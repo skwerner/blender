@@ -76,7 +76,7 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 /* -------------------------------------------------------------------- */
 /** \name View Navigation Utilities
@@ -125,7 +125,7 @@ static void sclip_zoom_set(const bContext *C,
     dx = ((location[0] - 0.5f) * w - sc->xof) * (sc->zoom - oldzoom) / sc->zoom;
     dy = ((location[1] - 0.5f) * h - sc->yof) * (sc->zoom - oldzoom) / sc->zoom;
 
-    if (sc->flag & SC_LOCK_SELECTION) {
+    if (clip_view_has_locked_selection(C)) {
       sc->xlockof += dx;
       sc->ylockof += dy;
     }
@@ -283,7 +283,7 @@ static int open_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event)
   }
 
   if (clip) {
-    BLI_strncpy(path, clip->name, sizeof(path));
+    BLI_strncpy(path, clip->filepath, sizeof(path));
 
     BLI_path_abs(path, CTX_data_main(C)->name);
     BLI_path_parent_dir(path);
@@ -329,7 +329,7 @@ void CLIP_OT_open(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_RELPATH | WM_FILESEL_FILES | WM_FILESEL_DIRECTORY,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /** \} */
@@ -396,7 +396,7 @@ static void view_pan_init(bContext *C, wmOperator *op, const wmEvent *event)
   vpd->x = event->x;
   vpd->y = event->y;
 
-  if (sc->flag & SC_LOCK_SELECTION) {
+  if (clip_view_has_locked_selection(C)) {
     vpd->vec = &sc->xlockof;
   }
   else {
@@ -434,7 +434,7 @@ static int view_pan_exec(bContext *C, wmOperator *op)
 
   RNA_float_get_array(op->ptr, "offset", offset);
 
-  if (sc->flag & SC_LOCK_SELECTION) {
+  if (clip_view_has_locked_selection(C)) {
     sc->xlockof += offset[0];
     sc->ylockof += offset[1];
   }
@@ -463,11 +463,10 @@ static int view_pan_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    view_pan_init(C, op, event);
 
-    return OPERATOR_RUNNING_MODAL;
-  }
+  view_pan_init(C, op, event);
+
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static int view_pan_modal(bContext *C, wmOperator *op, const wmEvent *event)
@@ -534,7 +533,7 @@ void CLIP_OT_view_pan(wmOperatorType *ot)
                        -FLT_MAX,
                        FLT_MAX,
                        "Offset",
-                       "Offset in floating point units, 1.0 is the width and height of the image",
+                       "Offset in floating-point units, 1.0 is the width and height of the image",
                        -FLT_MAX,
                        FLT_MAX);
 }
@@ -570,7 +569,7 @@ static void view_zoom_init(bContext *C, wmOperator *op, const wmEvent *event)
     WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);
   }
 
-  if (U.viewzoom == USER_ZOOM_CONT) {
+  if (U.viewzoom == USER_ZOOM_CONTINUE) {
     /* needs a timer to continue redrawing */
     vpd->timer = WM_event_add_timer(CTX_wm_manager(C), CTX_wm_window(C), TIMER, 0.01f);
     vpd->timer_lastdraw = PIL_check_seconds_timer();
@@ -617,7 +616,7 @@ static int view_zoom_exec(bContext *C, wmOperator *op)
 
 static int view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  if (event->type == MOUSEZOOM || event->type == MOUSEPAN) {
+  if (ELEM(event->type, MOUSEZOOM, MOUSEPAN)) {
     float delta, factor;
 
     delta = event->prevx - event->x + event->prevy - event->y;
@@ -633,11 +632,10 @@ static int view_zoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    view_zoom_init(C, op, event);
 
-    return OPERATOR_RUNNING_MODAL;
-  }
+  view_zoom_init(C, op, event);
+
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static void view_zoom_apply(
@@ -664,7 +662,7 @@ static void view_zoom_apply(
     delta = -delta;
   }
 
-  if (U.viewzoom == USER_ZOOM_CONT) {
+  if (U.viewzoom == USER_ZOOM_CONTINUE) {
     SpaceClip *sclip = CTX_wm_space_clip(C);
     double time = PIL_check_seconds_timer();
     float time_step = (float)(time - vpd->timer_lastdraw);
@@ -861,7 +859,7 @@ void CLIP_OT_view_zoom_out(wmOperatorType *ot)
                               -FLT_MAX,
                               FLT_MAX,
                               "Location",
-                              "Cursor location in normalized (0.0-1.0) coordinates",
+                              "Cursor location in normalized (0.0 to 1.0) coordinates",
                               -10.0f,
                               10.0f);
   RNA_def_property_flag(prop, PROP_HIDDEN);
@@ -1253,10 +1251,9 @@ static void do_movie_proxy(void *pjv,
 
     return;
   }
-  else {
-    sfra = 1;
-    efra = clip->len;
-  }
+
+  sfra = 1;
+  efra = clip->len;
 
   if (build_undistort_count) {
     int threads = BLI_system_thread_count();
@@ -1406,6 +1403,8 @@ static void do_sequence_proxy(void *pjv,
                               int build_count,
                               int *build_undistort_sizes,
                               int build_undistort_count,
+                              /* Cannot be const, because it is assigned to a non-const variable.
+                               * NOLINTNEXTLINE: readability-non-const-parameter. */
                               short *stop,
                               short *do_update,
                               float *progress)
@@ -1413,17 +1412,16 @@ static void do_sequence_proxy(void *pjv,
   ProxyJob *pj = pjv;
   MovieClip *clip = pj->clip;
   Scene *scene = pj->scene;
-  TaskPool *task_pool;
   int sfra = SFRA, efra = EFRA;
   ProxyThread *handles;
-  int i, tot_thread = BLI_task_scheduler_num_threads();
+  int tot_thread = BLI_task_scheduler_num_threads();
   int width, height;
-  ProxyQueue queue;
 
   if (build_undistort_count) {
     BKE_movieclip_get_size(clip, NULL, &width, &height);
   }
 
+  ProxyQueue queue;
   BLI_spin_init(&queue.spin);
 
   queue.cfra = sfra;
@@ -1433,9 +1431,9 @@ static void do_sequence_proxy(void *pjv,
   queue.do_update = do_update;
   queue.progress = progress;
 
-  task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
+  TaskPool *task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
   handles = MEM_callocN(sizeof(ProxyThread) * tot_thread, "proxy threaded handles");
-  for (i = 0; i < tot_thread; i++) {
+  for (int i = 0; i < tot_thread; i++) {
     ProxyThread *handle = &handles[i];
 
     handle->clip = clip;
@@ -1457,7 +1455,7 @@ static void do_sequence_proxy(void *pjv,
   BLI_task_pool_free(task_pool);
 
   if (build_undistort_count) {
-    for (i = 0; i < tot_thread; i++) {
+    for (int i = 0; i < tot_thread; i++) {
       ProxyThread *handle = &handles[i];
       BKE_tracking_distortion_free(handle->distortion);
     }
@@ -1516,7 +1514,7 @@ static void proxy_endjob(void *pjv)
   }
 
   if (pj->clip->source == MCLIP_SRC_MOVIE) {
-    /* Timecode might have changed, so do a full reload to deal with this. */
+    /* Time-code might have changed, so do a full reload to deal with this. */
     DEG_id_tag_update(&pj->clip->id, ID_RECALC_SOURCE);
   }
   else {
@@ -1646,27 +1644,26 @@ static int clip_view_ndof_invoke(bContext *C, wmOperator *UNUSED(op), const wmEv
   if (event->type != NDOF_MOTION) {
     return OPERATOR_CANCELLED;
   }
-  else {
-    SpaceClip *sc = CTX_wm_space_clip(C);
-    ARegion *region = CTX_wm_region(C);
-    float pan_vec[3];
 
-    const wmNDOFMotionData *ndof = event->customdata;
-    const float speed = NDOF_PIXELS_PER_SECOND;
+  SpaceClip *sc = CTX_wm_space_clip(C);
+  ARegion *region = CTX_wm_region(C);
+  float pan_vec[3];
 
-    WM_event_ndof_pan_get(ndof, pan_vec, true);
+  const wmNDOFMotionData *ndof = event->customdata;
+  const float speed = NDOF_PIXELS_PER_SECOND;
 
-    mul_v2_fl(pan_vec, (speed * ndof->dt) / sc->zoom);
-    pan_vec[2] *= -ndof->dt;
+  WM_event_ndof_pan_get(ndof, pan_vec, true);
 
-    sclip_zoom_set_factor(C, 1.0f + pan_vec[2], NULL, false);
-    sc->xof += pan_vec[0];
-    sc->yof += pan_vec[1];
+  mul_v2_fl(pan_vec, (speed * ndof->dt) / sc->zoom);
+  pan_vec[2] *= -ndof->dt;
 
-    ED_region_tag_redraw(region);
+  sclip_zoom_set_factor(C, 1.0f + pan_vec[2], NULL, false);
+  sc->xof += pan_vec[0];
+  sc->yof += pan_vec[1];
 
-    return OPERATOR_FINISHED;
-  }
+  ED_region_tag_redraw(region);
+
+  return OPERATOR_FINISHED;
 }
 
 void CLIP_OT_view_ndof(wmOperatorType *ot)
@@ -1843,8 +1840,16 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
 static int lock_selection_togglee_exec(bContext *C, wmOperator *UNUSED(op))
 {
   SpaceClip *space_clip = CTX_wm_space_clip(C);
+
+  ClipViewLockState lock_state;
+  ED_clip_view_lock_state_store(C, &lock_state);
+
   space_clip->flag ^= SC_LOCK_SELECTION;
+
+  ED_clip_view_lock_state_restore_no_jump(C, &lock_state);
+
   WM_event_add_notifier(C, NC_SPACE | ND_SPACE_CLIP, NULL);
+
   return OPERATOR_FINISHED;
 }
 

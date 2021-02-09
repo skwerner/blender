@@ -26,16 +26,27 @@
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_lib_query.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 #include "BKE_texture.h" /* Texture masking. */
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
@@ -43,6 +54,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 #include "MOD_weightvg_util.h"
 
@@ -84,16 +96,16 @@ static float mix_weight(float weight, float weight2, char mix_mode)
   if (mix_mode == MOD_WVG_MIX_SET) {
     return weight2;
   }
-  else if (mix_mode == MOD_WVG_MIX_ADD) {
+  if (mix_mode == MOD_WVG_MIX_ADD) {
     return (weight + weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_SUB) {
+  if (mix_mode == MOD_WVG_MIX_SUB) {
     return (weight - weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_MUL) {
+  if (mix_mode == MOD_WVG_MIX_MUL) {
     return (weight * weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_DIV) {
+  if (mix_mode == MOD_WVG_MIX_DIV) {
     /* Avoid dividing by zero (or really small values). */
     if (weight2 < 0.0f && weight2 > -MOD_WVG_ZEROFLOOR) {
       weight2 = -MOD_WVG_ZEROFLOOR;
@@ -103,15 +115,14 @@ static float mix_weight(float weight, float weight2, char mix_mode)
     }
     return (weight / weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_DIF) {
+  if (mix_mode == MOD_WVG_MIX_DIF) {
     return (weight < weight2 ? weight2 - weight : weight - weight2);
   }
-  else if (mix_mode == MOD_WVG_MIX_AVG) {
+  if (mix_mode == MOD_WVG_MIX_AVG) {
     return (weight + weight2) * 0.5f;
   }
-  else {
-    return weight2;
-  }
+
+  return weight2;
 }
 
 /**************************************
@@ -121,14 +132,9 @@ static void initData(ModifierData *md)
 {
   WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
 
-  wmd->default_weight_a = 0.0f;
-  wmd->default_weight_b = 0.0f;
-  wmd->mix_mode = MOD_WVG_MIX_SET;
-  wmd->mix_set = MOD_WVG_SET_AND;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(wmd, modifier));
 
-  wmd->mask_constant = 1.0f;
-  wmd->mask_tex_use_channel = MOD_WVG_MASK_TEX_USE_INT; /* Use intensity by default. */
-  wmd->mask_tex_mapping = MOD_DISP_MAP_LOCAL;
+  MEMCPY_STRUCT_AFTER(wmd, DNA_struct_default_get(WeightVGMixModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -158,19 +164,12 @@ static bool dependsOnTime(ModifierData *md)
   return false;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
-{
-  WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
-  walk(userData, ob, &wmd->mask_tex_map_obj, IDWALK_CB_NOP);
-}
-
 static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   WeightVGMixModifierData *wmd = (WeightVGMixModifierData *)md;
 
   walk(userData, ob, (ID **)&wmd->mask_texture, IDWALK_CB_USER);
-
-  foreachObjectLink(md, ob, (ObjectWalkFunc)walk, userData);
+  walk(userData, ob, (ID **)&wmd->mask_tex_map_obj, IDWALK_CB_NOP);
 }
 
 static void foreachTexLink(ModifierData *md, Object *ob, TexWalkFunc walk, void *userData)
@@ -445,17 +444,66 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   MEM_freeN(dw2);
   MEM_SAFE_FREE(indices);
 
+  mesh->runtime.is_original = false;
+
   /* Return the vgroup-modified mesh. */
   return mesh;
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group_a", "invert_vertex_group_a", NULL);
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group_b", "invert_vertex_group_b", IFACE_("B"));
+
+  uiItemS(layout);
+
+  uiItemR(layout, ptr, "default_weight_a", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "default_weight_b", 0, IFACE_("B"), ICON_NONE);
+
+  uiItemS(layout);
+
+  uiItemR(layout, ptr, "mix_set", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mix_mode", 0, NULL, ICON_NONE);
+
+  uiItemR(layout, ptr, "normalize", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void influence_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  weightvg_ui_common(C, &ob_ptr, ptr, layout);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(
+      region_type, eModifierType_WeightVGMix, panel_draw);
+  modifier_subpanel_register(
+      region_type, "influence", "Influence", NULL, influence_panel_draw, panel_type);
 }
 
 ModifierTypeInfo modifierType_WeightVGMix = {
     /* name */ "VertexWeightMix",
     /* structName */ "WeightVGMixModifierData",
     /* structSize */ sizeof(WeightVGMixModifierData),
+    /* srna */ &RNA_VertexWeightMixModifier,
     /* type */ eModifierTypeType_NonGeometrical,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_UsesPreview,
+    /* icon */ ICON_MOD_VERTEX_WEIGHT,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -465,7 +513,7 @@ ModifierTypeInfo modifierType_WeightVGMix = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,
@@ -475,8 +523,10 @@ ModifierTypeInfo modifierType_WeightVGMix = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ dependsOnTime,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ foreachTexLink,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

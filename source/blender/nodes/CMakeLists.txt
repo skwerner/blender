@@ -22,26 +22,26 @@ set(INC
   .
   composite
   function
+  geometry
   intern
   shader
-  simulation
   texture
   ../blenkernel
   ../blenlib
   ../blentranslation
+  ../bmesh
   ../depsgraph
+  ../functions
   ../gpu
   ../imbuf
   ../makesdna
   ../makesrna
-  ../render/extern/include
+  ../render
   ../../../intern/glew-mx
   ../../../intern/guardedalloc
+  ../../../intern/sky/include
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   composite/nodes/node_composite_alphaOver.c
@@ -73,6 +73,7 @@ set(SRC
   composite/nodes/node_composite_distanceMatte.c
   composite/nodes/node_composite_doubleEdgeMask.c
   composite/nodes/node_composite_ellipsemask.c
+  composite/nodes/node_composite_exposure.c
   composite/nodes/node_composite_filter.c
   composite/nodes/node_composite_flip.c
   composite/nodes/node_composite_gamma.c
@@ -133,8 +134,43 @@ set(SRC
   function/nodes/node_fn_combine_strings.cc
   function/nodes/node_fn_float_compare.cc
   function/nodes/node_fn_group_instance_id.cc
+  function/nodes/node_fn_input_vector.cc
+  function/nodes/node_fn_object_transforms.cc
+  function/nodes/node_fn_random_float.cc
   function/nodes/node_fn_switch.cc
   function/node_function_util.cc
+
+  geometry/nodes/node_geo_align_rotation_to_vector.cc
+  geometry/nodes/node_geo_attribute_color_ramp.cc
+  geometry/nodes/node_geo_attribute_compare.cc
+  geometry/nodes/node_geo_attribute_fill.cc
+  geometry/nodes/node_geo_attribute_math.cc
+  geometry/nodes/node_geo_attribute_mix.cc
+  geometry/nodes/node_geo_attribute_sample_texture.cc
+  geometry/nodes/node_geo_attribute_proximity.cc
+  geometry/nodes/node_geo_attribute_randomize.cc
+  geometry/nodes/node_geo_attribute_vector_math.cc
+  geometry/nodes/node_geo_boolean.cc
+  geometry/nodes/node_geo_collection_info.cc
+  geometry/nodes/node_geo_common.cc
+  geometry/nodes/node_geo_edge_split.cc
+  geometry/nodes/node_geo_is_viewport.cc
+  geometry/nodes/node_geo_join_geometry.cc
+  geometry/nodes/node_geo_object_info.cc
+  geometry/nodes/node_geo_point_distribute.cc
+  geometry/nodes/node_geo_point_instance.cc
+  geometry/nodes/node_geo_point_rotate.cc
+  geometry/nodes/node_geo_point_scale.cc
+  geometry/nodes/node_geo_point_separate.cc
+  geometry/nodes/node_geo_point_translate.cc
+  geometry/nodes/node_geo_points_to_volume.cc
+  geometry/nodes/node_geo_subdivision_surface.cc
+  geometry/nodes/node_geo_transform.cc
+  geometry/nodes/node_geo_triangulate.cc
+  geometry/nodes/node_geo_volume_to_mesh.cc
+  geometry/node_geometry_exec.cc
+  geometry/node_geometry_tree.cc
+  geometry/node_geometry_util.cc
 
   shader/nodes/node_shader_add_shader.c
   shader/nodes/node_shader_ambient_occlusion.c
@@ -157,7 +193,7 @@ set(SRC
   shader/nodes/node_shader_bsdf_velvet.c
   shader/nodes/node_shader_bump.c
   shader/nodes/node_shader_camera.c
-  shader/nodes/node_shader_clamp.c
+  shader/nodes/node_shader_clamp.cc
   shader/nodes/node_shader_common.c
   shader/nodes/node_shader_curves.c
   shader/nodes/node_shader_displacement.c
@@ -174,9 +210,9 @@ set(SRC
   shader/nodes/node_shader_layer_weight.c
   shader/nodes/node_shader_light_falloff.c
   shader/nodes/node_shader_light_path.c
-  shader/nodes/node_shader_map_range.c
+  shader/nodes/node_shader_map_range.cc
   shader/nodes/node_shader_mapping.c
-  shader/nodes/node_shader_math.c
+  shader/nodes/node_shader_math.cc
   shader/nodes/node_shader_mixRgb.c
   shader/nodes/node_shader_mix_shader.c
   shader/nodes/node_shader_normal.c
@@ -191,8 +227,8 @@ set(SRC
   shader/nodes/node_shader_rgb.c
   shader/nodes/node_shader_script.c
   shader/nodes/node_shader_sepcombHSV.c
-  shader/nodes/node_shader_sepcombRGB.c
-  shader/nodes/node_shader_sepcombXYZ.c
+  shader/nodes/node_shader_sepcombRGB.cc
+  shader/nodes/node_shader_sepcombXYZ.cc
   shader/nodes/node_shader_shaderToRgb.c
   shader/nodes/node_shader_squeeze.c
   shader/nodes/node_shader_subsurface_scattering.c
@@ -213,11 +249,11 @@ set(SRC
   shader/nodes/node_shader_tex_white_noise.c
   shader/nodes/node_shader_uvAlongStroke.c
   shader/nodes/node_shader_uvmap.c
-  shader/nodes/node_shader_valToRgb.c
-  shader/nodes/node_shader_value.c
+  shader/nodes/node_shader_valToRgb.cc
+  shader/nodes/node_shader_value.cc
   shader/nodes/node_shader_vectTransform.c
   shader/nodes/node_shader_vector_displacement.c
-  shader/nodes/node_shader_vector_math.c
+  shader/nodes/node_shader_vector_math.cc
   shader/nodes/node_shader_vector_rotate.c
   shader/nodes/node_shader_vertex_color.c
   shader/nodes/node_shader_volume_absorption.c
@@ -228,22 +264,6 @@ set(SRC
   shader/nodes/node_shader_wireframe.c
   shader/node_shader_tree.c
   shader/node_shader_util.c
-
-  simulation/nodes/node_sim_common.cc
-  simulation/nodes/node_sim_emit_particles.cc
-  simulation/nodes/node_sim_execute_condition.cc
-  simulation/nodes/node_sim_force.cc
-  simulation/nodes/node_sim_multi_execute.cc
-  simulation/nodes/node_sim_particle_attribute.cc
-  simulation/nodes/node_sim_particle_birth_event.cc
-  simulation/nodes/node_sim_particle_mesh_collision_event.cc
-  simulation/nodes/node_sim_particle_mesh_emitter.cc
-  simulation/nodes/node_sim_particle_simulation.cc
-  simulation/nodes/node_sim_particle_time_step_event.cc
-  simulation/nodes/node_sim_set_particle_attribute.cc
-  simulation/nodes/node_sim_simulation_time.cc
-  simulation/node_simulation_tree.cc
-  simulation/node_simulation_util.cc
 
   texture/nodes/node_texture_at.c
   texture/nodes/node_texture_bricks.c
@@ -271,31 +291,48 @@ set(SRC
   texture/node_texture_tree.c
   texture/node_texture_util.c
 
+  intern/derived_node_tree.cc
+  intern/math_functions.cc
   intern/node_common.c
   intern/node_exec.c
-  intern/node_socket.c
+  intern/node_geometry_exec.cc
+  intern/node_socket.cc
+  intern/node_tree_dependencies.cc
+  intern/node_tree_multi_function.cc
+  intern/node_tree_ref.cc
   intern/node_util.c
+  intern/type_callbacks.cc
 
   composite/node_composite_util.h
-  function/node_function_util.h
+  function/node_function_util.hh
   shader/node_shader_util.h
-  simulation/node_simulation_util.h
+  geometry/node_geometry_util.hh
   texture/node_texture_util.h
 
   NOD_common.h
   NOD_composite.h
+  NOD_derived_node_tree.hh
   NOD_function.h
+  NOD_geometry.h
+  NOD_geometry_exec.hh
+  NOD_math_functions.hh
+  NOD_node_tree_dependencies.hh
+  NOD_node_tree_multi_function.hh
+  NOD_node_tree_ref.hh
   NOD_shader.h
-  NOD_simulation.h
   NOD_socket.h
   NOD_static_types.h
   NOD_texture.h
+  NOD_type_callbacks.hh
   intern/node_common.h
   intern/node_exec.h
   intern/node_util.h
 )
 
 set(LIB
+  bf_bmesh
+  bf_functions
+  bf_intern_sky
 )
 
 if(WITH_PYTHON)
@@ -316,6 +353,10 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
+if(WITH_TBB)
+  add_definitions(-DWITH_TBB)
+endif()
+
 if(WITH_IMAGE_OPENEXR)
   add_definitions(-DWITH_OPENEXR)
 endif()
@@ -327,10 +368,19 @@ if(WITH_COMPOSITOR)
   add_definitions(-DWITH_COMPOSITOR)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
-
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
+endif()
+
+if(WITH_OPENSUBDIV)
+  add_definitions(-DWITH_OPENSUBDIV)
+endif()
+
+if(WITH_OPENVDB)
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
 endif()
 
 blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

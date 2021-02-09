@@ -222,10 +222,9 @@ TextFormatType *ED_text_format_get(Text *text)
      * the "default" text format */
     return tft_lb.first;
   }
-  else {
-    /* Return the "default" text format */
-    return tft_lb.first;
-  }
+
+  /* Return the "default" text format */
+  return tft_lb.first;
 }
 
 bool ED_text_is_syntax_highlight_supported(Text *text)
@@ -238,7 +237,7 @@ bool ED_text_is_syntax_highlight_supported(Text *text)
 
   const char *text_ext = BLI_path_extension(text->id.name + 2);
   if (text_ext == NULL) {
-    /* Extensionless datablocks are considered highlightable as Python. */
+    /* Extensionless data-blocks are considered highlightable as Python. */
     return true;
   }
   text_ext++; /* skip the '.' */

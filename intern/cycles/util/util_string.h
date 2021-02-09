@@ -46,7 +46,7 @@ void string_split(vector<string> &tokens,
                   bool skip_empty_tokens = true);
 void string_replace(string &haystack, const string &needle, const string &other);
 bool string_startswith(const string &s, const char *start);
-bool string_endswith(const string &s, const char *end);
+bool string_endswith(const string &s, const string &end);
 string string_strip(const string &s);
 string string_remove_trademark(const string &s);
 string string_from_bool(const bool var);
@@ -66,9 +66,9 @@ string string_from_wstring(const wstring &path);
 string string_to_ansi(const string &str);
 #endif
 
-/* Make a string from a size in bytes in human readable form */
+/* Make a string from a size in bytes in human readable form. */
 string string_human_readable_size(size_t size);
-/* Make a string from a unitless quantity in human readable form */
+/* Make a string from a unit-less quantity in human readable form. */
 string string_human_readable_number(size_t num);
 
 CCL_NAMESPACE_END

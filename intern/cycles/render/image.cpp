@@ -18,6 +18,7 @@
 #include "device/device.h"
 #include "render/colorspace.h"
 #include "render/image_oiio.h"
+#include "render/image_vdb.h"
 #include "render/scene.h"
 #include "render/stats.h"
 
@@ -27,6 +28,7 @@
 #include "util/util_logging.h"
 #include "util/util_path.h"
 #include "util/util_progress.h"
+#include "util/util_task.h"
 #include "util/util_texture.h"
 #include "util/util_unique_ptr.h"
 
@@ -71,6 +73,10 @@ const char *name_from_type(ImageDataType type)
       return "ushort4";
     case IMAGE_DATA_TYPE_USHORT:
       return "ushort";
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
+      return "nanovdb_float";
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
+      return "nanovdb_float3";
     case IMAGE_DATA_NUM_TYPES:
       assert(!"System enumerator type, should never be used");
       return "";
@@ -171,6 +177,31 @@ device_texture *ImageHandle::image_memory(const int tile_index) const
   return img ? img->mem : NULL;
 }
 
+VDBImageLoader *ImageHandle::vdb_loader(const int tile_index) const
+{
+  if (tile_index >= tile_slots.size()) {
+    return NULL;
+  }
+
+  ImageManager::Image *img = manager->images[tile_slots[tile_index]];
+
+  if (img == NULL) {
+    return NULL;
+  }
+
+  ImageLoader *loader = img->loader;
+
+  if (loader == NULL) {
+    return NULL;
+  }
+
+  if (loader->is_vdb_loader()) {
+    return dynamic_cast<VDBImageLoader *>(loader);
+  }
+
+  return NULL;
+}
+
 bool ImageHandle::operator==(const ImageHandle &other) const
 {
   return manager == other.manager && tile_slots == other.tile_slots;
@@ -183,6 +214,7 @@ ImageMetaData::ImageMetaData()
       width(0),
       height(0),
       depth(0),
+      byte_size(0),
       type(IMAGE_DATA_NUM_TYPES),
       colorspace(u_colorspace_raw),
       colorspace_file_format(""),
@@ -257,11 +289,16 @@ bool ImageLoader::equals(const ImageLoader *a, const ImageLoader *b)
   }
 }
 
+bool ImageLoader::is_vdb_loader() const
+{
+  return false;
+}
+
 /* Image Manager */
 
 ImageManager::ImageManager(const DeviceInfo &info)
 {
-  need_update = true;
+  need_update_ = true;
   osl_texture_system = NULL;
   animation_frame = 0;
 
@@ -344,7 +381,7 @@ ImageHandle ImageManager::add_image(const string &filename, const ImageParams &p
 
 ImageHandle ImageManager::add_image(const string &filename,
                                     const ImageParams &params,
-                                    const vector<int> &tiles)
+                                    const array<int> &tiles)
 {
   ImageHandle handle;
   handle.manager = this;
@@ -361,9 +398,11 @@ ImageHandle ImageManager::add_image(const string &filename,
   return handle;
 }
 
-ImageHandle ImageManager::add_image(ImageLoader *loader, const ImageParams &params)
+ImageHandle ImageManager::add_image(ImageLoader *loader,
+                                    const ImageParams &params,
+                                    const bool builtin)
 {
-  const int slot = add_image_slot(loader, params, true);
+  const int slot = add_image_slot(loader, params, builtin);
 
   ImageHandle handle;
   handle.tile_slots.push_back(slot);
@@ -380,7 +419,7 @@ int ImageManager::add_image_slot(ImageLoader *loader,
 
   thread_scoped_lock device_lock(images_mutex);
 
-  /* Fnd existing image. */
+  /* Find existing image. */
   for (slot = 0; slot < images.size(); slot++) {
     img = images[slot];
     if (img && ImageLoader::equals(img->loader, loader) && img->params == params) {
@@ -412,7 +451,7 @@ int ImageManager::add_image_slot(ImageLoader *loader,
 
   images[slot] = img;
 
-  need_update = true;
+  need_update_ = true;
 
   return slot;
 }
@@ -439,7 +478,7 @@ void ImageManager::remove_image_user(int slot)
    * the reasons for this is that on shader changes we add and remove nodes
    * that use them, but we do not want to reload the image all the time. */
   if (image->users == 0)
-    need_update = true;
+    need_update_ = true;
 }
 
 static bool image_associate_alpha(ImageManager::Image *img)
@@ -454,8 +493,8 @@ static bool image_associate_alpha(ImageManager::Image *img)
 template<TypeDesc::BASETYPE FileFormat, typename StorageType>
 bool ImageManager::file_load_image(Image *img, int texture_limit)
 {
-  /* we only handle certain number of components */
-  if (!(img->metadata.channels >= 1 && img->metadata.channels <= 4)) {
+  /* Ignore empty images. */
+  if (!(img->metadata.channels > 0)) {
     return false;
   }
 
@@ -722,6 +761,16 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
       pixels[0] = TEX_IMAGE_MISSING_R;
     }
   }
+#ifdef WITH_NANOVDB
+  else if (type == IMAGE_DATA_TYPE_NANOVDB_FLOAT || type == IMAGE_DATA_TYPE_NANOVDB_FLOAT3) {
+    thread_scoped_lock device_lock(device_mutex);
+    void *pixels = img->mem->alloc(img->metadata.byte_size, 0);
+
+    if (pixels != NULL) {
+      img->loader->load_pixels(img->metadata, pixels, img->metadata.byte_size, false);
+    }
+  }
+#endif
 
   {
     thread_scoped_lock device_lock(device_mutex);
@@ -761,9 +810,15 @@ void ImageManager::device_free_image(Device *, int slot)
 
 void ImageManager::device_update(Device *device, Scene *scene, Progress &progress)
 {
-  if (!need_update) {
+  if (!need_update()) {
     return;
   }
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->image.times.add_entry({"device_update", time});
+    }
+  });
 
   TaskPool pool;
   for (size_t slot = 0; slot < images.size(); slot++) {
@@ -779,7 +834,7 @@ void ImageManager::device_update(Device *device, Scene *scene, Progress &progres
 
   pool.wait_work();
 
-  need_update = false;
+  need_update_ = false;
 }
 
 void ImageManager::device_update_slot(Device *device, Scene *scene, int slot, Progress *progress)
@@ -799,7 +854,7 @@ void ImageManager::device_load_builtin(Device *device, Scene *scene, Progress &p
 {
   /* Load only builtin images, Blender needs this to load evaluated
    * scene data from depsgraph before it is freed. */
-  if (!need_update) {
+  if (!need_update()) {
     return;
   }
 
@@ -839,6 +894,16 @@ void ImageManager::collect_statistics(RenderStats *stats)
     stats->image.textures.add_entry(
         NamedSizeEntry(image->loader->name(), image->mem->memory_size()));
   }
+}
+
+void ImageManager::tag_update()
+{
+  need_update_ = true;
+}
+
+bool ImageManager::need_update() const
+{
+  return need_update_;
 }
 
 CCL_NAMESPACE_END

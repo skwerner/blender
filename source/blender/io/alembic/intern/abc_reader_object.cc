@@ -41,17 +41,16 @@ using Alembic::AbcGeom::IObject;
 using Alembic::AbcGeom::IXform;
 using Alembic::AbcGeom::IXformSchema;
 
+namespace blender::io::alembic {
+
 AbcObjectReader::AbcObjectReader(const IObject &object, ImportSettings &settings)
-    : m_name(""),
-      m_object_name(""),
-      m_data_name(""),
-      m_object(NULL),
+    : m_object(nullptr),
       m_iobject(object),
       m_settings(&settings),
       m_min_time(std::numeric_limits<chrono_t>::max()),
       m_max_time(std::numeric_limits<chrono_t>::min()),
       m_refcount(0),
-      parent_reader(NULL)
+      parent_reader(nullptr)
 {
   m_name = object.getFullName();
   std::vector<std::string> parts;
@@ -204,7 +203,7 @@ void AbcObjectReader::setupObjectTransform(const float time)
 
   if (!is_constant) {
     bConstraint *con = BKE_constraint_add_for_object(
-        m_object, NULL, CONSTRAINT_TYPE_TRANSFORM_CACHE);
+        m_object, nullptr, CONSTRAINT_TYPE_TRANSFORM_CACHE);
     bTransformCacheConstraint *data = static_cast<bTransformCacheConstraint *>(con->data);
     BLI_strncpy(data->object_path, m_iobject.getFullName().c_str(), FILE_MAX);
 
@@ -232,7 +231,7 @@ Alembic::AbcGeom::IXform AbcObjectReader::xform()
    * parent Alembic object should contain the transform. */
   IObject abc_parent = m_iobject.getParent();
 
-  /* The archive's top object can be recognised by not having a parent. */
+  /* The archive's top object can be recognized by not having a parent. */
   if (abc_parent.getParent() && IXform::matches(abc_parent.getMetaData())) {
     try {
       return IXform(abc_parent, Alembic::AbcGeom::kWrapExisting);
@@ -330,3 +329,5 @@ void AbcObjectReader::decref()
   m_refcount--;
   BLI_assert(m_refcount >= 0);
 }
+
+}  // namespace blender::io::alembic

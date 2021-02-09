@@ -21,14 +21,18 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_GPENCIL_TYPES_H__
-#define __DNA_GPENCIL_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_brush_types.h"
 #include "DNA_listBase.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
+struct Curve;
 struct MDeformVert;
 
 #define GP_DEFAULT_PIX_FACTOR 1.0f
@@ -36,6 +40,10 @@ struct MDeformVert;
 #define GP_MAX_INPUT_SAMPLES 10
 
 #define GP_MATERIAL_BUFFER_LEN 256
+
+#define GP_DEFAULT_CURVE_RESOLUTION 32
+#define GP_DEFAULT_CURVE_ERROR 0.1f
+#define GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE M_PI_2
 
 /* ***************************************** */
 /* GP Stroke Points */
@@ -167,6 +175,61 @@ typedef enum eGPDpalette_Flag {
 } eGPDpalette_Flag;
 
 /* ***************************************** */
+/* GP Curve Point */
+
+typedef struct bGPDcurve_point {
+  /** Bezier Triple for the handles and control points. */
+  BezTriple bezt;
+  /** Pressure of input device (from 0 to 1) at this point. */
+  float pressure;
+  /** Color strength (used for alpha factor). */
+  float strength;
+  /** Index of corresponding point in gps->points. */
+  int point_index;
+
+  /** Additional options. */
+  int flag;
+
+  /** Factor of uv along the stroke. */
+  float uv_fac;
+  /** Uv rotation for dot mode. */
+  float uv_rot;
+  /** Uv for fill mode. */
+  float uv_fill[2];
+
+  /** Vertex Color RGBA (A=mix factor). */
+  float vert_color[4];
+  char _pad[4];
+} bGPDcurve_point;
+
+/* bGPDcurve_point->flag */
+typedef enum eGPDcurve_point_Flag {
+  GP_CURVE_POINT_SELECT = (1 << 0),
+} eGPDcurve_point_Flag;
+
+/* ***************************************** */
+/* GP Curve */
+
+/* Curve for Bezier Editing. */
+typedef struct bGPDcurve {
+  /** Array of BezTriple. */
+  bGPDcurve_point *curve_points;
+  /** Total number of curve points. */
+  int tot_curve_points;
+  /** General flag. */
+  short flag;
+  char _pad[2];
+} bGPDcurve;
+
+/* bGPDcurve_Flag->flag */
+typedef enum bGPDcurve_Flag {
+  /* Flag to indicated that the stroke data has been changed and the curve needs to be refitted */
+  GP_CURVE_NEEDS_STROKE_UPDATE = (1 << 0),
+  /* Curve is selected */
+  GP_CURVE_SELECT = (1 << 1),
+} bGPDcurve_Flag;
+
+/* ***************************************** */
 /* GP Strokes */
 
 /* Runtime temp data for bGPDstroke */
@@ -181,7 +244,8 @@ typedef struct bGPDstroke_Runtime {
   int stroke_start;
   /** Triangle offset in the ibo where this fill starts. */
   int fill_start;
-  int _pad[1];
+  /** Curve Handles offset in the ibo where this handle starts. */
+  int curve_start;
 
   /** Original stroke (used to dereference evaluated data) */
   struct bGPDstroke *gps_orig;
@@ -246,6 +310,9 @@ typedef struct bGPDstroke {
   /** Vertex Color for Fill (one for all stroke, A=mix factor). */
   float vert_color_fill[4];
 
+  /** Curve used to edit the stroke using Bezier handlers. */
+  struct bGPDcurve *editcurve;
+
   bGPDstroke_Runtime runtime;
 } bGPDstroke;
 
@@ -264,6 +331,9 @@ typedef enum eGPDstroke_Flag {
   /* Flag used to indicate that stroke is used for fill close and must use
    * fill color for stroke and no fill area */
   GP_STROKE_NOFILL = (1 << 8),
+  /* Flag to indicated that the editcurve has been changed and the stroke needs to be updated with
+   * the curve data */
+  GP_STROKE_NEEDS_CURVE_UPDATE = (1 << 9),
   /* only for use with stroke-buffer (while drawing arrows) */
   GP_STROKE_USE_ARROW_START = (1 << 12),
   /* only for use with stroke-buffer (while drawing arrows) */
@@ -442,6 +512,11 @@ typedef struct bGPDlayer {
   int act_mask;
   char _pad2[4];
 
+  /** Layer transforms. */
+  float location[3], rotation[3], scale[3];
+  float layer_mat[4][4], layer_invmat[4][4];
+  char _pad3[4];
+
   bGPDlayer_Runtime runtime;
 } bGPDlayer;
 
@@ -504,7 +579,9 @@ typedef struct bGPdata_Runtime {
   /** Temp stroke used for drawing. */
   struct bGPDstroke *sbuffer_gps;
 
-  char _pad[2];
+  /** Animation playing flag. */
+  short playing;
+
   /** Material index of the stroke. */
   short matid;
 
@@ -563,7 +640,12 @@ typedef struct bGPdata {
   ListBase layers;
   /** Settings for this data-block. */
   int flag;
-  char _pad1[4];
+  /** Default resolution for generated curves using curve editing method. */
+  int curve_edit_resolution;
+  /** Curve Editing error threshold. */
+  float curve_edit_threshold;
+  /** Curve Editing corner angle (less or equal is treated as corner). */
+  float curve_edit_corner_angle;
 
   /* Palettes */
   /** List of bGPDpalette's   - Deprecated (2.78 - 2.79 only). */
@@ -681,6 +763,11 @@ typedef enum eGPdata_Flag {
 
   /* Autolock not active layers */
   GP_DATA_AUTOLOCK_LAYERS = (1 << 20),
+
+  /* Enable Bezier Editing Curve (a submode of Edit mode). */
+  GP_DATA_CURVE_EDIT_MODE = (1 << 21),
+  /* Use adaptive curve resolution */
+  GP_DATA_CURVE_ADAPTIVE_RESOLUTION = (1 << 22),
 } eGPdata_Flag;
 
 /* gpd->onion_flag */
@@ -726,6 +813,9 @@ typedef enum eGP_DrawMode {
                    GP_DATA_STROKE_WEIGHTMODE | GP_DATA_STROKE_VERTEXMODE)) && \
    ((gpd)->flag & GP_DATA_STROKE_MULTIEDIT))
 
+#define GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd) \
+  ((gpd) && ((gpd)->flag & (GP_DATA_STROKE_EDITMODE)) && ((gpd)->flag & GP_DATA_CURVE_EDIT_MODE))
+
 /* Macros to check grease pencil modes */
 #define GPENCIL_ANY_MODE(gpd) \
   ((gpd) && ((gpd)->flag & \
@@ -735,10 +825,10 @@ typedef enum eGP_DrawMode {
 #define GPENCIL_ANY_EDIT_MODE(gpd) \
   ((gpd) && ((gpd)->flag & \
              (GP_DATA_STROKE_EDITMODE | GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
-#define GPENCIL_PAINT_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_PAINTMODE)))
+#define GPENCIL_PAINT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_PAINTMODE))
 #define GPENCIL_SCULPT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_SCULPTMODE))
 #define GPENCIL_WEIGHT_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_WEIGHTMODE))
-#define GPENCIL_VERTEX_MODE(gpd) ((gpd) && (gpd->flag & (GP_DATA_STROKE_VERTEXMODE)))
+#define GPENCIL_VERTEX_MODE(gpd) ((gpd) && (gpd->flag & GP_DATA_STROKE_VERTEXMODE))
 #define GPENCIL_SCULPT_OR_WEIGHT_MODE(gpd) \
   ((gpd) && ((gpd)->flag & (GP_DATA_STROKE_SCULPTMODE | GP_DATA_STROKE_WEIGHTMODE)))
 #define GPENCIL_NONE_EDIT_MODE(gpd) \
@@ -757,4 +847,8 @@ typedef enum eGP_DrawMode {
   ((flag & (GP_VERTEX_MASK_SELECTMODE_POINT | GP_VERTEX_MASK_SELECTMODE_STROKE | \
             GP_VERTEX_MASK_SELECTMODE_SEGMENT)))
 
-#endif /*  __DNA_GPENCIL_TYPES_H__ */
+#define GPENCIL_PLAY_ON(gpd) ((gpd) && ((gpd)->runtime.playing == 1))
+
+#ifdef __cplusplus
+}
+#endif

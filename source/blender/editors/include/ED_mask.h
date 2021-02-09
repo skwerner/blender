@@ -21,12 +21,13 @@
  * \ingroup editors
  */
 
-#ifndef __ED_MASK_H__
-#define __ED_MASK_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include "DNA_mask_types.h"
 
 struct Depsgraph;
 struct KeyframeEditData;
@@ -62,7 +63,10 @@ void ED_mask_point_pos__reverse(
     struct ScrArea *area, struct ARegion *region, float x, float y, float *xr, float *yr);
 
 void ED_mask_cursor_location_get(struct ScrArea *area, float cursor[2]);
-bool ED_mask_selected_minmax(const struct bContext *C, float min[2], float max[2]);
+bool ED_mask_selected_minmax(const struct bContext *C,
+                             float min[2],
+                             float max[2],
+                             bool include_handles);
 
 /* mask_draw.c */
 void ED_mask_draw(const struct bContext *C, const char draw_flag, const char draw_type);
@@ -71,7 +75,7 @@ void ED_mask_draw_region(struct Depsgraph *depsgraph,
                          struct ARegion *region,
                          const char draw_flag,
                          const char draw_type,
-                         const char overlay_mode,
+                         const eMaskOverlayMode overlay_mode,
                          const int width_i,
                          const int height_i,
                          const float aspx,
@@ -92,8 +96,8 @@ bool ED_mask_layer_shape_auto_key_select(struct Mask *mask, const int frame);
 /* ----------- Mask AnimEdit API ------------------ */
 bool ED_masklayer_frames_looper(struct MaskLayer *mask_layer,
                                 struct Scene *scene,
-                                short (*mask_layer_shape_cb)(struct MaskLayerShape *,
-                                                             struct Scene *));
+                                bool (*mask_layer_shape_cb)(struct MaskLayerShape *,
+                                                            struct Scene *));
 void ED_masklayer_make_cfra_list(struct MaskLayer *mask_layer, ListBase *elems, bool onlysel);
 
 bool ED_masklayer_frame_select_check(struct MaskLayer *mask_layer);
@@ -125,5 +129,3 @@ void mirror_masklayer_frames(struct MaskLayer *mask_layer, short mode);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_MASK_H__ */

@@ -34,7 +34,7 @@
 static PyObject *bpy_atexit(PyObject *UNUSED(self), PyObject *UNUSED(args), PyObject *UNUSED(kw))
 {
   /* close down enough of blender at least not to crash */
-  struct bContext *C = BPy_GetContext();
+  struct bContext *C = BPY_context_get();
 
   WM_exit_ex(C, false);
 
@@ -42,7 +42,7 @@ static PyObject *bpy_atexit(PyObject *UNUSED(self), PyObject *UNUSED(args), PyOb
 }
 
 static PyMethodDef meth_bpy_atexit = {"bpy_atexit", (PyCFunction)bpy_atexit, METH_NOARGS, NULL};
-static PyObject *func_bpy_atregister = NULL; /* borrowed referebce, atexit holds */
+static PyObject *func_bpy_atregister = NULL; /* borrowed reference, `atexit` holds. */
 
 static void atexit_func_call(const char *func_name, PyObject *atexit_func_arg)
 {

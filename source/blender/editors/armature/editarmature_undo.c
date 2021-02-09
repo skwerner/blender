@@ -26,11 +26,14 @@
 #include "CLG_log.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_layer_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
 
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -63,8 +66,8 @@ static void undoarm_to_editarm(UndoArmature *uarm, bArmature *arm)
 {
   EditBone *ebone;
 
-  ED_armature_ebone_listbase_free(arm->edbo);
-  ED_armature_ebone_listbase_copy(arm->edbo, &uarm->lb);
+  ED_armature_ebone_listbase_free(arm->edbo, true);
+  ED_armature_ebone_listbase_copy(arm->edbo, &uarm->lb, true);
 
   /* active bone */
   if (uarm->act_edbone) {
@@ -85,7 +88,7 @@ static void *undoarm_from_editarm(UndoArmature *uarm, bArmature *arm)
   /* TODO: include size of ID-properties. */
   uarm->undo_size = 0;
 
-  ED_armature_ebone_listbase_copy(&uarm->lb, arm->edbo);
+  ED_armature_ebone_listbase_copy(&uarm->lb, arm->edbo, false);
 
   /* active bone */
   if (arm->act_edbone) {
@@ -104,7 +107,7 @@ static void *undoarm_from_editarm(UndoArmature *uarm, bArmature *arm)
 
 static void undoarm_free_data(UndoArmature *uarm)
 {
-  ED_armature_ebone_listbase_free(&uarm->lb);
+  ED_armature_ebone_listbase_free(&uarm->lb, false);
 }
 
 static Object *editarm_object_from_context(bContext *C)
@@ -175,8 +178,11 @@ static bool armature_undosys_step_encode(struct bContext *C, struct Main *bmain,
   return true;
 }
 
-static void armature_undosys_step_decode(
-    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
+static void armature_undosys_step_decode(struct bContext *C,
+                                         struct Main *bmain,
+                                         UndoStep *us_p,
+                                         const eUndoStepDir UNUSED(dir),
+                                         bool UNUSED(is_final))
 {
   ArmatureUndoStep *us = (ArmatureUndoStep *)us_p;
 
@@ -246,7 +252,7 @@ void ED_armature_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = armature_undosys_foreach_ID_ref;
 
-  ut->use_context = true;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
 
   ut->step_size = sizeof(ArmatureUndoStep);
 }

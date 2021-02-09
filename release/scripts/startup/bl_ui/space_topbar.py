@@ -248,7 +248,7 @@ class TOPBAR_MT_file_cleanup(Menu):
         layout = self.layout
         layout.separator()
 
-        layout.operator("outliner.orphans_purge")
+        layout.operator("outliner.orphans_purge", text="Unused Data-Blocks")
 
 
 class TOPBAR_MT_file(Menu):
@@ -567,7 +567,7 @@ class TOPBAR_MT_edit(Menu):
         props.name = "TOPBAR_PT_name"
         props.keep_open = False
 
-        layout.operator("wm.batch_rename")
+        layout.operator("wm.batch_rename", text="Batch Rename...")
 
         layout.separator()
 

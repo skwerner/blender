@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_UTIL_IMBUF_H__
-#define __ED_UTIL_IMBUF_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
@@ -32,7 +31,6 @@ extern "C" {
 #endif
 
 struct ARegion;
-struct Main;
 struct bContext;
 struct wmEvent;
 struct wmOperator;
@@ -48,5 +46,3 @@ bool ED_imbuf_sample_poll(struct bContext *C);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_UTIL_IMBUF_H__ */

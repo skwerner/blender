@@ -112,6 +112,7 @@
 /* only for BLI_array_store_is_valid */
 #include "BLI_ghash.h"
 
+/* -------------------------------------------------------------------- */
 /** \name Defines
  *
  * Some of the logic for merging is quite involved,
@@ -189,7 +190,7 @@
  */
 #  define BCHUNK_SIZE_MIN_DIV 8
 
-/* Disallow chunks bigger then the regular chunk size scaled by this value
+/* Disallow chunks bigger than the regular chunk size scaled by this value
  * note: must be at least 2!
  * however, this code runs wont run in tests unless its ~1.1 ugh.
  * so lower only to check splitting works.
@@ -206,6 +207,7 @@
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal Structs
  * \{ */
 
@@ -313,6 +315,7 @@ typedef struct BTableRef {
 
 static size_t bchunk_list_size(const BChunkList *chunk_list);
 
+/* -------------------------------------------------------------------- */
 /** \name Internal BChunk API
  * \{ */
 
@@ -355,13 +358,12 @@ static bool bchunk_data_compare(const BChunk *chunk,
   if (offset + (size_t)chunk->data_len <= data_base_len) {
     return (memcmp(&data_base[offset], chunk->data, chunk->data_len) == 0);
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal BChunkList API
  * \{ */
 
@@ -525,13 +527,13 @@ static void bchunk_list_calc_trim_len(const BArrayInfo *info,
 
 #ifdef USE_MERGE_CHUNKS
   /* avoid creating too-small chunks
-   * more efficient then merging after */
+   * more efficient than merging after */
   if (data_len > info->chunk_byte_size) {
     data_last_chunk_len = (data_trim_len % info->chunk_byte_size);
     data_trim_len = data_trim_len - data_last_chunk_len;
     if (data_last_chunk_len) {
       if (data_last_chunk_len < info->chunk_byte_size_min) {
-        /* may be zero and thats OK */
+        /* May be zero and that's OK. */
         data_trim_len -= info->chunk_byte_size;
         data_last_chunk_len += info->chunk_byte_size;
       }
@@ -734,10 +736,11 @@ static void bchunk_list_fill_from_array(const BArrayInfo *info,
 
 /** \} */
 
-/* ---------------------------------------------------------------------------
+/*
  * Internal Table Lookup Functions
  */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal Hashing/De-Duplication API
  *
  * Only used by #bchunk_list_from_data_merge
@@ -893,20 +896,18 @@ static hash_key key_from_chunk_ref(const BArrayInfo *info,
 #  endif
     return key;
   }
-  else {
-    /* corner case - we're too small, calculate the key each time. */
+  /* corner case - we're too small, calculate the key each time. */
 
-    hash_array_from_cref(info, cref, info->accum_read_ahead_bytes, hash_store);
-    hash_accum_single(hash_store, hash_store_len, info->accum_steps);
-    hash_key key = hash_store[0];
+  hash_array_from_cref(info, cref, info->accum_read_ahead_bytes, hash_store);
+  hash_accum_single(hash_store, hash_store_len, info->accum_steps);
+  hash_key key = hash_store[0];
 
 #  ifdef USE_HASH_TABLE_KEY_CACHE
-    if (UNLIKELY(key == HASH_TABLE_KEY_UNSET)) {
-      key = HASH_TABLE_KEY_FALLBACK;
-    }
-#  endif
-    return key;
+  if (UNLIKELY(key == HASH_TABLE_KEY_UNSET)) {
+    key = HASH_TABLE_KEY_FALLBACK;
   }
+#  endif
+  return key;
 }
 
 static const BChunkRef *table_lookup(const BArrayInfo *info,
@@ -1009,6 +1010,7 @@ static const BChunkRef *table_lookup(const BArrayInfo *info,
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Main Data De-Duplication Function
  *
  * \{ */
@@ -1083,9 +1085,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
       if (cref == cref_match_first) {
         break;
       }
-      else {
-        cref = cref->next;
-      }
+      cref = cref->next;
     }
     /* happens when bytes are removed from the end of the array */
     if (chunk_size_step == data_len_original) {
@@ -1313,7 +1313,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
         ASSERT_CHUNKLIST_DATA(chunk_list, data);
 
         /* its likely that the next chunk in the list will be a match, so check it! */
-        while ((cref_found->next != NULL) && (cref_found->next != chunk_list_reference_last)) {
+        while (!ELEM(cref_found->next, NULL, chunk_list_reference_last)) {
           cref_found = cref_found->next;
           BChunk *chunk_found = cref_found->link;
 
@@ -1396,6 +1396,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Main Array Storage API
  * \{ */
 
@@ -1411,7 +1412,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
  *
  * \param chunk_count: Number of elements to split each chunk into.
  * - A small value increases the ability to de-duplicate chunks,
- *   but adds overhead by increasing the number of chunks to look-up when searching for duplicates,
+ *   but adds overhead by increasing the number of chunks to look up when searching for duplicates,
  *   as well as some overhead constructing the original array again, with more calls to ``memcpy``.
  * - Larger values reduce the *book keeping* overhead,
  *   but increase the chance a small,
@@ -1502,6 +1503,7 @@ void BLI_array_store_clear(BArrayStore *bs)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name BArrayStore Statistics
  * \{ */
 
@@ -1536,6 +1538,7 @@ size_t BLI_array_store_calc_size_compacted_get(const BArrayStore *bs)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name BArrayState Access
  * \{ */
 
@@ -1659,6 +1662,7 @@ void *BLI_array_store_state_data_get_alloc(BArrayState *state, size_t *r_data_le
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Debugging API (for testing).
  * \{ */
 

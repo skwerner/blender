@@ -32,6 +32,7 @@
 #define CERES_INTERNAL_TRUST_REGION_STRATEGY_H_
 
 #include <string>
+
 #include "ceres/internal/port.h"
 #include "ceres/linear_solver.h"
 
@@ -53,46 +54,37 @@ class SparseMatrix;
 // the LevenbergMarquardtStrategy uses the inverse of the trust region
 // radius to scale the damping term, which controls the step size, but
 // does not set a hard limit on its size.
-class TrustRegionStrategy {
+class CERES_EXPORT_INTERNAL TrustRegionStrategy {
  public:
   struct Options {
-    Options()
-        : trust_region_strategy_type(LEVENBERG_MARQUARDT),
-          initial_radius(1e4),
-          max_radius(1e32),
-          min_lm_diagonal(1e-6),
-          max_lm_diagonal(1e32),
-          dogleg_type(TRADITIONAL_DOGLEG) {
-    }
-
-    TrustRegionStrategyType trust_region_strategy_type;
+    TrustRegionStrategyType trust_region_strategy_type = LEVENBERG_MARQUARDT;
     // Linear solver used for actually solving the trust region step.
-    LinearSolver* linear_solver;
-    double initial_radius;
-    double max_radius;
+    LinearSolver* linear_solver = nullptr;
+    double initial_radius = 1e4;
+    double max_radius = 1e32;
 
     // Minimum and maximum values of the diagonal damping matrix used
     // by LevenbergMarquardtStrategy. The DoglegStrategy also uses
     // these bounds to construct a regularizing diagonal to ensure
     // that the Gauss-Newton step computation is of full rank.
-    double min_lm_diagonal;
-    double max_lm_diagonal;
+    double min_lm_diagonal = 1e-6;
+    double max_lm_diagonal = 1e32;
 
     // Further specify which dogleg method to use
-    DoglegType dogleg_type;
+    DoglegType dogleg_type = TRADITIONAL_DOGLEG;
   };
+
+  // Factory.
+  static TrustRegionStrategy* Create(const Options& options);
+
+  virtual ~TrustRegionStrategy();
 
   // Per solve options.
   struct PerSolveOptions {
-    PerSolveOptions()
-        : eta(0),
-          dump_format_type(TEXTFILE) {
-    }
-
     // Forcing sequence for inexact solves.
-    double eta;
+    double eta = 1e-1;
 
-    DumpFormatType dump_format_type;
+    DumpFormatType dump_format_type = TEXTFILE;
 
     // If non-empty and dump_format_type is not CONSOLE, the trust
     // regions strategy will write the linear system to file(s) with
@@ -103,12 +95,6 @@ class TrustRegionStrategy {
   };
 
   struct Summary {
-    Summary()
-        : residual_norm(0.0),
-          num_iterations(-1),
-          termination_type(LINEAR_SOLVER_FAILURE) {
-    }
-
     // If the trust region problem is,
     //
     //   1/2 x'Ax + b'x + c,
@@ -116,18 +102,16 @@ class TrustRegionStrategy {
     // then
     //
     //   residual_norm = |Ax -b|
-    double residual_norm;
+    double residual_norm = -1;
 
     // Number of iterations used by the linear solver. If a linear
     // solver was not called (e.g., DogLegStrategy after an
     // unsuccessful step), then this would be zero.
-    int num_iterations;
+    int num_iterations = -1;
 
     // Status of the linear solver used to solve the Newton system.
-    LinearSolverTerminationType termination_type;
+    LinearSolverTerminationType termination_type = LINEAR_SOLVER_FAILURE;
   };
-
-  virtual ~TrustRegionStrategy();
 
   // Use the current radius to solve for the trust region step.
   virtual Summary ComputeStep(const PerSolveOptions& per_solve_options,
@@ -153,9 +137,6 @@ class TrustRegionStrategy {
 
   // Current trust region radius.
   virtual double Radius() const = 0;
-
-  // Factory.
-  static TrustRegionStrategy* Create(const Options& options);
 };
 
 }  // namespace internal

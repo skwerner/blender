@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_NODE_H__
-#define __BKE_NODE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -42,6 +41,10 @@ extern "C" {
 #define MAX_SOCKET 512
 
 struct ARegion;
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
 struct FreestyleLineStyle;
@@ -101,6 +104,36 @@ typedef struct bNodeSocketTemplate {
   char identifier[64];      /* generated from name */
 } bNodeSocketTemplate;
 
+/* Use `void *` for callbacks that require C++. This is rather ugly, but works well for now. This
+ * would not be necessary if we would use bNodeSocketType and bNodeType only in C++ code.
+ * However, achieving this requires quite a few changes currently. */
+#ifdef __cplusplus
+namespace blender {
+namespace nodes {
+class SocketMFNetworkBuilder;
+class NodeMFNetworkBuilder;
+class GeoNodeExecParams;
+}  // namespace nodes
+namespace fn {
+class CPPType;
+class MFDataType;
+}  // namespace fn
+}  // namespace blender
+
+using NodeExpandInMFNetworkFunction = void (*)(blender::nodes::NodeMFNetworkBuilder &builder);
+using NodeGeometryExecFunction = void (*)(blender::nodes::GeoNodeExecParams params);
+using SocketGetCPPTypeFunction = const blender::fn::CPPType *(*)();
+using SocketGetCPPValueFunction = void (*)(const struct bNodeSocket &socket, void *r_value);
+using SocketExpandInMFNetworkFunction = void (*)(blender::nodes::SocketMFNetworkBuilder &builder);
+
+#else
+typedef void *NodeExpandInMFNetworkFunction;
+typedef void *SocketExpandInMFNetworkFunction;
+typedef void *NodeGeometryExecFunction;
+typedef void *SocketGetCPPTypeFunction;
+typedef void *SocketGetCPPValueFunction;
+#endif
+
 /**
  * \brief Defines a socket type.
  *
@@ -153,6 +186,13 @@ typedef struct bNodeSocketType {
 
   /* Callback to free the socket type. */
   void (*free_self)(struct bNodeSocketType *stype);
+
+  /* Expands the socket into a multi-function node that outputs the socket value. */
+  SocketExpandInMFNetworkFunction expand_in_mf_network;
+  /* Return the CPPType of this socket. */
+  SocketGetCPPTypeFunction get_cpp_type;
+  /* Get the value of this socket in a generic way. */
+  SocketGetCPPValueFunction get_cpp_value;
 } bNodeSocketType;
 
 typedef void *(*NodeInitExecFunction)(struct bNodeExecContext *context,
@@ -222,23 +262,23 @@ typedef struct bNodeType {
    * \note Used as a fallback when #bNode.label isn't set.
    */
   void (*labelfunc)(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
-  /// Optional custom resize handle polling.
+  /** Optional custom resize handle polling. */
   int (*resize_area_func)(struct bNode *node, int x, int y);
-  /// Optional selection area polling.
+  /** Optional selection area polling. */
   int (*select_area_func)(struct bNode *node, int x, int y);
-  /// Optional tweak area polling (for grabbing).
+  /** Optional tweak area polling (for grabbing). */
   int (*tweak_area_func)(struct bNode *node, int x, int y);
 
-  /// Called when the node is updated in the editor.
+  /** Called when the node is updated in the editor. */
   void (*updatefunc)(struct bNodeTree *ntree, struct bNode *node);
-  /// Check and update if internal ID data has changed.
+  /** Check and update if internal ID data has changed. */
   void (*group_update_func)(struct bNodeTree *ntree, struct bNode *node);
 
-  /// Initialize a new node instance of this type after creation.
+  /** Initialize a new node instance of this type after creation. */
   void (*initfunc)(struct bNodeTree *ntree, struct bNode *node);
-  /// Free the node instance.
+  /** Free the node instance. */
   void (*freefunc)(struct bNode *node);
-  /// Make a copy of the node instance.
+  /** Make a copy of the node instance. */
   void (*copyfunc)(struct bNodeTree *dest_ntree,
                    struct bNode *dest_node,
                    const struct bNode *src_node);
@@ -266,6 +306,12 @@ typedef struct bNodeType {
   NodeExecFunction execfunc;
   /* gpu */
   NodeGPUExecFunction gpufunc;
+
+  /* Expands the bNode into nodes in a multi-function network, which will be evaluated later on. */
+  NodeExpandInMFNetworkFunction expand_in_mf_network;
+
+  /* Execute a geometry node. */
+  NodeGeometryExecFunction geometry_node_execute;
 
   /* RNA integration */
   ExtensionRNA rna_ext;
@@ -297,6 +343,8 @@ typedef struct bNodeType {
 #define NODE_CLASS_SCRIPT 32
 #define NODE_CLASS_INTERFACE 33
 #define NODE_CLASS_SHADER 40
+#define NODE_CLASS_GEOMETRY 41
+#define NODE_CLASS_ATTRIBUTE 42
 #define NODE_CLASS_LAYOUT 100
 
 /* node resize directions */
@@ -371,7 +419,7 @@ struct GHashIterator *ntreeTypeGetIterator(void);
     GHashIterator *__node_tree_type_iter__ = ntreeTypeGetIterator(); \
     for (; !BLI_ghashIterator_done(__node_tree_type_iter__); \
          BLI_ghashIterator_step(__node_tree_type_iter__)) { \
-      bNodeTreeType *ntype = BLI_ghashIterator_getValue(__node_tree_type_iter__);
+      bNodeTreeType *ntype = (bNodeTreeType *)BLI_ghashIterator_getValue(__node_tree_type_iter__);
 
 #define NODE_TREE_TYPES_END \
   } \
@@ -405,7 +453,9 @@ void ntreeUpdateTree(struct Main *main, struct bNodeTree *ntree);
 void ntreeUpdateAllNew(struct Main *main);
 void ntreeUpdateAllUsers(struct Main *main, struct ID *id);
 
-void ntreeGetDependencyList(struct bNodeTree *ntree, struct bNode ***deplist, int *totnodes);
+void ntreeGetDependencyList(struct bNodeTree *ntree,
+                            struct bNode ***r_deplist,
+                            int *r_deplist_len);
 
 /* XXX old trees handle output flags automatically based on special output
  * node types and last active selection.
@@ -415,12 +465,17 @@ void ntreeSetOutput(struct bNodeTree *ntree);
 
 void ntreeFreeCache(struct bNodeTree *ntree);
 
-int ntreeNodeExists(struct bNodeTree *ntree, struct bNode *testnode);
-int ntreeOutputExists(struct bNode *node, struct bNodeSocket *testsock);
+bool ntreeNodeExists(const struct bNodeTree *ntree, const struct bNode *testnode);
+bool ntreeOutputExists(const struct bNode *node, const struct bNodeSocket *testsock);
 void ntreeNodeFlagSet(const bNodeTree *ntree, const int flag, const bool enable);
 struct bNodeTree *ntreeLocalize(struct bNodeTree *ntree);
 void ntreeLocalSync(struct bNodeTree *localtree, struct bNodeTree *ntree);
 void ntreeLocalMerge(struct Main *bmain, struct bNodeTree *localtree, struct bNodeTree *ntree);
+
+void ntreeBlendWrite(struct BlendWriter *writer, struct bNodeTree *ntree);
+void ntreeBlendReadData(struct BlendDataReader *reader, struct bNodeTree *ntree);
+void ntreeBlendReadLib(struct BlendLibReader *reader, struct bNodeTree *ntree);
+void ntreeBlendReadExpand(struct BlendExpander *expander, struct bNodeTree *ntree);
 
 /** \} */
 
@@ -448,7 +503,7 @@ struct bNodeSocket *ntreeInsertSocketInterfaceFromSocket(struct bNodeTree *ntree
                                                          struct bNodeSocket *from_sock);
 void ntreeRemoveSocketInterface(struct bNodeTree *ntree, struct bNodeSocket *sock);
 
-struct StructRNA *ntreeInterfaceTypeGet(struct bNodeTree *ntree, int create);
+struct StructRNA *ntreeInterfaceTypeGet(struct bNodeTree *ntree, bool create);
 void ntreeInterfaceTypeFree(struct bNodeTree *ntree);
 void ntreeInterfaceTypeUpdate(struct bNodeTree *ntree);
 
@@ -461,7 +516,7 @@ void ntreeInterfaceTypeUpdate(struct bNodeTree *ntree);
 struct bNodeType *nodeTypeFind(const char *idname);
 void nodeRegisterType(struct bNodeType *ntype);
 void nodeUnregisterType(struct bNodeType *ntype);
-bool nodeIsRegistered(struct bNode *node);
+bool nodeTypeUndefined(struct bNode *node);
 struct GHashIterator *nodeTypeGetIterator(void);
 
 /* helper macros for iterating over node types */
@@ -470,7 +525,7 @@ struct GHashIterator *nodeTypeGetIterator(void);
     GHashIterator *__node_type_iter__ = nodeTypeGetIterator(); \
     for (; !BLI_ghashIterator_done(__node_type_iter__); \
          BLI_ghashIterator_step(__node_type_iter__)) { \
-      bNodeType *ntype = BLI_ghashIterator_getValue(__node_type_iter__);
+      bNodeType *ntype = (bNodeType *)BLI_ghashIterator_getValue(__node_type_iter__);
 
 #define NODE_TYPES_END \
   } \
@@ -492,7 +547,8 @@ const char *nodeStaticSocketInterfaceType(int type, int subtype);
     GHashIterator *__node_socket_type_iter__ = nodeSocketTypeGetIterator(); \
     for (; !BLI_ghashIterator_done(__node_socket_type_iter__); \
          BLI_ghashIterator_step(__node_socket_type_iter__)) { \
-      bNodeSocketType *stype = BLI_ghashIterator_getValue(__node_socket_type_iter__);
+      bNodeSocketType *stype = (bNodeSocketType *)BLI_ghashIterator_getValue( \
+          __node_socket_type_iter__);
 
 #define NODE_SOCKET_TYPES_END \
   } \
@@ -500,7 +556,7 @@ const char *nodeStaticSocketInterfaceType(int type, int subtype);
   } \
   ((void)0)
 
-struct bNodeSocket *nodeFindSocket(struct bNode *node, int in_out, const char *identifier);
+struct bNodeSocket *nodeFindSocket(const struct bNode *node, int in_out, const char *identifier);
 struct bNodeSocket *nodeAddSocket(struct bNodeTree *ntree,
                                   struct bNode *node,
                                   int in_out,
@@ -571,12 +627,12 @@ struct bNodeLink *nodeAddLink(struct bNodeTree *ntree,
                               struct bNodeSocket *tosock);
 void nodeRemLink(struct bNodeTree *ntree, struct bNodeLink *link);
 void nodeRemSocketLinks(struct bNodeTree *ntree, struct bNodeSocket *sock);
-bool nodeLinkIsHidden(struct bNodeLink *link);
+bool nodeLinkIsHidden(const struct bNodeLink *link);
 void nodeInternalRelink(struct bNodeTree *ntree, struct bNode *node);
 
-void nodeToView(struct bNode *node, float x, float y, float *rx, float *ry);
-void nodeFromView(struct bNode *node, float x, float y, float *rx, float *ry);
-bool nodeAttachNodeCheck(struct bNode *node, struct bNode *parent);
+void nodeToView(const struct bNode *node, float x, float y, float *rx, float *ry);
+void nodeFromView(const struct bNode *node, float x, float y, float *rx, float *ry);
+bool nodeAttachNodeCheck(const struct bNode *node, const struct bNode *parent);
 void nodeAttachNode(struct bNode *node, struct bNode *parent);
 void nodeDetachNode(struct bNode *node);
 
@@ -587,10 +643,10 @@ void nodePositionRelative(struct bNode *from_node,
 void nodePositionPropagate(struct bNode *node);
 
 struct bNode *nodeFindNodebyName(struct bNodeTree *ntree, const char *name);
-int nodeFindNode(struct bNodeTree *ntree,
-                 struct bNodeSocket *sock,
-                 struct bNode **nodep,
-                 int *sockindex);
+bool nodeFindNode(struct bNodeTree *ntree,
+                  struct bNodeSocket *sock,
+                  struct bNode **r_node,
+                  int *r_sockindex);
 struct bNode *nodeFindRootParent(bNode *node);
 
 bool nodeIsChildOf(const bNode *parent, const bNode *child);
@@ -608,9 +664,9 @@ void nodeChainIterBackwards(const bNodeTree *ntree,
 void nodeParentsIter(bNode *node, bool (*callback)(bNode *, void *), void *userdata);
 
 struct bNodeLink *nodeFindLink(struct bNodeTree *ntree,
-                               struct bNodeSocket *from,
-                               struct bNodeSocket *to);
-int nodeCountSocketLinks(struct bNodeTree *ntree, struct bNodeSocket *sock);
+                               const struct bNodeSocket *from,
+                               const struct bNodeSocket *to);
+int nodeCountSocketLinks(const struct bNodeTree *ntree, const struct bNodeSocket *sock);
 
 void nodeSetSelected(struct bNode *node, bool select);
 void nodeSetActive(struct bNodeTree *ntree, struct bNode *node);
@@ -625,14 +681,14 @@ void nodeUpdate(struct bNodeTree *ntree, struct bNode *node);
 bool nodeUpdateID(struct bNodeTree *ntree, struct ID *id);
 void nodeUpdateInternalLinks(struct bNodeTree *ntree, struct bNode *node);
 
-int nodeSocketIsHidden(struct bNodeSocket *sock);
+int nodeSocketIsHidden(const struct bNodeSocket *sock);
 void ntreeTagUsedSockets(struct bNodeTree *ntree);
 void nodeSetSocketAvailability(struct bNodeSocket *sock, bool is_available);
 
-int nodeSocketLinkLimit(struct bNodeSocket *sock);
+int nodeSocketLinkLimit(const struct bNodeSocket *sock);
 
 /* Node Clipboard */
-void BKE_node_clipboard_init(struct bNodeTree *ntree);
+void BKE_node_clipboard_init(const struct bNodeTree *ntree);
 void BKE_node_clipboard_clear(void);
 void BKE_node_clipboard_free(void);
 bool BKE_node_clipboard_validate(void);
@@ -653,8 +709,8 @@ extern const bNodeInstanceKey NODE_INSTANCE_KEY_BASE;
 extern const bNodeInstanceKey NODE_INSTANCE_KEY_NONE;
 
 bNodeInstanceKey BKE_node_instance_key(bNodeInstanceKey parent_key,
-                                       struct bNodeTree *ntree,
-                                       struct bNode *node);
+                                       const struct bNodeTree *ntree,
+                                       const struct bNode *node);
 
 bNodeInstanceHash *BKE_node_instance_hash_new(const char *info);
 void BKE_node_instance_hash_free(bNodeInstanceHash *hash, bNodeInstanceValueFP valfreefp);
@@ -714,7 +770,7 @@ BLI_INLINE bool BKE_node_instance_hash_iterator_done(bNodeInstanceHashIterator *
 
 /* Node Previews */
 
-int BKE_node_preview_used(struct bNode *node);
+bool BKE_node_preview_used(const struct bNode *node);
 bNodePreview *BKE_node_preview_verify(
     struct bNodeInstanceHash *previews, bNodeInstanceKey key, int xsize, int ysize, bool create);
 bNodePreview *BKE_node_preview_copy(struct bNodePreview *preview);
@@ -840,8 +896,7 @@ void BKE_node_tree_unlink_id(ID *id, struct bNodeTree *ntree);
  * } FOREACH_NODETREE_END;
  * \endcode
  *
- * \{
- */
+ * \{ */
 
 /* should be an opaque type, only for internal use by BKE_node_tree_iter_*** */
 struct NodeTreeIterStore {
@@ -1152,6 +1207,7 @@ void ntreeGPUMaterialNodes(struct bNodeTree *localtree,
 #define CMP_NODE_SWITCH_VIEW 322
 #define CMP_NODE_CRYPTOMATTE 323
 #define CMP_NODE_DENOISE 324
+#define CMP_NODE_EXPOSURE 325
 
 /* channel toggles */
 #define CMP_CHAN_RGB 1
@@ -1190,7 +1246,7 @@ void ntreeCompositExecTree(struct Scene *scene,
                            const struct ColorManagedViewSettings *view_settings,
                            const struct ColorManagedDisplaySettings *display_settings,
                            const char *view_name);
-void ntreeCompositTagRender(struct Scene *sce);
+void ntreeCompositTagRender(struct Scene *scene);
 void ntreeCompositUpdateRLayers(struct bNodeTree *ntree);
 void ntreeCompositRegisterPass(struct bNodeTree *ntree,
                                struct Scene *scene,
@@ -1271,7 +1327,7 @@ struct bNodeTreeExec *ntreeTexBeginExecTree(struct bNodeTree *ntree);
 void ntreeTexEndExecTree(struct bNodeTreeExec *exec);
 int ntreeTexExecTree(struct bNodeTree *ntree,
                      struct TexResult *target,
-                     float coord[3],
+                     const float co[3],
                      float dxt[3],
                      float dyt[3],
                      int osatex,
@@ -1284,21 +1340,36 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Simulation Nodes
+/** \name Geometry Nodes
  * \{ */
 
-#define SIM_NODE_PARTICLE_SIMULATION 1000
-#define SIM_NODE_FORCE 1001
-#define SIM_NODE_SET_PARTICLE_ATTRIBUTE 1002
-#define SIM_NODE_PARTICLE_BIRTH_EVENT 1003
-#define SIM_NODE_PARTICLE_TIME_STEP_EVENT 1004
-#define SIM_NODE_EXECUTE_CONDITION 1005
-#define SIM_NODE_MULTI_EXECUTE 1006
-#define SIM_NODE_PARTICLE_MESH_EMITTER 1007
-#define SIM_NODE_PARTICLE_MESH_COLLISION_EVENT 1008
-#define SIM_NODE_EMIT_PARTICLES 1009
-#define SIM_NODE_TIME 1010
-#define SIM_NODE_PARTICLE_ATTRIBUTE 1011
+#define GEO_NODE_TRIANGULATE 1000
+#define GEO_NODE_EDGE_SPLIT 1001
+#define GEO_NODE_TRANSFORM 1002
+#define GEO_NODE_BOOLEAN 1003
+#define GEO_NODE_POINT_DISTRIBUTE 1004
+#define GEO_NODE_POINT_INSTANCE 1005
+#define GEO_NODE_SUBDIVISION_SURFACE 1006
+#define GEO_NODE_OBJECT_INFO 1007
+#define GEO_NODE_ATTRIBUTE_RANDOMIZE 1008
+#define GEO_NODE_ATTRIBUTE_MATH 1009
+#define GEO_NODE_JOIN_GEOMETRY 1010
+#define GEO_NODE_ATTRIBUTE_FILL 1011
+#define GEO_NODE_ATTRIBUTE_MIX 1012
+#define GEO_NODE_ATTRIBUTE_COLOR_RAMP 1013
+#define GEO_NODE_POINT_SEPARATE 1014
+#define GEO_NODE_ATTRIBUTE_COMPARE 1015
+#define GEO_NODE_POINT_ROTATE 1016
+#define GEO_NODE_ATTRIBUTE_VECTOR_MATH 1017
+#define GEO_NODE_ALIGN_ROTATION_TO_VECTOR 1018
+#define GEO_NODE_POINT_TRANSLATE 1019
+#define GEO_NODE_POINT_SCALE 1020
+#define GEO_NODE_ATTRIBUTE_SAMPLE_TEXTURE 1021
+#define GEO_NODE_POINTS_TO_VOLUME 1022
+#define GEO_NODE_COLLECTION_INFO 1023
+#define GEO_NODE_IS_VIEWPORT 1024
+#define GEO_NODE_ATTRIBUTE_PROXIMITY 1025
+#define GEO_NODE_VOLUME_TO_MESH 1026
 
 /** \} */
 
@@ -1311,11 +1382,14 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 #define FN_NODE_FLOAT_COMPARE 1202
 #define FN_NODE_GROUP_INSTANCE_ID 1203
 #define FN_NODE_COMBINE_STRINGS 1204
+#define FN_NODE_OBJECT_TRANSFORMS 1205
+#define FN_NODE_RANDOM_FLOAT 1206
+#define FN_NODE_INPUT_VECTOR 1207
 
 /** \} */
 
-void init_nodesystem(void);
-void free_nodesystem(void);
+void BKE_node_system_init(void);
+void BKE_node_system_exit(void);
 
 /* -------------------------------------------------------------------- */
 /* evaluation support, */
@@ -1332,5 +1406,3 @@ extern struct bNodeSocketType NodeSocketTypeUndefined;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_NODE_H__ */

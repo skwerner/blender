@@ -53,7 +53,7 @@ void imb_refcounter_lock_exit(void)
   BLI_spin_end(&refcounter_spin);
 }
 
-#ifdef WIN32
+#ifndef WIN32
 static SpinLock mmap_spin;
 
 void imb_mmap_lock_init(void)
@@ -197,7 +197,7 @@ void IMB_freezbuffloatImBuf(ImBuf *ibuf)
   ibuf->mall &= ~IB_zbuffloat;
 }
 
-/** Free all pixel data (assosiated with image size). */
+/** Free all pixel data (associated with image size). */
 void imb_freerectImbuf_all(ImBuf *ibuf)
 {
   imb_freerectImBuf(ibuf);
@@ -423,9 +423,8 @@ bool imb_addrectImBuf(ImBuf *ibuf)
     if (ibuf->planes > 32) {
       return (addzbufImBuf(ibuf));
     }
-    else {
-      return true;
-    }
+
+    return true;
   }
 
   return false;
@@ -489,7 +488,7 @@ ImBuf *IMB_allocImBuf(unsigned int x, unsigned int y, uchar planes, unsigned int
     }
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 bool IMB_initImBuf(
@@ -624,7 +623,7 @@ ImBuf *IMB_dupImBuf(const ImBuf *ibuf1)
 
   *ibuf2 = tbuf;
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 size_t IMB_get_size_in_memory(ImBuf *ibuf)

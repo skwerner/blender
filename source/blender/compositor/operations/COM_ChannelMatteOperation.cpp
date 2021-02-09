@@ -19,12 +19,12 @@
 #include "COM_ChannelMatteOperation.h"
 #include "BLI_math.h"
 
-ChannelMatteOperation::ChannelMatteOperation() : NodeOperation()
+ChannelMatteOperation::ChannelMatteOperation()
 {
   addInputSocket(COM_DT_COLOR);
   addOutputSocket(COM_DT_VALUE);
 
-  this->m_inputImageProgram = NULL;
+  this->m_inputImageProgram = nullptr;
 }
 
 void ChannelMatteOperation::initExecution()
@@ -77,7 +77,7 @@ void ChannelMatteOperation::initExecution()
 
 void ChannelMatteOperation::deinitExecution()
 {
-  this->m_inputImageProgram = NULL;
+  this->m_inputImageProgram = nullptr;
 }
 
 void ChannelMatteOperation::executePixelSampled(float output[4],
@@ -111,10 +111,10 @@ void ChannelMatteOperation::executePixelSampled(float output[4],
     alpha = (alpha - limit_min) / limit_range;
   }
 
-  /* store matte(alpha) value in [0] to go with
-   * COM_SetAlphaOperation and the Value output
+  /* Store matte(alpha) value in [0] to go with
+   * COM_SetAlphaMultiplyOperation and the Value output.
    */
 
-  /* don't make something that was more transparent less transparent */
+  /* Don't make something that was more transparent less transparent. */
   output[0] = min(alpha, inColor[3]);
 }

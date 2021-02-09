@@ -21,8 +21,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_WEIGHTVG_UTIL_H__
-#define __MOD_WEIGHTVG_UTIL_H__
+#pragma once
 
 struct CurveMapping;
 struct MDeformVert;
@@ -30,9 +29,11 @@ struct MDeformWeight;
 struct Mesh;
 struct ModifierEvalContext;
 struct Object;
+struct PointerRNA;
 struct RNG;
 struct Scene;
 struct Tex;
+struct uiLayout;
 
 /*
  * XXX I'd like to make modified weights visible in WeightPaint mode,
@@ -54,7 +55,7 @@ struct Tex;
 
 void weightvg_do_map(int num,
                      float *new_w,
-                     short mode,
+                     short falloff_type,
                      const bool do_invert,
                      struct CurveMapping *cmap,
                      struct RNG *rng);
@@ -89,4 +90,4 @@ void weightvg_update_vg(struct MDeformVert *dvert,
                         const float rem_thresh,
                         const bool do_normalize);
 
-#endif /* __MOD_WEIGHTVG_UTIL_H__ */
+void weightvg_ui_common(const bContext *C, PointerRNA *ob_ptr, PointerRNA *ptr, uiLayout *layout);

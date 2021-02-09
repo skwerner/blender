@@ -88,12 +88,12 @@ static void undocurve_to_editcurve(Main *bmain, UndoCurve *ucu, Curve *cu, short
 
   if (ad) {
     if (ad->action) {
-      free_fcurves(&ad->action->curves);
-      copy_fcurves(&ad->action->curves, &ucu->fcurves);
+      BKE_fcurves_free(&ad->action->curves);
+      BKE_fcurves_copy(&ad->action->curves, &ucu->fcurves);
     }
 
-    free_fcurves(&ad->drivers);
-    copy_fcurves(&ad->drivers, &ucu->drivers);
+    BKE_fcurves_free(&ad->drivers);
+    BKE_fcurves_copy(&ad->drivers, &ucu->drivers);
   }
 
   /* copy  */
@@ -132,10 +132,10 @@ static void undocurve_from_editcurve(UndoCurve *ucu, Curve *cu, const short shap
 
   if (ad) {
     if (ad->action) {
-      copy_fcurves(&ucu->fcurves, &ad->action->curves);
+      BKE_fcurves_copy(&ucu->fcurves, &ad->action->curves);
     }
 
-    copy_fcurves(&ucu->drivers, &ad->drivers);
+    BKE_fcurves_copy(&ucu->drivers, &ad->drivers);
   }
 
   /* copy  */
@@ -167,8 +167,8 @@ static void undocurve_free_data(UndoCurve *uc)
 
   BKE_curve_editNurb_keyIndex_free(&uc->undoIndex);
 
-  free_fcurves(&uc->fcurves);
-  free_fcurves(&uc->drivers);
+  BKE_fcurves_free(&uc->fcurves);
+  BKE_fcurves_free(&uc->drivers);
 }
 
 static Object *editcurve_object_from_context(bContext *C)
@@ -238,8 +238,11 @@ static bool curve_undosys_step_encode(struct bContext *C, struct Main *bmain, Un
   return true;
 }
 
-static void curve_undosys_step_decode(
-    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
+static void curve_undosys_step_decode(struct bContext *C,
+                                      struct Main *bmain,
+                                      UndoStep *us_p,
+                                      const eUndoStepDir UNUSED(dir),
+                                      bool UNUSED(is_final))
 {
   CurveUndoStep *us = (CurveUndoStep *)us_p;
 
@@ -309,7 +312,7 @@ void ED_curve_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = curve_undosys_foreach_ID_ref;
 
-  ut->use_context = true;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
 
   ut->step_size = sizeof(CurveUndoStep);
 }

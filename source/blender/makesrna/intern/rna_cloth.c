@@ -34,7 +34,7 @@
 #include "BKE_cloth.h"
 #include "BKE_modifier.h"
 
-#include "BPH_mass_spring.h"
+#include "SIM_mass_spring.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -396,6 +396,24 @@ static void rna_CollSettings_selfcol_vgroup_set(PointerRNA *ptr, const char *val
   rna_object_vgroup_name_index_set(ptr, value, &coll->vgroup_selfcol);
 }
 
+static void rna_CollSettings_objcol_vgroup_get(PointerRNA *ptr, char *value)
+{
+  ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
+  rna_object_vgroup_name_index_get(ptr, value, coll->vgroup_objcol);
+}
+
+static int rna_CollSettings_objcol_vgroup_length(PointerRNA *ptr)
+{
+  ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
+  return rna_object_vgroup_name_index_length(ptr, coll->vgroup_objcol);
+}
+
+static void rna_CollSettings_objcol_vgroup_set(PointerRNA *ptr, const char *value)
+{
+  ClothCollSettings *coll = (ClothCollSettings *)ptr->data;
+  rna_object_vgroup_name_index_set(ptr, value, &coll->vgroup_objcol);
+}
+
 static PointerRNA rna_ClothSettings_rest_shape_key_get(PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
@@ -439,7 +457,7 @@ static char *rna_ClothSettings_path(PointerRNA *ptr)
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
-    BLI_strescape(name_esc, md->name, sizeof(name_esc));
+    BLI_str_escape(name_esc, md->name, sizeof(name_esc));
     return BLI_sprintfN("modifiers[\"%s\"].settings", name_esc);
   }
   else {
@@ -454,7 +472,7 @@ static char *rna_ClothCollisionSettings_path(PointerRNA *ptr)
 
   if (md) {
     char name_esc[sizeof(md->name) * 2];
-    BLI_strescape(name_esc, md->name, sizeof(name_esc));
+    BLI_str_escape(name_esc, md->name, sizeof(name_esc));
     return BLI_sprintfN("modifiers[\"%s\"].collision_settings", name_esc);
   }
   else {
@@ -482,18 +500,18 @@ static void rna_def_cloth_solver_result(BlenderRNA *brna)
   PropertyRNA *prop;
 
   static const EnumPropertyItem status_items[] = {
-      {BPH_SOLVER_SUCCESS, "SUCCESS", 0, "Success", "Computation was successful"},
-      {BPH_SOLVER_NUMERICAL_ISSUE,
+      {SIM_SOLVER_SUCCESS, "SUCCESS", 0, "Success", "Computation was successful"},
+      {SIM_SOLVER_NUMERICAL_ISSUE,
        "NUMERICAL_ISSUE",
        0,
        "Numerical Issue",
        "The provided data did not satisfy the prerequisites"},
-      {BPH_SOLVER_NO_CONVERGENCE,
+      {SIM_SOLVER_NO_CONVERGENCE,
        "NO_CONVERGENCE",
        0,
        "No Convergence",
        "Iterative procedure did not converge"},
-      {BPH_SOLVER_INVALID_INPUT,
+      {SIM_SOLVER_INVALID_INPUT,
        "INVALID_INPUT",
        0,
        "Invalid Input",
@@ -711,7 +729,6 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "voxel_cell_size", PROP_FLOAT, PROP_UNSIGNED);
   RNA_def_property_float_sdna(prop, NULL, "voxel_cell_size");
   RNA_def_property_range(prop, 0.0001f, 10000.0f);
-  RNA_def_property_float_default(prop, 0.1f);
   RNA_def_property_ui_text(
       prop, "Voxel Grid Cell Size", "Size of the voxel grid cells for interaction effects");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
@@ -975,8 +992,10 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_pressure_volume", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", CLOTH_SIMSETTINGS_FLAG_PRESSURE_VOL);
-  RNA_def_property_ui_text(
-      prop, "Use Custom Volume", "Use the Volume parameter as the initial volume");
+  RNA_def_property_ui_text(prop,
+                           "Use Custom Volume",
+                           "Use the Target Volume parameter as the initial volume, instead "
+                           "of calculating it from the mesh itself");
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
@@ -984,10 +1003,10 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
   RNA_def_property_float_sdna(prop, NULL, "uniform_pressure_force");
   RNA_def_property_range(prop, -10000.0f, 10000.0f);
   RNA_def_property_float_default(prop, 0.0f);
-  RNA_def_property_ui_text(
-      prop,
-      "Pressure",
-      "The uniform pressure that is constantly applied to the mesh. Can be negative");
+  RNA_def_property_ui_text(prop,
+                           "Pressure",
+                           "The uniform pressure that is constantly applied to the mesh, in units "
+                           "of Pressure Scale. Can be negative");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "target_volume", PROP_FLOAT, PROP_NONE);
@@ -997,14 +1016,27 @@ static void rna_def_cloth_sim_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Target Volume",
                            "The mesh volume where the inner/outer pressure will be the same. If "
-                           "set to zero the volume will not contribute to the total pressure");
+                           "set to zero the change in volume will not affect pressure");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "pressure_factor", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "pressure_factor");
   RNA_def_property_range(prop, 0.0f, 10000.0f);
-  RNA_def_property_float_default(prop, 1.0f);
-  RNA_def_property_ui_text(prop, "Pressure Scale", "Air pressure scaling factor");
+  RNA_def_property_ui_text(prop,
+                           "Pressure Scale",
+                           "Ambient pressure (kPa) that balances out between the inside and "
+                           "outside of the object when it has the target volume");
+  RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+  prop = RNA_def_property(srna, "fluid_density", PROP_FLOAT, PROP_NONE);
+  RNA_def_property_float_sdna(prop, NULL, "fluid_density");
+  RNA_def_property_ui_range(prop, -2.0f, 2.0f, 0.05f, 4);
+  RNA_def_property_ui_text(
+      prop,
+      "Fluid Density",
+      "Density (kg/l) of the fluid contained inside the object, used to create "
+      "a hydrostatic pressure gradient simulating the weight of the internal fluid, "
+      "or buoyancy from the surrounding fluid if negative");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "vertex_group_pressure", PROP_STRING, PROP_NONE);
@@ -1149,7 +1181,18 @@ static void rna_def_cloth_collision_settings(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Selfcollision Vertex Group",
-      "Vertex group to define vertices which are not used during self collisions");
+      "Triangles with all vertices in this group are not used during self collisions");
+  RNA_def_property_update(prop, 0, "rna_cloth_update");
+
+  prop = RNA_def_property(srna, "vertex_group_object_collisions", PROP_STRING, PROP_NONE);
+  RNA_def_property_string_funcs(prop,
+                                "rna_CollSettings_objcol_vgroup_get",
+                                "rna_CollSettings_objcol_vgroup_length",
+                                "rna_CollSettings_objcol_vgroup_set");
+  RNA_def_property_ui_text(
+      prop,
+      "Collision Vertex Group",
+      "Triangles with all vertices in this group are not used during object collisions");
   RNA_def_property_update(prop, 0, "rna_cloth_update");
 
   prop = RNA_def_property(srna, "self_impulse_clamp", PROP_FLOAT, PROP_NONE);

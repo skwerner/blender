@@ -189,6 +189,12 @@ void multiresModifier_subdivide_to_level(struct Object *object,
   }
 
   Mesh *coarse_mesh = object->data;
+  if (coarse_mesh->totloop == 0) {
+    /* If there are no loops in the mesh implies there is no CD_MDISPS as well. So can early output
+     * from here as there is nothing to subdivide. */
+    return;
+  }
+
   MultiresReshapeContext reshape_context;
 
   /* There was no multires at all, all displacement is at 0. Can simply make sure all mdisps grids
@@ -219,7 +225,7 @@ void multiresModifier_subdivide_to_level(struct Object *object,
 
   multires_flush_sculpt_updates(object);
 
-  if (!multires_reshape_context_create_from_subdivide(&reshape_context, object, mmd, top_level)) {
+  if (!multires_reshape_context_create_from_modifier(&reshape_context, object, mmd, top_level)) {
     return;
   }
 

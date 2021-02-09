@@ -75,7 +75,7 @@ void firstIntersectionGridVisitor::examineOccluder(Polygon3r *occ)
       }
     }
     else {
-      occ->userdata2 = 0;
+      occ->userdata2 = nullptr;
     }
   }
 }
@@ -93,7 +93,7 @@ bool firstIntersectionGridVisitor::stop()
 /////////////////
 void Grid::clear()
 {
-  if (_occluders.size() != 0) {
+  if (!_occluders.empty()) {
     for (OccludersSet::iterator it = _occluders.begin(); it != _occluders.end(); it++) {
       delete (*it);
     }
@@ -154,7 +154,7 @@ void Grid::configure(const Vec3r &orig, const Vec3r &size, unsigned nb)
 void Grid::insertOccluder(Polygon3r *occluder)
 {
   const vector<Vec3r> vertices = occluder->getVertices();
-  if (vertices.size() == 0) {
+  if (vertices.empty()) {
     return;
   }
 
@@ -321,11 +321,11 @@ void Grid::castInfiniteRay(const Vec3r &orig,
 Polygon3r *Grid::castRayToFindFirstIntersection(
     const Vec3r &orig, const Vec3r &dir, double &t, double &u, double &v, unsigned timestamp)
 {
-  Polygon3r *occluder = 0;
+  Polygon3r *occluder = nullptr;
   Vec3r end = Vec3r(orig + FLT_MAX * dir / dir.norm());
   bool inter = initInfiniteRay(orig, dir, timestamp);
   if (!inter) {
-    return 0;
+    return nullptr;
   }
   firstIntersectionGridVisitor visitor(orig, dir, _cell_size);
   castRayInternal(visitor);

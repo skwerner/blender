@@ -21,12 +21,12 @@
 
 #include "IMB_colormanagement.h"
 
-LuminanceMatteOperation::LuminanceMatteOperation() : NodeOperation()
+LuminanceMatteOperation::LuminanceMatteOperation()
 {
   addInputSocket(COM_DT_COLOR);
   addOutputSocket(COM_DT_VALUE);
 
-  this->m_inputImageProgram = NULL;
+  this->m_inputImageProgram = nullptr;
 }
 
 void LuminanceMatteOperation::initExecution()
@@ -36,7 +36,7 @@ void LuminanceMatteOperation::initExecution()
 
 void LuminanceMatteOperation::deinitExecution()
 {
-  this->m_inputImageProgram = NULL;
+  this->m_inputImageProgram = nullptr;
 }
 
 void LuminanceMatteOperation::executePixelSampled(float output[4],
@@ -68,8 +68,8 @@ void LuminanceMatteOperation::executePixelSampled(float output[4],
     alpha = (luminance - low) / (high - low);
   }
 
-  /* store matte(alpha) value in [0] to go with
-   * COM_SetAlphaOperation and the Value output
+  /* Store matte(alpha) value in [0] to go with
+   * COM_SetAlphaMultiplyOperation and the Value output.
    */
 
   /* don't make something that was more transparent less transparent */

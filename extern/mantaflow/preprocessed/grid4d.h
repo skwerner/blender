@@ -69,7 +69,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::getSizeX", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -97,7 +97,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::getSizeY", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -125,7 +125,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::getSizeZ", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -153,7 +153,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::getSizeT", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -181,7 +181,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::getSize", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -256,7 +256,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::is3D", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -283,7 +283,7 @@ class Grid4dBase : public PbClass {
       Grid4dBase *pbo = dynamic_cast<Grid4dBase *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4dBase::is4D", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -372,7 +372,7 @@ template<class T> class Grid4d : public Grid4dBase {
   typedef T BASETYPE;
   typedef Grid4dBase BASETYPE_GRID;
 
-  void save(std::string name);
+  int save(std::string name);
   static PyObject *_W_9(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
   {
     try {
@@ -380,13 +380,12 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::save", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         std::string name = _args.get<std::string>("name", 0, &_lock);
         pbo->_args.copy(_args);
-        _retval = getPyNone();
-        pbo->save(name);
+        _retval = toPy(pbo->save(name));
         pbo->_args.check();
       }
       pbFinalizePlugin(pbo->getParent(), "Grid4d::save", !noTiming);
@@ -398,7 +397,7 @@ template<class T> class Grid4d : public Grid4dBase {
     }
   }
 
-  void load(std::string name);
+  int load(std::string name);
   static PyObject *_W_10(PyObject *_self, PyObject *_linargs, PyObject *_kwds)
   {
     try {
@@ -406,13 +405,12 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::load", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         std::string name = _args.get<std::string>("name", 0, &_lock);
         pbo->_args.copy(_args);
-        _retval = getPyNone();
-        pbo->load(name);
+        _retval = toPy(pbo->load(name));
         pbo->_args.check();
       }
       pbFinalizePlugin(pbo->getParent(), "Grid4d::load", !noTiming);
@@ -433,7 +431,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::clear", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -537,7 +535,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::copyFrom", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         const Grid4d<T> &a = *_args.getPtr<Grid4d<T>>("a", 0, &_lock);
@@ -567,7 +565,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::add", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         const Grid4d<T> &a = *_args.getPtr<Grid4d<T>>("a", 0, &_lock);
@@ -593,7 +591,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::sub", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         const Grid4d<T> &a = *_args.getPtr<Grid4d<T>>("a", 0, &_lock);
@@ -620,7 +618,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::setConst", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         T s = _args.get<T>("s", 0, &_lock);
@@ -647,7 +645,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::addConst", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         T s = _args.get<T>("s", 0, &_lock);
@@ -674,7 +672,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::addScaled", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         const Grid4d<T> &a = *_args.getPtr<Grid4d<T>>("a", 0, &_lock);
@@ -702,7 +700,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::mult", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         const Grid4d<T> &a = *_args.getPtr<Grid4d<T>>("a", 0, &_lock);
@@ -729,7 +727,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::multConst", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         T s = _args.get<T>("s", 0, &_lock);
@@ -756,7 +754,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::clamp", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         Real min = _args.get<Real>("min", 0, &_lock);
@@ -785,7 +783,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::getMaxAbs", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -810,7 +808,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::getMax", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -835,7 +833,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::getMin", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         pbo->_args.copy(_args);
@@ -860,7 +858,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::setBound", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         T value = _args.get<T>("value", 0, &_lock);
@@ -888,7 +886,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::setBoundNeumann", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         int boundaryWidth = _args.getOpt<int>("boundaryWidth", 0, 1, &_lock);
@@ -915,7 +913,7 @@ template<class T> class Grid4d : public Grid4dBase {
       Grid4d *pbo = dynamic_cast<Grid4d *>(Pb::objFromPy(_self));
       bool noTiming = _args.getOpt<bool>("notiming", -1, 0);
       pbPreparePlugin(pbo->getParent(), "Grid4d::printGrid", !noTiming);
-      PyObject *_retval = 0;
+      PyObject *_retval = nullptr;
       {
         ArgLocker _lock;
         int zSlice = _args.getOpt<int>("zSlice", 0, -1, &_lock);

@@ -100,21 +100,18 @@ static bool add_reroute_intersect_check(bNodeLink *link,
                                         float result[2])
 {
   float coord_array[NODE_LINK_RESOL + 1][2];
-  int i, b;
 
   if (node_link_bezier_points(NULL, NULL, link, coord_array, NODE_LINK_RESOL)) {
-
-    for (i = 0; i < tot - 1; i++) {
-      for (b = 0; b < NODE_LINK_RESOL; b++) {
-        if (isect_seg_seg_v2(mcoords[i], mcoords[i + 1], coord_array[b], coord_array[b + 1]) > 0) {
-          result[0] = (mcoords[i][0] + mcoords[i + 1][0]) / 2.0f;
-          result[1] = (mcoords[i][1] + mcoords[i + 1][1]) / 2.0f;
-          return 1;
+    for (int i = 0; i < tot - 1; i++) {
+      for (int b = 0; b < NODE_LINK_RESOL; b++) {
+        if (isect_seg_seg_v2_point(
+                mcoords[i], mcoords[i + 1], coord_array[b], coord_array[b + 1], result) > 0) {
+          return true;
         }
       }
     }
   }
-  return 0;
+  return false;
 }
 
 typedef struct bNodeSocketLink {
@@ -314,6 +311,13 @@ void NODE_OT_add_reroute(wmOperatorType *ot)
 
 /* ****************** Add File Node Operator  ******************* */
 
+static bool node_add_file_poll(bContext *C)
+{
+  const SpaceNode *snode = CTX_wm_space_node(C);
+  return ED_operator_node_editable(C) &&
+         ELEM(snode->nodetree->type, NTREE_SHADER, NTREE_TEXTURE, NTREE_COMPOSIT);
+}
+
 static int node_add_file_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -343,7 +347,7 @@ static int node_add_file_exec(bContext *C, wmOperator *op)
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  node = node_add_node(C, NULL, type, snode->cursor[0], snode->cursor[1]);
+  node = node_add_node(C, NULL, type, snode->runtime->cursor[0], snode->runtime->cursor[1]);
 
   if (!node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add an image node");
@@ -372,19 +376,20 @@ static int node_add_file_invoke(bContext *C, wmOperator *op, const wmEvent *even
   SpaceNode *snode = CTX_wm_space_node(C);
 
   /* convert mouse coordinates to v2d space */
-  UI_view2d_region_to_view(
-      &region->v2d, event->mval[0], event->mval[1], &snode->cursor[0], &snode->cursor[1]);
+  UI_view2d_region_to_view(&region->v2d,
+                           event->mval[0],
+                           event->mval[1],
+                           &snode->runtime->cursor[0],
+                           &snode->runtime->cursor[1]);
 
-  snode->cursor[0] /= UI_DPI_FAC;
-  snode->cursor[1] /= UI_DPI_FAC;
+  snode->runtime->cursor[0] /= UI_DPI_FAC;
+  snode->runtime->cursor[1] /= UI_DPI_FAC;
 
   if (RNA_struct_property_is_set(op->ptr, "filepath") ||
       RNA_struct_property_is_set(op->ptr, "name")) {
     return node_add_file_exec(C, op);
   }
-  else {
-    return WM_operator_filesel(C, op, event);
-  }
+  return WM_operator_filesel(C, op, event);
 }
 
 void NODE_OT_add_file(wmOperatorType *ot)
@@ -397,7 +402,7 @@ void NODE_OT_add_file(wmOperatorType *ot)
   /* callbacks */
   ot->exec = node_add_file_exec;
   ot->invoke = node_add_file_invoke;
-  ot->poll = ED_operator_node_editable;
+  ot->poll = node_add_file_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -408,7 +413,7 @@ void NODE_OT_add_file(wmOperatorType *ot)
                                  FILE_OPENFILE,
                                  WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
   RNA_def_string(ot->srna, "name", "Image", MAX_ID_NAME - 2, "Name", "Data-block name to assign");
 }
 
@@ -439,7 +444,8 @@ static int node_add_mask_exec(bContext *C, wmOperator *op)
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
 
-  node = node_add_node(C, NULL, CMP_NODE_MASK, snode->cursor[0], snode->cursor[1]);
+  node = node_add_node(
+      C, NULL, CMP_NODE_MASK, snode->runtime->cursor[0], snode->runtime->cursor[1]);
 
   if (!node) {
     BKE_report(op->reports, RPT_WARNING, "Could not add a mask node");

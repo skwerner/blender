@@ -27,6 +27,7 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_array_utils.h"
 #include "BLI_listbase.h"
@@ -35,6 +36,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
 #include "BKE_undo_system.h"
@@ -117,6 +119,7 @@ typedef struct UndoMesh {
 
 #ifdef USE_ARRAY_STORE
 
+/* -------------------------------------------------------------------- */
 /** \name Array Store
  * \{ */
 
@@ -168,7 +171,7 @@ static void um_arraystore_cd_compact(struct CustomData *cdata,
       else {
         bcd_reference_current = NULL;
 
-        /* do a full lookup when un-alligned */
+        /* Do a full lookup when unaligned. */
         if (bcd_reference) {
           const BArrayCustomData *bcd_iter = bcd_reference;
           while (bcd_iter) {
@@ -508,7 +511,13 @@ static void *undomesh_from_editmesh(UndoMesh *um, BMEditMesh *em, Key *key)
   }
 #endif
   /* make sure shape keys work */
-  um->me.key = key ? BKE_key_copy_nolib(key) : NULL;
+  if (key != NULL) {
+    um->me.key = (Key *)BKE_id_copy_ex(
+        NULL, &key->id, NULL, LIB_ID_COPY_LOCALIZE | LIB_ID_COPY_NO_ANIMDATA);
+  }
+  else {
+    um->me.key = NULL;
+  }
 
   /* BM_mesh_validate(em->bm); */ /* for troubleshooting */
 
@@ -619,7 +628,7 @@ static void undomesh_to_editmesh(UndoMesh *um, Object *ob, BMEditMesh *em, Key *
       if (kb_act->totelem != um->me.totvert) {
         /* The current mesh has some extra/missing verts compared to the undo, adjust. */
         MEM_SAFE_FREE(kb_act->data);
-        kb_act->data = MEM_mallocN((size_t)(key->elemsize * bm->totvert), __func__);
+        kb_act->data = MEM_mallocN((size_t)(key->elemsize) * bm->totvert, __func__);
         kb_act->totelem = um->me.totvert;
       }
 
@@ -735,8 +744,11 @@ static bool mesh_undosys_step_encode(struct bContext *C, struct Main *bmain, Und
   return true;
 }
 
-static void mesh_undosys_step_decode(
-    struct bContext *C, struct Main *bmain, UndoStep *us_p, int UNUSED(dir), bool UNUSED(is_final))
+static void mesh_undosys_step_decode(struct bContext *C,
+                                     struct Main *bmain,
+                                     UndoStep *us_p,
+                                     const eUndoStepDir UNUSED(dir),
+                                     bool UNUSED(is_final))
 {
   MeshUndoStep *us = (MeshUndoStep *)us_p;
 
@@ -810,7 +822,7 @@ void ED_mesh_undosys_type(UndoType *ut)
 
   ut->step_foreach_ID_ref = mesh_undosys_foreach_ID_ref;
 
-  ut->use_context = true;
+  ut->flags = UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE;
 
   ut->step_size = sizeof(MeshUndoStep);
 }

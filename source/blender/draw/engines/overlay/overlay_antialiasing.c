@@ -69,7 +69,7 @@ void OVERLAY_antialiasing_init(OVERLAY_Data *vedata)
 
   /* Small texture which will have very small impact on rendertime. */
   if (txl->dummy_depth_tx == NULL) {
-    float pixel[1] = {1.0f};
+    const float pixel[1] = {1.0f};
     txl->dummy_depth_tx = DRW_texture_create_2d(1, 1, GPU_DEPTH_COMPONENT24, 0, pixel);
   }
 
@@ -80,7 +80,7 @@ void OVERLAY_antialiasing_init(OVERLAY_Data *vedata)
 
   bool need_wire_expansion = (G_draw.block.sizePixel > 1.0f);
   pd->antialiasing.enabled = need_wire_expansion ||
-                             ((U.gpu_flag & USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE) > 0);
+                             ((U.gpu_flag & USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE) != 0);
 
   GPUTexture *color_tex = NULL;
   GPUTexture *line_tex = NULL;
@@ -93,7 +93,7 @@ void OVERLAY_antialiasing_init(OVERLAY_Data *vedata)
     line_tex = txl->overlay_line_tx;
   }
   else {
-    /* Just a copy of the defaults framebuffers. */
+    /* Just a copy of the defaults frame-buffers. */
     color_tex = dtxl->color_overlay;
   }
 
@@ -127,7 +127,7 @@ void OVERLAY_antialiasing_cache_init(OVERLAY_Data *vedata)
   if (pd->antialiasing.enabled) {
     /* `antialiasing.enabled` is also enabled for wire expansion. Check here if
      * anti aliasing is needed. */
-    const bool do_smooth_lines = (U.gpu_flag & USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE) > 0;
+    const bool do_smooth_lines = (U.gpu_flag & USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE) != 0;
 
     DRW_PASS_CREATE(psl->antialiasing_ps, DRW_STATE_WRITE_COLOR | DRW_STATE_BLEND_ALPHA_PREMUL);
 
@@ -202,14 +202,14 @@ void OVERLAY_antialiasing_start(OVERLAY_Data *vedata)
   OVERLAY_PrivateData *pd = vedata->stl->pd;
 
   if (pd->antialiasing.enabled) {
-    float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     GPU_framebuffer_bind(fbl->overlay_line_fb);
     GPU_framebuffer_clear_color(fbl->overlay_line_fb, clear_col);
   }
 
   /* If we are not in solid shading mode, we clear the depth. */
   if (DRW_state_is_fbo() && pd->clear_in_front) {
-    /* TODO(fclem) This clear should be done in a global place. */
+    /* TODO(fclem): This clear should be done in a global place. */
     GPU_framebuffer_bind(fbl->overlay_in_front_fb);
     GPU_framebuffer_clear_depth(fbl->overlay_in_front_fb, 1.0f);
   }

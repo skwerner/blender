@@ -18,6 +18,7 @@
 #ifdef WITH_OPTIX
 
 #  include "bvh/bvh.h"
+#  include "bvh/bvh_optix.h"
 #  include "device/cuda/device_cuda.h"
 #  include "device/device_denoising.h"
 #  include "device/device_intern.h"
@@ -30,6 +31,7 @@
 #  include "util/util_logging.h"
 #  include "util/util_md5.h"
 #  include "util/util_path.h"
+#  include "util/util_progress.h"
 #  include "util/util_time.h"
 
 #  ifdef WITH_CUDA_DYNLOAD
@@ -70,7 +72,7 @@ struct KernelParams {
       if (res != CUDA_SUCCESS) { \
         const char *name; \
         cuGetErrorName(res, &name); \
-        set_error(string_printf("OptiX CUDA error %s in %s, line %d", name, #stmt, __LINE__)); \
+        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
         return; \
       } \
     } \
@@ -81,7 +83,7 @@ struct KernelParams {
       if (res != CUDA_SUCCESS) { \
         const char *name; \
         cuGetErrorName(res, &name); \
-        set_error(string_printf("OptiX CUDA error %s in %s, line %d", name, #stmt, __LINE__)); \
+        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
         return false; \
       } \
     } \
@@ -92,7 +94,7 @@ struct KernelParams {
       enum OptixResult res = stmt; \
       if (res != OPTIX_SUCCESS) { \
         const char *name = optixGetErrorName(res); \
-        set_error(string_printf("OptiX error %s in %s, line %d", name, #stmt, __LINE__)); \
+        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
         return; \
       } \
     } \
@@ -102,7 +104,7 @@ struct KernelParams {
       enum OptixResult res = stmt; \
       if (res != OPTIX_SUCCESS) { \
         const char *name = optixGetErrorName(res); \
-        set_error(string_printf("OptiX error %s in %s, line %d", name, #stmt, __LINE__)); \
+        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
         return false; \
       } \
     } \
@@ -131,15 +133,17 @@ class OptiXDevice : public CUDADevice {
     PG_RGEN,
     PG_MISS,
     PG_HITD,  // Default hit group
-    PG_HITL,  // __BVH_LOCAL__ hit group
     PG_HITS,  // __SHADOW_RECORD_ALL__ hit group
-#  ifdef WITH_CYCLES_DEBUG
-    PG_EXCP,
+    PG_HITL,  // __BVH_LOCAL__ hit group (only used for triangles)
+#  if OPTIX_ABI_VERSION >= 36
+    PG_HITD_MOTION,
+    PG_HITS_MOTION,
 #  endif
     PG_BAKE,  // kernel_bake_evaluate
     PG_DISP,  // kernel_displace_evaluate
     PG_BACK,  // kernel_background_evaluate
-    NUM_PROGRAM_GROUPS
+    PG_CALL,
+    NUM_PROGRAM_GROUPS = PG_CALL + 3
   };
 
   // List of OptiX pipelines
@@ -177,12 +181,12 @@ class OptiXDevice : public CUDADevice {
   OptixDeviceContext context = NULL;
 
   OptixModule optix_module = NULL;  // All necessary OptiX kernels are in one module
+  OptixModule builtin_modules[2] = {};
   OptixPipeline pipelines[NUM_PIPELINES] = {};
 
   bool motion_blur = false;
   device_vector<SbtRecord> sbt_data;
   device_only_memory<KernelParams> launch_params;
-  vector<CUdeviceptr> as_mem;
   OptixTraversableHandle tlas_handle = 0;
 
   OptixDenoiser denoiser = NULL;
@@ -227,6 +231,9 @@ class OptiXDevice : public CUDADevice {
           }
         };
 #  endif
+#  if OPTIX_ABI_VERSION >= 41 && defined(WITH_CYCLES_DEBUG)
+    options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+#  endif
     check_result_optix(optixDeviceContextCreate(cuContext, &options, &context));
 #  ifdef WITH_CYCLES_LOGGING
     check_result_optix(optixDeviceContextSetLogCallback(
@@ -246,15 +253,10 @@ class OptiXDevice : public CUDADevice {
   ~OptiXDevice()
   {
     // Stop processing any more tasks
-    task_pool.stop();
+    task_pool.cancel();
 
     // Make CUDA context current
     const CUDAContextScope scope(cuContext);
-
-    // Free all acceleration structures
-    for (CUdeviceptr mem : as_mem) {
-      cuMemFree(mem);
-    }
 
     sbt_data.free();
     texture_info.free();
@@ -264,6 +266,9 @@ class OptiXDevice : public CUDADevice {
     // Unload modules
     if (optix_module != NULL)
       optixModuleDestroy(optix_module);
+    for (unsigned int i = 0; i < 2; ++i)
+      if (builtin_modules[i] != NULL)
+        optixModuleDestroy(builtin_modules[i]);
     for (unsigned int i = 0; i < NUM_PIPELINES; ++i)
       if (pipelines[i] != NULL)
         optixPipelineDestroy(pipelines[i]);
@@ -287,6 +292,10 @@ class OptiXDevice : public CUDADevice {
 
   BVHLayoutMask get_bvh_layout_mask() const override
   {
+    // CUDA kernels are used when doing baking, so need to build a BVH those can understand too!
+    if (optix_module == NULL)
+      return CUDADevice::get_bvh_layout_mask();
+
     // OptiX has its own internal acceleration structure format
     return BVH_LAYOUT_OPTIX;
   }
@@ -305,6 +314,14 @@ class OptiXDevice : public CUDADevice {
       common_cflags += string_printf(" -I\"%s/include\"", optix_sdk_path);
     }
 
+    // Specialization for shader raytracing
+    if (requested_features.use_shader_raytrace) {
+      common_cflags += " --keep-device-functions";
+    }
+    else {
+      common_cflags += " -D __NO_SHADER_RAYTRACE__";
+    }
+
     return common_cflags;
   }
 
@@ -320,15 +337,9 @@ class OptiXDevice : public CUDADevice {
       return false;
     }
 
-    // Disable baking for now, since its kernel is not well-suited for inlining and is very slow
+    // Baking is currently performed using CUDA, so no need to load OptiX kernels
     if (requested_features.use_baking) {
-      set_error("OptiX implementation does not support baking yet");
-      return false;
-    }
-    // Disable shader raytracing support for now, since continuation callables are slow
-    if (requested_features.use_shader_raytrace) {
-      set_error("OptiX implementation does not support shader raytracing yet");
-      return false;
+      return true;
     }
 
     const CUDAContextScope scope(cuContext);
@@ -337,6 +348,12 @@ class OptiXDevice : public CUDADevice {
     if (optix_module != NULL) {
       optixModuleDestroy(optix_module);
       optix_module = NULL;
+    }
+    for (unsigned int i = 0; i < 2; ++i) {
+      if (builtin_modules[i] != NULL) {
+        optixModuleDestroy(builtin_modules[i]);
+        builtin_modules[i] = NULL;
+      }
     }
     for (unsigned int i = 0; i < NUM_PIPELINES; ++i) {
       if (pipelines[i] != NULL) {
@@ -354,6 +371,12 @@ class OptiXDevice : public CUDADevice {
     module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
     module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
 #  endif
+
+#  if OPTIX_ABI_VERSION >= 41
+    module_options.boundValues = nullptr;
+    module_options.numBoundValues = 0;
+#  endif
+
     OptixPipelineCompileOptions pipeline_options;
     // Default to no motion blur and two-level graph, since it is the fastest option
     pipeline_options.usesMotionBlur = false;
@@ -361,13 +384,20 @@ class OptiXDevice : public CUDADevice {
         OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
     pipeline_options.numPayloadValues = 6;
     pipeline_options.numAttributeValues = 2;  // u, v
-#  ifdef WITH_CYCLES_DEBUG
-    pipeline_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_STACK_OVERFLOW |
-                                      OPTIX_EXCEPTION_FLAG_TRACE_DEPTH;
-#  else
     pipeline_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
-#  endif
     pipeline_options.pipelineLaunchParamsVariableName = "__params";  // See kernel_globals.h
+
+#  if OPTIX_ABI_VERSION >= 36
+    pipeline_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
+    if (requested_features.use_hair) {
+      if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
+        pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_ROUND_CUBIC_BSPLINE;
+      }
+      else {
+        pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
+      }
+    }
+#  endif
 
     // Keep track of whether motion blur is enabled, so to enable/disable motion in BVH builds
     // This is necessary since objects may be reported to have motion if the Vector pass is
@@ -382,18 +412,20 @@ class OptiXDevice : public CUDADevice {
     }
 
     {  // Load and compile PTX module with OptiX kernels
-      string ptx_data, ptx_filename = path_get("lib/kernel_optix.ptx");
+      string ptx_data, ptx_filename = path_get(requested_features.use_shader_raytrace ?
+                                                   "lib/kernel_optix_shader_raytrace.ptx" :
+                                                   "lib/kernel_optix.ptx");
       if (use_adaptive_compilation() || path_file_size(ptx_filename) == -1) {
         if (!getenv("OPTIX_ROOT_DIR")) {
           set_error(
-              "OPTIX_ROOT_DIR environment variable not set, must be set with the path to the "
-              "Optix SDK in order to compile the Optix kernel on demand.");
+              "Missing OPTIX_ROOT_DIR environment variable (which must be set with the path to "
+              "the Optix SDK to be able to compile Optix kernels on demand).");
           return false;
         }
         ptx_filename = compile_kernel(requested_features, "kernel_optix", "optix", true);
       }
       if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
-        set_error("Failed loading OptiX kernel " + ptx_filename + ".");
+        set_error("Failed to load OptiX kernel from '" + ptx_filename + "'");
         return false;
       }
 
@@ -428,11 +460,48 @@ class OptiXDevice : public CUDADevice {
     group_descs[PG_HITS].hitgroup.entryFunctionNameAH = "__anyhit__kernel_optix_shadow_all_hit";
 
     if (requested_features.use_hair) {
-      // Add curve intersection programs
       group_descs[PG_HITD].hitgroup.moduleIS = optix_module;
-      group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve";
       group_descs[PG_HITS].hitgroup.moduleIS = optix_module;
-      group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve";
+
+      // Add curve intersection programs
+      if (requested_features.use_hair_thick) {
+        // Slower programs for thick hair since that also slows down ribbons.
+        // Ideally this should not be needed.
+        group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve_all";
+        group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve_all";
+      }
+      else {
+        group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
+        group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
+      }
+
+#  if OPTIX_ABI_VERSION >= 36
+      if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
+        OptixBuiltinISOptions builtin_options;
+        builtin_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
+        builtin_options.usesMotionBlur = false;
+
+        check_result_optix_ret(optixBuiltinISModuleGet(
+            context, &module_options, &pipeline_options, &builtin_options, &builtin_modules[0]));
+
+        group_descs[PG_HITD].hitgroup.moduleIS = builtin_modules[0];
+        group_descs[PG_HITD].hitgroup.entryFunctionNameIS = nullptr;
+        group_descs[PG_HITS].hitgroup.moduleIS = builtin_modules[0];
+        group_descs[PG_HITS].hitgroup.entryFunctionNameIS = nullptr;
+
+        if (motion_blur) {
+          builtin_options.usesMotionBlur = true;
+
+          check_result_optix_ret(optixBuiltinISModuleGet(
+              context, &module_options, &pipeline_options, &builtin_options, &builtin_modules[1]));
+
+          group_descs[PG_HITD_MOTION] = group_descs[PG_HITD];
+          group_descs[PG_HITD_MOTION].hitgroup.moduleIS = builtin_modules[1];
+          group_descs[PG_HITS_MOTION] = group_descs[PG_HITS];
+          group_descs[PG_HITS_MOTION].hitgroup.moduleIS = builtin_modules[1];
+        }
+      }
+#  endif
     }
 
     if (requested_features.use_subsurface || requested_features.use_shader_raytrace) {
@@ -441,12 +510,6 @@ class OptiXDevice : public CUDADevice {
       group_descs[PG_HITL].hitgroup.moduleAH = optix_module;
       group_descs[PG_HITL].hitgroup.entryFunctionNameAH = "__anyhit__kernel_optix_local_hit";
     }
-
-#  ifdef WITH_CYCLES_DEBUG
-    group_descs[PG_EXCP].kind = OPTIX_PROGRAM_GROUP_KIND_EXCEPTION;
-    group_descs[PG_EXCP].exception.module = optix_module;
-    group_descs[PG_EXCP].exception.entryFunctionName = "__exception__kernel_optix_exception";
-#  endif
 
     if (requested_features.use_baking) {
       group_descs[PG_BAKE].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
@@ -464,6 +527,21 @@ class OptiXDevice : public CUDADevice {
       group_descs[PG_BACK].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
       group_descs[PG_BACK].raygen.module = optix_module;
       group_descs[PG_BACK].raygen.entryFunctionName = "__raygen__kernel_optix_background";
+    }
+
+    // Shader raytracing replaces some functions with direct callables
+    if (requested_features.use_shader_raytrace) {
+      group_descs[PG_CALL + 0].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+      group_descs[PG_CALL + 0].callables.moduleDC = optix_module;
+      group_descs[PG_CALL + 0].callables.entryFunctionNameDC = "__direct_callable__svm_eval_nodes";
+      group_descs[PG_CALL + 1].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+      group_descs[PG_CALL + 1].callables.moduleDC = optix_module;
+      group_descs[PG_CALL + 1].callables.entryFunctionNameDC =
+          "__direct_callable__kernel_volume_shadow";
+      group_descs[PG_CALL + 2].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+      group_descs[PG_CALL + 2].callables.moduleDC = optix_module;
+      group_descs[PG_CALL + 2].callables.entryFunctionNameDC =
+          "__direct_callable__subsurface_scatter_multi_setup";
     }
 
     check_result_optix_ret(optixProgramGroupCreate(
@@ -484,8 +562,14 @@ class OptiXDevice : public CUDADevice {
     unsigned int trace_css = stack_size[PG_HITD].cssCH;
     // This is based on the maximum of closest-hit and any-hit/intersection programs
     trace_css = std::max(trace_css, stack_size[PG_HITD].cssIS + stack_size[PG_HITD].cssAH);
-    trace_css = std::max(trace_css, stack_size[PG_HITL].cssIS + stack_size[PG_HITL].cssAH);
     trace_css = std::max(trace_css, stack_size[PG_HITS].cssIS + stack_size[PG_HITS].cssAH);
+    trace_css = std::max(trace_css, stack_size[PG_HITL].cssIS + stack_size[PG_HITL].cssAH);
+#  if OPTIX_ABI_VERSION >= 36
+    trace_css = std::max(trace_css,
+                         stack_size[PG_HITD_MOTION].cssIS + stack_size[PG_HITD_MOTION].cssAH);
+    trace_css = std::max(trace_css,
+                         stack_size[PG_HITS_MOTION].cssIS + stack_size[PG_HITS_MOTION].cssAH);
+#  endif
 
     OptixPipelineLinkOptions link_options;
     link_options.maxTraceDepth = 1;
@@ -494,35 +578,56 @@ class OptiXDevice : public CUDADevice {
 #  else
     link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
 #  endif
-    link_options.overrideUsesMotionBlur = pipeline_options.usesMotionBlur;
+#  if OPTIX_ABI_VERSION < 24
+    link_options.overrideUsesMotionBlur = motion_blur;
+#  endif
 
     {  // Create path tracing pipeline
-      OptixProgramGroup pipeline_groups[] = {
-          groups[PG_RGEN],
-          groups[PG_MISS],
-          groups[PG_HITD],
-          groups[PG_HITS],
-          groups[PG_HITL],
-#  ifdef WITH_CYCLES_DEBUG
-          groups[PG_EXCP],
+      vector<OptixProgramGroup> pipeline_groups;
+      pipeline_groups.reserve(NUM_PROGRAM_GROUPS);
+      pipeline_groups.push_back(groups[PG_RGEN]);
+      pipeline_groups.push_back(groups[PG_MISS]);
+      pipeline_groups.push_back(groups[PG_HITD]);
+      pipeline_groups.push_back(groups[PG_HITS]);
+      pipeline_groups.push_back(groups[PG_HITL]);
+#  if OPTIX_ABI_VERSION >= 36
+      if (motion_blur) {
+        pipeline_groups.push_back(groups[PG_HITD_MOTION]);
+        pipeline_groups.push_back(groups[PG_HITS_MOTION]);
+      }
 #  endif
-      };
-      check_result_optix_ret(
-          optixPipelineCreate(context,
-                              &pipeline_options,
-                              &link_options,
-                              pipeline_groups,
-                              (sizeof(pipeline_groups) / sizeof(pipeline_groups[0])),
-                              nullptr,
-                              0,
-                              &pipelines[PIP_PATH_TRACE]));
+      if (requested_features.use_shader_raytrace) {
+        pipeline_groups.push_back(groups[PG_CALL + 0]);
+        pipeline_groups.push_back(groups[PG_CALL + 1]);
+        pipeline_groups.push_back(groups[PG_CALL + 2]);
+      }
+
+      check_result_optix_ret(optixPipelineCreate(context,
+                                                 &pipeline_options,
+                                                 &link_options,
+                                                 pipeline_groups.data(),
+                                                 pipeline_groups.size(),
+                                                 nullptr,
+                                                 0,
+                                                 &pipelines[PIP_PATH_TRACE]));
 
       // Combine ray generation and trace continuation stack size
       const unsigned int css = stack_size[PG_RGEN].cssRG + link_options.maxTraceDepth * trace_css;
+      // Max direct callable depth is one of the following, so combine accordingly
+      // - __raygen__ -> svm_eval_nodes
+      // - __raygen__ -> kernel_volume_shadow -> svm_eval_nodes
+      // - __raygen__ -> subsurface_scatter_multi_setup -> svm_eval_nodes
+      const unsigned int dss = stack_size[PG_CALL + 0].dssDC +
+                               std::max(stack_size[PG_CALL + 1].dssDC,
+                                        stack_size[PG_CALL + 2].dssDC);
 
       // Set stack size depending on pipeline options
-      check_result_optix_ret(optixPipelineSetStackSize(
-          pipelines[PIP_PATH_TRACE], 0, 0, css, (pipeline_options.usesMotionBlur ? 3 : 2)));
+      check_result_optix_ret(
+          optixPipelineSetStackSize(pipelines[PIP_PATH_TRACE],
+                                    0,
+                                    requested_features.use_shader_raytrace ? dss : 0,
+                                    css,
+                                    motion_blur ? 3 : 2));
     }
 
     // Only need to create shader evaluation pipeline if one of these features is used:
@@ -531,36 +636,51 @@ class OptiXDevice : public CUDADevice {
                                           requested_features.use_true_displacement;
 
     if (use_shader_eval_pipeline) {  // Create shader evaluation pipeline
-      OptixProgramGroup pipeline_groups[] = {
-          groups[PG_BAKE],
-          groups[PG_DISP],
-          groups[PG_BACK],
-          groups[PG_MISS],
-          groups[PG_HITD],
-          groups[PG_HITS],
-          groups[PG_HITL],
-#  ifdef WITH_CYCLES_DEBUG
-          groups[PG_EXCP],
+      vector<OptixProgramGroup> pipeline_groups;
+      pipeline_groups.reserve(NUM_PROGRAM_GROUPS);
+      pipeline_groups.push_back(groups[PG_BAKE]);
+      pipeline_groups.push_back(groups[PG_DISP]);
+      pipeline_groups.push_back(groups[PG_BACK]);
+      pipeline_groups.push_back(groups[PG_MISS]);
+      pipeline_groups.push_back(groups[PG_HITD]);
+      pipeline_groups.push_back(groups[PG_HITS]);
+      pipeline_groups.push_back(groups[PG_HITL]);
+#  if OPTIX_ABI_VERSION >= 36
+      if (motion_blur) {
+        pipeline_groups.push_back(groups[PG_HITD_MOTION]);
+        pipeline_groups.push_back(groups[PG_HITS_MOTION]);
+      }
 #  endif
-      };
-      check_result_optix_ret(
-          optixPipelineCreate(context,
-                              &pipeline_options,
-                              &link_options,
-                              pipeline_groups,
-                              (sizeof(pipeline_groups) / sizeof(pipeline_groups[0])),
-                              nullptr,
-                              0,
-                              &pipelines[PIP_SHADER_EVAL]));
+      if (requested_features.use_shader_raytrace) {
+        pipeline_groups.push_back(groups[PG_CALL + 0]);
+        pipeline_groups.push_back(groups[PG_CALL + 1]);
+        pipeline_groups.push_back(groups[PG_CALL + 2]);
+      }
+
+      check_result_optix_ret(optixPipelineCreate(context,
+                                                 &pipeline_options,
+                                                 &link_options,
+                                                 pipeline_groups.data(),
+                                                 pipeline_groups.size(),
+                                                 nullptr,
+                                                 0,
+                                                 &pipelines[PIP_SHADER_EVAL]));
 
       // Calculate continuation stack size based on the maximum of all ray generation stack sizes
       const unsigned int css = std::max(stack_size[PG_BAKE].cssRG,
                                         std::max(stack_size[PG_DISP].cssRG,
                                                  stack_size[PG_BACK].cssRG)) +
                                link_options.maxTraceDepth * trace_css;
+      const unsigned int dss = stack_size[PG_CALL + 0].dssDC +
+                               std::max(stack_size[PG_CALL + 1].dssDC,
+                                        stack_size[PG_CALL + 2].dssDC);
 
-      check_result_optix_ret(optixPipelineSetStackSize(
-          pipelines[PIP_SHADER_EVAL], 0, 0, css, (pipeline_options.usesMotionBlur ? 3 : 2)));
+      check_result_optix_ret(
+          optixPipelineSetStackSize(pipelines[PIP_SHADER_EVAL],
+                                    0,
+                                    requested_features.use_shader_raytrace ? dss : 0,
+                                    css,
+                                    motion_blur ? 3 : 2));
     }
 
     // Clean up program group objects
@@ -586,6 +706,11 @@ class OptiXDevice : public CUDADevice {
       while (task.acquire_tile(this, tile, task.tile_types)) {
         if (tile.task == RenderTile::PATH_TRACE)
           launch_render(task, tile, thread_index);
+        else if (tile.task == RenderTile::BAKE) {
+          // Perform baking using CUDA, since it is not currently implemented in OptiX
+          device_vector<WorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
+          CUDADevice::render(task, tile, work_tiles);
+        }
         else if (tile.task == RenderTile::DENOISE)
           launch_denoise(task, tile);
         task.release_tile(tile);
@@ -635,9 +760,6 @@ class OptiXDevice : public CUDADevice {
     const int end_sample = rtile.start_sample + rtile.num_samples;
     // Keep this number reasonable to avoid running into TDRs
     int step_samples = (info.display_device ? 8 : 32);
-    if (task.adaptive_sampling.use) {
-      step_samples = task.adaptive_sampling.align_static_samples(step_samples);
-    }
 
     // Offset into launch params buffer so that streams use separate data
     device_ptr launch_params_ptr = launch_params.device_pointer +
@@ -645,25 +767,33 @@ class OptiXDevice : public CUDADevice {
 
     const CUDAContextScope scope(cuContext);
 
-    for (int sample = rtile.start_sample; sample < end_sample; sample += step_samples) {
+    for (int sample = rtile.start_sample; sample < end_sample;) {
       // Copy work tile information to device
-      wtile.num_samples = min(step_samples, end_sample - sample);
       wtile.start_sample = sample;
+      wtile.num_samples = step_samples;
+      if (task.adaptive_sampling.use) {
+        wtile.num_samples = task.adaptive_sampling.align_samples(sample, step_samples);
+      }
+      wtile.num_samples = min(wtile.num_samples, end_sample - sample);
       device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
       check_result_cuda(
           cuMemcpyHtoDAsync(d_wtile_ptr, &wtile, sizeof(wtile), cuda_stream[thread_index]));
 
       OptixShaderBindingTable sbt_params = {};
       sbt_params.raygenRecord = sbt_data.device_pointer + PG_RGEN * sizeof(SbtRecord);
-#  ifdef WITH_CYCLES_DEBUG
-      sbt_params.exceptionRecord = sbt_data.device_pointer + PG_EXCP * sizeof(SbtRecord);
-#  endif
       sbt_params.missRecordBase = sbt_data.device_pointer + PG_MISS * sizeof(SbtRecord);
       sbt_params.missRecordStrideInBytes = sizeof(SbtRecord);
       sbt_params.missRecordCount = 1;
       sbt_params.hitgroupRecordBase = sbt_data.device_pointer + PG_HITD * sizeof(SbtRecord);
       sbt_params.hitgroupRecordStrideInBytes = sizeof(SbtRecord);
-      sbt_params.hitgroupRecordCount = 3;  // PG_HITD, PG_HITL, PG_HITS
+#  if OPTIX_ABI_VERSION >= 36
+      sbt_params.hitgroupRecordCount = 5;  // PG_HITD(_MOTION), PG_HITS(_MOTION), PG_HITL
+#  else
+      sbt_params.hitgroupRecordCount = 3;  // PG_HITD, PG_HITS, PG_HITL
+#  endif
+      sbt_params.callablesRecordBase = sbt_data.device_pointer + PG_CALL * sizeof(SbtRecord);
+      sbt_params.callablesRecordCount = 3;
+      sbt_params.callablesRecordStrideInBytes = sizeof(SbtRecord);
 
       // Launch the ray generation program
       check_result_optix(optixLaunch(pipelines[PIP_PATH_TRACE],
@@ -686,7 +816,8 @@ class OptiXDevice : public CUDADevice {
       check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
 
       // Update current sample, so it is displayed correctly
-      rtile.sample = wtile.start_sample + wtile.num_samples;
+      sample += wtile.num_samples;
+      rtile.sample = sample;
       // Update task progress after the kernel completed rendering
       task.update_progress(&rtile, wtile.w * wtile.h * wtile.num_samples);
 
@@ -712,25 +843,24 @@ class OptiXDevice : public CUDADevice {
     const CUDAContextScope scope(cuContext);
 
     // Choose between OptiX and NLM denoising
-    if (task.denoising_use_optix) {
+    if (task.denoising.type == DENOISER_OPTIX) {
       // Map neighboring tiles onto this device, indices are as following:
       // Where index 4 is the center tile and index 9 is the target for the result.
       //   0 1 2
       //   3 4 5
       //   6 7 8  9
-      RenderTile rtiles[10];
-      rtiles[4] = rtile;
-      task.map_neighbor_tiles(rtiles, this);
-      rtile = rtiles[4];  // Tile may have been modified by mapping code
+      RenderTileNeighbors neighbors(rtile);
+      task.map_neighbor_tiles(neighbors, this);
+      RenderTile &center_tile = neighbors.tiles[RenderTileNeighbors::CENTER];
+      RenderTile &target_tile = neighbors.target;
+      rtile = center_tile;  // Tile may have been modified by mapping code
 
       // Calculate size of the tile to denoise (including overlap)
-      int4 rect = make_int4(
-          rtiles[4].x, rtiles[4].y, rtiles[4].x + rtiles[4].w, rtiles[4].y + rtiles[4].h);
+      int4 rect = center_tile.bounds();
       // Overlap between tiles has to be at least 64 pixels
       // TODO(pmours): Query this value from OptiX
       rect = rect_expand(rect, 64);
-      int4 clip_rect = make_int4(
-          rtiles[3].x, rtiles[1].y, rtiles[5].x + rtiles[5].w, rtiles[7].y + rtiles[7].h);
+      int4 clip_rect = neighbors.bounds();
       rect = rect_clip(rect, clip_rect);
       int2 rect_size = make_int2(rect.z - rect.x, rect.w - rect.y);
       int2 overlap_offset = make_int2(rtile.x - rect.x, rtile.y - rect.y);
@@ -751,14 +881,14 @@ class OptiXDevice : public CUDADevice {
       device_only_memory<float> input(this, "denoiser input");
       device_vector<TileInfo> tile_info_mem(this, "denoiser tile info", MEM_READ_WRITE);
 
-      if ((!rtiles[0].buffer || rtiles[0].buffer == rtile.buffer) &&
-          (!rtiles[1].buffer || rtiles[1].buffer == rtile.buffer) &&
-          (!rtiles[2].buffer || rtiles[2].buffer == rtile.buffer) &&
-          (!rtiles[3].buffer || rtiles[3].buffer == rtile.buffer) &&
-          (!rtiles[5].buffer || rtiles[5].buffer == rtile.buffer) &&
-          (!rtiles[6].buffer || rtiles[6].buffer == rtile.buffer) &&
-          (!rtiles[7].buffer || rtiles[7].buffer == rtile.buffer) &&
-          (!rtiles[8].buffer || rtiles[8].buffer == rtile.buffer)) {
+      bool contiguous_memory = true;
+      for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
+        if (neighbors.tiles[i].buffer && neighbors.tiles[i].buffer != rtile.buffer) {
+          contiguous_memory = false;
+        }
+      }
+
+      if (contiguous_memory) {
         // Tiles are in continous memory, so can just subtract overlap offset
         input_ptr -= (overlap_offset.x + overlap_offset.y * rtile.stride) * pixel_stride;
         // Stride covers the whole width of the image and not just a single tile
@@ -773,19 +903,19 @@ class OptiXDevice : public CUDADevice {
         input_stride *= rect_size.x;
 
         TileInfo *tile_info = tile_info_mem.alloc(1);
-        for (int i = 0; i < 9; i++) {
-          tile_info->offsets[i] = rtiles[i].offset;
-          tile_info->strides[i] = rtiles[i].stride;
-          tile_info->buffers[i] = rtiles[i].buffer;
+        for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
+          tile_info->offsets[i] = neighbors.tiles[i].offset;
+          tile_info->strides[i] = neighbors.tiles[i].stride;
+          tile_info->buffers[i] = neighbors.tiles[i].buffer;
         }
-        tile_info->x[0] = rtiles[3].x;
-        tile_info->x[1] = rtiles[4].x;
-        tile_info->x[2] = rtiles[5].x;
-        tile_info->x[3] = rtiles[5].x + rtiles[5].w;
-        tile_info->y[0] = rtiles[1].y;
-        tile_info->y[1] = rtiles[4].y;
-        tile_info->y[2] = rtiles[7].y;
-        tile_info->y[3] = rtiles[7].y + rtiles[7].h;
+        tile_info->x[0] = neighbors.tiles[3].x;
+        tile_info->x[1] = neighbors.tiles[4].x;
+        tile_info->x[2] = neighbors.tiles[5].x;
+        tile_info->x[3] = neighbors.tiles[5].x + neighbors.tiles[5].w;
+        tile_info->y[0] = neighbors.tiles[1].y;
+        tile_info->y[1] = neighbors.tiles[4].y;
+        tile_info->y[2] = neighbors.tiles[7].y;
+        tile_info->y[3] = neighbors.tiles[7].y + neighbors.tiles[7].h;
         tile_info_mem.copy_to_device();
 
         void *args[] = {
@@ -795,7 +925,7 @@ class OptiXDevice : public CUDADevice {
 
 #  if OPTIX_DENOISER_NO_PIXEL_STRIDE
       device_only_memory<float> input_rgb(this, "denoiser input rgb");
-      input_rgb.alloc_to_device(rect_size.x * rect_size.y * 3 * task.denoising.optix_input_passes);
+      input_rgb.alloc_to_device(rect_size.x * rect_size.y * 3 * task.denoising.input_passes);
 
       void *input_args[] = {&input_rgb.device_pointer,
                             &input_ptr,
@@ -804,7 +934,7 @@ class OptiXDevice : public CUDADevice {
                             &input_stride,
                             &task.pass_stride,
                             const_cast<int *>(pass_offset),
-                            &task.denoising.optix_input_passes,
+                            &task.denoising.input_passes,
                             &rtile.sample};
       launch_filter_kernel(
           "kernel_cuda_filter_convert_to_rgb", rect_size.x, rect_size.y, input_args);
@@ -815,7 +945,7 @@ class OptiXDevice : public CUDADevice {
 #  endif
 
       const bool recreate_denoiser = (denoiser == NULL) ||
-                                     (task.denoising.optix_input_passes != denoiser_input_passes);
+                                     (task.denoising.input_passes != denoiser_input_passes);
       if (recreate_denoiser) {
         // Destroy existing handle before creating new one
         if (denoiser != NULL) {
@@ -824,23 +954,29 @@ class OptiXDevice : public CUDADevice {
 
         // Create OptiX denoiser handle on demand when it is first used
         OptixDenoiserOptions denoiser_options;
-        assert(task.denoising.optix_input_passes >= 1 && task.denoising.optix_input_passes <= 3);
+        assert(task.denoising.input_passes >= 1 && task.denoising.input_passes <= 3);
         denoiser_options.inputKind = static_cast<OptixDenoiserInputKind>(
-            OPTIX_DENOISER_INPUT_RGB + (task.denoising.optix_input_passes - 1));
+            OPTIX_DENOISER_INPUT_RGB + (task.denoising.input_passes - 1));
+#  if OPTIX_ABI_VERSION < 28
         denoiser_options.pixelFormat = OPTIX_PIXEL_FORMAT_FLOAT3;
+#  endif
         check_result_optix_ret(optixDenoiserCreate(context, &denoiser_options, &denoiser));
         check_result_optix_ret(
             optixDenoiserSetModel(denoiser, OPTIX_DENOISER_MODEL_KIND_HDR, NULL, 0));
 
         // OptiX denoiser handle was created with the requested number of input passes
-        denoiser_input_passes = task.denoising.optix_input_passes;
+        denoiser_input_passes = task.denoising.input_passes;
       }
 
       OptixDenoiserSizes sizes = {};
       check_result_optix_ret(
           optixDenoiserComputeMemoryResources(denoiser, rect_size.x, rect_size.y, &sizes));
 
+#  if OPTIX_ABI_VERSION < 28
       const size_t scratch_size = sizes.recommendedScratchSizeInBytes;
+#  else
+      const size_t scratch_size = sizes.withOverlapScratchSizeInBytes;
+#  endif
       const size_t scratch_offset = sizes.stateSizeInBytes;
 
       // Allocate denoiser state if tile size has changed since last setup
@@ -888,10 +1024,10 @@ class OptiXDevice : public CUDADevice {
       int2 output_offset = overlap_offset;
       overlap_offset = make_int2(0, 0);  // Not supported by denoiser API, so apply manually
 #  else
-      output_layers[0].data = rtiles[9].buffer + pixel_offset;
-      output_layers[0].width = rtiles[9].w;
-      output_layers[0].height = rtiles[9].h;
-      output_layers[0].rowStrideInBytes = rtiles[9].stride * pixel_stride;
+      output_layers[0].data = target_tile.buffer + pixel_offset;
+      output_layers[0].width = target_tile.w;
+      output_layers[0].height = target_tile.h;
+      output_layers[0].rowStrideInBytes = target_tile.stride * pixel_stride;
       output_layers[0].pixelStrideInBytes = pixel_stride;
 #  endif
       output_layers[0].format = OPTIX_PIXEL_FORMAT_FLOAT3;
@@ -904,7 +1040,7 @@ class OptiXDevice : public CUDADevice {
                                                  denoiser_state.device_pointer,
                                                  scratch_offset,
                                                  input_layers,
-                                                 task.denoising.optix_input_passes,
+                                                 task.denoising.input_passes,
                                                  overlap_offset.x,
                                                  overlap_offset.y,
                                                  output_layers,
@@ -913,26 +1049,26 @@ class OptiXDevice : public CUDADevice {
 
 #  if OPTIX_DENOISER_NO_PIXEL_STRIDE
       void *output_args[] = {&input_ptr,
-                             &rtiles[9].buffer,
+                             &target_tile.buffer,
                              &output_offset.x,
                              &output_offset.y,
                              &rect_size.x,
                              &rect_size.y,
-                             &rtiles[9].x,
-                             &rtiles[9].y,
-                             &rtiles[9].w,
-                             &rtiles[9].h,
-                             &rtiles[9].offset,
-                             &rtiles[9].stride,
+                             &target_tile.x,
+                             &target_tile.y,
+                             &target_tile.w,
+                             &target_tile.h,
+                             &target_tile.offset,
+                             &target_tile.stride,
                              &task.pass_stride,
                              &rtile.sample};
       launch_filter_kernel(
-          "kernel_cuda_filter_convert_from_rgb", rtiles[9].w, rtiles[9].h, output_args);
+          "kernel_cuda_filter_convert_from_rgb", target_tile.w, target_tile.h, output_args);
 #  endif
 
       check_result_cuda_ret(cuStreamSynchronize(0));
 
-      task.unmap_neighbor_tiles(rtiles, this);
+      task.unmap_neighbor_tiles(neighbors, this);
     }
     else {
       // Run CUDA denoising kernels
@@ -976,15 +1112,19 @@ class OptiXDevice : public CUDADevice {
 
       OptixShaderBindingTable sbt_params = {};
       sbt_params.raygenRecord = sbt_data.device_pointer + rgen_index * sizeof(SbtRecord);
-#  ifdef WITH_CYCLES_DEBUG
-      sbt_params.exceptionRecord = sbt_data.device_pointer + PG_EXCP * sizeof(SbtRecord);
-#  endif
       sbt_params.missRecordBase = sbt_data.device_pointer + PG_MISS * sizeof(SbtRecord);
       sbt_params.missRecordStrideInBytes = sizeof(SbtRecord);
       sbt_params.missRecordCount = 1;
       sbt_params.hitgroupRecordBase = sbt_data.device_pointer + PG_HITD * sizeof(SbtRecord);
       sbt_params.hitgroupRecordStrideInBytes = sizeof(SbtRecord);
-      sbt_params.hitgroupRecordCount = 3;  // PG_HITD, PG_HITL, PG_HITS
+#  if OPTIX_ABI_VERSION >= 36
+      sbt_params.hitgroupRecordCount = 5;  // PG_HITD(_MOTION), PG_HITS(_MOTION), PG_HITL
+#  else
+      sbt_params.hitgroupRecordCount = 3;  // PG_HITD, PG_HITS, PG_HITL
+#  endif
+      sbt_params.callablesRecordBase = sbt_data.device_pointer + PG_CALL * sizeof(SbtRecord);
+      sbt_params.callablesRecordCount = 3;
+      sbt_params.callablesRecordStrideInBytes = sizeof(SbtRecord);
 
       check_result_optix(optixLaunch(pipelines[PIP_SHADER_EVAL],
                                      cuda_stream[thread_index],
@@ -1001,25 +1141,24 @@ class OptiXDevice : public CUDADevice {
     }
   }
 
-  bool build_optix_bvh(const OptixBuildInput &build_input,
-                       uint16_t num_motion_steps,
-                       OptixTraversableHandle &out_handle)
+  bool build_optix_bvh(BVHOptiX *bvh,
+                       OptixBuildOperation operation,
+                       const OptixBuildInput &build_input,
+                       uint16_t num_motion_steps)
   {
-    out_handle = 0;
-
     const CUDAContextScope scope(cuContext);
 
     // Compute memory usage
     OptixAccelBufferSizes sizes = {};
     OptixAccelBuildOptions options;
-    options.operation = OPTIX_BUILD_OPERATION_BUILD;
+    options.operation = operation;
     if (background) {
       // Prefer best performance and lowest memory consumption in background
       options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
     }
     else {
       // Prefer fast updates in viewport
-      options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD;
+      options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
     }
 
     options.motionOptions.numKeys = num_motion_steps;
@@ -1031,22 +1170,21 @@ class OptiXDevice : public CUDADevice {
         optixAccelComputeMemoryUsage(context, &options, &build_input, 1, &sizes));
 
     // Allocate required output buffers
-    device_only_memory<char> temp_mem(this, "temp_build_mem");
+    device_only_memory<char> temp_mem(this, "optix temp as build mem");
     temp_mem.alloc_to_device(align_up(sizes.tempSizeInBytes, 8) + 8);
     if (!temp_mem.device_pointer)
       return false;  // Make sure temporary memory allocation succeeded
 
-    // Move textures to host memory if there is not enough room
-    size_t size = 0, free = 0;
-    cuMemGetInfo(&free, &size);
-    size = sizes.outputSizeInBytes + device_working_headroom;
-    if (size >= free && can_map_host) {
-      move_textures_to_host(size - free, false);
+    device_only_memory<char> &out_data = bvh->as_data;
+    if (operation == OPTIX_BUILD_OPERATION_BUILD) {
+      assert(out_data.device == this);
+      out_data.alloc_to_device(sizes.outputSizeInBytes);
+      if (!out_data.device_pointer)
+        return false;
     }
-
-    CUdeviceptr out_data = 0;
-    check_result_cuda_ret(cuMemAlloc(&out_data, sizes.outputSizeInBytes));
-    as_mem.push_back(out_data);
+    else {
+      assert(out_data.device_pointer && out_data.device_size >= sizes.outputSizeInBytes);
+    }
 
     // Finally build the acceleration structure
     OptixAccelEmitDesc compacted_size_prop;
@@ -1055,18 +1193,20 @@ class OptiXDevice : public CUDADevice {
     // Make sure this pointer is 8-byte aligned
     compacted_size_prop.result = align_up(temp_mem.device_pointer + sizes.tempSizeInBytes, 8);
 
+    OptixTraversableHandle out_handle = 0;
     check_result_optix_ret(optixAccelBuild(context,
                                            NULL,
                                            &options,
                                            &build_input,
                                            1,
                                            temp_mem.device_pointer,
-                                           temp_mem.device_size,
-                                           out_data,
+                                           sizes.tempSizeInBytes,
+                                           out_data.device_pointer,
                                            sizes.outputSizeInBytes,
                                            &out_handle,
                                            background ? &compacted_size_prop : NULL,
                                            background ? 1 : 0));
+    bvh->traversable_handle = static_cast<uint64_t>(out_handle);
 
     // Wait for all operations to finish
     check_result_cuda_ret(cuStreamSynchronize(NULL));
@@ -1082,151 +1222,253 @@ class OptiXDevice : public CUDADevice {
 
       // There is no point compacting if the size does not change
       if (compacted_size < sizes.outputSizeInBytes) {
-        CUdeviceptr compacted_data = 0;
-        if (cuMemAlloc(&compacted_data, compacted_size) != CUDA_SUCCESS)
+        device_only_memory<char> compacted_data(this, "optix compacted as");
+        compacted_data.alloc_to_device(compacted_size);
+        if (!compacted_data.device_pointer)
           // Do not compact if memory allocation for compacted acceleration structure fails
           // Can just use the uncompacted one then, so succeed here regardless
           return true;
-        as_mem.push_back(compacted_data);
 
-        check_result_optix_ret(optixAccelCompact(
-            context, NULL, out_handle, compacted_data, compacted_size, &out_handle));
+        check_result_optix_ret(optixAccelCompact(context,
+                                                 NULL,
+                                                 out_handle,
+                                                 compacted_data.device_pointer,
+                                                 compacted_size,
+                                                 &out_handle));
+        bvh->traversable_handle = static_cast<uint64_t>(out_handle);
 
         // Wait for compaction to finish
         check_result_cuda_ret(cuStreamSynchronize(NULL));
 
-        // Free uncompacted acceleration structure
-        cuMemFree(out_data);
-        as_mem.erase(as_mem.end() - 2);  // Remove 'out_data' from 'as_mem' array
+        std::swap(out_data.device_size, compacted_data.device_size);
+        std::swap(out_data.device_pointer, compacted_data.device_pointer);
       }
     }
 
     return true;
   }
 
-  bool build_optix_bvh(BVH *bvh) override
+  void build_bvh(BVH *bvh, Progress &progress, bool refit) override
   {
-    assert(bvh->params.top_level);
-
-    unsigned int num_instances = 0;
-    unordered_map<Geometry *, OptixTraversableHandle> geometry;
-    geometry.reserve(bvh->geometry.size());
-
-    // Free all previous acceleration structures
-    for (CUdeviceptr mem : as_mem) {
-      cuMemFree(mem);
+    if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2) {
+      /* For baking CUDA is used, build appropriate BVH for that. */
+      Device::build_bvh(bvh, progress, refit);
+      return;
     }
-    as_mem.clear();
 
-    // Build bottom level acceleration structures (BLAS)
-    // Note: Always keep this logic in sync with bvh_optix.cpp!
-    for (Object *ob : bvh->objects) {
-      // Skip geometry for which acceleration structure already exists
-      Geometry *geom = ob->geometry;
-      if (geometry.find(geom) != geometry.end())
-        continue;
+    BVHOptiX *const bvh_optix = static_cast<BVHOptiX *>(bvh);
 
-      if (geom->type == Geometry::HAIR) {
+    progress.set_substatus("Building OptiX acceleration structure");
+
+    if (!bvh->params.top_level) {
+      assert(bvh->objects.size() == 1 && bvh->geometry.size() == 1);
+
+      // Refit is only possible in viewport for now (because AS is built with
+      // OPTIX_BUILD_FLAG_ALLOW_UPDATE only there, see above)
+      OptixBuildOperation operation = OPTIX_BUILD_OPERATION_BUILD;
+      if (refit && !background) {
+        assert(bvh_optix->traversable_handle != 0);
+        operation = OPTIX_BUILD_OPERATION_UPDATE;
+      }
+      else {
+        bvh_optix->as_data.free();
+        bvh_optix->traversable_handle = 0;
+      }
+
+      // Build bottom level acceleration structures (BLAS)
+      Geometry *const geom = bvh->geometry[0];
+      if (geom->geometry_type == Geometry::HAIR) {
         // Build BLAS for curve primitives
-        Hair *const hair = static_cast<Hair *const>(ob->geometry);
+        Hair *const hair = static_cast<Hair *const>(geom);
         if (hair->num_curves() == 0) {
-          continue;
+          return;
         }
 
-        const size_t num_curves = hair->num_curves();
         const size_t num_segments = hair->num_segments();
 
         size_t num_motion_steps = 1;
         Attribute *motion_keys = hair->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-        if (motion_blur && hair->use_motion_blur && motion_keys) {
-          num_motion_steps = hair->motion_steps;
+        if (motion_blur && hair->get_use_motion_blur() && motion_keys) {
+          num_motion_steps = hair->get_motion_steps();
         }
 
-        device_vector<OptixAabb> aabb_data(this, "temp_aabb_data", MEM_READ_ONLY);
-        aabb_data.alloc(num_segments * num_motion_steps);
+        device_vector<OptixAabb> aabb_data(this, "optix temp aabb data", MEM_READ_ONLY);
+#  if OPTIX_ABI_VERSION >= 36
+        device_vector<int> index_data(this, "optix temp index data", MEM_READ_ONLY);
+        device_vector<float4> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
+        // Four control points for each curve segment
+        const size_t num_vertices = num_segments * 4;
+        if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+          index_data.alloc(num_segments);
+          vertex_data.alloc(num_vertices * num_motion_steps);
+        }
+        else
+#  endif
+          aabb_data.alloc(num_segments * num_motion_steps);
 
         // Get AABBs for each motion step
         for (size_t step = 0; step < num_motion_steps; ++step) {
           // The center step for motion vertices is not stored in the attribute
-          const float3 *keys = hair->curve_keys.data();
+          const float3 *keys = hair->get_curve_keys().data();
           size_t center_step = (num_motion_steps - 1) / 2;
           if (step != center_step) {
             size_t attr_offset = (step > center_step) ? step - 1 : step;
-            // Technically this is a float4 array, but sizeof(float3) is the same as sizeof(float4)
-            keys = motion_keys->data_float3() + attr_offset * hair->curve_keys.size();
+            // Technically this is a float4 array, but sizeof(float3) == sizeof(float4)
+            keys = motion_keys->data_float3() + attr_offset * hair->get_curve_keys().size();
           }
 
-          size_t i = step * num_segments;
-          for (size_t j = 0; j < num_curves; ++j) {
-            const Hair::Curve c = hair->get_curve(j);
+          for (size_t j = 0, i = 0; j < hair->num_curves(); ++j) {
+            const Hair::Curve curve = hair->get_curve(j);
+#  if OPTIX_ABI_VERSION >= 36
+            const array<float> &curve_radius = hair->get_curve_radius();
+#  endif
 
-            for (size_t k = 0; k < c.num_segments(); ++i, ++k) {
-              BoundBox bounds = BoundBox::empty;
-              c.bounds_grow(k, keys, hair->curve_radius.data(), bounds);
+            for (int segment = 0; segment < curve.num_segments(); ++segment, ++i) {
+#  if OPTIX_ABI_VERSION >= 36
+              if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+                int k0 = curve.first_key + segment;
+                int k1 = k0 + 1;
+                int ka = max(k0 - 1, curve.first_key);
+                int kb = min(k1 + 1, curve.first_key + curve.num_keys - 1);
 
-              aabb_data[i].minX = bounds.min.x;
-              aabb_data[i].minY = bounds.min.y;
-              aabb_data[i].minZ = bounds.min.z;
-              aabb_data[i].maxX = bounds.max.x;
-              aabb_data[i].maxY = bounds.max.y;
-              aabb_data[i].maxZ = bounds.max.z;
+                const float4 px = make_float4(keys[ka].x, keys[k0].x, keys[k1].x, keys[kb].x);
+                const float4 py = make_float4(keys[ka].y, keys[k0].y, keys[k1].y, keys[kb].y);
+                const float4 pz = make_float4(keys[ka].z, keys[k0].z, keys[k1].z, keys[kb].z);
+                const float4 pw = make_float4(
+                    curve_radius[ka], curve_radius[k0], curve_radius[k1], curve_radius[kb]);
+
+                // Convert Catmull-Rom data to Bezier spline
+                static const float4 cr2bsp0 = make_float4(+7, -4, +5, -2) / 6.f;
+                static const float4 cr2bsp1 = make_float4(-2, 11, -4, +1) / 6.f;
+                static const float4 cr2bsp2 = make_float4(+1, -4, 11, -2) / 6.f;
+                static const float4 cr2bsp3 = make_float4(-2, +5, -4, +7) / 6.f;
+
+                index_data[i] = i * 4;
+                float4 *const v = vertex_data.data() + step * num_vertices + index_data[i];
+                v[0] = make_float4(
+                    dot(cr2bsp0, px), dot(cr2bsp0, py), dot(cr2bsp0, pz), dot(cr2bsp0, pw));
+                v[1] = make_float4(
+                    dot(cr2bsp1, px), dot(cr2bsp1, py), dot(cr2bsp1, pz), dot(cr2bsp1, pw));
+                v[2] = make_float4(
+                    dot(cr2bsp2, px), dot(cr2bsp2, py), dot(cr2bsp2, pz), dot(cr2bsp2, pw));
+                v[3] = make_float4(
+                    dot(cr2bsp3, px), dot(cr2bsp3, py), dot(cr2bsp3, pz), dot(cr2bsp3, pw));
+              }
+              else
+#  endif
+              {
+                BoundBox bounds = BoundBox::empty;
+                curve.bounds_grow(segment, keys, hair->get_curve_radius().data(), bounds);
+
+                const size_t index = step * num_segments + i;
+                aabb_data[index].minX = bounds.min.x;
+                aabb_data[index].minY = bounds.min.y;
+                aabb_data[index].minZ = bounds.min.z;
+                aabb_data[index].maxX = bounds.max.x;
+                aabb_data[index].maxY = bounds.max.y;
+                aabb_data[index].maxZ = bounds.max.z;
+              }
             }
           }
         }
 
         // Upload AABB data to GPU
         aabb_data.copy_to_device();
+#  if OPTIX_ABI_VERSION >= 36
+        index_data.copy_to_device();
+        vertex_data.copy_to_device();
+#  endif
 
         vector<device_ptr> aabb_ptrs;
         aabb_ptrs.reserve(num_motion_steps);
+#  if OPTIX_ABI_VERSION >= 36
+        vector<device_ptr> width_ptrs;
+        vector<device_ptr> vertex_ptrs;
+        width_ptrs.reserve(num_motion_steps);
+        vertex_ptrs.reserve(num_motion_steps);
+#  endif
         for (size_t step = 0; step < num_motion_steps; ++step) {
           aabb_ptrs.push_back(aabb_data.device_pointer + step * num_segments * sizeof(OptixAabb));
+#  if OPTIX_ABI_VERSION >= 36
+          const device_ptr base_ptr = vertex_data.device_pointer +
+                                      step * num_vertices * sizeof(float4);
+          width_ptrs.push_back(base_ptr + 3 * sizeof(float));  // Offset by vertex size
+          vertex_ptrs.push_back(base_ptr);
+#  endif
         }
 
-        // Disable visibility test anyhit program, since it is already checked during intersection
-        // Those trace calls that require anyhit can force it with OPTIX_RAY_FLAG_ENFORCE_ANYHIT
-        unsigned int build_flags = OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+        // Force a single any-hit call, so shadow record-all behavior works correctly
+        unsigned int build_flags = OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL;
         OptixBuildInput build_input = {};
-        build_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-        build_input.aabbArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
-        build_input.aabbArray.numPrimitives = num_segments;
-        build_input.aabbArray.strideInBytes = sizeof(OptixAabb);
-        build_input.aabbArray.flags = &build_flags;
-        build_input.aabbArray.numSbtRecords = 1;
-        build_input.aabbArray.primitiveIndexOffset = hair->optix_prim_offset;
-
-        // Allocate memory for new BLAS and build it
-        OptixTraversableHandle handle;
-        if (build_optix_bvh(build_input, num_motion_steps, handle)) {
-          geometry.insert({ob->geometry, handle});
+#  if OPTIX_ABI_VERSION >= 36
+        if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+          build_input.type = OPTIX_BUILD_INPUT_TYPE_CURVES;
+          build_input.curveArray.curveType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
+          build_input.curveArray.numPrimitives = num_segments;
+          build_input.curveArray.vertexBuffers = (CUdeviceptr *)vertex_ptrs.data();
+          build_input.curveArray.numVertices = num_vertices;
+          build_input.curveArray.vertexStrideInBytes = sizeof(float4);
+          build_input.curveArray.widthBuffers = (CUdeviceptr *)width_ptrs.data();
+          build_input.curveArray.widthStrideInBytes = sizeof(float4);
+          build_input.curveArray.indexBuffer = (CUdeviceptr)index_data.device_pointer;
+          build_input.curveArray.indexStrideInBytes = sizeof(int);
+          build_input.curveArray.flag = build_flags;
+          build_input.curveArray.primitiveIndexOffset = hair->optix_prim_offset;
         }
-        else {
-          return false;
+        else
+#  endif
+        {
+          // Disable visibility test any-hit program, since it is already checked during
+          // intersection. Those trace calls that require anyhit can force it with a ray flag.
+          build_flags |= OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
+
+          build_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
+#  if OPTIX_ABI_VERSION < 23
+          build_input.aabbArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
+          build_input.aabbArray.numPrimitives = num_segments;
+          build_input.aabbArray.strideInBytes = sizeof(OptixAabb);
+          build_input.aabbArray.flags = &build_flags;
+          build_input.aabbArray.numSbtRecords = 1;
+          build_input.aabbArray.primitiveIndexOffset = hair->optix_prim_offset;
+#  else
+          build_input.customPrimitiveArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
+          build_input.customPrimitiveArray.numPrimitives = num_segments;
+          build_input.customPrimitiveArray.strideInBytes = sizeof(OptixAabb);
+          build_input.customPrimitiveArray.flags = &build_flags;
+          build_input.customPrimitiveArray.numSbtRecords = 1;
+          build_input.customPrimitiveArray.primitiveIndexOffset = hair->optix_prim_offset;
+#  endif
+        }
+
+        if (!build_optix_bvh(bvh_optix, operation, build_input, num_motion_steps)) {
+          progress.set_error("Failed to build OptiX acceleration structure");
         }
       }
-      else if (geom->type == Geometry::MESH) {
+      else if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
         // Build BLAS for triangle primitives
-        Mesh *const mesh = static_cast<Mesh *const>(ob->geometry);
+        Mesh *const mesh = static_cast<Mesh *const>(geom);
         if (mesh->num_triangles() == 0) {
-          continue;
+          return;
         }
 
-        const size_t num_verts = mesh->verts.size();
+        const size_t num_verts = mesh->get_verts().size();
 
         size_t num_motion_steps = 1;
         Attribute *motion_keys = mesh->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
-        if (motion_blur && mesh->use_motion_blur && motion_keys) {
-          num_motion_steps = mesh->motion_steps;
+        if (motion_blur && mesh->get_use_motion_blur() && motion_keys) {
+          num_motion_steps = mesh->get_motion_steps();
         }
 
-        device_vector<int> index_data(this, "temp_index_data", MEM_READ_ONLY);
-        index_data.alloc(mesh->triangles.size());
-        memcpy(index_data.data(), mesh->triangles.data(), mesh->triangles.size() * sizeof(int));
-        device_vector<float3> vertex_data(this, "temp_vertex_data", MEM_READ_ONLY);
+        device_vector<int> index_data(this, "optix temp index data", MEM_READ_ONLY);
+        index_data.alloc(mesh->get_triangles().size());
+        memcpy(index_data.data(),
+               mesh->get_triangles().data(),
+               mesh->get_triangles().size() * sizeof(int));
+        device_vector<float3> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
         vertex_data.alloc(num_verts * num_motion_steps);
 
         for (size_t step = 0; step < num_motion_steps; ++step) {
-          const float3 *verts = mesh->verts.data();
+          const float3 *verts = mesh->get_verts().data();
 
           size_t center_step = (num_motion_steps - 1) / 2;
           // The center step for motion vertices is not stored in the attribute
@@ -1248,8 +1490,8 @@ class OptiXDevice : public CUDADevice {
           vertex_ptrs.push_back(vertex_data.device_pointer + num_verts * step * sizeof(float3));
         }
 
-        // No special build flags for triangle primitives
-        unsigned int build_flags = OPTIX_GEOMETRY_FLAG_NONE;
+        // Force a single any-hit call, so shadow record-all behavior works correctly
+        unsigned int build_flags = OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL;
         OptixBuildInput build_input = {};
         build_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
         build_input.triangleArray.vertexBuffers = (CUdeviceptr *)vertex_ptrs.data();
@@ -1267,159 +1509,221 @@ class OptiXDevice : public CUDADevice {
         build_input.triangleArray.numSbtRecords = 1;
         build_input.triangleArray.primitiveIndexOffset = mesh->optix_prim_offset;
 
-        // Allocate memory for new BLAS and build it
-        OptixTraversableHandle handle;
-        if (build_optix_bvh(build_input, num_motion_steps, handle)) {
-          geometry.insert({ob->geometry, handle});
-        }
-        else {
-          return false;
+        if (!build_optix_bvh(bvh_optix, operation, build_input, num_motion_steps)) {
+          progress.set_error("Failed to build OptiX acceleration structure");
         }
       }
     }
+    else {
+      unsigned int num_instances = 0;
+      unsigned int max_num_instances = 0xFFFFFFFF;
 
-    // Fill instance descriptions
-    device_vector<OptixAabb> aabbs(this, "tlas_aabbs", MEM_READ_ONLY);
-    aabbs.alloc(bvh->objects.size());
-    device_vector<OptixInstance> instances(this, "tlas_instances", MEM_READ_ONLY);
-    instances.alloc(bvh->objects.size());
+      bvh_optix->as_data.free();
+      bvh_optix->traversable_handle = 0;
+      bvh_optix->motion_transform_data.free();
 
-    for (Object *ob : bvh->objects) {
-      // Skip non-traceable objects
-      if (!ob->is_traceable())
-        continue;
-
-      // Create separate instance for triangle/curve meshes of an object
-      auto handle_it = geometry.find(ob->geometry);
-      if (handle_it == geometry.end()) {
-        continue;
+      optixDeviceContextGetProperty(context,
+                                    OPTIX_DEVICE_PROPERTY_LIMIT_MAX_INSTANCE_ID,
+                                    &max_num_instances,
+                                    sizeof(max_num_instances));
+      // Do not count first bit, which is used to distinguish instanced and non-instanced objects
+      max_num_instances >>= 1;
+      if (bvh->objects.size() > max_num_instances) {
+        progress.set_error(
+            "Failed to build OptiX acceleration structure because there are too many instances");
+        return;
       }
-      OptixTraversableHandle handle = handle_it->second;
 
-      OptixAabb &aabb = aabbs[num_instances];
-      aabb.minX = ob->bounds.min.x;
-      aabb.minY = ob->bounds.min.y;
-      aabb.minZ = ob->bounds.min.z;
-      aabb.maxX = ob->bounds.max.x;
-      aabb.maxY = ob->bounds.max.y;
-      aabb.maxZ = ob->bounds.max.z;
+      // Fill instance descriptions
+#  if OPTIX_ABI_VERSION < 41
+      device_vector<OptixAabb> aabbs(this, "optix tlas aabbs", MEM_READ_ONLY);
+      aabbs.alloc(bvh->objects.size());
+#  endif
+      device_vector<OptixInstance> instances(this, "optix tlas instances", MEM_READ_ONLY);
+      instances.alloc(bvh->objects.size());
 
-      OptixInstance &instance = instances[num_instances++];
-      memset(&instance, 0, sizeof(instance));
-
-      // Clear transform to identity matrix
-      instance.transform[0] = 1.0f;
-      instance.transform[5] = 1.0f;
-      instance.transform[10] = 1.0f;
-
-      // Set user instance ID to object index
-      instance.instanceId = ob->get_device_index();
-
-      // Volumes have a special bit set in the visibility mask so a trace can mask only volumes
-      // See 'scene_intersect_volume' in bvh.h
-      instance.visibilityMask = (ob->geometry->has_volume ? 3 : 1);
-
-      // Insert motion traversable if object has motion
-      if (motion_blur && ob->use_motion()) {
-        size_t motion_keys = max(ob->motion.size(), 2) - 2;
-        size_t motion_transform_size = sizeof(OptixSRTMotionTransform) +
-                                       motion_keys * sizeof(OptixSRTData);
-
-        const CUDAContextScope scope(cuContext);
-
-        CUdeviceptr motion_transform_gpu = 0;
-        check_result_cuda_ret(cuMemAlloc(&motion_transform_gpu, motion_transform_size));
-        as_mem.push_back(motion_transform_gpu);
-
-        // Allocate host side memory for motion transform and fill it with transform data
-        OptixSRTMotionTransform &motion_transform = *reinterpret_cast<OptixSRTMotionTransform *>(
-            new uint8_t[motion_transform_size]);
-        motion_transform.child = handle;
-        motion_transform.motionOptions.numKeys = ob->motion.size();
-        motion_transform.motionOptions.flags = OPTIX_MOTION_FLAG_NONE;
-        motion_transform.motionOptions.timeBegin = 0.0f;
-        motion_transform.motionOptions.timeEnd = 1.0f;
-
-        OptixSRTData *const srt_data = motion_transform.srtData;
-        array<DecomposedTransform> decomp(ob->motion.size());
-        transform_motion_decompose(decomp.data(), ob->motion.data(), ob->motion.size());
-
-        for (size_t i = 0; i < ob->motion.size(); ++i) {
-          // Scale
-          srt_data[i].sx = decomp[i].y.w;  // scale.x.x
-          srt_data[i].sy = decomp[i].z.w;  // scale.y.y
-          srt_data[i].sz = decomp[i].w.w;  // scale.z.z
-
-          // Shear
-          srt_data[i].a = decomp[i].z.x;  // scale.x.y
-          srt_data[i].b = decomp[i].z.y;  // scale.x.z
-          srt_data[i].c = decomp[i].w.x;  // scale.y.z
-          assert(decomp[i].z.z == 0.0f);  // scale.y.x
-          assert(decomp[i].w.y == 0.0f);  // scale.z.x
-          assert(decomp[i].w.z == 0.0f);  // scale.z.y
-
-          // Pivot point
-          srt_data[i].pvx = 0.0f;
-          srt_data[i].pvy = 0.0f;
-          srt_data[i].pvz = 0.0f;
-
-          // Rotation
-          srt_data[i].qx = decomp[i].x.x;
-          srt_data[i].qy = decomp[i].x.y;
-          srt_data[i].qz = decomp[i].x.z;
-          srt_data[i].qw = decomp[i].x.w;
-
-          // Translation
-          srt_data[i].tx = decomp[i].y.x;
-          srt_data[i].ty = decomp[i].y.y;
-          srt_data[i].tz = decomp[i].y.z;
+      // Calculate total motion transform size and allocate memory for them
+      size_t motion_transform_offset = 0;
+      if (motion_blur) {
+        size_t total_motion_transform_size = 0;
+        for (Object *const ob : bvh->objects) {
+          if (ob->is_traceable() && ob->use_motion()) {
+            total_motion_transform_size = align_up(total_motion_transform_size,
+                                                   OPTIX_TRANSFORM_BYTE_ALIGNMENT);
+            const size_t motion_keys = max(ob->get_motion().size(), 2) - 2;
+            total_motion_transform_size = total_motion_transform_size +
+                                          sizeof(OptixSRTMotionTransform) +
+                                          motion_keys * sizeof(OptixSRTData);
+          }
         }
 
-        // Upload motion transform to GPU
-        cuMemcpyHtoD(motion_transform_gpu, &motion_transform, motion_transform_size);
-        delete[] reinterpret_cast<uint8_t *>(&motion_transform);
-
-        // Disable instance transform if object uses motion transform already
-        instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
-
-        // Get traversable handle to motion transform
-        optixConvertPointerToTraversableHandle(context,
-                                               motion_transform_gpu,
-                                               OPTIX_TRAVERSABLE_TYPE_SRT_MOTION_TRANSFORM,
-                                               &instance.traversableHandle);
+        assert(bvh_optix->motion_transform_data.device == this);
+        bvh_optix->motion_transform_data.alloc_to_device(total_motion_transform_size);
       }
-      else {
-        instance.traversableHandle = handle;
 
-        if (ob->geometry->is_instanced()) {
-          // Set transform matrix
-          memcpy(instance.transform, &ob->tfm, sizeof(instance.transform));
+      for (Object *ob : bvh->objects) {
+        // Skip non-traceable objects
+        if (!ob->is_traceable())
+          continue;
+
+        BVHOptiX *const blas = static_cast<BVHOptiX *>(ob->get_geometry()->bvh);
+        OptixTraversableHandle handle = blas->traversable_handle;
+
+#  if OPTIX_ABI_VERSION < 41
+        OptixAabb &aabb = aabbs[num_instances];
+        aabb.minX = ob->bounds.min.x;
+        aabb.minY = ob->bounds.min.y;
+        aabb.minZ = ob->bounds.min.z;
+        aabb.maxX = ob->bounds.max.x;
+        aabb.maxY = ob->bounds.max.y;
+        aabb.maxZ = ob->bounds.max.z;
+#  endif
+
+        OptixInstance &instance = instances[num_instances++];
+        memset(&instance, 0, sizeof(instance));
+
+        // Clear transform to identity matrix
+        instance.transform[0] = 1.0f;
+        instance.transform[5] = 1.0f;
+        instance.transform[10] = 1.0f;
+
+        // Set user instance ID to object index (but leave low bit blank)
+        instance.instanceId = ob->get_device_index() << 1;
+
+        // Have to have at least one bit in the mask, or else instance would always be culled
+        instance.visibilityMask = 1;
+
+        if (ob->get_geometry()->has_volume) {
+          // Volumes have a special bit set in the visibility mask so a trace can mask only volumes
+          instance.visibilityMask |= 2;
         }
-        else {
-          // Disable instance transform if geometry already has it applied to vertex data
+
+        if (ob->get_geometry()->geometry_type == Geometry::HAIR) {
+          // Same applies to curves (so they can be skipped in local trace calls)
+          instance.visibilityMask |= 4;
+
+#  if OPTIX_ABI_VERSION >= 36
+          if (motion_blur && ob->get_geometry()->has_motion_blur() &&
+              DebugFlags().optix.curves_api &&
+              static_cast<const Hair *>(ob->get_geometry())->curve_shape == CURVE_THICK) {
+            // Select between motion blur and non-motion blur built-in intersection module
+            instance.sbtOffset = PG_HITD_MOTION - PG_HITD;
+          }
+#  endif
+        }
+
+        // Insert motion traversable if object has motion
+        if (motion_blur && ob->use_motion()) {
+          size_t motion_keys = max(ob->get_motion().size(), 2) - 2;
+          size_t motion_transform_size = sizeof(OptixSRTMotionTransform) +
+                                         motion_keys * sizeof(OptixSRTData);
+
+          const CUDAContextScope scope(cuContext);
+
+          motion_transform_offset = align_up(motion_transform_offset,
+                                             OPTIX_TRANSFORM_BYTE_ALIGNMENT);
+          CUdeviceptr motion_transform_gpu = bvh_optix->motion_transform_data.device_pointer +
+                                             motion_transform_offset;
+          motion_transform_offset += motion_transform_size;
+
+          // Allocate host side memory for motion transform and fill it with transform data
+          OptixSRTMotionTransform &motion_transform = *reinterpret_cast<OptixSRTMotionTransform *>(
+              new uint8_t[motion_transform_size]);
+          motion_transform.child = handle;
+          motion_transform.motionOptions.numKeys = ob->get_motion().size();
+          motion_transform.motionOptions.flags = OPTIX_MOTION_FLAG_NONE;
+          motion_transform.motionOptions.timeBegin = 0.0f;
+          motion_transform.motionOptions.timeEnd = 1.0f;
+
+          OptixSRTData *const srt_data = motion_transform.srtData;
+          array<DecomposedTransform> decomp(ob->get_motion().size());
+          transform_motion_decompose(
+              decomp.data(), ob->get_motion().data(), ob->get_motion().size());
+
+          for (size_t i = 0; i < ob->get_motion().size(); ++i) {
+            // Scale
+            srt_data[i].sx = decomp[i].y.w;  // scale.x.x
+            srt_data[i].sy = decomp[i].z.w;  // scale.y.y
+            srt_data[i].sz = decomp[i].w.w;  // scale.z.z
+
+            // Shear
+            srt_data[i].a = decomp[i].z.x;  // scale.x.y
+            srt_data[i].b = decomp[i].z.y;  // scale.x.z
+            srt_data[i].c = decomp[i].w.x;  // scale.y.z
+            assert(decomp[i].z.z == 0.0f);  // scale.y.x
+            assert(decomp[i].w.y == 0.0f);  // scale.z.x
+            assert(decomp[i].w.z == 0.0f);  // scale.z.y
+
+            // Pivot point
+            srt_data[i].pvx = 0.0f;
+            srt_data[i].pvy = 0.0f;
+            srt_data[i].pvz = 0.0f;
+
+            // Rotation
+            srt_data[i].qx = decomp[i].x.x;
+            srt_data[i].qy = decomp[i].x.y;
+            srt_data[i].qz = decomp[i].x.z;
+            srt_data[i].qw = decomp[i].x.w;
+
+            // Translation
+            srt_data[i].tx = decomp[i].y.x;
+            srt_data[i].ty = decomp[i].y.y;
+            srt_data[i].tz = decomp[i].y.z;
+          }
+
+          // Upload motion transform to GPU
+          cuMemcpyHtoD(motion_transform_gpu, &motion_transform, motion_transform_size);
+          delete[] reinterpret_cast<uint8_t *>(&motion_transform);
+
+          // Disable instance transform if object uses motion transform already
           instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
-          // Non-instanced objects read ID from prim_object, so
-          // distinguish them from instanced objects with high bit set
-          instance.instanceId |= 0x800000;
+
+          // Get traversable handle to motion transform
+          optixConvertPointerToTraversableHandle(context,
+                                                 motion_transform_gpu,
+                                                 OPTIX_TRAVERSABLE_TYPE_SRT_MOTION_TRANSFORM,
+                                                 &instance.traversableHandle);
+        }
+        else {
+          instance.traversableHandle = handle;
+
+          if (ob->get_geometry()->is_instanced()) {
+            // Set transform matrix
+            memcpy(instance.transform, &ob->get_tfm(), sizeof(instance.transform));
+          }
+          else {
+            // Disable instance transform if geometry already has it applied to vertex data
+            instance.flags = OPTIX_INSTANCE_FLAG_DISABLE_TRANSFORM;
+            // Non-instanced objects read ID from 'prim_object', so distinguish
+            // them from instanced objects with the low bit set
+            instance.instanceId |= 1;
+          }
         }
       }
+
+      // Upload instance descriptions
+#  if OPTIX_ABI_VERSION < 41
+      aabbs.resize(num_instances);
+      aabbs.copy_to_device();
+#  endif
+      instances.resize(num_instances);
+      instances.copy_to_device();
+
+      // Build top-level acceleration structure (TLAS)
+      OptixBuildInput build_input = {};
+      build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
+#  if OPTIX_ABI_VERSION < 41  // Instance AABBs no longer need to be set since OptiX 7.2
+      build_input.instanceArray.aabbs = aabbs.device_pointer;
+      build_input.instanceArray.numAabbs = num_instances;
+#  endif
+      build_input.instanceArray.instances = instances.device_pointer;
+      build_input.instanceArray.numInstances = num_instances;
+
+      if (!build_optix_bvh(bvh_optix, OPTIX_BUILD_OPERATION_BUILD, build_input, 0)) {
+        progress.set_error("Failed to build OptiX acceleration structure");
+      }
+      tlas_handle = bvh_optix->traversable_handle;
     }
-
-    // Upload instance descriptions
-    aabbs.resize(num_instances);
-    aabbs.copy_to_device();
-    instances.resize(num_instances);
-    instances.copy_to_device();
-
-    // Build top-level acceleration structure (TLAS)
-    OptixBuildInput build_input = {};
-    build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-    build_input.instanceArray.instances = instances.device_pointer;
-    build_input.instanceArray.numInstances = num_instances;
-    build_input.instanceArray.aabbs = aabbs.device_pointer;
-    build_input.instanceArray.numAabbs = num_instances;
-
-    return build_optix_bvh(build_input, 0, tlas_handle);
   }
 
   void const_copy_to(const char *name, void *host, size_t size) override
@@ -1432,25 +1736,25 @@ class OptiXDevice : public CUDADevice {
     if (strcmp(name, "__data") == 0) {
       assert(size <= sizeof(KernelData));
 
-      // Fix traversable handle on multi devices
+      // Update traversable handle (since it is different for each device on multi devices)
       KernelData *const data = (KernelData *)host;
       *(OptixTraversableHandle *)&data->bvh.scene = tlas_handle;
 
-      update_launch_params(name, offsetof(KernelParams, data), host, size);
+      update_launch_params(offsetof(KernelParams, data), host, size);
       return;
     }
 
     // Update data storage pointers in launch parameters
 #  define KERNEL_TEX(data_type, tex_name) \
     if (strcmp(name, #tex_name) == 0) { \
-      update_launch_params(name, offsetof(KernelParams, tex_name), host, size); \
+      update_launch_params(offsetof(KernelParams, tex_name), host, size); \
       return; \
     }
 #  include "kernel/kernel_textures.h"
 #  undef KERNEL_TEX
   }
 
-  void update_launch_params(const char *name, size_t offset, void *data, size_t data_size)
+  void update_launch_params(size_t offset, void *data, size_t data_size)
   {
     const CUDAContextScope scope(cuContext);
 
@@ -1463,15 +1767,6 @@ class OptiXDevice : public CUDADevice {
 
   void task_add(DeviceTask &task) override
   {
-    struct OptiXDeviceTask : public DeviceTask {
-      OptiXDeviceTask(OptiXDevice *device, DeviceTask &task, int task_index) : DeviceTask(task)
-      {
-        // Using task index parameter instead of thread index, since number of CUDA streams may
-        // differ from number of threads
-        run = function_bind(&OptiXDevice::thread_run, device, *this, task_index);
-      }
-    };
-
     // Upload texture information to device if it has changed since last launch
     load_texture_info();
 
@@ -1483,7 +1778,10 @@ class OptiXDevice : public CUDADevice {
 
     if (task.type == DeviceTask::DENOISE_BUFFER) {
       // Execute denoising in a single thread (e.g. to avoid race conditions during creation)
-      task_pool.push(new OptiXDeviceTask(this, task, 0));
+      task_pool.push([=] {
+        DeviceTask task_copy = task;
+        thread_run(task_copy, 0);
+      });
       return;
     }
 
@@ -1493,8 +1791,15 @@ class OptiXDevice : public CUDADevice {
 
     // Queue tasks in internal task pool
     int task_index = 0;
-    for (DeviceTask &task : tasks)
-      task_pool.push(new OptiXDeviceTask(this, task, task_index++));
+    for (DeviceTask &task : tasks) {
+      task_pool.push([=] {
+        // Using task index parameter instead of thread index, since number of CUDA streams may
+        // differ from number of threads
+        DeviceTask task_copy = task;
+        thread_run(task_copy, task_index);
+      });
+      task_index++;
+    }
   }
 
   void task_wait() override
@@ -1522,8 +1827,8 @@ bool device_optix_init()
   const OptixResult result = optixInit();
 
   if (result == OPTIX_ERROR_UNSUPPORTED_ABI_VERSION) {
-    VLOG(1) << "OptiX initialization failed because driver does not support ABI version "
-            << OPTIX_ABI_VERSION;
+    VLOG(1) << "OptiX initialization failed because the installed NVIDIA driver is too old. "
+               "Please update to the latest driver first!";
     return false;
   }
   else if (result != OPTIX_SUCCESS) {
@@ -1537,34 +1842,24 @@ bool device_optix_init()
 
 void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo> &devices)
 {
+  devices.reserve(cuda_devices.size());
+
   // Simply add all supported CUDA devices as OptiX devices again
-  for (const DeviceInfo &cuda_info : cuda_devices) {
-    DeviceInfo info = cuda_info;
+  for (DeviceInfo info : cuda_devices) {
     assert(info.type == DEVICE_CUDA);
+
+    int major;
+    cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, info.num);
+    if (major < 5) {
+      continue;  // Only Maxwell and up are supported by OptiX
+    }
+
     info.type = DEVICE_OPTIX;
     info.id += "_OptiX";
+    info.denoisers |= DENOISER_OPTIX;
+    info.has_branched_path = false;
 
-    // Figure out RTX support
-    CUdevice cuda_device = 0;
-    CUcontext cuda_context = NULL;
-    unsigned int rtcore_version = 0;
-    if (cuDeviceGet(&cuda_device, info.num) == CUDA_SUCCESS &&
-        cuDevicePrimaryCtxRetain(&cuda_context, cuda_device) == CUDA_SUCCESS) {
-      OptixDeviceContext optix_context = NULL;
-      if (optixDeviceContextCreate(cuda_context, nullptr, &optix_context) == OPTIX_SUCCESS) {
-        optixDeviceContextGetProperty(optix_context,
-                                      OPTIX_DEVICE_PROPERTY_RTCORE_VERSION,
-                                      &rtcore_version,
-                                      sizeof(rtcore_version));
-        optixDeviceContextDestroy(optix_context);
-      }
-      cuDevicePrimaryCtxRelease(cuda_device);
-    }
-
-    // Only add devices with RTX support
-    if (rtcore_version != 0 || getenv("CYCLES_OPTIX_TEST")) {
-      devices.push_back(info);
-    }
+    devices.push_back(info);
   }
 }
 

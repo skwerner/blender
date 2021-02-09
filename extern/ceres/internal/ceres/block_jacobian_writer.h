@@ -39,6 +39,7 @@
 #define CERES_INTERNAL_BLOCK_JACOBIAN_WRITER_H_
 
 #include <vector>
+
 #include "ceres/evaluator.h"
 #include "ceres/internal/port.h"
 
@@ -49,10 +50,10 @@ class BlockEvaluatePreparer;
 class Program;
 class SparseMatrix;
 
+// TODO(sameeragarwal): This class needs documemtation.
 class BlockJacobianWriter {
  public:
-  BlockJacobianWriter(const Evaluator::Options& options,
-                      Program* program);
+  BlockJacobianWriter(const Evaluator::Options& options, Program* program);
 
   // JacobianWriter interface.
 

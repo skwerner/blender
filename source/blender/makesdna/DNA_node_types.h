@@ -21,16 +21,19 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_NODE_TYPES_H__
-#define __DNA_NODE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_listBase.h"
-#include "DNA_scene_types.h"
-#include "DNA_texture_types.h"
-#include "DNA_vec_types.h"
+#include "DNA_scene_types.h" /* for #ImageFormatData */
+#include "DNA_vec_types.h"   /* for #rctf */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
+struct Collection;
 struct ID;
 struct Image;
 struct ListBase;
@@ -156,10 +159,8 @@ typedef enum eNodeSocketDatatype {
   SOCK_STRING = 7,
   SOCK_OBJECT = 8,
   SOCK_IMAGE = 9,
-  SOCK_EMITTERS = 10,
-  SOCK_EVENTS = 11,
-  SOCK_FORCES = 12,
-  SOCK_CONTROL_FLOW = 13,
+  SOCK_GEOMETRY = 10,
+  SOCK_COLLECTION = 11,
 } eNodeSocketDatatype;
 
 /* socket shape */
@@ -199,6 +200,8 @@ typedef enum eNodeSocketFlag {
   SOCK_NO_INTERNAL_LINK = (1 << 9),
   /** Draw socket in a more compact form. */
   SOCK_COMPACT = (1 << 10),
+  /** Make the input socket accept multiple incoming links in the UI. */
+  SOCK_MULTI_INPUT = (1 << 11),
 } eNodeSocketFlag;
 
 /* limit data in bNode to what we want to see saved? */
@@ -217,15 +220,14 @@ typedef struct bNode {
   char name[64];
   int flag;
   short type;
-  char _pad[2];
   /** Both for dependency and sorting. */
   short done, level;
-  /** Lasty: check preview render status, menunr: browse ID blocks. */
-  short lasty, menunr;
-  /** For groupnode, offset in global caller stack. */
-  short stack_index;
-  /** Number of this node in list, used for UI exec events. */
-  short nr;
+
+  /** Used as a boolean for execution. */
+  uint8_t need_exec;
+
+  char _pad[1];
+
   /** Custom user-defined color. */
   float color[3];
 
@@ -263,10 +265,8 @@ typedef struct bNode {
   short custom1, custom2;
   float custom3, custom4;
 
-  /** Need_exec is set as UI execution event, exec is flag during exec. */
-  short need_exec, exec;
-  /** Optional extra storage for use in thread (read only then!). */
-  void *threaddata;
+  char _pad1[4];
+
   /** Entire boundbox (worldspace). */
   rctf totr;
   /** Optional buttons area. */
@@ -504,7 +504,7 @@ typedef struct bNodeTree {
 #define NTREE_SHADER 0
 #define NTREE_COMPOSIT 1
 #define NTREE_TEXTURE 2
-#define NTREE_SIMULATION 3
+#define NTREE_GEOMETRY 3
 
 /* ntree->init, flag */
 #define NTREE_TYPE_INIT 1
@@ -579,6 +579,10 @@ typedef struct bNodeSocketValueObject {
 typedef struct bNodeSocketValueImage {
   struct Image *value;
 } bNodeSocketValueImage;
+
+typedef struct bNodeSocketValueCollection {
+  struct Collection *value;
+} bNodeSocketValueCollection;
 
 /* data structs, for node->storage */
 enum {
@@ -733,7 +737,8 @@ typedef struct NodeImageMultiFileSocket {
   short use_render_format DNA_DEPRECATED;
   /** Use overall node image format. */
   short use_node_format;
-  char _pad1[4];
+  char save_as_render;
+  char _pad1[3];
   /** 1024 = FILE_MAX. */
   char path[1024];
   ImageFormatData format;
@@ -833,6 +838,11 @@ typedef struct NodeMask {
   int size_x, size_y;
 } NodeMask;
 
+typedef struct NodeSetAlpha {
+  char mode;
+  char _pad[7];
+} NodeSetAlpha;
+
 typedef struct NodeTexBase {
   TexMapping tex_mapping;
   ColorMapping color_mapping;
@@ -844,6 +854,16 @@ typedef struct NodeTexSky {
   float sun_direction[3];
   float turbidity;
   float ground_albedo;
+  float sun_size;
+  float sun_intensity;
+  float sun_elevation;
+  float sun_rotation;
+  float altitude;
+  float air_density;
+  float dust_density;
+  float ozone_density;
+  char sun_disc;
+  char _pad[7];
 } NodeTexSky;
 
 typedef struct NodeTexImage {
@@ -918,6 +938,8 @@ typedef struct NodeTexMagic {
 
 typedef struct NodeShaderAttribute {
   char name[64];
+  int type;
+  char _pad[4];
 } NodeShaderAttribute;
 
 typedef struct NodeShaderVectTransform {
@@ -1034,10 +1056,20 @@ typedef struct NodeSunBeams {
   float ray_length;
 } NodeSunBeams;
 
+typedef struct CryptomatteEntry {
+  struct CryptomatteEntry *next, *prev;
+  float encoded_hash;
+  /** MAX_NAME. */
+  char name[64];
+  char _pad[4];
+} CryptomatteEntry;
+
 typedef struct NodeCryptomatte {
   float add[3];
   float remove[3];
-  char *matte_id;
+  char *matte_id DNA_DEPRECATED;
+  /* Contains `CryptomatteEntry`. */
+  ListBase entries;
   int num_inputs;
   char _pad[4];
 } NodeCryptomatte;
@@ -1046,6 +1078,143 @@ typedef struct NodeDenoise {
   char hdr;
   char _pad[7];
 } NodeDenoise;
+
+typedef struct NodeAttributeCompare {
+  /* FloatCompareOperation. */
+  uint8_t operation;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_a;
+  uint8_t input_type_b;
+
+  char _pad[5];
+} NodeAttributeCompare;
+
+typedef struct NodeAttributeMath {
+  /* NodeMathOperation. */
+  uint8_t operation;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_a;
+  uint8_t input_type_b;
+  uint8_t input_type_c;
+
+  char _pad[4];
+} NodeAttributeMath;
+
+typedef struct NodeAttributeMix {
+  /* e.g. MA_RAMP_BLEND. */
+  uint8_t blend_type;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_factor;
+  uint8_t input_type_a;
+  uint8_t input_type_b;
+} NodeAttributeMix;
+
+typedef struct NodeAttributeVectorMath {
+  /* NodeVectorMathOperation */
+  uint8_t operation;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_a;
+  uint8_t input_type_b;
+  uint8_t input_type_c;
+
+  char _pad[4];
+} NodeAttributeVectorMath;
+
+typedef struct NodeAttributeColorRamp {
+  ColorBand color_ramp;
+} NodeAttributeColorRamp;
+
+typedef struct NodeInputVector {
+  float vector[3];
+} NodeInputVector;
+
+typedef struct NodeGeometryRotatePoints {
+  /* GeometryNodeRotatePointsType */
+  uint8_t type;
+  /* GeometryNodeRotatePointsSpace */
+  uint8_t space;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_axis;
+  uint8_t input_type_angle;
+  uint8_t input_type_rotation;
+  char _pad[3];
+} NodeGeometryRotatePoints;
+
+typedef struct NodeGeometryAlignRotationToVector {
+  /* GeometryNodeAlignRotationToVectorAxis */
+  uint8_t axis;
+  /* GeometryNodeAlignRotationToVectorPivotAxis */
+  uint8_t pivot_axis;
+
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_factor;
+  uint8_t input_type_vector;
+} NodeGeometryAlignRotationToVector;
+
+typedef struct NodeGeometryPointScale {
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type;
+
+  char _pad[7];
+} NodeGeometryPointScale;
+
+typedef struct NodeGeometryPointTranslate {
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type;
+
+  char _pad[7];
+} NodeGeometryPointTranslate;
+
+typedef struct NodeGeometryObjectInfo {
+  /* GeometryNodeTransformSpace. */
+  uint8_t transform_space;
+
+  char _pad[7];
+} NodeGeometryObjectInfo;
+
+typedef struct NodeGeometryPointInstance {
+  /* GeometryNodePointInstanceType. */
+  uint8_t instance_type;
+  /* GeometryNodePointInstanceFlag. */
+  uint8_t flag;
+
+  char _pad[6];
+} NodeGeometryPointInstance;
+
+typedef struct NodeGeometryPointsToVolume {
+  /* GeometryNodePointsToVolumeResolutionMode */
+  uint8_t resolution_mode;
+  /* GeometryNodeAttributeInputMode */
+  uint8_t input_type_radius;
+
+  char _pad[6];
+} NodeGeometryPointsToVolume;
+
+typedef struct NodeGeometryCollectionInfo {
+  /* GeometryNodeTransformSpace. */
+  uint8_t transform_space;
+
+  char _pad[7];
+} NodeGeometryCollectionInfo;
+
+typedef struct NodeGeometryAttributeProximity {
+  /* GeometryNodeAttributeProximityTargetGeometryElement. */
+  uint8_t target_geometry_element;
+
+  char _pad[7];
+} NodeGeometryAttributeProximity;
+
+typedef struct NodeGeometryVolumeToMesh {
+  /* VolumeToMeshResolutionMode */
+  uint8_t resolution_mode;
+
+  char _pad[7];
+} NodeGeometryVolumeToMesh;
 
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0
@@ -1086,6 +1255,13 @@ typedef struct NodeDenoise {
 #define SHD_VECT_TRANSFORM_SPACE_WORLD 0
 #define SHD_VECT_TRANSFORM_SPACE_OBJECT 1
 #define SHD_VECT_TRANSFORM_SPACE_CAMERA 2
+
+/* attribute */
+enum {
+  SHD_ATTRIBUTE_GEOMETRY = 0,
+  SHD_ATTRIBUTE_OBJECT = 1,
+  SHD_ATTRIBUTE_INSTANCER = 2,
+};
 
 /* toon modes */
 #define SHD_TOON_DIFFUSE 0
@@ -1171,8 +1347,9 @@ enum {
 };
 
 /* sky texture */
-#define SHD_SKY_OLD 0
-#define SHD_SKY_NEW 1
+#define SHD_SKY_PREETHAM 0
+#define SHD_SKY_HOSEK 1
+#define SHD_SKY_NISHITA 2
 
 /* environment texture */
 #define SHD_PROJ_EQUIRECTANGULAR 0
@@ -1234,7 +1411,7 @@ enum {
 #define SHD_MATH_CLAMP 1
 
 /* Math node operations. */
-enum {
+typedef enum NodeMathOperation {
   NODE_MATH_ADD = 0,
   NODE_MATH_SUBTRACT = 1,
   NODE_MATH_MULTIPLY = 2,
@@ -1275,10 +1452,10 @@ enum {
   NODE_MATH_PINGPONG = 37,
   NODE_MATH_SMOOTH_MIN = 38,
   NODE_MATH_SMOOTH_MAX = 39,
-};
+} NodeMathOperation;
 
 /* Vector Math node operations. */
-enum {
+typedef enum NodeVectorMathOperation {
   NODE_VECTOR_MATH_ADD = 0,
   NODE_VECTOR_MATH_SUBTRACT = 1,
   NODE_VECTOR_MATH_MULTIPLY = 2,
@@ -1306,7 +1483,7 @@ enum {
   NODE_VECTOR_MATH_SINE = 21,
   NODE_VECTOR_MATH_COSINE = 22,
   NODE_VECTOR_MATH_TANGENT = 23,
-};
+} NodeVectorMathOperation;
 
 /* Boolean math node operations. */
 enum {
@@ -1316,14 +1493,14 @@ enum {
 };
 
 /* Float compare node operations. */
-enum {
+typedef enum FloatCompareOperation {
   NODE_FLOAT_COMPARE_LESS_THAN = 0,
   NODE_FLOAT_COMPARE_LESS_EQUAL = 1,
   NODE_FLOAT_COMPARE_GREATER_THAN = 2,
   NODE_FLOAT_COMPARE_GREATER_EQUAL = 3,
   NODE_FLOAT_COMPARE_EQUAL = 4,
   NODE_FLOAT_COMPARE_NOT_EQUAL = 5,
-};
+} FloatCompareOperation;
 
 /* Clamp node types. */
 enum {
@@ -1346,7 +1523,7 @@ enum {
 /* subsurface */
 enum {
 #ifdef DNA_DEPRECATED_ALLOW
-  SHD_SUBSURFACE_COMPATIBLE = 0,  // Deprecated
+  SHD_SUBSURFACE_COMPATIBLE = 0, /* Deprecated */
 #endif
   SHD_SUBSURFACE_CUBIC = 1,
   SHD_SUBSURFACE_GAUSSIAN = 2,
@@ -1383,6 +1560,13 @@ enum {
   CMP_NODEFLAG_STABILIZE_INVERSE = 1,
 };
 
+/* Set Alpha Node. */
+/* `NodeSetAlpha.mode` */
+typedef enum CMPNodeSetAlphaMode {
+  CMP_NODE_SETALPHA_MODE_APPLY = 0,
+  CMP_NODE_SETALPHA_MODE_REPLACE_ALPHA = 1,
+} CMPNodeSetAlphaMode;
+
 #define CMP_NODE_PLANETRACKDEFORM_MBLUR_SAMPLES_MAX 64
 
 /* Point Density shader node */
@@ -1417,16 +1601,89 @@ typedef enum NodeShaderOutputTarget {
   SHD_OUTPUT_CYCLES = 2,
 } NodeShaderOutputTarget;
 
-/* Particle Time Step Event node */
-typedef enum NodeSimParticleTimeStepEventType {
-  NODE_PARTICLE_TIME_STEP_EVENT_BEGIN = 0,
-  NODE_PARTICLE_TIME_STEP_EVENT_END = 1,
-} NodeSimParticleTimeStepEventType;
+/* Geometry Nodes */
 
-/* Simulation Time node */
-typedef enum NodeSimInputTimeType {
-  NODE_SIM_INPUT_SIMULATION_TIME = 0,
-  NODE_SIM_INPUT_SCENE_TIME = 1,
-} NodeSimInputTimeType;
+typedef enum GeometryNodeAttributeProximityTargetGeometryElement {
+  GEO_NODE_ATTRIBUTE_PROXIMITY_TARGET_GEOMETRY_ELEMENT_POINTS = 0,
+  GEO_NODE_ATTRIBUTE_PROXIMITY_TARGET_GEOMETRY_ELEMENT_EDGES = 1,
+  GEO_NODE_ATTRIBUTE_PROXIMITY_TARGET_GEOMETRY_ELEMENT_FACES = 2,
+} GeometryNodeAttributeProximityTargetGeometryElement;
 
+/* Boolean Node */
+typedef enum GeometryNodeBooleanOperation {
+  GEO_NODE_BOOLEAN_INTERSECT = 0,
+  GEO_NODE_BOOLEAN_UNION = 1,
+  GEO_NODE_BOOLEAN_DIFFERENCE = 2,
+} GeometryNodeBooleanOperation;
+
+/* Triangulate Node */
+typedef enum GeometryNodeTriangulateNGons {
+  GEO_NODE_TRIANGULATE_NGON_BEAUTY = 0,
+  GEO_NODE_TRIANGULATE_NGON_EARCLIP = 1,
+} GeometryNodeTriangulateNGons;
+
+typedef enum GeometryNodeTriangulateQuads {
+  GEO_NODE_TRIANGULATE_QUAD_BEAUTY = 0,
+  GEO_NODE_TRIANGULATE_QUAD_FIXED = 1,
+  GEO_NODE_TRIANGULATE_QUAD_ALTERNATE = 2,
+  GEO_NODE_TRIANGULATE_QUAD_SHORTEDGE = 3,
+} GeometryNodeTriangulateQuads;
+
+typedef enum GeometryNodePointInstanceType {
+  GEO_NODE_POINT_INSTANCE_TYPE_OBJECT = 0,
+  GEO_NODE_POINT_INSTANCE_TYPE_COLLECTION = 1,
+} GeometryNodePointInstanceType;
+
+typedef enum GeometryNodePointInstanceFlag {
+  GEO_NODE_POINT_INSTANCE_WHOLE_COLLECTION = (1 << 0),
+} GeometryNodePointInstanceFlag;
+
+typedef enum GeometryNodeAttributeInputMode {
+  GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE = 0,
+  GEO_NODE_ATTRIBUTE_INPUT_FLOAT = 1,
+  GEO_NODE_ATTRIBUTE_INPUT_VECTOR = 2,
+  GEO_NODE_ATTRIBUTE_INPUT_COLOR = 3,
+  GEO_NODE_ATTRIBUTE_INPUT_BOOLEAN = 4,
+} GeometryNodeAttributeInputMode;
+
+typedef enum GeometryNodePointDistributeMethod {
+  GEO_NODE_POINT_DISTRIBUTE_RANDOM = 0,
+  GEO_NODE_POINT_DISTRIBUTE_POISSON = 1,
+} GeometryNodePointDistributeMethod;
+
+typedef enum GeometryNodeRotatePointsType {
+  GEO_NODE_POINT_ROTATE_TYPE_EULER = 0,
+  GEO_NODE_POINT_ROTATE_TYPE_AXIS_ANGLE = 1,
+} GeometryNodeRotatePointsType;
+
+typedef enum GeometryNodeRotatePointsSpace {
+  GEO_NODE_POINT_ROTATE_SPACE_OBJECT = 0,
+  GEO_NODE_POINT_ROTATE_SPACE_POINT = 1,
+} GeometryNodeRotatePointsSpace;
+
+typedef enum GeometryNodeAlignRotationToVectorAxis {
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_AXIS_X = 0,
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_AXIS_Y = 1,
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_AXIS_Z = 2,
+} GeometryNodeAlignRotationToVectorAxis;
+
+typedef enum GeometryNodeAlignRotationToVectorPivotAxis {
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_PIVOT_AXIS_AUTO = 0,
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_PIVOT_AXIS_X = 1,
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_PIVOT_AXIS_Y = 2,
+  GEO_NODE_ALIGN_ROTATION_TO_VECTOR_PIVOT_AXIS_Z = 3,
+} GeometryNodeAlignRotationToVectorPivotAxis;
+
+typedef enum GeometryNodeTransformSpace {
+  GEO_NODE_TRANSFORM_SPACE_ORIGINAL = 0,
+  GEO_NODE_TRANSFORM_SPACE_RELATIVE = 1,
+} GeometryNodeTransformSpace;
+
+typedef enum GeometryNodePointsToVolumeResolutionMode {
+  GEO_NODE_POINTS_TO_VOLUME_RESOLUTION_MODE_AMOUNT = 0,
+  GEO_NODE_POINTS_TO_VOLUME_RESOLUTION_MODE_SIZE = 1,
+} GeometryNodePointsToVolumeResolutionMode;
+
+#ifdef __cplusplus
+}
 #endif

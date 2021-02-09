@@ -58,11 +58,11 @@ class TextureNodeCategory(SortedNodeCategory):
                 context.space_data.tree_type == 'TextureNodeTree')
 
 
-class SimulationNodeCategory(SortedNodeCategory):
+class GeometryNodeCategory(SortedNodeCategory):
     @classmethod
     def poll(cls, context):
         return (context.space_data.type == 'NODE_EDITOR' and
-                context.space_data.tree_type == 'SimulationNodeTree')
+                context.space_data.tree_type == 'GeometryNodeTree')
 
 
 # menu entry for node group tools
@@ -77,11 +77,11 @@ node_tree_group_type = {
     'CompositorNodeTree': 'CompositorNodeGroup',
     'ShaderNodeTree': 'ShaderNodeGroup',
     'TextureNodeTree': 'TextureNodeGroup',
-    'SimulationNodeTree': 'SimulationNodeGroup',
+    'GeometryNodeTree': 'GeometryNodeGroup',
 }
 
 
-# generic node group items generator for shader, compositor, simulation and texture node groups
+# generic node group items generator for shader, compositor, geometry and texture node groups
 def node_group_items(context):
     if context is None:
         return
@@ -165,11 +165,6 @@ def object_cycles_shader_nodes_poll(context):
             cycles_shader_nodes_poll(context))
 
 
-def cycles_aov_node_poll(context):
-    return (object_cycles_shader_nodes_poll(context) or
-            world_shader_nodes_poll(context))
-
-
 def object_eevee_shader_nodes_poll(context):
     return (object_shader_nodes_poll(context) and
             eevee_shader_nodes_poll(context))
@@ -210,7 +205,7 @@ shader_node_categories = [
     ShaderNodeCategory("SH_NEW_OUTPUT", "Output", items=[
         NodeItem("ShaderNodeOutputMaterial", poll=object_eevee_cycles_shader_nodes_poll),
         NodeItem("ShaderNodeOutputLight", poll=object_cycles_shader_nodes_poll),
-        NodeItem("ShaderNodeOutputAOV", poll=cycles_aov_node_poll),
+        NodeItem("ShaderNodeOutputAOV"),
         NodeItem("ShaderNodeOutputWorld", poll=world_shader_nodes_poll),
         NodeItem("ShaderNodeOutputLineStyle", poll=line_style_shader_nodes_poll),
         NodeItem("NodeGroupOutput", poll=group_input_output_item_poll),
@@ -335,6 +330,7 @@ compositor_node_categories = [
         NodeItem("CompositorNodeHueCorrect"),
         NodeItem("CompositorNodeBrightContrast"),
         NodeItem("CompositorNodeGamma"),
+        NodeItem("CompositorNodeExposure"),
         NodeItem("CompositorNodeColorCorrection"),
         NodeItem("CompositorNodeTonemap"),
         NodeItem("CompositorNodeZcombine"),
@@ -475,66 +471,82 @@ texture_node_categories = [
     ]),
 ]
 
-simulation_node_categories = [
-    # Simulation Nodes
-    SimulationNodeCategory("SIM_OUTPUT", "Output", items=[
-        NodeItem("SimulationNodeParticleSimulation"),
+
+def not_implemented_node(idname):
+    NodeType = getattr(bpy.types, idname)
+    name = NodeType.bl_rna.name
+    label = "%s (mockup)" % name
+    return NodeItem(idname, label=label)
+
+
+geometry_node_categories = [
+    # Geometry Nodes
+    GeometryNodeCategory("GEO_ATTRIBUTE", "Attribute", items=[
+        NodeItem("GeometryNodeAttributeRandomize"),
+        NodeItem("GeometryNodeAttributeMath"),
+        NodeItem("GeometryNodeAttributeCompare"),
+        NodeItem("GeometryNodeAttributeFill"),
+        NodeItem("GeometryNodeAttributeMix"),
+        NodeItem("GeometryNodeAttributeProximity"),
+        NodeItem("GeometryNodeAttributeColorRamp"),
+        NodeItem("GeometryNodeAttributeVectorMath"),
+        NodeItem("GeometryNodeAttributeSampleTexture"),
     ]),
-    SimulationNodeCategory("SIM_INPUTS", "Input", items=[
-        NodeItem("SimulationNodeTime"),
-        NodeItem("SimulationNodeParticleAttribute"),
-        NodeItem("FunctionNodeGroupInstanceID"),
+    GeometryNodeCategory("GEO_COLOR", "Color", items=[
+        NodeItem("ShaderNodeValToRGB"),
+        NodeItem("ShaderNodeSeparateRGB"),
+        NodeItem("ShaderNodeCombineRGB"),
     ]),
-    SimulationNodeCategory("SIM_EMITTERS", "Emitters", items=[
-        NodeItem("SimulationNodeParticleMeshEmitter"),
-        NodeItem("SimulationNodeEmitParticles"),
+    GeometryNodeCategory("GEO_GEOMETRY", "Geometry", items=[
+        NodeItem("GeometryNodeTransform"),
+        NodeItem("GeometryNodeJoinGeometry"),
     ]),
-    SimulationNodeCategory("SIM_EVENTS", "Events", items=[
-        NodeItem("SimulationNodeParticleBirthEvent"),
-        NodeItem("SimulationNodeParticleTimeStepEvent"),
-        NodeItem("SimulationNodeParticleMeshCollisionEvent"),
+    GeometryNodeCategory("GEO_INPUT", "Input", items=[
+        NodeItem("GeometryNodeObjectInfo"),
+        NodeItem("GeometryNodeCollectionInfo"),
+        NodeItem("FunctionNodeRandomFloat"),
+        NodeItem("ShaderNodeValue"),
+        NodeItem("FunctionNodeInputVector"),
+        NodeItem("GeometryNodeIsViewport"),
     ]),
-    SimulationNodeCategory("SIM_FORCES", "Forces", items=[
-        NodeItem("SimulationNodeForce"),
+    GeometryNodeCategory("GEO_MESH", "Mesh", items=[
+        NodeItem("GeometryNodeBoolean"),
+        NodeItem("GeometryNodeTriangulate"),
+        NodeItem("GeometryNodeEdgeSplit"),
+        NodeItem("GeometryNodeSubdivisionSurface"),
     ]),
-    SimulationNodeCategory("SIM_EXECUTE", "Execute", items=[
-        NodeItem("SimulationNodeSetParticleAttribute"),
-        NodeItem("SimulationNodeExecuteCondition"),
-        NodeItem("SimulationNodeMultiExecute"),
+    GeometryNodeCategory("GEO_POINT", "Point", items=[
+        NodeItem("GeometryNodePointDistribute"),
+        NodeItem("GeometryNodePointInstance"),
+        NodeItem("GeometryNodePointSeparate"),
+        NodeItem("GeometryNodePointScale"),
+        NodeItem("GeometryNodePointTranslate"),
+        NodeItem("GeometryNodeRotatePoints"),
+        NodeItem("GeometryNodeAlignRotationToVector"),
     ]),
-    SimulationNodeCategory("SIM_NOISE", "Noise", items=[
-        NodeItem("ShaderNodeTexNoise"),
-        NodeItem("ShaderNodeTexWhiteNoise"),
+    GeometryNodeCategory("GEO_VOLUME", "Volume", items=[
+        NodeItem("GeometryNodePointsToVolume"),
+        NodeItem("GeometryNodeVolumeToMesh"),
     ]),
-    SimulationNodeCategory("SIM_COLOR", "Color", items=[
-        NodeItem("ShaderNodeMixRGB"),
-        NodeItem("ShaderNodeInvert"),
-        NodeItem("ShaderNodeHueSaturation"),
-        NodeItem("ShaderNodeGamma"),
-        NodeItem("ShaderNodeBrightContrast"),
-    ]),
-    SimulationNodeCategory("SIM_CONVERTER", "Converter", items=[
+    GeometryNodeCategory("GEO_UTILITIES", "Utilities", items=[
         NodeItem("ShaderNodeMapRange"),
         NodeItem("ShaderNodeClamp"),
         NodeItem("ShaderNodeMath"),
-        NodeItem("ShaderNodeValToRGB"),
-        NodeItem("ShaderNodeVectorMath"),
-        NodeItem("ShaderNodeSeparateRGB"),
-        NodeItem("ShaderNodeCombineRGB"),
-        NodeItem("ShaderNodeSeparateXYZ"),
-        NodeItem("ShaderNodeCombineXYZ"),
-        NodeItem("ShaderNodeSeparateHSV"),
-        NodeItem("ShaderNodeCombineHSV"),
         NodeItem("FunctionNodeBooleanMath"),
         NodeItem("FunctionNodeFloatCompare"),
-        NodeItem("FunctionNodeSwitch"),
-        NodeItem("FunctionNodeCombineStrings"),
     ]),
-    SimulationNodeCategory("SIM_GROUP", "Group", items=node_group_items),
-    SimulationNodeCategory("SIM_LAYOUT", "Layout", items=[
+    GeometryNodeCategory("GEO_VECTOR", "Vector", items=[
+        NodeItem("ShaderNodeSeparateXYZ"),
+        NodeItem("ShaderNodeCombineXYZ"),
+        NodeItem("ShaderNodeVectorMath"),
+    ]),
+    GeometryNodeCategory("GEO_GROUP", "Group", items=node_group_items),
+    GeometryNodeCategory("GEO_LAYOUT", "Layout", items=[
         NodeItem("NodeFrame"),
         NodeItem("NodeReroute"),
     ]),
+    # NodeItem("FunctionNodeCombineStrings"),
+    # NodeItem("FunctionNodeGroupInstanceID"),
 ]
 
 
@@ -542,14 +554,14 @@ def register():
     nodeitems_utils.register_node_categories('SHADER', shader_node_categories)
     nodeitems_utils.register_node_categories('COMPOSITING', compositor_node_categories)
     nodeitems_utils.register_node_categories('TEXTURE', texture_node_categories)
-    nodeitems_utils.register_node_categories('SIMULATION', simulation_node_categories)
+    nodeitems_utils.register_node_categories('GEOMETRY', geometry_node_categories)
 
 
 def unregister():
     nodeitems_utils.unregister_node_categories('SHADER')
     nodeitems_utils.unregister_node_categories('COMPOSITING')
     nodeitems_utils.unregister_node_categories('TEXTURE')
-    nodeitems_utils.unregister_node_categories('SIMULATION')
+    nodeitems_utils.unregister_node_categories('GEOMETRY')
 
 
 if __name__ == "__main__":

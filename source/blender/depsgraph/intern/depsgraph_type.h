@@ -50,23 +50,15 @@ struct Depsgraph;
 
 struct CustomData_MeshMasks;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 /* Commonly used types. */
-using BLI::ArrayRef;
-using BLI::Map;
-using BLI::Set;
-using BLI::StringRef;
-using BLI::StringRefNull;
-using BLI::Vector;
-using BLI::VectorSet;
 using std::deque;
-using std::map;
+using std::optional;
 using std::pair;
-using std::set;
 using std::string;
 using std::unique_ptr;
-using std::vector;
 
 /* Commonly used functions. */
 using std::make_pair;
@@ -177,4 +169,5 @@ struct DEGCustomDataMeshMasks {
   }
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

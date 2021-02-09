@@ -21,12 +21,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_ARMATURE_TYPES_H__
-#define __DNA_ARMATURE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 
@@ -282,4 +285,6 @@ typedef enum eBone_BBoneHandleType {
 
 #define MAXBONENAME 64
 
+#ifdef __cplusplus
+}
 #endif

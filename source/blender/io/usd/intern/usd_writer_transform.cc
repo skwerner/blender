@@ -28,7 +28,7 @@
 
 #include "DNA_layer_types.h"
 
-namespace USD {
+namespace blender::io::usd {
 
 USDTransformWriter::USDTransformWriter(const USDExporterContext &ctx) : USDAbstractWriter(ctx)
 {
@@ -36,10 +36,10 @@ USDTransformWriter::USDTransformWriter(const USDExporterContext &ctx) : USDAbstr
 
 void USDTransformWriter::do_write(HierarchyContext &context)
 {
-  float parent_relative_matrix[4][4];  // The object matrix relative to the parent.
+  float parent_relative_matrix[4][4]; /* The object matrix relative to the parent. */
   mul_m4_m4m4(parent_relative_matrix, context.parent_matrix_inv_world, context.matrix_world);
 
-  // Write the transform relative to the parent.
+  /* Write the transform relative to the parent. */
   pxr::UsdGeomXform xform = pxr::UsdGeomXform::Define(usd_export_context_.stage,
                                                       usd_export_context_.usd_path);
   if (!xformOp_) {
@@ -56,7 +56,10 @@ bool USDTransformWriter::check_is_animated(const HierarchyContext &context) cons
      * depsgraph whether this object instance has a time source. */
     return true;
   }
+  if (check_has_physics(context)) {
+    return true;
+  }
   return BKE_object_moves_in_time(context.object, context.animation_check_include_parent);
 }
 
-}  // namespace USD
+}  // namespace blender::io::usd

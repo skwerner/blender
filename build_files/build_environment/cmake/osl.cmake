@@ -44,6 +44,7 @@ set(OSL_EXTRA_ARGS
   -DBOOST_ROOT=${LIBDIR}/boost
   -DBOOST_LIBRARYDIR=${LIBDIR}/boost/lib/
   -DBoost_NO_SYSTEM_PATHS=ON
+  -DBoost_NO_BOOST_CMAKE=ON
   -DLLVM_DIRECTORY=${LIBDIR}/llvm
   -DLLVM_INCLUDES=${LIBDIR}/llvm/include
   -DLLVM_LIB_DIR=${LIBDIR}/llvm/lib
@@ -74,16 +75,13 @@ set(OSL_EXTRA_ARGS
   -DUSE_LLVM_BITCODE=OFF
   -DUSE_PARTIO=OFF
   -DUSE_QT=OFF
+  -DINSTALL_DOCS=OFF
   ${OSL_SIMD_FLAGS}
   -DPARTIO_LIBRARIES=
+  -DPUGIXML_HOME=${LIBDIR}/pugixml
 )
 
-if(WIN32)
-  set(OSL_EXTRA_ARGS
-    ${OSL_EXTRA_ARGS}
-    -DPUGIXML_HOME=${LIBDIR}/pugixml
-  )
-elseif(APPLE)
+if(APPLE)
   # Make symbol hiding consistent with OIIO which defaults to OFF,
   # avoids linker warnings on macOS
   set(OSL_EXTRA_ARGS
@@ -112,16 +110,8 @@ add_dependencies(
   external_zlib
   external_flexbison
   external_openimageio
+  external_pugixml
 )
-
-if(UNIX)
-  # Rely on PugiXML compiled with OpenImageIO
-else()
-  add_dependencies(
-    external_osl
-    external_pugixml
-  )
-endif()
 
 if(WIN32)
   if(BUILD_MODE STREQUAL Release)

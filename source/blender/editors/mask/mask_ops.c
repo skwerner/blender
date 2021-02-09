@@ -226,13 +226,19 @@ typedef struct SlidePointData {
   int width, height;
 
   float prev_mouse_coord[2];
+
+  /* Previous clip coordinate which was resolved from mouse position (0, 0).
+   * Is used to compensate for view offset moving in-between of mouse events when
+   * lock-to-selection is enabled. */
+  float prev_zero_coord[2];
+
   float no[2];
 
   bool is_curvature_only, is_accurate, is_initial_feather, is_overall_feather;
 
   bool is_sliding_new_point;
 
-  /* Data needed to restre the state. */
+  /* Data needed to restore the state. */
   float vec[3][3];
   char old_h1, old_h2;
 
@@ -262,15 +268,16 @@ static bool spline_under_mouse_get(const bContext *C,
   const float threshold = 19.0f;
   ScrArea *area = CTX_wm_area(C);
   SpaceClip *sc = CTX_wm_space_clip(C);
-  int width, height;
-  float pixel_co[2];
   float closest_dist_squared = 0.0f;
   MaskLayer *closest_layer = NULL;
   MaskSpline *closest_spline = NULL;
   bool undistort = false;
   *r_mask_layer = NULL;
   *r_mask_spline = NULL;
+
+  int width, height;
   ED_mask_get_size(area, &width, &height);
+  float pixel_co[2];
   pixel_co[0] = co[0] * width;
   pixel_co[1] = co[1] * height;
   if (sc != NULL) {
@@ -285,16 +292,13 @@ static bool spline_under_mouse_get(const bContext *C,
     for (MaskSpline *spline = mask_layer->splines.first; spline != NULL; spline = spline->next) {
       MaskSplinePoint *points_array;
       float min[2], max[2], center[2];
-      float dist_squared;
-      int i;
-      float max_bb_side;
       if ((spline->flag & SELECT) == 0) {
         continue;
       }
 
       points_array = BKE_mask_spline_point_array(spline);
       INIT_MINMAX2(min, max);
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point_deform = &points_array[i];
         BezTriple *bezt = &point_deform->bezt;
 
@@ -311,8 +315,8 @@ static bool spline_under_mouse_get(const bContext *C,
 
       center[0] = (min[0] + max[0]) / 2.0f * width;
       center[1] = (min[1] + max[1]) / 2.0f * height;
-      dist_squared = len_squared_v2v2(pixel_co, center);
-      max_bb_side = min_ff((max[0] - min[0]) * width, (max[1] - min[1]) * height);
+      float dist_squared = len_squared_v2v2(pixel_co, center);
+      float max_bb_side = min_ff((max[0] - min[0]) * width, (max[1] - min[1]) * height);
       if (dist_squared <= max_bb_side * max_bb_side * 0.5f &&
           (closest_spline == NULL || dist_squared < closest_dist_squared)) {
         closest_layer = mask_layer;
@@ -350,9 +354,7 @@ static bool spline_under_mouse_get(const bContext *C,
 
 static bool slide_point_check_initial_feather(MaskSpline *spline)
 {
-  int i;
-
-  for (i = 0; i < spline->tot_point; i++) {
+  for (int i = 0; i < spline->tot_point; i++) {
     MaskSplinePoint *point = &spline->points[i];
 
     if (point->bezt.weight != 0.0f) {
@@ -434,6 +436,9 @@ static void *slide_point_customdata(bContext *C, wmOperator *op, const wmEvent *
   float co[2], cv_score, feather_score;
   const float threshold = 19;
   eMaskWhichHandle which_handle;
+
+  MaskViewLockState lock_state;
+  ED_mask_view_lock_state_store(C, &lock_state);
 
   ED_mask_mouse_pos(area, region, event->mval, co);
   ED_mask_get_size(area, &width, &height);
@@ -534,7 +539,15 @@ static void *slide_point_customdata(bContext *C, wmOperator *op, const wmEvent *
     }
     customdata->which_handle = which_handle;
 
+    {
+      WM_event_add_notifier(C, NC_MASK | NA_EDITED, mask);
+      DEG_id_tag_update(&mask->id, 0);
+
+      ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
+    }
+
     ED_mask_mouse_pos(area, region, event->mval, customdata->prev_mouse_coord);
+    ED_mask_mouse_pos(area, region, (int[2]){0, 0}, customdata->prev_zero_coord);
   }
 
   return customdata;
@@ -569,9 +582,7 @@ static int slide_point_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
 static void slide_point_delta_all_feather(SlidePointData *data, float delta)
 {
-  int i;
-
-  for (i = 0; i < data->spline->tot_point; i++) {
+  for (int i = 0; i < data->spline->tot_point; i++) {
     MaskSplinePoint *point = &data->spline->points[i];
     MaskSplinePoint *orig_point = &data->orig_spline->points[i];
 
@@ -584,16 +595,13 @@ static void slide_point_delta_all_feather(SlidePointData *data, float delta)
 
 static void slide_point_restore_spline(SlidePointData *data)
 {
-  int i;
-
-  for (i = 0; i < data->spline->tot_point; i++) {
+  for (int i = 0; i < data->spline->tot_point; i++) {
     MaskSplinePoint *point = &data->spline->points[i];
     MaskSplinePoint *orig_point = &data->orig_spline->points[i];
-    int j;
 
     point->bezt = orig_point->bezt;
 
-    for (j = 0; j < point->tot_uw; j++) {
+    for (int j = 0; j < point->tot_uw; j++) {
       point->uw[j] = orig_point->uw[j];
     }
   }
@@ -664,10 +672,24 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
       ED_mask_mouse_pos(area, region, event->mval, co);
       sub_v2_v2v2(delta, co, data->prev_mouse_coord);
+      copy_v2_v2(data->prev_mouse_coord, co);
+
+      /* Compensate for possibly moved view offset since the last event.
+       * The idea is to see how mapping of a fixed and known position did change. */
+      {
+        float zero_coord[2];
+        ED_mask_mouse_pos(area, region, (int[2]){0, 0}, zero_coord);
+
+        float zero_delta[2];
+        sub_v2_v2v2(zero_delta, zero_coord, data->prev_zero_coord);
+        sub_v2_v2(delta, zero_delta);
+
+        copy_v2_v2(data->prev_zero_coord, zero_coord);
+      }
+
       if (data->is_accurate) {
         mul_v2_fl(delta, 0.2f);
       }
-      copy_v2_v2(data->prev_mouse_coord, co);
 
       if (data->action == SLIDE_ACTION_HANDLE) {
         float new_handle[2];
@@ -818,13 +840,11 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
         }
       }
       else if (data->action == SLIDE_ACTION_SPLINE) {
-        int i;
-
         if (data->orig_spline == NULL) {
           data->orig_spline = BKE_mask_spline_copy(data->spline);
         }
 
-        for (i = 0; i < data->spline->tot_point; i++) {
+        for (int i = 0; i < data->spline->tot_point; i++) {
           MaskSplinePoint *point = &data->spline->points[i];
           add_v2_v2(point->bezt.vec[0], delta);
           add_v2_v2(point->bezt.vec[1], delta);
@@ -843,7 +863,7 @@ static int slide_point_modal(bContext *C, wmOperator *op, const wmEvent *event)
       if (event->type == data->event_invoke_type && event->val == KM_RELEASE) {
         Scene *scene = CTX_data_scene(C);
 
-        /* dont key sliding feather uw's */
+        /* Don't key sliding feather UW's. */
         if ((data->action == SLIDE_ACTION_FEATHER && data->uw) == false) {
           if (IS_AUTOKEY_ON(scene)) {
             ED_mask_layer_shape_auto_key(data->mask_layer, CFRA);
@@ -977,6 +997,9 @@ static SlideSplineCurvatureData *slide_spline_curvature_customdata(bContext *C,
   float u, co[2];
   BezTriple *next_bezt;
 
+  MaskViewLockState lock_state;
+  ED_mask_view_lock_state_store(C, &lock_state);
+
   ED_mask_mouse_pos(CTX_wm_area(C), CTX_wm_region(C), event->mval, co);
 
   if (!ED_mask_find_nearest_diff_point(C,
@@ -1030,7 +1053,7 @@ static SlideSplineCurvatureData *slide_spline_curvature_customdata(bContext *C,
   slide_data->bezt_backup = *slide_data->adjust_bezt;
   slide_data->other_bezt_backup = *slide_data->other_bezt;
 
-  /* Let's dont touch other side of the point for now, so set handle to FREE. */
+  /* Let's don't touch other side of the point for now, so set handle to FREE. */
   if (u < 0.5f) {
     if (slide_data->adjust_bezt->h2 <= HD_VECT) {
       slide_data->adjust_bezt->h2 = HD_FREE;
@@ -1057,6 +1080,9 @@ static SlideSplineCurvatureData *slide_spline_curvature_customdata(bContext *C,
   mask_layer->act_spline = spline;
   mask_layer->act_point = point;
   ED_mask_select_flush_all(mask);
+
+  DEG_id_tag_update(&mask->id, 0);
+  ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
 
   return slide_data;
 }
@@ -1244,7 +1270,7 @@ static int slide_spline_curvature_modal(bContext *C, wmOperator *op, const wmEve
     case LEFTMOUSE:
     case RIGHTMOUSE:
       if (event->type == slide_data->event_invoke_type && event->val == KM_RELEASE) {
-        /* dont key sliding feather uw's */
+        /* Don't key sliding feather UW's. */
         if (IS_AUTOKEY_ON(scene)) {
           ED_mask_layer_shape_auto_key(slide_data->mask_layer, CFRA);
         }
@@ -1275,7 +1301,7 @@ void MASK_OT_slide_spline_curvature(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Slide Spline Curvature";
-  ot->description = "Slide a point on the spline to define it's curvature";
+  ot->description = "Slide a point on the spline to define its curvature";
   ot->idname = "MASK_OT_slide_spline_curvature";
 
   /* api callbacks */
@@ -1330,13 +1356,13 @@ void MASK_OT_cyclic_toggle(wmOperatorType *ot)
 
 static void delete_feather_points(MaskSplinePoint *point)
 {
-  int i, count = 0;
+  int count = 0;
 
   if (!point->tot_uw) {
     return;
   }
 
-  for (i = 0; i < point->tot_uw; i++) {
+  for (int i = 0; i < point->tot_uw; i++) {
     if ((point->uw[i].flag & SELECT) == 0) {
       count++;
     }
@@ -1353,7 +1379,7 @@ static void delete_feather_points(MaskSplinePoint *point)
 
     new_uw = MEM_callocN(count * sizeof(MaskSplinePointUW), "new mask uw points");
 
-    for (i = 0; i < point->tot_uw; i++) {
+    for (int i = 0; i < point->tot_uw; i++) {
       if ((point->uw[i].flag & SELECT) == 0) {
         new_uw[j++] = point->uw[i];
       }
@@ -1383,11 +1409,11 @@ static int delete_exec(bContext *C, wmOperator *UNUSED(op))
 
     while (spline) {
       const int tot_point_orig = spline->tot_point;
-      int i, count = 0;
+      int count = 0;
       MaskSpline *next_spline = spline->next;
 
       /* count unselected points */
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point = &spline->points[i];
 
         if (!MASKPOINT_ISSEL_ANY(point)) {
@@ -1409,11 +1435,10 @@ static int delete_exec(bContext *C, wmOperator *UNUSED(op))
       }
       else {
         MaskSplinePoint *new_points;
-        int j;
 
         new_points = MEM_callocN(count * sizeof(MaskSplinePoint), "deleteMaskPoints");
 
-        for (i = 0, j = 0; i < tot_point_orig; i++) {
+        for (int i = 0, j = 0; i < tot_point_orig; i++) {
           MaskSplinePoint *point = &spline->points[i];
 
           if (!MASKPOINT_ISSEL_ANY(point)) {
@@ -1589,12 +1614,12 @@ static int mask_normals_make_consistent_exec(bContext *C, wmOperator *UNUSED(op)
   return OPERATOR_CANCELLED;
 }
 
-/* named to match mesh recalc normals */
+/* Named to match mesh recalculate normals. */
 void MASK_OT_normals_make_consistent(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Recalc Normals";
-  ot->description = "Re-calculate the direction of selected handles";
+  ot->name = "Recalculate Handles";
+  ot->description = "Recalculate the direction of selected handles";
   ot->idname = "MASK_OT_normals_make_consistent";
 
   /* api callbacks */
@@ -1710,9 +1735,7 @@ static int mask_hide_view_clear_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_hide_view_clear(wmOperatorType *ot)
@@ -1773,9 +1796,7 @@ static int mask_hide_view_set_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_hide_view_set(wmOperatorType *ot)
@@ -1827,9 +1848,7 @@ static int mask_feather_weight_clear_exec(bContext *C, wmOperator *UNUSED(op))
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void MASK_OT_feather_weight_clear(wmOperatorType *ot)

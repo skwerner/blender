@@ -25,18 +25,18 @@
 
 #pragma once
 
-struct Main;
-
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 
 /* Flush updates from tagged nodes outwards until all affected nodes
  * are tagged.
  */
-void deg_graph_flush_updates(struct Main *bmain, struct Depsgraph *graph);
+void deg_graph_flush_updates(struct Depsgraph *graph);
 
 /* Clear tags from all operation nodes. */
 void deg_graph_clear_tags(struct Depsgraph *graph);
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

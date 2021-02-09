@@ -559,7 +559,7 @@ def lightmap_uvpack(
 
 
 def unwrap(operator, context, **kwargs):
-     # switch to object mode
+    # switch to object mode
     is_editmode = context.object and context.object.mode == 'EDIT'
     if is_editmode:
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
@@ -600,7 +600,7 @@ class LightMapPack(Operator):
     # Proper solution would be to make undo stack aware of such things,
     # but for now just disable redo. Keep undo here so unwanted changes to uv
     # coords might be undone.
-    # This fixes infinite image creation reported there [#30968] (sergey)
+    # This fixes infinite image creation reported there T30968 (sergey)
     bl_options = {'UNDO'}
 
     PREF_CONTEXT: bpy.props.EnumProperty(
@@ -613,7 +613,7 @@ class LightMapPack(Operator):
 
     # Image & UVs...
     PREF_PACK_IN_ONE: BoolProperty(
-        name="Share Tex Space",
+        name="Share Texture Space",
         description=(
             "Objects Share texture space, map all objects "
             "into 1 uvmap"
@@ -635,14 +635,14 @@ class LightMapPack(Operator):
     )
     PREF_IMG_PX_SIZE: IntProperty(
         name="Image Size",
-        description="Width and Height for the new image",
+        description="Width and height for the new image",
         min=64, max=5000,
         default=512,
     )
     # UV Packing...
     PREF_BOX_DIV: IntProperty(
         name="Pack Quality",
-        description="Pre Packing before the complex boxpack",
+        description="Pre-packing before the complex boxpack",
         min=1, max=48,
         default=12,
     )
@@ -656,6 +656,7 @@ class LightMapPack(Operator):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         is_editmode = context.active_object.mode == 'EDIT'
         if is_editmode:

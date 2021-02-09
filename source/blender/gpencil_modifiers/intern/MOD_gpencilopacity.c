@@ -28,13 +28,18 @@
 #include "BLI_blenlib.h"
 #include "BLI_math_vector.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
+#include "DNA_screen_types.h"
 
 #include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
@@ -42,25 +47,29 @@
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
 #include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
   OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->factor = 1.0f;
-  gpmd->hardeness = 1.0f;
-  gpmd->material = NULL;
-  gpmd->modify_color = GP_MODIFY_COLOR_BOTH;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(OpacityGpencilModifierData), modifier);
+
   gpmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  if (gpmd->curve_intensity) {
-    CurveMapping *curve = gpmd->curve_intensity;
-    BKE_curvemapping_initialize(curve);
-  }
+  BKE_curvemapping_init(gpmd->curve_intensity);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
@@ -180,6 +189,7 @@ static void bakeModifier(Main *UNUSED(bmain),
     }
   }
 }
+
 static void freeData(GpencilModifierData *md)
 {
   OpacityGpencilModifierData *gpmd = (OpacityGpencilModifierData *)md;
@@ -194,6 +204,75 @@ static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, 
   OpacityGpencilModifierData *mmd = (OpacityGpencilModifierData *)md;
 
   walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  int modify_color = RNA_enum_get(ptr, "modify_color");
+
+  uiItemR(layout, ptr, "modify_color", 0, NULL, ICON_NONE);
+
+  if (modify_color == GP_MODIFY_COLOR_HARDNESS) {
+    uiItemR(layout, ptr, "hardness", 0, NULL, ICON_NONE);
+  }
+  else {
+    uiItemR(layout, ptr, "normalize_opacity", 0, NULL, ICON_NONE);
+    const char *text = (RNA_boolean_get(ptr, "normalize_opacity")) ? IFACE_("Strength") :
+                                                                     IFACE_("Opacity Factor");
+    uiItemR(layout, ptr, "factor", 0, text, ICON_NONE);
+  }
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  int modify_color = RNA_enum_get(ptr, "modify_color");
+  bool show_vertex = (modify_color != GP_MODIFY_COLOR_HARDNESS);
+
+  gpencil_modifier_masking_panel_draw(panel, true, show_vertex);
+}
+
+static void curve_header_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  int modify_color = RNA_enum_get(ptr, "modify_color");
+  uiLayoutSetActive(layout, modify_color != GP_MODIFY_COLOR_HARDNESS);
+
+  gpencil_modifier_curve_header_draw(C, panel);
+}
+
+static void curve_panel_draw(const bContext *C, Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  int modify_color = RNA_enum_get(ptr, "modify_color");
+  uiLayoutSetActive(layout, modify_color != GP_MODIFY_COLOR_HARDNESS);
+
+  gpencil_modifier_curve_panel_draw(C, panel);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Opacity, panel_draw);
+  PanelType *mask_panel_type = gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(
+      region_type, "curve", "", curve_header_draw, curve_panel_draw, mask_panel_type);
 }
 
 GpencilModifierTypeInfo modifierType_Gpencil_Opacity = {
@@ -215,7 +294,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Opacity = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
+    /* panelRegister */ panelRegister,
 };

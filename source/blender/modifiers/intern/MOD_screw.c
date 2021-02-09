@@ -29,18 +29,40 @@
 #include "BLI_alloca.h"
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
+
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
+
+static void initData(ModifierData *md)
+{
+  ScrewModifierData *ltmd = (ScrewModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ltmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(ltmd, DNA_struct_default_get(ScrewModifierData), modifier);
+}
 
 #include "BLI_strict_flags.h"
 
@@ -165,19 +187,6 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
   return result;
 }
 
-static void initData(ModifierData *md)
-{
-  ScrewModifierData *ltmd = (ScrewModifierData *)md;
-  ltmd->ob_axis = NULL;
-  ltmd->angle = (float)(M_PI * 2.0);
-  ltmd->axis = 2;
-  ltmd->flag = MOD_SCREW_SMOOTH_SHADING;
-  ltmd->steps = 16;
-  ltmd->render_steps = 16;
-  ltmd->iter = 1;
-  ltmd->merge_dist = 0.01f;
-}
-
 static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *meshData)
 {
   Mesh *mesh = meshData;
@@ -289,7 +298,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
       float totlen = len_v3(mtx_tx[3]);
 
       if (totlen != 0.0f) {
-        float zero[3] = {0.0f, 0.0f, 0.0f};
+        const float zero[3] = {0.0f, 0.0f, 0.0f};
         float cp[3];
         screw_ofs = closest_to_line_v3(cp, mtx_tx[3], zero, axis_vec);
       }
@@ -349,7 +358,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   step_tot = ((step_tot + 1) * ltmd->iter) - (ltmd->iter - 1);
 
   /* Will the screw be closed?
-   * Note! smaller then `FLT_EPSILON * 100`
+   * Note! smaller than `FLT_EPSILON * 100`
    * gives problems with float precision so its never closed. */
   if (fabsf(screw_ofs) <= (FLT_EPSILON * 100.0f) &&
       fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f) && step_tot > 3) {
@@ -400,7 +409,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   CustomData_copy_data(&mesh->vdata, &result->vdata, 0, 0, (int)totvert);
 
   if (mloopuv_layers_tot) {
-    float zero_co[3] = {0};
+    const float zero_co[3] = {0};
     plane_from_point_normal_v3(uv_axis_plane, zero_co, axis_vec);
   }
 
@@ -477,9 +486,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
     /*
      * Normal Calculation (for face flipping)
      * Sort edge verts for correct face flipping
-     * NOT REALLY NEEDED but face flipping is nice.
-     *
-     * */
+     * NOT REALLY NEEDED but face flipping is nice. */
 
     /* Notice!
      *
@@ -692,8 +699,8 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
 
             /*printf("flip direction %i\n", ed_loop_flip);*/
 
-            /* switch the flip option if set
-             * note: flip is now done at face level so copying vgroup slizes is easier */
+            /* Switch the flip option if set
+             * NOTE: flip is now done at face level so copying group slices is easier. */
 #if 0
             if (do_flip) {
               ed_loop_flip = !ed_loop_flip;
@@ -771,7 +778,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
          * use edge connectivity work this out */
         if (SV_IS_VALID(vc->v[0])) {
           if (SV_IS_VALID(vc->v[1])) {
-            /* 2 edges connedted */
+            /* 2 edges connected. */
             /* make 2 connecting vert locations relative to the middle vert */
             sub_v3_v3v3(tmp_vec1, mvert_new[vc->v[0]].co, mvert_new[i].co);
             sub_v3_v3v3(tmp_vec2, mvert_new[vc->v[1]].co, mvert_new[i].co);
@@ -1149,21 +1156,98 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ScrewModifierData *ltmd = (ScrewModifierData *)md;
 
-  walk(userData, ob, &ltmd->ob_axis, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&ltmd->ob_axis, IDWALK_CB_NOP);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *sub, *row, *col;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  PointerRNA screw_obj_ptr = RNA_pointer_get(ptr, "object");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "angle", 0, NULL, ICON_NONE);
+  row = uiLayoutRow(col, false);
+  uiLayoutSetActive(row,
+                    RNA_pointer_is_null(&screw_obj_ptr) ||
+                        !RNA_boolean_get(ptr, "use_object_screw_offset"));
+  uiItemR(row, ptr, "screw_offset", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "iterations", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+  col = uiLayoutColumn(layout, false);
+  row = uiLayoutRow(col, false);
+  uiItemR(row, ptr, "axis", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(col, ptr, "object", 0, IFACE_("Axis Object"), ICON_NONE);
+  sub = uiLayoutColumn(col, false);
+  uiLayoutSetActive(sub, !RNA_pointer_is_null(&screw_obj_ptr));
+  uiItemR(sub, ptr, "use_object_screw_offset", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "steps", 0, IFACE_("Steps Viewport"), ICON_NONE);
+  uiItemR(col, ptr, "render_steps", 0, IFACE_("Render"), ICON_NONE);
+
+  uiItemS(layout);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Merge"));
+  uiItemR(row, ptr, "use_merge_vertices", 0, "", ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_merge_vertices"));
+  uiItemR(sub, ptr, "merge_threshold", 0, "", ICON_NONE);
+
+  uiItemS(layout);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Stretch UVs"));
+  uiItemR(row, ptr, "use_stretch_u", toggles_flag, IFACE_("U"), ICON_NONE);
+  uiItemR(row, ptr, "use_stretch_v", toggles_flag, IFACE_("V"), ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void normals_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_normal_calculate", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_normal_flip", 0, NULL, ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Screw, panel_draw);
+  modifier_subpanel_register(
+      region_type, "normals", "Normals", NULL, normals_panel_draw, panel_type);
 }
 
 ModifierTypeInfo modifierType_Screw = {
     /* name */ "Screw",
     /* structName */ "ScrewModifierData",
     /* structSize */ sizeof(ScrewModifierData),
+    /* srna */ &RNA_ScrewModifier,
     /* type */ eModifierTypeType_Constructive,
 
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_SCREW,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -1173,7 +1257,7 @@ ModifierTypeInfo modifierType_Screw = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,
@@ -1183,8 +1267,10 @@ ModifierTypeInfo modifierType_Screw = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

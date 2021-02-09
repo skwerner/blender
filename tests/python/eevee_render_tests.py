@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 
+
 def setup():
     import bpy
 
@@ -42,13 +43,13 @@ def setup():
         # Simple probe setup
         bpy.ops.object.lightprobe_add(type='CUBEMAP', location=(0.5, 0, 1.5))
         cubemap = bpy.context.selected_objects[0]
-        cubemap.scale = (2.5,2.5,1.0)
+        cubemap.scale = (2.5, 2.5, 1.0)
         cubemap.data.falloff = 0
         cubemap.data.clip_start = 2.4
 
         bpy.ops.object.lightprobe_add(type='GRID', location=(0, 0, 0.25))
         grid = bpy.context.selected_objects[0]
-        grid.scale = (1.735,1.735,1.735)
+        grid.scale = (1.735, 1.735, 1.735)
         grid.data.grid_resolution_x = 3
         grid.data.grid_resolution_y = 3
         grid.data.grid_resolution_z = 2
@@ -103,6 +104,8 @@ def get_arguments(filepath, output_filepath):
         "-noaudio",
         "--factory-startup",
         "--enable-autoexec",
+        "--debug-memory",
+        "--debug-exit-on-error",
         filepath,
         "-E", "BLENDER_EEVEE",
         "-P",
@@ -134,7 +137,7 @@ def main():
     report = render_report.Report("Eevee", output_dir, idiff)
     report.set_pixelated(True)
     report.set_reference_dir("eevee_renders")
-    report.set_compare_engines('eevee', 'cycles')
+    report.set_compare_engine('cycles', 'CPU')
     ok = report.run(test_dir, blender, get_arguments, batch=True)
 
     sys.exit(not ok)

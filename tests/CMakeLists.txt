@@ -30,7 +30,7 @@ endif()
 # The installation directory's Python is the best one to use. However, it can only be there after the install step,
 # which means that Python will never be there on a fresh system. To suit different needs, the user can pass
 # -DTEST_PYTHON_EXE=/path/to/python to CMake.
-if (NOT TEST_PYTHON_EXE)
+if(NOT TEST_PYTHON_EXE)
   set(TEST_PYTHON_EXE ${_default_test_python_exe})
   message(STATUS "Tests: Using Python executable: ${TEST_PYTHON_EXE}")
 elseif(NOT EXISTS ${TEST_PYTHON_EXE})
@@ -44,7 +44,7 @@ unset(_default_test_python_exe)
 
 # Standard Blender arguments for running tests.
 # Specify exit code so that if a Python script error happens, the test fails.
-set(TEST_BLENDER_EXE_PARAMS --background -noaudio --factory-startup --python-exit-code 1)
+set(TEST_BLENDER_EXE_PARAMS --background -noaudio --factory-startup --debug-memory --debug-exit-on-error --python-exit-code 1)
 
 # Python CTests
 if(WITH_BLENDER AND WITH_PYTHON)

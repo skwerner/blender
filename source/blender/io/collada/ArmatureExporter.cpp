@@ -40,17 +40,17 @@
 #include "GeometryExporter.h"
 #include "SceneExporter.h"
 
-// write bone nodes
+/* write bone nodes */
 void ArmatureExporter::add_armature_bones(Object *ob_arm,
                                           ViewLayer *view_layer,
                                           SceneExporter *se,
                                           std::vector<Object *> &child_objects)
 
 {
-  // write bone nodes
+  /* write bone nodes */
 
   bArmature *armature = (bArmature *)ob_arm->data;
-  bool is_edited = armature->edbo != NULL;
+  bool is_edited = armature->edbo != nullptr;
 
   if (!is_edited) {
     ED_armature_to_edit(armature);
@@ -95,7 +95,7 @@ bool ArmatureExporter::add_instance_controller(Object *ob)
     return false;
   }
 
-  // write root bone URLs
+  /* write root bone URLs */
   Bone *bone;
   for (bone = (Bone *)arm->bonebase.first; bone; bone = bone->next) {
     write_bone_URLs(ins, ob_arm, bone);
@@ -144,7 +144,7 @@ void ArmatureExporter::find_objects_using_armature(Object *ob_arm,
 }
 #endif
 
-// parent_mat is armature-space
+/* parent_mat is armature-space */
 void ArmatureExporter::add_bone_node(Bone *bone,
                                      Object *ob_arm,
                                      SceneExporter *se,
@@ -197,7 +197,7 @@ void ArmatureExporter::add_bone_node(Bone *bone,
 
     add_bone_transform(ob_arm, bone, node);
 
-    // Write nodes of childobjects, remove written objects from list
+    /* Write nodes of child-objects, remove written objects from list. */
     std::vector<Object *>::iterator iter = child_objects.begin();
 
     while (iter != child_objects.end()) {
@@ -206,20 +206,20 @@ void ArmatureExporter::add_bone_node(Bone *bone,
         float backup_parinv[4][4];
         copy_m4_m4(backup_parinv, ob->parentinv);
 
-        // crude, temporary change to parentinv
-        // so transform gets exported correctly.
+        /* Crude, temporary change to parentinv
+         * so transform gets exported correctly. */
 
-        // Add bone tail- translation... don't know why
-        // bone parenting is against the tail of a bone
-        // and not it's head, seems arbitrary.
+        /* Add bone tail- translation... don't know why
+         * bone parenting is against the tail of a bone
+         * and not its head, seems arbitrary. */
         ob->parentinv[3][1] += bone->length;
 
-        // OPEN_SIM_COMPATIBILITY
-        // TODO: when such objects are animated as
-        // single matrix the tweak must be applied
-        // to the result.
+        /* OPEN_SIM_COMPATIBILITY
+         * TODO: when such objects are animated as
+         * single matrix the tweak must be applied
+         * to the result. */
         if (export_settings.get_open_sim()) {
-          // tweak objects parentinverse to match compatibility
+          /* Tweak objects parent-inverse to match compatibility. */
           float temp[4][4];
 
           copy_m4_m4(temp, bone->arm_mat);
@@ -289,11 +289,11 @@ void ArmatureExporter::add_bone_transform(Object *ob_arm, Bone *bone, COLLADASW:
       mul_m4_m4m4(mat, parent_inverse, bone_rest_mat);
     }
 
-    // OPEN_SIM_COMPATIBILITY
+    /* OPEN_SIM_COMPATIBILITY */
 
     if (export_settings.get_open_sim()) {
-      // Remove rotations vs armature from transform
-      // parent_rest_rot * mat * irest_rot
+      /* Remove rotations vs armature from transform
+       * parent_rest_rot * mat * irest_rot */
       Matrix workmat;
       copy_m4_m4(workmat, bone_rest_mat);
 
@@ -315,7 +315,7 @@ void ArmatureExporter::add_bone_transform(Object *ob_arm, Bone *bone, COLLADASW:
     BCMatrix::sanitize(mat, LIMITTED_PRECISION);
   }
 
-  TransformWriter::add_joint_transform(node, mat, NULL, this->export_settings, has_restmat);
+  TransformWriter::add_joint_transform(node, mat, nullptr, this->export_settings, has_restmat);
 }
 
 std::string ArmatureExporter::get_controller_id(Object *ob_arm, Object *ob)

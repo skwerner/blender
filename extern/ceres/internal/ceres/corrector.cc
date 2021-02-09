@@ -30,8 +30,9 @@
 
 #include "ceres/corrector.h"
 
-#include <cstddef>
 #include <cmath>
+#include <cstddef>
+
 #include "ceres/internal/eigen.h"
 #include "glog/logging.h"
 
@@ -43,7 +44,7 @@ Corrector::Corrector(const double sq_norm, const double rho[3]) {
   sqrt_rho1_ = sqrt(rho[1]);
 
   // If sq_norm = 0.0, the correction becomes trivial, the residual
-  // and the jacobian are scaled by the squareroot of the derivative
+  // and the jacobian are scaled by the square root of the derivative
   // of rho. Handling this case explicitly avoids the divide by zero
   // error that would occur below.
   //
@@ -59,7 +60,7 @@ Corrector::Corrector(const double sq_norm, const double rho[3]) {
   // correction which re-wights the gradient of the function by the
   // square root of the derivative of rho, and the Gauss-Newton
   // Hessian gets both the scaling and the rank-1 curvature
-  // correction. Normaly, alpha is upper bounded by one, but with this
+  // correction. Normally, alpha is upper bounded by one, but with this
   // change, alpha is bounded above by zero.
   //
   // Empirically we have observed that the full Triggs correction and
@@ -147,9 +148,9 @@ void Corrector::CorrectJacobian(const int num_rows,
     }
 
     for (int r = 0; r < num_rows; ++r) {
-      jacobian[r * num_cols + c] = sqrt_rho1_ *
-          (jacobian[r * num_cols + c] -
-           alpha_sq_norm_ * residuals[r] * r_transpose_j);
+      jacobian[r * num_cols + c] =
+          sqrt_rho1_ * (jacobian[r * num_cols + c] -
+                        alpha_sq_norm_ * residuals[r] * r_transpose_j);
     }
   }
 }

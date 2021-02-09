@@ -78,10 +78,6 @@ set(FREEGLUT_VERSION 3.0.0)
 set(FREEGLUT_URI http://pilotfiber.dl.sourceforge.net/project/freeglut/freeglut/${FREEGLUT_VERSION}/freeglut-${FREEGLUT_VERSION}.tar.gz)
 set(FREEGLUT_HASH 90c3ca4dd9d51cf32276bc5344ec9754)
 
-set(HDF5_VERSION 1.8.17)
-set(HDF5_URI https://support.hdfgroup.org/ftp/HDF5/releases/hdf5-1.8/hdf5-${HDF5_VERSION}/src/hdf5-${HDF5_VERSION}.tar.gz)
-set(HDF5_HASH 7d572f8f3b798a628b8245af0391a0ca)
-
 set(ALEMBIC_VERSION 1.7.12)
 set(ALEMBIC_URI https://github.com/alembic/alembic/archive/${ALEMBIC_VERSION}.tar.gz)
 set(ALEMBIC_MD5 e2b3777f23c5c09481a008cc6f0f8a40)
@@ -124,6 +120,9 @@ set(LLVM_HASH 31eb9ce73dd2a0f8dcab8319fb03f8fc)
 set(CLANG_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-${LLVM_VERSION}.src.tar.xz)
 set(CLANG_HASH 13468e4a44940efef1b75e8641752f90)
 
+set(CLANG_TOOLS_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/clang-tools-extra-${LLVM_VERSION}.src.tar.xz)
+set(CLANG_TOOLS_HASH c76293870b564c6a7968622b475b7646)
+
 set(OPENMP_URI https://github.com/llvm/llvm-project/releases/download/llvmorg-${LLVM_VERSION}/openmp-${LLVM_VERSION}.src.tar.xz)
 set(OPENMP_HASH 6eade16057edbdecb3c4eef9daa2bfcf)
 
@@ -139,30 +138,34 @@ set(OSL_VERSION 1.10.10)
 set(OSL_URI https://github.com/imageworks/OpenShadingLanguage/archive/Release-${OSL_VERSION}.tar.gz)
 set(OSL_HASH 00dec08a93c8084e53848b9ad047889f)
 
-set(PYTHON_VERSION 3.7.4)
+set(PYTHON_VERSION 3.7.7)
 set(PYTHON_SHORT_VERSION 3.7)
 set(PYTHON_SHORT_VERSION_NO_DOTS 37)
 set(PYTHON_URI https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tar.xz)
-set(PYTHON_HASH d33e4aae66097051c2eca45ee3604803)
+set(PYTHON_HASH 172c650156f7bea68ce31b2fd01fa766)
 
 set(TBB_VERSION 2019_U9)
 set(TBB_URI https://github.com/oneapi-src/oneTBB/archive/${TBB_VERSION}.tar.gz)
 set(TBB_HASH 26263622e9187212ec240dcf01b66207)
 
 set(OPENVDB_VERSION 7.0.0)
-set(OPENVDB_URI https://github.com/dreamworksanimation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
+set(OPENVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/v${OPENVDB_VERSION}.tar.gz)
 set(OPENVDB_HASH fd6c4f168282f7e0e494d290cd531fa8)
 
-set(IDNA_VERSION 2.8)
-set(CHARDET_VERSION 3.0.4)
-set(URLLIB3_VERSION 1.25.3)
-set(CERTIFI_VERSION 2019.6.16)
-set(REQUESTS_VERSION 2.22.0)
+set(NANOVDB_GIT_UID e62f7a0bf1e27397223c61ddeaaf57edf111b77f)
+set(NANOVDB_URI https://github.com/AcademySoftwareFoundation/openvdb/archive/${NANOVDB_GIT_UID}.tar.gz)
+set(NANOVDB_HASH 90919510bc6ccd630fedc56f748cb199)
 
-set(NUMPY_VERSION v1.17.0)
+set(IDNA_VERSION 2.9)
+set(CHARDET_VERSION 3.0.4)
+set(URLLIB3_VERSION 1.25.9)
+set(CERTIFI_VERSION 2020.4.5.2)
+set(REQUESTS_VERSION 2.23.0)
+
+set(NUMPY_VERSION 1.17.5)
 set(NUMPY_SHORT_VERSION 1.17)
-set(NUMPY_URI https://files.pythonhosted.org/packages/da/32/1b8f2bb5fb50e4db68543eb85ce37b9fa6660cd05b58bddfafafa7ed62da/numpy-1.17.0.zip)
-set(NUMPY_HASH aed49b31bcb44ec73b8155be78566135)
+set(NUMPY_URI https://github.com/numpy/numpy/releases/download/v${NUMPY_VERSION}/numpy-${NUMPY_VERSION}.zip)
+set(NUMPY_HASH 763a5646fa6eef7a22f4895bca0524f2)
 
 set(LAME_VERSION 3.100)
 set(LAME_URI http://downloads.sourceforge.net/project/lame/lame/3.100/lame-${LAME_VERSION}.tar.gz)
@@ -192,8 +195,8 @@ set(OPUS_VERSION 1.3.1)
 set(OPUS_URI https://archive.mozilla.org/pub/opus/opus-${OPUS_VERSION}.tar.gz)
 set(OPUS_HASH 65b58e1e25b2a114157014736a3d9dfeaad8d41be1c8179866f144a2fb44ff9d)
 
-set(X264_URI https://code.videolan.org/videolan/x264/-/archive/master/x264-33f9e1474613f59392be5ab6a7e7abf60fa63622.tar.gz)
-set(X264_HASH 300dfb5b6c35722516f168868ce9419252a9e9eb77a05d82c9cede925b691bd6)
+set(X264_URI https://code.videolan.org/videolan/x264/-/archive/33f9e1474613f59392be5ab6a7e7abf60fa63622/x264-33f9e1474613f59392be5ab6a7e7abf60fa63622.tar.gz)
+set(X264_HASH 5456450ee1ae02cd2328be3157367a232a0ab73315e8c8f80dab80469524f525)
 
 set(XVIDCORE_VERSION 1.3.7)
 set(XVIDCORE_URI https://downloads.xvid.com/downloads/xvidcore-${XVIDCORE_VERSION}.tar.gz)
@@ -216,10 +219,6 @@ set(ICONV_VERSION 1.16)
 set(ICONV_URI http://ftp.gnu.org/pub/gnu/libiconv/libiconv-${ICONV_VERSION}.tar.gz)
 set(ICONV_HASH 7d2a800b952942bb2880efb00cfd524c)
 
-set(LAPACK_VERSION 3.6.0)
-set(LAPACK_URI http://www.netlib.org/lapack/lapack-${LAPACK_VERSION}.tgz)
-set(LAPACK_HASH f2f6c67134e851fe189bb3ca1fbb5101)
-
 set(SNDFILE_VERSION 1.0.28)
 set(SNDFILE_URI http://www.mega-nerd.com/libsndfile/files/libsndfile-${SNDFILE_VERSION}.tar.gz)
 set(SNDFILE_HASH 646b5f98ce89ac60cdb060fcd398247c)
@@ -240,13 +239,13 @@ set(SPNAV_VERSION 0.2.3)
 set(SPNAV_URI http://downloads.sourceforge.net/project/spacenav/spacenav%20library%20%28SDK%29/libspnav%20${SPNAV_VERSION}/libspnav-${SPNAV_VERSION}.tar.gz)
 set(SPNAV_HASH 44d840540d53326d4a119c0f1aa7bf0a)
 
-set(JEMALLOC_VERSION 5.0.1)
+set(JEMALLOC_VERSION 5.2.1)
 set(JEMALLOC_URI https://github.com/jemalloc/jemalloc/releases/download/${JEMALLOC_VERSION}/jemalloc-${JEMALLOC_VERSION}.tar.bz2)
-set(JEMALLOC_HASH 507f7b6b882d868730d644510491d18f)
+set(JEMALLOC_HASH 3d41fbf006e6ebffd489bdb304d009ae)
 
-set(XML2_VERSION 2.9.4)
+set(XML2_VERSION 2.9.10)
 set(XML2_URI http://xmlsoft.org/sources/libxml2-${XML2_VERSION}.tar.gz)
-set(XML2_HASH ae249165c173b1ff386ee8ad676815f5)
+set(XML2_HASH 10942a1dc23137a8aa07f0639cbfece5)
 
 set(TINYXML_VERSION 2_6_2)
 set(TINYXML_VERSION_DOTS 2.6.2)
@@ -266,30 +265,30 @@ set(PUGIXML_URI https://github.com/zeux/pugixml/archive/v${PUGIXML_VERSION}.tar.
 set(PUGIXML_HASH 0c208b0664c7fb822bf1b49ad035e8fd)
 
 set(FLEXBISON_VERSION 2.5.5)
-set(FLEXBISON_URI http://prdownloads.sourceforge.net/winflexbison//win_flex_bison-2.5.5.zip)
+set(FLEXBISON_URI http://prdownloads.sourceforge.net/winflexbison/win_flex_bison-2.5.5.zip)
 set(FLEXBISON_HASH d87a3938194520d904013abef3df10ce)
 
 # Libraries to keep Python modules static on Linux.
 
 # NOTE: bzip.org domain does no longer belong to BZip 2 project, so we download
 # sources from Debian packaging.
-set(BZIP2_VERSION 1.0.6)
-set(BZIP2_URI http://http.debian.net/debian/pool/main/b/bzip2/bzip2_${BZIP2_VERSION}.orig.tar.bz2)
-set(BZIP2_HASH d70a9ccd8bdf47e302d96c69fecd54925f45d9c7b966bb4ef5f56b770960afa7)
+set(BZIP2_VERSION 1.0.8)
+set(BZIP2_URI http://http.debian.net/debian/pool/main/b/bzip2/bzip2_${BZIP2_VERSION}.orig.tar.gz)
+set(BZIP2_HASH ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269)
 
-set(FFI_VERSION 3.2.1)
+set(FFI_VERSION 3.3)
 set(FFI_URI https://sourceware.org/pub/libffi/libffi-${FFI_VERSION}.tar.gz)
-set(FFI_HASH d06ebb8e1d9a22d19e38d63fdb83954253f39bedc5d46232a05645685722ca37)
+set(FFI_HASH 72fba7922703ddfa7a028d513ac15a85c8d54c8d67f55fa5a4802885dc652056)
 
-set(LZMA_VERSION 5.2.4)
+set(LZMA_VERSION 5.2.5)
 set(LZMA_URI https://tukaani.org/xz/xz-${LZMA_VERSION}.tar.bz2)
-set(LZMA_HASH 3313fd2a95f43d88e44264e6b015e7d03053e681860b0d5d3f9baca79c57b7bf)
+set(LZMA_HASH 5117f930900b341493827d63aa910ff5e011e0b994197c3b71c08a20228a42df)
 
-set(SSL_VERSION 1.1.0i)
+set(SSL_VERSION 1.1.1g)
 set(SSL_URI https://www.openssl.org/source/openssl-${SSL_VERSION}.tar.gz)
-set(SSL_HASH ebbfc844a8c8cc0ea5dc10b86c9ce97f401837f3fa08c17b2cdadc118253cf99)
+set(SSL_HASH ddb04774f1e32f0c49751e21b67216ac87852ceb056b75209af2443400636d46)
 
-set(SQLITE_VERSION 3.24.0)
+set(SQLITE_VERSION 3.31.1)
 set(SQLITE_URI https://www.sqlite.org/2018/sqlite-src-3240000.zip)
 set(SQLITE_HASH fb558c49ee21a837713c4f1e7e413309aabdd9c7)
 
@@ -297,22 +296,42 @@ set(EMBREE_VERSION 3.10.0)
 set(EMBREE_URI https://github.com/embree/embree/archive/v${EMBREE_VERSION}.zip)
 set(EMBREE_HASH 4bbe29e7eaa46417efc75fc5f1e8eb87)
 
-set(USD_VERSION 19.11)
+set(USD_VERSION 20.05)
 set(USD_URI https://github.com/PixarAnimationStudios/USD/archive/v${USD_VERSION}.tar.gz)
-set(USD_HASH 79ff176167b3fe85f4953abd6cc5e0cc)
+set(USD_HASH 6d679e739e7f65725d9c029e37dda9fc)
 
-set(OIDN_VERSION 1.0.0)
-set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.zip)
-set(OIDN_HASH 19fe67b0164e8f020ac8a4f520defe60)
+set(OIDN_VERSION 1.2.3)
+set(OIDN_URI https://github.com/OpenImageDenoise/oidn/releases/download/v${OIDN_VERSION}/oidn-${OIDN_VERSION}.src.tar.gz)
+set(OIDN_HASH 1f11466c2c3efc27faba5ec7078d12b2)
 
 set(LIBGLU_VERSION 9.0.1)
 set(LIBGLU_URI ftp://ftp.freedesktop.org/pub/mesa/glu/glu-${LIBGLU_VERSION}.tar.xz)
 set(LIBGLU_HASH 151aef599b8259efe9acd599c96ea2a3)
 
 set(MESA_VERSION 18.3.1)
-set(MESA_URI ftp://ftp.freedesktop.org/pub/mesa//mesa-${MESA_VERSION}.tar.xz)
+set(MESA_URI ftp://ftp.freedesktop.org/pub/mesa/mesa-${MESA_VERSION}.tar.xz)
 set(MESA_HASH d60828056d77bfdbae0970f9b15fb1be)
+
+set(NASM_VERSION 2.15.02)
+set(NASM_URI https://www.nasm.us/pub/nasm/releasebuilds/${NASM_VERSION}/nasm-${NASM_VERSION}.tar.xz)
+set(NASM_HASH f4fd1329b1713e1ccd34b2fc121c4bcd278c9f91cc4cb205ae8fcd2e4728dd14)
 
 set(XR_OPENXR_SDK_VERSION 1.0.8)
 set(XR_OPENXR_SDK_URI https://github.com/KhronosGroup/OpenXR-SDK/archive/release-${XR_OPENXR_SDK_VERSION}.tar.gz)
 set(XR_OPENXR_SDK_HASH c6de63d2e0f9029aa58dfa97cad8ce07)
+
+set(ISPC_VERSION v1.14.1)
+set(ISPC_URI https://github.com/ispc/ispc/archive/${ISPC_VERSION}.tar.gz)
+set(ISPC_HASH 968fbc8dfd16a60ba4e32d2e0e03ea7a)
+
+set(GMP_VERSION 6.2.0)
+set(GMP_URI https://gmplib.org/download/gmp/gmp-${GMP_VERSION}.tar.xz)
+set(GMP_HASH a325e3f09e6d91e62101e59f9bda3ec1)
+
+set(POTRACE_VERSION 1.16)
+set(POTRACE_URI http://potrace.sourceforge.net/download/${POTRACE_VERSION}/potrace-${POTRACE_VERSION}.tar.gz)
+set(POTRACE_HASH 5f0bd87ddd9a620b0c4e65652ef93d69)
+
+set(HARU_VERSION 2_3_0)
+set(HARU_URI https://github.com/libharu/libharu/archive/RELEASE_${HARU_VERSION}.tar.gz)
+set(HARU_HASH 4f916aa49c3069b3a10850013c507460)

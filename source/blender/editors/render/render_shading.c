@@ -56,7 +56,7 @@
 #include "BKE_linestyle.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
-#include "BKE_paint.h"
+#include "BKE_object.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_texture.h"
@@ -81,6 +81,7 @@
 #include "ED_mesh.h"
 #include "ED_node.h"
 #include "ED_object.h"
+#include "ED_paint.h"
 #include "ED_render.h"
 #include "ED_scene.h"
 #include "ED_screen.h"
@@ -89,45 +90,89 @@
 
 #include "UI_interface.h"
 
+#include "RE_engine.h"
 #include "RE_pipeline.h"
 
 #include "engines/eevee/eevee_lightcache.h"
 
-#include "render_intern.h"  // own include
+#include "render_intern.h" /* own include */
 
-/**
- * Object list for material operations.
- * has exception for pinned object.
- */
-static Object **object_array_for_shading(bContext *C, uint *r_objects_len)
+static bool object_materials_supported_poll_ex(bContext *C, const Object *ob);
+
+/* -------------------------------------------------------------------- */
+/** \name Local Utilities
+ * \{ */
+
+static bool object_array_for_shading_edit_mode_enabled_filter(Object *ob, void *user_data)
 {
-  ScrArea *area = CTX_wm_area(C);
-  SpaceProperties *sbuts = NULL;
-  View3D *v3d = NULL;
-  if (area != NULL) {
-    if (area->spacetype == SPACE_PROPERTIES) {
-      sbuts = area->spacedata.first;
-    }
-    else if (area->spacetype == SPACE_VIEW3D) {
-      v3d = area->spacedata.first;
+  bContext *C = user_data;
+  if (object_materials_supported_poll_ex(C, ob)) {
+    if (BKE_object_is_in_editmode(ob) == true) {
+      return true;
     }
   }
-
-  Object **objects;
-  if (sbuts != NULL && sbuts->pinid && GS(sbuts->pinid->name) == ID_OB) {
-    objects = MEM_mallocN(sizeof(*objects), __func__);
-    objects[0] = (Object *)sbuts->pinid;
-    *r_objects_len = 1;
-  }
-  else {
-    ViewLayer *view_layer = CTX_data_view_layer(C);
-    objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
-        view_layer, v3d, r_objects_len);
-  }
-  return objects;
+  return false;
 }
 
-/********************** material slot operators *********************/
+static Object **object_array_for_shading_edit_mode_enabled(bContext *C, uint *r_objects_len)
+{
+  return ED_object_array_in_mode_or_selected(
+      C, object_array_for_shading_edit_mode_enabled_filter, C, r_objects_len);
+}
+
+static bool object_array_for_shading_edit_mode_disabled_filter(Object *ob, void *user_data)
+{
+  bContext *C = user_data;
+  if (object_materials_supported_poll_ex(C, ob)) {
+    if (BKE_object_is_in_editmode(ob) == false) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static Object **object_array_for_shading_edit_mode_disabled(bContext *C, uint *r_objects_len)
+{
+  return ED_object_array_in_mode_or_selected(
+      C, object_array_for_shading_edit_mode_disabled_filter, C, r_objects_len);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Shared Operator Poll Functions
+ * \{ */
+
+static bool object_materials_supported_poll_ex(bContext *C, const Object *ob)
+{
+  if (!ED_operator_object_active_local_editable_ex(C, ob)) {
+    return false;
+  }
+  if (!OB_TYPE_SUPPORT_MATERIAL(ob->type)) {
+    return false;
+  }
+
+  /* Material linked to object. */
+  if (ob->matbits && ob->actcol && ob->matbits[ob->actcol - 1]) {
+    return true;
+  }
+
+  /* Material linked to obdata. */
+  const ID *data = ob->data;
+  return (data && !ID_IS_LINKED(data) && !ID_IS_OVERRIDE_LIBRARY(data));
+}
+
+static bool object_materials_supported_poll(bContext *C)
+{
+  Object *ob = ED_object_context(C);
+  return object_materials_supported_poll_ex(C, ob);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot Add Operator
+ * \{ */
 
 static int material_slot_add_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -142,7 +187,7 @@ static int material_slot_add_exec(bContext *C, wmOperator *UNUSED(op))
 
   if (ob->mode & OB_MODE_TEXTURE_PAINT) {
     Scene *scene = CTX_data_scene(C);
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
   }
 
@@ -162,11 +207,17 @@ void OBJECT_OT_material_slot_add(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_add_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = object_materials_supported_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot Remove Operator
+ * \{ */
 
 static int material_slot_remove_exec(bContext *C, wmOperator *op)
 {
@@ -176,7 +227,7 @@ static int material_slot_remove_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  /* Removing material slots in edit mode screws things up, see bug #21822.*/
+  /* Removing material slots in edit mode screws things up, see bug T21822.*/
   if (ob == CTX_data_edit_object(C)) {
     BKE_report(op->reports, RPT_ERROR, "Unable to remove material slot in edit mode");
     return OPERATOR_CANCELLED;
@@ -186,7 +237,7 @@ static int material_slot_remove_exec(bContext *C, wmOperator *op)
 
   if (ob->mode & OB_MODE_TEXTURE_PAINT) {
     Scene *scene = CTX_data_scene(C);
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
   }
 
@@ -207,11 +258,17 @@ void OBJECT_OT_material_slot_remove(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_remove_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = object_materials_supported_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot Assign Operator
+ * \{ */
 
 static int material_slot_assign_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -222,7 +279,7 @@ static int material_slot_assign_exec(bContext *C, wmOperator *UNUSED(op))
   const Material *mat_active = obact ? BKE_object_material_get(obact, obact->actcol) : NULL;
 
   uint objects_len = 0;
-  Object **objects = object_array_for_shading(C, &objects_len);
+  Object **objects = object_array_for_shading_edit_mode_enabled(C, &objects_len);
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
     short mat_nr_active = -1;
@@ -238,7 +295,7 @@ static int material_slot_assign_exec(bContext *C, wmOperator *UNUSED(op))
     else {
       /* Find the first matching material.
        * Note: there may be multiple but that's not a common use case. */
-      for (short i = 0; i < ob->totcol; i++) {
+      for (int i = 0; i < ob->totcol; i++) {
         const Material *mat = BKE_object_material_get(ob, i + 1);
         if (mat_active == mat) {
           mat_nr_active = i;
@@ -310,11 +367,17 @@ void OBJECT_OT_material_slot_assign(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_assign_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = object_materials_supported_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot (De)Select Operator
+ * \{ */
 
 static int material_slot_de_select(bContext *C, bool select)
 {
@@ -323,7 +386,7 @@ static int material_slot_de_select(bContext *C, bool select)
   const Material *mat_active = obact ? BKE_object_material_get(obact, obact->actcol) : NULL;
 
   uint objects_len = 0;
-  Object **objects = object_array_for_shading(C, &objects_len);
+  Object **objects = object_array_for_shading_edit_mode_enabled(C, &objects_len);
   for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
     Object *ob = objects[ob_index];
     short mat_nr_active = -1;
@@ -339,7 +402,7 @@ static int material_slot_de_select(bContext *C, bool select)
     else {
       /* Find the first matching material.
        * Note: there may be multiple but that's not a common use case. */
-      for (short i = 0; i < ob->totcol; i++) {
+      for (int i = 0; i < ob->totcol; i++) {
         const Material *mat = BKE_object_material_get(ob, i + 1);
         if (mat_active == mat) {
           mat_nr_active = i;
@@ -461,21 +524,37 @@ void OBJECT_OT_material_slot_deselect(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot Copy Operator
+ * \{ */
+
 static int material_slot_copy_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Main *bmain = CTX_data_main(C);
   Object *ob = ED_object_context(C);
-  Material ***matar;
+  Material ***matar_obdata;
 
-  if (!ob || !(matar = BKE_object_material_array_p(ob))) {
+  if (!ob || !(matar_obdata = BKE_object_material_array_p(ob))) {
     return OPERATOR_CANCELLED;
+  }
+
+  BLI_assert(ob->totcol == *BKE_object_material_len_p(ob));
+
+  Material ***matar_object = &ob->mat;
+
+  Material **matar = MEM_callocN(sizeof(*matar) * (size_t)ob->totcol, __func__);
+  for (int i = ob->totcol; i--;) {
+    matar[i] = ob->matbits[i] ? (*matar_object)[i] : (*matar_obdata)[i];
   }
 
   CTX_DATA_BEGIN (C, Object *, ob_iter, selected_editable_objects) {
     if (ob != ob_iter && BKE_object_material_array_p(ob_iter)) {
-      if (ob->data != ob_iter->data) {
-        BKE_object_material_array_assign(bmain, ob_iter, matar, ob->totcol);
-      }
+      /* If we are using the same obdata, we only assign slots in ob_iter that are using object
+       * materials, and not obdata ones. */
+      const bool is_same_obdata = ob->data == ob_iter->data;
+      BKE_object_material_array_assign(bmain, ob_iter, &matar, ob->totcol, is_same_obdata);
 
       if (ob_iter->totcol == ob->totcol) {
         ob_iter->actcol = ob->actcol;
@@ -485,6 +564,8 @@ static int material_slot_copy_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
   CTX_DATA_END;
+
+  MEM_freeN(matar);
 
   return OPERATOR_FINISHED;
 }
@@ -502,6 +583,12 @@ void OBJECT_OT_material_slot_copy(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot Move Operator
+ * \{ */
 
 static int material_slot_move_exec(bContext *C, wmOperator *op)
 {
@@ -565,6 +652,7 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_move_exec;
+  ot->poll = object_materials_supported_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -577,37 +665,46 @@ void OBJECT_OT_material_slot_move(wmOperatorType *ot)
                "Direction to move the active material towards");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Slot Remove Unused Operator
+ * \{ */
+
 static int material_slot_remove_unused_exec(bContext *C, wmOperator *op)
 {
-  Object *ob = CTX_data_active_object(C);
-
-  if (!ob) {
-    return OPERATOR_CANCELLED;
-  }
-
-  /* Removing material slots in edit mode screws things up, see bug #21822.*/
-  if (ob == CTX_data_edit_object(C)) {
+  /* Removing material slots in edit mode screws things up, see bug T21822. */
+  Object *ob_active = CTX_data_active_object(C);
+  if (ob_active && BKE_object_is_in_editmode(ob_active)) {
     BKE_report(op->reports, RPT_ERROR, "Unable to remove material slot in edit mode");
     return OPERATOR_CANCELLED;
   }
 
-  int actcol = ob->actcol;
-
+  Main *bmain = CTX_data_main(C);
   int removed = 0;
-  for (int slot = 1; slot <= ob->totcol; slot++) {
-    while (slot <= ob->totcol && !BKE_object_material_slot_used(ob->data, slot)) {
-      ob->actcol = slot;
-      BKE_object_material_slot_remove(CTX_data_main(C), ob);
 
-      if (actcol >= slot) {
-        actcol--;
+  uint objects_len = 0;
+  Object **objects = object_array_for_shading_edit_mode_disabled(C, &objects_len);
+  for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+    Object *ob = objects[ob_index];
+    int actcol = ob->actcol;
+    for (int slot = 1; slot <= ob->totcol; slot++) {
+      while (slot <= ob->totcol && !BKE_object_material_slot_used(ob->data, slot)) {
+        ob->actcol = slot;
+        BKE_object_material_slot_remove(bmain, ob);
+
+        if (actcol >= slot) {
+          actcol--;
+        }
+
+        removed++;
       }
-
-      removed++;
     }
-  }
+    ob->actcol = actcol;
 
-  ob->actcol = actcol;
+    DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+  }
+  MEM_freeN(objects);
 
   if (!removed) {
     return OPERATOR_CANCELLED;
@@ -615,16 +712,15 @@ static int material_slot_remove_unused_exec(bContext *C, wmOperator *op)
 
   BKE_reportf(op->reports, RPT_INFO, "Removed %d slots", removed);
 
-  if (ob->mode & OB_MODE_TEXTURE_PAINT) {
+  if (ob_active->mode & OB_MODE_TEXTURE_PAINT) {
     Scene *scene = CTX_data_scene(C);
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob_active, NULL, NULL, NULL, NULL);
     WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
   }
 
-  DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
-  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob);
-  WM_event_add_notifier(C, NC_OBJECT | ND_OB_SHADING, ob);
-  WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_PREVIEW, ob);
+  WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, ob_active);
+  WM_event_add_notifier(C, NC_OBJECT | ND_OB_SHADING, ob_active);
+  WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_PREVIEW, ob_active);
 
   return OPERATOR_FINISHED;
 }
@@ -638,13 +734,17 @@ void OBJECT_OT_material_slot_remove_unused(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = material_slot_remove_unused_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = object_materials_supported_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/********************** new material operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name New Material Operator
+ * \{ */
 
 static int new_material_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -660,8 +760,8 @@ static int new_material_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy material */
   if (ma) {
-    Material *new_ma = NULL;
-    BKE_id_copy_ex(bmain, &ma->id, (ID **)&new_ma, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS);
+    Material *new_ma = (Material *)BKE_id_copy_ex(
+        bmain, &ma->id, NULL, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS);
     ma = new_ma;
   }
   else {
@@ -708,12 +808,17 @@ void MATERIAL_OT_new(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = new_material_exec;
+  ot->poll = object_materials_supported_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/********************** new texture operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name New Texture Operator
+ * \{ */
 
 static int new_texture_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -724,7 +829,7 @@ static int new_texture_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy texture */
   if (tex) {
-    tex = BKE_texture_copy(bmain, tex);
+    tex = (Tex *)BKE_id_copy(bmain, &tex->id);
   }
   else {
     tex = BKE_texture_add(bmain, DATA_("Texture"));
@@ -762,7 +867,11 @@ void TEXTURE_OT_new(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/********************** new world operator *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name new world operator
+ * \{ */
 
 static int new_world_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -773,7 +882,9 @@ static int new_world_exec(bContext *C, wmOperator *UNUSED(op))
 
   /* add or copy world */
   if (wo) {
-    wo = BKE_world_copy(bmain, wo);
+    World *new_wo = (World *)BKE_id_copy_ex(
+        bmain, &wo->id, NULL, LIB_ID_COPY_DEFAULT | LIB_ID_COPY_ACTIONS);
+    wo = new_wo;
   }
   else {
     wo = BKE_world_add(bmain, DATA_("World"));
@@ -813,7 +924,11 @@ void WORLD_OT_new(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/********************** render layer operators *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Render Layer Add Operator
+ * \{ */
 
 static int view_layer_add_exec(bContext *C, wmOperator *op)
 {
@@ -863,6 +978,12 @@ void SCENE_OT_view_layer_add(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", type_items, 0, "Type", "");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Render Layer Remove Operator
+ * \{ */
+
 static bool view_layer_remove_poll(bContext *C)
 {
   Scene *scene = CTX_data_scene(C);
@@ -899,7 +1020,99 @@ void SCENE_OT_view_layer_remove(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
-/********************** light cache operators *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Layer Add AOV Operator
+ * \{ */
+
+static int view_layer_add_aov_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+
+  BKE_view_layer_add_aov(view_layer);
+
+  RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
+  if (engine_type->update_render_passes) {
+    RenderEngine *engine = RE_engine_create(engine_type);
+    if (engine) {
+      BKE_view_layer_verify_aov(engine, scene, view_layer);
+    }
+    RE_engine_free(engine);
+    engine = NULL;
+  }
+
+  DEG_id_tag_update(&scene->id, 0);
+  DEG_relations_tag_update(CTX_data_main(C));
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER, scene);
+
+  return OPERATOR_FINISHED;
+}
+
+void SCENE_OT_view_layer_add_aov(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Add AOV";
+  ot->idname = "SCENE_OT_view_layer_add_aov";
+  ot->description = "Add a Shader AOV";
+
+  /* api callbacks */
+  ot->exec = view_layer_add_aov_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Layer Remove AOV Operator
+ * \{ */
+
+static int view_layer_remove_aov_exec(bContext *C, wmOperator *UNUSED(op))
+{
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  BKE_view_layer_remove_aov(view_layer, view_layer->active_aov);
+
+  RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
+  if (engine_type->update_render_passes) {
+    RenderEngine *engine = RE_engine_create(engine_type);
+    if (engine) {
+      BKE_view_layer_verify_aov(engine, scene, view_layer);
+    }
+    RE_engine_free(engine);
+    engine = NULL;
+  }
+
+  DEG_id_tag_update(&scene->id, 0);
+  DEG_relations_tag_update(CTX_data_main(C));
+  WM_event_add_notifier(C, NC_SCENE | ND_LAYER, scene);
+
+  return OPERATOR_FINISHED;
+}
+
+void SCENE_OT_view_layer_remove_aov(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Remove AOV";
+  ot->idname = "SCENE_OT_view_layer_remove_aov";
+  ot->description = "Remove Active AOV";
+
+  /* api callbacks */
+  ot->exec = view_layer_remove_aov_exec;
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Light Cache Bake Operator
+ * \{ */
+
 enum {
   LIGHTCACHE_SUBSET_ALL = 0,
   LIGHTCACHE_SUBSET_DIRTY,
@@ -931,6 +1144,11 @@ static int light_cache_bake_modal(bContext *C, wmOperator *op, const wmEvent *ev
 
   /* no running blender, remove handler and pass through */
   if (0 == WM_jobs_test(CTX_wm_manager(C), scene, WM_JOB_TYPE_RENDER)) {
+    LightCache *lcache = scene->eevee.light_cache_data;
+    if (lcache && (lcache->flag & LIGHTCACHE_INVALID)) {
+      BKE_report(op->reports, RPT_ERROR, "Lightcache cannot allocate resources");
+      return OPERATOR_CANCELLED;
+    }
     return OPERATOR_FINISHED | OPERATOR_PASS_THROUGH;
   }
 
@@ -970,7 +1188,7 @@ static int light_cache_bake_exec(bContext *C, wmOperator *op)
   EEVEE_lightbake_job(rj, &stop, &do_update, &progress);
   EEVEE_lightbake_job_data_free(rj);
 
-  // no redraw needed, we leave state as we entered it
+  /* No redraw needed, we leave state as we entered it. */
   ED_update_for_newframe(bmain, CTX_data_depsgraph_pointer(C));
 
   WM_event_add_notifier(C, NC_SCENE | NA_EDITED, scene);
@@ -1001,8 +1219,7 @@ static int light_cache_bake_invoke(bContext *C, wmOperator *op, const wmEvent *U
 
   /* store actual owner of job, so modal operator could check for it,
    * the reason of this is that active scene could change when rendering
-   * several layers from compositor [#31800]
-   */
+   * several layers from compositor T31800. */
   op->customdata = scene;
 
   WM_jobs_start(wm, wm_job);
@@ -1018,13 +1235,13 @@ void SCENE_OT_light_cache_bake(wmOperatorType *ot)
       {LIGHTCACHE_SUBSET_ALL,
        "ALL",
        0,
-       "All LightProbes",
+       "All Light Probes",
        "Bake both irradiance grids and reflection cubemaps"},
       {LIGHTCACHE_SUBSET_DIRTY,
        "DIRTY",
        0,
        "Dirty Only",
-       "Only bake lightprobes that are marked as dirty"},
+       "Only bake light probes that are marked as dirty"},
       {LIGHTCACHE_SUBSET_CUBE,
        "CUBEMAPS",
        0,
@@ -1059,6 +1276,12 @@ void SCENE_OT_light_cache_bake(wmOperatorType *ot)
       ot->srna, "subset", light_cache_subset_items, 0, "Subset", "Subset of probes to update");
   RNA_def_property_flag(ot->prop, PROP_SKIP_SAVE);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Light Cache Free Operator
+ * \{ */
 
 static bool light_cache_free_poll(bContext *C)
 {
@@ -1103,7 +1326,11 @@ void SCENE_OT_light_cache_free(wmOperatorType *ot)
   ot->poll = light_cache_free_poll;
 }
 
-/********************** render view operators *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Render View Remove Operator
+ * \{ */
 
 static bool render_view_remove_poll(bContext *C)
 {
@@ -1139,6 +1366,12 @@ void SCENE_OT_render_view_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Render View Add Operator
+ * \{ */
+
 static int render_view_remove_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
@@ -1168,7 +1401,13 @@ void SCENE_OT_render_view_remove(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
+/** \} */
+
 #ifdef WITH_FREESTYLE
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Module Add Operator
+ * \{ */
 
 static bool freestyle_linestyle_check_report(FreestyleLineSet *lineset, ReportList *reports)
 {
@@ -1222,6 +1461,12 @@ void SCENE_OT_freestyle_module_add(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Module Remove Operator
+ * \{ */
+
 static int freestyle_module_remove_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
@@ -1268,6 +1513,12 @@ static int freestyle_module_move_exec(bContext *C, wmOperator *op)
   return OPERATOR_FINISHED;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Module Move Operator
+ * \{ */
+
 void SCENE_OT_freestyle_module_move(wmOperatorType *ot)
 {
   static const EnumPropertyItem direction_items[] = {
@@ -1297,6 +1548,12 @@ void SCENE_OT_freestyle_module_move(wmOperatorType *ot)
                "Direction to move the chosen style module towards");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Line Set Add Operator
+ * \{ */
+
 static int freestyle_lineset_add_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Main *bmain = CTX_data_main(C);
@@ -1324,6 +1581,12 @@ void SCENE_OT_freestyle_lineset_add(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Line Set Copy Operator
+ * \{ */
 
 static bool freestyle_active_lineset_poll(bContext *C)
 {
@@ -1360,6 +1623,12 @@ void SCENE_OT_freestyle_lineset_copy(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Line Set Paste Operator
+ * \{ */
+
 static int freestyle_lineset_paste_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
@@ -1388,6 +1657,12 @@ void SCENE_OT_freestyle_lineset_paste(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Line Set Remove Operator
+ * \{ */
+
 static int freestyle_lineset_remove_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
@@ -1415,6 +1690,12 @@ void SCENE_OT_freestyle_lineset_remove(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Line Set Move Operator
+ * \{ */
 
 static int freestyle_lineset_move_exec(bContext *C, wmOperator *op)
 {
@@ -1459,6 +1740,12 @@ void SCENE_OT_freestyle_lineset_move(wmOperatorType *ot)
                "Direction to move the active line set towards");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Line Set New Operator
+ * \{ */
+
 static int freestyle_linestyle_new_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -1471,7 +1758,7 @@ static int freestyle_linestyle_new_exec(bContext *C, wmOperator *op)
   }
   if (lineset->linestyle) {
     id_us_min(&lineset->linestyle->id);
-    lineset->linestyle = BKE_linestyle_copy(bmain, lineset->linestyle);
+    lineset->linestyle = (FreestyleLineStyle *)BKE_id_copy(bmain, &lineset->linestyle->id);
   }
   else {
     lineset->linestyle = BKE_linestyle_new(bmain, "LineStyle");
@@ -1496,6 +1783,12 @@ void SCENE_OT_freestyle_linestyle_new(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Add "Color" Operator
+ * \{ */
 
 static int freestyle_color_modifier_add_exec(bContext *C, wmOperator *op)
 {
@@ -1538,6 +1831,12 @@ void SCENE_OT_freestyle_color_modifier_add(wmOperatorType *ot)
       ot->srna, "type", rna_enum_linestyle_color_modifier_type_items, 0, "Type", "");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Add "Alpha" Operator
+ * \{ */
+
 static int freestyle_alpha_modifier_add_exec(bContext *C, wmOperator *op)
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -1578,6 +1877,12 @@ void SCENE_OT_freestyle_alpha_modifier_add(wmOperatorType *ot)
   ot->prop = RNA_def_enum(
       ot->srna, "type", rna_enum_linestyle_alpha_modifier_type_items, 0, "Type", "");
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Add "Thickness" Operator
+ * \{ */
 
 static int freestyle_thickness_modifier_add_exec(bContext *C, wmOperator *op)
 {
@@ -1620,6 +1925,12 @@ void SCENE_OT_freestyle_thickness_modifier_add(wmOperatorType *ot)
       ot->srna, "type", rna_enum_linestyle_thickness_modifier_type_items, 0, "Type", "");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Add "Geometry" Operator
+ * \{ */
+
 static int freestyle_geometry_modifier_add_exec(bContext *C, wmOperator *op)
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -1661,18 +1972,24 @@ void SCENE_OT_freestyle_geometry_modifier_add(wmOperatorType *ot)
       ot->srna, "type", rna_enum_linestyle_geometry_modifier_type_items, 0, "Type", "");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Remove Operator
+ * \{ */
+
 static int freestyle_get_modifier_type(PointerRNA *ptr)
 {
   if (RNA_struct_is_a(ptr->type, &RNA_LineStyleColorModifier)) {
     return LS_MODIFIER_TYPE_COLOR;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleAlphaModifier)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleAlphaModifier)) {
     return LS_MODIFIER_TYPE_ALPHA;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleThicknessModifier)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleThicknessModifier)) {
     return LS_MODIFIER_TYPE_THICKNESS;
   }
-  else if (RNA_struct_is_a(ptr->type, &RNA_LineStyleGeometryModifier)) {
+  if (RNA_struct_is_a(ptr->type, &RNA_LineStyleGeometryModifier)) {
     return LS_MODIFIER_TYPE_GEOMETRY;
   }
   return -1;
@@ -1728,6 +2045,12 @@ void SCENE_OT_freestyle_modifier_remove(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Copy Operator
+ * \{ */
+
 static int freestyle_modifier_copy_exec(bContext *C, wmOperator *op)
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
@@ -1777,6 +2100,12 @@ void SCENE_OT_freestyle_modifier_copy(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Modifier Move Operator
+ * \{ */
 
 static int freestyle_modifier_move_exec(bContext *C, wmOperator *op)
 {
@@ -1847,6 +2176,12 @@ void SCENE_OT_freestyle_modifier_move(wmOperatorType *ot)
                "Direction to move the chosen modifier towards");
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Free Style Stroke Material Create Operator
+ * \{ */
+
 static int freestyle_stroke_material_create_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -1878,6 +2213,12 @@ void SCENE_OT_freestyle_stroke_material_create(wmOperatorType *ot)
 }
 
 #endif /* WITH_FREESTYLE */
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Texture Slot Move Operator
+ * \{ */
 
 static int texture_slot_move_exec(bContext *C, wmOperator *op)
 {
@@ -1947,7 +2288,11 @@ void TEXTURE_OT_slot_move(wmOperatorType *ot)
   RNA_def_enum(ot->srna, "type", slot_move, 0, "Type", "");
 }
 
-/********************** material operators *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Copy Operator
+ * \{ */
 
 /* material copy/paste */
 static int copy_material_exec(bContext *C, wmOperator *UNUSED(op))
@@ -1978,6 +2323,12 @@ void MATERIAL_OT_copy(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_INTERNAL;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Material Paste Operator
+ * \{ */
+
 static int paste_material_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Material *ma = CTX_data_pointer_get_type(C, "material", &RNA_Material).data;
@@ -2007,6 +2358,12 @@ void MATERIAL_OT_paste(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name #MTex Copy/Paste Utilities
+ * \{ */
 
 static short mtexcopied = 0; /* must be reset on file load */
 static MTex mtexcopybuf;
@@ -2074,6 +2431,12 @@ static void paste_mtex_copybuf(ID *id)
   }
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Texture Slot Copy Operator
+ * \{ */
+
 static int copy_mtex_exec(bContext *C, wmOperator *UNUSED(op))
 {
   ID *id = CTX_data_pointer_get_type(C, "texture_slot", &RNA_TextureSlot).owner_id;
@@ -2111,6 +2474,12 @@ void TEXTURE_OT_slot_copy(wmOperatorType *ot)
   /* no undo needed since no changes are made to the mtex */
   ot->flag = OPTYPE_REGISTER | OPTYPE_INTERNAL;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Texture Slot Paste Operator
+ * \{ */
 
 static int paste_mtex_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -2166,3 +2535,5 @@ void TEXTURE_OT_slot_paste(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_INTERNAL;
 }
+
+/** \} */

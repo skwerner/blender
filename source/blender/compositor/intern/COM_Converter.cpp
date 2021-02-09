@@ -16,7 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <string.h>
+#include <cstring>
 
 #include "DNA_node_types.h"
 
@@ -37,6 +37,7 @@
 #include "COM_ColorBalanceNode.h"
 #include "COM_ColorCorrectionNode.h"
 #include "COM_ColorCurveNode.h"
+#include "COM_ColorExposureNode.h"
 #include "COM_ColorMatteNode.h"
 #include "COM_ColorNode.h"
 #include "COM_ColorRampNode.h"
@@ -116,21 +117,28 @@
 
 bool Converter::is_fast_node(bNode *b_node)
 {
-  return !(b_node->type == CMP_NODE_BLUR || b_node->type == CMP_NODE_VECBLUR ||
-           b_node->type == CMP_NODE_BILATERALBLUR || b_node->type == CMP_NODE_DEFOCUS ||
-           b_node->type == CMP_NODE_BOKEHBLUR || b_node->type == CMP_NODE_GLARE ||
-           b_node->type == CMP_NODE_DBLUR || b_node->type == CMP_NODE_MOVIEDISTORTION ||
-           b_node->type == CMP_NODE_LENSDIST || b_node->type == CMP_NODE_DOUBLEEDGEMASK ||
-           b_node->type == CMP_NODE_DILATEERODE || b_node->type == CMP_NODE_DENOISE);
+  return !ELEM(b_node->type,
+               CMP_NODE_BLUR,
+               CMP_NODE_VECBLUR,
+               CMP_NODE_BILATERALBLUR,
+               CMP_NODE_DEFOCUS,
+               CMP_NODE_BOKEHBLUR,
+               CMP_NODE_GLARE,
+               CMP_NODE_DBLUR,
+               CMP_NODE_MOVIEDISTORTION,
+               CMP_NODE_LENSDIST,
+               CMP_NODE_DOUBLEEDGEMASK,
+               CMP_NODE_DILATEERODE,
+               CMP_NODE_DENOISE);
 }
 
 Node *Converter::convert(bNode *b_node)
 {
-  Node *node = NULL;
+  Node *node = nullptr;
 
   /* ignore undefined nodes with missing or invalid node data */
-  if (!nodeIsRegistered(b_node)) {
-    return NULL;
+  if (nodeTypeUndefined(b_node)) {
+    return nullptr;
   }
 
   switch (b_node->type) {
@@ -404,6 +412,9 @@ Node *Converter::convert(bNode *b_node)
     case CMP_NODE_DENOISE:
       node = new DenoiseNode(b_node);
       break;
+    case CMP_NODE_EXPOSURE:
+      node = new ExposureNode(b_node);
+      break;
   }
   return node;
 }
@@ -416,23 +427,23 @@ NodeOperation *Converter::convertDataType(NodeOperationOutput *from, NodeOperati
   if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_COLOR) {
     return new ConvertValueToColorOperation();
   }
-  else if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_VECTOR) {
+  if (fromDatatype == COM_DT_VALUE && toDatatype == COM_DT_VECTOR) {
     return new ConvertValueToVectorOperation();
   }
-  else if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VALUE) {
+  if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VALUE) {
     return new ConvertColorToValueOperation();
   }
-  else if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VECTOR) {
+  if (fromDatatype == COM_DT_COLOR && toDatatype == COM_DT_VECTOR) {
     return new ConvertColorToVectorOperation();
   }
-  else if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_VALUE) {
+  if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_VALUE) {
     return new ConvertVectorToValueOperation();
   }
-  else if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_COLOR) {
+  if (fromDatatype == COM_DT_VECTOR && toDatatype == COM_DT_COLOR) {
     return new ConvertVectorToColorOperation();
   }
 
-  return NULL;
+  return nullptr;
 }
 
 void Converter::convertResolution(NodeOperationBuilder &builder,
@@ -491,8 +502,8 @@ void Converter::convertResolution(NodeOperationBuilder &builder,
   }
 
   if (doCenter) {
-    NodeOperation *first = NULL;
-    ScaleOperation *scaleOperation = NULL;
+    NodeOperation *first = nullptr;
+    ScaleOperation *scaleOperation = nullptr;
     if (doScale) {
       scaleOperation = new ScaleOperation();
       scaleOperation->getInputSocket(1)->setResizeMode(COM_SC_NO_RESIZE);

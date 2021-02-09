@@ -102,7 +102,7 @@ void DPAINT_OT_surface_slot_add(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = surface_slot_add_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -151,7 +151,7 @@ void DPAINT_OT_surface_slot_remove(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = surface_slot_remove_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -203,7 +203,7 @@ void DPAINT_OT_type_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = type_toggle_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -233,7 +233,7 @@ static int output_toggle_exec(bContext *C, wmOperator *op)
 
   /* if type is already enabled, toggle it off */
   if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
-    int exists = dynamicPaint_outputLayerExists(surface, ob, output);
+    bool exists = dynamicPaint_outputLayerExists(surface, ob, output);
     const char *name;
 
     if (output == 0) {
@@ -286,7 +286,7 @@ void DPAINT_OT_output_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = output_toggle_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -538,5 +538,5 @@ void DPAINT_OT_bake(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = dynamicpaint_bake_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 }

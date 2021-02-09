@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_VORONOI_2D_H__
-#define __BLI_VORONOI_2D_H__
+#pragma once
 
 struct ListBase;
 
@@ -51,7 +50,7 @@ typedef struct VoronoiEdge {
   /* point on Voronoi place on the right side of edge */
   float right[2];
 
-  /* directional coeffitients satisfying equation y = f * x + g (edge lies on this line) */
+  /* Directional coefficients satisfying equation `y = f * x + g` (edge lies on this line). */
   float f, g;
 
   /* some edges consist of two parts,
@@ -81,5 +80,3 @@ void BLI_voronoi_triangulate(const VoronoiSite *sites,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_VORONOI_2D_H__ */

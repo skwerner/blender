@@ -104,7 +104,7 @@ static void make_prim_finish(bContext *C,
 
   /* userdef */
   if (exit_editmode) {
-    ED_object_editmode_exit(C, EM_FREEDATA);
+    ED_object_editmode_exit_ex(CTX_data_main(C), CTX_data_scene(C), obedit, EM_FREEDATA);
   }
   WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obedit);
 }
@@ -239,7 +239,7 @@ void MESH_OT_primitive_cube_add(wmOperatorType *ot)
 
 static const EnumPropertyItem fill_type_items[] = {
     {0, "NOTHING", 0, "Nothing", "Don't fill at all"},
-    {1, "NGON", 0, "Ngon", "Use ngons"},
+    {1, "NGON", 0, "N-Gon", "Use n-gons"},
     {2, "TRIFAN", 0, "Triangle Fan", "Use triangle fans"},
     {0, NULL, 0, NULL, NULL},
 };

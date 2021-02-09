@@ -29,17 +29,15 @@ set(INC
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
-
 set(SRC
   graph_buttons.c
   graph_draw.c
   graph_edit.c
   graph_ops.c
   graph_select.c
+  graph_slider_ops.c
   graph_utils.c
+  graph_view.c
   space_graph.c
 
   graph_intern.h
@@ -67,6 +65,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_space_graph "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

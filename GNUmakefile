@@ -32,6 +32,7 @@ Convenience Targets
    * debug:         Build a debug binary.
    * full:          Enable all supported dependencies & options.
    * lite:          Disable non essential features for a smaller binary and faster build.
+   * release        Complete build with all options enabled including CUDA and Optix, matching the releases on blender.org
    * headless:      Build without an interface (renderfarm or server automation).
    * cycles:        Build Cycles standalone only, without Blender.
    * bpy:           Build as a python module which can be loaded from python directly.
@@ -40,6 +41,7 @@ Convenience Targets
    * developer:     Enable faster builds, error checking and tests, recommended for developers.
    * config:        Run cmake configuration tool to set build options.
    * ninja:         Use ninja build tool for faster builds.
+   * ccache:        Use ccache for faster rebuilds.
 
    Note: passing the argument 'BUILD_DIR=path' when calling make will override the default build dir.
    Note: passing the argument 'BUILD_CMAKE_ARGS=args' lets you add cmake arguments.
@@ -80,11 +82,19 @@ Static Source Code Checking
    * check_splint:          Run blenders source through splint (C only).
    * check_sparse:          Run blenders source through sparse (C only).
    * check_smatch:          Run blenders source through smatch (C only).
-   * check_spelling_c:      Check for spelling errors (C/C++ only).
-   * check_spelling_c_qtc:  Same as check_spelling_c but outputs QtCreator tasks format.
+   * check_descriptions:    Check for duplicate/invalid descriptions.
+
+Spell Checkers
+
+   * check_spelling_c:      Check for spelling errors (C/C++ only),
    * check_spelling_osl:    Check for spelling errors (OSL only).
    * check_spelling_py:     Check for spelling errors (Python only).
-   * check_descriptions:    Check for duplicate/invalid descriptions.
+
+   Note that spell checkers can take a 'CHECK_SPELLING_CACHE' filepath argument,
+   so re-running does not need to re-check unchanged files.
+
+   Example:
+      make check_spelling_c CHECK_SPELLING_CACHE=../spelling_cache.data
 
 Utilities
    Not associated with building Blender.
@@ -141,6 +151,10 @@ Information
 endef
 # HELP_TEXT (end)
 
+# This makefile is not meant for Windows
+ifeq ($(OS),Windows_NT)
+    $(error On Windows, use "cmd //c make.bat" instead of "make")
+endif
 
 # System Vars
 OS:=$(shell uname -s)
@@ -169,8 +183,13 @@ endif
 ifndef DEPS_INSTALL_DIR
 	DEPS_INSTALL_DIR:=$(shell dirname "$(BLENDER_DIR)")/lib/$(OS_NCASE)
 
-	ifneq ($(OS_NCASE),darwin)
-		# Add processor type to directory name
+	# Add processor type to directory name, except for darwin x86_64
+	# which by convention does not have it.
+	ifeq ($(OS_NCASE),darwin)
+		ifneq ($(CPU),x86_64)
+			DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(CPU)
+		endif
+	else
 		DEPS_INSTALL_DIR:=$(DEPS_INSTALL_DIR)_$(CPU)
 	endif
 endif
@@ -184,7 +203,7 @@ endif
 # in libraries, or python 2 for running make update to get it.
 ifeq ($(OS_NCASE),darwin)
 	ifeq (, $(shell command -v $(PYTHON)))
-		PYTHON:=../lib/darwin/python/bin/python3.7m
+		PYTHON:=$(DEPS_INSTALL_DIR)/python/bin/python3.7m
 		ifeq (, $(shell command -v $(PYTHON)))
 			PYTHON:=python
 		endif
@@ -207,6 +226,10 @@ ifneq "$(findstring lite, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_lite
 	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_lite.cmake" $(CMAKE_CONFIG_ARGS)
 endif
+ifneq "$(findstring release, $(MAKECMDGOALS))" ""
+	BUILD_DIR:=$(BUILD_DIR)_release
+	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_release.cmake" $(CMAKE_CONFIG_ARGS)
+endif
 ifneq "$(findstring cycles, $(MAKECMDGOALS))" ""
 	BUILD_DIR:=$(BUILD_DIR)_cycles
 	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/cycles_standalone.cmake" $(CMAKE_CONFIG_ARGS)
@@ -222,6 +245,10 @@ endif
 
 ifneq "$(findstring developer, $(MAKECMDGOALS))" ""
 	CMAKE_CONFIG_ARGS:=-C"$(BLENDER_DIR)/build_files/cmake/config/blender_developer.cmake" $(CMAKE_CONFIG_ARGS)
+endif
+
+ifneq "$(findstring ccache, $(MAKECMDGOALS))" ""
+	CMAKE_CONFIG_ARGS:=-DWITH_COMPILER_CCACHE=YES $(CMAKE_CONFIG_ARGS)
 endif
 
 # -----------------------------------------------------------------------------
@@ -317,11 +344,13 @@ all: .FORCE
 debug: all
 full: all
 lite: all
+release: all
 cycles: all
 headless: all
 bpy: all
 developer: all
 ninja: all
+ccache: all
 
 # -----------------------------------------------------------------------------
 # Build dependencies
@@ -447,26 +476,17 @@ check_spelling_c: .FORCE
 	cd "$(BUILD_DIR)" ; \
 	PYTHONIOENCODING=utf_8 $(PYTHON) \
 	    "$(BLENDER_DIR)/source/tools/check_source/check_spelling.py" \
+	    --cache-file=$(CHECK_SPELLING_CACHE) \
 	    "$(BLENDER_DIR)/source" \
 	    "$(BLENDER_DIR)/intern/cycles" \
 	    "$(BLENDER_DIR)/intern/guardedalloc" \
 	    "$(BLENDER_DIR)/intern/ghost" \
-
-check_spelling_c_qtc: .FORCE
-	cd "$(BUILD_DIR)" ; USE_QTC_TASK=1 \
-	PYTHONIOENCODING=utf_8 $(PYTHON) \
-	    "$(BLENDER_DIR)/source/tools/check_source/check_spelling.py" \
-	    "$(BLENDER_DIR)/source" \
-	    "$(BLENDER_DIR)/intern/cycles" \
-	    "$(BLENDER_DIR)/intern/guardedalloc" \
-	    "$(BLENDER_DIR)/intern/ghost" \
-	    > \
-	    "$(BLENDER_DIR)/check_spelling_c.tasks"
 
 check_spelling_osl: .FORCE
 	cd "$(BUILD_DIR)" ;\
 	PYTHONIOENCODING=utf_8 $(PYTHON) \
 	    "$(BLENDER_DIR)/source/tools/check_source/check_spelling.py" \
+	    --cache-file=$(CHECK_SPELLING_CACHE) \
 	    "$(BLENDER_DIR)/intern/cycles/kernel/shaders"
 
 check_descriptions: .FORCE
@@ -505,10 +525,10 @@ format: .FORCE
 
 # Simple version of ./doc/python_api/sphinx_doc_gen.sh with no PDF generation.
 doc_py: .FORCE
-	ASAN_OPTIONS=halt_on_error=0 \
+	ASAN_OPTIONS=halt_on_error=0:${ASAN_OPTIONS} \
 	$(BLENDER_BIN) --background -noaudio --factory-startup \
 		--python doc/python_api/sphinx_doc_gen.py
-	cd doc/python_api ; sphinx-build -b html sphinx-in sphinx-out
+	sphinx-build -b html -j $(NPROCS) doc/python_api/sphinx-in doc/python_api/sphinx-out
 	@echo "docs written into: '$(BLENDER_DIR)/doc/python_api/sphinx-out/index.html'"
 
 doc_doxy: .FORCE

@@ -1,3 +1,3 @@
 
 
-#define MANTA_GIT_VERSION "commit b61bf9efa7a1d8ca98635076a7e9f2c4dacb2914"
+#define MANTA_GIT_VERSION "commit 39b7a415721ecbf6643612a24e8eadd221aeb934"

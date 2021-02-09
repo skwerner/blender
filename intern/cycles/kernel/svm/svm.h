@@ -20,7 +20,7 @@
 /* Shader Virtual Machine
  *
  * A shader is a list of nodes to be executed. These are simply read one after
- * the other and executed, using an node counter. Each node and it's associated
+ * the other and executed, using an node counter. Each node and its associated
  * data is encoded as one or more uint4's in a 1D texture. If the data is larger
  * than an uint4, the node can increase the node counter to compensate for this.
  * Floats are encoded as int and then converted to float again.
@@ -217,12 +217,26 @@ CCL_NAMESPACE_END
 CCL_NAMESPACE_BEGIN
 
 /* Main Interpreter Loop */
-ccl_device_noinline void svm_eval_nodes(KernelGlobals *kg,
-                                        ShaderData *sd,
-                                        ccl_addr_space PathState *state,
-                                        ccl_global float *buffer,
-                                        ShaderType type,
-                                        int path_flag)
+#if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
+ccl_device_inline void svm_eval_nodes(KernelGlobals *kg,
+                                      ShaderData *sd,
+                                      ccl_addr_space PathState *state,
+                                      ccl_global float *buffer,
+                                      ShaderType type,
+                                      int path_flag)
+{
+  optixDirectCall<void>(0, kg, sd, state, buffer, type, path_flag);
+}
+extern "C" __device__ void __direct_callable__svm_eval_nodes(
+#else
+ccl_device_noinline void svm_eval_nodes(
+#endif
+    KernelGlobals *kg,
+    ShaderData *sd,
+    ccl_addr_space PathState *state,
+    ccl_global float *buffer,
+    ShaderType type,
+    int path_flag)
 {
   float stack[SVM_STACK_SIZE];
   int offset = sd->shader & SHADER_MASK;

@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GAUSSIANBOKEHBLUROPERATION_H__
-#define __COM_GAUSSIANBOKEHBLUROPERATION_H__
+#pragma once
+
 #include "COM_BlurBaseOperation.h"
 #include "COM_NodeOperation.h"
 #include "COM_QualityStepHelper.h"
@@ -33,7 +33,7 @@ class GaussianBokehBlurOperation : public BlurBaseOperation {
   void initExecution();
   void *initializeTileData(rcti *rect);
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -62,7 +62,7 @@ class GaussianBlurReferenceOperation : public BlurBaseOperation {
   void initExecution();
   void *initializeTileData(rcti *rect);
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -75,5 +75,3 @@ class GaussianBlurReferenceOperation : public BlurBaseOperation {
                                         ReadBufferOperation *readOperation,
                                         rcti *output);
 };
-
-#endif

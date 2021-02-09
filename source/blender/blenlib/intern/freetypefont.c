@@ -15,7 +15,8 @@
  *
  * The Original Code is written by Rob Haarsma (phase)
  * All rights reserved.
- * This code parses the Freetype font outline data to chains of Blender's beziertriples.
+ *
+ * This code parses the Freetype font outline data to chains of Blender's bezier-triples.
  * Additional information can be found at the bottom of this file.
  *
  * Code that uses exotic character maps is present but commented out.
@@ -306,7 +307,7 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
   /* Extract the first 256 character from TTF */
   lcode = charcode = FT_Get_First_Char(face, &glyph_index);
 
-  /* No charmap found from the ttf so we need to figure it out */
+  /* No `charmap` found from the TTF so we need to figure it out. */
   if (glyph_index == 0) {
     FT_CharMap found = NULL;
     FT_CharMap charmap;

@@ -171,7 +171,10 @@ static float bm_edge_calc_dissolve_error(const BMEdge *e,
 
 #ifdef USE_DEGENERATE_CHECK
 
-static void mul_v2_m3v3_center(float r[2], float m[3][3], const float a[3], const float center[3])
+static void mul_v2_m3v3_center(float r[2],
+                               const float m[3][3],
+                               const float a[3],
+                               const float center[3])
 {
   BLI_assert(r != a);
   BLI_assert(r != center);
@@ -185,7 +188,7 @@ static void mul_v2_m3v3_center(float r[2], float m[3][3], const float a[3], cons
 
 static bool bm_loop_collapse_is_degenerate(BMLoop *l_ear)
 {
-  /* calculate relative to the centeral vertex for higher precision */
+  /* Calculate relative to the central vertex for higher precision. */
   const float *center = l_ear->v->co;
 
   float tri_2d[3][2];
@@ -278,9 +281,7 @@ static bool bm_vert_collapse_is_degenerate(BMVert *v)
     }
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 #endif /* USE_DEGENERATE_CHECK */
 

@@ -450,7 +450,7 @@ void BM_mesh_edgeloops_calc_order(BMesh *UNUSED(bm), ListBase *eloops, const boo
   }
   mul_v3_fl(cent, 1.0f / (float)tot);
 
-  /* find far outest loop */
+  /* Find the furthest out loop. */
   {
     BMEdgeLoopStore *el_store_best = NULL;
     float len_best_sq = -1.0f;
@@ -651,9 +651,7 @@ bool BM_edgeloop_calc_normal(BMesh *UNUSED(bm), BMEdgeLoopStore *el_store)
     el_store->no[2] = 1.0f; /* other axis set to 0.0 */
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 /**
@@ -693,9 +691,7 @@ bool BM_edgeloop_calc_normal_aligned(BMesh *UNUSED(bm),
     el_store->no[2] = 1.0f; /* other axis set to 0.0 */
     return false;
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 void BM_edgeloop_flip(BMesh *UNUSED(bm), BMEdgeLoopStore *el_store)

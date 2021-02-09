@@ -67,6 +67,7 @@ set(OPENIMAGEIO_EXTRA_ARGS
   -DBOOST_ROOT=${LIBDIR}/boost
   -DBOOST_LIBRARYDIR=${LIBDIR}/boost/lib/
   -DBoost_NO_SYSTEM_PATHS=ON
+  -DBoost_NO_BOOST_CMAKE=ON
   -OIIO_BUILD_CPP11=ON
   -DUSE_LIBSQUISH=OFF
   -DUSE_QT5=OFF
@@ -111,6 +112,9 @@ set(OPENIMAGEIO_EXTRA_ARGS
   -DOPENEXR_IEX_LIBRARY=${LIBDIR}/openexr/lib/${LIBPREFIX}Iex${OPENEXR_VERSION_POSTFIX}${LIBEXT}
   -DOPENEXR_ILMIMF_LIBRARY=${LIBDIR}/openexr/lib/${LIBPREFIX}IlmImf${OPENEXR_VERSION_POSTFIX}${LIBEXT}
   -DSTOP_ON_WARNING=OFF
+  -DUSE_EXTERNAL_PUGIXML=ON
+  -DPUGIXML_LIBRARY=${LIBDIR}/pugixml/lib/${LIBPREFIX}pugixml${LIBEXT}
+  -DPUGIXML_INCLUDE_DIR=${LIBDIR}/pugixml/include/
   ${WEBP_FLAGS}
   ${OIIO_SIMD_FLAGS}
 )
@@ -133,6 +137,7 @@ add_dependencies(
   external_jpeg
   external_boost
   external_tiff
+  external_pugixml
   external_openjpeg${OPENJPEG_POSTFIX}
   ${WEBP_DEP}
 )
@@ -155,4 +160,3 @@ if(WIN32)
     )
   endif()
 endif()
-

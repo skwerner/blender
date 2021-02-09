@@ -25,16 +25,49 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 
 #include "BKE_context.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
+
+#include "ED_markers.h"
+
+#include "SEQ_relations.h"
+#include "SEQ_sequencer.h"
+#include "SEQ_time.h"
+#include "SEQ_transform.h"
+#include "SEQ_utils.h"
 
 #include "UI_view2d.h"
 
 #include "transform.h"
 #include "transform_convert.h"
+
+/** Used for sequencer transform. */
+typedef struct TransDataSeq {
+  struct Sequence *seq;
+  /** A copy of #Sequence.flag that may be modified for nested strips. */
+  int flag;
+  /** Use this so we can have transform data at the strips start,
+   * but apply correctly to the start frame. */
+  int start_offset;
+  /** one of #SELECT, #SEQ_LEFTSEL and #SEQ_RIGHTSEL. */
+  short sel_flag;
+
+} TransDataSeq;
+
+/**
+ * Sequencer transform customdata (stored in #TransCustomDataContainer).
+ */
+typedef struct TransSeq {
+  TransDataSeq *tdseq;
+  int min;
+  int max;
+  bool snap_left;
+  int selection_channel_range_min;
+  int selection_channel_range_max;
+} TransSeq;
 
 /* -------------------------------------------------------------------- */
 /** \name Sequencer Transform Creation
@@ -58,8 +91,8 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *r_recursive, int *r_c
 
     Scene *scene = t->scene;
     int cfra = CFRA;
-    int left = BKE_sequence_tx_get_final_left(seq, true);
-    int right = BKE_sequence_tx_get_final_right(seq, true);
+    int left = SEQ_transform_get_left_handle_frame(seq, true);
+    int right = SEQ_transform_get_right_handle_frame(seq, true);
 
     if (seq->depth == 0 && ((seq->flag & SELECT) == 0 || (seq->flag & SEQ_LOCK))) {
       *r_recursive = false;
@@ -160,7 +193,7 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *r_recursive, int *r_c
         /* Meta's can only directly be moved between channels since they
          * don't have their start and length set directly (children affect that)
          * since this Meta is nested we don't need any of its data in fact.
-         * BKE_sequence_calc() will update its settings when run on the top-level meta. */
+         * SEQ_time_update_sequence() will update its settings when run on the top-level meta. */
         *r_flag = 0;
         *r_count = 0;
         *r_recursive = true;
@@ -209,16 +242,16 @@ static TransData *SeqToTransData(
       /* Use seq_tx_get_final_left() and an offset here
        * so transform has the left hand location of the strip.
        * tdsq->start_offset is used when flushing the tx data back */
-      start_left = BKE_sequence_tx_get_final_left(seq, false);
+      start_left = SEQ_transform_get_left_handle_frame(seq, false);
       td2d->loc[0] = start_left;
       tdsq->start_offset = start_left - seq->start; /* use to apply the original location */
       break;
     case SEQ_LEFTSEL:
-      start_left = BKE_sequence_tx_get_final_left(seq, false);
+      start_left = SEQ_transform_get_left_handle_frame(seq, false);
       td2d->loc[0] = start_left;
       break;
     case SEQ_RIGHTSEL:
-      td2d->loc[0] = BKE_sequence_tx_get_final_right(seq, false);
+      td2d->loc[0] = SEQ_transform_get_right_handle_frame(seq, false);
       break;
   }
 
@@ -340,7 +373,7 @@ static void SeqTransDataBounds(TransInfo *t, ListBase *seqbase, TransSeq *ts)
 
 static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *custom_data)
 {
-  Editing *ed = BKE_sequencer_editing_get(t->scene, false);
+  Editing *ed = SEQ_editing_get(t->scene, false);
 
   if (ed != NULL) {
 
@@ -356,19 +389,19 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
 
     if (!(t->state == TRANS_CANCEL)) {
 
-#if 0  // default 2.4 behavior
+#if 0 /* Default 2.4 behavior. */
 
       /* flush to 2d vector from internally used 3d vector */
       for (a = 0; a < t->total; a++, td++) {
         if ((seq != seq_prev) && (seq->depth == 0) && (seq->flag & SEQ_OVERLAP)) {
           seq = ((TransDataSeq *)td->extra)->seq;
-          BKE_sequence_base_shuffle(seqbasep, seq, t->scene);
+          SEQ_transform_seqbase_shuffle(seqbasep, seq, t->scene);
         }
 
         seq_prev = seq;
       }
 
-#else  // durian hack
+#else /* durian hack */
       {
         int overlap = 0;
 
@@ -403,7 +436,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
               else {
                 /* Tag seq with a non zero value, used by
-                 * BKE_sequence_base_shuffle_time to identify the ones to shuffle */
+                 * SEQ_transform_seqbase_shuffle_time to identify the ones to shuffle */
                 if (seq->depth == 0) {
                   seq->tmp = (void *)1;
                 }
@@ -429,7 +462,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
             }
 
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
+            SEQ_transform_seqbase_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
 
             for (seq = seqbasep->first; seq; seq = seq->next) {
               if (seq->machine >= MAXSEQ * 2) {
@@ -441,10 +474,10 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               }
             }
 
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
+            SEQ_transform_seqbase_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
           }
           else {
-            BKE_sequence_base_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
+            SEQ_transform_seqbase_shuffle_time(seqbasep, t->scene, markers, use_sync_markers);
           }
 
           if (has_effect_any) {
@@ -454,7 +487,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               seq = ((TransDataSeq *)td->extra)->seq;
               if ((seq != seq_prev)) {
                 if ((seq->type & SEQ_TYPE_EFFECT) && seq->seq1) {
-                  BKE_sequence_calc(t->scene, seq);
+                  SEQ_time_update_sequence(t->scene, seq);
                 }
               }
             }
@@ -467,8 +500,8 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
               seq = ((TransDataSeq *)td->extra)->seq;
               if ((seq != seq_prev) && (seq->depth == 0)) {
                 if ((seq->type & SEQ_TYPE_EFFECT) && seq->seq1) {
-                  if (BKE_sequence_test_overlap(seqbasep, seq)) {
-                    BKE_sequence_base_shuffle(seqbasep, seq, t->scene);
+                  if (SEQ_transform_test_overlap(seqbasep, seq)) {
+                    SEQ_transform_seqbase_shuffle(seqbasep, seq, t->scene);
                   }
                 }
               }
@@ -483,18 +516,18 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
         /* We might want to build a list of effects that need to be updated during transform */
         if (seq->type & SEQ_TYPE_EFFECT) {
           if (seq->seq1 && seq->seq1->flag & SELECT) {
-            BKE_sequence_calc(t->scene, seq);
+            SEQ_time_update_sequence(t->scene, seq);
           }
           else if (seq->seq2 && seq->seq2->flag & SELECT) {
-            BKE_sequence_calc(t->scene, seq);
+            SEQ_time_update_sequence(t->scene, seq);
           }
           else if (seq->seq3 && seq->seq3->flag & SELECT) {
-            BKE_sequence_calc(t->scene, seq);
+            SEQ_time_update_sequence(t->scene, seq);
           }
         }
       }
 
-      BKE_sequencer_sort(t->scene);
+      SEQ_sort(t->scene);
     }
     else {
       /* Canceled, need to update the strips display */
@@ -502,10 +535,10 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData *c
         seq = ((TransDataSeq *)td->extra)->seq;
         if ((seq != seq_prev) && (seq->depth == 0)) {
           if (seq->flag & SEQ_OVERLAP) {
-            BKE_sequence_base_shuffle(seqbasep, seq, t->scene);
+            SEQ_transform_seqbase_shuffle(seqbasep, seq, t->scene);
           }
 
-          BKE_sequence_calc_disp(t->scene, seq);
+          SEQ_time_update_sequence_bounds(t->scene, seq);
         }
         seq_prev = seq;
       }
@@ -527,7 +560,7 @@ void createTransSeqData(TransInfo *t)
 #define XXX_DURIAN_ANIM_TX_HACK
 
   Scene *scene = t->scene;
-  Editing *ed = BKE_sequencer_editing_get(t->scene, false);
+  Editing *ed = SEQ_editing_get(t->scene, false);
   TransData *td = NULL;
   TransData2D *td2d = NULL;
   TransDataSeq *tdsq = NULL;
@@ -593,6 +626,14 @@ void createTransSeqData(TransInfo *t)
     }
   }
 
+  ts->selection_channel_range_min = MAXSEQ + 1;
+  LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
+    if ((seq->flag & SELECT) != 0) {
+      ts->selection_channel_range_min = min_ii(ts->selection_channel_range_min, seq->machine);
+      ts->selection_channel_range_max = max_ii(ts->selection_channel_range_max, seq->machine);
+    }
+  }
+
 #undef XXX_DURIAN_ANIM_TX_HACK
 }
 
@@ -604,7 +645,7 @@ void createTransSeqData(TransInfo *t)
  * \{ */
 
 /* commented _only_ because the meta may have animation data which
- * needs moving too [#28158] */
+ * needs moving too T28158. */
 
 #define SEQ_TX_NESTED_METAS
 
@@ -614,21 +655,21 @@ BLI_INLINE void trans_update_seq(Scene *sce, Sequence *seq, int old_start, int s
     /* Calculate this strip and all nested strips.
      * Children are ALWAYS transformed first so we don't need to do this in another loop.
      */
-    BKE_sequence_calc(sce, seq);
+    SEQ_time_update_sequence(sce, seq);
   }
   else {
-    BKE_sequence_calc_disp(sce, seq);
+    SEQ_time_update_sequence_bounds(sce, seq);
   }
 
   if (sel_flag == SELECT) {
-    BKE_sequencer_offset_animdata(sce, seq, seq->start - old_start);
+    SEQ_offset_animdata(sce, seq, seq->start - old_start);
   }
 }
 
-void flushTransSeq(TransInfo *t)
+static void flushTransSeq(TransInfo *t)
 {
   /* Editing null check already done */
-  ListBase *seqbasep = BKE_sequencer_editing_get(t->scene, false)->seqbasep;
+  ListBase *seqbasep = SEQ_editing_get(t->scene, false)->seqbasep;
 
   int a, new_frame;
   TransData *td = NULL;
@@ -655,7 +696,7 @@ void flushTransSeq(TransInfo *t)
     switch (tdsq->sel_flag) {
       case SELECT:
 #ifdef SEQ_TX_NESTED_METAS
-        if ((seq->depth != 0 || BKE_sequence_tx_test(seq))) {
+        if ((seq->depth != 0 || SEQ_transform_sequence_can_be_translated(seq))) {
           /* for meta's, their children move */
           seq->start = new_frame - tdsq->start_offset;
         }
@@ -671,18 +712,18 @@ void flushTransSeq(TransInfo *t)
         }
         break;
       case SEQ_LEFTSEL: /* no vertical transform  */
-        BKE_sequence_tx_set_final_left(seq, new_frame);
-        BKE_sequence_tx_handle_xlimits(seq, tdsq->flag & SEQ_LEFTSEL, tdsq->flag & SEQ_RIGHTSEL);
+        SEQ_transform_set_left_handle_frame(seq, new_frame);
+        SEQ_transform_handle_xlimits(seq, tdsq->flag & SEQ_LEFTSEL, tdsq->flag & SEQ_RIGHTSEL);
 
         /* todo - move this into aftertrans update? - old seq tx needed it anyway */
-        BKE_sequence_single_fix(seq);
+        SEQ_transform_fix_single_image_seq_offsets(seq);
         break;
       case SEQ_RIGHTSEL: /* no vertical transform  */
-        BKE_sequence_tx_set_final_right(seq, new_frame);
-        BKE_sequence_tx_handle_xlimits(seq, tdsq->flag & SEQ_LEFTSEL, tdsq->flag & SEQ_RIGHTSEL);
+        SEQ_transform_set_right_handle_frame(seq, new_frame);
+        SEQ_transform_handle_xlimits(seq, tdsq->flag & SEQ_LEFTSEL, tdsq->flag & SEQ_RIGHTSEL);
 
         /* todo - move this into aftertrans update? - old seq tx needed it anyway */
-        BKE_sequence_single_fix(seq);
+        SEQ_transform_fix_single_image_seq_offsets(seq);
         break;
     }
 
@@ -714,15 +755,15 @@ void flushTransSeq(TransInfo *t)
   if (ELEM(t->mode, TFM_SEQ_SLIDE, TFM_TIME_TRANSLATE)) {
     /* Special annoying case here, need to calc metas with TFM_TIME_EXTEND only */
 
-    /* calc all meta's then effects [#27953] */
+    /* calc all meta's then effects T27953. */
     for (seq = seqbasep->first; seq; seq = seq->next) {
       if (seq->type == SEQ_TYPE_META && seq->flag & SELECT) {
-        BKE_sequence_calc(t->scene, seq);
+        SEQ_time_update_sequence(t->scene, seq);
       }
     }
     for (seq = seqbasep->first; seq; seq = seq->next) {
       if (seq->seq1 || seq->seq2 || seq->seq3) {
-        BKE_sequence_calc(t->scene, seq);
+        SEQ_time_update_sequence(t->scene, seq);
       }
     }
 
@@ -733,7 +774,7 @@ void flushTransSeq(TransInfo *t)
       seq = tdsq->seq;
       if ((seq != seq_prev) && (seq->depth != 0)) {
         if (seq->seq1 || seq->seq2 || seq->seq3) {
-          BKE_sequence_calc(t->scene, seq);
+          SEQ_time_update_sequence(t->scene, seq);
         }
       }
     }
@@ -751,13 +792,94 @@ void flushTransSeq(TransInfo *t)
       if (seq->depth == 0) {
         /* test overlap, displays red outline */
         seq->flag &= ~SEQ_OVERLAP;
-        if (BKE_sequence_test_overlap(seqbasep, seq)) {
+        if (SEQ_transform_test_overlap(seqbasep, seq)) {
           seq->flag |= SEQ_OVERLAP;
         }
       }
     }
     seq_prev = seq;
   }
+}
+
+/* helper for recalcData() - for sequencer transforms */
+void recalcData_sequencer(TransInfo *t)
+{
+  TransData *td;
+  int a;
+  Sequence *seq_prev = NULL;
+
+  TransDataContainer *tc = TRANS_DATA_CONTAINER_FIRST_SINGLE(t);
+
+  for (a = 0, td = tc->data; a < tc->data_len; a++, td++) {
+    TransDataSeq *tdsq = (TransDataSeq *)td->extra;
+    Sequence *seq = tdsq->seq;
+
+    if (seq != seq_prev) {
+      SEQ_relations_invalidate_cache_composite(t->scene, seq);
+    }
+
+    seq_prev = seq;
+  }
+
+  DEG_id_tag_update(&t->scene->id, ID_RECALC_SEQUENCER_STRIPS);
+
+  flushTransSeq(t);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Special After Transform Sequencer
+ * \{ */
+
+void special_aftertrans_update__sequencer(bContext *UNUSED(C), TransInfo *t)
+{
+  if (t->state == TRANS_CANCEL) {
+    return;
+  }
+  /* freeSeqData in transform_conversions.c does this
+   * keep here so the else at the end wont run... */
+
+  SpaceSeq *sseq = (SpaceSeq *)t->area->spacedata.first;
+
+  /* Marker transform, not especially nice but we may want to move markers
+   * at the same time as strips in the Video Sequencer. */
+  if (sseq->flag & SEQ_MARKER_TRANS) {
+    /* can't use TFM_TIME_EXTEND
+     * for some reason EXTEND is changed into TRANSLATE, so use frame_side instead */
+
+    if (t->mode == TFM_SEQ_SLIDE) {
+      if (t->frame_side == 'B') {
+        ED_markers_post_apply_transform(
+            &t->scene->markers, t->scene, TFM_TIME_TRANSLATE, t->values[0], t->frame_side);
+      }
+    }
+    else if (ELEM(t->frame_side, 'L', 'R')) {
+      ED_markers_post_apply_transform(
+          &t->scene->markers, t->scene, TFM_TIME_EXTEND, t->values[0], t->frame_side);
+    }
+  }
+}
+
+void transform_convert_sequencer_channel_clamp(TransInfo *t)
+{
+  const TransSeq *ts = (TransSeq *)TRANS_DATA_CONTAINER_FIRST_SINGLE(t)->custom.type.data;
+  const int channel_offset = round_fl_to_int(t->values[1]);
+  const int min_channel_after_transform = ts->selection_channel_range_min + channel_offset;
+  const int max_channel_after_transform = ts->selection_channel_range_max + channel_offset;
+
+  if (max_channel_after_transform > MAXSEQ) {
+    t->values[1] -= max_channel_after_transform - MAXSEQ;
+  }
+  if (min_channel_after_transform < 1) {
+    t->values[1] -= min_channel_after_transform - 1;
+  }
+}
+
+int transform_convert_sequencer_get_snap_bound(TransInfo *t)
+{
+  TransSeq *ts = TRANS_DATA_CONTAINER_FIRST_SINGLE(t)->custom.type.data;
+  return ts->snap_left ? ts->min : ts->max;
 }
 
 /** \} */

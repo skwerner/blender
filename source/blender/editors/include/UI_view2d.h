@@ -23,8 +23,7 @@
  * \ingroup editorui
  */
 
-#ifndef __UI_VIEW2D_H__
-#define __UI_VIEW2D_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -121,13 +120,16 @@ void UI_view2d_curRect_validate(struct View2D *v2d);
 void UI_view2d_curRect_reset(struct View2D *v2d);
 void UI_view2d_sync(struct bScreen *screen, struct ScrArea *area, struct View2D *v2dcur, int flag);
 
+/* Perform all required updates after `v2d->cur` as been modified.
+ * This includes like validation view validation (#UI_view2d_curRect_validate).
+ *
+ * Current intent is to use it from user code, such as view navigation and zoom operations. */
+void UI_view2d_curRect_changed(const struct bContext *C, struct View2D *v2d);
+
 void UI_view2d_totRect_set(struct View2D *v2d, int width, int height);
 void UI_view2d_totRect_set_resize(struct View2D *v2d, int width, int height, bool resize);
 
 void UI_view2d_mask_from_win(const struct View2D *v2d, struct rcti *r_mask);
-
-/* per tab offsets, returns 1 if tab changed */
-bool UI_view2d_tab_set(struct View2D *v2d, int tab);
 
 void UI_view2d_zoom_cache_reset(void);
 
@@ -180,9 +182,10 @@ void UI_view2d_draw_scale_x__frames_or_seconds(const struct ARegion *region,
                                                int colorid);
 
 /* scrollbar drawing */
-View2DScrollers *UI_view2d_scrollers_calc(struct View2D *v2d, const struct rcti *mask_custom);
-void UI_view2d_scrollers_draw(struct View2D *v2d, View2DScrollers *scrollers);
-void UI_view2d_scrollers_free(View2DScrollers *scrollers);
+void UI_view2d_scrollers_calc(struct View2D *v2d,
+                              const struct rcti *mask_custom,
+                              struct View2DScrollers *r_scrollers);
+void UI_view2d_scrollers_draw(struct View2D *v2d, const struct rcti *mask_custom);
 
 /* list view tools */
 void UI_view2d_listview_view_to_cell(float columnwidth,
@@ -228,7 +231,7 @@ struct View2D *UI_view2d_fromcontext(const struct bContext *C);
 struct View2D *UI_view2d_fromcontext_rwin(const struct bContext *C);
 
 void UI_view2d_scroller_size_get(const struct View2D *v2d, float *r_x, float *r_y);
-void UI_view2d_scale_get(struct View2D *v2d, float *r_x, float *r_y);
+void UI_view2d_scale_get(const struct View2D *v2d, float *r_x, float *r_y);
 float UI_view2d_scale_get_x(const struct View2D *v2d);
 float UI_view2d_scale_get_y(const struct View2D *v2d);
 void UI_view2d_scale_get_inverse(const struct View2D *v2d, float *r_x, float *r_y);
@@ -287,5 +290,3 @@ void VIEW2D_GGT_navigate_impl(struct wmGizmoGroupType *gzgt, const char *idname)
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __UI_VIEW2D_H__ */

@@ -22,9 +22,9 @@
  */
 
 #ifndef _WIN32
-#  include <unistd.h>  // for read close
+#  include <unistd.h> /* for read close */
 #else
-#  include <io.h>  // for open close read
+#  include <io.h> /* for open close read */
 #endif
 
 #include <errno.h>
@@ -48,6 +48,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
+#include "BKE_undo_system.h"
 
 #include "BLO_readfile.h"
 #include "BLO_undofile.h"
@@ -62,7 +63,7 @@
 #define UNDO_DISK 0
 
 bool BKE_memfile_undo_decode(MemFileUndoData *mfu,
-                             const int undo_direction,
+                             const eUndoStepDir undo_direction,
                              const bool use_old_bmain_data,
                              bContext *C)
 {
@@ -80,7 +81,7 @@ bool BKE_memfile_undo_decode(MemFileUndoData *mfu,
   }
   else {
     struct BlendFileReadParams params = {0};
-    params.undo_direction = undo_direction > 0 ? 1 : -1;
+    params.undo_direction = undo_direction;
     if (!use_old_bmain_data) {
       params.skip_flags |= BLO_READ_SKIP_UNDO_OLD_MAIN;
     }
@@ -109,7 +110,6 @@ MemFileUndoData *BKE_memfile_undo_encode(Main *bmain, MemFileUndoData *mfu_prev)
     static int counter = 0;
     char filename[FILE_MAX];
     char numstr[32];
-    int fileflags = G.fileflags & ~(G_FILE_HISTORY); /* don't do file history on undo */
 
     /* Calculate current filename. */
     counter++;
@@ -118,7 +118,8 @@ MemFileUndoData *BKE_memfile_undo_encode(Main *bmain, MemFileUndoData *mfu_prev)
     BLI_snprintf(numstr, sizeof(numstr), "%d.blend", counter);
     BLI_join_dirfile(filename, sizeof(filename), BKE_tempdir_session(), numstr);
 
-    /* success = */ /* UNUSED */ BLO_write_file(bmain, filename, fileflags, NULL, NULL);
+    /* success = */ /* UNUSED */ BLO_write_file(
+        bmain, filename, G.fileflags, &(const struct BlendFileWriteParams){0}, NULL);
 
     BLI_strncpy(mfu->filename, filename, sizeof(mfu->filename));
   }

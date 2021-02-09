@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_CHANGEHSVOPERATION_H__
-#define __COM_CHANGEHSVOPERATION_H__
+#pragma once
+
 #include "COM_MixOperation.h"
 
 /**
@@ -41,8 +41,7 @@ class ChangeHSVOperation : public NodeOperation {
   void deinitExecution();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
-#endif

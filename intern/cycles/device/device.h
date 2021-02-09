@@ -48,6 +48,7 @@ enum DeviceType {
   DEVICE_NETWORK,
   DEVICE_MULTI,
   DEVICE_OPTIX,
+  DEVICE_DUMMY,
 };
 
 enum DeviceTypeMask {
@@ -78,13 +79,17 @@ class DeviceInfo {
   bool display_device;               /* GPU is used as a display device. */
   bool has_half_images;              /* Support half-float textures. */
   bool has_volume_decoupled;         /* Decoupled volume shading. */
+  bool has_branched_path;            /* Supports branched path tracing. */
   bool has_adaptive_stop_per_sample; /* Per-sample adaptive sampling stopping. */
   bool has_osl;                      /* Support Open Shading Language. */
   bool use_split_kernel;             /* Use split or mega kernel. */
   bool has_profiling;                /* Supports runtime collection of profiling info. */
+  bool has_peer_memory;              /* GPU has P2P access to memory of another GPU. */
+  DenoiserTypeMask denoisers;        /* Supported denoiser types. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
   vector<DeviceInfo> denoising_devices;
+  string error_msg;
 
   DeviceInfo()
   {
@@ -95,10 +100,13 @@ class DeviceInfo {
     display_device = false;
     has_half_images = false;
     has_volume_decoupled = false;
+    has_branched_path = true;
     has_adaptive_stop_per_sample = false;
     has_osl = false;
     use_split_kernel = false;
     has_profiling = false;
+    has_peer_memory = false;
+    denoisers = DENOISER_NONE;
   }
 
   bool operator==(const DeviceInfo &info)
@@ -108,6 +116,9 @@ class DeviceInfo {
            (type == info.type && num == info.num && description == info.description));
     return id == info.id;
   }
+
+  /* Add additional devices needed for the specified denoiser. */
+  void add_denoising_devices(DenoiserType denoiser_type);
 };
 
 class DeviceRequestedFeatures {
@@ -130,6 +141,7 @@ class DeviceRequestedFeatures {
 
   /* BVH/sampling kernel features. */
   bool use_hair;
+  bool use_hair_thick;
   bool use_object_motion;
   bool use_camera_motion;
 
@@ -172,10 +184,10 @@ class DeviceRequestedFeatures {
   DeviceRequestedFeatures()
   {
     /* TODO(sergey): Find more meaningful defaults. */
-    experimental = false;
     max_nodes_group = 0;
     nodes_features = 0;
     use_hair = false;
+    use_hair_thick = false;
     use_object_motion = false;
     use_camera_motion = false;
     use_baking = false;
@@ -194,10 +206,10 @@ class DeviceRequestedFeatures {
 
   bool modified(const DeviceRequestedFeatures &requested_features)
   {
-    return !(experimental == requested_features.experimental &&
-             max_nodes_group == requested_features.max_nodes_group &&
+    return !(max_nodes_group == requested_features.max_nodes_group &&
              nodes_features == requested_features.nodes_features &&
              use_hair == requested_features.use_hair &&
+             use_hair_thick == requested_features.use_hair_thick &&
              use_object_motion == requested_features.use_object_motion &&
              use_camera_motion == requested_features.use_camera_motion &&
              use_baking == requested_features.use_baking &&
@@ -317,7 +329,8 @@ class Device {
   virtual void mem_free_sub_ptr(device_ptr /*ptr*/){};
 
  public:
-  virtual ~Device();
+  /* noexcept needed to silence TBB warning. */
+  virtual ~Device() noexcept(false);
 
   /* info */
   DeviceInfo info;
@@ -410,10 +423,7 @@ class Device {
                            const DeviceDrawParams &draw_params);
 
   /* acceleration structure building */
-  virtual bool build_optix_bvh(BVH *)
-  {
-    return false;
-  }
+  virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);
 
 #ifdef WITH_NETWORK
   /* networking */
@@ -428,11 +438,22 @@ class Device {
   {
     return 0;
   }
-  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/)
+  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
   {
   }
-  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/)
+  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
   {
+  }
+
+  virtual bool is_resident(device_ptr /*key*/, Device *sub_device)
+  {
+    /* Memory is always resident if this is not a multi device, regardless of whether the pointer
+     * is valid or not (since it may not have been allocated yet). */
+    return sub_device == this;
+  }
+  virtual bool check_peer_access(Device * /*peer_device*/)
+  {
+    return false;
   }
 
   /* static */
@@ -445,6 +466,7 @@ class Device {
   static string string_from_type(DeviceType type);
   static vector<DeviceType> available_types();
   static vector<DeviceInfo> available_devices(uint device_type_mask = DEVICE_MASK_ALL);
+  static DeviceInfo dummy_device(const string &error_msg = "");
   static string device_capabilities(uint device_type_mask = DEVICE_MASK_ALL);
   static DeviceInfo get_multi_device(const vector<DeviceInfo> &subdevices,
                                      int threads,

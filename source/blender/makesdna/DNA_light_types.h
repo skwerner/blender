@@ -21,11 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_LIGHT_TYPES_H__
-#define __DNA_LIGHT_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
@@ -156,4 +159,6 @@ typedef struct Light {
 #define LA_AREA_DISK 4
 #define LA_AREA_ELLIPSE 5
 
-#endif /* __DNA_LIGHT_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

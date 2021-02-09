@@ -66,7 +66,7 @@ static float quad_calc_error(const float v1[3],
     error += diff;
   }
 
-  /* Colinearity */
+  /* Co-linearity */
   {
     float edge_vecs[4][3];
     float diff;
@@ -166,7 +166,7 @@ static bool bm_edge_delimit_cdata(CustomData *ldata,
   r_delim_cd->cd_type = type;
   r_delim_cd->cd_size = CustomData_sizeof(r_delim_cd->cd_type);
   r_delim_cd->cd_offset = CustomData_get_n_offset(ldata, type, 0);
-  r_delim_cd->cd_offset_end = r_delim_cd->cd_size * layer_len;
+  r_delim_cd->cd_offset_end = r_delim_cd->cd_offset + (r_delim_cd->cd_size * layer_len);
   return (r_delim_cd->cd_offset != -1);
 }
 

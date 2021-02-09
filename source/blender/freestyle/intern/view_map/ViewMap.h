@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_MAP_H__
-#define __FREESTYLE_VIEW_MAP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -154,7 +153,7 @@ class ViewMap {
     return _VEdges.size();
   }
 
-  ViewShape *viewShape(unsigned index);
+  ViewShape *viewShape(unsigned id);
 
   id_to_index_map &shapeIdToIndexMap()
   {
@@ -229,7 +228,7 @@ class ViewMap {
    */
   ViewVertex *InsertViewVertex(SVertex *iVertex, vector<ViewEdge *> &newViewEdges);
 
-  /* connects a FEdge to the graph trough a SVertex */
+  /* connects a FEdge to the graph through a SVertex */
   // FEdge *Connect(FEdge *ioEdge, SVertex *ioVertex);
 
   /* Clean temporary FEdges created by chaining */
@@ -1086,13 +1085,13 @@ class ViewEdge : public Interface1D {
     return __B;
   }
 
-  /*! Returns the first FEdge that constitues this ViewEdge. */
+  /*! Returns the first FEdge that constitutes this ViewEdge. */
   inline FEdge *fedgeA()
   {
     return _FEdgeA;
   }
 
-  /*! Returns the last FEdge that constitues this ViewEdge. */
+  /*! Returns the last FEdge that constitutes this ViewEdge. */
   inline FEdge *fedgeB()
   {
     return _FEdgeB;
@@ -1830,5 +1829,3 @@ inline real ViewEdge::curvature2d_as_angle(int iCombination) const
 #endif
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_MAP_H__

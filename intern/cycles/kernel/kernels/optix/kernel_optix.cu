@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// clang-format off
 #include "kernel/kernel_compat_optix.h"
 #include "util/util_atomic.h"
 #include "kernel/kernel_types.h"
@@ -23,6 +24,7 @@
 
 #include "kernel/kernel_path.h"
 #include "kernel/kernel_bake.h"
+// clang-format on
 
 template<typename T> ccl_device_forceinline T *get_payload_ptr_0()
 {
@@ -43,13 +45,12 @@ template<bool always = false> ccl_device_forceinline uint get_object_id()
   uint object = optixGetInstanceId();
 #endif
   // Choose between always returning object ID or only for instances
-  if (always)
-    // Can just remove the high bit since instance always contains object ID
-    return object & 0x7FFFFF;
-  // Set to OBJECT_NONE if this is not an instanced object
-  else if (object & 0x800000)
-    object = OBJECT_NONE;
-  return object;
+  if (always || (object & 1) == 0)
+    // Can just remove the low bit since instance always contains object ID
+    return object >> 1;
+  else
+    // Set to OBJECT_NONE if this is not an instanced object
+    return OBJECT_NONE;
 }
 
 extern "C" __global__ void __raygen__kernel_optix_path_trace()
@@ -116,12 +117,18 @@ extern "C" __global__ void __anyhit__kernel_optix_local_hit()
     return optixIgnoreIntersection();
   }
 
+  const uint max_hits = optixGetPayload_5();
+  if (max_hits == 0) {
+    // Special case for when no hit information is requested, just report that something was hit
+    optixSetPayload_5(true);
+    return optixTerminateRay();
+  }
+
   int hit = 0;
   uint *const lcg_state = get_payload_ptr_0<uint>();
   LocalIntersection *const local_isect = get_payload_ptr_2<LocalIntersection>();
 
   if (lcg_state) {
-    const uint max_hits = optixGetPayload_5();
     for (int i = min(max_hits, local_isect->num_hits) - 1; i >= 0; --i) {
       if (optixGetRayTmax() == local_isect->hits[i].t) {
         return optixIgnoreIntersection();
@@ -139,8 +146,8 @@ extern "C" __global__ void __anyhit__kernel_optix_local_hit()
   }
   else {
     if (local_isect->num_hits && optixGetRayTmax() > local_isect->hits[0].t) {
-      // Record closest intersection only (do not terminate ray here, since there is no guarantee
-      // about distance ordering in anyhit)
+      // Record closest intersection only
+      // Do not terminate ray here, since there is no guarantee about distance ordering in any-hit
       return optixIgnoreIntersection();
     }
 
@@ -153,15 +160,9 @@ extern "C" __global__ void __anyhit__kernel_optix_local_hit()
   isect->object = get_object_id();
   isect->type = kernel_tex_fetch(__prim_type, isect->prim);
 
-  if (optixIsTriangleHit()) {
-    const float2 barycentrics = optixGetTriangleBarycentrics();
-    isect->u = 1.0f - barycentrics.y - barycentrics.x;
-    isect->v = barycentrics.x;
-  }
-  else {
-    isect->u = __uint_as_float(optixGetAttribute_0());
-    isect->v = __uint_as_float(optixGetAttribute_1());
-  }
+  const float2 barycentrics = optixGetTriangleBarycentrics();
+  isect->u = 1.0f - barycentrics.y - barycentrics.x;
+  isect->v = barycentrics.x;
 
   // Record geometric normal
   const uint tri_vindex = kernel_tex_fetch(__prim_tri_index, isect->prim);
@@ -198,10 +199,18 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
     isect->u = 1.0f - barycentrics.y - barycentrics.x;
     isect->v = barycentrics.x;
   }
+#  ifdef __HAIR__
   else {
-    isect->u = __uint_as_float(optixGetAttribute_0());
+    const float u = __uint_as_float(optixGetAttribute_0());
+    isect->u = u;
     isect->v = __uint_as_float(optixGetAttribute_1());
+
+    // Filter out curve endcaps
+    if (u == 0.0f || u == 1.0f) {
+      return optixIgnoreIntersection();
+    }
   }
+#  endif
 
 #  ifdef __TRANSPARENT_SHADOWS__
   // Detect if this surface has a shader with transparent shadows
@@ -213,7 +222,6 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
 #  ifdef __TRANSPARENT_SHADOWS__
   }
 
-  // TODO(pmours): Do we need REQUIRE_UNIQUE_ANYHIT for this to work?
   optixSetPayload_2(optixGetPayload_2() + 1);  // num_hits++
 
   // Continue tracing
@@ -227,13 +235,25 @@ extern "C" __global__ void __anyhit__kernel_optix_visibility_test()
   uint visibility = optixGetPayload_4();
 #ifdef __VISIBILITY_FLAG__
   const uint prim = optixGetPrimitiveIndex();
-  if ((kernel_tex_fetch(__prim_visibility, prim) & visibility) == 0)
+  if ((kernel_tex_fetch(__prim_visibility, prim) & visibility) == 0) {
     return optixIgnoreIntersection();
+  }
+#endif
+
+#ifdef __HAIR__
+  if (!optixIsTriangleHit()) {
+    // Filter out curve endcaps
+    const float u = __uint_as_float(optixGetAttribute_0());
+    if (u == 0.0f || u == 1.0f) {
+      return optixIgnoreIntersection();
+    }
+  }
 #endif
 
   // Shadow ray early termination
-  if (visibility & PATH_RAY_SHADOW_OPAQUE)
+  if (visibility & PATH_RAY_SHADOW_OPAQUE) {
     return optixTerminateRay();
+  }
 }
 
 extern "C" __global__ void __closesthit__kernel_optix_hit()
@@ -250,17 +270,15 @@ extern "C" __global__ void __closesthit__kernel_optix_hit()
     optixSetPayload_2(__float_as_uint(barycentrics.x));
   }
   else {
-    optixSetPayload_1(optixGetAttribute_0());
+    optixSetPayload_1(optixGetAttribute_0());  // Same as 'optixGetCurveParameter()'
     optixSetPayload_2(optixGetAttribute_1());
   }
 }
 
 #ifdef __HAIR__
-extern "C" __global__ void __intersection__curve()
+ccl_device_inline void optix_intersection_curve(const uint prim, const uint type)
 {
-  const uint prim = optixGetPrimitiveIndex();
   const uint object = get_object_id<true>();
-  const uint type = kernel_tex_fetch(__prim_type, prim);
   const uint visibility = optixGetPayload_4();
 
   float3 P = optixGetObjectRayOrigin();
@@ -282,20 +300,28 @@ extern "C" __global__ void __intersection__curve()
   if (isect.t != FLT_MAX)
     isect.t *= len;
 
-  if (!(kernel_data.curve.curveflags & CURVE_KN_INTERPOLATE) ?
-          curve_intersect(NULL, &isect, P, dir, visibility, object, prim, time, type) :
-          cardinal_curve_intersect(NULL, &isect, P, dir, visibility, object, prim, time, type)) {
+  if (curve_intersect(NULL, &isect, P, dir, visibility, object, prim, time, type)) {
     optixReportIntersection(isect.t / len,
                             type & PRIMITIVE_ALL,
                             __float_as_int(isect.u),   // Attribute_0
                             __float_as_int(isect.v));  // Attribute_1
   }
 }
-#endif
 
-#ifdef __KERNEL_DEBUG__
-extern "C" __global__ void __exception__kernel_optix_exception()
+extern "C" __global__ void __intersection__curve_ribbon()
 {
-  printf("Unhandled exception occured: code %d!\n", optixGetExceptionCode());
+  const uint prim = optixGetPrimitiveIndex();
+  const uint type = kernel_tex_fetch(__prim_type, prim);
+
+  if (type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON)) {
+    optix_intersection_curve(prim, type);
+  }
+}
+
+extern "C" __global__ void __intersection__curve_all()
+{
+  const uint prim = optixGetPrimitiveIndex();
+  const uint type = kernel_tex_fetch(__prim_type, prim);
+  optix_intersection_curve(prim, type);
 }
 #endif

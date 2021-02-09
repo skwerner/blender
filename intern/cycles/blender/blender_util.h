@@ -40,6 +40,9 @@ float *BKE_image_get_float_pixels_for_frame(void *image, int frame, int tile);
 
 CCL_NAMESPACE_BEGIN
 
+typedef BL::ShaderNodeAttribute::attribute_type_enum BlenderAttributeType;
+BlenderAttributeType blender_attribute_name_split_type(ustring name, string *r_real_name);
+
 void python_thread_state_save(void **python_thread_state);
 void python_thread_state_restore(void **python_thread_state);
 
@@ -238,7 +241,7 @@ static inline string image_user_file_path(BL::ImageUser &iuser,
 {
   char filepath[1024];
   iuser.tile(0);
-  BKE_image_user_frame_calc(NULL, iuser.ptr.data, cfra);
+  BKE_image_user_frame_calc(ima.ptr.data, iuser.ptr.data, cfra);
   BKE_image_user_file_path(iuser.ptr.data, ima.ptr.data, filepath);
 
   string filepath_str = string(filepath);
@@ -248,9 +251,9 @@ static inline string image_user_file_path(BL::ImageUser &iuser,
   return filepath_str;
 }
 
-static inline int image_user_frame_number(BL::ImageUser &iuser, int cfra)
+static inline int image_user_frame_number(BL::ImageUser &iuser, BL::Image &ima, int cfra)
 {
-  BKE_image_user_frame_calc(NULL, iuser.ptr.data, cfra);
+  BKE_image_user_frame_calc(ima.ptr.data, iuser.ptr.data, cfra);
   return iuser.frame_current();
 }
 
@@ -535,11 +538,9 @@ static inline bool object_use_deform_motion(BL::Object &b_parent, BL::Object &b_
 
 static inline BL::FluidDomainSettings object_fluid_liquid_domain_find(BL::Object &b_ob)
 {
-  BL::Object::modifiers_iterator b_mod;
-
-  for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_FluidModifier)) {
-      BL::FluidModifier b_mmd(*b_mod);
+  for (BL::Modifier &b_mod : b_ob.modifiers) {
+    if (b_mod.is_a(&RNA_FluidModifier)) {
+      BL::FluidModifier b_mmd(b_mod);
 
       if (b_mmd.fluid_type() == BL::FluidModifier::fluid_type_DOMAIN &&
           b_mmd.domain_settings().domain_type() == BL::FluidDomainSettings::domain_type_LIQUID) {
@@ -553,11 +554,9 @@ static inline BL::FluidDomainSettings object_fluid_liquid_domain_find(BL::Object
 
 static inline BL::FluidDomainSettings object_fluid_gas_domain_find(BL::Object &b_ob)
 {
-  BL::Object::modifiers_iterator b_mod;
-
-  for (b_ob.modifiers.begin(b_mod); b_mod != b_ob.modifiers.end(); ++b_mod) {
-    if (b_mod->is_a(&RNA_FluidModifier)) {
-      BL::FluidModifier b_mmd(*b_mod);
+  for (BL::Modifier &b_mod : b_ob.modifiers) {
+    if (b_mod.is_a(&RNA_FluidModifier)) {
+      BL::FluidModifier b_mmd(b_mod);
 
       if (b_mmd.fluid_type() == BL::FluidModifier::fluid_type_DOMAIN &&
           b_mmd.domain_settings().domain_type() == BL::FluidDomainSettings::domain_type_GAS) {

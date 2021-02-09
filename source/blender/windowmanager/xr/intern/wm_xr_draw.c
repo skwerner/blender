@@ -55,7 +55,7 @@ static void wm_xr_draw_matrices_create(const wmXrDrawData *draw_data,
 
   copy_qt_qt(eye_pose.orientation_quat, draw_view->eye_pose.orientation_quat);
   copy_v3_v3(eye_pose.position, draw_view->eye_pose.position);
-  add_v3_v3(eye_pose.position, draw_data->eye_position_ofs);
+  sub_v3_v3(eye_pose.position, draw_data->eye_position_ofs);
   if ((session_settings->flag & XR_SESSION_USE_POSITION_TRACKING) == 0) {
     sub_v3_v3(eye_pose.position, draw_view->local_pose.position);
   }
@@ -92,7 +92,8 @@ static void wm_xr_draw_viewport_buffers_to_active_framebuffer(
   if (is_upside_down) {
     SWAP(int, rect.ymin, rect.ymax);
   }
-  GPU_viewport_draw_to_screen_ex(surface_data->viewport, 0, &rect, draw_view->expects_srgb_buffer);
+  GPU_viewport_draw_to_screen_ex(
+      surface_data->viewport, 0, &rect, draw_view->expects_srgb_buffer, true);
 }
 
 /**
@@ -126,9 +127,9 @@ void wm_xr_draw_view(const GHOST_XrDrawViewInfo *draw_view, void *customdata)
   /* In case a framebuffer is still bound from drawing the last eye. */
   GPU_framebuffer_restore();
   /* Some systems have drawing glitches without this. */
-  GPU_clear(GPU_DEPTH_BIT);
+  GPU_clear_depth(1.0f);
 
-  /* Draws the view into the surface_data->viewport's framebuffers */
+  /* Draws the view into the surface_data->viewport's frame-buffers. */
   ED_view3d_draw_offscreen_simple(draw_data->depsgraph,
                                   draw_data->scene,
                                   &settings->shading,
@@ -141,7 +142,6 @@ void wm_xr_draw_view(const GHOST_XrDrawViewInfo *draw_view, void *customdata)
                                   settings->clip_start,
                                   settings->clip_end,
                                   false,
-                                  true,
                                   true,
                                   NULL,
                                   false,

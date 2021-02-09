@@ -70,6 +70,11 @@ def _configure_argument_parser():
     parser.add_argument("--cycles-print-stats",
                         help="Print rendering statistics to stderr",
                         action='store_true')
+    parser.add_argument("--cycles-device",
+                        help="Set the device to use for Cycles, overriding user preferences and the scene setting."
+                             "Valid options are 'CPU', 'CUDA', 'OPTIX' or 'OPENCL'."
+                             "Additionally, you can append '+CPU' to any GPU type for hybrid rendering.",
+                        default=None)
     return parser
 
 
@@ -101,6 +106,10 @@ def _parse_command_line():
     if args.cycles_print_stats:
         import _cycles
         _cycles.enable_print_stats()
+
+    if args.cycles_device:
+        import _cycles
+        _cycles.set_device_override(args.cycles_device)
 
 
 def init():
@@ -150,8 +159,7 @@ def create(engine, data, region=None, v3d=None, rv3d=None, preview_osl=False):
         screen = screen or rv3d.id_data.as_pointer()
         rv3d = rv3d.as_pointer()
 
-    engine.session = _cycles.create(
-            engine.as_pointer(), prefs, data, screen, region, v3d, rv3d, preview_osl)
+    engine.session = _cycles.create(engine.as_pointer(), prefs, data, screen, region, v3d, rv3d, preview_osl)
 
 
 def free(engine):
@@ -179,7 +187,8 @@ def reset(engine, data, depsgraph):
     import _cycles
     import bpy
 
-    if bpy.app.debug_value == 256:
+    prefs = bpy.context.preferences
+    if prefs.experimental.use_cycles_debug and prefs.view.show_developer_ui:
         _cycles.debug_flags_update(depsgraph.scene.as_pointer())
     else:
         _cycles.debug_flags_reset()
@@ -223,7 +232,8 @@ def system_info():
     import _cycles
     return _cycles.system_info()
 
-def list_render_passes(srl):
+
+def list_render_passes(scene, srl):
     # Builtin Blender passes.
     yield ("Combined", "RGBA", 'COLOR')
 
@@ -260,32 +270,35 @@ def list_render_passes(srl):
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
     # Cryptomatte passes.
-    crypto_depth = (crl.pass_crypto_depth + 1) // 2
-    if crl.use_pass_crypto_object:
+    crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2
+    if srl.use_pass_cryptomatte_object:
         for i in range(0, crypto_depth):
             yield ("CryptoObject" + '{:02d}'.format(i), "RGBA", 'COLOR')
-    if crl.use_pass_crypto_material:
+    if srl.use_pass_cryptomatte_material:
         for i in range(0, crypto_depth):
             yield ("CryptoMaterial" + '{:02d}'.format(i), "RGBA", 'COLOR')
-    if srl.cycles.use_pass_crypto_asset:
+    if srl.use_pass_cryptomatte_asset:
         for i in range(0, crypto_depth):
             yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
     # Denoising passes.
-    if crl.use_denoising or crl.denoising_store_passes:
+    if (scene.cycles.use_denoising and crl.use_denoising) or crl.denoising_store_passes:
         yield ("Noisy Image", "RGBA", 'COLOR')
         if crl.denoising_store_passes:
             yield ("Denoising Normal",          "XYZ", 'VECTOR')
             yield ("Denoising Albedo",          "RGB", 'COLOR')
             yield ("Denoising Depth",           "Z",   'VALUE')
-            yield ("Denoising Shadowing",       "X",   'VALUE')
-            yield ("Denoising Variance",        "RGB", 'COLOR')
-            yield ("Denoising Intensity",       "X",   'VALUE')
-            clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
-                             "denoising_glossy_direct", "denoising_glossy_indirect",
-                             "denoising_transmission_direct", "denoising_transmission_indirect")
-            if any(getattr(crl, option) for option in clean_options):
-                yield ("Denoising Clean", "RGB", 'COLOR')
+
+            if scene.cycles.denoiser == 'NLM':
+                yield ("Denoising Shadowing",       "X",   'VALUE')
+                yield ("Denoising Variance",        "RGB", 'COLOR')
+                yield ("Denoising Intensity",       "X",   'VALUE')
+
+                clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
+                                 "denoising_glossy_direct", "denoising_glossy_indirect",
+                                 "denoising_transmission_direct", "denoising_transmission_indirect")
+                if any(getattr(crl, option) for option in clean_options):
+                    yield ("Denoising Clean", "RGB", 'COLOR')
 
     # Custom AOV passes.
     for aov in crl.aovs:
@@ -294,18 +307,20 @@ def list_render_passes(srl):
         else:
             yield (aov.name, "RGBA", 'COLOR')
 
+
 def register_passes(engine, scene, view_layer):
     # Detect duplicate render pass names, first one wins.
     listed = set()
-    for name, channelids, channeltype in list_render_passes(view_layer):
+    for name, channelids, channeltype in list_render_passes(scene, view_layer):
         if name not in listed:
             engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)
             listed.add(name)
 
-def detect_conflicting_passes(view_layer):
+
+def detect_conflicting_passes(scene, view_layer):
     # Detect conflicting render pass names for UI.
     counter = {}
-    for name, _, _ in list_render_passes(view_layer):
+    for name, _, _ in list_render_passes(scene, view_layer):
         counter[name] = counter.get(name, 0) + 1
 
     for aov in view_layer.cycles.aovs:

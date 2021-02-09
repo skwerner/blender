@@ -187,28 +187,6 @@ void ED_object_assign_active_image(Main *bmain, Object *ob, int mat_nr, Image *i
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Space Conversion
- * \{ */
-
-void uvedit_pixel_to_float(SpaceImage *sima, float pixeldist, float r_dist[2])
-{
-  int width, height;
-
-  if (sima) {
-    ED_space_image_get_size(sima, &width, &height);
-  }
-  else {
-    width = IMG_SIZE_FALLBACK;
-    height = IMG_SIZE_FALLBACK;
-  }
-
-  r_dist[0] = pixeldist / width;
-  r_dist[1] = pixeldist / height;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name Live Unwrap Utilities
  * \{ */
 
@@ -226,22 +204,6 @@ void uvedit_live_unwrap_update(SpaceImage *sima, Scene *scene, Object *obedit)
 /* -------------------------------------------------------------------- */
 /** \name Geometric Utilities
  * \{ */
-
-void uv_poly_center(BMFace *f, float r_cent[2], const int cd_loop_uv_offset)
-{
-  BMLoop *l;
-  MLoopUV *luv;
-  BMIter liter;
-
-  zero_v2(r_cent);
-
-  BM_ITER_ELEM (l, &liter, f, BM_LOOPS_OF_FACE) {
-    luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
-    add_v2_v2(r_cent, luv->uv);
-  }
-
-  mul_v2_fl(r_cent, 1.0f / (float)f->len);
-}
 
 void uv_poly_copy_aspect(float uv_orig[][2], float uv[][2], float aspx, float aspy, int len)
 {
@@ -998,9 +960,7 @@ static int uv_remove_doubles_exec(bContext *C, wmOperator *op)
   if (RNA_boolean_get(op->ptr, "use_unselected")) {
     return uv_remove_doubles_to_unselected(C, op);
   }
-  else {
-    return uv_remove_doubles_to_selected(C, op);
-  }
+  return uv_remove_doubles_to_selected(C, op);
 }
 
 static void UV_OT_remove_doubles(wmOperatorType *ot)
@@ -1491,7 +1451,7 @@ static int uv_hide_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   const ToolSettings *ts = scene->toolsettings;
   const bool swap = RNA_boolean_get(op->ptr, "unselected");
-  const int use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
+  const bool use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
 
   uint objects_len = 0;
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
@@ -1623,8 +1583,8 @@ static int uv_reveal_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   const ToolSettings *ts = scene->toolsettings;
 
-  const int use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
-  const int stickymode = sima ? (sima->sticky != SI_STICKY_DISABLE) : 1;
+  const bool use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
+  const bool stickymode = sima ? (sima->sticky != SI_STICKY_DISABLE) : 1;
   const bool select = RNA_boolean_get(op->ptr, "select");
 
   uint objects_len = 0;
@@ -1830,7 +1790,7 @@ static void UV_OT_cursor_set(wmOperatorType *ot)
                        -FLT_MAX,
                        FLT_MAX,
                        "Location",
-                       "Cursor location in normalized (0.0-1.0) coordinates",
+                       "Cursor location in normalized (0.0 to 1.0) coordinates",
                        -10.0f,
                        10.0f);
 }
@@ -1843,11 +1803,11 @@ static void UV_OT_cursor_set(wmOperatorType *ot)
 
 static int uv_seams_from_islands_exec(bContext *C, wmOperator *op)
 {
+  Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
-  int ret = OPERATOR_CANCELLED;
-  const float limit[2] = {STD_UV_CONNECT_LIMIT, STD_UV_CONNECT_LIMIT};
   const bool mark_seams = RNA_boolean_get(op->ptr, "mark_seams");
   const bool mark_sharp = RNA_boolean_get(op->ptr, "mark_sharp");
+  bool changed_multi = false;
 
   uint objects_len = 0;
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
@@ -1858,117 +1818,69 @@ static int uv_seams_from_islands_exec(bContext *C, wmOperator *op)
     Mesh *me = (Mesh *)ob->data;
     BMEditMesh *em = me->edit_mesh;
     BMesh *bm = em->bm;
-
-    UvVertMap *vmap;
-    BMEdge *editedge;
     BMIter iter;
 
     if (!EDBM_uv_check(em)) {
       continue;
     }
-    ret = OPERATOR_FINISHED;
 
-    /* This code sets editvert->tmp.l to the index. This will be useful later on. */
-    BM_mesh_elem_table_ensure(bm, BM_FACE);
-    vmap = BM_uv_vert_map_create(bm, limit, false, false);
+    const int cd_loop_uv_offset = CustomData_get_offset(&bm->ldata, CD_MLOOPUV);
+    bool changed = false;
 
-    BM_ITER_MESH (editedge, &iter, bm, BM_EDGES_OF_MESH) {
-      /* flags to determine if we uv is separated from first editface match */
-      char separated1 = 0, separated2;
-      /* set to denote edge must be flagged as seam */
-      char faces_separated = 0;
-      /* flag to keep track if uv1 is disconnected from first editface match */
-      char v1coincident = 1;
-      /* For use with v1coincident. v1coincident will change only if we've had commonFaces */
-      int commonFaces = 0;
-
-      BMFace *efa1, *efa2;
-
-      UvMapVert *mv1, *mvinit1, *mv2, *mvinit2, *mviter;
-      /* mv2cache stores the first of the list of coincident uv's for later comparison
-       * mv2sep holds the last separator and is copied to mv2cache
-       * when a hit is first found */
-      UvMapVert *mv2cache = NULL, *mv2sep = NULL;
-
-      mvinit1 = vmap->vert[BM_elem_index_get(editedge->v1)];
-      if (mark_seams) {
-        BM_elem_flag_disable(editedge, BM_ELEM_SEAM);
+    BMFace *f;
+    BM_ITER_MESH (f, &iter, bm, BM_FACES_OF_MESH) {
+      if (!uvedit_face_visible_test(scene, f)) {
+        continue;
       }
 
-      for (mv1 = mvinit1; mv1 && !faces_separated; mv1 = mv1->next) {
-        if (mv1->separate && commonFaces) {
-          v1coincident = 0;
+      BMLoop *l_iter;
+      BMLoop *l_first;
+
+      l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+      do {
+        if (l_iter == l_iter->radial_next) {
+          continue;
+        }
+        if (!uvedit_edge_select_test(scene, l_iter, cd_loop_uv_offset)) {
+          continue;
         }
 
-        separated2 = 0;
-        efa1 = BM_face_at_index(bm, mv1->poly_index);
-        mvinit2 = vmap->vert[BM_elem_index_get(editedge->v2)];
-
-        for (mv2 = mvinit2; mv2; mv2 = mv2->next) {
-          if (mv2->separate) {
-            mv2sep = mv2;
+        bool mark = false;
+        BMLoop *l_other = l_iter->radial_next;
+        do {
+          if (!BM_loop_uv_share_edge_check(l_iter, l_other, cd_loop_uv_offset)) {
+            mark = true;
+            break;
           }
+        } while ((l_other = l_other->radial_next) != l_iter);
 
-          efa2 = BM_face_at_index(bm, mv2->poly_index);
-          if (efa1 == efa2) {
-            /* if v1 is not coincident no point in comparing */
-            if (v1coincident) {
-              /* have we found previously anything? */
-              if (mv2cache) {
-                /* flag seam unless proved to be coincident with previous hit */
-                separated2 = 1;
-                for (mviter = mv2cache; mviter; mviter = mviter->next) {
-                  if (mviter->separate && mviter != mv2cache) {
-                    break;
-                  }
-                  /* coincident with previous hit, do not flag seam */
-                  if (mviter == mv2) {
-                    separated2 = 0;
-                  }
-                }
-              }
-              /* First hit case, store the hit in the cache */
-              else {
-                mv2cache = mv2sep;
-                commonFaces = 1;
-              }
-            }
-            else {
-              separated1 = 1;
-            }
-
-            if (separated1 || separated2) {
-              faces_separated = 1;
-              break;
-            }
+        if (mark) {
+          if (mark_seams) {
+            BM_elem_flag_enable(l_iter->e, BM_ELEM_SEAM);
           }
+          if (mark_sharp) {
+            BM_elem_flag_disable(l_iter->e, BM_ELEM_SMOOTH);
+          }
+          changed = true;
         }
-      }
-
-      if (faces_separated) {
-        if (mark_seams) {
-          BM_elem_flag_enable(editedge, BM_ELEM_SEAM);
-        }
-        if (mark_sharp) {
-          BM_elem_flag_disable(editedge, BM_ELEM_SMOOTH);
-        }
-      }
+      } while ((l_iter = l_iter->next) != l_first);
     }
 
-    BM_uv_vert_map_free(vmap);
-
-    DEG_id_tag_update(&me->id, 0);
-    WM_event_add_notifier(C, NC_GEOM | ND_DATA, me);
+    if (changed) {
+      changed_multi = true;
+      DEG_id_tag_update(&me->id, 0);
+      WM_event_add_notifier(C, NC_GEOM | ND_DATA, me);
+    }
   }
   MEM_freeN(objects);
 
-  return ret;
+  return changed_multi ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
 static void UV_OT_seams_from_islands(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Seams From Islands";
+  ot->name = "Seams from Islands";
   ot->description = "Set mesh seams according to island setup in the UV editor";
   ot->idname = "UV_OT_seams_from_islands";
 
@@ -2107,6 +2019,7 @@ void ED_operatortypes_uvedit(void)
   WM_operatortype_append(UV_OT_select_all);
   WM_operatortype_append(UV_OT_select);
   WM_operatortype_append(UV_OT_select_loop);
+  WM_operatortype_append(UV_OT_select_edge_ring);
   WM_operatortype_append(UV_OT_select_linked);
   WM_operatortype_append(UV_OT_select_linked_pick);
   WM_operatortype_append(UV_OT_select_split);
@@ -2123,7 +2036,10 @@ void ED_operatortypes_uvedit(void)
 
   WM_operatortype_append(UV_OT_align);
 
+  WM_operatortype_append(UV_OT_rip);
   WM_operatortype_append(UV_OT_stitch);
+  WM_operatortype_append(UV_OT_shortest_path_pick);
+  WM_operatortype_append(UV_OT_shortest_path_select);
 
   WM_operatortype_append(UV_OT_seams_from_islands);
   WM_operatortype_append(UV_OT_mark_seam);
@@ -2140,11 +2056,27 @@ void ED_operatortypes_uvedit(void)
   WM_operatortype_append(UV_OT_reset);
   WM_operatortype_append(UV_OT_sphere_project);
   WM_operatortype_append(UV_OT_unwrap);
+  WM_operatortype_append(UV_OT_smart_project);
 
   WM_operatortype_append(UV_OT_reveal);
   WM_operatortype_append(UV_OT_hide);
 
   WM_operatortype_append(UV_OT_cursor_set);
+}
+
+void ED_operatormacros_uvedit(void)
+{
+  wmOperatorType *ot;
+  wmOperatorTypeMacro *otmacro;
+
+  ot = WM_operatortype_append_macro("UV_OT_rip_move",
+                                    "UV Rip Move",
+                                    "Unstitch UV's and move the result",
+                                    OPTYPE_UNDO | OPTYPE_REGISTER);
+  WM_operatortype_macro_define(ot, "UV_OT_rip");
+  otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
+  RNA_boolean_set(otmacro->ptr, "mirror", false);
 }
 
 void ED_keymap_uvedit(wmKeyConfig *keyconf)

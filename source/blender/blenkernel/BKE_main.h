@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_MAIN_H__
-#define __BKE_MAIN_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -61,22 +60,52 @@ typedef struct BlendThumbnail {
 } BlendThumbnail;
 
 /* Structs caching relations between data-blocks in a given Main. */
+typedef struct MainIDRelationsEntryItem {
+  struct MainIDRelationsEntryItem *next;
+
+  union {
+    /* For `from_ids` list, a user of the hashed ID. */
+    struct ID *from;
+    /* For `to_ids` list, an ID used by the hashed ID. */
+    struct ID **to;
+  } id_pointer;
+  /* Session uuid of the `id_pointer`. */
+  uint session_uuid;
+
+  int usage_flag; /* Using IDWALK_ enums, defined in BKE_lib_query.h */
+} MainIDRelationsEntryItem;
+
 typedef struct MainIDRelationsEntry {
-  struct MainIDRelationsEntry *next;
-  /* WARNING! for user_to_used,
-   * that pointer is really an ID** one, but for used_to_user, it’s only an ID* one! */
-  struct ID **id_pointer;
-  int usage_flag; /* Using IDWALK_ enums, in BKE_lib_query.h */
+  /* Linked list of IDs using that ID. */
+  struct MainIDRelationsEntryItem *from_ids;
+  /* Linked list of IDs used by that ID. */
+  struct MainIDRelationsEntryItem *to_ids;
+
+  /* Session uuid of the ID matching that entry. */
+  uint session_uuid;
+
+  /* Runtime tags, users should ensure those are reset after usage. */
+  uint tags;
 } MainIDRelationsEntry;
 
+/* MainIDRelationsEntry.tags */
+typedef enum MainIDRelationsEntryTags {
+  /* Generic tag marking the entry as to be processed. */
+  MAINIDRELATIONS_ENTRY_TAGS_DOIT = 1 << 0,
+  /* Generic tag marking the entry as processed. */
+  MAINIDRELATIONS_ENTRY_TAGS_PROCESSED = 1 << 1,
+} MainIDRelationsEntryTags;
+
 typedef struct MainIDRelations {
-  struct GHash *id_user_to_used;
-  struct GHash *id_used_to_user;
+  /* Mapping from an ID pointer to all of its parents (IDs using it) and children (IDs it uses).
+   * Values are `MainIDRelationsEntry` pointers. */
+  struct GHash *relations_from_pointers;
+  /* Note: we could add more mappings when needed (e.g. from session uuid?). */
 
   short flag;
 
   /* Private... */
-  struct BLI_mempool *entry_pool;
+  struct BLI_mempool *entry_items_pool;
 } MainIDRelations;
 
 enum {
@@ -95,12 +124,12 @@ typedef struct Main {
   /** All current ID's exist in the last memfile undo step. */
   char is_memfile_undo_written;
   /**
-   * An ID needs it's data to be flushed back.
+   * An ID needs its data to be flushed back.
    * use "needs_flush_to_id" in edit data to flag data which needs updating.
    */
   char is_memfile_undo_flush_needed;
   /**
-   * Indicates that next memfile undo step should not allow to re-use old bmain when re-read, but
+   * Indicates that next memfile undo step should not allow reusing old bmain when re-read, but
    * instead do a complete full re-read/update from stored memfile.
    */
   char use_memfile_full_barrier;
@@ -173,6 +202,9 @@ void BKE_main_unlock(struct Main *bmain);
 
 void BKE_main_relations_create(struct Main *bmain, const short flag);
 void BKE_main_relations_free(struct Main *bmain);
+void BKE_main_relations_tag_set(struct Main *bmain,
+                                const MainIDRelationsEntryTags tag,
+                                const bool value);
 
 struct GSet *BKE_main_gset_create(struct Main *bmain, struct GSet *gset);
 
@@ -225,7 +257,7 @@ void BKE_main_thumbnail_create(struct Main *bmain);
 const char *BKE_main_blendfile_path(const struct Main *bmain) ATTR_NONNULL();
 const char *BKE_main_blendfile_path_from_global(void);
 
-struct ListBase *which_libbase(struct Main *mainlib, short type);
+struct ListBase *which_libbase(struct Main *bmain, short type);
 
 #define MAX_LIBARRAY 41
 int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
@@ -249,5 +281,3 @@ int set_listbasepointers(struct Main *main, struct ListBase *lb[MAX_LIBARRAY]);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_MAIN_H__ */

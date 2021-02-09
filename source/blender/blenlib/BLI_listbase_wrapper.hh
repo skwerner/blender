@@ -14,27 +14,28 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_LISTBASE_WRAPPER_HH__
-#define __BLI_LISTBASE_WRAPPER_HH__
+#pragma once
 
 /** \file
  * \ingroup bli
  *
- * The purpose of this wrapper is just to make it more comfortable to iterate of ListBase
- * instances, that are used in many places in Blender.
+ * `blender::ListBaseWrapper` is a typed wrapper for the #ListBase struct. That makes it safer and
+ * more convenient to use in C++ in some cases. However, if you find yourself iterating over a
+ * linked list a lot, consider to convert it into a vector for further processing. This improves
+ * performance and debug-ability.
  */
 
 #include "BLI_listbase.h"
 #include "DNA_listBase.h"
 
-namespace BLI {
+namespace blender {
 
 template<typename T> class ListBaseWrapper {
  private:
-  ListBase *m_listbase;
+  ListBase *listbase_;
 
  public:
-  ListBaseWrapper(ListBase *listbase) : m_listbase(listbase)
+  ListBaseWrapper(ListBase *listbase) : listbase_(listbase)
   {
     BLI_assert(listbase);
   }
@@ -45,17 +46,18 @@ template<typename T> class ListBaseWrapper {
 
   class Iterator {
    private:
-    ListBase *m_listbase;
-    T *m_current;
+    ListBase *listbase_;
+    T *current_;
 
    public:
-    Iterator(ListBase *listbase, T *current) : m_listbase(listbase), m_current(current)
+    Iterator(ListBase *listbase, T *current) : listbase_(listbase), current_(current)
     {
     }
 
     Iterator &operator++()
     {
-      m_current = m_current->next;
+      /* Some types store next/prev using `void *`, so cast is necessary. */
+      current_ = static_cast<T *>(current_->next);
       return *this;
     }
 
@@ -68,35 +70,35 @@ template<typename T> class ListBaseWrapper {
 
     bool operator!=(const Iterator &iterator) const
     {
-      return m_current != iterator.m_current;
+      return current_ != iterator.current_;
     }
 
     T *operator*() const
     {
-      return m_current;
+      return current_;
     }
   };
 
   Iterator begin() const
   {
-    return Iterator(m_listbase, (T *)m_listbase->first);
+    return Iterator(listbase_, static_cast<T *>(listbase_->first));
   }
 
   Iterator end() const
   {
-    return Iterator(m_listbase, nullptr);
+    return Iterator(listbase_, nullptr);
   }
 
   T get(uint index) const
   {
-    void *ptr = BLI_findlink(m_listbase, index);
+    void *ptr = BLI_findlink(listbase_, index);
     BLI_assert(ptr);
-    return (T *)ptr;
+    return static_cast<T *>(ptr);
   }
 
-  uint index_of(const T *value) const
+  int64_t index_of(const T *value) const
   {
-    uint index = 0;
+    int64_t index = 0;
     for (T *ptr : *this) {
       if (ptr == value) {
         return index;
@@ -104,10 +106,8 @@ template<typename T> class ListBaseWrapper {
       index++;
     }
     BLI_assert(false);
-    return 0;
+    return -1;
   }
 };
 
-} /* namespace BLI */
-
-#endif /* __BLI_LISTBASE_WRAPPER_HH__ */
+} /* namespace blender */

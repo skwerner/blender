@@ -23,7 +23,7 @@
 
 #include "intern/node/deg_node.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "BLI_utildefines.h"
 
@@ -36,7 +36,7 @@
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
 
-namespace DEG {
+namespace blender::deg {
 
 const char *nodeClassAsString(NodeClass node_class)
 {
@@ -298,10 +298,10 @@ Node::~Node()
 {
   /* Free links. */
   /* NOTE: We only free incoming links. This is to avoid double-free of links
-   * when we're trying to free same link from both it's sides. We don't have
+   * when we're trying to free same link from both its sides. We don't have
    * dangling links so this is not a problem from memory leaks point of view. */
   for (Relation *rel : inlinks) {
-    OBJECT_GUARDED_DELETE(rel, Relation);
+    delete rel;
   }
 }
 
@@ -316,12 +316,11 @@ NodeClass Node::get_class() const
   if (type == NodeType::OPERATION) {
     return NodeClass::OPERATION;
   }
-  else if (type < NodeType::PARAMETERS) {
+  if (type < NodeType::PARAMETERS) {
     return NodeClass::GENERIC;
   }
-  else {
-    return NodeClass::COMPONENT;
-  }
+
+  return NodeClass::COMPONENT;
 }
 
 /*******************************************************************************
@@ -340,4 +339,4 @@ void deg_register_base_depsnodes()
   register_node_typeinfo(&DNTI_ID_REF);
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_THREADS_H__
-#define __BLI_THREADS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -28,10 +27,6 @@
 
 #include "BLI_sys_types.h"
 
-#ifdef __APPLE__
-#  include <libkern/OSAtomic.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -40,7 +35,6 @@ extern "C" {
 #define BLENDER_MAX_THREADS 1024
 
 struct ListBase;
-struct TaskScheduler;
 
 /* Threading API */
 
@@ -64,21 +58,22 @@ int BLI_system_thread_count(void); /* gets the number of threads the system can 
 void BLI_system_num_threads_override_set(int num);
 int BLI_system_num_threads_override_get(void);
 
-/* Global Mutex Locks
+/**
+ * Global Mutex Locks
  *
- * One custom lock available now. can be extended. */
-
-#define LOCK_IMAGE 0
-#define LOCK_DRAW_IMAGE 1
-#define LOCK_VIEWER 2
-#define LOCK_CUSTOM1 3
-#define LOCK_RCACHE 4
-#define LOCK_OPENGL 5
-#define LOCK_NODES 6
-#define LOCK_MOVIECLIP 7
-#define LOCK_COLORMANAGE 8
-#define LOCK_FFTW 9
-#define LOCK_VIEW3D 10
+ * One custom lock available now. can be extended.
+ */
+enum {
+  LOCK_IMAGE = 0,
+  LOCK_DRAW_IMAGE,
+  LOCK_VIEWER,
+  LOCK_CUSTOM1,
+  LOCK_NODES,
+  LOCK_MOVIECLIP,
+  LOCK_COLORMANAGE,
+  LOCK_FFTW,
+  LOCK_VIEW3D,
+};
 
 void BLI_thread_lock(int type);
 void BLI_thread_unlock(int type);
@@ -100,10 +95,18 @@ void BLI_mutex_unlock(ThreadMutex *mutex);
 
 /* Spin Lock */
 
-#if defined(__APPLE__)
-typedef OSSpinLock SpinLock;
+/* By default we use TBB for spin lock on all platforms. When building without
+ * TBB fall-back to spin lock implementation which is native to the platform.
+ *
+ * On macOS we use mutex lock instead of spin since the spin lock has been
+ * deprecated in SDK 10.12 and is discouraged from use. */
+
+#ifdef WITH_TBB
+typedef uint32_t SpinLock;
+#elif defined(__APPLE__)
+typedef ThreadMutex SpinLock;
 #elif defined(_MSC_VER)
-typedef volatile int SpinLock;
+typedef volatile unsigned int SpinLock;
 #else
 typedef pthread_spinlock_t SpinLock;
 #endif
@@ -200,6 +203,4 @@ void BLI_thread_put_thread_on_fast_node(void);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

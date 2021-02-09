@@ -19,8 +19,7 @@
  * Declaration of GHOST_WindowNULL class.
  */
 
-#ifndef __GHOST_WINDOWNULL_H__
-#define __GHOST_WINDOWNULL_H__
+#pragma once
 
 #include "GHOST_Window.h"
 
@@ -169,7 +168,7 @@ class GHOST_WindowNULL : public GHOST_Window {
   GHOST_SystemNULL *m_system;
 
   /**
-   * \param type  The type of rendering context create.
+   * \param type: The type of rendering context create.
    * \return Indication of success.
    */
   GHOST_Context *newDrawingContext(GHOST_TDrawingContextType type)
@@ -177,5 +176,3 @@ class GHOST_WindowNULL : public GHOST_Window {
     return NULL;
   }
 };
-
-#endif  // __GHOST_WINDOWNULL_H__

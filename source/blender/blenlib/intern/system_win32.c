@@ -244,7 +244,7 @@ static void bli_windows_system_backtrace_modules(FILE *fp)
   me32.dwSize = sizeof(MODULEENTRY32);
 
   if (!Module32First(hModuleSnap, &me32)) {
-    CloseHandle(hModuleSnap);  // Must clean up the snapshot object!
+    CloseHandle(hModuleSnap); /* Must clean up the snapshot object! */
     fprintf(fp, " Error getting module list.\n");
     return;
   }
@@ -386,7 +386,6 @@ void BLI_system_backtrace(FILE *fp)
     bli_windows_system_backtrace_threads(fp);
   }
   bli_windows_system_backtrace_modules(fp);
-  fputc(0, fp); /* Give our selves a nice zero terminator for later on */
 }
 
 void BLI_windows_handle_exception(EXCEPTION_POINTERS *exception)

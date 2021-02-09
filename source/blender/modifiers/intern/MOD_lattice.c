@@ -25,25 +25,41 @@
 
 #include "BLI_utildefines.h"
 
-#include "DNA_object_types.h"
+#include "BLT_translation.h"
 
+#include "DNA_defaults.h"
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_lattice.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void initData(ModifierData *md)
 {
   LatticeModifierData *lmd = (LatticeModifierData *)md;
-  lmd->strength = 1.0f;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(lmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(lmd, DNA_struct_default_get(LatticeModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -72,11 +88,11 @@ static bool isDisabled(const struct Scene *UNUSED(scene),
   return !lmd->object || lmd->object->type != OB_LATTICE;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   LatticeModifierData *lmd = (LatticeModifierData *)md;
 
-  walk(userData, ob, &lmd->object, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&lmd->object, IDWALK_CB_NOP);
 }
 
 static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphContext *ctx)
@@ -101,14 +117,14 @@ static void deformVerts(ModifierData *md,
 
   MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
 
-  lattice_deform_verts(lmd->object,
-                       ctx->object,
-                       mesh_src,
-                       vertexCos,
-                       numVerts,
-                       lmd->flag,
-                       lmd->name,
-                       lmd->strength);
+  BKE_lattice_deform_coords_with_mesh(lmd->object,
+                                      ctx->object,
+                                      vertexCos,
+                                      numVerts,
+                                      lmd->flag,
+                                      lmd->name,
+                                      lmd->strength,
+                                      mesh_src);
 
   if (!ELEM(mesh_src, NULL, mesh)) {
     BKE_id_free(NULL, mesh_src);
@@ -122,28 +138,51 @@ static void deformVertsEM(ModifierData *md,
                           float (*vertexCos)[3],
                           int numVerts)
 {
-  struct Mesh *mesh_src = MOD_deform_mesh_eval_get(
-      ctx->object, em, mesh, NULL, numVerts, false, false);
-
-  /* TODO(Campbell): use edit-mode data only (remove this line). */
-  if (mesh_src != NULL) {
-    BKE_mesh_wrapper_ensure_mdata(mesh_src);
+  if (mesh != NULL) {
+    deformVerts(md, ctx, mesh, vertexCos, numVerts);
+    return;
   }
 
-  deformVerts(md, ctx, mesh_src, vertexCos, numVerts);
+  LatticeModifierData *lmd = (LatticeModifierData *)md;
 
-  if (!ELEM(mesh_src, NULL, mesh)) {
-    BKE_id_free(NULL, mesh_src);
-  }
+  MOD_previous_vcos_store(md, vertexCos); /* if next modifier needs original vertices */
+
+  BKE_lattice_deform_coords_with_editmesh(
+      lmd->object, ctx->object, vertexCos, numVerts, lmd->flag, lmd->name, lmd->strength, em);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "object", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  uiItemR(layout, ptr, "strength", UI_ITEM_R_SLIDER, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_Lattice, panel_draw);
 }
 
 ModifierTypeInfo modifierType_Lattice = {
     /* name */ "Lattice",
     /* structName */ "LatticeModifierData",
     /* structSize */ sizeof(LatticeModifierData),
+    /* srna */ &RNA_LatticeModifier,
     /* type */ eModifierTypeType_OnlyDeform,
     /* flags */ eModifierTypeFlag_AcceptsCVs | eModifierTypeFlag_AcceptsVertexCosOnly |
         eModifierTypeFlag_SupportsEditmode,
+    /* icon */ ICON_MOD_LATTICE,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -153,7 +192,7 @@ ModifierTypeInfo modifierType_Lattice = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ NULL,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,
@@ -163,8 +202,10 @@ ModifierTypeInfo modifierType_Lattice = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

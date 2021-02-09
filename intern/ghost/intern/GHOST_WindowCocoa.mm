@@ -404,23 +404,23 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
   [m_window setAcceptsMouseMovedEvents:YES];
 
   NSView *contentview = [m_window contentView];
-  [contentview setAcceptsTouchEvents:YES];
+  [contentview setAllowedTouchTypes:(NSTouchTypeMaskDirect | NSTouchTypeMaskIndirect)];
 
   [m_window registerForDraggedTypes:[NSArray arrayWithObjects:NSFilenamesPboardType,
                                                               NSStringPboardType,
                                                               NSTIFFPboardType,
                                                               nil]];
 
-  if (state != GHOST_kWindowStateFullScreen) {
+  if (is_dialog && parentWindow) {
+    [parentWindow->getCocoaWindow() addChildWindow:m_window ordered:NSWindowAbove];
+    [m_window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenAuxiliary];
+  }
+  else {
     [m_window setCollectionBehavior:NSWindowCollectionBehaviorFullScreenPrimary];
   }
 
   if (state == GHOST_kWindowStateFullScreen)
     setState(GHOST_kWindowStateFullScreen);
-
-  if (is_dialog && parentWindow) {
-    [parentWindow->getCocoaWindow() addChildWindow:m_window ordered:NSWindowAbove];
-  }
 
   setNativePixelSize();
 
@@ -869,28 +869,26 @@ GHOST_TSuccess GHOST_WindowCocoa::setProgressBar(float progress)
     NSImage *dockIcon = [[NSImage alloc] initWithSize:NSMakeSize(128, 128)];
 
     [dockIcon lockFocus];
-    NSRect progressBox = {{4, 4}, {120, 16}};
 
     [[NSImage imageNamed:@"NSApplicationIcon"] drawAtPoint:NSZeroPoint
                                                   fromRect:NSZeroRect
                                                  operation:NSCompositingOperationSourceOver
                                                   fraction:1.0];
 
-    // Track & Outline
-    [[NSColor blackColor] setFill];
-    NSRectFill(progressBox);
+    NSRect progressRect = {{8, 8}, {112, 14}};
+    NSBezierPath *progressPath;
 
-    [[NSColor whiteColor] set];
-    NSFrameRect(progressBox);
+    /* Draw white track. */
+    [[[NSColor whiteColor] colorWithAlphaComponent:0.6] setFill];
+    progressPath = [NSBezierPath bezierPathWithRoundedRect:progressRect xRadius:7 yRadius:7];
+    [progressPath fill];
 
-    // Progress fill
-    progressBox = NSInsetRect(progressBox, 1, 1);
-
-    progressBox.size.width = progressBox.size.width * progress;
-    NSGradient *gradient = [[NSGradient alloc] initWithStartingColor:[NSColor darkGrayColor]
-                                                         endingColor:[NSColor lightGrayColor]];
-    [gradient drawInRect:progressBox angle:90];
-    [gradient release];
+    /* Black progress fill. */
+    [[[NSColor blackColor] colorWithAlphaComponent:0.7] setFill];
+    progressRect = NSInsetRect(progressRect, 2, 2);
+    progressRect.size.width *= progress;
+    progressPath = [NSBezierPath bezierPathWithRoundedRect:progressRect xRadius:5 yRadius:5];
+    [progressPath fill];
 
     [dockIcon unlockFocus];
 
@@ -907,8 +905,8 @@ GHOST_TSuccess GHOST_WindowCocoa::setProgressBar(float progress)
 static void postNotification()
 {
   NSUserNotification *notification = [[NSUserNotification alloc] init];
-  notification.title = @"Blender progress notification";
-  notification.informativeText = @"Calculation is finished";
+  notification.title = @"Blender Progress Notification";
+  notification.informativeText = @"Calculation is finished.";
   notification.soundName = NSUserNotificationDefaultSoundName;
   [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
   [notification release];

@@ -23,7 +23,6 @@
  * Pie Menu Region
  */
 
-#include <assert.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
@@ -387,13 +386,13 @@ void ui_pie_menu_level_create(uiBlock *block,
 {
   const int totitem_parent = PIE_MAX_ITEMS - 1;
   const int totitem_remain = totitem - totitem_parent;
-  size_t array_size = sizeof(EnumPropertyItem) * totitem_remain;
+  const size_t array_size = sizeof(EnumPropertyItem) * totitem_remain;
 
   /* used as but->func_argN so freeing is handled elsewhere */
   EnumPropertyItem *remaining = MEM_mallocN(array_size + sizeof(EnumPropertyItem),
                                             "pie_level_item_array");
   memcpy(remaining, items + totitem_parent, array_size);
-  /* a NULL terminating sentinal element is required */
+  /* A NULL terminating sentinel element is required. */
   memset(&remaining[totitem_remain], 0, sizeof(EnumPropertyItem));
 
   /* yuk, static... issue is we can't reliably free this without doing dangerous changes */

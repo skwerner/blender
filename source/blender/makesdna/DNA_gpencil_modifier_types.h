@@ -18,11 +18,16 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_GPENCIL_MODIFIER_TYPES_H__
-#define __DNA_GPENCIL_MODIFIER_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct LatticeDeformData;
 
 /* WARNING ALERT! TYPEDEF VALUES ARE WRITTEN IN FILES! SO DO NOT CHANGE!
  * (ONLY ADD NEW ITEMS AT THE END)
@@ -56,7 +61,10 @@ typedef enum GpencilModifierMode {
   eGpencilModifierMode_Realtime = (1 << 0),
   eGpencilModifierMode_Render = (1 << 1),
   eGpencilModifierMode_Editmode = (1 << 2),
-  eGpencilModifierMode_Expanded = (1 << 3),
+#ifdef DNA_DEPRECATED_ALLOW
+  eGpencilModifierMode_Expanded_DEPRECATED = (1 << 3),
+#endif
+  eGpencilModifierMode_Virtual = (1 << 4),
 } GpencilModifierMode;
 
 typedef enum {
@@ -68,9 +76,10 @@ typedef struct GpencilModifierData {
   struct GpencilModifierData *next, *prev;
 
   int type, mode;
-  int stackindex;
+  char _pad0[4];
   short flag;
-  short _pad;
+  /* An "expand" bit for each of the modifier's (sub)panels (uiPanelDataExpansion). */
+  short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
 
@@ -98,6 +107,8 @@ typedef struct NoiseGpencilModifierData {
   float factor_uvs;
   /** Noise Frequency scaling */
   float noise_scale;
+  float noise_offset;
+  char _pad[4];
   /** How many frames before recalculate randoms. */
   int step;
   /** Custom index for passes. */
@@ -171,7 +182,7 @@ typedef struct ThickGpencilModifierData {
   int flag;
   /** Relative thickness factor. */
   float thickness_fac;
-  /** Absolute thickness overide. */
+  /** Absolute thickness override. */
   int thickness;
   /** Custom index for passes. */
   int layer_pass;
@@ -342,6 +353,7 @@ typedef enum eArrayGpencil_Flag {
   GP_ARRAY_USE_OFFSET = (1 << 7),
   GP_ARRAY_USE_RELATIVE = (1 << 8),
   GP_ARRAY_USE_OB_OFFSET = (1 << 9),
+  GP_ARRAY_UNIFORM_RANDOM_SCALE = (1 << 10),
 } eArrayGpencil_Flag;
 
 typedef struct BuildGpencilModifierData {
@@ -445,8 +457,8 @@ typedef struct LatticeGpencilModifierData {
   float strength;
   /** Custom index for passes. */
   int layer_pass;
-  /** Runtime only (LatticeDeformData). */
-  void *cache_data;
+  /** Runtime only. */
+  struct LatticeDeformData *cache_data;
 } LatticeGpencilModifierData;
 
 typedef enum eLatticeGpencil_Flag {
@@ -655,12 +667,12 @@ typedef enum eSmoothGpencil_Flag {
 
 typedef struct ArmatureGpencilModifierData {
   GpencilModifierData modifier;
-  /** Deformflag replaces armature->deformflag. */
+  /** #eArmature_DeformFlag use instead of #bArmature.deformflag. */
   short deformflag, multi;
   int _pad;
   struct Object *object;
-  /** Stored input of previous modifier, for vertexgroup blending. */
-  float *prevCos;
+  /** Stored input of previous modifier, for vertex-group blending. */
+  float (*vert_coords_prev)[3];
   /** MAX_VGROUP_NAME. */
   char vgname[64];
 
@@ -680,7 +692,6 @@ typedef struct MultiplyGpencilModifierData {
   int flag;
   /** Custom index for passes. */
   int layer_pass;
-  char _pad[4];
 
   int flags;
 
@@ -693,14 +704,10 @@ typedef struct MultiplyGpencilModifierData {
   float fading_thickness;
   float fading_opacity;
 
-  /* in rad not deg */
-  float split_angle;
-
-  /* char _pad[4]; */
 } MultiplyGpencilModifierData;
 
 typedef enum eMultiplyGpencil_Flag {
-  GP_MULTIPLY_ENABLE_ANGLE_SPLITTING = (1 << 1),
+  /* GP_MULTIPLY_ENABLE_ANGLE_SPLITTING = (1 << 1),  Deprecated. */
   GP_MULTIPLY_ENABLE_FADING = (1 << 2),
 } eMultiplyGpencil_Flag;
 
@@ -776,6 +783,9 @@ typedef struct TextureGpencilModifierData {
   /** Texture fit options. */
   short fit_method;
   short mode;
+  /** Dot texture rotation */
+  float alignment_rotation;
+  char _pad[4];
 } TextureGpencilModifierData;
 
 typedef enum eTextureGpencil_Flag {
@@ -799,4 +809,6 @@ typedef enum eTextureGpencil_Mode {
   STROKE_AND_FILL = 2,
 } eTextureGpencil_Mode;
 
-#endif /* __DNA_GPENCIL_MODIFIER_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

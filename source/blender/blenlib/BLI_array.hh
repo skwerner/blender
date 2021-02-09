@@ -13,228 +13,421 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BLI_ARRAY_HH__
-#define __BLI_ARRAY_HH__
+
+#pragma once
 
 /** \file
  * \ingroup bli
  *
- * This is a container that contains a fixed size array. Note however, the size of the array is not
- * a template argument. Instead it can be specified at the construction time.
+ * A `blender::Array<T>` is a container for a fixed size array the size of which is NOT known at
+ * compile time.
+ *
+ * If the size is known at compile time, `std::array<T, N>` should be used instead.
+ *
+ * blender::Array should usually be used instead of blender::Vector whenever the number of elements
+ * is known at construction time. Note however, that blender::Array will default construct all
+ * elements when initialized with the size-constructor. For trivial types, this does nothing. In
+ * all other cases, this adds overhead.
+ *
+ * A main benefit of using Array over Vector is that it expresses the intent of the developer
+ * better. It indicates that the size of the data structure is not expected to change. Furthermore,
+ * you can be more certain that an array does not overallocate.
+ *
+ * blender::Array supports small object optimization to improve performance when the size turns out
+ * to be small at run-time.
  */
 
 #include "BLI_allocator.hh"
-#include "BLI_array_ref.hh"
 #include "BLI_index_range.hh"
 #include "BLI_memory_utils.hh"
+#include "BLI_span.hh"
 #include "BLI_utildefines.h"
 
-namespace BLI {
+namespace blender {
 
-template<typename T, uint InlineBufferCapacity = 4, typename Allocator = GuardedAllocator>
+template<
+    /**
+     * The type of the values stored in the array.
+     */
+    typename T,
+    /**
+     * The number of values that can be stored in the array, without doing a heap allocation.
+     */
+    int64_t InlineBufferCapacity = default_inline_buffer_capacity(sizeof(T)),
+    /**
+     * The allocator used by this array. Should rarely be changed, except when you don't want that
+     * MEM_* functions are used internally.
+     */
+    typename Allocator = GuardedAllocator>
 class Array {
  private:
-  T *m_data;
-  uint m_size;
-  Allocator m_allocator;
-  AlignedBuffer<sizeof(T) * InlineBufferCapacity, alignof(T)> m_inline_storage;
+  /** The beginning of the array. It might point into the inline buffer. */
+  T *data_;
+
+  /** Number of elements in the array. */
+  int64_t size_;
+
+  /** Used for allocations when the inline buffer is too small. */
+  Allocator allocator_;
+
+  /** A placeholder buffer that will remain uninitialized until it is used. */
+  TypedBuffer<T, InlineBufferCapacity> inline_buffer_;
 
  public:
-  Array()
+  /**
+   * By default an empty array is created.
+   */
+  Array(Allocator allocator = {}) noexcept : allocator_(allocator)
   {
-    m_data = this->inline_storage();
-    m_size = 0;
+    data_ = inline_buffer_;
+    size_ = 0;
   }
 
-  Array(ArrayRef<T> values)
-  {
-    m_size = values.size();
-    m_data = this->get_buffer_for_size(values.size());
-    uninitialized_copy_n(values.begin(), m_size, m_data);
-  }
-
-  Array(const std::initializer_list<T> &values) : Array(ArrayRef<T>(values))
+  Array(NoExceptConstructor, Allocator allocator = {}) noexcept : Array(allocator)
   {
   }
 
-  explicit Array(uint size)
+  /**
+   * Create a new array that contains copies of all values.
+   */
+  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  Array(Span<U> values, Allocator allocator = {}) : Array(NoExceptConstructor(), allocator)
   {
-    m_size = size;
-    m_data = this->get_buffer_for_size(size);
-
-    for (uint i = 0; i < m_size; i++) {
-      new (m_data + i) T();
-    }
+    const int64_t size = values.size();
+    data_ = this->get_buffer_for_size(size);
+    uninitialized_convert_n<U, T>(values.data(), size, data_);
+    size_ = size;
   }
 
-  Array(uint size, const T &value)
+  /**
+   * Create a new array that contains copies of all values.
+   */
+  template<typename U, typename std::enable_if_t<std::is_convertible_v<U, T>> * = nullptr>
+  Array(const std::initializer_list<U> &values, Allocator allocator = {})
+      : Array(Span<U>(values), allocator)
   {
-    m_size = size;
-    m_data = this->get_buffer_for_size(size);
-    uninitialized_fill_n(m_data, m_size, value);
   }
 
-  Array(const Array &other)
+  Array(const std::initializer_list<T> &values, Allocator allocator = {})
+      : Array(Span<T>(values), allocator)
   {
-    m_size = other.size();
-    m_allocator = other.m_allocator;
-
-    m_data = this->get_buffer_for_size(other.size());
-    uninitialized_copy_n(other.begin(), m_size, m_data);
   }
 
-  Array(Array &&other) noexcept
+  /**
+   * Create a new array with the given size. All values will be default constructed. For trivial
+   * types like int, default construction does nothing.
+   *
+   * We might want another version of this in the future, that does not do default construction
+   * even for non-trivial types. This should not be the default though, because one can easily mess
+   * up when dealing with uninitialized memory.
+   */
+  explicit Array(int64_t size, Allocator allocator = {}) : Array(NoExceptConstructor(), allocator)
   {
-    m_size = other.m_size;
-    m_allocator = other.m_allocator;
+    data_ = this->get_buffer_for_size(size);
+    default_construct_n(data_, size);
+    size_ = size;
+  }
 
-    if (!other.uses_inline_storage()) {
-      m_data = other.m_data;
+  /**
+   * Create a new array with the given size. All values will be initialized by copying the given
+   * default.
+   */
+  Array(int64_t size, const T &value, Allocator allocator = {})
+      : Array(NoExceptConstructor(), allocator)
+  {
+    BLI_assert(size >= 0);
+    data_ = this->get_buffer_for_size(size);
+    uninitialized_fill_n(data_, size, value);
+    size_ = size;
+  }
+
+  /**
+   * Create a new array with uninitialized elements. The caller is responsible for constructing the
+   * elements. Moving, copying or destructing an Array with uninitialized elements invokes
+   * undefined behavior.
+   *
+   * This should be used very rarely. Note, that the normal size-constructor also does not
+   * initialize the elements when T is trivially constructible. Therefore, it only makes sense to
+   * use this with non trivially constructible types.
+   *
+   * Usage:
+   *  Array<std::string> my_strings(10, NoInitialization());
+   */
+  Array(int64_t size, NoInitialization, Allocator allocator = {})
+      : Array(NoExceptConstructor(), allocator)
+  {
+    BLI_assert(size >= 0);
+    data_ = this->get_buffer_for_size(size);
+    size_ = size;
+  }
+
+  Array(const Array &other) : Array(other.as_span(), other.allocator_)
+  {
+  }
+
+  Array(Array &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
+      : Array(NoExceptConstructor(), other.allocator_)
+  {
+    if (other.data_ == other.inline_buffer_) {
+      uninitialized_relocate_n(other.data_, other.size_, data_);
     }
     else {
-      m_data = this->get_buffer_for_size(m_size);
-      uninitialized_relocate_n(other.m_data, m_size, m_data);
+      data_ = other.data_;
     }
+    size_ = other.size_;
 
-    other.m_data = other.inline_storage();
-    other.m_size = 0;
+    other.data_ = other.inline_buffer_;
+    other.size_ = 0;
   }
 
   ~Array()
   {
-    destruct_n(m_data, m_size);
-    if (!this->uses_inline_storage()) {
-      m_allocator.deallocate((void *)m_data);
-    }
+    destruct_n(data_, size_);
+    this->deallocate_if_not_inline(data_);
   }
 
   Array &operator=(const Array &other)
   {
-    if (this == &other) {
-      return *this;
-    }
+    return copy_assign_container(*this, other);
+  }
 
-    this->~Array();
-    new (this) Array(other);
+  Array &operator=(Array &&other) noexcept(std::is_nothrow_move_constructible_v<T>)
+  {
+    return move_assign_container(*this, std::move(other));
+  }
+
+  T &operator[](int64_t index)
+  {
+    BLI_assert(index >= 0);
+    BLI_assert(index < size_);
+    return data_[index];
+  }
+
+  const T &operator[](int64_t index) const
+  {
+    BLI_assert(index >= 0);
+    BLI_assert(index < size_);
+    return data_[index];
+  }
+
+  operator Span<T>() const
+  {
+    return Span<T>(data_, size_);
+  }
+
+  operator MutableSpan<T>()
+  {
+    return MutableSpan<T>(data_, size_);
+  }
+
+  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
+  operator Span<U>() const
+  {
+    return Span<U>(data_, size_);
+  }
+
+  template<typename U, typename std::enable_if_t<is_span_convertible_pointer_v<T, U>> * = nullptr>
+  operator MutableSpan<U>()
+  {
+    return MutableSpan<U>(data_, size_);
+  }
+
+  Span<T> as_span() const
+  {
     return *this;
   }
 
-  Array &operator=(Array &&other)
-  {
-    if (this == &other) {
-      return *this;
-    }
-
-    this->~Array();
-    new (this) Array(std::move(other));
-    return *this;
-  }
-
-  operator ArrayRef<T>() const
-  {
-    return ArrayRef<T>(m_data, m_size);
-  }
-
-  operator MutableArrayRef<T>()
-  {
-    return MutableArrayRef<T>(m_data, m_size);
-  }
-
-  ArrayRef<T> as_ref() const
+  MutableSpan<T> as_mutable_span()
   {
     return *this;
   }
 
-  MutableArrayRef<T> as_mutable_ref()
+  /**
+   * Returns the number of elements in the array.
+   */
+  int64_t size() const
   {
-    return *this;
+    return size_;
   }
 
-  T &operator[](uint index)
+  /**
+   * Returns true when the number of elements in the array is zero.
+   */
+  bool is_empty() const
   {
-    BLI_assert(index < m_size);
-    return m_data[index];
+    return size_ == 0;
   }
 
-  const T &operator[](uint index) const
+  /**
+   * Copies the given value to every element in the array.
+   */
+  void fill(const T &value) const
   {
-    BLI_assert(index < m_size);
-    return m_data[index];
+    initialized_fill_n(data_, size_, value);
   }
 
-  uint size() const
+  /**
+   * Return a reference to the last element in the array.
+   * This invokes undefined behavior when the array is empty.
+   */
+  const T &last() const
   {
-    return m_size;
+    BLI_assert(size_ > 0);
+    return *(data_ + size_ - 1);
+  }
+  T &last()
+  {
+    BLI_assert(size_ > 0);
+    return *(data_ + size_ - 1);
   }
 
-  void fill(const T &value)
+  /**
+   * Get a pointer to the beginning of the array.
+   */
+  const T *data() const
   {
-    MutableArrayRef<T>(*this).fill(value);
+    return data_;
   }
-
-  void fill_indices(ArrayRef<uint> indices, const T &value)
+  T *data()
   {
-    MutableArrayRef<T>(*this).fill_indices(indices, value);
+    return data_;
   }
 
   const T *begin() const
   {
-    return m_data;
+    return data_;
   }
-
   const T *end() const
   {
-    return m_data + m_size;
+    return data_ + size_;
   }
 
   T *begin()
   {
-    return m_data;
+    return data_;
   }
-
   T *end()
   {
-    return m_data + m_size;
+    return data_ + size_;
   }
 
+  std::reverse_iterator<T *> rbegin()
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<T *> rend()
+  {
+    return std::reverse_iterator<T *>(this->begin());
+  }
+
+  std::reverse_iterator<const T *> rbegin() const
+  {
+    return std::reverse_iterator<T *>(this->end());
+  }
+  std::reverse_iterator<const T *> rend() const
+  {
+    return std::reverse_iterator<T *>(this->begin());
+  }
+
+  /**
+   * Get an index range containing all valid indices for this array.
+   */
   IndexRange index_range() const
   {
-    return IndexRange(m_size);
+    return IndexRange(size_);
   }
 
+  /**
+   * Sets the size to zero. This should only be used when you have manually destructed all elements
+   * in the array beforehand. Use with care.
+   */
+  void clear_without_destruct()
+  {
+    size_ = 0;
+  }
+
+  /**
+   * Access the allocator used by this array.
+   */
   Allocator &allocator()
   {
-    return m_allocator;
+    return allocator_;
+  }
+  const Allocator &allocator() const
+  {
+    return allocator_;
+  }
+
+  /**
+   * Get the value of the InlineBufferCapacity template argument. This is the number of elements
+   * that can be stored without doing an allocation.
+   */
+  static int64_t inline_buffer_capacity()
+  {
+    return InlineBufferCapacity;
+  }
+
+  /**
+   * Destruct values and create a new array of the given size. The values in the new array are
+   * default constructed.
+   */
+  void reinitialize(const int64_t new_size)
+  {
+    BLI_assert(new_size >= 0);
+    int64_t old_size = size_;
+
+    destruct_n(data_, size_);
+    size_ = 0;
+
+    if (new_size <= old_size) {
+      default_construct_n(data_, new_size);
+    }
+    else {
+      T *new_data = this->get_buffer_for_size(new_size);
+      try {
+        default_construct_n(new_data, new_size);
+      }
+      catch (...) {
+        this->deallocate_if_not_inline(new_data);
+        throw;
+      }
+      this->deallocate_if_not_inline(data_);
+      data_ = new_data;
+    }
+
+    size_ = new_size;
   }
 
  private:
-  T *get_buffer_for_size(uint size)
+  T *get_buffer_for_size(int64_t size)
   {
     if (size <= InlineBufferCapacity) {
-      return this->inline_storage();
+      return inline_buffer_;
     }
     else {
       return this->allocate(size);
     }
   }
 
-  T *inline_storage() const
+  T *allocate(int64_t size)
   {
-    return (T *)m_inline_storage.ptr();
+    return static_cast<T *>(
+        allocator_.allocate(static_cast<size_t>(size) * sizeof(T), alignof(T), AT));
   }
 
-  T *allocate(uint size)
+  void deallocate_if_not_inline(T *ptr)
   {
-    return (T *)m_allocator.allocate_aligned(
-        size * sizeof(T), std::alignment_of<T>::value, __func__);
-  }
-
-  bool uses_inline_storage() const
-  {
-    return m_data == this->inline_storage();
+    if (ptr != inline_buffer_) {
+      allocator_.deallocate(ptr);
+    }
   }
 };
 
-}  // namespace BLI
+/**
+ * Same as a normal Array, but does not use Blender's guarded allocator. This is useful when
+ * allocating memory with static storage duration.
+ */
+template<typename T, int64_t InlineBufferCapacity = default_inline_buffer_capacity(sizeof(T))>
+using RawArray = Array<T, InlineBufferCapacity, RawAllocator>;
 
-#endif /* __BLI_ARRAY_HH__ */
+}  // namespace blender

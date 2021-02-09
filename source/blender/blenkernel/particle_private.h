@@ -21,12 +21,13 @@
  * \ingroup bke
  */
 
-#ifndef __PARTICLE_PRIVATE_H__
-#define __PARTICLE_PRIVATE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct CurveMapping;
 
 typedef struct ParticleChildModifierContext {
   ParticleThreadContext *thread_ctx;
@@ -63,7 +64,7 @@ float do_clump(ParticleKey *state,
                float pa_clump,
                bool use_clump_noise,
                float clump_noise_size,
-               CurveMapping *clumpcurve);
+               struct CurveMapping *clumpcurve);
 void do_child_modifiers(const ParticleChildModifierContext *modifier_ctx,
                         float mat[4][4],
                         ParticleKey *state,
@@ -72,5 +73,3 @@ void do_child_modifiers(const ParticleChildModifierContext *modifier_ctx,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __PARTICLE_PRIVATE_H__ */

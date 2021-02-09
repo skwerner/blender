@@ -54,6 +54,8 @@ using Alembic::AbcGeom::IInt16Property;
 using Alembic::AbcGeom::ISampleSelector;
 using Alembic::AbcGeom::kWrapExisting;
 
+namespace blender::io::alembic {
+
 AbcCurveReader::AbcCurveReader(const Alembic::Abc::IObject &object, ImportSettings &settings)
     : AbcObjectReader(object, settings)
 {
@@ -99,7 +101,7 @@ void AbcCurveReader::readObjectData(Main *bmain, const Alembic::Abc::ISampleSele
   ICompoundProperty user_props = m_curves_schema.getUserProperties();
   if (user_props) {
     const PropertyHeader *header = user_props.getPropertyHeader(ABC_CURVE_RESOLUTION_U_PROPNAME);
-    if (header != NULL && header->isScalar() && IInt16Property::matches(*header)) {
+    if (header != nullptr && header->isScalar() && IInt16Property::matches(*header)) {
       IInt16Property resolu(user_props, header->getName());
       cu->resolu = resolu.getValue(sample_sel);
     }
@@ -216,10 +218,10 @@ void AbcCurveReader::read_curve_sample(Curve *cu,
       nu->pntsu -= overlap;
     }
 
-    const bool do_weights = (weights != NULL) && (weights->size() > 1);
+    const bool do_weights = (weights != nullptr) && (weights->size() > 1);
     float weight = 1.0f;
 
-    const bool do_radius = (radiuses != NULL) && (radiuses->size() > 1);
+    const bool do_radius = (radiuses != nullptr) && (radiuses->size() > 1);
     float radius = (radiuses && radiuses->size() == 1) ? (*radiuses)[0] : 1.0f;
 
     nu->type = CU_NURBS;
@@ -351,3 +353,5 @@ Mesh *AbcCurveReader::read_mesh(Mesh *existing_mesh,
 
   return BKE_mesh_new_nomain_from_curve(m_object);
 }
+
+}  // namespace blender::io::alembic

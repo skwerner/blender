@@ -16,7 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <stdlib.h>
+#include <cstdlib>
 
 #include "BLI_math.h"
 #include "COM_DoubleEdgeMaskOperation.h"
@@ -26,8 +26,8 @@
 // this part has been copied from the double edge mask
 static void do_adjacentKeepBorders(unsigned int t,
                                    unsigned int rw,
-                                   unsigned int *limask,
-                                   unsigned int *lomask,
+                                   const unsigned int *limask,
+                                   const unsigned int *lomask,
                                    unsigned int *lres,
                                    float *res,
                                    unsigned int *rsize)
@@ -196,8 +196,8 @@ static void do_adjacentKeepBorders(unsigned int t,
 
 static void do_adjacentBleedBorders(unsigned int t,
                                     unsigned int rw,
-                                    unsigned int *limask,
-                                    unsigned int *lomask,
+                                    const unsigned int *limask,
+                                    const unsigned int *lomask,
                                     unsigned int *lres,
                                     float *res,
                                     unsigned int *rsize)
@@ -417,8 +417,8 @@ static void do_adjacentBleedBorders(unsigned int t,
 
 static void do_allKeepBorders(unsigned int t,
                               unsigned int rw,
-                              unsigned int *limask,
-                              unsigned int *lomask,
+                              const unsigned int *limask,
+                              const unsigned int *lomask,
                               unsigned int *lres,
                               float *res,
                               unsigned int *rsize)
@@ -579,8 +579,8 @@ static void do_allKeepBorders(unsigned int t,
 
 static void do_allBleedBorders(unsigned int t,
                                unsigned int rw,
-                               unsigned int *limask,
-                               unsigned int *lomask,
+                               const unsigned int *limask,
+                               const unsigned int *lomask,
                                unsigned int *lres,
                                float *res,
                                unsigned int *rsize)
@@ -793,8 +793,8 @@ static void do_allBleedBorders(unsigned int t,
 
 static void do_allEdgeDetection(unsigned int t,
                                 unsigned int rw,
-                                unsigned int *limask,
-                                unsigned int *lomask,
+                                const unsigned int *limask,
+                                const unsigned int *lomask,
                                 unsigned int *lres,
                                 float *res,
                                 unsigned int *rsize,
@@ -863,8 +863,8 @@ static void do_allEdgeDetection(unsigned int t,
 
 static void do_adjacentEdgeDetection(unsigned int t,
                                      unsigned int rw,
-                                     unsigned int *limask,
-                                     unsigned int *lomask,
+                                     const unsigned int *limask,
+                                     const unsigned int *lomask,
                                      unsigned int *lres,
                                      float *res,
                                      unsigned int *rsize,
@@ -935,7 +935,7 @@ static void do_adjacentEdgeDetection(unsigned int t,
 
 static void do_createEdgeLocationBuffer(unsigned int t,
                                         unsigned int rw,
-                                        unsigned int *lres,
+                                        const unsigned int *lres,
                                         float *res,
                                         unsigned short *gbuf,
                                         unsigned int *innerEdgeOffset,
@@ -1029,7 +1029,7 @@ static void do_createEdgeLocationBuffer(unsigned int t,
   /* set the accumulators to correct positions */  // set up some accumulator variables for loops
   gradientAccum = gradientFillOffset;  // each accumulator variable starts at its respective
   innerAccum = *innerEdgeOffset;       // section's offset so when we start filling, each
-  outerAccum = *outerEdgeOffset;       // section fills up it's allocated space in gbuf
+  outerAccum = *outerEdgeOffset;       // section fills up its allocated space in gbuf
   // uses dmin=row, rsl=col
   for (x = 0, dmin = 0; x < t; x += rw, dmin++) {
     for (rsl = 0; rsl < rw; rsl++) {
@@ -1060,7 +1060,7 @@ static void do_createEdgeLocationBuffer(unsigned int t,
 
 static void do_fillGradientBuffer(unsigned int rw,
                                   float *res,
-                                  unsigned short *gbuf,
+                                  const unsigned short *gbuf,
                                   unsigned int isz,
                                   unsigned int osz,
                                   unsigned int gsz,
@@ -1088,7 +1088,7 @@ static void do_fillGradientBuffer(unsigned int rw,
    *
    * 1.) Loop through all gradient pixels.
    * A.) For each gradient pixel:
-   * a.) Loop though all outside edge pixels, looking for closest one
+   * a.) Loop through all outside edge pixels, looking for closest one
    * to the gradient pixel we are in.
    * b.) Loop through all inside edge pixels, looking for closest one
    * to the gradient pixel we are in.
@@ -1256,7 +1256,7 @@ void DoubleEdgeMaskOperation::doDoubleEdgeMask(float *imask, float *omask, float
      *
      * Each version has slightly different criteria for detecting an edge pixel.
      */
-    if (this->m_adjecentOnly) {  // if "adjacent only" inner edge mode is turned on
+    if (this->m_adjacentOnly) {  // if "adjacent only" inner edge mode is turned on
       if (this->m_keepInside) {  // if "keep inside" buffer edge mode is turned on
         do_adjacentKeepBorders(t, rw, limask, lomask, lres, res, rsize);
       }
@@ -1306,14 +1306,14 @@ void DoubleEdgeMaskOperation::doDoubleEdgeMask(float *imask, float *omask, float
   }
 }
 
-DoubleEdgeMaskOperation::DoubleEdgeMaskOperation() : NodeOperation()
+DoubleEdgeMaskOperation::DoubleEdgeMaskOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_VALUE);
-  this->m_inputInnerMask = NULL;
-  this->m_inputOuterMask = NULL;
-  this->m_adjecentOnly = false;
+  this->m_inputInnerMask = nullptr;
+  this->m_inputOuterMask = nullptr;
+  this->m_adjacentOnly = false;
   this->m_keepInside = false;
   this->setComplex(true);
 }
@@ -1322,7 +1322,7 @@ bool DoubleEdgeMaskOperation::determineDependingAreaOfInterest(rcti * /*input*/,
                                                                ReadBufferOperation *readOperation,
                                                                rcti *output)
 {
-  if (this->m_cachedInstance == NULL) {
+  if (this->m_cachedInstance == nullptr) {
     rcti newInput;
     newInput.xmax = this->getWidth();
     newInput.xmin = 0;
@@ -1330,9 +1330,8 @@ bool DoubleEdgeMaskOperation::determineDependingAreaOfInterest(rcti * /*input*/,
     newInput.ymin = 0;
     return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void DoubleEdgeMaskOperation::initExecution()
@@ -1340,7 +1339,7 @@ void DoubleEdgeMaskOperation::initExecution()
   this->m_inputInnerMask = this->getInputSocketReader(0);
   this->m_inputOuterMask = this->getInputSocketReader(1);
   initMutex();
-  this->m_cachedInstance = NULL;
+  this->m_cachedInstance = nullptr;
 }
 
 void *DoubleEdgeMaskOperation::initializeTileData(rcti *rect)
@@ -1350,7 +1349,7 @@ void *DoubleEdgeMaskOperation::initializeTileData(rcti *rect)
   }
 
   lockMutex();
-  if (this->m_cachedInstance == NULL) {
+  if (this->m_cachedInstance == nullptr) {
     MemoryBuffer *innerMask = (MemoryBuffer *)this->m_inputInnerMask->initializeTileData(rect);
     MemoryBuffer *outerMask = (MemoryBuffer *)this->m_inputOuterMask->initializeTileData(rect);
     float *data = (float *)MEM_mallocN(sizeof(float) * this->getWidth() * this->getHeight(),
@@ -1372,11 +1371,11 @@ void DoubleEdgeMaskOperation::executePixel(float output[4], int x, int y, void *
 
 void DoubleEdgeMaskOperation::deinitExecution()
 {
-  this->m_inputInnerMask = NULL;
-  this->m_inputOuterMask = NULL;
+  this->m_inputInnerMask = nullptr;
+  this->m_inputOuterMask = nullptr;
   deinitMutex();
   if (this->m_cachedInstance) {
     MEM_freeN(this->m_cachedInstance);
-    this->m_cachedInstance = NULL;
+    this->m_cachedInstance = nullptr;
   }
 }

@@ -27,6 +27,7 @@ from bpy.types import (
 
 from bl_ui.properties_grease_pencil_common import (
     GreasePencilLayerMasksPanel,
+    GreasePencilLayerTransformPanel,
     GreasePencilLayerAdjustmentsPanel,
     GreasePencilLayerRelationsPanel,
     GreasePencilLayerDisplayPanel,
@@ -228,13 +229,7 @@ class DOPESHEET_HT_header(Header):
 
 
 # Header for "normal" dopesheet editor modes (e.g. Dope Sheet, Action, Shape Keys, etc.)
-class DOPESHEET_HT_editor_buttons(Header):
-    bl_idname = "DOPESHEET_HT_editor_buttons"
-    bl_space_type = 'DOPESHEET_EDITOR'
-    bl_label = ""
-
-    def draw(self, context):
-        pass
+class DOPESHEET_HT_editor_buttons:
 
     @staticmethod
     def draw_header(context, layout):
@@ -342,13 +337,19 @@ class DOPESHEET_MT_view(Menu):
 
         layout.separator()
 
-        layout.prop(st.dopesheet, "use_multi_word_filter", text="Multi-word Match Search")
+        layout.prop(st.dopesheet, "use_multi_word_filter", text="Multi-Word Match Search")
 
         layout.separator()
 
         layout.prop(st, "use_realtime_update")
-        layout.prop(st, "show_sliders")
-        layout.prop(st, "show_group_colors")
+
+        # Sliders are always shown in the Shape Key Editor regardless of this setting.
+        col = layout.column()
+        col.active = context.space_data.mode != 'SHAPEKEY'
+        col.prop(st, "show_sliders")
+
+        if bpy.app.version < (2, 93):
+            layout.operator("anim.show_group_colors_deprecated", icon='CHECKBOX_HLT')
         layout.prop(st, "show_interpolation")
         layout.prop(st, "show_extremes")
         layout.prop(st, "use_auto_merge_keyframes")
@@ -669,10 +670,10 @@ class DOPESHEET_MT_snap_pie(Menu):
         layout = self.layout
         pie = layout.menu_pie()
 
-        pie.operator("action.snap", text="Current Frame").type = 'CFRA'
-        pie.operator("action.snap", text="Nearest Frame").type = 'NEAREST_FRAME'
-        pie.operator("action.snap", text="Nearest Second").type = 'NEAREST_SECOND'
-        pie.operator("action.snap", text="Nearest Marker").type = 'NEAREST_MARKER'
+        pie.operator("action.snap", text="Selection to Current Frame").type = 'CFRA'
+        pie.operator("action.snap", text="Selection to Nearest Frame").type = 'NEAREST_FRAME'
+        pie.operator("action.snap", text="Selection to Nearest Second").type = 'NEAREST_SECOND'
+        pie.operator("action.snap", text="Selection to Nearest Marker").type = 'NEAREST_MARKER'
 
 
 class LayersDopeSheetPanel:
@@ -726,6 +727,12 @@ class DOPESHEET_PT_gpencil_layer_masks(LayersDopeSheetPanel, GreasePencilLayerMa
     bl_options = {'DEFAULT_CLOSED'}
 
 
+class DOPESHEET_PT_gpencil_layer_transform(LayersDopeSheetPanel, GreasePencilLayerTransformPanel, Panel):
+    bl_label = "Transform"
+    bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
+    bl_options = {'DEFAULT_CLOSED'}
+
+
 class DOPESHEET_PT_gpencil_layer_adjustments(LayersDopeSheetPanel, GreasePencilLayerAdjustmentsPanel, Panel):
     bl_label = "Adjustments"
     bl_parent_id = 'DOPESHEET_PT_gpencil_mode'
@@ -746,7 +753,6 @@ class DOPESHEET_PT_gpencil_layer_display(LayersDopeSheetPanel, GreasePencilLayer
 
 classes = (
     DOPESHEET_HT_header,
-    DOPESHEET_HT_editor_buttons,
     DOPESHEET_MT_editor_menus,
     DOPESHEET_MT_view,
     DOPESHEET_MT_select,
@@ -763,6 +769,7 @@ classes = (
     DOPESHEET_PT_filters,
     DOPESHEET_PT_gpencil_mode,
     DOPESHEET_PT_gpencil_layer_masks,
+    DOPESHEET_PT_gpencil_layer_transform,
     DOPESHEET_PT_gpencil_layer_adjustments,
     DOPESHEET_PT_gpencil_layer_relations,
     DOPESHEET_PT_gpencil_layer_display,

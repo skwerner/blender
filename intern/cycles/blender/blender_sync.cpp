@@ -24,6 +24,7 @@
 #include "render/mesh.h"
 #include "render/nodes.h"
 #include "render/object.h"
+#include "render/procedural.h"
 #include "render/scene.h"
 #include "render/shader.h"
 
@@ -37,7 +38,9 @@
 #include "util/util_debug.h"
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
+#include "util/util_logging.h"
 #include "util/util_opengl.h"
+#include "util/util_openimagedenoise.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -54,11 +57,11 @@ BlenderSync::BlenderSync(BL::RenderEngine &b_engine,
     : b_engine(b_engine),
       b_data(b_data),
       b_scene(b_scene),
-      shader_map(&scene->shaders),
-      object_map(&scene->objects),
-      geometry_map(&scene->geometry),
-      light_map(&scene->lights),
-      particle_system_map(&scene->particle_systems),
+      shader_map(scene),
+      object_map(scene),
+      geometry_map(scene),
+      light_map(scene),
+      particle_system_map(scene),
       world_map(NULL),
       world_recalc(false),
       scene(scene),
@@ -116,9 +119,9 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
     if (dicing_prop_changed) {
       for (const pair<const GeometryKey, Geometry *> &iter : geometry_map.key_to_scene_data()) {
         Geometry *geom = iter.second;
-        if (geom->type == Geometry::MESH) {
+        if (geom->is_mesh()) {
           Mesh *mesh = static_cast<Mesh *>(geom);
-          if (mesh->subdivision_type != Mesh::SUBDIVISION_NONE) {
+          if (mesh->get_subdivision_type() != Mesh::SUBDIVISION_NONE) {
             PointerRNA id_ptr;
             RNA_id_pointer_create((::ID *)iter.first.id, &id_ptr);
             geometry_map.set_recalc(BL::ID(id_ptr));
@@ -129,9 +132,8 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
   }
 
   /* Iterate over all IDs in this depsgraph. */
-  BL::Depsgraph::updates_iterator b_update;
-  for (b_depsgraph.updates.begin(b_update); b_update != b_depsgraph.updates.end(); ++b_update) {
-    BL::ID b_id(b_update->id());
+  for (BL::DepsgraphUpdate &b_update : b_depsgraph.updates) {
+    BL::ID b_id(b_update.id());
 
     /* Material */
     if (b_id.is_a(&RNA_Material)) {
@@ -146,30 +148,48 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
     /* Object */
     else if (b_id.is_a(&RNA_Object)) {
       BL::Object b_ob(b_id);
-      const bool updated_geometry = b_update->is_updated_geometry();
+      const bool is_geometry = object_is_geometry(b_ob);
+      const bool is_light = !is_geometry && object_is_light(b_ob);
 
-      if (b_update->is_updated_transform() || b_update->is_updated_shading()) {
+      if (b_ob.is_instancer() && b_update.is_updated_shading()) {
+        /* Needed for e.g. object color updates on instancer. */
         object_map.set_recalc(b_ob);
-        light_map.set_recalc(b_ob);
       }
 
-      if (object_is_mesh(b_ob)) {
-        if (updated_geometry ||
-            (object_subdivision_type(b_ob, preview, experimental) != Mesh::SUBDIVISION_NONE)) {
-          BL::ID key = BKE_object_is_modified(b_ob) ? b_ob : b_ob.data();
-          geometry_map.set_recalc(key);
-        }
-      }
-      else if (object_is_light(b_ob)) {
-        if (updated_geometry) {
-          light_map.set_recalc(b_ob);
-        }
-      }
+      if (is_geometry || is_light) {
+        const bool updated_geometry = b_update.is_updated_geometry();
 
-      if (updated_geometry) {
-        BL::Object::particle_systems_iterator b_psys;
-        for (b_ob.particle_systems.begin(b_psys); b_psys != b_ob.particle_systems.end(); ++b_psys)
-          particle_system_map.set_recalc(b_ob);
+        /* Geometry (mesh, hair, volume). */
+        if (is_geometry) {
+          if (b_update.is_updated_transform() || b_update.is_updated_shading()) {
+            object_map.set_recalc(b_ob);
+          }
+
+          if (updated_geometry ||
+              (object_subdivision_type(b_ob, preview, experimental) != Mesh::SUBDIVISION_NONE)) {
+            BL::ID key = BKE_object_is_modified(b_ob) ? b_ob : b_ob.data();
+            geometry_map.set_recalc(key);
+          }
+
+          if (updated_geometry) {
+            BL::Object::particle_systems_iterator b_psys;
+            for (b_ob.particle_systems.begin(b_psys); b_psys != b_ob.particle_systems.end();
+                 ++b_psys) {
+              particle_system_map.set_recalc(b_ob);
+            }
+          }
+        }
+        /* Light */
+        else if (is_light) {
+          if (b_update.is_updated_transform() || b_update.is_updated_shading()) {
+            object_map.set_recalc(b_ob);
+            light_map.set_recalc(b_ob);
+          }
+
+          if (updated_geometry) {
+            light_map.set_recalc(b_ob);
+          }
+        }
       }
     }
     /* Mesh */
@@ -205,6 +225,8 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
                             int height,
                             void **python_thread_state)
 {
+  scoped_timer timer;
+
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
 
   sync_view_layer(b_v3d, b_view_layer);
@@ -212,12 +234,11 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
   sync_film(b_v3d);
   sync_shaders(b_depsgraph, b_v3d);
   sync_images();
-  sync_curve_settings();
 
   geometry_synced.clear(); /* use for objects and motion sync */
 
   if (scene->need_motion() == Scene::MOTION_PASS || scene->need_motion() == Scene::MOTION_NONE ||
-      scene->camera->motion_position == Camera::MOTION_POSITION_CENTER) {
+      scene->camera->get_motion_position() == Camera::MOTION_POSITION_CENTER) {
     sync_objects(b_depsgraph, b_v3d);
   }
   sync_motion(b_render, b_depsgraph, b_v3d, b_override, width, height, python_thread_state);
@@ -229,6 +250,8 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
   shader_map.post_sync(false);
 
   free_data_after_sync(b_depsgraph);
+
+  VLOG(1) << "Total time spent synchronizing data: " << timer.get_time();
 }
 
 /* Integrator */
@@ -241,69 +264,69 @@ void BlenderSync::sync_integrator()
   experimental = (get_enum(cscene, "feature_set") != 0);
 
   Integrator *integrator = scene->integrator;
-  Integrator previntegrator = *integrator;
 
-  integrator->min_bounce = get_int(cscene, "min_light_bounces");
-  integrator->max_bounce = get_int(cscene, "max_bounces");
+  integrator->set_min_bounce(get_int(cscene, "min_light_bounces"));
+  integrator->set_max_bounce(get_int(cscene, "max_bounces"));
 
-  integrator->max_diffuse_bounce = get_int(cscene, "diffuse_bounces");
-  integrator->max_glossy_bounce = get_int(cscene, "glossy_bounces");
-  integrator->max_transmission_bounce = get_int(cscene, "transmission_bounces");
-  integrator->max_volume_bounce = get_int(cscene, "volume_bounces");
+  integrator->set_max_diffuse_bounce(get_int(cscene, "diffuse_bounces"));
+  integrator->set_max_glossy_bounce(get_int(cscene, "glossy_bounces"));
+  integrator->set_max_transmission_bounce(get_int(cscene, "transmission_bounces"));
+  integrator->set_max_volume_bounce(get_int(cscene, "volume_bounces"));
 
-  integrator->transparent_min_bounce = get_int(cscene, "min_transparent_bounces");
-  integrator->transparent_max_bounce = get_int(cscene, "transparent_max_bounces");
+  integrator->set_transparent_min_bounce(get_int(cscene, "min_transparent_bounces"));
+  integrator->set_transparent_max_bounce(get_int(cscene, "transparent_max_bounces"));
 
-  integrator->volume_max_steps = get_int(cscene, "volume_max_steps");
-  integrator->volume_step_rate = (preview) ? get_float(cscene, "volume_preview_step_rate") :
-                                             get_float(cscene, "volume_step_rate");
+  integrator->set_volume_max_steps(get_int(cscene, "volume_max_steps"));
+  float volume_step_rate = (preview) ? get_float(cscene, "volume_preview_step_rate") :
+                                       get_float(cscene, "volume_step_rate");
+  integrator->set_volume_step_rate(volume_step_rate);
 
-  integrator->caustics_reflective = get_boolean(cscene, "caustics_reflective");
-  integrator->caustics_refractive = get_boolean(cscene, "caustics_refractive");
-  integrator->filter_glossy = get_float(cscene, "blur_glossy");
+  integrator->set_caustics_reflective(get_boolean(cscene, "caustics_reflective"));
+  integrator->set_caustics_refractive(get_boolean(cscene, "caustics_refractive"));
+  integrator->set_filter_glossy(get_float(cscene, "blur_glossy"));
 
-  integrator->seed = get_int(cscene, "seed");
+  int seed = get_int(cscene, "seed");
   if (get_boolean(cscene, "use_animated_seed")) {
-    integrator->seed = hash_uint2(b_scene.frame_current(), get_int(cscene, "seed"));
+    seed = hash_uint2(b_scene.frame_current(), get_int(cscene, "seed"));
     if (b_scene.frame_subframe() != 0.0f) {
       /* TODO(sergey): Ideally should be some sort of hash_merge,
        * but this is good enough for now.
        */
-      integrator->seed += hash_uint2((int)(b_scene.frame_subframe() * (float)INT_MAX),
-                                     get_int(cscene, "seed"));
+      seed += hash_uint2((int)(b_scene.frame_subframe() * (float)INT_MAX),
+                         get_int(cscene, "seed"));
     }
   }
 
-  integrator->sampling_pattern = (SamplingPattern)get_enum(
+  integrator->set_seed(seed);
+
+  integrator->set_sample_clamp_direct(get_float(cscene, "sample_clamp_direct"));
+  integrator->set_sample_clamp_indirect(get_float(cscene, "sample_clamp_indirect"));
+  if (!preview) {
+    integrator->set_motion_blur(r.use_motion_blur());
+  }
+
+  integrator->set_method((Integrator::Method)get_enum(
+      cscene, "progressive", Integrator::NUM_METHODS, Integrator::PATH));
+
+  integrator->set_sample_all_lights_direct(get_boolean(cscene, "sample_all_lights_direct"));
+  integrator->set_sample_all_lights_indirect(get_boolean(cscene, "sample_all_lights_indirect"));
+  integrator->set_light_sampling_threshold(get_float(cscene, "light_sampling_threshold"));
+
+  SamplingPattern sampling_pattern = (SamplingPattern)get_enum(
       cscene, "sampling_pattern", SAMPLING_NUM_PATTERNS, SAMPLING_PATTERN_SOBOL);
 
-  integrator->sample_clamp_direct = get_float(cscene, "sample_clamp_direct");
-  integrator->sample_clamp_indirect = get_float(cscene, "sample_clamp_indirect");
-  if (!preview) {
-    if (integrator->motion_blur != r.use_motion_blur()) {
-      scene->object_manager->tag_update(scene);
-      scene->camera->tag_update();
-    }
-
-    integrator->motion_blur = r.use_motion_blur();
-  }
-
-  integrator->method = (Integrator::Method)get_enum(
-      cscene, "progressive", Integrator::NUM_METHODS, Integrator::PATH);
-
-  integrator->sample_all_lights_direct = get_boolean(cscene, "sample_all_lights_direct");
-  integrator->sample_all_lights_indirect = get_boolean(cscene, "sample_all_lights_indirect");
-  integrator->light_sampling_threshold = get_float(cscene, "light_sampling_threshold");
+  int adaptive_min_samples = INT_MAX;
 
   if (RNA_boolean_get(&cscene, "use_adaptive_sampling")) {
-    integrator->sampling_pattern = SAMPLING_PATTERN_PMJ;
-    integrator->adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
-    integrator->adaptive_threshold = get_float(cscene, "adaptive_threshold");
+    sampling_pattern = SAMPLING_PATTERN_PMJ;
+    adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
+    integrator->set_adaptive_threshold(get_float(cscene, "adaptive_threshold"));
   }
   else {
-    integrator->adaptive_min_samples = INT_MAX;
-    integrator->adaptive_threshold = 0.0f;
+    integrator->set_adaptive_threshold(0.0f);
   }
+
+  integrator->set_sampling_pattern(sampling_pattern);
 
   int diffuse_samples = get_int(cscene, "diffuse_samples");
   int glossy_samples = get_int(cscene, "glossy_samples");
@@ -314,40 +337,41 @@ void BlenderSync::sync_integrator()
   int volume_samples = get_int(cscene, "volume_samples");
 
   if (get_boolean(cscene, "use_square_samples")) {
-    integrator->diffuse_samples = diffuse_samples * diffuse_samples;
-    integrator->glossy_samples = glossy_samples * glossy_samples;
-    integrator->transmission_samples = transmission_samples * transmission_samples;
-    integrator->ao_samples = ao_samples * ao_samples;
-    integrator->mesh_light_samples = mesh_light_samples * mesh_light_samples;
-    integrator->subsurface_samples = subsurface_samples * subsurface_samples;
-    integrator->volume_samples = volume_samples * volume_samples;
-    integrator->adaptive_min_samples = min(
-        integrator->adaptive_min_samples * integrator->adaptive_min_samples, INT_MAX);
+    integrator->set_diffuse_samples(diffuse_samples * diffuse_samples);
+    integrator->set_glossy_samples(glossy_samples * glossy_samples);
+    integrator->set_transmission_samples(transmission_samples * transmission_samples);
+    integrator->set_ao_samples(ao_samples * ao_samples);
+    integrator->set_mesh_light_samples(mesh_light_samples * mesh_light_samples);
+    integrator->set_subsurface_samples(subsurface_samples * subsurface_samples);
+    integrator->set_volume_samples(volume_samples * volume_samples);
+    adaptive_min_samples = min(adaptive_min_samples * adaptive_min_samples, INT_MAX);
   }
   else {
-    integrator->diffuse_samples = diffuse_samples;
-    integrator->glossy_samples = glossy_samples;
-    integrator->transmission_samples = transmission_samples;
-    integrator->ao_samples = ao_samples;
-    integrator->mesh_light_samples = mesh_light_samples;
-    integrator->subsurface_samples = subsurface_samples;
-    integrator->volume_samples = volume_samples;
+    integrator->set_diffuse_samples(diffuse_samples);
+    integrator->set_glossy_samples(glossy_samples);
+    integrator->set_transmission_samples(transmission_samples);
+    integrator->set_ao_samples(ao_samples);
+    integrator->set_mesh_light_samples(mesh_light_samples);
+    integrator->set_subsurface_samples(subsurface_samples);
+    integrator->set_volume_samples(volume_samples);
   }
+
+  integrator->set_adaptive_min_samples(adaptive_min_samples);
 
   if (b_scene.render().use_simplify()) {
     if (preview) {
-      integrator->ao_bounces = get_int(cscene, "ao_bounces");
+      integrator->set_ao_bounces(get_int(cscene, "ao_bounces"));
     }
     else {
-      integrator->ao_bounces = get_int(cscene, "ao_bounces_render");
+      integrator->set_ao_bounces(get_int(cscene, "ao_bounces_render"));
     }
   }
   else {
-    integrator->ao_bounces = 0;
+    integrator->set_ao_bounces(0);
   }
 
-  if (integrator->modified(previntegrator))
-    integrator->tag_update(scene);
+  /* UPDATE_NONE as we don't want to tag the integrator as modified, just tag dependent things */
+  integrator->tag_update(scene, Integrator::UPDATE_NONE);
 }
 
 /* Film */
@@ -357,40 +381,42 @@ void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
 
   Film *film = scene->film;
-  Film prevfilm = *film;
+
+  vector<Pass> prevpasses = scene->passes;
 
   if (b_v3d) {
-    film->display_pass = update_viewport_display_passes(b_v3d, film->passes);
+    film->set_display_pass(update_viewport_display_passes(b_v3d, scene->passes));
   }
 
-  film->exposure = get_float(cscene, "film_exposure");
-  film->filter_type = (FilterType)get_enum(
-      cscene, "pixel_filter_type", FILTER_NUM_TYPES, FILTER_BLACKMAN_HARRIS);
-  film->filter_width = (film->filter_type == FILTER_BOX) ? 1.0f :
-                                                           get_float(cscene, "filter_width");
+  film->set_exposure(get_float(cscene, "film_exposure"));
+  film->set_filter_type(
+      (FilterType)get_enum(cscene, "pixel_filter_type", FILTER_NUM_TYPES, FILTER_BLACKMAN_HARRIS));
+  float filter_width = (film->get_filter_type() == FILTER_BOX) ? 1.0f :
+                                                                 get_float(cscene, "filter_width");
+  film->set_filter_width(filter_width);
 
   if (b_scene.world()) {
     BL::WorldMistSettings b_mist = b_scene.world().mist_settings();
 
-    film->mist_start = b_mist.start();
-    film->mist_depth = b_mist.depth();
+    film->set_mist_start(b_mist.start());
+    film->set_mist_depth(b_mist.depth());
 
     switch (b_mist.falloff()) {
       case BL::WorldMistSettings::falloff_QUADRATIC:
-        film->mist_falloff = 2.0f;
+        film->set_mist_falloff(2.0f);
         break;
       case BL::WorldMistSettings::falloff_LINEAR:
-        film->mist_falloff = 1.0f;
+        film->set_mist_falloff(1.0f);
         break;
       case BL::WorldMistSettings::falloff_INVERSE_QUADRATIC:
-        film->mist_falloff = 0.5f;
+        film->set_mist_falloff(0.5f);
         break;
     }
   }
 
-  if (film->modified(prevfilm)) {
-    film->tag_update(scene);
-    film->tag_passes_update(scene, prevfilm.passes, false);
+  if (!Pass::equals(prevpasses, scene->passes)) {
+    film->tag_passes_update(scene, prevpasses, false);
+    film->tag_modified();
   }
 }
 
@@ -398,11 +424,13 @@ void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
 
 void BlenderSync::sync_view_layer(BL::SpaceView3D & /*b_v3d*/, BL::ViewLayer &b_view_layer)
 {
-  /* render layer */
   view_layer.name = b_view_layer.name();
+
+  /* Filter. */
   view_layer.use_background_shader = b_view_layer.use_sky();
   view_layer.use_background_ao = b_view_layer.use_ao();
-  view_layer.use_surfaces = b_view_layer.use_solid();
+  /* Always enable surfaces for baking, otherwise there is nothing to bake to. */
+  view_layer.use_surfaces = b_view_layer.use_solid() || scene->bake_manager->get_baking();
   view_layer.use_hair = b_view_layer.use_strand();
   view_layer.use_volumes = b_view_layer.use_volumes();
 
@@ -438,16 +466,15 @@ void BlenderSync::sync_images()
     return;
   }
   /* Free buffers used by images which are not needed for render. */
-  BL::BlendData::images_iterator b_image;
-  for (b_data.images.begin(b_image); b_image != b_data.images.end(); ++b_image) {
+  for (BL::Image &b_image : b_data.images) {
     /* TODO(sergey): Consider making it an utility function to check
      * whether image is considered builtin.
      */
-    const bool is_builtin = b_image->packed_file() ||
-                            b_image->source() == BL::Image::source_GENERATED ||
-                            b_image->source() == BL::Image::source_MOVIE || b_engine.is_preview();
+    const bool is_builtin = b_image.packed_file() ||
+                            b_image.source() == BL::Image::source_GENERATED ||
+                            b_image.source() == BL::Image::source_MOVIE || b_engine.is_preview();
     if (is_builtin == false) {
-      b_image->buffers_free();
+      b_image.buffers_free();
     }
     /* TODO(sergey): Free builtin images not used by any shader. */
   }
@@ -458,8 +485,10 @@ PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
 {
   string name = b_pass.name();
 #define MAP_PASS(passname, passtype) \
-  if (name == passname) \
-    return passtype;
+  if (name == passname) { \
+    return passtype; \
+  } \
+  ((void)0)
   /* NOTE: Keep in sync with defined names from DNA_scene_types.h */
   MAP_PASS("Combined", PASS_COMBINED);
   MAP_PASS("Depth", PASS_DEPTH);
@@ -522,8 +551,10 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
   name = name.substr(10);
 
 #define MAP_PASS(passname, offset) \
-  if (name == passname) \
-    return offset;
+  if (name == passname) { \
+    return offset; \
+  } \
+  ((void)0)
   MAP_PASS("Normal", DENOISING_PASS_PREFILTERED_NORMAL);
   MAP_PASS("Albedo", DENOISING_PASS_PREFILTERED_ALBEDO);
   MAP_PASS("Depth", DENOISING_PASS_PREFILTERED_DEPTH);
@@ -538,34 +569,31 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
 
 vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
                                              BL::ViewLayer &b_view_layer,
-                                             bool adaptive_sampling)
+                                             bool adaptive_sampling,
+                                             const DenoiseParams &denoising)
 {
   vector<Pass> passes;
 
   /* loop over passes */
-  BL::RenderLayer::passes_iterator b_pass_iter;
-
-  for (b_rlay.passes.begin(b_pass_iter); b_pass_iter != b_rlay.passes.end(); ++b_pass_iter) {
-    BL::RenderPass b_pass(*b_pass_iter);
+  for (BL::RenderPass &b_pass : b_rlay.passes) {
     PassType pass_type = get_pass_type(b_pass);
 
-    if (pass_type == PASS_MOTION && scene->integrator->motion_blur)
+    if (pass_type == PASS_MOTION && scene->integrator->get_motion_blur())
       continue;
     if (pass_type != PASS_NONE)
       Pass::add(pass_type, passes, b_pass.name().c_str());
   }
 
-  PointerRNA crp = RNA_pointer_get(&b_view_layer.ptr, "cycles");
-  bool use_denoising = get_boolean(crp, "use_denoising");
-  bool use_optix_denoising = get_boolean(crp, "use_optix_denoising");
-  bool write_denoising_passes = get_boolean(crp, "denoising_store_passes");
+  PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
-  scene->film->denoising_flags = 0;
-  if (use_denoising || write_denoising_passes) {
-    if (!use_optix_denoising) {
+  int denoising_flags = 0;
+  if (denoising.use || denoising.store_passes) {
+    if (denoising.type == DENOISER_NLM) {
 #define MAP_OPTION(name, flag) \
-  if (!get_boolean(crp, name)) \
-    scene->film->denoising_flags |= flag;
+  if (!get_boolean(crl, name)) { \
+    denoising_flags |= flag; \
+  } \
+  ((void)0)
       MAP_OPTION("denoising_diffuse_direct", DENOISING_CLEAN_DIFFUSE_DIR);
       MAP_OPTION("denoising_diffuse_indirect", DENOISING_CLEAN_DIFFUSE_IND);
       MAP_OPTION("denoising_glossy_direct", DENOISING_CLEAN_GLOSSY_DIR);
@@ -576,102 +604,100 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
     }
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
   }
+  scene->film->set_denoising_flags(denoising_flags);
 
-  if (write_denoising_passes) {
+  if (denoising.store_passes) {
     b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
     b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
     b_engine.add_pass("Denoising Depth", 1, "Z", b_view_layer.name().c_str());
-    if (!use_optix_denoising) {
+    if (denoising.type == DENOISER_NLM) {
       b_engine.add_pass("Denoising Shadowing", 1, "X", b_view_layer.name().c_str());
       b_engine.add_pass("Denoising Variance", 3, "RGB", b_view_layer.name().c_str());
       b_engine.add_pass("Denoising Intensity", 1, "X", b_view_layer.name().c_str());
     }
 
-    if (scene->film->denoising_flags & DENOISING_CLEAN_ALL_PASSES) {
+    if (scene->film->get_denoising_flags() & DENOISING_CLEAN_ALL_PASSES) {
       b_engine.add_pass("Denoising Clean", 3, "RGB", b_view_layer.name().c_str());
     }
   }
 
 #ifdef __KERNEL_DEBUG__
-  if (get_boolean(crp, "pass_debug_bvh_traversed_nodes")) {
+  if (get_boolean(crl, "pass_debug_bvh_traversed_nodes")) {
     b_engine.add_pass("Debug BVH Traversed Nodes", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_BVH_TRAVERSED_NODES, passes, "Debug BVH Traversed Nodes");
   }
-  if (get_boolean(crp, "pass_debug_bvh_traversed_instances")) {
+  if (get_boolean(crl, "pass_debug_bvh_traversed_instances")) {
     b_engine.add_pass("Debug BVH Traversed Instances", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_BVH_TRAVERSED_INSTANCES, passes, "Debug BVH Traversed Instances");
   }
-  if (get_boolean(crp, "pass_debug_bvh_intersections")) {
+  if (get_boolean(crl, "pass_debug_bvh_intersections")) {
     b_engine.add_pass("Debug BVH Intersections", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_BVH_INTERSECTIONS, passes, "Debug BVH Intersections");
   }
-  if (get_boolean(crp, "pass_debug_ray_bounces")) {
+  if (get_boolean(crl, "pass_debug_ray_bounces")) {
     b_engine.add_pass("Debug Ray Bounces", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_RAY_BOUNCES, passes, "Debug Ray Bounces");
   }
 #endif
-  if (get_boolean(crp, "pass_debug_render_time")) {
+  if (get_boolean(crl, "pass_debug_render_time")) {
     b_engine.add_pass("Debug Render Time", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_RENDER_TIME, passes, "Debug Render Time");
   }
-  if (get_boolean(crp, "pass_debug_sample_count")) {
+  if (get_boolean(crl, "pass_debug_sample_count")) {
     b_engine.add_pass("Debug Sample Count", 1, "X", b_view_layer.name().c_str());
     Pass::add(PASS_SAMPLE_COUNT, passes, "Debug Sample Count");
   }
-  if (get_boolean(crp, "use_pass_volume_direct")) {
+  if (get_boolean(crl, "use_pass_volume_direct")) {
     b_engine.add_pass("VolumeDir", 3, "RGB", b_view_layer.name().c_str());
     Pass::add(PASS_VOLUME_DIRECT, passes, "VolumeDir");
   }
-  if (get_boolean(crp, "use_pass_volume_indirect")) {
+  if (get_boolean(crl, "use_pass_volume_indirect")) {
     b_engine.add_pass("VolumeInd", 3, "RGB", b_view_layer.name().c_str());
     Pass::add(PASS_VOLUME_INDIRECT, passes, "VolumeInd");
   }
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.
    * User facing parameter is the number of pairs. */
-  int crypto_depth = divide_up(min(16, get_int(crp, "pass_crypto_depth")), 2);
-  scene->film->cryptomatte_depth = crypto_depth;
-  scene->film->cryptomatte_passes = CRYPT_NONE;
-  if (get_boolean(crp, "use_pass_crypto_object")) {
+  int crypto_depth = divide_up(min(16, b_view_layer.pass_cryptomatte_depth()), 2);
+  scene->film->set_cryptomatte_depth(crypto_depth);
+  CryptomatteType cryptomatte_passes = CRYPT_NONE;
+  if (b_view_layer.use_pass_cryptomatte_object()) {
     for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Object%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
     }
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-                                                        CRYPT_OBJECT);
+    cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_OBJECT);
   }
-  if (get_boolean(crp, "use_pass_crypto_material")) {
+  if (b_view_layer.use_pass_cryptomatte_material()) {
     for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Material%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
     }
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-                                                        CRYPT_MATERIAL);
+    cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_MATERIAL);
   }
-  if (get_boolean(crp, "use_pass_crypto_asset")) {
+  if (b_view_layer.use_pass_cryptomatte_asset()) {
     for (int i = 0; i < crypto_depth; i++) {
       string passname = cryptomatte_prefix + string_printf("Asset%02d", i);
       b_engine.add_pass(passname.c_str(), 4, "RGBA", b_view_layer.name().c_str());
       Pass::add(PASS_CRYPTOMATTE, passes, passname.c_str());
     }
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-                                                        CRYPT_ASSET);
+    cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_ASSET);
   }
-  if (get_boolean(crp, "pass_crypto_accurate") && scene->film->cryptomatte_passes != CRYPT_NONE) {
-    scene->film->cryptomatte_passes = (CryptomatteType)(scene->film->cryptomatte_passes |
-                                                        CRYPT_ACCURATE);
+  if (b_view_layer.use_pass_cryptomatte_accurate() && cryptomatte_passes != CRYPT_NONE) {
+    cryptomatte_passes = (CryptomatteType)(cryptomatte_passes | CRYPT_ACCURATE);
   }
+  scene->film->set_cryptomatte_passes(cryptomatte_passes);
 
   if (adaptive_sampling) {
     Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes);
-    if (!get_boolean(crp, "pass_debug_sample_count")) {
+    if (!get_boolean(crl, "pass_debug_sample_count")) {
       Pass::add(PASS_SAMPLE_COUNT, passes);
     }
   }
 
-  RNA_BEGIN (&crp, b_aov, "aovs") {
+  RNA_BEGIN (&crl, b_aov, "aovs") {
     bool is_color = (get_enum(b_aov, "type") == 1);
     string name = get_string(b_aov, "name");
 
@@ -687,6 +713,15 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
   RNA_END;
 
   Pass::add(PASS_LIGHT_SAMPLING, passes);
+  scene->film->set_denoising_data_pass(denoising.use || denoising.store_passes);
+  scene->film->set_denoising_clean_pass(scene->film->get_denoising_flags() &
+                                        DENOISING_CLEAN_ALL_PASSES);
+  scene->film->set_denoising_prefiltered_pass(denoising.store_passes &&
+                                              denoising.type == DENOISER_NLM);
+
+  scene->film->set_pass_alpha_threshold(b_view_layer.pass_alpha_threshold());
+  scene->film->tag_passes_update(scene, passes);
+  scene->integrator->tag_update(scene, Integrator::UPDATE_ALL);
 
   return passes;
 }
@@ -698,16 +733,19 @@ void BlenderSync::free_data_after_sync(BL::Depsgraph &b_depsgraph)
    * footprint during synchronization process.
    */
   const bool is_interface_locked = b_engine.render() && b_engine.render().use_lock_interface();
-  const bool can_free_caches = BlenderSession::headless || is_interface_locked;
+  const bool can_free_caches = (BlenderSession::headless || is_interface_locked) &&
+                               /* Baking re-uses the depsgraph multiple times, clearing crashes
+                                * reading un-evaluated mesh data which isn't aligned with the
+                                * geometry we're baking, see T71012. */
+                               !scene->bake_manager->get_baking();
   if (!can_free_caches) {
     return;
   }
   /* TODO(sergey): We can actually remove the whole dependency graph,
    * but that will need some API support first.
    */
-  BL::Depsgraph::objects_iterator b_ob;
-  for (b_depsgraph.objects.begin(b_ob); b_ob != b_depsgraph.objects.end(); ++b_ob) {
-    b_ob->cache_release();
+  for (BL::Object &b_ob : b_depsgraph.objects) {
+    b_ob.cache_release();
   }
 }
 
@@ -734,6 +772,11 @@ SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene, bool background)
   params.use_bvh_unaligned_nodes = RNA_boolean_get(&cscene, "debug_use_hair_bvh");
   params.num_bvh_time_steps = RNA_int_get(&cscene, "debug_bvh_time_steps");
 
+  PointerRNA csscene = RNA_pointer_get(&b_scene.ptr, "cycles_curves");
+  params.hair_subdivisions = get_int(csscene, "subdivisions");
+  params.hair_shape = (CurveShapeType)get_enum(
+      csscene, "shape", CURVE_NUM_SHAPE_TYPES, CURVE_THICK);
+
   if (background && params.shadingsystem != SHADINGSYSTEM_OSL)
     params.persistent_data = r.use_persistent_data();
   else
@@ -753,20 +796,7 @@ SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene, bool background)
     params.texture_limit = 0;
   }
 
-  /* TODO(sergey): Once OSL supports per-microarchitecture optimization get
-   * rid of this.
-   */
-  if (params.shadingsystem == SHADINGSYSTEM_OSL) {
-    params.bvh_layout = BVH_LAYOUT_BVH4;
-  }
-  else {
-    params.bvh_layout = DebugFlags().cpu.bvh_layout;
-  }
-
-#ifdef WITH_EMBREE
-  params.bvh_layout = RNA_boolean_get(&cscene, "use_bvh_embree") ? BVH_LAYOUT_EMBREE :
-                                                                   params.bvh_layout;
-#endif
+  params.bvh_layout = DebugFlags().cpu.bvh_layout;
 
   params.background = background;
 
@@ -784,7 +814,8 @@ bool BlenderSync::get_session_pause(BL::Scene &b_scene, bool background)
 SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
                                               BL::Preferences &b_preferences,
                                               BL::Scene &b_scene,
-                                              bool background)
+                                              bool background,
+                                              BL::ViewLayer b_view_layer)
 {
   SessionParams params;
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
@@ -813,7 +844,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
     preview_samples = preview_samples * preview_samples;
   }
 
-  if (get_enum(cscene, "progressive") == 0 && (params.device.type != DEVICE_OPTIX)) {
+  if (get_enum(cscene, "progressive") == 0 && params.device.has_branched_path) {
     if (background) {
       params.samples = aa_samples;
     }
@@ -862,9 +893,22 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
     params.tile_order = TILE_BOTTOM_TO_TOP;
   }
 
-  /* other parameters */
+  /* Denoising */
+  params.denoising = get_denoise_params(b_scene, b_view_layer, background);
+
+  if (params.denoising.use) {
+    /* Add additional denoising devices if we are rendering and denoising
+     * with different devices. */
+    params.device.add_denoising_devices(params.denoising.type);
+
+    /* Check if denoiser is supported by device. */
+    if (!(params.device.denoisers & params.denoising.type)) {
+      params.denoising.use = false;
+    }
+  }
+
+  /* Viewport Performance */
   params.start_resolution = get_int(cscene, "preview_start_resolution");
-  params.denoising_start_sample = get_int(cscene, "preview_denoising_start_sample");
   params.pixel_size = b_engine.get_preview_pixel_size(b_scene);
 
   /* other parameters */
@@ -899,7 +943,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   else if (shadingsystem == 1)
     params.shadingsystem = SHADINGSYSTEM_OSL;
 
-  /* color managagement */
+  /* Color management. */
   params.display_buffer_linear = b_engine.support_display_space_shader(b_scene);
 
   if (b_engine.is_preview()) {
@@ -915,6 +959,63 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   params.adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
 
   return params;
+}
+
+DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
+                                              BL::ViewLayer &b_view_layer,
+                                              bool background)
+{
+  DenoiseParams denoising;
+  PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
+
+  if (background) {
+    /* Final Render Denoising */
+    denoising.use = get_boolean(cscene, "use_denoising");
+    denoising.type = (DenoiserType)get_enum(cscene, "denoiser", DENOISER_NUM, DENOISER_NONE);
+
+    if (b_view_layer) {
+      PointerRNA clayer = RNA_pointer_get(&b_view_layer.ptr, "cycles");
+      if (!get_boolean(clayer, "use_denoising")) {
+        denoising.use = false;
+      }
+
+      denoising.radius = get_int(clayer, "denoising_radius");
+      denoising.strength = get_float(clayer, "denoising_strength");
+      denoising.feature_strength = get_float(clayer, "denoising_feature_strength");
+      denoising.relative_pca = get_boolean(clayer, "denoising_relative_pca");
+
+      denoising.input_passes = (DenoiserInput)get_enum(
+          clayer,
+          (denoising.type == DENOISER_OPTIX) ? "denoising_optix_input_passes" :
+                                               "denoising_openimagedenoise_input_passes",
+          DENOISER_INPUT_NUM,
+          DENOISER_INPUT_RGB_ALBEDO_NORMAL);
+
+      denoising.store_passes = get_boolean(clayer, "denoising_store_passes");
+    }
+  }
+  else {
+    /* Viewport Denoising */
+    denoising.use = get_boolean(cscene, "use_preview_denoising");
+    denoising.type = (DenoiserType)get_enum(
+        cscene, "preview_denoiser", DENOISER_NUM, DENOISER_NONE);
+    denoising.start_sample = get_int(cscene, "preview_denoising_start_sample");
+
+    /* Auto select fastest denoiser. */
+    if (denoising.type == DENOISER_NONE) {
+      if (!Device::available_devices(DEVICE_MASK_OPTIX).empty()) {
+        denoising.type = DENOISER_OPTIX;
+      }
+      else if (openimagedenoise_supported()) {
+        denoising.type = DENOISER_OPENIMAGEDENOISE;
+      }
+      else {
+        denoising.use = false;
+      }
+    }
+  }
+
+  return denoising;
 }
 
 CCL_NAMESPACE_END

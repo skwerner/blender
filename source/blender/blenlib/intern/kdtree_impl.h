@@ -158,7 +158,7 @@ static uint kdtree_balance(KDTreeNode *nodes, uint nodes_len, uint axis, const u
     return 0 + ofs;
   }
 
-  /* quicksort style sorting around median */
+  /* Quick-sort style sorting around median. */
   left = 0;
   right = nodes_len - 1;
   median = nodes_len / 2;
@@ -878,7 +878,7 @@ static void deduplicate_recursive(const struct DeDuplicateParams *p, uint i)
  * the iteration order.
  * \param duplicates: An array of int's the length of #KDTree.nodes_len
  * Values initialized to -1 are candidates to me merged.
- * Setting the index to it's own position in the array prevents it from being touched,
+ * Setting the index to its own position in the array prevents it from being touched,
  * although it can still be used as a target.
  * \returns The number of merges found (includes any merges already in the \a duplicates array).
  *

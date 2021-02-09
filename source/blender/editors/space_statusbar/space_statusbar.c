@@ -42,7 +42,7 @@
 
 /* ******************** default callbacks for statusbar space ********************  */
 
-static SpaceLink *statusbar_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *statusbar_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceStatusBar *sstatusbar;
@@ -95,12 +95,11 @@ static void statusbar_keymap(struct wmKeyConfig *UNUSED(keyconf))
 {
 }
 
-static void statusbar_header_region_listener(wmWindow *UNUSED(win),
-                                             ScrArea *UNUSED(area),
-                                             ARegion *region,
-                                             wmNotifier *wmn,
-                                             const Scene *UNUSED(scene))
+static void statusbar_header_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* context changes */
   switch (wmn->category) {
     case NC_SCREEN:
@@ -131,14 +130,11 @@ static void statusbar_header_region_listener(wmWindow *UNUSED(win),
   }
 }
 
-static void statusbar_header_region_message_subscribe(const bContext *UNUSED(C),
-                                                      WorkSpace *UNUSED(workspace),
-                                                      Scene *UNUSED(scene),
-                                                      bScreen *UNUSED(screen),
-                                                      ScrArea *UNUSED(area),
-                                                      ARegion *region,
-                                                      struct wmMsgBus *mbus)
+static void statusbar_header_region_message_subscribe(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  ARegion *region = params->region;
+
   wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
       .owner = region,
       .user_data = region,
@@ -158,7 +154,7 @@ void ED_spacetype_statusbar(void)
   st->spaceid = SPACE_STATUSBAR;
   strncpy(st->name, "Status Bar", BKE_ST_MAXNAME);
 
-  st->new = statusbar_new;
+  st->create = statusbar_create;
   st->free = statusbar_free;
   st->init = statusbar_init;
   st->duplicate = statusbar_duplicate;

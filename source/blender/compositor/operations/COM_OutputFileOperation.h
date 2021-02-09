@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_OUTPUTFILEOPERATION_H__
-#define __COM_OUTPUTFILEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 #include "BLI_path_util.h"
@@ -44,6 +44,7 @@ class OutputSingleLayerOperation : public NodeOperation {
   const ColorManagedDisplaySettings *m_displaySettings;
 
   const char *m_viewName;
+  bool m_saveAsRender;
 
  public:
   OutputSingleLayerOperation(const RenderData *rd,
@@ -53,7 +54,8 @@ class OutputSingleLayerOperation : public NodeOperation {
                              const char *path,
                              const ColorManagedViewSettings *viewSettings,
                              const ColorManagedDisplaySettings *displaySettings,
-                             const char *viewName);
+                             const char *viewName,
+                             const bool saveAsRender);
 
   void executeRegion(rcti *rect, unsigned int tileNumber);
   bool isOutputOperation(bool /*rendering*/) const
@@ -91,6 +93,7 @@ class OutputOpenExrMultiLayerOperation : public NodeOperation {
  protected:
   typedef std::vector<OutputOpenExrLayer> LayerList;
 
+  const Scene *m_scene;
   const RenderData *m_rd;
   const bNodeTree *m_tree;
 
@@ -100,8 +103,11 @@ class OutputOpenExrMultiLayerOperation : public NodeOperation {
   LayerList m_layers;
   const char *m_viewName;
 
+  StampData *createStampData() const;
+
  public:
-  OutputOpenExrMultiLayerOperation(const RenderData *rd,
+  OutputOpenExrMultiLayerOperation(const Scene *scene,
+                                   const RenderData *rd,
                                    const bNodeTree *tree,
                                    const char *path,
                                    char exr_codec,
@@ -140,5 +146,3 @@ void free_exr_channels(void *exrhandle,
                        const char *layerName,
                        const DataType datatype);
 int get_datatype_size(DataType datatype);
-
-#endif

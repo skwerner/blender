@@ -16,7 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include <string.h>
+#include <cstring>
 
 #include "MEM_guardedalloc.h"
 
@@ -43,17 +43,17 @@ void zbuf_free_span(ZSpan *zspan);
 void antialias_tagbuf(int xsize, int ysize, char *rectmove);
 
 /* VectorBlurOperation */
-VectorBlurOperation::VectorBlurOperation() : NodeOperation()
+VectorBlurOperation::VectorBlurOperation()
 {
   this->addInputSocket(COM_DT_COLOR);
   this->addInputSocket(COM_DT_VALUE);  // ZBUF
   this->addInputSocket(COM_DT_COLOR);  // SPEED
   this->addOutputSocket(COM_DT_COLOR);
-  this->m_settings = NULL;
-  this->m_cachedInstance = NULL;
-  this->m_inputImageProgram = NULL;
-  this->m_inputSpeedProgram = NULL;
-  this->m_inputZProgram = NULL;
+  this->m_settings = nullptr;
+  this->m_cachedInstance = nullptr;
+  this->m_inputImageProgram = nullptr;
+  this->m_inputSpeedProgram = nullptr;
+  this->m_inputZProgram = nullptr;
   setComplex(true);
 }
 void VectorBlurOperation::initExecution()
@@ -62,7 +62,7 @@ void VectorBlurOperation::initExecution()
   this->m_inputImageProgram = getInputSocketReader(0);
   this->m_inputZProgram = getInputSocketReader(1);
   this->m_inputSpeedProgram = getInputSocketReader(2);
-  this->m_cachedInstance = NULL;
+  this->m_cachedInstance = nullptr;
   QualityStepHelper::initExecution(COM_QH_INCREASE);
 }
 
@@ -76,12 +76,12 @@ void VectorBlurOperation::executePixel(float output[4], int x, int y, void *data
 void VectorBlurOperation::deinitExecution()
 {
   deinitMutex();
-  this->m_inputImageProgram = NULL;
-  this->m_inputSpeedProgram = NULL;
-  this->m_inputZProgram = NULL;
+  this->m_inputImageProgram = nullptr;
+  this->m_inputSpeedProgram = nullptr;
+  this->m_inputZProgram = nullptr;
   if (this->m_cachedInstance) {
     MEM_freeN(this->m_cachedInstance);
-    this->m_cachedInstance = NULL;
+    this->m_cachedInstance = nullptr;
   }
 }
 void *VectorBlurOperation::initializeTileData(rcti *rect)
@@ -91,7 +91,7 @@ void *VectorBlurOperation::initializeTileData(rcti *rect)
   }
 
   lockMutex();
-  if (this->m_cachedInstance == NULL) {
+  if (this->m_cachedInstance == nullptr) {
     MemoryBuffer *tile = (MemoryBuffer *)this->m_inputImageProgram->initializeTileData(rect);
     MemoryBuffer *speed = (MemoryBuffer *)this->m_inputSpeedProgram->initializeTileData(rect);
     MemoryBuffer *z = (MemoryBuffer *)this->m_inputZProgram->initializeTileData(rect);
@@ -107,7 +107,7 @@ bool VectorBlurOperation::determineDependingAreaOfInterest(rcti * /*input*/,
                                                            ReadBufferOperation *readOperation,
                                                            rcti *output)
 {
-  if (this->m_cachedInstance == NULL) {
+  if (this->m_cachedInstance == nullptr) {
     rcti newInput;
     newInput.xmax = this->getWidth();
     newInput.xmin = 0;
@@ -115,9 +115,8 @@ bool VectorBlurOperation::determineDependingAreaOfInterest(rcti * /*input*/,
     newInput.ymin = 0;
     return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 void VectorBlurOperation::generateVectorBlur(float *data,
@@ -138,12 +137,11 @@ void VectorBlurOperation::generateVectorBlur(float *data,
                           inputImage->getBuffer(),
                           inputSpeed->getBuffer(),
                           inputZ->getBuffer());
-  return;
 }
 
 /* ****************** Spans ******************************* */
 /* span fill in method, is also used to localize data for zbuffering */
-typedef struct ZSpan {
+struct ZSpan {
   /* range for clipping */
   int rectx, recty;
 
@@ -159,8 +157,7 @@ typedef struct ZSpan {
   int *rectz;
   DrawBufPixel *rectdraw;
   float clipcrop;
-
-} ZSpan;
+};
 
 /* each zbuffer has coordinates transformed to local rect coordinates, so we can simply clip */
 void zbuf_alloc_span(ZSpan *zspan, int rectx, int recty, float clipcrop)
@@ -185,7 +182,7 @@ void zbuf_free_span(ZSpan *zspan)
     if (zspan->span2) {
       MEM_freeN(zspan->span2);
     }
-    zspan->span1 = zspan->span2 = NULL;
+    zspan->span1 = zspan->span2 = nullptr;
   }
 }
 
@@ -194,7 +191,7 @@ static void zbuf_init_span(ZSpan *zspan)
 {
   zspan->miny1 = zspan->miny2 = zspan->recty + 1;
   zspan->maxy1 = zspan->maxy2 = -1;
-  zspan->minp1 = zspan->maxp1 = zspan->minp2 = zspan->maxp2 = NULL;
+  zspan->minp1 = zspan->maxp1 = zspan->minp2 = zspan->maxp2 = nullptr;
 }
 
 static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
@@ -245,7 +242,7 @@ static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
   }
 
   /* empty span */
-  if (zspan->maxp1 == NULL) {
+  if (zspan->maxp1 == nullptr) {
     span = zspan->span1;
   }
   else { /* does it complete left span? */
@@ -259,10 +256,10 @@ static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
 
   if (span == zspan->span1) {
     //      printf("left span my0 %d my2 %d\n", my0, my2);
-    if (zspan->minp1 == NULL || zspan->minp1[1] > minv[1]) {
+    if (zspan->minp1 == nullptr || zspan->minp1[1] > minv[1]) {
       zspan->minp1 = minv;
     }
-    if (zspan->maxp1 == NULL || zspan->maxp1[1] < maxv[1]) {
+    if (zspan->maxp1 == nullptr || zspan->maxp1[1] < maxv[1]) {
       zspan->maxp1 = maxv;
     }
     if (my0 < zspan->miny1) {
@@ -274,10 +271,10 @@ static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
   }
   else {
     //      printf("right span my0 %d my2 %d\n", my0, my2);
-    if (zspan->minp2 == NULL || zspan->minp2[1] > minv[1]) {
+    if (zspan->minp2 == nullptr || zspan->minp2[1] > minv[1]) {
       zspan->minp2 = minv;
     }
-    if (zspan->maxp2 == NULL || zspan->maxp2[1] < maxv[1]) {
+    if (zspan->maxp2 == nullptr || zspan->maxp2[1] < maxv[1]) {
       zspan->maxp2 = maxv;
     }
     if (my0 < zspan->miny2) {
@@ -296,10 +293,10 @@ static void zbuf_add_to_span(ZSpan *zspan, const float v1[2], const float v2[2])
 
 /* ******************** VECBLUR ACCUM BUF ************************* */
 
-typedef struct DrawBufPixel {
+struct DrawBufPixel {
   const float *colpoin;
   float alpha;
-} DrawBufPixel;
+};
 
 static void zbuf_fill_in_rgba(
     ZSpan *zspan, DrawBufPixel *col, float *v1, float *v2, float *v3, float *v4)
@@ -323,7 +320,7 @@ static void zbuf_fill_in_rgba(
   zbuf_add_to_span(zspan, v4, v1);
 
   /* clipped */
-  if (zspan->minp2 == NULL || zspan->maxp2 == NULL) {
+  if (zspan->minp2 == nullptr || zspan->maxp2 == nullptr) {
     return;
   }
 
@@ -515,7 +512,7 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove)
 /* we make this into 3 points, center point is (0, 0) */
 /* and offset the center point just enough to make curve go through midpoint */
 
-static void quad_bezier_2d(float *result, float *v1, float *v2, float *ipodata)
+static void quad_bezier_2d(float *result, const float *v1, const float *v2, const float *ipodata)
 {
   float p1[2], p2[2], p3[2];
 
@@ -556,7 +553,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   float v1[3], v2[3], v3[3], v4[3], fx, fy;
   const float *dimg, *dz, *ro;
   float *rectvz, *dvz, *dvec1, *dvec2, *dz1, *dz2, *rectz;
-  float *minvecbufrect = NULL, *rectweight, *rw, *rectmax, *rm;
+  float *minvecbufrect = nullptr, *rectweight, *rw, *rectmax, *rm;
   float maxspeedsq = (float)nbd->maxspeed * nbd->maxspeed;
   int y, x, step, maxspeed = nbd->maxspeed, samples = nbd->samples;
   int tsktsk = 0;
@@ -592,12 +589,12 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
     printf("Found uninitialized speed in vector buffer... fixed.\n");
   }
 
-  /* min speed? then copy speedbuffer to recalculate speed vectors */
+  /* Min speed? then copy speed-buffer to recalculate speed vectors. */
   if (nbd->minspeed) {
     float minspeed = (float)nbd->minspeed;
     float minspeedsq = minspeed * minspeed;
 
-    minvecbufrect = (float *)MEM_callocN(4 * sizeof(float) * xsize * ysize, "minspeed buf");
+    minvecbufrect = (float *)MEM_callocN(sizeof(float[4]) * xsize * ysize, "minspeed buf");
 
     dvec1 = vecbufrect;
     dvec2 = minvecbufrect;
@@ -622,8 +619,8 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
     SWAP(float *, minvecbufrect, vecbufrect);
   }
 
-  /* make vertex buffer with averaged speed and zvalues */
-  rectvz = (float *)MEM_callocN(4 * sizeof(float) * (xsize + 1) * (ysize + 1), "vertices");
+  /* Make vertex buffer with averaged speed and Z-values. */
+  rectvz = (float *)MEM_callocN(sizeof(float[4]) * (xsize + 1) * (ysize + 1), "vertices");
   dvz = rectvz;
   for (y = 0; y <= ysize; y++) {
 
@@ -731,7 +728,8 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
 
   antialias_tagbuf(xsize, ysize, rectmove);
 
-  /* has to become static, the init-jit calls a random-seed, screwing up texture noise node */
+  /* Has to become static, the jitter initialization calls a random-seed,
+   * screwing up texture noise node. */
   if (firsttime) {
     firsttime = 0;
     BLI_jitter_init(jit, 256);
@@ -749,7 +747,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
       float blendfac, ipodata[4];
 
       /* clear zbuf, if we draw future we fill in not moving pixels */
-      if (0) {
+      if (false) {
         for (x = xsize * ysize - 1; x >= 0; x--) {
           rectz[x] = 10e16;
         }
@@ -767,7 +765,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
 
       /* clear drawing buffer */
       for (x = xsize * ysize - 1; x >= 0; x--) {
-        rectdraw[x].colpoin = NULL;
+        rectdraw[x].colpoin = nullptr;
       }
 
       dimg = imgrect;

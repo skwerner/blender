@@ -24,14 +24,17 @@
 
 /* all types are needed here, in order to do memory operations */
 #include "DNA_ID.h"
+#include "DNA_key_types.h"
 
 #include "BLI_utildefines.h"
 
 #include "BLI_listbase.h"
 
 #include "BKE_anim_data.h"
+#include "BKE_asset.h"
 #include "BKE_idprop.h"
 #include "BKE_idtype.h"
+#include "BKE_key.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_override.h"
 #include "BKE_lib_remap.h"
@@ -54,10 +57,16 @@ void BKE_libblock_free_data(ID *id, const bool do_id_user)
   if (id->properties) {
     IDP_FreePropertyContent_ex(id->properties, do_id_user);
     MEM_freeN(id->properties);
+    id->properties = NULL;
   }
 
   if (id->override_library) {
     BKE_lib_override_library_free(&id->override_library, do_id_user);
+    id->override_library = NULL;
+  }
+
+  if (id->asset_data) {
+    BKE_asset_metadata_free(&id->asset_data);
   }
 
   BKE_animdata_free(id, do_id_user);
@@ -142,8 +151,14 @@ void BKE_id_free_ex(Main *bmain, void *idv, int flag, const bool use_flag_from_i
   }
 #endif
 
+  Key *key = ((flag & LIB_ID_FREE_NO_MAIN) == 0) ? BKE_key_from_id(id) : NULL;
+
   if ((flag & LIB_ID_FREE_NO_USER_REFCOUNT) == 0) {
     BKE_libblock_relink_ex(bmain, id, NULL, NULL, 0);
+  }
+
+  if ((flag & LIB_ID_FREE_NO_MAIN) == 0 && key != NULL) {
+    BKE_id_free_ex(bmain, &key->id, flag, use_flag_from_idtag);
   }
 
   BKE_libblock_free_datablock(id, flag);
@@ -222,7 +237,7 @@ void BKE_id_free_us(Main *bmain, void *idv) /* test users */
   }
 }
 
-static void id_delete(Main *bmain, const bool do_tagged_deletion)
+static size_t id_delete(Main *bmain, const bool do_tagged_deletion)
 {
   const int tag = LIB_TAG_DOIT;
   ListBase *lbarray[MAX_LIBARRAY];
@@ -267,8 +282,8 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
             BLI_remlink(lb, id);
             BLI_addtail(&tagged_deleted_ids, id);
             /* Do not tag as no_main now, we want to unlink it first (lower-level ID management
-             * code has some specific handling of 'nom main'
-             * IDs that would be a problem in that case). */
+             * code has some specific handling of 'no main' IDs that would be a problem in that
+             * case). */
             id->tag |= tag;
             keep_looping = true;
           }
@@ -331,6 +346,7 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
    * have been already cleared when we reach it
    * (e.g. Objects being processed before meshes, they'll have already released their 'reference'
    * over meshes when we come to freeing obdata). */
+  size_t num_datablocks_deleted = 0;
   for (i = do_tagged_deletion ? 1 : base_count; i--;) {
     ListBase *lb = lbarray[i];
     ID *id, *id_next;
@@ -345,11 +361,13 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
           BLI_assert(id->us == 0);
         }
         BKE_id_free_ex(bmain, id, free_flag, !do_tagged_deletion);
+        ++num_datablocks_deleted;
       }
     }
   }
 
   bmain->is_memfile_undo_written = false;
+  return num_datablocks_deleted;
 }
 
 /**
@@ -371,8 +389,9 @@ void BKE_id_delete(Main *bmain, void *idv)
  *
  * \warning Considered experimental for now, seems to be working OK but this is
  *          risky code in a complicated area.
+ * \return Number of deleted datablocks.
  */
-void BKE_id_multi_tagged_delete(Main *bmain)
+size_t BKE_id_multi_tagged_delete(Main *bmain)
 {
-  id_delete(bmain, true);
+  return id_delete(bmain, true);
 }

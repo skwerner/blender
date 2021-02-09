@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_TEXTUREOPERATION_H__
-#define __COM_TEXTUREOPERATION_H__
+#pragma once
 
 #include "BLI_listbase.h"
 #include "COM_NodeOperation.h"
@@ -25,8 +24,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "RE_pipeline.h"
-#include "RE_render_ext.h"
-#include "RE_shader_ext.h"
+#include "RE_texture.h"
 
 /**
  * Base class for all renderlayeroperations
@@ -81,5 +79,3 @@ class TextureAlphaOperation : public TextureBaseOperation {
   TextureAlphaOperation();
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 };
-
-#endif

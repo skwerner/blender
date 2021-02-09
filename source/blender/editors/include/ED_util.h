@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_UTIL_H__
-#define __ED_UTIL_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -32,7 +31,6 @@ extern "C" {
 
 struct Main;
 struct bContext;
-struct wmOperatorType;
 
 /* ed_util.c */
 void ED_editors_init_for_undo(struct Main *bmain);
@@ -53,7 +51,7 @@ void ED_spacedata_id_remap(struct ScrArea *area,
                            struct ID *old_id,
                            struct ID *new_id);
 
-void ED_OT_flush_edits(struct wmOperatorType *ot);
+void ED_operatortypes_edutils(void);
 
 /* ************** XXX OLD CRUFT WARNING ************* */
 
@@ -71,5 +69,3 @@ void unpack_menu(struct bContext *C,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_UTIL_H__ */

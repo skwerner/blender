@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORCORRECTIONOPERATION_H__
-#define __COM_COLORCORRECTIONOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class ColorCorrectionOperation : public NodeOperation {
@@ -37,7 +37,7 @@ class ColorCorrectionOperation : public NodeOperation {
   ColorCorrectionOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -68,4 +68,3 @@ class ColorCorrectionOperation : public NodeOperation {
     this->m_blueChannelEnabled = enabled;
   }
 };
-#endif

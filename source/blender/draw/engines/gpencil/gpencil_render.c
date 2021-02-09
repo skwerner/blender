@@ -47,7 +47,7 @@ void GPENCIL_render_init(GPENCIL_Data *vedata,
   const float *viewport_size = DRW_viewport_size_get();
   const int size[2] = {(int)viewport_size[0], (int)viewport_size[1]};
 
-  /* Set the pers & view matrix. */
+  /* Set the perspective & view matrix. */
   float winmat[4][4], viewmat[4][4], viewinv[4][4];
 
   struct Object *camera = DEG_get_evaluated_object(depsgraph, RE_GetCamera(engine->re));
@@ -101,7 +101,7 @@ void GPENCIL_render_init(GPENCIL_Data *vedata,
   const bool do_clear_z = !pix_z || do_region;
   const bool do_clear_col = !pix_col || do_region;
 
-  /* FIXME(fclem): we have a precision loss in the depth buffer because of this reupload.
+  /* FIXME(fclem): we have a precision loss in the depth buffer because of this re-upload.
    * Find where it comes from! */
   /* In multi view render the textures can be reused. */
   if (txl->render_depth_tx && !do_clear_z) {
@@ -129,7 +129,7 @@ void GPENCIL_render_init(GPENCIL_Data *vedata,
     /* To avoid unpredictable result, clear buffers that have not be initialized. */
     GPU_framebuffer_bind(fbl->render_fb);
     if (do_clear_col) {
-      float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+      const float clear_col[4] = {0.0f, 0.0f, 0.0f, 0.0f};
       GPU_framebuffer_clear_color(fbl->render_fb, clear_col);
     }
     if (do_clear_z) {
@@ -182,6 +182,7 @@ static void GPENCIL_render_result_z(struct RenderLayer *rl,
                                rect->ymin,
                                BLI_rcti_size_x(rect),
                                BLI_rcti_size_y(rect),
+                               GPU_DATA_FLOAT,
                                rp->rect);
 
     float winmat[4][4];
@@ -212,7 +213,7 @@ static void GPENCIL_render_result_z(struct RenderLayer *rl,
           rp->rect[i] = 1e10f; /* Background */
         }
         else {
-          rp->rect[i] = -rp->rect[i] * range + near;
+          rp->rect[i] = rp->rect[i] * range - near;
         }
       }
     }
@@ -235,6 +236,7 @@ static void GPENCIL_render_result_combined(struct RenderLayer *rl,
                              BLI_rcti_size_y(rect),
                              4,
                              0,
+                             GPU_DATA_FLOAT,
                              rp->rect);
 }
 

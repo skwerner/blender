@@ -242,10 +242,26 @@ bool multires_reshape_context_create_from_ccg(MultiresReshapeContext *reshape_co
   return context_verify_or_free(reshape_context);
 }
 
-bool multires_reshape_context_create_from_subdivide(MultiresReshapeContext *reshape_context,
-                                                    struct Object *object,
-                                                    struct MultiresModifierData *mmd,
-                                                    int top_level)
+bool multires_reshape_context_create_from_modifier(MultiresReshapeContext *reshape_context,
+                                                   struct Object *object,
+                                                   struct MultiresModifierData *mmd,
+                                                   int top_level)
+{
+  Subdiv *subdiv = multires_reshape_create_subdiv(NULL, object, mmd);
+
+  const bool result = multires_reshape_context_create_from_subdiv(
+      reshape_context, object, mmd, subdiv, top_level);
+
+  reshape_context->need_free_subdiv = true;
+
+  return result;
+}
+
+bool multires_reshape_context_create_from_subdiv(MultiresReshapeContext *reshape_context,
+                                                 struct Object *object,
+                                                 struct MultiresModifierData *mmd,
+                                                 struct Subdiv *subdiv,
+                                                 int top_level)
 {
   context_zero(reshape_context);
 
@@ -254,8 +270,8 @@ bool multires_reshape_context_create_from_subdivide(MultiresReshapeContext *resh
   reshape_context->mmd = mmd;
   reshape_context->base_mesh = base_mesh;
 
-  reshape_context->subdiv = multires_reshape_create_subdiv(NULL, object, mmd);
-  reshape_context->need_free_subdiv = true;
+  reshape_context->subdiv = subdiv;
+  reshape_context->need_free_subdiv = false;
 
   reshape_context->reshape.level = mmd->totlvl;
   reshape_context->reshape.grid_size = BKE_subdiv_grid_size_from_level(
@@ -522,7 +538,7 @@ static void allocate_displacement_grid(MDisps *displacement_grid, const int leve
 {
   const int grid_size = BKE_subdiv_grid_size_from_level(level);
   const int grid_area = grid_size * grid_size;
-  float(*disps)[3] = MEM_calloc_arrayN(grid_area, 3 * sizeof(float), "multires disps");
+  float(*disps)[3] = MEM_calloc_arrayN(grid_area, sizeof(float[3]), "multires disps");
   if (displacement_grid->disps != NULL) {
     MEM_freeN(displacement_grid->disps);
   }

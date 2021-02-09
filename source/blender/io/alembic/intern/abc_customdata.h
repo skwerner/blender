@@ -16,13 +16,11 @@
  * The Original Code is Copyright (C) 2016 Kévin Dietrich.
  * All rights reserved.
  */
+#pragma once
 
 /** \file
  * \ingroup balembic
  */
-
-#ifndef __ABC_CUSTOMDATA_H__
-#define __ABC_CUSTOMDATA_H__
 
 #include <Alembic/Abc/All.h>
 #include <Alembic/AbcGeom/All.h>
@@ -38,6 +36,7 @@ struct Mesh;
 
 using Alembic::Abc::ICompoundProperty;
 using Alembic::Abc::OCompoundProperty;
+namespace blender::io::alembic {
 
 struct UVSample {
   std::vector<Imath::V2f> uvs;
@@ -67,6 +66,7 @@ struct CDStreamConfig {
 
   float weight;
   float time;
+  bool use_vertex_interpolation;
   Alembic::AbcGeom::index_t index;
   Alembic::AbcGeom::index_t ceil_index;
 
@@ -112,4 +112,4 @@ void read_custom_data(const std::string &iobject_full_name,
                       const CDStreamConfig &config,
                       const Alembic::Abc::ISampleSelector &iss);
 
-#endif /* __ABC_CUSTOMDATA_H__ */
+}  // namespace blender::io::alembic

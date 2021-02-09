@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GAMMACORRECTOPERATION_H__
-#define __COM_GAMMACORRECTOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class GammaCorrectOperation : public NodeOperation {
@@ -31,7 +31,7 @@ class GammaCorrectOperation : public NodeOperation {
   GammaCorrectOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -57,7 +57,7 @@ class GammaUncorrectOperation : public NodeOperation {
   GammaUncorrectOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -71,5 +71,3 @@ class GammaUncorrectOperation : public NodeOperation {
    */
   void deinitExecution();
 };
-
-#endif

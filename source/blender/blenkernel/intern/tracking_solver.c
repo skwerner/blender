@@ -291,12 +291,12 @@ static int reconstruct_refine_intrinsics_get_flags(MovieTracking *tracking,
     flags |= LIBMV_REFINE_PRINCIPAL_POINT;
   }
 
-  if (refine & REFINE_RADIAL_DISTORTION_K1) {
-    flags |= LIBMV_REFINE_RADIAL_DISTORTION_K1;
+  if (refine & REFINE_RADIAL_DISTORTION) {
+    flags |= LIBMV_REFINE_RADIAL_DISTORTION;
   }
 
-  if (refine & REFINE_RADIAL_DISTORTION_K2) {
-    flags |= LIBMV_REFINE_RADIAL_DISTORTION_K2;
+  if (refine & REFINE_TANGENTIAL_DISTORTION) {
+    flags |= LIBMV_REFINE_TANGENTIAL_DISTORTION;
   }
 
   return flags;
@@ -335,7 +335,7 @@ bool BKE_tracking_reconstruction_check(MovieTracking *tracking,
     /* TODO: check for number of tracks? */
     return true;
   }
-  else if ((tracking->settings.reconstruction_flag & TRACKING_USE_KEYFRAME_SELECTION) == 0) {
+  if ((tracking->settings.reconstruction_flag & TRACKING_USE_KEYFRAME_SELECTION) == 0) {
     /* automatic keyframe selection does not require any pre-process checks */
     if (reconstruct_count_tracks_on_both_keyframes(tracking, object) < 8) {
       BLI_strncpy(error_msg,

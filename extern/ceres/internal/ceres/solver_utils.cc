@@ -28,20 +28,24 @@
 //
 // Author: sameeragarwal@google.com (Sameer Agarwal)
 
+#include "ceres/solver_utils.h"
+
 #include <string>
 
 #include "Eigen/Core"
+#include "ceres/internal/config.h"
 #include "ceres/internal/port.h"
-#include "ceres/solver_utils.h"
 #include "ceres/version.h"
 
 namespace ceres {
 namespace internal {
 
-#define CERES_EIGEN_VERSION                                          \
-  CERES_TO_STRING(EIGEN_WORLD_VERSION) "."                           \
-  CERES_TO_STRING(EIGEN_MAJOR_VERSION) "."                           \
+// clang-format off
+#define CERES_EIGEN_VERSION                 \
+  CERES_TO_STRING(EIGEN_WORLD_VERSION) "."  \
+  CERES_TO_STRING(EIGEN_MAJOR_VERSION) "."  \
   CERES_TO_STRING(EIGEN_MINOR_VERSION)
+// clang-format on
 
 std::string VersionString() {
   std::string value = std::string(CERES_VERSION_STRING);
@@ -59,6 +63,10 @@ std::string VersionString() {
 
 #ifndef CERES_NO_CXSPARSE
   value += "-cxsparse-(" + std::string(CERES_CXSPARSE_VERSION) + ")";
+#endif
+
+#ifndef CERES_NO_ACCELERATE_SPARSE
+  value += "-acceleratesparse";
 #endif
 
 #ifdef CERES_USE_EIGEN_SPARSE

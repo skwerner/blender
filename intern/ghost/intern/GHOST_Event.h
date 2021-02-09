@@ -22,8 +22,7 @@
  * Declaration of GHOST_Event class.
  */
 
-#ifndef __GHOST_EVENT_H__
-#define __GHOST_EVENT_H__
+#pragma once
 
 #include "GHOST_IEvent.h"
 
@@ -34,9 +33,9 @@ class GHOST_Event : public GHOST_IEvent {
  public:
   /**
    * Constructor.
-   * \param msec  The time this event was generated.
-   * \param type  The type of this event.
-   * \param window The generating window (or NULL if system event).
+   * \param msec: The time this event was generated.
+   * \param type: The type of this event.
+   * \param window: The generating window (or NULL if system event).
    */
   GHOST_Event(GHOST_TUns64 msec, GHOST_TEventType type, GHOST_IWindow *window)
       : m_type(type), m_time(msec), m_window(window), m_data(NULL)
@@ -90,5 +89,3 @@ class GHOST_Event : public GHOST_IEvent {
   /** Pointer to the event data. */
   GHOST_TEventDataPtr m_data;
 };
-
-#endif  // __GHOST_EVENT_H__

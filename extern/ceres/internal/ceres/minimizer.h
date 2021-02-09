@@ -31,8 +31,10 @@
 #ifndef CERES_INTERNAL_MINIMIZER_H_
 #define CERES_INTERNAL_MINIMIZER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
+
 #include "ceres/internal/port.h"
 #include "ceres/iteration_callback.h"
 #include "ceres/solver.h"
@@ -47,19 +49,15 @@ class CoordinateDescentMinimizer;
 class LinearSolver;
 
 // Interface for non-linear least squares solvers.
-class Minimizer {
+class CERES_EXPORT_INTERNAL Minimizer {
  public:
   // Options struct to control the behaviour of the Minimizer. Please
   // see solver.h for detailed information about the meaning and
   // default values of each of these parameters.
   struct Options {
-    Options() {
-      Init(Solver::Options());
-    }
+    Options() { Init(Solver::Options()); }
 
-    explicit Options(const Solver::Options& options) {
-      Init(options);
-    }
+    explicit Options(const Solver::Options& options) { Init(options); }
 
     void Init(const Solver::Options& options) {
       num_threads = options.num_threads;
@@ -91,8 +89,7 @@ class Minimizer {
       max_lbfgs_rank = options.max_lbfgs_rank;
       use_approximate_eigenvalue_bfgs_scaling =
           options.use_approximate_eigenvalue_bfgs_scaling;
-      line_search_interpolation_type =
-          options.line_search_interpolation_type;
+      line_search_interpolation_type = options.line_search_interpolation_type;
       min_line_search_step_size = options.min_line_search_step_size;
       line_search_sufficient_function_decrease =
           options.line_search_sufficient_function_decrease;
@@ -106,8 +103,7 @@ class Minimizer {
           options.max_num_line_search_direction_restarts;
       line_search_sufficient_curvature_decrease =
           options.line_search_sufficient_curvature_decrease;
-      max_line_search_step_expansion =
-          options.max_line_search_step_expansion;
+      max_line_search_step_expansion = options.max_line_search_step_expansion;
       inner_iteration_tolerance = options.inner_iteration_tolerance;
       is_silent = (options.logging_type == SILENT);
       is_constrained = false;
@@ -167,19 +163,19 @@ class Minimizer {
 
     // Object responsible for evaluating the cost, residuals and
     // Jacobian matrix.
-    shared_ptr<Evaluator> evaluator;
+    std::shared_ptr<Evaluator> evaluator;
 
     // Object responsible for actually computing the trust region
     // step, and sizing the trust region radius.
-    shared_ptr<TrustRegionStrategy> trust_region_strategy;
+    std::shared_ptr<TrustRegionStrategy> trust_region_strategy;
 
     // Object holding the Jacobian matrix. It is assumed that the
     // sparsity structure of the matrix has already been initialized
     // and will remain constant for the life time of the
     // optimization.
-    shared_ptr<SparseMatrix> jacobian;
+    std::shared_ptr<SparseMatrix> jacobian;
 
-    shared_ptr<CoordinateDescentMinimizer> inner_iteration_minimizer;
+    std::shared_ptr<CoordinateDescentMinimizer> inner_iteration_minimizer;
   };
 
   static Minimizer* Create(MinimizerType minimizer_type);

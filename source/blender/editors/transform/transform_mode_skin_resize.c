@@ -38,9 +38,7 @@
 #include "transform_snap.h"
 
 /* -------------------------------------------------------------------- */
-/* Transform (Skin) */
-
-/** \name Transform Skin
+/** \name Transform (Skin)
  * \{ */
 
 static void applySkinResize(TransInfo *t, const int UNUSED(mval[2]))
@@ -55,7 +53,7 @@ static void applySkinResize(TransInfo *t, const int UNUSED(mval[2]))
   else {
     copy_v3_fl(t->values_final, t->values[0]);
 
-    snapGridIncrement(t, t->values_final);
+    transform_snap_increment(t, t->values_final);
 
     if (applyNumInput(&t->num, t->values_final)) {
       constraintNumInput(t, t->values_final);
@@ -73,11 +71,6 @@ static void applySkinResize(TransInfo *t, const int UNUSED(mval[2]))
     for (i = 0; i < tc->data_len; i++, td++) {
       float tmat[3][3], smat[3][3];
       float fsize[3];
-
-      if (td->flag & TD_NOACTION) {
-        break;
-      }
-
       if (td->flag & TD_SKIP) {
         continue;
       }
@@ -95,8 +88,8 @@ static void applySkinResize(TransInfo *t, const int UNUSED(mval[2]))
       }
 
       mat3_to_size(fsize, tmat);
-      td->val[0] = td->ext->isize[0] * (1 + (fsize[0] - 1) * td->factor);
-      td->val[1] = td->ext->isize[1] * (1 + (fsize[1] - 1) * td->factor);
+      td->loc[0] = td->iloc[0] * (1 + (fsize[0] - 1) * td->factor);
+      td->loc[1] = td->iloc[1] * (1 + (fsize[1] - 1) * td->factor);
     }
   }
 
@@ -128,11 +121,10 @@ void initSkinResize(TransInfo *t)
 
   t->idx_max = 2;
   t->num.idx_max = 2;
-  t->snap[0] = 0.0f;
-  t->snap[1] = 0.1f;
-  t->snap[2] = t->snap[1] * 0.1f;
+  t->snap[0] = 0.1f;
+  t->snap[1] = t->snap[0] * 0.1f;
 
-  copy_v3_fl(t->num.val_inc, t->snap[1]);
+  copy_v3_fl(t->num.val_inc, t->snap[0]);
   t->num.unit_sys = t->scene->unit.system;
   t->num.unit_type[0] = B_UNIT_NONE;
   t->num.unit_type[1] = B_UNIT_NONE;

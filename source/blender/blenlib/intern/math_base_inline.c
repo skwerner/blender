@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -380,11 +379,19 @@ MINLINE float fractf(float a)
   return a - floorf(a);
 }
 
-/* Adapted from godotengine math_funcs.h. */
+/* Adapted from godot-engine math_funcs.h. */
 MINLINE float wrapf(float value, float max, float min)
 {
   float range = max - min;
   return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
+}
+
+MINLINE float pingpongf(float value, float scale)
+{
+  if (scale == 0.0f) {
+    return 0.0f;
+  }
+  return fabsf(fractf((value - scale) / (scale * 2.0f)) * scale * 2.0f - scale);
 }
 
 // Square.
@@ -611,7 +618,7 @@ MINLINE int compare_ff_relative(float a, float b, const float max_diff, const in
 
 MINLINE float signf(float f)
 {
-  return (f < 0.f) ? -1.f : 1.f;
+  return (f < 0.0f) ? -1.0f : 1.0f;
 }
 
 MINLINE float compatible_signf(float f)
@@ -709,7 +716,7 @@ MALWAYS_INLINE __m128 _bli_math_improve_5throot_solution(const __m128 old_result
   __m128 approx2 = _mm_mul_ps(old_result, old_result);
   __m128 approx4 = _mm_mul_ps(approx2, approx2);
   __m128 t = _mm_div_ps(x, approx4);
-  __m128 summ = _mm_add_ps(_mm_mul_ps(_mm_set1_ps(4.0f), old_result), t); /* fma */
+  __m128 summ = _mm_add_ps(_mm_mul_ps(_mm_set1_ps(4.0f), old_result), t); /* FMA. */
   return _mm_mul_ps(summ, _mm_set1_ps(1.0f / 5.0f));
 }
 

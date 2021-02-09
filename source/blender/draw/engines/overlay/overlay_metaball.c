@@ -63,13 +63,13 @@ static void metaball_instance_data_set(
   mul_v3_v3fl(data->mat[1], ob->obmat[1], radius / 0.05f);
   mul_v3_v3fl(data->mat[2], ob->obmat[2], radius / 0.05f);
   mul_v3_m4v3(data->mat[3], ob->obmat, pos);
-  /* WATCH: Reminder, alpha is wiresize. */
+  /* WATCH: Reminder, alpha is wire-size. */
   OVERLAY_bone_instance_data_set_color(data, color);
 }
 
 void OVERLAY_edit_metaball_cache_populate(OVERLAY_Data *vedata, Object *ob)
 {
-  const bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool do_in_front = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
   const bool is_select = DRW_state_is_select();
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   MetaBall *mb = ob->data;
@@ -82,8 +82,7 @@ void OVERLAY_edit_metaball_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
   int select_id = 0;
   if (is_select) {
-    const Object *orig_object = DEG_get_original_object(ob);
-    select_id = orig_object->runtime.select_id;
+    select_id = ob->runtime.select_id;
   }
 
   LISTBASE_FOREACH (MetaElem *, ml, mb->editelems) {
@@ -112,7 +111,7 @@ void OVERLAY_edit_metaball_cache_populate(OVERLAY_Data *vedata, Object *ob)
 
 void OVERLAY_metaball_cache_populate(OVERLAY_Data *vedata, Object *ob)
 {
-  const bool do_in_front = (ob->dtx & OB_DRAWXRAY) != 0;
+  const bool do_in_front = (ob->dtx & OB_DRAW_IN_FRONT) != 0;
   OVERLAY_PrivateData *pd = vedata->stl->pd;
   MetaBall *mb = ob->data;
   const DRWContextState *draw_ctx = DRW_context_state_get();

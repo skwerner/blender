@@ -21,10 +21,13 @@
  * \ingroup wm
  */
 
-#ifndef __WM_WINDOW_H__
-#define __WM_WINDOW_H__
+#pragma once
 
 struct wmOperator;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* *************** internal api ************** */
 void wm_ghost_init(bContext *C);
@@ -83,6 +86,9 @@ void wm_quit_with_optional_confirmation_prompt(bContext *C, wmWindow *win) ATTR_
 int wm_window_new_exec(bContext *C, struct wmOperator *op);
 int wm_window_new_main_exec(bContext *C, struct wmOperator *op);
 
+void wm_test_autorun_revert_action_set(struct wmOperatorType *ot, struct PointerRNA *ptr);
 void wm_test_autorun_warning(bContext *C);
 
-#endif /* __WM_WINDOW_H__ */
+#ifdef __cplusplus
+}
+#endif

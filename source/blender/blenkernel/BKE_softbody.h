@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_SOFTBODY_H__
-#define __BKE_SOFTBODY_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -41,7 +40,7 @@ typedef struct BodyPoint {
   int *springs;
   float choke, choke2, frozen;
   float colball;
-  short loc_flag;  // reserved by locale module specific states
+  short loc_flag; /* reserved by locale module specific states */
   // char octantflag;
   float mass;
   float springweight;
@@ -50,7 +49,7 @@ typedef struct BodyPoint {
 /* allocates and initializes general main data */
 extern struct SoftBody *sbNew(struct Scene *scene);
 
-/* frees internal data and softbody itself */
+/* frees internal data and soft-body itself */
 extern void sbFree(struct Object *ob);
 
 /* frees simulation data to reset simulation */
@@ -60,14 +59,14 @@ extern void sbFreeSimulation(struct SoftBody *sb);
 extern void sbObjectStep(struct Depsgraph *depsgraph,
                          struct Scene *scene,
                          struct Object *ob,
-                         float framnr,
+                         float cfra,
                          float (*vertexCos)[3],
                          int numVerts);
 
 /* makes totally fresh start situation, resets time */
 extern void sbObjectToSoftbody(struct Object *ob);
 
-/* links the softbody module to a 'test for Interrupt' function */
+/* links the soft-body module to a 'test for Interrupt' function */
 /* pass NULL to unlink again */
 extern void sbSetInterruptCallBack(int (*f)(void));
 
@@ -75,6 +74,4 @@ extern void SB_estimate_transform(Object *ob, float lloc[3], float lrot[3][3], f
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

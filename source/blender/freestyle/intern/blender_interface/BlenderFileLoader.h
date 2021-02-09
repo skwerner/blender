@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLENDER_FILE_LOADER_H__
-#define __BLENDER_FILE_LOADER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -37,7 +36,6 @@
 
 #include "MEM_guardedalloc.h"
 
-extern "C" {
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -56,7 +54,6 @@ extern "C" {
 #include "BLI_iterator.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-}
 
 #include "DEG_depsgraph_query.h"
 
@@ -128,7 +125,7 @@ class BlenderFileLoader {
                     bool em1,
                     bool em2,
                     bool em3,
-                    int clip[3]);
+                    const int clip[3]);
   void addTriangle(struct LoaderState *ls,
                    float v1[3],
                    float v2[3],
@@ -155,10 +152,6 @@ class BlenderFileLoader {
   real _minEdgeSize;
 #endif
   bool _smooth; /* if true, face smoothness is taken into account */
-  float _viewplane_left;
-  float _viewplane_right;
-  float _viewplane_bottom;
-  float _viewplane_top;
   float _z_near, _z_far;
   float _z_offset;
 
@@ -170,5 +163,3 @@ class BlenderFileLoader {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __BLENDER_FILE_LOADER_H__

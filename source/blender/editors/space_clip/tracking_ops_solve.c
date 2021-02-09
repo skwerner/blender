@@ -144,8 +144,8 @@ static void solve_camera_freejob(void *scv)
   else {
     BKE_reportf(scj->reports,
                 RPT_INFO,
-                "Average re-projection error: %.3f",
-                tracking->reconstruction.error);
+                "Average re-projection error: %.2f px",
+                BKE_tracking_get_active_reconstruction(tracking)->error);
   }
 
   /* Set currently solved clip as active for scene. */

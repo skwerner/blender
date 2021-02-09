@@ -31,13 +31,14 @@
 #include "ceres/linear_least_squares_problems.h"
 
 #include <cstdio>
+#include <memory>
 #include <string>
 #include <vector>
+
 #include "ceres/block_sparse_matrix.h"
 #include "ceres/block_structure.h"
 #include "ceres/casts.h"
 #include "ceres/file.h"
-#include "ceres/internal/scoped_ptr.h"
 #include "ceres/stringprintf.h"
 #include "ceres/triplet_sparse_matrix.h"
 #include "ceres/types.h"
@@ -100,7 +101,7 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem0() {
 
   int counter = 0;
   for (int i = 0; i < 3; ++i) {
-    for (int j = 0; j< 2; ++j) {
+    for (int j = 0; j < 2; ++j) {
       Ai[counter] = i;
       Aj[counter] = j;
       ++counter;
@@ -130,7 +131,6 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem0() {
   problem->x_D[1] = 2.82327586;
   return problem;
 }
-
 
 /*
       A = [1 0  | 2 0 0
@@ -186,9 +186,8 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem1() {
   int num_cols = 5;
 
   LinearLeastSquaresProblem* problem = new LinearLeastSquaresProblem;
-  TripletSparseMatrix* A = new TripletSparseMatrix(num_rows,
-                                                   num_cols,
-                                                   num_rows * num_cols);
+  TripletSparseMatrix* A =
+      new TripletSparseMatrix(num_rows, num_cols, num_rows * num_cols);
   problem->b.reset(new double[num_rows]);
   problem->D.reset(new double[num_cols]);
   problem->num_eliminate_blocks = 2;
@@ -297,7 +296,7 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem2() {
   problem->num_eliminate_blocks = 2;
 
   CompressedRowBlockStructure* bs = new CompressedRowBlockStructure;
-  scoped_array<double> values(new double[num_rows * num_cols]);
+  std::unique_ptr<double[]> values(new double[num_rows * num_cols]);
 
   for (int c = 0; c < num_cols; ++c) {
     bs->cols.push_back(Block());
@@ -403,7 +402,6 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem2() {
   return problem;
 }
 
-
 /*
       A = [1 0
            3 0
@@ -431,7 +429,7 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem3() {
   problem->num_eliminate_blocks = 2;
 
   CompressedRowBlockStructure* bs = new CompressedRowBlockStructure;
-  scoped_array<double> values(new double[num_rows * num_cols]);
+  std::unique_ptr<double[]> values(new double[num_rows * num_cols]);
 
   for (int c = 0; c < num_cols; ++c) {
     bs->cols.push_back(Block());
@@ -538,7 +536,7 @@ LinearLeastSquaresProblem* LinearLeastSquaresProblem4() {
   problem->num_eliminate_blocks = 1;
 
   CompressedRowBlockStructure* bs = new CompressedRowBlockStructure;
-  scoped_array<double> values(new double[num_rows * num_cols]);
+  std::unique_ptr<double[]> values(new double[num_rows * num_cols]);
 
   // Column block structure
   bs->cols.push_back(Block());
@@ -613,14 +611,13 @@ bool DumpLinearLeastSquaresProblemToConsole(const SparseMatrix* A,
                                             const double* b,
                                             const double* x,
                                             int num_eliminate_blocks) {
-  CHECK_NOTNULL(A);
+  CHECK(A != nullptr);
   Matrix AA;
   A->ToDenseMatrix(&AA);
   LOG(INFO) << "A^T: \n" << AA.transpose();
 
   if (D != NULL) {
-    LOG(INFO) << "A's appended diagonal:\n"
-              << ConstVectorRef(D, A->num_cols());
+    LOG(INFO) << "A's appended diagonal:\n" << ConstVectorRef(D, A->num_cols());
   }
 
   if (b != NULL) {
@@ -636,10 +633,10 @@ bool DumpLinearLeastSquaresProblemToConsole(const SparseMatrix* A,
 void WriteArrayToFileOrDie(const string& filename,
                            const double* x,
                            const int size) {
-  CHECK_NOTNULL(x);
+  CHECK(x != nullptr);
   VLOG(2) << "Writing array to: " << filename;
   FILE* fptr = fopen(filename.c_str(), "w");
-  CHECK_NOTNULL(fptr);
+  CHECK(fptr != nullptr);
   for (int i = 0; i < size; ++i) {
     fprintf(fptr, "%17f\n", x[i]);
   }
@@ -652,25 +649,23 @@ bool DumpLinearLeastSquaresProblemToTextFile(const string& filename_base,
                                              const double* b,
                                              const double* x,
                                              int num_eliminate_blocks) {
-  CHECK_NOTNULL(A);
+  CHECK(A != nullptr);
   LOG(INFO) << "writing to: " << filename_base << "*";
 
   string matlab_script;
   StringAppendF(&matlab_script,
                 "function lsqp = load_trust_region_problem()\n");
-  StringAppendF(&matlab_script,
-                "lsqp.num_rows = %d;\n", A->num_rows());
-  StringAppendF(&matlab_script,
-                "lsqp.num_cols = %d;\n", A->num_cols());
+  StringAppendF(&matlab_script, "lsqp.num_rows = %d;\n", A->num_rows());
+  StringAppendF(&matlab_script, "lsqp.num_cols = %d;\n", A->num_cols());
 
   {
     string filename = filename_base + "_A.txt";
     FILE* fptr = fopen(filename.c_str(), "w");
-    CHECK_NOTNULL(fptr);
+    CHECK(fptr != nullptr);
     A->ToTextFile(fptr);
     fclose(fptr);
-    StringAppendF(&matlab_script,
-                  "tmp = load('%s', '-ascii');\n", filename.c_str());
+    StringAppendF(
+        &matlab_script, "tmp = load('%s', '-ascii');\n", filename.c_str());
     StringAppendF(
         &matlab_script,
         "lsqp.A = sparse(tmp(:, 1) + 1, tmp(:, 2) + 1, tmp(:, 3), %d, %d);\n",
@@ -678,26 +673,25 @@ bool DumpLinearLeastSquaresProblemToTextFile(const string& filename_base,
         A->num_cols());
   }
 
-
   if (D != NULL) {
     string filename = filename_base + "_D.txt";
     WriteArrayToFileOrDie(filename, D, A->num_cols());
-    StringAppendF(&matlab_script,
-                  "lsqp.D = load('%s', '-ascii');\n", filename.c_str());
+    StringAppendF(
+        &matlab_script, "lsqp.D = load('%s', '-ascii');\n", filename.c_str());
   }
 
   if (b != NULL) {
     string filename = filename_base + "_b.txt";
     WriteArrayToFileOrDie(filename, b, A->num_rows());
-    StringAppendF(&matlab_script,
-                  "lsqp.b = load('%s', '-ascii');\n", filename.c_str());
+    StringAppendF(
+        &matlab_script, "lsqp.b = load('%s', '-ascii');\n", filename.c_str());
   }
 
   if (x != NULL) {
     string filename = filename_base + "_x.txt";
     WriteArrayToFileOrDie(filename, x, A->num_cols());
-    StringAppendF(&matlab_script,
-                  "lsqp.x = load('%s', '-ascii');\n", filename.c_str());
+    StringAppendF(
+        &matlab_script, "lsqp.x = load('%s', '-ascii');\n", filename.c_str());
   }
 
   string matlab_filename = filename_base + ".m";
@@ -715,12 +709,11 @@ bool DumpLinearLeastSquaresProblem(const string& filename_base,
                                    int num_eliminate_blocks) {
   switch (dump_format_type) {
     case CONSOLE:
-      return DumpLinearLeastSquaresProblemToConsole(A, D, b, x,
-                                                    num_eliminate_blocks);
+      return DumpLinearLeastSquaresProblemToConsole(
+          A, D, b, x, num_eliminate_blocks);
     case TEXTFILE:
-      return DumpLinearLeastSquaresProblemToTextFile(filename_base,
-                                                     A, D, b, x,
-                                                     num_eliminate_blocks);
+      return DumpLinearLeastSquaresProblemToTextFile(
+          filename_base, A, D, b, x, num_eliminate_blocks);
     default:
       LOG(FATAL) << "Unknown DumpFormatType " << dump_format_type;
   }

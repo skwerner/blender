@@ -22,11 +22,14 @@
  * \brief Types and defines for representing Rigid Body entities
  */
 
-#ifndef __DNA_RIGIDBODY_TYPES_H__
-#define __DNA_RIGIDBODY_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
 #include "DNA_object_force_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Collection;
 
@@ -76,8 +79,8 @@ typedef struct RigidBodyWorld {
   /** Number of objects in rigid body group. */
   int numbodies;
 
-  /** Number of simulation steps thaken per second. */
-  short steps_per_second;
+  /** Number of simulation substeps steps taken per frame. */
+  short substeps_per_frame;
   /** Number of constraint solver iterations made per simulation step. */
   short num_solver_iterations;
 
@@ -214,7 +217,7 @@ typedef enum eRigidBody_Shape {
   RB_SHAPE_TRIMESH = 6,
 
   /* concave mesh approximated using primitives */
-  // RB_SHAPE_COMPOUND,
+  RB_SHAPE_COMPOUND = 7,
 } eRigidBody_Shape;
 
 typedef enum eRigidBody_MeshSource {
@@ -370,4 +373,6 @@ typedef enum eRigidBodyCon_Flag {
 
 /* ******************************** */
 
-#endif /* __DNA_RIGIDBODY_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

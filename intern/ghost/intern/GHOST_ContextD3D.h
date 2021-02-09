@@ -18,8 +18,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_CONTEXTD3D_H__
-#define __GHOST_CONTEXTD3D_H__
+#pragma once
 
 #ifndef WIN32
 #  error WIN32 only!
@@ -39,19 +38,19 @@ class GHOST_ContextD3D : public GHOST_Context {
 
   /**
    * Swaps front and back buffers of a window.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess swapBuffers();
 
   /**
    * Activates the drawing context of this window.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess activateDrawingContext();
 
   /**
    * Release the drawing context of the calling thread.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess releaseDrawingContext();
 
@@ -78,8 +77,8 @@ class GHOST_ContextD3D : public GHOST_Context {
   GHOST_TSuccess releaseNativeHandles();
 
   /**
-   * Sets the swap interval for swapBuffers.
-   * \param interval The swap interval to use.
+   * Sets the swap interval for #swapBuffers.
+   * \param interval: The swap interval to use.
    * \return A boolean success indicator.
    */
   GHOST_TSuccess setSwapInterval(int /*interval*/)
@@ -88,8 +87,8 @@ class GHOST_ContextD3D : public GHOST_Context {
   }
 
   /**
-   * Gets the current swap interval for swapBuffers.
-   * \param intervalOut Variable to store the swap interval if it can be read.
+   * Gets the current swap interval for #swapBuffers.
+   * \param intervalOut: Variable to store the swap interval if it can be read.
    * \return Whether the swap interval can be read.
    */
   GHOST_TSuccess getSwapInterval(int &)
@@ -98,8 +97,8 @@ class GHOST_ContextD3D : public GHOST_Context {
   }
 
   /**
-   * Gets the OpenGL framebuffer associated with the OpenGL context
-   * \return The ID of an OpenGL framebuffer object.
+   * Gets the OpenGL frame-buffer associated with the OpenGL context
+   * \return The ID of an OpenGL frame-buffer object.
    */
   unsigned int getDefaultFramebuffer()
   {
@@ -132,5 +131,3 @@ class GHOST_ContextD3D : public GHOST_Context {
   ID3D11Device *m_device;
   ID3D11DeviceContext *m_device_ctx;
 };
-
-#endif /* __GHOST_CONTEXTD3D_H__ */

@@ -27,6 +27,10 @@
 #include "BLI_path_util.h"
 #include "BLI_utildefines.h"
 
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
+
 #include "DEG_depsgraph.h"
 
 #include "BKE_image.h"
@@ -98,7 +102,7 @@ const EnumPropertyItem rna_enum_bake_pass_type_items[] = {
 #  include "BKE_context.h"
 #  include "BKE_report.h"
 
-#  include "GPU_extensions.h"
+#  include "GPU_capabilities.h"
 #  include "GPU_shader.h"
 #  include "IMB_colormanagement.h"
 
@@ -131,7 +135,7 @@ static void engine_bind_display_space_shader(RenderEngine *UNUSED(engine), Scene
   GPUShader *shader = GPU_shader_get_builtin_shader(GPU_SHADER_2D_IMAGE);
   GPU_shader_bind(shader);
 
-  int img_loc = GPU_shader_get_uniform_ensure(shader, "image");
+  int img_loc = GPU_shader_get_uniform(shader, "image");
 
   GPU_shader_uniform_int(shader, img_loc, 0);
 }
@@ -294,12 +298,13 @@ static void rna_RenderEngine_unregister(Main *bmain, StructRNA *type)
     return;
   }
 
+  RE_FreeAllPersistentData();
   RNA_struct_free_extension(type, &et->rna_ext);
   RNA_struct_free(&BLENDER_RNA, type);
   BLI_freelinkN(&R_engines, et);
 
   /* Stop all renders in case we were using this one. */
-  ED_render_engine_changed(bmain);
+  ED_render_engine_changed(bmain, false);
 }
 
 static StructRNA *rna_RenderEngine_register(Main *bmain,
@@ -406,6 +411,19 @@ static PointerRNA rna_RenderEngine_camera_override_get(PointerRNA *ptr)
   else {
     return rna_pointer_inherit_refine(ptr, &RNA_Object, engine->camera_override);
   }
+}
+
+static void rna_RenderEngine_engine_frame_set(RenderEngine *engine, int frame, float subframe)
+{
+#  ifdef WITH_PYTHON
+  BPy_BEGIN_ALLOW_THREADS;
+#  endif
+
+  RE_engine_frame_set(engine, frame, subframe);
+
+#  ifdef WITH_PYTHON
+  BPy_END_ALLOW_THREADS;
+#  endif
 }
 
 static void rna_RenderResult_views_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -568,7 +586,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
 
   func = RNA_def_function(srna, "begin_result", "RE_engine_begin_result");
   RNA_def_function_ui_description(
-      func, "Create render result to write linear floating point render layers and passes");
+      func, "Create render result to write linear floating-point render layers and passes");
   parm = RNA_def_int(func, "x", 0, 0, INT_MAX, "X", "", 0, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   parm = RNA_def_int(func, "y", 0, 0, INT_MAX, "Y", "", 0, INT_MAX);
@@ -673,7 +691,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
   parm = RNA_def_string(func, "info", NULL, 0, "Info", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
-  func = RNA_def_function(srna, "frame_set", "RE_engine_frame_set");
+  func = RNA_def_function(srna, "frame_set", "rna_RenderEngine_engine_frame_set");
   RNA_def_function_ui_description(func, "Evaluate scene at a different frame (for motion blur)");
   parm = RNA_def_int(func, "frame", 0, INT_MIN, INT_MAX, "Frame", "", INT_MIN, INT_MAX);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -743,7 +761,7 @@ static void rna_def_render_engine(BlenderRNA *brna)
   parm = RNA_def_int(func, "pixel_size", 0, 1, 8, "Pixel Size", "", 1, 8);
   RNA_def_function_return(func, parm);
 
-  RNA_def_function(srna, "free_blender_memory", "RE_engine_free_blender_memory");
+  func = RNA_def_function(srna, "free_blender_memory", "RE_engine_free_blender_memory");
   RNA_def_function_ui_description(func, "Free Blender side memory of render engine");
 
   RNA_define_verify_sdna(0);
@@ -829,6 +847,22 @@ static void rna_def_render_engine(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
   RNA_def_property_ui_text(
       prop, "Use Eevee Viewport", "Uses Eevee for viewport shading in LookDev shading mode");
+
+  prop = RNA_def_property(srna, "bl_use_custom_freestyle", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_CUSTOM_FREESTYLE);
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Use Custom Freestyle",
+      "Handles freestyle rendering on its own, instead of delegating it to EEVEE");
+
+  prop = RNA_def_property(srna, "bl_use_gpu_context", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_GPU_CONTEXT);
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Use GPU Context",
+      "Enable OpenGL context for the render method, for engines that render using OpenGL");
 
   prop = RNA_def_property(srna, "bl_use_shading_nodes_custom", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_SHADING_NODES_CUSTOM);
@@ -1055,7 +1089,6 @@ static void rna_def_render_pass(BlenderRNA *brna)
   prop = RNA_def_property(srna, "fullname", PROP_STRING, PROP_NONE);
   RNA_def_property_string_sdna(prop, NULL, "fullname");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_struct_name_property(srna, prop);
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
   RNA_def_property_string_sdna(prop, NULL, "name");

@@ -91,11 +91,11 @@ static bool copy_data_path_button_poll(bContext *C)
 
     if (path) {
       MEM_freeN(path);
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 static int copy_data_path_button_exec(bContext *C, wmOperator *op)
@@ -182,11 +182,11 @@ static bool copy_as_driver_button_poll(bContext *C)
 
     if (path) {
       MEM_freeN(path);
-      return 1;
+      return true;
     }
   }
 
-  return 0;
+  return false;
 }
 
 static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
@@ -201,7 +201,7 @@ static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
 
   if (ptr.owner_id && ptr.data && prop) {
     ID *id;
-    int dim = RNA_property_array_dimension(&ptr, prop, NULL);
+    const int dim = RNA_property_array_dimension(&ptr, prop, NULL);
     char *path = RNA_path_from_real_ID_to_property_index(bmain, &ptr, prop, dim, index, &id);
 
     if (path) {
@@ -209,10 +209,9 @@ static int copy_as_driver_button_exec(bContext *C, wmOperator *op)
       MEM_freeN(path);
       return OPERATOR_FINISHED;
     }
-    else {
-      BKE_reportf(op->reports, RPT_ERROR, "Could not compute a valid data path");
-      return OPERATOR_CANCELLED;
-    }
+
+    BKE_reportf(op->reports, RPT_ERROR, "Could not compute a valid data path");
+    return OPERATOR_CANCELLED;
   }
 
   return OPERATOR_CANCELLED;
@@ -312,9 +311,7 @@ static int operator_button_property_finish(bContext *C, PointerRNA *ptr, Propert
     /* do nothing, go ahead with undo */
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool reset_default_button_poll(bContext *C)
@@ -381,7 +378,7 @@ static bool assign_default_button_poll(bContext *C)
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
   if (ptr.data && prop && RNA_property_editable(&ptr, prop)) {
-    PropertyType type = RNA_property_type(prop);
+    const PropertyType type = RNA_property_type(prop);
 
     return RNA_property_is_idprop(prop) && !RNA_property_array_check(prop) &&
            ELEM(type, PROP_INT, PROP_FLOAT);
@@ -513,7 +510,8 @@ static bool override_type_set_button_poll(bContext *C)
 
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  const int override_status = RNA_property_override_library_status(&ptr, prop, index);
+  const uint override_status = RNA_property_override_library_status(
+      CTX_data_main(C), &ptr, prop, index);
 
   return (ptr.data && prop && (override_status & RNA_OVERRIDE_STATUS_OVERRIDABLE));
 }
@@ -559,7 +557,14 @@ static int override_type_set_button_exec(bContext *C, wmOperator *op)
   }
 
   IDOverrideLibraryPropertyOperation *opop = RNA_property_override_property_operation_get(
-      &ptr, prop, operation, index, true, NULL, &created);
+      CTX_data_main(C), &ptr, prop, operation, index, true, NULL, &created);
+
+  if (opop == NULL) {
+    /* Sometimes e.g. RNA cannot generate a path to the given property. */
+    BKE_reportf(op->reports, RPT_WARNING, "Failed to create the override operation");
+    return OPERATOR_CANCELLED;
+  }
+
   if (!created) {
     opop->operation = operation;
   }
@@ -613,7 +618,8 @@ static bool override_remove_button_poll(bContext *C)
 
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
-  const int override_status = RNA_property_override_library_status(&ptr, prop, index);
+  const uint override_status = RNA_property_override_library_status(
+      CTX_data_main(C), &ptr, prop, index);
 
   return (ptr.data && ptr.owner_id && prop && (override_status & RNA_OVERRIDE_STATUS_OVERRIDDEN));
 }
@@ -630,11 +636,11 @@ static int override_remove_button_exec(bContext *C, wmOperator *op)
   UI_context_active_but_prop_get(C, &ptr, &prop, &index);
 
   ID *id = ptr.owner_id;
-  IDOverrideLibraryProperty *oprop = RNA_property_override_property_find(&ptr, prop);
+  IDOverrideLibraryProperty *oprop = RNA_property_override_property_find(bmain, &ptr, prop, &id);
   BLI_assert(oprop != NULL);
   BLI_assert(id != NULL && id->override_library != NULL);
 
-  const bool is_template = (id->override_library->reference == NULL);
+  const bool is_template = ID_IS_OVERRIDE_LIBRARY_TEMPLATE(id);
 
   /* We need source (i.e. linked data) to restore values of deleted overrides...
    * If this is an override template, we obviously do not need to restore anything. */
@@ -716,8 +722,7 @@ static void ui_context_selected_bones_via_pose(bContext *C, ListBase *r_lb)
   lb = CTX_data_collection_get(C, "selected_pose_bones");
 
   if (!BLI_listbase_is_empty(&lb)) {
-    CollectionPointerLink *link;
-    for (link = lb.first; link; link = link->next) {
+    LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
       bPoseChannel *pchan = link->ptr.data;
       RNA_pointer_create(link->ptr.owner_id, &RNA_Bone, pchan->bone, &link->ptr);
     }
@@ -737,6 +742,8 @@ bool UI_context_copy_to_selected_list(bContext *C,
   *r_path = NULL;
   /* special case for bone constraints */
   char *path_from_bone = NULL;
+  /* Remove links from the collection list which don't contain 'prop'. */
+  bool ensure_list_items_contain_prop = false;
 
   /* PropertyGroup objects don't have a reference to the struct that actually owns
    * them, so it is normally necessary to do a brute force search to find it. This
@@ -803,9 +810,14 @@ bool UI_context_copy_to_selected_list(bContext *C,
     else {
       *r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
     }
+    /* Account for properties only being available for some sequence types. */
+    ensure_list_items_contain_prop = true;
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_FCurve)) {
     *r_lb = CTX_data_collection_get(C, "selected_editable_fcurves");
+  }
+  else if (RNA_struct_is_a(ptr->type, &RNA_Keyframe)) {
+    *r_lb = CTX_data_collection_get(C, "selected_editable_keyframes");
   }
   else if (RNA_struct_is_a(ptr->type, &RNA_NlaStrip)) {
     *r_lb = CTX_data_collection_get(C, "selected_nla_strips");
@@ -840,12 +852,10 @@ bool UI_context_copy_to_selected_list(bContext *C,
 
     /* Now filter by type */
     if (node) {
-      CollectionPointerLink *link, *link_next;
       lb = CTX_data_collection_get(C, "selected_nodes");
 
-      for (link = lb.first; link; link = link_next) {
+      LISTBASE_FOREACH_MUTABLE (CollectionPointerLink *, link, &lb) {
         bNode *node_data = link->ptr.data;
-        link_next = link->next;
 
         if (node_data->type != node->type) {
           BLI_remlink(&lb, link);
@@ -873,9 +883,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
 
       /* de-duplicate obdata */
       if (!BLI_listbase_is_empty(&lb)) {
-        CollectionPointerLink *link, *link_next;
-
-        for (link = lb.first; link; link = link->next) {
+        LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
           Object *ob = (Object *)link->ptr.owner_id;
           if (ob->data) {
             ID *id_data = ob->data;
@@ -883,10 +891,9 @@ bool UI_context_copy_to_selected_list(bContext *C,
           }
         }
 
-        for (link = lb.first; link; link = link_next) {
+        LISTBASE_FOREACH_MUTABLE (CollectionPointerLink *, link, &lb) {
           Object *ob = (Object *)link->ptr.owner_id;
           ID *id_data = ob->data;
-          link_next = link->next;
 
           if ((id_data == NULL) || (id_data->tag & LIB_TAG_DOIT) == 0 || ID_IS_LINKED(id_data) ||
               (GS(id_data->name) != id_code)) {
@@ -894,7 +901,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
             MEM_freeN(link);
           }
           else {
-            /* avoid prepending 'data' to the path */
+            /* Avoid prepending 'data' to the path. */
             RNA_id_pointer_create(id_data, &link->ptr);
           }
 
@@ -921,12 +928,25 @@ bool UI_context_copy_to_selected_list(bContext *C,
         else {
           *r_lb = CTX_data_collection_get(C, "selected_editable_sequences");
         }
+        /* Account for properties only being available for some sequence types. */
+        ensure_list_items_contain_prop = true;
       }
     }
     return (*r_path != NULL);
   }
   else {
     return false;
+  }
+
+  if (ensure_list_items_contain_prop) {
+    const char *prop_id = RNA_property_identifier(prop);
+    LISTBASE_FOREACH_MUTABLE (CollectionPointerLink *, link, r_lb) {
+      if ((ptr->type != link->ptr.type) &&
+          (RNA_struct_type_find_property(link->ptr.type, prop_id) != prop)) {
+        BLI_remlink(r_lb, link);
+        MEM_freeN(link);
+      }
+    }
   }
 
   return true;
@@ -954,12 +974,11 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
   if (ptr.data && prop) {
     char *path = NULL;
     bool use_path_from_id;
-    CollectionPointerLink *link;
     ListBase lb = {NULL};
 
     if (UI_context_copy_to_selected_list(C, &ptr, prop, &lb, &use_path_from_id, &path) &&
         !BLI_listbase_is_empty(&lb)) {
-      for (link = lb.first; link; link = link->next) {
+      LISTBASE_FOREACH (CollectionPointerLink *, link, &lb) {
         if (link->ptr.data != ptr.data) {
           if (use_path_from_id) {
             /* Path relative to ID. */
@@ -988,11 +1007,9 @@ static bool copy_to_selected_button(bContext *C, bool all, bool poll)
                 success = true;
                 break;
               }
-              else {
-                if (RNA_property_copy(bmain, &lptr, &ptr, prop, (all) ? -1 : index)) {
-                  RNA_property_update(C, &lptr, prop);
-                  success = true;
-                }
+              if (RNA_property_copy(bmain, &lptr, &ptr, prop, (all) ? -1 : index)) {
+                RNA_property_update(C, &lptr, prop);
+                success = true;
               }
             }
           }
@@ -1132,12 +1149,13 @@ static bool jump_to_target_button(bContext *C, bool poll)
       return jump_to_target_ptr(C, target_ptr, poll);
     }
     /* For string properties with prop_search, look up the search collection item. */
-    else if (type == PROP_STRING) {
+    if (type == PROP_STRING) {
       const uiBut *but = UI_context_active_but_get(C);
+      const uiButSearch *search_but = (but->type == UI_BTYPE_SEARCH_MENU) ? (uiButSearch *)but :
+                                                                            NULL;
 
-      if (but->type == UI_BTYPE_SEARCH_MENU && but->search &&
-          but->search->update_fn == ui_rna_collection_search_update_fn) {
-        uiRNACollectionSearch *coll_search = but->search->arg;
+      if (search_but && search_but->items_update_fn == ui_rna_collection_search_update_fn) {
+        uiRNACollectionSearch *coll_search = search_but->arg;
 
         char str_buf[MAXBONENAME];
         char *str_ptr = RNA_property_string_get_alloc(&ptr, prop, str_buf, sizeof(str_buf), NULL);
@@ -1166,7 +1184,7 @@ bool ui_jump_to_target_button_poll(bContext *C)
 
 static int jump_to_target_button_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  bool success = jump_to_target_button(C, false);
+  const bool success = jump_to_target_button(C, false);
 
   return (success) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
@@ -1205,7 +1223,7 @@ typedef struct uiEditSourceStore {
 
 typedef struct uiEditSourceButStore {
   char py_dbg_fn[FILE_MAX];
-  int py_dbg_ln;
+  int py_dbg_line_number;
 } uiEditSourceButStore;
 
 /* should only ever be set while the edit source operator is running */
@@ -1248,9 +1266,7 @@ static bool ui_editsource_uibut_match(uiBut *but_a, uiBut *but_b)
       STREQLEN(but_a->drawstr, but_b->drawstr, UI_MAX_DRAW_STR)) {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void UI_editsource_active_but_test(uiBut *but)
@@ -1260,21 +1276,21 @@ void UI_editsource_active_but_test(uiBut *but)
   struct uiEditSourceButStore *but_store = MEM_callocN(sizeof(uiEditSourceButStore), __func__);
 
   const char *fn;
-  int lineno = -1;
+  int line_number = -1;
 
 #  if 0
   printf("comparing buttons: '%s' == '%s'\n", but->drawstr, ui_editsource_info->but_orig.drawstr);
 #  endif
 
-  PyC_FileAndNum_Safe(&fn, &lineno);
+  PyC_FileAndNum_Safe(&fn, &line_number);
 
-  if (lineno != -1) {
+  if (line_number != -1) {
     BLI_strncpy(but_store->py_dbg_fn, fn, sizeof(but_store->py_dbg_fn));
-    but_store->py_dbg_ln = lineno;
+    but_store->py_dbg_line_number = line_number;
   }
   else {
     but_store->py_dbg_fn[0] = '\0';
-    but_store->py_dbg_ln = -1;
+    but_store->py_dbg_line_number = -1;
   }
 
   BLI_ghash_insert(ui_editsource_info->hash, but, but_store);
@@ -1286,41 +1302,40 @@ static int editsource_text_edit(bContext *C,
                                 const int line)
 {
   struct Main *bmain = CTX_data_main(C);
-  Text *text;
+  Text *text = NULL;
 
   /* Developers may wish to copy-paste to an external editor. */
   printf("%s:%d\n", filepath, line);
 
-  for (text = bmain->texts.first; text; text = text->id.next) {
-    if (text->name && BLI_path_cmp(text->name, filepath) == 0) {
+  LISTBASE_FOREACH (Text *, text_iter, &bmain->texts) {
+    if (text_iter->filepath && BLI_path_cmp(text_iter->filepath, filepath) == 0) {
+      text = text_iter;
       break;
     }
   }
 
   if (text == NULL) {
     text = BKE_text_load(bmain, filepath, BKE_main_blendfile_path(bmain));
-    id_us_ensure_real(&text->id);
   }
 
   if (text == NULL) {
     BKE_reportf(op->reports, RPT_WARNING, "File '%s' cannot be opened", filepath);
     return OPERATOR_CANCELLED;
   }
-  else {
-    /* naughty!, find text area to set, not good behavior
-     * but since this is a dev tool lets allow it - campbell */
-    ScrArea *area = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_TEXT, 0);
-    if (area) {
-      SpaceText *st = area->spacedata.first;
-      st->text = text;
-    }
-    else {
-      BKE_reportf(op->reports, RPT_INFO, "See '%s' in the text editor", text->id.name + 2);
-    }
 
-    txt_move_toline(text, line - 1, false);
-    WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, text);
+  /* naughty!, find text area to set, not good behavior
+   * but since this is a dev tool lets allow it - campbell */
+  ScrArea *area = BKE_screen_find_big_area(CTX_wm_screen(C), SPACE_TEXT, 0);
+  if (area) {
+    SpaceText *st = area->spacedata.first;
+    st->text = text;
   }
+  else {
+    BKE_reportf(op->reports, RPT_INFO, "See '%s' in the text editor", text->id.name + 2);
+  }
+
+  txt_move_toline(text, line - 1, false);
+  WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, text);
 
   return OPERATOR_FINISHED;
 }
@@ -1360,8 +1375,8 @@ static int editsource_exec(bContext *C, wmOperator *op)
     }
 
     if (but_store) {
-      if (but_store->py_dbg_ln != -1) {
-        ret = editsource_text_edit(C, op, but_store->py_dbg_fn, but_store->py_dbg_ln);
+      if (but_store->py_dbg_line_number != -1) {
+        ret = editsource_text_edit(C, op, but_store->py_dbg_fn, but_store->py_dbg_line_number);
       }
       else {
         BKE_report(
@@ -1380,10 +1395,9 @@ static int editsource_exec(bContext *C, wmOperator *op)
 
     return ret;
   }
-  else {
-    BKE_report(op->reports, RPT_ERROR, "Active button not found");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports, RPT_ERROR, "Active button not found");
+  return OPERATOR_CANCELLED;
 }
 
 static void UI_OT_editsource(wmOperatorType *ot)
@@ -1568,10 +1582,9 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
 
     return ret;
   }
-  else {
-    BKE_report(op->reports, RPT_ERROR, "Active button not found");
-    return OPERATOR_CANCELLED;
-  }
+
+  BKE_report(op->reports, RPT_ERROR, "Active button not found");
+  return OPERATOR_CANCELLED;
 }
 
 static void UI_OT_edittranslation_init(wmOperatorType *ot)
@@ -1798,7 +1811,7 @@ static void UI_OT_drop_color(wmOperatorType *ot)
   ot->flag = OPTYPE_INTERNAL;
 
   RNA_def_float_color(ot->srna, "color", 3, NULL, 0.0, FLT_MAX, "Color", "Source color", 0.0, 1.0);
-  RNA_def_boolean(ot->srna, "gamma", 0, "Gamma Corrected", "The source color is gamma corrected ");
+  RNA_def_boolean(ot->srna, "gamma", 0, "Gamma Corrected", "The source color is gamma corrected");
 }
 
 /** \} */

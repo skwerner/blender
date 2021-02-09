@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SETVALUEOPERATION_H__
-#define __COM_SETVALUEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 /**
@@ -44,7 +44,7 @@ class SetValueOperation : public NodeOperation {
   }
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
   void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
@@ -54,4 +54,3 @@ class SetValueOperation : public NodeOperation {
     return true;
   }
 };
-#endif

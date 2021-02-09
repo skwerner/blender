@@ -13,6 +13,8 @@ out vec4 fragColor;
 #define BG_GRADIENT 1
 #define BG_CHECKER 2
 #define BG_RADIAL 3
+#define BG_SOLID_CHECKER 4
+#define BG_MASK 5
 #define SQRT2 1.4142135623730950488
 
 /* 4x4 bayer matrix prepared for 8bit UNORM precision error. */
@@ -43,7 +45,11 @@ void main()
   vec3 col_high;
   vec3 col_low;
 
-  switch (bgType) {
+  /* BG_SOLID_CHECKER selects BG_SOLID when no pixel has been drawn otherwise use the BG_CHERKER.
+   */
+  int bg_type = bgType == BG_SOLID_CHECKER ? (depth == 1.0 ? BG_SOLID : BG_CHECKER) : bgType;
+
+  switch (bg_type) {
     case BG_SOLID:
       bg_col = colorBackground.rgb;
       break;
@@ -76,6 +82,9 @@ void main()
       bool check = mod(p.x, 2) == mod(p.y, 2);
       bg_col = (check) ? colorCheckerPrimary.rgb : colorCheckerSecondary.rgb;
       break;
+    case BG_MASK:
+      fragColor = vec4(vec3(1.0 - alpha), 0.0);
+      return;
   }
 
   bg_col = mix(bg_col, colorOverride.rgb, colorOverride.a);

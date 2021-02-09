@@ -31,8 +31,7 @@
  * For these rogue platforms, we make the typedefs ourselves.
  */
 
-#ifndef __BLI_SYS_TYPES_H__
-#define __BLI_SYS_TYPES_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +40,7 @@ extern "C" {
 #if defined(__linux__) || defined(__GNU__) || defined(__NetBSD__) || defined(__OpenBSD__) || \
     defined(__FreeBSD_kernel__) || defined(__HAIKU__)
 
-/* Linux-i386, Linux-Alpha, Linux-ppc */
+/* Linux-i386, Linux-Alpha, Linux-PPC */
 #  include <stdint.h>
 
 /* XXX */
@@ -89,5 +88,3 @@ typedef unsigned char uchar;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* eof */

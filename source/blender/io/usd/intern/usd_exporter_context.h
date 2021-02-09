@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2019 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __USD_EXPORTER_CONTEXT_H__
-#define __USD_EXPORTER_CONTEXT_H__
+#pragma once
 
 #include "usd.h"
 
@@ -25,9 +24,8 @@
 #include <pxr/usd/usd/common.h>
 
 struct Depsgraph;
-struct Object;
 
-namespace USD {
+namespace blender::io::usd {
 
 class USDHierarchyIterator;
 
@@ -39,6 +37,4 @@ struct USDExporterContext {
   const USDExportParams &export_params;
 };
 
-}  // namespace USD
-
-#endif /* __USD_EXPORTER_CONTEXT_H__ */
+}  // namespace blender::io::usd

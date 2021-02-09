@@ -35,6 +35,7 @@
 #include "BLI_utildefines.h"
 
 #include "BKE_DerivedMesh.h"
+#include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_editmesh.h"
@@ -180,7 +181,7 @@ static void set_mapped_co(void *vuserdata,
     tv = &tv[BM_elem_index_get(eve)];
 
     /* be clever, get the closest vertex to the original,
-     * behaves most logically when the mirror modifier is used for eg [#33051]*/
+     * behaves most logically when the mirror modifier is used for eg T33051*/
     if ((tv->flag & TX_VERT_USE_MAPLOC) == 0) {
       /* first time */
       copy_v3_v3(tv->maploc, co);
@@ -494,8 +495,8 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
   }
 
   if (!tvs->transverts_tot && tvs->transverts) {
-    /* prevent memory leak. happens for curves/latticies due to */
-    /* difficult condition of adding points to trans data */
+    /* Prevent memory leak. happens for curves/lattices due to
+     * difficult condition of adding points to trans data. */
     MEM_freeN(tvs->transverts);
     tvs->transverts = NULL;
   }

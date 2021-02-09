@@ -18,11 +18,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_HAIR_TYPES_H__
-#define __DNA_HAIR_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_customdata_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct HairCurve {
   /* Index of first point of hair curve. */
@@ -57,6 +60,8 @@ typedef struct Hair {
   /* Custom Data */
   struct CustomData pdata;
   struct CustomData cdata;
+  int attributes_active_index;
+  int _pad3;
 
   /* Material */
   struct Material **mat;
@@ -75,4 +80,6 @@ enum {
 /* Only one material supported currently. */
 #define HAIR_MATERIAL_NR 1
 
-#endif /* __DNA_HAIR_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -21,8 +21,7 @@
  * \ingroup editors
  */
 
-#ifndef __ED_NODE_H__
-#define __ED_NODE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -31,7 +30,6 @@ extern "C" {
 struct ID;
 struct Main;
 struct Scene;
-struct Scene;
 struct ScrArea;
 struct Tex;
 struct View2D;
@@ -39,7 +37,6 @@ struct bContext;
 struct bNode;
 struct bNodeSocket;
 struct bNodeSocketType;
-struct bNodeTree;
 struct bNodeTree;
 struct bNodeTreeType;
 struct bNodeType;
@@ -54,6 +51,10 @@ typedef enum {
 #define NODE_GRID_STEPS 5
 
 /* space_node.c */
+
+void ED_node_cursor_location_get(const struct SpaceNode *snode, float value[2]);
+void ED_node_cursor_location_set(struct SpaceNode *snode, const float value[2]);
+
 int ED_node_tree_path_length(struct SpaceNode *snode);
 void ED_node_tree_path_get(struct SpaceNode *snode, char *value);
 void ED_node_tree_path_get_fixedbuf(struct SpaceNode *snode, char *value, int max_length);
@@ -99,7 +100,7 @@ void ED_node_set_tree_type(struct SpaceNode *snode, struct bNodeTreeType *typein
 bool ED_node_is_compositor(struct SpaceNode *snode);
 bool ED_node_is_shader(struct SpaceNode *snode);
 bool ED_node_is_texture(struct SpaceNode *snode);
-bool ED_node_is_simulation(struct SpaceNode *snode);
+bool ED_node_is_geometry(struct SpaceNode *snode);
 
 void ED_node_shader_default(const struct bContext *C, struct ID *id);
 void ED_node_composit_default(const struct bContext *C, struct Scene *scene);
@@ -123,11 +124,9 @@ void ED_operatormacros_node(void);
 bool ED_space_node_color_sample(struct Main *bmain,
                                 struct SpaceNode *snode,
                                 struct ARegion *region,
-                                int mval[2],
+                                const int mval[2],
                                 float r_col[3]);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __ED_NODE_H__ */

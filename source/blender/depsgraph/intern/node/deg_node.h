@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "MEM_guardedalloc.h"
+
 #include "intern/depsgraph_type.h"
 
 #include "BLI_utildefines.h"
@@ -32,7 +34,8 @@
 struct ID;
 struct Scene;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 struct OperationNode;
@@ -120,7 +123,7 @@ enum class NodeType {
   /* TODO(sergey); Verify that we really need this. */
   CACHE,
   /* Batch Cache Component.
-   * TODO (dfelinto/sergey): rename to make it more generic. */
+   * TODO(dfelinto/sergey): rename to make it more generic. */
   BATCH_CACHE,
   /* Duplication system. Used to force duplicated objects visible when
    * when duplicator is visible. */
@@ -203,6 +206,8 @@ struct Node {
   }
 
   virtual NodeClass get_class() const;
+
+  MEM_CXX_CLASS_ALLOC_FUNCS("Node");
 };
 
 /* Macros for common static typeinfo. */
@@ -212,4 +217,5 @@ struct Node {
 
 void deg_register_base_depsnodes();
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

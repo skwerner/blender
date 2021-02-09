@@ -20,8 +20,8 @@
  * Task pool to run tasks in parallel.
  */
 
+#include <cstdlib>
 #include <memory>
-#include <stdlib.h>
 #include <utility>
 
 #include "MEM_guardedalloc.h"
@@ -83,11 +83,11 @@ class Task {
         free_taskdata(other.free_taskdata),
         freedata(other.freedata)
   {
-    other.pool = NULL;
-    other.run = NULL;
-    other.taskdata = NULL;
+    other.pool = nullptr;
+    other.run = nullptr;
+    other.taskdata = nullptr;
     other.free_taskdata = false;
-    other.freedata = NULL;
+    other.freedata = nullptr;
   }
 
 #if defined(WITH_TBB) && TBB_INTERFACE_VERSION_MAJOR < 10
@@ -131,6 +131,12 @@ class TBBTaskGroup : public tbb::task_group {
  public:
   TBBTaskGroup(TaskPriority priority)
   {
+#  if TBB_INTERFACE_VERSION_MAJOR >= 12
+    /* TODO: support priorities in TBB 2021, where they are only available as
+     * part of task arenas, no longer for task groups. Or remove support for
+     * task priorities if they are no longer useful. */
+    UNUSED_VARS(priority);
+#  else
     switch (priority) {
       case TASK_PRIORITY_LOW:
         my_context.set_priority(tbb::priority_low);
@@ -139,6 +145,7 @@ class TBBTaskGroup : public tbb::task_group {
         my_context.set_priority(tbb::priority_normal);
         break;
     }
+#  endif
   }
 
   ~TBBTaskGroup()
@@ -149,13 +156,13 @@ class TBBTaskGroup : public tbb::task_group {
 
 /* Task Pool */
 
-typedef enum TaskPoolType {
+enum TaskPoolType {
   TASK_POOL_TBB,
   TASK_POOL_TBB_SUSPENDED,
   TASK_POOL_NO_THREADS,
   TASK_POOL_BACKGROUND,
   TASK_POOL_BACKGROUND_SERIAL,
-} TaskPoolType;
+};
 
 struct TaskPool {
   TaskPoolType type;
@@ -268,7 +275,7 @@ static bool tbb_task_pool_canceled(TaskPool *pool)
 {
 #ifdef WITH_TBB
   if (pool->use_threads) {
-    return pool->tbb_group.is_canceling();
+    return tbb::is_current_task_group_canceling();
   }
 #else
   UNUSED_VARS(pool);
@@ -302,7 +309,7 @@ static void *background_task_run(void *userdata)
     task->~Task();
     MEM_freeN(task);
   }
-  return NULL;
+  return nullptr;
 }
 
 static void background_task_pool_create(TaskPool *pool)
@@ -520,7 +527,7 @@ void BLI_task_pool_cancel(TaskPool *pool)
   }
 }
 
-bool BLI_task_pool_canceled(TaskPool *pool)
+bool BLI_task_pool_current_canceled(TaskPool *pool)
 {
   switch (pool->type) {
     case TASK_POOL_TBB:

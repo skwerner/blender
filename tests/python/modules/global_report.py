@@ -6,6 +6,7 @@ import glob
 import os
 import pathlib
 
+
 def _write_html(output_dir):
     combined_reports = ""
 
@@ -21,7 +22,7 @@ def _write_html(output_dir):
             filepath = os.path.join(output_dir, filename)
             combined_reports += pathlib.Path(filepath).read_text()
 
-        combined_reports += "<br/>\n";
+        combined_reports += "<br/>\n"
 
     html = """
 <html>
@@ -38,6 +39,7 @@ def _write_html(output_dir):
     <div class="container">
         <br/>
         <h1>{title}</h1>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item active" aria-current="page">Test Reports</li></ol></nav>
         {combined_reports}
         <br/>
     </div>
@@ -66,7 +68,7 @@ def add(output_dir, category, name, filepath, failed=None):
                      name=name,
                      filepath=filepath)
 
-    dirpath = os.path.join(output_dir, "report", category);
+    dirpath = os.path.join(output_dir, "report", category)
     os.makedirs(dirpath, exist_ok=True)
     filepath = os.path.join(dirpath, name + ".data")
     pathlib.Path(filepath).write_text(html)

@@ -15,18 +15,12 @@
  */
 
 #include "blender/blender_device.h"
+#include "blender/blender_session.h"
 #include "blender/blender_util.h"
 
 #include "util/util_foreach.h"
 
 CCL_NAMESPACE_BEGIN
-
-enum DenoiserType {
-  DENOISER_NONE = 0,
-  DENOISER_OPTIX = 1,
-
-  DENOISER_NUM
-};
 
 enum ComputeDevice {
   COMPUTE_DEVICE_CPU = 0,
@@ -51,29 +45,37 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
 {
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
 
+  /* Find cycles preferences. */
+  PointerRNA cpreferences;
+  for (BL::Addon &b_addon : b_preferences.addons) {
+    if (b_addon.module() == "cycles") {
+      cpreferences = b_addon.preferences().ptr;
+      break;
+    }
+  }
+
   /* Default to CPU device. */
   DeviceInfo device = Device::available_devices(DEVICE_MASK_CPU).front();
 
-  if (get_enum(cscene, "device") == 2) {
+  if (BlenderSession::device_override != DEVICE_MASK_ALL) {
+    vector<DeviceInfo> devices = Device::available_devices(BlenderSession::device_override);
+
+    if (devices.empty()) {
+      device = Device::dummy_device("Found no Cycles device of the specified type");
+    }
+    else {
+      int threads = blender_device_threads(b_scene);
+      device = Device::get_multi_device(devices, threads, background);
+    }
+  }
+  else if (get_enum(cscene, "device") == 2) {
     /* Find network device. */
     vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK_NETWORK);
     if (!devices.empty()) {
-      return devices.front();
+      device = devices.front();
     }
   }
   else if (get_enum(cscene, "device") == 1) {
-    /* Find cycles preferences. */
-    PointerRNA cpreferences;
-
-    BL::Preferences::addons_iterator b_addon_iter;
-    for (b_preferences.addons.begin(b_addon_iter); b_addon_iter != b_preferences.addons.end();
-         ++b_addon_iter) {
-      if (b_addon_iter->module() == "cycles") {
-        cpreferences = b_addon_iter->preferences().ptr;
-        break;
-      }
-    }
-
     /* Test if we are using GPU devices. */
     ComputeDevice compute_device = (ComputeDevice)get_enum(
         cpreferences, "compute_device_type", COMPUTE_DEVICE_NUM, COMPUTE_DEVICE_CPU);
@@ -85,8 +87,7 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
         mask |= DEVICE_MASK_CUDA;
       }
       else if (compute_device == COMPUTE_DEVICE_OPTIX) {
-        /* Cannot use CPU and OptiX device at the same time right now, so replace mask. */
-        mask = DEVICE_MASK_OPTIX;
+        mask |= DEVICE_MASK_OPTIX;
       }
       else if (compute_device == COMPUTE_DEVICE_OPENCL) {
         mask |= DEVICE_MASK_OPENCL;
@@ -116,32 +117,8 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
     }
   }
 
-  /* Ensure there is an OptiX device when using the OptiX denoiser. */
-  bool use_optix_denoising = get_enum(cscene, "preview_denoising", DENOISER_NUM, DENOISER_NONE) ==
-                                 DENOISER_OPTIX &&
-                             !background;
-  BL::Scene::view_layers_iterator b_view_layer;
-  for (b_scene.view_layers.begin(b_view_layer); b_view_layer != b_scene.view_layers.end();
-       ++b_view_layer) {
-    PointerRNA crl = RNA_pointer_get(&b_view_layer->ptr, "cycles");
-    if (get_boolean(crl, "use_optix_denoising")) {
-      use_optix_denoising = true;
-    }
-  }
-
-  if (use_optix_denoising && device.type != DEVICE_OPTIX) {
-    vector<DeviceInfo> optix_devices = Device::available_devices(DEVICE_MASK_OPTIX);
-    if (!optix_devices.empty()) {
-      /* Convert to a special multi device with separate denoising devices. */
-      if (device.multi_devices.empty()) {
-        device.multi_devices.push_back(device);
-      }
-
-      /* Simply use the first available OptiX device. */
-      const DeviceInfo optix_device = optix_devices.front();
-      device.id += optix_device.id; /* Uniquely identify this special multi device. */
-      device.denoising_devices.push_back(optix_device);
-    }
+  if (!get_boolean(cpreferences, "peer_memory")) {
+    device.has_peer_memory = false;
   }
 
   return device;

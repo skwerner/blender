@@ -14,6 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+/* Use a define instead of `#pragma once` because of `bmesh_iterators_inline.h` */
 #ifndef __BLI_TASK_H__
 #define __BLI_TASK_H__
 
@@ -104,8 +105,10 @@ void BLI_task_pool_work_and_wait(TaskPool *pool);
 /* cancel all tasks, keep worker threads running */
 void BLI_task_pool_cancel(TaskPool *pool);
 
-/* for worker threads, test if canceled */
-bool BLI_task_pool_canceled(TaskPool *pool);
+/* for worker threads, test if current task pool canceled. this function may
+ * only be called from worker threads and pool must be the task pool that the
+ * thread is currently executing a task from. */
+bool BLI_task_pool_current_canceled(TaskPool *pool);
 
 /* optional userdata pointer to pass along to run function */
 void *BLI_task_pool_user_data(TaskPool *pool);
@@ -286,7 +289,7 @@ int BLI_task_parallel_thread_id(const TaskParallelTLS *tls);
  * ** Task-Data **
  *
  * Typically you want give a task data to work on.
- * Task data can be shared with other nodes, but be carefull not to free the data multiple times.
+ * Task data can be shared with other nodes, but be careful not to free the data multiple times.
  * Task data is freed when calling `BLI_task_graph_free`.
  *
  *    MyData *task_data = MEM_callocN(sizeof(MyData), __func__);
@@ -308,7 +311,7 @@ void BLI_task_graph_work_and_wait(struct TaskGraph *task_graph);
 void BLI_task_graph_free(struct TaskGraph *task_graph);
 struct TaskNode *BLI_task_graph_node_create(struct TaskGraph *task_graph,
                                             TaskGraphNodeRunFunction run,
-                                            void *task_data,
+                                            void *user_data,
                                             TaskGraphNodeFreeFunction free_func);
 bool BLI_task_graph_node_push_work(struct TaskNode *task_node);
 void BLI_task_graph_edge_create(struct TaskNode *from_node, struct TaskNode *to_node);

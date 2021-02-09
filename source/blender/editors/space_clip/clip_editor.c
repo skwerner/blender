@@ -65,7 +65,7 @@
 
 #include "UI_view2d.h"
 
-#include "clip_intern.h"  // own include
+#include "clip_intern.h" /* own include */
 
 /* ******** operactor poll functions ******** */
 
@@ -327,119 +327,18 @@ void ED_clip_update_frame(const Main *mainp, int cfra)
   }
 }
 
-static bool selected_tracking_boundbox(SpaceClip *sc, float min[2], float max[2])
+bool ED_clip_view_selection(const bContext *C, ARegion *UNUSED(region), bool fit)
 {
-  MovieClip *clip = ED_space_clip_get_clip(sc);
-  MovieTrackingTrack *track;
-  int width, height;
-  bool ok = false;
-  ListBase *tracksbase = BKE_tracking_get_active_tracks(&clip->tracking);
-  int framenr = ED_space_clip_get_clip_frame_number(sc);
-
-  INIT_MINMAX2(min, max);
-
-  ED_space_clip_get_size(sc, &width, &height);
-
-  track = tracksbase->first;
-  while (track) {
-    if (TRACK_VIEW_SELECTED(sc, track)) {
-      MovieTrackingMarker *marker = BKE_tracking_marker_get(track, framenr);
-
-      if (marker) {
-        float pos[3];
-
-        pos[0] = marker->pos[0] + track->offset[0];
-        pos[1] = marker->pos[1] + track->offset[1];
-        pos[2] = 0.0f;
-
-        /* undistortion happens for normalized coords */
-        if (sc->user.render_flag & MCLIP_PROXY_RENDER_UNDISTORT) {
-          /* undistortion happens for normalized coords */
-          ED_clip_point_undistorted_pos(sc, pos, pos);
-        }
-
-        pos[0] *= width;
-        pos[1] *= height;
-
-        mul_v3_m4v3(pos, sc->stabmat, pos);
-
-        minmax_v2v2_v2(min, max, pos);
-
-        ok = true;
-      }
-    }
-
-    track = track->next;
+  float offset_x, offset_y;
+  float zoom;
+  if (!clip_view_calculate_view_selection(C, fit, &offset_x, &offset_y, &zoom)) {
+    return false;
   }
 
-  return ok;
-}
-
-static bool selected_boundbox(const bContext *C, float min[2], float max[2])
-{
   SpaceClip *sc = CTX_wm_space_clip(C);
-  if (sc->mode == SC_MODE_TRACKING) {
-    return selected_tracking_boundbox(sc, min, max);
-  }
-  else {
-    if (ED_mask_selected_minmax(C, min, max)) {
-      MovieClip *clip = ED_space_clip_get_clip(sc);
-      int width, height;
-      ED_space_clip_get_size(sc, &width, &height);
-      BKE_mask_coord_to_movieclip(clip, &sc->user, min, min);
-      BKE_mask_coord_to_movieclip(clip, &sc->user, max, max);
-      min[0] *= width;
-      min[1] *= height;
-      max[0] *= width;
-      max[1] *= height;
-      return true;
-    }
-    return false;
-  }
-}
-
-bool ED_clip_view_selection(const bContext *C, ARegion *region, bool fit)
-{
-  SpaceClip *sc = CTX_wm_space_clip(C);
-  int w, h, frame_width, frame_height;
-  float min[2], max[2];
-
-  ED_space_clip_get_size(sc, &frame_width, &frame_height);
-
-  if ((frame_width == 0) || (frame_height == 0) || (sc->clip == NULL)) {
-    return false;
-  }
-
-  if (!selected_boundbox(C, min, max)) {
-    return false;
-  }
-
-  /* center view */
-  clip_view_center_to_point(
-      sc, (max[0] + min[0]) / (2 * frame_width), (max[1] + min[1]) / (2 * frame_height));
-
-  w = max[0] - min[0];
-  h = max[1] - min[1];
-
-  /* set zoom to see all selection */
-  if (w > 0 && h > 0) {
-    int width, height;
-    float zoomx, zoomy, newzoom, aspx, aspy;
-
-    ED_space_clip_get_aspect(sc, &aspx, &aspy);
-
-    width = BLI_rcti_size_x(&region->winrct) + 1;
-    height = BLI_rcti_size_y(&region->winrct) + 1;
-
-    zoomx = (float)width / w / aspx;
-    zoomy = (float)height / h / aspy;
-
-    newzoom = 1.0f / power_of_2(1.0f / min_ff(zoomx, zoomy));
-
-    if (fit || sc->zoom > newzoom) {
-      sc->zoom = newzoom;
-    }
-  }
+  sc->xof = offset_x;
+  sc->yof = offset_y;
+  sc->zoom = zoom;
 
   return true;
 }
@@ -676,7 +575,7 @@ void ED_space_clip_set_clip(bContext *C, bScreen *screen, SpaceClip *sc, MovieCl
               }
             }
             else {
-              if (cur_sc->clip == old_clip || cur_sc->clip == NULL) {
+              if (ELEM(cur_sc->clip, old_clip, NULL)) {
                 cur_sc->clip = clip;
               }
             }
@@ -686,7 +585,7 @@ void ED_space_clip_set_clip(bContext *C, bScreen *screen, SpaceClip *sc, MovieCl
     }
   }
 
-  /* If clip is no longer visible on screen, free memory used by it's cache */
+  /* If clip is no longer visible on screen, free memory used by its cache */
   if (old_clip && old_clip != clip && !old_clip_visible) {
     BKE_movieclip_clear_cache(old_clip);
   }
@@ -726,7 +625,7 @@ typedef struct PrefetchQueue {
   int initial_frame, current_frame, start_frame, end_frame;
   short render_size, render_flag;
 
-  /* If true prefecthing goes forward in time,
+  /* If true pre-fetching goes forward in time,
    * otherwise it goes backwards in time (starting from current frame).
    */
   bool forward;
@@ -941,11 +840,10 @@ static void start_prefetch_threads(MovieClip *clip,
                                    short *do_update,
                                    float *progress)
 {
-  PrefetchQueue queue;
-  TaskPool *task_pool;
-  int i, tot_thread = BLI_task_scheduler_num_threads();
+  int tot_thread = BLI_task_scheduler_num_threads();
 
   /* initialize queue */
+  PrefetchQueue queue;
   BLI_spin_init(&queue.spin);
 
   queue.current_frame = current_frame;
@@ -960,8 +858,8 @@ static void start_prefetch_threads(MovieClip *clip,
   queue.do_update = do_update;
   queue.progress = progress;
 
-  task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
-  for (i = 0; i < tot_thread; i++) {
+  TaskPool *task_pool = BLI_task_pool_create(&queue, TASK_PRIORITY_LOW);
+  for (int i = 0; i < tot_thread; i++) {
     BLI_task_pool_push(task_pool, prefetch_task_func, clip, false, NULL);
   }
   BLI_task_pool_work_and_wait(task_pool);
@@ -1178,4 +1076,48 @@ void clip_start_prefetch_job(const bContext *C)
 
   /* and finally start the job */
   WM_jobs_start(CTX_wm_manager(C), wm_job);
+}
+
+void ED_clip_view_lock_state_store(const bContext *C, ClipViewLockState *state)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  BLI_assert(space_clip != NULL);
+
+  state->offset_x = space_clip->xof;
+  state->offset_y = space_clip->yof;
+  state->zoom = space_clip->zoom;
+
+  state->lock_offset_x = 0.0f;
+  state->lock_offset_y = 0.0f;
+
+  if ((space_clip->flag & SC_LOCK_SELECTION) == 0) {
+    return;
+  }
+
+  if (!clip_view_calculate_view_selection(
+          C, false, &state->offset_x, &state->offset_y, &state->zoom)) {
+    return;
+  }
+
+  state->lock_offset_x = space_clip->xlockof;
+  state->lock_offset_y = space_clip->ylockof;
+}
+
+void ED_clip_view_lock_state_restore_no_jump(const bContext *C, const ClipViewLockState *state)
+{
+  SpaceClip *space_clip = CTX_wm_space_clip(C);
+  BLI_assert(space_clip != NULL);
+
+  if ((space_clip->flag & SC_LOCK_SELECTION) == 0) {
+    return;
+  }
+
+  float offset_x, offset_y;
+  float zoom;
+  if (!clip_view_calculate_view_selection(C, false, &offset_x, &offset_y, &zoom)) {
+    return;
+  }
+
+  space_clip->xlockof = state->offset_x + state->lock_offset_x - offset_x;
+  space_clip->ylockof = state->offset_y + state->lock_offset_y - offset_y;
 }

@@ -55,7 +55,7 @@ if $DO_EXE_BLENDER ; then
   # Don't delete existing docs, now partial updates are used for quick builds.
   #
   # Disable ASAN error halt since it results in nonzero exit code on any minor issue.
-  ASAN_OPTIONS=halt_on_error=0 \
+  ASAN_OPTIONS=halt_on_error=0:${ASAN_OPTIONS} \
   $BLENDER_BIN \
     --background \
     -noaudio \
@@ -76,11 +76,7 @@ fi
 # Generate HTML (sphinx)
 
 if $DO_OUT_HTML ; then
-  # sphinx-build -n -b html $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
-
-  # annoying bug in sphinx makes it very slow unless we do this. should report.
-  cd $SPHINX_WORKDIR
-  sphinx-build -b html sphinx-in sphinx-out
+  sphinx-build -b html -j auto $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
 
   # XXX, saves space on upload and zip, should move HTML outside
   # and zip up there, for now this is OK
@@ -107,8 +103,7 @@ fi
 # Generate PDF (sphinx/laytex)
 
 if $DO_OUT_PDF ; then
-  cd $SPHINX_WORKDIR
-  sphinx-build -n -b latex $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
+  sphinx-build -n -b latex -j auto $SPHINX_WORKDIR/sphinx-in $SPHINX_WORKDIR/sphinx-out
   make -C $SPHINX_WORKDIR/sphinx-out
   mv $SPHINX_WORKDIR/sphinx-out/contents.pdf \
      $SPHINX_WORKDIR/sphinx-out/blender_python_reference_$BLENDER_VERSION.pdf

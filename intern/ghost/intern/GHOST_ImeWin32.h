@@ -23,8 +23,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_IME_H__
-#define __GHOST_IME_H__
+#pragma once
 
 #ifdef WITH_INPUT_IME
 
@@ -41,9 +40,9 @@ class GHOST_EventIME : public GHOST_Event {
  public:
   /**
    * Constructor.
-   * \param msec  The time this event was generated.
-   * \param type  The type of key event.
-   * \param key   The key code of the key.
+   * \param msec: The time this event was generated.
+   * \param type: The type of key event.
+   * \param key: The key code of the key.
    */
   GHOST_EventIME(GHOST_TUns64 msec, GHOST_TEventType type, GHOST_IWindow *window, void *customdata)
       : GHOST_Event(msec, type, window)
@@ -304,10 +303,10 @@ class GHOST_ImeWin32 {
    */
   void EndIME(HWND window_handle);
 
-  /* Updatg resultInfo and compInfo */
+  /** Update #resultInfo and #compInfo */
   void UpdateInfo(HWND window_handle);
 
-  /* disable ime when start up */
+  /** Disable IME when start up. */
   void CheckFirst(HWND window_handle);
 
   ImeComposition resultInfo, compInfo;
@@ -388,4 +387,3 @@ class GHOST_ImeWin32 {
 };
 
 #endif  // WITH_INPUT_IME
-#endif  // __GHOST_IME_H__

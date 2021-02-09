@@ -119,14 +119,12 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
   if (segcount == 0) {
     return;
   }
-  else {
-    pchanRoot = pchanChain[segcount - 1];
-  }
+
+  pchanRoot = pchanChain[segcount - 1];
 
   /* perform binding step if required */
   if ((ikData->flag & CONSTRAINT_SPLINEIK_BOUND) == 0) {
     float segmentLen = (1.0f / (float)segcount);
-    int i;
 
     /* setup new empty array for the points list */
     if (ikData->points) {
@@ -141,7 +139,7 @@ static void splineik_init_tree_from_pchan(Scene *UNUSED(scene),
     /* perform binding of the joints to parametric positions along the curve based
      * proportion of the total length that each bone occupies
      */
-    for (i = 0; i < segcount; i++) {
+    for (int i = 0; i < segcount; i++) {
       /* 'head' joints, traveling towards the root of the chain
        * - 2 methods; the one chosen depends on whether we've got usable lengths
        */
@@ -430,8 +428,8 @@ static void splineik_evaluate_bone(
         if (fabsf(scaleFac) != 0.0f) {
           scale = 1.0f / fabsf(scaleFac);
 
-          /* we need to clamp this within sensible values */
-          /* NOTE: these should be fine for now, but should get sanitised in future */
+          /* We need to clamp this within sensible values. */
+          /* NOTE: these should be fine for now, but should get sanitized in future. */
           CLAMP(scale, 0.0001f, 100000.0f);
         }
         else {
@@ -485,7 +483,7 @@ static void splineik_evaluate_bone(
           final_scale = 1.0f;
         }
 
-        /* apply the scaling (assuming normalised scale) */
+        /* Apply the scaling (assuming normalized scale). */
         mul_v3_fl(poseMat[0], final_scale);
         mul_v3_fl(poseMat[2], final_scale);
         break;
@@ -550,11 +548,9 @@ static void splineik_execute_tree(
 
   /* for each pose-tree, execute it if it is spline, otherwise just free it */
   while ((tree = pchan_root->siktree.first) != NULL) {
-    int i;
-
     /* Firstly, calculate the bone matrix the standard way,
      * since this is needed for roll control. */
-    for (i = tree->chainlen - 1; i >= 0; i--) {
+    for (int i = tree->chainlen - 1; i >= 0; i--) {
       BKE_pose_where_is_bone(depsgraph, scene, ob, tree->chain[i], ctime, 1);
     }
 
@@ -566,7 +562,7 @@ static void splineik_execute_tree(
        * - the chain is traversed in the opposite order to storage order (i.e. parent to children)
        *   so that dependencies are correct
        */
-      for (i = tree->chainlen - 1; i >= 0; i--) {
+      for (int i = tree->chainlen - 1; i >= 0; i--) {
         bPoseChannel *pchan = tree->chain[i];
         splineik_evaluate_bone(tree, ob, pchan, i, &state);
       }
@@ -659,7 +655,7 @@ void BKE_pose_eval_init_ik(struct Depsgraph *depsgraph, Scene *scene, Object *ob
     return;
   }
   /* construct the IK tree (standard IK) */
-  BIK_initialize_tree(depsgraph, scene, object, ctime);
+  BIK_init_tree(depsgraph, scene, object, ctime);
   /* construct the Spline IK trees
    * - this is not integrated as an IK plugin, since it should be able
    *   to function in conjunction with standard IK.  */
@@ -717,7 +713,7 @@ void BKE_pose_constraints_evaluate(struct Depsgraph *depsgraph,
   if (armature->flag & ARM_RESTPOS) {
     return;
   }
-  else if (pchan->flag & POSE_IKTREE || pchan->flag & POSE_IKSPLINE) {
+  if (pchan->flag & POSE_IKTREE || pchan->flag & POSE_IKSPLINE) {
     /* IK are being solved separately/ */
   }
   else {
@@ -834,18 +830,6 @@ void BKE_pose_splineik_evaluate(struct Depsgraph *depsgraph,
   BKE_splineik_execute_tree(depsgraph, scene, object, rootchan, ctime);
 }
 
-/* Common part for both original and proxy armatrues. */
-static void pose_eval_done_common(struct Depsgraph *depsgraph, Object *object)
-{
-  const bArmature *armature = (bArmature *)object->data;
-  if (armature->edbo != NULL) {
-    return;
-  }
-  bPose *pose = object->pose;
-  UNUSED_VARS_NDEBUG(pose);
-  BLI_assert(pose != NULL);
-  BKE_object_eval_boundbox(depsgraph, object);
-}
 static void pose_eval_cleanup_common(Object *object)
 {
   bPose *pose = object->pose;
@@ -861,7 +845,6 @@ void BKE_pose_eval_done(struct Depsgraph *depsgraph, Object *object)
   UNUSED_VARS_NDEBUG(pose);
   DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
   BLI_assert(object->type == OB_ARMATURE);
-  pose_eval_done_common(depsgraph, object);
 }
 
 void BKE_pose_eval_cleanup(struct Depsgraph *depsgraph, Scene *scene, Object *object)
@@ -889,7 +872,6 @@ void BKE_pose_eval_proxy_done(struct Depsgraph *depsgraph, Object *object)
 {
   BLI_assert(ID_IS_LINKED(object) && object->proxy_from != NULL);
   DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
-  pose_eval_done_common(depsgraph, object);
 }
 
 void BKE_pose_eval_proxy_cleanup(struct Depsgraph *depsgraph, Object *object)

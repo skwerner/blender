@@ -23,8 +23,7 @@
  * Public API for Querying Depsgraph.
  */
 
-#ifndef __DEG_DEPSGRAPH_QUERY_H__
-#define __DEG_DEPSGRAPH_QUERY_H__
+#pragma once
 
 #include "BLI_iterator.h"
 
@@ -55,6 +54,9 @@ struct Scene *DEG_get_input_scene(const Depsgraph *graph);
 
 /* Get view layer that depsgraph was built for. */
 struct ViewLayer *DEG_get_input_view_layer(const Depsgraph *graph);
+
+/* Get bmain that depsgraph was built for. */
+struct Main *DEG_get_bmain(const Depsgraph *graph);
 
 /* Get evaluation mode that depsgraph was built for. */
 eEvaluationMode DEG_get_mode(const Depsgraph *graph);
@@ -142,6 +144,16 @@ typedef struct DEGObjectIterData {
   struct Scene *scene;
 
   eEvaluationMode eval_mode;
+
+  /* **** Iteration over geometry components **** */
+
+  /* The object whose components we currently iterate over.
+   * This might point to #temp_dupli_object. */
+  struct Object *geometry_component_owner;
+  /* Some identifier that is used to determine which geometry component should be returned next. */
+  int geometry_component_id;
+  /* Temporary storage for an object that is created from a component. */
+  struct Object temp_geometry_component_object;
 
   /* **** Iteration over dupli-list. *** */
 
@@ -261,5 +273,3 @@ void DEG_foreach_ID(const Depsgraph *depsgraph, DEGForeachIDCallback callback, v
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_QUERY_H__ */

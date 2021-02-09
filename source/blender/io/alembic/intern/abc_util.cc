@@ -38,6 +38,8 @@
 
 #include "PIL_time.h"
 
+namespace blender::io::alembic {
+
 std::string get_id_name(const Object *const ob)
 {
   if (!ob) {
@@ -49,12 +51,16 @@ std::string get_id_name(const Object *const ob)
 
 std::string get_id_name(const ID *const id)
 {
-  std::string name(id->name + 2);
-  std::replace(name.begin(), name.end(), ' ', '_');
-  std::replace(name.begin(), name.end(), '.', '_');
-  std::replace(name.begin(), name.end(), ':', '_');
+  return get_valid_abc_name(id->name + 2);
+}
 
-  return name;
+std::string get_valid_abc_name(const char *name)
+{
+  std::string name_string(name);
+  std::replace(name_string.begin(), name_string.end(), ' ', '_');
+  std::replace(name_string.begin(), name_string.end(), '.', '_');
+  std::replace(name_string.begin(), name_string.end(), ':', '_');
+  return name_string;
 }
 
 /**
@@ -126,10 +132,10 @@ bool has_property(const Alembic::Abc::ICompoundProperty &prop, const std::string
     return false;
   }
 
-  return prop.getPropertyHeader(name) != NULL;
+  return prop.getPropertyHeader(name) != nullptr;
 }
 
-typedef std::pair<Alembic::AbcCoreAbstract::index_t, float> index_time_pair_t;
+using index_time_pair_t = std::pair<Alembic::AbcCoreAbstract::index_t, float>;
 
 float get_weight_and_index(float time,
                            const Alembic::AbcCoreAbstract::TimeSamplingPtr &time_sampling,
@@ -167,7 +173,7 @@ float get_weight_and_index(float time,
 
 AbcObjectReader *create_reader(const Alembic::AbcGeom::IObject &object, ImportSettings &settings)
 {
-  AbcObjectReader *reader = NULL;
+  AbcObjectReader *reader = nullptr;
 
   const Alembic::AbcGeom::MetaData &md = object.getMetaData();
 
@@ -252,3 +258,5 @@ std::ostream &operator<<(std::ostream &os, const SimpleLogger &logger)
   os << logger.str();
   return os;
 }
+
+}  // namespace blender::io::alembic

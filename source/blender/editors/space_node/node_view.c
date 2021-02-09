@@ -55,7 +55,9 @@
 #include "NOD_composite.h"
 #include "node_intern.h" /* own include */
 
-/* **************** View All Operator ************** */
+/* -------------------------------------------------------------------- */
+/** \name View All Operator
+ * \{ */
 
 int space_node_view_flag(
     bContext *C, SpaceNode *snode, ARegion *region, const int node_flag, const int smooth_viewtx)
@@ -133,9 +135,7 @@ static int node_view_all_exec(bContext *C, wmOperator *op)
   if (space_node_view_flag(C, snode, region, 0, smooth_viewtx)) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void NODE_OT_view_all(wmOperatorType *ot)
@@ -153,6 +153,12 @@ void NODE_OT_view_all(wmOperatorType *ot)
   ot->flag = 0;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name View Selected Operator
+ * \{ */
+
 static int node_view_selected_exec(bContext *C, wmOperator *op)
 {
   ARegion *region = CTX_wm_region(C);
@@ -162,9 +168,7 @@ static int node_view_selected_exec(bContext *C, wmOperator *op)
   if (space_node_view_flag(C, snode, region, NODE_SELECT, smooth_viewtx)) {
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void NODE_OT_view_selected(wmOperatorType *ot)
@@ -182,7 +186,11 @@ void NODE_OT_view_selected(wmOperatorType *ot)
   ot->flag = 0;
 }
 
-/* **************** Background Image Operators ************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Operators
+ * \{ */
 
 typedef struct NodeViewMove {
   int mvalo[2];
@@ -235,7 +243,7 @@ static int snode_bg_viewmove_invoke(bContext *C, wmOperator *op, const wmEvent *
   NodeViewMove *nvm;
   Image *ima;
   ImBuf *ibuf;
-  const float pad = 32.0f; /* better be bigger then scrollbars */
+  const float pad = 32.0f; /* better be bigger than scrollbars */
 
   void *lock;
 
@@ -275,7 +283,7 @@ void NODE_OT_backimage_move(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Background Image Move";
-  ot->description = "Move Node backdrop";
+  ot->description = "Move node backdrop";
   ot->idname = "NODE_OT_backimage_move";
 
   /* api callbacks */
@@ -288,6 +296,12 @@ void NODE_OT_backimage_move(wmOperatorType *ot)
   ot->flag = OPTYPE_BLOCKING | OPTYPE_GRAB_CURSOR_XY;
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Zoom
+ * \{ */
+
 static int backimage_zoom_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
@@ -297,6 +311,7 @@ static int backimage_zoom_exec(bContext *C, wmOperator *op)
   snode->zoom *= fac;
   ED_region_tag_redraw(region);
   WM_main_add_notifier(NC_NODE | ND_DISPLAY, NULL);
+  WM_main_add_notifier(NC_SPACE | ND_SPACE_NODE_VIEW, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -319,6 +334,12 @@ void NODE_OT_backimage_zoom(wmOperatorType *ot)
   /* internal */
   RNA_def_float(ot->srna, "factor", 1.2f, 0.0f, 10.0f, "Factor", "", 0.0f, 10.0f);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Background Image Fit
+ * \{ */
 
 static int backimage_fit_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -376,7 +397,11 @@ void NODE_OT_backimage_fit(wmOperatorType *ot)
   ot->flag = OPTYPE_BLOCKING;
 }
 
-/******************** sample backdrop operator ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Sample Backdrop Operator
+ * \{ */
 
 typedef struct ImageSampleInfo {
   ARegionType *art;
@@ -423,7 +448,7 @@ static void sample_draw(const bContext *C, ARegion *region, void *arg_info)
  * And here we've got recursion in the comments tips...
  */
 bool ED_space_node_color_sample(
-    Main *bmain, SpaceNode *snode, ARegion *region, int mval[2], float r_col[3])
+    Main *bmain, SpaceNode *snode, ARegion *region, const int mval[2], float r_col[3])
 {
   void *lock;
   Image *ima;
@@ -460,7 +485,7 @@ bool ED_space_node_color_sample(
 
     if (ibuf->rect_float) {
       fp = (ibuf->rect_float + (ibuf->channels) * (y * ibuf->x + x));
-      /* IB_PROFILE_NONE is default but infact its linear */
+      /* #IB_PROFILE_NONE is default but in fact its linear. */
       copy_v3_v3(r_col, fp);
       ret = true;
     }
@@ -611,7 +636,7 @@ static int sample_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   switch (event->type) {
     case LEFTMOUSE:
-    case RIGHTMOUSE:  // XXX hardcoded
+    case RIGHTMOUSE: /* XXX hardcoded */
       if (event->val == KM_RELEASE) {
         sample_exit(C, op);
         return OPERATOR_CANCELLED;
@@ -646,3 +671,5 @@ void NODE_OT_backimage_sample(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_BLOCKING;
 }
+
+/** \} */

@@ -54,6 +54,23 @@
 /** \name Event Printing
  * \{ */
 
+static void event_ids_from_type_and_value(const short type,
+                                          const short val,
+                                          const char **r_type_id,
+                                          const char **r_val_id)
+{
+  /* Type. */
+  RNA_enum_identifier(rna_enum_event_type_items, type, r_type_id);
+
+  /* Value. */
+  if (ISTWEAK(type)) {
+    RNA_enum_identifier(rna_enum_event_value_tweak_items, val, r_val_id);
+  }
+  else {
+    RNA_enum_identifier(rna_enum_event_value_all_items, val, r_val_id);
+  }
+}
+
 /* for debugging only, getting inspecting events manually is tedious */
 void WM_event_print(const wmEvent *event)
 {
@@ -64,11 +81,8 @@ void WM_event_print(const wmEvent *event)
     const char *prev_type_id = unknown;
     const char *prev_val_id = unknown;
 
-    RNA_enum_identifier(rna_enum_event_type_items, event->type, &type_id);
-    RNA_enum_identifier(rna_enum_event_value_items, event->val, &val_id);
-
-    RNA_enum_identifier(rna_enum_event_type_items, event->prevtype, &prev_type_id);
-    RNA_enum_identifier(rna_enum_event_value_items, event->prevval, &prev_val_id);
+    event_ids_from_type_and_value(event->type, event->val, &type_id, &val_id);
+    event_ids_from_type_and_value(event->prevtype, event->prevval, &prev_type_id, &prev_val_id);
 
     printf(
         "wmEvent  type:%d / %s, val:%d / %s,\n"
@@ -222,7 +236,7 @@ bool WM_event_is_modal_tweak_exit(const wmEvent *event, int tweak_event)
     }
     else {
       /* if the initial event wasn't a tweak event then
-       * ignore USER_RELEASECONFIRM setting: see [#26756] */
+       * ignore USER_RELEASECONFIRM setting: see T26756. */
       if (ELEM(tweak_event, EVT_TWEAK_L, EVT_TWEAK_M, EVT_TWEAK_R) == 0) {
         return 1;
       }
@@ -418,6 +432,38 @@ float WM_event_tablet_data(const wmEvent *event, int *pen_flip, float tilt[2])
 bool WM_event_is_tablet(const struct wmEvent *event)
 {
   return (event->tablet.active != EVT_TABLET_NONE);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Event Scroll's Absolute Deltas
+ *
+ * User may change the scroll behavior, and the deltas are automatically inverted.
+ * These functions return the absolute direction, swipe up/right gives positive values.
+ *
+ * \{ */
+
+int WM_event_absolute_delta_x(const struct wmEvent *event)
+{
+  int dx = event->x - event->prevx;
+
+  if (!event->is_direction_inverted) {
+    dx = -dx;
+  }
+
+  return dx;
+}
+
+int WM_event_absolute_delta_y(const struct wmEvent *event)
+{
+  int dy = event->y - event->prevy;
+
+  if (!event->is_direction_inverted) {
+    dy = -dy;
+  }
+
+  return dy;
 }
 
 /** \} */

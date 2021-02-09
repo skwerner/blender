@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_SYSTEM_H__
-#define __BLI_SYSTEM_H__
+#pragma once
 
 #include <stdio.h>
 
@@ -50,7 +49,7 @@ void BLI_hostname_get(char *buffer, size_t bufsize);
 size_t BLI_system_memory_max_in_megabytes(void);
 int BLI_system_memory_max_in_megabytes_int(void);
 
-/* getpid */
+/* For `getpid`. */
 #ifdef WIN32
 #  define BLI_SYSTEM_PID_H <process.h>
 
@@ -64,5 +63,3 @@ void BLI_windows_handle_exception(void *exception);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_SYSTEM_H__ */

@@ -21,8 +21,7 @@
  * \ingroup imbuf
  */
 
-#ifndef __IMB_METADATA_H__
-#define __IMB_METADATA_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,7 +35,7 @@ struct anim;
  * The metadata is a list of key/value pairs (both char *) that can me
  * saved in the header of several image formats.
  * Apart from some common keys like
- * 'Software' and 'Description' (png standard) we'll use keys within the
+ * 'Software' and 'Description' (PNG standard) we'll use keys within the
  * Blender namespace, so should be called 'Blender::StampInfo' or 'Blender::FrameNum'
  * etc...
  *
@@ -84,5 +83,3 @@ void IMB_metadata_foreach(struct ImBuf *ibuf, IMBMetadataForeachCb callback, voi
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __IMB_METADATA_H__ */

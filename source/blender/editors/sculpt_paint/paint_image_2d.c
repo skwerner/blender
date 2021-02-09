@@ -57,8 +57,6 @@
 
 #include "UI_view2d.h"
 
-#include "GPU_draw.h"
-
 #include "paint_intern.h"
 
 /* Brush Painting for 2D image editor */
@@ -93,7 +91,7 @@ typedef struct BrushPainter {
   Scene *scene;
   Brush *brush;
 
-  short firsttouch; /* first paint op */
+  bool firsttouch; /* first paint op */
 
   struct ImagePool *pool; /* image pool */
   rctf tex_mapping;       /* texture coordinate mapping */
@@ -134,8 +132,6 @@ typedef struct ImagePaintState {
   SpaceImage *sima;
   View2D *v2d;
   Scene *scene;
-  bScreen *screen;
-  struct ImagePool *image_pool;
 
   Brush *brush;
   short tool, blend;
@@ -144,11 +140,6 @@ typedef struct ImagePaintState {
 
   bool do_masking;
 
-  /* viewport texture paint only, but _not_ project paint */
-  Object *ob;
-  int faceindex;
-  float uv[2];
-  int do_facesel;
   int symmetry;
 
   ImagePaintTile *tiles;
@@ -163,7 +154,7 @@ static BrushPainter *brush_painter_2d_new(Scene *scene, Brush *brush, bool inver
 
   painter->brush = brush;
   painter->scene = scene;
-  painter->firsttouch = 1;
+  painter->firsttouch = true;
   painter->cache_invert = invert;
 
   return painter;
@@ -257,7 +248,7 @@ static ushort *brush_painter_mask_ibuf_new(BrushPainter *painter, const int size
 /* update rectangular section of the brush image */
 static void brush_painter_mask_imbuf_update(BrushPainter *painter,
                                             ImagePaintTile *tile,
-                                            ushort *tex_mask_old,
+                                            const ushort *tex_mask_old,
                                             int origx,
                                             int origy,
                                             int w,
@@ -1039,7 +1030,7 @@ static float paint_2d_ibuf_add_if(
     paint_2d_ibuf_rgb_get(ibuf, x, y, inrgb);
   }
   else {
-    return 0;
+    return 0.0f;
   }
 
   mul_v4_fl(inrgb, w);
@@ -1052,7 +1043,7 @@ static void paint_2d_lift_soften(ImagePaintState *s,
                                  ImagePaintTile *tile,
                                  ImBuf *ibuf,
                                  ImBuf *ibufb,
-                                 int *pos,
+                                 const int *pos,
                                  const short paint_tile)
 {
   bool sharpen = (tile->cache.invert ^ ((s->brush->flag & BRUSH_DIR_IN) != 0));
@@ -1255,7 +1246,7 @@ static void paint_2d_lift_smear(ImBuf *ibuf, ImBuf *ibufb, int *pos, short paint
   }
 }
 
-static ImBuf *paint_2d_lift_clone(ImBuf *ibuf, ImBuf *ibufb, int *pos)
+static ImBuf *paint_2d_lift_clone(ImBuf *ibuf, ImBuf *ibufb, const int *pos)
 {
   /* note: allocImbuf returns zero'd memory, so regions outside image will
    * have zero alpha, and hence not be blended onto the image */
@@ -1661,7 +1652,7 @@ void paint_2d_stroke(void *ps,
     }
   }
 
-  painter->firsttouch = 0;
+  painter->firsttouch = false;
 }
 
 void *paint_2d_new_stroke(bContext *C, wmOperator *op, int mode)
@@ -1676,7 +1667,6 @@ void *paint_2d_new_stroke(bContext *C, wmOperator *op, int mode)
   s->sima = CTX_wm_space_image(C);
   s->v2d = &CTX_wm_region(C)->v2d;
   s->scene = scene;
-  s->screen = CTX_wm_screen(C);
 
   s->brush = brush;
   s->tool = brush->imagepaint_tool;
@@ -1692,7 +1682,7 @@ void *paint_2d_new_stroke(bContext *C, wmOperator *op, int mode)
   if (BKE_image_has_packedfile(s->image) && s->image->rr != NULL) {
     BKE_report(op->reports, RPT_WARNING, "Packed MultiLayer files cannot be painted");
     MEM_freeN(s);
-    return 0;
+    return NULL;
   }
 
   s->num_tiles = BLI_listbase_count(&s->image->tiles);
@@ -1784,7 +1774,7 @@ void paint_2d_redraw(const bContext *C, void *ps, bool final)
 
   if (final) {
     if (s->image && !(s->sima && s->sima->lock)) {
-      GPU_free_image(s->image);
+      BKE_image_free_gputextures(s->image);
     }
 
     /* compositor listener deals with updating */
@@ -2165,7 +2155,7 @@ void paint_2d_gradient_fill(
     for (x_px = 0; x_px < ibuf->x; x_px++) {
       for (y_px = 0; y_px < ibuf->y; y_px++) {
         float f;
-        float p[2] = {x_px - image_init[0], y_px - image_init[1]};
+        const float p[2] = {x_px - image_init[0], y_px - image_init[1]};
 
         switch (br->gradient_fill_mode) {
           case BRUSH_GRADIENT_LINEAR: {
@@ -2193,7 +2183,7 @@ void paint_2d_gradient_fill(
     for (x_px = 0; x_px < ibuf->x; x_px++) {
       for (y_px = 0; y_px < ibuf->y; y_px++) {
         float f;
-        float p[2] = {x_px - image_init[0], y_px - image_init[1]};
+        const float p[2] = {x_px - image_init[0], y_px - image_init[1]};
 
         switch (br->gradient_fill_mode) {
           case BRUSH_GRADIENT_LINEAR: {

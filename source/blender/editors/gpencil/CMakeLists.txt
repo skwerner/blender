@@ -31,10 +31,6 @@ set(INC
   ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
-
 set(SRC
   annotate_draw.c
   annotate_paint.c
@@ -46,9 +42,11 @@ set(SRC
   gpencil_convert.c
   gpencil_data.c
   gpencil_edit.c
+  gpencil_edit_curve.c
   gpencil_fill.c
   gpencil_interpolate.c
   gpencil_merge.c
+  gpencil_mesh.c
   gpencil_ops.c
   gpencil_ops_versioning.c
   gpencil_paint.c
@@ -63,6 +61,7 @@ set(SRC
   gpencil_weight_paint.c
 
   gpencil_intern.h
+  gpencil_trace.h
 )
 
 set(LIB
@@ -70,10 +69,23 @@ set(LIB
   bf_blenlib
 )
 
+if(WITH_POTRACE)
+  list(APPEND SRC
+    gpencil_trace_ops.c
+    gpencil_trace_utils.c
+  )
+  list(APPEND INC
+    ${POTRACE_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${POTRACE_LIBRARIES}
+  )
+  add_definitions(-DWITH_POTRACE)
+endif()
+
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_gpencil "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

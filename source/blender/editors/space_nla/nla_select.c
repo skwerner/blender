@@ -49,7 +49,7 @@
 #include "UI_interface.h"
 #include "UI_view2d.h"
 
-#include "nla_intern.h"  // own include
+#include "nla_intern.h" /* own include */
 
 /* ******************** Utilities ***************************************** */
 
@@ -100,7 +100,7 @@ static void deselect_nla_strips(bAnimContext *ac, short test, short sel)
   short smode;
 
   /* determine type-based settings */
-  // FIXME: double check whether ANIMFILTER_LIST_VISIBLE is needed!
+  /* FIXME: double check whether ANIMFILTER_LIST_VISIBLE is needed! */
   filter = (ANIMFILTER_DATA_VISIBLE);
 
   /* filter data */
@@ -434,8 +434,8 @@ void NLA_OT_select_box(wmOperatorType *ot)
 /* defines for left-right select tool */
 static const EnumPropertyItem prop_nlaedit_leftright_select_types[] = {
     {NLAEDIT_LRSEL_TEST, "CHECK", 0, "Check if Select Left or Right", ""},
-    {NLAEDIT_LRSEL_LEFT, "LEFT", 0, "Before current frame", ""},
-    {NLAEDIT_LRSEL_RIGHT, "RIGHT", 0, "After current frame", ""},
+    {NLAEDIT_LRSEL_LEFT, "LEFT", 0, "Before Current Frame", ""},
+    {NLAEDIT_LRSEL_RIGHT, "RIGHT", 0, "After Current Frame", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -638,7 +638,7 @@ static int mouse_nla_strips(bContext *C,
       deselect_nla_strips(ac, 0, SELECT_SUBTRACT);
 
       /* deselect all other channels first */
-      ANIM_deselect_anim_channels(ac, ac->data, ac->datatype, 0, ACHANNEL_SETFLAG_CLEAR);
+      ANIM_anim_channels_select_set(ac, ACHANNEL_SETFLAG_CLEAR);
     }
   }
 
@@ -728,7 +728,7 @@ void NLA_OT_click_select(wmOperatorType *ot)
 
   /* properties */
   WM_operator_properties_generic_select(ot);
-  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", "");  // SHIFTKEY
+  prop = RNA_def_boolean(ot->srna, "extend", 0, "Extend Select", ""); /* SHIFTKEY */
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   prop = RNA_def_boolean(ot->srna,

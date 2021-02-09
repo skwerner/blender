@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_LUMINANCEMATTEOPERATION_H__
-#define __COM_LUMINANCEMATTEOPERATION_H__
+#pragma once
+
 #include "COM_MixOperation.h"
 
 /**
@@ -36,7 +36,7 @@ class LuminanceMatteOperation : public NodeOperation {
   LuminanceMatteOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -48,4 +48,3 @@ class LuminanceMatteOperation : public NodeOperation {
     this->m_settings = nodeChroma;
   }
 };
-#endif

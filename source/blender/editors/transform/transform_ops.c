@@ -20,7 +20,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -32,7 +31,6 @@
 #include "BKE_context.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
-#include "BKE_layer.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
 
@@ -133,32 +131,32 @@ const EnumPropertyItem rna_enum_transform_mode_types[] = {
     {TFM_ROTATION, "ROTATION", 0, "Rotation", ""},
     {TFM_RESIZE, "RESIZE", 0, "Resize", ""},
     {TFM_SKIN_RESIZE, "SKIN_RESIZE", 0, "Skin Resize", ""},
-    {TFM_TOSPHERE, "TOSPHERE", 0, "Tosphere", ""},
+    {TFM_TOSPHERE, "TOSPHERE", 0, "To Sphere", ""},
     {TFM_SHEAR, "SHEAR", 0, "Shear", ""},
     {TFM_BEND, "BEND", 0, "Bend", ""},
-    {TFM_SHRINKFATTEN, "SHRINKFATTEN", 0, "Shrinkfatten", ""},
+    {TFM_SHRINKFATTEN, "SHRINKFATTEN", 0, "Shrink/Fatten", ""},
     {TFM_TILT, "TILT", 0, "Tilt", ""},
     {TFM_TRACKBALL, "TRACKBALL", 0, "Trackball", ""},
-    {TFM_PUSHPULL, "PUSHPULL", 0, "Pushpull", ""},
+    {TFM_PUSHPULL, "PUSHPULL", 0, "Push/Pull", ""},
     {TFM_CREASE, "CREASE", 0, "Crease", ""},
     {TFM_MIRROR, "MIRROR", 0, "Mirror", ""},
-    {TFM_BONESIZE, "BONE_SIZE", 0, "Bonesize", ""},
+    {TFM_BONESIZE, "BONE_SIZE", 0, "Bone Size", ""},
     {TFM_BONE_ENVELOPE, "BONE_ENVELOPE", 0, "Bone Envelope", ""},
     {TFM_BONE_ENVELOPE_DIST, "BONE_ENVELOPE_DIST", 0, "Bone Envelope Distance", ""},
-    {TFM_CURVE_SHRINKFATTEN, "CURVE_SHRINKFATTEN", 0, "Curve Shrinkfatten", ""},
-    {TFM_MASK_SHRINKFATTEN, "MASK_SHRINKFATTEN", 0, "Mask Shrinkfatten", ""},
-    {TFM_GPENCIL_SHRINKFATTEN, "GPENCIL_SHRINKFATTEN", 0, "GPencil Shrinkfatten", ""},
+    {TFM_CURVE_SHRINKFATTEN, "CURVE_SHRINKFATTEN", 0, "Curve Shrink/Fatten", ""},
+    {TFM_MASK_SHRINKFATTEN, "MASK_SHRINKFATTEN", 0, "Mask Shrink/Fatten", ""},
+    {TFM_GPENCIL_SHRINKFATTEN, "GPENCIL_SHRINKFATTEN", 0, "Grease Pencil Shrink/Fatten", ""},
     {TFM_BONE_ROLL, "BONE_ROLL", 0, "Bone Roll", ""},
     {TFM_TIME_TRANSLATE, "TIME_TRANSLATE", 0, "Time Translate", ""},
     {TFM_TIME_SLIDE, "TIME_SLIDE", 0, "Time Slide", ""},
     {TFM_TIME_SCALE, "TIME_SCALE", 0, "Time Scale", ""},
     {TFM_TIME_EXTEND, "TIME_EXTEND", 0, "Time Extend", ""},
     {TFM_BAKE_TIME, "BAKE_TIME", 0, "Bake Time", ""},
-    {TFM_BWEIGHT, "BWEIGHT", 0, "Bweight", ""},
+    {TFM_BWEIGHT, "BWEIGHT", 0, "Bevel Weight", ""},
     {TFM_ALIGN, "ALIGN", 0, "Align", ""},
     {TFM_EDGE_SLIDE, "EDGESLIDE", 0, "Edge Slide", ""},
     {TFM_SEQ_SLIDE, "SEQSLIDE", 0, "Sequence Slide", ""},
-    {TFM_GPENCIL_OPACITY, "GPENCIL_OPACITY", 0, "GPencil Opacity", ""},
+    {TFM_GPENCIL_OPACITY, "GPENCIL_OPACITY", 0, "Grease Pencil Opacity", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -416,9 +414,9 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
   const enum TfmMode mode_prev = t->mode;
 
 #if defined(WITH_INPUT_NDOF) && 0
-  // stable 2D mouse coords map to different 3D coords while the 3D mouse is active
-  // in other words, 2D deltas are no longer good enough!
-  // disable until individual 'transformers' behave better
+  /* Stable 2D mouse coords map to different 3D coords while the 3D mouse is active
+   * in other words, 2D deltas are no longer good enough!
+   * disable until individual 'transformers' behave better. */
 
   if (event->type == NDOF_MOTION) {
     return OPERATOR_PASS_THROUGH;
@@ -434,7 +432,7 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
    * since we're not reading from 'td->center' in this case. see: T40241 */
   if (t->tsnap.target == SCE_SNAP_TARGET_ACTIVE) {
     /* In camera view, tsnap callback is not set
-     * (see initSnappingMode() in transfrom_snap.c, and T40348). */
+     * (see #initSnappingMode() in transform_snap.c, and T40348). */
     if (t->tsnap.targetSnap && ((t->tsnap.status & TARGET_INIT) == 0)) {
       t->tsnap.targetSnap(t);
     }
@@ -446,7 +444,7 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
   if ((exit_code & OPERATOR_RUNNING_MODAL) == 0) {
     transformops_exit(C, op);
-    exit_code &= ~OPERATOR_PASS_THROUGH; /* preventively remove passthrough */
+    exit_code &= ~OPERATOR_PASS_THROUGH; /* Preventively remove pass-through. */
   }
   else {
     if (mode_prev != t->mode) {
@@ -518,22 +516,19 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if ((event == NULL) && RNA_struct_property_is_set(op->ptr, "value")) {
     return transform_exec(C, op);
   }
-  else {
-    /* add temp handler */
-    WM_event_add_modal_handler(C, op);
 
-    op->flag |= OP_IS_MODAL_GRAB_CURSOR;  // XXX maybe we want this with the gizmo only?
+  /* add temp handler */
+  WM_event_add_modal_handler(C, op);
 
-    /* Use when modal input has some transformation to begin with. */
-    {
-      TransInfo *t = op->customdata;
-      if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
-        transformApply(C, t);
-      }
-    }
+  op->flag |= OP_IS_MODAL_GRAB_CURSOR; /* XXX maybe we want this with the gizmo only? */
 
-    return OPERATOR_RUNNING_MODAL;
+  /* Use when modal input has some transformation to begin with. */
+  TransInfo *t = op->customdata;
+  if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
+    transformApply(C, t);
   }
+
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static bool transform_poll_property(const bContext *UNUSED(C),
@@ -546,7 +541,7 @@ static bool transform_poll_property(const bContext *UNUSED(C),
   {
     /* Hide orientation axis if no constraints are set, since it wont be used. */
     PropertyRNA *prop_con = RNA_struct_find_property(op->ptr, "orient_type");
-    if (prop_con != NULL && (prop_con != prop)) {
+    if (!ELEM(prop_con, NULL, prop)) {
       if (STRPREFIX(prop_id, "constraint")) {
 
         /* Special case: show constraint axis if we don't have values,
@@ -685,7 +680,7 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
 
   if ((flags & P_OPTIONS) && !(flags & P_NO_TEXSPACE)) {
     prop = RNA_def_boolean(
-        ot->srna, "texture_space", 0, "Edit Texture Space", "Edit Object data texture space");
+        ot->srna, "texture_space", 0, "Edit Texture Space", "Edit object data texture space");
     RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
     prop = RNA_def_boolean(
         ot->srna, "remove_on_cancel", 0, "Remove on Cancel", "Remove elements on cancel");
@@ -722,7 +717,7 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
                            "use_automerge_and_split",
                            0,
                            "Auto Merge & Split",
-                           "Forces the use of Auto Merge & Split");
+                           "Forces the use of Auto Merge and Split");
     RNA_def_property_flag(prop, PROP_HIDDEN);
   }
 }
@@ -830,6 +825,17 @@ static void TRANSFORM_OT_trackball(struct wmOperatorType *ot)
   Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
+/* Similar to #transform_shear_poll. */
+static bool transform_rotate_poll(bContext *C)
+{
+  if (!ED_operator_screenactive(C)) {
+    return false;
+  }
+
+  ScrArea *area = CTX_wm_area(C);
+  return area && !ELEM(area->spacetype, SPACE_ACTION);
+}
+
 static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
 {
   /* identifiers */
@@ -843,7 +849,7 @@ static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_screenactive;
+  ot->poll = transform_rotate_poll;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_rotation(
@@ -893,7 +899,7 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->invoke = transform_invoke;
-  // ot->exec   = transform_exec;  // unsupported
+  // ot->exec = transform_exec; /* unsupported */
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
   ot->poll = ED_operator_region_view3d_active;
@@ -907,6 +913,7 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
   Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
+/* Similar to #transform_rotate_poll. */
 static bool transform_shear_poll(bContext *C)
 {
   if (!ED_operator_screenactive(C)) {
@@ -998,8 +1005,7 @@ static void TRANSFORM_OT_tosphere(struct wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "To Sphere";
-  // added "around mesh center" to differentiate between "MESH_OT_vertices_to_sphere()"
-  ot->description = "Move selected vertices outward in a spherical shape around mesh center";
+  ot->description = "Move selected items outward in a spherical shape around geometric center";
   ot->idname = OP_TOSPHERE;
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
@@ -1034,8 +1040,7 @@ static void TRANSFORM_OT_mirror(struct wmOperatorType *ot)
   ot->poll = ED_operator_screenactive;
   ot->poll_property = transform_poll_property;
 
-  Transform_Properties(
-      ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_GPENCIL_EDIT | P_CENTER);
+  Transform_Properties(ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_GPENCIL_EDIT | P_CENTER);
 }
 
 static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)
@@ -1051,11 +1056,11 @@ static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_editarmature;
+  ot->poll = ED_operator_object_active;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_translation(
-      ot->srna, "value", 2, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
+      ot->srna, "value", 3, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
 
   WM_operatortype_props_advanced_begin(ot);
 
@@ -1307,7 +1312,7 @@ static int transform_from_gizmo_invoke(bContext *C,
 static void TRANSFORM_OT_from_gizmo(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Transform From Gizmo";
+  ot->name = "Transform from Gizmo";
   ot->description = "Transform selected items by mode type";
   ot->idname = "TRANSFORM_OT_from_gizmo";
   ot->flag = 0;

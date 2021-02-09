@@ -16,8 +16,7 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COMPOSITOR_H__
-#define __COM_COMPOSITOR_H__
+#pragma once
 
 #include "DNA_color_types.h"
 #include "DNA_node_types.h"
@@ -269,8 +268,8 @@ extern "C" {
  * When an ExecutionGroup schedules a Chunk the schedule method of the WorkScheduler
  * The Workscheduler determines if the chunk can be run on an OpenCLDevice
  * (and that there are available OpenCLDevice).
- * If this is the case the chunk will be added to the worklist for OpenCLDevice's
- * otherwise the chunk will be added to the worklist of CPUDevices.
+ * If this is the case the chunk will be added to the work-list for OpenCLDevice's
+ * otherwise the chunk will be added to the work-list of CPUDevices.
  *
  * A thread will read the work-list and sends a workpackage to its device.
  *
@@ -299,7 +298,7 @@ extern "C" {
 
 /**
  * \brief The main method that is used to execute the compositor tree.
- * It can be executed during editing (blenkernel/node.c) or rendering
+ * It can be executed during editing (blenkernel/node.cc) or rendering
  * (renderer/pipeline.c)
  *
  * \param rd: [struct RenderData]
@@ -363,5 +362,3 @@ void COM_deinitialize(void);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __COM_COMPOSITOR_H__ */

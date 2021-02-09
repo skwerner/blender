@@ -25,6 +25,7 @@ __all__ = (
     "generate",
 )
 
+
 def generate(context, space_type, use_fallback_keys=True, use_reset=True):
     """
     Keymap for popup toolbar, currently generated each time.
@@ -73,8 +74,6 @@ def generate(context, space_type, use_fallback_keys=True, use_reset=True):
     if tap_reset_tool not in items_all_id:
         use_tap_reset = False
 
-    from bl_operators.wm import use_toolbar_release_hack
-
     # Pie-menu style release to activate.
     use_release_confirm = use_reset
 
@@ -110,14 +109,12 @@ def generate(context, space_type, use_fallback_keys=True, use_reset=True):
     del keymap_src
     del items_all_id
 
-
     kmi_unique_args = set()
 
     def kmi_unique_or_pass(kmi_args):
         kmi_unique_len = len(kmi_unique_args)
         kmi_unique_args.add(dict_as_tuple(kmi_args))
         return kmi_unique_len != len(kmi_unique_args)
-
 
     cls = ToolSelectPanelHelper._tool_class_from_space_type(space_type)
 
@@ -193,16 +190,25 @@ def generate(context, space_type, use_fallback_keys=True, use_reset=True):
                     # PAINT_OT_brush_select
                     mode = context.active_object.mode
                     # See: BKE_paint_get_tool_prop_id_from_paintmode
-                    attr = {
-                        'SCULPT': "sculpt_tool",
-                        'VERTEX_PAINT': "vertex_tool",
-                        'WEIGHT_PAINT': "weight_tool",
-                        'TEXTURE_PAINT': "image_tool",
-                        'PAINT_GPENCIL': "gpencil_tool",
-                        'VERTEX_GPENCIL': "gpencil_vertex_tool",
-                        'SCULPT_GPENCIL': "gpencil_sculpt_tool",
-                        'WEIGHT_GPENCIL': "gpencil_weight_tool",
-                    }.get(mode, None)
+                    if space_type == 'IMAGE_EDITOR':
+                        if context.space_data.ui_mode == 'PAINT':
+                            attr = "image_tool"
+                        else:
+                            attr = None
+                    elif space_type == 'VIEW_3D':
+                        attr = {
+                            'SCULPT': "sculpt_tool",
+                            'VERTEX_PAINT': "vertex_tool",
+                            'WEIGHT_PAINT': "weight_tool",
+                            'TEXTURE_PAINT': "image_tool",
+                            'PAINT_GPENCIL': "gpencil_tool",
+                            'VERTEX_GPENCIL': "gpencil_vertex_tool",
+                            'SCULPT_GPENCIL': "gpencil_sculpt_tool",
+                            'WEIGHT_GPENCIL': "gpencil_weight_tool",
+                        }.get(mode, None)
+                    else:
+                        attr = None
+
                     if attr is not None:
                         setattr(kmi_hack_brush_select_properties, attr, item.data_block)
                         kmi_found = wm.keyconfigs.find_item_from_operator(
@@ -405,7 +411,6 @@ def generate(context, space_type, use_fallback_keys=True, use_reset=True):
                         kmi.properties.name = item.idname
                         kmi_unique_args.add(kmi_tuple)
 
-
     # ---------------------
     # End Keymap Generation
 
@@ -430,7 +435,7 @@ def generate(context, space_type, use_fallback_keys=True, use_reset=True):
 
         kmi = keymap.keymap_items.new(
             "wm.tool_set_by_id",
-            value='PRESS' if use_toolbar_release_hack else 'DOUBLE_CLICK',
+            value='DOUBLE_CLICK',
             **kmi_toolbar_args_available,
         )
         kmi.properties.name = tap_reset_tool
@@ -444,15 +449,6 @@ def generate(context, space_type, use_fallback_keys=True, use_reset=True):
         )
         kmi.properties.skip_depressed = True
 
-        if use_toolbar_release_hack:
-            # ... or pass through to let the toolbar know we're released.
-            # Let the operator know we're released.
-            kmi = keymap.keymap_items.new(
-                "wm.tool_set_by_id",
-                type=kmi_toolbar_type,
-                value='RELEASE',
-                any=True,
-            )
 
     wm.keyconfigs.update()
     return keymap

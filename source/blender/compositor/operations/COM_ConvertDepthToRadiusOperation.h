@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_CONVERTDEPTHTORADIUSOPERATION_H__
-#define __COM_CONVERTDEPTHTORADIUSOPERATION_H__
+#pragma once
+
 #include "COM_FastGaussianBlurOperation.h"
 #include "COM_NodeOperation.h"
 #include "DNA_object_types.h"
@@ -49,7 +49,7 @@ class ConvertDepthToRadiusOperation : public NodeOperation {
   ConvertDepthToRadiusOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -81,4 +81,3 @@ class ConvertDepthToRadiusOperation : public NodeOperation {
     this->m_blurPostOperation = operation;
   }
 };
-#endif

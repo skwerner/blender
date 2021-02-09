@@ -18,10 +18,13 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SPEAKER_TYPES_H__
-#define __DNA_SPEAKER_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 struct bSound;
@@ -59,4 +62,6 @@ typedef struct Speaker {
 #define SPK_MUTED (1 << 1)
 // #define SPK_RELATIVE    (1 << 2)  /* UNUSED */
 
-#endif /* __DNA_SPEAKER_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

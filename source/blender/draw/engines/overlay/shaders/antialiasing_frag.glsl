@@ -1,4 +1,6 @@
 
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+
 uniform sampler2D colorTex;
 uniform sampler2D depthTex;
 uniform sampler2D lineTex;
@@ -144,7 +146,7 @@ void main()
     vec4 lines = vec4(neightbor_line0.z, neightbor_line1.z, neightbor_line2.z, neightbor_line3.z);
     /* Count number of line neighbors. */
     float blend = dot(vec4(0.25), step(0.001, lines));
-    /* Only do blend if there is more than 2 neighbor. This avoid loosing too much AA. */
+    /* Only do blend if there are more than 2 neighbors. This avoids losing too much AA. */
     blend = clamp(blend * 2.0 - 1.0, 0.0, 1.0);
     fragColor = mix(fragColor, fragColor / fragColor.a, blend);
   }

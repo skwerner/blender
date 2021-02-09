@@ -124,6 +124,7 @@ const EnumPropertyItem rna_enum_symmetrize_direction_items[] = {
 #  include "DEG_depsgraph.h"
 
 #  include "ED_gpencil.h"
+#  include "ED_paint.h"
 #  include "ED_particle.h"
 
 static void rna_GPencil_update(Main *UNUSED(bmain), Scene *scene, PointerRNA *UNUSED(ptr))
@@ -228,7 +229,7 @@ static const EnumPropertyItem *rna_ParticleEdit_tool_itemf(bContext *C,
 #  else
   /* use this rather than PE_get_current() - because the editing cache is
    * dependent on the cache being updated which can happen after this UI
-   * draws causing a glitch [#28883] */
+   * draws causing a glitch T28883. */
   ParticleSystem *psys = psys_get_current(ob);
 #  endif
 
@@ -483,7 +484,7 @@ static void rna_ImaPaint_mode_update(bContext *C, PointerRNA *UNUSED(ptr))
 
     /* We assume that changing the current mode will invalidate the uv layers
      * so we need to refresh display. */
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
 }
@@ -495,7 +496,7 @@ static void rna_ImaPaint_stencil_update(bContext *C, PointerRNA *UNUSED(ptr))
   Object *ob = OBACT(view_layer);
 
   if (ob && ob->type == OB_MESH) {
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
 }
@@ -527,7 +528,7 @@ static void rna_ImaPaint_canvas_update(bContext *C, PointerRNA *UNUSED(ptr))
   }
 
   if (ob && ob->type == OB_MESH) {
-    BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+    ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, NULL);
   }
 }
@@ -763,12 +764,6 @@ static void rna_def_sculpt(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Lock Z", "Disallow changes to the Z axis of vertices");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
-  prop = RNA_def_property(srna, "use_threaded", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", SCULPT_USE_OPENMP);
-  RNA_def_property_ui_text(
-      prop, "Use OpenMP", "Take advantage of multiple CPU cores to improve sculpting performance");
-  RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
-
   prop = RNA_def_property(srna, "use_deform_only", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", SCULPT_ONLY_DEFORM);
   RNA_def_property_ui_text(prop,
@@ -826,28 +821,28 @@ static void rna_def_sculpt(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_automasking_topology", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_TOPOLOGY);
   RNA_def_property_ui_text(prop,
-                           "Topology Auto-masking",
+                           "Topology Auto-Masking",
                            "Affect only vertices connected to the active vertex under the brush");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_automasking_face_sets", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_FACE_SETS);
   RNA_def_property_ui_text(prop,
-                           "Face Sets Auto-masking",
+                           "Face Sets Auto-Masking",
                            "Affect only vertices that share Face Sets with the active vertex");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_automasking_boundary_edges", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_BOUNDARY_EDGES);
   RNA_def_property_ui_text(
-      prop, "Mesh Boundary Auto-masking", "Do not affect non manifold boundary edges");
+      prop, "Mesh Boundary Auto-Masking", "Do not affect non manifold boundary edges");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
   prop = RNA_def_property(srna, "use_automasking_boundary_face_sets", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(
       prop, NULL, "automasking_flags", BRUSH_AUTOMASKING_BOUNDARY_FACE_SETS);
   RNA_def_property_ui_text(prop,
-                           "Face Sets Boundary Auto-masking",
+                           "Face Sets Boundary Auto-Masking",
                            "Do not affect vertices that belong to a Face Set boundary");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, NULL);
 
@@ -901,7 +896,7 @@ static void rna_def_gp_paint(BlenderRNA *brna)
   RNA_def_struct_path_func(srna, "rna_GpPaint_path");
   RNA_def_struct_ui_text(srna, "Grease Pencil Paint", "");
 
-  /* Use vertex color (main swith). */
+  /* Use vertex color (main switch). */
   prop = RNA_def_property(srna, "color_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "mode");
   RNA_def_property_enum_items(prop, rna_enum_gpencil_paint_mode);
@@ -1156,7 +1151,7 @@ static void rna_def_particle_edit(BlenderRNA *brna)
 
   static const EnumPropertyItem edit_type_items[] = {
       {PE_TYPE_PARTICLES, "PARTICLES", 0, "Particles", ""},
-      {PE_TYPE_SOFTBODY, "SOFT_BODY", 0, "Soft body", ""},
+      {PE_TYPE_SOFTBODY, "SOFT_BODY", 0, "Soft Body", ""},
       {PE_TYPE_CLOTH, "CLOTH", 0, "Cloth", ""},
       {0, NULL, 0, NULL, NULL},
   };

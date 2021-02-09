@@ -99,7 +99,7 @@ static void button2d_geom_draw_backdrop(const wmGizmo *gz,
   else {
     /* Draw fill. */
     if ((fill_alpha != 0.0f) || (select == true)) {
-      float fill_color[4] = {UNPACK3(color), fill_alpha * color[3]};
+      const float fill_color[4] = {UNPACK3(color), fill_alpha * color[3]};
       immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
       immUniformColor4fv(fill_color);
       imm_draw_circle_fill_2d(pos, 0, 0, 1.0f, CIRCLE_RESOLUTION);
@@ -195,7 +195,7 @@ static void button2d_draw_intern(const bContext *C,
   }
   else {
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
 
     if (draw_options & ED_GIZMO_BUTTON_SHOW_BACKDROP) {
       const float fill_alpha = RNA_float_get(gz->ptr, "backdrop_fill_alpha");
@@ -226,10 +226,10 @@ static void button2d_draw_intern(const bContext *C,
           float color_contrast[4];
           copy_v3_fl(color_contrast, rgb_to_grayscale(color) < 0.2f ? 1 : 0);
           color_contrast[3] = color[3];
-          GPU_batch_uniform_4f(button->shape_batch[i], "color", UNPACK4(color_contrast));
+          GPU_shader_uniform_4f(button->shape_batch[i]->shader, "color", UNPACK4(color_contrast));
         }
         else {
-          GPU_batch_uniform_4f(button->shape_batch[i], "color", UNPACK4(color));
+          GPU_shader_uniform_4f(button->shape_batch[i]->shader, "color", UNPACK4(color));
         }
 
         GPU_batch_draw(button->shape_batch[i]);
@@ -265,7 +265,7 @@ static void button2d_draw_intern(const bContext *C,
       UI_icon_draw_alpha(pos[0], pos[1], button->icon, alpha);
       GPU_polygon_smooth(true);
     }
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
   }
 
   if (need_to_pop) {
@@ -283,9 +283,9 @@ static void gizmo_button2d_draw(const bContext *C, wmGizmo *gz)
 {
   const bool is_highlight = (gz->state & WM_GIZMO_STATE_HIGHLIGHT) != 0;
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   button2d_draw_intern(C, gz, false, is_highlight);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 static int gizmo_button2d_test_select(bContext *C, wmGizmo *gz, const int mval[2])
@@ -320,6 +320,16 @@ static int gizmo_button2d_cursor_get(wmGizmo *gz)
   return WM_CURSOR_DEFAULT;
 }
 
+static void gizmo_button2d_bounds(bContext *C, wmGizmo *gz, rcti *r_bounding_box)
+{
+  ScrArea *area = CTX_wm_area(C);
+  float rad = CIRCLE_RESOLUTION * U.dpi_fac / 2.0f;
+  r_bounding_box->xmin = gz->matrix_basis[3][0] + area->totrct.xmin - rad;
+  r_bounding_box->ymin = gz->matrix_basis[3][1] + area->totrct.ymin - rad;
+  r_bounding_box->xmax = r_bounding_box->xmin + rad;
+  r_bounding_box->ymax = r_bounding_box->ymin + rad;
+}
+
 static void gizmo_button2d_free(wmGizmo *gz)
 {
   ButtonGizmo2D *shape = (ButtonGizmo2D *)gz;
@@ -346,6 +356,7 @@ static void GIZMO_GT_button_2d(wmGizmoType *gzt)
   gzt->draw_select = gizmo_button2d_draw_select;
   gzt->test_select = gizmo_button2d_test_select;
   gzt->cursor_get = gizmo_button2d_cursor_get;
+  gzt->screen_bounds_get = gizmo_button2d_bounds;
   gzt->free = gizmo_button2d_free;
 
   gzt->struct_size = sizeof(ButtonGizmo2D);
@@ -386,4 +397,4 @@ void ED_gizmotypes_button_2d(void)
   WM_gizmotype_append(GIZMO_GT_button_2d);
 }
 
-/** \} */  // Button Gizmo API
+/** \} */ /* Button Gizmo API */

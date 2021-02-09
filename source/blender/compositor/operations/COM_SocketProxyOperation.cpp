@@ -19,8 +19,13 @@
 #include "COM_SocketProxyOperation.h"
 
 SocketProxyOperation::SocketProxyOperation(DataType type, bool use_conversion)
-    : NodeOperation(), m_use_conversion(use_conversion)
+    : m_use_conversion(use_conversion)
 {
   this->addInputSocket(type);
   this->addOutputSocket(type);
+}
+
+std::unique_ptr<MetaData> SocketProxyOperation::getMetaData() const
+{
+  return this->getInputSocket(0)->getReader()->getMetaData();
 }

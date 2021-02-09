@@ -69,14 +69,85 @@ void ED_sculpt_init_transform(struct bContext *C)
 
   copy_v3_v3(ss->init_pivot_pos, ss->pivot_pos);
   copy_v4_v4(ss->init_pivot_rot, ss->pivot_rot);
+  copy_v3_v3(ss->init_pivot_scale, ss->pivot_scale);
 
-  SCULPT_undo_push_begin("Transform");
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  copy_v3_v3(ss->prev_pivot_pos, ss->pivot_pos);
+  copy_v4_v4(ss->prev_pivot_rot, ss->pivot_rot);
+  copy_v3_v3(ss->prev_pivot_scale, ss->pivot_scale);
+
+  SCULPT_undo_push_begin(ob, "Transform");
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
 
   ss->pivot_rot[3] = 1.0f;
 
-  SCULPT_vertex_random_access_init(ss);
-  SCULPT_filter_cache_init(ob, sd);
+  SCULPT_vertex_random_access_ensure(ss);
+  SCULPT_filter_cache_init(C, ob, sd, SCULPT_UNDO_COORDS);
+
+  ss->filter_cache->transform_displacement_mode = SCULPT_TRANSFORM_DISPLACEMENT_ORIGINAL;
+}
+
+static void sculpt_transform_matrices_init(SculptSession *ss,
+                                           const char symm,
+                                           const SculptTransformDisplacementMode t_mode,
+                                           float r_transform_mats[8][4][4])
+{
+
+  float final_pivot_pos[3], d_t[3], d_r[4], d_s[3];
+  float t_mat[4][4], r_mat[4][4], s_mat[4][4], pivot_mat[4][4], pivot_imat[4][4],
+      transform_mat[4][4];
+
+  float start_pivot_pos[3], start_pivot_rot[4], start_pivot_scale[3];
+  switch (t_mode) {
+    case SCULPT_TRANSFORM_DISPLACEMENT_ORIGINAL:
+      copy_v3_v3(start_pivot_pos, ss->init_pivot_pos);
+      copy_v4_v4(start_pivot_rot, ss->init_pivot_rot);
+      copy_v3_v3(start_pivot_scale, ss->init_pivot_scale);
+      break;
+    case SCULPT_TRANSFORM_DISPLACEMENT_INCREMENTAL:
+      copy_v3_v3(start_pivot_pos, ss->prev_pivot_pos);
+      copy_v4_v4(start_pivot_rot, ss->prev_pivot_rot);
+      copy_v3_v3(start_pivot_scale, ss->prev_pivot_scale);
+      break;
+  }
+
+  for (int i = 0; i < PAINT_SYMM_AREAS; i++) {
+    ePaintSymmetryAreas v_symm = i;
+
+    copy_v3_v3(final_pivot_pos, ss->pivot_pos);
+
+    unit_m4(pivot_mat);
+
+    unit_m4(t_mat);
+    unit_m4(r_mat);
+    unit_m4(s_mat);
+
+    /* Translation matrix. */
+    sub_v3_v3v3(d_t, ss->pivot_pos, start_pivot_pos);
+    SCULPT_flip_v3_by_symm_area(d_t, symm, v_symm, ss->init_pivot_pos);
+    translate_m4(t_mat, d_t[0], d_t[1], d_t[2]);
+
+    /* Rotation matrix. */
+    sub_qt_qtqt(d_r, ss->pivot_rot, start_pivot_rot);
+    normalize_qt(d_r);
+    SCULPT_flip_quat_by_symm_area(d_r, symm, v_symm, ss->init_pivot_pos);
+    quat_to_mat4(r_mat, d_r);
+
+    /* Scale matrix. */
+    sub_v3_v3v3(d_s, ss->pivot_scale, start_pivot_scale);
+    add_v3_fl(d_s, 1.0f);
+    size_to_mat4(s_mat, d_s);
+
+    /* Pivot matrix. */
+    SCULPT_flip_v3_by_symm_area(final_pivot_pos, symm, v_symm, start_pivot_pos);
+    translate_m4(pivot_mat, final_pivot_pos[0], final_pivot_pos[1], final_pivot_pos[2]);
+    invert_m4_m4(pivot_imat, pivot_mat);
+
+    /* Final transform matrix. */
+    mul_m4_m4m4(transform_mat, r_mat, t_mat);
+    mul_m4_m4m4(transform_mat, transform_mat, s_mat);
+    mul_m4_m4m4(r_transform_mats[i], transform_mat, pivot_imat);
+    mul_m4_m4m4(r_transform_mats[i], pivot_mat, r_transform_mats[i]);
+  }
 }
 
 static void sculpt_transform_task_cb(void *__restrict userdata,
@@ -98,16 +169,25 @@ static void sculpt_transform_task_cb(void *__restrict userdata,
   {
     SCULPT_orig_vert_data_update(&orig_data, &vd);
     float transformed_co[3], orig_co[3], disp[3];
+    float *start_co;
     float fade = vd.mask ? *vd.mask : 0.0f;
     copy_v3_v3(orig_co, orig_data.co);
     char symm_area = SCULPT_get_vertex_symm_area(orig_co);
 
-    copy_v3_v3(transformed_co, orig_co);
-    mul_m4_v3(data->transform_mats[(int)symm_area], transformed_co);
-    sub_v3_v3v3(disp, transformed_co, orig_co);
-    mul_v3_fl(disp, 1.0f - fade);
+    switch (ss->filter_cache->transform_displacement_mode) {
+      case SCULPT_TRANSFORM_DISPLACEMENT_ORIGINAL:
+        start_co = orig_co;
+        break;
+      case SCULPT_TRANSFORM_DISPLACEMENT_INCREMENTAL:
+        start_co = vd.co;
+        break;
+    }
 
-    add_v3_v3v3(vd.co, orig_co, disp);
+    copy_v3_v3(transformed_co, start_co);
+    mul_m4_v3(data->transform_mats[(int)symm_area], transformed_co);
+    sub_v3_v3v3(disp, transformed_co, start_co);
+    mul_v3_fl(disp, 1.0f - fade);
+    add_v3_v3v3(vd.co, start_co, disp);
 
     if (vd.mvert) {
       vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
@@ -118,16 +198,10 @@ static void sculpt_transform_task_cb(void *__restrict userdata,
   BKE_pbvh_node_mark_update(node);
 }
 
-void ED_sculpt_update_modal_transform(struct bContext *C)
+static void sculpt_transform_all_vertices(Sculpt *sd, Object *ob)
 {
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
-  Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
-  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
-
-  SCULPT_vertex_random_access_init(ss);
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false);
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
   SculptThreadedTaskData data = {
       .sd = sd,
@@ -135,53 +209,32 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
       .nodes = ss->filter_cache->nodes,
   };
 
-  float final_pivot_pos[3], d_t[3], d_r[4];
-  float t_mat[4][4], r_mat[4][4], s_mat[4][4], pivot_mat[4][4], pivot_imat[4][4],
-      transform_mat[4][4];
+  sculpt_transform_matrices_init(
+      ss, symm, ss->filter_cache->transform_displacement_mode, data.transform_mats);
 
-  copy_v3_v3(final_pivot_pos, ss->pivot_pos);
-  for (int i = 0; i < PAINT_SYMM_AREAS; i++) {
-    ePaintSymmetryAreas v_symm = i;
-
-    copy_v3_v3(final_pivot_pos, ss->pivot_pos);
-
-    unit_m4(pivot_mat);
-
-    unit_m4(t_mat);
-    unit_m4(r_mat);
-    unit_m4(s_mat);
-
-    /* Translation matrix. */
-    sub_v3_v3v3(d_t, ss->pivot_pos, ss->init_pivot_pos);
-    SCULPT_flip_v3_by_symm_area(d_t, symm, v_symm, ss->init_pivot_pos);
-    translate_m4(t_mat, d_t[0], d_t[1], d_t[2]);
-
-    /* Rotation matrix. */
-    sub_qt_qtqt(d_r, ss->pivot_rot, ss->init_pivot_rot);
-    normalize_qt(d_r);
-    SCULPT_flip_quat_by_symm_area(d_r, symm, v_symm, ss->init_pivot_pos);
-    quat_to_mat4(r_mat, d_r);
-
-    /* Scale matrix. */
-    size_to_mat4(s_mat, ss->pivot_scale);
-
-    /* Pivot matrix. */
-    SCULPT_flip_v3_by_symm_area(final_pivot_pos, symm, v_symm, ss->init_pivot_pos);
-    translate_m4(pivot_mat, final_pivot_pos[0], final_pivot_pos[1], final_pivot_pos[2]);
-    invert_m4_m4(pivot_imat, pivot_mat);
-
-    /* Final transform matrix. */
-    mul_m4_m4m4(transform_mat, r_mat, t_mat);
-    mul_m4_m4m4(transform_mat, transform_mat, s_mat);
-    mul_m4_m4m4(data.transform_mats[i], transform_mat, pivot_imat);
-    mul_m4_m4m4(data.transform_mats[i], pivot_mat, data.transform_mats[i]);
-  }
-
+  /* Regular transform applies all symmetry passes at once as it is split by symmetry areas
+   * (each vertex can only be transformed once by the transform matrix of its area). */
   TaskParallelSettings settings;
-  BKE_pbvh_parallel_range_settings(
-      &settings, (sd->flags & SCULPT_USE_OPENMP), ss->filter_cache->totnode);
+  BKE_pbvh_parallel_range_settings(&settings, true, ss->filter_cache->totnode);
   BLI_task_parallel_range(
       0, ss->filter_cache->totnode, &data, sculpt_transform_task_cb, &settings);
+}
+
+void ED_sculpt_update_modal_transform(struct bContext *C)
+{
+  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
+  Object *ob = CTX_data_active_object(C);
+  SculptSession *ss = ob->sculpt;
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+
+  SCULPT_vertex_random_access_ensure(ss);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, false, false);
+
+  sculpt_transform_all_vertices(sd, ob);
+
+  copy_v3_v3(ss->prev_pivot_pos, ss->pivot_pos);
+  copy_v4_v4(ss->prev_pivot_rot, ss->pivot_rot);
+  copy_v3_v3(ss->prev_pivot_scale, ss->pivot_scale);
 
   if (ss->deform_modifiers_active || ss->shapekey_active) {
     SCULPT_flush_stroke_deform(sd, ob, true);
@@ -199,7 +252,7 @@ void ED_sculpt_end_transform(struct bContext *C)
   }
   /* Force undo push to happen even inside transform operator, since the sculpt
    * undo system works separate from regular undo and this is require to properly
-   * finish an undo step also when cancelling. */
+   * finish an undo step also when canceling. */
   const bool use_nested_undo = true;
   SCULPT_undo_push_end_ex(use_nested_undo);
   SCULPT_flush_update_done(C, ob, SCULPT_UPDATE_COORDS);
@@ -227,12 +280,12 @@ static EnumPropertyItem prop_sculpt_pivot_position_types[] = {
     {SCULPT_PIVOT_POSITION_MASK_BORDER,
      "BORDER",
      0,
-     "Mask border",
+     "Mask Border",
      "Sets the pivot position to the center of the border of the mask"},
     {SCULPT_PIVOT_POSITION_ACTIVE_VERTEX,
      "ACTIVE",
      0,
-     "Active vertex",
+     "Active Vertex",
      "Sets the pivot position to the active vertex position"},
     {SCULPT_PIVOT_POSITION_CURSOR_SURFACE,
      "SURFACE",
@@ -244,16 +297,15 @@ static EnumPropertyItem prop_sculpt_pivot_position_types[] = {
 
 static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 {
-  Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
   Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   ARegion *region = CTX_wm_region(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
-  const char symm = sd->paint.symmetry_flags & PAINT_SYMM_AXIS_ALL;
+  const char symm = SCULPT_mesh_symmetry_xyz_get(ob);
 
   int mode = RNA_enum_get(op->ptr, "mode");
 
-  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true);
+  BKE_sculpt_update_object_for_edit(depsgraph, ob, false, true, false);
 
   /* Pivot to center. */
   if (mode == SCULPT_PIVOT_POSITION_ORIGIN) {
@@ -326,6 +378,12 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 
     MEM_SAFE_FREE(nodes);
   }
+
+  /* Update the viewport navigation rotation origin. */
+  UnifiedPaintSettings *ups = &CTX_data_tool_settings(C)->unified_paint_settings;
+  copy_v3_v3(ups->average_stroke_accum, ss->pivot_pos);
+  ups->average_stroke_counter = 1;
+  ups->last_stroke_valid = true;
 
   ED_region_tag_redraw(region);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);

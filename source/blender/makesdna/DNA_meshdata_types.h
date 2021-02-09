@@ -21,11 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MESHDATA_TYPES_H__
-#define __DNA_MESHDATA_TYPES_H__
+#pragma once
 
 #include "DNA_customdata_types.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /** \name Geometry Elements
@@ -309,7 +312,7 @@ typedef enum eMVertSkinFlag {
    */
   MVERT_SKIN_ROOT = 1,
 
-  /** Marks a branch vertex (vertex with more than two connected edges), so that it's neighbors
+  /** Marks a branch vertex (vertex with more than two connected edges), so that its neighbors
    * are directly hulled together, rather than the default of generating intermediate frames.
    */
   MVERT_SKIN_LOOSE = 2,
@@ -337,7 +340,7 @@ enum {
 };
 
 /**
- * \note While alpha is currently is not in the view-port,
+ * \note While alpha is not currently in the 3D Viewport,
  * this may eventually be added back, keep this value set to 255.
  */
 typedef struct MLoopCol {
@@ -345,7 +348,7 @@ typedef struct MLoopCol {
 } MLoopCol;
 
 typedef struct MPropCol {
-  float col[4];
+  float color[4];
 } MPropCol;
 
 /** Multi-Resolution loop data. */
@@ -519,56 +522,8 @@ typedef struct MRecast {
   int i;
 } MRecast;
 
-/** Multires structs kept for compatibility with old files. */
-typedef struct MultiresCol {
-  float a, r, g, b;
-} MultiresCol;
-
-typedef struct MultiresColFace {
-  /* vertex colors */
-  MultiresCol col[4];
-} MultiresColFace;
-
-typedef struct MultiresFace {
-  unsigned int v[4];
-  unsigned int mid;
-  char flag, mat_nr, _pad[2];
-} MultiresFace;
-
-typedef struct MultiresEdge {
-  unsigned int v[2];
-  unsigned int mid;
-} MultiresEdge;
-
-typedef struct MultiresLevel {
-  struct MultiresLevel *next, *prev;
-
-  MultiresFace *faces;
-  MultiresColFace *colfaces;
-  MultiresEdge *edges;
-
-  unsigned int totvert, totface, totedge;
-  char _pad[4];
-
-  /* Kept for compatibility with even older files */
-  MVert *verts;
-} MultiresLevel;
-
-typedef struct Multires {
-  ListBase levels;
-  MVert *verts;
-
-  unsigned char level_count, current, newlvl, edgelvl, pinlvl, renderlvl;
-  unsigned char use_col, flag;
-
-  /* Special level 1 data that cannot be modified from other levels */
-  CustomData vdata;
-  CustomData fdata;
-  short *edge_flags;
-  char *edge_creases;
-} Multires;
-/* End multi-res structs. */
-
 /** \} */
 
-#endif /* __DNA_MESHDATA_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

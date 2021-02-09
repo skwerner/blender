@@ -26,11 +26,13 @@
 #include "DNA_node_types.h"
 #include "DNA_windowmanager_types.h"
 
+#include "BLI_alloca.h"
 #include "BLI_lasso_2d.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
+#include "BLI_string_search.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
@@ -60,14 +62,15 @@
 
 #include "node_intern.h" /* own include */
 
-/* Function to detect if there is a visible view3d that uses workbench in texture mode.
+/**
+ * Function to detect if there is a visible view3d that uses workbench in texture mode.
  * This function is for fixing T76970 for Blender 2.83. The actual fix should add a mechanism in
  * the depsgraph that can be used by the draw engines to check if they need to be redrawn.
  *
  * We don't want to add these risky changes this close before releasing 2.83 without good testing
  * hence this workaround. There are still cases were too many updates happen. For example when you
  * have both a Cycles and workbench with textures viewport.
- * */
+ */
 static bool has_workbench_in_texture_color(const wmWindowManager *wm,
                                            const Scene *scene,
                                            const Object *ob)
@@ -1097,9 +1100,7 @@ static int node_select_same_type_step_exec(bContext *C, wmOperator *op)
         if (node->type == active->type) {
           break;
         }
-        else {
-          node = NULL;
-        }
+        node = NULL;
       }
       if (node) {
         active = node;
@@ -1164,6 +1165,16 @@ void NODE_OT_select_same_type_step(wmOperatorType *ot)
 /** \name Find Node by Name Operator
  * \{ */
 
+static void node_find_create_label(const bNode *node, char *str, int maxlen)
+{
+  if (node->label[0]) {
+    BLI_snprintf(str, maxlen, "%s (%s)", node->name, node->label);
+  }
+  else {
+    BLI_strncpy(str, node->name, maxlen);
+  }
+}
+
 /* generic  search invoke */
 static void node_find_update_fn(const struct bContext *C,
                                 void *UNUSED(arg),
@@ -1171,24 +1182,29 @@ static void node_find_update_fn(const struct bContext *C,
                                 uiSearchItems *items)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  bNode *node;
 
-  for (node = snode->edittree->nodes.first; node; node = node->next) {
+  StringSearch *search = BLI_string_search_new();
 
-    if (BLI_strcasestr(node->name, str) || BLI_strcasestr(node->label, str)) {
-      char name[256];
+  LISTBASE_FOREACH (bNode *, node, &snode->edittree->nodes) {
+    char name[256];
+    node_find_create_label(node, name, ARRAY_SIZE(name));
+    BLI_string_search_add(search, name, node);
+  }
 
-      if (node->label[0]) {
-        BLI_snprintf(name, 256, "%s (%s)", node->name, node->label);
-      }
-      else {
-        BLI_strncpy(name, node->name, 256);
-      }
-      if (!UI_search_item_add(items, name, node, ICON_NONE, 0)) {
-        break;
-      }
+  bNode **filtered_nodes;
+  int filtered_amount = BLI_string_search_query(search, str, (void ***)&filtered_nodes);
+
+  for (int i = 0; i < filtered_amount; i++) {
+    bNode *node = filtered_nodes[i];
+    char name[256];
+    node_find_create_label(node, name, ARRAY_SIZE(name));
+    if (!UI_search_item_add(items, name, node, ICON_NONE, 0, 0)) {
+      break;
     }
   }
+
+  MEM_freeN(filtered_nodes);
+  BLI_string_search_free(search);
 }
 
 static void node_find_exec_fn(struct bContext *C, void *UNUSED(arg1), void *arg2)
@@ -1266,7 +1282,7 @@ void NODE_OT_find_node(wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "Find Node";
-  ot->description = "Search for named node and allow to select and activate it";
+  ot->description = "Search for a node by name and focus and select it";
   ot->idname = "NODE_OT_find_node";
 
   /* api callbacks */

@@ -19,7 +19,7 @@
 #include "COM_MapUVOperation.h"
 #include "BLI_math.h"
 
-MapUVOperation::MapUVOperation() : NodeOperation()
+MapUVOperation::MapUVOperation()
 {
   this->addInputSocket(COM_DT_COLOR, COM_SC_NO_RESIZE);
   this->addInputSocket(COM_DT_VECTOR);
@@ -28,8 +28,8 @@ MapUVOperation::MapUVOperation() : NodeOperation()
   this->setComplex(true);
   setResolutionInputSocketIndex(1);
 
-  this->m_inputUVProgram = NULL;
-  this->m_inputColorProgram = NULL;
+  this->m_inputUVProgram = nullptr;
+  this->m_inputColorProgram = nullptr;
 }
 
 void MapUVOperation::initExecution()
@@ -87,14 +87,13 @@ bool MapUVOperation::read_uv(float x, float y, float &r_u, float &r_v, float &r_
     r_alpha = 0.0f;
     return false;
   }
-  else {
-    float vector[3];
-    m_inputUVProgram->readSampled(vector, x, y, COM_PS_BILINEAR);
-    r_u = vector[0] * m_inputColorProgram->getWidth();
-    r_v = vector[1] * m_inputColorProgram->getHeight();
-    r_alpha = vector[2];
-    return true;
-  }
+
+  float vector[3];
+  m_inputUVProgram->readSampled(vector, x, y, COM_PS_BILINEAR);
+  r_u = vector[0] * m_inputColorProgram->getWidth();
+  r_v = vector[1] * m_inputColorProgram->getHeight();
+  r_alpha = vector[2];
+  return true;
 }
 
 void MapUVOperation::pixelTransform(const float xy[2],
@@ -150,8 +149,8 @@ void MapUVOperation::pixelTransform(const float xy[2],
 
 void MapUVOperation::deinitExecution()
 {
-  this->m_inputUVProgram = NULL;
-  this->m_inputColorProgram = NULL;
+  this->m_inputUVProgram = nullptr;
+  this->m_inputColorProgram = nullptr;
 }
 
 bool MapUVOperation::determineDependingAreaOfInterest(rcti *input,
@@ -160,7 +159,7 @@ bool MapUVOperation::determineDependingAreaOfInterest(rcti *input,
 {
   rcti colorInput;
   rcti uvInput;
-  NodeOperation *operation = NULL;
+  NodeOperation *operation = nullptr;
 
   /* the uv buffer only needs a 3x3 buffer. The image needs whole buffer */
 

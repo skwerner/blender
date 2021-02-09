@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_ELLIPSEMASKOPERATION_H__
-#define __COM_ELLIPSEMASKOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class EllipseMaskOperation : public NodeOperation {
@@ -39,7 +39,7 @@ class EllipseMaskOperation : public NodeOperation {
   EllipseMaskOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -63,4 +63,3 @@ class EllipseMaskOperation : public NodeOperation {
     this->m_maskType = maskType;
   }
 };
-#endif

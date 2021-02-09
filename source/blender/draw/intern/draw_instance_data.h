@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRAW_INSTANCE_DATA_H__
-#define __DRAW_INSTANCE_DATA_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 #include "BLI_sys_types.h"
@@ -32,8 +31,12 @@
 
 #define DRW_BUFFER_VERTS_CHUNK 128
 
+struct GHash;
+struct GPUUniformAttrList;
+
 typedef struct DRWInstanceData DRWInstanceData;
 typedef struct DRWInstanceDataList DRWInstanceDataList;
+typedef struct DRWSparseUniformBuf DRWSparseUniformBuf;
 
 void *DRW_instance_data_next(DRWInstanceData *idata);
 DRWInstanceData *DRW_instance_data_request(DRWInstanceDataList *idatalist, uint attr_size);
@@ -56,4 +59,20 @@ void DRW_instance_data_list_reset(DRWInstanceDataList *idatalist);
 void DRW_instance_data_list_free_unused(DRWInstanceDataList *idatalist);
 void DRW_instance_data_list_resize(DRWInstanceDataList *idatalist);
 
-#endif /* __DRAW_INSTANCE_DATA_H__ */
+/* Sparse chunked UBO manager. */
+DRWSparseUniformBuf *DRW_sparse_uniform_buffer_new(unsigned int item_size,
+                                                   unsigned int chunk_size);
+void DRW_sparse_uniform_buffer_flush(DRWSparseUniformBuf *buffer);
+void DRW_sparse_uniform_buffer_clear(DRWSparseUniformBuf *buffer, bool free_all);
+void DRW_sparse_uniform_buffer_free(DRWSparseUniformBuf *buffer);
+bool DRW_sparse_uniform_buffer_is_empty(DRWSparseUniformBuf *buffer);
+void DRW_sparse_uniform_buffer_bind(DRWSparseUniformBuf *buffer, int chunk, int location);
+void DRW_sparse_uniform_buffer_unbind(DRWSparseUniformBuf *buffer, int chunk);
+void *DRW_sparse_uniform_buffer_ensure_item(DRWSparseUniformBuf *buffer, int chunk, int item);
+
+/* Uniform attribute UBO management. */
+struct GHash *DRW_uniform_attrs_pool_new(void);
+void DRW_uniform_attrs_pool_flush_all(struct GHash *table);
+void DRW_uniform_attrs_pool_clear_all(struct GHash *table);
+struct DRWSparseUniformBuf *DRW_uniform_attrs_pool_find_ubo(struct GHash *table,
+                                                            struct GPUUniformAttrList *key);

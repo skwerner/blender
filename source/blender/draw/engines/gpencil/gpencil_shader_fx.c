@@ -95,7 +95,7 @@ static DRWShadingGroup *gpencil_vfx_pass_create(const char *name,
 
 static void gpencil_vfx_blur(BlurShaderFxData *fx, Object *ob, gpIterVfxData *iter)
 {
-  if (fx->radius[0] == 0.0f && fx->radius[1] == 0.0f) {
+  if ((fx->samples == 0.0f) || (fx->radius[0] == 0.0f && fx->radius[1] == 0.0f)) {
     return;
   }
 
@@ -235,7 +235,7 @@ static void gpencil_vfx_rim(RimShaderFxData *fx, Object *ob, gpIterVfxData *iter
   DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
 
   if (fx->mode == eShaderFxRimMode_Overlay) {
-    /* We cannot do custom blending on MultiTarget framebuffers.
+    /* We cannot do custom blending on multi-target frame-buffers.
      * Workaround by doing 2 passes. */
     grp = DRW_shgroup_create_sub(grp);
     DRW_shgroup_state_disable(grp, DRW_STATE_BLEND_MUL);
@@ -262,6 +262,8 @@ static void gpencil_vfx_pixelize(PixelShaderFxData *fx, Object *ob, gpIterVfxDat
   mul_v3_m4v3(ob_center, persmat, ob->obmat[3]);
   mul_v3_fl(ob_center, 1.0f / w);
 
+  const bool use_antialiasing = ((fx->flag & FX_PIXEL_FILTER_NEAREST) == 0);
+
   /* Convert to uvs. */
   mul_v2_fl(ob_center, 0.5f);
   add_v2_fl(ob_center, 0.5f);
@@ -285,7 +287,8 @@ static void gpencil_vfx_pixelize(PixelShaderFxData *fx, Object *ob, gpIterVfxDat
     DRW_shgroup_uniform_vec2_copy(grp, "targetPixelSize", pixsize_uniform);
     DRW_shgroup_uniform_vec2_copy(grp, "targetPixelOffset", ob_center);
     DRW_shgroup_uniform_vec2_copy(grp, "accumOffset", (float[2]){pixel_size[0], 0.0f});
-    DRW_shgroup_uniform_int_copy(grp, "sampCount", (pixel_size[0] / vp_size_inv[0] > 3.0) ? 2 : 1);
+    int samp_count = (pixel_size[0] / vp_size_inv[0] > 3.0) ? 2 : 1;
+    DRW_shgroup_uniform_int_copy(grp, "sampCount", use_antialiasing ? samp_count : 0);
     DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
   }
 
@@ -294,7 +297,8 @@ static void gpencil_vfx_pixelize(PixelShaderFxData *fx, Object *ob, gpIterVfxDat
     grp = gpencil_vfx_pass_create("Fx Pixelize Y", state, iter, sh);
     DRW_shgroup_uniform_vec2_copy(grp, "targetPixelSize", pixsize_uniform);
     DRW_shgroup_uniform_vec2_copy(grp, "accumOffset", (float[2]){0.0f, pixel_size[1]});
-    DRW_shgroup_uniform_int_copy(grp, "sampCount", (pixel_size[1] / vp_size_inv[1] > 3.0) ? 2 : 1);
+    int samp_count = (pixel_size[1] / vp_size_inv[1] > 3.0) ? 2 : 1;
+    DRW_shgroup_uniform_int_copy(grp, "sampCount", use_antialiasing ? samp_count : 0);
     DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
   }
 }
@@ -359,7 +363,7 @@ static void gpencil_vfx_shadow(ShadowShaderFxData *fx, Object *ob, gpIterVfxData
     copy_v2_v2(wave_ofs, wave_dir);
     SWAP(float, wave_ofs[0], wave_ofs[1]);
     wave_ofs[1] *= -1.0f;
-    /* Keep world space scalling and aspect ratio. */
+    /* Keep world space scaling and aspect ratio. */
     mul_v2_fl(wave_dir, 1.0f / (max_ff(1e-8f, fx->period) * distance_factor));
     mul_v2_v2(wave_dir, vp_size);
     mul_v2_fl(wave_ofs, fx->amplitude * distance_factor);
@@ -393,7 +397,7 @@ static void gpencil_vfx_shadow(ShadowShaderFxData *fx, Object *ob, gpIterVfxData
   unit_m4(uv_mat);
   zero_v2(wave_ofs);
 
-  /* We reseted the uv_mat so we need to accound for the rotation in the  */
+  /* We reset the uv_mat so we need to account for the rotation in the  */
   copy_v2_fl2(tmp, 0.0f, blur_size[1]);
   rotate_v2_v2fl(blur_dir, tmp, -fx->rotation);
   mul_v2_v2(blur_dir, vp_size_inv);
@@ -511,7 +515,7 @@ static void gpencil_vfx_wave(WaveShaderFxData *fx, Object *ob, gpIterVfxData *it
   copy_v2_v2(wave_ofs, wave_dir);
   SWAP(float, wave_ofs[0], wave_ofs[1]);
   wave_ofs[1] *= -1.0f;
-  /* Keep world space scalling and aspect ratio. */
+  /* Keep world space scaling and aspect ratio. */
   mul_v2_fl(wave_dir, 1.0f / (max_ff(1e-8f, fx->period) * distance_factor));
   mul_v2_v2(wave_dir, vp_size);
   mul_v2_fl(wave_ofs, fx->amplitude * distance_factor);
@@ -581,12 +585,8 @@ void gpencil_vfx_cache_populate(GPENCIL_Data *vedata, Object *ob, GPENCIL_tObjec
   bGPdata *gpd = (bGPdata *)ob->data;
   GPENCIL_FramebufferList *fbl = vedata->fbl;
   GPENCIL_PrivateData *pd = vedata->stl->pd;
-  /* If simplify enabled, nothing more to do. */
-  if (pd->simplify_fx) {
-    return;
-  }
 
-  /* These may not be allocated yet, use adress of future pointer. */
+  /* These may not be allocated yet, use address of future pointer. */
   gpIterVfxData iter = {
       .pd = pd,
       .tgp_ob = tgp_ob,
@@ -597,44 +597,46 @@ void gpencil_vfx_cache_populate(GPENCIL_Data *vedata, Object *ob, GPENCIL_tObjec
       .target_reveal_tx = &pd->reveal_layer_tx,
       .source_reveal_tx = &pd->reveal_object_tx,
   };
-
-  LISTBASE_FOREACH (ShaderFxData *, fx, &ob->shader_fx) {
-    if (effect_is_active(gpd, fx, pd->is_viewport)) {
-      switch (fx->type) {
-        case eShaderFxType_Blur:
-          gpencil_vfx_blur((BlurShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Colorize:
-          gpencil_vfx_colorize((ColorizeShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Flip:
-          gpencil_vfx_flip((FlipShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Pixel:
-          gpencil_vfx_pixelize((PixelShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Rim:
-          gpencil_vfx_rim((RimShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Shadow:
-          gpencil_vfx_shadow((ShadowShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Glow:
-          gpencil_vfx_glow((GlowShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Swirl:
-          gpencil_vfx_swirl((SwirlShaderFxData *)fx, ob, &iter);
-          break;
-        case eShaderFxType_Wave:
-          gpencil_vfx_wave((WaveShaderFxData *)fx, ob, &iter);
-          break;
-        default:
-          break;
+  /* If simplify enabled, nothing more to do. */
+  if (!pd->simplify_fx) {
+    LISTBASE_FOREACH (ShaderFxData *, fx, &ob->shader_fx) {
+      if (effect_is_active(gpd, fx, pd->is_viewport)) {
+        switch (fx->type) {
+          case eShaderFxType_Blur:
+            gpencil_vfx_blur((BlurShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Colorize:
+            gpencil_vfx_colorize((ColorizeShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Flip:
+            gpencil_vfx_flip((FlipShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Pixel:
+            gpencil_vfx_pixelize((PixelShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Rim:
+            gpencil_vfx_rim((RimShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Shadow:
+            gpencil_vfx_shadow((ShadowShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Glow:
+            gpencil_vfx_glow((GlowShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Swirl:
+            gpencil_vfx_swirl((SwirlShaderFxData *)fx, ob, &iter);
+            break;
+          case eShaderFxType_Wave:
+            gpencil_vfx_wave((WaveShaderFxData *)fx, ob, &iter);
+            break;
+          default:
+            break;
+        }
       }
     }
   }
 
-  if (tgp_ob->vfx.first != NULL) {
+  if ((!pd->simplify_fx && tgp_ob->vfx.first != NULL) || tgp_ob->do_mat_holdout) {
     /* We need an extra pass to combine result to main buffer. */
     iter.target_fb = &fbl->gpencil_fb;
 
@@ -645,7 +647,7 @@ void gpencil_vfx_cache_populate(GPENCIL_Data *vedata, Object *ob, GPENCIL_tObjec
     DRW_shgroup_uniform_int_copy(grp, "isFirstPass", true);
     DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
 
-    /* We cannot do custom blending on MultiTarget framebuffers.
+    /* We cannot do custom blending on multi-target frame-buffers.
      * Workaround by doing 2 passes. */
     grp = DRW_shgroup_create_sub(grp);
     DRW_shgroup_state_disable(grp, DRW_STATE_BLEND_MUL);

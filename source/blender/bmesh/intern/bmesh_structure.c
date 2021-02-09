@@ -402,7 +402,7 @@ bool bmesh_radial_validate(int radlen, BMLoop *l)
     if (l_iter->e != l->e) {
       return false;
     }
-    if (l_iter->v != l->e->v1 && l_iter->v != l->e->v2) {
+    if (!ELEM(l_iter->v, l->e->v1, l->e->v2)) {
       return false;
     }
 
@@ -537,7 +537,7 @@ int bmesh_radial_length(const BMLoop *l)
 
   do {
     if (UNLIKELY(!l_iter)) {
-      /* radial cycle is broken (not a circulat loop) */
+      /* Radial cycle is broken (not a circular loop). */
       BMESH_ASSERT(0);
       return 0;
     }

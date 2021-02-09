@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SINGLETHREADEDOPERATION_H__
-#define __COM_SINGLETHREADEDOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class SingleThreadedOperation : public NodeOperation {
@@ -34,7 +34,7 @@ class SingleThreadedOperation : public NodeOperation {
   SingleThreadedOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -57,4 +57,3 @@ class SingleThreadedOperation : public NodeOperation {
     return true;
   }
 };
-#endif

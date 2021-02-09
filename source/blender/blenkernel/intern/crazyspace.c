@@ -38,6 +38,7 @@
 #include "BKE_editmesh.h"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
 #include "BKE_multires.h"
 
@@ -193,30 +194,22 @@ void BKE_crazyspace_set_quats_mesh(Mesh *me,
                                    float (*mappedcos)[3],
                                    float (*quats)[4])
 {
-  int i;
-  MVert *mvert;
-  MLoop *mloop;
-  MPoly *mp;
-
-  mvert = me->mvert;
-  for (i = 0; i < me->totvert; i++, mvert++) {
+  MVert *mvert = me->mvert;
+  for (int i = 0; i < me->totvert; i++, mvert++) {
     mvert->flag &= ~ME_VERT_TMP_TAG;
   }
 
   /* first store two sets of tangent vectors in vertices, we derive it just from the face-edges */
   mvert = me->mvert;
-  mp = me->mpoly;
-  mloop = me->mloop;
+  MPoly *mp = me->mpoly;
+  MLoop *mloop = me->mloop;
 
-  for (i = 0; i < me->totpoly; i++, mp++) {
-    MLoop *ml_prev, *ml_curr, *ml_next;
-    int j;
+  for (int i = 0; i < me->totpoly; i++, mp++) {
+    MLoop *ml_next = &mloop[mp->loopstart];
+    MLoop *ml_curr = &ml_next[mp->totloop - 1];
+    MLoop *ml_prev = &ml_next[mp->totloop - 2];
 
-    ml_next = &mloop[mp->loopstart];
-    ml_curr = &ml_next[mp->totloop - 1];
-    ml_prev = &ml_next[mp->totloop - 2];
-
-    for (j = 0; j < mp->totloop; j++) {
+    for (int j = 0; j < mp->totloop; j++) {
       if ((mvert[ml_curr->v].flag & ME_VERT_TMP_TAG) == 0) {
         const float *co_prev, *co_curr, *co_next; /* orig */
         const float *vd_prev, *vd_curr, *vd_next; /* deform */
@@ -251,7 +244,7 @@ void BKE_crazyspace_set_quats_mesh(Mesh *me,
 }
 
 /**
- * Returns an array of deform matrices for crazyspace correction,
+ * Returns an array of deform matrices for crazy-space correction,
  * and the number of modifiers left.
  */
 int BKE_crazyspace_get_first_deform_matrices_editbmesh(struct Depsgraph *depsgraph,
@@ -280,7 +273,7 @@ int BKE_crazyspace_get_first_deform_matrices_editbmesh(struct Depsgraph *depsgra
   for (i = 0; md && i <= cageIndex; i++, md = md->next) {
     const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
-    if (!editbmesh_modifier_is_enabled(scene, md, me != NULL)) {
+    if (!editbmesh_modifier_is_enabled(scene, ob, md, me != NULL)) {
       continue;
     }
 
@@ -309,7 +302,7 @@ int BKE_crazyspace_get_first_deform_matrices_editbmesh(struct Depsgraph *depsgra
   }
 
   for (; md && i <= cageIndex; md = md->next, i++) {
-    if (editbmesh_modifier_is_enabled(scene, md, me != NULL) &&
+    if (editbmesh_modifier_is_enabled(scene, ob, md, me != NULL) &&
         BKE_modifier_is_correctable_deformed(md)) {
       numleft++;
     }
@@ -326,7 +319,7 @@ int BKE_crazyspace_get_first_deform_matrices_editbmesh(struct Depsgraph *depsgra
 }
 
 /**
- * Crazyspace evaluation needs to have an object which has all the fields
+ * Crazy-space evaluation needs to have an object which has all the fields
  * evaluated, but the mesh data being at undeformed state. This way it can
  * re-apply modifiers and also have proper pointers to key data blocks.
  *
@@ -454,8 +447,8 @@ void BKE_crazyspace_build_sculpt(struct Depsgraph *depsgraph,
       depsgraph, scene, object, deformmats, deformcos);
 
   if (totleft) {
-    /* there are deformation modifier which doesn't support deformation matrices
-     * calculation. Need additional crazyspace correction */
+    /* There are deformation modifier which doesn't support deformation matrices calculation.
+     * Need additional crazy-space correction. */
 
     Mesh *mesh = (Mesh *)object->data;
     Mesh *mesh_eval = NULL;

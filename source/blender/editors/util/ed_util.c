@@ -29,22 +29,14 @@
 
 #include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_object_types.h"
-#include "DNA_packedFile_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_space_types.h"
 
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
-#include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_multires.h"
@@ -53,23 +45,18 @@
 #include "BKE_paint.h"
 #include "BKE_screen.h"
 #include "BKE_undo_system.h"
-#include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
-#include "ED_buttons.h"
 #include "ED_image.h"
 #include "ED_mesh.h"
-#include "ED_node.h"
 #include "ED_object.h"
-#include "ED_outliner.h"
 #include "ED_paint.h"
 #include "ED_space_api.h"
 #include "ED_util.h"
 
 #include "GPU_immediate.h"
-#include "GPU_state.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -92,7 +79,7 @@ void ED_editors_init_for_undo(Main *bmain)
         Scene *scene = WM_window_get_active_scene(win);
 
         BKE_texpaint_slots_refresh_object(scene, ob);
-        BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+        ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
       }
     }
   }
@@ -123,10 +110,10 @@ void ED_editors_init(bContext *C)
     if (mode == OB_MODE_OBJECT) {
       continue;
     }
-    else if (BKE_object_has_mode_data(ob, mode)) {
+    if (BKE_object_has_mode_data(ob, mode)) {
       continue;
     }
-    else if (ob->type == OB_GPENCIL) {
+    if (ob->type == OB_GPENCIL) {
       /* For multi-edit mode we may already have mode data (grease pencil does not need it).
        * However we may have a non-active object stuck in a grease-pencil edit mode. */
       if (ob != obact) {
@@ -153,10 +140,10 @@ void ED_editors_init(bContext *C)
             ED_object_sculptmode_enter_ex(bmain, depsgraph, scene, ob, true, reports);
           }
           else if (mode == OB_MODE_VERTEX_PAINT) {
-            ED_object_vpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_vpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else if (mode == OB_MODE_WEIGHT_PAINT) {
-            ED_object_wpaintmode_enter_ex(bmain, depsgraph, wm, scene, ob);
+            ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else {
             BLI_assert(0);
@@ -174,7 +161,7 @@ void ED_editors_init(bContext *C)
       else {
         /* TODO(campbell): avoid operator calls. */
         if (obact == ob) {
-          ED_object_mode_toggle(C, mode);
+          ED_object_mode_set(C, mode);
         }
       }
     }
@@ -207,6 +194,17 @@ void ED_editors_exit(Main *bmain, bool do_undo_system)
     }
   }
 
+  /* On undo, tag for update so the depsgraph doesn't use stale edit-mode data,
+   * this is possible when mixing edit-mode and memory-file undo.
+   *
+   * By convention, objects are not left in edit-mode - so this isn't often problem in practice,
+   * since exiting edit-mode will tag the objects too.
+   *
+   * However there is no guarantee the active object _never_ changes while in edit-mode.
+   * Python for example can do this, some callers to #ED_object_base_activate
+   * don't handle modes either (doing so isn't always practical).
+   *
+   * To reproduce the problem where stale data is used, see: T84920. */
   for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
     if (ob->type == OB_MESH) {
       Mesh *me = ob->data;
@@ -214,12 +212,18 @@ void ED_editors_exit(Main *bmain, bool do_undo_system)
         EDBM_mesh_free(me->edit_mesh);
         MEM_freeN(me->edit_mesh);
         me->edit_mesh = NULL;
+        if (do_undo_system == false) {
+          DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+        }
       }
     }
     else if (ob->type == OB_ARMATURE) {
       bArmature *arm = ob->data;
       if (arm->edbo) {
         ED_armature_edit_free(ob->data);
+        if (do_undo_system == false) {
+          DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+        }
       }
     }
   }
@@ -480,25 +484,4 @@ void ED_spacedata_id_remap(struct ScrArea *area, struct SpaceLink *sl, ID *old_i
   if (st && st->id_remap) {
     st->id_remap(area, sl, old_id, new_id);
   }
-}
-
-static int ed_flush_edits_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  Main *bmain = CTX_data_main(C);
-  ED_editors_flush_edits(bmain);
-  return OPERATOR_FINISHED;
-}
-
-void ED_OT_flush_edits(wmOperatorType *ot)
-{
-  /* identifiers */
-  ot->name = "Flush Edits";
-  ot->description = "Flush edit data from active editing modes";
-  ot->idname = "ED_OT_flush_edits";
-
-  /* api callbacks */
-  ot->exec = ed_flush_edits_exec;
-
-  /* flags */
-  ot->flag = OPTYPE_INTERNAL;
 }

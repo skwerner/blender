@@ -22,99 +22,92 @@
  * \brief conversion and adaptation of different datablocks to a common struct.
  */
 
-#ifndef __TRANSFORM_CONVERT_H__
-#define __TRANSFORM_CONVERT_H__
+#pragma once
 
 struct BezTriple;
+struct BMEditMesh;
+struct BMesh;
+struct FCurve;
 struct ListBase;
 struct Object;
 struct TransData;
-struct TransDataContainer;
 struct TransDataCurveHandleFlags;
 struct TransInfo;
 struct bContext;
-struct bKinematicConstraint;
-struct bPoseChannel;
 
 /* transform_convert.c */
-int transform_convert_pose_transflags_update(Object *ob,
-                                             const int mode,
-                                             const short around,
-                                             bool has_translate_rotate[2]);
 void transform_autoik_update(TransInfo *t, short mode);
-void autokeyframe_object(struct bContext *C,
-                         struct Scene *scene,
-                         struct ViewLayer *view_layer,
-                         struct Object *ob,
-                         int tmode);
-void autokeyframe_pose(
-    struct bContext *C, struct Scene *scene, struct Object *ob, int tmode, short targetless_ik);
-bool motionpath_need_update_object(struct Scene *scene, struct Object *ob);
-bool motionpath_need_update_pose(struct Scene *scene, struct Object *ob);
 int special_transform_moving(TransInfo *t);
-void remake_graph_transdata(TransInfo *t, struct ListBase *anim_data);
 void special_aftertrans_update(struct bContext *C, TransInfo *t);
 void sort_trans_data_dist(TransInfo *t);
 void createTransData(struct bContext *C, TransInfo *t);
 bool clipUVTransform(TransInfo *t, float vec[2], const bool resize);
 void clipUVData(TransInfo *t);
 
-/* transform_convert_action.c */
-void flushTransIntFrameActionData(TransInfo *t);
-
-/* transform_convert_armature.c */
-void pose_transform_mirror_update(TransInfo *t, TransDataContainer *tc, Object *ob);
-void restoreMirrorPoseBones(TransDataContainer *tc);
-void restoreBones(TransDataContainer *tc);
-
-/* transform_convert_graph.c */
-void flushTransGraphData(TransInfo *t);
-
-/* transform_convert_mask.c */
-void flushTransMasking(TransInfo *t);
-
 /* transform_convert_mesh.c */
-void flushTransUVs(TransInfo *t);
-void trans_mesh_customdata_correction_init(TransInfo *t);
-void trans_mesh_customdata_correction_apply(struct TransDataContainer *tc, bool is_final);
-
-/* transform_convert_node.c */
-void flushTransNodes(TransInfo *t);
-
-/* transform_convert_object.c */
-void trans_obdata_in_obmode_update_all(struct TransInfo *t);
-void trans_obchild_in_obmode_update_all(struct TransInfo *t);
-
-/* transform_convert_paintcurve.c */
-void flushTransPaintCurve(TransInfo *t);
-
-/* transform_convert_particle.c */
-void flushTransParticles(TransInfo *t);
+void mesh_customdatacorrect_init(TransInfo *t);
 
 /* transform_convert_sequencer.c */
-void flushTransSeq(TransInfo *t);
-
-/* transform_convert_tracking.c */
-void flushTransTracking(TransInfo *t);
-
+int transform_convert_sequencer_get_snap_bound(TransInfo *t);
+void transform_convert_sequencer_channel_clamp(TransInfo *t);
 /********************* intern **********************/
+
+typedef enum eTransConvertType {
+  TC_NONE = 0,
+  TC_ACTION_DATA,
+  TC_POSE,
+  TC_ARMATURE_VERTS,
+  TC_CURSOR_IMAGE,
+  TC_CURSOR_VIEW3D,
+  TC_CURVE_VERTS,
+  TC_GRAPH_EDIT_DATA,
+  TC_GPENCIL,
+  TC_LATTICE_VERTS,
+  TC_MASKING_DATA,
+  TC_MBALL_VERTS,
+  TC_MESH_VERTS,
+  TC_MESH_EDGES,
+  TC_MESH_SKIN,
+  TC_MESH_UV,
+  TC_NLA_DATA,
+  TC_NODE_DATA,
+  TC_OBJECT,
+  TC_OBJECT_TEXSPACE,
+  TC_PAINT_CURVE_VERTS,
+  TC_PARTICLE_VERTS,
+  TC_SCULPT,
+  TC_SEQ_DATA,
+  TC_TRACKING_DATA,
+} eTransConvertType;
 
 /* transform_convert.c */
 bool transform_mode_use_local_origins(const TransInfo *t);
+void transform_around_single_fallback_ex(TransInfo *t, int data_len_all);
 void transform_around_single_fallback(TransInfo *t);
+void posttrans_fcurve_clean(struct FCurve *fcu, const int sel_flag, const bool use_handle);
 bool constraints_list_needinv(TransInfo *t, ListBase *list);
-void calc_distanceCurveVerts(TransData *head, TransData *tail);
+void calc_distanceCurveVerts(TransData *head, TransData *tail, bool cyclic);
 struct TransDataCurveHandleFlags *initTransDataCurveHandles(TransData *td, struct BezTriple *bezt);
 char transform_convert_frame_side_dir_get(TransInfo *t, float cframe);
 bool FrameOnMouseSide(char side, float frame, float cframe);
+void clipMirrorModifier(TransInfo *t);
+void animrecord_check_state(TransInfo *t, struct Object *ob);
 
 /* transform_convert_action.c */
 void createTransActionData(bContext *C, TransInfo *t);
+void recalcData_actedit(TransInfo *t);
+void special_aftertrans_update__actedit(bContext *C, TransInfo *t);
 
 /* transform_convert_armature.c */
-struct bKinematicConstraint *has_targetless_ik(struct bPoseChannel *pchan);
+int transform_convert_pose_transflags_update(Object *ob,
+                                             const int mode,
+                                             const short around,
+                                             bool has_translate_rotate[2]);
 void createTransPose(TransInfo *t);
 void createTransArmatureVerts(TransInfo *t);
+void recalcData_edit_armature(TransInfo *t);
+void recalcData_pose(TransInfo *t);
+void special_aftertrans_update__pose(bContext *C, TransInfo *t);
 
 /* transform_convert_cursor.c */
 void createTransCursor_image(TransInfo *t);
@@ -122,51 +115,129 @@ void createTransCursor_view3d(TransInfo *t);
 
 /* transform_convert_curve.c */
 void createTransCurveVerts(TransInfo *t);
+void recalcData_curve(TransInfo *t);
 
 /* transform_convert_graph.c */
 void createTransGraphEditData(bContext *C, TransInfo *t);
+void recalcData_graphedit(TransInfo *t);
+void special_aftertrans_update__graph(bContext *C, TransInfo *t);
 
 /* transform_convert_gpencil.c */
 void createTransGPencil(bContext *C, TransInfo *t);
+void recalcData_gpencil_strokes(TransInfo *t);
 
 /* transform_convert_lattice.c */
 void createTransLatticeVerts(TransInfo *t);
+void recalcData_lattice(TransInfo *t);
 
 /* transform_convert_mask.c */
 void createTransMaskingData(bContext *C, TransInfo *t);
+void recalcData_mask_common(TransInfo *t);
+void special_aftertrans_update__mask(bContext *C, TransInfo *t);
 
 /* transform_convert_mball.c */
 void createTransMBallVerts(TransInfo *t);
 
 /* transform_convert_mesh.c */
+struct TransIslandData {
+  float (*center)[3];
+  float (*axismtx)[3][3];
+  int island_tot;
+  int *island_vert_map;
+};
+
+struct MirrorDataVert {
+  int index;
+  int flag;
+};
+
+struct TransMirrorData {
+  struct MirrorDataVert *vert_map;
+  int mirror_elem_len;
+};
+
+struct TransMeshDataCrazySpace {
+  float (*quats)[4];
+  float (*defmats)[3][3];
+};
+
+void transform_convert_mesh_islands_calc(struct BMEditMesh *em,
+                                         const bool calc_single_islands,
+                                         const bool calc_island_center,
+                                         const bool calc_island_axismtx,
+                                         struct TransIslandData *r_island_data);
+void transform_convert_mesh_islanddata_free(struct TransIslandData *island_data);
+void transform_convert_mesh_connectivity_distance(struct BMesh *bm,
+                                                  const float mtx[3][3],
+                                                  float *dists,
+                                                  int *index);
+void transform_convert_mesh_mirrordata_calc(struct BMEditMesh *em,
+                                            const bool use_select,
+                                            const bool use_topology,
+                                            const bool mirror_axis[3],
+                                            struct TransMirrorData *r_mirror_data);
+void transform_convert_mesh_mirrordata_free(struct TransMirrorData *mirror_data);
+void transform_convert_mesh_crazyspace_detect(TransInfo *t,
+                                              struct TransDataContainer *tc,
+                                              struct BMEditMesh *em,
+                                              struct TransMeshDataCrazySpace *r_crazyspace_data);
+void transform_convert_mesh_crazyspace_transdata_set(const float mtx[3][3],
+                                                     const float smtx[3][3],
+                                                     const float defmat[3][3],
+                                                     const float quat[4],
+                                                     struct TransData *r_td);
+void transform_convert_mesh_crazyspace_free(struct TransMeshDataCrazySpace *r_crazyspace_data);
+
 void createTransEditVerts(TransInfo *t);
+void recalcData_mesh(TransInfo *t);
+void special_aftertrans_update__mesh(bContext *C, TransInfo *t);
+
+/* transform_convert_mesh_edge.c */
 void createTransEdge(TransInfo *t);
+
+/* transform_convert_mesh_skin.c */
+void createTransMeshSkin(TransInfo *t);
+void recalcData_mesh_skin(TransInfo *t);
+
+/* transform_convert_mesh_uv.c */
 void createTransUVs(bContext *C, TransInfo *t);
+void recalcData_uv(TransInfo *t);
 
 /* transform_convert_nla.c */
 void createTransNlaData(bContext *C, TransInfo *t);
+void recalcData_nla(TransInfo *t);
+void special_aftertrans_update__nla(bContext *C, TransInfo *t);
 
 /* transform_convert_node.c */
-void createTransNodeData(bContext *UNUSED(C), TransInfo *t);
+void createTransNodeData(TransInfo *t);
+void flushTransNodes(TransInfo *t);
+void special_aftertrans_update__node(bContext *C, TransInfo *t);
 
 /* transform_convert_object.c */
-void clear_trans_object_base_flags(TransInfo *t);
 void createTransObject(bContext *C, TransInfo *t);
 void createTransTexspace(TransInfo *t);
+void recalcData_objects(TransInfo *t);
+void special_aftertrans_update__object(bContext *C, TransInfo *t);
 
 /* transform_convert_paintcurve.c */
 void createTransPaintCurveVerts(bContext *C, TransInfo *t);
+void flushTransPaintCurve(TransInfo *t);
 
 /* transform_convert_particle.c */
 void createTransParticleVerts(bContext *C, TransInfo *t);
+void recalcData_particles(TransInfo *t);
 
 /* transform_convert_sculpt.c */
-void createTransSculpt(TransInfo *t);
+void createTransSculpt(bContext *C, TransInfo *t);
+void recalcData_sculpt(TransInfo *t);
+void special_aftertrans_update__sculpt(bContext *C, TransInfo *t);
 
-/* transform_convert_sequence.c */
+/* transform_convert_sequencer.c */
 void createTransSeqData(TransInfo *t);
+void recalcData_sequencer(TransInfo *t);
+void special_aftertrans_update__sequencer(bContext *C, TransInfo *t);
 
 /* transform_convert_tracking.c */
 void createTransTrackingData(bContext *C, TransInfo *t);
-void cancelTransTracking(TransInfo *t);
-#endif
+void recalcData_tracking(TransInfo *t);
+void special_aftertrans_update__movieclip(bContext *C, TransInfo *t);

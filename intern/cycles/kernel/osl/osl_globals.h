@@ -43,7 +43,7 @@ class ColorSpaceProcessor;
  *
  * Data needed by OSL render services, that is global to a rendering session.
  * This includes all OSL shaders, name to attribute mapping and texture handles.
- * */
+ */
 
 struct OSLGlobals {
   OSLGlobals()
@@ -90,6 +90,7 @@ struct OSLTraceData {
   ShaderData sd;
   bool setup;
   bool init;
+  bool hit;
 };
 
 /* thread key for thread specific data lookup */

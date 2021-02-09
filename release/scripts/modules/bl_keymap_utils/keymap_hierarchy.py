@@ -22,6 +22,7 @@ __all__ = (
     "generate",
 )
 
+
 def _km_expand_from_toolsystem(space_type, context_mode):
     def _fn():
         from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
@@ -117,6 +118,7 @@ _km_hierarchy = [
 
         ('Object Non-modal', 'EMPTY', 'WINDOW', []),  # mode change
 
+        ('View3D Placement Modal', 'EMPTY', 'WINDOW', []),
         ('View3D Walk Modal', 'EMPTY', 'WINDOW', []),
         ('View3D Fly Modal', 'EMPTY', 'WINDOW', []),
         ('View3D Rotate Modal', 'EMPTY', 'WINDOW', []),
@@ -190,6 +192,7 @@ _km_hierarchy = [
     ]),
 
     ('Grease Pencil', 'EMPTY', 'WINDOW', [  # grease pencil stuff (per region)
+        ('Grease Pencil Stroke Curve Edit Mode', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Edit Mode', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Paint (Draw brush)', 'EMPTY', 'WINDOW', []),
         ('Grease Pencil Stroke Paint (Fill)', 'EMPTY', 'WINDOW', []),

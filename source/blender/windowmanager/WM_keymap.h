@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __WM_KEYMAP_H__
-#define __WM_KEYMAP_H__
+#pragma once
 
 /** \file
  * \ingroup wm
@@ -60,7 +59,7 @@ wmKeyMapItem *WM_keymap_add_item(
 wmKeyMapItem *WM_keymap_add_item_copy(struct wmKeyMap *keymap, wmKeyMapItem *kmi_src);
 
 bool WM_keymap_remove_item(struct wmKeyMap *keymap, struct wmKeyMapItem *kmi);
-int WM_keymap_item_to_string(wmKeyMapItem *kmi,
+int WM_keymap_item_to_string(const wmKeyMapItem *kmi,
                              const bool compact,
                              char *result,
                              const int result_len);
@@ -87,7 +86,7 @@ bool WM_keymap_remove(struct wmKeyConfig *keyconfig, struct wmKeyMap *keymap);
 bool WM_keymap_poll(struct bContext *C, struct wmKeyMap *keymap);
 
 wmKeyMapItem *WM_keymap_item_find_id(struct wmKeyMap *keymap, int id);
-bool WM_keymap_item_compare(struct wmKeyMapItem *k1, struct wmKeyMapItem *k2);
+bool WM_keymap_item_compare(const struct wmKeyMapItem *k1, const struct wmKeyMapItem *k2);
 
 /* keymap_utils.c */
 
@@ -112,13 +111,13 @@ void WM_keymap_add_context_enum_set_items(wmKeyMap *keymap,
 wmKeyMap *WM_keymap_guess_from_context(const struct bContext *C);
 wmKeyMap *WM_keymap_guess_opname(const struct bContext *C, const char *opname);
 
-bool WM_keymap_uses_event_modifier(wmKeyMap *keymap, const int event_modifier);
+bool WM_keymap_uses_event_modifier(const wmKeyMap *keymap, const int event_modifier);
 
 void WM_keymap_fix_linking(void);
 
 /* Modal Keymap */
 
-int WM_modalkeymap_items_to_string(struct wmKeyMap *km,
+int WM_modalkeymap_items_to_string(const struct wmKeyMap *km,
                                    const int propvalue,
                                    const bool compact,
                                    char *result,
@@ -143,7 +142,7 @@ wmKeyMapItem *WM_modalkeymap_add_item(
     struct wmKeyMap *km, int type, int val, int modifier, int keymodifier, int value);
 wmKeyMapItem *WM_modalkeymap_add_item_str(
     struct wmKeyMap *km, int type, int val, int modifier, int keymodifier, const char *value);
-wmKeyMapItem *WM_modalkeymap_find_propvalue(wmKeyMap *km, const int propvalue);
+const wmKeyMapItem *WM_modalkeymap_find_propvalue(const wmKeyMap *km, const int propvalue);
 void WM_modalkeymap_assign(struct wmKeyMap *km, const char *opname);
 
 /* Keymap Editor */
@@ -194,5 +193,3 @@ const char *WM_bool_as_string(bool test);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __WM_KEYMAP_H__ */

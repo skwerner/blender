@@ -16,10 +16,14 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SOCKETREADER_H__
-#define __COM_SOCKETREADER_H__
+#pragma once
+
 #include "BLI_rect.h"
+#include "COM_MetaData.h"
 #include "COM_defines.h"
+
+#include <memory>
+#include <optional>
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -32,6 +36,7 @@ typedef enum PixelSampler {
 } PixelSampler;
 
 class MemoryBuffer;
+
 /**
  * \brief Helper class for reading socket data.
  * Only use this class for dispatching (un-ary and n-ary) executions.
@@ -134,9 +139,15 @@ class SocketReader {
     return this->m_height;
   }
 
+  /* Return the meta data associated with this branch.
+   *
+   * The return parameter holds an instance or is an nullptr. */
+  virtual std::unique_ptr<MetaData> getMetaData() const
+  {
+    return std::unique_ptr<MetaData>();
+  }
+
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:SocketReader")
 #endif
 };
-
-#endif /* __COM_SOCKETREADER_H__ */

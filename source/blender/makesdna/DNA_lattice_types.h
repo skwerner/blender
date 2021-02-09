@@ -21,11 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_LATTICE_TYPES_H__
-#define __DNA_LATTICE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 struct BPoint;
@@ -84,4 +87,6 @@ typedef struct Lattice {
 
 #define LT_ACTBP_NONE -1
 
+#ifdef __cplusplus
+}
 #endif

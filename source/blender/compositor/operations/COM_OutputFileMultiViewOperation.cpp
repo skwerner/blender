@@ -19,7 +19,7 @@
 #include "COM_OutputFileMultiViewOperation.h"
 #include "COM_OutputFileOperation.h"
 
-#include <string.h>
+#include <cstring>
 
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
@@ -47,9 +47,10 @@ OutputOpenExrSingleLayerMultiViewOperation::OutputOpenExrSingleLayerMultiViewOpe
     const char *path,
     const ColorManagedViewSettings *viewSettings,
     const ColorManagedDisplaySettings *displaySettings,
-    const char *viewName)
+    const char *viewName,
+    const bool saveAsRender)
     : OutputSingleLayerOperation(
-          rd, tree, datatype, format, path, viewSettings, displaySettings, viewName)
+          rd, tree, datatype, format, path, viewSettings, displaySettings, viewName, saveAsRender)
 {
 }
 
@@ -76,15 +77,15 @@ void *OutputOpenExrSingleLayerMultiViewOperation::get_handle(const char *filenam
       }
 
       IMB_exr_add_view(exrhandle, srv->name);
-      add_exr_channels(exrhandle, NULL, this->m_datatype, srv->name, width, false, NULL);
+      add_exr_channels(exrhandle, nullptr, this->m_datatype, srv->name, width, false, nullptr);
     }
 
     BLI_make_existing_file(filename);
 
     /* prepare the file with all the channels */
 
-    if (IMB_exr_begin_write(exrhandle, filename, width, height, this->m_format->exr_codec, NULL) ==
-        0) {
+    if (IMB_exr_begin_write(
+            exrhandle, filename, width, height, this->m_format->exr_codec, nullptr) == 0) {
       printf("Error Writing Singlelayer Multiview Openexr\n");
       IMB_exr_close(exrhandle);
     }
@@ -93,7 +94,7 @@ void *OutputOpenExrSingleLayerMultiViewOperation::get_handle(const char *filenam
       return exrhandle;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 void OutputOpenExrSingleLayerMultiViewOperation::deinitExecution()
@@ -112,11 +113,11 @@ void OutputOpenExrSingleLayerMultiViewOperation::deinitExecution()
                                R_IMF_IMTYPE_OPENEXR,
                                (this->m_rd->scemode & R_EXTENSION) != 0,
                                true,
-                               NULL);
+                               nullptr);
 
     exrhandle = this->get_handle(filename);
     add_exr_channels(exrhandle,
-                     NULL,
+                     nullptr,
                      this->m_datatype,
                      this->m_viewName,
                      width,
@@ -124,15 +125,15 @@ void OutputOpenExrSingleLayerMultiViewOperation::deinitExecution()
                      this->m_outputBuffer);
 
     /* memory can only be freed after we write all views to the file */
-    this->m_outputBuffer = NULL;
-    this->m_imageInput = NULL;
+    this->m_outputBuffer = nullptr;
+    this->m_imageInput = nullptr;
 
     /* ready to close the file */
     if (BKE_scene_multiview_is_render_view_last(this->m_rd, this->m_viewName)) {
       IMB_exr_write_channels(exrhandle);
 
       /* free buffer memory for all the views */
-      free_exr_channels(exrhandle, this->m_rd, NULL, this->m_datatype);
+      free_exr_channels(exrhandle, this->m_rd, nullptr, this->m_datatype);
 
       /* remove exr handle and data */
       IMB_exr_close(exrhandle);
@@ -143,13 +144,14 @@ void OutputOpenExrSingleLayerMultiViewOperation::deinitExecution()
 /************************************ OpenEXR Multilayer Multiview *******************************/
 
 OutputOpenExrMultiLayerMultiViewOperation::OutputOpenExrMultiLayerMultiViewOperation(
+    const Scene *scene,
     const RenderData *rd,
     const bNodeTree *tree,
     const char *path,
     char exr_codec,
     bool exr_half_float,
     const char *viewName)
-    : OutputOpenExrMultiLayerOperation(rd, tree, path, exr_codec, exr_half_float, viewName)
+    : OutputOpenExrMultiLayerOperation(scene, rd, tree, path, exr_codec, exr_half_float, viewName)
 {
 }
 
@@ -188,23 +190,27 @@ void *OutputOpenExrMultiLayerMultiViewOperation::get_handle(const char *filename
                          srv->name,
                          width,
                          this->m_exr_half_float,
-                         NULL);
+                         nullptr);
       }
     }
 
     BLI_make_existing_file(filename);
 
     /* prepare the file with all the channels for the header */
-    if (IMB_exr_begin_write(exrhandle, filename, width, height, this->m_exr_codec, NULL) == 0) {
+    StampData *stamp_data = createStampData();
+    if (IMB_exr_begin_write(exrhandle, filename, width, height, this->m_exr_codec, stamp_data) ==
+        0) {
       printf("Error Writing Multilayer Multiview Openexr\n");
       IMB_exr_close(exrhandle);
+      BKE_stamp_data_free(stamp_data);
     }
     else {
       IMB_exr_clear_channels(exrhandle);
+      BKE_stamp_data_free(stamp_data);
       return exrhandle;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 void OutputOpenExrMultiLayerMultiViewOperation::deinitExecution()
@@ -223,7 +229,7 @@ void OutputOpenExrMultiLayerMultiViewOperation::deinitExecution()
                                R_IMF_IMTYPE_MULTILAYER,
                                (this->m_rd->scemode & R_EXTENSION) != 0,
                                true,
-                               NULL);
+                               nullptr);
 
     exrhandle = this->get_handle(filename);
 
@@ -239,8 +245,8 @@ void OutputOpenExrMultiLayerMultiViewOperation::deinitExecution()
 
     for (unsigned int i = 0; i < this->m_layers.size(); i++) {
       /* memory can only be freed after we write all views to the file */
-      this->m_layers[i].outputBuffer = NULL;
-      this->m_layers[i].imageInput = NULL;
+      this->m_layers[i].outputBuffer = nullptr;
+      this->m_layers[i].imageInput = nullptr;
     }
 
     /* ready to close the file */
@@ -268,9 +274,10 @@ OutputStereoOperation::OutputStereoOperation(const RenderData *rd,
                                              const char *name,
                                              const ColorManagedViewSettings *viewSettings,
                                              const ColorManagedDisplaySettings *displaySettings,
-                                             const char *viewName)
+                                             const char *viewName,
+                                             const bool saveAsRender)
     : OutputSingleLayerOperation(
-          rd, tree, datatype, format, path, viewSettings, displaySettings, viewName)
+          rd, tree, datatype, format, path, viewSettings, displaySettings, viewName, saveAsRender)
 {
   BLI_strncpy(this->m_name, name, sizeof(this->m_name));
   this->m_channels = get_datatype_size(datatype);
@@ -300,7 +307,7 @@ void *OutputStereoOperation::get_handle(const char *filename)
 
     return exrhandle;
   }
-  return NULL;
+  return nullptr;
 }
 
 void OutputStereoOperation::deinitExecution()
@@ -316,7 +323,7 @@ void OutputStereoOperation::deinitExecution()
 
     /* populate single EXR channel with view data */
     IMB_exr_add_channel(exrhandle,
-                        NULL,
+                        nullptr,
                         this->m_name,
                         this->m_viewName,
                         1,
@@ -324,19 +331,19 @@ void OutputStereoOperation::deinitExecution()
                         buf,
                         this->m_format->depth == R_IMF_CHAN_DEPTH_16);
 
-    this->m_imageInput = NULL;
-    this->m_outputBuffer = NULL;
+    this->m_imageInput = nullptr;
+    this->m_outputBuffer = nullptr;
 
     /* create stereo ibuf */
     if (BKE_scene_multiview_is_render_view_last(this->m_rd, this->m_viewName)) {
-      ImBuf *ibuf[3] = {NULL};
+      ImBuf *ibuf[3] = {nullptr};
       const char *names[2] = {STEREO_LEFT_NAME, STEREO_RIGHT_NAME};
       char filename[FILE_MAX];
       int i;
 
       /* get rectf from EXR */
       for (i = 0; i < 2; i++) {
-        float *rectf = IMB_exr_channel_rect(exrhandle, NULL, this->m_name, names[i]);
+        float *rectf = IMB_exr_channel_rect(exrhandle, nullptr, this->m_name, names[i]);
         ibuf[i] = IMB_allocImBuf(width, height, this->m_format->planes, 0);
 
         ibuf[i]->channels = this->m_channels;
@@ -360,7 +367,7 @@ void OutputStereoOperation::deinitExecution()
                                    this->m_format,
                                    (this->m_rd->scemode & R_EXTENSION) != 0,
                                    true,
-                                   NULL);
+                                   nullptr);
 
       BKE_imbuf_write(ibuf[2], filename, this->m_format);
 

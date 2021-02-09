@@ -28,9 +28,6 @@ if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
   )
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 if(WIN32)
     add_definitions(-D_USE_MATH_DEFINES)
 endif()
@@ -105,7 +102,7 @@ set(SRC
 )
 
 set(LIB
- ${BOOST_LIBRARIES}
+  ${BOOST_LIBRARIES}
 )
 
 blender_add_lib(extern_quadriflow "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

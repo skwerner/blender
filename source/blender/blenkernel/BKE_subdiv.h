@@ -21,8 +21,7 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_SUBDIV_H__
-#define __BKE_SUBDIV_H__
+#pragma once
 
 #include "BLI_compiler_compat.h"
 #include "BLI_sys_types.h"
@@ -205,6 +204,9 @@ void BKE_subdiv_exit(void);
 /* NOTE: uv_smooth is eSubsurfUVSmooth. */
 eSubdivFVarLinearInterpolation BKE_subdiv_fvar_interpolation_from_uv_smooth(int uv_smooth);
 
+eSubdivVtxBoundaryInterpolation BKE_subdiv_vtx_boundary_interpolation_from_subsurf(
+    int boundary_smooth);
+
 /* =============================== STATISTICS =============================== */
 
 void BKE_subdiv_stats_init(SubdivStats *stats);
@@ -217,8 +219,6 @@ void BKE_subdiv_stats_reset(SubdivStats *stats, eSubdivStatsValue value);
 void BKE_subdiv_stats_print(const SubdivStats *stats);
 
 /* ================================ SETTINGS ================================ */
-
-void BKE_subdiv_settings_validate_for_mesh(SubdivSettings *settings, const struct Mesh *mesh);
 
 bool BKE_subdiv_settings_equal(const SubdivSettings *settings_a, const SubdivSettings *settings_b);
 
@@ -302,5 +302,3 @@ BLI_INLINE float BKE_subdiv_edge_crease_to_sharpness_char(char edge_crease);
 #endif
 
 #include "intern/subdiv_inline.h"
-
-#endif /* __BKE_SUBDIV_H__ */

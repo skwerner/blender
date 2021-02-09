@@ -30,18 +30,33 @@
 
 #include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_context.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
 
 #include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
 
-static Mesh *doEdgeSplit(Mesh *mesh, EdgeSplitModifierData *emd)
+/* For edge split modifier node. */
+Mesh *doEdgeSplit(const Mesh *mesh, EdgeSplitModifierData *emd);
+
+Mesh *doEdgeSplit(const Mesh *mesh, EdgeSplitModifierData *emd)
 {
   Mesh *result;
   BMesh *bm;
@@ -108,9 +123,9 @@ static void initData(ModifierData *md)
 {
   EdgeSplitModifierData *emd = (EdgeSplitModifierData *)md;
 
-  /* default to 30-degree split angle, sharpness from both angle & flag */
-  emd->split_angle = DEG2RADF(30.0f);
-  emd->flags = MOD_EDGESPLIT_FROMANGLE | MOD_EDGESPLIT_FROMFLAG;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(emd, modifier));
+
+  MEMCPY_STRUCT_AFTER(emd, DNA_struct_default_get(EdgeSplitModifierData), modifier);
 }
 
 static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx), Mesh *mesh)
@@ -127,14 +142,41 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *UNUSED(ctx)
   return result;
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row, *sub;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Edge Angle"));
+  uiItemR(row, ptr, "use_edge_angle", 0, "", ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_edge_angle"));
+  uiItemR(sub, ptr, "split_angle", 0, "", ICON_NONE);
+
+  uiItemR(layout, ptr, "use_edge_sharp", 0, IFACE_("Sharp Edges"), ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  modifier_panel_register(region_type, eModifierType_EdgeSplit, panel_draw);
+}
+
 ModifierTypeInfo modifierType_EdgeSplit = {
     /* name */ "EdgeSplit",
     /* structName */ "EdgeSplitModifierData",
     /* structSize */ sizeof(EdgeSplitModifierData),
+    /* srna */ &RNA_EdgeSplitModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsMapping | eModifierTypeFlag_SupportsEditmode |
         eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_EDGESPLIT,
 
     /* copyData */ BKE_modifier_copydata_generic,
 
@@ -144,7 +186,7 @@ ModifierTypeInfo modifierType_EdgeSplit = {
     /* deformMatricesEM */ NULL,
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
-    /* modifyPointCloud */ NULL,
+    /* modifyGeometrySet */ NULL,
     /* modifyVolume */ NULL,
 
     /* initData */ initData,
@@ -154,8 +196,10 @@ ModifierTypeInfo modifierType_EdgeSplit = {
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ NULL,
     /* foreachIDLink */ NULL,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

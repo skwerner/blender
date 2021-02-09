@@ -274,11 +274,24 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 
 /* get the volume attenuation over line segment defined by ray, with the
  * assumption that there are no surfaces blocking light between the endpoints */
-ccl_device_noinline void kernel_volume_shadow(KernelGlobals *kg,
-                                              ShaderData *shadow_sd,
-                                              ccl_addr_space PathState *state,
-                                              Ray *ray,
-                                              float3 *throughput)
+#  if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
+ccl_device_inline void kernel_volume_shadow(KernelGlobals *kg,
+                                            ShaderData *shadow_sd,
+                                            ccl_addr_space PathState *state,
+                                            Ray *ray,
+                                            float3 *throughput)
+{
+  optixDirectCall<void>(1, kg, shadow_sd, state, ray, throughput);
+}
+extern "C" __device__ void __direct_callable__kernel_volume_shadow(
+#  else
+ccl_device_noinline void kernel_volume_shadow(
+#  endif
+    KernelGlobals *kg,
+    ShaderData *shadow_sd,
+    ccl_addr_space PathState *state,
+    Ray *ray,
+    float3 *throughput)
 {
   shader_setup_from_volume(kg, shadow_sd, ray);
 
@@ -777,7 +790,7 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
      *
      * This gives us restrictions that decoupled record should only happen
      * in the stack manner, meaning if there's subsequent call of decoupled
-     * record it'll need to free memory before it's caller frees memory.
+     * record it'll need to free memory before its caller frees memory.
      */
     const int index = kg->decoupled_volume_steps_index;
     assert(index < sizeof(kg->decoupled_volume_steps) / sizeof(*kg->decoupled_volume_steps));

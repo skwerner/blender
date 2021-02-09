@@ -203,8 +203,8 @@ static float brush_influence_calc(tGP_BrushWeightpaintData *gso, const int radiu
   influence *= 1.0f - (distance / max_ff(radius, 1e-8));
 
   /* Apply Brush curve. */
-  float brush_fallof = BKE_brush_curve_strength(brush, distance, (float)radius);
-  influence *= brush_fallof;
+  float brush_falloff = BKE_brush_curve_strength(brush, distance, (float)radius);
+  influence *= brush_falloff;
 
   /* apply multi-frame falloff */
   influence *= gso->mf_falloff;
@@ -268,7 +268,7 @@ static bool brush_draw_apply(tGP_BrushWeightpaintData *gso,
 
 /* ************************************************ */
 /* Header Info */
-static void gp_weightpaint_brush_header_set(bContext *C)
+static void gpencil_weightpaint_brush_header_set(bContext *C)
 {
   ED_workspace_status_text(C, TIP_("GPencil Weight Paint: LMB to paint | RMB/Escape to Exit"));
 }
@@ -278,7 +278,7 @@ static void gp_weightpaint_brush_header_set(bContext *C)
 
 /* Init/Exit ----------------------------------------------- */
 
-static bool gp_weightpaint_brush_init(bContext *C, wmOperator *op)
+static bool gpencil_weightpaint_brush_init(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
@@ -295,7 +295,7 @@ static bool gp_weightpaint_brush_init(bContext *C, wmOperator *op)
   gso->bmain = CTX_data_main(C);
 
   gso->brush = paint->brush;
-  BKE_curvemapping_initialize(gso->brush->curve);
+  BKE_curvemapping_init(gso->brush->curve);
 
   gso->is_painting = false;
   gso->first = true;
@@ -326,19 +326,19 @@ static bool gp_weightpaint_brush_init(bContext *C, wmOperator *op)
   /* Init multi-edit falloff curve data before doing anything,
    * so we won't have to do it again later. */
   if (gso->is_multiframe) {
-    BKE_curvemapping_initialize(ts->gp_sculpt.cur_falloff);
+    BKE_curvemapping_init(ts->gp_sculpt.cur_falloff);
   }
 
   /* Setup space conversions. */
-  gp_point_conversion_init(C, &gso->gsc);
+  gpencil_point_conversion_init(C, &gso->gsc);
 
   /* Update header. */
-  gp_weightpaint_brush_header_set(C);
+  gpencil_weightpaint_brush_header_set(C);
 
   return true;
 }
 
-static void gp_weightpaint_brush_exit(bContext *C, wmOperator *op)
+static void gpencil_weightpaint_brush_exit(bContext *C, wmOperator *op)
 {
   tGP_BrushWeightpaintData *gso = op->customdata;
 
@@ -352,17 +352,17 @@ static void gp_weightpaint_brush_exit(bContext *C, wmOperator *op)
 }
 
 /* Poll callback for stroke weight paint operator. */
-static bool gp_weightpaint_brush_poll(bContext *C)
+static bool gpencil_weightpaint_brush_poll(bContext *C)
 {
   /* NOTE: this is a bit slower, but is the most accurate... */
   return CTX_DATA_COUNT(C, editable_gpencil_strokes) != 0;
 }
 
 /* Helper to save the points selected by the brush. */
-static void gp_save_selected_point(tGP_BrushWeightpaintData *gso,
-                                   bGPDstroke *gps,
-                                   int index,
-                                   int pc[2])
+static void gpencil_save_selected_point(tGP_BrushWeightpaintData *gso,
+                                        bGPDstroke *gps,
+                                        int index,
+                                        int pc[2])
 {
   tGP_Selected *selected;
   bGPDspoint *pt = &gps->points[index];
@@ -381,9 +381,10 @@ static void gp_save_selected_point(tGP_BrushWeightpaintData *gso,
 }
 
 /* Select points in this stroke and add to an array to be used later. */
-static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
-                                         bGPDstroke *gps,
-                                         const float diff_mat[4][4])
+static void gpencil_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
+                                              bGPDstroke *gps,
+                                              const float diff_mat[4][4],
+                                              const float bound_mat[4][4])
 {
   GP_SpaceConversion *gsc = &gso->gsc;
   rcti *rect = &gso->brush_rect;
@@ -402,15 +403,15 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
   bool include_last = false;
 
   /* Check if the stroke collide with brush. */
-  if (!ED_gpencil_stroke_check_collision(gsc, gps, gso->mval, radius, diff_mat)) {
+  if (!ED_gpencil_stroke_check_collision(gsc, gps, gso->mval, radius, bound_mat)) {
     return;
   }
 
   if (gps->totpoints == 1) {
     bGPDspoint pt_temp;
     pt = &gps->points[0];
-    gp_point_to_parent_space(gps->points, diff_mat, &pt_temp);
-    gp_point_to_xy(gsc, gps, &pt_temp, &pc1[0], &pc1[1]);
+    gpencil_point_to_parent_space(gps->points, diff_mat, &pt_temp);
+    gpencil_point_to_xy(gsc, gps, &pt_temp, &pc1[0], &pc1[1]);
 
     pt_active = (pt->runtime.pt_orig) ? pt->runtime.pt_orig : pt;
     /* do boundbox check first */
@@ -421,7 +422,7 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
       if (len_v2v2_int(mval_i, pc1) <= radius) {
         /* apply operation to this point */
         if (pt_active != NULL) {
-          gp_save_selected_point(gso, gps_active, 0, pc1);
+          gpencil_save_selected_point(gso, gps_active, 0, pc1);
         }
       }
     }
@@ -436,11 +437,11 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
       pt2 = gps->points + i + 1;
 
       bGPDspoint npt;
-      gp_point_to_parent_space(pt1, diff_mat, &npt);
-      gp_point_to_xy(gsc, gps, &npt, &pc1[0], &pc1[1]);
+      gpencil_point_to_parent_space(pt1, diff_mat, &npt);
+      gpencil_point_to_xy(gsc, gps, &npt, &pc1[0], &pc1[1]);
 
-      gp_point_to_parent_space(pt2, diff_mat, &npt);
-      gp_point_to_xy(gsc, gps, &npt, &pc2[0], &pc2[1]);
+      gpencil_point_to_parent_space(pt2, diff_mat, &npt);
+      gpencil_point_to_xy(gsc, gps, &npt, &pc2[0], &pc2[1]);
 
       /* Check that point segment of the boundbox of the selection stroke */
       if (((!ELEM(V2D_IS_CLIPPED, pc1[0], pc1[1])) && BLI_rcti_isect_pt(rect, pc1[0], pc1[1])) ||
@@ -449,14 +450,14 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
          * brush region  (either within stroke painted, or on its lines)
          * - this assumes that linewidth is irrelevant
          */
-        if (gp_stroke_inside_circle(gso->mval, radius, pc1[0], pc1[1], pc2[0], pc2[1])) {
+        if (gpencil_stroke_inside_circle(gso->mval, radius, pc1[0], pc1[1], pc2[0], pc2[1])) {
 
           /* To each point individually... */
           pt = &gps->points[i];
-          pt_active = (pt->runtime.pt_orig) ? pt->runtime.pt_orig : pt;
-          index = (pt->runtime.pt_orig) ? pt->runtime.idx_orig : i;
+          pt_active = pt->runtime.pt_orig;
           if (pt_active != NULL) {
-            gp_save_selected_point(gso, gps_active, index, pc1);
+            index = (pt->runtime.pt_orig) ? pt->runtime.idx_orig : i;
+            gpencil_save_selected_point(gso, gps_active, index, pc1);
           }
 
           /* Only do the second point if this is the last segment,
@@ -469,10 +470,10 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
            */
           if (i + 1 == gps->totpoints - 1) {
             pt = &gps->points[i + 1];
-            pt_active = (pt->runtime.pt_orig) ? pt->runtime.pt_orig : pt;
-            index = (pt->runtime.pt_orig) ? pt->runtime.idx_orig : i + 1;
+            pt_active = pt->runtime.pt_orig;
             if (pt_active != NULL) {
-              gp_save_selected_point(gso, gps_active, index, pc2);
+              index = (pt->runtime.pt_orig) ? pt->runtime.idx_orig : i + 1;
+              gpencil_save_selected_point(gso, gps_active, index, pc2);
               include_last = false;
             }
           }
@@ -487,10 +488,10 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
            * (but wasn't added then, to avoid double-ups).
            */
           pt = &gps->points[i];
-          pt_active = (pt->runtime.pt_orig) ? pt->runtime.pt_orig : pt;
-          index = (pt->runtime.pt_orig) ? pt->runtime.idx_orig : i;
+          pt_active = pt->runtime.pt_orig;
           if (pt_active != NULL) {
-            gp_save_selected_point(gso, gps_active, index, pc1);
+            index = (pt->runtime.pt_orig) ? pt->runtime.idx_orig : i;
+            gpencil_save_selected_point(gso, gps_active, index, pc1);
 
             include_last = false;
           }
@@ -501,11 +502,12 @@ static void gp_weightpaint_select_stroke(tGP_BrushWeightpaintData *gso,
 }
 
 /* Apply weight paint brushes to strokes in the given frame. */
-static bool gp_weightpaint_brush_do_frame(bContext *C,
-                                          tGP_BrushWeightpaintData *gso,
-                                          bGPDlayer *gpl,
-                                          bGPDframe *gpf,
-                                          const float diff_mat[4][4])
+static bool gpencil_weightpaint_brush_do_frame(bContext *C,
+                                               tGP_BrushWeightpaintData *gso,
+                                               bGPDlayer *gpl,
+                                               bGPDframe *gpf,
+                                               const float diff_mat[4][4],
+                                               const float bound_mat[4][4])
 {
   Object *ob = CTX_data_active_object(C);
   char tool = gso->brush->gpencil_weight_tool;
@@ -526,12 +528,12 @@ static bool gp_weightpaint_brush_do_frame(bContext *C,
       continue;
     }
     /* Check if the color is editable. */
-    if (ED_gpencil_stroke_color_use(ob, gpl, gps) == false) {
+    if (ED_gpencil_stroke_material_editable(ob, gpl, gps) == false) {
       continue;
     }
 
     /* Check points below the brush. */
-    gp_weightpaint_select_stroke(gso, gps, diff_mat);
+    gpencil_weightpaint_select_stroke(gso, gps, diff_mat, bound_mat);
   }
 
   /*---------------------------------------------------------------------
@@ -561,7 +563,7 @@ static bool gp_weightpaint_brush_do_frame(bContext *C,
 }
 
 /* Apply brush effect to all layers. */
-static bool gp_weightpaint_brush_apply_to_layers(bContext *C, tGP_BrushWeightpaintData *gso)
+static bool gpencil_weightpaint_brush_apply_to_layers(bContext *C, tGP_BrushWeightpaintData *gso)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
@@ -578,9 +580,11 @@ static bool gp_weightpaint_brush_apply_to_layers(bContext *C, tGP_BrushWeightpai
       continue;
     }
 
-    /* calculate difference matrix */
-    float diff_mat[4][4];
-    BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+    /* Calculate transform matrix. */
+    float diff_mat[4][4], bound_mat[4][4];
+    BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
+    copy_m4_m4(bound_mat, diff_mat);
+    mul_m4_m4m4(diff_mat, diff_mat, gpl->layer_invmat);
 
     /* Active Frame or MultiFrame? */
     if (gso->is_multiframe) {
@@ -608,7 +612,7 @@ static bool gp_weightpaint_brush_apply_to_layers(bContext *C, tGP_BrushWeightpai
           }
 
           /* affect strokes in this frame */
-          changed |= gp_weightpaint_brush_do_frame(C, gso, gpl, gpf, diff_mat);
+          changed |= gpencil_weightpaint_brush_do_frame(C, gso, gpl, gpf, diff_mat, bound_mat);
         }
       }
     }
@@ -616,7 +620,8 @@ static bool gp_weightpaint_brush_apply_to_layers(bContext *C, tGP_BrushWeightpai
       if (gpl->actframe != NULL) {
         /* Apply to active frame's strokes */
         gso->mf_falloff = 1.0f;
-        changed |= gp_weightpaint_brush_do_frame(C, gso, gpl, gpl->actframe, diff_mat);
+        changed |= gpencil_weightpaint_brush_do_frame(
+            C, gso, gpl, gpl->actframe, diff_mat, bound_mat);
       }
     }
   }
@@ -625,7 +630,7 @@ static bool gp_weightpaint_brush_apply_to_layers(bContext *C, tGP_BrushWeightpai
 }
 
 /* Calculate settings for applying brush */
-static void gp_weightpaint_brush_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
+static void gpencil_weightpaint_brush_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
 {
   tGP_BrushWeightpaintData *gso = op->customdata;
   Brush *brush = gso->brush;
@@ -658,7 +663,7 @@ static void gp_weightpaint_brush_apply(bContext *C, wmOperator *op, PointerRNA *
   /* Calculate 2D direction vector and relative angle. */
   brush_calc_dvec_2d(gso);
 
-  changed = gp_weightpaint_brush_apply_to_layers(C, gso);
+  changed = gpencil_weightpaint_brush_apply_to_layers(C, gso);
 
   /* Updates */
   if (changed) {
@@ -676,7 +681,9 @@ static void gp_weightpaint_brush_apply(bContext *C, wmOperator *op, PointerRNA *
 /* Running --------------------------------------------- */
 
 /* helper - a record stroke, and apply paint event */
-static void gp_weightpaint_brush_apply_event(bContext *C, wmOperator *op, const wmEvent *event)
+static void gpencil_weightpaint_brush_apply_event(bContext *C,
+                                                  wmOperator *op,
+                                                  const wmEvent *event)
 {
   tGP_BrushWeightpaintData *gso = op->customdata;
   PointerRNA itemptr;
@@ -698,28 +705,28 @@ static void gp_weightpaint_brush_apply_event(bContext *C, wmOperator *op, const 
   RNA_float_set(&itemptr, "pressure", pressure);
 
   /* apply */
-  gp_weightpaint_brush_apply(C, op, &itemptr);
+  gpencil_weightpaint_brush_apply(C, op, &itemptr);
 }
 
 /* reapply */
-static int gp_weightpaint_brush_exec(bContext *C, wmOperator *op)
+static int gpencil_weightpaint_brush_exec(bContext *C, wmOperator *op)
 {
-  if (!gp_weightpaint_brush_init(C, op)) {
+  if (!gpencil_weightpaint_brush_init(C, op)) {
     return OPERATOR_CANCELLED;
   }
 
   RNA_BEGIN (op->ptr, itemptr, "stroke") {
-    gp_weightpaint_brush_apply(C, op, &itemptr);
+    gpencil_weightpaint_brush_apply(C, op, &itemptr);
   }
   RNA_END;
 
-  gp_weightpaint_brush_exit(C, op);
+  gpencil_weightpaint_brush_exit(C, op);
 
   return OPERATOR_FINISHED;
 }
 
 /* start modal painting */
-static int gp_weightpaint_brush_invoke(bContext *C, wmOperator *op, const wmEvent *event)
+static int gpencil_weightpaint_brush_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tGP_BrushWeightpaintData *gso = NULL;
   const bool is_modal = RNA_boolean_get(op->ptr, "wait_for_input");
@@ -733,7 +740,7 @@ static int gp_weightpaint_brush_invoke(bContext *C, wmOperator *op, const wmEven
   }
 
   /* init painting data */
-  if (!gp_weightpaint_brush_init(C, op)) {
+  if (!gpencil_weightpaint_brush_init(C, op)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -748,7 +755,7 @@ static int gp_weightpaint_brush_invoke(bContext *C, wmOperator *op, const wmEven
 
     /* apply first dab... */
     gso->is_painting = true;
-    gp_weightpaint_brush_apply_event(C, op, event);
+    gpencil_weightpaint_brush_apply_event(C, op, event);
 
     /* redraw view with feedback */
     ED_region_tag_redraw(region);
@@ -758,7 +765,7 @@ static int gp_weightpaint_brush_invoke(bContext *C, wmOperator *op, const wmEven
 }
 
 /* painting - handle events */
-static int gp_weightpaint_brush_modal(bContext *C, wmOperator *op, const wmEvent *event)
+static int gpencil_weightpaint_brush_modal(bContext *C, wmOperator *op, const wmEvent *event)
 {
   tGP_BrushWeightpaintData *gso = op->customdata;
   const bool is_modal = RNA_boolean_get(op->ptr, "wait_for_input");
@@ -773,7 +780,7 @@ static int gp_weightpaint_brush_modal(bContext *C, wmOperator *op, const wmEvent
       case MOUSEMOVE:
       case INBETWEEN_MOUSEMOVE:
         /* apply brush effect at new position */
-        gp_weightpaint_brush_apply_event(C, op, event);
+        gpencil_weightpaint_brush_apply_event(C, op, event);
 
         /* force redraw, so that the cursor will at least be valid */
         redraw_region = true;
@@ -789,7 +796,7 @@ static int gp_weightpaint_brush_modal(bContext *C, wmOperator *op, const wmEvent
           /* end painting, since we're not modal */
           gso->is_painting = false;
 
-          gp_weightpaint_brush_exit(C, op);
+          gpencil_weightpaint_brush_exit(C, op);
           return OPERATOR_FINISHED;
         }
         break;
@@ -798,7 +805,7 @@ static int gp_weightpaint_brush_modal(bContext *C, wmOperator *op, const wmEvent
       case MIDDLEMOUSE:
       case RIGHTMOUSE:
       case EVT_ESCKEY:
-        gp_weightpaint_brush_exit(C, op);
+        gpencil_weightpaint_brush_exit(C, op);
         return OPERATOR_FINISHED;
     }
   }
@@ -813,13 +820,13 @@ static int gp_weightpaint_brush_modal(bContext *C, wmOperator *op, const wmEvent
         gso->is_painting = true;
         gso->first = true;
 
-        gp_weightpaint_brush_apply_event(C, op, event);
+        gpencil_weightpaint_brush_apply_event(C, op, event);
         break;
 
       /* Exit modal operator, based on the "standard" ops */
       case RIGHTMOUSE:
       case EVT_ESCKEY:
-        gp_weightpaint_brush_exit(C, op);
+        gpencil_weightpaint_brush_exit(C, op);
         return OPERATOR_FINISHED;
 
       /* MMB is often used for view manipulations */
@@ -881,11 +888,11 @@ void GPENCIL_OT_weight_paint(wmOperatorType *ot)
   ot->description = "Paint stroke points with a color";
 
   /* api callbacks */
-  ot->exec = gp_weightpaint_brush_exec;
-  ot->invoke = gp_weightpaint_brush_invoke;
-  ot->modal = gp_weightpaint_brush_modal;
-  ot->cancel = gp_weightpaint_brush_exit;
-  ot->poll = gp_weightpaint_brush_poll;
+  ot->exec = gpencil_weightpaint_brush_exec;
+  ot->invoke = gpencil_weightpaint_brush_invoke;
+  ot->modal = gpencil_weightpaint_brush_modal;
+  ot->cancel = gpencil_weightpaint_brush_exit;
+  ot->poll = gpencil_weightpaint_brush_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;

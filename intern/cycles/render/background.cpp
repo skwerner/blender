@@ -21,9 +21,11 @@
 #include "render/nodes.h"
 #include "render/scene.h"
 #include "render/shader.h"
+#include "render/stats.h"
 
 #include "util/util_foreach.h"
 #include "util/util_math.h"
+#include "util/util_time.h"
 #include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
@@ -52,7 +54,6 @@ NODE_DEFINE(Background)
 
 Background::Background() : Node(node_type)
 {
-  need_update = true;
   shader = NULL;
 }
 
@@ -62,8 +63,14 @@ Background::~Background()
 
 void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  if (!need_update)
+  if (!is_modified())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->background.times.add_entry({"device_update", time});
+    }
+  });
 
   device_free(device, dscene);
 
@@ -94,7 +101,7 @@ void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene
   else
     kbackground->volume_shader = SHADER_NONE;
 
-  kbackground->volume_step_size = volume_step_size * scene->integrator->volume_step_rate;
+  kbackground->volume_step_size = volume_step_size * scene->integrator->get_volume_step_rate();
 
   /* No background node, make world shader invisible to all rays, to skip evaluation in kernel. */
   if (bg_shader->graph->nodes.size() <= 1) {
@@ -114,22 +121,18 @@ void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene
       kbackground->surface_shader |= SHADER_EXCLUDE_CAMERA;
   }
 
-  need_update = false;
+  clear_modified();
 }
 
 void Background::device_free(Device * /*device*/, DeviceScene * /*dscene*/)
 {
 }
 
-bool Background::modified(const Background &background)
-{
-  return !Node::equals(background);
-}
-
 void Background::tag_update(Scene *scene)
 {
-  scene->integrator->tag_update(scene);
-  need_update = true;
+  if (ao_factor_is_modified() || use_ao_is_modified()) {
+    scene->integrator->tag_update(scene, Integrator::BACKGROUND_AO_MODIFIED);
+  }
 }
 
 Shader *Background::get_shader(const Scene *scene)

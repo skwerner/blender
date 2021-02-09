@@ -34,12 +34,13 @@
 #ifndef CERES_INTERNAL_RESIDUAL_BLOCK_H_
 #define CERES_INTERNAL_RESIDUAL_BLOCK_H_
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "ceres/cost_function.h"
 #include "ceres/internal/port.h"
-#include "ceres/internal/scoped_ptr.h"
 #include "ceres/stringprintf.h"
 #include "ceres/types.h"
 
@@ -64,7 +65,7 @@ class ParameterBlock;
 //
 // The residual block stores pointers to but does not own the cost functions,
 // loss functions, and parameter blocks.
-class ResidualBlock {
+class CERES_EXPORT_INTERNAL ResidualBlock {
  public:
   // Construct the residual block with the given cost/loss functions. Loss may
   // be null. The index is the index of the residual block in the Program's
@@ -81,12 +82,14 @@ class ResidualBlock {
   // computed. If jacobians[i] is NULL, then the jacobian for that parameter is
   // not computed.
   //
+  // cost must not be null.
+  //
   // Evaluate needs scratch space which must be supplied by the caller via
   // scratch. The array should have at least NumScratchDoublesForEvaluate()
   // space available.
   //
   // The return value indicates the success or failure. If the function returns
-  // false, the caller should expect the the output memory locations to have
+  // false, the caller should expect the output memory locations to have
   // been modified.
   //
   // The returned cost and jacobians have had robustification and local
@@ -101,7 +104,6 @@ class ResidualBlock {
                 double* residuals,
                 double** jacobians,
                 double* scratch) const;
-
 
   const CostFunction* cost_function() const { return cost_function_; }
   const LossFunction* loss_function() const { return loss_function_; }
@@ -134,12 +136,12 @@ class ResidualBlock {
  private:
   const CostFunction* cost_function_;
   const LossFunction* loss_function_;
-  scoped_array<ParameterBlock*> parameter_blocks_;
+  std::unique_ptr<ParameterBlock*[]> parameter_blocks_;
 
   // The index of the residual, typically in a Program. This is only to permit
   // switching from a ResidualBlock* to an index in the Program's array, needed
   // to do efficient removals.
-  int32 index_;
+  int32_t index_;
 };
 
 }  // namespace internal

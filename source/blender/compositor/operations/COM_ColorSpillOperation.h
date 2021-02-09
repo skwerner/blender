@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORSPILLOPERATION_H__
-#define __COM_COLORSPILLOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 /**
@@ -42,7 +42,7 @@ class ColorSpillOperation : public NodeOperation {
   ColorSpillOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -64,5 +64,3 @@ class ColorSpillOperation : public NodeOperation {
 
   float calculateMapValue(float fac, float *input);
 };
-
-#endif

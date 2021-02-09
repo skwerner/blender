@@ -16,7 +16,9 @@
 
 #include <stdlib.h>
 
+#include "bvh/bvh.h"
 #include "device/device.h"
+#include "render/alembic.h"
 #include "render/background.h"
 #include "render/bake.h"
 #include "render/camera.h"
@@ -28,10 +30,13 @@
 #include "render/object.h"
 #include "render/osl.h"
 #include "render/particles.h"
+#include "render/procedural.h"
 #include "render/scene.h"
+#include "render/session.h"
 #include "render/shader.h"
 #include "render/svm.h"
 #include "render/tables.h"
+#include "render/volume.h"
 
 #include "util/util_foreach.h"
 #include "util/util_guarded_allocator.h"
@@ -93,23 +98,31 @@ Scene::Scene(const SceneParams &params_, Device *device)
       default_empty(NULL),
       device(device),
       dscene(device),
-      params(params_)
+      params(params_),
+      update_stats(NULL)
 {
   memset((void *)&dscene.data, 0, sizeof(dscene.data));
 
-  camera = new Camera();
-  dicing_camera = new Camera();
+  bvh = NULL;
+  camera = create_node<Camera>();
+  dicing_camera = create_node<Camera>();
   lookup_tables = new LookupTables();
-  film = new Film();
-  background = new Background();
+  film = create_node<Film>();
+  background = create_node<Background>();
   light_manager = new LightManager();
   geometry_manager = new GeometryManager();
   object_manager = new ObjectManager();
-  integrator = new Integrator();
+  integrator = create_node<Integrator>();
   image_manager = new ImageManager(device->info);
   particle_system_manager = new ParticleSystemManager();
-  curve_system_manager = new CurveSystemManager();
   bake_manager = new BakeManager();
+  procedural_manager = new ProceduralManager();
+  kernels_loaded = false;
+
+  /* TODO(sergey): Check if it's indeed optimal value for the split kernel. */
+  max_closure_global = 1;
+
+  film->add_default(this);
 
   /* OSL only works on the CPU */
   if (device->info.has_osl)
@@ -127,8 +140,14 @@ Scene::~Scene()
 
 void Scene::free_memory(bool final)
 {
+  delete bvh;
+  bvh = NULL;
+
   foreach (Shader *s, shaders)
     delete s;
+  /* delete procedurals before other types as they may hold pointers to those types */
+  foreach (Procedural *p, procedurals)
+    delete p;
   foreach (Geometry *g, geometry)
     delete g;
   foreach (Object *o, objects)
@@ -143,20 +162,20 @@ void Scene::free_memory(bool final)
   objects.clear();
   lights.clear();
   particle_systems.clear();
+  procedurals.clear();
 
   if (device) {
     camera->device_free(device, &dscene, this);
     film->device_free(device, &dscene, this);
     background->device_free(device, &dscene);
-    integrator->device_free(device, &dscene);
+    integrator->device_free(device, &dscene, true);
 
-    object_manager->device_free(device, &dscene);
-    geometry_manager->device_free(device, &dscene);
+    object_manager->device_free(device, &dscene, true);
+    geometry_manager->device_free(device, &dscene, true);
     shader_manager->device_free(device, &dscene, this);
     light_manager->device_free(device, &dscene);
 
     particle_system_manager->device_free(device, &dscene);
-    curve_system_manager->device_free(device, &dscene);
 
     bake_manager->device_free(device, &dscene);
 
@@ -180,9 +199,10 @@ void Scene::free_memory(bool final)
     delete shader_manager;
     delete light_manager;
     delete particle_system_manager;
-    delete curve_system_manager;
     delete image_manager;
     delete bake_manager;
+    delete update_stats;
+    delete procedural_manager;
   }
 }
 
@@ -192,6 +212,20 @@ void Scene::device_update(Device *device_, Progress &progress)
     device = device_;
 
   bool print_stats = need_data_update();
+
+  if (update_stats) {
+    update_stats->clear();
+  }
+
+  scoped_callback_timer timer([this, print_stats](double time) {
+    if (update_stats) {
+      update_stats->scene.times.add_entry({"device_update", time});
+
+      if (print_stats) {
+        printf("Update statistics:\n%s\n", update_stats->full_report().c_str());
+      }
+    }
+  });
 
   /* The order of updates is important, because there's dependencies between
    * the different managers, using data computed by previous managers.
@@ -208,6 +242,11 @@ void Scene::device_update(Device *device_, Progress &progress)
   shader_manager->device_update(device, &dscene, this, progress);
 
   if (progress.get_cancel() || device->have_error())
+    return;
+
+  procedural_manager->update(this, progress);
+
+  if (progress.get_cancel())
     return;
 
   progress.set_status("Updating Background");
@@ -229,12 +268,6 @@ void Scene::device_update(Device *device_, Progress &progress)
 
   progress.set_status("Updating Objects");
   object_manager->device_update(device, &dscene, this, progress);
-
-  if (progress.get_cancel() || device->have_error())
-    return;
-
-  progress.set_status("Updating Hair Systems");
-  curve_system_manager->device_update(device, &dscene, this, progress);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -270,7 +303,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Lookup Tables");
-  lookup_tables->device_update(device, &dscene);
+  lookup_tables->device_update(device, &dscene, this);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -294,7 +327,7 @@ void Scene::device_update(Device *device_, Progress &progress)
     return;
 
   progress.set_status("Updating Lookup Tables");
-  lookup_tables->device_update(device, &dscene);
+  lookup_tables->device_update(device, &dscene, this);
 
   if (progress.get_cancel() || device->have_error())
     return;
@@ -324,9 +357,9 @@ void Scene::device_update(Device *device_, Progress &progress)
 
 Scene::MotionType Scene::need_motion()
 {
-  if (integrator->motion_blur)
+  if (integrator->get_motion_blur())
     return MOTION_BLUR;
-  else if (Pass::contains(film->passes, PASS_MOTION))
+  else if (Pass::contains(passes, PASS_MOTION))
     return MOTION_PASS;
   else
     return MOTION_NONE;
@@ -337,13 +370,13 @@ float Scene::motion_shutter_time()
   if (need_motion() == Scene::MOTION_PASS)
     return 2.0f;
   else
-    return camera->shuttertime;
+    return camera->get_shuttertime();
 }
 
 bool Scene::need_global_attribute(AttributeStandard std)
 {
   if (std == ATTR_STD_UV)
-    return Pass::contains(film->passes, PASS_UV);
+    return Pass::contains(passes, PASS_UV);
   else if (std == ATTR_STD_MOTION_VERTEX_POSITION)
     return need_motion() != MOTION_NONE;
   else if (std == ATTR_STD_MOTION_VERTEX_NORMAL)
@@ -361,21 +394,22 @@ void Scene::need_global_attributes(AttributeRequestSet &attributes)
 
 bool Scene::need_update()
 {
-  return (need_reset() || film->need_update);
+  return (need_reset() || film->is_modified());
 }
 
 bool Scene::need_data_update()
 {
-  return (background->need_update || image_manager->need_update || object_manager->need_update ||
-          geometry_manager->need_update || light_manager->need_update ||
-          lookup_tables->need_update || integrator->need_update || shader_manager->need_update ||
-          particle_system_manager->need_update || curve_system_manager->need_update ||
-          bake_manager->need_update || film->need_update);
+  return (background->is_modified() || image_manager->need_update() ||
+          object_manager->need_update() || geometry_manager->need_update() ||
+          light_manager->need_update() || lookup_tables->need_update() ||
+          integrator->is_modified() || shader_manager->need_update() ||
+          particle_system_manager->need_update() || bake_manager->need_update() ||
+          film->is_modified() || procedural_manager->need_update());
 }
 
 bool Scene::need_reset()
 {
-  return need_data_update() || camera->need_update;
+  return need_data_update() || camera->is_modified();
 }
 
 void Scene::reset()
@@ -384,16 +418,18 @@ void Scene::reset()
   shader_manager->add_default(this);
 
   /* ensure all objects are updated */
-  camera->tag_update();
-  dicing_camera->tag_update();
-  film->tag_update(this);
+  camera->tag_modified();
+  dicing_camera->tag_modified();
+  film->tag_modified();
+  background->tag_modified();
+
   background->tag_update(this);
-  integrator->tag_update(this);
-  object_manager->tag_update(this);
-  geometry_manager->tag_update(this);
-  light_manager->tag_update(this);
+  integrator->tag_update(this, Integrator::UPDATE_ALL);
+  object_manager->tag_update(this, ObjectManager::UPDATE_ALL);
+  geometry_manager->tag_update(this, GeometryManager::UPDATE_ALL);
+  light_manager->tag_update(this, LightManager::UPDATE_ALL);
   particle_system_manager->tag_update(this);
-  curve_system_manager->tag_update(this);
+  procedural_manager->tag_update();
 }
 
 void Scene::device_free()
@@ -405,6 +441,391 @@ void Scene::collect_statistics(RenderStats *stats)
 {
   geometry_manager->collect_statistics(this, stats);
   image_manager->collect_statistics(stats);
+}
+
+void Scene::enable_update_stats()
+{
+  if (!update_stats) {
+    update_stats = new SceneUpdateStats();
+  }
+}
+
+DeviceRequestedFeatures Scene::get_requested_device_features()
+{
+  DeviceRequestedFeatures requested_features;
+
+  shader_manager->get_requested_features(this, &requested_features);
+
+  /* This features are not being tweaked as often as shaders,
+   * so could be done selective magic for the viewport as well.
+   */
+  bool use_motion = need_motion() == Scene::MotionType::MOTION_BLUR;
+  requested_features.use_hair = false;
+  requested_features.use_hair_thick = (params.hair_shape == CURVE_THICK);
+  requested_features.use_object_motion = false;
+  requested_features.use_camera_motion = use_motion && camera->use_motion();
+  foreach (Object *object, objects) {
+    Geometry *geom = object->get_geometry();
+    if (use_motion) {
+      requested_features.use_object_motion |= object->use_motion() | geom->get_use_motion_blur();
+      requested_features.use_camera_motion |= geom->get_use_motion_blur();
+    }
+    if (object->get_is_shadow_catcher()) {
+      requested_features.use_shadow_tricks = true;
+    }
+    if (geom->is_mesh()) {
+      Mesh *mesh = static_cast<Mesh *>(geom);
+#ifdef WITH_OPENSUBDIV
+      if (mesh->get_subdivision_type() != Mesh::SUBDIVISION_NONE) {
+        requested_features.use_patch_evaluation = true;
+      }
+#endif
+      requested_features.use_true_displacement |= mesh->has_true_displacement();
+    }
+    else if (geom->is_hair()) {
+      requested_features.use_hair = true;
+    }
+  }
+
+  requested_features.use_background_light = light_manager->has_background_light(this);
+
+  requested_features.use_baking = bake_manager->get_baking();
+  requested_features.use_integrator_branched = (integrator->get_method() ==
+                                                Integrator::BRANCHED_PATH);
+  if (film->get_denoising_data_pass()) {
+    requested_features.use_denoising = true;
+    requested_features.use_shadow_tricks = true;
+  }
+
+  return requested_features;
+}
+
+bool Scene::update(Progress &progress, bool &kernel_switch_needed)
+{
+  /* update scene */
+  if (need_update()) {
+    /* Updated used shader tag so we know which features are need for the kernel. */
+    shader_manager->update_shaders_used(this);
+
+    /* Update max_closures. */
+    KernelIntegrator *kintegrator = &dscene.data.integrator;
+    if (params.background) {
+      kintegrator->max_closures = get_max_closure_count();
+    }
+    else {
+      /* Currently viewport render is faster with higher max_closures, needs investigating. */
+      kintegrator->max_closures = MAX_CLOSURE;
+    }
+
+    /* Load render kernels, before device update where we upload data to the GPU. */
+    bool new_kernels_needed = load_kernels(progress, false);
+
+    progress.set_status("Updating Scene");
+    MEM_GUARDED_CALL(&progress, device_update, device, progress);
+
+    DeviceKernelStatus kernel_switch_status = device->get_active_kernel_switch_state();
+    kernel_switch_needed = kernel_switch_status == DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE ||
+                           kernel_switch_status == DEVICE_KERNEL_FEATURE_KERNEL_INVALID;
+    if (kernel_switch_status == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
+      progress.set_kernel_status("Compiling render kernels");
+    }
+    if (new_kernels_needed || kernel_switch_needed) {
+      progress.set_kernel_status("Compiling render kernels");
+      device->wait_for_availability(loaded_kernel_features);
+      progress.set_kernel_status("");
+    }
+
+    return true;
+  }
+  return false;
+}
+
+bool Scene::load_kernels(Progress &progress, bool lock_scene)
+{
+  thread_scoped_lock scene_lock;
+  if (lock_scene) {
+    scene_lock = thread_scoped_lock(mutex);
+  }
+
+  DeviceRequestedFeatures requested_features = get_requested_device_features();
+
+  if (!kernels_loaded || loaded_kernel_features.modified(requested_features)) {
+    progress.set_status("Loading render kernels (may take a few minutes the first time)");
+
+    scoped_timer timer;
+
+    VLOG(2) << "Requested features:\n" << requested_features;
+    if (!device->load_kernels(requested_features)) {
+      string message = device->error_message();
+      if (message.empty())
+        message = "Failed loading render kernel, see console for errors";
+
+      progress.set_error(message);
+      progress.set_status(message);
+      progress.set_update();
+      return false;
+    }
+
+    progress.add_skip_time(timer, false);
+    VLOG(1) << "Total time spent loading kernels: " << time_dt() - timer.get_start();
+
+    kernels_loaded = true;
+    loaded_kernel_features = requested_features;
+    return true;
+  }
+  return false;
+}
+
+int Scene::get_max_closure_count()
+{
+  if (shader_manager->use_osl()) {
+    /* OSL always needs the maximum as we can't predict the
+     * number of closures a shader might generate. */
+    return MAX_CLOSURE;
+  }
+
+  int max_closures = 0;
+  for (int i = 0; i < shaders.size(); i++) {
+    Shader *shader = shaders[i];
+    if (shader->used) {
+      int num_closures = shader->graph->get_num_closures();
+      max_closures = max(max_closures, num_closures);
+    }
+  }
+  max_closure_global = max(max_closure_global, max_closures);
+
+  if (max_closure_global > MAX_CLOSURE) {
+    /* This is usually harmless as more complex shader tend to get many
+     * closures discarded due to mixing or low weights. We need to limit
+     * to MAX_CLOSURE as this is hardcoded in CPU/mega kernels, and it
+     * avoids excessive memory usage for split kernels. */
+    VLOG(2) << "Maximum number of closures exceeded: " << max_closure_global << " > "
+            << MAX_CLOSURE;
+
+    max_closure_global = MAX_CLOSURE;
+  }
+
+  return max_closure_global;
+}
+
+template<> Light *Scene::create_node<Light>()
+{
+  Light *node = new Light();
+  node->set_owner(this);
+  lights.push_back(node);
+  light_manager->tag_update(this, LightManager::LIGHT_ADDED);
+  return node;
+}
+
+template<> Mesh *Scene::create_node<Mesh>()
+{
+  Mesh *node = new Mesh();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this, GeometryManager::MESH_ADDED);
+  return node;
+}
+
+template<> Hair *Scene::create_node<Hair>()
+{
+  Hair *node = new Hair();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this, GeometryManager::HAIR_ADDED);
+  return node;
+}
+
+template<> Volume *Scene::create_node<Volume>()
+{
+  Volume *node = new Volume();
+  node->set_owner(this);
+  geometry.push_back(node);
+  geometry_manager->tag_update(this, GeometryManager::MESH_ADDED);
+  return node;
+}
+
+template<> Object *Scene::create_node<Object>()
+{
+  Object *node = new Object();
+  node->set_owner(this);
+  objects.push_back(node);
+  object_manager->tag_update(this, ObjectManager::OBJECT_ADDED);
+  return node;
+}
+
+template<> ParticleSystem *Scene::create_node<ParticleSystem>()
+{
+  ParticleSystem *node = new ParticleSystem();
+  node->set_owner(this);
+  particle_systems.push_back(node);
+  particle_system_manager->tag_update(this);
+  return node;
+}
+
+template<> Shader *Scene::create_node<Shader>()
+{
+  Shader *node = new Shader();
+  node->set_owner(this);
+  shaders.push_back(node);
+  shader_manager->tag_update(this, ShaderManager::SHADER_ADDED);
+  return node;
+}
+
+template<> AlembicProcedural *Scene::create_node<AlembicProcedural>()
+{
+#ifdef WITH_ALEMBIC
+  AlembicProcedural *node = new AlembicProcedural();
+  node->set_owner(this);
+  procedurals.push_back(node);
+  procedural_manager->tag_update();
+  return node;
+#else
+  return nullptr;
+#endif
+}
+
+template<typename T> void delete_node_from_array(vector<T> &nodes, T node)
+{
+  for (size_t i = 0; i < nodes.size(); ++i) {
+    if (nodes[i] == node) {
+      std::swap(nodes[i], nodes[nodes.size() - 1]);
+      break;
+    }
+  }
+
+  nodes.resize(nodes.size() - 1);
+
+  delete node;
+}
+
+template<> void Scene::delete_node_impl(Light *node)
+{
+  delete_node_from_array(lights, node);
+  light_manager->tag_update(this, LightManager::LIGHT_REMOVED);
+}
+
+template<> void Scene::delete_node_impl(Mesh *node)
+{
+  delete_node_from_array(geometry, static_cast<Geometry *>(node));
+  geometry_manager->tag_update(this, GeometryManager::MESH_REMOVED);
+}
+
+template<> void Scene::delete_node_impl(Hair *node)
+{
+  delete_node_from_array(geometry, static_cast<Geometry *>(node));
+  geometry_manager->tag_update(this, GeometryManager::HAIR_REMOVED);
+}
+
+template<> void Scene::delete_node_impl(Volume *node)
+{
+  delete_node_from_array(geometry, static_cast<Geometry *>(node));
+  geometry_manager->tag_update(this, GeometryManager::MESH_REMOVED);
+}
+
+template<> void Scene::delete_node_impl(Geometry *node)
+{
+  uint flag;
+  if (node->is_hair()) {
+    flag = GeometryManager::HAIR_REMOVED;
+  }
+  else {
+    flag = GeometryManager::MESH_REMOVED;
+  }
+
+  delete_node_from_array(geometry, node);
+  geometry_manager->tag_update(this, flag);
+}
+
+template<> void Scene::delete_node_impl(Object *node)
+{
+  delete_node_from_array(objects, node);
+  object_manager->tag_update(this, ObjectManager::OBJECT_REMOVED);
+}
+
+template<> void Scene::delete_node_impl(ParticleSystem *node)
+{
+  delete_node_from_array(particle_systems, node);
+  particle_system_manager->tag_update(this);
+}
+
+template<> void Scene::delete_node_impl(Shader * /*node*/)
+{
+  /* don't delete unused shaders, not supported */
+}
+
+template<> void Scene::delete_node_impl(Procedural *node)
+{
+  delete_node_from_array(procedurals, node);
+  procedural_manager->tag_update();
+}
+
+template<> void Scene::delete_node_impl(AlembicProcedural *node)
+{
+#ifdef WITH_ALEMBIC
+  delete_node_impl(static_cast<Procedural *>(node));
+#else
+  (void)node;
+#endif
+}
+
+template<typename T>
+static void remove_nodes_in_set(const set<T *> &nodes_set,
+                                vector<T *> &nodes_array,
+                                const NodeOwner *owner)
+{
+  size_t new_size = nodes_array.size();
+
+  for (size_t i = 0; i < new_size; ++i) {
+    T *node = nodes_array[i];
+
+    if (nodes_set.find(node) != nodes_set.end()) {
+      std::swap(nodes_array[i], nodes_array[new_size - 1]);
+
+      assert(node->get_owner() == owner);
+      delete node;
+
+      i -= 1;
+      new_size -= 1;
+    }
+  }
+
+  nodes_array.resize(new_size);
+  (void)owner;
+}
+
+template<> void Scene::delete_nodes(const set<Light *> &nodes, const NodeOwner *owner)
+{
+  remove_nodes_in_set(nodes, lights, owner);
+  light_manager->tag_update(this, LightManager::LIGHT_REMOVED);
+}
+
+template<> void Scene::delete_nodes(const set<Geometry *> &nodes, const NodeOwner *owner)
+{
+  remove_nodes_in_set(nodes, geometry, owner);
+  geometry_manager->tag_update(this, GeometryManager::GEOMETRY_REMOVED);
+}
+
+template<> void Scene::delete_nodes(const set<Object *> &nodes, const NodeOwner *owner)
+{
+  remove_nodes_in_set(nodes, objects, owner);
+  object_manager->tag_update(this, ObjectManager::OBJECT_REMOVED);
+}
+
+template<> void Scene::delete_nodes(const set<ParticleSystem *> &nodes, const NodeOwner *owner)
+{
+  remove_nodes_in_set(nodes, particle_systems, owner);
+  particle_system_manager->tag_update(this);
+}
+
+template<> void Scene::delete_nodes(const set<Shader *> & /*nodes*/, const NodeOwner * /*owner*/)
+{
+  /* don't delete unused shaders, not supported */
+}
+
+template<> void Scene::delete_nodes(const set<Procedural *> &nodes, const NodeOwner *owner)
+{
+  remove_nodes_in_set(nodes, procedurals, owner);
+  procedural_manager->tag_update();
 }
 
 CCL_NAMESPACE_END

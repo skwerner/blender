@@ -21,8 +21,7 @@
  * \ingroup edscr
  */
 
-#ifndef __SCREEN_INTERN_H__
-#define __SCREEN_INTERN_H__
+#pragma once
 
 struct Main;
 struct bContext;
@@ -30,10 +29,10 @@ struct bContextDataResult;
 
 /* internal exports only */
 
-#define AZONESPOTW UI_HEADER_OFFSET         /* width of corner azone - max */
-#define AZONESPOTH (0.6f * U.widget_unit)   /* height of corner azone */
-#define AZONEFADEIN (5.0f * U.widget_unit)  /* when azone is totally visible */
-#define AZONEFADEOUT (6.5f * U.widget_unit) /* when we start seeing the azone */
+#define AZONESPOTW UI_HEADER_OFFSET         /* width of corner #AZone - max */
+#define AZONESPOTH (0.6f * U.widget_unit)   /* height of corner #AZone */
+#define AZONEFADEIN (5.0f * U.widget_unit)  /* when #AZone is totally visible */
+#define AZONEFADEOUT (6.5f * U.widget_unit) /* when we start seeing the #AZone */
 
 #define AREAJOINTOLERANCE (1.0f * U.widget_unit) /* Edges must be close to allow joining. */
 
@@ -42,7 +41,7 @@ struct bContextDataResult;
 
 /* area.c */
 void ED_area_data_copy(ScrArea *area_dst, ScrArea *area_src, const bool do_free);
-void ED_area_data_swap(ScrArea *sa1, ScrArea *sa2);
+void ED_area_data_swap(ScrArea *area_dst, ScrArea *area_src);
 void region_toggle_hidden(struct bContext *C, ARegion *region, const bool do_fade);
 
 /* screen_edit.c */
@@ -50,11 +49,11 @@ bScreen *screen_add(struct Main *bmain, const char *name, const rcti *rect);
 void screen_data_copy(bScreen *to, bScreen *from);
 void screen_new_activate_prepare(const wmWindow *win, bScreen *screen_new);
 void screen_change_update(struct bContext *C, wmWindow *win, bScreen *screen);
-bScreen *screen_change_prepare(bScreen *screen_old,
-                               bScreen *screen_new,
-                               struct Main *bmain,
-                               struct bContext *C,
-                               wmWindow *win);
+void screen_change_prepare(bScreen *screen_old,
+                           bScreen *screen_new,
+                           struct Main *bmain,
+                           struct bContext *C,
+                           wmWindow *win);
 ScrArea *area_split(
     const wmWindow *win, bScreen *screen, ScrArea *area, char dir, float fac, int merge);
 int screen_area_join(struct bContext *C, bScreen *screen, ScrArea *sa1, ScrArea *sa2);
@@ -97,5 +96,3 @@ void SCREEN_OT_screenshot(struct wmOperatorType *ot);
 
 /* workspace_layout_edit.c */
 bool workspace_layout_set_poll(const struct WorkSpaceLayout *layout);
-
-#endif /* __SCREEN_INTERN_H__ */

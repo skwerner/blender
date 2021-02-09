@@ -81,7 +81,7 @@ static bool meshcache_read_pc2_head(FILE *fp,
 }
 
 /**
- * Gets the index frange and factor
+ * Gets the index range and factor
  *
  * currently same as for MDD
  */
@@ -146,16 +146,18 @@ bool MOD_meshcache_read_pc2_index(FILE *fp,
     return false;
   }
 
-  if (BLI_fseek(fp, sizeof(float) * 3 * index * pc2_head.verts_tot, SEEK_CUR) != 0) {
+  if (BLI_fseek(fp, sizeof(float[3]) * index * pc2_head.verts_tot, SEEK_CUR) != 0) {
     *err_str = "Failed to seek frame";
     return false;
   }
 
+  size_t num_verts_read = 0;
+  errno = 0;
   if (factor >= 1.0f) {
     float *vco = *vertexCos;
     uint i;
     for (i = pc2_head.verts_tot; i != 0; i--, vco += 3) {
-      fread(vco, sizeof(float) * 3, 1, fp);
+      num_verts_read += fread(vco, sizeof(float[3]), 1, fp);
 
 #ifdef __BIG_ENDIAN__
       BLI_endian_switch_float(vco + 0);
@@ -170,7 +172,7 @@ bool MOD_meshcache_read_pc2_index(FILE *fp,
     uint i;
     for (i = pc2_head.verts_tot; i != 0; i--, vco += 3) {
       float tvec[3];
-      fread(tvec, sizeof(float) * 3, 1, fp);
+      num_verts_read += fread(tvec, sizeof(float[3]), 1, fp);
 
 #ifdef __BIG_ENDIAN__
       BLI_endian_switch_float(tvec + 0);
@@ -182,6 +184,11 @@ bool MOD_meshcache_read_pc2_index(FILE *fp,
       vco[1] = (vco[1] * ifactor) + (tvec[1] * factor);
       vco[2] = (vco[2] * ifactor) + (tvec[2] * factor);
     }
+  }
+
+  if (num_verts_read != pc2_head.verts_tot) {
+    *err_str = errno ? strerror(errno) : "Vertex coordinate read failed";
+    return false;
   }
 
   return true;
@@ -213,22 +220,19 @@ bool MOD_meshcache_read_pc2_frame(FILE *fp,
         MOD_meshcache_read_pc2_index(fp, vertexCos, verts_tot, index_range[0], 1.0f, err_str)) {
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
-  else {
-    /* read both and interpolate */
-    if ((BLI_fseek(fp, 0, SEEK_SET) == 0) &&
-        MOD_meshcache_read_pc2_index(fp, vertexCos, verts_tot, index_range[0], 1.0f, err_str) &&
-        (BLI_fseek(fp, 0, SEEK_SET) == 0) &&
-        MOD_meshcache_read_pc2_index(fp, vertexCos, verts_tot, index_range[1], factor, err_str)) {
-      return true;
-    }
-    else {
-      return false;
-    }
+
+  /* read both and interpolate */
+  if ((BLI_fseek(fp, 0, SEEK_SET) == 0) &&
+      MOD_meshcache_read_pc2_index(fp, vertexCos, verts_tot, index_range[0], 1.0f, err_str) &&
+      (BLI_fseek(fp, 0, SEEK_SET) == 0) &&
+      MOD_meshcache_read_pc2_index(fp, vertexCos, verts_tot, index_range[1], factor, err_str)) {
+    return true;
   }
+
+  return false;
 }
 
 bool MOD_meshcache_read_pc2_times(const char *filepath,

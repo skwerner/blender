@@ -168,10 +168,9 @@ bNodeTree *ED_node_tree_get(SpaceNode *snode, int level)
 
 int ED_node_tree_path_length(SpaceNode *snode)
 {
-  bNodeTreePath *path;
   int length = 0;
-  int i;
-  for (path = snode->treepath.first, i = 0; path; path = path->next, i++) {
+  int i = 0;
+  LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     length += strlen(path->node_name);
     if (i > 0) {
       length += 1; /* for separator char */
@@ -182,11 +181,10 @@ int ED_node_tree_path_length(SpaceNode *snode)
 
 void ED_node_tree_path_get(SpaceNode *snode, char *value)
 {
-  bNodeTreePath *path;
-  int i;
+  int i = 0;
 
   value[0] = '\0';
-  for (path = snode->treepath.first, i = 0; path; path = path->next, i++) {
+  LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     if (i == 0) {
       strcpy(value, path->node_name);
       value += strlen(path->node_name);
@@ -200,11 +198,11 @@ void ED_node_tree_path_get(SpaceNode *snode, char *value)
 
 void ED_node_tree_path_get_fixedbuf(SpaceNode *snode, char *value, int max_length)
 {
-  bNodeTreePath *path;
-  int size, i;
+  int size;
 
   value[0] = '\0';
-  for (path = snode->treepath.first, i = 0; path; path = path->next, i++) {
+  int i = 0;
+  LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     if (i == 0) {
       size = BLI_strncpy_rlen(value, path->node_name, max_length);
     }
@@ -227,7 +225,7 @@ void ED_node_set_active_viewer_key(SpaceNode *snode)
   }
 }
 
-void snode_group_offset(SpaceNode *snode, float *x, float *y)
+void space_node_group_offset(SpaceNode *snode, float *x, float *y)
 {
   bNodeTreePath *path = snode->treepath.last;
 
@@ -244,7 +242,7 @@ void snode_group_offset(SpaceNode *snode, float *x, float *y)
 
 /* ******************** default callbacks for node space ***************** */
 
-static SpaceLink *node_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *node_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
   ARegion *region;
   SpaceNode *snode;
@@ -319,24 +317,29 @@ static SpaceLink *node_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scen
 static void node_free(SpaceLink *sl)
 {
   SpaceNode *snode = (SpaceNode *)sl;
-  bNodeTreePath *path, *path_next;
 
-  for (path = snode->treepath.first; path; path = path_next) {
-    path_next = path->next;
+  LISTBASE_FOREACH_MUTABLE (bNodeTreePath *, path, &snode->treepath) {
     MEM_freeN(path);
   }
+
+  MEM_SAFE_FREE(snode->runtime);
 }
 
 /* spacetype; init callback */
-static void node_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
+static void node_init(struct wmWindowManager *UNUSED(wm), ScrArea *area)
 {
+  SpaceNode *snode = (SpaceNode *)area->spacedata.first;
+
+  if (snode->runtime == NULL) {
+    snode->runtime = MEM_callocN(sizeof(SpaceNode_Runtime), __func__);
+  }
 }
 
-static void node_area_listener(wmWindow *UNUSED(win),
-                               ScrArea *area,
-                               wmNotifier *wmn,
-                               Scene *UNUSED(scene))
+static void node_area_listener(const wmSpaceTypeListenerParams *params)
 {
+  ScrArea *area = params->area;
+  wmNotifier *wmn = params->notifier;
+
   /* note, ED_area_tag_refresh will re-execute compositor */
   SpaceNode *snode = area->spacedata.first;
   /* shaderfrom is only used for new shading nodes, otherwise all shaders are from objects */
@@ -366,7 +369,7 @@ static void node_area_listener(wmWindow *UNUSED(win),
         case ND_TRANSFORM_DONE:
           if (ED_node_is_compositor(snode)) {
             if (snode->flag & SNODE_AUTO_RENDER) {
-              snode->recalc = 1;
+              snode->runtime->recalc = true;
               ED_area_tag_refresh(area);
             }
           }
@@ -410,6 +413,14 @@ static void node_area_listener(wmWindow *UNUSED(win),
       if (ED_node_is_shader(snode)) {
         if (wmn->data == ND_OB_SHADING) {
           ED_area_tag_refresh(area);
+        }
+      }
+      else if (ED_node_is_geometry(snode)) {
+        /* Rather strict check: only redraw when the reference matches the current editor's ID. */
+        if (wmn->data == ND_MODIFIER) {
+          if (wmn->reference == snode->id || snode->id == NULL) {
+            ED_area_tag_refresh(area);
+          }
         }
       }
       break;
@@ -517,8 +528,8 @@ static void node_area_refresh(const struct bContext *C, ScrArea *area)
       Scene *scene = (Scene *)snode->id;
       if (scene->use_nodes) {
         /* recalc is set on 3d view changes for auto compo */
-        if (snode->recalc) {
-          snode->recalc = 0;
+        if (snode->runtime->recalc) {
+          snode->runtime->recalc = false;
           node_render_changed_exec((struct bContext *)C, NULL);
         }
         else {
@@ -542,8 +553,10 @@ static SpaceLink *node_duplicate(SpaceLink *sl)
 
   BLI_duplicatelist(&snoden->treepath, &snode->treepath);
 
-  /* clear or remove stuff from old */
-  BLI_listbase_clear(&snoden->linkdrag);
+  if (snode->runtime != NULL) {
+    snoden->runtime = MEM_dupallocN(snode->runtime);
+    BLI_listbase_clear(&snoden->runtime->linkdrag);
+  }
 
   /* Note: no need to set node tree user counts,
    * the editor only keeps at least 1 (id_us_ensure_real),
@@ -585,6 +598,16 @@ static void node_toolbar_region_draw(const bContext *C, ARegion *region)
   ED_region_panels(C, region);
 }
 
+void ED_node_cursor_location_get(const SpaceNode *snode, float value[2])
+{
+  copy_v2_v2(value, snode->runtime->cursor);
+}
+
+void ED_node_cursor_location_set(SpaceNode *snode, const float value[2])
+{
+  copy_v2_v2(snode->runtime->cursor, value);
+}
+
 static void node_cursor(wmWindow *win, ScrArea *area, ARegion *region)
 {
   SpaceNode *snode = area->spacedata.first;
@@ -593,15 +616,15 @@ static void node_cursor(wmWindow *win, ScrArea *area, ARegion *region)
   UI_view2d_region_to_view(&region->v2d,
                            win->eventstate->x - region->winrct.xmin,
                            win->eventstate->y - region->winrct.ymin,
-                           &snode->cursor[0],
-                           &snode->cursor[1]);
+                           &snode->runtime->cursor[0],
+                           &snode->runtime->cursor[1]);
 
-  /* here snode->cursor is used to detect the node edge for sizing */
-  node_set_cursor(win, snode, snode->cursor);
+  /* here snode->runtime->cursor is used to detect the node edge for sizing */
+  node_set_cursor(win, snode, snode->runtime->cursor);
 
-  /* XXX snode->cursor is in placing new nodes space */
-  snode->cursor[0] /= UI_DPI_FAC;
-  snode->cursor[1] /= UI_DPI_FAC;
+  /* XXX snode->runtime->cursor is in placing new nodes space */
+  snode->runtime->cursor[0] /= UI_DPI_FAC;
+  snode->runtime->cursor[1] /= UI_DPI_FAC;
 }
 
 /* Initialize main region, setting handlers. */
@@ -627,7 +650,7 @@ static void node_main_region_init(wmWindowManager *wm, ARegion *region)
 
 static void node_main_region_draw(const bContext *C, ARegion *region)
 {
-  drawnodespace(C, region);
+  node_draw_space(C, region);
 }
 
 /* ************* dropboxes ************* */
@@ -641,9 +664,7 @@ static bool node_ima_drop_poll(bContext *UNUSED(C),
     /* rule might not work? */
     return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
   }
-  else {
-    return WM_drag_ID(drag, ID_IM) != NULL;
-  }
+  return WM_drag_is_ID_type(drag, ID_IM);
 }
 
 static bool node_mask_drop_poll(bContext *UNUSED(C),
@@ -651,19 +672,19 @@ static bool node_mask_drop_poll(bContext *UNUSED(C),
                                 const wmEvent *UNUSED(event),
                                 const char **UNUSED(r_tooltip))
 {
-  return WM_drag_ID(drag, ID_MSK) != NULL;
+  return WM_drag_is_ID_type(drag, ID_MSK);
 }
 
 static void node_id_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-  ID *id = WM_drag_ID(drag, 0);
+  ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, 0);
 
   RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
 static void node_id_path_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-  ID *id = WM_drag_ID(drag, 0);
+  ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, 0);
 
   if (id) {
     RNA_string_set(drop->ptr, "name", id->name + 2);
@@ -701,12 +722,10 @@ static void node_header_region_draw(const bContext *C, ARegion *region)
 }
 
 /* used for header + main region */
-static void node_region_listener(wmWindow *UNUSED(win),
-                                 ScrArea *UNUSED(area),
-                                 ARegion *region,
-                                 wmNotifier *wmn,
-                                 const Scene *UNUSED(scene))
+static void node_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
   wmGizmoMap *gzmap = region->gizmo_map;
 
   /* context changes */
@@ -778,16 +797,17 @@ static void node_region_listener(wmWindow *UNUSED(win),
 
 const char *node_context_dir[] = {
     "selected_nodes", "active_node", "light", "material", "world", NULL};
-
-static int node_context(const bContext *C, const char *member, bContextDataResult *result)
+static int /*eContextResult*/ node_context(const bContext *C,
+                                           const char *member,
+                                           bContextDataResult *result)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
 
   if (CTX_data_dir(member)) {
     CTX_data_dir_set(result, node_context_dir);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "selected_nodes")) {
+  if (CTX_data_equals(member, "selected_nodes")) {
     bNode *node;
 
     if (snode->edittree) {
@@ -798,46 +818,46 @@ static int node_context(const bContext *C, const char *member, bContextDataResul
       }
     }
     CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "active_node")) {
+  if (CTX_data_equals(member, "active_node")) {
     if (snode->edittree) {
       bNode *node = nodeGetActive(snode->edittree);
       CTX_data_pointer_set(result, &snode->edittree->id, &RNA_Node, node);
     }
 
     CTX_data_type_set(result, CTX_DATA_TYPE_POINTER);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "node_previews")) {
+  if (CTX_data_equals(member, "node_previews")) {
     if (snode->nodetree) {
       CTX_data_pointer_set(
           result, &snode->nodetree->id, &RNA_NodeInstanceHash, snode->nodetree->previews);
     }
 
     CTX_data_type_set(result, CTX_DATA_TYPE_POINTER);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "material")) {
+  if (CTX_data_equals(member, "material")) {
     if (snode->id && GS(snode->id->name) == ID_MA) {
       CTX_data_id_pointer_set(result, snode->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "light")) {
+  if (CTX_data_equals(member, "light")) {
     if (snode->id && GS(snode->id->name) == ID_LA) {
       CTX_data_id_pointer_set(result, snode->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "world")) {
+  if (CTX_data_equals(member, "world")) {
     if (snode->id && GS(snode->id->name) == ID_WO) {
       CTX_data_id_pointer_set(result, snode->id);
     }
-    return 1;
+    return CTX_RESULT_OK;
   }
 
-  return 0;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 static void node_widgets(void)
@@ -935,14 +955,7 @@ static void node_space_subtype_item_extend(bContext *C, EnumPropertyItem **item,
 {
   bool free;
   const EnumPropertyItem *item_src = RNA_enum_node_tree_types_itemf_impl(C, &free);
-  for (const EnumPropertyItem *item_iter = item_src; item_iter->identifier; item_iter++) {
-#ifndef WITH_NEW_SIMULATION_TYPE
-    if (STREQ(item_iter->identifier, "SimulationNodeTree")) {
-      continue;
-    }
-#endif
-    RNA_enum_item_add(item, totitem, item_iter);
-  }
+  RNA_enum_items_add(item, totitem, item_src);
   if (free) {
     MEM_freeN((void *)item_src);
   }
@@ -957,7 +970,7 @@ void ED_spacetype_node(void)
   st->spaceid = SPACE_NODE;
   strncpy(st->name, "Node", BKE_ST_MAXNAME);
 
-  st->new = node_new;
+  st->create = node_create;
   st->free = node_free;
   st->init = node_init;
   st->duplicate = node_duplicate;

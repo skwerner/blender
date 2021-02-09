@@ -60,11 +60,13 @@ struct bAction;
 struct bArmature;
 struct bConstraint;
 struct bGPdata;
+struct bNodeSocket;
 struct bNodeTree;
 struct bPoseChannel;
 struct bSound;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct ComponentNode;
 struct Depsgraph;
@@ -150,6 +152,9 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
 
   virtual void build_id(ID *id);
 
+  /* Build function for ID types that do not need their own build_xxx() function. */
+  virtual void build_generic_id(ID *id);
+
   virtual void build_idproperties(IDProperty *id_property);
 
   virtual void build_scene_render(Scene *scene, ViewLayer *view_layer);
@@ -168,6 +173,9 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_object_proxy_from(Object *object, bool is_object_visible);
   virtual void build_object_proxy_group(Object *object, bool is_object_visible);
   virtual void build_object_instance_collection(Object *object, bool is_object_visible);
+  virtual void build_object_from_layer(int base_index,
+                                       Object *object,
+                                       eDepsNode_LinkedState_Type linked_state);
   virtual void build_object_flags(int base_index,
                                   Object *object,
                                   eDepsNode_LinkedState_Type linked_state);
@@ -200,13 +208,14 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   virtual void build_ik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_splineik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
   virtual void build_rig(Object *object, bool is_object_visible);
-  virtual void build_proxy_rig(Object *object);
+  virtual void build_proxy_rig(Object *object, bool is_object_visible);
   virtual void build_armature(bArmature *armature);
   virtual void build_armature_bones(ListBase *bones);
   virtual void build_shapekeys(Key *key);
   virtual void build_camera(Camera *camera);
   virtual void build_light(Light *lamp);
   virtual void build_nodetree(bNodeTree *ntree);
+  virtual void build_nodetree_socket(bNodeSocket *socket);
   virtual void build_material(Material *ma);
   virtual void build_materials(Material **materials, int num_materials);
   virtual void build_freestyle_lineset(FreestyleLineSet *fls);
@@ -251,7 +260,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
     string name;
     int name_tag;
   };
-  vector<SavedEntryTag> saved_entry_tags_;
+  Vector<SavedEntryTag> saved_entry_tags_;
 
   struct BuilderWalkUserData {
     DepsgraphNodeBuilder *builder;
@@ -279,12 +288,13 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
    * very root is visible (aka not restricted.). */
   bool is_parent_collection_visible_;
 
-  /* Indexed by original ID, values are IDInfo. */
-  Map<const ID *, IDInfo *> id_info_hash_;
+  /* Indexed by original ID.session_uuid, values are IDInfo. */
+  Map<uint, IDInfo *> id_info_hash_;
 
   /* Set of IDs which were already build. Makes it easier to keep track of
    * what was already built and what was not. */
   BuilderMap built_map_;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

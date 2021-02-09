@@ -24,7 +24,7 @@
 
 GaussianAlphaYBlurOperation::GaussianAlphaYBlurOperation() : BlurBaseOperation(COM_DT_VALUE)
 {
-  this->m_gausstab = NULL;
+  this->m_gausstab = nullptr;
   this->m_filtersize = 0;
   this->m_falloff = -1; /* intentionally invalid, so we can detect uninitialized values */
 }
@@ -35,14 +35,15 @@ void *GaussianAlphaYBlurOperation::initializeTileData(rcti * /*rect*/)
   if (!this->m_sizeavailable) {
     updateGauss();
   }
-  void *buffer = getInputOperation(0)->initializeTileData(NULL);
+  void *buffer = getInputOperation(0)->initializeTileData(nullptr);
   unlockMutex();
   return buffer;
 }
 
 void GaussianAlphaYBlurOperation::initExecution()
 {
-  /* BlurBaseOperation::initExecution(); */ /* until we suppoer size input - comment this */
+  /* Until we support size input - comment this. */
+  // BlurBaseOperation::initExecution();
 
   initMutex();
 
@@ -57,15 +58,16 @@ void GaussianAlphaYBlurOperation::initExecution()
 
 void GaussianAlphaYBlurOperation::updateGauss()
 {
-  if (this->m_gausstab == NULL) {
+  if (this->m_gausstab == nullptr) {
     updateSize();
     float rad = max_ff(m_size * m_data.sizey, 0.0f);
+    rad = min_ff(rad, MAX_GAUSSTAB_RADIUS);
     m_filtersize = min_ii(ceil(rad), MAX_GAUSSTAB_RADIUS);
 
     m_gausstab = BlurBaseOperation::make_gausstab(rad, m_filtersize);
   }
 
-  if (this->m_distbuf_inv == NULL) {
+  if (this->m_distbuf_inv == nullptr) {
     updateSize();
     float rad = max_ff(m_size * m_data.sizey, 0.0f);
     m_filtersize = min_ii(ceil(rad), MAX_GAUSSTAB_RADIUS);
@@ -143,12 +145,12 @@ void GaussianAlphaYBlurOperation::deinitExecution()
 
   if (this->m_gausstab) {
     MEM_freeN(this->m_gausstab);
-    this->m_gausstab = NULL;
+    this->m_gausstab = nullptr;
   }
 
   if (this->m_distbuf_inv) {
     MEM_freeN(this->m_distbuf_inv);
-    this->m_distbuf_inv = NULL;
+    this->m_distbuf_inv = nullptr;
   }
 
   deinitMutex();
@@ -172,7 +174,7 @@ bool GaussianAlphaYBlurOperation::determineDependingAreaOfInterest(
   else
 #endif
   {
-    if (this->m_sizeavailable && this->m_gausstab != NULL) {
+    if (this->m_sizeavailable && this->m_gausstab != nullptr) {
       newInput.xmax = input->xmax;
       newInput.xmin = input->xmin;
       newInput.ymax = input->ymax + this->m_filtersize + 1;

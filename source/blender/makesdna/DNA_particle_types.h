@@ -21,12 +21,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_PARTICLE_TYPES_H__
-#define __DNA_PARTICLE_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
 #include "DNA_boid_types.h"
 #include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 
@@ -129,10 +132,13 @@ typedef struct ParticleData {
    */
   /** Index to vert/edge/face. */
   int num;
-  /** Index to derived mesh data (face) to avoid slow lookups. */
+  /**
+   * Index to derived mesh data (face) to avoid slow lookups. It can also have negative
+   * values DMCACHE_NOTFOUND and DMCACHE_ISCHILD.
+   */
   int num_dmcache;
 
-  /** Coordinates on face/edge number "num" and depth alon.g*/
+  /** Coordinates on face/edge number "num" and depth along. */
   float fuv[4], foffset;
   /* face normal for volume emission. */
 
@@ -273,7 +279,7 @@ typedef struct ParticleSettings {
 
   struct Collection *instance_collection;
   struct ListBase instance_weights;
-  struct Collection *force_group DNA_DEPRECATED;  // deprecated
+  struct Collection *force_group DNA_DEPRECATED; /* deprecated */
   struct Object *instance_object;
   struct Object *bb_ob;
   /** Old animation system, deprecated for 2.5. */
@@ -692,4 +698,6 @@ typedef enum eParticleTextureInfluence {
                  PAMAP_TWIST),
 } eParticleTextureInfluence;
 
+#ifdef __cplusplus
+}
 #endif

@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_BRIGHTNESSOPERATION_H__
-#define __COM_BRIGHTNESSOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 class BrightnessOperation : public NodeOperation {
@@ -35,7 +35,7 @@ class BrightnessOperation : public NodeOperation {
   BrightnessOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -51,4 +51,3 @@ class BrightnessOperation : public NodeOperation {
 
   void setUsePremultiply(bool use_premultiply);
 };
-#endif

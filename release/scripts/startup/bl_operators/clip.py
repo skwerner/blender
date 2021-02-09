@@ -414,8 +414,8 @@ class CLIP_OT_delete_proxy(Operator):
 
 
 class CLIP_OT_set_viewport_background(Operator):
-    """Set current movie clip as a camera background in 3D view-port """ \
-        """(works only when a 3D view-port is visible)"""
+    """Set current movie clip as a camera background in 3D Viewport """ \
+        """(works only when a 3D Viewport is visible)"""
 
     bl_idname = "clip.set_viewport_background"
     bl_label = "Set as Background"
@@ -486,7 +486,10 @@ class CLIP_OT_constraint_to_fcurve(Operator):
             return {'FINISHED'}
 
         # Find start and end frames.
-        if con.object:
+        if con.type == 'CAMERA_SOLVER':
+            # Camera solver constraint is always referring to camera.
+            tracks = clip.tracking.tracks
+        elif con.object:
             tracking_object = clip.tracking.objects.get(con.object, None)
             if not tracking_object:
                 self.report({'ERROR'}, "Motion Tracking object not found")
@@ -1008,7 +1011,7 @@ class CLIP_OT_track_settings_as_default(Operator):
     """Copy tracking settings from active track to default settings"""
 
     bl_idname = "clip.track_settings_as_default"
-    bl_label = "Track Settings As Default"
+    bl_label = "Track Settings as Default"
     bl_options = {'UNDO', 'REGISTER'}
 
     @classmethod

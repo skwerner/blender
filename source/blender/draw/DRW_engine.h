@@ -20,8 +20,7 @@
  * \ingroup draw
  */
 
-#ifndef __DRW_ENGINE_H__
-#define __DRW_ENGINE_H__
+#pragma once
 
 #include "BLI_sys_types.h" /* for bool */
 
@@ -37,12 +36,14 @@ struct ARegion;
 struct DRWInstanceDataList;
 struct Depsgraph;
 struct DrawEngineType;
+struct GHash;
 struct GPUMaterial;
 struct GPUOffScreen;
 struct GPUViewport;
 struct ID;
 struct Main;
 struct Object;
+struct Render;
 struct RenderEngine;
 struct RenderEngineType;
 struct Scene;
@@ -99,6 +100,10 @@ void DRW_draw_render_loop_offscreen(struct Depsgraph *depsgraph,
                                     const bool do_color_management,
                                     struct GPUOffScreen *ofs,
                                     struct GPUViewport *viewport);
+void DRW_draw_render_loop_2d_ex(struct Depsgraph *depsgraph,
+                                struct ARegion *region,
+                                struct GPUViewport *viewport,
+                                const struct bContext *evil_C);
 void DRW_draw_select_loop(struct Depsgraph *depsgraph,
                           struct ARegion *region,
                           struct View3D *v3d,
@@ -136,6 +141,10 @@ void DRW_render_gpencil(struct RenderEngine *engine, struct Depsgraph *depsgraph
 /* This is here because GPUViewport needs it */
 struct DRWInstanceDataList *DRW_instance_data_list_create(void);
 void DRW_instance_data_list_free(struct DRWInstanceDataList *idatalist);
+void DRW_uniform_attrs_pool_free(struct GHash *table);
+
+void DRW_render_context_enable(struct Render *render);
+void DRW_render_context_disable(struct Render *render);
 
 void DRW_opengl_context_create(void);
 void DRW_opengl_context_destroy(void);
@@ -170,5 +179,3 @@ void DRW_drawdata_free(struct ID *id);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DRW_ENGINE_H__ */

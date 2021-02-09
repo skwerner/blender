@@ -20,15 +20,15 @@
 
 #include "BLI_math.h"
 
-MathBaseOperation::MathBaseOperation() : NodeOperation()
+MathBaseOperation::MathBaseOperation()
 {
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
   this->addInputSocket(COM_DT_VALUE);
   this->addOutputSocket(COM_DT_VALUE);
-  this->m_inputValue1Operation = NULL;
-  this->m_inputValue2Operation = NULL;
-  this->m_inputValue3Operation = NULL;
+  this->m_inputValue1Operation = nullptr;
+  this->m_inputValue2Operation = nullptr;
+  this->m_inputValue3Operation = nullptr;
   this->m_useClamp = false;
 }
 
@@ -41,9 +41,9 @@ void MathBaseOperation::initExecution()
 
 void MathBaseOperation::deinitExecution()
 {
-  this->m_inputValue1Operation = NULL;
-  this->m_inputValue2Operation = NULL;
-  this->m_inputValue3Operation = NULL;
+  this->m_inputValue1Operation = nullptr;
+  this->m_inputValue2Operation = nullptr;
+  this->m_inputValue3Operation = nullptr;
 }
 
 void MathBaseOperation::determineResolution(unsigned int resolution[2],
@@ -671,9 +671,7 @@ void MathPingpongOperation::executePixelSampled(float output[4],
   this->m_inputValue1Operation->readSampled(inputValue1, x, y, sampler);
   this->m_inputValue2Operation->readSampled(inputValue2, x, y, sampler);
 
-  output[0] = fabsf(fractf((inputValue1[0] - inputValue2[0]) / (inputValue2[0] * 2.0f)) *
-                        inputValue2[0] * 2.0f -
-                    inputValue2[0]);
+  output[0] = pingpongf(inputValue1[0], inputValue2[0]);
 
   clampIfNeeded(output);
 }

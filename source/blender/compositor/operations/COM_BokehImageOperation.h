@@ -16,8 +16,8 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_BOKEHIMAGEOPERATION_H__
-#define __COM_BOKEHIMAGEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
 /**
@@ -29,7 +29,7 @@
  *  - angle offset of the flaps
  *  - rounding of the flaps (also used to make a circular lens)
  *  - simulate catadioptric
- *  - simulate lensshift
+ *  - simulate lens-shift
  *
  * Per pixel the algorithm determines the edge of the bokeh on the same line as the center of the
  *image and the pixel is evaluating.
@@ -55,7 +55,7 @@ class BokehImageOperation : public NodeOperation {
   NodeBokehImage *m_data;
 
   /**
-   * \brief precalced center of the image
+   * \brief precalculate center of the image
    */
   float m_center[2];
 
@@ -87,7 +87,7 @@ class BokehImageOperation : public NodeOperation {
   /**
    * \brief determine the coordinate of a flap corner.
    *
-   * \param r: result in bokehimage space are stored [x,y]
+   * \param r: result in bokeh-image space are stored [x,y]
    * \param flapNumber: the flap number to calculate
    * \param distance: the lens distance is used to simulate lens shifts
    */
@@ -108,7 +108,7 @@ class BokehImageOperation : public NodeOperation {
   BokehImageOperation();
 
   /**
-   * \brief the inner loop of this program
+   * \brief The inner loop of this operation.
    */
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
 
@@ -149,4 +149,3 @@ class BokehImageOperation : public NodeOperation {
     this->m_deleteData = true;
   }
 };
-#endif

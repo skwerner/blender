@@ -40,6 +40,8 @@ class RenderStats;
 class Scene;
 class SceneParams;
 class Shader;
+class Volume;
+struct PackedBVH;
 
 /* Geometry
  *
@@ -52,15 +54,16 @@ class Geometry : public Node {
   enum Type {
     MESH,
     HAIR,
+    VOLUME,
   };
 
-  Type type;
+  Type geometry_type;
 
   /* Attributes */
   AttributeSet attributes;
 
   /* Shaders */
-  vector<Shader *> used_shaders;
+  NODE_SOCKET_API_ARRAY(array<Node *>, used_shaders)
 
   /* Transform */
   BoundBox bounds;
@@ -69,8 +72,8 @@ class Geometry : public Node {
   Transform transform_normal;
 
   /* Motion Blur */
-  uint motion_steps;
-  bool use_motion_blur;
+  NODE_SOCKET_API(uint, motion_steps)
+  NODE_SOCKET_API(bool, use_motion_blur)
 
   /* Maximum number of motion steps supported (due to Embree). */
   static const uint MAX_MOTION_STEPS = 129;
@@ -86,21 +89,25 @@ class Geometry : public Node {
   bool has_surface_bssrdf; /* Set in the device_update_flags(). */
 
   /* Update Flags */
-  bool need_update;
   bool need_update_rebuild;
+
+  /* Index into scene->geometry (only valid during update) */
+  size_t index;
 
   /* Constructor/Destructor */
   explicit Geometry(const NodeType *node_type, const Type type);
   virtual ~Geometry();
 
   /* Geometry */
-  virtual void clear();
+  virtual void clear(bool preserve_shaders = false);
   virtual void compute_bounds() = 0;
   virtual void apply_transform(const Transform &tfm, const bool apply_to_motion) = 0;
 
   /* Attribute Requests */
   bool need_attribute(Scene *scene, AttributeStandard std);
   bool need_attribute(Scene *scene, ustring name);
+
+  AttributeRequestSet needed_attributes();
 
   /* UDIM */
   virtual void get_uv_tiles(ustring map, unordered_set<int> &tiles) = 0;
@@ -117,6 +124,8 @@ class Geometry : public Node {
                    Progress *progress,
                    int n,
                    int total);
+
+  virtual void pack_primitives(PackedBVH *pack, int object, uint visibility, bool pack_all) = 0;
 
   /* Check whether the geometry should have own BVH built separately. Briefly,
    * own BVH is needed for geometry, if:
@@ -136,16 +145,56 @@ class Geometry : public Node {
   bool has_motion_blur() const;
   bool has_voxel_attributes() const;
 
+  bool is_mesh() const
+  {
+    return geometry_type == MESH;
+  }
+
+  bool is_hair() const
+  {
+    return geometry_type == HAIR;
+  }
+
+  bool is_volume() const
+  {
+    return geometry_type == VOLUME;
+  }
+
   /* Updates */
   void tag_update(Scene *scene, bool rebuild);
+
+  void tag_bvh_update(bool rebuild);
 };
 
 /* Geometry Manager */
 
 class GeometryManager {
+  uint32_t update_flags;
+
  public:
+  enum : uint32_t {
+    UV_PASS_NEEDED = (1 << 0),
+    MOTION_PASS_NEEDED = (1 << 1),
+    GEOMETRY_MODIFIED = (1 << 2),
+    OBJECT_MANAGER = (1 << 3),
+    MESH_ADDED = (1 << 4),
+    MESH_REMOVED = (1 << 5),
+    HAIR_ADDED = (1 << 6),
+    HAIR_REMOVED = (1 << 7),
+
+    SHADER_ATTRIBUTE_MODIFIED = (1 << 8),
+    SHADER_DISPLACEMENT_MODIFIED = (1 << 9),
+
+    GEOMETRY_ADDED = MESH_ADDED | HAIR_ADDED,
+    GEOMETRY_REMOVED = MESH_REMOVED | HAIR_REMOVED,
+
+    /* tag everything in the manager for an update */
+    UPDATE_ALL = ~0u,
+
+    UPDATE_NONE = 0u,
+  };
+
   /* Update Flags */
-  bool need_update;
   bool need_flags_update;
 
   /* Constructor/Destructor */
@@ -155,10 +204,12 @@ class GeometryManager {
   /* Device Updates */
   void device_update_preprocess(Device *device, Scene *scene, Progress &progress);
   void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
-  void device_free(Device *device, DeviceScene *dscene);
+  void device_free(Device *device, DeviceScene *dscene, bool force_free);
 
   /* Updates */
-  void tag_update(Scene *scene);
+  void tag_update(Scene *scene, uint32_t flag);
+
+  bool need_update() const;
 
   /* Statistics */
   void collect_statistics(const Scene *scene, RenderStats *stats);
@@ -166,7 +217,7 @@ class GeometryManager {
  protected:
   bool displace(Device *device, DeviceScene *dscene, Scene *scene, Mesh *mesh, Progress &progress);
 
-  void create_volume_mesh(Mesh *mesh, Progress &progress);
+  void create_volume_mesh(Volume *volume, Progress &progress);
 
   /* Attributes */
   void update_osl_attributes(Device *device,
@@ -175,10 +226,11 @@ class GeometryManager {
   void update_svm_attributes(Device *device,
                              DeviceScene *dscene,
                              Scene *scene,
-                             vector<AttributeRequestSet> &geom_attributes);
+                             vector<AttributeRequestSet> &geom_attributes,
+                             vector<AttributeRequestSet> &object_attributes);
 
   /* Compute verts/triangles/curves offsets in global arrays. */
-  void mesh_calc_offset(Scene *scene);
+  void mesh_calc_offset(Scene *scene, BVHLayout bvh_layout);
 
   void device_update_object(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
 
@@ -198,6 +250,21 @@ class GeometryManager {
   void device_update_displacement_images(Device *device, Scene *scene, Progress &progress);
 
   void device_update_volume_images(Device *device, Scene *scene, Progress &progress);
+
+ private:
+  static void update_attribute_element_offset(Geometry *geom,
+                                              device_vector<float> &attr_float,
+                                              size_t &attr_float_offset,
+                                              device_vector<float2> &attr_float2,
+                                              size_t &attr_float2_offset,
+                                              device_vector<float4> &attr_float3,
+                                              size_t &attr_float3_offset,
+                                              device_vector<uchar4> &attr_uchar4,
+                                              size_t &attr_uchar4_offset,
+                                              Attribute *mattr,
+                                              AttributePrimitive prim,
+                                              TypeDesc &type,
+                                              AttributeDescriptor &desc);
 };
 
 CCL_NAMESPACE_END

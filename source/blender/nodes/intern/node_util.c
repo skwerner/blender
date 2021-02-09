@@ -43,7 +43,9 @@
 
 #include "node_util.h"
 
-/**** Storage Data ****/
+/* -------------------------------------------------------------------- */
+/** \name Storage Data
+ * \{ */
 
 void node_free_curves(bNode *node)
 {
@@ -73,11 +75,15 @@ void *node_initexec_curves(bNodeExecContext *UNUSED(context),
                            bNode *node,
                            bNodeInstanceKey UNUSED(key))
 {
-  BKE_curvemapping_initialize(node->storage);
+  BKE_curvemapping_init(node->storage);
   return NULL; /* unused return */
 }
 
-/**** Updates ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Updates
+ * \{ */
 
 void node_sock_label(bNodeSocket *sock, const char *name)
 {
@@ -173,7 +179,11 @@ void node_math_update(bNodeTree *UNUSED(ntree), bNode *node)
   }
 }
 
-/**** Labels ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Labels
+ * \{ */
 
 void node_blend_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int maxlen)
 {
@@ -222,7 +232,11 @@ void node_filter_label(bNodeTree *UNUSED(ntree), bNode *node, char *label, int m
   BLI_strncpy(label, IFACE_(name), maxlen);
 }
 
-/*** Link Insertion ***/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Link Insertion
+ * \{ */
 
 /* test if two sockets are interchangeable */
 static bool node_link_socket_match(bNodeSocket *a, bNodeSocket *b)
@@ -267,25 +281,30 @@ static int node_count_links(bNodeTree *ntree, bNodeSocket *sock)
   return count;
 }
 
-/* find an eligible socket for linking */
+/* Find an eligible socket for linking. */
 static bNodeSocket *node_find_linkable_socket(bNodeTree *ntree, bNode *node, bNodeSocket *cur)
 {
-  /* link swapping: try to find a free slot with a matching name */
-
   bNodeSocket *first = cur->in_out == SOCK_IN ? node->inputs.first : node->outputs.first;
   bNodeSocket *sock;
 
-  sock = cur->next ? cur->next : first; /* wrap around the list end */
+  /* Iterate over all sockets of the target node, to find one that matches the same socket type.
+   * The idea behind this is: When a user connects an input to a socket that is
+   * already linked (and if its not an Multi Input Socket), we try to find a replacement socket for
+   * the link that we try to overwrite and connect that previous link to the new socket. */
+  sock = cur->next ? cur->next : first; /* Wrap around the list end. */
   while (sock != cur) {
     if (!nodeSocketIsHidden(sock) && node_link_socket_match(sock, cur)) {
-      int link_count = node_count_links(ntree, sock);
-      /* take +1 into account since we would add a new link */
-      if (link_count + 1 <= nodeSocketLinkLimit(sock)) {
-        return sock; /* found a valid free socket we can swap to */
-      }
+      break;
     }
+    sock = sock->next ? sock->next : first; /* Wrap around the list end. */
+  }
 
-    sock = sock->next ? sock->next : first; /* wrap around the list end */
+  if (!nodeSocketIsHidden(sock) && node_link_socket_match(sock, cur)) {
+    int link_count = node_count_links(ntree, sock);
+    /* Take +1 into account since we would add a new link. */
+    if (link_count + 1 <= nodeSocketLinkLimit(sock)) {
+      return sock; /* Found a valid free socket we can swap to. */
+    }
   }
   return NULL;
 }
@@ -295,7 +314,6 @@ void node_insert_link_default(bNodeTree *ntree, bNode *node, bNodeLink *link)
   bNodeSocket *sock = link->tosock;
   bNodeLink *tlink, *tlink_next;
 
-  /* inputs can have one link only, outputs can have unlimited links */
   if (node != link->tonode) {
     return;
   }
@@ -321,12 +339,17 @@ void node_insert_link_default(bNodeTree *ntree, bNode *node, bNodeLink *link)
   }
 }
 
-/**** Internal Links (mute and disconnect) ****/
+/** \} */
 
-/* common datatype priorities, works for compositor, shader and texture nodes alike
+/* -------------------------------------------------------------------- */
+/** \name Internal Links (mute and disconnect)
+ * \{ */
+
+/**
+ * Common datatype priorities, works for compositor, shader and texture nodes alike
  * defines priority of datatype connection based on output type (to):
- *   < 0  : never connect these types
- *   >= 0 : priority of connection (higher values chosen first)
+ * `<  0`: never connect these types.
+ * `>= 0`: priority of connection (higher values chosen first).
  */
 static int node_datatype_priority(eNodeSocketDatatype from, eNodeSocketDatatype to)
 {
@@ -416,6 +439,30 @@ static int node_datatype_priority(eNodeSocketDatatype from, eNodeSocketDatatype 
         default:
           return -1;
       }
+    case SOCK_OBJECT: {
+      switch (from) {
+        case SOCK_OBJECT:
+          return 1;
+        default:
+          return -1;
+      }
+    }
+    case SOCK_GEOMETRY: {
+      switch (from) {
+        case SOCK_GEOMETRY:
+          return 1;
+        default:
+          return -1;
+      }
+    }
+    case SOCK_COLLECTION: {
+      switch (from) {
+        case SOCK_COLLECTION:
+          return 1;
+        default:
+          return -1;
+      }
+    }
     default:
       return -1;
   }
@@ -507,7 +554,11 @@ void node_update_internal_links_default(bNodeTree *ntree, bNode *node)
   }
 }
 
-/**** Default value RNA access ****/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Default value RNA access
+ * \{ */
 
 float node_socket_get_float(bNodeTree *ntree, bNode *UNUSED(node), bNodeSocket *sock)
 {
@@ -556,3 +607,5 @@ void node_socket_set_vector(bNodeTree *ntree,
   RNA_pointer_create((ID *)ntree, &RNA_NodeSocket, sock, &ptr);
   RNA_float_set_array(&ptr, "default_value", value);
 }
+
+/** \} */

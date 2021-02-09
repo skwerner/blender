@@ -22,8 +22,7 @@
  * Declaration of GHOST_EventKey class.
  */
 
-#ifndef __GHOST_EVENTKEY_H__
-#define __GHOST_EVENTKEY_H__
+#pragma once
 
 #include <string.h>
 
@@ -36,9 +35,9 @@ class GHOST_EventKey : public GHOST_Event {
  public:
   /**
    * Constructor.
-   * \param msec  The time this event was generated.
-   * \param type  The type of key event.
-   * \param key   The key code of the key.
+   * \param msec: The time this event was generated.
+   * \param type: The type of key event.
+   * \param key: The key code of the key.
    */
   GHOST_EventKey(GHOST_TUns64 msec,
                  GHOST_TEventType type,
@@ -56,10 +55,10 @@ class GHOST_EventKey : public GHOST_Event {
 
   /**
    * Constructor.
-   * \param msec  The time this event was generated.
-   * \param type  The type of key event.
-   * \param key   The key code of the key.
-   * \param ascii The ascii code for the key event.
+   * \param msec: The time this event was generated.
+   * \param type: The type of key event.
+   * \param key: The key code of the key.
+   * \param ascii: The ascii code for the key event.
    */
   GHOST_EventKey(GHOST_TUns64 msec,
                  GHOST_TEventType type,
@@ -84,5 +83,3 @@ class GHOST_EventKey : public GHOST_Event {
   /** The key event data. */
   GHOST_TEventKeyData m_keyEventData;
 };
-
-#endif  // __GHOST_EVENTKEY_H__

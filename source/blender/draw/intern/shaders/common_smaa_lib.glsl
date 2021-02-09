@@ -1,9 +1,9 @@
 /**
- * Copyright (C) 2013 Jorge Jimenez (jorge@iryoku.com)
- * Copyright (C) 2013 Jose I. Echevarria (joseignacioechevarria@gmail.com)
- * Copyright (C) 2013 Belen Masia (bmasia@unizar.es)
- * Copyright (C) 2013 Fernando Navarro (fernandn@microsoft.com)
- * Copyright (C) 2013 Diego Gutierrez (diegog@unizar.es)
+ * Copyright (C) 2013 Jorge Jimenez <jorge@iryoku.com>
+ * Copyright (C) 2013 Jose I. Echevarria <joseignacioechevarria@gmail.com>
+ * Copyright (C) 2013 Belen Masia <bmasia@unizar.es>
+ * Copyright (C) 2013 Fernando Navarro <fernandn@microsoft.com>
+ * Copyright (C) 2013 Diego Gutierrez <diegog@unizar.es>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * this software and associated documentation files (the "Software"), to deal in
@@ -118,7 +118,7 @@
  *     half-rate linear filtering on GCN.
  *
  *     If SMAA is applied to 64-bit color buffers, switching to point filtering
- *     when accesing them will increase the performance. Search for
+ *     when accessing them will increase the performance. Search for
  *     'SMAASamplePoint' to see which textures may benefit from point
  *     filtering, and where (which is basically the color input in the edge
  *     detection and resolve passes).
@@ -240,7 +240,7 @@
  *      - SMAA::detectMSAAOrder and
  *      - SMAA::msaaReorder
  *
- *    These functions allow to match the standard multisample patterns by
+ *    These functions allow matching the standard multisample patterns by
  *    detecting the subsample order for a specific GPU, and reordering
  *    them appropriately.
  *
@@ -1258,8 +1258,8 @@ float4 SMAABlendingWeightCalculationPS(float2 texcoord,
           SMAATexturePass2D(edgesTex), SMAATexturePass2D(searchTex), offset[0].zw, offset[2].y);
       d.y = coords.z;
 
-      // We want the distances to be in pixel units (doing this here allow to
-      // better interleave arithmetic and memory accesses):
+      // We want the distances to be in pixel units (doing this here allows
+      // better interleaving of arithmetic and memory accesses):
       d = abs(round(mad(SMAA_RT_METRICS.zz, d, -pixcoord.xx)));
 
       // SMAAArea below needs a sqrt, as the areas texture is compressed

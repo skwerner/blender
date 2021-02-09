@@ -126,6 +126,7 @@ class BlenderSession {
   /* Global state which is common for all render sessions created from Blender.
    * Usually denotes command line arguments.
    */
+  static DeviceTypeMask device_override;
 
   /* Blender is running from the command line, no windows are shown and some
    * extra render optimization is possible (possible to free draw-only data and
@@ -135,7 +136,7 @@ class BlenderSession {
 
   /* ** Resumable render ** */
 
-  /* Overall number of chunks in which the sample range is to be devided. */
+  /* Overall number of chunks in which the sample range is to be divided. */
   static int num_resumable_chunks;
 
   /* Current resumable chunk index to render. */

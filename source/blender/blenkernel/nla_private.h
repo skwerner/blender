@@ -21,8 +21,7 @@
  * \ingroup bke
  */
 
-#ifndef __NLA_PRIVATE_H__
-#define __NLA_PRIVATE_H__
+#pragma once
 
 #include "BLI_bitmap.h"
 #include "BLI_ghash.h"
@@ -31,6 +30,8 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct AnimationEvalContext;
 
 /* --------------- NLA Evaluation DataTypes ----------------------- */
 
@@ -105,14 +106,10 @@ typedef struct NlaEvalChannel {
 
   int index;
   bool is_array;
-  bool in_blend;
   char mix_mode;
 
-  struct NlaEvalChannel *next_blend;
-  NlaEvalChannelSnapshot *blend_snapshot;
-
-  /* Mask of array items controlled by NLA. */
-  NlaValidMask valid;
+  /* Associated with the RNA property's value(s), marks which elements are affected by NLA. */
+  NlaValidMask domain;
 
   /* Base set of values. */
   NlaEvalChannelSnapshot base_snapshot;
@@ -155,8 +152,8 @@ typedef struct NlaKeyframingContext {
   NlaStrip strip;
   NlaEvalStrip *eval_strip;
 
-  /* Evaluated NLA stack below the current strip. */
-  NlaEvalData nla_channels;
+  /* Evaluated NLA stack below the tweak strip. */
+  NlaEvalData lower_eval_data;
 } NlaKeyframingContext;
 
 /* --------------- NLA Functions (not to be used as a proper API) ----------------------- */
@@ -168,21 +165,32 @@ float nlastrip_get_frame(NlaStrip *strip, float cframe, short mode);
 /* these functions are only defined here to avoid problems with the order
  * in which they get defined. */
 
-NlaEvalStrip *nlastrips_ctime_get_strip(
-    ListBase *list, ListBase *strips, short index, float ctime, const bool flush_to_original);
+NlaEvalStrip *nlastrips_ctime_get_strip(ListBase *list,
+                                        ListBase *strips,
+                                        short index,
+                                        const struct AnimationEvalContext *anim_eval_context,
+                                        const bool flush_to_original);
 void nlastrip_evaluate(PointerRNA *ptr,
                        NlaEvalData *channels,
                        ListBase *modifiers,
                        NlaEvalStrip *nes,
                        NlaEvalSnapshot *snapshot,
+                       const struct AnimationEvalContext *anim_eval_context,
                        const bool flush_to_original);
 void nladata_flush_channels(PointerRNA *ptr,
                             NlaEvalData *channels,
                             NlaEvalSnapshot *snapshot,
                             const bool flush_to_original);
 
+void nlasnapshot_ensure_channels(NlaEvalData *eval_data, NlaEvalSnapshot *snapshot);
+
+void nlasnapshot_blend(NlaEvalData *eval_data,
+                       NlaEvalSnapshot *lower_snapshot,
+                       NlaEvalSnapshot *upper_snapshot,
+                       const short upper_blendmode,
+                       const float upper_influence,
+                       NlaEvalSnapshot *r_blended_snapshot);
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __NLA_PRIVATE_H__ */

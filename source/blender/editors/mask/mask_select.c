@@ -55,9 +55,7 @@
 /* 'check' select */
 bool ED_mask_spline_select_check(const MaskSpline *spline)
 {
-  int i;
-
-  for (i = 0; i < spline->tot_point; i++) {
+  for (int i = 0; i < spline->tot_point; i++) {
     MaskSplinePoint *point = &spline->points[i];
 
     if (MASKPOINT_ISSEL_ANY(point)) {
@@ -97,8 +95,6 @@ bool ED_mask_select_check(const Mask *mask)
 /* 'sel' select  */
 void ED_mask_spline_select_set(MaskSpline *spline, const bool do_select)
 {
-  int i;
-
   if (do_select) {
     spline->flag |= SELECT;
   }
@@ -106,7 +102,7 @@ void ED_mask_spline_select_set(MaskSpline *spline, const bool do_select)
     spline->flag &= ~SELECT;
   }
 
-  for (i = 0; i < spline->tot_point; i++) {
+  for (int i = 0; i < spline->tot_point; i++) {
     MaskSplinePoint *point = &spline->points[i];
 
     BKE_mask_point_select_set(point, do_select);
@@ -151,8 +147,7 @@ void ED_mask_select_toggle_all(Mask *mask, int action)
         continue;
       }
       LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
-        int i;
-        for (i = 0; i < spline->tot_point; i++) {
+        for (int i = 0; i < spline->tot_point; i++) {
           MaskSplinePoint *point = &spline->points[i];
           BKE_mask_point_select_set(point, !MASKPOINT_ISSEL_ANY(point));
         }
@@ -219,11 +214,16 @@ static int select_all_exec(bContext *C, wmOperator *op)
   Mask *mask = CTX_data_edit_mask(C);
   int action = RNA_enum_get(op->ptr, "action");
 
+  MaskViewLockState lock_state;
+  ED_mask_view_lock_state_store(C, &lock_state);
+
   ED_mask_select_toggle_all(mask, action);
   ED_mask_select_flush_all(mask);
 
   DEG_id_tag_update(&mask->id, ID_RECALC_SELECT);
   WM_event_add_notifier(C, NC_MASK | ND_SELECT, mask);
+
+  ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
 
   return OPERATOR_FINISHED;
 }
@@ -265,6 +265,9 @@ static int select_exec(bContext *C, wmOperator *op)
   const bool deselect_all = RNA_boolean_get(op->ptr, "deselect_all");
   eMaskWhichHandle which_handle;
   const float threshold = 19;
+
+  MaskViewLockState lock_state;
+  ED_mask_view_lock_state_store(C, &lock_state);
 
   RNA_float_get_array(op->ptr, "location", co);
 
@@ -329,54 +332,58 @@ static int select_exec(bContext *C, wmOperator *op)
     DEG_id_tag_update(&mask->id, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_MASK | ND_SELECT, mask);
 
+    ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
+
     return OPERATOR_FINISHED;
   }
-  else {
-    MaskSplinePointUW *uw;
 
-    if (ED_mask_feather_find_nearest(
-            C, mask, co, threshold, &mask_layer, &spline, &point, &uw, NULL)) {
+  MaskSplinePointUW *uw;
 
-      if (extend) {
-        mask_layer->act_spline = spline;
-        mask_layer->act_point = point;
+  if (ED_mask_feather_find_nearest(
+          C, mask, co, threshold, &mask_layer, &spline, &point, &uw, NULL)) {
 
-        if (uw) {
+    if (extend) {
+      mask_layer->act_spline = spline;
+      mask_layer->act_point = point;
+
+      if (uw) {
+        uw->flag |= SELECT;
+      }
+    }
+    else if (deselect) {
+      if (uw) {
+        uw->flag &= ~SELECT;
+      }
+    }
+    else {
+      mask_layer->act_spline = spline;
+      mask_layer->act_point = point;
+
+      if (uw) {
+        if (!(uw->flag & SELECT)) {
           uw->flag |= SELECT;
         }
-      }
-      else if (deselect) {
-        if (uw) {
+        else if (toggle) {
           uw->flag &= ~SELECT;
         }
       }
-      else {
-        mask_layer->act_spline = spline;
-        mask_layer->act_point = point;
-
-        if (uw) {
-          if (!(uw->flag & SELECT)) {
-            uw->flag |= SELECT;
-          }
-          else if (toggle) {
-            uw->flag &= ~SELECT;
-          }
-        }
-      }
-
-      ED_mask_select_flush_all(mask);
-
-      DEG_id_tag_update(&mask->id, ID_RECALC_SELECT);
-      WM_event_add_notifier(C, NC_MASK | ND_SELECT, mask);
-
-      return OPERATOR_FINISHED;
     }
-    else if (deselect_all) {
-      /* For clip editor tracks, leave deselect all to clip editor. */
-      if (!ED_clip_can_select(C)) {
-        ED_mask_deselect_all(C);
-        return OPERATOR_FINISHED;
-      }
+
+    ED_mask_select_flush_all(mask);
+
+    DEG_id_tag_update(&mask->id, ID_RECALC_SELECT);
+    WM_event_add_notifier(C, NC_MASK | ND_SELECT, mask);
+
+    ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
+
+    return OPERATOR_FINISHED;
+  }
+  if (deselect_all) {
+    /* For clip editor tracks, leave deselect all to clip editor. */
+    if (!ED_clip_can_select(C)) {
+      ED_mask_deselect_all(C);
+      ED_mask_view_lock_state_restore_no_jump(C, &lock_state);
+      return OPERATOR_FINISHED;
     }
   }
 
@@ -655,7 +662,6 @@ static int circle_select_exec(bContext *C, wmOperator *op)
   ARegion *region = CTX_wm_region(C);
 
   Mask *mask = CTX_data_edit_mask(C);
-  int i;
 
   float zoomx, zoomy, offset[2], ellipse[2];
   int width, height;
@@ -693,7 +699,7 @@ static int circle_select_exec(bContext *C, wmOperator *op)
     LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
       MaskSplinePoint *points_array = BKE_mask_spline_point_array(spline);
 
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         MaskSplinePoint *point = &spline->points[i];
         MaskSplinePoint *point_deform = &points_array[i];
 
@@ -872,10 +878,9 @@ static int mask_select_more_less(bContext *C, bool more)
     LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
       const bool cyclic = (spline->flag & MASK_SPLINE_CYCLIC) != 0;
       bool start_sel, end_sel, prev_sel, cur_sel;
-      int i;
 
       /* reselect point if any handle is selected to make the result more predictable */
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         BKE_mask_point_select_set(spline->points + i, MASKPOINT_ISSEL_ANY(spline->points + i));
       }
 
@@ -893,7 +898,7 @@ static int mask_select_more_less(bContext *C, bool more)
         end_sel = false;
       }
 
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         if (i == 0 && !cyclic) {
           continue;
         }
@@ -909,7 +914,7 @@ static int mask_select_more_less(bContext *C, bool more)
         }
       }
 
-      for (i = spline->tot_point - 1; i >= 0; i--) {
+      for (int i = spline->tot_point - 1; i >= 0; i--) {
         if (i == spline->tot_point - 1 && !cyclic) {
           continue;
         }

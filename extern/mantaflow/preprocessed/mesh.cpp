@@ -39,7 +39,7 @@ Mesh::Mesh(FluidSolver *parent) : PbClass(parent)
 Mesh::~Mesh()
 {
   for (IndexInt i = 0; i < (IndexInt)mMeshData.size(); ++i)
-    mMeshData[i]->setMesh(NULL);
+    mMeshData[i]->setMesh(nullptr);
 
   if (mFreeMdata) {
     for (IndexInt i = 0; i < (IndexInt)mMeshData.size(); ++i)
@@ -88,7 +88,7 @@ PbClass *Mesh::create(PbType t, PbTypeVec T, const string &name)
         "Unable to get mesh data pointer from newly created object. Only create MeshData type "
         "with a Mesh.creat() call, eg, MdataReal, MdataVec3 etc.");
     delete pyObj;
-    return NULL;
+    return nullptr;
   }
   else {
     this->registerMdata(mdata);
@@ -97,7 +97,7 @@ PbClass *Mesh::create(PbType t, PbTypeVec T, const string &name)
   // directly init size of new mdata field:
   mdata->resize(this->getSizeSlow());
 #else
-  PbClass *pyObj = NULL;
+  PbClass *pyObj = nullptr;
 #endif
   return pyObj;
 }
@@ -213,34 +213,36 @@ Mesh &Mesh::operator=(const Mesh &o)
   return *this;
 }
 
-void Mesh::load(string name, bool append)
+int Mesh::load(string name, bool append)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".gz")  // assume bobj gz
-    readBobjFile(name, this, append);
+    return readBobjFile(name, this, append);
   else if (ext == ".obj")
-    readObjFile(name, this, append);
+    return readObjFile(name, this, append);
   else
     errMsg("file '" + name + "' filetype not supported");
 
   // dont always rebuild...
   // rebuildCorners();
   // rebuildLookup();
+  return 0;
 }
 
-void Mesh::save(string name)
+int Mesh::save(string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".obj")
-    writeObjFile(name, this);
+    return writeObjFile(name, this);
   else if (ext == ".gz")
-    writeBobjFile(name, this);
+    return writeBobjFile(name, this);
   else
     errMsg("file '" + name + "' filetype not supported");
+  return 0;
 }
 
 void Mesh::fromShape(Shape &shape, bool append)
@@ -1277,7 +1279,7 @@ std::string Mesh::getTrisDataPointer()
 
 // mesh data
 
-MeshDataBase::MeshDataBase(FluidSolver *parent) : PbClass(parent), mMesh(NULL)
+MeshDataBase::MeshDataBase(FluidSolver *parent) : PbClass(parent), mMesh(nullptr)
 {
 }
 
@@ -1292,13 +1294,13 @@ MeshDataBase::~MeshDataBase()
 
 template<class T>
 MeshDataImpl<T>::MeshDataImpl(FluidSolver *parent)
-    : MeshDataBase(parent), mpGridSource(NULL), mGridSourceMAC(false)
+    : MeshDataBase(parent), mpGridSource(nullptr), mGridSourceMAC(false)
 {
 }
 
 template<class T>
 MeshDataImpl<T>::MeshDataImpl(FluidSolver *parent, MeshDataImpl<T> *other)
-    : MeshDataBase(parent), mpGridSource(NULL), mGridSourceMAC(false)
+    : MeshDataBase(parent), mpGridSource(nullptr), mGridSourceMAC(false)
 {
   this->mData = other->mData;
   setName(other->getName());
@@ -1339,8 +1341,8 @@ template<class T> void MeshDataImpl<T>::setSource(Grid<T> *grid, bool isMAC)
 {
   mpGridSource = grid;
   mGridSourceMAC = isMAC;
-  if (isMAC)
-    assertMsg(dynamic_cast<MACGrid *>(grid) != NULL, "Given grid is not a valid MAC grid");
+  if (grid && isMAC)
+    assertMsg(grid->getType() & GridBase::TypeMAC, "Given grid is not a valid MAC grid");
 }
 
 template<class T> void MeshDataImpl<T>::initNewValue(IndexInt idx, Vec3 pos)
@@ -1371,38 +1373,40 @@ void Mesh::updateDataFields()
   for (size_t i = 0; i < mNodes.size(); ++i) {
     Vec3 pos = mNodes[i].pos;
     for (IndexInt md = 0; md < (IndexInt)mMdataReal.size(); ++md)
-      mMdataReal[md]->initNewValue(i, mNodes[i].pos);
+      mMdataReal[md]->initNewValue(i, pos);
     for (IndexInt md = 0; md < (IndexInt)mMdataVec3.size(); ++md)
-      mMdataVec3[md]->initNewValue(i, mNodes[i].pos);
+      mMdataVec3[md]->initNewValue(i, pos);
     for (IndexInt md = 0; md < (IndexInt)mMdataInt.size(); ++md)
-      mMdataInt[md]->initNewValue(i, mNodes[i].pos);
+      mMdataInt[md]->initNewValue(i, pos);
   }
 }
 
-template<typename T> void MeshDataImpl<T>::load(string name)
+template<typename T> int MeshDataImpl<T>::load(string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".uni")
-    readMdataUni<T>(name, this);
+    return readMdataUni<T>(name, this);
   else if (ext == ".raw")  // raw = uni for now
-    readMdataUni<T>(name, this);
+    return readMdataUni<T>(name, this);
   else
     errMsg("mesh data '" + name + "' filetype not supported for loading");
+  return 0;
 }
 
-template<typename T> void MeshDataImpl<T>::save(string name)
+template<typename T> int MeshDataImpl<T>::save(string name)
 {
   if (name.find_last_of('.') == string::npos)
     errMsg("file '" + name + "' does not have an extension");
   string ext = name.substr(name.find_last_of('.'));
   if (ext == ".uni")
-    writeMdataUni<T>(name, this);
+    return writeMdataUni<T>(name, this);
   else if (ext == ".raw")  // raw = uni for now
-    writeMdataUni<T>(name, this);
+    return writeMdataUni<T>(name, this);
   else
     errMsg("mesh data '" + name + "' filetype not supported for saving");
+  return 0;
 }
 
 // specializations

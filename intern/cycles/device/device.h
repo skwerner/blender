@@ -82,7 +82,6 @@ class DeviceInfo {
   bool has_branched_path;            /* Supports branched path tracing. */
   bool has_adaptive_stop_per_sample; /* Per-sample adaptive sampling stopping. */
   bool has_osl;                      /* Support Open Shading Language. */
-  bool use_split_kernel;             /* Use split or mega kernel. */
   bool has_profiling;                /* Supports runtime collection of profiling info. */
   bool has_peer_memory;              /* GPU has P2P access to memory of another GPU. */
   DenoiserTypeMask denoisers;        /* Supported denoiser types. */
@@ -103,7 +102,6 @@ class DeviceInfo {
     has_branched_path = true;
     has_adaptive_stop_per_sample = false;
     has_osl = false;
-    use_split_kernel = false;
     has_profiling = false;
     has_peer_memory = false;
     denoisers = DENOISER_NONE;

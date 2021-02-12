@@ -29,12 +29,6 @@ set(SRC_CPU_KERNELS
   kernels/cpu/kernel_sse41.cpp
   kernels/cpu/kernel_avx.cpp
   kernels/cpu/kernel_avx2.cpp
-  kernels/cpu/kernel_split.cpp
-  kernels/cpu/kernel_split_sse2.cpp
-  kernels/cpu/kernel_split_sse3.cpp
-  kernels/cpu/kernel_split_sse41.cpp
-  kernels/cpu/kernel_split_avx.cpp
-  kernels/cpu/kernel_split_avx2.cpp
   kernels/cpu/filter.cpp
   kernels/cpu/filter_sse2.cpp
   kernels/cpu/filter_sse3.cpp
@@ -45,7 +39,6 @@ set(SRC_CPU_KERNELS
 
 set(SRC_CUDA_KERNELS
   kernels/cuda/kernel.cu
-  kernels/cuda/kernel_split.cu
   kernels/cuda/filter.cu
 )
 
@@ -332,36 +325,6 @@ set(SRC_UTIL_HEADERS
   ../util/util_types_vector3_impl.h
 )
 
-set(SRC_SPLIT_HEADERS
-  split/kernel_adaptive_adjust_samples.h
-  split/kernel_adaptive_filter_x.h
-  split/kernel_adaptive_filter_y.h
-  split/kernel_adaptive_stopping.h
-  split/kernel_branched.h
-  split/kernel_buffer_update.h
-  split/kernel_data_init.h
-  split/kernel_direct_lighting.h
-  split/kernel_do_volume.h
-  split/kernel_enqueue_inactive.h
-  split/kernel_holdout_emission_blurring_pathtermination_ao.h
-  split/kernel_indirect_background.h
-  split/kernel_indirect_subsurface.h
-  split/kernel_lamp_emission.h
-  split/kernel_next_iteration_setup.h
-  split/kernel_path_init.h
-  split/kernel_queue_enqueue.h
-  split/kernel_scene_intersect.h
-  split/kernel_shader_setup.h
-  split/kernel_shader_sort.h
-  split/kernel_shader_eval.h
-  split/kernel_shadow_blocked_ao.h
-  split/kernel_shadow_blocked_dl.h
-  split/kernel_split_common.h
-  split/kernel_split_data.h
-  split/kernel_split_data_types.h
-  split/kernel_subsurface_scatter.h
-)
-
 set(LIB
 
 )
@@ -387,7 +350,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
   endif()
 
   # build for each arch
-  set(cuda_sources kernels/cuda/kernel.cu kernels/cuda/kernel_split.cu
+  set(cuda_sources kernels/cuda/kernel.cu
     ${SRC_HEADERS}
     ${SRC_KERNELS_CUDA_HEADERS}
     ${SRC_BVH_HEADERS}
@@ -524,11 +487,6 @@ if(WITH_CYCLES_CUDA_BINARIES)
       CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} filter "" "${cuda_filter_sources}" FALSE)
       CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel "" "${cuda_sources}" FALSE)
 
-      if(WITH_CYCLES_CUDA_SPLIT_KERNEL_BINARIES)
-        # Compile split kernel
-        CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel_split "-D __SPLIT__" "${cuda_sources}" FALSE)
-      endif()
-
       if(WITH_CYCLES_CUDA_BUILD_SERIAL)
         set(prev_arch ${arch})
       endif()
@@ -663,16 +621,12 @@ if(WITH_COMPILER_ASAN)
 endif()
 
 set_source_files_properties(kernels/cpu/kernel.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
-set_source_files_properties(kernels/cpu/kernel_split.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
 set_source_files_properties(kernels/cpu/filter.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
 
 if(CXX_HAS_SSE)
   set_source_files_properties(kernels/cpu/kernel_sse2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE2_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/kernel_sse3.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE3_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/kernel_sse41.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE41_KERNEL_FLAGS}")
-  set_source_files_properties(kernels/cpu/kernel_split_sse2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE2_KERNEL_FLAGS}")
-  set_source_files_properties(kernels/cpu/kernel_split_sse3.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE3_KERNEL_FLAGS}")
-  set_source_files_properties(kernels/cpu/kernel_split_sse41.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE41_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/filter_sse2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE2_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/filter_sse3.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE3_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/filter_sse41.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE41_KERNEL_FLAGS}")
@@ -680,13 +634,11 @@ endif()
 
 if(CXX_HAS_AVX)
   set_source_files_properties(kernels/cpu/kernel_avx.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX_KERNEL_FLAGS}")
-  set_source_files_properties(kernels/cpu/kernel_split_avx.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/filter_avx.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX_KERNEL_FLAGS}")
 endif()
 
 if(CXX_HAS_AVX2)
   set_source_files_properties(kernels/cpu/kernel_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
-  set_source_files_properties(kernels/cpu/kernel_split_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
   set_source_files_properties(kernels/cpu/filter_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
 endif()
 
@@ -705,7 +657,6 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_FILTER_HEADERS}
   ${SRC_SVM_HEADERS}
   ${SRC_GEOM_HEADERS}
-  ${SRC_SPLIT_HEADERS}
 )
 
 source_group("bvh" FILES ${SRC_BVH_HEADERS})
@@ -713,7 +664,6 @@ source_group("closure" FILES ${SRC_CLOSURE_HEADERS})
 source_group("filter" FILES ${SRC_FILTER_HEADERS})
 source_group("geom" FILES ${SRC_GEOM_HEADERS})
 source_group("kernel" FILES ${SRC_HEADERS})
-source_group("kernel\\split" FILES ${SRC_SPLIT_HEADERS})
 source_group("kernels\\cpu" FILES ${SRC_CPU_KERNELS} ${SRC_KERNELS_CPU_HEADERS})
 source_group("kernels\\cuda" FILES ${SRC_CUDA_KERNELS} ${SRC_KERNELS_CUDA_HEADERS})
 source_group("kernels\\opencl" FILES ${SRC_OPENCL_KERNELS} ${SRC_KERNELS_OPENCL_HEADERS})
@@ -750,7 +700,6 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_FILTER_HEADERS}" ${CYCLES_INS
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/svm)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
-delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SPLIT_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/split)
 
 
 if(WITH_NANOVDB)

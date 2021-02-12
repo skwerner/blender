@@ -34,7 +34,6 @@
 /* needed for calculating differentials */
 // clang-format off
 #include "kernel/kernel_compat_cpu.h"
-#include "kernel/split/kernel_split_data.h"
 #include "kernel/kernel_globals.h"
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_differential.h"

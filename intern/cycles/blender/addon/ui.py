@@ -1967,14 +1967,12 @@ class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
         row.prop(cscene, "debug_use_cpu_avx", toggle=True)
         row.prop(cscene, "debug_use_cpu_avx2", toggle=True)
         col.prop(cscene, "debug_bvh_layout")
-        col.prop(cscene, "debug_use_cpu_split_kernel")
 
         col.separator()
 
         col = layout.column()
         col.label(text="CUDA Flags:")
         col.prop(cscene, "debug_use_cuda_adaptive_compile")
-        col.prop(cscene, "debug_use_cuda_split_kernel")
 
         col.separator()
 

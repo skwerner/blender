@@ -18,7 +18,6 @@
 
 #  include "device/device.h"
 #  include "device/device_denoising.h"
-#  include "device/device_split_kernel.h"
 
 #  include "util/util_map.h"
 #  include "util/util_task.h"
@@ -33,12 +32,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-class CUDASplitKernel;
-
 class CUDADevice : public Device {
 
-  friend class CUDASplitKernelFunction;
-  friend class CUDASplitKernel;
   friend class CUDAContextScope;
 
  public:
@@ -56,7 +51,6 @@ class CUDADevice : public Device {
   int cuDevId;
   int cuDevArchitecture;
   bool first_error;
-  CUDASplitKernel *split_kernel;
 
   struct CUDAMem {
     CUDAMem() : texobject(0), array(0), use_mapped_host(false)
@@ -114,10 +108,8 @@ class CUDADevice : public Device {
 
   bool use_adaptive_compilation();
 
-  bool use_split_kernel();
-
   virtual string compile_kernel_get_common_cflags(
-      const DeviceRequestedFeatures &requested_features, bool filter = false, bool split = false);
+      const DeviceRequestedFeatures &requested_features, bool filter = false);
 
   string compile_kernel(const DeviceRequestedFeatures &requested_features,
                         const char *name,

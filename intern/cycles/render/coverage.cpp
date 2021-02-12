@@ -19,7 +19,6 @@
 
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_types.h"
-#include "kernel/split/kernel_split_data.h"
 
 #include "kernel/kernel_globals.h"
 #include "kernel/kernel_id_passes.h"

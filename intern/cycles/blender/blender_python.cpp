@@ -86,10 +86,8 @@ bool debug_flags_sync_from_scene(BL::Scene b_scene)
   flags.cpu.sse3 = get_boolean(cscene, "debug_use_cpu_sse3");
   flags.cpu.sse2 = get_boolean(cscene, "debug_use_cpu_sse2");
   flags.cpu.bvh_layout = (BVHLayout)get_enum(cscene, "debug_bvh_layout");
-  flags.cpu.split_kernel = get_boolean(cscene, "debug_use_cpu_split_kernel");
   /* Synchronize CUDA flags. */
   flags.cuda.adaptive_compile = get_boolean(cscene, "debug_use_cuda_adaptive_compile");
-  flags.cuda.split_kernel = get_boolean(cscene, "debug_use_cuda_split_kernel");
   /* Synchronize OptiX flags. */
   flags.optix.cuda_streams = get_int(cscene, "debug_optix_cuda_streams");
   flags.optix.curves_api = get_boolean(cscene, "debug_optix_curves_api");

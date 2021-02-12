@@ -24,7 +24,6 @@
 
 #  include "device/cuda/device_cuda.h"
 #  include "device/device_intern.h"
-#  include "device/device_split_kernel.h"
 
 #  include "render/buffers.h"
 
@@ -42,8 +41,6 @@
 #  include "util/util_time.h"
 #  include "util/util_types.h"
 #  include "util/util_windows.h"
-
-#  include "kernel/split/kernel_split_data_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -82,31 +79,6 @@ int cuewCompilerVersion()
 #  endif /* WITH_CUDA_DYNLOAD */
 
 class CUDADevice;
-
-class CUDASplitKernel : public DeviceSplitKernel {
-  CUDADevice *device;
-
- public:
-  explicit CUDASplitKernel(CUDADevice *device);
-
-  virtual uint64_t state_buffer_size(device_memory &kg, device_memory &data, size_t num_threads);
-
-  virtual bool enqueue_split_kernel_data_init(const KernelDimensions &dim,
-                                              RenderTile &rtile,
-                                              int num_global_elements,
-                                              device_memory &kernel_globals,
-                                              device_memory &kernel_data_,
-                                              device_memory &split_data,
-                                              device_memory &ray_state,
-                                              device_memory &queue_index,
-                                              device_memory &use_queues_flag,
-                                              device_memory &work_pool_wgs);
-
-  virtual SplitKernelFunction *get_split_kernel_function(const string &kernel_name,
-                                                         const DeviceRequestedFeatures &);
-  virtual int2 split_kernel_local_size();
-  virtual int2 split_kernel_global_size(device_memory &kg, device_memory &data, DeviceTask &task);
-};
 
 /* Utility to push/pop CUDA context. */
 class CUDAContextScope {
@@ -169,8 +141,6 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
 
   cuModule = 0;
   cuFilterModule = 0;
-
-  split_kernel = NULL;
 
   need_texture_info = false;
 
@@ -244,8 +214,6 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
 CUDADevice::~CUDADevice()
 {
   task_pool.cancel();
-
-  delete split_kernel;
 
   texture_info.free();
 
@@ -322,16 +290,11 @@ bool CUDADevice::use_adaptive_compilation()
   return DebugFlags().cuda.adaptive_compile;
 }
 
-bool CUDADevice::use_split_kernel()
-{
-  return DebugFlags().cuda.split_kernel;
-}
-
 /* Common NVCC flags which stays the same regardless of shading model,
  * kernel sources md5 and only depends on compiler or compilation settings.
  */
 string CUDADevice::compile_kernel_get_common_cflags(
-    const DeviceRequestedFeatures &requested_features, bool filter, bool split)
+    const DeviceRequestedFeatures &requested_features, bool filter)
 {
   const int machine = system_cpu_bits();
   const string source_path = path_get("source");
@@ -354,10 +317,6 @@ string CUDADevice::compile_kernel_get_common_cflags(
 #  ifdef WITH_CYCLES_DEBUG
   cflags += " -D__KERNEL_DEBUG__";
 #  endif
-
-  if (split) {
-    cflags += " -D__SPLIT__";
-  }
 
 #  ifdef WITH_NANOVDB
   cflags += " -DWITH_NANOVDB";
@@ -415,8 +374,8 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   /* We include cflags into md5 so changing cuda toolkit or changing other
    * compiler command line arguments makes sure cubin gets re-built.
    */
-  string common_cflags = compile_kernel_get_common_cflags(
-      requested_features, strstr(name, "filter") != NULL, strstr(name, "split") != NULL);
+  string common_cflags = compile_kernel_get_common_cflags(requested_features,
+                                                          strstr(name, "filter") != NULL);
   const string kernel_md5 = util_md5_string(source_md5 + common_cflags);
 
   const char *const kernel_ext = force_ptx ? "ptx" : "cubin";
@@ -545,7 +504,7 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
     return false;
 
   /* get kernel */
-  const char *kernel_name = use_split_kernel() ? "kernel_split" : "kernel";
+  const char *kernel_name = "kernel";
   string cubin = compile_kernel(requested_features, kernel_name);
   if (cubin.empty())
     return false;
@@ -622,12 +581,6 @@ void CUDADevice::load_functions()
 
 void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_features)
 {
-  if (use_split_kernel()) {
-    /* Split kernel mostly uses global memory and adaptive compilation,
-     * difficult to predict how much is needed currently. */
-    return;
-  }
-
   /* Together with CU_CTX_LMEM_RESIZE_TO_MAX, this reserves local memory
    * needed for kernel launches, so that we can reliably figure out when
    * to allocate scene data in mapped host memory. */
@@ -2371,14 +2324,6 @@ void CUDADevice::thread_run(DeviceTask &task)
   CUDAContextScope scope(this);
 
   if (task.type == DeviceTask::RENDER) {
-    DeviceRequestedFeatures requested_features;
-    if (use_split_kernel()) {
-      if (split_kernel == NULL) {
-        split_kernel = new CUDASplitKernel(this);
-        split_kernel->load_kernels(requested_features);
-      }
-    }
-
     device_vector<WorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
 
     /* keep rendering tiles until done */
@@ -2387,13 +2332,7 @@ void CUDADevice::thread_run(DeviceTask &task)
 
     while (task.acquire_tile(this, tile, task.tile_types)) {
       if (tile.task == RenderTile::PATH_TRACE) {
-        if (use_split_kernel()) {
-          device_only_memory<uchar> void_buffer(this, "void_buffer");
-          split_kernel->path_trace(task, tile, void_buffer, void_buffer);
-        }
-        else {
-          render(task, tile, work_tiles);
-        }
+        render(task, tile, work_tiles);
       }
       else if (tile.task == RenderTile::BAKE) {
         render(task, tile, work_tiles);
@@ -2498,211 +2437,6 @@ CUDAContextScope::CUDAContextScope(CUDADevice *device) : device(device)
 CUDAContextScope::~CUDAContextScope()
 {
   cuda_assert(cuCtxPopCurrent(NULL));
-}
-
-/* split kernel */
-
-class CUDASplitKernelFunction : public SplitKernelFunction {
-  CUDADevice *device;
-  CUfunction func;
-
- public:
-  CUDASplitKernelFunction(CUDADevice *device, CUfunction func) : device(device), func(func)
-  {
-  }
-
-  /* enqueue the kernel, returns false if there is an error */
-  bool enqueue(const KernelDimensions &dim, device_memory & /*kg*/, device_memory & /*data*/)
-  {
-    return enqueue(dim, NULL);
-  }
-
-  /* enqueue the kernel, returns false if there is an error */
-  bool enqueue(const KernelDimensions &dim, void *args[])
-  {
-    if (device->have_error())
-      return false;
-
-    CUDAContextScope scope(device);
-
-    /* we ignore dim.local_size for now, as this is faster */
-    int threads_per_block;
-    cuda_assert(
-        cuFuncGetAttribute(&threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func));
-
-    int xblocks = (dim.global_size[0] * dim.global_size[1] + threads_per_block - 1) /
-                  threads_per_block;
-
-    cuda_assert(cuFuncSetCacheConfig(func, CU_FUNC_CACHE_PREFER_L1));
-
-    cuda_assert(cuLaunchKernel(func,
-                               xblocks,
-                               1,
-                               1, /* blocks */
-                               threads_per_block,
-                               1,
-                               1, /* threads */
-                               0,
-                               0,
-                               args,
-                               0));
-
-    return !device->have_error();
-  }
-};
-
-CUDASplitKernel::CUDASplitKernel(CUDADevice *device) : DeviceSplitKernel(device), device(device)
-{
-}
-
-uint64_t CUDASplitKernel::state_buffer_size(device_memory & /*kg*/,
-                                            device_memory & /*data*/,
-                                            size_t num_threads)
-{
-  CUDAContextScope scope(device);
-
-  device_vector<uint64_t> size_buffer(device, "size_buffer", MEM_READ_WRITE);
-  size_buffer.alloc(1);
-  size_buffer.zero_to_device();
-
-  uint threads = num_threads;
-  CUdeviceptr d_size = (CUdeviceptr)size_buffer.device_pointer;
-
-  struct args_t {
-    uint *num_threads;
-    CUdeviceptr *size;
-  };
-
-  args_t args = {&threads, &d_size};
-
-  CUfunction state_buffer_size;
-  cuda_assert(
-      cuModuleGetFunction(&state_buffer_size, device->cuModule, "kernel_cuda_state_buffer_size"));
-
-  cuda_assert(cuLaunchKernel(state_buffer_size, 1, 1, 1, 1, 1, 1, 0, 0, (void **)&args, 0));
-
-  size_buffer.copy_from_device(0, 1, 1);
-  size_t size = size_buffer[0];
-  size_buffer.free();
-
-  return size;
-}
-
-bool CUDASplitKernel::enqueue_split_kernel_data_init(const KernelDimensions &dim,
-                                                     RenderTile &rtile,
-                                                     int num_global_elements,
-                                                     device_memory & /*kernel_globals*/,
-                                                     device_memory & /*kernel_data*/,
-                                                     device_memory &split_data,
-                                                     device_memory &ray_state,
-                                                     device_memory &queue_index,
-                                                     device_memory &use_queues_flag,
-                                                     device_memory &work_pool_wgs)
-{
-  CUDAContextScope scope(device);
-
-  CUdeviceptr d_split_data = (CUdeviceptr)split_data.device_pointer;
-  CUdeviceptr d_ray_state = (CUdeviceptr)ray_state.device_pointer;
-  CUdeviceptr d_queue_index = (CUdeviceptr)queue_index.device_pointer;
-  CUdeviceptr d_use_queues_flag = (CUdeviceptr)use_queues_flag.device_pointer;
-  CUdeviceptr d_work_pool_wgs = (CUdeviceptr)work_pool_wgs.device_pointer;
-
-  CUdeviceptr d_buffer = (CUdeviceptr)rtile.buffer;
-
-  int end_sample = rtile.start_sample + rtile.num_samples;
-  int queue_size = dim.global_size[0] * dim.global_size[1];
-
-  struct args_t {
-    CUdeviceptr *split_data_buffer;
-    int *num_elements;
-    CUdeviceptr *ray_state;
-    int *start_sample;
-    int *end_sample;
-    int *sx;
-    int *sy;
-    int *sw;
-    int *sh;
-    int *offset;
-    int *stride;
-    CUdeviceptr *queue_index;
-    int *queuesize;
-    CUdeviceptr *use_queues_flag;
-    CUdeviceptr *work_pool_wgs;
-    int *num_samples;
-    CUdeviceptr *buffer;
-  };
-
-  args_t args = {&d_split_data,
-                 &num_global_elements,
-                 &d_ray_state,
-                 &rtile.start_sample,
-                 &end_sample,
-                 &rtile.x,
-                 &rtile.y,
-                 &rtile.w,
-                 &rtile.h,
-                 &rtile.offset,
-                 &rtile.stride,
-                 &d_queue_index,
-                 &queue_size,
-                 &d_use_queues_flag,
-                 &d_work_pool_wgs,
-                 &rtile.num_samples,
-                 &d_buffer};
-
-  CUfunction data_init;
-  cuda_assert(
-      cuModuleGetFunction(&data_init, device->cuModule, "kernel_cuda_path_trace_data_init"));
-  if (device->have_error()) {
-    return false;
-  }
-
-  CUDASplitKernelFunction(device, data_init).enqueue(dim, (void **)&args);
-
-  return !device->have_error();
-}
-
-SplitKernelFunction *CUDASplitKernel::get_split_kernel_function(const string &kernel_name,
-                                                                const DeviceRequestedFeatures &)
-{
-  const CUDAContextScope scope(device);
-
-  CUfunction func;
-  const CUresult result = cuModuleGetFunction(
-      &func, device->cuModule, (string("kernel_cuda_") + kernel_name).data());
-  if (result != CUDA_SUCCESS) {
-    device->set_error(string_printf("Could not find kernel \"kernel_cuda_%s\" in module (%s)",
-                                    kernel_name.data(),
-                                    cuewErrorString(result)));
-    return NULL;
-  }
-
-  return new CUDASplitKernelFunction(device, func);
-}
-
-int2 CUDASplitKernel::split_kernel_local_size()
-{
-  return make_int2(32, 1);
-}
-
-int2 CUDASplitKernel::split_kernel_global_size(device_memory &kg,
-                                               device_memory &data,
-                                               DeviceTask & /*task*/)
-{
-  CUDAContextScope scope(device);
-  size_t free;
-  size_t total;
-
-  cuda_assert(cuMemGetInfo(&free, &total));
-
-  VLOG(1) << "Maximum device allocation size: " << string_human_readable_number(free)
-          << " bytes. (" << string_human_readable_size(free) << ").";
-
-  size_t num_elements = max_elements_for_max_buffer_size(kg, data, free / 2);
-  size_t side = round_down((int)sqrt(num_elements), 32);
-  int2 global_size = make_int2(side, round_down(num_elements / side, 16));
-  VLOG(1) << "Global size: " << global_size << ".";
-  return global_size;
 }
 
 CCL_NAMESPACE_END

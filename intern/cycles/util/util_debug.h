@@ -79,9 +79,6 @@ class DebugFlags {
      * CPUs and GPUs can be selected here instead.
      */
     BVHLayout bvh_layout;
-
-    /* Whether split kernel is used */
-    bool split_kernel;
   };
 
   /* Descriptor of CUDA feature-set to be used. */
@@ -94,9 +91,6 @@ class DebugFlags {
     /* Whether adaptive feature based runtime compile is enabled or not.
      * Requires the CUDA Toolkit and only works on Linux atm. */
     bool adaptive_compile;
-
-    /* Whether split kernel is used */
-    bool split_kernel;
   };
 
   /* Descriptor of OptiX feature-set to be used. */

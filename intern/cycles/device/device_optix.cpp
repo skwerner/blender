@@ -301,12 +301,10 @@ class OptiXDevice : public CUDADevice {
   }
 
   string compile_kernel_get_common_cflags(const DeviceRequestedFeatures &requested_features,
-                                          bool filter,
-                                          bool /*split*/) override
+                                          bool filter) override
   {
-    // Split kernel is not supported in OptiX
-    string common_cflags = CUDADevice::compile_kernel_get_common_cflags(
-        requested_features, filter, false);
+    string common_cflags = CUDADevice::compile_kernel_get_common_cflags(requested_features,
+                                                                        filter);
 
     // Add OptiX SDK include directory to include paths
     const char *optix_sdk_path = getenv("OPTIX_ROOT_DIR");

@@ -42,7 +42,6 @@
 #  include "kernel/kernel_compat_cpu.h"
 #  include "kernel/kernel_globals.h"
 #  include "kernel/kernel_random.h"
-#  include "kernel/split/kernel_split_data_types.h"
 
 #  include "render/hair.h"
 #  include "render/mesh.h"

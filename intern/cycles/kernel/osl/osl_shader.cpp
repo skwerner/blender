@@ -20,7 +20,6 @@
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_types.h"
-#include "kernel/split/kernel_split_data_types.h"
 #include "kernel/kernel_globals.h"
 
 #include "kernel/geom/geom_object.h"

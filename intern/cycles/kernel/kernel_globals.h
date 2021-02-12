@@ -78,10 +78,6 @@ typedef struct KernelGlobals {
   CoverageMap *coverage_material;
   CoverageMap *coverage_asset;
 
-  /* split kernel */
-  SplitData split_data;
-  SplitParams split_param_data;
-
   int2 global_size;
   int2 global_id;
 

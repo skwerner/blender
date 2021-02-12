@@ -24,11 +24,9 @@
 #include "kernel/kernel_compat_cpu.h"
 
 #ifndef KERNEL_STUB
-#  ifndef __SPLIT_KERNEL__
 #    include "kernel/kernel_math.h"
 #    include "kernel/kernel_types.h"
 
-#    include "kernel/split/kernel_split_data.h"
 #    include "kernel/kernel_globals.h"
 
 #    include "kernel/kernel_color.h"
@@ -37,40 +35,9 @@
 #    include "kernel/kernel_path.h"
 #    include "kernel/kernel_path_branched.h"
 #    include "kernel/kernel_bake.h"
-#  else
-#    include "kernel/split/kernel_split_common.h"
-
-#    include "kernel/split/kernel_data_init.h"
-#    include "kernel/split/kernel_path_init.h"
-#    include "kernel/split/kernel_scene_intersect.h"
-#    include "kernel/split/kernel_lamp_emission.h"
-#    include "kernel/split/kernel_do_volume.h"
-#    include "kernel/split/kernel_queue_enqueue.h"
-#    include "kernel/split/kernel_indirect_background.h"
-#    include "kernel/split/kernel_shader_setup.h"
-#    include "kernel/split/kernel_shader_sort.h"
-#    include "kernel/split/kernel_shader_eval.h"
-#    include "kernel/split/kernel_holdout_emission_blurring_pathtermination_ao.h"
-#    include "kernel/split/kernel_subsurface_scatter.h"
-#    include "kernel/split/kernel_direct_lighting.h"
-#    include "kernel/split/kernel_shadow_blocked_ao.h"
-#    include "kernel/split/kernel_shadow_blocked_dl.h"
-#    include "kernel/split/kernel_enqueue_inactive.h"
-#    include "kernel/split/kernel_next_iteration_setup.h"
-#    include "kernel/split/kernel_indirect_subsurface.h"
-#    include "kernel/split/kernel_buffer_update.h"
-#    include "kernel/split/kernel_adaptive_stopping.h"
-#    include "kernel/split/kernel_adaptive_filter_x.h"
-#    include "kernel/split/kernel_adaptive_filter_y.h"
-#    include "kernel/split/kernel_adaptive_adjust_samples.h"
-#  endif /* __SPLIT_KERNEL__ */
 #else
 #  define STUB_ASSERT(arch, name) \
     assert(!(#name " kernel stub for architecture " #arch " was called!"))
-
-#  ifdef __SPLIT_KERNEL__
-#    include "kernel/split/kernel_data_init.h"
-#  endif /* __SPLIT_KERNEL__ */
 #endif   /* KERNEL_STUB */
 // clang-format on
 

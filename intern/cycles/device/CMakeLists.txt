@@ -44,7 +44,6 @@ set(SRC
   device_multi.cpp
   device_opencl.cpp
   device_optix.cpp
-  device_split_kernel.cpp
   device_task.cpp
 )
 
@@ -73,7 +72,6 @@ set(SRC_HEADERS
   device_memory.h
   device_intern.h
   device_network.h
-  device_split_kernel.h
   device_task.h
 )
 

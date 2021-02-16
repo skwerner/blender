@@ -257,6 +257,16 @@ set(SRC_GEOM_HEADERS
   geom/geom_volume.h
 )
 
+set(SRC_INTEGRATOR_HEADERS
+  integrator/kernel_generate_camera_rays.h
+  integrator/kernel_intersect_closest.h
+  integrator/kernel_intersect_shadow.h
+  integrator/kernel_shadow.h
+  integrator/kernel_subsurface.h
+  integrator/kernel_surface.h
+  integrator/kernel_volume.h
+)
+
 set(SRC_FILTER_HEADERS
   filter/filter.h
   filter/filter_defines.h
@@ -356,6 +366,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
     ${SRC_BVH_HEADERS}
     ${SRC_SVM_HEADERS}
     ${SRC_GEOM_HEADERS}
+    ${SRC_INTEGRATOR_HEADERS}
     ${SRC_CLOSURE_HEADERS}
     ${SRC_UTIL_HEADERS}
   )
@@ -546,6 +557,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
           ${SRC_BVH_HEADERS}
           ${SRC_SVM_HEADERS}
           ${SRC_GEOM_HEADERS}
+          ${SRC_INTEGRATOR_HEADERS}
           ${SRC_CLOSURE_HEADERS}
           ${SRC_UTIL_HEADERS}
         COMMAND ${CUBIN_CC_ENV}
@@ -569,6 +581,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
           ${SRC_BVH_HEADERS}
           ${SRC_SVM_HEADERS}
           ${SRC_GEOM_HEADERS}
+          ${SRC_INTEGRATOR_HEADERS}
           ${SRC_CLOSURE_HEADERS}
           ${SRC_UTIL_HEADERS}
         COMMAND
@@ -657,12 +670,14 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_FILTER_HEADERS}
   ${SRC_SVM_HEADERS}
   ${SRC_GEOM_HEADERS}
+  ${SRC_INTEGRATOR_HEADERS}
 )
 
 source_group("bvh" FILES ${SRC_BVH_HEADERS})
 source_group("closure" FILES ${SRC_CLOSURE_HEADERS})
 source_group("filter" FILES ${SRC_FILTER_HEADERS})
 source_group("geom" FILES ${SRC_GEOM_HEADERS})
+source_group("integrator" FILES ${SRC_INTEGATOR_HEADERS})
 source_group("kernel" FILES ${SRC_HEADERS})
 source_group("kernels\\cpu" FILES ${SRC_CPU_KERNELS} ${SRC_KERNELS_CPU_HEADERS})
 source_group("kernels\\cuda" FILES ${SRC_CUDA_KERNELS} ${SRC_KERNELS_CUDA_HEADERS})
@@ -699,6 +714,7 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CLOSURE_HEADERS}" ${CYCLES_IN
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_FILTER_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/filter)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/svm)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_INTEGRATOR_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/integrator)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
 
 

@@ -49,4 +49,20 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
 void KERNEL_FUNCTION_FULL_NAME(bake)(
     KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
 
+/* ********************************************************************************************* */
+/* *                            *** The new split kernel ***                                   * */
+/* ********************************************************************************************* */
+
+#define KERNEL_INTEGRATOR_FUNCTION(name) void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg)
+
+KERNEL_INTEGRATOR_FUNCTION(generate_camera_rays);
+KERNEL_INTEGRATOR_FUNCTION(intersect_closest);
+KERNEL_INTEGRATOR_FUNCTION(intersect_shadow);
+KERNEL_INTEGRATOR_FUNCTION(shadow);
+KERNEL_INTEGRATOR_FUNCTION(subsurface);
+KERNEL_INTEGRATOR_FUNCTION(surface);
+KERNEL_INTEGRATOR_FUNCTION(volume);
+
+#undef KERNEL_INTEGRATOR_FUNCTION
+
 #undef KERNEL_ARCH

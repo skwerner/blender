@@ -29,6 +29,14 @@
 
 #    include "kernel/kernel_globals.h"
 
+#    include "kernel/integrator/kernel_generate_camera_rays.h"
+#    include "kernel/integrator/kernel_intersect_closest.h"
+#    include "kernel/integrator/kernel_intersect_shadow.h"
+#    include "kernel/integrator/kernel_shadow.h"
+#    include "kernel/integrator/kernel_subsurface.h"
+#    include "kernel/integrator/kernel_surface.h"
+#    include "kernel/integrator/kernel_volume.h"
+
 #    include "kernel/kernel_color.h"
 #    include "kernel/kernels/cpu/kernel_cpu_image.h"
 #    include "kernel/kernel_film.h"
@@ -133,6 +141,34 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
   }
 #endif /* KERNEL_STUB */
 }
+
+/* ********************************************************************************************* */
+/* *                            *** The new split kernel ***                                   * */
+/* ********************************************************************************************* */
+
+#ifdef KERNEL_STUB
+#  define DEFINE_INTEGRATOR_KERNEL(name) \
+    void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * /*kg*/) \
+    { \
+      STUB_ASSERT(KERNEL_ARCH, name); \
+    }
+#else
+#  define DEFINE_INTEGRATOR_KERNEL(name) \
+    void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg) \
+    { \
+      kernel_integrate_##name(kg); \
+    }
+#endif
+
+DEFINE_INTEGRATOR_KERNEL(generate_camera_rays)
+DEFINE_INTEGRATOR_KERNEL(intersect_closest)
+DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
+DEFINE_INTEGRATOR_KERNEL(shadow)
+DEFINE_INTEGRATOR_KERNEL(subsurface)
+DEFINE_INTEGRATOR_KERNEL(surface)
+DEFINE_INTEGRATOR_KERNEL(volume)
+
+#undef DEFINE_INTEGRATOR_KERNEL
 
 #undef KERNEL_STUB
 #undef STUB_ASSERT

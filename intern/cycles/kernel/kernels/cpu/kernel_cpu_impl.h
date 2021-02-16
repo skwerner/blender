@@ -148,15 +148,16 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
 
 #ifdef KERNEL_STUB
 #  define DEFINE_INTEGRATOR_KERNEL(name) \
-    void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * /*kg*/) \
+    void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals * /*kg*/, \
+                                         IntegratorState * /*state*/) \
     { \
       STUB_ASSERT(KERNEL_ARCH, name); \
     }
 #else
 #  define DEFINE_INTEGRATOR_KERNEL(name) \
-    void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg) \
+    void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *kg, IntegratorState *state) \
     { \
-      kernel_integrate_##name(kg); \
+      kernel_integrate_##name(kg, state); \
     }
 #endif
 

@@ -19,8 +19,11 @@
 
 /* CPU Kernel Interface */
 
-#include "kernel/kernel_types.h"
 #include "util/util_types.h"
+
+#include "kernel/kernel_types.h"
+
+#include "kernel/integrator/integrator_state.h"
 
 CCL_NAMESPACE_BEGIN
 

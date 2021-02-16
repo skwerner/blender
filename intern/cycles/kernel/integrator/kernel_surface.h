@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_surface(KernelGlobals * /*kg*/)
+ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS)
 {
 }
 

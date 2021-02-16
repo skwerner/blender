@@ -147,7 +147,8 @@ template<typename F> class KernelFunctions {
   F kernel;
 };
 
-using SplitKernelFunction = KernelFunctions<void (*)(KernelGlobals *)>;
+using SplitKernelFunction =
+    KernelFunctions<void (*)(const KernelGlobals *, IntegratorState *state)>;
 
 class CPUDevice : public Device {
  public:

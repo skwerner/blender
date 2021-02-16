@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_intersect_shadow(KernelGlobals * /*kg*/)
+ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
 }
 

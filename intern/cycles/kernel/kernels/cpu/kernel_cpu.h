@@ -53,7 +53,8 @@ void KERNEL_FUNCTION_FULL_NAME(bake)(
 /* *                            *** The new split kernel ***                                   * */
 /* ********************************************************************************************* */
 
-#define KERNEL_INTEGRATOR_FUNCTION(name) void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg)
+#define KERNEL_INTEGRATOR_FUNCTION(name) \
+  void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *kg, IntegratorState *state)
 
 KERNEL_INTEGRATOR_FUNCTION(generate_camera_rays);
 KERNEL_INTEGRATOR_FUNCTION(intersect_closest);

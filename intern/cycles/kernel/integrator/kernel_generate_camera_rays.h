@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_generate_camera_rays(KernelGlobals * /*kg*/)
+ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS)
 {
 }
 

@@ -43,26 +43,24 @@
 
 CCL_NAMESPACE_BEGIN
 
-#ifndef __SPLIT_KERNEL__
-
 /* Path Tracing */
 
 void KERNEL_FUNCTION_FULL_NAME(path_trace)(
     KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
 {
-#  ifdef KERNEL_STUB
+#ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, path_trace);
-#  else
-#    ifdef __BRANCHED_PATH__
+#else
+#  ifdef __BRANCHED_PATH__
   if (kernel_data.integrator.branched) {
     kernel_branched_path_trace(kg, buffer, sample, x, y, offset, stride);
   }
   else
-#    endif
+#  endif
   {
     kernel_path_trace(kg, buffer, sample, x, y, offset, stride);
   }
-#  endif /* KERNEL_STUB */
+#endif /* KERNEL_STUB */
 }
 
 /* Film */
@@ -76,11 +74,11 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(KernelGlobals *kg,
                                                 int offset,
                                                 int stride)
 {
-#  ifdef KERNEL_STUB
+#ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, convert_to_byte);
-#  else
+#else
   kernel_film_convert_to_byte(kg, rgba, buffer, sample_scale, x, y, offset, stride);
-#  endif /* KERNEL_STUB */
+#endif /* KERNEL_STUB */
 }
 
 void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
@@ -92,11 +90,11 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
                                                       int offset,
                                                       int stride)
 {
-#  ifdef KERNEL_STUB
+#ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, convert_to_half_float);
-#  else
+#else
   kernel_film_convert_to_half_float(kg, rgba, buffer, sample_scale, x, y, offset, stride);
-#  endif /* KERNEL_STUB */
+#endif /* KERNEL_STUB */
 }
 
 /* Bake */
@@ -104,13 +102,13 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
 void KERNEL_FUNCTION_FULL_NAME(bake)(
     KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
 {
-#  ifdef KERNEL_STUB
+#ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, bake);
-#  else
-#    ifdef __BAKING__
+#else
+#  ifdef __BAKING__
   kernel_bake_evaluate(kg, buffer, sample, x, y, offset, stride);
-#    endif
-#  endif /* KERNEL_STUB */
+#  endif
+#endif /* KERNEL_STUB */
 }
 
 /* Shader Evaluate */
@@ -124,73 +122,17 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
                                        int offset,
                                        int sample)
 {
-#  ifdef KERNEL_STUB
+#ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, shader);
-#  else
+#else
   if (type == SHADER_EVAL_DISPLACE) {
     kernel_displace_evaluate(kg, input, output, i);
   }
   else {
     kernel_background_evaluate(kg, input, output, i);
   }
-#  endif /* KERNEL_STUB */
+#endif /* KERNEL_STUB */
 }
-
-#else /* __SPLIT_KERNEL__ */
-
-/* Split Kernel Path Tracing */
-
-#  ifdef KERNEL_STUB
-#    define DEFINE_SPLIT_KERNEL_FUNCTION(name) \
-      void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg, KernelData * /*data*/) \
-      { \
-        STUB_ASSERT(KERNEL_ARCH, name); \
-      }
-
-#    define DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(name, type) \
-      void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg, KernelData * /*data*/) \
-      { \
-        STUB_ASSERT(KERNEL_ARCH, name); \
-      }
-#  else
-#    define DEFINE_SPLIT_KERNEL_FUNCTION(name) \
-      void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg, KernelData * /*data*/) \
-      { \
-        kernel_##name(kg); \
-      }
-
-#    define DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(name, type) \
-      void KERNEL_FUNCTION_FULL_NAME(name)(KernelGlobals * kg, KernelData * /*data*/) \
-      { \
-        ccl_local type locals; \
-        kernel_##name(kg, &locals); \
-      }
-#  endif /* KERNEL_STUB */
-
-DEFINE_SPLIT_KERNEL_FUNCTION(path_init)
-DEFINE_SPLIT_KERNEL_FUNCTION(scene_intersect)
-DEFINE_SPLIT_KERNEL_FUNCTION(lamp_emission)
-DEFINE_SPLIT_KERNEL_FUNCTION(do_volume)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(queue_enqueue, QueueEnqueueLocals)
-DEFINE_SPLIT_KERNEL_FUNCTION(indirect_background)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(shader_setup, uint)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(shader_sort, ShaderSortLocals)
-DEFINE_SPLIT_KERNEL_FUNCTION(shader_eval)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(holdout_emission_blurring_pathtermination_ao,
-                                    BackgroundAOLocals)
-DEFINE_SPLIT_KERNEL_FUNCTION(subsurface_scatter)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(direct_lighting, uint)
-DEFINE_SPLIT_KERNEL_FUNCTION(shadow_blocked_ao)
-DEFINE_SPLIT_KERNEL_FUNCTION(shadow_blocked_dl)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(enqueue_inactive, uint)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(next_iteration_setup, uint)
-DEFINE_SPLIT_KERNEL_FUNCTION(indirect_subsurface)
-DEFINE_SPLIT_KERNEL_FUNCTION_LOCALS(buffer_update, uint)
-DEFINE_SPLIT_KERNEL_FUNCTION(adaptive_stopping)
-DEFINE_SPLIT_KERNEL_FUNCTION(adaptive_filter_x)
-DEFINE_SPLIT_KERNEL_FUNCTION(adaptive_filter_y)
-DEFINE_SPLIT_KERNEL_FUNCTION(adaptive_adjust_samples)
-#endif   /* __SPLIT_KERNEL__ */
 
 #undef KERNEL_STUB
 #undef STUB_ASSERT

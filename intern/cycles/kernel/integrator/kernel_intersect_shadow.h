@@ -18,6 +18,24 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
+  kernel_assert(INTEGRATOR_STATE(shadow_ray, t) != 0.0f);
+
+  /* Scene ray intersection. */
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, t) = 0.0f;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, u) = 0.0f;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, v) = 0.0f;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, object) = OBJECT_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, prim) = PRIM_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, type) = PRIMITIVE_NONE;
+
+#if INTEGRATOR_SHADOW_ISECT_SIZE > 1
+  /* Null terminator for array. */
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, object) = OBJECT_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, prim) = PRIM_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, type) = PRIMITIVE_NONE;
+#endif
+
+  /* Queue shadow kernel or nothing if opaque. */
 }
 
 CCL_NAMESPACE_END

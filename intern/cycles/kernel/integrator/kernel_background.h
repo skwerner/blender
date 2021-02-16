@@ -16,20 +16,12 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
+ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS, ccl_global float *render_buffer)
 {
-  kernel_assert(INTEGRATOR_STATE(ray, t) != 0.0f);
+  kernel_assert(INTEGRATOR_STATE(isect, object) == OBJECT_NONE);
 
-  /* Scene ray intersection. */
-  INTEGRATOR_STATE_WRITE(isect, t) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, u) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, v) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, Ng) = make_float3(0.0f, 0.0f, 0.0f);
-  INTEGRATOR_STATE_WRITE(isect, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_WRITE(isect, prim) = PRIM_NONE;
-  INTEGRATOR_STATE_WRITE(isect, type) = PRIMITIVE_NONE;
-
-  /* Queue background, surface, or volume kernel. */
+  /* Write to render buffer. */
+  render_buffer[0] = 0.0f;
 }
 
 CCL_NAMESPACE_END

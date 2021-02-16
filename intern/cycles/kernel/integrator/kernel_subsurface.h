@@ -18,6 +18,19 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_subsurface(INTEGRATOR_STATE_ARGS)
 {
+  /* Scatter. */
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+
+  INTEGRATOR_STATE_WRITE(isect, t) = 0.0f;
+  INTEGRATOR_STATE_WRITE(isect, u) = 0.0f;
+  INTEGRATOR_STATE_WRITE(isect, v) = 0.0f;
+  INTEGRATOR_STATE_WRITE(isect, Ng) = make_float3(0.0f, 0.0f, 0.0f);
+  INTEGRATOR_STATE_WRITE(isect, object) = OBJECT_NONE;
+  INTEGRATOR_STATE_WRITE(isect, prim) = PRIM_NONE;
+  INTEGRATOR_STATE_WRITE(isect, type) = PRIMITIVE_NONE;
+  INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
+
+  /* Queue surface kernel or nothing. */
 }
 
 CCL_NAMESPACE_END

@@ -29,6 +29,7 @@
 
 #    include "kernel/kernel_globals.h"
 
+#    include "kernel/integrator/kernel_background.h"
 #    include "kernel/integrator/kernel_generate_camera_rays.h"
 #    include "kernel/integrator/kernel_intersect_closest.h"
 #    include "kernel/integrator/kernel_intersect_shadow.h"
@@ -161,13 +162,31 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
     }
 #endif
 
+#ifdef KERNEL_STUB
+#  define DEFINE_INTEGRATOR_OUTPUT_KERNEL(name) \
+    void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals * /*kg*/, \
+                                         IntegratorState * /*state*/, \
+                                         ccl_global float *render_buffer) \
+    { \
+      STUB_ASSERT(KERNEL_ARCH, name); \
+    }
+#else
+#  define DEFINE_INTEGRATOR_OUTPUT_KERNEL(name) \
+    void KERNEL_FUNCTION_FULL_NAME(name)( \
+        const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer) \
+    { \
+      kernel_integrate_##name(kg, state, render_buffer); \
+    }
+#endif
+
+DEFINE_INTEGRATOR_OUTPUT_KERNEL(background)
 DEFINE_INTEGRATOR_KERNEL(generate_camera_rays)
 DEFINE_INTEGRATOR_KERNEL(intersect_closest)
 DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
-DEFINE_INTEGRATOR_KERNEL(shadow)
+DEFINE_INTEGRATOR_OUTPUT_KERNEL(shadow)
 DEFINE_INTEGRATOR_KERNEL(subsurface)
-DEFINE_INTEGRATOR_KERNEL(surface)
-DEFINE_INTEGRATOR_KERNEL(volume)
+DEFINE_INTEGRATOR_OUTPUT_KERNEL(surface)
+DEFINE_INTEGRATOR_OUTPUT_KERNEL(volume)
 
 #undef DEFINE_INTEGRATOR_KERNEL
 

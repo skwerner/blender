@@ -258,6 +258,8 @@ set(SRC_GEOM_HEADERS
 )
 
 set(SRC_INTEGRATOR_HEADERS
+  integrator/integrator_state.h
+  integrator/kernel_background.h
   integrator/kernel_generate_camera_rays.h
   integrator/kernel_intersect_closest.h
   integrator/kernel_intersect_shadow.h

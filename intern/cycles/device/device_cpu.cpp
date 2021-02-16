@@ -147,8 +147,10 @@ template<typename F> class KernelFunctions {
   F kernel;
 };
 
-using SplitKernelFunction =
+using IntegratorFunction =
     KernelFunctions<void (*)(const KernelGlobals *, IntegratorState *state)>;
+using IntegratorOutputFunction = KernelFunctions<void (*)(
+    const KernelGlobals *, IntegratorState *state, ccl_global float *render_buffer)>;
 
 class CPUDevice : public Device {
  public:
@@ -226,13 +228,14 @@ class CPUDevice : public Device {
   KernelFunctions<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
       filter_finalize_kernel;
 
-  SplitKernelFunction generate_camera_rays_kernel;
-  SplitKernelFunction intersect_closest_kernel;
-  SplitKernelFunction intersect_shadow_kernel;
-  SplitKernelFunction shadow_kernel;
-  SplitKernelFunction subsurface_kernel;
-  SplitKernelFunction surface_kernel;
-  SplitKernelFunction volume_kernel;
+  IntegratorOutputFunction background_kernel;
+  IntegratorFunction generate_camera_rays_kernel;
+  IntegratorFunction intersect_closest_kernel;
+  IntegratorFunction intersect_shadow_kernel;
+  IntegratorOutputFunction shadow_kernel;
+  IntegratorFunction subsurface_kernel;
+  IntegratorOutputFunction surface_kernel;
+  IntegratorOutputFunction volume_kernel;
 
 #define KERNEL_FUNCTIONS(name) \
   KERNEL_NAME_EVAL(cpu, name), KERNEL_NAME_EVAL(cpu_sse2, name), \
@@ -261,6 +264,7 @@ class CPUDevice : public Device {
         REGISTER_KERNEL(filter_construct_transform),
         REGISTER_KERNEL(filter_nlm_construct_gramian),
         REGISTER_KERNEL(filter_finalize),
+        REGISTER_KERNEL(background),
         REGISTER_KERNEL(generate_camera_rays),
         REGISTER_KERNEL(intersect_closest),
         REGISTER_KERNEL(intersect_shadow),

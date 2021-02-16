@@ -36,7 +36,8 @@ ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_WRITE(ray, t) = FLT_MAX;
   INTEGRATOR_STATE_WRITE(ray, time) = 0.0f;
 
-  /* Queue intersect_closest kernel. */
+  /* Continue with intersect_closest kernel. */
+  INTEGRATOR_FLOW_QUEUE(intersect_closest);
 }
 
 CCL_NAMESPACE_END

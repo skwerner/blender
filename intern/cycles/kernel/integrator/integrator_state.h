@@ -38,16 +38,7 @@
  * INTEGRATOR_STATE_ARRAY(x, index, y): read x[index].y
  * INTEGRATOR_STATE_ARRAY_WRITE(x, index, y): write x[index].y
  *
- * Example:
- *
- * void integrator_function(INTEGRATOR_STATE_ARGS, int other_arg)
- * {
- *    const float3 P = INTEGRATOR_STATE(ray, P);
- *    const float ray_pdf = integrator_other_function(INTEGRATOR_STATE_PASS, P);
- *    INTEGRATOR_STATE_WRITE(path, ray_pdf) = ray_pdf;
- *    INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
- *    INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = SHADER_NONE;
- * }
+ * INTEGRATOR_STATE_COPY(to_x, from_x): copy contents of one nested struct to another
  *
  * NOTE: if we end up with a device that passes no arguments, the leading comma will be a problem.
  * Can solve it with more macros if we encouter it, but rather ugly so postpone for now.
@@ -127,7 +118,8 @@ typedef struct IntegratorVolumeStack {
 /* Subsurface closure state for subsurface kernel. */
 #ifdef __SUBSURFACE__
 typedef struct IntegratorSubsurfaceState {
-  /* TODO: BSSRDF closure parameters */
+  /* TODO: actual BSSRDF closure parameters */
+  float3 albedo;
 } IntegratorSubsurfaceState;
 #endif
 
@@ -168,16 +160,23 @@ typedef struct IntegratorState {
 #ifdef __KERNEL_CPU__
 
 /* Scalar access on CPU. */
+
 #  define INTEGRATOR_STATE_ARGS const KernelGlobals *kg, IntegratorState *state
 #  define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *kg, const IntegratorState *state
 #  define INTEGRATOR_STATE_PASS kg, state
+
 #  define INTEGRATOR_STATE(nested_struct, member) \
     (((const IntegratorState *)state)->nested_struct.member)
 #  define INTEGRATOR_STATE_WRITE(nested_struct, member) (state->nested_struct.member)
+
 #  define INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member) \
     (((const IntegratorState *)state)->nested_struct[array_index].member)
 #  define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
     ((state)->nested_struct[array_index].member)
+
+#  define INTEGRATOR_STATE_COPY(to_nested_struct, from_nested_struct) \
+    memcpy( \
+        &state->to_nested_struct, &state->from_nested_struct, sizeof(state->from_nested_struct));
 
 #else /* __KERNEL__CPU__ */
 

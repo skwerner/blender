@@ -29,7 +29,25 @@ ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_WRITE(isect, prim) = PRIM_NONE;
   INTEGRATOR_STATE_WRITE(isect, type) = PRIMITIVE_NONE;
 
-  /* Queue background, surface, or volume kernel. */
+#ifdef __VOLUME__
+  if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {
+    /* Continue with volume kernel if we are inside a volume, regardless
+     * if we hit anything. */
+    INTEGRATOR_FLOW_QUEUE(volume);
+    return;
+  }
+#endif
+
+  if (INTEGRATOR_STATE(isect, object) == OBJECT_NONE) {
+    /* Nothing hit, continue with background kernel. */
+    INTEGRATOR_FLOW_QUEUE(background);
+    return;
+  }
+  else {
+    /* Hit a surface continue with surface kernel. */
+    INTEGRATOR_FLOW_QUEUE(surface);
+    return;
+  }
 }
 
 CCL_NAMESPACE_END

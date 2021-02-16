@@ -23,6 +23,7 @@
 
 #include "kernel/kernel_types.h"
 
+#include "kernel/integrator/integrator_flow.h"
 #include "kernel/integrator/integrator_state.h"
 
 CCL_NAMESPACE_BEGIN

@@ -18,19 +18,43 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_subsurface(INTEGRATOR_STATE_ARGS)
 {
-  /* Scatter. */
+#ifdef __SUBSURFACE__
+  /* Subsurface scattering to find exit point. */
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
 
-  INTEGRATOR_STATE_WRITE(isect, t) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, u) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, v) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, Ng) = make_float3(0.0f, 0.0f, 0.0f);
-  INTEGRATOR_STATE_WRITE(isect, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_WRITE(isect, prim) = PRIM_NONE;
-  INTEGRATOR_STATE_WRITE(isect, type) = PRIMITIVE_NONE;
+  /* We're done if no exit point found. */
+  const bool exit_point_found = false;
+  if (!exit_point_found) {
+    INTEGRATOR_FLOW_END;
+    return;
+  }
+
+  /* Direct lighting. */
+  const bool direct_lighting = false;
+  if (direct_lighting) {
+    /* Generate shadow ray. */
+    INTEGRATOR_STATE_WRITE(shadow_ray, P) = make_float3(0.0f, 0.0f, 0.0f);
+    INTEGRATOR_STATE_WRITE(shadow_ray, D) = make_float3(0.0f, 0.0f, 1.0f);
+    INTEGRATOR_STATE_WRITE(shadow_ray, t) = FLT_MAX;
+    INTEGRATOR_STATE_WRITE(shadow_ray, time) = 0.0f;
+
+    /* Copy entire state and volume stack */
+    INTEGRATOR_STATE_WRITE(shadow_path, throughput) = INTEGRATOR_STATE(path, throughput);
+
+    /* Branch of shadow kernel. */
+    INTEGRATOR_FLOW_SHADOW_QUEUE(intersect_shadow);
+  }
+
+  /* Sample BSDF and continue path. */
+  INTEGRATOR_STATE_WRITE(ray, P) = make_float3(0.0f, 0.0f, 0.0f);
+  INTEGRATOR_STATE_WRITE(ray, D) = make_float3(0.0f, 0.0f, 1.0f);
+  INTEGRATOR_STATE_WRITE(ray, t) = FLT_MAX;
+  INTEGRATOR_STATE_WRITE(ray, time) = 0.0f;
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
-  /* Queue surface kernel or nothing. */
+  /* Queue intersect_closest kernel. */
+  INTEGRATOR_FLOW_QUEUE(intersect_closest);
+#endif /* __SUBSURFACE__ */
 }
 
 CCL_NAMESPACE_END

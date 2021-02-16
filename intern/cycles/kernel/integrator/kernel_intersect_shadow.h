@@ -35,7 +35,21 @@ ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, type) = PRIMITIVE_NONE;
 #endif
 
-  /* Queue shadow kernel or nothing if opaque. */
+  const bool shadow_opaque = true;
+  if (INTEGRATOR_STATE_ARRAY(shadow_isect, 0, object) != OBJECT_NONE && shadow_opaque) {
+    /* Hit an opaque surface, shadow path ends here. */
+    INTEGRATOR_FLOW_SHADOW_END;
+    return;
+  }
+  else {
+    /* Hit nothing or transparent surfaces, continue to shadow kernel
+     * for shading and render buffer output.
+     *
+     * TODO: could also write to render buffer directly if no transparent shadows?
+     * Could save a kernel execution for the common case. */
+    INTEGRATOR_FLOW_SHADOW_QUEUE(shadow);
+    return;
+  }
 }
 
 CCL_NAMESPACE_END

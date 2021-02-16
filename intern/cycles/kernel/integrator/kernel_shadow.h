@@ -30,6 +30,9 @@ ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS, ccl_global float 
       /* Write to render buffer. */
       render_buffer[0] = 0.0f;
     }
+
+    INTEGRATOR_FLOW_SHADOW_END;
+    return;
   }
   else {
     /* Continue shadow path. */
@@ -37,7 +40,8 @@ ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS, ccl_global float 
     INTEGRATOR_STATE_WRITE(shadow_ray, t) = new_t;
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
-    /* Queue intersect_shadow kernel. */
+    INTEGRATOR_FLOW_SHADOW_QUEUE(intersect_shadow);
+    return;
   }
 }
 

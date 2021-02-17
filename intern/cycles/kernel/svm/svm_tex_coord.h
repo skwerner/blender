@@ -19,7 +19,7 @@ CCL_NAMESPACE_BEGIN
 /* Texture Coordinate Node */
 
 ccl_device void svm_node_tex_coord(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
+    const KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
 {
   float3 data;
   uint type = node.y;
@@ -95,7 +95,7 @@ ccl_device void svm_node_tex_coord(
 }
 
 ccl_device void svm_node_tex_coord_bump_dx(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
+    const KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
 {
 #ifdef __RAY_DIFFERENTIALS__
   float3 data;
@@ -175,7 +175,7 @@ ccl_device void svm_node_tex_coord_bump_dx(
 }
 
 ccl_device void svm_node_tex_coord_bump_dy(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
+    const KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
 {
 #ifdef __RAY_DIFFERENTIALS__
   float3 data;
@@ -254,7 +254,10 @@ ccl_device void svm_node_tex_coord_bump_dy(
 #endif
 }
 
-ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_normal_map(const KernelGlobals *kg,
+                                    ShaderData *sd,
+                                    float *stack,
+                                    uint4 node)
 {
   uint color_offset, strength_offset, normal_offset, space;
   svm_unpack_node_uchar4(node.y, &color_offset, &strength_offset, &normal_offset, &space);
@@ -348,7 +351,7 @@ ccl_device void svm_node_normal_map(KernelGlobals *kg, ShaderData *sd, float *st
   stack_store_float3(stack, normal_offset, N);
 }
 
-ccl_device void svm_node_tangent(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_tangent(const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
 {
   uint tangent_offset, direction_type, axis;
   svm_unpack_node_uchar3(node.y, &tangent_offset, &direction_type, &axis);

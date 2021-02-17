@@ -21,7 +21,7 @@
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void kernel_path_trace_setup(
-    KernelGlobals *kg, int sample, int x, int y, uint *rng_hash, ccl_addr_space Ray *ray)
+    const KernelGlobals *kg, int sample, int x, int y, uint *rng_hash, ccl_addr_space Ray *ray)
 {
   float filter_u;
   float filter_v;

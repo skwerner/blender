@@ -994,7 +994,7 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
   differential3 ray_dP;
 
 #ifdef __OSL__
-  struct KernelGlobals *osl_globals;
+  const struct KernelGlobals *osl_globals;
   struct PathState *osl_path_state;
 #endif
 

@@ -34,8 +34,11 @@ CCL_NAMESPACE_BEGIN
  * normals */
 
 /* return 3 triangle vertex normals */
-ccl_device_noinline void motion_triangle_shader_setup(
-    KernelGlobals *kg, ShaderData *sd, const Intersection *isect, const Ray *ray, bool is_local)
+ccl_device_noinline void motion_triangle_shader_setup(const KernelGlobals *kg,
+                                                      ShaderData *sd,
+                                                      const Intersection *isect,
+                                                      const Ray *ray,
+                                                      bool is_local)
 {
   /* Get shader. */
   sd->shader = kernel_tex_fetch(__tri_shader, sd->prim);

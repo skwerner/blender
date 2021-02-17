@@ -20,7 +20,7 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __VOLUME_SCATTER__
 
-ccl_device_inline void kernel_path_volume_connect_light(KernelGlobals *kg,
+ccl_device_inline void kernel_path_volume_connect_light(const KernelGlobals *kg,
                                                         ShaderData *sd,
                                                         ShaderData *emission_sd,
                                                         float3 throughput,
@@ -64,7 +64,7 @@ ccl_device_inline void kernel_path_volume_connect_light(KernelGlobals *kg,
 #  endif /* __EMISSION__ */
 }
 
-ccl_device_noinline_cpu bool kernel_path_volume_bounce(KernelGlobals *kg,
+ccl_device_noinline_cpu bool kernel_path_volume_bounce(const KernelGlobals *kg,
                                                        ShaderData *sd,
                                                        ccl_addr_space float3 *throughput,
                                                        ccl_addr_space PathState *state,
@@ -130,7 +130,7 @@ ccl_device_noinline_cpu bool kernel_path_volume_bounce(KernelGlobals *kg,
 }
 
 #  if !defined(__SPLIT_KERNEL__) && (defined(__BRANCHED_PATH__) || defined(__VOLUME_DECOUPLED__))
-ccl_device void kernel_branched_path_volume_connect_light(KernelGlobals *kg,
+ccl_device void kernel_branched_path_volume_connect_light(const KernelGlobals *kg,
                                                           ShaderData *sd,
                                                           ShaderData *emission_sd,
                                                           float3 throughput,

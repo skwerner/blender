@@ -18,7 +18,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS, ccl_global float *render_buffer)
+ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS,
+                                        ccl_global float *ccl_restrict render_buffer)
 {
 #ifdef __VOLUME__
   const float3 throughput = INTEGRATOR_STATE(path, throughput);

@@ -40,7 +40,7 @@ typedef struct LightSample {
 /* Regular Light */
 
 ccl_device_inline bool lamp_light_sample(
-    KernelGlobals *kg, int lamp, float randu, float randv, float3 P, LightSample *ls)
+    const KernelGlobals *kg, int lamp, float randu, float randv, float3 P, LightSample *ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
   LightType type = (LightType)klight->type;
@@ -161,7 +161,7 @@ ccl_device_inline bool lamp_light_sample(
 }
 
 ccl_device bool lamp_light_eval(
-    KernelGlobals *kg, int lamp, float3 P, float3 D, float t, LightSample *ls)
+    const KernelGlobals *kg, int lamp, float3 P, float3 D, float t, LightSample *ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
   LightType type = (LightType)klight->type;
@@ -302,7 +302,7 @@ ccl_device bool lamp_light_eval(
 
 /* returns true if the triangle is has motion blur or an instancing transform applied */
 ccl_device_inline bool triangle_world_space_vertices(
-    KernelGlobals *kg, int object, int prim, float time, float3 V[3])
+    const KernelGlobals *kg, int object, int prim, float time, float3 V[3])
 {
   bool has_motion = false;
   const int object_flag = kernel_tex_fetch(__object_flag, object);
@@ -330,7 +330,7 @@ ccl_device_inline bool triangle_world_space_vertices(
   return has_motion;
 }
 
-ccl_device_inline float triangle_light_pdf_area(KernelGlobals *kg,
+ccl_device_inline float triangle_light_pdf_area(const KernelGlobals *kg,
                                                 const float3 Ng,
                                                 const float3 I,
                                                 float t)
@@ -344,7 +344,7 @@ ccl_device_inline float triangle_light_pdf_area(KernelGlobals *kg,
   return t * t * pdf / cos_pi;
 }
 
-ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *sd, float t)
+ccl_device_forceinline float triangle_light_pdf(const KernelGlobals *kg, ShaderData *sd, float t)
 {
   /* A naive heuristic to decide between costly solid angle sampling
    * and simple area sampling, comparing the distance to the triangle plane
@@ -413,7 +413,7 @@ ccl_device_forceinline float triangle_light_pdf(KernelGlobals *kg, ShaderData *s
   }
 }
 
-ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg,
+ccl_device_forceinline void triangle_light_sample(const KernelGlobals *kg,
                                                   int prim,
                                                   int object,
                                                   float randu,
@@ -582,7 +582,7 @@ ccl_device_forceinline void triangle_light_sample(KernelGlobals *kg,
 
 /* Light Distribution */
 
-ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
+ccl_device int light_distribution_sample(const KernelGlobals *kg, float *randu)
 {
   /* This is basically std::upper_bound as used by PBRT, to find a point light or
    * triangle to emit from, proportional to area. a good improvement would be to
@@ -620,12 +620,14 @@ ccl_device int light_distribution_sample(KernelGlobals *kg, float *randu)
 
 /* Generic Light */
 
-ccl_device_inline bool light_select_reached_max_bounces(KernelGlobals *kg, int index, int bounce)
+ccl_device_inline bool light_select_reached_max_bounces(const KernelGlobals *kg,
+                                                        int index,
+                                                        int bounce)
 {
   return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
-ccl_device_noinline bool light_sample(KernelGlobals *kg,
+ccl_device_noinline bool light_sample(const KernelGlobals *kg,
                                       int lamp,
                                       float randu,
                                       float randv,
@@ -662,7 +664,7 @@ ccl_device_noinline bool light_sample(KernelGlobals *kg,
   return lamp_light_sample(kg, lamp, randu, randv, P, ls);
 }
 
-ccl_device_inline int light_select_num_samples(KernelGlobals *kg, int index)
+ccl_device_inline int light_select_num_samples(const KernelGlobals *kg, int index)
 {
   return kernel_tex_fetch(__lights, index).samples;
 }

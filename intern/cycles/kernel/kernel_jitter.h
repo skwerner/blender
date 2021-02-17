@@ -197,7 +197,7 @@ ccl_device void cmj_sample_2D(int s, int N, int p, float *fx, float *fy)
 }
 #endif
 
-ccl_device float pmj_sample_1D(KernelGlobals *kg, int sample, int rng_hash, int dimension)
+ccl_device float pmj_sample_1D(const KernelGlobals *kg, int sample, int rng_hash, int dimension)
 {
   /* Fallback to random */
   if (sample >= NUM_PMJ_SAMPLES) {
@@ -211,7 +211,7 @@ ccl_device float pmj_sample_1D(KernelGlobals *kg, int sample, int rng_hash, int 
   }
 }
 
-ccl_device float2 pmj_sample_2D(KernelGlobals *kg, int sample, int rng_hash, int dimension)
+ccl_device float2 pmj_sample_2D(const KernelGlobals *kg, int sample, int rng_hash, int dimension)
 {
   if (sample >= NUM_PMJ_SAMPLES) {
     const int p = rng_hash + dimension;

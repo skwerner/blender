@@ -52,7 +52,7 @@ ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
 
 #ifdef __SPLIT_KERNEL__
 /* Returns true if there is work */
-ccl_device bool get_next_work_item(KernelGlobals *kg,
+ccl_device bool get_next_work_item(const KernelGlobals *kg,
                                    ccl_global uint *work_pools,
                                    uint total_work_size,
                                    uint ray_index,
@@ -80,7 +80,7 @@ ccl_device bool get_next_work_item(KernelGlobals *kg,
   return (*global_work_index < total_work_size);
 }
 
-ccl_device bool get_next_work(KernelGlobals *kg,
+ccl_device bool get_next_work(const KernelGlobals *kg,
                               ccl_global uint *work_pools,
                               uint total_work_size,
                               uint ray_index,

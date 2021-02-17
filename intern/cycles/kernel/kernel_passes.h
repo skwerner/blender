@@ -22,7 +22,7 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __DENOISING_FEATURES__
 
-ccl_device_inline void kernel_write_denoising_shadow(KernelGlobals *kg,
+ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *kg,
                                                      ccl_global float *buffer,
                                                      int sample,
                                                      float path_total,
@@ -45,7 +45,7 @@ ccl_device_inline void kernel_write_denoising_shadow(KernelGlobals *kg,
   kernel_write_pass_float(buffer + 2, value * value);
 }
 
-ccl_device_inline void kernel_update_denoising_features(KernelGlobals *kg,
+ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *kg,
                                                         ShaderData *sd,
                                                         ccl_addr_space PathState *state,
                                                         PathRadiance *L)
@@ -125,7 +125,7 @@ ccl_device_inline void kernel_update_denoising_features(KernelGlobals *kg,
 #endif /* __DENOISING_FEATURES__ */
 
 #ifdef __KERNEL_DEBUG__
-ccl_device_inline void kernel_write_debug_passes(KernelGlobals *kg,
+ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *kg,
                                                  ccl_global float *buffer,
                                                  PathRadiance *L)
 {
@@ -172,7 +172,7 @@ ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *buffer,
   return depth * 2;
 }
 
-ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg,
+ccl_device_inline void kernel_write_data_passes(const KernelGlobals *kg,
                                                 ccl_global float *buffer,
                                                 PathRadiance *L,
                                                 ShaderData *sd,
@@ -284,7 +284,7 @@ ccl_device_inline void kernel_write_data_passes(KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline void kernel_write_light_passes(KernelGlobals *kg,
+ccl_device_inline void kernel_write_light_passes(const KernelGlobals *kg,
                                                  ccl_global float *buffer,
                                                  PathRadiance *L)
 {
@@ -338,7 +338,7 @@ ccl_device_inline void kernel_write_light_passes(KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline void kernel_write_result(KernelGlobals *kg,
+ccl_device_inline void kernel_write_result(const KernelGlobals *kg,
                                            ccl_global float *buffer,
                                            int sample,
                                            PathRadiance *L)

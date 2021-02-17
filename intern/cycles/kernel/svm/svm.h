@@ -105,14 +105,14 @@ ccl_device_inline bool stack_valid(uint a)
 
 /* Reading Nodes */
 
-ccl_device_inline uint4 read_node(KernelGlobals *kg, int *offset)
+ccl_device_inline uint4 read_node(const KernelGlobals *kg, int *offset)
 {
   uint4 node = kernel_tex_fetch(__svm_nodes, *offset);
   (*offset)++;
   return node;
 }
 
-ccl_device_inline float4 read_node_float(KernelGlobals *kg, int *offset)
+ccl_device_inline float4 read_node_float(const KernelGlobals *kg, int *offset)
 {
   uint4 node = kernel_tex_fetch(__svm_nodes, *offset);
   float4 f = make_float4(__uint_as_float(node.x),
@@ -123,7 +123,7 @@ ccl_device_inline float4 read_node_float(KernelGlobals *kg, int *offset)
   return f;
 }
 
-ccl_device_inline float4 fetch_node_float(KernelGlobals *kg, int offset)
+ccl_device_inline float4 fetch_node_float(const KernelGlobals *kg, int offset)
 {
   uint4 node = kernel_tex_fetch(__svm_nodes, offset);
   return make_float4(__uint_as_float(node.x),
@@ -218,7 +218,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Main Interpreter Loop */
 #if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
-ccl_device_inline void svm_eval_nodes(KernelGlobals *kg,
+ccl_device_inline void svm_eval_nodes(const KernelGlobals *kg,
                                       ShaderData *sd,
                                       ccl_addr_space PathState *state,
                                       ccl_global float *buffer,
@@ -231,7 +231,7 @@ extern "C" __device__ void __direct_callable__svm_eval_nodes(
 #else
 ccl_device_noinline void svm_eval_nodes(
 #endif
-    KernelGlobals *kg,
+    const KernelGlobals *kg,
     ShaderData *sd,
     ccl_addr_space PathState *state,
     ccl_global float *buffer,

@@ -897,7 +897,7 @@ ccl_device void voronoi_n_sphere_radius_4d(float4 coord, float randomness, float
   *outRadius = distance(closestPointToClosestPoint, closestPoint) / 2.0f;
 }
 
-ccl_device void svm_node_tex_voronoi(KernelGlobals *kg,
+ccl_device void svm_node_tex_voronoi(const KernelGlobals *kg,
                                      ShaderData *sd,
                                      float *stack,
                                      uint dimensions,

@@ -23,7 +23,7 @@ CCL_NAMESPACE_BEGIN
  * BSDF evaluation result, split per BSDF type. This is used to accumulate
  * render passes separately. */
 
-ccl_device float3 shader_bsdf_transparency(KernelGlobals *kg, const ShaderData *sd);
+ccl_device float3 shader_bsdf_transparency(const KernelGlobals *kg, const ShaderData *sd);
 
 ccl_device_inline void bsdf_eval_init(BsdfEval *eval,
                                       ClosureType type,
@@ -169,7 +169,7 @@ ccl_device_inline float3 bsdf_eval_sum(const BsdfEval *eval)
  * visible as the first non-transparent hit, while indirectly visible are the
  * bounces after that. */
 
-ccl_device_inline void path_radiance_init(KernelGlobals *kg, PathRadiance *L)
+ccl_device_inline void path_radiance_init(const KernelGlobals *kg, PathRadiance *L)
 {
   /* clear all */
 #ifdef __PASSES__
@@ -236,7 +236,7 @@ ccl_device_inline void path_radiance_init(KernelGlobals *kg, PathRadiance *L)
 #endif
 }
 
-ccl_device_inline void path_radiance_bsdf_bounce(KernelGlobals *kg,
+ccl_device_inline void path_radiance_bsdf_bounce(const KernelGlobals *kg,
                                                  PathRadianceState *L_state,
                                                  ccl_addr_space float3 *throughput,
                                                  BsdfEval *bsdf_eval,
@@ -275,7 +275,7 @@ ccl_device_inline void path_radiance_bsdf_bounce(KernelGlobals *kg,
 }
 
 #ifdef __CLAMP_SAMPLE__
-ccl_device_forceinline void path_radiance_clamp(KernelGlobals *kg, float3 *L, int bounce)
+ccl_device_forceinline void path_radiance_clamp(const KernelGlobals *kg, float3 *L, int bounce)
 {
   float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
                                kernel_data.integrator.sample_clamp_direct;
@@ -285,7 +285,7 @@ ccl_device_forceinline void path_radiance_clamp(KernelGlobals *kg, float3 *L, in
   }
 }
 
-ccl_device_forceinline void path_radiance_clamp_throughput(KernelGlobals *kg,
+ccl_device_forceinline void path_radiance_clamp_throughput(const KernelGlobals *kg,
                                                            float3 *L,
                                                            float3 *throughput,
                                                            int bounce)
@@ -303,7 +303,7 @@ ccl_device_forceinline void path_radiance_clamp_throughput(KernelGlobals *kg,
 
 #endif
 
-ccl_device_inline void path_radiance_accum_emission(KernelGlobals *kg,
+ccl_device_inline void path_radiance_accum_emission(const KernelGlobals *kg,
                                                     PathRadiance *L,
                                                     ccl_addr_space PathState *state,
                                                     float3 throughput,
@@ -336,7 +336,7 @@ ccl_device_inline void path_radiance_accum_emission(KernelGlobals *kg,
   }
 }
 
-ccl_device_inline void path_radiance_accum_ao(KernelGlobals *kg,
+ccl_device_inline void path_radiance_accum_ao(const KernelGlobals *kg,
                                               PathRadiance *L,
                                               ccl_addr_space PathState *state,
                                               float3 throughput,
@@ -401,7 +401,7 @@ ccl_device_inline void path_radiance_accum_total_ao(PathRadiance *L,
 #endif
 }
 
-ccl_device_inline void path_radiance_accum_light(KernelGlobals *kg,
+ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
                                                  PathRadiance *L,
                                                  ccl_addr_space PathState *state,
                                                  float3 throughput,
@@ -475,7 +475,7 @@ ccl_device_inline void path_radiance_accum_total_light(PathRadiance *L,
 #endif
 }
 
-ccl_device_inline void path_radiance_accum_background(KernelGlobals *kg,
+ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
                                                       PathRadiance *L,
                                                       ccl_addr_space PathState *state,
                                                       float3 throughput,
@@ -587,7 +587,7 @@ ccl_device_inline void path_radiance_copy_indirect(PathRadiance *L, const PathRa
 }
 
 #ifdef __SHADOW_TRICKS__
-ccl_device_inline void path_radiance_sum_shadowcatcher(KernelGlobals *kg,
+ccl_device_inline void path_radiance_sum_shadowcatcher(const KernelGlobals *kg,
                                                        PathRadiance *L,
                                                        float3 *L_sum,
                                                        float *alpha)
@@ -619,7 +619,7 @@ ccl_device_inline void path_radiance_sum_shadowcatcher(KernelGlobals *kg,
 }
 #endif
 
-ccl_device_inline float3 path_radiance_clamp_and_sum(KernelGlobals *kg,
+ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
                                                      PathRadiance *L,
                                                      float *alpha)
 {
@@ -687,7 +687,7 @@ ccl_device_inline float3 path_radiance_clamp_and_sum(KernelGlobals *kg,
   return L_sum;
 }
 
-ccl_device_inline void path_radiance_split_denoising(KernelGlobals *kg,
+ccl_device_inline void path_radiance_split_denoising(const KernelGlobals *kg,
                                                      PathRadiance *L,
                                                      float3 *noisy,
                                                      float3 *clean)

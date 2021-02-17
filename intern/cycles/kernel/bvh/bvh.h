@@ -153,7 +153,7 @@ ccl_device_inline bool scene_intersect_valid(const Ray *ray)
   return isfinite_safe(ray->P.x) && isfinite_safe(ray->D.x) && len_squared(ray->D) != 0.0f;
 }
 
-ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect(const KernelGlobals *kg,
                                           const Ray *ray,
                                           const uint visibility,
                                           Intersection *isect)
@@ -239,7 +239,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 }
 
 #ifdef __BVH_LOCAL__
-ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_local(const KernelGlobals *kg,
                                                 const Ray *ray,
                                                 LocalIntersection *local_isect,
                                                 int local_object,
@@ -354,7 +354,7 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
 #endif
 
 #ifdef __SHADOW_RECORD_ALL__
-ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_shadow_all(const KernelGlobals *kg,
                                                      const Ray *ray,
                                                      Intersection *isect,
                                                      uint visibility,
@@ -440,7 +440,7 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
 #endif /* __SHADOW_RECORD_ALL__ */
 
 #ifdef __VOLUME__
-ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_volume(const KernelGlobals *kg,
                                                  const Ray *ray,
                                                  Intersection *isect,
                                                  const uint visibility)
@@ -499,7 +499,7 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
 #endif /* __VOLUME__ */
 
 #ifdef __VOLUME_RECORD_ALL__
-ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
+ccl_device_intersect uint scene_intersect_volume_all(const KernelGlobals *kg,
                                                      const Ray *ray,
                                                      Intersection *isect,
                                                      const uint max_hits,

@@ -24,7 +24,7 @@ CCL_NAMESPACE_BEGIN
  * http://library.imageworks.com/pdfs/imageworks-library-BSSRDF-sampling.pdf
  */
 
-ccl_device_noinline float3 svm_bevel(KernelGlobals *kg,
+ccl_device_noinline float3 svm_bevel(const KernelGlobals *kg,
                                      ShaderData *sd,
                                      ccl_addr_space PathState *state,
                                      float radius,
@@ -198,8 +198,11 @@ ccl_device_noinline float3 svm_bevel(KernelGlobals *kg,
   return is_zero(N) ? sd->N : (sd->flag & SD_BACKFACING) ? -N : N;
 }
 
-ccl_device void svm_node_bevel(
-    KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state, float *stack, uint4 node)
+ccl_device void svm_node_bevel(const KernelGlobals *kg,
+                               ShaderData *sd,
+                               ccl_addr_space PathState *state,
+                               float *stack,
+                               uint4 node)
 {
   uint num_samples, radius_offset, normal_offset, out_offset;
   svm_unpack_node_uchar4(node.y, &num_samples, &radius_offset, &normal_offset, &out_offset);

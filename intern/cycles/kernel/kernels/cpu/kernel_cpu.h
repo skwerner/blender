@@ -17,9 +17,9 @@
 /* Templated common declaration part of all CPU kernels. */
 
 void KERNEL_FUNCTION_FULL_NAME(path_trace)(
-    KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
+    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
 
-void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(const KernelGlobals *kg,
                                                 uchar4 *rgba,
                                                 float *buffer,
                                                 float sample_scale,
@@ -28,7 +28,7 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(KernelGlobals *kg,
                                                 int offset,
                                                 int stride);
 
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       uchar4 *rgba,
                                                       float *buffer,
                                                       float sample_scale,
@@ -37,7 +37,7 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
                                                       int offset,
                                                       int stride);
 
-void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
                                        uint4 *input,
                                        float4 *output,
                                        int type,
@@ -47,7 +47,7 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
                                        int sample);
 
 void KERNEL_FUNCTION_FULL_NAME(bake)(
-    KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
+    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
 
 /* ********************************************************************************************* */
 /* *                            *** The new split kernel ***                                   * */

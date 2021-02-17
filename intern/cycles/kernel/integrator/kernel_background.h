@@ -18,7 +18,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS, ccl_global float *render_buffer)
+ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
+                                            ccl_global float *ccl_restrict render_buffer)
 {
   kernel_assert(INTEGRATOR_STATE(isect, object) == OBJECT_NONE);
 

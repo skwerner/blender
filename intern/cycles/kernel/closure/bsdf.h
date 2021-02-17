@@ -111,7 +111,7 @@ ccl_device_inline float shift_cos_in(float cos_in, const float frequency_multipl
   return val;
 }
 
-ccl_device_inline int bsdf_sample(KernelGlobals *kg,
+ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                   ShaderData *sd,
                                   const ShaderClosure *sc,
                                   float randu,
@@ -484,7 +484,7 @@ ccl_device
 ccl_device_inline
 #endif
     float3
-    bsdf_eval(KernelGlobals *kg,
+    bsdf_eval(const KernelGlobals *kg,
               ShaderData *sd,
               const ShaderClosure *sc,
               const float3 omega_in,
@@ -687,7 +687,7 @@ ccl_device_inline
   return eval;
 }
 
-ccl_device void bsdf_blur(KernelGlobals *kg, ShaderClosure *sc, float roughness)
+ccl_device void bsdf_blur(const KernelGlobals *kg, ShaderClosure *sc, float roughness)
 {
   /* ToDo: do we want to blur volume closures? */
 #ifdef __SVM__

@@ -57,7 +57,7 @@ ccl_device void svm_node_glass_setup(
   }
 }
 
-ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
+ccl_device void svm_node_closure_bsdf(const KernelGlobals *kg,
                                       ShaderData *sd,
                                       float *stack,
                                       uint4 node,
@@ -910,7 +910,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
 }
 
 ccl_device void svm_node_closure_volume(
-    KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, ShaderType shader_type)
+    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, ShaderType shader_type)
 {
 #ifdef __VOLUME__
   /* Only sum extinction for volumes, variable is shared with surface transparency. */
@@ -961,7 +961,7 @@ ccl_device void svm_node_closure_volume(
 #endif
 }
 
-ccl_device void svm_node_principled_volume(KernelGlobals *kg,
+ccl_device void svm_node_principled_volume(const KernelGlobals *kg,
                                            ShaderData *sd,
                                            float *stack,
                                            uint4 node,
@@ -1149,7 +1149,7 @@ ccl_device void svm_node_closure_weight(ShaderData *sd, float *stack, uint weigh
   svm_node_closure_store_weight(sd, weight);
 }
 
-ccl_device void svm_node_emission_weight(KernelGlobals *kg,
+ccl_device void svm_node_emission_weight(const KernelGlobals *kg,
                                          ShaderData *sd,
                                          float *stack,
                                          uint4 node)
@@ -1186,7 +1186,7 @@ ccl_device void svm_node_mix_closure(ShaderData *sd, float *stack, uint4 node)
 /* (Bump) normal */
 
 ccl_device void svm_node_set_normal(
-    KernelGlobals *kg, ShaderData *sd, float *stack, uint in_direction, uint out_normal)
+    const KernelGlobals *kg, ShaderData *sd, float *stack, uint in_direction, uint out_normal)
 {
   float3 normal = stack_load_float3(stack, in_direction);
   sd->N = normal;

@@ -23,7 +23,8 @@
 CCL_NAMESPACE_BEGIN
 
 #ifdef __KERNEL_CPU__
-#  define PROFILING_INIT(kg, event) ProfilingHelper profiling_helper(&kg->profiler, event)
+#  define PROFILING_INIT(kg, event) \
+    ProfilingHelper profiling_helper((ProfilingState *)&kg->profiler, event)
 #  define PROFILING_EVENT(event) profiling_helper.set_event(event)
 #  define PROFILING_SHADER(shader) \
     if ((shader) != SHADER_NONE) { \

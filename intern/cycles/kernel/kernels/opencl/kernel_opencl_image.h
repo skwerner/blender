@@ -33,7 +33,7 @@ typedef struct ccl_vdb_double_t {
 
 /* For OpenCL we do manual lookup and interpolation. */
 
-ccl_device_inline ccl_global TextureInfo *kernel_tex_info(KernelGlobals *kg, uint id)
+ccl_device_inline ccl_global TextureInfo *kernel_tex_info(const KernelGlobals *kg, uint id)
 {
   const uint tex_offset = id
 #define KERNEL_TEX(type, name) +1
@@ -60,7 +60,7 @@ ccl_device_inline int svm_image_texture_wrap_clamp(int x, int width)
 }
 
 ccl_device_inline float4 svm_image_texture_read(
-    KernelGlobals *kg, const ccl_global TextureInfo *info, void *acc, int x, int y, int z)
+    const KernelGlobals *kg, const ccl_global TextureInfo *info, void *acc, int x, int y, int z)
 {
   const int data_offset = x + info->width * y + info->width * info->height * z;
   const int texture_type = info->data_type;
@@ -132,7 +132,7 @@ ccl_device_inline float4 svm_image_texture_read(
 }
 
 ccl_device_inline float4
-svm_image_texture_read_2d(KernelGlobals *kg, int id, void *acc, int x, int y)
+svm_image_texture_read_2d(const KernelGlobals *kg, int id, void *acc, int x, int y)
 {
   const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
 
@@ -157,7 +157,7 @@ svm_image_texture_read_2d(KernelGlobals *kg, int id, void *acc, int x, int y)
 }
 
 ccl_device_inline float4
-svm_image_texture_read_3d(KernelGlobals *kg, int id, void *acc, int x, int y, int z)
+svm_image_texture_read_3d(const KernelGlobals *kg, int id, void *acc, int x, int y, int z)
 {
   const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
 
@@ -199,7 +199,7 @@ ccl_device_inline float svm_image_texture_frac(float x, int *ix)
   } \
   (void)0
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y)
+ccl_device float4 kernel_tex_image_interp(const KernelGlobals *kg, int id, float x, float y)
 {
   const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
 
@@ -252,7 +252,7 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
   }
 }
 
-ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg, int id, float3 P, int interp)
+ccl_device float4 kernel_tex_image_interp_3d(const KernelGlobals *kg, int id, float3 P, int interp)
 {
   const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
 

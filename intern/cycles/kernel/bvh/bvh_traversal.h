@@ -31,7 +31,7 @@
  * BVH_MOTION: motion blur rendering
  */
 
-ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
+ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(const KernelGlobals *kg,
                                                      const Ray *ray,
                                                      Intersection *isect,
                                                      const uint visibility)
@@ -226,7 +226,7 @@ ccl_device_noinline bool BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
   return (isect->prim != PRIM_NONE);
 }
 
-ccl_device_inline bool BVH_FUNCTION_NAME(KernelGlobals *kg,
+ccl_device_inline bool BVH_FUNCTION_NAME(const KernelGlobals *kg,
                                          const Ray *ray,
                                          Intersection *isect,
                                          const uint visibility)

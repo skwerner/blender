@@ -53,13 +53,22 @@ class OSLShader {
   static void thread_free(KernelGlobals *kg);
 
   /* eval */
-  static void eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag);
-  static void eval_background(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag);
-  static void eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag);
-  static void eval_displacement(KernelGlobals *kg, ShaderData *sd, PathState *state);
+  static void eval_surface(const KernelGlobals *kg,
+                           ShaderData *sd,
+                           PathState *state,
+                           int path_flag);
+  static void eval_background(const KernelGlobals *kg,
+                              ShaderData *sd,
+                              PathState *state,
+                              int path_flag);
+  static void eval_volume(const KernelGlobals *kg,
+                          ShaderData *sd,
+                          PathState *state,
+                          int path_flag);
+  static void eval_displacement(const KernelGlobals *kg, ShaderData *sd, PathState *state);
 
   /* attributes */
-  static int find_attribute(KernelGlobals *kg,
+  static int find_attribute(const KernelGlobals *kg,
                             const ShaderData *sd,
                             uint id,
                             AttributeDescriptor *desc);

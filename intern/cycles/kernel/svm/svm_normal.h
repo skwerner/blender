@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void svm_node_normal(KernelGlobals *kg,
+ccl_device void svm_node_normal(const KernelGlobals *kg,
                                 ShaderData *sd,
                                 float *stack,
                                 uint in_normal_offset,

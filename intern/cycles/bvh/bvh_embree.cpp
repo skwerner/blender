@@ -74,7 +74,7 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
   const RTCRay *ray = (RTCRay *)args->ray;
   RTCHit *hit = (RTCHit *)args->hit;
   CCLIntersectContext *ctx = ((IntersectContext *)args->context)->userRayExt;
-  KernelGlobals *kg = ctx->kg;
+  const KernelGlobals *kg = ctx->kg;
 
   switch (ctx->type) {
     case CCLIntersectContext::RAY_SHADOW_ALL: {

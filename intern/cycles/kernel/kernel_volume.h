@@ -40,7 +40,7 @@ typedef struct VolumeShaderCoefficients {
 #ifdef __VOLUME__
 
 /* evaluate shader to get extinction coefficient at P */
-ccl_device_inline bool volume_shader_extinction_sample(KernelGlobals *kg,
+ccl_device_inline bool volume_shader_extinction_sample(const KernelGlobals *kg,
                                                        ShaderData *sd,
                                                        ccl_addr_space PathState *state,
                                                        float3 P,
@@ -60,7 +60,7 @@ ccl_device_inline bool volume_shader_extinction_sample(KernelGlobals *kg,
 }
 
 /* evaluate shader to get absorption, scattering and emission at P */
-ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
+ccl_device_inline bool volume_shader_sample(const KernelGlobals *kg,
                                             ShaderData *sd,
                                             ccl_addr_space PathState *state,
                                             float3 P,
@@ -109,7 +109,7 @@ ccl_device float kernel_volume_channel_get(float3 value, int channel)
 
 #ifdef __VOLUME__
 
-ccl_device float volume_stack_step_size(KernelGlobals *kg, ccl_addr_space VolumeStack *stack)
+ccl_device float volume_stack_step_size(const KernelGlobals *kg, ccl_addr_space VolumeStack *stack)
 {
   float step_size = FLT_MAX;
 
@@ -144,7 +144,7 @@ ccl_device float volume_stack_step_size(KernelGlobals *kg, ccl_addr_space Volume
   return step_size;
 }
 
-ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stack)
+ccl_device int volume_stack_sampling_method(const KernelGlobals *kg, VolumeStack *stack)
 {
   if (kernel_data.integrator.num_all_lights == 0)
     return 0;
@@ -174,7 +174,7 @@ ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stac
   return method;
 }
 
-ccl_device_inline void kernel_volume_step_init(KernelGlobals *kg,
+ccl_device_inline void kernel_volume_step_init(const KernelGlobals *kg,
                                                ccl_addr_space PathState *state,
                                                const float object_step_size,
                                                float t,
@@ -200,7 +200,7 @@ ccl_device_inline void kernel_volume_step_init(KernelGlobals *kg,
 
 /* homogeneous volume: assume shader evaluation at the starts gives
  * the extinction coefficient for the entire line segment */
-ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
+ccl_device void kernel_volume_shadow_homogeneous(const KernelGlobals *kg,
                                                  ccl_addr_space PathState *state,
                                                  Ray *ray,
                                                  ShaderData *sd,
@@ -214,7 +214,7 @@ ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
 
 /* heterogeneous volume: integrate stepping through the volume until we
  * reach the end, get absorbed entirely, or run out of iterations */
-ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
+ccl_device void kernel_volume_shadow_heterogeneous(const KernelGlobals *kg,
                                                    ccl_addr_space PathState *state,
                                                    Ray *ray,
                                                    ShaderData *sd,
@@ -277,7 +277,7 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 /* get the volume attenuation over line segment defined by ray, with the
  * assumption that there are no surfaces blocking light between the endpoints */
 #  if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
-ccl_device_inline void kernel_volume_shadow(KernelGlobals *kg,
+ccl_device_inline void kernel_volume_shadow(const KernelGlobals *kg,
                                             ShaderData *shadow_sd,
                                             ccl_addr_space PathState *state,
                                             Ray *ray,
@@ -289,7 +289,7 @@ extern "C" __device__ void __direct_callable__kernel_volume_shadow(
 #  else
 ccl_device_noinline void kernel_volume_shadow(
 #  endif
-    KernelGlobals *kg,
+    const KernelGlobals *kg,
     ShaderData *shadow_sd,
     ccl_addr_space PathState *state,
     Ray *ray,
@@ -454,7 +454,7 @@ ccl_device int kernel_volume_sample_channel(float3 albedo,
 /* homogeneous volume: assume shader evaluation at the start gives
  * the volume shading coefficient for the entire line segment */
 ccl_device VolumeIntegrateResult
-kernel_volume_integrate_homogeneous(KernelGlobals *kg,
+kernel_volume_integrate_homogeneous(const KernelGlobals *kg,
                                     ccl_addr_space PathState *state,
                                     Ray *ray,
                                     ShaderData *sd,
@@ -562,7 +562,7 @@ kernel_volume_integrate_homogeneous(KernelGlobals *kg,
  * iterations. this does probabilistically scatter or get transmitted through
  * for path tracing where we don't want to branch. */
 ccl_device VolumeIntegrateResult
-kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
+kernel_volume_integrate_heterogeneous_distance(const KernelGlobals *kg,
                                                ccl_addr_space PathState *state,
                                                Ray *ray,
                                                ShaderData *sd,
@@ -708,7 +708,7 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
  * between the endpoints. distance sampling is used to decide if we will
  * scatter or not. */
 ccl_device_noinline_cpu VolumeIntegrateResult
-kernel_volume_integrate(KernelGlobals *kg,
+kernel_volume_integrate(const KernelGlobals *kg,
                         ccl_addr_space PathState *state,
                         ShaderData *sd,
                         Ray *ray,
@@ -766,7 +766,7 @@ typedef struct VolumeSegment {
  * hitting or missing the volume. if we don't know the transmittance at the end of the
  * volume we can't generate stratified distance samples up to that transmittance */
 #    ifdef __VOLUME_DECOUPLED__
-ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
+ccl_device void kernel_volume_decoupled_record(const KernelGlobals *kg,
                                                PathState *state,
                                                Ray *ray,
                                                ShaderData *sd,
@@ -788,7 +788,7 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
      * and indirect light integration both having volume segments allocated.
      * We detect this using index in the pre-allocated memory. Currently we
      * only support two segments allocated at a time, if more needed some
-     * modifications to the KernelGlobals will be needed.
+     * modifications to the const KernelGlobals will be needed.
      *
      * This gives us restrictions that decoupled record should only happen
      * in the stack manner, meaning if there's subsequent call of decoupled
@@ -925,7 +925,7 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
   }
 }
 
-ccl_device void kernel_volume_decoupled_free(KernelGlobals *kg, VolumeSegment *segment)
+ccl_device void kernel_volume_decoupled_free(const KernelGlobals *kg, VolumeSegment *segment)
 {
   if (segment->steps != &segment->stack_step) {
 #      ifdef __KERNEL_CPU__
@@ -946,7 +946,7 @@ ccl_device void kernel_volume_decoupled_free(KernelGlobals *kg, VolumeSegment *s
  * marching.
  *
  * function is expected to return VOLUME_PATH_SCATTERED when probalistic_scatter is false */
-ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *kg,
+ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(const KernelGlobals *kg,
                                                                  PathState *state,
                                                                  Ray *ray,
                                                                  ShaderData *sd,
@@ -1145,7 +1145,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 #  endif /* __SPLIT_KERNEL */
 
 /* decide if we need to use decoupled or not */
-ccl_device bool kernel_volume_use_decoupled(KernelGlobals *kg,
+ccl_device bool kernel_volume_use_decoupled(const KernelGlobals *kg,
                                             bool heterogeneous,
                                             bool direct,
                                             int sampling_method)
@@ -1178,7 +1178,7 @@ ccl_device bool kernel_volume_use_decoupled(KernelGlobals *kg,
  * This is an array of object/shared ID's that the current segment of the path
  * is inside of. */
 
-ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
+ccl_device void kernel_volume_stack_init(const KernelGlobals *kg,
                                          ShaderData *stack_sd,
                                          ccl_addr_space const PathState *state,
                                          ccl_addr_space const Ray *ray,
@@ -1320,7 +1320,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
   }
 }
 
-ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg,
+ccl_device void kernel_volume_stack_enter_exit(const KernelGlobals *kg,
                                                ShaderData *sd,
                                                ccl_addr_space VolumeStack *stack)
 {
@@ -1367,7 +1367,7 @@ ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg,
 }
 
 #  ifdef __SUBSURFACE__
-ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
+ccl_device void kernel_volume_stack_update_for_subsurface(const KernelGlobals *kg,
                                                           ShaderData *stack_sd,
                                                           Ray *ray,
                                                           ccl_addr_space VolumeStack *stack)
@@ -1424,7 +1424,7 @@ ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
  * Use this function after the last bounce to get rid of all volumes apart from
  * the world's one after the last bounce to avoid render artifacts.
  */
-ccl_device_inline void kernel_volume_clean_stack(KernelGlobals *kg,
+ccl_device_inline void kernel_volume_clean_stack(const KernelGlobals *kg,
                                                  ccl_addr_space VolumeStack *volume_stack)
 {
   if (kernel_data.background.volume_shader != SHADER_NONE) {

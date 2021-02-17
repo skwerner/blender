@@ -18,7 +18,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_inline void path_state_init(KernelGlobals *kg,
+ccl_device_inline void path_state_init(const KernelGlobals *kg,
                                        ShaderData *stack_sd,
                                        ccl_addr_space PathState *state,
                                        uint rng_hash,
@@ -71,7 +71,7 @@ ccl_device_inline void path_state_init(KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline void path_state_next(KernelGlobals *kg,
+ccl_device_inline void path_state_next(const KernelGlobals *kg,
                                        ccl_addr_space PathState *state,
                                        int label)
 {
@@ -171,7 +171,8 @@ ccl_device_inline void path_state_next(KernelGlobals *kg,
 }
 
 #ifdef __VOLUME__
-ccl_device_inline bool path_state_volume_next(KernelGlobals *kg, ccl_addr_space PathState *state)
+ccl_device_inline bool path_state_volume_next(const KernelGlobals *kg,
+                                              ccl_addr_space PathState *state)
 {
   /* For volume bounding meshes we pass through without counting transparent
    * bounces, only sanity check in case self intersection gets us stuck. */
@@ -189,7 +190,7 @@ ccl_device_inline bool path_state_volume_next(KernelGlobals *kg, ccl_addr_space 
 }
 #endif
 
-ccl_device_inline uint path_state_ray_visibility(KernelGlobals *kg,
+ccl_device_inline uint path_state_ray_visibility(const KernelGlobals *kg,
                                                  ccl_addr_space PathState *state)
 {
   uint flag = state->flag & PATH_RAY_ALL_VISIBILITY;
@@ -204,7 +205,7 @@ ccl_device_inline uint path_state_ray_visibility(KernelGlobals *kg,
   return flag;
 }
 
-ccl_device_inline float path_state_continuation_probability(KernelGlobals *kg,
+ccl_device_inline float path_state_continuation_probability(const KernelGlobals *kg,
                                                             ccl_addr_space PathState *state,
                                                             const float3 throughput)
 {
@@ -252,7 +253,8 @@ ccl_device_inline void path_state_modify_bounce(ccl_addr_space PathState *state,
     state->bounce -= 1;
 }
 
-ccl_device_inline bool path_state_ao_bounce(KernelGlobals *kg, ccl_addr_space PathState *state)
+ccl_device_inline bool path_state_ao_bounce(const KernelGlobals *kg,
+                                            ccl_addr_space PathState *state)
 {
   if (state->bounce <= kernel_data.integrator.ao_bounces) {
     return false;

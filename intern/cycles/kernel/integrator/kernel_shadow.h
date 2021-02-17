@@ -18,7 +18,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS, ccl_global float *render_buffer)
+ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS,
+                                        ccl_global float *ccl_restrict render_buffer)
 {
   kernel_assert(INTEGRATOR_STATE_ARRAY(shadow_isect, 0, object) != OBJECT_NONE);
 

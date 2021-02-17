@@ -18,7 +18,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float4 film_get_pass_result(KernelGlobals *kg,
+ccl_device float4 film_get_pass_result(const KernelGlobals *kg,
                                        ccl_global float *buffer,
                                        float sample_scale,
                                        int index,
@@ -61,7 +61,7 @@ ccl_device float4 film_get_pass_result(KernelGlobals *kg,
   return pass_result;
 }
 
-ccl_device float4 film_map(KernelGlobals *kg, float4 rgba_in, float scale)
+ccl_device float4 film_map(const KernelGlobals *kg, float4 rgba_in, float scale)
 {
   float4 result;
 
@@ -89,7 +89,7 @@ ccl_device uchar4 film_float_to_byte(float4 color)
   return result;
 }
 
-ccl_device void kernel_film_convert_to_byte(KernelGlobals *kg,
+ccl_device void kernel_film_convert_to_byte(const KernelGlobals *kg,
                                             ccl_global uchar4 *rgba,
                                             ccl_global float *buffer,
                                             float sample_scale,
@@ -112,7 +112,7 @@ ccl_device void kernel_film_convert_to_byte(KernelGlobals *kg,
   *rgba = uchar_result;
 }
 
-ccl_device void kernel_film_convert_to_half_float(KernelGlobals *kg,
+ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
                                                   ccl_global uchar4 *rgba,
                                                   ccl_global float *buffer,
                                                   float sample_scale,

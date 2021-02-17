@@ -20,8 +20,12 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __BAKING__
 
-ccl_device_noinline void compute_light_pass(
-    KernelGlobals *kg, ShaderData *sd, PathRadiance *L, uint rng_hash, int pass_filter, int sample)
+ccl_device_noinline void compute_light_pass(const KernelGlobals *kg,
+                                            ShaderData *sd,
+                                            PathRadiance *L,
+                                            uint rng_hash,
+                                            int pass_filter,
+                                            int sample)
 {
   kernel_assert(kernel_data.film.use_light_pass);
 
@@ -165,7 +169,7 @@ ccl_device_inline float bake_clamp_mirror_repeat(float u, float max)
   return ((((int)fu) & 1) ? 1.0f - u : u) * max;
 }
 
-ccl_device_inline float3 kernel_bake_shader_bsdf(KernelGlobals *kg,
+ccl_device_inline float3 kernel_bake_shader_bsdf(const KernelGlobals *kg,
                                                  ShaderData *sd,
                                                  const ShaderEvalType type)
 {
@@ -182,7 +186,7 @@ ccl_device_inline float3 kernel_bake_shader_bsdf(KernelGlobals *kg,
   }
 }
 
-ccl_device float3 kernel_bake_evaluate_direct_indirect(KernelGlobals *kg,
+ccl_device float3 kernel_bake_evaluate_direct_indirect(const KernelGlobals *kg,
                                                        ShaderData *sd,
                                                        PathState *state,
                                                        float3 direct,
@@ -223,8 +227,13 @@ ccl_device float3 kernel_bake_evaluate_direct_indirect(KernelGlobals *kg,
   return out;
 }
 
-ccl_device void kernel_bake_evaluate(
-    KernelGlobals *kg, ccl_global float *buffer, int sample, int x, int y, int offset, int stride)
+ccl_device void kernel_bake_evaluate(const KernelGlobals *kg,
+                                     ccl_global float *buffer,
+                                     int sample,
+                                     int x,
+                                     int y,
+                                     int offset,
+                                     int stride)
 {
   /* Setup render buffers. */
   const int index = offset + x + y * stride;
@@ -445,7 +454,7 @@ ccl_device void kernel_bake_evaluate(
 
 #endif /* __BAKING__ */
 
-ccl_device void kernel_displace_evaluate(KernelGlobals *kg,
+ccl_device void kernel_displace_evaluate(const KernelGlobals *kg,
                                          ccl_global uint4 *input,
                                          ccl_global float4 *output,
                                          int i)
@@ -473,7 +482,7 @@ ccl_device void kernel_displace_evaluate(KernelGlobals *kg,
   output[i] += make_float4(D.x, D.y, D.z, 0.0f);
 }
 
-ccl_device void kernel_background_evaluate(KernelGlobals *kg,
+ccl_device void kernel_background_evaluate(const KernelGlobals *kg,
                                            ccl_global uint4 *input,
                                            ccl_global float4 *output,
                                            int i)

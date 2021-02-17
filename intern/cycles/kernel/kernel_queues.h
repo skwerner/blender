@@ -50,7 +50,7 @@ ccl_device void enqueue_ray_index(
  * is no more ray to allocate to other threads.
  */
 ccl_device int get_ray_index(
-    KernelGlobals *kg,
+    const KernelGlobals *kg,
     int thread_index,       /* Global thread index. */
     int queue_number,       /* Queue to operate on. */
     ccl_global int *queues, /* Buffer of all queues. */

@@ -18,7 +18,7 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __SHADER_RAYTRACE__
 
-ccl_device_noinline float svm_ao(KernelGlobals *kg,
+ccl_device_noinline float svm_ao(const KernelGlobals *kg,
                                  ShaderData *sd,
                                  float3 N,
                                  ccl_addr_space PathState *state,
@@ -81,8 +81,11 @@ ccl_device_noinline float svm_ao(KernelGlobals *kg,
   return ((float)unoccluded) / num_samples;
 }
 
-ccl_device void svm_node_ao(
-    KernelGlobals *kg, ShaderData *sd, ccl_addr_space PathState *state, float *stack, uint4 node)
+ccl_device void svm_node_ao(const KernelGlobals *kg,
+                            ShaderData *sd,
+                            ccl_addr_space PathState *state,
+                            float *stack,
+                            uint4 node)
 {
   uint flags, dist_offset, normal_offset, out_ao_offset;
   svm_unpack_node_uchar4(node.y, &flags, &dist_offset, &normal_offset, &out_ao_offset);

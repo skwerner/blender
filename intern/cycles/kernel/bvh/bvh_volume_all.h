@@ -35,7 +35,7 @@ ccl_device
 #else
 ccl_device_inline
 #endif
-    uint BVH_FUNCTION_FULL_NAME(BVH)(KernelGlobals *kg,
+    uint BVH_FUNCTION_FULL_NAME(BVH)(const KernelGlobals *kg,
                                      const Ray *ray,
                                      Intersection *isect_array,
                                      const uint max_hits,
@@ -289,7 +289,7 @@ ccl_device_inline
   return num_hits;
 }
 
-ccl_device_inline uint BVH_FUNCTION_NAME(KernelGlobals *kg,
+ccl_device_inline uint BVH_FUNCTION_NAME(const KernelGlobals *kg,
                                          const Ray *ray,
                                          Intersection *isect_array,
                                          const uint max_hits,

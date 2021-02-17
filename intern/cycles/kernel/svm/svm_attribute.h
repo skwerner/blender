@@ -18,8 +18,11 @@ CCL_NAMESPACE_BEGIN
 
 /* Attribute Node */
 
-ccl_device AttributeDescriptor svm_node_attr_init(
-    KernelGlobals *kg, ShaderData *sd, uint4 node, NodeAttributeOutputType *type, uint *out_offset)
+ccl_device AttributeDescriptor svm_node_attr_init(const KernelGlobals *kg,
+                                                  ShaderData *sd,
+                                                  uint4 node,
+                                                  NodeAttributeOutputType *type,
+                                                  uint *out_offset)
 {
   *out_offset = node.z;
   *type = (NodeAttributeOutputType)node.w;
@@ -44,7 +47,7 @@ ccl_device AttributeDescriptor svm_node_attr_init(
   return desc;
 }
 
-ccl_device void svm_node_attr(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_attr(const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
 {
   NodeAttributeOutputType type = NODE_ATTR_OUTPUT_FLOAT;
   uint out_offset = 0;
@@ -123,7 +126,10 @@ ccl_device void svm_node_attr(KernelGlobals *kg, ShaderData *sd, float *stack, u
   }
 }
 
-ccl_device void svm_node_attr_bump_dx(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_attr_bump_dx(const KernelGlobals *kg,
+                                      ShaderData *sd,
+                                      float *stack,
+                                      uint4 node)
 {
   NodeAttributeOutputType type = NODE_ATTR_OUTPUT_FLOAT;
   uint out_offset = 0;
@@ -200,7 +206,10 @@ ccl_device void svm_node_attr_bump_dx(KernelGlobals *kg, ShaderData *sd, float *
   }
 }
 
-ccl_device void svm_node_attr_bump_dy(KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
+ccl_device void svm_node_attr_bump_dy(const KernelGlobals *kg,
+                                      ShaderData *sd,
+                                      float *stack,
+                                      uint4 node)
 {
   NodeAttributeOutputType type = NODE_ATTR_OUTPUT_FLOAT;
   uint out_offset = 0;

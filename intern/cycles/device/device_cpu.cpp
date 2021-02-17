@@ -176,13 +176,14 @@ using IntegratorOutputFunction = KernelFunction<void (*)(
 
 class Kernels {
  public:
-  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> path_trace;
-  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
+  KernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
+  KernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_half_float;
-  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
+  KernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_byte;
-  KernelFunction<void (*)(KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)> shader;
-  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> bake;
+  KernelFunction<void (*)(const KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>
+      shader;
+  KernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
 
   KernelFunction<void (*)(
       int, TileInfo *, int, int, float *, float *, float *, float *, float *, int *, int, int)>

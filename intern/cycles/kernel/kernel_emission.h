@@ -19,7 +19,7 @@
 CCL_NAMESPACE_BEGIN
 
 /* Direction Emission */
-ccl_device_noinline_cpu float3 direct_emissive_eval(KernelGlobals *kg,
+ccl_device_noinline_cpu float3 direct_emissive_eval(const KernelGlobals *kg,
                                                     ShaderData *emission_sd,
                                                     LightSample *ls,
                                                     ccl_addr_space PathState *state,
@@ -100,7 +100,7 @@ ccl_device_noinline_cpu float3 direct_emissive_eval(KernelGlobals *kg,
   return eval;
 }
 
-ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
+ccl_device_noinline_cpu bool direct_emission(const KernelGlobals *kg,
                                              ShaderData *sd,
                                              ShaderData *emission_sd,
                                              LightSample *ls,
@@ -209,7 +209,7 @@ ccl_device_noinline_cpu bool direct_emission(KernelGlobals *kg,
 /* Indirect Primitive Emission */
 
 ccl_device_noinline_cpu float3 indirect_primitive_emission(
-    KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf)
+    const KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf)
 {
   /* evaluate emissive closure */
   float3 L = shader_emissive_eval(sd);
@@ -234,7 +234,7 @@ ccl_device_noinline_cpu float3 indirect_primitive_emission(
 
 /* Indirect Lamp Emission */
 
-ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
+ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
                                                     ShaderData *emission_sd,
                                                     ccl_addr_space PathState *state,
                                                     PathRadiance *L,
@@ -287,7 +287,7 @@ ccl_device_noinline_cpu void indirect_lamp_emission(KernelGlobals *kg,
 
 /* Indirect Background */
 
-ccl_device_noinline_cpu float3 indirect_background(KernelGlobals *kg,
+ccl_device_noinline_cpu float3 indirect_background(const KernelGlobals *kg,
                                                    ShaderData *emission_sd,
                                                    ccl_addr_space PathState *state,
                                                    ccl_global float *buffer,

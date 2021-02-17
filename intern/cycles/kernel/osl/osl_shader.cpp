@@ -85,7 +85,7 @@ void OSLShader::thread_free(KernelGlobals *kg)
 /* Globals */
 
 static void shaderdata_to_shaderglobals(
-    KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, OSLThreadData *tdata)
+    const KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, OSLThreadData *tdata)
 {
   OSL::ShaderGlobals *globals = &tdata->globals;
 
@@ -168,7 +168,10 @@ static void flatten_surface_closure_tree(ShaderData *sd,
   }
 }
 
-void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
+void OSLShader::eval_surface(const KernelGlobals *kg,
+                             ShaderData *sd,
+                             PathState *state,
+                             int path_flag)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -273,7 +276,10 @@ static void flatten_background_closure_tree(ShaderData *sd,
   }
 }
 
-void OSLShader::eval_background(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
+void OSLShader::eval_background(const KernelGlobals *kg,
+                                ShaderData *sd,
+                                PathState *state,
+                                int path_flag)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -328,7 +334,10 @@ static void flatten_volume_closure_tree(ShaderData *sd,
   }
 }
 
-void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
+void OSLShader::eval_volume(const KernelGlobals *kg,
+                            ShaderData *sd,
+                            PathState *state,
+                            int path_flag)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -351,7 +360,7 @@ void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state,
 
 /* Displacement */
 
-void OSLShader::eval_displacement(KernelGlobals *kg, ShaderData *sd, PathState *state)
+void OSLShader::eval_displacement(const KernelGlobals *kg, ShaderData *sd, PathState *state)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -374,7 +383,7 @@ void OSLShader::eval_displacement(KernelGlobals *kg, ShaderData *sd, PathState *
 
 /* Attributes */
 
-int OSLShader::find_attribute(KernelGlobals *kg,
+int OSLShader::find_attribute(const KernelGlobals *kg,
                               const ShaderData *sd,
                               uint id,
                               AttributeDescriptor *desc)

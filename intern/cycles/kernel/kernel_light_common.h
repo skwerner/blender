@@ -148,7 +148,7 @@ ccl_device float spot_light_attenuation(float3 dir, float spot_angle, float spot
   return attenuation;
 }
 
-ccl_device float lamp_light_pdf(KernelGlobals *kg, const float3 Ng, const float3 I, float t)
+ccl_device float lamp_light_pdf(const KernelGlobals *kg, const float3 Ng, const float3 I, float t)
 {
   float cos_pi = dot(Ng, I);
 

@@ -71,7 +71,7 @@ CCL_NAMESPACE_BEGIN
  * simple arrays and after inlining fetch hopefully revert to being a simple
  * pointer lookup. */
 template<typename T> struct texture {
-  ccl_always_inline const T &fetch(int index)
+  ccl_always_inline const T &fetch(int index) const
   {
     kernel_assert(index >= 0 && index < width);
     return data[index];
@@ -80,7 +80,7 @@ template<typename T> struct texture {
   /* Reads 256 bytes but indexes in blocks of 128 bytes to maintain
    * compatibility with existing indices and data structures.
    */
-  ccl_always_inline avxf fetch_avxf(const int index)
+  ccl_always_inline avxf fetch_avxf(const int index) const
   {
     kernel_assert(index >= 0 && (index + 1) < width);
     ssef *ssef_data = (ssef *)data;
@@ -90,13 +90,13 @@ template<typename T> struct texture {
 #endif
 
 #ifdef __KERNEL_SSE2__
-  ccl_always_inline ssef fetch_ssef(int index)
+  ccl_always_inline ssef fetch_ssef(int index) const
   {
     kernel_assert(index >= 0 && index < width);
     return ((ssef *)data)[index];
   }
 
-  ccl_always_inline ssei fetch_ssei(int index)
+  ccl_always_inline ssei fetch_ssei(int index) const
   {
     kernel_assert(index >= 0 && index < width);
     return ((ssei *)data)[index];

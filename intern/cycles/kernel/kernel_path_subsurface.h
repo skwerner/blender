@@ -25,7 +25,7 @@ ccl_device
 ccl_device_inline
 #  endif
     bool
-    kernel_path_subsurface_scatter(KernelGlobals *kg,
+    kernel_path_subsurface_scatter(const KernelGlobals *kg,
                                    ShaderData *sd,
                                    ShaderData *emission_sd,
                                    PathRadiance *L,
@@ -115,7 +115,7 @@ ccl_device_inline void kernel_path_subsurface_init_indirect(
 }
 
 ccl_device void kernel_path_subsurface_setup_indirect(
-    KernelGlobals *kg,
+    const KernelGlobals *kg,
     ccl_addr_space SubsurfaceIndirectRays *ss_indirect,
     ccl_addr_space PathState *state,
     ccl_addr_space Ray *ray,

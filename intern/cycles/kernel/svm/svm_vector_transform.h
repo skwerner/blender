@@ -18,7 +18,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Vector Transform */
 
-ccl_device void svm_node_vector_transform(KernelGlobals *kg,
+ccl_device void svm_node_vector_transform(const KernelGlobals *kg,
                                           ShaderData *sd,
                                           float *stack,
                                           uint4 node)

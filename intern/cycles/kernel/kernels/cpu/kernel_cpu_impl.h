@@ -60,7 +60,7 @@ CCL_NAMESPACE_BEGIN
 /* Path Tracing */
 
 void KERNEL_FUNCTION_FULL_NAME(path_trace)(
-    KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
+    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
 {
 #if 0
 #  ifdef KERNEL_STUB
@@ -81,7 +81,7 @@ void KERNEL_FUNCTION_FULL_NAME(path_trace)(
 
 /* Film */
 
-void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(const KernelGlobals *kg,
                                                 uchar4 *rgba,
                                                 float *buffer,
                                                 float sample_scale,
@@ -97,7 +97,7 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(KernelGlobals *kg,
 #endif /* KERNEL_STUB */
 }
 
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       uchar4 *rgba,
                                                       float *buffer,
                                                       float sample_scale,
@@ -116,7 +116,7 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
 /* Bake */
 
 void KERNEL_FUNCTION_FULL_NAME(bake)(
-    KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
+    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
 {
 #if 0
 #  ifdef KERNEL_STUB
@@ -131,7 +131,7 @@ void KERNEL_FUNCTION_FULL_NAME(bake)(
 
 /* Shader Evaluate */
 
-void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
                                        uint4 *input,
                                        float4 *output,
                                        int type,

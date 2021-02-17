@@ -619,7 +619,7 @@ ccl_device_inline bool ribbon_intersect(const float3 ray_org,
   return false;
 }
 
-ccl_device_forceinline bool curve_intersect(KernelGlobals *kg,
+ccl_device_forceinline bool curve_intersect(const KernelGlobals *kg,
                                             Intersection *isect,
                                             const float3 P,
                                             const float3 dir,
@@ -693,7 +693,7 @@ ccl_device_forceinline bool curve_intersect(KernelGlobals *kg,
   }
 }
 
-ccl_device_inline void curve_shader_setup(KernelGlobals *kg,
+ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
                                           ShaderData *sd,
                                           const Intersection *isect,
                                           const Ray *ray)

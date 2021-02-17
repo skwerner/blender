@@ -56,7 +56,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
+ccl_device_forceinline bool kernel_path_scene_intersect(const KernelGlobals *kg,
                                                         ccl_addr_space PathState *state,
                                                         Ray *ray,
                                                         Intersection *isect,
@@ -85,7 +85,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
   return hit;
 }
 
-ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
+ccl_device_forceinline void kernel_path_lamp_emission(const KernelGlobals *kg,
                                                       ccl_addr_space PathState *state,
                                                       Ray *ray,
                                                       float3 throughput,
@@ -114,7 +114,7 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
 #endif /* __LAMP_MIS__ */
 }
 
-ccl_device_forceinline void kernel_path_background(KernelGlobals *kg,
+ccl_device_forceinline void kernel_path_background(const KernelGlobals *kg,
                                                    ccl_addr_space PathState *state,
                                                    ccl_addr_space Ray *ray,
                                                    float3 throughput,
@@ -148,7 +148,7 @@ ccl_device_forceinline void kernel_path_background(KernelGlobals *kg,
 #ifndef __SPLIT_KERNEL__
 
 #  ifdef __VOLUME__
-ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *kg,
+ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(const KernelGlobals *kg,
                                                                 ShaderData *sd,
                                                                 PathState *state,
                                                                 Ray *ray,
@@ -253,7 +253,7 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
 
 #endif /* __SPLIT_KERNEL__ */
 
-ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
+ccl_device_forceinline bool kernel_path_shader_apply(const KernelGlobals *kg,
                                                      ShaderData *sd,
                                                      ccl_addr_space PathState *state,
                                                      ccl_addr_space Ray *ray,
@@ -328,7 +328,7 @@ ccl_device_inline /* inline trace calls */
 ccl_device_noinline
 #endif
     void
-    kernel_path_ao(KernelGlobals *kg,
+    kernel_path_ao(const KernelGlobals *kg,
                    ShaderData *sd,
                    ShaderData *emission_sd,
                    PathRadiance *L,
@@ -375,7 +375,7 @@ ccl_device_noinline
 
 #  if defined(__BRANCHED_PATH__) || defined(__BAKING__)
 
-ccl_device void kernel_path_indirect(KernelGlobals *kg,
+ccl_device void kernel_path_indirect(const KernelGlobals *kg,
                                      ShaderData *sd,
                                      ShaderData *emission_sd,
                                      Ray *ray,
@@ -508,7 +508,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 
 #  endif /* defined(__BRANCHED_PATH__) || defined(__BAKING__) */
 
-ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
+ccl_device_forceinline void kernel_path_integrate(const KernelGlobals *kg,
                                                   PathState *state,
                                                   float3 throughput,
                                                   Ray *ray,
@@ -642,8 +642,13 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
 #  endif /* __SUBSURFACE__ */
 }
 
-ccl_device void kernel_path_trace(
-    KernelGlobals *kg, ccl_global float *buffer, int sample, int x, int y, int offset, int stride)
+ccl_device void kernel_path_trace(const KernelGlobals *kg,
+                                  ccl_global float *buffer,
+                                  int sample,
+                                  int x,
+                                  int y,
+                                  int offset,
+                                  int stride)
 {
   PROFILING_INIT(kg, PROFILING_RAY_SETUP);
 

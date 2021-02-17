@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "device/device.h"
+#include "integrator/path_trace.h"
 #include "render/bake.h"
 #include "render/buffers.h"
 #include "render/camera.h"
@@ -1154,7 +1155,7 @@ bool Session::render_need_denoise(bool &delayed)
   return !delayed;
 }
 
-void Session::render(bool need_denoise)
+void Session::render(bool /*need_denoise*/)
 {
   if (buffers && tile_manager.state.sample == tile_manager.range_start_sample) {
     /* Clear buffers. */
@@ -1165,6 +1166,34 @@ void Session::render(bool need_denoise)
     return; /* Avoid empty launches. */
   }
 
+#if 1
+
+  /* Buffer paraments for the big tile.
+   *
+   * TODO(sergey): Currently it is the same as the full-frame buffer parameners. In the future
+   * needs to be split into smaller tiles when doing really huge renders (for example, limit
+   * tile size to 4K when doing 16K render). */
+  const BufferParams &buffer_params = tile_manager.params;
+
+  /* Number of samples which are to be path traced. */
+  const int samples_to_render_num = tile_manager.state.num_samples;
+
+  /* TODO(sergey): Preserve path tracer state, so it doesn't re-allocate states and things like
+   * that on every sample of viewport render. */
+
+  /* TODO(sergey): Take start sample `tile_manager.state.sample` into account. */
+
+  PathTrace path_trace(device, buffer_params);
+
+  /* Configure path tracer. */
+  path_trace.get_cancel_cb = [&progress = this->progress]() { return progress.get_cancel(); };
+
+  path_trace.render_samples(samples_to_render_num);
+
+  /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on
+   * the `PathTrace`. */
+
+#else
   /* Add path trace task. */
   DeviceTask task(DeviceTask::RENDER);
 
@@ -1224,6 +1253,7 @@ void Session::render(bool need_denoise)
   }
 
   device->task_add(task);
+#endif
 }
 
 void Session::copy_to_display_buffer(int sample)

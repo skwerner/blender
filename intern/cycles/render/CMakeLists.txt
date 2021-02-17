@@ -109,6 +109,7 @@ set(SRC_HEADERS
 set(LIB
   cycles_bvh
   cycles_device
+  cycles_integrator
   cycles_subd
   cycles_util
 )

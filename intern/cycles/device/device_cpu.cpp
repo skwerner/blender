@@ -31,6 +31,7 @@
 #include "device/device.h"
 #include "device/device_denoising.h"
 #include "device/device_intern.h"
+#include "device/device_queue.h"
 
 // clang-format off
 #include "kernel/kernel.h"
@@ -143,6 +144,23 @@ template<typename F> class KernelFunctions {
 
  protected:
   F kernel;
+};
+
+class CPUDeviceQueue : public DeviceQueue {
+ public:
+  CPUDeviceQueue(Device *device) : DeviceQueue(device)
+  {
+  }
+
+  virtual void enqueue(DeviceKernel kernel)
+  {
+    /* TODO(sergey): Needs implementation. */
+    (void)kernel;
+  }
+
+  /* TODO(sergey): Add kernel globals which will be usable by this queue. Should probably be
+   * done the same as thread_kernel_globals_init(). Ideally, look into sub-classing, so that the
+   * resource management for such local `KernelGlobals` is centralized. */
 };
 
 using IntegratorFunction =
@@ -1389,6 +1407,11 @@ class CPUDevice : public Device {
   virtual void task_cancel() override
   {
     task_pool.cancel();
+  }
+
+  virtual unique_ptr<DeviceQueue> queue_create() override
+  {
+    return make_unique<CPUDeviceQueue>(this);
   }
 
  protected:

@@ -25,6 +25,10 @@ set(SRC_HEADERS
 )
 
 set(LIB
+  # NOTE: Is required for RenderBuffers access. Might consider moving files around a bit to
+  # avoid such cyclic dependency.
+  cycles_render
+
   cycles_util
 )
 

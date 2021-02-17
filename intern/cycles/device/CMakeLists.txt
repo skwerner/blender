@@ -40,10 +40,12 @@ set(SRC
   device_cuda.cpp
   device_denoising.cpp
   device_dummy.cpp
+  device_kernel.cpp
   device_memory.cpp
   device_multi.cpp
   device_opencl.cpp
   device_optix.cpp
+  device_queue.cpp
   device_task.cpp
 )
 
@@ -71,7 +73,9 @@ set(SRC_HEADERS
   device_denoising.h
   device_memory.h
   device_intern.h
+  device_kernel.h
   device_network.h
+  device_queue.h
   device_task.h
 )
 

@@ -16,6 +16,9 @@
 
 #pragma once
 
+#include "render/buffers.h"
+#include "util/util_function.h"
+
 CCL_NAMESPACE_BEGIN
 
 class Device;
@@ -34,23 +37,43 @@ class PathTrace {
    *  - Render tile (could be `ccl::Tile`, but to avoid bad level call it needs to be moved to this
    *    module).
    *  - Render buffer. */
-  explicit PathTrace(Device *device);
+  /* `buffer_params` denotes parameters of the entire big tile which is to be path traced. */
+  PathTrace(Device *device, const BufferParams &buffer_params);
 
   /* Request render of the given number of tiles.
    *
    * TODO(sergey): Decide and document whether it is a blocking or asynchronous call. */
   void render_samples(int samples_num);
 
+  /* Callback which is used top check whether user requested to cancel rendering.
+   * If this callback is not assigned the path tracing procfess can not be cancelled and it will be
+   * finished when it fully sampled all requested samples. */
+  function<bool(void)> get_cancel_cb;
+
  protected:
   /* Render given number of samples on the given device.
    *
+   * Buffer params denotes parameters of a buffer which is to be rendered on this device. In the
+   * case of multi-device rendering this will be a smaller portion of the `buffer_params_`.
+   *
    * This is a blocking call and it is yp to caller to call it from thread if asynchronous
    * execution is needed. */
-  void render_samples_on_device(Device *device, int samples_num);
+  void render_samples_on_device(Device *device,
+                                const BufferParams &buffer_params,
+                                int samples_num);
+
+  /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
+   * soon as possible. */
+  bool is_cancel_requested();
 
   /* Pointer to a device which is configured to be used for path tracing. If multiple devices are
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
+
+  /* Parameters of buffers which corresponds to the big tile. */
+  /* TODO(sergey): Consider addressing naming a bit, to make it explicit that this is a big
+   * buffer. Alternatively, can consider introducing BigTile as entity concept. */
+  BufferParams buffer_params_;
 };
 
 CCL_NAMESPACE_END

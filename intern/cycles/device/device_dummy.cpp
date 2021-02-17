@@ -16,6 +16,7 @@
 
 #include "device/device.h"
 #include "device/device_intern.h"
+#include "device/device_queue.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -72,6 +73,11 @@ class DummyDevice : public Device {
 
   virtual void task_cancel() override
   {
+  }
+
+  virtual unique_ptr<DeviceQueue> queue_create() override
+  {
+    return nullptr;
   }
 };
 

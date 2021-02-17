@@ -30,11 +30,13 @@
 #include "util/util_texture.h"
 #include "util/util_thread.h"
 #include "util/util_types.h"
+#include "util/util_unique_ptr.h"
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
 class BVH;
+class DeviceQueue;
 class Progress;
 class RenderTile;
 
@@ -405,6 +407,15 @@ class Device {
   virtual void task_add(DeviceTask &task) = 0;
   virtual void task_wait() = 0;
   virtual void task_cancel() = 0;
+
+  /* Queues. */
+
+  /* Create new generic queue for commands execution on this device.
+   *
+   * NOTE: Do not use it for multi-device and instead use per-device queues. Makes it more explicit
+   * all the synchronization and work stealing logic. It will LOG(FATAL) when used on multi-device.
+   */
+  virtual unique_ptr<DeviceQueue> queue_create() = 0;
 
   /* opengl drawing */
   virtual void draw_pixels(device_memory &mem,

@@ -24,6 +24,8 @@
  * language governing permissions and limitations under the Apache License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 typedef struct PatchHandle {

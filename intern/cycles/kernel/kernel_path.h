@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #ifdef __OSL__
 #  include "kernel/osl/osl_shader.h"
 #endif

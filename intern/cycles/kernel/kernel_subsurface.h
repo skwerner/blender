@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* BSSRDF using disk based importance sampling.

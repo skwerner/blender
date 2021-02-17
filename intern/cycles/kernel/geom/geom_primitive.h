@@ -19,6 +19,8 @@
  * Generic functions to look up mesh, curve and volume primitive attributes for
  * shading and render passes. */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* Surface Attributes

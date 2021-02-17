@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include <embree3/rtcore_ray.h>
 #include <embree3/rtcore_scene.h>
 

@@ -30,8 +30,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __BSDF_MICROFACET_H__
-#define __BSDF_MICROFACET_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -1175,5 +1174,3 @@ ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg,
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __BSDF_MICROFACET_H__ */

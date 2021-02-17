@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_COLOR_H__
-#define __KERNEL_COLOR_H__
+#pragma once
 
 #include "util/util_color.h"
 
@@ -34,5 +33,3 @@ ccl_device float linear_rgb_to_gray(KernelGlobals *kg, float3 c)
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_COLOR_H__ */

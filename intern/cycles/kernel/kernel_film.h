@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device float4 film_get_pass_result(KernelGlobals *kg,

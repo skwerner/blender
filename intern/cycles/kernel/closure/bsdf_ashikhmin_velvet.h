@@ -30,8 +30,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __BSDF_ASHIKHMIN_VELVET_H__
-#define __BSDF_ASHIKHMIN_VELVET_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -175,5 +174,3 @@ ccl_device int bsdf_ashikhmin_velvet_sample(const ShaderClosure *sc,
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __BSDF_ASHIKHMIN_VELVET_H__ */

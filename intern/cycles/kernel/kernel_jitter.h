@@ -16,6 +16,8 @@
 
 /* TODO(sergey): Consider moving portable ctz/clz stuff to util. */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* "Correlated Multi-Jittered Sampling"

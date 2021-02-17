@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_filter_construct_transform(const float *ccl_restrict buffer,

@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 #define load4_a(buf, ofs) (*((float4 *)((buf) + (ofs))))

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __BSDF_PRINCIPLED_SHEEN_H__
-#define __BSDF_PRINCIPLED_SHEEN_H__
+#pragma once
 
 /* DISNEY PRINCIPLED SHEEN BRDF
  *
@@ -137,5 +136,3 @@ ccl_device int bsdf_principled_sheen_sample(const ShaderClosure *sc,
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __BSDF_PRINCIPLED_SHEEN_H__ */

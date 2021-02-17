@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS, ccl_global float *render_buffer)

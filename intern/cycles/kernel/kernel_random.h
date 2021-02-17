@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include "kernel/kernel_jitter.h"
 #include "util/util_hash.h"
 

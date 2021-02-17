@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_COMPAT_OPENCL_H__
-#define __KERNEL_COMPAT_OPENCL_H__
+#pragma once
 
 #define __KERNEL_GPU__
 #define __KERNEL_OPENCL__
@@ -173,5 +172,3 @@
 
 #include "util/util_half.h"
 #include "util/util_types.h"
-
-#endif /* __KERNEL_COMPAT_OPENCL_H__ */

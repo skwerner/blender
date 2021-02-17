@@ -20,6 +20,8 @@
  * ray intersection we use a precomputed triangle storage to accelerate
  * intersection at the cost of more memory usage */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* normal on triangle  */

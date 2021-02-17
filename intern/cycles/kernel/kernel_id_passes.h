@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void kernel_write_id_slots(ccl_global float *buffer,

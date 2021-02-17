@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_ADAPTIVE_SAMPLING_H__
-#define __KERNEL_ADAPTIVE_SAMPLING_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -235,5 +234,3 @@ ccl_device bool kernel_do_adaptive_filter_y(KernelGlobals *kg, int x, ccl_global
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_ADAPTIVE_SAMPLING_H__ */

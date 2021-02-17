@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_COMPAT_OPTIX_H__
-#define __KERNEL_COMPAT_OPTIX_H__
+#pragma once
 
 #define OPTIX_DONT_INCLUDE_CUDA
 #include <optix.h>
@@ -93,5 +92,3 @@ __device__ half __float2half(const float f)
 
 #include "util/util_half.h"
 #include "util/util_types.h"
-
-#endif /* __KERNEL_COMPAT_OPTIX_H__ */

@@ -23,6 +23,8 @@
  * Release.
  */
 
+#pragma once
+
 // clang-format off
 #include "kernel/closure/alloc.h"
 #include "kernel/closure/bsdf_util.h"

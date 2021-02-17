@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_COMPAT_CPU_H__
-#define __KERNEL_COMPAT_CPU_H__
+#pragma once
 
 #define __KERNEL_CPU__
 
@@ -152,5 +151,3 @@ typedef vector3<avxf> avx3f;
 #endif
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_COMPAT_CPU_H__ */

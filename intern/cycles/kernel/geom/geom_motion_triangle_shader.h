@@ -25,6 +25,8 @@
  * and ATTR_STD_MOTION_VERTEX_NORMAL mesh attributes.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* Setup of motion triangle specific parts of ShaderData, moved into this one

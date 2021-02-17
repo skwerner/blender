@@ -16,8 +16,7 @@
 
 /* Constant Globals */
 
-#ifndef __KERNEL_GLOBALS_H__
-#define __KERNEL_GLOBALS_H__
+#pragma once
 
 #include "kernel/kernel_profiling.h"
 
@@ -240,5 +239,3 @@ ccl_device float lookup_table_read_2D(
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_GLOBALS_H__ */

@@ -25,6 +25,8 @@
  * and ATTR_STD_MOTION_VERTEX_NORMAL mesh attributes.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* Refine triangle intersection to more precise hit point. For rays that travel

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __FILTER_DEFINES_H__
-#define __FILTER_DEFINES_H__
+#pragma once
 
 #define DENOISE_FEATURES 11
 #define TRANSFORM_SIZE (DENOISE_FEATURES * DENOISE_FEATURES)
@@ -69,5 +68,3 @@ typedef struct TileInfo {
 #  endif
 #  define ccl_get_tile_buffer(id) (tile_info->buffers[id])
 #endif
-
-#endif /* __FILTER_DEFINES_H__*/

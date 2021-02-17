@@ -20,6 +20,8 @@
  * simply includes this file without worry of copying actual implementation over.
  */
 
+#pragma once
+
 #include "kernel/kernel_compat_cpu.h"
 
 #include "kernel/filter/filter_kernel.h"

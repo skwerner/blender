@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include "kernel/kernel_id_passes.h"
 
 CCL_NAMESPACE_BEGIN

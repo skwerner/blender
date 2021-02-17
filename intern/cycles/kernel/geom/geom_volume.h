@@ -23,6 +23,8 @@
  * 3D voxel textures can be assigned as attributes per mesh, which means the
  * same shader can be used for volume objects with different densities, etc. */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 #ifdef __VOLUME__

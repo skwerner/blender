@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __FILTER_H__
-#define __FILTER_H__
+#pragma once
 
 /* CPU Filter Kernel Interface */
 
@@ -48,5 +47,3 @@ CCL_NAMESPACE_BEGIN
 #include "kernel/kernels/cpu/filter_cpu.h"
 
 CCL_NAMESPACE_END
-
-#endif /* __FILTER_H__ */

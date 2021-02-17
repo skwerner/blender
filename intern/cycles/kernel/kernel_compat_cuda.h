@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_COMPAT_CUDA_H__
-#define __KERNEL_COMPAT_CUDA_H__
+#pragma once
 
 #define __KERNEL_GPU__
 #define __KERNEL_CUDA__
@@ -174,5 +173,3 @@ ccl_device_inline uint ccl_num_groups(uint d)
 #define tanf(x) __tanf(((float)(x)))
 #define logf(x) __logf(((float)(x)))
 #define expf(x) __expf(((float)(x)))
-
-#endif /* __KERNEL_COMPAT_CUDA_H__ */

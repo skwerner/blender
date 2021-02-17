@@ -25,6 +25,8 @@
  * the code has been extended and modified to support more primitives and work
  * with CPU/CUDA/OpenCL. */
 
+#pragma once
+
 #ifdef __EMBREE__
 #  include "kernel/bvh/bvh_embree.h"
 #endif

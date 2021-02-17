@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 #define ccl_get_feature_sse(pass) load_float4(buffer + (pass)*pass_stride)

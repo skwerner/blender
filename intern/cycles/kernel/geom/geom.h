@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 // clang-format off
 #include "kernel/geom/geom_attribute.h"
 #include "kernel/geom/geom_object.h"

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_H__
-#define __KERNEL_H__
+#pragma once
 
 /* CPU Kernel Interface */
 
@@ -63,5 +62,3 @@ void kernel_global_memory_copy(KernelGlobals *kg, const char *name, void *mem, s
 #include "kernel/kernels/cpu/kernel_cpu.h"
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_H__ */

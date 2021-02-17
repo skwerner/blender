@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_TYPES_H__
-#define __KERNEL_TYPES_H__
+#pragma once
 
 #if !defined(__KERNEL_GPU__) && defined(WITH_EMBREE)
 #  include <embree3/rtcore.h>
@@ -1704,5 +1703,3 @@ typedef struct WorkTile {
 #define NUM_PMJ_PATTERNS 48
 
 CCL_NAMESPACE_END
-
-#endif /*  __KERNEL_TYPES_H__ */

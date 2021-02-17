@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #ifdef __KERNEL_CPU__
 #  include <fenv.h>
 #endif
 
 #include "kernel/kernel_color.h"
-
-#ifndef __BSDF_HAIR_PRINCIPLED_H__
-#  define __BSDF_HAIR_PRINCIPLED_H__
 
 CCL_NAMESPACE_BEGIN
 
@@ -186,7 +185,7 @@ ccl_device_inline float4 combine_with_energy(KernelGlobals *kg, float3 c)
   return make_float4(c.x, c.y, c.z, linear_rgb_to_gray(kg, c));
 }
 
-#  ifdef __HAIR__
+#ifdef __HAIR__
 /* Set up the hair closure. */
 ccl_device int bsdf_principled_hair_setup(ShaderData *sd, PrincipledHairBSDF *bsdf)
 {
@@ -226,7 +225,7 @@ ccl_device int bsdf_principled_hair_setup(ShaderData *sd, PrincipledHairBSDF *bs
   return SD_BSDF | SD_BSDF_HAS_EVAL | SD_BSDF_NEEDS_LCG;
 }
 
-#  endif /* __HAIR__ */
+#endif /* __HAIR__ */
 
 /* Given the Fresnel term and transmittance, generate the attenuation terms for each bounce. */
 ccl_device_inline void hair_attenuation(KernelGlobals *kg, float f, float3 T, float4 *Ap)
@@ -473,11 +472,11 @@ ccl_device int bsdf_principled_hair_sample(KernelGlobals *kg,
 
   *omega_in = X * sin_theta_i + Y * cos_theta_i * cosf(phi_i) + Z * cos_theta_i * sinf(phi_i);
 
-#  ifdef __RAY_DIFFERENTIALS__
+#ifdef __RAY_DIFFERENTIALS__
   float3 N = safe_normalize(sd->I + *omega_in);
   *domega_in_dx = (2 * dot(N, sd->dI.dx)) * N - sd->dI.dx;
   *domega_in_dy = (2 * dot(N, sd->dI.dy)) * N - sd->dI.dy;
-#  endif
+#endif
 
   return LABEL_GLOSSY | ((p == 0) ? LABEL_REFLECT : LABEL_TRANSMIT);
 }
@@ -523,5 +522,3 @@ ccl_device_inline float3 bsdf_principled_hair_sigma_from_concentration(const flo
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __BSDF_HAIR_PRINCIPLED_H__ */

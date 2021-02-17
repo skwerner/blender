@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __VOLUME_H__
-#define __VOLUME_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -197,5 +196,3 @@ ccl_device int volume_phase_sample(const ShaderData *sd,
 }
 
 CCL_NAMESPACE_END
-
-#endif

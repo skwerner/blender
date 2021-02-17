@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_CPU_IMAGE_H__
-#define __KERNEL_CPU_IMAGE_H__
+#pragma once
 
 #ifdef WITH_NANOVDB
 #  define NANOVDB_USE_INTRINSICS
@@ -656,5 +655,3 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals *kg,
 } /* Namespace. */
 
 CCL_NAMESPACE_END
-
-#endif  // __KERNEL_CPU_IMAGE_H__

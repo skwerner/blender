@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #if defined(__SPLIT_KERNEL__) || defined(__KERNEL_CUDA__)
 #  define __ATOMIC_PASS_WRITE__
 #endif

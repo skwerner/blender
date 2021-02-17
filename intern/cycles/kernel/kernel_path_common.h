@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include "util/util_hash.h"
 
 CCL_NAMESPACE_BEGIN

@@ -20,6 +20,8 @@
  * simply includes this file without worry of copying actual implementation over.
  */
 
+#pragma once
+
 // clang-format off
 #include "kernel/kernel_compat_cpu.h"
 

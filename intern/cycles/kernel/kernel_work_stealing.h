@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_WORK_STEALING_H__
-#define __KERNEL_WORK_STEALING_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -113,5 +112,3 @@ ccl_device bool get_next_work(KernelGlobals *kg,
 #endif
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_WORK_STEALING_H__ */

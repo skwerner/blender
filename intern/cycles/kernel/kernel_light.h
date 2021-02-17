@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include "kernel_light_background.h"
 
 CCL_NAMESPACE_BEGIN

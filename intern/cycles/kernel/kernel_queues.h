@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_QUEUE_H__
-#define __KERNEL_QUEUE_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -143,5 +142,3 @@ ccl_device int dequeue_ray_index(int queue_number,
 }
 
 CCL_NAMESPACE_END
-
-#endif  // __KERNEL_QUEUE_H__

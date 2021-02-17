@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_PROFILING_H__
-#define __KERNEL_PROFILING_H__
+#pragma once
 
 #ifdef __KERNEL_CPU__
 #  include "util/util_profiling.h"
@@ -42,5 +41,3 @@ CCL_NAMESPACE_BEGIN
 #endif /* __KERNEL_CPU__ */
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_PROFILING_H__ */

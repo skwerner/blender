@@ -65,8 +65,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-class CPUDevice;
-
 /* Has to be outside of the class to be shared across template instantiations. */
 static const char *logged_architecture = "";
 

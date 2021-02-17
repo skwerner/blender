@@ -146,6 +146,47 @@ template<typename F> class KernelFunctions {
   F kernel;
 };
 
+class KernelThreadGlobals : public KernelGlobals {
+ public:
+  KernelThreadGlobals(KernelGlobals *kernel_globals, OSLGlobals *osl_globals)
+      : KernelGlobals(*kernel_globals)
+  {
+    transparent_shadow_intersections = NULL;
+    const int decoupled_count = sizeof(decoupled_volume_steps) / sizeof(*decoupled_volume_steps);
+    for (int i = 0; i < decoupled_count; ++i) {
+      decoupled_volume_steps[i] = NULL;
+    }
+    decoupled_volume_steps_index = 0;
+    coverage_asset = coverage_object = coverage_material = NULL;
+#ifdef WITH_OSL
+    OSLShader::thread_init(this, kernel_globals, osl_globals);
+#endif
+  }
+
+  ~KernelThreadGlobals()
+  {
+    safe_free(transparent_shadow_intersections);
+
+    const int decoupled_count = sizeof(decoupled_volume_steps) / sizeof(*decoupled_volume_steps);
+    for (int i = 0; i < decoupled_count; ++i) {
+      safe_free(decoupled_volume_steps[i]);
+    }
+#ifdef WITH_OSL
+    OSLShader::thread_free(this);
+#endif
+  }
+
+ protected:
+  /* TODO(sergey): Consider making more available function. Maybe `util_memory.h`? */
+  void safe_free(void *mem)
+  {
+    if (mem == nullptr) {
+      return;
+    }
+    free(mem);
+  }
+};
+
 class CPUDeviceQueue : public DeviceQueue {
  public:
   CPUDeviceQueue(Device *device) : DeviceQueue(device)
@@ -1210,13 +1251,9 @@ class CPUDevice : public Device {
     }
 
     /* allocate buffer for kernel globals */
-    device_only_memory<KernelGlobals> kgbuffer(this, "kernel_globals");
-    kgbuffer.alloc_to_device(1);
+    KernelThreadGlobals kg(&kernel_globals, &osl_globals);
 
-    KernelGlobals *kg = new ((void *)kgbuffer.device_pointer)
-        KernelGlobals(thread_kernel_globals_init());
-
-    profiler.add_state(&kg->profiler);
+    profiler.add_state(&kg.profiler);
 
     /* NLM denoiser. */
     DenoisingTask *denoising = NULL;
@@ -1236,10 +1273,10 @@ class CPUDevice : public Device {
     RenderTile tile;
     while (task.acquire_tile(this, tile, tile_types)) {
       if (tile.task == RenderTile::PATH_TRACE) {
-        render(task, tile, kg);
+        render(task, tile, &kg);
       }
       else if (tile.task == RenderTile::BAKE) {
-        render(task, tile, kg);
+        render(task, tile, &kg);
       }
       else if (tile.task == RenderTile::DENOISE) {
         if (task.denoising.type == DENOISER_OPENIMAGEDENOISE) {
@@ -1248,7 +1285,7 @@ class CPUDevice : public Device {
         else if (task.denoising.type == DENOISER_NLM) {
           if (denoising == NULL) {
             denoising = new DenoisingTask(this, task);
-            denoising->profiler = &kg->profiler;
+            denoising->profiler = &kg.profiler;
           }
           denoise_nlm(*denoising, tile);
         }
@@ -1267,11 +1304,8 @@ class CPUDevice : public Device {
       oidn_task_lock.unlock();
     }
 
-    profiler.remove_state(&kg->profiler);
+    profiler.remove_state(&kg.profiler);
 
-    thread_kernel_globals_free((KernelGlobals *)kgbuffer.device_pointer);
-    kg->~KernelGlobals();
-    kgbuffer.free();
     delete denoising;
   }
 
@@ -1340,11 +1374,11 @@ class CPUDevice : public Device {
 
   void thread_shader(DeviceTask &task)
   {
-    KernelGlobals *kg = new KernelGlobals(thread_kernel_globals_init());
+    KernelThreadGlobals kg(&kernel_globals, &osl_globals);
 
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
-        shader_kernel()(kg,
+        shader_kernel()(&kg,
                         (uint4 *)task.shader_input,
                         (float4 *)task.shader_output,
                         task.shader_eval_type,
@@ -1358,9 +1392,6 @@ class CPUDevice : public Device {
 
       task.update_progress(NULL);
     }
-
-    thread_kernel_globals_free(kg);
-    delete kg;
   }
 
   virtual int get_split_task_count(DeviceTask &task) override
@@ -1415,44 +1446,6 @@ class CPUDevice : public Device {
   }
 
  protected:
-  inline KernelGlobals thread_kernel_globals_init()
-  {
-    KernelGlobals kg = kernel_globals;
-    kg.transparent_shadow_intersections = NULL;
-    const int decoupled_count = sizeof(kg.decoupled_volume_steps) /
-                                sizeof(*kg.decoupled_volume_steps);
-    for (int i = 0; i < decoupled_count; ++i) {
-      kg.decoupled_volume_steps[i] = NULL;
-    }
-    kg.decoupled_volume_steps_index = 0;
-    kg.coverage_asset = kg.coverage_object = kg.coverage_material = NULL;
-#ifdef WITH_OSL
-    OSLShader::thread_init(&kg, &kernel_globals, &osl_globals);
-#endif
-    return kg;
-  }
-
-  inline void thread_kernel_globals_free(KernelGlobals *kg)
-  {
-    if (kg == NULL) {
-      return;
-    }
-
-    if (kg->transparent_shadow_intersections != NULL) {
-      free(kg->transparent_shadow_intersections);
-    }
-    const int decoupled_count = sizeof(kg->decoupled_volume_steps) /
-                                sizeof(*kg->decoupled_volume_steps);
-    for (int i = 0; i < decoupled_count; ++i) {
-      if (kg->decoupled_volume_steps[i] != NULL) {
-        free(kg->decoupled_volume_steps[i]);
-      }
-    }
-#ifdef WITH_OSL
-    OSLShader::thread_free(kg);
-#endif
-  }
-
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/) override
   {
     return true;

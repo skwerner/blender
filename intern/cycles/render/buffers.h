@@ -84,7 +84,7 @@ class RenderBuffers {
   explicit RenderBuffers(Device *device);
   ~RenderBuffers();
 
-  void reset(BufferParams &params);
+  void reset(const BufferParams &params);
   void zero();
 
   bool copy_from_device();

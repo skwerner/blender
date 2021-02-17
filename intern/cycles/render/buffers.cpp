@@ -142,7 +142,7 @@ RenderBuffers::~RenderBuffers()
   buffer.free();
 }
 
-void RenderBuffers::reset(BufferParams &params_)
+void RenderBuffers::reset(const BufferParams &params_)
 {
   params = params_;
 

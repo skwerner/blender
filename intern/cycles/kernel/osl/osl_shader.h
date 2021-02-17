@@ -49,9 +49,7 @@ class OSLShader {
   static void register_closures(OSLShadingSystem *ss);
 
   /* per thread data */
-  static void thread_init(KernelGlobals *kg,
-                          KernelGlobals *kernel_globals,
-                          OSLGlobals *osl_globals);
+  static void thread_init(KernelGlobals *kg, OSLGlobals *osl_globals);
   static void thread_free(KernelGlobals *kg);
 
   /* eval */

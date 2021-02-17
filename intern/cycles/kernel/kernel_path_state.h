@@ -18,6 +18,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+#if 0
 ccl_device_inline void path_state_init(const KernelGlobals *kg,
                                        ShaderData *stack_sd,
                                        ccl_addr_space PathState *state,
@@ -39,7 +40,7 @@ ccl_device_inline void path_state_init(const KernelGlobals *kg,
   state->transmission_bounce = 0;
   state->transparent_bounce = 0;
 
-#ifdef __DENOISING_FEATURES__
+#  ifdef __DENOISING_FEATURES__
   if (kernel_data.film.pass_denoising_data) {
     state->flag |= PATH_RAY_STORE_SHADOW_INFO;
     state->denoising_feature_weight = 1.0f;
@@ -49,26 +50,28 @@ ccl_device_inline void path_state_init(const KernelGlobals *kg,
     state->denoising_feature_weight = 0.0f;
     state->denoising_feature_throughput = make_float3(0.0f, 0.0f, 0.0f);
   }
-#endif /* __DENOISING_FEATURES__ */
+#  endif /* __DENOISING_FEATURES__ */
 
   state->min_ray_pdf = FLT_MAX;
   state->ray_pdf = 0.0f;
-#ifdef __LAMP_MIS__
+#  ifdef __LAMP_MIS__
   state->ray_t = 0.0f;
-#endif
+#  endif
 
-#ifdef __VOLUME__
+#  ifdef __VOLUME__
   state->volume_bounce = 0;
   state->volume_bounds_bounce = 0;
 
+#    if 0
   if (kernel_data.integrator.use_volumes) {
     /* Initialize volume stack with volume we are inside of. */
     kernel_volume_stack_init(kg, stack_sd, state, ray, state->volume_stack);
   }
-  else {
+  else
+  {
     state->volume_stack[0].shader = SHADER_NONE;
   }
-#endif
+#    endif
 }
 
 ccl_device_inline void path_state_next(const KernelGlobals *kg,
@@ -100,7 +103,7 @@ ccl_device_inline void path_state_next(const KernelGlobals *kg,
 
   state->flag &= ~(PATH_RAY_ALL_VISIBILITY | PATH_RAY_MIS_SKIP);
 
-#ifdef __VOLUME__
+#    ifdef __VOLUME__
   if (label & LABEL_VOLUME_SCATTER) {
     /* volume scatter */
     state->flag |= PATH_RAY_VOLUME_SCATTER;
@@ -112,7 +115,7 @@ ccl_device_inline void path_state_next(const KernelGlobals *kg,
     }
   }
   else
-#endif
+#    endif
   {
     /* surface reflection/transmission */
     if (label & LABEL_REFLECT) {
@@ -163,14 +166,15 @@ ccl_device_inline void path_state_next(const KernelGlobals *kg,
   /* random number generator next bounce */
   state->rng_offset += PRNG_BOUNCE_NUM;
 
-#ifdef __DENOISING_FEATURES__
+#    ifdef __DENOISING_FEATURES__
   if ((state->denoising_feature_weight == 0.0f) && !(state->flag & PATH_RAY_SHADOW_CATCHER)) {
     state->flag &= ~PATH_RAY_STORE_SHADOW_INFO;
   }
-#endif
+#    endif
 }
+#  endif
 
-#ifdef __VOLUME__
+#  ifdef __VOLUME__
 ccl_device_inline bool path_state_volume_next(const KernelGlobals *kg,
                                               ccl_addr_space PathState *state)
 {
@@ -188,23 +192,25 @@ ccl_device_inline bool path_state_volume_next(const KernelGlobals *kg,
 
   return true;
 }
+#  endif
 #endif
 
-ccl_device_inline uint path_state_ray_visibility(const KernelGlobals *kg,
-                                                 ccl_addr_space PathState *state)
+ccl_device_inline uint path_state_ray_visibility(INTEGRATOR_STATE_CONST_ARGS)
 {
-  uint flag = state->flag & PATH_RAY_ALL_VISIBILITY;
+  const uint32_t flag = INTEGRATOR_STATE(path, flag);
+  uint32_t visibility = flag & PATH_RAY_ALL_VISIBILITY;
 
-  /* for visibility, diffuse/glossy are for reflection only */
-  if (flag & PATH_RAY_TRANSMIT)
-    flag &= ~(PATH_RAY_DIFFUSE | PATH_RAY_GLOSSY);
-  /* todo: this is not supported as its own ray visibility yet */
-  if (state->flag & PATH_RAY_VOLUME_SCATTER)
-    flag |= PATH_RAY_DIFFUSE;
+  /* For visibility, diffuse/glossy are for reflection only. */
+  if (visibility & PATH_RAY_TRANSMIT)
+    visibility &= ~(PATH_RAY_DIFFUSE | PATH_RAY_GLOSSY);
+  /* todo: this is not supported as its own ray visibility yet. */
+  if (flag & PATH_RAY_VOLUME_SCATTER)
+    visibility |= PATH_RAY_DIFFUSE;
 
-  return flag;
+  return visibility;
 }
 
+#if 0
 ccl_device_inline float path_state_continuation_probability(const KernelGlobals *kg,
                                                             ccl_addr_space PathState *state,
                                                             const float3 throughput)
@@ -218,24 +224,24 @@ ccl_device_inline float path_state_continuation_probability(const KernelGlobals 
     if (state->transparent_bounce <= kernel_data.integrator.transparent_min_bounce) {
       return 1.0f;
     }
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
     /* Exception for shadow catcher not working correctly with RR. */
     else if ((state->flag & PATH_RAY_SHADOW_CATCHER) && (state->transparent_bounce <= 8)) {
       return 1.0f;
     }
-#endif
+#  endif
   }
   else {
     /* Do at least specified number of bounces without RR. */
     if (state->bounce <= kernel_data.integrator.min_bounce) {
       return 1.0f;
     }
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
     /* Exception for shadow catcher not working correctly with RR. */
     else if ((state->flag & PATH_RAY_SHADOW_CATCHER) && (state->bounce <= 3)) {
       return 1.0f;
     }
-#endif
+#  endif
   }
 
   /* Probabilistic termination: use sqrt() to roughly match typical view
@@ -276,5 +282,6 @@ ccl_device_inline void path_state_branch(ccl_addr_space PathState *state,
     state->branch_factor *= num_branches;
   }
 }
+#endif
 
 CCL_NAMESPACE_END

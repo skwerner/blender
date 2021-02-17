@@ -16,20 +16,63 @@
 
 #pragma once
 
+#include "kernel/kernel_differential.h"
+#include "kernel/kernel_projection.h"
+#include "kernel/kernel_random.h"
+
+#include "kernel/geom/geom.h"
+
+#include "kernel/bvh/bvh.h"
+
 CCL_NAMESPACE_BEGIN
+
+ccl_device_forceinline bool intersect_closest_scene(INTEGRATOR_STATE_CONST_ARGS,
+                                                    const Ray *ray,
+                                                    Intersection *isect)
+{
+  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
+  const uint visibility = path_state_ray_visibility(INTEGRATOR_STATE_PASS);
+
+  /* TODO */
+#if 0
+  /* Trick to use short AO rays to approximate indirect light at the end of the path. */
+  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
+    visibility = PATH_RAY_SHADOW;
+    ray->t = kernel_data.background.ao_distance;
+  }
+#endif
+
+  return scene_intersect(kg, ray, visibility, isect);
+}
 
 ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
   kernel_assert(INTEGRATOR_STATE(ray, t) != 0.0f);
 
-  /* Scene ray intersection. */
-  INTEGRATOR_STATE_WRITE(isect, t) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, u) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, v) = 0.0f;
-  INTEGRATOR_STATE_WRITE(isect, Ng) = make_float3(0.0f, 0.0f, 0.0f);
-  INTEGRATOR_STATE_WRITE(isect, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_WRITE(isect, prim) = PRIM_NONE;
-  INTEGRATOR_STATE_WRITE(isect, type) = PRIMITIVE_NONE;
+  /* Read ray from integrator state into local memory. */
+  Ray ray;
+  ray.P = INTEGRATOR_STATE(ray, P);
+  ray.D = INTEGRATOR_STATE(ray, D);
+  ray.t = INTEGRATOR_STATE(ray, t);
+  ray.time = INTEGRATOR_STATE(ray, time);
+  ray.dP = differential3_zero();
+  ray.dD = differential3_zero();
+
+  /* Scene Intersection. */
+  Intersection isect;
+  const bool hit = intersect_closest_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
+  if (!hit) {
+    isect.object = OBJECT_NONE;
+  }
+
+  /* Write intersection result into global integrator state memory. */
+  INTEGRATOR_STATE_WRITE(isect, t) = isect.t;
+  INTEGRATOR_STATE_WRITE(isect, u) = isect.u;
+  INTEGRATOR_STATE_WRITE(isect, v) = isect.v;
+  INTEGRATOR_STATE_WRITE(isect, Ng) = isect.Ng;
+  INTEGRATOR_STATE_WRITE(isect, object) = isect.object;
+  INTEGRATOR_STATE_WRITE(isect, prim) = isect.prim;
+  INTEGRATOR_STATE_WRITE(isect, type) = isect.type;
 
 #ifdef __VOLUME__
   if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {
@@ -40,14 +83,14 @@ ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
   }
 #endif
 
-  if (INTEGRATOR_STATE(isect, object) == OBJECT_NONE) {
-    /* Nothing hit, continue with background kernel. */
-    INTEGRATOR_FLOW_QUEUE(background);
+  if (hit) {
+    /* Hit a surface continue with surface kernel. */
+    INTEGRATOR_FLOW_QUEUE(surface);
     return;
   }
   else {
-    /* Hit a surface continue with surface kernel. */
-    INTEGRATOR_FLOW_QUEUE(surface);
+    /* Nothing hit, continue with background kernel. */
+    INTEGRATOR_FLOW_QUEUE(background);
     return;
   }
 }

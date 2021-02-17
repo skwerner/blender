@@ -30,6 +30,7 @@
 #    include "kernel/kernel_types.h"
 
 #    include "kernel/kernel_globals.h"
+#    include "kernel/kernels/cpu/kernel_cpu_image.h"
 
 #    include "kernel/integrator/kernel_background.h"
 #    include "kernel/integrator/kernel_generate_camera_rays.h"
@@ -44,7 +45,6 @@
 
 #if 0
 #    include "kernel/kernel_color.h"
-#    include "kernel/kernels/cpu/kernel_cpu_image.h"
 #    include "kernel/kernel_path.h"
 #    include "kernel/kernel_path_branched.h"
 #    include "kernel/kernel_bake.h"

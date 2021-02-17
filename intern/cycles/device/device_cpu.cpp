@@ -148,7 +148,9 @@ template<typename F> class KernelFunctions {
 
 class KernelThreadGlobals : public KernelGlobals {
  public:
-  KernelThreadGlobals(const KernelGlobals &kernel_globals, OSLGlobals *osl_globals)
+  /* TODO(sergey): Would be nice to have properly typed OSLGlobals even in the case when building
+   * without OSL support. Will avoid need to those unnamed pointers and casts.  */
+  KernelThreadGlobals(const KernelGlobals &kernel_globals, void *osl_globals_memory)
       : KernelGlobals(kernel_globals)
   {
     transparent_shadow_intersections = NULL;
@@ -159,7 +161,9 @@ class KernelThreadGlobals : public KernelGlobals {
     decoupled_volume_steps_index = 0;
     coverage_asset = coverage_object = coverage_material = NULL;
 #ifdef WITH_OSL
-    OSLShader::thread_init(this, osl_globals);
+    OSLShader::thread_init(this, reinterpret_cast<OSLGlobals *>(osl_globals_memory));
+#else
+    (void)osl_globals_memory;
 #endif
   }
 
@@ -1251,7 +1255,7 @@ class CPUDevice : public Device {
     }
 
     /* allocate buffer for kernel globals */
-    KernelThreadGlobals kg(kernel_globals, &osl_globals);
+    KernelThreadGlobals kg(kernel_globals, osl_memory());
 
     profiler.add_state(&kg.profiler);
 
@@ -1374,7 +1378,7 @@ class CPUDevice : public Device {
 
   void thread_shader(DeviceTask &task)
   {
-    KernelThreadGlobals kg(kernel_globals, &osl_globals);
+    KernelThreadGlobals kg(kernel_globals, osl_memory());
 
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)

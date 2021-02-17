@@ -66,84 +66,108 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Has to be outside of the class to be shared across template instantiations. */
-static const char *logged_architecture = "";
+/* Name of microarchitecture which was last logged. Avoid noisy output when multiple kernel
+ * functions are defined in the device.
+ *
+ * NOTE: Has to be outside of the class to be shared across template instantiations. */
+static const char *g_logged_uarch = "";
 
-template<typename F> class KernelFunctions {
+/* A wrapper around per-microarchitecture variant of a kernel function.
+ *
+ * Provides a function-call-like API which gets routed to the most suitable implementation.
+ *
+ * For example, on a computer which only has SSE4.1 the kernel_sse41 will be used. */
+template<typename FunctionType> class KernelFunction {
  public:
-  KernelFunctions()
+  KernelFunction(FunctionType kernel_default,
+                 FunctionType kernel_sse2,
+                 FunctionType kernel_sse3,
+                 FunctionType kernel_sse41,
+                 FunctionType kernel_avx,
+                 FunctionType kernel_avx2)
   {
-    kernel = (F)NULL;
+    const KernelInfo kernel_info = get_best_kernel_info(
+        kernel_default, kernel_sse2, kernel_sse3, kernel_sse41, kernel_avx, kernel_avx2);
+
+    if (strcmp(kernel_info.uarch_name, g_logged_uarch) != 0) {
+      VLOG(1) << "Will be using " << kernel_info.uarch_name << " kernels.";
+      g_logged_uarch = kernel_info.uarch_name;
+    }
+
+    kernel_ = kernel_info.kernel;
   }
 
-  KernelFunctions(
-      F kernel_default, F kernel_sse2, F kernel_sse3, F kernel_sse41, F kernel_avx, F kernel_avx2)
+  inline FunctionType operator()() const
   {
-    const char *architecture_name = "default";
-    kernel = kernel_default;
+    assert(kernel_);
 
-    /* Silence potential warnings about unused variables
-     * when compiling without some architectures. */
+    return kernel_;
+  }
+
+ protected:
+  /* Helper class which allows to pass human-readable microarchitecture name together with function
+   * pointer. */
+  class KernelInfo {
+   public:
+    /* TODO(sergey): Use string view, to have higher-level functionality (i.e. comparison) without
+     * memory allocation. */
+    KernelInfo(const char *uarch_name, FunctionType kernel)
+        : uarch_name(uarch_name), kernel(kernel)
+    {
+    }
+
+    const char *uarch_name;
+    FunctionType kernel;
+  };
+
+  KernelInfo get_best_kernel_info(FunctionType kernel_default,
+                                  FunctionType kernel_sse2,
+                                  FunctionType kernel_sse3,
+                                  FunctionType kernel_sse41,
+                                  FunctionType kernel_avx,
+                                  FunctionType kernel_avx2)
+  {
+    /* Silence warnings about unused variables when compiling without some architectures. */
     (void)kernel_sse2;
     (void)kernel_sse3;
     (void)kernel_sse41;
     (void)kernel_avx;
     (void)kernel_avx2;
+
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
     if (DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
-      architecture_name = "AVX2";
-      kernel = kernel_avx2;
+      return KernelInfo("AVX2", kernel_avx2);
     }
-    else
 #endif
+
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
-        if (DebugFlags().cpu.has_avx() && system_cpu_support_avx()) {
-      architecture_name = "AVX";
-      kernel = kernel_avx;
+    if (DebugFlags().cpu.has_avx() && system_cpu_support_avx()) {
+      return KernelInfo("AVX", kernel_avx);
     }
-    else
 #endif
+
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
-        if (DebugFlags().cpu.has_sse41() && system_cpu_support_sse41()) {
-      architecture_name = "SSE4.1";
-      kernel = kernel_sse41;
+    if (DebugFlags().cpu.has_sse41() && system_cpu_support_sse41()) {
+      return KernelInfo("SSE4.1", kernel_sse41);
     }
-    else
 #endif
+
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
-        if (DebugFlags().cpu.has_sse3() && system_cpu_support_sse3()) {
-      architecture_name = "SSE3";
-      kernel = kernel_sse3;
+    if (DebugFlags().cpu.has_sse3() && system_cpu_support_sse3()) {
+      return KernelInfo("SSE3", kernel_sse3);
     }
-    else
 #endif
+
 #ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
-        if (DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
-      architecture_name = "SSE2";
-      kernel = kernel_sse2;
-    }
-#else
-    {
-      /* Dummy to prevent the architecture if below become
-       * conditional when WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
-       * is not defined. */
+    if (DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
+      return KernelInfo("SSE2", kernel_sse2);
     }
 #endif
 
-    if (strcmp(architecture_name, logged_architecture) != 0) {
-      VLOG(1) << "Will be using " << architecture_name << " kernels.";
-      logged_architecture = architecture_name;
-    }
+    return KernelInfo("default", kernel_default);
   }
 
-  inline F operator()() const
-  {
-    assert(kernel);
-    return kernel;
-  }
-
- protected:
-  F kernel;
+  FunctionType kernel_;
 };
 
 class KernelThreadGlobals : public KernelGlobals {
@@ -208,9 +232,8 @@ class CPUDeviceQueue : public DeviceQueue {
    * resource management for such local `KernelGlobals` is centralized. */
 };
 
-using IntegratorFunction =
-    KernelFunctions<void (*)(const KernelGlobals *, IntegratorState *state)>;
-using IntegratorOutputFunction = KernelFunctions<void (*)(
+using IntegratorFunction = KernelFunction<void (*)(const KernelGlobals *, IntegratorState *state)>;
+using IntegratorOutputFunction = KernelFunction<void (*)(
     const KernelGlobals *, IntegratorState *state, ccl_global float *render_buffer)>;
 
 class CPUDevice : public Device {
@@ -234,59 +257,59 @@ class CPUDevice : public Device {
   RTCDevice embree_device;
 #endif
 
-  KernelFunctions<void (*)(KernelGlobals *, float *, int, int, int, int, int)> path_trace_kernel;
-  KernelFunctions<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
+  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> path_trace_kernel;
+  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_half_float_kernel;
-  KernelFunctions<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
+  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_byte_kernel;
-  KernelFunctions<void (*)(KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>
+  KernelFunction<void (*)(KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>
       shader_kernel;
-  KernelFunctions<void (*)(KernelGlobals *, float *, int, int, int, int, int)> bake_kernel;
+  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> bake_kernel;
 
-  KernelFunctions<void (*)(
+  KernelFunction<void (*)(
       int, TileInfo *, int, int, float *, float *, float *, float *, float *, int *, int, int)>
       filter_divide_shadow_kernel;
-  KernelFunctions<void (*)(
+  KernelFunction<void (*)(
       int, TileInfo *, int, int, int, int, float *, float *, float, int *, int, int)>
       filter_get_feature_kernel;
-  KernelFunctions<void (*)(int, int, int, int *, float *, float *, int, int *)>
+  KernelFunction<void (*)(int, int, int, int *, float *, float *, int, int *)>
       filter_write_feature_kernel;
-  KernelFunctions<void (*)(int, int, float *, float *, float *, float *, int *, int)>
+  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
       filter_detect_outliers_kernel;
-  KernelFunctions<void (*)(int, int, float *, float *, float *, float *, int *, int)>
+  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
       filter_combine_halves_kernel;
 
-  KernelFunctions<void (*)(
+  KernelFunction<void (*)(
       int, int, float *, float *, float *, float *, int *, int, int, int, float, float)>
       filter_nlm_calc_difference_kernel;
-  KernelFunctions<void (*)(float *, float *, int *, int, int)> filter_nlm_blur_kernel;
-  KernelFunctions<void (*)(float *, float *, int *, int, int)> filter_nlm_calc_weight_kernel;
-  KernelFunctions<void (*)(
+  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_blur_kernel;
+  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_calc_weight_kernel;
+  KernelFunction<void (*)(
       int, int, float *, float *, float *, float *, float *, int *, int, int, int)>
       filter_nlm_update_output_kernel;
-  KernelFunctions<void (*)(float *, float *, int *, int)> filter_nlm_normalize_kernel;
+  KernelFunction<void (*)(float *, float *, int *, int)> filter_nlm_normalize_kernel;
 
-  KernelFunctions<void (*)(
+  KernelFunction<void (*)(
       float *, TileInfo *, int, int, int, float *, int *, int *, int, int, bool, int, float)>
       filter_construct_transform_kernel;
-  KernelFunctions<void (*)(int,
-                           int,
-                           int,
-                           float *,
-                           float *,
-                           float *,
-                           int *,
-                           float *,
-                           float3 *,
-                           int *,
-                           int *,
-                           int,
-                           int,
-                           int,
-                           int,
-                           bool)>
+  KernelFunction<void (*)(int,
+                          int,
+                          int,
+                          float *,
+                          float *,
+                          float *,
+                          int *,
+                          float *,
+                          float3 *,
+                          int *,
+                          int *,
+                          int,
+                          int,
+                          int,
+                          int,
+                          bool)>
       filter_nlm_construct_gramian_kernel;
-  KernelFunctions<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
+  KernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
       filter_finalize_kernel;
 
   IntegratorOutputFunction background_kernel;

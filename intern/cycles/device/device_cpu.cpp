@@ -325,21 +325,71 @@ class KernelThreadGlobals : public KernelGlobals {
   }
 };
 
+/* Base implementation of all CPU queues. Takes care of kernel function pointers and global data
+ * localization. */
 class CPUDeviceQueue : public DeviceQueue {
  public:
-  CPUDeviceQueue(Device *device) : DeviceQueue(device)
+  CPUDeviceQueue(Device *device, const Kernels &kernels, const KernelGlobals &kernel_globals)
+      : DeviceQueue(device),
+        kernels_(kernels),
+        kernel_globals_(kernel_globals, device->osl_memory())
+  {
+  }
+
+ protected:
+  Kernels kernels_;
+
+  /* Copy of kernel globals which is suitable for concurrent access from multiple queues.
+   *
+   * More specifically, the `kernel_globals_` is local to this queue and nobody else is
+   * accessing it, but some "localization" is required to decouple from kernel globals stored
+   * on the device level. */
+  KernelThreadGlobals kernel_globals_;
+};
+
+class IntegratorQueue : public CPUDeviceQueue {
+ public:
+  IntegratorQueue(Device *device,
+                  const Kernels &kernels,
+                  const KernelGlobals &kernel_globals,
+                  RenderBuffers *render_buffers)
+      : CPUDeviceQueue(device, kernels, kernel_globals), render_buffers_(render_buffers)
   {
   }
 
   virtual void enqueue(DeviceKernel kernel)
   {
-    /* TODO(sergey): Needs implementation. */
-    (void)kernel;
+    float *render_buffer = render_buffers_->buffer.data();
+
+    switch (kernel) {
+      case DeviceKernel::BACKGROUND:
+        return kernels_.background(&kernel_globals_, &integrator_state_, render_buffer);
+      case DeviceKernel::GENERATE_CAMERA_RAYS:
+        return kernels_.generate_camera_rays(&kernel_globals_, &integrator_state_);
+      case DeviceKernel::INTERSECT_CLOSEST:
+        return kernels_.intersect_closest(&kernel_globals_, &integrator_state_);
+      case DeviceKernel::INTERSECT_SHADOW:
+        return kernels_.intersect_shadow(&kernel_globals_, &integrator_state_);
+      case DeviceKernel::SHADOW:
+        return kernels_.shadow(&kernel_globals_, &integrator_state_, render_buffer);
+      case DeviceKernel::SUBSURFACE:
+        return kernels_.subsurface(&kernel_globals_, &integrator_state_);
+      case DeviceKernel::SURFACE:
+        return kernels_.surface(&kernel_globals_, &integrator_state_, render_buffer);
+      case DeviceKernel::VOLUME:
+        return kernels_.volume(&kernel_globals_, &integrator_state_, render_buffer);
+    }
+
+    LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
   }
 
-  /* TODO(sergey): Add kernel globals which will be usable by this queue. Should probably be
-   * done the same as thread_kernel_globals_init(). Ideally, look into sub-classing, so that the
-   * resource management for such local `KernelGlobals` is centralized. */
+ protected:
+  RenderBuffers *render_buffers_;
+
+  /* TODO(sergey): Make integrator state somehow more explicit and more edependent on the number
+   * of threads, or number of splits in the kernels.
+   * For the quick debug keep it at 1, but it really needs to be changed soon. */
+  IntegratorState integrator_state_;
 };
 
 class CPUDevice : public Device {
@@ -1476,9 +1526,9 @@ class CPUDevice : public Device {
     task_pool.cancel();
   }
 
-  virtual unique_ptr<DeviceQueue> queue_create() override
+  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *render_buffers) override
   {
-    return make_unique<CPUDeviceQueue>(this);
+    return make_unique<IntegratorQueue>(this, kernels, kernel_globals, render_buffers);
   }
 
  protected:

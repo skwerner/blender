@@ -50,7 +50,7 @@ void PathTrace::render_samples_on_device(Device *device,
   render_buffers.reset(buffer_params);
 
   /* Execution queue for the kernels from the path tracing graph. */
-  unique_ptr<DeviceQueue> queue = device->queue_create();
+  unique_ptr<DeviceQueue> queue = device->queue_create_integrator(&render_buffers);
   DCHECK(queue);
 
   /* TODO(sergey): Determine possible queue/wavefront size. For the ideal performance the wavefront

@@ -39,6 +39,7 @@ class BVH;
 class DeviceQueue;
 class Progress;
 class RenderTile;
+class RenderBuffers;
 
 /* Device Types */
 
@@ -410,12 +411,12 @@ class Device {
 
   /* Queues. */
 
-  /* Create new generic queue for commands execution on this device.
+  /* Create new queue for integrator kernels.
    *
    * NOTE: Do not use it for multi-device and instead use per-device queues. Makes it more explicit
    * all the synchronization and work stealing logic. It will LOG(FATAL) when used on multi-device.
    */
-  virtual unique_ptr<DeviceQueue> queue_create() = 0;
+  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *buffers) = 0;
 
   /* opengl drawing */
   virtual void draw_pixels(device_memory &mem,

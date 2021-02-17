@@ -75,7 +75,8 @@ class DummyDevice : public Device {
   {
   }
 
-  virtual unique_ptr<DeviceQueue> queue_create() override
+  virtual unique_ptr<DeviceQueue> queue_create_integrator(
+      RenderBuffers * /*render_buffers*/) override
   {
     return nullptr;
   }

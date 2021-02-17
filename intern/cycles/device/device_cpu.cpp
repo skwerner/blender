@@ -170,6 +170,116 @@ template<typename FunctionType> class KernelFunction {
   FunctionType kernel_;
 };
 
+using IntegratorFunction = KernelFunction<void (*)(const KernelGlobals *, IntegratorState *state)>;
+using IntegratorOutputFunction = KernelFunction<void (*)(
+    const KernelGlobals *, IntegratorState *state, ccl_global float *render_buffer)>;
+
+class Kernels {
+ public:
+  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> path_trace;
+  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
+      convert_to_half_float;
+  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
+      convert_to_byte;
+  KernelFunction<void (*)(KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)> shader;
+  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> bake;
+
+  KernelFunction<void (*)(
+      int, TileInfo *, int, int, float *, float *, float *, float *, float *, int *, int, int)>
+      filter_divide_shadow;
+  KernelFunction<void (*)(
+      int, TileInfo *, int, int, int, int, float *, float *, float, int *, int, int)>
+      filter_get_feature;
+  KernelFunction<void (*)(int, int, int, int *, float *, float *, int, int *)>
+      filter_write_feature;
+  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
+      filter_detect_outliers;
+  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
+      filter_combine_halves;
+
+  KernelFunction<void (*)(
+      int, int, float *, float *, float *, float *, int *, int, int, int, float, float)>
+      filter_nlm_calc_difference;
+  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_blur;
+  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_calc_weight;
+  KernelFunction<void (*)(
+      int, int, float *, float *, float *, float *, float *, int *, int, int, int)>
+      filter_nlm_update_output;
+  KernelFunction<void (*)(float *, float *, int *, int)> filter_nlm_normalize;
+
+  KernelFunction<void (*)(
+      float *, TileInfo *, int, int, int, float *, int *, int *, int, int, bool, int, float)>
+      filter_construct_transform;
+  KernelFunction<void (*)(int,
+                          int,
+                          int,
+                          float *,
+                          float *,
+                          float *,
+                          int *,
+                          float *,
+                          float3 *,
+                          int *,
+                          int *,
+                          int,
+                          int,
+                          int,
+                          int,
+                          bool)>
+      filter_nlm_construct_gramian;
+  KernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
+      filter_finalize;
+
+  IntegratorOutputFunction background;
+  IntegratorFunction generate_camera_rays;
+  IntegratorFunction intersect_closest;
+  IntegratorFunction intersect_shadow;
+  IntegratorOutputFunction shadow;
+  IntegratorFunction subsurface;
+  IntegratorOutputFunction surface;
+  IntegratorOutputFunction volume;
+
+#define KERNEL_FUNCTIONS(name) \
+  KERNEL_NAME_EVAL(cpu, name), KERNEL_NAME_EVAL(cpu_sse2, name), \
+      KERNEL_NAME_EVAL(cpu_sse3, name), KERNEL_NAME_EVAL(cpu_sse41, name), \
+      KERNEL_NAME_EVAL(cpu_avx, name), KERNEL_NAME_EVAL(cpu_avx2, name)
+
+#define REGISTER_KERNEL(name) name(KERNEL_FUNCTIONS(name))
+
+  Kernels()
+      : REGISTER_KERNEL(path_trace),
+        REGISTER_KERNEL(convert_to_half_float),
+        REGISTER_KERNEL(convert_to_byte),
+        REGISTER_KERNEL(shader),
+        REGISTER_KERNEL(bake),
+        REGISTER_KERNEL(filter_divide_shadow),
+        REGISTER_KERNEL(filter_get_feature),
+        REGISTER_KERNEL(filter_write_feature),
+        REGISTER_KERNEL(filter_detect_outliers),
+        REGISTER_KERNEL(filter_combine_halves),
+        REGISTER_KERNEL(filter_nlm_calc_difference),
+        REGISTER_KERNEL(filter_nlm_blur),
+        REGISTER_KERNEL(filter_nlm_calc_weight),
+        REGISTER_KERNEL(filter_nlm_update_output),
+        REGISTER_KERNEL(filter_nlm_normalize),
+        REGISTER_KERNEL(filter_construct_transform),
+        REGISTER_KERNEL(filter_nlm_construct_gramian),
+        REGISTER_KERNEL(filter_finalize),
+        REGISTER_KERNEL(background),
+        REGISTER_KERNEL(generate_camera_rays),
+        REGISTER_KERNEL(intersect_closest),
+        REGISTER_KERNEL(intersect_shadow),
+        REGISTER_KERNEL(shadow),
+        REGISTER_KERNEL(subsurface),
+        REGISTER_KERNEL(surface),
+        REGISTER_KERNEL(volume)
+  {
+  }
+
+#undef REGISTER_KERNEL
+#undef KERNEL_FUNCTIONS
+};
+
 class KernelThreadGlobals : public KernelGlobals {
  public:
   /* TODO(sergey): Would be nice to have properly typed OSLGlobals even in the case when building
@@ -232,10 +342,6 @@ class CPUDeviceQueue : public DeviceQueue {
    * resource management for such local `KernelGlobals` is centralized. */
 };
 
-using IntegratorFunction = KernelFunction<void (*)(const KernelGlobals *, IntegratorState *state)>;
-using IntegratorOutputFunction = KernelFunction<void (*)(
-    const KernelGlobals *, IntegratorState *state, ccl_global float *render_buffer)>;
-
 class CPUDevice : public Device {
  public:
   TaskPool task_pool;
@@ -257,106 +363,11 @@ class CPUDevice : public Device {
   RTCDevice embree_device;
 #endif
 
-  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> path_trace_kernel;
-  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
-      convert_to_half_float_kernel;
-  KernelFunction<void (*)(KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
-      convert_to_byte_kernel;
-  KernelFunction<void (*)(KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>
-      shader_kernel;
-  KernelFunction<void (*)(KernelGlobals *, float *, int, int, int, int, int)> bake_kernel;
-
-  KernelFunction<void (*)(
-      int, TileInfo *, int, int, float *, float *, float *, float *, float *, int *, int, int)>
-      filter_divide_shadow_kernel;
-  KernelFunction<void (*)(
-      int, TileInfo *, int, int, int, int, float *, float *, float, int *, int, int)>
-      filter_get_feature_kernel;
-  KernelFunction<void (*)(int, int, int, int *, float *, float *, int, int *)>
-      filter_write_feature_kernel;
-  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
-      filter_detect_outliers_kernel;
-  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
-      filter_combine_halves_kernel;
-
-  KernelFunction<void (*)(
-      int, int, float *, float *, float *, float *, int *, int, int, int, float, float)>
-      filter_nlm_calc_difference_kernel;
-  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_blur_kernel;
-  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_calc_weight_kernel;
-  KernelFunction<void (*)(
-      int, int, float *, float *, float *, float *, float *, int *, int, int, int)>
-      filter_nlm_update_output_kernel;
-  KernelFunction<void (*)(float *, float *, int *, int)> filter_nlm_normalize_kernel;
-
-  KernelFunction<void (*)(
-      float *, TileInfo *, int, int, int, float *, int *, int *, int, int, bool, int, float)>
-      filter_construct_transform_kernel;
-  KernelFunction<void (*)(int,
-                          int,
-                          int,
-                          float *,
-                          float *,
-                          float *,
-                          int *,
-                          float *,
-                          float3 *,
-                          int *,
-                          int *,
-                          int,
-                          int,
-                          int,
-                          int,
-                          bool)>
-      filter_nlm_construct_gramian_kernel;
-  KernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
-      filter_finalize_kernel;
-
-  IntegratorOutputFunction background_kernel;
-  IntegratorFunction generate_camera_rays_kernel;
-  IntegratorFunction intersect_closest_kernel;
-  IntegratorFunction intersect_shadow_kernel;
-  IntegratorOutputFunction shadow_kernel;
-  IntegratorFunction subsurface_kernel;
-  IntegratorOutputFunction surface_kernel;
-  IntegratorOutputFunction volume_kernel;
-
-#define KERNEL_FUNCTIONS(name) \
-  KERNEL_NAME_EVAL(cpu, name), KERNEL_NAME_EVAL(cpu_sse2, name), \
-      KERNEL_NAME_EVAL(cpu_sse3, name), KERNEL_NAME_EVAL(cpu_sse41, name), \
-      KERNEL_NAME_EVAL(cpu_avx, name), KERNEL_NAME_EVAL(cpu_avx2, name)
+  Kernels kernels;
 
   CPUDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
       : Device(info_, stats_, profiler_, background_),
-        texture_info(this, "__texture_info", MEM_GLOBAL),
-#define REGISTER_KERNEL(name) name##_kernel(KERNEL_FUNCTIONS(name))
-        REGISTER_KERNEL(path_trace),
-        REGISTER_KERNEL(convert_to_half_float),
-        REGISTER_KERNEL(convert_to_byte),
-        REGISTER_KERNEL(shader),
-        REGISTER_KERNEL(bake),
-        REGISTER_KERNEL(filter_divide_shadow),
-        REGISTER_KERNEL(filter_get_feature),
-        REGISTER_KERNEL(filter_write_feature),
-        REGISTER_KERNEL(filter_detect_outliers),
-        REGISTER_KERNEL(filter_combine_halves),
-        REGISTER_KERNEL(filter_nlm_calc_difference),
-        REGISTER_KERNEL(filter_nlm_blur),
-        REGISTER_KERNEL(filter_nlm_calc_weight),
-        REGISTER_KERNEL(filter_nlm_update_output),
-        REGISTER_KERNEL(filter_nlm_normalize),
-        REGISTER_KERNEL(filter_construct_transform),
-        REGISTER_KERNEL(filter_nlm_construct_gramian),
-        REGISTER_KERNEL(filter_finalize),
-        REGISTER_KERNEL(background),
-        REGISTER_KERNEL(generate_camera_rays),
-        REGISTER_KERNEL(intersect_closest),
-        REGISTER_KERNEL(intersect_shadow),
-        REGISTER_KERNEL(shadow),
-        REGISTER_KERNEL(subsurface),
-        REGISTER_KERNEL(surface),
-        REGISTER_KERNEL(volume)
-#undef REGISTER_KERNEL
+        texture_info(this, "__texture_info", MEM_GLOBAL)
   {
     if (info.cpu_threads == 0) {
       info.cpu_threads = TaskScheduler::num_threads();
@@ -369,8 +380,6 @@ class CPUDevice : public Device {
     embree_device = rtcNewDevice("verbose=0");
 #endif
     need_texture_info = false;
-
-#undef KERNEL_FUNCTIONS
   }
 
   ~CPUDevice()
@@ -639,38 +648,38 @@ class CPUDevice : public Device {
 
       int local_rect[4] = {
           max(0, -dx), max(0, -dy), rect.z - rect.x - max(0, dx), rect.w - rect.y - max(0, dy)};
-      filter_nlm_calc_difference_kernel(dx,
-                                        dy,
-                                        (float *)guide_ptr,
-                                        (float *)variance_ptr,
-                                        nullptr,
-                                        difference,
-                                        local_rect,
-                                        w,
-                                        channel_offset,
-                                        0,
-                                        a,
-                                        k_2);
+      kernels.filter_nlm_calc_difference(dx,
+                                         dy,
+                                         (float *)guide_ptr,
+                                         (float *)variance_ptr,
+                                         nullptr,
+                                         difference,
+                                         local_rect,
+                                         w,
+                                         channel_offset,
+                                         0,
+                                         a,
+                                         k_2);
 
-      filter_nlm_blur_kernel(difference, blurDifference, local_rect, w, f);
-      filter_nlm_calc_weight_kernel(blurDifference, difference, local_rect, w, f);
-      filter_nlm_blur_kernel(difference, blurDifference, local_rect, w, f);
+      kernels.filter_nlm_blur(difference, blurDifference, local_rect, w, f);
+      kernels.filter_nlm_calc_weight(blurDifference, difference, local_rect, w, f);
+      kernels.filter_nlm_blur(difference, blurDifference, local_rect, w, f);
 
-      filter_nlm_update_output_kernel(dx,
-                                      dy,
-                                      blurDifference,
-                                      (float *)image_ptr,
-                                      difference,
-                                      (float *)out_ptr,
-                                      weightAccum,
-                                      local_rect,
-                                      channel_offset,
-                                      stride,
-                                      f);
+      kernels.filter_nlm_update_output(dx,
+                                       dy,
+                                       blurDifference,
+                                       (float *)image_ptr,
+                                       difference,
+                                       (float *)out_ptr,
+                                       weightAccum,
+                                       local_rect,
+                                       channel_offset,
+                                       stride,
+                                       f);
     }
 
     int local_rect[4] = {0, 0, rect.z - rect.x, rect.w - rect.y};
-    filter_nlm_normalize_kernel((float *)out_ptr, weightAccum, local_rect, w);
+    kernels.filter_nlm_normalize((float *)out_ptr, weightAccum, local_rect, w);
 
     return true;
   }
@@ -681,19 +690,19 @@ class CPUDevice : public Device {
 
     for (int y = 0; y < task->filter_area.w; y++) {
       for (int x = 0; x < task->filter_area.z; x++) {
-        filter_construct_transform_kernel((float *)task->buffer.mem.device_pointer,
-                                          task->tile_info,
-                                          x + task->filter_area.x,
-                                          y + task->filter_area.y,
-                                          y * task->filter_area.z + x,
-                                          (float *)task->storage.transform.device_pointer,
-                                          (int *)task->storage.rank.device_pointer,
-                                          &task->rect.x,
-                                          task->buffer.pass_stride,
-                                          task->buffer.frame_stride,
-                                          task->buffer.use_time,
-                                          task->radius,
-                                          task->pca_threshold);
+        kernels.filter_construct_transform((float *)task->buffer.mem.device_pointer,
+                                           task->tile_info,
+                                           x + task->filter_area.x,
+                                           y + task->filter_area.y,
+                                           y * task->filter_area.z + x,
+                                           (float *)task->storage.transform.device_pointer,
+                                           (int *)task->storage.rank.device_pointer,
+                                           &task->rect.x,
+                                           task->buffer.pass_stride,
+                                           task->buffer.frame_stride,
+                                           task->buffer.use_time,
+                                           task->radius,
+                                           task->pca_threshold);
       }
     }
     return true;
@@ -721,38 +730,38 @@ class CPUDevice : public Device {
                            max(0, -dy),
                            task->reconstruction_state.source_w - max(0, dx),
                            task->reconstruction_state.source_h - max(0, dy)};
-      filter_nlm_calc_difference_kernel(dx,
-                                        dy,
-                                        (float *)color_ptr,
-                                        (float *)color_variance_ptr,
-                                        (float *)scale_ptr,
-                                        difference,
-                                        local_rect,
-                                        task->buffer.stride,
-                                        task->buffer.pass_stride,
-                                        frame_offset,
-                                        1.0f,
-                                        task->nlm_k_2);
-      filter_nlm_blur_kernel(difference, blurDifference, local_rect, task->buffer.stride, 4);
-      filter_nlm_calc_weight_kernel(
+      kernels.filter_nlm_calc_difference(dx,
+                                         dy,
+                                         (float *)color_ptr,
+                                         (float *)color_variance_ptr,
+                                         (float *)scale_ptr,
+                                         difference,
+                                         local_rect,
+                                         task->buffer.stride,
+                                         task->buffer.pass_stride,
+                                         frame_offset,
+                                         1.0f,
+                                         task->nlm_k_2);
+      kernels.filter_nlm_blur(difference, blurDifference, local_rect, task->buffer.stride, 4);
+      kernels.filter_nlm_calc_weight(
           blurDifference, difference, local_rect, task->buffer.stride, 4);
-      filter_nlm_blur_kernel(difference, blurDifference, local_rect, task->buffer.stride, 4);
-      filter_nlm_construct_gramian_kernel(dx,
-                                          dy,
-                                          task->tile_info->frames[frame],
-                                          blurDifference,
-                                          (float *)task->buffer.mem.device_pointer,
-                                          (float *)task->storage.transform.device_pointer,
-                                          (int *)task->storage.rank.device_pointer,
-                                          (float *)task->storage.XtWX.device_pointer,
-                                          (float3 *)task->storage.XtWY.device_pointer,
-                                          local_rect,
-                                          &task->reconstruction_state.filter_window.x,
-                                          task->buffer.stride,
-                                          4,
-                                          task->buffer.pass_stride,
-                                          frame_offset,
-                                          task->buffer.use_time);
+      kernels.filter_nlm_blur(difference, blurDifference, local_rect, task->buffer.stride, 4);
+      kernels.filter_nlm_construct_gramian(dx,
+                                           dy,
+                                           task->tile_info->frames[frame],
+                                           blurDifference,
+                                           (float *)task->buffer.mem.device_pointer,
+                                           (float *)task->storage.transform.device_pointer,
+                                           (int *)task->storage.rank.device_pointer,
+                                           (float *)task->storage.XtWX.device_pointer,
+                                           (float3 *)task->storage.XtWY.device_pointer,
+                                           local_rect,
+                                           &task->reconstruction_state.filter_window.x,
+                                           task->buffer.stride,
+                                           4,
+                                           task->buffer.pass_stride,
+                                           frame_offset,
+                                           task->buffer.use_time);
     }
 
     return true;
@@ -762,15 +771,15 @@ class CPUDevice : public Device {
   {
     for (int y = 0; y < task->filter_area.w; y++) {
       for (int x = 0; x < task->filter_area.z; x++) {
-        filter_finalize_kernel(x,
-                               y,
-                               y * task->filter_area.z + x,
-                               (float *)output_ptr,
-                               (int *)task->storage.rank.device_pointer,
-                               (float *)task->storage.XtWX.device_pointer,
-                               (float3 *)task->storage.XtWY.device_pointer,
-                               &task->reconstruction_state.buffer_params.x,
-                               task->render_buffer.samples);
+        kernels.filter_finalize(x,
+                                y,
+                                y * task->filter_area.z + x,
+                                (float *)output_ptr,
+                                (int *)task->storage.rank.device_pointer,
+                                (float *)task->storage.XtWX.device_pointer,
+                                (float3 *)task->storage.XtWY.device_pointer,
+                                &task->reconstruction_state.buffer_params.x,
+                                task->render_buffer.samples);
       }
     }
     return true;
@@ -788,14 +797,14 @@ class CPUDevice : public Device {
 
     for (int y = rect.y; y < rect.w; y++) {
       for (int x = rect.x; x < rect.z; x++) {
-        filter_combine_halves_kernel(x,
-                                     y,
-                                     (float *)mean_ptr,
-                                     (float *)variance_ptr,
-                                     (float *)a_ptr,
-                                     (float *)b_ptr,
-                                     &rect.x,
-                                     r);
+        kernels.filter_combine_halves(x,
+                                      y,
+                                      (float *)mean_ptr,
+                                      (float *)variance_ptr,
+                                      (float *)a_ptr,
+                                      (float *)b_ptr,
+                                      &rect.x,
+                                      r);
       }
     }
     return true;
@@ -812,18 +821,18 @@ class CPUDevice : public Device {
 
     for (int y = task->rect.y; y < task->rect.w; y++) {
       for (int x = task->rect.x; x < task->rect.z; x++) {
-        filter_divide_shadow_kernel(task->render_buffer.samples,
-                                    task->tile_info,
-                                    x,
-                                    y,
-                                    (float *)a_ptr,
-                                    (float *)b_ptr,
-                                    (float *)sample_variance_ptr,
-                                    (float *)sv_variance_ptr,
-                                    (float *)buffer_variance_ptr,
-                                    &task->rect.x,
-                                    task->render_buffer.pass_stride,
-                                    task->render_buffer.offset);
+        kernels.filter_divide_shadow(task->render_buffer.samples,
+                                     task->tile_info,
+                                     x,
+                                     y,
+                                     (float *)a_ptr,
+                                     (float *)b_ptr,
+                                     (float *)sample_variance_ptr,
+                                     (float *)sv_variance_ptr,
+                                     (float *)buffer_variance_ptr,
+                                     &task->rect.x,
+                                     task->render_buffer.pass_stride,
+                                     task->render_buffer.offset);
       }
     }
     return true;
@@ -840,18 +849,18 @@ class CPUDevice : public Device {
 
     for (int y = task->rect.y; y < task->rect.w; y++) {
       for (int x = task->rect.x; x < task->rect.z; x++) {
-        filter_get_feature_kernel(task->render_buffer.samples,
-                                  task->tile_info,
-                                  mean_offset,
-                                  variance_offset,
-                                  x,
-                                  y,
-                                  (float *)mean_ptr,
-                                  (float *)variance_ptr,
-                                  scale,
-                                  &task->rect.x,
-                                  task->render_buffer.pass_stride,
-                                  task->render_buffer.offset);
+        kernels.filter_get_feature(task->render_buffer.samples,
+                                   task->tile_info,
+                                   mean_offset,
+                                   variance_offset,
+                                   x,
+                                   y,
+                                   (float *)mean_ptr,
+                                   (float *)variance_ptr,
+                                   scale,
+                                   &task->rect.x,
+                                   task->render_buffer.pass_stride,
+                                   task->render_buffer.offset);
       }
     }
     return true;
@@ -864,14 +873,14 @@ class CPUDevice : public Device {
   {
     for (int y = 0; y < task->filter_area.w; y++) {
       for (int x = 0; x < task->filter_area.z; x++) {
-        filter_write_feature_kernel(task->render_buffer.samples,
-                                    x + task->filter_area.x,
-                                    y + task->filter_area.y,
-                                    &task->reconstruction_state.buffer_params.x,
-                                    (float *)from_ptr,
-                                    (float *)buffer_ptr,
-                                    out_offset,
-                                    &task->rect.x);
+        kernels.filter_write_feature(task->render_buffer.samples,
+                                     x + task->filter_area.x,
+                                     y + task->filter_area.y,
+                                     &task->reconstruction_state.buffer_params.x,
+                                     (float *)from_ptr,
+                                     (float *)buffer_ptr,
+                                     out_offset,
+                                     &task->rect.x);
       }
     }
     return true;
@@ -887,14 +896,14 @@ class CPUDevice : public Device {
 
     for (int y = task->rect.y; y < task->rect.w; y++) {
       for (int x = task->rect.x; x < task->rect.z; x++) {
-        filter_detect_outliers_kernel(x,
-                                      y,
-                                      (float *)image_ptr,
-                                      (float *)variance_ptr,
-                                      (float *)depth_ptr,
-                                      (float *)output_ptr,
-                                      &task->rect.x,
-                                      task->buffer.pass_stride);
+        kernels.filter_detect_outliers(x,
+                                       y,
+                                       (float *)image_ptr,
+                                       (float *)variance_ptr,
+                                       (float *)depth_ptr,
+                                       (float *)output_ptr,
+                                       &task->rect.x,
+                                       task->buffer.pass_stride);
       }
     }
     return true;
@@ -990,14 +999,14 @@ class CPUDevice : public Device {
             if (use_coverage) {
               coverage.init_pixel(x, y);
             }
-            path_trace_kernel(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
+            kernels.path_trace(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
           }
         }
       }
       else {
         for (int y = tile.y; y < tile.y + tile.h; y++) {
           for (int x = tile.x; x < tile.x + tile.w; x++) {
-            bake_kernel(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
+            kernels.bake(kg, render_buffer, sample, x, y, tile.offset, tile.stride);
           }
         }
       }
@@ -1376,26 +1385,26 @@ class CPUDevice : public Device {
     if (task.rgba_half) {
       for (int y = task.y; y < task.y + task.h; y++)
         for (int x = task.x; x < task.x + task.w; x++)
-          convert_to_half_float_kernel(&kernel_globals,
-                                       (uchar4 *)task.rgba_half,
-                                       (float *)task.buffer,
-                                       sample_scale,
-                                       x,
-                                       y,
-                                       task.offset,
-                                       task.stride);
+          kernels.convert_to_half_float(&kernel_globals,
+                                        (uchar4 *)task.rgba_half,
+                                        (float *)task.buffer,
+                                        sample_scale,
+                                        x,
+                                        y,
+                                        task.offset,
+                                        task.stride);
     }
     else {
       for (int y = task.y; y < task.y + task.h; y++)
         for (int x = task.x; x < task.x + task.w; x++)
-          convert_to_byte_kernel(&kernel_globals,
-                                 (uchar4 *)task.rgba_byte,
-                                 (float *)task.buffer,
-                                 sample_scale,
-                                 x,
-                                 y,
-                                 task.offset,
-                                 task.stride);
+          kernels.convert_to_byte(&kernel_globals,
+                                  (uchar4 *)task.rgba_byte,
+                                  (float *)task.buffer,
+                                  sample_scale,
+                                  x,
+                                  y,
+                                  task.offset,
+                                  task.stride);
     }
   }
 
@@ -1405,14 +1414,14 @@ class CPUDevice : public Device {
 
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
-        shader_kernel(&kg,
-                      (uint4 *)task.shader_input,
-                      (float4 *)task.shader_output,
-                      task.shader_eval_type,
-                      task.shader_filter,
-                      x,
-                      task.offset,
-                      sample);
+        kernels.shader(&kg,
+                       (uint4 *)task.shader_input,
+                       (float4 *)task.shader_output,
+                       task.shader_eval_type,
+                       task.shader_filter,
+                       x,
+                       task.offset,
+                       sample);
 
       if (task.get_cancel() || TaskPool::canceled())
         break;

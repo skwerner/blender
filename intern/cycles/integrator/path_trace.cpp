@@ -19,6 +19,7 @@
 #include "device/device.h"
 #include "device/device_queue.h"
 #include "util/util_logging.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -45,6 +46,8 @@ void PathTrace::render_samples_on_device(Device *device,
                                          const BufferParams &buffer_params,
                                          int samples_num)
 {
+  update_reset_status();
+
   /* Allocate render buffers for the current device. */
   RenderBuffers render_buffers(device);
   render_buffers.reset(buffer_params);
@@ -106,7 +109,11 @@ void PathTrace::render_samples_on_device(Device *device,
     } while (have_alive_paths);
 
     traced_samples_num += parallel_samples_num;
+
+    update_if_needed(&render_buffers, traced_samples_num);
   }
+
+  write(&render_buffers, traced_samples_num);
 }
 
 bool PathTrace::is_cancel_requested()
@@ -115,6 +122,43 @@ bool PathTrace::is_cancel_requested()
     return false;
   }
   return get_cancel_cb();
+}
+
+void PathTrace::update_reset_status()
+{
+  update_status.has_update = false;
+}
+
+void PathTrace::update_if_needed(RenderBuffers *render_buffers, int sample)
+{
+  if (!update_cb) {
+    return;
+  }
+
+  const double current_time = time_dt();
+
+  /* Always perform the first update, so that users see first pixels as soon as possible.
+   * After that only perform updates every now and then. */
+  if (update_status.has_update) {
+    /* TODO(sergey): Use steady clock. */
+    if (current_time - update_status.last_update_time < update_interval_in_seconds) {
+      return;
+    }
+  }
+
+  update_cb(render_buffers, sample);
+
+  update_status.has_update = true;
+  update_status.last_update_time = current_time;
+}
+
+void PathTrace::write(RenderBuffers *render_buffers, int sample)
+{
+  if (!write_cb) {
+    return;
+  }
+
+  write_cb(render_buffers, sample);
 }
 
 CCL_NAMESPACE_END

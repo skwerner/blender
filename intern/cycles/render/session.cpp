@@ -1187,7 +1187,47 @@ void Session::render(bool /*need_denoise*/)
 
   /* Configure path tracer. */
   path_trace.get_cancel_cb = [&progress = this->progress]() { return progress.get_cancel(); };
+  path_trace.update_cb = [&](RenderBuffers *render_buffers, int sample) {
+    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
+     * the the new progressive+adaptive nature of rendering. */
 
+    if (!update_render_tile_cb) {
+      return;
+    }
+
+    RenderTile render_tile;
+    render_tile.x = render_buffers->params.full_x;
+    render_tile.y = render_buffers->params.full_y;
+    render_tile.w = render_buffers->params.full_width;
+    render_tile.h = render_buffers->params.full_height;
+    render_tile.sample = sample;
+    render_tile.buffers = render_buffers;
+
+    update_render_tile_cb(render_tile, false);
+  };
+  path_trace.write_cb = [&](RenderBuffers *render_buffers, int sample) {
+    /* NOTE: Almost a duplicate of `update_cb`, but is done for a testing purposes, neither of
+     * this callbacks are final. */
+
+    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
+     * the the new progressive+adaptive nature of rendering. */
+
+    if (!write_render_tile_cb) {
+      return;
+    }
+
+    RenderTile render_tile;
+    render_tile.x = render_buffers->params.full_x;
+    render_tile.y = render_buffers->params.full_y;
+    render_tile.w = render_buffers->params.full_width;
+    render_tile.h = render_buffers->params.full_height;
+    render_tile.sample = sample;
+    render_tile.buffers = render_buffers;
+
+    write_render_tile_cb(render_tile);
+  };
+
+  /* Perform rendering. */
   path_trace.render_samples(samples_to_render_num);
 
   /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on

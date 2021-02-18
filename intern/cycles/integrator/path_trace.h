@@ -22,6 +22,7 @@
 CCL_NAMESPACE_BEGIN
 
 class Device;
+class RenderBuffers;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
  * all the common steps of path tracing which are not device-specific. The list of tasks includes
@@ -50,6 +51,21 @@ class PathTrace {
    * finished when it fully sampled all requested samples. */
   function<bool(void)> get_cancel_cb;
 
+  /* Callback which communicates an updates state of the render buffer.
+   * Is called during path tracing to communicate work-in-progress state of the final buffer.
+   *
+   * The samples indicates how many samples the buffer contains. */
+  function<void(RenderBuffers *render_buffers, int sample)> update_cb;
+
+  /* The update callback will never be run more often that this interval, avoiding overhead of
+   * data communication on a simple renders.  */
+  double update_interval_in_seconds = 1.0;
+
+  /* Callback which communicates final rendered buffer. Is called after pathtracing is done.
+   *
+   * The samples indicates how many samples the buffer contains. */
+  function<void(RenderBuffers *render_buffers, int sample)> write_cb;
+
  protected:
   /* Render given number of samples on the given device.
    *
@@ -66,6 +82,24 @@ class PathTrace {
    * soon as possible. */
   bool is_cancel_requested();
 
+  /* Used before path tracing begins, so that all updates can happen as user expects them. */
+  void update_reset_status();
+
+  /* Run an update callback if needed.
+   * This call which check whether an update callback is configured, and do other optimization
+   * checks. For example, the update will not be communicated if update happens too often, so that
+   * the overhead of update does not degrade rendering performance.
+   *
+   * The samples indicates how many samples the buffer contains. */
+  /* TODO(sergey): Ideally the render buffers will be passed by the const reference. */
+  void update_if_needed(RenderBuffers *render_buffers, int sample);
+
+  /* Write the render buffer via the write callback.
+   *
+   * The samples indicates how many samples the buffer contains. */
+  /* TODO(sergey): Ideally the render buffers will be passed by the const reference. */
+  void write(RenderBuffers *render_buffers, int sample);
+
   /* Pointer to a device which is configured to be used for path tracing. If multiple devices are
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
@@ -74,6 +108,15 @@ class PathTrace {
   /* TODO(sergey): Consider addressing naming a bit, to make it explicit that this is a big
    * buffer. Alternatively, can consider introducing BigTile as entity concept. */
   BufferParams buffer_params_;
+
+  /* Status for the update reporting.
+   * Is used to avoid updates being sent too often. */
+  struct {
+    /* Denotes whether update callback was ever called during the current path tracing process. */
+    bool has_update;
+    /* Timestamp of when the update callback was last call (only valid if `has_update` is true.) */
+    double last_update_time;
+  } update_status;
 };
 
 CCL_NAMESPACE_END

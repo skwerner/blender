@@ -17,13 +17,14 @@
 #pragma once
 
 #include "kernel/kernel_id_passes.h"
+#include "kernel/kernel_write_passes.h"
 
 CCL_NAMESPACE_BEGIN
 
 #ifdef __DENOISING_FEATURES__
 
-ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *kg,
-                                                     ccl_global float *buffer,
+ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *ccl_restrict kg,
+                                                     ccl_global float *ccl_restrict buffer,
                                                      int sample,
                                                      float path_total,
                                                      float path_total_shaded)
@@ -45,7 +46,7 @@ ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *kg,
   kernel_write_pass_float(buffer + 2, value * value);
 }
 
-ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *kg,
+ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *ccl_restrict kg,
                                                         ShaderData *sd,
                                                         ccl_addr_space PathState *state,
                                                         PathRadiance *L)
@@ -125,8 +126,8 @@ ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *kg,
 #endif /* __DENOISING_FEATURES__ */
 
 #ifdef __KERNEL_DEBUG__
-ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *kg,
-                                                 ccl_global float *buffer,
+ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *ccl_restrict kg,
+                                                 ccl_global float *ccl_restrict buffer,
                                                  PathRadiance *L)
 {
   int flag = kernel_data.film.pass_flag;
@@ -153,7 +154,7 @@ ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *kg,
 #  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
     kernel_write_id_pass_cpu(buffer, depth * 2, id, matte_weight, kg->coverage_##name)
 ccl_device_inline size_t kernel_write_id_pass_cpu(
-    float *buffer, size_t depth, float id, float matte_weight, CoverageMap *map)
+    float *ccl_restrict buffer, size_t depth, float id, float matte_weight, CoverageMap *map)
 {
   if (map) {
     (*map)[id] += matte_weight;
@@ -162,7 +163,7 @@ ccl_device_inline size_t kernel_write_id_pass_cpu(
 #else /* __KERNEL_CPU__ */
 #  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
     kernel_write_id_slots_gpu(buffer, depth * 2, id, matte_weight)
-ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *buffer,
+ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *ccl_restrict buffer,
                                                    size_t depth,
                                                    float id,
                                                    float matte_weight)
@@ -172,8 +173,8 @@ ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *buffer,
   return depth * 2;
 }
 
-ccl_device_inline void kernel_write_data_passes(const KernelGlobals *kg,
-                                                ccl_global float *buffer,
+ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restrict kg,
+                                                ccl_global float *ccl_restrict buffer,
                                                 PathRadiance *L,
                                                 ShaderData *sd,
                                                 ccl_addr_space PathState *state,
@@ -284,8 +285,8 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline void kernel_write_light_passes(const KernelGlobals *kg,
-                                                 ccl_global float *buffer,
+ccl_device_inline void kernel_write_light_passes(const KernelGlobals *ccl_restrict kg,
+                                                 ccl_global float *ccl_restrict buffer,
                                                  PathRadiance *L)
 {
 #ifdef __PASSES__
@@ -338,8 +339,8 @@ ccl_device_inline void kernel_write_light_passes(const KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline void kernel_write_result(const KernelGlobals *kg,
-                                           ccl_global float *buffer,
+ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
+                                           ccl_global float *ccl_restrict buffer,
                                            int sample,
                                            PathRadiance *L)
 {

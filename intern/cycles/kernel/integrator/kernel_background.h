@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel/kernel_write_passes.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
@@ -23,8 +25,13 @@ ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
 {
   kernel_assert(INTEGRATOR_STATE(isect, object) == OBJECT_NONE);
 
-  /* Write to render buffer. */
-  render_buffer[0] = 0.0f;
+  /* Placeholder. */
+  const float3 L = make_float3(0.0f, 0.0f, 0.0f);
+  const float alpha = 0.0f;
+
+  if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
+    kernel_write_pass_float4(render_buffer, make_float4(L.x, L.y, L.z, alpha));
+  }
 
   /* Path ends here. */
   INTEGRATOR_FLOW_END;

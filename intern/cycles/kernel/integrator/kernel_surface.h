@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel/kernel_write_passes.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
@@ -23,6 +25,19 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
 {
   kernel_assert(INTEGRATOR_STATE(isect, object) != OBJECT_NONE);
 
+  /* Placeholder. */
+  const float3 L = make_float3(hash_uint_to_float(INTEGRATOR_STATE(isect, object)),
+                               hash_uint_to_float(INTEGRATOR_STATE(isect, prim)),
+                               0.0f);
+  const float alpha = 1.0f;
+
+  if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
+    kernel_write_pass_float4(render_buffer, make_float4(L.x, L.y, L.z, alpha));
+  }
+
+  INTEGRATOR_FLOW_END;
+
+#if 0
   /* Evaluate shader. */
 
   /* Subsurface scattering does scattering, direct and indirect light in own kernel. */
@@ -69,6 +84,7 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_FLOW_QUEUE(intersect_closest);
     return;
   }
+#endif
 }
 
 CCL_NAMESPACE_END

@@ -70,11 +70,13 @@ typedef struct IntegratorPathState {
   uint16_t x, y;
   /* Current sample number. */
   uint16_t sample;
-  /* Current ray depth. */
-  uint16_t depth;
+  /* Current ray bounce depth. */
+  uint16_t bounce;
 
   /* Random number generator seed. */
-  uint32_t rng;
+  uint32_t rng_hash;
+  /* Random number dimension offset. */
+  uint32_t rng_offset;
 
   /* enum PathRayFlag */
   uint32_t flag;

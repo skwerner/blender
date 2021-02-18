@@ -18,23 +18,25 @@
 
 CCL_NAMESPACE_BEGIN
 
-#if 0
-ccl_device_inline void path_state_init(const KernelGlobals *kg,
-                                       ShaderData *stack_sd,
-                                       ccl_addr_space PathState *state,
-                                       uint rng_hash,
-                                       int sample,
-                                       ccl_addr_space Ray *ray)
+ccl_device_inline void path_state_init(
+    INTEGRATOR_STATE_ARGS, const int sample, const int x, const int y, const uint rng_hash)
 {
-  state->flag = PATH_RAY_CAMERA | PATH_RAY_MIS_SKIP | PATH_RAY_TRANSPARENT_BACKGROUND;
+  INTEGRATOR_STATE_WRITE(path, x) = x;
+  INTEGRATOR_STATE_WRITE(path, y) = y;
+  INTEGRATOR_STATE_WRITE(path, sample) = sample;
+  INTEGRATOR_STATE_WRITE(path, bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, rng_hash) = rng_hash;
+  INTEGRATOR_STATE_WRITE(path, rng_offset) = PRNG_BASE_NUM;
+  INTEGRATOR_STATE_WRITE(path, flag) = PATH_RAY_CAMERA | PATH_RAY_MIS_SKIP |
+                                       PATH_RAY_TRANSPARENT_BACKGROUND;
+  INTEGRATOR_STATE_WRITE(path, ray_pdf) = 0.0f;
+  INTEGRATOR_STATE_WRITE(path, throughput) = make_float3(1.0f, 1.0f, 1.0f);
 
-  state->rng_hash = rng_hash;
-  state->rng_offset = PRNG_BASE_NUM;
-  state->sample = sample;
-  state->num_samples = kernel_data.integrator.aa_samples;
-  state->branch_factor = 1.0f;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = SHADER_NONE;
 
-  state->bounce = 0;
+/* TODO */
+#if 0
   state->diffuse_bounce = 0;
   state->glossy_bounce = 0;
   state->transmission_bounce = 0;
@@ -53,7 +55,6 @@ ccl_device_inline void path_state_init(const KernelGlobals *kg,
 #  endif /* __DENOISING_FEATURES__ */
 
   state->min_ray_pdf = FLT_MAX;
-  state->ray_pdf = 0.0f;
 #  ifdef __LAMP_MIS__
   state->ray_t = 0.0f;
 #  endif
@@ -62,18 +63,18 @@ ccl_device_inline void path_state_init(const KernelGlobals *kg,
   state->volume_bounce = 0;
   state->volume_bounds_bounce = 0;
 
-#    if 0
   if (kernel_data.integrator.use_volumes) {
     /* Initialize volume stack with volume we are inside of. */
     kernel_volume_stack_init(kg, stack_sd, state, ray, state->volume_stack);
   }
-  else
-  {
+  else {
     state->volume_stack[0].shader = SHADER_NONE;
   }
-#    endif
+#  endif
+#endif
 }
 
+#if 0
 ccl_device_inline void path_state_next(const KernelGlobals *kg,
                                        ccl_addr_space PathState *state,
                                        int label)
@@ -103,7 +104,7 @@ ccl_device_inline void path_state_next(const KernelGlobals *kg,
 
   state->flag &= ~(PATH_RAY_ALL_VISIBILITY | PATH_RAY_MIS_SKIP);
 
-#    ifdef __VOLUME__
+#  ifdef __VOLUME__
   if (label & LABEL_VOLUME_SCATTER) {
     /* volume scatter */
     state->flag |= PATH_RAY_VOLUME_SCATTER;
@@ -115,7 +116,7 @@ ccl_device_inline void path_state_next(const KernelGlobals *kg,
     }
   }
   else
-#    endif
+#  endif
   {
     /* surface reflection/transmission */
     if (label & LABEL_REFLECT) {
@@ -166,15 +167,15 @@ ccl_device_inline void path_state_next(const KernelGlobals *kg,
   /* random number generator next bounce */
   state->rng_offset += PRNG_BOUNCE_NUM;
 
-#    ifdef __DENOISING_FEATURES__
+#  ifdef __DENOISING_FEATURES__
   if ((state->denoising_feature_weight == 0.0f) && !(state->flag & PATH_RAY_SHADOW_CATCHER)) {
     state->flag &= ~PATH_RAY_STORE_SHADOW_INFO;
   }
-#    endif
-}
 #  endif
+}
+#endif
 
-#  ifdef __VOLUME__
+#ifdef __VOLUME__
 ccl_device_inline bool path_state_volume_next(const KernelGlobals *kg,
                                               ccl_addr_space PathState *state)
 {
@@ -192,7 +193,6 @@ ccl_device_inline bool path_state_volume_next(const KernelGlobals *kg,
 
   return true;
 }
-#  endif
 #endif
 
 ccl_device_inline uint path_state_ray_visibility(INTEGRATOR_STATE_CONST_ARGS)

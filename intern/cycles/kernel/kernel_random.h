@@ -128,30 +128,18 @@ ccl_device_forceinline void path_rng_2D(const KernelGlobals *kg,
 #endif
 }
 
-ccl_device_inline void path_rng_init(const KernelGlobals *kg,
-                                     int sample,
-                                     int num_samples,
-                                     uint *rng_hash,
-                                     int x,
-                                     int y,
-                                     float *fx,
-                                     float *fy)
+ccl_device_inline uint path_rng_hash_init(const KernelGlobals *ccl_restrict kg,
+                                          const int sample,
+                                          const int x,
+                                          const int y)
 {
-  /* load state */
-  *rng_hash = hash_uint2(x, y);
-  *rng_hash ^= kernel_data.integrator.seed;
+  const uint rng_hash = hash_uint2(x, y) ^ kernel_data.integrator.seed;
 
 #ifdef __DEBUG_CORRELATION__
-  srand48(*rng_hash + sample);
+  srand48(rng_hash + sample);
 #endif
 
-  if (sample == 0) {
-    *fx = 0.5f;
-    *fy = 0.5f;
-  }
-  else {
-    path_rng_2D(kg, *rng_hash, sample, num_samples, PRNG_FILTER_U, fx, fy);
-  }
+  return rng_hash;
 }
 
 /* Linear Congruential Generator */

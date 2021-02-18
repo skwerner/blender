@@ -16,6 +16,10 @@
 
 #pragma once
 
+#include "kernel_differential.h"
+#include "kernel_montecarlo.h"
+#include "kernel_projection.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Perspective Camera */
@@ -41,7 +45,7 @@ ccl_device float2 camera_sample_aperture(ccl_constant KernelCamera *cam, float u
   return bokeh;
 }
 
-ccl_device void camera_sample_perspective(const KernelGlobals *kg,
+ccl_device void camera_sample_perspective(const KernelGlobals *ccl_restrict kg,
                                           float raster_x,
                                           float raster_y,
                                           float lens_u,
@@ -173,7 +177,7 @@ ccl_device void camera_sample_perspective(const KernelGlobals *kg,
 }
 
 /* Orthographic Camera */
-ccl_device void camera_sample_orthographic(const KernelGlobals *kg,
+ccl_device void camera_sample_orthographic(const KernelGlobals *ccl_restrict kg,
                                            float raster_x,
                                            float raster_y,
                                            float lens_u,
@@ -354,7 +358,7 @@ ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
 
 /* Common */
 
-ccl_device_inline void camera_sample(const KernelGlobals *kg,
+ccl_device_inline void camera_sample(const KernelGlobals *ccl_restrict kg,
                                      int x,
                                      int y,
                                      float filter_u,

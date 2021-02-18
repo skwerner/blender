@@ -40,12 +40,15 @@
 #    include "kernel/integrator/kernel_surface.h"
 #    include "kernel/integrator/kernel_volume.h"
 
+#    include "kernel/kernel_film.h"
+
+#if 0
 #    include "kernel/kernel_color.h"
 #    include "kernel/kernels/cpu/kernel_cpu_image.h"
-#    include "kernel/kernel_film.h"
 #    include "kernel/kernel_path.h"
 #    include "kernel/kernel_path_branched.h"
 #    include "kernel/kernel_bake.h"
+#endif
 #else
 #  define STUB_ASSERT(arch, name) \
     assert(!(#name " kernel stub for architecture " #arch " was called!"))
@@ -59,19 +62,21 @@ CCL_NAMESPACE_BEGIN
 void KERNEL_FUNCTION_FULL_NAME(path_trace)(
     KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
 {
-#ifdef KERNEL_STUB
+#if 0
+#  ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, path_trace);
-#else
-#  ifdef __BRANCHED_PATH__
+#  else
+#    ifdef __BRANCHED_PATH__
   if (kernel_data.integrator.branched) {
     kernel_branched_path_trace(kg, buffer, sample, x, y, offset, stride);
   }
   else
-#  endif
+#    endif
   {
     kernel_path_trace(kg, buffer, sample, x, y, offset, stride);
   }
-#endif /* KERNEL_STUB */
+#  endif /* KERNEL_STUB */
+#endif
 }
 
 /* Film */
@@ -113,13 +118,15 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(KernelGlobals *kg,
 void KERNEL_FUNCTION_FULL_NAME(bake)(
     KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
 {
-#ifdef KERNEL_STUB
+#if 0
+#  ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, bake);
-#else
-#  ifdef __BAKING__
+#  else
+#    ifdef __BAKING__
   kernel_bake_evaluate(kg, buffer, sample, x, y, offset, stride);
-#  endif
-#endif /* KERNEL_STUB */
+#    endif
+#  endif /* KERNEL_STUB */
+#endif
 }
 
 /* Shader Evaluate */
@@ -133,16 +140,18 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
                                        int offset,
                                        int sample)
 {
-#ifdef KERNEL_STUB
+#if 0
+#  ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, shader);
-#else
+#  else
   if (type == SHADER_EVAL_DISPLACE) {
     kernel_displace_evaluate(kg, input, output, i);
   }
   else {
     kernel_background_evaluate(kg, input, output, i);
   }
-#endif /* KERNEL_STUB */
+#  endif /* KERNEL_STUB */
+#endif
 }
 
 /* ********************************************************************************************* */

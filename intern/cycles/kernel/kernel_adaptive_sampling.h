@@ -177,7 +177,7 @@ ccl_device void kernel_adaptive_post_adjust(const KernelGlobals *kg,
 
 ccl_device bool kernel_do_adaptive_filter_x(const KernelGlobals *kg,
                                             int y,
-                                            ccl_global WorkTile *tile)
+                                            ccl_global KernelWorkTile *tile)
 {
   bool any = false;
   bool prev = false;
@@ -208,7 +208,7 @@ ccl_device bool kernel_do_adaptive_filter_x(const KernelGlobals *kg,
 
 ccl_device bool kernel_do_adaptive_filter_y(const KernelGlobals *kg,
                                             int x,
-                                            ccl_global WorkTile *tile)
+                                            ccl_global KernelWorkTile *tile)
 {
   bool prev = false;
   bool any = false;

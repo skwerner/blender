@@ -208,15 +208,15 @@ class CUDADevice : public Device {
   void denoise(RenderTile &rtile, DenoisingTask &denoising);
 
   void adaptive_sampling_filter(uint filter_sample,
-                                WorkTile *wtile,
+                                KernelWorkTile *wtile,
                                 CUdeviceptr d_wtile,
                                 CUstream stream = 0);
   void adaptive_sampling_post(RenderTile &rtile,
-                              WorkTile *wtile,
+                              KernelWorkTile *wtile,
                               CUdeviceptr d_wtile,
                               CUstream stream = 0);
 
-  void render(DeviceTask &task, RenderTile &rtile, device_vector<WorkTile> &work_tiles);
+  void render(DeviceTask &task, RenderTile &rtile, device_vector<KernelWorkTile> &work_tiles);
 
   void film_convert(DeviceTask &task,
                     device_ptr buffer,

@@ -1755,7 +1755,7 @@ void CUDADevice::denoise(RenderTile &rtile, DenoisingTask &denoising)
 }
 
 void CUDADevice::adaptive_sampling_filter(uint filter_sample,
-                                          WorkTile *wtile,
+                                          KernelWorkTile *wtile,
                                           CUdeviceptr d_wtile,
                                           CUstream stream)
 {
@@ -1806,7 +1806,7 @@ void CUDADevice::adaptive_sampling_filter(uint filter_sample,
 }
 
 void CUDADevice::adaptive_sampling_post(RenderTile &rtile,
-                                        WorkTile *wtile,
+                                        KernelWorkTile *wtile,
                                         CUdeviceptr d_wtile,
                                         CUstream stream)
 {
@@ -1828,7 +1828,9 @@ void CUDADevice::adaptive_sampling_post(RenderTile &rtile,
                              0));
 }
 
-void CUDADevice::render(DeviceTask &task, RenderTile &rtile, device_vector<WorkTile> &work_tiles)
+void CUDADevice::render(DeviceTask &task,
+                        RenderTile &rtile,
+                        device_vector<KernelWorkTile> &work_tiles)
 {
   scoped_timer timer(&rtile.buffers->render_time);
 
@@ -1858,7 +1860,7 @@ void CUDADevice::render(DeviceTask &task, RenderTile &rtile, device_vector<WorkT
   /* Allocate work tile. */
   work_tiles.alloc(1);
 
-  WorkTile *wtile = work_tiles.data();
+  KernelWorkTile *wtile = work_tiles.data();
   wtile->x = rtile.x;
   wtile->y = rtile.y;
   wtile->w = rtile.w;
@@ -2324,7 +2326,7 @@ void CUDADevice::thread_run(DeviceTask &task)
   CUDAContextScope scope(this);
 
   if (task.type == DeviceTask::RENDER) {
-    device_vector<WorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
+    device_vector<KernelWorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
 
     /* keep rendering tiles until done */
     RenderTile tile;

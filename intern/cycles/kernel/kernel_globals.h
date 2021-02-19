@@ -98,7 +98,7 @@ typedef struct ShaderParams {
 } ShaderParams;
 
 typedef struct KernelParams {
-  WorkTile tile;
+  KernelWorkTile tile;
   KernelData data;
   ShaderParams shader;
 #  define KERNEL_TEX(type, name) const type *name;

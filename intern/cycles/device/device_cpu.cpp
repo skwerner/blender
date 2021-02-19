@@ -962,7 +962,7 @@ class CPUDevice : public Device {
 
   bool adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample)
   {
-    WorkTile wtile;
+    KernelWorkTile wtile;
     wtile.x = tile.x;
     wtile.y = tile.y;
     wtile.w = tile.w;

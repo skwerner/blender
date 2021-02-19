@@ -58,7 +58,7 @@ struct ShaderParams {
   int sample;
 };
 struct KernelParams {
-  WorkTile tile;
+  KernelWorkTile tile;
   KernelData data;
   ShaderParams shader;
 #  define KERNEL_TEX(type, name) const type *name;
@@ -706,7 +706,7 @@ class OptiXDevice : public CUDADevice {
           launch_render(task, tile, thread_index);
         else if (tile.task == RenderTile::BAKE) {
           // Perform baking using CUDA, since it is not currently implemented in OptiX
-          device_vector<WorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
+          device_vector<KernelWorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
           CUDADevice::render(task, tile, work_tiles);
         }
         else if (tile.task == RenderTile::DENOISE)
@@ -746,7 +746,7 @@ class OptiXDevice : public CUDADevice {
     // Keep track of total render time of this tile
     const scoped_timer timer(&rtile.buffers->render_time);
 
-    WorkTile wtile;
+    KernelWorkTile wtile;
     wtile.x = rtile.x;
     wtile.y = rtile.y;
     wtile.w = rtile.w;

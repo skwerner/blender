@@ -23,7 +23,7 @@ CCL_NAMESPACE_BEGIN
  */
 
 /* Map global work index to tile, pixel X/Y and sample. */
-ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
+ccl_device_inline void get_work_pixel(ccl_global const KernelWorkTile *tile,
                                       uint global_work_index,
                                       ccl_private uint *x,
                                       ccl_private uint *y,
@@ -91,7 +91,7 @@ ccl_device bool get_next_work(const KernelGlobals *kg,
     do {
       got_work = get_next_work_item(kg, work_pools, total_work_size, ray_index, global_work_index);
       if (got_work) {
-        ccl_global WorkTile *tile = &kernel_split_params.tile;
+        ccl_global KernelWorkTile *tile = &kernel_split_params.tile;
         uint x, y, sample;
         get_work_pixel(tile, *global_work_index, &x, &y, &sample);
         uint buffer_offset = (tile->offset + x + y * tile->stride) * kernel_data.film.pass_stride;

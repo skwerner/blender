@@ -1686,7 +1686,7 @@ enum RayState {
 
 /* Work Tiles */
 
-typedef struct WorkTile {
+typedef struct KernelWorkTile {
   uint x, y, w, h;
 
   uint start_sample;
@@ -1696,7 +1696,7 @@ typedef struct WorkTile {
   uint stride;
 
   ccl_global float *buffer;
-} WorkTile;
+} KernelWorkTile;
 
 /* Pre-computed sample table sizes for PMJ02 sampler. */
 #define NUM_PMJ_SAMPLES 64 * 64

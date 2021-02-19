@@ -221,8 +221,7 @@ CCL_NAMESPACE_BEGIN
 #if 0  // defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
 ccl_device_inline void svm_eval_nodes(const KernelGlobals *kg,
                                       ShaderData *sd,
-                                      ccl_addr_space PathState *state,
-                                      ccl_global float *buffer,
+                                      ccl_global float *ccl_restrict buffer,
                                       ShaderType type,
                                       int path_flag)
 {
@@ -231,9 +230,8 @@ ccl_device_inline void svm_eval_nodes(const KernelGlobals *kg,
 extern "C" __device__ void __direct_callable__svm_eval_nodes(
 #endif
 
-ccl_device_noinline void svm_eval_nodes(const KernelGlobals *kg,
+ccl_device_noinline void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
                                         ShaderData *sd,
-                                        ccl_addr_space PathState *state,
                                         ccl_global float *buffer,
                                         ShaderType type,
                                         int path_flag)
@@ -408,7 +406,7 @@ ccl_device_noinline void svm_eval_nodes(const KernelGlobals *kg,
         svm_node_brightness(sd, stack, node.y, node.z, node.w);
         break;
       case NODE_LIGHT_PATH:
-        svm_node_light_path(sd, state, stack, node.y, node.z, path_flag);
+        svm_node_light_path(INTEGRATOR_STATE_PASS, sd, stack, node.y, node.z, path_flag);
         break;
       case NODE_OBJECT_INFO:
         svm_node_object_info(kg, sd, stack, node.y, node.z);
@@ -529,10 +527,10 @@ ccl_device_noinline void svm_eval_nodes(const KernelGlobals *kg,
         break;
 #  ifdef __SHADER_RAYTRACE__
       case NODE_BEVEL:
-        svm_node_bevel(kg, sd, state, stack, node);
+        svm_node_bevel(INTEGRATOR_STATE_PASS, sd, stack, node);
         break;
       case NODE_AMBIENT_OCCLUSION:
-        svm_node_ao(kg, sd, state, stack, node);
+        svm_node_ao(INTEGRATOR_STATE_PASS, sd, stack, node);
         break;
 #  endif /* __SHADER_RAYTRACE__ */
 #endif   /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
@@ -544,7 +542,7 @@ ccl_device_noinline void svm_eval_nodes(const KernelGlobals *kg,
         break;
 #  endif /* NODES_FEATURE(NODE_FEATURE_VOLUME) */
       case NODE_AOV_START:
-        if (!svm_node_aov_check(state, buffer)) {
+        if (!svm_node_aov_check(path_flag, buffer)) {
           return;
         }
         break;

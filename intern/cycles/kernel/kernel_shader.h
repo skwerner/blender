@@ -403,21 +403,21 @@ ccl_device void shader_setup_from_displace(
 
 /* ShaderData setup from ray into background */
 
-ccl_device_inline void shader_setup_from_background(const KernelGlobals *kg,
-                                                    ShaderData *sd,
-                                                    const Ray *ray)
+ccl_device_inline void shader_setup_from_background(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
+  const float3 ray_D = INTEGRATOR_STATE(ray, D);
+
   /* vectors */
-  sd->P = ray->D;
-  sd->N = -ray->D;
-  sd->Ng = -ray->D;
-  sd->I = -ray->D;
+  sd->P = ray_D;
+  sd->N = -ray_D;
+  sd->Ng = -ray_D;
+  sd->I = -ray_D;
   sd->shader = kernel_data.background.surface_shader;
   sd->flag = kernel_tex_fetch(__shaders, (sd->shader & SHADER_MASK)).flags;
   sd->object_flag = 0;
-  sd->time = ray->time;
+  sd->time = INTEGRATOR_STATE(ray, time);
   sd->ray_length = 0.0f;
 
   sd->object = OBJECT_NONE;
@@ -434,14 +434,14 @@ ccl_device_inline void shader_setup_from_background(const KernelGlobals *kg,
 
 #ifdef __RAY_DIFFERENTIALS__
   /* differentials */
-  sd->dP = ray->dD;
+  sd->dP = differential3_zero();  // TODO ray->dD;
   differential_incoming(&sd->dI, sd->dP);
   sd->du = differential_zero();
   sd->dv = differential_zero();
 #endif
 
   /* for NDC coordinates */
-  sd->ray_P = ray->P;
+  sd->ray_P = INTEGRATOR_STATE(ray, P);
 
   PROFILING_SHADER(sd->shader);
   PROFILING_OBJECT(sd->object);
@@ -1068,9 +1068,8 @@ ccl_device float3 shader_holdout_apply(const KernelGlobals *kg, ShaderData *sd)
 
 /* Surface Evaluation */
 
-ccl_device void shader_eval_surface(const KernelGlobals *kg,
+ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
                                     ShaderData *sd,
-                                    ccl_addr_space PathState *state,
                                     ccl_global float *buffer,
                                     int path_flag)
 {
@@ -1093,17 +1092,17 @@ ccl_device void shader_eval_surface(const KernelGlobals *kg,
 #ifdef __OSL__
   if (kg->osl) {
     if (sd->object == OBJECT_NONE && sd->lamp == LAMP_NONE) {
-      OSLShader::eval_background(kg, sd, state, path_flag);
+      OSLShader::eval_background(INTEGRATOR_STATE_PASS, sd, path_flag);
     }
     else {
-      OSLShader::eval_surface(kg, sd, state, path_flag);
+      OSLShader::eval_surface(INTEGRATOR_STATE_PASS, sd, path_flag);
     }
   }
   else
 #endif
   {
 #ifdef __SVM__
-    svm_eval_nodes(kg, sd, state, buffer, SHADER_TYPE_SURFACE, path_flag);
+    svm_eval_nodes(INTEGRATOR_STATE_PASS, sd, buffer, SHADER_TYPE_SURFACE, path_flag);
 #else
     if (sd->object == OBJECT_NONE) {
       sd->closure_emission_background = make_float3(0.8f, 0.8f, 0.8f);
@@ -1121,7 +1120,10 @@ ccl_device void shader_eval_surface(const KernelGlobals *kg,
   }
 
   if (sd->flag & SD_BSDF_NEEDS_LCG) {
-    sd->lcg_state = lcg_state_init_addrspace(state, 0xb4bc3953);
+    sd->lcg_state = lcg_state_init(INTEGRATOR_STATE(path, rng_hash),
+                                   INTEGRATOR_STATE(path, rng_offset),
+                                   INTEGRATOR_STATE(path, sample),
+                                   0xb4bc3953);
   }
 }
 
@@ -1264,9 +1266,8 @@ ccl_device int shader_phase_sample_closure(const KernelGlobals *kg,
 
 /* Volume Evaluation */
 
-ccl_device_inline void shader_eval_volume(const KernelGlobals *kg,
+ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
                                           ShaderData *sd,
-                                          ccl_addr_space PathState *state,
                                           ccl_addr_space VolumeStack *stack,
                                           int path_flag)
 {
@@ -1313,12 +1314,12 @@ ccl_device_inline void shader_eval_volume(const KernelGlobals *kg,
 #  ifdef __SVM__
 #    ifdef __OSL__
     if (kg->osl) {
-      OSLShader::eval_volume(kg, sd, state, path_flag);
+      OSLShader::eval_volume(INTEGRATOR_STATE_PASS, sd, path_flag);
     }
     else
 #    endif
     {
-      svm_eval_nodes(kg, sd, state, NULL, SHADER_TYPE_VOLUME, path_flag);
+      svm_eval_nodes(INTEGRATOR_STATE_PASS, sd, NULL, SHADER_TYPE_VOLUME, path_flag);
     }
 #  endif
 
@@ -1332,9 +1333,7 @@ ccl_device_inline void shader_eval_volume(const KernelGlobals *kg,
 
 /* Displacement Evaluation */
 
-ccl_device void shader_eval_displacement(const KernelGlobals *kg,
-                                         ShaderData *sd,
-                                         ccl_addr_space PathState *state)
+ccl_device void shader_eval_displacement(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
 {
   sd->num_closure = 0;
   sd->num_closure_left = 0;
@@ -1343,11 +1342,11 @@ ccl_device void shader_eval_displacement(const KernelGlobals *kg,
 #ifdef __SVM__
 #  ifdef __OSL__
   if (kg->osl)
-    OSLShader::eval_displacement(kg, sd, state);
+    OSLShader::eval_displacement(INTEGRATOR_STATE_PASS, sd);
   else
 #  endif
   {
-    svm_eval_nodes(kg, sd, state, NULL, SHADER_TYPE_DISPLACEMENT, 0);
+    svm_eval_nodes(INTEGRATOR_STATE_PASS, sd, NULL, SHADER_TYPE_DISPLACEMENT, 0);
   }
 #endif
 }

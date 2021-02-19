@@ -18,8 +18,8 @@ CCL_NAMESPACE_BEGIN
 
 /* Light Path Node */
 
-ccl_device void svm_node_light_path(ShaderData *sd,
-                                    ccl_addr_space PathState *state,
+ccl_device void svm_node_light_path(INTEGRATOR_STATE_CONST_ARGS,
+                                    const ShaderData *sd,
                                     float *stack,
                                     uint type,
                                     uint out_offset,
@@ -59,7 +59,7 @@ ccl_device void svm_node_light_path(ShaderData *sd,
       info = sd->ray_length;
       break;
     case NODE_LP_ray_depth:
-      info = (float)state->bounce;
+      info = (float)INTEGRATOR_STATE(path, bounce);
       break;
       /* TODO */
 #if 0

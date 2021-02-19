@@ -20,10 +20,9 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __SHADER_RAYTRACE__
 
-ccl_device_noinline float svm_ao(const KernelGlobals *kg,
+ccl_device_noinline float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
                                  ShaderData *sd,
                                  float3 N,
-                                 ccl_addr_space PathState *state,
                                  float max_dist,
                                  int num_samples,
                                  int flags)
@@ -86,11 +85,7 @@ ccl_device_noinline float svm_ao(const KernelGlobals *kg,
   return ((float)unoccluded) / num_samples;
 }
 
-ccl_device void svm_node_ao(const KernelGlobals *kg,
-                            ShaderData *sd,
-                            ccl_addr_space PathState *state,
-                            float *stack,
-                            uint4 node)
+ccl_device void svm_node_ao(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd, float *stack, uint4 node)
 {
   uint flags, dist_offset, normal_offset, out_ao_offset;
   svm_unpack_node_uchar4(node.y, &flags, &dist_offset, &normal_offset, &out_ao_offset);
@@ -100,7 +95,7 @@ ccl_device void svm_node_ao(const KernelGlobals *kg,
 
   float dist = stack_load_float_default(stack, dist_offset, node.w);
   float3 normal = stack_valid(normal_offset) ? stack_load_float3(stack, normal_offset) : sd->N;
-  float ao = svm_ao(kg, sd, normal, state, dist, samples, flags);
+  float ao = svm_ao(INTEGRATOR_STATE_PASS, sd, normal, dist, samples, flags);
 
   if (stack_valid(out_ao_offset)) {
     stack_store_float(stack, out_ao_offset, ao);

@@ -267,14 +267,12 @@ ccl_device_inline float path_branched_rng_light_termination(const KernelGlobals 
   return 0.0f;
 }
 
-ccl_device_inline uint lcg_state_init(PathState *state, uint scramble)
+ccl_device_inline uint lcg_state_init(const uint rng_hash,
+                                      const uint rng_offset,
+                                      const uint sample,
+                                      const uint scramble)
 {
-  return lcg_init(state->rng_hash + state->rng_offset + state->sample * scramble);
-}
-
-ccl_device_inline uint lcg_state_init_addrspace(ccl_addr_space PathState *state, uint scramble)
-{
-  return lcg_init(state->rng_hash + state->rng_offset + state->sample * scramble);
+  return lcg_init(rng_hash + rng_offset + sample * scramble);
 }
 
 ccl_device float lcg_step_float_addrspace(ccl_addr_space uint *rng)

@@ -24,6 +24,8 @@
 
 #include "kernel/geom/geom_object.h"
 
+#include "kernel/integrator/integrator_state.h"
+
 #include "kernel/osl/osl_closures.h"
 #include "kernel/osl/osl_globals.h"
 #include "kernel/osl/osl_services.h"
@@ -84,8 +86,11 @@ void OSLShader::thread_free(KernelGlobals *kg)
 
 /* Globals */
 
-static void shaderdata_to_shaderglobals(
-    const KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, OSLThreadData *tdata)
+static void shaderdata_to_shaderglobals(const KernelGlobals *kg,
+                                        ShaderData *sd,
+                                        const IntegratorState *state,
+                                        int path_flag,
+                                        OSLThreadData *tdata)
 {
   OSL::ShaderGlobals *globals = &tdata->globals;
 
@@ -172,8 +177,8 @@ static void flatten_surface_closure_tree(ShaderData *sd,
 }
 
 void OSLShader::eval_surface(const KernelGlobals *kg,
+                             const IntegratorState *state,
                              ShaderData *sd,
-                             PathState *state,
                              int path_flag)
 {
   /* setup shader globals from shader data */
@@ -280,8 +285,8 @@ static void flatten_background_closure_tree(ShaderData *sd,
 }
 
 void OSLShader::eval_background(const KernelGlobals *kg,
+                                const IntegratorState *state,
                                 ShaderData *sd,
-                                PathState *state,
                                 int path_flag)
 {
   /* setup shader globals from shader data */
@@ -338,8 +343,8 @@ static void flatten_volume_closure_tree(ShaderData *sd,
 }
 
 void OSLShader::eval_volume(const KernelGlobals *kg,
+                            const IntegratorState *state,
                             ShaderData *sd,
-                            PathState *state,
                             int path_flag)
 {
   /* setup shader globals from shader data */
@@ -363,7 +368,9 @@ void OSLShader::eval_volume(const KernelGlobals *kg,
 
 /* Displacement */
 
-void OSLShader::eval_displacement(const KernelGlobals *kg, ShaderData *sd, PathState *state)
+void OSLShader::eval_displacement(const KernelGlobals *kg,
+                                  const IntegratorState *state,
+                                  ShaderData *sd)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;

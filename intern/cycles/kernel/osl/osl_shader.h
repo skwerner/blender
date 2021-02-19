@@ -37,6 +37,7 @@ class Scene;
 
 struct ShaderClosure;
 struct ShaderData;
+struct IntegratorState;
 struct differential3;
 struct KernelGlobals;
 
@@ -54,18 +55,20 @@ class OSLShader {
 
   /* eval */
   static void eval_surface(const KernelGlobals *kg,
+                           const IntegratorState *state,
                            ShaderData *sd,
-                           PathState *state,
                            int path_flag);
   static void eval_background(const KernelGlobals *kg,
+                              const IntegratorState *state,
                               ShaderData *sd,
-                              PathState *state,
                               int path_flag);
   static void eval_volume(const KernelGlobals *kg,
+                          const IntegratorState *state,
                           ShaderData *sd,
-                          PathState *state,
                           int path_flag);
-  static void eval_displacement(const KernelGlobals *kg, ShaderData *sd, PathState *state);
+  static void eval_displacement(const KernelGlobals *kg,
+                                const IntegratorState *state,
+                                ShaderData *sd);
 
   /* attributes */
   static int find_attribute(const KernelGlobals *kg,

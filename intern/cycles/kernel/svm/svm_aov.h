@@ -18,11 +18,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_inline bool svm_node_aov_check(ccl_addr_space PathState *state,
-                                          ccl_global float *buffer)
+ccl_device_inline bool svm_node_aov_check(const int path_flag, ccl_global float *buffer)
 {
-  int path_flag = state->flag;
-
   bool is_primary = (path_flag & PATH_RAY_CAMERA) && (!(path_flag & PATH_RAY_SINGLE_PASS_DONE));
 
   return ((buffer != NULL) && is_primary);

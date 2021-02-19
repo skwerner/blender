@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel_montecarlo.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Area light sampling */

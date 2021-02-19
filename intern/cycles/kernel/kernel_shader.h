@@ -32,7 +32,14 @@
 #include "kernel/closure/emissive.h"
 // clang-format on
 
+#include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_random.h"
+#include "kernel/geom/geom.h"
 #include "kernel/svm/svm.h"
+
+#ifdef __OSL__
+#  include "kernel/osl/osl_shader.h"
+#endif
 
 CCL_NAMESPACE_BEGIN
 

@@ -16,7 +16,11 @@
 
 #pragma once
 
+#include "geom/geom.h"
+
 #include "kernel_light_background.h"
+#include "kernel_montecarlo.h"
+#include "kernel_projection.h"
 
 CCL_NAMESPACE_BEGIN
 

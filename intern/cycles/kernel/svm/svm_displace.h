@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "kernel/kernel_montecarlo.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Bump Node */

@@ -14,6 +14,10 @@
  * limitations under the License.
  */
 
+#include "kernel/geom/geom.h"
+#include "kernel/kernel_camera.h"
+#include "kernel/kernel_montecarlo.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Texture Coordinate Node */

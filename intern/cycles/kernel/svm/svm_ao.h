@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "kernel/bvh/bvh.h"
+
 CCL_NAMESPACE_BEGIN
 
 #ifdef __SHADER_RAYTRACE__

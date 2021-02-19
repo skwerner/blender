@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "kernel/kernel_projection.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Surface Attributes

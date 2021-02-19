@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "kernel/kernel_write_passes.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline bool svm_node_aov_check(ccl_addr_space PathState *state,

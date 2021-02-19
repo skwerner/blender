@@ -32,6 +32,8 @@
 
 #pragma once
 
+#include "kernel/kernel_random.h"
+
 CCL_NAMESPACE_BEGIN
 
 typedef ccl_addr_space struct MicrofacetExtra {

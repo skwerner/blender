@@ -16,6 +16,12 @@
 
 #pragma once
 
+#include "kernel/kernel_light.h"
+#include "kernel/kernel_montecarlo.h"
+#include "kernel/kernel_path_state.h"
+#include "kernel/kernel_shader.h"
+#include "kernel/kernel_shadow.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Direction Emission */

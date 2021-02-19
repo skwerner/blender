@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include "kernel/kernel_random.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline bool triangle_intersect(const KernelGlobals *kg,

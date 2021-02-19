@@ -61,6 +61,8 @@ ccl_device void svm_node_light_path(ShaderData *sd,
     case NODE_LP_ray_depth:
       info = (float)state->bounce;
       break;
+      /* TODO */
+#if 0
     case NODE_LP_ray_diffuse:
       info = (float)state->diffuse_bounce;
       break;
@@ -73,6 +75,7 @@ ccl_device void svm_node_light_path(ShaderData *sd,
     case NODE_LP_ray_transmission:
       info = (float)state->transmission_bounce;
       break;
+#endif
   }
 
   stack_store_float(stack, out_offset, info);

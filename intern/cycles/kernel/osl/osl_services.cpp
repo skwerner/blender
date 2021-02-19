@@ -55,7 +55,6 @@
 
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_accumulate.h"
-#include "kernel/kernel_shader.h"
 // clang-format on
 
 CCL_NAMESPACE_BEGIN
@@ -1003,6 +1002,8 @@ bool OSLRenderServices::get_background_attribute(const KernelGlobals *kg,
     float f = sd->ray_length;
     return set_attribute_float(f, type, derivatives, val);
   }
+  /* TODO */
+#if 0
   else if (name == u_path_ray_depth) {
     /* Ray Depth */
     PathState *state = sd->osl_path_state;
@@ -1039,6 +1040,7 @@ bool OSLRenderServices::get_background_attribute(const KernelGlobals *kg,
     int f = state->transmission_bounce;
     return set_attribute_int(f, type, derivatives, val);
   }
+#endif
   else if (name == u_ndc) {
     /* NDC coordinates with special exception for orthographic projection. */
     OSLThreadData *tdata = kg->osl_tdata;
@@ -1220,6 +1222,8 @@ bool OSLRenderServices::texture(ustring filename,
 
   switch (texture_type) {
     case OSLTextureHandle::BEVEL: {
+      /* TODO */
+#if 0
       /* Bevel shader hack. */
       if (nchannels >= 3) {
         PathState *state = sd->osl_path_state;
@@ -1231,9 +1235,12 @@ bool OSLRenderServices::texture(ustring filename,
         result[2] = N.z;
         status = true;
       }
+#endif
       break;
     }
     case OSLTextureHandle::AO: {
+      /* TODO */
+#if 0
       /* AO shader hack. */
       PathState *state = sd->osl_path_state;
       int num_samples = (int)s;
@@ -1251,6 +1258,7 @@ bool OSLRenderServices::texture(ustring filename,
       }
       result[0] = svm_ao(kernel_globals, sd, N, state, radius, num_samples, flags);
       status = true;
+#endif
       break;
     }
     case OSLTextureHandle::SVM: {
@@ -1268,9 +1276,12 @@ bool OSLRenderServices::texture(ustring filename,
       break;
     }
     case OSLTextureHandle::IES: {
+      /* TODO */
+#if 0
       /* IES light. */
       result[0] = kernel_ies_interp(kernel_globals, handle->svm_slot, s, t);
       status = true;
+#endif
       break;
     }
     case OSLTextureHandle::OIIO: {
@@ -1652,6 +1663,8 @@ bool OSLRenderServices::getmessage(OSL::ShaderGlobals *sg,
         return set_attribute_float(f, type, derivatives, val);
       }
       else {
+        /* TODO */
+#if 0
         ShaderData *sd = &tracedata->sd;
         const KernelGlobals *kg = sd->osl_globals;
 
@@ -1685,6 +1698,7 @@ bool OSLRenderServices::getmessage(OSL::ShaderGlobals *sg,
         }
 
         return get_attribute(sd, derivatives, u_empty, type, name, val);
+#endif
       }
     }
   }

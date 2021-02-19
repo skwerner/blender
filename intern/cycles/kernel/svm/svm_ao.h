@@ -49,6 +49,8 @@ ccl_device_noinline float svm_ao(const KernelGlobals *kg,
 
   int unoccluded = 0;
   for (int sample = 0; sample < num_samples; sample++) {
+    /* TODO */
+#  if 0
     float disk_u, disk_v;
     path_branched_rng_2D(
         kg, state->rng_hash, state, sample, num_samples, PRNG_BEVEL_U, &disk_u, &disk_v);
@@ -76,6 +78,7 @@ ccl_device_noinline float svm_ao(const KernelGlobals *kg,
         unoccluded++;
       }
     }
+#  endif
   }
 
   return ((float)unoccluded) / num_samples;

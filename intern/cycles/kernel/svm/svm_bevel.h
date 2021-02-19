@@ -30,6 +30,8 @@ ccl_device_noinline float3 svm_bevel(const KernelGlobals *kg,
                                      float radius,
                                      int num_samples)
 {
+  /* TODO */
+#  if 0
   /* Early out if no sampling needed. */
   if (radius <= 0.0f || num_samples < 1 || sd->object == OBJECT_NONE) {
     return sd->N;
@@ -122,14 +124,14 @@ ccl_device_noinline float3 svm_bevel(const KernelGlobals *kg,
       if (sd->type & PRIMITIVE_TRIANGLE) {
         hit_P = triangle_refine_local(kg, sd, &isect.hits[hit], ray);
       }
-#  ifdef __OBJECT_MOTION__
+#    ifdef __OBJECT_MOTION__
       else if (sd->type & PRIMITIVE_MOTION_TRIANGLE) {
         float3 verts[3];
         motion_triangle_vertices(
             kg, sd->object, kernel_tex_fetch(__prim_index, isect.hits[hit].prim), sd->time, verts);
         hit_P = motion_triangle_refine_local(kg, sd, &isect.hits[hit], ray, verts);
       }
-#  endif /* __OBJECT_MOTION__ */
+#    endif /* __OBJECT_MOTION__ */
 
       /* Get geometric normal. */
       float3 hit_Ng = isect.Ng[hit];
@@ -153,11 +155,11 @@ ccl_device_noinline float3 svm_bevel(const KernelGlobals *kg,
         if (sd->type & PRIMITIVE_TRIANGLE) {
           N = triangle_smooth_normal(kg, N, prim, u, v);
         }
-#  ifdef __OBJECT_MOTION__
+#    ifdef __OBJECT_MOTION__
         else if (sd->type & PRIMITIVE_MOTION_TRIANGLE) {
           N = motion_triangle_smooth_normal(kg, N, sd->object, prim, u, v, sd->time);
         }
-#  endif /* __OBJECT_MOTION__ */
+#    endif /* __OBJECT_MOTION__ */
       }
 
       /* Transform normals to world space. */
@@ -196,6 +198,9 @@ ccl_device_noinline float3 svm_bevel(const KernelGlobals *kg,
   /* Normalize. */
   float3 N = safe_normalize(sum_N);
   return is_zero(N) ? sd->N : (sd->flag & SD_BACKFACING) ? -N : N;
+#  else
+  return sd->N;
+#  endif
 }
 
 ccl_device void svm_node_bevel(const KernelGlobals *kg,

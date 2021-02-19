@@ -66,8 +66,13 @@ CCL_NAMESPACE_BEGIN
 
 /* Path tracer state. */
 typedef struct IntegratorPathState {
-  /* Pixel x, y coordinate in current (big) tile. */
-  uint16_t x, y;
+  /* Index of a pixel within the device render buffer where this path will write its result.
+   * To get an actual offset within the buffer the value needs to be multiplied by the
+   * `kernel_data.film.pass_stride`.
+   *
+   * The multiplication is delayed for later, so that state can use 32bit integer. */
+  uint32_t render_pixel_index;
+
   /* Current sample number. */
   uint16_t sample;
   /* Current ray bounce depth. */

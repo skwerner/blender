@@ -22,6 +22,7 @@
 CCL_NAMESPACE_BEGIN
 
 class Device;
+class DeviceQueue;
 class RenderBuffers;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
@@ -77,6 +78,13 @@ class PathTrace {
   void render_samples_on_device(Device *device,
                                 const BufferParams &buffer_params,
                                 int samples_num);
+
+  /* TODO(sergey): This is a quick and dirty implementation to have pixels visible on the screen.
+   * Basic idea here is to evaluate kernel graph for the given work tile. The work tile is
+   * currently a single pixel, which matches path state size on CPU.
+   * All these arguments would need to be wrapped into a CPU-side WOrkTile and somehow integrated
+   * with small tile scheduler. */
+  void render_work_on_queue(DeviceQueue *queue, int x, int y, int start_sample, int samples_num);
 
   /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
    * soon as possible. */

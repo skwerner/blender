@@ -25,6 +25,11 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
 {
   kernel_assert(INTEGRATOR_STATE(isect, object) != OBJECT_NONE);
 
+  const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                        kernel_data.film.pass_stride;
+  float *pixel_render_buffer = render_buffer + render_buffer_offset;
+
   /* Placeholder. */
   const float3 L = make_float3(hash_uint_to_float(INTEGRATOR_STATE(isect, object)),
                                hash_uint_to_float(INTEGRATOR_STATE(isect, prim)),
@@ -32,7 +37,7 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
   const float alpha = 1.0f;
 
   if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
-    kernel_write_pass_float4(render_buffer, make_float4(L.x, L.y, L.z, alpha));
+    kernel_write_pass_float4(pixel_render_buffer, make_float4(L.x, L.y, L.z, alpha));
   }
 
   INTEGRATOR_FLOW_END;

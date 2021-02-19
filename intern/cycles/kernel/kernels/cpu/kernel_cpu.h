@@ -54,14 +54,20 @@ void KERNEL_FUNCTION_FULL_NAME(bake)(
 /* ********************************************************************************************* */
 
 #define KERNEL_INTEGRATOR_FUNCTION(name) \
-  void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *kg, IntegratorState *state)
+  void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *ccl_restrict kg, \
+                                       IntegratorState *state)
 
 #define KERNEL_INTEGRATOR_OUTPUT_FUNCTION(name) \
+  void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *ccl_restrict kg, \
+                                       IntegratorState *state, \
+                                       ccl_global float *render_buffer)
+
+#define KERNEL_INTEGRATOR_TILE_FUNCTION(name) \
   void KERNEL_FUNCTION_FULL_NAME(name)( \
-      const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)
+      const KernelGlobals *ccl_restrict kg, IntegratorState *state, KernelWorkTile *tile)
 
 KERNEL_INTEGRATOR_OUTPUT_FUNCTION(background);
-KERNEL_INTEGRATOR_FUNCTION(generate_camera_rays);
+KERNEL_INTEGRATOR_TILE_FUNCTION(generate_camera_rays);
 KERNEL_INTEGRATOR_FUNCTION(intersect_closest);
 KERNEL_INTEGRATOR_FUNCTION(intersect_shadow);
 KERNEL_INTEGRATOR_OUTPUT_FUNCTION(shadow);

@@ -159,39 +159,33 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
 /* ********************************************************************************************* */
 
 #ifdef KERNEL_STUB
-#  define DEFINE_INTEGRATOR_KERNEL(name) \
-    void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals * /*kg*/, \
-                                         IntegratorState * /*state*/) \
-    { \
-      STUB_ASSERT(KERNEL_ARCH, name); \
-    }
+#  define KERNEL_INVOKE(name, ...) STUB_ASSERT(KERNEL_ARCH, name)
 #else
-#  define DEFINE_INTEGRATOR_KERNEL(name) \
-    void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *kg, IntegratorState *state) \
-    { \
-      kernel_integrate_##name(kg, state); \
-    }
+#  define KERNEL_INVOKE(name, ...) kernel_integrate_##name(__VA_ARGS__)
 #endif
 
-#ifdef KERNEL_STUB
-#  define DEFINE_INTEGRATOR_OUTPUT_KERNEL(name) \
-    void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals * /*kg*/, \
-                                         IntegratorState * /*state*/, \
-                                         ccl_global float *render_buffer) \
-    { \
-      STUB_ASSERT(KERNEL_ARCH, name); \
-    }
-#else
-#  define DEFINE_INTEGRATOR_OUTPUT_KERNEL(name) \
-    void KERNEL_FUNCTION_FULL_NAME(name)( \
-        const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer) \
-    { \
-      kernel_integrate_##name(kg, state, render_buffer); \
-    }
-#endif
+#define DEFINE_INTEGRATOR_KERNEL(name) \
+  void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *kg, IntegratorState *state) \
+  { \
+    KERNEL_INVOKE(name, kg, state); \
+  }
+
+#define DEFINE_INTEGRATOR_OUTPUT_KERNEL(name) \
+  void KERNEL_FUNCTION_FULL_NAME(name)( \
+      const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer) \
+  { \
+    KERNEL_INVOKE(name, kg, state, render_buffer); \
+  }
+
+#define DEFINE_INTEGRATOR_TILE_KERNEL(name) \
+  void KERNEL_FUNCTION_FULL_NAME(name)( \
+      const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile) \
+  { \
+    KERNEL_INVOKE(name, kg, state, tile); \
+  }
 
 DEFINE_INTEGRATOR_OUTPUT_KERNEL(background)
-DEFINE_INTEGRATOR_KERNEL(generate_camera_rays)
+DEFINE_INTEGRATOR_TILE_KERNEL(generate_camera_rays)
 DEFINE_INTEGRATOR_KERNEL(intersect_closest)
 DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
 DEFINE_INTEGRATOR_OUTPUT_KERNEL(shadow)
@@ -199,7 +193,10 @@ DEFINE_INTEGRATOR_KERNEL(subsurface)
 DEFINE_INTEGRATOR_OUTPUT_KERNEL(surface)
 DEFINE_INTEGRATOR_OUTPUT_KERNEL(volume)
 
+#undef KERNEL_INVOKE
 #undef DEFINE_INTEGRATOR_KERNEL
+#undef DEFINE_INTEGRATOR_OUTPUT_KERNEL
+#undef DEFINE_INTEGRATOR_TILE_KERNEL
 
 #undef KERNEL_STUB
 #undef STUB_ASSERT

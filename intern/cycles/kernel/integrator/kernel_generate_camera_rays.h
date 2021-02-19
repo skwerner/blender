@@ -59,12 +59,14 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
   camera_sample(kg, x, y, filter_u, filter_v, lens_u, lens_v, time, ray);
 }
 
-ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS)
+ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS,
+                                                      KernelWorkTile *ccl_restrict tile)
 {
-  /* TODO: fill in. */
-  const int x = 0;
-  const int y = 0;
-  const int sample = 0;
+  /* TODO: Either use something like get_work_pixel(), or simplify tile which is passed here, so
+   * that it does not contain unused fields. */
+  const int x = tile->x;
+  const int y = tile->y;
+  const int sample = tile->start_sample;
 
   /* Initialize random number seed for path. */
   const uint rng_hash = path_rng_hash_init(kg, sample, x, y);
@@ -87,7 +89,7 @@ ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS)
   }
 
   /* Initialize path state. */
-  path_state_init(INTEGRATOR_STATE_PASS, sample, x, y, rng_hash);
+  path_state_init(INTEGRATOR_STATE_PASS, tile, sample, x, y, rng_hash);
 
   /* Continue with intersect_closest kernel. */
   INTEGRATOR_FLOW_QUEUE(intersect_closest);

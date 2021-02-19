@@ -56,6 +56,28 @@ void PathTrace::render_samples_on_device(Device *device,
   unique_ptr<DeviceQueue> queue = device->queue_create_integrator(&render_buffers);
   DCHECK(queue);
 
+  /* TODO(sergey): Replace with proper WorkTile scheduling. */
+  for (int sample = 0; sample < samples_num; ++sample) {
+    for (int y = 0; y < buffer_params.full_height; ++y) {
+      for (int x = 0; x < buffer_params.full_width; ++x) {
+        render_work_on_queue(queue.get(), x, y, sample, 1);
+      }
+      /* TODO(sergey): Properly handle render cancel request. Perhaps needs to happen here rather
+       * than in the graph evaluation. */
+    }
+
+    /* TODO(sergey): Take user cancel into account. */
+    update_if_needed(&render_buffers, sample + 1);
+  }
+
+  /* TODO(sergey): Take adaptive stopping and user cancel into account. Both of these actions will
+   * affect how the buffer is to be scaled. */
+  write(&render_buffers, samples_num);
+}
+
+void PathTrace::render_work_on_queue(
+    DeviceQueue *queue, int x, int y, int start_sample, int samples_num)
+{
   /* TODO(sergey): Determine possible queue/wavefront size. For the ideal performance the wavefront
    * should be as big as it is needed to have all device threads occupied. In practice, its size
    * might need to be smaller if the state does not fit into the memory. */
@@ -67,6 +89,14 @@ void PathTrace::render_samples_on_device(Device *device,
   int traced_samples_num = 0;
 
   while (traced_samples_num < samples_num) {
+    DeviceWorkTile work_tile;
+    work_tile.x = x;
+    work_tile.y = y;
+    work_tile.width = 1;
+    work_tile.height = 1;
+    work_tile.sample = start_sample + traced_samples_num;
+    queue->set_work_tile(work_tile);
+
     if (is_cancel_requested()) {
       /* TODO(sergey): Either wait fore the current wavefront to be fully finished, or discard its
        * unfinished changes to the render buffer.
@@ -104,16 +134,12 @@ void PathTrace::render_samples_on_device(Device *device,
       queue->enqueue(DeviceKernel::INTERSECT_SHADOW);
       queue->enqueue(DeviceKernel::SHADOW);
 
-      /* TODO(sergey): perform actual check on number of "alive" paths in the wavefront.  */
+      /* TODO(sergey): perform actual check on number of "alive" paths in the wavefront. */
       have_alive_paths = false;
     } while (have_alive_paths);
 
     traced_samples_num += parallel_samples_num;
-
-    update_if_needed(&render_buffers, traced_samples_num);
   }
-
-  write(&render_buffers, traced_samples_num);
 }
 
 bool PathTrace::is_cancel_requested()

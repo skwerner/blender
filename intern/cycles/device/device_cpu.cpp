@@ -170,9 +170,12 @@ template<typename FunctionType> class KernelFunction {
   FunctionType kernel_;
 };
 
-using IntegratorFunction = KernelFunction<void (*)(const KernelGlobals *, IntegratorState *state)>;
+using IntegratorFunction =
+    KernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
 using IntegratorOutputFunction = KernelFunction<void (*)(
-    const KernelGlobals *, IntegratorState *state, ccl_global float *render_buffer)>;
+    const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
+using IntegratorTileFunction = KernelFunction<void (*)(
+    const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
 
 class Kernels {
  public:
@@ -232,7 +235,7 @@ class Kernels {
       filter_finalize;
 
   IntegratorOutputFunction background;
-  IntegratorFunction generate_camera_rays;
+  IntegratorTileFunction generate_camera_rays;
   IntegratorFunction intersect_closest;
   IntegratorFunction intersect_shadow;
   IntegratorOutputFunction shadow;
@@ -358,39 +361,74 @@ class IntegratorQueue : public CPUDeviceQueue {
   {
   }
 
-  virtual void enqueue(DeviceKernel kernel)
+  virtual void enqueue(DeviceKernel kernel) override
   {
-    float *render_buffer = render_buffers_->buffer.data();
-
     switch (kernel) {
       case DeviceKernel::BACKGROUND:
-        return kernels_.background(&kernel_globals_, &integrator_state_, render_buffer);
-      case DeviceKernel::GENERATE_CAMERA_RAYS:
-        return kernels_.generate_camera_rays(&kernel_globals_, &integrator_state_);
+        return kernels_.background(
+            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+      case DeviceKernel::GENERATE_CAMERA_RAYS: {
+        KernelWorkTile work_tile = init_kernel_work_tile();
+        return kernels_.generate_camera_rays(&kernel_globals_, &integrator_state_, &work_tile);
+      }
       case DeviceKernel::INTERSECT_CLOSEST:
         return kernels_.intersect_closest(&kernel_globals_, &integrator_state_);
       case DeviceKernel::INTERSECT_SHADOW:
         return kernels_.intersect_shadow(&kernel_globals_, &integrator_state_);
       case DeviceKernel::SHADOW:
-        return kernels_.shadow(&kernel_globals_, &integrator_state_, render_buffer);
+        return kernels_.shadow(
+            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
       case DeviceKernel::SUBSURFACE:
         return kernels_.subsurface(&kernel_globals_, &integrator_state_);
       case DeviceKernel::SURFACE:
-        return kernels_.surface(&kernel_globals_, &integrator_state_, render_buffer);
+        return kernels_.surface(
+            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
       case DeviceKernel::VOLUME:
-        return kernels_.volume(&kernel_globals_, &integrator_state_, render_buffer);
+        return kernels_.volume(
+            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
     }
 
     LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
   }
 
+  virtual void set_work_tile(const DeviceWorkTile &work_tile) override
+  {
+    work_tile_ = work_tile;
+  }
+
  protected:
+  KernelWorkTile init_kernel_work_tile()
+  {
+    KernelWorkTile kernel_work_tile;
+
+    kernel_work_tile.x = work_tile_.x;
+    kernel_work_tile.y = work_tile_.y;
+    kernel_work_tile.w = work_tile_.width;
+    kernel_work_tile.h = work_tile_.height;
+
+    kernel_work_tile.start_sample = work_tile_.sample;
+    kernel_work_tile.num_samples = 1;
+
+    /* TODO(sergey): Avoid temporary variable by making sign match between device and kernel. */
+    int offset, stride;
+    render_buffers_->params.get_offset_stride(offset, stride);
+
+    kernel_work_tile.offset = offset;
+    kernel_work_tile.stride = stride;
+
+    kernel_work_tile.buffer = render_buffers_->buffer.data();
+
+    return kernel_work_tile;
+  }
+
   RenderBuffers *render_buffers_;
 
   /* TODO(sergey): Make integrator state somehow more explicit and more edependent on the number
    * of threads, or number of splits in the kernels.
    * For the quick debug keep it at 1, but it really needs to be changed soon. */
   IntegratorState integrator_state_;
+
+  DeviceWorkTile work_tile_;
 };
 
 class CPUDevice : public Device {

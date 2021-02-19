@@ -77,6 +77,7 @@ typedef struct KernelGlobals {
   CoverageMap *coverage_material;
   CoverageMap *coverage_asset;
 
+  /* TODO(sergey): Either remove, or properly implement. */
   int2 global_size;
   int2 global_id;
 

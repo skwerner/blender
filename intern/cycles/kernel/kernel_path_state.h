@@ -18,11 +18,16 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_inline void path_state_init(
-    INTEGRATOR_STATE_ARGS, const int sample, const int x, const int y, const uint rng_hash)
+ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
+                                       KernelWorkTile *ccl_restrict tile,
+                                       const int sample,
+                                       const int x,
+                                       const int y,
+                                       const uint rng_hash)
 {
-  INTEGRATOR_STATE_WRITE(path, x) = x;
-  INTEGRATOR_STATE_WRITE(path, y) = y;
+  const uint render_pixel_index = (uint)tile->offset + x + y * tile->stride;
+
+  INTEGRATOR_STATE_WRITE(path, render_pixel_index) = render_pixel_index;
   INTEGRATOR_STATE_WRITE(path, sample) = sample;
   INTEGRATOR_STATE_WRITE(path, bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, rng_hash) = rng_hash;

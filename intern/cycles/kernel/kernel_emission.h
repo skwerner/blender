@@ -212,32 +212,6 @@ ccl_device_noinline_cpu bool direct_emission(const KernelGlobals *kg,
   return true;
 }
 
-/* Indirect Primitive Emission */
-
-ccl_device_noinline_cpu float3 indirect_primitive_emission(
-    const KernelGlobals *kg, ShaderData *sd, float t, int path_flag, float bsdf_pdf)
-{
-  /* evaluate emissive closure */
-  float3 L = shader_emissive_eval(sd);
-
-#ifdef __HAIR__
-  if (!(path_flag & PATH_RAY_MIS_SKIP) && (sd->flag & SD_USE_MIS) &&
-      (sd->type & PRIMITIVE_ALL_TRIANGLE))
-#else
-  if (!(path_flag & PATH_RAY_MIS_SKIP) && (sd->flag & SD_USE_MIS))
-#endif
-  {
-    /* multiple importance sampling, get triangle light pdf,
-     * and compute weight with respect to BSDF pdf */
-    float pdf = triangle_light_pdf(kg, sd, t);
-    float mis_weight = power_heuristic(bsdf_pdf, pdf);
-
-    return L * mis_weight;
-  }
-
-  return L;
-}
-
 /* Indirect Lamp Emission */
 
 ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,

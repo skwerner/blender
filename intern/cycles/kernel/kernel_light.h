@@ -348,7 +348,9 @@ ccl_device_inline float triangle_light_pdf_area(const KernelGlobals *kg,
   return t * t * pdf / cos_pi;
 }
 
-ccl_device_forceinline float triangle_light_pdf(const KernelGlobals *kg, ShaderData *sd, float t)
+ccl_device_forceinline float triangle_light_pdf(const KernelGlobals *kg,
+                                                const ShaderData *sd,
+                                                float t)
 {
   /* A naive heuristic to decide between costly solid angle sampling
    * and simple area sampling, comparing the distance to the triangle plane

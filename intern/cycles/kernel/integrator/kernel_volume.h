@@ -21,6 +21,12 @@ CCL_NAMESPACE_BEGIN
 ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
+  /* Only execute if path is active and volume stack is non-empty. */
+  if (INTEGRATOR_PATH_IS_TERMINATED ||
+      (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) == OBJECT_NONE)) {
+    return;
+  }
+
 #ifdef __VOLUME__
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
 
@@ -37,7 +43,7 @@ ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(shadow_path, throughput) = INTEGRATOR_STATE(path, throughput);
 
     /* Queue intersect_shadow kernel. */
-    INTEGRATOR_FLOW_SHADOW_QUEUE(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
   }
 
   const bool end_path = true;
@@ -45,7 +51,7 @@ ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS,
 
   if (end_path) {
     /* End path. */
-    INTEGRATOR_FLOW_END;
+    INTEGRATOR_PATH_TERMINATE;
     return;
   }
   else if (scatter) {
@@ -57,18 +63,18 @@ ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
     /* Queue intersect_closest kernel. */
-    INTEGRATOR_FLOW_QUEUE(intersect_closest);
+    INTEGRATOR_PATH_NEXT(intersect_closest);
     return;
   }
   else {
     /* Modify throughput and continue with surface or background shading. */
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
-    if (INTEGRATOR_STATE(isect, object) == OBJECT_NONE) {
-      INTEGRATOR_FLOW_QUEUE(background);
+    if (INTEGRATOR_STATE(isect, prim) == PRIM_NONE) {
+      INTEGRATOR_PATH_NEXT(background);
     }
     else {
-      INTEGRATOR_FLOW_QUEUE(surface);
+      INTEGRATOR_PATH_NEXT(surface);
     }
     return;
   }

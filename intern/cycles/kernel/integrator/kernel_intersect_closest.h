@@ -47,7 +47,10 @@ ccl_device_forceinline bool intersect_closest_scene(INTEGRATOR_STATE_CONST_ARGS,
 
 ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
-  kernel_assert(INTEGRATOR_STATE(ray, t) != 0.0f);
+  /* Only execute if path is active. */
+  if (INTEGRATOR_PATH_IS_TERMINATED) {
+    return;
+  }
 
   /* Read ray from integrator state into local memory. */
   Ray ray;
@@ -58,11 +61,13 @@ ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
   ray.dP = differential3_zero();
   ray.dD = differential3_zero();
 
+  kernel_assert(ray.t != 0.0f);
+
   /* Scene Intersection. */
   Intersection isect;
   const bool hit = intersect_closest_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
   if (!hit) {
-    isect.object = OBJECT_NONE;
+    isect.prim = PRIM_NONE;
   }
 
   /* Write intersection result into global integrator state memory. */
@@ -78,19 +83,19 @@ ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
   if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {
     /* Continue with volume kernel if we are inside a volume, regardless
      * if we hit anything. */
-    INTEGRATOR_FLOW_QUEUE(volume);
+    INTEGRATOR_PATH_NEXT(volume);
     return;
   }
 #endif
 
   if (hit) {
-    /* Hit a surface continue with surface kernel. */
-    INTEGRATOR_FLOW_QUEUE(surface);
+    /* Hit a surface, continue with surface kernel. */
+    INTEGRATOR_PATH_NEXT(surface);
     return;
   }
   else {
     /* Nothing hit, continue with background kernel. */
-    INTEGRATOR_FLOW_QUEUE(background);
+    INTEGRATOR_PATH_NEXT(background);
     return;
   }
 }

@@ -321,7 +321,9 @@ enum PathRayFlag {
   /* Ray is to be terminated. */
   PATH_RAY_TERMINATE = (PATH_RAY_TERMINATE_IMMEDIATE | PATH_RAY_TERMINATE_AFTER_TRANSPARENT),
   /* Path and shader is being evaluated for direct lighting emission. */
-  PATH_RAY_EMISSION = (1 << 22)
+  PATH_RAY_EMISSION = (1 << 22),
+  /* Perform subsurface scattering. */
+  PATH_RAY_SUBSURFACE = (1 << 23)
 };
 
 /* Closure Label */

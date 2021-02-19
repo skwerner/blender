@@ -20,6 +20,11 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_subsurface(INTEGRATOR_STATE_ARGS)
 {
+  /* Only execute if path is active and ray was marked for subsurface scattering. */
+  if (INTEGRATOR_PATH_IS_TERMINATED || !(INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE)) {
+    return;
+  }
+
 #ifdef __SUBSURFACE__
   /* Subsurface scattering to find exit point. */
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
@@ -27,7 +32,7 @@ ccl_device void kernel_integrate_subsurface(INTEGRATOR_STATE_ARGS)
   /* We're done if no exit point found. */
   const bool exit_point_found = false;
   if (!exit_point_found) {
-    INTEGRATOR_FLOW_END;
+    INTEGRATOR_PATH_TERMINATE;
     return;
   }
 
@@ -44,7 +49,7 @@ ccl_device void kernel_integrate_subsurface(INTEGRATOR_STATE_ARGS)
     INTEGRATOR_STATE_WRITE(shadow_path, throughput) = INTEGRATOR_STATE(path, throughput);
 
     /* Branch of shadow kernel. */
-    INTEGRATOR_FLOW_SHADOW_QUEUE(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
   }
 
   /* Sample BSDF and continue path. */
@@ -54,8 +59,11 @@ ccl_device void kernel_integrate_subsurface(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_WRITE(ray, time) = 0.0f;
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
+  /* Mark subsurface scattering as done. */
+  INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SUBSURFACE;
+
   /* Queue intersect_closest kernel. */
-  INTEGRATOR_FLOW_QUEUE(intersect_closest);
+  INTEGRATOR_PATH_NEXT(intersect_closest);
 #endif /* __SUBSURFACE__ */
 }
 

@@ -40,6 +40,8 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = SHADER_NONE;
 
+  INTEGRATOR_STATE_WRITE(shadow_path, flag) = 0;
+
 /* TODO */
 #if 0
   state->diffuse_bounce = 0;

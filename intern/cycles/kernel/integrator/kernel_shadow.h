@@ -21,7 +21,12 @@ CCL_NAMESPACE_BEGIN
 ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
-  kernel_assert(INTEGRATOR_STATE_ARRAY(shadow_isect, 0, object) != OBJECT_NONE);
+  /* Only execute if anything was hit, otherwise path must have been terminated. */
+  if (INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {
+    return;
+  }
+
+  kernel_assert(INTEGRATOR_STATE_ARRAY(shadow_isect, 0, prim) != PRIM_NONE);
 
   /* Modify throughput. */
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
@@ -34,7 +39,7 @@ ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS,
       render_buffer[0] = 0.0f;
     }
 
-    INTEGRATOR_FLOW_SHADOW_END;
+    INTEGRATOR_SHADOW_PATH_TERMINATE;
     return;
   }
   else {
@@ -43,7 +48,7 @@ ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(shadow_ray, t) = new_t;
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
-    INTEGRATOR_FLOW_SHADOW_QUEUE(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
     return;
   }
 }

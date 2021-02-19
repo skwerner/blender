@@ -23,7 +23,10 @@ CCL_NAMESPACE_BEGIN
 ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
-  kernel_assert(INTEGRATOR_STATE(isect, object) == OBJECT_NONE);
+  /* Only execute for active path and nothing hit. */
+  if (INTEGRATOR_PATH_IS_TERMINATED || (INTEGRATOR_STATE(isect, prim) != PRIM_NONE)) {
+    return;
+  }
 
   /* Placeholder. */
   const float3 L = make_float3(0.0f, 0.0f, 0.0f);
@@ -34,7 +37,7 @@ ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
   }
 
   /* Path ends here. */
-  INTEGRATOR_FLOW_END;
+  INTEGRATOR_PATH_TERMINATE;
 }
 
 CCL_NAMESPACE_END

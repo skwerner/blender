@@ -76,7 +76,7 @@ ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS,
     Ray ray;
     integrate_camera_sample(kg, sample, x, y, rng_hash, &ray);
     if (ray.t == 0.0f) {
-      INTEGRATOR_FLOW_END;
+      INTEGRATOR_PATH_TERMINATE;
       return;
     }
 
@@ -92,7 +92,7 @@ ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS,
   path_state_init(INTEGRATOR_STATE_PASS, tile, sample, x, y, rng_hash);
 
   /* Continue with intersect_closest kernel. */
-  INTEGRATOR_FLOW_QUEUE(intersect_closest);
+  INTEGRATOR_PATH_NEXT(intersect_closest);
 }
 
 CCL_NAMESPACE_END

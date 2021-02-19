@@ -20,6 +20,11 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
+  /* Only execute if shadow ray needs to be traced. */
+  if (INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {
+    return;
+  }
+
   kernel_assert(INTEGRATOR_STATE(shadow_ray, t) != 0.0f);
 
   /* Scene ray intersection. */
@@ -38,9 +43,9 @@ ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 #endif
 
   const bool shadow_opaque = true;
-  if (INTEGRATOR_STATE_ARRAY(shadow_isect, 0, object) != OBJECT_NONE && shadow_opaque) {
+  if (INTEGRATOR_STATE_ARRAY(shadow_isect, 0, prim) != PRIM_NONE && shadow_opaque) {
     /* Hit an opaque surface, shadow path ends here. */
-    INTEGRATOR_FLOW_SHADOW_END;
+    INTEGRATOR_SHADOW_PATH_TERMINATE;
     return;
   }
   else {
@@ -49,7 +54,7 @@ ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
      *
      * TODO: could also write to render buffer directly if no transparent shadows?
      * Could save a kernel execution for the common case. */
-    INTEGRATOR_FLOW_SHADOW_QUEUE(shadow);
+    INTEGRATOR_SHADOW_PATH_NEXT(shadow);
     return;
   }
 }

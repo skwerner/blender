@@ -257,7 +257,7 @@ set(SRC_GEOM_HEADERS
 )
 
 set(SRC_INTEGRATOR_HEADERS
-  integrator/integrator_flow.h
+  integrator/integrator_path_state.h
   integrator/integrator_state.h
   integrator/kernel_background.h
   integrator/kernel_generate_camera_rays.h

@@ -23,7 +23,10 @@ CCL_NAMESPACE_BEGIN
 ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 {
-  kernel_assert(INTEGRATOR_STATE(isect, object) != OBJECT_NONE);
+  /* Only execute if path is active and intersection was found. */
+  if (INTEGRATOR_PATH_IS_TERMINATED || INTEGRATOR_STATE(isect, prim) == PRIM_NONE) {
+    return;
+  }
 
   const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
   const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
@@ -40,7 +43,7 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
     kernel_write_pass_float4(pixel_render_buffer, make_float4(L.x, L.y, L.z, alpha));
   }
 
-  INTEGRATOR_FLOW_END;
+  INTEGRATOR_PATH_TERMINATE;
 
 #if 0
   /* Evaluate shader. */
@@ -48,8 +51,9 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
   /* Subsurface scattering does scattering, direct and indirect light in own kernel. */
   const bool subsurface = false;
   if (subsurface) {
+    INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SUBSURFACE;
     INTEGRATOR_STATE_WRITE(subsurface, albedo) = make_float3(1.0f, 1.0f, 1.0f);
-    INTEGRATOR_FLOW_QUEUE(subsurface);
+    INTEGRATOR_PATH_NEXT(subsurface);
     return;
   }
 
@@ -68,13 +72,13 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
 
     /* Branch of shadow kernel. */
-    INTEGRATOR_FLOW_SHADOW_QUEUE(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
   }
 
   const bool end_path = true;
   if (end_path) {
     /* End path. */
-    INTEGRATOR_FLOW_END;
+    INTEGRATOR_PATH_TERMINATE;
     return;
   }
   else {
@@ -86,7 +90,7 @@ ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
     /* Queue intersect_closest kernel. */
-    INTEGRATOR_FLOW_QUEUE(intersect_closest);
+    INTEGRATOR_PATH_NEXT(intersect_closest);
     return;
   }
 #endif

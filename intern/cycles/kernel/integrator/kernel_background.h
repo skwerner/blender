@@ -16,9 +16,115 @@
 
 #pragma once
 
+#include "kernel/kernel_light.h"
+#include "kernel/kernel_shader.h"
 #include "kernel/kernel_write_passes.h"
 
 CCL_NAMESPACE_BEGIN
+
+ccl_device_noinline_cpu float3 integrator_eval_background_shader(
+    INTEGRATOR_STATE_ARGS, ccl_global float *ccl_restrict render_buffer)
+{
+#ifdef __BACKGROUND__
+  const int shader = kernel_data.background.surface_shader;
+  const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
+
+  /* Use visibility flag to skip lights. */
+  if (shader & SHADER_EXCLUDE_ANY) {
+    if (((shader & SHADER_EXCLUDE_DIFFUSE) && (path_flag & PATH_RAY_DIFFUSE)) ||
+        ((shader & SHADER_EXCLUDE_GLOSSY) && ((path_flag & (PATH_RAY_GLOSSY | PATH_RAY_REFLECT)) ==
+                                              (PATH_RAY_GLOSSY | PATH_RAY_REFLECT))) ||
+        ((shader & SHADER_EXCLUDE_TRANSMIT) && (path_flag & PATH_RAY_TRANSMIT)) ||
+        ((shader & SHADER_EXCLUDE_CAMERA) && (path_flag & PATH_RAY_CAMERA)) ||
+        ((shader & SHADER_EXCLUDE_SCATTER) && (path_flag & PATH_RAY_VOLUME_SCATTER)))
+      return make_float3(0.0f, 0.0f, 0.0f);
+  }
+
+  /* Fast path for constant color shader. */
+  float3 L = make_float3(0.0f, 0.0f, 0.0f);
+  if (shader_constant_emission_eval(kg, shader, &L)) {
+    return L;
+  }
+
+  /* Evaluate background shader. */
+  {
+    /* TODO: does aliasing like this break automatic SoA in CUDA?
+     * Should we instead store closures separate from ShaderData? */
+    ShaderDataTinyStorage emission_sd_storage;
+    ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
+
+    shader_setup_from_background(INTEGRATOR_STATE_PASS, emission_sd);
+
+    INTEGRATOR_STATE_WRITE(path, bounce) += 1;
+    shader_eval_surface(
+        INTEGRATOR_STATE_PASS, emission_sd, render_buffer, path_flag | PATH_RAY_EMISSION);
+    INTEGRATOR_STATE_WRITE(path, bounce) -= 1;
+
+    L = shader_background_eval(emission_sd);
+  }
+
+  /* Background MIS weights. */
+#  ifdef __BACKGROUND_MIS__
+  /* Check if background light exists or if we should skip pdf. */
+  if (!(INTEGRATOR_STATE(path, flag) & PATH_RAY_MIS_SKIP) && kernel_data.background.use_mis) {
+    const float3 ray_P = INTEGRATOR_STATE(ray, P);
+    const float3 ray_D = INTEGRATOR_STATE(ray, D);
+    const float ray_pdf = INTEGRATOR_STATE(path, ray_pdf);
+
+    /* multiple importance sampling, get background light pdf for ray
+     * direction, and compute weight with respect to BSDF pdf */
+    const float pdf = background_light_pdf(kg, ray_P, ray_D);
+    const float mis_weight = power_heuristic(ray_pdf, pdf);
+
+    L *= mis_weight;
+  }
+#  endif
+
+  return L;
+#else
+  return make_float3(0.8f, 0.8f, 0.8f);
+#endif
+}
+
+ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
+                                            ccl_global float *ccl_restrict render_buffer)
+{
+  float transparent = 0.0f;
+
+  /* eval background shader if nothing hit */
+  if (kernel_data.background.transparent &&
+      (INTEGRATOR_STATE(path, flag) & PATH_RAY_TRANSPARENT_BACKGROUND)) {
+    transparent = average(INTEGRATOR_STATE(path, throughput));
+
+#ifdef __PASSES__
+    if (!(kernel_data.film.light_pass_flag & PASSMASK(BACKGROUND)))
+#endif /* __PASSES__ */
+      return;
+  }
+
+  /* TODO */
+#if 0
+  /* When using the ao bounces approximation, adjust background
+   * shader intensity with ao factor. */
+  if (path_state_ao_bounce(kg, state)) {
+    throughput *= kernel_data.background.ao_bounces_factor;
+  }
+#endif
+
+  /* sample background shader */
+  float3 L = integrator_eval_background_shader(INTEGRATOR_STATE_PASS, render_buffer);
+
+  /* TODO */
+#if 0
+  path_radiance_accum_background(kg, L, state, throughput, L_background);
+#else
+  L *= INTEGRATOR_STATE(path, throughput);
+
+  if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
+    kernel_write_pass_float4(render_buffer, make_float4(L.x, L.y, L.z, 1.0f - transparent));
+  }
+#endif
+}
 
 ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
@@ -28,13 +134,12 @@ ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
     return;
   }
 
-  /* Placeholder. */
-  const float3 L = make_float3(0.0f, 0.0f, 0.0f);
-  const float alpha = 0.0f;
+  const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                        kernel_data.film.pass_stride;
+  float *pixel_render_buffer = render_buffer + render_buffer_offset;
 
-  if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
-    kernel_write_pass_float4(render_buffer, make_float4(L.x, L.y, L.z, alpha));
-  }
+  integrate_background(INTEGRATOR_STATE_PASS, pixel_render_buffer);
 
   /* Path ends here. */
   INTEGRATOR_PATH_TERMINATE;

@@ -26,9 +26,10 @@ ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS,
     return;
   }
 
-  kernel_assert(INTEGRATOR_STATE_ARRAY(shadow_isect, 0, prim) != PRIM_NONE);
+  if (INTEGRATOR_STATE_ARRAY(shadow_isect, 0, prim) != PRIM_NONE) {
+    /* TODO: modify throughput. */
+  }
 
-  /* Modify throughput. */
   const bool shadow_isect_done = true;
   if (shadow_isect_done) {
     const float3 L = INTEGRATOR_STATE(shadow_light, L);

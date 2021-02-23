@@ -77,6 +77,8 @@ typedef struct IntegratorPathState {
   uint16_t sample;
   /* Current ray bounce depth. */
   uint16_t bounce;
+  /* Current transparent ray bounce depth. */
+  uint16_t transparent_bounce;
 
   /* Random number generator seed. */
   uint32_t rng_hash;
@@ -88,6 +90,8 @@ typedef struct IntegratorPathState {
 
   /* Multiple importance sampling. */
   float ray_pdf;
+  /* Filter glossy. */
+  float min_ray_pdf;
 
   /* Throughput. */
   float3 throughput;

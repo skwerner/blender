@@ -32,11 +32,13 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, render_pixel_index) = render_pixel_index;
   INTEGRATOR_STATE_WRITE(path, sample) = sample;
   INTEGRATOR_STATE_WRITE(path, bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, transparent_bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, rng_hash) = rng_hash;
   INTEGRATOR_STATE_WRITE(path, rng_offset) = PRNG_BASE_NUM;
   INTEGRATOR_STATE_WRITE(path, flag) = PATH_RAY_CAMERA | PATH_RAY_MIS_SKIP |
                                        PATH_RAY_TRANSPARENT_BACKGROUND;
   INTEGRATOR_STATE_WRITE(path, ray_pdf) = 0.0f;
+  INTEGRATOR_STATE_WRITE(path, min_ray_pdf) = FLT_MAX;
   INTEGRATOR_STATE_WRITE(path, throughput) = make_float3(1.0f, 1.0f, 1.0f);
 
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
@@ -83,124 +85,144 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
 #endif
 }
 
-#if 0
-ccl_device_inline void path_state_next(const KernelGlobals *kg,
-                                       ccl_addr_space PathState *state,
-                                       int label)
+ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
 {
+  uint32_t flag = INTEGRATOR_STATE(path, flag);
+
   /* ray through transparent keeps same flags from previous ray and is
    * not counted as a regular bounce, transparent has separate max */
   if (label & LABEL_TRANSPARENT) {
-    state->flag |= PATH_RAY_TRANSPARENT;
-    state->transparent_bounce++;
-    if (state->transparent_bounce >= kernel_data.integrator.transparent_max_bounce) {
-      state->flag |= PATH_RAY_TERMINATE_IMMEDIATE;
+    uint32_t transparent_bounce = INTEGRATOR_STATE(path, transparent_bounce) + 1;
+
+    flag |= PATH_RAY_TRANSPARENT;
+    if (transparent_bounce >= kernel_data.integrator.transparent_max_bounce) {
+      flag |= PATH_RAY_TERMINATE_IMMEDIATE;
     }
 
     if (!kernel_data.integrator.transparent_shadows)
-      state->flag |= PATH_RAY_MIS_SKIP;
+      flag |= PATH_RAY_MIS_SKIP;
 
-    /* random number generator next bounce */
-    state->rng_offset += PRNG_BOUNCE_NUM;
-
+    INTEGRATOR_STATE_WRITE(path, flag) = flag;
+    INTEGRATOR_STATE_WRITE(path, transparent_bounce) = transparent_bounce;
+    /* Random number generator next bounce. */
+    INTEGRATOR_STATE_WRITE(path, rng_offset) += PRNG_BOUNCE_NUM;
     return;
   }
 
-  state->bounce++;
-  if (state->bounce >= kernel_data.integrator.max_bounce) {
-    state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+  uint32_t bounce = INTEGRATOR_STATE(path, bounce) + 1;
+  if (bounce >= kernel_data.integrator.max_bounce) {
+    flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
   }
 
-  state->flag &= ~(PATH_RAY_ALL_VISIBILITY | PATH_RAY_MIS_SKIP);
+  flag &= ~(PATH_RAY_ALL_VISIBILITY | PATH_RAY_MIS_SKIP);
 
-#  ifdef __VOLUME__
+#ifdef __VOLUME__
   if (label & LABEL_VOLUME_SCATTER) {
     /* volume scatter */
-    state->flag |= PATH_RAY_VOLUME_SCATTER;
-    state->flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
+    flag |= PATH_RAY_VOLUME_SCATTER;
+    flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
 
+    /* TODO */
+#  if 0
     state->volume_bounce++;
     if (state->volume_bounce >= kernel_data.integrator.max_volume_bounce) {
-      state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+      flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
     }
+#  endif
   }
   else
-#  endif
+#endif
   {
     /* surface reflection/transmission */
     if (label & LABEL_REFLECT) {
-      state->flag |= PATH_RAY_REFLECT;
-      state->flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
+      flag |= PATH_RAY_REFLECT;
+      flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
 
+      /* TODO */
+#if 0
       if (label & LABEL_DIFFUSE) {
         state->diffuse_bounce++;
         if (state->diffuse_bounce >= kernel_data.integrator.max_diffuse_bounce) {
-          state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+          flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
         }
       }
       else {
         state->glossy_bounce++;
         if (state->glossy_bounce >= kernel_data.integrator.max_glossy_bounce) {
-          state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+          flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
         }
       }
+#endif
     }
     else {
       kernel_assert(label & LABEL_TRANSMIT);
 
-      state->flag |= PATH_RAY_TRANSMIT;
+      flag |= PATH_RAY_TRANSMIT;
 
       if (!(label & LABEL_TRANSMIT_TRANSPARENT)) {
-        state->flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
+        flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
       }
 
+      /* TODO */
+#if 0
       state->transmission_bounce++;
       if (state->transmission_bounce >= kernel_data.integrator.max_transmission_bounce) {
-        state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+        flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
       }
+#endif
     }
 
     /* diffuse/glossy/singular */
     if (label & LABEL_DIFFUSE) {
-      state->flag |= PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR;
+      flag |= PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR;
     }
     else if (label & LABEL_GLOSSY) {
-      state->flag |= PATH_RAY_GLOSSY;
+      flag |= PATH_RAY_GLOSSY;
     }
     else {
       kernel_assert(label & LABEL_SINGULAR);
-      state->flag |= PATH_RAY_GLOSSY | PATH_RAY_SINGULAR | PATH_RAY_MIS_SKIP;
+      flag |= PATH_RAY_GLOSSY | PATH_RAY_SINGULAR | PATH_RAY_MIS_SKIP;
     }
   }
 
-  /* random number generator next bounce */
-  state->rng_offset += PRNG_BOUNCE_NUM;
-
+  /* TODO */
+#if 0
 #  ifdef __DENOISING_FEATURES__
-  if ((state->denoising_feature_weight == 0.0f) && !(state->flag & PATH_RAY_SHADOW_CATCHER)) {
-    state->flag &= ~PATH_RAY_STORE_SHADOW_INFO;
+  if ((state->denoising_feature_weight == 0.0f) && !(flag & PATH_RAY_SHADOW_CATCHER)) {
+    flag &= ~PATH_RAY_STORE_SHADOW_INFO;
   }
 #  endif
-}
 #endif
 
+  INTEGRATOR_STATE_WRITE(path, flag) = flag;
+  INTEGRATOR_STATE_WRITE(path, bounce) = bounce;
+
+  /* Random number generator next bounce. */
+  INTEGRATOR_STATE_WRITE(path, rng_offset) += PRNG_BOUNCE_NUM;
+}
+
 #ifdef __VOLUME__
-ccl_device_inline bool path_state_volume_next(const KernelGlobals *kg,
-                                              ccl_addr_space PathState *state)
+ccl_device_inline bool path_state_volume_next(INTEGRATOR_STATE_ARGS)
 {
+  /* TODO */
+#  if 0
   /* For volume bounding meshes we pass through without counting transparent
    * bounces, only sanity check in case self intersection gets us stuck. */
-  state->volume_bounds_bounce++;
-  if (state->volume_bounds_bounce > VOLUME_BOUNDS_MAX) {
+  uint32_t volume_bounds_bounce = INTEGRATOR_STATE(path, volume_bounds_bounce) + 1;
+  INTEGRATOR_STATE_WRITE(path, volume_bounds_bounce) = volume_bounds_bounce;
+  if (volume_bounds_bounce > VOLUME_BOUNDS_MAX) {
     return false;
   }
 
   /* Random number generator next bounce. */
-  if (state->volume_bounds_bounce > 1) {
-    state->rng_offset += PRNG_BOUNCE_NUM;
+  if (volume_bounds_bounce > 1) {
+    INTEGRATOR_STATE_WRITE(path, rng_offset) += PRNG_BOUNCE_NUM;
   }
 
   return true;
+#  else
+  return false;
+#  endif
 }
 #endif
 
@@ -219,66 +241,72 @@ ccl_device_inline uint path_state_ray_visibility(INTEGRATOR_STATE_CONST_ARGS)
   return visibility;
 }
 
-#if 0
-ccl_device_inline float path_state_continuation_probability(const KernelGlobals *kg,
-                                                            ccl_addr_space PathState *state,
-                                                            const float3 throughput)
+ccl_device_inline float path_state_continuation_probability(INTEGRATOR_STATE_CONST_ARGS)
 {
-  if (state->flag & PATH_RAY_TERMINATE_IMMEDIATE) {
+  const uint32_t flag = INTEGRATOR_STATE(path, flag);
+
+  if (flag & PATH_RAY_TERMINATE_IMMEDIATE) {
     /* Ray is to be terminated immediately. */
     return 0.0f;
   }
-  else if (state->flag & PATH_RAY_TRANSPARENT) {
+  else if (flag & PATH_RAY_TRANSPARENT) {
+    const uint32_t transparent_bounce = INTEGRATOR_STATE(path, transparent_bounce);
     /* Do at least specified number of bounces without RR. */
-    if (state->transparent_bounce <= kernel_data.integrator.transparent_min_bounce) {
+    if (transparent_bounce <= kernel_data.integrator.transparent_min_bounce) {
       return 1.0f;
     }
-#  ifdef __SHADOW_TRICKS__
+#ifdef __SHADOW_TRICKS__
     /* Exception for shadow catcher not working correctly with RR. */
-    else if ((state->flag & PATH_RAY_SHADOW_CATCHER) && (state->transparent_bounce <= 8)) {
+    else if ((flag & PATH_RAY_SHADOW_CATCHER) && (transparent_bounce <= 8)) {
       return 1.0f;
     }
-#  endif
+#endif
   }
   else {
+    const uint32_t bounce = INTEGRATOR_STATE(path, bounce);
     /* Do at least specified number of bounces without RR. */
-    if (state->bounce <= kernel_data.integrator.min_bounce) {
+    if (bounce <= kernel_data.integrator.min_bounce) {
       return 1.0f;
     }
-#  ifdef __SHADOW_TRICKS__
+#ifdef __SHADOW_TRICKS__
     /* Exception for shadow catcher not working correctly with RR. */
-    else if ((state->flag & PATH_RAY_SHADOW_CATCHER) && (state->bounce <= 3)) {
+    else if ((flag & PATH_RAY_SHADOW_CATCHER) && (bounce <= 3)) {
       return 1.0f;
     }
-#  endif
+#endif
   }
 
   /* Probabilistic termination: use sqrt() to roughly match typical view
    * transform and do path termination a bit later on average. */
-  return min(sqrtf(max3(fabs(throughput)) * state->branch_factor), 1.0f);
+  return min(sqrtf(max3(fabs(INTEGRATOR_STATE(path, throughput)))), 1.0f);
 }
 
+#if 0
 /* TODO(DingTo): Find more meaningful name for this */
 ccl_device_inline void path_state_modify_bounce(ccl_addr_space PathState *state, bool increase)
 {
   /* Modify bounce temporarily for shader eval */
   if (increase)
-    state->bounce += 1;
+    state->bounce += 1
   else
     state->bounce -= 1;
 }
+#endif
 
-ccl_device_inline bool path_state_ao_bounce(const KernelGlobals *kg,
-                                            ccl_addr_space PathState *state)
+ccl_device_inline bool path_state_ao_bounce(INTEGRATOR_STATE_CONST_ARGS)
 {
+  /* TODO */
+#if 0
   if (state->bounce <= kernel_data.integrator.ao_bounces) {
     return false;
   }
 
   int bounce = state->bounce - state->transmission_bounce - (state->glossy_bounce > 0);
   return (bounce > kernel_data.integrator.ao_bounces);
-}
+#else
+  return false;
 #endif
+}
 
 /* Random Number Sampling Utility Functions
  *

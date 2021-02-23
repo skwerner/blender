@@ -97,10 +97,6 @@ if(WITH_CYCLES_DEVICE_OPENCL)
   add_definitions(-DWITH_OPENCL)
 endif()
 
-if(WITH_CYCLES_NETWORK)
-  add_definitions(-DWITH_NETWORK)
-endif()
-
 if(WITH_MOD_FLUID)
   add_definitions(-DWITH_FLUID)
 endif()

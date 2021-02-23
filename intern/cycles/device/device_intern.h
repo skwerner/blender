@@ -37,17 +37,12 @@ bool device_optix_init();
 Device *device_optix_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 Device *device_dummy_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 
-Device *device_network_create(DeviceInfo &info,
-                              Stats &stats,
-                              Profiler &profiler,
-                              const char *address);
 Device *device_multi_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 
 void device_cpu_info(vector<DeviceInfo> &devices);
 void device_opencl_info(vector<DeviceInfo> &devices);
 void device_cuda_info(vector<DeviceInfo> &devices);
 void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo> &devices);
-void device_network_info(vector<DeviceInfo> &devices);
 
 string device_cpu_capabilities();
 string device_opencl_capabilities();

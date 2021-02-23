@@ -21,7 +21,6 @@
 
 #include "device/device.h"
 #include "device/device_intern.h"
-#include "device/device_network.h"
 #include "device/device_queue.h"
 
 #include "render/buffers.h"
@@ -121,20 +120,6 @@ class MultiDevice : public Device {
         }
       }
     }
-
-#ifdef WITH_NETWORK
-    /* try to add network devices */
-    ServerDiscovery discovery(true);
-    time_sleep(1.0);
-
-    vector<string> servers = discovery.get_server_list();
-
-    foreach (string &server, servers) {
-      Device *device = device_network_create(info, stats, profiler, server.c_str());
-      if (device)
-        devices.push_back(SubDevice(device));
-    }
-#endif
   }
 
   ~MultiDevice()

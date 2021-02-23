@@ -289,8 +289,6 @@ endif()
 if(WITH_CYCLES_STANDALONE)
   set(WITH_CYCLES_DEVICE_OPENCL TRUE)
   set(WITH_CYCLES_DEVICE_CUDA TRUE)
-  # Experimental and unfinished.
-  set(WITH_CYCLES_NETWORK FALSE)
 endif()
 # TODO(sergey): Consider removing it, only causes confusion in interface.
 set(WITH_CYCLES_DEVICE_MULTI TRUE)
@@ -384,10 +382,6 @@ if(WITH_CYCLES_BLENDER)
   remove_cc_flag("-ffp-contract=off")
   add_definitions(-DWITH_BLENDER_GUARDEDALLOC)
   add_subdirectory(blender)
-endif()
-
-if(WITH_CYCLES_NETWORK)
-  add_definitions(-DWITH_NETWORK)
 endif()
 
 add_subdirectory(app)

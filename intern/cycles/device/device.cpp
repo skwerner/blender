@@ -42,7 +42,6 @@ vector<DeviceInfo> Device::opencl_devices;
 vector<DeviceInfo> Device::cuda_devices;
 vector<DeviceInfo> Device::optix_devices;
 vector<DeviceInfo> Device::cpu_devices;
-vector<DeviceInfo> Device::network_devices;
 uint Device::devices_initialized_mask = 0;
 
 /* Device Requested Features */
@@ -408,11 +407,6 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
         device = device_optix_create(info, stats, profiler, background);
       break;
 #endif
-#ifdef WITH_NETWORK
-    case DEVICE_NETWORK:
-      device = device_network_create(info, stats, profiler, "127.0.0.1");
-      break;
-#endif
 #ifdef WITH_OPENCL
     case DEVICE_OPENCL:
       if (device_opencl_init())
@@ -440,8 +434,6 @@ DeviceType Device::type_from_string(const char *name)
     return DEVICE_OPTIX;
   else if (strcmp(name, "OPENCL") == 0)
     return DEVICE_OPENCL;
-  else if (strcmp(name, "NETWORK") == 0)
-    return DEVICE_NETWORK;
   else if (strcmp(name, "MULTI") == 0)
     return DEVICE_MULTI;
 
@@ -458,8 +450,6 @@ string Device::string_from_type(DeviceType type)
     return "OPTIX";
   else if (type == DEVICE_OPENCL)
     return "OPENCL";
-  else if (type == DEVICE_NETWORK)
-    return "NETWORK";
   else if (type == DEVICE_MULTI)
     return "MULTI";
 
@@ -478,9 +468,6 @@ vector<DeviceType> Device::available_types()
 #endif
 #ifdef WITH_OPENCL
   types.push_back(DEVICE_OPENCL);
-#endif
-#ifdef WITH_NETWORK
-  types.push_back(DEVICE_NETWORK);
 #endif
   return types;
 }
@@ -546,18 +533,6 @@ vector<DeviceInfo> Device::available_devices(uint mask)
       devices.push_back(info);
     }
   }
-
-#ifdef WITH_NETWORK
-  if (mask & DEVICE_MASK_NETWORK) {
-    if (!(devices_initialized_mask & DEVICE_MASK_NETWORK)) {
-      device_network_info(network_devices);
-      devices_initialized_mask |= DEVICE_MASK_NETWORK;
-    }
-    foreach (DeviceInfo &info, network_devices) {
-      devices.push_back(info);
-    }
-  }
-#endif
 
   return devices;
 }
@@ -689,7 +664,6 @@ void Device::free_memory()
   optix_devices.free_memory();
   opencl_devices.free_memory();
   cpu_devices.free_memory();
-  network_devices.free_memory();
 }
 
 /* DeviceInfo */

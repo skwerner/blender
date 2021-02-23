@@ -38,11 +38,6 @@ enum_devices = (
     ('GPU', "GPU Compute", "Use GPU compute device for rendering, configured in the system tab in the user preferences"),
 )
 
-from _cycles import with_network
-if with_network:
-    enum_devices += (('NETWORK', "Networked Device", "Use networked device for rendering"),)
-del with_network
-
 enum_feature_set = (
     ('SUPPORTED', "Supported", "Only use finished and supported features"),
     ('EXPERIMENTAL', "Experimental", "Use experimental and incomplete features that might be broken or change in the future", 'ERROR', 1),

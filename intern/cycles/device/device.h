@@ -48,7 +48,6 @@ enum DeviceType {
   DEVICE_CPU,
   DEVICE_OPENCL,
   DEVICE_CUDA,
-  DEVICE_NETWORK,
   DEVICE_MULTI,
   DEVICE_OPTIX,
   DEVICE_DUMMY,
@@ -59,7 +58,6 @@ enum DeviceTypeMask {
   DEVICE_MASK_OPENCL = (1 << DEVICE_OPENCL),
   DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
   DEVICE_MASK_OPTIX = (1 << DEVICE_OPTIX),
-  DEVICE_MASK_NETWORK = (1 << DEVICE_NETWORK),
   DEVICE_MASK_ALL = ~0
 };
 
@@ -435,11 +433,6 @@ class Device {
   /* acceleration structure building */
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);
 
-#ifdef WITH_NETWORK
-  /* networking */
-  void server_run();
-#endif
-
   /* multi device */
   virtual void map_tile(Device * /*sub_device*/, RenderTile & /*tile*/)
   {
@@ -507,7 +500,6 @@ class Device {
   static vector<DeviceInfo> optix_devices;
   static vector<DeviceInfo> opencl_devices;
   static vector<DeviceInfo> cpu_devices;
-  static vector<DeviceInfo> network_devices;
   static uint devices_initialized_mask;
 };
 

@@ -62,19 +62,12 @@ set(SRC_OPENCL
   opencl/opencl_util.cpp
 )
 
-if(WITH_CYCLES_NETWORK)
-  list(APPEND SRC
-    device_network.cpp
-  )
-endif()
-
 set(SRC_HEADERS
   device.h
   device_denoising.h
   device_memory.h
   device_intern.h
   device_kernel.h
-  device_network.h
   device_queue.h
   device_task.h
 )
@@ -97,9 +90,7 @@ else()
 endif()
 
 add_definitions(${GL_DEFINITIONS})
-if(WITH_CYCLES_NETWORK)
-  add_definitions(-DWITH_NETWORK)
-endif()
+
 if(WITH_CYCLES_DEVICE_OPENCL)
   list(APPEND LIB
     extern_clew

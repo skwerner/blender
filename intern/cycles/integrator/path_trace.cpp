@@ -107,7 +107,6 @@ void PathTrace::render_work_on_queue(
 
     queue->enqueue(DeviceKernel::GENERATE_CAMERA_RAYS);
 
-    bool have_alive_paths = false;
     do {
       /* NOTE: The order of queuing is based on the following ideas:
        *  - It is possible that some rays will hit background, and and of them will need volume
@@ -133,10 +132,7 @@ void PathTrace::render_work_on_queue(
 
       queue->enqueue(DeviceKernel::INTERSECT_SHADOW);
       queue->enqueue(DeviceKernel::SHADOW);
-
-      /* TODO(sergey): perform actual check on number of "alive" paths in the wavefront. */
-      have_alive_paths = false;
-    } while (have_alive_paths);
+    } while (queue->has_work_remaining());
 
     traced_samples_num += parallel_samples_num;
   }

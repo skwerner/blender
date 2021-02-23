@@ -59,10 +59,12 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
 
   virtual void set_work_tile(const DeviceWorkTile &work_tile) override;
 
+  virtual bool has_work_remaining() override;
+
  protected:
   RenderBuffers *render_buffers_;
 
-  /* TODO(sergey): Make integrator state somehow more explicit and more edependent on the number
+  /* TODO(sergey): Make integrator state somehow more explicit and more dependent on the number
    * of threads, or number of splits in the kernels.
    * For the quick debug keep it at 1, but it really needs to be changed soon. */
   IntegratorState integrator_state_;

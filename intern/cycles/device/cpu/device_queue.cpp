@@ -20,6 +20,8 @@
 #include "render/buffers.h"
 #include "util/util_logging.h"
 
+#include "kernel/integrator/integrator_path_state.h"
+
 CCL_NAMESPACE_BEGIN
 
 CPUDeviceQueue::CPUDeviceQueue(Device *device,
@@ -94,6 +96,12 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
 void CPUIntegratorQueue::set_work_tile(const DeviceWorkTile &work_tile)
 {
   work_tile_ = work_tile;
+}
+
+bool CPUIntegratorQueue::has_work_remaining()
+{
+  const IntegratorState *state = &integrator_state_;
+  return !(INTEGRATOR_PATH_IS_TERMINATED && INTEGRATOR_SHADOW_PATH_IS_TERMINATED);
 }
 
 CCL_NAMESPACE_END

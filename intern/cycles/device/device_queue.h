@@ -53,6 +53,9 @@ class DeviceQueue {
    * specific to render queue. */
   virtual void set_work_tile(const DeviceWorkTile &work_tile) = 0;
 
+  /* Test if any work is still remaining to be done. */
+  virtual bool has_work_remaining() = 0;
+
   /* Device this queue has been created for. */
   Device *device;
 

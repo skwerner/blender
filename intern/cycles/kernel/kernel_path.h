@@ -114,37 +114,6 @@ ccl_device_forceinline void kernel_path_lamp_emission(const KernelGlobals *kg,
 #endif /* __LAMP_MIS__ */
 }
 
-ccl_device_forceinline void kernel_path_background(const KernelGlobals *kg,
-                                                   ccl_addr_space PathState *state,
-                                                   ccl_addr_space Ray *ray,
-                                                   float3 throughput,
-                                                   ShaderData *sd,
-                                                   ccl_global float *buffer,
-                                                   PathRadiance *L)
-{
-  /* eval background shader if nothing hit */
-  if (kernel_data.background.transparent && (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND)) {
-    L->transparent += average(throughput);
-
-#ifdef __PASSES__
-    if (!(kernel_data.film.light_pass_flag & PASSMASK(BACKGROUND)))
-#endif /* __PASSES__ */
-      return;
-  }
-
-  /* When using the ao bounces approximation, adjust background
-   * shader intensity with ao factor. */
-  if (path_state_ao_bounce(kg, state)) {
-    throughput *= kernel_data.background.ao_bounces_factor;
-  }
-
-#ifdef __BACKGROUND__
-  /* sample background shader */
-  float3 L_background = indirect_background(kg, sd, state, buffer, ray);
-  path_radiance_accum_background(kg, L, state, throughput, L_background);
-#endif /* __BACKGROUND__ */
-}
-
 #ifndef __SPLIT_KERNEL__
 
 #  ifdef __VOLUME__

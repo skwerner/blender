@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel_write_passes.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* BSDF Eval
@@ -162,6 +164,41 @@ ccl_device_inline float3 bsdf_eval_sum(const BsdfEval *eval)
     return eval->diffuse;
 }
 
+/* Clamping
+ *
+ * Clamping is done on a per-contribution basis so that we can write directly
+ * to render buffers instead of using per-thread memory, and to avoid the
+ * impact of clamping on other contributions. */
+
+#ifdef __CLAMP_SAMPLE__
+ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *L, int bounce)
+{
+  float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
+                               kernel_data.integrator.sample_clamp_direct;
+  float sum = reduce_add(fabs(*L));
+  if (sum > limit) {
+    *L *= limit / sum;
+  }
+}
+
+ccl_device_forceinline void kernel_accum_clamp_throughput(const KernelGlobals *kg,
+                                                          float3 *L,
+                                                          float3 *throughput,
+                                                          int bounce)
+{
+  float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
+                               kernel_data.integrator.sample_clamp_direct;
+
+  float sum = reduce_add(fabs(*L));
+  if (sum > limit) {
+    float clamp_factor = limit / sum;
+    *L *= clamp_factor;
+    *throughput *= clamp_factor;
+  }
+}
+#endif
+
+#if 0
 /* Path Radiance
  *
  * We accumulate different render passes separately. After summing at the end
@@ -172,7 +209,7 @@ ccl_device_inline float3 bsdf_eval_sum(const BsdfEval *eval)
 ccl_device_inline void path_radiance_init(const KernelGlobals *kg, PathRadiance *L)
 {
   /* clear all */
-#ifdef __PASSES__
+#  ifdef __PASSES__
   L->use_light_pass = kernel_data.film.use_light_pass;
 
   if (kernel_data.film.use_light_pass) {
@@ -207,33 +244,33 @@ ccl_device_inline void path_radiance_init(const KernelGlobals *kg, PathRadiance 
     L->state.direct = make_float3(0.0f, 0.0f, 0.0f);
   }
   else
-#endif
+#  endif
   {
     L->transparent = 0.0f;
     L->emission = make_float3(0.0f, 0.0f, 0.0f);
   }
 
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   L->path_total = make_float3(0.0f, 0.0f, 0.0f);
   L->path_total_shaded = make_float3(0.0f, 0.0f, 0.0f);
   L->shadow_background_color = make_float3(0.0f, 0.0f, 0.0f);
   L->shadow_throughput = 0.0f;
   L->shadow_transparency = 1.0f;
   L->has_shadow_catcher = 0;
-#endif
+#  endif
 
-#ifdef __DENOISING_FEATURES__
+#  ifdef __DENOISING_FEATURES__
   L->denoising_normal = make_float3(0.0f, 0.0f, 0.0f);
   L->denoising_albedo = make_float3(0.0f, 0.0f, 0.0f);
   L->denoising_depth = 0.0f;
-#endif
+#  endif
 
-#ifdef __KERNEL_DEBUG__
+#  ifdef __KERNEL_DEBUG__
   L->debug_data.num_bvh_traversed_nodes = 0;
   L->debug_data.num_bvh_traversed_instances = 0;
   L->debug_data.num_bvh_intersections = 0;
   L->debug_data.num_ray_bounces = 0;
-#endif
+#  endif
 }
 
 ccl_device_inline void path_radiance_bsdf_bounce(const KernelGlobals *kg,
@@ -246,7 +283,7 @@ ccl_device_inline void path_radiance_bsdf_bounce(const KernelGlobals *kg,
 {
   float inverse_pdf = 1.0f / bsdf_pdf;
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (kernel_data.film.use_light_pass) {
     if (bounce == 0 && !(bsdf_label & LABEL_TRANSPARENT)) {
       /* first on directly visible surface */
@@ -268,40 +305,11 @@ ccl_device_inline void path_radiance_bsdf_bounce(const KernelGlobals *kg,
     }
   }
   else
-#endif
+#  endif
   {
     *throughput *= bsdf_eval->diffuse * inverse_pdf;
   }
 }
-
-#ifdef __CLAMP_SAMPLE__
-ccl_device_forceinline void path_radiance_clamp(const KernelGlobals *kg, float3 *L, int bounce)
-{
-  float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
-                               kernel_data.integrator.sample_clamp_direct;
-  float sum = reduce_add(fabs(*L));
-  if (sum > limit) {
-    *L *= limit / sum;
-  }
-}
-
-ccl_device_forceinline void path_radiance_clamp_throughput(const KernelGlobals *kg,
-                                                           float3 *L,
-                                                           float3 *throughput,
-                                                           int bounce)
-{
-  float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
-                               kernel_data.integrator.sample_clamp_direct;
-
-  float sum = reduce_add(fabs(*L));
-  if (sum > limit) {
-    float clamp_factor = limit / sum;
-    *L *= clamp_factor;
-    *throughput *= clamp_factor;
-  }
-}
-
-#endif
 
 ccl_device_inline void path_radiance_accum_emission(const KernelGlobals *kg,
                                                     PathRadiance *L,
@@ -309,18 +317,18 @@ ccl_device_inline void path_radiance_accum_emission(const KernelGlobals *kg,
                                                     float3 throughput,
                                                     float3 value)
 {
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (state->flag & PATH_RAY_SHADOW_CATCHER) {
     return;
   }
-#endif
+#  endif
 
   float3 contribution = throughput * value;
-#ifdef __CLAMP_SAMPLE__
+#  ifdef __CLAMP_SAMPLE__
   path_radiance_clamp(kg, &contribution, state->bounce - 1);
-#endif
+#  endif
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (L->use_light_pass) {
     if (state->bounce == 0)
       L->emission += contribution;
@@ -330,7 +338,7 @@ ccl_device_inline void path_radiance_accum_emission(const KernelGlobals *kg,
       L->indirect += contribution;
   }
   else
-#endif
+#  endif
   {
     L->emission += contribution;
   }
@@ -344,14 +352,14 @@ ccl_device_inline void path_radiance_accum_ao(const KernelGlobals *kg,
                                               float3 bsdf,
                                               float3 ao)
 {
-#ifdef __PASSES__
+#  ifdef __PASSES__
   /* Store AO pass. */
   if (L->use_light_pass && state->bounce == 0) {
     L->ao += alpha * throughput * ao;
   }
-#endif
+#  endif
 
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   /* For shadow catcher, accumulate ratio. */
   if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
     float3 light = throughput * bsdf;
@@ -362,11 +370,11 @@ ccl_device_inline void path_radiance_accum_ao(const KernelGlobals *kg,
       return;
     }
   }
-#endif
+#  endif
 
   float3 contribution = throughput * bsdf * ao;
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (L->use_light_pass) {
     if (state->bounce == 0) {
       /* Directly visible lighting. */
@@ -378,7 +386,7 @@ ccl_device_inline void path_radiance_accum_ao(const KernelGlobals *kg,
     }
   }
   else
-#endif
+#  endif
   {
     L->emission += contribution;
   }
@@ -389,16 +397,16 @@ ccl_device_inline void path_radiance_accum_total_ao(PathRadiance *L,
                                                     float3 throughput,
                                                     float3 bsdf)
 {
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
     L->path_total += throughput * bsdf;
   }
-#else
+#  else
   (void)L;
   (void)state;
   (void)throughput;
   (void)bsdf;
-#endif
+#  endif
 }
 
 ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
@@ -410,7 +418,7 @@ ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
                                                  float shadow_fac,
                                                  bool is_lamp)
 {
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
     float3 light = throughput * bsdf_eval->sum_no_mis;
     L->path_total += light;
@@ -420,18 +428,18 @@ ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
       return;
     }
   }
-#endif
+#  endif
 
   float3 shaded_throughput = throughput * shadow;
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (L->use_light_pass) {
     /* Compute the clamping based on the total contribution.
      * The resulting scale is then be applied to all individual components. */
     float3 full_contribution = shaded_throughput * bsdf_eval_sum(bsdf_eval);
-#  ifdef __CLAMP_SAMPLE__
+#    ifdef __CLAMP_SAMPLE__
     path_radiance_clamp_throughput(kg, &full_contribution, &shaded_throughput, state->bounce);
-#  endif
+#    endif
 
     if (state->bounce == 0) {
       /* directly visible lighting */
@@ -450,7 +458,7 @@ ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
     }
   }
   else
-#endif
+#  endif
   {
     float3 contribution = shaded_throughput * bsdf_eval->diffuse;
     path_radiance_clamp(kg, &contribution, state->bounce);
@@ -463,16 +471,16 @@ ccl_device_inline void path_radiance_accum_total_light(PathRadiance *L,
                                                        float3 throughput,
                                                        const BsdfEval *bsdf_eval)
 {
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
     L->path_total += throughput * bsdf_eval->sum_no_mis;
   }
-#else
+#  else
   (void)L;
   (void)state;
   (void)throughput;
   (void)bsdf_eval;
-#endif
+#  endif
 }
 
 ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
@@ -482,7 +490,7 @@ ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
                                                       float3 value)
 {
 
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
     L->path_total += throughput * value;
     L->path_total_shaded += throughput * value * L->shadow_transparency;
@@ -491,14 +499,14 @@ ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
       return;
     }
   }
-#endif
+#  endif
 
   float3 contribution = throughput * value;
-#ifdef __CLAMP_SAMPLE__
+#  ifdef __CLAMP_SAMPLE__
   path_radiance_clamp(kg, &contribution, state->bounce - 1);
-#endif
+#  endif
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (L->use_light_pass) {
     if (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND)
       L->background += contribution;
@@ -508,15 +516,15 @@ ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
       L->indirect += contribution;
   }
   else
-#endif
+#  endif
   {
     L->emission += contribution;
   }
 
-#ifdef __DENOISING_FEATURES__
+#  ifdef __DENOISING_FEATURES__
   L->denoising_albedo += state->denoising_feature_weight * state->denoising_feature_throughput *
                          value;
-#endif /* __DENOISING_FEATURES__ */
+#  endif /* __DENOISING_FEATURES__ */
 }
 
 ccl_device_inline void path_radiance_accum_transparent(PathRadiance *L,
@@ -526,7 +534,7 @@ ccl_device_inline void path_radiance_accum_transparent(PathRadiance *L,
   L->transparent += average(throughput);
 }
 
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
 ccl_device_inline void path_radiance_accum_shadowcatcher(PathRadiance *L,
                                                          float3 throughput,
                                                          float3 background)
@@ -535,11 +543,11 @@ ccl_device_inline void path_radiance_accum_shadowcatcher(PathRadiance *L,
   L->shadow_background_color += throughput * background;
   L->has_shadow_catcher = 1;
 }
-#endif
+#  endif
 
 ccl_device_inline void path_radiance_sum_indirect(PathRadiance *L)
 {
-#ifdef __PASSES__
+#  ifdef __PASSES__
   /* this division is a bit ugly, but means we only have to keep track of
    * only a single throughput further along the path, here we recover just
    * the indirect path that is not influenced by any particular BSDF type */
@@ -556,12 +564,12 @@ ccl_device_inline void path_radiance_sum_indirect(PathRadiance *L)
     L->indirect_transmission += L->state.transmission * L->indirect;
     L->indirect_volume += L->state.volume * L->indirect;
   }
-#endif
+#  endif
 }
 
 ccl_device_inline void path_radiance_reset_indirect(PathRadiance *L)
 {
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (L->use_light_pass) {
     L->state.diffuse = make_float3(0.0f, 0.0f, 0.0f);
     L->state.glossy = make_float3(0.0f, 0.0f, 0.0f);
@@ -571,22 +579,22 @@ ccl_device_inline void path_radiance_reset_indirect(PathRadiance *L)
     L->direct_emission = make_float3(0.0f, 0.0f, 0.0f);
     L->indirect = make_float3(0.0f, 0.0f, 0.0f);
   }
-#endif
+#  endif
 }
 
 ccl_device_inline void path_radiance_copy_indirect(PathRadiance *L, const PathRadiance *L_src)
 {
-#ifdef __PASSES__
+#  ifdef __PASSES__
   if (L->use_light_pass) {
     L->state = L_src->state;
 
     L->direct_emission = L_src->direct_emission;
     L->indirect = L_src->indirect;
   }
-#endif
+#  endif
 }
 
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
 ccl_device_inline void path_radiance_sum_shadowcatcher(const KernelGlobals *kg,
                                                        PathRadiance *L,
                                                        float3 *L_sum,
@@ -617,7 +625,7 @@ ccl_device_inline void path_radiance_sum_shadowcatcher(const KernelGlobals *kg,
     *L_sum += L->shadow_background_color;
   }
 }
-#endif
+#  endif
 
 ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
                                                      PathRadiance *L,
@@ -625,7 +633,7 @@ ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
 {
   float3 L_sum;
   /* Light Passes are used */
-#ifdef __PASSES__
+#  ifdef __PASSES__
   float3 L_direct, L_indirect;
   if (L->use_light_pass) {
     path_radiance_sum_indirect(L);
@@ -662,7 +670,7 @@ ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
 
   /* No Light Passes */
   else
-#endif
+#  endif
   {
     L_sum = L->emission;
 
@@ -678,11 +686,11 @@ ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
   *alpha = 1.0f - L->transparent;
 
   /* Add shadow catcher contributions. */
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (L->has_shadow_catcher) {
     path_radiance_sum_shadowcatcher(kg, L, &L_sum, alpha);
   }
-#endif /* __SHADOW_TRICKS__ */
+#  endif /* __SHADOW_TRICKS__ */
 
   return L_sum;
 }
@@ -692,17 +700,17 @@ ccl_device_inline void path_radiance_split_denoising(const KernelGlobals *kg,
                                                      float3 *noisy,
                                                      float3 *clean)
 {
-#ifdef __PASSES__
+#  ifdef __PASSES__
   kernel_assert(L->use_light_pass);
 
   *clean = L->emission + L->background;
   *noisy = L->direct_volume + L->indirect_volume;
 
-#  define ADD_COMPONENT(flag, component) \
-    if (kernel_data.film.denoising_flags & flag) \
-      *clean += component; \
-    else \
-      *noisy += component;
+#    define ADD_COMPONENT(flag, component) \
+      if (kernel_data.film.denoising_flags & flag) \
+        *clean += component; \
+      else \
+        *noisy += component;
 
   ADD_COMPONENT(DENOISING_CLEAN_DIFFUSE_DIR, L->direct_diffuse);
   ADD_COMPONENT(DENOISING_CLEAN_DIFFUSE_IND, L->indirect_diffuse);
@@ -710,17 +718,17 @@ ccl_device_inline void path_radiance_split_denoising(const KernelGlobals *kg,
   ADD_COMPONENT(DENOISING_CLEAN_GLOSSY_IND, L->indirect_glossy);
   ADD_COMPONENT(DENOISING_CLEAN_TRANSMISSION_DIR, L->direct_transmission);
   ADD_COMPONENT(DENOISING_CLEAN_TRANSMISSION_IND, L->indirect_transmission);
-#  undef ADD_COMPONENT
-#else
+#    undef ADD_COMPONENT
+#  else
   *noisy = L->emission;
   *clean = make_float3(0.0f, 0.0f, 0.0f);
-#endif
+#  endif
 
-#ifdef __SHADOW_TRICKS__
+#  ifdef __SHADOW_TRICKS__
   if (L->has_shadow_catcher) {
     *noisy += L->shadow_background_color;
   }
-#endif
+#  endif
 
   *noisy = ensure_finite3(*noisy);
   *clean = ensure_finite3(*clean);
@@ -728,21 +736,21 @@ ccl_device_inline void path_radiance_split_denoising(const KernelGlobals *kg,
 
 ccl_device_inline void path_radiance_accum_sample(PathRadiance *L, PathRadiance *L_sample)
 {
-#ifdef __SPLIT_KERNEL__
-#  define safe_float3_add(f, v) \
-    do { \
-      ccl_global float *p = (ccl_global float *)(&(f)); \
-      atomic_add_and_fetch_float(p + 0, (v).x); \
-      atomic_add_and_fetch_float(p + 1, (v).y); \
-      atomic_add_and_fetch_float(p + 2, (v).z); \
-    } while (0)
-#  define safe_float_add(f, v) atomic_add_and_fetch_float(&(f), (v))
-#else
-#  define safe_float3_add(f, v) (f) += (v)
-#  define safe_float_add(f, v) (f) += (v)
-#endif /* __SPLIT_KERNEL__ */
+#  ifdef __SPLIT_KERNEL__
+#    define safe_float3_add(f, v) \
+      do { \
+        ccl_global float *p = (ccl_global float *)(&(f)); \
+        atomic_add_and_fetch_float(p + 0, (v).x); \
+        atomic_add_and_fetch_float(p + 1, (v).y); \
+        atomic_add_and_fetch_float(p + 2, (v).z); \
+      } while (0)
+#    define safe_float_add(f, v) atomic_add_and_fetch_float(&(f), (v))
+#  else
+#    define safe_float3_add(f, v) (f) += (v)
+#    define safe_float_add(f, v) (f) += (v)
+#  endif /* __SPLIT_KERNEL__ */
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
   safe_float3_add(L->direct_diffuse, L_sample->direct_diffuse);
   safe_float3_add(L->direct_glossy, L_sample->direct_glossy);
   safe_float3_add(L->direct_transmission, L_sample->direct_transmission);
@@ -757,11 +765,107 @@ ccl_device_inline void path_radiance_accum_sample(PathRadiance *L, PathRadiance 
   safe_float3_add(L->ao, L_sample->ao);
   safe_float3_add(L->shadow, L_sample->shadow);
   safe_float_add(L->mist, L_sample->mist);
-#endif /* __PASSES__ */
+#  endif /* __PASSES__ */
   safe_float3_add(L->emission, L_sample->emission);
 
-#undef safe_float_add
-#undef safe_float3_add
+#  undef safe_float_add
+#  undef safe_float3_add
+}
+#endif
+
+/* Get pointer to pixel in render buffer. */
+ccl_device_forceinline ccl_global float *kernel_accum_pixel_render_buffer(
+    INTEGRATOR_STATE_CONST_ARGS,
+    ccl_global float *ccl_restrict render_buffer,
+    const int pass_offset)
+{
+  /* TODO: is uint64_t slow on GPU? */
+  const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                        kernel_data.film.pass_stride;
+  return render_buffer + render_buffer_offset;
+}
+
+/* Write emission to render buffer. */
+ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
+                                             const float3 L,
+                                             ccl_global float *ccl_restrict render_buffer)
+{
+  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
+    return;
+  }
+
+  float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
+#ifdef __CLAMP_SAMPLE__
+  kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
+#endif
+
+  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+      INTEGRATOR_STATE_PASS, render_buffer, 0);
+  kernel_write_pass_float4(pixel_render_buffer,
+                           make_float4(contribution.x, contribution.y, contribution.z, 0.0f));
+}
+
+/* Write light contribution to render buffer. */
+ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
+                                          const float3 L,
+                                          ccl_global float *ccl_restrict render_buffer)
+{
+  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
+    return;
+  }
+
+  float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
+#ifdef __CLAMP_SAMPLE__
+  kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
+#endif
+
+  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+      INTEGRATOR_STATE_PASS, render_buffer, 0);
+  kernel_write_pass_float4(pixel_render_buffer,
+                           make_float4(contribution.x, contribution.y, contribution.z, 0.0f));
+}
+
+/* Write transparency to render buffer.
+ *
+ * Note that we accumulate transparency = 1 - alpha in the render buffer.
+ * Otherwise we'd have to write alpha on path termination, which happens
+ * in many places. */
+ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
+                                                const float transparent,
+                                                ccl_global float *ccl_restrict render_buffer)
+{
+  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
+    return;
+  }
+
+  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+      INTEGRATOR_STATE_PASS, render_buffer, 0);
+  kernel_write_pass_float4(pixel_render_buffer, make_float4(0.0f, 0.0f, 0.0f, transparent));
+}
+
+/* Write background contribution to render buffer.
+ *
+ * Includes transparency, matching kernel_accum_transparent. */
+ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
+                                               const float3 L,
+                                               const float transparent,
+                                               ccl_global float *ccl_restrict render_buffer)
+{
+  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
+    return;
+  }
+
+  float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
+#ifdef __CLAMP_SAMPLE__
+  kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
+#endif
+
+  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+      INTEGRATOR_STATE_PASS, render_buffer, 0);
+  kernel_write_pass_float4(
+      pixel_render_buffer,
+      make_float4(contribution.x, contribution.y, contribution.z, transparent));
 }
 
 CCL_NAMESPACE_END

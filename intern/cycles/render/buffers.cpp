@@ -244,7 +244,11 @@ bool RenderBuffers::get_denoising_pass_rect(
       pixels[0] = val.x * scale;
       pixels[1] = val.y * scale;
       pixels[2] = val.z * scale;
-      pixels[3] = saturate(in_combined[3] * alpha_scale);
+
+      /* Note that 3rd channel contains transparency = 1 - alpha at this point,
+       * so convert to alpha. Clamp since alpha might end up outside of 0..1 due
+       * to Russian roulette. */
+      pixels[3] = saturate(1.0f - in_combined[3] * alpha_scale);
     }
   }
   else {
@@ -448,8 +452,10 @@ bool RenderBuffers::get_pass_rect(
           pixels[1] = f.y * scale_exposure;
           pixels[2] = f.z * scale_exposure;
 
-          /* Clamp since alpha might be > 1.0 due to Russian roulette. */
-          pixels[3] = saturate(f.w * scale);
+          /* Note that 3rd channel contains transparency = 1 - alpha at this point,
+           * so convert to alpha. Clamp since alpha might end up outside of 0..1 due
+           * to Russian roulette. */
+          pixels[3] = saturate(1.0f - f.w * scale);
         }
       }
     }

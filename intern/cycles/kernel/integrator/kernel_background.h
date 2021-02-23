@@ -16,9 +16,9 @@
 
 #pragma once
 
+#include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_light.h"
 #include "kernel/kernel_shader.h"
-#include "kernel/kernel_write_passes.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -89,17 +89,20 @@ ccl_device_noinline_cpu float3 integrator_eval_background_shader(
 ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
+  /* Accumulate transparency for transparent background. We can skip background
+   * shader evaluation unless a background pass is used. */
+  bool eval_background = true;
   float transparent = 0.0f;
 
-  /* eval background shader if nothing hit */
   if (kernel_data.background.transparent &&
       (INTEGRATOR_STATE(path, flag) & PATH_RAY_TRANSPARENT_BACKGROUND)) {
     transparent = average(INTEGRATOR_STATE(path, throughput));
 
 #ifdef __PASSES__
-    if (!(kernel_data.film.light_pass_flag & PASSMASK(BACKGROUND)))
-#endif /* __PASSES__ */
-      return;
+    eval_background = (kernel_data.film.light_pass_flag & PASSMASK(BACKGROUND));
+#else
+    eval_background = false;
+#endif
   }
 
   /* TODO */
@@ -111,19 +114,13 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   }
 #endif
 
-  /* sample background shader */
-  float3 L = integrator_eval_background_shader(INTEGRATOR_STATE_PASS, render_buffer);
+  /* Evaluate background shader. */
+  const float3 L = (eval_background) ?
+                       integrator_eval_background_shader(INTEGRATOR_STATE_PASS, render_buffer) :
+                       make_float3(0.0f, 0.0f, 0.0f);
 
-  /* TODO */
-#if 0
-  path_radiance_accum_background(kg, L, state, throughput, L_background);
-#else
-  L *= INTEGRATOR_STATE(path, throughput);
-
-  if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
-    kernel_write_pass_float4(render_buffer, make_float4(L.x, L.y, L.z, 1.0f - transparent));
-  }
-#endif
+  /* Write to render buffer. */
+  kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);
 }
 
 ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
@@ -134,12 +131,7 @@ ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
     return;
   }
 
-  const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
-  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
-                                        kernel_data.film.pass_stride;
-  float *pixel_render_buffer = render_buffer + render_buffer_offset;
-
-  integrate_background(INTEGRATOR_STATE_PASS, pixel_render_buffer);
+  integrate_background(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* Path ends here. */
   INTEGRATOR_PATH_TERMINATE;

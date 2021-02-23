@@ -49,7 +49,6 @@
 #include "kernel/bvh/bvh.h"
 
 #include "kernel/kernel_projection.h"
-#include "kernel/kernel_accumulate.h"
 // clang-format on
 
 CCL_NAMESPACE_BEGIN

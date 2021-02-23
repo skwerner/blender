@@ -16,6 +16,8 @@
 
 #pragma once
 
+CCL_NAMESPACE_BEGIN
+
 #define DENOISE_FEATURES 11
 #define TRANSFORM_SIZE (DENOISE_FEATURES * DENOISE_FEATURES)
 #define XTWX_SIZE (((DENOISE_FEATURES + 1) * (DENOISE_FEATURES + 2)) / 2)
@@ -68,3 +70,5 @@ typedef struct TileInfo {
 #  endif
 #  define ccl_get_tile_buffer(id) (tile_info->buffers[id])
 #endif
+
+CCL_NAMESPACE_END

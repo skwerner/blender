@@ -67,12 +67,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Name of microarchitecture which was last logged. Avoid noisy output when multiple kernel
- * functions are defined in the device.
- *
- * NOTE: Has to be outside of the class to be shared across template instantiations. */
-static const char *g_logged_uarch = "";
-
 /* A wrapper around per-microarchitecture variant of a kernel function.
  *
  * Provides a function-call-like API which gets routed to the most suitable implementation.
@@ -87,22 +81,20 @@ template<typename FunctionType> class KernelFunction {
                  FunctionType kernel_avx,
                  FunctionType kernel_avx2)
   {
-    const KernelInfo kernel_info = get_best_kernel_info(
+    kernel_info_ = get_best_kernel_info(
         kernel_default, kernel_sse2, kernel_sse3, kernel_sse41, kernel_avx, kernel_avx2);
-
-    if (strcmp(kernel_info.uarch_name, g_logged_uarch) != 0) {
-      VLOG(1) << "Will be using " << kernel_info.uarch_name << " kernels.";
-      g_logged_uarch = kernel_info.uarch_name;
-    }
-
-    kernel_ = kernel_info.kernel;
   }
 
   template<typename... Args> inline void operator()(Args... args) const
   {
-    assert(kernel_);
+    assert(kernel_info_.kernel);
 
-    kernel_(args...);
+    kernel_info_.kernel(args...);
+  }
+
+  const char *get_uarch_name() const
+  {
+    return kernel_info_.uarch_name;
   }
 
  protected:
@@ -110,6 +102,10 @@ template<typename FunctionType> class KernelFunction {
    * pointer. */
   class KernelInfo {
    public:
+    KernelInfo() : KernelInfo("", nullptr)
+    {
+    }
+
     /* TODO(sergey): Use string view, to have higher-level functionality (i.e. comparison) without
      * memory allocation. */
     KernelInfo(const char *uarch_name, FunctionType kernel)
@@ -168,7 +164,7 @@ template<typename FunctionType> class KernelFunction {
     return KernelInfo("default", kernel_default);
   }
 
-  FunctionType kernel_;
+  KernelInfo kernel_info_;
 };
 
 using IntegratorFunction =
@@ -459,6 +455,10 @@ class CPUDevice : public Device {
       : Device(info_, stats_, profiler_, background_),
         texture_info(this, "__texture_info", MEM_GLOBAL)
   {
+    /* Pick any kernel, all of them are supposed to have same level of microarchitecture
+     * optimization. */
+    VLOG(1) << "Will be using " << kernels.generate_camera_rays.get_uarch_name() << " kernels.";
+
     if (info.cpu_threads == 0) {
       info.cpu_threads = TaskScheduler::num_threads();
     }

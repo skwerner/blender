@@ -36,30 +36,42 @@ endif()
 
 set(SRC
   device.cpp
-  device_cpu.cpp
-  device_cuda.cpp
   device_denoising.cpp
-  device_dummy.cpp
   device_kernel.cpp
   device_memory.cpp
-  device_multi.cpp
-  device_opencl.cpp
-  device_optix.cpp
   device_queue.cpp
   device_task.cpp
 )
 
+set(SRC_CPU
+  cpu/device_cpu.cpp
+)
+
 set(SRC_CUDA
+  cuda/device_cuda.cpp
   cuda/device_cuda.h
   cuda/device_cuda_impl.cpp
 )
 
+set(SRC_DUMMY
+  dummy/device_dummy.cpp
+)
+
+set(SRC_MULTI
+  multi/device_multi.cpp
+)
+
 set(SRC_OPENCL
+  opencl/device_opencl.cpp
   opencl/device_opencl.h
   opencl/device_opencl_impl.cpp
   opencl/memory_manager.h
   opencl/memory_manager.cpp
   opencl/opencl_util.cpp
+)
+
+set(SRC_OPTIX
+  optix/device_optix.cpp
 )
 
 set(SRC_HEADERS
@@ -122,4 +134,14 @@ endif()
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 
-cycles_add_library(cycles_device "${LIB}" ${SRC} ${SRC_CUDA} ${SRC_OPENCL} ${SRC_HEADERS})
+cycles_add_library(cycles_device "${LIB}"
+  ${SRC}
+  ${SRC_CPU}
+  ${SRC_CUDA}
+  ${SRC_DUMMY}
+  ${SRC_MULTI}
+  ${SRC_OPENCL}
+  ${SRC_OPTIX}
+  ${SRC_HEADERS}
+)
+

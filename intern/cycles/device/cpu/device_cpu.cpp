@@ -30,9 +30,11 @@
 #  include <embree3/rtcore.h>
 #endif
 
+#include "device/cpu/device_queue.h"
+#include "device/cpu/kernel.h"
+#include "device/cpu/kernel_thread_globals.h"
 #include "device/device.h"
 #include "device/device_denoising.h"
-#include "device/device_queue.h"
 
 // clang-format off
 #include "kernel/kernel.h"
@@ -67,367 +69,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* A wrapper around per-microarchitecture variant of a kernel function.
- *
- * Provides a function-call-like API which gets routed to the most suitable implementation.
- *
- * For example, on a computer which only has SSE4.1 the kernel_sse41 will be used. */
-template<typename FunctionType> class KernelFunction {
- public:
-  KernelFunction(FunctionType kernel_default,
-                 FunctionType kernel_sse2,
-                 FunctionType kernel_sse3,
-                 FunctionType kernel_sse41,
-                 FunctionType kernel_avx,
-                 FunctionType kernel_avx2)
-  {
-    kernel_info_ = get_best_kernel_info(
-        kernel_default, kernel_sse2, kernel_sse3, kernel_sse41, kernel_avx, kernel_avx2);
-  }
-
-  template<typename... Args> inline void operator()(Args... args) const
-  {
-    assert(kernel_info_.kernel);
-
-    kernel_info_.kernel(args...);
-  }
-
-  const char *get_uarch_name() const
-  {
-    return kernel_info_.uarch_name;
-  }
-
- protected:
-  /* Helper class which allows to pass human-readable microarchitecture name together with function
-   * pointer. */
-  class KernelInfo {
-   public:
-    KernelInfo() : KernelInfo("", nullptr)
-    {
-    }
-
-    /* TODO(sergey): Use string view, to have higher-level functionality (i.e. comparison) without
-     * memory allocation. */
-    KernelInfo(const char *uarch_name, FunctionType kernel)
-        : uarch_name(uarch_name), kernel(kernel)
-    {
-    }
-
-    const char *uarch_name;
-    FunctionType kernel;
-  };
-
-  KernelInfo get_best_kernel_info(FunctionType kernel_default,
-                                  FunctionType kernel_sse2,
-                                  FunctionType kernel_sse3,
-                                  FunctionType kernel_sse41,
-                                  FunctionType kernel_avx,
-                                  FunctionType kernel_avx2)
-  {
-    /* Silence warnings about unused variables when compiling without some architectures. */
-    (void)kernel_sse2;
-    (void)kernel_sse3;
-    (void)kernel_sse41;
-    (void)kernel_avx;
-    (void)kernel_avx2;
-
-#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX2
-    if (DebugFlags().cpu.has_avx2() && system_cpu_support_avx2()) {
-      return KernelInfo("AVX2", kernel_avx2);
-    }
-#endif
-
-#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_AVX
-    if (DebugFlags().cpu.has_avx() && system_cpu_support_avx()) {
-      return KernelInfo("AVX", kernel_avx);
-    }
-#endif
-
-#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE41
-    if (DebugFlags().cpu.has_sse41() && system_cpu_support_sse41()) {
-      return KernelInfo("SSE4.1", kernel_sse41);
-    }
-#endif
-
-#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE3
-    if (DebugFlags().cpu.has_sse3() && system_cpu_support_sse3()) {
-      return KernelInfo("SSE3", kernel_sse3);
-    }
-#endif
-
-#ifdef WITH_CYCLES_OPTIMIZED_KERNEL_SSE2
-    if (DebugFlags().cpu.has_sse2() && system_cpu_support_sse2()) {
-      return KernelInfo("SSE2", kernel_sse2);
-    }
-#endif
-
-    return KernelInfo("default", kernel_default);
-  }
-
-  KernelInfo kernel_info_;
-};
-
-using IntegratorFunction =
-    KernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
-using IntegratorOutputFunction = KernelFunction<void (*)(
-    const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
-using IntegratorTileFunction = KernelFunction<void (*)(
-    const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
-
-class Kernels {
- public:
-  KernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
-  KernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
-      convert_to_half_float;
-  KernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
-      convert_to_byte;
-  KernelFunction<void (*)(const KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>
-      shader;
-  KernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
-
-  KernelFunction<void (*)(
-      int, TileInfo *, int, int, float *, float *, float *, float *, float *, int *, int, int)>
-      filter_divide_shadow;
-  KernelFunction<void (*)(
-      int, TileInfo *, int, int, int, int, float *, float *, float, int *, int, int)>
-      filter_get_feature;
-  KernelFunction<void (*)(int, int, int, int *, float *, float *, int, int *)>
-      filter_write_feature;
-  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
-      filter_detect_outliers;
-  KernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
-      filter_combine_halves;
-
-  KernelFunction<void (*)(
-      int, int, float *, float *, float *, float *, int *, int, int, int, float, float)>
-      filter_nlm_calc_difference;
-  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_blur;
-  KernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_calc_weight;
-  KernelFunction<void (*)(
-      int, int, float *, float *, float *, float *, float *, int *, int, int, int)>
-      filter_nlm_update_output;
-  KernelFunction<void (*)(float *, float *, int *, int)> filter_nlm_normalize;
-
-  KernelFunction<void (*)(
-      float *, TileInfo *, int, int, int, float *, int *, int *, int, int, bool, int, float)>
-      filter_construct_transform;
-  KernelFunction<void (*)(int,
-                          int,
-                          int,
-                          float *,
-                          float *,
-                          float *,
-                          int *,
-                          float *,
-                          float3 *,
-                          int *,
-                          int *,
-                          int,
-                          int,
-                          int,
-                          int,
-                          bool)>
-      filter_nlm_construct_gramian;
-  KernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
-      filter_finalize;
-
-  IntegratorOutputFunction background;
-  IntegratorTileFunction generate_camera_rays;
-  IntegratorFunction intersect_closest;
-  IntegratorFunction intersect_shadow;
-  IntegratorOutputFunction shadow;
-  IntegratorFunction subsurface;
-  IntegratorOutputFunction surface;
-  IntegratorOutputFunction volume;
-
-#define KERNEL_FUNCTIONS(name) \
-  KERNEL_NAME_EVAL(cpu, name), KERNEL_NAME_EVAL(cpu_sse2, name), \
-      KERNEL_NAME_EVAL(cpu_sse3, name), KERNEL_NAME_EVAL(cpu_sse41, name), \
-      KERNEL_NAME_EVAL(cpu_avx, name), KERNEL_NAME_EVAL(cpu_avx2, name)
-
-#define REGISTER_KERNEL(name) name(KERNEL_FUNCTIONS(name))
-
-  Kernels()
-      : REGISTER_KERNEL(path_trace),
-        REGISTER_KERNEL(convert_to_half_float),
-        REGISTER_KERNEL(convert_to_byte),
-        REGISTER_KERNEL(shader),
-        REGISTER_KERNEL(bake),
-        REGISTER_KERNEL(filter_divide_shadow),
-        REGISTER_KERNEL(filter_get_feature),
-        REGISTER_KERNEL(filter_write_feature),
-        REGISTER_KERNEL(filter_detect_outliers),
-        REGISTER_KERNEL(filter_combine_halves),
-        REGISTER_KERNEL(filter_nlm_calc_difference),
-        REGISTER_KERNEL(filter_nlm_blur),
-        REGISTER_KERNEL(filter_nlm_calc_weight),
-        REGISTER_KERNEL(filter_nlm_update_output),
-        REGISTER_KERNEL(filter_nlm_normalize),
-        REGISTER_KERNEL(filter_construct_transform),
-        REGISTER_KERNEL(filter_nlm_construct_gramian),
-        REGISTER_KERNEL(filter_finalize),
-        REGISTER_KERNEL(background),
-        REGISTER_KERNEL(generate_camera_rays),
-        REGISTER_KERNEL(intersect_closest),
-        REGISTER_KERNEL(intersect_shadow),
-        REGISTER_KERNEL(shadow),
-        REGISTER_KERNEL(subsurface),
-        REGISTER_KERNEL(surface),
-        REGISTER_KERNEL(volume)
-  {
-  }
-
-#undef REGISTER_KERNEL
-#undef KERNEL_FUNCTIONS
-};
-
-class KernelThreadGlobals : public KernelGlobals {
- public:
-  /* TODO(sergey): Would be nice to have properly typed OSLGlobals even in the case when building
-   * without OSL support. Will avoid need to those unnamed pointers and casts.  */
-  KernelThreadGlobals(const KernelGlobals &kernel_globals, void *osl_globals_memory)
-      : KernelGlobals(kernel_globals)
-  {
-    transparent_shadow_intersections = NULL;
-    const int decoupled_count = sizeof(decoupled_volume_steps) / sizeof(*decoupled_volume_steps);
-    for (int i = 0; i < decoupled_count; ++i) {
-      decoupled_volume_steps[i] = NULL;
-    }
-    decoupled_volume_steps_index = 0;
-    coverage_asset = coverage_object = coverage_material = NULL;
-#ifdef WITH_OSL
-    OSLShader::thread_init(this, reinterpret_cast<OSLGlobals *>(osl_globals_memory));
-#else
-    (void)osl_globals_memory;
-#endif
-  }
-
-  ~KernelThreadGlobals()
-  {
-    safe_free(transparent_shadow_intersections);
-
-    const int decoupled_count = sizeof(decoupled_volume_steps) / sizeof(*decoupled_volume_steps);
-    for (int i = 0; i < decoupled_count; ++i) {
-      safe_free(decoupled_volume_steps[i]);
-    }
-#ifdef WITH_OSL
-    OSLShader::thread_free(this);
-#endif
-  }
-
- protected:
-  /* TODO(sergey): Consider making more available function. Maybe `util_memory.h`? */
-  void safe_free(void *mem)
-  {
-    if (mem == nullptr) {
-      return;
-    }
-    free(mem);
-  }
-};
-
-/* Base implementation of all CPU queues. Takes care of kernel function pointers and global data
- * localization. */
-class CPUDeviceQueue : public DeviceQueue {
- public:
-  CPUDeviceQueue(Device *device, const Kernels &kernels, const KernelGlobals &kernel_globals)
-      : DeviceQueue(device),
-        kernels_(kernels),
-        kernel_globals_(kernel_globals, device->osl_memory())
-  {
-  }
-
- protected:
-  Kernels kernels_;
-
-  /* Copy of kernel globals which is suitable for concurrent access from multiple queues.
-   *
-   * More specifically, the `kernel_globals_` is local to this queue and nobody else is
-   * accessing it, but some "localization" is required to decouple from kernel globals stored
-   * on the device level. */
-  KernelThreadGlobals kernel_globals_;
-};
-
-class IntegratorQueue : public CPUDeviceQueue {
- public:
-  IntegratorQueue(Device *device,
-                  const Kernels &kernels,
-                  const KernelGlobals &kernel_globals,
-                  RenderBuffers *render_buffers)
-      : CPUDeviceQueue(device, kernels, kernel_globals), render_buffers_(render_buffers)
-  {
-  }
-
-  virtual void enqueue(DeviceKernel kernel) override
-  {
-    switch (kernel) {
-      case DeviceKernel::BACKGROUND:
-        return kernels_.background(
-            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-      case DeviceKernel::GENERATE_CAMERA_RAYS: {
-        KernelWorkTile work_tile = init_kernel_work_tile();
-        return kernels_.generate_camera_rays(&kernel_globals_, &integrator_state_, &work_tile);
-      }
-      case DeviceKernel::INTERSECT_CLOSEST:
-        return kernels_.intersect_closest(&kernel_globals_, &integrator_state_);
-      case DeviceKernel::INTERSECT_SHADOW:
-        return kernels_.intersect_shadow(&kernel_globals_, &integrator_state_);
-      case DeviceKernel::SHADOW:
-        return kernels_.shadow(
-            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-      case DeviceKernel::SUBSURFACE:
-        return kernels_.subsurface(&kernel_globals_, &integrator_state_);
-      case DeviceKernel::SURFACE:
-        return kernels_.surface(
-            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-      case DeviceKernel::VOLUME:
-        return kernels_.volume(
-            &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    }
-
-    LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
-  }
-
-  virtual void set_work_tile(const DeviceWorkTile &work_tile) override
-  {
-    work_tile_ = work_tile;
-  }
-
- protected:
-  KernelWorkTile init_kernel_work_tile()
-  {
-    KernelWorkTile kernel_work_tile;
-
-    kernel_work_tile.x = work_tile_.x;
-    kernel_work_tile.y = work_tile_.y;
-    kernel_work_tile.w = work_tile_.width;
-    kernel_work_tile.h = work_tile_.height;
-
-    kernel_work_tile.start_sample = work_tile_.sample;
-    kernel_work_tile.num_samples = 1;
-
-    /* TODO(sergey): Avoid temporary variable by making sign match between device and kernel. */
-    int offset, stride;
-    render_buffers_->params.get_offset_stride(offset, stride);
-
-    kernel_work_tile.offset = offset;
-    kernel_work_tile.stride = stride;
-
-    kernel_work_tile.buffer = render_buffers_->buffer.data();
-
-    return kernel_work_tile;
-  }
-
-  RenderBuffers *render_buffers_;
-
-  /* TODO(sergey): Make integrator state somehow more explicit and more edependent on the number
-   * of threads, or number of splits in the kernels.
-   * For the quick debug keep it at 1, but it really needs to be changed soon. */
-  IntegratorState integrator_state_;
-
-  DeviceWorkTile work_tile_;
-};
-
 class CPUDevice : public Device {
  public:
   TaskPool task_pool;
@@ -449,7 +90,7 @@ class CPUDevice : public Device {
   RTCDevice embree_device;
 #endif
 
-  Kernels kernels;
+  CPUKernels kernels;
 
   CPUDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
       : Device(info_, stats_, profiler_, background_),
@@ -1377,7 +1018,7 @@ class CPUDevice : public Device {
     }
 
     /* allocate buffer for kernel globals */
-    KernelThreadGlobals kg(kernel_globals, osl_memory());
+    CPUKernelThreadGlobals kg(kernel_globals, osl_memory());
 
     profiler.add_state(&kg.profiler);
 
@@ -1500,7 +1141,7 @@ class CPUDevice : public Device {
 
   void thread_shader(DeviceTask &task)
   {
-    KernelThreadGlobals kg(kernel_globals, osl_memory());
+    CPUKernelThreadGlobals kg(kernel_globals, osl_memory());
 
     for (int sample = 0; sample < task.num_samples; sample++) {
       for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
@@ -1568,7 +1209,7 @@ class CPUDevice : public Device {
 
   virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *render_buffers) override
   {
-    return make_unique<IntegratorQueue>(this, kernels, kernel_globals, render_buffers);
+    return make_unique<CPUIntegratorQueue>(this, kernels, kernel_globals, render_buffers);
   }
 
  protected:

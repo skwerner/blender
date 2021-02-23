@@ -46,6 +46,13 @@ set(SRC
 set(SRC_CPU
   cpu/device_cpu.cpp
   cpu/device_cpu.h
+  cpu/device_queue.cpp
+  cpu/device_queue.h
+  cpu/kernel.cpp
+  cpu/kernel.h
+  cpu/kernel_function.h
+  cpu/kernel_thread_globals.cpp
+  cpu/kernel_thread_globals.h
 )
 
 set(SRC_CUDA

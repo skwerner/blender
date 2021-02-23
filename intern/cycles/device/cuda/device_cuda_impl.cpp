@@ -16,14 +16,13 @@
 
 #ifdef WITH_CUDA
 
+#  include "device/cuda/device_cuda_impl.h"
+
 #  include <climits>
 #  include <limits.h>
 #  include <stdio.h>
 #  include <stdlib.h>
 #  include <string.h>
-
-#  include "device/cuda/device_cuda.h"
-#  include "device/device_intern.h"
 
 #  include "render/buffers.h"
 

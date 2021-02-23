@@ -45,26 +45,31 @@ set(SRC
 
 set(SRC_CPU
   cpu/device_cpu.cpp
+  cpu/device_cpu.h
 )
 
 set(SRC_CUDA
   cuda/device_cuda.cpp
   cuda/device_cuda.h
   cuda/device_cuda_impl.cpp
+  cuda/device_cuda_impl.h
 )
 
 set(SRC_DUMMY
   dummy/device_dummy.cpp
+  dummy/device_dummy.h
 )
 
 set(SRC_MULTI
   multi/device_multi.cpp
+  multi/device_multi.h
 )
 
 set(SRC_OPENCL
   opencl/device_opencl.cpp
   opencl/device_opencl.h
   opencl/device_opencl_impl.cpp
+  opencl/device_opencl_impl.h
   opencl/memory_manager.h
   opencl/memory_manager.cpp
   opencl/opencl_util.cpp
@@ -72,13 +77,13 @@ set(SRC_OPENCL
 
 set(SRC_OPTIX
   optix/device_optix.cpp
+  optix/device_optix.h
 )
 
 set(SRC_HEADERS
   device.h
   device_denoising.h
   device_memory.h
-  device_intern.h
   device_kernel.h
   device_queue.h
   device_task.h

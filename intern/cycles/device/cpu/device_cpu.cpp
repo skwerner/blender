@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include "device/cpu/device_cpu.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,7 +32,6 @@
 
 #include "device/device.h"
 #include "device/device_denoising.h"
-#include "device/device_intern.h"
 #include "device/device_queue.h"
 
 // clang-format off

@@ -14,8 +14,9 @@
  * limitations under the License.
  */
 
+#include "device/dummy/device_dummy.h"
+
 #include "device/device.h"
-#include "device/device_intern.h"
 #include "device/device_queue.h"
 
 CCL_NAMESPACE_BEGIN

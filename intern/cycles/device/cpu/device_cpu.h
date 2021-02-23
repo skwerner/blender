@@ -26,12 +26,10 @@ class DeviceInfo;
 class Profiler;
 class Stats;
 
-bool device_opencl_init();
-Device *device_opencl_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
-bool device_opencl_compile_kernel(const vector<string> &parameters);
+Device *device_cpu_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 
-void device_opencl_info(vector<DeviceInfo> &devices);
+void device_cpu_info(vector<DeviceInfo> &devices);
 
-string device_opencl_capabilities();
+string device_cpu_capabilities();
 
 CCL_NAMESPACE_END

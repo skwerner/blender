@@ -16,7 +16,6 @@
 
 #ifdef WITH_OPENCL
 
-#  include "device/device_intern.h"
 #  include "device/opencl/device_opencl.h"
 
 #  include "util/util_debug.h"

@@ -14,22 +14,36 @@
  * limitations under the License.
  */
 
-#ifdef WITH_OPENCL
+#include "device/opencl/device_opencl.h"
 
-#  include "device/opencl/device_opencl.h"
+#include "util/util_logging.h"
+
+#ifdef WITH_OPENCL
 #  include "device/device.h"
-#  include "device/device_intern.h"
+#  include "device/opencl/device_opencl.h"
 
 #  include "util/util_foreach.h"
-#  include "util/util_logging.h"
 #  include "util/util_set.h"
 #  include "util/util_string.h"
+#endif
 
 CCL_NAMESPACE_BEGIN
 
 Device *device_opencl_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
+#ifdef WITH_OPENCL
   return opencl_create_split_device(info, stats, profiler, background);
+#else
+  (void)info;
+  (void)stats;
+  (void)profiler;
+  (void)background;
+
+  LOG(FATAL)
+      << "Request to create OpenCL device without compiled-in support. Should never happen.";
+
+  return nullptr;
+#endif
 }
 
 bool device_opencl_init()
@@ -42,6 +56,7 @@ bool device_opencl_init()
 
   initialized = true;
 
+#ifdef WITH_OPENCL
   if (OpenCLInfo::device_type() != 0) {
     int clew_result = clewInit();
     if (clew_result == CLEW_SUCCESS) {
@@ -58,10 +73,12 @@ bool device_opencl_init()
     VLOG(1) << "Skip initializing CLEW, platform is force disabled.";
     result = false;
   }
+#endif
 
   return result;
 }
 
+#ifdef WITH_OPENCL
 static cl_int device_opencl_get_num_platforms_safe(cl_uint *num_platforms)
 {
 #  ifdef _WIN32
@@ -80,9 +97,11 @@ static cl_int device_opencl_get_num_platforms_safe(cl_uint *num_platforms)
   return clGetPlatformIDs(0, NULL, num_platforms);
 #  endif
 }
+#endif
 
 void device_opencl_info(vector<DeviceInfo> &devices)
 {
+#ifdef WITH_OPENCL
   cl_uint num_platforms = 0;
   device_opencl_get_num_platforms_safe(&num_platforms);
   if (num_platforms == 0) {
@@ -129,14 +148,19 @@ void device_opencl_info(vector<DeviceInfo> &devices)
     devices.push_back(info);
     num_devices++;
   }
+#else  /* WITH_OPENCL */
+  (void)devices;
+#endif /* WITH_OPENCL */
 }
 
 string device_opencl_capabilities()
 {
+  string result = "";
+
+#ifdef WITH_OPENCL
   if (OpenCLInfo::device_type() == 0) {
     return "All OpenCL devices are forced to be OFF";
   }
-  string result = "";
   string error_msg = ""; /* Only used by opencl_assert(), but in the future
                           * it could also be nicely reported to the console.
                           */
@@ -233,10 +257,9 @@ string device_opencl_capabilities()
 #  undef APPEND_DEVICE_INFO
 #  undef APPEND_DEVICE_STRING_INFO
 #  undef APPEND_DEVICE_STRING_EXTENSION_INFO
+#endif /* WITH_OPENCL */
 
   return result;
 }
 
 CCL_NAMESPACE_END
-
-#endif /* WITH_OPENCL */

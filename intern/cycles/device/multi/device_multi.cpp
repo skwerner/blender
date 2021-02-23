@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
+#include "device/multi/device_multi.h"
+
 #include <sstream>
 #include <stdlib.h>
 
 #include "bvh/bvh_multi.h"
 
 #include "device/device.h"
-#include "device/device_intern.h"
 #include "device/device_queue.h"
 
 #include "render/buffers.h"

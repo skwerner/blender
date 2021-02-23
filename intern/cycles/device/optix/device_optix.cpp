@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-#ifdef WITH_OPTIX
+#include "device/optix/device_optix.h"
 
+#include "util/util_logging.h"
+
+#ifdef WITH_OPTIX
 #  include "bvh/bvh.h"
 #  include "bvh/bvh_optix.h"
-#  include "device/cuda/device_cuda.h"
+#  include "device/cuda/device_cuda_impl.h"
 #  include "device/device_denoising.h"
-#  include "device/device_intern.h"
 #  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"
 #  include "render/object.h"
 #  include "render/scene.h"
 #  include "util/util_debug.h"
-#  include "util/util_logging.h"
 #  include "util/util_md5.h"
 #  include "util/util_path.h"
 #  include "util/util_progress.h"
@@ -39,13 +40,18 @@
 // Do not use CUDA SDK headers when using CUEW
 #    define OPTIX_DONT_INCLUDE_CUDA
 #  endif
+
 #  include <optix_function_table_definition.h>
 #  include <optix_stubs.h>
 
 // TODO(pmours): Disable this once drivers have native support
 #  define OPTIX_DENOISER_NO_PIXEL_STRIDE 1
 
+#endif /* WITH_OPTIX */
+
 CCL_NAMESPACE_BEGIN
+
+#ifdef WITH_OPTIX
 
 /* Make sure this stays in sync with kernel_globals.h */
 struct ShaderParams {
@@ -1813,8 +1819,11 @@ class OptiXDevice : public CUDADevice {
   }
 };
 
+#endif /* WITH_OPTIX */
+
 bool device_optix_init()
 {
+#ifdef WITH_OPTIX
   if (g_optixFunctionTable.optixDeviceContextCreate != NULL)
     return true;  // Already initialized function table
 
@@ -1836,10 +1845,14 @@ bool device_optix_init()
 
   // Loaded OptiX successfully!
   return true;
+#else
+  return false;
+#endif
 }
 
 void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo> &devices)
 {
+#ifdef WITH_OPTIX
   devices.reserve(cuda_devices.size());
 
   // Simply add all supported CUDA devices as OptiX devices again
@@ -1859,13 +1872,26 @@ void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo
 
     devices.push_back(info);
   }
+#else
+  (void)cuda_devices;
+  (void)devices;
+#endif
 }
 
 Device *device_optix_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
+#ifdef WITH_OPTIX
   return new OptiXDevice(info, stats, profiler, background);
+#else
+  (void)info;
+  (void)stats;
+  (void)profiler;
+  (void)background;
+
+  LOG(FATAL) << "Request to create OptiX device without compiled-in support. Should never happen.";
+
+  return nullptr;
+#endif
 }
 
 CCL_NAMESPACE_END
-
-#endif

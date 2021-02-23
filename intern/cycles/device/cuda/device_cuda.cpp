@@ -14,21 +14,25 @@
  * limitations under the License.
  */
 
+#include "device/cuda/device_cuda.h"
+
+#include "util/util_logging.h"
+
 #ifdef WITH_CUDA
-
-#  include "device/cuda/device_cuda.h"
+#  include "device/cuda/device_cuda_impl.h"
 #  include "device/device.h"
-#  include "device/device_intern.h"
 
-#  include "util/util_logging.h"
 #  include "util/util_string.h"
 #  include "util/util_windows.h"
+#endif /* WITH_CUDA */
 
 CCL_NAMESPACE_BEGIN
 
 bool device_cuda_init()
 {
-#  ifdef WITH_CUDA_DYNLOAD
+#if !defined(WITH_CUDA)
+  return false;
+#elif defined(WITH_CUDA_DYNLOAD)
   static bool initialized = false;
   static bool result = false;
 
@@ -59,16 +63,28 @@ bool device_cuda_init()
   }
 
   return result;
-#  else  /* WITH_CUDA_DYNLOAD */
+#else  /* WITH_CUDA_DYNLOAD */
   return true;
-#  endif /* WITH_CUDA_DYNLOAD */
+#endif /* WITH_CUDA_DYNLOAD */
 }
 
 Device *device_cuda_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
+#ifdef WITH_CUDA
   return new CUDADevice(info, stats, profiler, background);
+#else
+  (void)info;
+  (void)stats;
+  (void)profiler;
+  (void)background;
+
+  LOG(FATAL) << "Request to create CUDA device without compiled-in support. Should never happen.";
+
+  return nullptr;
+#endif
 }
 
+#ifdef WITH_CUDA
 static CUresult device_cuda_safe_init()
 {
 #  ifdef _WIN32
@@ -86,9 +102,11 @@ static CUresult device_cuda_safe_init()
   return cuInit(0);
 #  endif
 }
+#endif /* WITH_CUDA */
 
 void device_cuda_info(vector<DeviceInfo> &devices)
 {
+#ifdef WITH_CUDA
   CUresult result = device_cuda_safe_init();
   if (result != CUDA_SUCCESS) {
     if (result != CUDA_ERROR_NO_DEVICE)
@@ -181,10 +199,14 @@ void device_cuda_info(vector<DeviceInfo> &devices)
 
   if (!display_devices.empty())
     devices.insert(devices.end(), display_devices.begin(), display_devices.end());
+#else  /* WITH_CUDA */
+  (void)devices;
+#endif /* WITH_CUDA */
 }
 
 string device_cuda_capabilities()
 {
+#ifdef WITH_CUDA
   CUresult result = device_cuda_safe_init();
   if (result != CUDA_SUCCESS) {
     if (result != CUDA_ERROR_NO_DEVICE) {
@@ -309,8 +331,10 @@ string device_cuda_capabilities()
   }
 
   return capabilities;
+
+#else  /* WITH_CUDA */
+  return "";
+#endif /* WITH_CUDA */
 }
 
 CCL_NAMESPACE_END
-
-#endif

@@ -45,7 +45,7 @@
 #endif
 
 #ifdef WITH_OPENCL
-#  include "device/device_intern.h"
+#  include "device/opencl/device_opencl.h"
 #endif
 
 CCL_NAMESPACE_BEGIN

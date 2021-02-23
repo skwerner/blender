@@ -19,8 +19,13 @@
 
 #include "bvh/bvh2.h"
 
+#include "device/cpu/device_cpu.h"
+#include "device/cuda/device_cuda.h"
 #include "device/device.h"
-#include "device/device_intern.h"
+#include "device/dummy/device_dummy.h"
+#include "device/multi/device_multi.h"
+#include "device/opencl/device_opencl.h"
+#include "device/optix/device_optix.h"
 
 #include "util/util_foreach.h"
 #include "util/util_half.h"

@@ -17,6 +17,7 @@
 #pragma once
 
 #include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_emission.h"
 #include "kernel/kernel_light.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_shader.h"
@@ -118,6 +119,65 @@ ccl_device_inline void integrate_surface_emission(INTEGRATOR_STATE_CONST_ARGS,
 }
 #endif /* __EMISSION__ */
 
+#ifdef __EMISSION__
+/* Path tracing: sample point on light and evaluate light shader, then
+ * queue shadow ray to be traced. */
+ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
+                                                      ShaderData *sd,
+                                                      const RNGState *rng_state)
+{
+  /* Test if there is a light or BSDF that needs direct light. */
+  if (!kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
+    return;
+  }
+
+  /* Sample position on a light. */
+  float light_u, light_v;
+  path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
+
+  const uint bounce = INTEGRATOR_STATE(path, bounce);
+  LightSample ls ccl_optional_struct_init;
+  if (!light_sample(kg, -1, light_u, light_v, sd->time, sd->P, bounce, &ls)) {
+    return;
+  }
+
+  /* Evaluate shader and generate ray. */
+  BsdfEval light_eval ccl_optional_struct_init;
+  Ray ray ccl_optional_struct_init;
+  ray.t = 0.0f;
+  ray.time = sd->time;
+
+  /* TODO: can we reuse sd memory? In theory we can move this after integrate_surface_bounce,
+   * evaluate the BSDF, and only then evaluate the light shader.
+   * This could also move to its own kernel, for non-constant light sources. */
+  ShaderDataTinyStorage emission_sd_storage;
+  ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
+
+  const float terminate = path_state_rng_light_termination(kg, rng_state);
+  bool is_light = false;
+  if (!direct_emission(
+          INTEGRATOR_STATE_PASS, sd, emission_sd, &ls, &ray, &light_eval, &is_light, terminate)) {
+    return;
+  }
+
+  /* Write shadow ray and associated state to global memory. */
+  INTEGRATOR_STATE_WRITE(shadow_ray, P) = ray.P;
+  INTEGRATOR_STATE_WRITE(shadow_ray, D) = ray.D;
+  INTEGRATOR_STATE_WRITE(shadow_ray, t) = ray.t;
+  INTEGRATOR_STATE_WRITE(shadow_ray, time) = ray.time;
+
+  INTEGRATOR_STATE_WRITE(shadow_light, L) = bsdf_eval_sum(&light_eval); /* TODO */
+  INTEGRATOR_STATE_WRITE(shadow_light, is_light) = is_light;
+
+  /* Copy state from main path to shadow path. */
+  INTEGRATOR_STATE_COPY(shadow_path, path);
+  INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
+
+  /* Branch of shadow kernel. */
+  INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
+}
+#endif
+
 /* Path tracing: bounce off or through surface with new direction. */
 ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
                                          ShaderData *sd,
@@ -163,7 +223,7 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
 #if 0
     path_radiance_bsdf_bounce(kg, L_state, throughput, &bsdf_eval, bsdf_pdf, state->bounce, label);
 #else
-    throughput *= bsdf_eval.diffuse / bsdf_pdf;
+    throughput *= bsdf_eval_sum(&bsdf_eval) / bsdf_pdf;
 #endif
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
@@ -291,6 +351,9 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(path, throughput) /= probability;
   }
 
+  /* Direct light. */
+  integrate_surface_direct_light(INTEGRATOR_STATE_PASS, &sd, &rng_state);
+
   /* TODO */
 #if 0
 #  ifdef __DENOISING_FEATURES__
@@ -303,31 +366,6 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
     kernel_path_ao(kg, &sd, emission_sd, L, state, throughput, shader_bsdf_alpha(kg, &sd));
   }
 #  endif /* __AO__ */
-
-#  ifdef __EMISSION__
-  /* direct lighting */
-  kernel_path_surface_connect_light(kg, &sd, emission_sd, throughput, state, L);
-#  endif /* __EMISSION__ */
-#endif
-
-#if 0
-  /* Direct lighting. */
-  const float3 throughput = INTEGRATOR_STATE(path, throughput);
-  const bool direct_lighting = false;
-  if (direct_lighting) {
-    /* Generate shadow ray. */
-    INTEGRATOR_STATE_WRITE(shadow_ray, P) = make_float3(0.0f, 0.0f, 0.0f);
-    INTEGRATOR_STATE_WRITE(shadow_ray, D) = make_float3(0.0f, 0.0f, 1.0f);
-    INTEGRATOR_STATE_WRITE(shadow_ray, t) = FLT_MAX;
-    INTEGRATOR_STATE_WRITE(shadow_ray, time) = 0.0f;
-
-    /* Copy entire path state. */
-    INTEGRATOR_STATE_COPY(shadow_path, path);
-    INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
-
-    /* Branch of shadow kernel. */
-    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
-  }
 #endif
 
 #if 0

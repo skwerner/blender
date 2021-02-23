@@ -18,6 +18,23 @@
 
 CCL_NAMESPACE_BEGIN
 
+ccl_device_forceinline bool intersect_shadow_scene(INTEGRATOR_STATE_CONST_ARGS,
+                                                   const Ray *ray,
+                                                   Intersection *isect)
+{
+  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
+  const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
+#ifdef __SHADOW_TRICKS__
+  const uint visibility = (path_flag & PATH_RAY_SHADOW_CATCHER) ? PATH_RAY_SHADOW_NON_CATCHER :
+                                                                  PATH_RAY_SHADOW;
+#else
+  const uint visibility = PATH_RAY_SHADOW;
+#endif
+
+  /* TODO: transparent shadows. */
+  return scene_intersect(kg, ray, visibility & PATH_RAY_SHADOW_OPAQUE, isect);
+}
+
 ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
   /* Only execute if shadow ray needs to be traced. */
@@ -25,15 +42,33 @@ ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
     return;
   }
 
-  kernel_assert(INTEGRATOR_STATE(shadow_ray, t) != 0.0f);
+  /* Read ray from integrator state into local memory. */
+  Ray ray;
+  ray.P = INTEGRATOR_STATE(shadow_ray, P);
+  ray.D = INTEGRATOR_STATE(shadow_ray, D);
+  ray.t = INTEGRATOR_STATE(shadow_ray, t);
+  ray.time = INTEGRATOR_STATE(shadow_ray, time);
+  ray.dP = differential3_zero();
+  ray.dD = differential3_zero();
 
-  /* Scene ray intersection. */
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, t) = 0.0f;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, u) = 0.0f;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, v) = 0.0f;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, prim) = PRIM_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, type) = PRIMITIVE_NONE;
+  /* TODO: this means light casts no shadow. */
+  kernel_assert(ray.t != 0.0f);
+
+  /* Scene Intersection. */
+  Intersection isect;
+  const bool hit = intersect_shadow_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
+  if (!hit) {
+    isect.prim = PRIM_NONE;
+  }
+
+  /* Write intersection result into global integrator state memory. */
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, t) = isect.t;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, u) = isect.u;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, v) = isect.v;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, Ng) = isect.Ng;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, object) = isect.object;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, prim) = isect.prim;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, type) = isect.type;
 
 #if INTEGRATOR_SHADOW_ISECT_SIZE > 1
   /* Null terminator for array. */
@@ -43,7 +78,7 @@ ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 #endif
 
   const bool shadow_opaque = true;
-  if (INTEGRATOR_STATE_ARRAY(shadow_isect, 0, prim) != PRIM_NONE && shadow_opaque) {
+  if (hit && shadow_opaque) {
     /* Hit an opaque surface, shadow path ends here. */
     INTEGRATOR_SHADOW_PATH_TERMINATE;
     return;

@@ -20,15 +20,13 @@
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_shader.h"
-#include "kernel/kernel_shadow.h"
 
 CCL_NAMESPACE_BEGIN
 
 /* Direction Emission */
-ccl_device_noinline_cpu float3 direct_emissive_eval(const KernelGlobals *kg,
+ccl_device_noinline_cpu float3 direct_emissive_eval(INTEGRATOR_STATE_ARGS,
                                                     ShaderData *emission_sd,
                                                     LightSample *ls,
-                                                    ccl_addr_space PathState *state,
                                                     float3 I,
                                                     differential3 dI,
                                                     float t,
@@ -47,15 +45,7 @@ ccl_device_noinline_cpu float3 direct_emissive_eval(const KernelGlobals *kg,
      * for GPU coherence and compile times. */
 #ifdef __BACKGROUND_MIS__
     if (ls->type == LIGHT_BACKGROUND) {
-      Ray ray;
-      ray.D = ls->D;
-      ray.P = ls->P;
-      ray.t = 1.0f;
-      ray.time = time;
-      ray.dP = differential3_zero();
-      ray.dD = dI;
-
-      shader_setup_from_background(kg, emission_sd, &ray);
+      shader_setup_from_background(kg, emission_sd, ls->P, ls->D, time);
     }
     else
 #endif
@@ -80,9 +70,9 @@ ccl_device_noinline_cpu float3 direct_emissive_eval(const KernelGlobals *kg,
 
     /* No proper path flag, we're evaluating this for all closures. that's
      * weak but we'd have to do multiple evaluations otherwise. */
-    path_state_modify_bounce(state, true);
-    shader_eval_surface(kg, emission_sd, state, NULL, PATH_RAY_EMISSION);
-    path_state_modify_bounce(state, false);
+    INTEGRATOR_STATE_WRITE(path, bounce) += 1;
+    shader_eval_surface(INTEGRATOR_STATE_PASS, emission_sd, NULL, PATH_RAY_EMISSION);
+    INTEGRATOR_STATE_WRITE(path, bounce) -= 1;
 
     /* Evaluate closures. */
 #ifdef __BACKGROUND_MIS__
@@ -106,11 +96,10 @@ ccl_device_noinline_cpu float3 direct_emissive_eval(const KernelGlobals *kg,
   return eval;
 }
 
-ccl_device_noinline_cpu bool direct_emission(const KernelGlobals *kg,
+ccl_device_noinline_cpu bool direct_emission(INTEGRATOR_STATE_ARGS,
                                              ShaderData *sd,
                                              ShaderData *emission_sd,
                                              LightSample *ls,
-                                             ccl_addr_space PathState *state,
                                              Ray *ray,
                                              BsdfEval *eval,
                                              bool *is_lamp,
@@ -125,7 +114,7 @@ ccl_device_noinline_cpu bool direct_emission(const KernelGlobals *kg,
   /* evaluate closure */
 
   float3 light_eval = direct_emissive_eval(
-      kg, emission_sd, ls, state, -ls->D, dD, ls->t, sd->time);
+      INTEGRATOR_STATE_PASS, emission_sd, ls, -ls->D, dD, ls->t, sd->time);
 
   if (is_zero(light_eval))
     return false;
@@ -168,8 +157,11 @@ ccl_device_noinline_cpu bool direct_emission(const KernelGlobals *kg,
     return false;
 
   if (kernel_data.integrator.light_inv_rr_threshold > 0.0f
-#ifdef __SHADOW_TRICKS__
+  /* TODO */
+#if 0
+#  ifdef __SHADOW_TRICKS__
       && (state->flag & PATH_RAY_SHADOW_CATCHER) == 0
+#  endif
 #endif
   ) {
     float probability = max3(fabs(bsdf_eval_sum(eval))) *
@@ -212,6 +204,7 @@ ccl_device_noinline_cpu bool direct_emission(const KernelGlobals *kg,
   return true;
 }
 
+#if 0
 /* Indirect Lamp Emission */
 
 ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
@@ -227,7 +220,7 @@ ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
     if (!lamp_light_eval(kg, lamp, ray->P, ray->D, ray->t, &ls))
       continue;
 
-#ifdef __PASSES__
+#  ifdef __PASSES__
     /* use visibility flag to skip lights */
     if (ls.shader & SHADER_EXCLUDE_ANY) {
       if (((ls.shader & SHADER_EXCLUDE_DIFFUSE) && (state->flag & PATH_RAY_DIFFUSE)) ||
@@ -238,12 +231,12 @@ ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
           ((ls.shader & SHADER_EXCLUDE_SCATTER) && (state->flag & PATH_RAY_VOLUME_SCATTER)))
         continue;
     }
-#endif
+#  endif
 
     float3 lamp_L = direct_emissive_eval(
         kg, emission_sd, &ls, state, -ray->D, ray->dD, ls.t, ray->time);
 
-#ifdef __VOLUME__
+#  ifdef __VOLUME__
     if (state->volume_stack[0].shader != SHADER_NONE) {
       /* shadow attenuation */
       Ray volume_ray = *ray;
@@ -252,7 +245,7 @@ ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
       kernel_volume_shadow(kg, emission_sd, state, &volume_ray, &volume_tp);
       lamp_L *= volume_tp;
     }
-#endif
+#  endif
 
     if (!(state->flag & PATH_RAY_MIS_SKIP)) {
       /* multiple importance sampling, get regular light pdf,
@@ -264,5 +257,6 @@ ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
     path_radiance_accum_emission(kg, L, state, throughput, lamp_L);
   }
 }
+#endif
 
 CCL_NAMESPACE_END

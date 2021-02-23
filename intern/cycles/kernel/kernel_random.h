@@ -52,25 +52,21 @@ ccl_device uint sobol_dimension(const KernelGlobals *kg, int index, int dimensio
 
 #endif /* __SOBOL__ */
 
-ccl_device_forceinline float path_rng_1D(
-    const KernelGlobals *kg, uint rng_hash, int sample, int num_samples, int dimension)
+ccl_device_forceinline float path_rng_1D(const KernelGlobals *kg,
+                                         uint rng_hash,
+                                         int sample,
+                                         int dimension)
 {
 #ifdef __DEBUG_CORRELATION__
   return (float)drand48();
 #endif
-  if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
+
+#ifdef __SOBOL__
+  if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ)
+#endif
+  {
     return pmj_sample_1D(kg, sample, rng_hash, dimension);
   }
-#ifdef __CMJ__
-#  ifdef __SOBOL__
-  if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_CMJ)
-#  endif
-  {
-    /* Correlated multi-jitter. */
-    int p = rng_hash + dimension;
-    return cmj_sample_1D(sample, num_samples, p);
-  }
-#endif
 
 #ifdef __SOBOL__
   /* Sobol sequence value using direction vectors. */
@@ -90,41 +86,29 @@ ccl_device_forceinline float path_rng_1D(
 #endif
 }
 
-ccl_device_forceinline void path_rng_2D(const KernelGlobals *kg,
-                                        uint rng_hash,
-                                        int sample,
-                                        int num_samples,
-                                        int dimension,
-                                        float *fx,
-                                        float *fy)
+ccl_device_forceinline void path_rng_2D(
+    const KernelGlobals *kg, uint rng_hash, int sample, int dimension, float *fx, float *fy)
 {
 #ifdef __DEBUG_CORRELATION__
   *fx = (float)drand48();
   *fy = (float)drand48();
   return;
 #endif
-  if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ) {
+
+#ifdef __SOBOL__
+  if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_PMJ)
+#endif
+  {
     const float2 f = pmj_sample_2D(kg, sample, rng_hash, dimension);
     *fx = f.x;
     *fy = f.y;
     return;
   }
-#ifdef __CMJ__
-#  ifdef __SOBOL__
-  if (kernel_data.integrator.sampling_pattern == SAMPLING_PATTERN_CMJ)
-#  endif
-  {
-    /* Correlated multi-jitter. */
-    int p = rng_hash + dimension;
-    cmj_sample_2D(sample, num_samples, p, fx, fy);
-    return;
-  }
-#endif
 
 #ifdef __SOBOL__
   /* Sobol. */
-  *fx = path_rng_1D(kg, rng_hash, sample, num_samples, dimension);
-  *fy = path_rng_1D(kg, rng_hash, sample, num_samples, dimension + 1);
+  *fx = path_rng_1D(kg, rng_hash, sample, dimension);
+  *fy = path_rng_1D(kg, rng_hash, sample, dimension + 1);
 #endif
 }
 
@@ -163,108 +147,6 @@ ccl_device uint lcg_init(uint seed)
   uint rng = seed;
   lcg_step_uint(&rng);
   return rng;
-}
-
-/* Path Tracing Utility Functions
- *
- * For each random number in each step of the path we must have a unique
- * dimension to avoid using the same sequence twice.
- *
- * For branches in the path we must be careful not to reuse the same number
- * in a sequence and offset accordingly.
- */
-
-ccl_device_inline float path_state_rng_1D(const KernelGlobals *kg,
-                                          const ccl_addr_space PathState *state,
-                                          int dimension)
-{
-  return path_rng_1D(
-      kg, state->rng_hash, state->sample, state->num_samples, state->rng_offset + dimension);
-}
-
-ccl_device_inline void path_state_rng_2D(const KernelGlobals *kg,
-                                         const ccl_addr_space PathState *state,
-                                         int dimension,
-                                         float *fx,
-                                         float *fy)
-{
-  path_rng_2D(kg,
-              state->rng_hash,
-              state->sample,
-              state->num_samples,
-              state->rng_offset + dimension,
-              fx,
-              fy);
-}
-
-ccl_device_inline float path_state_rng_1D_hash(const KernelGlobals *kg,
-                                               const ccl_addr_space PathState *state,
-                                               uint hash)
-{
-  /* Use a hash instead of dimension, this is not great but avoids adding
-   * more dimensions to each bounce which reduces quality of dimensions we
-   * are already using. */
-  return path_rng_1D(kg,
-                     cmj_hash_simple(state->rng_hash, hash),
-                     state->sample,
-                     state->num_samples,
-                     state->rng_offset);
-}
-
-ccl_device_inline float path_branched_rng_1D(const KernelGlobals *kg,
-                                             uint rng_hash,
-                                             const ccl_addr_space PathState *state,
-                                             int branch,
-                                             int num_branches,
-                                             int dimension)
-{
-  return path_rng_1D(kg,
-                     rng_hash,
-                     state->sample * num_branches + branch,
-                     state->num_samples * num_branches,
-                     state->rng_offset + dimension);
-}
-
-ccl_device_inline void path_branched_rng_2D(const KernelGlobals *kg,
-                                            uint rng_hash,
-                                            const ccl_addr_space PathState *state,
-                                            int branch,
-                                            int num_branches,
-                                            int dimension,
-                                            float *fx,
-                                            float *fy)
-{
-  path_rng_2D(kg,
-              rng_hash,
-              state->sample * num_branches + branch,
-              state->num_samples * num_branches,
-              state->rng_offset + dimension,
-              fx,
-              fy);
-}
-
-/* Utility functions to get light termination value,
- * since it might not be needed in many cases.
- */
-ccl_device_inline float path_state_rng_light_termination(const KernelGlobals *kg,
-                                                         const ccl_addr_space PathState *state)
-{
-  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
-    return path_state_rng_1D(kg, state, PRNG_LIGHT_TERMINATE);
-  }
-  return 0.0f;
-}
-
-ccl_device_inline float path_branched_rng_light_termination(const KernelGlobals *kg,
-                                                            uint rng_hash,
-                                                            const ccl_addr_space PathState *state,
-                                                            int branch,
-                                                            int num_branches)
-{
-  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
-    return path_branched_rng_1D(kg, rng_hash, state, branch, num_branches, PRNG_LIGHT_TERMINATE);
-  }
-  return 0.0f;
 }
 
 ccl_device_inline uint lcg_state_init(const uint rng_hash,

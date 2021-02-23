@@ -89,7 +89,6 @@ NODE_DEFINE(Integrator)
 
   static NodeEnum sampling_pattern_enum;
   sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
-  sampling_pattern_enum.insert("cmj", SAMPLING_PATTERN_CMJ);
   sampling_pattern_enum.insert("pmj", SAMPLING_PATTERN_PMJ);
   SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 

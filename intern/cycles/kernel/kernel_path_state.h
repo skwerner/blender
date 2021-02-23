@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel_random.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
@@ -276,19 +278,111 @@ ccl_device_inline bool path_state_ao_bounce(const KernelGlobals *kg,
   int bounce = state->bounce - state->transmission_bounce - (state->glossy_bounce > 0);
   return (bounce > kernel_data.integrator.ao_bounces);
 }
-
-ccl_device_inline void path_state_branch(ccl_addr_space PathState *state,
-                                         int branch,
-                                         int num_branches)
-{
-  if (num_branches > 1) {
-    /* Path is splitting into a branch, adjust so that each branch
-     * still gets a unique sample from the same sequence. */
-    state->sample = state->sample * num_branches + branch;
-    state->num_samples = state->num_samples * num_branches;
-    state->branch_factor *= num_branches;
-  }
-}
 #endif
+
+/* Random Number Sampling Utility Functions
+ *
+ * For each random number in each step of the path we must have a unique
+ * dimension to avoid using the same sequence twice.
+ *
+ * For branches in the path we must be careful not to reuse the same number
+ * in a sequence and offset accordingly.
+ */
+
+/* RNG State loaded onto stack. */
+typedef struct RNGState {
+  uint rng_hash;
+  uint rng_offset;
+  int sample;
+} RNGState;
+
+ccl_device_inline void path_state_rng_load(INTEGRATOR_STATE_CONST_ARGS, RNGState *rng_state)
+{
+  rng_state->rng_hash = INTEGRATOR_STATE(path, rng_hash);
+  rng_state->rng_offset = INTEGRATOR_STATE(path, rng_offset);
+  rng_state->sample = INTEGRATOR_STATE(path, sample);
+}
+
+ccl_device_inline void path_shadow_state_rng_load(INTEGRATOR_STATE_CONST_ARGS, RNGState *rng_state)
+{
+  rng_state->rng_hash = INTEGRATOR_STATE(shadow_path, rng_hash);
+  rng_state->rng_offset = INTEGRATOR_STATE(shadow_path, rng_offset);
+  rng_state->sample = INTEGRATOR_STATE(shadow_path, sample);
+}
+
+ccl_device_inline float path_state_rng_1D(const KernelGlobals *kg,
+                                          const RNGState *rng_state,
+                                          int dimension)
+{
+  return path_rng_1D(
+      kg, rng_state->rng_hash, rng_state->sample, rng_state->rng_offset + dimension);
+}
+
+ccl_device_inline void path_state_rng_2D(
+    const KernelGlobals *kg, const RNGState *rng_state, int dimension, float *fx, float *fy)
+{
+  path_rng_2D(
+      kg, rng_state->rng_hash, rng_state->sample, rng_state->rng_offset + dimension, fx, fy);
+}
+
+ccl_device_inline float path_state_rng_1D_hash(const KernelGlobals *kg,
+                                               const RNGState *rng_state,
+                                               uint hash)
+{
+  /* Use a hash instead of dimension, this is not great but avoids adding
+   * more dimensions to each bounce which reduces quality of dimensions we
+   * are already using. */
+  return path_rng_1D(
+      kg, cmj_hash_simple(rng_state->rng_hash, hash), rng_state->sample, rng_state->rng_offset);
+}
+
+ccl_device_inline float path_branched_rng_1D(const KernelGlobals *kg,
+                                             uint rng_hash,
+                                             const RNGState *rng_state,
+                                             int branch,
+                                             int num_branches,
+                                             int dimension)
+{
+  return path_rng_1D(
+      kg, rng_hash, rng_state->sample * num_branches + branch, rng_state->rng_offset + dimension);
+}
+
+ccl_device_inline void path_branched_rng_2D(const KernelGlobals *kg,
+                                            uint rng_hash,
+                                            const RNGState *rng_state,
+                                            int branch,
+                                            int num_branches,
+                                            int dimension,
+                                            float *fx,
+                                            float *fy)
+{
+  path_rng_2D(kg,
+              rng_hash,
+              rng_state->sample * num_branches + branch,
+              rng_state->rng_offset + dimension,
+              fx,
+              fy);
+}
+
+/* Utility functions to get light termination value,
+ * since it might not be needed in many cases.
+ */
+ccl_device_inline float path_state_rng_light_termination(const KernelGlobals *kg,
+                                                         const RNGState *state)
+{
+  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
+    return path_state_rng_1D(kg, state, PRNG_LIGHT_TERMINATE);
+  }
+  return 0.0f;
+}
+
+ccl_device_inline float path_branched_rng_light_termination(
+    const KernelGlobals *kg, uint rng_hash, const RNGState *state, int branch, int num_branches)
+{
+  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
+    return path_branched_rng_1D(kg, rng_hash, state, branch, num_branches, PRNG_LIGHT_TERMINATE);
+  }
+  return 0.0f;
+}
 
 CCL_NAMESPACE_END

@@ -29,8 +29,6 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
                                                const uint rng_hash,
                                                Ray *ray)
 {
-  const int num_samples = 1;
-
   /* Filter sampling. */
   float filter_u, filter_v;
 
@@ -39,20 +37,20 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
     filter_v = 0.5f;
   }
   else {
-    path_rng_2D(kg, rng_hash, sample, num_samples, PRNG_FILTER_U, &filter_u, &filter_v);
+    path_rng_2D(kg, rng_hash, sample, PRNG_FILTER_U, &filter_u, &filter_v);
   }
 
   /* Depth of field sampling. */
   float lens_u = 0.0f, lens_v = 0.0f;
   if (kernel_data.cam.aperturesize > 0.0f) {
-    path_rng_2D(kg, rng_hash, sample, num_samples, PRNG_LENS_U, &lens_u, &lens_v);
+    path_rng_2D(kg, rng_hash, sample, PRNG_LENS_U, &lens_u, &lens_v);
   }
 
   /* Motion blur time sampling. */
   float time = 0.0f;
 #ifdef __CAMERA_MOTION__
   if (kernel_data.cam.shuttertime != -1.0f)
-    time = path_rng_1D(kg, rng_hash, sample, num_samples, PRNG_TIME);
+    time = path_rng_1D(kg, rng_hash, sample, PRNG_TIME);
 #endif
 
   /* Generate camera ray. */

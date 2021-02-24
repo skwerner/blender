@@ -53,7 +53,11 @@ ccl_device_noinline_cpu float3 integrator_eval_background_shader(
     ShaderDataTinyStorage emission_sd_storage;
     ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
 
-    shader_setup_from_background(INTEGRATOR_STATE_PASS, emission_sd);
+    shader_setup_from_background(kg,
+                                 emission_sd,
+                                 INTEGRATOR_STATE(ray, P),
+                                 INTEGRATOR_STATE(ray, D),
+                                 INTEGRATOR_STATE(ray, time));
 
     INTEGRATOR_STATE_WRITE(path, bounce) += 1;
     shader_eval_surface(

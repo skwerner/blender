@@ -695,18 +695,17 @@ ccl_device_forceinline bool curve_intersect(const KernelGlobals *kg,
 
 ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
                                           ShaderData *sd,
-                                          const Intersection *isect,
-                                          const Ray *ray)
+                                          float3 P,
+                                          float3 D,
+                                          float t,
+                                          const int isect_object,
+                                          const int isect_prim)
 {
-  float t = isect->t;
-  float3 P = ray->P;
-  float3 D = ray->D;
-
-  if (isect->object != OBJECT_NONE) {
+  if (isect_object != OBJECT_NONE) {
 #  ifdef __OBJECT_MOTION__
     Transform tfm = sd->ob_itfm;
 #  else
-    Transform tfm = object_fetch_transform(kg, isect->object, OBJECT_INVERSE_TRANSFORM);
+    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_INVERSE_TRANSFORM);
 #  endif
 
     P = transform_point(&tfm, P);
@@ -714,7 +713,7 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
     D = normalize_len(D, &t);
   }
 
-  int prim = kernel_tex_fetch(__prim_index, isect->prim);
+  int prim = kernel_tex_fetch(__prim_index, isect_prim);
   float4 v00 = kernel_tex_fetch(__curves, prim);
 
   int k0 = __float_as_int(v00.x) + PRIMITIVE_UNPACK_SEGMENT(sd->type);
@@ -735,23 +734,20 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
     motion_curve_keys(kg, sd->object, sd->prim, sd->time, ka, k0, k1, kb, P_curve);
   }
 
-  sd->u = isect->u;
-
   P = P + D * t;
 
-  const float4 dPdu4 = catmull_rom_basis_derivative(P_curve, isect->u);
+  const float4 dPdu4 = catmull_rom_basis_derivative(P_curve, sd->u);
   const float3 dPdu = float4_to_float3(dPdu4);
 
   if (sd->type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON)) {
     /* Rounded smooth normals for ribbons, to approximate thick curve shape. */
     const float3 tangent = normalize(dPdu);
     const float3 bitangent = normalize(cross(tangent, -D));
-    const float sine = isect->v;
+    const float sine = sd->v;
     const float cosine = safe_sqrtf(1.0f - sine * sine);
 
     sd->N = normalize(sine * bitangent - cosine * normalize(cross(tangent, bitangent)));
     sd->Ng = -D;
-    sd->v = isect->v;
 
 #  if 0
     /* This approximates the position and geometric normal of a thick curve too,
@@ -765,7 +761,7 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
     /* Thick curves, compute normal using direction from inside the curve.
      * This could be optimized by recording the normal in the intersection,
      * however for Optix this would go beyond the size of the payload. */
-    const float3 P_inside = float4_to_float3(catmull_rom_basis_eval(P_curve, isect->u));
+    const float3 P_inside = float4_to_float3(catmull_rom_basis_eval(P_curve, sd->u));
     const float3 Ng = normalize(P - P_inside);
 
     sd->N = Ng;
@@ -779,11 +775,11 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
   sd->dPdv = cross(dPdu, sd->Ng);
 #  endif
 
-  if (isect->object != OBJECT_NONE) {
+  if (isect_object != OBJECT_NONE) {
 #  ifdef __OBJECT_MOTION__
     Transform tfm = sd->ob_tfm;
 #  else
-    Transform tfm = object_fetch_transform(kg, isect->object, OBJECT_TRANSFORM);
+    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_TRANSFORM);
 #  endif
 
     P = transform_point(&tfm, P);

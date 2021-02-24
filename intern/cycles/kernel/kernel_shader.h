@@ -69,21 +69,22 @@ ccl_device_noinline
 {
   PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
-  /* Read ray and intersection data into shader globals.
+  /* Read intersection data into shader globals.
    *
    * TODO: this is redundant, could potentially remove some of this from
    * ShaderData but would need to ensure that it also works for shadow
    * shader evaluation. */
-  sd->u = INTEGRATOR_STATE(isect, u);
-  sd->v = INTEGRATOR_STATE(isect, v);
-  sd->ray_length = INTEGRATOR_STATE(isect, t);
-  sd->type = INTEGRATOR_STATE(isect, type);
-  sd->time = INTEGRATOR_STATE(ray, time);
-  sd->I = -INTEGRATOR_STATE(ray, D);
-
   const int isect_prim = INTEGRATOR_STATE(isect, prim);
   const int isect_object = INTEGRATOR_STATE(isect, object);
+  const int isect_type = INTEGRATOR_STATE(isect, type);
+  const float isect_u = INTEGRATOR_STATE(isect, u);
+  const float isect_v = INTEGRATOR_STATE(isect, v);
+  const float isect_t = INTEGRATOR_STATE(isect, t);
 
+  sd->u = isect_u;
+  sd->v = isect_v;
+  sd->ray_length = isect_t;
+  sd->type = isect_type;
   sd->object = (isect_object == OBJECT_NONE) ? kernel_tex_fetch(__prim_object, isect_prim) :
                                                isect_object;
   sd->object_flag = kernel_tex_fetch(__object_flag, sd->object);
@@ -91,18 +92,23 @@ ccl_device_noinline
   sd->lamp = LAMP_NONE;
   sd->flag = 0;
 
-  /* matrices and time */
+  /* Read matrices and time. */
+  const float ray_time = INTEGRATOR_STATE(ray, time);
+  sd->time = ray_time;
+
 #ifdef __OBJECT_MOTION__
-  shader_setup_object_transforms(kg, sd, sd->time);
+  shader_setup_object_transforms(kg, sd, ray_time);
 #endif
+
+  /* Read ray data into shader globals. */
+  const float3 ray_P = INTEGRATOR_STATE(ray, P);
+  const float3 ray_D = INTEGRATOR_STATE(ray, D);
+  sd->I = -ray_D;
 
 #ifdef __HAIR__
   if (sd->type & PRIMITIVE_ALL_CURVE) {
-    /* TODO */
-#  if 0
     /* curve */
-    curve_shader_setup(kg, sd, isect, ray);
-#  endif
+    curve_shader_setup(kg, sd, ray_P, ray_D, isect_t, isect_object, isect_prim);
   }
   else
 #endif
@@ -112,12 +118,7 @@ ccl_device_noinline
     sd->shader = kernel_tex_fetch(__tri_shader, sd->prim);
 
     /* vectors */
-    /* TODO */
-#if 0
-    sd->P = triangle_refine(kg, sd, isect, ray);
-#else
-    sd->P = INTEGRATOR_STATE(ray, P) + INTEGRATOR_STATE(ray, t) * INTEGRATOR_STATE(ray, D);
-#endif
+    sd->P = triangle_refine(kg, sd, ray_P, ray_D, isect_t, isect_object, isect_prim);
     sd->Ng = Ng;
     sd->N = Ng;
 
@@ -132,11 +133,7 @@ ccl_device_noinline
   }
   else {
     /* motion triangle */
-    /* TODO */
-#if 0
-    /* curve */
-    motion_triangle_shader_setup(kg, sd, isect, ray, false);
-#endif
+    motion_triangle_shader_setup(kg, sd, ray_P, ray_D, isect_t, isect_object, isect_prim, false);
   }
 
   sd->flag |= kernel_tex_fetch(__shaders, (sd->shader & SHADER_MASK)).flags;
@@ -180,12 +177,13 @@ ccl_device_noinline
 
 /* ShaderData setup from BSSRDF scatter */
 
-#ifdef __SUBSURFACE__
-#  ifndef __KERNEL_CUDA__
+#if 0
+#  ifdef __SUBSURFACE__
+#    ifndef __KERNEL_CUDA__
 ccl_device
-#  else
+#    else
 ccl_device_inline
-#  endif
+#    endif
     void
     shader_setup_from_subsurface(const KernelGlobals *kg,
                                  ShaderData *sd,
@@ -218,10 +216,10 @@ ccl_device_inline
     if (sd->shader & SHADER_SMOOTH_NORMAL)
       sd->N = triangle_smooth_normal(kg, Ng, sd->prim, sd->u, sd->v);
 
-#  ifdef __DPDU__
+#    ifdef __DPDU__
     /* dPdu/dPdv */
     triangle_dPdudv(kg, sd->prim, &sd->dPdu, &sd->dPdv);
-#  endif
+#    endif
   }
   else {
     /* motion triangle */
@@ -234,10 +232,10 @@ ccl_device_inline
     /* instance transform */
     object_normal_transform_auto(kg, sd, &sd->N);
     object_normal_transform_auto(kg, sd, &sd->Ng);
-#  ifdef __DPDU__
+#    ifdef __DPDU__
     object_dir_transform_auto(kg, sd, &sd->dPdu);
     object_dir_transform_auto(kg, sd, &sd->dPdv);
-#  endif
+#    endif
   }
 
   /* backfacing test */
@@ -245,29 +243,30 @@ ccl_device_inline
     sd->flag |= SD_BACKFACING;
     sd->Ng = -sd->Ng;
     sd->N = -sd->N;
-#  ifdef __DPDU__
+#    ifdef __DPDU__
     sd->dPdu = -sd->dPdu;
     sd->dPdv = -sd->dPdv;
-#  endif
+#    endif
   }
 
   /* should not get used in principle as the shading will only use a diffuse
    * BSDF, but the shader might still access it */
   sd->I = sd->N;
 
-#  ifdef __RAY_DIFFERENTIALS__
+#    ifdef __RAY_DIFFERENTIALS__
   /* differentials */
   differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
   /* don't modify dP and dI */
-#  endif
+#    endif
 
   PROFILING_SHADER(sd->shader);
 }
+#  endif
 #endif
 
 /* ShaderData setup from position sampled on mesh */
 
-ccl_device_inline void shader_setup_from_sample(const KernelGlobals *kg,
+ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restrict kg,
                                                 ShaderData *sd,
                                                 const float3 P,
                                                 const float3 Ng,
@@ -391,7 +390,7 @@ ccl_device_inline void shader_setup_from_sample(const KernelGlobals *kg,
 /* ShaderData setup for displacement */
 
 ccl_device void shader_setup_from_displace(
-    const KernelGlobals *kg, ShaderData *sd, int object, int prim, float u, float v)
+    const KernelGlobals *ccl_restrict kg, ShaderData *sd, int object, int prim, float u, float v)
 {
   float3 P, Ng, I = make_float3(0.0f, 0.0f, 0.0f);
   int shader;
@@ -420,11 +419,16 @@ ccl_device void shader_setup_from_displace(
 
 /* ShaderData setup from ray into background */
 
-ccl_device_inline void shader_setup_from_background(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
+ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_restrict kg,
+                                                    ShaderData *sd,
+                                                    const float3 ray_P,
+                                                    const float3 ray_D,
+                                                    const float ray_time)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
-  const float3 ray_D = INTEGRATOR_STATE(ray, D);
+  /* for NDC coordinates */
+  sd->ray_P = ray_P;
 
   /* vectors */
   sd->P = ray_D;
@@ -434,7 +438,7 @@ ccl_device_inline void shader_setup_from_background(INTEGRATOR_STATE_CONST_ARGS,
   sd->shader = kernel_data.background.surface_shader;
   sd->flag = kernel_tex_fetch(__shaders, (sd->shader & SHADER_MASK)).flags;
   sd->object_flag = 0;
-  sd->time = INTEGRATOR_STATE(ray, time);
+  sd->time = ray_time;
   sd->ray_length = 0.0f;
 
   sd->object = OBJECT_NONE;
@@ -456,9 +460,6 @@ ccl_device_inline void shader_setup_from_background(INTEGRATOR_STATE_CONST_ARGS,
   sd->du = differential_zero();
   sd->dv = differential_zero();
 #endif
-
-  /* for NDC coordinates */
-  sd->ray_P = INTEGRATOR_STATE(ray, P);
 
   PROFILING_SHADER(sd->shader);
   PROFILING_OBJECT(sd->object);

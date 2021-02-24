@@ -62,11 +62,11 @@ class BufferParams {
   /* functions */
   BufferParams();
 
-  void get_offset_stride(int &offset, int &stride);
-  bool modified(const BufferParams &params);
-  int get_passes_size();
-  int get_denoising_offset();
-  int get_denoising_prefiltered_offset();
+  void get_offset_stride(int &offset, int &stride) const;
+  bool modified(const BufferParams &params) const;
+  int get_passes_size() const;
+  int get_denoising_offset() const;
+  int get_denoising_prefiltered_offset() const;
 };
 
 /* Render Buffers */

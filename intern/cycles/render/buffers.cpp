@@ -47,13 +47,13 @@ BufferParams::BufferParams()
   Pass::add(PASS_COMBINED, passes);
 }
 
-void BufferParams::get_offset_stride(int &offset, int &stride)
+void BufferParams::get_offset_stride(int &offset, int &stride) const
 {
   offset = -(full_x + full_y * width);
   stride = width;
 }
 
-bool BufferParams::modified(const BufferParams &params)
+bool BufferParams::modified(const BufferParams &params) const
 {
   return !(full_x == params.full_x && full_y == params.full_y && width == params.width &&
            height == params.height && full_width == params.full_width &&
@@ -63,7 +63,7 @@ bool BufferParams::modified(const BufferParams &params)
            denoising_prefiltered_pass == params.denoising_prefiltered_pass);
 }
 
-int BufferParams::get_passes_size()
+int BufferParams::get_passes_size() const
 {
   int size = 0;
 
@@ -81,7 +81,7 @@ int BufferParams::get_passes_size()
   return align_up(size, 4);
 }
 
-int BufferParams::get_denoising_offset()
+int BufferParams::get_denoising_offset() const
 {
   int offset = 0;
 
@@ -91,7 +91,7 @@ int BufferParams::get_denoising_offset()
   return offset;
 }
 
-int BufferParams::get_denoising_prefiltered_offset()
+int BufferParams::get_denoising_prefiltered_offset() const
 {
   assert(denoising_prefiltered_pass);
 

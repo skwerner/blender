@@ -1198,8 +1198,8 @@ void Session::render(bool /*need_denoise*/)
     RenderTile render_tile;
     render_tile.x = render_buffers->params.full_x;
     render_tile.y = render_buffers->params.full_y;
-    render_tile.w = render_buffers->params.full_width;
-    render_tile.h = render_buffers->params.full_height;
+    render_tile.w = render_buffers->params.width;
+    render_tile.h = render_buffers->params.height;
     render_tile.sample = sample;
     render_tile.buffers = render_buffers;
 
@@ -1219,8 +1219,8 @@ void Session::render(bool /*need_denoise*/)
     RenderTile render_tile;
     render_tile.x = render_buffers->params.full_x;
     render_tile.y = render_buffers->params.full_y;
-    render_tile.w = render_buffers->params.full_width;
-    render_tile.h = render_buffers->params.full_height;
+    render_tile.w = render_buffers->params.width;
+    render_tile.h = render_buffers->params.height;
     render_tile.sample = sample;
     render_tile.buffers = render_buffers;
 

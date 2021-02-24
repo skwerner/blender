@@ -804,8 +804,7 @@ class MultiDevice : public Device {
       sub.device->task_cancel();
   }
 
-  virtual unique_ptr<DeviceQueue> queue_create_integrator(
-      RenderBuffers * /*buffers*/) override
+  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers * /*buffers*/) override
   {
     /* It is at a best very tricky to have a single `DeviceQueue` API for a multi-device as the
      * devices are likely to run out of sync very quickly. At least this is a motivation at this
@@ -816,6 +815,13 @@ class MultiDevice : public Device {
      * bottlenecks, making work strealing more hard. */
     LOG(FATAL) << "Multi-device is not supposed to be used for queues.";
     return nullptr;
+  }
+
+  virtual void foreach_device(function<void(Device *)> callback) override
+  {
+    foreach (SubDevice &sub, devices) {
+      sub.device->foreach_device(callback);
+    }
   }
 };
 

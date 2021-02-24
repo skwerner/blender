@@ -18,10 +18,14 @@ set(INC
 
 set(SRC
   path_trace.cpp
+  path_trace_context.cpp
+  work_scheduler.cpp
 )
 
 set(SRC_HEADERS
   path_trace.h
+  path_trace_context.h
+  work_scheduler.h
 )
 
 set(LIB

@@ -61,6 +61,8 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
 
   virtual bool has_work_remaining() override;
 
+  virtual int get_max_num_path_states() override;
+
  protected:
   RenderBuffers *render_buffers_;
 

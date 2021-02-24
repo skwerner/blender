@@ -16,8 +16,12 @@
 
 #pragma once
 
+#include "integrator/path_trace_context.h"
+#include "integrator/work_scheduler.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
+#include "util/util_unique_ptr.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -39,8 +43,8 @@ class PathTrace {
    *  - Render tile (could be `ccl::Tile`, but to avoid bad level call it needs to be moved to this
    *    module).
    *  - Render buffer. */
-  /* `buffer_params` denotes parameters of the entire big tile which is to be path traced. */
-  PathTrace(Device *device, const BufferParams &buffer_params);
+  /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced. */
+  PathTrace(Device *device, const BufferParams &full_buffer_params);
 
   /* Request render of the given number of tiles.
    *
@@ -68,63 +72,84 @@ class PathTrace {
   function<void(RenderBuffers *render_buffers, int sample)> write_cb;
 
  protected:
-  /* Render given number of samples on the given device.
+  /* Run full render pipeline on all devices to add the given number of samples to the render
+   * result.
    *
-   * Buffer params denotes parameters of a buffer which is to be rendered on this device. In the
-   * case of multi-device rendering this will be a smaller portion of the `buffer_params_`.
+   * There are no update callbacks or cancellation checks are done form here, for the performance
+   * reasons.
    *
-   * This is a blocking call and it is yp to caller to call it from thread if asynchronous
-   * execution is needed. */
-  void render_samples_on_device(Device *device,
-                                const BufferParams &buffer_params,
-                                int samples_num);
+   * This call advances number of samples stored in the render status. */
+  void render_samples_full_pipeline(int samples_num);
 
-  /* TODO(sergey): This is a quick and dirty implementation to have pixels visible on the screen.
-   * Basic idea here is to evaluate kernel graph for the given work tile. The work tile is
-   * currently a single pixel, which matches path state size on CPU.
-   * All these arguments would need to be wrapped into a CPU-side WOrkTile and somehow integrated
-   * with small tile scheduler. */
-  void render_work_on_queue(DeviceQueue *queue, int x, int y, int start_sample, int samples_num);
+  /* This is a worker thread's "run" function which polls for a work to be rendered and renders
+   * the work. */
+  void render_samples_full_pipeline(PathTraceContext *path_trace_context);
+
+  /* Core path tracing routine. Renders given work time on the given path tracing context. */
+  void render_samples_full_pipeline(PathTraceContext *path_trace_context,
+                                    const DeviceWorkTile &work_tile);
 
   /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
    * soon as possible. */
   bool is_cancel_requested();
 
-  /* Used before path tracing begins, so that all updates can happen as user expects them. */
-  void update_reset_status();
-
   /* Run an update callback if needed.
    * This call which check whether an update callback is configured, and do other optimization
    * checks. For example, the update will not be communicated if update happens too often, so that
-   * the overhead of update does not degrade rendering performance.
-   *
-   * The samples indicates how many samples the buffer contains. */
-  /* TODO(sergey): Ideally the render buffers will be passed by the const reference. */
-  void update_if_needed(RenderBuffers *render_buffers, int sample);
+   * the overhead of update does not degrade rendering performance. */
+  void update_if_needed();
 
-  /* Write the render buffer via the write callback.
-   *
-   * The samples indicates how many samples the buffer contains. */
-  /* TODO(sergey): Ideally the render buffers will be passed by the const reference. */
-  void write(RenderBuffers *render_buffers, int sample);
+  /* Write the big tile render buffer via the write callback. */
+  void write();
 
   /* Pointer to a device which is configured to be used for path tracing. If multiple devices are
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
-  /* Parameters of buffers which corresponds to the big tile. */
-  /* TODO(sergey): Consider addressing naming a bit, to make it explicit that this is a big
-   * buffer. Alternatively, can consider introducing BigTile as entity concept. */
-  BufferParams buffer_params_;
+  /* Pre-calculated value of passes stride.
+   * Used for copying work-in-progress per-device buffers to a big tile. */
+  int pass_stride_;
+
+  /* Scheduler which gives work to path tracing threads. */
+  WorkScheduler work_scheduler_;
+
+  /* Per-compute device path tracing contexts.
+   *
+   * Each context has its own queue and small render buffer. */
+  vector<unique_ptr<PathTraceContext>> path_trace_contexts_;
+
+  /* Global path tracing status. */
+  /* TODO(sergey): state vs. status. */
+  struct RenderStatus {
+    /* Reset status before new render begins. */
+    void reset();
+
+    /* Render buffer which corresponds to the big tile.
+     * It is used to accumulate work from all rendering devices, and to communicate render result
+     * to the render session.
+     *
+     * TODO(sergey): This is actually a subject for reconsideration. It is unclear which device the
+     * buffer is to be created for, how to easily/efficiently copy "partial" render results from
+     * devices. */
+    unique_ptr<RenderBuffers> full_render_buffers;
+
+    /* Number of samples in the render buffer. */
+    int rendered_samples_num;
+  };
+  RenderStatus render_status;
 
   /* Status for the update reporting.
    * Is used to avoid updates being sent too often. */
-  struct {
+  struct UpdateStatus {
+    /* Used before path tracing begins, so that all updates can happen as user expects them. */
+    void reset();
+
     /* Denotes whether update callback was ever called during the current path tracing process. */
     bool has_update;
     /* Timestamp of when the update callback was last call (only valid if `has_update` is true.) */
     double last_update_time;
-  } update_status;
+  };
+  UpdateStatus update_status;
 };
 
 CCL_NAMESPACE_END

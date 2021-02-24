@@ -104,4 +104,9 @@ bool CPUIntegratorQueue::has_work_remaining()
   return !(INTEGRATOR_PATH_IS_TERMINATED && INTEGRATOR_SHADOW_PATH_IS_TERMINATED);
 }
 
+int CPUIntegratorQueue::get_max_num_path_states()
+{
+  return 1;
+}
+
 CCL_NAMESPACE_END

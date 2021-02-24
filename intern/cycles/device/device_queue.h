@@ -56,6 +56,15 @@ class DeviceQueue {
   /* Test if any work is still remaining to be done. */
   virtual bool has_work_remaining() = 0;
 
+  /* Get maximum number of path states which can be held by this queue.
+   *
+   * The number of path states is determined by factors like number of threads on the device,
+   * amount of free memory on the device and so on.
+   *
+   * This value is used by an external world to effectively implement scheduling on a
+   * (multi)device.  */
+  virtual int get_max_num_path_states() = 0;
+
   /* Device this queue has been created for. */
   Device *device;
 

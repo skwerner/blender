@@ -24,6 +24,7 @@
 #include "device/device_memory.h"
 #include "device/device_task.h"
 
+#include "util/util_function.h"
 #include "util/util_list.h"
 #include "util/util_stats.h"
 #include "util/util_string.h"
@@ -457,6 +458,16 @@ class Device {
   virtual bool check_peer_access(Device * /*peer_device*/)
   {
     return false;
+  }
+
+  /* Sub-devices */
+
+  /* Run given callback for every individual device which will be handling rendering.
+   * For the single device the callback is called for the device itself. For the multi-device the
+   * callback is only called for the sub-devices. */
+  virtual void foreach_device(function<void(Device *)> callback)
+  {
+    callback(this);
   }
 
   /* static */

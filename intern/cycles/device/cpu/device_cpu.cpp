@@ -1209,6 +1209,12 @@ class CPUDevice : public Device {
 
   virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *render_buffers) override
   {
+    /* Textures needs to be loaded on the device before renderin.
+     *
+     * Consider that creation of queue means the device update is done and that it will not be
+     * changed during the lifetime of the integrator queue. */
+    load_texture_info();
+
     return make_unique<CPUIntegratorQueue>(this, kernels, kernel_globals, render_buffers);
   }
 

@@ -802,8 +802,7 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
 
   float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
-  kernel_write_pass_float4(pixel_render_buffer,
-                           make_float4(contribution.x, contribution.y, contribution.z, 0.0f));
+  kernel_write_pass_float3(pixel_render_buffer, contribution);
 }
 
 /* Write light contribution to render buffer. */
@@ -822,8 +821,7 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
 
   float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
-  kernel_write_pass_float4(pixel_render_buffer,
-                           make_float4(contribution.x, contribution.y, contribution.z, 0.0f));
+  kernel_write_pass_float3(pixel_render_buffer, contribution);
 }
 
 /* Write transparency to render buffer.
@@ -840,8 +838,8 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
   }
 
   float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
-      INTEGRATOR_STATE_PASS, render_buffer, 0);
-  kernel_write_pass_float4(pixel_render_buffer, make_float4(0.0f, 0.0f, 0.0f, transparent));
+      INTEGRATOR_STATE_PASS, render_buffer, 3);
+  kernel_write_pass_float(pixel_render_buffer, transparent);
 }
 
 /* Write background contribution to render buffer.

@@ -817,6 +817,11 @@ class MultiDevice : public Device {
     return nullptr;
   }
 
+  virtual int get_concurrent_integrator_queues_num() override
+  {
+    return 0;
+  }
+
   virtual void foreach_device(function<void(Device *)> callback) override
   {
     foreach (SubDevice &sub, devices) {

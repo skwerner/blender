@@ -43,13 +43,12 @@ PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params)
 
   /* Create path tracing contexts in advance, so that they can be reused by incremental sampling
    * as much as possible. */
-  /* TODO(sergey): Support devices which can have multiple queues running in parallel. This would
-   * be, for example, a CPU device which might want to have asynchronous queues per CPU thread. */
   device->foreach_device([&](Device *render_device) {
-    /* For tests one can add `for (int i = 0; i < 64; ++i)` prior to the statement below and have
-     * multi-threaded rendering on CPU. */
+    const int num_queues = render_device->get_concurrent_integrator_queues_num();
 
-    path_trace_contexts_.push_back(make_unique<PathTraceContext>(render_device));
+    for (int i = 0; i < num_queues; ++i) {
+      path_trace_contexts_.push_back(make_unique<PathTraceContext>(render_device));
+    }
   });
 
   /* TODO(sergey): Communicate some scheduling block size to the work scheduler based on every

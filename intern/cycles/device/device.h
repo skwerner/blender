@@ -417,6 +417,11 @@ class Device {
    */
   virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *buffers) = 0;
 
+  /* Get number of concurrent integrator queues supported on this device.
+   * Path tracer will create this many queues for this device and run them in parallel from
+   * different threads. */
+  virtual int get_concurrent_integrator_queues_num() = 0;
+
   /* opengl drawing */
   virtual void draw_pixels(device_memory &mem,
                            int y,

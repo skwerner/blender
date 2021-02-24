@@ -81,6 +81,11 @@ class DummyDevice : public Device {
   {
     return nullptr;
   }
+
+  virtual int get_concurrent_integrator_queues_num() override
+  {
+    return 0;
+  }
 };
 
 Device *device_dummy_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)

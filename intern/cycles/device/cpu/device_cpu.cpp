@@ -1218,6 +1218,11 @@ class CPUDevice : public Device {
     return make_unique<CPUIntegratorQueue>(this, kernels, kernel_globals, render_buffers);
   }
 
+  virtual int get_concurrent_integrator_queues_num() override
+  {
+    return info.cpu_threads;
+  }
+
  protected:
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/) override
   {

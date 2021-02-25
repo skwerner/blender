@@ -67,9 +67,7 @@ ccl_device_noinline_cpu float3 light_sample_shader_eval(INTEGRATOR_STATE_ARGS,
 
     /* No proper path flag, we're evaluating this for all closures. that's
      * weak but we'd have to do multiple evaluations otherwise. */
-    INTEGRATOR_STATE_WRITE(path, bounce) += 1;
     shader_eval_surface(INTEGRATOR_STATE_PASS, emission_sd, NULL, PATH_RAY_EMISSION);
-    INTEGRATOR_STATE_WRITE(path, bounce) -= 1;
 
     /* Evaluate closures. */
 #ifdef __BACKGROUND_MIS__

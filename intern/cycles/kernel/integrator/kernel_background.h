@@ -58,11 +58,8 @@ ccl_device_noinline_cpu float3 integrator_eval_background_shader(
                                  INTEGRATOR_STATE(ray, P),
                                  INTEGRATOR_STATE(ray, D),
                                  INTEGRATOR_STATE(ray, time));
-
-    INTEGRATOR_STATE_WRITE(path, bounce) += 1;
     shader_eval_surface(
         INTEGRATOR_STATE_PASS, emission_sd, render_buffer, path_flag | PATH_RAY_EMISSION);
-    INTEGRATOR_STATE_WRITE(path, bounce) -= 1;
 
     L = shader_background_eval(emission_sd);
   }

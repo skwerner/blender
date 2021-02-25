@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "integrator/path_trace_context.h"
+#include "device/device_queue.h"
 #include "integrator/work_scheduler.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
@@ -38,12 +38,9 @@ class RenderBuffers;
  *  - Adaptive stopping. */
 class PathTrace {
  public:
-  /* TODO(sergey): Need to provide the following information:
-   *  - (Device)Scene.
-   *  - Render tile (could be `ccl::Tile`, but to avoid bad level call it needs to be moved to this
-   *    module).
-   *  - Render buffer. */
-  /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced. */
+  /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced.
+   *
+   * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
   PathTrace(Device *device, const BufferParams &full_buffer_params);
 
   /* Request render of the given number of tiles.
@@ -83,11 +80,10 @@ class PathTrace {
 
   /* This is a worker thread's "run" function which polls for a work to be rendered and renders
    * the work. */
-  void render_samples_full_pipeline(PathTraceContext *path_trace_context);
+  void render_samples_full_pipeline(DeviceQueue *queue);
 
-  /* Core path tracing routine. Renders given work time on the given path tracing context. */
-  void render_samples_full_pipeline(PathTraceContext *path_trace_context,
-                                    const DeviceWorkTile &work_tile);
+  /* Core path tracing routine. Renders given work time on the given queue. */
+  void render_samples_full_pipeline(DeviceQueue *queue, const DeviceWorkTile &work_tile);
 
   /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
    * soon as possible. */
@@ -106,17 +102,19 @@ class PathTrace {
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
-  /* Pre-calculated value of passes stride.
-   * Used for copying work-in-progress per-device buffers to a big tile. */
-  int pass_stride_;
-
   /* Scheduler which gives work to path tracing threads. */
   WorkScheduler work_scheduler_;
 
-  /* Per-compute device path tracing contexts.
+  /* Per-compute device path tracing contexts. */
+  vector<unique_ptr<DeviceQueue>> integrator_queues_;
+
+  /* Render buffer which corresponds to the big tile.
+   * It is used to accumulate work from all rendering devices, and to communicate render result
+   * to the render session.
    *
-   * Each context has its own queue and small render buffer. */
-  vector<unique_ptr<PathTraceContext>> path_trace_contexts_;
+   * TODO(sergey): This is actually a subject for reconsideration when multi-device support will be
+   * added. */
+  unique_ptr<RenderBuffers> full_render_buffers_;
 
   /* Global path tracing status. */
   /* TODO(sergey): state vs. status. */
@@ -124,19 +122,10 @@ class PathTrace {
     /* Reset status before new render begins. */
     void reset();
 
-    /* Render buffer which corresponds to the big tile.
-     * It is used to accumulate work from all rendering devices, and to communicate render result
-     * to the render session.
-     *
-     * TODO(sergey): This is actually a subject for reconsideration. It is unclear which device the
-     * buffer is to be created for, how to easily/efficiently copy "partial" render results from
-     * devices. */
-    unique_ptr<RenderBuffers> full_render_buffers;
-
     /* Number of samples in the render buffer. */
     int rendered_samples_num;
   };
-  RenderStatus render_status;
+  RenderStatus render_status_;
 
   /* Status for the update reporting.
    * Is used to avoid updates being sent too often. */
@@ -149,7 +138,7 @@ class PathTrace {
     /* Timestamp of when the update callback was last call (only valid if `has_update` is true.) */
     double last_update_time;
   };
-  UpdateStatus update_status;
+  UpdateStatus update_status_;
 };
 
 CCL_NAMESPACE_END

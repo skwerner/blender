@@ -412,6 +412,12 @@ class Device {
 
   /* Create new queue for integrator kernels.
    *
+   * The integration will happen into the given render buffer. This render buffer is owned by a
+   * path tracer, and is shared across possible multiple queues created for this device. The queue
+   * will write to the pixels of this buffer which are pointed by the work tile.
+   *
+   * The render buffer is supposed to be allocated for this device.
+   *
    * NOTE: Do not use it for multi-device and instead use per-device queues. Makes it more explicit
    * all the synchronization and work stealing logic. It will LOG(FATAL) when used on multi-device.
    */

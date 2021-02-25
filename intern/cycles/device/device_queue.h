@@ -62,7 +62,7 @@ class DeviceQueue {
    * amount of free memory on the device and so on.
    *
    * This value is used by an external world to effectively implement scheduling on a
-   * (multi)device.  */
+   * (multi)device. */
   virtual int get_max_num_path_states() = 0;
 
   /* Device this queue has been created for. */

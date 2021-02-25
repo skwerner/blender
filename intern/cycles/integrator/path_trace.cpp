@@ -33,21 +33,21 @@ void PathTrace::UpdateStatus::reset()
   has_update = false;
 }
 
-PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params)
-    : device_(device), pass_stride_(full_buffer_params.get_passes_size())
+PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params) : device_(device)
 {
   DCHECK_NE(device_, nullptr);
 
-  render_status.full_render_buffers = make_unique<RenderBuffers>(device);
-  render_status.full_render_buffers->reset(full_buffer_params);
+  full_render_buffers_ = make_unique<RenderBuffers>(device);
+  full_render_buffers_->reset(full_buffer_params);
 
-  /* Create path tracing contexts in advance, so that they can be reused by incremental sampling
+  /* Create integrator queues in advance, so that they can be reused by incremental sampling
    * as much as possible. */
   device->foreach_device([&](Device *render_device) {
     const int num_queues = render_device->get_concurrent_integrator_queues_num();
 
     for (int i = 0; i < num_queues; ++i) {
-      path_trace_contexts_.push_back(make_unique<PathTraceContext>(render_device));
+      integrator_queues_.emplace_back(
+          render_device->queue_create_integrator(full_render_buffers_.get()));
     }
   });
 
@@ -59,8 +59,8 @@ PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params)
 
 void PathTrace::render_samples(int samples_num)
 {
-  render_status.reset();
-  update_status.reset();
+  render_status_.reset();
+  update_status_.reset();
 
   /* TODO(sergey): Dp something smarter, like:
    * - Render first sample and update the interface, so user sees first pixels as soon as possible.
@@ -83,78 +83,32 @@ void PathTrace::render_samples(int samples_num)
   write();
 }
 
-/* XXX: Part of an experiment and transitional code to support multi-device.
- * Copies `src` (which can be thought as a smaller tile inside of `dst`) into `dst`.
- */
-static void accumulate_buffer(RenderBuffers *dst, RenderBuffers *src, const int pass_stride)
-{
-  int dst_offset, dst_stride;
-  dst->params.get_offset_stride(dst_offset, dst_stride);
-
-  int src_offset, src_stride;
-  src->params.get_offset_stride(src_offset, src_stride);
-
-  for (int src_y = 0; src_y < src->params.height; ++src_y) {
-    const int src_x = 0;
-    const int dst_x = src->params.full_x + src_x;
-    const int dst_y = src->params.full_y + src_y;
-
-    const int src_pixel_offset = (src_y * src_stride + src_x) * pass_stride;
-    const int dst_pixel_offset = (dst_y * dst_stride + dst_x) * pass_stride;
-
-    for (int i = 0; i < pass_stride; ++i) {
-      *(dst->buffer.data() + dst_pixel_offset + i) += *(src->buffer.data() + src_pixel_offset + i);
-    }
-  }
-}
-
 void PathTrace::render_samples_full_pipeline(int samples_num)
 {
   /* Reset work scheduler, so that it is ready to give work tiles for the new samples range. */
-  const BufferParams &full_buffer_params = render_status.full_render_buffers->params;
+  const BufferParams &full_buffer_params = full_render_buffers_->params;
   work_scheduler_.reset(full_buffer_params.full_width,
                         full_buffer_params.full_height,
-                        render_status.rendered_samples_num,
+                        render_status_.rendered_samples_num,
                         samples_num);
 
-  tbb::parallel_for_each(path_trace_contexts_,
-                         [&](unique_ptr<PathTraceContext> &path_trace_context) {
-                           render_samples_full_pipeline(path_trace_context.get());
-                         });
+  tbb::parallel_for_each(integrator_queues_, [&](unique_ptr<DeviceQueue> &queue) {
+    render_samples_full_pipeline(queue.get());
+  });
 
-  render_status.rendered_samples_num += samples_num;
+  render_status_.rendered_samples_num += samples_num;
 }
 
-void PathTrace::render_samples_full_pipeline(PathTraceContext *path_trace_context)
+void PathTrace::render_samples_full_pipeline(DeviceQueue *queue)
 {
   DeviceWorkTile work_tile;
   while (work_scheduler_.get_work(&work_tile)) {
-    render_samples_full_pipeline(path_trace_context, work_tile);
-
-    /* XXX: This is annoying and feels wrong. But not sure yet what is the proper way to have
-     * device-side buffer for path tracing and a big-tile buffer. */
-    accumulate_buffer(render_status.full_render_buffers.get(),
-                      &path_trace_context->render_buffers,
-                      pass_stride_);
+    render_samples_full_pipeline(queue, work_tile);
   }
 }
 
-void PathTrace::render_samples_full_pipeline(PathTraceContext *path_trace_context,
-                                             const DeviceWorkTile &work_tile)
+void PathTrace::render_samples_full_pipeline(DeviceQueue *queue, const DeviceWorkTile &work_tile)
 {
-  /* TODO(sergey): This is rather expensive since it involves a temporary copy of passes and
-   * re-calculation of full passes size. In theory we can only do it once per PathTraceContext
-   * lifetime based on the number of path states in the device (which does not change during
-   * rendering) and only move the tile's position here.  */
-  BufferParams buffer_params = render_status.full_render_buffers->params;
-  buffer_params.width = work_tile.width;
-  buffer_params.height = work_tile.height;
-  buffer_params.full_x = work_tile.x;
-  buffer_params.full_y = work_tile.y;
-  path_trace_context->render_buffers.reset(buffer_params);
-
-  DeviceQueue *queue = path_trace_context->queue.get();
-
   queue->set_work_tile(work_tile);
 
   queue->enqueue(DeviceKernel::GENERATE_CAMERA_RAYS);
@@ -205,17 +159,17 @@ void PathTrace::update_if_needed()
 
   /* Always perform the first update, so that users see first pixels as soon as possible.
    * After that only perform updates every now and then. */
-  if (update_status.has_update) {
+  if (update_status_.has_update) {
     /* TODO(sergey): Use steady clock. */
-    if (current_time - update_status.last_update_time < update_interval_in_seconds) {
+    if (current_time - update_status_.last_update_time < update_interval_in_seconds) {
       return;
     }
   }
 
-  update_cb(render_status.full_render_buffers.get(), render_status.rendered_samples_num);
+  update_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
 
-  update_status.has_update = true;
-  update_status.last_update_time = current_time;
+  update_status_.has_update = true;
+  update_status_.last_update_time = current_time;
 }
 
 void PathTrace::write()
@@ -224,7 +178,7 @@ void PathTrace::write()
     return;
   }
 
-  write_cb(render_status.full_render_buffers.get(), render_status.rendered_samples_num);
+  write_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
 }
 
 CCL_NAMESPACE_END

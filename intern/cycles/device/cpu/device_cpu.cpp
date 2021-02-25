@@ -1215,6 +1215,8 @@ class CPUDevice : public Device {
      * changed during the lifetime of the integrator queue. */
     load_texture_info();
 
+    DCHECK_EQ(render_buffers->buffer.device, this);
+
     return make_unique<CPUIntegratorQueue>(this, kernels, kernel_globals, render_buffers);
   }
 

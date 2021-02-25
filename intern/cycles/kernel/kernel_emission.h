@@ -120,8 +120,9 @@ ccl_device_inline bool light_sample_terminate(const KernelGlobals *ccl_restrict 
   }
 #endif
 
-  if (bsdf_eval_is_zero(eval))
+  if (bsdf_eval_is_zero(eval)) {
     return true;
+  }
 
   if (kernel_data.integrator.light_inv_rr_threshold > 0.0f
   /* TODO */
@@ -141,7 +142,7 @@ ccl_device_inline bool light_sample_terminate(const KernelGlobals *ccl_restrict 
     }
   }
 
-  return true;
+  return false;
 }
 
 /* Create shadow ray towards light sample. */

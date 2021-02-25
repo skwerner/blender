@@ -132,33 +132,46 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   }
 
   /* Sample position on a light. */
+  const uint bounce = INTEGRATOR_STATE(path, bounce);
   float light_u, light_v;
   path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
 
-  const uint bounce = INTEGRATOR_STATE(path, bounce);
   LightSample ls ccl_optional_struct_init;
   if (!light_sample(kg, -1, light_u, light_v, sd->time, sd->P, bounce, &ls)) {
     return;
   }
 
-  /* Evaluate shader and generate ray. */
-  BsdfEval light_eval ccl_optional_struct_init;
-  Ray ray ccl_optional_struct_init;
-  ray.t = 0.0f;
-  ray.time = sd->time;
+  kernel_assert(ls.pdf != 0.0f);
 
-  /* TODO: can we reuse sd memory? In theory we can move this after integrate_surface_bounce,
-   * evaluate the BSDF, and only then evaluate the light shader.
-   * This could also move to its own kernel, for non-constant light sources. */
+  /* Evaluate light shader.
+   *
+   * TODO: can we reuse sd memory? In theory we can move this after
+   * integrate_surface_bounce, evaluate the BSDF, and only then evaluate
+   * the light shader. This could also move to its own kernel, for
+   * non-constant light sources. */
   ShaderDataTinyStorage emission_sd_storage;
   ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
-
-  const float terminate = path_state_rng_light_termination(kg, rng_state);
-  bool is_light = false;
-  if (!direct_emission(
-          INTEGRATOR_STATE_PASS, sd, emission_sd, &ls, &ray, &light_eval, &is_light, terminate)) {
+  const float3 light_eval = light_sample_shader_eval(
+      INTEGRATOR_STATE_PASS, emission_sd, &ls, sd->time);
+  if (is_zero(light_eval)) {
     return;
   }
+
+  /* Evaluate BSDF. */
+  BsdfEval bsdf_eval ccl_optional_struct_init;
+  shader_bsdf_eval(kg, sd, ls.D, &bsdf_eval, ls.pdf, ls.shader & SHADER_USE_MIS);
+  bsdf_eval_mul3(&bsdf_eval, light_eval / ls.pdf);
+
+  /* Path termination. */
+  const float terminate = path_state_rng_light_termination(kg, rng_state);
+  if (light_sample_terminate(kg, &ls, &bsdf_eval, terminate)) {
+    return;
+  }
+
+  /* Create shadow ray. */
+  Ray ray ccl_optional_struct_init;
+  light_sample_to_shadow_ray(sd, &ls, &ray);
+  const bool is_light = light_sample_is_light(&ls);
 
   /* Write shadow ray and associated state to global memory. */
   INTEGRATOR_STATE_WRITE(shadow_ray, P) = ray.P;
@@ -166,7 +179,7 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(shadow_ray, t) = ray.t;
   INTEGRATOR_STATE_WRITE(shadow_ray, time) = ray.time;
 
-  INTEGRATOR_STATE_WRITE(shadow_light, L) = bsdf_eval_sum(&light_eval); /* TODO */
+  INTEGRATOR_STATE_WRITE(shadow_light, L) = bsdf_eval_sum(&bsdf_eval); /* TODO */
   INTEGRATOR_STATE_WRITE(shadow_light, is_light) = is_light;
 
   /* Copy state from main path to shadow path. */

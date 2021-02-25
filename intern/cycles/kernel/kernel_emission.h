@@ -23,20 +23,17 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Direction Emission */
-ccl_device_noinline_cpu float3 direct_emissive_eval(INTEGRATOR_STATE_ARGS,
-                                                    ShaderData *emission_sd,
-                                                    LightSample *ls,
-                                                    float3 I,
-                                                    differential3 dI,
-                                                    float t,
-                                                    float time)
+/* Evaluate shader on light. */
+ccl_device_noinline_cpu float3 light_sample_shader_eval(INTEGRATOR_STATE_ARGS,
+                                                        ShaderData *emission_sd,
+                                                        LightSample *ls,
+                                                        float time)
 {
   /* setup shading at emitter */
   float3 eval = make_float3(0.0f, 0.0f, 0.0f);
 
   if (shader_constant_emission_eval(kg, ls->shader, &eval)) {
-    if ((ls->prim != PRIM_NONE) && dot(ls->Ng, I) < 0.0f) {
+    if ((ls->prim != PRIM_NONE) && dot(ls->Ng, ls->D) > 0.0f) {
       ls->Ng = -ls->Ng;
     }
   }
@@ -54,13 +51,13 @@ ccl_device_noinline_cpu float3 direct_emissive_eval(INTEGRATOR_STATE_ARGS,
                                emission_sd,
                                ls->P,
                                ls->Ng,
-                               I,
+                               -ls->D,
                                ls->shader,
                                ls->object,
                                ls->prim,
                                ls->u,
                                ls->v,
-                               t,
+                               ls->t,
                                time,
                                false,
                                ls->lamp);
@@ -96,49 +93,19 @@ ccl_device_noinline_cpu float3 direct_emissive_eval(INTEGRATOR_STATE_ARGS,
   return eval;
 }
 
-ccl_device_noinline_cpu bool direct_emission(INTEGRATOR_STATE_ARGS,
-                                             ShaderData *sd,
-                                             ShaderData *emission_sd,
-                                             LightSample *ls,
-                                             Ray *ray,
-                                             BsdfEval *eval,
-                                             bool *is_lamp,
-                                             float rand_terminate)
+/* Test if light sample is from a light or emission from geometry. */
+ccl_device_inline bool light_sample_is_light(const LightSample *ls)
 {
-  if (ls->pdf == 0.0f)
-    return false;
+  /* return if it's a lamp for shadow pass */
+  return (ls->prim == PRIM_NONE && ls->type != LIGHT_BACKGROUND);
+}
 
-  /* todo: implement */
-  differential3 dD = differential3_zero();
-
-  /* evaluate closure */
-
-  float3 light_eval = direct_emissive_eval(
-      INTEGRATOR_STATE_PASS, emission_sd, ls, -ls->D, dD, ls->t, sd->time);
-
-  if (is_zero(light_eval))
-    return false;
-
-    /* evaluate BSDF at shading point */
-
-#ifdef __VOLUME__
-  if (sd->prim != PRIM_NONE)
-    shader_bsdf_eval(kg, sd, ls->D, eval, ls->pdf, ls->shader & SHADER_USE_MIS);
-  else {
-    float bsdf_pdf;
-    shader_volume_phase_eval(kg, sd, ls->D, eval, &bsdf_pdf);
-    if (ls->shader & SHADER_USE_MIS) {
-      /* Multiple importance sampling. */
-      float mis_weight = power_heuristic(ls->pdf, bsdf_pdf);
-      light_eval *= mis_weight;
-    }
-  }
-#else
-  shader_bsdf_eval(kg, sd, ls->D, eval, ls->pdf, ls->shader & SHADER_USE_MIS);
-#endif
-
-  bsdf_eval_mul3(eval, light_eval / ls->pdf);
-
+/* Early path termination of shadow rays. */
+ccl_device_inline bool light_sample_terminate(const KernelGlobals *ccl_restrict kg,
+                                              const LightSample *ls,
+                                              BsdfEval *eval,
+                                              const float rand_terminate)
+{
 #ifdef __PASSES__
   /* use visibility flag to skip lights */
   if (ls->shader & SHADER_EXCLUDE_ANY) {
@@ -154,7 +121,7 @@ ccl_device_noinline_cpu bool direct_emission(INTEGRATOR_STATE_ARGS,
 #endif
 
   if (bsdf_eval_is_zero(eval))
-    return false;
+    return true;
 
   if (kernel_data.integrator.light_inv_rr_threshold > 0.0f
   /* TODO */
@@ -168,12 +135,20 @@ ccl_device_noinline_cpu bool direct_emission(INTEGRATOR_STATE_ARGS,
                         kernel_data.integrator.light_inv_rr_threshold;
     if (probability < 1.0f) {
       if (rand_terminate >= probability) {
-        return false;
+        return true;
       }
       bsdf_eval_mul(eval, 1.0f / probability);
     }
   }
 
+  return true;
+}
+
+/* Create shadow ray towards light sample. */
+ccl_device_inline void light_sample_to_shadow_ray(const ShaderData *sd,
+                                                  const LightSample *ls,
+                                                  Ray *ray)
+{
   if (ls->shader & SHADER_CAST_SHADOW) {
     /* setup ray */
     bool transmit = (dot(sd->Ng, ls->D) < 0.0f);
@@ -198,15 +173,25 @@ ccl_device_noinline_cpu bool direct_emission(INTEGRATOR_STATE_ARGS,
     ray->t = 0.0f;
   }
 
-  /* return if it's a lamp for shadow pass */
-  *is_lamp = (ls->prim == PRIM_NONE && ls->type != LIGHT_BACKGROUND);
-
-  return true;
+  ray->time = sd->time;
 }
 
+/* Volume phase evaluation code - to be moved into volume code. */
 #if 0
-/* Indirect Lamp Emission */
+#  ifdef __VOLUME__
+    float bsdf_pdf;
+    shader_volume_phase_eval(kg, sd, ls->D, eval, &bsdf_pdf);
+    if (ls->shader & SHADER_USE_MIS) {
+      /* Multiple importance sampling. */
+      float mis_weight = power_heuristic(ls->pdf, bsdf_pdf);
+      light_eval *= mis_weight;
+    }
+  }
+#  endif
+#endif
 
+/* Indirect Lamp Emission - to be replaced by making lights actual geometry. */
+#if 0
 ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
                                                     ShaderData *emission_sd,
                                                     ccl_addr_space PathState *state,

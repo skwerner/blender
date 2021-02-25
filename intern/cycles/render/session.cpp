@@ -1181,9 +1181,9 @@ void Session::render(bool /*need_denoise*/)
   /* TODO(sergey): Preserve path tracer state, so it doesn't re-allocate states and things like
    * that on every sample of viewport render. */
 
-  /* TODO(sergey): Take start sample `tile_manager.state.sample` into account. */
-
   PathTrace path_trace(device, buffer_params);
+
+  path_trace.set_start_sample(tile_manager.state.sample);
 
   /* Configure path tracer. */
   path_trace.get_cancel_cb = [&progress = this->progress]() { return progress.get_cancel(); };

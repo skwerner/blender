@@ -43,7 +43,14 @@ class PathTrace {
    * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
   PathTrace(Device *device, const BufferParams &full_buffer_params);
 
-  /* Request render of the given number of tiles.
+  /* Is used to either offset sampling when adding more samples to an existing render, or to
+   * offset sample for a viewport render.
+   *
+   * The sample is 0-based. */
+  void set_start_sample(int start_sample_num);
+
+  /* Request render of the given number of samples.
+   * Will add [start_sample_num, start_sample_num + samples_num) samples to the render buffer.
    *
    * TODO(sergey): Decide and document whether it is a blocking or asynchronous call. */
   void render_samples(int samples_num);
@@ -115,6 +122,9 @@ class PathTrace {
    * TODO(sergey): This is actually a subject for reconsideration when multi-device support will be
    * added. */
   unique_ptr<RenderBuffers> full_render_buffers_;
+
+  /* Number of a start sample, in the 0 based notation. */
+  int start_sample_num_;
 
   /* Global path tracing status. */
   /* TODO(sergey): state vs. status. */

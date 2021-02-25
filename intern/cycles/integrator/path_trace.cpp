@@ -57,6 +57,11 @@ PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params) : d
    * How to find an ideal scheduling for such a mixture?  */
 }
 
+void PathTrace::set_start_sample(int start_sample_num)
+{
+  start_sample_num_ = start_sample_num;
+}
+
 void PathTrace::render_samples(int samples_num)
 {
   render_status_.reset();
@@ -91,7 +96,7 @@ void PathTrace::render_samples_full_pipeline(int samples_num)
                         full_buffer_params.full_y,
                         full_buffer_params.width,
                         full_buffer_params.height,
-                        render_status_.rendered_samples_num,
+                        start_sample_num_ + render_status_.rendered_samples_num,
                         samples_num);
 
   tbb::parallel_for_each(integrator_queues_, [&](unique_ptr<DeviceQueue> &queue) {

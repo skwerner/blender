@@ -18,22 +18,70 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_forceinline bool intersect_shadow_scene(INTEGRATOR_STATE_CONST_ARGS,
-                                                   const Ray *ray,
-                                                   Intersection *isect)
+ccl_device_forceinline uint integrate_intersect_shadow_visibility(INTEGRATOR_STATE_CONST_ARGS)
 {
-  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
   const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
 #ifdef __SHADOW_TRICKS__
-  const uint visibility = (path_flag & PATH_RAY_SHADOW_CATCHER) ? PATH_RAY_SHADOW_NON_CATCHER :
-                                                                  PATH_RAY_SHADOW;
+  return (path_flag & PATH_RAY_SHADOW_CATCHER) ? PATH_RAY_SHADOW_NON_CATCHER : PATH_RAY_SHADOW;
 #else
-  const uint visibility = PATH_RAY_SHADOW;
+  return PATH_RAY_SHADOW;
 #endif
-
-  /* TODO: transparent shadows. */
-  return scene_intersect(kg, ray, visibility & PATH_RAY_SHADOW_OPAQUE, isect);
 }
+
+ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
+                                                  const Ray *ray,
+                                                  const uint visibility)
+{
+  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
+
+  Intersection isect;
+  const bool opaque_hit = scene_intersect(kg, ray, visibility & PATH_RAY_SHADOW_OPAQUE, &isect);
+
+  if (!opaque_hit) {
+    /* Null terminator for array, no transparent hits to shade. */
+    INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, prim) = PRIM_NONE;
+  }
+
+  return opaque_hit;
+}
+
+#ifdef __TRANSPARENT_SHADOWS__
+ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
+                                                       const Ray *ray,
+                                                       const uint visibility)
+{
+  /* TODO: add mechanism to detect and continue tracing if max_hits exceeded. */
+  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
+
+  Intersection isect[INTEGRATOR_SHADOW_ISECT_SIZE];
+  const uint max_hits = INTEGRATOR_SHADOW_ISECT_SIZE;
+  uint num_hits;
+  const bool opaque_hit = scene_intersect_shadow_all(
+      kg, ray, isect, visibility, max_hits, &num_hits);
+
+  if (!opaque_hit) {
+    sort_intersections(isect, num_hits);
+
+    /* Write intersection result into global integrator state memory. */
+    for (int hit = 0; hit < num_hits; hit++) {
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, t) = isect[hit].t;
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, u) = isect[hit].u;
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, v) = isect[hit].v;
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, Ng) = isect[hit].Ng;
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, object) = isect[hit].object;
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, prim) = isect[hit].prim;
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, type) = isect[hit].type;
+    }
+
+    /* Null terminator for array. */
+    if (num_hits < INTEGRATOR_SHADOW_ISECT_SIZE) {
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, num_hits, prim) = PRIM_NONE;
+    }
+  }
+
+  return opaque_hit;
+}
+#endif
 
 ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
@@ -51,34 +99,22 @@ ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
   ray.dP = differential3_zero();
   ray.dD = differential3_zero();
 
-  /* TODO: this means light casts no shadow. */
-  kernel_assert(ray.t != 0.0f);
+  /* Compute visibility. */
+  const uint visibility = integrate_intersect_shadow_visibility(INTEGRATOR_STATE_PASS);
 
-  /* Scene Intersection. */
-  Intersection isect;
-  const bool hit = intersect_shadow_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
-  if (!hit) {
-    isect.prim = PRIM_NONE;
-  }
-
-  /* Write intersection result into global integrator state memory. */
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, t) = isect.t;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, u) = isect.u;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, v) = isect.v;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, Ng) = isect.Ng;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, object) = isect.object;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, prim) = isect.prim;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, type) = isect.type;
-
-#if INTEGRATOR_SHADOW_ISECT_SIZE > 1
-  /* Null terminator for array. */
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, prim) = PRIM_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 1, type) = PRIMITIVE_NONE;
+#ifdef __TRANSPARENT_SHADOWS__
+  /* TODO: compile different kernels depending on this? Especially for OptiX
+   * conditional trace calls are bad. */
+  const bool opaque_hit =
+      (kernel_data.integrator.transparent_shadows) ?
+          integrate_intersect_shadow_transparent(INTEGRATOR_STATE_PASS, &ray, visibility) :
+          integrate_intersect_shadow_opaque(INTEGRATOR_STATE_PASS, &ray, visibility);
+#else
+  const bool opaque_hit = integrate_intersect_shadow_opaque(
+      INTEGRATOR_STATE_PASS, &ray, visibility);
 #endif
 
-  const bool shadow_opaque = true;
-  if (hit && shadow_opaque) {
+  if (opaque_hit) {
     /* Hit an opaque surface, shadow path ends here. */
     INTEGRATOR_SHADOW_PATH_TERMINATE;
     return;

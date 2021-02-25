@@ -814,9 +814,9 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
     return;
   }
 
-  float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
+  float3 contribution = INTEGRATOR_STATE(shadow_path, throughput) * L;
 #ifdef __CLAMP_SAMPLE__
-  kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
+  kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(shadow_path, bounce) - 1);
 #endif
 
   float *pixel_render_buffer = kernel_accum_pixel_render_buffer(

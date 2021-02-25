@@ -24,6 +24,23 @@
 
 CCL_NAMESPACE_BEGIN
 
+ccl_device_inline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
+{
+  Intersection isect ccl_optional_struct_init;
+  isect.prim = INTEGRATOR_STATE(isect, prim);
+  isect.object = INTEGRATOR_STATE(isect, object);
+  isect.type = INTEGRATOR_STATE(isect, type);
+  isect.u = INTEGRATOR_STATE(isect, u);
+  isect.v = INTEGRATOR_STATE(isect, v);
+  isect.t = INTEGRATOR_STATE(isect, t);
+
+  const float3 ray_P = INTEGRATOR_STATE(ray, P);
+  const float3 ray_D = INTEGRATOR_STATE(ray, D);
+  const float ray_time = INTEGRATOR_STATE(ray, time);
+
+  shader_setup_from_ray(kg, sd, ray_P, ray_D, ray_time, &isect);
+}
+
 /* TODO: this should move to its own kernel. */
 #if 0
 #  ifdef __SHADOW_TRICKS__
@@ -310,7 +327,7 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
 
   /* Setup shader data. */
   ShaderData sd;
-  shader_setup_from_ray(INTEGRATOR_STATE_PASS, &sd);
+  integrate_surface_shader_setup(INTEGRATOR_STATE_PASS, &sd);
 
   /* Skip most work for volume bounding surface. */
 #ifdef __VOLUME__

@@ -59,13 +59,14 @@ ccl_device void shader_setup_object_transforms(const KernelGlobals *kg, ShaderDa
 }
 #endif
 
-#ifdef __KERNEL_OPTIX__
-ccl_device_inline
-#else
-ccl_device_noinline
-#endif
-    void
-    shader_setup_from_ray(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
+/* TODO: break this up if it helps reduce register pressure to load data from
+ * global memory as we write it to shaderdata. */
+ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict kg,
+                                             ShaderData *sd,
+                                             const float3 ray_P,
+                                             const float3 ray_D,
+                                             const float ray_time,
+                                             const Intersection *isect)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
@@ -74,26 +75,18 @@ ccl_device_noinline
    * TODO: this is redundant, could potentially remove some of this from
    * ShaderData but would need to ensure that it also works for shadow
    * shader evaluation. */
-  const int isect_prim = INTEGRATOR_STATE(isect, prim);
-  const int isect_object = INTEGRATOR_STATE(isect, object);
-  const int isect_type = INTEGRATOR_STATE(isect, type);
-  const float isect_u = INTEGRATOR_STATE(isect, u);
-  const float isect_v = INTEGRATOR_STATE(isect, v);
-  const float isect_t = INTEGRATOR_STATE(isect, t);
-
-  sd->u = isect_u;
-  sd->v = isect_v;
-  sd->ray_length = isect_t;
-  sd->type = isect_type;
-  sd->object = (isect_object == OBJECT_NONE) ? kernel_tex_fetch(__prim_object, isect_prim) :
-                                               isect_object;
+  sd->u = isect->u;
+  sd->v = isect->v;
+  sd->ray_length = isect->t;
+  sd->type = isect->type;
+  sd->object = (isect->object == OBJECT_NONE) ? kernel_tex_fetch(__prim_object, isect->prim) :
+                                                isect->object;
   sd->object_flag = kernel_tex_fetch(__object_flag, sd->object);
-  sd->prim = kernel_tex_fetch(__prim_index, isect_prim);
+  sd->prim = kernel_tex_fetch(__prim_index, isect->prim);
   sd->lamp = LAMP_NONE;
   sd->flag = 0;
 
   /* Read matrices and time. */
-  const float ray_time = INTEGRATOR_STATE(ray, time);
   sd->time = ray_time;
 
 #ifdef __OBJECT_MOTION__
@@ -101,14 +94,12 @@ ccl_device_noinline
 #endif
 
   /* Read ray data into shader globals. */
-  const float3 ray_P = INTEGRATOR_STATE(ray, P);
-  const float3 ray_D = INTEGRATOR_STATE(ray, D);
   sd->I = -ray_D;
 
 #ifdef __HAIR__
   if (sd->type & PRIMITIVE_ALL_CURVE) {
     /* curve */
-    curve_shader_setup(kg, sd, ray_P, ray_D, isect_t, isect_object, isect_prim);
+    curve_shader_setup(kg, sd, ray_P, ray_D, isect->t, isect->object, isect->prim);
   }
   else
 #endif
@@ -118,7 +109,7 @@ ccl_device_noinline
     sd->shader = kernel_tex_fetch(__tri_shader, sd->prim);
 
     /* vectors */
-    sd->P = triangle_refine(kg, sd, ray_P, ray_D, isect_t, isect_object, isect_prim);
+    sd->P = triangle_refine(kg, sd, ray_P, ray_D, isect->t, isect->object, isect->prim);
     sd->Ng = Ng;
     sd->N = Ng;
 
@@ -133,12 +124,13 @@ ccl_device_noinline
   }
   else {
     /* motion triangle */
-    motion_triangle_shader_setup(kg, sd, ray_P, ray_D, isect_t, isect_object, isect_prim, false);
+    motion_triangle_shader_setup(
+        kg, sd, ray_P, ray_D, isect->t, isect->object, isect->prim, false);
   }
 
   sd->flag |= kernel_tex_fetch(__shaders, (sd->shader & SHADER_MASK)).flags;
 
-  if (isect_object != OBJECT_NONE) {
+  if (isect->object != OBJECT_NONE) {
     /* instance transform */
     object_normal_transform_auto(kg, sd, &sd->N);
     object_normal_transform_auto(kg, sd, &sd->Ng);

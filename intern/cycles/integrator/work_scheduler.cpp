@@ -49,7 +49,7 @@ bool WorkScheduler::get_work(DeviceWorkTile *work_tile)
    * different from 1x1. Currently this is a bare minimum for CPU devices. */
 
   const int work_index = atomic_fetch_and_add_int32(&next_work_index_, 1);
-  if (work_index > total_work_size_) {
+  if (work_index >= total_work_size_) {
     return false;
   }
 

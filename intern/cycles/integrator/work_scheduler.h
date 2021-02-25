@@ -26,7 +26,7 @@ class WorkScheduler {
  public:
   WorkScheduler();
 
-  void reset(int width, int height, int sample_start, int samples_num);
+  void reset(int full_x, int full_y, int width, int height, int sample_start, int samples_num);
 
   /* Get work for a device.
    * Returns truth if there is still work to be done and initialied the work tile to all
@@ -37,8 +37,12 @@ class WorkScheduler {
  protected:
   void reset_scheduler_state();
 
+  int full_x_ = 0;
+  int full_y_ = 0;
+
   int width_ = 0;
   int height_ = 0;
+
   int sample_start_ = 0;
   int samples_num_ = 0;
 

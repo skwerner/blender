@@ -25,10 +25,15 @@ WorkScheduler::WorkScheduler()
 {
 }
 
-void WorkScheduler::reset(int width, int height, int sample_start, int samples_num)
+void WorkScheduler::reset(
+    int full_x, int full_y, int width, int height, int sample_start, int samples_num)
 {
+  full_x_ = full_x;
+  full_y_ = full_y;
+
   width_ = width;
   height_ = height;
+
   sample_start_ = sample_start;
   samples_num_ = samples_num;
 
@@ -58,8 +63,8 @@ bool WorkScheduler::get_work(DeviceWorkTile *work_tile)
   const int y = pixel_index / width_;
   const int x = pixel_index - y * width_;
 
-  work_tile->x = x;
-  work_tile->y = y;
+  work_tile->x = full_x_ + x;
+  work_tile->y = full_y_ + y;
   work_tile->width = 1;
   work_tile->height = 1;
   work_tile->sample = sample_start_ + sample;

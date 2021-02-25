@@ -87,8 +87,10 @@ void PathTrace::render_samples_full_pipeline(int samples_num)
 {
   /* Reset work scheduler, so that it is ready to give work tiles for the new samples range. */
   const BufferParams &full_buffer_params = full_render_buffers_->params;
-  work_scheduler_.reset(full_buffer_params.full_width,
-                        full_buffer_params.full_height,
+  work_scheduler_.reset(full_buffer_params.full_x,
+                        full_buffer_params.full_y,
+                        full_buffer_params.width,
+                        full_buffer_params.height,
                         render_status_.rendered_samples_num,
                         samples_num);
 

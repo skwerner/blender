@@ -157,7 +157,7 @@ void EEVEE_render_view_sync(EEVEE_Data *vedata, RenderEngine *engine, struct Dep
 {
   EEVEE_PrivateData *g_data = vedata->stl->g_data;
 
-  /* Set the pers & view matrix. */
+  /* Set the perspective & view matrix. */
   float winmat[4][4], viewmat[4][4], viewinv[4][4];
   /* TODO(sergey): Shall render hold pointer to an evaluated camera instead? */
   struct Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, g_data->cam_original_ob);
@@ -556,14 +556,14 @@ void EEVEE_render_draw(EEVEE_Data *vedata, RenderEngine *engine, RenderLayer *rl
   DRW_render_instance_buffer_finish();
 
   /* Need to be called after DRW_render_instance_buffer_finish() */
-  /* Also we weed to have a correct fbo bound for DRW_hair_update */
+  /* Also we weed to have a correct FBO bound for DRW_hair_update */
   GPU_framebuffer_bind(fbl->main_fb);
   DRW_hair_update();
 
   /* Sort transparents before the loop. */
   DRW_pass_sort_shgroup_z(psl->transparent_pass);
 
-  uint tot_sample = stl->g_data->render_tot_samples;
+  uint tot_sample = stl->g_data->render_sample_count_per_timestep;
   uint render_samples = 0;
 
   /* SSR needs one iteration to start properly. */

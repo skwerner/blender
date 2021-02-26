@@ -353,7 +353,7 @@ static void ui_popup_block_position(wmWindow *window,
     block->direction = dir1;
   }
 
-  /* keep a list of these, needed for pulldown menus */
+  /* Keep a list of these, needed for pull-down menus. */
   uiSafetyRct *saferct = MEM_callocN(sizeof(uiSafetyRct), "uiSafetyRct");
   saferct->parent = butrct;
   saferct->safety = block->safety;
@@ -539,7 +539,7 @@ static void ui_popup_block_remove(bContext *C, uiPopupBlockHandle *handle)
   CTX_wm_window_set(C, win);
   ui_region_temp_remove(C, screen, handle->region);
 
-  /* Reset context (area and region were NULL'ed when chaning context window). */
+  /* Reset context (area and region were NULL'ed when changing context window). */
   CTX_wm_window_set(C, ctx_win);
   CTX_wm_area_set(C, ctx_area);
   CTX_wm_region_set(C, ctx_region);
@@ -632,7 +632,7 @@ uiBlock *ui_popup_block_refresh(bContext *C,
   }
   else {
     uiSafetyRct *saferct;
-    /* keep a list of these, needed for pulldown menus */
+    /* Keep a list of these, needed for pull-down menus. */
     saferct = MEM_callocN(sizeof(uiSafetyRct), "uiSafetyRct");
     saferct->safety = block->safety;
     BLI_addhead(&block->saferct, saferct);

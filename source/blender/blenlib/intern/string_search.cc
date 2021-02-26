@@ -250,7 +250,7 @@ static int get_shortest_word_index_that_startswith(StringRef query,
                                                    Span<bool> word_is_usable)
 {
   int best_word_size = INT32_MAX;
-  int bset_word_index = -1;
+  int best_word_index = -1;
   for (const int i : words.index_range()) {
     if (!word_is_usable[i]) {
       continue;
@@ -258,11 +258,12 @@ static int get_shortest_word_index_that_startswith(StringRef query,
     StringRef word = words[i];
     if (word.startswith(query)) {
       if (word.size() < best_word_size) {
-        bset_word_index = i;
+        best_word_index = i;
+        best_word_size = word.size();
       }
     }
   }
-  return bset_word_index;
+  return best_word_index;
 }
 
 static int get_word_index_that_fuzzy_matches(StringRef query,
@@ -446,7 +447,7 @@ int BLI_string_search_query(StringSearch *search, const char *query, void ***r_d
   for (const int score : result_indices_by_score.keys()) {
     found_scores.append(score);
   }
-  std::sort(found_scores.begin(), found_scores.end(), std::greater<int>());
+  std::sort(found_scores.begin(), found_scores.end(), std::greater<>());
 
   /* Add results to output vector in correct order. First come the results with the best match
    * score. Results with the same score are in the order they have been added to the search. */

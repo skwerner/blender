@@ -243,7 +243,7 @@ void rna_userdef_is_dirty_update(Main *UNUSED(bmain),
   rna_userdef_is_dirty_update_impl();
 }
 
-/** Take care not to use this if we expet 'is_dirty' to be tagged. */
+/** Take care not to use this if we expect 'is_dirty' to be tagged. */
 static void rna_userdef_ui_update(Main *UNUSED(bmain),
                                   Scene *UNUSED(scene),
                                   PointerRNA *UNUSED(ptr))
@@ -274,7 +274,9 @@ static void rna_userdef_gizmo_update(Main *bmain, Scene *scene, PointerRNA *ptr)
 
 static void rna_userdef_theme_update_icons(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  UI_icons_reload_internal_textures();
+  if (!G.background) {
+    UI_icons_reload_internal_textures();
+  }
   rna_userdef_theme_update(bmain, scene, ptr);
 }
 
@@ -863,7 +865,7 @@ static StructRNA *rna_AddonPref_register(Main *bmain,
   PointerRNA dummy_ptr;
   // int have_function[1];
 
-  /* setup dummy addon-pref & addon-pref type to store static properties in */
+  /* Setup dummy add-on preference and it's type to store static properties in. */
   RNA_pointer_create(NULL, &RNA_AddonPreferences, &dummy_addon, &dummy_ptr);
 
   /* validate the python class */
@@ -881,13 +883,13 @@ static StructRNA *rna_AddonPref_register(Main *bmain,
     return NULL;
   }
 
-  /* check if we have registered this addon-pref type before, and remove it */
+  /* Check if we have registered this add-on preference type before, and remove it. */
   apt = BKE_addon_pref_type_find(dummy_addon.module, true);
   if (apt && apt->rna_ext.srna) {
     rna_AddonPref_unregister(bmain, apt->rna_ext.srna);
   }
 
-  /* create a new addon-pref type */
+  /* Create a new add-on preference type. */
   apt = MEM_mallocN(sizeof(bAddonPrefType), "addonpreftype");
   memcpy(apt, &dummy_apt, sizeof(dummy_apt));
   BKE_addon_pref_type_add(apt);
@@ -3005,6 +3007,12 @@ static void rna_def_userdef_theme_space_buts(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Search Match", "");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
+  prop = RNA_def_property(srna, "active_modifier", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_float_sdna(prop, NULL, "active");
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Active Modifier Outline", "");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
   rna_def_userdef_theme_spaces_main(srna);
 }
 
@@ -3536,59 +3544,59 @@ static void rna_def_userdef_theme_space_nla(BlenderRNA *brna)
   prop = RNA_def_property(srna, "strips", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "strip");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Strips", "Action-Clip Strip - Unselected");
+  RNA_def_property_ui_text(prop, "Strips", "Unselected Action-Clip Strip");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "strips_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "strip_select");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Strips Selected", "Action-Clip Strip - Selected");
+  RNA_def_property_ui_text(prop, "Strips Selected", "Selected Action-Clip Strip");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "transition_strips", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_transition");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Transitions", "Transition Strip - Unselected");
+  RNA_def_property_ui_text(prop, "Transitions", "Unselected Transition Strip");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "transition_strips_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_transition_sel");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Transitions Selected", "Transition Strip - Selected");
+  RNA_def_property_ui_text(prop, "Transitions Selected", "Selected Transition Strip");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "meta_strips", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_meta");
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(
-      prop, "Meta Strips", "Meta Strip - Unselected (for grouping related strips)");
+      prop, "Meta Strips", "Unselected Meta Strip (for grouping related strips)");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "meta_strips_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_meta_sel");
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(
-      prop, "Meta Strips Selected", "Meta Strip - Selected (for grouping related strips)");
+      prop, "Meta Strips Selected", "Selected Meta Strip (for grouping related strips)");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
   prop = RNA_def_property(srna, "sound_strips", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_sound");
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(
-      prop, "Sound Strips", "Sound Strip - Unselected (for timing speaker sounds)");
+      prop, "Sound Strips", "Unselected Sound Strip (for timing speaker sounds)");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "sound_strips_selected", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_sound_sel");
   RNA_def_property_array(prop, 3);
   RNA_def_property_ui_text(
-      prop, "Sound Strips Selected", "Sound Strip - Selected (for timing speaker sounds)");
+      prop, "Sound Strips Selected", "Selected Sound Strip (for timing speaker sounds)");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "tweak", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, NULL, "nla_tweaking");
   RNA_def_property_array(prop, 3);
-  RNA_def_property_ui_text(prop, "Tweak", "Color for strip/action being 'tweaked' or edited");
+  RNA_def_property_ui_text(prop, "Tweak", "Color for strip/action being \"tweaked\" or edited");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 
   prop = RNA_def_property(srna, "tweak_duplicate", PROP_FLOAT, PROP_COLOR_GAMMA);
@@ -4756,6 +4764,11 @@ static void rna_def_userdef_view(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Gizmo Size", "Diameter of the gizmo");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
+  prop = RNA_def_property(srna, "gizmo_size_navigate_v3d", PROP_INT, PROP_PIXEL);
+  RNA_def_property_range(prop, 30, 200);
+  RNA_def_property_ui_text(prop, "Navigate Gizmo Size", "The Navigate Gizmo size");
+  RNA_def_property_update(prop, 0, "rna_userdef_gizmo_update");
+
   /* Lookdev */
   prop = RNA_def_property(srna, "lookdev_sphere_size", PROP_INT, PROP_PIXEL);
   RNA_def_property_int_sdna(prop, NULL, "lookdev_sphere_size");
@@ -4855,7 +4868,7 @@ static void rna_def_userdef_view(BlenderRNA *brna)
                            "Translate the names of new data-blocks (objects, materials...)");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
-  /* Statusbar. */
+  /* Status-bar. */
 
   prop = RNA_def_property(srna, "show_statusbar_memory", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "statusbar_flag", STATUSBAR_SHOW_MEMORY);
@@ -5643,7 +5656,7 @@ static void rna_def_userdef_input(BlenderRNA *brna)
   };
 
   static const EnumPropertyItem view_zoom_styles[] = {
-      {USER_ZOOM_CONT,
+      {USER_ZOOM_CONTINUE,
        "CONTINUE",
        0,
        "Continue",
@@ -5728,10 +5741,11 @@ static void rna_def_userdef_input(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_mouse_continuous", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "uiflag", USER_CONTINUOUS_MOUSE);
-  RNA_def_property_ui_text(prop,
-                           "Continuous Grab",
-                           "Allow moving the mouse outside the view on some manipulations "
-                           "(transform, ui control drag)");
+  RNA_def_property_ui_text(
+      prop,
+      "Continuous Grab",
+      "Let the mouse wrap around the view boundaries so mouse movements are not limited by the "
+      "screen size (used by transform, dragging of UI controls, etc.)");
 
   prop = RNA_def_property(srna, "use_drag_immediately", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_RELEASECONFIRM);
@@ -5818,8 +5832,10 @@ static void rna_def_userdef_input(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "tablet_api", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_items(prop, tablet_api);
-  RNA_def_property_ui_text(
-      prop, "Tablet API", "Select the tablet API to use for pressure sensitivity");
+  RNA_def_property_ui_text(prop,
+                           "Tablet API",
+                           "Select the tablet API to use for pressure sensitivity (may require "
+                           "restarting Blender for changes to take effect)");
   RNA_def_property_update(prop, 0, "rna_userdef_tablet_api_update");
 
 #  ifdef WITH_INPUT_NDOF
@@ -6006,7 +6022,7 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
 
   static const EnumPropertyItem anim_player_presets[] = {
       {0, "INTERNAL", 0, "Internal", "Built-in animation player"},
-      {2, "DJV", 0, "DJV", "Open source frame player: http://djv.sourceforge.net"},
+      {2, "DJV", 0, "DJV", "Open source frame player"},
       {3, "FRAMECYCLER", 0, "FrameCycler", "Frame player from IRIDAS"},
       {4, "RV", 0, "RV", "Frame player from Tweak Software"},
       {5, "MPLAYER", 0, "MPlayer", "Media player for video and PNG/JPEG/SGI image sequences"},

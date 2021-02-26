@@ -3704,7 +3704,7 @@ void RNA_property_pointer_set(PointerRNA *ptr,
     }
   }
   else {
-    /* Assigning to an IDProperty desguised as RNA one. */
+    /* Assigning to an IDProperty disguised as RNA one. */
     if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, &RNA_ID)) {
       BKE_reportf(reports,
                   RPT_ERROR,
@@ -3741,7 +3741,7 @@ void RNA_property_pointer_set(PointerRNA *ptr,
       pprop->set(ptr, ptr_value, reports);
     }
   }
-  /* IDProperty desguised as RNA property (and not yet defined in ptr). */
+  /* IDProperty disguised as RNA property (and not yet defined in ptr). */
   else if (prop->flag & PROP_EDITABLE) {
     IDPropertyTemplate val = {0};
     IDProperty *group;
@@ -5826,26 +5826,29 @@ ID *RNA_find_real_ID_and_path(Main *bmain, ID *id, const char **r_path)
     *r_path = "";
   }
 
-  if ((id != NULL) && (id->flag & LIB_EMBEDDED_DATA)) {
-    switch (GS(id->name)) {
-      case ID_NT:
-        if (r_path) {
-          *r_path = "node_tree";
-        }
-        return BKE_node_tree_find_owner_ID(bmain, (bNodeTree *)id);
-      case ID_GR:
-        if (r_path) {
-          *r_path = "collection";
-        }
-        return (ID *)BKE_collection_master_scene_search(bmain, (struct Collection *)id);
-
-      default:
-        return NULL;
-    }
-  }
-  else {
+  if ((id == NULL) || (id->flag & LIB_EMBEDDED_DATA) == 0) {
     return id;
   }
+
+  const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(id);
+  if (r_path) {
+    switch (GS(id->name)) {
+      case ID_NT:
+        *r_path = "node_tree";
+        break;
+      case ID_GR:
+        *r_path = "collection";
+        break;
+      default:
+        BLI_assert(!"Missing handling of embedded id type.");
+    }
+  }
+
+  if (id_type->owner_get == NULL) {
+    BLI_assert(!"Missing handling of embedded id type.");
+    return id;
+  }
+  return id_type->owner_get(bmain, id);
 }
 
 static char *rna_prepend_real_ID_path(Main *bmain, ID *id, char *path, ID **r_real_id)
@@ -6174,7 +6177,7 @@ char *RNA_path_full_property_py_ex(
   }
   else {
     if (use_fallback) {
-      /* fuzzy fallback. be explicit in our ignoranc. */
+      /* Fuzzy fallback. Be explicit in our ignorance. */
       data_path = RNA_property_identifier(prop);
       data_delim = " ... ";
     }

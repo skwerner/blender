@@ -691,6 +691,9 @@ class USERPREF_PT_viewport_display(ViewportPanel, CenterAlignMixIn, Panel):
             col.prop(view, "mini_axis_size", text="Size")
             col.prop(view, "mini_axis_brightness", text="Brightness")
 
+        if view.mini_axis_type == 'GIZMO':
+            col.prop(view, "gizmo_size_navigate_v3d", text="Size")
+
 
 class USERPREF_PT_viewport_quality(ViewportPanel, CenterAlignMixIn, Panel):
     bl_label = "Quality"
@@ -1330,7 +1333,7 @@ class USERPREF_PT_saveload_autorun(FilePathsPanel, Panel):
 
         box = layout.box()
         row = box.row()
-        row.label(text="Excluded Paths:")
+        row.label(text="Excluded Paths")
         row.operator("preferences.autoexec_path_add", text="", icon='ADD', emboss=False)
         for i, path_cmp in enumerate(prefs.autoexec_paths):
             row = box.row()

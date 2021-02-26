@@ -36,6 +36,7 @@
 #include "BKE_blender_undo.h"
 #include "BKE_context.h"
 #include "BKE_gpencil.h"
+#include "BKE_undo_system.h"
 
 #include "ED_gpencil.h"
 
@@ -61,19 +62,23 @@ int ED_gpencil_session_active(void)
   return (BLI_listbase_is_empty(&undo_nodes) == false);
 }
 
+/**
+ * \param step: eUndoStepDir.
+ */
 int ED_undo_gpencil_step(bContext *C, const int step)
 {
   bGPdata **gpd_ptr = NULL, *new_gpd = NULL;
 
   gpd_ptr = ED_gpencil_data_get_pointers(C, NULL);
 
-  if (step == -1) { /* undo */
+  const eUndoStepDir undo_step = (eUndoStepDir)step;
+  if (undo_step == STEP_UNDO) {
     if (cur_node->prev) {
       cur_node = cur_node->prev;
       new_gpd = cur_node->gpd;
     }
   }
-  else if (step == 1) {
+  else if (undo_step == STEP_REDO) {
     if (cur_node->next) {
       cur_node = cur_node->next;
       new_gpd = cur_node->gpd;
@@ -93,7 +98,7 @@ int ED_undo_gpencil_step(bContext *C, const int step)
 
         LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           /* make a copy of source layer and its data */
-          gpld = BKE_gpencil_layer_duplicate(gpl);
+          gpld = BKE_gpencil_layer_duplicate(gpl, true, true);
           BLI_addtail(&gpd->layers, gpld);
         }
       }
@@ -131,7 +136,7 @@ void gpencil_undo_push(bGPdata *gpd)
   // printf("\t\tGP - undo push\n");
 
   if (cur_node) {
-    /* remove all un-done nodes from stack */
+    /* Remove all undone nodes from stack. */
     undo_node = cur_node->next;
 
     while (undo_node) {

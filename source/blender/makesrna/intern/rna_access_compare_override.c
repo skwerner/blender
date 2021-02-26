@@ -42,6 +42,7 @@
 
 #include "BKE_armature.h"
 #include "BKE_idprop.h"
+#include "BKE_idtype.h"
 #include "BKE_lib_override.h"
 #include "BKE_main.h"
 
@@ -133,7 +134,7 @@ bool RNA_property_overridable_get(PointerRNA *ptr, PropertyRNA *prop)
     /* Special handling for insertions of constraints or modifiers... */
     /* TODO Note We may want to add a more generic system to RNA
      * (like a special property in struct of items)
-     * if we get more overrideable collections,
+     * if we get more overridable collections,
      * for now we can live with those special-cases handling I think. */
     if (RNA_struct_is_a(ptr->type, &RNA_Constraint)) {
       bConstraint *con = ptr->data;
@@ -1178,6 +1179,17 @@ void RNA_struct_override_apply(Main *bmain,
 #endif
     }
   }
+
+  /* Some cases (like point caches) may require additional post-processing. */
+  if (RNA_struct_is_a(ptr_dst->type, &RNA_ID)) {
+    ID *id_dst = ptr_dst->data;
+    ID *id_src = ptr_src->data;
+    const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(id_dst);
+    if (id_type->lib_override_apply_post != NULL) {
+      id_type->lib_override_apply_post(id_dst, id_src);
+    }
+  }
+
 #ifdef DEBUG_OVERRIDE_TIMEIT
   TIMEIT_END_AVERAGED(RNA_struct_override_apply);
 #endif

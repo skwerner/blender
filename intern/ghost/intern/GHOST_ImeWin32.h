@@ -303,10 +303,10 @@ class GHOST_ImeWin32 {
    */
   void EndIME(HWND window_handle);
 
-  /* Updatg resultInfo and compInfo */
+  /** Update #resultInfo and #compInfo */
   void UpdateInfo(HWND window_handle);
 
-  /* disable ime when start up */
+  /** Disable IME when start up. */
   void CheckFirst(HWND window_handle);
 
   ImeComposition resultInfo, compInfo;
@@ -365,7 +365,7 @@ class GHOST_ImeWin32 {
    *     MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED);
    *   * "ja-JP" (0x0411)
    *     MAKELANGID(LANG_JAPANESE, SUBLANG_JAPANESE_JAPAN), etc.
-   *   (See <winnt.h> for other available values.)
+   *   (See `winnt.h` for other available values.)
    * This Language ID is used for processing language-specific operations in
    * IME functions.
    */

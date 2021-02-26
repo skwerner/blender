@@ -52,7 +52,6 @@
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "NOD_composite.h"
 #include "node_intern.h" /* own include */
 
 /* -------------------------------------------------------------------- */
@@ -311,6 +310,7 @@ static int backimage_zoom_exec(bContext *C, wmOperator *op)
   snode->zoom *= fac;
   ED_region_tag_redraw(region);
   WM_main_add_notifier(NC_NODE | ND_DISPLAY, NULL);
+  WM_main_add_notifier(NC_SPACE | ND_SPACE_NODE_VIEW, NULL);
 
   return OPERATOR_FINISHED;
 }

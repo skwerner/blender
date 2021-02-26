@@ -145,6 +145,7 @@ typedef struct IconPreviewSize {
 
 typedef struct IconPreview {
   Main *bmain;
+  Depsgraph *depsgraph; /* May be NULL (see #WM_OT_previews_ensure). */
   Scene *scene;
   void *owner;
   ID *id, *id_copy; /* May be NULL! (see ICON_TYPE_PREVIEW case in #ui_icon_ensure_deferred()) */
@@ -198,6 +199,11 @@ static bool check_engine_supports_preview(Scene *scene)
 {
   RenderEngineType *type = RE_engines_find(scene->r.engine);
   return (type->flag & RE_USE_PREVIEW) != 0;
+}
+
+static bool preview_method_is_render(int pr_method)
+{
+  return ELEM(pr_method, PR_ICON_RENDER, PR_BUTS_RENDER, PR_NODE_RENDER);
 }
 
 void ED_preview_free_dbase(void)
@@ -803,6 +809,59 @@ static void object_preview_render(IconPreview *preview, IconPreviewSize *preview
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Action Preview
+ * \{ */
+
+/* Render a pose. It is assumed that the pose has already been applied and that the scene camera is
+ * capturing the pose. In other words, this function just renders from the scene camera without
+ * evaluating the Action stored in preview->id. */
+static void action_preview_render(IconPreview *preview, IconPreviewSize *preview_sized)
+{
+  char err_out[256] = "";
+
+  Depsgraph *depsgraph = preview->depsgraph;
+  /* Not all code paths that lead to this function actually provide a depsgraph.
+   * The "Refresh Asset Preview" button (ED_OT_lib_id_generate_preview) does,
+   * but WM_OT_previews_ensure does not. */
+  BLI_assert(depsgraph != NULL);
+  BLI_assert(preview->scene == DEG_get_input_scene(depsgraph));
+
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
+  Object *camera_eval = scene_eval->camera;
+  if (camera_eval == NULL) {
+    printf("Scene has no camera, unable to render preview of %s without it.\n",
+           preview->id->name + 2);
+    return;
+  }
+
+  /* This renders with the Workbench engine settings stored on the Scene. */
+  ImBuf *ibuf = ED_view3d_draw_offscreen_imbuf_simple(depsgraph,
+                                                      scene_eval,
+                                                      NULL,
+                                                      OB_SOLID,
+                                                      camera_eval,
+                                                      preview_sized->sizex,
+                                                      preview_sized->sizey,
+                                                      IB_rect,
+                                                      V3D_OFSDRAW_NONE,
+                                                      R_ALPHAPREMUL,
+                                                      NULL,
+                                                      NULL,
+                                                      err_out);
+
+  if (err_out[0] != '\0') {
+    printf("Error rendering Action %s preview: %s\n", preview->id->name + 2, err_out);
+  }
+
+  if (ibuf) {
+    icon_copy_rect(ibuf, preview_sized->sizex, preview_sized->sizey, preview_sized->rect);
+    IMB_freeImBuf(ibuf);
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name New Shader Preview System
  * \{ */
 
@@ -1179,7 +1238,7 @@ static void icon_copy_rect(ImBuf *ibuf, uint w, uint h, uint *rect)
     return;
   }
 
-  /* waste of cpu cyles... but the imbuf API has no other way to scale fast (ton) */
+  /* Waste of cpu cycles... but the imbuf API has no other way to scale fast (ton). */
   ima = IMB_dupImBuf(ibuf);
 
   if (!ima) {
@@ -1352,13 +1411,12 @@ static void common_preview_startjob(void *customdata,
  */
 static void other_id_types_preview_render(IconPreview *ip,
                                           IconPreviewSize *cur_size,
-                                          const bool is_deferred,
+                                          const int pr_method,
                                           short *stop,
                                           short *do_update,
                                           float *progress)
 {
   ShaderPreview *sp = MEM_callocN(sizeof(ShaderPreview), "Icon ShaderPreview");
-  const bool is_render = !is_deferred;
 
   /* These types don't use the ShaderPreview mess, they have their own types and functions. */
   BLI_assert(!ip->id || !ELEM(GS(ip->id->name), ID_OB));
@@ -1368,7 +1426,7 @@ static void other_id_types_preview_render(IconPreview *ip,
   sp->owner = ip->owner;
   sp->sizex = cur_size->sizex;
   sp->sizey = cur_size->sizey;
-  sp->pr_method = is_render ? PR_ICON_RENDER : PR_ICON_DEFERRED;
+  sp->pr_method = pr_method;
   sp->pr_rect = cur_size->rect;
   sp->id = ip->id;
   sp->id_copy = ip->id_copy;
@@ -1376,7 +1434,7 @@ static void other_id_types_preview_render(IconPreview *ip,
   sp->own_id_copy = false;
   Material *ma = NULL;
 
-  if (is_render) {
+  if (sp->pr_method == PR_ICON_RENDER) {
     BLI_assert(ip->id);
 
     /* grease pencil use its own preview file */
@@ -1424,6 +1482,8 @@ static void icon_preview_startjob_all_sizes(void *customdata,
 
   for (cur_size = ip->sizes.first; cur_size; cur_size = cur_size->next) {
     PreviewImage *prv = ip->owner;
+    /* Is this a render job or a deferred loading job? */
+    const int pr_method = (prv->tag & PRV_TAG_DEFFERED) ? PR_ICON_DEFERRED : PR_ICON_RENDER;
 
     if (*stop) {
       break;
@@ -1434,7 +1494,15 @@ static void icon_preview_startjob_all_sizes(void *customdata,
       continue;
     }
 
-    if (!check_engine_supports_preview(ip->scene)) {
+    /* check_engine_supports_preview() checks whether the engine supports "preview mode" (think:
+     * Material Preview). This check is only relevant when the render function called below is
+     * going to use such a mode. Object and Action render functions use Solid mode, though, so they
+     * can skip this test. */
+    /* TODO: Decouple the ID-type-specific render functions from this function, so that it's not
+     * necessary to know here what happens inside lower-level functions. */
+    const bool use_solid_render_mode = (ip->id != NULL) && ELEM(GS(ip->id->name), ID_OB, ID_AC);
+    if (!use_solid_render_mode && preview_method_is_render(pr_method) &&
+        !check_engine_supports_preview(ip->scene)) {
       continue;
     }
 
@@ -1445,14 +1513,21 @@ static void icon_preview_startjob_all_sizes(void *customdata,
     }
 #endif
 
-    if (ip->id && ELEM(GS(ip->id->name), ID_OB)) {
-      /* Much simpler than the ShaderPreview mess used for other ID types. */
-      object_preview_render(ip, cur_size);
+    if (ip->id != NULL) {
+      switch (GS(ip->id->name)) {
+        case ID_OB:
+          /* Much simpler than the ShaderPreview mess used for other ID types. */
+          object_preview_render(ip, cur_size);
+          continue;
+        case ID_AC:
+          action_preview_render(ip, cur_size);
+          continue;
+        default:
+          /* Fall through to the same code as the `ip->id == NULL` case. */
+          break;
+      }
     }
-    else {
-      other_id_types_preview_render(
-          ip, cur_size, (prv->tag & PRV_TAG_DEFFERED), stop, do_update, progress);
-    }
+    other_id_types_preview_render(ip, cur_size, pr_method, stop, do_update, progress);
   }
 }
 
@@ -1532,7 +1607,8 @@ static void icon_preview_free(void *customdata)
   MEM_freeN(ip);
 }
 
-void ED_preview_icon_render(Main *bmain, Scene *scene, ID *id, uint *rect, int sizex, int sizey)
+void ED_preview_icon_render(
+    Main *bmain, Depsgraph *depsgraph, Scene *scene, ID *id, uint *rect, int sizex, int sizey)
 {
   IconPreview ip = {NULL};
   short stop = false, update = false;
@@ -1542,6 +1618,7 @@ void ED_preview_icon_render(Main *bmain, Scene *scene, ID *id, uint *rect, int s
 
   ip.bmain = bmain;
   ip.scene = scene;
+  ip.depsgraph = depsgraph;
   ip.owner = BKE_previewimg_id_ensure(id);
   ip.id = id;
   /* Control isn't given back to the caller until the preview is done. So we don't need to copy
@@ -1586,7 +1663,8 @@ void ED_preview_icon_job(
 
   /* customdata for preview thread */
   ip->bmain = CTX_data_main(C);
-  ip->scene = CTX_data_scene(C);
+  ip->depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  ip->scene = DEG_get_input_scene(ip->depsgraph);
   ip->owner = owner;
   ip->id = id;
   ip->id_copy = duplicate_ids(id, false);
@@ -1634,7 +1712,7 @@ void ED_preview_shader_job(const bContext *C,
   /* Use workspace render only for buttons Window,
    * since the other previews are related to the datablock. */
 
-  if (!check_engine_supports_preview(scene)) {
+  if (preview_method_is_render(method) && !check_engine_supports_preview(scene)) {
     return;
   }
 

@@ -51,7 +51,6 @@
 
 #include "RNA_access.h"
 
-#include "SEQ_sequencer.h"
 #include "SEQ_utils.h"
 
 #include "UI_interface.h"
@@ -449,9 +448,9 @@ static void sequencer_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Sequencer", SPACE_SEQ, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "SEQUENCER_OT_image_strip_add", image_drop_poll, sequencer_drop_copy);
-  WM_dropbox_add(lb, "SEQUENCER_OT_movie_strip_add", movie_drop_poll, sequencer_drop_copy);
-  WM_dropbox_add(lb, "SEQUENCER_OT_sound_strip_add", sound_drop_poll, sequencer_drop_copy);
+  WM_dropbox_add(lb, "SEQUENCER_OT_image_strip_add", image_drop_poll, sequencer_drop_copy, NULL);
+  WM_dropbox_add(lb, "SEQUENCER_OT_movie_strip_add", movie_drop_poll, sequencer_drop_copy, NULL);
+  WM_dropbox_add(lb, "SEQUENCER_OT_sound_strip_add", sound_drop_poll, sequencer_drop_copy, NULL);
 }
 
 /* ************* end drop *********** */
@@ -954,7 +953,7 @@ void ED_spacetype_sequencer(void)
   art->listener = sequencer_main_region_listener;
   BLI_addhead(&st->regiontypes, art);
 
-  /* Hud. */
+  /* HUD. */
   art = ED_area_type_hud(st->spaceid);
   BLI_addhead(&st->regiontypes, art);
 

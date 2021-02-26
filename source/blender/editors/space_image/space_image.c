@@ -24,8 +24,6 @@
 #include "DNA_gpencil_types.h"
 #include "DNA_image_types.h"
 #include "DNA_mask_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -37,14 +35,9 @@
 
 #include "BKE_colortools.h"
 #include "BKE_context.h"
-#include "BKE_editmesh.h"
 #include "BKE_image.h"
-#include "BKE_layer.h"
 #include "BKE_lib_id.h"
-#include "BKE_material.h"
-#include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_workspace.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -56,7 +49,6 @@
 
 #include "ED_image.h"
 #include "ED_mask.h"
-#include "ED_mesh.h"
 #include "ED_node.h"
 #include "ED_render.h"
 #include "ED_screen.h"
@@ -65,19 +57,13 @@
 #include "ED_uvedit.h"
 
 #include "WM_api.h"
-#include "WM_message.h"
 #include "WM_types.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "GPU_batch_presets.h"
-#include "GPU_framebuffer.h"
-#include "GPU_viewport.h"
-
 #include "DRW_engine.h"
-#include "DRW_engine_types.h"
 
 #include "image_intern.h"
 
@@ -131,7 +117,7 @@ static SpaceLink *image_create(const ScrArea *UNUSED(area), const Scene *UNUSED(
   simage->overlay.flag = SI_OVERLAY_SHOW_OVERLAYS;
 
   BKE_imageuser_default(&simage->iuser);
-  simage->iuser.flag = IMA_SHOW_STEREO | IMA_ANIM_ALWAYS;
+  simage->iuser.flag = IMA_SHOW_STEREO | IMA_ANIM_ALWAYS | IMA_SHOW_MAX_RESOLUTION;
 
   BKE_scopes_new(&simage->scopes);
   simage->sample_line_hist.height = 100;
@@ -234,6 +220,7 @@ static void image_operatortypes(void)
   WM_operatortype_append(IMAGE_OT_pack);
   WM_operatortype_append(IMAGE_OT_unpack);
 
+  WM_operatortype_append(IMAGE_OT_flip);
   WM_operatortype_append(IMAGE_OT_invert);
   WM_operatortype_append(IMAGE_OT_resize);
 
@@ -293,7 +280,7 @@ static void image_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Image", SPACE_IMAGE, 0);
 
-  WM_dropbox_add(lb, "IMAGE_OT_open", image_drop_poll, image_drop_copy);
+  WM_dropbox_add(lb, "IMAGE_OT_open", image_drop_poll, image_drop_copy, NULL);
 }
 
 /**
@@ -642,6 +629,8 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
   Mask *mask = NULL;
   Scene *scene = CTX_data_scene(C);
   View2D *v2d = &region->v2d;
+  Image *image = ED_space_image(sima);
+  const bool show_viewer = (image && image->source == IMA_SRC_VIEWER);
 
   /* XXX not supported yet, disabling for now */
   scene->r.scemode &= ~R_COMP_CROP;
@@ -656,8 +645,14 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
     mask = ED_space_image_get_mask(sima);
   }
 
-  /* we draw image in pixelspace */
+  if (show_viewer) {
+    BLI_thread_lock(LOCK_DRAW_IMAGE);
+  }
   DRW_draw_view(C);
+  if (show_viewer) {
+    BLI_thread_unlock(LOCK_DRAW_IMAGE);
+  }
+
   draw_image_main_helpers(C, region);
 
   /* Draw Meta data of the image isn't added to the DrawManager as it is
@@ -685,11 +680,8 @@ static void image_main_region_draw(const bContext *C, ARegion *region)
   UI_view2d_view_restore(C);
 
   if (mask) {
-    Image *image = ED_space_image(sima);
-    int width, height, show_viewer;
+    int width, height;
     float aspx, aspy;
-
-    show_viewer = (image && image->source == IMA_SRC_VIEWER);
 
     if (show_viewer) {
       /* ED_space_image_get* will acquire image buffer which requires

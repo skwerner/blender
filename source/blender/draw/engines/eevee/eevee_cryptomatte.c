@@ -161,6 +161,14 @@ void EEVEE_cryptomatte_output_init(EEVEE_ViewLayerData *UNUSED(sldata),
     g_data->cryptomatte_download_buffer = MEM_malloc_arrayN(
         sizeof(float), buffer_size * num_cryptomatte_layers, __func__);
   }
+  else {
+    /* During multiview rendering the `cryptomatte_accum_buffer` is deallocated after all views
+     * have been rendered. Clear it here to be reused by the next view. */
+    memset(g_data->cryptomatte_accum_buffer,
+           0,
+           buffer_size * eevee_cryptomatte_pixel_stride(view_layer) *
+               sizeof(EEVEE_CryptomatteSample));
+  }
 
   DRW_texture_ensure_fullscreen_2d(&txl->cryptomatte, format, 0);
   GPU_framebuffer_ensure_config(&fbl->cryptomatte_fb,
@@ -313,12 +321,6 @@ void EEVEE_cryptomatte_cache_populate(EEVEE_Data *vedata, EEVEE_ViewLayerData *s
   }
 }
 
-void EEVEE_cryptomatte_cache_finish(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *vedata)
-{
-  EEVEE_PrivateData *g_data = vedata->stl->g_data;
-  BKE_cryptomatte_finish(g_data->cryptomatte_session);
-}
-
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -355,7 +357,7 @@ static void eevee_cryptomatte_download_buffer(EEVEE_Data *vedata, GPUFrameBuffer
                              download_buffer);
 
   /* Integrate download buffer into the accum buffer.
-   * The download buffer contains upto 3 floats per pixel (one float per cryptomatte layer.
+   * The download buffer contains up to 3 floats per pixel (one float per cryptomatte layer.
    *
    * NOTE: here we deviate from the cryptomatte standard. During integration the standard always
    * sort the samples by its weight to make sure that samples with the lowest weight
@@ -495,7 +497,7 @@ static void eevee_cryptomatte_postprocess_weights(EEVEE_Data *vedata)
     volumetric_transmittance_buffer = GPU_texture_read(
         txl->volume_transmittance_accum, GPU_DATA_FLOAT, 0);
   }
-  const int num_samples = effects->taa_current_sample;
+  const int num_samples = effects->taa_current_sample - 1;
 
   int accum_pixel_index = 0;
   int accum_pixel_stride = eevee_cryptomatte_pixel_stride(view_layer);

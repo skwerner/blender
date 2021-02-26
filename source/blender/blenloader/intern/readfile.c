@@ -94,6 +94,7 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
+#include "BKE_undo_system.h"
 #include "BKE_workspace.h"
 
 #include "DRW_engine.h"
@@ -1294,12 +1295,12 @@ static ssize_t fd_read_from_memfile(FileData *filedata,
       seek += readsize;
       if (r_is_memchunck_identical != NULL) {
         /* `is_identical` of current chunk represents whether it changed compared to previous undo
-         * step. this is fine in redo case (filedata->undo_direction > 0), but not in undo case,
-         * where we need an extra flag defined when saving the next (future) step after the one we
-         * want to restore, as we are supposed to 'come from' that future undo step, and not the
-         * one before current one. */
-        *r_is_memchunck_identical &= filedata->undo_direction > 0 ? chunk->is_identical :
-                                                                    chunk->is_identical_future;
+         * step. this is fine in redo case, but not in undo case, where we need an extra flag
+         * defined when saving the next (future) step after the one we want to restore, as we are
+         * supposed to 'come from' that future undo step, and not the one before current one. */
+        *r_is_memchunck_identical &= filedata->undo_direction == STEP_REDO ?
+                                         chunk->is_identical :
+                                         chunk->is_identical_future;
       }
     } while (totread < size);
 
@@ -1782,25 +1783,25 @@ BlendThumbnail *BLO_thumbnail_from_file(const char *filepath)
 /** \name Old/New Pointer Map
  * \{ */
 
-/* only direct databocks */
+/* Only direct data-blocks. */
 static void *newdataadr(FileData *fd, const void *adr)
 {
   return oldnewmap_lookup_and_inc(fd->datamap, adr, true);
 }
 
-/* only direct databocks */
+/* Only direct data-blocks. */
 static void *newdataadr_no_us(FileData *fd, const void *adr)
 {
   return oldnewmap_lookup_and_inc(fd->datamap, adr, false);
 }
 
-/* direct datablocks with global linking */
+/* Direct datablocks with global linking. */
 void *blo_read_get_new_globaldata_address(FileData *fd, const void *adr)
 {
   return oldnewmap_lookup_and_inc(fd->globmap, adr, true);
 }
 
-/* used to restore packed data after undo */
+/* Used to restore packed data after undo. */
 static void *newpackedadr(FileData *fd, const void *adr)
 {
   if (fd->packedmap && adr) {
@@ -2400,11 +2401,12 @@ static int direct_link_id_restore_recalc(const FileData *fd,
 
     /* Tags that were set between the target state and the current state,
      * that we need to perform again. */
-    if (fd->undo_direction < 0) {
+    if (fd->undo_direction == STEP_UNDO) {
       /* Undo: tags from target to the current state. */
       recalc |= id_current->recalc_up_to_undo_push;
     }
     else {
+      BLI_assert(fd->undo_direction == STEP_REDO);
       /* Redo: tags from current to the target state. */
       recalc |= id_target->recalc_up_to_undo_push;
     }
@@ -2738,7 +2740,7 @@ static void lib_link_window_scene_data_restore(wmWindow *win, Scene *scene, View
 
           v3d->localvd->camera = scene->camera;
 
-          /* Localview can become invalid during undo/redo steps,
+          /* Local-view can become invalid during undo/redo steps,
            * so we exit it when no could be found. */
           for (base = view_layer->object_bases.first; base; base = base->next) {
             if (base->local_view_bits & v3d->local_view_uuid) {
@@ -2750,7 +2752,7 @@ static void lib_link_window_scene_data_restore(wmWindow *win, Scene *scene, View
             v3d->localvd = NULL;
             v3d->local_view_uuid = 0;
 
-            /* Regionbase storage is different depending if the space is active. */
+            /* Region-base storage is different depending if the space is active. */
             ListBase *regionbase = (sl == area->spacedata.first) ? &area->regionbase :
                                                                    &sl->regionbase;
             LISTBASE_FOREACH (ARegion *, region, regionbase) {
@@ -3916,6 +3918,26 @@ static void lib_link_all(FileData *fd, Main *bmain)
   }
   FOREACH_MAIN_ID_END;
 
+#ifndef NDEBUG
+  /* Double check we do not have any 'need link' tag remaining, this should never be the case once
+   * this function has run. */
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    BLI_assert((id->tag & LIB_TAG_NEED_LINK) == 0);
+  }
+  FOREACH_MAIN_ID_END;
+#endif
+}
+
+/**
+ * Checks to perform after `lib_link_all`.
+ * Those operations cannot perform properly in a split bmain case, since some data from other
+ * bmain's (aka libraries) may not have been processed yet.
+ */
+static void after_liblink_merged_bmain_process(Main *bmain)
+{
+  /* We only expect a merged Main here, not a split one. */
+  BLI_assert((bmain->prev == NULL) && (bmain->next == NULL));
+
   /* Check for possible cycles in scenes' 'set' background property. */
   lib_link_scenes_check_set(bmain);
 
@@ -3926,15 +3948,6 @@ static void lib_link_all(FileData *fd, Main *bmain)
   /* We have to rebuild that runtime information *after* all data-blocks have been properly linked.
    */
   BKE_main_collections_parent_relations_rebuild(bmain);
-
-#ifndef NDEBUG
-  /* Double check we do not have any 'need link' tag remaining, this should never be the case once
-   * this function has run. */
-  FOREACH_MAIN_ID_BEGIN (bmain, id) {
-    BLI_assert((id->tag & LIB_TAG_NEED_LINK) == 0);
-  }
-  FOREACH_MAIN_ID_END;
-#endif
 }
 
 /** \} */
@@ -4157,6 +4170,7 @@ BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath)
     blo_join_main(&mainlist);
 
     lib_link_all(fd, bfd->main);
+    after_liblink_merged_bmain_process(bfd->main);
 
     /* Skip in undo case. */
     if (fd->memfile == NULL) {
@@ -4582,6 +4596,13 @@ static bool object_in_any_collection(Main *bmain, Object *ob)
 {
   LISTBASE_FOREACH (Collection *, collection, &bmain->collections) {
     if (BKE_collection_has_object(collection, ob)) {
+      return true;
+    }
+  }
+
+  LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+    if (scene->master_collection != NULL &&
+        BKE_collection_has_object(scene->master_collection, ob)) {
       return true;
     }
   }
@@ -5105,6 +5126,7 @@ static void library_link_end(Main *mainl,
   mainl = NULL; /* blo_join_main free's mainl, cant use anymore */
 
   lib_link_all(*fd, mainvar);
+  after_liblink_merged_bmain_process(mainvar);
 
   /* Some versioning code does expect some proper userrefcounting, e.g. in conversion from
    * groups to collections... We could optimize out that first call when we are reading a
@@ -5251,12 +5273,13 @@ static void read_library_linked_id(
   }
   else {
     BLO_reportf_wrap(reports,
-                     RPT_WARNING,
+                     RPT_INFO,
                      TIP_("LIB: %s: '%s' missing from '%s', parent '%s'"),
                      BKE_idtype_idcode_to_name(GS(id->name)),
                      id->name + 2,
                      mainvar->curlib->filepath_abs,
                      library_parent_filepath(mainvar->curlib));
+    fd->library_id_missing_count++;
 
     /* Generate a placeholder for this ID (simplified version of read_libblock actually...). */
     if (r_id) {
@@ -5410,7 +5433,8 @@ static FileData *read_library_file_data(FileData *basefd,
 
   if (fd == NULL) {
     BLO_reportf_wrap(
-        basefd->reports, RPT_WARNING, TIP_("Cannot find lib '%s'"), mainptr->curlib->filepath_abs);
+        basefd->reports, RPT_INFO, TIP_("Cannot find lib '%s'"), mainptr->curlib->filepath_abs);
+    fd->library_file_missing_count++;
   }
 
   return fd;
@@ -5459,6 +5483,9 @@ static void read_libraries(FileData *basefd, ListBase *mainlist)
         /* Test if linked data-locks need to read further linked data-locks
          * and create link placeholders for them. */
         BLO_expand_main(fd, mainptr);
+
+        basefd->library_file_missing_count += fd->library_file_missing_count;
+        basefd->library_id_missing_count += fd->library_id_missing_count;
       }
     }
   }
@@ -5504,6 +5531,15 @@ static void read_libraries(FileData *basefd, ListBase *mainlist)
     mainptr->curlib->filedata = NULL;
   }
   BKE_main_free(main_newid);
+
+  if (basefd->library_file_missing_count != 0 || basefd->library_id_missing_count != 0) {
+    BKE_reportf(basefd->reports,
+                RPT_WARNING,
+                "LIB: %d libraries and %d linked data-blocks are missing, please check the "
+                "Info and Outliner editors for details",
+                basefd->library_file_missing_count,
+                basefd->library_id_missing_count);
+  }
 }
 
 void *BLO_read_get_new_data_address(BlendDataReader *reader, const void *old_address)

@@ -33,7 +33,6 @@
 
 #include "BKE_action.h"
 #include "BKE_anim_data.h"
-#include "BKE_armature.h"
 #include "BKE_idprop.h"
 #include "BKE_layer.h"
 #include "BKE_object.h"
@@ -312,7 +311,7 @@ void poseAnim_mapping_autoKeyframe(bContext *C, Scene *scene, ListBase *pfLinks,
       continue;
     }
 
-    /* add datasource override for the PoseChannel, to be used later */
+    /* Add data-source override for the PoseChannel, to be used later. */
     ANIM_relative_keyingset_add_source(&dsources, &pfl->ob->id, &RNA_PoseBone, pchan);
 
     /* clear any unkeyed tags */

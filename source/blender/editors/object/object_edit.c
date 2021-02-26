@@ -683,6 +683,32 @@ bool ED_object_editmode_exit(bContext *C, int flag)
   return ED_object_editmode_exit_ex(bmain, scene, obedit, flag);
 }
 
+bool ED_object_editmode_exit_multi_ex(Main *bmain, Scene *scene, ViewLayer *view_layer, int flag)
+{
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  if (obedit == NULL) {
+    return false;
+  }
+  bool changed = false;
+  const short obedit_type = obedit->type;
+
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+    Object *ob = base->object;
+    if ((ob->type == obedit_type) && (ob->mode & OB_MODE_EDIT)) {
+      changed |= ED_object_editmode_exit_ex(bmain, scene, base->object, flag);
+    }
+  }
+  return changed;
+}
+
+bool ED_object_editmode_exit_multi(bContext *C, int flag)
+{
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  return ED_object_editmode_exit_multi_ex(bmain, scene, view_layer, flag);
+}
+
 bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag)
 {
   bool ok = false;
@@ -692,20 +718,26 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
     return false;
   }
 
-  /* this checks actual object->data, for cases when other scenes have it in editmode context */
-  if (BKE_object_is_in_editmode(ob)) {
-    return true;
-  }
-
   if (BKE_object_obdata_is_libdata(ob)) {
     /* Ideally the caller should check this. */
     CLOG_WARN(&LOG, "Unable to enter edit-mode on library data for object '%s'", ob->id.name + 2);
     return false;
   }
 
-  ob->restore_mode = ob->mode;
+  if ((ob->mode & OB_MODE_EDIT) == 0) {
+    ob->restore_mode = ob->mode;
 
-  ob->mode = OB_MODE_EDIT;
+    ob->mode = OB_MODE_EDIT;
+  }
+
+  /* This checks actual `object->data`,
+   * for cases when other scenes have it in edit-mode context.
+   *
+   * It's important to run this after setting the object's mode (above), since in rare cases
+   * the object may have the edit-data but not it's object-mode set. See T85974. */
+  if (BKE_object_is_in_editmode(ob)) {
+    return true;
+  }
 
   if (ob->type == OB_MESH) {
     ok = true;

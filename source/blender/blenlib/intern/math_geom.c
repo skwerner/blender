@@ -1438,12 +1438,12 @@ int isect_line_sphere_v3(const float l1[3],
   /* adapted for use in blender by Campbell Barton - 2011
    *
    * atelier iebele abel - 2001
-   * atelier@iebele.nl
+   * <atelier@iebele.nl>
    * http://www.iebele.nl
    *
    * sphere_line_intersection function adapted from:
    * http://astronomy.swin.edu.au/pbourke/geometry/sphereline
-   * Paul Bourke pbourke@swin.edu.au
+   * Paul Bourke <pbourke@swin.edu.au>
    */
 
   const float ldir[3] = {
@@ -4886,8 +4886,8 @@ void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x
     len1 = (1.0f / len_v3(v1));
     len2 = (1.0f / len_v3(v2));
 
-    winmat[2][0] += len1 * winmat[0][0] * x;
-    winmat[2][1] += len2 * winmat[1][1] * y;
+    winmat[2][0] -= len1 * winmat[0][0] * x;
+    winmat[2][1] -= len2 * winmat[1][1] * y;
   }
   else {
     winmat[3][0] += x;
@@ -5233,7 +5233,7 @@ void map_to_sphere(float *r_u, float *r_v, const float x, const float y, const f
   len = sqrtf(x * x + y * y + z * z);
   if (len > 0.0f) {
     if (UNLIKELY(x == 0.0f && y == 0.0f)) {
-      *r_u = 0.0f; /* othwise domain error */
+      *r_u = 0.0f; /* Otherwise domain error. */
     }
     else {
       *r_u = (1.0f - atan2f(x, y) / (float)M_PI) / 2.0f;
@@ -5836,7 +5836,7 @@ bool form_factor_visible_quad(const float p[3],
   return true;
 }
 
-/* altivec optimization, this works, but is unused */
+/* `AltiVec` optimization, this works, but is unused. */
 
 #if 0
 #  include <Accelerate/Accelerate.h>
@@ -5907,7 +5907,7 @@ static float ff_quad_form_factor(float *p, float *n, float *q0, float *q1, float
 
 #if 0
 
-#  include <xmmintrin.h>
+#  include "BLI_simd.h"
 
 static __m128 sse_approx_acos(__m128 x)
 {
@@ -6125,7 +6125,7 @@ bool is_quad_convex_v3(const float v1[3], const float v2[3], const float v3[3], 
 
 bool is_quad_convex_v2(const float v1[2], const float v2[2], const float v3[2], const float v4[2])
 {
-  /* linetests, the 2 diagonals have to instersect to be convex */
+  /* Line-tests, the 2 diagonals have to intersect to be convex. */
   return (isect_seg_seg_v2(v1, v3, v2, v4) > 0);
 }
 
@@ -6233,7 +6233,7 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
     return (1.0f / 3.0f) * 0.75f;
   }
   if (tan_dot < -1.0f + eps) {
-    /* parallele tangents (half-circle) */
+    /* Parallel tangents (half-circle). */
     return (1.0f / 2.0f);
   }
 

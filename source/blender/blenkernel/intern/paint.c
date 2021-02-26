@@ -127,7 +127,7 @@ static void palette_blend_read_data(BlendDataReader *reader, ID *id)
 
 static void palette_undo_preserve(BlendLibReader *UNUSED(reader), ID *id_new, ID *id_old)
 {
-  /* Whole Palette is preserved accross undo's, and it has no extra pointer, simple. */
+  /* Whole Palette is preserved across undo-steps, and it has no extra pointer, simple. */
   /* Note: We do not care about potential internal references to self here, Palette has none. */
   /* Note: We do not swap IDProperties, as dealing with potential ID pointers in those would be
    *       fairly delicate. */
@@ -151,6 +151,7 @@ IDTypeInfo IDType_ID_PAL = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = palette_blend_write,
     .blend_read_data = palette_blend_read_data,
@@ -158,6 +159,8 @@ IDTypeInfo IDType_ID_PAL = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = palette_undo_preserve,
+
+    .lib_override_apply_post = NULL,
 };
 
 static void paint_curve_copy_data(Main *UNUSED(bmain),
@@ -214,6 +217,7 @@ IDTypeInfo IDType_ID_PC = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = paint_curve_blend_write,
     .blend_read_data = paint_curve_blend_read_data,
@@ -221,6 +225,8 @@ IDTypeInfo IDType_ID_PC = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 const char PAINT_CURSOR_SCULPT[3] = {255, 100, 100};
@@ -1485,6 +1491,14 @@ void BKE_sculptsession_free(Object *ob)
       }
       MEM_SAFE_FREE(ss->pose_ik_chain_preview->segments);
       MEM_SAFE_FREE(ss->pose_ik_chain_preview);
+    }
+
+    if (ss->boundary_preview) {
+      MEM_SAFE_FREE(ss->boundary_preview->vertices);
+      MEM_SAFE_FREE(ss->boundary_preview->edges);
+      MEM_SAFE_FREE(ss->boundary_preview->distance);
+      MEM_SAFE_FREE(ss->boundary_preview->edit_info);
+      MEM_SAFE_FREE(ss->boundary_preview);
     }
 
     BKE_sculptsession_free_vwpaint_data(ob->sculpt);

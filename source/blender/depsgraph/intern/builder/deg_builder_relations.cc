@@ -434,6 +434,13 @@ void DepsgraphRelationBuilder::add_particle_forcefield_relations(const Operation
         add_relation(mod_key, key, name);
       }
 
+      /* Force field Texture. */
+      if ((relation->pd != nullptr) && (relation->pd->forcefield == PFIELD_TEXTURE) &&
+          (relation->pd->tex != nullptr)) {
+        ComponentKey tex_key(&relation->pd->tex->id, NodeType::GENERIC_DATABLOCK);
+        add_relation(tex_key, key, "Force field Texture");
+      }
+
       /* Smoke flow relations. */
       if (relation->pd->forcefield == PFIELD_FLUIDFLOW && relation->pd->f_source) {
         ComponentKey trf_key(&relation->pd->f_source->id, NodeType::TRANSFORM);
@@ -740,6 +747,11 @@ void DepsgraphRelationBuilder::build_object(Object *object)
   /* Particle systems. */
   if (object->particlesystem.first != nullptr) {
     build_particle_systems(object);
+  }
+  /* Force field Texture. */
+  if ((object->pd != nullptr) && (object->pd->forcefield == PFIELD_TEXTURE) &&
+      (object->pd->tex != nullptr)) {
+    build_texture(object->pd->tex);
   }
   /* Proxy object to copy from. */
   build_object_proxy_from(object);
@@ -1226,7 +1238,7 @@ void DepsgraphRelationBuilder::build_constraints(ID *id,
           // TODO: loc vs rot vs scale?
           if (&ct->tar->id == id) {
             /* Constraint targeting own object:
-             * - This case is fine IFF we're dealing with a bone
+             * - This case is fine IF we're dealing with a bone
              *   constraint pointing to its own armature. In that
              *   case, it's just transform -> bone.
              * - If however it is a real self targeting case, just
@@ -1754,6 +1766,11 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
         ComponentKey effector_geometry_key(&effector_relation->ob->id, NodeType::GEOMETRY);
         add_relation(effector_geometry_key, rb_init_key, "RigidBody Field");
       }
+      if ((effector_relation->pd->forcefield == PFIELD_TEXTURE) &&
+          (effector_relation->pd->tex != nullptr)) {
+        ComponentKey tex_key(&effector_relation->pd->tex->id, NodeType::GENERIC_DATABLOCK);
+        add_relation(tex_key, rb_init_key, "Force field Texture");
+      }
     }
   }
   /* Objects. */
@@ -1797,7 +1814,7 @@ void DepsgraphRelationBuilder::build_rigidbody(Scene *scene)
                      RELATION_FLAG_GODMODE);
       }
 
-      /* Final transform is whetever solver gave to us. */
+      /* Final transform is whatever the solver gave to us. */
       if (object->rigidbody_object->type == RBO_TYPE_ACTIVE) {
         /* We do not have to update the objects final transform after the simulation if it is
          * passive or controlled by the animation system in blender.
@@ -2479,7 +2496,7 @@ void DepsgraphRelationBuilder::build_material(Material *material)
   /* Animated / driven parameters (without nodetree). */
   OperationKey material_key(&material->id, NodeType::SHADING, OperationCode::MATERIAL_UPDATE);
   ComponentKey parameters_key(&material->id, NodeType::PARAMETERS);
-  add_relation(parameters_key, material_key, "Material's paramters");
+  add_relation(parameters_key, material_key, "Material's parameters");
 
   /* material's nodetree */
   if (material->nodetree != nullptr) {

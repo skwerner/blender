@@ -71,7 +71,6 @@ enum transDataTracking_Mode {
 
 /* -------------------------------------------------------------------- */
 /** \name Clip Editor Motion Tracking Transform Creation
- *
  * \{ */
 
 typedef struct TransformInitContext {
@@ -80,7 +79,7 @@ typedef struct TransformInitContext {
   TransInfo *t;
   TransDataContainer *tc;
 
-  /* MOTE: There pointers will be `nullptr` during counting step.
+  /* NOTE: These pointers will be `nullptr` during counting step.
    * This means, that the transformation data initialization functions are to increment
    * `tc->data_len` instead of filling in the transformation data when these pointers are
    * `nullptr`. For simplicity, check the `current.td` against `nullptr`.
@@ -358,7 +357,7 @@ static void createTransTrackingTracksData(bContext *C, TransInfo *t)
   init_context.t = t;
   init_context.tc = tc;
 
-  /* Count required tranformation data. */
+  /* Count required transformation data. */
 
   tc->data_len = 0;
 
@@ -567,7 +566,6 @@ void createTransTrackingData(bContext *C, TransInfo *t)
 
 /* -------------------------------------------------------------------- */
 /** \name recalc Motion Tracking TransData
- *
  * \{ */
 
 static void cancelTransTracking(TransInfo *t)

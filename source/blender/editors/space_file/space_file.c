@@ -261,7 +261,7 @@ static void file_ensure_valid_region_state(bContext *C,
     }
   }
   /* If there's an file-operation, ensure we have the option and execute region */
-  else if (sfile->op) {
+  else if (sfile->op && !BKE_area_find_region_type(area, RGN_TYPE_TOOL_PROPS)) {
     ARegion *region_ui = file_ui_region_ensure(area, region_tools);
     ARegion *region_execute = file_execute_region_ensure(area, region_ui);
     ARegion *region_props = file_tool_props_region_ensure(area, region_execute);
@@ -276,7 +276,7 @@ static void file_ensure_valid_region_state(bContext *C,
     needs_init = true;
   }
   /* If there's _no_ file-operation, ensure we _don't_ have the option and execute region */
-  else {
+  else if (!sfile->op) {
     ARegion *region_props = BKE_area_find_region_type(area, RGN_TYPE_TOOL_PROPS);
     ARegion *region_execute = BKE_area_find_region_type(area, RGN_TYPE_EXECUTE);
     ARegion *region_ui = file_ui_region_ensure(area, region_tools);
@@ -463,6 +463,12 @@ static void file_main_region_listener(const wmRegionListenerParams *params)
           break;
       }
       break;
+    case NC_ID:
+      if (ELEM(wmn->action, NA_RENAME)) {
+        /* In case the filelist shows ID names. */
+        ED_region_tag_redraw(region);
+      }
+      break;
   }
 }
 
@@ -552,7 +558,7 @@ static void file_main_region_draw(const bContext *C, ARegion *region)
     v2d->keepofs |= V2D_LOCKOFS_Y;
 
     /* XXX this happens on scaling down Screen (like from startup.blend) */
-    /* view2d has no type specific for filewindow case, which doesn't scroll vertically */
+    /* view2d has no type specific for file-window case, which doesn't scroll vertically. */
     if (v2d->cur.ymax < 0) {
       v2d->cur.ymin -= v2d->cur.ymax;
       v2d->cur.ymax = 0;
@@ -650,6 +656,21 @@ static void file_tools_region_listener(const wmRegionListenerParams *UNUSED(para
 {
 }
 
+static void file_tool_props_region_listener(const wmRegionListenerParams *params)
+{
+  const wmNotifier *wmn = params->notifier;
+  ARegion *region = params->region;
+
+  switch (wmn->category) {
+    case NC_ID:
+      if (ELEM(wmn->action, NA_RENAME)) {
+        /* In case the filelist shows ID names. */
+        ED_region_tag_redraw(region);
+      }
+      break;
+  }
+}
+
 /* add handlers, stuff you only do once or on area/region changes */
 static void file_header_region_init(wmWindowManager *wm, ARegion *region)
 {
@@ -745,7 +766,7 @@ static void file_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Window", SPACE_EMPTY, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "FILE_OT_filepath_drop", filepath_drop_poll, filepath_drop_copy);
+  WM_dropbox_add(lb, "FILE_OT_filepath_drop", filepath_drop_poll, filepath_drop_copy, NULL);
 }
 
 static int file_space_subtype_get(ScrArea *area)
@@ -773,7 +794,7 @@ static void file_space_subtype_item_extend(bContext *UNUSED(C),
   }
 }
 
-static const char *file_context_dir[] = {"active_file", "active_id", NULL};
+static const char *file_context_dir[] = {"active_file", "id", NULL};
 
 static int /*eContextResult*/ file_context(const bContext *C,
                                            const char *member,
@@ -916,7 +937,7 @@ void ED_spacetype_file(void)
   art->prefsizex = 240;
   art->prefsizey = 60;
   art->keymapflag = ED_KEYMAP_UI;
-  art->listener = file_tools_region_listener;
+  art->listener = file_tool_props_region_listener;
   art->init = file_tools_region_init;
   art->draw = file_tools_region_draw;
   BLI_addhead(&st->regiontypes, art);

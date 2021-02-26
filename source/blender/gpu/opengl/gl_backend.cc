@@ -34,28 +34,6 @@
 
 namespace blender::gpu {
 
-/* See T82856: AMD drivers since 20.11 running on a polaris architecture doesn't support the
- * `GL_INT_2_10_10_10_REV` data type correctly. This data type is used to pack normals and flags.
- * The work around uses `GPU_RGBA16I` but that is only possible for loop normals.
- *
- * Vertex and Face normals would still render resulting in undefined behavior during selection and
- * rendering. */
-static bool is_faulty_T82856_platform(const char *version, const char *renderer)
-{
-  /* On Linux the driver does not report its version. Test the OpenGL version in stead. */
-  if (strstr(version, "4.5.14756") || strstr(version, "4.5.14757")) {
-    if (strstr(renderer, " RX 460 ") || strstr(renderer, " RX 470 ") ||
-        strstr(renderer, " RX 480 ") || strstr(renderer, " RX 490 ") ||
-        strstr(renderer, " RX 560 ") || strstr(renderer, " RX 560X ") ||
-        strstr(renderer, " RX 570 ") || strstr(renderer, " RX 580 ") ||
-        strstr(renderer, " RX 590 ") || strstr(renderer, " RX550/550 ") ||
-        strstr(renderer, " (TM) 520  ") || strstr(renderer, " (TM) 530  ") ||
-        strstr(renderer, " R5 ") || strstr(renderer, " R7 ") || strstr(renderer, " R9 ")) {
-      return true;
-    }
-  }
-  return false;
-}
 /* -------------------------------------------------------------------- */
 /** \name Platform
  * \{ */
@@ -117,6 +95,11 @@ void GLBackend::platform_init()
   else if (strstr(vendor, "Microsoft")) {
     GPG.device = GPU_DEVICE_SOFTWARE;
     GPG.driver = GPU_DRIVER_SOFTWARE;
+  }
+  else if (strstr(vendor, "Apple")) {
+    /* Apple Silicon. */
+    GPG.device = GPU_DEVICE_APPLE;
+    GPG.driver = GPU_DRIVER_OFFICIAL;
   }
   else if (strstr(renderer, "Apple Software Renderer")) {
     GPG.device = GPU_DEVICE_SOFTWARE;
@@ -266,15 +249,16 @@ static void detect_workarounds()
   if (!GLEW_VERSION_4_0) {
     GLContext::base_instance_support = false;
   }
-  /* The renderers include:
-   *   Mobility Radeon HD 5000;
-   *   Radeon HD 7500M;
-   *   Radeon HD 7570M;
-   *   Radeon HD 7600M;
-   * And many others... */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
       (strstr(version, "4.5.13399") || strstr(version, "4.5.13417") ||
-       strstr(version, "4.5.13422"))) {
+       strstr(version, "4.5.13422") || strstr(version, "4.5.13467"))) {
+    /* The renderers include:
+     *   Radeon HD 5000;
+     *   Radeon HD 7500M;
+     *   Radeon HD 7570M;
+     *   Radeon HD 7600M;
+     *   Radeon R5 Graphics;
+     * And others... */
     GLContext::unused_fb_slot_workaround = true;
     GCaps.mip_render_workaround = true;
     GCaps.shader_image_load_store_support = false;
@@ -294,9 +278,17 @@ static void detect_workarounds()
     GCaps.broken_amd_driver = true;
   }
   /* See T82856: AMD drivers since 20.11 running on a polaris architecture doesn't support the
-   * `GL_INT_2_10_10_10_REV` data type. */
+   * `GL_INT_2_10_10_10_REV` data type correctly. This data type is used to pack normals and flags.
+   * The work around uses `GPU_RGBA16I`.
+   */
   if (GPU_type_matches(GPU_DEVICE_ATI, GPU_OS_ANY, GPU_DRIVER_OFFICIAL)) {
-    if (is_faulty_T82856_platform(version, renderer)) {
+    if (strstr(renderer, " RX 460 ") || strstr(renderer, " RX 470 ") ||
+        strstr(renderer, " RX 480 ") || strstr(renderer, " RX 490 ") ||
+        strstr(renderer, " RX 560 ") || strstr(renderer, " RX 560X ") ||
+        strstr(renderer, " RX 570 ") || strstr(renderer, " RX 580 ") ||
+        strstr(renderer, " RX 590 ") || strstr(renderer, " RX550/550 ") ||
+        strstr(renderer, " (TM) 520  ") || strstr(renderer, " (TM) 530  ") ||
+        strstr(renderer, " R5 ") || strstr(renderer, " R7 ") || strstr(renderer, " R9 ")) {
       GCaps.use_hq_normals_workaround = true;
     }
   }
@@ -316,7 +308,7 @@ static void detect_workarounds()
   if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) && !GLEW_VERSION_4_5) {
     GLContext::copy_image_support = false;
   }
-  /* Special fix for theses specific GPUs.
+  /* Special fix for these specific GPUs.
    * Without this workaround, blender crashes on startup. (see T72098) */
   if (GPU_type_matches(GPU_DEVICE_INTEL, GPU_OS_WIN, GPU_DRIVER_OFFICIAL) &&
       (strstr(renderer, "HD Graphics 620") || strstr(renderer, "HD Graphics 630"))) {
@@ -375,14 +367,14 @@ static void detect_workarounds()
     }
   }
 
-  /* Some Intel drivers have issues with using mips as framebuffer targets if
-   * GL_TEXTURE_MAX_LEVEL is higher than the target mip.
+  /* Some Intel drivers have issues with using mips as frame-buffer targets if
+   * GL_TEXTURE_MAX_LEVEL is higher than the target MIP.
    * Only check at the end after all other workarounds because this uses the drawing code.
    * Also after device/driver flags to avoid the check that causes pre GCN Radeon to crash. */
   if (GCaps.mip_render_workaround == false) {
     GCaps.mip_render_workaround = detect_mip_render_workaround();
   }
-  /* Disable multidraw if the base instance cannot be read. */
+  /* Disable multi-draw if the base instance cannot be read. */
   if (GLContext::shader_draw_parameters_support == false) {
     GLContext::multi_draw_indirect_support = false;
   }

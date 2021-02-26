@@ -241,8 +241,8 @@ typedef enum eSpaceButtons_Flag {
 /* SpaceProperties.outliner_sync */
 typedef enum eSpaceButtons_OutlinerSync {
   PROPERTIES_SYNC_AUTO = 0,
-  PROPERTIES_SYNC_OFF = 1,
-  PROPERTIES_SYNC_ON = 2,
+  PROPERTIES_SYNC_NEVER = 1,
+  PROPERTIES_SYNC_ALWAYS = 2,
 } eSpaceButtons_OutlinerSync;
 
 /** \} */
@@ -1087,6 +1087,8 @@ typedef struct FileDirEntry {
   struct FileDirEntry *next, *prev;
 
   int uuid[4];
+  /* Name needs freeing if FILE_ENTRY_NAME_FREE is set. Otherwise this is a direct pointer to a
+   * name buffer. */
   char *name;
   char *description;
 
@@ -1165,6 +1167,7 @@ enum {
 /* FileDirEntry.flags */
 enum {
   FILE_ENTRY_INVALID_PREVIEW = 1 << 0, /* The preview for this entry could not be generated. */
+  FILE_ENTRY_NAME_FREE = 1 << 1,
 };
 
 /** \} */
@@ -1542,7 +1545,7 @@ typedef struct SpaceNode {
    */
   ListBase treepath;
 
-  /* The tree farthest down in the group heirarchy. */
+  /* The tree farthest down in the group hierarchy. */
   struct bNodeTree *edittree;
 
   struct bNodeTree *nodetree;

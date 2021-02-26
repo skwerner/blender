@@ -103,7 +103,7 @@ struct Render {
   /* Camera transform, only used by Freestyle. */
   float winmat[4][4];
 
-  /* clippping */
+  /* Clipping. */
   float clip_start;
   float clip_end;
 
@@ -141,7 +141,7 @@ struct Render {
   void (*progress)(void *handle, float i);
   void *prh;
 
-  void (*draw_lock)(void *handle, int i);
+  void (*draw_lock)(void *handle, bool lock);
   void *dlh;
   int (*test_break)(void *handle);
   void *tbh;

@@ -26,6 +26,7 @@
 
 #include "BKE_editmesh.h"
 #include "BKE_image.h"
+#include "BKE_layer.h"
 #include "BKE_mask.h"
 #include "BKE_paint.h"
 
@@ -44,6 +45,9 @@
 #include "UI_resources.h"
 
 #include "overlay_private.h"
+
+/* Forward declarations. */
+static void overlay_edit_uv_cache_populate(OVERLAY_Data *vedata, Object *ob);
 
 typedef struct OVERLAY_StretchingAreaTotals {
   void *next, *prev;
@@ -157,7 +161,7 @@ void OVERLAY_edit_uv_init(OVERLAY_Data *vedata)
   pd->edit_uv.do_tiled_image_border_overlay = is_image_type && is_tiled_image;
   pd->edit_uv.dash_length = 4.0f * UI_DPI_FAC;
   pd->edit_uv.line_style = edit_uv_line_style_from_space_image(sima);
-  pd->edit_uv.do_smooth_wire = ((U.gpu_flag & USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE) > 0);
+  pd->edit_uv.do_smooth_wire = ((U.gpu_flag & USER_GPU_FLAG_OVERLAY_SMOOTH_WIRE) != 0);
   pd->edit_uv.do_stencil_overlay = show_overlays && do_stencil_overlay;
 
   pd->edit_uv.draw_type = sima->dt_uvstretch;
@@ -228,7 +232,7 @@ void OVERLAY_edit_uv_cache_init(OVERLAY_Data *vedata)
       GPUShader *sh = OVERLAY_shader_edit_uv_verts_get();
       pd->edit_uv_verts_grp = DRW_shgroup_create(sh, psl->edit_uv_verts_ps);
 
-      const float point_size = UI_GetThemeValuef(TH_VERTEX_SIZE);
+      const float point_size = UI_GetThemeValuef(TH_VERTEX_SIZE) * U.dpi_fac;
 
       DRW_shgroup_uniform_block(pd->edit_uv_verts_grp, "globalsBlock", G_draw.block_ubo);
       DRW_shgroup_uniform_float_copy(
@@ -248,7 +252,7 @@ void OVERLAY_edit_uv_cache_init(OVERLAY_Data *vedata)
 
     /* uv face dots */
     if (pd->edit_uv.do_face_dots) {
-      const float point_size = UI_GetThemeValuef(TH_FACEDOT_SIZE);
+      const float point_size = UI_GetThemeValuef(TH_FACEDOT_SIZE) * U.dpi_fac;
       GPUShader *sh = OVERLAY_shader_edit_uv_face_dots_get();
       pd->edit_uv_face_dots_grp = DRW_shgroup_create(sh, psl->edit_uv_verts_ps);
       DRW_shgroup_uniform_block(pd->edit_uv_face_dots_grp, "globalsBlock", G_draw.block_ubo);
@@ -393,9 +397,25 @@ void OVERLAY_edit_uv_cache_init(OVERLAY_Data *vedata)
     DRW_shgroup_uniform_vec4_copy(grp, "color", (float[4]){1.0f, 1.0f, 1.0f, 1.0f});
     DRW_shgroup_call_obmat(grp, geom, NULL);
   }
+
+  /* HACK: When editing objects that share the same mesh we should only draw the
+   * first one in the order that is used during uv editing. We can only trust that the first object
+   * has the correct batches with the correct selection state. See T83187. */
+  if ((pd->edit_uv.do_uv_overlay || pd->edit_uv.do_uv_shadow_overlay) &&
+      draw_ctx->obact->type == OB_MESH) {
+    uint objects_len = 0;
+    Object **objects = BKE_view_layer_array_from_objects_in_mode_unique_data(
+        draw_ctx->view_layer, NULL, &objects_len, draw_ctx->object_mode);
+    for (uint ob_index = 0; ob_index < objects_len; ob_index++) {
+      Object *object_eval = DEG_get_evaluated_object(draw_ctx->depsgraph, objects[ob_index]);
+      DRW_mesh_batch_cache_validate((Mesh *)object_eval->data);
+      overlay_edit_uv_cache_populate(vedata, object_eval);
+    }
+    MEM_freeN(objects);
+  }
 }
 
-void OVERLAY_edit_uv_cache_populate(OVERLAY_Data *vedata, Object *ob)
+static void overlay_edit_uv_cache_populate(OVERLAY_Data *vedata, Object *ob)
 {
   OVERLAY_StorageList *stl = vedata->stl;
   OVERLAY_PrivateData *pd = stl->pd;
@@ -484,6 +504,16 @@ static void edit_uv_stretching_update_ratios(OVERLAY_Data *vedata)
   BLI_freelistN(&pd->edit_uv.totals);
 }
 
+void OVERLAY_edit_uv_cache_finish(OVERLAY_Data *vedata)
+{
+  OVERLAY_StorageList *stl = vedata->stl;
+  OVERLAY_PrivateData *pd = stl->pd;
+
+  if (pd->edit_uv.do_uv_stretching_overlay) {
+    edit_uv_stretching_update_ratios(vedata);
+  }
+}
+
 static void OVERLAY_edit_uv_draw_finish(OVERLAY_Data *vedata)
 {
   OVERLAY_StorageList *stl = vedata->stl;
@@ -525,7 +555,6 @@ void OVERLAY_edit_uv_draw(OVERLAY_Data *vedata)
   }
 
   if (pd->edit_uv.do_uv_stretching_overlay) {
-    edit_uv_stretching_update_ratios(vedata);
     DRW_draw_pass(psl->edit_uv_stretching_ps);
   }
 
@@ -546,4 +575,4 @@ void OVERLAY_edit_uv_draw(OVERLAY_Data *vedata)
   OVERLAY_edit_uv_draw_finish(vedata);
 }
 
-/* \} */
+/** \} */

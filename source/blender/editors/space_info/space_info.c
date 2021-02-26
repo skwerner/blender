@@ -29,8 +29,6 @@
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
-#include "BLT_translation.h"
-
 #include "BKE_context.h"
 #include "BKE_screen.h"
 
@@ -43,12 +41,9 @@
 
 #include "RNA_access.h"
 
-#include "UI_interface.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "BLO_readfile.h"
-#include "GPU_framebuffer.h"
 #include "info_intern.h" /* own include */
 
 /* ******************** default callbacks for info space ***************** */
@@ -150,7 +145,7 @@ static void info_main_region_draw(const bContext *C, ARegion *region)
 
   info_textview_update_rect(C, region);
 
-  /* worlks best with no view2d matrix set */
+  /* Works best with no view2d matrix set. */
   UI_view2d_view_ortho(v2d);
 
   info_textview_main(sinfo, region, CTX_wm_reports(C));

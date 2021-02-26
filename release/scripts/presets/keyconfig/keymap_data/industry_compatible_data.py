@@ -2277,7 +2277,7 @@ def km_grease_pencil(_params):
 
 def _grease_pencil_selection(params):
     return [
-        ("gpencil.select", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True},
+        ("gpencil.select", {"type": 'LEFTMOUSE', "value": 'CLICK', "shift": True},
          {"properties": [("extend", True), ("toggle", True)]}),
         # Select all
         ("gpencil.select_all", {"type": 'A', "value": 'PRESS', "ctrl": True}, {"properties": [("action", 'SELECT')]}),
@@ -3962,6 +3962,8 @@ def km_transform_modal_map(_params):
         ("INSERTOFS_TOGGLE_DIR", {"type": 'T', "value": 'PRESS'}, None),
         ("AUTOCONSTRAIN", {"type": 'MIDDLEMOUSE', "value": 'ANY'}, None),
         ("AUTOCONSTRAINPLANE", {"type": 'MIDDLEMOUSE', "value": 'ANY', "shift": True}, None),
+        ("PRECISION", {"type": 'LEFT_SHIFT', "value": 'ANY', "any": True}, None),
+        ("PRECISION", {"type": 'RIGHT_SHIFT', "value": 'ANY', "any": True}, None),
     ])
 
     return keymap
@@ -3994,6 +3996,19 @@ def km_3d_view_tool_edit_gpencil_select(params):
         "3D View Tool: Edit Gpencil, Tweak",
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": _template_items_tool_select(params, "gpencil.select", extend="toggle")},
+    )
+
+
+def km_3d_view_tool_interactive_add(params):
+    return (
+        "3D View Tool: Object, Add Primitive",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("view3d.interactive_add", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("wait_for_input", False)]}),
+            ("view3d.interactive_add", {"type": params.tool_tweak, "value": 'ANY', "ctrl": True},
+             {"properties": [("wait_for_input", False)]}),
+        ]},
     )
 
 
@@ -4135,6 +4150,7 @@ def generate_keymaps_impl(params=None):
         km_3d_view_tool_select(params),
         km_image_editor_tool_uv_select(params),
         km_3d_view_tool_edit_gpencil_select(params),
+        km_3d_view_tool_interactive_add(params),
     ]
 
 

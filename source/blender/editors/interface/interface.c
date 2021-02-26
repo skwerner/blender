@@ -789,7 +789,7 @@ static void ui_but_update_old_active_from_new(uiBut *oldbut, uiBut *but)
   BLI_assert(oldbut->active);
 
   /* flags from the buttons we want to refresh, may want to add more here... */
-  const int flag_copy = UI_BUT_REDALERT | UI_HAS_ICON;
+  const int flag_copy = UI_BUT_REDALERT | UI_HAS_ICON | UI_SELECT_DRAW;
   const int drawflag_copy = 0; /* None currently. */
 
   /* still stuff needs to be copied */
@@ -988,6 +988,10 @@ bool UI_but_active_only(const bContext *C, ARegion *region, uiBlock *block, uiBu
  */
 bool UI_block_active_only_flagged_buttons(const bContext *C, ARegion *region, uiBlock *block)
 {
+  /* Running this command before end-block has run, means buttons that open menus
+   * wont have those menus correctly positioned, see T83539. */
+  BLI_assert(block->endblock);
+
   bool done = false;
   LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
     if (but->flag & UI_BUT_ACTIVATE_ON_INIT) {
@@ -1417,10 +1421,10 @@ static bool ui_but_event_property_operator_string(const bContext *C,
     // printf("prop shortcut: '%s' (%s)\n", RNA_property_identifier(prop), data_path);
   }
 
-  /* we have a datapath! */
+  /* We have a data-path! */
   bool found = false;
   if (data_path || (prop_enum_value_ok && prop_enum_value_id)) {
-    /* create a property to host the "datapath" property we're sending to the operators */
+    /* Create a property to host the "data_path" property we're sending to the operators. */
     IDProperty *prop_path;
 
     const IDPropertyTemplate val = {0};
@@ -1909,7 +1913,7 @@ void UI_block_end_ex(const bContext *C, uiBlock *block, const int xy[2], int r_x
 
   ui_update_flexible_spacing(region, block);
 
-  block->endblock = 1;
+  block->endblock = true;
 }
 
 void UI_block_end(const bContext *C, uiBlock *block)
@@ -1940,7 +1944,7 @@ void ui_fontscale(short *points, float aspect)
   }
 }
 
-/* project button or block (but==NULL) to pixels in regionspace */
+/* Project button or block (but==NULL) to pixels in region-space. */
 static void ui_but_to_pixelrect(rcti *rect, const ARegion *region, uiBlock *block, uiBut *but)
 {
   rctf rectf;
@@ -3194,6 +3198,7 @@ void ui_but_range_set_soft(uiBut *but)
 
   if (but->rnaprop) {
     const PropertyType type = RNA_property_type(but->rnaprop);
+    const PropertySubType subtype = RNA_property_subtype(but->rnaprop);
     double softmin, softmax /*, step, precision*/;
     double value_min;
     double value_max;
@@ -3217,7 +3222,7 @@ void ui_but_range_set_soft(uiBut *but)
         value_max = (double)value_range[1];
       }
       else {
-        value_min = value_max = (double)RNA_property_int_get(&but->rnapoin, but->rnaprop);
+        value_min = value_max = ui_but_value_get(but);
       }
     }
     else if (type == PROP_FLOAT) {
@@ -3230,14 +3235,15 @@ void ui_but_range_set_soft(uiBut *but)
       /*step = fstep;*/           /*UNUSED*/
       /*precision = fprecision;*/ /*UNUSED*/
 
-      if (is_array) {
+      /* Use shared min/max for array values, except for color alpha. */
+      if (is_array && !(subtype == PROP_COLOR && but->rnaindex == 3)) {
         float value_range[2];
         RNA_property_float_get_array_range(&but->rnapoin, but->rnaprop, value_range);
         value_min = (double)value_range[0];
         value_max = (double)value_range[1];
       }
       else {
-        value_min = value_max = (double)RNA_property_float_get(&but->rnapoin, but->rnaprop);
+        value_min = value_max = ui_but_value_get(but);
       }
     }
     else {
@@ -3422,12 +3428,12 @@ void UI_blocklist_free_inactive(const bContext *C, ListBase *lb)
 {
   LISTBASE_FOREACH_MUTABLE (uiBlock *, block, lb) {
     if (!block->handle) {
-      if (!block->active) {
-        BLI_remlink(lb, block);
-        UI_block_free(C, block);
+      if (block->active) {
+        block->active = false;
       }
       else {
-        block->active = 0;
+        BLI_remlink(lb, block);
+        UI_block_free(C, block);
       }
     }
   }
@@ -3444,7 +3450,7 @@ void UI_block_region_set(uiBlock *block, ARegion *region)
     oldblock = BLI_findstring(lb, block->name, offsetof(uiBlock, name));
 
     if (oldblock) {
-      oldblock->active = 0;
+      oldblock->active = false;
       oldblock->panel = NULL;
       oldblock->handle = NULL;
     }
@@ -3462,7 +3468,7 @@ uiBlock *UI_block_begin(const bContext *C, ARegion *region, const char *name, eU
   Scene *scene = CTX_data_scene(C);
 
   uiBlock *block = MEM_callocN(sizeof(uiBlock), "uiBlock");
-  block->active = 1;
+  block->active = true;
   block->emboss = emboss;
   block->evil_C = (void *)C; /* XXX */
 
@@ -3941,6 +3947,9 @@ uiBut *ui_but_change_type(uiBut *but, eButType new_type)
       UNUSED_VARS_NDEBUG(found_layout);
       ui_button_group_replace_but_ptr(uiLayoutGetBlock(but->layout), old_but_ptr, but);
     }
+    if (UI_editsource_enable_check()) {
+      UI_editsource_but_replace(old_but_ptr, but);
+    }
   }
 
   return but;
@@ -4017,7 +4026,7 @@ static uiBut *ui_def_but(uiBlock *block,
   but->emboss = block->emboss;
   but->pie_dir = UI_RADIAL_NONE;
 
-  but->block = block; /* pointer back, used for frontbuffer status, and picker */
+  but->block = block; /* pointer back, used for front-buffer status, and picker. */
 
   if ((block->flag & UI_BUT_ALIGN) && ui_but_can_align(but)) {
     but->alignnr = block->alignnr;
@@ -4050,7 +4059,8 @@ static uiBut *ui_def_but(uiBlock *block,
       but->drawflag |= UI_BUT_ICON_LEFT;
     }
   }
-  else if (((block->flag & UI_BLOCK_LOOP) && !ui_block_is_popover(block)) ||
+  else if (((block->flag & UI_BLOCK_LOOP) && !ui_block_is_popover(block) &&
+            !(block->flag & UI_BLOCK_QUICK_SETUP)) ||
            ELEM(but->type,
                 UI_BTYPE_MENU,
                 UI_BTYPE_TEXT,
@@ -4069,11 +4079,6 @@ static uiBut *ui_def_but(uiBlock *block,
     }
   }
 #endif
-
-  /* Always keep text in radio-buttons (expanded enums) center aligned. */
-  if (ELEM(but->type, UI_BTYPE_ROW)) {
-    but->drawflag &= ~UI_BUT_TEXT_LEFT;
-  }
 
   but->drawflag |= (block->flag & UI_BUT_ALIGN);
 
@@ -4740,7 +4745,7 @@ static int findBitIndex(uint x)
   return idx;
 }
 
-/* autocomplete helper functions */
+/* Auto-complete helper functions. */
 struct AutoComplete {
   size_t maxlen;
   int matches;

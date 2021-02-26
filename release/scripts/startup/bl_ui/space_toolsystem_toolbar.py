@@ -503,6 +503,7 @@ class _defs_view3d_add:
         if extra:
             layout.use_property_split = True
             layout.row().prop(props, "plane_axis", expand=True)
+            layout.row().prop(props, "plane_axis_auto")
 
             layout.label(text="Base")
             layout.row().prop(props, "plane_origin_base", expand=True)
@@ -1561,6 +1562,7 @@ class _defs_texture_paint:
             icon_prefix="brush.paint_texture.",
             type=bpy.types.Brush,
             attr="image_tool",
+            cursor='PAINT_CROSS',
         )
 
 
@@ -2033,6 +2035,25 @@ class _defs_gpencil_paint:
             draw_settings=draw_settings,
         )
 
+    @ToolDef.from_fn
+    def interpolate():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.interpolate")
+            layout.prop(props, "layers")
+            layout.prop(props, "flip")
+            layout.prop(props, "smooth_factor")
+            layout.prop(props, "smooth_steps")
+
+        return dict(
+            idname="builtin.interpolate",
+            label="Interpolate",
+            icon="ops.pose.breakdowner",
+            cursor='DEFAULT',
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
 
 class _defs_gpencil_edit:
     def is_segment(context):
@@ -2190,6 +2211,26 @@ class _defs_gpencil_edit:
             idname="builtin.transform_fill",
             label="Transform Fill",
             icon="ops.gpencil.transform_fill",
+            cursor='DEFAULT',
+            widget=None,
+            keymap=(),
+            draw_settings=draw_settings,
+        )
+
+    @ToolDef.from_fn
+    def interpolate():
+        def draw_settings(context, layout, tool):
+            props = tool.operator_properties("gpencil.interpolate")
+            layout.prop(props, "layers")
+            layout.prop(props, "interpolate_selected_only")
+            layout.prop(props, "flip")
+            layout.prop(props, "smooth_factor")
+            layout.prop(props, "smooth_steps")
+
+        return dict(
+            idname="builtin.interpolate",
+            label="Interpolate",
+            icon="ops.pose.breakdowner",
             cursor='DEFAULT',
             widget=None,
             keymap=(),
@@ -2875,6 +2916,8 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
             _defs_gpencil_paint.box,
             _defs_gpencil_paint.circle,
             None,
+            _defs_gpencil_paint.interpolate,
+            None,
             *_tools_annotate,
         ],
         'EDIT_GPENCIL': [
@@ -2890,8 +2933,9 @@ class VIEW3D_PT_tools_active(ToolSelectPanelHelper, Panel):
                 _defs_gpencil_edit.shear,
                 _defs_gpencil_edit.tosphere,
             ),
-            None,
             _defs_gpencil_edit.transform_fill,
+            None,
+            _defs_gpencil_edit.interpolate,
             None,
             *_tools_annotate,
         ],

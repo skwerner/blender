@@ -331,6 +331,7 @@ IDTypeInfo IDType_ID_IM = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = image_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = image_blend_write,
     .blend_read_data = image_blend_read_data,
@@ -338,6 +339,8 @@ IDTypeInfo IDType_ID_IM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* prototypes */

@@ -473,7 +473,7 @@ static void scene_foreach_rigidbodyworldSceneLooper(struct RigidBodyWorld *UNUSE
 
 /**
  * This code is shared by both the regular `foreach_id` looper, and the code trying to restore or
- * preserve ID pointers like brushes across undoes.
+ * preserve ID pointers like brushes across undo-steps.
  */
 typedef enum eSceneForeachUndoPreserveProcess {
   /* Undo when preserving tool-settings from old scene, we also want to try to preserve that ID
@@ -1687,6 +1687,19 @@ static void scene_undo_preserve(BlendLibReader *reader, ID *id_new, ID *id_old)
   }
 }
 
+static void scene_lib_override_apply_post(ID *id_dst, ID *UNUSED(id_src))
+{
+  Scene *scene = (Scene *)id_dst;
+
+  if (scene->rigidbody_world != NULL) {
+    PTCacheID pid;
+    BKE_ptcache_id_from_rigidbody(&pid, NULL, scene->rigidbody_world);
+    LISTBASE_FOREACH (PointCache *, point_cache, pid.ptcaches) {
+      point_cache->flag |= PTCACHE_FLAG_INFO_DIRTY;
+    }
+  }
+}
+
 IDTypeInfo IDType_ID_SCE = {
     .id_code = ID_SCE,
     .id_filter = FILTER_ID_SCE,
@@ -1705,6 +1718,7 @@ IDTypeInfo IDType_ID_SCE = {
     .make_local = NULL,
     .foreach_id = scene_foreach_id,
     .foreach_cache = scene_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = scene_blend_write,
     .blend_read_data = scene_blend_read_data,
@@ -1712,6 +1726,8 @@ IDTypeInfo IDType_ID_SCE = {
     .blend_read_expand = scene_blend_read_expand,
 
     .blend_read_undo_preserve = scene_undo_preserve,
+
+    .lib_override_apply_post = scene_lib_override_apply_post,
 };
 
 const char *RE_engine_id_BLENDER_EEVEE = "BLENDER_EEVEE";
@@ -3301,7 +3317,7 @@ int BKE_scene_multiview_num_videos_get(const RenderData *rd)
 
 /* This is a key which identifies depsgraph. */
 typedef struct DepsgraphKey {
-  ViewLayer *view_layer;
+  const ViewLayer *view_layer;
   /* TODO(sergey): Need to include window somehow (same layer might be in a
    * different states in different windows).
    */
@@ -3436,10 +3452,17 @@ static Depsgraph **scene_ensure_depsgraph_p(Main *bmain, Scene *scene, ViewLayer
   return depsgraph_ptr;
 }
 
-Depsgraph *BKE_scene_get_depsgraph(Scene *scene, ViewLayer *view_layer)
+Depsgraph *BKE_scene_get_depsgraph(const Scene *scene, const ViewLayer *view_layer)
 {
-  Depsgraph **depsgraph_ptr = scene_get_depsgraph_p(scene, view_layer, false);
-  return (depsgraph_ptr != NULL) ? *depsgraph_ptr : NULL;
+  BLI_assert(BKE_scene_has_view_layer(scene, view_layer));
+
+  if (scene->depsgraph_hash == NULL) {
+    return NULL;
+  }
+
+  DepsgraphKey key;
+  key.view_layer = view_layer;
+  return BLI_ghash_lookup(scene->depsgraph_hash, &key);
 }
 
 Depsgraph *BKE_scene_ensure_depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer)

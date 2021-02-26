@@ -151,7 +151,7 @@ typedef struct tGP_BrushVertexpaintData {
   tGP_Grid *grid;
   /** Total number of rows/cols. */
   int grid_size;
-  /** Total number of cells elments in the grid array. */
+  /** Total number of cells elements in the grid array. */
   int grid_len;
   /** Grid sample position (used to determine distance of falloff) */
   int grid_sample[2];
@@ -845,6 +845,13 @@ static bool gpencil_vertexpaint_select_stroke(tGP_BrushVertexpaintData *gso,
   bool include_last = false;
 
   bool saved = false;
+
+  /* Check stroke masking. */
+  if (GPENCIL_ANY_VERTEX_MASK(gso->mask)) {
+    if ((gps->flag & GP_STROKE_SELECT) == 0) {
+      return false;
+    }
+  }
 
   /* Check if the stroke collide with brush. */
   if (!ED_gpencil_stroke_check_collision(gsc, gps, gso->mval, radius, bound_mat)) {

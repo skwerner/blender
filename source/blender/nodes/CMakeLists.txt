@@ -26,6 +26,7 @@ set(INC
   intern
   shader
   texture
+  ../editors/include
   ../blenkernel
   ../blenlib
   ../blentranslation
@@ -134,6 +135,7 @@ set(SRC
   function/nodes/node_fn_combine_strings.cc
   function/nodes/node_fn_float_compare.cc
   function/nodes/node_fn_group_instance_id.cc
+  function/nodes/node_fn_input_string.cc
   function/nodes/node_fn_input_vector.cc
   function/nodes/node_fn_object_transforms.cc
   function/nodes/node_fn_random_float.cc
@@ -142,15 +144,21 @@ set(SRC
 
   geometry/nodes/node_geo_align_rotation_to_vector.cc
   geometry/nodes/node_geo_attribute_color_ramp.cc
+  geometry/nodes/node_geo_attribute_combine_xyz.cc
   geometry/nodes/node_geo_attribute_compare.cc
   geometry/nodes/node_geo_attribute_fill.cc
   geometry/nodes/node_geo_attribute_math.cc
   geometry/nodes/node_geo_attribute_mix.cc
+  geometry/nodes/node_geo_attribute_proximity.cc
   geometry/nodes/node_geo_attribute_randomize.cc
+  geometry/nodes/node_geo_attribute_sample_texture.cc
+  geometry/nodes/node_geo_attribute_separate_xyz.cc
   geometry/nodes/node_geo_attribute_vector_math.cc
   geometry/nodes/node_geo_boolean.cc
+  geometry/nodes/node_geo_collection_info.cc
   geometry/nodes/node_geo_common.cc
   geometry/nodes/node_geo_edge_split.cc
+  geometry/nodes/node_geo_is_viewport.cc
   geometry/nodes/node_geo_join_geometry.cc
   geometry/nodes/node_geo_object_info.cc
   geometry/nodes/node_geo_point_distribute.cc
@@ -159,9 +167,12 @@ set(SRC
   geometry/nodes/node_geo_point_scale.cc
   geometry/nodes/node_geo_point_separate.cc
   geometry/nodes/node_geo_point_translate.cc
+  geometry/nodes/node_geo_points_to_volume.cc
   geometry/nodes/node_geo_subdivision_surface.cc
+  geometry/nodes/node_geo_subdivision_surface_simple.cc
   geometry/nodes/node_geo_transform.cc
   geometry/nodes/node_geo_triangulate.cc
+  geometry/nodes/node_geo_volume_to_mesh.cc
   geometry/node_geometry_exec.cc
   geometry/node_geometry_tree.cc
   geometry/node_geometry_util.cc
@@ -347,6 +358,13 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
+if(WITH_TBB)
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+  add_definitions(-DWITH_TBB)
+endif()
+
 if(WITH_IMAGE_OPENEXR)
   add_definitions(-DWITH_OPENEXR)
 endif()
@@ -364,6 +382,13 @@ endif()
 
 if(WITH_OPENSUBDIV)
   add_definitions(-DWITH_OPENSUBDIV)
+endif()
+
+if(WITH_OPENVDB)
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
 endif()
 
 blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

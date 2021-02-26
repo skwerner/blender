@@ -147,7 +147,7 @@ void python_thread_state_restore(void **python_thread_state)
 
 static const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
 {
-  const char *result = _PyUnicode_AsString(py_str);
+  const char *result = PyUnicode_AsUTF8(py_str);
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
      * chars since blender doesn't limit this.
@@ -597,22 +597,19 @@ static PyObject *osl_update_node_func(PyObject * /*self*/, PyObject *args)
   bool removed;
 
   do {
-    BL::Node::inputs_iterator b_input;
-    BL::Node::outputs_iterator b_output;
-
     removed = false;
 
-    for (b_node.inputs.begin(b_input); b_input != b_node.inputs.end(); ++b_input) {
-      if (used_sockets.find(b_input->ptr.data) == used_sockets.end()) {
-        b_node.inputs.remove(b_data, *b_input);
+    for (BL::NodeSocket &b_input : b_node.inputs) {
+      if (used_sockets.find(b_input.ptr.data) == used_sockets.end()) {
+        b_node.inputs.remove(b_data, b_input);
         removed = true;
         break;
       }
     }
 
-    for (b_node.outputs.begin(b_output); b_output != b_node.outputs.end(); ++b_output) {
-      if (used_sockets.find(b_output->ptr.data) == used_sockets.end()) {
-        b_node.outputs.remove(b_data, *b_output);
+    for (BL::NodeSocket &b_output : b_node.outputs) {
+      if (used_sockets.find(b_output.ptr.data) == used_sockets.end()) {
+        b_node.outputs.remove(b_data, b_output);
         removed = true;
         break;
       }

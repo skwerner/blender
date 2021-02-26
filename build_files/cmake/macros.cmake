@@ -389,7 +389,7 @@ function(blender_add_lib
 endfunction()
 
 function(blender_add_test_suite)
-  if (ARGC LESS 1)
+  if(ARGC LESS 1)
     message(FATAL_ERROR "No arguments supplied to blender_add_test_suite()")
   endif()
 
@@ -668,12 +668,6 @@ macro(TEST_SSE_SUPPORT
       #include <xmmintrin.h>
       int main(void) { __m128 v = _mm_setzero_ps(); return 0; }"
     SUPPORT_SSE_BUILD)
-
-    if(SUPPORT_SSE_BUILD)
-      message(STATUS "SSE Support: detected.")
-    else()
-      message(STATUS "SSE Support: missing.")
-    endif()
   endif()
 
   if(NOT DEFINED SUPPORT_SSE2_BUILD)
@@ -682,15 +676,17 @@ macro(TEST_SSE_SUPPORT
       #include <emmintrin.h>
       int main(void) { __m128d v = _mm_setzero_pd(); return 0; }"
     SUPPORT_SSE2_BUILD)
-
-    if(SUPPORT_SSE2_BUILD)
-      message(STATUS "SSE2 Support: detected.")
-    else()
-      message(STATUS "SSE2 Support: missing.")
-    endif()
   endif()
 
   unset(CMAKE_REQUIRED_FLAGS)
+endmacro()
+
+macro(TEST_NEON_SUPPORT)
+  include(CheckCXXSourceCompiles)
+  check_cxx_source_compiles(
+    "#include <arm_neon.h>
+     int main() {return vaddvq_s32(vdupq_n_s32(1));}"
+    SUPPORT_NEON_BUILD)
 endmacro()
 
 # Only print message if running CMake first time
@@ -1209,9 +1205,9 @@ function(find_python_package
         site-packages
         dist-packages
         vendor-packages
-       NO_DEFAULT_PATH
-       DOC
-         "Path to python site-packages or dist-packages containing '${package}' module"
+      NO_DEFAULT_PATH
+      DOC
+        "Path to python site-packages or dist-packages containing '${package}' module"
     )
     mark_as_advanced(PYTHON_${_upper_package}_PATH)
 

@@ -3101,7 +3101,8 @@ static bool merge_firstlast(BMEditMesh *em,
    * so do extra check for data here
    */
 
-  /* do sanity check in mergemenu in edit.c ?*/
+  /* While #merge_type_itemf does a sanity check, this operation runs on all edit-mode objects.
+   * Some of them may not have the expected selection state. */
   if (use_first == false) {
     if (!em->bm->selected.last || ((BMEditSelection *)em->bm->selected.last)->htype != BM_VERT) {
       return false;
@@ -3260,11 +3261,11 @@ static int edbm_merge_exec(bContext *C, wmOperator *op)
 }
 
 static const EnumPropertyItem merge_type_items[] = {
-    {MESH_MERGE_FIRST, "FIRST", 0, "At First", ""},
-    {MESH_MERGE_LAST, "LAST", 0, "At Last", ""},
     {MESH_MERGE_CENTER, "CENTER", 0, "At Center", ""},
     {MESH_MERGE_CURSOR, "CURSOR", 0, "At Cursor", ""},
     {MESH_MERGE_COLLAPSE, "COLLAPSE", 0, "Collapse", ""},
+    {MESH_MERGE_FIRST, "FIRST", 0, "At First", ""},
+    {MESH_MERGE_LAST, "LAST", 0, "At Last", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -3282,6 +3283,11 @@ static const EnumPropertyItem *merge_type_itemf(bContext *C,
     EnumPropertyItem *item = NULL;
     int totitem = 0;
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
+
+    /* Keep these first so that their automatic shortcuts don't change. */
+    RNA_enum_items_add_value(&item, &totitem, merge_type_items, MESH_MERGE_CENTER);
+    RNA_enum_items_add_value(&item, &totitem, merge_type_items, MESH_MERGE_CURSOR);
+    RNA_enum_items_add_value(&item, &totitem, merge_type_items, MESH_MERGE_COLLAPSE);
 
     /* Only active object supported:
      * In practice it doesn't make sense to run this operation on non-active meshes
@@ -3304,9 +3310,6 @@ static const EnumPropertyItem *merge_type_itemf(bContext *C,
       }
     }
 
-    RNA_enum_items_add_value(&item, &totitem, merge_type_items, MESH_MERGE_CENTER);
-    RNA_enum_items_add_value(&item, &totitem, merge_type_items, MESH_MERGE_CURSOR);
-    RNA_enum_items_add_value(&item, &totitem, merge_type_items, MESH_MERGE_COLLAPSE);
     RNA_enum_item_end(&item, &totitem);
 
     *r_free = true;
@@ -3905,7 +3908,7 @@ static float bm_edge_seg_isect(const float sco_a[2],
     x12 = mouse_path[i][0];
     y12 = mouse_path[i][1];
 
-    /* Perp. Distance from point to line */
+    /* Calculate the distance from point to line. */
     if (m2 != MAXSLOPE) {
       /* sqrt(m2 * m2 + 1); Only looking for change in sign.  Skip extra math .*/
       dist = (y12 - m2 * x12 - b2);
@@ -4010,7 +4013,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
   short numcuts = 1;
   const short mode = RNA_int_get(op->ptr, "type");
 
-  /* allocd vars */
+  /* Allocated variables. */
   float(*screen_vert_coords)[2], (*sco)[2], (*mouse_path)[2];
 
   /* edit-object needed for matrix, and region->regiondata for projections to work */
@@ -6886,7 +6889,7 @@ void MESH_OT_sort_elements(wmOperatorType *ot)
        "MATERIAL",
        0,
        "Material",
-       "Sort selected elements from smallest to greatest material index (faces only!)"},
+       "Sort selected faces from smallest to greatest material index"},
       {SRT_SELECTED,
        "SELECTED",
        0,

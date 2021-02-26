@@ -2642,7 +2642,7 @@ void uiItemsEnumR(uiLayout *layout, struct PointerRNA *ptr, const char *propname
 static void search_id_collection(StructRNA *ptype, PointerRNA *r_ptr, PropertyRNA **r_prop)
 {
   /* look for collection property in Main */
-  /* Note: using global Main is OK-ish here, UI shall not access other Mains anyay... */
+  /* NOTE: using global Main is OK-ish here, UI shall not access other Mains anyway. */
   RNA_main_pointer_create(G_MAIN, r_ptr);
 
   *r_prop = NULL;
@@ -2821,7 +2821,7 @@ void ui_item_menutype_func(bContext *C, uiLayout *layout, void *arg_mt)
 
   UI_menutype_draw(C, mt, layout);
 
-  /* menus are created flipped (from event handling pov) */
+  /* Menus are created flipped (from event handling point of view). */
   layout->root->block->flag ^= UI_BLOCK_IS_FLIP;
 }
 
@@ -3057,7 +3057,8 @@ void uiItemPopoverPanel_ptr(
     };
     pt->draw_header(C, &panel);
   }
-  uiBut *but = ui_item_menu(layout, name, icon, ui_item_paneltype_func, pt, NULL, NULL, true);
+  uiBut *but = ui_item_menu(
+      layout, name, icon, ui_item_paneltype_func, pt, NULL, pt->description, true);
   but->type = UI_BTYPE_POPOVER;
   if (!ok) {
     but->flag |= UI_BUT_DISABLED;

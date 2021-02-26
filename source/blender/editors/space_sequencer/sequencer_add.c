@@ -66,8 +66,6 @@
 
 #include "UI_interface.h"
 
-#include "BKE_sound.h"
-
 #ifdef WITH_AUDASPACE
 #  include <AUD_Sequence.h>
 #endif
@@ -1069,6 +1067,9 @@ static int sequencer_add_effect_strip_exec(bContext *C, wmOperator *op)
   else if (seq->type == SEQ_TYPE_TEXT) {
     seq->blend_mode = SEQ_TYPE_ALPHAOVER;
   }
+  else if (SEQ_effect_get_num_inputs(seq->type) == 1) {
+    seq->blend_mode = seq1->blend_mode;
+  }
 
   /* Set channel. If unset, use lowest free one above strips. */
   if (!RNA_struct_property_is_set(op->ptr, "channel")) {
@@ -1143,6 +1144,7 @@ void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot)
                "Type",
                "Sequencer effect type");
   sequencer_generic_props__internal(ot, SEQPROP_STARTFRAME | SEQPROP_ENDFRAME);
+  /* Only used when strip is of the Color type. */
   prop = RNA_def_float_color(ot->srna,
                              "color",
                              3,
@@ -1150,7 +1152,7 @@ void SEQUENCER_OT_effect_strip_add(struct wmOperatorType *ot)
                              0.0f,
                              1.0f,
                              "Color",
-                             "Initialize the strip with this color (only used when type='COLOR')",
+                             "Initialize the strip with this color",
                              0.0f,
                              1.0f);
   RNA_def_property_subtype(prop, PROP_COLOR_GAMMA);

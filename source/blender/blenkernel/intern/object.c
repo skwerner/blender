@@ -1118,6 +1118,20 @@ static void object_blend_read_expand(BlendExpander *expander, ID *id)
   }
 }
 
+static void object_lib_override_apply_post(ID *id_dst, ID *UNUSED(id_src))
+{
+  Object *object = (Object *)id_dst;
+
+  ListBase pidlist;
+  BKE_ptcache_ids_from_object(&pidlist, object, NULL, 0);
+  LISTBASE_FOREACH (PTCacheID *, pid, &pidlist) {
+    LISTBASE_FOREACH (PointCache *, point_cache, pid->ptcaches) {
+      point_cache->flag |= PTCACHE_FLAG_INFO_DIRTY;
+    }
+  }
+  BLI_freelistN(&pidlist);
+}
+
 IDTypeInfo IDType_ID_OB = {
     .id_code = ID_OB,
     .id_filter = FILTER_ID_OB,
@@ -1134,6 +1148,7 @@ IDTypeInfo IDType_ID_OB = {
     .make_local = object_make_local,
     .foreach_id = object_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = object_blend_write,
     .blend_read_data = object_blend_read_data,
@@ -1141,6 +1156,8 @@ IDTypeInfo IDType_ID_OB = {
     .blend_read_expand = object_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = object_lib_override_apply_post,
 };
 
 void BKE_object_workob_clear(Object *workob)
@@ -1506,11 +1523,11 @@ bool BKE_object_copy_gpencil_modifier(struct Object *ob_dst, GpencilModifierData
 /**
  * Copy the whole stack of modifiers from one object into another.
  *
- * \warning  **Does not** clear modifier stack and related data (particle systems, softbody,
+ * \warning **Does not** clear modifier stack and related data (particle systems, soft-body,
  * etc.) in `ob_dst`, if needed calling code must do it.
  *
- * @param do_copy_all If true, even modifiers that should not suport copying (like Hook one) will
- * be duplicated.
+ * \param do_copy_all: If true, even modifiers that should not support copying (like Hook one)
+ * will be duplicated.
  */
 bool BKE_object_modifier_stack_copy(Object *ob_dst,
                                     const Object *ob_src,
@@ -1726,6 +1743,7 @@ void BKE_object_free_derived_caches(Object *ob)
   }
 
   BKE_object_to_mesh_clear(ob);
+  BKE_object_to_curve_clear(ob);
   BKE_object_free_curve_cache(ob);
 
   /* Clear grease pencil data. */
@@ -1957,7 +1975,8 @@ int BKE_object_visibility(const Object *ob, const int dag_eval_mode)
     visibility |= OB_VISIBLE_INSTANCES;
   }
 
-  if (ob->runtime.geometry_set_eval != NULL) {
+  if (ob->runtime.geometry_set_eval != NULL &&
+      BKE_geometry_set_has_instances(ob->runtime.geometry_set_eval)) {
     visibility |= OB_VISIBLE_INSTANCES;
   }
 
@@ -3527,9 +3546,6 @@ static void solve_parenting(
   }
 }
 
-/**
- * \note scene is the active scene while actual_scene is the scene the object resides in.
- */
 static void object_where_is_calc_ex(Depsgraph *depsgraph,
                                     Scene *scene,
                                     Object *ob,
@@ -5043,6 +5059,7 @@ void BKE_object_runtime_reset_on_copy(Object *object, const int UNUSED(flag))
   runtime->mesh_deform_eval = NULL;
   runtime->curve_cache = NULL;
   runtime->object_as_temp_mesh = NULL;
+  runtime->object_as_temp_curve = NULL;
   runtime->geometry_set_eval = NULL;
 }
 
@@ -5599,6 +5616,24 @@ void BKE_object_to_mesh_clear(Object *object)
   }
   BKE_id_free(NULL, object->runtime.object_as_temp_mesh);
   object->runtime.object_as_temp_mesh = NULL;
+}
+
+Curve *BKE_object_to_curve(Object *object, Depsgraph *depsgraph, bool apply_modifiers)
+{
+  BKE_object_to_curve_clear(object);
+
+  Curve *curve = BKE_curve_new_from_object(object, depsgraph, apply_modifiers);
+  object->runtime.object_as_temp_curve = curve;
+  return curve;
+}
+
+void BKE_object_to_curve_clear(Object *object)
+{
+  if (object->runtime.object_as_temp_curve == NULL) {
+    return;
+  }
+  BKE_id_free(NULL, object->runtime.object_as_temp_curve);
+  object->runtime.object_as_temp_curve = NULL;
 }
 
 void BKE_object_check_uuids_unique_and_report(const Object *object)

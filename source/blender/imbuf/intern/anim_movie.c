@@ -55,6 +55,7 @@
 
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
@@ -573,6 +574,9 @@ static int startffmpeg(struct anim *anim)
 
   pCodecCtx->workaround_bugs = 1;
 
+  pCodecCtx->thread_count = BLI_system_thread_count();
+  pCodecCtx->thread_type = FF_THREAD_SLICE;
+
   if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) {
     avformat_close_input(&pFormatCtx);
     return -1;
@@ -1050,7 +1054,7 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
   int64_t pts_to_search = 0;
   double frame_rate;
   double pts_time_base;
-  long long st_time;
+  int64_t st_time;
   struct anim_index *tc_index = 0;
   AVStream *v_st;
   int new_frame_index = 0; /* To quiet gcc barking... */
@@ -1121,7 +1125,7 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
     ffmpeg_decode_video_frame_scan(anim, pts_to_search);
   }
   else if (position != anim->curposition + 1) {
-    long long pos;
+    int64_t pos;
     int ret;
 
     if (tc_index) {
@@ -1145,7 +1149,7 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
       }
     }
     else {
-      pos = (long long)(position - anim->preseek) * AV_TIME_BASE / frame_rate;
+      pos = (int64_t)(position - anim->preseek) * AV_TIME_BASE / frame_rate;
 
       av_log(anim->pFormatCtx,
              AV_LOG_DEBUG,

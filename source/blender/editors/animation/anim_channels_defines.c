@@ -133,7 +133,16 @@ static void acf_generic_root_backdrop(bAnimContext *ac,
   UI_draw_roundbox_corner_set((expanded) ? UI_CNR_TOP_LEFT :
                                            (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
   UI_draw_roundbox_3fv_alpha(
-      true, offset, yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
+      &(const rctf){
+          .xmin = offset,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc,
+          .ymax = ymaxc,
+      },
+      true,
+      8,
+      color,
+      1.0f);
 }
 
 /* get backdrop color for data expanders under top-level Scene/Object */
@@ -421,7 +430,7 @@ static bool acf_generic_dataexpand_setting_valid(bAnimContext *ac,
     case ACHANNEL_SETTING_MUTE:
       return ((ac) && (ac->spacetype == SPACE_NLA));
 
-    /* select is ok for most "ds*" channels (e.g. dsmat) */
+    /* Select is ok for most `ds*` channels (e.g. `dsmat`) */
     case ACHANNEL_SETTING_SELECT:
       return true;
 
@@ -464,7 +473,16 @@ static void acf_summary_backdrop(bAnimContext *ac, bAnimListElem *ale, float ymi
    */
   UI_draw_roundbox_corner_set(UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT);
   UI_draw_roundbox_3fv_alpha(
-      true, 0, yminc - 2, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
+      &(const rctf){
+          .xmin = 0,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc - 2,
+          .ymax = ymaxc,
+      },
+      true,
+      8,
+      color,
+      1.0f);
 }
 
 /* name for summary entries */
@@ -875,7 +893,16 @@ static void acf_group_backdrop(bAnimContext *ac, bAnimListElem *ale, float yminc
   /* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
   UI_draw_roundbox_corner_set(expanded ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
   UI_draw_roundbox_3fv_alpha(
-      true, offset, yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 8, color, 1.0f);
+      &(const rctf){
+          .xmin = offset,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc,
+          .ymax = ymaxc,
+      },
+      true,
+      8,
+      color,
+      1.0f);
 }
 
 /* name for group entries */
@@ -1149,7 +1176,16 @@ static void acf_nla_controls_backdrop(bAnimContext *ac,
   /* rounded corners on LHS only - top only when expanded, but bottom too when collapsed */
   UI_draw_roundbox_corner_set(expanded ? UI_CNR_TOP_LEFT : (UI_CNR_TOP_LEFT | UI_CNR_BOTTOM_LEFT));
   UI_draw_roundbox_3fv_alpha(
-      true, offset, yminc, v2d->cur.xmax + EXTRA_SCROLL_PAD, ymaxc, 5, color, 1.0f);
+      &(const rctf){
+          .xmin = offset,
+          .xmax = v2d->cur.xmax + EXTRA_SCROLL_PAD,
+          .ymin = yminc,
+          .ymax = ymaxc,
+      },
+      true,
+      5,
+      color,
+      1.0f);
 }
 
 /* name for nla controls expander entries */
@@ -3936,13 +3972,16 @@ static void acf_nlaaction_backdrop(bAnimContext *ac, bAnimListElem *ale, float y
   /* draw slightly shifted up vertically to look like it has more separation from other channels,
    * but we then need to slightly shorten it so that it doesn't look like it overlaps
    */
-  UI_draw_roundbox_4fv(true,
-                       offset,
-                       yminc + NLACHANNEL_SKIP,
-                       (float)v2d->cur.xmax,
-                       ymaxc + NLACHANNEL_SKIP - 1,
-                       8,
-                       color);
+  UI_draw_roundbox_4fv(
+      &(const rctf){
+          .xmin = offset,
+          .xmax = (float)v2d->cur.xmax,
+          .ymin = yminc + NLACHANNEL_SKIP,
+          .ymax = ymaxc + NLACHANNEL_SKIP - 1,
+      },
+      true,
+      8,
+      color);
 }
 
 /* name for nla action entries */
@@ -4122,7 +4161,7 @@ static void ANIM_init_channel_typeinfo_data(void)
 /* Get type info from given channel type */
 const bAnimChannelType *ANIM_channel_get_typeinfo(bAnimListElem *ale)
 {
-  /* santiy checks */
+  /* Sanity checks. */
   if (ale == NULL) {
     return NULL;
   }

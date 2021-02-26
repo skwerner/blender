@@ -510,13 +510,13 @@ struct uiBlock {
 
   const char *lockstr;
 
-  char lock;
+  bool lock;
   /** to keep blocks while drawing and free them afterwards */
-  char active;
+  bool active;
   /** to avoid tooltip after click */
-  char tooltipdisabled;
+  bool tooltipdisabled;
   /** UI_block_end done? */
-  char endblock;
+  bool endblock;
 
   /** for doing delayed */
   eBlockBoundsCalc bounds_type;
@@ -525,7 +525,7 @@ struct uiBlock {
   /** for doing delayed */
   int bounds, minbounds;
 
-  /** pulldowns, to detect outside, can differ per case how it is created */
+  /** pull-downs, to detect outside, can differ per case how it is created. */
   rctf safety;
   /** uiSafetyRct list */
   ListBase saferct;
@@ -659,7 +659,7 @@ void ui_block_cm_to_display_space_v3(uiBlock *block, float pixel[3]);
 /* interface_regions.c */
 
 struct uiKeyNavLock {
-  /* set when we're using keyinput */
+  /* Set when we're using key-input. */
   bool is_keynav;
   /* only used to check if we've moved the cursor */
   int event_xy[2];
@@ -756,7 +756,7 @@ uiBlock *ui_block_func_COLOR(struct bContext *C, uiPopupBlockHandle *handle, voi
 ColorPicker *ui_block_colorpicker_create(struct uiBlock *block);
 
 /* interface_region_search.c */
-/* Searchbox for string button */
+/* Search-box for string button. */
 struct ARegion *ui_searchbox_create_generic(struct bContext *C,
                                             struct ARegion *butregion,
                                             uiButSearch *search_but);
@@ -991,12 +991,26 @@ extern void ui_draw_but(const struct bContext *C,
                         uiBut *but,
                         rcti *rect);
 
+/**
+ * Info about what the separator character separates, used to decide between different drawing
+ * styles. E.g. we never want a shortcut string to be clipped, but other hint strings can be
+ * clipped.
+ */
+typedef enum {
+  UI_MENU_ITEM_SEPARATOR_NONE,
+  /** Separator is used to indicate shortcut string of this item. Shortcut string will not get
+   * clipped. */
+  UI_MENU_ITEM_SEPARATOR_SHORTCUT,
+  /** Separator is used to indicate some additional hint to display for this item. Hint string will
+   * get clipped before the normal text. */
+  UI_MENU_ITEM_SEPARATOR_HINT,
+} uiMenuItemSeparatorType;
 void ui_draw_menu_item(const struct uiFontStyle *fstyle,
                        rcti *rect,
                        const char *name,
                        int iconid,
                        int state,
-                       bool use_sep,
+                       uiMenuItemSeparatorType separator_type,
                        int *r_xmax);
 void ui_draw_preview_item(
     const struct uiFontStyle *fstyle, rcti *rect, const char *name, int iconid, int state);

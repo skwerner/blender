@@ -252,13 +252,11 @@ void RE_ChangeModeFlag(struct Render *re, int flag, bool clear);
 struct Object *RE_GetCamera(struct Render *re); /* return camera override if set */
 void RE_SetOverrideCamera(struct Render *re, struct Object *cam_ob);
 void RE_SetCamera(struct Render *re, struct Object *cam_ob);
-void RE_SetWindow(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
-void RE_SetOrtho(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 
 /* get current view and window transform */
 void RE_GetViewPlane(struct Render *re, rctf *r_viewplane, rcti *r_disprect);
 
-/* set the render threads based on the command-line and autothreads setting */
+/* Set the render threads based on the command-line and auto-threads setting. */
 void RE_init_threadcount(Render *re);
 
 bool RE_WriteRenderViewsImage(struct ReportList *reports,
@@ -333,7 +331,7 @@ void RE_display_update_cb(struct Render *re,
                           void (*f)(void *handle, RenderResult *rr, volatile struct rcti *rect));
 void RE_stats_draw_cb(struct Render *re, void *handle, void (*f)(void *handle, RenderStats *rs));
 void RE_progress_cb(struct Render *re, void *handle, void (*f)(void *handle, float));
-void RE_draw_lock_cb(struct Render *re, void *handle, void (*f)(void *handle, int));
+void RE_draw_lock_cb(struct Render *re, void *handle, void (*f)(void *handle, bool lock));
 void RE_test_break_cb(struct Render *re, void *handle, int (*f)(void *handle));
 void RE_current_scene_update_cb(struct Render *re,
                                 void *handle,

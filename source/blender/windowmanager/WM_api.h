@@ -171,15 +171,24 @@ void WM_opengl_context_dispose(void *context);
 void WM_opengl_context_activate(void *context);
 void WM_opengl_context_release(void *context);
 
-struct wmWindow *WM_window_open(struct bContext *C, const struct rcti *rect);
-struct wmWindow *WM_window_open_temp(struct bContext *C,
-                                     const char *title,
-                                     int x,
-                                     int y,
-                                     int sizex,
-                                     int sizey,
-                                     int space_type,
-                                     bool dialog);
+/* WM_window_open alignment */
+typedef enum WindowAlignment {
+  WIN_ALIGN_ABSOLUTE = 0,
+  WIN_ALIGN_LOCATION_CENTER,
+  WIN_ALIGN_PARENT_CENTER,
+} WindowAlignment;
+
+struct wmWindow *WM_window_open(struct bContext *C,
+                                const char *title,
+                                int x,
+                                int y,
+                                int sizex,
+                                int sizey,
+                                int space_type,
+                                bool dialog,
+                                bool temp,
+                                WindowAlignment alignment);
+
 void WM_window_set_dpi(const wmWindow *win);
 
 bool WM_stereo3d_enabled(struct wmWindow *win, bool only_fullscreen_test);
@@ -188,7 +197,7 @@ bool WM_stereo3d_enabled(struct wmWindow *win, bool only_fullscreen_test);
 void WM_file_autoexec_init(const char *filepath);
 bool WM_file_read(struct bContext *C, const char *filepath, struct ReportList *reports);
 void WM_autosave_init(struct wmWindowManager *wm);
-void WM_recover_last_session(struct bContext *C, struct ReportList *reports);
+bool WM_recover_last_session(struct bContext *C, struct ReportList *reports);
 void WM_file_tag_modified(void);
 
 struct ID *WM_file_append_datablock(struct Main *bmain,
@@ -218,6 +227,9 @@ struct wmPaintCursor *WM_paint_cursor_activate(
     void *customdata);
 
 bool WM_paint_cursor_end(struct wmPaintCursor *handle);
+void WM_paint_cursor_remove_by_type(struct wmWindowManager *wm,
+                                    void *draw_fn,
+                                    void (*free)(void *));
 void WM_paint_cursor_tag_redraw(struct wmWindow *win, struct ARegion *region);
 
 void WM_cursor_warp(struct wmWindow *win, int x, int y);
@@ -678,16 +690,22 @@ struct wmDropBox *WM_dropbox_add(
     ListBase *lb,
     const char *idname,
     bool (*poll)(struct bContext *, struct wmDrag *, const struct wmEvent *event, const char **),
-    void (*copy)(struct wmDrag *, struct wmDropBox *));
+    void (*copy)(struct wmDrag *, struct wmDropBox *),
+    void (*cancel)(struct Main *, struct wmDrag *, struct wmDropBox *));
 ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid);
 
 /* ID drag and drop */
 void WM_drag_add_local_ID(struct wmDrag *drag, struct ID *id, struct ID *from_parent);
 struct ID *WM_drag_get_local_ID(const struct wmDrag *drag, short idcode);
 struct ID *WM_drag_get_local_ID_from_event(const struct wmEvent *event, short idcode);
+bool WM_drag_is_ID_type(const struct wmDrag *drag, int idcode);
 
 struct wmDragAsset *WM_drag_get_asset_data(const struct wmDrag *drag, int idcode);
 struct ID *WM_drag_get_local_ID_or_import_from_asset(const struct wmDrag *drag, int idcode);
+
+void WM_drag_free_imported_drag_ID(struct Main *bmain,
+                                   struct wmDrag *drag,
+                                   struct wmDropBox *drop);
 
 /* Set OpenGL viewport and scissor */
 void wmViewport(const struct rcti *winrct);

@@ -141,7 +141,7 @@ static char *rna_PoseBone_path(PointerRNA *ptr)
 static bool rna_bone_group_poll(Object *ob, ReportList *reports)
 {
   if ((ob->proxy != NULL) || (ob->proxy_group != NULL) || ID_IS_OVERRIDE_LIBRARY(ob)) {
-    BKE_report(reports, RPT_ERROR, "Cannot edit bonegroups for proxies or library overrides");
+    BKE_report(reports, RPT_ERROR, "Cannot edit bone groups for proxies or library overrides");
     return false;
   }
 
@@ -1142,6 +1142,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "rotation_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "rotmode");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_enum_items(prop, rna_enum_object_rotation_mode_items);
   RNA_def_property_enum_funcs(prop, NULL, "rna_PoseChannel_rotation_mode_set", NULL);
   /* XXX... disabled, since proxy-locked layers are currently

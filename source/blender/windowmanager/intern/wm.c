@@ -272,6 +272,7 @@ IDTypeInfo IDType_ID_WM = {
     .make_local = NULL,
     .foreach_id = window_manager_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = window_manager_blend_write,
     .blend_read_data = window_manager_blend_read_data,
@@ -279,6 +280,8 @@ IDTypeInfo IDType_ID_WM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 #define MAX_OP_REGISTERED 32
@@ -593,6 +596,9 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
     WM_msgbus_destroy(wm->message_bus);
   }
 
+#ifdef WITH_PYTHON
+  BPY_callback_wm_free(wm);
+#endif
   BLI_freelistN(&wm->paintcursors);
 
   WM_drag_free_list(&wm->drags);

@@ -172,6 +172,26 @@ static void collection_foreach_id(ID *id, LibraryForeachIDData *data)
   }
 }
 
+static ID *collection_owner_get(Main *bmain, ID *id)
+{
+  if ((id->flag & LIB_EMBEDDED_DATA) == 0) {
+    return id;
+  }
+  BLI_assert((id->tag & LIB_TAG_NO_MAIN) == 0);
+
+  Collection *master_collection = (Collection *)id;
+  BLI_assert((master_collection->flag & COLLECTION_IS_MASTER) != 0);
+
+  for (Scene *scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
+    if (scene->master_collection == master_collection) {
+      return &scene->id;
+    }
+  }
+
+  BLI_assert(!"Embedded collection with no owner. Critical Main inconsistency.");
+  return NULL;
+}
+
 void BKE_collection_blend_write_nolib(BlendWriter *writer, Collection *collection)
 {
   BKE_id_blend_write(writer, &collection->id);
@@ -355,6 +375,7 @@ IDTypeInfo IDType_ID_GR = {
     .make_local = NULL,
     .foreach_id = collection_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = collection_owner_get,
 
     .blend_write = collection_blend_write,
     .blend_read_data = collection_blend_read_data,
@@ -362,6 +383,8 @@ IDTypeInfo IDType_ID_GR = {
     .blend_read_expand = collection_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /** \} */
@@ -835,19 +858,6 @@ Collection *BKE_collection_master_add()
   master_collection->flag |= COLLECTION_IS_MASTER;
   master_collection->color_tag = COLLECTION_COLOR_NONE;
   return master_collection;
-}
-
-Scene *BKE_collection_master_scene_search(const Main *bmain, const Collection *master_collection)
-{
-  BLI_assert((master_collection->flag & COLLECTION_IS_MASTER) != 0);
-
-  for (Scene *scene = bmain->scenes.first; scene != NULL; scene = scene->id.next) {
-    if (scene->master_collection == master_collection) {
-      return scene;
-    }
-  }
-
-  return NULL;
 }
 
 /** \} */
@@ -1907,7 +1917,7 @@ bool BKE_collection_move(Main *bmain,
 /** \name Iterators
  * \{ */
 
-/* scene collection iteractor */
+/* Scene collection iterator. */
 
 typedef struct CollectionsIteratorData {
   Scene *scene;
@@ -1939,27 +1949,28 @@ static void scene_collections_build_array(Collection *collection, void *data)
   (*array)++;
 }
 
-static void scene_collections_array(Scene *scene, Collection ***collections_array, int *tot)
+static void scene_collections_array(Scene *scene,
+                                    Collection ***r_collections_array,
+                                    int *r_collections_array_len)
 {
-  Collection *collection;
-  Collection **array;
-
-  *collections_array = NULL;
-  *tot = 0;
+  *r_collections_array = NULL;
+  *r_collections_array_len = 0;
 
   if (scene == NULL) {
     return;
   }
 
-  collection = scene->master_collection;
+  Collection *collection = scene->master_collection;
   BLI_assert(collection != NULL);
-  scene_collection_callback(collection, scene_collections_count, tot);
+  scene_collection_callback(collection, scene_collections_count, r_collections_array_len);
 
-  if (*tot == 0) {
+  if (*r_collections_array_len == 0) {
     return;
   }
 
-  *collections_array = array = MEM_mallocN(sizeof(Collection *) * (*tot), "CollectionArray");
+  Collection **array = MEM_mallocN(sizeof(Collection *) * (*r_collections_array_len),
+                                   "CollectionArray");
+  *r_collections_array = array;
   scene_collection_callback(collection, scene_collections_build_array, &array);
 }
 

@@ -504,6 +504,7 @@ IDTypeInfo IDType_ID_PA = {
     .make_local = NULL,
     .foreach_id = particle_settings_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = particle_settings_blend_write,
     .blend_read_data = particle_settings_blend_read_data,
@@ -511,6 +512,8 @@ IDTypeInfo IDType_ID_PA = {
     .blend_read_expand = particle_settings_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
@@ -2302,7 +2305,7 @@ void psys_particle_on_emitter(ParticleSystemModifierData *psmd,
       }
       return;
     }
-    /* we cant use the num_dmcache */
+    /* we can't use the num_dmcache */
     psys_particle_on_dm(
         psmd->mesh_final, from, index, index_dmcache, fuv, foffset, vec, nor, utan, vtan, orco);
   }

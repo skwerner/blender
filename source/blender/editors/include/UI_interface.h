@@ -56,6 +56,7 @@ struct bNode;
 struct bNodeSocket;
 struct bNodeTree;
 struct bScreen;
+struct rctf;
 struct rcti;
 struct uiButSearch;
 struct uiFontStyle;
@@ -105,7 +106,7 @@ typedef struct uiPopupBlockHandle uiPopupBlockHandle;
 typedef enum eUIEmbossType {
   UI_EMBOSS = 0,          /* use widget style for drawing */
   UI_EMBOSS_NONE = 1,     /* Nothing, only icon and/or text */
-  UI_EMBOSS_PULLDOWN = 2, /* Pulldown menu style */
+  UI_EMBOSS_PULLDOWN = 2, /* Pull-down menu style */
   UI_EMBOSS_RADIAL = 3,   /* Pie Menu */
   /**
    * The same as #UI_EMBOSS_NONE, unless the button has
@@ -165,6 +166,8 @@ enum {
   /** The block is only used during the search process and will not be drawn.
    * Currently just for the case of a closed panel's sub-panel (and its sub-panels). */
   UI_BLOCK_SEARCH_ONLY = 1 << 25,
+  /** Hack for quick setup (splash screen) to draw text centered. */
+  UI_BLOCK_QUICK_SETUP = 1 << 26,
 };
 
 /** #uiPopupBlockHandle.menuretval */
@@ -414,57 +417,38 @@ void UI_draw_anti_tria(
 void UI_draw_anti_fan(float tri_array[][2], unsigned int length, const float color[4]);
 
 void UI_draw_roundbox_corner_set(int type);
-void UI_draw_roundbox_aa(
-    bool filled, float minx, float miny, float maxx, float maxy, float rad, const float color[4]);
-void UI_draw_roundbox_4fv(
-    bool filled, float minx, float miny, float maxx, float maxy, float rad, const float col[4]);
-void UI_draw_roundbox_3ub_alpha(bool filled,
-                                float minx,
-                                float miny,
-                                float maxx,
-                                float maxy,
+void UI_draw_roundbox_aa(const struct rctf *rect, bool filled, float rad, const float color[4]);
+void UI_draw_roundbox_4fv(const struct rctf *rect, bool filled, float rad, const float col[4]);
+void UI_draw_roundbox_3ub_alpha(const struct rctf *rect,
+                                bool filled,
                                 float rad,
                                 const unsigned char col[3],
                                 unsigned char alpha);
-void UI_draw_roundbox_3fv_alpha(bool filled,
-                                float minx,
-                                float miny,
-                                float maxx,
-                                float maxy,
-                                float rad,
-                                const float col[3],
-                                float alpha);
-void UI_draw_roundbox_shade_x(bool filled,
-                              float minx,
-                              float miny,
-                              float maxx,
-                              float maxy,
+void UI_draw_roundbox_3fv_alpha(
+    const struct rctf *rect, bool filled, float rad, const float col[3], float alpha);
+void UI_draw_roundbox_shade_x(const struct rctf *rect,
+                              bool filled,
                               float rad,
                               float shadetop,
                               float shadedown,
                               const float col[4]);
+void UI_draw_roundbox_4fv_ex(const struct rctf *rect,
+                             const float inner1[4],
+                             const float inner2[4],
+                             float shade_dir,
+                             const float outline[4],
+                             float outline_width,
+                             float rad);
 
 #if 0 /* unused */
 int UI_draw_roundbox_corner_get(void);
-void UI_draw_roundbox_shade_y(bool filled,
-                              float minx,
-                              float miny,
-                              float maxx,
-                              float maxy,
-                              float rad,
-                              float shadeleft,
-                              float shaderight,
-                              const float col[4]);
 #endif
 
-void UI_draw_box_shadow(unsigned char alpha, float minx, float miny, float maxx, float maxy);
+void UI_draw_box_shadow(const struct rctf *rect, unsigned char alpha);
 void UI_draw_text_underline(int pos_x, int pos_y, int len, int height, const float color[4]);
 
 void UI_draw_safe_areas(uint pos,
-                        float x1,
-                        float x2,
-                        float y1,
-                        float y2,
+                        const struct rctf *rect,
                         const float title_aspect[2],
                         const float action_aspect[2]);
 
@@ -526,6 +510,7 @@ typedef bool (*uiButSearchContextMenuFn)(struct bContext *C,
                                          const struct wmEvent *event);
 typedef struct ARegion *(*uiButSearchTooltipFn)(struct bContext *C,
                                                 struct ARegion *region,
+                                                const struct rcti *item_rect,
                                                 void *arg,
                                                 void *active);
 
@@ -1428,8 +1413,10 @@ enum {
   UI_TEMPLATE_ID_FILTER_AVAILABLE = 1,
 };
 
-int UI_icon_from_id(struct ID *id);
+int UI_icon_from_id(const struct ID *id);
 int UI_icon_from_report_type(int type);
+int UI_icon_colorid_from_report_type(int type);
+int UI_text_colorid_from_report_type(int type);
 
 int UI_icon_from_event_type(short event_type, short event_value);
 int UI_icon_from_keymap_item(const struct wmKeyMapItem *kmi, int r_icon_mod[4]);
@@ -2498,11 +2485,12 @@ void UI_context_active_but_prop_get_templateID(struct bContext *C,
                                                struct PropertyRNA **r_prop);
 struct ID *UI_context_active_but_get_tab_ID(struct bContext *C);
 
-uiBut *UI_region_active_but_get(struct ARegion *region);
+uiBut *UI_region_active_but_get(const struct ARegion *region);
 uiBut *UI_region_but_find_rect_over(const struct ARegion *region, const struct rcti *rect_px);
 uiBlock *UI_region_block_find_mouse_over(const struct ARegion *region,
                                          const int xy[2],
                                          bool only_clip);
+struct ARegion *UI_region_searchbox_region_get(const struct ARegion *button_region);
 
 /* uiFontStyle.align */
 typedef enum eFontStyle_Align {
@@ -2559,6 +2547,7 @@ void UI_template_fix_linking(void);
 /* UI_OT_editsource helpers */
 bool UI_editsource_enable_check(void);
 void UI_editsource_active_but_test(uiBut *but);
+void UI_editsource_but_replace(const uiBut *old_but, uiBut *new_but);
 
 /* UI_butstore_ helpers */
 typedef struct uiButStore uiButStore;
@@ -2581,6 +2570,21 @@ struct ARegion *UI_tooltip_create_from_button(struct bContext *C,
                                               bool is_label);
 struct ARegion *UI_tooltip_create_from_gizmo(struct bContext *C, struct wmGizmo *gz);
 void UI_tooltip_free(struct bContext *C, struct bScreen *screen, struct ARegion *region);
+
+typedef struct {
+  /** A description for the item, e.g. what happens when selecting it. */
+  char description[UI_MAX_DRAW_STR];
+  /* The full name of the item, without prefixes or suffixes (e.g. hint with UI_SEP_CHARP). */
+  const char *name;
+  /** Additional info about the item (e.g. library name of a linked data-block). */
+  char hint[UI_MAX_DRAW_STR];
+} uiSearchItemTooltipData;
+
+struct ARegion *UI_tooltip_create_from_search_item_generic(
+    struct bContext *C,
+    const struct ARegion *searchbox_region,
+    const struct rcti *item_rect,
+    const uiSearchItemTooltipData *item_tooltip_data);
 
 /* How long before a tool-tip shows. */
 #define UI_TOOLTIP_DELAY 0.5

@@ -439,7 +439,7 @@ const EnumPropertyItem rna_enum_clip_editor_mode_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-/* Actually populated dynamically trough a function,
+/* Actually populated dynamically through a function,
  * but helps for context-less access (e.g. doc, i18n...). */
 static const EnumPropertyItem buttons_context_items[] = {
     {BCONTEXT_TOOL, "TOOL", ICON_TOOL_SETTINGS, "Tool", "Active Tool and Workspace settings"},
@@ -2478,7 +2478,7 @@ static void rna_FileSelectPrams_filter_glob_set(PointerRNA *ptr, const char *val
 
   BLI_strncpy(params->filter_glob, value, sizeof(params->filter_glob));
 
-  /* Remove stupi things like last group being a wildcard-only one... */
+  /* Remove stupid things like last group being a wildcard-only one. */
   BLI_path_extension_glob_validate(params->filter_glob);
 }
 
@@ -4008,7 +4008,7 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
   prop = RNA_def_property(srna, "show_occlude_wire", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_OCCLUDE_WIRE);
   RNA_def_property_ui_text(prop, "Hidden Wire", "Use hidden wireframe display");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D | NS_VIEW3D_SHADING, NULL);
 
   prop = RNA_def_property(srna, "show_face_normals", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_FACE_NORMALS);
@@ -4038,7 +4038,10 @@ static void rna_def_space_view3d_overlay(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "show_face_center", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "overlay.edit_flag", V3D_OVERLAY_EDIT_FACE_DOT);
-  RNA_def_property_ui_text(prop, "Draw Face Center", "Display face center");
+  RNA_def_property_ui_text(
+      prop,
+      "Draw Face Center",
+      "Display face center when face selection is enabled in solid shading modes");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   prop = RNA_def_property(srna, "show_edge_crease", PROP_BOOLEAN, PROP_NONE);
@@ -4333,7 +4336,7 @@ static void rna_def_space_view3d(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(prop,
                            "Render Region",
-                           "Use a region within the frame size for rendered viewport"
+                           "Use a region within the frame size for rendered viewport "
                            "(when not viewing through the camera)");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
@@ -4651,11 +4654,11 @@ static void rna_def_space_view3d(BlenderRNA *brna)
         RNA_def_property_boolean_negative_sdna(
             prop, NULL, view_mask_member[mask_index], info[type_index].type_mask);
         RNA_def_property_ui_text(prop, info[type_index].name, "");
-        RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+        RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D | NS_VIEW3D_SHADING, NULL);
       }
     }
 
-    /* Heper for drawing the icon. */
+    /* Helper for drawing the icon. */
     prop = RNA_def_property(srna, "icon_from_show_object_viewport", PROP_INT, PROP_NONE);
     RNA_def_property_int_funcs(
         prop, "rna_SpaceView3D_icon_from_show_object_viewport_get", NULL, NULL);
@@ -4802,13 +4805,21 @@ static void rna_def_space_properties(BlenderRNA *brna)
   PropertyRNA *prop;
 
   static const EnumPropertyItem tab_sync_items[] = {
-      {PROPERTIES_SYNC_ON, "ON", 0, "On", "Always sync from outliner editors to this editor"},
-      {PROPERTIES_SYNC_OFF, "OFF", 0, "Off", "Never sync from outliner editors to this editor"},
+      {PROPERTIES_SYNC_ALWAYS,
+       "ALWAYS",
+       0,
+       "Always",
+       "Always change tabs when clicking an icon in an outliner"},
+      {PROPERTIES_SYNC_NEVER,
+       "NEVER",
+       0,
+       "Never",
+       "Never change tabs when clicking an icon in an outliner"},
       {PROPERTIES_SYNC_AUTO,
        "AUTO",
        0,
        "Auto",
-       "Sync when this editor shares an edge with an outliner editor"},
+       "Change tabs only when this editor shares a border with an outliner"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -4867,7 +4878,9 @@ static void rna_def_space_properties(BlenderRNA *brna)
   prop = RNA_def_property(srna, "outliner_sync", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "outliner_sync");
   RNA_def_property_enum_items(prop, tab_sync_items);
-  RNA_def_property_ui_text(prop, "Outliner Sync", "Sync tabs from outliner datablock selection");
+  RNA_def_property_ui_text(prop,
+                           "Outliner Sync",
+                           "Change to the corresponding tab when outliner data icons are clicked");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_PROPERTIES, NULL);
 }
 
@@ -5699,13 +5712,13 @@ static void rna_def_space_graph(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Pivot Point", "Pivot center for rotation/scaling");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
 
-  /* dopesheet */
+  /* Dope-sheet. */
   prop = RNA_def_property(srna, "dopesheet", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "DopeSheet");
   RNA_def_property_pointer_sdna(prop, NULL, "ads");
   RNA_def_property_ui_text(prop, "Dope Sheet", "Settings for filtering animation data");
 
-  /* autosnap */
+  /* Auto-snap. */
   prop = RNA_def_property(srna, "auto_snap", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "autosnap");
   RNA_def_property_enum_items(prop, autosnap_items);
@@ -5713,14 +5726,14 @@ static void rna_def_space_graph(BlenderRNA *brna)
       prop, "Auto Snap", "Automatic time snapping settings for transformations");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_GRAPH, NULL);
 
-  /* readonly state info */
+  /* Read-only state info. */
   prop = RNA_def_property(srna, "has_ghost_curves", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_funcs(prop, "rna_SpaceGraphEditor_has_ghost_curves_get", NULL);
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
   RNA_def_property_ui_text(
       prop, "Has Ghost Curves", "Graph Editor instance has some ghost curves stored");
 
-  /* nromalize curves */
+  /* Normalize curves. */
   prop = RNA_def_property(srna, "use_normalization", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", SIPO_NORMALIZE);
   RNA_def_property_ui_text(prop,

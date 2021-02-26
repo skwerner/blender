@@ -165,7 +165,7 @@ void ED_view3d_update_viewmat(Depsgraph *depsgraph,
     rv3d->viewcamtexcofac[2] = rv3d->viewcamtexcofac[3] = 0.0f;
   }
 
-  /* calculate pixelsize factor once, is used for lights and obcenters */
+  /* Calculate pixel-size factor once, this is used for lights and object-centers. */
   {
     /* note:  '1.0f / len_v3(v1)'  replaced  'len_v3(rv3d->viewmat[0])'
      * because of float point precision problems at large values T23908. */
@@ -723,15 +723,24 @@ static void drawviewborder(Scene *scene, Depsgraph *depsgraph, ARegion *region, 
     }
 
     if (ca->flag & CAM_SHOW_SAFE_MARGINS) {
-      UI_draw_safe_areas(
-          shdr_pos, x1, x2, y1, y2, scene->safe_areas.title, scene->safe_areas.action);
+      UI_draw_safe_areas(shdr_pos,
+                         &(const rctf){
+                             .xmin = x1,
+                             .xmax = x2,
+                             .ymin = y1,
+                             .ymax = y2,
+                         },
+                         scene->safe_areas.title,
+                         scene->safe_areas.action);
 
       if (ca->flag & CAM_SHOW_SAFE_CENTER) {
         UI_draw_safe_areas(shdr_pos,
-                           x1,
-                           x2,
-                           y1,
-                           y2,
+                           &(const rctf){
+                               .xmin = x1,
+                               .xmax = x2,
+                               .ymin = y1,
+                               .ymax = y2,
+                           },
                            scene->safe_areas.title_center,
                            scene->safe_areas.action_center);
       }
@@ -869,7 +878,11 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
   UI_Theme_Restore(&theme_state);
 }
 
-/* ******************** other elements ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Other Elements
+ * \{ */
 
 /** could move this elsewhere, but tied into #ED_view3d_grid_scale */
 float ED_scene_grid_scale(const Scene *scene, const char **r_grid_unit)
@@ -1667,6 +1680,7 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
                               bool draw_background,
                               const char *viewname,
                               const bool do_color_management,
+                              const bool restore_rv3d_mats,
                               GPUOffScreen *ofs,
                               GPUViewport *viewport)
 {
@@ -1755,7 +1769,11 @@ void ED_view3d_draw_offscreen(Depsgraph *depsgraph,
   region->winy = orig.region_winy;
   region->winrct = orig.region_winrct;
 
-  ED_view3d_mats_rv3d_restore(region->regiondata, orig.rv3d_mats);
+  /* Optionally do _not_ restore rv3d matrices (e.g. they are used/stored in the ImBuff for
+   * reprojection, see texture_paint_image_from_view_exec(). */
+  if (restore_rv3d_mats) {
+    ED_view3d_mats_rv3d_restore(region->regiondata, orig.rv3d_mats);
+  }
   MEM_freeN(orig.rv3d_mats);
 
   UI_Theme_Restore(&orig.theme_state);
@@ -1847,6 +1865,7 @@ void ED_view3d_draw_offscreen_simple(Depsgraph *depsgraph,
                            draw_background,
                            viewname,
                            do_color_management,
+                           true,
                            ofs,
                            viewport);
 }
@@ -1867,6 +1886,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
                                       eImBufFlags imbuf_flag,
                                       int alpha_mode,
                                       const char *viewname,
+                                      const bool restore_rv3d_mats,
                                       /* output vars */
                                       GPUOffScreen *ofs,
                                       char err_out[256])
@@ -1950,6 +1970,16 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
     }
   }
 
+  /* XXX(jbakker): `do_color_management` should be controlled by the caller. Currently when doing a
+   * viewport render animation and saving to an 8bit file format, color management would be applied
+   * twice. Once here, and once when saving the saving to disk. In this case the Save As Render
+   * option cannot be controlled either. But when doing an off-screen render you want to do the
+   * color management here.
+   *
+   * This option was added here to increase the performance for quick view-port preview renders.
+   * When using workbench the color differences haven't been reported as a bug. But users also use
+   * the viewport rendering to render Eevee scenes. In the later situation the saved colors are
+   * totally wrong. */
   const bool do_color_management = (ibuf->rect_float == NULL);
   ED_view3d_draw_offscreen(depsgraph,
                            scene,
@@ -1964,6 +1994,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
                            draw_sky,
                            viewname,
                            do_color_management,
+                           restore_rv3d_mats,
                            ofs,
                            NULL);
 
@@ -1971,7 +2002,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
     GPU_offscreen_read_pixels(ofs, GPU_DATA_FLOAT, ibuf->rect_float);
   }
   else if (ibuf->rect) {
-    GPU_offscreen_read_pixels(ofs, GPU_DATA_UNSIGNED_BYTE, ibuf->rect);
+    GPU_offscreen_read_pixels(ofs, GPU_DATA_UBYTE, ibuf->rect);
   }
 
   /* unbind */
@@ -2089,6 +2120,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf_simple(Depsgraph *depsgraph,
                                         imbuf_flag,
                                         alpha_mode,
                                         viewname,
+                                        true,
                                         ofs,
                                         err_out);
 }
@@ -2121,7 +2153,11 @@ bool ED_view3d_clipping_test(const RegionView3D *rv3d, const float co[3], const 
   return view3d_clipping_test(co, is_local ? rv3d->clip_local : rv3d->clip);
 }
 
-/* *********************** backdraw for selection *************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Back-Draw for Selection
+ * \{ */
 
 /**
  * \note Only use in object mode.
@@ -2164,7 +2200,7 @@ static void validate_object_select_id(struct Depsgraph *depsgraph,
   }
 
   /* TODO: Create a flag in `DRW_manager` because the drawing is no longer
-   *       made on the backbuffer in this case. */
+   *       made on the back-buffer in this case. */
   v3d->flag &= ~V3D_INVALID_BACKBUF;
 }
 
@@ -2193,7 +2229,7 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
 void ED_view3d_select_id_validate(ViewContext *vc)
 {
   /* TODO: Create a flag in `DRW_manager` because the drawing is no longer
-   *       made on the backbuffer in this case. */
+   *       made on the back-buffer in this case. */
   if (vc->v3d->flag & V3D_INVALID_BACKBUF) {
     validate_object_select_id(vc->depsgraph, vc->view_layer, vc->region, vc->v3d, vc->obact);
   }
@@ -2223,7 +2259,11 @@ int ED_view3d_backbuf_sample_size_clamp(ARegion *region, const float dist)
   return (int)min_ff(ceilf(dist), (float)max_ii(region->winx, region->winx));
 }
 
-/* *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Z-Depth Utilities
+ * \{ */
 
 void view3d_update_depths_rect(ARegion *region, ViewDepths *d, rcti *rect)
 {
@@ -2316,7 +2356,7 @@ void ED_view3d_depth_update(ARegion *region)
   }
 }
 
-/* Utility function to find the closest Z value, use for autodepth. */
+/* Utility function to find the closest Z value, use for auto-depth. */
 float view3d_depth_near(ViewDepths *d)
 {
   /* Convert to float for comparisons. */
@@ -2355,7 +2395,11 @@ void ED_view3d_draw_depth_gpencil(Depsgraph *depsgraph, Scene *scene, ARegion *r
   GPU_depth_test(GPU_DEPTH_NONE);
 }
 
-/* *********************** customdata **************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Custom-data Utilities
+ * \{ */
 
 void ED_view3d_datamask(const bContext *C,
                         const Scene *UNUSED(scene),
@@ -2402,6 +2446,12 @@ void ED_view3d_screen_datamask(const bContext *C,
   }
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Region View Matrix Backup/Restore
+ * \{ */
+
 /**
  * Store values from #RegionView3D, set when drawing.
  * This is needed when we draw with to a viewport using a different matrix
@@ -2443,6 +2493,12 @@ void ED_view3d_mats_rv3d_restore(struct RegionView3D *rv3d, struct RV3DMatrixSto
   copy_v4_v4(rv3d->viewcamtexcofac, rv3dmat->viewcamtexcofac);
   rv3d->pixsize = rv3dmat->pixsize;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name FPS Drawing
+ * \{ */
 
 /**
  * \note The info that this uses is updated in #ED_refresh_viewport_fps,
@@ -2502,6 +2558,12 @@ void ED_scene_draw_fps(const Scene *scene, int xoffset, int *yoffset)
 
   BLF_disable(font_id, BLF_SHADOW);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Calculate Render Border
+ * \{ */
 
 static bool view3d_main_region_do_render_draw(const Scene *scene)
 {

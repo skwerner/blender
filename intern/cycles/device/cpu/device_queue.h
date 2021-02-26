@@ -52,6 +52,9 @@ class CPUDeviceQueue : public DeviceQueue {
    * accessing it, but some "localization" is required to decouple from kernel globals stored
    * on the device level. */
   CPUKernelThreadGlobals kernel_globals_;
+
+  /* Optimization flag to avoid re-initialization of the copy of the kernel globals. */
+  bool need_copy_kernel_globals_ = true;
 };
 
 class CPUIntegratorQueue : public CPUDeviceQueue {

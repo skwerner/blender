@@ -114,12 +114,16 @@ BVHLayoutMask CPUDevice::get_bvh_layout_mask() const
   return bvh_layout_mask;
 }
 
-void CPUDevice::load_texture_info()
+bool CPUDevice::load_texture_info()
 {
-  if (need_texture_info) {
-    texture_info.copy_to_device();
-    need_texture_info = false;
+  if (!need_texture_info) {
+    return false;
   }
+
+  texture_info.copy_to_device();
+  need_texture_info = false;
+
+  return true;
 }
 
 void CPUDevice::mem_alloc(device_memory &mem)

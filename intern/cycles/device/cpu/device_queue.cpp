@@ -35,11 +35,13 @@ void CPUDeviceQueue::init_execution()
 
   /* Load information about textures from data stroed in CPUDevice to data available to kernels
    * via KernelGlobals. */
-  cpu_device->load_texture_info();
+  const bool texture_info_changed = cpu_device->load_texture_info();
 
-  /* TODO(sergey): Avoid re-creation of `kernel_globals_` if no textures were loaded and there
-   * was already a copy of the globals. */
-  kernel_globals_ = CPUKernelThreadGlobals(cpu_device->kernel_globals, cpu_device->osl_memory());
+  if (need_copy_kernel_globals_ || texture_info_changed) {
+    kernel_globals_ = CPUKernelThreadGlobals(cpu_device->kernel_globals, cpu_device->osl_memory());
+  }
+
+  need_copy_kernel_globals_ = false;
 }
 
 CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_buffers)

@@ -77,7 +77,9 @@ class CPUDevice : public Device {
 
   virtual BVHLayoutMask get_bvh_layout_mask() const override;
 
-  void load_texture_info();
+  /* Returns truth if the texture info was copied to the device (meaning, some more
+   * re-initialization might be needed). */
+  bool load_texture_info();
 
   virtual void mem_alloc(device_memory &mem) override;
   virtual void mem_copy_to(device_memory &mem) override;

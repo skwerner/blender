@@ -33,12 +33,11 @@ void PathTrace::UpdateStatus::reset()
   has_update = false;
 }
 
-PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params) : device_(device)
+PathTrace::PathTrace(Device *device) : device_(device)
 {
   DCHECK_NE(device_, nullptr);
 
   full_render_buffers_ = make_unique<RenderBuffers>(device);
-  full_render_buffers_->reset(full_buffer_params);
 
   /* Create integrator queues in advance, so that they can be reused by incremental sampling
    * as much as possible. */
@@ -55,6 +54,11 @@ PathTrace::PathTrace(Device *device, const BufferParams &full_buffer_params) : d
    * device's get_max_num_path_states(). This is a bit tricky because CPU and GPU device will
    * be opposites of each other: CPU wavefront is super tiny, and GPU wavefront is gigantic.
    * How to find an ideal scheduling for such a mixture?  */
+}
+
+void PathTrace::reset(const BufferParams &full_buffer_params)
+{
+  full_render_buffers_->reset(full_buffer_params);
 }
 
 void PathTrace::set_start_sample(int start_sample_num)

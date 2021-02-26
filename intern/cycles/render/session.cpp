@@ -95,6 +95,50 @@ Session::Session(const SessionParams &params_)
     buffers = new RenderBuffers(device);
     display = new DisplayBuffer(device, params.display_buffer_linear);
   }
+
+  /* Configure path tracer. */
+  path_trace_ = make_unique<PathTrace>(device);
+
+  path_trace_->get_cancel_cb = [&progress = this->progress]() { return progress.get_cancel(); };
+  path_trace_->update_cb = [&](RenderBuffers *render_buffers, int sample) {
+    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
+     * the the new progressive+adaptive nature of rendering. */
+
+    if (!update_render_tile_cb) {
+      return;
+    }
+
+    RenderTile render_tile;
+    render_tile.x = render_buffers->params.full_x;
+    render_tile.y = render_buffers->params.full_y;
+    render_tile.w = render_buffers->params.width;
+    render_tile.h = render_buffers->params.height;
+    render_tile.sample = sample;
+    render_tile.buffers = render_buffers;
+
+    update_render_tile_cb(render_tile, false);
+  };
+  path_trace_->write_cb = [&](RenderBuffers *render_buffers, int sample) {
+    /* NOTE: Almost a duplicate of `update_cb`, but is done for a testing purposes, neither of
+     * this callbacks are final. */
+
+    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
+     * the the new progressive+adaptive nature of rendering. */
+
+    if (!write_render_tile_cb) {
+      return;
+    }
+
+    RenderTile render_tile;
+    render_tile.x = render_buffers->params.full_x;
+    render_tile.y = render_buffers->params.full_y;
+    render_tile.w = render_buffers->params.width;
+    render_tile.h = render_buffers->params.height;
+    render_tile.sample = sample;
+    render_tile.buffers = render_buffers;
+
+    write_render_tile_cb(render_tile);
+  };
 }
 
 Session::~Session()
@@ -114,6 +158,12 @@ Session::~Session()
     uchar4 *pixels = display->rgba_byte.copy_from_device(0, w, h);
     params.write_render_cb((uchar *)pixels, w, h, 4);
   }
+
+  /* Make sure path tracer is destroyed before the deviec. This is needed because destruction might
+   * need to access device for device memory free. */
+  /* TODO(sergey): Convert device to be unique_ptr, and rely on C++ to destruct objects in the
+   * pre-defined order. */
+  path_trace_.reset();
 
   /* clean up */
   tile_manager.device_free();
@@ -1178,57 +1228,11 @@ void Session::render(bool /*need_denoise*/)
   /* Number of samples which are to be path traced. */
   const int samples_to_render_num = tile_manager.state.num_samples;
 
-  /* TODO(sergey): Preserve path tracer state, so it doesn't re-allocate states and things like
-   * that on every sample of viewport render. */
-
-  PathTrace path_trace(device, buffer_params);
-
-  path_trace.set_start_sample(tile_manager.state.sample);
-
-  /* Configure path tracer. */
-  path_trace.get_cancel_cb = [&progress = this->progress]() { return progress.get_cancel(); };
-  path_trace.update_cb = [&](RenderBuffers *render_buffers, int sample) {
-    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
-     * the the new progressive+adaptive nature of rendering. */
-
-    if (!update_render_tile_cb) {
-      return;
-    }
-
-    RenderTile render_tile;
-    render_tile.x = render_buffers->params.full_x;
-    render_tile.y = render_buffers->params.full_y;
-    render_tile.w = render_buffers->params.width;
-    render_tile.h = render_buffers->params.height;
-    render_tile.sample = sample;
-    render_tile.buffers = render_buffers;
-
-    update_render_tile_cb(render_tile, false);
-  };
-  path_trace.write_cb = [&](RenderBuffers *render_buffers, int sample) {
-    /* NOTE: Almost a duplicate of `update_cb`, but is done for a testing purposes, neither of
-     * this callbacks are final. */
-
-    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
-     * the the new progressive+adaptive nature of rendering. */
-
-    if (!write_render_tile_cb) {
-      return;
-    }
-
-    RenderTile render_tile;
-    render_tile.x = render_buffers->params.full_x;
-    render_tile.y = render_buffers->params.full_y;
-    render_tile.w = render_buffers->params.width;
-    render_tile.h = render_buffers->params.height;
-    render_tile.sample = sample;
-    render_tile.buffers = render_buffers;
-
-    write_render_tile_cb(render_tile);
-  };
+  path_trace_->reset(buffer_params);
+  path_trace_->set_start_sample(tile_manager.state.sample);
 
   /* Perform rendering. */
-  path_trace.render_samples(samples_to_render_num);
+  path_trace_->render_samples(samples_to_render_num);
 
   /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on
    * the `PathTrace`. */

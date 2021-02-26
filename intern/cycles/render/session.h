@@ -26,6 +26,7 @@
 #include "util/util_progress.h"
 #include "util/util_stats.h"
 #include "util/util_thread.h"
+#include "util/util_unique_ptr.h"
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
@@ -35,6 +36,7 @@ class Device;
 class DeviceScene;
 class DeviceRequestedFeatures;
 class DisplayBuffer;
+class PathTrace;
 class Progress;
 class RenderBuffers;
 class Scene;
@@ -239,6 +241,12 @@ class Session {
 
   /* progressive refine */
   bool update_progressive_refine(bool cancel);
+
+  /* Path tracer object.
+   *
+   * Is a single full-frame path tracer for interactive viewport rendering.
+   * A path tracer for the current big-tile for an offline rendering. */
+  unique_ptr<PathTrace> path_trace_;
 };
 
 CCL_NAMESPACE_END

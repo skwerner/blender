@@ -38,10 +38,12 @@ class RenderBuffers;
  *  - Adaptive stopping. */
 class PathTrace {
  public:
+  explicit PathTrace(Device *device);
+
   /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced.
    *
    * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
-  PathTrace(Device *device, const BufferParams &full_buffer_params);
+  void reset(const BufferParams &full_buffer_params);
 
   /* Is used to either offset sampling when adding more samples to an existing render, or to
    * offset sample for a viewport render.

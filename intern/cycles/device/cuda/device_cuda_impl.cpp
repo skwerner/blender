@@ -523,6 +523,7 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
   }
 
   load_functions();
+  kernels.load(this);
 
   return (result == CUDA_SUCCESS);
 }
@@ -568,6 +569,8 @@ void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_f
   size_t total = 0, free_before = 0, free_after = 0;
   cuMemGetInfo(&free_before, &total);
 
+  /* TODO: implement for new integrator kernels. */
+#  if 0
   /* Get kernel function. */
   CUfunction cuRender;
 
@@ -600,6 +603,10 @@ void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_f
   cuda_assert(cuCtxSynchronize());
 
   cuMemGetInfo(&free_after, &total);
+#  else
+  free_after = free_before;
+#  endif
+
   VLOG(1) << "Local memory reserved " << string_human_readable_number(free_before - free_after)
           << " bytes. (" << string_human_readable_size(free_before - free_after) << ")";
 
@@ -2391,6 +2398,18 @@ void CUDADevice::task_wait()
 void CUDADevice::task_cancel()
 {
   task_pool.cancel();
+}
+
+unique_ptr<DeviceQueue> CUDADevice::queue_create_integrator(RenderBuffers *render_buffers)
+{
+  DCHECK_EQ(render_buffers->buffer.device, this);
+
+  return make_unique<CUDAIntegratorQueue>(this, render_buffers);
+}
+
+int CUDADevice::get_concurrent_integrator_queues_num()
+{
+  return 1;
 }
 
 CCL_NAMESPACE_END

@@ -62,6 +62,10 @@ set(SRC_CUDA
   cuda/device_cuda.h
   cuda/device_cuda_impl.cpp
   cuda/device_cuda_impl.h
+  cuda/kernel.cpp
+  cuda/kernel.h
+  cuda/queue.cpp
+  cuda/queue.h
   cuda/util.cpp
   cuda/util.h
 )

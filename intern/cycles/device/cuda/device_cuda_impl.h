@@ -16,6 +16,8 @@
 
 #ifdef WITH_CUDA
 
+#  include "device/cuda/kernel.h"
+#  include "device/cuda/queue.h"
 #  include "device/cuda/util.h"
 #  include "device/device.h"
 #  include "device/device_denoising.h"
@@ -32,6 +34,9 @@
 #  endif
 
 CCL_NAMESPACE_BEGIN
+
+class RenderBuffers;
+class DeviceQueue;
 
 class CUDADevice : public Device {
 
@@ -90,6 +95,9 @@ class CUDADevice : public Device {
     CUfunction adaptive_scale_samples;
     int adaptive_num_threads_per_block;
   } functions;
+
+  /* TODO: put all kernels in this. */
+  CUDADeviceKernels kernels;
 
   static bool have_precompiled_kernels();
 
@@ -256,6 +264,10 @@ class CUDADevice : public Device {
   virtual void task_wait() override;
 
   virtual void task_cancel() override;
+
+  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *render_buffers) override;
+
+  virtual int get_concurrent_integrator_queues_num() override;
 };
 
 CCL_NAMESPACE_END

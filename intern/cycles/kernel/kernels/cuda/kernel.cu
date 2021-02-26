@@ -23,63 +23,107 @@
 
 #  include "util/util_atomic.h"
 
-#  include "kernel/kernel_adaptive_sampling.h"
-#  include "kernel/kernel_bake.h"
-#  include "kernel/kernel_color.h"
-#  include "kernel/kernel_film.h"
-#  include "kernel/kernel_globals.h"
 #  include "kernel/kernel_math.h"
-#  include "kernel/kernel_path.h"
-#  include "kernel/kernel_path_branched.h"
 #  include "kernel/kernel_types.h"
-#  include "kernel/kernel_work_stealing.h"
+
+#  include "kernel/kernel_globals.h"
 #  include "kernel/kernels/cuda/kernel_cuda_image.h"
 
+#  include "kernel/integrator/integrator_path_state.h"
+#  include "kernel/integrator/integrator_state.h"
+
+#  include "kernel/integrator/integrator_init_from_camera.h"
+#  include "kernel/integrator/integrator_intersect_closest.h"
+#  include "kernel/integrator/integrator_intersect_shadow.h"
+#  include "kernel/integrator/integrator_intersect_subsurface.h"
+#  include "kernel/integrator/integrator_shade_background.h"
+#  include "kernel/integrator/integrator_shade_shadow.h"
+#  include "kernel/integrator/integrator_shade_surface.h"
+#  include "kernel/integrator/integrator_shade_volume.h"
+
+#  include "kernel/kernel_adaptive_sampling.h"
+#  include "kernel/kernel_film.h"
+#  include "kernel/kernel_work_stealing.h"
+
+#  if 0
 /* kernels */
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_path_trace(KernelWorkTile *tile, uint total_work_size)
 {
-  int work_index = ccl_global_id(0);
-  bool thread_is_active = work_index < total_work_size;
-  uint x, y, sample;
-  KernelGlobals kg;
-  if (thread_is_active) {
-    get_work_pixel(tile, work_index, &x, &y, &sample);
+	int work_index = ccl_global_id(0);
+	bool thread_is_active = work_index < total_work_size;
+	uint x, y, sample;
+	KernelGlobals kg;
+	if(thread_is_active) {
+		get_work_pixel(tile, work_index, &x, &y, &sample);
 
-    kernel_path_trace(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-  }
+		kernel_path_trace(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
+	}
 
-  if (kernel_data.film.cryptomatte_passes) {
-    __syncthreads();
-    if (thread_is_active) {
-      kernel_cryptomatte_post(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-    }
-  }
-}
-
-#  ifdef __BRANCHED_PATH__
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH,
-                                              CUDA_KERNEL_BRANCHED_MAX_REGISTERS)
-    kernel_cuda_branched_path_trace(KernelWorkTile *tile, uint total_work_size)
-{
-  int work_index = ccl_global_id(0);
-  bool thread_is_active = work_index < total_work_size;
-  uint x, y, sample;
-  KernelGlobals kg;
-  if (thread_is_active) {
-    get_work_pixel(tile, work_index, &x, &y, &sample);
-
-    kernel_branched_path_trace(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-  }
-
-  if (kernel_data.film.cryptomatte_passes) {
-    __syncthreads();
-    if (thread_is_active) {
-      kernel_cryptomatte_post(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-    }
-  }
+	if(kernel_data.film.cryptomatte_passes) {
+		__syncthreads();
+		if(thread_is_active) {
+			kernel_cryptomatte_post(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
+		}
+	}
 }
 #  endif
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_init_from_camera(IntegratorState *state,
+                                            KernelWorkTile *tile,
+                                            uint total_work_size)
+{
+  const int work_index = ccl_global_id(0);
+  bool thread_is_active = work_index < total_work_size;
+  if (thread_is_active) {
+    uint x, y, sample;
+    get_work_pixel(tile, work_index, &x, &y, &sample);
+    integrator_init_from_camera(NULL, state, tile, x, y, sample);
+  }
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_intersect_closest(IntegratorState *state)
+{
+  integrator_intersect_closest(NULL, state);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_intersect_shadow(IntegratorState *state)
+{
+  integrator_intersect_shadow(NULL, state);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_intersect_subsurface(IntegratorState *state)
+{
+  integrator_intersect_subsurface(NULL, state);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_shade_background(IntegratorState *state, float *render_buffer)
+{
+  integrator_shade_background(NULL, state, render_buffer);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_shade_shadow(IntegratorState *state, float *render_buffer)
+{
+  integrator_shade_shadow(NULL, state, render_buffer);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_shade_surface(IntegratorState *state, float *render_buffer)
+{
+  integrator_shade_surface(NULL, state, render_buffer);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_shade_volume(IntegratorState *state, float *render_buffer)
+{
+  integrator_shade_volume(NULL, state, render_buffer);
+}
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_adaptive_stopping(KernelWorkTile *tile, int sample, uint total_work_size)
@@ -193,30 +237,38 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
     kernel_cuda_displace(
         uint4 *input, float4 *output, int type, int sx, int sw, int offset, int sample)
 {
+  /* TODO */
+#  if 0
   int x = sx + blockDim.x * blockIdx.x + threadIdx.x;
 
   if (x < sx + sw) {
     KernelGlobals kg;
     kernel_displace_evaluate(&kg, input, output, x);
   }
+#  endif
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_background(
         uint4 *input, float4 *output, int type, int sx, int sw, int offset, int sample)
 {
+  /* TODO */
+#  if 0
   int x = sx + blockDim.x * blockIdx.x + threadIdx.x;
 
   if (x < sx + sw) {
     KernelGlobals kg;
     kernel_background_evaluate(&kg, input, output, x);
   }
+#  endif
 }
 
 #  ifdef __BAKING__
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_bake(KernelWorkTile *tile, uint total_work_size)
 {
+  /* TODO */
+#    if 0
   int work_index = ccl_global_id(0);
 
   if (work_index < total_work_size) {
@@ -226,6 +278,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
     KernelGlobals kg;
     kernel_bake_evaluate(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
   }
+#    endif
 }
 #  endif
 

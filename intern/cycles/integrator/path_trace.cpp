@@ -64,6 +64,8 @@ void PathTrace::set_start_sample(int start_sample_num)
 
 void PathTrace::render_samples(int samples_num)
 {
+  render_init_execution();
+
   render_status_.reset();
   update_status_.reset();
 
@@ -88,6 +90,13 @@ void PathTrace::render_samples(int samples_num)
   write();
 }
 
+void PathTrace::render_init_execution()
+{
+  for (auto &&queue : integrator_queues_) {
+    queue->init_execution();
+  }
+}
+
 void PathTrace::render_samples_full_pipeline(int samples_num)
 {
   /* Reset work scheduler, so that it is ready to give work tiles for the new samples range. */
@@ -108,6 +117,8 @@ void PathTrace::render_samples_full_pipeline(int samples_num)
 
 void PathTrace::render_samples_full_pipeline(DeviceQueue *queue)
 {
+  queue->init_execution();
+
   DeviceWorkTile work_tile;
   while (work_scheduler_.get_work(&work_tile)) {
     render_samples_full_pipeline(queue, work_tile);

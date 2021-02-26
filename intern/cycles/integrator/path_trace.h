@@ -76,6 +76,9 @@ class PathTrace {
   function<void(RenderBuffers *render_buffers, int sample)> write_cb;
 
  protected:
+  /* Initialize kernel execution on all integrator queues. */
+  void render_init_execution();
+
   /* Run full render pipeline on all devices to add the given number of samples to the render
    * result.
    *

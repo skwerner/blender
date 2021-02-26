@@ -25,23 +25,25 @@
 
 CCL_NAMESPACE_BEGIN
 
-CPUDeviceQueue::CPUDeviceQueue(CPUDevice *device,
-                               const CPUKernels &kernels,
-                               const KernelGlobals &kernel_globals)
-    : DeviceQueue(device), kernels_(kernels), kernel_globals_(kernel_globals, device->osl_memory())
+CPUDeviceQueue::CPUDeviceQueue(CPUDevice *device) : DeviceQueue(device)
 {
 }
 
-CPUDevice *CPUDeviceQueue::get_cpu_device() const
+void CPUDeviceQueue::init_execution()
 {
-  return static_cast<CPUDevice *>(device);
+  CPUDevice *cpu_device = get_cpu_device();
+
+  /* Load information about textures from data stroed in CPUDevice to data available to kernels
+   * via KernelGlobals. */
+  cpu_device->load_texture_info();
+
+  /* TODO(sergey): Avoid re-creation of `kernel_globals_` if no textures were loaded and there
+   * was already a copy of the globals. */
+  kernel_globals_ = CPUKernelThreadGlobals(cpu_device->kernel_globals, cpu_device->osl_memory());
 }
 
-CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device,
-                                       const CPUKernels &kernels,
-                                       const KernelGlobals &kernel_globals,
-                                       RenderBuffers *render_buffers)
-    : CPUDeviceQueue(device, kernels, kernel_globals), render_buffers_(render_buffers)
+CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_buffers)
+    : CPUDeviceQueue(device), render_buffers_(render_buffers)
 {
 }
 
@@ -72,28 +74,29 @@ static KernelWorkTile init_kernel_work_tile(RenderBuffers *render_buffers,
 
 void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
 {
+  CPUDevice *cpu_device = get_cpu_device();
+  const CPUKernels &kernels = cpu_device->kernels;
+
   switch (kernel) {
     case DeviceKernel::BACKGROUND:
-      return kernels_.background(
+      return kernels.background(
           &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
     case DeviceKernel::GENERATE_CAMERA_RAYS: {
       KernelWorkTile kernel_work_tile = init_kernel_work_tile(render_buffers_, work_tile_);
-      return kernels_.generate_camera_rays(
-          &kernel_globals_, &integrator_state_, &kernel_work_tile);
+      return kernels.generate_camera_rays(&kernel_globals_, &integrator_state_, &kernel_work_tile);
     }
     case DeviceKernel::INTERSECT_CLOSEST:
-      return kernels_.intersect_closest(&kernel_globals_, &integrator_state_);
+      return kernels.intersect_closest(&kernel_globals_, &integrator_state_);
     case DeviceKernel::INTERSECT_SHADOW:
-      return kernels_.intersect_shadow(&kernel_globals_, &integrator_state_);
+      return kernels.intersect_shadow(&kernel_globals_, &integrator_state_);
     case DeviceKernel::SHADOW:
-      return kernels_.shadow(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+      return kernels.shadow(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
     case DeviceKernel::SUBSURFACE:
-      return kernels_.subsurface(&kernel_globals_, &integrator_state_);
+      return kernels.subsurface(&kernel_globals_, &integrator_state_);
     case DeviceKernel::SURFACE:
-      return kernels_.surface(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+      return kernels.surface(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
     case DeviceKernel::VOLUME:
-      return kernels_.volume(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+      return kernels.volume(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
   }
 
   LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";

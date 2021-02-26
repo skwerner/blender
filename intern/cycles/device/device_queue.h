@@ -44,6 +44,13 @@ class DeviceQueue {
  public:
   virtual ~DeviceQueue() = default;
 
+  /* Initialize execution of kernels on this queue.
+   *
+   * Will, for example, load all data required by the kernels from Device to global or path state.
+   *
+   * Use this method after device synchronization has finished before enqueueing any kernels. */
+  virtual void init_execution() = 0;
+
   /* Enqueue kernel execution. */
   virtual void enqueue(DeviceKernel kernel) = 0;
 

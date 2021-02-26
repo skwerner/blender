@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "device/cpu/device_cpu_impl.h"
 #include "device/cpu/kernel.h"
 #include "device/cpu/kernel_thread_globals.h"
 #include "device/device_queue.h"
@@ -35,15 +36,16 @@ class RenderBuffers;
  * localization. */
 class CPUDeviceQueue : public DeviceQueue {
  public:
-  CPUDeviceQueue(CPUDevice *device,
-                 const CPUKernels &kernels,
-                 const KernelGlobals &kernel_globals);
+  CPUDeviceQueue(CPUDevice *device);
 
-  CPUDevice *get_cpu_device() const;
+  virtual void init_execution() override;
+
+  inline CPUDevice *get_cpu_device() const
+  {
+    return static_cast<CPUDevice *>(device);
+  }
 
  protected:
-  CPUKernels kernels_;
-
   /* Copy of kernel globals which is suitable for concurrent access from multiple queues.
    *
    * More specifically, the `kernel_globals_` is local to this queue and nobody else is
@@ -54,10 +56,7 @@ class CPUDeviceQueue : public DeviceQueue {
 
 class CPUIntegratorQueue : public CPUDeviceQueue {
  public:
-  CPUIntegratorQueue(CPUDevice *device,
-                     const CPUKernels &kernels,
-                     const KernelGlobals &kernel_globals,
-                     RenderBuffers *render_buffers);
+  CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_buffers);
 
   virtual void enqueue(DeviceKernel kernel) override;
 

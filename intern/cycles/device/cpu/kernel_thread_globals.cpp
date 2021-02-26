@@ -32,12 +32,19 @@ static void safe_free(void *mem)
   free(mem);
 }
 
+/* Get number of elements in a bound array. */
+/* TODO(sergey): Make this function more re-usable. */
+template<class T, int N> constexpr inline int ARRAY_SIZE(T (&/*array*/)[N])
+{
+  return N;
+}
+
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
                                                void *osl_globals_memory)
     : KernelGlobals(kernel_globals)
 {
   transparent_shadow_intersections = NULL;
-  const int decoupled_count = sizeof(decoupled_volume_steps) / sizeof(*decoupled_volume_steps);
+  const int decoupled_count = ARRAY_SIZE(decoupled_volume_steps);
   for (int i = 0; i < decoupled_count; ++i) {
     decoupled_volume_steps[i] = NULL;
   }
@@ -54,7 +61,7 @@ CPUKernelThreadGlobals::~CPUKernelThreadGlobals()
 {
   safe_free(transparent_shadow_intersections);
 
-  const int decoupled_count = sizeof(decoupled_volume_steps) / sizeof(*decoupled_volume_steps);
+  const int decoupled_count = ARRAY_SIZE(decoupled_volume_steps);
   for (int i = 0; i < decoupled_count; ++i) {
     safe_free(decoupled_volume_steps[i]);
   }

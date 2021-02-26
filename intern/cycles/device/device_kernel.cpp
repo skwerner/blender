@@ -39,6 +39,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_shade_surface";
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       return "integrator_shade_volume";
+    case DeviceKernel::NUM_KERNELS:
+      break;
   };
   LOG(FATAL) << "Unhandled kernel " << static_cast<int>(kernel) << ", should never happen.";
   return "UNKNOWN";

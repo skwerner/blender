@@ -31,6 +31,8 @@ enum class DeviceKernel {
   INTEGRATOR_SHADE_SHADOW,
   INTEGRATOR_SHADE_SURFACE,
   INTEGRATOR_SHADE_VOLUME,
+
+  NUM_KERNELS
 };
 const char *device_kernel_as_string(DeviceKernel kernel);
 std::ostream &operator<<(std::ostream &os, DeviceKernel kernel);

@@ -107,6 +107,8 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       return kernels.integrator_shade_volume(
           &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::NUM_KERNELS:
+      break;
   }
 
   LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";

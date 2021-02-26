@@ -37,7 +37,15 @@ void CPUDeviceQueue::init_execution()
    * via KernelGlobals. */
   const bool texture_info_changed = cpu_device->load_texture_info();
 
-  if (need_copy_kernel_globals_ || texture_info_changed) {
+  /* It is possible that kernel_data changes without texture info change. Such changes needs to
+   * lead to re-initialization of the local copy. Currently it is not very clear how to detect
+   * such changes, so always copy globals to the local copy.
+   *
+   * TODO(sergey): Is not too bad, is same as how it used to work in older versions, but is
+   * something what would be nice to see performance impact of, and change if needed. */
+  const bool is_data_changed = true;
+
+  if (need_copy_kernel_globals_ || texture_info_changed || is_data_changed) {
     kernel_globals_ = CPUKernelThreadGlobals(cpu_device->kernel_globals, cpu_device->osl_memory());
   }
 

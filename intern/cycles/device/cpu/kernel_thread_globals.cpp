@@ -39,6 +39,14 @@ template<class T, int N> constexpr inline int ARRAY_SIZE(T (&/*array*/)[N])
   return N;
 }
 
+CPUKernelThreadGlobals::CPUKernelThreadGlobals()
+{
+  transparent_shadow_intersections = nullptr;
+  osl = nullptr;
+
+  memset(decoupled_volume_steps, 0, sizeof(decoupled_volume_steps));
+}
+
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
                                                void *osl_globals_memory)
     : KernelGlobals(kernel_globals)

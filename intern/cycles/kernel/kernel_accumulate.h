@@ -800,7 +800,7 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
 #endif
 
-  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
   kernel_write_pass_float3(pixel_render_buffer, contribution);
 }
@@ -819,7 +819,7 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(shadow_path, bounce) - 1);
 #endif
 
-  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
   kernel_write_pass_float3(pixel_render_buffer, contribution);
 }
@@ -837,7 +837,7 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
     return;
   }
 
-  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 3);
   kernel_write_pass_float(pixel_render_buffer, transparent);
 }
@@ -859,7 +859,7 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
 #endif
 
-  float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
   kernel_write_pass_float4(
       pixel_render_buffer,

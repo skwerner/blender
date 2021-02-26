@@ -74,10 +74,12 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_WRITE(isect, t) = isect.t;
   INTEGRATOR_STATE_WRITE(isect, u) = isect.u;
   INTEGRATOR_STATE_WRITE(isect, v) = isect.v;
-  INTEGRATOR_STATE_WRITE(isect, Ng) = isect.Ng;
   INTEGRATOR_STATE_WRITE(isect, object) = isect.object;
   INTEGRATOR_STATE_WRITE(isect, prim) = isect.prim;
   INTEGRATOR_STATE_WRITE(isect, type) = isect.type;
+#ifdef __EMBREE__
+  INTEGRATOR_STATE_WRITE(isect, Ng) = isect.Ng;
+#endif
 
 #ifdef __VOLUME__
   if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {

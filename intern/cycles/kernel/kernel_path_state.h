@@ -21,7 +21,7 @@
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
-                                       KernelWorkTile *ccl_restrict tile,
+                                       const ccl_global KernelWorkTile *ccl_restrict tile,
                                        const int sample,
                                        const int x,
                                        const int y,

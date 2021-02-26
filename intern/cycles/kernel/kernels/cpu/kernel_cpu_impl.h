@@ -178,11 +178,13 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
     KERNEL_INVOKE(name, kg, state, render_buffer); \
   }
 
+/* TODO: Either use something like get_work_pixel(), or simplify tile which is passed here, so
+ * that it does not contain unused fields. */
 #define DEFINE_INTEGRATOR_INIT_KERNEL(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)( \
       const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile) \
   { \
-    KERNEL_INVOKE(name, kg, state, tile); \
+    KERNEL_INVOKE(name, kg, state, tile, tile->x, tile->y, tile->start_sample); \
   }
 
 DEFINE_INTEGRATOR_INIT_KERNEL(init_from_camera)

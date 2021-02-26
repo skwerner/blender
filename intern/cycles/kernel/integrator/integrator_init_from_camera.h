@@ -58,14 +58,11 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
 }
 
 ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
-                                            KernelWorkTile *ccl_restrict tile)
+                                            const ccl_global KernelWorkTile *ccl_restrict tile,
+                                            const int x,
+                                            const int y,
+                                            const int sample)
 {
-  /* TODO: Either use something like get_work_pixel(), or simplify tile which is passed here, so
-   * that it does not contain unused fields. */
-  const int x = tile->x;
-  const int y = tile->y;
-  const int sample = tile->start_sample;
-
   /* Initialize random number seed for path. */
   const uint rng_hash = path_rng_hash_init(kg, sample, x, y);
 

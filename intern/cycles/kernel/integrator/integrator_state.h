@@ -208,9 +208,29 @@ typedef struct IntegratorState {
            (void *)&state->from_nested_struct, \
            sizeof(state->from_nested_struct));
 
-#else /* __KERNEL__CPU__ */
+#else /* __KERNEL_CPU__ */
 
-#  error "Not implemented yet"
+/* Array access on GPU (TODO: SoA). */
+
+#  define INTEGRATOR_STATE_ARGS \
+    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorState *ccl_restrict state
+#  define INTEGRATOR_STATE_CONST_ARGS \
+    const KernelGlobals *ccl_restrict kg, const ccl_global IntegratorState *ccl_restrict state
+#  define INTEGRATOR_STATE_PASS kg, state
+
+#  define INTEGRATOR_STATE(nested_struct, member) state[ccl_global_id(0)].nested_struct.member
+#  define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)
+
+#  define INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member) \
+    state[ccl_global_id(0)].nested_struct[array_index].member
+#  define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
+    INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member)
+
+/* TODO: check if memcpy emits efficient code on CUDA. */
+#  define INTEGRATOR_STATE_COPY(to_nested_struct, from_nested_struct) \
+    memcpy(&state[ccl_global_id(0)].to_nested_struct, \
+           &state[ccl_global_id(0)].from_nested_struct, \
+           sizeof(state[0].from_nested_struct));
 
 #endif /* __KERNEL__CPU__ */
 

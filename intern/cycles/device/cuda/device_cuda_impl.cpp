@@ -79,16 +79,6 @@ int cuewCompilerVersion()
 
 class CUDADevice;
 
-/* Utility to push/pop CUDA context. */
-class CUDAContextScope {
- public:
-  CUDAContextScope(CUDADevice *device);
-  ~CUDAContextScope();
-
- private:
-  CUDADevice *device;
-};
-
 bool CUDADevice::have_precompiled_kernels()
 {
   string cubins_path = path_get("lib");
@@ -117,16 +107,6 @@ void CUDADevice::set_error(const string &error)
     first_error = false;
   }
 }
-
-#  define cuda_assert(stmt) \
-    { \
-      CUresult result = stmt; \
-      if (result != CUDA_SUCCESS) { \
-        const char *name = cuewErrorString(result); \
-        set_error(string_printf("%s in %s (device_cuda_impl.cpp:%d)", name, #stmt, __LINE__)); \
-      } \
-    } \
-    (void)0
 
 CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
     : Device(info, stats, profiler, background_), texture_info(this, "__texture_info", MEM_GLOBAL)
@@ -2411,33 +2391,6 @@ void CUDADevice::task_wait()
 void CUDADevice::task_cancel()
 {
   task_pool.cancel();
-}
-
-/* redefine the cuda_assert macro so it can be used outside of the CUDADevice class
- * now that the definition of that class is complete
- */
-#  undef cuda_assert
-#  define cuda_assert(stmt) \
-    { \
-      CUresult result = stmt; \
-      if (result != CUDA_SUCCESS) { \
-        const char *name = cuewErrorString(result); \
-        device->set_error( \
-            string_printf("%s in %s (device_cuda_impl.cpp:%d)", name, #stmt, __LINE__)); \
-      } \
-    } \
-    (void)0
-
-/* CUDA context scope. */
-
-CUDAContextScope::CUDAContextScope(CUDADevice *device) : device(device)
-{
-  cuda_assert(cuCtxPushCurrent(device->cuContext));
-}
-
-CUDAContextScope::~CUDAContextScope()
-{
-  cuda_assert(cuCtxPopCurrent(NULL));
 }
 
 CCL_NAMESPACE_END

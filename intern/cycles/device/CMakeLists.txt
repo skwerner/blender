@@ -62,6 +62,8 @@ set(SRC_CUDA
   cuda/device_cuda.h
   cuda/device_cuda_impl.cpp
   cuda/device_cuda_impl.h
+  cuda/util.cpp
+  cuda/util.h
 )
 
 set(SRC_DUMMY

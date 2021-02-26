@@ -16,6 +16,7 @@
 
 #ifdef WITH_CUDA
 
+#  include "device/cuda/util.h"
 #  include "device/device.h"
 #  include "device/device_denoising.h"
 

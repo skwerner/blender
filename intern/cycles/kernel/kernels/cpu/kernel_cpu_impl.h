@@ -32,14 +32,14 @@
 #    include "kernel/kernel_globals.h"
 #    include "kernel/kernels/cpu/kernel_cpu_image.h"
 
-#    include "kernel/integrator/kernel_background.h"
-#    include "kernel/integrator/kernel_generate_camera_rays.h"
-#    include "kernel/integrator/kernel_intersect_closest.h"
-#    include "kernel/integrator/kernel_intersect_shadow.h"
-#    include "kernel/integrator/kernel_shadow.h"
-#    include "kernel/integrator/kernel_subsurface.h"
-#    include "kernel/integrator/kernel_surface.h"
-#    include "kernel/integrator/kernel_volume.h"
+#    include "kernel/integrator/integrator_init_from_camera.h"
+#    include "kernel/integrator/integrator_intersect_closest.h"
+#    include "kernel/integrator/integrator_intersect_shadow.h"
+#    include "kernel/integrator/integrator_intersect_subsurface.h"
+#    include "kernel/integrator/integrator_shade_background.h"
+#    include "kernel/integrator/integrator_shade_shadow.h"
+#    include "kernel/integrator/integrator_shade_surface.h"
+#    include "kernel/integrator/integrator_shade_volume.h"
 
 #    include "kernel/kernel_film.h"
 
@@ -161,42 +161,43 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
 #ifdef KERNEL_STUB
 #  define KERNEL_INVOKE(name, ...) STUB_ASSERT(KERNEL_ARCH, name)
 #else
-#  define KERNEL_INVOKE(name, ...) kernel_integrate_##name(__VA_ARGS__)
+#  define KERNEL_INVOKE(name, ...) integrator_##name(__VA_ARGS__)
 #endif
 
 #define DEFINE_INTEGRATOR_KERNEL(name) \
-  void KERNEL_FUNCTION_FULL_NAME(name)(const KernelGlobals *kg, IntegratorState *state) \
+  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
+                                                    IntegratorState *state) \
   { \
     KERNEL_INVOKE(name, kg, state); \
   }
 
-#define DEFINE_INTEGRATOR_OUTPUT_KERNEL(name) \
-  void KERNEL_FUNCTION_FULL_NAME(name)( \
+#define DEFINE_INTEGRATOR_SHADE_KERNEL(name) \
+  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)( \
       const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer) \
   { \
     KERNEL_INVOKE(name, kg, state, render_buffer); \
   }
 
-#define DEFINE_INTEGRATOR_TILE_KERNEL(name) \
-  void KERNEL_FUNCTION_FULL_NAME(name)( \
+#define DEFINE_INTEGRATOR_INIT_KERNEL(name) \
+  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)( \
       const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile) \
   { \
     KERNEL_INVOKE(name, kg, state, tile); \
   }
 
-DEFINE_INTEGRATOR_OUTPUT_KERNEL(background)
-DEFINE_INTEGRATOR_TILE_KERNEL(generate_camera_rays)
+DEFINE_INTEGRATOR_INIT_KERNEL(init_from_camera)
 DEFINE_INTEGRATOR_KERNEL(intersect_closest)
 DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
-DEFINE_INTEGRATOR_OUTPUT_KERNEL(shadow)
-DEFINE_INTEGRATOR_KERNEL(subsurface)
-DEFINE_INTEGRATOR_OUTPUT_KERNEL(surface)
-DEFINE_INTEGRATOR_OUTPUT_KERNEL(volume)
+DEFINE_INTEGRATOR_KERNEL(intersect_subsurface)
+DEFINE_INTEGRATOR_SHADE_KERNEL(shade_background)
+DEFINE_INTEGRATOR_SHADE_KERNEL(shade_shadow)
+DEFINE_INTEGRATOR_SHADE_KERNEL(shade_surface)
+DEFINE_INTEGRATOR_SHADE_KERNEL(shade_volume)
 
 #undef KERNEL_INVOKE
 #undef DEFINE_INTEGRATOR_KERNEL
-#undef DEFINE_INTEGRATOR_OUTPUT_KERNEL
-#undef DEFINE_INTEGRATOR_TILE_KERNEL
+#undef DEFINE_INTEGRATOR_SHADE_KERNEL
+#undef DEFINE_INTEGRATOR_INIT_KERNEL
 
 #undef KERNEL_STUB
 #undef STUB_ASSERT

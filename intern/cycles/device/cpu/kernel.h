@@ -29,9 +29,9 @@ class CPUKernels {
  public:
   using CPUIntegratorFunction =
       CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
-  using CPUIntegratorOutputFunction = CPUKernelFunction<void (*)(
+  using CPUIntegratorShadeFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
-  using CPUIntegratorTileFunction = CPUKernelFunction<void (*)(
+  using CPUIntegratorInitFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
 
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
@@ -89,14 +89,14 @@ class CPUKernels {
   CPUKernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
       filter_finalize;
 
-  CPUIntegratorOutputFunction background;
-  CPUIntegratorTileFunction generate_camera_rays;
-  CPUIntegratorFunction intersect_closest;
-  CPUIntegratorFunction intersect_shadow;
-  CPUIntegratorOutputFunction shadow;
-  CPUIntegratorFunction subsurface;
-  CPUIntegratorOutputFunction surface;
-  CPUIntegratorOutputFunction volume;
+  CPUIntegratorInitFunction integrator_init_from_camera;
+  CPUIntegratorFunction integrator_intersect_closest;
+  CPUIntegratorFunction integrator_intersect_shadow;
+  CPUIntegratorFunction integrator_intersect_subsurface;
+  CPUIntegratorShadeFunction integrator_shade_background;
+  CPUIntegratorShadeFunction integrator_shade_shadow;
+  CPUIntegratorShadeFunction integrator_shade_surface;
+  CPUIntegratorShadeFunction integrator_shade_volume;
 
   CPUKernels();
 };

@@ -144,7 +144,7 @@ void PathTrace::render_samples_full_pipeline(DeviceQueue *queue, const DeviceWor
 {
   queue->set_work_tile(work_tile);
 
-  queue->enqueue(DeviceKernel::GENERATE_CAMERA_RAYS);
+  queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
 
   do {
     /* NOTE: The order of queuing is based on the following ideas:
@@ -161,16 +161,16 @@ void PathTrace::render_samples_full_pipeline(DeviceQueue *queue, const DeviceWor
      * camera rays if the wavefront becomes too small but there are still a lot of samples to be
      * calculated. */
 
-    queue->enqueue(DeviceKernel::INTERSECT_CLOSEST);
+    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
 
-    queue->enqueue(DeviceKernel::VOLUME);
-    queue->enqueue(DeviceKernel::BACKGROUND);
+    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
+    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_BACKGROUND);
 
-    queue->enqueue(DeviceKernel::SURFACE);
-    queue->enqueue(DeviceKernel::SUBSURFACE);
+    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SURFACE);
+    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE);
 
-    queue->enqueue(DeviceKernel::INTERSECT_SHADOW);
-    queue->enqueue(DeviceKernel::SHADOW);
+    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
+    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
   } while (queue->has_work_remaining());
 }
 

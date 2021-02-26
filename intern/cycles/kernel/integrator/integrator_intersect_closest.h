@@ -45,7 +45,7 @@ ccl_device_forceinline bool intersect_closest_scene(INTEGRATOR_STATE_CONST_ARGS,
   return scene_intersect(kg, ray, visibility, isect);
 }
 
-ccl_device void kernel_integrate_intersect_closest(INTEGRATOR_STATE_ARGS)
+ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
   /* Only execute if path is active. */
   if (INTEGRATOR_PATH_IS_TERMINATED) {

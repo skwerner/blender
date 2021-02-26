@@ -75,7 +75,8 @@ CPUDevice::CPUDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool
 {
   /* Pick any kernel, all of them are supposed to have same level of microarchitecture
    * optimization. */
-  VLOG(1) << "Will be using " << kernels.generate_camera_rays.get_uarch_name() << " kernels.";
+  VLOG(1) << "Will be using " << kernels.integrator_init_from_camera.get_uarch_name()
+          << " kernels.";
 
   if (info.cpu_threads == 0) {
     info.cpu_threads = TaskScheduler::num_threads();

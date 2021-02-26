@@ -124,7 +124,7 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);
 }
 
-ccl_device void kernel_integrate_background(INTEGRATOR_STATE_ARGS,
+ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
   /* Only execute for active path and nothing hit. */

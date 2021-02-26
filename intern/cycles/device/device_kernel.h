@@ -23,14 +23,14 @@ CCL_NAMESPACE_BEGIN
 /* high level identifier of a kernel.
  * Used in the device API to communicate which kernel caller is interested in. */
 enum class DeviceKernel {
-  BACKGROUND,
-  GENERATE_CAMERA_RAYS,
-  INTERSECT_CLOSEST,
-  INTERSECT_SHADOW,
-  SHADOW,
-  SUBSURFACE,
-  SURFACE,
-  VOLUME,
+  INTEGRATOR_INIT_FROM_CAMERA = 0,
+  INTEGRATOR_INTERSECT_CLOSEST,
+  INTEGRATOR_INTERSECT_SHADOW,
+  INTEGRATOR_INTERSECT_SUBSURFACE,
+  INTEGRATOR_SHADE_BACKGROUND,
+  INTEGRATOR_SHADE_SHADOW,
+  INTEGRATOR_SHADE_SURFACE,
+  INTEGRATOR_SHADE_VOLUME,
 };
 const char *device_kernel_as_string(DeviceKernel kernel);
 std::ostream &operator<<(std::ostream &os, DeviceKernel kernel);

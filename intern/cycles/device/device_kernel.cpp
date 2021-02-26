@@ -23,22 +23,22 @@ CCL_NAMESPACE_BEGIN
 const char *device_kernel_as_string(DeviceKernel kernel)
 {
   switch (kernel) {
-    case DeviceKernel::BACKGROUND:
-      return "BACKGROUND";
-    case DeviceKernel::GENERATE_CAMERA_RAYS:
-      return "GENERATE_CAMERA_RAYS";
-    case DeviceKernel::INTERSECT_CLOSEST:
-      return "INTERSECT_CLOSEST";
-    case DeviceKernel::INTERSECT_SHADOW:
-      return "INTERSECT_SHADOW";
-    case DeviceKernel::SHADOW:
-      return "SHADOW";
-    case DeviceKernel::SUBSURFACE:
-      return "SUBSURFACE";
-    case DeviceKernel::SURFACE:
-      return "SURFACE";
-    case DeviceKernel::VOLUME:
-      return "VOLUME";
+    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
+      return "integrator_init_from_camera";
+    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
+      return "integrator_intersect_closest";
+    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
+      return "integrator_intersect_shadow";
+    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
+      return "integrator_intersect_subsurface";
+    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
+      return "integrator_shade_background";
+    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
+      return "integrator_shade_shadow";
+    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
+      return "integrator_shade_surface";
+    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
+      return "integrator_shade_volume";
   };
   LOG(FATAL) << "Unhandled kernel " << static_cast<int>(kernel) << ", should never happen.";
   return "UNKNOWN";

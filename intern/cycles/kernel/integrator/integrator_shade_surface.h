@@ -412,7 +412,7 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   return integrate_surface_bounce(INTEGRATOR_STATE_PASS, &sd, &rng_state);
 }
 
-ccl_device void kernel_integrate_surface(INTEGRATOR_STATE_ARGS,
+ccl_device void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 {
   /* Only execute if path is active and intersection was found. */

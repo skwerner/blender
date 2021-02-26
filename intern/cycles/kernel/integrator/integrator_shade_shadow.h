@@ -77,7 +77,7 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS)
 }
 #endif /* __TRANSPARENT_SHADOWS__ */
 
-ccl_device void kernel_integrate_shadow(INTEGRATOR_STATE_ARGS,
+ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
   /* Only execute if anything was hit, otherwise path must have been terminated. */

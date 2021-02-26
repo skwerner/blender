@@ -84,25 +84,29 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
   const CPUKernels &kernels = cpu_device->kernels;
 
   switch (kernel) {
-    case DeviceKernel::BACKGROUND:
-      return kernels.background(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::GENERATE_CAMERA_RAYS: {
+    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA: {
       KernelWorkTile kernel_work_tile = init_kernel_work_tile(render_buffers_, work_tile_);
-      return kernels.generate_camera_rays(&kernel_globals_, &integrator_state_, &kernel_work_tile);
+      return kernels.integrator_init_from_camera(
+          &kernel_globals_, &integrator_state_, &kernel_work_tile);
     }
-    case DeviceKernel::INTERSECT_CLOSEST:
-      return kernels.intersect_closest(&kernel_globals_, &integrator_state_);
-    case DeviceKernel::INTERSECT_SHADOW:
-      return kernels.intersect_shadow(&kernel_globals_, &integrator_state_);
-    case DeviceKernel::SHADOW:
-      return kernels.shadow(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::SUBSURFACE:
-      return kernels.subsurface(&kernel_globals_, &integrator_state_);
-    case DeviceKernel::SURFACE:
-      return kernels.surface(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::VOLUME:
-      return kernels.volume(&kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
+      return kernels.integrator_intersect_closest(&kernel_globals_, &integrator_state_);
+    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
+      return kernels.integrator_intersect_shadow(&kernel_globals_, &integrator_state_);
+    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
+      return kernels.integrator_intersect_subsurface(&kernel_globals_, &integrator_state_);
+    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
+      return kernels.integrator_shade_background(
+          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
+      return kernels.integrator_shade_shadow(
+          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
+      return kernels.integrator_shade_surface(
+          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
+      return kernels.integrator_shade_volume(
+          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
   }
 
   LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";

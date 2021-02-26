@@ -83,7 +83,7 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
 }
 #endif
 
-ccl_device void kernel_integrate_intersect_shadow(INTEGRATOR_STATE_ARGS)
+ccl_device void integrator_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
   /* Only execute if shadow ray needs to be traced. */
   if (INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {

@@ -57,8 +57,8 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
   camera_sample(kg, x, y, filter_u, filter_v, lens_u, lens_v, time, ray);
 }
 
-ccl_device void kernel_integrate_generate_camera_rays(INTEGRATOR_STATE_ARGS,
-                                                      KernelWorkTile *ccl_restrict tile)
+ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
+                                            KernelWorkTile *ccl_restrict tile)
 {
   /* TODO: Either use something like get_work_pixel(), or simplify tile which is passed here, so
    * that it does not contain unused fields. */

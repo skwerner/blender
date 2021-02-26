@@ -18,7 +18,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void kernel_integrate_volume(INTEGRATOR_STATE_ARGS,
+ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
   /* Only execute if path is active and volume stack is non-empty. */

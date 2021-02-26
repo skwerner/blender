@@ -49,14 +49,14 @@ CPUKernels::CPUKernels()
       REGISTER_KERNEL(filter_construct_transform),
       REGISTER_KERNEL(filter_nlm_construct_gramian),
       REGISTER_KERNEL(filter_finalize),
-      REGISTER_KERNEL(background),
-      REGISTER_KERNEL(generate_camera_rays),
-      REGISTER_KERNEL(intersect_closest),
-      REGISTER_KERNEL(intersect_shadow),
-      REGISTER_KERNEL(shadow),
-      REGISTER_KERNEL(subsurface),
-      REGISTER_KERNEL(surface),
-      REGISTER_KERNEL(volume)
+      REGISTER_KERNEL(integrator_init_from_camera),
+      REGISTER_KERNEL(integrator_intersect_closest),
+      REGISTER_KERNEL(integrator_intersect_shadow),
+      REGISTER_KERNEL(integrator_intersect_subsurface),
+      REGISTER_KERNEL(integrator_shade_background),
+      REGISTER_KERNEL(integrator_shade_shadow),
+      REGISTER_KERNEL(integrator_shade_surface),
+      REGISTER_KERNEL(integrator_shade_volume)
 {
 }
 

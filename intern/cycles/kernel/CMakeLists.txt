@@ -257,16 +257,16 @@ set(SRC_GEOM_HEADERS
 )
 
 set(SRC_INTEGRATOR_HEADERS
+  integrator/integrator_init_from_camera.h
+  integrator/integrator_intersect_closest.h
+  integrator/integrator_intersect_shadow.h
+  integrator/integrator_intersect_subsurface.h
   integrator/integrator_path_state.h
+  integrator/integrator_shade_background.h
+  integrator/integrator_shade_shadow.h
+  integrator/integrator_shade_surface.h
+  integrator/integrator_shade_volume.h
   integrator/integrator_state.h
-  integrator/kernel_background.h
-  integrator/kernel_generate_camera_rays.h
-  integrator/kernel_intersect_closest.h
-  integrator/kernel_intersect_shadow.h
-  integrator/kernel_shadow.h
-  integrator/kernel_subsurface.h
-  integrator/kernel_surface.h
-  integrator/kernel_volume.h
 )
 
 set(SRC_FILTER_HEADERS

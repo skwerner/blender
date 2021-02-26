@@ -16,6 +16,7 @@
 
 #include "device/cpu/device_queue.h"
 
+#include "device/cpu/device_cpu_impl.h"
 #include "device/device.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
@@ -24,14 +25,19 @@
 
 CCL_NAMESPACE_BEGIN
 
-CPUDeviceQueue::CPUDeviceQueue(Device *device,
+CPUDeviceQueue::CPUDeviceQueue(CPUDevice *device,
                                const CPUKernels &kernels,
                                const KernelGlobals &kernel_globals)
     : DeviceQueue(device), kernels_(kernels), kernel_globals_(kernel_globals, device->osl_memory())
 {
 }
 
-CPUIntegratorQueue::CPUIntegratorQueue(Device *device,
+CPUDevice *CPUDeviceQueue::get_cpu_device() const
+{
+  return static_cast<CPUDevice *>(device);
+}
+
+CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device,
                                        const CPUKernels &kernels,
                                        const KernelGlobals &kernel_globals,
                                        RenderBuffers *render_buffers)

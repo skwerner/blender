@@ -28,14 +28,18 @@
 
 CCL_NAMESPACE_BEGIN
 
-class Device;
+class CPUDevice;
 class RenderBuffers;
 
 /* Base implementation of all CPU queues. Takes care of kernel function pointers and global data
  * localization. */
 class CPUDeviceQueue : public DeviceQueue {
  public:
-  CPUDeviceQueue(Device *device, const CPUKernels &kernels, const KernelGlobals &kernel_globals);
+  CPUDeviceQueue(CPUDevice *device,
+                 const CPUKernels &kernels,
+                 const KernelGlobals &kernel_globals);
+
+  CPUDevice *get_cpu_device() const;
 
  protected:
   CPUKernels kernels_;
@@ -50,7 +54,7 @@ class CPUDeviceQueue : public DeviceQueue {
 
 class CPUIntegratorQueue : public CPUDeviceQueue {
  public:
-  CPUIntegratorQueue(Device *device,
+  CPUIntegratorQueue(CPUDevice *device,
                      const CPUKernels &kernels,
                      const KernelGlobals &kernel_globals,
                      RenderBuffers *render_buffers);

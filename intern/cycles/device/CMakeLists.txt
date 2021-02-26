@@ -46,6 +46,8 @@ set(SRC
 set(SRC_CPU
   cpu/device_cpu.cpp
   cpu/device_cpu.h
+  cpu/device_cpu_impl.cpp
+  cpu/device_cpu_impl.h
   cpu/device_queue.cpp
   cpu/device_queue.h
   cpu/kernel.cpp

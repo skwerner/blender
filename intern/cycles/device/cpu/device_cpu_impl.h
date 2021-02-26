@@ -77,7 +77,7 @@ class CPUDevice : public Device {
 
   virtual BVHLayoutMask get_bvh_layout_mask() const override;
 
-  /* Returns truth if the texture info was copied to the device (meaning, some more
+  /* Returns true if the texture info was copied to the device (meaning, some more
    * re-initialization might be needed). */
   bool load_texture_info();
 

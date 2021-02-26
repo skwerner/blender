@@ -17,6 +17,7 @@
 #include "integrator/path_trace.h"
 
 #include "device/device.h"
+#include "util/util_algorithm.h"
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
 #include "util/util_time.h"
@@ -59,6 +60,20 @@ PathTrace::PathTrace(Device *device) : device_(device)
 void PathTrace::reset(const BufferParams &full_buffer_params)
 {
   full_render_buffers_->reset(full_buffer_params);
+
+  scaled_render_buffer_params_ = full_buffer_params;
+  update_scaled_render_buffers_resolution();
+}
+
+void PathTrace::clear_render_buffers()
+{
+  full_render_buffers_->zero();
+}
+
+void PathTrace::set_resolution_divider(int resolution_divider)
+{
+  resolution_divider_ = resolution_divider;
+  update_scaled_render_buffers_resolution();
 }
 
 void PathTrace::set_start_sample(int start_sample_num)
@@ -104,11 +119,7 @@ void PathTrace::render_init_execution()
 void PathTrace::render_samples_full_pipeline(int samples_num)
 {
   /* Reset work scheduler, so that it is ready to give work tiles for the new samples range. */
-  const BufferParams &full_buffer_params = full_render_buffers_->params;
-  work_scheduler_.reset(full_buffer_params.full_x,
-                        full_buffer_params.full_y,
-                        full_buffer_params.width,
-                        full_buffer_params.height,
+  work_scheduler_.reset(scaled_render_buffer_params_,
                         start_sample_num_ + render_status_.rendered_samples_num,
                         samples_num);
 
@@ -161,6 +172,42 @@ void PathTrace::render_samples_full_pipeline(DeviceQueue *queue, const DeviceWor
     queue->enqueue(DeviceKernel::INTERSECT_SHADOW);
     queue->enqueue(DeviceKernel::SHADOW);
   } while (queue->has_work_remaining());
+}
+
+void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)
+{
+  DeviceTask task(DeviceTask::FILM_CONVERT);
+
+  task.x = scaled_render_buffer_params_.full_x;
+  task.y = scaled_render_buffer_params_.full_y;
+  task.w = scaled_render_buffer_params_.width;
+  task.h = scaled_render_buffer_params_.height;
+  task.rgba_byte = display_buffer->rgba_byte.device_pointer;
+  task.rgba_half = display_buffer->rgba_half.device_pointer;
+  task.buffer = full_render_buffers_->buffer.device_pointer;
+
+  /* NOTE: The device assumes the sample is the 0-based index of the last samples sample. */
+  task.sample = start_sample_num_ + render_status_.rendered_samples_num - 1;
+
+  scaled_render_buffer_params_.get_offset_stride(task.offset, task.stride);
+
+  if (task.w > 0 && task.h > 0) {
+    device_->task_add(task);
+    device_->task_wait();
+
+    /* Set display to new size. */
+    display_buffer->draw_set(task.w, task.h);
+  }
+}
+
+void PathTrace::update_scaled_render_buffers_resolution()
+{
+  const BufferParams &orig_params = full_render_buffers_->params;
+
+  scaled_render_buffer_params_.width = max(1, orig_params.width / resolution_divider_);
+  scaled_render_buffer_params_.height = max(1, orig_params.height / resolution_divider_);
+  scaled_render_buffer_params_.full_x = orig_params.full_x / resolution_divider_;
+  scaled_render_buffer_params_.full_y = orig_params.full_y / resolution_divider_;
 }
 
 bool PathTrace::is_cancel_requested()

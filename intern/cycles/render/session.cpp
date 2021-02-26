@@ -965,6 +965,8 @@ bool Session::draw(BufferParams &buffer_params, DeviceDrawParams &draw_params)
 
 void Session::reset_(BufferParams &buffer_params, int samples)
 {
+  path_trace_->reset(buffer_params);
+
   if (buffers && buffer_params.modified(tile_manager.params)) {
     gpu_draw_ready = false;
     buffers->reset(buffer_params);
@@ -1209,7 +1211,7 @@ void Session::render(bool /*need_denoise*/)
 {
   if (buffers && tile_manager.state.sample == tile_manager.range_start_sample) {
     /* Clear buffers. */
-    buffers->zero();
+    path_trace_->clear_render_buffers();
   }
 
   if (tile_manager.state.buffer.width == 0 || tile_manager.state.buffer.height == 0) {
@@ -1218,18 +1220,11 @@ void Session::render(bool /*need_denoise*/)
 
 #if 1
 
-  /* Buffer paraments for the big tile.
-   *
-   * TODO(sergey): Currently it is the same as the full-frame buffer parameners. In the future
-   * needs to be split into smaller tiles when doing really huge renders (for example, limit
-   * tile size to 4K when doing 16K render). */
-  const BufferParams &buffer_params = tile_manager.params;
-
   /* Number of samples which are to be path traced. */
   const int samples_to_render_num = tile_manager.state.num_samples;
 
-  path_trace_->reset(buffer_params);
   path_trace_->set_start_sample(tile_manager.state.sample);
+  path_trace_->set_resolution_divider(tile_manager.state.resolution_divider);
 
   /* Perform rendering. */
   path_trace_->render_samples(samples_to_render_num);
@@ -1300,31 +1295,11 @@ void Session::render(bool /*need_denoise*/)
 #endif
 }
 
-void Session::copy_to_display_buffer(int sample)
+void Session::copy_to_display_buffer(int /*sample*/)
 {
-  /* add film conversion task */
-  DeviceTask task(DeviceTask::FILM_CONVERT);
+  path_trace_->copy_to_display_buffer(display);
 
-  task.x = tile_manager.state.buffer.full_x;
-  task.y = tile_manager.state.buffer.full_y;
-  task.w = tile_manager.state.buffer.width;
-  task.h = tile_manager.state.buffer.height;
-  task.rgba_byte = display->rgba_byte.device_pointer;
-  task.rgba_half = display->rgba_half.device_pointer;
-  task.buffer = buffers->buffer.device_pointer;
-  task.sample = sample;
-  tile_manager.state.buffer.get_offset_stride(task.offset, task.stride);
-
-  if (task.w > 0 && task.h > 0) {
-    device->task_add(task);
-    device->task_wait();
-
-    /* set display to new size */
-    display->draw_set(task.w, task.h);
-
-    last_display_time = time_dt();
-  }
-
+  last_display_time = time_dt();
   display_outdated = false;
 }
 

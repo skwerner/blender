@@ -27,6 +27,7 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class DeviceQueue;
+class DisplayBuffer;
 class RenderBuffers;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
@@ -45,6 +46,14 @@ class PathTrace {
    * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
   void reset(const BufferParams &full_buffer_params);
 
+  /* Clear current render buffer.
+   * Used during interactive viewport rendering rendering to force refresh accumulated result on
+   * resolution change. */
+  void clear_render_buffers();
+
+  /* Configure the path tracer to perform lower resolution rendering into the full frame buffer. */
+  void set_resolution_divider(int resolution_divider);
+
   /* Is used to either offset sampling when adding more samples to an existing render, or to
    * offset sample for a viewport render.
    *
@@ -56,6 +65,9 @@ class PathTrace {
    *
    * TODO(sergey): Decide and document whether it is a blocking or asynchronous call. */
   void render_samples(int samples_num);
+
+  /* Copy current render result to the given display buffer. */
+  void copy_to_display_buffer(DisplayBuffer *display_buffer);
 
   /* Callback which is used top check whether user requested to cancel rendering.
    * If this callback is not assigned the path tracing procfess can not be cancelled and it will be
@@ -78,6 +90,11 @@ class PathTrace {
   function<void(RenderBuffers *render_buffers, int sample)> write_cb;
 
  protected:
+  /* Update resolution stored in the `scaled_render_buffer_params_`.
+   * Used to bring the scaled parameters up to date on either full render buffers change, or on
+   * resolution divider change. */
+  void update_scaled_render_buffers_resolution();
+
   /* Initialize kernel execution on all integrator queues. */
   void render_init_execution();
 
@@ -129,7 +146,18 @@ class PathTrace {
   unique_ptr<RenderBuffers> full_render_buffers_;
 
   /* Number of a start sample, in the 0 based notation. */
-  int start_sample_num_;
+  int start_sample_num_ = 0;
+
+  /* Divider of the resolution for faster previews.
+   *
+   * Allows to re-use same render buffer, but have less pixels rendered into in it. The way to
+   * think of render buffer in this case is as an over-allocated array: the resolution divider
+   * affects both resolution and stride as visible by the integrator kernels. */
+  int resolution_divider_ = 1;
+
+  /* Parameters of render buffers which corresponds to full render buffers divided by the
+   * resolution divider. */
+  BufferParams scaled_render_buffer_params_;
 
   /* Global path tracing status. */
   /* TODO(sergey): state vs. status. */

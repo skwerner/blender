@@ -33,6 +33,10 @@ class DeviceWorkTile {
 
   /* Sample the tile will be operating on. */
   int sample;
+
+  /* Offset and stride corresponding to where the memory of tile is in the big tile. */
+  int offset;
+  int stride;
 };
 
 /* Abstraction of a command queue for a device.

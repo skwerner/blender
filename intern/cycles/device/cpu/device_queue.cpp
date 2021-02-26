@@ -33,7 +33,7 @@ void CPUDeviceQueue::init_execution()
 {
   CPUDevice *cpu_device = get_cpu_device();
 
-  /* Load information about textures from data stroed in CPUDevice to data available to kernels
+  /* Load information about textures from data stored in CPUDevice to data available to kernels
    * via KernelGlobals. */
   const bool texture_info_changed = cpu_device->load_texture_info();
 
@@ -70,12 +70,8 @@ static KernelWorkTile init_kernel_work_tile(RenderBuffers *render_buffers,
   kernel_work_tile.start_sample = work_tile.sample;
   kernel_work_tile.num_samples = 1;
 
-  /* TODO(sergey): Avoid temporary variable by making sign match between device and kernel. */
-  int offset, stride;
-  render_buffers->params.get_offset_stride(offset, stride);
-
-  kernel_work_tile.offset = offset;
-  kernel_work_tile.stride = stride;
+  kernel_work_tile.offset = work_tile.offset;
+  kernel_work_tile.stride = work_tile.stride;
 
   kernel_work_tile.buffer = render_buffers->buffer.data();
 

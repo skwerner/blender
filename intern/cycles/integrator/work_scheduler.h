@@ -18,6 +18,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class BufferParams;
 class DeviceWorkTile;
 
 /* Scheduler of device work tiles.
@@ -26,7 +27,8 @@ class WorkScheduler {
  public:
   WorkScheduler();
 
-  void reset(int full_x, int full_y, int width, int height, int sample_start, int samples_num);
+  /* Scheduling will happen for pixels within a big tile denotes by its parameters. */
+  void reset(const BufferParams &buffer_params, int sample_start, int samples_num);
 
   /* Get work for a device.
    * Returns truth if there is still work to be done and initialied the work tile to all
@@ -42,6 +44,10 @@ class WorkScheduler {
 
   int width_ = 0;
   int height_ = 0;
+
+  /* Offset and stride of the buffer within which scheduing is happenning.
+   * Will be passed over to the KernelWorkTile. */
+  int offset_, stride_;
 
   int sample_start_ = 0;
   int samples_num_ = 0;

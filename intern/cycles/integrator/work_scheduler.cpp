@@ -17,6 +17,7 @@
 #include "integrator/work_scheduler.h"
 
 #include "device/device_queue.h"
+#include "render/buffers.h"
 #include "util/util_atomic.h"
 
 CCL_NAMESPACE_BEGIN
@@ -25,17 +26,18 @@ WorkScheduler::WorkScheduler()
 {
 }
 
-void WorkScheduler::reset(
-    int full_x, int full_y, int width, int height, int sample_start, int samples_num)
+void WorkScheduler::reset(const BufferParams &buffer_params, int sample_start, int samples_num)
 {
-  full_x_ = full_x;
-  full_y_ = full_y;
+  full_x_ = buffer_params.full_x;
+  full_y_ = buffer_params.full_y;
 
-  width_ = width;
-  height_ = height;
+  width_ = buffer_params.width;
+  height_ = buffer_params.height;
 
   sample_start_ = sample_start;
   samples_num_ = samples_num;
+
+  buffer_params.get_offset_stride(offset_, stride_);
 
   reset_scheduler_state();
 }
@@ -68,6 +70,8 @@ bool WorkScheduler::get_work(DeviceWorkTile *work_tile)
   work_tile->width = 1;
   work_tile->height = 1;
   work_tile->sample = sample_start_ + sample;
+  work_tile->offset = offset_;
+  work_tile->stride = stride_;
 
   return true;
 }

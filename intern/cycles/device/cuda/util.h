@@ -16,6 +16,8 @@
 
 #pragma once
 
+#ifdef WITH_CUDA
+
 #ifdef WITH_CUDA_DYNLOAD
 #  include "cuew.h"
 #else
@@ -50,3 +52,5 @@ class CUDAContextScope {
 #define cuda_assert(stmt) cuda_device_assert(this, stmt)
 
 CCL_NAMESPACE_END
+
+#endif /* WITH_CUDA */

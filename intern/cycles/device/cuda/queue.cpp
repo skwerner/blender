@@ -15,10 +15,13 @@
  */
 
 #include "device/cuda/queue.h"
-#include "device/cuda/device_cuda_impl.h"
-#include "device/cuda/kernel.h"
 
-#include "render/buffers.h"
+#ifdef WITH_CUDA
+
+#  include "device/cuda/device_cuda_impl.h"
+#  include "device/cuda/kernel.h"
+
+#  include "render/buffers.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -153,3 +156,5 @@ int CUDAIntegratorQueue::get_max_num_path_states()
 }
 
 CCL_NAMESPACE_END
+
+#endif /* WITH_CUDA */

@@ -16,12 +16,14 @@
 
 #pragma once
 
-#include "device/device_kernel.h"
-#include "device/device_memory.h"
-#include "device/device_queue.h"
+#ifdef WITH_CUDA
 
-#include "kernel/integrator/integrator_state.h"
-#include "kernel/kernel_types.h"
+#  include "device/device_kernel.h"
+#  include "device/device_memory.h"
+#  include "device/device_queue.h"
+
+#  include "kernel/integrator/integrator_state.h"
+#  include "kernel/kernel_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -61,3 +63,5 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
 };
 
 CCL_NAMESPACE_END
+
+#endif /* WITH_CUDA */

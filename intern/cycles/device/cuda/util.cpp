@@ -15,7 +15,10 @@
  */
 
 #include "device/cuda/util.h"
-#include "device/cuda/device_cuda_impl.h"
+
+#ifdef WITH_CUDA
+
+#  include "device/cuda/device_cuda_impl.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -30,3 +33,5 @@ CUDAContextScope::~CUDAContextScope()
 }
 
 CCL_NAMESPACE_END
+
+#endif /* WITH_CUDA */

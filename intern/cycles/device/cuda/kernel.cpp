@@ -15,7 +15,10 @@
  */
 
 #include "device/cuda/kernel.h"
-#include "device/cuda/device_cuda_impl.h"
+
+#ifdef WITH_CUDA
+
+#  include "device/cuda/device_cuda_impl.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -47,3 +50,5 @@ const CUDADeviceKernel &CUDADeviceKernels::get(DeviceKernel kernel) const
 }
 
 CCL_NAMESPACE_END
+
+#endif /* WITH_CUDA*/

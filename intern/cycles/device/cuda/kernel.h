@@ -16,13 +16,15 @@
 
 #pragma once
 
-#include "device/device_kernel.h"
+#ifdef WITH_CUDA
 
-#ifdef WITH_CUDA_DYNLOAD
-#  include "cuew.h"
-#else
-#  include <cuda.h>
-#endif
+#  include "device/device_kernel.h"
+
+#  ifdef WITH_CUDA_DYNLOAD
+#    include "cuew.h"
+#  else
+#    include <cuda.h>
+#  endif
 
 CCL_NAMESPACE_BEGIN
 
@@ -49,3 +51,5 @@ class CUDADeviceKernels {
 };
 
 CCL_NAMESPACE_END
+
+#endif /* WITH_CUDA */

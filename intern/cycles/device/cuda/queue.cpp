@@ -93,8 +93,7 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
       /* Generate camera ray kernel with work tile. */
       CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
       CUdeviceptr d_work_tile = (CUdeviceptr)work_tile_.device_pointer;
-      int total_work_size = 1;
-      void *args[] = {&d_integrator_state, &d_work_tile, &total_work_size};
+      void *args[] = {&d_integrator_state, &d_work_tile, const_cast<int *>(&total_work_size)};
 
       cuda_device_assert(
           cuda_device_,

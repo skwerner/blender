@@ -113,6 +113,9 @@ void PathTrace::render_init_execution()
 {
   for (auto &&queue : integrator_queues_) {
     queue->init_execution();
+
+    /* TODO(sergey): Needs to be consolidated with queue into PathTraceWork. */
+    work_scheduler_.set_max_num_path_states(queue->get_max_num_path_states());
   }
 }
 

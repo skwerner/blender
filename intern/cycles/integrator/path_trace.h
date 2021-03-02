@@ -131,7 +131,11 @@ class PathTrace {
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
-  /* Scheduler which gives work to path tracing threads. */
+  /* Scheduler which gives work to path tracing threads.
+   *
+   * TODO(sergey): Should probably be moved into PathTraceWork together with the queue which
+   * queries for the work. This is because scheduling needs to take maximum possible path state
+   * count on the device. */
   WorkScheduler work_scheduler_;
 
   /* Per-compute device path tracing contexts. */

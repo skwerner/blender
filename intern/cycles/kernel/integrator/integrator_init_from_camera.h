@@ -72,6 +72,7 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
     integrate_camera_sample(kg, sample, x, y, rng_hash, &ray);
     if (ray.t == 0.0f) {
       INTEGRATOR_PATH_TERMINATE;
+      INTEGRATOR_SHADOW_PATH_TERMINATE;
       return;
     }
 

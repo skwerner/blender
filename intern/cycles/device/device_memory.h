@@ -502,7 +502,7 @@ template<typename T> class device_vector : public device_memory {
 
   void copy_from_device()
   {
-    device_copy_from(0, data_width, data_height, sizeof(T));
+    device_copy_from(0, data_width, (data_height == 0) ? 1 : data_height, sizeof(T));
   }
 
   void copy_from_device(int y, int w, int h)

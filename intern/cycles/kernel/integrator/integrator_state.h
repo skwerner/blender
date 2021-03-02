@@ -53,12 +53,7 @@ CCL_NAMESPACE_BEGIN
  * TODO: these could be made dynamic depending on the features used in the scene. */
 
 #define INTEGRATOR_VOLUME_STACK_SIZE 4
-
-#ifdef __TRANSPARENT_SHADOWS__
-#  define INTEGRATOR_SHADOW_ISECT_SIZE 4
-#else
-#  define INTEGRATOR_SHADOW_ISECT_SIZE 1
-#endif
+#define INTEGRATOR_SHADOW_ISECT_SIZE 4
 
 /* Scalar Struct Definitions
  *
@@ -119,20 +114,16 @@ typedef struct IntegratorIntersectionState {
 } IntegratorIntersectionState;
 
 /* Volume stack to identify which volumes the path is inside of. */
-#ifdef __VOLUME__
 typedef struct IntegratorVolumeStack {
   int object;
   int shader;
 } IntegratorVolumeStack;
-#endif
 
 /* Subsurface closure state for subsurface kernel. */
-#ifdef __SUBSURFACE__
 typedef struct IntegratorSubsurfaceState {
   /* TODO: actual BSSRDF closure parameters */
   float3 albedo;
 } IntegratorSubsurfaceState;
-#endif
 
 typedef struct IntegratorShadowLight {
   /* TODO: can we write this somewhere with the additional memory usage? */
@@ -149,14 +140,10 @@ typedef struct IntegratorState {
   IntegratorPathState path;
 
   /* Volume Rendering */
-#ifdef __VOLUME__
   IntegratorVolumeStack volume_stack[INTEGRATOR_VOLUME_STACK_SIZE];
-#endif
 
   /* Subsurface Scattering */
-#ifdef __SUBSURFACE__
   IntegratorSubsurfaceState subsurface;
-#endif
 
   /* Shadows / Next Event Estimation */
   IntegratorRayState shadow_ray;
@@ -164,12 +151,8 @@ typedef struct IntegratorState {
   IntegratorShadowLight shadow_light;
 
   /* Transparent Shadows */
-#ifdef __TRANSPARENT_SHADOWS__
   IntegratorPathState shadow_path;
-#  ifdef __VOLUME__
   IntegratorVolumeStack shadow_volume_stack[INTEGRATOR_VOLUME_STACK_SIZE];
-#  endif
-#endif
 } IntegratorState;
 
 /* Abstraction

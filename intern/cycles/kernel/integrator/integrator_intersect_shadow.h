@@ -60,19 +60,21 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
       kg, ray, isect, visibility, max_hits, &num_hits);
 
   if (!opaque_hit) {
-    sort_intersections(isect, num_hits);
+    if (num_hits > 0) {
+      sort_intersections(isect, num_hits);
 
-    /* Write intersection result into global integrator state memory. */
-    for (int hit = 0; hit < num_hits; hit++) {
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, t) = isect[hit].t;
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, u) = isect[hit].u;
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, v) = isect[hit].v;
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, object) = isect[hit].object;
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, prim) = isect[hit].prim;
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, type) = isect[hit].type;
+      /* Write intersection result into global integrator state memory. */
+      for (int hit = 0; hit < num_hits; hit++) {
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, t) = isect[hit].t;
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, u) = isect[hit].u;
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, v) = isect[hit].v;
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, object) = isect[hit].object;
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, prim) = isect[hit].prim;
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, type) = isect[hit].type;
 #  ifdef __EMBREE__
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, Ng) = isect[hit].Ng;
+        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, Ng) = isect[hit].Ng;
 #  endif
+      }
     }
 
     /* Null terminator for array. */

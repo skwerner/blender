@@ -81,6 +81,12 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
     get_work_pixel(tile, work_index, &x, &y, &sample);
     integrator_init_from_camera(NULL, state, tile, x, y, sample);
   }
+  else {
+    /* Mark any paths outside the work size as terminated so they are ignored
+     * by subsequent kernels. */
+    INTEGRATOR_PATH_TERMINATE;
+    INTEGRATOR_SHADOW_PATH_TERMINATE;
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)

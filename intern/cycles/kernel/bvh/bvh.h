@@ -607,6 +607,8 @@ ccl_device int intersections_compare(const void *a, const void *b)
 #if defined(__SHADOW_RECORD_ALL__)
 ccl_device_inline void sort_intersections(Intersection *hits, uint num_hits)
 {
+  kernel_assert(num_hits > 0);
+
 #  ifdef __KERNEL_GPU__
   /* Use bubble sort which has more friendly memory pattern on GPU. */
   bool swapped;

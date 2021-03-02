@@ -27,8 +27,13 @@ CCL_NAMESPACE_BEGIN
 
 static inline bool openimagedenoise_supported()
 {
-#ifdef WITH_OPENIMAGEDENOISE
-  return system_cpu_support_sse41();
+#ifdef WITH_OPENIMAGEDENOISE+
+#  ifdef __APPLE__
+  /* Always supported through Accelerate framework BNNS. */
+  return true;
+#  else
+    return system_cpu_support_sse41();
+#  endif
 #else
   return false;
 #endif

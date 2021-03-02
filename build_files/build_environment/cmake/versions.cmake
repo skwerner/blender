@@ -298,7 +298,7 @@ set(EMBREE_HASH 4bbe29e7eaa46417efc75fc5f1e8eb87)
 
 set(EMBREE_AARCH64_VERSION 3.12.0)
 set(EMBREE_AARCH64_GIT_URI https://github.com/lighttransport/embree-aarch64.git)
-set(EMBREE_AARCH64_GIT_TAG 54a6ebc2e97f5a9980d674c42dbd7fda0a212ba2)
+set(EMBREE_AARCH64_GIT_TAG 3dd19186c6fa921690ed0379726bce4ec9d2bcb7)
 
 set(USD_VERSION 20.05)
 set(USD_URI https://github.com/PixarAnimationStudios/USD/archive/v${USD_VERSION}.tar.gz)

@@ -2698,9 +2698,11 @@ static void node_composit_buts_denoise(uiLayout *layout, bContext *UNUSED(C), Po
 #ifndef WITH_OPENIMAGEDENOISE
   uiItemL(layout, IFACE_("Disabled, built without OpenImageDenoise"), ICON_ERROR);
 #else
+#  ifndef __APPLE__
   if (!BLI_cpu_support_sse41()) {
     uiItemL(layout, IFACE_("Disabled, CPU with SSE4.1 is required"), ICON_ERROR);
   }
+#  endif
 #endif
 
   uiItemR(layout, ptr, "use_hdr", DEFAULT_FLAGS, NULL, ICON_NONE);

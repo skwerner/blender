@@ -94,7 +94,10 @@ void DenoiseOperation::generateDenoise(float *data,
     return;
   }
 #ifdef WITH_OPENIMAGEDENOISE
-  if (BLI_cpu_support_sse41()) {
+#  ifndef __APPLE__
+  if (BLI_cpu_support_sse41())
+#  endif
+  {
     oidn::DeviceRef device = oidn::newDevice();
     device.commit();
 

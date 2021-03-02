@@ -39,6 +39,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_shade_surface";
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       return "integrator_shade_volume";
+    case DeviceKernel::INTEGRATOR_NUM_ACTIVE_PATHS:
+      return "integrator_num_active_paths";
     case DeviceKernel::NUM_KERNELS:
       break;
   };

@@ -28,6 +28,7 @@
 
 #  include "kernel/kernel_globals.h"
 #  include "kernel/kernels/cuda/kernel_cuda_image.h"
+#  include "kernel/kernels/cuda/parallel_reduce.h"
 
 #  include "kernel/integrator/integrator_path_state.h"
 #  include "kernel/integrator/integrator_state.h"
@@ -68,6 +69,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 	}
 }
 #  endif
+
+/* Integrator */
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_init_from_camera(IntegratorState *state,
@@ -130,6 +133,19 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 {
   integrator_shade_volume(NULL, state, render_buffer);
 }
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SUM_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_num_active_paths(IntegratorState *state,
+                                            int *num_active,
+                                            int num_states)
+{
+  cuda_parallel_sum<CUDA_PARALLEL_SUM_DEFAULT_BLOCK_SIZE>(
+      state, num_states, num_active, 0, [](const IntegratorState &state) {
+        return (state.path.flag != 0);
+      });
+}
+
+/* Adaptive Sampling */
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_adaptive_stopping(KernelWorkTile *tile, int sample, uint total_work_size)
@@ -201,6 +217,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
+/* Convert to Display Buffer */
+
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_convert_to_byte(uchar4 *rgba,
                                 float *buffer,
@@ -239,6 +257,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
+/* Displacement */
+
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_displace(
         uint4 *input, float4 *output, int type, int sx, int sw, int offset, int sample)
@@ -254,6 +274,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 #  endif
 }
 
+/* Background Shader Evaluation */
+
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_background(
         uint4 *input, float4 *output, int type, int sx, int sw, int offset, int sample)
@@ -268,6 +290,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 #  endif
 }
+
+/* Baking */
 
 #  ifdef __BAKING__
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)

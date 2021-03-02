@@ -45,6 +45,7 @@ CUDAIntegratorQueue::CUDAIntegratorQueue(CUDADevice *device, RenderBuffers *rend
     : CUDADeviceQueue(device),
       render_buffers_(render_buffers),
       integrator_state_(device, "integrator_state"),
+      num_active_paths_(device, "num_active_paths", MEM_READ_WRITE),
       work_tile_(device, "work_tile", MEM_READ_WRITE)
 {
   integrator_state_.alloc_to_device(get_max_num_path_states());
@@ -77,6 +78,10 @@ static KernelWorkTile init_kernel_work_tile(RenderBuffers *render_buffers,
 
 void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
 {
+  if (cuda_device_->have_error()) {
+    return;
+  }
+
   const CUDAContextScope scope(cuda_device_);
   const CUDADeviceKernel &cuda_kernel = cuda_device_->kernels.get(kernel);
 
@@ -129,6 +134,7 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
               cuda_kernel.function, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
       break;
     }
+    case DeviceKernel::INTEGRATOR_NUM_ACTIVE_PATHS:
     case DeviceKernel::NUM_KERNELS: {
       break;
     }
@@ -144,9 +150,61 @@ void CUDAIntegratorQueue::set_work_tile(const DeviceWorkTile &work_tile)
 
 bool CUDAIntegratorQueue::has_work_remaining()
 {
+  /* TODO: set a hard limit in case of undetected kernel failures? */
+  if (cuda_device_->have_error()) {
+    return false;
+  }
+
   const CUDAContextScope scope(cuda_device_);
+
+  /* Launch kernel to count the number of active paths. */
+  const CUDADeviceKernel &cuda_kernel = cuda_device_->kernels.get(
+      DeviceKernel::INTEGRATOR_NUM_ACTIVE_PATHS);
+
+  const KernelWorkTile *wtile = work_tile_.data();
+  int total_work_size = wtile->w * wtile->h * wtile->num_samples;
+
+  /* We perform parallel reduce per block, and then sum the results from each block on the host. */
+  const int num_threads_per_block = cuda_kernel.num_threads_per_block;
+  const int num_blocks = divide_up(total_work_size, num_threads_per_block);
+
+  if (num_active_paths_.size() < num_blocks) {
+    num_active_paths_.alloc(num_blocks);
+    num_active_paths_.zero_to_device();
+  }
+
+  /* See parall_reduce.h for why this amount of shared memory is needed. */
+  const int shared_mem_bytes = max(num_threads_per_block, 64) * sizeof(int);
+
+  CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
+  CUdeviceptr d_num_active_paths = (CUdeviceptr)num_active_paths_.device_pointer;
+  void *args[] = {&d_integrator_state, &d_num_active_paths, &total_work_size};
+
+  cuda_device_assert(cuda_device_,
+                     cuLaunchKernel(cuda_kernel.function,
+                                    num_blocks,
+                                    1,
+                                    1,
+                                    num_threads_per_block,
+                                    1,
+                                    1,
+                                    shared_mem_bytes,
+                                    0,
+                                    args,
+                                    0));
+
   cuda_device_assert(cuda_device_, cuCtxSynchronize());
-  return false; /* TODO */
+
+  /* Test if any paths are active. */
+  num_active_paths_.copy_from_device();
+  int *num_active_paths = num_active_paths_.data();
+  int num_paths = 0;
+
+  for (int i = 0; i < num_blocks; i++) {
+    num_paths += num_active_paths[i];
+  }
+
+  return (num_paths > 0);
 }
 
 int CUDAIntegratorQueue::get_max_num_path_states()

@@ -59,6 +59,7 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
   RenderBuffers *render_buffers_;
 
   device_only_memory<IntegratorState> integrator_state_;
+  device_vector<int> num_active_paths_;
   device_vector<KernelWorkTile> work_tile_;
 };
 

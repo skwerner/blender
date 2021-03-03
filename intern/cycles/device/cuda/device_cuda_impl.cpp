@@ -43,40 +43,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-#  ifndef WITH_CUDA_DYNLOAD
-
-/* Transparently implement some functions, so majority of the file does not need
- * to worry about difference between dynamically loaded and linked CUDA at all.
- */
-
-namespace {
-
-const char *cuewErrorString(CUresult result)
-{
-  /* We can only give error code here without major code duplication, that
-   * should be enough since dynamic loading is only being disabled by folks
-   * who knows what they're doing anyway.
-   *
-   * NOTE: Avoid call from several threads.
-   */
-  static string error;
-  error = string_printf("%d", result);
-  return error.c_str();
-}
-
-const char *cuewCompilerPath()
-{
-  return CYCLES_CUDA_NVCC_EXECUTABLE;
-}
-
-int cuewCompilerVersion()
-{
-  return (CUDA_VERSION / 100) + (CUDA_VERSION % 100 / 10);
-}
-
-} /* namespace */
-#  endif /* WITH_CUDA_DYNLOAD */
-
 class CUDADevice;
 
 bool CUDADevice::have_precompiled_kernels()
@@ -164,17 +130,7 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   }
 
   /* Create context. */
-  if (background) {
-    result = cuCtxCreate(&cuContext, ctx_flags, cuDevice);
-  }
-  else {
-    result = cuGLCtxCreate(&cuContext, ctx_flags, cuDevice);
-
-    if (result != CUDA_SUCCESS) {
-      result = cuCtxCreate(&cuContext, ctx_flags, cuDevice);
-      background = true;
-    }
-  }
+  result = cuCtxCreate(&cuContext, ctx_flags, cuDevice);
 
   if (result != CUDA_SUCCESS) {
     set_error(string_printf("Failed to create CUDA context (%s)", cuewErrorString(result)));
@@ -234,7 +190,7 @@ bool CUDADevice::check_peer_access(Device *peer_device)
 
   // Ensure array access over the link is possible as well (for 3D textures)
   cuda_assert(cuDeviceGetP2PAttribute(&can_access,
-                                      CU_DEVICE_P2P_ATTRIBUTE_ARRAY_ACCESS_ACCESS_SUPPORTED,
+                                      CU_DEVICE_P2P_ATTRIBUTE_CUDA_ARRAY_ACCESS_SUPPORTED,
                                       cuDevice,
                                       peer_device_cuda->cuDevice));
   if (can_access == 0) {
@@ -520,10 +476,9 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
 
   if (result == CUDA_SUCCESS) {
     reserve_local_memory(requested_features);
+    load_functions();
+    kernels.load(this);
   }
-
-  load_functions();
-  kernels.load(this);
 
   return (result == CUDA_SUCCESS);
 }

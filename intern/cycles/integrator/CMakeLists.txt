@@ -21,6 +21,7 @@ set(SRC
   tile.cpp
   path_trace_work.cpp
   path_trace_work_tiled.cpp
+  path_trace_work_pixel.cpp
   work_scheduler.cpp
 )
 
@@ -29,6 +30,7 @@ set(SRC_HEADERS
   tile.h
   path_trace_work.h
   path_trace_work_tiled.h
+  path_trace_work_pixel.h
   work_scheduler.h
 )
 

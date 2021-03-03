@@ -16,12 +16,18 @@
 
 #include "integrator/path_trace_work.h"
 
+#include "device/device.h"
+#include "integrator/path_trace_work_pixel.h"
 #include "integrator/path_trace_work_tiled.h"
 
 CCL_NAMESPACE_BEGIN
 
 unique_ptr<PathTraceWork> PathTraceWork::create(Device *render_device, RenderBuffers *buffers)
 {
+  if (render_device->info.type == DEVICE_CPU) {
+    return make_unique<PathTraceWorkPixel>(render_device, buffers);
+  }
+
   return make_unique<PathTraceWorkTiled>(render_device, buffers);
 }
 

@@ -46,7 +46,9 @@ class PathTraceWorkPixel : public PathTraceWork {
   void render_samples_full_pipeline(DeviceQueue *queue);
 
   /* Core path tracing routine. Renders given work time on the given queue. */
-  void render_samples_full_pipeline(DeviceQueue *queue, const DeviceWorkTile &work_tile);
+  void render_samples_full_pipeline(DeviceQueue *queue,
+                                    const DeviceWorkTile &work_tile,
+                                    const int samples_num);
 
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */

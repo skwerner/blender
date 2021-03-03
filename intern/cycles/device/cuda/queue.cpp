@@ -211,7 +211,7 @@ int CUDAIntegratorQueue::get_max_num_path_states()
 {
   /* TODO: compute automatically. */
   /* TODO: must have at least num_threads_per_block. */
-  return 131072;
+  return 1048576;
 }
 
 CCL_NAMESPACE_END

@@ -161,6 +161,11 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
   differential_incoming(&sd->dI, ray->dD);
   differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
 #  endif
+#else
+  sd->dP = differential3_zero();
+  sd->dI = differential3_zero();
+  sd->du = differential_zero();
+  sd->dv = differential_zero();
 #endif
 
   PROFILING_SHADER(sd->shader);

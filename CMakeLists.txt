@@ -1661,6 +1661,10 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "MSVC")
   unset(_WARNINGS)
 endif()
 
+if(NOT CMAKE_C_COMPILER_ID MATCHES "MSVC")
+  check_c_compiler_flag(COMPILER_HAS_MARCH_NATIVE -march=native)
+endif()
+
 # ensure python header is found since detection can fail, this could happen
 # with _any_ library but since we used a fixed python version this tends to
 # be most problematic.

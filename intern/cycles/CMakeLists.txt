@@ -45,8 +45,10 @@ if(WITH_CYCLES_NATIVE_ONLY)
   )
 
   if(NOT MSVC)
-    string(APPEND CMAKE_CXX_FLAGS " -march=native")
-    set(CYCLES_KERNEL_FLAGS "-march=native")
+    if(COMPILER_HAS_MARCH_NATIVE)
+      string(APPEND CMAKE_CXX_FLAGS " -march=native")
+      set(CYCLES_KERNEL_FLAGS "-march=native")
+    endif()
   else()
     if(NOT MSVC_NATIVE_ARCH_FLAGS)
         TRY_RUN(

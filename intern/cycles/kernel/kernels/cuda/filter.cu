@@ -26,7 +26,8 @@
 
 /* kernels */
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_copy_input(float *buffer,
                                   CCL_FILTER_TILE_INFO,
                                   int4 prefilter_rect,
@@ -49,7 +50,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_convert_to_rgb(float *rgb,
                                       float *buf,
                                       int sw,
@@ -87,7 +89,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_convert_from_rgb(float *rgb,
                                         float *buf,
                                         int ix,
@@ -114,7 +117,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_divide_shadow(int sample,
                                      CCL_FILTER_TILE_INFO,
                                      float *unfilteredA,
@@ -144,7 +148,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_get_feature(int sample,
                                    CCL_FILTER_TILE_INFO,
                                    int m_offset,
@@ -174,7 +179,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_write_feature(int sample,
                                      int4 buffer_params,
                                      int4 filter_area,
@@ -197,7 +203,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_detect_outliers(float *image,
                                        float *variance,
                                        float *depth,
@@ -213,7 +220,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_combine_halves(
         float *mean, float *variance, float *a, float *b, int4 prefilter_rect, int r)
 {
@@ -224,7 +232,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_construct_transform(float const *__restrict__ buffer,
                                            CCL_FILTER_TILE_INFO,
                                            float *transform,
@@ -259,7 +268,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_nlm_calc_difference(const float *ccl_restrict weight_image,
                                            const float *ccl_restrict variance_image,
                                            const float *ccl_restrict scale_image,
@@ -294,7 +304,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_nlm_blur(const float *ccl_restrict difference_image,
                                 float *out_image,
                                 int w,
@@ -311,7 +322,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_nlm_calc_weight(const float *ccl_restrict difference_image,
                                        float *out_image,
                                        int w,
@@ -329,7 +341,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_nlm_update_output(const float *ccl_restrict difference_image,
                                          const float *ccl_restrict image,
                                          float *out_image,
@@ -360,7 +373,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_nlm_normalize(
         float *out_image, const float *ccl_restrict accum_image, int w, int h, int stride)
 {
@@ -371,7 +385,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_nlm_construct_gramian(int t,
                                              const float *ccl_restrict difference_image,
                                              const float *ccl_restrict buffer,
@@ -414,7 +429,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_filter_finalize(float *buffer,
                                 int *rank,
                                 float *XtWX,

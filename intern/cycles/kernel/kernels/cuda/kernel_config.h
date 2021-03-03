@@ -14,7 +14,15 @@
  * limitations under the License.
  */
 
-/* device data taken from CUDA occupancy calculator */
+/* Device data taken from CUDA occupancy calculator.
+ *
+ * Terminology
+ * - CUDA GPUs have multiple streaming multiprocessors
+ * - Each multiprocessor executes multiple thread blocks
+ * - Each thread block contains a number of threads, also known as the block size
+ * - Multiprocessors have a fixed number of registers, and the amount of registers
+ *   used by each threads limits the number of threads per block.
+ */
 
 /* 3.0 and 3.5 */
 #if __CUDA_ARCH__ == 300 || __CUDA_ARCH__ == 350
@@ -24,9 +32,8 @@
 #  define CUDA_THREAD_MAX_REGISTERS 63
 
 /* tunable parameters */
-#  define CUDA_THREADS_BLOCK_WIDTH 16
+#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
 #  define CUDA_KERNEL_MAX_REGISTERS 63
-#  define CUDA_KERNEL_BRANCHED_MAX_REGISTERS 63
 
 /* 3.2 */
 #elif __CUDA_ARCH__ == 320
@@ -36,9 +43,8 @@
 #  define CUDA_THREAD_MAX_REGISTERS 63
 
 /* tunable parameters */
-#  define CUDA_THREADS_BLOCK_WIDTH 16
+#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
 #  define CUDA_KERNEL_MAX_REGISTERS 63
-#  define CUDA_KERNEL_BRANCHED_MAX_REGISTERS 63
 
 /* 3.7 */
 #elif __CUDA_ARCH__ == 370
@@ -48,9 +54,8 @@
 #  define CUDA_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_THREADS_BLOCK_WIDTH 16
+#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
 #  define CUDA_KERNEL_MAX_REGISTERS 63
-#  define CUDA_KERNEL_BRANCHED_MAX_REGISTERS 63
 
 /* 5.x, 6.x */
 #elif __CUDA_ARCH__ <= 699
@@ -60,7 +65,7 @@
 #  define CUDA_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_THREADS_BLOCK_WIDTH 16
+#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
 /* CUDA 9.0 seems to cause slowdowns on high-end Pascal cards unless we increase the number of
  * registers */
 #  if __CUDACC_VER_MAJOR__ >= 9 && __CUDA_ARCH__ >= 600
@@ -68,7 +73,6 @@
 #  else
 #    define CUDA_KERNEL_MAX_REGISTERS 48
 #  endif
-#  define CUDA_KERNEL_BRANCHED_MAX_REGISTERS 63
 
 /* 7.x, 8.x */
 #elif __CUDA_ARCH__ <= 899
@@ -78,9 +82,8 @@
 #  define CUDA_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_THREADS_BLOCK_WIDTH 16
+#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
 #  define CUDA_KERNEL_MAX_REGISTERS 64
-#  define CUDA_KERNEL_BRANCHED_MAX_REGISTERS 72
 
 /* unknown architecture */
 #else
@@ -95,27 +98,22 @@
 /* Compute number of threads per block and minimum blocks per multiprocessor
  * given the maximum number of registers per thread. */
 
-#define CUDA_LAUNCH_BOUNDS(threads_block_width, thread_num_registers) \
-  __launch_bounds__(threads_block_width *threads_block_width, \
-                    CUDA_MULTIPRESSOR_MAX_REGISTERS / \
-                        (threads_block_width * threads_block_width * thread_num_registers))
+#define CUDA_LAUNCH_BOUNDS(block_num_threads, thread_num_registers) \
+  __launch_bounds__(block_num_threads, \
+                    CUDA_MULTIPRESSOR_MAX_REGISTERS / (block_num_threads * thread_num_registers))
 
 /* sanity checks */
 
-#if CUDA_THREADS_BLOCK_WIDTH * CUDA_THREADS_BLOCK_WIDTH > CUDA_BLOCK_MAX_THREADS
+#if CUDA_KERNEL_BLOCK_NUM_THREADS > CUDA_BLOCK_MAX_THREADS
 #  error "Maximum number of threads per block exceeded"
 #endif
 
 #if CUDA_MULTIPRESSOR_MAX_REGISTERS / \
-        (CUDA_THREADS_BLOCK_WIDTH * CUDA_THREADS_BLOCK_WIDTH * CUDA_KERNEL_MAX_REGISTERS) > \
+        (CUDA_KERNEL_BLOCK_NUM_THREADS * CUDA_KERNEL_MAX_REGISTERS) > \
     CUDA_MULTIPROCESSOR_MAX_BLOCKS
 #  error "Maximum number of blocks per multiprocessor exceeded"
 #endif
 
 #if CUDA_KERNEL_MAX_REGISTERS > CUDA_THREAD_MAX_REGISTERS
-#  error "Maximum number of registers per thread exceeded"
-#endif
-
-#if CUDA_KERNEL_BRANCHED_MAX_REGISTERS > CUDA_THREAD_MAX_REGISTERS
 #  error "Maximum number of registers per thread exceeded"
 #endif

@@ -84,7 +84,7 @@ __device__ half __float2half(const float f)
 
 #define ATTR_FALLTHROUGH
 
-#define CCL_MAX_LOCAL_SIZE (CUDA_THREADS_BLOCK_WIDTH * CUDA_THREADS_BLOCK_WIDTH)
+#define CCL_MAX_LOCAL_SIZE CUDA_KERNEL_BLOCK_NUM_THREADS
 
 /* No assert supported for CUDA */
 

@@ -48,7 +48,7 @@
 
 #  if 0
 /* kernels */
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_path_trace(KernelWorkTile *tile, uint total_work_size)
 {
 	int work_index = ccl_global_id(0);
@@ -72,7 +72,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 
 /* Integrator */
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_init_from_camera(IntegratorState *state,
                                             KernelWorkTile *tile,
                                             uint total_work_size)
@@ -92,43 +93,50 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_intersect_closest(IntegratorState *state)
 {
   integrator_intersect_closest(NULL, state);
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_intersect_shadow(IntegratorState *state)
 {
   integrator_intersect_shadow(NULL, state);
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_intersect_subsurface(IntegratorState *state)
 {
   integrator_intersect_subsurface(NULL, state);
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_background(IntegratorState *state, float *render_buffer)
 {
   integrator_shade_background(NULL, state, render_buffer);
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_shadow(IntegratorState *state, float *render_buffer)
 {
   integrator_shade_shadow(NULL, state, render_buffer);
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_surface(IntegratorState *state, float *render_buffer)
 {
   integrator_shade_surface(NULL, state, render_buffer);
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_volume(IntegratorState *state, float *render_buffer)
 {
   integrator_shade_volume(NULL, state, render_buffer);
@@ -147,7 +155,8 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SUM_DEFAULT_BLOCK_SIZ
 
 /* Adaptive Sampling */
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_adaptive_stopping(KernelWorkTile *tile, int sample, uint total_work_size)
 {
   int work_index = ccl_global_id(0);
@@ -162,7 +171,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_adaptive_filter_x(KernelWorkTile *tile, int sample, uint)
 {
   KernelGlobals kg;
@@ -175,7 +185,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_adaptive_filter_y(KernelWorkTile *tile, int sample, uint)
 {
   KernelGlobals kg;
@@ -188,7 +199,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_adaptive_scale_samples(KernelWorkTile *tile,
                                        int start_sample,
                                        int sample,
@@ -219,7 +231,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 
 /* Convert to Display Buffer */
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_convert_to_byte(uchar4 *rgba,
                                 float *buffer,
                                 float sample_scale,
@@ -238,7 +251,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
   }
 }
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_convert_to_half_float(uchar4 *rgba,
                                       float *buffer,
                                       float sample_scale,
@@ -259,7 +273,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 
 /* Displacement */
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_displace(
         uint4 *input, float4 *output, int type, int sx, int sw, int offset, int sample)
 {
@@ -276,7 +291,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 
 /* Background Shader Evaluation */
 
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_background(
         uint4 *input, float4 *output, int type, int sx, int sw, int offset, int sample)
 {
@@ -294,7 +310,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KER
 /* Baking */
 
 #  ifdef __BAKING__
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_THREADS_BLOCK_WIDTH, CUDA_KERNEL_MAX_REGISTERS)
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_bake(KernelWorkTile *tile, uint total_work_size)
 {
   /* TODO */

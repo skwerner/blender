@@ -84,15 +84,28 @@ void PathTrace::render_samples(int samples_num)
   render_status_.reset();
   update_status_.reset();
 
-  /* TODO(sergey): Dp something smarter, like:
-   * - Render first sample and update the interface, so user sees first pixels as soon as possible.
-   * - Render in a bigger chunks of samples for the performance reasons. */
+  double total_sampling_time = 0;
+
+  total_sampling_time += render_samples_full_pipeline(1);
+
+  /* Update as soon as possible, so that artists immediately see first pixels. */
+  update_if_needed();
 
   for (int sample = 0; sample < samples_num; ++sample) {
     /* TODO(sergey): Take adaptive stopping and user cancel into account. Both of these actions
      * will affect how the buffer is to be scaled. */
 
-    render_samples_full_pipeline(1);
+    const double time_per_sample_average = total_sampling_time /
+                                           render_status_.rendered_samples_num;
+
+    /* TODO(sergey): Take update_interval_in_seconds into account. */
+
+    const int samples_in_second_num = max(int(1.0 / time_per_sample_average), 1);
+    const int samples_to_render_num = min(samples_in_second_num,
+                                          samples_num - render_status_.rendered_samples_num);
+
+    total_sampling_time += render_samples_full_pipeline(samples_to_render_num);
+
     update_if_needed();
 
     if (is_cancel_requested()) {
@@ -112,8 +125,10 @@ void PathTrace::render_init_execution()
   }
 }
 
-void PathTrace::render_samples_full_pipeline(int samples_num)
+double PathTrace::render_samples_full_pipeline(int samples_num)
 {
+  const double start_render_time = time_dt();
+
   const int start_sample = start_sample_num_ + render_status_.rendered_samples_num;
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
@@ -121,6 +136,8 @@ void PathTrace::render_samples_full_pipeline(int samples_num)
   });
 
   render_status_.rendered_samples_num += samples_num;
+
+  return time_dt() - start_render_time;
 }
 
 void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)

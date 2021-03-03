@@ -104,7 +104,7 @@ class PathTrace {
    * reasons.
    *
    * This call advances number of samples stored in the render status. */
-  void render_samples_full_pipeline(int samples_num);
+  double render_samples_full_pipeline(int samples_num);
 
   /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
    * soon as possible. */

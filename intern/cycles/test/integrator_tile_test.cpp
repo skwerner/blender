@@ -27,9 +27,6 @@ TEST(tile_calculate_best_size, Basic)
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1), make_int2(1, 1));
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1), make_int2(1, 1));
 
-  /* XXX: Once the logic is fully implemented in the function. */
-  return;
-
   /* Enough path states to fit an entire image. */
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1920 * 1080),
             make_int2(1920, 1080));

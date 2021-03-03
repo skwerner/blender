@@ -30,11 +30,6 @@ int2 tile_calculate_best_size(const int2 &image_size,
     return make_int2(1, 1);
   }
 
-  /* XXX: Return tile size which is known to work.
-   * Proper tile wsize causes kernel to fail. Is there a mis-calculation of path integrator size
-   * for CUDA on CPU and GPU? Is CPU-side allocation of GPU memory uses CPU-side structure size? */
-  return make_int2(256, 256);
-
   const int64_t num_pixels = image_size.x * image_size.y;
   const int64_t num_pixel_samples = num_pixels * samples_num;
 

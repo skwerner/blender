@@ -16,8 +16,7 @@
 
 #pragma once
 
-#include "device/device_queue.h"
-#include "integrator/work_scheduler.h"
+#include "integrator/path_trace_work.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
 #include "util/util_unique_ptr.h"
@@ -107,13 +106,6 @@ class PathTrace {
    * This call advances number of samples stored in the render status. */
   void render_samples_full_pipeline(int samples_num);
 
-  /* This is a worker thread's "run" function which polls for a work to be rendered and renders
-   * the work. */
-  void render_samples_full_pipeline(DeviceQueue *queue);
-
-  /* Core path tracing routine. Renders given work time on the given queue. */
-  void render_samples_full_pipeline(DeviceQueue *queue, const DeviceWorkTile &work_tile);
-
   /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
    * soon as possible. */
   bool is_cancel_requested();
@@ -131,15 +123,9 @@ class PathTrace {
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
-  /* Scheduler which gives work to path tracing threads.
-   *
-   * TODO(sergey): Should probably be moved into PathTraceWork together with the queue which
-   * queries for the work. This is because scheduling needs to take maximum possible path state
-   * count on the device. */
-  WorkScheduler work_scheduler_;
-
-  /* Per-compute device path tracing contexts. */
-  vector<unique_ptr<DeviceQueue>> integrator_queues_;
+  /* Per-compute device descriptors of work which is responsible for path tracing on its configured
+   * device. */
+  vector<unique_ptr<PathTraceWork>> path_trace_works_;
 
   /* Render buffer which corresponds to the big tile.
    * It is used to accumulate work from all rendering devices, and to communicate render result

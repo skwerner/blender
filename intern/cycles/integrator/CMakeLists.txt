@@ -19,12 +19,16 @@ set(INC
 set(SRC
   path_trace.cpp
   tile.cpp
+  path_trace_work.cpp
+  path_trace_work_tiled.cpp
   work_scheduler.cpp
 )
 
 set(SRC_HEADERS
   path_trace.h
   tile.h
+  path_trace_work.h
+  path_trace_work_tiled.h
   work_scheduler.h
 )
 

@@ -40,15 +40,11 @@ PathTrace::PathTrace(Device *device) : device_(device)
 
   full_render_buffers_ = make_unique<RenderBuffers>(device);
 
-  /* Create integrator queues in advance, so that they can be reused by incremental sampling
-   * as much as possible. */
+  /* Create path tracing work in advance, so that it can be reused by incremental sampling as much
+   * as possible. */
   device->foreach_device([&](Device *render_device) {
-    const int num_queues = render_device->get_concurrent_integrator_queues_num();
-
-    for (int i = 0; i < num_queues; ++i) {
-      integrator_queues_.emplace_back(
-          render_device->queue_create_integrator(full_render_buffers_.get()));
-    }
+    path_trace_works_.emplace_back(
+        PathTraceWork::create(render_device, full_render_buffers_.get()));
   });
 
   /* TODO(sergey): Communicate some scheduling block size to the work scheduler based on every
@@ -111,70 +107,20 @@ void PathTrace::render_samples(int samples_num)
 
 void PathTrace::render_init_execution()
 {
-  for (auto &&queue : integrator_queues_) {
-    queue->init_execution();
-
-    /* TODO(sergey): Needs to be consolidated with queue into PathTraceWork. */
-    work_scheduler_.set_max_num_path_states(queue->get_max_num_path_states());
+  for (auto &&path_trace_work : path_trace_works_) {
+    path_trace_work->init_execution();
   }
 }
 
 void PathTrace::render_samples_full_pipeline(int samples_num)
 {
-  /* Reset work scheduler, so that it is ready to give work tiles for the new samples range. */
-  work_scheduler_.reset(scaled_render_buffer_params_,
-                        start_sample_num_ + render_status_.rendered_samples_num,
-                        samples_num);
+  const int start_sample = start_sample_num_ + render_status_.rendered_samples_num;
 
-  tbb::parallel_for_each(integrator_queues_, [&](unique_ptr<DeviceQueue> &queue) {
-    render_samples_full_pipeline(queue.get());
+  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+    path_trace_work->render_samples(scaled_render_buffer_params_, start_sample, samples_num);
   });
 
   render_status_.rendered_samples_num += samples_num;
-}
-
-void PathTrace::render_samples_full_pipeline(DeviceQueue *queue)
-{
-  queue->init_execution();
-
-  DeviceWorkTile work_tile;
-  while (work_scheduler_.get_work(&work_tile)) {
-    render_samples_full_pipeline(queue, work_tile);
-  }
-}
-
-void PathTrace::render_samples_full_pipeline(DeviceQueue *queue, const DeviceWorkTile &work_tile)
-{
-  queue->set_work_tile(work_tile);
-
-  queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
-
-  do {
-    /* NOTE: The order of queuing is based on the following ideas:
-     *  - It is possible that some rays will hit background, and and of them will need volume
-     *    attenuation. So first do intersect which allows to see which rays hit background, then
-     *    do volume kernel which might enqueue background work items. After that the background
-     *    kernel will handle work items coming from both intersection and volume kernels.
-     *
-     *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
-     *    intersection kernel is scheduled after work items are scheduled from both surface and
-     *    subsurface kernels. */
-
-    /* TODO(sergey): For the final implementation can do something smarter, like re-generating
-     * camera rays if the wavefront becomes too small but there are still a lot of samples to be
-     * calculated. */
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_BACKGROUND);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SURFACE);
-    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
-  } while (queue->has_work_remaining());
 }
 
 void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)

@@ -98,9 +98,8 @@ Session::Session(const SessionParams &params_)
 
   /* Configure path tracer. */
   path_trace_ = make_unique<PathTrace>(device);
-
-  path_trace_->get_cancel_cb = [&progress = this->progress]() { return progress.get_cancel(); };
-  path_trace_->update_cb = [&](RenderBuffers *render_buffers, int sample) {
+  path_trace_->set_progress(&progress);
+  path_trace_->buffer_update_cb = [&](RenderBuffers *render_buffers, int sample) {
     /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
      * the the new progressive+adaptive nature of rendering. */
 
@@ -119,7 +118,7 @@ Session::Session(const SessionParams &params_)
 
     update_render_tile_cb(render_tile, false);
   };
-  path_trace_->write_cb = [&](RenderBuffers *render_buffers, int sample) {
+  path_trace_->buffer_write_cb = [&](RenderBuffers *render_buffers, int sample) {
     /* NOTE: Almost a duplicate of `update_cb`, but is done for a testing purposes, neither of
      * this callbacks are final. */
 
@@ -141,6 +140,7 @@ Session::Session(const SessionParams &params_)
 
     write_render_tile_cb(render_tile);
   };
+  path_trace_->progress_update_cb = [&]() { update_status_time(); };
 }
 
 Session::~Session()
@@ -1094,6 +1094,7 @@ bool Session::update_scene()
 
 void Session::update_status_time(bool show_pause, bool show_done)
 {
+#if 0
   int progressive_sample = tile_manager.state.sample;
   int num_samples = tile_manager.get_num_effective_samples();
 
@@ -1145,6 +1146,27 @@ void Session::update_status_time(bool show_pause, bool show_done)
     status = substatus;
     substatus.clear();
   }
+#else
+  string status, substatus;
+
+  /* TODO(sergey): Take number of big tiles into account. */
+
+  const int num_samples = tile_manager.get_num_effective_samples();
+  substatus += string_printf("Sample %d/%d", progress.get_current_sample(), num_samples);
+
+  if (show_pause) {
+    status = "Rendering Paused";
+  }
+  else if (show_done) {
+    status = "Rendering Done";
+    progress.set_end_time(); /* Save end time so that further calls to get_time are accurate. */
+  }
+  else {
+    status = substatus;
+    substatus.clear();
+  }
+
+#endif
 
   progress.set_status(status, substatus);
 }

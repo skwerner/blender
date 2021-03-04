@@ -19,6 +19,7 @@
 #include "device/device.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
+#include "util/util_progress.h"
 #include "util/util_tbb.h"
 #include "util/util_time.h"
 
@@ -77,6 +78,11 @@ void PathTrace::set_start_sample(int start_sample_num)
   start_sample_num_ = start_sample_num;
 }
 
+void PathTrace::set_progress(Progress *progress)
+{
+  progress_ = progress;
+}
+
 void PathTrace::render_samples(int samples_num)
 {
   render_init_execution();
@@ -89,7 +95,8 @@ void PathTrace::render_samples(int samples_num)
   total_sampling_time += render_samples_full_pipeline(1);
 
   /* Update as soon as possible, so that artists immediately see first pixels. */
-  update_if_needed();
+  buffer_update_if_needed();
+  progress_update_if_needed();
 
   for (int sample = 0; sample < samples_num; ++sample) {
     /* TODO(sergey): Take adaptive stopping and user cancel into account. Both of these actions
@@ -106,7 +113,8 @@ void PathTrace::render_samples(int samples_num)
 
     total_sampling_time += render_samples_full_pipeline(samples_to_render_num);
 
-    update_if_needed();
+    buffer_update_if_needed();
+    progress_update_if_needed();
 
     if (is_cancel_requested()) {
       break;
@@ -115,7 +123,7 @@ void PathTrace::render_samples(int samples_num)
 
   /* TODO(sergey): Need to write to the whole buffer, after all devices sampled the frame to the
    * given number of samples. */
-  write();
+  buffer_write();
 }
 
 void PathTrace::render_init_execution()
@@ -153,7 +161,7 @@ void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)
   task.buffer = full_render_buffers_->buffer.device_pointer;
 
   /* NOTE: The device assumes the sample is the 0-based index of the last samples sample. */
-  task.sample = start_sample_num_ + render_status_.rendered_samples_num - 1;
+  task.sample = get_num_samples_in_buffer() - 1;
 
   scaled_render_buffer_params_.get_offset_stride(task.offset, task.stride);
 
@@ -176,17 +184,25 @@ void PathTrace::update_scaled_render_buffers_resolution()
   scaled_render_buffer_params_.full_y = orig_params.full_y / resolution_divider_;
 }
 
-bool PathTrace::is_cancel_requested()
+int PathTrace::get_num_samples_in_buffer()
 {
-  if (!get_cancel_cb) {
-    return false;
-  }
-  return get_cancel_cb();
+  return start_sample_num_ + render_status_.rendered_samples_num;
 }
 
-void PathTrace::update_if_needed()
+bool PathTrace::is_cancel_requested()
 {
-  if (!update_cb) {
+  if (progress_ != nullptr) {
+    if (progress_->get_cancel()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void PathTrace::buffer_update_if_needed()
+{
+  if (!buffer_update_cb) {
     return;
   }
 
@@ -201,19 +217,30 @@ void PathTrace::update_if_needed()
     }
   }
 
-  update_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
+  buffer_update_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
 
   update_status_.has_update = true;
   update_status_.last_update_time = current_time;
 }
 
-void PathTrace::write()
+void PathTrace::buffer_write()
 {
-  if (!write_cb) {
+  if (!buffer_write_cb) {
     return;
   }
 
-  write_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
+  buffer_write_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
+}
+
+void PathTrace::progress_update_if_needed()
+{
+  if (progress_ != nullptr) {
+    progress_->add_samples(0, get_num_samples_in_buffer());
+  }
+
+  if (progress_update_cb) {
+    progress_update_cb();
+  }
 }
 
 CCL_NAMESPACE_END

@@ -28,6 +28,7 @@ class Device;
 class DeviceQueue;
 class DisplayBuffer;
 class RenderBuffers;
+class Progress;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
  * all the common steps of path tracing which are not device-specific. The list of tasks includes
@@ -59,6 +60,14 @@ class PathTrace {
    * The sample is 0-based. */
   void set_start_sample(int start_sample_num);
 
+  /* Set progress tracker.
+   * Used to communicate details about the progress to the outer world, check whether rendering is
+   * to be canceled.
+   *
+   * The path tracer writes to this object, and then at a convenient moment runs
+   * progress_update_cb() callback. */
+  void set_progress(Progress *progress);
+
   /* Request render of the given number of samples.
    * Will add [start_sample_num, start_sample_num + samples_num) samples to the render buffer.
    *
@@ -68,16 +77,11 @@ class PathTrace {
   /* Copy current render result to the given display buffer. */
   void copy_to_display_buffer(DisplayBuffer *display_buffer);
 
-  /* Callback which is used top check whether user requested to cancel rendering.
-   * If this callback is not assigned the path tracing procfess can not be cancelled and it will be
-   * finished when it fully sampled all requested samples. */
-  function<bool(void)> get_cancel_cb;
-
   /* Callback which communicates an updates state of the render buffer.
    * Is called during path tracing to communicate work-in-progress state of the final buffer.
    *
    * The samples indicates how many samples the buffer contains. */
-  function<void(RenderBuffers *render_buffers, int sample)> update_cb;
+  function<void(RenderBuffers *render_buffers, int sample)> buffer_update_cb;
 
   /* The update callback will never be run more often that this interval, avoiding overhead of
    * data communication on a simple renders.  */
@@ -86,7 +90,14 @@ class PathTrace {
   /* Callback which communicates final rendered buffer. Is called after pathtracing is done.
    *
    * The samples indicates how many samples the buffer contains. */
-  function<void(RenderBuffers *render_buffers, int sample)> write_cb;
+  function<void(RenderBuffers *render_buffers, int sample)> buffer_write_cb;
+
+  /* Callback which is called to report current rendering progress.
+   *
+   * It is supposed to be cheaper than buffer update/write, hence can be called more often.
+   * Additionally, it might be called form the middle of wavefront (meaning, it is not guaranteed
+   * that the buffer is "uniformly" sampled at the moment of this callback). */
+  function<void(void)> progress_update_cb;
 
  protected:
   /* Update resolution stored in the `scaled_render_buffer_params_`.
@@ -106,18 +117,25 @@ class PathTrace {
    * This call advances number of samples stored in the render status. */
   double render_samples_full_pipeline(int samples_num);
 
+  /* Get number of samples in the current state of the render buffers. */
+  int get_num_samples_in_buffer();
+
   /* Check whether user requested to cancel rendering, so that path tracing is to be finished as
    * soon as possible. */
   bool is_cancel_requested();
 
-  /* Run an update callback if needed.
+  /* Run a buffer update callback if needed.
+   *
    * This call which check whether an update callback is configured, and do other optimization
    * checks. For example, the update will not be communicated if update happens too often, so that
    * the overhead of update does not degrade rendering performance. */
-  void update_if_needed();
+  void buffer_update_if_needed();
 
   /* Write the big tile render buffer via the write callback. */
-  void write();
+  void buffer_write();
+
+  /* Run the progress_update_cb callback if it is needed. */
+  void progress_update_if_needed();
 
   /* Pointer to a device which is configured to be used for path tracing. If multiple devices are
    * configured this is a `MultiDevice`. */
@@ -172,6 +190,9 @@ class PathTrace {
     double last_update_time;
   };
   UpdateStatus update_status_;
+
+  /* Progress object which is used to communicate sample progress. */
+  Progress *progress_;
 };
 
 CCL_NAMESPACE_END

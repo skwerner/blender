@@ -48,7 +48,7 @@ CUDAIntegratorQueue::CUDAIntegratorQueue(CUDADevice *device, RenderBuffers *rend
       num_active_paths_(device, "num_active_paths", MEM_READ_WRITE),
       work_tile_(device, "work_tile", MEM_READ_WRITE)
 {
-  integrator_state_.alloc_to_device(get_max_num_path_states());
+  integrator_state_.alloc_to_device(get_max_num_paths());
 }
 
 void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
@@ -66,7 +66,7 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
   const int total_work_size = wtile->w * wtile->h * wtile->num_samples;
   const int num_blocks = divide_up(total_work_size, num_threads_per_block);
 
-  assert(total_work_size < get_max_num_path_states());
+  assert(total_work_size < get_max_num_paths());
 
   switch (kernel) {
     case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA: {
@@ -127,11 +127,11 @@ void CUDAIntegratorQueue::set_work_tile(const KernelWorkTile &work_tile)
   work_tile_.copy_to_device();
 }
 
-bool CUDAIntegratorQueue::has_work_remaining()
+int CUDAIntegratorQueue::get_num_active_paths()
 {
   /* TODO: set a hard limit in case of undetected kernel failures? */
   if (cuda_device_->have_error()) {
-    return false;
+    return 0;
   }
 
   const CUDAContextScope scope(cuda_device_);
@@ -183,10 +183,10 @@ bool CUDAIntegratorQueue::has_work_remaining()
     num_paths += num_active_paths[i];
   }
 
-  return (num_paths > 0);
+  return num_paths;
 }
 
-int CUDAIntegratorQueue::get_max_num_path_states()
+int CUDAIntegratorQueue::get_max_num_paths()
 {
   /* TODO: compute automatically. */
   /* TODO: must have at least num_threads_per_block. */

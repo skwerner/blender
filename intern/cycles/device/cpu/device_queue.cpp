@@ -99,13 +99,13 @@ void CPUIntegratorQueue::set_work_tile(const KernelWorkTile &work_tile)
   work_tile_.buffer = render_buffers_->buffer.data();
 }
 
-bool CPUIntegratorQueue::has_work_remaining()
+int CPUIntegratorQueue::get_num_active_paths()
 {
   const IntegratorState *state = &integrator_state_;
-  return !(INTEGRATOR_PATH_IS_TERMINATED && INTEGRATOR_SHADOW_PATH_IS_TERMINATED);
+  return (INTEGRATOR_PATH_IS_TERMINATED && INTEGRATOR_SHADOW_PATH_IS_TERMINATED) ? 0 : 1;
 }
 
-int CPUIntegratorQueue::get_max_num_path_states()
+int CPUIntegratorQueue::get_max_num_paths()
 {
   return 1;
 }

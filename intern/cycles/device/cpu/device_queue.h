@@ -65,9 +65,9 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
 
   virtual void set_work_tile(const KernelWorkTile &work_tile) override;
 
-  virtual bool has_work_remaining() override;
+  virtual int get_num_active_paths() override;
 
-  virtual int get_max_num_path_states() override;
+  virtual int get_max_num_paths() override;
 
  protected:
   RenderBuffers *render_buffers_;

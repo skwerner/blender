@@ -52,17 +52,17 @@ class DeviceQueue {
    * specific to render queue. */
   virtual void set_work_tile(const KernelWorkTile &work_tile) = 0;
 
-  /* Test if any work is still remaining to be done. */
-  virtual bool has_work_remaining() = 0;
+  /* Get number of active paths in the queue. */
+  virtual int get_num_active_paths() = 0;
 
-  /* Get maximum number of path states which can be held by this queue.
+  /* Get maximum number of paths which can be held by this queue.
    *
-   * The number of path states is determined by factors like number of threads on the device,
+   * The number of path is determined by factors like number of threads on the device,
    * amount of free memory on the device and so on.
    *
    * This value is used by an external world to effectively implement scheduling on a
    * (multi)device. */
-  virtual int get_max_num_path_states() = 0;
+  virtual int get_max_num_paths() = 0;
 
   /* Device this queue has been created for. */
   Device *device;

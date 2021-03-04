@@ -37,7 +37,7 @@ PathTraceWorkTiled::PathTraceWorkTiled(Device *render_device, RenderBuffers *buf
   }
 
   /* NOTE: Expect that all queues have the same number of path states. */
-  work_scheduler_.set_max_num_path_states(integrator_queues_[0]->get_max_num_path_states());
+  work_scheduler_.set_max_num_path_states(integrator_queues_[0]->get_max_num_paths());
 }
 
 void PathTraceWorkTiled::init_execution()
@@ -98,7 +98,7 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
 
     queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
     queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
-  } while (queue->has_work_remaining());
+  } while (queue->get_num_active_paths() > 0);
 }
 
 CCL_NAMESPACE_END

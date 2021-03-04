@@ -110,7 +110,7 @@ void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
 
       queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
       queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
-    } while (queue->has_work_remaining());
+    } while (queue->get_num_active_paths() > 0);
 
     ++sample_work_tile.start_sample;
   }

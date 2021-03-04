@@ -49,7 +49,7 @@ PathTrace::PathTrace(Device *device) : device_(device)
   });
 
   /* TODO(sergey): Communicate some scheduling block size to the work scheduler based on every
-   * device's get_max_num_path_states(). This is a bit tricky because CPU and GPU device will
+   * device's get_max_num_paths(). This is a bit tricky because CPU and GPU device will
    * be opposites of each other: CPU wavefront is super tiny, and GPU wavefront is gigantic.
    * How to find an ideal scheduling for such a mixture?  */
 }

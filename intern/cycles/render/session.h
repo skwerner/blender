@@ -53,8 +53,6 @@ class SessionParams {
 
   bool experimental;
   int samples;
-  int2 tile_size;
-  TileOrder tile_order;
   int start_resolution;
   int denoising_start_sample;
   int pixel_size;
@@ -83,7 +81,6 @@ class SessionParams {
     progressive = false;
     experimental = false;
     samples = 1024;
-    tile_size = make_int2(64, 64);
     start_resolution = INT_MAX;
     denoising_start_sample = 0;
     pixel_size = 1;
@@ -100,7 +97,6 @@ class SessionParams {
     progressive_update_timeout = 1.0;
 
     shadingsystem = SHADINGSYSTEM_SVM;
-    tile_order = TILE_CENTER;
   }
 
   bool modified(const SessionParams &params)
@@ -109,16 +105,14 @@ class SessionParams {
      * that can be handled by an existing Session are omitted. */
     return !(device == params.device && background == params.background &&
              progressive == params.progressive && experimental == params.experimental &&
-             tile_size == params.tile_size && start_resolution == params.start_resolution &&
-             pixel_size == params.pixel_size && threads == params.threads &&
-             adaptive_sampling == params.adaptive_sampling &&
+             start_resolution == params.start_resolution && pixel_size == params.pixel_size &&
+             threads == params.threads && adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling &&
              display_buffer_linear == params.display_buffer_linear &&
              cancel_timeout == params.cancel_timeout && reset_timeout == params.reset_timeout &&
              text_timeout == params.text_timeout &&
              progressive_update_timeout == params.progressive_update_timeout &&
-             tile_order == params.tile_order && shadingsystem == params.shadingsystem &&
-             denoising.type == params.denoising.type &&
+             shadingsystem == params.shadingsystem && denoising.type == params.denoising.type &&
              (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
   }
 };

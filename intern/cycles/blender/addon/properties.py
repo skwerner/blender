@@ -78,15 +78,6 @@ enum_curve_shape = (
     ('THICK', "3D Curves", "Render hair as 3D curve, for accurate results when viewing hair close up"),
 )
 
-enum_tile_order = (
-    ('CENTER', "Center", "Render from center to the edges"),
-    ('RIGHT_TO_LEFT', "Right to Left", "Render from right to left"),
-    ('LEFT_TO_RIGHT', "Left to Right", "Render from left to right"),
-    ('TOP_TO_BOTTOM', "Top to Bottom", "Render from top to bottom"),
-    ('BOTTOM_TO_TOP', "Bottom to Top", "Render from bottom to top"),
-    ('HILBERT_SPIRAL', "Hilbert Spiral", "Render in a Hilbert Spiral"),
-)
-
 enum_use_layer_samples = (
     ('USE', "Use", "Per render layer number of samples override scene samples"),
     ('BOUNDED', "Bounded", "Bound per render layer number of samples by global samples"),
@@ -618,13 +609,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=10.0,
     )
 
-    debug_tile_size: IntProperty(
-        name="Tile Size",
-        description="",
-        min=1, max=4096,
-        default=1024,
-    )
-
     preview_start_resolution: IntProperty(
         name="Start Resolution",
         description="Resolution to start rendering preview at, "
@@ -680,13 +664,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Split BVH primitives by this number of time steps to speed up render time in cost of memory",
         default=0,
         min=0, max=16,
-    )
-    tile_order: EnumProperty(
-        name="Tile Order",
-        description="Tile order for rendering",
-        items=enum_tile_order,
-        default='HILBERT_SPIRAL',
-        options=set(),  # Not animatable!
     )
 
     bake_type: EnumProperty(

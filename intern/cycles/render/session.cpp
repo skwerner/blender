@@ -48,11 +48,11 @@ Session::Session(const SessionParams &params_)
     : params(params_),
       tile_manager(params.progressive,
                    params.samples,
-                   params.tile_size,
+                   make_int2(64, 64),
                    params.start_resolution,
                    params.background == false,
                    params.background,
-                   params.tile_order,
+                   TILE_HILBERT_SPIRAL,
                    max(params.device.multi_devices.size(), 1),
                    params.pixel_size),
       stats(),
@@ -739,8 +739,13 @@ void Session::map_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_de
           }
         }
         else {
-          int px = center_tile.x + dx * params.tile_size.x;
-          int py = center_tile.y + dy * params.tile_size.y;
+          /* TODO(sergey): Tile size is not known, tiling is done internally in the PathTrace.
+           * Mapping tiles will probably be not needed in the future, as the denoising will happen
+           * on a big tile. Keep a dummy value so that we can have code for reference. */
+          const int2 tile_size = make_int2(64, 64);
+
+          int px = center_tile.x + dx * tile_size.x;
+          int py = center_tile.y + dy * tile_size.y;
 
           rtile.x = clamp(px, image_region.x, image_region.z);
           rtile.y = clamp(py, image_region.y, image_region.w);

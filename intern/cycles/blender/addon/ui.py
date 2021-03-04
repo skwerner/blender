@@ -667,27 +667,6 @@ class CYCLES_RENDER_PT_performance_threads(CyclesButtonsPanel, Panel):
         sub.prop(rd, "threads")
 
 
-class CYCLES_RENDER_PT_performance_tiles(CyclesButtonsPanel, Panel):
-    bl_label = "Tiles"
-    bl_parent_id = "CYCLES_RENDER_PT_performance"
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        scene = context.scene
-        rd = scene.render
-        cscene = scene.cycles
-
-        col = layout.column()
-
-        sub = col.column(align=True)
-        sub.prop(rd, "tile_x", text="Tiles X")
-        sub.prop(rd, "tile_y", text="Y")
-        col.prop(cscene, "tile_order", text="Order")
-
-
 class CYCLES_RENDER_PT_performance_acceleration_structure(CyclesButtonsPanel, Panel):
     bl_label = "Acceleration Structure"
     bl_parent_id = "CYCLES_RENDER_PT_performance"
@@ -2247,7 +2226,6 @@ classes = (
     CYCLES_RENDER_PT_film_transparency,
     CYCLES_RENDER_PT_performance,
     CYCLES_RENDER_PT_performance_threads,
-    CYCLES_RENDER_PT_performance_tiles,
     CYCLES_RENDER_PT_performance_acceleration_structure,
     CYCLES_RENDER_PT_performance_final_render,
     CYCLES_RENDER_PT_performance_viewport,

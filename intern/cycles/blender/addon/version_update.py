@@ -165,10 +165,6 @@ def do_versions(self):
                 if not cscene.is_property_set("filter_type"):
                     cscene.pixel_filter_type = 'GAUSSIAN'
 
-                # Tile Order
-                if not cscene.is_property_set("tile_order"):
-                    cscene.tile_order = 'CENTER'
-
             if version <= (2, 76, 10):
                 cscene = scene.cycles
                 if cscene.is_property_set("filter_type"):

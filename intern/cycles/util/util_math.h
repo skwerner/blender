@@ -119,6 +119,11 @@ ccl_device_inline int min(int a, int b)
   return (a < b) ? a : b;
 }
 
+ccl_device_inline uint min(uint a, uint b)
+{
+  return (a < b) ? a : b;
+}
+
 ccl_device_inline float max(float a, float b)
 {
   return (a > b) ? a : b;

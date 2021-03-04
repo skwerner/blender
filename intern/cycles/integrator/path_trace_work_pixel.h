@@ -22,7 +22,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-class DeviceWorkTile;
+struct KernelWorkTile;
 
 /* Implementation of PathTraceWork which schedules work on to queues pixel-by-pixel.
  * This implementation suits best CPU device.
@@ -47,7 +47,7 @@ class PathTraceWorkPixel : public PathTraceWork {
 
   /* Core path tracing routine. Renders given work time on the given queue. */
   void render_samples_full_pipeline(DeviceQueue *queue,
-                                    const DeviceWorkTile &work_tile,
+                                    const KernelWorkTile &work_tile,
                                     const int samples_num);
 
   /* Integrator queues.

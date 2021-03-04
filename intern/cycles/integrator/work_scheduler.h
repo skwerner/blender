@@ -21,7 +21,8 @@
 CCL_NAMESPACE_BEGIN
 
 class BufferParams;
-class DeviceWorkTile;
+
+struct KernelWorkTile;
 
 /* Scheduler of device work tiles.
  * Takes care of feeding multiple devices running in parallel a work which needs to be done. */
@@ -42,7 +43,7 @@ class WorkScheduler {
    * Returns truth if there is still work to be done and initialied the work tile to all
    * parameters of this work. If there is nothing remained to be done, returns false and the
    * work tile is kept unchanged. */
-  bool get_work(DeviceWorkTile *work_tile);
+  bool get_work(KernelWorkTile *work_tile);
 
  protected:
   void reset_scheduler_state();

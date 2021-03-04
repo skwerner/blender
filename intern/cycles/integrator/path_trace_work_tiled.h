@@ -23,7 +23,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-class DeviceWorkTile;
+struct KernelWorkTile;
 
 /* Implementation of PathTraceWork which schedules work to the device in tiles which are sized
  * to match device queue's number of path states.
@@ -44,7 +44,7 @@ class PathTraceWorkTiled : public PathTraceWork {
   void render_samples_full_pipeline(DeviceQueue *queue);
 
   /* Core path tracing routine. Renders given work time on the given queue. */
-  void render_samples_full_pipeline(DeviceQueue *queue, const DeviceWorkTile &work_tile);
+  void render_samples_full_pipeline(DeviceQueue *queue, const KernelWorkTile &work_tile);
 
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */

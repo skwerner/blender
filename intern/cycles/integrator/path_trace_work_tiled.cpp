@@ -21,6 +21,8 @@
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
 
+#include "kernel/kernel_types.h"
+
 CCL_NAMESPACE_BEGIN
 
 PathTraceWorkTiled::PathTraceWorkTiled(Device *render_device, RenderBuffers *buffers)
@@ -58,14 +60,14 @@ void PathTraceWorkTiled::render_samples(const BufferParams &scaled_render_buffer
 
 void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
 {
-  DeviceWorkTile work_tile;
+  KernelWorkTile work_tile;
   while (work_scheduler_.get_work(&work_tile)) {
     render_samples_full_pipeline(queue, work_tile);
   }
 }
 
 void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
-                                                      const DeviceWorkTile &work_tile)
+                                                      const KernelWorkTile &work_tile)
 {
   queue->set_work_tile(work_tile);
 

@@ -23,21 +23,7 @@ CCL_NAMESPACE_BEGIN
 class Device;
 class RenderBuffers;
 
-class DeviceWorkTile {
- public:
-  /* Position of the tile within global buffer. */
-  int x, y;
-
-  /* Size of the tile. */
-  int width, height;
-
-  /* Sample the tile will be operating on. */
-  int sample;
-
-  /* Offset and stride corresponding to where the memory of tile is in the big tile. */
-  int offset;
-  int stride;
-};
+struct KernelWorkTile;
 
 /* Abstraction of a command queue for a device.
  * Provides API to schedule kernel execution in a specific queue with minimal possible overhead
@@ -60,9 +46,11 @@ class DeviceQueue {
 
   /* Set tile within which the queue is operating. Defines a subset of a bigger global buffer.
    *
+   * NOTE: The buffer stored in the tile information is ignored.
+   *
    * TODO(sergey): See in the future if it's a concept usable for all queues, or whether it is
    * specific to render queue. */
-  virtual void set_work_tile(const DeviceWorkTile &work_tile) = 0;
+  virtual void set_work_tile(const KernelWorkTile &work_tile) = 0;
 
   /* Test if any work is still remaining to be done. */
   virtual bool has_work_remaining() = 0;

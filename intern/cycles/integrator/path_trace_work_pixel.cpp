@@ -56,12 +56,13 @@ void PathTraceWorkPixel::render_samples(const BufferParams &scaled_render_buffer
     const int y = work_index / image_width;
     const int x = work_index - y * image_width;
 
-    DeviceWorkTile work_tile;
+    KernelWorkTile work_tile;
     work_tile.x = scaled_render_buffer_params.full_x + x;
     work_tile.y = scaled_render_buffer_params.full_y + y;
-    work_tile.width = 1;
-    work_tile.height = 1;
-    work_tile.sample = start_sample;
+    work_tile.w = 1;
+    work_tile.h = 1;
+    work_tile.start_sample = start_sample;
+    work_tile.num_samples = 1;
     work_tile.offset = offset;
     work_tile.stride = stride;
 
@@ -74,10 +75,10 @@ void PathTraceWorkPixel::render_samples(const BufferParams &scaled_render_buffer
 }
 
 void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
-                                                      const DeviceWorkTile &work_tile,
+                                                      const KernelWorkTile &work_tile,
                                                       const int samples_num)
 {
-  DeviceWorkTile sample_work_tile = work_tile;
+  KernelWorkTile sample_work_tile = work_tile;
 
   for (int sample = 0; sample < samples_num; ++sample) {
     queue->set_work_tile(sample_work_tile);
@@ -111,7 +112,7 @@ void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
       queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
     } while (queue->has_work_remaining());
 
-    ++sample_work_tile.sample;
+    ++sample_work_tile.start_sample;
   }
 }
 

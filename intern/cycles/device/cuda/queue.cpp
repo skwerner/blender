@@ -51,31 +51,6 @@ CUDAIntegratorQueue::CUDAIntegratorQueue(CUDADevice *device, RenderBuffers *rend
   integrator_state_.alloc_to_device(get_max_num_path_states());
 }
 
-static KernelWorkTile init_kernel_work_tile(RenderBuffers *render_buffers,
-                                            const DeviceWorkTile &work_tile)
-{
-  KernelWorkTile kernel_work_tile;
-
-  kernel_work_tile.x = work_tile.x;
-  kernel_work_tile.y = work_tile.y;
-  kernel_work_tile.w = work_tile.width;
-  kernel_work_tile.h = work_tile.height;
-
-  kernel_work_tile.start_sample = work_tile.sample;
-  kernel_work_tile.num_samples = 1;
-
-  /* TODO(sergey): Avoid temporary variable by making sign match between device and kernel. */
-  int offset, stride;
-  render_buffers->params.get_offset_stride(offset, stride);
-
-  kernel_work_tile.offset = offset;
-  kernel_work_tile.stride = stride;
-
-  kernel_work_tile.buffer = (float *)(CUdeviceptr)render_buffers->buffer.device_pointer;
-
-  return kernel_work_tile;
-}
-
 void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
 {
   if (cuda_device_->have_error()) {
@@ -141,10 +116,14 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
   }
 }
 
-void CUDAIntegratorQueue::set_work_tile(const DeviceWorkTile &work_tile)
+void CUDAIntegratorQueue::set_work_tile(const KernelWorkTile &work_tile)
 {
   work_tile_.alloc(1);
-  *(work_tile_.data()) = init_kernel_work_tile(render_buffers_, work_tile);
+
+  KernelWorkTile *work_tile_data = work_tile_.data();
+  *work_tile_data = work_tile;
+  work_tile_data->buffer = render_buffers_->buffer.data();
+
   work_tile_.copy_to_device();
 }
 

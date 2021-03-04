@@ -49,7 +49,7 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
 
   virtual void enqueue(DeviceKernel kernel) override;
 
-  virtual void set_work_tile(const DeviceWorkTile &work_tile) override;
+  virtual void set_work_tile(const KernelWorkTile &work_tile) override;
 
   virtual bool has_work_remaining() override;
 

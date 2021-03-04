@@ -63,7 +63,7 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
 
   virtual void enqueue(DeviceKernel kernel) override;
 
-  virtual void set_work_tile(const DeviceWorkTile &work_tile) override;
+  virtual void set_work_tile(const KernelWorkTile &work_tile) override;
 
   virtual bool has_work_remaining() override;
 
@@ -77,7 +77,7 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
    * For the quick debug keep it at 1, but it really needs to be changed soon. */
   IntegratorState integrator_state_;
 
-  DeviceWorkTile work_tile_;
+  KernelWorkTile work_tile_;
 };
 
 CCL_NAMESPACE_END

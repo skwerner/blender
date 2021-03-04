@@ -57,27 +57,6 @@ CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_
 {
 }
 
-static KernelWorkTile init_kernel_work_tile(RenderBuffers *render_buffers,
-                                            const DeviceWorkTile &work_tile)
-{
-  KernelWorkTile kernel_work_tile;
-
-  kernel_work_tile.x = work_tile.x;
-  kernel_work_tile.y = work_tile.y;
-  kernel_work_tile.w = work_tile.width;
-  kernel_work_tile.h = work_tile.height;
-
-  kernel_work_tile.start_sample = work_tile.sample;
-  kernel_work_tile.num_samples = 1;
-
-  kernel_work_tile.offset = work_tile.offset;
-  kernel_work_tile.stride = work_tile.stride;
-
-  kernel_work_tile.buffer = render_buffers->buffer.data();
-
-  return kernel_work_tile;
-}
-
 void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
 {
   CPUDevice *cpu_device = get_cpu_device();
@@ -85,9 +64,8 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
 
   switch (kernel) {
     case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA: {
-      KernelWorkTile kernel_work_tile = init_kernel_work_tile(render_buffers_, work_tile_);
       return kernels.integrator_init_from_camera(
-          &kernel_globals_, &integrator_state_, &kernel_work_tile);
+          &kernel_globals_, &integrator_state_, &work_tile_);
     }
     case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
       return kernels.integrator_intersect_closest(&kernel_globals_, &integrator_state_);
@@ -115,9 +93,10 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
   LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
 }
 
-void CPUIntegratorQueue::set_work_tile(const DeviceWorkTile &work_tile)
+void CPUIntegratorQueue::set_work_tile(const KernelWorkTile &work_tile)
 {
   work_tile_ = work_tile;
+  work_tile_.buffer = render_buffers_->buffer.data();
 }
 
 bool CPUIntegratorQueue::has_work_remaining()

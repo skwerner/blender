@@ -1696,6 +1696,9 @@ typedef struct KernelWorkTile {
   int offset;
   uint stride;
 
+  /* TODO(sergey): We do pass buffers explicitly to the integrator kernels, so we don't need the
+   * pointer here. However, some of the existing/old kernels still rely on buffers stored here.
+   * Once we've ported all kernels over we can get rid of this pointer. */
   ccl_global float *buffer;
 } KernelWorkTile;
 

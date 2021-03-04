@@ -64,7 +64,7 @@ void WorkScheduler::reset_scheduler_state()
   total_work_size_ = total_tiles_num_ * samples_num_;
 }
 
-bool WorkScheduler::get_work(DeviceWorkTile *work_tile)
+bool WorkScheduler::get_work(KernelWorkTile *work_tile)
 {
   DCHECK_NE(max_num_path_states_, 0);
 
@@ -83,14 +83,15 @@ bool WorkScheduler::get_work(DeviceWorkTile *work_tile)
 
   work_tile->x = image_full_offset_px_.x + tile_x * tile_size_.x;
   work_tile->y = image_full_offset_px_.y + tile_y * tile_size_.y;
-  work_tile->width = tile_size_.x;
-  work_tile->height = tile_size_.y;
-  work_tile->sample = sample_start_ + sample;
+  work_tile->w = tile_size_.x;
+  work_tile->h = tile_size_.y;
+  work_tile->start_sample = sample_start_ + sample;
+  work_tile->num_samples = 1;
   work_tile->offset = offset_;
   work_tile->stride = stride_;
 
-  work_tile->width = min(work_tile->width, image_size_px_.x - work_tile->x);
-  work_tile->height = min(work_tile->height, image_size_px_.y - work_tile->y);
+  work_tile->w = min(work_tile->w, image_size_px_.x - work_tile->x);
+  work_tile->h = min(work_tile->h, image_size_px_.y - work_tile->y);
 
   return true;
 }

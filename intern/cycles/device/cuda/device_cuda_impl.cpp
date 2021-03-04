@@ -1823,8 +1823,8 @@ void CUDADevice::render(DeviceTask &task,
   uint step_samples = divide_up(min_blocks * num_threads_per_block, wtile->w * wtile->h);
 
   /* Render all samples. */
-  int start_sample = rtile.start_sample;
-  int end_sample = rtile.start_sample + rtile.num_samples;
+  uint start_sample = rtile.start_sample;
+  uint end_sample = rtile.start_sample + rtile.num_samples;
 
   for (int sample = start_sample; sample < end_sample;) {
     /* Setup and copy work tile to device. */

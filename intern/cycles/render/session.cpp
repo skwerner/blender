@@ -115,6 +115,7 @@ Session::Session(const SessionParams &params_)
     render_tile.h = render_buffers->params.height;
     render_tile.sample = sample;
     render_tile.buffers = render_buffers;
+    render_tile.task = RenderTile::PATH_TRACE;
 
     update_render_tile_cb(render_tile, false);
   };
@@ -136,6 +137,7 @@ Session::Session(const SessionParams &params_)
     render_tile.h = render_buffers->params.height;
     render_tile.sample = sample;
     render_tile.buffers = render_buffers;
+    render_tile.task = RenderTile::PATH_TRACE;
 
     write_render_tile_cb(render_tile);
   };

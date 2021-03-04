@@ -57,11 +57,16 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
   virtual int get_max_num_paths() override;
 
  protected:
+  void compute_queued_paths(DeviceKernel kernel, int queued_kernel);
+
   RenderBuffers *render_buffers_;
 
   device_only_memory<IntegratorState> integrator_state_;
   device_vector<IntegratorPathQueue> integrator_path_queue_;
-  device_vector<int> num_active_paths_;
+
+  device_vector<int> queued_paths_;
+  device_vector<int> num_queued_paths_;
+
   device_vector<KernelWorkTile> work_tile_;
 };
 

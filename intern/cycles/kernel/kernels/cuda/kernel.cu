@@ -28,6 +28,7 @@
 
 #  include "kernel/kernel_globals.h"
 #  include "kernel/kernels/cuda/kernel_cuda_image.h"
+#  include "kernel/kernels/cuda/parallel_active_index.h"
 
 #  include "kernel/integrator/integrator_path_state.h"
 #  include "kernel/integrator/integrator_state.h"
@@ -75,73 +76,162 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_init_from_camera(IntegratorState *state,
                                             IntegratorPathQueue *queue,
+                                            const int *path_index_array,
                                             KernelWorkTile *tile,
                                             uint total_work_size)
 {
-  const int work_index = ccl_global_id(0);
+  const int global_index = ccl_global_id(0);
+  const int work_index = global_index;
   bool thread_is_active = work_index < total_work_size;
   if (thread_is_active) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+
     uint x, y, sample;
     get_work_pixel(tile, work_index, &x, &y, &sample);
-    integrator_init_from_camera(NULL, state, queue, tile, x, y, sample);
+    integrator_init_from_camera(NULL, state, queue, path_index, tile, x, y, sample);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_closest(IntegratorState *state, IntegratorPathQueue *queue)
+    kernel_cuda_integrator_intersect_closest(IntegratorState *state,
+                                             IntegratorPathQueue *queue,
+                                             const int *path_index_array,
+                                             const int total_work_size)
 {
-  integrator_intersect_closest(NULL, state, queue);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_closest(NULL, state, queue, path_index);
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_shadow(IntegratorState *state, IntegratorPathQueue *queue)
+    kernel_cuda_integrator_intersect_shadow(IntegratorState *state,
+                                            IntegratorPathQueue *queue,
+                                            const int *path_index_array,
+                                            const int total_work_size)
 {
-  integrator_intersect_shadow(NULL, state, queue);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_shadow(NULL, state, queue, path_index);
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_subsurface(IntegratorState *state, IntegratorPathQueue *queue)
+    kernel_cuda_integrator_intersect_subsurface(IntegratorState *state,
+                                                IntegratorPathQueue *queue,
+                                                const int *path_index_array,
+                                                const int total_work_size)
 {
-  integrator_intersect_subsurface(NULL, state, queue);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_intersect_subsurface(NULL, state, queue, path_index);
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_background(IntegratorState *state,
                                             IntegratorPathQueue *queue,
-                                            float *render_buffer)
+                                            const int *path_index_array,
+                                            float *render_buffer,
+                                            const int total_work_size)
 {
-  integrator_shade_background(NULL, state, queue, render_buffer);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_background(NULL, state, queue, path_index, render_buffer);
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_shadow(IntegratorState *state,
                                         IntegratorPathQueue *queue,
-                                        float *render_buffer)
+                                        const int *path_index_array,
+                                        float *render_buffer,
+                                        const int total_work_size)
 {
-  integrator_shade_shadow(NULL, state, queue, render_buffer);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_shadow(NULL, state, queue, path_index, render_buffer);
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_surface(IntegratorState *state,
                                          IntegratorPathQueue *queue,
-                                         float *render_buffer)
+                                         const int *path_index_array,
+                                         float *render_buffer,
+                                         const int total_work_size)
 {
-  integrator_shade_surface(NULL, state, queue, render_buffer);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_surface(NULL, state, queue, path_index, render_buffer);
+  }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_shade_volume(IntegratorState *state,
                                         IntegratorPathQueue *queue,
-                                        float *render_buffer)
+                                        const int *path_index_array,
+                                        float *render_buffer,
+                                        const int total_work_size)
 {
-  integrator_shade_volume(NULL, state, queue, render_buffer);
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_shade_volume(NULL, state, queue, path_index, render_buffer);
+  }
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_queued_paths_array(
+        IntegratorState *state, int num_states, int *indices, int *num_indices, int kernel_flag)
+{
+  cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
+      state, num_states, indices, num_indices, [kernel_flag](const IntegratorState &state) {
+        return ((state.path.queued_kernels & kernel_flag) != 0);
+      });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_queued_shadow_paths_array(
+        IntegratorState *state, int num_states, int *indices, int *num_indices, int kernel_flag)
+{
+  cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
+      state, num_states, indices, num_indices, [kernel_flag](const IntegratorState &state) {
+        return ((state.shadow_path.queued_kernels & kernel_flag) != 0);
+      });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_terminated_paths_array(IntegratorState *state,
+                                                  int num_states,
+                                                  int *indices,
+                                                  int *num_indices,
+                                                  int unused_kernel_flag)
+{
+  cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
+      state, num_states, indices, num_indices, [](const IntegratorState &state) {
+        return (state.path.flag == 0);
+      });
 }
 
 /* Adaptive Sampling */

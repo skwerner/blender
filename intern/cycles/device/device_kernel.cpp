@@ -39,6 +39,12 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_shade_surface";
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       return "integrator_shade_volume";
+    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
+      return "integrator_queued_paths_array";
+    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+      return "integrator_queued_shadow_paths_array";
+    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
+      return "integrator_terminated_paths_array";
     case DeviceKernel::NUM_KERNELS:
       break;
   };

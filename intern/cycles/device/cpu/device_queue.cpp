@@ -86,6 +86,9 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       return kernels.integrator_shade_volume(
           &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
+    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
     case DeviceKernel::NUM_KERNELS:
       break;
   }

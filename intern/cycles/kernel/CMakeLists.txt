@@ -146,6 +146,7 @@ set(SRC_KERNELS_CUDA_HEADERS
   kernels/cuda/kernel_config.h
   kernels/cuda/kernel_cuda_image.h
   kernels/cuda/parallel_reduce.h
+  kernels/cuda/parallel_active_index.h
 )
 
 set(SRC_KERNELS_OPTIX_HEADERS

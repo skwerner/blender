@@ -89,7 +89,7 @@ ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
   /* Evaluate transparent shadows. */
   const bool opaque = integrate_transparent_shadow(INTEGRATOR_STATE_PASS);
   if (opaque) {
-    INTEGRATOR_SHADOW_PATH_TERMINATE;
+    INTEGRATOR_SHADOW_PATH_TERMINATE(shade_shadow);
     return;
   }
 #endif
@@ -99,12 +99,12 @@ ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
     const float3 L = INTEGRATOR_STATE(shadow_light, L);
     kernel_accum_light(INTEGRATOR_STATE_PASS, L, render_buffer);
 
-    INTEGRATOR_SHADOW_PATH_TERMINATE;
+    INTEGRATOR_SHADOW_PATH_TERMINATE(shade_shadow);
     return;
   }
   else {
     /* TODO: add mechanism to detect and continue tracing if max_hits exceeded. */
-    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_NEXT(shade_shadow, intersect_shadow);
     return;
   }
 }

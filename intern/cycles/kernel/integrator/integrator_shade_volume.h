@@ -43,7 +43,7 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(shadow_path, throughput) = INTEGRATOR_STATE(path, throughput);
 
     /* Queue intersect_shadow kernel. */
-    INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_INIT(intersect_shadow);
   }
 
   const bool end_path = true;
@@ -51,7 +51,7 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
 
   if (end_path) {
     /* End path. */
-    INTEGRATOR_PATH_TERMINATE;
+    INTEGRATOR_PATH_TERMINATE(shade_volume);
     return;
   }
   else if (scatter) {
@@ -63,7 +63,7 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
     /* Queue intersect_closest kernel. */
-    INTEGRATOR_PATH_NEXT(intersect_closest);
+    INTEGRATOR_PATH_NEXT(shade_volume, intersect_closest);
     return;
   }
   else {
@@ -71,10 +71,10 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
     if (INTEGRATOR_STATE(isect, prim) == PRIM_NONE) {
-      INTEGRATOR_PATH_NEXT(background);
+      INTEGRATOR_PATH_NEXT(shade_volume, shade_background);
     }
     else {
-      INTEGRATOR_PATH_NEXT(surface);
+      INTEGRATOR_PATH_NEXT(shade_volume, shade_surface);
     }
     return;
   }

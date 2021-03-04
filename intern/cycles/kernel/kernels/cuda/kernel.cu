@@ -28,7 +28,6 @@
 
 #  include "kernel/kernel_globals.h"
 #  include "kernel/kernels/cuda/kernel_cuda_image.h"
-#  include "kernel/kernels/cuda/parallel_reduce.h"
 
 #  include "kernel/integrator/integrator_path_state.h"
 #  include "kernel/integrator/integrator_state.h"
@@ -75,6 +74,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, CUD
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_init_from_camera(IntegratorState *state,
+                                            IntegratorPathQueue *queue,
                                             KernelWorkTile *tile,
                                             uint total_work_size)
 {
@@ -83,74 +83,65 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   if (thread_is_active) {
     uint x, y, sample;
     get_work_pixel(tile, work_index, &x, &y, &sample);
-    integrator_init_from_camera(NULL, state, tile, x, y, sample);
-  }
-  else {
-    /* Mark any paths outside the work size as terminated so they are ignored
-     * by subsequent kernels. */
-    INTEGRATOR_PATH_TERMINATE;
-    INTEGRATOR_SHADOW_PATH_TERMINATE;
+    integrator_init_from_camera(NULL, state, queue, tile, x, y, sample);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_closest(IntegratorState *state)
+    kernel_cuda_integrator_intersect_closest(IntegratorState *state, IntegratorPathQueue *queue)
 {
-  integrator_intersect_closest(NULL, state);
+  integrator_intersect_closest(NULL, state, queue);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_shadow(IntegratorState *state)
+    kernel_cuda_integrator_intersect_shadow(IntegratorState *state, IntegratorPathQueue *queue)
 {
-  integrator_intersect_shadow(NULL, state);
+  integrator_intersect_shadow(NULL, state, queue);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_subsurface(IntegratorState *state)
+    kernel_cuda_integrator_intersect_subsurface(IntegratorState *state, IntegratorPathQueue *queue)
 {
-  integrator_intersect_subsurface(NULL, state);
+  integrator_intersect_subsurface(NULL, state, queue);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_background(IntegratorState *state, float *render_buffer)
+    kernel_cuda_integrator_shade_background(IntegratorState *state,
+                                            IntegratorPathQueue *queue,
+                                            float *render_buffer)
 {
-  integrator_shade_background(NULL, state, render_buffer);
+  integrator_shade_background(NULL, state, queue, render_buffer);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_shadow(IntegratorState *state, float *render_buffer)
+    kernel_cuda_integrator_shade_shadow(IntegratorState *state,
+                                        IntegratorPathQueue *queue,
+                                        float *render_buffer)
 {
-  integrator_shade_shadow(NULL, state, render_buffer);
+  integrator_shade_shadow(NULL, state, queue, render_buffer);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_surface(IntegratorState *state, float *render_buffer)
+    kernel_cuda_integrator_shade_surface(IntegratorState *state,
+                                         IntegratorPathQueue *queue,
+                                         float *render_buffer)
 {
-  integrator_shade_surface(NULL, state, render_buffer);
+  integrator_shade_surface(NULL, state, queue, render_buffer);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_volume(IntegratorState *state, float *render_buffer)
+    kernel_cuda_integrator_shade_volume(IntegratorState *state,
+                                        IntegratorPathQueue *queue,
+                                        float *render_buffer)
 {
-  integrator_shade_volume(NULL, state, render_buffer);
-}
-
-extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SUM_DEFAULT_BLOCK_SIZE)
-    kernel_cuda_integrator_num_active_paths(IntegratorState *state,
-                                            int *num_active,
-                                            int num_states)
-{
-  cuda_parallel_sum<CUDA_PARALLEL_SUM_DEFAULT_BLOCK_SIZE>(
-      state, num_states, num_active, 0, [](const IntegratorState &state) {
-        return (state.path.flag != 0);
-      });
+  integrator_shade_volume(NULL, state, queue, render_buffer);
 }
 
 /* Adaptive Sampling */

@@ -55,6 +55,7 @@ void CPUDeviceQueue::init_execution()
 CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_buffers)
     : CPUDeviceQueue(device), render_buffers_(render_buffers)
 {
+  memset(&integrator_state_, 0, sizeof(integrator_state_));
 }
 
 void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
@@ -85,7 +86,6 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       return kernels.integrator_shade_volume(
           &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::INTEGRATOR_NUM_ACTIVE_PATHS:
     case DeviceKernel::NUM_KERNELS:
       break;
   }

@@ -45,10 +45,15 @@ CUDAIntegratorQueue::CUDAIntegratorQueue(CUDADevice *device, RenderBuffers *rend
     : CUDADeviceQueue(device),
       render_buffers_(render_buffers),
       integrator_state_(device, "integrator_state"),
+      integrator_path_queue_(device, "integrator_path_queue", MEM_READ_WRITE),
       num_active_paths_(device, "num_active_paths", MEM_READ_WRITE),
       work_tile_(device, "work_tile", MEM_READ_WRITE)
 {
   integrator_state_.alloc_to_device(get_max_num_paths());
+  integrator_state_.zero_to_device();
+
+  integrator_path_queue_.alloc(1);
+  integrator_path_queue_.zero_to_device();
 }
 
 void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
@@ -72,8 +77,12 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA: {
       /* Generate camera ray kernel with work tile. */
       CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
+      CUdeviceptr d_integrator_path_queue = (CUdeviceptr)integrator_path_queue_.device_pointer;
       CUdeviceptr d_work_tile = (CUdeviceptr)work_tile_.device_pointer;
-      void *args[] = {&d_integrator_state, &d_work_tile, const_cast<int *>(&total_work_size)};
+      void *args[] = {&d_integrator_state,
+                      &d_integrator_path_queue,
+                      &d_work_tile,
+                      const_cast<int *>(&total_work_size)};
 
       cuda_device_assert(
           cuda_device_,
@@ -86,7 +95,8 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE: {
       /* Ray intersection kernels with integrator state. */
       CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
-      void *args[] = {&d_integrator_state};
+      CUdeviceptr d_integrator_path_queue = (CUdeviceptr)integrator_path_queue_.device_pointer;
+      void *args[] = {&d_integrator_state, &d_integrator_path_queue};
 
       cuda_device_assert(
           cuda_device_,
@@ -100,8 +110,9 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME: {
       /* Shading kernels with integrator state and render buffer. */
       CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
+      CUdeviceptr d_integrator_path_queue = (CUdeviceptr)integrator_path_queue_.device_pointer;
       CUdeviceptr d_render_buffer = (CUdeviceptr)render_buffers_->buffer.device_pointer;
-      void *args[] = {&d_integrator_state, &d_render_buffer};
+      void *args[] = {&d_integrator_state, &d_integrator_path_queue, &d_render_buffer};
 
       cuda_device_assert(
           cuda_device_,
@@ -109,7 +120,6 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
               cuda_kernel.function, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
       break;
     }
-    case DeviceKernel::INTEGRATOR_NUM_ACTIVE_PATHS:
     case DeviceKernel::NUM_KERNELS: {
       break;
     }
@@ -136,51 +146,14 @@ int CUDAIntegratorQueue::get_num_active_paths()
 
   const CUDAContextScope scope(cuda_device_);
 
-  /* Launch kernel to count the number of active paths. */
-  const CUDADeviceKernel &cuda_kernel = cuda_device_->kernels.get(
-      DeviceKernel::INTEGRATOR_NUM_ACTIVE_PATHS);
-
-  const KernelWorkTile *wtile = work_tile_.data();
-  int total_work_size = wtile->w * wtile->h * wtile->num_samples;
-
-  /* We perform parallel reduce per block, and then sum the results from each block on the host. */
-  const int num_threads_per_block = cuda_kernel.num_threads_per_block;
-  const int num_blocks = divide_up(total_work_size, num_threads_per_block);
-
-  if (num_active_paths_.size() < num_blocks) {
-    num_active_paths_.alloc(num_blocks);
-    num_active_paths_.zero_to_device();
-  }
-
-  /* See parall_reduce.h for why this amount of shared memory is needed. */
-  const int shared_mem_bytes = max(num_threads_per_block, 64) * sizeof(int);
-
-  CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
-  CUdeviceptr d_num_active_paths = (CUdeviceptr)num_active_paths_.device_pointer;
-  void *args[] = {&d_integrator_state, &d_num_active_paths, &total_work_size};
-
-  cuda_device_assert(cuda_device_,
-                     cuLaunchKernel(cuda_kernel.function,
-                                    num_blocks,
-                                    1,
-                                    1,
-                                    num_threads_per_block,
-                                    1,
-                                    1,
-                                    shared_mem_bytes,
-                                    0,
-                                    args,
-                                    0));
-
   cuda_device_assert(cuda_device_, cuCtxSynchronize());
 
-  /* Test if any paths are active. */
-  num_active_paths_.copy_from_device();
-  int *num_active_paths = num_active_paths_.data();
-  int num_paths = 0;
+  integrator_path_queue_.copy_from_device();
+  IntegratorPathQueue *path_queue = integrator_path_queue_.data();
 
-  for (int i = 0; i < num_blocks; i++) {
-    num_paths += num_active_paths[i];
+  int num_paths = 0;
+  for (int i = 0; i < INTEGRATOR_KERNEL_NUM; i++) {
+    num_paths += path_queue->num_queued[i];
   }
 
   return num_paths;

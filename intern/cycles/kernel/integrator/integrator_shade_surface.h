@@ -204,7 +204,7 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
 
   /* Branch of shadow kernel. */
-  INTEGRATOR_SHADOW_PATH_NEXT(intersect_shadow);
+  INTEGRATOR_SHADOW_PATH_INIT(intersect_shadow);
 }
 #endif
 
@@ -404,7 +404,7 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   if (subsurface) {
     INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SUBSURFACE;
     INTEGRATOR_STATE_WRITE(subsurface, albedo) = make_float3(1.0f, 1.0f, 1.0f);
-    INTEGRATOR_PATH_NEXT(subsurface);
+    INTEGRATOR_PATH_NEXT(shade_surface, intersect_subsurface);
     return;
   }
 #endif
@@ -421,10 +421,10 @@ ccl_device void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
   }
 
   if (integrate_surface(INTEGRATOR_STATE_PASS, render_buffer)) {
-    INTEGRATOR_PATH_NEXT(intersect_closest);
+    INTEGRATOR_PATH_NEXT(shade_surface, intersect_closest);
   }
   else {
-    INTEGRATOR_PATH_TERMINATE;
+    INTEGRATOR_PATH_TERMINATE(shade_surface);
   }
 }
 

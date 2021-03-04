@@ -75,6 +75,10 @@ typedef struct IntegratorPathState {
   /* Current transparent ray bounce depth. */
   uint16_t transparent_bounce;
 
+  /* IntegratorPathKernel bit indicating queued kernels.
+   * TODO: reduce size? */
+  uint32_t queued_kernels;
+
   /* Random number generator seed. */
   uint32_t rng_hash;
   /* Random number dimension offset. */
@@ -196,10 +200,12 @@ typedef struct IntegratorState {
 /* Array access on GPU (TODO: SoA). */
 
 #  define INTEGRATOR_STATE_ARGS \
-    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorState *ccl_restrict state
+    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorState *ccl_restrict state, \
+        ccl_global IntegratorPathQueue *ccl_restrict queue
 #  define INTEGRATOR_STATE_CONST_ARGS \
-    const KernelGlobals *ccl_restrict kg, const ccl_global IntegratorState *ccl_restrict state
-#  define INTEGRATOR_STATE_PASS kg, state
+    const KernelGlobals *ccl_restrict kg, const ccl_global IntegratorState *ccl_restrict state, \
+        ccl_global IntegratorPathQueue *ccl_restrict queue
+#  define INTEGRATOR_STATE_PASS kg, state, queue
 
 #  define INTEGRATOR_STATE(nested_struct, member) state[ccl_global_id(0)].nested_struct.member
 #  define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)

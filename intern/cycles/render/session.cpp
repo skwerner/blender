@@ -52,7 +52,7 @@ Session::Session(const SessionParams &params_)
                    params.start_resolution,
                    params.background == false,
                    params.background,
-                   TILE_HILBERT_SPIRAL,
+                   TILE_BOTTOM_TO_TOP,
                    max(params.device.multi_devices.size(), 1),
                    params.pixel_size),
       stats(),

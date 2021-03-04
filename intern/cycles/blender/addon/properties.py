@@ -688,14 +688,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='HILBERT_SPIRAL',
         options=set(),  # Not animatable!
     )
-    use_progressive_refine: BoolProperty(
-        name="Progressive Refine",
-        description="Instead of rendering each tile until it is finished, "
-        "refine the whole image progressively "
-        "(this renders somewhat slower, "
-        "but time can be saved by manually stopping the render when the noise is low enough)",
-        default=False,
-    )
 
     bake_type: EnumProperty(
         name="Bake Type",

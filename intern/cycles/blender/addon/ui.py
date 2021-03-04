@@ -687,10 +687,6 @@ class CYCLES_RENDER_PT_performance_tiles(CyclesButtonsPanel, Panel):
         sub.prop(rd, "tile_y", text="Y")
         col.prop(cscene, "tile_order", text="Order")
 
-        sub = col.column()
-        sub.active = not rd.use_save_buffers
-        sub.prop(cscene, "use_progressive_refine")
-
 
 class CYCLES_RENDER_PT_performance_acceleration_structure(CyclesButtonsPanel, Panel):
     bl_label = "Acceleration Structure"

@@ -47,9 +47,10 @@ class SessionParams {
  public:
   DeviceInfo device;
   bool background;
-  bool progressive_refine;
 
+  /* TODO(sergey): Everything is progressive nowadays, consider removing this. */
   bool progressive;
+
   bool experimental;
   int samples;
   int2 tile_size;
@@ -78,7 +79,6 @@ class SessionParams {
   SessionParams()
   {
     background = false;
-    progressive_refine = false;
 
     progressive = false;
     experimental = false;
@@ -108,7 +108,6 @@ class SessionParams {
     /* Modified means we have to recreate the session, any parameter changes
      * that can be handled by an existing Session are omitted. */
     return !(device == params.device && background == params.background &&
-             progressive_refine == params.progressive_refine &&
              progressive == params.progressive && experimental == params.experimental &&
              tile_size == params.tile_size && start_resolution == params.start_resolution &&
              pixel_size == params.pixel_size && threads == params.threads &&
@@ -238,9 +237,6 @@ class Session {
   } TileStealingState;
   std::atomic<TileStealingState> tile_stealing_state;
   int stealable_tiles;
-
-  /* progressive refine */
-  bool update_progressive_refine(bool cancel);
 
   /* Path tracer object.
    *

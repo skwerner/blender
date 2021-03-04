@@ -50,7 +50,7 @@ Session::Session(const SessionParams &params_)
                    params.samples,
                    params.tile_size,
                    params.start_resolution,
-                   params.background == false || params.progressive_refine,
+                   params.background == false,
                    params.background,
                    params.tile_order,
                    max(params.device.multi_devices.size(), 1),
@@ -271,8 +271,6 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
 
 void Session::run_gpu()
 {
-  bool tiles_written = false;
-
   reset_time = time_dt();
   last_update_time = time_dt();
   last_display_time = last_update_time;
@@ -389,15 +387,10 @@ void Session::run_gpu()
       if (!device->error_message().empty())
         progress.set_error(device->error_message());
 
-      tiles_written = update_progressive_refine(progress.get_cancel());
-
       if (progress.get_cancel())
         break;
     }
   }
-
-  if (!tiles_written)
-    update_progressive_refine(true);
 }
 
 /* CPU Session */
@@ -499,10 +492,7 @@ bool Session::get_tile_stolen()
 bool Session::acquire_tile(RenderTile &rtile, Device *tile_device, uint tile_types)
 {
   if (progress.get_cancel()) {
-    if (params.progressive_refine == false) {
-      /* for progressive refine current sample should be finished for all tiles */
-      return false;
-    }
+    return false;
   }
 
   thread_scoped_lock tile_lock(tile_mutex);
@@ -635,11 +625,7 @@ void Session::update_tile_sample(RenderTile &rtile)
   thread_scoped_lock tile_lock(tile_mutex);
 
   if (update_render_tile_cb) {
-    if (params.progressive_refine == false) {
-      /* todo: optimize this by making it thread safe and removing lock */
-
-      update_render_tile_cb(rtile, true);
-    }
+    update_render_tile_cb(rtile, true);
   }
 
   update_status_time();
@@ -675,7 +661,7 @@ void Session::release_tile(RenderTile &rtile, const bool need_denoise)
 
   if (tile_manager.finish_tile(rtile.tile_index, need_denoise, delete_tile)) {
     /* Finished tile pixels write. */
-    if (write_render_tile_cb && params.progressive_refine == false) {
+    if (write_render_tile_cb) {
       write_render_tile_cb(rtile);
     }
 
@@ -686,7 +672,7 @@ void Session::release_tile(RenderTile &rtile, const bool need_denoise)
   }
   else {
     /* In progress tile pixels update. */
-    if (update_render_tile_cb && params.progressive_refine == false) {
+    if (update_render_tile_cb) {
       update_render_tile_cb(rtile, false);
     }
   }
@@ -782,8 +768,6 @@ void Session::unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_
 
 void Session::run_cpu()
 {
-  bool tiles_written = false;
-
   last_update_time = time_dt();
   last_display_time = last_update_time;
 
@@ -917,15 +901,10 @@ void Session::run_cpu()
 
       if (!device->error_message().empty())
         progress.set_error(device->error_message());
-
-      tiles_written = update_progressive_refine(progress.get_cancel());
     }
 
     progress.set_update();
   }
-
-  if (!tiles_written)
-    update_progressive_refine(true);
 }
 
 void Session::run()
@@ -1303,49 +1282,6 @@ void Session::copy_to_display_buffer(int /*sample*/)
 
   last_display_time = time_dt();
   display_outdated = false;
-}
-
-bool Session::update_progressive_refine(bool cancel)
-{
-  int sample = tile_manager.state.sample + 1;
-  bool write = sample == tile_manager.num_samples || cancel;
-
-  double current_time = time_dt();
-
-  if (current_time - last_update_time < params.progressive_update_timeout) {
-    /* if last sample was processed, we need to write buffers anyway  */
-    if (!write && sample != 1)
-      return false;
-  }
-
-  if (params.progressive_refine) {
-    foreach (Tile &tile, tile_manager.state.tiles) {
-      if (!tile.buffers) {
-        continue;
-      }
-
-      RenderTile rtile;
-      rtile.x = tile_manager.state.buffer.full_x + tile.x;
-      rtile.y = tile_manager.state.buffer.full_y + tile.y;
-      rtile.w = tile.w;
-      rtile.h = tile.h;
-      rtile.sample = sample;
-      rtile.buffers = tile.buffers;
-
-      if (write) {
-        if (write_render_tile_cb)
-          write_render_tile_cb(rtile);
-      }
-      else {
-        if (update_render_tile_cb)
-          update_render_tile_cb(rtile, true);
-      }
-    }
-  }
-
-  last_update_time = current_time;
-
-  return write;
 }
 
 void Session::device_free()

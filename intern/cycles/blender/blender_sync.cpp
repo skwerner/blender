@@ -920,19 +920,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   params.reset_timeout = (double)get_float(cscene, "debug_reset_timeout");
   params.text_timeout = (double)get_float(cscene, "debug_text_timeout");
 
-  /* progressive refine */
-  BL::RenderSettings b_r = b_scene.render();
-  params.progressive_refine = b_engine.is_preview() ||
-                              get_boolean(cscene, "use_progressive_refine");
-  if (b_r.use_save_buffers())
-    params.progressive_refine = false;
-
   if (background) {
-    if (params.progressive_refine)
-      params.progressive = true;
-    else
-      params.progressive = false;
-
+    params.progressive = false;
     params.start_resolution = INT_MAX;
     params.pixel_size = 1;
   }

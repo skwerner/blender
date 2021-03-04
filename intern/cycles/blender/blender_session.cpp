@@ -164,7 +164,10 @@ void BlenderSession::create_session()
       b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
-  b_engine.use_highlight_tiles(session_params.progressive_refine == false);
+  /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
+   * rendering for from visual point of view when render buffer fits big tile. But for huge
+   * render resolutions it might still be helpful to see which big tile is being sampled. */
+  /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */
 
   update_resumable_tile_manager(session_params.samples);
 }
@@ -252,7 +255,12 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
                                                               session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
-  b_engine.use_highlight_tiles(session_params.progressive_refine == false);
+  /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
+   * rendering for from visual point of view when render buffer fits big tile. But for huge
+   * render resolutions it might still be helpful to see which big tile is being sampled. */
+  /* TODO(sergey): If some logic is needed here, de-duplicate it with the constructor using some
+   * sort of utility function. */
+  /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */
 
   /* reset time */
   start_resize_time = 0.0;
@@ -683,7 +691,6 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     /* Get session and buffer parameters. */
     SessionParams session_params = BlenderSync::get_session_params(
         b_engine, b_userpref, b_scene, background);
-    session_params.progressive_refine = false;
 
     BufferParams buffer_params;
     buffer_params.width = bake_width;

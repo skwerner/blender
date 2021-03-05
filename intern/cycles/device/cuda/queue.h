@@ -61,13 +61,21 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
 
   RenderBuffers *render_buffers_;
 
+  /* Integrate state for paths. */
   device_only_memory<IntegratorState> integrator_state_;
+  /* Keep track of number of queued kernels. */
   device_vector<IntegratorPathQueue> integrator_path_queue_;
 
+  /* Temporary buffer to get an array of queued path for a particular kernel. */
   device_vector<int> queued_paths_;
   device_vector<int> num_queued_paths_;
 
+  /* Temporary buffer for passing work tiles to kernel. */
   device_vector<KernelWorkTile> work_tile_;
+  /* Maximum path index, effective number of paths used may be smaller than
+   * the size of the integrator_state_ buffer so can avoid iterating over the
+   * full buffer. */
+  int max_active_path_index_;
 };
 
 CCL_NAMESPACE_END

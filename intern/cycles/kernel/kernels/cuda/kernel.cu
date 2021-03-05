@@ -79,13 +79,15 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                             IntegratorPathQueue *queue,
                                             const int *path_index_array,
                                             KernelWorkTile *tile,
-                                            uint total_work_size)
+                                            const int tile_work_size,
+                                            const int path_index_offset)
 {
   const int global_index = ccl_global_id(0);
   const int work_index = global_index;
-  bool thread_is_active = work_index < total_work_size;
+  bool thread_is_active = work_index < tile_work_size;
   if (thread_is_active) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    const int path_index = (path_index_array) ? path_index_array[global_index] :
+                                                path_index_offset + global_index;
 
     uint x, y, sample;
     get_work_pixel(tile, work_index, &x, &y, &sample);

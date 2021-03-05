@@ -50,7 +50,9 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
 
   virtual void enqueue(DeviceKernel kernel) override;
 
-  virtual void set_work_tile(const KernelWorkTile &work_tile) override;
+  virtual void enqueue_work_tiles(DeviceKernel kernel,
+                                  const KernelWorkTile work_tiles[],
+                                  const int num_work_tiles) override;
 
   virtual int get_num_active_paths() override;
 
@@ -71,7 +73,8 @@ class CUDAIntegratorQueue : public CUDADeviceQueue {
   device_vector<int> num_queued_paths_;
 
   /* Temporary buffer for passing work tiles to kernel. */
-  device_vector<KernelWorkTile> work_tile_;
+  device_vector<KernelWorkTile> work_tiles_;
+
   /* Maximum path index, effective number of paths used may be smaller than
    * the size of the integrator_state_ buffer so can avoid iterating over the
    * full buffer. */

@@ -43,9 +43,6 @@ class PathTraceWorkTiled : public PathTraceWork {
    * the work. */
   void render_samples_full_pipeline(DeviceQueue *queue);
 
-  /* Core path tracing routine. Renders given work time on the given queue. */
-  void render_samples_full_pipeline(DeviceQueue *queue, const KernelWorkTile &work_tile);
-
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */
   vector<unique_ptr<DeviceQueue>> integrator_queues_;

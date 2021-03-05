@@ -98,9 +98,7 @@ void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
       break;
     }
 
-    queue->set_work_tile(sample_work_tile);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
+    queue->enqueue_work_tiles(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA, &sample_work_tile, 1);
 
 #if 0
     do {

@@ -48,7 +48,7 @@ CUDAIntegratorQueue::CUDAIntegratorQueue(CUDADevice *device, RenderBuffers *rend
       integrator_path_queue_(device, "integrator_path_queue", MEM_READ_WRITE),
       queued_paths_(device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
-      work_tile_(device, "work_tile", MEM_READ_WRITE),
+      work_tiles_(device, "work_tiles", MEM_READ_WRITE),
       max_active_path_index_(0)
 {
   integrator_state_.alloc_to_device(get_max_num_paths());
@@ -119,33 +119,6 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
   CUdeviceptr d_integrator_path_queue = (CUdeviceptr)integrator_path_queue_.device_pointer;
   CUdeviceptr d_path_index = (CUdeviceptr)NULL;
 
-  /* Init from camera kernel handled separately. */
-  if (kernel == DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA) {
-    /* Compute kernel launch parameters. */
-    const KernelWorkTile *wtile = work_tile_.data();
-    const int tile_work_size = wtile->w * wtile->h * wtile->num_samples;
-    assert(tile_work_size < get_max_num_paths());
-
-    const int num_threads_per_block = cuda_kernel.num_threads_per_block;
-    const int num_blocks = divide_up(tile_work_size, num_threads_per_block);
-
-    /* Generate camera ray kernel with work tile. */
-    CUdeviceptr d_work_tile = (CUdeviceptr)work_tile_.device_pointer;
-    void *args[] = {&d_integrator_state,
-                    &d_integrator_path_queue,
-                    &d_path_index,
-                    &d_work_tile,
-                    const_cast<int *>(&tile_work_size)};
-
-    cuda_device_assert(
-        cuda_device_,
-        cuLaunchKernel(
-            cuda_kernel.function, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
-
-    max_active_path_index_ = tile_work_size;
-    return;
-  }
-
   /* Create array of path indices for which this kernel is queued to be executed. */
   int work_size = max_active_path_index_;
   IntegratorPathKernel integrator_kernel = INTEGRATOR_KERNEL_NUM;
@@ -208,6 +181,8 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
   const int num_threads_per_block = cuda_kernel.num_threads_per_block;
   const int num_blocks = divide_up(work_size, num_threads_per_block);
 
+  assert(work_size < get_max_num_paths());
+
   switch (kernel) {
     case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
     case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
@@ -253,15 +228,63 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
   }
 }
 
-void CUDAIntegratorQueue::set_work_tile(const KernelWorkTile &work_tile)
+void CUDAIntegratorQueue::enqueue_work_tiles(DeviceKernel kernel,
+                                             const KernelWorkTile work_tiles[],
+                                             const int num_work_tiles)
 {
-  work_tile_.alloc(1);
+  const CUDAContextScope scope(cuda_device_);
+  const CUDADeviceKernel &cuda_kernel = cuda_device_->kernels.get(kernel);
 
-  KernelWorkTile *work_tile_data = work_tile_.data();
-  *work_tile_data = work_tile;
-  work_tile_data->buffer = render_buffers_->buffer.data();
+  /* Copy work tiles to device. */
+  if (work_tiles_.size() < num_work_tiles) {
+    work_tiles_.alloc(num_work_tiles);
+  }
 
-  work_tile_.copy_to_device();
+  for (int i = 0; i < num_work_tiles; i++) {
+    KernelWorkTile &work_tile = work_tiles_.data()[i];
+    work_tile = work_tiles[i];
+    work_tile.buffer = render_buffers_->buffer.data();
+  }
+
+  work_tiles_.copy_to_device();
+
+  /* TODO: consider launching a single kernel with an array of work tiles.
+   * Mapping global index to the right tile with different sized tiles
+   * is not trivial so not done for now. */
+  CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
+  CUdeviceptr d_integrator_path_queue = (CUdeviceptr)integrator_path_queue_.device_pointer;
+  CUdeviceptr d_path_index = (CUdeviceptr)NULL;
+
+  int num_paths = 0;
+
+  for (int i = 0; i < num_work_tiles; i++) {
+    KernelWorkTile &work_tile = work_tiles_.data()[i];
+
+    /* Compute kernel launch parameters. */
+    const int tile_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
+    const int num_threads_per_block = cuda_kernel.num_threads_per_block;
+    const int num_blocks = divide_up(tile_work_size, num_threads_per_block);
+    CUdeviceptr d_work_tile = (CUdeviceptr)((char *)work_tiles_.device_pointer +
+                                            sizeof(KernelWorkTile) * i);
+
+    /* Launch kernel. */
+    void *args[] = {&d_integrator_state,
+                    &d_integrator_path_queue,
+                    &d_path_index,
+                    &d_work_tile,
+                    const_cast<int *>(&tile_work_size),
+                    &num_paths};
+
+    cuda_device_assert(
+        cuda_device_,
+        cuLaunchKernel(
+            cuda_kernel.function, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
+
+    num_paths += tile_work_size;
+    assert(num_paths < get_max_num_paths());
+  }
+
+  max_active_path_index_ = num_paths;
 }
 
 int CUDAIntegratorQueue::get_num_active_paths()

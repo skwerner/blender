@@ -64,10 +64,6 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
   const CPUKernels &kernels = cpu_device->kernels;
 
   switch (kernel) {
-    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA: {
-      return kernels.integrator_init_from_camera(
-          &kernel_globals_, &integrator_state_, &work_tile_);
-    }
     case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
       return kernels.integrator_intersect_closest(&kernel_globals_, &integrator_state_);
     case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
@@ -89,6 +85,7 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_MEGAKERNEL:
       return kernels.integrator_megakernel(
           &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
+    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
     case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
     case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
     case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
@@ -99,10 +96,22 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
   LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
 }
 
-void CPUIntegratorQueue::set_work_tile(const KernelWorkTile &work_tile)
+void CPUIntegratorQueue::enqueue_work_tiles(DeviceKernel kernel,
+                                            const KernelWorkTile work_tiles[],
+                                            const int num_work_tiles)
 {
-  work_tile_ = work_tile;
-  work_tile_.buffer = render_buffers_->buffer.data();
+  assert(kernel == DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
+
+  CPUDevice *cpu_device = get_cpu_device();
+  const CPUKernels &kernels = cpu_device->kernels;
+
+  /* TODO: support scheduling multiple tiles and of size bigger than 1x1x1. */
+  assert(num_work_tiles == 1);
+
+  KernelWorkTile work_tile = work_tiles[0];
+  work_tile.buffer = render_buffers_->buffer.data();
+
+  kernels.integrator_init_from_camera(&kernel_globals_, &integrator_state_, &work_tile);
 }
 
 int CPUIntegratorQueue::get_num_active_paths()

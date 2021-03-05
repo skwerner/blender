@@ -64,12 +64,9 @@ void WorkScheduler::reset_scheduler_state()
   total_work_size_ = total_tiles_num_ * samples_num_;
 }
 
-bool WorkScheduler::get_work(KernelWorkTile *work_tile)
+bool WorkScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size)
 {
   DCHECK_NE(max_num_path_states_, 0);
-
-  /* TODO(sergey): Implement some smarter work scheduler which will be able to scheduler tile sizes
-   * different from 1x1. Currently this is a bare minimum for CPU devices. */
 
   const int work_index = atomic_fetch_and_add_int32(&next_work_index_, 1);
   if (work_index >= total_work_size_) {
@@ -81,17 +78,28 @@ bool WorkScheduler::get_work(KernelWorkTile *work_tile)
   const int tile_y = tile_index / num_tiles_x_;
   const int tile_x = tile_index - tile_y * num_tiles_x_;
 
-  work_tile->x = image_full_offset_px_.x + tile_x * tile_size_.x;
-  work_tile->y = image_full_offset_px_.y + tile_y * tile_size_.y;
-  work_tile->w = tile_size_.x;
-  work_tile->h = tile_size_.y;
-  work_tile->start_sample = sample_start_ + sample;
-  work_tile->num_samples = 1;
-  work_tile->offset = offset_;
-  work_tile->stride = stride_;
+  KernelWorkTile work_tile;
+  work_tile.x = image_full_offset_px_.x + tile_x * tile_size_.x;
+  work_tile.y = image_full_offset_px_.y + tile_y * tile_size_.y;
+  work_tile.w = tile_size_.x;
+  work_tile.h = tile_size_.y;
+  work_tile.start_sample = sample_start_ + sample;
+  work_tile.num_samples = 1;
+  work_tile.offset = offset_;
+  work_tile.stride = stride_;
 
-  work_tile->w = min(work_tile->w, image_size_px_.x - work_tile->x);
-  work_tile->h = min(work_tile->h, image_size_px_.y - work_tile->y);
+  work_tile.w = min(work_tile.w, image_size_px_.x - work_tile.x);
+  work_tile.h = min(work_tile.h, image_size_px_.y - work_tile.y);
+
+  assert(max_work_size <= max_num_path_states_);
+  if (max_work_size && work_tile.w * work_tile.h * work_tile.num_samples > max_work_size) {
+    /* TODO: decrementing the counter is not great, means another device might
+     * think the work is done and leave all work to this device. */
+    atomic_fetch_and_add_int32(&next_work_index_, -1);
+    return false;
+  }
+
+  *work_tile_ = work_tile;
 
   return true;
 }

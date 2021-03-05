@@ -63,7 +63,9 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
 
   virtual void enqueue(DeviceKernel kernel) override;
 
-  virtual void set_work_tile(const KernelWorkTile &work_tile) override;
+  virtual void enqueue_work_tiles(DeviceKernel kernel,
+                                  const KernelWorkTile work_tiles[],
+                                  const int num_work_tiles) override;
 
   virtual int get_num_active_paths() override;
 
@@ -76,8 +78,6 @@ class CPUIntegratorQueue : public CPUDeviceQueue {
    * of threads, or number of splits in the kernels.
    * For the quick debug keep it at 1, but it really needs to be changed soon. */
   IntegratorState integrator_state_;
-
-  KernelWorkTile work_tile_;
 };
 
 CCL_NAMESPACE_END

@@ -63,69 +63,74 @@ void PathTraceWorkTiled::render_samples(const BufferParams &scaled_render_buffer
 
 void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
 {
-  KernelWorkTile work_tile;
-  while (work_scheduler_.get_work(&work_tile)) {
-    render_samples_full_pipeline(queue, work_tile);
-
-    if (is_cancel_requested()) {
-      return;
-    }
-  }
-}
-
-void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
-                                                      const KernelWorkTile &work_tile)
-{
-  if (is_cancel_requested()) {
-    return;
-  }
-
   const float megakernel_threshold = 0.1f;
-  const int total_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
-
-  queue->set_work_tile(work_tile);
-
-  queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
 
   while (true) {
     if (is_cancel_requested()) {
       break;
     }
 
-    /* NOTE: The order of queuing is based on the following ideas:
-     *  - It is possible that some rays will hit background, and and of them will need volume
-     *    attenuation. So first do intersect which allows to see which rays hit background, then
-     *    do volume kernel which might enqueue background work items. After that the background
-     *    kernel will handle work items coming from both intersection and volume kernels.
-     *
-     *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
-     *    intersection kernel is scheduled after work items are scheduled from both surface and
-     *    subsurface kernels. */
+    vector<KernelWorkTile> work_tiles;
 
-    /* TODO(sergey): For the final implementation can do something smarter, like re-generating
-     * camera rays if the wavefront becomes too small but there are still a lot of samples to be
-     * calculated. */
+    /* Get work tiles until we reach the max number of paths we can render. */
+    const int max_num_paths = queue->get_max_num_paths();
+    int num_paths = 0;
+    while (num_paths < max_num_paths) {
+      KernelWorkTile work_tile;
+      if (work_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
+        work_tiles.push_back(work_tile);
+        num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
+      }
+      else {
+        break;
+      }
+    }
 
-    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_BACKGROUND);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SURFACE);
-    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE);
-
-    queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
-    queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
-
-    const int num_active = queue->get_num_active_paths();
-
-    if (num_active == 0) {
+    /* If we couldn't get any more tiles, we're done. */
+    if (work_tiles.size() == 0) {
       break;
     }
-    else if (num_active < megakernel_threshold * total_work_size) {
-      /* TODO: limit number of iterations to keep GPU responsive? */
-      queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
-      break;
+
+    /* Initialize paths from work tiles. */
+    queue->enqueue_work_tiles(
+        DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
+
+    while (true) {
+      /* NOTE: The order of queuing is based on the following ideas:
+       *  - It is possible that some rays will hit background, and and of them will need volume
+       *    attenuation. So first do intersect which allows to see which rays hit background, then
+       *    do volume kernel which might enqueue background work items. After that the background
+       *    kernel will handle work items coming from both intersection and volume kernels.
+       *
+       *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
+       *    intersection kernel is scheduled after work items are scheduled from both surface and
+       *    subsurface kernels. */
+
+      /* TODO(sergey): For the final implementation can do something smarter, like re-generating
+       * camera rays if the wavefront becomes too small but there are still a lot of samples to be
+       * calculated. */
+
+      queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
+
+      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
+      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_BACKGROUND);
+
+      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SURFACE);
+      queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE);
+
+      queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
+      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
+
+      const int num_active = queue->get_num_active_paths();
+
+      if (num_active == 0) {
+        break;
+      }
+      else if (num_active < megakernel_threshold * max_num_paths) {
+        /* TODO: limit number of iterations to keep GPU responsive? */
+        queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
+        break;
+      }
     }
   }
 }

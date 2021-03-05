@@ -44,13 +44,16 @@ class DeviceQueue {
   /* Enqueue kernel execution. */
   virtual void enqueue(DeviceKernel kernel) = 0;
 
-  /* Set tile within which the queue is operating. Defines a subset of a bigger global buffer.
+  /* Enqueue kernel with work tiles, to initialize paths.
    *
-   * NOTE: The buffer stored in the tile information is ignored.
+   * Work tiles indicate the subset of the image buffer the paths will be initialized for.
+   * Multiple tiles may be scheduled at once for more flexible division of the buffer.
    *
    * TODO(sergey): See in the future if it's a concept usable for all queues, or whether it is
    * specific to render queue. */
-  virtual void set_work_tile(const KernelWorkTile &work_tile) = 0;
+  virtual void enqueue_work_tiles(DeviceKernel kernel,
+                                  const KernelWorkTile work_tiles[],
+                                  const int num_work_tiles) = 0;
 
   /* Get number of active paths in the queue. */
   virtual int get_num_active_paths() = 0;

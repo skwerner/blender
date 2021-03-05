@@ -40,10 +40,12 @@ class WorkScheduler {
   void reset(const BufferParams &buffer_params, int sample_start, int samples_num);
 
   /* Get work for a device.
-   * Returns truth if there is still work to be done and initialied the work tile to all
-   * parameters of this work. If there is nothing remained to be done, returns false and the
-   * work tile is kept unchanged. */
-  bool get_work(KernelWorkTile *work_tile);
+   * Returns true if there is still work to be done and initialize the work tile to all
+   * parameters of this work. If there is nothing remaining to be done, returns false and the
+   * work tile is kept unchanged.
+   *
+   * Optionally pass max_work_size to do nothing if there is no tile small enough. */
+  bool get_work(KernelWorkTile *work_tile, const int max_work_size = 0);
 
  protected:
   void reset_scheduler_state();

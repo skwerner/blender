@@ -98,7 +98,7 @@ void PathTrace::render_samples(int samples_num)
   buffer_update_if_needed();
   progress_update_if_needed();
 
-  for (int sample = 0; sample < samples_num; ++sample) {
+  while (render_status_.rendered_samples_num < samples_num) {
     /* TODO(sergey): Take adaptive stopping and user cancel into account. Both of these actions
      * will affect how the buffer is to be scaled. */
 

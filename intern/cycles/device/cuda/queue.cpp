@@ -150,6 +150,13 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
       integrator_kernel = INTEGRATOR_KERNEL_shade_volume;
       break;
+
+    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
+    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
+    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
+    case DeviceKernel::NUM_KERNELS:
+      break;
   }
 
   if (integrator_kernel != INTEGRATOR_KERNEL_NUM) {

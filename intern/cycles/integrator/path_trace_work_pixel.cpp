@@ -23,8 +23,10 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTraceWorkPixel::PathTraceWorkPixel(Device *render_device, RenderBuffers *buffers)
-    : PathTraceWork(render_device, buffers)
+PathTraceWorkPixel::PathTraceWorkPixel(Device *render_device,
+                                       RenderBuffers *buffers,
+                                       bool *cancel_requested_flag)
+    : PathTraceWork(render_device, buffers, cancel_requested_flag)
 {
   DCHECK_EQ(render_device->info.type, DEVICE_CPU);
 
@@ -53,6 +55,10 @@ void PathTraceWorkPixel::render_samples(const BufferParams &scaled_render_buffer
   scaled_render_buffer_params.get_offset_stride(offset, stride);
 
   tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
+    if (is_cancel_requested()) {
+      return;
+    }
+
     const int y = work_index / image_width;
     const int x = work_index - y * image_width;
 
@@ -81,6 +87,10 @@ void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
   KernelWorkTile sample_work_tile = work_tile;
 
   for (int sample = 0; sample < samples_num; ++sample) {
+    if (is_cancel_requested()) {
+      break;
+    }
+
     queue->set_work_tile(sample_work_tile);
 
     queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);

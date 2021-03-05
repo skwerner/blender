@@ -22,17 +22,23 @@
 
 CCL_NAMESPACE_BEGIN
 
-unique_ptr<PathTraceWork> PathTraceWork::create(Device *render_device, RenderBuffers *buffers)
+unique_ptr<PathTraceWork> PathTraceWork::create(Device *render_device,
+                                                RenderBuffers *buffers,
+                                                bool *cancel_requested_flag)
 {
   if (render_device->info.type == DEVICE_CPU) {
-    return make_unique<PathTraceWorkPixel>(render_device, buffers);
+    return make_unique<PathTraceWorkPixel>(render_device, buffers, cancel_requested_flag);
   }
 
-  return make_unique<PathTraceWorkTiled>(render_device, buffers);
+  return make_unique<PathTraceWorkTiled>(render_device, buffers, cancel_requested_flag);
 }
 
-PathTraceWork::PathTraceWork(Device *render_device, RenderBuffers *buffers)
-    : render_device_(render_device), buffers_(buffers)
+PathTraceWork::PathTraceWork(Device *render_device,
+                             RenderBuffers *buffers,
+                             bool *cancel_requested_flag)
+    : render_device_(render_device),
+      buffers_(buffers),
+      cancel_requested_flag_(cancel_requested_flag)
 {
 }
 

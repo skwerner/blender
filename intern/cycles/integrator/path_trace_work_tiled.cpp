@@ -26,8 +26,10 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTraceWorkTiled::PathTraceWorkTiled(Device *render_device, RenderBuffers *buffers)
-    : PathTraceWork(render_device, buffers)
+PathTraceWorkTiled::PathTraceWorkTiled(Device *render_device,
+                                       RenderBuffers *buffers,
+                                       bool *cancel_requested_flag)
+    : PathTraceWork(render_device, buffers, cancel_requested_flag)
 {
   const int num_queues = render_device->get_concurrent_integrator_queues_num();
 
@@ -64,12 +66,20 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
   KernelWorkTile work_tile;
   while (work_scheduler_.get_work(&work_tile)) {
     render_samples_full_pipeline(queue, work_tile);
+
+    if (is_cancel_requested()) {
+      return;
+    }
   }
 }
 
 void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
                                                       const KernelWorkTile &work_tile)
 {
+  if (is_cancel_requested()) {
+    return;
+  }
+
   const float megakernel_threshold = 0.1f;
   const int total_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
 
@@ -78,6 +88,10 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
   queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
 
   while (true) {
+    if (is_cancel_requested()) {
+      break;
+    }
+
     /* NOTE: The order of queuing is based on the following ideas:
      *  - It is possible that some rays will hit background, and and of them will need volume
      *    attenuation. So first do intersect which allows to see which rays hit background, then

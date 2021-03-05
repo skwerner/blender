@@ -30,7 +30,7 @@ struct KernelWorkTile;
  * This implementation suits best devices which have a lot of integrator states, such as GPU. */
 class PathTraceWorkTiled : public PathTraceWork {
  public:
-  PathTraceWorkTiled(Device *render_device, RenderBuffers *buffers);
+  PathTraceWorkTiled(Device *render_device, RenderBuffers *buffers, bool *cancel_requested_flag);
 
   virtual void init_execution() override;
 

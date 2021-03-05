@@ -19,6 +19,7 @@
 #include "integrator/path_trace_work.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
+#include "util/util_thread.h"
 #include "util/util_unique_ptr.h"
 #include "util/util_vector.h"
 
@@ -76,6 +77,13 @@ class PathTrace {
 
   /* Copy current render result to the given display buffer. */
   void copy_to_display_buffer(DisplayBuffer *display_buffer);
+
+  /* Cancel rendering process as soon as possible, without waiting for full tile to be sampled.
+   * Used in cases like reset of render session.
+   *
+   * This is a blockign call, which returns as soon as there is no running `render_samples()` call.
+   */
+  void cancel();
 
   /* Callback which communicates an updates state of the render buffer.
    * Is called during path tracing to communicate work-in-progress state of the final buffer.
@@ -193,6 +201,20 @@ class PathTrace {
 
   /* Progress object which is used to communicate sample progress. */
   Progress *progress_;
+
+  /* Fields required for canceling render on demand, as quickly as possible. */
+  struct {
+    /* Indicates whether there is an on-going `render_samples()` call. */
+    bool is_rendering = false;
+
+    /* Indicates whether rendering is requested to be canceled by `cancel()`. */
+    bool is_requested = false;
+
+    /* Synchronization between thread which does `render_samples()` and thread which does
+     * `cancel()`. */
+    thread_mutex mutex;
+    thread_condition_variable condition;
+  } render_cancel_;
 };
 
 CCL_NAMESPACE_END

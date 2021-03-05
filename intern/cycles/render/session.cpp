@@ -408,6 +408,8 @@ void Session::reset_cpu(BufferParams &buffer_params, int samples)
   delayed_reset.do_reset = true;
   device->task_cancel();
 
+  path_trace_->cancel();
+
   pause_cond.notify_all();
 }
 

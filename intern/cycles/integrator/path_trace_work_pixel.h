@@ -32,7 +32,7 @@ struct KernelWorkTile;
  * for debug purposes, but it needs some changes. */
 class PathTraceWorkPixel : public PathTraceWork {
  public:
-  PathTraceWorkPixel(Device *render_device, RenderBuffers *buffers);
+  PathTraceWorkPixel(Device *render_device, RenderBuffers *buffers, bool *cancel_requested_flag);
 
   virtual void init_execution() override;
 

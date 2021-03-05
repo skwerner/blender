@@ -44,8 +44,8 @@ PathTrace::PathTrace(Device *device) : device_(device)
   /* Create path tracing work in advance, so that it can be reused by incremental sampling as much
    * as possible. */
   device->foreach_device([&](Device *render_device) {
-    path_trace_works_.emplace_back(
-        PathTraceWork::create(render_device, full_render_buffers_.get()));
+    path_trace_works_.emplace_back(PathTraceWork::create(
+        render_device, full_render_buffers_.get(), &render_cancel_.is_requested));
   });
 
   /* TODO(sergey): Communicate some scheduling block size to the work scheduler based on every
@@ -85,6 +85,13 @@ void PathTrace::set_progress(Progress *progress)
 
 void PathTrace::render_samples(int samples_num)
 {
+  /* Indicate that rendering has started and that it can be requested to cancel. */
+  {
+    thread_scoped_lock lock(render_cancel_.mutex);
+    render_cancel_.is_rendering = true;
+    render_cancel_.is_requested = false;
+  }
+
   render_init_execution();
 
   render_status_.reset();
@@ -124,6 +131,14 @@ void PathTrace::render_samples(int samples_num)
   /* TODO(sergey): Need to write to the whole buffer, after all devices sampled the frame to the
    * given number of samples. */
   buffer_write();
+
+  /* Indicate that rendering has finished, making it so thread which requested `cancel()` can carry
+   * on. */
+  {
+    thread_scoped_lock lock(render_cancel_.mutex);
+    render_cancel_.is_rendering = false;
+    render_cancel_.condition.notify_one();
+  }
 }
 
 void PathTrace::render_init_execution()
@@ -174,6 +189,17 @@ void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)
   }
 }
 
+void PathTrace::cancel()
+{
+  thread_scoped_lock lock(render_cancel_.mutex);
+
+  render_cancel_.is_requested = true;
+
+  while (render_cancel_.is_rendering) {
+    render_cancel_.condition.wait(lock);
+  }
+}
+
 void PathTrace::update_scaled_render_buffers_resolution()
 {
   const BufferParams &orig_params = full_render_buffers_->params;
@@ -191,6 +217,10 @@ int PathTrace::get_num_samples_in_buffer()
 
 bool PathTrace::is_cancel_requested()
 {
+  if (render_cancel_.is_requested) {
+    return true;
+  }
+
   if (progress_ != nullptr) {
     if (progress_->get_cancel()) {
       return true;

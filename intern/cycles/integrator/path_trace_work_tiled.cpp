@@ -64,6 +64,10 @@ void PathTraceWorkTiled::render_samples(const BufferParams &scaled_render_buffer
 void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
 {
   const float megakernel_threshold = 0.1f;
+  const float regenerate_threshold = 0.5f;
+
+  const int max_num_paths = queue->get_max_num_paths();
+  int num_paths = 0;
 
   while (true) {
     if (is_cancel_requested()) {
@@ -72,30 +76,35 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
 
     vector<KernelWorkTile> work_tiles;
 
-    /* Get work tiles until we reach the max number of paths we can render. */
-    const int max_num_paths = queue->get_max_num_paths();
-    int num_paths = 0;
-    while (num_paths < max_num_paths) {
-      KernelWorkTile work_tile;
-      if (work_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
-        work_tiles.push_back(work_tile);
-        num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
+    /* Schedule work tiles on start, or during execution to keep the device occupied. */
+    if (num_paths == 0 || num_paths < regenerate_threshold * max_num_paths) {
+      /* Get work tiles until the maximum number of path is reached. */
+      while (num_paths < max_num_paths) {
+        KernelWorkTile work_tile;
+        if (work_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
+          work_tiles.push_back(work_tile);
+          num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
+        }
+        else {
+          break;
+        }
       }
-      else {
+
+      /* If we couldn't get any more tiles, we're done. */
+      if (work_tiles.size() == 0 && num_paths == 0) {
         break;
       }
     }
 
-    /* If we couldn't get any more tiles, we're done. */
-    if (work_tiles.size() == 0) {
-      break;
+    /* Initialize paths from work tiles. */
+    if (work_tiles.size()) {
+      queue->enqueue_work_tiles(
+          DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
+      num_paths = queue->get_num_active_paths();
     }
 
-    /* Initialize paths from work tiles. */
-    queue->enqueue_work_tiles(
-        DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
-
-    while (true) {
+    /* TODO: unclear if max_num_paths is the right way to measure this. */
+    if (num_paths > megakernel_threshold * max_num_paths) {
       /* NOTE: The order of queuing is based on the following ideas:
        *  - It is possible that some rays will hit background, and and of them will need volume
        *    attenuation. So first do intersect which allows to see which rays hit background, then
@@ -109,7 +118,6 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
       /* TODO(sergey): For the final implementation can do something smarter, like re-generating
        * camera rays if the wavefront becomes too small but there are still a lot of samples to be
        * calculated. */
-
       queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
 
       queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
@@ -121,16 +129,14 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
       queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
       queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
 
-      const int num_active = queue->get_num_active_paths();
-
-      if (num_active == 0) {
-        break;
-      }
-      else if (num_active < megakernel_threshold * max_num_paths) {
-        /* TODO: limit number of iterations to keep GPU responsive? */
-        queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
-        break;
-      }
+      num_paths = queue->get_num_active_paths();
+    }
+    else if (num_paths > 0) {
+      /* Megakernel to finish all remaining paths. */
+      /* TODO: limit number of iterations to keep GPU responsive? */
+      queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
+      num_paths = queue->get_num_active_paths();
+      assert(num_paths == 0);
     }
   }
 }

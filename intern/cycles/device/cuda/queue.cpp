@@ -63,9 +63,15 @@ void CUDAIntegratorQueue::compute_queued_paths(DeviceKernel kernel, int queued_k
   /* Launch kernel to count the number of active paths. */
   const CUDADeviceKernel &cuda_kernel = cuda_device_->kernels.get(kernel);
 
+  /* TODO: this could be smaller for terminated paths based on amount of work we want
+   * to schedule. */
+  const int work_size = (kernel == DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
+                            get_max_num_paths() :
+                            max_active_path_index_;
+
   /* We perform parallel reduce per block, and then sum the results from each block on the host. */
   const int num_threads_per_block = cuda_kernel.num_threads_per_block;
-  const int num_blocks = divide_up(max_active_path_index_, num_threads_per_block);
+  const int num_blocks = divide_up(work_size, num_threads_per_block);
 
   /* See parall_reduce.h for why this amount of shared memory is needed. */
   const int shared_mem_bytes = (num_threads_per_block + 1) * sizeof(int);
@@ -73,9 +79,8 @@ void CUDAIntegratorQueue::compute_queued_paths(DeviceKernel kernel, int queued_k
   if (num_queued_paths_.size() < 1) {
     num_queued_paths_.alloc(1);
   }
-  /* TODO: smaller number. */
-  if (queued_paths_.size() < max_active_path_index_) {
-    queued_paths_.alloc(max_active_path_index_);
+  if (queued_paths_.size() < work_size) {
+    queued_paths_.alloc(work_size);
     queued_paths_.zero_to_device(); /* TODO: only need to allocate on device. */
   }
 
@@ -87,7 +92,7 @@ void CUDAIntegratorQueue::compute_queued_paths(DeviceKernel kernel, int queued_k
   CUdeviceptr d_num_queued_paths = (CUdeviceptr)num_queued_paths_.device_pointer;
   int queued_kernel_flag = 1 << queued_kernel;
   void *args[] = {&d_integrator_state,
-                  &max_active_path_index_,
+                  const_cast<int *>(&work_size),
                   &d_queued_paths,
                   &d_num_queued_paths,
                   &queued_kernel_flag};
@@ -253,7 +258,13 @@ void CUDAIntegratorQueue::enqueue_work_tiles(DeviceKernel kernel,
    * is not trivial so not done for now. */
   CUdeviceptr d_integrator_state = (CUdeviceptr)integrator_state_.device_pointer;
   CUdeviceptr d_integrator_path_queue = (CUdeviceptr)integrator_path_queue_.device_pointer;
+  CUdeviceptr d_work_tile = (CUdeviceptr)work_tiles_.device_pointer;
   CUdeviceptr d_path_index = (CUdeviceptr)NULL;
+
+  if (max_active_path_index_ != 0) {
+    compute_queued_paths(DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY, 0);
+    d_path_index = (CUdeviceptr)queued_paths_.device_pointer;
+  }
 
   int num_paths = 0;
 
@@ -264,8 +275,6 @@ void CUDAIntegratorQueue::enqueue_work_tiles(DeviceKernel kernel,
     const int tile_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
     const int num_threads_per_block = cuda_kernel.num_threads_per_block;
     const int num_blocks = divide_up(tile_work_size, num_threads_per_block);
-    CUdeviceptr d_work_tile = (CUdeviceptr)((char *)work_tiles_.device_pointer +
-                                            sizeof(KernelWorkTile) * i);
 
     /* Launch kernel. */
     void *args[] = {&d_integrator_state,
@@ -280,11 +289,19 @@ void CUDAIntegratorQueue::enqueue_work_tiles(DeviceKernel kernel,
         cuLaunchKernel(
             cuda_kernel.function, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
 
+    /* Offset work tile and path index pointers for next tile. */
     num_paths += tile_work_size;
     assert(num_paths < get_max_num_paths());
+
+    d_work_tile = (CUdeviceptr)(((KernelWorkTile *)d_work_tile) + 1);
+    if (d_path_index) {
+      d_path_index = (CUdeviceptr)(((int *)d_path_index) + tile_work_size);
+    }
   }
 
-  max_active_path_index_ = num_paths;
+  /* TODO: this could be computed more accurately using on the last entry
+   * in the queued_paths array passed to the kernel. ?. */
+  max_active_path_index_ = min(max_active_path_index_ + num_paths, get_max_num_paths());
 }
 
 int CUDAIntegratorQueue::get_num_active_paths()

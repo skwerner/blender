@@ -20,6 +20,7 @@
 #include "render/buffers.h"
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
+#include "util/util_time.h"
 
 #include "kernel/kernel_types.h"
 
@@ -69,11 +70,14 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue)
 void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
                                                       const KernelWorkTile &work_tile)
 {
+  const float megakernel_threshold = 0.1f;
+  const int total_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
+
   queue->set_work_tile(work_tile);
 
   queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
 
-  do {
+  while (true) {
     /* NOTE: The order of queuing is based on the following ideas:
      *  - It is possible that some rays will hit background, and and of them will need volume
      *    attenuation. So first do intersect which allows to see which rays hit background, then
@@ -98,7 +102,18 @@ void PathTraceWorkTiled::render_samples_full_pipeline(DeviceQueue *queue,
 
     queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
     queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
-  } while (queue->get_num_active_paths() > 0);
+
+    const int num_active = queue->get_num_active_paths();
+
+    if (num_active == 0) {
+      break;
+    }
+    else if (num_active < megakernel_threshold * total_work_size) {
+      /* TODO: limit number of iterations to keep GPU responsive? */
+      queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
+      break;
+    }
+  }
 }
 
 CCL_NAMESPACE_END

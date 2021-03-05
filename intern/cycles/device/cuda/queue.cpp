@@ -129,6 +129,7 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
 
   switch (kernel) {
     case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
+    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
       integrator_kernel = INTEGRATOR_KERNEL_intersect_closest;
       break;
     case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
@@ -212,7 +213,8 @@ void CUDAIntegratorQueue::enqueue(DeviceKernel kernel)
     case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
     case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
     case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME: {
+    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
+    case DeviceKernel::INTEGRATOR_MEGAKERNEL: {
       /* Shading kernels with integrator state and render buffer. */
       CUdeviceptr d_render_buffer = (CUdeviceptr)render_buffers_->buffer.device_pointer;
       void *args[] = {&d_integrator_state,

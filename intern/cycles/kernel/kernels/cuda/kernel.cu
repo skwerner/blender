@@ -37,6 +37,7 @@
 #  include "kernel/integrator/integrator_intersect_closest.h"
 #  include "kernel/integrator/integrator_intersect_shadow.h"
 #  include "kernel/integrator/integrator_intersect_subsurface.h"
+#  include "kernel/integrator/integrator_megakernel.h"
 #  include "kernel/integrator/integrator_shade_background.h"
 #  include "kernel/integrator/integrator_shade_shadow.h"
 #  include "kernel/integrator/integrator_shade_surface.h"
@@ -198,6 +199,22 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   if (global_index < total_work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
     integrator_shade_volume(NULL, state, queue, path_index, render_buffer);
+  }
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_megakernel(IntegratorState *state,
+                                      IntegratorPathQueue *queue,
+                                      const int *path_index_array,
+                                      float *render_buffer,
+                                      const int total_work_size)
+{
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < total_work_size) {
+    const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
+    integrator_megakernel(NULL, state, queue, path_index, render_buffer);
   }
 }
 

@@ -40,6 +40,7 @@
 #    include "kernel/integrator/integrator_shade_shadow.h"
 #    include "kernel/integrator/integrator_shade_surface.h"
 #    include "kernel/integrator/integrator_shade_volume.h"
+#    include "kernel/integrator/integrator_megakernel.h"
 
 #    include "kernel/kernel_film.h"
 
@@ -195,6 +196,7 @@ DEFINE_INTEGRATOR_SHADE_KERNEL(shade_background)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_shadow)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_surface)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_volume)
+DEFINE_INTEGRATOR_SHADE_KERNEL(megakernel)
 
 #undef KERNEL_INVOKE
 #undef DEFINE_INTEGRATOR_KERNEL

@@ -97,6 +97,7 @@ class CPUKernels {
   CPUIntegratorShadeFunction integrator_shade_shadow;
   CPUIntegratorShadeFunction integrator_shade_surface;
   CPUIntegratorShadeFunction integrator_shade_volume;
+  CPUIntegratorShadeFunction integrator_megakernel;
 
   CPUKernels();
 };

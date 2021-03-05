@@ -85,6 +85,7 @@ void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
 
     queue->enqueue(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
 
+#if 0
     do {
       /* NOTE: The order of queuing is based on the following ideas:
        *  - It is possible that some rays will hit background, and and of them will need volume
@@ -111,6 +112,9 @@ void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
       queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
       queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
     } while (queue->get_num_active_paths() > 0);
+#else
+    queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
+#endif
 
     ++sample_work_tile.start_sample;
   }

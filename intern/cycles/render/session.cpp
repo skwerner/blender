@@ -826,6 +826,11 @@ void Session::run_cpu()
 
         reset_(delayed_reset.params, delayed_reset.samples);
         delayed_reset.do_reset = false;
+
+        /* Continue to the next iteration of the outer loop, so that the tile manager is
+         * re-initialized to its initial valid state after reset (without `tile_manager.next()`
+         * used after reset the current render buffer and camera size in pixels is set to 0). */
+        continue;
       }
       else if (pause || no_tiles) {
         update_status_time(pause, no_tiles);

@@ -85,19 +85,19 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {
     /* Continue with volume kernel if we are inside a volume, regardless
      * if we hit anything. */
-    INTEGRATOR_PATH_NEXT(intersect_closest, shade_volume);
+    INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_VOLUME);
     return;
   }
 #endif
 
   if (hit) {
     /* Hit a surface, continue with surface kernel. */
-    INTEGRATOR_PATH_NEXT(intersect_closest, shade_surface);
+    INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_SURFACE);
     return;
   }
   else {
     /* Nothing hit, continue with background kernel. */
-    INTEGRATOR_PATH_NEXT(intersect_closest, shade_background);
+    INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_BACKGROUND);
     return;
   }
 }

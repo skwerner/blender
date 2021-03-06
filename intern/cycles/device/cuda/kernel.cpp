@@ -26,7 +26,7 @@ void CUDADeviceKernels::load(CUDADevice *device)
 {
   CUmodule cuModule = device->cuModule;
 
-  for (int i = 0; i < (int)DeviceKernel::NUM_KERNELS; i++) {
+  for (int i = 0; i < (int)DEVICE_KERNEL_NUM; i++) {
     CUDADeviceKernel &kernel = kernels_[i];
 
     const std::string function_name = std::string("kernel_cuda_") +

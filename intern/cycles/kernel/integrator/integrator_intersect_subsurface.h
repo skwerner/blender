@@ -32,7 +32,7 @@ ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
   /* We're done if no exit point found. */
   const bool exit_point_found = false;
   if (!exit_point_found) {
-    INTEGRATOR_PATH_TERMINATE(intersect_subsurface);
+    INTEGRATOR_PATH_TERMINATE(INTERSECT_SUBSURFACE);
     return;
   }
 
@@ -49,7 +49,7 @@ ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
     INTEGRATOR_STATE_WRITE(shadow_path, throughput) = INTEGRATOR_STATE(path, throughput);
 
     /* Branch of shadow kernel. */
-    INTEGRATOR_SHADOW_PATH_INIT(intersect_shadow);
+    INTEGRATOR_SHADOW_PATH_INIT(INTERSECT_SHADOW);
   }
 
   /* Sample BSDF and continue path. */
@@ -63,7 +63,7 @@ ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SUBSURFACE;
 
   /* Queue intersect_closest kernel. */
-  INTEGRATOR_PATH_NEXT(intersect_subsurface, intersect_closest);
+  INTEGRATOR_PATH_NEXT(INTERSECT_SUBSURFACE, INTERSECT_CLOSEST);
 #endif /* __SUBSURFACE__ */
 }
 

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "kernel/kernel_types.h"
 #include "util/util_atomic.h"
 
 CCL_NAMESPACE_BEGIN
@@ -25,20 +26,8 @@ CCL_NAMESPACE_BEGIN
  * Keep track of which kernels are queued to be executed next in the path.
  * Currently only used on the GPU for counting the number of paths. */
 
-typedef enum IntegratorPathKernel {
-  INTEGRATOR_KERNEL_intersect_closest = 0,
-  INTEGRATOR_KERNEL_intersect_shadow,
-  INTEGRATOR_KERNEL_intersect_subsurface,
-  INTEGRATOR_KERNEL_shade_background,
-  INTEGRATOR_KERNEL_shade_surface,
-  INTEGRATOR_KERNEL_shade_volume,
-  INTEGRATOR_KERNEL_shade_shadow,
-
-  INTEGRATOR_KERNEL_NUM,
-} IntegratorPathKernel;
-
 typedef struct IntegratorPathQueue {
-  int num_queued[INTEGRATOR_KERNEL_NUM];
+  int num_queued[DEVICE_KERNEL_INTEGRATOR_NUM];
 } IntegratorPathQueue;
 
 /* Control Flow
@@ -69,43 +58,51 @@ typedef struct IntegratorPathQueue {
 
 #  define INTEGRATOR_PATH_INIT(next_kernel) \
     { \
-      atomic_fetch_and_add_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##next_kernel], 1); \
-      INTEGRATOR_STATE_WRITE(path, queued_kernels) |= (1 << INTEGRATOR_KERNEL_##next_kernel); \
+      atomic_fetch_and_add_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(path, \
+                             queued_kernels) |= (1 << DEVICE_KERNEL_INTEGRATOR_##next_kernel); \
     }
 #  define INTEGRATOR_PATH_NEXT(current_kernel, next_kernel) \
     { \
-      atomic_fetch_and_sub_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##current_kernel], 1); \
-      atomic_fetch_and_add_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##next_kernel], 1); \
-      INTEGRATOR_STATE_WRITE(path, queued_kernels) |= (1 << INTEGRATOR_KERNEL_##next_kernel); \
-      INTEGRATOR_STATE_WRITE(path, queued_kernels) &= ~(1 << INTEGRATOR_KERNEL_##current_kernel); \
+      atomic_fetch_and_sub_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      atomic_fetch_and_add_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(path, \
+                             queued_kernels) |= (1 << DEVICE_KERNEL_INTEGRATOR_##next_kernel); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernels) &= ~( \
+          1 << DEVICE_KERNEL_INTEGRATOR_##current_kernel); \
     }
 #  define INTEGRATOR_PATH_TERMINATE(current_kernel) \
     { \
-      atomic_fetch_and_sub_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##current_kernel], 1); \
-      INTEGRATOR_STATE_WRITE(path, queued_kernels) &= ~(1 << INTEGRATOR_KERNEL_##current_kernel); \
+      atomic_fetch_and_sub_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernels) &= ~( \
+          1 << DEVICE_KERNEL_INTEGRATOR_##current_kernel); \
       INTEGRATOR_STATE_WRITE(path, flag) = 0; \
     }
 
 #  define INTEGRATOR_SHADOW_PATH_INIT(next_kernel) \
     { \
-      atomic_fetch_and_add_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##next_kernel], 1); \
+      atomic_fetch_and_add_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
       INTEGRATOR_STATE_WRITE(shadow_path, \
-                             queued_kernels) |= (1 << INTEGRATOR_KERNEL_##next_kernel); \
+                             queued_kernels) |= (1 << DEVICE_KERNEL_INTEGRATOR_##next_kernel); \
     }
 #  define INTEGRATOR_SHADOW_PATH_NEXT(current_kernel, next_kernel) \
     { \
-      atomic_fetch_and_sub_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##current_kernel], 1); \
-      atomic_fetch_and_add_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##next_kernel], 1); \
+      atomic_fetch_and_sub_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      atomic_fetch_and_add_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
       INTEGRATOR_STATE_WRITE(shadow_path, \
-                             queued_kernels) |= (1 << INTEGRATOR_KERNEL_##next_kernel); \
-      INTEGRATOR_STATE_WRITE(shadow_path, \
-                             queued_kernels) &= ~(1 << INTEGRATOR_KERNEL_##current_kernel); \
+                             queued_kernels) |= (1 << DEVICE_KERNEL_INTEGRATOR_##next_kernel); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernels) &= ~( \
+          1 << DEVICE_KERNEL_INTEGRATOR_##current_kernel); \
     }
 #  define INTEGRATOR_SHADOW_PATH_TERMINATE(current_kernel) \
     { \
-      atomic_fetch_and_sub_uint32(&queue->num_queued[INTEGRATOR_KERNEL_##current_kernel], 1); \
-      INTEGRATOR_STATE_WRITE(shadow_path, \
-                             queued_kernels) &= ~(1 << INTEGRATOR_KERNEL_##current_kernel); \
+      atomic_fetch_and_sub_uint32(&queue->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernels) &= ~( \
+          1 << DEVICE_KERNEL_INTEGRATOR_##current_kernel); \
       INTEGRATOR_STATE_WRITE(shadow_path, flag) = 0; \
     }
 

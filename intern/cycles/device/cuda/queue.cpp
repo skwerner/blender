@@ -53,22 +53,22 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
   int shared_mem_bytes = 0;
 
   switch (kernel) {
-    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
-    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
-    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
       /* See parall_active_index.h for why this amount of shared memory is needed. */
       shared_mem_bytes = (num_threads_per_block + 1) * sizeof(int);
       break;
-    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
-    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
-    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
-    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
-    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
-    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
-    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
-    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
-    case DeviceKernel::NUM_KERNELS:
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
+    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
+    case DEVICE_KERNEL_NUM:
       break;
   }
 

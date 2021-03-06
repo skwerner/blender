@@ -46,7 +46,7 @@ bool CPUDeviceQueue::enqueue(DeviceKernel kernel, const int /* work_size */, voi
 {
   /* TODO: does it make sense to implement this for debugging? */
   switch (kernel) {
-    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
 #if 0
       IntegratorState *state = *(IntegratorState **)args[0];
       const int *path_index_array = *(int **)args[2];
@@ -70,18 +70,18 @@ bool CPUDeviceQueue::enqueue(DeviceKernel kernel, const int /* work_size */, voi
       }
 #endif
       break;
-    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
-    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
-    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
-    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
-    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
-    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
-    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
-    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
-    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
-    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
-    case DeviceKernel::NUM_KERNELS:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
+    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
+    case DEVICE_KERNEL_NUM:
       break;
   }
 

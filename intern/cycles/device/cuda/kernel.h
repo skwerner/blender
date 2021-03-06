@@ -46,7 +46,7 @@ class CUDADeviceKernels {
   const CUDADeviceKernel &get(DeviceKernel kernel) const;
 
  protected:
-  CUDADeviceKernel kernels_[(int)DeviceKernel::NUM_KERNELS];
+  CUDADeviceKernel kernels_[DEVICE_KERNEL_NUM];
   bool loaded = false;
 };
 

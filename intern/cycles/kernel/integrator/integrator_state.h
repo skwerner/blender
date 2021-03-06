@@ -77,7 +77,7 @@ typedef struct IntegratorPathState {
   /* Current transparent ray bounce depth. */
   uint16_t transparent_bounce;
 
-  /* IntegratorPathKernel bit indicating queued kernels.
+  /* DeviceKernel bit indicating queued kernels.
    * TODO: reduce size? */
   uint32_t queued_kernels;
 

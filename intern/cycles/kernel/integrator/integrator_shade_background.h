@@ -135,7 +135,7 @@ ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
   integrate_background(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* Path ends here. */
-  INTEGRATOR_PATH_TERMINATE(shade_background);
+  INTEGRATOR_PATH_TERMINATE(SHADE_BACKGROUND);
 }
 
 CCL_NAMESPACE_END

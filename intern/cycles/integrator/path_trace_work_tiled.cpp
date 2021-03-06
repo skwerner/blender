@@ -99,7 +99,7 @@ void PathTraceWorkTiled::render_samples_full_pipeline()
     /* Initialize paths from work tiles. */
     if (work_tiles.size()) {
       enqueue_work_tiles(
-          DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
+          DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
       num_paths = get_num_active_paths();
     }
 
@@ -114,23 +114,23 @@ void PathTraceWorkTiled::render_samples_full_pipeline()
        *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
        *    intersection kernel is scheduled after work items are scheduled from both surface and
        *    subsurface kernels. */
-      enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
 
-      enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
-      enqueue(DeviceKernel::INTEGRATOR_SHADE_BACKGROUND);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
 
-      enqueue(DeviceKernel::INTEGRATOR_SHADE_SURFACE);
-      enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
 
-      enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
-      enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
 
       num_paths = get_num_active_paths();
     }
     else if (num_paths > 0) {
       /* Megakernel to finish all remaining paths. */
       /* TODO: limit number of iterations to keep GPU responsive? */
-      enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
+      enqueue(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);
       num_paths = get_num_active_paths();
       assert(num_paths == 0);
     }
@@ -142,7 +142,7 @@ void PathTraceWorkTiled::compute_queued_paths(DeviceKernel kernel, int queued_ke
   /* Launch kernel to count the number of active paths. */
   /* TODO: this could be smaller for terminated paths based on amount of work we want
    * to schedule. */
-  const int work_size = (kernel == DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
+  const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
                             get_max_num_paths() :
                             max_active_path_index_;
 
@@ -176,41 +176,16 @@ void PathTraceWorkTiled::enqueue(DeviceKernel kernel)
     return;
   }
 
+  DeviceKernel queue_kernel = (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) ?
+                                  DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST :
+                                  kernel;
+
   /* Create array of path indices for which this kernel is queued to be executed. */
   int work_size = max_active_path_index_;
-  IntegratorPathKernel integrator_kernel = INTEGRATOR_KERNEL_NUM;
-
-  switch (kernel) {
-    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
-    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
-      integrator_kernel = INTEGRATOR_KERNEL_intersect_closest;
-      break;
-    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
-      integrator_kernel = INTEGRATOR_KERNEL_intersect_shadow;
-      break;
-    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
-      integrator_kernel = INTEGRATOR_KERNEL_intersect_subsurface;
-      break;
-    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
-      integrator_kernel = INTEGRATOR_KERNEL_shade_background;
-      break;
-    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
-      integrator_kernel = INTEGRATOR_KERNEL_shade_shadow;
-      break;
-    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
-      integrator_kernel = INTEGRATOR_KERNEL_shade_surface;
-      break;
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
-      integrator_kernel = INTEGRATOR_KERNEL_shade_volume;
-      break;
-    default:
-      LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
-      break;
-  }
 
   integrator_path_queue_.copy_from_device();
   IntegratorPathQueue *path_queue = integrator_path_queue_.data();
-  const int num_queued = path_queue->num_queued[integrator_kernel];
+  const int num_queued = path_queue->num_queued[queue_kernel];
 
   if (num_queued == 0) {
     return;
@@ -222,20 +197,20 @@ void PathTraceWorkTiled::enqueue(DeviceKernel kernel)
 
   if (num_queued < work_size) {
     work_size = num_queued;
-    compute_queued_paths((kernel == DeviceKernel::INTEGRATOR_INTERSECT_SHADOW ||
-                          kernel == DeviceKernel::INTEGRATOR_SHADE_SHADOW) ?
-                             DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY :
-                             DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY,
-                         integrator_kernel);
+    compute_queued_paths((kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
+                          kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW) ?
+                             DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY :
+                             DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY,
+                         queue_kernel);
     d_path_index = (void *)queued_paths_.device_pointer;
   }
 
   assert(work_size < get_max_num_paths());
 
   switch (kernel) {
-    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
-    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
-    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE: {
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE: {
       /* Ray intersection kernels with integrator state. */
       void *args[] = {&d_integrator_state,
                       &d_integrator_path_queue,
@@ -245,11 +220,11 @@ void PathTraceWorkTiled::enqueue(DeviceKernel kernel)
       queue_->enqueue(kernel, work_size, args);
       break;
     }
-    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
-    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
-    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
-    case DeviceKernel::INTEGRATOR_MEGAKERNEL: {
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
+    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL: {
       /* Shading kernels with integrator state and render buffer. */
       void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
       void *args[] = {&d_integrator_state,
@@ -261,11 +236,12 @@ void PathTraceWorkTiled::enqueue(DeviceKernel kernel)
       queue_->enqueue(kernel, work_size, args);
       break;
     }
-    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
-    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
-    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
-    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
-    case DeviceKernel::NUM_KERNELS: {
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
+    case DEVICE_KERNEL_NUM: {
+      LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
       break;
     }
   }
@@ -297,7 +273,7 @@ void PathTraceWorkTiled::enqueue_work_tiles(DeviceKernel kernel,
   void *d_path_index = (void *)NULL;
 
   if (max_active_path_index_ != 0) {
-    compute_queued_paths(DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY, 0);
+    compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, 0);
     d_path_index = (void *)queued_paths_.device_pointer;
   }
 
@@ -346,7 +322,7 @@ int PathTraceWorkTiled::get_num_active_paths()
   IntegratorPathQueue *path_queue = integrator_path_queue_.data();
 
   int num_paths = 0;
-  for (int i = 0; i < INTEGRATOR_KERNEL_NUM; i++) {
+  for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
     num_paths += path_queue->num_queued[i];
   }
 

@@ -23,31 +23,31 @@ CCL_NAMESPACE_BEGIN
 const char *device_kernel_as_string(DeviceKernel kernel)
 {
   switch (kernel) {
-    case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
       return "integrator_init_from_camera";
-    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
       return "integrator_intersect_closest";
-    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
       return "integrator_intersect_shadow";
-    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
       return "integrator_intersect_subsurface";
-    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
       return "integrator_shade_background";
-    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
       return "integrator_shade_shadow";
-    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
       return "integrator_shade_surface";
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
       return "integrator_shade_volume";
-    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
+    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
       return "integrator_megakernel";
-    case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
       return "integrator_queued_paths_array";
-    case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
       return "integrator_queued_shadow_paths_array";
-    case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
       return "integrator_terminated_paths_array";
-    case DeviceKernel::NUM_KERNELS:
+    case DEVICE_KERNEL_NUM:
       break;
   };
   LOG(FATAL) << "Unhandled kernel " << static_cast<int>(kernel) << ", should never happen.";

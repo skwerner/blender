@@ -91,10 +91,14 @@ bool WorkScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size
   work_tile.w = min(work_tile.w, image_size_px_.x - work_tile.x);
   work_tile.h = min(work_tile.h, image_size_px_.y - work_tile.y);
 
-  assert(max_work_size <= max_num_path_states_);
+  DCHECK_LT(max_work_size, max_num_path_states_);
   if (max_work_size && work_tile.w * work_tile.h * work_tile.num_samples > max_work_size) {
-    /* TODO: decrementing the counter is not great, means another device might
-     * think the work is done and leave all work to this device. */
+    /* The work did not fit into the requested limit of the work size. Unchedule" the tile,
+     * allowing others (or ourselves later one) to pick it up.
+     *
+     * TODO: Such temporary decrement is not ideal, since it might lead to situation when another
+     * device sees there is nothing to be done, finishing its work and leaving all work to be
+     * done by us. */
     atomic_fetch_and_add_int32(&next_work_index_, -1);
     return false;
   }

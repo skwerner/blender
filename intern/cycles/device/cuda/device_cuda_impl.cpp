@@ -2355,16 +2355,9 @@ void CUDADevice::task_cancel()
   task_pool.cancel();
 }
 
-unique_ptr<DeviceQueue> CUDADevice::queue_create_integrator(RenderBuffers *render_buffers)
+unique_ptr<DeviceQueue> CUDADevice::queue_create()
 {
-  DCHECK_EQ(render_buffers->buffer.device, this);
-
-  return make_unique<CUDAIntegratorQueue>(this, render_buffers);
-}
-
-int CUDADevice::get_concurrent_integrator_queues_num()
-{
-  return 1;
+  return make_unique<CUDADeviceQueue>(this);
 }
 
 CCL_NAMESPACE_END

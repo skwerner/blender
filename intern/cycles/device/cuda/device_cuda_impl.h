@@ -265,9 +265,7 @@ class CUDADevice : public Device {
 
   virtual void task_cancel() override;
 
-  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *render_buffers) override;
-
-  virtual int get_concurrent_integrator_queues_num() override;
+  virtual unique_ptr<DeviceQueue> queue_create() override;
 };
 
 CCL_NAMESPACE_END

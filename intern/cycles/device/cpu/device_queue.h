@@ -40,44 +40,25 @@ class CPUDeviceQueue : public DeviceQueue {
 
   virtual void init_execution() override;
 
+  virtual bool enqueue(DeviceKernel kernel, const int work_size, void *args[]) override;
+
+  virtual bool synchronize() override;
+
   inline CPUDevice *get_cpu_device() const
   {
     return static_cast<CPUDevice *>(device);
   }
 
  protected:
-  /* Copy of kernel globals which is suitable for concurrent access from multiple queues.
+  /* CPU kernels. */
+  const CPUKernels &kernels_;
+
+  /* Copy of kernel globals which is suitable for concurrent access from multiple threads.
    *
-   * More specifically, the `kernel_globals_` is local to this queue and nobody else is
+   * More specifically, the `kernel_globals_` is local to each threads and nobody else is
    * accessing it, but some "localization" is required to decouple from kernel globals stored
    * on the device level. */
-  CPUKernelThreadGlobals kernel_globals_;
-
-  /* Optimization flag to avoid re-initialization of the copy of the kernel globals. */
-  bool need_copy_kernel_globals_ = true;
-};
-
-class CPUIntegratorQueue : public CPUDeviceQueue {
- public:
-  CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_buffers);
-
-  virtual void enqueue(DeviceKernel kernel) override;
-
-  virtual void enqueue_work_tiles(DeviceKernel kernel,
-                                  const KernelWorkTile work_tiles[],
-                                  const int num_work_tiles) override;
-
-  virtual int get_num_active_paths() override;
-
-  virtual int get_max_num_paths() override;
-
- protected:
-  RenderBuffers *render_buffers_;
-
-  /* TODO(sergey): Make integrator state somehow more explicit and more dependent on the number
-   * of threads, or number of splits in the kernels.
-   * For the quick debug keep it at 1, but it really needs to be changed soon. */
-  IntegratorState integrator_state_;
+  vector<CPUKernelThreadGlobals> kernel_thread_globals_;
 };
 
 CCL_NAMESPACE_END

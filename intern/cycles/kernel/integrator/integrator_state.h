@@ -44,6 +44,8 @@
  * Can solve it with more macros if we encouter it, but rather ugly so postpone for now.
  */
 
+#include "util/util_types.h"
+
 #pragma once
 
 CCL_NAMESPACE_BEGIN

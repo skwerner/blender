@@ -16,9 +16,15 @@
 
 #pragma once
 
+#include "kernel/integrator/integrator_path_state.h"
+#include "kernel/integrator/integrator_state.h"
+
+#include "device/device_memory.h"
 #include "device/device_queue.h"
+
 #include "integrator/path_trace_work.h"
 #include "integrator/work_scheduler.h"
+
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
@@ -39,16 +45,48 @@ class PathTraceWorkTiled : public PathTraceWork {
                               int samples_num) override;
 
  protected:
+  void enqueue(DeviceKernel kernel);
+
+  void enqueue_work_tiles(DeviceKernel kernel,
+                          const KernelWorkTile work_tiles[],
+                          const int num_work_tiles);
+
+  int get_num_active_paths();
+
+  int get_max_num_paths();
+
+  void compute_queued_paths(DeviceKernel kernel, int queued_kernel);
+
   /* This is a worker thread's "run" function which polls for a work to be rendered and renders
    * the work. */
-  void render_samples_full_pipeline(DeviceQueue *queue);
+  void render_samples_full_pipeline();
 
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */
-  vector<unique_ptr<DeviceQueue>> integrator_queues_;
+  unique_ptr<DeviceQueue> queue_;
 
   /* Scheduler which gives work to path tracing threads. */
   WorkScheduler work_scheduler_;
+
+  /* Output render buffer. */
+  RenderBuffers *render_buffers_;
+
+  /* Integrate state for paths. */
+  device_only_memory<IntegratorState> integrator_state_;
+  /* Keep track of number of queued kernels. */
+  device_vector<IntegratorPathQueue> integrator_path_queue_;
+
+  /* Temporary buffer to get an array of queued path for a particular kernel. */
+  device_vector<int> queued_paths_;
+  device_vector<int> num_queued_paths_;
+
+  /* Temporary buffer for passing work tiles to kernel. */
+  device_vector<KernelWorkTile> work_tiles_;
+
+  /* Maximum path index, effective number of paths used may be smaller than
+   * the size of the integrator_state_ buffer so can avoid iterating over the
+   * full buffer. */
+  int max_active_path_index_;
 };
 
 CCL_NAMESPACE_END

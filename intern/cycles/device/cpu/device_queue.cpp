@@ -18,74 +18,66 @@
 
 #include "device/cpu/device_cpu_impl.h"
 #include "device/device.h"
-#include "render/buffers.h"
 #include "util/util_logging.h"
 
 #include "kernel/integrator/integrator_path_state.h"
 
 CCL_NAMESPACE_BEGIN
 
-CPUDeviceQueue::CPUDeviceQueue(CPUDevice *device) : DeviceQueue(device)
+CPUDeviceQueue::CPUDeviceQueue(CPUDevice *device)
+    : DeviceQueue(device), kernels_(get_cpu_device()->kernels)
 {
 }
 
 void CPUDeviceQueue::init_execution()
 {
+  /* Cache per-thread kernel globals. */
   CPUDevice *cpu_device = get_cpu_device();
+  const KernelGlobals &kernel_globals = *(cpu_device->get_cpu_kernel_globals());
+  void *osl_memory = cpu_device->get_cpu_osl_memory();
 
-  /* Load information about textures from data stored in CPUDevice to data available to kernels
-   * via KernelGlobals. */
-  const bool texture_info_changed = cpu_device->load_texture_info();
-
-  /* It is possible that kernel_data changes without texture info change. Such changes needs to
-   * lead to re-initialization of the local copy. Currently it is not very clear how to detect
-   * such changes, so always copy globals to the local copy.
-   *
-   * TODO(sergey): Is not too bad, is same as how it used to work in older versions, but is
-   * something what would be nice to see performance impact of, and change if needed. */
-  const bool is_data_changed = true;
-
-  if (need_copy_kernel_globals_ || texture_info_changed || is_data_changed) {
-    kernel_globals_ = CPUKernelThreadGlobals(cpu_device->kernel_globals, cpu_device->osl_memory());
+  kernel_thread_globals_.clear();
+  for (int i = 0; i < cpu_device->info.cpu_threads; i++) {
+    kernel_thread_globals_.emplace_back(CPUKernelThreadGlobals(kernel_globals, osl_memory));
   }
-
-  need_copy_kernel_globals_ = false;
 }
 
-CPUIntegratorQueue::CPUIntegratorQueue(CPUDevice *device, RenderBuffers *render_buffers)
-    : CPUDeviceQueue(device), render_buffers_(render_buffers)
+bool CPUDeviceQueue::enqueue(DeviceKernel kernel, const int /* work_size */, void * /* args */[])
 {
-  memset(&integrator_state_, 0, sizeof(integrator_state_));
-}
-
-void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
-{
-  CPUDevice *cpu_device = get_cpu_device();
-  const CPUKernels &kernels = cpu_device->kernels;
-
+  /* TODO: does it make sense to implement this for debugging? */
   switch (kernel) {
-    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
-      return kernels.integrator_intersect_closest(&kernel_globals_, &integrator_state_);
-    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
-      return kernels.integrator_intersect_shadow(&kernel_globals_, &integrator_state_);
-    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
-      return kernels.integrator_intersect_subsurface(&kernel_globals_, &integrator_state_);
-    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
-      return kernels.integrator_shade_background(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
-      return kernels.integrator_shade_shadow(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
-      return kernels.integrator_shade_surface(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
-      return kernels.integrator_shade_volume(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
-    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
-      return kernels.integrator_megakernel(
-          &kernel_globals_, &integrator_state_, render_buffers_->buffer.data());
     case DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA:
+#if 0
+      IntegratorState *state = *(IntegratorState **)args[0];
+      const int *path_index_array = *(int **)args[2];
+      const KernelWorkTile *tile = *(KernelWorkTile **)args[3];
+      const int path_index_offset = *(int *)args[4];
+
+      tbb::parallel_for(0, work_size, [&](int work_index) {
+        const int thread_index = tbb::this_task_arena::current_thread_index();
+        DCHECK_GE(thread_index, 0);
+        DCHECK_LE(thread_index, kernel_thread_globals_.size());
+        KernelGlobals &kernel_globals = kernel_thread_globals_[thread_index];
+
+        const int path_index = (path_index_array) ? path_index_array[work_index] :
+                                                    path_index_offset + work_index;
+
+        /* TODO
+        uint x, y, sample;
+        get_work_pixel(tile, work_index, &x, &y, &sample); */
+
+        kernels.integrator_init_from_camera(&kernel_globals, &state[work_index], tile);
+      }
+#endif
+      break;
+    case DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST:
+    case DeviceKernel::INTEGRATOR_INTERSECT_SHADOW:
+    case DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE:
+    case DeviceKernel::INTEGRATOR_SHADE_BACKGROUND:
+    case DeviceKernel::INTEGRATOR_SHADE_SHADOW:
+    case DeviceKernel::INTEGRATOR_SHADE_SURFACE:
+    case DeviceKernel::INTEGRATOR_SHADE_VOLUME:
+    case DeviceKernel::INTEGRATOR_MEGAKERNEL:
     case DeviceKernel::INTEGRATOR_QUEUED_PATHS_ARRAY:
     case DeviceKernel::INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
     case DeviceKernel::INTEGRATOR_TERMINATED_PATHS_ARRAY:
@@ -94,35 +86,12 @@ void CPUIntegratorQueue::enqueue(DeviceKernel kernel)
   }
 
   LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
+  return false;
 }
 
-void CPUIntegratorQueue::enqueue_work_tiles(DeviceKernel kernel,
-                                            const KernelWorkTile work_tiles[],
-                                            const int num_work_tiles)
+bool CPUDeviceQueue::synchronize()
 {
-  assert(kernel == DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA);
-
-  CPUDevice *cpu_device = get_cpu_device();
-  const CPUKernels &kernels = cpu_device->kernels;
-
-  /* TODO: support scheduling multiple tiles and of size bigger than 1x1x1. */
-  assert(num_work_tiles == 1);
-
-  KernelWorkTile work_tile = work_tiles[0];
-  work_tile.buffer = render_buffers_->buffer.data();
-
-  kernels.integrator_init_from_camera(&kernel_globals_, &integrator_state_, &work_tile);
-}
-
-int CPUIntegratorQueue::get_num_active_paths()
-{
-  const IntegratorState *state = &integrator_state_;
-  return (INTEGRATOR_PATH_IS_TERMINATED && INTEGRATOR_SHADOW_PATH_IS_TERMINATED) ? 0 : 1;
-}
-
-int CPUIntegratorQueue::get_max_num_paths()
-{
-  return 1;
+  return true;
 }
 
 CCL_NAMESPACE_END

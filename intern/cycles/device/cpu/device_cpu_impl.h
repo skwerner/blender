@@ -96,8 +96,6 @@ class CPUDevice : public Device {
   void tex_alloc(device_texture &mem);
   void tex_free(device_texture &mem);
 
-  virtual void *osl_memory() override;
-
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
 
   void thread_run(DeviceTask &task);
@@ -174,9 +172,11 @@ class CPUDevice : public Device {
   virtual void task_wait() override;
   virtual void task_cancel() override;
 
-  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *render_buffers) override;
+  virtual unique_ptr<DeviceQueue> queue_create() override;
 
-  virtual int get_concurrent_integrator_queues_num() override;
+  virtual const CPUKernels *get_cpu_kernels() const override;
+  virtual const KernelGlobals *get_cpu_kernel_globals() override;
+  virtual void *get_cpu_osl_memory() override;
 
  protected:
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/) override;

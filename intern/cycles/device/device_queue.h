@@ -41,31 +41,18 @@ class DeviceQueue {
    * Use this method after device synchronization has finished before enqueueing any kernels. */
   virtual void init_execution() = 0;
 
-  /* Enqueue kernel execution. */
-  virtual void enqueue(DeviceKernel kernel) = 0;
+  /* Enqueue kernel execution.
+   *
+   * Execute the kernel work_size times on the device.
+   * Supported arguments types:
+   * - int: pass pointer to the int
+   * - device memory: pass pointer to device_memory.device_pointer
+   * Return false if there was an error executing this or a previous kernel. */
+  virtual bool enqueue(DeviceKernel kernel, const int work_size, void *args[]) = 0;
 
-  /* Enqueue kernel with work tiles, to initialize paths.
-   *
-   * Work tiles indicate the subset of the image buffer the paths will be initialized for.
-   * Multiple tiles may be scheduled at once for more flexible division of the buffer.
-   *
-   * TODO(sergey): See in the future if it's a concept usable for all queues, or whether it is
-   * specific to render queue. */
-  virtual void enqueue_work_tiles(DeviceKernel kernel,
-                                  const KernelWorkTile work_tiles[],
-                                  const int num_work_tiles) = 0;
-
-  /* Get number of active paths in the queue. */
-  virtual int get_num_active_paths() = 0;
-
-  /* Get maximum number of paths which can be held by this queue.
-   *
-   * The number of path is determined by factors like number of threads on the device,
-   * amount of free memory on the device and so on.
-   *
-   * This value is used by an external world to effectively implement scheduling on a
-   * (multi)device. */
-  virtual int get_max_num_paths() = 0;
+  /* Wait unit all enqueued kernels have finished execution.
+   * Return false if there was an error executing any of the enqueued kernels. */
+  virtual bool synchronize() = 0;
 
   /* Device this queue has been created for. */
   Device *device;

@@ -113,7 +113,7 @@ void OSLShaderManager::device_update(Device *device,
   scene->image_manager->set_osl_texture_system((void *)ts);
 
   /* create shaders */
-  OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  OSLGlobals *og = (OSLGlobals *)device->get_cpu_osl_memory();
   Shader *background_shader = scene->background->get_shader(scene);
 
   foreach (Shader *shader, scene->shaders) {
@@ -174,7 +174,7 @@ void OSLShaderManager::device_update(Device *device,
 
 void OSLShaderManager::device_free(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  OSLGlobals *og = (OSLGlobals *)device->get_cpu_osl_memory();
 
   device_free_common(device, dscene, scene);
 

@@ -16,8 +16,11 @@
 
 #include "integrator/path_trace_work_pixel.h"
 
+#include "device/cpu/kernel.h"
 #include "device/device.h"
+
 #include "render/buffers.h"
+
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
 
@@ -27,24 +30,21 @@ PathTraceWorkPixel::PathTraceWorkPixel(Device *render_device,
                                        RenderBuffers *buffers,
                                        bool *cancel_requested_flag)
     : PathTraceWork(render_device, buffers, cancel_requested_flag),
-      use_thread_index_queue_(render_device->info.type == DEVICE_CPU)
+      kernels_(*(render_device->get_cpu_kernels())),
+      render_buffers_(buffers)
 {
-  const int num_queues = render_device->get_concurrent_integrator_queues_num();
-  for (int i = 0; i < num_queues; ++i) {
-    integrator_queues_.emplace_back(render_device->queue_create_integrator(buffers_));
-  }
-
-  /* For the GPU rendering we ecpect a single path state.
-   * Otherwise it will be very tricky to know which path state is to be used for rendering. */
-  if (!use_thread_index_queue_) {
-    DCHECK_EQ(num_queues, 1);
-  }
+  DCHECK_EQ(render_device->info.type, DEVICE_CPU);
 }
 
 void PathTraceWorkPixel::init_execution()
 {
-  for (auto &&queue : integrator_queues_) {
-    queue->init_execution();
+  /* Cache per-thread kernel globals. */
+  const KernelGlobals &kernel_globals = *(render_device_->get_cpu_kernel_globals());
+  void *osl_memory = render_device_->get_cpu_osl_memory();
+
+  kernel_thread_globals_.clear();
+  for (int i = 0; i < render_device_->info.cpu_threads; i++) {
+    kernel_thread_globals_.emplace_back(CPUKernelThreadGlobals(kernel_globals, osl_memory));
   }
 }
 
@@ -59,6 +59,9 @@ void PathTraceWorkPixel::render_samples(const BufferParams &scaled_render_buffer
   int offset, stride;
   scaled_render_buffer_params.get_offset_stride(offset, stride);
 
+  /* TODO: limit this to number of threads of CPU device, it may be smaller than
+   * the system number of threads when we reduce the number of CPU threads in
+   * CPU + GPU rendering to dedicate some cores to handling the GPU device. */
   tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
     if (is_cancel_requested()) {
       return;
@@ -76,59 +79,59 @@ void PathTraceWorkPixel::render_samples(const BufferParams &scaled_render_buffer
     work_tile.num_samples = 1;
     work_tile.offset = offset;
     work_tile.stride = stride;
+    work_tile.buffer = render_buffers_->buffer.data();
 
-    const int queue_index = use_thread_index_queue_ ?
-                                tbb::this_task_arena::current_thread_index() :
-                                0;
-    DCHECK_GE(queue_index, 0);
-    DCHECK_LE(queue_index, integrator_queues_.size());
+    const int thread_index = tbb::this_task_arena::current_thread_index();
+    DCHECK_GE(thread_index, 0);
+    DCHECK_LE(thread_index, kernel_thread_globals_.size());
 
-    render_samples_full_pipeline(integrator_queues_[queue_index].get(), work_tile, samples_num);
+    render_samples_full_pipeline(kernel_thread_globals_[thread_index], work_tile, samples_num);
   });
 }
 
-void PathTraceWorkPixel::render_samples_full_pipeline(DeviceQueue *queue,
+void PathTraceWorkPixel::render_samples_full_pipeline(KernelGlobals &kernel_globals,
                                                       const KernelWorkTile &work_tile,
                                                       const int samples_num)
 {
+  IntegratorState integrator_state;
+  IntegratorState *state = &integrator_state;
+
   KernelWorkTile sample_work_tile = work_tile;
+  float *render_buffer = render_buffers_->buffer.data();
 
   for (int sample = 0; sample < samples_num; ++sample) {
     if (is_cancel_requested()) {
       break;
     }
 
-    queue->enqueue_work_tiles(DeviceKernel::INTEGRATOR_INIT_FROM_CAMERA, &sample_work_tile, 1);
+    kernels_.integrator_init_from_camera(&kernel_globals, state, &sample_work_tile);
 
 #if 0
-    do {
-      /* NOTE: The order of queuing is based on the following ideas:
-       *  - It is possible that some rays will hit background, and and of them will need volume
-       *    attenuation. So first do intersect which allows to see which rays hit background, then
-       *    do volume kernel which might enqueue background work items. After that the background
-       *    kernel will handle work items coming from both intersection and volume kernels.
-       *
-       *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
-       *    intersection kernel is scheduled after work items are scheduled from both surface and
-       *    subsurface kernels. */
+    /* NOTE: The order of queuing is based on the following ideas:
+     *  - It is possible that some rays will hit background, and and of them will need volume
+     *    attenuation. So first do intersect which allows to see which rays hit background,
+     * then do volume kernel which might enqueue background work items. After that the
+     * background kernel will handle work items coming from both intersection and volume
+     * kernels.
+     *
+     *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
+     *    intersection kernel is scheduled after work items are scheduled from both surface and
+     *    subsurface kernels. */
+    while (!INTEGRATOR_PATH_IS_TERMINATED)
+    {
+      kernels_.integrator_intersect_closest(&kernel_globals, state);
+      kernels_.integrator_shade_volume(&kernel_globals, state, render_buffer);
+      kernels_.integrator_shade_background(&kernel_globals, state, render_buffer);
+      kernels_.integrator_shade_surface(&kernel_globals, state, render_buffer);
+      kernels_.integrator_intersect_subsurface(&kernel_globals, state);
 
-      /* TODO(sergey): For the final implementation can do something smarter, like re-generating
-       * camera rays if the wavefront becomes too small but there are still a lot of samples to be
-       * calculated. */
-
-      queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_CLOSEST);
-
-      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_VOLUME);
-      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_BACKGROUND);
-
-      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SURFACE);
-      queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SUBSURFACE);
-
-      queue->enqueue(DeviceKernel::INTEGRATOR_INTERSECT_SHADOW);
-      queue->enqueue(DeviceKernel::INTEGRATOR_SHADE_SHADOW);
-    } while (queue->get_num_active_paths() > 0);
+      while (!INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {
+        kernels_.integrator_intersect_shadow(&kernel_globals, state);
+        kernels_.integrator_shade_shadow(&kernel_globals, state, render_buffer);
+      }
+    }
 #else
-    queue->enqueue(DeviceKernel::INTEGRATOR_MEGAKERNEL);
+    kernels_.integrator_megakernel(&kernel_globals, state, render_buffer);
 #endif
 
     ++sample_work_tile.start_sample;

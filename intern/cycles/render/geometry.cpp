@@ -307,7 +307,7 @@ void GeometryManager::update_osl_attributes(Device *device,
 {
 #ifdef WITH_OSL
   /* for OSL, a hash map is used to lookup the attribute by name. */
-  OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  OSLGlobals *og = (OSLGlobals *)device->get_cpu_osl_memory();
 
   og->object_name_map.clear();
   og->attribute_map.clear();
@@ -2074,7 +2074,7 @@ void GeometryManager::device_free(Device *device, DeviceScene *dscene, bool forc
   dscene->data.bvh.bvh_layout = BVH_LAYOUT_NONE;
 
 #ifdef WITH_OSL
-  OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  OSLGlobals *og = (OSLGlobals *)device->get_cpu_osl_memory();
 
   if (og) {
     og->object_name_map.clear();

@@ -250,12 +250,12 @@ class MultiDevice : public Device {
     }
   }
 
-  virtual void *osl_memory() override
+  virtual void *get_cpu_osl_memory() override
   {
     if (devices.size() > 1) {
       return NULL;
     }
-    return devices.front().device->osl_memory();
+    return devices.front().device->get_cpu_osl_memory();
   }
 
   bool is_resident(device_ptr key, Device *sub_device) override
@@ -765,7 +765,7 @@ class MultiDevice : public Device {
       sub.device->task_cancel();
   }
 
-  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers * /*buffers*/) override
+  virtual unique_ptr<DeviceQueue> queue_create() override
   {
     /* It is at a best very tricky to have a single `DeviceQueue` API for a multi-device as the
      * devices are likely to run out of sync very quickly. At least this is a motivation at this
@@ -776,11 +776,6 @@ class MultiDevice : public Device {
      * bottlenecks, making work strealing more hard. */
     LOG(FATAL) << "Multi-device is not supposed to be used for queues.";
     return nullptr;
-  }
-
-  virtual int get_concurrent_integrator_queues_num() override
-  {
-    return 0;
   }
 
   virtual void foreach_device(function<void(Device *)> callback) override

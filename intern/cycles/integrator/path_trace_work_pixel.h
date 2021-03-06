@@ -16,16 +16,24 @@
 
 #pragma once
 
+#include "kernel/integrator/integrator_state.h"
+
+#include "device/cpu/kernel_thread_globals.h"
 #include "device/device_queue.h"
+
 #include "integrator/path_trace_work.h"
+
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
 struct KernelWorkTile;
+struct KernelGlobals;
 
-/* Implementation of PathTraceWork which schedules work on to queues pixel-by-pixel.
- * This implementation suits best for the CPU device.
+class CPUKernels;
+
+/* Implementation of PathTraceWork which schedules work on to queues pixel-by-pixel,
+ * for CPU devices.
  *
  * NOTE: For the CPU rendering there are assumptions about TBB arena size and number of concurrent
  * queues on the render device which makes this work be only usable on CPU. */
@@ -40,22 +48,23 @@ class PathTraceWorkPixel : public PathTraceWork {
                               int samples_num) override;
 
  protected:
-  /* This is a worker thread's "run" function which polls for a work to be rendered and renders
-   * the work. */
-  void render_samples_full_pipeline(DeviceQueue *queue);
-
   /* Core path tracing routine. Renders given work time on the given queue. */
-  void render_samples_full_pipeline(DeviceQueue *queue,
+  void render_samples_full_pipeline(KernelGlobals &kernel_globals,
                                     const KernelWorkTile &work_tile,
                                     const int samples_num);
 
-  /* Integrator queues.
-   * There are as many of queues as the concurrent queues the device supports. */
-  vector<unique_ptr<DeviceQueue>> integrator_queues_;
+  /* CPU kernels. */
+  const CPUKernels &kernels_;
 
-  /* Use queue which corresponds to a current thread index within the arena.
-   * Used for CPU rendering where threads need to have a way to know which queue to use. */
-  bool use_thread_index_queue_ = false;
+  /* Copy of kernel globals which is suitable for concurrent access from multiple threads.
+   *
+   * More specifically, the `kernel_globals_` is local to each threads and nobody else is
+   * accessing it, but some "localization" is required to decouple from kernel globals stored
+   * on the device level. */
+  vector<CPUKernelThreadGlobals> kernel_thread_globals_;
+
+  /* Render output buffers. */
+  RenderBuffers *render_buffers_;
 };
 
 CCL_NAMESPACE_END

@@ -41,6 +41,8 @@ class DeviceQueue;
 class Progress;
 class RenderTile;
 class RenderBuffers;
+class CPUKernels;
+struct KernelGlobals;
 
 /* Device Types */
 
@@ -361,12 +363,6 @@ class Device {
   /* constant memory */
   virtual void const_copy_to(const char *name, void *host, size_t size) = 0;
 
-  /* open shading language, only for CPU device */
-  virtual void *osl_memory()
-  {
-    return NULL;
-  }
-
   /* load/compile kernels, must be called before adding tasks */
   virtual bool load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
   {
@@ -385,23 +381,30 @@ class Device {
 
   /* Queues. */
 
-  /* Create new queue for integrator kernels.
-   *
-   * The integration will happen into the given render buffer. This render buffer is owned by a
-   * path tracer, and is shared across possible multiple queues created for this device. The queue
-   * will write to the pixels of this buffer which are pointed by the work tile.
-   *
-   * The render buffer is supposed to be allocated for this device.
+  /* Create new queue for executing kernels in.
    *
    * NOTE: Do not use it for multi-device and instead use per-device queues. Makes it more explicit
    * all the synchronization and work stealing logic. It will LOG(FATAL) when used on multi-device.
    */
-  virtual unique_ptr<DeviceQueue> queue_create_integrator(RenderBuffers *buffers) = 0;
+  virtual unique_ptr<DeviceQueue> queue_create() = 0;
 
-  /* Get number of concurrent integrator queues supported on this device.
-   * Path tracer will create this many queues for this device and run them in parallel from
-   * different threads. */
-  virtual int get_concurrent_integrator_queues_num() = 0;
+  /* CPU device only functions. */
+
+  /* Get CPU kernel functions for native instruction set. */
+  virtual const CPUKernels *get_cpu_kernels() const
+  {
+    return NULL;
+  }
+  /* Get kernel globals to pass to kernels. */
+  virtual const KernelGlobals *get_cpu_kernel_globals()
+  {
+    return NULL;
+  }
+  /* Get OpenShadingLanguage memory buffer. */
+  virtual void *get_cpu_osl_memory()
+  {
+    return NULL;
+  }
 
   /* opengl drawing */
   virtual void draw_pixels(device_memory &mem,

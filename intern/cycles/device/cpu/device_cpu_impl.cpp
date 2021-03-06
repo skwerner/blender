@@ -286,15 +286,6 @@ void CPUDevice::tex_free(device_texture &mem)
   }
 }
 
-void *CPUDevice::osl_memory()
-{
-#ifdef WITH_OSL
-  return &osl_globals;
-#else
-  return NULL;
-#endif
-}
-
 void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 {
 #ifdef WITH_EMBREE
@@ -999,7 +990,7 @@ void CPUDevice::thread_render(DeviceTask &task)
   }
 
   /* allocate buffer for kernel globals */
-  CPUKernelThreadGlobals kg(kernel_globals, osl_memory());
+  CPUKernelThreadGlobals kg(kernel_globals, get_cpu_osl_memory());
 
   profiler.add_state(&kg.profiler);
 
@@ -1122,7 +1113,7 @@ void CPUDevice::thread_film_convert(DeviceTask &task)
 
 void CPUDevice::thread_shader(DeviceTask &task)
 {
-  CPUKernelThreadGlobals kg(kernel_globals, osl_memory());
+  CPUKernelThreadGlobals kg(kernel_globals, get_cpu_osl_memory());
 
   for (int sample = 0; sample < task.num_samples; sample++) {
     for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
@@ -1188,16 +1179,30 @@ void CPUDevice::task_cancel()
   task_pool.cancel();
 }
 
-unique_ptr<DeviceQueue> CPUDevice::queue_create_integrator(RenderBuffers *render_buffers)
+unique_ptr<DeviceQueue> CPUDevice::queue_create()
 {
-  DCHECK_EQ(render_buffers->buffer.device, this);
-
-  return make_unique<CPUIntegratorQueue>(this, render_buffers);
+  return make_unique<CPUDeviceQueue>(this);
 }
 
-int CPUDevice::get_concurrent_integrator_queues_num()
+const CPUKernels *CPUDevice::get_cpu_kernels() const
 {
-  return info.cpu_threads;
+  return &kernels;
+}
+
+const KernelGlobals *CPUDevice::get_cpu_kernel_globals()
+{
+  /* Ensure latest texture info is loaded into kernel globals before returning. */
+  load_texture_info();
+  return &kernel_globals;
+}
+
+void *CPUDevice::get_cpu_osl_memory()
+{
+#ifdef WITH_OSL
+  return &osl_globals;
+#else
+  return NULL;
+#endif
 }
 
 bool CPUDevice::load_kernels(const DeviceRequestedFeatures & /*requested_features*/)

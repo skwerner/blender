@@ -45,21 +45,19 @@ class PathTraceWorkTiled : public PathTraceWork {
                               int samples_num) override;
 
  protected:
-  void enqueue(DeviceKernel kernel);
-
+  bool enqueue_work_tiles(bool &finished);
   void enqueue_work_tiles(DeviceKernel kernel,
                           const KernelWorkTile work_tiles[],
                           const int num_work_tiles);
 
-  int get_num_active_paths();
-
-  int get_max_num_paths();
+  bool enqueue_path_iteration();
+  void enqueue_path_iteration(DeviceKernel kernel);
 
   void compute_queued_paths(DeviceKernel kernel, int queued_kernel);
 
-  /* This is a worker thread's "run" function which polls for a work to be rendered and renders
-   * the work. */
-  void render_samples_full_pipeline();
+  int get_num_active_paths();
+
+  int get_max_num_paths();
 
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */

@@ -249,7 +249,7 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
       state, num_states, indices, num_indices, [](const IntegratorState &state) {
-        return (state.path.flag == 0);
+        return (state.path.flag == 0 && state.shadow_path.flag == 0);
       });
 }
 

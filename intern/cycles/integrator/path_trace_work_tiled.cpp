@@ -46,6 +46,7 @@ PathTraceWorkTiled::PathTraceWorkTiled(Device *render_device,
 
   integrator_path_queue_.alloc(1);
   integrator_path_queue_.zero_to_device();
+  integrator_path_queue_.copy_from_device();
 }
 
 void PathTraceWorkTiled::init_execution()
@@ -58,142 +59,108 @@ void PathTraceWorkTiled::render_samples(const BufferParams &scaled_render_buffer
                                         int samples_num)
 {
   work_scheduler_.reset(scaled_render_buffer_params, start_sample, samples_num);
-  render_samples_full_pipeline();
-}
 
-void PathTraceWorkTiled::render_samples_full_pipeline()
-{
-  const float megakernel_threshold = 0.1f;
-  const float regenerate_threshold = 0.5f;
-
-  const int max_num_paths = get_max_num_paths();
-  int num_paths = 0;
-
+  /* TODO: set a hard limit in case of undetected kernel failures? */
   while (true) {
-    if (is_cancel_requested()) {
+    /* Enqueue work from the scheduler, on start or when there are not enough
+     * paths to keep the device occupied. */
+    bool finished;
+    if (enqueue_work_tiles(finished)) {
+      if (!queue_->synchronize()) {
+        break; /* Stop on error. */
+      }
+
+      /* Copy stats from the device. */
+      integrator_path_queue_.copy_from_device();
+    }
+
+    /* Stop if no more work remaining. */
+    if (finished) {
       break;
     }
 
-    vector<KernelWorkTile> work_tiles;
-
-    /* Schedule work tiles on start, or during execution to keep the device occupied. */
-    if (num_paths == 0 || num_paths < regenerate_threshold * max_num_paths) {
-      /* Get work tiles until the maximum number of path is reached. */
-      while (num_paths < max_num_paths) {
-        KernelWorkTile work_tile;
-        if (work_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
-          work_tiles.push_back(work_tile);
-          num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
-        }
-        else {
-          break;
-        }
+    /* Enqueue on of the path iteration kernels. */
+    if (enqueue_path_iteration()) {
+      if (!queue_->synchronize()) {
+        break; /* Stop on error. */
       }
 
-      /* If we couldn't get any more tiles, we're done. */
-      if (work_tiles.size() == 0 && num_paths == 0) {
-        break;
-      }
-    }
-
-    /* Initialize paths from work tiles. */
-    if (work_tiles.size()) {
-      enqueue_work_tiles(
-          DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
-      num_paths = get_num_active_paths();
-    }
-
-    /* TODO: unclear if max_num_paths is the right way to measure this. */
-    if (num_paths > megakernel_threshold * max_num_paths) {
-      /* NOTE: The order of queuing is based on the following ideas:
-       *  - It is possible that some rays will hit background, and and of them will need volume
-       *    attenuation. So first do intersect which allows to see which rays hit background, then
-       *    do volume kernel which might enqueue background work items. After that the background
-       *    kernel will handle work items coming from both intersection and volume kernels.
-       *
-       *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
-       *    intersection kernel is scheduled after work items are scheduled from both surface and
-       *    subsurface kernels. */
-      enqueue(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
-
-      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME);
-      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
-
-      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE);
-      enqueue(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
-
-      enqueue(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
-      enqueue(DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
-
-      num_paths = get_num_active_paths();
-    }
-    else if (num_paths > 0) {
-      /* Megakernel to finish all remaining paths. */
-      /* TODO: limit number of iterations to keep GPU responsive? */
-      enqueue(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);
-      num_paths = get_num_active_paths();
-      assert(num_paths == 0);
+      /* Copy stats from the device. */
+      integrator_path_queue_.copy_from_device();
     }
   }
 }
 
-void PathTraceWorkTiled::compute_queued_paths(DeviceKernel kernel, int queued_kernel)
+bool PathTraceWorkTiled::enqueue_path_iteration()
 {
-  /* Launch kernel to count the number of active paths. */
-  /* TODO: this could be smaller for terminated paths based on amount of work we want
-   * to schedule. */
-  const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
-                            get_max_num_paths() :
-                            max_active_path_index_;
+  const float megakernel_threshold = 0.1f;
+  const int max_num_paths = get_max_num_paths();
 
-  if (num_queued_paths_.size() < 1) {
-    num_queued_paths_.alloc(1);
+  /* Find kernel to execute, with max number of queued paths. */
+  IntegratorPathQueue *path_queue = integrator_path_queue_.data();
+
+  int num_paths = 0;
+  int max_num_queued = 0;
+  DeviceKernel kernel = DEVICE_KERNEL_INTEGRATOR_NUM;
+
+  for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
+    num_paths += path_queue->num_queued[i];
+
+    if (path_queue->num_queued[i] > max_num_queued) {
+      kernel = (DeviceKernel)i;
+      max_num_queued = path_queue->num_queued[i];
+    }
   }
-  if (queued_paths_.size() < work_size) {
-    queued_paths_.alloc(work_size);
-    queued_paths_.zero_to_device(); /* TODO: only need to allocate on device. */
+
+  if (max_num_queued == 0) {
+    return false;
   }
 
-  /* TODO: ensure this happens as part of queue stream. */
-  num_queued_paths_.zero_to_device();
+  /* Switch to megakernel once the number of remaining paths is low.
+   * TODO: unclear if max_num_paths is the right way to measure this. */
+  const bool use_megakernel = (num_paths < megakernel_threshold * max_num_paths);
+  if (use_megakernel && (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST &&
+                         num_paths == path_queue->num_queued[kernel])) {
+    enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);
+    return true;
+  }
 
+  /* Finish shadows before potentially adding more shadow rays. We can only
+   * store one shadow ray in the integrator state.
+   * Also finish shadow rays if we want to switch to the megakernel since
+   * all paths need to be at intersect closest to execute it. */
+  if (use_megakernel || kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE ||
+      kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME ||
+      kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE) {
+    if (path_queue->num_queued[DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW]) {
+      enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
+      return true;
+    }
+    else if (path_queue->num_queued[DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW]) {
+      enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
+      return true;
+    }
+  }
+
+  /* Schedule kernel with maximum number of queued items. */
+  enqueue_path_iteration(kernel);
+  return true;
+}
+
+void PathTraceWorkTiled::enqueue_path_iteration(DeviceKernel kernel)
+{
   void *d_integrator_state = (void *)integrator_state_.device_pointer;
-  void *d_queued_paths = (void *)queued_paths_.device_pointer;
-  void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
-  int queued_kernel_flag = 1 << queued_kernel;
-  void *args[] = {&d_integrator_state,
-                  const_cast<int *>(&work_size),
-                  &d_queued_paths,
-                  &d_num_queued_paths,
-                  &queued_kernel_flag};
-
-  queue_->enqueue(kernel, work_size, args);
-}
-
-void PathTraceWorkTiled::enqueue(DeviceKernel kernel)
-{
-  if (!queue_->synchronize()) {
-    return;
-  }
-
-  DeviceKernel queue_kernel = (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) ?
-                                  DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST :
-                                  kernel;
+  void *d_integrator_path_queue = (void *)integrator_path_queue_.device_pointer;
+  void *d_path_index = (void *)NULL;
 
   /* Create array of path indices for which this kernel is queued to be executed. */
   int work_size = max_active_path_index_;
 
-  integrator_path_queue_.copy_from_device();
+  DeviceKernel queue_kernel = (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) ?
+                                  DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST :
+                                  kernel;
   IntegratorPathQueue *path_queue = integrator_path_queue_.data();
   const int num_queued = path_queue->num_queued[queue_kernel];
-
-  if (num_queued == 0) {
-    return;
-  }
-
-  void *d_integrator_state = (void *)integrator_state_.device_pointer;
-  void *d_integrator_path_queue = (void *)integrator_path_queue_.device_pointer;
-  void *d_path_index = (void *)NULL;
 
   if (num_queued < work_size) {
     work_size = num_queued;
@@ -245,6 +212,93 @@ void PathTraceWorkTiled::enqueue(DeviceKernel kernel)
       break;
     }
   }
+}
+
+void PathTraceWorkTiled::compute_queued_paths(DeviceKernel kernel, int queued_kernel)
+{
+  /* Launch kernel to count the number of active paths. */
+  /* TODO: this could be smaller for terminated paths based on amount of work we want
+   * to schedule. */
+  const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
+                            get_max_num_paths() :
+                            max_active_path_index_;
+
+  if (num_queued_paths_.size() < 1) {
+    num_queued_paths_.alloc(1);
+  }
+  if (queued_paths_.size() < work_size) {
+    queued_paths_.alloc(work_size);
+    queued_paths_.zero_to_device(); /* TODO: only need to allocate on device. */
+  }
+
+  /* TODO: ensure this happens as part of queue stream. */
+  num_queued_paths_.zero_to_device();
+
+  void *d_integrator_state = (void *)integrator_state_.device_pointer;
+  void *d_queued_paths = (void *)queued_paths_.device_pointer;
+  void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
+  int queued_kernel_flag = 1 << queued_kernel;
+  void *args[] = {&d_integrator_state,
+                  const_cast<int *>(&work_size),
+                  &d_queued_paths,
+                  &d_num_queued_paths,
+                  &queued_kernel_flag};
+
+  queue_->enqueue(kernel, work_size, args);
+}
+
+bool PathTraceWorkTiled::enqueue_work_tiles(bool &finished)
+{
+  const float regenerate_threshold = 0.5f;
+  const int max_num_paths = get_max_num_paths();
+  int num_paths = get_num_active_paths();
+
+  if (num_paths == 0) {
+    max_active_path_index_ = 0;
+  }
+
+  /* Don't schedule more work if cancelling. */
+  if (is_cancel_requested()) {
+    if (num_paths == 0) {
+      finished = true;
+    }
+    return false;
+  }
+
+  finished = false;
+
+  vector<KernelWorkTile> work_tiles;
+
+  /* Schedule when we're out of paths or there are too few paths to keep the
+   * device occupied. */
+  if (num_paths == 0 || num_paths < regenerate_threshold * max_num_paths) {
+    /* Get work tiles until the maximum number of path is reached. */
+    while (num_paths < max_num_paths) {
+      KernelWorkTile work_tile;
+      if (work_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
+        work_tiles.push_back(work_tile);
+        num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
+      }
+      else {
+        break;
+      }
+    }
+
+    /* If we couldn't get any more tiles, we're done. */
+    if (work_tiles.size() == 0 && num_paths == 0) {
+      finished = true;
+      return false;
+    }
+  }
+
+  /* Initialize paths from work tiles. */
+  if (work_tiles.size() == 0) {
+    return false;
+  }
+
+  enqueue_work_tiles(
+      DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
+  return true;
 }
 
 void PathTraceWorkTiled::enqueue_work_tiles(DeviceKernel kernel,
@@ -307,27 +361,17 @@ void PathTraceWorkTiled::enqueue_work_tiles(DeviceKernel kernel,
   }
 
   /* TODO: this could be computed more accurately using on the last entry
-   * in the queued_paths array passed to the kernel. ?. */
+   * in the queued_paths array passed to the kernel? */
   max_active_path_index_ = min(max_active_path_index_ + num_paths, get_max_num_paths());
 }
 
 int PathTraceWorkTiled::get_num_active_paths()
 {
-  /* TODO: set a hard limit in case of undetected kernel failures? */
-  if (!queue_->synchronize()) {
-    return 0;
-  }
-
-  integrator_path_queue_.copy_from_device();
   IntegratorPathQueue *path_queue = integrator_path_queue_.data();
 
   int num_paths = 0;
   for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
     num_paths += path_queue->num_queued[i];
-  }
-
-  if (num_paths == 0) {
-    max_active_path_index_ = 0;
   }
 
   return num_paths;

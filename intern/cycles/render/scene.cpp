@@ -517,6 +517,9 @@ bool Scene::update(Progress &progress)
       kintegrator->max_closures = MAX_CLOSURE;
     }
 
+    /* Load render kernels, before device update where we upload data to the GPU. */
+    load_kernels(progress, false);
+
     progress.set_status("Updating Scene");
     MEM_GUARDED_CALL(&progress, device_update, device, progress);
 

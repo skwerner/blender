@@ -49,6 +49,8 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
     return;
   }
   else if (scatter) {
+    /* TODO: handle path termination like intersect closest. */
+
     /* Sample phase function and go back to intersect_closest kernel. */
     INTEGRATOR_STATE_WRITE(ray, P) = zero_float3();
     INTEGRATOR_STATE_WRITE(ray, D) = make_float3(0.0f, 0.0f, 1.0f);

@@ -323,10 +323,6 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 
 {
-  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    return false;
-  }
-
   /* Setup shader data. */
   ShaderData sd;
   integrate_surface_shader_setup(INTEGRATOR_STATE_PASS, &sd);
@@ -376,21 +372,14 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   RNGState rng_state;
   path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
 
-  /* Path termination. this is a strange place to put the termination, it's
-   * mainly due to the mixed in MIS that we use. gives too many unneeded
-   * shader evaluations, only need emission if we are going to terminate. */
+  /* Perform path termination. Most paths have already been terminated in
+   * the intersect_closest kernel, this is just for emission and for dividing
+   * throughput by the probability at the right moment. */
   const float probability = path_state_continuation_probability(INTEGRATOR_STATE_PASS);
-
   if (probability == 0.0f) {
     return false;
   }
   else if (probability != 1.0f) {
-    const float terminate = path_state_rng_1D(kg, &rng_state, PRNG_TERMINATE);
-
-    if (terminate >= probability) {
-      return false;
-    }
-
     INTEGRATOR_STATE_WRITE(path, throughput) /= probability;
   }
 

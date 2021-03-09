@@ -121,7 +121,6 @@ set(SRC_HEADERS
   kernel_path_volume.h
   kernel_profiling.h
   kernel_projection.h
-  kernel_queues.h
   kernel_random.h
   kernel_shader.h
   kernel_shadow.h

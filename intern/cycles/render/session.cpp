@@ -76,7 +76,6 @@ Session::Session(const SessionParams &params_)
   gpu_need_display_buffer_update = false;
   pause = false;
 
-  buffers = NULL;
   display = NULL;
 
   /* Validate denoising parameters. */
@@ -92,7 +91,6 @@ Session::Session(const SessionParams &params_)
 
   /* Create buffers for interactive rendering. */
   if (!(params.background && !params.write_render_cb)) {
-    buffers = new RenderBuffers(device);
     display = new DisplayBuffer(device, params.display_buffer_linear);
   }
 
@@ -147,6 +145,9 @@ Session::~Session()
 {
   cancel();
 
+  /* TODO(sergey): Bring the passes in viewport back.
+   * It is unclear why there is such an exception needed though. */
+#if 0
   if (buffers && params.write_render_cb) {
     /* Copy to display buffer and write out image if requested */
     delete display;
@@ -160,6 +161,7 @@ Session::~Session()
     uchar4 *pixels = display->rgba_byte.copy_from_device(0, w, h);
     params.write_render_cb((uchar *)pixels, w, h, 4);
   }
+#endif
 
   /* Make sure path tracer is destroyed before the deviec. This is needed because destruction might
    * need to access device for device memory free. */
@@ -170,7 +172,6 @@ Session::~Session()
   /* clean up */
   tile_manager.device_free();
 
-  delete buffers;
   delete display;
   delete scene;
   delete device;
@@ -962,9 +963,8 @@ void Session::reset_(BufferParams &buffer_params, int samples)
 {
   path_trace_->reset(buffer_params);
 
-  if (buffers && buffer_params.modified(tile_manager.params)) {
+  if (buffer_params.modified(tile_manager.params)) {
     gpu_draw_ready = false;
-    buffers->reset(buffer_params);
     if (display) {
       display->reset(buffer_params);
     }
@@ -1048,7 +1048,7 @@ void Session::set_denoising(const DenoiseParams &denoising)
 
   /* Schedule per tile denoising for final renders if we are either denoising or
    * need prefiltered passes for the native denoiser. */
-  tile_manager.schedule_denoising = need_denoise && !buffers;
+  tile_manager.schedule_denoising = need_denoise && params.background;
 }
 
 void Session::set_denoising_start_sample(int sample)
@@ -1228,7 +1228,7 @@ bool Session::render_need_denoise(bool &delayed)
 
 void Session::render(bool /*need_denoise*/)
 {
-  if (buffers && tile_manager.state.sample == tile_manager.range_start_sample) {
+  if (!params.background && tile_manager.state.sample == tile_manager.range_start_sample) {
     /* Clear buffers. */
     path_trace_->clear_render_buffers();
   }

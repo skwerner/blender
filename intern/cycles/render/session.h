@@ -126,7 +126,6 @@ class Session {
  public:
   Device *device;
   Scene *scene;
-  RenderBuffers *buffers;
   DisplayBuffer *display;
   Progress progress;
   SessionParams params;

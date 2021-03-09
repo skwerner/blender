@@ -282,11 +282,6 @@ void Session::run_gpu()
     /* advance to next tile */
     bool no_tiles = !tile_manager.next();
 
-    DeviceKernelStatus kernel_state = DEVICE_KERNEL_UNKNOWN;
-    if (no_tiles) {
-      kernel_state = device->get_active_kernel_switch_state();
-    }
-
     if (params.background) {
       /* if no work left and in background mode, we can stop immediately */
       if (no_tiles) {
@@ -294,16 +289,6 @@ void Session::run_gpu()
         break;
       }
     }
-
-    /* Don't go in pause mode when image was rendered with preview kernels
-     * When feature kernels become available the session will be reset. */
-    else if (no_tiles && kernel_state == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
-      time_sleep(0.1);
-    }
-    else if (no_tiles && kernel_state == DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE) {
-      reset_gpu(tile_manager.params, params.samples);
-    }
-
     else {
       /* if in interactive mode, and we are either paused or done for now,
        * wait for pause condition notify to wake up again */
@@ -796,11 +781,6 @@ void Session::run_cpu()
     bool no_tiles = !tile_manager.next();
     bool need_copy_to_display_buffer = false;
 
-    DeviceKernelStatus kernel_state = DEVICE_KERNEL_UNKNOWN;
-    if (no_tiles) {
-      kernel_state = device->get_active_kernel_switch_state();
-    }
-
     if (params.background) {
       /* if no work left and in background mode, we can stop immediately */
       if (no_tiles) {
@@ -808,16 +788,6 @@ void Session::run_cpu()
         break;
       }
     }
-
-    /* Don't go in pause mode when preview kernels are used
-     * When feature kernels become available the session will be reset. */
-    else if (no_tiles && kernel_state == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
-      time_sleep(0.1);
-    }
-    else if (no_tiles && kernel_state == DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE) {
-      reset_cpu(tile_manager.params, params.samples);
-    }
-
     else {
       /* if in interactive mode, and we are either paused or done for now,
        * wait for pause condition notify to wake up again */

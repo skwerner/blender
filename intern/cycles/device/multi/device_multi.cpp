@@ -193,45 +193,6 @@ class MultiDevice : public Device {
     return true;
   }
 
-  bool wait_for_availability(const DeviceRequestedFeatures &requested_features) override
-  {
-    foreach (SubDevice &sub, devices)
-      if (!sub.device->wait_for_availability(requested_features))
-        return false;
-
-    if (requested_features.use_denoising) {
-      foreach (SubDevice &sub, denoising_devices)
-        if (!sub.device->wait_for_availability(requested_features))
-          return false;
-    }
-
-    return true;
-  }
-
-  DeviceKernelStatus get_active_kernel_switch_state() override
-  {
-    DeviceKernelStatus result = DEVICE_KERNEL_USING_FEATURE_KERNEL;
-
-    foreach (SubDevice &sub, devices) {
-      DeviceKernelStatus subresult = sub.device->get_active_kernel_switch_state();
-      switch (subresult) {
-        case DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL:
-          result = subresult;
-          break;
-
-        case DEVICE_KERNEL_FEATURE_KERNEL_INVALID:
-        case DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE:
-          return subresult;
-
-        case DEVICE_KERNEL_USING_FEATURE_KERNEL:
-        case DEVICE_KERNEL_UNKNOWN:
-          break;
-      }
-    }
-
-    return result;
-  }
-
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override
   {
     /* Try to build and share a single acceleration structure, if possible */

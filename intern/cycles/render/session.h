@@ -242,6 +242,10 @@ class Session {
    * Is a single full-frame path tracer for interactive viewport rendering.
    * A path tracer for the current big-tile for an offline rendering. */
   unique_ptr<PathTrace> path_trace_;
+
+  /* Indicates whether a render result was drawn after latest session reset.
+   * Used by `ready_to_reset()` to implement logic which feels the most interactive. */
+  bool did_draw_after_reset_ = false;
 };
 
 CCL_NAMESPACE_END

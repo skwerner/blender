@@ -207,6 +207,26 @@ void Session::cancel()
 
 bool Session::ready_to_reset()
 {
+  /* The logic here tries to provide behavior which feels the most interactive feel to artists.
+   * General idea is to be able to reset as quickly as possible, while still providing interactive
+   * feel.
+   *
+   * If the render result was ever drawn after previous reset, consider that reset is now possible.
+   * This way camera navigation gives the quickest feedback of rendered pixels, regardless of
+   * whether CPU or GPU drawing pipeline is used.
+   *
+   * Consider reset happening after redraw "slow" enough to not clog anything. This is a bit
+   * arbitrary, but seems to work very well with viewport navigation in Blender.
+   *
+   * In addition to displayed pixels use a configurabel timeout. This would allow session reset
+   * in cases when drawing is not happening or is very slow.
+   *
+   * TODO(sergey): Check whether timeout-based reset is useful/needed in practice. */
+
+  if (did_draw_after_reset_) {
+    return true;
+  }
+
   double dt = time_dt() - reset_time;
 
   if (!display_outdated)
@@ -256,6 +276,10 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
         copy_to_display_buffer(tile_manager.state.sample);
         gpu_need_display_buffer_update = false;
         gpu_need_display_buffer_update_cond.notify_all();
+
+        /* NOTE: Only count up-to-date redraws. Otherwise this flag might get cleared by a viewport
+         * redraw which happenned after reset but before path tracer gave new render result. */
+        did_draw_after_reset_ = true;
       }
 
       display->draw(device, draw_params);
@@ -410,6 +434,7 @@ bool Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
     if (buffer_params.width == display->params.width &&
         buffer_params.height == display->params.height) {
       display->draw(device, draw_params);
+      did_draw_after_reset_ = true;
 
       if (display_outdated && (time_dt() - reset_time) > params.text_timeout)
         return false;
@@ -953,6 +978,8 @@ void Session::reset_(BufferParams &buffer_params, int samples)
   if (!params.background)
     progress.set_start_time();
   progress.set_render_start_time();
+
+  did_draw_after_reset_ = false;
 }
 
 void Session::reset(BufferParams &buffer_params, int samples)

@@ -397,7 +397,7 @@ mark_as_advanced(WITH_CYCLES_LOGGING)
 mark_as_advanced(WITH_CYCLES_DEBUG)
 mark_as_advanced(WITH_CYCLES_NATIVE_ONLY)
 
-option(WITH_CYCLES_DEVICE_CUDA              "Enable Cycles CUDA compute support" OFF)
+option(WITH_CYCLES_DEVICE_CUDA              "Enable Cycles CUDA compute support" ON)
 option(WITH_CYCLES_DEVICE_OPTIX             "Enable Cycles OptiX support" OFF)
 option(WITH_CYCLES_DEVICE_OPENCL            "Enable Cycles OpenCL compute support" OFF)
 mark_as_advanced(WITH_CYCLES_DEVICE_CUDA)

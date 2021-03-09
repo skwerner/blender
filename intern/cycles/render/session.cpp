@@ -435,6 +435,7 @@ bool Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
   return false;
 }
 
+#if 0
 bool Session::steal_tile(RenderTile &rtile, Device *tile_device, thread_scoped_lock &tile_lock)
 {
   /* Devices that can get their tiles stolen don't steal tiles themselves.
@@ -772,6 +773,7 @@ void Session::unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_
   thread_scoped_lock tile_lock(tile_mutex);
   device->unmap_neighbor_tiles(tile_device, neighbors);
 }
+#endif
 
 void Session::run_cpu()
 {
@@ -969,8 +971,10 @@ void Session::reset_(BufferParams &buffer_params, int samples)
   }
 
   tile_manager.reset(buffer_params, samples);
+#if 0
   stealable_tiles = 0;
   tile_stealing_state = NOT_STEALING;
+#endif
   progress.reset_sample();
 
   bool show_progress = params.background || tile_manager.get_num_effective_samples() != INT_MAX;

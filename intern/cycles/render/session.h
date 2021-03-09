@@ -190,6 +190,7 @@ class Session {
 
   bool render_need_denoise(bool &delayed);
 
+#if 0
   bool steal_tile(RenderTile &tile, Device *tile_device, thread_scoped_lock &tile_lock);
   bool get_tile_stolen();
   bool acquire_tile(RenderTile &tile, Device *tile_device, uint tile_types);
@@ -198,6 +199,7 @@ class Session {
 
   void map_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
   void unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
+#endif
 
   bool device_use_gl;
 
@@ -215,13 +217,16 @@ class Session {
   thread_mutex tile_mutex;
   thread_mutex buffers_mutex;
   thread_mutex display_mutex;
+#if 0
   thread_condition_variable denoising_cond;
   thread_condition_variable tile_steal_cond;
+#endif
 
   double reset_time;
   double last_update_time;
   double last_display_time;
 
+#if 0
   RenderTile stolen_tile;
   typedef enum {
     NOT_STEALING,     /* There currently is no tile stealing in progress. */
@@ -231,6 +236,7 @@ class Session {
   } TileStealingState;
   std::atomic<TileStealingState> tile_stealing_state;
   int stealable_tiles;
+#endif
 
   /* Path tracer object.
    *

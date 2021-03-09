@@ -1571,8 +1571,8 @@ StructRNA *RNA_property_pointer_type(PointerRNA *ptr, PropertyRNA *prop)
   if (prop->type == PROP_POINTER) {
     PointerPropertyRNA *pprop = (PointerPropertyRNA *)prop;
 
-    if (pprop->typef) {
-      return pprop->typef(ptr);
+    if (pprop->type_fn) {
+      return pprop->type_fn(ptr);
     }
     if (pprop->type) {
       return pprop->type;
@@ -1623,14 +1623,14 @@ void RNA_property_enum_items_ex(bContext *C,
 
   *r_free = false;
 
-  if (!use_static && eprop->itemf && (C != NULL || (prop->flag & PROP_ENUM_NO_CONTEXT))) {
+  if (!use_static && eprop->item_fn && (C != NULL || (prop->flag & PROP_ENUM_NO_CONTEXT))) {
     const EnumPropertyItem *item;
 
     if (prop->flag & PROP_ENUM_NO_CONTEXT) {
-      item = eprop->itemf(NULL, ptr, prop, r_free);
+      item = eprop->item_fn(NULL, ptr, prop, r_free);
     }
     else {
-      item = eprop->itemf(C, ptr, prop, r_free);
+      item = eprop->item_fn(C, ptr, prop, r_free);
     }
 
     /* any callbacks returning NULL should be fixed */
@@ -1753,16 +1753,16 @@ void RNA_property_enum_items_gettexted_all(bContext *C,
     *r_totitem = eprop->totitem;
   }
 
-  if (eprop->itemf && (C != NULL || (prop->flag & PROP_ENUM_NO_CONTEXT))) {
+  if (eprop->item_fn && (C != NULL || (prop->flag & PROP_ENUM_NO_CONTEXT))) {
     const EnumPropertyItem *item;
     int i;
     bool free = false;
 
     if (prop->flag & PROP_ENUM_NO_CONTEXT) {
-      item = eprop->itemf(NULL, ptr, prop, &free);
+      item = eprop->item_fn(NULL, ptr, prop, &free);
     }
     else {
-      item = eprop->itemf(C, ptr, prop, &free);
+      item = eprop->item_fn(C, ptr, prop, &free);
     }
 
     /* any callbacks returning NULL should be fixed */
@@ -3662,8 +3662,8 @@ PointerRNA RNA_property_pointer_get(PointerRNA *ptr, PropertyRNA *prop)
     }
 
     /* for groups, data is idprop itself */
-    if (pprop->typef) {
-      return rna_pointer_inherit_refine(ptr, pprop->typef(ptr), idprop);
+    if (pprop->type_fn) {
+      return rna_pointer_inherit_refine(ptr, pprop->type_fn(ptr), idprop);
     }
     return rna_pointer_inherit_refine(ptr, pprop->type, idprop);
   }
@@ -5826,26 +5826,29 @@ ID *RNA_find_real_ID_and_path(Main *bmain, ID *id, const char **r_path)
     *r_path = "";
   }
 
-  if ((id != NULL) && (id->flag & LIB_EMBEDDED_DATA)) {
-    switch (GS(id->name)) {
-      case ID_NT:
-        if (r_path) {
-          *r_path = "node_tree";
-        }
-        return BKE_node_tree_find_owner_ID(bmain, (bNodeTree *)id);
-      case ID_GR:
-        if (r_path) {
-          *r_path = "collection";
-        }
-        return (ID *)BKE_collection_master_scene_search(bmain, (struct Collection *)id);
-
-      default:
-        return NULL;
-    }
-  }
-  else {
+  if ((id == NULL) || (id->flag & LIB_EMBEDDED_DATA) == 0) {
     return id;
   }
+
+  const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(id);
+  if (r_path) {
+    switch (GS(id->name)) {
+      case ID_NT:
+        *r_path = "node_tree";
+        break;
+      case ID_GR:
+        *r_path = "collection";
+        break;
+      default:
+        BLI_assert(!"Missing handling of embedded id type.");
+    }
+  }
+
+  if (id_type->owner_get == NULL) {
+    BLI_assert(!"Missing handling of embedded id type.");
+    return id;
+  }
+  return id_type->owner_get(bmain, id);
 }
 
 static char *rna_prepend_real_ID_path(Main *bmain, ID *id, char *path, ID **r_real_id)

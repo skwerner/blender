@@ -95,6 +95,7 @@ void ED_spacetypes_init(void)
   ED_spacetype_clip();
   ED_spacetype_statusbar();
   ED_spacetype_topbar();
+  ED_spacetype_spreadsheet();
 
   /* Register operator types for screen and all spaces. */
   ED_operatortypes_userpref();
@@ -262,12 +263,25 @@ void ED_region_draw_cb_exit(ARegionType *art, void *handle)
 
 void ED_region_draw_cb_draw(const bContext *C, ARegion *region, int type)
 {
-  LISTBASE_FOREACH (RegionDrawCB *, rdc, &region->type->drawcalls) {
+  LISTBASE_FOREACH_MUTABLE (RegionDrawCB *, rdc, &region->type->drawcalls) {
     if (rdc->type == type) {
       rdc->draw(C, region, rdc->customdata);
 
       /* This is needed until we get rid of BGL which can change the states we are tracking. */
       GPU_bgl_end();
+    }
+  }
+}
+
+void ED_region_draw_cb_remove_by_type(ARegionType *art, void *draw_fn, void (*free)(void *))
+{
+  LISTBASE_FOREACH_MUTABLE (RegionDrawCB *, rdc, &art->drawcalls) {
+    if (rdc->draw == draw_fn) {
+      if (free) {
+        free(rdc->customdata);
+      }
+      BLI_remlink(&art->drawcalls, rdc);
+      MEM_freeN(rdc);
     }
   }
 }

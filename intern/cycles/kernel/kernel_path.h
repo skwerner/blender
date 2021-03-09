@@ -362,7 +362,7 @@ ccl_device void kernel_path_indirect(const KernelGlobals *kg,
 #    ifdef __AO__
         /* ambient occlusion */
         if (kernel_data.integrator.use_ambient_occlusion) {
-          kernel_path_ao(kg, sd, emission_sd, L, state, throughput, make_float3(0.0f, 0.0f, 0.0f));
+          kernel_path_ao(kg, sd, emission_sd, L, state, throughput, zero_float3());
         }
 #    endif /* __AO__ */
 
@@ -577,7 +577,7 @@ ccl_device void kernel_path_trace(const KernelGlobals *kg,
   }
 
   /* Initialize state. */
-  float3 throughput = make_float3(1.0f, 1.0f, 1.0f);
+  float3 throughput = one_float3();
 
   PathRadiance L;
   path_radiance_init(kg, &L);

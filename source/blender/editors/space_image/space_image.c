@@ -54,6 +54,7 @@
 #include "ED_screen.h"
 #include "ED_space_api.h"
 #include "ED_transform.h"
+#include "ED_util.h"
 #include "ED_uvedit.h"
 
 #include "WM_api.h"
@@ -280,7 +281,7 @@ static void image_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Image", SPACE_IMAGE, 0);
 
-  WM_dropbox_add(lb, "IMAGE_OT_open", image_drop_poll, image_drop_copy);
+  WM_dropbox_add(lb, "IMAGE_OT_open", image_drop_poll, image_drop_copy, NULL);
 }
 
 /**

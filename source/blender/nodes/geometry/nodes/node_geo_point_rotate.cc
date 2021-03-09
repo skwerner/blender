@@ -41,8 +41,11 @@ static void geo_node_point_rotate_layout(uiLayout *layout, bContext *UNUSED(C), 
 {
   NodeGeometryRotatePoints *storage = (NodeGeometryRotatePoints *)((bNode *)ptr->data)->storage;
 
-  uiItemR(layout, ptr, "type", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
-  uiItemR(layout, ptr, "space", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "type", UI_ITEM_R_EXPAND, nullptr, ICON_NONE);
+  uiItemR(layout, ptr, "space", UI_ITEM_R_EXPAND, nullptr, ICON_NONE);
+
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
 
   uiLayout *col = uiLayoutColumn(layout, false);
   if (storage->type == GEO_NODE_POINT_ROTATE_TYPE_AXIS_ANGLE) {
@@ -164,6 +167,8 @@ static void point_rotate_on_component(GeometryComponent &component,
 static void geo_node_point_rotate_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     point_rotate_on_component(geometry_set.get_component_for_write<MeshComponent>(), params);

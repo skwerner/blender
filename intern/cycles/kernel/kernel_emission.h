@@ -30,7 +30,7 @@ ccl_device_noinline_cpu float3 light_sample_shader_eval(INTEGRATOR_STATE_ARGS,
                                                         float time)
 {
   /* setup shading at emitter */
-  float3 eval = make_float3(0.0f, 0.0f, 0.0f);
+  float3 eval = zero_float3();
 
   if (shader_constant_emission_eval(kg, ls->shader, &eval)) {
     if ((ls->prim != PRIM_NONE) && dot(ls->Ng, ls->D) > 0.0f) {
@@ -108,13 +108,13 @@ ccl_device_inline bool light_sample_terminate(const KernelGlobals *ccl_restrict 
   /* use visibility flag to skip lights */
   if (ls->shader & SHADER_EXCLUDE_ANY) {
     if (ls->shader & SHADER_EXCLUDE_DIFFUSE)
-      eval->diffuse = make_float3(0.0f, 0.0f, 0.0f);
+      eval->diffuse = zero_float3();
     if (ls->shader & SHADER_EXCLUDE_GLOSSY)
-      eval->glossy = make_float3(0.0f, 0.0f, 0.0f);
+      eval->glossy = zero_float3();
     if (ls->shader & SHADER_EXCLUDE_TRANSMIT)
-      eval->transmission = make_float3(0.0f, 0.0f, 0.0f);
+      eval->transmission = zero_float3();
     if (ls->shader & SHADER_EXCLUDE_SCATTER)
-      eval->volume = make_float3(0.0f, 0.0f, 0.0f);
+      eval->volume = zero_float3();
   }
 #endif
 
@@ -225,7 +225,7 @@ ccl_device_noinline_cpu void indirect_lamp_emission(const KernelGlobals *kg,
       /* shadow attenuation */
       Ray volume_ray = *ray;
       volume_ray.t = ls.t;
-      float3 volume_tp = make_float3(1.0f, 1.0f, 1.0f);
+      float3 volume_tp = one_float3();
       kernel_volume_shadow(kg, emission_sd, state, &volume_ray, &volume_tp);
       lamp_L *= volume_tp;
     }

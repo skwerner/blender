@@ -729,7 +729,7 @@ void NODE_OT_select_box(wmOperatorType *ot)
                   "tweak",
                   0,
                   "Tweak",
-                  "Only activate when mouse is not over a node - useful for tweak gesture");
+                  "Only activate when mouse is not over a node (useful for tweak gesture)");
 
   WM_operator_properties_gesture_box(ot);
   WM_operator_properties_select_operation_simple(ot);
@@ -905,7 +905,7 @@ void NODE_OT_select_lasso(wmOperatorType *ot)
                   "tweak",
                   0,
                   "Tweak",
-                  "Only activate when mouse is not over a node - useful for tweak gesture");
+                  "Only activate when mouse is not over a node (useful for tweak gesture)");
 
   WM_operator_properties_gesture_lasso(ot);
   WM_operator_properties_select_operation_simple(ot);
@@ -1178,7 +1178,8 @@ static void node_find_create_label(const bNode *node, char *str, int maxlen)
 static void node_find_update_fn(const struct bContext *C,
                                 void *UNUSED(arg),
                                 const char *str,
-                                uiSearchItems *items)
+                                uiSearchItems *items,
+                                const bool UNUSED(is_first))
 {
   SpaceNode *snode = CTX_wm_space_node(C);
 

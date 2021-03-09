@@ -42,28 +42,14 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   EEVEE_CommonUniformBuffer *common_data = &sldata->common_data;
   EEVEE_StorageList *stl = vedata->stl;
   EEVEE_FramebufferList *fbl = vedata->fbl;
-  EEVEE_TextureList *txl = vedata->txl;
   EEVEE_EffectsInfo *effects = stl->effects;
   const float *viewport_size = DRW_viewport_size_get();
 
   const DRWContextState *draw_ctx = DRW_context_state_get();
   const Scene *scene_eval = DEG_get_evaluated_scene(draw_ctx->depsgraph);
 
-  /* Compute pixel size, (shared with contact shadows) */
-  copy_v2_v2(common_data->ssr_pixelsize, viewport_size);
-  invert_v2(common_data->ssr_pixelsize);
-
   if (scene_eval->eevee.flag & SCE_EEVEE_SSR_ENABLED) {
     const bool use_refraction = (scene_eval->eevee.flag & SCE_EEVEE_SSR_REFRACTION) != 0;
-
-    if (use_refraction) {
-      /* TODO: Opti: Could be shared. */
-      DRW_texture_ensure_fullscreen_2d(
-          &txl->refract_color, GPU_R11F_G11F_B10F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
-
-      GPU_framebuffer_ensure_config(
-          &fbl->refract_fb, {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE(txl->refract_color)});
-    }
 
     const bool is_persp = DRW_view_is_persp_get(NULL);
     if (effects->ssr_was_persp != is_persp) {
@@ -117,8 +103,7 @@ int EEVEE_screen_raytrace_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
                                    GPU_ATTACHMENT_TEXTURE(effects->ssr_hit_output),
                                    GPU_ATTACHMENT_TEXTURE(effects->ssr_pdf_output)});
 
-    /* Enable double buffering to be able to read previous frame color */
-    return EFFECT_SSR | EFFECT_NORMAL_BUFFER | EFFECT_DOUBLE_BUFFER |
+    return EFFECT_SSR | EFFECT_NORMAL_BUFFER | EFFECT_RADIANCE_BUFFER | EFFECT_DOUBLE_BUFFER |
            ((use_refraction) ? EFFECT_REFRACT : 0);
   }
 
@@ -143,7 +128,6 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
 
   if ((effects->enabled_effects & EFFECT_SSR) != 0) {
     EEVEE_SSRShaderOptions options = (effects->reflection_trace_full) ? SSR_FULL_TRACE : 0;
-    options |= ((effects->enabled_effects & EFFECT_GTAO) != 0) ? SSR_AO : 0;
 
     struct GPUShader *trace_shader = EEVEE_shaders_effect_screen_raytrace_sh_get(options);
     struct GPUShader *resolve_shader = EEVEE_shaders_effect_screen_raytrace_sh_get(SSR_RESOLVE |
@@ -190,17 +174,20 @@ void EEVEE_screen_raytrace_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
     DRW_shgroup_uniform_texture_ref(grp, "planarDepth", &vedata->txl->planar_depth);
     DRW_shgroup_uniform_texture_ref(grp, "hitBuffer", &effects->ssr_hit_output);
     DRW_shgroup_uniform_texture_ref(grp, "pdfBuffer", &effects->ssr_pdf_output);
-    DRW_shgroup_uniform_texture_ref(grp, "prevColorBuffer", &txl->color_double_buffer);
+    DRW_shgroup_uniform_texture_ref(grp, "prevColorBuffer", &txl->filtered_radiance);
+    DRW_shgroup_uniform_texture_ref(grp, "maxzBuffer", &txl->maxzbuffer);
+    DRW_shgroup_uniform_texture_ref(grp, "shadowCubeTexture", &sldata->shadow_cube_pool);
+    DRW_shgroup_uniform_texture_ref(grp, "shadowCascadeTexture", &sldata->shadow_cascade_pool);
+    DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
+    DRW_shgroup_uniform_block(grp, "light_block", sldata->light_ubo);
+    DRW_shgroup_uniform_block(grp, "shadow_block", sldata->shadow_ubo);
     DRW_shgroup_uniform_block(grp, "grid_block", sldata->grid_ubo);
     DRW_shgroup_uniform_block(grp, "probe_block", sldata->probe_ubo);
     DRW_shgroup_uniform_block(grp, "planar_block", sldata->planar_ubo);
     DRW_shgroup_uniform_block(grp, "common_block", sldata->common_ubo);
     DRW_shgroup_uniform_block(grp, "renderpass_block", sldata->renderpass_ubo.combined);
     DRW_shgroup_uniform_int(grp, "neighborOffset", &effects->ssr_neighbor_ofs, 1);
-    if ((effects->enabled_effects & EFFECT_GTAO) != 0) {
-      DRW_shgroup_uniform_texture(grp, "utilTex", EEVEE_materials_get_util_tex());
-      DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->gtao_horizons);
-    }
+    DRW_shgroup_uniform_texture_ref(grp, "horizonBuffer", &effects->gtao_horizons);
 
     DRW_shgroup_call(grp, quad, NULL);
   }
@@ -214,8 +201,7 @@ void EEVEE_refraction_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *v
   EEVEE_EffectsInfo *effects = stl->effects;
 
   if ((effects->enabled_effects & EFFECT_REFRACT) != 0) {
-    GPU_framebuffer_blit(fbl->main_fb, 0, fbl->refract_fb, 0, GPU_COLOR_BIT);
-    EEVEE_downsample_buffer(vedata, txl->refract_color, 9);
+    EEVEE_effects_downsample_radiance_buffer(vedata, txl->color);
 
     /* Restore */
     GPU_framebuffer_bind(fbl->main_fb);
@@ -240,16 +226,16 @@ void EEVEE_reflection_compute(EEVEE_ViewLayerData *UNUSED(sldata), EEVEE_Data *v
     GPU_framebuffer_bind(fbl->screen_tracing_fb);
     DRW_draw_pass(psl->ssr_raytrace);
 
-    EEVEE_downsample_buffer(vedata, txl->color_double_buffer, 9);
+    EEVEE_effects_downsample_radiance_buffer(vedata, txl->color_double_buffer);
 
     /* Resolve at fullres */
-    int sample = (DRW_state_is_image_render()) ? effects->taa_render_sample :
-                                                 effects->taa_current_sample;
+    int samp = (DRW_state_is_image_render()) ? effects->taa_render_sample :
+                                               effects->taa_current_sample;
     /* Doing a neighbor shift only after a few iteration.
      * We wait for a prime number of cycles to avoid noise correlation.
      * This reduces variance faster. */
-    effects->ssr_neighbor_ofs = ((sample / 5) % 8) * 4;
-    switch ((sample / 11) % 4) {
+    effects->ssr_neighbor_ofs = ((samp / 5) % 8) * 4;
+    switch ((samp / 11) % 4) {
       case 0:
         effects->ssr_halfres_ofs[0] = 0;
         effects->ssr_halfres_ofs[1] = 0;

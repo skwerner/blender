@@ -106,7 +106,7 @@ typedef struct uiPopupBlockHandle uiPopupBlockHandle;
 typedef enum eUIEmbossType {
   UI_EMBOSS = 0,          /* use widget style for drawing */
   UI_EMBOSS_NONE = 1,     /* Nothing, only icon and/or text */
-  UI_EMBOSS_PULLDOWN = 2, /* Pulldown menu style */
+  UI_EMBOSS_PULLDOWN = 2, /* Pull-down menu style */
   UI_EMBOSS_RADIAL = 3,   /* Pie Menu */
   /**
    * The same as #UI_EMBOSS_NONE, unless the button has
@@ -166,6 +166,8 @@ enum {
   /** The block is only used during the search process and will not be drawn.
    * Currently just for the case of a closed panel's sub-panel (and its sub-panels). */
   UI_BLOCK_SEARCH_ONLY = 1 << 25,
+  /** Hack for quick setup (splash screen) to draw text centered. */
+  UI_BLOCK_QUICK_SETUP = 1 << 26,
 };
 
 /** #uiPopupBlockHandle.menuretval */
@@ -497,10 +499,14 @@ typedef int (*uiButCompleteFunc)(struct bContext *C, char *str, void *arg);
 typedef struct ARegion *(*uiButSearchCreateFn)(struct bContext *C,
                                                struct ARegion *butregion,
                                                struct uiButSearch *search_but);
+/* `is_first` is typically used to ignore search filtering when the menu is first opened in order
+ * to display the full list of options. The value will be false after the button's text is edited
+ * (for every call except the first). */
 typedef void (*uiButSearchUpdateFn)(const struct bContext *C,
                                     void *arg,
                                     const char *str,
-                                    uiSearchItems *items);
+                                    uiSearchItems *items,
+                                    const bool is_first);
 typedef void (*uiButSearchArgFreeFn)(void *arg);
 typedef bool (*uiButSearchContextMenuFn)(struct bContext *C,
                                          void *arg,
@@ -1411,7 +1417,7 @@ enum {
   UI_TEMPLATE_ID_FILTER_AVAILABLE = 1,
 };
 
-int UI_icon_from_id(struct ID *id);
+int UI_icon_from_id(const struct ID *id);
 int UI_icon_from_report_type(int type);
 int UI_icon_colorid_from_report_type(int type);
 int UI_text_colorid_from_report_type(int type);
@@ -1600,6 +1606,7 @@ void UI_but_func_search_set(uiBut *but,
 void UI_but_func_search_set_context_menu(uiBut *but, uiButSearchContextMenuFn context_menu_fn);
 void UI_but_func_search_set_tooltip(uiBut *but, uiButSearchTooltipFn tooltip_fn);
 void UI_but_func_search_set_sep_string(uiBut *but, const char *search_sep_string);
+void UI_but_func_search_set_results_are_suggestions(uiBut *but, const bool value);
 
 /* height in pixels, it's using hardcoded values still */
 int UI_searchbox_size_y(void);
@@ -2545,6 +2552,7 @@ void UI_template_fix_linking(void);
 /* UI_OT_editsource helpers */
 bool UI_editsource_enable_check(void);
 void UI_editsource_active_but_test(uiBut *but);
+void UI_editsource_but_replace(const uiBut *old_but, uiBut *new_but);
 
 /* UI_butstore_ helpers */
 typedef struct uiButStore uiButStore;

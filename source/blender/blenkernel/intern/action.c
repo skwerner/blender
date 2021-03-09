@@ -303,6 +303,7 @@ IDTypeInfo IDType_ID_AC = {
     .make_local = NULL,
     .foreach_id = action_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = action_blend_write,
     .blend_read_data = action_blend_read_data,
@@ -2001,7 +2002,7 @@ void BKE_pose_blend_read_lib(BlendLibReader *reader, Object *ob, bPose *pose)
 
     IDP_BlendReadLib(reader, pchan->prop);
 
-    BLO_read_id_address(reader, arm->id.lib, &pchan->custom);
+    BLO_read_id_address(reader, ob->id.lib, &pchan->custom);
     if (UNLIKELY(pchan->bone == NULL)) {
       rebuild = true;
     }

@@ -37,11 +37,11 @@ ccl_device_noinline_cpu float3 integrator_eval_background_shader(
         ((shader & SHADER_EXCLUDE_TRANSMIT) && (path_flag & PATH_RAY_TRANSMIT)) ||
         ((shader & SHADER_EXCLUDE_CAMERA) && (path_flag & PATH_RAY_CAMERA)) ||
         ((shader & SHADER_EXCLUDE_SCATTER) && (path_flag & PATH_RAY_VOLUME_SCATTER)))
-      return make_float3(0.0f, 0.0f, 0.0f);
+      return zero_float3();
   }
 
   /* Fast path for constant color shader. */
-  float3 L = make_float3(0.0f, 0.0f, 0.0f);
+  float3 L = zero_float3();
   if (shader_constant_emission_eval(kg, shader, &L)) {
     return L;
   }
@@ -118,7 +118,7 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   /* Evaluate background shader. */
   const float3 L = (eval_background) ?
                        integrator_eval_background_shader(INTEGRATOR_STATE_PASS, render_buffer) :
-                       make_float3(0.0f, 0.0f, 0.0f);
+                       zero_float3();
 
   /* Write to render buffer. */
   kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);

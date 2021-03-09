@@ -113,6 +113,10 @@ class SEQUENCER_HT_tool_header(Header):
         # TODO: options popover.
 
     def draw_tool_settings(self, context):
+        pass
+
+        # Currently unused.
+        '''
         layout = self.layout
 
         # Active Tool
@@ -120,6 +124,7 @@ class SEQUENCER_HT_tool_header(Header):
         from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
         tool = ToolSelectPanelHelper.draw_active_tool_header(context, layout)
         tool_mode = context.mode if tool is None else tool.mode
+        '''
 
 
 class SEQUENCER_HT_header(Header):
@@ -129,8 +134,6 @@ class SEQUENCER_HT_header(Header):
         layout = self.layout
 
         st = context.space_data
-        scene = context.scene
-        sequencer_tool_settings = context.tool_settings.sequencer_tool_settings
 
         show_region_tool_header = st.show_region_tool_header
 
@@ -336,8 +339,6 @@ class SEQUENCER_MT_view(Menu):
         st = context.space_data
         is_preview = st.view_type in {'PREVIEW', 'SEQUENCER_PREVIEW'}
         is_sequencer_view = st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}
-        scene = context.scene
-        ed = scene.sequence_editor
 
         if st.view_type == 'PREVIEW':
             # Specifying the REGION_PREVIEW context is needed in preview-only
@@ -407,17 +408,6 @@ class SEQUENCER_MT_view(Menu):
             layout.prop(st, "show_markers")
             if context.preferences.view.show_developer_ui:
                 layout.menu("SEQUENCER_MT_view_cache", text="Show Cache")
-
-        if is_preview:
-            layout.separator()
-            if st.display_mode == 'IMAGE':
-                layout.prop(st, "use_zoom_to_fit")
-                layout.prop(ed, "show_overlay", text="Show Frame Overlay")
-                layout.prop(st, "show_safe_areas", text="Show Safe Areas")
-                layout.prop(st, "show_metadata", text="Show Metadata")
-                layout.prop(st, "show_annotation", text="Show Annotations")
-            elif st.display_mode == 'WAVEFORM':
-                layout.prop(st, "show_separate_color", text="Show Separate Color Channels")
 
         layout.separator()
 
@@ -1915,7 +1905,6 @@ class SEQUENCER_PT_strip_proxy(SequencerButtonsPanel, Panel):
         if strip.proxy:
             proxy = strip.proxy
 
-            flow = layout.column_flow()
             if ed.proxy_storage == 'PER_STRIP':
                 col = layout.column(heading="Custom Proxy")
                 col.prop(proxy, "use_proxy_custom_directory", text="Directory")

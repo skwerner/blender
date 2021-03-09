@@ -24,45 +24,46 @@ class MultilayerBaseOperation : public BaseImageOperation {
  private:
   int m_passId;
   int m_view;
-  RenderLayer *m_renderlayer;
 
  protected:
-  ImBuf *getImBuf();
+  RenderLayer *m_renderLayer;
+  RenderPass *m_renderPass;
+  ImBuf *getImBuf() override;
 
  public:
   /**
    * Constructor
    */
-  MultilayerBaseOperation(int passindex, int view);
-  void setRenderLayer(RenderLayer *renderlayer)
-  {
-    this->m_renderlayer = renderlayer;
-  }
+  MultilayerBaseOperation(RenderLayer *render_layer, RenderPass *render_pass, int view);
 };
 
 class MultilayerColorOperation : public MultilayerBaseOperation {
  public:
-  MultilayerColorOperation(int passindex, int view) : MultilayerBaseOperation(passindex, view)
+  MultilayerColorOperation(RenderLayer *render_layer, RenderPass *render_pass, int view)
+      : MultilayerBaseOperation(render_layer, render_pass, view)
   {
     this->addOutputSocket(COM_DT_COLOR);
   }
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
+  std::unique_ptr<MetaData> getMetaData() const override;
 };
 
 class MultilayerValueOperation : public MultilayerBaseOperation {
  public:
-  MultilayerValueOperation(int passindex, int view) : MultilayerBaseOperation(passindex, view)
+  MultilayerValueOperation(RenderLayer *render_layer, RenderPass *render_pass, int view)
+      : MultilayerBaseOperation(render_layer, render_pass, view)
   {
     this->addOutputSocket(COM_DT_VALUE);
   }
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
 class MultilayerVectorOperation : public MultilayerBaseOperation {
  public:
-  MultilayerVectorOperation(int passindex, int view) : MultilayerBaseOperation(passindex, view)
+  MultilayerVectorOperation(RenderLayer *render_layer, RenderPass *render_pass, int view)
+      : MultilayerBaseOperation(render_layer, render_pass, view)
   {
     this->addOutputSocket(COM_DT_VECTOR);
   }
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };

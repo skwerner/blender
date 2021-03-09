@@ -38,6 +38,7 @@
 #  include "BLI_math_mpq.hh"
 #  include "BLI_mesh_intersect.hh"
 #  include "BLI_mpq3.hh"
+#  include "BLI_polyfill_2d.h"
 #  include "BLI_set.hh"
 #  include "BLI_span.hh"
 #  include "BLI_stack.hh"
@@ -2385,7 +2386,7 @@ static void inside_shape_callback(void *userdata,
     std::cout << "  fv2=(" << fv2[0] << "," << fv2[1] << "," << fv2[2] << ")\n";
   }
   if (isect_ray_tri_epsilon_v3(
-          ray->origin, ray->direction, fv0, fv1, fv2, &dist, NULL, FLT_EPSILON)) {
+          ray->origin, ray->direction, fv0, fv1, fv2, &dist, nullptr, FLT_EPSILON)) {
     /* Count parity as +1 if ray is in the same direction as tri's normal,
      * and -1 if the directions are opposite. */
     double3 o_db{double(ray->origin[0]), double(ray->origin[1]), double(ray->origin[2])};
@@ -2483,29 +2484,14 @@ static void test_tri_inside_shapes(const IMesh &tm,
 }
 
 /**
- * Use the RayCast method for deciding if a triangle of the
- * mesh is supposed to be included or excluded in the boolean result,
- * and return the mesh that is the boolean result.
- * The reason this is done on a triangle-by-triangle basis is that
- * when the input is not PWN, some patches can be both inside and outside
- * some shapes (e.g., a plane cutting through Suzanne's open eyes).
+ * Return a BVH Tree that contains all of the triangles of \a tm.
+ * The caller must free it.
+ * (We could possible reuse the BVH tree(s) built in TriOverlaps,
+ * in the mesh intersect function. A future TODO.)
  */
-static IMesh raycast_boolean(const IMesh &tm,
-                             BoolOpType op,
-                             int nshapes,
-                             std::function<int(int)> shape_fn,
-                             IMeshArena *arena)
+static BVHTree *raycast_tree(const IMesh &tm)
 {
-  constexpr int dbg_level = 0;
-  if (dbg_level > 0) {
-    std::cout << "RAYCAST_BOOLEAN\n";
-  }
-  IMesh ans;
-
-  /* Build a BVH tree of tm's triangles.
-   * We could possibly reuse the BVH tree(s) build in TriOverlaps in
-   * the mesh intersect function. A future TODO. */
-  BVHTree *tree = BLI_bvhtree_new(tm.face_size(), FLT_EPSILON, 8, 8);
+  BVHTree *tree = BLI_bvhtree_new(tm.face_size(), FLT_EPSILON, 4, 6);
   for (int i : tm.face_index_range()) {
     const Face *f = tm.face(i);
     float t_cos[9];
@@ -2518,7 +2504,70 @@ static IMesh raycast_boolean(const IMesh &tm,
     BLI_bvhtree_insert(tree, i, t_cos, 3);
   }
   BLI_bvhtree_balance(tree);
+  return tree;
+}
 
+/**
+ * Should a face with given shape and given winding array be removed for given boolean op?
+ * Also return true in *r_do_flip if it retained by normals need to be flipped.
+ */
+static bool raycast_test_remove(BoolOpType op, Array<int> &winding, int shape, bool *r_do_flip)
+{
+  constexpr int dbg_level = 0;
+  /* Find out the "in the output volume" flag for each of the cases of winding[shape] == 0
+   * and winding[shape] == 1. If the flags are different, this patch should be in the output.
+   * Also, if this is a Difference and the shape isn't the first one, need to flip the normals.
+   */
+  winding[shape] = 0;
+  bool in_output_volume_0 = apply_bool_op(op, winding);
+  winding[shape] = 1;
+  bool in_output_volume_1 = apply_bool_op(op, winding);
+  bool do_remove = in_output_volume_0 == in_output_volume_1;
+  bool do_flip = !do_remove && op == BoolOpType::Difference && shape != 0;
+  if (dbg_level > 0) {
+    std::cout << "winding = ";
+    for (int i = 0; i < winding.size(); ++i) {
+      std::cout << winding[i] << " ";
+    }
+    std::cout << "\niv0=" << in_output_volume_0 << ", iv1=" << in_output_volume_1 << "\n";
+    std::cout << " remove=" << do_remove << ", flip=" << do_flip << "\n";
+  }
+  *r_do_flip = do_flip;
+  return do_remove;
+}
+
+/** Add triangle a flipped version of tri to out_faces. */
+static void raycast_add_flipped(Vector<Face *> &out_faces, Face &tri, IMeshArena *arena)
+{
+
+  Array<const Vert *> flipped_vs = {tri[0], tri[2], tri[1]};
+  Array<int> flipped_e_origs = {tri.edge_orig[2], tri.edge_orig[1], tri.edge_orig[0]};
+  Array<bool> flipped_is_intersect = {
+      tri.is_intersect[2], tri.is_intersect[1], tri.is_intersect[0]};
+  Face *flipped_f = arena->add_face(flipped_vs, tri.orig, flipped_e_origs, flipped_is_intersect);
+  out_faces.append(flipped_f);
+}
+
+/**
+ * Use the RayCast method for deciding if a triangle of the
+ * mesh is supposed to be included or excluded in the boolean result,
+ * and return the mesh that is the boolean result.
+ * The reason this is done on a triangle-by-triangle basis is that
+ * when the input is not PWN, some patches can be both inside and outside
+ * some shapes (e.g., a plane cutting through Suzanne's open eyes).
+ */
+static IMesh raycast_tris_boolean(const IMesh &tm,
+                                  BoolOpType op,
+                                  int nshapes,
+                                  std::function<int(int)> shape_fn,
+                                  IMeshArena *arena)
+{
+  constexpr int dbg_level = 0;
+  if (dbg_level > 0) {
+    std::cout << "RAYCAST_TRIS_BOOLEAN\n";
+  }
+  IMesh ans;
+  BVHTree *tree = raycast_tree(tm);
   Vector<Face *> out_faces;
   out_faces.reserve(tm.face_size());
   Array<float> in_shape(nshapes, 0);
@@ -2540,47 +2589,95 @@ static IMesh raycast_boolean(const IMesh &tm,
        * gives good results, but when shape is a cutter in a Difference
        * operation, we want to be pretty sure that the point is inside other_shape.
        * E.g., T75827.
+       * Also, when the operation is intersection, we also want high confidence.
        */
-      bool need_high_confidence = (op == BoolOpType::Difference) && (shape != 0);
+      bool need_high_confidence = (op == BoolOpType::Difference && shape != 0) ||
+                                  op == BoolOpType::Intersect;
       bool inside = in_shape[other_shape] >= (need_high_confidence ? 0.5f : 0.1f);
       if (dbg_level > 0) {
         std::cout << "test point is " << (inside ? "inside" : "outside") << " other_shape "
-                  << other_shape << "\n";
+                  << other_shape << " val = " << in_shape[other_shape] << "\n";
       }
       winding[other_shape] = inside;
     }
-    /* Find out the "in the output volume" flag for each of the cases of winding[shape] == 0
-     * and winding[shape] == 1. If the flags are different, this patch should be in the output.
-     * Also, if this is a Difference and the shape isn't the first one, need to flip the normals.
-     */
-    winding[shape] = 0;
-    bool in_output_volume_0 = apply_bool_op(op, winding);
-    winding[shape] = 1;
-    bool in_output_volume_1 = apply_bool_op(op, winding);
-    bool do_remove = in_output_volume_0 == in_output_volume_1;
-    bool do_flip = !do_remove && op == BoolOpType::Difference && shape != 0;
-    if (dbg_level > 0) {
-      std::cout << "winding = ";
-      for (int i = 0; i < nshapes; ++i) {
-        std::cout << winding[i] << " ";
-      }
-      std::cout << "\niv0=" << in_output_volume_0 << ", iv1=" << in_output_volume_1 << "\n";
-      std::cout << "result for tri " << t << ": remove=" << do_remove << ", flip=" << do_flip
-                << "\n";
-    }
+    bool do_flip;
+    bool do_remove = raycast_test_remove(op, winding, shape, &do_flip);
     if (!do_remove) {
       if (!do_flip) {
         out_faces.append(&tri);
       }
       else {
-        /* We need flipped version of tri. */
-        Array<const Vert *> flipped_vs = {tri[0], tri[2], tri[1]};
-        Array<int> flipped_e_origs = {tri.edge_orig[2], tri.edge_orig[1], tri.edge_orig[0]};
-        Array<bool> flipped_is_intersect = {
-            tri.is_intersect[2], tri.is_intersect[1], tri.is_intersect[0]};
-        Face *flipped_f = arena->add_face(
-            flipped_vs, tri.orig, flipped_e_origs, flipped_is_intersect);
-        out_faces.append(flipped_f);
+        raycast_add_flipped(out_faces, tri, arena);
+      }
+    }
+  }
+  BLI_bvhtree_free(tree);
+  ans.set_faces(out_faces);
+  return ans;
+}
+
+/* This is (sometimes much faster) version of raycast boolean
+ * that does it per patch rather than per triangle.
+ * It may fail in cases where raycast_tri_boolean will succeed,
+ * but the latter can be very slow on huge meshes. */
+static IMesh raycast_patches_boolean(const IMesh &tm,
+                                     BoolOpType op,
+                                     int nshapes,
+                                     std::function<int(int)> shape_fn,
+                                     const PatchesInfo &pinfo,
+                                     IMeshArena *arena)
+{
+  constexpr int dbg_level = 0;
+  if (dbg_level > 0) {
+    std::cout << "RAYCAST_PATCHES_BOOLEAN\n";
+  }
+  IMesh ans;
+  BVHTree *tree = raycast_tree(tm);
+  Vector<Face *> out_faces;
+  out_faces.reserve(tm.face_size());
+  Array<float> in_shape(nshapes, 0);
+  Array<int> winding(nshapes, 0);
+  for (int p : pinfo.index_range()) {
+    const Patch &patch = pinfo.patch(p);
+    /* For test triangle, choose one in the middle of patch list
+     * as the ones near the beginning may be very near other patches. */
+    int test_t_index = patch.tri(patch.tot_tri() / 2);
+    Face &tri_test = *tm.face(test_t_index);
+    /* Assume all triangles in a patch are in the same shape. */
+    int shape = shape_fn(tri_test.orig);
+    if (dbg_level > 0) {
+      std::cout << "process patch " << p << " = " << patch << "\n";
+      std::cout << "test tri = " << test_t_index << " = " << &tri_test << "\n";
+      std::cout << "shape = " << shape << "\n";
+    }
+    if (shape == -1) {
+      continue;
+    }
+    test_tri_inside_shapes(tm, shape_fn, nshapes, test_t_index, tree, in_shape);
+    for (int other_shape = 0; other_shape < nshapes; ++other_shape) {
+      if (other_shape == shape) {
+        continue;
+      }
+      bool need_high_confidence = (op == BoolOpType::Difference && shape != 0) ||
+                                  op == BoolOpType::Intersect;
+      bool inside = in_shape[other_shape] >= (need_high_confidence ? 0.5f : 0.1f);
+      if (dbg_level > 0) {
+        std::cout << "test point is " << (inside ? "inside" : "outside") << " other_shape "
+                  << other_shape << " val = " << in_shape[other_shape] << "\n";
+      }
+      winding[other_shape] = inside;
+    }
+    bool do_flip;
+    bool do_remove = raycast_test_remove(op, winding, shape, &do_flip);
+    if (!do_remove) {
+      for (int t : patch.tris()) {
+        Face *f = tm.face(t);
+        if (!do_flip) {
+          out_faces.append(f);
+        }
+        else {
+          raycast_add_flipped(out_faces, *f, arena);
+        }
       }
     }
   }
@@ -2590,24 +2687,8 @@ static IMesh raycast_boolean(const IMesh &tm,
 }
 
 /**
- * Which CDT output edge index is for an edge between output verts
- * v1 and v2 (in either order)?
- * \return -1 if none.
- */
-static int find_cdt_edge(const CDT_result<mpq_class> &cdt_out, int v1, int v2)
-{
-  for (int e : cdt_out.edge.index_range()) {
-    const std::pair<int, int> &edge = cdt_out.edge[e];
-    if ((edge.first == v1 && edge.second == v2) || (edge.first == v2 && edge.second == v1)) {
-      return e;
-    }
-  }
-  return -1;
-}
-
-/**
  * Tessellate face f into triangles and return an array of `const Face *`
- * giving that triangulation.
+ * giving that triangulation. Intended to be used when f has > 4 vertices.
  * Care is taken so that the original edge index associated with
  * each edge in the output triangles either matches the original edge
  * for the (identical) edge of f, or else is -1. So diagonals added
@@ -2615,68 +2696,55 @@ static int find_cdt_edge(const CDT_result<mpq_class> &cdt_out, int v1, int v2)
  */
 static Array<Face *> triangulate_poly(Face *f, IMeshArena *arena)
 {
+  /* Similar to loop body in BM_mesh_calc_tesselation. */
   int flen = f->size();
-  CDT_input<mpq_class> cdt_in;
-  cdt_in.vert = Array<mpq2>(flen);
-  cdt_in.face = Array<Vector<int>>(1);
-  cdt_in.face[0].reserve(flen);
-  for (int i : f->index_range()) {
-    cdt_in.face[0].append(i);
-  }
-  /* Project poly along dominant axis of normal to get 2d coords. */
+  BLI_assert(flen > 4);
   if (!f->plane_populated()) {
     f->populate_plane(false);
   }
+  /* Project along negative face normal so (x,y) can be used in 2d. */
   const double3 &poly_normal = f->plane->norm;
-  int axis = double3::dominant_axis(poly_normal);
-  /* If project down y axis as opposed to x or z, the orientation
-   * of the polygon will be reversed.
-   * Yet another reversal happens if the poly normal in the dominant
-   * direction is opposite that of the positive dominant axis. */
-  bool rev1 = (axis == 1);
-  bool rev2 = poly_normal[axis] < 0;
-  bool rev = rev1 ^ rev2;
-  for (int i = 0; i < flen; ++i) {
-    int ii = rev ? flen - i - 1 : i;
-    mpq2 &p2d = cdt_in.vert[ii];
-    int k = 0;
-    for (int j = 0; j < 3; ++j) {
-      if (j != axis) {
-        p2d[k++] = (*f)[ii]->co_exact[j];
-      }
-    }
+  float no[3] = {float(poly_normal[0]), float(poly_normal[1]), float(poly_normal[2])};
+  normalize_v3(no);
+  float axis_mat[3][3];
+  float(*projverts)[2];
+  unsigned int(*tris)[3];
+  const int totfilltri = flen - 2;
+  /* Prepare projected vertices and array to receive triangles in tesselation. */
+  tris = static_cast<unsigned int(*)[3]>(MEM_malloc_arrayN(totfilltri, sizeof(*tris), __func__));
+  projverts = static_cast<float(*)[2]>(MEM_malloc_arrayN(flen, sizeof(*projverts), __func__));
+  axis_dominant_v3_to_m3_negate(axis_mat, no);
+  for (int j = 0; j < flen; ++j) {
+    const double3 &dco = (*f)[j]->co;
+    float co[3] = {float(dco[0]), float(dco[1]), float(dco[2])};
+    mul_v2_m3v3(projverts[j], axis_mat, co);
   }
-  CDT_result<mpq_class> cdt_out = delaunay_2d_calc(cdt_in, CDT_INSIDE);
-  int n_tris = cdt_out.face.size();
-  Array<Face *> ans(n_tris);
-  for (int t = 0; t < n_tris; ++t) {
-    int i_v_out[3];
-    const Vert *v[3];
+  BLI_polyfill_calc(projverts, flen, 1, tris);
+  /* Put tesselation triangles into Face form. Record original edges where they exist. */
+  Array<Face *> ans(totfilltri);
+  for (int t = 0; t < totfilltri; ++t) {
+    unsigned int *tri = tris[t];
     int eo[3];
-    for (int i = 0; i < 3; ++i) {
-      i_v_out[i] = cdt_out.face[t][i];
-      v[i] = (*f)[cdt_out.vert_orig[i_v_out[i]][0]];
-    }
-    for (int i = 0; i < 3; ++i) {
-      int e_out = find_cdt_edge(cdt_out, i_v_out[i], i_v_out[(i + 1) % 3]);
-      BLI_assert(e_out != -1);
-      eo[i] = NO_INDEX;
-      for (int orig : cdt_out.edge_orig[e_out]) {
-        if (orig != NO_INDEX) {
-          eo[i] = orig;
-          break;
-        }
+    const Vert *v[3];
+    for (int k = 0; k < 3; k++) {
+      BLI_assert(tri[k] < flen);
+      v[k] = (*f)[tri[k]];
+      /* If tri edge goes between two successive indices in
+       * the original face, then it is an original edge. */
+      if ((tri[k] + 1) % flen == tri[(k + 1) % 3]) {
+        eo[k] = f->edge_orig[tri[k]];
       }
-    }
-    if (rev) {
-      ans[t] = arena->add_face(
-          {v[0], v[2], v[1]}, f->orig, {eo[2], eo[1], eo[0]}, {false, false, false});
-    }
-    else {
+      else {
+        eo[k] = NO_INDEX;
+      }
       ans[t] = arena->add_face(
           {v[0], v[1], v[2]}, f->orig, {eo[0], eo[1], eo[2]}, {false, false, false});
     }
   }
+
+  MEM_freeN(tris);
+  MEM_freeN(projverts);
+
   return ans;
 }
 
@@ -3369,6 +3437,7 @@ IMesh boolean_trimesh(IMesh &tm_in,
                       int nshapes,
                       std::function<int(int)> shape_fn,
                       bool use_self,
+                      bool hole_tolerant,
                       IMeshArena *arena)
 {
   constexpr int dbg_level = 0;
@@ -3419,7 +3488,13 @@ IMesh boolean_trimesh(IMesh &tm_in,
     if (dbg_level > 0) {
       std::cout << "Input is not PWN, using raycast method\n";
     }
-    tm_out = raycast_boolean(tm_si, op, nshapes, shape_fn, arena);
+    if (hole_tolerant) {
+      tm_out = raycast_tris_boolean(tm_si, op, nshapes, shape_fn, arena);
+    }
+    else {
+      PatchesInfo pinfo = find_patches(tm_si, tm_si_topo);
+      tm_out = raycast_patches_boolean(tm_si, op, nshapes, shape_fn, pinfo, arena);
+    }
 #  ifdef PERFDEBUG
     double raycast_time = PIL_check_seconds_timer();
     std::cout << "  raycast_boolean done, time = " << raycast_time - pwn_time << "\n";
@@ -3514,6 +3589,7 @@ IMesh boolean_mesh(IMesh &imesh,
                    int nshapes,
                    std::function<int(int)> shape_fn,
                    bool use_self,
+                   bool hole_tolerant,
                    IMesh *imesh_triangulated,
                    IMeshArena *arena)
 {
@@ -3547,7 +3623,7 @@ IMesh boolean_mesh(IMesh &imesh,
   if (dbg_level > 1) {
     write_obj_mesh(*tm_in, "boolean_tm_in");
   }
-  IMesh tm_out = boolean_trimesh(*tm_in, op, nshapes, shape_fn, use_self, arena);
+  IMesh tm_out = boolean_trimesh(*tm_in, op, nshapes, shape_fn, use_self, hole_tolerant, arena);
 #  ifdef PERFDEBUG
   double bool_tri_time = PIL_check_seconds_timer();
   std::cout << "boolean_trimesh done, time = " << bool_tri_time - tri_time << "\n";

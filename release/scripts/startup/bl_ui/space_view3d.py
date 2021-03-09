@@ -715,13 +715,6 @@ class VIEW3D_HT_header(Header):
                     text="Multiframe",
                 )
 
-            if gpd.use_stroke_edit_mode or gpd.is_stroke_paint_mode:
-                row = layout.row(align=True)
-                row.popover(
-                    panel="VIEW3D_PT_tools_grease_pencil_interpolate",
-                    text="Interpolate",
-                )
-
         overlay = view.overlay
 
         VIEW3D_MT_editor_menus.draw_collapsible(context, layout)
@@ -1075,7 +1068,7 @@ class VIEW3D_MT_snap(Menu):
 class VIEW3D_MT_uv_map(Menu):
     bl_label = "UV Mapping"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("uv.unwrap")
@@ -1829,7 +1822,7 @@ class VIEW3D_MT_select_edit_armature(Menu):
 class VIEW3D_MT_paint_gpencil(Menu):
     bl_label = "Paint"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("gpencil.vertex_color_set", text="Set Vertex Colors")
@@ -2245,7 +2238,7 @@ class VIEW3D_MT_object(Menu):
     bl_context = "objectmode"
     bl_label = "Object"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.menu("VIEW3D_MT_transform_object")
@@ -2724,7 +2717,7 @@ class VIEW3D_MT_object_constraints(Menu):
 class VIEW3D_MT_object_quick_effects(Menu):
     bl_label = "Quick Effects"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("object.quick_fur")
@@ -4907,7 +4900,7 @@ class VIEW3D_MT_draw_gpencil(Menu):
         layout.separator()
 
         layout.menu("VIEW3D_MT_gpencil_animation")
-        layout.menu("VIEW3D_MT_edit_gpencil_interpolate")
+        layout.operator("gpencil.interpolate_sequence", text="Interpolate Sequence")
 
         layout.separator()
 
@@ -4969,7 +4962,7 @@ class VIEW3D_MT_edit_gpencil(Menu):
         layout.separator()
 
         layout.menu("VIEW3D_MT_gpencil_animation")
-        layout.menu("VIEW3D_MT_edit_gpencil_interpolate")
+        layout.operator("gpencil.interpolate_sequence", text="Interpolate Sequence")
 
         layout.separator()
 
@@ -5131,16 +5124,6 @@ class VIEW3D_MT_edit_gpencil_showhide(Menu):
 
         layout.operator("gpencil.hide", text="Hide Active Layer").unselected = False
         layout.operator("gpencil.hide", text="Hide Inactive Layers").unselected = True
-
-
-class VIEW3D_MT_edit_gpencil_interpolate(Menu):
-    bl_label = "Interpolate"
-
-    def draw(self, _context):
-        layout = self.layout
-
-        layout.operator("gpencil.interpolate", text="Interpolate")
-        layout.operator("gpencil.interpolate_sequence", text="Sequence")
 
 
 class VIEW3D_MT_object_mode_pie(Menu):
@@ -6227,7 +6210,7 @@ class VIEW3D_PT_overlay_motion_tracking(Panel):
 
             col = layout.column()
             col.active = display_all
-            col.label(text="Tracks:")
+            col.label(text="Tracks")
             row = col.row(align=True)
             row.prop(view, "tracks_display_type", text="")
             row.prop(view, "tracks_display_size", text="Size")
@@ -6940,7 +6923,7 @@ class VIEW3D_PT_view3d_stereo(Panel):
         col = layout.column()
         col.row().prop(view, "stereo_3d_camera", expand=True)
 
-        col.label(text="Display:")
+        col.label(text="Display")
         row = col.row()
         row.active = basic_stereo
         row.prop(view, "show_stereo_3d_cameras")
@@ -7026,10 +7009,9 @@ class VIEW3D_PT_gpencil_curve_edit(Panel):
     bl_label = "Curve Editing"
 
     def draw(self, context):
-        gpd = context.gpencil_data
-        settings = context.tool_settings.gpencil_sculpt
-
         layout = self.layout
+
+        gpd = context.gpencil_data
         col = layout.column(align=True)
         col.prop(gpd, "edit_curve_resolution")
         col.prop(gpd, "curve_edit_threshold")
@@ -7655,7 +7637,6 @@ classes = (
     VIEW3D_MT_edit_armature_names,
     VIEW3D_MT_edit_armature_delete,
     VIEW3D_MT_edit_gpencil_transform,
-    VIEW3D_MT_edit_gpencil_interpolate,
     VIEW3D_MT_object_mode_pie,
     VIEW3D_MT_view_pie,
     VIEW3D_MT_transform_gizmo_pie,

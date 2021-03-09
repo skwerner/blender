@@ -37,15 +37,37 @@ class AbstractTreeElement {
   TreeElement &legacy_te_;
 
  public:
-  AbstractTreeElement(TreeElement &legacy_te) : legacy_te_(legacy_te)
-  {
-  }
   virtual ~AbstractTreeElement() = default;
 
+  /**
+   * Check if the type is expandible in current context.
+   */
+  virtual bool expandPoll(const SpaceOutliner &) const
+  {
+    return true;
+  }
   /**
    * Let the type add its own children.
    */
   virtual void expand(SpaceOutliner &) const
+  {
+  }
+  virtual void postExpand(SpaceOutliner &) const
+  {
+  }
+
+  /**
+   * Just while transitioning to the new tree-element design: Some types are only partially ported,
+   * and the expanding isn't done yet.
+   */
+  virtual bool isExpandValid() const
+  {
+    return true;
+  }
+
+ protected:
+  /* Pseudo-abstract: Only allow creation through derived types. */
+  AbstractTreeElement(TreeElement &legacy_te) : legacy_te_(legacy_te)
   {
   }
 };

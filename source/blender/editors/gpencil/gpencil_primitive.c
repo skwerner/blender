@@ -71,6 +71,7 @@
 #include "RNA_enum_types.h"
 
 #include "ED_gpencil.h"
+#include "ED_keyframing.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
@@ -338,6 +339,7 @@ static void gpencil_primitive_set_initdata(bContext *C, tGPDprimitive *tgpi)
   ED_gpencil_fill_vertex_color_set(ts, brush, gps);
 
   gps->flag &= ~GP_STROKE_SELECT;
+  BKE_gpencil_stroke_select_index_reset(gps);
   /* the polygon must be closed, so enabled cyclic */
   if (ELEM(tgpi->type, GP_STROKE_BOX, GP_STROKE_CIRCLE)) {
     gps->flag |= GP_STROKE_CYCLIC;
@@ -464,10 +466,10 @@ static void gpencil_primitive_status_indicators(bContext *C, tGPDprimitive *tgpi
            GP_STROKE_BOX,
            GP_STROKE_POLYLINE)) {
     if (hasNumInput(&tgpi->num)) {
-      char str_offs[NUM_STR_REP_LEN];
+      char str_ofs[NUM_STR_REP_LEN];
 
-      outputNumInput(&tgpi->num, str_offs, &scene->unit);
-      BLI_snprintf(status_str, sizeof(status_str), "%s: %s", msg_str, str_offs);
+      outputNumInput(&tgpi->num, str_ofs, &scene->unit);
+      BLI_snprintf(status_str, sizeof(status_str), "%s: %s", msg_str, str_ofs);
     }
     else {
       if (tgpi->flag == IN_PROGRESS) {
@@ -1082,7 +1084,7 @@ static void gpencil_primitive_update_strokes(bContext *C, tGPDprimitive *tgpi)
   }
 
   /* If camera view or view projection, reproject flat to view to avoid perspective effect. */
-  if (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || is_camera) {
+  if ((!is_depth) && (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || (is_camera))) {
     ED_gpencil_project_stroke_to_view(C, tgpi->gpl, gps);
   }
 
@@ -1252,8 +1254,17 @@ static void gpencil_primitive_init(bContext *C, wmOperator *op)
 static int gpencil_primitive_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
   wmWindow *win = CTX_wm_window(C);
+  Scene *scene = CTX_data_scene(C);
   bGPdata *gpd = CTX_data_gpencil_data(C);
   tGPDprimitive *tgpi = NULL;
+
+  if (!IS_AUTOKEY_ON(scene)) {
+    bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
+    if ((gpl == NULL) || (gpl->actframe == NULL)) {
+      BKE_report(op->reports, RPT_INFO, "No available frame for creating stroke");
+      return OPERATOR_CANCELLED;
+    }
+  }
 
   /* initialize operator runtime data */
   gpencil_primitive_init(C, op);
@@ -1276,7 +1287,7 @@ static int gpencil_primitive_invoke(bContext *C, wmOperator *op, const wmEvent *
   /* set cursor to indicate modal */
   WM_cursor_modal_set(win, WM_CURSOR_CROSS);
 
-  /* update sindicator in header */
+  /* Updates indicator in header. */
   gpencil_primitive_status_indicators(C, tgpi);
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GPENCIL | NA_EDITED, NULL);
@@ -1309,11 +1320,16 @@ static void gpencil_primitive_interaction_end(bContext *C,
 
   /* insert keyframes as required... */
   short add_frame_mode;
-  if (ts->gpencil_flags & GP_TOOL_FLAG_RETAIN_LAST) {
-    add_frame_mode = GP_GETFRAME_ADD_COPY;
+  if (IS_AUTOKEY_ON(tgpi->scene)) {
+    if (ts->gpencil_flags & GP_TOOL_FLAG_RETAIN_LAST) {
+      add_frame_mode = GP_GETFRAME_ADD_COPY;
+    }
+    else {
+      add_frame_mode = GP_GETFRAME_ADD_NEW;
+    }
   }
   else {
-    add_frame_mode = GP_GETFRAME_ADD_NEW;
+    add_frame_mode = GP_GETFRAME_USE_PREV;
   }
 
   bool need_tag = tgpi->gpl->actframe == NULL;

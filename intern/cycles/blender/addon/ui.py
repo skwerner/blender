@@ -15,6 +15,7 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 import bpy
 from bpy_extras.node_utils import find_node_input
@@ -274,6 +275,8 @@ class CYCLES_RENDER_PT_sampling_denoising(CyclesButtonsPanel, Panel):
 
         sub.prop(cscene, "denoiser", text="")
 
+        layout.separator()
+
         heading = layout.column(align=False, heading="Viewport")
         row = heading.row(align=True)
         row.prop(cscene, "use_preview_denoising", text="")
@@ -284,6 +287,9 @@ class CYCLES_RENDER_PT_sampling_denoising(CyclesButtonsPanel, Panel):
         sub = heading.row(align=True)
         sub.active = cscene.use_preview_denoising
         sub.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
+        sub = heading.row(align=True)
+        sub.active = cscene.use_preview_denoising
+        sub.prop(cscene, "preview_denoising_input_passes", text="Input Passes")
 
 
 class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):

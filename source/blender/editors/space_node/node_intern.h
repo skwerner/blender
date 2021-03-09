@@ -32,15 +32,19 @@
 struct ARegion;
 struct ARegionType;
 struct Main;
+struct NodeInsertOfsData;
 struct View2D;
 struct bContext;
 struct bNode;
 struct bNodeLink;
 struct bNodeSocket;
-struct NodeInsertOfsData;
 struct wmGizmoGroupType;
 struct wmKeyConfig;
 struct wmWindow;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* temp data to pass on to modal */
 typedef struct bNodeLinkDrag {
@@ -53,6 +57,9 @@ typedef struct bNodeLinkDrag {
   ListBase links;
   bool from_multi_input_socket;
   int in_out;
+
+  /** Temporarily stores the last picked link from multi input socket operator. */
+  struct bNodeLink *last_picked_multi_input_socket_link;
 } bNodeLinkDrag;
 
 typedef struct SpaceNode_Runtime {
@@ -77,7 +84,7 @@ typedef struct SpaceNode_Runtime {
 /* transform between View2Ds in the tree path */
 void space_node_group_offset(struct SpaceNode *snode, float *x, float *y);
 
-/* node_draw.c */
+/* node_draw.cc */
 float node_socket_calculate_height(const bNodeSocket *socket);
 void node_link_calculate_multi_input_position(const bNodeLink *link, float r[2]);
 
@@ -194,11 +201,13 @@ void draw_nodespace_back_pix(const struct bContext *C,
 bNode *node_add_node(
     const struct bContext *C, const char *idname, int type, float locx, float locy);
 void NODE_OT_add_reroute(struct wmOperatorType *ot);
+void NODE_OT_add_group(struct wmOperatorType *ot);
 void NODE_OT_add_file(struct wmOperatorType *ot);
 void NODE_OT_add_mask(struct wmOperatorType *ot);
 void NODE_OT_new_node_tree(struct wmOperatorType *ot);
 
 /* node_group.c */
+const char *node_group_idname(struct bContext *C);
 void NODE_OT_group_make(struct wmOperatorType *ot);
 void NODE_OT_group_insert(struct wmOperatorType *ot);
 void NODE_OT_group_ungroup(struct wmOperatorType *ot);
@@ -283,6 +292,12 @@ void NODE_GGT_backdrop_corner_pin(struct wmGizmoGroupType *gzgt);
 void NODE_OT_cryptomatte_layer_add(struct wmOperatorType *ot);
 void NODE_OT_cryptomatte_layer_remove(struct wmOperatorType *ot);
 
+/* node_geometry_attribute_search.cc */
+void node_geometry_add_attribute_search_button(const struct bNodeTree *node_tree,
+                                               const struct bNode *node,
+                                               struct PointerRNA *socket_ptr,
+                                               struct uiLayout *layout);
+
 extern const char *node_context_dir[];
 
 /* XXXXXX */
@@ -301,22 +316,6 @@ extern const char *node_context_dir[];
 #define NODE_RESIZE_MARGIN (0.20f * U.widget_unit)
 #define NODE_LINK_RESOL 12
 
-/* Button events (butspace) */
-enum eNodeSpace_ButEvents {
-  B_NOP = 0,
-  B_REDR = 1,
-  B_NODE_USEMAT,
-  B_NODE_USESCENE,
-  B_NODE_USETEX,
-  B_TEXBROWSE,
-  B_TEXALONE,
-  B_TEXLOCAL,
-  B_TEXDELETE,
-  B_TEXPRV,
-  B_AUTOTEXNAME,
-  B_KEEPDATA,
-  B_NODE_EXEC,
-  B_MATPRV,
-  B_NODE_LOADIMAGE,
-  B_NODE_SETIMAGE,
-};
+#ifdef __cplusplus
+}
+#endif

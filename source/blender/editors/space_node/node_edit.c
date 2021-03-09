@@ -722,7 +722,7 @@ void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node, bool *r_acti
           }
         }
 
-        LISTBASE_FOREACH (World *, wo, &bmain->materials) {
+        LISTBASE_FOREACH (World *, wo, &bmain->worlds) {
           if (wo->nodetree && wo->use_nodes && ntreeHasTree(wo->nodetree, ntree)) {
             GPU_material_free(&wo->gpumaterial);
           }
@@ -2231,10 +2231,13 @@ static int node_clipboard_paste_exec(bContext *C, wmOperator *op)
                 link->tosock->new_sock);
   }
 
-  ntreeUpdateTree(CTX_data_main(C), snode->edittree);
+  Main *bmain = CTX_data_main(C);
+  ntreeUpdateTree(bmain, snode->edittree);
 
   snode_notify(C, snode);
   snode_dag_update(C, snode);
+  /* Pasting nodes can create arbitrary new relations, because nodes can reference IDs. */
+  DEG_relations_tag_update(bmain);
 
   return OPERATOR_FINISHED;
 }

@@ -80,7 +80,7 @@ static GHOST_TButtonMask convertButton(int button)
 }
 
 /**
- * Converts Mac rawkey codes (same for Cocoa & Carbon)
+ * Converts Mac raw-key codes (same for Cocoa & Carbon)
  * into GHOST key codes
  * \param rawCode: The raw physical key code
  * \param recvChar: the character ignoring modifiers (except for shift)
@@ -645,6 +645,11 @@ GHOST_TSuccess GHOST_SystemCocoa::init()
       [appDelegate setSystemCocoa:this];
       [NSApp setDelegate:appDelegate];
     }
+
+    // AppKit provides automatic window tabbing. Blender is a single-tabbed application without a
+    // macOS tab bar, and should explicitly opt-out of this. This is also controlled by the macOS
+    // user default #NSWindowTabbingEnabled.
+    NSWindow.allowsAutomaticWindowTabbing = NO;
 
     [NSApp finishLaunching];
 
@@ -1286,7 +1291,7 @@ GHOST_TSuccess GHOST_SystemCocoa::handleDraggingEvent(GHOST_TEventType eventType
               return GHOST_kFailure;
             }
 
-            /* Then get Alpha values by getting the RGBA image (that is premultiplied btw) */
+            /* Then get Alpha values by getting the RGBA image (that is pre-multiplied BTW) */
             blBitmapFormatImageRGBA = [[NSBitmapImageRep alloc]
                 initWithBitmapDataPlanes:NULL
                               pixelsWide:imgSize.width

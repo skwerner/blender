@@ -2011,7 +2011,6 @@ def km_file_browser_main(params):
         # operator (i.e. in regular editor mode).
         ("file.select", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'},
          {"properties": [("open", True), ("deselect_all", not params.legacy)]}),
-        ("file.refresh", {"type": 'NUMPAD_PERIOD', "value": 'PRESS'}, None),
         ("file.select", {"type": 'LEFTMOUSE', "value": 'PRESS'},
          {"properties": [("open", False), ("deselect_all", not params.legacy)]}),
         ("file.select", {"type": 'LEFTMOUSE', "value": 'CLICK', "ctrl": True},
@@ -2053,6 +2052,7 @@ def km_file_browser_main(params):
          {"properties": [("mode", 'SUB')]}),
         ("file.highlight", {"type": 'MOUSEMOVE', "value": 'ANY', "any": True}, None),
         ("file.sort_column_ui_context", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
+        ("file.view_selected", {"type": 'NUMPAD_PERIOD', "value": 'PRESS'}, None),
     ])
 
     return keymap
@@ -4470,6 +4470,15 @@ def km_sculpt(params):
          {"properties": [("mode", 'INVERT')]}),
         ("sculpt.brush_stroke", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True},
          {"properties": [("mode", 'SMOOTH')]}),
+        # Expand
+        ("sculpt.expand", {"type": 'A', "value": 'PRESS', "shift": True},
+         {"properties": [("target", "MASK"), ("falloff_type", "GEODESIC"), ("invert", True)]}),
+        ("sculpt.expand", {"type": 'A', "value": 'PRESS', "shift": True, "alt": True},
+         {"properties": [("target", "MASK"), ("falloff_type", "NORMALS"), ("invert", False)]}),
+        ("sculpt.expand", {"type": 'W', "value": 'PRESS', "shift": True},
+         {"properties": [("target", "FACE_SETS"), ("falloff_type", "GEODESIC"), ("invert", False), ("use_modify_active", False)]}),
+        ("sculpt.expand", {"type": 'W', "value": 'PRESS', "shift": True, "alt": True},
+         {"properties": [("target", "FACE_SETS"), ("falloff_type", "BOUNDARY_FACE_SET"),("invert", False), ("use_modify_active", True)]}),
         # Partial Visibility Show/hide
         ("sculpt.face_set_change_visibility", {"type": 'H', "value": 'PRESS'},
          {"properties": [("mode", 'TOGGLE')]}),
@@ -4477,8 +4486,6 @@ def km_sculpt(params):
          {"properties": [("mode", 'HIDE_ACTIVE')]}),
         ("sculpt.face_set_change_visibility", {"type": 'H', "value": 'PRESS', "alt": True},
          {"properties": [("mode", 'SHOW_ALL')]}),
-        ("sculpt.mask_expand", {"type": 'W', "value": 'PRESS', "shift": True},
-         {"properties": [("use_normals", False), ("keep_previous_mask", False), ("invert", False), ("smooth_iterations", 0), ("create_face_set", True)]}),
         ("sculpt.face_set_edit", {"type": 'W', "value": 'PRESS', "ctrl": True},
          {"properties": [("mode", 'GROW')]}),
         ("sculpt.face_set_edit", {"type": 'W', "value": 'PRESS', "ctrl": True, "alt": True},
@@ -4499,13 +4506,10 @@ def km_sculpt(params):
         ("paint.mask_lasso_gesture", {"type": 'LEFTMOUSE', "value": 'PRESS', "shift": True, "ctrl": True}, None),
         ("wm.context_toggle", {"type": 'M', "value": 'PRESS', "ctrl": True},
          {"properties": [("data_path", 'scene.tool_settings.sculpt.show_mask')]}),
-        ("sculpt.mask_expand", {"type": 'A', "value": 'PRESS', "shift": True},
-         {"properties": [("use_normals", False), ("keep_previous_mask", False), ("invert", True), ("smooth_iterations", 2), ("create_face_set", False)]}),
-        ("sculpt.mask_expand", {"type": 'A', "value": 'PRESS', "shift": True, 'alt': True},
-         {"properties": [("use_normals", True), ("keep_previous_mask", True), ("invert", False), ("smooth_iterations", 0), ("create_face_set", False)]}),
         # Dynamic topology
         ("sculpt.dynamic_topology_toggle", {"type": 'D', "value": 'PRESS', "ctrl": True}, None),
         ("sculpt.dyntopo_detail_size_edit", {"type": 'D', "value": 'PRESS', "shift": True}, None),
+        ("sculpt.set_detail_size", {"type": 'D', "value": 'PRESS', "shift": True, "alt": True}, None),
         # Remesh
         ("object.voxel_remesh", {"type": 'R', "value": 'PRESS', "ctrl": True}, None),
         ("object.voxel_size_edit", {"type": 'R', "value": 'PRESS', "shift": True}, None),
@@ -5570,6 +5574,39 @@ def km_paint_stroke_modal(_params):
     ])
 
     return keymap
+
+def km_sculpt_expand_modal(_params):
+    items = []
+    keymap = (
+        "Sculpt Expand Modal",
+        {"space_type": 'EMPTY', "region_type": 'WINDOW', "modal": True},
+        {"items": items},
+    )
+
+    items.extend([
+        ("CANCEL", {"type": 'ESC', "value": 'PRESS', "any": True}, None),
+        ("CANCEL", {"type": 'RIGHTMOUSE', "value": 'PRESS', "any": True}, None),
+        ("CONFIRM", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
+        ("INVERT", {"type": 'F', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("PRESERVE", {"type": 'E', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("GRADIENT", {"type": 'G', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("RECURSION_STEP_GEODESIC", {"type": 'R', "value": 'PRESS', "repeat" : False}, None),
+        ("RECURSION_STEP_TOPOLOGY", {"type": 'R', "value": 'PRESS', "alt" : True ,"any": True, "repeat" : False}, None),
+        ("MOVE_TOGGLE", {"type": 'SPACE', "value": 'ANY', "any": True, "repeat" : False}, None),
+        ("FALLOFF_GEODESICS", {"type": 'ONE', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("FALLOFF_TOPOLOGY", {"type": 'TWO', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("FALLOFF_TOPOLOGY_DIAGONALS", {"type": 'THREE', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("FALLOFF_SPHERICAL", {"type": 'FOUR', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("SNAP_TOGGLE", {"type": 'LEFT_CTRL', "value": 'ANY', "repeat" : False}, None),
+        ("LOOP_COUNT_INCREASE", {"type": 'W', "value": 'PRESS', "any": True, "repeat" : True}, None),
+        ("LOOP_COUNT_DECREASE", {"type": 'Q', "value": 'PRESS', "any": True, "repeat" : True}, None),
+        ("BRUSH_GRADIENT_TOGGLE", {"type": 'B', "value": 'PRESS', "any": True, "repeat" : False}, None),
+        ("TEXTURE_DISTORTION_INCREASE", {"type": 'Y', "value": 'PRESS', "any": False, "repeat" : True}, None),
+        ("TEXTURE_DISTORTION_DECREASE", {"type": 'T', "value": 'PRESS', "any": False, "repeat" : True}, None),
+    ])
+    return keymap
+
+
 
 
 # Fallback for gizmos that don't have custom a custom key-map.
@@ -6757,6 +6794,15 @@ def km_3d_view_tool_paint_gpencil_eyedropper(params):
         ]},
     )
 
+def km_3d_view_tool_paint_gpencil_interpolate(params):
+    return (
+        "3D View Tool: Paint Gpencil, Interpolate",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("gpencil.interpolate", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("release_confirm", True)]}),
+        ]},
+    )
 
 def km_3d_view_tool_edit_gpencil_select(params):
     return (
@@ -6853,6 +6899,17 @@ def km_3d_view_tool_edit_gpencil_transform_fill(params):
         {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
         {"items": [
             ("gpencil.transform_fill", {"type": params.tool_tweak, "value": 'ANY'},
+             {"properties": [("release_confirm", True)]}),
+        ]},
+    )
+
+
+def km_3d_view_tool_edit_gpencil_interpolate(params):
+    return (
+        "3D View Tool: Edit Gpencil, Interpolate",
+        {"space_type": 'VIEW_3D', "region_type": 'WINDOW'},
+        {"items": [
+            ("gpencil.interpolate", {"type": params.tool_tweak, "value": 'ANY'},
              {"properties": [("release_confirm", True)]}),
         ]},
     )
@@ -7065,6 +7122,7 @@ def generate_keymaps(params=None):
         km_view3d_zoom_modal(params),
         km_view3d_dolly_modal(params),
         km_paint_stroke_modal(params),
+        km_sculpt_expand_modal(params),
 
         # Gizmos.
         km_generic_gizmo(params),
@@ -7173,6 +7231,7 @@ def generate_keymaps(params=None):
         km_3d_view_tool_paint_gpencil_curve(params),
         km_3d_view_tool_paint_gpencil_cutter(params),
         km_3d_view_tool_paint_gpencil_eyedropper(params),
+        km_3d_view_tool_paint_gpencil_interpolate(params),
         km_3d_view_tool_edit_gpencil_select(params),
         km_3d_view_tool_edit_gpencil_select_box(params),
         km_3d_view_tool_edit_gpencil_select_circle(params),
@@ -7183,6 +7242,7 @@ def generate_keymaps(params=None):
         km_3d_view_tool_edit_gpencil_shear(params),
         km_3d_view_tool_edit_gpencil_to_sphere(params),
         km_3d_view_tool_edit_gpencil_transform_fill(params),
+        km_3d_view_tool_edit_gpencil_interpolate(params),
         km_3d_view_tool_sculpt_gpencil_select(params),
         km_3d_view_tool_sculpt_gpencil_select_box(params),
         km_3d_view_tool_sculpt_gpencil_select_circle(params),

@@ -37,13 +37,13 @@
 #include "BKE_gpencil_geom.h"
 
 #include "ED_gpencil.h"
+#include "ED_keyframing.h"
 
 #include "transform.h"
 #include "transform_convert.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Gpencil Transform Creation
- *
  * \{ */
 
 static void createTransGPencil_center_get(bGPDstroke *gps, float r_center[3])
@@ -115,6 +115,7 @@ static void createTransGPencil_curves(bContext *C,
 #define SEL_F3 (1 << 2)
 
   View3D *v3d = t->view;
+  Scene *scene = CTX_data_scene(C);
   const bool handle_only_selected_visible = (v3d->overlay.handle_display == CURVE_HANDLE_SELECTED);
   const bool handle_all_visible = (v3d->overlay.handle_display == CURVE_HANDLE_ALL);
 
@@ -231,7 +232,9 @@ static void createTransGPencil_curves(bContext *C,
       }
 
       if ((gpf->framenum != cfra) && (!is_multiedit)) {
-        gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        if (IS_AUTOKEY_ON(scene)) {
+          gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        }
         /* in some weird situations (framelock enabled) return NULL */
         if (gpf == NULL) {
           continue;
@@ -406,6 +409,7 @@ static void createTransGPencil_strokes(bContext *C,
                                        const bool is_prop_edit_connected,
                                        const bool is_scale_thickness)
 {
+  Scene *scene = CTX_data_scene(C);
   TransData *td = NULL;
   float mtx[3][3], smtx[3][3];
 
@@ -518,7 +522,9 @@ static void createTransGPencil_strokes(bContext *C,
        *   spent too much time editing the wrong frame...
        */
       if ((gpf->framenum != cfra) && (!is_multiedit)) {
-        gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        if (IS_AUTOKEY_ON(scene)) {
+          gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        }
         /* in some weird situations (framelock enabled) return NULL */
         if (gpf == NULL) {
           continue;

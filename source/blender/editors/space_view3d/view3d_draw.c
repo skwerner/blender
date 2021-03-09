@@ -878,7 +878,11 @@ void ED_view3d_draw_depth(Depsgraph *depsgraph, ARegion *region, View3D *v3d, bo
   UI_Theme_Restore(&theme_state);
 }
 
-/* ******************** other elements ***************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Other Elements
+ * \{ */
 
 /** could move this elsewhere, but tied into #ED_view3d_grid_scale */
 float ED_scene_grid_scale(const Scene *scene, const char **r_grid_unit)
@@ -1998,7 +2002,7 @@ ImBuf *ED_view3d_draw_offscreen_imbuf(Depsgraph *depsgraph,
     GPU_offscreen_read_pixels(ofs, GPU_DATA_FLOAT, ibuf->rect_float);
   }
   else if (ibuf->rect) {
-    GPU_offscreen_read_pixels(ofs, GPU_DATA_UNSIGNED_BYTE, ibuf->rect);
+    GPU_offscreen_read_pixels(ofs, GPU_DATA_UBYTE, ibuf->rect);
   }
 
   /* unbind */
@@ -2149,7 +2153,11 @@ bool ED_view3d_clipping_test(const RegionView3D *rv3d, const float co[3], const 
   return view3d_clipping_test(co, is_local ? rv3d->clip_local : rv3d->clip);
 }
 
-/* *********************** backdraw for selection *************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Back-Draw for Selection
+ * \{ */
 
 /**
  * \note Only use in object mode.
@@ -2192,7 +2200,7 @@ static void validate_object_select_id(struct Depsgraph *depsgraph,
   }
 
   /* TODO: Create a flag in `DRW_manager` because the drawing is no longer
-   *       made on the backbuffer in this case. */
+   *       made on the back-buffer in this case. */
   v3d->flag &= ~V3D_INVALID_BACKBUF;
 }
 
@@ -2221,7 +2229,7 @@ static void view3d_opengl_read_Z_pixels(GPUViewport *viewport, rcti *rect, void 
 void ED_view3d_select_id_validate(ViewContext *vc)
 {
   /* TODO: Create a flag in `DRW_manager` because the drawing is no longer
-   *       made on the backbuffer in this case. */
+   *       made on the back-buffer in this case. */
   if (vc->v3d->flag & V3D_INVALID_BACKBUF) {
     validate_object_select_id(vc->depsgraph, vc->view_layer, vc->region, vc->v3d, vc->obact);
   }
@@ -2251,7 +2259,11 @@ int ED_view3d_backbuf_sample_size_clamp(ARegion *region, const float dist)
   return (int)min_ff(ceilf(dist), (float)max_ii(region->winx, region->winx));
 }
 
-/* *********************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Z-Depth Utilities
+ * \{ */
 
 void view3d_update_depths_rect(ARegion *region, ViewDepths *d, rcti *rect)
 {
@@ -2383,7 +2395,11 @@ void ED_view3d_draw_depth_gpencil(Depsgraph *depsgraph, Scene *scene, ARegion *r
   GPU_depth_test(GPU_DEPTH_NONE);
 }
 
-/* *********************** customdata **************** */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Custom-data Utilities
+ * \{ */
 
 void ED_view3d_datamask(const bContext *C,
                         const Scene *UNUSED(scene),
@@ -2430,6 +2446,12 @@ void ED_view3d_screen_datamask(const bContext *C,
   }
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Region View Matrix Backup/Restore
+ * \{ */
+
 /**
  * Store values from #RegionView3D, set when drawing.
  * This is needed when we draw with to a viewport using a different matrix
@@ -2471,6 +2493,12 @@ void ED_view3d_mats_rv3d_restore(struct RegionView3D *rv3d, struct RV3DMatrixSto
   copy_v4_v4(rv3d->viewcamtexcofac, rv3dmat->viewcamtexcofac);
   rv3d->pixsize = rv3dmat->pixsize;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name FPS Drawing
+ * \{ */
 
 /**
  * \note The info that this uses is updated in #ED_refresh_viewport_fps,
@@ -2530,6 +2558,12 @@ void ED_scene_draw_fps(const Scene *scene, int xoffset, int *yoffset)
 
   BLF_disable(font_id, BLF_SHADOW);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Calculate Render Border
+ * \{ */
 
 static bool view3d_main_region_do_render_draw(const Scene *scene)
 {

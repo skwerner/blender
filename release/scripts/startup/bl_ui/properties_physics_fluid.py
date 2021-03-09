@@ -19,7 +19,7 @@
 # <pep8 compliant>
 
 import bpy
-from bpy.types import Menu, Panel
+from bpy.types import Panel
 from bl_ui.utils import PresetPanel
 from .properties_physics_common import (
     effector_weights_ui,
@@ -958,7 +958,7 @@ class PHYSICS_PT_particles(PhysicButtonsPanel, Panel):
         col.separator()
 
         col = flow.column()
-        col.prop(domain, "sndparticle_boundary", text="Particles in Boundary:")
+        col.prop(domain, "sndparticle_boundary", text="Particles in Boundary")
 
         if domain.cache_type == 'MODULAR':
             col.separator()

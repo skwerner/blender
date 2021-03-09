@@ -55,6 +55,7 @@
 
 #include "BLI_path_util.h"
 #include "BLI_string.h"
+#include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
@@ -572,6 +573,9 @@ static int startffmpeg(struct anim *anim)
   }
 
   pCodecCtx->workaround_bugs = 1;
+
+  pCodecCtx->thread_count = BLI_system_thread_count();
+  pCodecCtx->thread_type = FF_THREAD_SLICE;
 
   if (avcodec_open2(pCodecCtx, pCodec, NULL) < 0) {
     avformat_close_input(&pFormatCtx);
@@ -1145,7 +1149,7 @@ static ImBuf *ffmpeg_fetchibuf(struct anim *anim, int position, IMB_Timecode_Typ
       }
     }
     else {
-      pos = (int64_t)(position - anim->preseek) * AV_TIME_BASE / frame_rate;
+      pos = (int64_t)position * AV_TIME_BASE / frame_rate;
 
       av_log(anim->pFormatCtx,
              AV_LOG_DEBUG,

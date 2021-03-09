@@ -277,7 +277,7 @@ void mul_m4_m4m4_uniq(float R[4][4], const float A[4][4], const float B[4][4])
   BLI_assert(!ELEM(R, A, B));
 
   /* matrix product: R[j][k] = A[j][i] . B[i][k] */
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   __m128 A0 = _mm_loadu_ps(A[0]);
   __m128 A1 = _mm_loadu_ps(A[1]);
   __m128 A2 = _mm_loadu_ps(A[2]);
@@ -2137,6 +2137,16 @@ void mat3_to_rot_size(float rot[3][3], float size[3], const float mat3[3][3])
   if (UNLIKELY(is_negative_m3(rot))) {
     negate_m3(rot);
     negate_v3(size);
+  }
+}
+
+void mat4_to_rot(float rot[3][3], const float wmat[4][4])
+{
+  normalize_v3_v3(rot[0], wmat[0]);
+  normalize_v3_v3(rot[1], wmat[1]);
+  normalize_v3_v3(rot[2], wmat[2]);
+  if (UNLIKELY(is_negative_m3(rot))) {
+    negate_m3(rot);
   }
 }
 

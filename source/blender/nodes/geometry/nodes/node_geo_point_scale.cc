@@ -35,6 +35,8 @@ static bNodeSocketTemplate geo_node_point_scale_out[] = {
 
 static void geo_node_point_scale_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
   uiItemR(layout, ptr, "input_type", 0, IFACE_("Type"), ICON_NONE);
 }
 
@@ -45,6 +47,9 @@ static void execute_on_component(GeoNodeExecParams params, GeometryComponent &co
   static const float3 scale_default = float3(1.0f);
   OutputAttributePtr scale_attribute = component.attribute_try_get_for_output(
       "scale", ATTR_DOMAIN_POINT, CD_PROP_FLOAT3, &scale_default);
+  if (!scale_attribute) {
+    return;
+  }
   ReadAttributePtr attribute = params.get_input_attribute(
       "Factor", component, ATTR_DOMAIN_POINT, CD_PROP_FLOAT3, nullptr);
   if (!attribute) {
@@ -63,6 +68,8 @@ static void execute_on_component(GeoNodeExecParams params, GeometryComponent &co
 static void geo_node_point_scale_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     execute_on_component(params, geometry_set.get_component_for_write<MeshComponent>());

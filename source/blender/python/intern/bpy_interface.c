@@ -419,16 +419,19 @@ void BPY_python_start(bContext *C, int argc, const char **argv)
     /* Allow to use our own included Python. `py_path_bundle` may be NULL. */
     {
       const char *py_path_bundle = BKE_appdir_folder_id(BLENDER_SYSTEM_PYTHON, NULL);
-#  ifdef __APPLE__
-      /* OSX allow file/directory names to contain : character (represented as / in the Finder)
-       * but current Python lib (release 3.1.1) doesn't handle these correctly */
-      if (strchr(py_path_bundle, ':')) {
-        fprintf(stderr,
-                "Warning! Blender application is located in a path containing ':' or '/' chars\n"
-                "This may make python import function fail\n");
-      }
-#  endif
       if (py_path_bundle != NULL) {
+
+#  ifdef __APPLE__
+        /* Mac-OS allows file/directory names to contain `:` character
+         * (represented as `/` in the Finder) but current Python lib (as of release 3.1.1)
+         * doesn't handle these correctly. */
+        if (strchr(py_path_bundle, ':')) {
+          fprintf(stderr,
+                  "Warning! Blender application is located in a path containing ':' or '/' chars\n"
+                  "This may make python import function fail\n");
+        }
+#  endif /* __APPLE__ */
+
         status = PyConfig_SetBytesString(&config, &config.home, py_path_bundle);
         pystatus_exit_on_error(status);
       }
@@ -585,8 +588,8 @@ void BPY_python_backtrace(FILE *fp)
     PyFrameObject *frame = tstate->frame;
     do {
       const int line = PyCode_Addr2Line(frame->f_code, frame->f_lasti);
-      const char *filename = _PyUnicode_AsString(frame->f_code->co_filename);
-      const char *funcname = _PyUnicode_AsString(frame->f_code->co_name);
+      const char *filename = PyUnicode_AsUTF8(frame->f_code->co_filename);
+      const char *funcname = PyUnicode_AsUTF8(frame->f_code->co_name);
       fprintf(fp, "  File \"%s\", line %d in %s\n", filename, line, funcname);
     } while ((frame = frame->f_back));
   }
@@ -778,7 +781,7 @@ static void bpy_module_delay_init(PyObject *bpy_proxy)
   /* updating the module dict below will lose the reference to __file__ */
   PyObject *filename_obj = PyModule_GetFilenameObject(bpy_proxy);
 
-  const char *filename_rel = _PyUnicode_AsString(filename_obj); /* can be relative */
+  const char *filename_rel = PyUnicode_AsUTF8(filename_obj); /* can be relative */
   char filename_abs[1024];
 
   BLI_strncpy(filename_abs, filename_rel, sizeof(filename_abs));

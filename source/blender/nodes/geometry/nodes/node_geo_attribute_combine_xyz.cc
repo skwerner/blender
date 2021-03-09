@@ -40,9 +40,12 @@ static void geo_node_attribute_combine_xyz_layout(uiLayout *layout,
                                                   bContext *UNUSED(C),
                                                   PointerRNA *ptr)
 {
-  uiItemR(layout, ptr, "input_type_x", 0, IFACE_("Type X"), ICON_NONE);
-  uiItemR(layout, ptr, "input_type_y", 0, IFACE_("Type Y"), ICON_NONE);
-  uiItemR(layout, ptr, "input_type_z", 0, IFACE_("Type Z"), ICON_NONE);
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+  uiLayout *col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "input_type_x", 0, IFACE_("X"), ICON_NONE);
+  uiItemR(col, ptr, "input_type_y", 0, IFACE_("Y"), ICON_NONE);
+  uiItemR(col, ptr, "input_type_z", 0, IFACE_("Z"), ICON_NONE);
 }
 
 namespace blender::nodes {
@@ -69,14 +72,27 @@ static void geo_node_attribute_combine_xyz_update(bNodeTree *UNUSED(ntree), bNod
       *node, "Z", (GeometryNodeAttributeInputMode)node_storage->input_type_z);
 }
 
+static AttributeDomain get_result_domain(const GeometryComponent &component,
+                                         const GeoNodeExecParams &params,
+                                         StringRef result_name)
+{
+  /* Use the domain of the result attribute if it already exists. */
+  ReadAttributePtr result_attribute = component.attribute_try_get_for_read(result_name);
+  if (result_attribute) {
+    return result_attribute->domain();
+  }
+
+  /* Otherwise use the highest priority domain from existing input attributes, or the default. */
+  return params.get_highest_priority_input_domain({"X", "Y", "Z"}, component, ATTR_DOMAIN_POINT);
+}
+
 static void combine_attributes(GeometryComponent &component, const GeoNodeExecParams &params)
 {
   const std::string result_name = params.get_input<std::string>("Result");
-  /* The result domain is always point for now. */
-  const AttributeDomain result_domain = ATTR_DOMAIN_POINT;
   if (result_name.empty()) {
     return;
   }
+  const AttributeDomain result_domain = get_result_domain(component, params, result_name);
 
   OutputAttributePtr attribute_result = component.attribute_try_get_for_output(
       result_name, result_domain, CD_PROP_FLOAT3);
@@ -104,6 +120,8 @@ static void combine_attributes(GeometryComponent &component, const GeoNodeExecPa
 static void geo_node_attribute_combine_xyz_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     combine_attributes(geometry_set.get_component_for_write<MeshComponent>(), params);

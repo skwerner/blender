@@ -67,6 +67,7 @@
 
 #include "ED_clip.h"
 #include "ED_gpencil.h"
+#include "ED_keyframing.h"
 #include "ED_object.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
@@ -149,9 +150,9 @@ typedef struct tGPsdata {
   Scene *scene;
   struct Depsgraph *depsgraph;
 
-  /** current object. */
+  /** Current object. */
   Object *ob;
-  /** Obeject eval. */
+  /** Evaluated object. */
   Object *ob_eval;
   /** window where painting originated. */
   wmWindow *win;
@@ -1087,7 +1088,8 @@ static void gpencil_stroke_newfrombuffer(tGPsdata *p)
     }
 
     /* If camera view or view projection, reproject flat to view to avoid perspective effect. */
-    if (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || is_camera) {
+    if ((!is_depth) &&
+        (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || (is_camera))) {
       ED_gpencil_project_stroke_to_view(p->C, p->gpl, gps);
     }
   }
@@ -1236,7 +1238,7 @@ static void gpencil_stroke_newfrombuffer(tGPsdata *p)
     /* change position relative to parent object */
     gpencil_apply_parent(depsgraph, obact, gpl, gps);
     /* If camera view or view projection, reproject flat to view to avoid perspective effect. */
-    if (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || is_camera) {
+    if ((!is_depth) && (((align_flag & GP_PROJECT_VIEWSPACE) && is_lock_axis_view) || is_camera)) {
       ED_gpencil_project_stroke_to_view(p->C, p->gpl, gps);
     }
 
@@ -1876,7 +1878,7 @@ static void gpencil_init_drawing_brush(bContext *C, tGPsdata *p)
     BKE_brush_gpencil_paint_presets(bmain, ts, true);
     changed = true;
   }
-  /* Be sure curves are initializated. */
+  /* Be sure curves are initialized. */
   BKE_curvemapping_init(paint->brush->gpencil_settings->curve_sensitivity);
   BKE_curvemapping_init(paint->brush->gpencil_settings->curve_strength);
   BKE_curvemapping_init(paint->brush->gpencil_settings->curve_jitter);
@@ -1887,7 +1889,7 @@ static void gpencil_init_drawing_brush(bContext *C, tGPsdata *p)
   BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_saturation);
   BKE_curvemapping_init(paint->brush->gpencil_settings->curve_rand_value);
 
-  /* assign to temp tGPsdata */
+  /* Assign to temp #tGPsdata */
   p->brush = paint->brush;
   if (paint->brush->gpencil_tool != GPAINT_TOOL_ERASE) {
     p->eraser = gpencil_get_default_eraser(p->bmain, ts);
@@ -2154,6 +2156,10 @@ static void gpencil_paint_initstroke(tGPsdata *p,
         continue;
       }
 
+      if (!IS_AUTOKEY_ON(scene) && (gpl->actframe == NULL)) {
+        continue;
+      }
+
       /* Add a new frame if needed (and based off the active frame,
        * as we need some existing strokes to erase)
        *
@@ -2163,7 +2169,8 @@ static void gpencil_paint_initstroke(tGPsdata *p,
        */
       if (gpl->actframe && gpl->actframe->strokes.first) {
         if (ts->gpencil_flags & GP_TOOL_FLAG_RETAIN_LAST) {
-          gpl->actframe = BKE_gpencil_layer_frame_get(gpl, CFRA, GP_GETFRAME_ADD_COPY);
+          short frame_mode = IS_AUTOKEY_ON(scene) ? GP_GETFRAME_ADD_COPY : GP_GETFRAME_USE_PREV;
+          gpl->actframe = BKE_gpencil_layer_frame_get(gpl, CFRA, frame_mode);
         }
         has_layer_to_erase = true;
         break;
@@ -2186,11 +2193,16 @@ static void gpencil_paint_initstroke(tGPsdata *p,
     /* Drawing Modes - Add a new frame if needed on the active layer */
     short add_frame_mode;
 
-    if (ts->gpencil_flags & GP_TOOL_FLAG_RETAIN_LAST) {
-      add_frame_mode = GP_GETFRAME_ADD_COPY;
+    if (IS_AUTOKEY_ON(scene)) {
+      if (ts->gpencil_flags & GP_TOOL_FLAG_RETAIN_LAST) {
+        add_frame_mode = GP_GETFRAME_ADD_COPY;
+      }
+      else {
+        add_frame_mode = GP_GETFRAME_ADD_NEW;
+      }
     }
     else {
-      add_frame_mode = GP_GETFRAME_ADD_NEW;
+      add_frame_mode = GP_GETFRAME_USE_PREV;
     }
 
     bool need_tag = p->gpl->actframe == NULL;
@@ -2205,6 +2217,10 @@ static void gpencil_paint_initstroke(tGPsdata *p,
       if (G.debug & G_DEBUG) {
         printf("Error: No frame created (gpencil_paint_init)\n");
       }
+      if (!IS_AUTOKEY_ON(scene)) {
+        BKE_report(p->reports, RPT_INFO, "No available frame for creating stroke");
+      }
+
       return;
     }
     p->gpf->flag |= GP_FRAME_PAINT;
@@ -2468,6 +2484,8 @@ static int gpencil_draw_init(bContext *C, wmOperator *op, const wmEvent *event)
     return 0;
   }
 
+  p->reports = op->reports;
+
   /* init painting data */
   gpencil_paint_initstroke(p, paintmode, CTX_data_ensure_evaluated_depsgraph(C));
   if (p->status == GP_STATUS_ERROR) {
@@ -2481,8 +2499,6 @@ static int gpencil_draw_init(bContext *C, wmOperator *op, const wmEvent *event)
   else {
     p->keymodifier = -1;
   }
-
-  p->reports = op->reports;
 
   /* everything is now setup ok */
   return 1;
@@ -2834,7 +2850,7 @@ static void gpencil_draw_apply_event(bContext *C,
 
   /* verify direction for straight lines and guides */
   if ((is_speed_guide) ||
-      ((event->alt > 0) && (RNA_boolean_get(op->ptr, "disable_straight") == false))) {
+      (event->alt && (RNA_boolean_get(op->ptr, "disable_straight") == false))) {
     if (p->straight == 0) {
       int dx = (int)fabsf(p->mval[0] - p->mvali[0]);
       int dy = (int)fabsf(p->mval[1] - p->mvali[1]);
@@ -2875,13 +2891,13 @@ static void gpencil_draw_apply_event(bContext *C,
 
   /* special eraser modes */
   if (p->paintmode == GP_PAINTMODE_ERASER) {
-    if (event->shift > 0) {
+    if (event->shift) {
       p->flags |= GP_PAINTFLAG_HARD_ERASER;
     }
     else {
       p->flags &= ~GP_PAINTFLAG_HARD_ERASER;
     }
-    if (event->alt > 0) {
+    if (event->alt) {
       p->flags |= GP_PAINTFLAG_STROKE_ERASER;
     }
     else {

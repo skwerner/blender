@@ -100,7 +100,7 @@ static Mesh *mesh_boolean_calc(const Mesh *mesh_a, const Mesh *mesh_b, int boole
   }
 
   BM_mesh_boolean(
-      bm, looptris, tottri, bm_face_isect_pair, nullptr, 2, false, false, boolean_mode);
+      bm, looptris, tottri, bm_face_isect_pair, nullptr, 2, false, false, false, boolean_mode);
 
   Mesh *result = BKE_mesh_from_bmesh_for_eval_nomain(bm, nullptr, mesh_a);
   BM_mesh_free(bm);
@@ -123,6 +123,12 @@ static void geo_node_boolean_exec(GeoNodeExecParams params)
     params.set_output("Geometry", std::move(geometry_set_out));
     return;
   }
+
+  /* TODO: Boolean does support an input of multiple meshes. Currently they must all be
+   * converted to BMesh before running the operation though. D9957 will make it possible
+   * to use the mesh structure directly. */
+  geometry_set_in_a = geometry_set_realize_instances(geometry_set_in_a);
+  geometry_set_in_b = geometry_set_realize_instances(geometry_set_in_b);
 
   const Mesh *mesh_in_a = geometry_set_in_a.get_mesh_for_read();
   const Mesh *mesh_in_b = geometry_set_in_b.get_mesh_for_read();

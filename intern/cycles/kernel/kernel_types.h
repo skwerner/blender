@@ -1703,7 +1703,7 @@ typedef struct KernelWorkTile {
 } KernelWorkTile;
 
 /* Pre-computed sample table sizes for PMJ02 sampler. */
-#define NUM_PMJ_SAMPLES 64 * 64
+#define NUM_PMJ_SAMPLES (64 * 64)
 #define NUM_PMJ_PATTERNS 48
 
 CCL_NAMESPACE_END

@@ -301,11 +301,11 @@ typedef struct bNodeType {
   void (*free_self)(struct bNodeType *ntype);
 
   /* **** execution callbacks **** */
-  NodeInitExecFunction initexecfunc;
-  NodeFreeExecFunction freeexecfunc;
-  NodeExecFunction execfunc;
+  NodeInitExecFunction init_exec_fn;
+  NodeFreeExecFunction free_exec_fn;
+  NodeExecFunction exec_fn;
   /* gpu */
-  NodeGPUExecFunction gpufunc;
+  NodeGPUExecFunction gpu_fn;
 
   /* Expands the bNode into nodes in a multi-function network, which will be evaluated later on. */
   NodeExpandInMFNetworkFunction expand_in_mf_network;
@@ -442,7 +442,6 @@ struct bNodeTree *ntreeCopyTree(struct Main *bmain, const struct bNodeTree *ntre
 
 struct bNodeTree **BKE_ntree_ptr_from_id(struct ID *id);
 struct bNodeTree *ntreeFromID(struct ID *id);
-struct ID *BKE_node_tree_find_owner_ID(struct Main *bmain, struct bNodeTree *ntree);
 
 void ntreeFreeLocalNode(struct bNodeTree *ntree, struct bNode *node);
 void ntreeFreeLocalTree(struct bNodeTree *ntree);
@@ -778,7 +777,7 @@ void BKE_node_preview_free(struct bNodePreview *preview);
 void BKE_node_preview_init_tree(struct bNodeTree *ntree,
                                 int xsize,
                                 int ysize,
-                                int create_previews);
+                                bool create_previews);
 void BKE_node_preview_free_tree(struct bNodeTree *ntree);
 void BKE_node_preview_remove_unused(struct bNodeTree *ntree);
 void BKE_node_preview_clear(struct bNodePreview *preview);
@@ -830,10 +829,10 @@ void node_type_group_update(struct bNodeType *ntype,
                                                       struct bNode *node));
 
 void node_type_exec(struct bNodeType *ntype,
-                    NodeInitExecFunction initexecfunc,
-                    NodeFreeExecFunction freeexecfunc,
-                    NodeExecFunction execfunc);
-void node_type_gpu(struct bNodeType *ntype, NodeGPUExecFunction gpufunc);
+                    NodeInitExecFunction init_exec_fn,
+                    NodeFreeExecFunction free_exec_fn,
+                    NodeExecFunction exec_fn);
+void node_type_gpu(struct bNodeType *ntype, NodeGPUExecFunction gpu_fn);
 void node_type_internal_links(struct bNodeType *ntype,
                               void (*update_internal_links)(struct bNodeTree *, struct bNode *));
 
@@ -1349,7 +1348,7 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 #define GEO_NODE_BOOLEAN 1003
 #define GEO_NODE_POINT_DISTRIBUTE 1004
 #define GEO_NODE_POINT_INSTANCE 1005
-#define GEO_NODE_SUBDIVISION_SURFACE 1006
+#define GEO_NODE_SUBDIVIDE_SMOOTH 1006
 #define GEO_NODE_OBJECT_INFO 1007
 #define GEO_NODE_ATTRIBUTE_RANDOMIZE 1008
 #define GEO_NODE_ATTRIBUTE_MATH 1009
@@ -1372,6 +1371,7 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 #define GEO_NODE_VOLUME_TO_MESH 1026
 #define GEO_NODE_ATTRIBUTE_COMBINE_XYZ 1027
 #define GEO_NODE_ATTRIBUTE_SEPARATE_XYZ 1028
+#define GEO_NODE_SUBDIVIDE 1029
 
 /** \} */
 
@@ -1387,6 +1387,7 @@ int ntreeTexExecTree(struct bNodeTree *ntree,
 #define FN_NODE_OBJECT_TRANSFORMS 1205
 #define FN_NODE_RANDOM_FLOAT 1206
 #define FN_NODE_INPUT_VECTOR 1207
+#define FN_NODE_INPUT_STRING 1208
 
 /** \} */
 

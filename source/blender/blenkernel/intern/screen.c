@@ -65,6 +65,10 @@
 
 #include "BLO_read_write.h"
 
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
+
 static void screen_free_data(ID *id)
 {
   bScreen *screen = (bScreen *)id;
@@ -307,6 +311,7 @@ IDTypeInfo IDType_ID_SCR = {
     .make_local = NULL,
     .foreach_id = screen_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = screen_blend_write,
     /* Cannot be used yet, because #direct_link_screen has a return value. */
@@ -328,6 +333,9 @@ static ListBase spacetypes = {NULL, NULL};
 static void spacetype_free(SpaceType *st)
 {
   LISTBASE_FOREACH (ARegionType *, art, &st->regiontypes) {
+#ifdef WITH_PYTHON
+    BPY_callback_screen_free(art);
+#endif
     BLI_freelistN(&art->drawcalls);
 
     LISTBASE_FOREACH (PanelType *, pt, &art->paneltypes) {
@@ -525,7 +533,7 @@ void BKE_spacedata_copylist(ListBase *lb1, ListBase *lb2)
 /* facility to set locks for drawing to survive (render) threads accessing drawing data */
 /* lock can become bitflag too */
 /* should be replaced in future by better local data handling for threads */
-void BKE_spacedata_draw_locks(int set)
+void BKE_spacedata_draw_locks(bool set)
 {
   LISTBASE_FOREACH (SpaceType *, st, &spacetypes) {
     LISTBASE_FOREACH (ARegionType *, art, &st->regiontypes) {
@@ -1209,7 +1217,7 @@ static void write_panel_list(BlendWriter *writer, ListBase *lb)
   }
 }
 
-static void write_area_regions(BlendWriter *writer, ScrArea *area)
+static void write_area(BlendWriter *writer, ScrArea *area)
 {
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     write_region(writer, region, area->spacetype);
@@ -1334,6 +1342,9 @@ static void write_area_regions(BlendWriter *writer, ScrArea *area)
     else if (sl->spacetype == SPACE_INFO) {
       BLO_write_struct(writer, SpaceInfo, sl);
     }
+    else if (sl->spacetype == SPACE_SPREADSHEET) {
+      BLO_write_struct(writer, SpaceSpreadsheet, sl);
+    }
   }
 }
 
@@ -1348,7 +1359,7 @@ void BKE_screen_area_map_blend_write(BlendWriter *writer, ScrAreaMap *area_map)
 
     BLO_write_struct(writer, ScrGlobalAreaData, area->global);
 
-    write_area_regions(writer, area);
+    write_area(writer, area);
 
     area->butspacetype = SPACE_EMPTY; /* Unset again, was changed above. */
   }
@@ -1673,6 +1684,7 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
       sfile->op = NULL;
       sfile->previews_timer = NULL;
       sfile->tags = 0;
+      sfile->runtime = NULL;
       BLO_read_data_address(reader, &sfile->params);
       BLO_read_data_address(reader, &sfile->asset_params);
     }

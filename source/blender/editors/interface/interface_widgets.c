@@ -1180,7 +1180,7 @@ void UI_widgetbase_draw_cache_flush(void)
     /* draw single */
     GPU_batch_program_set_builtin(batch, GPU_SHADER_2D_WIDGET_BASE);
     GPU_batch_uniform_4fv_array(
-        batch, "parameters", MAX_WIDGET_PARAMETERS, (float(*)[4])g_widget_base_batch.params);
+        batch, "parameters", MAX_WIDGET_PARAMETERS, (const float(*)[4])g_widget_base_batch.params);
     GPU_batch_uniform_3fv(batch, "checkerColorAndSize", checker_params);
     GPU_batch_draw(batch);
   }
@@ -3667,16 +3667,16 @@ static void widget_progressbar(
 
   /* round corners */
   const float value = but_progressbar->progress;
-  const float offs = wcol->roundness * BLI_rcti_size_y(&rect_prog);
+  const float ofs = wcol->roundness * BLI_rcti_size_y(&rect_prog);
   float w = value * BLI_rcti_size_x(&rect_prog);
 
   /* Ensure minimum size. */
-  w = MAX2(w, offs);
+  w = MAX2(w, ofs);
 
   rect_bar.xmax = rect_bar.xmin + w;
 
-  round_box_edges(&wtb, roundboxalign, &rect_prog, offs);
-  round_box_edges(&wtb_bar, roundboxalign, &rect_bar, offs);
+  round_box_edges(&wtb, roundboxalign, &rect_prog, ofs);
+  round_box_edges(&wtb_bar, roundboxalign, &rect_bar, ofs);
 
   wtb.draw_outline = true;
   widgetbase_draw(&wtb, wcol);
@@ -3733,9 +3733,9 @@ static void widget_numslider(
   widget_init(&wtb1);
 
   /* Backdrop first. */
-  const float offs = wcol->roundness * BLI_rcti_size_y(rect);
-  const float toffs = offs * 0.75f;
-  round_box_edges(&wtb, roundboxalign, rect, offs);
+  const float ofs = wcol->roundness * BLI_rcti_size_y(rect);
+  const float toffs = ofs * 0.75f;
+  round_box_edges(&wtb, roundboxalign, rect, ofs);
 
   wtb.draw_outline = false;
   widgetbase_draw(&wtb, wcol);
@@ -3768,13 +3768,13 @@ static void widget_numslider(
     const float width = (float)BLI_rcti_size_x(rect);
     factor_ui = factor * width;
 
-    if (factor_ui <= offs) {
+    if (factor_ui <= ofs) {
       /* Left part only. */
       roundboxalign_slider &= ~(UI_CNR_TOP_RIGHT | UI_CNR_BOTTOM_RIGHT);
-      rect1.xmax = rect1.xmin + offs;
-      factor_discard = factor_ui / offs;
+      rect1.xmax = rect1.xmin + ofs;
+      factor_discard = factor_ui / ofs;
     }
-    else if (factor_ui <= width - offs) {
+    else if (factor_ui <= width - ofs) {
       /* Left part + middle part. */
       roundboxalign_slider &= ~(UI_CNR_TOP_RIGHT | UI_CNR_BOTTOM_RIGHT);
       rect1.xmax = rect1.xmin + factor_ui;
@@ -3784,7 +3784,7 @@ static void widget_numslider(
       factor_discard = factor;
     }
 
-    round_box_edges(&wtb1, roundboxalign_slider, &rect1, offs);
+    round_box_edges(&wtb1, roundboxalign_slider, &rect1, ofs);
     wtb1.draw_outline = false;
     widgetbase_set_uniform_discard_factor(&wtb1, factor_discard);
     widgetbase_draw(&wtb1, wcol);
@@ -5237,8 +5237,9 @@ void ui_draw_menu_item(const uiFontStyle *fstyle,
 {
   uiWidgetType *wt = widget_type(UI_WTYPE_MENU_ITEM);
   const rcti _rect = *rect;
+  const int row_height = BLI_rcti_size_y(rect);
   int max_hint_width = INT_MAX;
-  int padding = 0.25f * UI_UNIT_X;
+  int padding = 0.25f * row_height;
   char *cpoin = NULL;
 
   wt->state(wt, state, 0, UI_EMBOSS_UNDEFINED);
@@ -5249,7 +5250,7 @@ void ui_draw_menu_item(const uiFontStyle *fstyle,
   /* text location offset */
   rect->xmin += padding;
   if (iconid) {
-    rect->xmin += UI_DPI_ICON_SIZE;
+    rect->xmin += row_height; /* Use square area for icon. */
   }
 
   /* cut string in 2 parts? */

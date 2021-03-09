@@ -35,6 +35,8 @@ static bNodeSocketTemplate geo_node_point_translate_out[] = {
 
 static void geo_node_point_translate_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
 {
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
   uiItemR(layout, ptr, "input_type", 0, IFACE_("Type"), ICON_NONE);
 }
 
@@ -62,6 +64,8 @@ static void execute_on_component(GeoNodeExecParams params, GeometryComponent &co
 static void geo_node_point_translate_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     execute_on_component(params, geometry_set.get_component_for_write<MeshComponent>());

@@ -54,7 +54,6 @@
 #include "BLI_map.hh"
 #include "BLT_translation.h"
 
-#include "FN_attributes_ref.hh"
 #include "FN_multi_function_network_evaluation.hh"
 #include "FN_multi_function_network_optimization.hh"
 
@@ -166,6 +165,7 @@ IDTypeInfo IDType_ID_SIM = {
     /* make_local */ nullptr,
     /* foreach_id */ simulation_foreach_id,
     /* foreach_cache */ nullptr,
+    /* owner_get */ nullptr,
 
     /* blend_write */ simulation_blend_write,
     /* blend_read_data */ simulation_blend_read_data,

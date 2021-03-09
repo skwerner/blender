@@ -168,12 +168,14 @@ static bool ui_mouse_motion_keynav_test(struct uiKeyNavLock *keynav, const wmEve
 #define PIE_MENU_INTERVAL 0.01
 #define BUTTON_AUTO_OPEN_THRESH 0.2
 #define BUTTON_MOUSE_TOWARDS_THRESH 1.0
-/* pixels to move the cursor to get out of keyboard navigation */
+/** Pixels to move the cursor to get out of keyboard navigation. */
 #define BUTTON_KEYNAV_PX_LIMIT 8
 
-#define MENU_TOWARDS_MARGIN 20      /* margin in pixels */
-#define MENU_TOWARDS_WIGGLE_ROOM 64 /* tolerance in pixels */
-/* drag-lock distance threshold in pixels */
+/** Margin around the menu, use to check if we're moving towards this rectangle (in pixels). */
+#define MENU_TOWARDS_MARGIN 20
+/** Tolerance for closing menus (in pixels). */
+#define MENU_TOWARDS_WIGGLE_ROOM 64
+/** Drag-lock distance threshold (in pixels). */
 #define BUTTON_DRAGLOCK_THRESH 3
 
 typedef enum uiButtonActivateType {
@@ -665,7 +667,6 @@ static void ui_afterfunc_update_preferences_dirty(uiAfterFunc *after)
 
 /* -------------------------------------------------------------------- */
 /** \name Button Snap Values
- *
  * \{ */
 
 enum eSnapType {
@@ -3409,8 +3410,12 @@ static void ui_textedit_end(bContext *C, uiBut *but, uiHandleButtonData *data)
 
     if (data->searchbox) {
       if (data->cancel == false) {
+        BLI_assert(but->type == UI_BTYPE_SEARCH_MENU);
+        uiButSearch *but_search = (uiButSearch *)but;
+
         if ((ui_searchbox_apply(but, data->searchbox) == false) &&
-            (ui_searchbox_find_index(data->searchbox, but->editstr) == -1)) {
+            (ui_searchbox_find_index(data->searchbox, but->editstr) == -1) &&
+            !but_search->results_are_suggestions) {
           data->cancel = true;
 
           /* ensure menu (popup) too is closed! */
@@ -5241,8 +5246,8 @@ static bool ui_numedit_but_SLI(uiBut *but,
                      (but->softmax - but->softmin + but->a1);
   }
   else {
-    const float offs = (BLI_rctf_size_y(&but->rect) / 2.0f);
-    cursor_x_range = (BLI_rctf_size_x(&but->rect) - offs);
+    const float ofs = (BLI_rctf_size_y(&but->rect) / 2.0f);
+    cursor_x_range = (BLI_rctf_size_x(&but->rect) - ofs);
   }
 
   f = (mx_fl - data->dragstartx) / cursor_x_range + data->dragfstart;
@@ -7492,7 +7497,7 @@ static bool ui_numedit_but_TRACKPREVIEW(
 
   if (!scopes->track_locked) {
     const MovieClip *clip = CTX_data_edit_movieclip(C);
-    const int clip_framenr = BKE_movieclip_remap_scene_to_clip_frame(clip, scopes->framenr);
+    const int clip_framenr = BKE_movieclip_remap_scene_to_clip_frame(clip, scopes->scene_framenr);
     if (scopes->marker->framenr != clip_framenr) {
       scopes->marker = BKE_tracking_marker_ensure(scopes->track, clip_framenr);
     }
@@ -7928,7 +7933,7 @@ static void button_activate_state(bContext *C, uiBut *but, uiHandleButtonState s
 
     button_tooltip_timer_reset(C, but);
 
-    /* automatic open pulldown block timer */
+    /* Automatic open pull-down block timer. */
     if (ELEM(but->type, UI_BTYPE_BLOCK, UI_BTYPE_PULLDOWN, UI_BTYPE_POPOVER) ||
         /* Menu button types may draw as popovers, check for this case
          * ignoring other kinds of menus (mainly enums). (see T66538). */
@@ -8268,7 +8273,7 @@ static void button_activate_exit(
       bt->flag &= ~UI_BUT_LAST_ACTIVE;
     }
 
-    block_iter->tooltipdisabled = 1;
+    block_iter->tooltipdisabled = true;
   }
 
   ui_blocks_set_tooltips(data->region, false);
@@ -10441,7 +10446,7 @@ static int ui_pie_handler(bContext *C, const wmEvent *event, uiPopupBlockHandle 
       }
     }
 
-    if (event->type == block->pie_data.event && !is_click_style) {
+    if (event->type == block->pie_data.event_type && !is_click_style) {
       if (event->val != KM_RELEASE) {
         ui_handle_menu_button(C, event, menu);
 
@@ -10615,7 +10620,7 @@ static int ui_handle_menus_recursive(bContext *C,
     /* root pie menus accept the key that spawned
      * them as double click to improve responsiveness */
     const bool do_recursion = (!(block->flag & UI_BLOCK_RADIAL) ||
-                               event->type != block->pie_data.event);
+                               event->type != block->pie_data.event_type);
 
     if (do_recursion) {
       if (is_parent_inside == false) {
@@ -10908,7 +10913,7 @@ static int ui_popup_handler(bContext *C, const wmEvent *event, void *userdata)
 
     /* set last pie event to allow chained pie spawning */
     if (block->flag & UI_BLOCK_RADIAL) {
-      win->last_pie_event = block->pie_data.event;
+      win->pie_event_type_last = block->pie_data.event_type;
       reset_pie = true;
     }
 
@@ -10951,7 +10956,7 @@ static int ui_popup_handler(bContext *C, const wmEvent *event, void *userdata)
     wmWindow *win = CTX_wm_window(C);
 
     if (win) {
-      win->last_pie_event = EVENT_NONE;
+      win->pie_event_type_last = EVENT_NONE;
     }
   }
 

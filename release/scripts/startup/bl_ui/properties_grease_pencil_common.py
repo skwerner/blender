@@ -37,8 +37,6 @@ class AnnotationDrawingToolsPanel:
 
         tool_settings = context.tool_settings
 
-        is_clip_editor = context.space_data.type == 'CLIP_EDITOR'
-
         col = layout.column(align=True)
 
         col.label(text="Draw:")
@@ -328,11 +326,6 @@ class GPENCIL_MT_material_active(Menu):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        tool_settings = context.scene.tool_settings
-        mode = tool_settings.gpencil_paint.color_mode
-        if mode != 'MATERIAL':
-            return False
-
         if ob is None or len(ob.material_slots) == 0:
             return False
 
@@ -342,7 +335,6 @@ class GPENCIL_MT_material_active(Menu):
         layout = self.layout
         layout.operator_context = 'INVOKE_REGION_WIN'
         ob = context.active_object
-        mat_active = ob.active_material
 
         for slot in ob.material_slots:
             mat = slot.material
@@ -478,6 +470,7 @@ class AnnotationDataPanel:
 
         tool_settings = context.tool_settings
         if gpd and gpl:
+            layout.prop(gpl, "opacity", text="Opacity", slider=True)
             layout.prop(gpl, "thickness")
         else:
             layout.prop(tool_settings, "annotation_thickness", text="Thickness")

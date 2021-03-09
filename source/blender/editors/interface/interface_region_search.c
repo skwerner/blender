@@ -468,7 +468,8 @@ static void ui_searchbox_update_fn(bContext *C,
     wmWindow *win = CTX_wm_window(C);
     WM_tooltip_clear(C, win);
   }
-  search_but->items_update_fn(C, search_but->arg, str, items);
+  const bool is_first_search = !search_but->but.changed;
+  search_but->items_update_fn(C, search_but->arg, str, items, is_first_search);
 }
 
 /* region is the search box itself */
@@ -724,19 +725,13 @@ ARegion *ui_searchbox_create_generic(bContext *C, ARegion *butregion, uiButSearc
   wmWindow *win = CTX_wm_window(C);
   const uiStyle *style = UI_style_get();
   uiBut *but = &search_but->but;
-  static ARegionType type;
-  ARegion *region;
-  uiSearchboxData *data;
   const float aspect = but->block->aspect;
-  rctf rect_fl;
-  rcti rect_i;
   const int margin = UI_POPUP_MARGIN;
-  int winx /*, winy */, ofsx, ofsy;
-  int i;
 
   /* create area region */
-  region = ui_region_temp_add(CTX_wm_screen(C));
+  ARegion *region = ui_region_temp_add(CTX_wm_screen(C));
 
+  static ARegionType type;
   memset(&type, 0, sizeof(ARegionType));
   type.draw = ui_searchbox_region_draw_cb;
   type.free = ui_searchbox_region_free_cb;
@@ -744,7 +739,7 @@ ARegion *ui_searchbox_create_generic(bContext *C, ARegion *butregion, uiButSearc
   region->type = &type;
 
   /* create searchbox data */
-  data = MEM_callocN(sizeof(uiSearchboxData), "uiSearchboxData");
+  uiSearchboxData *data = MEM_callocN(sizeof(uiSearchboxData), "uiSearchboxData");
 
   /* set font, get bb */
   data->fstyle = style->widget; /* copy struct */
@@ -799,13 +794,14 @@ ARegion *ui_searchbox_create_generic(bContext *C, ARegion *butregion, uiButSearc
   else {
     const int searchbox_width = UI_searchbox_size_x();
 
+    rctf rect_fl;
     rect_fl.xmin = but->rect.xmin - 5; /* align text with button */
     rect_fl.xmax = but->rect.xmax + 5; /* symmetrical */
     rect_fl.ymax = but->rect.ymin;
     rect_fl.ymin = rect_fl.ymax - UI_searchbox_size_y();
 
-    ofsx = (but->block->panel) ? but->block->panel->ofsx : 0;
-    ofsy = (but->block->panel) ? but->block->panel->ofsy : 0;
+    const int ofsx = (but->block->panel) ? but->block->panel->ofsx : 0;
+    const int ofsy = (but->block->panel) ? but->block->panel->ofsy : 0;
 
     BLI_rctf_translate(&rect_fl, ofsx, ofsy);
 
@@ -815,6 +811,7 @@ ARegion *ui_searchbox_create_generic(bContext *C, ARegion *butregion, uiButSearc
     }
 
     /* copy to int, gets projected if possible too */
+    rcti rect_i;
     BLI_rcti_rctf_copy(&rect_i, &rect_fl);
 
     if (butregion->v2d.cur.xmin != butregion->v2d.cur.xmax) {
@@ -823,7 +820,7 @@ ARegion *ui_searchbox_create_generic(bContext *C, ARegion *butregion, uiButSearc
 
     BLI_rcti_translate(&rect_i, butregion->winrct.xmin, butregion->winrct.ymin);
 
-    winx = WM_window_pixels_x(win);
+    int winx = WM_window_pixels_x(win);
     // winy = WM_window_pixels_y(win);  /* UNUSED */
     // wm_window_get_size(win, &winx, &winy);
 
@@ -885,7 +882,7 @@ ARegion *ui_searchbox_create_generic(bContext *C, ARegion *butregion, uiButSearc
   data->items.icons = MEM_callocN(data->items.maxitem * sizeof(int), "search icons");
   data->items.states = MEM_callocN(data->items.maxitem * sizeof(int), "search flags");
   data->items.name_prefix_offsets = NULL; /* Lazy initialized as needed. */
-  for (i = 0; i < data->items.maxitem; i++) {
+  for (int i = 0; i < data->items.maxitem; i++) {
     data->items.names[i] = MEM_callocN(but->hardmax + 1, "search pointers");
   }
 
@@ -1000,10 +997,8 @@ static void ui_searchbox_region_draw_cb__operator(const bContext *UNUSED(C), ARe
 
 ARegion *ui_searchbox_create_operator(bContext *C, ARegion *butregion, uiButSearch *search_but)
 {
-  ARegion *region;
-
   UI_but_drawflag_enable(&search_but->but, UI_BUT_HAS_SHORTCUT);
-  region = ui_searchbox_create_generic(C, butregion, search_but);
+  ARegion *region = ui_searchbox_create_generic(C, butregion, search_but);
 
   region->type->draw = ui_searchbox_region_draw_cb__operator;
 
@@ -1022,10 +1017,8 @@ static void ui_searchbox_region_draw_cb__menu(const bContext *UNUSED(C), ARegion
 
 ARegion *ui_searchbox_create_menu(bContext *C, ARegion *butregion, uiButSearch *search_but)
 {
-  ARegion *region;
-
   UI_but_drawflag_enable(&search_but->but, UI_BUT_HAS_SHORTCUT);
-  region = ui_searchbox_create_generic(C, butregion, search_but);
+  ARegion *region = ui_searchbox_create_generic(C, butregion, search_but);
 
   if (false) {
     region->type->draw = ui_searchbox_region_draw_cb__menu;
@@ -1060,13 +1053,15 @@ void ui_but_search_refresh(uiButSearch *search_but)
 
   ui_searchbox_update_fn(but->block->evil_C, search_but, but->drawstr, items);
 
-  /* Only red-alert when we are sure of it, this can miss cases when >10 matches. */
-  if (items->totitem == 0) {
-    UI_but_flag_enable(but, UI_BUT_REDALERT);
-  }
-  else if (items->more == 0) {
-    if (UI_search_items_find_index(items, but->drawstr) == -1) {
+  if (!search_but->results_are_suggestions) {
+    /* Only red-alert when we are sure of it, this can miss cases when >10 matches. */
+    if (items->totitem == 0) {
       UI_but_flag_enable(but, UI_BUT_REDALERT);
+    }
+    else if (items->more == 0) {
+      if (UI_search_items_find_index(items, but->drawstr) == -1) {
+        UI_but_flag_enable(but, UI_BUT_REDALERT);
+      }
     }
   }
 

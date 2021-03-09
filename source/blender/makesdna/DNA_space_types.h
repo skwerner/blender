@@ -66,6 +66,9 @@ typedef struct SpaceProperties_Runtime SpaceProperties_Runtime;
 /* Defined in `node_intern.h`. */
 typedef struct SpaceNode_Runtime SpaceNode_Runtime;
 
+/* Defined in `file_intern.h`. */
+typedef struct SpaceFile_Runtime SpaceFile_Runtime;
+
 /* -------------------------------------------------------------------- */
 /** \name SpaceLink (Base)
  * \{ */
@@ -241,8 +244,8 @@ typedef enum eSpaceButtons_Flag {
 /* SpaceProperties.outliner_sync */
 typedef enum eSpaceButtons_OutlinerSync {
   PROPERTIES_SYNC_AUTO = 0,
-  PROPERTIES_SYNC_OFF = 1,
-  PROPERTIES_SYNC_ON = 2,
+  PROPERTIES_SYNC_NEVER = 1,
+  PROPERTIES_SYNC_ALWAYS = 2,
 } eSpaceButtons_OutlinerSync;
 
 /** \} */
@@ -846,6 +849,8 @@ typedef struct SpaceFile {
 
   short recentnr, bookmarknr;
   short systemnr, system_bookmarknr;
+
+  SpaceFile_Runtime *runtime;
 } SpaceFile;
 
 /* SpaceFile.browse_mode (File Space Browsing Mode) */
@@ -1545,7 +1550,7 @@ typedef struct SpaceNode {
    */
   ListBase treepath;
 
-  /* The tree farthest down in the group heirarchy. */
+  /* The tree farthest down in the group hierarchy. */
   struct bNodeTree *edittree;
 
   struct bNodeTree *nodetree;
@@ -1835,6 +1840,22 @@ typedef struct SpaceStatusBar {
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name Spreadsheet
+ * \{ */
+
+typedef struct SpaceSpreadsheet {
+  SpaceLink *next, *prev;
+  /** Storage of regions for inactive spaces. */
+  ListBase regionbase;
+  char spacetype;
+  char link_flag;
+  char _pad0[6];
+  /* End 'SpaceLink' header. */
+} SpaceSpreadsheet;
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Space Defines (eSpace_Type)
  * \{ */
 
@@ -1871,8 +1892,9 @@ typedef enum eSpace_Type {
   SPACE_CLIP = 20,
   SPACE_TOPBAR = 21,
   SPACE_STATUSBAR = 22,
+  SPACE_SPREADSHEET = 23
 
-#define SPACE_TYPE_LAST SPACE_STATUSBAR
+#define SPACE_TYPE_LAST SPACE_SPREADSHEET
 } eSpace_Type;
 
 /* use for function args */

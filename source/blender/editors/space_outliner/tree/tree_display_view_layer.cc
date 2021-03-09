@@ -60,7 +60,6 @@ class ObjectsChildrenBuilder {
 
 /* -------------------------------------------------------------------- */
 /** \name Tree-Display for a View Layer.
- *
  * \{ */
 
 TreeDisplayViewLayer::TreeDisplayViewLayer(SpaceOutliner &space_outliner)
@@ -81,7 +80,7 @@ ListBase TreeDisplayViewLayer::buildTree(const TreeSourceData &source_data)
     /* Show objects in the view layer. */
     for (Base *base : List<Base>(view_layer_->object_bases)) {
       TreeElement *te_object = outliner_add_element(
-          &space_outliner_, &tree, base->object, nullptr, 0, 0);
+          &space_outliner_, &tree, base->object, nullptr, TSE_SOME_ID, 0);
       te_object->directdata = base;
     }
 
@@ -143,10 +142,6 @@ void TreeDisplayViewLayer::add_layer_collections_recursive(ListBase &tree,
       if (!(tselem->used || ID_IS_LINKED(id) || ID_IS_OVERRIDE_LIBRARY(id))) {
         tselem->flag &= ~TSE_CLOSED;
       }
-
-      if (exclude || (lc->runtime_flag & LAYER_COLLECTION_VISIBLE_VIEW_LAYER) == 0) {
-        ten->flag |= TE_DISABLED;
-      }
     }
 
     add_layer_collections_recursive(ten->subtree, lc->layer_collections, *ten);
@@ -163,12 +158,8 @@ void TreeDisplayViewLayer::add_layer_collection_objects(ListBase &tree,
   for (CollectionObject *cob : List<CollectionObject>(lc.collection->gobject)) {
     Base *base = BKE_view_layer_base_find(view_layer_, cob->ob);
     TreeElement *te_object = outliner_add_element(
-        &space_outliner_, &tree, base->object, &ten, 0, 0);
+        &space_outliner_, &tree, base->object, &ten, TSE_SOME_ID, 0);
     te_object->directdata = base;
-
-    if (!(base->flag & BASE_VISIBLE_VIEWLAYER)) {
-      te_object->flag |= TE_DISABLED;
-    }
   }
 }
 
@@ -212,7 +203,7 @@ void ObjectsChildrenBuilder::object_tree_elements_lookup_create_recursive(TreeEl
       continue;
     }
 
-    if (tselem->type == 0 && te->idcode == ID_OB) {
+    if ((tselem->type == TSE_SOME_ID) && (te->idcode == ID_OB)) {
       Object *ob = (Object *)tselem->id;
       /* Lookup children or add new, empty children vector. */
       Vector<TreeElement *> &tree_elements = object_tree_elements_map_.lookup_or_add(ob, {});
@@ -270,8 +261,12 @@ void ObjectsChildrenBuilder::make_object_parent_hierarchy_collections()
       if (!found) {
         /* We add the child in the tree even if it is not in the collection.
          * We deliberately clear its sub-tree though, to make it less prominent. */
-        TreeElement *child_ob_tree_element = outliner_add_element(
-            &outliner_, &parent_ob_tree_element->subtree, child, parent_ob_tree_element, 0, 0);
+        TreeElement *child_ob_tree_element = outliner_add_element(&outliner_,
+                                                                  &parent_ob_tree_element->subtree,
+                                                                  child,
+                                                                  parent_ob_tree_element,
+                                                                  TSE_SOME_ID,
+                                                                  0);
         outliner_free_tree(&child_ob_tree_element->subtree);
         child_ob_tree_element->flag |= TE_CHILD_NOT_IN_COLLECTION;
         child_ob_tree_elements.append(child_ob_tree_element);

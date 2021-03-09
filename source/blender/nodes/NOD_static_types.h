@@ -267,11 +267,12 @@ DefNode(FunctionNode, FN_NODE_COMBINE_STRINGS, 0,               "COMBINE_STRINGS
 DefNode(FunctionNode, FN_NODE_OBJECT_TRANSFORMS, 0,             "OBJECT_TRANSFORMS", ObjectTransforms, "Object Transforms", "")
 DefNode(FunctionNode, FN_NODE_RANDOM_FLOAT, 0,                  "RANDOM_FLOAT", RandomFloat, "Random Float", "")
 DefNode(FunctionNode, FN_NODE_INPUT_VECTOR, def_fn_input_vector, "INPUT_VECTOR", InputVector, "Vector", "")
+DefNode(FunctionNode, FN_NODE_INPUT_STRING, def_fn_input_string, "INPUT_STRING", InputString, "String", "")
 
 DefNode(GeometryNode, GEO_NODE_TRIANGULATE, def_geo_triangulate, "TRIANGULATE", Triangulate, "Triangulate", "")
 DefNode(GeometryNode, GEO_NODE_EDGE_SPLIT, 0, "EDGE_SPLIT", EdgeSplit, "Edge Split", "")
 DefNode(GeometryNode, GEO_NODE_TRANSFORM, 0, "TRANSFORM", Transform, "Transform", "")
-DefNode(GeometryNode, GEO_NODE_SUBDIVISION_SURFACE, 0, "SUBDIVISION_SURFACE", SubdivisionSurface, "Subdivision Surface", "")
+DefNode(GeometryNode, GEO_NODE_SUBDIVIDE_SMOOTH, 0, "SUBDIVIDE_SMOOTH", SubdivideSmooth, "Subdivide Smooth", "")
 DefNode(GeometryNode, GEO_NODE_BOOLEAN, def_geo_boolean, "BOOLEAN", Boolean, "Boolean", "")
 DefNode(GeometryNode, GEO_NODE_POINT_DISTRIBUTE, def_geo_point_distribute, "POINT_DISTRIBUTE", PointDistribute, "Point Distribute", "")
 DefNode(GeometryNode, GEO_NODE_POINT_INSTANCE, def_geo_point_instance, "POINT_INSTANCE", PointInstance, "Point Instance", "")
@@ -297,6 +298,7 @@ DefNode(GeometryNode, GEO_NODE_ATTRIBUTE_PROXIMITY, def_geo_attribute_proximity,
 DefNode(GeometryNode, GEO_NODE_VOLUME_TO_MESH, def_geo_volume_to_mesh, "VOLUME_TO_MESH", VolumeToMesh, "Volume to Mesh", "")
 DefNode(GeometryNode, GEO_NODE_ATTRIBUTE_COMBINE_XYZ, def_geo_attribute_combine_xyz, "ATTRIBUTE_COMBINE_XYZ", AttributeCombineXYZ, "Attribute Combine XYZ", "")
 DefNode(GeometryNode, GEO_NODE_ATTRIBUTE_SEPARATE_XYZ, def_geo_attribute_separate_xyz, "ATTRIBUTE_SEPARATE_XYZ", AttributeSeparateXYZ, "Attribute Separate XYZ", "")
+DefNode(GeometryNode, GEO_NODE_SUBDIVIDE, 0, "SUBDIVIDE", Subdivide, "Subdivide", "")
 
 /* undefine macros */
 #undef DefNode

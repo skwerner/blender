@@ -34,7 +34,7 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
   const bool direct_lighting = false;
   if (direct_lighting) {
     /* Generate shadow ray. */
-    INTEGRATOR_STATE_WRITE(shadow_ray, P) = make_float3(0.0f, 0.0f, 0.0f);
+    INTEGRATOR_STATE_WRITE(shadow_ray, P) = zero_float3();
     INTEGRATOR_STATE_WRITE(shadow_ray, D) = make_float3(0.0f, 0.0f, 1.0f);
     INTEGRATOR_STATE_WRITE(shadow_ray, t) = FLT_MAX;
     INTEGRATOR_STATE_WRITE(shadow_ray, time) = 0.0f;
@@ -56,7 +56,7 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
   }
   else if (scatter) {
     /* Sample phase function and go back to intersect_closest kernel. */
-    INTEGRATOR_STATE_WRITE(ray, P) = make_float3(0.0f, 0.0f, 0.0f);
+    INTEGRATOR_STATE_WRITE(ray, P) = zero_float3();
     INTEGRATOR_STATE_WRITE(ray, D) = make_float3(0.0f, 0.0f, 1.0f);
     INTEGRATOR_STATE_WRITE(ray, t) = FLT_MAX;
     INTEGRATOR_STATE_WRITE(ray, time) = 0.0f;

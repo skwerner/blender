@@ -1420,7 +1420,7 @@ void GPENCIL_OT_layer_merge(wmOperatorType *ot)
 
 /* ********************** Change Layer ***************************** */
 
-static int gpencil_layer_change_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
+static int gpencil_layer_change_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   uiPopupMenu *pup;
   uiLayout *layout;
@@ -1589,7 +1589,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
                 continue;
               }
             }
-            /* some stroke is already at botom */
+            /* Some stroke is already at bottom. */
             if (ELEM(direction, GP_STROKE_MOVE_BOTTOM, GP_STROKE_MOVE_DOWN)) {
               if (gps == gpf->strokes.first) {
                 gpf_lock = true;
@@ -1676,7 +1676,7 @@ void GPENCIL_OT_stroke_arrange(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Arrange Stroke";
   ot->idname = "GPENCIL_OT_stroke_arrange";
-  ot->description = "Arrange selected strokes up/down in the drawing order of the active layer";
+  ot->description = "Arrange selected strokes up/down in the display order of the active layer";
 
   /* callbacks */
   ot->exec = gpencil_stroke_arrange_exec;
@@ -2022,7 +2022,7 @@ static void gpencil_brush_delete_mode_brushes(Main *bmain,
       }
     }
 
-    /* Before delete, unpinn any material of the brush. */
+    /* Before delete, un-pin any material of the brush. */
     if ((brush->gpencil_settings) && (brush->gpencil_settings->material != NULL)) {
       brush->gpencil_settings->material = NULL;
       brush->gpencil_settings->flag &= ~GP_BRUSH_MATERIAL_PINNED;
@@ -3418,9 +3418,11 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
 
             if (!deselected) {
               gps->flag |= GP_STROKE_SELECT;
+              BKE_gpencil_stroke_select_index_set(gpd, gps);
             }
             else {
               gps->flag &= ~GP_STROKE_SELECT;
+              BKE_gpencil_stroke_select_index_reset(gps);
             }
             for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
               if (!deselected) {

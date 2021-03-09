@@ -25,6 +25,7 @@
 
 #include "BLI_float3.hh"
 #include "BLI_float4x4.hh"
+#include "BLI_function_ref.hh"
 #include "BLI_hash.hh"
 #include "BLI_map.hh"
 #include "BLI_set.hh"
@@ -129,6 +130,20 @@ class OutputAttributePtr {
 };
 
 /**
+ * Contains information about an attribute in a geometry component.
+ * More information can be added in the future. E.g. whether the attribute is builtin and how it is
+ * stored (uv map, vertex group, ...).
+ */
+struct AttributeMetaData {
+  AttributeDomain domain;
+  CustomDataType data_type;
+};
+
+/* Returns false when the iteration should be stopped. */
+using AttributeForeachCallback = blender::FunctionRef<bool(blender::StringRefNull attribute_name,
+                                                           const AttributeMetaData &meta_data)>;
+
+/**
  * This is the base class for specialized geometry component types.
  */
 class GeometryComponent {
@@ -185,6 +200,8 @@ class GeometryComponent {
                             const CustomDataType data_type);
 
   blender::Set<std::string> attribute_names() const;
+  void attribute_foreach(const AttributeForeachCallback callback) const;
+
   virtual bool is_empty() const;
 
   /* Get a read-only attribute for the given domain and data type.
@@ -308,6 +325,8 @@ struct GeometrySet {
 
   void add(const GeometryComponent &component);
 
+  blender::Vector<const GeometryComponent *> get_components_for_read() const;
+
   void compute_boundbox_without_instances(blender::float3 *r_min, blender::float3 *r_max) const;
 
   friend std::ostream &operator<<(std::ostream &stream, const GeometrySet &geometry_set);
@@ -416,6 +435,13 @@ class InstancesComponent : public GeometryComponent {
   blender::Vector<int> ids_;
   blender::Vector<InstancedData> instanced_data_;
 
+  /* These almost unique ids are generated based on `ids_`, which might not contain unique ids at
+   * all. They are *almost* unique, because under certain very unlikely circumstances, they are not
+   * unique. Code using these ids should not crash when they are not unique but can generally
+   * expect them to be unique. */
+  mutable std::mutex almost_unique_ids_mutex_;
+  mutable blender::Array<int> almost_unique_ids_;
+
  public:
   InstancesComponent();
   ~InstancesComponent() = default;
@@ -431,6 +457,8 @@ class InstancesComponent : public GeometryComponent {
   blender::Span<int> ids() const;
   blender::MutableSpan<blender::float4x4> transforms();
   int instances_amount() const;
+
+  blender::Span<int> almost_unique_ids() const;
 
   bool is_empty() const final;
 

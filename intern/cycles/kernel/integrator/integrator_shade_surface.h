@@ -50,7 +50,7 @@ ccl_device_inline bool integrate_surface_shadow_catcher(INTEGRATOR_STATE_CONST_A
     if (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND) {
       state->flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_STORE_SHADOW_INFO);
 
-      float3 bg = make_float3(0.0f, 0.0f, 0.0f);
+      float3 bg = zero_float3();
       if (!kernel_data.background.transparent) {
         bg = indirect_background(kg, emission_sd, state, NULL, ray);
       }
@@ -82,7 +82,7 @@ ccl_device_inline bool integrate_surface_holdout(INTEGRATOR_STATE_CONST_ARGS,
       const float transparent = average(holdout_weight * throughput);
       kernel_accum_transparent(INTEGRATOR_STATE_PASS, transparent, render_buffer);
     }
-    if (isequal_float3(holdout_weight, make_float3(1.0f, 1.0f, 1.0f))) {
+    if (isequal_float3(holdout_weight, one_float3())) {
       return false;
     }
   }
@@ -403,7 +403,7 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   const bool subsurface = false;
   if (subsurface) {
     INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SUBSURFACE;
-    INTEGRATOR_STATE_WRITE(subsurface, albedo) = make_float3(1.0f, 1.0f, 1.0f);
+    INTEGRATOR_STATE_WRITE(subsurface, albedo) = one_float3();
     INTEGRATOR_PATH_NEXT(shade_surface, intersect_subsurface);
     return;
   }

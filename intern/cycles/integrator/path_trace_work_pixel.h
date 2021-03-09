@@ -25,11 +25,10 @@ CCL_NAMESPACE_BEGIN
 struct KernelWorkTile;
 
 /* Implementation of PathTraceWork which schedules work on to queues pixel-by-pixel.
- * This implementation suits best CPU device.
+ * This implementation suits best for the CPU device.
  *
- * NOTE: There are assumptions about TBB arena size and number of concurrent queues on the render
- * device which makes this work be only usable on CPU. It might be possible to support it for GPU
- * for debug purposes, but it needs some changes. */
+ * NOTE: For the CPU rendering there are assumptions about TBB arena size and number of concurrent
+ * queues on the render device which makes this work be only usable on CPU. */
 class PathTraceWorkPixel : public PathTraceWork {
  public:
   PathTraceWorkPixel(Device *render_device, RenderBuffers *buffers, bool *cancel_requested_flag);
@@ -53,6 +52,10 @@ class PathTraceWorkPixel : public PathTraceWork {
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */
   vector<unique_ptr<DeviceQueue>> integrator_queues_;
+
+  /* Use queue which corresponds to a current thread index within the arena.
+   * Used for CPU rendering where threads need to have a way to know which queue to use. */
+  bool use_thread_index_queue_ = false;
 };
 
 CCL_NAMESPACE_END

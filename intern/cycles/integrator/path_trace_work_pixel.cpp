@@ -26,13 +26,18 @@ CCL_NAMESPACE_BEGIN
 PathTraceWorkPixel::PathTraceWorkPixel(Device *render_device,
                                        RenderBuffers *buffers,
                                        bool *cancel_requested_flag)
-    : PathTraceWork(render_device, buffers, cancel_requested_flag)
+    : PathTraceWork(render_device, buffers, cancel_requested_flag),
+      use_thread_index_queue_(render_device->info.type == DEVICE_CPU)
 {
-  DCHECK_EQ(render_device->info.type, DEVICE_CPU);
-
   const int num_queues = render_device->get_concurrent_integrator_queues_num();
   for (int i = 0; i < num_queues; ++i) {
     integrator_queues_.emplace_back(render_device->queue_create_integrator(buffers_));
+  }
+
+  /* For the GPU rendering we ecpect a single path state.
+   * Otherwise it will be very tricky to know which path state is to be used for rendering. */
+  if (!use_thread_index_queue_) {
+    DCHECK_EQ(num_queues, 1);
   }
 }
 
@@ -72,11 +77,13 @@ void PathTraceWorkPixel::render_samples(const BufferParams &scaled_render_buffer
     work_tile.offset = offset;
     work_tile.stride = stride;
 
-    const int thread_index = tbb::this_task_arena::current_thread_index();
-    DCHECK_GE(thread_index, 0);
-    DCHECK_LE(thread_index, integrator_queues_.size());
+    const int queue_index = use_thread_index_queue_ ?
+                                tbb::this_task_arena::current_thread_index() :
+                                0;
+    DCHECK_GE(queue_index, 0);
+    DCHECK_LE(queue_index, integrator_queues_.size());
 
-    render_samples_full_pipeline(integrator_queues_[thread_index].get(), work_tile, samples_num);
+    render_samples_full_pipeline(integrator_queues_[queue_index].get(), work_tile, samples_num);
   });
 }
 

@@ -500,7 +500,7 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
   return requested_features;
 }
 
-bool Scene::update(Progress &progress, bool &kernel_switch_needed)
+bool Scene::update(Progress &progress)
 {
   /* update scene */
   if (need_update()) {
@@ -516,9 +516,6 @@ bool Scene::update(Progress &progress, bool &kernel_switch_needed)
       /* Currently viewport render is faster with higher max_closures, needs investigating. */
       kintegrator->max_closures = MAX_CLOSURE;
     }
-
-    /* Load render kernels, before device update where we upload data to the GPU. */
-    bool new_kernels_needed = load_kernels(progress, false);
 
     progress.set_status("Updating Scene");
     MEM_GUARDED_CALL(&progress, device_update, device, progress);

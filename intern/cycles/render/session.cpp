@@ -1090,13 +1090,10 @@ bool Session::update_scene()
     integrator->set_aa_samples(tile_manager.num_samples);
   }
 
-  bool kernel_switch_needed = false;
-  if (scene->update(progress, kernel_switch_needed)) {
-    if (kernel_switch_needed) {
-      reset(tile_manager.params, params.samples);
-    }
+  if (scene->update(progress)) {
     return true;
   }
+
   return false;
 }
 

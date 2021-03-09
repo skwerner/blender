@@ -293,7 +293,7 @@ class Scene : public NodeOwner {
 
   void enable_update_stats();
 
-  bool update(Progress &progress, bool &kernel_switch_needed);
+  bool update(Progress &progress);
 
   /* This function is used to create a node of a specified type instead of
    * calling 'new', and sets the scene as the owner of the node.

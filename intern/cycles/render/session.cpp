@@ -273,7 +273,7 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
        * only access GL buffers from the main thread. */
       if (gpu_need_display_buffer_update) {
         thread_scoped_lock buffers_lock(buffers_mutex);
-        copy_to_display_buffer(tile_manager.state.sample);
+        copy_to_display_buffer();
         gpu_need_display_buffer_update = false;
         gpu_need_display_buffer_update_cond.notify_all();
 
@@ -906,7 +906,7 @@ void Session::run_cpu()
       else if (need_copy_to_display_buffer) {
         /* Only copy to display_buffer if we do not reset, we don't
          * want to show the result of an incomplete sample */
-        copy_to_display_buffer(tile_manager.state.sample);
+        copy_to_display_buffer();
       }
 
       if (!device->error_message().empty())
@@ -1308,7 +1308,7 @@ void Session::render(bool /*need_denoise*/)
 #endif
 }
 
-void Session::copy_to_display_buffer(int /*sample*/)
+void Session::copy_to_display_buffer()
 {
   path_trace_->copy_to_display_buffer(display);
 

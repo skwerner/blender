@@ -175,7 +175,7 @@ class Session {
   void update_status_time(bool show_pause = false, bool show_done = false);
 
   void render(bool use_denoise);
-  void copy_to_display_buffer(int sample);
+  void copy_to_display_buffer();
 
   void reset_(BufferParams &params, int samples);
 

@@ -79,8 +79,8 @@ bool WorkScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size
   const int tile_x = tile_index - tile_y * num_tiles_x_;
 
   KernelWorkTile work_tile;
-  work_tile.x = image_full_offset_px_.x + tile_x * tile_size_.x;
-  work_tile.y = image_full_offset_px_.y + tile_y * tile_size_.y;
+  work_tile.x = tile_x * tile_size_.x;
+  work_tile.y = tile_y * tile_size_.y;
   work_tile.w = tile_size_.x;
   work_tile.h = tile_size_.y;
   work_tile.start_sample = sample_start_ + sample;
@@ -90,6 +90,9 @@ bool WorkScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size
 
   work_tile.w = min(work_tile.w, image_size_px_.x - work_tile.x);
   work_tile.h = min(work_tile.h, image_size_px_.y - work_tile.y);
+
+  work_tile.x += image_full_offset_px_.x;
+  work_tile.y += image_full_offset_px_.y;
 
   DCHECK_LT(max_work_size, max_num_path_states_);
   if (max_work_size && work_tile.w * work_tile.h * work_tile.num_samples > max_work_size) {

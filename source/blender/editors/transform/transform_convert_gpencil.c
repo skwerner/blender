@@ -43,7 +43,6 @@
 
 /* -------------------------------------------------------------------- */
 /** \name Gpencil Transform Creation
- *
  * \{ */
 
 static void createTransGPencil_center_get(bGPDstroke *gps, float r_center[3])
@@ -135,7 +134,7 @@ static void createTransGPencil_curves(bContext *C,
               continue;
             }
             /* Check if the color is editable. */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
             /* Check if stroke has an editcurve */
@@ -242,7 +241,7 @@ static void createTransGPencil_curves(bContext *C,
       }
 
       /* Calculate difference matrix. */
-      BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+      BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
       copy_m3_m4(mtx, diff_mat);
       pseudoinverse_m3_m3(smtx, mtx, PSEUDOINVERSE_EPSILON);
 
@@ -263,7 +262,7 @@ static void createTransGPencil_curves(bContext *C,
               continue;
             }
             /* Check if the color is editable. */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
             /* Check if stroke has an editcurve */
@@ -436,7 +435,7 @@ static void createTransGPencil_strokes(bContext *C,
               continue;
             }
             /* Check if the color is editable. */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
 
@@ -507,7 +506,7 @@ static void createTransGPencil_strokes(bContext *C,
       }
 
       /* Calculate difference matrix. */
-      BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+      BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
       /* Undo matrix. */
       invert_m4_m4(inverse_diff_mat, diff_mat);
 
@@ -551,7 +550,7 @@ static void createTransGPencil_strokes(bContext *C,
               continue;
             }
             /* check if the color is editable */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
             /* What we need to include depends on proportional editing settings... */
@@ -688,7 +687,7 @@ void createTransGPencil(bContext *C, TransInfo *t)
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   const Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = scene->toolsettings;
-  Object *obact = CTX_data_active_object(C);
+  Object *obact = OBACT(t->view_layer);
   bGPdata *gpd = obact->data;
   BLI_assert(gpd != NULL);
 

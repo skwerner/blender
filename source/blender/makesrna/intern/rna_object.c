@@ -85,16 +85,16 @@ const EnumPropertyItem rna_enum_object_mode_items[] = {
      ICON_GREASEPENCIL,
      "Draw",
      "Paint Grease Pencil Strokes"},
-    {OB_MODE_VERTEX_GPENCIL,
-     "VERTEX_GPENCIL",
-     ICON_VPAINT_HLT,
-     "Vertex Paint",
-     "Grease Pencil Vertex Paint Strokes"},
     {OB_MODE_WEIGHT_GPENCIL,
      "WEIGHT_GPENCIL",
      ICON_WPAINT_HLT,
      "Weight Paint",
      "Grease Pencil Weight Paint Strokes"},
+    {OB_MODE_VERTEX_GPENCIL,
+     "VERTEX_GPENCIL",
+     ICON_VPAINT_HLT,
+     "Vertex Paint",
+     "Grease Pencil Vertex Paint Strokes"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -481,6 +481,17 @@ static void rna_Object_dependency_update(Main *bmain, Scene *UNUSED(scene), Poin
   DEG_id_tag_update(ptr->owner_id, ID_RECALC_TRANSFORM);
   DEG_relations_tag_update(bmain);
   WM_main_add_notifier(NC_OBJECT | ND_PARENT, ptr->owner_id);
+}
+
+void rna_Object_data_update(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  Object *object = (Object *)ptr->data;
+
+  if (object->mode == OB_MODE_SCULPT) {
+    BKE_sculpt_ensure_orig_mesh_data(scene, object);
+  }
+
+  rna_Object_internal_update_data_dependency(bmain, scene, ptr);
 }
 
 static void rna_Object_data_set(PointerRNA *ptr, PointerRNA value, struct ReportList *reports)
@@ -1293,11 +1304,13 @@ static void rna_MaterialSlot_link_set(PointerRNA *ptr, int value)
 
   if (value) {
     ob->matbits[index] = 1;
-    /* ob->colbits |= (1 << index); */ /* DEPRECATED */
+    /* DEPRECATED */
+    // ob->colbits |= (1 << index);
   }
   else {
     ob->matbits[index] = 0;
-    /* ob->colbits &= ~(1 << index); */ /* DEPRECATED */
+    /* DEPRECATED */
+    // ob->colbits &= ~(1 << index);
   }
 }
 
@@ -1589,7 +1602,12 @@ bool rna_Object_constraints_override_apply(Main *UNUSED(bmain),
 static ModifierData *rna_Object_modifier_new(
     Object *object, bContext *C, ReportList *reports, const char *name, int type)
 {
-  return ED_object_modifier_add(reports, CTX_data_main(C), CTX_data_scene(C), object, name, type);
+  ModifierData *md = ED_object_modifier_add(
+      reports, CTX_data_main(C), CTX_data_scene(C), object, name, type);
+
+  WM_main_add_notifier(NC_OBJECT | ND_MODIFIER | NA_ADDED, object);
+
+  return md;
 }
 
 static void rna_Object_modifier_remove(Object *object,
@@ -2109,8 +2127,8 @@ static void rna_def_vertex_group(BlenderRNA *brna)
   func = RNA_def_function(srna, "add", "rna_VertexGroup_vertex_add");
   RNA_def_function_ui_description(func, "Add vertices to the group");
   RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
-  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "Index List", 0, 0);
+  /* TODO, see how array size of 0 works, this shouldn't be used */
+  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "List of indices", 0, 0);
   RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_REQUIRED);
   parm = RNA_def_float(func, "weight", 0, 0.0f, 1.0f, "", "Vertex weight", 0.0f, 1.0f);
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
@@ -2118,10 +2136,10 @@ static void rna_def_vertex_group(BlenderRNA *brna)
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
   func = RNA_def_function(srna, "remove", "rna_VertexGroup_vertex_remove");
-  RNA_def_function_ui_description(func, "Remove a vertex from the group");
+  RNA_def_function_ui_description(func, "Remove vertices from the group");
   RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
-  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "Index List", 0, 0);
+  /* TODO, see how array size of 0 works, this shouldn't be used */
+  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "List of indices", 0, 0);
   RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_REQUIRED);
 
   func = RNA_def_function(srna, "weight", "rna_VertexGroup_weight");
@@ -2165,17 +2183,17 @@ static void rna_def_face_map(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Index", "Index number of the face map");
 
   func = RNA_def_function(srna, "add", "rna_FaceMap_face_add");
-  RNA_def_function_ui_description(func, "Add vertices to the group");
+  RNA_def_function_ui_description(func, "Add faces to the face-map");
   RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
-  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "Index List", 0, 0);
+  /* TODO, see how array size of 0 works, this shouldn't be used */
+  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "List of indices", 0, 0);
   RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_REQUIRED);
 
   func = RNA_def_function(srna, "remove", "rna_FaceMap_face_remove");
-  RNA_def_function_ui_description(func, "Remove a vertex from the group");
+  RNA_def_function_ui_description(func, "Remove faces from the face-map");
   RNA_def_function_flag(func, FUNC_USE_REPORTS | FUNC_USE_SELF_ID);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
-  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "Index List", 0, 0);
+  /* TODO, see how array size of 0 works, this shouldn't be used */
+  parm = RNA_def_int_array(func, "index", 1, NULL, 0, 0, "", "List of indices", 0, 0);
   RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_REQUIRED);
 }
 
@@ -2679,7 +2697,7 @@ static void rna_def_object(BlenderRNA *brna)
       prop, NULL, "rna_Object_data_set", "rna_Object_data_typef", "rna_Object_data_poll");
   RNA_def_property_flag(prop, PROP_EDITABLE | PROP_NEVER_UNLINK);
   RNA_def_property_ui_text(prop, "Data", "Object data");
-  RNA_def_property_update(prop, 0, "rna_Object_internal_update_data_dependency");
+  RNA_def_property_update(prop, 0, "rna_Object_data_update");
 
   prop = RNA_def_property(srna, "type", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "type");

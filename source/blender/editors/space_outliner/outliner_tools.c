@@ -23,6 +23,8 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "CLG_log.h"
+
 #include "DNA_anim_types.h"
 #include "DNA_armature_types.h"
 #include "DNA_collection_types.h"
@@ -91,6 +93,8 @@
 #include "SEQ_sequencer.h"
 
 #include "outliner_intern.h"
+
+static CLG_LogRef LOG = {"ed.outliner.tools"};
 
 /* -------------------------------------------------------------------- */
 /** \name ID/Library/Data Set/Un-link Utilities
@@ -790,7 +794,7 @@ static void id_override_library_create_fn(bContext *C,
 
     id_root->tag |= LIB_TAG_DOIT;
 
-    /* For now, remapp all local usages of linked ID to local override one here. */
+    /* For now, remap all local usages of linked ID to local override one here. */
     ID *id_iter;
     FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
       if (ID_IS_LINKED(id_iter)) {
@@ -824,6 +828,9 @@ static void id_override_library_create_fn(bContext *C,
       BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
     }
   }
+  else {
+    CLOG_WARN(&LOG, "Could not create library override for data block '%s'", id_root->name);
+  }
 }
 
 static void id_override_library_reset_fn(bContext *C,
@@ -851,6 +858,9 @@ static void id_override_library_reset_fn(bContext *C,
 
     WM_event_add_notifier(C, NC_WM | ND_DATACHANGED, NULL);
     WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  }
+  else {
+    CLOG_WARN(&LOG, "Could not reset library override of data block '%s'", id_root->name);
   }
 }
 
@@ -882,6 +892,11 @@ static void id_override_library_resync_fn(bContext *C,
     }
 
     BKE_lib_override_library_resync(bmain, scene, CTX_data_view_layer(C), id_root);
+
+    WM_event_add_notifier(C, NC_WINDOW, NULL);
+  }
+  else {
+    CLOG_WARN(&LOG, "Could not resync library override of data block '%s'", id_root->name);
   }
 }
 
@@ -913,6 +928,11 @@ static void id_override_library_delete_fn(bContext *C,
     }
 
     BKE_lib_override_library_delete(bmain, id_root);
+
+    WM_event_add_notifier(C, NC_WINDOW, NULL);
+  }
+  else {
+    CLOG_WARN(&LOG, "Could not delete library override of data block '%s'", id_root->name);
   }
 }
 
@@ -1423,13 +1443,7 @@ enum {
   OL_OP_DESELECT,
   OL_OP_SELECT_HIERARCHY,
   OL_OP_REMAP,
-  OL_OP_LOCALIZED, /* disabled, see below */
-  OL_OP_TOGVIS,
-  OL_OP_TOGSEL,
-  OL_OP_TOGREN,
   OL_OP_RENAME,
-  OL_OP_OBJECT_MODE_ENTER,
-  OL_OP_OBJECT_MODE_EXIT,
   OL_OP_PROXY_TO_OVERRIDE_CONVERT,
 };
 
@@ -1443,8 +1457,6 @@ static const EnumPropertyItem prop_object_op_types[] = {
      "Remap Users",
      "Make all users of selected data-blocks to use instead a new chosen one"},
     {OL_OP_RENAME, "RENAME", 0, "Rename", ""},
-    {OL_OP_OBJECT_MODE_ENTER, "OBJECT_MODE_ENTER", 0, "Enter Mode", ""},
-    {OL_OP_OBJECT_MODE_EXIT, "OBJECT_MODE_EXIT", 0, "Exit Mode", ""},
     {OL_OP_PROXY_TO_OVERRIDE_CONVERT,
      "OBJECT_PROXY_TO_OVERRIDE",
      0,
@@ -1508,11 +1520,6 @@ static int outliner_object_operation_exec(bContext *C, wmOperator *op)
         C, op->reports, scene, space_outliner, &space_outliner->tree, id_remap_fn, NULL);
     /* No undo push here, operator does it itself (since it's a modal one, the op_undo_depth
      * trick does not work here). */
-  }
-  else if (event == OL_OP_LOCALIZED) { /* disabled, see above enum (ton) */
-    outliner_do_object_operation(
-        C, op->reports, scene, space_outliner, &space_outliner->tree, id_local_fn);
-    str = "Localized Objects";
   }
   else if (event == OL_OP_RENAME) {
     outliner_do_object_operation(
@@ -1789,18 +1796,44 @@ static bool outliner_id_operation_item_poll(bContext *C,
                                             const int enum_value)
 {
   SpaceOutliner *space_outliner = CTX_wm_space_outliner(C);
+  TreeElement *te = get_target_element(space_outliner);
+  TreeStoreElem *tselem = TREESTORE(te);
+  if (!TSE_IS_REAL_ID(tselem)) {
+    return false;
+  }
+
+  Object *ob = NULL;
+  if (GS(tselem->id->name) == ID_OB) {
+    ob = (Object *)tselem->id;
+  }
 
   switch (enum_value) {
+    case OUTLINER_IDOP_MARK_ASSET:
+    case OUTLINER_IDOP_CLEAR_ASSET:
+      return U.experimental.use_asset_browser;
     case OUTLINER_IDOP_OVERRIDE_LIBRARY_CREATE:
+      if (ID_IS_OVERRIDABLE_LIBRARY(tselem->id)) {
+        return true;
+      }
+      return false;
     case OUTLINER_IDOP_OVERRIDE_LIBRARY_CREATE_HIERARCHY:
-      return true;
+      if (ID_IS_OVERRIDABLE_LIBRARY(tselem->id) || (ID_IS_LINKED(tselem->id))) {
+        return true;
+      }
+      return false;
+    case OUTLINER_IDOP_OVERRIDE_LIBRARY_PROXY_CONVERT:
+      if (ob != NULL && ob->proxy != NULL) {
+        return true;
+      }
+      return false;
     case OUTLINER_IDOP_OVERRIDE_LIBRARY_RESET:
     case OUTLINER_IDOP_OVERRIDE_LIBRARY_RESET_HIERARCHY:
-      return true;
     case OUTLINER_IDOP_OVERRIDE_LIBRARY_RESYNC_HIERARCHY:
-      return true;
     case OUTLINER_IDOP_OVERRIDE_LIBRARY_DELETE_HIERARCHY:
-      return true;
+      if (ID_IS_OVERRIDE_LIBRARY_REAL(tselem->id)) {
+        return true;
+      }
+      return false;
     case OUTLINER_IDOP_SINGLE:
       if (!space_outliner || ELEM(space_outliner->outlinevis, SO_SCENES, SO_VIEW_LAYER)) {
         return true;
@@ -2402,9 +2435,6 @@ typedef enum eOutliner_AnimDataOps {
 
   OUTLINER_ANIMOP_REFRESH_DRV,
   OUTLINER_ANIMOP_CLEAR_DRV
-
-  /* OUTLINER_ANIMOP_COPY_DRIVERS, */
-  /* OUTLINER_ANIMOP_PASTE_DRIVERS */
 } eOutliner_AnimDataOps;
 
 static const EnumPropertyItem prop_animdata_op_types[] = {
@@ -2416,8 +2446,6 @@ static const EnumPropertyItem prop_animdata_op_types[] = {
     {OUTLINER_ANIMOP_SET_ACT, "SET_ACT", 0, "Set Action", ""},
     {OUTLINER_ANIMOP_CLEAR_ACT, "CLEAR_ACT", 0, "Unlink Action", ""},
     {OUTLINER_ANIMOP_REFRESH_DRV, "REFRESH_DRIVERS", 0, "Refresh Drivers", ""},
-    /* {OUTLINER_ANIMOP_COPY_DRIVERS, "COPY_DRIVERS", 0, "Copy Drivers", ""}, */
-    /* {OUTLINER_ANIMOP_PASTE_DRIVERS, "PASTE_DRIVERS", 0, "Paste Drivers", ""}, */
     {OUTLINER_ANIMOP_CLEAR_DRV, "CLEAR_DRIVERS", 0, "Clear Drivers", ""},
     {0, NULL, 0, NULL, NULL},
 };

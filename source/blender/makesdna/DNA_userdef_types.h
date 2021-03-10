@@ -643,7 +643,7 @@ typedef struct UserDef_Experimental {
   char use_sculpt_vertex_colors;
   char use_switch_object_operator;
   char use_sculpt_tools_tilt;
-  char use_object_add_tool;
+  char use_asset_browser;
   char _pad[7];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
@@ -673,6 +673,21 @@ typedef struct UserDef {
   /** 768 = FILE_MAXDIR. */
   char render_cachedir[768];
   char textudir[768];
+  /**
+   * Optional user location for scripts.
+   *
+   * This supports the same layout as Blender's scripts directory `release/scripts`.
+   *
+   * \note Unlike most paths, changing this is not fully supported at run-time,
+   * requiring a restart to properly take effect. Supporting this would cause complications as
+   * the script path can contain `startup`, `addons` & `modules` etc. properly unwinding the
+   * Python environment to the state it _would_ have been in gets complicated.
+   *
+   * Although this is partially supported as the `sys.path` is refreshed when loading preferences.
+   * This is done to support #PREFERENCES_OT_copy_prev which is available to the user when they
+   * launch with a new version of Blender. In this case setting the script path on top of
+   * factory settings will work without problems.
+   */
   char pythondir[768];
   char sounddir[768];
   char i18ndir[768];
@@ -762,8 +777,12 @@ typedef struct UserDef {
   char _pad13[4];
   struct SolidLight light_param[4];
   float light_ambient[3];
-  char _pad3[4];
-  short gizmo_flag, gizmo_size;
+  char gizmo_flag;
+  /** Generic gizmo size. */
+  char gizmo_size;
+  /** Navigate gizmo size. */
+  char gizmo_size_navigate_v3d;
+  char _pad3[5];
   short edit_studio_light;
   short lookdev_sphere_size;
   short vbotimeout, vbocollectrate;
@@ -1009,8 +1028,11 @@ typedef enum ePathCompare_Flag {
 
 /** #UserDef.viewzoom */
 typedef enum eViewZoom_Style {
-  USER_ZOOM_CONT = 0,
+  /** Update zoom continuously with a timer while dragging the cursor. */
+  USER_ZOOM_CONTINUE = 0,
+  /** Map changes in distance from the view center to zoom. */
   USER_ZOOM_SCALE = 1,
+  /** Map horizontal/vertical motion to zoom. */
   USER_ZOOM_DOLLY = 2,
 } eViewZoom_Style;
 
@@ -1200,7 +1222,7 @@ typedef enum eDupli_ID_Flags {
 
   USER_DUP_OBDATA = (~0) & ((1 << 24) - 1),
 
-  /* Those are not exposed as user preferences, only used internaly. */
+  /* Those are not exposed as user preferences, only used internally. */
   USER_DUP_OBJECT = (1 << 24),
   /* USER_DUP_COLLECTION = (1 << 25), */ /* UNUSED, keep because we may implement. */
 

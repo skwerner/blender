@@ -70,6 +70,7 @@ if(EXISTS ${LIBDIR})
   set(BOOST_LIBRARYDIR ${LIBDIR}/boost/lib)
   set(Boost_NO_SYSTEM_PATHS ON)
   set(OPENEXR_ROOT_DIR ${LIBDIR}/openexr)
+  set(CLANG_ROOT_DIR ${LIBDIR}/llvm)
 endif()
 
 if(WITH_STATIC_LIBS)
@@ -284,6 +285,10 @@ if(WITH_NANOVDB)
   endif()
 endif()
 
+if(WITH_CPU_SIMD AND SUPPORT_NEON_BUILD)
+  find_package_wrapper(sse2neon)
+endif()
+
 if(WITH_ALEMBIC)
   find_package_wrapper(Alembic)
 
@@ -352,6 +357,11 @@ endif()
 
 if(WITH_PUGIXML)
   find_package_wrapper(PugiXML)
+
+  if(NOT PUGIXML_FOUND)
+    set(WITH_PUGIXML OFF)
+    message(STATUS "PugiXML not found, disabling WITH_PUGIXML")
+  endif()
 endif()
 
 if(WITH_OPENIMAGEIO)
@@ -380,7 +390,7 @@ if(WITH_OPENIMAGEIO)
 endif()
 
 if(WITH_OPENCOLORIO)
-  find_package_wrapper(OpenColorIO)
+  find_package_wrapper(OpenColorIO 2.0.0)
 
   set(OPENCOLORIO_LIBRARIES ${OPENCOLORIO_LIBRARIES})
   set(OPENCOLORIO_LIBPATH)  # TODO, remove and reference the absolute path everywhere
@@ -411,7 +421,9 @@ if(WITH_LLVM)
   endif()
 
   find_package_wrapper(LLVM)
-
+  if(WITH_CLANG)
+    find_package_wrapper(Clang)
+  endif()
   # Symbol conflicts with same UTF library used by OpenCollada
   if(EXISTS ${LIBDIR})
     if(WITH_OPENCOLLADA AND (${LLVM_VERSION} VERSION_LESS "4.0.0"))
@@ -421,7 +433,13 @@ if(WITH_LLVM)
 
   if(NOT LLVM_FOUND)
     set(WITH_LLVM OFF)
+    set(WITH_CLANG OFF)
     message(STATUS "LLVM not found")
+  else()
+    if(NOT CLANG_FOUND)
+      set(WITH_CLANG OFF)
+      message(STATUS "Clang not found")
+    endif()
   endif()
 endif()
 
@@ -462,6 +480,14 @@ if(WITH_POTRACE)
   if(NOT POTRACE_FOUND)
     message(WARNING "potrace not found, disabling WITH_POTRACE")
     set(WITH_POTRACE OFF)
+  endif()
+endif()
+
+if(WITH_HARU)
+  find_package_wrapper(Haru)
+  if(NOT HARU_FOUND)
+    message(WARNING "Haru not found, disabling WITH_HARU")
+    set(WITH_HARU OFF)
   endif()
 endif()
 
@@ -610,7 +636,13 @@ endif()
 
 # GNU Compiler
 if(CMAKE_COMPILER_IS_GNUCC)
-  set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing")
+  # ffp-contract=off:
+  # Automatically turned on when building with "-march=native". This is
+  # explicitly turned off here as it will make floating point math give a bit
+  # different results. This will lead to automated test failures. So disable
+  # this until we support it. Seems to default to off in clang and the intel
+  # compiler.
+  set(PLATFORM_CFLAGS "-pipe -fPIC -funsigned-char -fno-strict-aliasing -ffp-contract=off")
 
   # `maybe-uninitialized` is unreliable in release builds, but fine in debug builds.
   set(GCC_EXTRA_FLAGS_RELEASE "-Wno-maybe-uninitialized")

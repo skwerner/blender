@@ -28,11 +28,9 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_curveprofile.h"
 #include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_mesh.h"
 #include "BKE_unit.h"
 
 #include "DNA_curveprofile_types.h"
@@ -52,6 +50,7 @@
 #include "ED_screen.h"
 #include "ED_space_api.h"
 #include "ED_transform.h"
+#include "ED_util.h"
 #include "ED_view3d.h"
 
 #include "mesh_intern.h" /* own include */
@@ -575,7 +574,7 @@ static void edbm_bevel_mouse_set_value(wmOperator *op, const wmEvent *event)
     opdata->shift_value[vmode] = -1.0f;
   }
 
-  /* clamp accordingto value mode, and store value back */
+  /* Clamp according to value mode, and store value back. */
   CLAMP(value, value_clamp_min[vmode], value_clamp_max[vmode]);
   if (vmode == SEGMENTS_VALUE) {
     opdata->segments = value;

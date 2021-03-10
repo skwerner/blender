@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -32,11 +31,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef __SSE2__
-#  include <emmintrin.h>
-#endif
-
 #include "BLI_math_base.h"
+#include "BLI_simd.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -380,7 +376,7 @@ MINLINE float fractf(float a)
   return a - floorf(a);
 }
 
-/* Adapted from godotengine math_funcs.h. */
+/* Adapted from godot-engine math_funcs.h. */
 MINLINE float wrapf(float value, float max, float min)
 {
   float range = max - min;
@@ -686,10 +682,10 @@ MINLINE int integer_digits_i(const int i)
 
 /* Internal helpers for SSE2 implementation.
  *
- * NOTE: Are to be called ONLY from inside `#ifdef __SSE2__` !!!
+ * NOTE: Are to be called ONLY from inside `#ifdef BLI_HAVE_SSE2` !!!
  */
 
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
 
 /* Calculate initial guess for arg^exp based on float representation
  * This method gives a constant bias, which can be easily compensated by
@@ -717,7 +713,7 @@ MALWAYS_INLINE __m128 _bli_math_improve_5throot_solution(const __m128 old_result
   __m128 approx2 = _mm_mul_ps(old_result, old_result);
   __m128 approx4 = _mm_mul_ps(approx2, approx2);
   __m128 t = _mm_div_ps(x, approx4);
-  __m128 summ = _mm_add_ps(_mm_mul_ps(_mm_set1_ps(4.0f), old_result), t); /* fma */
+  __m128 summ = _mm_add_ps(_mm_mul_ps(_mm_set1_ps(4.0f), old_result), t); /* FMA. */
   return _mm_mul_ps(summ, _mm_set1_ps(1.0f / 5.0f));
 }
 
@@ -770,7 +766,7 @@ MALWAYS_INLINE __m128 _bli_math_blend_sse(const __m128 mask, const __m128 a, con
   return _mm_or_ps(_mm_and_ps(mask, a), _mm_andnot_ps(mask, b));
 }
 
-#endif /* __SSE2__ */
+#endif /* BLI_HAVE_SSE2 */
 
 /* Low level conversion functions */
 MINLINE unsigned char unit_float_to_uchar_clamp(float val)

@@ -142,11 +142,20 @@ static void eevee_init_noise_texture(void)
   e_data.noise_tex = DRW_texture_create_2d(64, 64, GPU_RGBA16F, 0, (float *)blue_noise);
 }
 
+#define RUNTIME_LUT_CREATION 0
+
 static void eevee_init_util_texture(void)
 {
   const int layers = 4 + 16;
   float(*texels)[4] = MEM_mallocN(sizeof(float[4]) * 64 * 64 * layers, "utils texels");
   float(*texels_layer)[4] = texels;
+#if RUNTIME_LUT_CREATION
+  float *bsdf_ggx_lut = EEVEE_lut_update_ggx_brdf(64);
+  float(*btdf_ggx_lut)[64 * 64 * 2] = (float(*)[64 * 64 * 2]) EEVEE_lut_update_ggx_btdf(64, 16);
+#else
+  const float *bsdf_ggx_lut = bsdf_split_sum_ggx;
+  const float(*btdf_ggx_lut)[64 * 64 * 2] = btdf_split_sum_ggx;
+#endif
 
   /* Copy ltc_mat_ggx into 1st layer */
   memcpy(texels_layer, ltc_mat_ggx, sizeof(float[4]) * 64 * 64);
@@ -155,8 +164,8 @@ static void eevee_init_util_texture(void)
   /* Copy bsdf_split_sum_ggx into 2nd layer red and green channels.
    * Copy ltc_mag_ggx into 2nd layer blue and alpha channel. */
   for (int i = 0; i < 64 * 64; i++) {
-    texels_layer[i][0] = bsdf_split_sum_ggx[i * 2 + 0];
-    texels_layer[i][1] = bsdf_split_sum_ggx[i * 2 + 1];
+    texels_layer[i][0] = bsdf_ggx_lut[i * 2 + 0];
+    texels_layer[i][1] = bsdf_ggx_lut[i * 2 + 1];
     texels_layer[i][2] = ltc_mag_ggx[i * 2 + 0];
     texels_layer[i][3] = ltc_mag_ggx[i * 2 + 1];
   }
@@ -183,8 +192,8 @@ static void eevee_init_util_texture(void)
   /* Copy Refraction GGX LUT in layer 5 - 21 */
   for (int j = 0; j < 16; j++) {
     for (int i = 0; i < 64 * 64; i++) {
-      texels_layer[i][0] = btdf_split_sum_ggx[j * 2][i];
-      texels_layer[i][1] = 0.0; /* UNUSED */
+      texels_layer[i][0] = btdf_ggx_lut[j][i * 2 + 0];
+      texels_layer[i][1] = btdf_ggx_lut[j][i * 2 + 1];
       texels_layer[i][2] = 0.0; /* UNUSED */
       texels_layer[i][3] = 0.0; /* UNUSED */
     }
@@ -195,6 +204,10 @@ static void eevee_init_util_texture(void)
       64, 64, layers, GPU_RGBA16F, DRW_TEX_FILTER | DRW_TEX_WRAP, (float *)texels);
 
   MEM_freeN(texels);
+#if RUNTIME_LUT_CREATION
+  MEM_freeN(bsdf_ggx_lut);
+  MEM_freeN(btdf_ggx_lut);
+#endif
 }
 
 void EEVEE_update_noise(EEVEE_PassList *psl, EEVEE_FramebufferList *fbl, const double offsets[3])
@@ -234,7 +247,7 @@ void EEVEE_materials_init(EEVEE_ViewLayerData *sldata,
   }
 
   {
-    /* Update noise Framebuffer. */
+    /* Update noise Frame-buffer. */
     GPU_framebuffer_ensure_config(
         &fbl->update_noise_fb,
         {GPU_ATTACHMENT_NONE, GPU_ATTACHMENT_TEXTURE_LAYER(e_data.util_tex, 2)});
@@ -415,7 +428,7 @@ void EEVEE_materials_cache_init(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   {
     /* Renderpass accumulation. */
     DRWState state = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_EQUAL | DRW_STATE_BLEND_ADD_FULL;
-    /* Create an instance of each of theses passes and link them together. */
+    /* Create an instance of each of these passes and link them together. */
     DRWPass *passes[] = {
         psl->material_ps,
         psl->material_cull_ps,
@@ -856,7 +869,7 @@ void EEVEE_materials_cache_populate(EEVEE_Data *vedata,
             ADD_SHGROUP_CALL(matcache[i].shading_grp, ob, mat_geom[i], oedata);
             ADD_SHGROUP_CALL_SAFE(matcache[i].depth_grp, ob, mat_geom[i], oedata);
             ADD_SHGROUP_CALL_SAFE(matcache[i].shadow_grp, ob, mat_geom[i], oedata);
-            *cast_shadow = (matcache[i].shadow_grp != NULL);
+            *cast_shadow = *cast_shadow || (matcache[i].shadow_grp != NULL);
           }
         }
       }
@@ -1107,4 +1120,4 @@ void EEVEE_material_output_accumulate(EEVEE_ViewLayerData *sldata, EEVEE_Data *v
   }
 }
 
-/* \} */
+/** \} */

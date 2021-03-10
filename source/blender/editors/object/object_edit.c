@@ -504,7 +504,7 @@ static bool mesh_needs_keyindex(Main *bmain, const Mesh *me)
     return false; /* will be added */
   }
 
-  for (const Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
+  LISTBASE_FOREACH (const Object *, ob, &bmain->objects) {
     if ((ob->parent) && (ob->parent->data == me) && ELEM(ob->partype, PARVERT1, PARVERT3)) {
       return true;
     }
@@ -650,12 +650,10 @@ bool ED_object_editmode_exit_ex(Main *bmain, Scene *scene, Object *obedit, int f
 
   /* freedata only 0 now on file saves and render */
   if (freedata) {
-    ListBase pidlist;
-    PTCacheID *pid;
-
     /* flag object caches as outdated */
+    ListBase pidlist;
     BKE_ptcache_ids_from_object(&pidlist, obedit, scene, 0);
-    for (pid = pidlist.first; pid; pid = pid->next) {
+    LISTBASE_FOREACH (PTCacheID *, pid, &pidlist) {
       /* particles don't need reset on geometry change */
       if (pid->type != PTCACHE_TYPE_PARTICLES) {
         pid->cache->flag |= PTCACHE_OUTDATED;
@@ -685,6 +683,32 @@ bool ED_object_editmode_exit(bContext *C, int flag)
   return ED_object_editmode_exit_ex(bmain, scene, obedit, flag);
 }
 
+bool ED_object_editmode_exit_multi_ex(Main *bmain, Scene *scene, ViewLayer *view_layer, int flag)
+{
+  Object *obedit = OBEDIT_FROM_VIEW_LAYER(view_layer);
+  if (obedit == NULL) {
+    return false;
+  }
+  bool changed = false;
+  const short obedit_type = obedit->type;
+
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+    Object *ob = base->object;
+    if ((ob->type == obedit_type) && (ob->mode & OB_MODE_EDIT)) {
+      changed |= ED_object_editmode_exit_ex(bmain, scene, base->object, flag);
+    }
+  }
+  return changed;
+}
+
+bool ED_object_editmode_exit_multi(bContext *C, int flag)
+{
+  Main *bmain = CTX_data_main(C);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  return ED_object_editmode_exit_multi_ex(bmain, scene, view_layer, flag);
+}
+
 bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag)
 {
   bool ok = false;
@@ -694,20 +718,26 @@ bool ED_object_editmode_enter_ex(Main *bmain, Scene *scene, Object *ob, int flag
     return false;
   }
 
-  /* this checks actual object->data, for cases when other scenes have it in editmode context */
-  if (BKE_object_is_in_editmode(ob)) {
-    return true;
-  }
-
   if (BKE_object_obdata_is_libdata(ob)) {
     /* Ideally the caller should check this. */
     CLOG_WARN(&LOG, "Unable to enter edit-mode on library data for object '%s'", ob->id.name + 2);
     return false;
   }
 
-  ob->restore_mode = ob->mode;
+  if ((ob->mode & OB_MODE_EDIT) == 0) {
+    ob->restore_mode = ob->mode;
 
-  ob->mode = OB_MODE_EDIT;
+    ob->mode = OB_MODE_EDIT;
+  }
+
+  /* This checks actual `object->data`,
+   * for cases when other scenes have it in edit-mode context.
+   *
+   * It's important to run this after setting the object's mode (above), since in rare cases
+   * the object may have the edit-data but not it's object-mode set. See T85974. */
+  if (BKE_object_is_in_editmode(ob)) {
+    return true;
+  }
 
   if (ob->type == OB_MESH) {
     ok = true;
@@ -1398,7 +1428,7 @@ static int shade_smooth_exec(bContext *C, wmOperator *op)
     CTX_data_selected_editable_objects(C, &ctx_objects);
   }
 
-  for (CollectionPointerLink *ctx_ob = ctx_objects.first; ctx_ob; ctx_ob = ctx_ob->next) {
+  LISTBASE_FOREACH (CollectionPointerLink *, ctx_ob, &ctx_objects) {
     Object *ob = ctx_ob->ptr.data;
     ID *data = ob->data;
     if (data != NULL) {
@@ -1406,7 +1436,7 @@ static int shade_smooth_exec(bContext *C, wmOperator *op)
     }
   }
 
-  for (CollectionPointerLink *ctx_ob = ctx_objects.first; ctx_ob; ctx_ob = ctx_ob->next) {
+  LISTBASE_FOREACH (CollectionPointerLink *, ctx_ob, &ctx_objects) {
     /* Always un-tag all object data-blocks irrespective of our ability to operate on them. */
     Object *ob = ctx_ob->ptr.data;
     ID *data = ob->data;
@@ -1817,11 +1847,9 @@ struct MoveToCollectionData {
 static int move_to_collection_menus_create(wmOperator *op, MoveToCollectionData *menu)
 {
   int index = menu->index;
-  for (CollectionChild *child = menu->collection->children.first; child != NULL;
-       child = child->next) {
+  LISTBASE_FOREACH (CollectionChild *, child, &menu->collection->children) {
     Collection *collection = child->collection;
-    MoveToCollectionData *submenu = MEM_callocN(sizeof(MoveToCollectionData),
-                                                "MoveToCollectionData submenu - expected memleak");
+    MoveToCollectionData *submenu = MEM_callocN(sizeof(MoveToCollectionData), __func__);
     BLI_addtail(&menu->submenus, submenu);
     submenu->collection = collection;
     submenu->index = ++index;
@@ -1833,8 +1861,7 @@ static int move_to_collection_menus_create(wmOperator *op, MoveToCollectionData 
 
 static void move_to_collection_menus_free_recursive(MoveToCollectionData *menu)
 {
-  for (MoveToCollectionData *submenu = menu->submenus.first; submenu != NULL;
-       submenu = submenu->next) {
+  LISTBASE_FOREACH (MoveToCollectionData *, submenu, &menu->submenus) {
     move_to_collection_menus_free_recursive(submenu);
   }
   BLI_freelistN(&menu->submenus);
@@ -1873,8 +1900,7 @@ static void move_to_collection_menu_create(bContext *C, uiLayout *layout, void *
                        UI_icon_color_from_collection(menu->collection);
   uiItemIntO(layout, name, icon, menu->ot->idname, "collection_index", menu->index);
 
-  for (MoveToCollectionData *submenu = menu->submenus.first; submenu != NULL;
-       submenu = submenu->next) {
+  LISTBASE_FOREACH (MoveToCollectionData *, submenu, &menu->submenus) {
     move_to_collection_menus_items(layout, submenu);
   }
 }
@@ -1937,7 +1963,7 @@ static int move_to_collection_invoke(bContext *C, wmOperator *op, const wmEvent 
   Collection *master_collection = scene->master_collection;
 
   /* We need the data to be allocated so it's available during menu drawing.
-   * Technically we could use wmOperator->customdata. However there is no free callback
+   * Technically we could use #wmOperator.customdata. However there is no free callback
    * called to an operator that exit with OPERATOR_INTERFACE to launch a menu.
    *
    * So we are left with a memory that will necessarily leak. It's a small leak though.*/

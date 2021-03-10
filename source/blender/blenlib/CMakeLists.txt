@@ -54,6 +54,7 @@ set(SRC
   intern/BLI_memblock.c
   intern/BLI_memiter.c
   intern/BLI_mempool.c
+  intern/BLI_mmap.c
   intern/BLI_timer.c
   intern/DLRB_tree.c
   intern/array_store.c
@@ -191,6 +192,7 @@ set(SRC
   BLI_float3.hh
   BLI_float4x4.hh
   BLI_fnmatch.h
+  BLI_function_ref.hh
   BLI_ghash.h
   BLI_gsqueue.h
   BLI_hash.h
@@ -243,6 +245,7 @@ set(SRC
   BLI_mempool.h
   BLI_mesh_boolean.hh
   BLI_mesh_intersect.hh
+  BLI_mmap.h
   BLI_mpq2.hh
   BLI_mpq3.hh
   BLI_multi_value_map.hh
@@ -276,6 +279,7 @@ set(SRC
   BLI_sys_types.h
   BLI_system.h
   BLI_task.h
+  BLI_task.hh
   BLI_threads.h
   BLI_timecode.h
   BLI_timeit.hh
@@ -385,6 +389,7 @@ if(WITH_GTESTS)
     tests/BLI_disjoint_set_test.cc
     tests/BLI_edgehash_test.cc
     tests/BLI_expr_pylike_eval_test.cc
+    tests/BLI_function_ref_test.cc
     tests/BLI_ghash_test.cc
     tests/BLI_hash_mm2a_test.cc
     tests/BLI_heap_simple_test.cc

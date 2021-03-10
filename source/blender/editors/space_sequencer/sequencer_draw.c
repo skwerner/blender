@@ -26,6 +26,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_string_utils.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
@@ -65,6 +66,7 @@
 #include "ED_sequencer.h"
 #include "ED_space_api.h"
 #include "ED_time_scrub_ui.h"
+#include "ED_util.h"
 
 #include "BIF_glutil.h"
 
@@ -623,42 +625,57 @@ static const char *draw_seq_text_get_name(Sequence *seq)
 
 static void draw_seq_text_get_source(Sequence *seq, char *r_source, size_t source_len)
 {
+  *r_source = '\0';
+
   /* Set source for the most common types. */
-  if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_MOVIE)) {
-    BLI_snprintf(r_source, source_len, "%s%s", seq->strip->dir, seq->strip->stripdata->name);
-  }
-  else if (seq->type == SEQ_TYPE_SOUND_RAM) {
-    if (seq->sound) {
-      BLI_snprintf(r_source, source_len, "%s", seq->sound->filepath);
+  switch (seq->type) {
+    case SEQ_TYPE_IMAGE:
+    case SEQ_TYPE_MOVIE: {
+      BLI_join_dirfile(r_source, source_len, seq->strip->dir, seq->strip->stripdata->name);
+      break;
     }
-  }
-  else if (seq->type == SEQ_TYPE_MULTICAM) {
-    BLI_snprintf(r_source, source_len, "Channel: %d", seq->multicam_source);
-  }
-  else if (seq->type == SEQ_TYPE_TEXT) {
-    TextVars *textdata = seq->effectdata;
-    BLI_snprintf(r_source, source_len, "%s", textdata->text);
-  }
-  else if (seq->type == SEQ_TYPE_SCENE) {
-    if (seq->scene_camera) {
-      BLI_snprintf(r_source,
-                   source_len,
-                   "%s (%s)",
-                   seq->scene->id.name + 2,
-                   ((ID *)seq->scene_camera)->name + 2);
+    case SEQ_TYPE_SOUND_RAM: {
+      if (seq->sound != NULL) {
+        BLI_strncpy(r_source, seq->sound->filepath, source_len);
+      }
+      break;
     }
-    else {
-      BLI_snprintf(r_source, source_len, "%s", seq->scene->id.name + 2);
+    case SEQ_TYPE_MULTICAM: {
+      BLI_snprintf(r_source, source_len, "Channel: %d", seq->multicam_source);
+      break;
     }
-  }
-  else if (seq->type == SEQ_TYPE_MOVIECLIP) {
-    BLI_snprintf(r_source, source_len, "%s", seq->clip->id.name + 2);
-  }
-  else if (seq->type == SEQ_TYPE_MASK) {
-    BLI_snprintf(r_source, source_len, "%s", seq->mask->id.name + 2);
-  }
-  else {
-    *r_source = '\0';
+    case SEQ_TYPE_TEXT: {
+      const TextVars *textdata = seq->effectdata;
+      BLI_strncpy(r_source, textdata->text, source_len);
+      break;
+    }
+    case SEQ_TYPE_SCENE: {
+      if (seq->scene != NULL) {
+        if (seq->scene_camera != NULL) {
+          BLI_snprintf(r_source,
+                       source_len,
+                       "%s (%s)",
+                       seq->scene->id.name + 2,
+                       seq->scene_camera->id.name + 2);
+        }
+        else {
+          BLI_strncpy(r_source, seq->scene->id.name + 2, source_len);
+        }
+      }
+      break;
+    }
+    case SEQ_TYPE_MOVIECLIP: {
+      if (seq->clip != NULL) {
+        BLI_strncpy(r_source, seq->clip->id.name + 2, source_len);
+      }
+      break;
+    }
+    case SEQ_TYPE_MASK: {
+      if (seq->mask != NULL) {
+        BLI_strncpy(r_source, seq->mask->id.name + 2, source_len);
+      }
+      break;
+    }
   }
 }
 
@@ -667,33 +684,39 @@ static size_t draw_seq_text_get_overlay_string(SpaceSeq *sseq,
                                                char *r_overlay_string,
                                                size_t overlay_string_len)
 {
-  const char *name = draw_seq_text_get_name(seq);
+  const char *text_sep = " | ";
+  const char *text_array[5];
+  int i = 0;
+
+  if (sseq->flag & SEQ_SHOW_STRIP_NAME) {
+    text_array[i++] = draw_seq_text_get_name(seq);
+  }
+
   char source[FILE_MAX];
-  int strip_duration = seq->enddisp - seq->startdisp;
-  draw_seq_text_get_source(seq, source, sizeof(source));
-
-  bool show_name = sseq->flag & SEQ_SHOW_STRIP_NAME;
-  bool show_source = (sseq->flag & (SEQ_SHOW_STRIP_SOURCE)) && source[0] != '\0';
-  bool show_duration = sseq->flag & SEQ_SHOW_STRIP_DURATION;
-
-  size_t string_len = 0;
-  if (show_name) {
-    string_len = BLI_snprintf(r_overlay_string, overlay_string_len, "%s", name);
-    if (show_source || show_duration) {
-      string_len += BLI_snprintf(r_overlay_string + string_len, overlay_string_len, " | ");
+  if (sseq->flag & SEQ_SHOW_STRIP_SOURCE) {
+    draw_seq_text_get_source(seq, source, sizeof(source));
+    if (source[0] != '\0') {
+      if (i != 0) {
+        text_array[i++] = text_sep;
+      }
+      text_array[i++] = source;
     }
   }
-  if (show_source) {
-    string_len += BLI_snprintf(r_overlay_string + string_len, overlay_string_len, "%s", source);
-    if (show_duration) {
-      string_len += BLI_snprintf(r_overlay_string + string_len, overlay_string_len, " | ");
+
+  char strip_duration_text[16];
+  if (sseq->flag & SEQ_SHOW_STRIP_DURATION) {
+    const int strip_duration = seq->enddisp - seq->startdisp;
+    SNPRINTF(strip_duration_text, "%d", strip_duration);
+    if (i != 0) {
+      text_array[i++] = text_sep;
     }
+    text_array[i++] = strip_duration_text;
   }
-  if (show_duration) {
-    string_len += BLI_snprintf(
-        r_overlay_string + string_len, overlay_string_len, "%d", strip_duration);
-  }
-  return string_len;
+
+  BLI_assert(i <= ARRAY_SIZE(text_array));
+
+  return BLI_string_join_array(r_overlay_string, overlay_string_len, text_array, i) -
+         r_overlay_string;
 }
 
 /* Draw info text on a sequence strip. */
@@ -1425,15 +1448,24 @@ static void sequencer_draw_borders_overlay(const SpaceSeq *sseq,
   if (sseq->flag & SEQ_SHOW_SAFE_MARGINS) {
     immUniformThemeColorBlend(TH_VIEW_OVERLAY, TH_BACK, 0.25f);
 
-    UI_draw_safe_areas(
-        shdr_pos, x1, x2, y1, y2, scene->safe_areas.title, scene->safe_areas.action);
+    UI_draw_safe_areas(shdr_pos,
+                       &(const rctf){
+                           .xmin = x1,
+                           .xmax = x2,
+                           .ymin = y1,
+                           .ymax = y2,
+                       },
+                       scene->safe_areas.title,
+                       scene->safe_areas.action);
 
     if (sseq->flag & SEQ_SHOW_SAFE_CENTER) {
       UI_draw_safe_areas(shdr_pos,
-                         x1,
-                         x2,
-                         y1,
-                         y2,
+                         &(const rctf){
+                             .xmin = x1,
+                             .xmax = x2,
+                             .ymin = y1,
+                             .ymax = y2,
+                         },
                          scene->safe_areas.title_center,
                          scene->safe_areas.action_center);
     }
@@ -1502,7 +1534,7 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
 
   /* Default */
   *r_format = GPU_RGBA8;
-  *r_data = GPU_DATA_UNSIGNED_BYTE;
+  *r_data = GPU_DATA_UBYTE;
 
   /* Fallback to CPU based color space conversion. */
   if (force_fallback) {
@@ -1549,7 +1581,7 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
   if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
     display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
     *r_format = GPU_RGBA8;
-    *r_data = GPU_DATA_UNSIGNED_BYTE;
+    *r_data = GPU_DATA_UBYTE;
   }
   if (cache_handle) {
     IMB_display_buffer_release(cache_handle);
@@ -1651,7 +1683,7 @@ static void sequencer_draw_display_buffer(const bContext *C,
 
     display_buffer = (uchar *)ibuf->rect;
     format = GPU_RGBA8;
-    data = GPU_DATA_UNSIGNED_BYTE;
+    data = GPU_DATA_UBYTE;
   }
   else {
     display_buffer = sequencer_OCIO_transform_ibuf(C, ibuf, &glsl_used, &format, &data);
@@ -1880,6 +1912,10 @@ static void draw_seq_backdrop(View2D *v2d)
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
+  /* View backdrop. */
+  immUniformThemeColorShade(TH_BACK, -25);
+  immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, v2d->cur.xmax, v2d->cur.ymax);
+
   /* Darker overlay over the view backdrop. */
   immUniformThemeColorShade(TH_BACK, -20);
   immRectf(pos, v2d->cur.xmin, -1.0, v2d->cur.xmax, 1.0);
@@ -1887,21 +1923,17 @@ static void draw_seq_backdrop(View2D *v2d)
   /* Alternating horizontal stripes. */
   i = max_ii(1, ((int)v2d->cur.ymin) - 1);
 
-  float col_alternating[4];
-  UI_GetThemeColor4fv(TH_ROW_ALTERNATE, col_alternating);
+  GPU_blend(GPU_BLEND_ALPHA);
+  immUniformThemeColor(TH_ROW_ALTERNATE);
 
   while (i < v2d->cur.ymax) {
     if (i & 1) {
-      immUniformThemeColorBlendShade(TH_BACK, TH_ROW_ALTERNATE, col_alternating[3], -25);
+      immRectf(pos, v2d->cur.xmin, i, v2d->cur.xmax, i + 1);
     }
-    else {
-      immUniformThemeColorShade(TH_BACK, -25);
-    }
-
-    immRectf(pos, v2d->cur.xmin, i, v2d->cur.xmax, i + 1);
-
     i++;
   }
+
+  GPU_blend(GPU_BLEND_NONE);
 
   /* Lines separating the horizontal bands. */
   i = max_ii(1, ((int)v2d->cur.ymin) - 1);

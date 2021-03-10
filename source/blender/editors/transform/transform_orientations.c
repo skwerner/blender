@@ -500,6 +500,15 @@ void ED_transform_calc_orientation_from_type(const bContext *C, float r_mat[3][3
       C, r_mat, scene, rv3d, ob, obedit, orientation_type, orientation_index_custom, pivot_point);
 }
 
+/**
+ * \note The resulting matrix may not be orthogonal,
+ * callers that depend on `r_mat` to be orthogonal should use #orthogonalize_m3.
+ *
+ * A non orthogonal matrix may be returned when:
+ * - #V3D_ORIENT_GIMBAL the result won't be orthogonal unless the object has no rotation.
+ * - #V3D_ORIENT_LOCAL may contain shear from non-uniform scale in parent/child relationships.
+ * - #V3D_ORIENT_CUSTOM may have been created from #V3D_ORIENT_LOCAL.
+ */
 short ED_transform_calc_orientation_from_type_ex(const bContext *C,
                                                  float r_mat[3][3],
                                                  /* extra args (can be accessed from context) */
@@ -512,23 +521,19 @@ short ED_transform_calc_orientation_from_type_ex(const bContext *C,
                                                  const int pivot_point)
 {
   switch (orientation_type) {
-    case V3D_ORIENT_GLOBAL: {
-      unit_m3(r_mat);
-      return V3D_ORIENT_GLOBAL;
-    }
     case V3D_ORIENT_GIMBAL: {
       if (ob && gimbal_axis(ob, r_mat)) {
-        return V3D_ORIENT_GIMBAL;
+        break;
       }
-      /* if not gimbal, fall through to normal */
+      /* If not gimbal, fall through to normal. */
       ATTR_FALLTHROUGH;
     }
     case V3D_ORIENT_NORMAL: {
       if (obedit || (ob && ob->mode & OB_MODE_POSE)) {
         ED_getTransformOrientationMatrix(C, ob, obedit, pivot_point, r_mat);
-        return V3D_ORIENT_NORMAL;
+        break;
       }
-      /* no break we define 'normal' as 'local' in Object mode */
+      /* No break we define 'normal' as 'local' in Object mode. */
       ATTR_FALLTHROUGH;
     }
     case V3D_ORIENT_LOCAL: {
@@ -543,25 +548,28 @@ short ED_transform_calc_orientation_from_type_ex(const bContext *C,
         else {
           transform_orientations_create_from_axis(r_mat, UNPACK3(ob->obmat));
         }
-        return V3D_ORIENT_LOCAL;
+        break;
       }
+      /* If not local, fall through to global. */
+      ATTR_FALLTHROUGH;
+    }
+    case V3D_ORIENT_GLOBAL: {
       unit_m3(r_mat);
-      return V3D_ORIENT_GLOBAL;
+      break;
     }
     case V3D_ORIENT_VIEW: {
       if (rv3d != NULL) {
         copy_m3_m4(r_mat, rv3d->viewinv);
         normalize_m3(r_mat);
-        negate_v3(r_mat[2]);
       }
       else {
         unit_m3(r_mat);
       }
-      return V3D_ORIENT_VIEW;
+      break;
     }
     case V3D_ORIENT_CURSOR: {
       BKE_scene_cursor_rot_to_mat3(&scene->cursor, r_mat);
-      return V3D_ORIENT_CURSOR;
+      break;
     }
     case V3D_ORIENT_CUSTOM_MATRIX: {
       /* Do nothing. */;
@@ -600,6 +608,12 @@ short transform_orientation_matrix_get(
   if (orientation >= V3D_ORIENT_CUSTOM) {
     orientation_index_custom = orientation - V3D_ORIENT_CUSTOM;
     orientation = V3D_ORIENT_CUSTOM;
+  }
+  else if (ob && (ob->mode & OB_MODE_ALL_WEIGHT_PAINT) && !(t->options & CTX_PAINT_CURVE)) {
+    Object *ob_armature = transform_object_deform_pose_armature_get(t, ob);
+    if (ob_armature) {
+      ob = ob_armature;
+    }
   }
 
   if ((t->spacetype == SPACE_VIEW3D) && t->region && (t->region->regiontype == RGN_TYPE_WINDOW)) {

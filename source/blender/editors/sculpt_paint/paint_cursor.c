@@ -350,7 +350,7 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
       eGPUTextureFormat format = col ? GPU_RGBA8 : GPU_R8;
       target->overlay_texture = GPU_texture_create_2d(
           "paint_cursor_overlay", size, size, 1, format, NULL);
-      GPU_texture_update(target->overlay_texture, GPU_DATA_UNSIGNED_BYTE, buffer);
+      GPU_texture_update(target->overlay_texture, GPU_DATA_UBYTE, buffer);
 
       if (!col) {
         GPU_texture_swizzle_set(target->overlay_texture, "rrrr");
@@ -358,7 +358,7 @@ static int load_tex(Brush *br, ViewContext *vc, float zoom, bool col, bool prima
     }
 
     if (init) {
-      GPU_texture_update(target->overlay_texture, GPU_DATA_UNSIGNED_BYTE, buffer);
+      GPU_texture_update(target->overlay_texture, GPU_DATA_UBYTE, buffer);
     }
 
     if (buffer) {
@@ -469,13 +469,13 @@ static int load_tex_cursor(Brush *br, ViewContext *vc, float zoom)
     if (!cursor_snap.overlay_texture) {
       cursor_snap.overlay_texture = GPU_texture_create_2d(
           "cursor_snap_overaly", size, size, 1, GPU_R8, NULL);
-      GPU_texture_update(cursor_snap.overlay_texture, GPU_DATA_UNSIGNED_BYTE, buffer);
+      GPU_texture_update(cursor_snap.overlay_texture, GPU_DATA_UBYTE, buffer);
 
       GPU_texture_swizzle_set(cursor_snap.overlay_texture, "rrrr");
     }
 
     if (init) {
-      GPU_texture_update(cursor_snap.overlay_texture, GPU_DATA_UNSIGNED_BYTE, buffer);
+      GPU_texture_update(cursor_snap.overlay_texture, GPU_DATA_UBYTE, buffer);
     }
 
     if (buffer) {
@@ -1755,7 +1755,7 @@ static void paint_cursor_cursor_draw_3d_view_brush_cursor_active(PaintCursorCont
     else if (brush->cloth_force_falloff_type == BRUSH_CLOTH_FORCE_FALLOFF_RADIAL &&
              brush->cloth_simulation_area_type == BRUSH_CLOTH_SIMULATION_AREA_LOCAL) {
       /* Display the simulation limits if sculpting outside them. */
-      /* This does not makes much sense of plane falloff as the falloff is infinte or global. */
+      /* This does not makes much sense of plane falloff as the falloff is infinite or global. */
 
       if (len_v3v3(ss->cache->true_location, ss->cache->true_initial_location) >
           ss->cache->radius * (1.0f + brush->cloth_sim_limit)) {

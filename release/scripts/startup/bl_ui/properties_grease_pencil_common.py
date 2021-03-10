@@ -328,11 +328,6 @@ class GPENCIL_MT_material_active(Menu):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        tool_settings = context.scene.tool_settings
-        mode = tool_settings.gpencil_paint.color_mode
-        if mode != 'MATERIAL':
-            return False
-
         if ob is None or len(ob.material_slots) == 0:
             return False
 
@@ -478,6 +473,7 @@ class AnnotationDataPanel:
 
         tool_settings = context.tool_settings
         if gpd and gpl:
+            layout.prop(gpl, "opacity", text="Opacity", slider=True)
             layout.prop(gpl, "thickness")
         else:
             layout.prop(tool_settings, "annotation_thickness", text="Thickness")
@@ -592,7 +588,7 @@ class GreasePencilMaterialsPanel:
             if show_full_ui:
                 row = layout.row()
 
-                row.template_ID(ob, "active_material", new="material.new", duplicate="material.duplicate", live_icon=True)
+                row.template_ID(ob, "active_material", new="material.new", live_icon=True)
 
                 slot = context.material_slot
                 if slot:
@@ -727,12 +723,32 @@ class GreasePencilSimplifyPanel:
         col.prop(rd, "simplify_gpencil_antialiasing")
 
 
+class GreasePencilLayerTransformPanel:
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
+        ob = context.object
+        gpd = ob.data
+        gpl = gpd.layers.active
+        layout.active = not gpl.lock
+
+        row = layout.row(align=True)
+        row.prop(gpl, "location")
+
+        row = layout.row(align=True)
+        row.prop(gpl, "rotation")
+
+        row = layout.row(align=True)
+        row.prop(gpl, "scale")
+
+
 class GreasePencilLayerAdjustmentsPanel:
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
-        scene = context.scene
 
         ob = context.object
         gpd = ob.data
@@ -749,15 +765,6 @@ class GreasePencilLayerAdjustmentsPanel:
         # Offsets - Thickness
         col = layout.row(align=True)
         col.prop(gpl, "line_change", text="Stroke Thickness")
-
-        col = layout.row(align=True)
-        col.prop(gpl, "pass_index")
-
-        col = layout.row(align=True)
-        col.prop_search(gpl, "viewlayer_render", scene, "view_layers", text="View Layer")
-
-        col = layout.row(align=True)
-        col.prop(gpl, "lock_material")
 
 
 class GPENCIL_UL_masks(UIList):
@@ -826,6 +833,7 @@ class GreasePencilLayerRelationsPanel:
         layout.use_property_split = True
         layout.use_property_decorate = False
 
+        scene = context.scene
         ob = context.object
         gpd = ob.data
         gpl = gpd.layers.active
@@ -838,6 +846,14 @@ class GreasePencilLayerRelationsPanel:
 
         if parent and gpl.parent_type == 'BONE' and parent.type == 'ARMATURE':
             col.prop_search(gpl, "parent_bone", parent.data, "bones", text="Bone")
+
+        layout.separator()
+
+        col = layout.row(align=True)
+        col.prop(gpl, "pass_index")
+
+        col = layout.row(align=True)
+        col.prop_search(gpl, "viewlayer_render", scene, "view_layers", text="View Layer")
 
 
 class GreasePencilLayerDisplayPanel:

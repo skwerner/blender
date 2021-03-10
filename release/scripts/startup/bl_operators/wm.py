@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
+from __future__ import annotations
 
 import bpy
 from bpy.types import (
@@ -33,11 +34,6 @@ from bpy.props import (
 )
 from bpy.app.translations import pgettext_iface as iface_
 
-# FIXME, we need a way to detect key repeat events.
-# unfortunately checking event previous values isn't reliable.
-use_toolbar_release_hack = True
-
-
 rna_path_prop = StringProperty(
     name="Context Attributes",
     description="RNA context string",
@@ -48,18 +44,21 @@ rna_reverse_prop = BoolProperty(
     name="Reverse",
     description="Cycle backwards",
     default=False,
+    options={'SKIP_SAVE'},
 )
 
 rna_wrap_prop = BoolProperty(
     name="Wrap",
     description="Wrap back to the first/last values",
     default=False,
+    options={'SKIP_SAVE'},
 )
 
 rna_relative_prop = BoolProperty(
     name="Relative",
     description="Apply relative to the current value (delta)",
     default=False,
+    options={'SKIP_SAVE'},
 )
 
 rna_space_type_prop = EnumProperty(
@@ -233,6 +232,7 @@ class WM_OT_context_scale_int(Operator):
         name="Always Step",
         description="Always adjust the value by a minimum of 1 when 'value' is not 1.0",
         default=True,
+        options={'SKIP_SAVE'},
     )
 
     def execute(self, context):
@@ -741,10 +741,12 @@ class WM_OT_context_modal_mouse(Operator):
     input_scale: FloatProperty(
         description="Scale the mouse movement by this value before applying the delta",
         default=0.01,
+        options={'SKIP_SAVE'},
     )
     invert: BoolProperty(
         description="Invert the mouse input",
         default=False,
+        options={'SKIP_SAVE'},
     )
     initial_x: IntProperty(options={'HIDDEN'})
 
@@ -858,9 +860,7 @@ class WM_OT_url_open_preset(Operator):
 
     type: EnumProperty(
         name="Site",
-        items=lambda self, _context: (
-            item for (item, _) in WM_OT_url_open_preset.preset_items
-        ),
+        items=WM_OT_url_open_preset._preset_items,
     )
 
     id: StringProperty(
@@ -914,6 +914,10 @@ class WM_OT_url_open_preset(Operator):
           "Lists committers to Blender's source code"),
          "https://www.blender.org/about/credits/"),
     ]
+
+    @staticmethod
+    def _preset_items(_self, _context):
+        return (item for (item, _) in WM_OT_url_open_preset.preset_items)
 
     def execute(self, context):
         url = None
@@ -974,7 +978,7 @@ class WM_OT_path_open(Operator):
         return {'FINISHED'}
 
 
-def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
+def _wm_doc_get_id(doc_id, do_url=True, url_prefix="", report=None):
 
     def operator_exists_pair(a, b):
         # Not fast, this is only for docs.
@@ -1024,6 +1028,11 @@ def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
             if rna_class is None:
                 # Check class for dynamically registered types.
                 rna_class = bpy.types.PropertyGroup.bl_rna_get_subclass_py(class_name)
+
+            if rna_class is None:
+                if report is not None:
+                    report({'ERROR'}, iface_("Type \"%s\" can not be found") % class_name)
+                return None
 
             # Detect if this is a inherited member and use that name instead.
             rna_parent = rna_class.bl_rna
@@ -1084,9 +1093,9 @@ class WM_OT_doc_view_manual(Operator):
                 return url
 
     def execute(self, _context):
-        rna_id = _wm_doc_get_id(self.doc_id, do_url=False)
+        rna_id = _wm_doc_get_id(self.doc_id, do_url=False, report=self.report)
         if rna_id is None:
-            return {'PASS_THROUGH'}
+            return {'CANCELLED'}
 
         url = self._lookup_rna_url(rna_id)
 
@@ -1118,9 +1127,9 @@ class WM_OT_doc_view(Operator):
         _prefix = ("https://docs.blender.org/api/master")
 
     def execute(self, _context):
-        url = _wm_doc_get_id(self.doc_id, do_url=True, url_prefix=self._prefix)
+        url = _wm_doc_get_id(self.doc_id, do_url=True, url_prefix=self._prefix, report=self.report)
         if url is None:
-            return {'PASS_THROUGH'}
+            return {'CANCELLED'}
 
         import webbrowser
         webbrowser.open(url)
@@ -1211,10 +1220,13 @@ class WM_OT_properties_edit(Operator):
     )
     subtype: EnumProperty(
         name="Subtype",
-        items=lambda self, _context: WM_OT_properties_edit.subtype_items,
+        items=WM_OT_properties_edit._subtype_items_fn,
     )
 
     subtype_items = rna_vector_subtype_items
+
+    def _subtype_items_fn(_self, _context):
+        return WM_OT_properties_edit.subtype_items
 
     def _init_subtype(self, prop_type, is_array, subtype):
         subtype = subtype or 'NONE'
@@ -1687,18 +1699,6 @@ class WM_OT_tool_set_by_id(Operator):
 
     space_type: rna_space_type_prop
 
-    if use_toolbar_release_hack:
-        def invoke(self, context, event):
-            # Hack :S
-            if not self.properties.is_property_set("name"):
-                WM_OT_toolbar._key_held = False
-                return {'PASS_THROUGH'}
-            elif (WM_OT_toolbar._key_held == event.type) and (event.value != 'RELEASE'):
-                return {'PASS_THROUGH'}
-            WM_OT_toolbar._key_held = None
-
-            return self.execute(context)
-
     def execute(self, context):
         from bl_ui.space_toolsystem_common import (
             activate_by_id,
@@ -1739,6 +1739,7 @@ class WM_OT_tool_set_by_index(Operator):
     expand: BoolProperty(
         description="Include tool subgroups",
         default=True,
+        options={'SKIP_SAVE'},
     )
 
     as_fallback: BoolProperty(
@@ -1788,13 +1789,6 @@ class WM_OT_toolbar(Operator):
     @classmethod
     def poll(cls, context):
         return context.space_data is not None
-
-    if use_toolbar_release_hack:
-        _key_held = None
-
-        def invoke(self, context, event):
-            WM_OT_toolbar._key_held = event.type
-            return self.execute(context)
 
     @staticmethod
     def keymap_from_toolbar(context, space_type, use_fallback_keys=True, use_reset=True):
@@ -2072,7 +2066,7 @@ class WM_OT_batch_rename(Operator):
             # Enum identifiers are compared with 'object.type'.
             ('MESH', "Meshes", ""),
             ('CURVE', "Curves", ""),
-            ('META', "Meta Balls", ""),
+            ('META', "Metaballs", ""),
             ('ARMATURE', "Armatures", ""),
             ('LATTICE', "Lattices", ""),
             ('GPENCIL', "Grease Pencils", ""),
@@ -2203,8 +2197,7 @@ class WM_OT_batch_rename(Operator):
                         id
                         for ob in context.selected_objects
                         if ob.type == data_type
-                        for id in (ob.data,)
-                        if id is not None and id.library is None
+                        if (id := ob.data) is not None and id.library is None
                     ))
                     if only_selected else
                     [id for id in getattr(bpy.data, attr) if id.library is None],
@@ -2489,10 +2482,10 @@ class WM_OT_batch_rename(Operator):
         return wm.invoke_props_dialog(self, width=400)
 
 
-class WM_MT_splash(Menu):
-    bl_label = "Splash"
+class WM_MT_splash_quick_setup(Menu):
+    bl_label = "Quick Setup"
 
-    def draw_setup(self, context):
+    def draw(self, context):
         wm = context.window_manager
         # prefs = context.preferences
 
@@ -2580,18 +2573,11 @@ class WM_MT_splash(Menu):
         layout.separator()
         layout.separator()
 
+
+class WM_MT_splash(Menu):
+    bl_label = "Splash"
+
     def draw(self, context):
-        # Draw setup screen if no preferences have been saved yet.
-        import os
-
-        userconfig_path = bpy.utils.user_resource('CONFIG')
-        userdef_path = os.path.join(userconfig_path, "userpref.blend")
-
-        if not os.path.isfile(userdef_path):
-            self.draw_setup(context)
-            return
-
-        # Pass
         layout = self.layout
         layout.operator_context = 'EXEC_DEFAULT'
         layout.emboss = 'PULLDOWN_MENU'
@@ -2740,6 +2726,7 @@ classes = (
     WM_OT_toolbar_prompt,
     BatchRenameAction,
     WM_OT_batch_rename,
+    WM_MT_splash_quick_setup,
     WM_MT_splash,
     WM_MT_splash_about,
 )

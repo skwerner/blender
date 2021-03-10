@@ -24,6 +24,9 @@
 
 #include "RNA_enum_types.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "BKE_mesh.h"
 
 #include "bmesh.h"
@@ -32,8 +35,8 @@
 #include "node_geometry_util.hh"
 
 static bNodeSocketTemplate geo_node_boolean_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry A")},
-    {SOCK_GEOMETRY, N_("Geometry B")},
+    {SOCK_GEOMETRY, N_("Geometry 1")},
+    {SOCK_GEOMETRY, N_("Geometry 2")},
     {-1, ""},
 };
 
@@ -41,6 +44,11 @@ static bNodeSocketTemplate geo_node_boolean_out[] = {
     {SOCK_GEOMETRY, N_("Geometry")},
     {-1, ""},
 };
+
+static void geo_node_boolean_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "operation", 0, "", ICON_NONE);
+}
 
 static int bm_face_isect_pair(BMFace *f, void *UNUSED(user_data))
 {
@@ -105,8 +113,8 @@ static Mesh *mesh_boolean_calc(const Mesh *mesh_a, const Mesh *mesh_b, int boole
 namespace blender::nodes {
 static void geo_node_boolean_exec(GeoNodeExecParams params)
 {
-  GeometrySet geometry_set_in_a = params.extract_input<GeometrySet>("Geometry A");
-  GeometrySet geometry_set_in_b = params.extract_input<GeometrySet>("Geometry B");
+  GeometrySet geometry_set_in_a = params.extract_input<GeometrySet>("Geometry 1");
+  GeometrySet geometry_set_in_b = params.extract_input<GeometrySet>("Geometry 2");
   GeometrySet geometry_set_out;
 
   GeometryNodeBooleanOperation operation = (GeometryNodeBooleanOperation)params.node().custom1;
@@ -115,6 +123,12 @@ static void geo_node_boolean_exec(GeoNodeExecParams params)
     params.set_output("Geometry", std::move(geometry_set_out));
     return;
   }
+
+  /* TODO: Boolean does support an input of multiple meshes. Currently they must all be
+   * converted to BMesh before running the operation though. D9957 will make it possible
+   * to use the mesh structure directly. */
+  geometry_set_in_a = geometry_set_realize_instances(geometry_set_in_a);
+  geometry_set_in_b = geometry_set_realize_instances(geometry_set_in_b);
 
   const Mesh *mesh_in_a = geometry_set_in_a.get_mesh_for_read();
   const Mesh *mesh_in_b = geometry_set_in_b.get_mesh_for_read();
@@ -147,6 +161,7 @@ void register_node_type_geo_boolean()
 
   geo_node_type_base(&ntype, GEO_NODE_BOOLEAN, "Boolean", NODE_CLASS_GEOMETRY, 0);
   node_type_socket_templates(&ntype, geo_node_boolean_in, geo_node_boolean_out);
+  ntype.draw_buttons = geo_node_boolean_layout;
   ntype.geometry_node_execute = blender::nodes::geo_node_boolean_exec;
   nodeRegisterType(&ntype);
 }

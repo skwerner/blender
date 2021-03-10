@@ -193,6 +193,7 @@ IDTypeInfo IDType_ID_IP = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = NULL,
     .blend_read_data = ipo_blend_read_data,
@@ -200,6 +201,8 @@ IDTypeInfo IDType_ID_IP = {
     .blend_read_expand = ipo_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* *************************************************** */

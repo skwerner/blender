@@ -517,14 +517,21 @@ void WM_exit_ex(bContext *C, const bool do_python)
           BKE_blendfile_userdef_write_all(NULL);
         }
       }
+      /* Free the callback data used on file-open
+       * (will be set when a recover operation has run). */
+      wm_test_autorun_revert_action_set(NULL, NULL);
     }
   }
 
-#ifdef WITH_PYTHON
+#if defined(WITH_PYTHON) && !defined(WITH_PYTHON_MODULE)
   /* Without this, we there isn't a good way to manage false-positive resource leaks
    * where a #PyObject references memory allocated with guarded-alloc, T71362.
    *
-   * This allows add-ons to free resources when unregistered (which is good practice anyway). */
+   * This allows add-ons to free resources when unregistered (which is good practice anyway).
+   *
+   * Don't run this code when built as a Python module as this runs when Python is in the
+   * process of shutting down, where running a snippet like this will crash, see T82675.
+   * Instead use the `atexit` module, installed by #BPY_python_start */
   BPY_run_string_eval(C, (const char *[]){"addon_utils", NULL}, "addon_utils.disable_all()");
 #endif
 
@@ -617,13 +624,13 @@ void WM_exit_ex(bContext *C, const bool do_python)
 #ifdef WITH_PYTHON
   /* option not to close python so we can use 'atexit' */
   if (do_python && ((C == NULL) || CTX_py_init_get(C))) {
-    /* XXX - old note */
-    /* before BKE_blender_free so py's gc happens while library still exists */
-    /* needed at least for a rare sigsegv that can happen in pydrivers */
-
-    /* Update for blender 2.5, move after BKE_blender_free because Blender now holds references to
-     * PyObject's so decref'ing them after python ends causes bad problems every time
-     * the py-driver bug can be fixed if it happens again we can deal with it then. */
+    /* NOTE: (old note)
+     * before BKE_blender_free so Python's garbage-collection happens while library still exists.
+     * Needed at least for a rare crash that can happen in python-drivers.
+     *
+     * Update for Blender 2.5, move after #BKE_blender_free because Blender now holds references
+     * to #PyObject's so #Py_DECREF'ing them after Python ends causes bad problems every time
+     * the python-driver bug can be fixed if it happens again we can deal with it then. */
     BPY_python_end();
   }
 #else

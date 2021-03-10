@@ -95,6 +95,8 @@ typedef void (*IDTypeForeachCacheFunction)(struct ID *id,
                                            IDTypeForeachCacheFunctionCallback function_callback,
                                            void *user_data);
 
+typedef struct ID *(*IDTypeEmbeddedOwnerGetFunction)(struct Main *bmain, struct ID *id);
+
 typedef void (*IDTypeBlendWriteFunction)(struct BlendWriter *writer,
                                          struct ID *id,
                                          const void *id_address);
@@ -105,6 +107,8 @@ typedef void (*IDTypeBlendReadExpandFunction)(struct BlendExpander *expander, st
 typedef void (*IDTypeBlendReadUndoPreserve)(struct BlendLibReader *reader,
                                             struct ID *id_new,
                                             struct ID *id_old);
+
+typedef void (*IDTypeLibOverrideApplyPost)(struct ID *id_dst, struct ID *id_src);
 
 typedef struct IDTypeInfo {
   /* ********** General IDType data. ********** */
@@ -179,6 +183,11 @@ typedef struct IDTypeInfo {
    */
   IDTypeForeachCacheFunction foreach_cache;
 
+  /**
+   * For embedded IDs, return their owner ID.
+   */
+  IDTypeEmbeddedOwnerGetFunction owner_get;
+
   /* ********** Callbacks for reading and writing .blend files. ********** */
 
   /**
@@ -207,6 +216,13 @@ typedef struct IDTypeInfo {
    * \note Called from #setup_app_data when undoing or redoing a memfile step.
    */
   IDTypeBlendReadUndoPreserve blend_read_undo_preserve;
+
+  /**
+   * Called after library override operations have been applied.
+   *
+   * \note Currently needed for some update operation on point caches.
+   */
+  IDTypeLibOverrideApplyPost lib_override_apply_post;
 } IDTypeInfo;
 
 /* ********** Declaration of each IDTypeInfo. ********** */

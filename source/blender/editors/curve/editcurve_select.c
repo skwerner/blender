@@ -501,7 +501,7 @@ void CURVE_OT_de_select_first(wmOperatorType *ot)
   ot->idname = "CURVE_OT_de_select_first";
   ot->description = "(De)select first of visible part of each NURBS";
 
-  /* api cfirstbacks */
+  /* api callbacks */
   ot->exec = de_select_first_exec;
   ot->poll = ED_operator_editcurve;
 
@@ -535,7 +535,7 @@ void CURVE_OT_de_select_last(wmOperatorType *ot)
   ot->idname = "CURVE_OT_de_select_last";
   ot->description = "(De)select last of visible part of each NURBS";
 
-  /* api clastbacks */
+  /* api callbacks */
   ot->exec = de_select_last_exec;
   ot->poll = ED_operator_editcurve;
 
@@ -1242,7 +1242,7 @@ static void curve_select_random(ListBase *editnurb, float randfac, int seed, boo
 static int curve_select_random_exec(bContext *C, wmOperator *op)
 {
   const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
-  const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
+  const float randfac = RNA_float_get(op->ptr, "ratio");
   const int seed = WM_operator_properties_select_random_seed_increment_get(op);
 
   ViewLayer *view_layer = CTX_data_view_layer(C);

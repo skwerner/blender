@@ -24,7 +24,7 @@
 class GaussianYBlurOperation : public BlurBaseOperation {
  private:
   float *m_gausstab;
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   __m128 *m_gausstab_sse;
 #endif
   int m_filtersize;
@@ -34,7 +34,7 @@ class GaussianYBlurOperation : public BlurBaseOperation {
   GaussianYBlurOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 

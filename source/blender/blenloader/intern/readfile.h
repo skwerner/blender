@@ -33,6 +33,7 @@
 #include "DNA_windowmanager_types.h" /* for ReportType */
 #include "zlib.h"
 
+struct BLI_mmap_file;
 struct BLOCacheStorage;
 struct IDNameLib_Map;
 struct Key;
@@ -83,13 +84,14 @@ typedef struct FileData {
   /** Regular file reading. */
   int filedes;
 
-  /** Variables needed for reading from memory / stream. */
+  /** Variables needed for reading from memory / stream / memory-mapped files. */
   const char *buffer;
+  struct BLI_mmap_file *mmap_file;
   /** Variables needed for reading from memfile (undo). */
   struct MemFile *memfile;
   /** Whether we are undoing (< 0) or redoing (> 0), used to choose which 'unchanged' flag to use
    * to detect unchanged data from memfile. */
-  short undo_direction;
+  int undo_direction; /* eUndoStepDir */
 
   /** Variables needed for reading from file. */
   gzFile gzfiledes;
@@ -136,6 +138,10 @@ typedef struct FileData {
   struct IDNameLib_Map *old_idmap;
 
   struct ReportList *reports;
+  /* Counters for amount of missing libraries, and missing IDs in libraries.
+   * Used to generate a synthetic report in the UI. */
+  int library_file_missing_count;
+  int library_id_missing_count;
 } FileData;
 
 #define SIZEOFBLENDERHEADER 12

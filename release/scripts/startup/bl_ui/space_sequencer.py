@@ -141,16 +141,9 @@ class SEQUENCER_HT_header(Header):
 
         SEQUENCER_MT_editor_menus.draw_collapsible(context, layout)
 
-        if st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}:
-            layout.separator_spacer()
-            row = layout.row(align=True)
-            row.prop(sequencer_tool_settings, "fit_method", text="")
-            layout.separator_spacer()
+        layout.separator_spacer()
 
         if st.view_type in {'PREVIEW', 'SEQUENCER_PREVIEW'}:
-            if st.view_type == 'PREVIEW':
-                layout.separator_spacer()
-
             layout.prop(st, "display_mode", text="", icon_only=True)
             layout.prop(st, "preview_channels", text="", icon_only=True)
 
@@ -412,7 +405,8 @@ class SEQUENCER_MT_view(Menu):
             layout.separator()
             layout.prop(st, "show_seconds")
             layout.prop(st, "show_markers")
-            layout.menu("SEQUENCER_MT_view_cache", text="Show Cache")
+            if context.preferences.view.show_developer_ui:
+                layout.menu("SEQUENCER_MT_view_cache", text="Show Cache")
 
         layout.separator()
 
@@ -1404,52 +1398,6 @@ class SEQUENCER_PT_source(SequencerButtonsPanel, Panel):
                 split.label(text="None")
 
 
-class SEQUENCER_PT_sound(SequencerButtonsPanel, Panel):
-    bl_label = "Sound"
-    bl_parent_id = ""
-    bl_category = "Strip"
-
-    @classmethod
-    def poll(cls, context):
-        if not cls.has_sequencer(context):
-            return False
-
-        strip = act_strip(context)
-        if not strip:
-            return False
-
-        return (strip.type == 'SOUND')
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        strip = act_strip(context)
-        sound = strip.sound
-
-        layout.active = not strip.mute
-
-        layout.template_ID(strip, "sound", open="sound.open")
-        if sound is not None:
-            layout.prop(sound, "filepath", text="")
-
-            layout.use_property_split = True
-            layout.use_property_decorate = False
-
-            layout.alignment = 'RIGHT'
-            sub = layout.column(align=True)
-            split = sub.split(factor=0.5, align=True)
-            split.alignment = 'RIGHT'
-            if sound.packed_file:
-                split.label(text="Unpack")
-                split.operator("sound.unpack", icon='PACKAGE', text="")
-            else:
-                split.label(text="Pack")
-                split.operator("sound.pack", icon='UGLYPACKAGE', text="")
-
-            layout.prop(sound, "use_memory_cache")
-
-
 class SEQUENCER_PT_scene(SequencerButtonsPanel, Panel):
     bl_label = "Scene"
     bl_category = "Strip"
@@ -1877,11 +1825,12 @@ class SEQUENCER_PT_adjust_color(SequencerButtonsPanel, Panel):
 
 class SEQUENCER_PT_cache_settings(SequencerButtonsPanel, Panel):
     bl_label = "Cache Settings"
-    bl_category = "Proxy & Cache"
+    bl_category = "Cache"
 
     @classmethod
     def poll(cls, context):
-        return cls.has_sequencer(context) and context.scene.sequence_editor
+        show_developer_ui = context.preferences.view.show_developer_ui
+        return cls.has_sequencer(context) and  context.scene.sequence_editor and show_developer_ui
 
     def draw(self, context):
         layout = self.layout
@@ -1900,7 +1849,7 @@ class SEQUENCER_PT_cache_settings(SequencerButtonsPanel, Panel):
 
 class SEQUENCER_PT_proxy_settings(SequencerButtonsPanel, Panel):
     bl_label = "Proxy Settings"
-    bl_category = "Proxy & Cache"
+    bl_category = "Proxy"
 
     @classmethod
     def poll(cls, context):
@@ -1925,7 +1874,7 @@ class SEQUENCER_PT_proxy_settings(SequencerButtonsPanel, Panel):
 
 class SEQUENCER_PT_strip_proxy(SequencerButtonsPanel, Panel):
     bl_label = "Strip Proxy & Timecode"
-    bl_category = "Proxy & Cache"
+    bl_category = "Proxy"
 
     @classmethod
     def poll(cls, context):
@@ -1936,7 +1885,7 @@ class SEQUENCER_PT_strip_proxy(SequencerButtonsPanel, Panel):
         if not strip:
             return False
 
-        return strip.type in {'MOVIE', 'IMAGE', 'SCENE', 'META', 'MULTICAM'}
+        return strip.type in {'MOVIE', 'IMAGE'}
 
     def draw_header(self, context):
         strip = act_strip(context)
@@ -1987,14 +1936,15 @@ class SEQUENCER_PT_strip_proxy(SequencerButtonsPanel, Panel):
 
 class SEQUENCER_PT_strip_cache(SequencerButtonsPanel, Panel):
     bl_label = "Strip Cache"
-    bl_category = "Proxy & Cache"
+    bl_category = "Cache"
     bl_options = {'DEFAULT_CLOSED'}
 
     @classmethod
     def poll(cls, context):
+        show_developer_ui = context.preferences.view.show_developer_ui
         if not cls.has_sequencer(context):
             return False
-        if act_strip(context) is not None:
+        if act_strip(context) is not None and show_developer_ui:
             return True
         return False
 

@@ -22,7 +22,7 @@
 #include "DNA_node_types.h"
 
 /**
- * \brief temporarily storage during execution of Tonemap
+ * \brief temporarily storage during execution of Tone-map
  * \ingroup operation
  */
 typedef struct AvgLogLum {
@@ -58,7 +58,7 @@ class TonemapOperation : public NodeOperation {
   TonemapOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -94,7 +94,7 @@ class TonemapOperation : public NodeOperation {
 class PhotoreceptorTonemapOperation : public TonemapOperation {
  public:
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 };

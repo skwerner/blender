@@ -1336,9 +1336,9 @@ static void uv_map_rotation_matrix_ex(float result[4][4],
   zero_m4(rotup);
   zero_m4(rotside);
 
-  /* compensate front/side.. against opengl x,y,z world definition */
-  /* this is "kanonen gegen spatzen", a few plus minus 1 will do here */
-  /* i wanted to keep the reason here, so we're rotating*/
+  /* Compensate front/side.. against opengl x,y,z world definition.
+   * This is "a sledgehammer to crack a nut" (overkill), a few plus minus 1 will do here.
+   * I wanted to keep the reason here, so we're rotating. */
   sideangle = (float)M_PI * (sideangledeg + 180.0f) / 180.0f;
   rotside[0][0] = cosf(sideangle);
   rotside[0][1] = -sinf(sideangle);
@@ -2129,7 +2129,7 @@ static int smart_project_exec(bContext *C, wmOperator *op)
       }
 
       float axis_mat[3][3];
-      axis_dominant_v3_to_m3_negate(axis_mat, project_normal_array[p_index]);
+      axis_dominant_v3_to_m3(axis_mat, project_normal_array[p_index]);
 
       for (LinkNode *list = thickface_project_groups[p_index]; list; list = list->next) {
         ThickFace *tf = list->link;
@@ -2165,6 +2165,7 @@ static int smart_project_exec(bContext *C, wmOperator *op)
     scene->toolsettings->uvcalc_margin = island_margin;
 
     /* Depsgraph refresh functions are called here. */
+    const bool correct_aspect = RNA_boolean_get(op->ptr, "correct_aspect");
     ED_uvedit_pack_islands_multi(scene,
                                  objects_changed,
                                  object_changed_len,
@@ -2173,7 +2174,7 @@ static int smart_project_exec(bContext *C, wmOperator *op)
                                      /* We could make this optional. */
                                      .rotate_align_axis = 1,
                                      .only_selected_faces = true,
-                                     .correct_aspect = true,
+                                     .correct_aspect = correct_aspect,
                                      .use_seams = true,
                                  });
 
@@ -2229,7 +2230,7 @@ void UV_OT_smart_project(wmOperatorType *ot)
                 0.0f,
                 1.0f,
                 "Area Weight",
-                "Weight projections vector by faces with larger areas",
+                "Weight projection's vector by faces with larger areas",
                 0.0f,
                 1.0f);
 

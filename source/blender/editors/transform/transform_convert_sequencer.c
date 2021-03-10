@@ -25,6 +25,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 
 #include "BKE_context.h"
@@ -64,11 +65,12 @@ typedef struct TransSeq {
   int min;
   int max;
   bool snap_left;
+  int selection_channel_range_min;
+  int selection_channel_range_max;
 } TransSeq;
 
 /* -------------------------------------------------------------------- */
 /** \name Sequencer Transform Creation
- *
  * \{ */
 
 /* This function applies the rules for transforming a strip so duplicate
@@ -88,35 +90,17 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *r_recursive, int *r_c
 
     Scene *scene = t->scene;
     int cfra = CFRA;
-    int left = SEQ_transform_get_left_handle_frame(seq, true);
-    int right = SEQ_transform_get_right_handle_frame(seq, true);
+    int left = SEQ_transform_get_left_handle_frame(seq, false);
+    int right = SEQ_transform_get_right_handle_frame(seq, false);
 
     if (seq->depth == 0 && ((seq->flag & SELECT) == 0 || (seq->flag & SEQ_LOCK))) {
       *r_recursive = false;
       *r_count = 0;
       *r_flag = 0;
     }
-    else if (seq->type == SEQ_TYPE_META) {
-
-      /* for meta's we only ever need to extend their children, no matter what depth
-       * just check the meta's are in the bounds */
-      if (t->frame_side == 'R' && right <= cfra) {
-        *r_recursive = false;
-      }
-      else if (t->frame_side == 'L' && left >= cfra) {
-        *r_recursive = false;
-      }
-      else {
-        *r_recursive = true;
-      }
-
-      *r_count = 1;
-      *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
-    }
     else {
-
-      *r_recursive = false; /* not a meta, so no thinking here */
-      *r_count = 1;         /* unless its set to 0, extend will never set 2 handles at once */
+      *r_recursive = false;
+      *r_count = 1; /* unless its set to 0, extend will never set 2 handles at once */
       *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
 
       if (t->frame_side == 'R') {
@@ -181,26 +165,9 @@ static void SeqTransInfo(TransInfo *t, Sequence *seq, int *r_recursive, int *r_c
     else {
       /* Nested, different rules apply */
 
-#ifdef SEQ_TX_NESTED_METAS
       *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
       *r_count = 1; /* ignore the selection for nested */
       *r_recursive = (seq->type == SEQ_TYPE_META);
-#else
-      if (seq->type == SEQ_TYPE_META) {
-        /* Meta's can only directly be moved between channels since they
-         * don't have their start and length set directly (children affect that)
-         * since this Meta is nested we don't need any of its data in fact.
-         * SEQ_time_update_sequence() will update its settings when run on the top-level meta. */
-        *r_flag = 0;
-        *r_count = 0;
-        *r_recursive = true;
-      }
-      else {
-        *r_flag = (seq->flag | SELECT) & ~(SEQ_LEFTSEL | SEQ_RIGHTSEL);
-        *r_count = 1; /* ignore the selection for nested */
-        *r_recursive = false;
-      }
-#endif
     }
   }
 }
@@ -623,6 +590,14 @@ void createTransSeqData(TransInfo *t)
     }
   }
 
+  ts->selection_channel_range_min = MAXSEQ + 1;
+  LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
+    if ((seq->flag & SELECT) != 0) {
+      ts->selection_channel_range_min = min_ii(ts->selection_channel_range_min, seq->machine);
+      ts->selection_channel_range_max = max_ii(ts->selection_channel_range_max, seq->machine);
+    }
+  }
+
 #undef XXX_DURIAN_ANIM_TX_HACK
 }
 
@@ -630,13 +605,10 @@ void createTransSeqData(TransInfo *t)
 
 /* -------------------------------------------------------------------- */
 /** \name UVs Transform Flush
- *
  * \{ */
 
 /* commented _only_ because the meta may have animation data which
  * needs moving too T28158. */
-
-#define SEQ_TX_NESTED_METAS
 
 BLI_INLINE void trans_update_seq(Scene *sce, Sequence *seq, int old_start, int sel_flag)
 {
@@ -684,17 +656,10 @@ static void flushTransSeq(TransInfo *t)
 
     switch (tdsq->sel_flag) {
       case SELECT:
-#ifdef SEQ_TX_NESTED_METAS
         if ((seq->depth != 0 || SEQ_transform_sequence_can_be_translated(seq))) {
           /* for meta's, their children move */
           seq->start = new_frame - tdsq->start_offset;
         }
-#else
-        if (seq->type != SEQ_TYPE_META && (seq->depth != 0 || seq_tx_test(seq))) {
-          /* for meta's, their children move */
-          seq->start = new_frame - tdsq->start_offset;
-        }
-#endif
         if (seq->depth == 0) {
           seq->machine = round_fl_to_int(td2d->loc[1]);
           CLAMP(seq->machine, 1, MAXSEQ);
@@ -834,7 +799,7 @@ void special_aftertrans_update__sequencer(bContext *UNUSED(C), TransInfo *t)
   /* Marker transform, not especially nice but we may want to move markers
    * at the same time as strips in the Video Sequencer. */
   if (sseq->flag & SEQ_MARKER_TRANS) {
-    /* cant use TFM_TIME_EXTEND
+    /* can't use TFM_TIME_EXTEND
      * for some reason EXTEND is changed into TRANSLATE, so use frame_side instead */
 
     if (t->mode == TFM_SEQ_SLIDE) {
@@ -847,6 +812,21 @@ void special_aftertrans_update__sequencer(bContext *UNUSED(C), TransInfo *t)
       ED_markers_post_apply_transform(
           &t->scene->markers, t->scene, TFM_TIME_EXTEND, t->values[0], t->frame_side);
     }
+  }
+}
+
+void transform_convert_sequencer_channel_clamp(TransInfo *t)
+{
+  const TransSeq *ts = (TransSeq *)TRANS_DATA_CONTAINER_FIRST_SINGLE(t)->custom.type.data;
+  const int channel_offset = round_fl_to_int(t->values[1]);
+  const int min_channel_after_transform = ts->selection_channel_range_min + channel_offset;
+  const int max_channel_after_transform = ts->selection_channel_range_max + channel_offset;
+
+  if (max_channel_after_transform > MAXSEQ) {
+    t->values[1] -= max_channel_after_transform - MAXSEQ;
+  }
+  if (min_channel_after_transform < 1) {
+    t->values[1] -= min_channel_after_transform - 1;
   }
 }
 

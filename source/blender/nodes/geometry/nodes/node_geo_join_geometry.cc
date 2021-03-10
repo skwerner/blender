@@ -24,8 +24,16 @@
 #include "node_geometry_util.hh"
 
 static bNodeSocketTemplate geo_node_join_geometry_in[] = {
-    {SOCK_GEOMETRY, N_("Geometry")},
-    {SOCK_GEOMETRY, N_("Geometry")},
+    {SOCK_GEOMETRY,
+     N_("Geometry"),
+     0.0f,
+     0.0f,
+     0.0f,
+     1.0f,
+     -1.0f,
+     1.0f,
+     PROP_NONE,
+     SOCK_MULTI_INPUT},
     {-1, ""},
 };
 
@@ -43,17 +51,31 @@ static Mesh *join_mesh_topology_and_builtin_attributes(Span<const MeshComponent 
   int totedges = 0;
   int totpolys = 0;
 
+  int64_t cd_dirty_vert = 0;
+  int64_t cd_dirty_poly = 0;
+  int64_t cd_dirty_edge = 0;
+  int64_t cd_dirty_loop = 0;
+
   for (const MeshComponent *mesh_component : src_components) {
     const Mesh *mesh = mesh_component->get_for_read();
     totverts += mesh->totvert;
     totloops += mesh->totloop;
     totedges += mesh->totedge;
     totpolys += mesh->totpoly;
+    cd_dirty_vert |= mesh->runtime.cd_dirty_vert;
+    cd_dirty_poly |= mesh->runtime.cd_dirty_poly;
+    cd_dirty_edge |= mesh->runtime.cd_dirty_edge;
+    cd_dirty_loop |= mesh->runtime.cd_dirty_loop;
   }
 
   const Mesh *first_input_mesh = src_components[0]->get_for_read();
   Mesh *new_mesh = BKE_mesh_new_nomain(totverts, totedges, 0, totloops, totpolys);
   BKE_mesh_copy_settings(new_mesh, first_input_mesh);
+
+  new_mesh->runtime.cd_dirty_vert = cd_dirty_vert;
+  new_mesh->runtime.cd_dirty_poly = cd_dirty_poly;
+  new_mesh->runtime.cd_dirty_edge = cd_dirty_edge;
+  new_mesh->runtime.cd_dirty_loop = cd_dirty_loop;
 
   int vert_offset = 0;
   int loop_offset = 0;
@@ -124,17 +146,18 @@ static void determine_final_data_type_and_domain(Span<const GeometryComponent *>
                                                  CustomDataType *r_type,
                                                  AttributeDomain *r_domain)
 {
+  Vector<CustomDataType> data_types;
+  Vector<AttributeDomain> domains;
   for (const GeometryComponent *component : components) {
     ReadAttributePtr attribute = component->attribute_try_get_for_read(attribute_name);
     if (attribute) {
-      /* TODO: Use data type with most information. */
-      *r_type = bke::cpp_type_to_custom_data_type(attribute->cpp_type());
-      /* TODO: Use highest priority domain. */
-      *r_domain = attribute->domain();
-      return;
+      data_types.append(attribute->custom_data_type());
+      domains.append(attribute->domain());
     }
   }
-  BLI_assert(false);
+
+  *r_type = bke::attribute_data_type_highest_complexity(data_types);
+  *r_domain = bke::attribute_domain_highest_priority(domains);
 }
 
 static void fill_new_attribute(Span<const GeometryComponent *> src_components,
@@ -149,6 +172,9 @@ static void fill_new_attribute(Span<const GeometryComponent *> src_components,
   int offset = 0;
   for (const GeometryComponent *component : src_components) {
     const int domain_size = component->attribute_domain_size(domain);
+    if (domain_size == 0) {
+      continue;
+    }
     ReadAttributePtr read_attribute = component->attribute_get_for_read(
         attribute_name, domain, data_type, nullptr);
 
@@ -175,16 +201,16 @@ static void join_attributes(Span<const GeometryComponent *> src_components,
     AttributeDomain domain;
     determine_final_data_type_and_domain(src_components, attribute_name, &data_type, &domain);
 
-    result.attribute_try_create(attribute_name, domain, data_type);
-    WriteAttributePtr write_attribute = result.attribute_try_get_for_write(attribute_name);
+    OutputAttributePtr write_attribute = result.attribute_try_get_for_output(
+        attribute_name, domain, data_type);
     if (!write_attribute ||
         &write_attribute->cpp_type() != bke::custom_data_type_to_cpp_type(data_type) ||
         write_attribute->domain() != domain) {
       continue;
     }
-    fn::GMutableSpan dst_span = write_attribute->get_span();
+    fn::GMutableSpan dst_span = write_attribute->get_span_for_write_only();
     fill_new_attribute(src_components, attribute_name, data_type, domain, dst_span);
-    write_attribute->apply_span();
+    write_attribute.apply_span_and_save();
   }
 }
 
@@ -195,8 +221,9 @@ static void join_components(Span<const MeshComponent *> src_components, Geometry
   MeshComponent &dst_component = result.get_component_for_write<MeshComponent>();
   dst_component.replace(new_mesh);
 
-  /* The position attribute is handled above already. */
-  join_attributes(to_base_components(src_components), dst_component, {"position"});
+  /* Don't copy attributes that are stored directly in the mesh data structs. */
+  join_attributes(
+      to_base_components(src_components), dst_component, {"position", "material_index"});
 }
 
 static void join_components(Span<const PointCloudComponent *> src_components, GeometrySet &result)
@@ -219,21 +246,27 @@ static void join_components(Span<const InstancesComponent *> src_components, Geo
   for (const InstancesComponent *component : src_components) {
     const int size = component->instances_amount();
     Span<InstancedData> instanced_data = component->instanced_data();
-    Span<float3> positions = component->positions();
-    Span<float3> rotations = component->rotations();
-    Span<float3> scales = component->scales();
+    Span<float4x4> transforms = component->transforms();
     for (const int i : IndexRange(size)) {
-      dst_component.add_instance(instanced_data[i], positions[i], rotations[i], scales[i]);
+      dst_component.add_instance(instanced_data[i], transforms[i]);
     }
   }
 }
 
+static void join_components(Span<const VolumeComponent *> src_components, GeometrySet &result)
+{
+  /* Not yet supported. Joining volume grids with the same name requires resampling of at least one
+   * of the grids. The cell size of the resulting volume has to be determined somehow. */
+  VolumeComponent &dst_component = result.get_component_for_write<VolumeComponent>();
+  UNUSED_VARS(src_components, dst_component);
+}
+
 template<typename Component>
-static void join_component_type(Span<const GeometrySet *> src_geometry_sets, GeometrySet &result)
+static void join_component_type(Span<GeometrySet> src_geometry_sets, GeometrySet &result)
 {
   Vector<const Component *> components;
-  for (const GeometrySet *geometry_set : src_geometry_sets) {
-    const Component *component = geometry_set->get_component_for_read<Component>();
+  for (const GeometrySet &geometry_set : src_geometry_sets) {
+    const Component *component = geometry_set.get_component_for_read<Component>();
     if (component != nullptr && !component->is_empty()) {
       components.append(component);
     }
@@ -251,15 +284,13 @@ static void join_component_type(Span<const GeometrySet *> src_geometry_sets, Geo
 
 static void geo_node_join_geometry_exec(GeoNodeExecParams params)
 {
-  GeometrySet geometry_set_a = params.extract_input<GeometrySet>("Geometry");
-  GeometrySet geometry_set_b = params.extract_input<GeometrySet>("Geometry_001");
+  Vector<GeometrySet> geometry_sets = params.extract_multi_input<GeometrySet>("Geometry");
+
   GeometrySet geometry_set_result;
-
-  std::array<const GeometrySet *, 2> src_geometry_sets = {&geometry_set_a, &geometry_set_b};
-
-  join_component_type<MeshComponent>(src_geometry_sets, geometry_set_result);
-  join_component_type<PointCloudComponent>(src_geometry_sets, geometry_set_result);
-  join_component_type<InstancesComponent>(src_geometry_sets, geometry_set_result);
+  join_component_type<MeshComponent>(geometry_sets, geometry_set_result);
+  join_component_type<PointCloudComponent>(geometry_sets, geometry_set_result);
+  join_component_type<InstancesComponent>(geometry_sets, geometry_set_result);
+  join_component_type<VolumeComponent>(geometry_sets, geometry_set_result);
 
   params.set_output("Geometry", std::move(geometry_set_result));
 }

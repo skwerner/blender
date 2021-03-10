@@ -135,6 +135,7 @@ IDTypeInfo IDType_ID_CF = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = cache_file_blend_write,
     .blend_read_data = cache_file_blend_read_data,
@@ -142,6 +143,8 @@ IDTypeInfo IDType_ID_CF = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* TODO: make this per cache file to avoid global locks. */

@@ -51,8 +51,6 @@
 
 #include "ED_object.h"
 
-#include "UI_interface.h"
-
 #include "object_intern.h"
 
 /* All possible data to transfer.
@@ -65,7 +63,7 @@ static const EnumPropertyItem DT_layer_items[] = {
      0,
      "Vertex Group(s)",
      "Transfer active or all vertex groups"},
-#if 0 /* XXX For now, would like to finish/merge work from 2014 gsoc first. */
+#if 0 /* XXX For now, would like to finish/merge work from 2014 GSOC first. */
     {DT_TYPE_SHAPEKEY, "SHAPEKEYS", 0, "Shapekey(s)", "Transfer active or all shape keys"},
 #endif
 /* XXX When SkinModifier is enabled,
@@ -617,7 +615,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
   ot->name = "Transfer Mesh Data";
   ot->idname = "OBJECT_OT_data_transfer";
   ot->description =
-      "Transfer data layer(s) (weights, edge sharp, ...) from active to selected meshes";
+      "Transfer data layer(s) (weights, edge sharp, etc.) from active to selected meshes";
 
   /* API callbacks.*/
   ot->poll = data_transfer_poll;

@@ -215,7 +215,7 @@ enum {
   (WM_OUTLINER_SYNC_SELECT_FROM_OBJECT | WM_OUTLINER_SYNC_SELECT_FROM_EDIT_BONE | \
    WM_OUTLINER_SYNC_SELECT_FROM_POSE_BONE | WM_OUTLINER_SYNC_SELECT_FROM_SEQUENCE)
 
-#define WM_KEYCONFIG_STR_DEFAULT "blender"
+#define WM_KEYCONFIG_STR_DEFAULT "Blender"
 
 /* IME is win32 only! */
 #if !defined(WIN32) && !defined(DNA_DEPRECATED)
@@ -472,7 +472,7 @@ typedef struct wmKeyConfig {
 
   /** Unique name. */
   char idname[64];
-  /** Idname of configuration this is derives from, "" if none. */
+  /** ID-name of configuration this is derives from, "" if none. */
   char basename[64];
 
   ListBase keymaps;

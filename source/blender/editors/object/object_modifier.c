@@ -346,7 +346,7 @@ static bool object_modifier_remove(
    * get called twice on same modifier, so make
    * sure it is in list. */
   if (BLI_findindex(&ob->modifiers, md) == -1) {
-    return 0;
+    return false;
   }
 
   /* special cases */
@@ -393,7 +393,7 @@ static bool object_modifier_remove(
   BKE_modifier_free(md);
   BKE_object_free_derived_caches(ob);
 
-  return 1;
+  return true;
 }
 
 bool ED_object_modifier_remove(
@@ -535,7 +535,7 @@ void ED_object_modifier_copy_to_object(bContext *C,
                                        Object *ob_src,
                                        ModifierData *md)
 {
-  BKE_object_copy_modifier(ob_dst, ob_src, md);
+  BKE_object_copy_modifier(CTX_data_main(C), CTX_data_scene(C), ob_dst, ob_src, md);
   WM_main_add_notifier(NC_OBJECT | ND_MODIFIER, ob_dst);
   DEG_id_tag_update(&ob_dst->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
 
@@ -674,18 +674,18 @@ static Mesh *modifier_apply_create_mesh_for_modifier(Depsgraph *depsgraph,
   return mesh_applied;
 }
 
-static int modifier_apply_shape(Main *bmain,
-                                ReportList *reports,
-                                Depsgraph *depsgraph,
-                                Scene *scene,
-                                Object *ob,
-                                ModifierData *md_eval)
+static bool modifier_apply_shape(Main *bmain,
+                                 ReportList *reports,
+                                 Depsgraph *depsgraph,
+                                 Scene *scene,
+                                 Object *ob,
+                                 ModifierData *md_eval)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
 
   if (mti->isDisabled && mti->isDisabled(scene, md_eval, 0)) {
     BKE_report(reports, RPT_ERROR, "Modifier is disabled, skipping apply");
-    return 0;
+    return false;
   }
 
   /* We could investigate using the #CD_ORIGINDEX layer
@@ -699,19 +699,18 @@ static int modifier_apply_shape(Main *bmain,
    * we can look into supporting them. */
 
   if (ob->type == OB_MESH) {
-    Mesh *mesh_applied;
     Mesh *me = ob->data;
     Key *key = me->key;
 
     if (!BKE_modifier_is_same_topology(md_eval) || mti->type == eModifierTypeType_NonGeometrical) {
       BKE_report(reports, RPT_ERROR, "Only deforming modifiers can be applied to shapes");
-      return 0;
+      return false;
     }
 
-    mesh_applied = modifier_apply_create_mesh_for_modifier(depsgraph, ob, md_eval, false);
+    Mesh *mesh_applied = modifier_apply_create_mesh_for_modifier(depsgraph, ob, md_eval, false);
     if (!mesh_applied) {
       BKE_report(reports, RPT_ERROR, "Modifier is disabled or returned error, skipping apply");
-      return 0;
+      return false;
     }
 
     if (key == NULL) {
@@ -731,29 +730,28 @@ static int modifier_apply_shape(Main *bmain,
   else {
     /* TODO: implement for hair, point-clouds and volumes. */
     BKE_report(reports, RPT_ERROR, "Cannot apply modifier for this object type");
-    return 0;
+    return false;
   }
-  return 1;
+  return true;
 }
 
-static int modifier_apply_obdata(
+static bool modifier_apply_obdata(
     ReportList *reports, Depsgraph *depsgraph, Scene *scene, Object *ob, ModifierData *md_eval)
 {
   const ModifierTypeInfo *mti = BKE_modifier_get_info(md_eval->type);
 
   if (mti->isDisabled && mti->isDisabled(scene, md_eval, 0)) {
     BKE_report(reports, RPT_ERROR, "Modifier is disabled, skipping apply");
-    return 0;
+    return false;
   }
 
   if (ob->type == OB_MESH) {
-    Mesh *mesh_applied;
     Mesh *me = ob->data;
     MultiresModifierData *mmd = find_multires_modifier_before(scene, md_eval);
 
     if (me->key && mti->type != eModifierTypeType_NonGeometrical) {
       BKE_report(reports, RPT_ERROR, "Modifier cannot be applied to a mesh with shape keys");
-      return 0;
+      return false;
     }
 
     /* Multires: ensure that recent sculpting is applied */
@@ -764,14 +762,14 @@ static int modifier_apply_obdata(
     if (mmd && mmd->totlvl && mti->type == eModifierTypeType_OnlyDeform) {
       if (!multiresModifier_reshapeFromDeformModifier(depsgraph, ob, mmd, md_eval)) {
         BKE_report(reports, RPT_ERROR, "Multires modifier returned error, skipping apply");
-        return 0;
+        return false;
       }
     }
     else {
-      mesh_applied = modifier_apply_create_mesh_for_modifier(depsgraph, ob, md_eval, true);
+      Mesh *mesh_applied = modifier_apply_create_mesh_for_modifier(depsgraph, ob, md_eval, true);
       if (!mesh_applied) {
         BKE_report(reports, RPT_ERROR, "Modifier returned error, skipping apply");
-        return 0;
+        return false;
       }
 
       BKE_mesh_nomain_to_mesh(mesh_applied, me, ob, &CD_MASK_MESH, true);
@@ -790,7 +788,7 @@ static int modifier_apply_obdata(
     if (ELEM(mti->type, eModifierTypeType_Constructive, eModifierTypeType_Nonconstructive)) {
       BKE_report(
           reports, RPT_ERROR, "Transform curve to mesh in order to apply constructive modifiers");
-      return 0;
+      return false;
     }
 
     BKE_report(reports,
@@ -813,7 +811,7 @@ static int modifier_apply_obdata(
 
     if (ELEM(mti->type, eModifierTypeType_Constructive, eModifierTypeType_Nonconstructive)) {
       BKE_report(reports, RPT_ERROR, "Constructive modifiers cannot be applied");
-      return 0;
+      return false;
     }
 
     int numVerts;
@@ -828,7 +826,7 @@ static int modifier_apply_obdata(
   else {
     /* TODO: implement for hair, point-clouds and volumes. */
     BKE_report(reports, RPT_ERROR, "Cannot apply modifier for this object type");
-    return 0;
+    return false;
   }
 
   /* lattice modifier can be applied to particle system too */
@@ -842,7 +840,7 @@ static int modifier_apply_obdata(
     }
   }
 
-  return 1;
+  return true;
 }
 
 bool ED_object_modifier_apply(Main *bmain,
@@ -908,20 +906,19 @@ bool ED_object_modifier_apply(Main *bmain,
   return true;
 }
 
-int ED_object_modifier_copy(
+bool ED_object_modifier_copy(
     ReportList *UNUSED(reports), Main *bmain, Scene *scene, Object *ob, ModifierData *md)
 {
-  ModifierData *nmd;
-
   if (md->type == eModifierType_ParticleSystem) {
-    nmd = object_copy_particle_system(bmain, scene, ob, ((ParticleSystemModifierData *)md)->psys);
+    ModifierData *nmd = object_copy_particle_system(
+        bmain, scene, ob, ((ParticleSystemModifierData *)md)->psys);
     BLI_remlink(&ob->modifiers, nmd);
     BLI_insertlinkafter(&ob->modifiers, md, nmd);
     BKE_object_modifier_set_active(ob, nmd);
     return true;
   }
 
-  nmd = BKE_modifier_new(md->type);
+  ModifierData *nmd = BKE_modifier_new(md->type);
   BKE_modifier_copydata(md, nmd);
   BLI_insertlinkafter(&ob->modifiers, md, nmd);
   BKE_modifier_unique_name(&ob->modifiers, nmd);
@@ -929,7 +926,7 @@ int ED_object_modifier_copy(
 
   nmd->flag |= eModifierFlag_OverrideLibrary_Local;
 
-  return 1;
+  return true;
 }
 
 /** \} */
@@ -1386,14 +1383,18 @@ static int modifier_apply_exec_ex(bContext *C, wmOperator *op, int apply_as, boo
   Scene *scene = CTX_data_scene(C);
   Object *ob = ED_object_active_context(C);
   ModifierData *md = edit_modifier_property_get(op, ob, 0);
+  const bool do_report = RNA_boolean_get(op->ptr, "report");
 
   if (md == NULL) {
     return OPERATOR_CANCELLED;
   }
 
-  /* Store name temporarily for report. */
+  int reports_len;
   char name[MAX_NAME];
-  strcpy(name, md->name);
+  if (do_report) {
+    reports_len = BLI_listbase_count(&op->reports->list);
+    strcpy(name, md->name); /* Store name temporarily since the modifier is removed. */
+  }
 
   if (!ED_object_modifier_apply(
           bmain, op->reports, depsgraph, scene, ob, md, apply_as, keep_modifier)) {
@@ -1404,8 +1405,12 @@ static int modifier_apply_exec_ex(bContext *C, wmOperator *op, int apply_as, boo
   DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, ob);
 
-  if (RNA_boolean_get(op->ptr, "report")) {
-    BKE_reportf(op->reports, RPT_INFO, "Applied modifier: %s", name);
+  if (do_report) {
+    /* Only add this report if the operator didn't cause another one. The purpose here is
+     * to alert that something happened, and the previous report will do that anyway. */
+    if (BLI_listbase_count(&op->reports->list) == reports_len) {
+      BKE_reportf(op->reports, RPT_INFO, "Applied modifier: %s", name);
+    }
   }
 
   return OPERATOR_FINISHED;
@@ -1623,8 +1628,8 @@ static int modifier_set_active_exec(bContext *C, wmOperator *op)
  * pointer then it would always set the active modifier to the already active modifier.
  *
  * \param event: If this isn't NULL, the operator will also look for panels underneath
- * the cursor with customdata set to a modifier.
- * \param r_retval: This should be used if #event is used in order to to return
+ * the cursor with custom-data set to a modifier.
+ * \param r_retval: This should be used if #event is used in order to return
  * #OPERATOR_PASS_THROUGH to check other operators with the same key set.
  */
 bool edit_modifier_invoke_properties_with_hover_no_active(bContext *C,
@@ -1687,74 +1692,6 @@ void OBJECT_OT_modifier_set_active(wmOperatorType *ot)
 /** \name Copy Modifier To Selected Operator
  * \{ */
 
-/* If the modifier uses particles, copy particle system to destination object
- * or reuse existing if it has the same ParticleSettings */
-static void copy_or_reuse_particle_system(bContext *C, Object *ob, ModifierData *md)
-{
-  ParticleSystem *psys_on_modifier = NULL;
-
-  if (md->type == eModifierType_DynamicPaint) {
-    DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
-    if (pmd->brush && pmd->brush->psys) {
-      psys_on_modifier = pmd->brush->psys;
-    }
-  }
-  else if (md->type == eModifierType_Fluid) {
-    FluidModifierData *fmd = (FluidModifierData *)md;
-    if (fmd->type == MOD_FLUID_TYPE_FLOW) {
-      if (fmd->flow && fmd->flow->psys) {
-        psys_on_modifier = fmd->flow->psys;
-      }
-    }
-  }
-
-  if (!psys_on_modifier) {
-    return;
-  }
-
-  ParticleSystem *psys_on_new_modifier = NULL;
-
-  /* Check if a particle system with the same particle settings
-   * already exists on the destination object. */
-  LISTBASE_FOREACH (ParticleSystem *, psys, &ob->particlesystem) {
-    if (psys_on_modifier->part == psys->part) {
-      psys_on_new_modifier = psys;
-      break;
-    }
-  }
-
-  /* If it does not exist, copy the particle system to the destination object. */
-  if (!psys_on_new_modifier) {
-    Main *bmain = CTX_data_main(C);
-    Scene *scene = CTX_data_scene(C);
-    object_copy_particle_system(bmain, scene, ob, psys_on_modifier);
-
-    LISTBASE_FOREACH (ParticleSystem *, psys, &ob->particlesystem) {
-      if (psys_on_modifier->part == psys->part) {
-        psys_on_new_modifier = psys;
-      }
-    }
-  }
-
-  /* Update the modifier to point to the new/existing particle system. */
-  LISTBASE_FOREACH (ModifierData *, new_md, &ob->modifiers) {
-    if (new_md->type == eModifierType_DynamicPaint) {
-      DynamicPaintModifierData *new_pmd = (DynamicPaintModifierData *)new_md;
-
-      if (psys_on_modifier == new_pmd->brush->psys) {
-        new_pmd->brush->psys = psys_on_new_modifier;
-      }
-    }
-    else if (new_md->type == eModifierType_Fluid) {
-      FluidModifierData *new_fmd = (FluidModifierData *)new_md;
-
-      if (psys_on_modifier == new_fmd->flow->psys) {
-        new_fmd->flow->psys = psys_on_new_modifier;
-      }
-    }
-  }
-}
-
 static int modifier_copy_to_selected_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -1794,22 +1731,12 @@ static int modifier_copy_to_selected_exec(bContext *C, wmOperator *op)
       }
     }
 
-    if (md->type == eModifierType_ParticleSystem) {
-      ParticleSystemModifierData *psmd = (ParticleSystemModifierData *)md;
-      object_copy_particle_system(bmain, scene, ob, psmd->psys);
-    }
-    else {
-      if (!BKE_object_copy_modifier(ob, obact, md)) {
-        BKE_reportf(op->reports,
-                    RPT_ERROR,
-                    "Copying modifier '%s' to object '%s' failed",
-                    md->name,
-                    ob->id.name + 2);
-      }
-    }
-
-    if (ELEM(md->type, eModifierType_DynamicPaint, eModifierType_Fluid)) {
-      copy_or_reuse_particle_system(C, ob, md);
+    if (!BKE_object_copy_modifier(bmain, scene, ob, obact, md)) {
+      BKE_reportf(op->reports,
+                  RPT_ERROR,
+                  "Copying modifier '%s' to object '%s' failed",
+                  md->name,
+                  ob->id.name + 2);
     }
 
     num_copied++;
@@ -1877,7 +1804,7 @@ static bool modifier_copy_to_selected_poll(bContext *C)
       found_supported_objects = true;
       break;
     }
-    else if (BKE_object_support_modifier_type_check(ob, md->type)) {
+    if (BKE_object_support_modifier_type_check(ob, md->type)) {
       found_supported_objects = true;
       break;
     }
@@ -3105,7 +3032,7 @@ static int ocean_bake_exec(bContext *C, wmOperator *op)
     i++;
   }
 
-  /* make a copy of ocean to use for baking - threadsafety */
+  /* Make a copy of ocean to use for baking - thread-safety. */
   struct Ocean *ocean = BKE_ocean_add();
   BKE_ocean_init_from_modifier(ocean, omd, omd->resolution);
 

@@ -75,6 +75,10 @@ const EnumPropertyItem rna_enum_keyframe_handle_type_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+/**
+ * \note this is a near exact duplicate of `gpencil_interpolation_type_items`,
+ * Changes here will likely apply there too.
+ */
 const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
     /* interpolation */
     {0, "", 0, N_("Interpolation"), "Standard transitions between keyframes"},
@@ -872,7 +876,7 @@ static void rna_def_bpoint(BlenderRNA *brna)
 
   /* Boolean values */
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f1", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f1", SELECT);
   RNA_def_property_ui_text(prop, "Select", "Selection status");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 

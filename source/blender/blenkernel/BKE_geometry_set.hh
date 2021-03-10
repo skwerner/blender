@@ -24,6 +24,8 @@
 #include <iostream>
 
 #include "BLI_float3.hh"
+#include "BLI_float4x4.hh"
+#include "BLI_function_ref.hh"
 #include "BLI_hash.hh"
 #include "BLI_map.hh"
 #include "BLI_set.hh"
@@ -36,6 +38,7 @@ struct Collection;
 struct Mesh;
 struct Object;
 struct PointCloud;
+struct Volume;
 
 /* Each geometry component has a specific type. The type determines what kind of data the component
  * stores. Functions modifying a geometry will usually just modify a subset of the component types.
@@ -44,6 +47,7 @@ enum class GeometryComponentType {
   Mesh = 0,
   PointCloud = 1,
   Instances = 2,
+  Volume = 3,
 };
 
 enum class GeometryOwnershipType {
@@ -64,6 +68,80 @@ template<> struct DefaultHash<GeometryComponentType> {
   }
 };
 }  // namespace blender
+
+namespace blender::bke {
+class ComponentAttributeProviders;
+}
+
+class GeometryComponent;
+
+/**
+ * An #OutputAttributePtr wraps a #WriteAttributePtr that might not be stored in its final
+ * destination yet. Therefore, once the attribute has been filled with data, the #save method has
+ * to be called, to store the attribute where it belongs (possibly by replacing an existing
+ * attribute with the same name).
+ *
+ * This is useful for example in the Attribute Color Ramp node, when the same attribute name is
+ * used as input and output. Typically the input is a float attribute, and the output is a color.
+ * Those two attributes cannot exist at the same time, due to a name collision. To handle this
+ * situation well, first the output colors have to be computed before the input floats are deleted.
+ * Therefore, the outputs have to be written to a temporary buffer that replaces the existing
+ * attribute once all computations are done.
+ */
+class OutputAttributePtr {
+ private:
+  blender::bke::WriteAttributePtr attribute_;
+
+ public:
+  OutputAttributePtr() = default;
+  OutputAttributePtr(blender::bke::WriteAttributePtr attribute);
+  OutputAttributePtr(GeometryComponent &component,
+                     AttributeDomain domain,
+                     std::string name,
+                     CustomDataType data_type);
+
+  ~OutputAttributePtr();
+
+  /* Returns false, when this wrapper is empty. */
+  operator bool() const
+  {
+    return static_cast<bool>(attribute_);
+  }
+
+  /* Get a reference to the underlying #WriteAttribute. */
+  blender::bke::WriteAttribute &get()
+  {
+    BLI_assert(attribute_);
+    return *attribute_;
+  }
+
+  blender::bke::WriteAttribute &operator*()
+  {
+    return *attribute_;
+  }
+
+  blender::bke::WriteAttribute *operator->()
+  {
+    return attribute_.get();
+  }
+
+  void save();
+  void apply_span_and_save();
+};
+
+/**
+ * Contains information about an attribute in a geometry component.
+ * More information can be added in the future. E.g. whether the attribute is builtin and how it is
+ * stored (uv map, vertex group, ...).
+ */
+struct AttributeMetaData {
+  AttributeDomain domain;
+  CustomDataType data_type;
+};
+
+/* Returns false when the iteration should be stopped. */
+using AttributeForeachCallback = blender::FunctionRef<bool(blender::StringRefNull attribute_name,
+                                                           const AttributeMetaData &meta_data)>;
 
 /**
  * This is the base class for specialized geometry component types.
@@ -93,40 +171,37 @@ class GeometryComponent {
   bool attribute_exists(const blender::StringRef attribute_name) const;
 
   /* Returns true when the geometry component supports this attribute domain. */
-  virtual bool attribute_domain_supported(const AttributeDomain domain) const;
-  /* Returns true when the given data type is supported in the given domain. */
-  virtual bool attribute_domain_with_type_supported(const AttributeDomain domain,
-                                                    const CustomDataType data_type) const;
+  bool attribute_domain_supported(const AttributeDomain domain) const;
   /* Can only be used with supported domain types. */
   virtual int attribute_domain_size(const AttributeDomain domain) const;
-  /* Attributes with these names cannot be created or removed via this api. */
-  virtual bool attribute_is_builtin(const blender::StringRef attribute_name) const;
 
   /* Get read-only access to the highest priority attribute with the given name.
    * Returns null if the attribute does not exist. */
-  virtual blender::bke::ReadAttributePtr attribute_try_get_for_read(
+  blender::bke::ReadAttributePtr attribute_try_get_for_read(
       const blender::StringRef attribute_name) const;
 
   /* Get read and write access to the highest priority attribute with the given name.
    * Returns null if the attribute does not exist. */
-  virtual blender::bke::WriteAttributePtr attribute_try_get_for_write(
+  blender::bke::WriteAttributePtr attribute_try_get_for_write(
       const blender::StringRef attribute_name);
 
   /* Get a read-only attribute for the domain based on the given attribute. This can be used to
    * interpolate from one domain to another.
    * Returns null if the interpolation is not implemented. */
   virtual blender::bke::ReadAttributePtr attribute_try_adapt_domain(
-      blender::bke::ReadAttributePtr attribute, const AttributeDomain domain) const;
+      blender::bke::ReadAttributePtr attribute, const AttributeDomain new_domain) const;
 
   /* Returns true when the attribute has been deleted. */
-  virtual bool attribute_try_delete(const blender::StringRef attribute_name);
+  bool attribute_try_delete(const blender::StringRef attribute_name);
 
   /* Returns true when the attribute has been created. */
-  virtual bool attribute_try_create(const blender::StringRef attribute_name,
-                                    const AttributeDomain domain,
-                                    const CustomDataType data_type);
+  bool attribute_try_create(const blender::StringRef attribute_name,
+                            const AttributeDomain domain,
+                            const CustomDataType data_type);
 
-  virtual blender::Set<std::string> attribute_names() const;
+  blender::Set<std::string> attribute_names() const;
+  void attribute_foreach(const AttributeForeachCallback callback) const;
+
   virtual bool is_empty() const;
 
   /* Get a read-only attribute for the given domain and data type.
@@ -185,14 +260,22 @@ class GeometryComponent {
   }
 
   /**
-   * Returns the attribute with the given parameters if it exists.
-   * If an exact match does not exist, other attributes with the same name are deleted and a new
-   * attribute is created if possible.
+   * If an attribute with the given params exist, it is returned.
+   * If no attribute with the given name exists, create it and
+   * fill it with the default value if it is provided.
+   * If an attribute with the given name but different domain or type exists, a temporary attribute
+   * is created that has to be saved after the output has been computed. This avoids deleting
+   * another attribute, before a computation is finished.
+   *
+   * This might return no attribute when the attribute cannot exist on the component.
    */
-  blender::bke::WriteAttributePtr attribute_try_ensure_for_write(
-      const blender::StringRef attribute_name,
-      const AttributeDomain domain,
-      const CustomDataType data_type);
+  OutputAttributePtr attribute_try_get_for_output(const blender::StringRef attribute_name,
+                                                  const AttributeDomain domain,
+                                                  const CustomDataType data_type,
+                                                  const void *default_value = nullptr);
+
+ private:
+  virtual const blender::bke::ComponentAttributeProviders *get_attribute_providers() const;
 };
 
 template<typename T>
@@ -242,6 +325,8 @@ struct GeometrySet {
 
   void add(const GeometryComponent &component);
 
+  blender::Vector<const GeometryComponent *> get_components_for_read() const;
+
   void compute_boundbox_without_instances(blender::float3 *r_min, blender::float3 *r_max) const;
 
   friend std::ostream &operator<<(std::ostream &stream, const GeometrySet &geometry_set);
@@ -258,10 +343,13 @@ struct GeometrySet {
   bool has_mesh() const;
   bool has_pointcloud() const;
   bool has_instances() const;
+  bool has_volume() const;
   const Mesh *get_mesh_for_read() const;
   const PointCloud *get_pointcloud_for_read() const;
+  const Volume *get_volume_for_read() const;
   Mesh *get_mesh_for_write();
   PointCloud *get_pointcloud_for_write();
+  Volume *get_volume_for_write();
 
   /* Utility methods for replacement. */
   void replace_mesh(Mesh *mesh, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
@@ -287,33 +375,27 @@ class MeshComponent : public GeometryComponent {
   void clear();
   bool has_mesh() const;
   void replace(Mesh *mesh, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
+  void replace_mesh_but_keep_vertex_group_names(
+      Mesh *mesh, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
   Mesh *release();
 
   void copy_vertex_group_names_from_object(const struct Object &object);
+  const blender::Map<std::string, int> &vertex_group_names() const;
+  blender::Map<std::string, int> &vertex_group_names();
 
   const Mesh *get_for_read() const;
   Mesh *get_for_write();
 
-  bool attribute_domain_supported(const AttributeDomain domain) const final;
-  bool attribute_domain_with_type_supported(const AttributeDomain domain,
-                                            const CustomDataType data_type) const final;
   int attribute_domain_size(const AttributeDomain domain) const final;
-  bool attribute_is_builtin(const blender::StringRef attribute_name) const final;
+  blender::bke::ReadAttributePtr attribute_try_adapt_domain(
+      blender::bke::ReadAttributePtr attribute, const AttributeDomain new_domain) const final;
 
-  blender::bke::ReadAttributePtr attribute_try_get_for_read(
-      const blender::StringRef attribute_name) const final;
-  blender::bke::WriteAttributePtr attribute_try_get_for_write(
-      const blender::StringRef attribute_name) final;
-
-  bool attribute_try_delete(const blender::StringRef attribute_name) final;
-  bool attribute_try_create(const blender::StringRef attribute_name,
-                            const AttributeDomain domain,
-                            const CustomDataType data_type) final;
-
-  blender::Set<std::string> attribute_names() const final;
   bool is_empty() const final;
 
   static constexpr inline GeometryComponentType static_type = GeometryComponentType::Mesh;
+
+ private:
+  const blender::bke::ComponentAttributeProviders *get_attribute_providers() const final;
 };
 
 /** A geometry component that stores a point cloud. */
@@ -336,35 +418,29 @@ class PointCloudComponent : public GeometryComponent {
   const PointCloud *get_for_read() const;
   PointCloud *get_for_write();
 
-  bool attribute_domain_supported(const AttributeDomain domain) const final;
-  bool attribute_domain_with_type_supported(const AttributeDomain domain,
-                                            const CustomDataType data_type) const final;
   int attribute_domain_size(const AttributeDomain domain) const final;
-  bool attribute_is_builtin(const blender::StringRef attribute_name) const final;
 
-  blender::bke::ReadAttributePtr attribute_try_get_for_read(
-      const blender::StringRef attribute_name) const final;
-  blender::bke::WriteAttributePtr attribute_try_get_for_write(
-      const blender::StringRef attribute_name) final;
-
-  bool attribute_try_delete(const blender::StringRef attribute_name) final;
-  bool attribute_try_create(const blender::StringRef attribute_name,
-                            const AttributeDomain domain,
-                            const CustomDataType data_type) final;
-
-  blender::Set<std::string> attribute_names() const final;
   bool is_empty() const final;
 
   static constexpr inline GeometryComponentType static_type = GeometryComponentType::PointCloud;
+
+ private:
+  const blender::bke::ComponentAttributeProviders *get_attribute_providers() const final;
 };
 
 /** A geometry component that stores instances. */
 class InstancesComponent : public GeometryComponent {
  private:
-  blender::Vector<blender::float3> positions_;
-  blender::Vector<blender::float3> rotations_;
-  blender::Vector<blender::float3> scales_;
+  blender::Vector<blender::float4x4> transforms_;
+  blender::Vector<int> ids_;
   blender::Vector<InstancedData> instanced_data_;
+
+  /* These almost unique ids are generated based on `ids_`, which might not contain unique ids at
+   * all. They are *almost* unique, because under certain very unlikely circumstances, they are not
+   * unique. Code using these ids should not crash when they are not unique but can generally
+   * expect them to be unique. */
+  mutable std::mutex almost_unique_ids_mutex_;
+  mutable blender::Array<int> almost_unique_ids_;
 
  public:
   InstancesComponent();
@@ -372,27 +448,41 @@ class InstancesComponent : public GeometryComponent {
   GeometryComponent *copy() const override;
 
   void clear();
-  void add_instance(Object *object,
-                    blender::float3 position,
-                    blender::float3 rotation = {0, 0, 0},
-                    blender::float3 scale = {1, 1, 1});
-  void add_instance(Collection *collection,
-                    blender::float3 position,
-                    blender::float3 rotation = {0, 0, 0},
-                    blender::float3 scale = {1, 1, 1});
-  void add_instance(InstancedData data,
-                    blender::float3 position,
-                    blender::float3 rotation,
-                    blender::float3 scale);
+  void add_instance(Object *object, blender::float4x4 transform, const int id = -1);
+  void add_instance(Collection *collection, blender::float4x4 transform, const int id = -1);
+  void add_instance(InstancedData data, blender::float4x4 transform, const int id = -1);
 
   blender::Span<InstancedData> instanced_data() const;
-  blender::Span<blender::float3> positions() const;
-  blender::Span<blender::float3> rotations() const;
-  blender::Span<blender::float3> scales() const;
-  blender::MutableSpan<blender::float3> positions();
+  blender::Span<blender::float4x4> transforms() const;
+  blender::Span<int> ids() const;
+  blender::MutableSpan<blender::float4x4> transforms();
   int instances_amount() const;
+
+  blender::Span<int> almost_unique_ids() const;
 
   bool is_empty() const final;
 
   static constexpr inline GeometryComponentType static_type = GeometryComponentType::Instances;
+};
+
+/** A geometry component that stores volume grids. */
+class VolumeComponent : public GeometryComponent {
+ private:
+  Volume *volume_ = nullptr;
+  GeometryOwnershipType ownership_ = GeometryOwnershipType::Owned;
+
+ public:
+  VolumeComponent();
+  ~VolumeComponent();
+  GeometryComponent *copy() const override;
+
+  void clear();
+  bool has_volume() const;
+  void replace(Volume *volume, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
+  Volume *release();
+
+  const Volume *get_for_read() const;
+  Volume *get_for_write();
+
+  static constexpr inline GeometryComponentType static_type = GeometryComponentType::Volume;
 };

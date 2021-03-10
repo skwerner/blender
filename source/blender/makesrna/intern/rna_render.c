@@ -848,6 +848,14 @@ static void rna_def_render_engine(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Use Eevee Viewport", "Uses Eevee for viewport shading in LookDev shading mode");
 
+  prop = RNA_def_property(srna, "bl_use_custom_freestyle", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_CUSTOM_FREESTYLE);
+  RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
+  RNA_def_property_ui_text(
+      prop,
+      "Use Custom Freestyle",
+      "Handles freestyle rendering on its own, instead of delegating it to EEVEE");
+
   prop = RNA_def_property(srna, "bl_use_gpu_context", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "type->flag", RE_USE_GPU_CONTEXT);
   RNA_def_property_flag(prop, PROP_REGISTER_OPTIONAL);
@@ -1050,7 +1058,7 @@ static void rna_def_render_layer(BlenderRNA *brna)
 
   RNA_define_verify_sdna(0);
 
-  rna_def_view_layer_common(srna, false);
+  rna_def_view_layer_common(brna, srna, false);
 
   prop = RNA_def_property(srna, "passes", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_struct_type(prop, "RenderPass");
@@ -1081,7 +1089,6 @@ static void rna_def_render_pass(BlenderRNA *brna)
   prop = RNA_def_property(srna, "fullname", PROP_STRING, PROP_NONE);
   RNA_def_property_string_sdna(prop, NULL, "fullname");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE);
-  RNA_def_struct_name_property(srna, prop);
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
   RNA_def_property_string_sdna(prop, NULL, "name");

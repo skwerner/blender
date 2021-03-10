@@ -51,7 +51,6 @@
 
 #include "RNA_access.h"
 
-#include "SEQ_sequencer.h"
 #include "SEQ_utils.h"
 
 #include "UI_interface.h"
@@ -334,11 +333,11 @@ static SpaceLink *sequencer_duplicate(SpaceLink *sl)
   return (SpaceLink *)sseqn;
 }
 
-static void sequencer_listener(wmWindow *UNUSED(win),
-                               ScrArea *area,
-                               wmNotifier *wmn,
-                               Scene *UNUSED(scene))
+static void sequencer_listener(const wmSpaceTypeListenerParams *params)
 {
+  ScrArea *area = params->area;
+  wmNotifier *wmn = params->notifier;
+
   /* Context changes. */
   switch (wmn->category) {
     case NC_SCENE:
@@ -449,9 +448,9 @@ static void sequencer_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Sequencer", SPACE_SEQ, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "SEQUENCER_OT_image_strip_add", image_drop_poll, sequencer_drop_copy);
-  WM_dropbox_add(lb, "SEQUENCER_OT_movie_strip_add", movie_drop_poll, sequencer_drop_copy);
-  WM_dropbox_add(lb, "SEQUENCER_OT_sound_strip_add", sound_drop_poll, sequencer_drop_copy);
+  WM_dropbox_add(lb, "SEQUENCER_OT_image_strip_add", image_drop_poll, sequencer_drop_copy, NULL);
+  WM_dropbox_add(lb, "SEQUENCER_OT_movie_strip_add", movie_drop_poll, sequencer_drop_copy, NULL);
+  WM_dropbox_add(lb, "SEQUENCER_OT_sound_strip_add", sound_drop_poll, sequencer_drop_copy, NULL);
 }
 
 /* ************* end drop *********** */
@@ -534,12 +533,11 @@ static void sequencer_main_region_draw_overlay(const bContext *C, ARegion *regio
   draw_timeline_seq_display(C, region);
 }
 
-static void sequencer_main_region_listener(wmWindow *UNUSED(win),
-                                           ScrArea *UNUSED(area),
-                                           ARegion *region,
-                                           wmNotifier *wmn,
-                                           const Scene *UNUSED(scene))
+static void sequencer_main_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* Context changes. */
   switch (wmn->category) {
     case NC_SCENE:
@@ -579,14 +577,12 @@ static void sequencer_main_region_listener(wmWindow *UNUSED(win),
   }
 }
 
-static void sequencer_main_region_message_subscribe(const struct bContext *UNUSED(C),
-                                                    struct WorkSpace *UNUSED(workspace),
-                                                    struct Scene *scene,
-                                                    struct bScreen *UNUSED(screen),
-                                                    struct ScrArea *UNUSED(area),
-                                                    struct ARegion *region,
-                                                    struct wmMsgBus *mbus)
+static void sequencer_main_region_message_subscribe(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  Scene *scene = params->scene;
+  ARegion *region = params->region;
+
   wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
       .owner = region,
       .user_data = region,
@@ -746,12 +742,11 @@ static void sequencer_preview_region_draw(const bContext *C, ARegion *region)
   }
 }
 
-static void sequencer_preview_region_listener(wmWindow *UNUSED(win),
-                                              ScrArea *UNUSED(area),
-                                              ARegion *region,
-                                              wmNotifier *wmn,
-                                              const Scene *UNUSED(scene))
+static void sequencer_preview_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* Context changes. */
   switch (wmn->category) {
     case NC_GPENCIL:
@@ -816,12 +811,11 @@ static void sequencer_buttons_region_draw(const bContext *C, ARegion *region)
   ED_region_panels(C, region);
 }
 
-static void sequencer_buttons_region_listener(wmWindow *UNUSED(win),
-                                              ScrArea *UNUSED(area),
-                                              ARegion *region,
-                                              wmNotifier *wmn,
-                                              const Scene *UNUSED(scene))
+static void sequencer_buttons_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* Context changes. */
   switch (wmn->category) {
     case NC_GPENCIL:
@@ -959,7 +953,7 @@ void ED_spacetype_sequencer(void)
   art->listener = sequencer_main_region_listener;
   BLI_addhead(&st->regiontypes, art);
 
-  /* Hud. */
+  /* HUD. */
   art = ED_area_type_hud(st->spaceid);
   BLI_addhead(&st->regiontypes, art);
 

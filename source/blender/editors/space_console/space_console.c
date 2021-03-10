@@ -41,7 +41,6 @@
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
-#include "GPU_framebuffer.h"
 #include "console_intern.h" /* own include */
 
 /* ******************** default callbacks for console space ***************** */
@@ -197,8 +196,8 @@ static void console_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Console", SPACE_CONSOLE, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "CONSOLE_OT_insert", id_drop_poll, id_drop_copy);
-  WM_dropbox_add(lb, "CONSOLE_OT_insert", path_drop_poll, path_drop_copy);
+  WM_dropbox_add(lb, "CONSOLE_OT_insert", id_drop_poll, id_drop_copy, NULL);
+  WM_dropbox_add(lb, "CONSOLE_OT_insert", path_drop_poll, path_drop_copy, NULL);
 }
 
 /* ************* end drop *********** */
@@ -216,7 +215,7 @@ static void console_main_region_draw(const bContext *C, ARegion *region)
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
 
-  /* worlks best with no view2d matrix set */
+  /* Works best with no view2d matrix set. */
   UI_view2d_view_ortho(v2d);
 
   /* data... */
@@ -273,13 +272,11 @@ static void console_header_region_draw(const bContext *C, ARegion *region)
   ED_region_header(C, region);
 }
 
-static void console_main_region_listener(wmWindow *UNUSED(win),
-                                         ScrArea *area,
-                                         ARegion *region,
-                                         wmNotifier *wmn,
-                                         const Scene *UNUSED(scene))
+static void console_main_region_listener(const wmRegionListenerParams *params)
 {
-  // SpaceInfo *sinfo = area->spacedata.first;
+  ScrArea *area = params->area;
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
 
   /* context changes */
   switch (wmn->category) {

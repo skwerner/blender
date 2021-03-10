@@ -133,7 +133,6 @@ Sequence *SEQ_sequence_alloc(ListBase *lb, int timeline_frame, int machine, int 
 
   seq->strip = seq_strip_alloc(type);
   seq->stereo3d_format = MEM_callocN(sizeof(Stereo3dFormat), "Sequence Stereo Format");
-  seq->cache_flag = SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_PREPROCESSED | SEQ_CACHE_STORE_COMPOSITE;
 
   SEQ_relations_session_uuid_generate(seq);
 
@@ -247,8 +246,7 @@ Editing *SEQ_editing_ensure(Scene *scene)
     ed->seqbasep = &ed->seqbase;
     ed->cache = NULL;
     ed->cache_flag = SEQ_CACHE_STORE_FINAL_OUT;
-    ed->cache_flag |= SEQ_CACHE_VIEW_FINAL_OUT;
-    ed->cache_flag |= SEQ_CACHE_VIEW_ENABLE;
+    ed->cache_flag |= SEQ_CACHE_STORE_RAW;
   }
 
   return scene->ed;
@@ -346,6 +344,58 @@ ListBase *SEQ_active_seqbase_get(const Editing *ed)
 
   return ed->seqbasep;
 }
+
+/**
+ * Set seqbase that is being viewed currently. This can be main seqbase or meta strip seqbase
+ *
+ * \param ed: sequence editor data
+ * \param seqbase: ListBase with strips
+ */
+void SEQ_seqbase_active_set(Editing *ed, ListBase *seqbase)
+{
+  ed->seqbasep = seqbase;
+}
+
+/**
+ * Create and initialize MetaStack, append it to ed->metastack ListBase
+ *
+ * \param ed: sequence editor data
+ * \param seq_meta: meta strip
+ * \return pointer to created meta stack
+ */
+MetaStack *SEQ_meta_stack_alloc(Editing *ed, Sequence *seq_meta)
+{
+  MetaStack *ms = MEM_mallocN(sizeof(MetaStack), "metastack");
+  BLI_addtail(&ed->metastack, ms);
+  ms->parseq = seq_meta;
+  ms->oldbasep = ed->seqbasep;
+  copy_v2_v2_int(ms->disp_range, &ms->parseq->startdisp);
+  return ms;
+}
+
+/**
+ * Free MetaStack and remoove it from ed->metastack ListBase
+ *
+ * \param ed: sequence editor data
+ * \param ms: meta stack
+ */
+void SEQ_meta_stack_free(Editing *ed, MetaStack *ms)
+{
+  BLI_remlink(&ed->metastack, ms);
+  MEM_freeN(ms);
+}
+
+/**
+ * Get MetaStack that coresponds to current level that is being viewed
+ *
+ * \param ed: sequence editor data
+ * \return pointer to meta stack
+ */
+MetaStack *SEQ_meta_stack_active_get(const Editing *ed)
+{
+  return ed->metastack.last;
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */

@@ -194,7 +194,7 @@ static RenderResult *render_result_from_bake(RenderEngine *engine, int x, int y,
         primitive[1] = int_as_float(-1);
       }
       else {
-        primitive[0] = int_as_float(bake_pixel->object_id);
+        primitive[0] = int_as_float(bake_pixel->seed);
         primitive[1] = int_as_float(bake_pixel->primitive_id);
         primitive[2] = bake_pixel->uv[0];
         primitive[3] = bake_pixel->uv[1];
@@ -757,7 +757,7 @@ static void engine_render_view_layer(Render *re,
 {
   /* Lock UI so scene can't be edited while we read from it in this render thread. */
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 1);
+    re->draw_lock(re->dlh, true);
   }
 
   /* Create depsgraph with scene evaluated at render resolution. */
@@ -773,7 +773,7 @@ static void engine_render_view_layer(Render *re,
   }
 
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 0);
+    re->draw_lock(re->dlh, false);
   }
 
   /* Perform render with engine. */
@@ -803,28 +803,28 @@ static void engine_render_view_layer(Render *re,
   engine_depsgraph_free(engine);
 }
 
-int RE_engine_render(Render *re, int do_all)
+bool RE_engine_render(Render *re, bool do_all)
 {
   RenderEngineType *type = RE_engines_find(re->r.engine);
   bool persistent_data = (re->r.mode & R_PERSISTENT_DATA) != 0;
 
   /* verify if we can render */
   if (!type->render) {
-    return 0;
+    return false;
   }
   if ((re->r.scemode & R_BUTS_PREVIEW) && !(type->flag & RE_USE_PREVIEW)) {
-    return 0;
+    return false;
   }
   if (do_all && !(type->flag & RE_USE_POSTPROCESS)) {
-    return 0;
+    return false;
   }
   if (!do_all && (type->flag & RE_USE_POSTPROCESS)) {
-    return 0;
+    return false;
   }
 
   /* Lock drawing in UI during data phase. */
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 1);
+    re->draw_lock(re->dlh, true);
   }
 
   /* update animation here so any render layer animation is applied before
@@ -852,14 +852,14 @@ int RE_engine_render(Render *re, int do_all)
   if (re->result == NULL) {
     /* Clear UI drawing locks. */
     if (re->draw_lock) {
-      re->draw_lock(re->dlh, 0);
+      re->draw_lock(re->dlh, false);
     }
     /* Too small image is handled earlier, here it could only happen if
      * there was no sufficient memory to allocate all passes.
      */
     BKE_report(re->reports, RPT_ERROR, "Failed allocate render result, out of memory");
     G.is_break = true;
-    return 1;
+    return true;
   }
 
   /* set render info */
@@ -902,7 +902,7 @@ int RE_engine_render(Render *re, int do_all)
 
   /* Clear UI drawing locks. */
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 0);
+    re->draw_lock(re->dlh, false);
   }
 
   /* Render view layers. */
@@ -977,7 +977,7 @@ int RE_engine_render(Render *re, int do_all)
   }
 #endif
 
-  return 1;
+  return true;
 }
 
 void RE_engine_update_render_passes(struct RenderEngine *engine,

@@ -65,6 +65,10 @@
 
 #include "BLO_read_write.h"
 
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
+
 static void screen_free_data(ID *id)
 {
   bScreen *screen = (bScreen *)id;
@@ -307,6 +311,7 @@ IDTypeInfo IDType_ID_SCR = {
     .make_local = NULL,
     .foreach_id = screen_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = screen_blend_write,
     /* Cannot be used yet, because #direct_link_screen has a return value. */
@@ -315,6 +320,8 @@ IDTypeInfo IDType_ID_SCR = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* ************ Spacetype/regiontype handling ************** */
@@ -326,6 +333,9 @@ static ListBase spacetypes = {NULL, NULL};
 static void spacetype_free(SpaceType *st)
 {
   LISTBASE_FOREACH (ARegionType *, art, &st->regiontypes) {
+#ifdef WITH_PYTHON
+    BPY_callback_screen_free(art);
+#endif
     BLI_freelistN(&art->drawcalls);
 
     LISTBASE_FOREACH (PanelType *, pt, &art->paneltypes) {
@@ -523,7 +533,7 @@ void BKE_spacedata_copylist(ListBase *lb1, ListBase *lb2)
 /* facility to set locks for drawing to survive (render) threads accessing drawing data */
 /* lock can become bitflag too */
 /* should be replaced in future by better local data handling for threads */
-void BKE_spacedata_draw_locks(int set)
+void BKE_spacedata_draw_locks(bool set)
 {
   LISTBASE_FOREACH (SpaceType *, st, &spacetypes) {
     LISTBASE_FOREACH (ARegionType *, art, &st->regiontypes) {
@@ -1599,8 +1609,7 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
 
       BLO_read_list(reader, &snode->treepath);
       snode->edittree = NULL;
-      snode->iofsd = NULL;
-      BLI_listbase_clear(&snode->linkdrag);
+      snode->runtime = NULL;
     }
     else if (sl->spacetype == SPACE_TEXT) {
       SpaceText *st = (SpaceText *)sl;

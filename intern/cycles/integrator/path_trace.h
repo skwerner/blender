@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "integrator/denoiser.h"
 #include "integrator/path_trace_work.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
@@ -75,6 +76,17 @@ class PathTrace {
    * TODO(sergey): Decide and document whether it is a blocking or asynchronous call. */
   void render_samples(int samples_num);
 
+  /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is
+   * convenient to have it here because then its easy to access render buffer. But the downside is
+   * that this adds too much of entities which can live separately with some clear API. */
+
+  /* Set denoiser parameters.
+   * Use this to configure the denoiser before rendering any samples. */
+  void set_denoiser_params(const DenoiseParams &params);
+
+  /* Denoise current state of the big tile. */
+  void denoise();
+
   /* Copy current render result to the given display buffer. */
   void copy_to_display_buffer(DisplayBuffer *display_buffer);
 
@@ -122,7 +134,9 @@ class PathTrace {
    * There are no update callbacks or cancellation checks are done form here, for the performance
    * reasons.
    *
-   * This call advances number of samples stored in the render status. */
+   * This call advances number of samples stored in the render status.
+   *
+   * Returns time in seconds which it took to render. */
   double render_samples_full_pipeline(int samples_num);
 
   /* Get number of samples in the current state of the render buffers. */
@@ -161,7 +175,11 @@ class PathTrace {
    * added. */
   unique_ptr<RenderBuffers> full_render_buffers_;
 
+  /* Denoiser which takes care of denoising the big tile. */
+  unique_ptr<Denoiser> denoiser_;
+
   /* Number of a start sample, in the 0 based notation. */
+  /* TODO(sergey): Consider moving insode of RenderState. */
   int start_sample_num_ = 0;
 
   /* Divider of the resolution for faster previews.

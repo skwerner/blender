@@ -17,6 +17,10 @@ set(INC
 )
 
 set(SRC
+  denoiser.cpp
+  denoiser_device.cpp
+  denoiser_nlm.cpp
+  denoiser_oidn.cpp
   path_trace.cpp
   tile.cpp
   path_trace_work.cpp
@@ -26,6 +30,10 @@ set(SRC
 )
 
 set(SRC_HEADERS
+  denoiser.h
+  denoiser_device.h
+  denoiser_nlm.h
+  denoiser_oidn.h
   path_trace.h
   tile.h
   path_trace_work.h

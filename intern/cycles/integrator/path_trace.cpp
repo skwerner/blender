@@ -128,8 +128,6 @@ void PathTrace::render_samples(int samples_num)
     }
   }
 
-  /* TODO(sergey): Need to write to the whole buffer, after all devices sampled the frame to the
-   * given number of samples. */
   buffer_write();
 
   /* Indicate that rendering has finished, making it so thread which requested `cancel()` can carry
@@ -161,6 +159,53 @@ double PathTrace::render_samples_full_pipeline(int samples_num)
   render_status_.rendered_samples_num += samples_num;
 
   return time_dt() - start_render_time;
+}
+
+void PathTrace::set_denoiser_params(const DenoiseParams &params)
+{
+  if (!params.use) {
+    denoiser_.reset();
+    return;
+  }
+
+  denoiser_ = Denoiser::create(device_, params);
+}
+
+void PathTrace::denoise()
+{
+  if (!denoiser_) {
+    /* Denoiser was not configured, so nothing to do here. */
+    return;
+  }
+
+  if (is_cancel_requested()) {
+    return;
+  }
+
+  /* Indicate that rendering has started and that it can be requested to cancel.
+   *
+   * TODO(sergey): De-duplicate with render_samples(). */
+  {
+    thread_scoped_lock lock(render_cancel_.mutex);
+    render_cancel_.is_rendering = true;
+    render_cancel_.is_requested = false;
+  }
+
+  const DenoiserBufferParams buffer_params(scaled_render_buffer_params_);
+  denoiser_->denoise_buffer(
+      buffer_params, full_render_buffers_.get(), get_num_samples_in_buffer());
+
+  buffer_write();
+
+  /* Indicate that rendering has finished, making it so thread which requested `cancel()` can carry
+   * on.
+   *
+   * TODO(sergey): De-duplicate with render_samples(). */
+  {
+    thread_scoped_lock lock(render_cancel_.mutex);
+    render_cancel_.is_rendering = false;
+    render_cancel_.condition.notify_one();
+  }
 }
 
 void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)

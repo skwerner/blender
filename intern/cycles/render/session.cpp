@@ -78,9 +78,6 @@ Session::Session(const SessionParams &params_)
 
   display = NULL;
 
-  /* Validate denoising parameters. */
-  set_denoising(params.denoising);
-
   /* Create CPU/GPU devices. */
   device = Device::create(params.device, stats, profiler, params.background);
 
@@ -139,6 +136,9 @@ Session::Session(const SessionParams &params_)
     write_render_tile_cb(render_tile);
   };
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
+
+  /* Validate denoising parameters. */
+  set_denoising(params.denoising);
 }
 
 Session::~Session()
@@ -434,7 +434,14 @@ bool Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
     if (buffer_params.width == display->params.width &&
         buffer_params.height == display->params.height) {
       display->draw(device, draw_params);
-      did_draw_after_reset_ = true;
+
+      if (!display_outdated) {
+        /* Only flag once the display is not out-of-date.
+         *
+         * This makes it so that redraw after delayed denoising (which does not immediately update
+         * display buffer) is not seen as a user feedback. */
+        did_draw_after_reset_ = true;
+      }
 
       if (display_outdated && (time_dt() - reset_time) > params.text_timeout)
         return false;
@@ -1031,6 +1038,7 @@ void Session::set_denoising(const DenoiseParams &denoising)
   thread_scoped_lock buffers_lock(buffers_mutex);
   params.denoising = denoising;
 
+  /* TODO(sergey): Finish decoupling denoiser implementation from device. */
   if (!(params.device.denoisers & denoising.type)) {
     if (need_denoise) {
       progress.set_error("Denoiser type not supported by compute device");
@@ -1040,12 +1048,17 @@ void Session::set_denoising(const DenoiseParams &denoising)
     need_denoise = false;
   }
 
+  /* TODO(sergey): Check which of the code is still needed. */
+#if 0
   // TODO(pmours): Query the required overlap value for denoising from the device?
   tile_manager.slice_overlap = need_denoise && !params.background ? 64 : 0;
 
   /* Schedule per tile denoising for final renders if we are either denoising or
    * need prefiltered passes for the native denoiser. */
   tile_manager.schedule_denoising = need_denoise && params.background;
+#endif
+
+  path_trace_->set_denoiser_params(denoising);
 }
 
 void Session::set_denoising_start_sample(int sample)
@@ -1220,7 +1233,7 @@ bool Session::render_need_denoise(bool &delayed)
   return !delayed;
 }
 
-void Session::render(bool /*need_denoise*/)
+void Session::render(bool need_denoise)
 {
   if (!params.background && tile_manager.state.sample == tile_manager.range_start_sample) {
     /* Clear buffers. */
@@ -1241,6 +1254,10 @@ void Session::render(bool /*need_denoise*/)
 
   /* Perform rendering. */
   path_trace_->render_samples(samples_to_render_num);
+
+  if (need_denoise) {
+    path_trace_->denoise();
+  }
 
   /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on
    * the `PathTrace`. */

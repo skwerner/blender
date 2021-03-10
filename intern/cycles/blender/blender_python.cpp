@@ -776,7 +776,7 @@ static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *key
   }
 
   /* Create denoiser. */
-  Denoiser denoiser(device);
+  DenoiserPipeline denoiser(device);
   denoiser.params = params;
   denoiser.input = input;
   denoiser.output = output;

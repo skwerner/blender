@@ -17,6 +17,9 @@
 #ifndef __DENOISING_H__
 #define __DENOISING_H__
 
+/* TODO(sergey): Make it explicit and clear when something is a denoiser, its pipeline or
+ * parameters. Currently it is an annoying mixture of terms used interchangeably. */
+
 #include "device/device.h"
 #include "device/device_denoising.h"
 
@@ -32,12 +35,12 @@ OIIO_NAMESPACE_USING
 
 CCL_NAMESPACE_BEGIN
 
-/* Denoiser */
+/* Denoiser pipeline */
 
-class Denoiser {
+class DenoiserPipeline {
  public:
-  Denoiser(DeviceInfo &device_info);
-  ~Denoiser();
+  DenoiserPipeline(DeviceInfo &device_info);
+  ~DenoiserPipeline();
 
   bool run();
 
@@ -155,7 +158,10 @@ class DenoiseImage {
 
 class DenoiseTask {
  public:
-  DenoiseTask(Device *device, Denoiser *denoiser, int frame, const vector<int> &neighbor_frames);
+  DenoiseTask(Device *device,
+              DenoiserPipeline *denoiser,
+              int frame,
+              const vector<int> &neighbor_frames);
   ~DenoiseTask();
 
   /* Task stages */
@@ -168,7 +174,7 @@ class DenoiseTask {
 
  protected:
   /* Denoiser parameters and device */
-  Denoiser *denoiser;
+  DenoiserPipeline *denoiser;
   Device *device;
 
   /* Frame number to be denoised */

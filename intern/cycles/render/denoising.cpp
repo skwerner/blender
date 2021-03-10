@@ -225,7 +225,7 @@ bool DenoiseImageLayer::match_channels(int neighbor,
 /* Denoise Task */
 
 DenoiseTask::DenoiseTask(Device *device,
-                         Denoiser *denoiser,
+                         DenoiserPipeline *denoiser,
                          int frame,
                          const vector<int> &neighbor_frames)
     : denoiser(denoiser),
@@ -863,7 +863,7 @@ bool DenoiseImage::save_output(const string &out_filepath, string &error)
 
 /* File pattern handling and outer loop over frames */
 
-Denoiser::Denoiser(DeviceInfo &device_info)
+DenoiserPipeline::DenoiserPipeline(DeviceInfo &device_info)
 {
   samples_override = 0;
   tile_size = make_int2(64, 64);
@@ -881,13 +881,13 @@ Denoiser::Denoiser(DeviceInfo &device_info)
   device->load_kernels(req);
 }
 
-Denoiser::~Denoiser()
+DenoiserPipeline::~DenoiserPipeline()
 {
   delete device;
   TaskScheduler::exit();
 }
 
-bool Denoiser::run()
+bool DenoiserPipeline::run()
 {
   assert(input.size() == output.size());
 

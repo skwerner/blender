@@ -172,6 +172,27 @@ class Session {
 
   void run();
 
+  /* Update for the new iteration of the main loop in run implementation (run_cpu and run_gpu).
+   *
+   * Will take care of the following things:
+   *  - Delayed reset
+   *  - Scene update
+   *  - Tile manager advance
+   *
+   * The updates are done in a proper order with proper locking around them, which guarantees
+   * that the device side of scene and render buffers are always in a consistent state.
+   *
+   * Returns true if there are tiles to be rendered. */
+  bool run_update_for_next_iteration();
+
+  /* Wait for rendering to be unpaused, or for new tiles for render to arrive.
+   * Returns true if new main render loop iteration is required after this function call.
+   *
+   * The `no_tiles` argument should be calculated at the state before advancing the tile manager.
+   * in practice it means that this is an opposite of what `run_update_for_next_iteration()`
+   * returns. */
+  bool run_wait_for_work(bool no_tiles);
+
   void update_status_time(bool show_pause = false, bool show_done = false);
 
   void render(bool use_denoise);

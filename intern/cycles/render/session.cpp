@@ -355,11 +355,16 @@ void Session::run_gpu()
 
     if (!no_tiles) {
       /* update scene */
-      scoped_timer update_timer;
-      if (update_scene()) {
-        profiler.reset(scene->shaders.size(), scene->objects.size());
+      {
+        /* TODO(sergey): Use run_update_for_next_iteration() similarly to `run_cpu()`. */
+        thread_scoped_lock scene_lock(scene->mutex);
+
+        scoped_timer update_timer;
+        if (update_scene()) {
+          profiler.reset(scene->shaders.size(), scene->objects.size());
+        }
+        progress.add_skip_time(update_timer, params.background);
       }
-      progress.add_skip_time(update_timer, params.background);
 
       if (!device->error_message().empty())
         progress.set_error(device->error_message());
@@ -817,8 +822,7 @@ void Session::run_cpu()
   }
 
   while (!progress.get_cancel()) {
-    /* advance to next tile */
-    bool no_tiles = !tile_manager.next();
+    const bool no_tiles = !run_update_for_next_iteration();
     bool need_copy_to_display_buffer = false;
 
     if (params.background) {
@@ -829,60 +833,18 @@ void Session::run_cpu()
       }
     }
     else {
-      /* if in interactive mode, and we are either paused or done for now,
+      /* if in interactive mode, and we might be either paused or done for now,
        * wait for pause condition notify to wake up again */
-      thread_scoped_lock pause_lock(pause_mutex);
-
-      if (!pause && delayed_reset.do_reset) {
-        /* reset once to start */
-        thread_scoped_lock reset_lock(delayed_reset.mutex);
-        thread_scoped_lock buffers_lock(buffers_mutex);
-        thread_scoped_lock display_lock(display_mutex);
-
-        reset_(delayed_reset.params, delayed_reset.samples);
-        delayed_reset.do_reset = false;
-
-        /* Continue to the next iteration of the outer loop, so that the tile manager is
-         * re-initialized to its initial valid state after reset (without `tile_manager.next()`
-         * used after reset the current render buffer and camera size in pixels is set to 0). */
+      if (run_wait_for_work(no_tiles)) {
         continue;
       }
-      else if (pause || no_tiles) {
-        update_status_time(pause, no_tiles);
-
-        while (1) {
-          scoped_timer pause_timer;
-          pause_cond.wait(pause_lock);
-          if (pause) {
-            progress.add_skip_time(pause_timer, params.background);
-          }
-
-          update_status_time(pause, no_tiles);
-          progress.set_update();
-
-          if (!pause)
-            break;
-        }
-      }
-
-      if (progress.get_cancel())
-        break;
     }
 
-    if (!no_tiles) {
-      /* update scene */
-      scoped_timer update_timer;
-      if (update_scene()) {
-        profiler.reset(scene->shaders.size(), scene->objects.size());
-      }
-      progress.add_skip_time(update_timer, params.background);
+    if (progress.get_cancel()) {
+      break;
+    }
 
-      if (!device->error_message().empty())
-        progress.set_error(device->error_message());
-
-      if (progress.get_cancel())
-        break;
-
+    {
       /* buffers mutex is locked entirely while rendering each
        * sample, and released/reacquired on each iteration to allow
        * reset and draw in between */
@@ -912,9 +874,10 @@ void Session::run_cpu()
       thread_scoped_lock display_lock(display_mutex);
 
       if (delayed_reset.do_reset) {
-        /* reset rendering if request from main thread */
-        delayed_reset.do_reset = false;
-        reset_(delayed_reset.params, delayed_reset.samples);
+        /* Handle reset on the next loop iteration. Here simply avoid copy of partial render buffer
+         * to the display buffer. */
+        /* TODO(sergey): It might be perceptually better to not cancel rendering mid-way and show
+         * "delayed" render result in the viewport. */
       }
       else if (need_copy_to_display_buffer) {
         /* Only copy to display_buffer if we do not reset, we don't
@@ -957,6 +920,59 @@ void Session::run()
     progress.set_status(progress.get_cancel_message());
   else
     progress.set_update();
+}
+
+bool Session::run_update_for_next_iteration()
+{
+  thread_scoped_lock scene_lock(scene->mutex);
+  thread_scoped_lock reset_lock(delayed_reset.mutex);
+
+  if (delayed_reset.do_reset) {
+    thread_scoped_lock buffers_lock(buffers_mutex);
+    thread_scoped_lock display_lock(display_mutex);
+    reset_(delayed_reset.params, delayed_reset.samples);
+    delayed_reset.do_reset = false;
+  }
+
+  const bool have_tiles = tile_manager.next();
+
+  if (have_tiles) {
+    scoped_timer update_timer;
+    if (update_scene()) {
+      profiler.reset(scene->shaders.size(), scene->objects.size());
+    }
+    progress.add_skip_time(update_timer, params.background);
+  }
+
+  return have_tiles;
+}
+
+bool Session::run_wait_for_work(bool no_tiles)
+{
+  thread_scoped_lock pause_lock(pause_mutex);
+
+  if (!pause && !no_tiles) {
+    return false;
+  }
+
+  update_status_time(pause, no_tiles);
+
+  while (true) {
+    scoped_timer pause_timer;
+    pause_cond.wait(pause_lock);
+    if (pause) {
+      progress.add_skip_time(pause_timer, params.background);
+    }
+
+    update_status_time(pause, no_tiles);
+    progress.set_update();
+
+    if (!pause) {
+      break;
+    }
+  }
+
+  return no_tiles;
 }
 
 bool Session::draw(BufferParams &buffer_params, DeviceDrawParams &draw_params)
@@ -1097,8 +1113,6 @@ void Session::wait()
 
 bool Session::update_scene()
 {
-  thread_scoped_lock scene_lock(scene->mutex);
-
   /* update camera if dimensions changed for progressive render. the camera
    * knows nothing about progressive or cropped rendering, it just gets the
    * image dimensions passed in */

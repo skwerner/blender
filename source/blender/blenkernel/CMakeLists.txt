@@ -77,6 +77,7 @@ set(SRC
   intern/appdir.c
   intern/armature.c
   intern/armature_deform.c
+  intern/armature_pose.cc
   intern/armature_update.c
   intern/asset.cc
   intern/attribute.c
@@ -130,6 +131,10 @@ set(SRC
   intern/fmodifier.c
   intern/font.c
   intern/freestyle.c
+  intern/geometry_component_instances.cc
+  intern/geometry_component_mesh.cc
+  intern/geometry_component_pointcloud.cc
+  intern/geometry_component_volume.cc
   intern/geometry_set.cc
   intern/geometry_set_instances.cc
   intern/gpencil.c
@@ -429,6 +434,7 @@ set(SRC
   nla_private.h
   particle_private.h
   tracking_private.h
+  intern/attribute_access_intern.hh
   intern/CCGSubSurf.h
   intern/CCGSubSurf_inline.h
   intern/CCGSubSurf_intern.h

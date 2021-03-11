@@ -68,9 +68,13 @@ typedef struct {
   BlendHandle *blo_handle;
   int flag;
   PyObject *dict;
+  /* Borrowed reference to the `bmain`, taken from the RNA instance of #RNA_BlendDataLibraries.
+   * Defaults to #G.main, Otherwise use a temporary #Main when `bmain_is_temp` is true. */
+  Main *bmain;
+  bool bmain_is_temp;
 } BPy_Library;
 
-static PyObject *bpy_lib_load(PyObject *self, PyObject *args, PyObject *kwds);
+static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *kwds);
 static PyObject *bpy_lib_enter(BPy_Library *self);
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *args);
 static PyObject *bpy_lib_dir(BPy_Library *self);
@@ -182,9 +186,10 @@ PyDoc_STRVAR(
     "   :type relative: bool\n"
     "   :arg assets_only: If True, only list data-blocks marked as assets.\n"
     "   :type assets_only: bool\n");
-static PyObject *bpy_lib_load(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
+static PyObject *bpy_lib_load(BPy_PropertyRNA *self, PyObject *args, PyObject *kw)
 {
-  Main *bmain = CTX_data_main(BPY_context_get());
+  Main *bmain_base = CTX_data_main(BPY_context_get());
+  Main *bmain = self->ptr.data; /* Typically #G_MAIN */
   BPy_Library *ret;
   const char *filename = NULL;
   bool is_rel = false, is_link = false, use_assets_only = false;
@@ -210,11 +215,14 @@ static PyObject *bpy_lib_load(PyObject *UNUSED(self), PyObject *args, PyObject *
   BLI_strncpy(ret->abspath, filename, sizeof(ret->abspath));
   BLI_path_abs(ret->abspath, BKE_main_blendfile_path(bmain));
 
+  ret->bmain = bmain;
+  ret->bmain_is_temp = (bmain != bmain_base);
+
   ret->blo_handle = NULL;
   ret->flag = ((is_link ? FILE_LINK : 0) | (is_rel ? FILE_RELPATH : 0) |
                (use_assets_only ? FILE_ASSETS_ONLY : 0));
 
-  ret->dict = _PyDict_NewPresized(MAX_LIBARRAY);
+  ret->dict = _PyDict_NewPresized(INDEX_ID_MAX);
 
   return (PyObject *)ret;
 }
@@ -245,7 +253,7 @@ static PyObject *bpy_lib_enter(BPy_Library *self)
 {
   PyObject *ret;
   BPy_Library *self_from;
-  PyObject *from_dict = _PyDict_NewPresized(MAX_LIBARRAY);
+  PyObject *from_dict = _PyDict_NewPresized(INDEX_ID_MAX);
   ReportList reports;
 
   BKE_reports_init(&reports, RPT_STORE);
@@ -333,7 +341,7 @@ static void bpy_lib_exit_warn_type(BPy_Library *self, PyObject *item)
 
 static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
 {
-  Main *bmain = CTX_data_main(BPY_context_get());
+  Main *bmain = self->bmain;
   Main *mainl = NULL;
   const int err = 0;
   const bool do_append = ((self->flag & FILE_LINK) == 0);
@@ -341,8 +349,9 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
   /* here appending/linking starts */
+  const int id_tag_extra = self->bmain_is_temp ? LIB_TAG_TEMP_MAIN : 0;
   struct LibraryLink_Params liblink_params;
-  BLO_library_link_params_init(&liblink_params, bmain, self->flag);
+  BLO_library_link_params_init(&liblink_params, bmain, self->flag, id_tag_extra);
 
   mainl = BLO_library_link_begin(&(self->blo_handle), self->relpath, &liblink_params);
 
@@ -369,6 +378,12 @@ static PyObject *bpy_lib_exit(BPy_Library *self, PyObject *UNUSED(args))
               ID *id = BLO_library_link_named_part(
                   mainl, &(self->blo_handle), idcode, item_idname, &liblink_params);
               if (id) {
+
+                if (self->bmain_is_temp) {
+                  /* If this fails, #LibraryLink_Params.id_tag_extra is not being applied. */
+                  BLI_assert(id->tag & LIB_TAG_TEMP_MAIN);
+                }
+
 #ifdef USE_RNA_DATABLOCKS
                 /* swap name for pointer to the id */
                 item_dst = PyCapsule_New((void *)id, NULL, NULL);
@@ -477,7 +492,7 @@ static PyObject *bpy_lib_dir(BPy_Library *self)
 PyMethodDef BPY_library_load_method_def = {
     "load",
     (PyCFunction)bpy_lib_load,
-    METH_STATIC | METH_VARARGS | METH_KEYWORDS,
+    METH_VARARGS | METH_KEYWORDS,
     bpy_lib_load_doc,
 };
 

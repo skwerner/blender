@@ -62,7 +62,7 @@ set(SRC
   composite/nodes/node_composite_composite.c
   composite/nodes/node_composite_cornerpin.c
   composite/nodes/node_composite_crop.c
-  composite/nodes/node_composite_cryptomatte.c
+  composite/nodes/node_composite_cryptomatte.cc
   composite/nodes/node_composite_curves.c
   composite/nodes/node_composite_defocus.c
   composite/nodes/node_composite_denoise.c
@@ -168,8 +168,8 @@ set(SRC
   geometry/nodes/node_geo_point_separate.cc
   geometry/nodes/node_geo_point_translate.cc
   geometry/nodes/node_geo_points_to_volume.cc
-  geometry/nodes/node_geo_subdivision_surface.cc
-  geometry/nodes/node_geo_subdivision_surface_simple.cc
+  geometry/nodes/node_geo_subdivide_smooth.cc
+  geometry/nodes/node_geo_subdivide.cc
   geometry/nodes/node_geo_transform.cc
   geometry/nodes/node_geo_triangulate.cc
   geometry/nodes/node_geo_volume_to_mesh.cc
@@ -259,7 +259,7 @@ set(SRC
   shader/nodes/node_shader_vectTransform.c
   shader/nodes/node_shader_vector_displacement.c
   shader/nodes/node_shader_vector_math.cc
-  shader/nodes/node_shader_vector_rotate.c
+  shader/nodes/node_shader_vector_rotate.cc
   shader/nodes/node_shader_vertex_color.c
   shader/nodes/node_shader_volume_absorption.c
   shader/nodes/node_shader_volume_info.c
@@ -302,7 +302,6 @@ set(SRC
   intern/node_exec.c
   intern/node_geometry_exec.cc
   intern/node_socket.cc
-  intern/node_tree_dependencies.cc
   intern/node_tree_multi_function.cc
   intern/node_tree_ref.cc
   intern/node_util.c
@@ -321,7 +320,6 @@ set(SRC
   NOD_geometry.h
   NOD_geometry_exec.hh
   NOD_math_functions.hh
-  NOD_node_tree_dependencies.hh
   NOD_node_tree_multi_function.hh
   NOD_node_tree_ref.hh
   NOD_shader.h

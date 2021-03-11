@@ -3847,6 +3847,26 @@ static void rna_def_userdef_theme_space_statusbar(BlenderRNA *brna)
   rna_def_userdef_theme_spaces_main(srna);
 }
 
+static void rna_def_userdef_theme_space_spreadsheet(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  /* space_spreadsheet */
+
+  srna = RNA_def_struct(brna, "ThemeSpreadsheet", NULL);
+  RNA_def_struct_sdna(srna, "ThemeSpace");
+  RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
+  RNA_def_struct_ui_text(srna, "Theme Spreadsheet", "Theme settings for the Spreadsheet");
+
+  prop = RNA_def_property(srna, "row_alternate", PROP_FLOAT, PROP_COLOR_GAMMA);
+  RNA_def_property_array(prop, 4);
+  RNA_def_property_ui_text(prop, "Alternate Rows", "Overlay color on every other row");
+  RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
+
+  rna_def_userdef_theme_spaces_main(srna);
+}
+
 static void rna_def_userdef_themes(BlenderRNA *brna)
 {
   StructRNA *srna;
@@ -3873,14 +3893,14 @@ static void rna_def_userdef_themes(BlenderRNA *brna)
       {20, "CLIP_EDITOR", ICON_TRACKER, "Movie Clip Editor", ""},
       {21, "TOPBAR", ICON_TOPBAR, "Top Bar", ""},
       {22, "STATUSBAR", ICON_STATUSBAR, "Status Bar", ""},
+      {23, "SPREADSHEET", ICON_SPREADSHEET, "Spreadsheet"},
       {0, NULL, 0, NULL, NULL},
   };
 
   srna = RNA_def_struct(brna, "Theme", NULL);
   RNA_def_struct_sdna(srna, "bTheme");
   RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
-  RNA_def_struct_ui_text(
-      srna, "Theme", "Theme settings defining draw style and colors in the user interface");
+  RNA_def_struct_ui_text(srna, "Theme", "User interface styling and color settings");
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
   RNA_def_property_ui_text(prop, "Name", "Name of the theme");
@@ -4002,6 +4022,12 @@ static void rna_def_userdef_themes(BlenderRNA *brna)
   RNA_def_property_pointer_sdna(prop, NULL, "space_statusbar");
   RNA_def_property_struct_type(prop, "ThemeStatusBar");
   RNA_def_property_ui_text(prop, "Status Bar", "");
+
+  prop = RNA_def_property(srna, "spreadsheet", PROP_POINTER, PROP_NONE);
+  RNA_def_property_flag(prop, PROP_NEVER_NULL);
+  RNA_def_property_pointer_sdna(prop, NULL, "space_spreadsheet");
+  RNA_def_property_struct_type(prop, "ThemeSpreadsheet");
+  RNA_def_property_ui_text(prop, "Spreadsheet", "");
   /* end space types */
 
   prop = RNA_def_property(srna, "bone_color_sets", PROP_COLLECTION, PROP_NONE);
@@ -4255,6 +4281,7 @@ static void rna_def_userdef_dothemes(BlenderRNA *brna)
   rna_def_userdef_theme_space_clip(brna);
   rna_def_userdef_theme_space_topbar(brna);
   rna_def_userdef_theme_space_statusbar(brna);
+  rna_def_userdef_theme_space_spreadsheet(brna);
   rna_def_userdef_theme_colorset(brna);
   rna_def_userdef_theme_collection_color(brna);
   rna_def_userdef_themes(brna);
@@ -4270,12 +4297,13 @@ static void rna_def_userdef_solidlight(BlenderRNA *brna)
   srna = RNA_def_struct(brna, "UserSolidLight", NULL);
   RNA_def_struct_sdna(srna, "SolidLight");
   RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
-  RNA_def_struct_ui_text(srna, "Solid Light", "Light used for Studio lighting in solid draw mode");
+  RNA_def_struct_ui_text(
+      srna, "Solid Light", "Light used for Studio lighting in solid shading mode");
 
   prop = RNA_def_property(srna, "use", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", 1);
   RNA_def_property_boolean_default(prop, true);
-  RNA_def_property_ui_text(prop, "Enabled", "Enable this light in solid draw mode");
+  RNA_def_property_ui_text(prop, "Enabled", "Enable this light in solid shading mode");
   RNA_def_property_update(prop, 0, "rna_UserDef_viewport_lights_update");
 
   prop = RNA_def_property(srna, "smooth", PROP_FLOAT, PROP_FACTOR);
@@ -4815,7 +4843,8 @@ static void rna_def_userdef_view(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "use_text_antialiasing", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_negative_sdna(prop, NULL, "text_render", USER_TEXT_DISABLE_AA);
-  RNA_def_property_ui_text(prop, "Text Anti-Aliasing", "Draw user interface text anti-aliased");
+  RNA_def_property_ui_text(
+      prop, "Text Anti-Aliasing", "Smooth jagged edges of user interface text");
   RNA_def_property_update(prop, 0, "rna_userdef_text_update");
 
   prop = RNA_def_property(srna, "text_hinting", PROP_ENUM, PROP_NONE);
@@ -5321,12 +5350,12 @@ static void rna_def_userdef_system(BlenderRNA *brna)
        "2DTEXTURE",
        0,
        "2D Texture",
-       "Use CPU for display transform and draw image with 2D texture"},
+       "Use CPU for display transform and display image with 2D texture"},
       {IMAGE_DRAW_METHOD_GLSL,
        "GLSL",
        0,
        "GLSL",
-       "Use GLSL shaders for display transform and draw image with 2D texture"},
+       "Use GLSL shaders for display transform and display image with 2D texture"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -5363,7 +5392,7 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "UI Scale",
-      "Size multiplier to use when drawing custom user interface elements, so that "
+      "Size multiplier to use when displaying custom user interface elements, so that "
       "they are scaled correctly on screens with different DPI. This value is based "
       "on operating system DPI settings and Blender display scale");
 
@@ -5373,7 +5402,7 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "UI Line Width",
-      "Suggested line thickness and point size in pixels, for add-ons drawing custom "
+      "Suggested line thickness and point size in pixels, for add-ons displaying custom "
       "user interface elements, based on operating system settings and Blender UI scale");
 
   prop = RNA_def_property(srna, "dpi", PROP_INT, PROP_NONE);
@@ -5442,7 +5471,7 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_region_overlap", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "uiflag2", USER_REGION_OVERLAP);
   RNA_def_property_ui_text(
-      prop, "Region Overlap", "Draw tool/property regions over the main region");
+      prop, "Region Overlap", "Display tool/property regions over the main region");
   RNA_def_property_update(prop, 0, "rna_userdef_dpi_update");
 
   prop = RNA_def_property(srna, "viewport_aa", PROP_ENUM, PROP_NONE);
@@ -5456,7 +5485,7 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_collection_sdna(prop, NULL, "light_param", "");
   RNA_def_property_struct_type(prop, "UserSolidLight");
   RNA_def_property_ui_text(
-      prop, "Solid Lights", "Lights user to display objects in solid draw mode");
+      prop, "Solid Lights", "Lights user to display objects in solid shading mode");
 
   prop = RNA_def_property(srna, "light_ambient", PROP_FLOAT, PROP_COLOR);
   RNA_def_property_float_sdna(prop, NULL, "light_ambient");
@@ -6061,7 +6090,9 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_relative_paths", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_RELPATHS);
   RNA_def_property_ui_text(
-      prop, "Relative Paths", "Default relative path option for the file selector");
+      prop,
+      "Relative Paths",
+      "Default relative path option for the file selector, when no path is defined yet");
 
   prop = RNA_def_property(srna, "use_file_compression", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_FILECOMPRESS);
@@ -6186,7 +6217,8 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", USER_SAVE_PREVIEWS);
   RNA_def_property_ui_text(prop,
                            "Save Preview Images",
-                           "Enables automatic saving of preview images in the .blend file");
+                           "Enables automatic saving of preview images in the .blend file "
+                           "as well as a thumbnail of the .blend");
 
   rna_def_userdef_filepaths_asset_library(brna);
 

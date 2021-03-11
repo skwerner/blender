@@ -19,7 +19,7 @@
 import bpy
 
 
-def geometry_node_group_empty_new(context):
+def geometry_node_group_empty_new():
     group = bpy.data.node_groups.new("Geometry Nodes", 'GeometryNodeTree')
     group.inputs.new('NodeSocketGeometry', "Geometry")
     group.outputs.new('NodeSocketGeometry', "Geometry")
@@ -38,7 +38,7 @@ def geometry_node_group_empty_new(context):
     return group
 
 
-def geometry_modifier_poll(context) -> bool:
+def geometry_modifier_poll(context):
     ob = context.object
 
     # Test object support for geometry node modifier (No volume, curve, or hair object support yet)
@@ -85,7 +85,7 @@ class NewGeometryNodeTreeAssign(bpy.types.Operator):
         if not modifier:
             return {'CANCELLED'}
 
-        group = geometry_node_group_empty_new(context)
+        group = geometry_node_group_empty_new()
         modifier.node_group = group
 
         return {'FINISHED'}

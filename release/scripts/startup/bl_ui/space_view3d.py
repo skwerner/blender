@@ -1068,7 +1068,7 @@ class VIEW3D_MT_snap(Menu):
 class VIEW3D_MT_uv_map(Menu):
     bl_label = "UV Mapping"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("uv.unwrap")
@@ -1822,7 +1822,7 @@ class VIEW3D_MT_select_edit_armature(Menu):
 class VIEW3D_MT_paint_gpencil(Menu):
     bl_label = "Paint"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("gpencil.vertex_color_set", text="Set Vertex Colors")
@@ -2238,7 +2238,7 @@ class VIEW3D_MT_object(Menu):
     bl_context = "objectmode"
     bl_label = "Object"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.menu("VIEW3D_MT_transform_object")
@@ -2717,7 +2717,7 @@ class VIEW3D_MT_object_constraints(Menu):
 class VIEW3D_MT_object_quick_effects(Menu):
     bl_label = "Quick Effects"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("object.quick_fur")
@@ -3196,6 +3196,9 @@ class VIEW3D_MT_face_sets_init(Menu):
 
         op = layout.operator("sculpt.face_sets_init", text='By Loose Parts')
         op.mode = 'LOOSE_PARTS'
+
+        op = layout.operator("sculpt.face_sets_init", text='By Face Set Boundaries')
+        op.mode = 'FACE_SET_BOUNDARIES'
 
         op = layout.operator("sculpt.face_sets_init", text='By Materials')
         op.mode = 'MATERIALS'
@@ -7009,10 +7012,9 @@ class VIEW3D_PT_gpencil_curve_edit(Panel):
     bl_label = "Curve Editing"
 
     def draw(self, context):
-        gpd = context.gpencil_data
-        settings = context.tool_settings.gpencil_sculpt
-
         layout = self.layout
+
+        gpd = context.gpencil_data
         col = layout.column(align=True)
         col.prop(gpd, "edit_curve_resolution")
         col.prop(gpd, "curve_edit_threshold")

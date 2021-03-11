@@ -540,18 +540,11 @@ void ntreeBlendWrite(BlendWriter *writer, bNodeTree *ntree)
       }
       else if ((ntree->type == NTREE_COMPOSIT) && (node->type == CMP_NODE_CRYPTOMATTE)) {
         NodeCryptomatte *nc = (NodeCryptomatte *)node->storage;
-        /* Update the matte_id so the files can be opened in versions that don't
-         * use `CryptomatteEntry`. */
-        MEM_SAFE_FREE(nc->matte_id);
-        nc->matte_id = BKE_cryptomatte_entries_to_matte_id(nc);
-        if (nc->matte_id) {
-          BLO_write_string(writer, nc->matte_id);
-        }
+        BLO_write_string(writer, nc->matte_id);
         LISTBASE_FOREACH (CryptomatteEntry *, entry, &nc->entries) {
           BLO_write_struct(writer, CryptomatteEntry, entry);
         }
         BLO_write_struct_by_name(writer, node->typeinfo->storagename, node->storage);
-        MEM_SAFE_FREE(nc->matte_id);
       }
       else if (node->type == FN_NODE_INPUT_STRING) {
         NodeInputString *storage = (NodeInputString *)node->storage;
@@ -4482,18 +4475,18 @@ void node_type_group_update(struct bNodeType *ntype,
 }
 
 void node_type_exec(struct bNodeType *ntype,
-                    NodeInitExecFunction initexecfunc,
-                    NodeFreeExecFunction freeexecfunc,
-                    NodeExecFunction execfunc)
+                    NodeInitExecFunction init_exec_fn,
+                    NodeFreeExecFunction free_exec_fn,
+                    NodeExecFunction exec_fn)
 {
-  ntype->initexecfunc = initexecfunc;
-  ntype->freeexecfunc = freeexecfunc;
-  ntype->execfunc = execfunc;
+  ntype->init_exec_fn = init_exec_fn;
+  ntype->free_exec_fn = free_exec_fn;
+  ntype->exec_fn = exec_fn;
 }
 
-void node_type_gpu(struct bNodeType *ntype, NodeGPUExecFunction gpufunc)
+void node_type_gpu(struct bNodeType *ntype, NodeGPUExecFunction gpu_fn)
 {
-  ntype->gpufunc = gpufunc;
+  ntype->gpu_fn = gpu_fn;
 }
 
 void node_type_internal_links(bNodeType *ntype,
@@ -4816,8 +4809,8 @@ static void registerGeometryNodes()
   register_node_type_geo_point_translate();
   register_node_type_geo_points_to_volume();
   register_node_type_geo_sample_texture();
-  register_node_type_geo_subdivision_surface();
-  register_node_type_geo_subdivision_surface_simple();
+  register_node_type_geo_subdivide_smooth();
+  register_node_type_geo_subdivide();
   register_node_type_geo_transform();
   register_node_type_geo_triangulate();
   register_node_type_geo_volume_to_mesh();

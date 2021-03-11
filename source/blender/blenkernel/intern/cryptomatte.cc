@@ -53,7 +53,7 @@ struct CryptomatteSession {
 
   CryptomatteSession();
   CryptomatteSession(const Main *bmain);
-  CryptomatteSession(StampData *metadata);
+  CryptomatteSession(StampData *stamp_data);
 
   blender::bke::cryptomatte::CryptomatteLayer &add_layer(std::string layer_name);
   std::optional<std::string> operator[](float encoded_hash) const;
@@ -206,7 +206,17 @@ char *BKE_cryptomatte_entries_to_matte_id(NodeCryptomatte *node_storage)
 void BKE_cryptomatte_matte_id_to_entries(NodeCryptomatte *node_storage, const char *matte_id)
 {
   BLI_freelistN(&node_storage->entries);
-  std::optional<CryptomatteSession> session = std::nullopt;
+
+  if (matte_id == nullptr) {
+    MEM_SAFE_FREE(node_storage->matte_id);
+    return;
+  }
+  /* Update the matte_id so the files can be opened in versions that don't
+   * use `CryptomatteEntry`. */
+  if (matte_id != node_storage->matte_id && STREQ(node_storage->matte_id, matte_id)) {
+    MEM_SAFE_FREE(node_storage->matte_id);
+    node_storage->matte_id = static_cast<char *>(MEM_dupallocN(matte_id));
+  }
 
   std::istringstream ss(matte_id);
   while (ss.good()) {
@@ -492,7 +502,7 @@ std::unique_ptr<CryptomatteLayer> CryptomatteLayer::read_from_manifest(
     blender::StringRefNull manifest)
 {
   std::unique_ptr<CryptomatteLayer> layer = std::make_unique<CryptomatteLayer>();
-  blender::bke::cryptomatte::manifest::from_manifest(*layer.get(), manifest);
+  blender::bke::cryptomatte::manifest::from_manifest(*layer, manifest);
   return layer;
 }
 

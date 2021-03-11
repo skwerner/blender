@@ -224,6 +224,12 @@ void BKE_screen_foreach_id_screen_area(LibraryForeachIDData *data, ScrArea *area
         BKE_LIB_FOREACHID_PROCESS(data, sclip->mask_info.mask, IDWALK_CB_USER_ONE);
         break;
       }
+      case SPACE_SPREADSHEET: {
+        SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+
+        BKE_LIB_FOREACHID_PROCESS_ID(data, sspreadsheet->pinned_id, IDWALK_CB_NOP);
+        break;
+      }
       default:
         break;
     }
@@ -1217,7 +1223,7 @@ static void write_panel_list(BlendWriter *writer, ListBase *lb)
   }
 }
 
-static void write_area_regions(BlendWriter *writer, ScrArea *area)
+static void write_area(BlendWriter *writer, ScrArea *area)
 {
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     write_region(writer, region, area->spacetype);
@@ -1342,6 +1348,9 @@ static void write_area_regions(BlendWriter *writer, ScrArea *area)
     else if (sl->spacetype == SPACE_INFO) {
       BLO_write_struct(writer, SpaceInfo, sl);
     }
+    else if (sl->spacetype == SPACE_SPREADSHEET) {
+      BLO_write_struct(writer, SpaceSpreadsheet, sl);
+    }
   }
 }
 
@@ -1356,7 +1365,7 @@ void BKE_screen_area_map_blend_write(BlendWriter *writer, ScrAreaMap *area_map)
 
     BLO_write_struct(writer, ScrGlobalAreaData, area->global);
 
-    write_area_regions(writer, area);
+    write_area(writer, area);
 
     area->butspacetype = SPACE_EMPTY; /* Unset again, was changed above. */
   }
@@ -1681,6 +1690,7 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
       sfile->op = NULL;
       sfile->previews_timer = NULL;
       sfile->tags = 0;
+      sfile->runtime = NULL;
       BLO_read_data_address(reader, &sfile->params);
       BLO_read_data_address(reader, &sfile->asset_params);
     }
@@ -1902,6 +1912,11 @@ void BKE_screen_area_blend_read_lib(BlendLibReader *reader, ID *parent_id, ScrAr
         SpaceClip *sclip = (SpaceClip *)sl;
         BLO_read_id_address(reader, parent_id->lib, &sclip->clip);
         BLO_read_id_address(reader, parent_id->lib, &sclip->mask_info.mask);
+        break;
+      }
+      case SPACE_SPREADSHEET: {
+        SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+        BLO_read_id_address(reader, parent_id->lib, &sspreadsheet->pinned_id);
         break;
       }
       default:

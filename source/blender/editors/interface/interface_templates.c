@@ -393,7 +393,8 @@ static bool id_search_add(const bContext *C, TemplateID *template_ui, uiSearchIt
 static void id_search_cb(const bContext *C,
                          void *arg_template,
                          const char *str,
-                         uiSearchItems *items)
+                         uiSearchItems *items,
+                         const bool UNUSED(is_first))
 {
   TemplateID *template_ui = (TemplateID *)arg_template;
   ListBase *lb = template_ui->idlb;
@@ -464,7 +465,8 @@ static void id_search_cb_tagged(const bContext *C,
 static void id_search_cb_objects_from_scene(const bContext *C,
                                             void *arg_template,
                                             const char *str,
-                                            uiSearchItems *items)
+                                            uiSearchItems *items,
+                                            const bool UNUSED(is_first))
 {
   TemplateID *template_ui = (TemplateID *)arg_template;
   ListBase *lb = template_ui->idlb;
@@ -518,7 +520,7 @@ static uiBlock *id_search_menu(bContext *C, ARegion *region, void *arg_litem)
   static TemplateID template_ui;
   PointerRNA active_item_ptr;
   void (*id_search_update_fn)(
-      const bContext *, void *, const char *, uiSearchItems *) = id_search_cb;
+      const bContext *, void *, const char *, uiSearchItems *, const bool) = id_search_cb;
 
   /* arg_litem is malloced, can be freed by parent button */
   template_ui = *((TemplateID *)arg_litem);
@@ -3985,7 +3987,7 @@ static void curvemap_tools_dofunc(bContext *C, void *cumap_v, int event)
       BKE_curvemapping_changed(cumap, false);
       break;
     case UICURVE_FUNC_RESET_VIEW:
-      cumap->curr = cumap->clipr;
+      BKE_curvemapping_reset_view(cumap);
       break;
     case UICURVE_FUNC_HANDLE_VECTOR: /* set vector */
       BKE_curvemap_handle_set(cuma, HD_VECT);
@@ -6381,9 +6383,9 @@ void uiTemplateList(uiLayout *layout,
   }
 
   if (glob) {
-    /* About UI_BTYPE_GRIP drag-resize:
+    /* About #UI_BTYPE_GRIP drag-resize:
      * We can't directly use results from a grip button, since we have a
-     * rather complex behavior here (sizing by discrete steps and, overall, autosize feature).
+     * rather complex behavior here (sizing by discrete steps and, overall, auto-size feature).
      * Since we *never* know whether we are grip-resizing or not
      * (because there is no callback for when a button enters/leaves its "edit mode"),
      * we use the fact that grip-controlled value (dyn_data->resize) is completely handled
@@ -6391,7 +6393,7 @@ void uiTemplateList(uiLayout *layout,
      *
      * It is only meaningful when we are not resizing,
      * in which case this gives us the correct "init drag" value.
-     * Note we cannot affect dyn_data->resize_prev here,
+     * Note we cannot affect `dyn_data->resize_prev here`,
      * since this value is not controlled by the grip!
      */
     dyn_data->resize = dyn_data->resize_prev +

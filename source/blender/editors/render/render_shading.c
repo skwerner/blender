@@ -1074,6 +1074,11 @@ static int view_layer_remove_aov_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
+
+  if (view_layer->active_aov == NULL) {
+    return OPERATOR_FINISHED;
+  }
+
   BKE_view_layer_remove_aov(view_layer, view_layer->active_aov);
 
   RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
@@ -1224,7 +1229,7 @@ static int light_cache_bake_invoke(bContext *C, wmOperator *op, const wmEvent *U
 
   WM_jobs_start(wm, wm_job);
 
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   return OPERATOR_RUNNING_MODAL;
 }

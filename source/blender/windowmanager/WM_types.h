@@ -427,6 +427,7 @@ typedef struct wmNotifier {
 #define ND_SPACE_CHANGED (19 << 16) /*sent to a new editor type after it's replaced an old one*/
 #define ND_SPACE_CLIP (20 << 16)
 #define ND_SPACE_FILE_PREVIEW (21 << 16)
+#define ND_SPACE_SPREADSHEET (22 << 16)
 
 /* subtype, 256 entries too */
 #define NOTE_SUBTYPE 0x0000FF00
@@ -461,6 +462,7 @@ typedef struct wmNotifier {
 #define NA_SELECTED 6
 #define NA_ACTIVATED 7
 #define NA_PAINTING 8
+#define NA_JOB_FINISHED 9
 
 /* ************** Gesture Manager data ************** */
 
@@ -611,10 +613,6 @@ typedef struct wmEvent {
   short shift, ctrl, alt, oskey;
   /** Raw-key modifier (allow using any key as a modifier). */
   short keymodifier;
-
-  /** Set in case a #KM_PRESS went by unhandled. */
-  char check_click;
-  char check_drag;
 
   /** Tablet info, available for mouse move and button events. */
   wmTabletData tablet;

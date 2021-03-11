@@ -57,6 +57,9 @@ typedef struct bNodeLinkDrag {
   ListBase links;
   bool from_multi_input_socket;
   int in_out;
+
+  /** Temporarily stores the last picked link from multi input socket operator. */
+  struct bNodeLink *last_picked_multi_input_socket_link;
 } bNodeLinkDrag;
 
 typedef struct SpaceNode_Runtime {
@@ -74,6 +77,7 @@ typedef struct SpaceNode_Runtime {
   /* XXX hack for translate_attach op-macros to pass data from transform op to insert_offset op */
   /** Temporary data for node insert offset (in UI called Auto-offset). */
   struct NodeInsertOfsData *iofsd;
+  struct bNode *last_node_hovered_while_dragging_a_link;
 } SpaceNode_Runtime;
 
 /* space_node.c */
@@ -83,7 +87,11 @@ void space_node_group_offset(struct SpaceNode *snode, float *x, float *y);
 
 /* node_draw.cc */
 float node_socket_calculate_height(const bNodeSocket *socket);
-void node_link_calculate_multi_input_position(const bNodeLink *link, float r[2]);
+void node_link_calculate_multi_input_position(const float socket_x,
+                                              const float socket_y,
+                                              const int index,
+                                              const int total_inputs,
+                                              float r[2]);
 
 int node_get_colorid(struct bNode *node);
 int node_get_resize_cursor(int directions);
@@ -212,6 +220,10 @@ void NODE_OT_group_separate(struct wmOperatorType *ot);
 void NODE_OT_group_edit(struct wmOperatorType *ot);
 
 /* node_relationships.c */
+void sort_multi_input_socket_links(struct SpaceNode *snode,
+                                   struct bNode *node,
+                                   struct bNodeLink *drag_link,
+                                   float cursor[2]);
 bool node_connected_to_output(struct Main *bmain, struct bNodeTree *ntree, struct bNode *node);
 
 void NODE_OT_link(struct wmOperatorType *ot);
@@ -288,6 +300,12 @@ void NODE_GGT_backdrop_corner_pin(struct wmGizmoGroupType *gzgt);
 
 void NODE_OT_cryptomatte_layer_add(struct wmOperatorType *ot);
 void NODE_OT_cryptomatte_layer_remove(struct wmOperatorType *ot);
+
+/* node_geometry_attribute_search.cc */
+void node_geometry_add_attribute_search_button(const struct bNodeTree *node_tree,
+                                               const struct bNode *node,
+                                               struct PointerRNA *socket_ptr,
+                                               struct uiLayout *layout);
 
 extern const char *node_context_dir[];
 

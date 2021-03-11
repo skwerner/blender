@@ -280,7 +280,7 @@ static void pick_input_link_by_link_intersect(const bContext *C,
         float distance = dist_squared_to_line_segment_v2(cursor, l1, l2);
         if (distance < cursor_link_touch_distance) {
           link_to_pick = link;
-          RNA_int_set(op->ptr, "last_picked_link_index", link->multi_input_socket_index);
+          nldrag->last_picked_multi_input_socket_link = link_to_pick;
         }
       }
     }
@@ -290,13 +290,9 @@ static void pick_input_link_by_link_intersect(const bContext *C,
    * Not essential for the basic behavior, but can make interaction feel a bit better if
    * the  mouse moves to the right and loses the "selection." */
   if (!link_to_pick) {
-    int last_picked_link_index = RNA_int_get(op->ptr, "last_picked_link_index");
-    if (last_picked_link_index > -1) {
-      LISTBASE_FOREACH (bNodeLink *, link, &snode->edittree->links) {
-        if (link->multi_input_socket_index == last_picked_link_index) {
-          link_to_pick = link;
-        }
-      }
+    bNodeLink *last_picked_link = nldrag->last_picked_multi_input_socket_link;
+    if (last_picked_link) {
+      link_to_pick = last_picked_link;
     }
   }
 
@@ -436,6 +432,75 @@ static bool snode_autoconnect_input(SpaceNode *snode,
 
   nodeAddLink(ntree, node_fr, sock_fr, node_to, sock_to);
   return true;
+}
+
+typedef struct LinkAndPosition {
+  struct bNodeLink *link;
+  float multi_socket_position[2];
+} LinkAndPosition;
+
+static int compare_link_by_y_position(const void *a, const void *b)
+{
+  const LinkAndPosition *link_and_position_a = *(const LinkAndPosition **)a;
+  const LinkAndPosition *link_and_position_b = *(const LinkAndPosition **)b;
+
+  BLI_assert(link_and_position_a->link->tosock == link_and_position_b->link->tosock);
+  const float link_a_y = link_and_position_a->multi_socket_position[1];
+  const float link_b_y = link_and_position_b->multi_socket_position[1];
+  return link_a_y > link_b_y ? 1 : -1;
+}
+
+void sort_multi_input_socket_links(SpaceNode *snode,
+                                   bNode *node,
+                                   bNodeLink *drag_link,
+                                   float cursor[2])
+{
+  LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
+    if (!(socket->flag & SOCK_MULTI_INPUT)) {
+      continue;
+    }
+    /* The total is calculated in #node_update_nodetree, which runs before this draw step. */
+    int total_inputs = socket->total_inputs + 1;
+    struct LinkAndPosition **input_links = MEM_malloc_arrayN(
+        total_inputs, sizeof(LinkAndPosition *), __func__);
+
+    int index = 0;
+    LISTBASE_FOREACH (bNodeLink *, link, &snode->edittree->links) {
+      if (link->tosock == socket) {
+        struct LinkAndPosition *link_and_position = MEM_callocN(sizeof(struct LinkAndPosition),
+                                                                __func__);
+        link_and_position->link = link;
+        node_link_calculate_multi_input_position(link->tosock->locx,
+                                                 link->tosock->locy,
+                                                 link->multi_input_socket_index,
+                                                 link->tosock->total_inputs,
+                                                 link_and_position->multi_socket_position);
+        input_links[index] = link_and_position;
+        index++;
+      }
+    }
+
+    if (drag_link) {
+      LinkAndPosition *link_and_position = MEM_callocN(sizeof(LinkAndPosition), __func__);
+      link_and_position->link = drag_link;
+      copy_v2_v2(link_and_position->multi_socket_position, cursor);
+      input_links[index] = link_and_position;
+      index++;
+    }
+
+    qsort(input_links, index, sizeof(bNodeLink *), compare_link_by_y_position);
+
+    for (int i = 0; i < index; i++) {
+      input_links[i]->link->multi_input_socket_index = i;
+    }
+
+    for (int i = 0; i < index; i++) {
+      if (input_links[i]) {
+        MEM_freeN(input_links[i]);
+      }
+    }
+    MEM_freeN(input_links);
+  }
 }
 
 static void snode_autoconnect(Main *bmain,
@@ -820,10 +885,6 @@ static void node_link_find_socket(bContext *C, wmOperator *op, float cursor[2])
       LISTBASE_FOREACH (LinkData *, linkdata, &nldrag->links) {
         bNodeLink *link = linkdata->data;
 
-        /* skip if this is already the target socket */
-        if (link->tosock == tsock) {
-          continue;
-        }
         /* skip if socket is on the same node as the fromsock */
         if (tnode && link->fromnode == tnode) {
           continue;
@@ -832,12 +893,17 @@ static void node_link_find_socket(bContext *C, wmOperator *op, float cursor[2])
         /* attach links to the socket */
         link->tonode = tnode;
         link->tosock = tsock;
+        snode->runtime->last_node_hovered_while_dragging_a_link = tnode;
+        sort_multi_input_socket_links(snode, tnode, link, cursor);
       }
     }
     else {
       LISTBASE_FOREACH (LinkData *, linkdata, &nldrag->links) {
         bNodeLink *link = linkdata->data;
-
+        if (snode->runtime->last_node_hovered_while_dragging_a_link) {
+          sort_multi_input_socket_links(
+              snode, snode->runtime->last_node_hovered_while_dragging_a_link, NULL, cursor);
+        }
         link->tonode = NULL;
         link->tosock = NULL;
       }
@@ -1032,7 +1098,6 @@ static int node_link_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   float cursor[2];
   UI_view2d_region_to_view(&region->v2d, event->mval[0], event->mval[1], &cursor[0], &cursor[1]);
   RNA_float_set_array(op->ptr, "drag_start", cursor);
-  RNA_int_set(op->ptr, "last_picked_link_index", -1);
   RNA_boolean_set(op->ptr, "has_link_picked", false);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
@@ -1102,15 +1167,6 @@ void NODE_OT_link(wmOperatorType *ot)
                       -UI_PRECISION_FLOAT_MAX,
                       UI_PRECISION_FLOAT_MAX);
   RNA_def_property_flag(prop, PROP_HIDDEN);
-  RNA_def_int(ot->srna,
-              "last_picked_link_index",
-              -1,
-              -1,
-              4095,
-              "Last Picked Link Index",
-              "The index of the last picked link on a multi-input socket",
-              -1,
-              4095);
   RNA_def_property_flag(prop, PROP_HIDDEN);
 }
 
@@ -2104,6 +2160,8 @@ void ED_node_link_insert(Main *bmain, ScrArea *area)
       snode_update(snode, select);
       ED_node_tag_update_id((ID *)snode->edittree);
       ED_node_tag_update_id(snode->id);
+
+      sort_multi_input_socket_links(snode, node, NULL, NULL);
     }
   }
 }

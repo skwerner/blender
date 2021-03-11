@@ -135,6 +135,7 @@ static void store_bake_pixel(void *handle, int x, int y, float u, float v)
   pixel->dv_dx = bd->dv_dx;
   pixel->dv_dy = bd->dv_dy;
   pixel->object_id = 0;
+  pixel->seed = i;
 }
 
 void RE_bake_mask_fill(const BakePixel pixel_array[], const size_t num_pixels, char *mask)
@@ -383,6 +384,7 @@ static bool cast_ray_highpoly(BVHTreeFromMesh *treeData,
 
     pixel_high->primitive_id = primitive_id_high;
     pixel_high->object_id = hit_mesh;
+    pixel_high->seed = pixel_id;
 
     /* ray direction in high poly object space */
     float dir_high[3];
@@ -434,6 +436,7 @@ static bool cast_ray_highpoly(BVHTreeFromMesh *treeData,
   else {
     pixel_array[pixel_id].primitive_id = -1;
     pixel_array[pixel_id].object_id = -1;
+    pixel_array[pixel_id].seed = 0;
   }
 
   MEM_freeN(hits);
@@ -691,7 +694,7 @@ static void bake_differentials(BakeDataZSpan *bd,
 void RE_bake_pixels_populate(Mesh *me,
                              BakePixel pixel_array[],
                              const size_t num_pixels,
-                             const BakeImages *bake_images,
+                             const BakeTargets *targets,
                              const char *uv_layer)
 {
   const MLoopUV *mloopuv;
@@ -709,7 +712,7 @@ void RE_bake_pixels_populate(Mesh *me,
 
   BakeDataZSpan bd;
   bd.pixel_array = pixel_array;
-  bd.zspan = MEM_callocN(sizeof(ZSpan) * bake_images->size, "bake zspan");
+  bd.zspan = MEM_callocN(sizeof(ZSpan) * targets->num_images, "bake zspan");
 
   /* initialize all pixel arrays so we know which ones are 'blank' */
   for (int i = 0; i < num_pixels; i++) {
@@ -717,8 +720,8 @@ void RE_bake_pixels_populate(Mesh *me,
     pixel_array[i].object_id = 0;
   }
 
-  for (int i = 0; i < bake_images->size; i++) {
-    zbuf_alloc_span(&bd.zspan[i], bake_images->data[i].width, bake_images->data[i].height);
+  for (int i = 0; i < targets->num_images; i++) {
+    zbuf_alloc_span(&bd.zspan[i], targets->images[i].width, targets->images[i].height);
   }
 
   const int tottri = poly_to_tri_count(me->totpoly, me->totloop);
@@ -731,13 +734,13 @@ void RE_bake_pixels_populate(Mesh *me,
     const MPoly *mp = &me->mpoly[lt->poly];
     float vec[3][2];
     int mat_nr = mp->mat_nr;
-    int image_id = bake_images->lookup[mat_nr];
+    int image_id = targets->material_to_image[mat_nr];
 
     if (image_id < 0) {
       continue;
     }
 
-    bd.bk_image = &bake_images->data[image_id];
+    bd.bk_image = &targets->images[image_id];
     bd.primitive_id = i;
 
     for (int a = 0; a < 3; a++) {
@@ -755,7 +758,7 @@ void RE_bake_pixels_populate(Mesh *me,
     zspan_scanconvert(&bd.zspan[image_id], (void *)&bd, vec[0], vec[1], vec[2], store_bake_pixel);
   }
 
-  for (int i = 0; i < bake_images->size; i++) {
+  for (int i = 0; i < targets->num_images; i++) {
     zbuf_free_span(&bd.zspan[i]);
   }
 

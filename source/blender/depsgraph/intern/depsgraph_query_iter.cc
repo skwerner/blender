@@ -86,7 +86,7 @@ void verify_id_properties_freed(DEGObjectIterData *data)
   const Object *dupli_object = data->dupli_object_current->ob;
   Object *temp_dupli_object = &data->temp_dupli_object;
   if (temp_dupli_object->id.properties == nullptr) {
-    // No ID properties in temp datablock -- no leak is possible.
+    // No ID properties in temp data-block -- no leak is possible.
     return;
   }
   if (temp_dupli_object->id.properties == dupli_object->id.properties) {
@@ -190,6 +190,32 @@ bool deg_iterator_components_step(BLI_Iterator *iter)
       temp_object->runtime.select_id = data->geometry_component_owner->runtime.select_id;
       iter->current = temp_object;
       return true;
+    }
+  }
+
+  /* The volume component. */
+  if (data->geometry_component_id == 2) {
+    data->geometry_component_id++;
+
+    /* Don't use a temporary object for this component, when the owner is a volume object. */
+    if (data->geometry_component_owner->type == OB_VOLUME) {
+      iter->current = data->geometry_component_owner;
+      return true;
+    }
+
+    const VolumeComponent *component = geometry_set->get_component_for_read<VolumeComponent>();
+    if (component != nullptr) {
+      const Volume *volume = component->get_for_read();
+
+      if (volume != nullptr) {
+        Object *temp_object = &data->temp_geometry_component_object;
+        *temp_object = *data->geometry_component_owner;
+        temp_object->type = OB_VOLUME;
+        temp_object->data = (void *)volume;
+        temp_object->runtime.select_id = data->geometry_component_owner->runtime.select_id;
+        iter->current = temp_object;
+        return true;
+      }
     }
   }
 
@@ -409,7 +435,7 @@ static void DEG_iterator_ids_step(BLI_Iterator *iter, deg::IDNode *id_node, bool
   if (only_updated && !(id_cow->recalc & ID_RECALC_ALL)) {
     bNodeTree *ntree = ntreeFromID(id_cow);
 
-    /* Nodetree is considered part of the datablock. */
+    /* Node-tree is considered part of the data-block. */
     if (!(ntree && (ntree->id.recalc & ID_RECALC_ALL))) {
       iter->skip = true;
       return;

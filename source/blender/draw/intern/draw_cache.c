@@ -935,8 +935,15 @@ GPUVertBuf *DRW_cache_object_pos_vertbuf_get(Object *ob)
 
 int DRW_cache_object_material_count_get(struct Object *ob)
 {
+  short type = ob->type;
+
   Mesh *me = BKE_object_get_evaluated_mesh(ob);
-  short type = (me != NULL) ? OB_MESH : ob->type;
+  if (me != NULL && type != OB_POINTCLOUD) {
+    /* Some object types (e.g. curves) can have a Curve in ob->data, but will be rendered as mesh.
+     * For point clouds this never happens. Ideally this check would happen at another level and we
+     * would just have to care about ob->data here. */
+    type = OB_MESH;
+  }
 
   switch (type) {
     case OB_MESH:
@@ -1325,7 +1332,7 @@ GPUBatch *DRW_cache_field_vortex_get(void)
 #undef SPIRAL_RESOL
 }
 
-/* Screenaligned circle. */
+/* Screen-aligned circle. */
 GPUBatch *DRW_cache_field_curve_get(void)
 {
 #define CIRCLE_RESOL 32
@@ -1414,7 +1421,7 @@ GPUBatch *DRW_cache_field_cone_limit_get(void)
 #undef CIRCLE_RESOL
 }
 
-/* Screenaligned dashed circle */
+/* Screen-aligned dashed circle */
 GPUBatch *DRW_cache_field_sphere_limit_get(void)
 {
 #define CIRCLE_RESOL 32
@@ -3385,7 +3392,7 @@ GPUBatch *DRW_cache_particles_get_prim(int type)
 
         int v = 0;
         int flag = VCLASS_EMPTY_AXES;
-        /* Set minimum to 0.001f so we can easilly normalize to get the color. */
+        /* Set minimum to 0.001f so we can easily normalize to get the color. */
         GPU_vertbuf_vert_set(vbo, v++, &(Vert){{0.0f, 0.0001f, 0.0f}, flag});
         GPU_vertbuf_vert_set(vbo, v++, &(Vert){{0.0f, 2.0f, 0.0f}, flag});
         GPU_vertbuf_vert_set(vbo, v++, &(Vert){{0.0001f, 0.0f, 0.0f}, flag});
@@ -3590,7 +3597,7 @@ void drw_batch_cache_generate_requested(Object *ob)
         DRW_mesh_batch_cache_create_requested(
             DST.task_graph, ob, mesh_eval, scene, is_paint_mode, use_hide);
       }
-      DRW_curve_batch_cache_create_requested(ob);
+      DRW_curve_batch_cache_create_requested(ob, scene);
       break;
     /* TODO all cases */
     default:

@@ -77,7 +77,7 @@ const EnumPropertyItem rna_enum_id_type_items[] = {
     {ID_TXT, "TEXT", ICON_TEXT, "Text", ""},
     {ID_TE, "TEXTURE", ICON_TEXTURE_DATA, "Texture", ""},
     {ID_HA, "HAIR", ICON_HAIR_DATA, "Hair", ""},
-    {ID_PT, "POINTCLOUD", ICON_POINTCLOUD_DATA, "PointCloud", ""},
+    {ID_PT, "POINTCLOUD", ICON_POINTCLOUD_DATA, "Point Cloud", ""},
     {ID_VO, "VOLUME", ICON_VOLUME_DATA, "Volume", ""},
     {ID_WM, "WINDOWMANAGER", ICON_WINDOW, "Window Manager", ""},
     {ID_WO, "WORLD", ICON_WORLD_DATA, "World", ""},
@@ -528,6 +528,9 @@ static ID *rna_ID_copy(ID *id, Main *bmain)
   if (newid != NULL) {
     id_us_min(newid);
   }
+
+  WM_main_add_notifier(NC_ID | NA_ADDED, NULL);
+
   return newid;
 }
 
@@ -1113,7 +1116,7 @@ static void rna_def_ID_properties(BlenderRNA *brna)
 
   /* IDP_ID */
   prop = RNA_def_property(srna, "id", PROP_POINTER, PROP_NONE);
-  RNA_def_property_flag(prop, PROP_IDPROPERTY | PROP_NEVER_UNLINK);
+  RNA_def_property_flag(prop, PROP_IDPROPERTY | PROP_EDITABLE);
   RNA_def_property_struct_type(prop, "ID");
 
   /* ID property groups > level 0, since level 0 group is merged

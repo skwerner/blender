@@ -1359,7 +1359,7 @@ static int separate_exec(bContext *C, wmOperator *op)
     int error_generic;
   } status = {0};
 
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   uint bases_len = 0;
   Base **bases = BKE_view_layer_array_from_bases_in_edit_mode_unique_data(
@@ -1426,7 +1426,7 @@ static int separate_exec(bContext *C, wmOperator *op)
     status.changed++;
   }
   MEM_freeN(bases);
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   if (status.unselected == bases_len) {
     BKE_report(op->reports, RPT_ERROR, "No point was selected");
@@ -2419,7 +2419,7 @@ static void adduplicateflagNurb(
                 memcpy(newnu->bp, &nu->bp[a], newu * newv * sizeof(BPoint));
                 memcpy(&newnu->bp[newu * newv], nu->bp, newu * cyclicv * sizeof(BPoint));
 
-                /* check for actvert in cylicv selection */
+                /* check for actvert in cyclicv selection */
                 if (cu->actnu == i) {
                   calc_duplicate_actvert(
                       editnurb, newnurb, cu, cu->actvert, a, (newu * newv) + cu->actvert);
@@ -2474,7 +2474,7 @@ static void adduplicateflagNurb(
               memcpy(&newnu->bp[b * newu], &nu->bp[b * nu->pntsu], newu * sizeof(BPoint));
             }
 
-            /* check for actvert in the unused cyclicuv selection */
+            /* Check for `actvert` in the unused cyclic-UV selection. */
             if (cu->actnu == i) {
               if (cu->actvert == -1) {
                 calc_duplicate_actnurb(editnurb, newnurb, cu);
@@ -3111,7 +3111,7 @@ void CURVE_OT_smooth_weight(wmOperatorType *ot)
   ot->description = "Interpolate weight of selected points";
   ot->idname = "CURVE_OT_smooth_weight";
 
-  /* api clastbacks */
+  /* api callbacks */
   ot->exec = curve_smooth_weight_exec;
   ot->poll = ED_operator_editsurfcurve;
 
@@ -3154,7 +3154,7 @@ void CURVE_OT_smooth_radius(wmOperatorType *ot)
   ot->description = "Interpolate radii of selected points";
   ot->idname = "CURVE_OT_smooth_radius";
 
-  /* api clastbacks */
+  /* api callbacks */
   ot->exec = curve_smooth_radius_exec;
   ot->poll = ED_operator_editsurfcurve;
 
@@ -3197,7 +3197,7 @@ void CURVE_OT_smooth_tilt(wmOperatorType *ot)
   ot->description = "Interpolate tilt of selected points";
   ot->idname = "CURVE_OT_smooth_tilt";
 
-  /* api clastbacks */
+  /* api callbacks */
   ot->exec = curve_smooth_tilt_exec;
   ot->poll = ED_operator_editsurfcurve;
 
@@ -5698,7 +5698,7 @@ static int curve_extrude_exec(bContext *C, wmOperator *UNUSED(op))
     /* First test: curve? */
     if (obedit->type != OB_CURVE) {
       LISTBASE_FOREACH (Nurb *, nu, &editnurb->nurbs) {
-        if ((nu->pntsv == 1) && (ED_curve_nurb_select_count(v3d, nu) == 1)) {
+        if ((nu->pntsv == 1) && (ED_curve_nurb_select_count(v3d, nu) < nu->pntsu)) {
           as_curve = true;
           break;
         }
@@ -6102,7 +6102,7 @@ static bool curve_delete_segments(Object *obedit, View3D *v3d, const bool split)
       }
 
       if (!split && cut != -1 && nu->pntsu > 2 && !(nu->flagu & CU_NURB_CYCLIC)) {
-        /* start and points copied if connecting segment was deleted and not cylic spline */
+        /* start and points copied if connecting segment was deleted and not cyclic spline */
         bezt1 = nu->bezt;
         bezt2 = &nu->bezt[1];
 
@@ -6232,7 +6232,7 @@ static bool curve_delete_segments(Object *obedit, View3D *v3d, const bool split)
         }
 
         if (!split && cut != -1 && nu->pntsu > 2 && !(nu->flagu & CU_NURB_CYCLIC)) {
-          /* start and points copied if connecting segment was deleted and not cylic spline */
+          /* start and points copied if connecting segment was deleted and not cyclic spline */
           bp1 = nu->bp;
           bp2 = &nu->bp[1];
 
@@ -6352,7 +6352,7 @@ static bool curve_delete_segments(Object *obedit, View3D *v3d, const bool split)
         }
 
         if (!split && cut != -1 && nu->pntsv > 2 && !(nu->flagv & CU_NURB_CYCLIC)) {
-          /* start and points copied if connecting segment was deleted and not cylic spline */
+          /* start and points copied if connecting segment was deleted and not cyclic spline */
           bp1 = nu->bp;
           bp2 = &nu->bp[nu->pntsu];
 

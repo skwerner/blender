@@ -3671,7 +3671,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
           }
         }
         else {
-          if (!defaultfound && !(eprop->itemf && eprop->item == DummyRNA_NULL_items)) {
+          if (!defaultfound && !(eprop->item_fn && eprop->item == DummyRNA_NULL_items)) {
             CLOG_ERROR(&LOG,
                        "%s%s.%s, enum default is not in items.",
                        srna->identifier,
@@ -3992,7 +3992,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
               "\t%s, %s, %s, %s, %s, NULL, ",
               rna_function_string(eprop->get),
               rna_function_string(eprop->set),
-              rna_function_string(eprop->itemf),
+              rna_function_string(eprop->item_fn),
               rna_function_string(eprop->get_ex),
               rna_function_string(eprop->set_ex));
       if (eprop->item) {
@@ -4010,7 +4010,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
               "\t%s, %s, %s, %s,",
               rna_function_string(pprop->get),
               rna_function_string(pprop->set),
-              rna_function_string(pprop->typef),
+              rna_function_string(pprop->type_fn),
               rna_function_string(pprop->poll));
       if (pprop->type) {
         fprintf(f, "&RNA_%s\n", (const char *)pprop->type);
@@ -4436,7 +4436,7 @@ static void rna_generate(BlenderRNA *brna, FILE *f, const char *filename, const 
     }
   }
 
-  if (STREQ(filename, "rna_ID.c")) {
+  if (filename && STREQ(filename, "rna_ID.c")) {
     /* this is ugly, but we cannot have c files compiled for both
      * makesrna and blender with some build systems at the moment */
     fprintf(f, "#include \"rna_define.c\"\n\n");
@@ -4758,7 +4758,13 @@ static const char *cpp_classes =
     "class CollectionIterator {\n"
     "public:\n"
     "    CollectionIterator() : iter(), t(iter.ptr), init(false) { iter.valid = false; }\n"
+    "    CollectionIterator(const PointerRNA &ptr) : CollectionIterator() { this->begin(ptr); }\n"
     "    ~CollectionIterator(void) { if (init) Tend(&iter); };\n"
+    "\n"
+    "    CollectionIterator(const CollectionIterator &other) = delete;\n"
+    "    CollectionIterator(CollectionIterator &&other) = delete;\n"
+    "    CollectionIterator &operator=(const CollectionIterator &other) = delete;\n"
+    "    CollectionIterator &operator=(CollectionIterator &&other) = delete;\n"
     "\n"
     "    operator bool(void)\n"
     "    { return iter.valid != 0; }\n"
@@ -4777,9 +4783,6 @@ static const char *cpp_classes =
     "true; }\n"
     "\n"
     "private:\n"
-    "    const CollectionIterator<T, Tbegin, Tnext, Tend>& operator = "
-    "(const CollectionIterator<T, Tbegin, Tnext, Tend>& /*copy*/) {}\n"
-    ""
     "    CollectionPropertyIterator iter;\n"
     "    T t;\n"
     "    bool init;\n"
@@ -4794,6 +4797,8 @@ static const char *cpp_classes =
     "\n"
     "    void begin(CollectionIterator<T, Tbegin, Tnext, Tend>& iter)\n"
     "    { iter.begin(ptr); }\n"
+    "    CollectionIterator<T, Tbegin, Tnext, Tend> begin()\n"
+    "    { return CollectionIterator<T, Tbegin, Tnext, Tend>(ptr); }\n"
     "    CollectionIterator<T, Tbegin, Tnext, Tend> end()\n"
     "    { return CollectionIterator<T, Tbegin, Tnext, Tend>(); } /* test */ \n"
     ""

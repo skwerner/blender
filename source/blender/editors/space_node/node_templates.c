@@ -35,7 +35,6 @@
 #include "BKE_context.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
-#include "BKE_scene.h"
 
 #include "RNA_access.h"
 
@@ -331,6 +330,10 @@ static void ui_node_link_items(NodeLinkArg *arg,
     int i;
 
     for (ngroup = arg->bmain->nodetrees.first; ngroup; ngroup = ngroup->id.next) {
+      if ((ngroup->type != arg->ntree->type) || !nodeGroupPoll(arg->ntree, ngroup)) {
+        continue;
+      }
+
       ListBase *lb = ((in_out == SOCK_IN) ? &ngroup->inputs : &ngroup->outputs);
       totitems += BLI_listbase_count(lb);
     }
@@ -340,6 +343,10 @@ static void ui_node_link_items(NodeLinkArg *arg,
 
       i = 0;
       for (ngroup = arg->bmain->nodetrees.first; ngroup; ngroup = ngroup->id.next) {
+        if ((ngroup->type != arg->ntree->type) || !nodeGroupPoll(arg->ntree, ngroup)) {
+          continue;
+        }
+
         ListBase *lb = (in_out == SOCK_IN ? &ngroup->inputs : &ngroup->outputs);
         bNodeSocket *stemp;
         int index;
@@ -827,11 +834,22 @@ static void ui_node_draw_input(
         case SOCK_INT:
         case SOCK_BOOLEAN:
         case SOCK_RGBA:
-        case SOCK_STRING:
           uiItemR(sub, &inputptr, "default_value", 0, "", ICON_NONE);
           uiItemDecoratorR(
               split_wrapper.decorate_column, &inputptr, "default_value", RNA_NO_INDEX);
           break;
+        case SOCK_STRING: {
+          const bNodeTree *node_tree = (const bNodeTree *)nodeptr.owner_id;
+          if (node_tree->type == NTREE_GEOMETRY) {
+            node_geometry_add_attribute_search_button(node_tree, node, &inputptr, row);
+          }
+          else {
+            uiItemR(sub, &inputptr, "default_value", 0, "", ICON_NONE);
+          }
+          uiItemDecoratorR(
+              split_wrapper.decorate_column, &inputptr, "default_value", RNA_NO_INDEX);
+          break;
+        }
         default:
           add_dummy_decorator = true;
       }

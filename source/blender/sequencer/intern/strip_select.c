@@ -29,11 +29,12 @@
 
 #include "BKE_scene.h"
 
+#include "SEQ_select.h"
 #include "SEQ_sequencer.h"
 
-Sequence *BKE_sequencer_active_get(Scene *scene)
+Sequence *SEQ_select_active_get(Scene *scene)
 {
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
 
   if (ed == NULL) {
     return NULL;
@@ -42,9 +43,9 @@ Sequence *BKE_sequencer_active_get(Scene *scene)
   return ed->act_seq;
 }
 
-void BKE_sequencer_active_set(Scene *scene, Sequence *seq)
+void SEQ_select_active_set(Scene *scene, Sequence *seq)
 {
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
 
   if (ed == NULL) {
     return;
@@ -53,29 +54,29 @@ void BKE_sequencer_active_set(Scene *scene, Sequence *seq)
   ed->act_seq = seq;
 }
 
-int BKE_sequencer_active_get_pair(Scene *scene, Sequence **seq_act, Sequence **seq_other)
+int SEQ_select_active_get_pair(Scene *scene, Sequence **r_seq_act, Sequence **r_seq_other)
 {
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
 
-  *seq_act = BKE_sequencer_active_get(scene);
+  *r_seq_act = SEQ_select_active_get(scene);
 
-  if (*seq_act == NULL) {
+  if (*r_seq_act == NULL) {
     return 0;
   }
 
   Sequence *seq;
 
-  *seq_other = NULL;
+  *r_seq_other = NULL;
 
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
-    if (seq->flag & SELECT && (seq != (*seq_act))) {
-      if (*seq_other) {
+    if (seq->flag & SELECT && (seq != (*r_seq_act))) {
+      if (*r_seq_other) {
         return 0;
       }
 
-      *seq_other = seq;
+      *r_seq_other = seq;
     }
   }
 
-  return (*seq_other != NULL);
+  return (*r_seq_other != NULL);
 }

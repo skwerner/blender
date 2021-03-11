@@ -35,7 +35,7 @@
 
 #include "BKE_scene.h"
 
-#include "SEQ_sequencer.h"
+#include "SEQ_iterator.h"
 
 /* ************************* iterator ************************** */
 /* *************** (replaces old WHILE_SEQ) ********************* */
@@ -75,31 +75,31 @@ static void seq_build_array(ListBase *seqbase, Sequence ***array, int depth)
 }
 
 static void seq_array(Editing *ed,
-                      Sequence ***seqarray,
-                      int *tot,
-                      const bool use_current_sequences)
+                      const bool use_current_sequences,
+                      Sequence ***r_seqarray,
+                      int *r_seqarray_len)
 {
   Sequence **array;
 
-  *seqarray = NULL;
-  *tot = 0;
+  *r_seqarray = NULL;
+  *r_seqarray_len = 0;
 
   if (ed == NULL) {
     return;
   }
 
   if (use_current_sequences) {
-    seq_count(ed->seqbasep, tot);
+    seq_count(ed->seqbasep, r_seqarray_len);
   }
   else {
-    seq_count(&ed->seqbase, tot);
+    seq_count(&ed->seqbase, r_seqarray_len);
   }
 
-  if (*tot == 0) {
+  if (*r_seqarray_len == 0) {
     return;
   }
 
-  *seqarray = array = MEM_mallocN(sizeof(Sequence *) * (*tot), "SeqArray");
+  *r_seqarray = array = MEM_mallocN(sizeof(Sequence *) * (*r_seqarray_len), "SeqArray");
   if (use_current_sequences) {
     seq_build_array(ed->seqbasep, &array, 0);
   }
@@ -108,10 +108,10 @@ static void seq_array(Editing *ed,
   }
 }
 
-void BKE_sequence_iterator_begin(Editing *ed, SeqIterator *iter, const bool use_current_sequences)
+void SEQ_iterator_begin(Editing *ed, SeqIterator *iter, const bool use_current_sequences)
 {
   memset(iter, 0, sizeof(*iter));
-  seq_array(ed, &iter->array, &iter->tot, use_current_sequences);
+  seq_array(ed, use_current_sequences, &iter->array, &iter->tot);
 
   if (iter->tot) {
     iter->cur = 0;
@@ -120,7 +120,7 @@ void BKE_sequence_iterator_begin(Editing *ed, SeqIterator *iter, const bool use_
   }
 }
 
-void BKE_sequence_iterator_next(SeqIterator *iter)
+void SEQ_iterator_next(SeqIterator *iter)
 {
   if (++iter->cur < iter->tot) {
     iter->seq = iter->array[iter->cur];
@@ -130,7 +130,7 @@ void BKE_sequence_iterator_next(SeqIterator *iter)
   }
 }
 
-void BKE_sequence_iterator_end(SeqIterator *iter)
+void SEQ_iterator_end(SeqIterator *iter)
 {
   if (iter->array) {
     MEM_freeN(iter->array);
@@ -139,20 +139,20 @@ void BKE_sequence_iterator_end(SeqIterator *iter)
   iter->valid = 0;
 }
 
-int BKE_sequencer_base_recursive_apply(ListBase *seqbase,
-                                       int (*apply_fn)(Sequence *seq, void *),
-                                       void *arg)
+int SEQ_iterator_seqbase_recursive_apply(ListBase *seqbase,
+                                         int (*apply_fn)(Sequence *seq, void *),
+                                         void *arg)
 {
   Sequence *iseq;
   for (iseq = seqbase->first; iseq; iseq = iseq->next) {
-    if (BKE_sequencer_recursive_apply(iseq, apply_fn, arg) == -1) {
+    if (SEQ_iterator_recursive_apply(iseq, apply_fn, arg) == -1) {
       return -1; /* bail out */
     }
   }
   return 1;
 }
 
-int BKE_sequencer_recursive_apply(Sequence *seq, int (*apply_fn)(Sequence *, void *), void *arg)
+int SEQ_iterator_recursive_apply(Sequence *seq, int (*apply_fn)(Sequence *, void *), void *arg)
 {
   int ret = apply_fn(seq, arg);
 
@@ -161,7 +161,7 @@ int BKE_sequencer_recursive_apply(Sequence *seq, int (*apply_fn)(Sequence *, voi
   }
 
   if (ret && seq->seqbase.first) {
-    ret = BKE_sequencer_base_recursive_apply(&seq->seqbase, apply_fn, arg);
+    ret = SEQ_iterator_seqbase_recursive_apply(&seq->seqbase, apply_fn, arg);
   }
 
   return ret;

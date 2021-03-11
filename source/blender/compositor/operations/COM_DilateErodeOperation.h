@@ -41,7 +41,7 @@ class DilateErodeThresholdOperation : public NodeOperation {
   DilateErodeThresholdOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -88,7 +88,7 @@ class DilateDistanceOperation : public NodeOperation {
   DilateDistanceOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -115,15 +115,15 @@ class DilateDistanceOperation : public NodeOperation {
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp);
 };
 class ErodeDistanceOperation : public DilateDistanceOperation {
  public:
   ErodeDistanceOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -131,8 +131,8 @@ class ErodeDistanceOperation : public DilateDistanceOperation {
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp);
 };
 
 class DilateStepOperation : public NodeOperation {
@@ -148,7 +148,7 @@ class DilateStepOperation : public NodeOperation {
   DilateStepOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 

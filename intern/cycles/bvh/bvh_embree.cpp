@@ -31,8 +31,6 @@
 #ifdef WITH_EMBREE
 
 #  include <embree3/rtcore_geometry.h>
-#  include <pmmintrin.h>
-#  include <xmmintrin.h>
 
 #  include "bvh/bvh_embree.h"
 
@@ -306,8 +304,7 @@ BVHEmbree::BVHEmbree(const BVHParams &params_,
       rtc_device(NULL),
       build_quality(RTC_BUILD_QUALITY_REFIT)
 {
-  _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-  _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+  SIMD_SET_FLUSH_TO_ZERO;
 }
 
 BVHEmbree::~BVHEmbree()
@@ -682,6 +679,7 @@ void BVHEmbree::refit(Progress &progress)
         if (mesh->num_triangles() > 0) {
           RTCGeometry geom = rtcGetGeometry(scene, geom_id);
           set_tri_vertex_buffer(geom, mesh, true);
+          rtcSetGeometryUserData(geom, (void *)mesh->optix_prim_offset);
           rtcCommitGeometry(geom);
         }
       }
@@ -690,6 +688,7 @@ void BVHEmbree::refit(Progress &progress)
         if (hair->num_curves() > 0) {
           RTCGeometry geom = rtcGetGeometry(scene, geom_id + 1);
           set_curve_vertex_buffer(geom, hair, true);
+          rtcSetGeometryUserData(geom, (void *)hair->optix_prim_offset);
           rtcCommitGeometry(geom);
         }
       }

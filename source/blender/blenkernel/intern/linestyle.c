@@ -760,6 +760,7 @@ IDTypeInfo IDType_ID_LS = {
     .make_local = NULL,
     .foreach_id = linestyle_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = linestyle_blend_write,
     .blend_read_data = linestyle_blend_read_data,
@@ -767,6 +768,8 @@ IDTypeInfo IDType_ID_LS = {
     .blend_read_expand = linestyle_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 static const char *modifier_name[LS_MODIFIER_NUM] = {

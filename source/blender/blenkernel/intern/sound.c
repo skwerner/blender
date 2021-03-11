@@ -68,6 +68,7 @@
 #include "BLO_read_write.h"
 
 #include "SEQ_sequencer.h"
+#include "SEQ_sound.h"
 
 static void sound_free_audio(bSound *sound);
 
@@ -213,6 +214,7 @@ IDTypeInfo IDType_ID_SO = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = sound_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = sound_blend_write,
     .blend_read_data = sound_blend_read_data,
@@ -220,6 +222,8 @@ IDTypeInfo IDType_ID_SO = {
     .blend_read_expand = sound_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 #ifdef WITH_AUDASPACE
@@ -683,7 +687,7 @@ void BKE_sound_update_fps(Main *bmain, Scene *scene)
     AUD_Sequence_setFPS(scene->sound_scene, FPS);
   }
 
-  BKE_sequencer_refresh_sound_length(bmain, scene);
+  SEQ_sound_update_length(bmain, scene);
 }
 
 void BKE_sound_update_scene_listener(Scene *scene)
@@ -825,7 +829,7 @@ void BKE_sound_update_sequencer(Main *main, bSound *sound)
   Scene *scene;
 
   for (scene = main->scenes.first; scene; scene = scene->id.next) {
-    BKE_sequencer_update_sound(scene, sound);
+    SEQ_sound_update(scene, sound);
   }
 }
 

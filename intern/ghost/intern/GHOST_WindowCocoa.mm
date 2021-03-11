@@ -336,11 +336,6 @@ GHOST_WindowCocoa::GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
                                               backing:NSBackingStoreBuffered
                                                 defer:NO];
 
-  if (m_window == nil) {
-    [pool drain];
-    return;
-  }
-
   [m_window setSystemAndWindowCocoa:systemCocoa windowCocoa:this];
 
   // Forbid to resize the window below the blender defined minimum one
@@ -905,8 +900,8 @@ GHOST_TSuccess GHOST_WindowCocoa::setProgressBar(float progress)
 static void postNotification()
 {
   NSUserNotification *notification = [[NSUserNotification alloc] init];
-  notification.title = @"Blender progress notification";
-  notification.informativeText = @"Calculation is finished";
+  notification.title = @"Blender Progress Notification";
+  notification.informativeText = @"Calculation is finished.";
   notification.soundName = NSUserNotificationDefaultSoundName;
   [[NSUserNotificationCenter defaultUserNotificationCenter] deliverNotification:notification];
   [notification release];

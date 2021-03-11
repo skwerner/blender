@@ -230,7 +230,7 @@ static uiBlock *menu_add_shortcut(bContext *C, ARegion *region, void *arg)
    * than being found on adding later... */
   wmKeyMap *km = WM_keymap_guess_opname(C, idname);
   wmKeyMapItem *kmi = WM_keymap_add_item(km, idname, EVT_AKEY, KM_PRESS, 0, 0);
-  int kmi_id = kmi->id;
+  const int kmi_id = kmi->id;
 
   /* This takes ownership of prop, or prop can be NULL for reset. */
   WM_keymap_item_properties_reset(kmi, prop);
@@ -280,7 +280,7 @@ static void menu_add_shortcut_cancel(struct bContext *C, void *arg1)
 
 #ifdef USE_KEYMAP_ADD_HACK
   wmKeyMap *km = WM_keymap_guess_opname(C, idname);
-  int kmi_id = g_kmi_id_hack;
+  const int kmi_id = g_kmi_id_hack;
   UNUSED_VARS(but);
 #else
   int kmi_id = WM_key_event_operator_id(C, idname, but->opcontext, prop, true, &km);
@@ -509,7 +509,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     uiStringInfo label = {BUT_GET_LABEL, NULL};
 
     /* highly unlikely getting the label ever fails */
-    UI_but_string_info_get(C, but, NULL, &label, NULL);
+    UI_but_string_info_get(C, but, &label, NULL);
 
     pup = UI_popup_menu_begin(C, label.strinfo ? label.strinfo : "", ICON_NONE);
     layout = UI_popup_menu_layout(pup);
@@ -567,7 +567,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 
     /* Keyframes */
     if (but->flag & UI_BUT_ANIMATED_KEY) {
-      /* replace/delete keyfraemes */
+      /* Replace/delete keyframes. */
       if (is_array_component) {
         uiItemBooleanO(layout,
                        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Replace Keyframes"),
@@ -784,7 +784,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
       /* Override Operators */
       uiItemS(layout);
 
-      if (but->flag & UI_BUT_OVERRIDEN) {
+      if (but->flag & UI_BUT_OVERRIDDEN) {
         if (is_array_component) {
 #if 0 /* Disabled for now. */
           ot = WM_operatortype_find("UI_OT_override_type_set_button", false);
@@ -936,6 +936,12 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Data Path"),
             ICON_NONE,
             "UI_OT_copy_data_path_button");
+    uiItemBooleanO(layout,
+                   CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Full Data Path"),
+                   ICON_NONE,
+                   "UI_OT_copy_data_path_button",
+                   "full_path",
+                   true);
 
     if (ptr->owner_id && !is_whole_array &&
         ELEM(type, PROP_BOOLEAN, PROP_INT, PROP_FLOAT, PROP_ENUM)) {
@@ -953,8 +959,8 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     }
   }
 
-  /* If the button reprents an id, it can set the "id" context pointer. */
-  if (ED_asset_can_make_single_from_context(C)) {
+  /* If the button represents an id, it can set the "id" context pointer. */
+  if (U.experimental.use_asset_browser && ED_asset_can_make_single_from_context(C)) {
     ID *id = CTX_data_pointer_get_type(C, "id", &RNA_ID).data;
 
     /* Gray out items depending on if data-block is an asset. Preferably this could be done via

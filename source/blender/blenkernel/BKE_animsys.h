@@ -212,8 +212,7 @@ struct NlaKeyframingContext *BKE_animsys_get_nla_keyframing_context(
     struct ListBase *cache,
     struct PointerRNA *ptr,
     struct AnimData *adt,
-    const struct AnimationEvalContext *anim_eval_context,
-    const bool flush_to_original);
+    const struct AnimationEvalContext *anim_eval_context);
 bool BKE_animsys_nla_remap_keyframe_values(struct NlaKeyframingContext *context,
                                            struct PointerRNA *prop_ptr,
                                            struct PropertyRNA *prop,
@@ -236,12 +235,12 @@ typedef enum eAnimData_Recalc {
   ADT_RECALC_ALL = (ADT_RECALC_DRIVERS | ADT_RECALC_ANIM),
 } eAnimData_Recalc;
 
-bool BKE_animsys_store_rna_setting(struct PointerRNA *ptr,
-                                   const char *rna_path,
-                                   const int array_index,
-                                   struct PathResolvedRNA *r_result);
-bool BKE_animsys_read_rna_setting(struct PathResolvedRNA *anim_rna, float *r_value);
-bool BKE_animsys_write_rna_setting(struct PathResolvedRNA *anim_rna, const float value);
+bool BKE_animsys_rna_path_resolve(struct PointerRNA *ptr,
+                                  const char *rna_path,
+                                  const int array_index,
+                                  struct PathResolvedRNA *r_result);
+bool BKE_animsys_read_from_rna_path(struct PathResolvedRNA *anim_rna, float *r_value);
+bool BKE_animsys_write_to_rna_path(struct PathResolvedRNA *anim_rna, const float value);
 
 /* Evaluation loop for evaluating animation data  */
 void BKE_animsys_evaluate_animdata(struct ID *id,

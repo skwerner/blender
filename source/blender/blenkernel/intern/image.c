@@ -93,7 +93,7 @@
 
 #include "RE_pipeline.h"
 
-#include "SEQ_sequencer.h" /* seq_foreground_frame_get() */
+#include "SEQ_utils.h" /* SEQ_get_topmost_sequence() */
 
 #include "GPU_texture.h"
 
@@ -331,6 +331,7 @@ IDTypeInfo IDType_ID_IM = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = image_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = image_blend_write,
     .blend_read_data = image_blend_read_data,
@@ -338,6 +339,8 @@ IDTypeInfo IDType_ID_IM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* prototypes */
@@ -2057,7 +2060,7 @@ static void stampdata(
   }
 
   if (use_dynamic && scene->r.stamp & R_STAMP_SEQSTRIP) {
-    const Sequence *seq = BKE_sequencer_foreground_frame_get(scene, scene->r.cfra);
+    const Sequence *seq = SEQ_get_topmost_sequence(scene, scene->r.cfra);
 
     if (seq) {
       STRNCPY(text, seq->name + 2);

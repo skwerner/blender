@@ -39,7 +39,7 @@ class BokehBlurOperation : public NodeOperation, public QualityStepHelper {
 
   void *initializeTileData(rcti *rect);
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -67,8 +67,8 @@ class BokehBlurOperation : public NodeOperation, public QualityStepHelper {
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp);
 
   void setExtendBounds(bool extend_bounds)
   {

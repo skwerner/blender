@@ -889,15 +889,15 @@ void UI_icons_reload_internal_textures(void)
       icongltex.invh = 1.0f / b32buf->y;
 
       icongltex.tex[0] = GPU_texture_create_2d("icons", b32buf->x, b32buf->y, 2, GPU_RGBA8, NULL);
-      GPU_texture_update_mipmap(icongltex.tex[0], 0, GPU_DATA_UNSIGNED_BYTE, b32buf->rect);
-      GPU_texture_update_mipmap(icongltex.tex[0], 1, GPU_DATA_UNSIGNED_BYTE, b16buf->rect);
+      GPU_texture_update_mipmap(icongltex.tex[0], 0, GPU_DATA_UBYTE, b32buf->rect);
+      GPU_texture_update_mipmap(icongltex.tex[0], 1, GPU_DATA_UBYTE, b16buf->rect);
     }
 
     if (need_icons_with_border && icongltex.tex[1] == NULL) {
       icongltex.tex[1] = GPU_texture_create_2d(
           "icons_border", b32buf_border->x, b32buf_border->y, 2, GPU_RGBA8, NULL);
-      GPU_texture_update_mipmap(icongltex.tex[1], 0, GPU_DATA_UNSIGNED_BYTE, b32buf_border->rect);
-      GPU_texture_update_mipmap(icongltex.tex[1], 1, GPU_DATA_UNSIGNED_BYTE, b16buf_border->rect);
+      GPU_texture_update_mipmap(icongltex.tex[1], 0, GPU_DATA_UBYTE, b32buf_border->rect);
+      GPU_texture_update_mipmap(icongltex.tex[1], 1, GPU_DATA_UBYTE, b16buf_border->rect);
     }
   }
 
@@ -1010,7 +1010,7 @@ static void init_iconfile_list(struct ListBase *list)
   }
 
   struct direntry *dir;
-  int totfile = BLI_filelist_dir_contents(icondir, &dir);
+  const int totfile = BLI_filelist_dir_contents(icondir, &dir);
 
   int index = 1;
   for (int i = 0; i < totfile; i++) {
@@ -1426,8 +1426,13 @@ static void icon_set_image(const bContext *C,
       scene = CTX_data_scene(C);
     }
     /* Immediate version */
-    ED_preview_icon_render(
-        CTX_data_main(C), scene, id, prv_img->rect[size], prv_img->w[size], prv_img->h[size]);
+    ED_preview_icon_render(CTX_data_main(C),
+                           CTX_data_ensure_evaluated_depsgraph(C),
+                           scene,
+                           id,
+                           prv_img->rect[size],
+                           prv_img->w[size],
+                           prv_img->h[size]);
   }
 }
 
@@ -1716,10 +1721,10 @@ static void icon_draw_texture(float x,
 
   GPU_blend(GPU_BLEND_ALPHA_PREMULT);
 
-  float x1 = ix * icongltex.invw;
-  float x2 = (ix + ih) * icongltex.invw;
-  float y1 = iy * icongltex.invh;
-  float y2 = (iy + ih) * icongltex.invh;
+  const float x1 = ix * icongltex.invw;
+  const float x2 = (ix + ih) * icongltex.invw;
+  const float y1 = iy * icongltex.invh;
+  const float y2 = (iy + ih) * icongltex.invh;
 
   GPUTexture *texture = with_border ? icongltex.tex[1] : icongltex.tex[0];
 
@@ -1955,7 +1960,8 @@ static void ui_id_preview_image_render_size(
 /**
  * Note that if an ID doesn't support jobs for preview creation, \a use_job will be ignored.
  */
-void UI_icon_render_id(const bContext *C, Scene *scene, ID *id, const bool big, const bool use_job)
+void UI_icon_render_id(
+    const bContext *C, Scene *scene, ID *id, const enum eIconSizes size, const bool use_job)
 {
   PreviewImage *pi = BKE_previewimg_id_ensure(id);
 
@@ -1963,14 +1969,7 @@ void UI_icon_render_id(const bContext *C, Scene *scene, ID *id, const bool big, 
     return;
   }
 
-  if (big) {
-    /* bigger preview size */
-    ui_id_preview_image_render_size(C, scene, id, pi, ICON_SIZE_PREVIEW, use_job);
-  }
-  else {
-    /* icon size */
-    ui_id_preview_image_render_size(C, scene, id, pi, ICON_SIZE_ICON, use_job);
-  }
+  ui_id_preview_image_render_size(C, scene, id, pi, size, use_job);
 }
 
 static void ui_id_icon_render(const bContext *C, ID *id, bool use_jobs)
@@ -2170,7 +2169,7 @@ int ui_id_icon_get(const bContext *C, ID *id, const bool big)
     case ID_LA: /* fall through */
       iconid = BKE_icon_id_ensure(id);
       /* checks if not exists, or changed */
-      UI_icon_render_id(C, NULL, id, big, true);
+      UI_icon_render_id(C, NULL, id, big ? ICON_SIZE_PREVIEW : ICON_SIZE_ICON, true);
       break;
     case ID_SCR:
       iconid = ui_id_screen_get_icon(C, id);
@@ -2200,7 +2199,7 @@ int UI_icon_from_library(const ID *id)
     return ICON_LIBRARY_DATA_OVERRIDE;
   }
   if (ID_IS_ASSET(id)) {
-    return ICON_MAT_SPHERE_SKY;
+    return ICON_ASSET_MANAGER;
   }
 
   return ICON_NONE;

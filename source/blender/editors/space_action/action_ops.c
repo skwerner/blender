@@ -27,9 +27,6 @@
 #include "DNA_space_types.h"
 
 #include "ED_anim_api.h"
-#include "ED_markers.h"
-#include "ED_object.h"
-#include "ED_select_utils.h"
 #include "ED_transform.h"
 
 #include "action_intern.h"
@@ -73,9 +70,7 @@ void action_operatortypes(void)
   WM_operatortype_append(ACTION_OT_copy);
   WM_operatortype_append(ACTION_OT_paste);
 
-  /* UI-context based operators. */
   WM_operatortype_append(ACTION_OT_new);
-  WM_operatortype_append(ACTION_OT_duplicate_assign);
   WM_operatortype_append(ACTION_OT_unlink);
 
   WM_operatortype_append(ACTION_OT_push_down);

@@ -200,7 +200,7 @@ void BKE_id_free(struct Main *bmain, void *idv);
 void BKE_id_free_us(struct Main *bmain, void *idv) ATTR_NONNULL();
 
 void BKE_id_delete(struct Main *bmain, void *idv) ATTR_NONNULL();
-void BKE_id_multi_tagged_delete(struct Main *bmain) ATTR_NONNULL();
+size_t BKE_id_multi_tagged_delete(struct Main *bmain) ATTR_NONNULL();
 
 void BKE_libblock_management_main_add(struct Main *bmain, void *idv);
 void BKE_libblock_management_main_remove(struct Main *bmain, void *idv);
@@ -219,7 +219,7 @@ void id_fake_user_set(struct ID *id);
 void id_fake_user_clear(struct ID *id);
 void BKE_id_clear_newpoin(struct ID *id);
 
-/** Flags to control make local code behaviour. */
+/** Flags to control make local code behavior. */
 enum {
   /** Making that ID local is part of making local a whole library. */
   LIB_ID_MAKELOCAL_FULL_LIBRARY = 1 << 0,

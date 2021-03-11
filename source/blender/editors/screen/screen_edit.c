@@ -871,6 +871,11 @@ static void screen_global_area_refresh(wmWindow *win,
                                        const short height_min,
                                        const short height_max)
 {
+  /* Full-screens shouldn't have global areas. Don't touch them. */
+  if (screen->state == SCREENFULL) {
+    return;
+  }
+
   ScrArea *area = NULL;
   LISTBASE_FOREACH (ScrArea *, area_iter, &win->global_areas.areabase) {
     if (area_iter->spacetype == space_type) {
@@ -1019,7 +1024,7 @@ void screen_change_update(bContext *C, wmWindow *win, bScreen *screen)
   WM_event_add_notifier(C, NC_WINDOW, NULL);
   WM_event_add_notifier(C, NC_SCREEN | ND_LAYOUTSET, layout);
 
-  /* makes button hilites work */
+  /* Makes button highlights work. */
   WM_event_add_mousemove(win);
 }
 
@@ -1216,7 +1221,7 @@ void ED_screen_full_restore(bContext *C, ScrArea *area)
 }
 
 /**
- * \param toggle_area: If this is set, its space data will be swapped with the one of the new emtpy
+ * \param toggle_area: If this is set, its space data will be swapped with the one of the new empty
  *                     area, when toggling back it can be swapped back again.
  * \return The newly created screen with the non-normal area.
  */
@@ -1436,7 +1441,16 @@ ScrArea *ED_screen_temp_space_open(bContext *C,
 
   switch (display_type) {
     case USER_TEMP_SPACE_DISPLAY_WINDOW:
-      if (WM_window_open_temp(C, title, x, y, sizex, sizey, (int)space_type, dialog)) {
+      if (WM_window_open(C,
+                         title,
+                         x,
+                         y,
+                         sizex,
+                         sizey,
+                         (int)space_type,
+                         dialog,
+                         true,
+                         WIN_ALIGN_LOCATION_CENTER)) {
         area = CTX_wm_area(C);
       }
       break;
@@ -1551,7 +1565,7 @@ void ED_screen_animation_timer(bContext *C, int redraws, int sync, int enable)
   /* Seek audio to ensure playback in preview range with AV sync. */
   DEG_id_tag_update(&scene->id, ID_RECALC_AUDIO_SEEK);
 
-  /* notifier catched by top header, for button */
+  /* Notifier caught by top header, for button. */
   WM_event_add_notifier(C, NC_SCREEN | ND_ANIMPLAY, NULL);
 }
 

@@ -93,6 +93,8 @@ void filelist_setdir(struct FileList *filelist, char *r_dir);
 int filelist_files_ensure(struct FileList *filelist);
 int filelist_needs_reading(struct FileList *filelist);
 FileDirEntry *filelist_file(struct FileList *filelist, int index);
+FileDirEntry *filelist_file_ex(struct FileList *filelist, int index, bool use_request);
+
 int filelist_file_findpath(struct FileList *filelist, const char *file);
 struct ID *filelist_file_get_id(const struct FileDirEntry *file);
 FileDirEntry *filelist_entry_find_uuid(struct FileList *filelist, const int uuid[4]);
@@ -126,6 +128,7 @@ unsigned int filelist_entry_select_get(struct FileList *filelist,
 unsigned int filelist_entry_select_index_get(struct FileList *filelist,
                                              const int index,
                                              FileCheckType check);
+bool filelist_entry_is_selected(struct FileList *filelist, const int index);
 void filelist_entry_parent_select_set(struct FileList *filelist,
                                       FileSelType select,
                                       unsigned int flag,

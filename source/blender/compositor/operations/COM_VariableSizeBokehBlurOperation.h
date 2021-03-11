@@ -39,7 +39,7 @@ class VariableSizeBokehBlurOperation : public NodeOperation, public QualityStepH
   VariableSizeBokehBlurOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -80,8 +80,8 @@ class VariableSizeBokehBlurOperation : public NodeOperation, public QualityStepH
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp);
 };
 
 #ifdef COM_DEFOCUS_SEARCH
@@ -96,7 +96,7 @@ class InverseSearchRadiusOperation : public NodeOperation {
   InverseSearchRadiusOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
   void executePixelChunk(float output[4], int x, int y, void *data);
 

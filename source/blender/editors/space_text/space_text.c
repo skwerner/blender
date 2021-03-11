@@ -33,7 +33,6 @@
 #include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_screen.h"
-#include "BKE_text.h"
 
 #include "ED_screen.h"
 #include "ED_space_api.h"
@@ -47,7 +46,6 @@
 
 #include "RNA_access.h"
 
-#include "GPU_framebuffer.h"
 #include "text_format.h"
 #include "text_intern.h" /* own include */
 
@@ -122,11 +120,10 @@ static SpaceLink *text_duplicate(SpaceLink *sl)
   return (SpaceLink *)stextn;
 }
 
-static void text_listener(wmWindow *UNUSED(win),
-                          ScrArea *area,
-                          wmNotifier *wmn,
-                          Scene *UNUSED(scene))
+static void text_listener(const wmSpaceTypeListenerParams *params)
 {
+  ScrArea *area = params->area;
+  wmNotifier *wmn = params->notifier;
   SpaceText *st = area->spacedata.first;
 
   /* context changes */
@@ -370,8 +367,8 @@ static void text_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Text", SPACE_TEXT, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "TEXT_OT_open", text_drop_poll, text_drop_copy);
-  WM_dropbox_add(lb, "TEXT_OT_insert", text_drop_paste_poll, text_drop_paste);
+  WM_dropbox_add(lb, "TEXT_OT_open", text_drop_poll, text_drop_copy, NULL);
+  WM_dropbox_add(lb, "TEXT_OT_insert", text_drop_paste_poll, text_drop_paste, NULL);
 }
 
 /* ************* end drop *********** */

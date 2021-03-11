@@ -128,7 +128,7 @@ void blend_mode_output(
        * rtn = 1 - 2 (1 - dst * (1 - src) - src);
        * rtn = 1 - 2 + dst * (2 - 2 * src) + 2 * src;
        * rtn = (- 1 + 2 * src) + dst * (2 - 2 * src);
-       **/
+       */
       color = mix(vec4(0.5), color, color.a * opacity);
       vec4 s = step(-0.5, -color);
       frag_revealage = frag_color = 2.0 * s + 2.0 * color * (1.0 - s * 2.0);
@@ -156,6 +156,7 @@ IN_OUT ShaderStageInterface
   vec3 finalPos;
   vec2 finalUvs;
   noperspective float strokeThickness;
+  noperspective float unclampedThickness;
   noperspective float strokeHardeness;
   flat vec2 strokeAspect;
   flat vec2 strokePt1;
@@ -324,7 +325,7 @@ vec2 safe_normalize_len(vec2 v, out float len)
   }
 }
 
-float stroke_thickness_modulate(float thickness, out float opacity)
+float stroke_thickness_modulate(float thickness)
 {
   /* Modify stroke thickness by object and layer factors.-*/
   thickness *= thicknessScale;
@@ -340,9 +341,14 @@ float stroke_thickness_modulate(float thickness, out float opacity)
     /* World space point size. */
     thickness *= thicknessWorldScale * ProjectionMatrix[1][1] * sizeViewport.y;
   }
-  /* To avoid aliasing artifact, we clamp the line thickness and reduce its opacity. */
+  return thickness;
+}
+
+float clamp_small_stroke_thickness(float thickness)
+{
+  /* To avoid aliasing artifacts, we clamp the line thickness and
+   * reduce its opacity in the fragment shader.*/
   float min_thickness = gl_Position.w * 1.3;
-  opacity = smoothstep(0.0, gl_Position.w * 1.0, thickness);
   thickness = max(min_thickness, thickness);
 
   return thickness;
@@ -363,7 +369,7 @@ void color_output(vec4 stroke_col, vec4 vert_col, float vert_strength, float mix
    * finalColorAdd is how much of the mixed color to add.
    * Note that we never add alpha. This is to keep the texture act as a stencil.
    * We do however, modulate the alpha (reduce it).
-   **/
+   */
   /* We add the mixed color. This is 100% mix (no texture visible). */
   finalColorMul = vec4(mixed_col.aaa, mixed_col.a);
   finalColorAdd = vec4(mixed_col.rgb * mixed_col.a, 0.0);
@@ -393,7 +399,7 @@ void stroke_vertex()
     is_squares = false;
   }
 
-  /* Enpoints, we discard the vertices. */
+  /* Endpoints, we discard the vertices. */
   if (ma1.x == -1 || (!is_dot && ma2.x == -1)) {
     discard_vert();
     return;
@@ -426,9 +432,9 @@ void stroke_vertex()
   vec2 line = safe_normalize_len(ss2 - ss1, line_len);
   vec2 line_adj = safe_normalize((use_curr) ? (ss1 - ss_adj) : (ss_adj - ss2));
 
-  float small_line_opacity;
   float thickness = abs((use_curr) ? thickness1 : thickness2);
-  thickness = stroke_thickness_modulate(thickness, small_line_opacity);
+  thickness = stroke_thickness_modulate(thickness);
+  float clampedThickness = clamp_small_stroke_thickness(thickness);
 
   finalUvs = vec2(x, y) * 0.5 + 0.5;
   strokeHardeness = decode_hardness(use_curr ? hardness1 : hardness2);
@@ -479,11 +485,12 @@ void stroke_vertex()
     /* Invert for vertex shader. */
     strokeAspect = 1.0 / strokeAspect;
 
-    gl_Position.xy += (x * x_axis + y * y_axis) * sizeViewportInv.xy * thickness;
+    gl_Position.xy += (x * x_axis + y * y_axis) * sizeViewportInv.xy * clampedThickness;
 
     strokePt1 = ss1;
     strokePt2 = ss1 + x_axis * 0.5;
-    strokeThickness = (is_squares) ? 1e18 : (thickness / gl_Position.w);
+    strokeThickness = (is_squares) ? 1e18 : (clampedThickness / gl_Position.w);
+    unclampedThickness = (is_squares) ? 1e18 : (thickness / gl_Position.w);
   }
   else {
     bool is_stroke_start = (ma.x == -1 && x == -1);
@@ -501,7 +508,8 @@ void stroke_vertex()
 
     strokePt1.xy = ss1;
     strokePt2.xy = ss2;
-    strokeThickness = thickness / gl_Position.w;
+    strokeThickness = clampedThickness / gl_Position.w;
+    unclampedThickness = thickness / gl_Position.w;
     strokeAspect = vec2(1.0);
 
     vec2 screen_ofs = miter * y;
@@ -512,7 +520,7 @@ void stroke_vertex()
       screen_ofs += line * x;
     }
 
-    gl_Position.xy += screen_ofs * sizeViewportInv.xy * thickness;
+    gl_Position.xy += screen_ofs * sizeViewportInv.xy * clampedThickness;
 
     finalUvs.x = (use_curr) ? uv1.z : uv2.z;
 #  ifdef GP_MATERIAL_BUFFER_LEN
@@ -531,7 +539,7 @@ void stroke_vertex()
     vert_col = vec4(0.0);
   }
 
-  color_output(stroke_col, vert_col, vert_strength * small_line_opacity, mix_tex);
+  color_output(stroke_col, vert_col, vert_strength, mix_tex);
 
   matFlag = GP_FLAG(m) & ~GP_FILL_FLAGS;
 #  endif
@@ -607,6 +615,7 @@ void fill_vertex()
 
   strokeHardeness = 1.0;
   strokeThickness = 1e18;
+  unclampedThickness = 1e20;
   strokeAspect = vec2(1.0);
   strokePt1 = strokePt2 = vec2(0.0);
 

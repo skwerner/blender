@@ -14,6 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+/* Use a define instead of `#pragma once` because of `rna_internal.h` */
 #ifndef __RNA_ACCESS_H__
 #define __RNA_ACCESS_H__
 
@@ -90,6 +91,7 @@ extern StructRNA RNA_BoidSettings;
 extern StructRNA RNA_BoidState;
 extern StructRNA RNA_Bone;
 extern StructRNA RNA_BoneGroup;
+extern StructRNA RNA_BoolAttribute;
 extern StructRNA RNA_BoolProperty;
 extern StructRNA RNA_BooleanModifier;
 extern StructRNA RNA_Brush;
@@ -149,6 +151,7 @@ extern StructRNA RNA_CompositorNodeDilateErode;
 extern StructRNA RNA_CompositorNodeDisplace;
 extern StructRNA RNA_CompositorNodeDistanceMatte;
 extern StructRNA RNA_CompositorNodeDoubleEdgeMask;
+extern StructRNA RNA_CompositorNodeExposure;
 extern StructRNA RNA_CompositorNodeFilter;
 extern StructRNA RNA_CompositorNodeFlip;
 extern StructRNA RNA_CompositorNodeGamma;
@@ -262,6 +265,7 @@ extern StructRNA RNA_FloatAttributeValue;
 extern StructRNA RNA_FloatColorAttribute;
 extern StructRNA RNA_FloatColorAttributeValue;
 extern StructRNA RNA_FloatProperty;
+extern StructRNA RNA_Float2Attribute;
 extern StructRNA RNA_FloorConstraint;
 extern StructRNA RNA_FluidDomainSettings;
 extern StructRNA RNA_FluidEffectorSettings;
@@ -572,7 +576,6 @@ extern StructRNA RNA_SimpleDeformModifier;
 extern StructRNA RNA_SimplifyGpencilModifier;
 extern StructRNA RNA_Simulation;
 extern StructRNA RNA_NodesModifier;
-extern StructRNA RNA_NodesModifierSettings;
 extern StructRNA RNA_GeometryNode;
 extern StructRNA RNA_GeometryNodeTree;
 extern StructRNA RNA_SkinModifier;
@@ -598,6 +601,7 @@ extern StructRNA RNA_SpaceOutliner;
 extern StructRNA RNA_SpacePreferences;
 extern StructRNA RNA_SpaceProperties;
 extern StructRNA RNA_SpaceSequenceEditor;
+extern StructRNA RNA_SpaceSpreadsheet;
 extern StructRNA RNA_SpaceTextEditor;
 extern StructRNA RNA_SpaceUVEditor;
 extern StructRNA RNA_SpaceView3D;

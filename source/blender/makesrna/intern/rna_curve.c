@@ -75,6 +75,10 @@ const EnumPropertyItem rna_enum_keyframe_handle_type_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
+/**
+ * \note this is a near exact duplicate of `gpencil_interpolation_type_items`,
+ * Changes here will likely apply there too.
+ */
 const EnumPropertyItem rna_enum_beztriple_interpolation_mode_items[] = {
     /* interpolation */
     {0, "", 0, N_("Interpolation"), "Standard transitions between keyframes"},
@@ -872,7 +876,7 @@ static void rna_def_bpoint(BlenderRNA *brna)
 
   /* Boolean values */
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f1", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f1", SELECT);
   RNA_def_property_ui_text(prop, "Select", "Selection status");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
@@ -1142,7 +1146,7 @@ static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
   RNA_def_property_float_sdna(prop, NULL, "fsize");
   RNA_def_property_range(prop, 0.0001f, 10000.0f);
   RNA_def_property_ui_range(prop, 0.01, 10, 1, 3);
-  RNA_def_property_ui_text(prop, "Font size", "");
+  RNA_def_property_ui_text(prop, "Font Size", "");
   RNA_def_property_update(prop, 0, "rna_Curve_update_data");
 
   prop = RNA_def_property(srna, "small_caps_scale", PROP_FLOAT, PROP_NONE);
@@ -1208,7 +1212,7 @@ static void rna_def_font(BlenderRNA *UNUSED(brna), StructRNA *srna)
 
   prop = RNA_def_property(srna, "active_textbox", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "actbox");
-  RNA_def_property_ui_text(prop, "The active text box", "");
+  RNA_def_property_ui_text(prop, "Active Text Box", "");
   RNA_def_property_int_funcs(prop, NULL, NULL, "rna_Curve_active_textbox_index_range");
 
   /* strings */

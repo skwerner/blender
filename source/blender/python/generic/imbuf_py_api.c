@@ -40,6 +40,8 @@
 #include <errno.h>
 #include <fcntl.h>
 
+static PyObject *BPyInit_imbuf_types(void);
+
 static PyObject *Py_ImBuf_CreatePyObject(ImBuf *ibuf);
 
 /* -------------------------------------------------------------------- */
@@ -93,7 +95,7 @@ static PyObject *py_imbuf_resize(Py_ImBuf *self, PyObject *args, PyObject *kw)
 {
   PY_IMBUF_CHECK_OBJ(self);
 
-  uint size[2];
+  int size[2];
 
   enum { FAST, BILINEAR };
   const struct PyC_StringEnumItems method_items[] = {
@@ -104,11 +106,16 @@ static PyObject *py_imbuf_resize(Py_ImBuf *self, PyObject *args, PyObject *kw)
   struct PyC_StringEnum method = {method_items, FAST};
 
   static const char *_keywords[] = {"size", "method", NULL};
-  static _PyArg_Parser _parser = {"(II)|O&:resize", _keywords, 0};
+  static _PyArg_Parser _parser = {"(ii)|O&:resize", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(
           args, kw, &_parser, &size[0], &size[1], PyC_ParseStringEnum, &method)) {
     return NULL;
   }
+  if (size[0] <= 0 || size[1] <= 0) {
+    PyErr_Format(PyExc_ValueError, "resize: Image size cannot be below 1 (%d, %d)", UNPACK2(size));
+    return NULL;
+  }
+
   if (method.value_found == FAST) {
     IMB_scalefastImBuf(self->ibuf, UNPACK2(size));
   }
@@ -262,7 +269,7 @@ static int py_imbuf_filepath_set(Py_ImBuf *self, PyObject *value, void *UNUSED(c
   ImBuf *ibuf = self->ibuf;
   const Py_ssize_t value_str_len_max = sizeof(ibuf->name);
   Py_ssize_t value_str_len;
-  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+  const char *value_str = PyUnicode_AsUTF8AndSize(value, &value_str_len);
   if (value_str_len >= value_str_len_max) {
     PyErr_Format(PyExc_TypeError, "filepath length over %zd", value_str_len_max - 1);
     return -1;
@@ -342,15 +349,11 @@ PyTypeObject Py_ImBuf_Type = {
     /* Methods to implement standard operations */
 
     (destructor)py_imbuf_dealloc, /* destructor tp_dealloc; */
-#if PY_VERSION_HEX >= 0x03080000
-    0, /* tp_vectorcall_offset */
-#else
-    (printfunc)NULL, /* printfunc tp_print */
-#endif
-    NULL,                    /* getattrfunc tp_getattr; */
-    NULL,                    /* setattrfunc tp_setattr; */
-    NULL,                    /* cmpfunc tp_compare; */
-    (reprfunc)py_imbuf_repr, /* reprfunc tp_repr; */
+    0,                            /* tp_vectorcall_offset */
+    NULL,                         /* getattrfunc tp_getattr; */
+    NULL,                         /* setattrfunc tp_setattr; */
+    NULL,                         /* cmpfunc tp_compare; */
+    (reprfunc)py_imbuf_repr,      /* reprfunc tp_repr; */
 
     /* Method suites for standard classes */
 
@@ -423,8 +426,12 @@ static PyObject *M_imbuf_new(PyObject *UNUSED(self), PyObject *args, PyObject *k
 {
   int size[2];
   static const char *_keywords[] = {"size", NULL};
-  static _PyArg_Parser _parser = {"(ii)|i:new", _keywords, 0};
+  static _PyArg_Parser _parser = {"(ii):new", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, &size[0], &size[1])) {
+    return NULL;
+  }
+  if (size[0] <= 0 || size[1] <= 0) {
+    PyErr_Format(PyExc_ValueError, "new: Image size cannot be below 1 (%d, %d)", UNPACK2(size));
     return NULL;
   }
 
@@ -517,7 +524,7 @@ static PyObject *M_imbuf_write(PyObject *UNUSED(self), PyObject *args, PyObject 
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Module Definition
+/** \name Module Definition (`imbuf`)
  * \{ */
 
 static PyMethodDef IMB_methods[] = {
@@ -542,11 +549,51 @@ static struct PyModuleDef IMB_module_def = {
 
 PyObject *BPyInit_imbuf(void)
 {
+  PyObject *mod;
   PyObject *submodule;
+  PyObject *sys_modules = PyImport_GetModuleDict();
 
-  submodule = PyModule_Create(&IMB_module_def);
+  mod = PyModule_Create(&IMB_module_def);
 
-  PyType_Ready(&Py_ImBuf_Type);
+  /* `imbuf.types` */
+  PyModule_AddObject(mod, "types", (submodule = BPyInit_imbuf_types()));
+  PyDict_SetItem(sys_modules, PyModule_GetNameObject(submodule), submodule);
+
+  return mod;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Module Definition (`imbuf.types`)
+ *
+ * `imbuf.types` module, only include this to expose access to `imbuf.types.ImBuf`
+ * for docs and the ability to use with built-ins such as `isinstance`, `issubclass`.
+ * \{ */
+
+PyDoc_STRVAR(IMB_types_doc, "This module provides access to image buffer types.");
+
+static struct PyModuleDef IMB_types_module_def = {
+    PyModuleDef_HEAD_INIT,
+    "imbuf.types", /* m_name */
+    IMB_types_doc, /* m_doc */
+    0,             /* m_size */
+    NULL,          /* m_methods */
+    NULL,          /* m_reload */
+    NULL,          /* m_traverse */
+    NULL,          /* m_clear */
+    NULL,          /* m_free */
+};
+
+PyObject *BPyInit_imbuf_types(void)
+{
+  PyObject *submodule = PyModule_Create(&IMB_types_module_def);
+
+  if (PyType_Ready(&Py_ImBuf_Type) < 0) {
+    return NULL;
+  }
+
+  PyModule_AddType(submodule, &Py_ImBuf_Type);
 
   return submodule;
 }

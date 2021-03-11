@@ -40,9 +40,9 @@ set(INC
   ../sequencer
   ../shader_fx
   ../simulation
+  ../../../intern/eigen
   ../../../intern/ghost
   ../../../intern/glew-mx
-  ../../../intern/eigen
   ../../../intern/guardedalloc
   ../../../intern/iksolver/extern
   ../../../intern/atomic
@@ -77,10 +77,12 @@ set(SRC
   intern/appdir.c
   intern/armature.c
   intern/armature_deform.c
+  intern/armature_pose.cc
   intern/armature_update.c
-  intern/asset.c
+  intern/asset.cc
   intern/attribute.c
   intern/attribute_access.cc
+  intern/attribute_math.cc
   intern/autoexec.c
   intern/blender.c
   intern/blender_copybuffer.c
@@ -106,6 +108,7 @@ set(SRC
   intern/cryptomatte.cc
   intern/curve.c
   intern/curve_bevel.c
+  intern/curve_convert.c
   intern/curve_decimate.c
   intern/curve_deform.c
   intern/curveprofile.c
@@ -128,7 +131,12 @@ set(SRC
   intern/fmodifier.c
   intern/font.c
   intern/freestyle.c
+  intern/geometry_component_instances.cc
+  intern/geometry_component_mesh.cc
+  intern/geometry_component_pointcloud.cc
+  intern/geometry_component_volume.cc
   intern/geometry_set.cc
+  intern/geometry_set_instances.cc
   intern/gpencil.c
   intern/gpencil_curve.c
   intern/gpencil_geom.c
@@ -169,6 +177,7 @@ set(SRC
   intern/mball.c
   intern/mball_tessellate.c
   intern/mesh.c
+  intern/mesh_boolean_convert.cc
   intern/mesh_convert.c
   intern/mesh_evaluate.c
   intern/mesh_fair.cc
@@ -197,7 +206,8 @@ set(SRC
   intern/multires_unsubdivide.c
   intern/multires_versioning.c
   intern/nla.c
-  intern/node.c
+  intern/node.cc
+  intern/node_ui_storage.cc
   intern/object.c
   intern/object_deform.c
   intern/object_dupli.c
@@ -259,6 +269,7 @@ set(SRC
   intern/unit.c
   intern/volume.cc
   intern/volume_render.cc
+  intern/volume_to_mesh.cc
   intern/workspace.c
   intern/world.c
   intern/writeavi.c
@@ -272,10 +283,11 @@ set(SRC
   BKE_animsys.h
   BKE_appdir.h
   BKE_armature.h
+  BKE_asset.h
   BKE_attribute.h
   BKE_attribute_access.hh
+  BKE_attribute_math.hh
   BKE_autoexec.h
-  BKE_asset.h
   BKE_blender.h
   BKE_blender_copybuffer.h
   BKE_blender_undo.h
@@ -299,6 +311,8 @@ set(SRC
   BKE_constraint.h
   BKE_context.h
   BKE_crazyspace.h
+  BKE_cryptomatte.h
+  BKE_cryptomatte.hh
   BKE_curve.h
   BKE_curveprofile.h
   BKE_customdata.h
@@ -322,6 +336,7 @@ set(SRC
   BKE_freestyle.h
   BKE_geometry_set.h
   BKE_geometry_set.hh
+  BKE_geometry_set_instances.hh
   BKE_global.h
   BKE_gpencil.h
   BKE_gpencil_curve.h
@@ -354,14 +369,16 @@ set(SRC
   BKE_mball.h
   BKE_mball_tessellate.h
   BKE_mesh.h
-  BKE_mesh_iterators.h
+  BKE_mesh_boolean_convert.h
   BKE_mesh_fair.h
+  BKE_mesh_iterators.h
   BKE_mesh_mapping.h
   BKE_mesh_mirror.h
   BKE_mesh_remap.h
   BKE_mesh_remesh_voxel.h
   BKE_mesh_runtime.h
   BKE_mesh_tangent.h
+  BKE_mesh_types.h
   BKE_mesh_wrapper.h
   BKE_modifier.h
   BKE_movieclip.h
@@ -409,6 +426,7 @@ set(SRC
   BKE_unit.h
   BKE_volume.h
   BKE_volume_render.h
+  BKE_volume_to_mesh.hh
   BKE_workspace.h
   BKE_world.h
   BKE_writeavi.h
@@ -416,6 +434,7 @@ set(SRC
   nla_private.h
   particle_private.h
   tracking_private.h
+  intern/attribute_access_intern.hh
   intern/CCGSubSurf.h
   intern/CCGSubSurf_inline.h
   intern/CCGSubSurf_intern.h
@@ -679,7 +698,7 @@ endif()
 
 if(WITH_OPENVDB)
   list(APPEND INC
-     ../../../intern/openvdb
+    ../../../intern/openvdb
   )
   list(APPEND INC_SYS
     ${OPENVDB_INCLUDE_DIRS}
@@ -693,10 +712,10 @@ endif()
 
 if(WITH_QUADRIFLOW)
   list(APPEND INC
-     ../../../intern/quadriflow
+    ../../../intern/quadriflow
   )
   list(APPEND LIB
-     bf_intern_quadriflow
+    bf_intern_quadriflow
   )
   add_definitions(-DWITH_QUADRIFLOW)
 endif()
@@ -717,6 +736,14 @@ if(WITH_TBB)
   )
 endif()
 
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+ endif()
+
 # # Warnings as errors, this is too strict!
 # if(MSVC)
 #    string(APPEND CMAKE_C_FLAGS " /WX")
@@ -731,6 +758,7 @@ add_dependencies(bf_blenkernel bf_dna)
 if(WITH_GTESTS)
   set(TEST_SRC
     intern/armature_test.cc
+    intern/cryptomatte_test.cc
     intern/fcurve_test.cc
     intern/lattice_deform_test.cc
     intern/layer_test.cc

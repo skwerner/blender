@@ -246,8 +246,7 @@ void WM_cursor_wait(bool val)
 void WM_cursor_grab_enable(wmWindow *win, int wrap, bool hide, int bounds[4])
 {
   /* Only grab cursor when not running debug.
-   * It helps not to get a stuck WM when hitting a breakpoint
-   * */
+   * It helps not to get a stuck WM when hitting a break-point. */
   GHOST_TGrabCursorMode mode = GHOST_kGrabNormal;
   GHOST_TAxisFlag mode_axis = GHOST_kAxisX | GHOST_kGrabAxisY;
 
@@ -304,7 +303,7 @@ static void wm_cursor_warp_relative(wmWindow *win, int x, int y)
 {
   /* note: don't use wmEvent coords because of continuous grab T36409. */
   int cx, cy;
-  wm_get_cursor_position(win, &cx, &cy);
+  wm_cursor_position_get(win, &cx, &cy);
   WM_cursor_warp(win, cx + x, cy + y);
 }
 

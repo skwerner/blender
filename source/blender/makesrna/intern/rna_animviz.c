@@ -61,7 +61,7 @@ static void rna_AnimViz_path_start_frame_set(PointerRNA *ptr, int value)
 {
   bAnimVizSettings *data = (bAnimVizSettings *)ptr->data;
 
-  /* XXX: watchit! Path Start > MAXFRAME/2 could be a problem... */
+  /* XXX: Watch it! Path Start > MAXFRAME/2 could be a problem. */
   data->path_sf = value;
   FRAMENUMBER_MIN_CLAMP(data->path_sf);
 
@@ -150,7 +150,7 @@ static void rna_def_animviz_motion_path(BlenderRNA *brna)
   prop = RNA_def_property(srna, "line_thickness", PROP_INT, PROP_NONE);
   RNA_def_property_int_sdna(prop, NULL, "line_thickness");
   RNA_def_property_range(prop, 1, 6);
-  RNA_def_property_ui_text(prop, "Line Thickness", "Line thickness for drawing path");
+  RNA_def_property_ui_text(prop, "Line Thickness", "Line thickness for motion path");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   /* Settings */
@@ -176,7 +176,7 @@ static void rna_def_animviz_motion_path(BlenderRNA *brna)
   /* Draw lines between keyframes */
   prop = RNA_def_property(srna, "lines", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MOTIONPATH_FLAG_LINES);
-  RNA_def_property_ui_text(prop, "Lines", "Draw straight lines between keyframe points");
+  RNA_def_property_ui_text(prop, "Lines", "Use straight lines between keyframe points");
   RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 }
 

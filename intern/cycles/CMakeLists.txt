@@ -14,7 +14,7 @@
 
 # Standalone or with Blender
 if(NOT WITH_BLENDER AND WITH_CYCLES_STANDALONE)
-  set(CYCLES_INSTALL_PATH "")
+  set(CYCLES_INSTALL_PATH ${CMAKE_INSTALL_PREFIX})
 else()
   set(WITH_CYCLES_BLENDER ON)
   # WINDOWS_PYTHON_DEBUG needs to write into the user addons folder since it will
@@ -64,7 +64,7 @@ if(WITH_CYCLES_NATIVE_ONLY)
     endif()
     set(CYCLES_KERNEL_FLAGS "${MSVC_NATIVE_ARCH_FLAGS}")
   endif()
-elseif(NOT WITH_CPU_SSE)
+elseif(NOT WITH_CPU_SIMD OR (SUPPORT_NEON_BUILD AND SSE2NEON_FOUND))
   set(CXX_HAS_SSE FALSE)
   set(CXX_HAS_AVX FALSE)
   set(CXX_HAS_AVX2 FALSE)
@@ -379,6 +379,9 @@ endif()
 # Subdirectories
 
 if(WITH_CYCLES_BLENDER)
+  # Not needed to make cycles automated tests pass with -march=native.
+  # However Blender itself needs this flag.
+  remove_cc_flag("-ffp-contract=off")
   add_definitions(-DWITH_BLENDER_GUARDEDALLOC)
   add_subdirectory(blender)
 endif()

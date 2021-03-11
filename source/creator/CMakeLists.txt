@@ -74,7 +74,7 @@ endif()
 if(WITH_TBB)
   blender_include_dirs(${TBB_INCLUDE_DIRS})
   if(NOT APPLE)
-    # APPLE plaform uses full paths for linking libraries.
+    # APPLE platform uses full paths for linking libraries.
     link_directories(${LIBDIR}/tbb/lib)
   endif()
 endif()
@@ -574,7 +574,7 @@ if(UNIX AND NOT APPLE)
         DIRECTORY ${PYTHON_LIBPATH}/python${PYTHON_VERSION}
         DESTINATION ${TARGETDIR_VER}/python/${_target_LIB}
         PATTERN "__pycache__" EXCLUDE               # * any cache *
-        PATTERN "config-${PYTHON_VERSION}m/*.a" EXCLUDE  # static lib
+        PATTERN "config-${PYTHON_VERSION}/*.a" EXCLUDE  # static lib
         PATTERN "lib2to3" EXCLUDE                   # ./lib2to3
         PATTERN "site-packages/*" EXCLUDE           # ./site-packages/*
         PATTERN "tkinter" EXCLUDE                   # ./tkinter
@@ -764,7 +764,7 @@ elseif(WIN32)
         PATTERN "*.pyo" EXCLUDE                 # * any cache *
       )
 
-       install(
+      install(
         DIRECTORY ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/lib
         DESTINATION ${BLENDER_VERSION}/python/
         CONFIGURATIONS Debug
@@ -772,7 +772,6 @@ elseif(WIN32)
         PATTERN "__pycache__" EXCLUDE           # * any cache *
         PATTERN "*.pyc" EXCLUDE                 # * any cache *
         PATTERN "*.pyo" EXCLUDE                 # * any cache *)
-
       )
 
       install(
@@ -804,13 +803,13 @@ elseif(WIN32)
 
       if(WINDOWS_PYTHON_DEBUG)
         install(
-          FILES ${LIBDIR}/python/37/libs/python${_PYTHON_VERSION_NO_DOTS}.pdb
+          FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}.pdb
           DESTINATION "."
           CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
         )
 
         install(
-          FILES ${LIBDIR}/python/37/libs/python${_PYTHON_VERSION_NO_DOTS}_d.pdb
+          FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}_d.pdb
           DESTINATION "."
           CONFIGURATIONS Debug
         )
@@ -945,7 +944,7 @@ elseif(APPLE)
       PATTERN "__pycache__" EXCLUDE
       PATTERN "__MACOSX" EXCLUDE
       PATTERN ".DS_Store" EXCLUDE
-      PATTERN "config-${PYTHON_VERSION}m/*.a" EXCLUDE  # static lib
+      PATTERN "config-${PYTHON_VERSION}/*.a" EXCLUDE  # static lib
       PATTERN "lib2to3" EXCLUDE                   # ./lib2to3
       PATTERN "tkinter" EXCLUDE                   # ./tkinter
       PATTERN "lib-dynload/_tkinter.*" EXCLUDE    # ./lib-dynload/_tkinter.co

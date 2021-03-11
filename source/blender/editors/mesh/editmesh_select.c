@@ -995,7 +995,7 @@ bool EDBM_unified_findnearest(ViewContext *vc,
 /* -------------------------------------------------------------------- */
 /** \name Alternate Find Nearest Vert/Edge (optional boundary)
  *
- * \note This uses ray-cast method instead of backbuffer,
+ * \note This uses ray-cast method instead of back-buffer,
  * currently used for poly-build.
  * \{ */
 
@@ -1524,7 +1524,13 @@ static int edbm_loop_multiselect_exec(bContext *C, wmOperator *op)
     else {
       for (edindex = 0; edindex < totedgesel; edindex += 1) {
         eed = edarray[edindex];
-        walker_select(em, BMW_EDGELOOP, eed, true);
+        bool non_manifold = BM_edge_face_count_is_over(eed, 2);
+        if (non_manifold) {
+          walker_select(em, BMW_EDGELOOP_NONMANIFOLD, eed, true);
+        }
+        else {
+          walker_select(em, BMW_EDGELOOP, eed, true);
+        }
       }
       EDBM_selectmode_flush(em);
     }
@@ -1585,6 +1591,7 @@ static void mouse_mesh_loop_edge(
     BMEditMesh *em, BMEdge *eed, bool select, bool select_clear, bool select_cycle)
 {
   bool edge_boundary = false;
+  bool non_manifold = BM_edge_face_count_is_over(eed, 2);
 
   /* Cycle between BMW_EDGELOOP / BMW_EDGEBOUNDARY. */
   if (select_cycle && BM_edge_is_boundary(eed)) {
@@ -1609,6 +1616,9 @@ static void mouse_mesh_loop_edge(
 
   if (edge_boundary) {
     walker_select(em, BMW_EDGEBOUNDARY, eed, select);
+  }
+  else if (non_manifold) {
+    walker_select(em, BMW_EDGELOOP_NONMANIFOLD, eed, select);
   }
   else {
     walker_select(em, BMW_EDGELOOP, eed, select);
@@ -2205,7 +2215,7 @@ void EDBM_selectmode_set(BMEditMesh *em)
     }
   }
   else if (em->selectmode & SCE_SELECT_FACE) {
-    /* deselect eges, and select again based on face select */
+    /* Deselect edges, and select again based on face select. */
     BM_ITER_MESH (eed, &iter, em->bm, BM_EDGES_OF_MESH) {
       BM_edge_select_set(em->bm, eed, false);
     }
@@ -2247,7 +2257,7 @@ void EDBM_selectmode_convert(BMEditMesh *em,
 
   /* first tag-to-select, then select --- this avoids a feedback loop */
 
-  /* have to find out what the selectionmode was previously */
+  /* Have to find out what the selection-mode was previously. */
   if (selectmode_old == SCE_SELECT_VERTEX) {
     if (bm->totvertsel == 0) {
       /* pass */
@@ -4327,7 +4337,7 @@ void MESH_OT_edges_select_sharp(wmOperatorType *ot)
 
   /* identifiers */
   ot->name = "Select Sharp Edges";
-  ot->description = "Select all sharp-enough edges";
+  ot->description = "Select all sharp enough edges";
   ot->idname = "MESH_OT_edges_select_sharp";
 
   /* api callbacks */
@@ -4536,7 +4546,7 @@ static int edbm_select_non_manifold_exec(bContext *C, wmOperator *op)
 void MESH_OT_select_non_manifold(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Select Non Manifold";
+  ot->name = "Select Non-Manifold";
   ot->description = "Select all non-manifold vertices or edges";
   ot->idname = "MESH_OT_select_non_manifold";
 
@@ -4573,7 +4583,7 @@ void MESH_OT_select_non_manifold(wmOperatorType *ot)
 static int edbm_select_random_exec(bContext *C, wmOperator *op)
 {
   const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
-  const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
+  const float randfac = RNA_float_get(op->ptr, "ratio");
   const int seed = WM_operator_properties_select_random_seed_increment_get(op);
 
   ViewLayer *view_layer = CTX_data_view_layer(C);

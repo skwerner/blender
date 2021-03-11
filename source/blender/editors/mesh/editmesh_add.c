@@ -24,7 +24,6 @@
 #include "BLI_math.h"
 #include "BLI_sys_types.h"
 
-#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -42,7 +41,6 @@
 #include "ED_mesh.h"
 #include "ED_object.h"
 #include "ED_screen.h"
-#include "ED_uvedit.h"
 
 #include "mesh_intern.h" /* own include */
 
@@ -77,11 +75,8 @@ static Object *make_prim_init(bContext *C,
 
   ED_object_new_primitive_matrix(C, obedit, loc, rot, r_creation_data->mat);
 
-  if (scale && !equals_v3v3(scale, (const float[3]){1.0f, 1.0f, 1.0f})) {
-    float scale_half[3];
-    copy_v3_v3(scale_half, scale);
-    mul_v3_fl(scale_half, 0.5f);
-    rescale_m4(r_creation_data->mat, scale_half);
+  if (scale) {
+    rescale_m4(r_creation_data->mat, scale);
   }
 
   return obedit;
@@ -239,7 +234,7 @@ void MESH_OT_primitive_cube_add(wmOperatorType *ot)
 
 static const EnumPropertyItem fill_type_items[] = {
     {0, "NOTHING", 0, "Nothing", "Don't fill at all"},
-    {1, "NGON", 0, "Ngon", "Use ngons"},
+    {1, "NGON", 0, "N-Gon", "Use n-gons"},
     {2, "TRIFAN", 0, "Triangle Fan", "Use triangle fans"},
     {0, NULL, 0, NULL, NULL},
 };

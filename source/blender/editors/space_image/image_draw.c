@@ -68,6 +68,7 @@
 #include "ED_mask.h"
 #include "ED_render.h"
 #include "ED_screen.h"
+#include "ED_util.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -466,7 +467,7 @@ static void sima_draw_zbuf_pixels(
 {
   const float red[4] = {1.0f, 0.0f, 0.0f, 0.0f};
 
-  /* Slowwww */
+  /* Very slow! */
   float *rectf = MEM_mallocN(rectx * recty * sizeof(float), "temp");
   for (int a = rectx * recty - 1; a >= 0; a--) {
     /* zbuffer values are signed, so we need to shift color range */
@@ -874,7 +875,7 @@ void draw_image_main(const bContext *C, ARegion *region)
 
   if (show_stereo3d) {
     if (show_multilayer) {
-      /* update multiindex and pass for the current eye */
+      /* Update multi-index and pass for the current eye. */
       BKE_image_multilayer_index(ima->rr, &sima->iuser);
     }
     else {

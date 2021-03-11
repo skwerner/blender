@@ -642,6 +642,7 @@ static struct MenuSearch_Data *menu_items_from_ui_create(
           SPACE_MENU_NOP(SPACE_SCRIPT);
           SPACE_MENU_NOP(SPACE_STATUSBAR);
           SPACE_MENU_NOP(SPACE_TOPBAR);
+          SPACE_MENU_NOP(SPACE_SPREADSHEET);
         }
       }
       for (int i = 0; i < idname_array_len; i++) {
@@ -990,7 +991,8 @@ static void menu_search_exec_fn(bContext *C, void *UNUSED(arg1), void *arg2)
 static void menu_search_update_fn(const bContext *UNUSED(C),
                                   void *arg,
                                   const char *str,
-                                  uiSearchItems *items)
+                                  uiSearchItems *items,
+                                  const bool UNUSED(is_first))
 {
   struct MenuSearch_Data *data = arg;
 
@@ -1001,7 +1003,7 @@ static void menu_search_update_fn(const bContext *UNUSED(C),
   }
 
   struct MenuSearch_Item **filtered_items;
-  int filtered_amount = BLI_string_search_query(search, str, (void ***)&filtered_items);
+  const int filtered_amount = BLI_string_search_query(search, str, (void ***)&filtered_items);
 
   for (int i = 0; i < filtered_amount; i++) {
     struct MenuSearch_Item *item = filtered_items[i];
@@ -1069,6 +1071,7 @@ static bool ui_search_menu_create_context_menu(struct bContext *C,
 
 static struct ARegion *ui_search_menu_create_tooltip(struct bContext *C,
                                                      struct ARegion *region,
+                                                     const rcti *UNUSED(item_rect),
                                                      void *arg,
                                                      void *active)
 {

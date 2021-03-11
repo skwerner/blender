@@ -237,10 +237,10 @@ void BKE_id_free_us(Main *bmain, void *idv) /* test users */
   }
 }
 
-static void id_delete(Main *bmain, const bool do_tagged_deletion)
+static size_t id_delete(Main *bmain, const bool do_tagged_deletion)
 {
   const int tag = LIB_TAG_DOIT;
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   Link dummy_link = {0};
   int base_count, i;
 
@@ -305,12 +305,15 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
         /* Since we removed ID from Main,
          * we also need to unlink its own other IDs usages ourself. */
         BKE_libblock_relink_ex(bmain, id, NULL, NULL, 0);
-        /* Now we can safely mark that ID as not being in Main database anymore. */
-        id->tag |= LIB_TAG_NO_MAIN;
-        /* This is needed because we may not have remapped usages
-         * of that ID by other deleted ones. */
-        // id->us = 0;  /* Is it actually? */
       }
+    }
+
+    /* Now we can safely mark that ID as not being in Main database anymore. */
+    /* NOTE: This needs to be done in a separate loop than above, otherwise some usercounts of
+     * deleted IDs may not be properly decreased by the remappings (since `NO_MAIN` ID usercounts
+     * is never affected). */
+    for (ID *id = tagged_deleted_ids.first; id; id = id->next) {
+      id->tag |= LIB_TAG_NO_MAIN;
     }
   }
   else {
@@ -346,6 +349,7 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
    * have been already cleared when we reach it
    * (e.g. Objects being processed before meshes, they'll have already released their 'reference'
    * over meshes when we come to freeing obdata). */
+  size_t num_datablocks_deleted = 0;
   for (i = do_tagged_deletion ? 1 : base_count; i--;) {
     ListBase *lb = lbarray[i];
     ID *id, *id_next;
@@ -360,11 +364,13 @@ static void id_delete(Main *bmain, const bool do_tagged_deletion)
           BLI_assert(id->us == 0);
         }
         BKE_id_free_ex(bmain, id, free_flag, !do_tagged_deletion);
+        ++num_datablocks_deleted;
       }
     }
   }
 
   bmain->is_memfile_undo_written = false;
+  return num_datablocks_deleted;
 }
 
 /**
@@ -386,8 +392,9 @@ void BKE_id_delete(Main *bmain, void *idv)
  *
  * \warning Considered experimental for now, seems to be working OK but this is
  *          risky code in a complicated area.
+ * \return Number of deleted datablocks.
  */
-void BKE_id_multi_tagged_delete(Main *bmain)
+size_t BKE_id_multi_tagged_delete(Main *bmain)
 {
-  id_delete(bmain, true);
+  return id_delete(bmain, true);
 }

@@ -66,7 +66,11 @@
 
 #include "RNA_access.h"
 
+#include "SEQ_proxy.h"
+#include "SEQ_render.h"
 #include "SEQ_sequencer.h"
+#include "SEQ_time.h"
+#include "SEQ_transform.h"
 
 #include "BLO_readfile.h"
 #include "readfile.h"
@@ -111,7 +115,9 @@ static void seq_convert_transform_animation(const Scene *scene,
     BezTriple *bezt = fcu->bezt;
     for (int i = 0; i < fcu->totvert; i++, bezt++) {
       /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[0][1] = image_size / 2 + bezt->vec[0][1] - scene->r.xsch / 2;
       bezt->vec[1][1] = image_size / 2 + bezt->vec[1][1] - scene->r.xsch / 2;
+      bezt->vec[2][1] = image_size / 2 + bezt->vec[2][1] - scene->r.xsch / 2;
     }
   }
 }
@@ -120,6 +126,13 @@ static void seq_convert_transform_crop(const Scene *scene,
                                        Sequence *seq,
                                        const eSpaceSeq_Proxy_RenderSize render_size)
 {
+  if (seq->strip->transform == NULL) {
+    seq->strip->transform = MEM_callocN(sizeof(struct StripTransform), "StripTransform");
+  }
+  if (seq->strip->crop == NULL) {
+    seq->strip->crop = MEM_callocN(sizeof(struct StripCrop), "StripCrop");
+  }
+
   StripCrop *c = seq->strip->crop;
   StripTransform *t = seq->strip->transform;
   int old_image_center_x = scene->r.xsch / 2;
@@ -248,7 +261,9 @@ static void seq_convert_transform_animation_2(const Scene *scene,
     BezTriple *bezt = fcu->bezt;
     for (int i = 0; i < fcu->totvert; i++, bezt++) {
       /* Same math as with old_image_center_*, but simplified. */
+      bezt->vec[0][1] *= scale_to_fit_factor;
       bezt->vec[1][1] *= scale_to_fit_factor;
+      bezt->vec[2][1] *= scale_to_fit_factor;
     }
   }
 }
@@ -284,6 +299,12 @@ static void seq_convert_transform_crop_2(const Scene *scene,
 
   char name_esc[(sizeof(seq->name) - 2) * 2], *path;
   BLI_str_escape(name_esc, seq->name + 2, sizeof(name_esc));
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.scale_x", name_esc);
+  seq_convert_transform_animation_2(scene, path, scale_to_fit_factor);
+  MEM_freeN(path);
+  path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].transform.scale_y", name_esc);
+  seq_convert_transform_animation_2(scene, path, scale_to_fit_factor);
+  MEM_freeN(path);
   path = BLI_sprintfN("sequence_editor.sequences_all[\"%s\"].crop.min_x", name_esc);
   seq_convert_transform_animation_2(scene, path, 1 / scale_to_fit_factor);
   MEM_freeN(path);
@@ -310,6 +331,37 @@ static void seq_convert_transform_crop_lb_2(const Scene *scene,
     if (seq->type == SEQ_TYPE_META) {
       seq_convert_transform_crop_lb_2(scene, &seq->seqbase, render_size);
     }
+  }
+}
+
+static void seq_update_meta_disp_range(Editing *ed)
+{
+  if (ed == NULL) {
+    return;
+  }
+
+  LISTBASE_FOREACH_BACKWARD (MetaStack *, ms, &ed->metastack) {
+    /* Update ms->disp_range from meta. */
+    if (ms->disp_range[0] == ms->disp_range[1]) {
+      copy_v2_v2_int(ms->disp_range, &ms->parseq->startdisp);
+    }
+
+    /* Update meta strip endpoints. */
+    SEQ_transform_set_left_handle_frame(ms->parseq, ms->disp_range[0]);
+    SEQ_transform_set_right_handle_frame(ms->parseq, ms->disp_range[1]);
+    SEQ_transform_fix_single_image_seq_offsets(ms->parseq);
+
+    /* Recalculate effects using meta strip. */
+    LISTBASE_FOREACH (Sequence *, seq, ms->oldbasep) {
+      if (seq->seq2) {
+        seq->start = seq->startdisp = max_ii(seq->seq1->startdisp, seq->seq2->startdisp);
+        seq->enddisp = min_ii(seq->seq1->enddisp, seq->seq2->enddisp);
+      }
+    }
+
+    /* Ensure that active seqbase points to active meta strip seqbase. */
+    MetaStack *active_ms = SEQ_meta_stack_active_get(ed);
+    SEQ_seqbase_active_set(ed, &active_ms->parseq->seqbase);
   }
 }
 
@@ -463,7 +515,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
         LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           bGPDframe *gpf = gpl->frames.first;
           if (gpf && gpf->framenum > scene->r.sfra) {
-            bGPDframe *gpf_dup = BKE_gpencil_frame_duplicate(gpf);
+            bGPDframe *gpf_dup = BKE_gpencil_frame_duplicate(gpf, true);
             gpf_dup->framenum = scene->r.sfra;
             BLI_addhead(&gpl->frames, gpf_dup);
           }
@@ -487,7 +539,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
     /**
      * Make sure Emission Alpha fcurve and drivers is properly mapped after the Emission Strength
      * got introduced.
-     * */
+     */
 
     /**
      * Effectively we are replacing the (animation of) node socket input 18 with 19.
@@ -498,7 +550,7 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
      *
      * The for loop for the input ids is at the top level otherwise we lose the animation
      * keyframe data.
-     * */
+     */
     for (int input_id = 21; input_id >= 18; input_id--) {
       FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
         if (ntree->type == NTREE_SHADER) {
@@ -587,6 +639,10 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
    */
   {
     /* Keep this block, even when empty. */
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      seq_update_meta_disp_range(SEQ_editing_get(scene, false));
+    }
   }
 }
 
@@ -646,7 +702,7 @@ static void do_versions_291_fcurve_handles_limit(FCurve *fcu)
 {
   uint i = 1;
   for (BezTriple *bezt = fcu->bezt; i < fcu->totvert; i++, bezt++) {
-    /* Only adjust bezier keyframes. */
+    /* Only adjust bezier key-frames. */
     if (bezt->ipo != BEZT_IPO_BEZ) {
       continue;
     }
@@ -683,6 +739,60 @@ static void do_versions_291_fcurve_handles_limit(FCurve *fcu)
     madd_v2_v2v2fl(bezt->vec[2], v1, delta1, -factor); /* vec[2] = v1 - factor * delta1 */
     /* Next keyframe's left handle: */
     madd_v2_v2v2fl(nextbezt->vec[0], v4, delta2, -factor); /* vec[0] = v4 - factor * delta2 */
+  }
+}
+
+static void do_versions_strip_cache_settings_recursive(const ListBase *seqbase)
+{
+  LISTBASE_FOREACH (Sequence *, seq, seqbase) {
+    seq->cache_flag = 0;
+    if (seq->type == SEQ_TYPE_META) {
+      do_versions_strip_cache_settings_recursive(&seq->seqbase);
+    }
+  }
+}
+
+static void version_node_socket_name(bNodeTree *ntree,
+                                     const int node_type,
+                                     const char *old_name,
+                                     const char *new_name)
+{
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == node_type) {
+      LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
+        if (STREQ(socket->name, old_name)) {
+          strcpy(socket->name, new_name);
+        }
+        if (STREQ(socket->identifier, old_name)) {
+          strcpy(socket->identifier, new_name);
+        }
+      }
+      LISTBASE_FOREACH (bNodeSocket *, socket, &node->outputs) {
+        if (STREQ(socket->name, old_name)) {
+          strcpy(socket->name, new_name);
+        }
+        if (STREQ(socket->identifier, old_name)) {
+          strcpy(socket->identifier, new_name);
+        }
+      }
+    }
+  }
+}
+
+static void version_node_join_geometry_for_multi_input_socket(bNodeTree *ntree)
+{
+  LISTBASE_FOREACH_MUTABLE (bNodeLink *, link, &ntree->links) {
+    if (link->tonode->type == GEO_NODE_JOIN_GEOMETRY && !(link->tosock->flag & SOCK_MULTI_INPUT)) {
+      link->tosock = link->tonode->inputs.first;
+    }
+  }
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == GEO_NODE_JOIN_GEOMETRY) {
+      bNodeSocket *socket = node->inputs.first;
+      socket->flag |= SOCK_MULTI_INPUT;
+      socket->limit = 4095;
+      nodeRemoveSocket(ntree, node, socket->next);
+    }
   }
 }
 
@@ -988,14 +1098,6 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* Set the minimum sequence interpolate for grease pencil. */
-    if (!DNA_struct_elem_find(fd->filesdna, "GP_Interpolate_Settings", "int", "step")) {
-      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
-        ToolSettings *ts = scene->toolsettings;
-        ts->gp_interpolate.step = 1;
-      }
-    }
-
     /* Hair and PointCloud attributes. */
     for (Hair *hair = bmain->hairs.first; hair != NULL; hair = hair->id.next) {
       do_versions_point_attributes(&hair->pdata);
@@ -1048,10 +1150,10 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 291, 5)) {
-    /* Fix fcurves to allow for new bezier handles behaviour (T75881 and D8752). */
+    /* Fix fcurves to allow for new bezier handles behavior (T75881 and D8752). */
     for (bAction *act = bmain->actions.first; act; act = act->id.next) {
       for (FCurve *fcu = act->curves.first; fcu; fcu = fcu->next) {
-        /* Only need to fix Bezier curves with at least 2 keyframes. */
+        /* Only need to fix Bezier curves with at least 2 key-frames. */
         if (fcu->totvert < 2 || fcu->bezt == NULL) {
           continue;
         }
@@ -1193,20 +1295,6 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
       if (ELEM(
               part->type, PART_FLUID_FLIP, PART_FLUID_SPRAY, PART_FLUID_BUBBLE, PART_FLUID_FOAM)) {
         part->phystype = PART_PHYS_NO;
-      }
-    }
-    /* Init grease pencil default curve resolution. */
-    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "int", "curve_edit_resolution")) {
-      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
-        gpd->curve_edit_resolution = GP_DEFAULT_CURVE_RESOLUTION;
-        gpd->flag |= GP_DATA_CURVE_ADAPTIVE_RESOLUTION;
-      }
-    }
-    /* Init grease pencil curve editing error threshold. */
-    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "curve_edit_threshold")) {
-      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
-        gpd->curve_edit_threshold = GP_DEFAULT_CURVE_ERROR;
-        gpd->curve_edit_corner_angle = GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE;
       }
     }
   }
@@ -1380,8 +1468,7 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
               if (matte_id == NULL || strlen(storage->matte_id) == 0) {
                 continue;
               }
-              BKE_cryptomatte_matte_id_to_entries(NULL, storage, storage->matte_id);
-              MEM_SAFE_FREE(storage->matte_id);
+              BKE_cryptomatte_matte_id_to_entries(storage, storage->matte_id);
             }
           }
         }
@@ -1418,18 +1505,7 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - "versioning_userdef.c", #blo_do_versions_userdef
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
-
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 9)) {
     FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
       if (ntree->type == NTREE_GEOMETRY) {
         LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
@@ -1450,5 +1526,311 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
     FOREACH_NODETREE_END;
+
+    /* Default properties editors to auto outliner sync. */
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+          if (space->spacetype == SPACE_PROPERTIES) {
+            SpaceProperties *space_properties = (SpaceProperties *)space;
+            space_properties->outliner_sync = PROPERTIES_SYNC_AUTO;
+          }
+        }
+      }
+    }
+
+    /* Ensure that new viscosity strength field is initialized correctly. */
+    if (!DNA_struct_elem_find(fd->filesdna, "FluidModifierData", "float", "viscosity_value")) {
+      LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
+        LISTBASE_FOREACH (ModifierData *, md, &ob->modifiers) {
+          if (md->type == eModifierType_Fluid) {
+            FluidModifierData *fmd = (FluidModifierData *)md;
+            if (fmd->domain != NULL) {
+              fmd->domain->viscosity_value = 0.05;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 10)) {
+    if (!DNA_struct_find(fd->filesdna, "NodeSetAlpha")) {
+      FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+        if (ntree->type != NTREE_COMPOSIT) {
+          continue;
+        }
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type != CMP_NODE_SETALPHA) {
+            continue;
+          }
+          NodeSetAlpha *storage = MEM_callocN(sizeof(NodeSetAlpha), "NodeSetAlpha");
+          storage->mode = CMP_NODE_SETALPHA_MODE_REPLACE_ALPHA;
+          node->storage = storage;
+        }
+      }
+      FOREACH_NODETREE_END;
+    }
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      Editing *ed = SEQ_editing_get(scene, false);
+      if (ed == NULL) {
+        continue;
+      }
+      ed->cache_flag = (SEQ_CACHE_STORE_RAW | SEQ_CACHE_STORE_FINAL_OUT);
+      do_versions_strip_cache_settings_recursive(&ed->seqbase);
+    }
+  }
+
+  /* Enable "Save as Render" option for file output node by default (apply view transform to image
+   * on save) */
+  if (!MAIN_VERSION_ATLEAST(bmain, 292, 11)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_COMPOSIT) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == CMP_NODE_OUTPUT_FILE) {
+            LISTBASE_FOREACH (bNodeSocket *, sock, &node->inputs) {
+              NodeImageMultiFileSocket *simf = sock->storage;
+              simf->save_as_render = true;
+            }
+          }
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 1)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_name(ntree, GEO_NODE_BOOLEAN, "Geometry A", "Geometry 1");
+        version_node_socket_name(ntree, GEO_NODE_BOOLEAN, "Geometry B", "Geometry 2");
+      }
+    }
+    FOREACH_NODETREE_END;
+
+    /* Init grease pencil default curve resolution. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "int", "curve_edit_resolution")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_resolution = GP_DEFAULT_CURVE_RESOLUTION;
+        gpd->flag |= GP_DATA_CURVE_ADAPTIVE_RESOLUTION;
+      }
+    }
+    /* Init grease pencil curve editing error threshold. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPdata", "float", "curve_edit_threshold")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        gpd->curve_edit_threshold = GP_DEFAULT_CURVE_ERROR;
+        gpd->curve_edit_corner_angle = GP_DEFAULT_CURVE_EDIT_CORNER_ANGLE;
+      }
+    }
+  }
+
+  if ((!MAIN_VERSION_ATLEAST(bmain, 292, 14)) ||
+      ((bmain->versionfile == 293) && (!MAIN_VERSION_ATLEAST(bmain, 293, 1)))) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type != NTREE_GEOMETRY) {
+        continue;
+      }
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (node->type == GEO_NODE_OBJECT_INFO && node->storage == NULL) {
+          NodeGeometryObjectInfo *data = (NodeGeometryObjectInfo *)MEM_callocN(
+              sizeof(NodeGeometryObjectInfo), __func__);
+          data->transform_space = GEO_NODE_TRANSFORM_SPACE_RELATIVE;
+          node->storage = data;
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 1)) {
+    /* Grease pencil layer transform matrix. */
+    if (!DNA_struct_elem_find(fd->filesdna, "bGPDlayer", "float", "location[0]")) {
+      LISTBASE_FOREACH (bGPdata *, gpd, &bmain->gpencils) {
+        LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+          zero_v3(gpl->location);
+          zero_v3(gpl->rotation);
+          copy_v3_fl(gpl->scale, 1.0f);
+          loc_eul_size_to_mat4(gpl->layer_mat, gpl->location, gpl->rotation, gpl->scale);
+          invert_m4_m4(gpl->layer_invmat, gpl->layer_mat);
+        }
+      }
+    }
+    /* Fix Fill factor for grease pencil fill brushes. */
+    LISTBASE_FOREACH (Brush *, brush, &bmain->brushes) {
+      if ((brush->gpencil_settings) && (brush->gpencil_settings->fill_factor == 0.0f)) {
+        brush->gpencil_settings->fill_factor = 1.0f;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 3)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type != NTREE_GEOMETRY) {
+        continue;
+      }
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (node->type == GEO_NODE_POINT_INSTANCE && node->storage == NULL) {
+          NodeGeometryPointInstance *data = (NodeGeometryPointInstance *)MEM_callocN(
+              sizeof(NodeGeometryPointInstance), __func__);
+          data->instance_type = node->custom1;
+          data->flag = (node->custom2 ? 0 : GEO_NODE_POINT_INSTANCE_WHOLE_COLLECTION);
+          node->storage = data;
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 4)) {
+    /* Add support for all operations to the "Attribute Math" node. */
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == GEO_NODE_ATTRIBUTE_MATH) {
+            NodeAttributeMath *data = (NodeAttributeMath *)node->storage;
+            data->input_type_c = GEO_NODE_ATTRIBUTE_INPUT_ATTRIBUTE;
+          }
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 5)) {
+    /* Change Nishita sky model Altitude unit. */
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_SHADER) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == SH_NODE_TEX_SKY && node->storage) {
+            NodeTexSky *tex = (NodeTexSky *)node->storage;
+            tex->altitude *= 1000.0f;
+          }
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 6)) {
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+          /* UV/Image Max resolution images in image editor. */
+          if (space->spacetype == SPACE_IMAGE) {
+            SpaceImage *sima = (SpaceImage *)space;
+            sima->iuser.flag |= IMA_SHOW_MAX_RESOLUTION;
+          }
+          /* Enable Outliner render visibility column. */
+          else if (space->spacetype == SPACE_OUTLINER) {
+            SpaceOutliner *space_outliner = (SpaceOutliner *)space;
+            space_outliner->show_restrict_flags |= SO_RESTRICT_RENDER;
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 7)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_join_geometry_for_multi_input_socket(ntree);
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 8)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type != NTREE_GEOMETRY) {
+        continue;
+      }
+      LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+        if (node->type == GEO_NODE_ATTRIBUTE_RANDOMIZE && node->storage == NULL) {
+          NodeAttributeRandomize *data = (NodeAttributeRandomize *)MEM_callocN(
+              sizeof(NodeAttributeRandomize), __func__);
+          data->data_type = node->custom1;
+          data->operation = GEO_NODE_ATTRIBUTE_RANDOMIZE_REPLACE_CREATE;
+          node->storage = data;
+        }
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 9)) {
+    if (!DNA_struct_elem_find(fd->filesdna, "SceneEEVEE", "float", "bokeh_overblur")) {
+      LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+        scene->eevee.bokeh_neighbor_max = 10.0f;
+        scene->eevee.bokeh_denoise_fac = 0.75f;
+        scene->eevee.bokeh_overblur = 5.0f;
+      }
+    }
+
+    /* Add subpanels for FModifiers, which requires a field to store expansion. */
+    if (!DNA_struct_elem_find(fd->filesdna, "FModifier", "short", "ui_expand_flag")) {
+      LISTBASE_FOREACH (bAction *, act, &bmain->actions) {
+        LISTBASE_FOREACH (FCurve *, fcu, &act->curves) {
+          LISTBASE_FOREACH (FModifier *, fcm, &fcu->modifiers) {
+            SET_FLAG_FROM_TEST(fcm->ui_expand_flag,
+                               fcm->flag & FMODIFIER_FLAG_EXPANDED,
+                               UI_PANEL_DATA_EXPAND_ROOT);
+          }
+        }
+      }
+    }
+
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_name(ntree, GEO_NODE_ATTRIBUTE_PROXIMITY, "Result", "Distance");
+      }
+    }
+    FOREACH_NODETREE_END;
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 10)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_name(ntree, GEO_NODE_ATTRIBUTE_PROXIMITY, "Location", "Position");
+      }
+    }
+    FOREACH_NODETREE_END;
+
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      /* Fix old scene with too many samples that were not being used.
+       * Now they are properly used and might produce a huge slowdown.
+       * So we clamp to what the old max actual was. */
+      if (scene->eevee.volumetric_shadow_samples > 32) {
+        scene->eevee.volumetric_shadow_samples = 32;
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 11)) {
+    LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (STREQ(node->idname, "GeometryNodeSubdivisionSurfaceSimple")) {
+            STRNCPY(node->idname, "GeometryNodeSubdivide");
+          }
+          if (STREQ(node->idname, "GeometryNodeSubdivisionSurface")) {
+            STRNCPY(node->idname, "GeometryNodeSubdivideSmooth");
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - "versioning_userdef.c", #blo_do_versions_userdef
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 }

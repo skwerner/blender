@@ -70,7 +70,7 @@ int transform_mode_really_used(bContext *C, int mode)
 bool transdata_check_local_center(TransInfo *t, short around)
 {
   return ((around == V3D_AROUND_LOCAL_ORIGINS) &&
-          ((t->flag & (T_OBJECT | T_POSE)) ||
+          ((t->options & (CTX_OBJECT | CTX_POSE_BONE)) ||
            /* implicit: (t->flag & T_EDIT) */
            (ELEM(t->obedit_type, OB_MESH, OB_CURVE, OB_MBALL, OB_ARMATURE, OB_GPENCIL)) ||
            (t->spacetype == SPACE_GRAPH) ||
@@ -513,7 +513,7 @@ void constraintSizeLim(TransInfo *t, TransData *td)
       return;
     }
 
-    /* extrace scale from matrix and apply back sign */
+    /* Extract scale from matrix and apply back sign. */
     mat4_to_size(td->ext->size, cob.matrix);
     mul_v3_v3(td->ext->size, size_sign);
   }
@@ -551,15 +551,6 @@ void headerRotation(TransInfo *t, char str[UI_MAX_DRAW_STR], float final)
   if (t->flag & T_PROP_EDIT_ALL) {
     ofs += BLI_snprintf(
         str + ofs, UI_MAX_DRAW_STR - ofs, TIP_(" Proportional size: %.2f"), t->prop_size);
-  }
-}
-
-void postInputRotation(TransInfo *t, float values[3])
-{
-  float axis_final[3];
-  copy_v3_v3(axis_final, t->spacemtx[t->orient_axis]);
-  if ((t->con.mode & CON_APPLY) && t->con.applyRot) {
-    t->con.applyRot(t, NULL, NULL, axis_final, values);
   }
 }
 
@@ -629,7 +620,7 @@ void ElementRotation_ex(TransInfo *t,
    * matrix (and inverse). That is not all though. Once the proper translation
    * has been computed, it has to be converted back into the bone's space.
    */
-  else if (t->flag & T_POSE) {
+  else if (t->options & CTX_POSE_BONE) {
     /* Extract and invert armature object matrix */
 
     if ((td->flag & TD_NO_LOC) == 0) {
@@ -705,7 +696,7 @@ void ElementRotation_ex(TransInfo *t,
         mul_m3_m3m3(totmat, mat, td->ext->r_mtx);
         mul_m3_m3m3(smat, td->ext->r_smtx, totmat);
 
-        /* calculate the total rotatation in eulers */
+        /* Calculate the total rotation in eulers. */
         copy_v3_v3(eul, td->ext->irot);
         eulO_to_mat3(eulmat, eul, td->ext->rotOrder);
 
@@ -778,7 +769,7 @@ void ElementRotation_ex(TransInfo *t,
         mul_m3_m3m3(totmat, mat, td->mtx);
         mul_m3_m3m3(smat, td->smtx, totmat);
 
-        /* calculate the total rotatation in eulers */
+        /* Calculate the total rotation in eulers. */
         add_v3_v3v3(eul, td->ext->irot, td->ext->drot); /* correct for delta rot */
         eulO_to_mat3(obmat, eul, td->ext->rotOrder);
         /* mat = transform, obmat = object rotation */
@@ -902,7 +893,7 @@ static void TransMat3ToSize(const float mat[3][3], const float smat[3][3], float
 
   mat3_to_rot_size(rmat, size, mat);
 
-  /* first tried with dotproduct... but the sign flip is crucial */
+  /* First tried with dot-product... but the sign flip is crucial. */
   if (dot_v3v3(rmat[0], smat[0]) < 0.0f) {
     size[0] = -size[0];
   }
@@ -1026,7 +1017,7 @@ void ElementResize(TransInfo *t, TransDataContainer *tc, TransData *td, float ma
     mul_v3_fl(vec, td->factor);
   }
 
-  if (t->flag & (T_OBJECT | T_POSE)) {
+  if (t->options & (CTX_OBJECT | CTX_POSE_BONE)) {
     mul_m3_v3(td->smtx, vec);
   }
 

@@ -20,7 +20,7 @@
 
 #pragma once
 
-/* Note that some struct members for colormapping and colorbands are not initialized here. */
+/* Note that some struct members for color-mapping and color-bands are not initialized here. */
 
 /* Struct members on own line. */
 /* clang-format off */
@@ -152,6 +152,7 @@
     .factor_thickness = 0.0f, \
     .factor_uvs = 0.0f, \
     .noise_scale = 0.0f, \
+    .noise_offset = 0.0f, \
     .step = 4, \
     .layer_pass = 0, \
     .seed = 1, \

@@ -449,21 +449,32 @@ void GPENCIL_OT_layer_annotation_move(wmOperatorType *ot)
   ot->prop = RNA_def_enum(ot->srna, "type", slot_move, 0, "Type", "");
 }
 /* ********************* Duplicate Layer ************************** */
+enum {
+  GP_LAYER_DUPLICATE_ALL = 0,
+  GP_LAYER_DUPLICATE_EMPTY = 1,
+};
 
-static int gpencil_layer_copy_exec(bContext *C, wmOperator *UNUSED(op))
+static int gpencil_layer_copy_exec(bContext *C, wmOperator *op)
 {
   bGPdata *gpd = ED_gpencil_data_get_active(C);
   bGPDlayer *gpl = BKE_gpencil_layer_active_get(gpd);
   bGPDlayer *new_layer;
-
+  const int mode = RNA_enum_get(op->ptr, "mode");
+  const bool dup_strokes = (bool)(mode == GP_LAYER_DUPLICATE_ALL);
   /* sanity checks */
   if (ELEM(NULL, gpd, gpl)) {
     return OPERATOR_CANCELLED;
   }
 
-  /* make copy of layer, and add it immediately after the existing layer */
-  new_layer = BKE_gpencil_layer_duplicate(gpl);
-  BLI_insertlinkafter(&gpd->layers, gpl, new_layer);
+  /* Make copy of layer, and add it immediately after or before the existing layer. */
+  new_layer = BKE_gpencil_layer_duplicate(gpl, true, dup_strokes);
+  if (dup_strokes) {
+    BLI_insertlinkafter(&gpd->layers, gpl, new_layer);
+  }
+  else {
+    /* For empty strokes is better add below. */
+    BLI_insertlinkbefore(&gpd->layers, gpl, new_layer);
+  }
 
   /* ensure new layer has a unique name, and is now the active layer */
   BLI_uniquename(&gpd->layers,
@@ -484,6 +495,12 @@ static int gpencil_layer_copy_exec(bContext *C, wmOperator *UNUSED(op))
 
 void GPENCIL_OT_layer_duplicate(wmOperatorType *ot)
 {
+  static const EnumPropertyItem copy_mode[] = {
+      {GP_LAYER_DUPLICATE_ALL, "ALL", 0, "All Data", ""},
+      {GP_LAYER_DUPLICATE_EMPTY, "EMPTY", 0, "Empty Keyframes", ""},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   /* identifiers */
   ot->name = "Duplicate Layer";
   ot->idname = "GPENCIL_OT_layer_duplicate";
@@ -495,6 +512,8 @@ void GPENCIL_OT_layer_duplicate(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
+
+  RNA_def_enum(ot->srna, "mode", copy_mode, GP_LAYER_DUPLICATE_ALL, "Mode", "");
 }
 
 /* ********************* Duplicate Layer in a new object ************************** */
@@ -1401,7 +1420,7 @@ void GPENCIL_OT_layer_merge(wmOperatorType *ot)
 
 /* ********************** Change Layer ***************************** */
 
-static int gpencil_layer_change_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
+static int gpencil_layer_change_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   uiPopupMenu *pup;
   uiLayout *layout;
@@ -1560,7 +1579,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
               continue;
             }
             /* check if the color is editable */
-            if (ED_gpencil_stroke_color_use(ob, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(ob, gpl, gps) == false) {
               continue;
             }
             /* some stroke is already at front*/
@@ -1570,7 +1589,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
                 continue;
               }
             }
-            /* some stroke is already at botom */
+            /* Some stroke is already at bottom. */
             if (ELEM(direction, GP_STROKE_MOVE_BOTTOM, GP_STROKE_MOVE_DOWN)) {
               if (gps == gpf->strokes.first) {
                 gpf_lock = true;
@@ -1657,7 +1676,7 @@ void GPENCIL_OT_stroke_arrange(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Arrange Stroke";
   ot->idname = "GPENCIL_OT_stroke_arrange";
-  ot->description = "Arrange selected strokes up/down in the drawing order of the active layer";
+  ot->description = "Arrange selected strokes up/down in the display order of the active layer";
 
   /* callbacks */
   ot->exec = gpencil_stroke_arrange_exec;
@@ -1725,7 +1744,7 @@ static int gpencil_stroke_change_color_exec(bContext *C, wmOperator *op)
               continue;
             }
             /* check if the color is editable */
-            if (ED_gpencil_stroke_color_use(ob, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(ob, gpl, gps) == false) {
               continue;
             }
 
@@ -1906,7 +1925,7 @@ void GPENCIL_OT_brush_reset(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Reset Brush";
   ot->idname = "GPENCIL_OT_brush_reset";
-  ot->description = "Reset Brush to default parameters";
+  ot->description = "Reset brush to default parameters";
 
   /* api callbacks */
   ot->exec = gpencil_brush_reset_exec;
@@ -2003,7 +2022,7 @@ static void gpencil_brush_delete_mode_brushes(Main *bmain,
       }
     }
 
-    /* Before delete, unpinn any material of the brush. */
+    /* Before delete, un-pin any material of the brush. */
     if ((brush->gpencil_settings) && (brush->gpencil_settings->material != NULL)) {
       brush->gpencil_settings->material = NULL;
       brush->gpencil_settings->flag &= ~GP_BRUSH_MATERIAL_PINNED;
@@ -2849,12 +2868,12 @@ int ED_gpencil_join_objects_exec(bContext *C, wmOperator *op)
         mul_v3_m3v3(offset_local, imat, offset_global);
 
         LISTBASE_FOREACH (bGPDlayer *, gpl_src, &gpd_src->layers) {
-          bGPDlayer *gpl_new = BKE_gpencil_layer_duplicate(gpl_src);
+          bGPDlayer *gpl_new = BKE_gpencil_layer_duplicate(gpl_src, true, true);
           float diff_mat[4][4];
           float inverse_diff_mat[4][4];
 
           /* recalculate all stroke points */
-          BKE_gpencil_parent_matrix_get(depsgraph, ob_iter, gpl_src, diff_mat);
+          BKE_gpencil_layer_transform_matrix_get(depsgraph, ob_iter, gpl_src, diff_mat);
           invert_m4_m4_safe_ortho(inverse_diff_mat, diff_mat);
 
           Material *ma_src = NULL;
@@ -3388,7 +3407,7 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
             continue;
           }
           /* check if the color is editable */
-          if (ED_gpencil_stroke_color_use(ob, gpl, gps) == false) {
+          if (ED_gpencil_stroke_material_editable(ob, gpl, gps) == false) {
             continue;
           }
 
@@ -3399,9 +3418,11 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
 
             if (!deselected) {
               gps->flag |= GP_STROKE_SELECT;
+              BKE_gpencil_stroke_select_index_set(gpd, gps);
             }
             else {
               gps->flag &= ~GP_STROKE_SELECT;
+              BKE_gpencil_stroke_select_index_reset(gps);
             }
             for (i = 0, pt = gps->points; i < gps->totpoints; i++, pt++) {
               if (!deselected) {

@@ -24,7 +24,7 @@
 class GaussianXBlurOperation : public BlurBaseOperation {
  private:
   float *m_gausstab;
-#ifdef __SSE2__
+#ifdef BLI_HAVE_SSE2
   __m128 *m_gausstab_sse;
 #endif
   int m_filtersize;
@@ -34,7 +34,7 @@ class GaussianXBlurOperation : public BlurBaseOperation {
   GaussianXBlurOperation();
 
   /**
-   * \brief the inner loop of this program
+   * \brief The inner loop of this operation.
    */
   void executePixel(float output[4], int x, int y, void *data);
 
@@ -42,8 +42,8 @@ class GaussianXBlurOperation : public BlurBaseOperation {
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp);
 
   /**
    * \brief initialize the execution

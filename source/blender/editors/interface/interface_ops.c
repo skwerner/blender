@@ -901,7 +901,7 @@ bool UI_context_copy_to_selected_list(bContext *C,
             MEM_freeN(link);
           }
           else {
-            /* avoid prepending 'data' to the path */
+            /* Avoid prepending 'data' to the path. */
             RNA_id_pointer_create(id_data, &link->ptr);
           }
 
@@ -1296,6 +1296,19 @@ void UI_editsource_active_but_test(uiBut *but)
   BLI_ghash_insert(ui_editsource_info->hash, but, but_store);
 }
 
+/**
+ * Remove the editsource data for \a old_but and reinsert it for \a new_but. Use when the button
+ * was reallocated, e.g. to have a new type (#ui_but_change_type()).
+ */
+void UI_editsource_but_replace(const uiBut *old_but, uiBut *new_but)
+{
+  uiEditSourceButStore *but_store = BLI_ghash_lookup(ui_editsource_info->hash, old_but);
+  if (but_store) {
+    BLI_ghash_remove(ui_editsource_info->hash, old_but, NULL, NULL);
+    BLI_ghash_insert(ui_editsource_info->hash, new_but, but_store);
+  }
+}
+
 static int editsource_text_edit(bContext *C,
                                 wmOperator *op,
                                 const char filepath[FILE_MAX],
@@ -1521,7 +1534,6 @@ static int edittranslation_exec(bContext *C, wmOperator *op)
 
     UI_but_string_info_get(C,
                            but,
-                           NULL,
                            &but_label,
                            &rna_label,
                            &enum_label,

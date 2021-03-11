@@ -35,19 +35,16 @@
 
 #  include "MEM_guardedalloc.h"
 
-#  include "DNA_mesh_types.h"
 #  include "DNA_modifier_types.h"
 #  include "DNA_object_types.h"
 #  include "DNA_scene_types.h"
 #  include "DNA_space_types.h"
 
 #  include "BKE_context.h"
-#  include "BKE_global.h"
 #  include "BKE_main.h"
 #  include "BKE_report.h"
 
 #  include "BLI_listbase.h"
-#  include "BLI_math_vector.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
 #  include "BLI_utildefines.h"
@@ -428,7 +425,7 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                   "triangulate",
                   false,
                   "Triangulate",
-                  "Export Polygons (Quads & NGons) as Triangles");
+                  "Export polygons (quads and n-gons) as triangles");
 
   RNA_def_enum(ot->srna,
                "quad_method",
@@ -439,10 +436,10 @@ void WM_OT_alembic_export(wmOperatorType *ot)
 
   RNA_def_enum(ot->srna,
                "ngon_method",
-               rna_enum_modifier_triangulate_quad_method_items,
+               rna_enum_modifier_triangulate_ngon_method_items,
                MOD_TRIANGULATE_NGON_BEAUTY,
-               "Polygon Method",
-               "Method for splitting the polygons into triangles");
+               "N-gon Method",
+               "Method for splitting the n-gons into triangles");
 
   RNA_def_boolean(ot->srna,
                   "export_hair",

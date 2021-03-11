@@ -320,6 +320,7 @@ IDTypeInfo IDType_ID_CU = {
     .make_local = NULL,
     .foreach_id = curve_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = curve_blend_write,
     .blend_read_data = curve_blend_read_data,
@@ -327,6 +328,8 @@ IDTypeInfo IDType_ID_CU = {
     .blend_read_expand = curve_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 static int cu_isectLL(const float v1[3],
@@ -2373,7 +2376,7 @@ static void make_bevel_list_3D_minimum_twist(BevList *bl)
      * 0,1,2,3,4 --> 1,2,3,4,0
      *
      * this is why we compare last with second last
-     * */
+     */
     float vec_1[3] = {0, 1, 0}, vec_2[3] = {0, 1, 0}, angle, ang_fac, cross_tmp[3];
 
     BevPoint *bevp_first;
@@ -4335,14 +4338,17 @@ void BKE_nurbList_handles_autocalc(ListBase *editnurb, uint8_t flag)
   }
 }
 
+/**
+ * \param code:
+ * - 1 (#HD_AUTO): set auto-handle.
+ * - 2 (#HD_VECT): set vector-handle.
+ * - 3 (#HD_ALIGN) it toggle, vector-handles become #HD_FREE.
+ *
+ * - 5: Set align, like 3 but no toggle.
+ * - 6: Clear align (setting #HD_FREE), like 3 but no toggle.
+ */
 void BKE_nurbList_handles_set(ListBase *editnurb, const char code)
 {
-  /* code==1: set autohandle */
-  /* code==2: set vectorhandle */
-  /* code==3 (HD_ALIGN) it toggle, vectorhandles become HD_FREE */
-  /* code==4: sets icu flag to become IPO_AUTO_HORIZ, horizontal extremes on auto-handles */
-  /* code==5: Set align, like 3 but no toggle */
-  /* code==6: Clear align, like 3 but no toggle */
   BezTriple *bezt;
   int a;
 

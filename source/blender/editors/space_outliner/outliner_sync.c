@@ -38,7 +38,6 @@
 #include "BKE_context.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
-#include "BKE_object.h"
 
 #include "DEG_depsgraph.h"
 
@@ -46,7 +45,7 @@
 #include "ED_object.h"
 #include "ED_outliner.h"
 
-#include "SEQ_sequencer.h"
+#include "SEQ_select.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -305,7 +304,7 @@ static void outliner_select_sync_to_sequence(Scene *scene, TreeStoreElem *tselem
   Sequence *seq = (Sequence *)tselem->id;
 
   if (tselem->flag & TSE_ACTIVE) {
-    BKE_sequencer_active_set(scene, seq);
+    SEQ_select_active_set(scene, seq);
   }
 
   if (tselem->flag & TSE_SELECTED) {
@@ -327,7 +326,7 @@ static void outliner_sync_selection_from_outliner(Scene *scene,
   LISTBASE_FOREACH (TreeElement *, te, tree) {
     TreeStoreElem *tselem = TREESTORE(te);
 
-    if (tselem->type == 0 && te->idcode == ID_OB) {
+    if ((tselem->type == TSE_SOME_ID) && (te->idcode == ID_OB)) {
       if (sync_types->object) {
         outliner_select_sync_to_object(view_layer, te, tselem, selected_items->objects);
       }
@@ -378,7 +377,7 @@ void ED_outliner_select_sync_from_outliner(bContext *C, SpaceOutliner *space_out
 
   selected_items_free(&selected_items);
 
-  /* Tag for updates and clear dirty flag toprevent a sync to the outliner on draw */
+  /* Tag for updates and clear dirty flag to prevent a sync to the outliner on draw. */
   if (sync_types.object) {
     space_outliner->sync_select_dirty &= ~WM_OUTLINER_SYNC_SELECT_FROM_OBJECT;
     DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
@@ -504,7 +503,7 @@ static void outliner_sync_selection_to_outliner(ViewLayer *view_layer,
   LISTBASE_FOREACH (TreeElement *, te, tree) {
     TreeStoreElem *tselem = TREESTORE(te);
 
-    if (tselem->type == 0 && te->idcode == ID_OB) {
+    if ((tselem->type == TSE_SOME_ID) && te->idcode == ID_OB) {
       if (sync_types->object) {
         outliner_select_sync_from_object(view_layer, active_data->object, te, tselem);
       }
@@ -542,10 +541,10 @@ static void get_sync_select_active_data(const bContext *C, SyncSelectActiveData 
   active_data->object = OBACT(view_layer);
   active_data->edit_bone = CTX_data_active_bone(C);
   active_data->pose_channel = CTX_data_active_pose_bone(C);
-  active_data->sequence = BKE_sequencer_active_get(scene);
+  active_data->sequence = SEQ_select_active_get(scene);
 }
 
-/* If outliner is dirty sync selection from view layer and sequwncer */
+/* If outliner is dirty sync selection from view layer and sequencer. */
 void outliner_sync_selection(const bContext *C, SpaceOutliner *space_outliner)
 {
   /* Set which types of data to sync from sync dirty flag and outliner display mode */

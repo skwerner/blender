@@ -66,6 +66,7 @@ static void eevee_engine_init(void *ved)
   stl->g_data->valid_double_buffer = (txl->color_double_buffer != NULL);
   stl->g_data->valid_taa_history = (txl->taa_history != NULL);
   stl->g_data->queued_shaders_count = 0;
+  stl->g_data->render_timesteps = 1;
 
   /* Main Buffer */
   DRW_texture_ensure_fullscreen_2d(&txl->color, GPU_RGBA16F, DRW_TEX_FILTER | DRW_TEX_MIPMAP);
@@ -319,7 +320,7 @@ static void eevee_draw_scene(void *vedata)
     EEVEE_renderpasses_output_accumulate(sldata, vedata, false);
 
     /* Transparent */
-    /* TODO(fclem): should be its own Framebuffer.
+    /* TODO(fclem): should be its own Frame-buffer.
      * This is needed because dualsource blending only works with 1 color buffer. */
     GPU_framebuffer_texture_attach(fbl->main_color_fb, dtxl->depth, 0, 0);
     GPU_framebuffer_bind(fbl->main_color_fb);
@@ -456,13 +457,17 @@ static void eevee_render_to_image(void *vedata,
   }
   EEVEE_PrivateData *g_data = ved->stl->g_data;
 
-  EEVEE_render_modules_init(vedata, engine, depsgraph);
-
   int initial_frame = CFRA;
   float initial_subframe = SUBFRA;
   float shuttertime = (do_motion_blur) ? scene->eevee.motion_blur_shutter : 0.0f;
   int time_steps_tot = (do_motion_blur) ? max_ii(1, scene->eevee.motion_blur_steps) : 1;
-  g_data->render_tot_samples = divide_ceil_u(scene->eevee.taa_render_samples, time_steps_tot);
+  g_data->render_timesteps = time_steps_tot;
+
+  EEVEE_render_modules_init(vedata, engine, depsgraph);
+
+  g_data->render_sample_count_per_timestep = EEVEE_temporal_sampling_sample_count_get(scene,
+                                                                                      ved->stl);
+
   /* Compute start time. The motion blur will cover `[time ...time + shuttertime]`. */
   float time = initial_frame + initial_subframe;
   switch (scene->eevee.motion_blur_position) {
@@ -553,7 +558,8 @@ static void eevee_render_to_image(void *vedata,
 
     /* Actual drawing. */
     {
-      EEVEE_renderpasses_output_init(sldata, vedata, g_data->render_tot_samples * time_steps_tot);
+      EEVEE_renderpasses_output_init(
+          sldata, vedata, g_data->render_sample_count_per_timestep * time_steps_tot);
 
       EEVEE_temporal_sampling_create_view(vedata);
       EEVEE_render_draw(vedata, engine, render_layer, rect);
@@ -570,8 +576,6 @@ static void eevee_render_to_image(void *vedata,
   EEVEE_motion_blur_data_free(&ved->stl->effects->motion_blur);
 
   if (RE_engine_test_break(engine)) {
-    /* Cryptomatte buffers are freed during render_read_result */
-    EEVEE_cryptomatte_free(vedata);
     return;
   }
 
@@ -583,6 +587,16 @@ static void eevee_render_to_image(void *vedata,
   if (CFRA != initial_frame || SUBFRA != initial_subframe) {
     /* Restore original frame number. This is because the render pipeline expects it. */
     RE_engine_frame_set(engine, initial_frame, initial_subframe);
+  }
+}
+
+static void eevee_store_metadata(void *vedata, struct RenderResult *render_result)
+{
+  EEVEE_Data *ved = (EEVEE_Data *)vedata;
+  EEVEE_PrivateData *g_data = ved->stl->g_data;
+  if (g_data->render_passes & EEVEE_RENDER_PASS_CRYPTOMATTE) {
+    EEVEE_cryptomatte_store_metadata(ved, render_result);
+    EEVEE_cryptomatte_free(ved);
   }
 }
 
@@ -611,6 +625,7 @@ DrawEngineType draw_engine_eevee_type = {
     &eevee_view_update,
     &eevee_id_update,
     &eevee_render_to_image,
+    &eevee_store_metadata,
 };
 
 RenderEngineType DRW_engine_viewport_eevee_type = {

@@ -189,8 +189,8 @@ Camera::Camera() : Node(node_type)
 
   full_rastertocamera = projection_identity();
 
-  dx = make_float3(0.0f, 0.0f, 0.0f);
-  dy = make_float3(0.0f, 0.0f, 0.0f);
+  dx = zero_float3();
+  dy = zero_float3();
 
   need_device_update = true;
   need_flags_update = true;
@@ -212,8 +212,8 @@ void Camera::compute_auto_viewplane()
     viewplane.top = 1.0f;
   }
   else {
-    float aspect = (float)width / (float)height;
-    if (width >= height) {
+    float aspect = (float)full_width / (float)full_height;
+    if (full_width >= full_height) {
       viewplane.left = -aspect;
       viewplane.right = aspect;
       viewplane.bottom = -1.0f;
@@ -252,11 +252,11 @@ void Camera::update(Scene *scene)
   Transform fulltoborder = transform_from_viewplane(viewport_camera_border);
   Transform bordertofull = transform_inverse(fulltoborder);
 
-  /* ndc to raster */
+  /* NDC to raster. */
   Transform ndctoraster = transform_scale(width, height, 1.0f) * bordertofull;
   Transform full_ndctoraster = transform_scale(full_width, full_height, 1.0f) * bordertofull;
 
-  /* raster to screen */
+  /* Raster to screen. */
   Transform screentondc = fulltoborder * transform_from_viewplane(viewplane);
 
   Transform screentoraster = ndctoraster * screentondc;
@@ -264,7 +264,7 @@ void Camera::update(Scene *scene)
   Transform full_screentoraster = full_ndctoraster * screentondc;
   Transform full_rastertoscreen = transform_inverse(full_screentoraster);
 
-  /* screen to camera */
+  /* Screen to camera. */
   ProjectionTransform cameratoscreen;
   if (camera_type == CAMERA_PERSPECTIVE)
     cameratoscreen = projection_perspective(fov, nearclip, farclip);
@@ -310,8 +310,8 @@ void Camera::update(Scene *scene)
               transform_perspective(&full_rastertocamera, make_float3(0, 0, 0));
   }
   else {
-    dx = make_float3(0.0f, 0.0f, 0.0f);
-    dy = make_float3(0.0f, 0.0f, 0.0f);
+    dx = zero_float3();
+    dy = zero_float3();
   }
 
   dx = transform_direction(&cameratoworld, dx);
@@ -568,7 +568,7 @@ float3 Camera::transform_raster_to_world(float raster_x, float raster_y)
   if (camera_type == CAMERA_PERSPECTIVE) {
     D = transform_perspective(&rastertocamera, make_float3(raster_x, raster_y, 0.0f));
     float3 Pclip = normalize(D);
-    P = make_float3(0.0f, 0.0f, 0.0f);
+    P = zero_float3();
     /* TODO(sergey): Aperture support? */
     P = transform_point(&cameratoworld, P);
     D = normalize(transform_direction(&cameratoworld, D));
@@ -643,7 +643,7 @@ float Camera::world_to_raster_size(float3 P)
       float3 p = transform_point(&worldtocamera, P);
       float3 v1 = transform_perspective(&full_rastertocamera,
                                         make_float3(full_width, full_height, 0.0f));
-      float3 v2 = transform_perspective(&full_rastertocamera, make_float3(0.0f, 0.0f, 0.0f));
+      float3 v2 = transform_perspective(&full_rastertocamera, zero_float3());
 
       /* Create point clamped to frustum */
       float3 c;
@@ -741,7 +741,8 @@ float Camera::world_to_raster_size(float3 P)
     float3 D = transform_point(&worldtocamera, P);
     float dist = len(D);
 
-    Ray ray = {{0}};
+    Ray ray;
+    memset(&ray, 0, sizeof(ray));
 
     /* Distortion can become so great that the results become meaningless, there
      * may be a better way to do this, but calculating differentials from the

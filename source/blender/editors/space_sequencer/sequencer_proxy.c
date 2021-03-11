@@ -25,7 +25,6 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
-#include "BLI_timecode.h"
 
 #include "DNA_scene_types.h"
 
@@ -34,6 +33,9 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 
+#include "SEQ_iterator.h"
+#include "SEQ_proxy.h"
+#include "SEQ_relations.h"
 #include "SEQ_sequencer.h"
 
 #include "WM_api.h"
@@ -90,14 +92,14 @@ static void proxy_startjob(void *pjv, short *stop, short *do_update, float *prog
 static void proxy_endjob(void *pjv)
 {
   ProxyJob *pj = pjv;
-  Editing *ed = BKE_sequencer_editing_get(pj->scene, false);
+  Editing *ed = SEQ_editing_get(pj->scene, false);
   LinkData *link;
 
   for (link = pj->queue.first; link; link = link->next) {
     SEQ_proxy_rebuild_finish(link->data, pj->stop);
   }
 
-  BKE_sequencer_free_imbuf(pj->scene, &ed->seqbase, false);
+  SEQ_relations_free_imbuf(pj->scene, &ed->seqbase, false);
 
   WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, pj->scene);
 }
@@ -108,7 +110,7 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
   ProxyJob *pj;
   struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   ScrArea *area = CTX_wm_area(C);
   Sequence *seq;
   GSet *file_list;
@@ -142,8 +144,7 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
   bool selected = false; /* Check for no selected strips */
 
   SEQ_CURRENT_BEGIN (ed, seq) {
-    if (!ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE, SEQ_TYPE_META) ||
-        (seq->flag & SELECT) == 0) {
+    if (!ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE) || (seq->flag & SELECT) == 0) {
       continue;
     }
 
@@ -166,12 +167,12 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
   }
   SEQ_CURRENT_END;
 
+  BLI_gset_free(file_list, MEM_freeN);
+
   if (!selected) {
     BKE_reportf(reports, RPT_WARNING, "Select movie or image strips");
     return;
   }
-
-  BLI_gset_free(file_list, MEM_freeN);
 
   if (selected && !WM_jobs_is_running(wm_job)) {
     G.is_break = false;
@@ -201,7 +202,7 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
   struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   Sequence *seq;
   GSet *file_list;
 
@@ -225,7 +226,7 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
         SEQ_proxy_rebuild(context, &stop, &do_update, &progress);
         SEQ_proxy_rebuild_finish(context, 0);
       }
-      BKE_sequencer_free_imbuf(scene, &ed->seqbase, false);
+      SEQ_relations_free_imbuf(scene, &ed->seqbase, false);
     }
   }
   SEQ_CURRENT_END;
@@ -266,7 +267,7 @@ static int sequencer_enable_proxies_invoke(bContext *C,
 static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   Sequence *seq;
   bool proxy_25 = RNA_boolean_get(op->ptr, "proxy_25");
   bool proxy_50 = RNA_boolean_get(op->ptr, "proxy_50");
@@ -281,7 +282,7 @@ static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
 
   SEQ_CURRENT_BEGIN (ed, seq) {
     if ((seq->flag & SELECT)) {
-      if (ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE, SEQ_TYPE_META)) {
+      if (ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE)) {
         SEQ_proxy_set(seq, turnon);
         if (seq->strip->proxy == NULL) {
           continue;
@@ -336,7 +337,7 @@ void SEQUENCER_OT_enable_proxies(wmOperatorType *ot)
   /* Identifiers. */
   ot->name = "Set Selected Strip Proxies";
   ot->idname = "SEQUENCER_OT_enable_proxies";
-  ot->description = "Enable selected proxies on all selected Movie, Image and Meta strips";
+  ot->description = "Enable selected proxies on all selected Movie and Image strips";
 
   /* Api callbacks. */
   ot->invoke = sequencer_enable_proxies_invoke;

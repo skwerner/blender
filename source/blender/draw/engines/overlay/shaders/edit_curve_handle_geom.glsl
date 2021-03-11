@@ -1,7 +1,7 @@
 
 /* Keep the same value of `ACTIVE_NURB` in `draw_cache_imp_curve.c` */
-#define ACTIVE_NURB 1 << 2
-#define EVEN_U_BIT 1 << 4
+#define ACTIVE_NURB (1 << 2)
+#define EVEN_U_BIT (1 << 4)
 #define COLOR_SHIFT 5
 
 /* Keep the same value in `handle_display` in `DNA_view3d_types.h` */
@@ -53,9 +53,8 @@ void main()
   bool edge_selected = (((vertFlag[1] | vertFlag[0]) & VERT_SELECTED) != 0);
   bool handle_selected = (showCurveHandles &&
                           (((vertFlag[1] | vertFlag[0]) & VERT_SELECTED_BEZT_HANDLE) != 0));
-  /* It reuses freestyle flag because the flag is 8 bits and all are already used and this
-   * flag is not used in this context. */
-  bool is_gpencil = ((vertFlag[1] & EDGE_FREESTYLE) != 0);
+
+  bool is_gpencil = ((vertFlag[1] & VERT_GPENCIL_BEZT_HANDLE) != 0);
 
   /* If handle type is only selected and the edge is not selected, don't show. */
   if ((curveHandleDisplay != CURVE_HANDLE_ALL) && (!handle_selected)) {

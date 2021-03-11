@@ -235,6 +235,7 @@ class IMAGE_MT_image(Menu):
 
             layout.menu("IMAGE_MT_image_invert")
             layout.operator("image.resize", text="Resize")
+            layout.menu("IMAGE_MT_image_flip")
 
         if ima and not show_render:
             if ima.packed_file:
@@ -250,6 +251,13 @@ class IMAGE_MT_image(Menu):
             layout.operator("palette.extract_from_image", text="Extract Palette")
             layout.operator("gpencil.image_to_grease_pencil", text="Generate Grease Pencil")
 
+class IMAGE_MT_image_flip(Menu):
+    bl_label = "Flip"
+
+    def draw(self, _context):
+        layout = self.layout
+        layout.operator("image.flip", text="Horizontally").use_flip_horizontal = True
+        layout.operator("image.flip", text="Vertically").use_flip_vertical = True
 
 class IMAGE_MT_image_invert(Menu):
     bl_label = "Invert"
@@ -367,7 +375,7 @@ class IMAGE_MT_uvs_split(Menu):
 class IMAGE_MT_uvs_unwrap(Menu):
     bl_label = "Unwrap"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("uv.unwrap")
@@ -1181,9 +1189,10 @@ class IMAGE_PT_tools_brush_texture(BrushButtonsPanel, Panel):
 
         tool_settings = context.tool_settings.image_paint
         brush = tool_settings.brush
+        tex_slot = brush.texture_slot
 
         col = layout.column()
-        col.template_ID_preview(brush, "texture", new="texture.new", rows=3, cols=8)
+        col.template_ID_preview(tex_slot, "texture", new="texture.new", rows=3, cols=8)
 
         brush_texture_settings(col, brush, 0)
 
@@ -1584,6 +1593,7 @@ classes = (
     IMAGE_MT_select,
     IMAGE_MT_select_linked,
     IMAGE_MT_image,
+    IMAGE_MT_image_flip,
     IMAGE_MT_image_invert,
     IMAGE_MT_uvs,
     IMAGE_MT_uvs_showhide,

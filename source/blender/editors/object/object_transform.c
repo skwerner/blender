@@ -1394,7 +1394,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
              * (all layers are considered without evaluating lock attributes) */
             LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
               /* calculate difference matrix */
-              BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+              BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
               /* undo matrix */
               invert_m4_m4(inverse_diff_mat, diff_mat);
               LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
@@ -1533,7 +1533,7 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
        0,
        "Origin to Geometry",
        "Calculate the center of geometry based on the current pivot point (median, otherwise "
-       "bounding-box)"},
+       "bounding box)"},
       {ORIGIN_TO_CURSOR,
        "ORIGIN_CURSOR",
        0,

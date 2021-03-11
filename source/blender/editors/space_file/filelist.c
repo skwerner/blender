@@ -276,6 +276,7 @@ typedef struct FileListInternEntry {
   char *redirection_path;
   /** not strictly needed, but used during sorting, avoids to have to recompute it there... */
   char *name;
+  bool free_name;
 
   /**
    * This is data from the current main, represented by this file. It's crucial that this is
@@ -409,14 +410,14 @@ typedef struct FileList {
   /* Set given path as root directory,
    * if last bool is true may change given string in place to a valid value.
    * Returns True if valid dir. */
-  bool (*checkdirf)(struct FileList *, char *, const bool);
+  bool (*check_dir_fn)(struct FileList *, char *, const bool);
 
   /* Fill filelist (to be called by read job). */
-  void (*read_jobf)(
+  void (*read_job_fn)(
       Main *, struct FileList *, const char *, short *, short *, float *, ThreadMutex *);
 
   /* Filter an entry of current filelist. */
-  bool (*filterf)(struct FileListInternEntry *, const char *, FileListFilter *);
+  bool (*filter_fn)(struct FileListInternEntry *, const char *, FileListFilter *);
 
   short tags; /* FileListTags */
 } FileList;
@@ -962,7 +963,7 @@ void filelist_filter(FileList *filelist)
 
   /* Filter remap & count how many files are left after filter in a single loop. */
   for (file = filelist->filelist_intern.entries.first; file; file = file->next) {
-    if (filelist->filterf(file, filelist->filelist.root, &filelist->filter_data)) {
+    if (filelist->filter_fn(file, filelist->filelist.root, &filelist->filter_data)) {
       filtered_tmp[num_filtered++] = file;
     }
   }
@@ -1366,7 +1367,7 @@ static bool filelist_checkdir_main_assets(struct FileList *UNUSED(filelist),
 
 static void filelist_entry_clear(FileDirEntry *entry)
 {
-  if (entry->name) {
+  if (entry->name && ((entry->flags & FILE_ENTRY_NAME_FREE) != 0)) {
     MEM_freeN(entry->name);
   }
   if (entry->description) {
@@ -1451,7 +1452,7 @@ static void filelist_intern_entry_free(FileListInternEntry *entry)
   if (entry->redirection_path) {
     MEM_freeN(entry->redirection_path);
   }
-  if (entry->name) {
+  if (entry->name && entry->free_name) {
     MEM_freeN(entry->name);
   }
   /* If we own the asset-data (it was generated from external file data), free it. */
@@ -1741,25 +1742,25 @@ void filelist_settype(FileList *filelist, short type)
   filelist->tags = 0;
   switch (filelist->type) {
     case FILE_MAIN:
-      filelist->checkdirf = filelist_checkdir_main;
-      filelist->read_jobf = filelist_readjob_main;
-      filelist->filterf = is_filtered_main;
+      filelist->check_dir_fn = filelist_checkdir_main;
+      filelist->read_job_fn = filelist_readjob_main;
+      filelist->filter_fn = is_filtered_main;
       break;
     case FILE_LOADLIB:
-      filelist->checkdirf = filelist_checkdir_lib;
-      filelist->read_jobf = filelist_readjob_lib;
-      filelist->filterf = is_filtered_lib;
+      filelist->check_dir_fn = filelist_checkdir_lib;
+      filelist->read_job_fn = filelist_readjob_lib;
+      filelist->filter_fn = is_filtered_lib;
       break;
     case FILE_MAIN_ASSET:
-      filelist->checkdirf = filelist_checkdir_main_assets;
-      filelist->read_jobf = filelist_readjob_main_assets;
-      filelist->filterf = is_filtered_main_assets;
+      filelist->check_dir_fn = filelist_checkdir_main_assets;
+      filelist->read_job_fn = filelist_readjob_main_assets;
+      filelist->filter_fn = is_filtered_main_assets;
       filelist->tags |= FILELIST_TAGS_USES_MAIN_DATA | FILELIST_TAGS_NO_THREADS;
       break;
     default:
-      filelist->checkdirf = filelist_checkdir_dir;
-      filelist->read_jobf = filelist_readjob_dir;
-      filelist->filterf = is_filtered_file;
+      filelist->check_dir_fn = filelist_checkdir_dir;
+      filelist->read_job_fn = filelist_readjob_dir;
+      filelist->filter_fn = is_filtered_file;
       break;
   }
 
@@ -1866,7 +1867,7 @@ const char *filelist_dir(struct FileList *filelist)
 
 bool filelist_is_dir(struct FileList *filelist, const char *path)
 {
-  return filelist->checkdirf(filelist, (char *)path, false);
+  return filelist->check_dir_fn(filelist, (char *)path, false);
 }
 
 /**
@@ -1878,7 +1879,7 @@ void filelist_setdir(struct FileList *filelist, char *r_dir)
   BLI_assert(strlen(r_dir) < FILE_MAX_LIBEXTRA);
 
   BLI_path_normalize_dir(BKE_main_blendfile_path_from_global(), r_dir);
-  const bool is_valid_path = filelist->checkdirf(filelist, r_dir, !allow_invalid);
+  const bool is_valid_path = filelist->check_dir_fn(filelist, r_dir, !allow_invalid);
   BLI_assert(is_valid_path || allow_invalid);
   UNUSED_VARS_NDEBUG(is_valid_path);
 
@@ -1953,7 +1954,13 @@ static FileDirEntry *filelist_file_create_entry(FileList *filelist, const int in
 
   ret->entry = rev;
   ret->relpath = BLI_strdup(entry->relpath);
-  ret->name = BLI_strdup(entry->name);
+  if (entry->free_name) {
+    ret->name = BLI_strdup(entry->name);
+    ret->flags |= FILE_ENTRY_NAME_FREE;
+  }
+  else {
+    ret->name = entry->name;
+  }
   ret->description = BLI_strdupcat(filelist->filelist.root, entry->relpath);
   memcpy(ret->uuid, entry->uuid, sizeof(ret->uuid));
   ret->blentype = entry->blentype;
@@ -1983,9 +1990,7 @@ static void filelist_file_release_entry(FileList *filelist, FileDirEntry *entry)
   filelist_entry_free(entry);
 }
 
-static FileDirEntry *filelist_file_ex(struct FileList *filelist,
-                                      const int index,
-                                      const bool use_request)
+FileDirEntry *filelist_file_ex(struct FileList *filelist, const int index, const bool use_request)
 {
   FileDirEntry *ret = NULL, *old;
   FileListEntryCache *cache = &filelist->filelist_cache;
@@ -2696,6 +2701,19 @@ uint filelist_entry_select_index_get(FileList *filelist, const int index, FileCh
   return 0;
 }
 
+bool filelist_entry_is_selected(FileList *filelist, const int index)
+{
+  BLI_assert(index >= 0 && index < filelist->filelist.nbr_entries_filtered);
+  FileListInternEntry *intern_entry = filelist->filelist_intern.filtered[index];
+
+  /* BLI_ghash_lookup returns NULL if not found, which gets mapped to 0, which gets mapped to
+   * "not selected". */
+  const uint selection_state = POINTER_AS_UINT(
+      BLI_ghash_lookup(filelist->selection_state, intern_entry->uuid));
+
+  return selection_state != 0;
+}
+
 /**
  * Set selection of the '..' parent entry, but only if it's actually visible.
  */
@@ -3175,6 +3193,7 @@ static void filelist_readjob_do(const bool do_lib,
       entry->relpath = BLI_strdup(dir + 2); /* + 2 to remove '//'
                                              * added by BLI_path_rel to rel_subdir. */
       entry->name = BLI_strdup(fileentry_uiname(root, entry->relpath, entry->typeflag, dir));
+      entry->free_name = true;
 
       /* Here we decide whether current filedirentry is to be listed too, or not. */
       if (max_recursion && (is_lib || (recursion_level <= max_recursion))) {
@@ -3288,7 +3307,8 @@ static void filelist_readjob_main_assets(Main *current_main,
 
     entry = MEM_callocN(sizeof(*entry), __func__);
     entry->relpath = BLI_strdup(id_code_name);
-    entry->name = BLI_strdup(id_iter->name + 2);
+    entry->name = id_iter->name + 2;
+    entry->free_name = false;
     entry->typeflag |= FILE_TYPE_BLENDERLIB | FILE_TYPE_ASSET;
     entry->blentype = GS(id_iter->name);
     *((uint32_t *)entry->uuid) = atomic_add_and_fetch_uint32(
@@ -3349,13 +3369,13 @@ static void filelist_readjob_startjob(void *flrjv, short *stop, short *do_update
 
   BLI_mutex_unlock(&flrj->lock);
 
-  flrj->tmp_filelist->read_jobf(flrj->current_main,
-                                flrj->tmp_filelist,
-                                flrj->main_name,
-                                stop,
-                                do_update,
-                                progress,
-                                &flrj->lock);
+  flrj->tmp_filelist->read_job_fn(flrj->current_main,
+                                  flrj->tmp_filelist,
+                                  flrj->main_name,
+                                  stop,
+                                  do_update,
+                                  progress,
+                                  &flrj->lock);
 }
 
 static void filelist_readjob_update(void *flrjv)
@@ -3455,7 +3475,7 @@ void filelist_readjob_start(FileList *filelist, const bContext *C)
     filelist_readjob_endjob(flrj);
     filelist_readjob_free(flrj);
 
-    WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_LIST, NULL);
+    WM_event_add_notifier(C, NC_SPACE | ND_SPACE_FILE_LIST | NA_JOB_FINISHED, NULL);
     return;
   }
 
@@ -3467,7 +3487,10 @@ void filelist_readjob_start(FileList *filelist, const bContext *C)
                        WM_JOB_PROGRESS,
                        WM_JOB_TYPE_FILESEL_READDIR);
   WM_jobs_customdata_set(wm_job, flrj, filelist_readjob_free);
-  WM_jobs_timer(wm_job, 0.01, NC_SPACE | ND_SPACE_FILE_LIST, NC_SPACE | ND_SPACE_FILE_LIST);
+  WM_jobs_timer(wm_job,
+                0.01,
+                NC_SPACE | ND_SPACE_FILE_LIST,
+                NC_SPACE | ND_SPACE_FILE_LIST | NA_JOB_FINISHED);
   WM_jobs_callbacks(
       wm_job, filelist_readjob_startjob, NULL, filelist_readjob_update, filelist_readjob_endjob);
 

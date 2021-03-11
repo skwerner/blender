@@ -159,12 +159,12 @@ extern struct EnumPropertyItem prop_clear_parent_types[];
 extern struct EnumPropertyItem prop_make_parent_types[];
 #endif
 
-/* Set the object's parent, return true iff successful. */
+/* Set the object's parent, return true if successful. */
 bool ED_object_parent_set(struct ReportList *reports,
                           const struct bContext *C,
                           struct Scene *scene,
-                          struct Object *ob,
-                          struct Object *par,
+                          struct Object *const ob,
+                          struct Object *const par,
                           int partype,
                           const bool xmirror,
                           const bool keep_transform,
@@ -173,6 +173,7 @@ void ED_object_parent_clear(struct Object *ob, const int type);
 
 void ED_object_base_select(struct Base *base, eObjectSelect_Mode mode);
 void ED_object_base_activate(struct bContext *C, struct Base *base);
+void ED_object_base_activate_with_mode_exit_if_needed(struct bContext *C, struct Base *base);
 void ED_object_base_active_refresh(struct Main *bmain,
                                    struct Scene *scene,
                                    struct ViewLayer *view_layer);
@@ -205,6 +206,12 @@ bool ED_object_editmode_exit_ex(struct Main *bmain,
                                 struct Object *obedit,
                                 int flag);
 bool ED_object_editmode_exit(struct bContext *C, int flag);
+
+bool ED_object_editmode_exit_multi_ex(struct Main *bmain,
+                                      struct Scene *scene,
+                                      struct ViewLayer *view_layer,
+                                      int flag);
+bool ED_object_editmode_exit_multi(struct bContext *C, int flag);
 
 bool ED_object_editmode_enter_ex(struct Main *bmain,
                                  struct Scene *scene,
@@ -424,11 +431,11 @@ bool ED_object_modifier_apply(struct Main *bmain,
                               struct ModifierData *md,
                               int mode,
                               bool keep_modifier);
-int ED_object_modifier_copy(struct ReportList *reports,
-                            struct Main *bmain,
-                            struct Scene *scene,
-                            struct Object *ob,
-                            struct ModifierData *md);
+bool ED_object_modifier_copy(struct ReportList *reports,
+                             struct Main *bmain,
+                             struct Scene *scene,
+                             struct Object *ob,
+                             struct ModifierData *md);
 void ED_object_modifier_link(struct bContext *C, struct Object *ob_dst, struct Object *ob_src);
 void ED_object_modifier_copy_to_object(struct bContext *C,
                                        struct Object *ob_dst,
@@ -455,25 +462,25 @@ bool ED_object_gpencil_modifier_remove(struct ReportList *reports,
                                        struct Object *ob,
                                        struct GpencilModifierData *md);
 void ED_object_gpencil_modifier_clear(struct Main *bmain, struct Object *ob);
-int ED_object_gpencil_modifier_move_down(struct ReportList *reports,
-                                         struct Object *ob,
-                                         struct GpencilModifierData *md);
-int ED_object_gpencil_modifier_move_up(struct ReportList *reports,
-                                       struct Object *ob,
-                                       struct GpencilModifierData *md);
+bool ED_object_gpencil_modifier_move_down(struct ReportList *reports,
+                                          struct Object *ob,
+                                          struct GpencilModifierData *md);
+bool ED_object_gpencil_modifier_move_up(struct ReportList *reports,
+                                        struct Object *ob,
+                                        struct GpencilModifierData *md);
 bool ED_object_gpencil_modifier_move_to_index(struct ReportList *reports,
                                               struct Object *ob,
                                               struct GpencilModifierData *md,
                                               const int index);
-int ED_object_gpencil_modifier_apply(struct Main *bmain,
-                                     struct ReportList *reports,
-                                     struct Depsgraph *depsgraph,
+bool ED_object_gpencil_modifier_apply(struct Main *bmain,
+                                      struct ReportList *reports,
+                                      struct Depsgraph *depsgraph,
+                                      struct Object *ob,
+                                      struct GpencilModifierData *md,
+                                      int mode);
+bool ED_object_gpencil_modifier_copy(struct ReportList *reports,
                                      struct Object *ob,
-                                     struct GpencilModifierData *md,
-                                     int mode);
-int ED_object_gpencil_modifier_copy(struct ReportList *reports,
-                                    struct Object *ob,
-                                    struct GpencilModifierData *md);
+                                     struct GpencilModifierData *md);
 void ED_object_gpencil_modifier_copy_to_object(struct Object *ob_dst,
                                                struct GpencilModifierData *md);
 

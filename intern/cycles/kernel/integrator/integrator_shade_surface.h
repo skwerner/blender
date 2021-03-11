@@ -416,7 +416,8 @@ ccl_device void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 {
   /* Only execute if path is active and intersection was found. */
-  if (INTEGRATOR_PATH_IS_TERMINATED || INTEGRATOR_STATE(isect, prim) == PRIM_NONE) {
+  if (INTEGRATOR_PATH_IS_TERMINATED || INTEGRATOR_STATE(isect, prim) == PRIM_NONE ||
+      (INTEGRATOR_STATE(isect, type) & PRIMITIVE_LAMP)) {
     return;
   }
 

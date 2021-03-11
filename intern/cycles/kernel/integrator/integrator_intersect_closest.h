@@ -17,6 +17,7 @@
 #pragma once
 
 #include "kernel/kernel_differential.h"
+#include "kernel/kernel_light.h"
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_random.h"
 
@@ -53,7 +54,7 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   }
 
   /* Read ray from integrator state into local memory. */
-  Ray ray;
+  Ray ray ccl_optional_struct_init;
   ray.P = INTEGRATOR_STATE(ray, P);
   ray.D = INTEGRATOR_STATE(ray, D);
   ray.t = INTEGRATOR_STATE(ray, t);
@@ -64,10 +65,17 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   kernel_assert(ray.t != 0.0f);
 
   /* Scene Intersection. */
-  Intersection isect;
-  const bool hit = intersect_closest_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
+  Intersection isect ccl_optional_struct_init;
+  bool hit = intersect_closest_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
+
+  /* TODO: remove this and do it in the various intersection functions instead. */
   if (!hit) {
     isect.prim = PRIM_NONE;
+  }
+
+  /* Light intersection for MIS. */
+  if (kernel_data.integrator.use_lamp_mis && !(INTEGRATOR_STATE(path, flag) & PATH_RAY_CAMERA)) {
+    hit = lights_intersect(kg, &ray, &isect) || hit;
   }
 
   /* Write intersection result into global integrator state memory. */
@@ -91,9 +99,14 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 #endif
 
   if (hit) {
-    /* Hit a surface, continue with surface kernel. */
-    INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_SURFACE);
-    return;
+    /* Hit a surface, continue with light or surface kernel. */
+    if (isect.type & PRIMITIVE_LAMP) {
+      INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_LIGHT);
+    }
+    else {
+      INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_SURFACE);
+      return;
+    }
   }
   else {
     /* Nothing hit, continue with background kernel. */

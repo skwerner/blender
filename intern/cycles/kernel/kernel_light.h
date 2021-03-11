@@ -21,6 +21,7 @@
 #include "kernel_light_background.h"
 #include "kernel_montecarlo.h"
 #include "kernel_projection.h"
+#include "kernel_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -43,7 +44,7 @@ typedef struct LightSample {
 
 /* Regular Light */
 
-ccl_device_inline bool lamp_light_sample(
+ccl_device_inline bool light_sample_from_position(
     const KernelGlobals *kg, int lamp, float randu, float randv, float3 P, LightSample *ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
@@ -164,11 +165,118 @@ ccl_device_inline bool lamp_light_sample(
   return (ls->pdf > 0.0f);
 }
 
-ccl_device bool lamp_light_eval(
-    const KernelGlobals *kg, int lamp, float3 P, float3 D, float t, LightSample *ls)
+ccl_device bool lights_intersect(const KernelGlobals *ccl_restrict kg,
+                                 const Ray *ccl_restrict ray,
+                                 Intersection *ccl_restrict isect)
+{
+  for (int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
+    const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+    LightType type = (LightType)klight->type;
+    float t = 0.0f, u = 0.0f, v = 0.0f;
+
+    if (!(klight->shader_id & SHADER_USE_MIS)) {
+      continue;
+    }
+
+    if (type == LIGHT_POINT || type == LIGHT_SPOT) {
+      /* Sphere light. */
+      const float3 lightP = make_float3(klight->co[0], klight->co[1], klight->co[2]);
+      const float radius = klight->spot.radius;
+      if (radius == 0.0f) {
+        continue;
+      }
+
+      float3 P;
+      if (!ray_aligned_disk_intersect(ray->P, ray->D, ray->t, lightP, radius, &P, &t)) {
+        continue;
+      }
+    }
+    else if (type == LIGHT_AREA) {
+      /* Area light. */
+      const float invarea = fabsf(klight->area.invarea);
+      const bool is_round = (klight->area.invarea < 0.0f);
+      if (invarea == 0.0f) {
+        continue;
+      }
+
+      const float3 axisu = make_float3(
+          klight->area.axisu[0], klight->area.axisu[1], klight->area.axisu[2]);
+      const float3 axisv = make_float3(
+          klight->area.axisv[0], klight->area.axisv[1], klight->area.axisv[2]);
+      const float3 Ng = make_float3(klight->area.dir[0], klight->area.dir[1], klight->area.dir[2]);
+
+      /* One sided. */
+      if (dot(ray->D, Ng) >= 0.0f) {
+        continue;
+      }
+
+      const float3 light_P = make_float3(klight->co[0], klight->co[1], klight->co[2]);
+
+      float3 P;
+      if (!ray_quad_intersect(
+              ray->P, ray->D, 0.0f, ray->t, light_P, axisu, axisv, Ng, &P, &t, &u, &v, is_round)) {
+        continue;
+      }
+    }
+    else {
+      continue;
+    }
+
+    if (t < isect->t) {
+      isect->t = t;
+      isect->u = u;
+      isect->v = v;
+      isect->type = PRIMITIVE_LAMP;
+      isect->prim = lamp;
+      isect->object = OBJECT_NONE;
+    }
+  }
+
+  return isect->prim != PRIM_NONE;
+}
+
+ccl_device bool light_sample_from_distant_ray(const KernelGlobals *ccl_restrict kg,
+                                              const float3 ray_D,
+                                              const int lamp,
+                                              LightSample *ccl_restrict ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
-  LightType type = (LightType)klight->type;
+  const int shader = klight->shader_id;
+  const float radius = klight->distant.radius;
+  const LightType type = (LightType)klight->type;
+
+  if (type != LIGHT_DISTANT) {
+    return false;
+  }
+  if (!(shader & SHADER_USE_MIS)) {
+    return false;
+  }
+  if (radius == 0.0f) {
+    return false;
+  }
+
+  /* a distant light is infinitely far away, but equivalent to a disk
+   * shaped light exactly 1 unit away from the current shading point.
+   *
+   *     radius              t^2/cos(theta)
+   *  <---------->           t = sqrt(1^2 + tan(theta)^2)
+   *       tan(th)           area = radius*radius*pi
+   *       <----->
+   *        \    |           (1 + tan(theta)^2)/cos(theta)
+   *         \   |           (1 + tan(acos(cos(theta)))^2)/cos(theta)
+   *       t  \th| 1         simplifies to
+   *           \-|           1/(cos(theta)^3)
+   *            \|           magic!
+   *             P
+   */
+
+  float3 lightD = make_float3(klight->co[0], klight->co[1], klight->co[2]);
+  float costheta = dot(-lightD, ray_D);
+  float cosangle = klight->distant.cosangle;
+
+  if (costheta < cosangle)
+    return false;
+
   ls->type = type;
   ls->shader = klight->shader_id;
   ls->object = PRIM_NONE;
@@ -177,66 +285,42 @@ ccl_device bool lamp_light_eval(
   /* todo: missing texture coordinates */
   ls->u = 0.0f;
   ls->v = 0.0f;
+  ls->t = FLT_MAX;
+  ls->P = -ray_D;
+  ls->Ng = -ray_D;
+  ls->D = ray_D;
 
-  if (!(ls->shader & SHADER_USE_MIS))
-    return false;
+  /* compute pdf */
+  float invarea = klight->distant.invarea;
+  ls->pdf = invarea / (costheta * costheta * costheta);
+  ls->pdf *= kernel_data.integrator.pdf_lights;
+  ls->eval_fac = ls->pdf;
 
-  if (type == LIGHT_DISTANT) {
-    /* distant light */
-    float radius = klight->distant.radius;
+  return true;
+}
 
-    if (radius == 0.0f)
-      return false;
-    if (t != FLT_MAX)
-      return false;
+ccl_device bool light_sample_from_intersection(const KernelGlobals *ccl_restrict kg,
+                                               const Intersection *ccl_restrict isect,
+                                               const float3 ray_P,
+                                               const float3 ray_D,
+                                               const float ray_t,
+                                               LightSample *ccl_restrict ls)
+{
+  const int lamp = isect->prim;
+  const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
+  LightType type = (LightType)klight->type;
+  ls->type = type;
+  ls->shader = klight->shader_id;
+  ls->object = PRIM_NONE;
+  ls->prim = PRIM_NONE;
+  ls->lamp = lamp;
+  /* todo: missing texture coordinates */
+  ls->t = isect->t;
+  ls->P = ray_P + ray_D * ls->t;
+  ls->D = ray_D;
 
-    /* a distant light is infinitely far away, but equivalent to a disk
-     * shaped light exactly 1 unit away from the current shading point.
-     *
-     *     radius              t^2/cos(theta)
-     *  <---------->           t = sqrt(1^2 + tan(theta)^2)
-     *       tan(th)           area = radius*radius*pi
-     *       <----->
-     *        \    |           (1 + tan(theta)^2)/cos(theta)
-     *         \   |           (1 + tan(acos(cos(theta)))^2)/cos(theta)
-     *       t  \th| 1         simplifies to
-     *           \-|           1/(cos(theta)^3)
-     *            \|           magic!
-     *             P
-     */
-
-    float3 lightD = make_float3(klight->co[0], klight->co[1], klight->co[2]);
-    float costheta = dot(-lightD, D);
-    float cosangle = klight->distant.cosangle;
-
-    if (costheta < cosangle)
-      return false;
-
-    ls->P = -D;
-    ls->Ng = -D;
-    ls->D = D;
-    ls->t = FLT_MAX;
-
-    /* compute pdf */
-    float invarea = klight->distant.invarea;
-    ls->pdf = invarea / (costheta * costheta * costheta);
-    ls->eval_fac = ls->pdf;
-  }
-  else if (type == LIGHT_POINT || type == LIGHT_SPOT) {
-    float3 lightP = make_float3(klight->co[0], klight->co[1], klight->co[2]);
-
-    float radius = klight->spot.radius;
-
-    /* sphere light */
-    if (radius == 0.0f)
-      return false;
-
-    if (!ray_aligned_disk_intersect(P, D, t, lightP, radius, &ls->P, &ls->t)) {
-      return false;
-    }
-
-    ls->Ng = -D;
-    ls->D = D;
+  if (type == LIGHT_POINT || type == LIGHT_SPOT) {
+    ls->Ng = -ray_D;
 
     float invarea = klight->spot.invarea;
     ls->eval_fac = (0.25f * M_1_PI_F) * invarea;
@@ -248,8 +332,9 @@ ccl_device bool lamp_light_eval(
       ls->eval_fac *= spot_light_attenuation(
           dir, klight->spot.spot_angle, klight->spot.spot_smooth, ls->Ng);
 
-      if (ls->eval_fac == 0.0f)
+      if (ls->eval_fac == 0.0f) {
         return false;
+      }
     }
     float2 uv = map_to_sphere(ls->Ng);
     ls->u = uv.x;
@@ -262,38 +347,30 @@ ccl_device bool lamp_light_eval(
   else if (type == LIGHT_AREA) {
     /* area light */
     float invarea = fabsf(klight->area.invarea);
-    bool is_round = (klight->area.invarea < 0.0f);
-    if (invarea == 0.0f)
-      return false;
 
     float3 axisu = make_float3(
         klight->area.axisu[0], klight->area.axisu[1], klight->area.axisu[2]);
     float3 axisv = make_float3(
         klight->area.axisv[0], klight->area.axisv[1], klight->area.axisv[2]);
     float3 Ng = make_float3(klight->area.dir[0], klight->area.dir[1], klight->area.dir[2]);
-
-    /* one sided */
-    if (dot(D, Ng) >= 0.0f)
-      return false;
-
     float3 light_P = make_float3(klight->co[0], klight->co[1], klight->co[2]);
 
-    if (!ray_quad_intersect(
-            P, D, 0.0f, t, light_P, axisu, axisv, Ng, &ls->P, &ls->t, &ls->u, &ls->v, is_round)) {
-      return false;
-    }
-
-    ls->D = D;
+    ls->u = isect->u;
+    ls->v = isect->v;
+    ls->D = ray_D;
     ls->Ng = Ng;
+
+    const bool is_round = (klight->area.invarea < 0.0f);
     if (is_round) {
-      ls->pdf = invarea * lamp_light_pdf(kg, Ng, -D, ls->t);
+      ls->pdf = invarea * lamp_light_pdf(kg, Ng, -ray_D, ls->t);
     }
     else {
-      ls->pdf = rect_light_sample(P, &light_P, axisu, axisv, 0, 0, false);
+      ls->pdf = rect_light_sample(ray_P, &light_P, axisu, axisv, 0, 0, false);
     }
     ls->eval_fac = 0.25f * invarea;
   }
   else {
+    kernel_assert(!"Invalid lamp type in light_sample_from_intersection");
     return false;
   }
 
@@ -667,7 +744,7 @@ ccl_device_noinline bool light_sample(const KernelGlobals *kg,
     return false;
   }
 
-  return lamp_light_sample(kg, lamp, randu, randv, P, ls);
+  return light_sample_from_position(kg, lamp, randu, randv, P, ls);
 }
 
 ccl_device_inline int light_select_num_samples(const KernelGlobals *kg, int index)

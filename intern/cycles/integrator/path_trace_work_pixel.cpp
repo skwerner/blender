@@ -122,6 +122,7 @@ void PathTraceWorkPixel::render_samples_full_pipeline(KernelGlobals &kernel_glob
       kernels_.integrator_intersect_closest(&kernel_globals, state);
       kernels_.integrator_shade_volume(&kernel_globals, state, render_buffer);
       kernels_.integrator_shade_background(&kernel_globals, state, render_buffer);
+      kernels_.integrator_shade_light(&kernel_globals, state, render_buffer);
       kernels_.integrator_shade_surface(&kernel_globals, state, render_buffer);
       kernels_.integrator_intersect_subsurface(&kernel_globals, state);
 

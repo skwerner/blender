@@ -73,6 +73,9 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
     if (INTEGRATOR_STATE(isect, prim) == PRIM_NONE) {
       INTEGRATOR_PATH_NEXT(SHADE_VOLUME, SHADE_BACKGROUND);
     }
+    else if (INTEGRATOR_STATE(isect, type) & PRIMITIVE_LAMP) {
+      INTEGRATOR_PATH_NEXT(SHADE_VOLUME, SHADE_LIGHT);
+    }
     else {
       INTEGRATOR_PATH_NEXT(SHADE_VOLUME, SHADE_SURFACE);
     }

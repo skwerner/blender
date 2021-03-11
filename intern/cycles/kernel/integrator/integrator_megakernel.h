@@ -21,6 +21,7 @@
 #include "kernel/integrator/integrator_intersect_shadow.h"
 #include "kernel/integrator/integrator_intersect_subsurface.h"
 #include "kernel/integrator/integrator_shade_background.h"
+#include "kernel/integrator/integrator_shade_light.h"
 #include "kernel/integrator/integrator_shade_shadow.h"
 #include "kernel/integrator/integrator_shade_surface.h"
 #include "kernel/integrator/integrator_shade_volume.h"
@@ -34,6 +35,7 @@ ccl_device void integrator_megakernel(INTEGRATOR_STATE_ARGS,
     integrator_intersect_closest(INTEGRATOR_STATE_PASS);
     integrator_shade_volume(INTEGRATOR_STATE_PASS, render_buffer);
     integrator_shade_background(INTEGRATOR_STATE_PASS, render_buffer);
+    integrator_shade_light(INTEGRATOR_STATE_PASS, render_buffer);
     integrator_shade_surface(INTEGRATOR_STATE_PASS, render_buffer);
     integrator_intersect_subsurface(INTEGRATOR_STATE_PASS);
 

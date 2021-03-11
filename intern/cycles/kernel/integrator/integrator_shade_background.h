@@ -17,6 +17,7 @@
 #pragma once
 
 #include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_emission.h"
 #include "kernel/kernel_light.h"
 #include "kernel/kernel_shader.h"
 
@@ -124,6 +125,54 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);
 }
 
+ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
+                                                ccl_global float *ccl_restrict render_buffer)
+{
+  const float3 ray_D = INTEGRATOR_STATE(ray, D);
+  const float ray_time = INTEGRATOR_STATE(ray, time);
+  LightSample ls ccl_optional_struct_init;
+  for (int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
+    if (light_sample_from_distant_ray(kg, ray_D, lamp, &ls)) {
+      /* Use visibility flag to skip lights. */
+#ifdef __PASSES__
+      const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
+
+      if (ls.shader & SHADER_EXCLUDE_ANY) {
+        if (((ls.shader & SHADER_EXCLUDE_DIFFUSE) && (path_flag & PATH_RAY_DIFFUSE)) ||
+            ((ls.shader & SHADER_EXCLUDE_GLOSSY) &&
+             ((path_flag & (PATH_RAY_GLOSSY | PATH_RAY_REFLECT)) ==
+              (PATH_RAY_GLOSSY | PATH_RAY_REFLECT))) ||
+            ((ls.shader & SHADER_EXCLUDE_TRANSMIT) && (path_flag & PATH_RAY_TRANSMIT)) ||
+            ((ls.shader & SHADER_EXCLUDE_SCATTER) && (path_flag & PATH_RAY_VOLUME_SCATTER)))
+          return;
+      }
+#endif
+
+      /* Evaluate light shader. */
+      /* TODO: does aliasing like this break automatic SoA in CUDA? */
+      ShaderDataTinyStorage emission_sd_storage;
+      ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
+      float3 light_eval = light_sample_shader_eval(
+          INTEGRATOR_STATE_PASS, emission_sd, &ls, ray_time);
+      if (is_zero(light_eval)) {
+        return;
+      }
+
+      /* MIS weighting. */
+      if (!(path_flag & PATH_RAY_MIS_SKIP)) {
+        /* multiple importance sampling, get regular light pdf,
+         * and compute weight with respect to BSDF pdf */
+        const float ray_pdf = INTEGRATOR_STATE(path, ray_pdf);
+        const float mis_weight = power_heuristic(ray_pdf, ls.pdf);
+        light_eval *= mis_weight;
+      }
+
+      /* Write to render buffer. */
+      kernel_accum_emission(INTEGRATOR_STATE_PASS, light_eval, render_buffer);
+    }
+  }
+}
+
 ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
@@ -132,6 +181,8 @@ ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
     return;
   }
 
+  // TODO: unify these in a single loop to only have a single shader evaluation call
+  integrate_distant_lights(INTEGRATOR_STATE_PASS, render_buffer);
   integrate_background(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* Path ends here. */

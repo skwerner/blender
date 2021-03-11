@@ -37,6 +37,7 @@
 #    include "kernel/integrator/integrator_intersect_shadow.h"
 #    include "kernel/integrator/integrator_intersect_subsurface.h"
 #    include "kernel/integrator/integrator_shade_background.h"
+#    include "kernel/integrator/integrator_shade_light.h"
 #    include "kernel/integrator/integrator_shade_shadow.h"
 #    include "kernel/integrator/integrator_shade_surface.h"
 #    include "kernel/integrator/integrator_shade_volume.h"
@@ -193,6 +194,7 @@ DEFINE_INTEGRATOR_KERNEL(intersect_closest)
 DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
 DEFINE_INTEGRATOR_KERNEL(intersect_subsurface)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_background)
+DEFINE_INTEGRATOR_SHADE_KERNEL(shade_light)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_shadow)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_surface)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_volume)

@@ -33,6 +33,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_intersect_subsurface";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
       return "integrator_shade_background";
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
+      return "integrator_shade_light";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
       return "integrator_shade_shadow";
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:

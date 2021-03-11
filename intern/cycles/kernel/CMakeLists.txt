@@ -265,6 +265,7 @@ set(SRC_INTEGRATOR_HEADERS
   integrator/integrator_megakernel.h
   integrator/integrator_path_state.h
   integrator/integrator_shade_background.h
+  integrator/integrator_shade_light.h
   integrator/integrator_shade_shadow.h
   integrator/integrator_shade_surface.h
   integrator/integrator_shade_volume.h

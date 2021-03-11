@@ -94,6 +94,7 @@ class CPUKernels {
   CPUIntegratorFunction integrator_intersect_shadow;
   CPUIntegratorFunction integrator_intersect_subsurface;
   CPUIntegratorShadeFunction integrator_shade_background;
+  CPUIntegratorShadeFunction integrator_shade_light;
   CPUIntegratorShadeFunction integrator_shade_shadow;
   CPUIntegratorShadeFunction integrator_shade_surface;
   CPUIntegratorShadeFunction integrator_shade_volume;

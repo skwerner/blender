@@ -107,6 +107,15 @@ class DenoiseParams {
     start_sample = 0;
   }
 
+  bool modified(const DenoiseParams &other) const
+  {
+    return !(use == other.use && store_passes == other.store_passes && type == other.type &&
+             start_sample == other.start_sample && radius == other.radius &&
+             strength == other.strength && feature_strength == other.feature_strength &&
+             relative_pca == other.relative_pca && neighbor_frames == other.neighbor_frames &&
+             clamp_input == other.clamp_input);
+  }
+
   /* Test if a denoising task needs to run, also to prefilter passes for the native
    * denoiser when we are not applying denoising to the combined image. */
   bool need_denoising_task() const

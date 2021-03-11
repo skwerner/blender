@@ -1038,9 +1038,18 @@ void Session::set_pause(bool pause_)
 
 void Session::set_denoising(const DenoiseParams &denoising)
 {
+  /* If parameters did not change do an early output, avoiding any locking.
+   * This ensures quick and responsive interface update during viewport rendering (interface will
+   * get locked on settings change due to buffer lock during rendering). */
+  if (!params.denoising.modified(denoising)) {
+    return;
+  }
+
   bool need_denoise = denoising.need_denoising_task();
 
   /* Lock buffers so no denoising operation is triggered while the settings are changed here. */
+  /* TODO(sergey): Would be nice to have a thread synchronization which will avoid such "expensive"
+   * (in terms of possible wait time) lock. */
   thread_scoped_lock buffers_lock(buffers_mutex);
   params.denoising = denoising;
 

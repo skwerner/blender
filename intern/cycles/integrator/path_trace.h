@@ -73,7 +73,8 @@ class PathTrace {
   /* Request render of the given number of samples.
    * Will add [start_sample_num, start_sample_num + samples_num) samples to the render buffer.
    *
-   * TODO(sergey): Decide and document whether it is a blocking or asynchronous call. */
+   * NOTE: This is a blocking cal. Meaning, it will not return until given number of samples are
+   * rendered (or until rendering is requested to be cancelled). */
   void render_samples(int samples_num);
 
   /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is

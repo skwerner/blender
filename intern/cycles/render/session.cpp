@@ -906,8 +906,6 @@ void Session::run_cpu()
         progress.set_error(device->error_message());
     }
 
-    device->task_wait();
-
     {
       thread_scoped_lock reset_lock(delayed_reset.mutex);
       thread_scoped_lock buffers_lock(buffers_mutex);

@@ -125,10 +125,12 @@ typedef struct IntegratorVolumeStack {
   int shader;
 } IntegratorVolumeStack;
 
-/* Subsurface closure state for subsurface kernel. */
+/* Subsurface closure state for subsurface kernel.
+ * TODO: overlap storage with something else? */
 typedef struct IntegratorSubsurfaceState {
-  /* TODO: actual BSSRDF closure parameters */
   float3 albedo;
+  float3 radius;
+  float roughness;
 } IntegratorSubsurfaceState;
 
 typedef struct IntegratorShadowLight {

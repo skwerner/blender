@@ -18,8 +18,8 @@
 
 #include "kernel/kernel_differential.h"
 #include "kernel/kernel_light.h"
+#include "kernel/kernel_path_state.h"
 #include "kernel/kernel_projection.h"
-#include "kernel/kernel_random.h"
 
 #include "kernel/geom/geom.h"
 

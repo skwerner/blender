@@ -95,16 +95,6 @@ ccl_device_inline bool volume_shader_sample(const KernelGlobals *kg,
 
 #endif /* __VOLUME__ */
 
-ccl_device float3 volume_color_transmittance(float3 sigma, float t)
-{
-  return exp3(-sigma * t);
-}
-
-ccl_device float kernel_volume_channel_get(float3 value, int channel)
-{
-  return (channel == 0) ? value.x : ((channel == 1) ? value.y : value.z);
-}
-
 #ifdef __VOLUME__
 
 ccl_device float volume_stack_step_size(const KernelGlobals *kg, ccl_addr_space VolumeStack *stack)
@@ -220,7 +210,6 @@ ccl_device void kernel_volume_shadow_heterogeneous(const KernelGlobals *kg,
                                                    const float object_step_size)
 {
   float3 tp = *throughput;
-  const float tp_eps = 1e-6f; /* todo: this is likely not the right value */
 
   /* prepare for stepping */
   int max_steps = kernel_data.integrator.volume_max_steps;
@@ -248,14 +237,16 @@ ccl_device void kernel_volume_shadow_heterogeneous(const KernelGlobals *kg,
     /* compute attenuation over segment */
     if (volume_shader_extinction_sample(kg, sd, state, new_P, &sigma_t)) {
       /* Compute expf() only for every Nth step, to save some calculations
-       * because exp(a)*exp(b) = exp(a+b), also do a quick tp_eps check then. */
+       * because exp(a)*exp(b) = exp(a+b), also do a quick VOLUME_THROUGHPUT_EPSILON
+       * check then. */
 
       sum += (-sigma_t * (new_t - t));
       if ((i & 0x07) == 0) { /* ToDo: Other interval? */
         tp = *throughput * exp3(sum);
 
         /* stop if nearly all light is blocked */
-        if (tp.x < tp_eps && tp.y < tp_eps && tp.z < tp_eps)
+        if (tp.x < VOLUME_THROUGHPUT_EPSILON && tp.y < VOLUME_THROUGHPUT_EPSILON &&
+            tp.z < VOLUME_THROUGHPUT_EPSILON)
           break;
       }
     }
@@ -358,9 +349,9 @@ ccl_device float kernel_volume_distance_sample(
 {
   /* xi is [0, 1[ so log(0) should never happen, division by zero is
    * avoided because sample_sigma_t > 0 when SD_SCATTER is set */
-  float sample_sigma_t = kernel_volume_channel_get(sigma_t, channel);
+  float sample_sigma_t = volume_channel_get(sigma_t, channel);
   float3 full_transmittance = volume_color_transmittance(sigma_t, max_t);
-  float sample_transmittance = kernel_volume_channel_get(full_transmittance, channel);
+  float sample_transmittance = volume_channel_get(full_transmittance, channel);
 
   float sample_t = min(max_t, -logf(1.0f - xi * (1.0f - sample_transmittance)) / sample_sigma_t);
 
@@ -410,41 +401,6 @@ ccl_device float3 kernel_volume_emission_integrate(VolumeShaderCoefficients *coe
 
 /* Volume Path */
 
-ccl_device int kernel_volume_sample_channel(float3 albedo,
-                                            float3 throughput,
-                                            float rand,
-                                            float3 *pdf)
-{
-  /* Sample color channel proportional to throughput and single scattering
-   * albedo, to significantly reduce noise with many bounce, following:
-   *
-   * "Practical and Controllable Subsurface Scattering for Production Path
-   *  Tracing". Matt Jen-Yuan Chiang, Peter Kutz, Brent Burley. SIGGRAPH 2016. */
-  float3 weights = fabs(throughput * albedo);
-  float sum_weights = weights.x + weights.y + weights.z;
-  float3 weights_pdf;
-
-  if (sum_weights > 0.0f) {
-    weights_pdf = weights / sum_weights;
-  }
-  else {
-    weights_pdf = make_float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f);
-  }
-
-  *pdf = weights_pdf;
-
-  /* OpenCL does not support -> on float3, so don't use pdf->x. */
-  if (rand < weights_pdf.x) {
-    return 0;
-  }
-  else if (rand < weights_pdf.x + weights_pdf.y) {
-    return 1;
-  }
-  else {
-    return 2;
-  }
-}
-
 #ifdef __VOLUME__
 
 /* homogeneous volume: assume shader evaluation at the start gives
@@ -474,14 +430,14 @@ kernel_volume_integrate_homogeneous(const KernelGlobals *kg,
     float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
     float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
     float3 channel_pdf;
-    int channel = kernel_volume_sample_channel(albedo, *throughput, rphase, &channel_pdf);
+    int channel = volume_sample_channel(albedo, *throughput, rphase, &channel_pdf);
 
     /* decide if we will hit or miss */
     bool scatter = true;
     float xi = path_state_rng_1D(kg, state, PRNG_SCATTER_DISTANCE);
 
     if (probalistic_scatter) {
-      float sample_sigma_t = kernel_volume_channel_get(coeff.sigma_t, channel);
+      float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
       float sample_transmittance = expf(-sample_sigma_t * t);
 
       if (1.0f - xi >= sample_transmittance) {
@@ -567,7 +523,6 @@ kernel_volume_integrate_heterogeneous_distance(const KernelGlobals *kg,
                                                const float object_step_size)
 {
   float3 tp = *throughput;
-  const float tp_eps = 1e-6f; /* todo: this is likely not the right value */
 
   /* prepare for stepping */
   int max_steps = kernel_data.integrator.volume_max_steps;
@@ -613,17 +568,17 @@ kernel_volume_integrate_heterogeneous_distance(const KernelGlobals *kg,
         /* Sample channel, use MIS with balance heuristic. */
         float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
         float3 channel_pdf;
-        int channel = kernel_volume_sample_channel(albedo, tp, rphase, &channel_pdf);
+        int channel = volume_sample_channel(albedo, tp, rphase, &channel_pdf);
 
         /* compute transmittance over full step */
         transmittance = volume_color_transmittance(coeff.sigma_t, dt);
 
         /* decide if we will scatter or continue */
-        float sample_transmittance = kernel_volume_channel_get(transmittance, channel);
+        float sample_transmittance = volume_channel_get(transmittance, channel);
 
         if (1.0f - xi >= sample_transmittance) {
           /* compute sampling distance */
-          float sample_sigma_t = kernel_volume_channel_get(coeff.sigma_t, channel);
+          float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
           float new_dt = -logf(1.0f - xi) / sample_sigma_t;
           new_t = t + new_dt;
 
@@ -668,7 +623,8 @@ kernel_volume_integrate_heterogeneous_distance(const KernelGlobals *kg,
         tp = new_tp;
 
         /* stop if nearly all light blocked */
-        if (tp.x < tp_eps && tp.y < tp_eps && tp.z < tp_eps) {
+        if (tp.x < VOLUME_THROUGHPUT_EPSILON && tp.y < VOLUME_THROUGHPUT_EPSILON &&
+            tp.z < VOLUME_THROUGHPUT_EPSILON) {
           tp = zero_float3();
           break;
         }
@@ -769,8 +725,6 @@ ccl_device void kernel_volume_decoupled_record(const KernelGlobals *kg,
                                                VolumeSegment *segment,
                                                const float object_step_size)
 {
-  const float tp_eps = 1e-6f; /* todo: this is likely not the right value */
-
   /* prepare for volume stepping */
   int max_steps;
   float step_size, step_offset;
@@ -898,8 +852,9 @@ ccl_device void kernel_volume_decoupled_record(const KernelGlobals *kg,
       break;
 
     /* stop if nearly all light blocked */
-    if (accum_transmittance.x < tp_eps && accum_transmittance.y < tp_eps &&
-        accum_transmittance.z < tp_eps)
+    if (accum_transmittance.x < VOLUME_THROUGHPUT_EPSILON &&
+        accum_transmittance.y < VOLUME_THROUGHPUT_EPSILON &&
+        accum_transmittance.z < VOLUME_THROUGHPUT_EPSILON)
       break;
   }
 
@@ -957,14 +912,13 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(const KernelGlo
 
   /* Sample color channel, use MIS with balance heuristic. */
   float3 channel_pdf;
-  int channel = kernel_volume_sample_channel(
-      segment->accum_albedo, *throughput, rphase, &channel_pdf);
+  int channel = volume_sample_channel(segment->accum_albedo, *throughput, rphase, &channel_pdf);
 
   float xi = rscatter;
 
   /* probabilistic scattering decision based on transmittance */
   if (probalistic_scatter) {
-    float sample_transmittance = kernel_volume_channel_get(segment->accum_transmittance, channel);
+    float sample_transmittance = volume_channel_get(segment->accum_transmittance, channel);
 
     if (1.0f - xi >= sample_transmittance) {
       /* rescale random number so we can reuse it */
@@ -1018,7 +972,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(const KernelGlo
 
       for (int i = 0;; i++, step++) {
         /* todo: optimize using binary search */
-        step_cdf = kernel_volume_channel_get(step->cdf_distance, channel);
+        step_cdf = volume_channel_get(step->cdf_distance, channel);
 
         if (xi < step_cdf || i == segment->numsteps - 1)
           break;

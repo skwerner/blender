@@ -626,28 +626,6 @@ ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
   *pdf = (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
 }
 
-#ifdef __BRANCHED_PATH__
-ccl_device_inline void _shader_bsdf_multi_eval_branched(const KernelGlobals *kg,
-                                                        ShaderData *sd,
-                                                        const float3 omega_in,
-                                                        BsdfEval *result_eval,
-                                                        float light_pdf,
-                                                        bool use_mis)
-{
-  for (int i = 0; i < sd->num_closure; i++) {
-    const ShaderClosure *sc = &sd->closure[i];
-    if (CLOSURE_IS_BSDF(sc->type)) {
-      float bsdf_pdf = 0.0f;
-      float3 eval = bsdf_eval(kg, sd, sc, omega_in, &bsdf_pdf);
-      if (bsdf_pdf != 0.0f) {
-        float mis_weight = use_mis ? power_heuristic(light_pdf, bsdf_pdf) : 1.0f;
-        bsdf_eval_accum(result_eval, sc->type, eval * sc->weight, mis_weight);
-      }
-    }
-  }
-}
-#endif /* __BRANCHED_PATH__ */
-
 #ifndef __KERNEL_CUDA__
 ccl_device
 #else
@@ -665,25 +643,18 @@ ccl_device_inline
 
   bsdf_eval_init(eval, NBUILTIN_CLOSURES, zero_float3(), kernel_data.film.use_light_pass);
 
-#ifdef __BRANCHED_PATH__
-  if (kernel_data.integrator.branched)
-    _shader_bsdf_multi_eval_branched(kg, sd, omega_in, eval, light_pdf, use_mis);
-  else
-#endif
-  {
-    float pdf;
-    _shader_bsdf_multi_eval(kg, sd, omega_in, &pdf, NULL, eval, 0.0f, 0.0f);
-    if (use_mis) {
-      float weight = power_heuristic(light_pdf, pdf);
-      bsdf_eval_mis(eval, weight);
-    }
+  float pdf;
+  _shader_bsdf_multi_eval(kg, sd, omega_in, &pdf, NULL, eval, 0.0f, 0.0f);
+  if (use_mis) {
+    float weight = power_heuristic(light_pdf, pdf);
+    bsdf_eval_mis(eval, weight);
   }
 }
 
-ccl_device_inline const ShaderClosure *shader_bsdf_pick(ShaderData *sd, float *randu)
+/* Randomly sample a BSSRDF or BSDF proportional to ShaderClosure.sample_weight. */
+ccl_device_inline const ShaderClosure *shader_bsdf_bssrdf_pick(const ShaderData *ccl_restrict sd,
+                                                               float *randu)
 {
-  /* Note the sampling here must match shader_bssrdf_pick,
-   * since we reuse the same random number. */
   int sampled = 0;
 
   if (sd->num_closure > 1) {
@@ -720,83 +691,43 @@ ccl_device_inline const ShaderClosure *shader_bsdf_pick(ShaderData *sd, float *r
     }
   }
 
-  const ShaderClosure *sc = &sd->closure[sampled];
-  return CLOSURE_IS_BSDF(sc->type) ? sc : NULL;
+  return &sd->closure[sampled];
 }
 
-ccl_device_inline const ShaderClosure *shader_bssrdf_pick(ShaderData *sd,
-                                                          ccl_addr_space float3 *throughput,
-                                                          float *randu)
+/* Return weight for picked BSSRDF. */
+ccl_device_inline float3 shader_bssrdf_sample_weight(const ShaderData *ccl_restrict sd,
+                                                     const ShaderClosure *ccl_restrict bssrdf_sc)
 {
-  /* Note the sampling here must match shader_bsdf_pick,
-   * since we reuse the same random number. */
-  int sampled = 0;
+  float3 weight = bssrdf_sc->weight;
 
   if (sd->num_closure > 1) {
-    /* Pick a BSDF or BSSRDF or based on sample weights. */
-    float sum_bsdf = 0.0f;
-    float sum_bssrdf = 0.0f;
-
-    for (int i = 0; i < sd->num_closure; i++) {
-      const ShaderClosure *sc = &sd->closure[i];
-
-      if (CLOSURE_IS_BSDF(sc->type)) {
-        sum_bsdf += sc->sample_weight;
-      }
-      else if (CLOSURE_IS_BSSRDF(sc->type)) {
-        sum_bssrdf += sc->sample_weight;
-      }
-    }
-
-    float r = (*randu) * (sum_bsdf + sum_bssrdf);
-    float partial_sum = 0.0f;
-
+    float sum = 0.0f;
     for (int i = 0; i < sd->num_closure; i++) {
       const ShaderClosure *sc = &sd->closure[i];
 
       if (CLOSURE_IS_BSDF_OR_BSSRDF(sc->type)) {
-        float next_sum = partial_sum + sc->sample_weight;
-
-        if (r < next_sum) {
-          if (CLOSURE_IS_BSDF(sc->type)) {
-            *throughput *= (sum_bsdf + sum_bssrdf) / sum_bsdf;
-            return NULL;
-          }
-          else {
-            *throughput *= (sum_bsdf + sum_bssrdf) / sum_bssrdf;
-            sampled = i;
-
-            /* Rescale to reuse for direction sample, to better preserve stratification. */
-            *randu = (r - partial_sum) / sc->sample_weight;
-            break;
-          }
-        }
-
-        partial_sum = next_sum;
+        sum += sc->sample_weight;
       }
     }
+    weight *= sum / bssrdf_sc->sample_weight;
   }
 
-  const ShaderClosure *sc = &sd->closure[sampled];
-  return CLOSURE_IS_BSSRDF(sc->type) ? sc : NULL;
+  return weight;
 }
 
-ccl_device_inline int shader_bsdf_sample(const KernelGlobals *kg,
-                                         ShaderData *sd,
-                                         float randu,
-                                         float randv,
-                                         BsdfEval *bsdf_eval,
-                                         float3 *omega_in,
-                                         differential3 *domega_in,
-                                         float *pdf)
+/* Sample direction for picked BSDF, and return evaluation and pdf for all
+ * BSDFs combined using MIS. */
+ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
+                                          ShaderData *sd,
+                                          const ShaderClosure *sc,
+                                          float randu,
+                                          float randv,
+                                          BsdfEval *bsdf_eval,
+                                          float3 *omega_in,
+                                          differential3 *domega_in,
+                                          float *pdf)
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_SAMPLE);
-
-  const ShaderClosure *sc = shader_bsdf_pick(sd, &randu);
-  if (sc == NULL) {
-    *pdf = 0.0f;
-    return LABEL_NONE;
-  }
 
   /* BSSRDF should already have been handled elsewhere. */
   kernel_assert(CLOSURE_IS_BSDF(sc->type));
@@ -815,30 +746,6 @@ ccl_device_inline int shader_bsdf_sample(const KernelGlobals *kg,
       _shader_bsdf_multi_eval(kg, sd, *omega_in, pdf, sc, bsdf_eval, *pdf * sweight, sweight);
     }
   }
-
-  return label;
-}
-
-ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
-                                          ShaderData *sd,
-                                          const ShaderClosure *sc,
-                                          float randu,
-                                          float randv,
-                                          BsdfEval *bsdf_eval,
-                                          float3 *omega_in,
-                                          differential3 *domega_in,
-                                          float *pdf)
-{
-  PROFILING_INIT(kg, PROFILING_CLOSURE_SAMPLE);
-
-  int label;
-  float3 eval = zero_float3();
-
-  *pdf = 0.0f;
-  label = bsdf_sample(kg, sd, sc, randu, randv, &eval, omega_in, domega_in, pdf);
-
-  if (*pdf != 0.0f)
-    bsdf_eval_init(bsdf_eval, sc->type, eval * sc->weight, kernel_data.film.use_light_pass);
 
   return label;
 }

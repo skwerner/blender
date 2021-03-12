@@ -27,8 +27,8 @@
 CCL_NAMESPACE_BEGIN
 
 PathTraceWorkGPU::PathTraceWorkGPU(Device *render_device,
-                                       RenderBuffers *buffers,
-                                       bool *cancel_requested_flag)
+                                   RenderBuffers *buffers,
+                                   bool *cancel_requested_flag)
     : PathTraceWork(render_device, buffers, cancel_requested_flag),
       queue_(render_device->queue_create()),
       render_buffers_(buffers),
@@ -55,8 +55,8 @@ void PathTraceWorkGPU::init_execution()
 }
 
 void PathTraceWorkGPU::render_samples(const BufferParams &scaled_render_buffer_params,
-                                        int start_sample,
-                                        int samples_num)
+                                      int start_sample,
+                                      int samples_num)
 {
   work_scheduler_.reset(scaled_render_buffer_params, start_sample, samples_num);
 
@@ -130,8 +130,7 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
    * Also finish shadow rays if we want to switch to the megakernel since
    * all paths need to be at intersect closest to execute it. */
   if (use_megakernel || kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE ||
-      kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME ||
-      kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE) {
+      kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME) {
     if (path_queue->num_queued[DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW]) {
       enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
       return true;
@@ -302,8 +301,8 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 }
 
 void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
-                                            const KernelWorkTile work_tiles[],
-                                            const int num_work_tiles)
+                                          const KernelWorkTile work_tiles[],
+                                          const int num_work_tiles)
 {
   /* Copy work tiles to device. */
   if (work_tiles_.size() < num_work_tiles) {

@@ -16,50 +16,39 @@
 
 #pragma once
 
+#include "kernel/integrator/integrator_subsurface.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
 {
 #ifdef __SUBSURFACE__
-  /* Subsurface scattering to find exit point. */
-  const float3 throughput = INTEGRATOR_STATE(path, throughput);
-
-  /* We're done if no exit point found. */
-  const bool exit_point_found = false;
-  if (!exit_point_found) {
-    INTEGRATOR_PATH_TERMINATE(INTERSECT_SUBSURFACE);
+  if (subsurface_random_walk(INTEGRATOR_STATE_PASS)) {
+    INTEGRATOR_PATH_NEXT(INTERSECT_SUBSURFACE, SHADE_SURFACE);
     return;
   }
+#endif
 
-  /* Direct lighting. */
-  const bool direct_lighting = false;
-  if (direct_lighting) {
-    /* Generate shadow ray. */
-    INTEGRATOR_STATE_WRITE(shadow_ray, P) = zero_float3();
-    INTEGRATOR_STATE_WRITE(shadow_ray, D) = make_float3(0.0f, 0.0f, 1.0f);
-    INTEGRATOR_STATE_WRITE(shadow_ray, t) = FLT_MAX;
-    INTEGRATOR_STATE_WRITE(shadow_ray, time) = 0.0f;
+  /* TODO: update volume stack. Instead of a special for_subsurface, we could
+   * just re-init the volume stack completely, sharing the same kernel as for
+   * cameras. */
+#if 0
+#  ifdef __VOLUME__
+  bool need_update_volume_stack = kernel_data.integrator.use_volumes &&
+                                  sd->object_flag & SD_OBJECT_INTERSECTS_VOLUME;
 
-    /* Copy entire state and volume stack */
-    INTEGRATOR_STATE_WRITE(shadow_path, throughput) = INTEGRATOR_STATE(path, throughput);
+  if (need_update_volume_stack) {
+    Ray volume_ray = *ray;
+    /* Setup ray from previous surface point to the new one. */
+    volume_ray.D = normalize_len(hit_ray->P - volume_ray.P, &volume_ray.t);
 
-    /* Branch of shadow kernel. */
-    INTEGRATOR_SHADOW_PATH_INIT(INTERSECT_SHADOW);
+    kernel_volume_stack_update_for_subsurface(
+        kg, emission_sd, &volume_ray, hit_state->volume_stack);
   }
+#  endif /* __VOLUME__ */
+#endif
 
-  /* Sample BSDF and continue path. */
-  INTEGRATOR_STATE_WRITE(ray, P) = zero_float3();
-  INTEGRATOR_STATE_WRITE(ray, D) = make_float3(0.0f, 0.0f, 1.0f);
-  INTEGRATOR_STATE_WRITE(ray, t) = FLT_MAX;
-  INTEGRATOR_STATE_WRITE(ray, time) = 0.0f;
-  INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
-
-  /* Mark subsurface scattering as done. */
-  INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SUBSURFACE;
-
-  /* Queue intersect_closest kernel. */
-  INTEGRATOR_PATH_NEXT(INTERSECT_SUBSURFACE, INTERSECT_CLOSEST);
-#endif /* __SUBSURFACE__ */
+  INTEGRATOR_PATH_TERMINATE(INTERSECT_SUBSURFACE);
 }
 
 CCL_NAMESPACE_END

@@ -22,6 +22,8 @@
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_shader.h"
 
+#include "kernel/integrator/integrator_subsurface.h"
+
 CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
@@ -205,19 +207,28 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
                                          ShaderData *sd,
                                          const RNGState *rng_state)
 {
-  /* no BSDF? we can stop here */
-  if (sd->flag & SD_BSDF) {
-    /* sample BSDF */
+  /* Sample BSDF or BSSRDF. */
+  if (sd->flag & (SD_BSDF | SD_BSSRDF)) {
+    float bsdf_u, bsdf_v;
+    path_state_rng_2D(kg, rng_state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
+    const ShaderClosure *sc = shader_bsdf_bssrdf_pick(sd, &bsdf_u);
+
+#ifdef __SUBSURFACE__
+    /* BSSRDF closure, we schedule subsurface intersection kernel. */
+    if (CLOSURE_IS_BSSRDF(sc->type)) {
+      return subsurface_bounce(INTEGRATOR_STATE_PASS, sd, sc);
+    }
+#endif
+
+    /* BSDF closure, sample direction. */
     float bsdf_pdf;
     BsdfEval bsdf_eval ccl_optional_struct_init;
     float3 bsdf_omega_in ccl_optional_struct_init;
     differential3 bsdf_domega_in ccl_optional_struct_init;
-    float bsdf_u, bsdf_v;
-    path_state_rng_2D(kg, rng_state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
     int label;
 
-    label = shader_bsdf_sample(
-        kg, sd, bsdf_u, bsdf_v, &bsdf_eval, &bsdf_omega_in, &bsdf_domega_in, &bsdf_pdf);
+    label = shader_bsdf_sample_closure(
+        kg, sd, sc, bsdf_u, bsdf_v, &bsdf_eval, &bsdf_omega_in, &bsdf_domega_in, &bsdf_pdf);
 
     if (bsdf_pdf == 0.0f || bsdf_eval_is_zero(&bsdf_eval)) {
       return false;
@@ -227,7 +238,7 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(ray, P) = ray_offset(sd->P,
                                                 (label & LABEL_TRANSMIT) ? -sd->Ng : sd->Ng);
     INTEGRATOR_STATE_WRITE(ray, D) = normalize(bsdf_omega_in);
-    INTEGRATOR_STATE_WRITE(ray, t) = (INTEGRATOR_STATE(path, bounce) == 0) ?
+    INTEGRATOR_STATE_WRITE(ray, t) = (label & LABEL_TRANSPARENT) ?
                                          INTEGRATOR_STATE(ray, t) - sd->ray_length :
                                          FLT_MAX;
 
@@ -254,12 +265,6 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
       INTEGRATOR_STATE_WRITE(path, ray_pdf) = bsdf_pdf;
       INTEGRATOR_STATE_WRITE(path, min_ray_pdf) = fminf(bsdf_pdf,
                                                         INTEGRATOR_STATE(path, min_ray_pdf));
-      /* TODO */
-#if 0
-#  ifdef __LAMP_MIS__
-      INTEGRATOR_STATE_WTITE(path, ray_t) = 0.0f;
-#  endif
-#endif
     }
 
     path_state_next(INTEGRATOR_STATE_PASS, label);
@@ -284,9 +289,7 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(ray, P) = ray_offset(sd->P, -sd->Ng);
 
     /* Clipping works through transparent. */
-    INTEGRATOR_STATE_WRITE(ray, t) = (INTEGRATOR_STATE(path, bounce) == 0) ?
-                                         INTEGRATOR_STATE(ray, t) - sd->ray_length :
-                                         FLT_MAX;
+    INTEGRATOR_STATE_WRITE(ray, t) -= sd->ray_length;
 
     /* TODO */
 #  if 0
@@ -328,9 +331,20 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   }
 #endif
 
-  /* Evaluate shader. */
-  shader_eval_surface(INTEGRATOR_STATE_PASS, &sd, render_buffer, INTEGRATOR_STATE(path, flag));
-  shader_prepare_closures(INTEGRATOR_STATE_PASS, &sd);
+#ifdef __SUBSURFACE__
+  if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE) {
+    /* When coming from inside subsurface scattering, setup a diffuse
+     * closure to perform lighting at the exit point. */
+    INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SUBSURFACE;
+    subsurface_shader_data_setup(INTEGRATOR_STATE_PASS, &sd);
+  }
+  else
+#endif
+  {
+    /* Evaluate shader. */
+    shader_eval_surface(INTEGRATOR_STATE_PASS, &sd, render_buffer, INTEGRATOR_STATE(path, flag));
+    shader_prepare_closures(INTEGRATOR_STATE_PASS, &sd);
+  }
 
 #ifdef __HOLDOUT__
   /* Evaluate holdout. */
@@ -390,17 +404,6 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
 #  endif /* __AO__ */
 #endif
 
-#if 0
-  /* Subsurface scattering does scattering, direct and indirect light in own kernel. */
-  const bool subsurface = false;
-  if (subsurface) {
-    INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SUBSURFACE;
-    INTEGRATOR_STATE_WRITE(subsurface, albedo) = one_float3();
-    INTEGRATOR_PATH_NEXT(SHADE_SURFACE, INTERSECT_SUBSURFACE);
-    return;
-  }
-#endif
-
   return integrate_surface_bounce(INTEGRATOR_STATE_PASS, &sd, &rng_state);
 }
 
@@ -408,7 +411,13 @@ ccl_device void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 {
   if (integrate_surface(INTEGRATOR_STATE_PASS, render_buffer)) {
-    INTEGRATOR_PATH_NEXT(SHADE_SURFACE, INTERSECT_CLOSEST);
+    if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE) {
+      INTEGRATOR_PATH_NEXT(SHADE_SURFACE, INTERSECT_SUBSURFACE);
+    }
+    else {
+      kernel_assert(INTEGRATOR_STATE(ray, t) != 0.0f);
+      INTEGRATOR_PATH_NEXT(SHADE_SURFACE, INTERSECT_CLOSEST);
+    }
   }
   else {
     INTEGRATOR_PATH_TERMINATE(SHADE_SURFACE);

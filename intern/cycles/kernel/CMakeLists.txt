@@ -91,7 +91,6 @@ set(SRC_HEADERS
   kernel_path_branched.h
   kernel_path_state.h
   kernel_path_surface.h
-  kernel_path_subsurface.h
   kernel_path_volume.h
   kernel_profiling.h
   kernel_projection.h
@@ -250,6 +249,7 @@ set(SRC_INTEGRATOR_HEADERS
   integrator/integrator_shade_volume.h
   integrator/integrator_state.h
   integrator/integrator_state_util.h
+  integrator/integrator_subsurface.h
 )
 
 set(SRC_FILTER_HEADERS

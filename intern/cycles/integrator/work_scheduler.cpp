@@ -94,9 +94,9 @@ bool WorkScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size
   work_tile.x += image_full_offset_px_.x;
   work_tile.y += image_full_offset_px_.y;
 
-  DCHECK_LT(max_work_size, max_num_path_states_);
+  DCHECK_LE(max_work_size, max_num_path_states_);
   if (max_work_size && work_tile.w * work_tile.h * work_tile.num_samples > max_work_size) {
-    /* The work did not fit into the requested limit of the work size. Unchedule" the tile,
+    /* The work did not fit into the requested limit of the work size. Unchedule the tile,
      * allowing others (or ourselves later one) to pick it up.
      *
      * TODO: Such temporary decrement is not ideal, since it might lead to situation when another

@@ -172,7 +172,7 @@ void PathTraceWorkTiled::enqueue_path_iteration(DeviceKernel kernel)
     d_path_index = (void *)queued_paths_.device_pointer;
   }
 
-  assert(work_size < get_max_num_paths());
+  DCHECK_LE(work_size, get_max_num_paths());
 
   switch (kernel) {
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
@@ -352,7 +352,7 @@ void PathTraceWorkTiled::enqueue_work_tiles(DeviceKernel kernel,
 
     /* Offset work tile and path index pointers for next tile. */
     num_paths += tile_work_size;
-    DCHECK_LT(num_paths, get_max_num_paths());
+    DCHECK_LE(num_paths, get_max_num_paths());
 
     /* TODO: this pointer manipulation won't work for OpenCL. */
     d_work_tile = (void *)(((KernelWorkTile *)d_work_tile) + 1);

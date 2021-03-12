@@ -27,12 +27,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device_inline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
 {
   Intersection isect ccl_optional_struct_init;
-  isect.prim = INTEGRATOR_STATE(isect, prim);
-  isect.object = INTEGRATOR_STATE(isect, object);
-  isect.type = INTEGRATOR_STATE(isect, type);
-  isect.u = INTEGRATOR_STATE(isect, u);
-  isect.v = INTEGRATOR_STATE(isect, v);
-  isect.t = INTEGRATOR_STATE(isect, t);
+  integrator_state_read_isect(INTEGRATOR_STATE_PASS, &isect);
 
   const float3 ray_P = INTEGRATOR_STATE(ray, P);
   const float3 ray_D = INTEGRATOR_STATE(ray, D);
@@ -191,10 +186,7 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   const bool is_light = light_sample_is_light(&ls);
 
   /* Write shadow ray and associated state to global memory. */
-  INTEGRATOR_STATE_WRITE(shadow_ray, P) = ray.P;
-  INTEGRATOR_STATE_WRITE(shadow_ray, D) = ray.D;
-  INTEGRATOR_STATE_WRITE(shadow_ray, t) = ray.t;
-  INTEGRATOR_STATE_WRITE(shadow_ray, time) = ray.time;
+  integrator_state_write_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
 
   INTEGRATOR_STATE_WRITE(shadow_light, L) = bsdf_eval_sum(&bsdf_eval); /* TODO */
   INTEGRATOR_STATE_WRITE(shadow_light, is_light) = is_light;

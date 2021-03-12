@@ -24,6 +24,7 @@
 
 #include "kernel/integrator/integrator_path_state.h"
 #include "kernel/integrator/integrator_state.h"
+#include "kernel/integrator/integrator_state_util.h"
 
 CCL_NAMESPACE_BEGIN
 

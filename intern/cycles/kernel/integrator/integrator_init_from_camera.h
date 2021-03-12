@@ -75,11 +75,7 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
     }
 
     /* Write camera ray to state. */
-    INTEGRATOR_STATE_WRITE(ray, P) = ray.P;
-    INTEGRATOR_STATE_WRITE(ray, D) = ray.D;
-    INTEGRATOR_STATE_WRITE(ray, t) = ray.t;
-    INTEGRATOR_STATE_WRITE(ray, time) = ray.time;
-    /* TODO: differentials. */
+    integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
   }
 
   /* Initialize path state. */

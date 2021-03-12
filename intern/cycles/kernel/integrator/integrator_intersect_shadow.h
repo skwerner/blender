@@ -65,15 +65,7 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
 
       /* Write intersection result into global integrator state memory. */
       for (int hit = 0; hit < num_hits; hit++) {
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, t) = isect[hit].t;
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, u) = isect[hit].u;
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, v) = isect[hit].v;
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, object) = isect[hit].object;
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, prim) = isect[hit].prim;
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, type) = isect[hit].type;
-#  ifdef __EMBREE__
-        INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, hit, Ng) = isect[hit].Ng;
-#  endif
+        integrator_state_write_shadow_isect(INTEGRATOR_STATE_PASS, &isect[hit], hit);
       }
     }
 
@@ -90,13 +82,8 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_intersect_shadow(INTEGRATOR_STATE_ARGS)
 {
   /* Read ray from integrator state into local memory. */
-  Ray ray;
-  ray.P = INTEGRATOR_STATE(shadow_ray, P);
-  ray.D = INTEGRATOR_STATE(shadow_ray, D);
-  ray.t = INTEGRATOR_STATE(shadow_ray, t);
-  ray.time = INTEGRATOR_STATE(shadow_ray, time);
-  ray.dP = differential3_zero();
-  ray.dD = differential3_zero();
+  Ray ray ccl_optional_struct_init;
+  integrator_state_read_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
 
   /* Compute visibility. */
   const uint visibility = integrate_intersect_shadow_visibility(INTEGRATOR_STATE_PASS);

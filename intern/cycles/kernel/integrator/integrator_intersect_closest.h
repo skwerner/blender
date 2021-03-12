@@ -50,13 +50,7 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
   /* Read ray from integrator state into local memory. */
   Ray ray ccl_optional_struct_init;
-  ray.P = INTEGRATOR_STATE(ray, P);
-  ray.D = INTEGRATOR_STATE(ray, D);
-  ray.t = INTEGRATOR_STATE(ray, t);
-  ray.time = INTEGRATOR_STATE(ray, time);
-  ray.dP = differential3_zero();
-  ray.dD = differential3_zero();
-
+  integrator_state_read_ray(INTEGRATOR_STATE_PASS, &ray);
   kernel_assert(ray.t != 0.0f);
 
   /* Scene Intersection. */
@@ -74,15 +68,7 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   }
 
   /* Write intersection result into global integrator state memory. */
-  INTEGRATOR_STATE_WRITE(isect, t) = isect.t;
-  INTEGRATOR_STATE_WRITE(isect, u) = isect.u;
-  INTEGRATOR_STATE_WRITE(isect, v) = isect.v;
-  INTEGRATOR_STATE_WRITE(isect, object) = isect.object;
-  INTEGRATOR_STATE_WRITE(isect, prim) = isect.prim;
-  INTEGRATOR_STATE_WRITE(isect, type) = isect.type;
-#ifdef __EMBREE__
-  INTEGRATOR_STATE_WRITE(isect, Ng) = isect.Ng;
-#endif
+  integrator_state_write_isect(INTEGRATOR_STATE_PASS, &isect);
 
 #ifdef __VOLUME__
   if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {

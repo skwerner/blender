@@ -35,12 +35,7 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
    * TODO: old logic would modify ray.P and isect.t for each step, why was that
    * needed? Can we avoid it? */
   Intersection isect ccl_optional_struct_init;
-  isect.prim = INTEGRATOR_STATE_ARRAY(shadow_isect, hit, prim);
-  isect.object = INTEGRATOR_STATE_ARRAY(shadow_isect, hit, object);
-  isect.type = INTEGRATOR_STATE_ARRAY(shadow_isect, hit, type);
-  isect.u = INTEGRATOR_STATE_ARRAY(shadow_isect, hit, u);
-  isect.v = INTEGRATOR_STATE_ARRAY(shadow_isect, hit, v);
-  isect.t = INTEGRATOR_STATE_ARRAY(shadow_isect, hit, t);
+  integrator_state_read_shadow_isect(INTEGRATOR_STATE_PASS, &isect, hit);
 
   const float3 ray_P = INTEGRATOR_STATE(shadow_ray, P);
   const float3 ray_D = INTEGRATOR_STATE(shadow_ray, D);

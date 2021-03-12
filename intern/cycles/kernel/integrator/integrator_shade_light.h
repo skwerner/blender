@@ -28,12 +28,7 @@ ccl_device_inline void integrate_light(INTEGRATOR_STATE_ARGS,
 {
   /* Setup light sample. */
   Intersection isect ccl_optional_struct_init;
-  isect.prim = INTEGRATOR_STATE(isect, prim);
-  isect.object = INTEGRATOR_STATE(isect, object);
-  isect.type = INTEGRATOR_STATE(isect, type);
-  isect.u = INTEGRATOR_STATE(isect, u);
-  isect.v = INTEGRATOR_STATE(isect, v);
-  isect.t = INTEGRATOR_STATE(isect, t);
+  integrator_state_read_isect(INTEGRATOR_STATE_PASS, &isect);
 
   const float3 ray_P = INTEGRATOR_STATE(ray, P);
   const float3 ray_D = INTEGRATOR_STATE(ray, D);

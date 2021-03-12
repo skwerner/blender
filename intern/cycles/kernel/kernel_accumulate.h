@@ -803,6 +803,12 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
   ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
   kernel_write_pass_float3(pixel_render_buffer, contribution);
+
+  if (kernel_data.film.pass_denoising_data) {
+    kernel_write_pass_float3_variance(pixel_render_buffer + kernel_data.film.pass_denoising_data +
+                                          DENOISING_PASS_COLOR,
+                                      contribution);
+  }
 }
 
 /* Write light contribution to render buffer. */
@@ -822,6 +828,12 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
   ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
   kernel_write_pass_float3(pixel_render_buffer, contribution);
+
+  if (kernel_data.film.pass_denoising_data) {
+    kernel_write_pass_float3_variance(pixel_render_buffer + kernel_data.film.pass_denoising_data +
+                                          DENOISING_PASS_COLOR,
+                                      contribution);
+  }
 }
 
 /* Write transparency to render buffer.
@@ -864,6 +876,12 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
   kernel_write_pass_float4(
       pixel_render_buffer,
       make_float4(contribution.x, contribution.y, contribution.z, transparent));
+
+  if (kernel_data.film.pass_denoising_data) {
+    kernel_write_pass_float3_variance(pixel_render_buffer + kernel_data.film.pass_denoising_data +
+                                          DENOISING_PASS_COLOR,
+                                      contribution);
+  }
 }
 
 CCL_NAMESPACE_END

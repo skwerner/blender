@@ -160,24 +160,26 @@ void OIDNDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
 #ifdef WITH_OPENIMAGEDENOISE
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
+  const int denoising_offset = render_buffers->params.get_denoising_offset();
+
 #  if 1
   /* NOTE: minimal amount of passes for development, until denoising passes are available from the
    * kernel. It also seems to be possible to use same buffer for input and output. In the final
    * implementation the input should become Noisy Image, the output should become Combined. */
   std::array<OIDNPass, 2> oidn_passes = {{
-      {"color", 0, false, true},
+      {"color", denoising_offset + DENOISING_PASS_COLOR, false, true},
       {"output", 0, false, true},
   }};
 #  else
   /* TODO(sergey): Needs access to denoising passes. */
   std::array<OIDNPass, 4> oidn_passes = {{
-      {"color", task.pass_denoising_data + DENOISING_PASS_COLOR, false, true},
+      {"color", denoising_offset + DENOISING_PASS_COLOR, false, true},
       {"albedo",
-       task.pass_denoising_data + DENOISING_PASS_ALBEDO,
+       denoising_offset + DENOISING_PASS_ALBEDO,
        true,
        denoising.input_passes >= DENOISER_INPUT_RGB_ALBEDO},
       {"normal",
-       task.pass_denoising_data + DENOISING_PASS_NORMAL,
+       denoising_offset + DENOISING_PASS_NORMAL,
        true,
        denoising.input_passes >= DENOISER_INPUT_RGB_ALBEDO_NORMAL},
       {"output", 0, false, true},

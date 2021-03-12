@@ -200,6 +200,10 @@ class Session {
 
   void reset_(BufferParams &params, int samples);
 
+  /* TODO(sergey): Once the threading synchronization betwee synchronization and render threads is
+   * properly implemented there will be no need in this. */
+  void set_denoising_no_check(const DenoiseParams &denoising);
+
   void run_cpu();
   bool draw_cpu(BufferParams &params, DeviceDrawParams &draw_params);
   void reset_cpu(BufferParams &params, int samples);

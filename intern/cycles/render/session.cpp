@@ -157,7 +157,7 @@ Session::Session(const SessionParams &params_)
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
 
   /* Validate denoising parameters. */
-  set_denoising(params.denoising);
+  set_denoising_no_check(params.denoising);
 }
 
 Session::~Session()
@@ -1074,6 +1074,11 @@ void Session::set_denoising(const DenoiseParams &denoising)
     return;
   }
 
+  set_denoising_no_check(denoising);
+}
+
+void Session::set_denoising_no_check(const DenoiseParams &denoising)
+{
   bool need_denoise = denoising.need_denoising_task();
 
   /* Lock buffers so no denoising operation is triggered while the settings are changed here. */

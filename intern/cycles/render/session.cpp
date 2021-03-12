@@ -40,20 +40,26 @@
 
 CCL_NAMESPACE_BEGIN
 
+#if 0
 /* Note about  preserve_tile_device option for tile manager:
  * progressive refine and viewport rendering does requires tiles to
  * always be allocated for the same device
  */
+#endif
 Session::Session(const SessionParams &params_)
     : params(params_),
       tile_manager(params.progressive,
                    params.samples,
-                   make_int2(64, 64),
+#if 0
+                    make_int2(64, 64),
+#endif
                    params.start_resolution,
-                   params.background == false,
-                   params.background,
-                   TILE_BOTTOM_TO_TOP,
-                   max(params.device.multi_devices.size(), 1),
+#if 0
+                    params.background == false,
+                    params.background,
+                    TILE_BOTTOM_TO_TOP,
+                    max(params.device.multi_devices.size(), 1),
+#endif
                    params.pixel_size),
       stats(),
       profiler()
@@ -169,8 +175,10 @@ Session::~Session()
    * pre-defined order. */
   path_trace_.reset();
 
+#if 0
   /* clean up */
   tile_manager.device_free();
+#endif
 
   delete display;
   delete scene;
@@ -1337,7 +1345,9 @@ void Session::device_free()
 {
   scene->device_free();
 
+#if 0
   tile_manager.device_free();
+#endif
 
   /* used from background render only, so no need to
    * re-create render/display buffers here

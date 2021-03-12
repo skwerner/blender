@@ -22,6 +22,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+#if 0
 namespace {
 
 class TileComparator {
@@ -85,28 +86,38 @@ enum SpiralDirection {
 };
 
 } /* namespace */
+#endif
 
 TileManager::TileManager(bool progressive_,
                          int num_samples_,
-                         int2 tile_size_,
+#if 0
+                          int2 tile_size_,
+#endif
                          int start_resolution_,
-                         bool preserve_tile_device_,
-                         bool background_,
-                         TileOrder tile_order_,
-                         int num_devices_,
+#if 0
+                          bool preserve_tile_device_,
+                          bool background_,
+                          TileOrder tile_order_,
+                          int num_devices_,
+#endif
                          int pixel_size_)
 {
   progressive = progressive_;
+#if 0
   tile_size = tile_size_;
   tile_order = tile_order_;
+#endif
   start_resolution = start_resolution_;
   pixel_size = pixel_size_;
   slice_overlap = 0;
   num_samples = num_samples_;
+#if 0
   num_devices = num_devices_;
   preserve_tile_device = preserve_tile_device_;
   background = background_;
+
   schedule_denoising = false;
+#endif
 
   range_start_sample = 0;
   range_num_samples = -1;
@@ -119,6 +130,7 @@ TileManager::~TileManager()
 {
 }
 
+#if 0
 void TileManager::device_free()
 {
   if (schedule_denoising || progressive) {
@@ -130,6 +142,7 @@ void TileManager::device_free()
 
   state.tiles.clear();
 }
+#endif
 
 static int get_divider(int w, int h, int start_resolution)
 {
@@ -153,12 +166,19 @@ void TileManager::reset(BufferParams &params_, int num_samples_)
 
   state.buffer = BufferParams();
   state.sample = range_start_sample - 1;
+
+#if 0
   state.num_tiles = 0;
+#endif
+
   state.num_samples = 0;
   state.resolution_divider = get_divider(params.width, params.height, start_resolution);
+
+#if 0
   state.render_tiles.clear();
   state.denoising_tiles.clear();
   device_free();
+#endif
 }
 
 void TileManager::set_samples(int num_samples_)
@@ -186,12 +206,16 @@ void TileManager::set_samples(int num_samples_)
     int image_h = max(1, params.height / divider);
     state.total_pixel_samples = pixel_samples +
                                 (uint64_t)get_num_effective_samples() * image_w * image_h;
+
+#if 0
     if (schedule_denoising) {
       state.total_pixel_samples += params.width * params.height;
     }
+#endif
   }
 }
 
+#if 0
 /* If sliced is false, splits image into tiles and assigns equal amount of tiles to every render
  * device. If sliced is true, slice image into as much pieces as how many devices are rendering
  * this image. */
@@ -373,6 +397,7 @@ void TileManager::gen_render_tiles()
     state.render_tiles[tile.device].push_back(tile.index);
   }
 }
+#endif
 
 void TileManager::set_tiles()
 {
@@ -380,7 +405,9 @@ void TileManager::set_tiles()
   int image_w = max(1, params.width / resolution);
   int image_h = max(1, params.height / resolution);
 
+#if 0
   state.num_tiles = gen_tiles(!background);
+#endif
 
   state.buffer.width = image_w;
   state.buffer.height = image_h;
@@ -391,6 +418,7 @@ void TileManager::set_tiles()
   state.buffer.full_height = max(1, params.full_height / resolution);
 }
 
+#if 0
 int TileManager::get_neighbor_index(int index, int neighbor)
 {
   /* Neighbor indices:
@@ -555,6 +583,7 @@ bool TileManager::next_tile(Tile *&tile, int device, uint tile_types)
 
   return false;
 }
+#endif
 
 bool TileManager::done()
 {
@@ -564,6 +593,7 @@ bool TileManager::done()
          (state.sample + state.num_samples >= end_sample);
 }
 
+#if 0
 bool TileManager::has_tiles()
 {
   foreach (Tile &tile, state.tiles) {
@@ -573,6 +603,7 @@ bool TileManager::has_tiles()
   }
   return false;
 }
+#endif
 
 bool TileManager::next()
 {
@@ -600,9 +631,11 @@ bool TileManager::next()
     if (state.sample == range_start_sample) {
       set_tiles();
     }
+#if 0
     else {
       gen_render_tiles();
     }
+#endif
   }
 
   return true;

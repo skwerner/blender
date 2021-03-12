@@ -24,6 +24,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+#if 0
 /* Tile */
 
 class Tile {
@@ -61,6 +62,7 @@ enum TileOrder {
   TILE_BOTTOM_TO_TOP = 4,
   TILE_HILBERT_SPIRAL = 5,
 };
+#endif
 
 /* Tile Manager */
 
@@ -69,23 +71,31 @@ class TileManager {
   BufferParams params;
 
   struct State {
+#if 0
     vector<Tile> tiles;
     int tile_stride;
+#endif
+
     BufferParams buffer;
     int sample;
     int num_samples;
     int resolution_divider;
+
+#if 0
     int num_tiles;
+#endif
 
     /* Total samples over all pixels: Generally num_samples*num_pixels,
      * but can be higher due to the initial resolution division for previews. */
     uint64_t total_pixel_samples;
 
+#if 0
     /* These lists contain the indices of the tiles to be rendered/denoised and are used
      * when acquiring a new tile for the device.
      * Each list in each vector is for one logical device. */
     vector<list<int>> render_tiles;
     vector<list<int>> denoising_tiles;
+#endif
   } state;
 
   int num_samples;
@@ -93,22 +103,35 @@ class TileManager {
 
   TileManager(bool progressive,
               int num_samples,
-              int2 tile_size,
+#if 0
+               int2 tile_size,
+#endif
               int start_resolution,
-              bool preserve_tile_device,
-              bool background,
-              TileOrder tile_order,
-              int num_devices = 1,
+#if 0
+               bool preserve_tile_device,
+               bool background,
+               TileOrder tile_order,
+               int num_devices = 1,
+#endif
               int pixel_size = 1);
   ~TileManager();
 
+#if 0
   void device_free();
+#endif
+
   void reset(BufferParams &params, int num_samples);
   void set_samples(int num_samples);
   bool next();
+
+#if 0
   bool next_tile(Tile *&tile, int device, uint tile_types);
   bool finish_tile(const int index, const bool need_denoise, bool &delete_tile);
+#endif
+
   bool done();
+
+#if 0
   bool has_tiles();
 
   void set_tile_order(TileOrder tile_order_)
@@ -118,6 +141,7 @@ class TileManager {
 
   int get_neighbor_index(int index, int neighbor);
   bool check_neighbor_state(int index, Tile::State state);
+#endif
 
   /* ** Sample range rendering. ** */
 
@@ -130,19 +154,27 @@ class TileManager {
   /* Get number of actual samples to render. */
   int get_num_effective_samples();
 
+#if 0
   /* Schedule tiles for denoising after they've been rendered. */
   bool schedule_denoising;
+#endif
 
  protected:
+  /* TODO(sergey): Rename to something more clear. It sets current state buffer parameters. */
   void set_tiles();
 
   bool progressive;
+
+#if 0
   int2 tile_size;
-  TileOrder tile_order;
+   TileOrder tile_order;
+#endif
+
   int start_resolution;
   int pixel_size;
   int num_devices;
 
+#if 0
   /* in some cases it is important that the same tile will be returned for the same
    * device it was originally generated for (i.e. viewport rendering when buffer is
    * allocating once for tile and then always used by it)
@@ -165,6 +197,7 @@ class TileManager {
   /* Generate tile list, return number of tiles. */
   int gen_tiles(bool sliced);
   void gen_render_tiles();
+#endif
 };
 
 CCL_NAMESPACE_END

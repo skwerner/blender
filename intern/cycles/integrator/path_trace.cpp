@@ -39,6 +39,8 @@ PathTrace::PathTrace(Device *device) : device_(device)
 {
   DCHECK_NE(device_, nullptr);
 
+  /* TODO(sergey): Need to create render buffer for every individual device, so that they can write
+   * directly to it. */
   full_render_buffers_ = make_unique<RenderBuffers>(device);
 
   /* Create path tracing work in advance, so that it can be reused by incremental sampling as much

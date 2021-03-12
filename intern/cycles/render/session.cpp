@@ -85,7 +85,20 @@ Session::Session(const SessionParams &params_)
   display = NULL;
 
   /* Create CPU/GPU devices. */
-  device = Device::create(params.device, stats, profiler, params.background);
+  /* Special trick to have current PathTracer happy: replace multi-device which has single
+   * sub-device with the single device of that type. This is required because currently PathTraces
+   * makes some assumptions that the device is a single device. */
+  /* TODO(sergey): Remove this once multi-device is fully supported by the PathTracer. */
+  if (params.device.multi_devices.empty()) {
+    device = Device::create(params.device, stats, profiler, params.background);
+  }
+  else if (params.device.multi_devices.size() == 1) {
+    device = Device::create(params.device.multi_devices[0], stats, profiler, params.background);
+  }
+  else {
+    LOG(ERROR) << "Multi-devices are not yet fully implemented.";
+    device = Device::create(params.device, stats, profiler, params.background);
+  }
 
   if (!device->error_message().empty()) {
     progress.set_error(device->error_message());

@@ -279,7 +279,7 @@ void Session::reset_gpu(BufferParams &buffer_params, int samples)
   pause_cond.notify_all();
 }
 
-bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_params)
+void Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_params)
 {
   /* block for buffer access */
   thread_scoped_lock display_lock(display_mutex);
@@ -304,15 +304,8 @@ bool Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
       }
 
       display->draw(device, draw_params);
-
-      if (display_outdated && (time_dt() - reset_time) > params.text_timeout)
-        return false;
-
-      return true;
     }
   }
-
-  return false;
 }
 
 void Session::run_gpu()
@@ -449,7 +442,7 @@ void Session::reset_cpu(BufferParams &buffer_params, int samples)
   pause_cond.notify_all();
 }
 
-bool Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_params)
+void Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_params)
 {
   thread_scoped_lock display_lock(display_mutex);
 
@@ -468,15 +461,8 @@ bool Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_param
          * display buffer) is not seen as a user feedback. */
         did_draw_after_reset_ = true;
       }
-
-      if (display_outdated && (time_dt() - reset_time) > params.text_timeout)
-        return false;
-
-      return true;
     }
   }
-
-  return false;
 }
 
 #if 0
@@ -988,12 +974,14 @@ bool Session::run_wait_for_work(bool no_tiles)
   return no_tiles;
 }
 
-bool Session::draw(BufferParams &buffer_params, DeviceDrawParams &draw_params)
+void Session::draw(BufferParams &buffer_params, DeviceDrawParams &draw_params)
 {
-  if (device_use_gl)
-    return draw_gpu(buffer_params, draw_params);
-  else
-    return draw_cpu(buffer_params, draw_params);
+  if (device_use_gl) {
+    draw_gpu(buffer_params, draw_params);
+  }
+  else {
+    draw_cpu(buffer_params, draw_params);
+  }
 }
 
 void Session::reset_(BufferParams &buffer_params, int samples)

@@ -858,7 +858,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   session->start();
 }
 
-bool BlenderSession::draw(int w, int h)
+void BlenderSession::draw(int w, int h)
 {
   /* pause in redraw in case update is not being called due to final render */
   session->set_pause(BlenderSync::get_session_pause(b_scene, background));
@@ -935,7 +935,7 @@ bool BlenderSession::draw(int w, int h)
         &BL::RenderEngine::unbind_display_space_shader, &b_engine);
   }
 
-  return !session->draw(buffer_params, draw_params);
+  session->draw(buffer_params, draw_params);
 }
 
 void BlenderSession::get_status(string &status, string &substatus)

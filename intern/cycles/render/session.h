@@ -142,7 +142,7 @@ class Session {
 
   void start();
   void cancel();
-  bool draw(BufferParams &params, DeviceDrawParams &draw_params);
+  void draw(BufferParams &params, DeviceDrawParams &draw_params);
   void wait();
 
   bool ready_to_reset();
@@ -205,11 +205,11 @@ class Session {
   void set_denoising_no_check(const DenoiseParams &denoising);
 
   void run_cpu();
-  bool draw_cpu(BufferParams &params, DeviceDrawParams &draw_params);
+  void draw_cpu(BufferParams &params, DeviceDrawParams &draw_params);
   void reset_cpu(BufferParams &params, int samples);
 
   void run_gpu();
-  bool draw_gpu(BufferParams &params, DeviceDrawParams &draw_params);
+  void draw_gpu(BufferParams &params, DeviceDrawParams &draw_params);
   void reset_gpu(BufferParams &params, int samples);
 
   bool render_need_denoise(bool &delayed);

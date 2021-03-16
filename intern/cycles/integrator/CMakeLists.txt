@@ -50,6 +50,12 @@ set(LIB
   cycles_util
 )
 
+if(WITH_OPENIMAGEDENOISE)
+  list(APPEND LIB
+    ${OPENIMAGEDENOISE_LIBRARIES}
+  )
+endif()
+
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 

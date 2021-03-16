@@ -139,6 +139,12 @@ if(WITH_CYCLES_DEVICE_MULTI)
   add_definitions(-DWITH_MULTI)
 endif()
 
+if(WITH_OPENIMAGEDENOISE)
+  list(APPEND LIB
+    ${OPENIMAGEDENOISE_LIBRARIES}
+  )
+endif()
+
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
 

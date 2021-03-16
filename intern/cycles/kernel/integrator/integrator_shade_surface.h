@@ -144,7 +144,7 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
                                                       const RNGState *rng_state)
 {
   /* Test if there is a light or BSDF that needs direct light. */
-  if (!kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL)) {
+  if (!(kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL))) {
     return;
   }
 

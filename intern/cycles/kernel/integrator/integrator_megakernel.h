@@ -31,17 +31,51 @@ CCL_NAMESPACE_BEGIN
 ccl_device void integrator_megakernel(INTEGRATOR_STATE_ARGS,
                                       ccl_global float *ccl_restrict render_buffer)
 {
-  while (!INTEGRATOR_PATH_IS_TERMINATED) {
-    integrator_intersect_closest(INTEGRATOR_STATE_PASS);
-    integrator_shade_volume(INTEGRATOR_STATE_PASS, render_buffer);
-    integrator_shade_background(INTEGRATOR_STATE_PASS, render_buffer);
-    integrator_shade_light(INTEGRATOR_STATE_PASS, render_buffer);
-    integrator_shade_surface(INTEGRATOR_STATE_PASS, render_buffer);
-    integrator_intersect_subsurface(INTEGRATOR_STATE_PASS);
-
-    while (!INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {
-      integrator_intersect_shadow(INTEGRATOR_STATE_PASS);
-      integrator_shade_shadow(INTEGRATOR_STATE_PASS, render_buffer);
+  /* Each kernel indicates the next kernel to execute, so here we simply
+   * have to check what that kernel is an execute it.
+   *
+   * TODO: investigate if we can use device side enqueue for GPUs to avoid
+   * having to compile this big kernel. */
+  while (true) {
+    if (INTEGRATOR_STATE(shadow_path, queued_kernel)) {
+      /* First handle any shadow paths before we potentially create more shadow paths. */
+      switch (INTEGRATOR_STATE(shadow_path, queued_kernel)) {
+        case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
+          integrator_intersect_shadow(INTEGRATOR_STATE_PASS);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
+          integrator_shade_shadow(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
+        default:
+          kernel_assert(0);
+          break;
+      }
+    }
+    else if (INTEGRATOR_STATE(path, queued_kernel)) {
+      /* Then handle regular path kernels. */
+      switch (INTEGRATOR_STATE(path, queued_kernel)) {
+        case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
+          integrator_intersect_closest(INTEGRATOR_STATE_PASS);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND:
+          integrator_shade_background(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
+          integrator_shade_surface(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
+          integrator_shade_light(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
+        case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
+          integrator_intersect_subsurface(INTEGRATOR_STATE_PASS);
+          break;
+        default:
+          kernel_assert(0);
+          break;
+      }
+    }
+    else {
+      break;
     }
   }
 }

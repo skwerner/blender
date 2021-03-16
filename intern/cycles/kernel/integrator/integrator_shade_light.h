@@ -93,12 +93,6 @@ ccl_device_inline void integrate_light(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_light(INTEGRATOR_STATE_ARGS,
                                        ccl_global float *ccl_restrict render_buffer)
 {
-  /* Only execute for active path and when a light was hit. */
-  if (INTEGRATOR_PATH_IS_TERMINATED || INTEGRATOR_STATE(isect, prim) == PRIM_NONE ||
-      !(INTEGRATOR_STATE(isect, type) & PRIMITIVE_LAMP)) {
-    return;
-  }
-
   integrate_light(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* TODO: we could get stuck in an infinite loop if there are precision issues

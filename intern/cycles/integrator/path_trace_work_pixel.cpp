@@ -105,35 +105,7 @@ void PathTraceWorkPixel::render_samples_full_pipeline(KernelGlobals &kernel_glob
     }
 
     kernels_.integrator_init_from_camera(&kernel_globals, state, &sample_work_tile);
-
-#if 0
-    /* NOTE: The order of queuing is based on the following ideas:
-     *  - It is possible that some rays will hit background, and and of them will need volume
-     *    attenuation. So first do intersect which allows to see which rays hit background,
-     * then do volume kernel which might enqueue background work items. After that the
-     * background kernel will handle work items coming from both intersection and volume
-     * kernels.
-     *
-     *  - Subsurface kernel might enqueue additional shadow work items, so make it so shadow
-     *    intersection kernel is scheduled after work items are scheduled from both surface and
-     *    subsurface kernels. */
-    while (!INTEGRATOR_PATH_IS_TERMINATED)
-    {
-      kernels_.integrator_intersect_closest(&kernel_globals, state);
-      kernels_.integrator_shade_volume(&kernel_globals, state, render_buffer);
-      kernels_.integrator_shade_background(&kernel_globals, state, render_buffer);
-      kernels_.integrator_shade_light(&kernel_globals, state, render_buffer);
-      kernels_.integrator_shade_surface(&kernel_globals, state, render_buffer);
-      kernels_.integrator_intersect_subsurface(&kernel_globals, state);
-
-      while (!INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {
-        kernels_.integrator_intersect_shadow(&kernel_globals, state);
-        kernels_.integrator_shade_shadow(&kernel_globals, state, render_buffer);
-      }
-    }
-#else
     kernels_.integrator_megakernel(&kernel_globals, state, render_buffer);
-#endif
 
     ++sample_work_tile.start_sample;
   }

@@ -79,7 +79,7 @@ typedef struct IntegratorPathState {
 
   /* DeviceKernel bit indicating queued kernels.
    * TODO: reduce size? */
-  uint32_t queued_kernels;
+  uint32_t queued_kernel;
 
   /* Random number generator seed. */
   uint32_t rng_hash;

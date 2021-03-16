@@ -238,12 +238,11 @@ void PathTraceWorkTiled::compute_queued_paths(DeviceKernel kernel, int queued_ke
   void *d_integrator_state = (void *)integrator_state_.device_pointer;
   void *d_queued_paths = (void *)queued_paths_.device_pointer;
   void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
-  int queued_kernel_flag = 1 << queued_kernel;
   void *args[] = {&d_integrator_state,
                   const_cast<int *>(&work_size),
                   &d_queued_paths,
                   &d_num_queued_paths,
-                  &queued_kernel_flag};
+                  &queued_kernel};
 
   queue_->enqueue(kernel, work_size, args);
 }

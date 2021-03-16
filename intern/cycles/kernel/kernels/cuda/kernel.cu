@@ -239,34 +239,31 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
 extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
     kernel_cuda_integrator_queued_paths_array(
-        IntegratorState *state, int num_states, int *indices, int *num_indices, int kernel_flag)
+        IntegratorState *state, int num_states, int *indices, int *num_indices, int kernel)
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      state, num_states, indices, num_indices, [kernel_flag](const IntegratorState &state) {
-        return ((state.path.queued_kernels & kernel_flag) != 0);
+      state, num_states, indices, num_indices, [kernel](const IntegratorState &state) {
+        return (state.path.queued_kernel == kernel);
       });
 }
 
 extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
     kernel_cuda_integrator_queued_shadow_paths_array(
-        IntegratorState *state, int num_states, int *indices, int *num_indices, int kernel_flag)
+        IntegratorState *state, int num_states, int *indices, int *num_indices, int kernel)
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      state, num_states, indices, num_indices, [kernel_flag](const IntegratorState &state) {
-        return ((state.shadow_path.queued_kernels & kernel_flag) != 0);
+      state, num_states, indices, num_indices, [kernel](const IntegratorState &state) {
+        return (state.shadow_path.queued_kernel == kernel);
       });
 }
 
 extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
-    kernel_cuda_integrator_terminated_paths_array(IntegratorState *state,
-                                                  int num_states,
-                                                  int *indices,
-                                                  int *num_indices,
-                                                  int unused_kernel_flag)
+    kernel_cuda_integrator_terminated_paths_array(
+        IntegratorState *state, int num_states, int *indices, int *num_indices, int unused_kernel)
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
       state, num_states, indices, num_indices, [](const IntegratorState &state) {
-        return (state.path.flag == 0 && state.shadow_path.flag == 0);
+        return (state.path.queued_kernel == 0 && state.shadow_path.queued_kernel == 0);
       });
 }
 

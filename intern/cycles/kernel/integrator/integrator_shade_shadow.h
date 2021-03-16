@@ -80,11 +80,6 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS)
 ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
-  /* Only execute if anything was hit, otherwise path must have been terminated. */
-  if (INTEGRATOR_SHADOW_PATH_IS_TERMINATED) {
-    return;
-  }
-
 #ifdef __TRANSPARENT_SHADOWS__
   /* Evaluate transparent shadows. */
   const bool opaque = integrate_transparent_shadow(INTEGRATOR_STATE_PASS);

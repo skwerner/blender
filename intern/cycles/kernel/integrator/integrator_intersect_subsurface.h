@@ -20,11 +20,6 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device void integrator_intersect_subsurface(INTEGRATOR_STATE_ARGS)
 {
-  /* Only execute if path is active and ray was marked for subsurface scattering. */
-  if (INTEGRATOR_PATH_IS_TERMINATED || !(INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE)) {
-    return;
-  }
-
 #ifdef __SUBSURFACE__
   /* Subsurface scattering to find exit point. */
   const float3 throughput = INTEGRATOR_STATE(path, throughput);

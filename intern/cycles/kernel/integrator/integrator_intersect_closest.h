@@ -48,11 +48,6 @@ ccl_device_forceinline bool intersect_closest_scene(INTEGRATOR_STATE_CONST_ARGS,
 
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
-  /* Only execute if path is active. */
-  if (INTEGRATOR_PATH_IS_TERMINATED) {
-    return;
-  }
-
   /* Read ray from integrator state into local memory. */
   Ray ray ccl_optional_struct_init;
   ray.P = INTEGRATOR_STATE(ray, P);

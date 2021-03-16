@@ -21,12 +21,6 @@ CCL_NAMESPACE_BEGIN
 ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
-  /* Only execute if path is active and volume stack is non-empty. */
-  if (INTEGRATOR_PATH_IS_TERMINATED ||
-      (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) == OBJECT_NONE)) {
-    return;
-  }
-
 #ifdef __VOLUME__
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
 

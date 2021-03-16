@@ -176,11 +176,6 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
-  /* Only execute for active path and nothing hit. */
-  if (INTEGRATOR_PATH_IS_TERMINATED || (INTEGRATOR_STATE(isect, prim) != PRIM_NONE)) {
-    return;
-  }
-
   // TODO: unify these in a single loop to only have a single shader evaluation call
   integrate_distant_lights(INTEGRATOR_STATE_PASS, render_buffer);
   integrate_background(INTEGRATOR_STATE_PASS, render_buffer);

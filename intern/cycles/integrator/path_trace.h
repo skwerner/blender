@@ -28,9 +28,11 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class DeviceQueue;
-class DisplayBuffer;
 class RenderBuffers;
 class Progress;
+
+/* TODO(sergey): See if it still will be needed for the final implementation. */
+class GPUDisplay;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
  * all the common steps of path tracing which are not device-specific. The list of tasks includes
@@ -88,8 +90,8 @@ class PathTrace {
   /* Denoise current state of the big tile. */
   void denoise();
 
-  /* Copy current render result to the given display buffer. */
-  void copy_to_display_buffer(DisplayBuffer *display_buffer);
+  /* TODO(sergey): This is a quick implementation for tests. */
+  void copy_to_gpu_display(GPUDisplay *gpu_display);
 
   /* Cancel rendering process as soon as possible, without waiting for full tile to be sampled.
    * Used in cases like reset of render session.

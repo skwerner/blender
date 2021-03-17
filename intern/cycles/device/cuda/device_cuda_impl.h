@@ -244,6 +244,7 @@ class CUDADevice : public Device {
 
   void pixels_free(device_memory &mem);
 
+#  if 0
   void draw_pixels(device_memory &mem,
                    int y,
                    int w,
@@ -256,6 +257,7 @@ class CUDADevice : public Device {
                    int dh,
                    bool transparent,
                    const DeviceDrawParams &draw_params) override;
+#  endif
 
   void thread_run(DeviceTask &task);
 

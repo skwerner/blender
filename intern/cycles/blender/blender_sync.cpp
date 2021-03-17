@@ -911,9 +911,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   else if (shadingsystem == 1)
     params.shadingsystem = SHADINGSYSTEM_OSL;
 
-  /* Color management. */
-  params.display_buffer_linear = b_engine.support_display_space_shader(b_scene);
-
   if (b_engine.is_preview()) {
     /* For preview rendering we're using same timeout as
      * blender's job update.

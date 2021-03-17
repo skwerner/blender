@@ -41,6 +41,7 @@
 #include "util/util_progress.h"
 #include "util/util_time.h"
 
+#include "blender/blender_gpu_display.h"
 #include "blender/blender_session.h"
 #include "blender/blender_sync.h"
 #include "blender/blender_util.h"
@@ -163,6 +164,11 @@ void BlenderSession::create_session()
   BufferParams buffer_params = BlenderSync::get_buffer_params(
       b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
+
+  /* Create GPU display. */
+  if (!background) {
+    session->gpu_display = make_unique<BlenderGPUDisplay>(b_engine, b_scene);
+  }
 
   /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
    * rendering for from visual point of view when render buffer fits big tile. But for huge
@@ -924,18 +930,7 @@ void BlenderSession::draw(int w, int h)
   update_status_progress();
 
   /* draw */
-  BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session->params.denoising.use);
-  DeviceDrawParams draw_params;
-
-  if (session->params.display_buffer_linear) {
-    draw_params.bind_display_space_shader_cb = function_bind(
-        &BL::RenderEngine::bind_display_space_shader, &b_engine, b_scene);
-    draw_params.unbind_display_space_shader_cb = function_bind(
-        &BL::RenderEngine::unbind_display_space_shader, &b_engine);
-  }
-
-  session->draw(buffer_params, draw_params);
+  session->draw();
 }
 
 void BlenderSession::get_status(string &status, string &substatus)

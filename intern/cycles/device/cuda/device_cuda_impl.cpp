@@ -2017,6 +2017,13 @@ void CUDADevice::shader(DeviceTask &task)
 
 CUdeviceptr CUDADevice::map_pixels(device_ptr mem)
 {
+  /* XXX: Coment out code which does expect memory pointer to be allocated for pixel usage.
+   * Currently for the development pixels are allocated as a generic read-write memory. This is
+   * a temporary state for until GPUDisplay can have its own dedicated OpenGL context. For until
+   * then comment out hardcoded assumption. */
+  /* TODO(serey): Is there a way to have some safety check to ensure memory is allocated for pixels
+   * and has buffer+OpenGL texture? */
+#  if 0
   if (!background) {
     PixelMem pmem = pixel_mem_map[mem];
     CUdeviceptr buffer;
@@ -2027,17 +2034,21 @@ CUdeviceptr CUDADevice::map_pixels(device_ptr mem)
 
     return buffer;
   }
+#  endif
 
   return (CUdeviceptr)mem;
 }
 
 void CUDADevice::unmap_pixels(device_ptr mem)
 {
+  /* XXX: Similar to the map_pixes(). */
+#  if 0
   if (!background) {
     PixelMem pmem = pixel_mem_map[mem];
 
     cuda_assert(cuGraphicsUnmapResources(1, &pmem.cuPBOresource, 0));
   }
+#  endif
 }
 
 void CUDADevice::pixels_alloc(device_memory &mem)
@@ -2125,6 +2136,7 @@ void CUDADevice::pixels_free(device_memory &mem)
   }
 }
 
+#  if 0
 void CUDADevice::draw_pixels(device_memory &mem,
                              int y,
                              int w,
@@ -2261,6 +2273,7 @@ void CUDADevice::draw_pixels(device_memory &mem,
 
   Device::draw_pixels(mem, y, w, h, width, height, dx, dy, dw, dh, transparent, draw_params);
 }
+#  endif
 
 void CUDADevice::thread_run(DeviceTask &task)
 {

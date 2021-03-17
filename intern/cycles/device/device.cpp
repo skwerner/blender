@@ -85,6 +85,7 @@ std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &reques
 
 Device::~Device() noexcept(false)
 {
+#if 0
   if (!background) {
     if (vertex_buffer != 0) {
       glDeleteBuffers(1, &vertex_buffer);
@@ -93,8 +94,10 @@ Device::~Device() noexcept(false)
       glDeleteProgram(fallback_shader_program);
     }
   }
+#endif
 }
 
+#if 0
 /* TODO move shaders to standalone .glsl file. */
 const char *FALLBACK_VERTEX_SHADER =
     "#version 330\n"
@@ -369,6 +372,7 @@ void Device::draw_pixels(device_memory &rgba,
     glDisable(GL_BLEND);
   }
 }
+#endif
 
 void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
 {

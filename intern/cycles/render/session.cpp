@@ -22,6 +22,7 @@
 #include "render/bake.h"
 #include "render/buffers.h"
 #include "render/camera.h"
+#include "render/gpu_display.h"
 #include "render/graph.h"
 #include "render/integrator.h"
 #include "render/light.h"
@@ -64,8 +65,6 @@ Session::Session(const SessionParams &params_)
       stats(),
       profiler()
 {
-  device_use_gl = ((params.device.type != DEVICE_CPU) && !params.background);
-
   TaskScheduler::init(params.threads);
 
   session_thread = NULL;
@@ -77,12 +76,7 @@ Session::Session(const SessionParams &params_)
   delayed_reset.do_reset = false;
   delayed_reset.samples = 0;
 
-  display_outdated = false;
-  gpu_draw_ready = false;
-  gpu_need_display_buffer_update = false;
   pause = false;
-
-  display = NULL;
 
   /* Create CPU/GPU devices. */
   /* Special trick to have current PathTracer happy: replace multi-device which has single
@@ -103,11 +97,6 @@ Session::Session(const SessionParams &params_)
   if (!device->error_message().empty()) {
     progress.set_error(device->error_message());
     return;
-  }
-
-  /* Create buffers for interactive rendering. */
-  if (!(params.background && !params.write_render_cb)) {
-    display = new DisplayBuffer(device, params.display_buffer_linear);
   }
 
   /* Configure path tracer. */
@@ -193,7 +182,6 @@ Session::~Session()
   tile_manager.device_free();
 #endif
 
-  delete display;
   delete scene;
   delete device;
 
@@ -212,9 +200,6 @@ void Session::cancel()
   if (session_thread) {
     /* wait for session thread to end */
     progress.set_cancel("Exiting");
-
-    gpu_need_display_buffer_update = false;
-    gpu_need_display_buffer_update_cond.notify_all();
 
     {
       thread_scoped_lock pause_lock(pause_mutex);
@@ -248,221 +233,8 @@ bool Session::ready_to_reset()
     return true;
   }
 
-  double dt = time_dt() - reset_time;
-
-  if (!display_outdated)
-    return (dt > params.reset_timeout);
-  else
-    return (dt > params.cancel_timeout);
-}
-
-/* GPU Session */
-
-void Session::reset_gpu(BufferParams &buffer_params, int samples)
-{
-  thread_scoped_lock pause_lock(pause_mutex);
-
-  /* block for buffer access and reset immediately. we can't do this
-   * in the thread, because we need to allocate an OpenGL buffer, and
-   * that only works in the main thread */
-  thread_scoped_lock display_lock(display_mutex);
-  thread_scoped_lock buffers_lock(buffers_mutex);
-
-  display_outdated = true;
-  reset_time = time_dt();
-
-  reset_(buffer_params, samples);
-
-  gpu_need_display_buffer_update = false;
-  gpu_need_display_buffer_update_cond.notify_all();
-
-  pause_cond.notify_all();
-}
-
-void Session::draw_gpu(BufferParams &buffer_params, DeviceDrawParams &draw_params)
-{
-  /* block for buffer access */
-  thread_scoped_lock display_lock(display_mutex);
-
-  /* first check we already rendered something */
-  if (gpu_draw_ready) {
-    /* then verify the buffers have the expected size, so we don't
-     * draw previous results in a resized window */
-    if (buffer_params.width == display->params.width &&
-        buffer_params.height == display->params.height) {
-      /* for CUDA we need to do tone-mapping still, since we can
-       * only access GL buffers from the main thread. */
-      if (gpu_need_display_buffer_update) {
-        thread_scoped_lock buffers_lock(buffers_mutex);
-        copy_to_display_buffer();
-        gpu_need_display_buffer_update = false;
-        gpu_need_display_buffer_update_cond.notify_all();
-
-        /* NOTE: Only count up-to-date redraws. Otherwise this flag might get cleared by a viewport
-         * redraw which happenned after reset but before path tracer gave new render result. */
-        did_draw_after_reset_ = true;
-      }
-
-      display->draw(device, draw_params);
-    }
-  }
-}
-
-void Session::run_gpu()
-{
-  reset_time = time_dt();
-  last_update_time = time_dt();
-  last_display_time = last_update_time;
-
-  progress.set_render_start_time();
-
-  while (!progress.get_cancel()) {
-    /* advance to next tile */
-    bool no_tiles = !tile_manager.next();
-
-    if (params.background) {
-      /* if no work left and in background mode, we can stop immediately */
-      if (no_tiles) {
-        progress.set_status("Finished");
-        break;
-      }
-    }
-    else {
-      /* if in interactive mode, and we are either paused or done for now,
-       * wait for pause condition notify to wake up again */
-      thread_scoped_lock pause_lock(pause_mutex);
-
-      if (!pause && !tile_manager.done()) {
-        /* reset could have happened after no_tiles was set, before this lock.
-         * in this case we shall not wait for pause condition
-         */
-      }
-      else if (pause || no_tiles) {
-        update_status_time(pause, no_tiles);
-
-        while (1) {
-          scoped_timer pause_timer;
-          pause_cond.wait(pause_lock);
-          if (pause) {
-            progress.add_skip_time(pause_timer, params.background);
-          }
-
-          update_status_time(pause, no_tiles);
-          progress.set_update();
-
-          if (!pause)
-            break;
-        }
-      }
-
-      if (progress.get_cancel())
-        break;
-    }
-
-    if (!no_tiles) {
-      /* update scene */
-      {
-        /* TODO(sergey): Use run_update_for_next_iteration() similarly to `run_cpu()`. */
-        thread_scoped_lock scene_lock(scene->mutex);
-
-        scoped_timer update_timer;
-        if (update_scene()) {
-          profiler.reset(scene->shaders.size(), scene->objects.size());
-        }
-        progress.add_skip_time(update_timer, params.background);
-      }
-
-      if (!device->error_message().empty())
-        progress.set_error(device->error_message());
-
-      if (progress.get_cancel())
-        break;
-
-      /* buffers mutex is locked entirely while rendering each
-       * sample, and released/reacquired on each iteration to allow
-       * reset and draw in between */
-      thread_scoped_lock buffers_lock(buffers_mutex);
-
-      /* update status and timing */
-      update_status_time();
-
-      /* render */
-      bool delayed_denoise = false;
-      const bool need_denoise = render_need_denoise(delayed_denoise);
-      render(need_denoise);
-
-      device->task_wait();
-
-      if (!device->error_message().empty())
-        progress.set_cancel(device->error_message());
-
-      /* update status and timing */
-      update_status_time();
-
-      gpu_need_display_buffer_update = !delayed_denoise;
-      gpu_draw_ready = true;
-      progress.set_update();
-
-      /* wait for until display buffer is updated */
-      if (!params.background) {
-        while (gpu_need_display_buffer_update) {
-          if (progress.get_cancel())
-            break;
-
-          gpu_need_display_buffer_update_cond.wait(buffers_lock);
-        }
-      }
-
-      if (!device->error_message().empty())
-        progress.set_error(device->error_message());
-
-      if (progress.get_cancel())
-        break;
-    }
-  }
-}
-
-/* CPU Session */
-
-void Session::reset_cpu(BufferParams &buffer_params, int samples)
-{
-  thread_scoped_lock reset_lock(delayed_reset.mutex);
-  thread_scoped_lock pause_lock(pause_mutex);
-
-  display_outdated = true;
-  reset_time = time_dt();
-
-  delayed_reset.params = buffer_params;
-  delayed_reset.samples = samples;
-  delayed_reset.do_reset = true;
-  device->task_cancel();
-
-  path_trace_->cancel();
-
-  pause_cond.notify_all();
-}
-
-void Session::draw_cpu(BufferParams &buffer_params, DeviceDrawParams &draw_params)
-{
-  thread_scoped_lock display_lock(display_mutex);
-
-  /* first check we already rendered something */
-  if (display->draw_ready()) {
-    /* then verify the buffers have the expected size, so we don't
-     * draw previous results in a resized window */
-    if (buffer_params.width == display->params.width &&
-        buffer_params.height == display->params.height) {
-      display->draw(device, draw_params);
-
-      if (!display_outdated) {
-        /* Only flag once the display is not out-of-date.
-         *
-         * This makes it so that redraw after delayed denoising (which does not immediately update
-         * display buffer) is not seen as a user feedback. */
-        did_draw_after_reset_ = true;
-      }
-    }
-  }
+  const double dt = time_dt() - reset_time;
+  return (dt > params.reset_timeout);
 }
 
 #if 0
@@ -805,7 +577,7 @@ void Session::unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_
 }
 #endif
 
-void Session::run_cpu()
+void Session::run_main_render_loop()
 {
   last_update_time = time_dt();
   last_display_time = last_update_time;
@@ -814,10 +586,11 @@ void Session::run_cpu()
     /* reset once to start */
     thread_scoped_lock reset_lock(delayed_reset.mutex);
     thread_scoped_lock buffers_lock(buffers_mutex);
-    thread_scoped_lock display_lock(display_mutex);
 
-    reset_(delayed_reset.params, delayed_reset.samples);
-    delayed_reset.do_reset = false;
+    if (delayed_reset.do_reset) {
+      reset_(delayed_reset.params, delayed_reset.samples);
+      delayed_reset.do_reset = false;
+    }
   }
 
   while (!progress.get_cancel()) {
@@ -870,7 +643,6 @@ void Session::run_cpu()
     {
       thread_scoped_lock reset_lock(delayed_reset.mutex);
       thread_scoped_lock buffers_lock(buffers_mutex);
-      thread_scoped_lock display_lock(display_mutex);
 
       if (delayed_reset.do_reset) {
         /* Handle reset on the next loop iteration. Here simply avoid copy of partial render buffer
@@ -906,10 +678,7 @@ void Session::run()
     /* reset number of rendered samples */
     progress.reset_sample();
 
-    if (device_use_gl)
-      run_gpu();
-    else
-      run_cpu();
+    run_main_render_loop();
   }
 
   profiler.stop();
@@ -928,7 +697,6 @@ bool Session::run_update_for_next_iteration()
 
   if (delayed_reset.do_reset) {
     thread_scoped_lock buffers_lock(buffers_mutex);
-    thread_scoped_lock display_lock(display_mutex);
     reset_(delayed_reset.params, delayed_reset.samples);
     delayed_reset.do_reset = false;
   }
@@ -974,25 +742,22 @@ bool Session::run_wait_for_work(bool no_tiles)
   return no_tiles;
 }
 
-void Session::draw(BufferParams &buffer_params, DeviceDrawParams &draw_params)
+void Session::draw()
 {
-  if (device_use_gl) {
-    draw_gpu(buffer_params, draw_params);
+  if (!gpu_display) {
+    did_draw_after_reset_ = true;
+    return;
   }
-  else {
-    draw_cpu(buffer_params, draw_params);
-  }
+
+  did_draw_after_reset_ |= gpu_display->draw();
 }
 
 void Session::reset_(BufferParams &buffer_params, int samples)
 {
   path_trace_->reset(buffer_params);
 
-  if (buffer_params.modified(tile_manager.params)) {
-    gpu_draw_ready = false;
-    if (display) {
-      display->reset(buffer_params);
-    }
+  if (gpu_display) {
+    gpu_display->reset(buffer_params);
   }
 
   tile_manager.reset(buffer_params, samples);
@@ -1014,10 +779,19 @@ void Session::reset_(BufferParams &buffer_params, int samples)
 
 void Session::reset(BufferParams &buffer_params, int samples)
 {
-  if (device_use_gl)
-    reset_gpu(buffer_params, samples);
-  else
-    reset_cpu(buffer_params, samples);
+  thread_scoped_lock reset_lock(delayed_reset.mutex);
+  thread_scoped_lock pause_lock(pause_mutex);
+
+  reset_time = time_dt();
+
+  delayed_reset.params = buffer_params;
+  delayed_reset.samples = samples;
+  delayed_reset.do_reset = true;
+  device->task_cancel();
+
+  path_trace_->cancel();
+
+  pause_cond.notify_all();
 }
 
 void Session::set_samples(int samples)
@@ -1362,10 +1136,13 @@ void Session::render(bool need_denoise)
 
 void Session::copy_to_display_buffer()
 {
-  path_trace_->copy_to_display_buffer(display);
+  /* TODO(sergey): Ideally this would be totally handled by the PathTrace, so that it will take
+   * care of updates when they are needed (not oo often for performance, not too rare for
+   * feedback). */
+
+  path_trace_->copy_to_gpu_display(gpu_display.get());
 
   last_display_time = time_dt();
-  display_outdated = false;
 }
 
 void Session::device_free()

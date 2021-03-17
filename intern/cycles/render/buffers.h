@@ -122,7 +122,9 @@ class DisplayBuffer {
   void reset(BufferParams &params);
 
   void draw_set(int width, int height);
+#if 0
   void draw(Device *device, const DeviceDrawParams &draw_params);
+#endif
   bool draw_ready();
 };
 

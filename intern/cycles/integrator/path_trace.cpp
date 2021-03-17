@@ -23,6 +23,9 @@
 #include "util/util_tbb.h"
 #include "util/util_time.h"
 
+/* TODO(sergey): See if it still will be needed for the final implementation. */
+#include "render/gpu_display.h"
+
 CCL_NAMESPACE_BEGIN
 
 void PathTrace::RenderStatus::reset()
@@ -58,7 +61,9 @@ PathTrace::PathTrace(Device *device) : device_(device)
 
 void PathTrace::reset(const BufferParams &full_buffer_params)
 {
-  full_render_buffers_->reset(full_buffer_params);
+  if (full_render_buffers_->params.modified(full_buffer_params)) {
+    full_render_buffers_->reset(full_buffer_params);
+  }
 
   scaled_render_buffer_params_ = full_buffer_params;
   update_scaled_render_buffers_resolution();
@@ -210,16 +215,26 @@ void PathTrace::denoise()
   }
 }
 
-void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)
+void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
 {
+  const int width = scaled_render_buffer_params_.width;
+  const int height = scaled_render_buffer_params_.height;
+  if (width == 0 || height == 0) {
+    return;
+  }
+
+  /* TODO(sergey): Consider avoiding re-allocation on every update. */
+  device_vector<half4> rgba_half(device_, "display buffer half", MEM_READ_WRITE);
+  rgba_half.alloc(width, height);
+  rgba_half.zero_to_device();
+
   DeviceTask task(DeviceTask::FILM_CONVERT);
 
   task.x = scaled_render_buffer_params_.full_x;
   task.y = scaled_render_buffer_params_.full_y;
-  task.w = scaled_render_buffer_params_.width;
-  task.h = scaled_render_buffer_params_.height;
-  task.rgba_byte = display_buffer->rgba_byte.device_pointer;
-  task.rgba_half = display_buffer->rgba_half.device_pointer;
+  task.w = width;
+  task.h = height;
+  task.rgba_half = rgba_half.device_pointer;
   task.buffer = full_render_buffers_->buffer.device_pointer;
 
   /* NOTE: The device assumes the sample is the 0-based index of the last samples sample. */
@@ -227,12 +242,14 @@ void PathTrace::copy_to_display_buffer(DisplayBuffer *display_buffer)
 
   scaled_render_buffer_params_.get_offset_stride(task.offset, task.stride);
 
-  if (task.w > 0 && task.h > 0) {
-    device_->task_add(task);
-    device_->task_wait();
+  device_->task_add(task);
+  device_->task_wait();
 
-    /* Set display to new size. */
-    display_buffer->draw_set(task.w, task.h);
+  rgba_half.copy_from_device(0, width, height);
+
+  {
+    thread_scoped_lock lock(gpu_display->mutex);
+    gpu_display->copy_pixels_to_texture(rgba_half.data(), width, height);
   }
 }
 

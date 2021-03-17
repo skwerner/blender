@@ -38,6 +38,7 @@ class DeviceRequestedFeatures;
 class DisplayBuffer;
 class PathTrace;
 class Progress;
+class GPUDisplay;
 class RenderBuffers;
 class Scene;
 
@@ -60,8 +61,6 @@ class SessionParams {
   bool adaptive_sampling;
 
   bool use_profiling;
-
-  bool display_buffer_linear;
 
   DenoiseParams denoising;
 
@@ -89,8 +88,6 @@ class SessionParams {
 
     use_profiling = false;
 
-    display_buffer_linear = false;
-
     cancel_timeout = 0.1;
     reset_timeout = 0.1;
     text_timeout = 1.0;
@@ -107,10 +104,8 @@ class SessionParams {
              progressive == params.progressive && experimental == params.experimental &&
              start_resolution == params.start_resolution && pixel_size == params.pixel_size &&
              threads == params.threads && adaptive_sampling == params.adaptive_sampling &&
-             use_profiling == params.use_profiling &&
-             display_buffer_linear == params.display_buffer_linear &&
-             cancel_timeout == params.cancel_timeout && reset_timeout == params.reset_timeout &&
-             text_timeout == params.text_timeout &&
+             use_profiling == params.use_profiling && cancel_timeout == params.cancel_timeout &&
+             reset_timeout == params.reset_timeout && text_timeout == params.text_timeout &&
              progressive_update_timeout == params.progressive_update_timeout &&
              shadingsystem == params.shadingsystem && denoising.type == params.denoising.type &&
              (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
@@ -126,7 +121,7 @@ class Session {
  public:
   Device *device;
   Scene *scene;
-  DisplayBuffer *display;
+  unique_ptr<GPUDisplay> gpu_display;
   Progress progress;
   SessionParams params;
   TileManager tile_manager;
@@ -142,7 +137,7 @@ class Session {
 
   void start();
   void cancel();
-  void draw(BufferParams &params, DeviceDrawParams &draw_params);
+  void draw();
   void wait();
 
   bool ready_to_reset();
@@ -193,9 +188,12 @@ class Session {
    * returns. */
   bool run_wait_for_work(bool no_tiles);
 
+  void run_main_render_loop();
+
   void update_status_time(bool show_pause = false, bool show_done = false);
 
   void render(bool use_denoise);
+
   void copy_to_display_buffer();
 
   void reset_(BufferParams &params, int samples);
@@ -203,14 +201,6 @@ class Session {
   /* TODO(sergey): Once the threading synchronization betwee synchronization and render threads is
    * properly implemented there will be no need in this. */
   void set_denoising_no_check(const DenoiseParams &denoising);
-
-  void run_cpu();
-  void draw_cpu(BufferParams &params, DeviceDrawParams &draw_params);
-  void reset_cpu(BufferParams &params, int samples);
-
-  void run_gpu();
-  void draw_gpu(BufferParams &params, DeviceDrawParams &draw_params);
-  void reset_gpu(BufferParams &params, int samples);
 
   bool render_need_denoise(bool &delayed);
 
@@ -223,24 +213,17 @@ class Session {
 
   void map_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
   void unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
-#endif
 
   bool device_use_gl;
+#endif
 
   thread *session_thread;
-
-  volatile bool display_outdated;
-
-  volatile bool gpu_draw_ready;
-  volatile bool gpu_need_display_buffer_update;
-  thread_condition_variable gpu_need_display_buffer_update_cond;
 
   bool pause;
   thread_condition_variable pause_cond;
   thread_mutex pause_mutex;
   thread_mutex tile_mutex;
   thread_mutex buffers_mutex;
-  thread_mutex display_mutex;
 #if 0
   thread_condition_variable denoising_cond;
   thread_condition_variable tile_steal_cond;

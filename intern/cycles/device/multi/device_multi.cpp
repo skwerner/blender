@@ -522,6 +522,7 @@ class MultiDevice : public Device {
       sub.device->const_copy_to(name, host, size);
   }
 
+#if 0
   void draw_pixels(device_memory &rgba,
                    int y,
                    int w,
@@ -556,6 +557,7 @@ class MultiDevice : public Device {
 
     rgba.device_pointer = key;
   }
+#endif
 
   void map_tile(Device *sub_device, RenderTile &tile) override
   {

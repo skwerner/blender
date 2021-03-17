@@ -551,6 +551,7 @@ void DisplayBuffer::draw_set(int width, int height)
   draw_height = height;
 }
 
+#if 0
 void DisplayBuffer::draw(Device *device, const DeviceDrawParams &draw_params)
 {
   if (draw_width != 0 && draw_height != 0) {
@@ -570,6 +571,7 @@ void DisplayBuffer::draw(Device *device, const DeviceDrawParams &draw_params)
                         draw_params);
   }
 }
+#endif
 
 bool DisplayBuffer::draw_ready()
 {

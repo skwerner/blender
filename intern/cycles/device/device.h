@@ -278,26 +278,32 @@ std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &reques
 
 /* Device */
 
+#if 0
 struct DeviceDrawParams {
   function<void()> bind_display_space_shader_cb;
   function<void()> unbind_display_space_shader_cb;
 };
+#endif
 
 class Device {
   friend class device_sub_ptr;
 
  protected:
+#if 0
   enum {
     FALLBACK_SHADER_STATUS_NONE = 0,
     FALLBACK_SHADER_STATUS_ERROR,
     FALLBACK_SHADER_STATUS_SUCCESS,
   };
+#endif
 
   Device(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background)
       : background(background),
+#if 0
         vertex_buffer(0),
         fallback_status(FALLBACK_SHADER_STATUS_NONE),
         fallback_shader_program(0),
+#endif
         info(info_),
         stats(stats_),
         profiler(profiler_)
@@ -307,12 +313,14 @@ class Device {
   bool background;
   string error_msg;
 
+#if 0
   /* used for real time display */
   unsigned int vertex_buffer;
   int fallback_status, fallback_shader_program;
   int image_texture_location, fullscreen_location;
 
   bool bind_fallback_display_space_shader(const float width, const float height);
+#endif
 
   virtual device_ptr mem_alloc_sub_ptr(device_memory & /*mem*/, int /*offset*/, int /*size*/)
   {
@@ -406,6 +414,7 @@ class Device {
     return NULL;
   }
 
+#if 0
   /* opengl drawing */
   virtual void draw_pixels(device_memory &mem,
                            int y,
@@ -419,6 +428,7 @@ class Device {
                            int dh,
                            bool transparent,
                            const DeviceDrawParams &draw_params);
+#endif
 
   /* acceleration structure building */
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);

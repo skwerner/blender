@@ -593,12 +593,8 @@ void Session::run_main_render_loop()
       }
     }
 
-    if (!params.background) {
-      /* if in interactive mode, and we might be either paused or done for now,
-       * wait for pause condition notify to wake up again */
-      if (run_wait_for_work(no_tiles)) {
-        continue;
-      }
+    if (run_wait_for_work(no_tiles)) {
+      continue;
     }
 
     if (progress.get_cancel()) {
@@ -705,6 +701,11 @@ bool Session::run_update_for_next_iteration()
 
 bool Session::run_wait_for_work(bool no_tiles)
 {
+  /* In an offline rendering there is no pause, and no tiles will mean the job is fully done.  */
+  if (params.background) {
+    return false;
+  }
+
   thread_scoped_lock pause_lock(pause_mutex);
 
   if (!pause && !no_tiles) {

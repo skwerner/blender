@@ -207,19 +207,6 @@ class PathTrace {
   };
   RenderStatus render_status_;
 
-  /* Status for the update reporting.
-   * Is used to avoid updates being sent too often. */
-  struct UpdateStatus {
-    /* Used before path tracing begins, so that all updates can happen as user expects them. */
-    void reset();
-
-    /* Denotes whether update callback was ever called during the current path tracing process. */
-    bool has_update;
-    /* Timestamp of when the update callback was last call (only valid if `has_update` is true.) */
-    double last_update_time;
-  };
-  UpdateStatus update_status_;
-
   /* Progress object which is used to communicate sample progress. */
   Progress *progress_;
 

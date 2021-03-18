@@ -33,11 +33,6 @@ void PathTrace::RenderStatus::reset()
   rendered_samples_num = 0;
 }
 
-void PathTrace::UpdateStatus::reset()
-{
-  has_update = false;
-}
-
 PathTrace::PathTrace(Device *device) : device_(device)
 {
   DCHECK_NE(device_, nullptr);
@@ -102,7 +97,6 @@ void PathTrace::render_samples(int samples_num)
   render_init_execution();
 
   render_status_.reset();
-  update_status_.reset();
 
   double total_sampling_time = 0;
 
@@ -300,21 +294,7 @@ void PathTrace::buffer_update_if_needed()
     return;
   }
 
-  const double current_time = time_dt();
-
-  /* Always perform the first update, so that users see first pixels as soon as possible.
-   * After that only perform updates every now and then. */
-  if (update_status_.has_update) {
-    /* TODO(sergey): Use steady clock. */
-    if (current_time - update_status_.last_update_time < update_interval_in_seconds) {
-      return;
-    }
-  }
-
   buffer_update_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
-
-  update_status_.has_update = true;
-  update_status_.last_update_time = current_time;
 }
 
 void PathTrace::buffer_write()

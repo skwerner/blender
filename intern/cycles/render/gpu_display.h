@@ -42,7 +42,7 @@ class GPUDisplayParams {
 
   bool modified(const GPUDisplayParams &other) const
   {
-    return !(offset == other.offset && full_size == other.full_size && size == other.full_size);
+    return !(offset == other.offset && full_size == other.full_size && size == other.size);
   }
 };
 

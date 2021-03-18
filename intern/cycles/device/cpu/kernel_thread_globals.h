@@ -39,6 +39,15 @@ class CPUKernelThreadGlobals : public KernelGlobals {
   CPUKernelThreadGlobals(const KernelGlobals &kernel_globals, void *osl_globals_memory);
 
   ~CPUKernelThreadGlobals();
+
+  CPUKernelThreadGlobals(const CPUKernelThreadGlobals &other) = delete;
+  CPUKernelThreadGlobals(CPUKernelThreadGlobals &&other) noexcept;
+
+  CPUKernelThreadGlobals &operator=(const CPUKernelThreadGlobals &other) = delete;
+  CPUKernelThreadGlobals &operator=(CPUKernelThreadGlobals &&other);
+
+ protected:
+  void reset_runtime_memory();
 };
 
 CCL_NAMESPACE_END

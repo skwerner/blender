@@ -41,30 +41,31 @@ template<class T, int N> constexpr inline int ARRAY_SIZE(T (&/*array*/)[N])
 
 CPUKernelThreadGlobals::CPUKernelThreadGlobals()
 {
-  transparent_shadow_intersections = nullptr;
-#ifdef WITH_OSL
-  osl = nullptr;
-#endif
-
-  memset(decoupled_volume_steps, 0, sizeof(decoupled_volume_steps));
+  reset_runtime_memory();
 }
 
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
                                                void *osl_globals_memory)
     : KernelGlobals(kernel_globals)
 {
-  transparent_shadow_intersections = NULL;
-  const int decoupled_count = ARRAY_SIZE(decoupled_volume_steps);
-  for (int i = 0; i < decoupled_count; ++i) {
-    decoupled_volume_steps[i] = NULL;
-  }
+  reset_runtime_memory();
+
   decoupled_volume_steps_index = 0;
-  coverage_asset = coverage_object = coverage_material = NULL;
+  coverage_asset = nullptr;
+  coverage_object = nullptr;
+  coverage_material = nullptr;
+
 #ifdef WITH_OSL
   OSLShader::thread_init(this, reinterpret_cast<OSLGlobals *>(osl_globals_memory));
 #else
   (void)osl_globals_memory;
 #endif
+}
+
+CPUKernelThreadGlobals::CPUKernelThreadGlobals(CPUKernelThreadGlobals &&other) noexcept
+    : KernelGlobals(std::move(other))
+{
+  other.reset_runtime_memory();
 }
 
 CPUKernelThreadGlobals::~CPUKernelThreadGlobals()
@@ -78,6 +79,30 @@ CPUKernelThreadGlobals::~CPUKernelThreadGlobals()
 #ifdef WITH_OSL
   OSLShader::thread_free(this);
 #endif
+}
+
+CPUKernelThreadGlobals &CPUKernelThreadGlobals::operator=(CPUKernelThreadGlobals &&other)
+{
+  if (this == &other) {
+    return *this;
+  }
+
+  *static_cast<KernelGlobals *>(this) = *static_cast<KernelGlobals *>(&other);
+
+  other.reset_runtime_memory();
+
+  return *this;
+}
+
+void CPUKernelThreadGlobals::reset_runtime_memory()
+{
+  transparent_shadow_intersections = nullptr;
+
+#ifdef WITH_OSL
+  osl = nullptr;
+#endif
+
+  memset(decoupled_volume_steps, 0, sizeof(decoupled_volume_steps));
 }
 
 CCL_NAMESPACE_END

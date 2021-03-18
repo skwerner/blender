@@ -212,6 +212,10 @@ void Session::cancel()
 
 bool Session::ready_to_reset()
 {
+  /* The logic here is optimized for the best feedback in the viewport, which implies having a GPU
+   * display. Of there is no such display, the logic here will break. */
+  DCHECK(gpu_display);
+
   /* The logic here tries to provide behavior which feels the most interactive feel to artists.
    * General idea is to be able to reset as quickly as possible, while still providing interactive
    * feel.
@@ -221,19 +225,13 @@ bool Session::ready_to_reset()
    * whether CPU or GPU drawing pipeline is used.
    *
    * Consider reset happening after redraw "slow" enough to not clog anything. This is a bit
-   * arbitrary, but seems to work very well with viewport navigation in Blender.
-   *
-   * In addition to displayed pixels use a configurabel timeout. This would allow session reset
-   * in cases when drawing is not happening or is very slow.
-   *
-   * TODO(sergey): Check whether timeout-based reset is useful/needed in practice. */
+   * arbitrary, but seems to work very well with viewport navigation in Blender. */
 
   if (did_draw_after_reset_) {
     return true;
   }
 
-  const double dt = time_dt() - reset_time;
-  return (dt > params.reset_timeout);
+  return false;
 }
 
 #if 0

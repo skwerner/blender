@@ -252,7 +252,7 @@ class Session {
 
   /* Indicates whether a render result was drawn after latest session reset.
    * Used by `ready_to_reset()` to implement logic which feels the most interactive. */
-  bool did_draw_after_reset_ = false;
+  bool did_draw_after_reset_ = true;
 };
 
 CCL_NAMESPACE_END

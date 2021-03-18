@@ -580,14 +580,20 @@ void Session::run_main_render_loop()
     const bool no_tiles = !run_update_for_next_iteration();
     bool need_copy_to_display_buffer = false;
 
-    if (params.background) {
-      /* if no work left and in background mode, we can stop immediately */
-      if (no_tiles) {
+    if (no_tiles) {
+      if (VLOG_IS_ON(2)) {
+        double total_time, render_time;
+        progress.get_time(total_time, render_time);
+        VLOG(2) << "Rendering in main loop is done in " << render_time << " seconds.";
+      }
+      if (params.background) {
+        /* if no work left and in background mode, we can stop immediately. */
         progress.set_status("Finished");
         break;
       }
     }
-    else {
+
+    if (!params.background) {
       /* if in interactive mode, and we might be either paused or done for now,
        * wait for pause condition notify to wake up again */
       if (run_wait_for_work(no_tiles)) {

@@ -230,7 +230,6 @@ class Session {
 #endif
 
   double reset_time;
-  double last_update_time;
   double last_display_time;
 
 #if 0

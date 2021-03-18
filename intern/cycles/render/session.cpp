@@ -71,7 +71,6 @@ Session::Session(const SessionParams &params_)
   scene = NULL;
 
   reset_time = 0.0;
-  last_update_time = 0.0;
 
   delayed_reset.do_reset = false;
   delayed_reset.samples = 0;
@@ -579,8 +578,7 @@ void Session::unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_
 
 void Session::run_main_render_loop()
 {
-  last_update_time = time_dt();
-  last_display_time = last_update_time;
+  last_display_time = time_dt();
 
   while (!progress.get_cancel()) {
     const bool no_tiles = !run_update_for_next_iteration();

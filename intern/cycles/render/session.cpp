@@ -70,8 +70,6 @@ Session::Session(const SessionParams &params_)
   session_thread = NULL;
   scene = NULL;
 
-  reset_time = 0.0;
-
   delayed_reset.do_reset = false;
   delayed_reset.samples = 0;
 
@@ -766,8 +764,6 @@ void Session::reset(BufferParams &buffer_params, int samples)
 {
   thread_scoped_lock reset_lock(delayed_reset.mutex);
   thread_scoped_lock pause_lock(pause_mutex);
-
-  reset_time = time_dt();
 
   delayed_reset.params = buffer_params;
   delayed_reset.samples = samples;

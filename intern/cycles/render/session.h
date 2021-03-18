@@ -229,7 +229,6 @@ class Session {
   thread_condition_variable tile_steal_cond;
 #endif
 
-  double reset_time;
   double last_display_time;
 
 #if 0

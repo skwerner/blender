@@ -582,17 +582,6 @@ void Session::run_main_render_loop()
   last_update_time = time_dt();
   last_display_time = last_update_time;
 
-  {
-    /* reset once to start */
-    thread_scoped_lock reset_lock(delayed_reset.mutex);
-    thread_scoped_lock buffers_lock(buffers_mutex);
-
-    if (delayed_reset.do_reset) {
-      reset_(delayed_reset.params, delayed_reset.samples);
-      delayed_reset.do_reset = false;
-    }
-  }
-
   while (!progress.get_cancel()) {
     const bool no_tiles = !run_update_for_next_iteration();
     bool need_copy_to_display_buffer = false;

@@ -38,7 +38,7 @@ void CPUDeviceQueue::init_execution()
 
   kernel_thread_globals_.clear();
   for (int i = 0; i < cpu_device->info.cpu_threads; i++) {
-    kernel_thread_globals_.emplace_back(CPUKernelThreadGlobals(kernel_globals, osl_memory));
+    kernel_thread_globals_.emplace_back(kernel_globals, osl_memory);
   }
 }
 

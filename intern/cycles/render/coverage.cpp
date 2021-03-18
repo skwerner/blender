@@ -17,10 +17,9 @@
 #include "render/coverage.h"
 #include "render/buffers.h"
 
-#include "kernel/kernel_compat_cpu.h"
-#include "kernel/kernel_types.h"
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
 
-#include "kernel/kernel_globals.h"
 #include "kernel/kernel_id_passes.h"
 
 #include "util/util_map.h"

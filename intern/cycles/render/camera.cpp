@@ -33,8 +33,9 @@
 
 /* needed for calculating differentials */
 // clang-format off
-#include "kernel/kernel_compat_cpu.h"
-#include "kernel/kernel_globals.h"
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
+
 #include "kernel/kernel_projection.h"
 #include "kernel/kernel_differential.h"
 #include "kernel/kernel_montecarlo.h"

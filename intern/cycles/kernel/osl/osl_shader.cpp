@@ -17,10 +17,11 @@
 #include <OSL/oslexec.h>
 
 // clang-format off
-#include "kernel/kernel_compat_cpu.h"
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
+
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_types.h"
-#include "kernel/kernel_globals.h"
 
 #include "kernel/geom/geom_object.h"
 

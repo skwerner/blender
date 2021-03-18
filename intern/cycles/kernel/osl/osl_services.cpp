@@ -40,11 +40,12 @@
 #include "util/util_string.h"
 
 // clang-format off
-#include "kernel/kernel_compat_cpu.h"
-#include "kernel/kernel_globals.h"
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
+#include "kernel/device/cpu/image.h"
+
 #include "kernel/kernel_color.h"
 #include "kernel/kernel_camera.h"
-#include "kernel/kernels/cpu/kernel_cpu_image.h"
 #include "kernel/geom/geom.h"
 #include "kernel/bvh/bvh.h"
 

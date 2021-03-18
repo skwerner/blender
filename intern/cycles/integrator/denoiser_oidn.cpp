@@ -24,11 +24,8 @@
 #include "util/util_logging.h"
 #include "util/util_openimagedenoise.h"
 
-// clang-format off
-#include "kernel/kernel.h"
-#include "kernel/kernel_compat_cpu.h"
-#include "kernel/kernel_types.h"
-// clang-format on
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/kernel.h"
 
 CCL_NAMESPACE_BEGIN
 

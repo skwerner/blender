@@ -16,10 +16,8 @@
 
 #include "device/cpu/kernel.h"
 
-// clang-format off
-#include "kernel/kernel.h"
-#include "kernel/filter/filter.h"
-// clang-format on
+#include "kernel/device/cpu/filter.h"
+#include "kernel/device/cpu/kernel.h"
 
 CCL_NAMESPACE_BEGIN
 

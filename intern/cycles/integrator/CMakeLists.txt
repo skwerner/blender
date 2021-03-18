@@ -24,8 +24,8 @@ set(SRC
   path_trace.cpp
   tile.cpp
   path_trace_work.cpp
-  path_trace_work_tiled.cpp
-  path_trace_work_pixel.cpp
+  path_trace_work_cpu.cpp
+  path_trace_work_gpu.cpp
   work_scheduler.cpp
 )
 
@@ -37,8 +37,8 @@ set(SRC_HEADERS
   path_trace.h
   tile.h
   path_trace_work.h
-  path_trace_work_tiled.h
-  path_trace_work_pixel.h
+  path_trace_work_cpu.h
+  path_trace_work_gpu.h
   work_scheduler.h
 )
 

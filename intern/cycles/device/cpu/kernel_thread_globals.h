@@ -16,11 +16,8 @@
 
 #pragma once
 
-// clang-format off
-#include "kernel/kernel_compat_cpu.h"
-#include "kernel/kernel_types.h"
-#include "kernel/kernel_globals.h"
-// clang-format on
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
 
 CCL_NAMESPACE_BEGIN
 

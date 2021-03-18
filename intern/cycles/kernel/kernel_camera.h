@@ -17,6 +17,7 @@
 #pragma once
 
 #include "kernel_differential.h"
+#include "kernel_lookup_table.h"
 #include "kernel_montecarlo.h"
 #include "kernel_projection.h"
 

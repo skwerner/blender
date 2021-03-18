@@ -37,8 +37,8 @@
 /* Kernel includes are necessary so that the filter function for Embree can access the packed BVH.
  */
 #  include "kernel/bvh/bvh_embree.h"
-#  include "kernel/kernel_compat_cpu.h"
-#  include "kernel/kernel_globals.h"
+#  include "kernel/device/cpu/compat.h"
+#  include "kernel/device/cpu/globals.h"
 #  include "kernel/kernel_random.h"
 
 #  include "render/hair.h"

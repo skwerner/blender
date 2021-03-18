@@ -32,6 +32,7 @@
 
 #pragma once
 
+#include "kernel/kernel_lookup_table.h"
 #include "kernel/kernel_random.h"
 
 CCL_NAMESPACE_BEGIN

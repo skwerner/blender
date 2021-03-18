@@ -14,11 +14,10 @@
  * limitations under the License.
  */
 
-#include "device/cuda/util.h"
-
 #ifdef WITH_CUDA
 
-#  include "device/cuda/device_cuda_impl.h"
+#  include "device/cuda/util.h"
+#  include "device/cuda/device_impl.h"
 
 CCL_NAMESPACE_BEGIN
 

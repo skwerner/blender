@@ -42,7 +42,7 @@ class Progress;
 class RenderTile;
 class RenderBuffers;
 class CPUKernels;
-struct KernelGlobals;
+class CPUKernelThreadGlobals;
 
 /* Device Types */
 
@@ -404,9 +404,8 @@ class Device {
     return NULL;
   }
   /* Get kernel globals to pass to kernels. */
-  virtual const KernelGlobals *get_cpu_kernel_globals()
+  virtual void get_cpu_kernel_thread_globals(vector<CPUKernelThreadGlobals> &kernel_thread_globals)
   {
-    return NULL;
   }
   /* Get OpenShadingLanguage memory buffer. */
   virtual void *get_cpu_osl_memory()

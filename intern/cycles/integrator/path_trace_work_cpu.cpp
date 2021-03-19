@@ -40,13 +40,7 @@ PathTraceWorkCPU::PathTraceWorkCPU(Device *render_device,
 void PathTraceWorkCPU::init_execution()
 {
   /* Cache per-thread kernel globals. */
-  const KernelGlobals &kernel_globals = *(render_device_->get_cpu_kernel_globals());
-  void *osl_memory = render_device_->get_cpu_osl_memory();
-
-  kernel_thread_globals_.clear();
-  for (int i = 0; i < render_device_->info.cpu_threads; i++) {
-    kernel_thread_globals_.emplace_back(kernel_globals, osl_memory);
-  }
+  render_device_->get_cpu_kernel_thread_globals(kernel_thread_globals_);
 }
 
 void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)

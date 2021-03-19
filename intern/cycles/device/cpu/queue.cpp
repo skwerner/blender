@@ -34,13 +34,7 @@ void CPUDeviceQueue::init_execution()
 {
   /* Cache per-thread kernel globals. */
   CPUDevice *cpu_device = get_cpu_device();
-  const KernelGlobals &kernel_globals = *(cpu_device->get_cpu_kernel_globals());
-  void *osl_memory = cpu_device->get_cpu_osl_memory();
-
-  kernel_thread_globals_.clear();
-  for (int i = 0; i < cpu_device->info.cpu_threads; i++) {
-    kernel_thread_globals_.emplace_back(kernel_globals, osl_memory);
-  }
+  cpu_device->get_cpu_kernel_thread_globals(kernel_thread_globals_);
 }
 
 bool CPUDeviceQueue::enqueue(DeviceKernel kernel, const int /* work_size */, void * /* args */[])

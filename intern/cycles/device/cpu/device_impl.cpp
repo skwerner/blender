@@ -1189,11 +1189,17 @@ const CPUKernels *CPUDevice::get_cpu_kernels() const
   return &kernels;
 }
 
-const KernelGlobals *CPUDevice::get_cpu_kernel_globals()
+void CPUDevice::get_cpu_kernel_thread_globals(
+    vector<CPUKernelThreadGlobals> &kernel_thread_globals)
 {
   /* Ensure latest texture info is loaded into kernel globals before returning. */
   load_texture_info();
-  return &kernel_globals;
+
+  kernel_thread_globals.clear();
+  void *osl_memory = get_cpu_osl_memory();
+  for (int i = 0; i < info.cpu_threads; i++) {
+    kernel_thread_globals.emplace_back(kernel_globals, osl_memory);
+  }
 }
 
 void *CPUDevice::get_cpu_osl_memory()

@@ -174,7 +174,8 @@ class CPUDevice : public Device {
   virtual unique_ptr<DeviceQueue> queue_create() override;
 
   virtual const CPUKernels *get_cpu_kernels() const override;
-  virtual const KernelGlobals *get_cpu_kernel_globals() override;
+  virtual void get_cpu_kernel_thread_globals(
+      vector<CPUKernelThreadGlobals> &kernel_thread_globals) override;
   virtual void *get_cpu_osl_memory() override;
 
  protected:

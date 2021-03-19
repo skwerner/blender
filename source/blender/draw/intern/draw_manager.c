@@ -3220,3 +3220,53 @@ void DRW_draw_state_init_gtests(eGPUShaderConfig sh_cfg)
 #endif
 
 /** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Draw manager context release/activation
+ *
+ * These functions are used in cases when an OpenGL context creation is needed during the draw.
+ * This happens, for example, when an external engine needs to create its own OpenGL context from
+ * the engine initialization.
+ *
+ * Example of context creation:
+ *
+ *   DRW_opengl_context_release();
+ *   gl_context = WM_opengl_context_create();
+ *   DRW_sergey_disable();
+ *
+ * Example of context destruction:
+ *
+ *   DRW_opengl_context_release();
+ *   WM_opengl_context_activate(gl_context);
+ *   WM_opengl_context_dispose(gl_context);
+ *   DRW_sergey_disable();
+ *
+ *
+ * NOTE: Will only perform context modification when on main thread. This way these functions can
+ * be used in an engine without check on whether it is a draw manager which manages OpenGL context
+ * on the current thread. The downside of this is that if the engine performs OpenGL creation from
+ * a non-main thread, that thread is supposed to not have OpenGL context ever bound by Blender.
+ *
+ * \{ */
+
+void DRW_opengl_context_release(void)
+{
+  if (!BLI_thread_is_main()) {
+    return;
+  }
+
+  GPU_context_active_set(NULL);
+  WM_opengl_context_release(DST.gl_context);
+}
+
+void DRW_opengl_context_activate(void)
+{
+  if (!BLI_thread_is_main()) {
+    return;
+  }
+
+  WM_opengl_context_activate(DST.gl_context);
+  GPU_context_active_set(DST.gpu_context);
+}
+
+/** \} */

@@ -23,11 +23,6 @@
 #include "render/gpu_display.h"
 #include "util/util_unique_ptr.h"
 
-/* TODO(sergey): Only for until BlenderGPUDisplay can have its own OpenGL context. */
-#include "util/util_array.h"
-#include "util/util_half.h"
-#include "util/util_types.h"
-
 CCL_NAMESPACE_BEGIN
 
 /* Base class of shader used for GPU display rendering. */
@@ -122,16 +117,50 @@ class BlenderGPUDisplay : public GPUDisplay {
   /* Destroy all GPU resources which are being used by this object. */
   void gpu_resources_destroy();
 
-  /* Create and perform initial configuration of texture on the GPU side.
+  /* Make sure texture is allocated and its initial configuration is performed.
    *
    * NOTE: Must be called from a proper active GPU context. */
-  bool create_texture();
+  bool texture_ensure();
+
+  /* Update GPU texture dimensions and content if needed (new pixel data was provided).
+   *
+   * NOTE: The texture needs to be bound. */
+  void texture_update_if_needed();
 
   /* Update vetrex buffer with new coordinates of vertex positions and texture coordinates.
    * This buffer is used to render texture in the viewport.
    *
    * NOTE: The buffer needs to be bound. */
-  void update_vertex_buffer();
+  void vertex_buffer_update();
+
+  /* OpenGL context created by Blender's Window Manager.
+   * This context is used to perform texture update from the render thread, asynchronously from the
+   * main thread which draws the viewport. */
+  void *gl_context_ = nullptr;
+
+  /* Texture which contains pixels of the render result. */
+  struct {
+    /* Indicates whether texture creation was attempted and succeeded.
+     * Used to avoid multiple attempts of texture creation on GPU issues or GPU context
+     * misconfiguration. */
+    bool creation_attempted = false;
+    bool is_created = false;
+
+    /* OpenGL resource IDs of the texture itself and Pixel Buffer Object (PBO) used to write
+     * pixels to it.
+     *
+     * NOTE: Allocated on the `gl_context_` context. */
+    uint gl_id_ = 0;
+    uint gl_pbo_id_ = 0;
+
+    /* Is true when new data was written to the PBO, meaning, the texture might need to be resized
+     * and new data is to be uploaded to the GPU. */
+    bool need_update = false;
+
+    /* Dimensions of the texture in pixels. */
+    int width = 0;
+    int height = 0;
+  } texture_;
 
   unique_ptr<BlenderDisplayShader> display_shader_;
 
@@ -140,26 +169,9 @@ class BlenderGPUDisplay : public GPUDisplay {
   bool gpu_resource_creation_attempted_ = false;
   bool gpu_resources_created_ = false;
 
-  /* Texture which contains pixels of the render result. */
-  uint texture_id_ = 0;
-
   /* Vertex buffer which hold vertrices of a triangle fan which is textures with the texture
    * holding the render result.  */
   uint vertex_buffer_ = 0;
-
-  /* Temporary CPU-side code, which is here only until this GPU display have own OpenGL context. */
-  struct {
-    /* Storage of pixels which are to be uploaded to the GPU texture. */
-    array<half4> rgba_pixels_;
-
-    /* Dimension of the GPU side texture. Could be different from the viewport resolution when
-     * there
-     * is a non-unit resolution divider. Should match number of pixels in the rgba_ storage. */
-    int2 texture_size_ = make_int2(0, 0);
-
-    /* There is a new data in the rgba_ buffer which is to be uploaded to the GPU texture. */
-    bool need_update_texture_ = false;
-  } cpu_side_update;
 };
 
 CCL_NAMESPACE_END

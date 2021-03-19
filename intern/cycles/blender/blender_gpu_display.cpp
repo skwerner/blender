@@ -20,7 +20,37 @@
 #include "util/util_logging.h"
 #include "util/util_opengl.h"
 
+extern "C" {
+void DRW_opengl_context_release();
+void DRW_opengl_context_activate();
+
+void *WM_opengl_context_create();
+void WM_opengl_context_activate(void *gl_context);
+void WM_opengl_context_dispose(void *gl_context);
+}
+
 CCL_NAMESPACE_BEGIN
+
+namespace {
+
+/* --------------------------------------------------------------------
+ * Context helpers.
+ */
+
+class GLContextScope {
+ public:
+  explicit GLContextScope(void *gl_context)
+  {
+    WM_opengl_context_activate(gl_context);
+  }
+
+  ~GLContextScope()
+  {
+    WM_opengl_context_activate(nullptr);
+  }
+};
+
+} /* namespace */
 
 /* --------------------------------------------------------------------
  * BlenderDisplayShader.
@@ -263,7 +293,7 @@ uint BlenderDisplaySpaceShader::get_shader_program()
 BlenderGPUDisplay::BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_scene)
     : display_shader_(BlenderDisplayShader::create(b_engine, b_scene))
 {
-  /* TODO(sergey): Think of whether it makes more sense to do it on-demand. */
+  /* Create context while on the main thread. */
   gpu_context_create();
 }
 
@@ -274,11 +304,46 @@ BlenderGPUDisplay::~BlenderGPUDisplay()
 
 void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height)
 {
-  cpu_side_update.rgba_pixels_.resize(width * height);
-  memcpy(cpu_side_update.rgba_pixels_.data(), rgba_pixels, sizeof(half4) * width * height);
+  /* This call copies pixels to a Pixel Buffer Object (PBO) which is much cheaper from CPU time
+   * point of view than to copy data directly to the OpenGL texture.
+   *
+   * The possible downside of this approach is that it might require a higher peak memory when
+   * doing partial updates of the texture (although, in practice even partial updates might peak
+   * with a full-frame buffer stored on the CPU if the GPU is currently occupied), */
 
-  cpu_side_update.texture_size_ = make_int2(width, height);
-  cpu_side_update.need_update_texture_ = true;
+  if (!gl_context_) {
+    return;
+  }
+
+  GLContextScope scope(gl_context_);
+
+  if (!texture_ensure()) {
+    return;
+  }
+
+  const size_t size_in_bytes = sizeof(half4) * width * height;
+
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
+
+  /* Invalidate old contents - avoids stalling if the buffer is still waiting in queue to be
+   * rendered. */
+  glBufferData(GL_PIXEL_UNPACK_BUFFER, size_in_bytes, 0, GL_STREAM_DRAW);
+
+  half4 *mapped_rgba_pixels = reinterpret_cast<half4 *>(
+      glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
+  if (mapped_rgba_pixels) {
+    memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
+    glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+
+    texture_.width = width;
+    texture_.height = height;
+    texture_.need_update = true;
+  }
+  else {
+    LOG(ERROR) << "Error mapping BlenderGPUDisplay pixel buffer object.";
+  }
+
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 }
 
 void BlenderGPUDisplay::get_cuda_buffer()
@@ -294,26 +359,6 @@ void BlenderGPUDisplay::do_draw()
     return;
   }
 
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture_id_);
-
-  {
-    /* TODO(sergey): Once the GPU display have own OpenGL context this should happen in
-     * copy_pixels_to_texture(). */
-    if (cpu_side_update.need_update_texture_) {
-      glTexImage2D(GL_TEXTURE_2D,
-                   0,
-                   GL_RGBA16F,
-                   cpu_side_update.texture_size_.x,
-                   cpu_side_update.texture_size_.y,
-                   0,
-                   GL_RGBA,
-                   GL_HALF_FLOAT,
-                   cpu_side_update.rgba_pixels_.data());
-      cpu_side_update.need_update_texture_ = false;
-    }
-  }
-
   if (transparent) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -321,8 +366,13 @@ void BlenderGPUDisplay::do_draw()
 
   display_shader_->bind(params_.full_size.x, params_.full_size.y);
 
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, texture_.gl_id_);
+
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-  update_vertex_buffer();
+
+  texture_update_if_needed();
+  vertex_buffer_update();
 
   /* TODO(sergey): Does it make sense/possible to cache/reuse the VAO? */
   GLuint vertex_array_object;
@@ -347,11 +397,11 @@ void BlenderGPUDisplay::do_draw()
   glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-  display_shader_->unbind();
+  glBindTexture(GL_TEXTURE_2D, 0);
 
   glDeleteVertexArrays(1, &vertex_array_object);
-  glBindTexture(GL_TEXTURE_2D, 0);
+
+  display_shader_->unbind();
 
   if (transparent) {
     glDisable(GL_BLEND);
@@ -360,22 +410,29 @@ void BlenderGPUDisplay::do_draw()
 
 void BlenderGPUDisplay::gpu_context_create()
 {
+  DRW_opengl_context_release();
+
+  gl_context_ = WM_opengl_context_create();
+  if (!gl_context_) {
+    LOG(ERROR) << "Error creating OpenGL context.";
+  }
+
+  DRW_opengl_context_activate();
 }
 
 bool BlenderGPUDisplay::gpu_resources_ensure()
 {
+  if (!texture_.gl_id_) {
+    /* If there is no texture allocated, there is nothing to draw. Inform the draw call that it can
+     * can not continue. Note that this is not an unrecoverable error, so once the texture is known
+     * we will come back here and create all the GPU resources needed for draw. */
+    return false;
+  }
+
   if (gpu_resource_creation_attempted_) {
     return gpu_resources_created_;
   }
   gpu_resource_creation_attempted_ = true;
-
-  /* TODO(sergey): Once this GPU display keeps track of its texture and OpenGL context the
-   * texture creation might need to be moved somewhere else. */
-  if (!texture_id_) {
-    if (!create_texture()) {
-      return false;
-    }
-  }
 
   if (!vertex_buffer_) {
     glGenBuffers(1, &vertex_buffer_);
@@ -396,37 +453,82 @@ void BlenderGPUDisplay::gpu_resources_destroy()
     glDeleteBuffers(1, &vertex_buffer_);
   }
 
-  if (texture_id_) {
-    glDeleteTextures(1, &texture_id_);
-    texture_id_ = 0;
+  if (gl_context_) {
+    DRW_opengl_context_release();
+
+    GLContextScope scope(gl_context_);
+
+    if (texture_.gl_pbo_id_) {
+      glDeleteBuffers(1, &texture_.gl_pbo_id_);
+      texture_.gl_pbo_id_ = 0;
+    }
+
+    if (texture_.gl_id_) {
+      glDeleteTextures(1, &texture_.gl_id_);
+      texture_.gl_id_ = 0;
+    }
+
+    WM_opengl_context_dispose(gl_context_);
+
+    DRW_opengl_context_activate();
   }
 }
 
-bool BlenderGPUDisplay::create_texture()
+bool BlenderGPUDisplay::texture_ensure()
 {
-  DCHECK(!texture_id_);
+  if (texture_.creation_attempted) {
+    return texture_.is_created;
+  }
+  texture_.creation_attempted = true;
 
-  glGenTextures(1, &texture_id_);
+  DCHECK(!texture_.gl_id_);
+  DCHECK(!texture_.gl_pbo_id_);
 
-  if (!texture_id_) {
+  /* Create texture. */
+  glGenTextures(1, &texture_.gl_id_);
+  if (!texture_.gl_id_) {
     LOG(ERROR) << "Error creating texture.";
     return false;
   }
 
+  /* Configure the texture. */
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture_id_);
-
+  glBindTexture(GL_TEXTURE_2D, texture_.gl_id_);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
   glBindTexture(GL_TEXTURE_2D, 0);
 
+  /* Create PBO for the texture. */
+  glGenBuffers(1, &texture_.gl_pbo_id_);
+  if (!texture_.gl_pbo_id_) {
+    LOG(ERROR) << "Error creating texture.";
+    return false;
+  }
+
+  /* Creation finished with a success. */
+  texture_.is_created = true;
+
   return true;
 }
 
-void BlenderGPUDisplay::update_vertex_buffer()
+void BlenderGPUDisplay::texture_update_if_needed()
 {
-  /* invalidate old contents - avoids stalling if the buffer is still waiting in queue to be
+  if (!texture_.need_update) {
+    return;
+  }
+
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
+  glTexImage2D(
+      GL_TEXTURE_2D, 0, GL_RGBA16F, texture_.width, texture_.height, 0, GL_RGBA, GL_HALF_FLOAT, 0);
+  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+  texture_.need_update = false;
+}
+
+void BlenderGPUDisplay::vertex_buffer_update()
+{
+  /* Invalidate old contents - avoids stalling if the buffer is still waiting in queue to be
    * rendered. */
   glBufferData(GL_ARRAY_BUFFER, 16 * sizeof(float), NULL, GL_STREAM_DRAW);
 

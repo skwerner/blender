@@ -24,6 +24,7 @@ CCL_NAMESPACE_BEGIN
 
 class BufferParams;
 class Device;
+class GPUDisplay;
 class RenderBuffers;
 
 class PathTraceWork {
@@ -56,6 +57,9 @@ class PathTraceWork {
   /* Render given number of samples as a synchronous blocking call.
    * The samples are added to the render buffer associated with this work. */
   virtual void render_samples(int start_sample, int samples_num) = 0;
+
+  /* Copy render result from this work to the corresponding place of the GPU display. */
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) = 0;
 
   /* Cheap-ish request to see whether rendering is requested and is to be stopped as soon as
    * possible, without waiting for any samples to be finished. */

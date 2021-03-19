@@ -217,33 +217,16 @@ void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
     return;
   }
 
-  /* TODO(sergey): Consider avoiding re-allocation on every update. */
-  device_vector<half4> rgba_half(device_, "display buffer half", MEM_READ_WRITE);
-  rgba_half.alloc(width, height);
-  rgba_half.zero_to_device();
+  const float sample_scale = 1.0f / get_num_samples_in_buffer();
 
-  DeviceTask task(DeviceTask::FILM_CONVERT);
+  thread_scoped_lock lock(gpu_display->mutex);
 
-  task.x = scaled_render_buffer_params_.full_x;
-  task.y = scaled_render_buffer_params_.full_y;
-  task.w = width;
-  task.h = height;
-  task.rgba_half = rgba_half.device_pointer;
-  task.buffer = full_render_buffers_->buffer.device_pointer;
-
-  /* NOTE: The device assumes the sample is the 0-based index of the last samples sample. */
-  task.sample = get_num_samples_in_buffer() - 1;
-
-  scaled_render_buffer_params_.get_offset_stride(task.offset, task.stride);
-
-  device_->task_add(task);
-  device_->task_wait();
-
-  rgba_half.copy_from_device(0, width, height);
-
-  {
-    thread_scoped_lock lock(gpu_display->mutex);
-    gpu_display->copy_pixels_to_texture(rgba_half.data(), width, height);
+  /* TODO(sergey): In theory we would want to update parts of the buffer from multiple threads.
+   * However, there could be some complications related on how texture buffer is mapped. Depending
+   * on an implementation of GPUDisplay it might not be possible to map GPUBuffer in a way that the
+   * PathTraceWork expects it in a threaded environment. */
+  for (auto &&path_trace_work : path_trace_works_) {
+    path_trace_work->copy_to_gpu_display(gpu_display, sample_scale);
   }
 }
 

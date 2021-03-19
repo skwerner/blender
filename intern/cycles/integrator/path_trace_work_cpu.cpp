@@ -20,6 +20,7 @@
 #include "device/device.h"
 
 #include "render/buffers.h"
+#include "render/gpu_display.h"
 
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
@@ -107,6 +108,43 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals &kernel_global
 
     ++sample_work_tile.start_sample;
   }
+}
+
+void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
+{
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  half4 *rgba_half = gpu_display->map_texture_buffer(width, height);
+  if (!rgba_half) {
+    /* TODO(sergey): Look into using copy_to_gpu_display() if mapping failed. Might be needed for
+     * some implementations of GPUDisplay which can not map memory? */
+    return;
+  }
+
+  /* NOTE: This call is supposed to happen outside of any path tracing, so can pick any of the
+   * pre-configured kernel globals. */
+  KernelGlobals *kernel_globals = &kernel_thread_globals_[0];
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
+
+  tbb::parallel_for(0, height, [&](int y) {
+    for (int x = 0; x < width; ++x) {
+      kernels_.convert_to_half_float(kernel_globals,
+                                     reinterpret_cast<uchar4 *>(rgba_half),
+                                     reinterpret_cast<float *>(buffers_->buffer.device_pointer),
+                                     sample_scale,
+                                     full_x + x,
+                                     full_y + y,
+                                     offset,
+                                     stride);
+    }
+  });
+
+  gpu_display->unmap_texture_buffer();
 }
 
 CCL_NAMESPACE_END

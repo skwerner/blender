@@ -17,6 +17,7 @@
 #include "render/gpu_display.h"
 
 #include "render/buffers.h"
+#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -49,6 +50,31 @@ void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels, int width, int
   texture_state_.is_usable = true;
 
   do_copy_pixels_to_texture(rgba_pixels, width, height);
+}
+
+half4 *GPUDisplay::map_texture_buffer(int width, int height)
+{
+  DCHECK(!is_mapped_);
+
+  half4 *mapped_rgba_pixels = do_map_texture_buffer(width, height);
+
+  if (mapped_rgba_pixels) {
+    is_mapped_ = true;
+  }
+
+  return mapped_rgba_pixels;
+}
+
+void GPUDisplay::unmap_texture_buffer()
+{
+  DCHECK(is_mapped_);
+
+  is_mapped_ = false;
+
+  texture_state_.is_outdated = false;
+  texture_state_.is_usable = true;
+
+  do_unmap_texture_buffer();
 }
 
 bool GPUDisplay::draw()

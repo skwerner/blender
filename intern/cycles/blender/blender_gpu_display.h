@@ -106,6 +106,9 @@ class BlenderGPUDisplay : public GPUDisplay {
   virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) override;
   virtual void do_draw() override;
 
+  virtual half4 *do_map_texture_buffer(int width, int height) override;
+  virtual void do_unmap_texture_buffer() override;
+
   /* Helper function which allocates new GPU context, without affecting the current
    * active GPU context. */
   void gpu_context_create();

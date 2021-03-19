@@ -81,6 +81,19 @@ class GPUDisplay {
   /* TODO(sergey): Do we need to support uint8 data type? */
   void copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height);
 
+  /* Map pixels memory form texture to a buffer available for write from CPU. Width and height will
+   * define a requested size of the texture to write to.
+   * Upon success a non-null pointer is returned and the texture buffer is to be unmapped.
+   * If an error happens during mapping, or if mapoping is not supported by this GPU display a
+   * null pointer is returned and the buffer is NOT to be unmapped.
+   *
+   * NOTE: Usually the implementation will rely on a GPU context of some sort, and the GPU context
+   * is often can not be bound to two threads simultaneously, and can not be released from a
+   * different thread. This means that the mapping API should be used from the single thread only,
+   */
+  half4 *map_texture_buffer(int width, int height);
+  void unmap_texture_buffer();
+
   /* Access CUDA buffer which can be used to define GPU-side texture without extra data copy. */
   /* TODO(sergey): Depending on a point of view, might need to be called "set" instead, so that
    * the render session sets CUDA buffer to a display owned by viewport. */
@@ -100,8 +113,12 @@ class GPUDisplay {
   /* Implementation-specific calls which subclasses are to implement.
    * These `do_foo()` method corresponds to their `foo()` calls, but they are purely virtual to
    * simplify their particular implementation. */
+
   virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) = 0;
   virtual void do_draw() = 0;
+
+  virtual half4 *do_map_texture_buffer(int width, int height) = 0;
+  virtual void do_unmap_texture_buffer() = 0;
 
   GPUDisplayParams params_;
 
@@ -122,6 +139,8 @@ class GPUDisplay {
      * `copy_pixels_to_texture()`. */
     bool is_outdated = true;
   } texture_state_;
+
+  bool is_mapped_ = false;
 };
 
 CCL_NAMESPACE_END

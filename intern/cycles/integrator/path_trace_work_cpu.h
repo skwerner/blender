@@ -45,6 +45,8 @@ class PathTraceWorkCPU : public PathTraceWork {
 
   virtual void render_samples(int start_sample, int samples_num) override;
 
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) override;
+
  protected:
   /* Core path tracing routine. Renders given work time on the given queue. */
   void render_samples_full_pipeline(KernelGlobals &kernel_globals,

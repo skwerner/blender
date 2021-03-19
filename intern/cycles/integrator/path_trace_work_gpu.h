@@ -42,6 +42,8 @@ class PathTraceWorkGPU : public PathTraceWork {
 
   virtual void render_samples(int start_sample, int samples_num) override;
 
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) override;
+
  protected:
   bool enqueue_work_tiles(bool &finished);
   void enqueue_work_tiles(DeviceKernel kernel,

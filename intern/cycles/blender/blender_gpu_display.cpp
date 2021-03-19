@@ -311,14 +311,26 @@ void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int 
    * doing partial updates of the texture (although, in practice even partial updates might peak
    * with a full-frame buffer stored on the CPU if the GPU is currently occupied), */
 
-  if (!gl_context_) {
+  half4 *mapped_rgba_pixels = map_texture_buffer(width, height);
+  if (!mapped_rgba_pixels) {
     return;
   }
 
-  GLContextScope scope(gl_context_);
+  const size_t size_in_bytes = sizeof(half4) * width * height;
+  memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
+  unmap_texture_buffer();
+}
+
+half4 *BlenderGPUDisplay::do_map_texture_buffer(int width, int height)
+{
+  if (!gl_context_) {
+    return nullptr;
+  }
+
+  WM_opengl_context_activate(gl_context_);
 
   if (!texture_ensure()) {
-    return;
+    return nullptr;
   }
 
   const size_t size_in_bytes = sizeof(half4) * width * height;
@@ -332,9 +344,6 @@ void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int 
   half4 *mapped_rgba_pixels = reinterpret_cast<half4 *>(
       glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
   if (mapped_rgba_pixels) {
-    memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
-    glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-
     texture_.width = width;
     texture_.height = height;
     texture_.need_update = true;
@@ -343,7 +352,16 @@ void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int 
     LOG(ERROR) << "Error mapping BlenderGPUDisplay pixel buffer object.";
   }
 
+  return mapped_rgba_pixels;
+}
+
+void BlenderGPUDisplay::do_unmap_texture_buffer()
+{
+  glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+  WM_opengl_context_activate(nullptr);
 }
 
 void BlenderGPUDisplay::get_cuda_buffer()

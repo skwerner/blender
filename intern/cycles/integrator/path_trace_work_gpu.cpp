@@ -18,6 +18,7 @@
 
 #include "device/device.h"
 #include "render/buffers.h"
+#include "render/gpu_display.h"
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
 #include "util/util_time.h"
@@ -379,6 +380,43 @@ int PathTraceWorkGPU::get_max_num_paths()
   /* TODO: compute automatically. */
   /* TODO: must have at least num_threads_per_block. */
   return 1048576;
+}
+
+void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
+{
+  /* TODO(sergey): Support CUDA GL Graphics, avoiding CPU roundtrip. */
+  /* TODO(sergey): Migrate this from Task to the queue call. */
+
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  Device *device = queue_->device;
+
+  /* TODO(sergey): Consider avoiding re-allocation on every update. */
+  device_vector<half4> rgba_half(device, "display buffer half", MEM_READ_WRITE);
+  rgba_half.alloc(width, height);
+  rgba_half.zero_to_device();
+
+  DeviceTask task(DeviceTask::FILM_CONVERT);
+
+  task.x = full_x;
+  task.y = full_y;
+  task.w = width;
+  task.h = height;
+  task.rgba_half = rgba_half.device_pointer;
+  task.buffer = buffers_->buffer.device_pointer;
+  task.sample = lround(1.0f / sample_scale - 1);
+
+  effective_buffer_params_.get_offset_stride(task.offset, task.stride);
+
+  device->task_add(task);
+  device->task_wait();
+
+  rgba_half.copy_from_device(0, width, height);
+
+  gpu_display->copy_pixels_to_texture(rgba_half.data(), width, height);
 }
 
 CCL_NAMESPACE_END

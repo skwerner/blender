@@ -35,7 +35,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
                                    RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
     : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
-      queue_(device->queue_create()),
+      queue_(device->gpu_queue_create()),
       render_buffers_(buffers),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
       integrator_sort_key_(device, "integrator_sort_key", MEM_READ_WRITE),

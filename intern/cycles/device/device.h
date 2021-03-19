@@ -330,32 +330,22 @@ class Device {
     return true;
   }
 
-  /* Queues. */
+  /* GPU device only functions.
+   * These may not be used on CPU or multi-devices. */
 
-  /* Create new queue for executing kernels in.
-   *
-   * NOTE: Do not use it for multi-device and instead use per-device queues. Makes it more explicit
-   * all the synchronization and work stealing logic. It will LOG(FATAL) when used on multi-device.
-   */
-  virtual unique_ptr<DeviceQueue> queue_create() = 0;
+  /* Create new queue for executing kernels in. */
+  virtual unique_ptr<DeviceQueue> gpu_queue_create();
 
-  /* CPU device only functions. */
+  /* CPU device only functions.
+   * These may not be used on GPU or multi-devices. */
 
   /* Get CPU kernel functions for native instruction set. */
-  virtual const CPUKernels *get_cpu_kernels() const
-  {
-    return NULL;
-  }
+  virtual const CPUKernels *get_cpu_kernels() const;
   /* Get kernel globals to pass to kernels. */
   virtual void get_cpu_kernel_thread_globals(
-      vector<CPUKernelThreadGlobals> & /*kernel_thread_globals*/)
-  {
-  }
+      vector<CPUKernelThreadGlobals> & /*kernel_thread_globals*/);
   /* Get OpenShadingLanguage memory buffer. */
-  virtual void *get_cpu_osl_memory()
-  {
-    return NULL;
-  }
+  virtual void *get_cpu_osl_memory();
 
   /* acceleration structure building */
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);

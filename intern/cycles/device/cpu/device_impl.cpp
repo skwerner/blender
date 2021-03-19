@@ -32,7 +32,6 @@
 
 #include "device/cpu/kernel.h"
 #include "device/cpu/kernel_thread_globals.h"
-#include "device/cpu/queue.h"
 
 #include "device/device.h"
 
@@ -447,11 +446,6 @@ void CPUDevice::thread_denoise(DeviceTask &task)
   task.update_progress(&tile, tile.w * tile.h);
 }
 #endif
-
-unique_ptr<DeviceQueue> CPUDevice::queue_create()
-{
-  return make_unique<CPUDeviceQueue>(this);
-}
 
 const CPUKernels *CPUDevice::get_cpu_kernels() const
 {

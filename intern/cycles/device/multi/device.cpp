@@ -407,19 +407,6 @@ class MultiDevice : public Device {
     return -1;
   }
 
-  virtual unique_ptr<DeviceQueue> queue_create() override
-  {
-    /* It is at a best very tricky to have a single `DeviceQueue` API for a multi-device as the
-     * devices are likely to run out of sync very quickly. At least this is a motivation at this
-     * time.
-     *
-     * In theory it might be possible to mitigate this by scheduling a lot of kernels, so that all
-     * devices have things to do. Whether it will work nice in practice is unclear, as it will hide
-     * bottlenecks, making work strealing more hard. */
-    LOG(FATAL) << "Multi-device is not supposed to be used for queues.";
-    return nullptr;
-  }
-
   virtual void foreach_device(const function<void(Device *)> &callback) override
   {
     foreach (SubDevice &sub, devices) {

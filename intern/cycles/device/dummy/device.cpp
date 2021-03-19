@@ -63,11 +63,6 @@ class DummyDevice : public Device {
   virtual void const_copy_to(const char *, void *, size_t) override
   {
   }
-
-  virtual unique_ptr<DeviceQueue> queue_create() override
-  {
-    return nullptr;
-  }
 };
 
 Device *device_dummy_create(const DeviceInfo &info, Stats &stats, Profiler &profiler)

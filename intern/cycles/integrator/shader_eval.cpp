@@ -151,7 +151,7 @@ bool ShaderEval::eval_gpu(Device *device,
   };
 
   /* Create device queue. */
-  unique_ptr<DeviceQueue> queue = device->queue_create();
+  unique_ptr<DeviceQueue> queue = device->gpu_queue_create();
   queue->init_execution();
 
   /* Execute work on GPU in chunk, so we can cancel.

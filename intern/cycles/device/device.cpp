@@ -385,6 +385,28 @@ void Device::free_memory()
   cpu_devices.free_memory();
 }
 
+unique_ptr<DeviceQueue> Device::gpu_queue_create()
+{
+  LOG(FATAL) << "Device does not support queues.";
+  return nullptr;
+}
+
+const CPUKernels *Device::get_cpu_kernels() const
+{
+  LOG(FATAL) << "Device does not support CPU kernels.";
+  return nullptr;
+}
+
+void Device::get_cpu_kernel_thread_globals(vector<CPUKernelThreadGlobals> &kernel_thread_globals)
+{
+  LOG(FATAL) << "Device does not support CPU kernels.";
+}
+
+void *Device::get_cpu_osl_memory()
+{
+  return nullptr;
+}
+
 /* DeviceInfo */
 
 CCL_NAMESPACE_END

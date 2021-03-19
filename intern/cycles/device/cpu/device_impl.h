@@ -87,8 +87,6 @@ class CPUDevice : public Device {
 
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
 
-  virtual unique_ptr<DeviceQueue> queue_create() override;
-
   virtual const CPUKernels *get_cpu_kernels() const override;
   virtual void get_cpu_kernel_thread_globals(
       vector<CPUKernelThreadGlobals> &kernel_thread_globals) override;

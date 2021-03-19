@@ -26,6 +26,8 @@ CCL_NAMESPACE_BEGIN
 
 /* CUDADeviceQueue */
 
+/* TODO: use CUDA stream. */
+
 CUDADeviceQueue::CUDADeviceQueue(CUDADevice *device)
     : DeviceQueue(device), cuda_device_(device), last_sync_time_(0.0)
 {

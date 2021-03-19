@@ -790,7 +790,7 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
     return;
   }
 
-  unique_ptr<DeviceQueue> queue = queue_create();
+  unique_ptr<DeviceQueue> queue = gpu_queue_create();
 
   const int input_pass_stride = denoise_buffer_pass_stride(task.params);
 

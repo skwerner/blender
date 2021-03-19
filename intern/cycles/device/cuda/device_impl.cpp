@@ -1316,7 +1316,7 @@ void CUDADevice::thread_run(DeviceTask &task)
 }
 #  endif
 
-unique_ptr<DeviceQueue> CUDADevice::queue_create()
+unique_ptr<DeviceQueue> CUDADevice::gpu_queue_create()
 {
   return make_unique<CUDADeviceQueue>(this);
 }

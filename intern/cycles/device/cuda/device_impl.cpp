@@ -376,7 +376,7 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   path_create_directories(cubin);
 
   source_path = path_join(path_join(source_path, "kernel"),
-                          path_join("kernels", path_join(base, string_printf("%s.cu", name))));
+                          path_join("device", path_join(base, string_printf("%s.cu", name))));
 
   string command = string_printf(
       "\"%s\" "

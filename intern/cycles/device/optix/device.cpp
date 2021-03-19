@@ -724,9 +724,6 @@ class OptiXDevice : public CUDADevice {
           break;  // Abort rendering when encountering an error
       }
     }
-    else if (task.type == DeviceTask::SHADER) {
-      launch_shader_eval(task, thread_index);
-    }
     else if (task.type == DeviceTask::DENOISE_BUFFER) {
       // Set up a single tile that covers the whole task and denoise it
       RenderTile tile;

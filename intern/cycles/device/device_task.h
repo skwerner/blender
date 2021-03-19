@@ -138,7 +138,7 @@ class AdaptiveSampling {
 
 class DeviceTask {
  public:
-  typedef enum { RENDER, FILM_CONVERT, SHADER, DENOISE_BUFFER } Type;
+  typedef enum { RENDER, FILM_CONVERT, DENOISE_BUFFER } Type;
   Type type;
 
   int x, y, w, h;

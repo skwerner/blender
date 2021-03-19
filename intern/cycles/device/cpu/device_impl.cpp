@@ -312,8 +312,6 @@ void CPUDevice::thread_run(DeviceTask &task)
 {
   if (task.type == DeviceTask::RENDER)
     thread_render(task);
-  else if (task.type == DeviceTask::SHADER)
-    thread_shader(task);
   else if (task.type == DeviceTask::FILM_CONVERT)
     thread_film_convert(task);
   else if (task.type == DeviceTask::DENOISE_BUFFER)
@@ -1111,34 +1109,9 @@ void CPUDevice::thread_film_convert(DeviceTask &task)
   }
 }
 
-void CPUDevice::thread_shader(DeviceTask &task)
-{
-  CPUKernelThreadGlobals kg(kernel_globals, get_cpu_osl_memory());
-
-  for (int sample = 0; sample < task.num_samples; sample++) {
-    for (int x = task.shader_x; x < task.shader_x + task.shader_w; x++)
-      kernels.shader(&kg,
-                     (uint4 *)task.shader_input,
-                     (float4 *)task.shader_output,
-                     task.shader_eval_type,
-                     task.shader_filter,
-                     x,
-                     task.offset,
-                     sample);
-
-    if (task.get_cancel() || TaskPool::canceled())
-      break;
-
-    task.update_progress(NULL);
-  }
-}
-
 int CPUDevice::get_split_task_count(DeviceTask &task)
 {
-  if (task.type == DeviceTask::SHADER)
-    return task.get_subtask_count(info.cpu_threads, 256);
-  else
-    return task.get_subtask_count(info.cpu_threads);
+  return task.get_subtask_count(info.cpu_threads);
 }
 
 void CPUDevice::task_add(DeviceTask &task)
@@ -1153,9 +1126,6 @@ void CPUDevice::task_add(DeviceTask &task)
       task.denoising.type == DENOISER_OPENIMAGEDENOISE) {
     /* Denoise entire buffer at once with OIDN, it has own threading. */
     tasks.push_back(task);
-  }
-  else if (task.type == DeviceTask::SHADER) {
-    task.split(tasks, info.cpu_threads, 256);
   }
   else {
     task.split(tasks, info.cpu_threads);

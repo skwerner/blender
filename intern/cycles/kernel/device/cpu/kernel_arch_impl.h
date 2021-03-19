@@ -41,6 +41,7 @@
 #    include "kernel/integrator/integrator_megakernel.h"
 
 #    include "kernel/kernel_film.h"
+#    include "kernel/kernel_bake.h"
 
 #if 0
 #    include "kernel/kernel_color.h"
@@ -130,26 +131,27 @@ void KERNEL_FUNCTION_FULL_NAME(bake)(
 
 /* Shader Evaluate */
 
-void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
-                                       uint4 *input,
-                                       float4 *output,
-                                       int type,
-                                       int filter,
-                                       int i,
-                                       int offset,
-                                       int sample)
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
+                                                     const uint4 *input,
+                                                     float4 *output,
+                                                     const int offset)
 {
-#if 0
-#  ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, shader);
-#  else
-  if (type == SHADER_EVAL_DISPLACE) {
-    kernel_displace_evaluate(kg, input, output, i);
-  }
-  else {
-    kernel_background_evaluate(kg, input, output, i);
-  }
-#  endif /* KERNEL_STUB */
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, shader_eval_displace);
+#else
+  kernel_displace_evaluate(kg, input, output, offset);
+#endif
+}
+
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
+                                                       const uint4 *input,
+                                                       float4 *output,
+                                                       const int offset)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, shader_eval_background);
+#else
+  kernel_background_evaluate(kg, input, output, offset);
 #endif
 }
 

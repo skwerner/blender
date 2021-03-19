@@ -62,8 +62,10 @@ ccl_device void svm_node_light_path(INTEGRATOR_STATE_CONST_ARGS,
       /* Read bounce from difference location depending if this is a shadow
        * path. It's a bit dubious to have integrate state details leak into
        * this function but hard to avoid currently. */
-      int bounce = (path_flag & PATH_RAY_SHADOW) ? INTEGRATOR_STATE(shadow_path, bounce) :
-                                                   INTEGRATOR_STATE(path, bounce);
+      int bounce = (INTEGRATOR_STATE_IS_NULL) ?
+                       0 :
+                       (path_flag & PATH_RAY_SHADOW) ? INTEGRATOR_STATE(shadow_path, bounce) :
+                                                       INTEGRATOR_STATE(path, bounce);
 
       /* For background, light emission and shadow evaluation we from a
        * surface or volume we are effective one bounce further. */
@@ -76,7 +78,9 @@ ccl_device void svm_node_light_path(INTEGRATOR_STATE_CONST_ARGS,
     }
       /* TODO */
     case NODE_LP_ray_transparent: {
-      const int bounce = (path_flag & PATH_RAY_SHADOW) ?
+      const int bounce = (INTEGRATOR_STATE_IS_NULL) ?
+                             0 :
+                             (path_flag & PATH_RAY_SHADOW) ?
                              INTEGRATOR_STATE(shadow_path, transparent_bounce) :
                              INTEGRATOR_STATE(path, transparent_bounce);
 

@@ -163,7 +163,6 @@ class CPUDevice : public Device {
   void thread_render(DeviceTask &task);
   void thread_denoise(DeviceTask &task);
   void thread_film_convert(DeviceTask &task);
-  void thread_shader(DeviceTask &task);
 
   virtual int get_split_task_count(DeviceTask &task) override;
 

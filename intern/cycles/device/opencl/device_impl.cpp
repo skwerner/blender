@@ -1389,9 +1389,6 @@ void OpenCLDevice::thread_run(DeviceTask &task)
 
     kgbuffer.free();
   }
-  else if (task.type == DeviceTask::SHADER) {
-    shader(task);
-  }
   else if (task.type == DeviceTask::FILM_CONVERT) {
     film_convert(task, task.buffer, task.rgba_byte, task.rgba_half);
   }
@@ -1854,50 +1851,6 @@ void OpenCLDevice::denoise(RenderTile &rtile, DenoisingTask &denoising)
   denoising.buffer.gpu_temporary_mem = true;
 
   denoising.run_denoising(rtile);
-}
-
-void OpenCLDevice::shader(DeviceTask &task)
-{
-  /* cast arguments to cl types */
-  cl_mem d_data = CL_MEM_PTR(const_mem_map["__data"]->device_pointer);
-  cl_mem d_input = CL_MEM_PTR(task.shader_input);
-  cl_mem d_output = CL_MEM_PTR(task.shader_output);
-  cl_int d_shader_eval_type = task.shader_eval_type;
-  cl_int d_shader_filter = task.shader_filter;
-  cl_int d_shader_x = task.shader_x;
-  cl_int d_shader_w = task.shader_w;
-  cl_int d_offset = task.offset;
-
-  OpenCLDevice::OpenCLProgram *program = &background_program;
-  if (task.shader_eval_type == SHADER_EVAL_DISPLACE) {
-    program = &displace_program;
-  }
-  program->wait_for_availability();
-  cl_kernel kernel = (*program)();
-
-  cl_uint start_arg_index = kernel_set_args(kernel, 0, d_data, d_input, d_output);
-
-  set_kernel_arg_buffers(kernel, &start_arg_index);
-
-  start_arg_index += kernel_set_args(kernel, start_arg_index, d_shader_eval_type);
-  if (task.shader_eval_type >= SHADER_EVAL_BAKE) {
-    start_arg_index += kernel_set_args(kernel, start_arg_index, d_shader_filter);
-  }
-  start_arg_index += kernel_set_args(kernel, start_arg_index, d_shader_x, d_shader_w, d_offset);
-
-  for (int sample = 0; sample < task.num_samples; sample++) {
-
-    if (task.get_cancel())
-      break;
-
-    kernel_set_args(kernel, start_arg_index, sample);
-
-    enqueue_kernel(kernel, task.shader_w, 1);
-
-    clFinish(cqCommandQueue);
-
-    task.update_progress(NULL);
-  }
 }
 
 void OpenCLDevice::bake(DeviceTask &task, RenderTile &rtile)

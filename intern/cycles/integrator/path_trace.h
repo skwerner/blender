@@ -27,7 +27,6 @@
 CCL_NAMESPACE_BEGIN
 
 class Device;
-class DeviceQueue;
 class RenderBuffers;
 class Progress;
 

@@ -16,6 +16,8 @@
 
 #include "device/device.h"
 
+#include "integrator/shader_eval.h"
+
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
@@ -118,34 +120,20 @@ bool GeometryManager::displace(
   if (d_input_size == 0)
     return false;
 
-  /* run device task */
-  device_vector<float4> d_output(device, "displace_output", MEM_READ_WRITE);
-  d_output.alloc(d_input_size);
-  d_output.zero_to_device();
-  d_input.copy_to_device();
-
-  /* needs to be up to data for attribute access */
+  /* Needs to be up to data for attribute access. */
   device->const_copy_to("__data", &dscene->data, sizeof(dscene->data));
 
-  DeviceTask task(DeviceTask::SHADER);
-  task.shader_input = d_input.device_pointer;
-  task.shader_output = d_output.device_pointer;
-  task.shader_eval_type = SHADER_EVAL_DISPLACE;
-  task.shader_x = 0;
-  task.shader_w = d_output.size();
-  task.num_samples = 1;
-  task.get_cancel = function_bind(&Progress::get_cancel, &progress);
+  /* Evaluate shader on device. */
+  device_vector<float4> d_output(device, "displace_output", MEM_READ_WRITE);
+  d_output.alloc(d_input_size);
 
-  device->task_add(task);
-  device->task_wait();
-
-  if (progress.get_cancel()) {
+  ShaderEval shader_eval(device, progress);
+  if (!shader_eval.eval(SHADER_EVAL_DISPLACE, d_input, d_output)) {
     d_input.free();
     d_output.free();
     return false;
   }
 
-  d_output.copy_from_device(0, 1, d_output.size());
   d_input.free();
 
   /* read result */

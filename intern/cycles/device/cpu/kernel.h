@@ -33,14 +33,16 @@ class CPUKernels {
       const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
   using CPUIntegratorInitFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
+  using CPUShaderEvalFunction =
+      CPUKernelFunction<void (*)(const KernelGlobals *kg, const uint4 *, float4 *, const int)>;
 
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
   CPUKernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_half_float;
   CPUKernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_byte;
-  CPUKernelFunction<void (*)(const KernelGlobals *, uint4 *, float4 *, int, int, int, int, int)>
-      shader;
+  CPUShaderEvalFunction shader_eval_displace;
+  CPUShaderEvalFunction shader_eval_background;
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
 
   CPUKernelFunction<void (*)(

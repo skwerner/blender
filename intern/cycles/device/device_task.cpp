@@ -55,21 +55,13 @@ int DeviceTask::get_subtask_count(int num, int max_size) const
   if (max_size != 0) {
     int max_size_num;
 
-    if (type == SHADER) {
-      max_size_num = (shader_w + max_size - 1) / max_size;
-    }
-    else {
-      max_size = max(1, max_size / w);
-      max_size_num = (h + max_size - 1) / max_size;
-    }
+    max_size = max(1, max_size / w);
+    max_size_num = (h + max_size - 1) / max_size;
 
     num = max(max_size_num, num);
   }
 
-  if (type == SHADER) {
-    num = min(shader_w, num);
-  }
-  else if (type == RENDER) {
+  if (type == RENDER) {
   }
   else {
     num = min(h, num);
@@ -82,20 +74,7 @@ void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size) const
 {
   num = get_subtask_count(num, max_size);
 
-  if (type == SHADER) {
-    for (int i = 0; i < num; i++) {
-      int tx = shader_x + (shader_w / num) * i;
-      int tw = (i == num - 1) ? shader_w - i * (shader_w / num) : shader_w / num;
-
-      DeviceTask task = *this;
-
-      task.shader_x = tx;
-      task.shader_w = tw;
-
-      tasks.push_back(task);
-    }
-  }
-  else if (type == RENDER) {
+  if (type == RENDER) {
     for (int i = 0; i < num; i++)
       tasks.push_back(*this);
   }

@@ -26,6 +26,7 @@ set(SRC
   path_trace_work.cpp
   path_trace_work_cpu.cpp
   path_trace_work_gpu.cpp
+  shader_eval.cpp
   work_scheduler.cpp
 )
 
@@ -39,6 +40,7 @@ set(SRC_HEADERS
   path_trace_work.h
   path_trace_work_cpu.h
   path_trace_work_gpu.h
+  shader_eval.h
   work_scheduler.h
 )
 

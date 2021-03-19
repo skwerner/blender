@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-#include "render/light.h"
 #include "device/device.h"
+
 #include "render/background.h"
 #include "render/film.h"
 #include "render/graph.h"
 #include "render/integrator.h"
+#include "render/light.h"
 #include "render/mesh.h"
 #include "render/nodes.h"
 #include "render/object.h"
 #include "render/scene.h"
 #include "render/shader.h"
 #include "render/stats.h"
+
+#include "integrator/shader_eval.h"
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
@@ -59,43 +62,28 @@ static void shade_background_pixels(Device *device,
     }
   }
 
-  /* compute on device */
   d_output.alloc(width * height);
-  d_output.zero_to_device();
-  d_input.copy_to_device();
 
+  /* Needs to be up to data for attribute access. */
   device->const_copy_to("__data", &dscene->data, sizeof(dscene->data));
 
-  DeviceTask main_task(DeviceTask::SHADER);
-  main_task.shader_input = d_input.device_pointer;
-  main_task.shader_output = d_output.device_pointer;
-  main_task.shader_eval_type = SHADER_EVAL_BACKGROUND;
-  main_task.shader_x = 0;
-  main_task.shader_w = width * height;
-  main_task.num_samples = 1;
-  main_task.get_cancel = function_bind(&Progress::get_cancel, &progress);
-
-  /* disabled splitting for now, there's an issue with multi-GPU mem_copy_from */
-  list<DeviceTask> split_tasks;
-  main_task.split(split_tasks, 1, 128 * 128);
-
-  foreach (DeviceTask &task, split_tasks) {
-    device->task_add(task);
-    device->task_wait();
-    d_output.copy_from_device(task.shader_x, 1, task.shader_w);
-  }
-
+  /* Evaluate shader on device. */
+  ShaderEval shader_eval(device, progress);
+  const bool success = shader_eval.eval(SHADER_EVAL_BACKGROUND, d_input, d_output);
   d_input.free();
 
-  float4 *d_output_data = d_output.data();
-
+  /* Copy to pixel buffer. */
   pixels.resize(width * height);
 
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      pixels[y * width + x].x = d_output_data[y * width + x].x;
-      pixels[y * width + x].y = d_output_data[y * width + x].y;
-      pixels[y * width + x].z = d_output_data[y * width + x].z;
+  if (success) {
+    float4 *d_output_data = d_output.data();
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        pixels[y * width + x].x = d_output_data[y * width + x].x;
+        pixels[y * width + x].y = d_output_data[y * width + x].y;
+        pixels[y * width + x].z = d_output_data[y * width + x].z;
+      }
     }
   }
 

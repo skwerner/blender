@@ -37,15 +37,14 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       int offset,
                                                       int stride);
 
-void KERNEL_FUNCTION_FULL_NAME(shader)(const KernelGlobals *kg,
-                                       uint4 *input,
-                                       float4 *output,
-                                       int type,
-                                       int filter,
-                                       int i,
-                                       int offset,
-                                       int sample);
-
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
+                                                       const uint4 *input,
+                                                       float4 *output,
+                                                       const int offset);
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
+                                                     const uint4 *input,
+                                                     float4 *output,
+                                                     const int offset);
 void KERNEL_FUNCTION_FULL_NAME(bake)(
     const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
 

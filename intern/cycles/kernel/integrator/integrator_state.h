@@ -40,6 +40,9 @@
  *
  * INTEGRATOR_STATE_COPY(to_x, from_x): copy contents of one nested struct to another
  *
+ * INTEGRATOR_STATE_IS_NULL: test if any integrator state is available, for shader evaluation
+ * INTEGRATOR_STATE_PASS_NULL: use to pass empty state to other functions.
+ *
  * NOTE: if we end up with a device that passes no arguments, the leading comma will be a problem.
  * Can solve it with more macros if we encouter it, but rather ugly so postpone for now.
  */
@@ -178,6 +181,9 @@ typedef struct IntegratorState {
         const IntegratorState *ccl_restrict state
 #  define INTEGRATOR_STATE_PASS kg, state
 
+#  define INTEGRATOR_STATE_PASS_NULL kg, NULL
+#  define INTEGRATOR_STATE_IS_NULL state == NULL
+
 #  define INTEGRATOR_STATE(nested_struct, member) \
     (((const IntegratorState *)state)->nested_struct.member)
 #  define INTEGRATOR_STATE_WRITE(nested_struct, member) (state->nested_struct.member)
@@ -211,6 +217,9 @@ typedef struct IntegratorState {
     const KernelGlobals *ccl_restrict kg, const ccl_global IntegratorState *ccl_restrict state, \
         ccl_global IntegratorPathQueue *ccl_restrict queue, const int path_index
 #  define INTEGRATOR_STATE_PASS kg, state, queue, path_index
+
+#  define INTEGRATOR_STATE_PASS_NULL kg, NULL, NULL, -1
+#  define INTEGRATOR_STATE_IS_NULL (path_index == -1)
 
 #  define INTEGRATOR_STATE(nested_struct, member) state[path_index].nested_struct.member
 #  define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)

@@ -1939,82 +1939,6 @@ void CUDADevice::film_convert(DeviceTask &task,
   cuda_assert(cuCtxSynchronize());
 }
 
-void CUDADevice::shader(DeviceTask &task)
-{
-  if (have_error())
-    return;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuShader;
-  CUdeviceptr d_input = (CUdeviceptr)task.shader_input;
-  CUdeviceptr d_output = (CUdeviceptr)task.shader_output;
-
-  /* get kernel function */
-  if (task.shader_eval_type == SHADER_EVAL_DISPLACE) {
-    cuda_assert(cuModuleGetFunction(&cuShader, cuModule, "kernel_cuda_displace"));
-  }
-  else {
-    cuda_assert(cuModuleGetFunction(&cuShader, cuModule, "kernel_cuda_background"));
-  }
-
-  /* do tasks in smaller chunks, so we can cancel it */
-  const int shader_chunk_size = 65536;
-  const int start = task.shader_x;
-  const int end = task.shader_x + task.shader_w;
-  int offset = task.offset;
-
-  bool canceled = false;
-  for (int sample = 0; sample < task.num_samples && !canceled; sample++) {
-    for (int shader_x = start; shader_x < end; shader_x += shader_chunk_size) {
-      int shader_w = min(shader_chunk_size, end - shader_x);
-
-      /* pass in parameters */
-      void *args[8];
-      int arg = 0;
-      args[arg++] = &d_input;
-      args[arg++] = &d_output;
-      args[arg++] = &task.shader_eval_type;
-      if (task.shader_eval_type >= SHADER_EVAL_BAKE) {
-        args[arg++] = &task.shader_filter;
-      }
-      args[arg++] = &shader_x;
-      args[arg++] = &shader_w;
-      args[arg++] = &offset;
-      args[arg++] = &sample;
-
-      /* launch kernel */
-      int threads_per_block;
-      cuda_assert(cuFuncGetAttribute(
-          &threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, cuShader));
-
-      int xblocks = (shader_w + threads_per_block - 1) / threads_per_block;
-
-      cuda_assert(cuFuncSetCacheConfig(cuShader, CU_FUNC_CACHE_PREFER_L1));
-      cuda_assert(cuLaunchKernel(cuShader,
-                                 xblocks,
-                                 1,
-                                 1, /* blocks */
-                                 threads_per_block,
-                                 1,
-                                 1, /* threads */
-                                 0,
-                                 0,
-                                 args,
-                                 0));
-
-      cuda_assert(cuCtxSynchronize());
-
-      if (task.get_cancel()) {
-        canceled = true;
-        break;
-      }
-    }
-
-    task.update_progress(NULL);
-  }
-}
-
 CUdeviceptr CUDADevice::map_pixels(device_ptr mem)
 {
   /* XXX: Coment out code which does expect memory pointer to be allocated for pixel usage.
@@ -2310,11 +2234,6 @@ void CUDADevice::thread_run(DeviceTask &task)
     }
 
     work_tiles.free();
-  }
-  else if (task.type == DeviceTask::SHADER) {
-    shader(task);
-
-    cuda_assert(cuCtxSynchronize());
   }
   else if (task.type == DeviceTask::DENOISE_BUFFER) {
     RenderTile tile;

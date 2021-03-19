@@ -272,38 +272,13 @@ BlenderGPUDisplay::~BlenderGPUDisplay()
   gpu_resources_destroy();
 }
 
-void BlenderGPUDisplay::reset(BufferParams &buffer_params)
+void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height)
 {
-  /* TODO(sergey): Ideally, all the reset logic will happen in the base class. See the TODO note
-   * around definition of `texture_outdated_`. */
+  cpu_side_update.rgba_pixels_.resize(width * height);
+  memcpy(cpu_side_update.rgba_pixels_.data(), rgba_pixels, sizeof(half4) * width * height);
 
-  thread_scoped_lock lock(mutex);
-
-  const GPUDisplayParams old_params = params_;
-
-  GPUDisplay::reset(buffer_params);
-
-  /* If the parameters did change tag texture as unusable. This avoids drawing old texture content
-   * in an updated configuration of the viewport. For example, avoids drawing old frame when render
-   * border did change.
-   * If the parameters did not change, allow drawing the current state of the texture, which will
-   * not count as an up-to-date redraw. This will avoid flickering when doping camera navigation by
-   * showing a previously rendered frame for until the new one is ready. */
-  if (old_params.modified(params_)) {
-    texture_size_ = make_int2(0, 0);
-  }
-
-  texture_outdated_ = true;
-}
-
-void BlenderGPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height)
-{
-  rgba_pixels_.resize(width * height);
-  memcpy(rgba_pixels_.data(), rgba_pixels, sizeof(half4) * width * height);
-
-  texture_size_ = make_int2(width, height);
-
-  need_update_texture_ = true;
+  cpu_side_update.texture_size_ = make_int2(width, height);
+  cpu_side_update.need_update_texture_ = true;
 }
 
 void BlenderGPUDisplay::get_cuda_buffer()
@@ -311,19 +286,12 @@ void BlenderGPUDisplay::get_cuda_buffer()
   /* TODO(sergey): Needs implementation. */
 }
 
-bool BlenderGPUDisplay::draw()
+void BlenderGPUDisplay::do_draw()
 {
   const bool transparent = true;  // TODO(sergey): Derive this from Film.
 
-  thread_scoped_lock lock(mutex);
-
-  if (texture_size_ == make_int2(0, 0)) {
-    /* Empty texture, nothing to draw. */
-    return false;
-  }
-
   if (!gpu_resources_ensure()) {
-    return false;
+    return;
   }
 
   glActiveTexture(GL_TEXTURE0);
@@ -332,18 +300,17 @@ bool BlenderGPUDisplay::draw()
   {
     /* TODO(sergey): Once the GPU display have own OpenGL context this should happen in
      * copy_pixels_to_texture(). */
-    if (need_update_texture_) {
+    if (cpu_side_update.need_update_texture_) {
       glTexImage2D(GL_TEXTURE_2D,
                    0,
                    GL_RGBA16F,
-                   texture_size_.x,
-                   texture_size_.y,
+                   cpu_side_update.texture_size_.x,
+                   cpu_side_update.texture_size_.y,
                    0,
                    GL_RGBA,
                    GL_HALF_FLOAT,
-                   rgba_pixels_.data());
-      need_update_texture_ = false;
-      texture_outdated_ = false;
+                   cpu_side_update.rgba_pixels_.data());
+      cpu_side_update.need_update_texture_ = false;
     }
   }
 
@@ -389,8 +356,6 @@ bool BlenderGPUDisplay::draw()
   if (transparent) {
     glDisable(GL_BLEND);
   }
-
-  return !texture_outdated_;
 }
 
 void BlenderGPUDisplay::gpu_context_create()

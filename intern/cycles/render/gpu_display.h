@@ -24,6 +24,16 @@ CCL_NAMESPACE_BEGIN
 
 class BufferParams;
 
+/* GPUDisplay class takes care of drawing render result in a viewport. The render result is stored
+ * in a GPU-side texture, which is updated from a path tracer and drawn by an application.
+ *
+ * The base GPUDisplay does some special texture state tracking, which allows render Session to
+ * make decisions on whether reset for an updated state is possible or not. This state should only
+ * be tracked in a base class and a particular implementation should not worry about it.
+ *
+ * The subclasses should only implement the pure virtual methods, which allows them to not worry
+ * about parent method calls, which helps them to be as small and reliable as possible. */
+
 class GPUDisplayParams {
  public:
   /* Offset of the display within a viewport.
@@ -51,9 +61,13 @@ class GPUDisplay {
   GPUDisplay() = default;
   virtual ~GPUDisplay() = default;
 
-  /* Reset the display for its new configuration.
-   * Will invalidate the texture as well. */
-  virtual void reset(BufferParams &buffer_params);
+  /* Reset the display for the new state of render session. Is called whenever session is reset,
+   * which happens on changes like viewport navigation or viewport dimension change.
+   *
+   * This call will configure parameters for a changed buffer and reset the texture state.
+   *
+   * NOTE: This call acquires the GPUDisplay::mutex lock. */
+  void reset(BufferParams &buffer_params);
 
   /* Copy rendered pixels from path tracer to a GPU texture.
    *
@@ -65,7 +79,7 @@ class GPUDisplay {
   /* TODO(sergey): Specify parameters which will allow to do partial updates, which will be needed
    * to update the texture from multiple devices. */
   /* TODO(sergey): Do we need to support uint8 data type? */
-  virtual void copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) = 0;
+  void copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height);
 
   /* Access CUDA buffer which can be used to define GPU-side texture without extra data copy. */
   /* TODO(sergey): Depending on a point of view, might need to be called "set" instead, so that
@@ -73,13 +87,41 @@ class GPUDisplay {
   /* TODO(sergey): Need proper return value. */
   virtual void get_cuda_buffer() = 0;
 
-  /* Returns true if drawing was performed. */
-  virtual bool draw() = 0;
+  /* Draw the current state of the texture.
+   *
+   * Returns truth if this call did draw an updated state of the texture.
+   *
+   * NOTE: This call acquires the GPUDisplay::mutex lock. */
+  bool draw();
 
   thread_mutex mutex;
 
  protected:
+  /* Implementation-specific calls which subclasses are to implement.
+   * These `do_foo()` method corresponds to their `foo()` calls, but they are purely virtual to
+   * simplify their particular implementation. */
+  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) = 0;
+  virtual void do_draw() = 0;
+
   GPUDisplayParams params_;
+
+ private:
+  /* State of the texture, which is needed for an integration with render session and interactive
+   * updates and navigation. */
+  struct {
+    /* Denotes whether possibly existing state of GPU side texture is still usable.
+     * It will not be usable in cases like render border did change (in this case we don't want
+     * previous texture to be rendered at all).
+     *
+     * However, if only navigation or object in scene did change, then the outdated state of the
+     * texture is still usable for draw, preventing display viewport flickering on navigation and
+     * object modifications. */
+    bool is_usable = false;
+
+    /* Texture is considered outdated after `reset()` until the next call of
+     * `copy_pixels_to_texture()`. */
+    bool is_outdated = true;
+  } texture_state_;
 };
 
 CCL_NAMESPACE_END

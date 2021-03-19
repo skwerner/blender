@@ -734,10 +734,7 @@ bool Session::run_wait_for_work(bool no_tiles)
 
 void Session::draw()
 {
-  if (!gpu_display) {
-    did_draw_after_reset_ = true;
-    return;
-  }
+  DCHECK(gpu_display);
 
   did_draw_after_reset_ |= gpu_display->draw();
 }

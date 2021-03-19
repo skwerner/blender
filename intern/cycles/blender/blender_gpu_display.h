@@ -105,15 +105,12 @@ class BlenderGPUDisplay : public GPUDisplay {
   BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_scene);
   ~BlenderGPUDisplay();
 
-  virtual void reset(BufferParams &buffer_params) override;
-
-  virtual void copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) override;
-
   virtual void get_cuda_buffer() override;
 
-  virtual bool draw() override;
-
  protected:
+  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) override;
+  virtual void do_draw() override;
+
   /* Helper function which allocates new GPU context, without affecting the current
    * active GPU context. */
   void gpu_context_create();
@@ -151,27 +148,18 @@ class BlenderGPUDisplay : public GPUDisplay {
   uint vertex_buffer_ = 0;
 
   /* Temporary CPU-side code, which is here only until this GPU display have own OpenGL context. */
+  struct {
+    /* Storage of pixels which are to be uploaded to the GPU texture. */
+    array<half4> rgba_pixels_;
 
-  /* Storage of pixels which are to be uploaded to the GPU texture. */
-  array<half4> rgba_pixels_;
+    /* Dimension of the GPU side texture. Could be different from the viewport resolution when
+     * there
+     * is a non-unit resolution divider. Should match number of pixels in the rgba_ storage. */
+    int2 texture_size_ = make_int2(0, 0);
 
-  /* Dimension of the GPU side texture. Could be different from the viewport resolution when there
-   * is a non-unit resolution divider. Should match number of pixels in the rgba_ storage. */
-  int2 texture_size_ = make_int2(0, 0);
-
-  /* There is a new data in the rgba_ buffer which is to be uploaded to the GPU texture. */
-  bool need_update_texture_ = false;
-
-  /* Reset happenned but there is no new data for the buffer yet.
-   * Is used to return false from the draw() function, so that the redraw does happen while the new
-   * sample is being rendered, but without considering it a "final" or "up-to-date" draw. This
-   * makes it so there is no flickering in the viewport and the session reset happens after an
-   * actual up-to-date sample rendered. */
-  /* TODO(sergey): This is something annoying to have: ideally, it will be very easy to subclass
-   * the GPUDisplay without any tricky logic in it. Currently this is needed for an integration
-   * with the render Session. We should either avoid such tricky logic all together, or to move it
-   * to a base class. */
-  bool texture_outdated_ = true;
+    /* There is a new data in the rgba_ buffer which is to be uploaded to the GPU texture. */
+    bool need_update_texture_ = false;
+  } cpu_side_update;
 };
 
 CCL_NAMESPACE_END

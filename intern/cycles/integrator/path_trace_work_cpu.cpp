@@ -48,16 +48,14 @@ void PathTraceWorkCPU::init_execution()
   }
 }
 
-void PathTraceWorkCPU::render_samples(const BufferParams &scaled_render_buffer_params,
-                                      int start_sample,
-                                      int samples_num)
+void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
 {
-  const int64_t image_width = scaled_render_buffer_params.width;
-  const int64_t image_height = scaled_render_buffer_params.height;
+  const int64_t image_width = effective_buffer_params_.width;
+  const int64_t image_height = effective_buffer_params_.height;
   const int64_t total_pixels_num = image_width * image_height;
 
   int offset, stride;
-  scaled_render_buffer_params.get_offset_stride(offset, stride);
+  effective_buffer_params_.get_offset_stride(offset, stride);
 
   /* TODO: limit this to number of threads of CPU device, it may be smaller than
    * the system number of threads when we reduce the number of CPU threads in
@@ -71,8 +69,8 @@ void PathTraceWorkCPU::render_samples(const BufferParams &scaled_render_buffer_p
     const int x = work_index - y * image_width;
 
     KernelWorkTile work_tile;
-    work_tile.x = scaled_render_buffer_params.full_x + x;
-    work_tile.y = scaled_render_buffer_params.full_y + y;
+    work_tile.x = effective_buffer_params_.full_x + x;
+    work_tile.y = effective_buffer_params_.full_y + y;
     work_tile.w = 1;
     work_tile.h = 1;
     work_tile.start_sample = start_sample;

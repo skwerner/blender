@@ -43,9 +43,7 @@ class PathTraceWorkCPU : public PathTraceWork {
 
   virtual void init_execution() override;
 
-  virtual void render_samples(const BufferParams &scaled_render_buffer_params,
-                              int start_sample,
-                              int samples_num) override;
+  virtual void render_samples(int start_sample, int samples_num) override;
 
  protected:
   /* Core path tracing routine. Renders given work time on the given queue. */

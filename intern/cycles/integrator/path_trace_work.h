@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "render/buffers.h"
 #include "util/util_types.h"
 #include "util/util_unique_ptr.h"
 
@@ -38,6 +39,13 @@ class PathTraceWork {
 
   virtual ~PathTraceWork();
 
+  /* Set effective parameters within the render buffers.
+   *
+   * TODO(sergey): Currently is used as a part of an update for resolution divider changes. Might
+   * need to become more generic once/if we want to support "re-slicing" of the full render buffer
+   * according to the device performance. */
+  void set_effective_buffer_params(const BufferParams &effective_buffer_params);
+
   /* Initialize execution of kernels.
    * Will ensure that all device queues are initialized for execution.
    *
@@ -47,9 +55,7 @@ class PathTraceWork {
 
   /* Render given number of samples as a synchronous blocking call.
    * The samples are added to the render buffer associated with this work. */
-  virtual void render_samples(const BufferParams &scaled_render_buffer_params,
-                              int start_sample,
-                              int samples_num) = 0;
+  virtual void render_samples(int start_sample, int samples_num) = 0;
 
   /* Cheap-ish request to see whether rendering is requested and is to be stopped as soon as
    * possible, without waiting for any samples to be finished. */
@@ -70,6 +76,10 @@ class PathTraceWork {
   /* Render buffers where sampling is being accumulated into.
    * It also defines possible subset of a big tile in the case of multi-device rendering. */
   RenderBuffers *buffers_;
+
+  /* Effective parameters of the render buffer.
+   * Might be different from buffers_->params when there is a resolution divider involved. */
+  BufferParams effective_buffer_params_;
 
   bool *cancel_requested_flag_ = nullptr;
 };

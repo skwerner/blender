@@ -154,7 +154,7 @@ double PathTrace::render_samples_full_pipeline(int samples_num)
   const int start_sample = start_sample_num_ + render_status_.rendered_samples_num;
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
-    path_trace_work->render_samples(scaled_render_buffer_params_, start_sample, samples_num);
+    path_trace_work->render_samples(start_sample, samples_num);
   });
 
   render_status_.rendered_samples_num += samples_num;
@@ -266,6 +266,11 @@ void PathTrace::update_scaled_render_buffers_resolution()
   scaled_render_buffer_params_.height = max(1, orig_params.height / resolution_divider_);
   scaled_render_buffer_params_.full_x = orig_params.full_x / resolution_divider_;
   scaled_render_buffer_params_.full_y = orig_params.full_y / resolution_divider_;
+
+  /* TODO(sergey): Perform slicing of the render buffers for every work. */
+  for (auto &&path_trace_work : path_trace_works_) {
+    path_trace_work->set_effective_buffer_params(scaled_render_buffer_params_);
+  }
 }
 
 int PathTrace::get_num_samples_in_buffer()

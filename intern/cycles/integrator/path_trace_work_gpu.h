@@ -40,9 +40,7 @@ class PathTraceWorkGPU : public PathTraceWork {
 
   virtual void init_execution() override;
 
-  virtual void render_samples(const BufferParams &scaled_render_buffer_params,
-                              int start_sample,
-                              int samples_num) override;
+  virtual void render_samples(int start_sample, int samples_num) override;
 
  protected:
   bool enqueue_work_tiles(bool &finished);

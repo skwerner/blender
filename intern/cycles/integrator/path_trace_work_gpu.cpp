@@ -54,11 +54,9 @@ void PathTraceWorkGPU::init_execution()
   queue_->init_execution();
 }
 
-void PathTraceWorkGPU::render_samples(const BufferParams &scaled_render_buffer_params,
-                                      int start_sample,
-                                      int samples_num)
+void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 {
-  work_scheduler_.reset(scaled_render_buffer_params, start_sample, samples_num);
+  work_scheduler_.reset(effective_buffer_params_, start_sample, samples_num);
 
   /* TODO: set a hard limit in case of undetected kernel failures? */
   while (true) {

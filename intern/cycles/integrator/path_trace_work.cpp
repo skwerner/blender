@@ -38,12 +38,18 @@ PathTraceWork::PathTraceWork(Device *render_device,
                              bool *cancel_requested_flag)
     : render_device_(render_device),
       buffers_(buffers),
+      effective_buffer_params_(buffers_->params),
       cancel_requested_flag_(cancel_requested_flag)
 {
 }
 
 PathTraceWork::~PathTraceWork()
 {
+}
+
+void PathTraceWork::set_effective_buffer_params(const BufferParams &effective_buffer_params)
+{
+  effective_buffer_params_ = effective_buffer_params;
 }
 
 CCL_NAMESPACE_END

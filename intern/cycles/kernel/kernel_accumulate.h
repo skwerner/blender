@@ -781,7 +781,6 @@ ccl_device_forceinline ccl_global float *kernel_accum_pixel_render_buffer(
     ccl_global float *ccl_restrict render_buffer,
     const int pass_offset)
 {
-  /* TODO: is uint64_t slow on GPU? */
   const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
   const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
                                         kernel_data.film.pass_stride;
@@ -793,21 +792,19 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
                                              const float3 L,
                                              ccl_global float *ccl_restrict render_buffer)
 {
-  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
-    return;
-  }
-
   float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
 
-  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
-  kernel_write_pass_float3(pixel_render_buffer, contribution);
+
+  if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
+    kernel_write_pass_float3(buffer, contribution);
+  }
 
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3_variance(pixel_render_buffer + kernel_data.film.pass_denoising_data +
-                                          DENOISING_PASS_COLOR,
-                                      contribution);
+    kernel_write_pass_float3_variance(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
   }
 }
 
@@ -816,21 +813,19 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
                                           const float3 L,
                                           ccl_global float *ccl_restrict render_buffer)
 {
-  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
-    return;
-  }
-
   float3 contribution = INTEGRATOR_STATE(shadow_path, throughput) * L;
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(shadow_path, bounce) - 1);
 
-  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
-  kernel_write_pass_float3(pixel_render_buffer, contribution);
+
+  if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
+    kernel_write_pass_float3(buffer, contribution);
+  }
 
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3_variance(pixel_render_buffer + kernel_data.film.pass_denoising_data +
-                                          DENOISING_PASS_COLOR,
-                                      contribution);
+    kernel_write_pass_float3_variance(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
   }
 }
 
@@ -843,13 +838,11 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
                                                 const float transparent,
                                                 ccl_global float *ccl_restrict render_buffer)
 {
-  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
-    return;
+  if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
+    ccl_global float *buffer = kernel_accum_pixel_render_buffer(
+        INTEGRATOR_STATE_PASS, render_buffer, 3);
+    kernel_write_pass_float(buffer, transparent);
   }
-
-  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
-      INTEGRATOR_STATE_PASS, render_buffer, 3);
-  kernel_write_pass_float(pixel_render_buffer, transparent);
 }
 
 /* Write background contribution to render buffer.
@@ -860,23 +853,20 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
                                                const float transparent,
                                                ccl_global float *ccl_restrict render_buffer)
 {
-  if (!(kernel_data.film.pass_flag & PASSMASK(COMBINED))) {
-    return;
-  }
-
   float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
 
-  ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
+  ccl_global float *buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
-  kernel_write_pass_float4(
-      pixel_render_buffer,
-      make_float4(contribution.x, contribution.y, contribution.z, transparent));
+
+  if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
+    kernel_write_pass_float4(
+        buffer, make_float4(contribution.x, contribution.y, contribution.z, transparent));
+  }
 
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3_variance(pixel_render_buffer + kernel_data.film.pass_denoising_data +
-                                          DENOISING_PASS_COLOR,
-                                      contribution);
+    kernel_write_pass_float3_variance(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
   }
 }
 

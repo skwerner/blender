@@ -186,11 +186,11 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restric
   if (!(path_flag & PATH_RAY_CAMERA))
     return;
 
-  int flag = kernel_data.film.pass_flag;
-  int light_flag = kernel_data.film.light_pass_flag;
+  const int flag = kernel_data.film.pass_flag;
 
-  if (!((flag | light_flag) & PASS_ANY))
+  if (!(flag & PASS_ANY)) {
     return;
+  }
 
   if (!(path_flag & PATH_RAY_SINGLE_PASS_DONE)) {
     if (!(sd->flag & SD_TRANSPARENT) || kernel_data.film.pass_alpha_threshold == 0.0f ||
@@ -251,14 +251,14 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restric
     }
   }
 
-  if (light_flag & PASSMASK_COMPONENT(DIFFUSE))
+  if (flag & PASSMASK_COMPONENT(DIFFUSE))
     L->color_diffuse += shader_bsdf_diffuse(kg, sd) * throughput;
-  if (light_flag & PASSMASK_COMPONENT(GLOSSY))
+  if (flag & PASSMASK_COMPONENT(GLOSSY))
     L->color_glossy += shader_bsdf_glossy(kg, sd) * throughput;
-  if (light_flag & PASSMASK_COMPONENT(TRANSMISSION))
+  if (flag & PASSMASK_COMPONENT(TRANSMISSION))
     L->color_transmission += shader_bsdf_transmission(kg, sd) * throughput;
 
-  if (light_flag & PASSMASK(MIST)) {
+  if (flag & PASSMASK(MIST)) {
     /* bring depth into 0..1 range */
     float mist_start = kernel_data.film.mist_start;
     float mist_inv_depth = kernel_data.film.mist_inv_depth;
@@ -321,20 +321,20 @@ ccl_device_inline void kernel_write_light_passes(const KernelGlobals *ccl_restri
   if (light_flag & PASSMASK(AO))
     kernel_write_pass_float3(buffer + kernel_data.film.pass_ao, L->ao);
 
-  if (light_flag & PASSMASK(DIFFUSE_COLOR))
+  if (flag & PASSMASK(DIFFUSE_COLOR))
     kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_color, L->color_diffuse);
-  if (light_flag & PASSMASK(GLOSSY_COLOR))
+  if (flag & PASSMASK(GLOSSY_COLOR))
     kernel_write_pass_float3(buffer + kernel_data.film.pass_glossy_color, L->color_glossy);
-  if (light_flag & PASSMASK(TRANSMISSION_COLOR))
+  if (flag & PASSMASK(TRANSMISSION_COLOR))
     kernel_write_pass_float3(buffer + kernel_data.film.pass_transmission_color,
                              L->color_transmission);
-  if (light_flag & PASSMASK(SHADOW)) {
+  if (flag & PASSMASK(SHADOW)) {
     float3 shadow = L->shadow;
     kernel_write_pass_float4(
         buffer + kernel_data.film.pass_shadow,
         make_float4(shadow.x, shadow.y, shadow.z, kernel_data.film.pass_shadow_scale));
   }
-  if (light_flag & PASSMASK(MIST))
+  if (flag & PASSMASK(MIST))
     kernel_write_pass_float(buffer + kernel_data.film.pass_mist, 1.0f - L->mist);
 #endif
 }
@@ -350,7 +350,7 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
   float alpha;
   float3 L_sum = path_radiance_clamp_and_sum(kg, L, &alpha);
 
-  if (kernel_data.film.pass_flag & PASSMASK(COMBINED)) {
+  if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
     kernel_write_pass_float4(buffer, make_float4(L_sum.x, L_sum.y, L_sum.z, alpha));
   }
 

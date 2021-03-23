@@ -473,12 +473,14 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     }
 
     int pass_flag = (1 << (pass.type % 32));
-    if (pass.type <= PASS_CATEGORY_MAIN_END) {
-      kfilm->pass_flag |= pass_flag;
-    }
-    else if (pass.type <= PASS_CATEGORY_LIGHT_END) {
-      kfilm->use_light_pass = 1;
+    if (pass.type <= PASS_CATEGORY_LIGHT_END) {
+      if (pass.type != PASS_COMBINED) {
+        kfilm->use_light_pass = 1;
+      }
       kfilm->light_pass_flag |= pass_flag;
+    }
+    else if (pass.type <= PASS_CATEGORY_DATA_END) {
+      kfilm->pass_flag |= pass_flag;
     }
     else {
       assert(pass.type <= PASS_CATEGORY_BAKE_END);

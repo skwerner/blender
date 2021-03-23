@@ -322,7 +322,9 @@ enum PathRayFlag {
   /* Path and shader is being evaluated for direct lighting emission. */
   PATH_RAY_EMISSION = (1 << 22),
   /* Perform subsurface scattering. */
-  PATH_RAY_SUBSURFACE = (1 << 23)
+  PATH_RAY_SUBSURFACE = (1 << 23),
+  /* Contribute to denoising features. */
+  PATH_RAY_DENOISING_FEATURES = (1 << 24),
 };
 
 /* Closure Label */

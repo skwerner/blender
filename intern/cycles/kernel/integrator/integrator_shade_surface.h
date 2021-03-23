@@ -19,6 +19,7 @@
 #include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_emission.h"
 #include "kernel/kernel_light.h"
+#include "kernel/kernel_passes.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_shader.h"
 
@@ -87,19 +88,6 @@ ccl_device_inline bool integrate_surface_holdout(INTEGRATOR_STATE_CONST_ARGS,
   return true;
 }
 #endif /* __HOLDOUT__ */
-
-#ifdef __PASSES__
-ccl_device_inline void integrate_surface_passes(INTEGRATOR_STATE_CONST_ARGS,
-                                                const ShaderData *sd,
-                                                ccl_global float *ccl_restrict render_buffer)
-
-{
-/* TODO */
-#  if 0
-  kernel_write_data_passes(kg, buffer, L, sd, state, throughput);
-#  endif
-}
-#endif /* __PASSES__ */
 
 #ifdef __EMISSION__
 ccl_device_inline void integrate_surface_emission(INTEGRATOR_STATE_CONST_ARGS,
@@ -355,7 +343,7 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
 
 #ifdef __PASSES__
   /* Write render passes. */
-  integrate_surface_passes(INTEGRATOR_STATE_PASS, &sd, render_buffer);
+  kernel_write_data_passes(INTEGRATOR_STATE_PASS, &sd, render_buffer);
 #endif
 
 #ifdef __EMISSION__
@@ -390,12 +378,12 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   /* Direct light. */
   integrate_surface_direct_light(INTEGRATOR_STATE_PASS, &sd, &rng_state);
 
+#ifdef __DENOISING_FEATURES__
+  kernel_write_denoising_features(INTEGRATOR_STATE_PASS, &sd, render_buffer);
+#endif
+
   /* TODO */
 #if 0
-#  ifdef __DENOISING_FEATURES__
-  kernel_update_denoising_features(kg, &sd, state, L);
-#  endif
-
 #  ifdef __AO__
   /* ambient occlusion */
   if (kernel_data.integrator.use_ambient_occlusion) {

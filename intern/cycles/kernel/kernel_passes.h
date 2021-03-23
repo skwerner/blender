@@ -16,13 +16,26 @@
 
 #pragma once
 
+#include "kernel/geom/geom.h"
+
 #include "kernel/kernel_id_passes.h"
 #include "kernel/kernel_write_passes.h"
 
 CCL_NAMESPACE_BEGIN
 
+/* Get pointer to pixel in render buffer. */
+ccl_device_forceinline ccl_global float *kernel_pass_pixel_render_buffer(
+    INTEGRATOR_STATE_CONST_ARGS, ccl_global float *ccl_restrict render_buffer)
+{
+  const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                        kernel_data.film.pass_stride;
+  return render_buffer + render_buffer_offset;
+}
+
 #ifdef __DENOISING_FEATURES__
 
+#  if 0
 ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *ccl_restrict kg,
                                                      ccl_global float *ccl_restrict buffer,
                                                      int sample,
@@ -45,17 +58,20 @@ ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *ccl_re
   float value = path_total_shaded / max(path_total, 1e-7f);
   kernel_write_pass_float(buffer + 2, value * value);
 }
+#  endif
 
-ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *ccl_restrict kg,
-                                                        ShaderData *sd,
-                                                        ccl_addr_space PathState *state,
-                                                        PathRadiance *L)
+ccl_device_inline void kernel_write_denoising_features(
+    INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
 {
-  if (state->denoising_feature_weight == 0.0f) {
+  if (!(INTEGRATOR_STATE(path, flag) & PATH_RAY_DENOISING_FEATURES)) {
     return;
   }
 
-  L->denoising_depth += ensure_finite(state->denoising_feature_weight * sd->ray_length);
+  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
+
+  const float denoising_depth = ensure_finite(sd->ray_length);
+  kernel_write_pass_float_variance(
+      buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_DEPTH, denoising_depth);
 
   /* Skip implicitly transparent surfaces. */
   if (sd->flag & SD_HAS_ONLY_VOLUME) {
@@ -68,10 +84,11 @@ ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *ccl
   float sum_weight = 0.0f, sum_nonspecular_weight = 0.0f;
 
   for (int i = 0; i < sd->num_closure; i++) {
-    ShaderClosure *sc = &sd->closure[i];
+    const ShaderClosure *sc = &sd->closure[i];
 
-    if (!CLOSURE_IS_BSDF_OR_BSSRDF(sc->type))
+    if (!CLOSURE_IS_BSDF_OR_BSSRDF(sc->type)) {
       continue;
+    }
 
     /* All closures contribute to the normal feature, but only diffuse-like ones to the albedo. */
     normal += sc->N * sc->sample_weight;
@@ -113,19 +130,27 @@ ccl_device_inline void kernel_update_denoising_features(const KernelGlobals *ccl
     const Transform worldtocamera = kernel_data.cam.worldtocamera;
     normal = transform_direction(&worldtocamera, normal);
 
-    L->denoising_normal += ensure_finite3(state->denoising_feature_weight * normal);
-    L->denoising_albedo += ensure_finite3(state->denoising_feature_weight *
-                                          state->denoising_feature_throughput * diffuse_albedo);
+    const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
+                                                                 denoising_feature_throughput);
 
-    state->denoising_feature_weight = 0.0f;
+    const float3 denoising_normal = ensure_finite3(normal);
+    const float3 denoising_albedo = ensure_finite3(denoising_feature_throughput * diffuse_albedo);
+
+    kernel_write_pass_float3_variance(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_NORMAL, denoising_normal);
+    kernel_write_pass_float3_variance(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_ALBEDO, denoising_albedo);
+
+    INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
   }
   else {
-    state->denoising_feature_throughput *= specular_albedo;
+    INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) *= specular_albedo;
   }
 }
 #endif /* __DENOISING_FEATURES__ */
 
-#ifdef __KERNEL_DEBUG__
+#if 0
+#  ifdef __KERNEL_DEBUG__
 ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *ccl_restrict kg,
                                                  ccl_global float *ccl_restrict buffer,
                                                  PathRadiance *L)
@@ -148,7 +173,8 @@ ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *ccl_restri
                             L->debug_data.num_ray_bounces);
   }
 }
-#endif /* __KERNEL_DEBUG__ */
+#  endif /* __KERNEL_DEBUG__ */
+#endif
 
 #ifdef __KERNEL_CPU__
 #  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
@@ -173,18 +199,16 @@ ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *ccl_restric
   return depth * 2;
 }
 
-ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restrict kg,
-                                                ccl_global float *ccl_restrict buffer,
-                                                PathRadiance *L,
-                                                ShaderData *sd,
-                                                ccl_addr_space PathState *state,
-                                                float3 throughput)
+ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
+                                                const ShaderData *sd,
+                                                ccl_global float *ccl_restrict render_buffer)
 {
 #ifdef __PASSES__
-  int path_flag = state->flag;
+  const int path_flag = INTEGRATOR_STATE(path, flag);
 
-  if (!(path_flag & PATH_RAY_CAMERA))
+  if (!(path_flag & PATH_RAY_CAMERA)) {
     return;
+  }
 
   const int flag = kernel_data.film.pass_flag;
 
@@ -192,10 +216,12 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restric
     return;
   }
 
+  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
+
   if (!(path_flag & PATH_RAY_SINGLE_PASS_DONE)) {
     if (!(sd->flag & SD_TRANSPARENT) || kernel_data.film.pass_alpha_threshold == 0.0f ||
         average(shader_bsdf_alpha(kg, sd)) >= kernel_data.film.pass_alpha_threshold) {
-      if (state->sample == 0) {
+      if (INTEGRATOR_STATE(path, sample) == 0) {
         if (flag & PASSMASK(DEPTH)) {
           float depth = camera_z_depth(kg, sd->P);
           kernel_write_pass_float(buffer + kernel_data.film.pass_depth, depth);
@@ -224,11 +250,12 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restric
         kernel_write_pass_float(buffer + kernel_data.film.pass_motion_weight, 1.0f);
       }
 
-      state->flag |= PATH_RAY_SINGLE_PASS_DONE;
+      INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SINGLE_PASS_DONE;
     }
   }
 
   if (kernel_data.film.cryptomatte_passes) {
+    const float3 throughput = INTEGRATOR_STATE(path, throughput);
     const float matte_weight = average(throughput) *
                                (1.0f - average(shader_bsdf_transparency(kg, sd)));
     if (matte_weight > 0.0f) {
@@ -251,23 +278,31 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restric
     }
   }
 
-  if (flag & PASSMASK_COMPONENT(DIFFUSE))
-    L->color_diffuse += shader_bsdf_diffuse(kg, sd) * throughput;
-  if (flag & PASSMASK_COMPONENT(GLOSSY))
-    L->color_glossy += shader_bsdf_glossy(kg, sd) * throughput;
-  if (flag & PASSMASK_COMPONENT(TRANSMISSION))
-    L->color_transmission += shader_bsdf_transmission(kg, sd) * throughput;
-
+  if (flag & PASSMASK_COMPONENT(DIFFUSE)) {
+    const float3 throughput = INTEGRATOR_STATE(path, throughput);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_color,
+                             shader_bsdf_diffuse(kg, sd) * throughput);
+  }
+  if (flag & PASSMASK_COMPONENT(GLOSSY)) {
+    const float3 throughput = INTEGRATOR_STATE(path, throughput);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_glossy_color,
+                             shader_bsdf_glossy(kg, sd) * throughput);
+  }
+  if (flag & PASSMASK_COMPONENT(TRANSMISSION)) {
+    const float3 throughput = INTEGRATOR_STATE(path, throughput);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_transmission_color,
+                             shader_bsdf_transmission(kg, sd) * throughput);
+  }
   if (flag & PASSMASK(MIST)) {
-    /* bring depth into 0..1 range */
-    float mist_start = kernel_data.film.mist_start;
-    float mist_inv_depth = kernel_data.film.mist_inv_depth;
+    /* Bring depth into 0..1 range. */
+    const float mist_start = kernel_data.film.mist_start;
+    const float mist_inv_depth = kernel_data.film.mist_inv_depth;
 
-    float depth = camera_distance(kg, sd->P);
+    const float depth = camera_distance(kg, sd->P);
     float mist = saturate((depth - mist_start) * mist_inv_depth);
 
-    /* falloff */
-    float mist_falloff = kernel_data.film.mist_falloff;
+    /* Falloff */
+    const float mist_falloff = kernel_data.film.mist_falloff;
 
     if (mist_falloff == 1.0f)
       ;
@@ -278,67 +313,44 @@ ccl_device_inline void kernel_write_data_passes(const KernelGlobals *ccl_restric
     else
       mist = powf(mist, mist_falloff);
 
-    /* modulate by transparency */
-    float3 alpha = shader_bsdf_alpha(kg, sd);
-    L->mist += (1.0f - mist) * average(throughput * alpha);
+    /* Modulate by transparency */
+    const float3 throughput = INTEGRATOR_STATE(path, throughput);
+    const float3 alpha = shader_bsdf_alpha(kg, sd);
+    const float mist_output = (1.0f - mist) * average(throughput * alpha);
+
+    /* Note that the final value in the render buffer we want is 1 - mist_output,
+     * to avoid having to tracking this in the Integrator state we do the negation
+     * after rendering. */
+    kernel_write_pass_float(buffer + kernel_data.film.pass_mist, mist_output);
   }
 #endif
 }
 
+#if 0
 ccl_device_inline void kernel_write_light_passes(const KernelGlobals *ccl_restrict kg,
                                                  ccl_global float *ccl_restrict buffer,
                                                  PathRadiance *L)
 {
-#ifdef __PASSES__
+#  ifdef __PASSES__
   int light_flag = kernel_data.film.light_pass_flag;
 
   if (!kernel_data.film.use_light_pass)
     return;
 
-  if (light_flag & PASSMASK(DIFFUSE_INDIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_indirect, L->indirect_diffuse);
-  if (light_flag & PASSMASK(GLOSSY_INDIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_glossy_indirect, L->indirect_glossy);
-  if (light_flag & PASSMASK(TRANSMISSION_INDIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_transmission_indirect,
-                             L->indirect_transmission);
-  if (light_flag & PASSMASK(VOLUME_INDIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_volume_indirect, L->indirect_volume);
-  if (light_flag & PASSMASK(DIFFUSE_DIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_direct, L->direct_diffuse);
-  if (light_flag & PASSMASK(GLOSSY_DIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_glossy_direct, L->direct_glossy);
-  if (light_flag & PASSMASK(TRANSMISSION_DIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_transmission_direct,
-                             L->direct_transmission);
-  if (light_flag & PASSMASK(VOLUME_DIRECT))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_volume_direct, L->direct_volume);
-
-  if (light_flag & PASSMASK(EMISSION))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_emission, L->emission);
-  if (light_flag & PASSMASK(BACKGROUND))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_background, L->background);
   if (light_flag & PASSMASK(AO))
     kernel_write_pass_float3(buffer + kernel_data.film.pass_ao, L->ao);
 
-  if (flag & PASSMASK(DIFFUSE_COLOR))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_color, L->color_diffuse);
-  if (flag & PASSMASK(GLOSSY_COLOR))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_glossy_color, L->color_glossy);
-  if (flag & PASSMASK(TRANSMISSION_COLOR))
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_transmission_color,
-                             L->color_transmission);
-  if (flag & PASSMASK(SHADOW)) {
+  if (light_flag & PASSMASK(SHADOW)) {
     float3 shadow = L->shadow;
     kernel_write_pass_float4(
         buffer + kernel_data.film.pass_shadow,
         make_float4(shadow.x, shadow.y, shadow.z, kernel_data.film.pass_shadow_scale));
   }
-  if (flag & PASSMASK(MIST))
-    kernel_write_pass_float(buffer + kernel_data.film.pass_mist, 1.0f - L->mist);
-#endif
+#  endif
 }
+#endif
 
+#if 0
 ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
                                            ccl_global float *ccl_restrict buffer,
                                            int sample,
@@ -356,18 +368,18 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
 
   kernel_write_light_passes(kg, buffer, L);
 
-#ifdef __DENOISING_FEATURES__
+#  ifdef __DENOISING_FEATURES__
   if (kernel_data.film.pass_denoising_data) {
-#  ifdef __SHADOW_TRICKS__
+#    ifdef __SHADOW_TRICKS__
     kernel_write_denoising_shadow(kg,
                                   buffer + kernel_data.film.pass_denoising_data,
                                   sample,
                                   average(L->path_total),
                                   average(L->path_total_shaded));
-#  else
+#    else
     kernel_write_denoising_shadow(
         kg, buffer + kernel_data.film.pass_denoising_data, sample, 0.0f, 0.0f);
-#  endif
+#    endif
     if (kernel_data.film.pass_denoising_clean) {
       float3 noisy, clean;
       path_radiance_split_denoising(kg, L, &noisy, &clean);
@@ -380,21 +392,12 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
                                             DENOISING_PASS_COLOR,
                                         ensure_finite3(L_sum));
     }
-
-    kernel_write_pass_float3_variance(buffer + kernel_data.film.pass_denoising_data +
-                                          DENOISING_PASS_NORMAL,
-                                      L->denoising_normal);
-    kernel_write_pass_float3_variance(buffer + kernel_data.film.pass_denoising_data +
-                                          DENOISING_PASS_ALBEDO,
-                                      L->denoising_albedo);
-    kernel_write_pass_float_variance(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_DEPTH, L->denoising_depth);
   }
-#endif /* __DENOISING_FEATURES__ */
+#  endif /* __DENOISING_FEATURES__ */
 
-#ifdef __KERNEL_DEBUG__
+#  ifdef __KERNEL_DEBUG__
   kernel_write_debug_passes(kg, buffer, L);
-#endif
+#  endif
 
   /* Adaptive Sampling. Fill the additional buffer with the odd samples and calculate our stopping
      criteria. This is the heuristic from "A hierarchical automatic stopping condition for Monte
@@ -406,7 +409,7 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
       kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer,
                                make_float4(L_sum.x * 2.0f, L_sum.y * 2.0f, L_sum.z * 2.0f, 0.0f));
     }
-#ifdef __KERNEL_CPU__
+#  ifdef __KERNEL_CPU__
     if ((sample > kernel_data.integrator.adaptive_min_samples) &&
         kernel_data.integrator.adaptive_stop_per_sample) {
       const int step = kernel_data.integrator.adaptive_step;
@@ -415,7 +418,7 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
         kernel_do_adaptive_stopping(kg, buffer, sample);
       }
     }
-#endif
+#  endif
   }
 
   /* Write the sample count as negative numbers initially to mark the samples as in progress.
@@ -424,16 +427,17 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
   if (kernel_data.film.pass_sample_count) {
     /* Make sure it's a negative number. In progressive refine mode, this bit gets flipped between
      * passes. */
-#ifdef __ATOMIC_PASS_WRITE__
+#  ifdef __ATOMIC_PASS_WRITE__
     atomic_fetch_and_or_uint32((ccl_global uint *)(buffer + kernel_data.film.pass_sample_count),
                                0x80000000);
-#else
+#  else
     if (buffer[kernel_data.film.pass_sample_count] > 0) {
       buffer[kernel_data.film.pass_sample_count] *= -1.0f;
     }
-#endif
+#  endif
     kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, -1.0f);
   }
 }
+#endif
 
 CCL_NAMESPACE_END

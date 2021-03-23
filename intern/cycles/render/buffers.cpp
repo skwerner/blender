@@ -323,7 +323,9 @@ bool RenderBuffers::get_pass_rect(
       else if (type == PASS_MIST) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
           float f = *in;
-          pixels[0] = saturate(f * scale_exposure);
+          /* Note that we accumulate 1 - mist in the kernel to avoid having to
+           * track the mist values in the integrator state. */
+          pixels[0] = saturate(1.0f - f * scale_exposure);
         }
       }
 #ifdef WITH_CYCLES_DEBUG

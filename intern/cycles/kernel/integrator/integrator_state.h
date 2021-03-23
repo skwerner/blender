@@ -99,6 +99,9 @@ typedef struct IntegratorPathState {
 
   /* Throughput. */
   float3 throughput;
+
+  /* Denoising. */
+  float3 denoising_feature_throughput;
 } IntegratorPathState;
 
 /* Ray parameters for scene intersection. */

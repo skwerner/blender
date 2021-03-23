@@ -44,6 +44,7 @@
 #  include "kernel/kernel_film.h"
 #  include "kernel/kernel_work_stealing.h"
 
+/* TODO: move cryptomatte post sorting to its own kernel. */
 #  if 0
 /* kernels */
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, CUDA_KERNEL_MAX_REGISTERS)

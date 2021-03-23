@@ -46,6 +46,16 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
 
   INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
 
+#ifdef __DENOISING_FEATURES__
+  if (kernel_data.film.pass_denoising_data) {
+    INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_DENOISING_FEATURES;
+    INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) = one_float3();
+  }
+  else {
+    INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) = zero_float3();
+  }
+#endif
+
 /* TODO */
 #if 0
   state->diffuse_bounce = 0;
@@ -55,12 +65,6 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
 #  ifdef __DENOISING_FEATURES__
   if (kernel_data.film.pass_denoising_data) {
     state->flag |= PATH_RAY_STORE_SHADOW_INFO;
-    state->denoising_feature_weight = 1.0f;
-    state->denoising_feature_throughput = one_float3();
-  }
-  else {
-    state->denoising_feature_weight = 0.0f;
-    state->denoising_feature_throughput = zero_float3();
   }
 #  endif /* __DENOISING_FEATURES__ */
 

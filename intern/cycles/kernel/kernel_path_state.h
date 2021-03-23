@@ -51,7 +51,6 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
   state->diffuse_bounce = 0;
   state->glossy_bounce = 0;
   state->transmission_bounce = 0;
-  state->transparent_bounce = 0;
 
 #  ifdef __DENOISING_FEATURES__
   if (kernel_data.film.pass_denoising_data) {
@@ -64,11 +63,6 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
     state->denoising_feature_throughput = zero_float3();
   }
 #  endif /* __DENOISING_FEATURES__ */
-
-  state->min_ray_pdf = FLT_MAX;
-#  ifdef __LAMP_MIS__
-  state->ray_t = 0.0f;
-#  endif
 
 #  ifdef __VOLUME__
   state->volume_bounce = 0;

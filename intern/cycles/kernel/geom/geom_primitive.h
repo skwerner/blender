@@ -187,7 +187,7 @@ ccl_device_inline float4 primitive_volume_attribute_float4(const KernelGlobals *
 
 /* Default UV coordinate */
 
-ccl_device_inline float3 primitive_uv(const KernelGlobals *kg, ShaderData *sd)
+ccl_device_inline float3 primitive_uv(const KernelGlobals *kg, const ShaderData *sd)
 {
   const AttributeDescriptor desc = find_attribute(kg, sd, ATTR_STD_UV);
 
@@ -252,7 +252,7 @@ ccl_device float3 primitive_tangent(const KernelGlobals *kg, ShaderData *sd)
 
 /* Motion vector for motion pass */
 
-ccl_device_inline float4 primitive_motion_vector(const KernelGlobals *kg, ShaderData *sd)
+ccl_device_inline float4 primitive_motion_vector(const KernelGlobals *kg, const ShaderData *sd)
 {
   /* center position */
   float3 center;

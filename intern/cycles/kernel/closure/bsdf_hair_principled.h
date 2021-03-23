@@ -500,7 +500,7 @@ ccl_device_inline float bsdf_principled_hair_albedo_roughness_scale(
   return (((((0.245f * x) + 5.574f) * x - 10.73f) * x + 2.532f) * x - 0.215f) * x + 5.969f;
 }
 
-ccl_device float3 bsdf_principled_hair_albedo(ShaderClosure *sc)
+ccl_device float3 bsdf_principled_hair_albedo(const ShaderClosure *sc)
 {
   PrincipledHairBSDF *bsdf = (PrincipledHairBSDF *)sc;
   return exp3(-sqrt(bsdf->sigma) * bsdf_principled_hair_albedo_roughness_scale(bsdf->v));

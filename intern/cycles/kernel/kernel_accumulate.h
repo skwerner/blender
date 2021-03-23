@@ -170,15 +170,16 @@ ccl_device_inline float3 bsdf_eval_sum(const BsdfEval *eval)
  * to render buffers instead of using per-thread memory, and to avoid the
  * impact of clamping on other contributions. */
 
-#ifdef __CLAMP_SAMPLE__
 ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *L, int bounce)
 {
+#ifdef __CLAMP_SAMPLE__
   float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
                                kernel_data.integrator.sample_clamp_direct;
   float sum = reduce_add(fabs(*L));
   if (sum > limit) {
     *L *= limit / sum;
   }
+#endif
 }
 
 ccl_device_forceinline void kernel_accum_clamp_throughput(const KernelGlobals *kg,
@@ -186,6 +187,7 @@ ccl_device_forceinline void kernel_accum_clamp_throughput(const KernelGlobals *k
                                                           float3 *throughput,
                                                           int bounce)
 {
+#ifdef __CLAMP_SAMPLE__
   float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
                                kernel_data.integrator.sample_clamp_direct;
 
@@ -195,8 +197,8 @@ ccl_device_forceinline void kernel_accum_clamp_throughput(const KernelGlobals *k
     *L *= clamp_factor;
     *throughput *= clamp_factor;
   }
-}
 #endif
+}
 
 #if 0
 /* Path Radiance
@@ -796,9 +798,7 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
   }
 
   float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
-#ifdef __CLAMP_SAMPLE__
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
-#endif
 
   ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
@@ -821,9 +821,7 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
   }
 
   float3 contribution = INTEGRATOR_STATE(shadow_path, throughput) * L;
-#ifdef __CLAMP_SAMPLE__
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(shadow_path, bounce) - 1);
-#endif
 
   ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);
@@ -867,9 +865,7 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
   }
 
   float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
-#ifdef __CLAMP_SAMPLE__
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
-#endif
 
   ccl_global float *pixel_render_buffer = kernel_accum_pixel_render_buffer(
       INTEGRATOR_STATE_PASS, render_buffer, 0);

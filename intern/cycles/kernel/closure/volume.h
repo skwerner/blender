@@ -197,7 +197,7 @@ ccl_device int volume_phase_sample(const ShaderData *sd,
 
 /* Volume sampling utilities. */
 
-/* tod: this value could be tweaked or turned into a probability to avoid
+/* todo: this value could be tweaked or turned into a probability to avoid
  * unnecessary work in volumes and subsurface scattering. */
 #define VOLUME_THROUGHPUT_EPSILON 1e-6f
 

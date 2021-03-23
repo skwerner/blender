@@ -208,6 +208,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
+    case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
     case DEVICE_KERNEL_NUM: {
       LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
       break;
@@ -387,12 +388,14 @@ int PathTraceWorkGPU::get_max_num_paths()
 void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
 {
   /* TODO(sergey): Support CUDA GL Graphics, avoiding CPU roundtrip. */
-  /* TODO(sergey): Migrate this from Task to the queue call. */
 
   const int full_x = effective_buffer_params_.full_x;
   const int full_y = effective_buffer_params_.full_y;
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
 
   Device *device = queue_->device;
 
@@ -401,22 +404,22 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   rgba_half.alloc(width, height);
   rgba_half.zero_to_device();
 
-  DeviceTask task(DeviceTask::FILM_CONVERT);
+  const int work_size = width * height;
 
-  task.x = full_x;
-  task.y = full_y;
-  task.w = width;
-  task.h = height;
-  task.rgba_half = rgba_half.device_pointer;
-  task.buffer = buffers_->buffer.device_pointer;
-  task.sample = lround(1.0f / sample_scale - 1);
+  void *args[] = {&rgba_half.device_pointer,
+                  &render_buffers_->buffer.device_pointer,
+                  const_cast<float *>(&sample_scale),
+                  const_cast<int *>(&full_x),
+                  const_cast<int *>(&full_y),
+                  const_cast<int *>(&width),
+                  const_cast<int *>(&height),
+                  &offset,
+                  &stride};
 
-  effective_buffer_params_.get_offset_stride(task.offset, task.stride);
+  queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
+  queue_->synchronize();
 
-  device->task_add(task);
-  device->task_wait();
-
-  rgba_half.copy_from_device(0, width, height);
+  rgba_half.copy_from_device();
 
   gpu_display->copy_pixels_to_texture(rgba_half.data(), width, height);
 }

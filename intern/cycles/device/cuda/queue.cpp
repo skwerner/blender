@@ -70,6 +70,7 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
     case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
+    case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
     case DEVICE_KERNEL_NUM:
       break;
   }

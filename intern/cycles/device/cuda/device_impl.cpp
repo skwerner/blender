@@ -1911,28 +1911,16 @@ void CUDADevice::film_convert(DeviceTask &task,
                   &task.stride};
 
   /* launch kernel */
-  int threads_per_block;
+  const int work_size = task.w * task.h;
+  int num_threads_per_block;
   cuda_assert(cuFuncGetAttribute(
-      &threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, cuFilmConvert));
-
-  int xthreads = (int)sqrt(threads_per_block);
-  int ythreads = (int)sqrt(threads_per_block);
-  int xblocks = (task.w + xthreads - 1) / xthreads;
-  int yblocks = (task.h + ythreads - 1) / ythreads;
+      &num_threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, cuFilmConvert));
+  const int num_blocks = divide_up(work_size, num_threads_per_block);
 
   cuda_assert(cuFuncSetCacheConfig(cuFilmConvert, CU_FUNC_CACHE_PREFER_L1));
 
-  cuda_assert(cuLaunchKernel(cuFilmConvert,
-                             xblocks,
-                             yblocks,
-                             1, /* blocks */
-                             xthreads,
-                             ythreads,
-                             1, /* threads */
-                             0,
-                             0,
-                             args,
-                             0));
+  cuda_assert(
+      cuLaunchKernel(cuFilmConvert, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
 
   unmap_pixels((rgba_byte) ? rgba_byte : rgba_half);
 

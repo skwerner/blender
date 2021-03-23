@@ -53,6 +53,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "shader_eval_displace";
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
       return "shader_eval_background";
+    case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
+      return "convert_to_half_float";
     case DEVICE_KERNEL_NUM:
       break;
   };

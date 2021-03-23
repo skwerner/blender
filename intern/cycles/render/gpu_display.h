@@ -40,14 +40,15 @@ class GPUDisplayParams {
    * For example, set to a lower-bottom corner of border render in Blender's viewport. */
   int2 offset = make_int2(0, 0);
 
-  /* Full viewport size. */
+  /* Full viewport size.
+   *
+   * NOTE: Is not affected by the resolution divider. */
   int2 full_size = make_int2(0, 0);
 
   /* Effective vieport size.
    * In the case of border render, size of the border rectangle.
    *
-   * NOTE: This is size of viewport. The size in pixels of texture needed to draw this viewport due
-   * to resolution divider used during viewport navigation. */
+   * NOTE: Is not affected by the resolution divider. */
   int2 size = make_int2(0, 0);
 
   bool modified(const GPUDisplayParams &other) const

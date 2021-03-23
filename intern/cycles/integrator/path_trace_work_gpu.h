@@ -81,6 +81,10 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Temporary buffer for passing work tiles to kernel. */
   device_vector<KernelWorkTile> work_tiles_;
 
+  /* Temporary buffer used by the copy_to_gpu_display() whenever graphics interoperability is not
+   * available. Is allocated on-demand. */
+  device_vector<half4> gpu_display_rgba_half_;
+
   /* Maximum path index, effective number of paths used may be smaller than
    * the size of the integrator_state_ buffer so can avoid iterating over the
    * full buffer. */

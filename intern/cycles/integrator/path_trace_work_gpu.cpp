@@ -38,6 +38,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *render_device,
       queued_paths_(render_device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(render_device, "num_queued_paths", MEM_READ_WRITE),
       work_tiles_(render_device, "work_tiles", MEM_READ_WRITE),
+      gpu_display_rgba_half_(render_device, "display buffer half", MEM_READ_WRITE),
       max_active_path_index_(0)
 {
   work_scheduler_.set_max_num_path_states(get_max_num_paths());
@@ -393,20 +394,28 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   const int full_y = effective_buffer_params_.full_y;
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
+  const int final_width = render_buffers_->params.width;
+  const int final_height = render_buffers_->params.height;
 
   int offset, stride;
   effective_buffer_params_.get_offset_stride(offset, stride);
 
-  Device *device = queue_->device;
-
-  /* TODO(sergey): Consider avoiding re-allocation on every update. */
-  device_vector<half4> rgba_half(device, "display buffer half", MEM_READ_WRITE);
-  rgba_half.alloc(width, height);
-  rgba_half.zero_to_device();
+  /* Re-allocate display memory if needed, and make sure the device pointer is allocated.
+   *
+   * NOTE: allocation happens to the final resolution so that no re-allocation happens on every
+   * change of the resolution divider. However, if the display becomes smaller, shrink the
+   * allocated memory as well. */
+  if (gpu_display_rgba_half_.data_width != final_width ||
+      gpu_display_rgba_half_.data_height != final_height) {
+    gpu_display_rgba_half_.alloc(final_width, final_height);
+    /* TODO(sergey): There should be a way to make sure device-side memory is allocated without
+     * transfering zeroes to the device. */
+    gpu_display_rgba_half_.zero_to_device();
+  }
 
   const int work_size = width * height;
 
-  void *args[] = {&rgba_half.device_pointer,
+  void *args[] = {&gpu_display_rgba_half_.device_pointer,
                   &render_buffers_->buffer.device_pointer,
                   const_cast<float *>(&sample_scale),
                   const_cast<int *>(&full_x),
@@ -419,9 +428,9 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
   queue_->synchronize();
 
-  rgba_half.copy_from_device();
+  gpu_display_rgba_half_.copy_from_device();
 
-  gpu_display->copy_pixels_to_texture(rgba_half.data(), width, height);
+  gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data(), width, height);
 }
 
 CCL_NAMESPACE_END

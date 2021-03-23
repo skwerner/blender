@@ -28,16 +28,20 @@ class Progress;
 /* ShaderEval class performs shader evaluation for background light and displacement. */
 class ShaderEval {
  public:
-  explicit ShaderEval(Device *device, Progress &progress);
+  ShaderEval(Device *device, Progress &progress);
 
-  bool eval(const ShaderEvalType type, device_vector<uint4> &input, device_vector<float4> &output);
+  /* Evaluate shader at points specified by KernelShaderEvalInput and write out
+   * RGBA colors to output. */
+  bool eval(const ShaderEvalType type,
+            device_vector<KernelShaderEvalInput> &input,
+            device_vector<float4> &output);
 
  protected:
   bool eval_cpu(const ShaderEvalType type,
-                device_vector<uint4> &input,
+                device_vector<KernelShaderEvalInput> &input,
                 device_vector<float4> &output);
   bool eval_gpu(const ShaderEvalType type,
-                device_vector<uint4> &input,
+                device_vector<KernelShaderEvalInput> &input,
                 device_vector<float4> &output);
 
   Device *device_;

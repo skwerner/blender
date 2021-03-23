@@ -69,8 +69,8 @@ bool GeometryManager::displace(
   /* setup input for device task */
   const size_t num_verts = mesh->verts.size();
   vector<bool> done(num_verts, false);
-  device_vector<uint4> d_input(device, "displace_input", MEM_READ_ONLY);
-  uint4 *d_input_data = d_input.alloc(num_verts);
+  device_vector<KernelShaderEvalInput> d_input(device, "displace_input", MEM_READ_ONLY);
+  KernelShaderEvalInput *d_input_data = d_input.alloc(num_verts);
   size_t d_input_size = 0;
 
   size_t num_triangles = mesh->num_triangles();
@@ -112,7 +112,11 @@ bool GeometryManager::displace(
       }
 
       /* back */
-      uint4 in = make_uint4(object, prim, __float_as_int(u), __float_as_int(v));
+      KernelShaderEvalInput in;
+      in.object = object;
+      in.prim = prim;
+      in.u = u;
+      in.v = v;
       d_input_data[d_input_size++] = in;
     }
   }

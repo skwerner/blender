@@ -1598,6 +1598,18 @@ typedef struct KernelWorkTile {
   ccl_global float *buffer;
 } KernelWorkTile;
 
+/* Shader Evaluation.
+ *
+ * Position on a primitive on an object at which we want to evaluate the
+ * shader for e.g. mesh displacement or light importance map. */
+
+typedef struct KernelShaderEvalInput {
+  int object;
+  int prim;
+  float u, v;
+} KernelShaderEvalInput;
+static_assert_align(KernelShaderEvalInput, 16);
+
 /* Pre-computed sample table sizes for PMJ02 sampler. */
 #define NUM_PMJ_SAMPLES (64 * 64)
 #define NUM_PMJ_PATTERNS 48

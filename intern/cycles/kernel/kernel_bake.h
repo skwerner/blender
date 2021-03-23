@@ -464,19 +464,15 @@ ccl_device void kernel_bake_evaluate(const KernelGlobals *kg,
 #endif
 
 ccl_device void kernel_displace_evaluate(const KernelGlobals *kg,
-                                         ccl_global const uint4 *input,
+                                         ccl_global const KernelShaderEvalInput *input,
                                          ccl_global float4 *output,
                                          const int offset)
 {
   /* Setup shader data. */
-  const uint4 in = input[offset];
-  const int object = in.x;
-  const int prim = in.y;
-  const float u = __uint_as_float(in.z);
-  const float v = __uint_as_float(in.w);
+  const KernelShaderEvalInput in = input[offset];
 
   ShaderData sd;
-  shader_setup_from_displace(kg, &sd, object, prim, u, v);
+  shader_setup_from_displace(kg, &sd, in.object, in.prim, in.u, in.v);
 
   /* Evaluate displacement shader. */
   const float3 P = sd.P;
@@ -490,16 +486,14 @@ ccl_device void kernel_displace_evaluate(const KernelGlobals *kg,
 }
 
 ccl_device void kernel_background_evaluate(const KernelGlobals *kg,
-                                           ccl_global const uint4 *input,
+                                           ccl_global const KernelShaderEvalInput *input,
                                            ccl_global float4 *output,
                                            const int offset)
 {
   /* Setup ray */
-  const uint4 in = input[offset];
-  const float u = __uint_as_float(in.x);
-  const float v = __uint_as_float(in.y);
+  const KernelShaderEvalInput in = input[offset];
   const float3 ray_P = zero_float3();
-  const float3 ray_D = equirectangular_to_direction(u, v);
+  const float3 ray_D = equirectangular_to_direction(in.u, in.v);
   const float ray_time = 0.5f;
 
   /* Setup shader data. */

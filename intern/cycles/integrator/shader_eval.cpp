@@ -34,7 +34,7 @@ ShaderEval::ShaderEval(Device *device, Progress &progress) : device_(device), pr
 }
 
 bool ShaderEval::eval(const ShaderEvalType type,
-                      device_vector<uint4> &input,
+                      device_vector<KernelShaderEvalInput> &input,
                       device_vector<float4> &output)
 {
   /* Allocate and copy device buffers. */
@@ -58,7 +58,7 @@ bool ShaderEval::eval(const ShaderEvalType type,
 }
 
 bool ShaderEval::eval_cpu(const ShaderEvalType type,
-                          device_vector<uint4> &input,
+                          device_vector<KernelShaderEvalInput> &input,
                           device_vector<float4> &output)
 {
   vector<CPUKernelThreadGlobals> kernel_thread_globals;
@@ -69,7 +69,7 @@ bool ShaderEval::eval_cpu(const ShaderEvalType type,
 
   /* Simple parallel_for over all work items. */
   const int64_t work_size = output.size();
-  uint4 *input_data = input.data();
+  KernelShaderEvalInput *input_data = input.data();
   float4 *output_data = output.data();
   bool success = true;
 
@@ -101,7 +101,7 @@ bool ShaderEval::eval_cpu(const ShaderEvalType type,
 }
 
 bool ShaderEval::eval_gpu(const ShaderEvalType type,
-                          device_vector<uint4> &input,
+                          device_vector<KernelShaderEvalInput> &input,
                           device_vector<float4> &output)
 {
   /* Find required kernel function. */

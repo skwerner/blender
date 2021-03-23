@@ -385,7 +385,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_shader_eval_displace(uint4 *input,
+    kernel_cuda_shader_eval_displace(KernelShaderEvalInput *input,
                                      float4 *output,
                                      const int offset,
                                      const int work_size)
@@ -400,7 +400,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_shader_eval_background(uint4 *input,
+    kernel_cuda_shader_eval_background(KernelShaderEvalInput *input,
                                        float4 *output,
                                        const int offset,
                                        const int work_size)

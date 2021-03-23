@@ -47,17 +47,21 @@ static void shade_background_pixels(Device *device,
                                     Progress &progress)
 {
   /* create input */
-  device_vector<uint4> d_input(device, "background_input", MEM_READ_ONLY);
+  device_vector<KernelShaderEvalInput> d_input(device, "background_input", MEM_READ_ONLY);
   device_vector<float4> d_output(device, "background_output", MEM_READ_WRITE);
 
-  uint4 *d_input_data = d_input.alloc(width * height);
+  KernelShaderEvalInput *d_input_data = d_input.alloc(width * height);
 
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       float u = (x + 0.5f) / width;
       float v = (y + 0.5f) / height;
 
-      uint4 in = make_uint4(__float_as_int(u), __float_as_int(v), 0, 0);
+      KernelShaderEvalInput in;
+      in.object = OBJECT_NONE;
+      in.prim = PRIM_NONE;
+      in.u = u;
+      in.v = v;
       d_input_data[x + y * width] = in;
     }
   }

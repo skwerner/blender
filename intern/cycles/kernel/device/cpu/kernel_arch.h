@@ -38,11 +38,11 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       int stride);
 
 void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
-                                                       const uint4 *input,
+                                                       const KernelShaderEvalInput *input,
                                                        float4 *output,
                                                        const int offset);
 void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
-                                                     const uint4 *input,
+                                                     const KernelShaderEvalInput *input,
                                                      float4 *output,
                                                      const int offset);
 void KERNEL_FUNCTION_FULL_NAME(bake)(

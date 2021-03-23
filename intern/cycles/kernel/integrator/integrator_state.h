@@ -172,9 +172,10 @@ typedef struct IntegratorState {
 /* Scalar access on CPU. */
 
 #  define INTEGRATOR_STATE_ARGS \
-    const KernelGlobals *ccl_restrict kg, IntegratorState *ccl_restrict state
+    ccl_attr_maybe_unused const KernelGlobals *ccl_restrict kg, IntegratorState *ccl_restrict state
 #  define INTEGRATOR_STATE_CONST_ARGS \
-    const KernelGlobals *ccl_restrict kg, const IntegratorState *ccl_restrict state
+    ccl_attr_maybe_unused const KernelGlobals *ccl_restrict kg, \
+        const IntegratorState *ccl_restrict state
 #  define INTEGRATOR_STATE_PASS kg, state
 
 #  define INTEGRATOR_STATE(nested_struct, member) \

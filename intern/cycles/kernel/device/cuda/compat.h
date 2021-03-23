@@ -82,6 +82,10 @@ __device__ half __float2half(const float f)
 #define ccl_align(n) __align__(n)
 #define ccl_optional_struct_init
 
+/* TODO(sergey): Should be able to use [[maybe_unused]] once the kernels are compiled with C++17
+ * standard support, */
+#define ccl_attr_maybe_unused
+
 #define ATTR_FALLTHROUGH
 
 #define CCL_MAX_LOCAL_SIZE CUDA_KERNEL_BLOCK_NUM_THREADS

@@ -46,6 +46,7 @@
 #  define ccl_ref &
 #  define ccl_optional_struct_init
 #  define ccl_loop_no_unroll
+#  define ccl_attr_maybe_unused [[maybe_unused]]
 #  define __KERNEL_WITH_SSE_ALIGN__
 
 #  if defined(_WIN32) && !defined(FREE_WINDOWS)

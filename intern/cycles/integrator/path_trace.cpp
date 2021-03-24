@@ -219,7 +219,10 @@ void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
 
   const float sample_scale = 1.0f / get_num_samples_in_buffer();
 
-  thread_scoped_lock lock(gpu_display->mutex);
+  if (!gpu_display->update_begin(width, height)) {
+    LOG(ERROR) << "Error beginning GPUDisplay update.";
+    return;
+  }
 
   /* TODO(sergey): In theory we would want to update parts of the buffer from multiple threads.
    * However, there could be some complications related on how texture buffer is mapped. Depending
@@ -228,6 +231,8 @@ void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
   for (auto &&path_trace_work : path_trace_works_) {
     path_trace_work->copy_to_gpu_display(gpu_display, sample_scale);
   }
+
+  gpu_display->update_end();
 }
 
 void PathTrace::cancel()

@@ -21,11 +21,13 @@
 
 #include "bvh/bvh_params.h"
 
+#include "device/device_graphics_interop.h"
 #include "device/device_memory.h"
 #include "device/device_task.h"
 
 #include "util/util_function.h"
 #include "util/util_list.h"
+#include "util/util_logging.h"
 #include "util/util_stats.h"
 #include "util/util_string.h"
 #include "util/util_texture.h"
@@ -457,6 +459,28 @@ class Device {
   virtual bool check_peer_access(Device * /*peer_device*/)
   {
     return false;
+  }
+
+  /* Graphics resources interoperability.
+   *
+   * The interoperability comes here by the meaning that the device is capable of computing result
+   * directly into an OpenGL (or other graphics library) buffer. */
+
+  /* Check display si to be updated using graphics interoperability.
+   * The interoperability can not be used is it is not supported by the device. But the device
+   * might also force disable the interoperability if it detects that it will be slower than
+   * copying pixels from the render buffer. */
+  virtual bool should_use_graphics_interop()
+  {
+    return false;
+  }
+
+  /* Create graphics interoperability context which will be taking care of mapping graphics
+   * resource as a buffer writable by kernels of this device. */
+  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create()
+  {
+    LOG(FATAL) << "Request of GPU interop of a device which does not support it.";
+    return nullptr;
   }
 
   /* Sub-devices */

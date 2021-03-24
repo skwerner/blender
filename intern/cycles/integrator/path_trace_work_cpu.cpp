@@ -111,7 +111,7 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
 
-  half4 *rgba_half = gpu_display->map_texture_buffer(width, height);
+  half4 *rgba_half = gpu_display->map_texture_buffer();
   if (!rgba_half) {
     /* TODO(sergey): Look into using copy_to_gpu_display() if mapping failed. Might be needed for
      * some implementations of GPUDisplay which can not map memory? */

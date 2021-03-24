@@ -23,7 +23,7 @@ CCL_NAMESPACE_BEGIN
 
 void GPUDisplay::reset(BufferParams &buffer_params)
 {
-  thread_scoped_lock lock(mutex);
+  thread_scoped_lock lock(mutex_);
 
   const GPUDisplayParams old_params = params_;
 
@@ -44,22 +44,93 @@ void GPUDisplay::reset(BufferParams &buffer_params)
   texture_state_.is_outdated = true;
 }
 
-void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height)
+void GPUDisplay::mark_texture_updated()
 {
   texture_state_.is_outdated = false;
   texture_state_.is_usable = true;
-
-  do_copy_pixels_to_texture(rgba_pixels, width, height);
 }
 
-half4 *GPUDisplay::map_texture_buffer(int width, int height)
-{
-  DCHECK(!is_mapped_);
+/* --------------------------------------------------------------------
+ * Update procedure.
+ */
 
-  half4 *mapped_rgba_pixels = do_map_texture_buffer(width, height);
+bool GPUDisplay::update_begin(int texture_width, int texture_height)
+{
+  DCHECK(!update_state_.is_active);
+
+  if (update_state_.is_active) {
+    LOG(ERROR) << "Attempt to re-activate update process.";
+    return false;
+  }
+
+  mutex_.lock();
+
+  if (!do_update_begin(texture_width, texture_height)) {
+    LOG(ERROR) << "GPUDisplay implementation could not begin updater.";
+    mutex_.unlock();
+    return false;
+  }
+
+  update_state_.is_active = true;
+
+  return true;
+}
+
+void GPUDisplay::update_end()
+{
+  DCHECK(update_state_.is_active);
+
+  if (!update_state_.is_active) {
+    LOG(ERROR) << "Attempt to deactivate inactive update process.";
+    return;
+  }
+
+  do_update_end();
+
+  update_state_.is_active = false;
+  mutex_.unlock();
+}
+
+/* --------------------------------------------------------------------
+ * Texture update from CPU buffer.
+ */
+
+void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels)
+{
+  DCHECK(update_state_.is_active);
+
+  if (!update_state_.is_active) {
+    LOG(ERROR) << "Attempt to copy pixels data outside of GPUDisplay update.";
+    return;
+  }
+
+  mark_texture_updated();
+  do_copy_pixels_to_texture(rgba_pixels);
+}
+
+/* --------------------------------------------------------------------
+ * Texture buffer mapping.
+ */
+
+half4 *GPUDisplay::map_texture_buffer()
+{
+  DCHECK(!texture_buffer_state_.is_mapped);
+  DCHECK(update_state_.is_active);
+
+  if (texture_buffer_state_.is_mapped) {
+    LOG(ERROR) << "Attempt to re-map an already mapped texture buffer.";
+    return nullptr;
+  }
+
+  if (!update_state_.is_active) {
+    LOG(ERROR) << "Attempt to copy pixels data outside of GPUDisplay update.";
+    return nullptr;
+  }
+
+  half4 *mapped_rgba_pixels = do_map_texture_buffer();
 
   if (mapped_rgba_pixels) {
-    is_mapped_ = true;
+    texture_buffer_state_.is_mapped = true;
   }
 
   return mapped_rgba_pixels;
@@ -67,19 +138,52 @@ half4 *GPUDisplay::map_texture_buffer(int width, int height)
 
 void GPUDisplay::unmap_texture_buffer()
 {
-  DCHECK(is_mapped_);
+  DCHECK(texture_buffer_state_.is_mapped);
 
-  is_mapped_ = false;
+  if (!texture_buffer_state_.is_mapped) {
+    LOG(ERROR) << "Attempt to unmap non-mapped texture buffer.";
+    return;
+  }
 
-  texture_state_.is_outdated = false;
-  texture_state_.is_usable = true;
+  texture_buffer_state_.is_mapped = false;
 
+  mark_texture_updated();
   do_unmap_texture_buffer();
 }
 
+/* --------------------------------------------------------------------
+ * Graphics interoperability.
+ */
+
+DeviceGraphicsInteropDestination GPUDisplay::graphics_interop_get()
+{
+  DCHECK(!texture_buffer_state_.is_mapped);
+  DCHECK(update_state_.is_active);
+
+  if (texture_buffer_state_.is_mapped) {
+    LOG(ERROR)
+        << "Attempt to use graphics interoperability mode while the texture buffer is mapped.";
+    return DeviceGraphicsInteropDestination();
+  }
+
+  if (!update_state_.is_active) {
+    LOG(ERROR) << "Attempt to use graphics interoperability outside of GPUDisplay update.";
+    return DeviceGraphicsInteropDestination();
+  }
+
+  /* Assume that interop will write new values to the texture. */
+  mark_texture_updated();
+
+  return do_graphics_interop_get();
+}
+
+/* --------------------------------------------------------------------
+ * Drawing.
+ */
+
 bool GPUDisplay::draw()
 {
-  thread_scoped_lock lock(mutex);
+  thread_scoped_lock lock(mutex_);
 
   if (texture_state_.is_usable) {
     do_draw();

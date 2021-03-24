@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "device/device_graphics_interop.h"
 #include "util/util_half.h"
 #include "util/util_thread.h"
 #include "util/util_types.h"
@@ -65,14 +66,35 @@ class GPUDisplay {
   /* Reset the display for the new state of render session. Is called whenever session is reset,
    * which happens on changes like viewport navigation or viewport dimension change.
    *
-   * This call will configure parameters for a changed buffer and reset the texture state.
-   *
-   * NOTE: This call acquires the GPUDisplay::mutex lock. */
+   * This call will configure parameters for a changed buffer and reset the texture state. */
   void reset(BufferParams &buffer_params);
 
-  /* Copy rendered pixels from path tracer to a GPU texture.
+  /* --------------------------------------------------------------------
+   * Update procedure.
    *
-   * NOTE: The caller must acquire GPUDisplay::mutex prior of using this function.
+   * These callsi indicates a desire of the caller to update content of the displayed texture. They
+   * will perform proper mutex locks, avoiding re-draws while update is in process. They will also
+   * perform proper context activation in the particular GPUDisplay implementation. */
+
+  /* Returns truth when update is ready. Update should be finished with update_end().
+   *
+   * If false is returned then no update is possible, and no update_end() call is needed.
+   *
+   * The texture width and height denotes an actual resolution of the underlying render result. */
+  bool update_begin(int texture_width, int texture_height);
+
+  void update_end();
+
+  /* --------------------------------------------------------------------
+   * Texture update from CPU buffer.
+   *
+   * NOTE: The GPUDisplay should be marked for an update being in process with `update_begin()`.
+   *
+   * Most portable implementation, which must be supported by all platforms. Might not be the most
+   * efficient one.
+   */
+
+  /* Copy rendered pixels from path tracer to a GPU texture.
    *
    * The reason for this is is to allow use of this function for partial updates from different
    * devices. In this case the caller will acquire the lock once, update all the slices and release
@@ -80,7 +102,20 @@ class GPUDisplay {
   /* TODO(sergey): Specify parameters which will allow to do partial updates, which will be needed
    * to update the texture from multiple devices. */
   /* TODO(sergey): Do we need to support uint8 data type? */
-  void copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height);
+  void copy_pixels_to_texture(const half4 *rgba_pixels);
+
+  /* --------------------------------------------------------------------
+   * Texture buffer mapping.
+   *
+   * This functionality is used to update GPU-side texture content without need to maintain CPU
+   * side buffer on the caller.
+   *
+   * NOTE: The GPUDisplay should be marked for an update being in process with `update_begin()`.
+   *
+   * NOTE: Texture buffer can not be mapped while graphics interopeability is active. This means
+   * that `map_texture_buffer()` is not allowed between `graphics_interop_begin()` and
+   * `graphics_interop_end()` calls.
+   */
 
   /* Map pixels memory form texture to a buffer available for write from CPU. Width and height will
    * define a requested size of the texture to write to.
@@ -92,38 +127,64 @@ class GPUDisplay {
    * is often can not be bound to two threads simultaneously, and can not be released from a
    * different thread. This means that the mapping API should be used from the single thread only,
    */
-  half4 *map_texture_buffer(int width, int height);
+  half4 *map_texture_buffer();
   void unmap_texture_buffer();
 
-  /* Access CUDA buffer which can be used to define GPU-side texture without extra data copy. */
-  /* TODO(sergey): Depending on a point of view, might need to be called "set" instead, so that
-   * the render session sets CUDA buffer to a display owned by viewport. */
-  /* TODO(sergey): Need proper return value. */
-  virtual void get_cuda_buffer() = 0;
+  /* --------------------------------------------------------------------
+   * Graphics interoperability.
+   *
+   * A special code path which allows to update texture content directly from the GPU compute
+   * device. Complementary part of DeviceGraphicsInterop.
+   *
+   * NOTE: Graphics interoperability can not be used while the texture buffer is mapped. This means
+   * that `graphics_interop_get()` is not allowed between `map_texture_buffer()` and
+   * `unmap_texture_buffer()` calls. */
+
+  /* Get GPUDisplay graphics interoperability information which acts as a destination for the
+   * device API. */
+  DeviceGraphicsInteropDestination graphics_interop_get();
+
+  /* --------------------------------------------------------------------
+   * Drawing.
+   */
 
   /* Draw the current state of the texture.
    *
-   * Returns truth if this call did draw an updated state of the texture.
-   *
-   * NOTE: This call acquires the GPUDisplay::mutex lock. */
+   * Returns truth if this call did draw an updated state of the texture. */
   bool draw();
-
-  thread_mutex mutex;
 
  protected:
   /* Implementation-specific calls which subclasses are to implement.
    * These `do_foo()` method corresponds to their `foo()` calls, but they are purely virtual to
    * simplify their particular implementation. */
 
-  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) = 0;
+  virtual bool do_update_begin(int texture_width, int texture_height) = 0;
+  virtual void do_update_end() = 0;
+
+  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels) = 0;
   virtual void do_draw() = 0;
 
-  virtual half4 *do_map_texture_buffer(int width, int height) = 0;
+  virtual half4 *do_map_texture_buffer() = 0;
   virtual void do_unmap_texture_buffer() = 0;
 
+  virtual DeviceGraphicsInteropDestination do_graphics_interop_get() = 0;
+
+  thread_mutex mutex_;
   GPUDisplayParams params_;
 
  private:
+  /* Mark texture as its content has been updated.
+   * Used from places which knows that the texture content has been brough up-to-date, so that the
+   * drawing knows whether it can be performed, and whether drawing happenned with an up-to-date
+   * texture state. */
+  void mark_texture_updated();
+
+  /* State of the update process. */
+  struct {
+    /* True when update is in process, indicated by `update_begin()` / `update_end()`. */
+    bool is_active = false;
+  } update_state_;
+
   /* State of the texture, which is needed for an integration with render session and interactive
    * updates and navigation. */
   struct {
@@ -141,7 +202,11 @@ class GPUDisplay {
     bool is_outdated = true;
   } texture_state_;
 
-  bool is_mapped_ = false;
+  /* State of the texture buffer. Is tracked to perform sanity checks. */
+  struct {
+    /* True when the texture buffer is mapped with `map_texture_buffer()`. */
+    bool is_mapped = false;
+  } texture_buffer_state_;
 };
 
 CCL_NAMESPACE_END

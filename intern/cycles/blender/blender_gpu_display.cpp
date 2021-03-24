@@ -294,15 +294,77 @@ BlenderGPUDisplay::BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_sc
     : display_shader_(BlenderDisplayShader::create(b_engine, b_scene))
 {
   /* Create context while on the main thread. */
-  gpu_context_create();
+  gl_context_create();
 }
 
 BlenderGPUDisplay::~BlenderGPUDisplay()
 {
-  gpu_resources_destroy();
+  gl_resources_destroy();
 }
 
-void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height)
+/* --------------------------------------------------------------------
+ * Update procedure.
+ */
+
+bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
+{
+  if (!gl_context_) {
+    return false;
+  }
+
+  WM_opengl_context_activate(gl_context_);
+
+  glWaitSync((GLsync)gl_render_sync_, 0, GL_TIMEOUT_IGNORED);
+
+  if (!gl_texture_resources_ensure()) {
+    WM_opengl_context_activate(nullptr);
+    return false;
+  }
+
+  /* Update texture dimensions if needed. */
+  if (texture_.width != texture_width || texture_.height != texture_height) {
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture_.gl_id_);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA16F, texture_width, texture_height, 0, GL_RGBA, GL_HALF_FLOAT, 0);
+    texture_.width = texture_width;
+    texture_.height = texture_height;
+    glBindTexture(GL_TEXTURE_2D, 0);
+  }
+
+  /* Update PBO dimensions if needed. */
+  const int buffer_width = params_.size.x;
+  const int buffer_height = params_.size.y;
+  if (texture_.buffer_width != buffer_width || texture_.buffer_height != buffer_height) {
+    const size_t size_in_bytes = sizeof(half4) * buffer_width * buffer_height;
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, size_in_bytes, 0, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+
+    texture_.buffer_width = buffer_width;
+    texture_.buffer_height = buffer_height;
+  }
+
+  /* New content will be provided to the texture in one way or another, so mark this in a
+   * centralized place. */
+  texture_.need_update = true;
+
+  return true;
+}
+
+void BlenderGPUDisplay::do_update_end()
+{
+  gl_upload_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  glFlush();
+
+  WM_opengl_context_activate(nullptr);
+}
+
+/* --------------------------------------------------------------------
+ * Texture update from CPU buffer.
+ */
+
+void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels)
 {
   /* This call copies pixels to a Pixel Buffer Object (PBO) which is much cheaper from CPU time
    * point of view than to copy data directly to the OpenGL texture.
@@ -311,44 +373,27 @@ void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels, int 
    * doing partial updates of the texture (although, in practice even partial updates might peak
    * with a full-frame buffer stored on the CPU if the GPU is currently occupied), */
 
-  half4 *mapped_rgba_pixels = map_texture_buffer(width, height);
+  half4 *mapped_rgba_pixels = map_texture_buffer();
   if (!mapped_rgba_pixels) {
     return;
   }
 
-  const size_t size_in_bytes = sizeof(half4) * width * height;
+  const size_t size_in_bytes = sizeof(half4) * texture_.width * texture_.height;
   memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
   unmap_texture_buffer();
 }
 
-half4 *BlenderGPUDisplay::do_map_texture_buffer(int width, int height)
+/* --------------------------------------------------------------------
+ * Texture buffer mapping.
+ */
+
+half4 *BlenderGPUDisplay::do_map_texture_buffer()
 {
-  if (!gl_context_) {
-    return nullptr;
-  }
-
-  WM_opengl_context_activate(gl_context_);
-
-  if (!texture_ensure()) {
-    return nullptr;
-  }
-
-  const size_t size_in_bytes = sizeof(half4) * width * height;
-
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
-
-  /* Invalidate old contents - avoids stalling if the buffer is still waiting in queue to be
-   * rendered. */
-  glBufferData(GL_PIXEL_UNPACK_BUFFER, size_in_bytes, 0, GL_STREAM_DRAW);
 
   half4 *mapped_rgba_pixels = reinterpret_cast<half4 *>(
       glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_WRITE_ONLY));
-  if (mapped_rgba_pixels) {
-    texture_.width = width;
-    texture_.height = height;
-    texture_.need_update = true;
-  }
-  else {
+  if (!mapped_rgba_pixels) {
     LOG(ERROR) << "Error mapping BlenderGPUDisplay pixel buffer object.";
   }
 
@@ -364,18 +409,34 @@ void BlenderGPUDisplay::do_unmap_texture_buffer()
   WM_opengl_context_activate(nullptr);
 }
 
-void BlenderGPUDisplay::get_cuda_buffer()
+/* --------------------------------------------------------------------
+ * Graphics interoperability.
+ */
+
+DeviceGraphicsInteropDestination BlenderGPUDisplay::do_graphics_interop_get()
 {
-  /* TODO(sergey): Needs implementation. */
+  DeviceGraphicsInteropDestination interop_dst;
+
+  interop_dst.buffer_width = texture_.buffer_width;
+  interop_dst.buffer_height = texture_.buffer_height;
+  interop_dst.opengl_pbo_id = texture_.gl_pbo_id_;
+
+  return interop_dst;
 }
+
+/* --------------------------------------------------------------------
+ * Drawing.
+ */
 
 void BlenderGPUDisplay::do_draw()
 {
   const bool transparent = true;  // TODO(sergey): Derive this from Film.
 
-  if (!gpu_resources_ensure()) {
+  if (!gl_draw_resources_ensure()) {
     return;
   }
+
+  glWaitSync((GLsync)gl_upload_sync_, 0, GL_TIMEOUT_IGNORED);
 
   if (transparent) {
     glEnable(GL_BLEND);
@@ -424,9 +485,12 @@ void BlenderGPUDisplay::do_draw()
   if (transparent) {
     glDisable(GL_BLEND);
   }
+
+  gl_render_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+  glFlush();
 }
 
-void BlenderGPUDisplay::gpu_context_create()
+void BlenderGPUDisplay::gl_context_create()
 {
   DRW_opengl_context_release();
 
@@ -438,7 +502,7 @@ void BlenderGPUDisplay::gpu_context_create()
   DRW_opengl_context_activate();
 }
 
-bool BlenderGPUDisplay::gpu_resources_ensure()
+bool BlenderGPUDisplay::gl_draw_resources_ensure()
 {
   if (!texture_.gl_id_) {
     /* If there is no texture allocated, there is nothing to draw. Inform the draw call that it can
@@ -447,10 +511,10 @@ bool BlenderGPUDisplay::gpu_resources_ensure()
     return false;
   }
 
-  if (gpu_resource_creation_attempted_) {
-    return gpu_resources_created_;
+  if (gl_draw_resource_creation_attempted_) {
+    return gl_draw_resources_created_;
   }
-  gpu_resource_creation_attempted_ = true;
+  gl_draw_resource_creation_attempted_ = true;
 
   if (!vertex_buffer_) {
     glGenBuffers(1, &vertex_buffer_);
@@ -460,12 +524,12 @@ bool BlenderGPUDisplay::gpu_resources_ensure()
     }
   }
 
-  gpu_resources_created_ = true;
+  gl_draw_resources_created_ = true;
 
   return true;
 }
 
-void BlenderGPUDisplay::gpu_resources_destroy()
+void BlenderGPUDisplay::gl_resources_destroy()
 {
   if (vertex_buffer_ != 0) {
     glDeleteBuffers(1, &vertex_buffer_);
@@ -492,7 +556,7 @@ void BlenderGPUDisplay::gpu_resources_destroy()
   }
 }
 
-bool BlenderGPUDisplay::texture_ensure()
+bool BlenderGPUDisplay::gl_texture_resources_ensure()
 {
   if (texture_.creation_attempted) {
     return texture_.is_created;
@@ -514,13 +578,12 @@ bool BlenderGPUDisplay::texture_ensure()
   glBindTexture(GL_TEXTURE_2D, texture_.gl_id_);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
   glBindTexture(GL_TEXTURE_2D, 0);
 
   /* Create PBO for the texture. */
   glGenBuffers(1, &texture_.gl_pbo_id_);
   if (!texture_.gl_pbo_id_) {
-    LOG(ERROR) << "Error creating texture.";
+    LOG(ERROR) << "Error creating texture pixel buffer object.";
     return false;
   }
 
@@ -537,8 +600,8 @@ void BlenderGPUDisplay::texture_update_if_needed()
   }
 
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, texture_.gl_pbo_id_);
-  glTexImage2D(
-      GL_TEXTURE_2D, 0, GL_RGBA16F, texture_.width, texture_.height, 0, GL_RGBA, GL_HALF_FLOAT, 0);
+  glTexSubImage2D(
+      GL_TEXTURE_2D, 0, 0, 0, texture_.width, texture_.height, GL_RGBA, GL_HALF_FLOAT, 0);
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 
   texture_.need_update = false;
@@ -560,16 +623,21 @@ void BlenderGPUDisplay::vertex_buffer_update()
   vpointer[2] = params_.offset.x;
   vpointer[3] = params_.offset.y;
 
+  // vpointer[4] = (float)texture_.width / (float)params_.size.x;
   vpointer[4] = 1.0f;
   vpointer[5] = 0.0f;
   vpointer[6] = (float)params_.size.x + params_.offset.x;
   vpointer[7] = params_.offset.y;
 
+  // vpointer[8] = (float)texture_.width / (float)params_.size.x;
+  // vpointer[9] = (float)texture_.height / (float)params_.size.y;
   vpointer[8] = 1.0f;
   vpointer[9] = 1.0f;
   vpointer[10] = (float)params_.size.x + params_.offset.x;
   vpointer[11] = (float)params_.size.y + params_.offset.y;
 
+  // vpointer[12] = 0.0f;
+  // vpointer[13] = (float)texture_.height / (float)params_.size.y;
   vpointer[12] = 0.0f;
   vpointer[13] = 1.0f;
   vpointer[14] = params_.offset.x;

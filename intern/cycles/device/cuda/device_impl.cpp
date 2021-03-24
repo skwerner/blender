@@ -2280,6 +2280,99 @@ unique_ptr<DeviceQueue> CUDADevice::queue_create()
   return make_unique<CUDADeviceQueue>(this);
 }
 
+/* --------------------------------------------------------------------
+ * Graphics resources interoperability.
+ */
+
+namespace {
+
+class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
+ public:
+  CUDADeviceGraphicsInterop(CUDADevice *device) : device_(device)
+  {
+  }
+
+  ~CUDADeviceGraphicsInterop()
+  {
+    CUDAContextScope scope(device_);
+
+    if (cu_graphics_resource_) {
+      cuda_device_assert(device_, cuGraphicsUnregisterResource(cu_graphics_resource_));
+    }
+  }
+
+  virtual void set_destination(const DeviceGraphicsInteropDestination &destination) override
+  {
+    const int64_t new_buffer_area = int64_t(destination.buffer_width) * destination.buffer_height;
+
+    if (opengl_pbo_id_ == destination.opengl_pbo_id && buffer_area_ == new_buffer_area) {
+      return;
+    }
+
+    CUDAContextScope scope(device_);
+
+    if (cu_graphics_resource_) {
+      cuda_device_assert(device_, cuGraphicsUnregisterResource(cu_graphics_resource_));
+    }
+
+    const CUresult result = cuGraphicsGLRegisterBuffer(
+        &cu_graphics_resource_, destination.opengl_pbo_id, CU_GRAPHICS_MAP_RESOURCE_FLAGS_NONE);
+    if (result != CUDA_SUCCESS) {
+      LOG(ERROR) << "Error registering OpenGL buffer: " << cuewErrorString(result);
+    }
+
+    opengl_pbo_id_ = destination.opengl_pbo_id;
+    buffer_area_ = new_buffer_area;
+  }
+
+  virtual device_ptr map() override
+  {
+    if (!cu_graphics_resource_) {
+      return 0;
+    }
+
+    CUDAContextScope scope(device_);
+
+    CUdeviceptr cu_buffer;
+    size_t bytes;
+
+    cuda_device_assert(device_, cuGraphicsMapResources(1, &cu_graphics_resource_, 0));
+    cuda_device_assert(
+        device_, cuGraphicsResourceGetMappedPointer(&cu_buffer, &bytes, cu_graphics_resource_));
+
+    return static_cast<device_ptr>(cu_buffer);
+  }
+
+  virtual void unmap() override
+  {
+    CUDAContextScope scope(device_);
+
+    cuda_device_assert(device_, cuGraphicsUnmapResources(1, &cu_graphics_resource_, 0));
+  }
+
+ protected:
+  CUDADevice *device_ = nullptr;
+
+  /* OpenGL PBO which is currently registered as the destination for the CUDA buffer.  */
+  uint opengl_pbo_id_ = 0;
+  /* Buffer area in pixels of the corresponding PBO. */
+  int64_t buffer_area_ = 0;
+
+  CUgraphicsResource cu_graphics_resource_ = nullptr;
+};
+
+} /* namespace */
+
+bool CUDADevice::should_use_graphics_interop()
+{
+  return true;
+}
+
+unique_ptr<DeviceGraphicsInterop> CUDADevice::graphics_interop_create()
+{
+  return make_unique<CUDADeviceGraphicsInterop>(this);
+}
+
 CCL_NAMESPACE_END
 
 #endif

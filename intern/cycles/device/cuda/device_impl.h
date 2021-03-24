@@ -268,6 +268,10 @@ class CUDADevice : public Device {
   virtual void task_cancel() override;
 
   virtual unique_ptr<DeviceQueue> queue_create() override;
+
+  /* Graphics resources interoperability. */
+  virtual bool should_use_graphics_interop() override;
+  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create();
 };
 
 CCL_NAMESPACE_END

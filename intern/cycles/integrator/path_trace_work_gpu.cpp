@@ -388,17 +388,28 @@ int PathTraceWorkGPU::get_max_num_paths()
 
 void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
 {
-  /* TODO(sergey): Support CUDA GL Graphics, avoiding CPU roundtrip. */
+  if (!interop_use_checked_) {
+    Device *device = queue_->device;
+    interop_use_ = device->should_use_graphics_interop();
+    interop_use_checked_ = true;
+  }
 
-  const int full_x = effective_buffer_params_.full_x;
-  const int full_y = effective_buffer_params_.full_y;
+  if (interop_use_) {
+    if (copy_to_gpu_display_interop(gpu_display, sample_scale)) {
+      return;
+    }
+    interop_use_ = false;
+  }
+
+  copy_to_gpu_display_naive(gpu_display, sample_scale);
+}
+
+void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, float sample_scale)
+{
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
   const int final_width = render_buffers_->params.width;
   const int final_height = render_buffers_->params.height;
-
-  int offset, stride;
-  effective_buffer_params_.get_offset_stride(offset, stride);
 
   /* Re-allocate display memory if needed, and make sure the device pointer is allocated.
    *
@@ -407,15 +418,58 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
    * allocated memory as well. */
   if (gpu_display_rgba_half_.data_width != final_width ||
       gpu_display_rgba_half_.data_height != final_height) {
-    gpu_display_rgba_half_.alloc(final_width, final_height);
+    gpu_display_rgba_half_.alloc(width, height);
     /* TODO(sergey): There should be a way to make sure device-side memory is allocated without
      * transfering zeroes to the device. */
     gpu_display_rgba_half_.zero_to_device();
   }
 
+  film_convert(gpu_display_rgba_half_.device_pointer, sample_scale);
+  queue_->synchronize();
+
+  gpu_display_rgba_half_.copy_from_device();
+
+  gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data());
+}
+
+bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, float sample_scale)
+{
+  Device *device = queue_->device;
+
+  if (!device_graphics_interop_) {
+    device_graphics_interop_ = device->graphics_interop_create();
+  }
+
+  const DeviceGraphicsInteropDestination graphics_interop_dst =
+      gpu_display->graphics_interop_get();
+  device_graphics_interop_->set_destination(graphics_interop_dst);
+
+  const device_ptr d_rgba_half = device_graphics_interop_->map();
+  if (!d_rgba_half) {
+    return false;
+  }
+
+  film_convert(d_rgba_half, sample_scale);
+
+  device_graphics_interop_->unmap();
+  queue_->synchronize();
+
+  return true;
+}
+
+void PathTraceWorkGPU::film_convert(device_ptr d_rgba_half, float sample_scale)
+{
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
+
   const int work_size = width * height;
 
-  void *args[] = {&gpu_display_rgba_half_.device_pointer,
+  void *args[] = {&d_rgba_half,
                   &render_buffers_->buffer.device_pointer,
                   const_cast<float *>(&sample_scale),
                   const_cast<int *>(&full_x),
@@ -426,11 +480,6 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
                   &stride};
 
   queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
-  queue_->synchronize();
-
-  gpu_display_rgba_half_.copy_from_device();
-
-  gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data(), width, height);
 }
 
 CCL_NAMESPACE_END

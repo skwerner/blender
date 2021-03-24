@@ -19,6 +19,7 @@
 #include "kernel/integrator/integrator_path_state.h"
 #include "kernel/integrator/integrator_state.h"
 
+#include "device/device_graphics_interop.h"
 #include "device/device_memory.h"
 #include "device/device_queue.h"
 
@@ -59,6 +60,18 @@ class PathTraceWorkGPU : public PathTraceWork {
 
   int get_max_num_paths();
 
+  /* Naive implementation of the `copy_to_gpu_display()` which performs film conversion on the
+   * device, then copies pixels to the host and pushes them to the `gpu_display`. */
+  void copy_to_gpu_display_naive(GPUDisplay *gpu_display, float sample_scale);
+
+  /* Implementation of `copy_to_gpu_display()` which uses driver's OpenGL/GPU interoperability
+   * functionality, avoiding copy of pixels to the host. */
+  bool copy_to_gpu_display_interop(GPUDisplay *gpu_display, float sample_scale);
+
+  /* Run the film conversion kernel which will store result in the given memory.
+   * This is a common part of both `copy_to_gpu_display` implementations. */
+  void film_convert(device_ptr d_rgba_half, float sample_scale);
+
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */
   unique_ptr<DeviceQueue> queue_;
@@ -84,6 +97,12 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Temporary buffer used by the copy_to_gpu_display() whenever graphics interoperability is not
    * available. Is allocated on-demand. */
   device_vector<half4> gpu_display_rgba_half_;
+
+  unique_ptr<DeviceGraphicsInterop> device_graphics_interop_;
+
+  /* Cached result of device->should_use_graphics_interop(). */
+  bool interop_use_checked_ = false;
+  bool interop_use_ = false;
 
   /* Maximum path index, effective number of paths used may be smaller than
    * the size of the integrator_state_ buffer so can avoid iterating over the

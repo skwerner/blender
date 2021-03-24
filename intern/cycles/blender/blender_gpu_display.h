@@ -100,30 +100,31 @@ class BlenderGPUDisplay : public GPUDisplay {
   BlenderGPUDisplay(BL::RenderEngine &b_engine, BL::Scene &b_scene);
   ~BlenderGPUDisplay();
 
-  virtual void get_cuda_buffer() override;
-
  protected:
-  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels, int width, int height) override;
+  virtual bool do_update_begin(int texture_width, int texture_height) override;
+  virtual void do_update_end() override;
+
+  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels) override;
   virtual void do_draw() override;
 
-  virtual half4 *do_map_texture_buffer(int width, int height) override;
+  virtual half4 *do_map_texture_buffer() override;
   virtual void do_unmap_texture_buffer() override;
+
+  virtual DeviceGraphicsInteropDestination do_graphics_interop_get() override;
 
   /* Helper function which allocates new GPU context, without affecting the current
    * active GPU context. */
-  void gpu_context_create();
+  void gl_context_create();
 
-  /* Ensure all runtime GPU resources are allocated.
+  /* Make sure texture is allocated and its initial configuration is performed. */
+  bool gl_texture_resources_ensure();
+
+  /* Ensure all runtime GPU resources needefd for drawing are allocated.
    * Returns true if all resources needed for drawing are available. */
-  bool gpu_resources_ensure();
+  bool gl_draw_resources_ensure();
 
   /* Destroy all GPU resources which are being used by this object. */
-  void gpu_resources_destroy();
-
-  /* Make sure texture is allocated and its initial configuration is performed.
-   *
-   * NOTE: Must be called from a proper active GPU context. */
-  bool texture_ensure();
+  void gl_resources_destroy();
 
   /* Update GPU texture dimensions and content if needed (new pixel data was provided).
    *
@@ -163,18 +164,25 @@ class BlenderGPUDisplay : public GPUDisplay {
     /* Dimensions of the texture in pixels. */
     int width = 0;
     int height = 0;
+
+    /* Dimensions of the underlying PBO. */
+    int buffer_width = 0;
+    int buffer_height = 0;
   } texture_;
 
   unique_ptr<BlenderDisplayShader> display_shader_;
 
   /* Special track of whether GPU resources were attempted to be created, to avoid attempts of
    * their re-creation on failure on every redraw. */
-  bool gpu_resource_creation_attempted_ = false;
-  bool gpu_resources_created_ = false;
+  bool gl_draw_resource_creation_attempted_ = false;
+  bool gl_draw_resources_created_ = false;
 
   /* Vertex buffer which hold vertrices of a triangle fan which is textures with the texture
    * holding the render result.  */
   uint vertex_buffer_ = 0;
+
+  void *gl_render_sync_ = nullptr;
+  void *gl_upload_sync_ = nullptr;
 };
 
 CCL_NAMESPACE_END

@@ -59,6 +59,7 @@ CCL_NAMESPACE_BEGIN
 #define PRIM_NONE (~0)
 #define LAMP_NONE (~0)
 #define ID_NONE (0.0f)
+#define PASS_UNUSED (~0)
 
 #define VOLUME_STACK_SIZE 32
 
@@ -325,6 +326,13 @@ enum PathRayFlag {
   PATH_RAY_SUBSURFACE = (1 << 23),
   /* Contribute to denoising features. */
   PATH_RAY_DENOISING_FEATURES = (1 << 24),
+  /* Render pass categories. */
+  PATH_RAY_REFLECT_PASS = (1 << 25),
+  PATH_RAY_TRANSMISSION_PASS = (1 << 26),
+  PATH_RAY_VOLUME_PASS = (1 << 27),
+  PATH_RAY_ANY_PASS = (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS | PATH_RAY_VOLUME_PASS),
+  /* Shadow ray is for a light or surface. */
+  PATH_RAY_SHADOW_FOR_LIGHT = (1 << 28),
 };
 
 /* Closure Label */
@@ -566,20 +574,8 @@ typedef ccl_addr_space struct PathRadiance {
 } PathRadiance;
 
 typedef struct BsdfEval {
-#ifdef __PASSES__
-  int use_light_pass;
-#endif
-
   float3 diffuse;
-#ifdef __PASSES__
   float3 glossy;
-  float3 transmission;
-  float3 transparent;
-  float3 volume;
-#endif
-#ifdef __SHADOW_TRICKS__
-  float3 sum_no_mis;
-#endif
 } BsdfEval;
 
 /* Shader Flag */

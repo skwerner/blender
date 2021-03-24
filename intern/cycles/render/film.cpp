@@ -455,6 +455,20 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_aov_value_num = 0;
   kfilm->pass_aov_color_num = 0;
 
+  /* Mark with PASS_UNUSED to avoid mask test in the kernel. */
+  kfilm->pass_background = PASS_UNUSED;
+  kfilm->pass_emission = PASS_UNUSED;
+  kfilm->pass_ao = PASS_UNUSED;
+  kfilm->pass_diffuse_direct = PASS_UNUSED;
+  kfilm->pass_diffuse_indirect = PASS_UNUSED;
+  kfilm->pass_glossy_direct = PASS_UNUSED;
+  kfilm->pass_glossy_indirect = PASS_UNUSED;
+  kfilm->pass_volume_direct = PASS_UNUSED;
+  kfilm->pass_volume_indirect = PASS_UNUSED;
+  kfilm->pass_volume_direct = PASS_UNUSED;
+  kfilm->pass_volume_indirect = PASS_UNUSED;
+  kfilm->pass_shadow = PASS_UNUSED;
+
   bool have_cryptomatte = false;
 
   for (size_t i = 0; i < scene->passes.size(); i++) {

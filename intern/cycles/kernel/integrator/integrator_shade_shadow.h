@@ -86,8 +86,7 @@ ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
 
   const bool shadow_isect_done = true;
   if (shadow_isect_done) {
-    const float3 L = INTEGRATOR_STATE(shadow_light, L);
-    kernel_accum_light(INTEGRATOR_STATE_PASS, L, render_buffer);
+    kernel_accum_light(INTEGRATOR_STATE_PASS, render_buffer);
 
     INTEGRATOR_SHADOW_PATH_TERMINATE(SHADE_SHADOW);
     return;

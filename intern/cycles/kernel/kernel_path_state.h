@@ -119,6 +119,9 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
     /* volume scatter */
     flag |= PATH_RAY_VOLUME_SCATTER;
     flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
+    if (bounce == 1) {
+      flag |= PATH_RAY_VOLUME_PASS;
+    }
 
     /* TODO */
 #  if 0
@@ -180,6 +183,11 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
     else {
       kernel_assert(label & LABEL_SINGULAR);
       flag |= PATH_RAY_GLOSSY | PATH_RAY_SINGULAR | PATH_RAY_MIS_SKIP;
+    }
+
+    /* Render pass categories. */
+    if (bounce == 1) {
+      flag |= (label & LABEL_TRANSMIT) ? PATH_RAY_TRANSMISSION_PASS : PATH_RAY_REFLECT_PASS;
     }
   }
 

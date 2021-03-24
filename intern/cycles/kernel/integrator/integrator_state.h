@@ -100,6 +100,9 @@ typedef struct IntegratorPathState {
   /* Throughput. */
   float3 throughput;
 
+  /* Ratio of throughput to distinguish diffuse and glossy render passes. */
+  float3 diffuse_glossy_ratio;
+
   /* Denoising. */
   float3 denoising_feature_throughput;
 } IntegratorPathState;
@@ -139,13 +142,6 @@ typedef struct IntegratorSubsurfaceState {
   float roughness;
 } IntegratorSubsurfaceState;
 
-typedef struct IntegratorShadowLight {
-  /* TODO: can we write this somewhere with the additional memory usage? */
-  float3 L;
-  /* TODO: use a bit somewhere */
-  uint8_t is_light;
-} IntegratorShadowLight;
-
 /* Combined state for path. */
 typedef struct IntegratorState {
   /* Basic Path Tracing */
@@ -162,7 +158,6 @@ typedef struct IntegratorState {
   /* Shadows / Next Event Estimation */
   IntegratorRayState shadow_ray;
   IntegratorIntersectionState shadow_isect[INTEGRATOR_SHADOW_ISECT_SIZE];
-  IntegratorShadowLight shadow_light;
 
   /* Transparent Shadows */
   IntegratorPathState shadow_path;

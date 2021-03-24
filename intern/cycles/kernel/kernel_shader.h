@@ -596,9 +596,19 @@ ccl_device_inline void shader_prepare_closures(INTEGRATOR_STATE_CONST_ARGS, Shad
 
 /* BSDF */
 
+ccl_device_inline bool shader_bsdf_is_transmission(const ShaderData *sd, const float3 omega_in)
+{
+  /* For curves use the smooth normal, particularly for ribbons the geometric
+   * normal gives too much darkening otherwise. */
+  const float3 Ng = (sd->type & PRIMITIVE_ALL_CURVE) ? sd->N : sd->Ng;
+
+  return dot(Ng, omega_in) < 0.0f;
+}
+
 ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
                                                ShaderData *sd,
                                                const float3 omega_in,
+                                               const bool is_transmission,
                                                float *pdf,
                                                const ShaderClosure *skip_sc,
                                                BsdfEval *result_eval,
@@ -612,10 +622,12 @@ ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
 
     if (sc != skip_sc && CLOSURE_IS_BSDF(sc->type)) {
       float bsdf_pdf = 0.0f;
-      float3 eval = bsdf_eval(kg, sd, sc, omega_in, &bsdf_pdf);
+      float3 eval = bsdf_eval(kg, sd, sc, omega_in, is_transmission, &bsdf_pdf);
 
       if (bsdf_pdf != 0.0f) {
-        bsdf_eval_accum(result_eval, sc->type, eval * sc->weight, 1.0f);
+        const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
+                                 CLOSURE_IS_BSDF_BSSRDF(sc->type));
+        bsdf_eval_accum(result_eval, is_diffuse, eval * sc->weight, 1.0f);
         sum_pdf += bsdf_pdf * sc->sample_weight;
       }
 
@@ -635,19 +647,20 @@ ccl_device_inline
     shader_bsdf_eval(const KernelGlobals *kg,
                      ShaderData *sd,
                      const float3 omega_in,
+                     const bool is_transmission,
                      BsdfEval *eval,
-                     float light_pdf,
+                     const float light_pdf,
                      bool use_mis)
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_EVAL);
 
-  bsdf_eval_init(eval, NBUILTIN_CLOSURES, zero_float3(), kernel_data.film.use_light_pass);
+  bsdf_eval_init(eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
   float pdf;
-  _shader_bsdf_multi_eval(kg, sd, omega_in, &pdf, NULL, eval, 0.0f, 0.0f);
+  _shader_bsdf_multi_eval(kg, sd, omega_in, is_transmission, &pdf, NULL, eval, 0.0f, 0.0f);
   if (use_mis) {
     float weight = power_heuristic(light_pdf, pdf);
-    bsdf_eval_mis(eval, weight);
+    bsdf_eval_mul(eval, weight);
   }
 }
 
@@ -739,11 +752,15 @@ ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
   label = bsdf_sample(kg, sd, sc, randu, randv, &eval, omega_in, domega_in, pdf);
 
   if (*pdf != 0.0f) {
-    bsdf_eval_init(bsdf_eval, sc->type, eval * sc->weight, kernel_data.film.use_light_pass);
+    const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
+                             CLOSURE_IS_BSDF_BSSRDF(sc->type));
+    bsdf_eval_init(bsdf_eval, is_diffuse, eval * sc->weight, kernel_data.film.use_light_pass);
 
     if (sd->num_closure > 1) {
+      const bool is_transmission = shader_bsdf_is_transmission(sd, *omega_in);
       float sweight = sc->sample_weight;
-      _shader_bsdf_multi_eval(kg, sd, *omega_in, pdf, sc, bsdf_eval, *pdf * sweight, sweight);
+      _shader_bsdf_multi_eval(
+          kg, sd, *omega_in, is_transmission, pdf, sc, bsdf_eval, *pdf * sweight, sweight);
     }
   }
 
@@ -1081,7 +1098,7 @@ ccl_device_inline void _shader_volume_phase_multi_eval(const ShaderData *sd,
       float3 eval = volume_phase_eval(sd, sc, omega_in, &phase_pdf);
 
       if (phase_pdf != 0.0f) {
-        bsdf_eval_accum(result_eval, sc->type, eval, 1.0f);
+        bsdf_eval_accum(result_eval, false, eval, 1.0f);
         sum_pdf += phase_pdf * sc->sample_weight;
       }
 
@@ -1100,7 +1117,7 @@ ccl_device void shader_volume_phase_eval(const KernelGlobals *kg,
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_VOLUME_EVAL);
 
-  bsdf_eval_init(eval, NBUILTIN_CLOSURES, zero_float3(), kernel_data.film.use_light_pass);
+  bsdf_eval_init(eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
   _shader_volume_phase_multi_eval(sd, omega_in, pdf, -1, eval, 0.0f, 0.0f);
 }
@@ -1164,7 +1181,7 @@ ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
   label = volume_phase_sample(sd, sc, randu, randv, &eval, omega_in, domega_in, pdf);
 
   if (*pdf != 0.0f) {
-    bsdf_eval_init(phase_eval, sc->type, eval, kernel_data.film.use_light_pass);
+    bsdf_eval_init(phase_eval, false, eval, kernel_data.film.use_light_pass);
   }
 
   return label;
@@ -1189,7 +1206,7 @@ ccl_device int shader_phase_sample_closure(const KernelGlobals *kg,
   label = volume_phase_sample(sd, sc, randu, randv, &eval, omega_in, domega_in, pdf);
 
   if (*pdf != 0.0f)
-    bsdf_eval_init(phase_eval, sc->type, eval, kernel_data.film.use_light_pass);
+    bsdf_eval_init(phase_eval, false, eval, kernel_data.film.use_light_pass);
 
   return label;
 }

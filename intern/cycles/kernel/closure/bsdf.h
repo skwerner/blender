@@ -488,14 +488,12 @@ ccl_device_inline
               ShaderData *sd,
               const ShaderClosure *sc,
               const float3 omega_in,
+              const bool is_transmission,
               float *pdf)
 {
-  /* For curves use the smooth normal, particularly for ribbons the geometric
-   * normal gives too much darkening otherwise. */
-  const float3 Ng = (sd->type & PRIMITIVE_ALL_CURVE) ? sd->N : sd->Ng;
-  float3 eval;
+  float3 eval = zero_float3();
 
-  if (dot(Ng, omega_in) >= 0.0f) {
+  if (!is_transmission) {
     switch (sc->type) {
       case CLOSURE_BSDF_DIFFUSE_ID:
       case CLOSURE_BSDF_BSSRDF_ID:
@@ -581,7 +579,6 @@ ccl_device_inline
         break;
 #endif
       default:
-        eval = make_float3(0.0f, 0.0f, 0.0f);
         break;
     }
     if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {
@@ -674,7 +671,6 @@ ccl_device_inline
         break;
 #endif
       default:
-        eval = make_float3(0.0f, 0.0f, 0.0f);
         break;
     }
     if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {

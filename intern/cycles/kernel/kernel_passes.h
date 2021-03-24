@@ -339,13 +339,6 @@ ccl_device_inline void kernel_write_light_passes(const KernelGlobals *ccl_restri
 
   if (light_flag & PASSMASK(AO))
     kernel_write_pass_float3(buffer + kernel_data.film.pass_ao, L->ao);
-
-  if (light_flag & PASSMASK(SHADOW)) {
-    float3 shadow = L->shadow;
-    kernel_write_pass_float4(
-        buffer + kernel_data.film.pass_shadow,
-        make_float4(shadow.x, shadow.y, shadow.z, kernel_data.film.pass_shadow_scale));
-  }
 #  endif
 }
 #endif

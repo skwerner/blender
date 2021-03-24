@@ -160,8 +160,10 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   }
 
   /* Evaluate BSDF. */
+  const bool is_transmission = shader_bsdf_is_transmission(sd, ls.D);
+
   BsdfEval bsdf_eval ccl_optional_struct_init;
-  shader_bsdf_eval(kg, sd, ls.D, &bsdf_eval, ls.pdf, ls.shader & SHADER_USE_MIS);
+  shader_bsdf_eval(kg, sd, ls.D, is_transmission, &bsdf_eval, ls.pdf, ls.shader & SHADER_USE_MIS);
   bsdf_eval_mul3(&bsdf_eval, light_eval / ls.pdf);
 
   /* Path termination. */
@@ -178,12 +180,18 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   /* Write shadow ray and associated state to global memory. */
   integrator_state_write_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
 
-  INTEGRATOR_STATE_WRITE(shadow_light, L) = bsdf_eval_sum(&bsdf_eval); /* TODO */
-  INTEGRATOR_STATE_WRITE(shadow_light, is_light) = is_light;
-
   /* Copy state from main path to shadow path. */
   INTEGRATOR_STATE_COPY(shadow_path, path);
   INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
+
+  INTEGRATOR_STATE_WRITE(shadow_path, throughput) *= bsdf_eval_sum(&bsdf_eval);
+  if (INTEGRATOR_STATE(path, bounce) == 0) {
+    INTEGRATOR_STATE_WRITE(shadow_path,
+                           diffuse_glossy_ratio) = bsdf_eval_diffuse_glossy_ratio(&bsdf_eval);
+  }
+  INTEGRATOR_STATE_WRITE(shadow_path, flag) |= (is_light) ? PATH_RAY_SHADOW_FOR_LIGHT : 0;
+  INTEGRATOR_STATE_WRITE(shadow_path, flag) |= (is_transmission) ? PATH_RAY_TRANSMISSION_PASS :
+                                                                   PATH_RAY_REFLECT_PASS;
 
   /* Branch of shadow kernel. */
   INTEGRATOR_SHADOW_PATH_INIT(INTERSECT_SHADOW);
@@ -247,6 +255,10 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
     throughput *= bsdf_eval_sum(&bsdf_eval) / bsdf_pdf;
 #endif
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
+    if (INTEGRATOR_STATE(path, bounce) == 0) {
+      INTEGRATOR_STATE_WRITE(path,
+                             diffuse_glossy_ratio) = bsdf_eval_diffuse_glossy_ratio(&bsdf_eval);
+    }
 
     /* Update path state */
     if (!(label & LABEL_TRANSPARENT)) {

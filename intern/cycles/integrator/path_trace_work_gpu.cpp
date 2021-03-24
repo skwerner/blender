@@ -391,6 +391,14 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   if (!interop_use_checked_) {
     Device *device = queue_->device;
     interop_use_ = device->should_use_graphics_interop();
+
+    if (interop_use_) {
+      VLOG(2) << "Will be using graphics interop GPU display update.";
+    }
+    else {
+      VLOG(2) << "Will be using naive GPU display update.";
+    }
+
     interop_use_checked_ = true;
   }
 

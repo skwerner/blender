@@ -2365,7 +2365,32 @@ class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
 
 bool CUDADevice::should_use_graphics_interop()
 {
-  return true;
+  /* Check whether this device is part of OpenGL context.
+   *
+   * Using CUDA device for graphics interoperability which is not part of the OpenGL context is
+   * possible, but from the empiric measurements it can be considerably slower than using naive
+   * pixels copy. */
+
+  CUDAContextScope scope(this);
+
+  int num_all_devices = 0;
+  cuda_assert(cuDeviceGetCount(&num_all_devices));
+
+  if (num_all_devices == 0) {
+    return false;
+  }
+
+  vector<CUdevice> gl_devices(num_all_devices);
+  uint num_gl_devices;
+  cuGLGetDevices(&num_gl_devices, gl_devices.data(), num_all_devices, CU_GL_DEVICE_LIST_ALL);
+
+  for (CUdevice gl_device : gl_devices) {
+    if (gl_device == cuDevice) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 unique_ptr<DeviceGraphicsInterop> CUDADevice::graphics_interop_create()

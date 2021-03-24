@@ -404,7 +404,8 @@ class Device {
     return NULL;
   }
   /* Get kernel globals to pass to kernels. */
-  virtual void get_cpu_kernel_thread_globals(vector<CPUKernelThreadGlobals> &kernel_thread_globals)
+  virtual void get_cpu_kernel_thread_globals(
+      vector<CPUKernelThreadGlobals> & /*kernel_thread_globals*/)
   {
   }
   /* Get OpenShadingLanguage memory buffer. */

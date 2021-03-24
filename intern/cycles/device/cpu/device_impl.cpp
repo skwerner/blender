@@ -167,9 +167,6 @@ void CPUDevice::mem_copy_to(device_memory &mem)
     tex_free((device_texture &)mem);
     tex_alloc((device_texture &)mem);
   }
-  else if (mem.type == MEM_PIXELS) {
-    assert(!"mem_copy_to not supported for pixels.");
-  }
   else {
     if (!mem.device_pointer) {
       mem_alloc(mem);

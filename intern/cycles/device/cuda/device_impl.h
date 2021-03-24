@@ -227,37 +227,7 @@ class CUDADevice : public Device {
 
   void render(DeviceTask &task, RenderTile &rtile, device_vector<KernelWorkTile> &work_tiles);
 
-  void film_convert(DeviceTask &task,
-                    device_ptr buffer,
-                    device_ptr rgba_byte,
-                    device_ptr rgba_half);
-
   void shader(DeviceTask &task);
-
-  CUdeviceptr map_pixels(device_ptr mem);
-
-  void unmap_pixels(device_ptr mem);
-
-  void pixels_alloc(device_memory &mem);
-
-  void pixels_copy_from(device_memory &mem, int y, int w, int h);
-
-  void pixels_free(device_memory &mem);
-
-#  if 0
-  void draw_pixels(device_memory &mem,
-                   int y,
-                   int w,
-                   int h,
-                   int width,
-                   int height,
-                   int dx,
-                   int dy,
-                   int dw,
-                   int dh,
-                   bool transparent,
-                   const DeviceDrawParams &draw_params) override;
-#  endif
 
   void thread_run(DeviceTask &task);
 

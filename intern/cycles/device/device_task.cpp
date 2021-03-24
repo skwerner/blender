@@ -95,9 +95,6 @@ void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size) const
 
 void DeviceTask::update_progress(RenderTile *rtile, int pixel_samples)
 {
-  if (type == FILM_CONVERT)
-    return;
-
   if (update_progress_sample) {
     if (pixel_samples == -1) {
       pixel_samples = shader_w;

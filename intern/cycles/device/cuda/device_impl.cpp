@@ -879,10 +879,7 @@ void CUDADevice::generic_free(device_memory &mem)
 
 void CUDADevice::mem_alloc(device_memory &mem)
 {
-  if (mem.type == MEM_PIXELS && !background) {
-    pixels_alloc(mem);
-  }
-  else if (mem.type == MEM_TEXTURE) {
+  if (mem.type == MEM_TEXTURE) {
     assert(!"mem_alloc not supported for textures.");
   }
   else if (mem.type == MEM_GLOBAL) {
@@ -895,10 +892,7 @@ void CUDADevice::mem_alloc(device_memory &mem)
 
 void CUDADevice::mem_copy_to(device_memory &mem)
 {
-  if (mem.type == MEM_PIXELS) {
-    assert(!"mem_copy_to not supported for pixels.");
-  }
-  else if (mem.type == MEM_GLOBAL) {
+  if (mem.type == MEM_GLOBAL) {
     global_free(mem);
     global_alloc(mem);
   }
@@ -916,10 +910,7 @@ void CUDADevice::mem_copy_to(device_memory &mem)
 
 void CUDADevice::mem_copy_from(device_memory &mem, int y, int w, int h, int elem)
 {
-  if (mem.type == MEM_PIXELS && !background) {
-    pixels_copy_from(mem, y, w, h);
-  }
-  else if (mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL) {
+  if (mem.type == MEM_TEXTURE || mem.type == MEM_GLOBAL) {
     assert(!"mem_copy_from not supported for textures.");
   }
   else if (mem.host_pointer) {
@@ -960,10 +951,7 @@ void CUDADevice::mem_zero(device_memory &mem)
 
 void CUDADevice::mem_free(device_memory &mem)
 {
-  if (mem.type == MEM_PIXELS && !background) {
-    pixels_free(mem);
-  }
-  else if (mem.type == MEM_GLOBAL) {
+  if (mem.type == MEM_GLOBAL) {
     global_free(mem);
   }
   else if (mem.type == MEM_TEXTURE) {
@@ -1874,319 +1862,6 @@ void CUDADevice::render(DeviceTask &task,
   }
 }
 
-void CUDADevice::film_convert(DeviceTask &task,
-                              device_ptr buffer,
-                              device_ptr rgba_byte,
-                              device_ptr rgba_half)
-{
-  if (have_error())
-    return;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilmConvert;
-  CUdeviceptr d_rgba = map_pixels((rgba_byte) ? rgba_byte : rgba_half);
-  CUdeviceptr d_buffer = (CUdeviceptr)buffer;
-
-  /* get kernel function */
-  if (rgba_half) {
-    cuda_assert(
-        cuModuleGetFunction(&cuFilmConvert, cuModule, "kernel_cuda_convert_to_half_float"));
-  }
-  else {
-    cuda_assert(cuModuleGetFunction(&cuFilmConvert, cuModule, "kernel_cuda_convert_to_byte"));
-  }
-
-  float sample_scale = 1.0f / (task.sample + 1);
-
-  /* pass in parameters */
-  void *args[] = {&d_rgba,
-                  &d_buffer,
-                  &sample_scale,
-                  &task.x,
-                  &task.y,
-                  &task.w,
-                  &task.h,
-                  &task.offset,
-                  &task.stride};
-
-  /* launch kernel */
-  const int work_size = task.w * task.h;
-  int num_threads_per_block;
-  cuda_assert(cuFuncGetAttribute(
-      &num_threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, cuFilmConvert));
-  const int num_blocks = divide_up(work_size, num_threads_per_block);
-
-  cuda_assert(cuFuncSetCacheConfig(cuFilmConvert, CU_FUNC_CACHE_PREFER_L1));
-
-  cuda_assert(
-      cuLaunchKernel(cuFilmConvert, num_blocks, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
-
-  unmap_pixels((rgba_byte) ? rgba_byte : rgba_half);
-
-  cuda_assert(cuCtxSynchronize());
-}
-
-CUdeviceptr CUDADevice::map_pixels(device_ptr mem)
-{
-  /* XXX: Coment out code which does expect memory pointer to be allocated for pixel usage.
-   * Currently for the development pixels are allocated as a generic read-write memory. This is
-   * a temporary state for until GPUDisplay can have its own dedicated OpenGL context. For until
-   * then comment out hardcoded assumption. */
-  /* TODO(serey): Is there a way to have some safety check to ensure memory is allocated for pixels
-   * and has buffer+OpenGL texture? */
-#  if 0
-  if (!background) {
-    PixelMem pmem = pixel_mem_map[mem];
-    CUdeviceptr buffer;
-
-    size_t bytes;
-    cuda_assert(cuGraphicsMapResources(1, &pmem.cuPBOresource, 0));
-    cuda_assert(cuGraphicsResourceGetMappedPointer(&buffer, &bytes, pmem.cuPBOresource));
-
-    return buffer;
-  }
-#  endif
-
-  return (CUdeviceptr)mem;
-}
-
-void CUDADevice::unmap_pixels(device_ptr mem)
-{
-  /* XXX: Similar to the map_pixes(). */
-#  if 0
-  if (!background) {
-    PixelMem pmem = pixel_mem_map[mem];
-
-    cuda_assert(cuGraphicsUnmapResources(1, &pmem.cuPBOresource, 0));
-  }
-#  endif
-}
-
-void CUDADevice::pixels_alloc(device_memory &mem)
-{
-  PixelMem pmem;
-
-  pmem.w = mem.data_width;
-  pmem.h = mem.data_height;
-
-  CUDAContextScope scope(this);
-
-  glGenBuffers(1, &pmem.cuPBO);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pmem.cuPBO);
-  if (mem.data_type == TYPE_HALF)
-    glBufferData(
-        GL_PIXEL_UNPACK_BUFFER, pmem.w * pmem.h * sizeof(GLhalf) * 4, NULL, GL_DYNAMIC_DRAW);
-  else
-    glBufferData(
-        GL_PIXEL_UNPACK_BUFFER, pmem.w * pmem.h * sizeof(uint8_t) * 4, NULL, GL_DYNAMIC_DRAW);
-
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
-  glActiveTexture(GL_TEXTURE0);
-  glGenTextures(1, &pmem.cuTexId);
-  glBindTexture(GL_TEXTURE_2D, pmem.cuTexId);
-  if (mem.data_type == TYPE_HALF)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, pmem.w, pmem.h, 0, GL_RGBA, GL_HALF_FLOAT, NULL);
-  else
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, pmem.w, pmem.h, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  CUresult result = cuGraphicsGLRegisterBuffer(
-      &pmem.cuPBOresource, pmem.cuPBO, CU_GRAPHICS_MAP_RESOURCE_FLAGS_NONE);
-
-  if (result == CUDA_SUCCESS) {
-    mem.device_pointer = pmem.cuTexId;
-    pixel_mem_map[mem.device_pointer] = pmem;
-
-    mem.device_size = mem.memory_size();
-    stats.mem_alloc(mem.device_size);
-
-    return;
-  }
-  else {
-    /* failed to register buffer, fallback to no interop */
-    glDeleteBuffers(1, &pmem.cuPBO);
-    glDeleteTextures(1, &pmem.cuTexId);
-
-    background = true;
-  }
-}
-
-void CUDADevice::pixels_copy_from(device_memory &mem, int y, int w, int h)
-{
-  PixelMem pmem = pixel_mem_map[mem.device_pointer];
-
-  CUDAContextScope scope(this);
-
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pmem.cuPBO);
-  uchar *pixels = (uchar *)glMapBuffer(GL_PIXEL_UNPACK_BUFFER, GL_READ_ONLY);
-  size_t offset = sizeof(uchar) * 4 * y * w;
-  memcpy((uchar *)mem.host_pointer + offset, pixels + offset, sizeof(uchar) * 4 * w * h);
-  glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-  glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-}
-
-void CUDADevice::pixels_free(device_memory &mem)
-{
-  if (mem.device_pointer) {
-    PixelMem pmem = pixel_mem_map[mem.device_pointer];
-
-    CUDAContextScope scope(this);
-
-    cuda_assert(cuGraphicsUnregisterResource(pmem.cuPBOresource));
-    glDeleteBuffers(1, &pmem.cuPBO);
-    glDeleteTextures(1, &pmem.cuTexId);
-
-    pixel_mem_map.erase(pixel_mem_map.find(mem.device_pointer));
-    mem.device_pointer = 0;
-
-    stats.mem_free(mem.device_size);
-    mem.device_size = 0;
-  }
-}
-
-#  if 0
-void CUDADevice::draw_pixels(device_memory &mem,
-                             int y,
-                             int w,
-                             int h,
-                             int width,
-                             int height,
-                             int dx,
-                             int dy,
-                             int dw,
-                             int dh,
-                             bool transparent,
-                             const DeviceDrawParams &draw_params)
-{
-  assert(mem.type == MEM_PIXELS);
-
-  if (!background) {
-    const bool use_fallback_shader = (draw_params.bind_display_space_shader_cb == NULL);
-    PixelMem pmem = pixel_mem_map[mem.device_pointer];
-    float *vpointer;
-
-    CUDAContextScope scope(this);
-
-    /* for multi devices, this assumes the inefficient method that we allocate
-     * all pixels on the device even though we only render to a subset */
-    size_t offset = 4 * y * w;
-
-    if (mem.data_type == TYPE_HALF)
-      offset *= sizeof(GLhalf);
-    else
-      offset *= sizeof(uint8_t);
-
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pmem.cuPBO);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, pmem.cuTexId);
-    if (mem.data_type == TYPE_HALF) {
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_HALF_FLOAT, (void *)offset);
-    }
-    else {
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, (void *)offset);
-    }
-    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
-    if (transparent) {
-      glEnable(GL_BLEND);
-      glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
-    }
-
-    GLint shader_program;
-    if (use_fallback_shader) {
-      if (!bind_fallback_display_space_shader(dw, dh)) {
-        return;
-      }
-      shader_program = fallback_shader_program;
-    }
-    else {
-      draw_params.bind_display_space_shader_cb();
-      glGetIntegerv(GL_CURRENT_PROGRAM, &shader_program);
-    }
-
-    if (!vertex_buffer) {
-      glGenBuffers(1, &vertex_buffer);
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-    /* invalidate old contents -
-     * avoids stalling if buffer is still waiting in queue to be rendered */
-    glBufferData(GL_ARRAY_BUFFER, 16 * sizeof(float), NULL, GL_STREAM_DRAW);
-
-    vpointer = (float *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
-
-    if (vpointer) {
-      /* texture coordinate - vertex pair */
-      vpointer[0] = 0.0f;
-      vpointer[1] = 0.0f;
-      vpointer[2] = dx;
-      vpointer[3] = dy;
-
-      vpointer[4] = (float)w / (float)pmem.w;
-      vpointer[5] = 0.0f;
-      vpointer[6] = (float)width + dx;
-      vpointer[7] = dy;
-
-      vpointer[8] = (float)w / (float)pmem.w;
-      vpointer[9] = (float)h / (float)pmem.h;
-      vpointer[10] = (float)width + dx;
-      vpointer[11] = (float)height + dy;
-
-      vpointer[12] = 0.0f;
-      vpointer[13] = (float)h / (float)pmem.h;
-      vpointer[14] = dx;
-      vpointer[15] = (float)height + dy;
-
-      glUnmapBuffer(GL_ARRAY_BUFFER);
-    }
-
-    GLuint vertex_array_object;
-    GLuint position_attribute, texcoord_attribute;
-
-    glGenVertexArrays(1, &vertex_array_object);
-    glBindVertexArray(vertex_array_object);
-
-    texcoord_attribute = glGetAttribLocation(shader_program, "texCoord");
-    position_attribute = glGetAttribLocation(shader_program, "pos");
-
-    glEnableVertexAttribArray(texcoord_attribute);
-    glEnableVertexAttribArray(position_attribute);
-
-    glVertexAttribPointer(
-        texcoord_attribute, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (const GLvoid *)0);
-    glVertexAttribPointer(position_attribute,
-                          2,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          4 * sizeof(float),
-                          (const GLvoid *)(sizeof(float) * 2));
-
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
-
-    if (use_fallback_shader) {
-      glUseProgram(0);
-    }
-    else {
-      draw_params.unbind_display_space_shader_cb();
-    }
-
-    if (transparent) {
-      glDisable(GL_BLEND);
-    }
-
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    return;
-  }
-
-  Device::draw_pixels(mem, y, w, h, width, height, dx, dy, dw, dh, transparent, draw_params);
-}
-#  endif
-
 void CUDADevice::thread_run(DeviceTask &task)
 {
   CUDAContextScope scope(this);
@@ -2253,16 +1928,10 @@ void CUDADevice::task_add(DeviceTask &task)
   /* Synchronize all memory copies before executing task. */
   cuda_assert(cuCtxSynchronize());
 
-  if (task.type == DeviceTask::FILM_CONVERT) {
-    /* must be done in main thread due to opengl access */
-    film_convert(task, task.buffer, task.rgba_byte, task.rgba_half);
-  }
-  else {
-    task_pool.push([=] {
-      DeviceTask task_copy = task;
-      thread_run(task_copy);
-    });
-  }
+  task_pool.push([=] {
+    DeviceTask task_copy = task;
+    thread_run(task_copy);
+  });
 }
 
 void CUDADevice::task_wait()

@@ -309,31 +309,16 @@ class MultiDevice : public Device {
   {
     device_ptr key = unique_key++;
 
-    if (mem.type == MEM_PIXELS) {
-      /* Always allocate pixels memory on all devices
-       * This is necessary to ensure PBOs are registered everywhere, which FILM_CONVERT uses */
-      foreach (SubDevice &sub, devices) {
-        mem.device = sub.device;
-        mem.device_pointer = 0;
-        mem.device_size = 0;
+    assert(mem.type == MEM_READ_ONLY || mem.type == MEM_READ_WRITE || mem.type == MEM_DEVICE_ONLY);
+    /* The remaining memory types can be distributed across devices */
+    foreach (const vector<SubDevice *> &island, peer_islands) {
+      SubDevice *owner_sub = find_suitable_mem_device(key, island);
+      mem.device = owner_sub->device;
+      mem.device_pointer = 0;
+      mem.device_size = 0;
 
-        sub.device->mem_alloc(mem);
-        sub.ptr_map[key] = mem.device_pointer;
-      }
-    }
-    else {
-      assert(mem.type == MEM_READ_ONLY || mem.type == MEM_READ_WRITE ||
-             mem.type == MEM_DEVICE_ONLY);
-      /* The remaining memory types can be distributed across devices */
-      foreach (const vector<SubDevice *> &island, peer_islands) {
-        SubDevice *owner_sub = find_suitable_mem_device(key, island);
-        mem.device = owner_sub->device;
-        mem.device_pointer = 0;
-        mem.device_size = 0;
-
-        owner_sub->device->mem_alloc(mem);
-        owner_sub->ptr_map[key] = mem.device_pointer;
-      }
+      owner_sub->device->mem_alloc(mem);
+      owner_sub->ptr_map[key] = mem.device_pointer;
     }
 
     mem.device = this;
@@ -466,45 +451,20 @@ class MultiDevice : public Device {
     size_t existing_size = mem.device_size;
 
     /* Free memory that was allocated for all devices (see above) on each device */
-    if (strcmp(mem.name, "RenderBuffers") == 0 || mem.type == MEM_PIXELS) {
-      foreach (SubDevice &sub, devices) {
-        mem.device = sub.device;
-        mem.device_pointer = sub.ptr_map[key];
-        mem.device_size = existing_size;
+    foreach (const vector<SubDevice *> &island, peer_islands) {
+      SubDevice *owner_sub = find_matching_mem_device(key, *island.front());
+      mem.device = owner_sub->device;
+      mem.device_pointer = owner_sub->ptr_map[key];
+      mem.device_size = existing_size;
 
-        sub.device->mem_free(mem);
-        sub.ptr_map.erase(sub.ptr_map.find(key));
-      }
-      foreach (SubDevice &sub, denoising_devices) {
-        if (matching_rendering_and_denoising_devices) {
-          sub.ptr_map.erase(key);
-        }
-        else {
-          mem.device = sub.device;
-          mem.device_pointer = sub.ptr_map[key];
-          mem.device_size = existing_size;
+      owner_sub->device->mem_free(mem);
+      owner_sub->ptr_map.erase(owner_sub->ptr_map.find(key));
 
-          sub.device->mem_free(mem);
-          sub.ptr_map.erase(sub.ptr_map.find(key));
-        }
-      }
-    }
-    else {
-      foreach (const vector<SubDevice *> &island, peer_islands) {
-        SubDevice *owner_sub = find_matching_mem_device(key, *island.front());
-        mem.device = owner_sub->device;
-        mem.device_pointer = owner_sub->ptr_map[key];
-        mem.device_size = existing_size;
-
-        owner_sub->device->mem_free(mem);
-        owner_sub->ptr_map.erase(owner_sub->ptr_map.find(key));
-
-        if (mem.type == MEM_TEXTURE) {
-          /* Free texture objects on all devices */
-          foreach (SubDevice *island_sub, island) {
-            if (island_sub != owner_sub) {
-              island_sub->device->mem_free(mem);
-            }
+      if (mem.type == MEM_TEXTURE) {
+        /* Free texture objects on all devices */
+        foreach (SubDevice *island_sub, island) {
+          if (island_sub != owner_sub) {
+            island_sub->device->mem_free(mem);
           }
         }
       }
@@ -521,43 +481,6 @@ class MultiDevice : public Device {
     foreach (SubDevice &sub, devices)
       sub.device->const_copy_to(name, host, size);
   }
-
-#if 0
-  void draw_pixels(device_memory &rgba,
-                   int y,
-                   int w,
-                   int h,
-                   int width,
-                   int height,
-                   int dx,
-                   int dy,
-                   int dw,
-                   int dh,
-                   bool transparent,
-                   const DeviceDrawParams &draw_params) override
-  {
-    assert(rgba.type == MEM_PIXELS);
-
-    device_ptr key = rgba.device_pointer;
-    int i = 0, sub_h = h / devices.size();
-    int sub_height = height / devices.size();
-
-    foreach (SubDevice &sub, devices) {
-      int sy = y + i * sub_h;
-      int sh = (i == (int)devices.size() - 1) ? h - sub_h * i : sub_h;
-      int sheight = (i == (int)devices.size() - 1) ? height - sub_height * i : sub_height;
-      int sdy = dy + i * sub_height;
-      /* adjust math for w/width */
-
-      rgba.device_pointer = sub.ptr_map[key];
-      sub.device->draw_pixels(
-          rgba, sy, w, sh, width, sheight, dx, sdy, dw, dh, transparent, draw_params);
-      i++;
-    }
-
-    rgba.device_pointer = key;
-  }
-#endif
 
   void map_tile(Device *sub_device, RenderTile &tile) override
   {

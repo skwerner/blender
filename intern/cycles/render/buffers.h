@@ -95,39 +95,6 @@ class RenderBuffers {
   bool set_pass_rect(PassType type, int components, float *pixels, int samples);
 };
 
-/* Display Buffer
- *
- * The buffer used for drawing during render, filled by converting the render
- * buffers to byte of half float storage */
-
-class DisplayBuffer {
- public:
-  /* buffer parameters */
-  BufferParams params;
-  /* dimensions for how much of the buffer is actually ready for display.
-   * with progressive render we can be using only a subset of the buffer.
-   * if these are zero, it means nothing can be drawn yet */
-  int draw_width, draw_height;
-  /* draw alpha channel? */
-  bool transparent;
-  /* use half float? */
-  bool half_float;
-  /* byte buffer for converted result */
-  device_pixels<uchar4> rgba_byte;
-  device_pixels<half4> rgba_half;
-
-  DisplayBuffer(Device *device, bool linear = false);
-  ~DisplayBuffer();
-
-  void reset(BufferParams &params);
-
-  void draw_set(int width, int height);
-#if 0
-  void draw(Device *device, const DeviceDrawParams &draw_params);
-#endif
-  bool draw_ready();
-};
-
 /* Render Tile
  * Rendering task on a buffer */
 

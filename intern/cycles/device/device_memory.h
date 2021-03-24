@@ -38,7 +38,6 @@ enum MemoryType {
   MEM_DEVICE_ONLY,
   MEM_GLOBAL,
   MEM_TEXTURE,
-  MEM_PIXELS
 };
 
 /* Supported Data Types */
@@ -527,33 +526,6 @@ template<typename T> class device_vector : public device_memory {
   size_t size(size_t width, size_t height, size_t depth)
   {
     return width * ((height == 0) ? 1 : height) * ((depth == 0) ? 1 : depth);
-  }
-};
-
-/* Pixel Memory
- *
- * Device memory to efficiently draw as pixels to the screen in interactive
- * rendering. Only copying pixels from the device is supported, not copying to. */
-
-template<typename T> class device_pixels : public device_vector<T> {
- public:
-  device_pixels(Device *device, const char *name) : device_vector<T>(device, name, MEM_PIXELS)
-  {
-  }
-
-  void alloc_to_device(size_t width, size_t height, size_t depth = 0)
-  {
-    device_vector<T>::alloc(width, height, depth);
-
-    if (!device_memory::device_pointer) {
-      device_memory::device_alloc();
-    }
-  }
-
-  T *copy_from_device(int y, int w, int h)
-  {
-    device_memory::device_copy_from(y, w, h, sizeof(T));
-    return device_vector<T>::data();
   }
 };
 

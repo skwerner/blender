@@ -35,7 +35,6 @@ class BufferParams;
 class Device;
 class DeviceScene;
 class DeviceRequestedFeatures;
-class DisplayBuffer;
 class PathTrace;
 class Progress;
 class GPUDisplay;

@@ -181,6 +181,8 @@ void PathTrace::render_init_execution()
 
 double PathTrace::render_samples_full_pipeline(int samples_num)
 {
+  VLOG(3) << "Will path trace " << samples_num << " samples.";
+
   const double start_render_time = time_dt();
 
   const int start_sample = start_sample_num_ + render_status_.rendered_samples_num;

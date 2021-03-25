@@ -29,8 +29,6 @@ CCL_NAMESPACE_BEGIN
 class Device;
 class RenderBuffers;
 class Progress;
-
-/* TODO(sergey): See if it still will be needed for the final implementation. */
 class GPUDisplay;
 
 /* PathTrace class takes care of kernel graph and scheduling on a (multi)device. It takes care of
@@ -43,6 +41,8 @@ class GPUDisplay;
 class PathTrace {
  public:
   explicit PathTrace(Device *device);
+
+  bool ready_to_reset();
 
   /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced.
    *
@@ -89,8 +89,16 @@ class PathTrace {
   /* Denoise current state of the big tile. */
   void denoise();
 
-  /* TODO(sergey): This is a quick implementation for tests. */
-  void copy_to_gpu_display(GPUDisplay *gpu_display);
+  /* Set GPU display which takes care of drawing the render result. */
+  void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
+
+  /* Copy current render result to the GPU display. */
+  /* TODO(sergey): Make this private, so that PathTrace filly takes control over display updates.
+   */
+  void copy_to_gpu_display();
+
+  /* Perform drawing of the current state of the GPUDisplay. */
+  void draw();
 
   /* Cancel rendering process as soon as possible, without waiting for full tile to be sampled.
    * Used in cases like reset of render session.
@@ -222,6 +230,12 @@ class PathTrace {
     thread_mutex mutex;
     thread_condition_variable condition;
   } render_cancel_;
+
+  unique_ptr<GPUDisplay> gpu_display_;
+
+  /* Indicates whether a render result was drawn after latest session reset.
+   * Used by `ready_to_reset()` to implement logic which feels the most interactive. */
+  bool did_draw_after_reset_ = true;
 };
 
 CCL_NAMESPACE_END

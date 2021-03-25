@@ -120,7 +120,6 @@ class Session {
  public:
   Device *device;
   Scene *scene;
-  unique_ptr<GPUDisplay> gpu_display;
   Progress progress;
   SessionParams params;
   TileManager tile_manager;
@@ -141,10 +140,15 @@ class Session {
 
   bool ready_to_reset();
   void reset(BufferParams &params, int samples);
+
   void set_pause(bool pause);
+
   void set_samples(int samples);
+
   void set_denoising(const DenoiseParams &denoising);
   void set_denoising_start_sample(int sample);
+
+  void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
 
   bool update_scene();
 
@@ -247,10 +251,6 @@ class Session {
    * Is a single full-frame path tracer for interactive viewport rendering.
    * A path tracer for the current big-tile for an offline rendering. */
   unique_ptr<PathTrace> path_trace_;
-
-  /* Indicates whether a render result was drawn after latest session reset.
-   * Used by `ready_to_reset()` to implement logic which feels the most interactive. */
-  bool did_draw_after_reset_ = true;
 };
 
 CCL_NAMESPACE_END

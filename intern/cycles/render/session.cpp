@@ -210,26 +210,7 @@ void Session::cancel()
 
 bool Session::ready_to_reset()
 {
-  /* The logic here is optimized for the best feedback in the viewport, which implies having a GPU
-   * display. Of there is no such display, the logic here will break. */
-  DCHECK(gpu_display);
-
-  /* The logic here tries to provide behavior which feels the most interactive feel to artists.
-   * General idea is to be able to reset as quickly as possible, while still providing interactive
-   * feel.
-   *
-   * If the render result was ever drawn after previous reset, consider that reset is now possible.
-   * This way camera navigation gives the quickest feedback of rendered pixels, regardless of
-   * whether CPU or GPU drawing pipeline is used.
-   *
-   * Consider reset happening after redraw "slow" enough to not clog anything. This is a bit
-   * arbitrary, but seems to work very well with viewport navigation in Blender. */
-
-  if (did_draw_after_reset_) {
-    return true;
-  }
-
-  return false;
+  return path_trace_->ready_to_reset();
 }
 
 #if 0
@@ -734,18 +715,12 @@ bool Session::run_wait_for_work(bool no_tiles)
 
 void Session::draw()
 {
-  DCHECK(gpu_display);
-
-  did_draw_after_reset_ |= gpu_display->draw();
+  path_trace_->draw();
 }
 
 void Session::reset_(BufferParams &buffer_params, int samples)
 {
   path_trace_->reset(buffer_params);
-
-  if (gpu_display) {
-    gpu_display->reset(buffer_params);
-  }
 
   tile_manager.reset(buffer_params, samples);
 #if 0
@@ -760,8 +735,6 @@ void Session::reset_(BufferParams &buffer_params, int samples)
   if (!params.background)
     progress.set_start_time();
   progress.set_render_start_time();
-
-  did_draw_after_reset_ = false;
 }
 
 void Session::reset(BufferParams &buffer_params, int samples)
@@ -864,6 +837,11 @@ void Session::set_denoising_start_sample(int sample)
 
     pause_cond.notify_all();
   }
+}
+
+void Session::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
+{
+  path_trace_->set_gpu_display(move(gpu_display));
 }
 
 void Session::wait()
@@ -1125,7 +1103,7 @@ void Session::copy_to_display_buffer()
    * care of updates when they are needed (not oo often for performance, not too rare for
    * feedback). */
 
-  path_trace_->copy_to_gpu_display(gpu_display.get());
+  path_trace_->copy_to_gpu_display();
 
   last_display_time = time_dt();
 }

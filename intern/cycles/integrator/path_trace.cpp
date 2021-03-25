@@ -17,14 +17,12 @@
 #include "integrator/path_trace.h"
 
 #include "device/device.h"
+#include "render/gpu_display.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
 #include "util/util_tbb.h"
 #include "util/util_time.h"
-
-/* TODO(sergey): See if it still will be needed for the final implementation. */
-#include "render/gpu_display.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -54,14 +52,44 @@ PathTrace::PathTrace(Device *device) : device_(device)
    * How to find an ideal scheduling for such a mixture?  */
 }
 
+bool PathTrace::ready_to_reset()
+{
+  /* The logic here is optimized for the best feedback in the viewport, which implies having a GPU
+   * display. Of there is no such display, the logic here will break. */
+  DCHECK(gpu_display_);
+
+  /* The logic here tries to provide behavior which feels the most interactive feel to artists.
+   * General idea is to be able to reset as quickly as possible, while still providing interactive
+   * feel.
+   *
+   * If the render result was ever drawn after previous reset, consider that reset is now possible.
+   * This way camera navigation gives the quickest feedback of rendered pixels, regardless of
+   * whether CPU or GPU drawing pipeline is used.
+   *
+   * Consider reset happening after redraw "slow" enough to not clog anything. This is a bit
+   * arbitrary, but seems to work very well with viewport navigation in Blender. */
+
+  if (did_draw_after_reset_) {
+    return true;
+  }
+
+  return false;
+}
+
 void PathTrace::reset(const BufferParams &full_buffer_params)
 {
   if (full_render_buffers_->params.modified(full_buffer_params)) {
     full_render_buffers_->reset(full_buffer_params);
   }
 
+  if (gpu_display_) {
+    gpu_display_->reset(full_buffer_params);
+  }
+
   scaled_render_buffer_params_ = full_buffer_params;
   update_scaled_render_buffers_resolution();
+
+  did_draw_after_reset_ = false;
 }
 
 void PathTrace::clear_render_buffers()
@@ -209,8 +237,24 @@ void PathTrace::denoise()
   }
 }
 
-void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
+void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
 {
+  gpu_display_ = move(gpu_display);
+}
+
+void PathTrace::draw()
+{
+  DCHECK(gpu_display_);
+
+  did_draw_after_reset_ |= gpu_display_->draw();
+}
+
+void PathTrace::copy_to_gpu_display()
+{
+  if (!gpu_display_) {
+    return;
+  }
+
   const int width = scaled_render_buffer_params_.width;
   const int height = scaled_render_buffer_params_.height;
   if (width == 0 || height == 0) {
@@ -219,7 +263,7 @@ void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
 
   const float sample_scale = 1.0f / get_num_samples_in_buffer();
 
-  if (!gpu_display->update_begin(width, height)) {
+  if (!gpu_display_->update_begin(width, height)) {
     LOG(ERROR) << "Error beginning GPUDisplay update.";
     return;
   }
@@ -229,10 +273,10 @@ void PathTrace::copy_to_gpu_display(GPUDisplay *gpu_display)
    * on an implementation of GPUDisplay it might not be possible to map GPUBuffer in a way that the
    * PathTraceWork expects it in a threaded environment. */
   for (auto &&path_trace_work : path_trace_works_) {
-    path_trace_work->copy_to_gpu_display(gpu_display, sample_scale);
+    path_trace_work->copy_to_gpu_display(gpu_display_.get(), sample_scale);
   }
 
-  gpu_display->update_end();
+  gpu_display_->update_end();
 }
 
 void PathTrace::cancel()

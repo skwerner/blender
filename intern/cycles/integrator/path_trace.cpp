@@ -113,7 +113,7 @@ void PathTrace::set_progress(Progress *progress)
   progress_ = progress;
 }
 
-void PathTrace::render_samples(int samples_num)
+void PathTrace::render_samples(int samples_num, bool need_denoise)
 {
   /* Indicate that rendering has started and that it can be requested to cancel. */
   {
@@ -155,6 +155,10 @@ void PathTrace::render_samples(int samples_num)
     if (is_cancel_requested()) {
       break;
     }
+  }
+
+  if (need_denoise) {
+    denoise();
   }
 
   buffer_write();
@@ -211,30 +215,9 @@ void PathTrace::denoise()
     return;
   }
 
-  /* Indicate that rendering has started and that it can be requested to cancel.
-   *
-   * TODO(sergey): De-duplicate with render_samples(). */
-  {
-    thread_scoped_lock lock(render_cancel_.mutex);
-    render_cancel_.is_rendering = true;
-    render_cancel_.is_requested = false;
-  }
-
   const DenoiserBufferParams buffer_params(scaled_render_buffer_params_);
   denoiser_->denoise_buffer(
       buffer_params, full_render_buffers_.get(), get_num_samples_in_buffer());
-
-  buffer_write();
-
-  /* Indicate that rendering has finished, making it so thread which requested `cancel()` can carry
-   * on.
-   *
-   * TODO(sergey): De-duplicate with render_samples(). */
-  {
-    thread_scoped_lock lock(render_cancel_.mutex);
-    render_cancel_.is_rendering = false;
-    render_cancel_.condition.notify_one();
-  }
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)

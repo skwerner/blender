@@ -1025,11 +1025,7 @@ void Session::render(bool need_denoise)
   path_trace_->set_resolution_divider(tile_manager.state.resolution_divider);
 
   /* Perform rendering. */
-  path_trace_->render_samples(samples_to_render_num);
-
-  if (need_denoise) {
-    path_trace_->denoise();
-  }
+  path_trace_->render_samples(samples_to_render_num, need_denoise);
 
   /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on
    * the `PathTrace`. */

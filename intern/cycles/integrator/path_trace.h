@@ -74,9 +74,11 @@ class PathTrace {
   /* Request render of the given number of samples.
    * Will add [start_sample_num, start_sample_num + samples_num) samples to the render buffer.
    *
-   * NOTE: This is a blocking cal. Meaning, it will not return until given number of samples are
+   * NOTE: This is a blocking call. Meaning, it will not return until given number of samples are
    * rendered (or until rendering is requested to be cancelled). */
-  void render_samples(int samples_num);
+  /* TODO(sergey): Move denoising decisions to the PathTrace. Currently it is a part of public API
+   * to allow to refactor internal logic, making it so denoising happens from within this call. */
+  void render_samples(int samples_num, bool need_denoise);
 
   /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is
    * convenient to have it here because then its easy to access render buffer. But the downside is
@@ -85,9 +87,6 @@ class PathTrace {
   /* Set denoiser parameters.
    * Use this to configure the denoiser before rendering any samples. */
   void set_denoiser_params(const DenoiseParams &params);
-
-  /* Denoise current state of the big tile. */
-  void denoise();
 
   /* Set GPU display which takes care of drawing the render result. */
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
@@ -148,6 +147,9 @@ class PathTrace {
    *
    * Returns time in seconds which it took to render. */
   double render_samples_full_pipeline(int samples_num);
+
+  /* Denoise current state of the big tile. */
+  void denoise();
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();

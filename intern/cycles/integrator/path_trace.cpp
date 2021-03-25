@@ -26,7 +26,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTrace::PathTrace(Device *device) : device_(device)
+PathTrace::PathTrace(Device *device, bool background)
+    : device_(device), render_scheduler_(background)
 {
   DCHECK_NE(device_, nullptr);
 
@@ -114,12 +115,17 @@ void PathTrace::set_start_sample(int start_sample_num)
   start_sample_num_ = start_sample_num;
 }
 
+void PathTrace::set_total_samples(int num_samples)
+{
+  render_scheduler_.set_total_samples(num_samples);
+}
+
 void PathTrace::set_progress(Progress *progress)
 {
   progress_ = progress;
 }
 
-void PathTrace::render_samples(int num_samples, bool need_denoise)
+void PathTrace::render_samples(int num_samples)
 {
   /* Indicate that rendering has started and that it can be requested to cancel. */
   {
@@ -138,13 +144,6 @@ void PathTrace::render_samples(int num_samples, bool need_denoise)
       break;
     }
 
-    render_work_full_pipeline(render_work);
-  }
-
-  /* TODO(sergey): Leave this up to the RenderScheduler to schedule denoising work. */
-  if (need_denoise) {
-    RenderWork render_work;
-    render_work.denoise = true;
     render_work_full_pipeline(render_work);
   }
 
@@ -169,12 +168,16 @@ void PathTrace::render_init_execution()
 void PathTrace::render_work_full_pipeline(const RenderWork &render_work)
 {
   path_trace_work(render_work);
-
   if (is_cancel_requested()) {
     return;
   }
 
   denoise_work(render_work);
+  if (is_cancel_requested()) {
+    return;
+  }
+
+  copy_to_gpu_display_work(render_work);
 
   buffer_update_if_needed();
   progress_update_if_needed();
@@ -201,6 +204,8 @@ void PathTrace::path_trace_work(const RenderWork &render_work)
 
 void PathTrace::set_denoiser_params(const DenoiseParams &params)
 {
+  render_scheduler_.set_denoiser_params(params);
+
   if (!params.use) {
     denoiser_.reset();
     return;
@@ -222,9 +227,13 @@ void PathTrace::denoise_work(const RenderWork &render_work)
 
   VLOG(3) << "Perform denoising work.";
 
+  const double start_time = time_dt();
+
   const DenoiserBufferParams buffer_params(scaled_render_buffer_params_);
   denoiser_->denoise_buffer(
       buffer_params, full_render_buffers_.get(), get_num_samples_in_buffer());
+
+  render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
@@ -239,11 +248,17 @@ void PathTrace::draw()
   did_draw_after_reset_ |= gpu_display_->draw();
 }
 
-void PathTrace::copy_to_gpu_display()
+void PathTrace::copy_to_gpu_display_work(const RenderWork &render_work)
 {
+  if (!render_work.copy_to_gpu_display) {
+    return;
+  }
+
   if (!gpu_display_) {
     return;
   }
+
+  VLOG(3) << "Perform copy to GPUDisplay work.";
 
   const int width = scaled_render_buffer_params_.width;
   const int height = scaled_render_buffer_params_.height;

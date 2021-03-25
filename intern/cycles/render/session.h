@@ -66,7 +66,6 @@ class SessionParams {
   double cancel_timeout;
   double reset_timeout;
   double text_timeout;
-  double progressive_update_timeout;
 
   ShadingSystem shadingsystem;
 
@@ -90,7 +89,6 @@ class SessionParams {
     cancel_timeout = 0.1;
     reset_timeout = 0.1;
     text_timeout = 1.0;
-    progressive_update_timeout = 1.0;
 
     shadingsystem = SHADINGSYSTEM_SVM;
   }
@@ -105,7 +103,6 @@ class SessionParams {
              threads == params.threads && adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling && cancel_timeout == params.cancel_timeout &&
              reset_timeout == params.reset_timeout && text_timeout == params.text_timeout &&
-             progressive_update_timeout == params.progressive_update_timeout &&
              shadingsystem == params.shadingsystem && denoising.type == params.denoising.type &&
              (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
   }
@@ -195,17 +192,13 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-  void render(bool use_denoise);
-
-  void copy_to_display_buffer();
+  void render();
 
   void reset_(BufferParams &params, int samples);
 
   /* TODO(sergey): Once the threading synchronization betwee synchronization and render threads is
    * properly implemented there will be no need in this. */
   void set_denoising_no_check(const DenoiseParams &denoising);
-
-  bool render_need_denoise(bool &delayed);
 
 #if 0
   bool steal_tile(RenderTile &tile, Device *tile_device, thread_scoped_lock &tile_lock);
@@ -231,8 +224,6 @@ class Session {
   thread_condition_variable denoising_cond;
   thread_condition_variable tile_steal_cond;
 #endif
-
-  double last_display_time;
 
 #if 0
   RenderTile stolen_tile;

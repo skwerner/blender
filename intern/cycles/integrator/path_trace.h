@@ -41,7 +41,7 @@ class GPUDisplay;
  *  - Adaptive stopping. */
 class PathTrace {
  public:
-  explicit PathTrace(Device *device);
+  PathTrace(Device *device, bool background);
 
   bool ready_to_reset();
 
@@ -64,6 +64,9 @@ class PathTrace {
    * The sample is 0-based. */
   void set_start_sample(int start_sample_num);
 
+  /* Set total number of samples which will be rendered within the active render session. */
+  void set_total_samples(int num_samples);
+
   /* Set progress tracker.
    * Used to communicate details about the progress to the outer world, check whether rendering is
    * to be canceled.
@@ -77,9 +80,7 @@ class PathTrace {
    *
    * NOTE: This is a blocking call. Meaning, it will not return until given number of samples are
    * rendered (or until rendering is requested to be cancelled). */
-  /* TODO(sergey): Move denoising decisions to the PathTrace. Currently it is a part of public API
-   * to allow to refactor internal logic, making it so denoising happens from within this call. */
-  void render_samples(int num_samples, bool need_denoise);
+  void render_samples(int num_samples);
 
   /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is
    * convenient to have it here because then its easy to access render buffer. But the downside is
@@ -91,11 +92,6 @@ class PathTrace {
 
   /* Set GPU display which takes care of drawing the render result. */
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
-
-  /* Copy current render result to the GPU display. */
-  /* TODO(sergey): Make this private, so that PathTrace filly takes control over display updates.
-   */
-  void copy_to_gpu_display();
 
   /* Perform drawing of the current state of the GPUDisplay. */
   void draw();
@@ -147,6 +143,9 @@ class PathTrace {
 
   /* Perform denoising part of the given render work. */
   void denoise_work(const RenderWork &render_work);
+
+  /* Copy current render result to the GPU display. */
+  void copy_to_gpu_display_work(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();

@@ -97,8 +97,9 @@ Session::Session(const SessionParams &params_)
   }
 
   /* Configure path tracer. */
-  path_trace_ = make_unique<PathTrace>(device);
+  path_trace_ = make_unique<PathTrace>(device, params.background);
   path_trace_->set_progress(&progress);
+  path_trace_->set_total_samples(params.samples);
   path_trace_->buffer_update_cb = [&](RenderBuffers *render_buffers, int sample) {
     /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
      * the the new progressive+adaptive nature of rendering. */
@@ -555,11 +556,8 @@ void Session::unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_
 
 void Session::run_main_render_loop()
 {
-  last_display_time = time_dt();
-
   while (!progress.get_cancel()) {
     const bool no_tiles = !run_update_for_next_iteration();
-    bool need_copy_to_display_buffer = false;
 
     if (no_tiles) {
       if (VLOG_IS_ON(2)) {
@@ -592,35 +590,10 @@ void Session::run_main_render_loop()
       update_status_time();
 
       /* render */
-      bool delayed_denoise = false;
-      const bool need_denoise = render_need_denoise(delayed_denoise);
-      render(need_denoise);
+      render();
 
       /* update status and timing */
       update_status_time();
-
-      if (!params.background)
-        need_copy_to_display_buffer = !delayed_denoise;
-
-      if (!device->error_message().empty())
-        progress.set_error(device->error_message());
-    }
-
-    {
-      thread_scoped_lock reset_lock(delayed_reset.mutex);
-      thread_scoped_lock buffers_lock(buffers_mutex);
-
-      if (delayed_reset.do_reset) {
-        /* Handle reset on the next loop iteration. Here simply avoid copy of partial render buffer
-         * to the display buffer. */
-        /* TODO(sergey): It might be perceptually better to not cancel rendering mid-way and show
-         * "delayed" render result in the viewport. */
-      }
-      else if (need_copy_to_display_buffer) {
-        /* Only copy to display_buffer if we do not reset, we don't
-         * want to show the result of an incomplete sample */
-        copy_to_display_buffer();
-      }
 
       if (!device->error_message().empty())
         progress.set_error(device->error_message());
@@ -757,6 +730,7 @@ void Session::set_samples(int samples)
   if (samples != params.samples) {
     params.samples = samples;
     tile_manager.set_samples(samples);
+    path_trace_->set_total_samples(samples);
 
     pause_cond.notify_all();
   }
@@ -827,7 +801,11 @@ void Session::set_denoising_no_check(const DenoiseParams &denoising)
   tile_manager.schedule_denoising = need_denoise && params.background;
 #endif
 
-  path_trace_->set_denoiser_params(denoising);
+  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
+   * Currently denoising is not supported for baking. */
+  if (!read_bake_tile_cb) {
+    path_trace_->set_denoiser_params(denoising);
+  }
 }
 
 void Session::set_denoising_start_sample(int sample)
@@ -961,51 +939,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
   progress.set_status(status, substatus);
 }
 
-bool Session::render_need_denoise(bool &delayed)
-{
-  delayed = false;
-
-  /* Not supported yet for baking. */
-  if (read_bake_tile_cb) {
-    return false;
-  }
-
-  /* Denoising enabled? */
-  if (!params.denoising.need_denoising_task()) {
-    return false;
-  }
-
-  if (params.background) {
-    /* Background render, only denoise when rendering the last sample. */
-    return tile_manager.done();
-  }
-
-  /* Viewport render. */
-
-  /* It can happen that denoising was already enabled, but the scene still needs an update. */
-  if (scene->film->is_modified() || !scene->film->get_denoising_data_offset()) {
-    return false;
-  }
-
-  /* Immediately denoise when we reach the start sample or last sample. */
-  const int num_samples_finished = tile_manager.state.sample + 1;
-  if (num_samples_finished == params.denoising.start_sample ||
-      num_samples_finished == params.samples) {
-    return true;
-  }
-
-  /* Do not denoise until the sample at which denoising should start is reached. */
-  if (num_samples_finished < params.denoising.start_sample) {
-    return false;
-  }
-
-  /* Avoid excessive denoising in viewport after reaching a certain amount of samples. */
-  delayed = (tile_manager.state.sample >= 20 &&
-             (time_dt() - last_display_time) < params.progressive_update_timeout);
-  return !delayed;
-}
-
-void Session::render(bool need_denoise)
+void Session::render()
 {
   if (!params.background && tile_manager.state.sample == tile_manager.range_start_sample) {
     /* Clear buffers. */
@@ -1025,7 +959,7 @@ void Session::render(bool need_denoise)
   path_trace_->set_resolution_divider(tile_manager.state.resolution_divider);
 
   /* Perform rendering. */
-  path_trace_->render_samples(samples_to_render_num, need_denoise);
+  path_trace_->render_samples(samples_to_render_num);
 
   /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on
    * the `PathTrace`. */
@@ -1091,17 +1025,6 @@ void Session::render(bool need_denoise)
 
   device->task_add(task);
 #endif
-}
-
-void Session::copy_to_display_buffer()
-{
-  /* TODO(sergey): Ideally this would be totally handled by the PathTrace, so that it will take
-   * care of updates when they are needed (not oo often for performance, not too rare for
-   * feedback). */
-
-  path_trace_->copy_to_gpu_display();
-
-  last_display_time = time_dt();
 }
 
 void Session::device_free()

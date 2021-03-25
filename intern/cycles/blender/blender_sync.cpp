@@ -911,13 +911,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   else if (shadingsystem == 1)
     params.shadingsystem = SHADINGSYSTEM_OSL;
 
-  if (b_engine.is_preview()) {
-    /* For preview rendering we're using same timeout as
-     * blender's job update.
-     */
-    params.progressive_update_timeout = 0.1;
-  }
-
   params.use_profiling = params.device.has_profiling && !b_engine.is_preview() && background &&
                          BlenderSession::print_render_stats;
 

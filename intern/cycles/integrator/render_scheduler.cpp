@@ -16,12 +16,24 @@
 
 #include "integrator/render_scheduler.h"
 
+#include "util/util_logging.h"
 #include "util/util_math.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
-RenderScheduler::RenderScheduler()
+RenderScheduler::RenderScheduler(bool background) : background_(background)
 {
+}
+
+void RenderScheduler::set_denoiser_params(const DenoiseParams &params)
+{
+  denoiser_params_ = params;
+}
+
+void RenderScheduler::set_total_samples(int num_samples)
+{
+  num_total_samples_ = num_samples;
 }
 
 void RenderScheduler::reset()
@@ -30,8 +42,18 @@ void RenderScheduler::reset()
 
   state_.num_rendered_samples = 0;
 
+  state_.last_gpu_display_update_time = 0.0;
+
   path_trace_time_.total_time = 0.0;
-  path_trace_time_.num_measured_samples = 0;
+  path_trace_time_.num_measured_times = 0;
+
+  denoise_time_.total_time = 0.0;
+  denoise_time_.num_measured_times = 0;
+}
+
+bool RenderScheduler::done() const
+{
+  return state_.num_rendered_samples >= num_samples_to_render_;
 }
 
 void RenderScheduler::add_samples_to_render(int num_samples)
@@ -46,14 +68,25 @@ int RenderScheduler::get_num_rendered_samples() const
 
 bool RenderScheduler::get_render_work(RenderWork &render_work)
 {
-  if (state_.num_rendered_samples >= num_samples_to_render_) {
+  if (done()) {
     return false;
   }
 
   render_work.path_trace.start_sample = state_.num_rendered_samples;
   render_work.path_trace.num_samples = get_num_samples_to_path_trace();
 
+  /* NOTE: Advance number of samples now, so that denoising check can see that all the samples are
+   * rendered. */
   state_.num_rendered_samples += render_work.path_trace.num_samples;
+
+  bool delayed;
+  render_work.denoise = work_need_denoise(delayed);
+
+  render_work.copy_to_gpu_display = !delayed;
+
+  if (render_work.copy_to_gpu_display) {
+    state_.last_gpu_display_update_time = time_dt();
+  }
 
   return true;
 }
@@ -66,7 +99,22 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work, doub
    * how long path tracing takes when rendering final resolution. */
 
   path_trace_time_.total_time += time;
-  path_trace_time_.num_measured_samples += render_work.path_trace.num_samples;
+  path_trace_time_.num_measured_times += render_work.path_trace.num_samples;
+
+  VLOG(4) << "Average path tracing time: " << path_trace_time_.get_average() << " seconds.";
+}
+
+void RenderScheduler::report_denoise_time(const RenderWork &render_work, double time)
+{
+  (void)render_work;
+
+  /* TODO(sergey): Multiply the time by the resolution divider, to give a more usabel estimate of
+   * how long path tracing takes when rendering final resolution. */
+
+  denoise_time_.total_time += time;
+  ++denoise_time_.num_measured_times;
+
+  VLOG(4) << "Average denoising time: " << denoise_time_.get_average() << " seconds.";
 }
 
 int RenderScheduler::get_num_samples_to_path_trace()
@@ -77,12 +125,49 @@ int RenderScheduler::get_num_samples_to_path_trace()
     return 1;
   }
 
-  const double time_per_sample_average = path_trace_time_.total_time /
-                                         path_trace_time_.num_measured_samples;
+  const double time_per_sample_average = path_trace_time_.get_average();
 
   const int num_samples_in_second = max(int(1.0 / time_per_sample_average), 1);
 
   return min(num_samples_in_second, num_samples_to_render_ - state_.num_rendered_samples);
+}
+
+bool RenderScheduler::work_need_denoise(bool &delayed)
+{
+  delayed = false;
+
+  if (!denoiser_params_.use) {
+    /* Denoising is disabled, no need to scheduler work for it. */
+    return false;
+  }
+
+  if (background_) {
+    /* Background render, only denoise when rendering the last sample. */
+    /* TODO(sergey): Follow similar logic to viewport, giving an overview of how final denoised
+     * image looks like even for the background rendering. */
+    return done();
+  }
+
+  /* Viewport render. */
+
+  /* Immediately denoise when we reach the start sample or last sample. */
+  const int num_samples_finished = state_.num_rendered_samples;
+  if (num_samples_finished == denoiser_params_.start_sample ||
+      num_samples_finished == num_total_samples_) {
+    return true;
+  }
+
+  /* Do not denoise until the sample at which denoising should start is reached. */
+  if (num_samples_finished < denoiser_params_.start_sample) {
+    return false;
+  }
+
+  /* Avoid excessive denoising in viewport after reaching a certain amount of samples. */
+  /* TODO(sergey): Consider making time interval and sample configurable. */
+  delayed = (state_.num_rendered_samples >= 20 &&
+             (time_dt() - state_.last_gpu_display_update_time) < 1.0);
+
+  return !delayed;
 }
 
 CCL_NAMESPACE_END

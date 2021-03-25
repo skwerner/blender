@@ -21,7 +21,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-void GPUDisplay::reset(BufferParams &buffer_params)
+void GPUDisplay::reset(const BufferParams &buffer_params)
 {
   thread_scoped_lock lock(mutex_);
 

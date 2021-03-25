@@ -67,7 +67,7 @@ class GPUDisplay {
    * which happens on changes like viewport navigation or viewport dimension change.
    *
    * This call will configure parameters for a changed buffer and reset the texture state. */
-  void reset(BufferParams &buffer_params);
+  void reset(const BufferParams &buffer_params);
 
   /* --------------------------------------------------------------------
    * Update procedure.

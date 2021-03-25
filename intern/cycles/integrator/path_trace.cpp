@@ -26,11 +26,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-void PathTrace::RenderStatus::reset()
-{
-  rendered_samples_num = 0;
-}
-
 PathTrace::PathTrace(Device *device) : device_(device)
 {
   DCHECK_NE(device_, nullptr);
@@ -86,6 +81,8 @@ void PathTrace::reset(const BufferParams &full_buffer_params)
     gpu_display_->reset(full_buffer_params);
   }
 
+  render_scheduler_.reset();
+
   scaled_render_buffer_params_ = full_buffer_params;
   update_scaled_render_buffers_resolution();
 
@@ -99,6 +96,15 @@ void PathTrace::clear_render_buffers()
 
 void PathTrace::set_resolution_divider(int resolution_divider)
 {
+  /* Changing resolution divider invalidates all the rendered samples. This doesn't currently fit
+   * under the reset() usage, so inform the scheduler explicitly here.
+   *
+   * In the future the divider will be taken care of by the scheduler, so this will not be needed
+   * anymore. */
+  if (resolution_divider_ != resolution_divider) {
+    render_scheduler_.reset();
+  }
+
   resolution_divider_ = resolution_divider;
   update_scaled_render_buffers_resolution();
 }
@@ -113,7 +119,7 @@ void PathTrace::set_progress(Progress *progress)
   progress_ = progress;
 }
 
-void PathTrace::render_samples(int samples_num, bool need_denoise)
+void PathTrace::render_samples(int num_samples, bool need_denoise)
 {
   /* Indicate that rendering has started and that it can be requested to cancel. */
   {
@@ -124,41 +130,22 @@ void PathTrace::render_samples(int samples_num, bool need_denoise)
 
   render_init_execution();
 
-  render_status_.reset();
+  render_scheduler_.add_samples_to_render(num_samples);
 
-  double total_sampling_time = 0;
-
-  total_sampling_time += render_samples_full_pipeline(1);
-
-  /* Update as soon as possible, so that artists immediately see first pixels. */
-  buffer_update_if_needed();
-  progress_update_if_needed();
-
-  while (render_status_.rendered_samples_num < samples_num) {
-    /* TODO(sergey): Take adaptive stopping and user cancel into account. Both of these actions
-     * will affect how the buffer is to be scaled. */
-
-    const double time_per_sample_average = total_sampling_time /
-                                           render_status_.rendered_samples_num;
-
-    /* TODO(sergey): Take update_interval_in_seconds into account. */
-
-    const int samples_in_second_num = max(int(1.0 / time_per_sample_average), 1);
-    const int samples_to_render_num = min(samples_in_second_num,
-                                          samples_num - render_status_.rendered_samples_num);
-
-    total_sampling_time += render_samples_full_pipeline(samples_to_render_num);
-
-    buffer_update_if_needed();
-    progress_update_if_needed();
-
-    if (is_cancel_requested()) {
+  while (!is_cancel_requested()) {
+    RenderWork render_work;
+    if (!render_scheduler_.get_render_work(render_work)) {
       break;
     }
+
+    render_work_full_pipeline(render_work);
   }
 
+  /* TODO(sergey): Leave this up to the RenderScheduler to schedule denoising work. */
   if (need_denoise) {
-    denoise();
+    RenderWork render_work;
+    render_work.denoise = true;
+    render_work_full_pipeline(render_work);
   }
 
   buffer_write();
@@ -179,21 +166,37 @@ void PathTrace::render_init_execution()
   }
 }
 
-double PathTrace::render_samples_full_pipeline(int samples_num)
+void PathTrace::render_work_full_pipeline(const RenderWork &render_work)
 {
-  VLOG(3) << "Will path trace " << samples_num << " samples.";
+  path_trace_work(render_work);
 
-  const double start_render_time = time_dt();
+  if (is_cancel_requested()) {
+    return;
+  }
 
-  const int start_sample = start_sample_num_ + render_status_.rendered_samples_num;
+  denoise_work(render_work);
+
+  buffer_update_if_needed();
+  progress_update_if_needed();
+}
+
+void PathTrace::path_trace_work(const RenderWork &render_work)
+{
+  if (!render_work.path_trace.num_samples) {
+    return;
+  }
+
+  VLOG(3) << "Will path trace " << render_work.path_trace.num_samples << " samples.";
+
+  const double start_time = time_dt();
+
+  const int start_sample = start_sample_num_ + render_work.path_trace.start_sample;
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
-    path_trace_work->render_samples(start_sample, samples_num);
+    path_trace_work->render_samples(start_sample, render_work.path_trace.num_samples);
   });
 
-  render_status_.rendered_samples_num += samples_num;
-
-  return time_dt() - start_render_time;
+  render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
 }
 
 void PathTrace::set_denoiser_params(const DenoiseParams &params)
@@ -206,16 +209,18 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
   denoiser_ = Denoiser::create(device_, params);
 }
 
-void PathTrace::denoise()
+void PathTrace::denoise_work(const RenderWork &render_work)
 {
+  if (!render_work.denoise) {
+    return;
+  }
+
   if (!denoiser_) {
     /* Denoiser was not configured, so nothing to do here. */
     return;
   }
 
-  if (is_cancel_requested()) {
-    return;
-  }
+  VLOG(3) << "Perform denoising work.";
 
   const DenoiserBufferParams buffer_params(scaled_render_buffer_params_);
   denoiser_->denoise_buffer(
@@ -292,7 +297,7 @@ void PathTrace::update_scaled_render_buffers_resolution()
 
 int PathTrace::get_num_samples_in_buffer()
 {
-  return start_sample_num_ + render_status_.rendered_samples_num;
+  return render_scheduler_.get_num_rendered_samples();
 }
 
 bool PathTrace::is_cancel_requested()
@@ -316,7 +321,8 @@ void PathTrace::buffer_update_if_needed()
     return;
   }
 
-  buffer_update_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
+  const int num_samples_rendered = get_num_samples_in_buffer();
+  buffer_update_cb(full_render_buffers_.get(), num_samples_rendered);
 }
 
 void PathTrace::buffer_write()
@@ -325,7 +331,8 @@ void PathTrace::buffer_write()
     return;
   }
 
-  buffer_write_cb(full_render_buffers_.get(), render_status_.rendered_samples_num);
+  const int num_samples_rendered = get_num_samples_in_buffer();
+  buffer_write_cb(full_render_buffers_.get(), num_samples_rendered);
 }
 
 void PathTrace::progress_update_if_needed()

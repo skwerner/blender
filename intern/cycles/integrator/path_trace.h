@@ -18,6 +18,7 @@
 
 #include "integrator/denoiser.h"
 #include "integrator/path_trace_work.h"
+#include "integrator/render_scheduler.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
 #include "util/util_thread.h"
@@ -72,13 +73,13 @@ class PathTrace {
   void set_progress(Progress *progress);
 
   /* Request render of the given number of samples.
-   * Will add [start_sample_num, start_sample_num + samples_num) samples to the render buffer.
+   * Will add [start_sample_num, start_sample_num + num_samples) samples to the render buffer.
    *
    * NOTE: This is a blocking call. Meaning, it will not return until given number of samples are
    * rendered (or until rendering is requested to be cancelled). */
   /* TODO(sergey): Move denoising decisions to the PathTrace. Currently it is a part of public API
    * to allow to refactor internal logic, making it so denoising happens from within this call. */
-  void render_samples(int samples_num, bool need_denoise);
+  void render_samples(int num_samples, bool need_denoise);
 
   /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is
    * convenient to have it here because then its easy to access render buffer. But the downside is
@@ -137,19 +138,15 @@ class PathTrace {
   /* Initialize kernel execution on all integrator queues. */
   void render_init_execution();
 
-  /* Run full render pipeline on all devices to add the given number of samples to the render
-   * result.
-   *
-   * There are no update callbacks or cancellation checks are done form here, for the performance
-   * reasons.
-   *
-   * This call advances number of samples stored in the render status.
-   *
-   * Returns time in seconds which it took to render. */
-  double render_samples_full_pipeline(int samples_num);
+  /* Perform all render pipeline steps needed for the given work.
+   * Includes such steps as path tracing, denoising, display update. */
+  void render_work_full_pipeline(const RenderWork &render_work);
 
-  /* Denoise current state of the big tile. */
-  void denoise();
+  /* Perform path tracing part of the given render work. */
+  void path_trace_work(const RenderWork &render_work);
+
+  /* Perform denoising part of the given render work. */
+  void denoise_work(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();
@@ -175,6 +172,8 @@ class PathTrace {
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
+  RenderScheduler render_scheduler_;
+
   /* Per-compute device descriptors of work which is responsible for path tracing on its configured
    * device. */
   vector<unique_ptr<PathTraceWork>> path_trace_works_;
@@ -191,7 +190,6 @@ class PathTrace {
   unique_ptr<Denoiser> denoiser_;
 
   /* Number of a start sample, in the 0 based notation. */
-  /* TODO(sergey): Consider moving insode of RenderState. */
   int start_sample_num_ = 0;
 
   /* Divider of the resolution for faster previews.
@@ -204,17 +202,6 @@ class PathTrace {
   /* Parameters of render buffers which corresponds to full render buffers divided by the
    * resolution divider. */
   BufferParams scaled_render_buffer_params_;
-
-  /* Global path tracing status. */
-  /* TODO(sergey): state vs. status. */
-  struct RenderStatus {
-    /* Reset status before new render begins. */
-    void reset();
-
-    /* Number of samples in the render buffer. */
-    int rendered_samples_num;
-  };
-  RenderStatus render_status_;
 
   /* Progress object which is used to communicate sample progress. */
   Progress *progress_;

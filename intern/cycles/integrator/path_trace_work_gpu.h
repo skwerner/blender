@@ -24,7 +24,7 @@
 #include "device/device_queue.h"
 
 #include "integrator/path_trace_work.h"
-#include "integrator/work_scheduler.h"
+#include "integrator/work_tile_scheduler.h"
 
 #include "util/util_vector.h"
 
@@ -77,7 +77,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   unique_ptr<DeviceQueue> queue_;
 
   /* Scheduler which gives work to path tracing threads. */
-  WorkScheduler work_scheduler_;
+  WorkTileScheduler work_tile_scheduler_;
 
   /* Output render buffer. */
   RenderBuffers *render_buffers_;

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "integrator/work_scheduler.h"
+#include "integrator/work_tile_scheduler.h"
 
 #include "device/device_queue.h"
 #include "integrator/tile.h"
@@ -24,16 +24,16 @@
 
 CCL_NAMESPACE_BEGIN
 
-WorkScheduler::WorkScheduler()
+WorkTileScheduler::WorkTileScheduler()
 {
 }
 
-void WorkScheduler::set_max_num_path_states(int max_num_path_states)
+void WorkTileScheduler::set_max_num_path_states(int max_num_path_states)
 {
   max_num_path_states_ = max_num_path_states;
 }
 
-void WorkScheduler::reset(const BufferParams &buffer_params, int sample_start, int samples_num)
+void WorkTileScheduler::reset(const BufferParams &buffer_params, int sample_start, int samples_num)
 {
   /* Image buffer parameters. */
   image_full_offset_px_.x = buffer_params.full_x;
@@ -51,7 +51,7 @@ void WorkScheduler::reset(const BufferParams &buffer_params, int sample_start, i
   reset_scheduler_state();
 }
 
-void WorkScheduler::reset_scheduler_state()
+void WorkTileScheduler::reset_scheduler_state()
 {
   tile_size_ = tile_calculate_best_size(image_size_px_, samples_num_, max_num_path_states_);
 
@@ -64,7 +64,7 @@ void WorkScheduler::reset_scheduler_state()
   total_work_size_ = total_tiles_num_ * samples_num_;
 }
 
-bool WorkScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size)
+bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size)
 {
   DCHECK_NE(max_num_path_states_, 0);
 

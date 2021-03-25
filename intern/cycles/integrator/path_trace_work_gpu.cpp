@@ -41,7 +41,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *render_device,
       gpu_display_rgba_half_(render_device, "display buffer half", MEM_READ_WRITE),
       max_active_path_index_(0)
 {
-  work_scheduler_.set_max_num_path_states(get_max_num_paths());
+  work_tile_scheduler_.set_max_num_path_states(get_max_num_paths());
 
   integrator_state_.alloc_to_device(get_max_num_paths());
   integrator_state_.zero_to_device();
@@ -58,7 +58,7 @@ void PathTraceWorkGPU::init_execution()
 
 void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 {
-  work_scheduler_.reset(effective_buffer_params_, start_sample, samples_num);
+  work_tile_scheduler_.reset(effective_buffer_params_, start_sample, samples_num);
 
   /* TODO: set a hard limit in case of undetected kernel failures? */
   while (true) {
@@ -277,7 +277,7 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
     /* Get work tiles until the maximum number of path is reached. */
     while (num_paths < max_num_paths) {
       KernelWorkTile work_tile;
-      if (work_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
+      if (work_tile_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
         work_tiles.push_back(work_tile);
         num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
       }

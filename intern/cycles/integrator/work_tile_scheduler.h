@@ -26,9 +26,9 @@ struct KernelWorkTile;
 
 /* Scheduler of device work tiles.
  * Takes care of feeding multiple devices running in parallel a work which needs to be done. */
-class WorkScheduler {
+class WorkTileScheduler {
  public:
-  WorkScheduler();
+  WorkTileScheduler();
 
   /* MAximum path states which are allowed to be used by the scheduled work.
    *

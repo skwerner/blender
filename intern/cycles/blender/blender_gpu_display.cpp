@@ -332,7 +332,15 @@ bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
     glBindTexture(GL_TEXTURE_2D, 0);
   }
 
-  /* Update PBO dimensions if needed. */
+  /* Update PBO dimensions if needed.
+   *
+   * NOTE: Allocate the PBO for the the size which will fit the final render resolution (as in,
+   * at a resolution divider 1. This was we don't need to recreate graphics interoperability
+   * objects which are costly and which are tied to the specific underlying buffer size.
+   * The downside of this approach is that when graphics interopeability is not used we are sending
+   * too much data to GPU when resolution divider is not 1. */
+  /* TODO(sergey): Investigate whether keeping the PBO exact size of the texute makes non-interop
+   * mode faster. */
   const int buffer_width = params_.size.x;
   const int buffer_height = params_.size.y;
   if (texture_.buffer_width != buffer_width || texture_.buffer_height != buffer_height) {

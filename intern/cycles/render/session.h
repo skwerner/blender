@@ -196,10 +196,6 @@ class Session {
 
   void reset_(BufferParams &params, int samples);
 
-  /* TODO(sergey): Once the threading synchronization betwee synchronization and render threads is
-   * properly implemented there will be no need in this. */
-  void set_denoising_no_check(const DenoiseParams &denoising);
-
 #if 0
   bool steal_tile(RenderTile &tile, Device *tile_device, thread_scoped_lock &tile_lock);
   bool get_tile_stolen();

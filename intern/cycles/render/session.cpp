@@ -144,7 +144,7 @@ Session::Session(const SessionParams &params_)
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
 
   /* Validate denoising parameters. */
-  set_denoising_no_check(params.denoising);
+  set_denoising(params.denoising);
 }
 
 Session::~Session()
@@ -648,6 +648,12 @@ bool Session::run_update_for_next_iteration()
       profiler.reset(scene->shaders.size(), scene->objects.size());
     }
     progress.add_skip_time(update_timer, params.background);
+
+    /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
+     * Currently denoising is not supported for baking. */
+    if (!read_bake_tile_cb) {
+      path_trace_->set_denoiser_params(params.denoising);
+    }
   }
 
   return have_tiles;
@@ -761,24 +767,8 @@ void Session::set_pause(bool pause_)
 
 void Session::set_denoising(const DenoiseParams &denoising)
 {
-  /* If parameters did not change do an early output, avoiding any locking.
-   * This ensures quick and responsive interface update during viewport rendering (interface will
-   * get locked on settings change due to buffer lock during rendering). */
-  if (!params.denoising.modified(denoising)) {
-    return;
-  }
-
-  set_denoising_no_check(denoising);
-}
-
-void Session::set_denoising_no_check(const DenoiseParams &denoising)
-{
   bool need_denoise = denoising.need_denoising_task();
 
-  /* Lock buffers so no denoising operation is triggered while the settings are changed here. */
-  /* TODO(sergey): Would be nice to have a thread synchronization which will avoid such "expensive"
-   * (in terms of possible wait time) lock. */
-  thread_scoped_lock buffers_lock(buffers_mutex);
   params.denoising = denoising;
 
   /* TODO(sergey): Finish decoupling denoiser implementation from device. */
@@ -800,12 +790,6 @@ void Session::set_denoising_no_check(const DenoiseParams &denoising)
    * need prefiltered passes for the native denoiser. */
   tile_manager.schedule_denoising = need_denoise && params.background;
 #endif
-
-  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
-   * Currently denoising is not supported for baking. */
-  if (!read_bake_tile_cb) {
-    path_trace_->set_denoiser_params(denoising);
-  }
 }
 
 void Session::set_denoising_start_sample(int sample)

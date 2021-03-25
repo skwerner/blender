@@ -66,4 +66,9 @@ Denoiser::Denoiser(Device *device, const DenoiseParams &params) : device_(device
   DCHECK(params.use);
 }
 
+const DenoiseParams &Denoiser::get_params() const
+{
+  return params_;
+}
+
 CCL_NAMESPACE_END

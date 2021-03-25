@@ -211,7 +211,9 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
     return;
   }
 
-  denoiser_ = Denoiser::create(device_, params);
+  if (!denoiser_ || denoiser_->get_params().modified(params)) {
+    denoiser_ = Denoiser::create(device_, params);
+  }
 }
 
 void PathTrace::denoise_work(const RenderWork &render_work)

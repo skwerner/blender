@@ -49,7 +49,7 @@ CCL_NAMESPACE_BEGIN
 #endif
 Session::Session(const SessionParams &params_)
     : params(params_),
-      tile_manager(params.progressive,
+      tile_manager(/*params.progressive*/ false,
                    params.samples,
 #if 0
                     make_int2(64, 64),
@@ -62,8 +62,7 @@ Session::Session(const SessionParams &params_)
                     max(params.device.multi_devices.size(), 1),
 #endif
                    params.pixel_size),
-      stats(),
-      profiler()
+      render_scheduler_(params.background)
 {
   TaskScheduler::init(params.threads);
 
@@ -96,10 +95,12 @@ Session::Session(const SessionParams &params_)
     return;
   }
 
+  /* Configure scheduler */
+  render_scheduler_.set_total_samples(params.samples);
+
   /* Configure path tracer. */
-  path_trace_ = make_unique<PathTrace>(device, params.background);
+  path_trace_ = make_unique<PathTrace>(device, render_scheduler_);
   path_trace_->set_progress(&progress);
-  path_trace_->set_total_samples(params.samples);
   path_trace_->buffer_update_cb = [&](RenderBuffers *render_buffers, int sample) {
     /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
      * the the new progressive+adaptive nature of rendering. */
@@ -557,14 +558,15 @@ void Session::unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_
 void Session::run_main_render_loop()
 {
   while (!progress.get_cancel()) {
-    const bool no_tiles = !run_update_for_next_iteration();
+    const RenderWork render_work = run_update_for_next_iteration();
 
-    if (no_tiles) {
+    if (!render_work) {
       if (VLOG_IS_ON(2)) {
         double total_time, render_time;
         progress.get_time(total_time, render_time);
         VLOG(2) << "Rendering in main loop is done in " << render_time << " seconds.";
       }
+
       if (params.background) {
         /* if no work left and in background mode, we can stop immediately. */
         progress.set_status("Finished");
@@ -572,7 +574,7 @@ void Session::run_main_render_loop()
       }
     }
 
-    if (run_wait_for_work(no_tiles)) {
+    if (run_wait_for_work(render_work)) {
       continue;
     }
 
@@ -590,7 +592,7 @@ void Session::run_main_render_loop()
       update_status_time();
 
       /* render */
-      render();
+      path_trace_->render(render_work);
 
       /* update status and timing */
       update_status_time();
@@ -629,37 +631,57 @@ void Session::run()
     progress.set_update();
 }
 
-bool Session::run_update_for_next_iteration()
+RenderWork Session::run_update_for_next_iteration()
 {
+  RenderWork render_work;
+
   thread_scoped_lock scene_lock(scene->mutex);
   thread_scoped_lock reset_lock(delayed_reset.mutex);
+
+  bool have_tiles = true;
 
   if (delayed_reset.do_reset) {
     thread_scoped_lock buffers_lock(buffers_mutex);
     reset_(delayed_reset.params, delayed_reset.samples);
     delayed_reset.do_reset = false;
+
+    /* After reset make sure the tile manager is at the first big tile. */
+    have_tiles = tile_manager.next();
   }
 
-  const bool have_tiles = tile_manager.next();
+  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
+   * Currently denoising is not supported for baking. */
+  if (!read_bake_tile_cb) {
+    path_trace_->set_denoiser_params(params.denoising);
+  }
 
-  if (have_tiles) {
+  while (have_tiles) {
+    render_work = render_scheduler_.get_render_work();
+    if (render_work) {
+      break;
+    }
+
+    /* TODO(sergey): Add support of the multiple big tile. */
+    break;
+  }
+
+  if (render_work) {
     scoped_timer update_timer;
-    if (update_scene()) {
+
+    const int resolution = render_work.resolution_divider;
+    const int width = max(1, tile_manager.params.full_width / resolution);
+    const int height = max(1, tile_manager.params.full_height / resolution);
+
+    if (update_scene(width, height, resolution)) {
       profiler.reset(scene->shaders.size(), scene->objects.size());
     }
     progress.add_skip_time(update_timer, params.background);
-
-    /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
-     * Currently denoising is not supported for baking. */
-    if (!read_bake_tile_cb) {
-      path_trace_->set_denoiser_params(params.denoising);
-    }
   }
 
-  return have_tiles;
+  return render_work;
 }
 
-bool Session::run_wait_for_work(bool no_tiles)
+bool Session::run_wait_for_work(const RenderWork &render_work)
 {
   /* In an offline rendering there is no pause, and no tiles will mean the job is fully done.  */
   if (params.background) {
@@ -668,11 +690,13 @@ bool Session::run_wait_for_work(bool no_tiles)
 
   thread_scoped_lock pause_lock(pause_mutex);
 
-  if (!pause && !no_tiles) {
+  const bool no_work = !render_work;
+
+  if (!pause && !no_work) {
     return false;
   }
 
-  update_status_time(pause, no_tiles);
+  update_status_time(pause, no_work);
 
   while (true) {
     scoped_timer pause_timer;
@@ -681,7 +705,7 @@ bool Session::run_wait_for_work(bool no_tiles)
       progress.add_skip_time(pause_timer, params.background);
     }
 
-    update_status_time(pause, no_tiles);
+    update_status_time(pause, no_work);
     progress.set_update();
 
     if (!pause) {
@@ -689,7 +713,7 @@ bool Session::run_wait_for_work(bool no_tiles)
     }
   }
 
-  return no_tiles;
+  return no_work;
 }
 
 void Session::draw()
@@ -699,6 +723,7 @@ void Session::draw()
 
 void Session::reset_(BufferParams &buffer_params, int samples)
 {
+  render_scheduler_.reset(buffer_params, samples);
   path_trace_->reset(buffer_params);
 
   tile_manager.reset(buffer_params, samples);
@@ -718,6 +743,7 @@ void Session::reset_(BufferParams &buffer_params, int samples)
 
 void Session::reset(BufferParams &buffer_params, int samples)
 {
+
   thread_scoped_lock reset_lock(delayed_reset.mutex);
   thread_scoped_lock pause_lock(pause_mutex);
 
@@ -736,7 +762,9 @@ void Session::set_samples(int samples)
   if (samples != params.samples) {
     params.samples = samples;
     tile_manager.set_samples(samples);
-    path_trace_->set_total_samples(samples);
+
+    /* TODO(sergey): Verify whether threading synchronization is needed here. */
+    render_scheduler_.set_total_samples(samples);
 
     pause_cond.notify_all();
   }
@@ -818,13 +846,19 @@ void Session::wait()
 
 bool Session::update_scene()
 {
+  const int width = tile_manager.state.buffer.full_width;
+  const int height = tile_manager.state.buffer.full_height;
+  const int resolution = tile_manager.state.resolution_divider;
+
+  return update_scene(width, height, resolution);
+}
+
+bool Session::update_scene(int width, int height, int resolution)
+{
   /* update camera if dimensions changed for progressive render. the camera
    * knows nothing about progressive or cropped rendering, it just gets the
    * image dimensions passed in */
   Camera *cam = scene->camera;
-  int width = tile_manager.state.buffer.full_width;
-  int height = tile_manager.state.buffer.full_height;
-  int resolution = tile_manager.state.resolution_divider;
 
   cam->set_screen_size_and_resolution(width, height, resolution);
 
@@ -923,6 +957,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
   progress.set_status(status, substatus);
 }
 
+#if 0
 void Session::render()
 {
   if (!params.background && tile_manager.state.sample == tile_manager.range_start_sample) {
@@ -933,22 +968,6 @@ void Session::render()
   if (tile_manager.state.buffer.width == 0 || tile_manager.state.buffer.height == 0) {
     return; /* Avoid empty launches. */
   }
-
-#if 1
-
-  /* Number of samples which are to be path traced. */
-  const int samples_to_render_num = tile_manager.state.num_samples;
-
-  path_trace_->set_start_sample(tile_manager.state.sample);
-  path_trace_->set_resolution_divider(tile_manager.state.resolution_divider);
-
-  /* Perform rendering. */
-  path_trace_->render_samples(samples_to_render_num);
-
-  /* TODO(sergey): Left for the reference. Remove after it is clear it is not needed for working on
-   * the `PathTrace`. */
-
-#else
   /* Add path trace task. */
   DeviceTask task(DeviceTask::RENDER);
 
@@ -1008,8 +1027,8 @@ void Session::render()
   }
 
   device->task_add(task);
-#endif
 }
+#endif
 
 void Session::device_free()
 {

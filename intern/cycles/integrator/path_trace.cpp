@@ -17,6 +17,7 @@
 #include "integrator/path_trace.h"
 
 #include "device/device.h"
+#include "integrator/render_scheduler.h"
 #include "render/gpu_display.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
@@ -26,8 +27,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTrace::PathTrace(Device *device, bool background)
-    : device_(device), render_scheduler_(background)
+PathTrace::PathTrace(Device *device, RenderScheduler &render_scheduler)
+    : device_(device), render_scheduler_(render_scheduler)
 {
   DCHECK_NE(device_, nullptr);
 
@@ -76,48 +77,16 @@ void PathTrace::reset(const BufferParams &full_buffer_params)
 {
   if (full_render_buffers_->params.modified(full_buffer_params)) {
     full_render_buffers_->reset(full_buffer_params);
+
+    /* Indicate the work state that resolution divider is out of date. */
+    render_state_.resolution_divider = 0;
   }
 
   if (gpu_display_) {
     gpu_display_->reset(full_buffer_params);
   }
 
-  render_scheduler_.reset();
-
-  scaled_render_buffer_params_ = full_buffer_params;
-  update_scaled_render_buffers_resolution();
-
   did_draw_after_reset_ = false;
-}
-
-void PathTrace::clear_render_buffers()
-{
-  full_render_buffers_->zero();
-}
-
-void PathTrace::set_resolution_divider(int resolution_divider)
-{
-  /* Changing resolution divider invalidates all the rendered samples. This doesn't currently fit
-   * under the reset() usage, so inform the scheduler explicitly here.
-   *
-   * In the future the divider will be taken care of by the scheduler, so this will not be needed
-   * anymore. */
-  if (resolution_divider_ != resolution_divider) {
-    render_scheduler_.reset();
-  }
-
-  resolution_divider_ = resolution_divider;
-  update_scaled_render_buffers_resolution();
-}
-
-void PathTrace::set_start_sample(int start_sample_num)
-{
-  start_sample_num_ = start_sample_num;
-}
-
-void PathTrace::set_total_samples(int num_samples)
-{
-  render_scheduler_.set_total_samples(num_samples);
 }
 
 void PathTrace::set_progress(Progress *progress)
@@ -125,7 +94,7 @@ void PathTrace::set_progress(Progress *progress)
   progress_ = progress;
 }
 
-void PathTrace::render_samples(int num_samples)
+void PathTrace::render(const RenderWork &render_work)
 {
   /* Indicate that rendering has started and that it can be requested to cancel. */
   {
@@ -134,20 +103,7 @@ void PathTrace::render_samples(int num_samples)
     render_cancel_.is_requested = false;
   }
 
-  render_init_execution();
-
-  render_scheduler_.add_samples_to_render(num_samples);
-
-  while (!is_cancel_requested()) {
-    RenderWork render_work;
-    if (!render_scheduler_.get_render_work(render_work)) {
-      break;
-    }
-
-    render_work_full_pipeline(render_work);
-  }
-
-  buffer_write();
+  render_pipeline(render_work);
 
   /* Indicate that rendering has finished, making it so thread which requested `cancel()` can carry
    * on. */
@@ -158,32 +114,46 @@ void PathTrace::render_samples(int num_samples)
   }
 }
 
-void PathTrace::render_init_execution()
+void PathTrace::render_pipeline(const RenderWork &render_work)
+{
+  /* For the interactive viewport clear the render buffer on first sample, so that changes in
+   * resolution and camera and things ike that get explicitly zeroed. */
+  if (!render_scheduler_.is_background() &&
+      render_work.path_trace.start_sample == render_scheduler_.get_start_sample()) {
+    full_render_buffers_->zero();
+  }
+
+  render_init_kernel_execution();
+  render_update_resolution_divider(render_work.resolution_divider);
+
+  path_trace(render_work);
+  if (is_cancel_requested()) {
+    return;
+  }
+
+  denoise(render_work);
+  if (is_cancel_requested()) {
+    return;
+  }
+
+  copy_to_gpu_display(render_work);
+
+  buffer_update_if_needed();
+  progress_update_if_needed();
+
+  if (render_scheduler_.done()) {
+    buffer_write();
+  }
+}
+
+void PathTrace::render_init_kernel_execution()
 {
   for (auto &&path_trace_work : path_trace_works_) {
     path_trace_work->init_execution();
   }
 }
 
-void PathTrace::render_work_full_pipeline(const RenderWork &render_work)
-{
-  path_trace_work(render_work);
-  if (is_cancel_requested()) {
-    return;
-  }
-
-  denoise_work(render_work);
-  if (is_cancel_requested()) {
-    return;
-  }
-
-  copy_to_gpu_display_work(render_work);
-
-  buffer_update_if_needed();
-  progress_update_if_needed();
-}
-
-void PathTrace::path_trace_work(const RenderWork &render_work)
+void PathTrace::path_trace(const RenderWork &render_work)
 {
   if (!render_work.path_trace.num_samples) {
     return;
@@ -193,10 +163,9 @@ void PathTrace::path_trace_work(const RenderWork &render_work)
 
   const double start_time = time_dt();
 
-  const int start_sample = start_sample_num_ + render_work.path_trace.start_sample;
-
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
-    path_trace_work->render_samples(start_sample, render_work.path_trace.num_samples);
+    path_trace_work->render_samples(render_work.path_trace.start_sample,
+                                    render_work.path_trace.num_samples);
   });
 
   render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
@@ -216,7 +185,7 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
   }
 }
 
-void PathTrace::denoise_work(const RenderWork &render_work)
+void PathTrace::denoise(const RenderWork &render_work)
 {
   if (!render_work.denoise) {
     return;
@@ -231,7 +200,7 @@ void PathTrace::denoise_work(const RenderWork &render_work)
 
   const double start_time = time_dt();
 
-  const DenoiserBufferParams buffer_params(scaled_render_buffer_params_);
+  const DenoiserBufferParams buffer_params(render_state_.scaled_render_buffer_params);
   denoiser_->denoise_buffer(
       buffer_params, full_render_buffers_.get(), get_num_samples_in_buffer());
 
@@ -250,7 +219,7 @@ void PathTrace::draw()
   did_draw_after_reset_ |= gpu_display_->draw();
 }
 
-void PathTrace::copy_to_gpu_display_work(const RenderWork &render_work)
+void PathTrace::copy_to_gpu_display(const RenderWork &render_work)
 {
   if (!render_work.copy_to_gpu_display) {
     return;
@@ -262,8 +231,8 @@ void PathTrace::copy_to_gpu_display_work(const RenderWork &render_work)
 
   VLOG(3) << "Perform copy to GPUDisplay work.";
 
-  const int width = scaled_render_buffer_params_.width;
-  const int height = scaled_render_buffer_params_.height;
+  const int width = render_state_.scaled_render_buffer_params.width;
+  const int height = render_state_.scaled_render_buffer_params.height;
   if (width == 0 || height == 0) {
     return;
   }
@@ -297,18 +266,26 @@ void PathTrace::cancel()
   }
 }
 
-void PathTrace::update_scaled_render_buffers_resolution()
+void PathTrace::render_update_resolution_divider(int resolution_divider)
 {
+  if (render_state_.resolution_divider == resolution_divider) {
+    return;
+  }
+  render_state_.resolution_divider = resolution_divider;
+
   const BufferParams &orig_params = full_render_buffers_->params;
 
-  scaled_render_buffer_params_.width = max(1, orig_params.width / resolution_divider_);
-  scaled_render_buffer_params_.height = max(1, orig_params.height / resolution_divider_);
-  scaled_render_buffer_params_.full_x = orig_params.full_x / resolution_divider_;
-  scaled_render_buffer_params_.full_y = orig_params.full_y / resolution_divider_;
+  render_state_.scaled_render_buffer_params = orig_params;
+
+  render_state_.scaled_render_buffer_params.width = max(1, orig_params.width / resolution_divider);
+  render_state_.scaled_render_buffer_params.height = max(1,
+                                                         orig_params.height / resolution_divider);
+  render_state_.scaled_render_buffer_params.full_x = orig_params.full_x / resolution_divider;
+  render_state_.scaled_render_buffer_params.full_y = orig_params.full_y / resolution_divider;
 
   /* TODO(sergey): Perform slicing of the render buffers for every work. */
   for (auto &&path_trace_work : path_trace_works_) {
-    path_trace_work->set_effective_buffer_params(scaled_render_buffer_params_);
+    path_trace_work->set_effective_buffer_params(render_state_.scaled_render_buffer_params);
   }
 }
 

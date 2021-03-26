@@ -26,9 +26,24 @@ RenderScheduler::RenderScheduler(bool background) : background_(background)
 {
 }
 
+bool RenderScheduler::is_background() const
+{
+  return background_;
+}
+
 void RenderScheduler::set_denoiser_params(const DenoiseParams &params)
 {
   denoiser_params_ = params;
+}
+
+void RenderScheduler::set_start_sample(int start_sample)
+{
+  start_sample_ = start_sample;
+}
+
+int RenderScheduler::get_start_sample() const
+{
+  return start_sample_;
 }
 
 void RenderScheduler::set_total_samples(int num_samples)
@@ -36,12 +51,22 @@ void RenderScheduler::set_total_samples(int num_samples)
   num_total_samples_ = num_samples;
 }
 
-void RenderScheduler::reset()
+void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 {
-  num_samples_to_render_ = 0;
+  buffer_params_ = buffer_params;
+
+  set_total_samples(num_samples);
+
+  /* In background mode never do lower resolution render preview, as it is not really supported
+   * by the software. */
+  if (background_) {
+    state_.resolution_divider = 1;
+  }
+  else {
+    state_.resolution_divider = 16;
+  }
 
   state_.num_rendered_samples = 0;
-
   state_.last_gpu_display_update_time = 0.0;
 
   path_trace_time_.total_time = 0.0;
@@ -53,12 +78,7 @@ void RenderScheduler::reset()
 
 bool RenderScheduler::done() const
 {
-  return state_.num_rendered_samples >= num_samples_to_render_;
-}
-
-void RenderScheduler::add_samples_to_render(int num_samples)
-{
-  num_samples_to_render_ += num_samples;
+  return state_.num_rendered_samples >= num_total_samples_;
 }
 
 int RenderScheduler::get_num_rendered_samples() const
@@ -66,13 +86,22 @@ int RenderScheduler::get_num_rendered_samples() const
   return state_.num_rendered_samples;
 }
 
-bool RenderScheduler::get_render_work(RenderWork &render_work)
+RenderWork RenderScheduler::get_render_work()
 {
   if (done()) {
-    return false;
+    return RenderWork();
   }
 
-  render_work.path_trace.start_sample = state_.num_rendered_samples;
+  RenderWork render_work;
+
+  if (state_.resolution_divider != 1) {
+    state_.resolution_divider = max(state_.resolution_divider / 2, 1);
+    state_.num_rendered_samples = 0;
+  }
+
+  render_work.resolution_divider = state_.resolution_divider;
+
+  render_work.path_trace.start_sample = start_sample_ + state_.num_rendered_samples;
   render_work.path_trace.num_samples = get_num_samples_to_path_trace();
 
   /* NOTE: Advance number of samples now, so that denoising check can see that all the samples are
@@ -88,7 +117,7 @@ bool RenderScheduler::get_render_work(RenderWork &render_work)
     state_.last_gpu_display_update_time = time_dt();
   }
 
-  return true;
+  return render_work;
 }
 
 void RenderScheduler::report_path_trace_time(const RenderWork &render_work, double time)
@@ -125,11 +154,21 @@ int RenderScheduler::get_num_samples_to_path_trace()
     return 1;
   }
 
+  /* Always render single sample when in non-final resolution. */
+  if (state_.resolution_divider != 1) {
+    return 1;
+  }
+
+  /* TODO(sergey): Scheduler multiple samples to the viewport as well. */
+  if (!background_) {
+    return 1;
+  }
+
   const double time_per_sample_average = path_trace_time_.get_average();
 
   const int num_samples_in_second = max(int(1.0 / time_per_sample_average), 1);
 
-  return min(num_samples_in_second, num_samples_to_render_ - state_.num_rendered_samples);
+  return min(num_samples_in_second, num_total_samples_ - state_.num_rendered_samples);
 }
 
 bool RenderScheduler::work_need_denoise(bool &delayed)

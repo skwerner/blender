@@ -17,11 +17,14 @@
 #pragma once
 
 #include "integrator/denoiser.h" /* For DenoiseParams. */
+#include "render/buffers.h"
 
 CCL_NAMESPACE_BEGIN
 
 class RenderWork {
  public:
+  int resolution_divider = 1;
+
   /* Path tracing samples information. */
   struct {
     int start_sample = 0;
@@ -31,34 +34,37 @@ class RenderWork {
   bool denoise = false;
 
   bool copy_to_gpu_display = false;
+
+  /* Conversion to bool, to simplify checks about whether there is anything to be done for this
+   * work. */
+  inline operator bool() const
+  {
+    return path_trace.num_samples || denoise || copy_to_gpu_display;
+  }
 };
 
 class RenderScheduler {
  public:
   explicit RenderScheduler(bool background);
 
+  bool is_background() const;
+
   void set_denoiser_params(const DenoiseParams &params);
 
-  /* Set total number of samples which are to be rendered.
-   * This is different from add_samples_to_render() in a sense that it is possible that main render
-   * loop will incrementally schedule samples to be rendered until the total number of samples is
-   * reached. */
+  void set_start_sample(int start_sample);
+  int get_start_sample() const;
+
+  /* Set total number of samples to render, starting with the start sample. */
   void set_total_samples(int num_samples);
 
   /* Reset scheduler, indicating that rendering will happen from scratch.
    * Resets current rendered state, as well as scheduling information. */
-  void reset();
+  void reset(const BufferParams &buffer_params, int num_samples);
 
   /* Check whether all work has been scheduled. */
   bool done() const;
 
-  /* Add given number of samples to be rendered.
-   * Is used for progressively add samples. For examples, when in viewport rendering an artist adds
-   * more samples in settings. */
-  void add_samples_to_render(int num_samples);
-
-  /* Returns false when there is no more work to be done. */
-  bool get_render_work(RenderWork &render_work);
+  RenderWork get_render_work();
 
   /* Get number of samples rendered within the current scheduling session.
    * Note that this is based on the scheduling information. In practice this means that if someone
@@ -82,6 +88,7 @@ class RenderScheduler {
   bool work_need_denoise(bool &delayed);
 
   struct {
+    int resolution_divider = 1;
     int num_rendered_samples = 0;
 
     /* Point in time the latest GPUDisplay work has been scheduled. */
@@ -108,15 +115,16 @@ class RenderScheduler {
     int num_measured_times = 0;
   } denoise_time_;
 
+  /* Possible offset of the first sample which is to be rendered. */
+  int start_sample_ = 0;
+
   /* Total number if samples to be rendered within the current render session. */
   int num_total_samples_ = 0;
-
-  /* The number of samples to render upto from the current `PathTrace::render_samples()` call. */
-  int num_samples_to_render_ = 0;
 
   /* Background (offline) rendering. */
   bool background_;
 
+  BufferParams buffer_params_;
   DenoiseParams denoiser_params_;
 };
 

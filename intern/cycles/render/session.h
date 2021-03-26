@@ -18,6 +18,7 @@
 #define __SESSION_H__
 
 #include "device/device.h"
+#include "integrator/render_scheduler.h"
 #include "render/buffers.h"
 #include "render/shader.h"
 #include "render/stats.h"
@@ -147,8 +148,6 @@ class Session {
 
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
 
-  bool update_scene();
-
   void device_free();
 
   /* Returns the rendering progress or 0 if no progress can be determined
@@ -173,26 +172,31 @@ class Session {
    *  - Delayed reset
    *  - Scene update
    *  - Tile manager advance
+   *  - Render scheduler work request
    *
    * The updates are done in a proper order with proper locking around them, which guarantees
    * that the device side of scene and render buffers are always in a consistent state.
    *
-   * Returns true if there are tiles to be rendered. */
-  bool run_update_for_next_iteration();
+   * Returns render work which is to be rendered next. */
+  RenderWork run_update_for_next_iteration();
 
   /* Wait for rendering to be unpaused, or for new tiles for render to arrive.
    * Returns true if new main render loop iteration is required after this function call.
    *
-   * The `no_tiles` argument should be calculated at the state before advancing the tile manager.
-   * in practice it means that this is an opposite of what `run_update_for_next_iteration()`
-   * returns. */
-  bool run_wait_for_work(bool no_tiles);
+   * The `render_work` is the work which was scheduled by the render scheduler right before
+   * checking the pause. */
+  bool run_wait_for_work(const RenderWork &render_work);
 
   void run_main_render_loop();
 
+  bool update_scene();
+  bool update_scene(int width, int height, int resolution);
+
   void update_status_time(bool show_pause = false, bool show_done = false);
 
+#if 0
   void render();
+#endif
 
   void reset_(BufferParams &params, int samples);
 
@@ -232,6 +236,9 @@ class Session {
   std::atomic<TileStealingState> tile_stealing_state;
   int stealable_tiles;
 #endif
+
+  /* Render scheduler is used to get work to be rendered with the current big tile. */
+  RenderScheduler render_scheduler_;
 
   /* Path tracer object.
    *

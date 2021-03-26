@@ -18,7 +18,6 @@
 
 #include "integrator/denoiser.h"
 #include "integrator/path_trace_work.h"
-#include "integrator/render_scheduler.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
 #include "util/util_thread.h"
@@ -29,6 +28,8 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 class RenderBuffers;
+class RenderScheduler;
+class RenderWork;
 class Progress;
 class GPUDisplay;
 
@@ -41,31 +42,19 @@ class GPUDisplay;
  *  - Adaptive stopping. */
 class PathTrace {
  public:
-  PathTrace(Device *device, bool background);
+  /* Render scheduler is used to report timing information and access things like start/finish
+   * sample. */
+  PathTrace(Device *device, RenderScheduler &render_scheduler);
 
+  /* Check whether now it is a good time to reset rendering.
+   * Used to avoid very often resets in the viewport, giving it a chance to draw intermediate
+   * render result. */
   bool ready_to_reset();
 
   /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced.
    *
    * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
   void reset(const BufferParams &full_buffer_params);
-
-  /* Clear current render buffer.
-   * Used during interactive viewport rendering rendering to force refresh accumulated result on
-   * resolution change. */
-  void clear_render_buffers();
-
-  /* Configure the path tracer to perform lower resolution rendering into the full frame buffer. */
-  void set_resolution_divider(int resolution_divider);
-
-  /* Is used to either offset sampling when adding more samples to an existing render, or to
-   * offset sample for a viewport render.
-   *
-   * The sample is 0-based. */
-  void set_start_sample(int start_sample_num);
-
-  /* Set total number of samples which will be rendered within the active render session. */
-  void set_total_samples(int num_samples);
 
   /* Set progress tracker.
    * Used to communicate details about the progress to the outer world, check whether rendering is
@@ -75,12 +64,9 @@ class PathTrace {
    * progress_update_cb() callback. */
   void set_progress(Progress *progress);
 
-  /* Request render of the given number of samples.
-   * Will add [start_sample_num, start_sample_num + num_samples) samples to the render buffer.
-   *
-   * NOTE: This is a blocking call. Meaning, it will not return until given number of samples are
+  /* NOTE: This is a blocking call. Meaning, it will not return until given number of samples are
    * rendered (or until rendering is requested to be cancelled). */
-  void render_samples(int num_samples);
+  void render(const RenderWork &render_work);
 
   /* TODO(sergey): Decide whether denoiser is really a part of path tracer. Currently it is
    * convenient to have it here because then its easy to access render buffer. But the downside is
@@ -109,10 +95,6 @@ class PathTrace {
    * The samples indicates how many samples the buffer contains. */
   function<void(RenderBuffers *render_buffers, int sample)> buffer_update_cb;
 
-  /* The update callback will never be run more often that this interval, avoiding overhead of
-   * data communication on a simple renders.  */
-  double update_interval_in_seconds = 1.0;
-
   /* Callback which communicates final rendered buffer. Is called after pathtracing is done.
    *
    * The samples indicates how many samples the buffer contains. */
@@ -126,26 +108,27 @@ class PathTrace {
   function<void(void)> progress_update_cb;
 
  protected:
-  /* Update resolution stored in the `scaled_render_buffer_params_`.
-   * Used to bring the scaled parameters up to date on either full render buffers change, or on
-   * resolution divider change. */
-  void update_scaled_render_buffers_resolution();
+  /* Actual implementation of the rendering pipeline.
+   * Calls steps in order, checking for the cancel to be requested inbetween.
+   *
+   * Is separate from `render()` to simplify dealing with the early outputs and keeping
+   * `render_cancel_` in the consistent state. */
+  void render_pipeline(const RenderWork &render_work);
 
   /* Initialize kernel execution on all integrator queues. */
-  void render_init_execution();
+  void render_init_kernel_execution();
 
-  /* Perform all render pipeline steps needed for the given work.
-   * Includes such steps as path tracing, denoising, display update. */
-  void render_work_full_pipeline(const RenderWork &render_work);
+  /* Update the render state to possibly changed resolution divider. */
+  void render_update_resolution_divider(int resolution_divider);
 
   /* Perform path tracing part of the given render work. */
-  void path_trace_work(const RenderWork &render_work);
+  void path_trace(const RenderWork &render_work);
 
   /* Perform denoising part of the given render work. */
-  void denoise_work(const RenderWork &render_work);
+  void denoise(const RenderWork &render_work);
 
   /* Copy current render result to the GPU display. */
-  void copy_to_gpu_display_work(const RenderWork &render_work);
+  void copy_to_gpu_display(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();
@@ -171,7 +154,7 @@ class PathTrace {
    * configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
-  RenderScheduler render_scheduler_;
+  RenderScheduler &render_scheduler_;
 
   /* Per-compute device descriptors of work which is responsible for path tracing on its configured
    * device. */
@@ -188,19 +171,21 @@ class PathTrace {
   /* Denoiser which takes care of denoising the big tile. */
   unique_ptr<Denoiser> denoiser_;
 
-  /* Number of a start sample, in the 0 based notation. */
-  int start_sample_num_ = 0;
+  /* State which is common for all the steps of the render work.
+   * Is brought up to date in the `render()` call and is accessed from all the steps involved into
+   * rendering the work. */
+  struct {
+    /* Divider of the resolution for faster previews.
+     *
+     * Allows to re-use same render buffer, but have less pixels rendered into in it. The way to
+     * think of render buffer in this case is as an over-allocated array: the resolution divider
+     * affects both resolution and stride as visible by the integrator kernels. */
+    int resolution_divider = 0;
 
-  /* Divider of the resolution for faster previews.
-   *
-   * Allows to re-use same render buffer, but have less pixels rendered into in it. The way to
-   * think of render buffer in this case is as an over-allocated array: the resolution divider
-   * affects both resolution and stride as visible by the integrator kernels. */
-  int resolution_divider_ = 1;
-
-  /* Parameters of render buffers which corresponds to full render buffers divided by the
-   * resolution divider. */
-  BufferParams scaled_render_buffer_params_;
+    /* Parameters of render buffers which corresponds to full render buffers divided by the
+     * resolution divider. */
+    BufferParams scaled_render_buffer_params;
+  } render_state_;
 
   /* Progress object which is used to communicate sample progress. */
   Progress *progress_;

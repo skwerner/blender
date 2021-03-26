@@ -22,7 +22,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-RenderScheduler::RenderScheduler(bool background) : background_(background)
+RenderScheduler::RenderScheduler(bool background, int pixel_size)
+    : background_(background), pixel_size_(pixel_size)
 {
 }
 
@@ -78,6 +79,10 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 
 bool RenderScheduler::done() const
 {
+  if (state_.resolution_divider != pixel_size_) {
+    return false;
+  }
+
   return state_.num_rendered_samples >= num_total_samples_;
 }
 
@@ -94,8 +99,8 @@ RenderWork RenderScheduler::get_render_work()
 
   RenderWork render_work;
 
-  if (state_.resolution_divider != 1) {
-    state_.resolution_divider = max(state_.resolution_divider / 2, 1);
+  if (state_.resolution_divider != pixel_size_) {
+    state_.resolution_divider = max(state_.resolution_divider / 2, pixel_size_);
     state_.num_rendered_samples = 0;
   }
 

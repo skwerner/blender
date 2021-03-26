@@ -62,7 +62,7 @@ Session::Session(const SessionParams &params_)
                     max(params.device.multi_devices.size(), 1),
 #endif
                    params.pixel_size),
-      render_scheduler_(params.background)
+      render_scheduler_(params.background, params.pixel_size)
 {
   TaskScheduler::init(params.threads);
 

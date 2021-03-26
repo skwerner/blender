@@ -45,7 +45,7 @@ class RenderWork {
 
 class RenderScheduler {
  public:
-  explicit RenderScheduler(bool background);
+  RenderScheduler(bool background, int pixel_size);
 
   bool is_background() const;
 
@@ -123,6 +123,10 @@ class RenderScheduler {
 
   /* Background (offline) rendering. */
   bool background_;
+
+  /* Pixel size is used to force lower resolution render for final pass. Useful for retina or other
+   * types of hi-dpi displays. */
+  int pixel_size_ = 1;
 
   BufferParams buffer_params_;
   DenoiseParams denoiser_params_;

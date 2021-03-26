@@ -73,28 +73,31 @@ bool ShaderEval::eval_cpu(const ShaderEvalType type,
   float4 *output_data = output.data();
   bool success = true;
 
-  tbb::parallel_for(int64_t(0), work_size, [&](int64_t work_index) {
-    /* TODO: is this fast enough? */
-    if (progress_.get_cancel()) {
-      success = false;
-      return;
-    }
-
-    const int thread_index = tbb::this_task_arena::current_thread_index();
-    KernelGlobals *kg = &kernel_thread_globals[thread_index];
-
-    switch (type) {
-      case SHADER_EVAL_DISPLACE:
-        kernels.shader_eval_displace(kg, input_data, output_data, work_index);
-        break;
-      case SHADER_EVAL_BACKGROUND:
-        kernels.shader_eval_background(kg, input_data, output_data, work_index);
-        break;
-      default:
-        LOG(FATAL) << "Unhandled shader evaluation " << type << ", should never happen.";
+  tbb::task_arena local_arena(device_->info.cpu_threads);
+  local_arena.execute([&]() {
+    tbb::parallel_for(int64_t(0), work_size, [&](int64_t work_index) {
+      /* TODO: is this fast enough? */
+      if (progress_.get_cancel()) {
         success = false;
         return;
-    }
+      }
+
+      const int thread_index = tbb::this_task_arena::current_thread_index();
+      KernelGlobals *kg = &kernel_thread_globals[thread_index];
+
+      switch (type) {
+        case SHADER_EVAL_DISPLACE:
+          kernels.shader_eval_displace(kg, input_data, output_data, work_index);
+          break;
+        case SHADER_EVAL_BACKGROUND:
+          kernels.shader_eval_background(kg, input_data, output_data, work_index);
+          break;
+        default:
+          LOG(FATAL) << "Unhandled shader evaluation " << type << ", should never happen.";
+          success = false;
+          return;
+      }
+    });
   });
 
   return success;

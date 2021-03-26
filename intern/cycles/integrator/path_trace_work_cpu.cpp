@@ -55,30 +55,33 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
   /* TODO: limit this to number of threads of CPU device, it may be smaller than
    * the system number of threads when we reduce the number of CPU threads in
    * CPU + GPU rendering to dedicate some cores to handling the GPU device. */
-  tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
-    if (is_cancel_requested()) {
-      return;
-    }
+  tbb::task_arena local_arena(render_device_->info.cpu_threads);
+  local_arena.execute([&]() {
+    tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
+      if (is_cancel_requested()) {
+        return;
+      }
 
-    const int y = work_index / image_width;
-    const int x = work_index - y * image_width;
+      const int y = work_index / image_width;
+      const int x = work_index - y * image_width;
 
-    KernelWorkTile work_tile;
-    work_tile.x = effective_buffer_params_.full_x + x;
-    work_tile.y = effective_buffer_params_.full_y + y;
-    work_tile.w = 1;
-    work_tile.h = 1;
-    work_tile.start_sample = start_sample;
-    work_tile.num_samples = 1;
-    work_tile.offset = offset;
-    work_tile.stride = stride;
-    work_tile.buffer = render_buffers_->buffer.data();
+      KernelWorkTile work_tile;
+      work_tile.x = effective_buffer_params_.full_x + x;
+      work_tile.y = effective_buffer_params_.full_y + y;
+      work_tile.w = 1;
+      work_tile.h = 1;
+      work_tile.start_sample = start_sample;
+      work_tile.num_samples = 1;
+      work_tile.offset = offset;
+      work_tile.stride = stride;
+      work_tile.buffer = render_buffers_->buffer.data();
 
-    const int thread_index = tbb::this_task_arena::current_thread_index();
-    DCHECK_GE(thread_index, 0);
-    DCHECK_LE(thread_index, kernel_thread_globals_.size());
+      const int thread_index = tbb::this_task_arena::current_thread_index();
+      DCHECK_GE(thread_index, 0);
+      DCHECK_LE(thread_index, kernel_thread_globals_.size());
 
-    render_samples_full_pipeline(kernel_thread_globals_[thread_index], work_tile, samples_num);
+      render_samples_full_pipeline(kernel_thread_globals_[thread_index], work_tile, samples_num);
+    });
   });
 }
 

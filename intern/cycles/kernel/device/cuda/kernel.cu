@@ -375,11 +375,12 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                       int stride)
 {
   const int work_index = ccl_global_id(0);
-  const int y = sy + work_index / sw;
-  const int x = sx + work_index - y * sw;
+  const int y = work_index / sw;
+  const int x = work_index - y * sw;
 
-  if (x < sx + sw && y < sy + sh) {
-    kernel_film_convert_to_half_float(NULL, rgba, buffer, sample_scale, x, y, offset, stride);
+  if (x < sw && y < sh) {
+    kernel_film_convert_to_half_float(
+      NULL, rgba, buffer, sample_scale, sx + x, sy + y, offset, stride);
   }
 }
 

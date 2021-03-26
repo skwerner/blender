@@ -125,14 +125,24 @@ RenderWork RenderScheduler::get_render_work()
   return render_work;
 }
 
+/* Knowing time which it took to complete a task at the current resolution divider approximate how
+ * long it would have taken to complete it at a final resolution.  */
+static double approximate_final_time(const RenderWork &render_work, double time)
+{
+  if (render_work.resolution_divider == 1) {
+    return time;
+  }
+
+  const double resolution_divider_sq = render_work.resolution_divider *
+                                       render_work.resolution_divider;
+  return time * resolution_divider_sq;
+}
+
 void RenderScheduler::report_path_trace_time(const RenderWork &render_work, double time)
 {
-  (void)render_work;
+  const double final_time_approx = approximate_final_time(render_work, time);
 
-  /* TODO(sergey): Multiply the time by the resolution divider, to give a more usabel estimate of
-   * how long path tracing takes when rendering final resolution. */
-
-  path_trace_time_.total_time += time;
+  path_trace_time_.total_time += final_time_approx;
   path_trace_time_.num_measured_times += render_work.path_trace.num_samples;
 
   VLOG(4) << "Average path tracing time: " << path_trace_time_.get_average() << " seconds.";
@@ -140,15 +150,41 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work, doub
 
 void RenderScheduler::report_denoise_time(const RenderWork &render_work, double time)
 {
-  (void)render_work;
+  const double final_time_approx = approximate_final_time(render_work, time);
 
-  /* TODO(sergey): Multiply the time by the resolution divider, to give a more usabel estimate of
-   * how long path tracing takes when rendering final resolution. */
-
-  denoise_time_.total_time += time;
+  denoise_time_.total_time += final_time_approx;
   ++denoise_time_.num_measured_times;
 
   VLOG(4) << "Average denoising time: " << denoise_time_.get_average() << " seconds.";
+}
+
+/* Heuristic which aims to give perceptually pleasant update interval in a way that at lower
+ * samples updates happens more often, but with higher number of samples updates happens less often
+ * but the device occupancy goes higher. */
+/* TODO(sergey): This is just a quick implementation, exact values might need to be tweaked based
+ * on a more careful experiments with viewport rendering. */
+static double guess_update_interval_in_second(bool background, int num_rendered_samples)
+{
+  if (background) {
+    if (num_rendered_samples < 32) {
+      return 1.0;
+    }
+    return 2.0;
+  }
+
+  if (num_rendered_samples < 4) {
+    return 0.1;
+  }
+  if (num_rendered_samples < 8) {
+    return 0.25;
+  }
+  if (num_rendered_samples < 16) {
+    return 0.5;
+  }
+  if (num_rendered_samples < 32) {
+    return 1.0;
+  }
+  return 2.0;
 }
 
 int RenderScheduler::get_num_samples_to_path_trace()
@@ -164,16 +200,16 @@ int RenderScheduler::get_num_samples_to_path_trace()
     return 1;
   }
 
-  /* TODO(sergey): Scheduler multiple samples to the viewport as well. */
-  if (!background_) {
-    return 1;
-  }
-
   const double time_per_sample_average = path_trace_time_.get_average();
+  const double num_samples_in_second = 1.0 / time_per_sample_average;
 
-  const int num_samples_in_second = max(int(1.0 / time_per_sample_average), 1);
+  const double update_interval_in_seconds = guess_update_interval_in_second(
+      background_, state_.num_rendered_samples);
 
-  return min(num_samples_in_second, num_total_samples_ - state_.num_rendered_samples);
+  const int num_samples_to_render = max(int(num_samples_in_second * update_interval_in_seconds),
+                                        1);
+
+  return min(num_samples_to_render, num_total_samples_ - state_.num_rendered_samples);
 }
 
 bool RenderScheduler::work_need_denoise(bool &delayed)

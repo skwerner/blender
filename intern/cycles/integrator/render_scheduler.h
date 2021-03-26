@@ -76,6 +76,8 @@ class RenderScheduler {
   void report_denoise_time(const RenderWork &render_work, double time);
 
  protected:
+  void update_start_resolution();
+
   /* Get number of samples which are to be path traces in the current work. */
   int get_num_samples_to_path_trace();
 
@@ -123,6 +125,8 @@ class RenderScheduler {
 
   BufferParams buffer_params_;
   DenoiseParams denoiser_params_;
+
+  int start_resolution_ = 0;
 };
 
 CCL_NAMESPACE_END

@@ -52,8 +52,24 @@ void RenderScheduler::set_total_samples(int num_samples)
   num_total_samples_ = num_samples;
 }
 
+static int get_divider(int w, int h, int start_resolution)
+{
+  int divider = 1;
+  if (start_resolution != INT_MAX) {
+    while (w * h > start_resolution * start_resolution) {
+      w = max(1, w / 2);
+      h = max(1, h / 2);
+
+      divider <<= 1;
+    }
+  }
+  return divider;
+}
+
 void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 {
+  update_start_resolution();
+
   buffer_params_ = buffer_params;
 
   set_total_samples(num_samples);
@@ -64,7 +80,8 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
     state_.resolution_divider = 1;
   }
   else {
-    state_.resolution_divider = 16;
+    state_.resolution_divider = get_divider(
+        buffer_params.width, buffer_params.height, start_resolution_);
   }
 
   state_.num_rendered_samples = 0;
@@ -248,6 +265,32 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
              (time_dt() - state_.last_gpu_display_update_time) < 1.0);
 
   return !delayed;
+}
+
+void RenderScheduler::update_start_resolution()
+{
+  if (path_trace_time_.num_measured_times < 2) {
+    start_resolution_ = 64;
+    return;
+  }
+
+  /* Value around 60 fps. */
+  const double update_interval_in_seconds = 0.015;
+
+  /* TODO(sergey): Take denoising and display update time into account. */
+  /* TODO(sergey): Feels like to be more correct some histeresis is needed. */
+
+  double time_per_sample_average = path_trace_time_.get_average();
+  int resolution_divider = 1;
+  while (time_per_sample_average > update_interval_in_seconds) {
+    resolution_divider = resolution_divider * 2;
+    time_per_sample_average /= 4.0;
+  }
+
+  const int pixel_area = buffer_params_.width * buffer_params_.height;
+  const int resolution = lround(sqrt(pixel_area));
+
+  start_resolution_ = max(64, resolution / resolution_divider);
 }
 
 CCL_NAMESPACE_END

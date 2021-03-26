@@ -87,6 +87,16 @@ class RenderScheduler {
    * later sample, to reduce overhead. */
   bool work_need_denoise(bool &delayed);
 
+  struct TimeAverage {
+    inline double get_average()
+    {
+      return total_time / num_measured_times;
+    }
+
+    double total_time = 0.0;
+    int num_measured_times = 0;
+  };
+
   struct {
     int resolution_divider = 1;
     int num_rendered_samples = 0;
@@ -95,25 +105,8 @@ class RenderScheduler {
     double last_gpu_display_update_time = 0.0;
   } state_;
 
-  struct {
-    inline double get_average()
-    {
-      return total_time / num_measured_times;
-    }
-
-    double total_time = 0.0;
-    int num_measured_times = 0;
-  } path_trace_time_;
-
-  struct {
-    inline double get_average()
-    {
-      return total_time / num_measured_times;
-    }
-
-    double total_time = 0.0;
-    int num_measured_times = 0;
-  } denoise_time_;
+  TimeAverage path_trace_time_;
+  TimeAverage denoise_time_;
 
   /* Possible offset of the first sample which is to be rendered. */
   int start_sample_ = 0;

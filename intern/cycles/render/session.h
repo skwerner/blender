@@ -54,7 +54,6 @@ class SessionParams {
 
   bool experimental;
   int samples;
-  int start_resolution;
   int denoising_start_sample;
   int pixel_size;
   int threads;
@@ -79,7 +78,6 @@ class SessionParams {
     progressive = false;
     experimental = false;
     samples = 1024;
-    start_resolution = INT_MAX;
     denoising_start_sample = 0;
     pixel_size = 1;
     threads = 0;
@@ -100,8 +98,8 @@ class SessionParams {
      * that can be handled by an existing Session are omitted. */
     return !(device == params.device && background == params.background &&
              progressive == params.progressive && experimental == params.experimental &&
-             start_resolution == params.start_resolution && pixel_size == params.pixel_size &&
-             threads == params.threads && adaptive_sampling == params.adaptive_sampling &&
+             pixel_size == params.pixel_size && threads == params.threads &&
+             adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling && cancel_timeout == params.cancel_timeout &&
              reset_timeout == params.reset_timeout && text_timeout == params.text_timeout &&
              shadingsystem == params.shadingsystem && denoising.type == params.denoising.type &&

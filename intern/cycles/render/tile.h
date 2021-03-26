@@ -104,14 +104,12 @@ class TileManager {
   TileManager(bool progressive,
               int num_samples,
 #if 0
-               int2 tile_size,
-#endif
+              int2 tile_size,
               int start_resolution,
-#if 0
-               bool preserve_tile_device,
-               bool background,
-               TileOrder tile_order,
-               int num_devices = 1,
+              bool preserve_tile_device,
+              bool background,
+              TileOrder tile_order,
+              int num_devices = 1,
 #endif
               int pixel_size = 1);
   ~TileManager();
@@ -167,10 +165,11 @@ class TileManager {
 
 #if 0
   int2 tile_size;
-   TileOrder tile_order;
-#endif
+  TileOrder tile_order;
 
   int start_resolution;
+#endif
+
   int pixel_size;
   int num_devices;
 

@@ -610,14 +610,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=10.0,
     )
 
-    preview_start_resolution: IntProperty(
-        name="Start Resolution",
-        description="Resolution to start rendering preview at, "
-        "progressively increasing it to the full viewport size",
-        min=8, max=16384,
-        default=64,
-        subtype='PIXEL'
-    )
     preview_denoising_start_sample: IntProperty(
         name="Start Denoising",
         description="Sample to start denoising the preview at",

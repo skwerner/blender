@@ -887,7 +887,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   }
 
   /* Viewport Performance */
-  params.start_resolution = get_int(cscene, "preview_start_resolution");
   params.pixel_size = b_engine.get_preview_pixel_size(b_scene);
 
   /* other parameters */
@@ -897,7 +896,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
 
   if (background) {
     params.progressive = false;
-    params.start_resolution = INT_MAX;
     params.pixel_size = 1;
   }
   else

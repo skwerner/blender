@@ -92,9 +92,7 @@ TileManager::TileManager(bool progressive_,
                          int num_samples_,
 #if 0
                           int2 tile_size_,
-#endif
-                         int start_resolution_,
-#if 0
+                          int start_resolution_,
                           bool preserve_tile_device_,
                           bool background_,
                           TileOrder tile_order_,
@@ -106,8 +104,8 @@ TileManager::TileManager(bool progressive_,
 #if 0
   tile_size = tile_size_;
   tile_order = tile_order_;
-#endif
   start_resolution = start_resolution_;
+#endif
   pixel_size = pixel_size_;
   slice_overlap = 0;
   num_samples = num_samples_;
@@ -142,7 +140,6 @@ void TileManager::device_free()
 
   state.tiles.clear();
 }
-#endif
 
 static int get_divider(int w, int h, int start_resolution)
 {
@@ -157,6 +154,7 @@ static int get_divider(int w, int h, int start_resolution)
   }
   return divider;
 }
+#endif
 
 void TileManager::reset(BufferParams &params_, int num_samples_)
 {
@@ -172,7 +170,11 @@ void TileManager::reset(BufferParams &params_, int num_samples_)
 #endif
 
   state.num_samples = 0;
+
+  state.resolution_divider = 1;
+#if 0
   state.resolution_divider = get_divider(params.width, params.height, start_resolution);
+#endif
 
 #if 0
   state.render_tiles.clear();
@@ -194,7 +196,13 @@ void TileManager::set_samples(int num_samples_)
     /* While rendering in the viewport, the initial preview resolution is increased to the native
      * resolution before the actual rendering begins. Therefore, additional pixel samples will be
      * rendered. */
+
+#if 0
     int divider = max(get_divider(params.width, params.height, start_resolution) / 2, pixel_size);
+#else
+    int divider = 1;
+#endif
+
     while (divider > pixel_size) {
       int image_w = max(1, params.width / divider);
       int image_h = max(1, params.height / divider);

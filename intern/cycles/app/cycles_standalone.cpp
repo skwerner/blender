@@ -527,9 +527,6 @@ static void options_parse(int argc, const char **argv)
     fprintf(stderr, "No file path specified\n");
     exit(EXIT_FAILURE);
   }
-
-  /* For smoother Viewport */
-  options.session_params.start_resolution = 64;
 }
 
 CCL_NAMESPACE_END

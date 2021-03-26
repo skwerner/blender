@@ -53,9 +53,7 @@ Session::Session(const SessionParams &params_)
                    params.samples,
 #if 0
                     make_int2(64, 64),
-#endif
-                   params.start_resolution,
-#if 0
+                    params.start_resolution,
                     params.background == false,
                     params.background,
                     TILE_BOTTOM_TO_TOP,

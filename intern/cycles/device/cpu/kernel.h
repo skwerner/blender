@@ -35,10 +35,17 @@ class CPUKernels {
       const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
   using ShaderEvalFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, const KernelShaderEvalInput *, float4 *, const int)>;
+  using ConvertToHalfFloatFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,
+                                                                uchar4 *rgba,
+                                                                float *buffer,
+                                                                float sample_scale,
+                                                                int x,
+                                                                int y,
+                                                                int offset,
+                                                                int stride)>;
 
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
-  CPUKernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
-      convert_to_half_float;
+  ConvertToHalfFloatFunction convert_to_half_float;
   CPUKernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_byte;
   ShaderEvalFunction shader_eval_displace;

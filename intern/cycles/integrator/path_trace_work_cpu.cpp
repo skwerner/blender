@@ -74,7 +74,6 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
       work_tile.num_samples = 1;
       work_tile.offset = offset;
       work_tile.stride = stride;
-      work_tile.buffer = render_buffers_->buffer.data();
 
       const int thread_index = tbb::this_task_arena::current_thread_index();
       DCHECK_GE(thread_index, 0);

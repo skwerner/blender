@@ -164,6 +164,7 @@ class CUDADevice : public Device {
 
   void tex_free(device_texture &mem);
 
+#  if 0
   void adaptive_sampling_filter(uint filter_sample,
                                 KernelWorkTile *wtile,
                                 CUdeviceptr d_wtile,
@@ -172,6 +173,7 @@ class CUDADevice : public Device {
                               KernelWorkTile *wtile,
                               CUdeviceptr d_wtile,
                               CUstream stream = 0);
+#  endif
 
   virtual unique_ptr<DeviceQueue> queue_create() override;
 

@@ -1241,6 +1241,7 @@ void CUDADevice::tex_free(device_texture &mem)
 #  define CUDA_LAUNCH_KERNEL_1D(func, args) \
     cuda_assert(cuLaunchKernel(func, xblocks, yblocks, 1, threads_per_block, 1, 1, 0, 0, args, 0));
 
+#  if 0
 void CUDADevice::adaptive_sampling_filter(uint filter_sample,
                                           KernelWorkTile *wtile,
                                           CUdeviceptr d_wtile,
@@ -1314,6 +1315,7 @@ void CUDADevice::adaptive_sampling_post(RenderTile &rtile,
                              args,
                              0));
 }
+#  endif
 
 #  if 0
 void CUDADevice::render(DeviceTask &task,

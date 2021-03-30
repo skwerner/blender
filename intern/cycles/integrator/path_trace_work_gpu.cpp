@@ -315,7 +315,6 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
   for (int i = 0; i < num_work_tiles; i++) {
     KernelWorkTile &work_tile = work_tiles_.data()[i];
     work_tile = work_tiles[i];
-    work_tile.buffer = render_buffers_->buffer.data();
   }
 
   work_tiles_.copy_to_device();

@@ -302,6 +302,7 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     Device::build_bvh(bvh, progress, refit);
 }
 
+#if 0
 bool CPUDevice::adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample)
 {
   KernelWorkTile wtile;
@@ -357,7 +358,6 @@ void CPUDevice::adaptive_sampling_post(const RenderTile &tile, KernelGlobals *kg
   }
 }
 
-#if 0
 void CPUDevice::render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
 {
   const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;

@@ -93,6 +93,8 @@ ccl_device void kernel_cryptomatte_post(const KernelGlobals *kg,
                                         int offset,
                                         int stride)
 {
+  /* TODO(sergey): Bring this back, possibly as a separate kernel. */
+#  if 0
   if (sample - 1 == kernel_data.integrator.aa_samples) {
     int index = offset + x + y * stride;
     int pass_stride = kernel_data.film.pass_stride;
@@ -100,6 +102,7 @@ ccl_device void kernel_cryptomatte_post(const KernelGlobals *kg,
                                            kernel_data.film.pass_cryptomatte;
     kernel_sort_id_slots(cryptomatte_buffer, 2 * kernel_data.film.cryptomatte_depth);
   }
+#  endif
 }
 #endif
 

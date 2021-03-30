@@ -143,7 +143,7 @@ RenderWork RenderScheduler::get_render_work()
 }
 
 /* Knowing time which it took to complete a task at the current resolution divider approximate how
- * long it would have taken to complete it at a final resolution.  */
+ * long it would have taken to complete it at a final resolution. */
 static double approximate_final_time(const RenderWork &render_work, double time)
 {
   if (render_work.resolution_divider == 1) {

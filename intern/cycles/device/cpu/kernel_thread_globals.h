@@ -32,7 +32,7 @@ class CPUKernelThreadGlobals : public KernelGlobals {
   CPUKernelThreadGlobals();
 
   /* TODO(sergey): Would be nice to have properly typed OSLGlobals even in the case when building
-   * without OSL support. Will avoid need to those unnamed pointers and casts.  */
+   * without OSL support. Will avoid need to those unnamed pointers and casts. */
   CPUKernelThreadGlobals(const KernelGlobals &kernel_globals, void *osl_globals_memory);
 
   ~CPUKernelThreadGlobals();

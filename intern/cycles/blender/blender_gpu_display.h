@@ -178,7 +178,7 @@ class BlenderGPUDisplay : public GPUDisplay {
   bool gl_draw_resources_created_ = false;
 
   /* Vertex buffer which hold vertrices of a triangle fan which is textures with the texture
-   * holding the render result.  */
+   * holding the render result. */
   uint vertex_buffer_ = 0;
 
   void *gl_render_sync_ = nullptr;

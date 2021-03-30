@@ -180,6 +180,25 @@ MINLINE double interpd(double target, double origin, double fac)
   return (fac * target) + (1.0f - fac) * origin;
 }
 
+MINLINE float ratiof(float min, float max, float pos)
+{
+  float range = max - min;
+  return range == 0 ? 0 : ((pos - min) / range);
+}
+
+MINLINE double ratiod(double min, double max, double pos)
+{
+  double range = max - min;
+  return range == 0 ? 0 : ((pos - min) / range);
+}
+
+/* Map a normalized value, i.e. from interval [0, 1] to interval [a, b]  */
+MINLINE float scalenorm(float a, float b, float x)
+{
+  BLI_assert(x <= 1 && x >= 0);
+  return (x * (b - a)) + a;
+}
+
 /* used for zoom values*/
 MINLINE float power_of_2(float val)
 {

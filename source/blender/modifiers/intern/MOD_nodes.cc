@@ -304,15 +304,15 @@ class GeometryNodesEvaluator {
     Vector<DSocket> from_sockets;
     socket_to_compute.foreach_origin_socket([&](DSocket socket) { from_sockets.append(socket); });
 
-    /* Multi-input sockets contain a vector of inputs. */
-    if (socket_to_compute->is_multi_input_socket()) {
-      return this->get_inputs_from_incoming_links(socket_to_compute, from_sockets);
-    }
-
     if (from_sockets.is_empty()) {
       /* The input is not connected, use the value from the socket itself. */
       const CPPType &type = *blender::nodes::socket_cpp_type_get(*socket_to_compute->typeinfo());
       return {get_unlinked_input_value(socket_to_compute, type)};
+    }
+
+    /* Multi-input sockets contain a vector of inputs. */
+    if (socket_to_compute->is_multi_input_socket()) {
+      return this->get_inputs_from_incoming_links(socket_to_compute, from_sockets);
     }
 
     const DSocket from_socket = from_sockets[0];
@@ -331,7 +331,7 @@ class GeometryNodesEvaluator {
         values.append(this->get_input_from_incoming_link(socket_to_compute, from_socket));
       }
       else {
-        /* If the same from-socket occures more than once, we make a copy of the first value. This
+        /* If the same from-socket occurs more than once, we make a copy of the first value. This
          * can happen when a node linked to a multi-input-socket is muted. */
         GMutablePointer value = values[first_occurence];
         const CPPType *type = value.type();
@@ -414,7 +414,9 @@ class GeometryNodesEvaluator {
   {
     const bNode &bnode = params.node();
 
-    this->store_ui_hints(node, params);
+    if (DEG_is_active(depsgraph_)) {
+      this->store_ui_hints(node, params);
+    }
 
     /* Use the geometry-node-execute callback if it exists. */
     if (bnode.typeinfo->geometry_node_execute != nullptr) {
@@ -456,9 +458,13 @@ class GeometryNodesEvaluator {
 
       for (const GeometryComponent *component : components) {
         component->attribute_foreach(
-            [&](StringRefNull attribute_name, const AttributeMetaData &UNUSED(meta_data)) {
-              BKE_nodetree_attribute_hint_add(
-                  *btree_original, context, *node->bnode(), attribute_name);
+            [&](StringRefNull attribute_name, const AttributeMetaData &meta_data) {
+              BKE_nodetree_attribute_hint_add(*btree_original,
+                                              context,
+                                              *node->bnode(),
+                                              attribute_name,
+                                              meta_data.domain,
+                                              meta_data.data_type);
               return true;
             });
       }
@@ -582,12 +588,12 @@ class GeometryNodesEvaluator {
     void *buffer = allocator_.allocate(type.size(), type.alignment());
 
     if (bsocket->type == SOCK_OBJECT) {
-      Object *object = ((bNodeSocketValueObject *)bsocket->default_value)->value;
+      Object *object = socket->default_value<bNodeSocketValueObject>()->value;
       PersistentObjectHandle object_handle = handle_map_.lookup(object);
       new (buffer) PersistentObjectHandle(object_handle);
     }
     else if (bsocket->type == SOCK_COLLECTION) {
-      Collection *collection = ((bNodeSocketValueCollection *)bsocket->default_value)->value;
+      Collection *collection = socket->default_value<bNodeSocketValueCollection>()->value;
       PersistentCollectionHandle collection_handle = handle_map_.lookup(collection);
       new (buffer) PersistentCollectionHandle(collection_handle);
     }
@@ -606,7 +612,7 @@ class GeometryNodesEvaluator {
       return {required_type, converted_buffer};
     }
     void *default_buffer = allocator_.allocate(required_type.size(), required_type.alignment());
-    type.copy_to_uninitialized(type.default_value(), default_buffer);
+    required_type.copy_to_uninitialized(required_type.default_value(), default_buffer);
     return {required_type, default_buffer};
   }
 };
@@ -647,7 +653,7 @@ static IDProperty *socket_add_property(IDProperty *settings_prop_group,
 
   prop->flag |= IDP_FLAG_OVERRIDABLE_LIBRARY;
 
-  /* Make the group in the ui container group to hold the property's UI settings. */
+  /* Make the group in the UI container group to hold the property's UI settings. */
   IDProperty *prop_ui_group;
   {
     IDPropertyTemplate idprop = {0};
@@ -716,10 +722,17 @@ static const SocketPropertyType *get_socket_property_type(const bNodeSocket &bso
           [](const bNodeSocket &socket) {
             return (PropertyType)((bNodeSocketValueFloat *)socket.default_value)->subtype;
           },
-          [](const IDProperty &property) { return property.type == IDP_FLOAT; },
+          [](const IDProperty &property) { return ELEM(property.type, IDP_FLOAT, IDP_DOUBLE); },
           [](const IDProperty &property,
              const PersistentDataHandleMap &UNUSED(handles),
-             void *r_value) { *(float *)r_value = IDP_Float(&property); },
+             void *r_value) {
+            if (property.type == IDP_FLOAT) {
+              *(float *)r_value = IDP_Float(&property);
+            }
+            else if (property.type == IDP_DOUBLE) {
+              *(float *)r_value = (float)IDP_Double(&property);
+            }
+          },
       };
       return &float_type;
     }
@@ -1193,7 +1206,9 @@ static void modifyGeometry(ModifierData *md,
     return;
   }
 
-  reset_tree_ui_storage(tree.used_node_tree_refs(), *ctx->object, *md);
+  if (DEG_is_active(ctx->depsgraph)) {
+    reset_tree_ui_storage(tree.used_node_tree_refs(), *ctx->object, *md);
+  }
 
   geometry_set = compute_geometry(
       tree, group_inputs, *group_outputs[0], std::move(geometry_set), nmd, ctx);

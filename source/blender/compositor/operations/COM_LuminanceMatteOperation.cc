@@ -21,10 +21,12 @@
 
 #include "IMB_colormanagement.h"
 
+namespace blender::compositor {
+
 LuminanceMatteOperation::LuminanceMatteOperation()
 {
-  addInputSocket(COM_DT_COLOR);
-  addOutputSocket(COM_DT_VALUE);
+  addInputSocket(DataType::Color);
+  addOutputSocket(DataType::Value);
 
   this->m_inputImageProgram = nullptr;
 }
@@ -75,3 +77,5 @@ void LuminanceMatteOperation::executePixelSampled(float output[4],
   /* don't make something that was more transparent less transparent */
   output[0] = min_ff(alpha, inColor[3]);
 }
+
+}  // namespace blender::compositor

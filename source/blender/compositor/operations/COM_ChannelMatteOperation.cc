@@ -19,10 +19,12 @@
 #include "COM_ChannelMatteOperation.h"
 #include "BLI_math.h"
 
+namespace blender::compositor {
+
 ChannelMatteOperation::ChannelMatteOperation()
 {
-  addInputSocket(COM_DT_COLOR);
-  addOutputSocket(COM_DT_VALUE);
+  addInputSocket(DataType::Color);
+  addOutputSocket(DataType::Value);
 
   this->m_inputImageProgram = nullptr;
 }
@@ -118,3 +120,5 @@ void ChannelMatteOperation::executePixelSampled(float output[4],
   /* Don't make something that was more transparent less transparent. */
   output[0] = MIN2(alpha, inColor[3]);
 }
+
+}  // namespace blender::compositor

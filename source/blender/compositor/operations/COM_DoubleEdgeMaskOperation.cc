@@ -23,6 +23,8 @@
 #include "DNA_node_types.h"
 #include "MEM_guardedalloc.h"
 
+namespace blender::compositor {
+
 // this part has been copied from the double edge mask
 static void do_adjacentKeepBorders(unsigned int t,
                                    unsigned int rw,
@@ -1308,14 +1310,14 @@ void DoubleEdgeMaskOperation::doDoubleEdgeMask(float *imask, float *omask, float
 
 DoubleEdgeMaskOperation::DoubleEdgeMaskOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
   this->m_inputInnerMask = nullptr;
   this->m_inputOuterMask = nullptr;
   this->m_adjacentOnly = false;
   this->m_keepInside = false;
-  this->setComplex(true);
+  this->flags.complex = true;
 }
 
 bool DoubleEdgeMaskOperation::determineDependingAreaOfInterest(rcti * /*input*/,
@@ -1379,3 +1381,5 @@ void DoubleEdgeMaskOperation::deinitExecution()
     this->m_cachedInstance = nullptr;
   }
 }
+
+}  // namespace blender::compositor

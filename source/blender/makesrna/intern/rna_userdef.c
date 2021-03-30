@@ -98,7 +98,7 @@ const EnumPropertyItem rna_enum_preference_section_items[] = {
 };
 
 static const EnumPropertyItem audio_device_items[] = {
-    {0, "Null", 0, "None", "Null device - there will be no audio output"},
+    {0, "None", 0, "None", "No device - there will be no audio output"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -5378,6 +5378,16 @@ static void rna_def_userdef_system(BlenderRNA *brna)
       {0, NULL, 0, NULL, NULL},
   };
 
+  static const EnumPropertyItem seq_proxy_setup_options[] = {
+      {USER_SEQ_PROXY_SETUP_MANUAL, "MANUAL", 0, "Manual", "Set up proxies manually"},
+      {USER_SEQ_PROXY_SETUP_AUTOMATIC,
+       "AUTOMATIC",
+       0,
+       "Automatic",
+       "Build proxies for added movie and image strips in each preview size"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   srna = RNA_def_struct(brna, "PreferencesSystem", NULL);
   RNA_def_struct_sdna(srna, "UserDef");
   RNA_def_struct_nested(brna, srna, "Preferences");
@@ -5445,6 +5455,13 @@ static void rna_def_userdef_system(BlenderRNA *brna)
       "Disk Cache Compression Level",
       "Smaller compression will result in larger files, but less decoding overhead");
 
+  /* Sequencer proxy setup */
+
+  prop = RNA_def_property(srna, "sequencer_proxy_setup", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_items(prop, seq_proxy_setup_options);
+  RNA_def_property_enum_sdna(prop, NULL, "sequencer_proxy_setup");
+  RNA_def_property_ui_text(prop, "Proxy Setup", "When and how proxies are created");
+
   prop = RNA_def_property(srna, "scrollback", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_int_sdna(prop, NULL, "scrollback");
   RNA_def_property_range(prop, 32, 32768);
@@ -5485,7 +5502,7 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_collection_sdna(prop, NULL, "light_param", "");
   RNA_def_property_struct_type(prop, "UserSolidLight");
   RNA_def_property_ui_text(
-      prop, "Solid Lights", "Lights user to display objects in solid shading mode");
+      prop, "Solid Lights", "Lights used to display objects in solid shading mode");
 
   prop = RNA_def_property(srna, "light_ambient", PROP_FLOAT, PROP_COLOR);
   RNA_def_property_float_sdna(prop, NULL, "light_ambient");
@@ -6198,7 +6215,8 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
   RNA_def_property_ui_text(prop,
                            "Auto Save Temporary Files",
                            "Automatic saving of temporary files in temp directory, "
-                           "uses process ID (sculpt and edit mode data won't be saved)");
+                           "uses process ID.\n"
+                           "Warning: Sculpt and edit mode data won't be saved");
   RNA_def_property_update(prop, 0, "rna_userdef_autosave_update");
 
   prop = RNA_def_property(srna, "auto_save_time", PROP_INT, PROP_NONE);
@@ -6245,6 +6263,14 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
       "Undo Legacy",
       "Use legacy undo (slower than the new default one, but may be more stable in some cases)");
 
+  prop = RNA_def_property(srna, "override_auto_resync", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_negative_sdna(prop, NULL, "no_override_auto_resync", 1);
+  RNA_def_property_ui_text(
+      prop,
+      "Override Auto Resync",
+      "Enable library overrides automatic resync detection and process on file load. Disable when "
+      "dealing with older .blend files that need manual Resync (Enforce) handling");
+
   prop = RNA_def_property(srna, "use_new_point_cloud_type", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "use_new_point_cloud_type", 1);
   RNA_def_property_ui_text(
@@ -6279,6 +6305,11 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
       prop,
       "Asset Browser",
       "Enable Asset Browser editor and operators to manage data-blocks as asset");
+
+  prop = RNA_def_property(srna, "use_override_templates", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, NULL, "use_override_templates", 1);
+  RNA_def_property_ui_text(
+      prop, "Override Templates", "Enable library override template in the python API");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

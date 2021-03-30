@@ -23,19 +23,23 @@
 #endif
 
 #include "COM_ChunkOrderHotspot.h"
-struct ChunkOrder {
-  unsigned int number;
-  int x;
-  int y;
-  double distance;
 
-  ChunkOrder();
+namespace blender::compositor {
+
+/** Helper to determine the order how chunks are prioritized during execution. */
+struct ChunkOrder {
+  unsigned int index = 0;
+  int x = 0;
+  int y = 0;
+  double distance = 0.0;
 
   friend bool operator<(const ChunkOrder &a, const ChunkOrder &b);
 
-  void update_distance(ChunkOrderHotspot **hotspots, unsigned int len_hotspots);
+  void update_distance(ChunkOrderHotspot *hotspots, unsigned int len_hotspots);
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:ChunkOrderHotspot")
 #endif
 };
+
+}  // namespace blender::compositor

@@ -20,14 +20,16 @@
 
 #include "BLI_math.h"
 
+namespace blender::compositor {
+
 /* ******** Mix Base Operation ******** */
 
 MixBaseOperation::MixBaseOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
   this->m_inputValueOperation = nullptr;
   this->m_inputColor1Operation = nullptr;
   this->m_inputColor2Operation = nullptr;
@@ -944,3 +946,5 @@ void MixValueOperation::executePixelSampled(float output[4],
 
   clampIfNeeded(output);
 }
+
+}  // namespace blender::compositor

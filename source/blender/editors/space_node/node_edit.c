@@ -1128,10 +1128,15 @@ static bool cursor_isect_multi_input_socket(const float cursor[2], const bNodeSo
 {
   const float node_socket_height = node_socket_calculate_height(socket);
   const rctf multi_socket_rect = {
-      .xmin = socket->locx - NODE_SOCKSIZE * 4,
-      .xmax = socket->locx + NODE_SOCKSIZE,
-      .ymin = socket->locy - node_socket_height * 0.5 - NODE_SOCKSIZE * 2.0f,
-      .ymax = socket->locy + node_socket_height * 0.5 + NODE_SOCKSIZE * 2.0f,
+      .xmin = socket->locx - NODE_SOCKSIZE * 4.0f,
+      .xmax = socket->locx + NODE_SOCKSIZE * 2.0f,
+      /*.xmax = socket->locx + NODE_SOCKSIZE * 5.5f
+       * would be the same behavior as for regular sockets.
+       * But keep it smaller because for multi-input socket you
+       * sometimes want to drag the link to the other side, if you may
+       * accidentally pick the wrong link otherwise. */
+      .ymin = socket->locy - node_socket_height * 0.5 - NODE_SOCKSIZE,
+      .ymax = socket->locy + node_socket_height * 0.5 + NODE_SOCKSIZE,
   };
   if (BLI_rctf_isect_pt(&multi_socket_rect, cursor[0], cursor[1])) {
     return true;
@@ -1141,7 +1146,7 @@ static bool cursor_isect_multi_input_socket(const float cursor[2], const bNodeSo
 
 /* type is SOCK_IN and/or SOCK_OUT */
 int node_find_indicated_socket(
-    SpaceNode *snode, bNode **nodep, bNodeSocket **sockp, float cursor[2], int in_out)
+    SpaceNode *snode, bNode **nodep, bNodeSocket **sockp, const float cursor[2], int in_out)
 {
   rctf rect;
 
@@ -1404,8 +1409,12 @@ static int node_read_viewlayers_exec(bContext *C, wmOperator *UNUSED(op))
   }
 
   LISTBASE_FOREACH (bNode *, node, &snode->edittree->nodes) {
-    if (node->type == CMP_NODE_R_LAYERS) {
+    if ((node->type == CMP_NODE_R_LAYERS) ||
+        (node->type == CMP_NODE_CRYPTOMATTE && node->custom1 == CMP_CRYPTOMATTE_SRC_RENDER)) {
       ID *id = node->id;
+      if (id == NULL) {
+        continue;
+      }
       if (id->tag & LIB_TAG_DOIT) {
         RE_ReadRenderResult(curscene, (Scene *)id);
         ntreeCompositTagRender((Scene *)id);
@@ -2742,7 +2751,7 @@ static int node_cryptomatte_add_socket_exec(bContext *C, wmOperator *UNUSED(op))
     node = nodeGetActive(snode->edittree);
   }
 
-  if (!node || node->type != CMP_NODE_CRYPTOMATTE) {
+  if (!node || node->type != CMP_NODE_CRYPTOMATTE_LEGACY) {
     return OPERATOR_CANCELLED;
   }
 
@@ -2786,7 +2795,7 @@ static int node_cryptomatte_remove_socket_exec(bContext *C, wmOperator *UNUSED(o
     node = nodeGetActive(snode->edittree);
   }
 
-  if (!node || node->type != CMP_NODE_CRYPTOMATTE) {
+  if (!node || node->type != CMP_NODE_CRYPTOMATTE_LEGACY) {
     return OPERATOR_CANCELLED;
   }
 

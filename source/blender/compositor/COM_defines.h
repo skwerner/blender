@@ -18,87 +18,71 @@
 
 #pragma once
 
+namespace blender::compositor {
+
 /**
  * \brief possible data types for sockets
  * \ingroup Model
  */
-typedef enum DataType {
+enum class DataType {
   /** \brief Value data type */
-  COM_DT_VALUE = 1,
+  Value = 0,
   /** \brief Vector data type */
-  COM_DT_VECTOR = 2,
+  Vector = 1,
   /** \brief Color data type */
-  COM_DT_COLOR = 4,
-} DataType;
+  Color = 2,
+};
 
 /**
  * \brief Possible quality settings
  * \see CompositorContext.quality
  * \ingroup Execution
  */
-typedef enum CompositorQuality {
+enum class CompositorQuality {
   /** \brief High quality setting */
-  COM_QUALITY_HIGH = 0,
+  High = 0,
   /** \brief Medium quality setting */
-  COM_QUALITY_MEDIUM = 1,
+  Medium = 1,
   /** \brief Low quality setting */
-  COM_QUALITY_LOW = 2,
-} CompositorQuality;
+  Low = 2,
+};
 
 /**
  * \brief Possible priority settings
  * \ingroup Execution
  */
-typedef enum CompositorPriority {
+enum class CompositorPriority {
   /** \brief High quality setting */
-  COM_PRIORITY_HIGH = 2,
+  High = 2,
   /** \brief Medium quality setting */
-  COM_PRIORITY_MEDIUM = 1,
+  Medium = 1,
   /** \brief Low quality setting */
-  COM_PRIORITY_LOW = 0,
-} CompositorPriority;
+  Low = 0,
+};
 
 // configurable items
 
 // chunk size determination
 #define COM_PREVIEW_SIZE 140.0f
-#define COM_OPENCL_ENABLED
 //#define COM_DEBUG
 
-// workscheduler threading models
-/**
- * COM_TM_QUEUE is a multi-threaded model, which uses the BLI_thread_queue pattern.
- * This is the default option.
- */
-#define COM_TM_QUEUE 1
-
-/**
- * COM_TM_NOTHREAD is a single threading model, everything is executed in the caller thread.
- * easy for debugging
- */
-#define COM_TM_NOTHREAD 0
-
-/**
- * COM_CURRENT_THREADING_MODEL can be one of the above, COM_TM_QUEUE is currently default.
- */
-#define COM_CURRENT_THREADING_MODEL COM_TM_QUEUE
 // chunk order
 /**
  * \brief The order of chunks to be scheduled
  * \ingroup Execution
  */
-typedef enum OrderOfChunks {
+enum class ChunkOrdering {
   /** \brief order from a distance to centerX/centerY */
-  COM_TO_CENTER_OUT = 0,
+  CenterOut = 0,
   /** \brief order randomly */
-  COM_TO_RANDOM = 1,
+  Random = 1,
   /** \brief no ordering */
-  COM_TO_TOP_DOWN = 2,
-  /** \brief experimental ordering with 9 hotspots */
-  COM_TO_RULE_OF_THIRDS = 3,
-} OrderOfChunks;
+  TopDown = 2,
+  /** \brief experimental ordering with 9 hot-spots. */
+  RuleOfThirds = 3,
 
-#define COM_ORDER_OF_CHUNKS_DEFAULT COM_TO_CENTER_OUT
+  Default = ChunkOrdering::CenterOut,
+};
 
 #define COM_RULE_OF_THIRDS_DIVIDER 100.0f
 
@@ -107,3 +91,5 @@ typedef enum OrderOfChunks {
 #define COM_NUM_CHANNELS_COLOR 4
 
 #define COM_BLUR_BOKEH_PIXELS 512
+
+}  // namespace blender::compositor

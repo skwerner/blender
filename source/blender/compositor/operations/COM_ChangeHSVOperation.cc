@@ -18,13 +18,15 @@
 
 #include "COM_ChangeHSVOperation.h"
 
+namespace blender::compositor {
+
 ChangeHSVOperation::ChangeHSVOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Color);
   this->m_inputOperation = nullptr;
 }
 
@@ -68,3 +70,5 @@ void ChangeHSVOperation::executePixelSampled(float output[4],
   output[2] = inputColor1[2] * value[0];
   output[3] = inputColor1[3];
 }
+
+}  // namespace blender::compositor

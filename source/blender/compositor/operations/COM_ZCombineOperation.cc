@@ -19,13 +19,15 @@
 #include "COM_ZCombineOperation.h"
 #include "BLI_utildefines.h"
 
+namespace blender::compositor {
+
 ZCombineOperation::ZCombineOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Color);
 
   this->m_image1Reader = nullptr;
   this->m_depth1Reader = nullptr;
@@ -97,10 +99,10 @@ void ZCombineOperation::deinitExecution()
 // MASK combine
 ZCombineMaskOperation::ZCombineMaskOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);  // mask
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Value);  // mask
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 
   this->m_maskReader = nullptr;
   this->m_image1Reader = nullptr;
@@ -158,3 +160,5 @@ void ZCombineMaskOperation::deinitExecution()
   this->m_maskReader = nullptr;
   this->m_image2Reader = nullptr;
 }
+
+}  // namespace blender::compositor

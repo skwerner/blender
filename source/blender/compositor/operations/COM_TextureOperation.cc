@@ -25,25 +25,27 @@
 #include "BLI_listbase.h"
 #include "BLI_threads.h"
 
+namespace blender::compositor {
+
 TextureBaseOperation::TextureBaseOperation()
 {
-  this->addInputSocket(COM_DT_VECTOR);  // offset
-  this->addInputSocket(COM_DT_VECTOR);  // size
+  this->addInputSocket(DataType::Vector);  // offset
+  this->addInputSocket(DataType::Vector);  // size
   this->m_texture = nullptr;
   this->m_inputSize = nullptr;
   this->m_inputOffset = nullptr;
   this->m_rd = nullptr;
   this->m_pool = nullptr;
   this->m_sceneColorManage = false;
-  setComplex(true);
+  flags.complex = true;
 }
 TextureOperation::TextureOperation() : TextureBaseOperation()
 {
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addOutputSocket(DataType::Color);
 }
 TextureAlphaOperation::TextureAlphaOperation() : TextureBaseOperation()
 {
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addOutputSocket(DataType::Value);
 }
 
 void TextureBaseOperation::initExecution()
@@ -155,3 +157,5 @@ void TextureBaseOperation::executePixelSampled(float output[4],
     output[0] = output[1] = output[2] = output[3];
   }
 }
+
+}  // namespace blender::compositor

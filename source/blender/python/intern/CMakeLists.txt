@@ -280,8 +280,20 @@ if(WITH_JACK)
   add_definitions(-DWITH_JACK)
 endif()
 
+if(WITH_COREAUDIO)
+  add_definitions(-DWITH_COREAUDIO)
+endif()
+
 if(WITH_LIBMV)
   add_definitions(-DWITH_LIBMV)
+endif()
+
+if(WITH_PULSEAUDIO)
+  add_definitions(-DWITH_PULSEAUDIO)
+endif()
+
+if(WITH_WASAPI)
+  add_definitions(-DWITH_WASAPI)
 endif()
 
 if(WITH_MOD_OCEANSIM)
@@ -349,6 +361,14 @@ endif()
 
 if(WITH_POTRACE)
   add_definitions(-DWITH_POTRACE)
+endif()
+
+if(WITH_PUGIXML)
+  add_definitions(-DWITH_PUGIXML)
+endif()
+
+if(WITH_HARU)
+  add_definitions(-DWITH_HARU)
 endif()
 
 blender_add_lib(bf_python "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

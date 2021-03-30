@@ -25,6 +25,8 @@
 #include "COM_SplitOperation.h"
 #include "COM_ViewerOperation.h"
 
+namespace blender::compositor {
+
 SplitViewerNode::SplitViewerNode(bNode *editorNode) : Node(editorNode)
 {
   /* pass */
@@ -60,7 +62,7 @@ void SplitViewerNode::convertToOperations(NodeConverter &converter,
 
   /* defaults - the viewer node has these options but not exposed for split view
    * we could use the split to define an area of interest on one axis at least */
-  viewerOperation->setChunkOrder(COM_ORDER_OF_CHUNKS_DEFAULT);
+  viewerOperation->setChunkOrder(ChunkOrdering::Default);
   viewerOperation->setCenterX(0.5f);
   viewerOperation->setCenterY(0.5f);
 
@@ -73,3 +75,5 @@ void SplitViewerNode::convertToOperations(NodeConverter &converter,
     converter.registerViewer(viewerOperation);
   }
 }
+
+}  // namespace blender::compositor

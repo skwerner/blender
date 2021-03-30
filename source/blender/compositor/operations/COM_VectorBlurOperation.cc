@@ -25,6 +25,8 @@
 
 #include "COM_VectorBlurOperation.h"
 
+namespace blender::compositor {
+
 /* Defined */
 #define PASS_VECTOR_MAX 10000.0f
 
@@ -45,16 +47,16 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove);
 /* VectorBlurOperation */
 VectorBlurOperation::VectorBlurOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_VALUE);  // ZBUF
-  this->addInputSocket(COM_DT_COLOR);  // SPEED
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Value);  // ZBUF
+  this->addInputSocket(DataType::Color);  // SPEED
+  this->addOutputSocket(DataType::Color);
   this->m_settings = nullptr;
   this->m_cachedInstance = nullptr;
   this->m_inputImageProgram = nullptr;
   this->m_inputSpeedProgram = nullptr;
   this->m_inputZProgram = nullptr;
-  setComplex(true);
+  flags.complex = true;
 }
 void VectorBlurOperation::initExecution()
 {
@@ -897,3 +899,5 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   }
   zbuf_free_span(&zspan);
 }
+
+}  // namespace blender::compositor

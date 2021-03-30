@@ -79,6 +79,7 @@ void register_node_type_cmp_inpaint(void);
 void register_node_type_cmp_despeckle(void);
 void register_node_type_cmp_defocus(void);
 void register_node_type_cmp_denoise(void);
+void register_node_type_cmp_antialiasing(void);
 
 void register_node_type_cmp_valtorgb(void);
 void register_node_type_cmp_rgbtobw(void);
@@ -106,6 +107,7 @@ void register_node_type_cmp_doubleedgemask(void);
 void register_node_type_cmp_keyingscreen(void);
 void register_node_type_cmp_keying(void);
 void register_node_type_cmp_cryptomatte(void);
+void register_node_type_cmp_cryptomatte_legacy(void);
 
 void register_node_type_cmp_translate(void);
 void register_node_type_cmp_rotate(void);

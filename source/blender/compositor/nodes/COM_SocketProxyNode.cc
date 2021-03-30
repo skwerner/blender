@@ -25,6 +25,8 @@
 #include "COM_SocketProxyOperation.h"
 #include "COM_WriteBufferOperation.h"
 
+namespace blender::compositor {
+
 SocketProxyNode::SocketProxyNode(bNode *editorNode,
                                  bNodeSocket *editorInput,
                                  bNodeSocket *editorOutput,
@@ -33,21 +35,21 @@ SocketProxyNode::SocketProxyNode(bNode *editorNode,
 {
   DataType dt;
 
-  dt = COM_DT_VALUE;
+  dt = DataType::Value;
   if (editorInput->type == SOCK_RGBA) {
-    dt = COM_DT_COLOR;
+    dt = DataType::Color;
   }
   if (editorInput->type == SOCK_VECTOR) {
-    dt = COM_DT_VECTOR;
+    dt = DataType::Vector;
   }
   this->addInputSocket(dt, editorInput);
 
-  dt = COM_DT_VALUE;
+  dt = DataType::Value;
   if (editorOutput->type == SOCK_RGBA) {
-    dt = COM_DT_COLOR;
+    dt = DataType::Color;
   }
   if (editorOutput->type == SOCK_VECTOR) {
-    dt = COM_DT_VECTOR;
+    dt = DataType::Vector;
   }
   this->addOutputSocket(dt, editorOutput);
 }
@@ -66,21 +68,21 @@ SocketBufferNode::SocketBufferNode(bNode *editorNode,
 {
   DataType dt;
 
-  dt = COM_DT_VALUE;
+  dt = DataType::Value;
   if (editorInput->type == SOCK_RGBA) {
-    dt = COM_DT_COLOR;
+    dt = DataType::Color;
   }
   if (editorInput->type == SOCK_VECTOR) {
-    dt = COM_DT_VECTOR;
+    dt = DataType::Vector;
   }
   this->addInputSocket(dt, editorInput);
 
-  dt = COM_DT_VALUE;
+  dt = DataType::Value;
   if (editorOutput->type == SOCK_RGBA) {
-    dt = COM_DT_COLOR;
+    dt = DataType::Color;
   }
   if (editorOutput->type == SOCK_VECTOR) {
-    dt = COM_DT_VECTOR;
+    dt = DataType::Vector;
   }
   this->addOutputSocket(dt, editorOutput);
 }
@@ -101,3 +103,5 @@ void SocketBufferNode::convertToOperations(NodeConverter &converter,
   converter.mapInputSocket(input, writeOperation->getInputSocket(0));
   converter.mapOutputSocket(output, readOperation->getOutputSocket());
 }
+
+}  // namespace blender::compositor

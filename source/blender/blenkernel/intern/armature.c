@@ -1532,14 +1532,6 @@ void BKE_pchan_bbone_deform_segment_index(const bPoseChannel *pchan,
 /** \name Bone Space to Space Conversion API
  * \{ */
 
-void get_objectspace_bone_matrix(struct Bone *bone,
-                                 float M_accumulatedMatrix[4][4],
-                                 int UNUSED(root),
-                                 int UNUSED(posed))
-{
-  copy_m4_m4(M_accumulatedMatrix, bone->arm_mat);
-}
-
 /* Convert World-Space Matrix to Pose-Space Matrix */
 void BKE_armature_mat_world_to_pose(Object *ob, const float inmat[4][4], float outmat[4][4])
 {
@@ -1699,7 +1691,7 @@ void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
             break;
 
           default:
-            BLI_assert(false);
+            BLI_assert_unreachable();
         }
       }
       /* If removing parent pose rotation: */
@@ -1731,7 +1723,7 @@ void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
             break;
 
           default:
-            BLI_assert(false);
+            BLI_assert_unreachable();
         }
       }
 

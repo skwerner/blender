@@ -23,6 +23,8 @@
 #include "COM_WrapOperation.h"
 #include "COM_WriteBufferOperation.h"
 
+namespace blender::compositor {
+
 TranslateNode::TranslateNode(bNode *editorNode) : Node(editorNode)
 {
   /* pass */
@@ -55,8 +57,8 @@ void TranslateNode::convertToOperations(NodeConverter &converter,
   converter.mapOutputSocket(outputSocket, operation->getOutputSocket(0));
 
   if (data->wrap_axis) {
-    WriteBufferOperation *writeOperation = new WriteBufferOperation(COM_DT_COLOR);
-    WrapOperation *wrapOperation = new WrapOperation(COM_DT_COLOR);
+    WriteBufferOperation *writeOperation = new WriteBufferOperation(DataType::Color);
+    WrapOperation *wrapOperation = new WrapOperation(DataType::Color);
     wrapOperation->setMemoryProxy(writeOperation->getMemoryProxy());
     wrapOperation->setWrapping(data->wrap_axis);
 
@@ -69,3 +71,5 @@ void TranslateNode::convertToOperations(NodeConverter &converter,
     converter.mapInputSocket(inputSocket, operation->getInputSocket(0));
   }
 }
+
+}  // namespace blender::compositor

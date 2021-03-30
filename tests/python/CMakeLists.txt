@@ -71,6 +71,12 @@ add_blender_test(
 )
 
 add_blender_test(
+  script_validate_keymap
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_keymap_validate.py
+  -- --relaxed  # Disable minor things that should not cause tests to break.
+)
+
+add_blender_test(
   script_load_addons
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_load_addons.py
 )
@@ -145,6 +151,12 @@ add_blender_test(
 add_blender_test(
   blendfile_liblink
   --python ${CMAKE_CURRENT_LIST_DIR}/bl_blendfile_liblink.py --
+  --output-dir ${TEST_OUT_DIR}/blendfile_io/
+)
+
+add_blender_test(
+  blendfile_library_overrides
+  --python ${CMAKE_CURRENT_LIST_DIR}/bl_blendfile_library_overrides.py --
   --output-dir ${TEST_OUT_DIR}/blendfile_io/
 )
 
@@ -699,6 +711,33 @@ if(WITH_CYCLES OR WITH_OPENGL_RENDER_TESTS)
       endforeach()
     endif()
   endif()
+endif()
+
+if(WITH_COMPOSITOR)
+  set(compositor_tests
+    color
+    converter
+    distort
+    filter
+    input
+    matte
+    output
+    vector
+
+    multiple_node_setups
+  )
+
+  foreach(comp_test ${compositor_tests})
+    add_python_test(
+      compositor_${comp_test}_test
+      ${CMAKE_CURRENT_LIST_DIR}/compositor_render_tests.py
+      -blender "${TEST_BLENDER_EXE}"
+      -testdir "${TEST_SRC_DIR}/compositor/${comp_test}"
+      -idiff "${OPENIMAGEIO_IDIFF}"
+      -outdir "${TEST_OUT_DIR}/compositor"
+    )
+  endforeach()
+
 endif()
 
 if(WITH_OPENGL_DRAW_TESTS)

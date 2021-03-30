@@ -29,7 +29,8 @@
 #include "COM_CompositorContext.h"
 #include "COM_NodeConverter.h"
 
-class Node;
+namespace blender::compositor {
+
 class NodeOperation;
 class NodeConverter;
 
@@ -208,17 +209,6 @@ class Node {
   virtual void convertToOperations(NodeConverter &converter,
                                    const CompositorContext &context) const = 0;
 
-  /**
-   * Create dummy warning operation, use when we can't get the source data.
-   */
-  NodeOperation *convertToOperations_invalid_index(NodeConverter *compiler, int index) const;
-  /**
-   * when a node has no valid data (missing image or a group nodes ID pointer is NULL)
-   * call this function from #convertToOperations, this way the node sockets are converted
-   * into valid outputs, without this the compositor system gets confused and crashes, see T32490.
-   */
-  void convertToOperations_invalid(NodeConverter *compiler) const;
-
   void setInstanceKey(bNodeInstanceKey instance_key)
   {
     m_instanceKey = instance_key;
@@ -292,9 +282,9 @@ class NodeInput {
     return m_link;
   }
 
-  float getEditorValueFloat();
-  void getEditorValueColor(float *value);
-  void getEditorValueVector(float *value);
+  float getEditorValueFloat() const;
+  void getEditorValueColor(float *value) const;
+  void getEditorValueVector(float *value) const;
 };
 
 /**
@@ -328,3 +318,5 @@ class NodeOutput {
   void getEditorValueColor(float *value);
   void getEditorValueVector(float *value);
 };
+
+}  // namespace blender::compositor

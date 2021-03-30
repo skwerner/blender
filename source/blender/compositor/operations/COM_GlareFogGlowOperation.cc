@@ -19,6 +19,8 @@
 #include "COM_GlareFogGlowOperation.h"
 #include "MEM_guardedalloc.h"
 
+namespace blender::compositor {
+
 /*
  *  2D Fast Hartley Transform, used for convolution
  */
@@ -268,7 +270,7 @@ static void convolve(float *dst, MemoryBuffer *in1, MemoryBuffer *in2)
   float *kernelBuffer = in2->getBuffer();
   float *imageBuffer = in1->getBuffer();
 
-  MemoryBuffer *rdst = new MemoryBuffer(COM_DT_COLOR, in1->getRect());
+  MemoryBuffer *rdst = new MemoryBuffer(DataType::Color, in1->get_rect());
   memset(rdst->getBuffer(),
          0,
          rdst->getWidth() * rdst->getHeight() * COM_NUM_CHANNELS_COLOR * sizeof(float));
@@ -417,7 +419,7 @@ void GlareFogGlowOperation::generateGlare(float *data,
   // make the convolution kernel
   rcti kernelRect;
   BLI_rcti_init(&kernelRect, 0, sz, 0, sz);
-  ckrn = new MemoryBuffer(COM_DT_COLOR, &kernelRect);
+  ckrn = new MemoryBuffer(DataType::Color, kernelRect);
 
   scale = 0.25f * sqrtf((float)(sz * sz));
 
@@ -442,3 +444,5 @@ void GlareFogGlowOperation::generateGlare(float *data,
   convolve(data, inputTile, ckrn);
   delete ckrn;
 }
+
+}  // namespace blender::compositor

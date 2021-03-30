@@ -82,7 +82,7 @@ NODE_DEFINE(Object)
 {
   NodeType *type = NodeType::add("object", create);
 
-  SOCKET_NODE(geometry, "Geometry", &Geometry::node_base_type);
+  SOCKET_NODE(geometry, "Geometry", Geometry::get_node_base_type());
   SOCKET_TRANSFORM(tfm, "Transform", transform_identity());
   SOCKET_UINT(visibility, "Visibility", ~0);
   SOCKET_COLOR(color, "Color", zero_float3());
@@ -98,13 +98,13 @@ NODE_DEFINE(Object)
 
   SOCKET_BOOLEAN(is_shadow_catcher, "Shadow Catcher", false);
 
-  SOCKET_NODE(particle_system, "Particle System", &ParticleSystem::node_type);
+  SOCKET_NODE(particle_system, "Particle System", ParticleSystem::get_node_type());
   SOCKET_INT(particle_index, "Particle Index", 0);
 
   return type;
 }
 
-Object::Object() : Node(node_type)
+Object::Object() : Node(get_node_type())
 {
   particle_system = NULL;
   particle_index = 0;
@@ -153,10 +153,6 @@ void Object::update_motion()
 
 void Object::compute_bounds(bool motion_blur)
 {
-  if (!is_modified() && !geometry->is_modified()) {
-    return;
-  }
-
   BoundBox mbounds = geometry->bounds;
 
   if (motion_blur && use_motion()) {
@@ -221,16 +217,7 @@ void Object::tag_update(Scene *scene)
 
   if (geometry) {
     if (tfm_is_modified()) {
-      /* tag the geometry as modified so the BVH is updated, but do not tag everything as modified
-       */
-      if (geometry->is_mesh() || geometry->is_volume()) {
-        Mesh *mesh = static_cast<Mesh *>(geometry);
-        mesh->tag_verts_modified();
-      }
-      else if (geometry->is_hair()) {
-        Hair *hair = static_cast<Hair *>(geometry);
-        hair->tag_curve_keys_modified();
-      }
+      flag |= ObjectManager::TRANSFORM_MODIFIED;
     }
 
     foreach (Node *node, geometry->get_used_shaders()) {
@@ -921,6 +908,10 @@ void ObjectManager::tag_update(Scene *scene, uint32_t flag)
      * added or removed, but the BVH still needs to updated. */
     if ((flag & (OBJECT_ADDED | OBJECT_REMOVED)) != 0) {
       geometry_flag |= (GeometryManager::GEOMETRY_ADDED | GeometryManager::GEOMETRY_REMOVED);
+    }
+
+    if ((flag & TRANSFORM_MODIFIED) != 0) {
+      geometry_flag |= GeometryManager::TRANSFORM_MODIFIED;
     }
 
     scene->geometry_manager->tag_update(scene, geometry_flag);

@@ -19,13 +19,15 @@
 
 #include "COM_SunBeamsOperation.h"
 
+namespace blender::compositor {
+
 SunBeamsOperation::SunBeamsOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
   this->setResolutionInputSocketIndex(0);
 
-  this->setComplex(true);
+  this->flags.complex = true;
 }
 
 void SunBeamsOperation::initExecution()
@@ -156,7 +158,7 @@ template<int fxu, int fxv, int fyu, int fyv> struct BufferLineAccumulator {
                    float dist_min,
                    float dist_max)
   {
-    rcti rect = *input->getRect();
+    const rcti &rect = input->get_rect();
     int buffer_width = input->getWidth();
     int x, y, num;
     float v, dv;
@@ -353,3 +355,5 @@ bool SunBeamsOperation::determineDependingAreaOfInterest(rcti *input,
 
   return NodeOperation::determineDependingAreaOfInterest(&rect, readOperation, output);
 }
+
+}  // namespace blender::compositor

@@ -261,17 +261,7 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_node.nodeclass_shader);
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - #blo_do_versions_userdef in this file.
-   * - "versioning_{BLENDER_VERSION}.c"
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
+  if (!USER_VERSION_ATLEAST(293, 15)) {
     FROM_DEFAULT_V4_UCHAR(space_properties.active);
 
     FROM_DEFAULT_V4_UCHAR(space_info.info_error);
@@ -284,6 +274,19 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_info.info_operator);
 
     btheme->space_spreadsheet = btheme->space_outliner;
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - #blo_do_versions_userdef in this file.
+   * - "versioning_{BLENDER_VERSION}.c"
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 
 #undef FROM_DEFAULT_V4_UCHAR
@@ -845,6 +848,14 @@ void blo_do_versions_userdef(UserDef *userdef)
     userdef->experimental.use_asset_browser = true;
   }
 
+  if (!USER_VERSION_ATLEAST(293, 12)) {
+    if (userdef->gizmo_size_navigate_v3d == 0) {
+      userdef->gizmo_size_navigate_v3d = 80;
+    }
+
+    userdef->sequencer_proxy_setup = USER_SEQ_PROXY_SETUP_AUTOMATIC;
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -856,9 +867,6 @@ void blo_do_versions_userdef(UserDef *userdef)
    */
   {
     /* Keep this block, even when empty. */
-    if (userdef->gizmo_size_navigate_v3d == 0) {
-      userdef->gizmo_size_navigate_v3d = 80;
-    }
   }
 
   LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {

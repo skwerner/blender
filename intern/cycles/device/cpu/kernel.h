@@ -27,13 +27,13 @@ struct TileInfo;
 
 class CPUKernels {
  public:
-  using CPUIntegratorFunction =
+  using IntegratorFunction =
       CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
-  using CPUIntegratorShadeFunction = CPUKernelFunction<void (*)(
+  using IntegratorShadeFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
-  using CPUIntegratorInitFunction = CPUKernelFunction<void (*)(
+  using IntegratorInitFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
-  using CPUShaderEvalFunction = CPUKernelFunction<void (*)(
+  using ShaderEvalFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, const KernelShaderEvalInput *, float4 *, const int)>;
 
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
@@ -41,8 +41,8 @@ class CPUKernels {
       convert_to_half_float;
   CPUKernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
       convert_to_byte;
-  CPUShaderEvalFunction shader_eval_displace;
-  CPUShaderEvalFunction shader_eval_background;
+  ShaderEvalFunction shader_eval_displace;
+  ShaderEvalFunction shader_eval_background;
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
 
   CPUKernelFunction<void (*)(
@@ -91,16 +91,16 @@ class CPUKernels {
   CPUKernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
       filter_finalize;
 
-  CPUIntegratorInitFunction integrator_init_from_camera;
-  CPUIntegratorFunction integrator_intersect_closest;
-  CPUIntegratorFunction integrator_intersect_shadow;
-  CPUIntegratorFunction integrator_intersect_subsurface;
-  CPUIntegratorShadeFunction integrator_shade_background;
-  CPUIntegratorShadeFunction integrator_shade_light;
-  CPUIntegratorShadeFunction integrator_shade_shadow;
-  CPUIntegratorShadeFunction integrator_shade_surface;
-  CPUIntegratorShadeFunction integrator_shade_volume;
-  CPUIntegratorShadeFunction integrator_megakernel;
+  IntegratorInitFunction integrator_init_from_camera;
+  IntegratorFunction integrator_intersect_closest;
+  IntegratorFunction integrator_intersect_shadow;
+  IntegratorFunction integrator_intersect_subsurface;
+  IntegratorShadeFunction integrator_shade_background;
+  IntegratorShadeFunction integrator_shade_light;
+  IntegratorShadeFunction integrator_shade_shadow;
+  IntegratorShadeFunction integrator_shade_surface;
+  IntegratorShadeFunction integrator_shade_volume;
+  IntegratorShadeFunction integrator_megakernel;
 
   CPUKernels();
 };

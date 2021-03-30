@@ -27,20 +27,20 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTraceWorkCPU::PathTraceWorkCPU(Device *render_device,
+PathTraceWorkCPU::PathTraceWorkCPU(Device *device,
                                    RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(render_device, buffers, cancel_requested_flag),
-      kernels_(*(render_device->get_cpu_kernels())),
+    : PathTraceWork(device, buffers, cancel_requested_flag),
+      kernels_(*(device->get_cpu_kernels())),
       render_buffers_(buffers)
 {
-  DCHECK_EQ(render_device->info.type, DEVICE_CPU);
+  DCHECK_EQ(device->info.type, DEVICE_CPU);
 }
 
 void PathTraceWorkCPU::init_execution()
 {
   /* Cache per-thread kernel globals. */
-  render_device_->get_cpu_kernel_thread_globals(kernel_thread_globals_);
+  device_->get_cpu_kernel_thread_globals(kernel_thread_globals_);
 }
 
 void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
@@ -55,7 +55,7 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
   /* TODO: limit this to number of threads of CPU device, it may be smaller than
    * the system number of threads when we reduce the number of CPU threads in
    * CPU + GPU rendering to dedicate some cores to handling the GPU device. */
-  tbb::task_arena local_arena(render_device_->info.cpu_threads);
+  tbb::task_arena local_arena(device_->info.cpu_threads);
   local_arena.execute([&]() {
     tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
       if (is_cancel_requested()) {

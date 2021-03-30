@@ -38,9 +38,9 @@ PathTrace::PathTrace(Device *device, RenderScheduler &render_scheduler)
 
   /* Create path tracing work in advance, so that it can be reused by incremental sampling as much
    * as possible. */
-  device->foreach_device([&](Device *render_device) {
+  device->foreach_device([&](Device *path_trace_device) {
     path_trace_works_.emplace_back(PathTraceWork::create(
-        render_device, full_render_buffers_.get(), &render_cancel_.is_requested));
+        path_trace_device, full_render_buffers_.get(), &render_cancel_.is_requested));
   });
 
   /* TODO(sergey): Communicate some scheduling block size to the work scheduler based on every

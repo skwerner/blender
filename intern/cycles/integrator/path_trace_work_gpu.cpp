@@ -27,18 +27,18 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTraceWorkGPU::PathTraceWorkGPU(Device *render_device,
+PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
                                    RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(render_device, buffers, cancel_requested_flag),
-      queue_(render_device->queue_create()),
+    : PathTraceWork(device, buffers, cancel_requested_flag),
+      queue_(device->queue_create()),
       render_buffers_(buffers),
-      integrator_state_(render_device, "integrator_state"),
-      integrator_path_queue_(render_device, "integrator_path_queue", MEM_READ_WRITE),
-      queued_paths_(render_device, "queued_paths", MEM_READ_WRITE),
-      num_queued_paths_(render_device, "num_queued_paths", MEM_READ_WRITE),
-      work_tiles_(render_device, "work_tiles", MEM_READ_WRITE),
-      gpu_display_rgba_half_(render_device, "display buffer half", MEM_READ_WRITE),
+      integrator_state_(device, "integrator_state"),
+      integrator_path_queue_(device, "integrator_path_queue", MEM_READ_WRITE),
+      queued_paths_(device, "queued_paths", MEM_READ_WRITE),
+      num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
+      work_tiles_(device, "work_tiles", MEM_READ_WRITE),
+      gpu_display_rgba_half_(device, "display buffer half", MEM_READ_WRITE),
       max_active_path_index_(0)
 {
   work_tile_scheduler_.set_max_num_path_states(get_max_num_paths());

@@ -27,7 +27,7 @@ CCL_NAMESPACE_BEGIN
  * and invoke denoising kernel via device API. */
 class DeviceDenoiser : public Denoiser {
  public:
-  DeviceDenoiser(Device *render_device, const DenoiseParams &params);
+  DeviceDenoiser(Device *device, const DenoiseParams &params);
 
   virtual void denoise_buffer(const DenoiserBufferParams &buffer_params,
                               RenderBuffers *render_buffers,

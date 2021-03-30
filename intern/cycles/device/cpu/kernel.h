@@ -44,7 +44,6 @@ class CPUKernels {
                                                                 int offset,
                                                                 int stride)>;
 
-  CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
   ConvertToHalfFloatFunction convert_to_half_float;
   ShaderEvalFunction shader_eval_displace;
   ShaderEvalFunction shader_eval_background;

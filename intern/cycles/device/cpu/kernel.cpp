@@ -29,8 +29,7 @@ CCL_NAMESPACE_BEGIN
 #define REGISTER_KERNEL(name) name(KERNEL_FUNCTIONS(name))
 
 CPUKernels::CPUKernels()
-    : REGISTER_KERNEL(path_trace),
-      REGISTER_KERNEL(convert_to_half_float),
+    : REGISTER_KERNEL(convert_to_half_float),
       REGISTER_KERNEL(shader_eval_displace),
       REGISTER_KERNEL(shader_eval_background),
       REGISTER_KERNEL(bake),

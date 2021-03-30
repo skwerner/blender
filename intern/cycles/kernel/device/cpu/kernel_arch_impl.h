@@ -57,28 +57,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Path Tracing */
-
-void KERNEL_FUNCTION_FULL_NAME(path_trace)(
-    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
-{
-#if 0
-#  ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, path_trace);
-#  else
-#    ifdef __BRANCHED_PATH__
-  if (kernel_data.integrator.branched) {
-    kernel_branched_path_trace(kg, buffer, sample, x, y, offset, stride);
-  }
-  else
-#    endif
-  {
-    kernel_path_trace(kg, buffer, sample, x, y, offset, stride);
-  }
-#  endif /* KERNEL_STUB */
-#endif
-}
-
 /* Film */
 
 void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,

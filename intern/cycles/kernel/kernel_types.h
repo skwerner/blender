@@ -256,8 +256,7 @@ enum PathTraceDimension {
 
 enum SamplingPattern {
   SAMPLING_PATTERN_SOBOL = 0,
-  SAMPLING_PATTERN_CMJ = 1,
-  SAMPLING_PATTERN_PMJ = 2,
+  SAMPLING_PATTERN_PMJ = 1,
 
   SAMPLING_NUM_PATTERNS,
 };

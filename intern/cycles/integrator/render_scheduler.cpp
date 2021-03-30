@@ -277,18 +277,21 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
 
 void RenderScheduler::update_start_resolution()
 {
-  if (path_trace_time_.num_measured_times < 2) {
-    start_resolution_ = 64;
+  if (!path_trace_time_.num_measured_times) {
+    /* Not enough information to calculate better resolution, keep the existing one. */
     return;
   }
 
-  /* Value around 60 fps. */
-  const double update_interval_in_seconds = 0.015;
+  const double update_interval_in_seconds = calculate_desired_update_interval();
 
-  /* TODO(sergey): Take denoising and display update time into account. */
   /* TODO(sergey): Feels like to be more correct some histeresis is needed. */
 
-  double time_per_sample_average = path_trace_time_.get_average();
+  double time_per_sample_average = path_trace_time_.get_average() +
+                                   display_update_time_.get_average();
+  if (is_denoise_active_during_update()) {
+    time_per_sample_average += denoise_time_.get_average();
+  }
+
   int resolution_divider = 1;
   while (time_per_sample_average > update_interval_in_seconds) {
     resolution_divider = resolution_divider * 2;
@@ -298,7 +301,37 @@ void RenderScheduler::update_start_resolution()
   const int pixel_area = buffer_params_.width * buffer_params_.height;
   const int resolution = lround(sqrt(pixel_area));
 
-  start_resolution_ = max(64, resolution / resolution_divider);
+  start_resolution_ = max(kDefaultStartResolution, resolution / resolution_divider);
+}
+
+double RenderScheduler::calculate_desired_update_interval() const
+{
+  if (is_denoise_active_during_update()) {
+    /* Use lower value than the non-denoised case to allow having more pixels to reconstruct the
+     * image from. With the faster updates and extra compute required the resolution becomes too
+     * low to give usable feedback. */
+    /* NOTE: Based on performance of OpenImageDenoiser on CPU. For OptiX denoiser or other denoiser
+     * on GPU the value might need to become lower for faster navigation. */
+    return 1.0 / 12.0;
+  }
+
+  /* NOTE: Based on Blender's viewport navigation update, which usually happens at 60fps. Allows to
+   * avoid "jelly" effect when Cycles render result is lagging behind too much from the overlays.
+   */
+  return 1.0 / 60.0;
+}
+
+bool RenderScheduler::is_denoise_active_during_update() const
+{
+  if (!denoiser_params_.use) {
+    return false;
+  }
+
+  if (denoiser_params_.start_sample > 1) {
+    return false;
+  }
+
+  return true;
 }
 
 CCL_NAMESPACE_END

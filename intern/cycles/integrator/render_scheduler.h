@@ -90,6 +90,12 @@ class RenderScheduler {
   bool work_need_denoise(bool &delayed);
 
   struct TimeAverage {
+    inline void reset()
+    {
+      total_time = 0.0;
+      num_measured_times = 0;
+    }
+
     inline double get_average()
     {
       return total_time / num_measured_times;

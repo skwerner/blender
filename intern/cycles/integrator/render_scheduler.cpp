@@ -87,11 +87,8 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.num_rendered_samples = 0;
   state_.last_gpu_display_update_time = 0.0;
 
-  path_trace_time_.total_time = 0.0;
-  path_trace_time_.num_measured_times = 0;
-
-  denoise_time_.total_time = 0.0;
-  denoise_time_.num_measured_times = 0;
+  path_trace_time_.reset();
+  denoise_time_.reset();
 }
 
 bool RenderScheduler::done() const

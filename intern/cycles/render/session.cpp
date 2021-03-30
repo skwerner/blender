@@ -506,15 +506,6 @@ bool Session::update_scene(int width, int height, int resolution)
 
   cam->set_screen_size_and_resolution(width, height, resolution);
 
-  /* number of samples is needed by multi jittered
-   * sampling pattern and by baking */
-  Integrator *integrator = scene->integrator;
-  BakeManager *bake_manager = scene->bake_manager;
-
-  if (integrator->get_sampling_pattern() != SAMPLING_PATTERN_SOBOL || bake_manager->get_baking()) {
-    integrator->set_aa_samples(tile_manager.num_samples);
-  }
-
   if (scene->update(progress)) {
     return true;
   }

@@ -1369,7 +1369,6 @@ typedef struct KernelIntegrator {
 
   /* sampler */
   int sampling_pattern;
-  int aa_samples;
   int adaptive_min_samples;
   int adaptive_step;
   int adaptive_stop_per_sample;
@@ -1385,7 +1384,7 @@ typedef struct KernelIntegrator {
 
   int max_closures;
 
-  int pad1, pad2;
+  int pad1, pad2, pad3;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

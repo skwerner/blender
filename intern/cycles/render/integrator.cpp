@@ -202,7 +202,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   }
 
   kintegrator->sampling_pattern = sampling_pattern;
-  kintegrator->aa_samples = aa_samples;
   if (aa_samples > 0 && adaptive_min_samples == 0) {
     kintegrator->adaptive_min_samples = max(4, (int)sqrtf(aa_samples));
     VLOG(1) << "Cycles adaptive sampling: automatic min samples = "

@@ -26,29 +26,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-static int aa_samples(Scene *scene, Object *object, ShaderEvalType type)
-{
-  if (type == SHADER_EVAL_UV || type == SHADER_EVAL_ROUGHNESS) {
-    return 1;
-  }
-  else if (type == SHADER_EVAL_NORMAL) {
-    /* Only antialias normal if mesh has bump mapping. */
-    if (object->get_geometry()) {
-      foreach (Node *node, object->get_geometry()->get_used_shaders()) {
-        Shader *shader = static_cast<Shader *>(node);
-        if (shader->has_bump) {
-          return scene->integrator->get_aa_samples();
-        }
-      }
-    }
-
-    return 1;
-  }
-  else {
-    return scene->integrator->get_aa_samples();
-  }
-}
-
 /* Keep it synced with kernel_bake.h logic */
 static int shader_type_to_pass_filter(ShaderEvalType type, int pass_filter)
 {
@@ -133,7 +110,6 @@ void BakeManager::device_update(Device * /*device*/,
     }
   });
 
-  KernelIntegrator *kintegrator = &dscene->data.integrator;
   KernelBake *kbake = &dscene->data.bake;
 
   kbake->type = type;
@@ -145,7 +121,6 @@ void BakeManager::device_update(Device * /*device*/,
     if (object->name == object_name && geom->geometry_type == Geometry::MESH) {
       kbake->object_index = object_index;
       kbake->tri_offset = geom->prim_offset;
-      kintegrator->aa_samples = aa_samples(scene, object, type);
       break;
     }
 

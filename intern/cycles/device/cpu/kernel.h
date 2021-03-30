@@ -31,8 +31,10 @@ class CPUKernels {
       CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
   using IntegratorShadeFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
-  using IntegratorInitFunction = CPUKernelFunction<void (*)(
-      const KernelGlobals *kg, IntegratorState *state, KernelWorkTile *tile)>;
+  using IntegratorInitFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,
+                                                            IntegratorState *state,
+                                                            KernelWorkTile *tile,
+                                                            ccl_global float *render_buffer)>;
   using ShaderEvalFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, const KernelShaderEvalInput *, float4 *, const int)>;
   using ConvertToHalfFloatFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,

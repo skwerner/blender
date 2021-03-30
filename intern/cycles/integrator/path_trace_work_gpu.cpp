@@ -326,6 +326,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
   void *d_integrator_path_queue = (void *)integrator_path_queue_.device_pointer;
   void *d_work_tile = (void *)work_tiles_.device_pointer;
   void *d_path_index = (void *)NULL;
+  void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
 
   if (max_active_path_index_ != 0) {
     compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, 0);
@@ -345,6 +346,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
                     &d_integrator_path_queue,
                     &d_path_index,
                     &d_work_tile,
+                    &d_render_buffer,
                     const_cast<int *>(&tile_work_size),
                     &num_paths};
 

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "kernel/kernel_accumulate.h"
 #include "kernel/kernel_camera.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_random.h"
@@ -59,6 +60,7 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
 
 ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
                                             const ccl_global KernelWorkTile *ccl_restrict tile,
+                                            ccl_global float *render_buffer,
                                             const int x,
                                             const int y,
                                             const int sample)
@@ -80,6 +82,8 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 
   /* Initialize path state. */
   path_state_init(INTEGRATOR_STATE_PASS, tile, sample, x, y, rng_hash);
+
+  kernel_accum_sample(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* Continue with intersect_closest kernel. */
   INTEGRATOR_PATH_INIT(INTERSECT_CLOSEST);

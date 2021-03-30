@@ -99,7 +99,7 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals &kernel_global
       break;
     }
 
-    kernels_.integrator_init_from_camera(&kernel_globals, state, &sample_work_tile);
+    kernels_.integrator_init_from_camera(&kernel_globals, state, &sample_work_tile, render_buffer);
     kernels_.integrator_megakernel(&kernel_globals, state, render_buffer);
 
     ++sample_work_tile.start_sample;

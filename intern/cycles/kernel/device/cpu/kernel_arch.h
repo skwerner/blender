@@ -50,8 +50,10 @@ void KERNEL_FUNCTION_FULL_NAME(bake)(
                                                     ccl_global float *render_buffer)
 
 #define KERNEL_INTEGRATOR_INIT_FUNCTION(name) \
-  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)( \
-      const KernelGlobals *ccl_restrict kg, IntegratorState *state, KernelWorkTile *tile)
+  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
+                                                    IntegratorState *state, \
+                                                    KernelWorkTile *tile, \
+                                                    ccl_global float *render_buffer)
 
 KERNEL_INTEGRATOR_INIT_FUNCTION(init_from_camera);
 KERNEL_INTEGRATOR_FUNCTION(intersect_closest);

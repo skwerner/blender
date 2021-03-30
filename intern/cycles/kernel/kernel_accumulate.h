@@ -544,4 +544,19 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
       INTEGRATOR_STATE_PASS, contribution, buffer, kernel_data.film.pass_emission);
 }
 
+/* Adaptive sampling passes. */
+
+ccl_device_inline void kernel_accum_sample(INTEGRATOR_STATE_CONST_ARGS,
+                                           ccl_global float *ccl_restrict render_buffer)
+{
+  if (!kernel_data.film.pass_sample_count) {
+    return;
+  }
+
+  ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
+                                                              render_buffer);
+
+  kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, 1.0f);
+}
+
 CCL_NAMESPACE_END

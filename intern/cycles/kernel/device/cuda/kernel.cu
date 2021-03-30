@@ -77,6 +77,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                             IntegratorPathQueue *queue,
                                             const int *path_index_array,
                                             KernelWorkTile *tile,
+                                            float *render_buffer,
                                             const int tile_work_size,
                                             const int path_index_offset)
 {
@@ -89,7 +90,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
     uint x, y, sample;
     get_work_pixel(tile, work_index, &x, &y, &sample);
-    integrator_init_from_camera(NULL, state, queue, path_index, tile, x, y, sample);
+    integrator_init_from_camera(NULL, state, queue, path_index, tile, render_buffer, x, y, sample);
   }
 }
 

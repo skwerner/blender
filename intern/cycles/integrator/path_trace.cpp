@@ -237,6 +237,8 @@ void PathTrace::copy_to_gpu_display(const RenderWork &render_work)
     return;
   }
 
+  const double start_time = time_dt();
+
   const float sample_scale = 1.0f / get_num_samples_in_buffer();
 
   if (!gpu_display_->update_begin(width, height)) {
@@ -253,6 +255,8 @@ void PathTrace::copy_to_gpu_display(const RenderWork &render_work)
   }
 
   gpu_display_->update_end();
+
+  render_scheduler_.report_display_update_time(render_work, time_dt() - start_time);
 }
 
 void PathTrace::cancel()

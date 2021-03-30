@@ -89,6 +89,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 
   path_trace_time_.reset();
   denoise_time_.reset();
+  display_update_time_.reset();
 }
 
 bool RenderScheduler::done() const
@@ -170,6 +171,16 @@ void RenderScheduler::report_denoise_time(const RenderWork &render_work, double 
   ++denoise_time_.num_measured_times;
 
   VLOG(4) << "Average denoising time: " << denoise_time_.get_average() << " seconds.";
+}
+
+void RenderScheduler::report_display_update_time(const RenderWork &render_work, double time)
+{
+  const double final_time_approx = approximate_final_time(render_work, time);
+
+  display_update_time_.total_time += final_time_approx;
+  ++display_update_time_.num_measured_times;
+
+  VLOG(4) << "Average display update time: " << display_update_time_.get_average() << " seconds.";
 }
 
 /* Heuristic which aims to give perceptually pleasant update interval in a way that at lower

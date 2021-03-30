@@ -74,6 +74,7 @@ class RenderScheduler {
   /* Report time (in seconds) which corresponding part of work took. */
   void report_path_trace_time(const RenderWork &render_work, double time);
   void report_denoise_time(const RenderWork &render_work, double time);
+  void report_display_update_time(const RenderWork &render_work, double time);
 
  protected:
   void update_start_resolution();
@@ -115,6 +116,7 @@ class RenderScheduler {
 
   TimeAverage path_trace_time_;
   TimeAverage denoise_time_;
+  TimeAverage display_update_time_;
 
   /* Possible offset of the first sample which is to be rendered. */
   int start_sample_ = 0;

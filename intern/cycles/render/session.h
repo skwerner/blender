@@ -192,24 +192,7 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-#if 0
-  void render();
-#endif
-
   void reset_(BufferParams &params, int samples);
-
-#if 0
-  bool steal_tile(RenderTile &tile, Device *tile_device, thread_scoped_lock &tile_lock);
-  bool get_tile_stolen();
-  bool acquire_tile(RenderTile &tile, Device *tile_device, uint tile_types);
-  void update_tile_sample(RenderTile &tile);
-  void release_tile(RenderTile &tile, const bool need_denoise);
-
-  void map_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
-  void unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
-
-  bool device_use_gl;
-#endif
 
   thread *session_thread;
 
@@ -218,22 +201,6 @@ class Session {
   thread_mutex pause_mutex;
   thread_mutex tile_mutex;
   thread_mutex buffers_mutex;
-#if 0
-  thread_condition_variable denoising_cond;
-  thread_condition_variable tile_steal_cond;
-#endif
-
-#if 0
-  RenderTile stolen_tile;
-  typedef enum {
-    NOT_STEALING,     /* There currently is no tile stealing in progress. */
-    WAITING_FOR_TILE, /* A device is waiting for another device to release a tile. */
-    RELEASING_TILE,   /* A device has releasing a stealable tile. */
-    GOT_TILE /* A device has released a stealable tile, which is now stored in stolen_tile. */
-  } TileStealingState;
-  std::atomic<TileStealingState> tile_stealing_state;
-  int stealable_tiles;
-#endif
 
   /* Render scheduler is used to get work to be rendered with the current big tile. */
   RenderScheduler render_scheduler_;

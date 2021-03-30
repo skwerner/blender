@@ -309,8 +309,6 @@ void CPUDevice::thread_run(DeviceTask &task)
 {
   if (task.type == DeviceTask::RENDER)
     thread_render(task);
-  else if (task.type == DeviceTask::FILM_CONVERT)
-    thread_film_convert(task);
   else if (task.type == DeviceTask::DENOISE_BUFFER)
     thread_denoise(task);
 }
@@ -1074,36 +1072,6 @@ void CPUDevice::thread_denoise(DeviceTask &task)
   }
 
   task.update_progress(&tile, tile.w * tile.h);
-}
-
-void CPUDevice::thread_film_convert(DeviceTask &task)
-{
-  float sample_scale = 1.0f / (task.sample + 1);
-
-  if (task.rgba_half) {
-    for (int y = task.y; y < task.y + task.h; y++)
-      for (int x = task.x; x < task.x + task.w; x++)
-        kernels.convert_to_half_float(&kernel_globals,
-                                      (uchar4 *)task.rgba_half,
-                                      (float *)task.buffer,
-                                      sample_scale,
-                                      x,
-                                      y,
-                                      task.offset,
-                                      task.stride);
-  }
-  else {
-    for (int y = task.y; y < task.y + task.h; y++)
-      for (int x = task.x; x < task.x + task.w; x++)
-        kernels.convert_to_byte(&kernel_globals,
-                                (uchar4 *)task.rgba_byte,
-                                (float *)task.buffer,
-                                sample_scale,
-                                x,
-                                y,
-                                task.offset,
-                                task.stride);
-  }
 }
 
 int CPUDevice::get_split_task_count(DeviceTask &task)

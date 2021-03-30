@@ -330,7 +330,7 @@ RenderWork Session::run_update_for_next_iteration()
     const int width = max(1, tile_manager.params.full_width / resolution);
     const int height = max(1, tile_manager.params.full_height / resolution);
 
-    if (update_scene(width, height, resolution)) {
+    if (update_scene(width, height)) {
       profiler.reset(scene->shaders.size(), scene->objects.size());
     }
     progress.add_skip_time(update_timer, params.background);
@@ -497,14 +497,14 @@ void Session::wait()
   session_thread = NULL;
 }
 
-bool Session::update_scene(int width, int height, int resolution)
+bool Session::update_scene(int width, int height)
 {
   /* update camera if dimensions changed for progressive render. the camera
    * knows nothing about progressive or cropped rendering, it just gets the
    * image dimensions passed in */
   Camera *cam = scene->camera;
 
-  cam->set_screen_size_and_resolution(width, height, resolution);
+  cam->set_screen_size(width, height);
 
   if (scene->update(progress)) {
     return true;

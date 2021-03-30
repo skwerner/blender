@@ -187,7 +187,7 @@ class Session {
 
   void run_main_render_loop();
 
-  bool update_scene(int width, int height, int resolution);
+  bool update_scene(int width, int height);
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 

@@ -169,7 +169,6 @@ Camera::Camera() : Node(node_type)
 
   width = 1024;
   height = 512;
-  resolution = 1;
 
   use_perspective_motion = false;
 
@@ -455,7 +454,6 @@ void Camera::update(Scene *scene)
   /* render size */
   kcam->width = width;
   kcam->height = height;
-  kcam->resolution = resolution;
 
   /* store differentials */
   kcam->dx = float3_to_float4(dx);
@@ -789,12 +787,11 @@ bool Camera::use_motion() const
   return motion.size() > 1;
 }
 
-void Camera::set_screen_size_and_resolution(int width_, int height_, int resolution_)
+void Camera::set_screen_size(int width_, int height_)
 {
-  if (width_ != width || height_ != height || resolution_ != resolution) {
+  if (width_ != width || height_ != height) {
     width = width_;
     height = height_;
-    resolution = resolution_;
     tag_modified();
   }
 }

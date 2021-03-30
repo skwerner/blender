@@ -1780,8 +1780,8 @@ void GeometryManager::device_update(Device *device,
     });
 
     Camera *dicing_camera = scene->dicing_camera;
-    dicing_camera->set_screen_size_and_resolution(
-        dicing_camera->get_full_width(), dicing_camera->get_full_height(), 1);
+    dicing_camera->set_screen_size(dicing_camera->get_full_width(),
+                                   dicing_camera->get_full_height());
     dicing_camera->update(scene);
 
     size_t i = 0;

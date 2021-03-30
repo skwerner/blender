@@ -16,7 +16,9 @@
 
 #include "device/device_denoising.h"
 
-#include "kernel/filter/filter_defines.h"
+#if 0
+
+#  include "kernel/filter/filter_defines.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -351,3 +353,5 @@ void DenoisingTask::run_denoising(RenderTile &tile)
 }
 
 CCL_NAMESPACE_END
+
+#endif

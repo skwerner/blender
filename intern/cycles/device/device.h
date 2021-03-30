@@ -23,7 +23,7 @@
 
 #include "device/device_graphics_interop.h"
 #include "device/device_memory.h"
-#include "device/device_task.h"
+#include "device/device_task.h" /* For denoiser and adaptive sampling. */
 
 #include "util/util_function.h"
 #include "util/util_list.h"
@@ -347,16 +347,6 @@ class Device {
     return true;
   }
 
-  /* tasks */
-  virtual int get_split_task_count(DeviceTask &)
-  {
-    return 1;
-  }
-
-  virtual void task_add(DeviceTask &task) = 0;
-  virtual void task_wait() = 0;
-  virtual void task_cancel() = 0;
-
   /* Queues. */
 
   /* Create new queue for executing kernels in.
@@ -388,18 +378,9 @@ class Device {
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);
 
   /* multi device */
-  virtual void map_tile(Device * /*sub_device*/, RenderTile & /*tile*/)
-  {
-  }
   virtual int device_number(Device * /*sub_device*/)
   {
     return 0;
-  }
-  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
-  {
-  }
-  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
-  {
   }
 
   virtual bool is_resident(device_ptr /*key*/, Device *sub_device)

@@ -16,15 +16,17 @@
 
 #include "render/denoising.h"
 
-#include "kernel/filter/filter_defines.h"
+#if 0
 
-#include "util/util_foreach.h"
-#include "util/util_map.h"
-#include "util/util_system.h"
-#include "util/util_task.h"
-#include "util/util_time.h"
+#  include "kernel/filter/filter_defines.h"
 
-#include <OpenImageIO/filesystem.h>
+#  include "util/util_foreach.h"
+#  include "util/util_map.h"
+#  include "util/util_system.h"
+#  include "util/util_task.h"
+#  include "util/util_time.h"
+
+#  include <OpenImageIO/filesystem.h>
 
 CCL_NAMESPACE_BEGIN
 
@@ -931,3 +933,5 @@ bool DenoiserPipeline::run()
 }
 
 CCL_NAMESPACE_END
+
+#endif

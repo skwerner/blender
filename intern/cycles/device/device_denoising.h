@@ -17,13 +17,15 @@
 #ifndef __DEVICE_DENOISING_H__
 #define __DEVICE_DENOISING_H__
 
-#include "device/device.h"
+#if 0
 
-#include "render/buffers.h"
+#  include "device/device.h"
 
-#include "kernel/filter/filter_defines.h"
+#  include "render/buffers.h"
 
-#include "util/util_profiling.h"
+#  include "kernel/filter/filter_defines.h"
+
+#  include "util/util_profiling.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -192,5 +194,7 @@ class DenoisingTask {
 };
 
 CCL_NAMESPACE_END
+
+#endif
 
 #endif /* __DEVICE_DENOISING_H__ */

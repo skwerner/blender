@@ -17,6 +17,11 @@
 #include "device/cpu/device.h"
 #include "device/cpu/device_impl.h"
 
+/* Used for `info.denoisers`. */
+/* TODO(sergey): The denoisers are probably to be moved completely out of the device into their
+ * own class. But until then keep API consistent with how it used to work before. */
+#include "util/util_openimagedenoise.h"
+
 CCL_NAMESPACE_BEGIN
 
 Device *device_cpu_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)

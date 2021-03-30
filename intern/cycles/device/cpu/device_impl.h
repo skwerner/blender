@@ -30,8 +30,6 @@
 #include "device/cpu/kernel.h"
 #include "device/device.h"
 #include "device/device_memory.h"
-#include "util/util_openimagedenoise.h"
-#include "util/util_task.h"
 
 // clang-format off
 #include "kernel/device/cpu/compat.h"
@@ -44,11 +42,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-class DenoisingTask;
-
 class CPUDevice : public Device {
  public:
-  TaskPool task_pool;
   KernelGlobals kernel_globals;
 
   device_vector<TextureInfo> texture_info;
@@ -57,11 +52,6 @@ class CPUDevice : public Device {
 #ifdef WITH_OSL
   OSLGlobals osl_globals;
 #endif
-#ifdef WITH_OPENIMAGEDENOISE
-  oidn::DeviceRef oidn_device;
-  oidn::FilterRef oidn_filter;
-#endif
-  thread_spin_lock oidn_task_lock;
 #ifdef WITH_EMBREE
   RTCScene embree_scene = NULL;
   RTCDevice embree_device;
@@ -97,8 +87,7 @@ class CPUDevice : public Device {
 
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
 
-  void thread_run(DeviceTask &task);
-
+#if 0
   bool denoising_non_local_means(device_ptr image_ptr,
                                  device_ptr guide_ptr,
                                  device_ptr variance_ptr,
@@ -139,35 +128,15 @@ class CPUDevice : public Device {
                                  device_ptr depth_ptr,
                                  device_ptr output_ptr,
                                  DenoisingTask *task);
+#endif
 
   bool adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample);
 
   void adaptive_sampling_post(const RenderTile &tile, KernelGlobals *kg);
 
-  void render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg);
-
-  void denoise_openimagedenoise_buffer(DeviceTask &task,
-                                       float *buffer,
-                                       const size_t offset,
-                                       const size_t stride,
-                                       const size_t x,
-                                       const size_t y,
-                                       const size_t w,
-                                       const size_t h,
-                                       const float scale);
-
-  void denoise_openimagedenoise(DeviceTask &task, RenderTile &rtile);
-
+#if 0
   void denoise_nlm(DenoisingTask &denoising, RenderTile &tile);
-
-  void thread_render(DeviceTask &task);
-  void thread_denoise(DeviceTask &task);
-
-  virtual int get_split_task_count(DeviceTask &task) override;
-
-  virtual void task_add(DeviceTask &task) override;
-  virtual void task_wait() override;
-  virtual void task_cancel() override;
+#endif
 
   virtual unique_ptr<DeviceQueue> queue_create() override;
 

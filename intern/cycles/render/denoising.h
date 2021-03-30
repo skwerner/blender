@@ -17,19 +17,21 @@
 #ifndef __DENOISING_H__
 #define __DENOISING_H__
 
+#if 0
+
 /* TODO(sergey): Make it explicit and clear when something is a denoiser, its pipeline or
  * parameters. Currently it is an annoying mixture of terms used interchangeably. */
 
-#include "device/device.h"
-#include "device/device_denoising.h"
+#  include "device/device.h"
+#  include "device/device_denoising.h"
 
-#include "render/buffers.h"
+#  include "render/buffers.h"
 
-#include "util/util_string.h"
-#include "util/util_unique_ptr.h"
-#include "util/util_vector.h"
+#  include "util/util_string.h"
+#  include "util/util_unique_ptr.h"
+#  include "util/util_vector.h"
 
-#include <OpenImageIO/imageio.h>
+#  include <OpenImageIO/imageio.h>
 
 OIIO_NAMESPACE_USING
 
@@ -209,5 +211,7 @@ class DenoiseTask {
 };
 
 CCL_NAMESPACE_END
+
+#endif
 
 #endif /* __DENOISING_H__ */

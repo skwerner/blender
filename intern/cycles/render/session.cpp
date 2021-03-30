@@ -404,7 +404,6 @@ void Session::reset(BufferParams &buffer_params, int samples)
   delayed_reset.params = buffer_params;
   delayed_reset.samples = samples;
   delayed_reset.do_reset = true;
-  device->task_cancel();
 
   path_trace_->cancel();
 

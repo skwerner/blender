@@ -28,6 +28,8 @@ CCL_NAMESPACE_BEGIN
 
 /* Device Task */
 
+#if 0
+
 DeviceTask::DeviceTask(Type type_)
     : type(type_),
       x(0),
@@ -112,6 +114,8 @@ void DeviceTask::update_progress(RenderTile *rtile, int pixel_samples)
     }
   }
 }
+
+#endif
 
 /* Adaptive Sampling */
 

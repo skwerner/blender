@@ -1262,6 +1262,7 @@ void CUDADevice::tex_free(device_texture &mem)
 #  define CUDA_LAUNCH_KERNEL_1D(func, args) \
     cuda_assert(cuLaunchKernel(func, xblocks, yblocks, 1, threads_per_block, 1, 1, 0, 0, args, 0));
 
+#  if 0
 bool CUDADevice::denoising_non_local_means(device_ptr image_ptr,
                                            device_ptr guide_ptr,
                                            device_ptr variance_ptr,
@@ -1682,6 +1683,7 @@ void CUDADevice::denoise(RenderTile &rtile, DenoisingTask &denoising)
 
   denoising.run_denoising(rtile);
 }
+#  endif
 
 void CUDADevice::adaptive_sampling_filter(uint filter_sample,
                                           KernelWorkTile *wtile,
@@ -1757,6 +1759,7 @@ void CUDADevice::adaptive_sampling_post(RenderTile &rtile,
                              0));
 }
 
+#  if 0
 void CUDADevice::render(DeviceTask &task,
                         RenderTile &rtile,
                         device_vector<KernelWorkTile> &work_tiles)
@@ -1917,32 +1920,7 @@ void CUDADevice::thread_run(DeviceTask &task)
     task.update_progress(&tile, tile.w * tile.h);
   }
 }
-
-void CUDADevice::task_add(DeviceTask &task)
-{
-  CUDAContextScope scope(this);
-
-  /* Load texture info. */
-  load_texture_info();
-
-  /* Synchronize all memory copies before executing task. */
-  cuda_assert(cuCtxSynchronize());
-
-  task_pool.push([=] {
-    DeviceTask task_copy = task;
-    thread_run(task_copy);
-  });
-}
-
-void CUDADevice::task_wait()
-{
-  task_pool.wait();
-}
-
-void CUDADevice::task_cancel()
-{
-  task_pool.cancel();
-}
+#  endif
 
 unique_ptr<DeviceQueue> CUDADevice::queue_create()
 {

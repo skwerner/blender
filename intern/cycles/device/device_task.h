@@ -136,6 +136,7 @@ class AdaptiveSampling {
   int min_samples;
 };
 
+#if 0
 class DeviceTask {
  public:
   typedef enum { RENDER, DENOISE_BUFFER } Type;
@@ -191,6 +192,7 @@ class DeviceTask {
  protected:
   double last_update_time;
 };
+#endif
 
 CCL_NAMESPACE_END
 

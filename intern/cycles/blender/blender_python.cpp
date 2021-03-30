@@ -703,6 +703,10 @@ static bool image_parse_filepaths(PyObject *pyfilepaths, vector<string> &filepat
 
 static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *keywords)
 {
+#if 1
+  (void)args;
+  (void)keywords;
+#else
   static const char *keyword_list[] = {
       "preferences", "scene", "view_layer", "input", "output", "tile_size", "samples", NULL};
   PyObject *pypreferences, *pyscene, *pyviewlayer;
@@ -793,6 +797,7 @@ static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *key
     PyErr_SetString(PyExc_ValueError, denoiser.error.c_str());
     return NULL;
   }
+#endif
 
   Py_RETURN_NONE;
 }

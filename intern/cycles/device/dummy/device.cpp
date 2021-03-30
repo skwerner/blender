@@ -64,18 +64,6 @@ class DummyDevice : public Device {
   {
   }
 
-  virtual void task_add(DeviceTask &) override
-  {
-  }
-
-  virtual void task_wait() override
-  {
-  }
-
-  virtual void task_cancel() override
-  {
-  }
-
   virtual unique_ptr<DeviceQueue> queue_create() override
   {
     return nullptr;

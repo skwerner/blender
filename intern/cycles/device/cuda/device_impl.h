@@ -165,6 +165,7 @@ class CUDADevice : public Device {
 
   void tex_free(device_texture &mem);
 
+#  if 0
   bool denoising_non_local_means(device_ptr image_ptr,
                                  device_ptr guide_ptr,
                                  device_ptr variance_ptr,
@@ -215,6 +216,7 @@ class CUDADevice : public Device {
                                  DenoisingTask *task);
 
   void denoise(RenderTile &rtile, DenoisingTask &denoising);
+#  endif
 
   void adaptive_sampling_filter(uint filter_sample,
                                 KernelWorkTile *wtile,
@@ -224,18 +226,6 @@ class CUDADevice : public Device {
                               KernelWorkTile *wtile,
                               CUdeviceptr d_wtile,
                               CUstream stream = 0);
-
-  void render(DeviceTask &task, RenderTile &rtile, device_vector<KernelWorkTile> &work_tiles);
-
-  void shader(DeviceTask &task);
-
-  void thread_run(DeviceTask &task);
-
-  virtual void task_add(DeviceTask &task) override;
-
-  virtual void task_wait() override;
-
-  virtual void task_cancel() override;
 
   virtual unique_ptr<DeviceQueue> queue_create() override;
 

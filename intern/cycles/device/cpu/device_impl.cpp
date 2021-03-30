@@ -97,7 +97,6 @@ CPUDevice::~CPUDevice()
   rtcReleaseDevice(embree_device);
 #endif
 
-  task_pool.cancel();
   texture_info.free();
 }
 
@@ -305,14 +304,7 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     Device::build_bvh(bvh, progress, refit);
 }
 
-void CPUDevice::thread_run(DeviceTask &task)
-{
-  if (task.type == DeviceTask::RENDER)
-    thread_render(task);
-  else if (task.type == DeviceTask::DENOISE_BUFFER)
-    thread_denoise(task);
-}
-
+#if 0
 bool CPUDevice::denoising_non_local_means(device_ptr image_ptr,
                                           device_ptr guide_ptr,
                                           device_ptr variance_ptr,
@@ -605,6 +597,7 @@ bool CPUDevice::denoising_detect_outliers(device_ptr image_ptr,
   }
   return true;
 }
+#endif
 
 bool CPUDevice::adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample)
 {
@@ -661,6 +654,7 @@ void CPUDevice::adaptive_sampling_post(const RenderTile &tile, KernelGlobals *kg
   }
 }
 
+#if 0
 void CPUDevice::render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
 {
   const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;
@@ -727,220 +721,6 @@ void CPUDevice::render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
 
   if (task.adaptive_sampling.use && (tile.stealing_state != RenderTile::WAS_STOLEN)) {
     adaptive_sampling_post(tile, kg);
-  }
-}
-
-void CPUDevice::denoise_openimagedenoise_buffer(DeviceTask &task,
-                                                float *buffer,
-                                                const size_t offset,
-                                                const size_t stride,
-                                                const size_t x,
-                                                const size_t y,
-                                                const size_t w,
-                                                const size_t h,
-                                                const float scale)
-{
-#ifdef WITH_OPENIMAGEDENOISE
-  assert(openimagedenoise_supported());
-
-  /* Only one at a time, since OpenImageDenoise itself is multithreaded for full
-   * buffers, and for tiled rendering because creating multiple devices and filters
-   * is slow and memory hungry as well.
-   *
-   * TODO: optimize tiled rendering case, by batching together denoising of many
-   * tiles somehow? */
-  static thread_mutex mutex;
-  thread_scoped_lock lock(mutex);
-
-  /* Create device and filter, cached for reuse. */
-  if (!oidn_device) {
-    oidn_device = oidn::newDevice();
-    oidn_device.commit();
-  }
-  if (!oidn_filter) {
-    oidn_filter = oidn_device.newFilter("RT");
-    oidn_filter.set("hdr", true);
-    oidn_filter.set("srgb", false);
-  }
-
-  /* Set images with appropriate stride for our interleaved pass storage. */
-  struct {
-    const char *name;
-    const int offset;
-    const bool scale;
-    const bool use;
-    array<float> scaled_buffer;
-  } passes[] = {{"color", task.pass_denoising_data + DENOISING_PASS_COLOR, false, true},
-                {"albedo",
-                 task.pass_denoising_data + DENOISING_PASS_ALBEDO,
-                 true,
-                 task.denoising.input_passes >= DENOISER_INPUT_RGB_ALBEDO},
-                {"normal",
-                 task.pass_denoising_data + DENOISING_PASS_NORMAL,
-                 true,
-                 task.denoising.input_passes >= DENOISER_INPUT_RGB_ALBEDO_NORMAL},
-                {"output", 0, false, true},
-                {NULL, 0}};
-
-  for (int i = 0; passes[i].name; i++) {
-    if (!passes[i].use) {
-      continue;
-    }
-
-    const int64_t pixel_offset = offset + x + y * stride;
-    const int64_t buffer_offset = (pixel_offset * task.pass_stride + passes[i].offset);
-    const int64_t pixel_stride = task.pass_stride;
-    const int64_t row_stride = stride * pixel_stride;
-
-    if (passes[i].scale && scale != 1.0f) {
-      /* Normalize albedo and normal passes as they are scaled by the number of samples.
-       * For the color passes OIDN will perform auto-exposure making it unnecessary. */
-      array<float> &scaled_buffer = passes[i].scaled_buffer;
-      scaled_buffer.resize(w * h * 3);
-
-      for (int y = 0; y < h; y++) {
-        const float *pass_row = buffer + buffer_offset + y * row_stride;
-        float *scaled_row = scaled_buffer.data() + y * w * 3;
-
-        for (int x = 0; x < w; x++) {
-          scaled_row[x * 3 + 0] = pass_row[x * pixel_stride + 0] * scale;
-          scaled_row[x * 3 + 1] = pass_row[x * pixel_stride + 1] * scale;
-          scaled_row[x * 3 + 2] = pass_row[x * pixel_stride + 2] * scale;
-        }
-      }
-
-      oidn_filter.setImage(
-          passes[i].name, scaled_buffer.data(), oidn::Format::Float3, w, h, 0, 0, 0);
-    }
-    else {
-      oidn_filter.setImage(passes[i].name,
-                           buffer + buffer_offset,
-                           oidn::Format::Float3,
-                           w,
-                           h,
-                           0,
-                           pixel_stride * sizeof(float),
-                           row_stride * sizeof(float));
-    }
-  }
-
-  /* Execute filter. */
-  oidn_filter.commit();
-  oidn_filter.execute();
-#else
-  (void)task;
-  (void)buffer;
-  (void)offset;
-  (void)stride;
-  (void)x;
-  (void)y;
-  (void)w;
-  (void)h;
-  (void)scale;
-#endif
-}
-
-void CPUDevice::denoise_openimagedenoise(DeviceTask &task, RenderTile &rtile)
-{
-  if (task.type == DeviceTask::DENOISE_BUFFER) {
-    /* Copy pixels from compute device to CPU (no-op for CPU device). */
-    rtile.buffers->buffer.copy_from_device();
-
-    denoise_openimagedenoise_buffer(task,
-                                    (float *)rtile.buffer,
-                                    rtile.offset,
-                                    rtile.stride,
-                                    rtile.x,
-                                    rtile.y,
-                                    rtile.w,
-                                    rtile.h,
-                                    1.0f / rtile.sample);
-
-    /* todo: it may be possible to avoid this copy, but we have to ensure that
-     * when other code copies data from the device it doesn't overwrite the
-     * denoiser buffers. */
-    rtile.buffers->buffer.copy_to_device();
-  }
-  else {
-    /* Per-tile denoising. */
-    rtile.sample = rtile.start_sample + rtile.num_samples;
-    const float scale = 1.0f / rtile.sample;
-    const float invscale = rtile.sample;
-    const size_t pass_stride = task.pass_stride;
-
-    /* Map neighboring tiles into one buffer for denoising. */
-    RenderTileNeighbors neighbors(rtile);
-    task.map_neighbor_tiles(neighbors, this);
-    RenderTile &center_tile = neighbors.tiles[RenderTileNeighbors::CENTER];
-    rtile = center_tile;
-
-    /* Calculate size of the tile to denoise (including overlap). The overlap
-     * size was chosen empirically. OpenImageDenoise specifies an overlap size
-     * of 128 but this is significantly bigger than typical tile size. */
-    const int4 rect = rect_clip(rect_expand(center_tile.bounds(), 64), neighbors.bounds());
-    const int2 rect_size = make_int2(rect.z - rect.x, rect.w - rect.y);
-
-    /* Adjacent tiles are in separate memory regions, copy into single buffer. */
-    array<float> merged(rect_size.x * rect_size.y * task.pass_stride);
-
-    for (int i = 0; i < RenderTileNeighbors::SIZE; i++) {
-      RenderTile &ntile = neighbors.tiles[i];
-      if (!ntile.buffer) {
-        continue;
-      }
-
-      const int xmin = max(ntile.x, rect.x);
-      const int ymin = max(ntile.y, rect.y);
-      const int xmax = min(ntile.x + ntile.w, rect.z);
-      const int ymax = min(ntile.y + ntile.h, rect.w);
-
-      const size_t tile_offset = ntile.offset + xmin + ymin * ntile.stride;
-      const float *tile_buffer = (float *)ntile.buffer + tile_offset * pass_stride;
-
-      const size_t merged_stride = rect_size.x;
-      const size_t merged_offset = (xmin - rect.x) + (ymin - rect.y) * merged_stride;
-      float *merged_buffer = merged.data() + merged_offset * pass_stride;
-
-      for (int y = ymin; y < ymax; y++) {
-        for (int x = 0; x < pass_stride * (xmax - xmin); x++) {
-          merged_buffer[x] = tile_buffer[x] * scale;
-        }
-        tile_buffer += ntile.stride * pass_stride;
-        merged_buffer += merged_stride * pass_stride;
-      }
-    }
-
-    /* Denoise */
-    denoise_openimagedenoise_buffer(
-        task, merged.data(), 0, rect_size.x, 0, 0, rect_size.x, rect_size.y, 1.0f);
-
-    /* Copy back result from merged buffer. */
-    RenderTile &ntile = neighbors.target;
-    if (ntile.buffer) {
-      const int xmin = max(ntile.x, rect.x);
-      const int ymin = max(ntile.y, rect.y);
-      const int xmax = min(ntile.x + ntile.w, rect.z);
-      const int ymax = min(ntile.y + ntile.h, rect.w);
-
-      const size_t tile_offset = ntile.offset + xmin + ymin * ntile.stride;
-      float *tile_buffer = (float *)ntile.buffer + tile_offset * pass_stride;
-
-      const size_t merged_stride = rect_size.x;
-      const size_t merged_offset = (xmin - rect.x) + (ymin - rect.y) * merged_stride;
-      const float *merged_buffer = merged.data() + merged_offset * pass_stride;
-
-      for (int y = ymin; y < ymax; y++) {
-        for (int x = 0; x < pass_stride * (xmax - xmin); x += pass_stride) {
-          tile_buffer[x + 0] = merged_buffer[x + 0] * invscale;
-          tile_buffer[x + 1] = merged_buffer[x + 1] * invscale;
-          tile_buffer[x + 2] = merged_buffer[x + 2] * invscale;
-        }
-        tile_buffer += ntile.stride * pass_stride;
-        merged_buffer += merged_stride * pass_stride;
-      }
-    }
-
-    task.unmap_neighbor_tiles(neighbors, this);
   }
 }
 
@@ -1073,46 +853,7 @@ void CPUDevice::thread_denoise(DeviceTask &task)
 
   task.update_progress(&tile, tile.w * tile.h);
 }
-
-int CPUDevice::get_split_task_count(DeviceTask &task)
-{
-  return task.get_subtask_count(info.cpu_threads);
-}
-
-void CPUDevice::task_add(DeviceTask &task)
-{
-  /* Load texture info. */
-  load_texture_info();
-
-  /* split task into smaller ones */
-  list<DeviceTask> tasks;
-
-  if (task.type == DeviceTask::DENOISE_BUFFER &&
-      task.denoising.type == DENOISER_OPENIMAGEDENOISE) {
-    /* Denoise entire buffer at once with OIDN, it has own threading. */
-    tasks.push_back(task);
-  }
-  else {
-    task.split(tasks, info.cpu_threads);
-  }
-
-  foreach (DeviceTask &task, tasks) {
-    task_pool.push([=] {
-      DeviceTask task_copy = task;
-      thread_run(task_copy);
-    });
-  }
-}
-
-void CPUDevice::task_wait()
-{
-  task_pool.wait_work();
-}
-
-void CPUDevice::task_cancel()
-{
-  task_pool.cancel();
-}
+#endif
 
 unique_ptr<DeviceQueue> CPUDevice::queue_create()
 {

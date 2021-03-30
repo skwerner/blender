@@ -498,15 +498,6 @@ void Session::wait()
   session_thread = NULL;
 }
 
-bool Session::update_scene()
-{
-  const int width = tile_manager.state.buffer.full_width;
-  const int height = tile_manager.state.buffer.full_height;
-  const int resolution = tile_manager.state.resolution_divider;
-
-  return update_scene(width, height, resolution);
-}
-
 bool Session::update_scene(int width, int height, int resolution)
 {
   /* update camera if dimensions changed for progressive render. the camera

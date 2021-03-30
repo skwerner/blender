@@ -812,7 +812,6 @@ void OpenCLDevice::load_required_kernels(const DeviceRequestedFeatures &requeste
   vector<OpenCLProgram *> programs;
   base_program = OpenCLProgram(
       this, "base", "kernel_base.cl", get_build_options(requested_features, "base"));
-  base_program.add_kernel(ustring("convert_to_byte"));
   base_program.add_kernel(ustring("convert_to_half_float"));
   base_program.add_kernel(ustring("zero_buffer"));
   programs.push_back(&base_program);
@@ -1429,8 +1428,8 @@ void OpenCLDevice::film_convert(DeviceTask &task,
   cl_int d_offset = task.offset;
   cl_int d_stride = task.stride;
 
-  cl_kernel ckFilmConvertKernel = (rgba_byte) ? base_program(ustring("convert_to_byte")) :
-                                                base_program(ustring("convert_to_half_float"));
+  assert(rgba_half);
+  cl_kernel ckFilmConvertKernel = (base_program(ustring("convert_to_half_float"));
 
   cl_uint start_arg_index = kernel_set_args(ckFilmConvertKernel, 0, d_data, d_rgba, d_buffer);
 

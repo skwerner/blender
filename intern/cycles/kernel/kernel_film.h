@@ -65,57 +65,6 @@ ccl_device float film_transparency_to_alpha(float transparency)
   return saturate(1.0f - transparency);
 }
 
-ccl_device float4 film_map(const KernelGlobals *kg, float4 rgba_in)
-{
-  float4 result;
-
-  /* Conversion to SRGB. */
-  result.x = color_linear_to_srgb(rgba_in.x);
-  result.y = color_linear_to_srgb(rgba_in.y);
-  result.z = color_linear_to_srgb(rgba_in.z);
-  result.w = film_transparency_to_alpha(rgba_in.w);
-
-  return result;
-}
-
-ccl_device uchar4 film_float_to_byte(float4 color)
-{
-  uchar4 result;
-
-  /* simple float to byte conversion */
-  result.x = (uchar)(saturate(color.x) * 255.0f);
-  result.y = (uchar)(saturate(color.y) * 255.0f);
-  result.z = (uchar)(saturate(color.z) * 255.0f);
-  result.w = (uchar)(saturate(color.w) * 255.0f);
-
-  return result;
-}
-
-ccl_device void kernel_film_convert_to_byte(const KernelGlobals *kg,
-                                            ccl_global uchar4 *rgba,
-                                            ccl_global float *buffer,
-                                            float sample_scale,
-                                            int x,
-                                            int y,
-                                            int offset,
-                                            int stride)
-{
-  /* buffer offset */
-  int index = offset + x + y * stride;
-
-  float4 rgba_in = film_get_pass_result(kg, buffer, index);
-  if (kernel_data.film.display_divide_pass_stride == -1) {
-    rgba_in *= sample_scale;
-  }
-
-  /* map colors */
-  float4 float_result = film_map(kg, rgba_in);
-  uchar4 uchar_result = film_float_to_byte(float_result);
-
-  rgba += index;
-  *rgba = uchar_result;
-}
-
 ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
                                                   ccl_global uchar4 *rgba,
                                                   ccl_global float *buffer,

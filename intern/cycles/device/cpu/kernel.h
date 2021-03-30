@@ -46,8 +46,6 @@ class CPUKernels {
 
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> path_trace;
   ConvertToHalfFloatFunction convert_to_half_float;
-  CPUKernelFunction<void (*)(const KernelGlobals *, uchar4 *, float *, float, int, int, int, int)>
-      convert_to_byte;
   ShaderEvalFunction shader_eval_displace;
   ShaderEvalFunction shader_eval_background;
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;

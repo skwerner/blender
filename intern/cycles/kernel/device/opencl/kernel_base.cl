@@ -22,30 +22,6 @@
 #include "kernel/kernel_film.h"
 
 
-__kernel void kernel_ocl_convert_to_byte(
-	ccl_constant KernelData *data,
-	ccl_global uchar4 *rgba,
-	ccl_global float *buffer,
-
-	KERNEL_BUFFER_PARAMS,
-
-	float sample_scale,
-	int sx, int sy, int sw, int sh, int offset, int stride)
-{
-	KernelGlobals kglobals, *kg = &kglobals;
-
-	kg->data = data;
-
-	kernel_set_buffer_pointers(kg, KERNEL_BUFFER_ARGS);
-	kernel_set_buffer_info(kg);
-
-	int x = sx + ccl_global_id(0);
-	int y = sy + ccl_global_id(1);
-
-	if(x < sx + sw && y < sy + sh)
-		kernel_film_convert_to_byte(kg, rgba, buffer, sample_scale, x, y, offset, stride);
-}
-
 __kernel void kernel_ocl_convert_to_half_float(
 	ccl_constant KernelData *data,
 	ccl_global uchar4 *rgba,

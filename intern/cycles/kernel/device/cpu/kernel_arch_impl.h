@@ -81,22 +81,6 @@ void KERNEL_FUNCTION_FULL_NAME(path_trace)(
 
 /* Film */
 
-void KERNEL_FUNCTION_FULL_NAME(convert_to_byte)(const KernelGlobals *kg,
-                                                uchar4 *rgba,
-                                                float *buffer,
-                                                float sample_scale,
-                                                int x,
-                                                int y,
-                                                int offset,
-                                                int stride)
-{
-#ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, convert_to_byte);
-#else
-  kernel_film_convert_to_byte(kg, rgba, buffer, sample_scale, x, y, offset, stride);
-#endif /* KERNEL_STUB */
-}
-
 void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       uchar4 *rgba,
                                                       float *buffer,

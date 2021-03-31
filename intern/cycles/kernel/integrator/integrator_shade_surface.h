@@ -183,8 +183,6 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   integrator_state_write_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
 
   /* Copy state from main path to shadow path. */
-  INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
-
   const uint16_t bounce = INTEGRATOR_STATE(path, bounce);
   const uint16_t transparent_bounce = INTEGRATOR_STATE(path, transparent_bounce);
   uint32_t shadow_flag = INTEGRATOR_STATE(path, flag);
@@ -199,6 +197,8 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
   INTEGRATOR_STATE_WRITE(shadow_path, diffuse_glossy_ratio) = diffuse_glossy_ratio;
   INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
+
+  integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_PASS);
 
   /* Branch of shadow kernel. */
   INTEGRATOR_SHADOW_PATH_INIT(INTERSECT_SHADOW);

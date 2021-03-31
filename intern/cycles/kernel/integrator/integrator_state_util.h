@@ -128,4 +128,14 @@ ccl_device_forceinline void integrator_state_read_shadow_isect(INTEGRATOR_STATE_
 #endif
 }
 
+ccl_device_forceinline void integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_ARGS)
+{
+  for (int i = 0; i < INTEGRATOR_VOLUME_STACK_SIZE; i++) {
+    INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = INTEGRATOR_STATE_ARRAY(
+        volume_stack, i, object);
+    INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = INTEGRATOR_STATE_ARRAY(
+        volume_stack, i, shader);
+  }
+}
+
 CCL_NAMESPACE_END

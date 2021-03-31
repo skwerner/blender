@@ -215,19 +215,6 @@ typedef struct IntegratorState {
 #  define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
     ((state)->nested_struct[array_index].member)
 
-/* NOTE: Cast to `void*` to avoid strict compiler's `-Werror=class-memaccess`. The compiler is not
- * really wrong here, as it is possible that it might be better to rely on struct's assignment
- * operator. It is possible to implement with a bit of SFINAE magic based on `is_assignable`.
- * However, things gets a bit more complicated when `INTEGRATOR_STATE_COPY` is used for an array
- * of non-trivially-copyable structs.
- *
- * TODO(sergey): Check whether using assignment operator behaves better for vectorized registers
- * and either implement it properly, or re-state this note. */
-#  define INTEGRATOR_STATE_COPY(to_nested_struct, from_nested_struct) \
-    memcpy((void *)&state->to_nested_struct, \
-           (void *)&state->from_nested_struct, \
-           sizeof(state->from_nested_struct));
-
 #else /* __KERNEL_CPU__ */
 
 /* Array access on GPU (TODO: SoA). */
@@ -250,12 +237,6 @@ typedef struct IntegratorState {
     state[path_index].nested_struct[array_index].member
 #  define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
     INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member)
-
-/* TODO: check if memcpy emits efficient code on CUDA. */
-#  define INTEGRATOR_STATE_COPY(to_nested_struct, from_nested_struct) \
-    memcpy(&state[path_index].to_nested_struct, \
-           &state[path_index].from_nested_struct, \
-           sizeof(state[0].from_nested_struct));
 
 #endif /* __KERNEL__CPU__ */
 

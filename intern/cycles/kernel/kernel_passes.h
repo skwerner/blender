@@ -278,17 +278,17 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
     }
   }
 
-  if (flag & PASSMASK_COMPONENT(DIFFUSE)) {
+  if (flag & PASSMASK(DIFFUSE_COLOR)) {
     const float3 throughput = INTEGRATOR_STATE(path, throughput);
     kernel_write_pass_float3(buffer + kernel_data.film.pass_diffuse_color,
                              shader_bsdf_diffuse(kg, sd) * throughput);
   }
-  if (flag & PASSMASK_COMPONENT(GLOSSY)) {
+  if (flag & PASSMASK(GLOSSY_COLOR)) {
     const float3 throughput = INTEGRATOR_STATE(path, throughput);
     kernel_write_pass_float3(buffer + kernel_data.film.pass_glossy_color,
                              shader_bsdf_glossy(kg, sd) * throughput);
   }
-  if (flag & PASSMASK_COMPONENT(TRANSMISSION)) {
+  if (flag & PASSMASK(TRANSMISSION_COLOR)) {
     const float3 throughput = INTEGRATOR_STATE(path, throughput);
     kernel_write_pass_float3(buffer + kernel_data.film.pass_transmission_color,
                              shader_bsdf_transmission(kg, sd) * throughput);

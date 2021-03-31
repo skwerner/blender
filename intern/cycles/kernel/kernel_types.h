@@ -353,10 +353,6 @@ typedef enum ClosureLabel {
 #define PASS_NAME_JOIN(a, b) a##_##b
 #define PASSMASK(pass) (1 << ((PASS_NAME_JOIN(PASS, pass)) % 32))
 
-#define PASSMASK_COMPONENT(comp) \
-  (PASSMASK(PASS_NAME_JOIN(comp, DIRECT)) | PASSMASK(PASS_NAME_JOIN(comp, INDIRECT)) | \
-   PASSMASK(PASS_NAME_JOIN(comp, COLOR)))
-
 typedef enum PassType {
   PASS_NONE = 0,
 

@@ -20,7 +20,6 @@
 #  include "device/cuda/queue.h"
 #  include "device/cuda/util.h"
 #  include "device/device.h"
-#  include "device/device_denoising.h"
 
 #  include "util/util_map.h"
 #  include "util/util_task.h"
@@ -118,7 +117,7 @@ class CUDADevice : public Device {
   bool use_adaptive_compilation();
 
   virtual string compile_kernel_get_common_cflags(
-      const DeviceRequestedFeatures &requested_features, bool filter = false);
+      const DeviceRequestedFeatures &requested_features);
 
   string compile_kernel(const DeviceRequestedFeatures &requested_features,
                         const char *name,
@@ -164,59 +163,6 @@ class CUDADevice : public Device {
   void tex_alloc(device_texture &mem);
 
   void tex_free(device_texture &mem);
-
-#  if 0
-  bool denoising_non_local_means(device_ptr image_ptr,
-                                 device_ptr guide_ptr,
-                                 device_ptr variance_ptr,
-                                 device_ptr out_ptr,
-                                 DenoisingTask *task);
-
-  bool denoising_construct_transform(DenoisingTask *task);
-
-  bool denoising_accumulate(device_ptr color_ptr,
-                            device_ptr color_variance_ptr,
-                            device_ptr scale_ptr,
-                            int frame,
-                            DenoisingTask *task);
-
-  bool denoising_solve(device_ptr output_ptr, DenoisingTask *task);
-
-  bool denoising_combine_halves(device_ptr a_ptr,
-                                device_ptr b_ptr,
-                                device_ptr mean_ptr,
-                                device_ptr variance_ptr,
-                                int r,
-                                int4 rect,
-                                DenoisingTask *task);
-
-  bool denoising_divide_shadow(device_ptr a_ptr,
-                               device_ptr b_ptr,
-                               device_ptr sample_variance_ptr,
-                               device_ptr sv_variance_ptr,
-                               device_ptr buffer_variance_ptr,
-                               DenoisingTask *task);
-
-  bool denoising_get_feature(int mean_offset,
-                             int variance_offset,
-                             device_ptr mean_ptr,
-                             device_ptr variance_ptr,
-                             float scale,
-                             DenoisingTask *task);
-
-  bool denoising_write_feature(int out_offset,
-                               device_ptr from_ptr,
-                               device_ptr buffer_ptr,
-                               DenoisingTask *task);
-
-  bool denoising_detect_outliers(device_ptr image_ptr,
-                                 device_ptr variance_ptr,
-                                 device_ptr depth_ptr,
-                                 device_ptr output_ptr,
-                                 DenoisingTask *task);
-
-  void denoise(RenderTile &rtile, DenoisingTask &denoising);
-#  endif
 
   void adaptive_sampling_filter(uint filter_sample,
                                 KernelWorkTile *wtile,

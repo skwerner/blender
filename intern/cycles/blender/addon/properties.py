@@ -193,7 +193,7 @@ def enum_preview_denoiser(self, context):
 
 
 def enum_denoiser(self, context):
-    items = [('NLM', "NLM", "Cycles native non-local means denoiser, running on any compute device", 1)]
+    items = []
     items += enum_optix_denoiser(self, context)
     items += enum_openimagedenoise_denoiser(self, context)
     return items
@@ -258,8 +258,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     denoiser: EnumProperty(
         name="Denoiser",
         description="Denoise the image with the selected denoiser. "
-        "For denoising the image after rendering, denoising data render passes "
-        "also adapt to the selected denoiser",
+        "For denoising the image after rendering",
         items=enum_denoiser,
         default=1,
         update=update_render_passes,
@@ -1320,71 +1319,11 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         default=True,
         update=update_render_passes,
     )
-    denoising_diffuse_direct: BoolProperty(
-        name="Diffuse Direct",
-        description="Denoise the direct diffuse lighting",
-        default=True,
-    )
-    denoising_diffuse_indirect: BoolProperty(
-        name="Diffuse Indirect",
-        description="Denoise the indirect diffuse lighting",
-        default=True,
-    )
-    denoising_glossy_direct: BoolProperty(
-        name="Glossy Direct",
-        description="Denoise the direct glossy lighting",
-        default=True,
-    )
-    denoising_glossy_indirect: BoolProperty(
-        name="Glossy Indirect",
-        description="Denoise the indirect glossy lighting",
-        default=True,
-    )
-    denoising_transmission_direct: BoolProperty(
-        name="Transmission Direct",
-        description="Denoise the direct transmission lighting",
-        default=True,
-    )
-    denoising_transmission_indirect: BoolProperty(
-        name="Transmission Indirect",
-        description="Denoise the indirect transmission lighting",
-        default=True,
-    )
-    denoising_strength: FloatProperty(
-        name="Denoising Strength",
-        description="Controls neighbor pixel weighting for the denoising filter (lower values preserve more detail, but aren't as smooth)",
-        min=0.0, max=1.0,
-        default=0.5,
-    )
-    denoising_feature_strength: FloatProperty(
-        name="Denoising Feature Strength",
-        description="Controls removal of noisy image feature passes (lower values preserve more detail, but aren't as smooth)",
-        min=0.0, max=1.0,
-        default=0.5,
-    )
-    denoising_radius: IntProperty(
-        name="Denoising Radius",
-        description="Size of the image area that's used to denoise a pixel (higher values are smoother, but might lose detail and are slower)",
-        min=1, max=25,
-        default=8,
-        subtype="PIXEL",
-    )
-    denoising_relative_pca: BoolProperty(
-        name="Relative Filter",
-        description="When removing pixels that don't carry information, use a relative threshold instead of an absolute one (can help to reduce artifacts, but might cause detail loss around edges)",
-        default=False,
-    )
     denoising_store_passes: BoolProperty(
         name="Store Denoising Passes",
         description="Store the denoising feature passes and the noisy image. The passes adapt to the denoiser selected for rendering",
         default=False,
         update=update_render_passes,
-    )
-    denoising_neighbor_frames: IntProperty(
-        name="Neighbor Frames",
-        description="Number of neighboring frames to use for denoising animations (more frames produce smoother results at the cost of performance)",
-        min=0, max=7,
-        default=0,
     )
 
     denoising_optix_input_passes: EnumProperty(

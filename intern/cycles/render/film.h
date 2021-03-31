@@ -62,9 +62,6 @@ class Film : public Node {
 
   NODE_SOCKET_API(float, exposure)
   NODE_SOCKET_API(bool, denoising_data_pass)
-  NODE_SOCKET_API(bool, denoising_clean_pass)
-  NODE_SOCKET_API(bool, denoising_prefiltered_pass)
-  NODE_SOCKET_API(int, denoising_flags)
   NODE_SOCKET_API(float, pass_alpha_threshold)
 
   NODE_SOCKET_API(PassType, display_pass)
@@ -85,7 +82,6 @@ class Film : public Node {
  private:
   int pass_stride;
   int denoising_data_offset;
-  int denoising_clean_offset;
   size_t filter_table_offset;
 
  public:
@@ -104,7 +100,6 @@ class Film : public Node {
 
   int get_pass_stride() const;
   int get_denoising_data_offset() const;
-  int get_denoising_clean_offset() const;
   size_t get_filter_table_offset() const;
 };
 

@@ -23,7 +23,6 @@
  * parameters. Currently it is an annoying mixture of terms used interchangeably. */
 
 #  include "device/device.h"
-#  include "device/device_denoising.h"
 
 #  include "render/buffers.h"
 

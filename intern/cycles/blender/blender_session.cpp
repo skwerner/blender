@@ -519,8 +519,6 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   /* Set buffer params, using film settings from sync_render_passes. */
   buffer_params.passes = passes;
   buffer_params.denoising_data_pass = scene->film->get_denoising_data_pass();
-  buffer_params.denoising_clean_pass = scene->film->get_denoising_clean_pass();
-  buffer_params.denoising_prefiltered_pass = scene->film->get_denoising_prefiltered_pass();
 
   BL::RenderResult::views_iterator b_view_iter;
 

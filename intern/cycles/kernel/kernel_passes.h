@@ -35,31 +35,6 @@ ccl_device_forceinline ccl_global float *kernel_pass_pixel_render_buffer(
 
 #ifdef __DENOISING_FEATURES__
 
-#  if 0
-ccl_device_inline void kernel_write_denoising_shadow(const KernelGlobals *ccl_restrict kg,
-                                                     ccl_global float *ccl_restrict buffer,
-                                                     int sample,
-                                                     float path_total,
-                                                     float path_total_shaded)
-{
-  if (kernel_data.film.pass_denoising_data == 0)
-    return;
-
-  buffer += sample_is_even(kernel_data.integrator.sampling_pattern, sample) ?
-                DENOISING_PASS_SHADOW_B :
-                DENOISING_PASS_SHADOW_A;
-
-  path_total = ensure_finite(path_total);
-  path_total_shaded = ensure_finite(path_total_shaded);
-
-  kernel_write_pass_float(buffer, path_total);
-  kernel_write_pass_float(buffer + 1, path_total_shaded);
-
-  float value = path_total_shaded / max(path_total, 1e-7f);
-  kernel_write_pass_float(buffer + 2, value * value);
-}
-#  endif
-
 ccl_device_inline void kernel_write_denoising_features(
     INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
 {
@@ -70,8 +45,8 @@ ccl_device_inline void kernel_write_denoising_features(
   ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
 
   const float denoising_depth = ensure_finite(sd->ray_length);
-  kernel_write_pass_float_variance(
-      buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_DEPTH, denoising_depth);
+  kernel_write_pass_float(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_DEPTH,
+                          denoising_depth);
 
   /* Skip implicitly transparent surfaces. */
   if (sd->flag & SD_HAS_ONLY_VOLUME) {
@@ -136,10 +111,10 @@ ccl_device_inline void kernel_write_denoising_features(
     const float3 denoising_normal = ensure_finite3(normal);
     const float3 denoising_albedo = ensure_finite3(denoising_feature_throughput * diffuse_albedo);
 
-    kernel_write_pass_float3_variance(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_NORMAL, denoising_normal);
-    kernel_write_pass_float3_variance(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_ALBEDO, denoising_albedo);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_NORMAL,
+                             denoising_normal);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_ALBEDO,
+                             denoising_albedo);
 
     INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
   }
@@ -358,35 +333,6 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
     kernel_write_pass_float4(buffer, make_float4(L_sum.x, L_sum.y, L_sum.z, alpha));
   }
-
-  kernel_write_light_passes(kg, buffer, L);
-
-#  ifdef __DENOISING_FEATURES__
-  if (kernel_data.film.pass_denoising_data) {
-#    ifdef __SHADOW_TRICKS__
-    kernel_write_denoising_shadow(kg,
-                                  buffer + kernel_data.film.pass_denoising_data,
-                                  sample,
-                                  average(L->path_total),
-                                  average(L->path_total_shaded));
-#    else
-    kernel_write_denoising_shadow(
-        kg, buffer + kernel_data.film.pass_denoising_data, sample, 0.0f, 0.0f);
-#    endif
-    if (kernel_data.film.pass_denoising_clean) {
-      float3 noisy, clean;
-      path_radiance_split_denoising(kg, L, &noisy, &clean);
-      kernel_write_pass_float3_variance(
-          buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, noisy);
-      kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_clean, clean);
-    }
-    else {
-      kernel_write_pass_float3_variance(buffer + kernel_data.film.pass_denoising_data +
-                                            DENOISING_PASS_COLOR,
-                                        ensure_finite3(L_sum));
-    }
-  }
-#  endif /* __DENOISING_FEATURES__ */
 
 #  ifdef __KERNEL_DEBUG__
   kernel_write_debug_passes(kg, buffer, L);

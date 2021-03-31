@@ -1367,6 +1367,11 @@ void blo_do_versions_cycles(FileData *UNUSED(fd), Library *UNUSED(lib), Main *bm
 
 void do_versions_after_linking_cycles(Main *bmain)
 {
+  const int DENOISER_AUTO = 0;
+  const int DENOISER_NLM = 1;
+  const int DENOISER_OPTIX = 2;
+  const int DENOISER_OPENIMAGEDENOISE = 4;
+
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 66)) {
     /* Shader node tree changes. After lib linking so we have all the typeinfo
      * pointers and updated sockets and we can use the high level node API to
@@ -1572,10 +1577,6 @@ void do_versions_after_linking_cycles(Main *bmain)
       }
 
       if (cscene) {
-        const int DENOISER_AUTO = 0;
-        const int DENOISER_NLM = 1;
-        const int DENOISER_OPTIX = 2;
-
         /* Enable denoiser if it was enabled for one view layer before. */
         cycles_property_int_set(cscene, "denoiser", (use_optix) ? DENOISER_OPTIX : DENOISER_NLM);
         cycles_property_boolean_set(cscene, "use_denoising", use_denoising);
@@ -1596,6 +1597,19 @@ void do_versions_after_linking_cycles(Main *bmain)
           if (cview_layer) {
             cycles_property_boolean_set(cview_layer, "use_denoising", true);
           }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 300, 0)) {
+    /* Removal of NLM denoiser. */
+    for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
+      IDProperty *cscene = cycles_properties_from_ID(&scene->id);
+
+      if (cscene) {
+        if (cycles_property_int(cscene, "denoiser", DENOISER_NLM) == DENOISER_NLM) {
+          cycles_property_int_set(cscene, "denoiser", DENOISER_OPENIMAGEDENOISE);
         }
       }
     }

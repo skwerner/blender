@@ -41,8 +41,6 @@ BufferParams::BufferParams()
   full_height = 0;
 
   denoising_data_pass = false;
-  denoising_clean_pass = false;
-  denoising_prefiltered_pass = false;
 
   Pass::add(PASS_COMBINED, passes);
 }
@@ -58,9 +56,7 @@ bool BufferParams::modified(const BufferParams &params) const
   return !(full_x == params.full_x && full_y == params.full_y && width == params.width &&
            height == params.height && full_width == params.full_width &&
            full_height == params.full_height && Pass::equals(passes, params.passes) &&
-           denoising_data_pass == params.denoising_data_pass &&
-           denoising_clean_pass == params.denoising_clean_pass &&
-           denoising_prefiltered_pass == params.denoising_prefiltered_pass);
+           denoising_data_pass == params.denoising_data_pass);
 }
 
 int BufferParams::get_passes_size() const
@@ -71,11 +67,7 @@ int BufferParams::get_passes_size() const
     size += passes[i].components;
 
   if (denoising_data_pass) {
-    size += DENOISING_PASS_SIZE_BASE;
-    if (denoising_clean_pass)
-      size += DENOISING_PASS_SIZE_CLEAN;
-    if (denoising_prefiltered_pass)
-      size += DENOISING_PASS_SIZE_PREFILTERED;
+    size += DENOISING_PASS_SIZE;
   }
 
   return align_up(size, 4);
@@ -87,20 +79,6 @@ int BufferParams::get_denoising_offset() const
 
   for (size_t i = 0; i < passes.size(); i++)
     offset += passes[i].components;
-
-  return offset;
-}
-
-int BufferParams::get_denoising_prefiltered_offset() const
-{
-  assert(denoising_prefiltered_pass);
-
-  int offset = get_denoising_offset();
-
-  offset += DENOISING_PASS_SIZE_BASE;
-  if (denoising_clean_pass) {
-    offset += DENOISING_PASS_SIZE_CLEAN;
-  }
 
   return offset;
 }
@@ -175,43 +153,28 @@ bool RenderBuffers::get_denoising_pass_rect(
 
   float scale = 1.0f;
   float alpha_scale = 1.0f / sample;
-  if (type == DENOISING_PASS_PREFILTERED_COLOR || type == DENOISING_PASS_CLEAN ||
-      type == DENOISING_PASS_PREFILTERED_INTENSITY) {
+  if (type == DENOISING_PASS_COLOR) {
     scale *= exposure;
-  }
-  else if (type == DENOISING_PASS_PREFILTERED_VARIANCE) {
-    scale *= exposure * exposure * (sample - 1);
   }
 
   int offset;
-  if (type == DENOISING_PASS_CLEAN) {
-    /* The clean pass isn't changed by prefiltering, so we use the original one there. */
-    offset = type + params.get_denoising_offset();
-    scale /= sample;
+  switch (type) {
+    case DENOISING_PASS_DEPTH:
+      offset = params.get_denoising_offset() + DENOISING_PASS_DEPTH;
+      break;
+    case DENOISING_PASS_NORMAL:
+      offset = params.get_denoising_offset() + DENOISING_PASS_NORMAL;
+      break;
+    case DENOISING_PASS_ALBEDO:
+      offset = params.get_denoising_offset() + DENOISING_PASS_ALBEDO;
+      break;
+    case DENOISING_PASS_COLOR:
+      offset = params.get_denoising_offset() + DENOISING_PASS_COLOR;
+      break;
+    default:
+      return false;
   }
-  else if (params.denoising_prefiltered_pass) {
-    offset = type + params.get_denoising_prefiltered_offset();
-  }
-  else {
-    switch (type) {
-      case DENOISING_PASS_PREFILTERED_DEPTH:
-        offset = params.get_denoising_offset() + DENOISING_PASS_DEPTH;
-        break;
-      case DENOISING_PASS_PREFILTERED_NORMAL:
-        offset = params.get_denoising_offset() + DENOISING_PASS_NORMAL;
-        break;
-      case DENOISING_PASS_PREFILTERED_ALBEDO:
-        offset = params.get_denoising_offset() + DENOISING_PASS_ALBEDO;
-        break;
-      case DENOISING_PASS_PREFILTERED_COLOR:
-        /* If we're not saving the prefiltering result, return the original noisy pass. */
-        offset = params.get_denoising_offset() + DENOISING_PASS_COLOR;
-        break;
-      default:
-        return false;
-    }
-    scale /= sample;
-  }
+  scale /= sample;
 
   int pass_stride = params.get_passes_size();
   int size = params.width * params.height;
@@ -237,10 +200,6 @@ bool RenderBuffers::get_denoising_pass_rect(
 
     for (int i = 0; i < size; i++, in += pass_stride, in_combined += pass_stride, pixels += 4) {
       float3 val = make_float3(in[0], in[1], in[2]);
-      if (type == DENOISING_PASS_PREFILTERED_COLOR && params.denoising_prefiltered_pass) {
-        /* Remove highlight compression from the image. */
-        val = color_highlight_uncompress(val);
-      }
       pixels[0] = val.x * scale;
       pixels[1] = val.y * scale;
       pixels[2] = val.z * scale;

@@ -42,7 +42,6 @@ void device_cpu_info(vector<DeviceInfo> &devices)
   info.has_osl = true;
   info.has_half_images = true;
   info.has_profiling = true;
-  info.denoisers = DENOISER_NLM;
   if (openimagedenoise_supported()) {
     info.denoisers |= DENOISER_OPENIMAGEDENOISE;
   }

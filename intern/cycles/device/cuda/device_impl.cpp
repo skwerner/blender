@@ -26,8 +26,6 @@
 
 #  include "render/buffers.h"
 
-#  include "kernel/filter/filter_defines.h"
-
 #  include "util/util_debug.h"
 #  include "util/util_foreach.h"
 #  include "util/util_logging.h"
@@ -229,7 +227,7 @@ bool CUDADevice::use_adaptive_compilation()
  * kernel sources md5 and only depends on compiler or compilation settings.
  */
 string CUDADevice::compile_kernel_get_common_cflags(
-    const DeviceRequestedFeatures &requested_features, bool filter)
+    const DeviceRequestedFeatures &requested_features)
 {
   const int machine = system_cpu_bits();
   const string source_path = path_get("source");
@@ -242,7 +240,7 @@ string CUDADevice::compile_kernel_get_common_cflags(
       "-I\"%s\"",
       machine,
       include_path.c_str());
-  if (!filter && use_adaptive_compilation()) {
+  if (use_adaptive_compilation()) {
     cflags += " " + requested_features.get_build_options();
   }
   const char *extra_cflags = getenv("CYCLES_CUDA_EXTRA_CFLAGS");
@@ -309,8 +307,7 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   /* We include cflags into md5 so changing cuda toolkit or changing other
    * compiler command line arguments makes sure cubin gets re-built.
    */
-  string common_cflags = compile_kernel_get_common_cflags(requested_features,
-                                                          strstr(name, "filter") != NULL);
+  string common_cflags = compile_kernel_get_common_cflags(requested_features);
   const string kernel_md5 = util_md5_string(source_md5 + common_cflags);
 
   const char *const kernel_ext = force_ptx ? "ptx" : "cubin";
@@ -444,11 +441,6 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
   if (cubin.empty())
     return false;
 
-  const char *filter_name = "filter";
-  string filter_cubin = compile_kernel(requested_features, filter_name);
-  if (filter_cubin.empty())
-    return false;
-
   /* open module */
   CUDAContextScope scope(this);
 
@@ -463,16 +455,6 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
   if (result != CUDA_SUCCESS)
     set_error(string_printf(
         "Failed to load CUDA kernel from '%s' (%s)", cubin.c_str(), cuewErrorString(result)));
-
-  if (path_read_text(filter_cubin, cubin_data))
-    result = cuModuleLoadData(&cuFilterModule, cubin_data.c_str());
-  else
-    result = CUDA_ERROR_FILE_NOT_FOUND;
-
-  if (result != CUDA_SUCCESS)
-    set_error(string_printf("Failed to load CUDA kernel from '%s' (%s)",
-                            filter_cubin.c_str(),
-                            cuewErrorString(result)));
 
   if (result == CUDA_SUCCESS) {
     reserve_local_memory(requested_features);
@@ -1262,429 +1244,6 @@ void CUDADevice::tex_free(device_texture &mem)
 #  define CUDA_LAUNCH_KERNEL_1D(func, args) \
     cuda_assert(cuLaunchKernel(func, xblocks, yblocks, 1, threads_per_block, 1, 1, 0, 0, args, 0));
 
-#  if 0
-bool CUDADevice::denoising_non_local_means(device_ptr image_ptr,
-                                           device_ptr guide_ptr,
-                                           device_ptr variance_ptr,
-                                           device_ptr out_ptr,
-                                           DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  int stride = task->buffer.stride;
-  int w = task->buffer.width;
-  int h = task->buffer.h;
-  int r = task->nlm_state.r;
-  int f = task->nlm_state.f;
-  float a = task->nlm_state.a;
-  float k_2 = task->nlm_state.k_2;
-
-  int pass_stride = task->buffer.pass_stride;
-  int num_shifts = (2 * r + 1) * (2 * r + 1);
-  int channel_offset = task->nlm_state.is_color ? task->buffer.pass_stride : 0;
-  int frame_offset = 0;
-
-  if (have_error())
-    return false;
-
-  CUdeviceptr difference = (CUdeviceptr)task->buffer.temporary_mem.device_pointer;
-  CUdeviceptr blurDifference = difference + sizeof(float) * pass_stride * num_shifts;
-  CUdeviceptr weightAccum = difference + 2 * sizeof(float) * pass_stride * num_shifts;
-  CUdeviceptr scale_ptr = 0;
-
-  cuda_assert(cuMemsetD8(weightAccum, 0, sizeof(float) * pass_stride));
-  cuda_assert(cuMemsetD8(out_ptr, 0, sizeof(float) * pass_stride));
-
-  {
-    CUfunction cuNLMCalcDifference, cuNLMBlur, cuNLMCalcWeight, cuNLMUpdateOutput;
-    cuda_assert(cuModuleGetFunction(
-        &cuNLMCalcDifference, cuFilterModule, "kernel_cuda_filter_nlm_calc_difference"));
-    cuda_assert(cuModuleGetFunction(&cuNLMBlur, cuFilterModule, "kernel_cuda_filter_nlm_blur"));
-    cuda_assert(cuModuleGetFunction(
-        &cuNLMCalcWeight, cuFilterModule, "kernel_cuda_filter_nlm_calc_weight"));
-    cuda_assert(cuModuleGetFunction(
-        &cuNLMUpdateOutput, cuFilterModule, "kernel_cuda_filter_nlm_update_output"));
-
-    cuda_assert(cuFuncSetCacheConfig(cuNLMCalcDifference, CU_FUNC_CACHE_PREFER_L1));
-    cuda_assert(cuFuncSetCacheConfig(cuNLMBlur, CU_FUNC_CACHE_PREFER_L1));
-    cuda_assert(cuFuncSetCacheConfig(cuNLMCalcWeight, CU_FUNC_CACHE_PREFER_L1));
-    cuda_assert(cuFuncSetCacheConfig(cuNLMUpdateOutput, CU_FUNC_CACHE_PREFER_L1));
-
-    CUDA_GET_BLOCKSIZE_1D(cuNLMCalcDifference, w * h, num_shifts);
-
-    void *calc_difference_args[] = {&guide_ptr,
-                                    &variance_ptr,
-                                    &scale_ptr,
-                                    &difference,
-                                    &w,
-                                    &h,
-                                    &stride,
-                                    &pass_stride,
-                                    &r,
-                                    &channel_offset,
-                                    &frame_offset,
-                                    &a,
-                                    &k_2};
-    void *blur_args[] = {&difference, &blurDifference, &w, &h, &stride, &pass_stride, &r, &f};
-    void *calc_weight_args[] = {
-        &blurDifference, &difference, &w, &h, &stride, &pass_stride, &r, &f};
-    void *update_output_args[] = {&blurDifference,
-                                  &image_ptr,
-                                  &out_ptr,
-                                  &weightAccum,
-                                  &w,
-                                  &h,
-                                  &stride,
-                                  &pass_stride,
-                                  &channel_offset,
-                                  &r,
-                                  &f};
-
-    CUDA_LAUNCH_KERNEL_1D(cuNLMCalcDifference, calc_difference_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMCalcWeight, calc_weight_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-    CUDA_LAUNCH_KERNEL_1D(cuNLMUpdateOutput, update_output_args);
-  }
-
-  {
-    CUfunction cuNLMNormalize;
-    cuda_assert(
-        cuModuleGetFunction(&cuNLMNormalize, cuFilterModule, "kernel_cuda_filter_nlm_normalize"));
-    cuda_assert(cuFuncSetCacheConfig(cuNLMNormalize, CU_FUNC_CACHE_PREFER_L1));
-    void *normalize_args[] = {&out_ptr, &weightAccum, &w, &h, &stride};
-    CUDA_GET_BLOCKSIZE(cuNLMNormalize, w, h);
-    CUDA_LAUNCH_KERNEL(cuNLMNormalize, normalize_args);
-    cuda_assert(cuCtxSynchronize());
-  }
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_construct_transform(DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilterConstructTransform;
-  cuda_assert(cuModuleGetFunction(
-      &cuFilterConstructTransform, cuFilterModule, "kernel_cuda_filter_construct_transform"));
-  cuda_assert(cuFuncSetCacheConfig(cuFilterConstructTransform, CU_FUNC_CACHE_PREFER_SHARED));
-  CUDA_GET_BLOCKSIZE(cuFilterConstructTransform, task->storage.w, task->storage.h);
-
-  void *args[] = {&task->buffer.mem.device_pointer,
-                  &task->tile_info_mem.device_pointer,
-                  &task->storage.transform.device_pointer,
-                  &task->storage.rank.device_pointer,
-                  &task->filter_area,
-                  &task->rect,
-                  &task->radius,
-                  &task->pca_threshold,
-                  &task->buffer.pass_stride,
-                  &task->buffer.frame_stride,
-                  &task->buffer.use_time};
-  CUDA_LAUNCH_KERNEL(cuFilterConstructTransform, args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_accumulate(device_ptr color_ptr,
-                                      device_ptr color_variance_ptr,
-                                      device_ptr scale_ptr,
-                                      int frame,
-                                      DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  int r = task->radius;
-  int f = 4;
-  float a = 1.0f;
-  float k_2 = task->nlm_k_2;
-
-  int w = task->reconstruction_state.source_w;
-  int h = task->reconstruction_state.source_h;
-  int stride = task->buffer.stride;
-  int frame_offset = frame * task->buffer.frame_stride;
-  int t = task->tile_info->frames[frame];
-
-  int pass_stride = task->buffer.pass_stride;
-  int num_shifts = (2 * r + 1) * (2 * r + 1);
-
-  if (have_error())
-    return false;
-
-  CUdeviceptr difference = (CUdeviceptr)task->buffer.temporary_mem.device_pointer;
-  CUdeviceptr blurDifference = difference + sizeof(float) * pass_stride * num_shifts;
-
-  CUfunction cuNLMCalcDifference, cuNLMBlur, cuNLMCalcWeight, cuNLMConstructGramian;
-  cuda_assert(cuModuleGetFunction(
-      &cuNLMCalcDifference, cuFilterModule, "kernel_cuda_filter_nlm_calc_difference"));
-  cuda_assert(cuModuleGetFunction(&cuNLMBlur, cuFilterModule, "kernel_cuda_filter_nlm_blur"));
-  cuda_assert(
-      cuModuleGetFunction(&cuNLMCalcWeight, cuFilterModule, "kernel_cuda_filter_nlm_calc_weight"));
-  cuda_assert(cuModuleGetFunction(
-      &cuNLMConstructGramian, cuFilterModule, "kernel_cuda_filter_nlm_construct_gramian"));
-
-  cuda_assert(cuFuncSetCacheConfig(cuNLMCalcDifference, CU_FUNC_CACHE_PREFER_L1));
-  cuda_assert(cuFuncSetCacheConfig(cuNLMBlur, CU_FUNC_CACHE_PREFER_L1));
-  cuda_assert(cuFuncSetCacheConfig(cuNLMCalcWeight, CU_FUNC_CACHE_PREFER_L1));
-  cuda_assert(cuFuncSetCacheConfig(cuNLMConstructGramian, CU_FUNC_CACHE_PREFER_SHARED));
-
-  CUDA_GET_BLOCKSIZE_1D(cuNLMCalcDifference,
-                        task->reconstruction_state.source_w * task->reconstruction_state.source_h,
-                        num_shifts);
-
-  void *calc_difference_args[] = {&color_ptr,
-                                  &color_variance_ptr,
-                                  &scale_ptr,
-                                  &difference,
-                                  &w,
-                                  &h,
-                                  &stride,
-                                  &pass_stride,
-                                  &r,
-                                  &pass_stride,
-                                  &frame_offset,
-                                  &a,
-                                  &k_2};
-  void *blur_args[] = {&difference, &blurDifference, &w, &h, &stride, &pass_stride, &r, &f};
-  void *calc_weight_args[] = {&blurDifference, &difference, &w, &h, &stride, &pass_stride, &r, &f};
-  void *construct_gramian_args[] = {&t,
-                                    &blurDifference,
-                                    &task->buffer.mem.device_pointer,
-                                    &task->storage.transform.device_pointer,
-                                    &task->storage.rank.device_pointer,
-                                    &task->storage.XtWX.device_pointer,
-                                    &task->storage.XtWY.device_pointer,
-                                    &task->reconstruction_state.filter_window,
-                                    &w,
-                                    &h,
-                                    &stride,
-                                    &pass_stride,
-                                    &r,
-                                    &f,
-                                    &frame_offset,
-                                    &task->buffer.use_time};
-
-  CUDA_LAUNCH_KERNEL_1D(cuNLMCalcDifference, calc_difference_args);
-  CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-  CUDA_LAUNCH_KERNEL_1D(cuNLMCalcWeight, calc_weight_args);
-  CUDA_LAUNCH_KERNEL_1D(cuNLMBlur, blur_args);
-  CUDA_LAUNCH_KERNEL_1D(cuNLMConstructGramian, construct_gramian_args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_solve(device_ptr output_ptr, DenoisingTask *task)
-{
-  CUfunction cuFinalize;
-  cuda_assert(cuModuleGetFunction(&cuFinalize, cuFilterModule, "kernel_cuda_filter_finalize"));
-  cuda_assert(cuFuncSetCacheConfig(cuFinalize, CU_FUNC_CACHE_PREFER_L1));
-  void *finalize_args[] = {&output_ptr,
-                           &task->storage.rank.device_pointer,
-                           &task->storage.XtWX.device_pointer,
-                           &task->storage.XtWY.device_pointer,
-                           &task->filter_area,
-                           &task->reconstruction_state.buffer_params.x,
-                           &task->render_buffer.samples};
-  CUDA_GET_BLOCKSIZE(
-      cuFinalize, task->reconstruction_state.source_w, task->reconstruction_state.source_h);
-  CUDA_LAUNCH_KERNEL(cuFinalize, finalize_args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_combine_halves(device_ptr a_ptr,
-                                          device_ptr b_ptr,
-                                          device_ptr mean_ptr,
-                                          device_ptr variance_ptr,
-                                          int r,
-                                          int4 rect,
-                                          DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilterCombineHalves;
-  cuda_assert(cuModuleGetFunction(
-      &cuFilterCombineHalves, cuFilterModule, "kernel_cuda_filter_combine_halves"));
-  cuda_assert(cuFuncSetCacheConfig(cuFilterCombineHalves, CU_FUNC_CACHE_PREFER_L1));
-  CUDA_GET_BLOCKSIZE(
-      cuFilterCombineHalves, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-  void *args[] = {&mean_ptr, &variance_ptr, &a_ptr, &b_ptr, &rect, &r};
-  CUDA_LAUNCH_KERNEL(cuFilterCombineHalves, args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_divide_shadow(device_ptr a_ptr,
-                                         device_ptr b_ptr,
-                                         device_ptr sample_variance_ptr,
-                                         device_ptr sv_variance_ptr,
-                                         device_ptr buffer_variance_ptr,
-                                         DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilterDivideShadow;
-  cuda_assert(cuModuleGetFunction(
-      &cuFilterDivideShadow, cuFilterModule, "kernel_cuda_filter_divide_shadow"));
-  cuda_assert(cuFuncSetCacheConfig(cuFilterDivideShadow, CU_FUNC_CACHE_PREFER_L1));
-  CUDA_GET_BLOCKSIZE(
-      cuFilterDivideShadow, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-  void *args[] = {&task->render_buffer.samples,
-                  &task->tile_info_mem.device_pointer,
-                  &a_ptr,
-                  &b_ptr,
-                  &sample_variance_ptr,
-                  &sv_variance_ptr,
-                  &buffer_variance_ptr,
-                  &task->rect,
-                  &task->render_buffer.pass_stride,
-                  &task->render_buffer.offset};
-  CUDA_LAUNCH_KERNEL(cuFilterDivideShadow, args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_get_feature(int mean_offset,
-                                       int variance_offset,
-                                       device_ptr mean_ptr,
-                                       device_ptr variance_ptr,
-                                       float scale,
-                                       DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilterGetFeature;
-  cuda_assert(
-      cuModuleGetFunction(&cuFilterGetFeature, cuFilterModule, "kernel_cuda_filter_get_feature"));
-  cuda_assert(cuFuncSetCacheConfig(cuFilterGetFeature, CU_FUNC_CACHE_PREFER_L1));
-  CUDA_GET_BLOCKSIZE(cuFilterGetFeature, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-  void *args[] = {&task->render_buffer.samples,
-                  &task->tile_info_mem.device_pointer,
-                  &mean_offset,
-                  &variance_offset,
-                  &mean_ptr,
-                  &variance_ptr,
-                  &scale,
-                  &task->rect,
-                  &task->render_buffer.pass_stride,
-                  &task->render_buffer.offset};
-  CUDA_LAUNCH_KERNEL(cuFilterGetFeature, args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_write_feature(int out_offset,
-                                         device_ptr from_ptr,
-                                         device_ptr buffer_ptr,
-                                         DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilterWriteFeature;
-  cuda_assert(cuModuleGetFunction(
-      &cuFilterWriteFeature, cuFilterModule, "kernel_cuda_filter_write_feature"));
-  cuda_assert(cuFuncSetCacheConfig(cuFilterWriteFeature, CU_FUNC_CACHE_PREFER_L1));
-  CUDA_GET_BLOCKSIZE(cuFilterWriteFeature, task->filter_area.z, task->filter_area.w);
-
-  void *args[] = {&task->render_buffer.samples,
-                  &task->reconstruction_state.buffer_params,
-                  &task->filter_area,
-                  &from_ptr,
-                  &buffer_ptr,
-                  &out_offset,
-                  &task->rect};
-  CUDA_LAUNCH_KERNEL(cuFilterWriteFeature, args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-bool CUDADevice::denoising_detect_outliers(device_ptr image_ptr,
-                                           device_ptr variance_ptr,
-                                           device_ptr depth_ptr,
-                                           device_ptr output_ptr,
-                                           DenoisingTask *task)
-{
-  if (have_error())
-    return false;
-
-  CUDAContextScope scope(this);
-
-  CUfunction cuFilterDetectOutliers;
-  cuda_assert(cuModuleGetFunction(
-      &cuFilterDetectOutliers, cuFilterModule, "kernel_cuda_filter_detect_outliers"));
-  cuda_assert(cuFuncSetCacheConfig(cuFilterDetectOutliers, CU_FUNC_CACHE_PREFER_L1));
-  CUDA_GET_BLOCKSIZE(
-      cuFilterDetectOutliers, task->rect.z - task->rect.x, task->rect.w - task->rect.y);
-
-  void *args[] = {
-      &image_ptr, &variance_ptr, &depth_ptr, &output_ptr, &task->rect, &task->buffer.pass_stride};
-
-  CUDA_LAUNCH_KERNEL(cuFilterDetectOutliers, args);
-  cuda_assert(cuCtxSynchronize());
-
-  return !have_error();
-}
-
-void CUDADevice::denoise(RenderTile &rtile, DenoisingTask &denoising)
-{
-  denoising.functions.construct_transform = function_bind(
-      &CUDADevice::denoising_construct_transform, this, &denoising);
-  denoising.functions.accumulate = function_bind(
-      &CUDADevice::denoising_accumulate, this, _1, _2, _3, _4, &denoising);
-  denoising.functions.solve = function_bind(&CUDADevice::denoising_solve, this, _1, &denoising);
-  denoising.functions.divide_shadow = function_bind(
-      &CUDADevice::denoising_divide_shadow, this, _1, _2, _3, _4, _5, &denoising);
-  denoising.functions.non_local_means = function_bind(
-      &CUDADevice::denoising_non_local_means, this, _1, _2, _3, _4, &denoising);
-  denoising.functions.combine_halves = function_bind(
-      &CUDADevice::denoising_combine_halves, this, _1, _2, _3, _4, _5, _6, &denoising);
-  denoising.functions.get_feature = function_bind(
-      &CUDADevice::denoising_get_feature, this, _1, _2, _3, _4, _5, &denoising);
-  denoising.functions.write_feature = function_bind(
-      &CUDADevice::denoising_write_feature, this, _1, _2, _3, &denoising);
-  denoising.functions.detect_outliers = function_bind(
-      &CUDADevice::denoising_detect_outliers, this, _1, _2, _3, _4, &denoising);
-
-  denoising.filter_area = make_int4(rtile.x, rtile.y, rtile.w, rtile.h);
-  denoising.render_buffer.samples = rtile.sample;
-  denoising.buffer.gpu_temporary_mem = true;
-
-  denoising.run_denoising(rtile);
-}
-#  endif
-
 void CUDADevice::adaptive_sampling_filter(uint filter_sample,
                                           KernelWorkTile *wtile,
                                           CUdeviceptr d_wtile,
@@ -1883,13 +1442,6 @@ void CUDADevice::thread_run(DeviceTask &task)
       else if (tile.task == RenderTile::BAKE) {
         render(task, tile, work_tiles);
       }
-      else if (tile.task == RenderTile::DENOISE) {
-        tile.sample = tile.start_sample + tile.num_samples;
-
-        denoise(tile, denoising);
-
-        task.update_progress(&tile, tile.w * tile.h);
-      }
 
       task.release_tile(tile);
 
@@ -1900,24 +1452,6 @@ void CUDADevice::thread_run(DeviceTask &task)
     }
 
     work_tiles.free();
-  }
-  else if (task.type == DeviceTask::DENOISE_BUFFER) {
-    RenderTile tile;
-    tile.x = task.x;
-    tile.y = task.y;
-    tile.w = task.w;
-    tile.h = task.h;
-    tile.buffer = task.buffer;
-    tile.sample = task.sample + task.num_samples;
-    tile.num_samples = task.num_samples;
-    tile.start_sample = task.sample;
-    tile.offset = task.offset;
-    tile.stride = task.stride;
-    tile.buffers = task.buffers;
-
-    DenoisingTask denoising(this, task);
-    denoise(tile, denoising);
-    task.update_progress(&tile, tile.w * tile.h);
   }
 }
 #  endif

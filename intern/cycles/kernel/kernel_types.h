@@ -417,28 +417,11 @@ typedef enum CryptomatteType {
 
 typedef enum DenoisingPassOffsets {
   DENOISING_PASS_NORMAL = 0,
-  DENOISING_PASS_NORMAL_VAR = 3,
-  DENOISING_PASS_ALBEDO = 6,
-  DENOISING_PASS_ALBEDO_VAR = 9,
-  DENOISING_PASS_DEPTH = 12,
-  DENOISING_PASS_DEPTH_VAR = 13,
-  DENOISING_PASS_SHADOW_A = 14,
-  DENOISING_PASS_SHADOW_B = 17,
-  DENOISING_PASS_COLOR = 20,
-  DENOISING_PASS_COLOR_VAR = 23,
-  DENOISING_PASS_CLEAN = 26,
+  DENOISING_PASS_ALBEDO = 3,
+  DENOISING_PASS_COLOR = 6,
+  DENOISING_PASS_DEPTH = 9,
 
-  DENOISING_PASS_PREFILTERED_DEPTH = 0,
-  DENOISING_PASS_PREFILTERED_NORMAL = 1,
-  DENOISING_PASS_PREFILTERED_SHADOWING = 4,
-  DENOISING_PASS_PREFILTERED_ALBEDO = 5,
-  DENOISING_PASS_PREFILTERED_COLOR = 8,
-  DENOISING_PASS_PREFILTERED_VARIANCE = 11,
-  DENOISING_PASS_PREFILTERED_INTENSITY = 14,
-
-  DENOISING_PASS_SIZE_BASE = 26,
-  DENOISING_PASS_SIZE_CLEAN = 3,
-  DENOISING_PASS_SIZE_PREFILTERED = 15,
+  DENOISING_PASS_SIZE = 10,
 } DenoisingPassOffsets;
 
 typedef enum eBakePassFilter {
@@ -464,16 +447,6 @@ typedef enum BakePassFilterCombos {
   BAKE_FILTER_GLOSSY_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_GLOSSY),
   BAKE_FILTER_TRANSMISSION_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_TRANSMISSION),
 } BakePassFilterCombos;
-
-typedef enum DenoiseFlag {
-  DENOISING_CLEAN_DIFFUSE_DIR = (1 << 0),
-  DENOISING_CLEAN_DIFFUSE_IND = (1 << 1),
-  DENOISING_CLEAN_GLOSSY_DIR = (1 << 2),
-  DENOISING_CLEAN_GLOSSY_IND = (1 << 3),
-  DENOISING_CLEAN_TRANSMISSION_DIR = (1 << 4),
-  DENOISING_CLEAN_TRANSMISSION_IND = (1 << 5),
-  DENOISING_CLEAN_ALL_PASSES = (1 << 6) - 1,
-} DenoiseFlag;
 
 #ifdef __KERNEL_DEBUG__
 /* NOTE: This is a runtime-only struct, alignment is not
@@ -1239,14 +1212,13 @@ typedef struct KernelFilm {
   float mist_falloff;
 
   int pass_denoising_data;
-  int pass_denoising_clean;
   int denoising_flags;
+  int pad1;
 
   int pass_aov_color;
   int pass_aov_value;
   int pass_aov_color_num;
   int pass_aov_value_num;
-  int pad1, pad2, pad3;
 
   /* XYZ to rendering color space transform. float4 instead of float3 to
    * ensure consistent padding/alignment across devices. */

@@ -301,45 +301,6 @@ ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
 
   return L_sum;
 }
-
-ccl_device_inline void path_radiance_split_denoising(const KernelGlobals *kg,
-                                                     PathRadiance *L,
-                                                     float3 *noisy,
-                                                     float3 *clean)
-{
-#  ifdef __PASSES__
-  kernel_assert(L->use_light_pass);
-
-  *clean = L->emission + L->background;
-  *noisy = L->direct_volume + L->indirect_volume;
-
-#    define ADD_COMPONENT(flag, component) \
-      if (kernel_data.film.denoising_flags & flag) \
-        *clean += component; \
-      else \
-        *noisy += component;
-
-  ADD_COMPONENT(DENOISING_CLEAN_DIFFUSE_DIR, L->direct_diffuse);
-  ADD_COMPONENT(DENOISING_CLEAN_DIFFUSE_IND, L->indirect_diffuse);
-  ADD_COMPONENT(DENOISING_CLEAN_GLOSSY_DIR, L->direct_glossy);
-  ADD_COMPONENT(DENOISING_CLEAN_GLOSSY_IND, L->indirect_glossy);
-  ADD_COMPONENT(DENOISING_CLEAN_TRANSMISSION_DIR, L->direct_transmission);
-  ADD_COMPONENT(DENOISING_CLEAN_TRANSMISSION_IND, L->indirect_transmission);
-#    undef ADD_COMPONENT
-#  else
-  *noisy = L->emission;
-  *clean = zero_float3();
-#  endif
-
-#  ifdef __SHADOW_TRICKS__
-  if (L->has_shadow_catcher) {
-    *noisy += L->shadow_background_color;
-  }
-#  endif
-
-  *noisy = ensure_finite3(*noisy);
-  *clean = ensure_finite3(*clean);
-}
 #endif
 
 /* Get pointer to pixel in render buffer. */
@@ -363,8 +324,8 @@ ccl_device_inline void kernel_accum_combined_pass(INTEGRATOR_STATE_CONST_ARGS,
 
 #ifdef __PASSES__
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3_variance(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR,
+                             contribution);
   }
 #endif
 }
@@ -383,8 +344,8 @@ ccl_device_inline void kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_C
 
 #ifdef __PASSES__
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3_variance(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR,
+                             contribution);
   }
 #endif
 }
@@ -414,7 +375,7 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
       const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
                                                                    denoising_feature_throughput);
       const float3 denoising_albedo = denoising_feature_throughput * contribution;
-      kernel_write_pass_float3_variance(
+      kernel_write_pass_float3(
           buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_ALBEDO, denoising_albedo);
     }
 #  endif /* __DENOISING_FEATURES__ */

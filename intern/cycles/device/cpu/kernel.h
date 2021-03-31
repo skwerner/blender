@@ -49,52 +49,6 @@ class CPUKernels {
   ShaderEvalFunction shader_eval_background;
   CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
 
-  CPUKernelFunction<void (*)(
-      int, TileInfo *, int, int, float *, float *, float *, float *, float *, int *, int, int)>
-      filter_divide_shadow;
-  CPUKernelFunction<void (*)(
-      int, TileInfo *, int, int, int, int, float *, float *, float, int *, int, int)>
-      filter_get_feature;
-  CPUKernelFunction<void (*)(int, int, int, int *, float *, float *, int, int *)>
-      filter_write_feature;
-  CPUKernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
-      filter_detect_outliers;
-  CPUKernelFunction<void (*)(int, int, float *, float *, float *, float *, int *, int)>
-      filter_combine_halves;
-
-  CPUKernelFunction<void (*)(
-      int, int, float *, float *, float *, float *, int *, int, int, int, float, float)>
-      filter_nlm_calc_difference;
-  CPUKernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_blur;
-  CPUKernelFunction<void (*)(float *, float *, int *, int, int)> filter_nlm_calc_weight;
-  CPUKernelFunction<void (*)(
-      int, int, float *, float *, float *, float *, float *, int *, int, int, int)>
-      filter_nlm_update_output;
-  CPUKernelFunction<void (*)(float *, float *, int *, int)> filter_nlm_normalize;
-
-  CPUKernelFunction<void (*)(
-      float *, TileInfo *, int, int, int, float *, int *, int *, int, int, bool, int, float)>
-      filter_construct_transform;
-  CPUKernelFunction<void (*)(int,
-                             int,
-                             int,
-                             float *,
-                             float *,
-                             float *,
-                             int *,
-                             float *,
-                             float3 *,
-                             int *,
-                             int *,
-                             int,
-                             int,
-                             int,
-                             int,
-                             bool)>
-      filter_nlm_construct_gramian;
-  CPUKernelFunction<void (*)(int, int, int, float *, int *, float *, float3 *, int *, int)>
-      filter_finalize;
-
   IntegratorInitFunction integrator_init_from_camera;
   IntegratorFunction integrator_intersect_closest;
   IntegratorFunction integrator_intersect_shadow;

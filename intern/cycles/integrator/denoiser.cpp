@@ -18,7 +18,6 @@
 
 #include "device/device.h"
 #include "integrator/denoiser_device.h"
-#include "integrator/denoiser_nlm.h"
 #include "integrator/denoiser_oidn.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
@@ -40,9 +39,6 @@ unique_ptr<Denoiser> Denoiser::create(Device *device, const DenoiseParams &param
   DCHECK(params.use);
 
   switch (params.type) {
-    case DENOISER_NLM:
-      return make_unique<NLMDenoiser>(device, params);
-
     case DENOISER_OPTIX:
       return make_unique<DeviceDenoiser>(device, params);
 

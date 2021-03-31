@@ -285,17 +285,6 @@ def list_render_passes(scene, srl):
             yield ("Denoising Albedo",          "RGB", 'COLOR')
             yield ("Denoising Depth",           "Z",   'VALUE')
 
-            if scene.cycles.denoiser == 'NLM':
-                yield ("Denoising Shadowing",       "X",   'VALUE')
-                yield ("Denoising Variance",        "RGB", 'COLOR')
-                yield ("Denoising Intensity",       "X",   'VALUE')
-
-                clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
-                                 "denoising_glossy_direct", "denoising_glossy_indirect",
-                                 "denoising_transmission_direct", "denoising_transmission_indirect")
-                if any(getattr(crl, option) for option in clean_options):
-                    yield ("Denoising Clean", "RGB", 'COLOR')
-
     # Custom AOV passes.
     for aov in srl.aovs:
         if aov.type == 'VALUE':

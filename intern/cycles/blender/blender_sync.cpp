@@ -543,7 +543,7 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
   string name = b_pass.name();
 
   if (name == "Noisy Image")
-    return DENOISING_PASS_PREFILTERED_COLOR;
+    return DENOISING_PASS_COLOR;
 
   if (name.substr(0, 10) != "Denoising ") {
     return -1;
@@ -555,13 +555,9 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
     return offset; \
   } \
   ((void)0)
-  MAP_PASS("Normal", DENOISING_PASS_PREFILTERED_NORMAL);
-  MAP_PASS("Albedo", DENOISING_PASS_PREFILTERED_ALBEDO);
-  MAP_PASS("Depth", DENOISING_PASS_PREFILTERED_DEPTH);
-  MAP_PASS("Shadowing", DENOISING_PASS_PREFILTERED_SHADOWING);
-  MAP_PASS("Variance", DENOISING_PASS_PREFILTERED_VARIANCE);
-  MAP_PASS("Intensity", DENOISING_PASS_PREFILTERED_INTENSITY);
-  MAP_PASS("Clean", DENOISING_PASS_CLEAN);
+  MAP_PASS("Normal", DENOISING_PASS_NORMAL);
+  MAP_PASS("Albedo", DENOISING_PASS_ALBEDO);
+  MAP_PASS("Depth", DENOISING_PASS_DEPTH);
 #undef MAP_PASS
 
   return -1;
@@ -586,39 +582,14 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
 
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
-  int denoising_flags = 0;
   if (denoising.use || denoising.store_passes) {
-    if (denoising.type == DENOISER_NLM) {
-#define MAP_OPTION(name, flag) \
-  if (!get_boolean(crl, name)) { \
-    denoising_flags |= flag; \
-  } \
-  ((void)0)
-      MAP_OPTION("denoising_diffuse_direct", DENOISING_CLEAN_DIFFUSE_DIR);
-      MAP_OPTION("denoising_diffuse_indirect", DENOISING_CLEAN_DIFFUSE_IND);
-      MAP_OPTION("denoising_glossy_direct", DENOISING_CLEAN_GLOSSY_DIR);
-      MAP_OPTION("denoising_glossy_indirect", DENOISING_CLEAN_GLOSSY_IND);
-      MAP_OPTION("denoising_transmission_direct", DENOISING_CLEAN_TRANSMISSION_DIR);
-      MAP_OPTION("denoising_transmission_indirect", DENOISING_CLEAN_TRANSMISSION_IND);
-#undef MAP_OPTION
-    }
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
   }
-  scene->film->set_denoising_flags(denoising_flags);
 
   if (denoising.store_passes) {
     b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
     b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
     b_engine.add_pass("Denoising Depth", 1, "Z", b_view_layer.name().c_str());
-    if (denoising.type == DENOISER_NLM) {
-      b_engine.add_pass("Denoising Shadowing", 1, "X", b_view_layer.name().c_str());
-      b_engine.add_pass("Denoising Variance", 3, "RGB", b_view_layer.name().c_str());
-      b_engine.add_pass("Denoising Intensity", 1, "X", b_view_layer.name().c_str());
-    }
-
-    if (scene->film->get_denoising_flags() & DENOISING_CLEAN_ALL_PASSES) {
-      b_engine.add_pass("Denoising Clean", 3, "RGB", b_view_layer.name().c_str());
-    }
   }
 
 #ifdef __KERNEL_DEBUG__
@@ -718,10 +689,6 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
   }
 
   scene->film->set_denoising_data_pass(denoising.use || denoising.store_passes);
-  scene->film->set_denoising_clean_pass(scene->film->get_denoising_flags() &
-                                        DENOISING_CLEAN_ALL_PASSES);
-  scene->film->set_denoising_prefiltered_pass(denoising.store_passes &&
-                                              denoising.type == DENOISER_NLM);
 
   scene->film->set_pass_alpha_threshold(b_view_layer.pass_alpha_threshold());
   scene->film->tag_passes_update(scene, passes);
@@ -934,11 +901,6 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
       if (!get_boolean(clayer, "use_denoising")) {
         denoising.use = false;
       }
-
-      denoising.radius = get_int(clayer, "denoising_radius");
-      denoising.strength = get_float(clayer, "denoising_strength");
-      denoising.feature_strength = get_float(clayer, "denoising_feature_strength");
-      denoising.relative_pca = get_boolean(clayer, "denoising_relative_pca");
 
       denoising.input_passes = (DenoiserInput)get_enum(
           clayer,

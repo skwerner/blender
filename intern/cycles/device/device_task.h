@@ -33,7 +33,6 @@ class RenderTileNeighbors;
 class Tile;
 
 enum DenoiserType {
-  DENOISER_NLM = 1,
   DENOISER_OPTIX = 2,
   DENOISER_OPENIMAGEDENOISE = 4,
   DENOISER_NUM,
@@ -65,22 +64,6 @@ class DenoiseParams {
   /* Viewport start sample. */
   int start_sample;
 
-  /** Native Denoiser **/
-
-  /* Pixel radius for neighboring pixels to take into account. */
-  int radius;
-  /* Controls neighbor pixel weighting for the denoising filter. */
-  float strength;
-  /* Preserve more or less detail based on feature passes. */
-  float feature_strength;
-  /* When removing pixels that don't carry information,
-   * use a relative threshold instead of an absolute one. */
-  bool relative_pca;
-  /* How many frames before and after the current center frame are included. */
-  int neighbor_frames;
-  /* Clamp the input to the range of +-1e8. Should be enough for any legitimate data. */
-  bool clamp_input;
-
   /** OIDN/Optix Denoiser **/
 
   /* Passes handed over to the OIDN/OptiX denoiser (default to color + albedo). */
@@ -91,14 +74,7 @@ class DenoiseParams {
     use = false;
     store_passes = false;
 
-    type = DENOISER_NLM;
-
-    radius = 8;
-    strength = 0.5f;
-    feature_strength = 0.5f;
-    relative_pca = false;
-    neighbor_frames = 2;
-    clamp_input = true;
+    type = DENOISER_OPENIMAGEDENOISE;
 
     /* Default to color + albedo only, since normal input does not always have the desired effect
      * when denoising with OptiX. */
@@ -110,17 +86,14 @@ class DenoiseParams {
   bool modified(const DenoiseParams &other) const
   {
     return !(use == other.use && store_passes == other.store_passes && type == other.type &&
-             start_sample == other.start_sample && radius == other.radius &&
-             strength == other.strength && feature_strength == other.feature_strength &&
-             relative_pca == other.relative_pca && neighbor_frames == other.neighbor_frames &&
-             clamp_input == other.clamp_input);
+             start_sample == other.start_sample);
   }
 
   /* Test if a denoising task needs to run, also to prefilter passes for the native
    * denoiser when we are not applying denoising to the combined image. */
   bool need_denoising_task() const
   {
-    return (use || (store_passes && type == DENOISER_NLM));
+    return use;
   }
 };
 
@@ -183,7 +156,6 @@ class DeviceTask {
   int frame_stride;
   int target_pass_stride;
   int pass_denoising_data;
-  int pass_denoising_clean;
 
   bool need_finish_queue;
   bool integrator_branched;

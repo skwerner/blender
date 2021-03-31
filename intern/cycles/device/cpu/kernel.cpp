@@ -16,7 +16,6 @@
 
 #include "device/cpu/kernel.h"
 
-#include "kernel/device/cpu/filter.h"
 #include "kernel/device/cpu/kernel.h"
 
 CCL_NAMESPACE_BEGIN
@@ -33,19 +32,6 @@ CPUKernels::CPUKernels()
       REGISTER_KERNEL(shader_eval_displace),
       REGISTER_KERNEL(shader_eval_background),
       REGISTER_KERNEL(bake),
-      REGISTER_KERNEL(filter_divide_shadow),
-      REGISTER_KERNEL(filter_get_feature),
-      REGISTER_KERNEL(filter_write_feature),
-      REGISTER_KERNEL(filter_detect_outliers),
-      REGISTER_KERNEL(filter_combine_halves),
-      REGISTER_KERNEL(filter_nlm_calc_difference),
-      REGISTER_KERNEL(filter_nlm_blur),
-      REGISTER_KERNEL(filter_nlm_calc_weight),
-      REGISTER_KERNEL(filter_nlm_update_output),
-      REGISTER_KERNEL(filter_nlm_normalize),
-      REGISTER_KERNEL(filter_construct_transform),
-      REGISTER_KERNEL(filter_nlm_construct_gramian),
-      REGISTER_KERNEL(filter_finalize),
       REGISTER_KERNEL(integrator_init_from_camera),
       REGISTER_KERNEL(integrator_intersect_closest),
       REGISTER_KERNEL(integrator_intersect_shadow),

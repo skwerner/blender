@@ -36,7 +36,6 @@ endif()
 
 set(SRC
   device.cpp
-  device_denoising.cpp
   device_graphics_interop.cpp
   device_kernel.cpp
   device_memory.cpp
@@ -98,7 +97,6 @@ set(SRC_OPTIX
 
 set(SRC_HEADERS
   device.h
-  device_denoising.h
   device_graphics_interop.h
   device_memory.h
   device_kernel.h

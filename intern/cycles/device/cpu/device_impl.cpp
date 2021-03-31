@@ -35,12 +35,10 @@
 #include "device/cpu/queue.h"
 
 #include "device/device.h"
-#include "device/device_denoising.h"
 
 // clang-format off
 #include "kernel/device/cpu/compat.h"
 #include "kernel/device/cpu/globals.h"
-#include "kernel/device/cpu/filter.h"
 #include "kernel/device/cpu/kernel.h"
 #include "kernel/kernel_types.h"
 #include "kernel/kernel_adaptive_sampling.h"
@@ -304,301 +302,6 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     Device::build_bvh(bvh, progress, refit);
 }
 
-#if 0
-bool CPUDevice::denoising_non_local_means(device_ptr image_ptr,
-                                          device_ptr guide_ptr,
-                                          device_ptr variance_ptr,
-                                          device_ptr out_ptr,
-                                          DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_NON_LOCAL_MEANS);
-
-  int4 rect = task->rect;
-  int r = task->nlm_state.r;
-  int f = task->nlm_state.f;
-  float a = task->nlm_state.a;
-  float k_2 = task->nlm_state.k_2;
-
-  int w = align_up(rect.z - rect.x, 4);
-  int h = rect.w - rect.y;
-  int stride = task->buffer.stride;
-  int channel_offset = task->nlm_state.is_color ? task->buffer.pass_stride : 0;
-
-  float *temporary_mem = (float *)task->buffer.temporary_mem.device_pointer;
-  float *blurDifference = temporary_mem;
-  float *difference = temporary_mem + task->buffer.pass_stride;
-  float *weightAccum = temporary_mem + 2 * task->buffer.pass_stride;
-
-  memset(weightAccum, 0, sizeof(float) * w * h);
-  memset((float *)out_ptr, 0, sizeof(float) * w * h);
-
-  for (int i = 0; i < (2 * r + 1) * (2 * r + 1); i++) {
-    int dy = i / (2 * r + 1) - r;
-    int dx = i % (2 * r + 1) - r;
-
-    int local_rect[4] = {
-        max(0, -dx), max(0, -dy), rect.z - rect.x - max(0, dx), rect.w - rect.y - max(0, dy)};
-    kernels.filter_nlm_calc_difference(dx,
-                                       dy,
-                                       (float *)guide_ptr,
-                                       (float *)variance_ptr,
-                                       nullptr,
-                                       difference,
-                                       local_rect,
-                                       w,
-                                       channel_offset,
-                                       0,
-                                       a,
-                                       k_2);
-
-    kernels.filter_nlm_blur(difference, blurDifference, local_rect, w, f);
-    kernels.filter_nlm_calc_weight(blurDifference, difference, local_rect, w, f);
-    kernels.filter_nlm_blur(difference, blurDifference, local_rect, w, f);
-
-    kernels.filter_nlm_update_output(dx,
-                                     dy,
-                                     blurDifference,
-                                     (float *)image_ptr,
-                                     difference,
-                                     (float *)out_ptr,
-                                     weightAccum,
-                                     local_rect,
-                                     channel_offset,
-                                     stride,
-                                     f);
-  }
-
-  int local_rect[4] = {0, 0, rect.z - rect.x, rect.w - rect.y};
-  kernels.filter_nlm_normalize((float *)out_ptr, weightAccum, local_rect, w);
-
-  return true;
-}
-
-bool CPUDevice::denoising_construct_transform(DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_CONSTRUCT_TRANSFORM);
-
-  for (int y = 0; y < task->filter_area.w; y++) {
-    for (int x = 0; x < task->filter_area.z; x++) {
-      kernels.filter_construct_transform((float *)task->buffer.mem.device_pointer,
-                                         task->tile_info,
-                                         x + task->filter_area.x,
-                                         y + task->filter_area.y,
-                                         y * task->filter_area.z + x,
-                                         (float *)task->storage.transform.device_pointer,
-                                         (int *)task->storage.rank.device_pointer,
-                                         &task->rect.x,
-                                         task->buffer.pass_stride,
-                                         task->buffer.frame_stride,
-                                         task->buffer.use_time,
-                                         task->radius,
-                                         task->pca_threshold);
-    }
-  }
-  return true;
-}
-
-bool CPUDevice::denoising_accumulate(device_ptr color_ptr,
-                                     device_ptr color_variance_ptr,
-                                     device_ptr scale_ptr,
-                                     int frame,
-                                     DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_RECONSTRUCT);
-
-  float *temporary_mem = (float *)task->buffer.temporary_mem.device_pointer;
-  float *difference = temporary_mem;
-  float *blurDifference = temporary_mem + task->buffer.pass_stride;
-
-  int r = task->radius;
-  int frame_offset = frame * task->buffer.frame_stride;
-  for (int i = 0; i < (2 * r + 1) * (2 * r + 1); i++) {
-    int dy = i / (2 * r + 1) - r;
-    int dx = i % (2 * r + 1) - r;
-
-    int local_rect[4] = {max(0, -dx),
-                         max(0, -dy),
-                         task->reconstruction_state.source_w - max(0, dx),
-                         task->reconstruction_state.source_h - max(0, dy)};
-    kernels.filter_nlm_calc_difference(dx,
-                                       dy,
-                                       (float *)color_ptr,
-                                       (float *)color_variance_ptr,
-                                       (float *)scale_ptr,
-                                       difference,
-                                       local_rect,
-                                       task->buffer.stride,
-                                       task->buffer.pass_stride,
-                                       frame_offset,
-                                       1.0f,
-                                       task->nlm_k_2);
-    kernels.filter_nlm_blur(difference, blurDifference, local_rect, task->buffer.stride, 4);
-    kernels.filter_nlm_calc_weight(blurDifference, difference, local_rect, task->buffer.stride, 4);
-    kernels.filter_nlm_blur(difference, blurDifference, local_rect, task->buffer.stride, 4);
-    kernels.filter_nlm_construct_gramian(dx,
-                                         dy,
-                                         task->tile_info->frames[frame],
-                                         blurDifference,
-                                         (float *)task->buffer.mem.device_pointer,
-                                         (float *)task->storage.transform.device_pointer,
-                                         (int *)task->storage.rank.device_pointer,
-                                         (float *)task->storage.XtWX.device_pointer,
-                                         (float3 *)task->storage.XtWY.device_pointer,
-                                         local_rect,
-                                         &task->reconstruction_state.filter_window.x,
-                                         task->buffer.stride,
-                                         4,
-                                         task->buffer.pass_stride,
-                                         frame_offset,
-                                         task->buffer.use_time);
-  }
-
-  return true;
-}
-
-bool CPUDevice::denoising_solve(device_ptr output_ptr, DenoisingTask *task)
-{
-  for (int y = 0; y < task->filter_area.w; y++) {
-    for (int x = 0; x < task->filter_area.z; x++) {
-      kernels.filter_finalize(x,
-                              y,
-                              y * task->filter_area.z + x,
-                              (float *)output_ptr,
-                              (int *)task->storage.rank.device_pointer,
-                              (float *)task->storage.XtWX.device_pointer,
-                              (float3 *)task->storage.XtWY.device_pointer,
-                              &task->reconstruction_state.buffer_params.x,
-                              task->render_buffer.samples);
-    }
-  }
-  return true;
-}
-
-bool CPUDevice::denoising_combine_halves(device_ptr a_ptr,
-                                         device_ptr b_ptr,
-                                         device_ptr mean_ptr,
-                                         device_ptr variance_ptr,
-                                         int r,
-                                         int4 rect,
-                                         DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_COMBINE_HALVES);
-
-  for (int y = rect.y; y < rect.w; y++) {
-    for (int x = rect.x; x < rect.z; x++) {
-      kernels.filter_combine_halves(x,
-                                    y,
-                                    (float *)mean_ptr,
-                                    (float *)variance_ptr,
-                                    (float *)a_ptr,
-                                    (float *)b_ptr,
-                                    &rect.x,
-                                    r);
-    }
-  }
-  return true;
-}
-
-bool CPUDevice::denoising_divide_shadow(device_ptr a_ptr,
-                                        device_ptr b_ptr,
-                                        device_ptr sample_variance_ptr,
-                                        device_ptr sv_variance_ptr,
-                                        device_ptr buffer_variance_ptr,
-                                        DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_DIVIDE_SHADOW);
-
-  for (int y = task->rect.y; y < task->rect.w; y++) {
-    for (int x = task->rect.x; x < task->rect.z; x++) {
-      kernels.filter_divide_shadow(task->render_buffer.samples,
-                                   task->tile_info,
-                                   x,
-                                   y,
-                                   (float *)a_ptr,
-                                   (float *)b_ptr,
-                                   (float *)sample_variance_ptr,
-                                   (float *)sv_variance_ptr,
-                                   (float *)buffer_variance_ptr,
-                                   &task->rect.x,
-                                   task->render_buffer.pass_stride,
-                                   task->render_buffer.offset);
-    }
-  }
-  return true;
-}
-
-bool CPUDevice::denoising_get_feature(int mean_offset,
-                                      int variance_offset,
-                                      device_ptr mean_ptr,
-                                      device_ptr variance_ptr,
-                                      float scale,
-                                      DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_GET_FEATURE);
-
-  for (int y = task->rect.y; y < task->rect.w; y++) {
-    for (int x = task->rect.x; x < task->rect.z; x++) {
-      kernels.filter_get_feature(task->render_buffer.samples,
-                                 task->tile_info,
-                                 mean_offset,
-                                 variance_offset,
-                                 x,
-                                 y,
-                                 (float *)mean_ptr,
-                                 (float *)variance_ptr,
-                                 scale,
-                                 &task->rect.x,
-                                 task->render_buffer.pass_stride,
-                                 task->render_buffer.offset);
-    }
-  }
-  return true;
-}
-
-bool CPUDevice::denoising_write_feature(int out_offset,
-                                        device_ptr from_ptr,
-                                        device_ptr buffer_ptr,
-                                        DenoisingTask *task)
-{
-  for (int y = 0; y < task->filter_area.w; y++) {
-    for (int x = 0; x < task->filter_area.z; x++) {
-      kernels.filter_write_feature(task->render_buffer.samples,
-                                   x + task->filter_area.x,
-                                   y + task->filter_area.y,
-                                   &task->reconstruction_state.buffer_params.x,
-                                   (float *)from_ptr,
-                                   (float *)buffer_ptr,
-                                   out_offset,
-                                   &task->rect.x);
-    }
-  }
-  return true;
-}
-
-bool CPUDevice::denoising_detect_outliers(device_ptr image_ptr,
-                                          device_ptr variance_ptr,
-                                          device_ptr depth_ptr,
-                                          device_ptr output_ptr,
-                                          DenoisingTask *task)
-{
-  ProfilingHelper profiling(task->profiler, PROFILING_DENOISING_DETECT_OUTLIERS);
-
-  for (int y = task->rect.y; y < task->rect.w; y++) {
-    for (int x = task->rect.x; x < task->rect.z; x++) {
-      kernels.filter_detect_outliers(x,
-                                     y,
-                                     (float *)image_ptr,
-                                     (float *)variance_ptr,
-                                     (float *)depth_ptr,
-                                     (float *)output_ptr,
-                                     &task->rect.x,
-                                     task->buffer.pass_stride);
-    }
-  }
-  return true;
-}
-#endif
-
 bool CPUDevice::adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample)
 {
   KernelWorkTile wtile;
@@ -724,37 +427,6 @@ void CPUDevice::render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
   }
 }
 
-void CPUDevice::denoise_nlm(DenoisingTask &denoising, RenderTile &tile)
-{
-  ProfilingHelper profiling(denoising.profiler, PROFILING_DENOISING);
-
-  tile.sample = tile.start_sample + tile.num_samples;
-
-  denoising.functions.construct_transform = function_bind(
-      &CPUDevice::denoising_construct_transform, this, &denoising);
-  denoising.functions.accumulate = function_bind(
-      &CPUDevice::denoising_accumulate, this, _1, _2, _3, _4, &denoising);
-  denoising.functions.solve = function_bind(&CPUDevice::denoising_solve, this, _1, &denoising);
-  denoising.functions.divide_shadow = function_bind(
-      &CPUDevice::denoising_divide_shadow, this, _1, _2, _3, _4, _5, &denoising);
-  denoising.functions.non_local_means = function_bind(
-      &CPUDevice::denoising_non_local_means, this, _1, _2, _3, _4, &denoising);
-  denoising.functions.combine_halves = function_bind(
-      &CPUDevice::denoising_combine_halves, this, _1, _2, _3, _4, _5, _6, &denoising);
-  denoising.functions.get_feature = function_bind(
-      &CPUDevice::denoising_get_feature, this, _1, _2, _3, _4, _5, &denoising);
-  denoising.functions.write_feature = function_bind(
-      &CPUDevice::denoising_write_feature, this, _1, _2, _3, &denoising);
-  denoising.functions.detect_outliers = function_bind(
-      &CPUDevice::denoising_detect_outliers, this, _1, _2, _3, _4, &denoising);
-
-  denoising.filter_area = make_int4(tile.x, tile.y, tile.w, tile.h);
-  denoising.render_buffer.samples = tile.sample;
-  denoising.buffer.gpu_temporary_mem = false;
-
-  denoising.run_denoising(tile);
-}
-
 void CPUDevice::thread_render(DeviceTask &task)
 {
   if (TaskPool::canceled()) {
@@ -791,16 +463,7 @@ void CPUDevice::thread_render(DeviceTask &task)
       render(task, tile, &kg);
     }
     else if (tile.task == RenderTile::DENOISE) {
-      if (task.denoising.type == DENOISER_OPENIMAGEDENOISE) {
-        denoise_openimagedenoise(task, tile);
-      }
-      else if (task.denoising.type == DENOISER_NLM) {
-        if (denoising == NULL) {
-          denoising = new DenoisingTask(this, task);
-          denoising->profiler = &kg.profiler;
-        }
-        denoise_nlm(*denoising, tile);
-      }
+      denoise_openimagedenoise(task, tile);
       task.update_progress(&tile, tile.w * tile.h);
     }
 
@@ -836,20 +499,7 @@ void CPUDevice::thread_denoise(DeviceTask &task)
   tile.stride = task.stride;
   tile.buffers = task.buffers;
 
-  if (task.denoising.type == DENOISER_OPENIMAGEDENOISE) {
-    denoise_openimagedenoise(task, tile);
-  }
-  else {
-    DenoisingTask denoising(this, task);
-
-    ProfilingState denoising_profiler_state;
-    profiler.add_state(&denoising_profiler_state);
-    denoising.profiler = &denoising_profiler_state;
-
-    denoise_nlm(denoising, tile);
-
-    profiler.remove_state(&denoising_profiler_state);
-  }
+  denoise_openimagedenoise(task, tile);
 
   task.update_progress(&tile, tile.w * tile.h);
 }

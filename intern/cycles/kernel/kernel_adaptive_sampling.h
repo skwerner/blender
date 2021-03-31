@@ -124,21 +124,8 @@ ccl_device void kernel_adaptive_post_adjust(const KernelGlobals *kg,
     *(buffer + offset + 2) *= scale * scale;
 
   if (kernel_data.film.pass_denoising_data) {
-    scale_shadow_variance(
-        buffer, kernel_data.film.pass_denoising_data + DENOISING_PASS_SHADOW_A, sample_multiplier);
-    scale_shadow_variance(
-        buffer, kernel_data.film.pass_denoising_data + DENOISING_PASS_SHADOW_B, sample_multiplier);
-    if (kernel_data.film.pass_denoising_clean) {
-      scale_float3_variance(
-          buffer, kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, sample_multiplier);
-      *(buffer + kernel_data.film.pass_denoising_clean) *= sample_multiplier;
-      *(buffer + kernel_data.film.pass_denoising_clean + 1) *= sample_multiplier;
-      *(buffer + kernel_data.film.pass_denoising_clean + 2) *= sample_multiplier;
-    }
-    else {
-      scale_float3_variance(
-          buffer, kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, sample_multiplier);
-    }
+    scale_float3_variance(
+        buffer, kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, sample_multiplier);
     scale_float3_variance(
         buffer, kernel_data.film.pass_denoising_data + DENOISING_PASS_NORMAL, sample_multiplier);
     scale_float3_variance(

@@ -52,12 +52,6 @@ class BufferParams {
   /* passes */
   vector<Pass> passes;
   bool denoising_data_pass;
-  /* If only some light path types should be target, an additional pass is needed. */
-  bool denoising_clean_pass;
-  /* When we're prefiltering the passes during rendering, we need to keep both the
-   * original and the prefiltered data around because neighboring tiles might still
-   * need the original data. */
-  bool denoising_prefiltered_pass;
 
   /* functions */
   BufferParams();
@@ -66,7 +60,6 @@ class BufferParams {
   bool modified(const BufferParams &params) const;
   int get_passes_size() const;
   int get_denoising_offset() const;
-  int get_denoising_prefiltered_offset() const;
 };
 
 /* Render Buffers */

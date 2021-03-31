@@ -23,7 +23,6 @@
 #  include "bvh/bvh.h"
 #  include "bvh/bvh_optix.h"
 #  include "device/cuda/device_cuda_impl.h"
-#  include "device/device_denoising.h"
 #  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"

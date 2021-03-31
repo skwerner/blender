@@ -384,9 +384,6 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
   SOCKET_BOOLEAN(denoising_data_pass, "Generate Denoising Data Pass", false);
-  SOCKET_BOOLEAN(denoising_clean_pass, "Generate Denoising Clean Pass", false);
-  SOCKET_BOOLEAN(denoising_prefiltered_pass, "Generate Denoising Prefiltered Pass", false);
-  SOCKET_INT(denoising_flags, "Denoising Flags", 0);
   SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
 
   SOCKET_BOOLEAN(use_light_visibility, "Use Light Visibility", false);
@@ -645,20 +642,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   }
 
   kfilm->pass_denoising_data = 0;
-  kfilm->pass_denoising_clean = 0;
-  kfilm->denoising_flags = 0;
   if (denoising_data_pass) {
     kfilm->pass_denoising_data = kfilm->pass_stride;
-    kfilm->pass_stride += DENOISING_PASS_SIZE_BASE;
-    kfilm->denoising_flags = denoising_flags;
-    if (denoising_clean_pass) {
-      kfilm->pass_denoising_clean = kfilm->pass_stride;
-      kfilm->pass_stride += DENOISING_PASS_SIZE_CLEAN;
-      kfilm->use_light_pass = 1;
-    }
-    if (denoising_prefiltered_pass) {
-      kfilm->pass_stride += DENOISING_PASS_SIZE_PREFILTERED;
-    }
+    kfilm->pass_stride += DENOISING_PASS_SIZE;
   }
 
   kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
@@ -691,7 +677,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   pass_stride = kfilm->pass_stride;
   denoising_data_offset = kfilm->pass_denoising_data;
-  denoising_clean_offset = kfilm->pass_denoising_clean;
 
   clear_modified();
 }
@@ -752,11 +737,6 @@ int Film::get_pass_stride() const
 int Film::get_denoising_data_offset() const
 {
   return denoising_data_offset;
-}
-
-int Film::get_denoising_clean_offset() const
-{
-  return denoising_clean_offset;
 }
 
 size_t Film::get_filter_table_offset() const

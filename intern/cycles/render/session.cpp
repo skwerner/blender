@@ -547,9 +547,6 @@ void Session::update_status_time(bool show_pause, bool show_done)
     if (params.denoising.use && params.denoising.type != DENOISER_OPENIMAGEDENOISE) {
       substatus += string_printf(", Denoised %d tiles", progress.get_denoised_tiles());
     }
-    else if (params.denoising.store_passes && params.denoising.type == DENOISER_NLM) {
-      substatus += string_printf(", Prefiltered %d tiles", progress.get_denoised_tiles());
-    }
   }
   else if (tile_manager.num_samples == Integrator::MAX_SAMPLES)
     substatus = string_printf("Path Tracing Sample %d", progressive_sample + 1);

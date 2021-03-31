@@ -29,17 +29,10 @@ set(SRC_DEVICE_CPU
   device/cpu/kernel_sse41.cpp
   device/cpu/kernel_avx.cpp
   device/cpu/kernel_avx2.cpp
-  device/cpu/filter.cpp
-  device/cpu/filter_sse2.cpp
-  device/cpu/filter_sse3.cpp
-  device/cpu/filter_sse41.cpp
-  device/cpu/filter_avx.cpp
-  device/cpu/filter_avx2.cpp
 )
 
 set(SRC_DEVICE_CUDA
   device/cuda/kernel.cu
-  device/cuda/filter.cu
 )
 
 set(SRC_DEVICE_OPENCL
@@ -50,7 +43,6 @@ set(SRC_DEVICE_OPENCL
   device/opencl/kernel_bake.cl
   device/opencl/kernel_base.cl
   device/opencl/kernel_displace.cl
-  device/opencl/filter.cl
 )
 
 set(SRC_DEVICE_OPTIX
@@ -111,9 +103,6 @@ set(SRC_DEVICE_CPU_HEADERS
   device/cpu/kernel.h
   device/cpu/kernel_arch.h
   device/cpu/kernel_arch_impl.h
-  device/cpu/filter.h
-  device/cpu/filter_arch.h
-  device/cpu/filter_arch_impl.h
 )
 
 set(SRC_DEVICE_CUDA_HEADERS
@@ -252,20 +241,6 @@ set(SRC_INTEGRATOR_HEADERS
   integrator/integrator_subsurface.h
 )
 
-set(SRC_FILTER_HEADERS
-  filter/filter_defines.h
-  filter/filter_features.h
-  filter/filter_features_sse.h
-  filter/filter_kernel.h
-  filter/filter_nlm_cpu.h
-  filter/filter_nlm_gpu.h
-  filter/filter_prefilter.h
-  filter/filter_reconstruction.h
-  filter/filter_transform.h
-  filter/filter_transform_gpu.h
-  filter/filter_transform_sse.h
-)
-
 set(SRC_UTIL_HEADERS
   ../util/util_atomic.h
   ../util/util_color.h
@@ -352,12 +327,6 @@ if(WITH_CYCLES_CUDA_BINARIES)
     ${SRC_GEOM_HEADERS}
     ${SRC_INTEGRATOR_HEADERS}
     ${SRC_CLOSURE_HEADERS}
-    ${SRC_UTIL_HEADERS}
-  )
-  set(cuda_filter_sources device/cuda/filter.cu
-    ${SRC_HEADERS}
-    ${SRC_DEVICE_CUDA_HEADERS}
-    ${SRC_FILTER_HEADERS}
     ${SRC_UTIL_HEADERS}
   )
   set(cuda_cubins)
@@ -479,7 +448,6 @@ if(WITH_CYCLES_CUDA_BINARIES)
     endif()
     if(DEFINED cuda_nvcc_executable AND DEFINED cuda_toolkit_root_dir)
       # Compile regular kernel
-      CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} filter "" "${cuda_filter_sources}" FALSE)
       CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel "" "${cuda_sources}" FALSE)
 
       if(WITH_CYCLES_CUDA_BUILD_SERIAL)
@@ -618,25 +586,19 @@ if(WITH_COMPILER_ASAN)
 endif()
 
 set_source_files_properties(device/cpu/kernel.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
-set_source_files_properties(device/cpu/filter.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
 
 if(CXX_HAS_SSE)
   set_source_files_properties(device/cpu/kernel_sse2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE2_KERNEL_FLAGS}")
   set_source_files_properties(device/cpu/kernel_sse3.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE3_KERNEL_FLAGS}")
   set_source_files_properties(device/cpu/kernel_sse41.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE41_KERNEL_FLAGS}")
-  set_source_files_properties(device/cpu/filter_sse2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE2_KERNEL_FLAGS}")
-  set_source_files_properties(device/cpu/filter_sse3.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE3_KERNEL_FLAGS}")
-  set_source_files_properties(device/cpu/filter_sse41.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_SSE41_KERNEL_FLAGS}")
 endif()
 
 if(CXX_HAS_AVX)
   set_source_files_properties(device/cpu/kernel_avx.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX_KERNEL_FLAGS}")
-  set_source_files_properties(device/cpu/filter_avx.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX_KERNEL_FLAGS}")
 endif()
 
 if(CXX_HAS_AVX2)
   set_source_files_properties(device/cpu/kernel_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
-  set_source_files_properties(device/cpu/filter_avx2.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_AVX2_KERNEL_FLAGS}")
 endif()
 
 cycles_add_library(cycles_kernel "${LIB}"
@@ -651,7 +613,6 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_DEVICE_OPENCL_HEADERS}
   ${SRC_BVH_HEADERS}
   ${SRC_CLOSURE_HEADERS}
-  ${SRC_FILTER_HEADERS}
   ${SRC_SVM_HEADERS}
   ${SRC_GEOM_HEADERS}
   ${SRC_INTEGRATOR_HEADERS}
@@ -659,7 +620,6 @@ cycles_add_library(cycles_kernel "${LIB}"
 
 source_group("bvh" FILES ${SRC_BVH_HEADERS})
 source_group("closure" FILES ${SRC_CLOSURE_HEADERS})
-source_group("filter" FILES ${SRC_FILTER_HEADERS})
 source_group("geom" FILES ${SRC_GEOM_HEADERS})
 source_group("integrator" FILES ${SRC_INTEGATOR_HEADERS})
 source_group("kernel" FILES ${SRC_HEADERS})
@@ -695,7 +655,6 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_CUDA_HEADERS}" ${CYCLE
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_OPTIX_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/device/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_BVH_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/bvh)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CLOSURE_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/closure)
-delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_FILTER_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/filter)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/svm)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_INTEGRATOR_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/integrator)

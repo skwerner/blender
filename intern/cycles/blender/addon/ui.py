@@ -269,10 +269,6 @@ class CYCLES_RENDER_PT_sampling_denoising(CyclesButtonsPanel, Panel):
         sub = row.row()
 
         sub.active = cscene.use_denoising
-        for view_layer in scene.view_layers:
-            if view_layer.cycles.denoising_store_passes:
-                sub.active = True
-
         sub.prop(cscene, "denoiser", text="")
 
         layout.separator()
@@ -935,34 +931,8 @@ class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
 
         if denoiser == 'OPTIX':
             col.prop(cycles_view_layer, "denoising_optix_input_passes")
-            return
         elif denoiser == 'OPENIMAGEDENOISE':
             col.prop(cycles_view_layer, "denoising_openimagedenoise_input_passes")
-            return
-
-        col.prop(cycles_view_layer, "denoising_radius", text="Radius")
-
-        col = layout.column()
-        col.prop(cycles_view_layer, "denoising_strength", slider=True, text="Strength")
-        col.prop(cycles_view_layer, "denoising_feature_strength", slider=True, text="Feature Strength")
-        col.prop(cycles_view_layer, "denoising_relative_pca")
-
-        layout.separator()
-
-        col = layout.column()
-        col.active = cycles_view_layer.use_denoising or cycles_view_layer.denoising_store_passes
-
-        row = col.row(heading="Diffuse", align=True)
-        row.prop(cycles_view_layer, "denoising_diffuse_direct", text="Direct", toggle=True)
-        row.prop(cycles_view_layer, "denoising_diffuse_indirect", text="Indirect", toggle=True)
-
-        row = col.row(heading="Glossy", align=True)
-        row.prop(cycles_view_layer, "denoising_glossy_direct", text="Direct", toggle=True)
-        row.prop(cycles_view_layer, "denoising_glossy_indirect", text="Indirect", toggle=True)
-
-        row = col.row(heading="Transmission", align=True)
-        row.prop(cycles_view_layer, "denoising_transmission_direct", text="Direct", toggle=True)
-        row.prop(cycles_view_layer, "denoising_transmission_indirect", text="Indirect", toggle=True)
 
 
 class CYCLES_PT_post_processing(CyclesButtonsPanel, Panel):

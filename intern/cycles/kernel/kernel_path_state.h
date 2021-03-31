@@ -20,16 +20,26 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Minimalistic initialization of the path state, which is needed for early outputs in the
+ * integrator initialization to work. */
 ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
                                        const ccl_global KernelWorkTile *ccl_restrict tile,
-                                       const int sample,
                                        const int x,
-                                       const int y,
-                                       const uint rng_hash)
+                                       const int y)
 {
   const uint render_pixel_index = (uint)tile->offset + x + y * tile->stride;
 
   INTEGRATOR_STATE_WRITE(path, render_pixel_index) = render_pixel_index;
+
+  INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
+  INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+}
+
+/* Initialize the rest of the path state needed to continue the path integration. */
+ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
+                                                  const int sample,
+                                                  const uint rng_hash)
+{
   INTEGRATOR_STATE_WRITE(path, sample) = sample;
   INTEGRATOR_STATE_WRITE(path, bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, transparent_bounce) = 0;
@@ -43,8 +53,6 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
 
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = SHADER_NONE;
-
-  INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
 
 #ifdef __DENOISING_FEATURES__
   if (kernel_data.film.pass_denoising_data) {

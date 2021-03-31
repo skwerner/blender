@@ -65,6 +65,9 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
                                             const int y,
                                             const int sample)
 {
+  /* Initialize path state to give basic buffer access and allow early outputs. */
+  path_state_init(INTEGRATOR_STATE_PASS, tile, x, y);
+
   /* Initialize random number seed for path. */
   const uint rng_hash = path_rng_hash_init(kg, sample, x, y);
 
@@ -80,8 +83,8 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
     integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
   }
 
-  /* Initialize path state. */
-  path_state_init(INTEGRATOR_STATE_PASS, tile, sample, x, y, rng_hash);
+  /* Initialize path state for path integration. */
+  path_state_init_integrator(INTEGRATOR_STATE_PASS, sample, rng_hash);
 
   kernel_accum_sample(INTEGRATOR_STATE_PASS, render_buffer);
 

@@ -78,19 +78,38 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
   switch (ctx->type) {
     case CCLIntersectContext::RAY_SHADOW_ALL: {
       /* Append the intersection to the end of the array. */
-      if (ctx->num_hits < ctx->max_hits) {
+      if (ctx->num_hits < ctx->max_hits || ray->tfar < ctx->max_t) {
         Intersection current_isect;
         kernel_embree_convert_hit(kg, ray, hit, &current_isect);
-        for (size_t i = 0; i < ctx->max_hits; ++i) {
+
+        /* Skip already recorded intersections. */
+        for (int i = 0; i < ctx->num_hits; ++i) {
           if (current_isect.object == ctx->isect_s[i].object &&
               current_isect.prim == ctx->isect_s[i].prim && current_isect.t == ctx->isect_s[i].t) {
             /* This intersection was already recorded, skip it. */
             *args->valid = 0;
-            break;
+            return;
           }
         }
-        Intersection *isect = &ctx->isect_s[ctx->num_hits];
-        ++ctx->num_hits;
+
+        /* If maximum number of hits was reached, replace the intersection with the
+         * highest distance. We want to find the N closest intersections. */
+        int isect_index = ctx->num_hits;
+        if (ctx->num_hits >= ctx->max_hits) {
+          float max_t = -FLT_MAX;
+          for (int i = 0; i < ctx->num_hits; ++i) {
+            if (ctx->isect_s[i].t > max_t) {
+              isect_index = i;
+              max_t = ctx->isect_s[i].t;
+            }
+          }
+        }
+        ctx->max_t = min(current_isect.t, ctx->max_t);
+        /* TODO: is there some way we can tell Embree to stop intersecting beyond
+         * this distance when max number of hits is reached?. Or maybe it will
+         * become irrelevant if we make max_hits a very high number on the CPU. */
+
+        Intersection *isect = &ctx->isect_s[isect_index];
         *isect = current_isect;
         const int flags = intersection_get_shader_flags(kg, isect);
         /* If no transparent shadows, all light is blocked. */
@@ -99,11 +118,11 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
           *args->valid = 0;
         }
       }
-      else {
-        /* Increase the number of hits beyond ray.max_hits
-         * so that the caller can detect this as opaque. */
-        ++ctx->num_hits;
-      }
+
+      /* Always increase the number of hits, even beyond ray.max_hits so that
+       * the caller can detect this as and consider it opaque, or trace another
+       * ray. */
+      ++ctx->num_hits;
       break;
     }
     case CCLIntersectContext::RAY_LOCAL:

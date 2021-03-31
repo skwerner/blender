@@ -185,6 +185,8 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
   }
 #  endif
 
+  /* TODO: find the max_hits closest hits. */
+
   // Offset into array with num_hits
   Intersection *const isect = get_payload_ptr_0<Intersection>() + optixGetPayload_2();
   isect->t = optixGetRayTmax();

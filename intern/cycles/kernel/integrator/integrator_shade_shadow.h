@@ -30,10 +30,7 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
   ShaderDataTinyStorage shadow_sd_storage;
   ShaderData *shadow_sd = AS_SHADER_DATA(&shadow_sd_storage);
 
-  /* Setup shader data at surface.
-   *
-   * TODO: old logic would modify ray.P and isect.t for each step, why was that
-   * needed? Can we avoid it? */
+  /* Setup shader data at surface. */
   Intersection isect ccl_optional_struct_init;
   integrator_state_read_shadow_isect(INTEGRATOR_STATE_PASS, &isect, hit);
 
@@ -51,19 +48,34 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
   return shader_bsdf_transparency(kg, shadow_sd);
 }
 
-ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS)
+ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS, const int num_hits)
 {
   /* Accumulate shadow for transparent surfaces. */
-  const uint num_hits = INTEGRATOR_STATE(shadow_path, num_hits);
+  const int num_recorded_hits = min(num_hits, INTEGRATOR_SHADOW_ISECT_SIZE);
 
-  for (int hit = 0; hit < num_hits; hit++) {
+  for (int hit = 0; hit < num_recorded_hits; hit++) {
     const float3 shadow = integrate_transparent_shadow_shader_eval(INTEGRATOR_STATE_PASS, hit);
     const float3 throughput = INTEGRATOR_STATE(shadow_path, throughput) * shadow;
-    INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
-
     if (is_zero(throughput)) {
       return true;
     }
+
+    INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
+    INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) += 1;
+
+    /* Note we do not need to check max_transparent_bounce here, the number
+     * of intersections is already limited and made opaque in the
+     * INTERSECT_SHADOW kernel. */
+  }
+
+  if (num_hits >= INTEGRATOR_SHADOW_ISECT_SIZE) {
+    /* There are more hits that we could not recorded due to memory usage,
+     * adjust ray to intersect again from the last hit. */
+    const float last_hit_t = INTEGRATOR_STATE_ARRAY(shadow_isect, num_recorded_hits - 1, t);
+    const float3 ray_P = INTEGRATOR_STATE(shadow_ray, P);
+    const float3 ray_D = INTEGRATOR_STATE(shadow_ray, D);
+    INTEGRATOR_STATE_WRITE(shadow_ray, P) = ray_offset(ray_P + last_hit_t * ray_D, ray_D);
+    INTEGRATOR_STATE_WRITE(shadow_ray, t) -= last_hit_t;
   }
 
   return false;
@@ -73,25 +85,25 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS)
 ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
+  const int num_hits = INTEGRATOR_STATE(shadow_path, num_hits);
+
 #ifdef __TRANSPARENT_SHADOWS__
   /* Evaluate transparent shadows. */
-  const bool opaque = integrate_transparent_shadow(INTEGRATOR_STATE_PASS);
+  const bool opaque = integrate_transparent_shadow(INTEGRATOR_STATE_PASS, num_hits);
   if (opaque) {
     INTEGRATOR_SHADOW_PATH_TERMINATE(SHADE_SHADOW);
     return;
   }
 #endif
 
-  const bool shadow_isect_done = true;
-  if (shadow_isect_done) {
-    kernel_accum_light(INTEGRATOR_STATE_PASS, render_buffer);
-
-    INTEGRATOR_SHADOW_PATH_TERMINATE(SHADE_SHADOW);
+  if (num_hits >= INTEGRATOR_SHADOW_ISECT_SIZE) {
+    /* More intersections to find, continue shadow ray. */
+    INTEGRATOR_SHADOW_PATH_NEXT(SHADE_SHADOW, INTERSECT_SHADOW);
     return;
   }
   else {
-    /* TODO: add mechanism to detect and continue tracing if max_hits exceeded. */
-    INTEGRATOR_SHADOW_PATH_NEXT(SHADE_SHADOW, INTERSECT_SHADOW);
+    kernel_accum_light(INTEGRATOR_STATE_PASS, render_buffer);
+    INTEGRATOR_SHADOW_PATH_TERMINATE(SHADE_SHADOW);
     return;
   }
 }

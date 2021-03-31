@@ -188,6 +188,7 @@ ccl_device_inline
               }
               /* if maximum number of hits reached, block all light */
               else if (*num_hits == max_hits) {
+                /* TODO: find the max_hits closest hits. */
                 return true;
               }
 

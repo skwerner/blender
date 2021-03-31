@@ -20,7 +20,7 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device_forceinline uint integrate_intersect_shadow_visibility(INTEGRATOR_STATE_CONST_ARGS)
 {
-  const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
+  const uint32_t path_flag = INTEGRATOR_STATE(shadow_path, flag);
 #ifdef __SHADOW_TRICKS__
   return (path_flag & PATH_RAY_SHADOW_CATCHER) ? PATH_RAY_SHADOW_NON_CATCHER : PATH_RAY_SHADOW;
 #else
@@ -44,26 +44,43 @@ ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
   return opaque_hit;
 }
 
+ccl_device_forceinline const int integrate_shadow_max_transparent_hits(INTEGRATOR_STATE_CONST_ARGS)
+{
+  const int transparent_max_bounce = kernel_data.integrator.transparent_max_bounce;
+  const int transparent_bounce = INTEGRATOR_STATE(shadow_path, transparent_bounce);
+
+  return max(transparent_max_bounce - transparent_bounce - 1, 0);
+}
+
 #ifdef __TRANSPARENT_SHADOWS__
 ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
                                                        const Ray *ray,
                                                        const uint visibility)
 {
-  /* TODO: add mechanism to detect and continue tracing if max_hits exceeded. */
   PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
 
   Intersection isect[INTEGRATOR_SHADOW_ISECT_SIZE];
-  const uint max_hits = INTEGRATOR_SHADOW_ISECT_SIZE;
-  uint num_hits;
-  const bool opaque_hit = scene_intersect_shadow_all(
-      kg, ray, isect, visibility, max_hits, &num_hits);
+
+  /* Limit the number hits to the max transparent bounces allowed and the size that we
+   * have available in the integrator state. */
+  const uint max_transparent_hits = integrate_shadow_max_transparent_hits(INTEGRATOR_STATE_PASS);
+  const uint max_hits = min(max_transparent_hits, (uint)INTEGRATOR_SHADOW_ISECT_SIZE);
+  uint num_hits = 0;
+  bool opaque_hit = scene_intersect_shadow_all(kg, ray, isect, visibility, max_hits, &num_hits);
+
+  /* If number of hits exceed the transparent bounces limit, make opaque. */
+  if (num_hits > max_transparent_hits) {
+    opaque_hit = true;
+  }
 
   if (!opaque_hit) {
-    if (num_hits > 0) {
-      sort_intersections(isect, num_hits);
+    uint num_recorded_hits = min(num_hits, max_hits);
+
+    if (num_recorded_hits > 0) {
+      sort_intersections(isect, num_recorded_hits);
 
       /* Write intersection result into global integrator state memory. */
-      for (int hit = 0; hit < num_hits; hit++) {
+      for (int hit = 0; hit < num_recorded_hits; hit++) {
         integrator_state_write_shadow_isect(INTEGRATOR_STATE_PASS, &isect[hit], hit);
       }
     }

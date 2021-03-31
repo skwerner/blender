@@ -39,11 +39,11 @@ template<typename FunctionType> class CPUKernelFunction {
         kernel_default, kernel_sse2, kernel_sse3, kernel_sse41, kernel_avx, kernel_avx2);
   }
 
-  template<typename... Args> inline void operator()(Args... args) const
+  template<typename... Args> inline auto operator()(Args... args) const
   {
     assert(kernel_info_.kernel);
 
-    kernel_info_.kernel(args...);
+    return kernel_info_.kernel(args...);
   }
 
   const char *get_uarch_name() const

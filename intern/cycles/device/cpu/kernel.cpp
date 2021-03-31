@@ -28,10 +28,7 @@ CCL_NAMESPACE_BEGIN
 #define REGISTER_KERNEL(name) name(KERNEL_FUNCTIONS(name))
 
 CPUKernels::CPUKernels()
-    : REGISTER_KERNEL(convert_to_half_float),
-      REGISTER_KERNEL(shader_eval_displace),
-      REGISTER_KERNEL(shader_eval_background),
-      REGISTER_KERNEL(bake),
+    : /* Integrator. */
       REGISTER_KERNEL(integrator_init_from_camera),
       REGISTER_KERNEL(integrator_intersect_closest),
       REGISTER_KERNEL(integrator_intersect_shadow),
@@ -41,7 +38,17 @@ CPUKernels::CPUKernels()
       REGISTER_KERNEL(integrator_shade_shadow),
       REGISTER_KERNEL(integrator_shade_surface),
       REGISTER_KERNEL(integrator_shade_volume),
-      REGISTER_KERNEL(integrator_megakernel)
+      REGISTER_KERNEL(integrator_megakernel),
+      /* Film. */
+      REGISTER_KERNEL(convert_to_half_float),
+      /* Shader evaluation. */
+      REGISTER_KERNEL(shader_eval_displace),
+      REGISTER_KERNEL(shader_eval_background),
+      /* Adaptive campling. */
+      REGISTER_KERNEL(adaptive_sampling_filter_x),
+      REGISTER_KERNEL(adaptive_sampling_filter_y),
+      /* Bake. */
+      REGISTER_KERNEL(bake)
 {
 }
 

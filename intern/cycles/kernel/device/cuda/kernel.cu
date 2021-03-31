@@ -295,7 +295,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
       sample > kernel_data.integrator.adaptive_min_samples) {
     if (ccl_global_id(0) < tile->h) {
       int y = tile->y + ccl_global_id(0);
-      kernel_do_adaptive_filter_x(&kg, y, tile, render_buffer);
+      kernel_adaptive_sampling_filter_x(
+          &kg, render_buffer, y, tile->x, tile->w, tile->offset, tile->stride);
     }
   }
 }
@@ -309,7 +310,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
       sample > kernel_data.integrator.adaptive_min_samples) {
     if (ccl_global_id(0) < tile->w) {
       int x = tile->x + ccl_global_id(0);
-      kernel_do_adaptive_filter_y(&kg, x, tile, render_buffer);
+      kernel_adaptive_sampling_filter_y(
+          &kg, render_buffer, x, tile->y, tile->h, tile->offset, tile->stride);
     }
   }
 }

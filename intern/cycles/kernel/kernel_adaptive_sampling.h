@@ -181,21 +181,24 @@ ccl_device void kernel_adaptive_post_adjust(const KernelGlobals *kg,
 /* This is a simple box filter in two passes.
  * When a pixel demands more adaptive samples, let its neighboring pixels draw more samples too. */
 
-ccl_device bool kernel_do_adaptive_filter_x(const KernelGlobals *kg,
-                                            int y,
-                                            ccl_global KernelWorkTile *tile,
-                                            ccl_global float *render_buffer)
+ccl_device bool kernel_adaptive_sampling_filter_x(const KernelGlobals *kg,
+                                                  ccl_global float *render_buffer,
+                                                  int y,
+                                                  int start_x,
+                                                  int width,
+                                                  int offset,
+                                                  int stride)
 {
   bool any = false;
   bool prev = false;
-  for (int x = tile->x; x < tile->x + tile->w; ++x) {
-    int index = tile->offset + x + y * tile->stride;
+  for (int x = start_x; x < start_x + width; ++x) {
+    int index = offset + x + y * stride;
     ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
     ccl_global float4 *aux = (ccl_global float4 *)(buffer +
                                                    kernel_data.film.pass_adaptive_aux_buffer);
     if ((*aux).w == 0.0f) {
       any = true;
-      if (x > tile->x && !prev) {
+      if (x > start_x && !prev) {
         index = index - 1;
         buffer = render_buffer + index * kernel_data.film.pass_stride;
         aux = (ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
@@ -213,22 +216,25 @@ ccl_device bool kernel_do_adaptive_filter_x(const KernelGlobals *kg,
   return any;
 }
 
-ccl_device bool kernel_do_adaptive_filter_y(const KernelGlobals *kg,
-                                            int x,
-                                            ccl_global KernelWorkTile *tile,
-                                            ccl_global float *render_buffer)
+ccl_device bool kernel_adaptive_sampling_filter_y(const KernelGlobals *kg,
+                                                  ccl_global float *render_buffer,
+                                                  int x,
+                                                  int start_y,
+                                                  int height,
+                                                  int offset,
+                                                  int stride)
 {
   bool prev = false;
   bool any = false;
-  for (int y = tile->y; y < tile->y + tile->h; ++y) {
-    int index = tile->offset + x + y * tile->stride;
+  for (int y = start_y; y < start_y + height; ++y) {
+    int index = offset + x + y * stride;
     ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
     ccl_global float4 *aux = (ccl_global float4 *)(buffer +
                                                    kernel_data.film.pass_adaptive_aux_buffer);
     if ((*aux).w == 0.0f) {
       any = true;
-      if (y > tile->y && !prev) {
-        index = index - tile->stride;
+      if (y > start_y && !prev) {
+        index = index - stride;
         buffer = render_buffer + index * kernel_data.film.pass_stride;
         aux = (ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
         (*aux).w = 0.0f;

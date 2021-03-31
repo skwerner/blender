@@ -41,6 +41,7 @@
 #    include "kernel/integrator/integrator_megakernel.h"
 
 #    include "kernel/kernel_film.h"
+#    include "kernel/kernel_adaptive_sampling.h"
 #    include "kernel/kernel_bake.h"
 
 #if 0
@@ -57,69 +58,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Film */
-
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
-                                                      uchar4 *rgba,
-                                                      float *buffer,
-                                                      float sample_scale,
-                                                      int x,
-                                                      int y,
-                                                      int offset,
-                                                      int stride)
-{
-#ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, convert_to_half_float);
-#else
-  kernel_film_convert_to_half_float(kg, rgba, buffer, sample_scale, x, y, offset, stride);
-#endif /* KERNEL_STUB */
-}
-
-/* Bake */
-
-void KERNEL_FUNCTION_FULL_NAME(bake)(
-    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
-{
-#if 0
-#  ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, bake);
-#  else
-#    ifdef __BAKING__
-  kernel_bake_evaluate(kg, buffer, sample, x, y, offset, stride);
-#    endif
-#  endif /* KERNEL_STUB */
-#endif
-}
-
-/* Shader Evaluate */
-
-void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
-                                                     const KernelShaderEvalInput *input,
-                                                     float4 *output,
-                                                     const int offset)
-{
-#ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, shader_eval_displace);
-#else
-  kernel_displace_evaluate(kg, input, output, offset);
-#endif
-}
-
-void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
-                                                       const KernelShaderEvalInput *input,
-                                                       float4 *output,
-                                                       const int offset)
-{
-#ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, shader_eval_background);
-#else
-  kernel_background_evaluate(kg, input, output, offset);
-#endif
-}
-
-/* ********************************************************************************************* */
-/* *                            *** The new split kernel ***                                   * */
-/* ********************************************************************************************* */
+/* Integrator. */
 
 #ifdef KERNEL_STUB
 #  define KERNEL_INVOKE(name, ...) STUB_ASSERT(KERNEL_ARCH, name)
@@ -162,6 +101,101 @@ DEFINE_INTEGRATOR_SHADE_KERNEL(shade_shadow)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_surface)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_volume)
 DEFINE_INTEGRATOR_SHADE_KERNEL(megakernel)
+
+/* Film. */
+
+void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
+                                                      uchar4 *rgba,
+                                                      float *buffer,
+                                                      float sample_scale,
+                                                      int x,
+                                                      int y,
+                                                      int offset,
+                                                      int stride)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, convert_to_half_float);
+#else
+  kernel_film_convert_to_half_float(kg, rgba, buffer, sample_scale, x, y, offset, stride);
+#endif /* KERNEL_STUB */
+}
+
+/* Shader evaluation. */
+
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
+                                                     const KernelShaderEvalInput *input,
+                                                     float4 *output,
+                                                     const int offset)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, shader_eval_displace);
+#else
+  kernel_displace_evaluate(kg, input, output, offset);
+#endif
+}
+
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
+                                                       const KernelShaderEvalInput *input,
+                                                       float4 *output,
+                                                       const int offset)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, shader_eval_background);
+#else
+  kernel_background_evaluate(kg, input, output, offset);
+#endif
+}
+
+/* Adaptive sampling. */
+
+bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *kg,
+                                                           ccl_global float *render_buffer,
+                                                           int y,
+                                                           int start_x,
+                                                           int width,
+                                                           int offset,
+                                                           int stride)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, adaptive_sampling_filter_x);
+  return false;
+#else
+  return kernel_adaptive_sampling_filter_x(kg, render_buffer, y, start_x, width, offset, stride);
+#endif
+}
+
+bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *kg,
+                                                           ccl_global float *render_buffer,
+                                                           int x,
+                                                           int start_y,
+                                                           int height,
+                                                           int offset,
+                                                           int stride)
+{
+#ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, adaptive_sampling_filter_y);
+  return false;
+#else
+  return kernel_adaptive_sampling_filter_y(kg, render_buffer, x, start_y, height, offset, stride);
+#endif
+}
+
+/* Bake. */
+/* TODO(sergey): Needs to be re-implemented. */
+
+void KERNEL_FUNCTION_FULL_NAME(bake)(
+    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride)
+{
+#if 0
+#  ifdef KERNEL_STUB
+  STUB_ASSERT(KERNEL_ARCH, bake);
+#  else
+#    ifdef __BAKING__
+  kernel_bake_evaluate(kg, buffer, sample, x, y, offset, stride);
+#    endif
+#  endif /* KERNEL_STUB */
+#endif
+}
 
 #undef KERNEL_INVOKE
 #undef DEFINE_INTEGRATOR_KERNEL

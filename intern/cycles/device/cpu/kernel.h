@@ -27,6 +27,8 @@ struct TileInfo;
 
 class CPUKernels {
  public:
+  /* Integrator. */
+
   using IntegratorFunction =
       CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
   using IntegratorShadeFunction = CPUKernelFunction<void (*)(
@@ -35,21 +37,6 @@ class CPUKernels {
                                                             IntegratorState *state,
                                                             KernelWorkTile *tile,
                                                             ccl_global float *render_buffer)>;
-  using ShaderEvalFunction = CPUKernelFunction<void (*)(
-      const KernelGlobals *kg, const KernelShaderEvalInput *, float4 *, const int)>;
-  using ConvertToHalfFloatFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,
-                                                                uchar4 *rgba,
-                                                                float *buffer,
-                                                                float sample_scale,
-                                                                int x,
-                                                                int y,
-                                                                int offset,
-                                                                int stride)>;
-
-  ConvertToHalfFloatFunction convert_to_half_float;
-  ShaderEvalFunction shader_eval_displace;
-  ShaderEvalFunction shader_eval_background;
-  CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
 
   IntegratorInitFunction integrator_init_from_camera;
   IntegratorFunction integrator_intersect_closest;
@@ -61,6 +48,54 @@ class CPUKernels {
   IntegratorShadeFunction integrator_shade_surface;
   IntegratorShadeFunction integrator_shade_volume;
   IntegratorShadeFunction integrator_megakernel;
+
+  /* Film. */
+
+  using ConvertToHalfFloatFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,
+                                                                uchar4 *rgba,
+                                                                float *buffer,
+                                                                float sample_scale,
+                                                                int x,
+                                                                int y,
+                                                                int offset,
+                                                                int stride)>;
+
+  ConvertToHalfFloatFunction convert_to_half_float;
+
+  /* Shader evaluation. */
+
+  using ShaderEvalFunction = CPUKernelFunction<void (*)(
+      const KernelGlobals *kg, const KernelShaderEvalInput *, float4 *, const int)>;
+
+  ShaderEvalFunction shader_eval_displace;
+  ShaderEvalFunction shader_eval_background;
+
+  /* Adaptive stopping. */
+
+  using AdaptiveSamplingFilterXFunction =
+      CPUKernelFunction<bool (*)(const KernelGlobals *kg,
+                                 ccl_global float *render_buffer,
+                                 int y,
+                                 int start_x,
+                                 int width,
+                                 int offset,
+                                 int stride)>;
+
+  using AdaptiveSamplingFilterYFunction =
+      CPUKernelFunction<bool (*)(const KernelGlobals *kg,
+                                 ccl_global float *render_buffer,
+                                 int x,
+                                 int start_y,
+                                 int height,
+                                 int offset,
+                                 int stride)>;
+
+  AdaptiveSamplingFilterXFunction adaptive_sampling_filter_x;
+  AdaptiveSamplingFilterYFunction adaptive_sampling_filter_y;
+
+  /* Bake. */
+
+  CPUKernelFunction<void (*)(const KernelGlobals *, float *, int, int, int, int, int)> bake;
 
   CPUKernels();
 };

@@ -16,29 +16,7 @@
 
 /* Templated common declaration part of all CPU kernels. */
 
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
-                                                      uchar4 *rgba,
-                                                      float *buffer,
-                                                      float sample_scale,
-                                                      int x,
-                                                      int y,
-                                                      int offset,
-                                                      int stride);
-
-void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
-                                                       const KernelShaderEvalInput *input,
-                                                       float4 *output,
-                                                       const int offset);
-void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
-                                                     const KernelShaderEvalInput *input,
-                                                     float4 *output,
-                                                     const int offset);
-void KERNEL_FUNCTION_FULL_NAME(bake)(
-    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
-
-/* ********************************************************************************************* */
-/* *                            *** The new split kernel ***                                   * */
-/* ********************************************************************************************* */
+/* Integrator. */
 
 #define KERNEL_INTEGRATOR_FUNCTION(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
@@ -67,5 +45,50 @@ KERNEL_INTEGRATOR_SHADE_FUNCTION(shade_volume);
 KERNEL_INTEGRATOR_SHADE_FUNCTION(megakernel);
 
 #undef KERNEL_INTEGRATOR_FUNCTION
+
+/* Film. */
+
+void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
+                                                      uchar4 *rgba,
+                                                      float *buffer,
+                                                      float sample_scale,
+                                                      int x,
+                                                      int y,
+                                                      int offset,
+                                                      int stride);
+
+/* Shader evaluation. */
+
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
+                                                       const KernelShaderEvalInput *input,
+                                                       float4 *output,
+                                                       const int offset);
+void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
+                                                     const KernelShaderEvalInput *input,
+                                                     float4 *output,
+                                                     const int offset);
+
+/* Adaptive sampling. */
+
+bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *kg,
+                                                           ccl_global float *render_buffer,
+                                                           int y,
+                                                           int start_x,
+                                                           int width,
+                                                           int offset,
+                                                           int stride);
+bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *kg,
+                                                           ccl_global float *render_buffer,
+                                                           int x,
+                                                           int start_y,
+                                                           int height,
+                                                           int offset,
+                                                           int stride);
+
+/* Baking. */
+/* TODO(sergey): Needs to be re-implemented. */
+
+void KERNEL_FUNCTION_FULL_NAME(bake)(
+    const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
 
 #undef KERNEL_ARCH

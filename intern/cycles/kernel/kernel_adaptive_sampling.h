@@ -18,6 +18,25 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Check whether the pixel has converged and should not be sampled anymore. */
+
+ccl_device_forceinline bool kernel_need_sample_pixel(INTEGRATOR_STATE_CONST_ARGS,
+                                                     ccl_global float *render_buffer)
+{
+  if (!kernel_data.film.pass_adaptive_aux_buffer) {
+    return true;
+  }
+
+  const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                        kernel_data.film.pass_stride;
+  ccl_global float *buffer = render_buffer + render_buffer_offset;
+
+  ccl_global float4 *aux = (ccl_global float4 *)(buffer +
+                                                 kernel_data.film.pass_adaptive_aux_buffer);
+  return (*aux).w == 0.0f;
+}
+
 /* Determines whether to continue sampling a given pixel or if it has sufficiently converged. */
 
 ccl_device void kernel_do_adaptive_stopping(const KernelGlobals *kg,

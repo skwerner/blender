@@ -402,8 +402,8 @@ bool RenderBuffers::get_pass_rect(
       }
       else {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-          if (sample_count && sample_count[i * pass_stride] < 0.0f) {
-            scale = (pass.filter) ? -1.0f / (sample_count[i * pass_stride]) : 1.0f;
+          if (sample_count) {
+            scale = (pass.filter) ? 1.0f / (sample_count[i * pass_stride]) : 1.0f;
             scale_exposure = (pass.exposure) ? scale * exposure : scale;
           }
 

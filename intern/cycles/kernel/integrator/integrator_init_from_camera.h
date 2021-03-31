@@ -17,6 +17,7 @@
 #pragma once
 
 #include "kernel/kernel_accumulate.h"
+#include "kernel/kernel_adaptive_sampling.h"
 #include "kernel/kernel_camera.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_random.h"
@@ -67,6 +68,11 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 {
   /* Initialize path state to give basic buffer access and allow early outputs. */
   path_state_init(INTEGRATOR_STATE_PASS, tile, x, y);
+
+  /* Check whether the pixel has converged and should not be sampled anymore. */
+  if (!kernel_need_sample_pixel(INTEGRATOR_STATE_PASS, render_buffer)) {
+    return;
+  }
 
   /* Initialize random number seed for path. */
   const uint rng_hash = path_rng_hash_init(kg, sample, x, y);

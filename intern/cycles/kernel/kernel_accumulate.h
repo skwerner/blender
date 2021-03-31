@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel_adaptive_sampling.h"
+#include "kernel_random.h"
 #include "kernel_write_passes.h"
 
 CCL_NAMESPACE_BEGIN
@@ -313,6 +315,40 @@ ccl_device_forceinline ccl_global float *kernel_accum_pixel_render_buffer(
   return render_buffer + render_buffer_offset;
 }
 
+ccl_device void kernel_accum_adaptive_buffer(INTEGRATOR_STATE_CONST_ARGS,
+                                             const float3 contribution,
+                                             ccl_global float *ccl_restrict buffer)
+{
+  /* Adaptive Sampling. Fill the additional buffer with the odd samples and calculate our stopping
+   * criteria. This is the heuristic from "A hierarchical automatic stopping condition for Monte
+   * Carlo global illumination" except that here it is applied per pixel and not in hierarchical
+   * tiles. */
+
+  if (!kernel_data.film.pass_adaptive_aux_buffer ||
+      kernel_data.integrator.adaptive_threshold == 0.0f) {
+    return;
+  }
+
+  const int sample = INTEGRATOR_STATE(path, sample);
+  if (sample_is_even(kernel_data.integrator.sampling_pattern, sample)) {
+    kernel_write_pass_float4(
+        buffer + kernel_data.film.pass_adaptive_aux_buffer,
+        make_float4(contribution.x * 2.0f, contribution.y * 2.0f, contribution.z * 2.0f, 0.0f));
+  }
+
+  /* TODO(sergey): This should happen once the path is fully terminated. Otherwise accumulation
+   * nature of updates in the combined pass will lead to a wrong termination criteria. */
+
+  if ((sample > kernel_data.integrator.adaptive_min_samples) &&
+      kernel_data.integrator.adaptive_stop_per_sample) {
+    const int step = kernel_data.integrator.adaptive_step;
+
+    if ((sample & (step - 1)) == (step - 1)) {
+      kernel_do_adaptive_stopping(kg, buffer, sample);
+    }
+  }
+}
+
 /* Write combined pass. */
 ccl_device_inline void kernel_accum_combined_pass(INTEGRATOR_STATE_CONST_ARGS,
                                                   const float3 contribution,
@@ -328,6 +364,8 @@ ccl_device_inline void kernel_accum_combined_pass(INTEGRATOR_STATE_CONST_ARGS,
                              contribution);
   }
 #endif
+
+  kernel_accum_adaptive_buffer(INTEGRATOR_STATE_PASS, contribution, buffer);
 }
 
 /* Write combined pass with transparency. */
@@ -348,6 +386,8 @@ ccl_device_inline void kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_C
                              contribution);
   }
 #endif
+
+  kernel_accum_adaptive_buffer(INTEGRATOR_STATE_PASS, contribution, buffer);
 }
 
 /* Write background or emission to appropriate pass. */

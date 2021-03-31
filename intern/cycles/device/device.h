@@ -74,14 +74,20 @@ class DeviceInfo {
   string description;
   string id; /* used for user preferences, should stay fixed with changing hardware config */
   int num;
-  bool display_device;               /* GPU is used as a display device. */
-  bool has_half_images;              /* Support half-float textures. */
-  bool has_volume_decoupled;         /* Decoupled volume shading. */
-  bool has_adaptive_stop_per_sample; /* Per-sample adaptive sampling stopping. */
-  bool has_osl;                      /* Support Open Shading Language. */
-  bool has_profiling;                /* Supports runtime collection of profiling info. */
-  bool has_peer_memory;              /* GPU has P2P access to memory of another GPU. */
-  DenoiserTypeMask denoisers;        /* Supported denoiser types. */
+  bool display_device;       /* GPU is used as a display device. */
+  bool has_half_images;      /* Support half-float textures. */
+  bool has_volume_decoupled; /* Decoupled volume shading. */
+
+  /* Per-sample adaptive sampling stopping. */
+  /* TODO(sergey): Seems that this is a candidate for removal. With the big tile we can not do
+   * abything else than a per sample stopping. The devices need to support it, and the
+   * PathTraceWork "just" needs to give enough work to keep the device occupied. */
+  bool has_adaptive_stop_per_sample;
+
+  bool has_osl;               /* Support Open Shading Language. */
+  bool has_profiling;         /* Supports runtime collection of profiling info. */
+  bool has_peer_memory;       /* GPU has P2P access to memory of another GPU. */
+  DenoiserTypeMask denoisers; /* Supported denoiser types. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
   vector<DeviceInfo> denoising_devices;

@@ -54,11 +54,9 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
 ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS)
 {
   /* Accumulate shadow for transparent surfaces. */
-  for (int hit = 0; hit < INTEGRATOR_SHADOW_ISECT_SIZE; hit++) {
-    if (INTEGRATOR_STATE_ARRAY(shadow_isect, hit, prim) == PRIM_NONE) {
-      break;
-    }
+  const uint num_hits = INTEGRATOR_STATE(shadow_path, num_hits);
 
+  for (int hit = 0; hit < num_hits; hit++) {
     const float3 shadow = integrate_transparent_shadow_shader_eval(INTEGRATOR_STATE_PASS, hit);
     const float3 throughput = INTEGRATOR_STATE(shadow_path, throughput) * shadow;
     INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;

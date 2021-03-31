@@ -134,13 +134,15 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   }
 
   /* Sample position on a light. */
-  const uint bounce = INTEGRATOR_STATE(path, bounce);
-  float light_u, light_v;
-  path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
-
   LightSample ls ccl_optional_struct_init;
-  if (!light_sample(kg, -1, light_u, light_v, sd->time, sd->P, bounce, &ls)) {
-    return;
+  {
+    const uint bounce = INTEGRATOR_STATE(path, bounce);
+    float light_u, light_v;
+    path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
+
+    if (!light_sample(kg, -1, light_u, light_v, sd->time, sd->P, bounce, &ls)) {
+      return;
+    }
   }
 
   kernel_assert(ls.pdf != 0.0f);
@@ -181,17 +183,22 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   integrator_state_write_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
 
   /* Copy state from main path to shadow path. */
-  INTEGRATOR_STATE_COPY(shadow_path, path);
   INTEGRATOR_STATE_COPY(shadow_volume_stack, volume_stack);
 
-  INTEGRATOR_STATE_WRITE(shadow_path, throughput) *= bsdf_eval_sum(&bsdf_eval);
-  if (INTEGRATOR_STATE(path, bounce) == 0) {
-    INTEGRATOR_STATE_WRITE(shadow_path,
-                           diffuse_glossy_ratio) = bsdf_eval_diffuse_glossy_ratio(&bsdf_eval);
-  }
-  INTEGRATOR_STATE_WRITE(shadow_path, flag) |= (is_light) ? PATH_RAY_SHADOW_FOR_LIGHT : 0;
-  INTEGRATOR_STATE_WRITE(shadow_path, flag) |= (is_transmission) ? PATH_RAY_TRANSMISSION_PASS :
-                                                                   PATH_RAY_REFLECT_PASS;
+  const uint16_t bounce = INTEGRATOR_STATE(path, bounce);
+  const uint16_t transparent_bounce = INTEGRATOR_STATE(path, transparent_bounce);
+  uint32_t shadow_flag = INTEGRATOR_STATE(path, flag);
+  shadow_flag |= (is_light) ? PATH_RAY_SHADOW_FOR_LIGHT : 0;
+  shadow_flag |= (is_transmission) ? PATH_RAY_TRANSMISSION_PASS : PATH_RAY_REFLECT_PASS;
+  const float3 diffuse_glossy_ratio = (bounce == 0) ? bsdf_eval_diffuse_glossy_ratio(&bsdf_eval) :
+                                                      INTEGRATOR_STATE(path, diffuse_glossy_ratio);
+  const float3 throughput = INTEGRATOR_STATE(path, throughput) * bsdf_eval_sum(&bsdf_eval);
+
+  INTEGRATOR_STATE_WRITE(shadow_path, flag) = shadow_flag;
+  INTEGRATOR_STATE_WRITE(shadow_path, bounce) = bounce;
+  INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
+  INTEGRATOR_STATE_WRITE(shadow_path, diffuse_glossy_ratio) = diffuse_glossy_ratio;
+  INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
 
   /* Branch of shadow kernel. */
   INTEGRATOR_SHADOW_PATH_INIT(INTERSECT_SHADOW);

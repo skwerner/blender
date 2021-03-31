@@ -107,6 +107,30 @@ typedef struct IntegratorPathState {
   float3 denoising_feature_throughput;
 } IntegratorPathState;
 
+/* Shadow tracing state. */
+typedef struct IntegratorShadowPathState {
+  /* Current ray bounce depth. */
+  uint16_t bounce;
+  /* Current transparent ray bounce depth. */
+  uint16_t transparent_bounce;
+
+  /* DeviceKernel bit indicating queued kernels.
+   * TODO: reduce size? */
+  uint32_t queued_kernel;
+
+  /* enum PathRayFlag */
+  uint32_t flag;
+
+  /* Throughput. */
+  float3 throughput;
+
+  /* Ratio of throughput to distinguish diffuse and glossy render passes. */
+  float3 diffuse_glossy_ratio;
+
+  /* Number of intersections found by ray-tracing. */
+  uint16_t num_hits;
+} IntegratorShadowPathState;
+
 /* Ray parameters for scene intersection. */
 typedef struct IntegratorRayState {
   float3 P;
@@ -160,7 +184,7 @@ typedef struct IntegratorState {
   IntegratorIntersectionState shadow_isect[INTEGRATOR_SHADOW_ISECT_SIZE];
 
   /* Transparent Shadows */
-  IntegratorPathState shadow_path;
+  IntegratorShadowPathState shadow_path;
   IntegratorVolumeStack shadow_volume_stack[INTEGRATOR_VOLUME_STACK_SIZE];
 } IntegratorState;
 

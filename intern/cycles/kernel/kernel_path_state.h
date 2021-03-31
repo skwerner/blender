@@ -345,13 +345,6 @@ ccl_device_inline void path_state_rng_load(INTEGRATOR_STATE_CONST_ARGS, RNGState
   rng_state->sample = INTEGRATOR_STATE(path, sample);
 }
 
-ccl_device_inline void path_shadow_state_rng_load(INTEGRATOR_STATE_CONST_ARGS, RNGState *rng_state)
-{
-  rng_state->rng_hash = INTEGRATOR_STATE(shadow_path, rng_hash);
-  rng_state->rng_offset = INTEGRATOR_STATE(shadow_path, rng_offset);
-  rng_state->sample = INTEGRATOR_STATE(shadow_path, sample);
-}
-
 ccl_device_inline float path_state_rng_1D(const KernelGlobals *kg,
                                           const RNGState *rng_state,
                                           int dimension)

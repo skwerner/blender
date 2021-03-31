@@ -69,10 +69,7 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
       }
     }
 
-    /* Null terminator for array. */
-    if (num_hits < INTEGRATOR_SHADOW_ISECT_SIZE) {
-      INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, num_hits, prim) = PRIM_NONE;
-    }
+    INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = num_hits;
   }
 
   return opaque_hit;

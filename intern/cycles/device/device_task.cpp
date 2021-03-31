@@ -117,37 +117,4 @@ void DeviceTask::update_progress(RenderTile *rtile, int pixel_samples)
 
 #endif
 
-/* Adaptive Sampling */
-
-AdaptiveSampling::AdaptiveSampling() : use(true), adaptive_step(0), min_samples(0)
-{
-}
-
-/* Render samples in steps that align with the adaptive filtering. */
-int AdaptiveSampling::align_samples(int sample, int num_samples) const
-{
-  int end_sample = sample + num_samples;
-
-  /* Round down end sample to the nearest sample that needs filtering. */
-  end_sample &= ~(adaptive_step - 1);
-
-  if (end_sample <= sample) {
-    /* In order to reach the next sample that needs filtering, we'd need
-     * to increase num_samples. We don't do that in this function, so
-     * just keep it as is and don't filter this time around. */
-    return num_samples;
-  }
-  return end_sample - sample;
-}
-
-bool AdaptiveSampling::need_filter(int sample) const
-{
-  if (sample > min_samples) {
-    return (sample & (adaptive_step - 1)) == (adaptive_step - 1);
-  }
-  else {
-    return false;
-  }
-}
-
 CCL_NAMESPACE_END

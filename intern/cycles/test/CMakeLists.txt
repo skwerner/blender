@@ -46,6 +46,7 @@ include_directories(${INC})
 cycles_link_directories()
 
 set(SRC
+  integrator_adaptive_sampling_test.cpp
   integrator_tile_test.cpp
   render_graph_finalize_test.cpp
   util_aligned_malloc_test.cpp

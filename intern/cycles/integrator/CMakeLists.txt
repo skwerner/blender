@@ -17,6 +17,7 @@ set(INC
 )
 
 set(SRC
+  adaptive_sampling.cpp
   denoiser.cpp
   denoiser_device.cpp
   denoiser_oidn.cpp
@@ -31,6 +32,7 @@ set(SRC
 )
 
 set(SRC_HEADERS
+  adaptive_sampling.h
   denoiser.h
   denoiser_device.h
   denoiser_oidn.h

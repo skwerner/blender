@@ -97,18 +97,6 @@ class DenoiseParams {
   }
 };
 
-class AdaptiveSampling {
- public:
-  AdaptiveSampling();
-
-  int align_samples(int sample, int num_samples) const;
-  bool need_filter(int sample) const;
-
-  bool use;
-  int adaptive_step;
-  int min_samples;
-};
-
 #if 0
 class DeviceTask {
  public:

@@ -171,7 +171,9 @@ void PathTrace::path_trace(const RenderWork &render_work)
     path_trace_work->render_samples(render_work.path_trace.start_sample,
                                     render_work.path_trace.num_samples);
 
-    /* TODO(sergey): Filter the adaptive sampling buffer. */
+    if (render_work.path_trace.adaptive_sampling_filter) {
+      path_trace_work->adaptive_sampling_filter();
+    }
   });
 
   render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);

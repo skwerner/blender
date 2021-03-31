@@ -61,6 +61,8 @@ class PathTraceWork {
   /* Copy render result from this work to the corresponding place of the GPU display. */
   virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) = 0;
 
+  virtual bool adaptive_sampling_filter() = 0;
+
   /* Cheap-ish request to see whether rendering is requested and is to be stopped as soon as
    * possible, without waiting for any samples to be finished. */
   inline bool is_cancel_requested() const

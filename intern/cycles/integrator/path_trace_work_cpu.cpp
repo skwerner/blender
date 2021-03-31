@@ -143,4 +143,37 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   gpu_display->unmap_texture_buffer();
 }
 
+bool PathTraceWorkCPU::adaptive_sampling_filter()
+{
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  /* NOTE: This call is supposed to happen outside of any path tracing, so can pick any of the
+   * pre-configured kernel globals. */
+  KernelGlobals *kernel_globals = &kernel_thread_globals_[0];
+
+  float *render_buffer = render_buffers_->buffer.data();
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
+
+  bool any = false;
+
+  /* TODO(sergey): Use parallel_for. */
+
+  for (int y = full_y; y < full_y + height; ++y) {
+    any |= kernels_.adaptive_sampling_filter_x(
+        kernel_globals, render_buffer, y, full_x, width, offset, stride);
+  }
+
+  for (int x = full_x; x < full_x + width; ++x) {
+    any |= kernels_.adaptive_sampling_filter_y(
+        kernel_globals, render_buffer, x, full_y, height, offset, stride);
+  }
+
+  return !any;
+}
+
 CCL_NAMESPACE_END

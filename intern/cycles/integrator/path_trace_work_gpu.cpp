@@ -491,4 +491,10 @@ void PathTraceWorkGPU::film_convert(device_ptr d_rgba_half, float sample_scale)
   queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
 }
 
+bool PathTraceWorkGPU::adaptive_sampling_filter()
+{
+  /* TODO(sergey): Needs implementation. */
+  return true;
+}
+
 CCL_NAMESPACE_END

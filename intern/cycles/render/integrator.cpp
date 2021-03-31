@@ -66,26 +66,12 @@ NODE_DEFINE(Integrator)
   SOCKET_BOOLEAN(motion_blur, "Motion Blur", false);
 
   SOCKET_INT(aa_samples, "AA Samples", 0);
-  SOCKET_INT(diffuse_samples, "Diffuse Samples", 1);
-  SOCKET_INT(glossy_samples, "Glossy Samples", 1);
-  SOCKET_INT(transmission_samples, "Transmission Samples", 1);
-  SOCKET_INT(ao_samples, "AO Samples", 1);
-  SOCKET_INT(mesh_light_samples, "Mesh Light Samples", 1);
-  SOCKET_INT(subsurface_samples, "Subsurface Samples", 1);
-  SOCKET_INT(volume_samples, "Volume Samples", 1);
   SOCKET_INT(start_sample, "Start Sample", 0);
 
   SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.0f);
   SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 0);
 
-  SOCKET_BOOLEAN(sample_all_lights_direct, "Sample All Lights Direct", true);
-  SOCKET_BOOLEAN(sample_all_lights_indirect, "Sample All Lights Indirect", true);
   SOCKET_FLOAT(light_sampling_threshold, "Light Sampling Threshold", 0.05f);
-
-  static NodeEnum method_enum;
-  method_enum.insert("path", PATH);
-  method_enum.insert("branched_path", BRANCHED_PATH);
-  SOCKET_ENUM(method, "Method", method_enum, PATH);
 
   static NodeEnum sampling_pattern_enum;
   sampling_pattern_enum.insert("sobol", SAMPLING_PATTERN_SOBOL);
@@ -114,13 +100,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     }
   });
 
-  const bool need_update_lut = ao_samples_is_modified() || diffuse_samples_is_modified() ||
-                               glossy_samples_is_modified() || max_bounce_is_modified() ||
-                               max_transmission_bounce_is_modified() ||
-                               mesh_light_samples_is_modified() || method_is_modified() ||
-                               sampling_pattern_is_modified() ||
-                               subsurface_samples_is_modified() ||
-                               transmission_samples_is_modified() || volume_samples_is_modified();
+  const bool need_update_lut = max_bounce_is_modified() || max_transmission_bounce_is_modified() ||
+                               sampling_pattern_is_modified();
 
   if (need_update_lut) {
     dscene->sample_pattern_lut.tag_realloc();
@@ -181,25 +162,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
                                            FLT_MAX :
                                            sample_clamp_indirect * 3.0f;
 
-  kintegrator->branched = (method == BRANCHED_PATH) && device->info.has_branched_path;
-  kintegrator->volume_decoupled = device->info.has_volume_decoupled;
-  kintegrator->diffuse_samples = diffuse_samples;
-  kintegrator->glossy_samples = glossy_samples;
-  kintegrator->transmission_samples = transmission_samples;
-  kintegrator->ao_samples = ao_samples;
-  kintegrator->mesh_light_samples = mesh_light_samples;
-  kintegrator->subsurface_samples = subsurface_samples;
-  kintegrator->volume_samples = volume_samples;
   kintegrator->start_sample = start_sample;
-
-  if (kintegrator->branched) {
-    kintegrator->sample_all_lights_direct = sample_all_lights_direct;
-    kintegrator->sample_all_lights_indirect = sample_all_lights_indirect;
-  }
-  else {
-    kintegrator->sample_all_lights_direct = false;
-    kintegrator->sample_all_lights_indirect = false;
-  }
 
   kintegrator->sampling_pattern = sampling_pattern;
   if (aa_samples > 0 && adaptive_min_samples == 0) {
@@ -234,22 +197,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   }
 
   /* sobol directions table */
-  int max_samples = 1;
-
-  if (kintegrator->branched) {
-    foreach (Light *light, scene->lights)
-      max_samples = max(max_samples, light->get_samples());
-
-    max_samples = max(max_samples,
-                      max(diffuse_samples, max(glossy_samples, transmission_samples)));
-    max_samples = max(max_samples, max(ao_samples, max(mesh_light_samples, subsurface_samples)));
-    max_samples = max(max_samples, volume_samples);
-  }
-
-  uint total_bounces = max_bounce + transparent_max_bounce + 3 + VOLUME_BOUNDS_MAX +
-                       max(BSSRDF_MAX_HITS, BSSRDF_MAX_BOUNCES);
-
-  max_samples *= total_bounces;
+  int max_samples = max_bounce + transparent_max_bounce + 3 + VOLUME_BOUNDS_MAX +
+                    max(BSSRDF_MAX_HITS, BSSRDF_MAX_BOUNCES);
 
   int dimensions = PRNG_BASE_NUM + max_samples * PRNG_BOUNCE_NUM;
   dimensions = min(dimensions, SOBOL_MAX_DIMENSIONS);
@@ -297,11 +246,6 @@ void Integrator::tag_update(Scene *scene, uint32_t flag)
     /* tag only the ao_bounces socket as modified so we avoid updating sample_pattern_lut
      * unnecessarily */
     tag_ao_bounces_modified();
-  }
-
-  if ((flag & LIGHT_SAMPLES_MODIFIED) && (method == BRANCHED_PATH)) {
-    /* the number of light samples may affect the size of the sample_pattern_lut */
-    tag_sampling_pattern_modified();
   }
 
   if (filter_glossy_is_modified()) {

@@ -747,9 +747,4 @@ ccl_device_noinline bool light_sample(const KernelGlobals *kg,
   return light_sample_from_position(kg, lamp, randu, randv, P, ls);
 }
 
-ccl_device_inline int light_select_num_samples(const KernelGlobals *kg, int index)
-{
-  return kernel_tex_fetch(__lights, index).samples;
-}
-
 CCL_NAMESPACE_END

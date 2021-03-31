@@ -129,7 +129,7 @@ ccl_device_noinline_cpu bool kernel_path_volume_bounce(const KernelGlobals *kg,
   return true;
 }
 
-#  if !defined(__SPLIT_KERNEL__) && (defined(__BRANCHED_PATH__) || defined(__VOLUME_DECOUPLED__))
+#  if !defined(__SPLIT_KERNEL__) && || defined(__VOLUME_DECOUPLED__)
 ccl_device void kernel_branched_path_volume_connect_light(const KernelGlobals *kg,
                                                           ShaderData *sd,
                                                           ShaderData *emission_sd,

@@ -448,7 +448,6 @@ class OptiXDevice : public CUDADevice {
     OptixProgramGroupOptions group_options = {};  // There are no options currently
     group_descs[PG_RGEN].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     group_descs[PG_RGEN].raygen.module = optix_module;
-    // Ignore branched integrator for now (see "requested_features.use_integrator_branched")
     group_descs[PG_RGEN].raygen.entryFunctionName = "__raygen__kernel_optix_path_trace";
     group_descs[PG_MISS].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
     group_descs[PG_MISS].miss.module = optix_module;
@@ -1864,7 +1863,6 @@ void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo
     info.type = DEVICE_OPTIX;
     info.id += "_OptiX";
     info.denoisers |= DENOISER_OPTIX;
-    info.has_branched_path = false;
 
     devices.push_back(info);
   }

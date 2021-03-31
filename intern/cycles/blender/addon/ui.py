@@ -96,12 +96,6 @@ def use_optix(context):
     return (get_device_type(context) == 'OPTIX' and cscene.device == 'GPU')
 
 
-def use_branched_path(context):
-    cscene = context.scene.cycles
-
-    return (cscene.progressive == 'BRANCHED_PATH' and not use_optix(context))
-
-
 def use_sample_all_lights(context):
     cscene = context.scene.cycles
 
@@ -117,48 +111,16 @@ def show_device_active(context):
 
 def draw_samples_info(layout, context):
     cscene = context.scene.cycles
-    integrator = cscene.progressive
 
-    # Calculate sample values
-    if integrator == 'PATH':
+    if cscene.use_square_samples:
         aa = cscene.samples
-        if cscene.use_square_samples:
-            aa = aa * aa
-    else:
-        aa = cscene.aa_samples
-        d = cscene.diffuse_samples
-        g = cscene.glossy_samples
-        t = cscene.transmission_samples
-        ao = cscene.ao_samples
-        ml = cscene.mesh_light_samples
-        sss = cscene.subsurface_samples
-        vol = cscene.volume_samples
+        aa = aa * aa
 
-        if cscene.use_square_samples:
-            aa = aa * aa
-            d = d * d
-            g = g * g
-            t = t * t
-            ao = ao * ao
-            ml = ml * ml
-            sss = sss * sss
-            vol = vol * vol
-
-    # Draw interface
-    # Do not draw for progressive, when Square Samples are disabled
-    if use_branched_path(context) or (cscene.use_square_samples and integrator == 'PATH'):
         col = layout.column(align=True)
         col.scale_y = 0.6
         col.label(text="Total Samples:")
         col.separator()
-        if integrator == 'PATH':
-            col.label(text="%s AA" % aa)
-        else:
-            col.label(text="%s AA, %s Diffuse, %s Glossy, %s Transmission" %
-                      (aa, d * aa, g * aa, t * aa))
-            col.separator()
-            col.label(text="%s AO, %s Mesh Light, %s Subsurface, %s Volume" %
-                      (ao * aa, ml * aa, sss * aa, vol * aa))
+        col.label(text="%s AA" % aa)
 
 
 class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
@@ -176,49 +138,9 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
         layout.use_property_split = True
         layout.use_property_decorate = False
 
-        if not use_optix(context):
-            layout.prop(cscene, "progressive")
-
-        if not use_branched_path(context):
-            col = layout.column(align=True)
-            col.prop(cscene, "samples", text="Render")
-            col.prop(cscene, "preview_samples", text="Viewport")
-        else:
-            col = layout.column(align=True)
-            col.prop(cscene, "aa_samples", text="Render")
-            col.prop(cscene, "preview_aa_samples", text="Viewport")
-
-        if not use_branched_path(context):
-            draw_samples_info(layout, context)
-
-
-class CYCLES_RENDER_PT_sampling_sub_samples(CyclesButtonsPanel, Panel):
-    bl_label = "Sub Samples"
-    bl_parent_id = "CYCLES_RENDER_PT_sampling"
-
-    @classmethod
-    def poll(cls, context):
-        return use_branched_path(context)
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        scene = context.scene
-        cscene = scene.cycles
-
         col = layout.column(align=True)
-        col.prop(cscene, "diffuse_samples", text="Diffuse")
-        col.prop(cscene, "glossy_samples", text="Glossy")
-        col.prop(cscene, "transmission_samples", text="Transmission")
-        col.prop(cscene, "ao_samples", text="AO")
-
-        sub = col.row(align=True)
-        sub.active = use_sample_all_lights(context)
-        sub.prop(cscene, "mesh_light_samples", text="Mesh Light")
-        col.prop(cscene, "subsurface_samples", text="Subsurface")
-        col.prop(cscene, "volume_samples", text="Volume")
+        col.prop(cscene, "samples", text="Render")
+        col.prop(cscene, "preview_samples", text="Viewport")
 
         draw_samples_info(layout, context)
 
@@ -318,11 +240,6 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
         col.prop(cscene, "min_transparent_bounces")
         col.prop(cscene, "light_sampling_threshold", text="Light Threshold")
 
-        if cscene.progressive != 'PATH' and use_branched_path(context):
-            col = layout.column(align=True)
-            col.prop(cscene, "sample_all_lights_direct")
-            col.prop(cscene, "sample_all_lights_indirect")
-
         for view_layer in scene.view_layers:
             if view_layer.samples > 0:
                 layout.separator()
@@ -339,51 +256,20 @@ class CYCLES_RENDER_PT_sampling_total(CyclesButtonsPanel, Panel):
         scene = context.scene
         cscene = scene.cycles
 
-        if cscene.use_square_samples:
-            return True
-
-        return cscene.progressive != 'PATH' and use_branched_path(context)
+        return cscene.use_square_samples
 
     def draw(self, context):
         layout = self.layout
         cscene = context.scene.cycles
-        integrator = cscene.progressive
 
         # Calculate sample values
-        if integrator == 'PATH':
-            aa = cscene.samples
-            if cscene.use_square_samples:
-                aa = aa * aa
-        else:
-            aa = cscene.aa_samples
-            d = cscene.diffuse_samples
-            g = cscene.glossy_samples
-            t = cscene.transmission_samples
-            ao = cscene.ao_samples
-            ml = cscene.mesh_light_samples
-            sss = cscene.subsurface_samples
-            vol = cscene.volume_samples
-
-            if cscene.use_square_samples:
-                aa = aa * aa
-                d = d * d
-                g = g * g
-                t = t * t
-                ao = ao * ao
-                ml = ml * ml
-                sss = sss * sss
-                vol = vol * vol
+        aa = cscene.samples
+        if cscene.use_square_samples:
+            aa = aa * aa
 
         col = layout.column(align=True)
         col.scale_y = 0.6
-        if integrator == 'PATH':
-            col.label(text="%s AA" % aa)
-        else:
-            col.label(text="%s AA, %s Diffuse, %s Glossy, %s Transmission" %
-                      (aa, d * aa, g * aa, t * aa))
-            col.separator()
-            col.label(text="%s AO, %s Mesh Light, %s Subsurface, %s Volume" %
-                      (ao * aa, ml * aa, sss * aa, vol * aa))
+        col.label(text="%s AA" % aa)
 
 
 class CYCLES_RENDER_PT_subdivision(CyclesButtonsPanel, Panel):
@@ -1319,10 +1205,6 @@ class CYCLES_LIGHT_PT_light(CyclesButtonsPanel, Panel):
 
         if not (light.type == 'AREA' and clamp.is_portal):
             sub = col.column()
-            if use_branched_path(context):
-                subsub = sub.row(align=True)
-                subsub.active = use_sample_all_lights(context)
-                subsub.prop(clamp, "samples")
             sub.prop(clamp, "max_bounces")
 
         sub = col.column(align=True)
@@ -1549,10 +1431,6 @@ class CYCLES_WORLD_PT_settings_surface(CyclesButtonsPanel, Panel):
         subsub = sub.row(align=True)
         subsub.active = cworld.sampling_method == 'MANUAL'
         subsub.prop(cworld, "sample_map_resolution")
-        if use_branched_path(context):
-            subsub = sub.column(align=True)
-            subsub.active = use_sample_all_lights(context)
-            subsub.prop(cworld, "samples")
         sub.prop(cworld, "max_bounces")
 
 
@@ -2176,7 +2054,6 @@ classes = (
     CYCLES_PT_sampling_presets,
     CYCLES_PT_integrator_presets,
     CYCLES_RENDER_PT_sampling,
-    CYCLES_RENDER_PT_sampling_sub_samples,
     CYCLES_RENDER_PT_sampling_adaptive,
     CYCLES_RENDER_PT_sampling_denoising,
     CYCLES_RENDER_PT_sampling_advanced,

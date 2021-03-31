@@ -514,9 +514,6 @@ void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_f
   if (requested_features.use_baking) {
     cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_bake"));
   }
-  else if (requested_features.use_integrator_branched) {
-    cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_branched_path_trace"));
-  }
   else {
     cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_path_trace"));
   }
@@ -1334,9 +1331,6 @@ void CUDADevice::render(DeviceTask &task,
   /* Get kernel function. */
   if (rtile.task == RenderTile::BAKE) {
     cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_bake"));
-  }
-  else if (task.integrator_branched) {
-    cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_branched_path_trace"));
   }
   else {
     cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_path_trace"));

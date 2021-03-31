@@ -515,7 +515,7 @@ ccl_device_inline void shader_setup_from_volume(const KernelGlobals *kg,
 
 /* Merging */
 
-#if defined(__BRANCHED_PATH__) || defined(__VOLUME__)
+#if defined(__VOLUME__)
 ccl_device_inline void shader_merge_closures(ShaderData *sd)
 {
   /* merge identical closures, better when we sample a single closure at a time */
@@ -546,7 +546,7 @@ ccl_device_inline void shader_merge_closures(ShaderData *sd)
     }
   }
 }
-#endif /* __BRANCHED_PATH__ || __VOLUME__ */
+#endif /* __VOLUME__ */
 
 ccl_device_inline void shader_prepare_closures(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
 {

@@ -80,9 +80,7 @@ set(SRC_HEADERS
   kernel_montecarlo.h
   kernel_passes.h
   kernel_path.h
-  kernel_path_branched.h
   kernel_path_state.h
-  kernel_path_surface.h
   kernel_path_volume.h
   kernel_profiling.h
   kernel_projection.h

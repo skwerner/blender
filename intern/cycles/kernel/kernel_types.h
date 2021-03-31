@@ -117,7 +117,6 @@ CCL_NAMESPACE_BEGIN
 #  define __VOLUME__
 #  define __VOLUME_SCATTER__
 #  define __SHADOW_RECORD_ALL__
-#  define __BRANCHED_PATH__
 #endif
 
 /* Device specific features */
@@ -129,15 +128,8 @@ CCL_NAMESPACE_BEGIN
 #  define __VOLUME_RECORD_ALL__
 #endif /* __KERNEL_CPU__ */
 
-#ifdef __KERNEL_CUDA__
-#  ifdef __SPLIT_KERNEL__
-#    undef __BRANCHED_PATH__
-#  endif
-#endif /* __KERNEL_CUDA__ */
-
 #ifdef __KERNEL_OPTIX__
 #  undef __BAKING__
-#  undef __BRANCHED_PATH__
 #endif /* __KERNEL_OPTIX__ */
 
 #ifdef __KERNEL_OPENCL__
@@ -162,9 +154,6 @@ CCL_NAMESPACE_BEGIN
 #endif
 #ifdef __NO_BAKING__
 #  undef __BAKING__
-#endif
-#ifdef __NO_BRANCHED_PATH__
-#  undef __BRANCHED_PATH__
 #endif
 #ifdef __NO_PATCH_EVAL__
 #  undef __PATCH_EVAL__
@@ -416,9 +405,9 @@ typedef enum CryptomatteType {
 } CryptomatteType;
 
 typedef enum DenoisingPassOffsets {
-  DENOISING_PASS_NORMAL = 0,
+  DENOISING_PASS_COLOR = 0,
   DENOISING_PASS_ALBEDO = 3,
-  DENOISING_PASS_COLOR = 6,
+  DENOISING_PASS_NORMAL = 6,
   DENOISING_PASS_DEPTH = 9,
 
   DENOISING_PASS_SIZE = 10,
@@ -1320,18 +1309,6 @@ typedef struct KernelIntegrator {
   float sample_clamp_direct;
   float sample_clamp_indirect;
 
-  /* branched path */
-  int branched;
-  int volume_decoupled;
-  int diffuse_samples;
-  int glossy_samples;
-  int transmission_samples;
-  int ao_samples;
-  int mesh_light_samples;
-  int subsurface_samples;
-  int sample_all_lights_direct;
-  int sample_all_lights_indirect;
-
   /* mis */
   int use_lamp_mis;
 
@@ -1346,13 +1323,12 @@ typedef struct KernelIntegrator {
   int use_volumes;
   int volume_max_steps;
   float volume_step_rate;
-  int volume_samples;
 
   int start_sample;
 
   int max_closures;
 
-  int pad1, pad2, pad3;
+  int pad1, pad2;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 
@@ -1482,11 +1458,10 @@ typedef struct KernelLight {
   int type;
   float co[3];
   int shader_id;
-  int samples;
   float max_bounces;
   float random;
   float strength[3];
-  float pad1;
+  float pad1, pad2;
   Transform tfm;
   Transform itfm;
   union {

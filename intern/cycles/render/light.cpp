@@ -136,7 +136,6 @@ NODE_DEFINE(Light)
   SOCKET_BOOLEAN(use_transmission, "Use Transmission", true);
   SOCKET_BOOLEAN(use_scatter, "Use Scatter", true);
 
-  SOCKET_INT(samples, "Samples", 1);
   SOCKET_INT(max_bounces, "Max Bounces", 1024);
   SOCKET_UINT(random_id, "Random ID", 0);
 
@@ -156,10 +155,6 @@ void Light::tag_update(Scene *scene)
 {
   if (is_modified()) {
     scene->light_manager->tag_update(scene, LightManager::LIGHT_MODIFIED);
-
-    if (samples_is_modified()) {
-      scene->integrator->tag_update(scene, Integrator::LIGHT_SAMPLES_MODIFIED);
-    }
   }
 }
 
@@ -773,7 +768,6 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     }
 
     klights[light_index].type = light->light_type;
-    klights[light_index].samples = light->samples;
     klights[light_index].strength[0] = light->strength.x;
     klights[light_index].strength[1] = light->strength.y;
     klights[light_index].strength[2] = light->strength.z;

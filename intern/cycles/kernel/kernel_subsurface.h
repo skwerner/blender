@@ -51,8 +51,7 @@ subsurface_scatter_eval(ShaderData *sd, const ShaderClosure *sc, float disk_r, f
     sc = &sd->closure[i];
 
     if (CLOSURE_IS_DISK_BSSRDF(sc->type)) {
-      /* in case of branched path integrate we sample all bssrdf's once,
-       * for path trace we pick one, so adjust pdf for that */
+      /* we pick one BSSRDF, so adjust pdf for that */
       float sample_weight = (all) ? 1.0f : sc->sample_weight * sample_weight_inv;
 
       /* compute pdf */

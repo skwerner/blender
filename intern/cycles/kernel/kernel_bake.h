@@ -65,11 +65,6 @@ ccl_device_noinline void compute_light_pass(const KernelGlobals *kg,
   ray.time = 0.5f;
 #    endif
 
-#    ifdef __BRANCHED_PATH__
-  if (!kernel_data.integrator.branched) {
-    /* regular path tracer */
-#    endif
-
     /* sample ambient occlusion */
     if (pass_filter & BAKE_FILTER_AO) {
       kernel_path_ao(kg, sd, emission_sd, L, &state, throughput, shader_bsdf_alpha(kg, sd));
@@ -117,49 +112,6 @@ ccl_device_noinline void compute_light_pass(const KernelGlobals *kg,
         path_radiance_reset_indirect(L);
       }
     }
-#    ifdef __BRANCHED_PATH__
-  }
-  else {
-    /* branched path tracer */
-
-    /* sample ambient occlusion */
-    if (pass_filter & BAKE_FILTER_AO) {
-      kernel_branched_path_ao(kg, sd, emission_sd, L, &state, throughput);
-    }
-
-    /* sample emission */
-    if ((pass_filter & BAKE_FILTER_EMISSION) && (sd->flag & SD_EMISSION)) {
-      float3 emission = indirect_primitive_emission(kg, sd, 0.0f, state.flag, state.ray_pdf);
-      path_radiance_accum_emission(kg, L, &state, throughput, emission);
-    }
-
-#      ifdef __SUBSURFACE__
-    /* sample subsurface scattering */
-    if ((pass_filter & BAKE_FILTER_DIFFUSE) && (sd->flag & SD_BSSRDF)) {
-      /* When mixing BSSRDF and BSDF closures we should skip BSDF lighting
-       * if scattering was successful. */
-      kernel_branched_path_subsurface_scatter(
-          kg, sd, &indirect_sd, emission_sd, L, &state, &ray, throughput);
-    }
-#      endif
-
-    /* sample light and BSDF */
-    if (pass_filter & (BAKE_FILTER_DIRECT | BAKE_FILTER_INDIRECT)) {
-#      if defined(__EMISSION__)
-      /* direct light */
-      if (kernel_data.integrator.use_direct_light) {
-        int all = kernel_data.integrator.sample_all_lights_direct;
-        kernel_branched_path_surface_connect_light(
-            kg, sd, emission_sd, &state, throughput, 1.0f, L, all);
-      }
-#      endif
-
-      /* indirect light */
-      kernel_branched_path_surface_indirect_light(
-          kg, sd, &indirect_sd, emission_sd, throughput, 1.0f, &state, L);
-    }
-  }
-#    endif
 }
 
 /* this helps with AA but it's not the real solution as it does not AA the geometry

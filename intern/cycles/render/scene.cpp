@@ -490,8 +490,6 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
   requested_features.use_background_light = light_manager->has_background_light(this);
 
   requested_features.use_baking = bake_manager->get_baking();
-  requested_features.use_integrator_branched = (integrator->get_method() ==
-                                                Integrator::BRANCHED_PATH);
   if (film->get_denoising_data_pass()) {
     requested_features.use_denoising = true;
     requested_features.use_shadow_tricks = true;

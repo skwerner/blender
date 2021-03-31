@@ -77,7 +77,6 @@ class DeviceInfo {
   bool display_device;               /* GPU is used as a display device. */
   bool has_half_images;              /* Support half-float textures. */
   bool has_volume_decoupled;         /* Decoupled volume shading. */
-  bool has_branched_path;            /* Supports branched path tracing. */
   bool has_adaptive_stop_per_sample; /* Per-sample adaptive sampling stopping. */
   bool has_osl;                      /* Support Open Shading Language. */
   bool has_profiling;                /* Supports runtime collection of profiling info. */
@@ -97,7 +96,6 @@ class DeviceInfo {
     display_device = false;
     has_half_images = false;
     has_volume_decoupled = false;
-    has_branched_path = true;
     has_adaptive_stop_per_sample = false;
     has_osl = false;
     has_profiling = false;
@@ -150,9 +148,6 @@ class DeviceRequestedFeatures {
   /* Use volume materials. */
   bool use_volume;
 
-  /* Use branched integrator. */
-  bool use_integrator_branched;
-
   /* Use OpenSubdiv patch evaluation */
   bool use_patch_evaluation;
 
@@ -189,7 +184,6 @@ class DeviceRequestedFeatures {
     use_baking = false;
     use_subsurface = false;
     use_volume = false;
-    use_integrator_branched = false;
     use_patch_evaluation = false;
     use_transparent = false;
     use_shadow_tricks = false;
@@ -211,7 +205,6 @@ class DeviceRequestedFeatures {
              use_baking == requested_features.use_baking &&
              use_subsurface == requested_features.use_subsurface &&
              use_volume == requested_features.use_volume &&
-             use_integrator_branched == requested_features.use_integrator_branched &&
              use_patch_evaluation == requested_features.use_patch_evaluation &&
              use_transparent == requested_features.use_transparent &&
              use_shadow_tricks == requested_features.use_shadow_tricks &&
@@ -250,9 +243,6 @@ class DeviceRequestedFeatures {
     }
     if (!use_subsurface) {
       build_options += " -D__NO_SUBSURFACE__";
-    }
-    if (!use_integrator_branched) {
-      build_options += " -D__NO_BRANCHED_PATH__";
     }
     if (!use_patch_evaluation) {
       build_options += " -D__NO_PATCH_EVAL__";

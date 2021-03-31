@@ -305,11 +305,6 @@ void BlenderSync::sync_integrator()
     integrator->set_motion_blur(r.use_motion_blur());
   }
 
-  integrator->set_method((Integrator::Method)get_enum(
-      cscene, "progressive", Integrator::NUM_METHODS, Integrator::PATH));
-
-  integrator->set_sample_all_lights_direct(get_boolean(cscene, "sample_all_lights_direct"));
-  integrator->set_sample_all_lights_indirect(get_boolean(cscene, "sample_all_lights_indirect"));
   integrator->set_light_sampling_threshold(get_float(cscene, "light_sampling_threshold"));
 
   SamplingPattern sampling_pattern = (SamplingPattern)get_enum(
@@ -328,32 +323,8 @@ void BlenderSync::sync_integrator()
 
   integrator->set_sampling_pattern(sampling_pattern);
 
-  int diffuse_samples = get_int(cscene, "diffuse_samples");
-  int glossy_samples = get_int(cscene, "glossy_samples");
-  int transmission_samples = get_int(cscene, "transmission_samples");
-  int ao_samples = get_int(cscene, "ao_samples");
-  int mesh_light_samples = get_int(cscene, "mesh_light_samples");
-  int subsurface_samples = get_int(cscene, "subsurface_samples");
-  int volume_samples = get_int(cscene, "volume_samples");
-
   if (get_boolean(cscene, "use_square_samples")) {
-    integrator->set_diffuse_samples(diffuse_samples * diffuse_samples);
-    integrator->set_glossy_samples(glossy_samples * glossy_samples);
-    integrator->set_transmission_samples(transmission_samples * transmission_samples);
-    integrator->set_ao_samples(ao_samples * ao_samples);
-    integrator->set_mesh_light_samples(mesh_light_samples * mesh_light_samples);
-    integrator->set_subsurface_samples(subsurface_samples * subsurface_samples);
-    integrator->set_volume_samples(volume_samples * volume_samples);
     adaptive_min_samples = min(adaptive_min_samples * adaptive_min_samples, INT_MAX);
-  }
-  else {
-    integrator->set_diffuse_samples(diffuse_samples);
-    integrator->set_glossy_samples(glossy_samples);
-    integrator->set_transmission_samples(transmission_samples);
-    integrator->set_ao_samples(ao_samples);
-    integrator->set_mesh_light_samples(mesh_light_samples);
-    integrator->set_subsurface_samples(subsurface_samples);
-    integrator->set_volume_samples(volume_samples);
   }
 
   integrator->set_adaptive_min_samples(adaptive_min_samples);
@@ -803,37 +774,20 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
 
   /* samples */
   int samples = get_int(cscene, "samples");
-  int aa_samples = get_int(cscene, "aa_samples");
   int preview_samples = get_int(cscene, "preview_samples");
-  int preview_aa_samples = get_int(cscene, "preview_aa_samples");
 
   if (get_boolean(cscene, "use_square_samples")) {
-    aa_samples = aa_samples * aa_samples;
-    preview_aa_samples = preview_aa_samples * preview_aa_samples;
-
     samples = samples * samples;
     preview_samples = preview_samples * preview_samples;
   }
 
-  if (get_enum(cscene, "progressive") == 0 && params.device.has_branched_path) {
-    if (background) {
-      params.samples = aa_samples;
-    }
-    else {
-      params.samples = preview_aa_samples;
-      if (params.samples == 0)
-        params.samples = INT_MAX;
-    }
+  if (background) {
+    params.samples = samples;
   }
   else {
-    if (background) {
-      params.samples = samples;
-    }
-    else {
-      params.samples = preview_samples;
-      if (params.samples == 0)
-        params.samples = INT_MAX;
-    }
+    params.samples = preview_samples;
+    if (params.samples == 0)
+      params.samples = INT_MAX;
   }
 
   /* Clamp samples. */

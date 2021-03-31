@@ -66,8 +66,6 @@ std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &reques
   os << "Use Baking: " << string_from_bool(requested_features.use_baking) << std::endl;
   os << "Use Subsurface: " << string_from_bool(requested_features.use_subsurface) << std::endl;
   os << "Use Volume: " << string_from_bool(requested_features.use_volume) << std::endl;
-  os << "Use Branched Integrator: " << string_from_bool(requested_features.use_integrator_branched)
-     << std::endl;
   os << "Use Patch Evaluation: " << string_from_bool(requested_features.use_patch_evaluation)
      << std::endl;
   os << "Use Transparent Shadows: " << string_from_bool(requested_features.use_transparent)
@@ -318,7 +316,6 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
 
   info.has_half_images = true;
   info.has_volume_decoupled = true;
-  info.has_branched_path = true;
   info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_profiling = true;
@@ -364,7 +361,6 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     /* Accumulate device info. */
     info.has_half_images &= device.has_half_images;
     info.has_volume_decoupled &= device.has_volume_decoupled;
-    info.has_branched_path &= device.has_branched_path;
     info.has_adaptive_stop_per_sample &= device.has_adaptive_stop_per_sample;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;

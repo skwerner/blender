@@ -30,6 +30,8 @@ class RenderWork {
   struct {
     int start_sample = 0;
     int num_samples = 0;
+
+    bool adaptive_sampling_filter = false;
   } path_trace;
 
   bool denoise = false;
@@ -40,7 +42,8 @@ class RenderWork {
    * work. */
   inline operator bool() const
   {
-    return path_trace.num_samples || denoise || copy_to_gpu_display;
+    return path_trace.num_samples || path_trace.adaptive_sampling_filter || denoise ||
+           copy_to_gpu_display;
   }
 };
 

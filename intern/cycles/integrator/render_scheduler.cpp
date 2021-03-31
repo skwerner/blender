@@ -129,6 +129,9 @@ RenderWork RenderScheduler::get_render_work()
   render_work.path_trace.start_sample = start_sample_ + state_.num_rendered_samples;
   render_work.path_trace.num_samples = get_num_samples_to_path_trace();
 
+  render_work.path_trace.adaptive_sampling_filter = adaptive_sampling_.need_filter(
+      render_work.path_trace.start_sample + render_work.path_trace.num_samples - 1);
+
   /* NOTE: Advance number of samples now, so that denoising check can see that all the samples are
    * rendered. */
   state_.num_rendered_samples += render_work.path_trace.num_samples;

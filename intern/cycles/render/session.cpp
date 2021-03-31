@@ -326,6 +326,11 @@ RenderWork Session::run_update_for_next_iteration()
   if (render_work) {
     scoped_timer update_timer;
 
+    /* Update number of samples in the integrator.
+     * Ideally this would need to happen once in `Session::set_samples()`, but the issue there is
+     * the initial configuration when Session is created where the `set_samples()` is not used. */
+    scene->integrator->set_aa_samples(params.samples);
+
     const int resolution = render_work.resolution_divider;
     const int width = max(1, tile_manager.params.full_width / resolution);
     const int height = max(1, tile_manager.params.full_height / resolution);

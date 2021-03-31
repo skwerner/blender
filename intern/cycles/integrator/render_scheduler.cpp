@@ -37,6 +37,11 @@ void RenderScheduler::set_denoiser_params(const DenoiseParams &params)
   denoiser_params_ = params;
 }
 
+void RenderScheduler::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)
+{
+  adaptive_sampling_ = adaptive_sampling;
+}
+
 void RenderScheduler::set_start_sample(int start_sample)
 {
   start_sample_ = start_sample;
@@ -231,10 +236,19 @@ int RenderScheduler::get_num_samples_to_path_trace()
   const double update_interval_in_seconds = guess_update_interval_in_second(
       background_, state_.num_rendered_samples);
 
-  const int num_samples_to_render = max(int(num_samples_in_second * update_interval_in_seconds),
-                                        1);
+  const int num_samples_per_update = max(int(num_samples_in_second * update_interval_in_seconds),
+                                         1);
 
-  return min(num_samples_to_render, num_total_samples_ - state_.num_rendered_samples);
+  const int effective_start_sample = start_sample_ + state_.num_rendered_samples;
+
+  const int num_samples_to_render = min(num_samples_per_update,
+                                        num_total_samples_ - effective_start_sample);
+
+  /* TODO(sergey): Add extra "clamping" here so that none of the filtering points is missing. This
+   * is to ensure that the final render is pixel-matched regardless of how many samples per second
+   * compute device can do. */
+
+  return adaptive_sampling_.align_samples(effective_start_sample, num_samples_to_render);
 }
 
 bool RenderScheduler::work_need_denoise(bool &delayed)

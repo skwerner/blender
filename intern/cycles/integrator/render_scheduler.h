@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "integrator/adaptive_sampling.h"
 #include "integrator/denoiser.h" /* For DenoiseParams. */
 #include "render/buffers.h"
 
@@ -50,6 +51,7 @@ class RenderScheduler {
   bool is_background() const;
 
   void set_denoiser_params(const DenoiseParams &params);
+  void set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling);
 
   void set_start_sample(int start_sample);
   int get_start_sample() const;
@@ -143,6 +145,7 @@ class RenderScheduler {
 
   BufferParams buffer_params_;
   DenoiseParams denoiser_params_;
+  AdaptiveSampling adaptive_sampling_;
 
   static constexpr const int kDefaultStartResolution = 64;
   int start_resolution_ = kDefaultStartResolution;

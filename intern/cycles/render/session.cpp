@@ -307,12 +307,6 @@ RenderWork Session::run_update_for_next_iteration()
     have_tiles = tile_manager.next();
   }
 
-  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
-   * Currently denoising is not supported for baking. */
-  if (!read_bake_tile_cb) {
-    path_trace_->set_denoiser_params(params.denoising);
-  }
-
   while (have_tiles) {
     render_work = render_scheduler_.get_render_work();
     if (render_work) {
@@ -339,6 +333,24 @@ RenderWork Session::run_update_for_next_iteration()
       profiler.reset(scene->shaders.size(), scene->objects.size());
     }
     progress.add_skip_time(update_timer, params.background);
+  }
+
+  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
+   * Currently denoising is not supported for baking. */
+  if (!read_bake_tile_cb) {
+    path_trace_->set_denoiser_params(params.denoising);
+  }
+
+  /* Update adaptive sampling. */
+  {
+    /* TODO(sergey): Hide this behind `Scene::get_adaptive_sampling()`. */
+    AdaptiveSampling adaptive_sampling;
+    adaptive_sampling.use = (scene->integrator->get_sampling_pattern() == SAMPLING_PATTERN_PMJ) &&
+                            scene->dscene.data.film.pass_adaptive_aux_buffer;
+    adaptive_sampling.min_samples = scene->dscene.data.integrator.adaptive_min_samples;
+    adaptive_sampling.adaptive_step = scene->dscene.data.integrator.adaptive_step;
+
+    path_trace_->set_adaptive_sampling(adaptive_sampling);
   }
 
   return render_work;

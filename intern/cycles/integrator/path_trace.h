@@ -26,6 +26,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class AdaptiveSampling;
 class Device;
 class RenderBuffers;
 class RenderScheduler;
@@ -75,6 +76,10 @@ class PathTrace {
   /* Set denoiser parameters.
    * Use this to configure the denoiser before rendering any samples. */
   void set_denoiser_params(const DenoiseParams &params);
+
+  /* Set parameters used for adaptive sampling.
+   * Use this to configure the adaptive sampler before rendering any samples. */
+  void set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling);
 
   /* Set GPU display which takes care of drawing the render result. */
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);

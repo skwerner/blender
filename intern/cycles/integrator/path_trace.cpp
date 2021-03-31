@@ -185,6 +185,11 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
   }
 }
 
+void PathTrace::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)
+{
+  render_scheduler_.set_adaptive_sampling(adaptive_sampling);
+}
+
 void PathTrace::denoise(const RenderWork &render_work)
 {
   if (!render_work.denoise) {

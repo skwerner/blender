@@ -205,7 +205,7 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
 
 /* TODO(sergey): This is just a quick implementation, exact values might need to be tweaked based
  * on a more careful experiments with viewport rendering. */
-double RenderScheduler::guess_update_interval_in_second() const
+double RenderScheduler::guess_display_update_interval_in_seconds() const
 {
   /* TODO(sergey): Need a decision on whether this should be using number of samples rendered
    * within the current render ression, or use absolute number of samples with the start sample
@@ -240,7 +240,7 @@ int RenderScheduler::calculate_num_samples_per_update() const
   const double time_per_sample_average = path_trace_time_.get_average();
   const double num_samples_in_second = 1.0 / time_per_sample_average;
 
-  const double update_interval_in_seconds = guess_update_interval_in_second();
+  const double update_interval_in_seconds = guess_display_update_interval_in_seconds();
 
   return max(int(num_samples_in_second * update_interval_in_seconds), 1);
 }
@@ -327,7 +327,7 @@ void RenderScheduler::update_start_resolution()
     return;
   }
 
-  const double update_interval_in_seconds = calculate_desired_update_interval();
+  const double update_interval_in_seconds = guess_viewport_navigation_update_interval_in_seconds();
 
   /* TODO(sergey): Feels like to be more correct some histeresis is needed. */
 
@@ -349,7 +349,7 @@ void RenderScheduler::update_start_resolution()
   start_resolution_ = max(kDefaultStartResolution, resolution / resolution_divider);
 }
 
-double RenderScheduler::calculate_desired_update_interval() const
+double RenderScheduler::guess_viewport_navigation_update_interval_in_seconds() const
 {
   if (is_denoise_active_during_update()) {
     /* Use lower value than the non-denoised case to allow having more pixels to reconstruct the

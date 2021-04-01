@@ -106,19 +106,19 @@ class RenderScheduler {
 
   /* Calculate desired update interval in seconds based on the current timings and settings.
    * Will give an interval which provides good feeling updates during viewport navigation. */
-  double calculate_desired_update_interval() const;
+  double guess_viewport_navigation_update_interval_in_seconds() const;
 
   /* Check whether denoising is active during interactive update while resolution divider is not
    * unit. */
   bool is_denoise_active_during_update() const;
 
-  /* Heuristic which aims to give perceptually pleasant update interval in a way that at lower
-   * samples updates happens more often, but with higher number of samples updates happens less
-   * often but the device occupancy goes higher. */
-  double guess_update_interval_in_second() const;
+  /* Heuristic which aims to give perceptually pleasant update of display interval in a way that at
+   * lower samples updates happens more often, but with higher number of samples updates happens
+   * less often but the device occupancy goes higher. */
+  double guess_display_update_interval_in_seconds() const;
 
   /* Calculate number of samples which can be rendered within current desred update interval which
-   * is calculated by `guess_update_interval_in_second()`. */
+   * is calculated by `guess_update_interval_in_seconds()`. */
   int calculate_num_samples_per_update() const;
 
   /* Get start sample and the number of samples which are to be path traces in the current work. */

@@ -74,6 +74,9 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
     return;
   }
 
+  /* Always count the sample, even if the camera sample will reject the ray. */
+  kernel_accum_sample(INTEGRATOR_STATE_PASS, render_buffer);
+
   /* Initialize random number seed for path. */
   const uint rng_hash = path_rng_hash_init(kg, sample, x, y);
 
@@ -91,8 +94,6 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 
   /* Initialize path state for path integration. */
   path_state_init_integrator(INTEGRATOR_STATE_PASS, sample, rng_hash);
-
-  kernel_accum_sample(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* Continue with intersect_closest kernel. */
   INTEGRATOR_PATH_INIT(INTERSECT_CLOSEST);

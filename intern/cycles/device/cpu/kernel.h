@@ -72,6 +72,15 @@ class CPUKernels {
 
   /* Adaptive stopping. */
 
+  using AdaptiveSamplingConvergenceCheckFunction =
+      CPUKernelFunction<void (*)(const KernelGlobals *kg,
+                                 ccl_global float *render_buffer,
+                                 int x,
+                                 int y,
+                                 int sample,
+                                 int offset,
+                                 int stride)>;
+
   using AdaptiveSamplingFilterXFunction =
       CPUKernelFunction<bool (*)(const KernelGlobals *kg,
                                  ccl_global float *render_buffer,
@@ -89,6 +98,8 @@ class CPUKernels {
                                  int height,
                                  int offset,
                                  int stride)>;
+
+  AdaptiveSamplingConvergenceCheckFunction adaptive_sampling_convergence_check;
 
   AdaptiveSamplingFilterXFunction adaptive_sampling_filter_x;
   AdaptiveSamplingFilterYFunction adaptive_sampling_filter_y;

@@ -158,7 +158,7 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   gpu_display->unmap_texture_buffer();
 }
 
-bool PathTraceWorkCPU::adaptive_sampling_filter()
+bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
 {
   const int full_x = effective_buffer_params_.full_x;
   const int full_y = effective_buffer_params_.full_y;
@@ -174,9 +174,23 @@ bool PathTraceWorkCPU::adaptive_sampling_filter()
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
 
+  /* Convergence test. */
+
+  local_arena.execute([&]() {
+    tbb::parallel_for(0, height, [&](int y) {
+      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
+      for (int x = 0; x < width; ++x) {
+        kernels_.adaptive_sampling_convergence_check(
+            kernel_globals, render_buffer, full_x + x, full_y + y, sample, offset, stride);
+      }
+    });
+  });
+
+  /* Filter. */
+
   local_arena.execute([&]() {
     tbb::parallel_for(full_y, full_y + height, [&](int y) {
-      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
+      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
       any |= kernels_.adaptive_sampling_filter_x(
           kernel_globals, render_buffer, y, full_x, width, offset, stride);
     });
@@ -184,7 +198,7 @@ bool PathTraceWorkCPU::adaptive_sampling_filter()
 
   local_arena.execute([&]() {
     tbb::parallel_for(full_x, full_x + width, [&](int x) {
-      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
+      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
       any |= kernels_.adaptive_sampling_filter_y(
           kernel_globals, render_buffer, x, full_y, height, offset, stride);
     });

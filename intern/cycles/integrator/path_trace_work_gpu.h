@@ -45,7 +45,7 @@ class PathTraceWorkGPU : public PathTraceWork {
 
   virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) override;
 
-  virtual bool adaptive_sampling_filter() override;
+  virtual bool adaptive_sampling_converge_and_filter(int sample) override;
 
  protected:
   bool enqueue_work_tiles(bool &finished);

@@ -39,18 +39,28 @@ ccl_device_forceinline bool kernel_need_sample_pixel(INTEGRATOR_STATE_CONST_ARGS
 
 /* Determines whether to continue sampling a given pixel or if it has sufficiently converged. */
 
-ccl_device void kernel_do_adaptive_stopping(const KernelGlobals *kg,
-                                            ccl_global float *buffer,
-                                            int sample)
+ccl_device void kernel_adaptive_sampling_convergence_check(const KernelGlobals *kg,
+                                                           ccl_global float *render_buffer,
+                                                           int x,
+                                                           int y,
+                                                           int sample,
+                                                           int offset,
+                                                           int stride)
 {
-  /* TODO Stefan: Is this better in linear, sRGB or something else? */
-  float4 I = *((ccl_global float4 *)buffer);
-  float4 A = *(ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+  const int render_pixel_index = offset + x + y * stride;
+  ccl_global float *buffer = render_buffer +
+                             (uint64_t)render_pixel_index * kernel_data.film.pass_stride;
+
+  /* TODO(Stefan): Is this better in linear, sRGB or something else? */
+
+  const float4 I = *((ccl_global float4 *)buffer);
+  const float4 A = *(ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+
   /* The per pixel error as seen in section 2.1 of
    * "A hierarchical automatic stopping condition for Monte Carlo global illumination"
    * A small epsilon is added to the divisor to prevent division by zero. */
-  float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) /
-                (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
+  const float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) /
+                      (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
   if (error < kernel_data.integrator.adaptive_threshold * (float)sample) {
     /* Set the fourth component to non-zero value to indicate that this pixel has converged. */
     buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] += 1.0f;

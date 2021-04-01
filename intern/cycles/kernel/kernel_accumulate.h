@@ -335,18 +335,6 @@ ccl_device void kernel_accum_adaptive_buffer(INTEGRATOR_STATE_CONST_ARGS,
         buffer + kernel_data.film.pass_adaptive_aux_buffer,
         make_float4(contribution.x * 2.0f, contribution.y * 2.0f, contribution.z * 2.0f, 0.0f));
   }
-
-  /* TODO(sergey): This should happen once the path is fully terminated. Otherwise accumulation
-   * nature of updates in the combined pass will lead to a wrong termination criteria. */
-
-  if ((sample > kernel_data.integrator.adaptive_min_samples) &&
-      kernel_data.integrator.adaptive_stop_per_sample) {
-    const int step = kernel_data.integrator.adaptive_step;
-
-    if ((sample & (step - 1)) == (step - 1)) {
-      kernel_do_adaptive_stopping(kg, buffer, sample);
-    }
-  }
 }
 
 /* Write combined pass. */

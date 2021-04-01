@@ -160,9 +160,10 @@ void PathTrace::path_trace(const RenderWork &render_work)
 
   VLOG(3) << "Will path trace " << render_work.path_trace.num_samples << " samples.";
 
+  const int filter_sample = render_work.path_trace.start_sample +
+                            render_work.path_trace.num_samples - 1;
   if (render_work.path_trace.adaptive_sampling_filter) {
-    VLOG(3) << "Will filter adaptive stopping buffer, sample "
-            << render_work.path_trace.start_sample + render_work.path_trace.num_samples - 1 << ".";
+    VLOG(3) << "Will filter adaptive stopping buffer, sample " << filter_sample << ".";
   }
 
   const double start_time = time_dt();
@@ -172,7 +173,7 @@ void PathTrace::path_trace(const RenderWork &render_work)
                                     render_work.path_trace.num_samples);
 
     if (render_work.path_trace.adaptive_sampling_filter) {
-      path_trace_work->adaptive_sampling_filter();
+      path_trace_work->adaptive_sampling_converge_and_filter(filter_sample);
     }
   });
 

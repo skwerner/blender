@@ -280,9 +280,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   if (thread_is_active && kernel_data.film.pass_adaptive_aux_buffer) {
     uint x = tile->x + work_index % tile->w;
     uint y = tile->y + work_index / tile->w;
-    int index = tile->offset + x + y * tile->stride;
-    ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
-    kernel_do_adaptive_stopping(&kg, buffer, sample);
+    kernel_adaptive_sampling_convergence_check(&kg, render_buffer, x, y, sample, tile->offset, tile->stride);
   }
 }
 

@@ -142,13 +142,6 @@ class PathTrace {
    * soon as possible. */
   bool is_cancel_requested();
 
-  /* Run a buffer update callback if needed.
-   *
-   * This call which check whether an update callback is configured, and do other optimization
-   * checks. For example, the update will not be communicated if update happens too often, so that
-   * the overhead of update does not degrade rendering performance. */
-  void buffer_update_if_needed();
-
   /* Write the big tile render buffer via the write callback. */
   void buffer_write();
 

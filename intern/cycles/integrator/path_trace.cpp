@@ -138,7 +138,6 @@ void PathTrace::render_pipeline(const RenderWork &render_work)
 
   update_display(render_work);
 
-  buffer_update_if_needed();
   progress_update_if_needed();
 
   if (render_scheduler_.done()) {
@@ -240,6 +239,15 @@ void PathTrace::update_display(const RenderWork &render_work)
   }
 
   if (!gpu_display_) {
+    /* TODO(sergey): Ideally the offline buffers update will be done using same API than the
+     * viewport GPU display. Seems to be a matter of moving pixels update API to a more abstract
+     * class and using it here instead of `GPUDisplay`. */
+    if (buffer_update_cb) {
+      const double start_time = time_dt();
+      buffer_update_cb(full_render_buffers_.get(), get_num_samples_in_buffer());
+      render_scheduler_.report_display_update_time(render_work, time_dt() - start_time);
+    }
+
     return;
   }
 
@@ -325,16 +333,6 @@ bool PathTrace::is_cancel_requested()
   }
 
   return false;
-}
-
-void PathTrace::buffer_update_if_needed()
-{
-  if (!buffer_update_cb) {
-    return;
-  }
-
-  const int num_samples_rendered = get_num_samples_in_buffer();
-  buffer_update_cb(full_render_buffers_.get(), num_samples_rendered);
 }
 
 void PathTrace::buffer_write()

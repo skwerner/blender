@@ -329,7 +329,24 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
 
 bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
 {
-  return !denoiser_delayed;
+  if (denoiser_delayed) {
+    /* If denoiser has been delayed the display can not be updated as it will not contain
+     * up-to-date state of the render result. */
+    return false;
+  }
+
+  if (!adaptive_sampling_.use) {
+    /* When adaptive sampling is not used the work is scheduled in a way that they keep render
+     * device busy for long enough, so that the display update can happen right after the
+     * rendering. */
+    return true;
+  }
+
+  /* When adaptive sampling is used, its possible that only handful of samples of a very simple
+   * scene will be scheduled to a powerful device (in order to not "miss" any of filtering points).
+   * We take care of skipping updates here based on when previous display update did happen. */
+  const double update_interval = guess_display_update_interval_in_seconds();
+  return (time_dt() - state_.last_display_update_time) > update_interval;
 }
 
 void RenderScheduler::update_start_resolution()

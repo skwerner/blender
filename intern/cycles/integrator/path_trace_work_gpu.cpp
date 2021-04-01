@@ -210,6 +210,9 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
     case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
+    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:
+    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X:
+    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y:
     case DEVICE_KERNEL_NUM: {
       LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
       break;
@@ -433,7 +436,7 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, float 
     gpu_display_rgba_half_.zero_to_device();
   }
 
-  film_convert(gpu_display_rgba_half_.device_pointer, sample_scale);
+  enqueue_film_convert(gpu_display_rgba_half_.device_pointer, sample_scale);
   queue_->synchronize();
 
   gpu_display_rgba_half_.copy_from_device();
@@ -458,7 +461,7 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, floa
     return false;
   }
 
-  film_convert(d_rgba_half, sample_scale);
+  enqueue_film_convert(d_rgba_half, sample_scale);
 
   device_graphics_interop_->unmap();
   queue_->synchronize();
@@ -466,7 +469,7 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, floa
   return true;
 }
 
-void PathTraceWorkGPU::film_convert(device_ptr d_rgba_half, float sample_scale)
+void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, float sample_scale)
 {
   const int full_x = effective_buffer_params_.full_x;
   const int full_y = effective_buffer_params_.full_y;
@@ -491,10 +494,85 @@ void PathTraceWorkGPU::film_convert(device_ptr d_rgba_half, float sample_scale)
   queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
 }
 
-bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter(int /*sample*/)
+bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter(int sample)
 {
-  /* TODO(sergey): Needs implementation. */
+  enqueue_adaptive_sampling_convergence_check(sample);
+  enqueue_adaptive_sampling_filter_x();
+  enqueue_adaptive_sampling_filter_y();
+
+  queue_->synchronize();
+
   return true;
+}
+
+void PathTraceWorkGPU::enqueue_adaptive_sampling_convergence_check(int sample)
+{
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
+
+  const int work_size = width * height;
+
+  void *args[] = {&render_buffers_->buffer.device_pointer,
+                  const_cast<int *>(&full_x),
+                  const_cast<int *>(&full_y),
+                  const_cast<int *>(&width),
+                  const_cast<int *>(&height),
+                  const_cast<int *>(&sample),
+                  &offset,
+                  &stride};
+
+  queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK, work_size, args);
+}
+
+void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_x()
+{
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
+
+  const int work_size = height;
+
+  void *args[] = {&render_buffers_->buffer.device_pointer,
+                  const_cast<int *>(&full_x),
+                  const_cast<int *>(&full_y),
+                  const_cast<int *>(&width),
+                  const_cast<int *>(&height),
+                  &offset,
+                  &stride};
+
+  queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X, work_size, args);
+}
+
+void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_y()
+{
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  int offset, stride;
+  effective_buffer_params_.get_offset_stride(offset, stride);
+
+  const int work_size = width;
+
+  void *args[] = {&render_buffers_->buffer.device_pointer,
+                  const_cast<int *>(&full_x),
+                  const_cast<int *>(&full_y),
+                  const_cast<int *>(&width),
+                  const_cast<int *>(&height),
+                  &offset,
+                  &stride};
+
+  queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y, work_size, args);
 }
 
 CCL_NAMESPACE_END

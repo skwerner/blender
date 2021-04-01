@@ -70,9 +70,13 @@ class PathTraceWorkGPU : public PathTraceWork {
    * functionality, avoiding copy of pixels to the host. */
   bool copy_to_gpu_display_interop(GPUDisplay *gpu_display, float sample_scale);
 
-  /* Run the film conversion kernel which will store result in the given memory.
+  /* Enqueue the film conversion kernel which will store result in the given memory.
    * This is a common part of both `copy_to_gpu_display` implementations. */
-  void film_convert(device_ptr d_rgba_half, float sample_scale);
+  void enqueue_film_convert(device_ptr d_rgba_half, float sample_scale);
+
+  void enqueue_adaptive_sampling_convergence_check(int sample);
+  void enqueue_adaptive_sampling_filter_x();
+  void enqueue_adaptive_sampling_filter_y();
 
   /* Integrator queues.
    * There are as many of queues as the concurrent queues the device supports. */

@@ -269,48 +269,40 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_adaptive_stopping(KernelWorkTile *tile,
-                                  float *render_buffer,
-                                  int sample,
-                                  uint work_size)
+    kernel_cuda_adaptive_sampling_convergence_check(
+        float *render_buffer, int sx, int sy, int sw, int sh, int sample, int offset, int stride)
 {
-  int work_index = ccl_global_id(0);
-  bool thread_is_active = work_index < work_size;
-  KernelGlobals kg;
-  if (thread_is_active && kernel_data.film.pass_adaptive_aux_buffer) {
-    uint x = tile->x + work_index % tile->w;
-    uint y = tile->y + work_index / tile->w;
-    kernel_adaptive_sampling_convergence_check(&kg, render_buffer, x, y, sample, tile->offset, tile->stride);
+  const int work_index = ccl_global_id(0);
+  const int y = work_index / sw;
+  const int x = work_index - y * sw;
+
+  if (x < sw && y < sh) {
+    kernel_adaptive_sampling_convergence_check(
+        NULL, render_buffer, sx + x, sy + y, sample, offset, stride);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_adaptive_filter_x(KernelWorkTile *tile, float *render_buffer, int sample, uint)
+    kernel_cuda_adaptive_sampling_filter_x(
+        float *render_buffer, int sx, int sy, int sw, int sh, int offset, int stride)
 {
-  KernelGlobals kg;
-  if (kernel_data.film.pass_adaptive_aux_buffer &&
-      sample > kernel_data.integrator.adaptive_min_samples) {
-    if (ccl_global_id(0) < tile->h) {
-      int y = tile->y + ccl_global_id(0);
-      kernel_adaptive_sampling_filter_x(
-          &kg, render_buffer, y, tile->x, tile->w, tile->offset, tile->stride);
-    }
+  const int y = ccl_global_id(0);
+
+  if (y < sh) {
+    kernel_adaptive_sampling_filter_x(NULL, render_buffer, sy + y, sx, sw, offset, stride);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_adaptive_filter_y(KernelWorkTile *tile, float *render_buffer, int sample, uint)
+    kernel_cuda_adaptive_sampling_filter_y(
+        float *render_buffer, int sx, int sy, int sw, int sh, int offset, int stride)
 {
-  KernelGlobals kg;
-  if (kernel_data.film.pass_adaptive_aux_buffer &&
-      sample > kernel_data.integrator.adaptive_min_samples) {
-    if (ccl_global_id(0) < tile->w) {
-      int x = tile->x + ccl_global_id(0);
-      kernel_adaptive_sampling_filter_y(
-          &kg, render_buffer, x, tile->y, tile->h, tile->offset, tile->stride);
-    }
+  const int x = ccl_global_id(0);
+
+  if (x < sw) {
+    kernel_adaptive_sampling_filter_y(NULL, render_buffer, sx + x, sy, sh, offset, stride);
   }
 }
 

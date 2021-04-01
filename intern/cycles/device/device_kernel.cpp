@@ -23,6 +23,7 @@ CCL_NAMESPACE_BEGIN
 const char *device_kernel_as_string(DeviceKernel kernel)
 {
   switch (kernel) {
+    /* Integrator. */
     case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
       return "integrator_init_from_camera";
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
@@ -49,12 +50,25 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_queued_shadow_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
       return "integrator_terminated_paths_array";
+
+    /* Shader evaluation. */
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
       return "shader_eval_displace";
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
       return "shader_eval_background";
+
+    /* Film. */
     case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
       return "convert_to_half_float";
+
+    /* Adaptive sampling. */
+    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:
+      return "adaptive_sampling_convergence_check";
+    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X:
+      return "adaptive_sampling_filter_x";
+    case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y:
+      return "adaptive_sampling_filter_y";
+
     case DEVICE_KERNEL_NUM:
       break;
   };

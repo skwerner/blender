@@ -73,8 +73,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, CUD
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_init_from_camera(IntegratorPathQueue *queue,
-                                            const int *path_index_array,
+    kernel_cuda_integrator_init_from_camera(const int *path_index_array,
                                             KernelWorkTile *tile,
                                             float *render_buffer,
                                             const int tile_work_size,
@@ -89,56 +88,49 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
     uint x, y, sample;
     get_work_pixel(tile, work_index, &x, &y, &sample);
-    integrator_init_from_camera(NULL, queue, path_index, tile, render_buffer, x, y, sample);
+    integrator_init_from_camera(NULL, path_index, tile, render_buffer, x, y, sample);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_closest(IntegratorPathQueue *queue,
-                                             const int *path_index_array,
-                                             const int work_size)
+    kernel_cuda_integrator_intersect_closest(const int *path_index_array, const int work_size)
 {
   const int global_index = ccl_global_id(0);
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_closest(NULL, queue, path_index);
+    integrator_intersect_closest(NULL, path_index);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_shadow(IntegratorPathQueue *queue,
-                                            const int *path_index_array,
-                                            const int work_size)
+    kernel_cuda_integrator_intersect_shadow(const int *path_index_array, const int work_size)
 {
   const int global_index = ccl_global_id(0);
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_shadow(NULL, queue, path_index);
+    integrator_intersect_shadow(NULL, path_index);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_intersect_subsurface(IntegratorPathQueue *queue,
-                                                const int *path_index_array,
-                                                const int work_size)
+    kernel_cuda_integrator_intersect_subsurface(const int *path_index_array, const int work_size)
 {
   const int global_index = ccl_global_id(0);
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_intersect_subsurface(NULL, queue, path_index);
+    integrator_intersect_subsurface(NULL, path_index);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_background(IntegratorPathQueue *queue,
-                                            const int *path_index_array,
+    kernel_cuda_integrator_shade_background(const int *path_index_array,
                                             float *render_buffer,
                                             const int work_size)
 {
@@ -146,14 +138,13 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_background(NULL, queue, path_index, render_buffer);
+    integrator_shade_background(NULL, path_index, render_buffer);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_light(IntegratorPathQueue *queue,
-                                       const int *path_index_array,
+    kernel_cuda_integrator_shade_light(const int *path_index_array,
                                        float *render_buffer,
                                        const int work_size)
 {
@@ -161,14 +152,13 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_light(NULL, queue, path_index, render_buffer);
+    integrator_shade_light(NULL, path_index, render_buffer);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_shadow(IntegratorPathQueue *queue,
-                                        const int *path_index_array,
+    kernel_cuda_integrator_shade_shadow(const int *path_index_array,
                                         float *render_buffer,
                                         const int work_size)
 {
@@ -176,14 +166,13 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_shadow(NULL, queue, path_index, render_buffer);
+    integrator_shade_shadow(NULL, path_index, render_buffer);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_surface(IntegratorPathQueue *queue,
-                                         const int *path_index_array,
+    kernel_cuda_integrator_shade_surface(const int *path_index_array,
                                          float *render_buffer,
                                          const int work_size)
 {
@@ -191,14 +180,13 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_surface(NULL, queue, path_index, render_buffer);
+    integrator_shade_surface(NULL, path_index, render_buffer);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_shade_volume(IntegratorPathQueue *queue,
-                                        const int *path_index_array,
+    kernel_cuda_integrator_shade_volume(const int *path_index_array,
                                         float *render_buffer,
                                         const int work_size)
 {
@@ -206,14 +194,13 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_volume(NULL, queue, path_index, render_buffer);
+    integrator_shade_volume(NULL, path_index, render_buffer);
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_megakernel(IntegratorPathQueue *queue,
-                                      const int *path_index_array,
+    kernel_cuda_integrator_megakernel(const int *path_index_array,
                                       float *render_buffer,
                                       const int work_size)
 {
@@ -221,7 +208,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_megakernel(NULL, queue, path_index, render_buffer);
+    integrator_megakernel(NULL, path_index, render_buffer);
   }
 }
 

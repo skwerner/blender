@@ -130,16 +130,13 @@ typedef struct IntegratorState {
 } IntegratorState;
 
 ccl_device_constant IntegratorState __integrator_state;
+ccl_device_constant IntegratorPathQueue *__integrator_queue;
 
-#  define INTEGRATOR_STATE_ARGS \
-    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorPathQueue *ccl_restrict queue, \
-        const int path_index
-#  define INTEGRATOR_STATE_CONST_ARGS \
-    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorPathQueue *ccl_restrict queue, \
-        const int path_index
-#  define INTEGRATOR_STATE_PASS kg, queue, path_index
+#  define INTEGRATOR_STATE_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
+#  define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
+#  define INTEGRATOR_STATE_PASS kg, path_index
 
-#  define INTEGRATOR_STATE_PASS_NULL kg, NULL, -1
+#  define INTEGRATOR_STATE_PASS_NULL kg, -1
 #  define INTEGRATOR_STATE_IS_NULL (path_index == -1)
 
 #  define INTEGRATOR_STATE(nested_struct, member) \

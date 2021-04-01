@@ -107,7 +107,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   }
 
   state_.num_rendered_samples = 0;
-  state_.last_gpu_display_update_time = 0.0;
+  state_.last_display_update_time = 0.0;
 
   path_trace_time_.reset();
   denoise_time_.reset();
@@ -151,10 +151,10 @@ RenderWork RenderScheduler::get_render_work()
   bool denoiser_delayed;
   render_work.denoise = work_need_denoise(denoiser_delayed);
 
-  render_work.copy_to_gpu_display = !delayed;
+  render_work.update_display = !denoiser_delayed;
 
-  if (render_work.copy_to_gpu_display) {
-    state_.last_gpu_display_update_time = time_dt();
+  if (render_work.update_display) {
+    state_.last_display_update_time = time_dt();
   }
 
   return render_work;
@@ -315,7 +315,7 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
   /* Avoid excessive denoising in viewport after reaching a certain amount of samples. */
   /* TODO(sergey): Consider making time interval and sample configurable. */
   delayed = (state_.num_rendered_samples >= 20 &&
-             (time_dt() - state_.last_gpu_display_update_time) < 1.0);
+             (time_dt() - state_.last_display_update_time) < 1.0);
 
   return !delayed;
 }

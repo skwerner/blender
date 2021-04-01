@@ -36,14 +36,15 @@ class RenderWork {
 
   bool denoise = false;
 
-  bool copy_to_gpu_display = false;
+  /* Display which is used to visualize render result is to be updated for the new render. */
+  bool update_display = false;
 
   /* Conversion to bool, to simplify checks about whether there is anything to be done for this
    * work. */
   inline operator bool() const
   {
     return path_trace.num_samples || path_trace.adaptive_sampling_filter || denoise ||
-           copy_to_gpu_display;
+           update_display;
   }
 };
 
@@ -156,7 +157,7 @@ class RenderScheduler {
     int num_rendered_samples = 0;
 
     /* Point in time the latest GPUDisplay work has been scheduled. */
-    double last_gpu_display_update_time = 0.0;
+    double last_display_update_time = 0.0;
   } state_;
 
   TimeAverage path_trace_time_;

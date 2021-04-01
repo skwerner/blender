@@ -136,7 +136,7 @@ void PathTrace::render_pipeline(const RenderWork &render_work)
     return;
   }
 
-  copy_to_gpu_display(render_work);
+  update_display(render_work);
 
   buffer_update_if_needed();
   progress_update_if_needed();
@@ -233,9 +233,9 @@ void PathTrace::draw()
   did_draw_after_reset_ |= gpu_display_->draw();
 }
 
-void PathTrace::copy_to_gpu_display(const RenderWork &render_work)
+void PathTrace::update_display(const RenderWork &render_work)
 {
-  if (!render_work.copy_to_gpu_display) {
+  if (!render_work.update_display) {
     return;
   }
 

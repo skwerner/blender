@@ -132,8 +132,8 @@ class PathTrace {
   /* Perform denoising part of the given render work. */
   void denoise(const RenderWork &render_work);
 
-  /* Copy current render result to the GPU display. */
-  void copy_to_gpu_display(const RenderWork &render_work);
+  /* Update display with the current render result. */
+  void update_display(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();

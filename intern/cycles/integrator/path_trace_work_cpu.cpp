@@ -141,9 +141,8 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
     tbb::parallel_for(0, height, [&](int y) {
+      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
       for (int x = 0; x < width; ++x) {
-        CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
-
         kernels_.convert_to_half_float(kernel_globals,
                                        reinterpret_cast<uchar4 *>(rgba_half),
                                        reinterpret_cast<float *>(buffers_->buffer.device_pointer),

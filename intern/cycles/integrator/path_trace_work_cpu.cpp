@@ -166,10 +166,6 @@ bool PathTraceWorkCPU::adaptive_sampling_filter()
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
 
-  /* NOTE: This call is supposed to happen outside of any path tracing, so can pick any of the
-   * pre-configured kernel globals. */
-  KernelGlobals *kernel_globals = &kernel_thread_globals_[0];
-
   float *render_buffer = render_buffers_->buffer.data();
 
   int offset, stride;
@@ -177,17 +173,23 @@ bool PathTraceWorkCPU::adaptive_sampling_filter()
 
   bool any = false;
 
-  /* TODO(sergey): Use parallel_for. */
+  tbb::task_arena local_arena = local_tbb_arena_create(device_);
 
-  for (int y = full_y; y < full_y + height; ++y) {
-    any |= kernels_.adaptive_sampling_filter_x(
-        kernel_globals, render_buffer, y, full_x, width, offset, stride);
-  }
+  local_arena.execute([&]() {
+    tbb::parallel_for(full_y, full_y + height, [&](int y) {
+      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
+      any |= kernels_.adaptive_sampling_filter_x(
+          kernel_globals, render_buffer, y, full_x, width, offset, stride);
+    });
+  });
 
-  for (int x = full_x; x < full_x + width; ++x) {
-    any |= kernels_.adaptive_sampling_filter_y(
-        kernel_globals, render_buffer, x, full_y, height, offset, stride);
-  }
+  local_arena.execute([&]() {
+    tbb::parallel_for(full_x, full_x + width, [&](int x) {
+      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
+      any |= kernels_.adaptive_sampling_filter_y(
+          kernel_globals, render_buffer, x, full_y, height, offset, stride);
+    });
+  });
 
   return !any;
 }

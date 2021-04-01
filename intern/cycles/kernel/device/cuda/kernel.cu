@@ -314,7 +314,6 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   if (kernel_data.film.pass_adaptive_aux_buffer) {
     int work_index = ccl_global_id(0);
     bool thread_is_active = work_index < work_size;
-    KernelGlobals kg;
     if (thread_is_active) {
       uint x = tile->x + work_index % tile->w;
       uint y = tile->y + work_index / tile->w;
@@ -324,11 +323,11 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
         buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
         float sample_multiplier = sample / buffer[kernel_data.film.pass_sample_count];
         if (sample_multiplier != 1.0f) {
-          kernel_adaptive_post_adjust(&kg, buffer, sample_multiplier);
+          kernel_adaptive_post_adjust(NULL, buffer, sample_multiplier);
         }
       }
       else {
-        kernel_adaptive_post_adjust(&kg, buffer, sample / (sample - 1.0f));
+        kernel_adaptive_post_adjust(NULL, buffer, sample / (sample - 1.0f));
       }
     }
   }

@@ -360,8 +360,8 @@ ccl_device_inline void kernel_accum_combined_pass(INTEGRATOR_STATE_CONST_ARGS,
 
 #ifdef __PASSES__
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR,
-                             contribution);
+    kernel_write_pass_float3_unaligned(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
   }
 #endif
 
@@ -382,8 +382,8 @@ ccl_device_inline void kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_C
 
 #ifdef __PASSES__
   if (kernel_data.film.pass_denoising_data) {
-    kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR,
-                             contribution);
+    kernel_write_pass_float3_unaligned(
+        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_COLOR, contribution);
   }
 #endif
 
@@ -415,7 +415,7 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
       const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
                                                                    denoising_feature_throughput);
       const float3 denoising_albedo = denoising_feature_throughput * contribution;
-      kernel_write_pass_float3(
+      kernel_write_pass_float3_unaligned(
           buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_ALBEDO, denoising_albedo);
     }
 #  endif /* __DENOISING_FEATURES__ */

@@ -162,7 +162,8 @@ void PathTrace::path_trace(const RenderWork &render_work)
   VLOG(3) << "Will path trace " << render_work.path_trace.num_samples << " samples.";
 
   if (render_work.path_trace.adaptive_sampling_filter) {
-    VLOG(3) << "Will filter adaptive stopping buffer.";
+    VLOG(3) << "Will filter adaptive stopping buffer, sample "
+            << render_work.path_trace.start_sample + render_work.path_trace.num_samples - 1 << ".";
   }
 
   const double start_time = time_dt();

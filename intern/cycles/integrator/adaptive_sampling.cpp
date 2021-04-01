@@ -16,6 +16,8 @@
 
 #include "integrator/adaptive_sampling.h"
 
+#include "util/util_math.h"
+
 CCL_NAMESPACE_BEGIN
 
 AdaptiveSampling::AdaptiveSampling()
@@ -28,22 +30,19 @@ int AdaptiveSampling::align_samples(int sample, int num_samples) const
     return num_samples;
   }
 
-  int end_sample = sample + num_samples;
+  /* 0-based sample index at which first filtering will happen. */
+  const int first_filter_sample = (min_samples + 1) | (adaptive_step - 1);
 
-  if (end_sample <= min_samples) {
+  /* Allow as many sampels as possible until the first filter sample. */
+  if (sample + num_samples <= first_filter_sample) {
     return num_samples;
   }
 
-  /* Round down end sample to the nearest sample that needs filtering. */
-  end_sample &= ~(adaptive_step - 1);
+  const int next_filter_sample = max(first_filter_sample, (sample + 1) | (adaptive_step - 1));
 
-  if (end_sample <= sample) {
-    /* In order to reach the next sample that needs filtering, we'd need
-     * to increase num_samples. We don't do that in this function, so
-     * just keep it as is and don't filter this time around. */
-    return num_samples;
-  }
-  return end_sample - sample;
+  const int num_samples_until_filter = next_filter_sample - sample + 1;
+
+  return min(num_samples_until_filter, num_samples);
 }
 
 bool AdaptiveSampling::need_filter(int sample) const

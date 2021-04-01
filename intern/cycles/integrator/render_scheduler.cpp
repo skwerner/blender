@@ -141,12 +141,12 @@ RenderWork RenderScheduler::get_render_work()
   render_work.path_trace.start_sample = get_start_sample_to_path_trace();
   render_work.path_trace.num_samples = get_num_samples_to_path_trace();
 
-  render_work.path_trace.adaptive_sampling_filter = adaptive_sampling_.need_filter(
-      render_work.path_trace.start_sample + render_work.path_trace.num_samples - 1);
-
-  /* NOTE: Advance number of samples now, so that denoising check can see that all the samples are
-   * rendered. */
+  /* NOTE: Advance number of samples now, so that filter and denoising check can see that all the
+   * samples are rendered. */
   state_.num_rendered_samples += render_work.path_trace.num_samples;
+
+  render_work.path_trace.adaptive_sampling_filter = adaptive_sampling_.need_filter(
+      get_rendered_sample());
 
   bool delayed;
   render_work.denoise = work_need_denoise(delayed);
@@ -268,6 +268,12 @@ int RenderScheduler::get_num_samples_to_path_trace() const
 
   const int num_samples_to_render = min(num_samples_per_update,
                                         start_sample_ + num_samples_ - path_trace_start_sample);
+
+  /* If adaptive sampling is not use, render as many samples per update as possible, keeping the
+   * device fully occupied, without much overhead of display updates. */
+  if (!adaptive_sampling_.use) {
+    return num_samples_to_render;
+  }
 
   /* TODO(sergey): Add extra "clamping" here so that none of the filtering points is missing. This
    * is to ensure that the final render is pixel-matched regardless of how many samples per second

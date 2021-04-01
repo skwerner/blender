@@ -24,8 +24,13 @@ class AdaptiveSampling {
 
   /* Align number of samples so that they align with the adaptive filtering.
    *
-   * Adjusts the `num_samples` and return new value for it in a way that when the adjusted number
-   * of samples ar rendered filter will need to happen.
+   * Returns the new value for the `num_samples` so that after rendering so many samples on top
+   * of `sample` filtering is required.
+   *
+   * The alignment happens in a way that allows to render as many samples as possible without
+   * missing any filtering point. This means that the result is "clamped" by the nearest sample
+   * at which filtering is needed. This is part of mechanism which ensures that all devices will
+   * perform same exact filtering and adaptive sampling, regardless of their performance.
    *
    * `sample` is the 0-based index of sample. */
   int align_samples(int sample, int num_samples) const;

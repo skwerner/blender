@@ -17,9 +17,11 @@
 #include "testing/testing.h"
 
 #include "integrator/adaptive_sampling.h"
+#include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
+#if 0
 TEST(AdaptiveSampling, schedule_samples)
 {
   AdaptiveSampling adaptive_sampling;
@@ -36,6 +38,7 @@ TEST(AdaptiveSampling, schedule_samples)
     }
   }
 }
+#endif
 
 TEST(AdaptiveSampling, align_samples)
 {
@@ -44,17 +47,45 @@ TEST(AdaptiveSampling, align_samples)
   adaptive_sampling.min_samples = 11 /* rounded of sqrt(128) */;
   adaptive_sampling.adaptive_step = 4;
 
+  /* Filtering will happen at the following samples:
+   * 15, 19, 23, 27, 31, 35, 39, 43 */
+
+  /* Requested sample and number of samples will result in number of samples lower than
+   * `min_samples`. */
   EXPECT_EQ(adaptive_sampling.align_samples(0, 4), 4);
   EXPECT_EQ(adaptive_sampling.align_samples(0, 7), 7);
 
-  EXPECT_EQ(adaptive_sampling.align_samples(0, 15), 12);
+  /* Request number of samples higher than the minimum samples before filter, but prior to the
+   * first sample at which filtering will happen. */
+  EXPECT_EQ(adaptive_sampling.align_samples(0, 15), 15);
+
+  /* When rendering many samples from the very beginning, limit number of samples by the first
+   * sample at which filtering is to happen. */
   EXPECT_EQ(adaptive_sampling.align_samples(0, 16), 16);
   EXPECT_EQ(adaptive_sampling.align_samples(0, 17), 16);
-  EXPECT_EQ(adaptive_sampling.align_samples(0, 20), 20);
+  EXPECT_EQ(adaptive_sampling.align_samples(0, 20), 16);
+  EXPECT_EQ(adaptive_sampling.align_samples(0, 60), 16);
 
+  /* Similar to above, but start sample is not 0. */
   EXPECT_EQ(adaptive_sampling.align_samples(9, 8), 7);
+  EXPECT_EQ(adaptive_sampling.align_samples(9, 20), 7);
+  EXPECT_EQ(adaptive_sampling.align_samples(9, 60), 7);
 
+  /* Start sample is past the minimum required samples, but prior to the first filter sample. */
   EXPECT_EQ(adaptive_sampling.align_samples(12, 6), 4);
+  EXPECT_EQ(adaptive_sampling.align_samples(12, 20), 4);
+  EXPECT_EQ(adaptive_sampling.align_samples(12, 60), 4);
+
+  /* Start sample is the sample which is to be filtered. */
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 4), 4);
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 6), 5);
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 10), 5);
+
+  /* Start sample is past the sample which is to be filtered. */
+  EXPECT_EQ(adaptive_sampling.align_samples(16, 3), 3);
+  EXPECT_EQ(adaptive_sampling.align_samples(16, 4), 4);
+  EXPECT_EQ(adaptive_sampling.align_samples(16, 5), 4);
+  EXPECT_EQ(adaptive_sampling.align_samples(16, 10), 4);
 }
 
 TEST(AdaptiveSampling, need_filter)
@@ -64,18 +95,16 @@ TEST(AdaptiveSampling, need_filter)
   adaptive_sampling.min_samples = 11 /* rounded of sqrt(128) */;
   adaptive_sampling.adaptive_step = 4;
 
-  EXPECT_FALSE(adaptive_sampling.need_filter(0));
-  EXPECT_FALSE(adaptive_sampling.need_filter(3));
-  EXPECT_FALSE(adaptive_sampling.need_filter(7));
-  EXPECT_FALSE(adaptive_sampling.need_filter(11));
+  const vector<int> expected_samples_to_filter = {{15, 19, 23, 27, 31, 35, 39, 43}};
 
-  EXPECT_FALSE(adaptive_sampling.need_filter(14));
-  EXPECT_TRUE(adaptive_sampling.need_filter(15));
-  EXPECT_FALSE(adaptive_sampling.need_filter(16));
+  vector<int> actual_samples_to_filter;
+  for (int sample = 0; sample < 44; ++sample) {
+    if (adaptive_sampling.need_filter(sample)) {
+      actual_samples_to_filter.push_back(sample);
+    }
+  }
 
-  EXPECT_FALSE(adaptive_sampling.need_filter(18));
-  EXPECT_TRUE(adaptive_sampling.need_filter(19));
-  EXPECT_FALSE(adaptive_sampling.need_filter(20));
+  EXPECT_EQ(actual_samples_to_filter, expected_samples_to_filter);
 }
 
 CCL_NAMESPACE_END

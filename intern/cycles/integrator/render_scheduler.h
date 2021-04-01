@@ -134,6 +134,11 @@ class RenderScheduler {
    * later sample, to reduce overhead. */
   bool work_need_denoise(bool &delayed);
 
+  /* Check whether current work need to update display.
+   *
+   * The `denoiser_delayed` is what `work_need_denoise()` returned as delayed denoiser flag. */
+  bool work_need_update_display(const bool denoiser_delayed);
+
   struct TimeAverage {
     inline void reset()
     {

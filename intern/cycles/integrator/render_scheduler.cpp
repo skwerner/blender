@@ -151,7 +151,7 @@ RenderWork RenderScheduler::get_render_work()
   bool denoiser_delayed;
   render_work.denoise = work_need_denoise(denoiser_delayed);
 
-  render_work.update_display = !denoiser_delayed;
+  render_work.update_display = work_need_update_display(denoiser_delayed);
 
   if (render_work.update_display) {
     state_.last_display_update_time = time_dt();
@@ -318,6 +318,11 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
              (time_dt() - state_.last_display_update_time) < 1.0);
 
   return !delayed;
+}
+
+bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
+{
+  return !denoiser_delayed;
 }
 
 void RenderScheduler::update_start_resolution()

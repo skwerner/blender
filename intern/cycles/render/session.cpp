@@ -94,7 +94,7 @@ Session::Session(const SessionParams &params_)
   }
 
   /* Configure scheduler */
-  render_scheduler_.set_total_samples(params.samples);
+  render_scheduler_.set_num_samples(params.samples);
 
   /* Configure path tracer. */
   path_trace_ = make_unique<PathTrace>(device, render_scheduler_);
@@ -434,7 +434,7 @@ void Session::set_samples(int samples)
     tile_manager.set_samples(samples);
 
     /* TODO(sergey): Verify whether threading synchronization is needed here. */
-    render_scheduler_.set_total_samples(samples);
+    render_scheduler_.set_num_samples(samples);
 
     pause_cond.notify_all();
   }

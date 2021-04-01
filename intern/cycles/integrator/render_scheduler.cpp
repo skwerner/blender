@@ -52,9 +52,26 @@ int RenderScheduler::get_start_sample() const
   return start_sample_;
 }
 
-void RenderScheduler::set_total_samples(int num_samples)
+void RenderScheduler::set_num_samples(int num_samples)
 {
-  num_total_samples_ = num_samples;
+  num_samples_ = num_samples;
+}
+
+int RenderScheduler::get_num_samples() const
+{
+  return num_samples_;
+}
+
+int RenderScheduler::get_rendered_sample() const
+{
+  DCHECK_GT(get_num_rendered_samples(), 0);
+
+  return start_sample_ + get_num_rendered_samples() - 1;
+}
+
+int RenderScheduler::get_num_rendered_samples() const
+{
+  return state_.num_rendered_samples;
 }
 
 static int get_divider(int w, int h, int start_resolution)
@@ -77,7 +94,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 
   buffer_params_ = buffer_params;
 
-  set_total_samples(num_samples);
+  set_num_samples(num_samples);
 
   /* In background mode never do lower resolution render preview, as it is not really supported
    * by the software. */
@@ -103,12 +120,7 @@ bool RenderScheduler::done() const
     return false;
   }
 
-  return state_.num_rendered_samples >= num_total_samples_;
-}
-
-int RenderScheduler::get_num_rendered_samples() const
-{
-  return state_.num_rendered_samples;
+  return get_num_rendered_samples() >= num_samples_;
 }
 
 RenderWork RenderScheduler::get_render_work()
@@ -126,7 +138,7 @@ RenderWork RenderScheduler::get_render_work()
 
   render_work.resolution_divider = state_.resolution_divider;
 
-  render_work.path_trace.start_sample = start_sample_ + state_.num_rendered_samples;
+  render_work.path_trace.start_sample = get_start_sample_to_path_trace();
   render_work.path_trace.num_samples = get_num_samples_to_path_trace();
 
   render_work.path_trace.adaptive_sampling_filter = adaptive_sampling_.need_filter(
@@ -191,14 +203,17 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
   VLOG(4) << "Average display update time: " << display_update_time_.get_average() << " seconds.";
 }
 
-/* Heuristic which aims to give perceptually pleasant update interval in a way that at lower
- * samples updates happens more often, but with higher number of samples updates happens less often
- * but the device occupancy goes higher. */
 /* TODO(sergey): This is just a quick implementation, exact values might need to be tweaked based
  * on a more careful experiments with viewport rendering. */
-static double guess_update_interval_in_second(bool background, int num_rendered_samples)
+double RenderScheduler::guess_update_interval_in_second() const
 {
-  if (background) {
+  /* TODO(sergey): Need a decision on whether this should be using number of samples rendered
+   * within the current render ression, or use absolute number of samples with the start sample
+   * taken into account. It will depend on whether the start sample offset clears the render
+   * buffer.  */
+  const int num_rendered_samples = state_.num_rendered_samples;
+
+  if (background_) {
     if (num_rendered_samples < 32) {
       return 1.0;
     }
@@ -220,7 +235,22 @@ static double guess_update_interval_in_second(bool background, int num_rendered_
   return 2.0;
 }
 
-int RenderScheduler::get_num_samples_to_path_trace()
+int RenderScheduler::calculate_num_samples_per_update() const
+{
+  const double time_per_sample_average = path_trace_time_.get_average();
+  const double num_samples_in_second = 1.0 / time_per_sample_average;
+
+  const double update_interval_in_seconds = guess_update_interval_in_second();
+
+  return max(int(num_samples_in_second * update_interval_in_seconds), 1);
+}
+
+int RenderScheduler::get_start_sample_to_path_trace() const
+{
+  return start_sample_ + state_.num_rendered_samples;
+}
+
+int RenderScheduler::get_num_samples_to_path_trace() const
 {
   /* Always start with a single sample. Gives more instant feedback to artists, and allows to
    * gather information for a subsequent path tracing works. */
@@ -233,25 +263,17 @@ int RenderScheduler::get_num_samples_to_path_trace()
     return 1;
   }
 
-  const double time_per_sample_average = path_trace_time_.get_average();
-  const double num_samples_in_second = 1.0 / time_per_sample_average;
-
-  const double update_interval_in_seconds = guess_update_interval_in_second(
-      background_, state_.num_rendered_samples);
-
-  const int num_samples_per_update = max(int(num_samples_in_second * update_interval_in_seconds),
-                                         1);
-
-  const int effective_start_sample = start_sample_ + state_.num_rendered_samples;
+  const int num_samples_per_update = calculate_num_samples_per_update();
+  const int path_trace_start_sample = get_start_sample_to_path_trace();
 
   const int num_samples_to_render = min(num_samples_per_update,
-                                        num_total_samples_ - effective_start_sample);
+                                        start_sample_ + num_samples_ - path_trace_start_sample);
 
   /* TODO(sergey): Add extra "clamping" here so that none of the filtering points is missing. This
    * is to ensure that the final render is pixel-matched regardless of how many samples per second
    * compute device can do. */
 
-  return adaptive_sampling_.align_samples(effective_start_sample, num_samples_to_render);
+  return adaptive_sampling_.align_samples(path_trace_start_sample, num_samples_to_render);
 }
 
 bool RenderScheduler::work_need_denoise(bool &delayed)
@@ -275,7 +297,7 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
   /* Immediately denoise when we reach the start sample or last sample. */
   const int num_samples_finished = state_.num_rendered_samples;
   if (num_samples_finished == denoiser_params_.start_sample ||
-      num_samples_finished == num_total_samples_) {
+      num_samples_finished == num_samples_) {
     return true;
   }
 

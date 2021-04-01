@@ -153,6 +153,8 @@ RenderWork RenderScheduler::get_render_work()
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
 
+  /* A fallback display update time, for the case there is an error of display update, or when
+   * there is no display at all. */
   if (render_work.update_display) {
     state_.last_display_update_time = time_dt();
   }
@@ -201,6 +203,11 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
   ++display_update_time_.num_measured_times;
 
   VLOG(4) << "Average display update time: " << display_update_time_.get_average() << " seconds.";
+
+  /* Move the display update moment further in time, so that logic which checks when last update
+   * did happen have more reliable point in time (without path tracing and denoising parts of the
+   * render work). */
+  state_.last_display_update_time = time_dt();
 }
 
 /* TODO(sergey): This is just a quick implementation, exact values might need to be tweaked based

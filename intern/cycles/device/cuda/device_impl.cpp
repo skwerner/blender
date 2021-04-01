@@ -95,8 +95,6 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   can_map_host = 0;
   pitch_alignment = 0;
 
-  functions.loaded = false;
-
   /* Initialize CUDA. */
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
@@ -458,42 +456,10 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
 
   if (result == CUDA_SUCCESS) {
     reserve_local_memory(requested_features);
-    load_functions();
     kernels.load(this);
   }
 
   return (result == CUDA_SUCCESS);
-}
-
-void CUDADevice::load_functions()
-{
-  /* TODO: load all functions here. */
-  if (functions.loaded) {
-    return;
-  }
-  functions.loaded = true;
-
-  cuda_assert(cuModuleGetFunction(
-      &functions.adaptive_stopping, cuModule, "kernel_cuda_adaptive_stopping"));
-  cuda_assert(cuModuleGetFunction(
-      &functions.adaptive_filter_x, cuModule, "kernel_cuda_adaptive_filter_x"));
-  cuda_assert(cuModuleGetFunction(
-      &functions.adaptive_filter_y, cuModule, "kernel_cuda_adaptive_filter_y"));
-  cuda_assert(cuModuleGetFunction(
-      &functions.adaptive_scale_samples, cuModule, "kernel_cuda_adaptive_scale_samples"));
-
-  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_stopping, CU_FUNC_CACHE_PREFER_L1));
-  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_filter_x, CU_FUNC_CACHE_PREFER_L1));
-  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_filter_y, CU_FUNC_CACHE_PREFER_L1));
-  cuda_assert(cuFuncSetCacheConfig(functions.adaptive_scale_samples, CU_FUNC_CACHE_PREFER_L1));
-
-  int unused_min_blocks;
-  cuda_assert(cuOccupancyMaxPotentialBlockSize(&unused_min_blocks,
-                                               &functions.adaptive_num_threads_per_block,
-                                               functions.adaptive_scale_samples,
-                                               NULL,
-                                               0,
-                                               0));
 }
 
 void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures &requested_features)

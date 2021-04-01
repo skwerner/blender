@@ -84,18 +84,6 @@ class CUDADevice : public Device {
   device_vector<TextureInfo> texture_info;
   bool need_texture_info;
 
-  /* Kernels */
-  struct {
-    bool loaded;
-
-    CUfunction adaptive_stopping;
-    CUfunction adaptive_filter_x;
-    CUfunction adaptive_filter_y;
-    CUfunction adaptive_scale_samples;
-    int adaptive_num_threads_per_block;
-  } functions;
-
-  /* TODO: put all kernels in this. */
   CUDADeviceKernels kernels;
 
   static bool have_precompiled_kernels();
@@ -125,8 +113,6 @@ class CUDADevice : public Device {
                         bool force_ptx = false);
 
   virtual bool load_kernels(const DeviceRequestedFeatures &requested_features) override;
-
-  void load_functions();
 
   void reserve_local_memory(const DeviceRequestedFeatures &requested_features);
 

@@ -34,6 +34,25 @@ enum class DataType {
 };
 
 /**
+ * Utility to get the number of channels of the given data type.
+ */
+constexpr int COM_data_type_num_channels(const DataType datatype)
+{
+  switch (datatype) {
+    case DataType::Value:
+      return 1;
+    case DataType::Vector:
+      return 3;
+    case DataType::Color:
+    default:
+      return 4;
+  }
+}
+
+constexpr int COM_DATA_TYPE_VALUE_CHANNELS = COM_data_type_num_channels(DataType::Value);
+constexpr int COM_DATA_TYPE_COLOR_CHANNELS = COM_data_type_num_channels(DataType::Color);
+
+/**
  * \brief Possible quality settings
  * \see CompositorContext.quality
  * \ingroup Execution
@@ -60,11 +79,29 @@ enum class CompositorPriority {
   Low = 0,
 };
 
+/**
+ * \brief the execution state of a chunk in an ExecutionGroup
+ * \ingroup Execution
+ */
+enum class eChunkExecutionState {
+  /**
+   * \brief chunk is not yet scheduled
+   */
+  NotScheduled = 0,
+  /**
+   * \brief chunk is scheduled, but not yet executed
+   */
+  Scheduled = 1,
+  /**
+   * \brief chunk is executed.
+   */
+  Executed = 2,
+};
+
 // configurable items
 
 // chunk size determination
-#define COM_PREVIEW_SIZE 140.0f
-//#define COM_DEBUG
+// #define COM_DEBUG
 
 // chunk order
 /**
@@ -84,12 +121,8 @@ enum class ChunkOrdering {
   Default = ChunkOrdering::CenterOut,
 };
 
-#define COM_RULE_OF_THIRDS_DIVIDER 100.0f
-
-#define COM_NUM_CHANNELS_VALUE 1
-#define COM_NUM_CHANNELS_VECTOR 3
-#define COM_NUM_CHANNELS_COLOR 4
-
-#define COM_BLUR_BOKEH_PIXELS 512
+constexpr float COM_PREVIEW_SIZE = 140.f;
+constexpr float COM_RULE_OF_THIRDS_DIVIDER = 100.0f;
+constexpr float COM_BLUR_BOKEH_PIXELS = 512;
 
 }  // namespace blender::compositor

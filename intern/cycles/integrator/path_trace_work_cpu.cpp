@@ -114,7 +114,11 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
       break;
     }
 
-    kernels_.integrator_init_from_camera(kernel_globals, state, &sample_work_tile, render_buffer);
+    if (!kernels_.integrator_init_from_camera(
+            kernel_globals, state, &sample_work_tile, render_buffer)) {
+      break;
+    }
+
     kernels_.integrator_megakernel(kernel_globals, state, render_buffer);
 
     ++sample_work_tile.start_sample;
@@ -174,23 +178,16 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
 
-  /* Convergence test. */
-
-  local_arena.execute([&]() {
-    tbb::parallel_for(0, height, [&](int y) {
-      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
-      for (int x = 0; x < width; ++x) {
-        kernels_.adaptive_sampling_convergence_check(
-            kernel_globals, render_buffer, full_x + x, full_y + y, sample, offset, stride);
-      }
-    });
-  });
-
-  /* Filter. */
-
+  /* Check convergency and do x-filter in a single `parallel_for`, to reduce threading overhead. */
   local_arena.execute([&]() {
     tbb::parallel_for(full_y, full_y + height, [&](int y) {
       CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
+
+      for (int x = 0; x < width; ++x) {
+        kernels_.adaptive_sampling_convergence_check(
+            kernel_globals, render_buffer, full_x + x, y, sample, offset, stride);
+      }
+
       any |= kernels_.adaptive_sampling_filter_x(
           kernel_globals, render_buffer, y, full_x, width, offset, stride);
     });

@@ -33,7 +33,7 @@ class CPUKernels {
       CPUKernelFunction<void (*)(const KernelGlobals *kg, IntegratorState *state)>;
   using IntegratorShadeFunction = CPUKernelFunction<void (*)(
       const KernelGlobals *kg, IntegratorState *state, ccl_global float *render_buffer)>;
-  using IntegratorInitFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,
+  using IntegratorInitFunction = CPUKernelFunction<bool (*)(const KernelGlobals *kg,
                                                             IntegratorState *state,
                                                             KernelWorkTile *tile,
                                                             ccl_global float *render_buffer)>;

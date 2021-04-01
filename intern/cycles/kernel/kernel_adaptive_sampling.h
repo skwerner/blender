@@ -53,8 +53,16 @@ ccl_device void kernel_adaptive_sampling_convergence_check(const KernelGlobals *
 
   /* TODO(Stefan): Is this better in linear, sRGB or something else? */
 
-  const float4 I = *((ccl_global float4 *)buffer);
   const float4 A = *(ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+  if (A.w != 0.0f) {
+    /* If the pixel was considered converged, its state will not change in this kernmel. Early
+     * output before doing any math.
+     *
+     * TODO(sergey): On a GPU it might be better to keep thread alive for better coherency? */
+    return;
+  }
+
+  const float4 I = *((ccl_global float4 *)buffer);
 
   /* The per pixel error as seen in section 2.1 of
    * "A hierarchical automatic stopping condition for Monte Carlo global illumination"

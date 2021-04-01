@@ -59,7 +59,10 @@ ccl_device_inline void integrate_camera_sample(const KernelGlobals *ccl_restrict
   camera_sample(kg, x, y, filter_u, filter_v, lens_u, lens_v, time, ray);
 }
 
-ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
+/* Return false to indicate that this pixel is finished.
+ * Used by CPU implementation to not attempt to sample pixel for multiple samples once its known
+ * that the pixel did converge. */
+ccl_device bool integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
                                             const ccl_global KernelWorkTile *ccl_restrict tile,
                                             ccl_global float *render_buffer,
                                             const int x,
@@ -71,7 +74,7 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 
   /* Check whether the pixel has converged and should not be sampled anymore. */
   if (!kernel_need_sample_pixel(INTEGRATOR_STATE_PASS, render_buffer)) {
-    return;
+    return false;
   }
 
   /* Always count the sample, even if the camera sample will reject the ray. */
@@ -85,7 +88,7 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
     Ray ray;
     integrate_camera_sample(kg, sample, x, y, rng_hash, &ray);
     if (ray.t == 0.0f) {
-      return;
+      return true;
     }
 
     /* Write camera ray to state. */
@@ -97,6 +100,8 @@ ccl_device void integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 
   /* Continue with intersect_closest kernel. */
   INTEGRATOR_PATH_INIT(INTERSECT_CLOSEST);
+
+  return true;
 }
 
 CCL_NAMESPACE_END

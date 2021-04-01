@@ -28,7 +28,7 @@
                                                     ccl_global float *render_buffer)
 
 #define KERNEL_INTEGRATOR_INIT_FUNCTION(name) \
-  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
+  bool KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
                                                     IntegratorState *state, \
                                                     KernelWorkTile *tile, \
                                                     ccl_global float *render_buffer)

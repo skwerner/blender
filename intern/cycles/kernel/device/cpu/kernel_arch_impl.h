@@ -61,7 +61,7 @@ CCL_NAMESPACE_BEGIN
 /* Integrator. */
 
 #ifdef KERNEL_STUB
-#  define KERNEL_INVOKE(name, ...) STUB_ASSERT(KERNEL_ARCH, name)
+#  define KERNEL_INVOKE(name, ...) (STUB_ASSERT(KERNEL_ARCH, name), 0)
 #else
 #  define KERNEL_INVOKE(name, ...) integrator_##name(__VA_ARGS__)
 #endif
@@ -83,12 +83,13 @@ CCL_NAMESPACE_BEGIN
 /* TODO: Either use something like get_work_pixel(), or simplify tile which is passed here, so
  * that it does not contain unused fields. */
 #define DEFINE_INTEGRATOR_INIT_KERNEL(name) \
-  void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
+  bool KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *kg, \
                                                     IntegratorState *state, \
                                                     KernelWorkTile *tile, \
                                                     ccl_global float *render_buffer) \
   { \
-    KERNEL_INVOKE(name, kg, state, tile, render_buffer, tile->x, tile->y, tile->start_sample); \
+    return KERNEL_INVOKE( \
+        name, kg, state, tile, render_buffer, tile->x, tile->y, tile->start_sample); \
   }
 
 DEFINE_INTEGRATOR_INIT_KERNEL(init_from_camera)

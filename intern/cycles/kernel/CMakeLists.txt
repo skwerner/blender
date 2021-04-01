@@ -235,6 +235,7 @@ set(SRC_INTEGRATOR_HEADERS
   integrator/integrator_shade_surface.h
   integrator/integrator_shade_volume.h
   integrator/integrator_state.h
+  integrator/integrator_state_template.h
   integrator/integrator_state_util.h
   integrator/integrator_subsurface.h
 )

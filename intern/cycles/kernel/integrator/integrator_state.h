@@ -47,6 +47,8 @@
  * Can solve it with more macros if we encouter it, but rather ugly so postpone for now.
  */
 
+#include "kernel/kernel_types.h"
+
 #include "util/util_types.h"
 
 #pragma once
@@ -60,139 +62,28 @@ CCL_NAMESPACE_BEGIN
 #define INTEGRATOR_VOLUME_STACK_SIZE 4
 #define INTEGRATOR_SHADOW_ISECT_SIZE 4
 
-/* Scalar Struct Definitions
- *
- * Used for single path processing on CPU. */
-
-/* Path tracer state. */
-typedef struct IntegratorPathState {
-  /* Index of a pixel within the device render buffer where this path will write its result.
-   * To get an actual offset within the buffer the value needs to be multiplied by the
-   * `kernel_data.film.pass_stride`.
-   *
-   * The multiplication is delayed for later, so that state can use 32bit integer. */
-  uint32_t render_pixel_index;
-
-  /* Current sample number. */
-  uint16_t sample;
-  /* Current ray bounce depth. */
-  uint16_t bounce;
-  /* Current transparent ray bounce depth. */
-  uint16_t transparent_bounce;
-
-  /* DeviceKernel bit indicating queued kernels.
-   * TODO: reduce size? */
-  uint32_t queued_kernel;
-
-  /* Random number generator seed. */
-  uint32_t rng_hash;
-  /* Random number dimension offset. */
-  uint32_t rng_offset;
-
-  /* enum PathRayFlag */
-  uint32_t flag;
-
-  /* Multiple importance sampling. */
-  float ray_pdf;
-  /* Filter glossy. */
-  float min_ray_pdf;
-
-  /* Throughput. */
-  float3 throughput;
-
-  /* Ratio of throughput to distinguish diffuse and glossy render passes. */
-  float3 diffuse_glossy_ratio;
-
-  /* Denoising. */
-  float3 denoising_feature_throughput;
-} IntegratorPathState;
-
-/* Shadow tracing state. */
-typedef struct IntegratorShadowPathState {
-  /* Current ray bounce depth. */
-  uint16_t bounce;
-  /* Current transparent ray bounce depth. */
-  uint16_t transparent_bounce;
-
-  /* DeviceKernel bit indicating queued kernels.
-   * TODO: reduce size? */
-  uint32_t queued_kernel;
-
-  /* enum PathRayFlag */
-  uint32_t flag;
-
-  /* Throughput. */
-  float3 throughput;
-
-  /* Ratio of throughput to distinguish diffuse and glossy render passes. */
-  float3 diffuse_glossy_ratio;
-
-  /* Number of intersections found by ray-tracing. */
-  uint16_t num_hits;
-} IntegratorShadowPathState;
-
-/* Ray parameters for scene intersection. */
-typedef struct IntegratorRayState {
-  float3 P;
-  float3 D;
-  float t;
-  float time;
-
-  /* TODO: compact differentials. */
-} IntegratorRayState;
-
-/* Result from scene intersection. */
-typedef struct IntegratorIntersectionState {
-  float t, u, v;
-  int prim;
-  int object;
-  int type;
-
-  /* TODO: exclude for GPU. */
-  float3 Ng;
-} IntegratorIntersectionState;
-
-/* Volume stack to identify which volumes the path is inside of. */
-typedef struct IntegratorVolumeStack {
-  int object;
-  int shader;
-} IntegratorVolumeStack;
-
-/* Subsurface closure state for subsurface kernel.
- * TODO: overlap storage with something else? */
-typedef struct IntegratorSubsurfaceState {
-  float3 albedo;
-  float3 radius;
-  float roughness;
-} IntegratorSubsurfaceState;
-
-/* Combined state for path. */
-typedef struct IntegratorState {
-  /* Basic Path Tracing */
-  IntegratorRayState ray;
-  IntegratorIntersectionState isect;
-  IntegratorPathState path;
-
-  /* Volume Rendering */
-  IntegratorVolumeStack volume_stack[INTEGRATOR_VOLUME_STACK_SIZE];
-
-  /* Subsurface Scattering */
-  IntegratorSubsurfaceState subsurface;
-
-  /* Shadows / Next Event Estimation */
-  IntegratorRayState shadow_ray;
-  IntegratorIntersectionState shadow_isect[INTEGRATOR_SHADOW_ISECT_SIZE];
-
-  /* Transparent Shadows */
-  IntegratorShadowPathState shadow_path;
-  IntegratorVolumeStack shadow_volume_stack[INTEGRATOR_VOLUME_STACK_SIZE];
-} IntegratorState;
-
 /* Abstraction
  *
  * Macros to access data structures on different devices. */
 
 #ifdef __KERNEL_CPU__
+
+/* Combined state for path. */
+typedef struct IntegratorState {
+#  define KERNEL_STRUCT_BEGIN(name) struct {
+#  define KERNEL_STRUCT_MEMBER(type, name) type name;
+#  define KERNEL_STRUCT_END(name) \
+    } \
+    name;
+#  define KERNEL_STRUCT_END_ARRAY(name, size) \
+    } \
+    name[size];
+#  include "kernel/integrator/integrator_state_template.h"
+#  undef KERNEL_STRUCT_BEGIN
+#  undef KERNEL_STRUCT_MEMBER
+#  undef KERNEL_STRUCT_END
+#  undef KERNEL_STRUCT_END_ARRAY
+} IntegratorState;
 
 /* Scalar access on CPU. */
 
@@ -217,24 +108,46 @@ typedef struct IntegratorState {
 
 #else /* __KERNEL_CPU__ */
 
-/* Array access on GPU (TODO: SoA). */
+/* Array access on GPU with Structure-of-Arrays.
+ *
+ * PathTraceWorkGPU on the host manages memory allocation and assumes the struct
+ * memory list is an array of 64-bit pointers. */
+
+typedef struct IntegratorState {
+#  define KERNEL_STRUCT_BEGIN(name) struct {
+#  define KERNEL_STRUCT_MEMBER(type, name) type *name;
+#  define KERNEL_STRUCT_END(name) \
+    } \
+    name;
+#  define KERNEL_STRUCT_END_ARRAY(name, size) \
+    } \
+    name[size];
+#  include "kernel/integrator/integrator_state_template.h"
+#  undef KERNEL_STRUCT_BEGIN
+#  undef KERNEL_STRUCT_MEMBER
+#  undef KERNEL_STRUCT_END
+#  undef KERNEL_STRUCT_END_ARRAY
+} IntegratorState;
+
+ccl_device_constant IntegratorState __integrator_state;
 
 #  define INTEGRATOR_STATE_ARGS \
-    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorState *ccl_restrict state, \
-        ccl_global IntegratorPathQueue *ccl_restrict queue, const int path_index
+    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorPathQueue *ccl_restrict queue, \
+        const int path_index
 #  define INTEGRATOR_STATE_CONST_ARGS \
-    const KernelGlobals *ccl_restrict kg, const ccl_global IntegratorState *ccl_restrict state, \
-        ccl_global IntegratorPathQueue *ccl_restrict queue, const int path_index
-#  define INTEGRATOR_STATE_PASS kg, state, queue, path_index
+    const KernelGlobals *ccl_restrict kg, ccl_global IntegratorPathQueue *ccl_restrict queue, \
+        const int path_index
+#  define INTEGRATOR_STATE_PASS kg, queue, path_index
 
-#  define INTEGRATOR_STATE_PASS_NULL kg, NULL, NULL, -1
+#  define INTEGRATOR_STATE_PASS_NULL kg, NULL, -1
 #  define INTEGRATOR_STATE_IS_NULL (path_index == -1)
 
-#  define INTEGRATOR_STATE(nested_struct, member) state[path_index].nested_struct.member
+#  define INTEGRATOR_STATE(nested_struct, member) \
+    __integrator_state.nested_struct.member[path_index]
 #  define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)
 
 #  define INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member) \
-    state[path_index].nested_struct[array_index].member
+    __integrator_state.nested_struct[array_index].member[path_index]
 #  define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
     INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member)
 

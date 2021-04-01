@@ -33,7 +33,6 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
     : PathTraceWork(device, buffers, cancel_requested_flag),
       queue_(device->queue_create()),
       render_buffers_(buffers),
-      integrator_state_(device, "integrator_state"),
       integrator_path_queue_(device, "integrator_path_queue", MEM_READ_WRITE),
       queued_paths_(device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
@@ -43,17 +42,64 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
 {
   work_tile_scheduler_.set_max_num_path_states(get_max_num_paths());
 
-  integrator_state_.alloc_to_device(get_max_num_paths());
-  integrator_state_.zero_to_device();
-
   integrator_path_queue_.alloc(1);
   integrator_path_queue_.zero_to_device();
   integrator_path_queue_.copy_from_device();
 }
 
+void PathTraceWorkGPU::alloc_integrator_state()
+{
+  /* IntegrateState allocated as structure of arrays.
+   *
+   * Allocate a device only memory buffer before for each struct member, and then
+   * write the pointers into a struct that resides in constant memory.
+   *
+   * This assumes the device side struct memory contains consecutive pointers for
+   * each struct member, with the same 64-bit size as device_ptr.
+   *
+   * TODO: store float3 in separate XYZ arrays. */
+  if (!integrator_state_soa_.empty()) {
+    return;
+  }
+
+  vector<device_ptr> device_struct;
+  const int max_num_paths = get_max_num_paths();
+
+#define KERNEL_STRUCT_BEGIN(name) for (int array_index = 0;; array_index++) {
+#define KERNEL_STRUCT_MEMBER(type, name) \
+  { \
+    device_only_memory<type> *array = new device_only_memory<type>(device_, \
+                                                                   "integrator_state_" #name); \
+    array->alloc_to_device(max_num_paths); \
+    /* TODO: skip for most arrays. */ \
+    array->zero_to_device(); \
+    device_struct.push_back(array->device_pointer); \
+    integrator_state_soa_.emplace_back(array); \
+  }
+#define KERNEL_STRUCT_END(name) \
+  break; \
+  }
+#define KERNEL_STRUCT_END_ARRAY(name, array_size) \
+  if (array_index == array_size - 1) { \
+    break; \
+  } \
+  }
+#include "kernel/integrator/integrator_state_template.h"
+#undef KERNEL_STRUCT_BEGIN
+#undef KERNEL_STRUCT_MEMBER
+#undef KERNEL_STRUCT_END
+#undef KERNEL_STRUCT_END_ARRAY
+
+  /* Copy to device side struct in constant memory. */
+  device_->const_copy_to(
+      "__integrator_state", device_struct.data(), device_struct.size() * sizeof(device_ptr));
+}
+
 void PathTraceWorkGPU::init_execution()
 {
   queue_->init_execution();
+
+  alloc_integrator_state();
 }
 
 void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
@@ -148,7 +194,6 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
 
 void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
 {
-  void *d_integrator_state = (void *)integrator_state_.device_pointer;
   void *d_integrator_path_queue = (void *)integrator_path_queue_.device_pointer;
   void *d_path_index = (void *)NULL;
 
@@ -178,10 +223,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE: {
       /* Ray intersection kernels with integrator state. */
-      void *args[] = {&d_integrator_state,
-                      &d_integrator_path_queue,
-                      &d_path_index,
-                      const_cast<int *>(&work_size)};
+      void *args[] = {&d_integrator_path_queue, &d_path_index, const_cast<int *>(&work_size)};
 
       queue_->enqueue(kernel, work_size, args);
       break;
@@ -194,8 +236,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL: {
       /* Shading kernels with integrator state and render buffer. */
       void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
-      void *args[] = {&d_integrator_state,
-                      &d_integrator_path_queue,
+      void *args[] = {&d_integrator_path_queue,
                       &d_path_index,
                       &d_render_buffer,
                       const_cast<int *>(&work_size)};
@@ -240,14 +281,10 @@ void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kern
   /* TODO: ensure this happens as part of queue stream. */
   num_queued_paths_.zero_to_device();
 
-  void *d_integrator_state = (void *)integrator_state_.device_pointer;
   void *d_queued_paths = (void *)queued_paths_.device_pointer;
   void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
-  void *args[] = {&d_integrator_state,
-                  const_cast<int *>(&work_size),
-                  &d_queued_paths,
-                  &d_num_queued_paths,
-                  &queued_kernel};
+  void *args[] = {
+      const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &queued_kernel};
 
   queue_->enqueue(kernel, work_size, args);
 }
@@ -325,7 +362,6 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
   /* TODO: consider launching a single kernel with an array of work tiles.
    * Mapping global index to the right tile with different sized tiles
    * is not trivial so not done for now. */
-  void *d_integrator_state = (void *)integrator_state_.device_pointer;
   void *d_integrator_path_queue = (void *)integrator_path_queue_.device_pointer;
   void *d_work_tile = (void *)work_tiles_.device_pointer;
   void *d_path_index = (void *)NULL;
@@ -345,8 +381,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
     const int tile_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
 
     /* Launch kernel. */
-    void *args[] = {&d_integrator_state,
-                    &d_integrator_path_queue,
+    void *args[] = {&d_integrator_path_queue,
                     &d_path_index,
                     &d_work_tile,
                     &d_render_buffer,

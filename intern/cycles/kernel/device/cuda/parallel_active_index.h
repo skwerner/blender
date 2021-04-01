@@ -27,9 +27,8 @@ CCL_NAMESPACE_BEGIN
 
 #define CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE 512
 
-template<uint blocksize, typename StateT, typename IsActiveOp>
-__device__ void cuda_parallel_active_index_array(const StateT *state,
-                                                 const uint num_states,
+template<uint blocksize, typename IsActiveOp>
+__device__ void cuda_parallel_active_index_array(const uint num_states,
                                                  int *indices,
                                                  int *num_indices,
                                                  IsActiveOp is_active_op)
@@ -44,7 +43,7 @@ __device__ void cuda_parallel_active_index_array(const StateT *state,
 
   /* Test if state corresponding to this thread is active. */
   const uint state_index = blockIdx.x * blocksize + thread_index;
-  const uint is_active = (state_index < num_states) ? is_active_op(state[state_index]) : 0;
+  const uint is_active = (state_index < num_states) ? is_active_op(state_index) : 0;
 
   /* For each thread within a warp compute how many other active states precede it. */
   const uint thread_mask = 0xFFFFFFFF >> (warpSize - thread_warp);

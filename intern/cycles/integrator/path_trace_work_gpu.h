@@ -48,6 +48,8 @@ class PathTraceWorkGPU : public PathTraceWork {
   virtual bool adaptive_sampling_converge_and_filter(int sample) override;
 
  protected:
+  void alloc_integrator_state();
+
   bool enqueue_work_tiles(bool &finished);
   void enqueue_work_tiles(DeviceKernel kernel,
                           const KernelWorkTile work_tiles[],
@@ -89,7 +91,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   RenderBuffers *render_buffers_;
 
   /* Integrate state for paths. */
-  device_only_memory<IntegratorState> integrator_state_;
+  vector<unique_ptr<device_memory>> integrator_state_soa_;
   /* Keep track of number of queued kernels. */
   device_vector<IntegratorPathQueue> integrator_path_queue_;
 

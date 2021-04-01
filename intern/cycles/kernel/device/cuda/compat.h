@@ -67,6 +67,7 @@ __device__ half __float2half(const float f)
 #define ccl_device_noinline_cpu ccl_device
 #define ccl_global
 #define ccl_static_constant __constant__
+#define ccl_device_constant __constant__ __device__
 #define ccl_constant const
 #define ccl_local __shared__
 #define ccl_local_param

@@ -1184,28 +1184,6 @@ void CUDADevice::tex_free(device_texture &mem)
   }
 }
 
-#  define CUDA_GET_BLOCKSIZE(func, w, h) \
-    int threads_per_block; \
-    cuda_assert( \
-        cuFuncGetAttribute(&threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func)); \
-    int threads = (int)sqrt((float)threads_per_block); \
-    int xblocks = ((w) + threads - 1) / threads; \
-    int yblocks = ((h) + threads - 1) / threads;
-
-#  define CUDA_LAUNCH_KERNEL(func, args) \
-    cuda_assert(cuLaunchKernel(func, xblocks, yblocks, 1, threads, threads, 1, 0, 0, args, 0));
-
-/* Similar as above, but for 1-dimensional blocks. */
-#  define CUDA_GET_BLOCKSIZE_1D(func, w, h) \
-    int threads_per_block; \
-    cuda_assert( \
-        cuFuncGetAttribute(&threads_per_block, CU_FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK, func)); \
-    int xblocks = ((w) + threads_per_block - 1) / threads_per_block; \
-    int yblocks = h;
-
-#  define CUDA_LAUNCH_KERNEL_1D(func, args) \
-    cuda_assert(cuLaunchKernel(func, xblocks, yblocks, 1, threads_per_block, 1, 1, 0, 0, args, 0));
-
 #  if 0
 void CUDADevice::render(DeviceTask &task,
                         RenderTile &rtile,

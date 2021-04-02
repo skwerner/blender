@@ -27,25 +27,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_forceinline bool intersect_closest_scene(INTEGRATOR_STATE_CONST_ARGS,
-                                                    const Ray *ray,
-                                                    Intersection *isect)
-{
-  PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
-  const uint visibility = path_state_ray_visibility(INTEGRATOR_STATE_PASS);
-
-  /* TODO */
-#if 0
-  /* Trick to use short AO rays to approximate indirect light at the end of the path. */
-  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    visibility = PATH_RAY_SHADOW;
-    ray->t = kernel_data.background.ao_distance;
-  }
-#endif
-
-  return scene_intersect(kg, ray, visibility, isect);
-}
-
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
   /* Read ray from integrator state into local memory. */
@@ -53,9 +34,17 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   integrator_state_read_ray(INTEGRATOR_STATE_PASS, &ray);
   kernel_assert(ray.t != 0.0f);
 
+  uint visibility = path_state_ray_visibility(INTEGRATOR_STATE_PASS);
+
+  /* Trick to use short AO rays to approximate indirect light at the end of the path. */
+  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
+    visibility = PATH_RAY_SHADOW;
+    ray.t = kernel_data.background.ao_distance;
+  }
+
   /* Scene Intersection. */
   Intersection isect ccl_optional_struct_init;
-  bool hit = intersect_closest_scene(INTEGRATOR_STATE_PASS, &ray, &isect);
+  bool hit = scene_intersect(kg, &ray, visibility, &isect);
 
   /* TODO: remove this and do it in the various intersection functions instead. */
   if (!hit) {

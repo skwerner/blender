@@ -303,61 +303,6 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 }
 
 #if 0
-bool CPUDevice::adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample)
-{
-  KernelWorkTile wtile;
-  wtile.x = tile.x;
-  wtile.y = tile.y;
-  wtile.w = tile.w;
-  wtile.h = tile.h;
-  wtile.offset = tile.offset;
-  wtile.stride = tile.stride;
-  wtile.buffer = (float *)tile.buffer;
-
-  /* For CPU we do adaptive stopping per sample so we can stop earlier, but
-   * for combined CPU + GPU rendering we match the GPU and do it per tile
-   * after a given number of sample steps. */
-  if (!kernel_data.integrator.adaptive_stop_per_sample) {
-    for (int y = wtile.y; y < wtile.y + wtile.h; ++y) {
-      for (int x = wtile.x; x < wtile.x + wtile.w; ++x) {
-        const int index = wtile.offset + x + y * wtile.stride;
-        float *buffer = wtile.buffer + index * kernel_data.film.pass_stride;
-        kernel_do_adaptive_stopping(kg, buffer, sample);
-      }
-    }
-  }
-
-  bool any = false;
-  for (int y = wtile.y; y < wtile.y + wtile.h; ++y) {
-    any |= kernel_do_adaptive_filter_x(kg, y, &wtile);
-  }
-  for (int x = wtile.x; x < wtile.x + wtile.w; ++x) {
-    any |= kernel_do_adaptive_filter_y(kg, x, &wtile);
-  }
-  return (!any);
-}
-
-void CPUDevice::adaptive_sampling_post(const RenderTile &tile, KernelGlobals *kg)
-{
-  float *render_buffer = (float *)tile.buffer;
-  for (int y = tile.y; y < tile.y + tile.h; y++) {
-    for (int x = tile.x; x < tile.x + tile.w; x++) {
-      int index = tile.offset + x + y * tile.stride;
-      ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
-      if (buffer[kernel_data.film.pass_sample_count] < 0.0f) {
-        buffer[kernel_data.film.pass_sample_count] = -buffer[kernel_data.film.pass_sample_count];
-        float sample_multiplier = tile.sample / buffer[kernel_data.film.pass_sample_count];
-        if (sample_multiplier != 1.0f) {
-          kernel_adaptive_post_adjust(kg, buffer, sample_multiplier);
-        }
-      }
-      else {
-        kernel_adaptive_post_adjust(kg, buffer, tile.sample / (tile.sample - 1.0f));
-      }
-    }
-  }
-}
-
 void CPUDevice::render(DeviceTask &task, RenderTile &tile, KernelGlobals *kg)
 {
   const bool use_coverage = kernel_data.film.cryptomatte_passes & CRYPT_ACCURATE;

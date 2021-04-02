@@ -87,12 +87,6 @@ class CPUDevice : public Device {
 
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
 
-#if 0
-  bool adaptive_sampling_filter(KernelGlobals *kg, RenderTile &tile, int sample);
-
-  void adaptive_sampling_post(const RenderTile &tile, KernelGlobals *kg);
-#endif
-
   virtual unique_ptr<DeviceQueue> queue_create() override;
 
   virtual const CPUKernels *get_cpu_kernels() const override;

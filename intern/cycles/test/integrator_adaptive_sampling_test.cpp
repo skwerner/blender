@@ -21,7 +21,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-#if 0
 TEST(AdaptiveSampling, schedule_samples)
 {
   AdaptiveSampling adaptive_sampling;
@@ -38,7 +37,6 @@ TEST(AdaptiveSampling, schedule_samples)
     }
   }
 }
-#endif
 
 TEST(AdaptiveSampling, align_samples)
 {

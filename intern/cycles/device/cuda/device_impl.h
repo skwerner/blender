@@ -45,7 +45,7 @@ class CUDADevice : public Device {
   DedicatedTaskPool task_pool;
   CUdevice cuDevice;
   CUcontext cuContext;
-  CUmodule cuModule, cuFilterModule;
+  CUmodule cuModule;
   size_t device_texture_headroom;
   size_t device_working_headroom;
   bool move_texture_to_host;

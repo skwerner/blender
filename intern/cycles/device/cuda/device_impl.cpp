@@ -83,7 +83,6 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
   cuContext = 0;
 
   cuModule = 0;
-  cuFilterModule = 0;
 
   need_texture_info = false;
 
@@ -420,7 +419,7 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
    * Currently re-loading kernel will invalidate memory pointers,
    * causing problems in cuCtxSynchronize.
    */
-  if (cuFilterModule && cuModule) {
+  if (cuModule) {
     VLOG(1) << "Skipping kernel reload, not currently supported.";
     return true;
   }

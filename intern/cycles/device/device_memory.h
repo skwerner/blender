@@ -471,6 +471,11 @@ template<typename T> class device_vector : public device_memory {
     return (T *)host_pointer;
   }
 
+  const T *data() const
+  {
+    return (T *)host_pointer;
+  }
+
   T &operator[](size_t i)
   {
     assert(i < data_size);

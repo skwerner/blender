@@ -86,6 +86,10 @@ class RenderBuffers {
   bool get_denoising_pass_rect(
       int offset, float exposure, int sample, int components, float *pixels);
   bool set_pass_rect(PassType type, int components, float *pixels, int samples);
+
+  /* Get buffer of the Sample Count pass.
+   * If there is no such pass configured nullptr is returned.*/
+  const float *get_sample_count_buffer() const;
 };
 
 /* Render Tile

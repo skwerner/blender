@@ -217,6 +217,100 @@ bool RenderBuffers::get_denoising_pass_rect(
   return true;
 }
 
+namespace {
+
+/* Helper class which takes care of calculating sample scale and exposure scale for render passes,
+ * taking adaptive sampling into account. */
+class Scaler {
+ public:
+  Scaler(const RenderBuffers *render_buffers,
+         const Pass &pass,
+         const float *pass_buffer,
+         const int sample,
+         const float exposure)
+      : pass_(pass),
+        pass_stride_(render_buffers->params.get_passes_size()),
+        sample_inv_(1.0f / sample),
+        exposure_(exposure),
+        sample_count_pass_(render_buffers->get_sample_count_buffer())
+  {
+    /* Special trick to only scale the samples count pass with the sample scale. Otherwise the pass
+     * becomes a uniform 1.0. */
+    if (sample_count_pass_ == pass_buffer) {
+      sample_count_pass_ = nullptr;
+    }
+
+    /* Pre-calculate values when adaptive sampling is not used. */
+    if (!sample_count_pass_) {
+      scale_ = pass.filter ? sample_inv_ : 1.0f;
+      scale_exposure_ = pass.exposure ? scale_ * exposure_ : scale_;
+    }
+  }
+
+  inline float scale(const int pixel_index) const
+  {
+    if (!sample_count_pass_) {
+      return scale_;
+    }
+
+    return (pass_.filter) ? 1.0f / (sample_count_pass_[pixel_index * pass_stride_]) : 1.0f;
+  }
+
+  inline float scale_exposure(const int pixel_index) const
+  {
+    if (!sample_count_pass_) {
+      return scale_exposure_;
+    }
+
+    float scale, scale_exposure;
+    scale_and_scale_exposure(pixel_index, scale, scale_exposure);
+
+    return scale_exposure;
+  }
+
+  inline void scale_and_scale_exposure(int pixel_index, float &scale, float &scale_exposure) const
+  {
+    if (!sample_count_pass_) {
+      scale = scale_;
+      scale_exposure = scale_exposure_;
+      return;
+    }
+
+    scale = this->scale(pixel_index);
+    scale_exposure = (pass_.exposure) ? scale * exposure_ : scale;
+  }
+
+ protected:
+  const Pass &pass_;
+  const int pass_stride_;
+
+  const float sample_inv_ = 1.0f;
+  const float exposure_ = 1.0f;
+
+  const float *sample_count_pass_ = nullptr;
+
+  float scale_ = 0.0f;
+  float scale_exposure_ = 0.0f;
+};
+
+} /* namespace */
+
+const float *RenderBuffers::get_sample_count_buffer() const
+{
+  /* TODO(sergey): Cache the pass somehow. */
+
+  int sample_offset = 0;
+  for (const Pass &pass : params.passes) {
+    if (pass.type != PASS_SAMPLE_COUNT) {
+      sample_offset += pass.components;
+      continue;
+    }
+    return buffer.data() + sample_offset;
+  }
+
+  return nullptr;
+}
+
 bool RenderBuffers::get_pass_rect(
     const string &name, float exposure, int sample, int components, float *pixels)
 {
@@ -224,26 +318,9 @@ bool RenderBuffers::get_pass_rect(
     return false;
   }
 
-  float *sample_count = NULL;
-  if (name == "Combined") {
-    int sample_offset = 0;
-    for (size_t j = 0; j < params.passes.size(); j++) {
-      Pass &pass = params.passes[j];
-      if (pass.type != PASS_SAMPLE_COUNT) {
-        sample_offset += pass.components;
-        continue;
-      }
-      else {
-        sample_count = buffer.data() + sample_offset;
-        break;
-      }
-    }
-  }
-
   int pass_offset = 0;
-
   for (size_t j = 0; j < params.passes.size(); j++) {
-    Pass &pass = params.passes[j];
+    const Pass &pass = params.passes[j];
 
     /* Pass is identified by both type and name, multiple of the same type
      * may exist with a different name. */
@@ -252,15 +329,14 @@ bool RenderBuffers::get_pass_rect(
       continue;
     }
 
-    PassType type = pass.type;
+    const PassType type = pass.type;
 
-    float *in = buffer.data() + pass_offset;
-    int pass_stride = params.get_passes_size();
+    const float *in = buffer.data() + pass_offset;
+    const int pass_stride = params.get_passes_size();
 
-    float scale = (pass.filter) ? 1.0f / (float)sample : 1.0f;
-    float scale_exposure = (pass.exposure) ? scale * exposure : scale;
+    const Scaler scaler(this, pass, in, sample, exposure);
 
-    int size = params.width * params.height;
+    const int size = params.width * params.height;
 
     if (components == 1 && type == PASS_RENDER_TIME) {
       /* Render time is not stored by kernel, but measured per tile. */
@@ -276,7 +352,7 @@ bool RenderBuffers::get_pass_rect(
       if (type == PASS_DEPTH) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
           float f = *in;
-          pixels[0] = (f == 0.0f) ? 1e10f : f * scale_exposure;
+          pixels[0] = (f == 0.0f) ? 1e10f : f * scaler.scale_exposure(i);
         }
       }
       else if (type == PASS_MIST) {
@@ -284,7 +360,7 @@ bool RenderBuffers::get_pass_rect(
           float f = *in;
           /* Note that we accumulate 1 - mist in the kernel to avoid having to
            * track the mist values in the integrator state. */
-          pixels[0] = saturate(1.0f - f * scale_exposure);
+          pixels[0] = saturate(1.0f - f * scaler.scale_exposure(i));
         }
       }
 #ifdef WITH_CYCLES_DEBUG
@@ -299,7 +375,7 @@ bool RenderBuffers::get_pass_rect(
       else {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
           float f = *in;
-          pixels[0] = f * scale_exposure;
+          pixels[0] = f * scaler.scale_exposure(i);
         }
       }
     }
@@ -343,6 +419,8 @@ bool RenderBuffers::get_pass_rect(
       else {
         /* RGB/vector */
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
+          const float scale_exposure = scaler.scale_exposure(i);
+
           float3 f = make_float3(in[0], in[1], in[2]);
 
           pixels[0] = f.x * scale_exposure;
@@ -391,6 +469,8 @@ bool RenderBuffers::get_pass_rect(
       }
       else if (type == PASS_CRYPTOMATTE) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
+          const float scale = scaler.scale(i);
+
           float4 f = make_float4(in[0], in[1], in[2], in[3]);
           /* x and z contain integer IDs, don't rescale them.
              y and w contain matte weights, they get scaled. */
@@ -402,10 +482,8 @@ bool RenderBuffers::get_pass_rect(
       }
       else {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-          if (sample_count) {
-            scale = (pass.filter) ? 1.0f / (sample_count[i * pass_stride]) : 1.0f;
-            scale_exposure = (pass.exposure) ? scale * exposure : scale;
-          }
+          float scale, scale_exposure;
+          scaler.scale_and_scale_exposure(i, scale, scale_exposure);
 
           float4 f = make_float4(in[0], in[1], in[2], in[3]);
 

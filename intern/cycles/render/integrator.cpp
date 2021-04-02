@@ -123,12 +123,7 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->transparent_min_bounce = transparent_min_bounce + 1;
   kintegrator->transparent_max_bounce = transparent_max_bounce + 1;
 
-  if (ao_bounces == 0) {
-    kintegrator->ao_bounces = INT_MAX;
-  }
-  else {
-    kintegrator->ao_bounces = ao_bounces - 1;
-  }
+  kintegrator->ao_bounces = ao_bounces;
 
   /* Transparent Shadows
    * We only need to enable transparent shadows, if we actually have

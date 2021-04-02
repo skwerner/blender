@@ -107,19 +107,16 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
 #endif
   }
 
-  /* TODO */
-#if 0
+  /* Evaluate background shader. */
+  float3 L = (eval_background) ?
+                 integrator_eval_background_shader(INTEGRATOR_STATE_PASS, render_buffer) :
+                 zero_float3();
+
   /* When using the ao bounces approximation, adjust background
    * shader intensity with ao factor. */
-  if (path_state_ao_bounce(kg, state)) {
-    throughput *= kernel_data.background.ao_bounces_factor;
+  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
+    L *= kernel_data.background.ao_bounces_factor;
   }
-#endif
-
-  /* Evaluate background shader. */
-  const float3 L = (eval_background) ?
-                       integrator_eval_background_shader(INTEGRATOR_STATE_PASS, render_buffer) :
-                       zero_float3();
 
   /* Write to render buffer. */
   kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);

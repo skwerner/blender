@@ -28,6 +28,14 @@ KERNEL_STRUCT_MEMBER(uint32_t, render_pixel_index)
 KERNEL_STRUCT_MEMBER(uint16_t, sample)
 /* Current ray bounce depth. */
 KERNEL_STRUCT_MEMBER(uint16_t, bounce)
+/* Current diffuse ray bounce depth. */
+KERNEL_STRUCT_MEMBER(uint16_t, diffuse_bounce)
+/* Current glossy ray bounce depth. */
+KERNEL_STRUCT_MEMBER(uint16_t, glossy_bounce)
+/* Current transmission ray bounce depth. */
+KERNEL_STRUCT_MEMBER(uint16_t, transmission_bounce)
+/* Current volume ray bounce depth. */
+KERNEL_STRUCT_MEMBER(uint16_t, volume_bounce)
 /* Current transparent ray bounce depth. */
 KERNEL_STRUCT_MEMBER(uint16_t, transparent_bounce)
 /* DeviceKernel bit indicating queued kernels.

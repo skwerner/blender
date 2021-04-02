@@ -42,7 +42,11 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
 {
   INTEGRATOR_STATE_WRITE(path, sample) = sample;
   INTEGRATOR_STATE_WRITE(path, bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, diffuse_bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, glossy_bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, transmission_bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, transparent_bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, volume_bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, rng_hash) = rng_hash;
   INTEGRATOR_STATE_WRITE(path, rng_offset) = PRNG_BASE_NUM;
   INTEGRATOR_STATE_WRITE(path, flag) = PATH_RAY_CAMERA | PATH_RAY_MIS_SKIP |
@@ -66,16 +70,6 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
 
 /* TODO */
 #if 0
-  state->diffuse_bounce = 0;
-  state->glossy_bounce = 0;
-  state->transmission_bounce = 0;
-
-#  ifdef __DENOISING_FEATURES__
-  if (kernel_data.film.pass_denoising_data) {
-    state->flag |= PATH_RAY_STORE_SHADOW_INFO;
-  }
-#  endif /* __DENOISING_FEATURES__ */
-
 #  ifdef __VOLUME__
   state->volume_bounce = 0;
   state->volume_bounds_bounce = 0;
@@ -131,13 +125,11 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
       flag |= PATH_RAY_VOLUME_PASS;
     }
 
-    /* TODO */
-#  if 0
-    state->volume_bounce++;
-    if (state->volume_bounce >= kernel_data.integrator.max_volume_bounce) {
+    const int volume_bounce = INTEGRATOR_STATE(path, volume_bounce) + 1;
+    INTEGRATOR_STATE_WRITE(path, volume_bounce) = volume_bounce;
+    if (volume_bounce >= kernel_data.integrator.max_volume_bounce) {
       flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
     }
-#  endif
   }
   else
 #endif
@@ -147,21 +139,20 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
       flag |= PATH_RAY_REFLECT;
       flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
 
-      /* TODO */
-#if 0
       if (label & LABEL_DIFFUSE) {
-        state->diffuse_bounce++;
-        if (state->diffuse_bounce >= kernel_data.integrator.max_diffuse_bounce) {
+        const int diffuse_bounce = INTEGRATOR_STATE(path, diffuse_bounce) + 1;
+        INTEGRATOR_STATE_WRITE(path, diffuse_bounce) = diffuse_bounce;
+        if (diffuse_bounce >= kernel_data.integrator.max_diffuse_bounce) {
           flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
         }
       }
       else {
-        state->glossy_bounce++;
-        if (state->glossy_bounce >= kernel_data.integrator.max_glossy_bounce) {
+        const int glossy_bounce = INTEGRATOR_STATE(path, glossy_bounce) + 1;
+        INTEGRATOR_STATE_WRITE(path, glossy_bounce) = glossy_bounce;
+        if (glossy_bounce >= kernel_data.integrator.max_glossy_bounce) {
           flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
         }
       }
-#endif
     }
     else {
       kernel_assert(label & LABEL_TRANSMIT);
@@ -172,13 +163,11 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
         flag &= ~PATH_RAY_TRANSPARENT_BACKGROUND;
       }
 
-      /* TODO */
-#if 0
-      state->transmission_bounce++;
-      if (state->transmission_bounce >= kernel_data.integrator.max_transmission_bounce) {
+      const int transmission_bounce = INTEGRATOR_STATE(path, transmission_bounce) + 1;
+      INTEGRATOR_STATE_WRITE(path, transmission_bounce) = transmission_bounce;
+      if (transmission_bounce >= kernel_data.integrator.max_transmission_bounce) {
         flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
       }
-#endif
     }
 
     /* diffuse/glossy/singular */
@@ -198,15 +187,6 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
       flag |= (label & LABEL_TRANSMIT) ? PATH_RAY_TRANSMISSION_PASS : PATH_RAY_REFLECT_PASS;
     }
   }
-
-  /* TODO */
-#if 0
-#  ifdef __DENOISING_FEATURES__
-  if ((state->denoising_feature_weight == 0.0f) && !(flag & PATH_RAY_SHADOW_CATCHER)) {
-    flag &= ~PATH_RAY_STORE_SHADOW_INFO;
-  }
-#  endif
-#endif
 
   INTEGRATOR_STATE_WRITE(path, flag) = flag;
   INTEGRATOR_STATE_WRITE(path, bounce) = bounce;
@@ -295,31 +275,15 @@ ccl_device_inline float path_state_continuation_probability(INTEGRATOR_STATE_CON
   return min(sqrtf(max3(fabs(INTEGRATOR_STATE(path, throughput)))), 1.0f);
 }
 
-#if 0
-/* TODO(DingTo): Find more meaningful name for this */
-ccl_device_inline void path_state_modify_bounce(ccl_addr_space PathState *state, bool increase)
-{
-  /* Modify bounce temporarily for shader eval */
-  if (increase)
-    state->bounce += 1
-  else
-    state->bounce -= 1;
-}
-#endif
-
 ccl_device_inline bool path_state_ao_bounce(INTEGRATOR_STATE_CONST_ARGS)
 {
-  /* TODO */
-#if 0
-  if (state->bounce <= kernel_data.integrator.ao_bounces) {
+  if (!kernel_data.integrator.ao_bounces) {
     return false;
   }
 
-  int bounce = state->bounce - state->transmission_bounce - (state->glossy_bounce > 0);
+  const int bounce = INTEGRATOR_STATE(path, bounce) - INTEGRATOR_STATE(path, transmission_bounce) -
+                     (INTEGRATOR_STATE(path, glossy_bounce) > 0) + 1;
   return (bounce > kernel_data.integrator.ao_bounces);
-#else
-  return false;
-#endif
 }
 
 /* Random Number Sampling Utility Functions

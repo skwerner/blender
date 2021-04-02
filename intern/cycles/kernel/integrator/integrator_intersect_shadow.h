@@ -38,8 +38,7 @@ ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
   const bool opaque_hit = scene_intersect(kg, ray, visibility & PATH_RAY_SHADOW_OPAQUE, &isect);
 
   if (!opaque_hit) {
-    /* Null terminator for array, no transparent hits to shade. */
-    INTEGRATOR_STATE_ARRAY_WRITE(shadow_isect, 0, prim) = PRIM_NONE;
+    INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = 0;
   }
 
   return opaque_hit;

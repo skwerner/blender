@@ -808,6 +808,12 @@ ccl_device_inline uint next_power_of_two(uint x)
   return x == 0 ? 1 : 1 << (32 - count_leading_zeros(x));
 }
 
+/* Return value which is lower than the given one and is a power of two. */
+ccl_device_inline uint prev_power_of_two(uint x)
+{
+  return x < 2 ? x : 1 << (31 - count_leading_zeros(x - 1));
+}
+
 CCL_NAMESPACE_END
 
 #endif /* __UTIL_MATH_H__ */

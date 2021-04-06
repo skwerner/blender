@@ -29,4 +29,20 @@ TEST(math, next_power_of_two)
   EXPECT_EQ(next_power_of_two(4), 8);
 }
 
+TEST(math, prev_power_of_two)
+{
+  EXPECT_EQ(prev_power_of_two(0), 0);
+
+  EXPECT_EQ(prev_power_of_two(1), 1);
+  EXPECT_EQ(prev_power_of_two(2), 1);
+
+  EXPECT_EQ(prev_power_of_two(3), 2);
+  EXPECT_EQ(prev_power_of_two(4), 2);
+
+  EXPECT_EQ(prev_power_of_two(5), 4);
+  EXPECT_EQ(prev_power_of_two(6), 4);
+  EXPECT_EQ(prev_power_of_two(7), 4);
+  EXPECT_EQ(prev_power_of_two(8), 4);
+}
+
 CCL_NAMESPACE_END

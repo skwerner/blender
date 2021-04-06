@@ -60,7 +60,7 @@ Session::Session(const SessionParams &params_)
                     max(params.device.multi_devices.size(), 1),
 #endif
                    params.pixel_size),
-      render_scheduler_(params.background, params.pixel_size)
+      render_scheduler_(params.headless, params.background, params.pixel_size)
 {
   TaskScheduler::init(params.threads);
 
@@ -337,11 +337,6 @@ RenderWork Session::run_update_for_next_iteration()
   if (render_work) {
     scoped_timer update_timer;
 
-    /* Update number of samples in the integrator.
-     * Ideally this would need to happen once in `Session::set_samples()`, but the issue there is
-     * the initial configuration when Session is created where the `set_samples()` is not used. */
-    scene->integrator->set_aa_samples(params.samples);
-
     const int resolution = render_work.resolution_divider;
     const int width = max(1, tile_manager.params.full_width / resolution);
     const int height = max(1, tile_manager.params.full_height / resolution);
@@ -350,24 +345,6 @@ RenderWork Session::run_update_for_next_iteration()
       profiler.reset(scene->shaders.size(), scene->objects.size());
     }
     progress.add_skip_time(update_timer, params.background);
-  }
-
-  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
-   * Currently denoising is not supported for baking. */
-  if (!read_bake_tile_cb) {
-    path_trace_->set_denoiser_params(params.denoising);
-  }
-
-  /* Update adaptive sampling. */
-  {
-    /* TODO(sergey): Hide this behind `Scene::get_adaptive_sampling()`. */
-    AdaptiveSampling adaptive_sampling;
-    adaptive_sampling.use = (scene->integrator->get_sampling_pattern() == SAMPLING_PATTERN_PMJ) &&
-                            scene->dscene.data.film.pass_adaptive_aux_buffer;
-    adaptive_sampling.min_samples = scene->dscene.data.integrator.adaptive_min_samples;
-    adaptive_sampling.adaptive_step = scene->dscene.data.integrator.adaptive_step;
-
-    path_trace_->set_adaptive_sampling(adaptive_sampling);
   }
 
   return render_work;

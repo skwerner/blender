@@ -50,7 +50,7 @@ class RenderWork {
 
 class RenderScheduler {
  public:
-  RenderScheduler(bool background, int pixel_size);
+  RenderScheduler(bool headless, bool background, int pixel_size);
 
   bool is_background() const;
 
@@ -173,6 +173,9 @@ class RenderScheduler {
    * [start_sample_, start_sample_ + num_samples_ - 1] range, inclusively. */
   int start_sample_ = 0;
   int num_samples_ = 0;
+
+  /* Headless rendering without interface. */
+  bool headless_;
 
   /* Background (offline) rendering. */
   bool background_;

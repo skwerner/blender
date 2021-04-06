@@ -22,8 +22,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-RenderScheduler::RenderScheduler(bool background, int pixel_size)
-    : background_(background), pixel_size_(pixel_size)
+RenderScheduler::RenderScheduler(bool headless, bool background, int pixel_size)
+    : headless_(headless), background_(background), pixel_size_(pixel_size)
 {
 }
 

@@ -167,7 +167,7 @@ void BlenderSession::create_session()
 
   /* Create GPU display. */
   if (!background) {
-    session->set_gpu_display(move(make_unique<BlenderGPUDisplay>(b_engine, b_scene)));
+    session->set_gpu_display(make_unique<BlenderGPUDisplay>(b_engine, b_scene));
   }
 
   /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled

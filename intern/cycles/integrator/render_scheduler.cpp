@@ -217,8 +217,14 @@ double RenderScheduler::guess_display_update_interval_in_seconds() const
   /* TODO(sergey): Need a decision on whether this should be using number of samples rendered
    * within the current render ression, or use absolute number of samples with the start sample
    * taken into account. It will depend on whether the start sample offset clears the render
-   * buffer.  */
+   * buffer. */
   const int num_rendered_samples = state_.num_rendered_samples;
+
+  if (headless_) {
+    /* In headless mode do rare updates, so that the device occupancy is high, but there are still
+     * progress messages printed to the logs. */
+    return 30.0;
+  }
 
   if (background_) {
     if (num_rendered_samples < 32) {
@@ -287,7 +293,8 @@ static inline uint round_num_samples_to_power_of_2(const uint num_samples)
 int RenderScheduler::get_num_samples_to_path_trace() const
 {
   /* Always start with a single sample. Gives more instant feedback to artists, and allows to
-   * gather information for a subsequent path tracing works. */
+   * gather information for a subsequent path tracing works.
+   * Do it in the headless mode as well, to give some estimate of how long samples are taking. */
   if (state_.num_rendered_samples == 0) {
     return 1;
   }
@@ -364,6 +371,12 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
 
 bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
 {
+  if (headless_) {
+    /* Force disable display update in headless mode. There will be nothing to display the
+     * in-progress result. */
+    return false;
+  }
+
   if (denoiser_delayed) {
     /* If denoiser has been delayed the display can not be updated as it will not contain
      * up-to-date state of the render result. */

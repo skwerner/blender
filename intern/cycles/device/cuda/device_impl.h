@@ -154,7 +154,7 @@ class CUDADevice : public Device {
 
   /* Graphics resources interoperability. */
   virtual bool should_use_graphics_interop() override;
-  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create();
+  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create() override;
 };
 
 CCL_NAMESPACE_END

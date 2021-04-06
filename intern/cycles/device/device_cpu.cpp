@@ -561,7 +561,7 @@ class CPUDevice : public Device {
 #endif
   }
 
-  void *oiio_memory()
+  void *oiio_memory() override
   {
     return &oiio_globals;
   }

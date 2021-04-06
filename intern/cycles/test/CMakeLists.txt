@@ -50,6 +50,7 @@ set(SRC
   integrator_tile_test.cpp
   render_graph_finalize_test.cpp
   util_aligned_malloc_test.cpp
+  util_math_test.cpp
   util_path_test.cpp
   util_string_test.cpp
   util_task_test.cpp

@@ -307,6 +307,23 @@ RenderWork Session::run_update_for_next_iteration()
     have_tiles = tile_manager.next();
   }
 
+  /* Update number of samples in the integrator.
+   * Ideally this would need to happen once in `Session::set_samples()`, but the issue there is
+   * the initial configuration when Session is created where the `set_samples()` is not used. */
+  scene->integrator->set_aa_samples(params.samples);
+
+  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
+   * Currently denoising is not supported for baking. */
+  if (!read_bake_tile_cb) {
+    path_trace_->set_denoiser_params(params.denoising);
+  }
+
+  /* Update adaptive sampling. */
+  {
+    const AdaptiveSampling adaptive_sampling = scene->integrator->adaptive_sampling_get();
+    path_trace_->set_adaptive_sampling(adaptive_sampling);
+  }
+
   while (have_tiles) {
     render_work = render_scheduler_.get_render_work();
     if (render_work) {

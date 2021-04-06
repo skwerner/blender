@@ -20,6 +20,7 @@
 #include "kernel/kernel_types.h"
 
 #include "graph/node.h"
+#include "integrator/adaptive_sampling.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -88,6 +89,8 @@ class Integrator : public Node {
   void device_free(Device *device, DeviceScene *dscene, bool force_free = false);
 
   void tag_update(Scene *scene, uint32_t flag);
+
+  AdaptiveSampling adaptive_sampling_get() const;
 };
 
 CCL_NAMESPACE_END

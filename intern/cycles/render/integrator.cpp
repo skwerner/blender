@@ -160,16 +160,10 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->start_sample = start_sample;
 
   kintegrator->sampling_pattern = sampling_pattern;
-  if (aa_samples > 0 && adaptive_min_samples == 0) {
-    kintegrator->adaptive_min_samples = max(4, (int)sqrtf(aa_samples));
-    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
-            << kintegrator->adaptive_min_samples;
-  }
-  else {
-    kintegrator->adaptive_min_samples = max(4, adaptive_min_samples);
-  }
 
-  kintegrator->adaptive_step = 4;
+  const AdaptiveSampling adaptive_sampling = adaptive_sampling_get();
+  kintegrator->adaptive_min_samples = adaptive_sampling.min_samples;
+  kintegrator->adaptive_step = adaptive_sampling.adaptive_step;
   kintegrator->adaptive_stop_per_sample = device->info.has_adaptive_stop_per_sample;
 
   /* Adaptive step must be a power of two for bitwise operations to work. */
@@ -256,6 +250,26 @@ void Integrator::tag_update(Scene *scene, uint32_t flag)
     scene->object_manager->tag_update(scene, ObjectManager::MOTION_BLUR_MODIFIED);
     scene->camera->tag_modified();
   }
+}
+
+AdaptiveSampling Integrator::adaptive_sampling_get() const
+{
+  AdaptiveSampling adaptive_sampling;
+
+  adaptive_sampling.use = (get_sampling_pattern() == SAMPLING_PATTERN_PMJ);
+
+  if (aa_samples > 0 && adaptive_min_samples == 0) {
+    adaptive_sampling.min_samples = max(4, (int)sqrtf(aa_samples));
+    VLOG(1) << "Cycles adaptive sampling: automatic min samples = "
+            << adaptive_sampling.min_samples;
+  }
+  else {
+    adaptive_sampling.min_samples = max(4, adaptive_min_samples);
+  }
+
+  adaptive_sampling.adaptive_step = 4;
+
+  return adaptive_sampling;
 }
 
 CCL_NAMESPACE_END

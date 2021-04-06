@@ -84,6 +84,11 @@ TEST(AdaptiveSampling, align_samples)
   EXPECT_EQ(adaptive_sampling.align_samples(16, 4), 4);
   EXPECT_EQ(adaptive_sampling.align_samples(16, 5), 4);
   EXPECT_EQ(adaptive_sampling.align_samples(16, 10), 4);
+
+  /* Should never exceed requested number of samples. */
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 2), 2);
+  EXPECT_EQ(adaptive_sampling.align_samples(16, 2), 2);
+  EXPECT_EQ(adaptive_sampling.align_samples(17, 2), 2);
 }
 
 TEST(AdaptiveSampling, need_filter)

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "integrator/tile.h"
 #include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
@@ -73,8 +74,8 @@ class WorkTileScheduler {
   int sample_start_ = 0;
   int samples_num_ = 0;
 
-  /* Tile size, in pixels. */
-  int2 tile_size_ = make_int2(0, 0);
+  /* Tile size which be scheduled for rendering. */
+  TileSize tile_size_;
 
   /* Number of tiles in X and Y axis of the image. */
   int num_tiles_x_, num_tiles_y_;

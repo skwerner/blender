@@ -257,6 +257,33 @@ int RenderScheduler::get_start_sample_to_path_trace() const
   return start_sample_ + state_.num_rendered_samples;
 }
 
+/* Round number of samples to the closest power of two.
+ * Rounding might happen to higher or lower value depending on which one is closer. Such behavior
+ * allows to have number of samples to be power of two without diverging from the planned number of
+ * samples too much. */
+static inline uint round_num_samples_to_power_of_2(const uint num_samples)
+{
+  if (num_samples == 1) {
+    return 1;
+  }
+
+  if (is_power_of_two(num_samples)) {
+    return num_samples;
+  }
+
+  const uint num_samples_up = next_power_of_two(num_samples);
+  const uint num_samples_down = num_samples_up - (num_samples_up >> 1);
+
+  const uint delta_up = num_samples_up - num_samples;
+  const uint delta_down = num_samples - num_samples_down;
+
+  if (delta_up <= delta_down) {
+    return num_samples_up;
+  }
+
+  return num_samples_down;
+}
+
 int RenderScheduler::get_num_samples_to_path_trace() const
 {
   /* Always start with a single sample. Gives more instant feedback to artists, and allows to
@@ -273,7 +300,15 @@ int RenderScheduler::get_num_samples_to_path_trace() const
   const int num_samples_per_update = calculate_num_samples_per_update();
   const int path_trace_start_sample = get_start_sample_to_path_trace();
 
-  const int num_samples_to_render = min(num_samples_per_update,
+  /* Round number of samples to a power of two, so that division of path states into tiles goes in
+   * a more integer manner.
+   * This might make it so updates happens more rarely due to rounding up. In the test scenes this
+   * is not huge deal because it is not seen that more than 8 sampels can be rendered between
+   * updates. If that becomes a problem we can add some extra rules like never allow to round up
+   * more than N samples. */
+  const int num_samples_pot = round_num_samples_to_power_of_2(num_samples_per_update);
+
+  const int num_samples_to_render = min(num_samples_pot,
                                         start_sample_ + num_samples_ - path_trace_start_sample);
 
   /* If adaptive sampling is not use, render as many samples per update as possible, keeping the

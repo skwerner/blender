@@ -55,16 +55,26 @@ void WorkTileScheduler::reset_scheduler_state()
 {
   tile_size_ = tile_calculate_best_size(image_size_px_, samples_num_, max_num_path_states_);
 
-  VLOG(3) << "Number of unused path states: "
-          << max_num_path_states_ - (tile_size_.x * tile_size_.y);
+  VLOG(3) << "Will schedule tiles of size " << tile_size_;
 
-  num_tiles_x_ = divide_up(image_size_px_.x, tile_size_.x);
-  num_tiles_y_ = divide_up(image_size_px_.y, tile_size_.y);
+  if (VLOG_IS_ON(3)) {
+    /* The logging is based on multiple tiles scheduled, ignoring overhead of multi-tile scheduling
+     * and purely focusing on the number of used path states. */
+    const int num_path_states_in_tile = tile_size_.width * tile_size_.height *
+                                        tile_size_.num_samples;
+    const int num_tiles = max_num_path_states_ / num_path_states_in_tile;
+    VLOG(3) << "Number of unused path states: "
+            << max_num_path_states_ - num_tiles * num_path_states_in_tile;
+  }
+
+  num_tiles_x_ = divide_up(image_size_px_.x, tile_size_.width);
+  num_tiles_y_ = divide_up(image_size_px_.y, tile_size_.height);
 
   total_tiles_num_ = num_tiles_x_ * num_tiles_y_;
 
   next_work_index_ = 0;
-  total_work_size_ = total_tiles_num_ * samples_num_;
+  total_work_size_ = total_tiles_num_ *
+                     static_cast<int>(ceilf(samples_num_ / tile_size_.num_samples));
 }
 
 bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size)
@@ -82,12 +92,12 @@ bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_
   const int tile_x = tile_index - tile_y * num_tiles_x_;
 
   KernelWorkTile work_tile;
-  work_tile.x = tile_x * tile_size_.x;
-  work_tile.y = tile_y * tile_size_.y;
-  work_tile.w = tile_size_.x;
-  work_tile.h = tile_size_.y;
+  work_tile.x = tile_x * tile_size_.width;
+  work_tile.y = tile_y * tile_size_.height;
+  work_tile.w = tile_size_.width;
+  work_tile.h = tile_size_.height;
   work_tile.start_sample = sample_start_ + sample;
-  work_tile.num_samples = 1;
+  work_tile.num_samples = tile_size_.num_samples;
   work_tile.offset = offset_;
   work_tile.stride = stride_;
 
@@ -99,7 +109,7 @@ bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_
 
   DCHECK_LE(max_work_size, max_num_path_states_);
   if (max_work_size && work_tile.w * work_tile.h * work_tile.num_samples > max_work_size) {
-    /* The work did not fit into the requested limit of the work size. Unchedule the tile,
+    /* The work did not fit into the requested limit of the work size. Unschedule the tile,
      * allowing others (or ourselves later one) to pick it up.
      *
      * TODO: Such temporary decrement is not ideal, since it might lead to situation when another

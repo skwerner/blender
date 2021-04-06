@@ -24,21 +24,27 @@ CCL_NAMESPACE_BEGIN
 TEST(tile_calculate_best_size, Basic)
 {
   /* Make sure CPU-like case is handled properly. */
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1), make_int2(1, 1));
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1), make_int2(1, 1));
+  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1), TileSize(1, 1, 1));
+  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1), TileSize(1, 1, 1));
 
-  /* Enough path states to fit an entire image. */
+  /* Enough path states to fit an entire image with all samples. */
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1920 * 1080),
-            make_int2(1920, 1080));
+            TileSize(1920, 1080, 1));
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1920 * 1080 * 100),
-            make_int2(1920, 1080));
+            TileSize(1920, 1080, 100));
 
+  /* Enough path states to only fit few samples of the entire image. */
+  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1920 * 1080 * 10),
+            TileSize(455, 455, 100));
+
+  /* Typical non-stressed configuration. */
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1024 * 1024),
-            make_int2(1024, 1024));
+            TileSize(1024, 1024, 1));
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 8, 1024 * 1024),
-            make_int2(1024, 1024));
+            TileSize(362, 362, 8));
 
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 8, 131072), make_int2(362, 362));
+  /* Number of samples is much higher than the state can handle. */
+  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 10000, 10), TileSize(1, 1, 10));
 }
 
 CCL_NAMESPACE_END

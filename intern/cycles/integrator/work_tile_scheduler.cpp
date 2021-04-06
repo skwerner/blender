@@ -55,6 +55,9 @@ void WorkTileScheduler::reset_scheduler_state()
 {
   tile_size_ = tile_calculate_best_size(image_size_px_, samples_num_, max_num_path_states_);
 
+  VLOG(3) << "Number of unused path states: "
+          << max_num_path_states_ - (tile_size_.x * tile_size_.y);
+
   num_tiles_x_ = divide_up(image_size_px_.x, tile_size_.x);
   num_tiles_y_ = divide_up(image_size_px_.y, tile_size_.y);
 

@@ -93,6 +93,8 @@ set(SRC_OPENCL
 set(SRC_OPTIX
   optix/device.cpp
   optix/device.h
+  optix/device_impl.cpp
+  optix/device_impl.h
 )
 
 set(SRC_HEADERS

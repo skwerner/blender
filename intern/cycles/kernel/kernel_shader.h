@@ -1303,23 +1303,7 @@ ccl_device void shader_eval_displacement(INTEGRATOR_STATE_CONST_ARGS, ShaderData
 #ifdef __TRANSPARENT_SHADOWS__
 ccl_device bool shader_transparent_shadow(const KernelGlobals *kg, Intersection *isect)
 {
-  int prim = kernel_tex_fetch(__prim_index, isect->prim);
-  int shader = 0;
-
-#  ifdef __HAIR__
-  if (isect->type & PRIMITIVE_ALL_TRIANGLE) {
-#  endif
-    shader = kernel_tex_fetch(__tri_shader, prim);
-#  ifdef __HAIR__
-  }
-  else {
-    float4 str = kernel_tex_fetch(__curves, prim);
-    shader = __float_as_int(str.z);
-  }
-#  endif
-  int flag = kernel_tex_fetch(__shaders, (shader & SHADER_MASK)).flags;
-
-  return (flag & SD_HAS_TRANSPARENT_SHADOW) != 0;
+  return (intersection_get_shader_flags(kg, isect) & SD_HAS_TRANSPARENT_SHADOW) != 0;
 }
 #endif /* __TRANSPARENT_SHADOWS__ */
 

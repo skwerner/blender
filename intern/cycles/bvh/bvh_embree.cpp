@@ -37,6 +37,7 @@
 /* Kernel includes are necessary so that the filter function for Embree can access the packed BVH.
  */
 #  include "kernel/bvh/bvh_embree.h"
+#  include "kernel/bvh/bvh_util.h"
 #  include "kernel/device/cpu/compat.h"
 #  include "kernel/device/cpu/globals.h"
 #  include "kernel/kernel_random.h"
@@ -91,18 +92,9 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
         Intersection *isect = &ctx->isect_s[ctx->num_hits];
         ++ctx->num_hits;
         *isect = current_isect;
-        int prim = kernel_tex_fetch(__prim_index, isect->prim);
-        int shader = 0;
-        if (kernel_tex_fetch(__prim_type, isect->prim) & PRIMITIVE_ALL_TRIANGLE) {
-          shader = kernel_tex_fetch(__tri_shader, prim);
-        }
-        else {
-          float4 str = kernel_tex_fetch(__curves, prim);
-          shader = __float_as_int(str.z);
-        }
-        int flag = kernel_tex_fetch(__shaders, shader & SHADER_MASK).flags;
+        const int flags = intersection_get_shader_flags(kg, isect);
         /* If no transparent shadows, all light is blocked. */
-        if (flag & (SD_HAS_TRANSPARENT_SHADOW)) {
+        if (flags & (SD_HAS_TRANSPARENT_SHADOW)) {
           /* This tells Embree to continue tracing. */
           *args->valid = 0;
         }

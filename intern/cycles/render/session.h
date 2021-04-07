@@ -62,10 +62,6 @@ class SessionParams {
 
   DenoiseParams denoising;
 
-  double cancel_timeout;
-  double reset_timeout;
-  double text_timeout;
-
   ShadingSystem shadingsystem;
 
   function<bool(const uchar *pixels, int width, int height, int channels)> write_render_cb;
@@ -84,10 +80,6 @@ class SessionParams {
 
     use_profiling = false;
 
-    cancel_timeout = 0.1;
-    reset_timeout = 0.1;
-    text_timeout = 1.0;
-
     shadingsystem = SHADINGSYSTEM_SVM;
   }
 
@@ -99,9 +91,8 @@ class SessionParams {
              background == params.background && experimental == params.experimental &&
              pixel_size == params.pixel_size && threads == params.threads &&
              adaptive_sampling == params.adaptive_sampling &&
-             use_profiling == params.use_profiling && cancel_timeout == params.cancel_timeout &&
-             reset_timeout == params.reset_timeout && text_timeout == params.text_timeout &&
-             shadingsystem == params.shadingsystem && denoising.type == params.denoising.type &&
+             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem &&
+             denoising.type == params.denoising.type &&
              (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
   }
 };

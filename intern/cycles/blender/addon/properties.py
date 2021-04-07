@@ -544,25 +544,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='RGB_ALBEDO',
     )
 
-    debug_reset_timeout: FloatProperty(
-        name="Reset timeout",
-        description="",
-        min=0.01, max=10.0,
-        default=0.1,
-    )
-    debug_cancel_timeout: FloatProperty(
-        name="Cancel timeout",
-        description="",
-        min=0.01, max=10.0,
-        default=0.1,
-    )
-    debug_text_timeout: FloatProperty(
-        name="Text timeout",
-        description="",
-        min=0.01, max=10.0,
-        default=1.0,
-    )
-
     debug_bvh_type: EnumProperty(
         name="Viewport BVH Type",
         description="Choose between faster updates, or faster render",

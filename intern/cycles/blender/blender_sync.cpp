@@ -811,11 +811,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   /* Viewport Performance */
   params.pixel_size = b_engine.get_preview_pixel_size(b_scene);
 
-  /* other parameters */
-  params.cancel_timeout = (double)get_float(cscene, "debug_cancel_timeout");
-  params.reset_timeout = (double)get_float(cscene, "debug_reset_timeout");
-  params.text_timeout = (double)get_float(cscene, "debug_text_timeout");
-
   if (background) {
     params.pixel_size = 1;
   }

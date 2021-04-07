@@ -117,6 +117,7 @@ class Session {
   Scene *scene;
   Progress progress;
   SessionParams params;
+  BufferParams buffer_params;
   TileManager tile_manager;
   Stats stats;
   Profiler profiler;

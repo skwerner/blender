@@ -345,8 +345,8 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
                                                  bool do_read_only,
                                                  bool highlight)
 {
-  int x = rtile.x - session->tile_manager.params.full_x;
-  int y = rtile.y - session->tile_manager.params.full_y;
+  int x = rtile.x - session->buffer_params.full_x;
+  int y = rtile.y - session->buffer_params.full_y;
   int w = rtile.w;
   int h = rtile.h;
 
@@ -444,12 +444,15 @@ void BlenderSession::stamp_view_layer_metadata(Scene *scene, const string &view_
                             to_string(session->params.samples).c_str());
 
   /* Store ranged samples information. */
+  /* TODO(sergey): Need to bring this information back. */
+#if 0
   if (session->tile_manager.range_num_samples != -1) {
     b_rr.stamp_data_add_field((prefix + "range_start_sample").c_str(),
                               to_string(session->tile_manager.range_start_sample).c_str());
     b_rr.stamp_data_add_field((prefix + "range_num_samples").c_str(),
                               to_string(session->tile_manager.range_num_samples).c_str());
   }
+#endif
 
   /* Write cryptomatte metadata. */
   if (scene->film->get_cryptomatte_passes() & CRYPT_OBJECT) {
@@ -700,7 +703,6 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     buffer_params.passes = scene->passes;
 
     /* Update session. */
-    session->tile_manager.set_samples(session_params.samples);
     session->reset(buffer_params, session_params.samples);
 
     session->progress.set_update_callback(
@@ -733,10 +735,12 @@ void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
 
   /* Adjust absolute sample number to the range. */
   int sample = rtile.sample;
+#if 0
   const int range_start_sample = session->tile_manager.range_start_sample;
   if (range_start_sample != -1) {
     sample -= range_start_sample;
   }
+#endif
 
   if (!do_update_only) {
     /* copy each pass */
@@ -1098,8 +1102,11 @@ void BlenderSession::update_resumable_tile_manager(int num_samples)
 
   scene->integrator->set_start_sample(rounded_range_start_sample);
 
+  /* TODO(sergey): Need to be brought back. */
+#if 0
   session->tile_manager.range_start_sample = rounded_range_start_sample;
   session->tile_manager.range_num_samples = rounded_range_num_samples;
+#endif
 }
 
 void BlenderSession::free_blender_memory_if_possible()

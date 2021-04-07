@@ -41,25 +41,9 @@
 
 CCL_NAMESPACE_BEGIN
 
-#if 0
-/* Note about  preserve_tile_device option for tile manager:
- * progressive refine and viewport rendering does requires tiles to
- * always be allocated for the same device
- */
-#endif
 Session::Session(const SessionParams &params_)
     : params(params_),
-      tile_manager(/*params.progressive*/ false,
-                   params.samples,
-#if 0
-                    make_int2(64, 64),
-                    params.start_resolution,
-                    params.background == false,
-                    params.background,
-                    TILE_BOTTOM_TO_TOP,
-                    max(params.device.multi_devices.size(), 1),
-#endif
-                   params.pixel_size),
+      tile_manager(make_int2(4096, 4096)),
       render_scheduler_(params.headless, params.background, params.pixel_size)
 {
   TaskScheduler::init(params.threads);
@@ -338,8 +322,8 @@ RenderWork Session::run_update_for_next_iteration()
     scoped_timer update_timer;
 
     const int resolution = render_work.resolution_divider;
-    const int width = max(1, tile_manager.params.full_width / resolution);
-    const int height = max(1, tile_manager.params.full_height / resolution);
+    const int width = max(1, buffer_params.full_width / resolution);
+    const int height = max(1, buffer_params.full_height / resolution);
 
     if (update_scene(width, height)) {
       profiler.reset(scene->shaders.size(), scene->objects.size());
@@ -392,17 +376,23 @@ void Session::draw()
 
 void Session::reset_(BufferParams &buffer_params, int samples)
 {
+  this->buffer_params = buffer_params;
+
   render_scheduler_.reset(buffer_params, samples);
   path_trace_->reset(buffer_params);
+  tile_manager.reset(buffer_params);
 
-  tile_manager.reset(buffer_params, samples);
   progress.reset_sample();
 
+  /* TODO(sergey): Progress report needs to be worked on. */
+#if 0
   bool show_progress = params.background || tile_manager.get_num_effective_samples() != INT_MAX;
   progress.set_total_pixel_samples(show_progress ? tile_manager.state.total_pixel_samples : 0);
+#endif
 
-  if (!params.background)
+  if (!params.background) {
     progress.set_start_time();
+  }
   progress.set_render_start_time();
 }
 
@@ -425,7 +415,6 @@ void Session::set_samples(int samples)
 {
   if (samples != params.samples) {
     params.samples = samples;
-    tile_manager.set_samples(samples);
 
     /* TODO(sergey): Verify whether threading synchronization is needed here. */
     render_scheduler_.set_num_samples(samples);
@@ -469,16 +458,6 @@ void Session::set_denoising(const DenoiseParams &denoising)
 
     params.denoising.use = false;
   }
-
-  /* TODO(sergey): Check which of the code is still needed. */
-#if 0
-  // TODO(pmours): Query the required overlap value for denoising from the device?
-  tile_manager.slice_overlap = need_denoise && !params.background ? 64 : 0;
-
-  /* Schedule per tile denoising for final renders if we are either denoising or
-   * need prefiltered passes for the native denoiser. */
-  tile_manager.schedule_denoising = need_denoise && params.background;
-#endif
 }
 
 void Session::set_denoising_start_sample(int sample)
@@ -576,9 +555,9 @@ void Session::update_status_time(bool show_pause, bool show_done)
   string status, substatus;
 
   /* TODO(sergey): Take number of big tiles into account. */
+  /* TODO(sergey): Take sample range into account. */
 
-  const int num_samples = tile_manager.get_num_effective_samples();
-  substatus += string_printf("Sample %d/%d", progress.get_current_sample(), num_samples);
+  substatus += string_printf("Sample %d/%d", progress.get_current_sample(), params.samples);
 
   if (show_pause) {
     status = "Rendering Paused";

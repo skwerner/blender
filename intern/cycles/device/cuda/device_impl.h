@@ -33,7 +33,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-class RenderBuffers;
 class DeviceQueue;
 
 class CUDADevice : public Device {

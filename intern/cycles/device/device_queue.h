@@ -21,7 +21,6 @@
 CCL_NAMESPACE_BEGIN
 
 class Device;
-class RenderBuffers;
 
 struct KernelWorkTile;
 

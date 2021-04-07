@@ -41,8 +41,6 @@ CCL_NAMESPACE_BEGIN
 class BVH;
 class DeviceQueue;
 class Progress;
-class RenderTile;
-class RenderBuffers;
 class CPUKernels;
 class CPUKernelThreadGlobals;
 

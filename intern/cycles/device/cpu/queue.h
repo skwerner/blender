@@ -28,7 +28,6 @@
 CCL_NAMESPACE_BEGIN
 
 class CPUDevice;
-class RenderBuffers;
 
 /* Base implementation of all CPU queues. Takes care of kernel function pointers and global data
  * localization. */

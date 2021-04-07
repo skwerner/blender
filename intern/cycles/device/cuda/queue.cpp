@@ -20,11 +20,14 @@
 #  include "device/cuda/device_impl.h"
 #  include "device/cuda/kernel.h"
 
+#  include "util/util_time.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* CUDADeviceQueue */
 
-CUDADeviceQueue::CUDADeviceQueue(CUDADevice *device) : DeviceQueue(device), cuda_device_(device)
+CUDADeviceQueue::CUDADeviceQueue(CUDADevice *device)
+    : DeviceQueue(device), cuda_device_(device), last_sync_time_(0.0)
 {
 }
 
@@ -34,6 +37,8 @@ void CUDADeviceQueue::init_execution()
   CUDAContextScope scope(cuda_device_);
   cuda_device_->load_texture_info();
   cuda_device_assert(cuda_device_, cuCtxSynchronize());
+
+  last_sync_time_ = time_dt();
 }
 
 bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *args[])
@@ -41,6 +46,9 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
   if (cuda_device_->have_error()) {
     return false;
   }
+
+  VLOG(3) << "CUDA queue launch " << device_kernel_as_string(kernel) << ", work_size "
+          << work_size;
 
   const CUDAContextScope scope(cuda_device_);
   const CUDADeviceKernel &cuda_kernel = cuda_device_->kernels.get(kernel);
@@ -105,6 +113,11 @@ bool CUDADeviceQueue::synchronize()
 
   const CUDAContextScope scope(cuda_device_);
   cuda_device_assert(cuda_device_, cuCtxSynchronize());
+
+  double new_time = time_dt();
+  VLOG(3) << "CUDA queue synchronize, elapsed " << new_time - last_sync_time_ << "s";
+  last_sync_time_ = new_time;
+
   return !(cuda_device_->have_error());
 }
 

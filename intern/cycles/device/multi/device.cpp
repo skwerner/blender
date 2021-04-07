@@ -514,7 +514,7 @@ class MultiDevice : public Device {
     return nullptr;
   }
 
-  virtual void foreach_device(function<void(Device *)> callback) override
+  virtual void foreach_device(const function<void(Device *)> &callback) override
   {
     foreach (SubDevice &sub, devices) {
       sub.device->foreach_device(callback);

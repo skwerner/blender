@@ -50,11 +50,6 @@ PathTrace::PathTrace(Device *device, RenderScheduler &render_scheduler)
     path_trace_works_.emplace_back(PathTraceWork::create(
         path_trace_device, full_render_buffers_.get(), &render_cancel_.is_requested));
   });
-
-  /* TODO(sergey): Communicate some scheduling block size to the work scheduler based on every
-   * device's get_max_num_paths(). This is a bit tricky because CPU and GPU device will
-   * be opposites of each other: CPU wavefront is super tiny, and GPU wavefront is gigantic.
-   * How to find an ideal scheduling for such a mixture?  */
 }
 
 bool PathTrace::ready_to_reset()

@@ -23,6 +23,8 @@
 #  include "kernel/device/cuda/globals.h"
 #  include "kernel/device/cuda/image.h"
 #  include "kernel/device/cuda/parallel_active_index.h"
+#  include "kernel/device/cuda/parallel_prefix_sum.h"
+#  include "kernel/device/cuda/parallel_sorted_index.h"
 
 #  include "kernel/integrator/integrator_path_state.h"
 #  include "kernel/integrator/integrator_state.h"
@@ -249,6 +251,24 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
         return (INTEGRATOR_STATE(path, queued_kernel) == 0) &&
                (INTEGRATOR_STATE(shadow_path, queued_kernel) == 0);
       });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_sorted_paths_array(
+        int num_states, int *indices, int *num_indices, int *key_prefix_sum, int kernel)
+{
+  cuda_parallel_sorted_index_array<CUDA_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE>(
+      num_states, indices, num_indices, key_prefix_sum, [kernel](const int path_index) {
+        return (INTEGRATOR_STATE(path, queued_kernel) == kernel) ?
+                   __integrator_sort_key[path_index] :
+                   CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY;
+      });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_prefix_sum(int *values, int num_values)
+{
+  cuda_parallel_prefix_sum<CUDA_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE>(values, num_values);
 }
 
 /* --------------------------------------------------------------------

@@ -132,6 +132,10 @@ typedef struct IntegratorState {
 ccl_device_constant IntegratorState __integrator_state;
 ccl_device_constant IntegratorQueueCounter *__integrator_queue_counter;
 
+/* TODO: compress as uint16? or leave out entirely and recompute key in sorting code? */
+ccl_device_constant int *__integrator_sort_key;
+ccl_device_constant int *__integrator_sort_key_counter;
+
 #  define INTEGRATOR_STATE_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
 #  define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
 #  define INTEGRATOR_STATE_PASS kg, path_index

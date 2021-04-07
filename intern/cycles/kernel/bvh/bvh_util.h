@@ -137,4 +137,26 @@ ccl_device_forceinline int intersection_get_shader_flags(const KernelGlobals *cc
   return kernel_tex_fetch(__shaders, (shader & SHADER_MASK)).flags;
 }
 
+ccl_device_forceinline int intersection_get_shader(const KernelGlobals *ccl_restrict kg,
+                                                   const Intersection *isect)
+{
+  const int prim = kernel_tex_fetch(__prim_index, isect->prim);
+  int shader = 0;
+
+#ifdef __HAIR__
+  if (kernel_tex_fetch(__prim_type, isect->prim) & PRIMITIVE_ALL_TRIANGLE)
+#endif
+  {
+    shader = kernel_tex_fetch(__tri_shader, prim);
+  }
+#ifdef __HAIR__
+  else {
+    float4 str = kernel_tex_fetch(__curves, prim);
+    shader = __float_as_int(str.z);
+  }
+#endif
+
+  return shader & SHADER_MASK;
+}
+
 CCL_NAMESPACE_END

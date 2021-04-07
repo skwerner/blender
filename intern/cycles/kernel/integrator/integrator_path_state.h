@@ -86,6 +86,13 @@ typedef struct IntegratorQueueCounter {
         &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
     INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
 
+#  define INTEGRATOR_PATH_SET_SORT_KEY(key) \
+    { \
+      const int key_ = key; \
+      __integrator_sort_key[path_index] = key_; \
+      atomic_fetch_and_add_uint32(&__integrator_sort_key_counter[key_], 1); \
+    }
+
 #else
 
 #  define INTEGRATOR_PATH_INIT(next_kernel) \
@@ -101,6 +108,8 @@ typedef struct IntegratorQueueCounter {
     INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
 #  define INTEGRATOR_SHADOW_PATH_TERMINATE(current_kernel) \
     INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+
+#  define INTEGRATOR_PATH_SET_SORT_KEY(key)
 
 #endif
 

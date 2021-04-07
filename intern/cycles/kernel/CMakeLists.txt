@@ -109,8 +109,10 @@ set(SRC_DEVICE_CUDA_HEADERS
   device/cuda/config.h
   device/cuda/globals.h
   device/cuda/image.h
-  device/cuda/parallel_reduce.h
   device/cuda/parallel_active_index.h
+  device/cuda/parallel_prefix_sum.h
+  device/cuda/parallel_reduce.h
+  device/cuda/parallel_sorted_index.h
 )
 
 set(SRC_DEVICE_OPTIX_HEADERS

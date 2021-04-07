@@ -505,6 +505,8 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
   integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
+  INTEGRATOR_PATH_SET_SORT_KEY(intersection_get_shader(kg, &ss_isect.hits[0]));
+
   return true;
 }
 

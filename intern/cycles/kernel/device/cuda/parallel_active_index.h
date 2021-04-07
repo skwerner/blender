@@ -19,7 +19,7 @@
 CCL_NAMESPACE_BEGIN
 
 /* Given an array of states, build an array of indices for which the states
- * array active.
+ * are active.
  *
  * Shared memory requirement is sizeof(int) * (number_of_warps + 1) */
 

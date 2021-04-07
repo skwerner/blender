@@ -50,6 +50,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_queued_shadow_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
       return "integrator_terminated_paths_array";
+    case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
+      return "integrator_sorted_paths_array";
 
     /* Shader evaluation. */
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
@@ -74,6 +76,10 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "filter_convert_to_rgb";
     case DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB:
       return "filter_convert_from_rgb";
+
+    /* Generic */
+    case DEVICE_KERNEL_PREFIX_SUM:
+      return "prefix_sum";
 
     case DEVICE_KERNEL_NUM:
       break;

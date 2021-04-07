@@ -27,12 +27,15 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_forceinline bool integrator_test_path_terminate(INTEGRATOR_STATE_ARGS,
-                                                           const Intersection *ccl_restrict isect)
+ccl_device_forceinline int integrator_intersect_next_shader(INTEGRATOR_STATE_ARGS,
+                                                            const Intersection *ccl_restrict isect)
 {
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    return true;
+    return SHADER_NONE;
   }
+
+  /* Find shader from intersection. */
+  const int shader = intersection_get_shader(kg, isect);
 
   /* Load random number state. */
   RNGState rng_state;
@@ -44,25 +47,23 @@ ccl_device_forceinline bool integrator_test_path_terminate(INTEGRATOR_STATE_ARGS
    * perform MIS as part of indirect rays. */
   const float probability = path_state_continuation_probability(INTEGRATOR_STATE_PASS);
 
-  if (probability == 1.0f) {
-    return false;
-  }
+  if (probability != 1.0f) {
+    const float terminate = path_state_rng_1D(kg, &rng_state, PRNG_TERMINATE);
 
-  const float terminate = path_state_rng_1D(kg, &rng_state, PRNG_TERMINATE);
+    if (probability == 0.0f || terminate >= probability) {
+      const int flags = kernel_tex_fetch(__shaders, shader).flags;
 
-  if (probability == 0.0f || terminate >= probability) {
-    const int flags = intersection_get_shader_flags(kg, isect);
-
-    if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
-      /* Mark path to be terminated right after shader evaluation. */
-      INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_IMMEDIATE;
-    }
-    else {
-      return true;
+      if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+        /* Mark path to be terminated right after shader evaluation. */
+        INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_IMMEDIATE;
+      }
+      else {
+        return SHADER_NONE;
+      }
     }
   }
 
-  return false;
+  return shader;
 }
 
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
@@ -114,7 +115,9 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
     }
     else {
       /* Hit a surface, continue with surface kernel unless terminated. */
-      if (!integrator_test_path_terminate(INTEGRATOR_STATE_PASS, &isect)) {
+      const int shader = integrator_intersect_next_shader(INTEGRATOR_STATE_PASS, &isect);
+      if (shader != SHADER_NONE) {
+        INTEGRATOR_PATH_SET_SORT_KEY(shader);
         INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_SURFACE);
         return;
       }

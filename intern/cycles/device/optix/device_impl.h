@@ -138,6 +138,8 @@ class OptiXDevice : public CUDADevice {
 
   void update_launch_params(size_t offset, void *data, size_t data_size);
 #  endif
+
+  virtual void denoise_buffer() override;
 };
 
 #endif /* WITH_OPTIX */

@@ -21,6 +21,7 @@ set(SRC
   denoiser.cpp
   denoiser_device.cpp
   denoiser_oidn.cpp
+  denoiser_optix.cpp
   path_trace.cpp
   tile.cpp
   path_trace_work.cpp
@@ -36,6 +37,7 @@ set(SRC_HEADERS
   denoiser.h
   denoiser_device.h
   denoiser_oidn.h
+  denoiser_optix.h
   path_trace.h
   tile.h
   path_trace_work.h

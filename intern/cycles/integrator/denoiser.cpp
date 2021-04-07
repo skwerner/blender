@@ -17,8 +17,8 @@
 #include "integrator/denoiser.h"
 
 #include "device/device.h"
-#include "integrator/denoiser_device.h"
 #include "integrator/denoiser_oidn.h"
+#include "integrator/denoiser_optix.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
 
@@ -40,7 +40,7 @@ unique_ptr<Denoiser> Denoiser::create(Device *device, const DenoiseParams &param
 
   switch (params.type) {
     case DENOISER_OPTIX:
-      return make_unique<DeviceDenoiser>(device, params);
+      return make_unique<OptiXDenoiser>(device, params);
 
     case DENOISER_OPENIMAGEDENOISE:
       return make_unique<OIDNDenoiser>(device, params);

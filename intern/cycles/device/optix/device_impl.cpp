@@ -1017,6 +1017,11 @@ bool OptiXDevice::launch_denoise(DeviceTask &task, RenderTile &rtile)
 }
 #  endif
 
+void OptiXDevice::denoise_buffer()
+{
+  LOG(ERROR) << "Not implemented.";
+}
+
 #  if 0
 void OptiXDevice::launch_shader_eval(DeviceTask &task, int thread_index)
 {

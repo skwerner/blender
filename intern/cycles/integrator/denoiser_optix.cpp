@@ -14,29 +14,17 @@
  * limitations under the License.
  */
 
-#include "integrator/denoiser_device.h"
+#include "integrator/denoiser_optix.h"
 
 #include "device/device.h"
-#include "render/buffers.h"
-#include "util/util_logging.h"
+#include "device/device_denoise.h"
 
 CCL_NAMESPACE_BEGIN
 
-DeviceDenoiser::DeviceDenoiser(Device *device, const DenoiseParams &params)
-    : Denoiser(device, params)
+OptiXDenoiser::OptiXDenoiser(Device *device, const DenoiseParams &params)
+    : DeviceDenoiser(device, params)
 {
-}
-
-void DeviceDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
-                                    RenderBuffers *render_buffers,
-                                    const int num_samples)
-{
-  /* TODO(sergey): Need to pass those to the device somehow. */
-  (void)buffer_params;
-  (void)render_buffers;
-  (void)num_samples;
-
-  device_->denoise_buffer();
+  DCHECK(device->info.denoisers & DENOISER_OPTIX);
 }
 
 CCL_NAMESPACE_END

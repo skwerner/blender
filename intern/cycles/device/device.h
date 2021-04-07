@@ -402,6 +402,14 @@ class Device {
     return nullptr;
   }
 
+  /* Buffer denoising. */
+
+  /* TODO(sergey): Need to pass real parameters needed for denoising. */
+  virtual void denoise_buffer()
+  {
+    LOG(ERROR) << "Request buffer denoising from a device which does not support it.";
+  }
+
   /* Sub-devices */
 
   /* Run given callback for every individual device which will be handling rendering.

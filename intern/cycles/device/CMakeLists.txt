@@ -106,7 +106,6 @@ set(SRC_HEADERS
 )
 
 set(LIB
-  cycles_render
   cycles_kernel
   cycles_util
   ${CYCLES_GL_LIBRARIES}

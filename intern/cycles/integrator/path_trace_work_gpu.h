@@ -94,7 +94,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Integrate state for paths. */
   vector<unique_ptr<device_memory>> integrator_state_soa_;
   /* Keep track of number of queued kernels. */
-  device_vector<IntegratorPathQueue> integrator_path_queue_;
+  device_vector<IntegratorQueueCounter> integrator_queue_counter_;
 
   /* Temporary buffer to get an array of queued path for a particular kernel. */
   device_vector<int> queued_paths_;

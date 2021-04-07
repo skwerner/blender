@@ -33,7 +33,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
     : PathTraceWork(device, buffers, cancel_requested_flag),
       queue_(device->queue_create()),
       render_buffers_(buffers),
-      integrator_path_queue_(device, "integrator_path_queue", MEM_READ_WRITE),
+      integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
       queued_paths_(device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
       work_tiles_(device, "work_tiles", MEM_READ_WRITE),
@@ -93,17 +93,17 @@ void PathTraceWorkGPU::alloc_integrator_state()
 
 void PathTraceWorkGPU::alloc_integrator_queue()
 {
-  if (integrator_path_queue_.size() != 0) {
+  if (integrator_queue_counter_.size() != 0) {
     return;
   }
 
-  integrator_path_queue_.alloc(1);
-  integrator_path_queue_.zero_to_device();
-  integrator_path_queue_.copy_from_device();
+  integrator_queue_counter_.alloc(1);
+  integrator_queue_counter_.zero_to_device();
+  integrator_queue_counter_.copy_from_device();
 
   /* Copy to device side pointer in constant memory. */
   device_->const_copy_to(
-      "__integrator_queue", &integrator_path_queue_.device_pointer, sizeof(device_ptr));
+      "__integrator_queue_counter", &integrator_queue_counter_.device_pointer, sizeof(device_ptr));
 }
 
 void PathTraceWorkGPU::init_execution()
@@ -129,7 +129,7 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
       }
 
       /* Copy stats from the device. */
-      integrator_path_queue_.copy_from_device();
+      integrator_queue_counter_.copy_from_device();
     }
 
     /* Stop if no more work remaining. */
@@ -144,7 +144,7 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
       }
 
       /* Copy stats from the device. */
-      integrator_path_queue_.copy_from_device();
+      integrator_queue_counter_.copy_from_device();
     }
   }
 }
@@ -155,18 +155,18 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
   const int max_num_paths = get_max_num_paths();
 
   /* Find kernel to execute, with max number of queued paths. */
-  IntegratorPathQueue *path_queue = integrator_path_queue_.data();
+  IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
 
   int num_paths = 0;
   int max_num_queued = 0;
   DeviceKernel kernel = DEVICE_KERNEL_INTEGRATOR_NUM;
 
   for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
-    num_paths += path_queue->num_queued[i];
+    num_paths += queue_counter->num_queued[i];
 
-    if (path_queue->num_queued[i] > max_num_queued) {
+    if (queue_counter->num_queued[i] > max_num_queued) {
       kernel = (DeviceKernel)i;
-      max_num_queued = path_queue->num_queued[i];
+      max_num_queued = queue_counter->num_queued[i];
     }
   }
 
@@ -178,7 +178,7 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
    * TODO: unclear if max_num_paths is the right way to measure this. */
   const bool use_megakernel = (num_paths < megakernel_threshold * max_num_paths);
   if (use_megakernel && (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST &&
-                         num_paths == path_queue->num_queued[kernel])) {
+                         num_paths == queue_counter->num_queued[kernel])) {
     enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);
     return true;
   }
@@ -189,11 +189,11 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
    * all paths need to be at intersect closest to execute it. */
   if (use_megakernel || kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE ||
       kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME) {
-    if (path_queue->num_queued[DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW]) {
+    if (queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW]) {
       enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
       return true;
     }
-    else if (path_queue->num_queued[DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW]) {
+    else if (queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW]) {
       enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
       return true;
     }
@@ -214,8 +214,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
   DeviceKernel queue_kernel = (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) ?
                                   DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST :
                                   kernel;
-  IntegratorPathQueue *path_queue = integrator_path_queue_.data();
-  const int num_queued = path_queue->num_queued[queue_kernel];
+  IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
+  const int num_queued = queue_counter->num_queued[queue_kernel];
 
   if (num_queued < work_size) {
     work_size = num_queued;
@@ -416,11 +416,11 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
 
 int PathTraceWorkGPU::get_num_active_paths()
 {
-  IntegratorPathQueue *path_queue = integrator_path_queue_.data();
+  IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
 
   int num_paths = 0;
   for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
-    num_paths += path_queue->num_queued[i];
+    num_paths += queue_counter->num_queued[i];
   }
 
   return num_paths;

@@ -130,7 +130,7 @@ typedef struct IntegratorState {
 } IntegratorState;
 
 ccl_device_constant IntegratorState __integrator_state;
-ccl_device_constant IntegratorPathQueue *__integrator_queue;
+ccl_device_constant IntegratorQueueCounter *__integrator_queue_counter;
 
 #  define INTEGRATOR_STATE_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
 #  define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *ccl_restrict kg, const int path_index

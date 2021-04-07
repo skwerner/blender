@@ -51,9 +51,6 @@ class SessionParams {
   bool headless;
   bool background;
 
-  /* TODO(sergey): Everything is progressive nowadays, consider removing this. */
-  bool progressive;
-
   bool experimental;
   int samples;
   int denoising_start_sample;
@@ -78,7 +75,6 @@ class SessionParams {
     headless = false;
     background = false;
 
-    progressive = false;
     experimental = false;
     samples = 1024;
     denoising_start_sample = 0;
@@ -100,9 +96,9 @@ class SessionParams {
     /* Modified means we have to recreate the session, any parameter changes
      * that can be handled by an existing Session are omitted. */
     return !(device == params.device && headless == params.headless &&
-             background == params.background && progressive == params.progressive &&
-             experimental == params.experimental && pixel_size == params.pixel_size &&
-             threads == params.threads && adaptive_sampling == params.adaptive_sampling &&
+             background == params.background && experimental == params.experimental &&
+             pixel_size == params.pixel_size && threads == params.threads &&
+             adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling && cancel_timeout == params.cancel_timeout &&
              reset_timeout == params.reset_timeout && text_timeout == params.text_timeout &&
              shadingsystem == params.shadingsystem && denoising.type == params.denoising.type &&

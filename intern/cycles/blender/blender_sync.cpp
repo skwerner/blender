@@ -817,11 +817,8 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   params.text_timeout = (double)get_float(cscene, "debug_text_timeout");
 
   if (background) {
-    params.progressive = false;
     params.pixel_size = 1;
   }
-  else
-    params.progressive = true;
 
   /* shading system - scene level needs full refresh */
   const bool shadingsystem = RNA_boolean_get(&cscene, "shading_system");

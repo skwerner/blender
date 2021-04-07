@@ -40,7 +40,6 @@ set(SRC
   device_kernel.cpp
   device_memory.cpp
   device_queue.cpp
-  device_task.cpp
 )
 
 set(SRC_CPU
@@ -99,11 +98,11 @@ set(SRC_OPTIX
 
 set(SRC_HEADERS
   device.h
+  device_denoise.h
   device_graphics_interop.h
   device_memory.h
   device_kernel.h
   device_queue.h
-  device_task.h
 )
 
 set(LIB

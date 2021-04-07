@@ -14,23 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef __DEVICE_TASK_H__
-#define __DEVICE_TASK_H__
-
-#include "device/device_memory.h"
-
-#include "util/util_function.h"
-#include "util/util_list.h"
+#pragma once
 
 CCL_NAMESPACE_BEGIN
-
-/* Device Task */
-
-class Device;
-class RenderBuffers;
-class RenderTile;
-class RenderTileNeighbors;
-class Tile;
 
 enum DenoiserType {
   DENOISER_OPTIX = 2,
@@ -97,63 +83,4 @@ class DenoiseParams {
   }
 };
 
-#if 0
-class DeviceTask {
- public:
-  typedef enum { RENDER, DENOISE_BUFFER } Type;
-  Type type;
-
-  int x, y, w, h;
-  device_ptr rgba_byte;
-  device_ptr rgba_half;
-  device_ptr buffer;
-  int sample;
-  int num_samples;
-  int offset, stride;
-
-  device_ptr shader_input;
-  device_ptr shader_output;
-  int shader_eval_type;
-  int shader_filter;
-  int shader_x, shader_w;
-
-  RenderBuffers *buffers;
-
-  explicit DeviceTask(Type type = RENDER);
-
-  int get_subtask_count(int num, int max_size = 0) const;
-  void split(list<DeviceTask> &tasks, int num, int max_size = 0) const;
-
-  void update_progress(RenderTile *rtile, int pixel_samples = -1);
-
-  function<bool(Device *device, RenderTile &, uint)> acquire_tile;
-  function<void(long, int)> update_progress_sample;
-  function<void(RenderTile &)> update_tile_sample;
-  function<void(RenderTile &)> release_tile;
-  function<bool()> get_cancel;
-  function<bool()> get_tile_stolen;
-  function<void(RenderTileNeighbors &, Device *)> map_neighbor_tiles;
-  function<void(RenderTileNeighbors &, Device *)> unmap_neighbor_tiles;
-
-  uint tile_types;
-  DenoiseParams denoising;
-  bool denoising_from_render;
-  vector<int> denoising_frames;
-
-  int pass_stride;
-  int frame_stride;
-  int target_pass_stride;
-  int pass_denoising_data;
-
-  bool need_finish_queue;
-  bool integrator_branched;
-  AdaptiveSampling adaptive_sampling;
-
- protected:
-  double last_update_time;
-};
-#endif
-
 CCL_NAMESPACE_END
-
-#endif /* __DEVICE_TASK_H__ */

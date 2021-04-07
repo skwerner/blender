@@ -21,9 +21,9 @@
 
 #include "bvh/bvh_params.h"
 
+#include "device/device_denoise.h"
 #include "device/device_graphics_interop.h"
 #include "device/device_memory.h"
-#include "device/device_task.h" /* For denoiser and adaptive sampling. */
 
 #include "util/util_function.h"
 #include "util/util_list.h"

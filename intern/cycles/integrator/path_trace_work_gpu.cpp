@@ -93,17 +93,28 @@ void PathTraceWorkGPU::alloc_integrator_state()
 
 void PathTraceWorkGPU::alloc_integrator_queue()
 {
-  if (integrator_queue_counter_.size() != 0) {
-    return;
+  if (integrator_queue_counter_.size() == 0) {
+    integrator_queue_counter_.alloc(1);
+    integrator_queue_counter_.zero_to_device();
+    integrator_queue_counter_.copy_from_device();
+
+    /* Copy to device side pointer in constant memory. */
+    device_->const_copy_to("__integrator_queue_counter",
+                           &integrator_queue_counter_.device_pointer,
+                           sizeof(device_ptr));
   }
 
-  integrator_queue_counter_.alloc(1);
-  integrator_queue_counter_.zero_to_device();
-  integrator_queue_counter_.copy_from_device();
+  /* Allocate data for active path index arrays. */
+  if (num_queued_paths_.size() == 0) {
+    num_queued_paths_.alloc(1);
+    num_queued_paths_.zero_to_device();
+  }
 
-  /* Copy to device side pointer in constant memory. */
-  device_->const_copy_to(
-      "__integrator_queue_counter", &integrator_queue_counter_.device_pointer, sizeof(device_ptr));
+  if (queued_paths_.size() == 0) {
+    queued_paths_.alloc(get_max_num_paths());
+    /* TODO: this could be skip if we had a function to just allocate on device. */
+    queued_paths_.zero_to_device();
+  }
 }
 
 void PathTraceWorkGPU::init_execution()
@@ -273,23 +284,12 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
 
 void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kernel)
 {
-  /* Launch kernel to count the number of active paths. */
+  /* Launch kernel to fill the active paths arrays. */
   /* TODO: this could be smaller for terminated paths based on amount of work we want
    * to schedule. */
   const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
                             get_max_num_paths() :
                             max_active_path_index_;
-
-  if (num_queued_paths_.size() < 1) {
-    num_queued_paths_.alloc(1);
-  }
-  if (queued_paths_.size() < work_size) {
-    queued_paths_.alloc(work_size);
-    queued_paths_.zero_to_device(); /* TODO: only need to allocate on device. */
-  }
-
-  /* TODO: ensure this happens as part of queue stream. */
-  num_queued_paths_.zero_to_device();
 
   void *d_queued_paths = (void *)queued_paths_.device_pointer;
   void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
@@ -297,6 +297,9 @@ void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kern
       const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &queued_kernel};
 
   queue_->enqueue(kernel, work_size, args);
+
+  /* TODO: ensure this happens as part of queue stream. */
+  num_queued_paths_.zero_to_device();
 }
 
 bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)

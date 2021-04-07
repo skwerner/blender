@@ -132,17 +132,14 @@ void BlenderSession::create_session()
   start_resize_time = 0.0;
 
   /* create session */
-  session = new Session(session_params);
-  session->scene = scene;
+  session = new Session(session_params, scene_params);
   session->progress.set_update_callback(function_bind(&BlenderSession::tag_redraw, this));
   session->progress.set_cancel_callback(function_bind(&BlenderSession::test_cancel, this));
   session->set_pause(session_pause);
 
   /* create scene */
-  scene = new Scene(scene_params, session->device);
+  scene = session->scene;
   scene->name = b_scene.name();
-
-  session->scene = scene;
 
   /* There is no single depsgraph to use for the entire render.
    * So we need to handle this differently.

@@ -24,6 +24,7 @@ CCL_NAMESPACE_BEGIN
 
 class BufferParams;
 class Device;
+class DeviceScene;
 class GPUDisplay;
 class RenderBuffers;
 
@@ -35,6 +36,7 @@ class PathTraceWork {
    * possible. This could be, for rexample, request to cancel rendering on camera navigation in
    * viewport. */
   static unique_ptr<PathTraceWork> create(Device *device,
+                                          DeviceScene *device_scene,
                                           RenderBuffers *buffers,
                                           bool *cancel_requested_flag);
 
@@ -76,11 +78,17 @@ class PathTraceWork {
   }
 
  protected:
-  PathTraceWork(Device *device, RenderBuffers *buffers, bool *cancel_requested_flag);
+  PathTraceWork(Device *device,
+                DeviceScene *device_scene,
+                RenderBuffers *buffers,
+                bool *cancel_requested_flag);
 
   /* Device which will be used for path tracing.
    * Note that it is an actual render device (and never is a multi-device). */
   Device *device_;
+
+  /* Device side scene storage, that may be used for integrator logic. */
+  DeviceScene *device_scene_;
 
   /* Render buffers where sampling is being accumulated into.
    * It also defines possible subset of a big tile in the case of multi-device rendering. */

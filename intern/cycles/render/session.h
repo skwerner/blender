@@ -41,6 +41,7 @@ class Progress;
 class GPUDisplay;
 class RenderBuffers;
 class Scene;
+class SceneParams;
 
 /* Session Parameters */
 
@@ -118,7 +119,7 @@ class Session {
   function<void(RenderTile &, bool)> update_render_tile_cb;
   function<void(RenderTile &)> read_bake_tile_cb;
 
-  explicit Session(const SessionParams &params);
+  explicit Session(const SessionParams &params, const SceneParams &scene_params);
   ~Session();
 
   void start();

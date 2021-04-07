@@ -48,9 +48,10 @@ static inline CPUKernelThreadGlobals *kernel_thread_globals_get(
 }
 
 PathTraceWorkCPU::PathTraceWorkCPU(Device *device,
+                                   DeviceScene *device_scene,
                                    RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(device, buffers, cancel_requested_flag),
+    : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
       kernels_(*(device->get_cpu_kernels())),
       render_buffers_(buffers)
 {

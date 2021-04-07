@@ -41,7 +41,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-Session::Session(const SessionParams &params_)
+Session::Session(const SessionParams &params_, const SceneParams &scene_params)
     : params(params_),
       tile_manager(make_int2(4096, 4096)),
       render_scheduler_(params.headless, params.background, params.pixel_size)
@@ -49,7 +49,6 @@ Session::Session(const SessionParams &params_)
   TaskScheduler::init(params.threads);
 
   session_thread = NULL;
-  scene = NULL;
 
   delayed_reset.do_reset = false;
   delayed_reset.samples = 0;
@@ -58,11 +57,13 @@ Session::Session(const SessionParams &params_)
 
   device = Device::create(params.device, stats, profiler, params.background);
 
+  scene = new Scene(scene_params, device);
+
   /* Configure scheduler */
   render_scheduler_.set_num_samples(params.samples);
 
   /* Configure path tracer. */
-  path_trace_ = make_unique<PathTrace>(device, render_scheduler_);
+  path_trace_ = make_unique<PathTrace>(device, &scene->dscene, render_scheduler_);
   path_trace_->set_progress(&progress);
   path_trace_->buffer_update_cb = [&](RenderBuffers *render_buffers, int sample) {
     /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported

@@ -28,9 +28,10 @@
 CCL_NAMESPACE_BEGIN
 
 PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
+                                   DeviceScene *device_scene,
                                    RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(device, buffers, cancel_requested_flag),
+    : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
       queue_(device->queue_create()),
       render_buffers_(buffers),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),

@@ -28,6 +28,7 @@ CCL_NAMESPACE_BEGIN
 
 class AdaptiveSampling;
 class Device;
+class DeviceScene;
 class RenderBuffers;
 class RenderScheduler;
 class RenderWork;
@@ -45,7 +46,7 @@ class PathTrace {
  public:
   /* Render scheduler is used to report timing information and access things like start/finish
    * sample. */
-  PathTrace(Device *device, RenderScheduler &render_scheduler);
+  PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler);
 
   /* Check whether now it is a good time to reset rendering.
    * Used to avoid very often resets in the viewport, giving it a chance to draw intermediate

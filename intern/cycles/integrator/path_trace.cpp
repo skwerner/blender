@@ -27,7 +27,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-PathTrace::PathTrace(Device *device, RenderScheduler &render_scheduler)
+PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler)
     : device_(device), render_scheduler_(render_scheduler)
 {
   DCHECK_NE(device_, nullptr);
@@ -47,8 +47,10 @@ PathTrace::PathTrace(Device *device, RenderScheduler &render_scheduler)
      * write directly to it. */
     full_render_buffers_ = make_unique<RenderBuffers>(path_trace_device);
 
-    path_trace_works_.emplace_back(PathTraceWork::create(
-        path_trace_device, full_render_buffers_.get(), &render_cancel_.is_requested));
+    path_trace_works_.emplace_back(PathTraceWork::create(path_trace_device,
+                                                         device_scene,
+                                                         full_render_buffers_.get(),
+                                                         &render_cancel_.is_requested));
   });
 }
 

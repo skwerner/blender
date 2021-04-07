@@ -459,18 +459,15 @@ void Session::set_pause(bool pause_)
 
 void Session::set_denoising(const DenoiseParams &denoising)
 {
-  bool need_denoise = denoising.need_denoising_task();
-
   params.denoising = denoising;
 
   /* TODO(sergey): Finish decoupling denoiser implementation from device. */
   if (!(params.device.denoisers & denoising.type)) {
-    if (need_denoise) {
+    if (params.denoising.use) {
       progress.set_error("Denoiser type not supported by compute device");
     }
 
     params.denoising.use = false;
-    need_denoise = false;
   }
 
   /* TODO(sergey): Check which of the code is still needed. */

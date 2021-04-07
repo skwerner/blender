@@ -41,6 +41,7 @@ class DenoiseParams {
  public:
   /* Apply denoiser to image. */
   bool use;
+
   /* Output denoising data passes (possibly without applying the denoiser). */
   bool store_passes;
 
@@ -73,13 +74,6 @@ class DenoiseParams {
   {
     return !(use == other.use && store_passes == other.store_passes && type == other.type &&
              start_sample == other.start_sample);
-  }
-
-  /* Test if a denoising task needs to run, also to prefilter passes for the native
-   * denoiser when we are not applying denoising to the combined image. */
-  bool need_denoising_task() const
-  {
-    return use;
   }
 };
 

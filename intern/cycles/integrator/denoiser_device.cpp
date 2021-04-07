@@ -25,7 +25,6 @@ CCL_NAMESPACE_BEGIN
 DeviceDenoiser::DeviceDenoiser(Device *device, const DenoiseParams &params)
     : Denoiser(device, params)
 {
-  DCHECK_NE(device->info.type, DEVICE_MULTI);
 }
 
 void DeviceDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,

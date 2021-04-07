@@ -32,13 +32,21 @@ PathTrace::PathTrace(Device *device, RenderScheduler &render_scheduler)
 {
   DCHECK_NE(device_, nullptr);
 
-  /* TODO(sergey): Need to create render buffer for every individual device, so that they can write
-   * directly to it. */
-  full_render_buffers_ = make_unique<RenderBuffers>(device);
-
   /* Create path tracing work in advance, so that it can be reused by incremental sampling as much
    * as possible. */
-  device->foreach_device([&](Device *path_trace_device) {
+  device_->foreach_device([&](Device *path_trace_device) {
+    if (!path_trace_works_.empty()) {
+      if (path_trace_works_.size() == 1) {
+        LOG(ERROR)
+            << "Multi-devices are not yet fully implemented, will render on a single device.";
+      }
+      return;
+    }
+
+    /* TODO(sergey): Need to create render buffer for every individual device, so that they can
+     * write directly to it. */
+    full_render_buffers_ = make_unique<RenderBuffers>(path_trace_device);
+
     path_trace_works_.emplace_back(PathTraceWork::create(
         path_trace_device, full_render_buffers_.get(), &render_cancel_.is_requested));
   });
@@ -190,6 +198,7 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
   }
 
   if (!denoiser_ || denoiser_->get_params().modified(params)) {
+    /* TODO(sergey): Create denoiser on a proper device. */
     denoiser_ = Denoiser::create(device_, params);
   }
 }

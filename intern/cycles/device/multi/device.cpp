@@ -49,10 +49,10 @@ class MultiDevice : public Device {
   vector<vector<SubDevice *>> peer_islands;
   bool matching_rendering_and_denoising_devices;
 
-  MultiDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
+  MultiDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
       : Device(info, stats, profiler, background_), unique_key(1)
   {
-    foreach (DeviceInfo &subinfo, info.multi_devices) {
+    foreach (const DeviceInfo &subinfo, info.multi_devices) {
       /* Always add CPU devices at the back since GPU devices can change
        * host memory pointers, which CPU uses as device pointer. */
       SubDevice *sub;
@@ -70,7 +70,7 @@ class MultiDevice : public Device {
       sub->device = Device::create(subinfo, sub->stats, profiler, background);
     }
 
-    foreach (DeviceInfo &subinfo, info.denoising_devices) {
+    foreach (const DeviceInfo &subinfo, info.denoising_devices) {
       denoising_devices.emplace_front();
       SubDevice *sub = &denoising_devices.front();
 
@@ -522,7 +522,10 @@ class MultiDevice : public Device {
   }
 };
 
-Device *device_multi_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
+Device *device_multi_create(const DeviceInfo &info,
+                            Stats &stats,
+                            Profiler &profiler,
+                            bool background)
 {
   return new MultiDevice(info, stats, profiler, background);
 }

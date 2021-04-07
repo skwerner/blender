@@ -72,7 +72,7 @@ void CUDADevice::set_error(const string &error)
   }
 }
 
-CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
+CUDADevice::CUDADevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
     : Device(info, stats, profiler, background_), texture_info(this, "__texture_info", MEM_GLOBAL)
 {
   first_error = true;

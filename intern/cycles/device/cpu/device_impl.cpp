@@ -67,7 +67,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-CPUDevice::CPUDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
+CPUDevice::CPUDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
     : Device(info_, stats_, profiler_, background_),
       texture_info(this, "__texture_info", MEM_GLOBAL)
 {

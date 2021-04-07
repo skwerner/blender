@@ -113,7 +113,7 @@ class OptiXDevice : public CUDADevice {
   int denoiser_input_passes = 0;
 #  endif
  public:
-  OptiXDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+  OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
   ~OptiXDevice();
 
  private:

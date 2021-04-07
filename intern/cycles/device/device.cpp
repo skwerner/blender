@@ -99,7 +99,7 @@ void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
   }
 }
 
-Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
+Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
 #ifdef WITH_MULTI
   if (!info.multi_devices.empty()) {

@@ -602,7 +602,10 @@ void OpenCLDevice::opencl_assert_err(cl_int err, const char *where)
   }
 }
 
-OpenCLDevice::OpenCLDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
+OpenCLDevice::OpenCLDevice(const DeviceInfo &info,
+                           Stats &stats,
+                           Profiler &profiler,
+                           bool background)
     : Device(info, stats, profiler, background),
       load_kernel_num_compiling(0),
       kernel_programs(this),
@@ -1663,7 +1666,7 @@ void OpenCLDevice::store_cached_kernel(cl_program program,
   OpenCLCache::store_program(cpPlatform, cdDevice, program, key, cache_locker);
 }
 
-Device *opencl_create_split_device(DeviceInfo &info,
+Device *opencl_create_split_device(const DeviceInfo &info,
                                    Stats &stats,
                                    Profiler &profiler,
                                    bool background)

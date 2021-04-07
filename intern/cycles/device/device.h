@@ -278,7 +278,7 @@ class Device {
   friend class device_sub_ptr;
 
  protected:
-  Device(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background)
+  Device(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background)
       : background(background), info(info_), stats(stats_), profiler(profiler_)
   {
   }
@@ -421,7 +421,7 @@ class Device {
   }
 
   /* static */
-  static Device *create(DeviceInfo &info,
+  static Device *create(const DeviceInfo &info,
                         Stats &stats,
                         Profiler &profiler,
                         bool background = true);

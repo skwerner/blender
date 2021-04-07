@@ -26,6 +26,9 @@ class DeviceInfo;
 class Profiler;
 class Stats;
 
-Device *device_dummy_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+Device *device_dummy_create(const DeviceInfo &info,
+                            Stats &stats,
+                            Profiler &profiler,
+                            bool background);
 
 CCL_NAMESPACE_END

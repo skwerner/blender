@@ -68,7 +68,10 @@ bool device_cuda_init()
 #endif /* WITH_CUDA_DYNLOAD */
 }
 
-Device *device_cuda_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
+Device *device_cuda_create(const DeviceInfo &info,
+                           Stats &stats,
+                           Profiler &profiler,
+                           bool background)
 {
 #ifdef WITH_CUDA
   return new CUDADevice(info, stats, profiler, background);

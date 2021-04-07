@@ -102,7 +102,7 @@ CCL_NAMESPACE_BEGIN
     } \
     (void)0
 
-OptiXDevice::OptiXDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
+OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
     : CUDADevice(info, stats, profiler, background)
 #  if 0
       sbt_data(this, "__sbt", MEM_READ_ONLY),

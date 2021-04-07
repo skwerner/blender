@@ -59,7 +59,7 @@ class CPUDevice : public Device {
 
   CPUKernels kernels;
 
-  CPUDevice(DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_);
+  CPUDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_);
   ~CPUDevice();
 
   virtual bool show_samples() const override;

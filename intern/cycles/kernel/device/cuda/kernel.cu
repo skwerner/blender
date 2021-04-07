@@ -241,6 +241,19 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
 }
 
 extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_active_paths_array(int num_states,
+                                              int *indices,
+                                              int *num_indices,
+                                              int unused_kernel)
+{
+  cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
+      num_states, indices, num_indices, [](const int path_index) {
+        return (INTEGRATOR_STATE(path, queued_kernel) != 0) ||
+               (INTEGRATOR_STATE(shadow_path, queued_kernel) != 0);
+      });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
     kernel_cuda_integrator_terminated_paths_array(int num_states,
                                                   int *indices,
                                                   int *num_indices,

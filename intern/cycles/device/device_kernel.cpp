@@ -48,6 +48,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_queued_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
       return "integrator_queued_shadow_paths_array";
+    case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:
+      return "integrator_active_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
       return "integrator_terminated_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:

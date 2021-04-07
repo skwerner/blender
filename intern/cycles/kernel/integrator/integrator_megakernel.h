@@ -32,7 +32,7 @@ ccl_device void integrator_megakernel(INTEGRATOR_STATE_ARGS,
                                       ccl_global float *ccl_restrict render_buffer)
 {
   /* Each kernel indicates the next kernel to execute, so here we simply
-   * have to check what that kernel is an execute it.
+   * have to check what that kernel is and execute it.
    *
    * TODO: investigate if we can use device side enqueue for GPUs to avoid
    * having to compile this big kernel. */

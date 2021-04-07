@@ -164,7 +164,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   const AdaptiveSampling adaptive_sampling = adaptive_sampling_get();
   kintegrator->adaptive_min_samples = adaptive_sampling.min_samples;
   kintegrator->adaptive_step = adaptive_sampling.adaptive_step;
-  kintegrator->adaptive_stop_per_sample = device->info.has_adaptive_stop_per_sample;
 
   /* Adaptive step must be a power of two for bitwise operations to work. */
   assert((kintegrator->adaptive_step & (kintegrator->adaptive_step - 1)) == 0);

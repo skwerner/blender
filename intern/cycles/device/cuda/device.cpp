@@ -150,7 +150,6 @@ void device_cuda_info(vector<DeviceInfo> &devices)
 
     info.has_half_images = (major >= 3);
     info.has_volume_decoupled = false;
-    info.has_adaptive_stop_per_sample = true;
     info.denoisers = 0;
 
     /* Check if the device has P2P access to any other device in the system. */

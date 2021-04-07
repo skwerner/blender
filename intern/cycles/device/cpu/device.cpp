@@ -41,7 +41,6 @@ void device_cpu_info(vector<DeviceInfo> &devices)
   info.id = "CPU";
   info.num = 0;
   info.has_volume_decoupled = true;
-  info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_half_images = true;
   info.has_profiling = true;

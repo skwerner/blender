@@ -43,6 +43,7 @@ class DenoiserBufferParams {
   int offset, stride;
 
   int pass_stride;
+  int pass_denoising_offset;
 };
 
 /* Implementation of a specific denoising algorithm.

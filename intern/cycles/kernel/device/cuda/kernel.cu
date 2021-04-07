@@ -69,7 +69,9 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, CUD
 }
 #  endif
 
-/* Integrator */
+/* --------------------------------------------------------------------
+ * Integrator.
+ */
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
@@ -249,7 +251,9 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
       });
 }
 
-/* Adaptive Sampling */
+/* --------------------------------------------------------------------
+ * Adaptive sampling.
+ */
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
@@ -290,6 +294,10 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   }
 }
 
+/* --------------------------------------------------------------------
+ * Film.
+ */
+
 /* Convert to Display Buffer */
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
@@ -313,6 +321,10 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
         NULL, rgba, buffer, sample_scale, sx + x, sy + y, offset, stride);
   }
 }
+
+/* --------------------------------------------------------------------
+ * Shader evaluaiton.
+ */
 
 /* Displacement */
 
@@ -344,7 +356,9 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   }
 }
 
-/* Baking */
+/* --------------------------------------------------------------------
+ * Baking.
+ */
 
 #  ifdef __BAKING__
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
@@ -365,5 +379,91 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 #    endif
 }
 #  endif
+
+/* --------------------------------------------------------------------
+ * Denoising.
+ */
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_filter_convert_to_rgb(float *rgb,
+                                      const float *render_buffer,
+                                      int sx,
+                                      int sy,
+                                      int sw,
+                                      int sh,
+                                      int offset,
+                                      int stride,
+                                      int pass_stride,
+                                      int3 pass_offset,
+                                      int num_inputs,
+                                      int num_samples)
+{
+  const int work_index = ccl_global_id(0);
+  const int y = work_index / sw;
+  const int x = work_index - y * sw;
+
+  if (x < sw && y < sh) {
+    const float num_samples_inv = 1.0f / num_samples;
+
+    const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
+    const float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
+
+    if (num_inputs > 0) {
+      const float *in = buffer + pass_offset.x;
+      float *out = rgb + (x + y * sw) * 3;
+      out[0] = clamp(in[0] * num_samples_inv, 0.0f, 10000.0f);
+      out[1] = clamp(in[1] * num_samples_inv, 0.0f, 10000.0f);
+      out[2] = clamp(in[2] * num_samples_inv, 0.0f, 10000.0f);
+    }
+
+#  if 0
+    if (num_inputs > 1) {
+      const float *in = buffer + pass_offset.y;
+      float *out = rgb + (x + y * sw) * 3 + (sw * sh) * 3;
+      out[0] = in[0] * num_samples_inv;
+      out[1] = in[1] * num_samples_inv;
+      out[2] = in[2] * num_samples_inv;
+    }
+
+    if (num_inputs > 2) {
+      const float *in = buffer + pass_offset.y;
+      float *out = rgb + (x + y * sw) * 3 + (sw * sh * 2) * 3;
+      out[0] = in[0] * num_samples_inv;
+      out[1] = in[1] * num_samples_inv;
+      out[2] = in[2] * num_samples_inv;
+    }
+#  endif
+  }
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_filter_convert_from_rgb(const float *rgb,
+                                        float *render_buffer,
+                                        int sx,
+                                        int sy,
+                                        int sw,
+                                        int sh,
+                                        int offset,
+                                        int stride,
+                                        int pass_stride,
+                                        int num_samples)
+{
+  const int work_index = ccl_global_id(0);
+  const int y = work_index / sw;
+  const int x = work_index - y * sw;
+
+  if (x < sw && y < sh) {
+    const float *in = rgb + (x + y * sw) * 3;
+
+    const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
+    float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
+
+    buffer[0] = in[0] * num_samples;
+    buffer[1] = in[1] * num_samples;
+    buffer[2] = in[2] * num_samples;
+  }
+}
 
 #endif

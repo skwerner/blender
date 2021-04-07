@@ -157,7 +157,7 @@ void OIDNDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
 #ifdef WITH_OPENIMAGEDENOISE
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
-  const int denoising_offset = render_buffers->params.get_denoising_offset();
+  const int denoising_offset = buffer_params.pass_denoising_offset;
 
   std::array<OIDNPass, 4> oidn_passes = {{
       {"color", denoising_offset + DENOISING_PASS_COLOR, false, true},

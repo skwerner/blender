@@ -192,6 +192,8 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
     return;
   }
 
+  /* TODO(sergey): Only re-create if the type did change. Otherwise simply update parameters of the
+   * existing denoiser. */
   if (!denoiser_ || denoiser_->get_params().modified(params)) {
     /* TODO(sergey): Create denoiser on a proper device. */
     denoiser_ = Denoiser::create(device_, params);

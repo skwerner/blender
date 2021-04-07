@@ -69,6 +69,12 @@ const char *device_kernel_as_string(DeviceKernel kernel)
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y:
       return "adaptive_sampling_filter_y";
 
+    /* Denoising. */
+    case DEVICE_KERNEL_FILTER_CONVERT_TO_RGB:
+      return "filter_convert_to_rgb";
+    case DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB:
+      return "filter_convert_from_rgb";
+
     case DEVICE_KERNEL_NUM:
       break;
   };

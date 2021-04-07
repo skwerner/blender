@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "device/device_memory.h"
+
 CCL_NAMESPACE_BEGIN
 
 enum DenoiserType {
@@ -73,8 +75,30 @@ class DenoiseParams {
   bool modified(const DenoiseParams &other) const
   {
     return !(use == other.use && store_passes == other.store_passes && type == other.type &&
-             start_sample == other.start_sample);
+             start_sample == other.start_sample && input_passes == other.input_passes);
   }
+};
+
+/* All the parameters needed to perform buffer denoising on a device.
+ * Is not really a task in its canonical terms (as in, is not an asynchronous running task). Is
+ * more like a wrapper for all the arguments and parameters needed to perform denoising. Is a
+ * single place where they are all listed, so that it's not required to modify all device methods
+ * when these parameters do change. */
+class DeviceDenoiseTask {
+ public:
+  int x, y;
+  int width, height;
+
+  int offset, stride;
+
+  int pass_stride;
+  int pass_denoising_offset;
+
+  device_ptr buffer;
+
+  int num_samples;
+
+  DenoiseParams params;
 };
 
 CCL_NAMESPACE_END

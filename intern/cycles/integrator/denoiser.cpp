@@ -29,7 +29,8 @@ DenoiserBufferParams::DenoiserBufferParams(const BufferParams &params)
       y(params.full_y),
       width(params.width),
       height(params.height),
-      pass_stride(params.get_passes_size())
+      pass_stride(params.get_passes_size()),
+      pass_denoising_offset(params.get_denoising_offset())
 {
   params.get_offset_stride(offset, stride);
 }

@@ -262,6 +262,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X:
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y:
+    case DEVICE_KERNEL_FILTER_CONVERT_TO_RGB:
+    case DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB:
     case DEVICE_KERNEL_NUM: {
       LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
       break;

@@ -83,7 +83,7 @@ class SessionParams {
     shadingsystem = SHADINGSYSTEM_SVM;
   }
 
-  bool modified(const SessionParams &params)
+  bool modified(const SessionParams &params) const
   {
     /* Modified means we have to recreate the session, any parameter changes
      * that can be handled by an existing Session are omitted. */
@@ -93,6 +93,7 @@ class SessionParams {
              adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling && shadingsystem == params.shadingsystem &&
              denoising.type == params.denoising.type &&
+             denoising.input_passes == params.denoising.input_passes &&
              (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
   }
 };

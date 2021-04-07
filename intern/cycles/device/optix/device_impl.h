@@ -94,11 +94,14 @@ class OptiXDevice : public CUDADevice {
   };
 
   /* Use a pool with multiple threads to support launches with multiple CUDA streams. */
-  TaskPool task_pool;
+  // TaskPool task_pool;
 
   vector<CUstream> cuda_stream;
+#  endif
+
   OptixDeviceContext context = NULL;
 
+#  if 0
   OptixModule optix_module = NULL; /* All necessary OptiX kernels are in one module. */
   OptixModule builtin_modules[2] = {};
   OptixPipeline pipelines[NUM_PIPELINES] = {};
@@ -107,11 +110,30 @@ class OptiXDevice : public CUDADevice {
   device_vector<SbtRecord> sbt_data;
   device_only_memory<KernelParams> launch_params;
   OptixTraversableHandle tlas_handle = 0;
-
-  OptixDenoiser denoiser = NULL;
-  device_only_memory<unsigned char> denoiser_state;
-  int denoiser_input_passes = 0;
 #  endif
+
+  class Denoiser {
+   public:
+    explicit Denoiser(Device *device);
+
+    OptixDenoiser optix_denoiser = nullptr;
+
+    /* Configuration size, as provided to `optixDenoiserSetup`.
+     * If the `optixDenoiserSetup()` was never used on the current `optix_denoiser` the
+     * `is_configured` will be false. */
+    bool is_configured = false;
+    int2 configured_size = make_int2(0, 0);
+
+    /* OptiX denoiser state and scratch buffers, stored in a single memory buffer.
+     * The memory layout goes as following: [denoiser state][scratch buffer]. */
+    device_only_memory<unsigned char> state;
+    size_t scratch_offset = 0;
+    size_t scratch_size = 0;
+
+    int input_passes = 0;
+  };
+  Denoiser denoiser_;
+
  public:
   OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
   ~OptiXDevice();
@@ -139,7 +161,34 @@ class OptiXDevice : public CUDADevice {
   void update_launch_params(size_t offset, void *data, size_t data_size);
 #  endif
 
-  virtual void denoise_buffer() override;
+  /* --------------------------------------------------------------------
+   * Denoising.
+   */
+
+  virtual void denoise_buffer(const DeviceDenoiseTask &task) override;
+
+  /* Run corresponding conversion kernels, preparing data for the denoiser or copying data from the
+   * denoiser result to the render buffer. */
+  bool denoise_filter_convert_to_rgb(DeviceQueue *queue,
+                                     const DeviceDenoiseTask &task,
+                                     const device_ptr d_input_rgb);
+  bool denoise_filter_convert_from_rgb(DeviceQueue *queue,
+                                       const DeviceDenoiseTask &task,
+                                       const device_ptr d_input_rgb);
+
+  /* Make sure the OptiX denoiser is created and configured for the given task. */
+  bool denoise_ensure(const DeviceDenoiseTask &task);
+
+  /* Create OptiX denoiser descriptor if needed.
+   * Will do nothing if the current OptiX descriptor is usable for the given parameters.
+   * If the OptiX denoiser descriptor did re-allocate here it is left unconfigured. */
+  bool denoise_create_if_needed(const DenoiseParams &params);
+
+  /* Configure existing OptiX denoiser descriptor for the use for the given task. */
+  bool denoise_configure_if_needed(const DeviceDenoiseTask &task);
+
+  /* Run configured denoiser on the given task. */
+  bool denoise_run(const DeviceDenoiseTask &task, const device_ptr d_input_rgb);
 };
 
 #endif /* WITH_OPTIX */

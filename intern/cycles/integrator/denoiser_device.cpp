@@ -17,6 +17,7 @@
 #include "integrator/denoiser_device.h"
 
 #include "device/device.h"
+#include "device/device_denoise.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
 
@@ -31,12 +32,34 @@ void DeviceDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
                                     RenderBuffers *render_buffers,
                                     const int num_samples)
 {
-  /* TODO(sergey): Need to pass those to the device somehow. */
-  (void)buffer_params;
-  (void)render_buffers;
-  (void)num_samples;
+  denoise_buffer_on_device(device_, buffer_params, render_buffers, num_samples);
+}
 
-  device_->denoise_buffer();
+void DeviceDenoiser::denoise_buffer_on_device(Device *device,
+                                              const DenoiserBufferParams &buffer_params,
+                                              RenderBuffers *render_buffers,
+                                              const int num_samples)
+{
+  DeviceDenoiseTask task;
+
+  task.x = buffer_params.x;
+  task.y = buffer_params.y;
+  task.width = buffer_params.width;
+  task.height = buffer_params.height;
+
+  task.offset = buffer_params.offset;
+  task.stride = buffer_params.stride;
+
+  task.pass_stride = buffer_params.pass_stride;
+  task.pass_denoising_offset = buffer_params.pass_denoising_offset;
+
+  task.buffer = render_buffers->buffer.device_pointer;
+
+  task.num_samples = num_samples;
+
+  task.params = params_;
+
+  device->denoise_buffer(task);
 }
 
 CCL_NAMESPACE_END

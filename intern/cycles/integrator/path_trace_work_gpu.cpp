@@ -163,9 +163,6 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 
 bool PathTraceWorkGPU::enqueue_path_iteration()
 {
-  const float megakernel_threshold = 0.1f;
-  const int max_num_paths = get_max_num_paths();
-
   /* Find kernel to execute, with max number of queued paths. */
   IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
 
@@ -186,14 +183,24 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
     return false;
   }
 
+  /* TODO: megakernel disabled for now since it seems to be harming performance
+   * more than helping. Need to investigate and fix or remove. It currently also
+   * does not kick in early enough in various scenes, held back by paths in
+   * e.g. shade_light or intersect_subsurface state. */
+#if 0
   /* Switch to megakernel once the number of remaining paths is low.
    * TODO: unclear if max_num_paths is the right way to measure this. */
-  const bool use_megakernel = (num_paths < megakernel_threshold * max_num_paths);
+  const int max_num_paths = get_max_num_paths();
+  const float megakernel_threshold = 0.1f;
+  const bool use_megakernel = false;  //(num_paths < megakernel_threshold * max_num_paths);
   if (use_megakernel && (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST &&
                          num_paths == queue_counter->num_queued[kernel])) {
     enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);
     return true;
   }
+#else
+  const bool use_megakernel = false;
+#endif
 
   /* Finish shadows before potentially adding more shadow rays. We can only
    * store one shadow ray in the integrator state.

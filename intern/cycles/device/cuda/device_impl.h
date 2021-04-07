@@ -22,7 +22,6 @@
 #  include "device/device.h"
 
 #  include "util/util_map.h"
-#  include "util/util_task.h"
 
 #  ifdef WITH_CUDA_DYNLOAD
 #    include "cuew.h"
@@ -42,7 +41,6 @@ class CUDADevice : public Device {
   friend class CUDAContextScope;
 
  public:
-  DedicatedTaskPool task_pool;
   CUdevice cuDevice;
   CUcontext cuContext;
   CUmodule cuModule;

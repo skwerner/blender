@@ -143,8 +143,6 @@ CUDADevice::CUDADevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
 
 CUDADevice::~CUDADevice()
 {
-  task_pool.cancel();
-
   texture_info.free();
 
   cuda_assert(cuCtxDestroy(cuContext));

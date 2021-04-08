@@ -30,19 +30,25 @@ ccl_device_inline void integrate_light(INTEGRATOR_STATE_ARGS,
   Intersection isect ccl_optional_struct_init;
   integrator_state_read_isect(INTEGRATOR_STATE_PASS, &isect);
 
-  const float3 ray_P = INTEGRATOR_STATE(ray, P);
+  float3 ray_P = INTEGRATOR_STATE(ray, P);
   const float3 ray_D = INTEGRATOR_STATE(ray, D);
-  const float ray_t = INTEGRATOR_STATE(ray, t);
   const float ray_time = INTEGRATOR_STATE(ray, time);
 
-  LightSample ls ccl_optional_struct_init;
-  const bool use_light_sample = light_sample_from_intersection(
-      kg, &isect, ray_P, ray_D, ray_t, &ls);
-
   /* Advance ray beyond light. */
+  /* TODO: can we make this more numerically robust to avoid reintersecting the
+   * same light in some cases? */
   const float3 new_ray_P = ray_offset(ray_P + ray_D * isect.t, ray_D);
   INTEGRATOR_STATE_WRITE(ray, P) = new_ray_P;
   INTEGRATOR_STATE_WRITE(ray, t) -= isect.t;
+
+  /* Set position to where the BSDF was sampled, for correct MIS PDF. */
+  const float mis_ray_t = INTEGRATOR_STATE(path, mis_ray_t);
+  ray_P -= ray_D * mis_ray_t;
+  isect.t += mis_ray_t;
+  INTEGRATOR_STATE_WRITE(path, mis_ray_t) = mis_ray_t + isect.t;
+
+  LightSample ls ccl_optional_struct_init;
+  const bool use_light_sample = light_sample_from_intersection(kg, &isect, ray_P, ray_D, &ls);
 
   if (!use_light_sample) {
     return;
@@ -76,8 +82,8 @@ ccl_device_inline void integrate_light(INTEGRATOR_STATE_ARGS,
   if (!(path_flag & PATH_RAY_MIS_SKIP)) {
     /* multiple importance sampling, get regular light pdf,
      * and compute weight with respect to BSDF pdf */
-    const float ray_pdf = INTEGRATOR_STATE(path, ray_pdf);
-    const float mis_weight = power_heuristic(ray_pdf, ls.pdf);
+    const float mis_ray_pdf = INTEGRATOR_STATE(path, mis_ray_pdf);
+    const float mis_weight = power_heuristic(mis_ray_pdf, ls.pdf);
     light_eval *= mis_weight;
   }
 

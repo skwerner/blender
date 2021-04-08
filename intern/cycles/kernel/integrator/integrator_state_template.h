@@ -48,7 +48,8 @@ KERNEL_STRUCT_MEMBER(uint32_t, rng_offset)
 /* enum PathRayFlag */
 KERNEL_STRUCT_MEMBER(uint32_t, flag)
 /* Multiple importance sampling. */
-KERNEL_STRUCT_MEMBER(float, ray_pdf)
+KERNEL_STRUCT_MEMBER(float, mis_ray_pdf)
+KERNEL_STRUCT_MEMBER(float, mis_ray_t)
 /* Filter glossy. */
 KERNEL_STRUCT_MEMBER(float, min_ray_pdf)
 /* Throughput. */

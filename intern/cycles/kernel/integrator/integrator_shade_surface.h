@@ -105,8 +105,8 @@ ccl_device_inline void integrate_surface_emission(INTEGRATOR_STATE_CONST_ARGS,
   if (!(path_flag & PATH_RAY_MIS_SKIP) && (sd->flag & SD_USE_MIS))
 #  endif
   {
-    const float bsdf_pdf = INTEGRATOR_STATE(path, ray_pdf);
-    const float t = sd->ray_length;
+    const float bsdf_pdf = INTEGRATOR_STATE(path, mis_ray_pdf);
+    const float t = sd->ray_length + INTEGRATOR_STATE(path, mis_ray_t);
 
     /* Multiple importance sampling, get triangle light pdf,
      * and compute weight with respect to BSDF pdf. */
@@ -260,7 +260,8 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
 
     /* Update path state */
     if (!(label & LABEL_TRANSPARENT)) {
-      INTEGRATOR_STATE_WRITE(path, ray_pdf) = bsdf_pdf;
+      INTEGRATOR_STATE_WRITE(path, mis_ray_pdf) = bsdf_pdf;
+      INTEGRATOR_STATE_WRITE(path, mis_ray_t) = 0.0f;
       INTEGRATOR_STATE_WRITE(path, min_ray_pdf) = fminf(bsdf_pdf,
                                                         INTEGRATOR_STATE(path, min_ray_pdf));
     }

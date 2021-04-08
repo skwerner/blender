@@ -71,12 +71,13 @@ ccl_device_noinline_cpu float3 integrator_eval_background_shader(
   if (!(INTEGRATOR_STATE(path, flag) & PATH_RAY_MIS_SKIP) && kernel_data.background.use_mis) {
     const float3 ray_P = INTEGRATOR_STATE(ray, P);
     const float3 ray_D = INTEGRATOR_STATE(ray, D);
-    const float ray_pdf = INTEGRATOR_STATE(path, ray_pdf);
+    const float mis_ray_pdf = INTEGRATOR_STATE(path, mis_ray_pdf);
+    const float mis_ray_t = INTEGRATOR_STATE(path, mis_ray_t);
 
     /* multiple importance sampling, get background light pdf for ray
      * direction, and compute weight with respect to BSDF pdf */
-    const float pdf = background_light_pdf(kg, ray_P, ray_D);
-    const float mis_weight = power_heuristic(ray_pdf, pdf);
+    const float pdf = background_light_pdf(kg, ray_P - ray_D * mis_ray_t, ray_D);
+    const float mis_weight = power_heuristic(mis_ray_pdf, pdf);
 
     L *= mis_weight;
   }
@@ -159,8 +160,8 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
       if (!(path_flag & PATH_RAY_MIS_SKIP)) {
         /* multiple importance sampling, get regular light pdf,
          * and compute weight with respect to BSDF pdf */
-        const float ray_pdf = INTEGRATOR_STATE(path, ray_pdf);
-        const float mis_weight = power_heuristic(ray_pdf, ls.pdf);
+        const float mis_ray_pdf = INTEGRATOR_STATE(path, mis_ray_pdf);
+        const float mis_weight = power_heuristic(mis_ray_pdf, ls.pdf);
         light_eval *= mis_weight;
       }
 

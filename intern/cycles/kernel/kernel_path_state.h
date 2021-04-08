@@ -51,7 +51,8 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, rng_offset) = PRNG_BASE_NUM;
   INTEGRATOR_STATE_WRITE(path, flag) = PATH_RAY_CAMERA | PATH_RAY_MIS_SKIP |
                                        PATH_RAY_TRANSPARENT_BACKGROUND;
-  INTEGRATOR_STATE_WRITE(path, ray_pdf) = 0.0f;
+  INTEGRATOR_STATE_WRITE(path, mis_ray_pdf) = 0.0f;
+  INTEGRATOR_STATE_WRITE(path, mis_ray_t) = 0.0f;
   INTEGRATOR_STATE_WRITE(path, min_ray_pdf) = FLT_MAX;
   INTEGRATOR_STATE_WRITE(path, throughput) = make_float3(1.0f, 1.0f, 1.0f);
 

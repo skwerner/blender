@@ -303,7 +303,6 @@ ccl_device bool light_sample_from_intersection(const KernelGlobals *ccl_restrict
                                                const Intersection *ccl_restrict isect,
                                                const float3 ray_P,
                                                const float3 ray_D,
-                                               const float ray_t,
                                                LightSample *ccl_restrict ls)
 {
   const int lamp = isect->prim;

@@ -311,7 +311,7 @@ int RenderScheduler::get_num_samples_to_path_trace() const
   }
 
   /* Always render single sample when in non-final resolution. */
-  if (state_.resolution_divider != 1) {
+  if (state_.resolution_divider != pixel_size_) {
     return 1;
   }
 

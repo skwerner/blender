@@ -616,8 +616,8 @@ typedef struct Ray {
 #endif
 
 #ifdef __RAY_DIFFERENTIALS__
-  differential3 dP;
-  differential3 dD;
+  float dP;
+  float dD;
 #endif
 } Ray;
 
@@ -950,7 +950,7 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
 
   /* ray start position, only set for backgrounds */
   float3 ray_P;
-  differential3 ray_dP;
+  float ray_dP;
 
 #ifdef __OSL__
   const struct KernelGlobals *osl_globals;

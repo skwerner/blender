@@ -774,9 +774,11 @@ float Camera::world_to_raster_size(float3 P)
                            &ray);
 #endif
 
-    differential_transfer(&ray.dP, ray.dP, ray.D, ray.dD, ray.D, dist);
+    /* TODO: would it help to use more accurate differentials here? */
+    differential3 dP;
+    differential_transfer_compact(&dP, ray.dP, ray.D, ray.dD, ray.D, dist);
 
-    return max(len(ray.dP.dx), len(ray.dP.dy));
+    return max(len(dP.dx), len(dP.dy));
   }
 
   return res;

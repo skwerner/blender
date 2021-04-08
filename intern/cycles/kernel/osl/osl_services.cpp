@@ -1047,8 +1047,8 @@ bool OSLRenderServices::get_background_attribute(const KernelGlobals *kg,
       ndc[0] = camera_world_to_ndc(kg, sd, sd->ray_P);
 
       if (derivatives) {
-        ndc[1] = camera_world_to_ndc(kg, sd, sd->ray_P + sd->ray_dP.dx) - ndc[0];
-        ndc[2] = camera_world_to_ndc(kg, sd, sd->ray_P + sd->ray_dP.dy) - ndc[0];
+        ndc[1] = camera_world_to_ndc(kg, sd, sd->ray_P /* TODO: + sd->ray_dP.dx*/) - ndc[0];
+        ndc[2] = camera_world_to_ndc(kg, sd, sd->ray_P /* TODO: + sd->ray_dP.dy*/) - ndc[0];
       }
     }
     else {
@@ -1613,10 +1613,14 @@ bool OSLRenderServices::trace(TraceOpt &options,
   }
 
   /* ray differentials */
-  ray.dP.dx = TO_FLOAT3(dPdx);
-  ray.dP.dy = TO_FLOAT3(dPdy);
-  ray.dD.dx = TO_FLOAT3(dRdx);
-  ray.dD.dy = TO_FLOAT3(dRdy);
+  differential3 dP;
+  dP.dx = TO_FLOAT3(dPdx);
+  dP.dy = TO_FLOAT3(dPdy);
+  ray.dP = differential_make_compact(dP);
+  differential3 dD;
+  dD.dx = TO_FLOAT3(dRdx);
+  dD.dy = TO_FLOAT3(dRdy);
+  ray.dD = differential_make_compact(dD);
 
   /* allocate trace data */
   OSLTraceData *tracedata = (OSLTraceData *)sg->tracedata;

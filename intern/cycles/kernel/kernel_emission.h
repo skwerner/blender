@@ -167,8 +167,8 @@ ccl_device_inline void light_sample_to_shadow_ray(const ShaderData *sd,
       ray->D = normalize_len(ray->D, &ray->t);
     }
 
-    ray->dP = sd->dP;
-    ray->dD = differential3_zero();
+    ray->dP = differential_make_compact(sd->dP);
+    ray->dD = differential_zero_compact();
   }
   else {
     /* signal to not cast shadow ray */

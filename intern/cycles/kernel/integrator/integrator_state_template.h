@@ -66,11 +66,8 @@ KERNEL_STRUCT_MEMBER(float3, P)
 KERNEL_STRUCT_MEMBER(float3, D)
 KERNEL_STRUCT_MEMBER(float, t)
 KERNEL_STRUCT_MEMBER(float, time)
-/* TODO: compact differentials. */
-KERNEL_STRUCT_MEMBER(float3, dPdx)
-KERNEL_STRUCT_MEMBER(float3, dPdy)
-KERNEL_STRUCT_MEMBER(float3, dDdx)
-KERNEL_STRUCT_MEMBER(float3, dDdy)
+KERNEL_STRUCT_MEMBER(float, dP)
+KERNEL_STRUCT_MEMBER(float, dD)
 KERNEL_STRUCT_END(ray)
 
 /*************************** Intersection result ******************************/

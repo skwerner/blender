@@ -153,8 +153,8 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
 
 #ifdef __RAY_DIFFERENTIALS__
   /* differentials */
-  differential_transfer(&sd->dP, ray->dP, ray->D, ray->dD, sd->Ng, sd->ray_length);
-  differential_incoming(&sd->dI, ray->dD);
+  differential_transfer_compact(&sd->dP, ray->dP, ray->D, ray->dD, sd->Ng, sd->ray_length);
+  differential_incoming_compact(&sd->dI, ray->D, ray->dD);
   differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
 #endif
   PROFILING_SHADER(sd->shader);
@@ -441,7 +441,7 @@ ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_res
 
 #ifdef __RAY_DIFFERENTIALS__
   /* differentials */
-  sd->dP = differential3_zero(); /* TODO */
+  sd->dP = differential3_zero(); /* TODO: ray->dP */
   differential_incoming(&sd->dI, sd->dP);
   sd->du = differential_zero();
   sd->dv = differential_zero();
@@ -487,7 +487,7 @@ ccl_device_inline void shader_setup_from_volume(const KernelGlobals *kg,
 
 #  ifdef __RAY_DIFFERENTIALS__
   /* differentials */
-  sd->dP = ray->dD;
+  sd->dP = differential3_zero(); /* TODO ray->dD */
   differential_incoming(&sd->dI, sd->dP);
   sd->du = differential_zero();
   sd->dv = differential_zero();

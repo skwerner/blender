@@ -245,10 +245,8 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
                                          FLT_MAX;
 
 #ifdef __RAY_DIFFERENTIALS__
-    INTEGRATOR_STATE_WRITE(ray, dPdx) = sd->dP.dx;
-    INTEGRATOR_STATE_WRITE(ray, dPdy) = sd->dP.dy;
-    INTEGRATOR_STATE_WRITE(ray, dDdx) = bsdf_domega_in.dx;
-    INTEGRATOR_STATE_WRITE(ray, dDdy) = bsdf_domega_in.dy;
+    INTEGRATOR_STATE_WRITE(ray, dP) = differential_make_compact(sd->dP);
+    INTEGRATOR_STATE_WRITE(ray, dD) = differential_make_compact(bsdf_domega_in);
 #endif
 
     /* Update throughput. */
@@ -292,8 +290,7 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(ray, t) -= sd->ray_length;
 
 #  ifdef __RAY_DIFFERENTIALS__
-    INTEGRATOR_STATE_WRITE(ray, dPdx) = sd->dP.dx;
-    INTEGRATOR_STATE_WRITE(ray, dPdy) = sd->dP.dy;
+    INTEGRATOR_STATE_WRITE(ray, dP) = differential_make_compact(sd->dP);
 #  endif
 
     /* TODO */

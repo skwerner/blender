@@ -323,6 +323,16 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   }
 #endif
 
+  const int path_flag = INTEGRATOR_STATE(path, flag);
+#ifdef __SUBSURFACE__
+  /* Can skip shader evaluation for BSSRDF exit point without bump mapping. */
+  if (!(path_flag & PATH_RAY_SUBSURFACE) || ((sd.flag & SD_HAS_BSSRDF_BUMP)))
+#endif
+  {
+    /* Evaluate shader. */
+    shader_eval_surface(INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
+  }
+
 #ifdef __SUBSURFACE__
   if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE) {
     /* When coming from inside subsurface scattering, setup a diffuse
@@ -330,13 +340,9 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
     INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SUBSURFACE;
     subsurface_shader_data_setup(INTEGRATOR_STATE_PASS, &sd);
   }
-  else
 #endif
-  {
-    /* Evaluate shader. */
-    shader_eval_surface(INTEGRATOR_STATE_PASS, &sd, render_buffer, INTEGRATOR_STATE(path, flag));
-    shader_prepare_closures(INTEGRATOR_STATE_PASS, &sd);
-  }
+
+  shader_prepare_closures(INTEGRATOR_STATE_PASS, &sd);
 
 #ifdef __HOLDOUT__
   /* Evaluate holdout. */

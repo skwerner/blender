@@ -104,6 +104,8 @@ ccl_device bool subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const S
   INTEGRATOR_STATE_WRITE(ray, P) = sd->P;
   INTEGRATOR_STATE_WRITE(ray, D) = sd->N;
   INTEGRATOR_STATE_WRITE(ray, t) = FLT_MAX;
+  INTEGRATOR_STATE_WRITE(ray, dP) = differential_make_compact(sd->dP);
+  INTEGRATOR_STATE_WRITE(ray, dD) = differential_zero_compact();
 
   /* Pass along object info, reusing isect to save memory. */
   INTEGRATOR_STATE_WRITE(isect, Ng) = sd->Ng;
@@ -127,6 +129,12 @@ ccl_device bool subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const S
 
 ccl_device void subsurface_shader_data_setup(INTEGRATOR_STATE_ARGS, ShaderData *sd)
 {
+  /* Get bump mapped normal from shader evaluation at exit point. */
+  float3 N = sd->N;
+  if (sd->flag & SD_HAS_BSSRDF_BUMP) {
+    N = shader_bssrdf_normal(sd);
+  }
+
   /* Setup diffuse BSDF at the exit point. This replaces shader_eval_surface. */
   sd->flag &= ~SD_CLOSURE_FLAGS;
   sd->num_closure = 0;
@@ -141,7 +149,7 @@ ccl_device void subsurface_shader_data_setup(INTEGRATOR_STATE_ARGS, ShaderData *
         sd, sizeof(PrincipledDiffuseBsdf), weight);
 
     if (bsdf) {
-      bsdf->N = sd->N;
+      bsdf->N = N;
       bsdf->roughness = roughness;
       sd->flag |= bsdf_principled_diffuse_setup(bsdf);
 
@@ -156,7 +164,7 @@ ccl_device void subsurface_shader_data_setup(INTEGRATOR_STATE_ARGS, ShaderData *
     DiffuseBsdf *bsdf = (DiffuseBsdf *)bsdf_alloc(sd, sizeof(DiffuseBsdf), weight);
 
     if (bsdf) {
-      bsdf->N = sd->N;
+      bsdf->N = N;
       sd->flag |= bsdf_diffuse_setup(bsdf);
 
       /* replace CLOSURE_BSDF_DIFFUSE_ID with this special ID so render passes
@@ -269,6 +277,7 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
 
   const float3 P = INTEGRATOR_STATE(ray, P);
   const float3 N = INTEGRATOR_STATE(ray, D);
+  const float ray_dP = INTEGRATOR_STATE(ray, dP);
   const float time = INTEGRATOR_STATE(ray, time);
   const float3 Ng = INTEGRATOR_STATE(isect, Ng);
   const int object = INTEGRATOR_STATE(isect, object);
@@ -293,6 +302,8 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
   ray.D = D;
   ray.t = FLT_MAX;
   ray.time = time;
+  ray.dP = ray_dP;
+  ray.dD = differential_zero_compact();
 
   /* Setup intersections.
    * TODO: make this more compact if we don't bring back disk based SSS that needs

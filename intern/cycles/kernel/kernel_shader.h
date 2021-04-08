@@ -922,11 +922,9 @@ ccl_device float3 shader_bsdf_ao(const KernelGlobals *kg,
 }
 
 #ifdef __SUBSURFACE__
-ccl_device float3 shader_bssrdf_sum(const ShaderData *sd, float3 *N_, float *texture_blur_)
+ccl_device float3 shader_bssrdf_normal(const ShaderData *sd)
 {
-  float3 eval = zero_float3();
   float3 N = zero_float3();
-  float texture_blur = 0.0f, weight_sum = 0.0f;
 
   for (int i = 0; i < sd->num_closure; i++) {
     const ShaderClosure *sc = &sd->closure[i];
@@ -936,19 +934,10 @@ ccl_device float3 shader_bssrdf_sum(const ShaderData *sd, float3 *N_, float *tex
       float avg_weight = fabsf(average(sc->weight));
 
       N += bssrdf->N * avg_weight;
-      eval += sc->weight;
-      texture_blur += bssrdf->texture_blur * avg_weight;
-      weight_sum += avg_weight;
     }
   }
 
-  if (N_)
-    *N_ = (is_zero(N)) ? sd->N : normalize(N);
-
-  if (texture_blur_)
-    *texture_blur_ = safe_divide(texture_blur, weight_sum);
-
-  return eval;
+  return (is_zero(N)) ? sd->N : normalize(N);
 }
 #endif /* __SUBSURFACE__ */
 

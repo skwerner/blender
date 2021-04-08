@@ -99,6 +99,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 
   state_.num_rendered_samples = 0;
   state_.last_display_update_time = 0.0;
+  state_.last_display_update_sample = -1;
 
   first_sample_time_.path_trace = 0.0;
   first_sample_time_.denoise_time = 0.0;
@@ -129,6 +130,7 @@ RenderWork RenderScheduler::get_render_work()
   if (state_.resolution_divider != pixel_size_) {
     state_.resolution_divider = max(state_.resolution_divider / 2, pixel_size_);
     state_.num_rendered_samples = 0;
+    state_.last_display_update_sample = -1;
   }
 
   render_work.resolution_divider = state_.resolution_divider;
@@ -152,6 +154,7 @@ RenderWork RenderScheduler::get_render_work()
    * there is no display at all. */
   if (render_work.update_display) {
     state_.last_display_update_time = time_dt();
+    state_.last_display_update_sample = state_.num_rendered_samples;
   }
 
   return render_work;
@@ -221,15 +224,20 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
   state_.last_display_update_time = time_dt();
 }
 
+double RenderScheduler::guess_display_update_interval_in_seconds() const
+{
+  return guess_display_update_interval_in_seconds_for_num_samples(state_.num_rendered_samples);
+}
+
 /* TODO(sergey): This is just a quick implementation, exact values might need to be tweaked based
  * on a more careful experiments with viewport rendering. */
-double RenderScheduler::guess_display_update_interval_in_seconds() const
+double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples(
+    int num_rendered_samples) const
 {
   /* TODO(sergey): Need a decision on whether this should be using number of samples rendered
    * within the current render ression, or use absolute number of samples with the start sample
    * taken into account. It will depend on whether the start sample offset clears the render
    * buffer. */
-  const int num_rendered_samples = state_.num_rendered_samples;
 
   if (headless_) {
     /* In headless mode do rare updates, so that the device occupancy is high, but there are still
@@ -401,10 +409,17 @@ bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
     return true;
   }
 
+  if (done() || state_.last_display_update_sample == -1) {
+    /* Make sure an initial and final results of adaptive sampling is communicated ot the display.
+     */
+    return true;
+  }
+
   /* When adaptive sampling is used, its possible that only handful of samples of a very simple
    * scene will be scheduled to a powerful device (in order to not "miss" any of filtering points).
    * We take care of skipping updates here based on when previous display update did happen. */
-  const double update_interval = guess_display_update_interval_in_seconds();
+  const double update_interval = guess_display_update_interval_in_seconds_for_num_samples(
+      state_.last_display_update_sample);
   return (time_dt() - state_.last_display_update_time) > update_interval;
 }
 

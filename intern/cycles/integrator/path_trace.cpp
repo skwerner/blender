@@ -165,7 +165,8 @@ void PathTrace::path_trace(const RenderWork &render_work)
     return;
   }
 
-  VLOG(3) << "Will path trace " << render_work.path_trace.num_samples << " samples.";
+  VLOG(3) << "Will path trace " << render_work.path_trace.num_samples
+          << " samples at the resolution divider " << render_work.resolution_divider;
 
   const int filter_sample = render_work.path_trace.start_sample +
                             render_work.path_trace.num_samples - 1;
@@ -258,9 +259,14 @@ void PathTrace::update_display(const RenderWork &render_work)
      * viewport GPU display. Seems to be a matter of moving pixels update API to a more abstract
      * class and using it here instead of `GPUDisplay`. */
     if (buffer_update_cb) {
+      VLOG(3) << "Invoke buffer update callback.";
+
       const double start_time = time_dt();
       buffer_update_cb(full_render_buffers_.get(), get_num_samples_in_buffer());
       render_scheduler_.report_display_update_time(render_work, time_dt() - start_time);
+    }
+    else {
+      VLOG(3) << "Ignore display update.";
     }
 
     return;

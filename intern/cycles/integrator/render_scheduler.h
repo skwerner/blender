@@ -117,6 +117,7 @@ class RenderScheduler {
    * lower samples updates happens more often, but with higher number of samples updates happens
    * less often but the device occupancy goes higher. */
   double guess_display_update_interval_in_seconds() const;
+  double guess_display_update_interval_in_seconds_for_num_samples(int num_rendered_samples) const;
 
   /* Calculate number of samples which can be rendered within current desred update interval which
    * is calculated by `guess_update_interval_in_seconds()`. */
@@ -167,6 +168,8 @@ class RenderScheduler {
 
     /* Point in time the latest GPUDisplay work has been scheduled. */
     double last_display_update_time = 0.0;
+    /* Value of -1 means display was never updated. */
+    int last_display_update_sample = -1;
   } state_;
 
   /* Timing of tasks which were performed at the very first render sample at 100% of the

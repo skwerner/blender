@@ -164,7 +164,7 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   const bool is_transmission = shader_bsdf_is_transmission(sd, ls.D);
 
   BsdfEval bsdf_eval ccl_optional_struct_init;
-  shader_bsdf_eval(kg, sd, ls.D, is_transmission, &bsdf_eval, ls.pdf, ls.shader & SHADER_USE_MIS);
+  shader_bsdf_eval(kg, sd, ls.D, is_transmission, &bsdf_eval, ls.pdf, ls.shader);
   bsdf_eval_mul3(&bsdf_eval, light_eval / ls.pdf);
 
   /* Path termination. */

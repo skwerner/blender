@@ -594,6 +594,29 @@ ccl_device_inline bool shader_bsdf_is_transmission(const ShaderData *sd, const f
   return dot(Ng, omega_in) < 0.0f;
 }
 
+ccl_device_forceinline bool _shader_bsdf_exclude(ClosureType type, uint light_shader_flags)
+{
+  if (!(light_shader_flags & SHADER_EXCLUDE_ANY)) {
+    return false;
+  }
+  if (light_shader_flags & SHADER_EXCLUDE_DIFFUSE) {
+    if (CLOSURE_IS_BSDF_DIFFUSE(type) || CLOSURE_IS_BSDF_BSSRDF(type)) {
+      return true;
+    }
+  }
+  if (light_shader_flags & SHADER_EXCLUDE_GLOSSY) {
+    if (CLOSURE_IS_BSDF_GLOSSY(type)) {
+      return true;
+    }
+  }
+  if (light_shader_flags & SHADER_EXCLUDE_TRANSMIT) {
+    if (CLOSURE_IS_BSDF_TRANSMISSION(type)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
                                                ShaderData *sd,
                                                const float3 omega_in,
@@ -602,26 +625,30 @@ ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
                                                const ShaderClosure *skip_sc,
                                                BsdfEval *result_eval,
                                                float sum_pdf,
-                                               float sum_sample_weight)
+                                               float sum_sample_weight,
+                                               const uint light_shader_flags)
 {
   /* this is the veach one-sample model with balance heuristic, some pdf
    * factors drop out when using balance heuristic weighting */
   for (int i = 0; i < sd->num_closure; i++) {
     const ShaderClosure *sc = &sd->closure[i];
 
-    if (sc != skip_sc && CLOSURE_IS_BSDF(sc->type)) {
-      float bsdf_pdf = 0.0f;
-      float3 eval = bsdf_eval(kg, sd, sc, omega_in, is_transmission, &bsdf_pdf);
-
-      if (bsdf_pdf != 0.0f) {
-        const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
-                                 CLOSURE_IS_BSDF_BSSRDF(sc->type));
-        bsdf_eval_accum(result_eval, is_diffuse, eval * sc->weight, 1.0f);
-        sum_pdf += bsdf_pdf * sc->sample_weight;
-      }
-
-      sum_sample_weight += sc->sample_weight;
+    if (sc == skip_sc || !CLOSURE_IS_BSDF(sc->type) ||
+        _shader_bsdf_exclude(sc->type, light_shader_flags)) {
+      continue;
     }
+
+    float bsdf_pdf = 0.0f;
+    float3 eval = bsdf_eval(kg, sd, sc, omega_in, is_transmission, &bsdf_pdf);
+
+    if (bsdf_pdf != 0.0f) {
+      const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
+                               CLOSURE_IS_BSDF_BSSRDF(sc->type));
+      bsdf_eval_accum(result_eval, is_diffuse, eval * sc->weight, 1.0f);
+      sum_pdf += bsdf_pdf * sc->sample_weight;
+    }
+
+    sum_sample_weight += sc->sample_weight;
   }
 
   *pdf = (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
@@ -639,15 +666,16 @@ ccl_device_inline
                      const bool is_transmission,
                      BsdfEval *eval,
                      const float light_pdf,
-                     bool use_mis)
+                     const uint light_shader_flags)
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_EVAL);
 
   bsdf_eval_init(eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
   float pdf;
-  _shader_bsdf_multi_eval(kg, sd, omega_in, is_transmission, &pdf, NULL, eval, 0.0f, 0.0f);
-  if (use_mis) {
+  _shader_bsdf_multi_eval(
+      kg, sd, omega_in, is_transmission, &pdf, NULL, eval, 0.0f, 0.0f, light_shader_flags);
+  if (light_shader_flags & SHADER_USE_MIS) {
     float weight = power_heuristic(light_pdf, pdf);
     bsdf_eval_mul(eval, weight);
   }
@@ -749,7 +777,7 @@ ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
       const bool is_transmission = shader_bsdf_is_transmission(sd, *omega_in);
       float sweight = sc->sample_weight;
       _shader_bsdf_multi_eval(
-          kg, sd, *omega_in, is_transmission, pdf, sc, bsdf_eval, *pdf * sweight, sweight);
+          kg, sd, *omega_in, is_transmission, pdf, sc, bsdf_eval, *pdf * sweight, sweight, 0);
     }
   }
 

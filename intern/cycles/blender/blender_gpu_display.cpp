@@ -21,8 +21,8 @@
 #include "util/util_opengl.h"
 
 extern "C" {
-void DRW_opengl_context_release();
-void DRW_opengl_context_activate();
+bool DRW_opengl_context_release();
+void DRW_opengl_context_activate(bool drw_state);
 
 void *WM_opengl_context_create();
 void WM_opengl_context_activate(void *gl_context);
@@ -500,14 +500,14 @@ void BlenderGPUDisplay::do_draw()
 
 void BlenderGPUDisplay::gl_context_create()
 {
-  DRW_opengl_context_release();
+  const bool drw_state = DRW_opengl_context_release();
 
   gl_context_ = WM_opengl_context_create();
   if (!gl_context_) {
     LOG(ERROR) << "Error creating OpenGL context.";
   }
 
-  DRW_opengl_context_activate();
+  DRW_opengl_context_activate(drw_state);
 }
 
 bool BlenderGPUDisplay::gl_draw_resources_ensure()
@@ -544,7 +544,7 @@ void BlenderGPUDisplay::gl_resources_destroy()
   }
 
   if (gl_context_) {
-    DRW_opengl_context_release();
+    const bool drw_state = DRW_opengl_context_release();
 
     GLContextScope scope(gl_context_);
 
@@ -560,7 +560,7 @@ void BlenderGPUDisplay::gl_resources_destroy()
 
     WM_opengl_context_dispose(gl_context_);
 
-    DRW_opengl_context_activate();
+    DRW_opengl_context_activate(drw_state);
   }
 }
 

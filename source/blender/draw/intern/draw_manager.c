@@ -3230,16 +3230,16 @@ void DRW_draw_state_init_gtests(eGPUShaderConfig sh_cfg)
  *
  * Example of context creation:
  *
- *   DRW_opengl_context_release();
+ *   const bool drw_state = DRW_opengl_context_release();
  *   gl_context = WM_opengl_context_create();
- *   DRW_sergey_disable();
+ *   DRW_opengl_context_activate(drw_state);
  *
  * Example of context destruction:
  *
- *   DRW_opengl_context_release();
+ *   const bool drw_state = DRW_opengl_context_release();
  *   WM_opengl_context_activate(gl_context);
  *   WM_opengl_context_dispose(gl_context);
- *   DRW_sergey_disable();
+ *   DRW_opengl_context_activate(drw_state);
  *
  *
  * NOTE: Will only perform context modification when on main thread. This way these functions can
@@ -3249,24 +3249,37 @@ void DRW_draw_state_init_gtests(eGPUShaderConfig sh_cfg)
  *
  * \{ */
 
-void DRW_opengl_context_release(void)
+bool DRW_opengl_context_release(void)
 {
   if (!BLI_thread_is_main()) {
-    return;
+    return false;
+  }
+
+  if (GPU_context_active_get() != DST.gpu_context) {
+    /* Context release is requested from the outside of the draw manager main draw loop, indicate
+     * this to the `DRW_opengl_context_activate()` so that it restores drawable of the window. */
+    return false;
   }
 
   GPU_context_active_set(NULL);
   WM_opengl_context_release(DST.gl_context);
+
+  return true;
 }
 
-void DRW_opengl_context_activate(void)
+void DRW_opengl_context_activate(bool drw_state)
 {
   if (!BLI_thread_is_main()) {
     return;
   }
 
-  WM_opengl_context_activate(DST.gl_context);
-  GPU_context_active_set(DST.gpu_context);
+  if (drw_state) {
+    WM_opengl_context_activate(DST.gl_context);
+    GPU_context_active_set(DST.gpu_context);
+  }
+  else {
+    wm_window_reset_drawable();
+  }
 }
 
 /** \} */

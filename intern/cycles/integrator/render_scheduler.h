@@ -140,9 +140,9 @@ class RenderScheduler {
    * The `denoiser_delayed` is what `work_need_denoise()` returned as delayed denoiser flag. */
   bool work_need_update_display(const bool denoiser_delayed);
 
-  /* Check whether timing of the given work are usable to store timings in the `first_sample_time_`
+  /* Check whether timing of the given work are usable to store timings in the `first_render_time_`
    * for the resolution divider calculation. */
-  bool work_is_first_sample(const RenderWork &render_work);
+  bool work_is_usable_for_first_render_estimation(const RenderWork &render_work);
 
   struct TimeAverage {
     inline void reset()
@@ -172,13 +172,14 @@ class RenderScheduler {
     int last_display_update_sample = -1;
   } state_;
 
-  /* Timing of tasks which were performed at the very first render sample at 100% of the
-   * resolution. */
+  /* Timing of tasks which were performed at the very first render work at 100% of the
+   * resolution. This timing information is used to estimate resolution divider for fats
+   * navigation. */
   struct {
     double path_trace;
     double denoise_time;
     double display_update_time;
-  } first_sample_time_;
+  } first_render_time_;
 
   TimeAverage path_trace_time_;
   TimeAverage denoise_time_;
@@ -206,6 +207,12 @@ class RenderScheduler {
   /* Resolution which is used to calculate an initial resolution divider when there is no timing
    * information about render times were known. */
   static constexpr const int kDefaultStartResolution = 64;
+
+  /* Number of samples which will be scheduled duging interactive updates.
+   * The idea is to use lower resolution render with more samples. The actual logic is a bit more
+   * involved, so see comments in the resolution divider update function and calculation of number
+   * of samples for the render work function. */
+  static constexpr const int kNumSamplesDuringUpdate = 4;
 
   /* Initial resolution divider which will be used on render scheduler reset. */
   int start_resolution_divider_ = 0;

@@ -101,9 +101,9 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.last_display_update_time = 0.0;
   state_.last_display_update_sample = -1;
 
-  first_sample_time_.path_trace = 0.0;
-  first_sample_time_.denoise_time = 0.0;
-  first_sample_time_.display_update_time = 0.0;
+  first_render_time_.path_trace = 0.0;
+  first_render_time_.denoise_time = 0.0;
+  first_render_time_.display_update_time = 0.0;
 
   path_trace_time_.reset();
   denoise_time_.reset();
@@ -177,12 +177,8 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work, doub
 {
   const double final_time_approx = approximate_final_time(render_work, time);
 
-  if (work_is_first_sample(render_work)) {
-    /* Need to ensure timing is stored for a single sample.
-     * For the viewport this should always be the case, but since we are tracking time for the
-     * offline rendering we do division here to keep timing semantically equal for viewport and
-     * offline. */
-    first_sample_time_.path_trace = final_time_approx / render_work.path_trace.num_samples;
+  if (work_is_usable_for_first_render_estimation(render_work)) {
+    first_render_time_.path_trace = final_time_approx;
   }
 
   path_trace_time_.total_time += final_time_approx;
@@ -195,8 +191,8 @@ void RenderScheduler::report_denoise_time(const RenderWork &render_work, double 
 {
   const double final_time_approx = approximate_final_time(render_work, time);
 
-  if (work_is_first_sample(render_work)) {
-    first_sample_time_.denoise_time = final_time_approx;
+  if (work_is_usable_for_first_render_estimation(render_work)) {
+    first_render_time_.denoise_time = final_time_approx;
   }
 
   denoise_time_.total_time += final_time_approx;
@@ -209,8 +205,8 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
 {
   const double final_time_approx = approximate_final_time(render_work, time);
 
-  if (work_is_first_sample(render_work)) {
-    first_sample_time_.display_update_time = final_time_approx;
+  if (work_is_usable_for_first_render_estimation(render_work)) {
+    first_render_time_.display_update_time = final_time_approx;
   }
 
   display_update_time_.total_time += final_time_approx;
@@ -311,15 +307,30 @@ static inline uint round_num_samples_to_power_of_2(const uint num_samples)
 
 int RenderScheduler::get_num_samples_to_path_trace() const
 {
-  /* Always start with a single sample. Gives more instant feedback to artists, and allows to
-   * gather information for a subsequent path tracing works.
-   * Do it in the headless mode as well, to give some estimate of how long samples are taking. */
-  if (state_.num_rendered_samples == 0) {
+  /* Specvial trick for the fast navigation: schedule multiple samples during fats navigation
+   * (which will prefer to use lower resolution to keep up with refresh rate). This gives more
+   * usable visual feedback for artists. There are couple of tricks though:
+   *
+   * - When resolution divider is the previous to the final resolution schedule single sample.
+   *   This is so that rendering on lower resolution does not exceed time what it takes to render
+   *   first sample at the full resolution.
+   *
+   * - When denoising is used during navigation prefer using highetr resolution and less samples
+   *  (scheduling less samples here will make it so resolutiondivider calculation will use lower
+   *  value for the divider). This is because both OpenImageDenoiser and OptiX denoiser gives
+   * visually better results on higher resolution image with less samples. */
+  if (state_.resolution_divider != pixel_size_) {
+    if (state_.resolution_divider != pixel_size_ * 2 && !is_denoise_active_during_update()) {
+      return min(num_samples_, kNumSamplesDuringUpdate);
+    }
+
     return 1;
   }
 
-  /* Always render single sample when in non-final resolution. */
-  if (state_.resolution_divider != pixel_size_) {
+  /* Always start full resolution render  with a single sample. Gives more instant feedback to
+   * artists, and allows to gather information for a subsequent path tracing works. Do it in the
+   * headless mode as well, to give some estimate of how long samples are taking. */
+  if (state_.num_rendered_samples == 0) {
     return 1;
   }
 
@@ -436,7 +447,7 @@ void RenderScheduler::update_start_resolution_divider()
     return;
   }
 
-  if (first_sample_time_.path_trace == 0.0) {
+  if (first_render_time_.path_trace == 0.0) {
     /* Not enough information to calculate better resolution, keep the existing one. */
     return;
   }
@@ -444,15 +455,19 @@ void RenderScheduler::update_start_resolution_divider()
   const double desired_update_interval_in_seconds =
       guess_viewport_navigation_update_interval_in_seconds();
 
-  const double actual_time_per_sample_average = first_sample_time_.path_trace +
-                                                first_sample_time_.denoise_time +
-                                                first_sample_time_.display_update_time;
+  const double actual_time_per_update = first_render_time_.path_trace +
+                                        first_render_time_.denoise_time +
+                                        first_render_time_.display_update_time;
 
-  /* Allow 10% of tolerance, so that if the render time is close enough to the higher resolution
-   * we prefer to use it instead of going way lower resolution and time way below the desired one.
-   */
-  const int new_resolution_divider = calculate_resolution_divider_for_time(
-      desired_update_interval_in_seconds * 1.1, actual_time_per_sample_average);
+  /* Allow some percent of tolerance, so that if the render time is close enough to the higher
+   * resolution we prefer to use it instead of going way lower resolution and time way below the
+   * desired one. */
+  const int resolution_divider_for_update = calculate_resolution_divider_for_time(
+      desired_update_interval_in_seconds * 1.4, actual_time_per_update);
+
+  /* Never higher resolution that the pixel size allows to (which is possible if the scene is
+   * simple and compute device is fast). */
+  const int new_resolution_divider = max(resolution_divider_for_update, pixel_size_);
 
   /* TODO(sergey): Need to add hysteresis to avoid resolution divider bouncing around when actual
    * render time is somewhere on a boundary between two resolutions. */
@@ -475,10 +490,15 @@ double RenderScheduler::guess_viewport_navigation_update_interval_in_seconds() c
     return 1.0 / 12.0;
   }
 
-  /* NOTE: Based on Blender's viewport navigation update, which usually happens at 60fps. Allows to
-   * avoid "jelly" effect when Cycles render result is lagging behind too much from the overlays.
-   */
-  return 1.0 / 60.0;
+  /* For the best match with the Blender's viewport the refresh ratio should be 60fps. This will
+   * avoid "jelly" effects. However, on a non-trivial scenes this can only be achieved with high
+   * values of the resolution divider which does not give very pleasant updates during navigation.
+   * Choose less frequent updates to allow more noise-free and higher resolution updates. */
+
+  /* TODO(sergey): Can look into heuristic which will allow to have 60fps if the resolution divider
+   * is not too high. Alternatively, synchronize Blender's overlays updates to Cycles updates. */
+
+  return 1.0 / 30.0;
 }
 
 bool RenderScheduler::is_denoise_active_during_update() const
@@ -494,16 +514,10 @@ bool RenderScheduler::is_denoise_active_during_update() const
   return true;
 }
 
-bool RenderScheduler::work_is_first_sample(const RenderWork &render_work)
+bool RenderScheduler::work_is_usable_for_first_render_estimation(const RenderWork &render_work)
 {
-  /* Denoising tasks might not be linearly scalable from the number of pixels, so for the accurate
-   * timing might also require `render_work.resolution_divider == pixel_size_`. However, on a slow
-   * computer this might be better to use approximation which is available early on, so that the
-   * resolution is adapting more quickly. After all, the first sample time is not averaged, so one
-   * the first sample at the final resolution is known it will be used for the next resolution
-   * calculation.*/
-
-  return render_work.path_trace.start_sample == start_sample_;
+  return render_work.resolution_divider == pixel_size_ &&
+         render_work.path_trace.start_sample == start_sample_;
 }
 
 /* --------------------------------------------------------------------

@@ -63,10 +63,8 @@ ccl_device void shader_setup_object_transforms(const KernelGlobals *kg, ShaderDa
  * global memory as we write it to shaderdata. */
 ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict kg,
                                              ShaderData *sd,
-                                             const float3 ray_P,
-                                             const float3 ray_D,
-                                             const float ray_time,
-                                             const Intersection *isect)
+                                             const Ray *ccl_restrict ray,
+                                             const Intersection *ccl_restrict isect)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
@@ -87,19 +85,19 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
   sd->flag = 0;
 
   /* Read matrices and time. */
-  sd->time = ray_time;
+  sd->time = ray->time;
 
 #ifdef __OBJECT_MOTION__
-  shader_setup_object_transforms(kg, sd, ray_time);
+  shader_setup_object_transforms(kg, sd, ray->time);
 #endif
 
   /* Read ray data into shader globals. */
-  sd->I = -ray_D;
+  sd->I = -ray->D;
 
 #ifdef __HAIR__
   if (sd->type & PRIMITIVE_ALL_CURVE) {
     /* curve */
-    curve_shader_setup(kg, sd, ray_P, ray_D, isect->t, isect->object, isect->prim);
+    curve_shader_setup(kg, sd, ray->P, ray->D, isect->t, isect->object, isect->prim);
   }
   else
 #endif
@@ -109,7 +107,7 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
     sd->shader = kernel_tex_fetch(__tri_shader, sd->prim);
 
     /* vectors */
-    sd->P = triangle_refine(kg, sd, ray_P, ray_D, isect->t, isect->object, isect->prim);
+    sd->P = triangle_refine(kg, sd, ray->P, ray->D, isect->t, isect->object, isect->prim);
     sd->Ng = Ng;
     sd->N = Ng;
 
@@ -125,7 +123,7 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
   else {
     /* motion triangle */
     motion_triangle_shader_setup(
-        kg, sd, ray_P, ray_D, isect->t, isect->object, isect->prim, false);
+        kg, sd, ray->P, ray->D, isect->t, isect->object, isect->prim, false);
   }
 
   sd->flag |= kernel_tex_fetch(__shaders, (sd->shader & SHADER_MASK)).flags;
@@ -153,21 +151,12 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
 #endif
   }
 
-  /* TODO */
-#if 0
-#  ifdef __RAY_DIFFERENTIALS__
+#ifdef __RAY_DIFFERENTIALS__
   /* differentials */
   differential_transfer(&sd->dP, ray->dP, ray->D, ray->dD, sd->Ng, sd->ray_length);
   differential_incoming(&sd->dI, ray->dD);
   differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
-#  endif
-#else
-  sd->dP = differential3_zero();
-  sd->dI = differential3_zero();
-  sd->du = differential_zero();
-  sd->dv = differential_zero();
 #endif
-
   PROFILING_SHADER(sd->shader);
   PROFILING_OBJECT(sd->object);
 }
@@ -452,7 +441,7 @@ ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_res
 
 #ifdef __RAY_DIFFERENTIALS__
   /* differentials */
-  sd->dP = differential3_zero();  // TODO ray->dD;
+  sd->dP = differential3_zero(); /* TODO */
   differential_incoming(&sd->dI, sd->dP);
   sd->du = differential_zero();
   sd->dv = differential_zero();

@@ -32,11 +32,10 @@ ccl_device_inline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARG
   Intersection isect ccl_optional_struct_init;
   integrator_state_read_isect(INTEGRATOR_STATE_PASS, &isect);
 
-  const float3 ray_P = INTEGRATOR_STATE(ray, P);
-  const float3 ray_D = INTEGRATOR_STATE(ray, D);
-  const float ray_time = INTEGRATOR_STATE(ray, time);
+  Ray ray ccl_optional_struct_init;
+  integrator_state_read_ray(INTEGRATOR_STATE_PASS, &ray);
 
-  shader_setup_from_ray(kg, sd, ray_P, ray_D, ray_time, &isect);
+  shader_setup_from_ray(kg, sd, &ray, &isect);
 }
 
 /* TODO: this should move to its own kernel. */
@@ -245,22 +244,16 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
                                          INTEGRATOR_STATE(ray, t) - sd->ray_length :
                                          FLT_MAX;
 
-/* TODO */
-#if 0
-#  ifdef __RAY_DIFFERENTIALS__
-    ray->dP = sd->dP;
-    ray->dD = bsdf_domega_in;
-#  endif
+#ifdef __RAY_DIFFERENTIALS__
+    INTEGRATOR_STATE_WRITE(ray, dPdx) = sd->dP.dx;
+    INTEGRATOR_STATE_WRITE(ray, dPdy) = sd->dP.dy;
+    INTEGRATOR_STATE_WRITE(ray, dDdx) = bsdf_domega_in.dx;
+    INTEGRATOR_STATE_WRITE(ray, dDdy) = bsdf_domega_in.dy;
 #endif
 
     /* Update throughput. */
     float3 throughput = INTEGRATOR_STATE(path, throughput);
-    /* TODO */
-#if 0
-    path_radiance_bsdf_bounce(kg, L_state, throughput, &bsdf_eval, bsdf_pdf, state->bounce, label);
-#else
     throughput *= bsdf_eval_sum(&bsdf_eval) / bsdf_pdf;
-#endif
     INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
     if (INTEGRATOR_STATE(path, bounce) == 0) {
       INTEGRATOR_STATE_WRITE(path,
@@ -298,11 +291,9 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
     /* Clipping works through transparent. */
     INTEGRATOR_STATE_WRITE(ray, t) -= sd->ray_length;
 
-    /* TODO */
-#  if 0
-#    ifdef __RAY_DIFFERENTIALS__
-    ray->dP = sd->dP;
-#    endif
+#  ifdef __RAY_DIFFERENTIALS__
+    INTEGRATOR_STATE_WRITE(ray, dPdx) = sd->dP.dx;
+    INTEGRATOR_STATE_WRITE(ray, dPdy) = sd->dP.dy;
 #  endif
 
     /* TODO */

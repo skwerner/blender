@@ -37,10 +37,10 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
   Intersection isect ccl_optional_struct_init;
   integrator_state_read_shadow_isect(INTEGRATOR_STATE_PASS, &isect, hit);
 
-  const float3 ray_P = INTEGRATOR_STATE(shadow_ray, P);
-  const float3 ray_D = INTEGRATOR_STATE(shadow_ray, D);
-  const float ray_time = INTEGRATOR_STATE(shadow_ray, time);
-  shader_setup_from_ray(kg, shadow_sd, ray_P, ray_D, ray_time, &isect);
+  Ray ray ccl_optional_struct_init;
+  integrator_state_read_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
+
+  shader_setup_from_ray(kg, shadow_sd, &ray, &isect);
 
   /* Evaluate shader. */
   if (!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {

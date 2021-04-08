@@ -158,8 +158,12 @@ void Session::start()
   }
 }
 
-void Session::cancel()
+void Session::cancel(bool quick)
 {
+  if (quick && path_trace_) {
+    path_trace_->cancel();
+  }
+
   if (session_thread) {
     /* wait for session thread to end */
     progress.set_cancel("Exiting");

@@ -123,7 +123,11 @@ class Session {
   ~Session();
 
   void start();
-  void cancel();
+
+  /* When quick cancel is requested path tracing is cancelles as soon as possible, without waiting
+   * for the buffer to be uniformly sampled. */
+  void cancel(bool quick = false);
+
   void draw();
   void wait();
 

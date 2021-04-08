@@ -182,7 +182,9 @@ void PathTrace::path_trace(const RenderWork &render_work)
     }
   });
 
-  render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
+  if (!is_cancel_requested()) {
+    render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
+  }
 }
 
 void PathTrace::set_denoiser_params(const DenoiseParams &params)
@@ -226,7 +228,9 @@ void PathTrace::denoise(const RenderWork &render_work)
   denoiser_->denoise_buffer(
       buffer_params, full_render_buffers_.get(), get_num_samples_in_buffer());
 
-  render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
+  if (!is_cancel_requested()) {
+    render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
+  }
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)

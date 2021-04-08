@@ -22,6 +22,10 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* --------------------------------------------------------------------
+ * Render scheduler.
+ */
+
 RenderScheduler::RenderScheduler(bool headless, bool background, int pixel_size)
     : headless_(headless), background_(background), pixel_size_(pixel_size)
 {
@@ -74,25 +78,11 @@ int RenderScheduler::get_num_rendered_samples() const
   return state_.num_rendered_samples;
 }
 
-static int get_divider(int w, int h, int start_resolution)
-{
-  int divider = 1;
-  if (start_resolution != INT_MAX) {
-    while (w * h > start_resolution * start_resolution) {
-      w = max(1, w / 2);
-      h = max(1, h / 2);
-
-      divider <<= 1;
-    }
-  }
-  return divider;
-}
-
 void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 {
-  update_start_resolution();
-
   buffer_params_ = buffer_params;
+
+  update_start_resolution_divider();
 
   set_num_samples(num_samples);
 
@@ -102,12 +92,17 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
     state_.resolution_divider = 1;
   }
   else {
-    state_.resolution_divider = get_divider(
-        buffer_params.width, buffer_params.height, start_resolution_);
+    /* NOTE: Divide by 2 because of the way how scheduling works: it advances resolution divider
+     * first and then initialized render work. */
+    state_.resolution_divider = start_resolution_divider_ * 2;
   }
 
   state_.num_rendered_samples = 0;
   state_.last_display_update_time = 0.0;
+
+  first_sample_time_.path_trace = 0.0;
+  first_sample_time_.denoise_time = 0.0;
+  first_sample_time_.display_update_time = 0.0;
 
   path_trace_time_.reset();
   denoise_time_.reset();
@@ -179,6 +174,14 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work, doub
 {
   const double final_time_approx = approximate_final_time(render_work, time);
 
+  if (work_is_first_sample(render_work)) {
+    /* Need to ensure timing is stored for a single sample.
+     * For the viewport this should always be the case, but since we are tracking time for the
+     * offline rendering we do division here to keep timing semantically equal for viewport and
+     * offline. */
+    first_sample_time_.path_trace = final_time_approx / render_work.path_trace.num_samples;
+  }
+
   path_trace_time_.total_time += final_time_approx;
   path_trace_time_.num_measured_times += render_work.path_trace.num_samples;
 
@@ -189,6 +192,10 @@ void RenderScheduler::report_denoise_time(const RenderWork &render_work, double 
 {
   const double final_time_approx = approximate_final_time(render_work, time);
 
+  if (work_is_first_sample(render_work)) {
+    first_sample_time_.denoise_time = final_time_approx;
+  }
+
   denoise_time_.total_time += final_time_approx;
   ++denoise_time_.num_measured_times;
 
@@ -198,6 +205,10 @@ void RenderScheduler::report_denoise_time(const RenderWork &render_work, double 
 void RenderScheduler::report_display_update_time(const RenderWork &render_work, double time)
 {
   const double final_time_approx = approximate_final_time(render_work, time);
+
+  if (work_is_first_sample(render_work)) {
+    first_sample_time_.display_update_time = final_time_approx;
+  }
 
   display_update_time_.total_time += final_time_approx;
   ++display_update_time_.num_measured_times;
@@ -397,33 +408,45 @@ bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
   return (time_dt() - state_.last_display_update_time) > update_interval;
 }
 
-void RenderScheduler::update_start_resolution()
+void RenderScheduler::update_start_resolution_divider()
 {
-  if (!path_trace_time_.num_measured_times) {
+  const int default_resolution_divider = calculate_resolution_divider_for_resolution(
+      buffer_params_.width, buffer_params_.height, kDefaultStartResolution);
+
+  if (start_resolution_divider_ == 0) {
+    /* Resolution divider has never been calculated before: use default resolution, so that we have
+     * somewhat good initial behavior, giving a chance to collect real numbers. */
+    start_resolution_divider_ = default_resolution_divider;
+    VLOG(3) << "Initial resolution divider is " << start_resolution_divider_;
+    return;
+  }
+
+  if (first_sample_time_.path_trace == 0.0) {
     /* Not enough information to calculate better resolution, keep the existing one. */
     return;
   }
 
-  const double update_interval_in_seconds = guess_viewport_navigation_update_interval_in_seconds();
+  const double desired_update_interval_in_seconds =
+      guess_viewport_navigation_update_interval_in_seconds();
 
-  /* TODO(sergey): Feels like to be more correct some histeresis is needed. */
+  const double actual_time_per_sample_average = first_sample_time_.path_trace +
+                                                first_sample_time_.denoise_time +
+                                                first_sample_time_.display_update_time;
 
-  double time_per_sample_average = path_trace_time_.get_average() +
-                                   display_update_time_.get_average();
-  if (is_denoise_active_during_update()) {
-    time_per_sample_average += denoise_time_.get_average();
-  }
+  /* Allow 10% of tolerance, so that if the render time is close enough to the higher resolution
+   * we prefer to use it instead of going way lower resolution and time way below the desired one.
+   */
+  const int new_resolution_divider = calculate_resolution_divider_for_time(
+      desired_update_interval_in_seconds * 1.1, actual_time_per_sample_average);
 
-  int resolution_divider = 1;
-  while (time_per_sample_average > update_interval_in_seconds) {
-    resolution_divider = resolution_divider * 2;
-    time_per_sample_average /= 4.0;
-  }
+  /* TODO(sergey): Need to add hysteresis to avoid resolution divider bouncing around when actual
+   * render time is somewhere on a boundary between two resolutions. */
 
-  const int pixel_area = buffer_params_.width * buffer_params_.height;
-  const int resolution = lround(sqrt(pixel_area));
+  /* Don't let resolution to go below the desired one: better be slower than provide a fully
+   * unreadable viewport render. */
+  start_resolution_divider_ = min(new_resolution_divider, default_resolution_divider);
 
-  start_resolution_ = max(kDefaultStartResolution, resolution / resolution_divider);
+  VLOG(3) << "Calculated resolution divider is " << start_resolution_divider_;
 }
 
 double RenderScheduler::guess_viewport_navigation_update_interval_in_seconds() const
@@ -454,6 +477,60 @@ bool RenderScheduler::is_denoise_active_during_update() const
   }
 
   return true;
+}
+
+bool RenderScheduler::work_is_first_sample(const RenderWork &render_work)
+{
+  /* Denoising tasks might not be linearly scalable from the number of pixels, so for the accurate
+   * timing might also require `render_work.resolution_divider == pixel_size_`. However, on a slow
+   * computer this might be better to use approximation which is available early on, so that the
+   * resolution is adapting more quickly. After all, the first sample time is not averaged, so one
+   * the first sample at the final resolution is known it will be used for the next resolution
+   * calculation.*/
+
+  return render_work.path_trace.start_sample == start_sample_;
+}
+
+/* --------------------------------------------------------------------
+ * Utility functions.
+ */
+
+int calculate_resolution_divider_for_time(double desired_time, double actual_time)
+{
+  /* TODO(sergey): There should a non-iterative analytical formula here. */
+
+  int resolution_divider = 1;
+  while (actual_time > desired_time) {
+    resolution_divider = resolution_divider * 2;
+    actual_time /= 4.0;
+  }
+
+  return resolution_divider;
+}
+
+int calculate_resolution_divider_for_resolution(int width, int height, int resolution)
+{
+  if (resolution == INT_MAX) {
+    return 1;
+  }
+
+  int resolution_divider = 1;
+  while (width * height > resolution * resolution) {
+    width = max(1, width / 2);
+    height = max(1, height / 2);
+
+    resolution_divider <<= 1;
+  }
+
+  return resolution_divider;
+}
+
+int calculate_resolution_for_divider(int width, int height, int resolution_divider)
+{
+  const int pixel_area = width * height;
+  const int resolution = lround(sqrt(pixel_area));
+
+  return resolution / resolution_divider;
 }
 
 CCL_NAMESPACE_END

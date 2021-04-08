@@ -101,9 +101,9 @@ class RenderScheduler {
   void report_display_update_time(const RenderWork &render_work, double time);
 
  protected:
-  /* Update start resolution based on the accumulated timing information, preserving nice feeling
-   * navigation feel. */
-  void update_start_resolution();
+  /* Update start resolution divider based on the accumulated timing information, preserving nice
+   * feeling navigation feel. */
+  void update_start_resolution_divider();
 
   /* Calculate desired update interval in seconds based on the current timings and settings.
    * Will give an interval which provides good feeling updates during viewport navigation. */
@@ -139,6 +139,10 @@ class RenderScheduler {
    * The `denoiser_delayed` is what `work_need_denoise()` returned as delayed denoiser flag. */
   bool work_need_update_display(const bool denoiser_delayed);
 
+  /* Check whether timing of the given work are usable to store timings in the `first_sample_time_`
+   * for the resolution divider calculation. */
+  bool work_is_first_sample(const RenderWork &render_work);
+
   struct TimeAverage {
     inline void reset()
     {
@@ -165,6 +169,14 @@ class RenderScheduler {
     double last_display_update_time = 0.0;
   } state_;
 
+  /* Timing of tasks which were performed at the very first render sample at 100% of the
+   * resolution. */
+  struct {
+    double path_trace;
+    double denoise_time;
+    double display_update_time;
+  } first_sample_time_;
+
   TimeAverage path_trace_time_;
   TimeAverage denoise_time_;
   TimeAverage display_update_time_;
@@ -188,8 +200,22 @@ class RenderScheduler {
   DenoiseParams denoiser_params_;
   AdaptiveSampling adaptive_sampling_;
 
+  /* Resolution which is used to calculate an initial resolution divider when there is no timing
+   * information about render times were known. */
   static constexpr const int kDefaultStartResolution = 64;
-  int start_resolution_ = kDefaultStartResolution;
+
+  /* Initial resolution divider which will be used on render scheduler reset. */
+  int start_resolution_divider_ = 0;
 };
+
+/* Calculate smallest resolution divider which will bring down actual rendering time below the
+ * desired one. This call assumes linear dependency of render time from number of pixel (quadratic
+ * dependency from the resolution divider): resolution divider of 2 beings render time down by a
+ * factor of 4. */
+int calculate_resolution_divider_for_time(double desired_time, double actual_time);
+
+int calculate_resolution_divider_for_resolution(int width, int height, int resolution);
+
+int calculate_resolution_for_divider(int width, int height, int resolution_divider);
 
 CCL_NAMESPACE_END

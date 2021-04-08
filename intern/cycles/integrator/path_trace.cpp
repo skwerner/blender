@@ -104,8 +104,10 @@ void PathTrace::render(const RenderWork &render_work)
   /* Indicate that rendering has started and that it can be requested to cancel. */
   {
     thread_scoped_lock lock(render_cancel_.mutex);
+    if (render_cancel_.is_requested) {
+      return;
+    }
     render_cancel_.is_rendering = true;
-    render_cancel_.is_requested = false;
   }
 
   render_pipeline(render_work);
@@ -303,6 +305,8 @@ void PathTrace::cancel()
   while (render_cancel_.is_rendering) {
     render_cancel_.condition.wait(lock);
   }
+
+  render_cancel_.is_requested = false;
 }
 
 void PathTrace::render_update_resolution_divider(int resolution_divider)

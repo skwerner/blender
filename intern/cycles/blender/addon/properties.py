@@ -129,34 +129,34 @@ enum_view3d_shading_render_pass = (
     ('', "General", ""),
 
     ('COMBINED', "Combined", "Show the Combined Render pass", 1),
-    ('EMISSION', "Emission", "Show the Emission render pass", 33),
-    ('BACKGROUND', "Background", "Show the Background render pass", 34),
-    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass", 35),
+    ('EMISSION', "Emission", "Show the Emission render pass", 2),
+    ('BACKGROUND', "Background", "Show the Background render pass", 3),
+    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass", 4),
 
     ('', "Light", ""),
 
-    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass", 38),
-    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass", 39),
-    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass", 40),
+    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass", 7),
+    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass", 8),
+    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass", 45),
 
-    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass", 41),
-    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass", 42),
-    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass", 43),
+    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass", 9),
+    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass", 10),
+    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass", 46),
 
     ('', "", ""),
 
-    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass", 44),
-    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 45),
-    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 46),
+    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass", 11),
+    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 12),
+    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 47),
 
-    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 50),
-    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 51),
+    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 13),
+    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 14),
 
     ('', "Data", ""),
 
-    ('NORMAL', "Normal", "Show the Normal render pass", 3),
-    ('UV', "UV", "Show the UV render pass", 4),
-    ('MIST', "Mist", "Show the Mist render pass", 32),
+    ('NORMAL', "Normal", "Show the Normal render pass", 33),
+    ('UV', "UV", "Show the UV render pass", 34),
+    ('MIST', "Mist", "Show the Mist render pass", 48),
 )
 
 

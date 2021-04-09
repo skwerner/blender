@@ -46,52 +46,49 @@ static void shade_background_pixels(Device *device,
                                     vector<float3> &pixels,
                                     Progress &progress)
 {
-  /* create input */
-  device_vector<KernelShaderEvalInput> d_input(device, "background_input", MEM_READ_ONLY);
-  device_vector<float4> d_output(device, "background_output", MEM_READ_WRITE);
-
-  KernelShaderEvalInput *d_input_data = d_input.alloc(width * height);
-
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      float u = (x + 0.5f) / width;
-      float v = (y + 0.5f) / height;
-
-      KernelShaderEvalInput in;
-      in.object = OBJECT_NONE;
-      in.prim = PRIM_NONE;
-      in.u = u;
-      in.v = v;
-      d_input_data[x + y * width] = in;
-    }
-  }
-
-  d_output.alloc(width * height);
-
   /* Needs to be up to data for attribute access. */
   device->const_copy_to("__data", &dscene->data, sizeof(dscene->data));
 
+  const int size = width * height;
+  pixels.resize(size);
+
   /* Evaluate shader on device. */
   ShaderEval shader_eval(device, progress);
-  const bool success = shader_eval.eval(SHADER_EVAL_BACKGROUND, d_input, d_output);
-  d_input.free();
+  shader_eval.eval(
+      SHADER_EVAL_BACKGROUND,
+      size,
+      [&](device_vector<KernelShaderEvalInput> &d_input) {
+        /* Fill coordinates for shading. */
+        KernelShaderEvalInput *d_input_data = d_input.data();
 
-  /* Copy to pixel buffer. */
-  pixels.resize(width * height);
+        for (int y = 0; y < height; y++) {
+          for (int x = 0; x < width; x++) {
+            float u = (x + 0.5f) / width;
+            float v = (y + 0.5f) / height;
 
-  if (success) {
-    float4 *d_output_data = d_output.data();
+            KernelShaderEvalInput in;
+            in.object = OBJECT_NONE;
+            in.prim = PRIM_NONE;
+            in.u = u;
+            in.v = v;
+            d_input_data[x + y * width] = in;
+          }
+        }
 
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        pixels[y * width + x].x = d_output_data[y * width + x].x;
-        pixels[y * width + x].y = d_output_data[y * width + x].y;
-        pixels[y * width + x].z = d_output_data[y * width + x].z;
-      }
-    }
-  }
+        return size;
+      },
+      [&](device_vector<float4> &d_output) {
+        /* Copy output to pixel buffer. */
+        float4 *d_output_data = d_output.data();
 
-  d_output.free();
+        for (int y = 0; y < height; y++) {
+          for (int x = 0; x < width; x++) {
+            pixels[y * width + x].x = d_output_data[y * width + x].x;
+            pixels[y * width + x].y = d_output_data[y * width + x].y;
+            pixels[y * width + x].z = d_output_data[y * width + x].z;
+          }
+        }
+      });
 }
 
 /* Light */

@@ -20,6 +20,8 @@
 
 #include "kernel/kernel_types.h"
 
+#include "util/util_function.h"
+
 CCL_NAMESPACE_BEGIN
 
 class Device;
@@ -33,14 +35,17 @@ class ShaderEval {
   /* Evaluate shader at points specified by KernelShaderEvalInput and write out
    * RGBA colors to output. */
   bool eval(const ShaderEvalType type,
-            device_vector<KernelShaderEvalInput> &input,
-            device_vector<float4> &output);
+            const int max_num_points,
+            const function<int(device_vector<KernelShaderEvalInput> &)> &fill_input,
+            const function<void(device_vector<float4> &)> &read_output);
 
  protected:
-  bool eval_cpu(const ShaderEvalType type,
+  bool eval_cpu(Device *device,
+                const ShaderEvalType type,
                 device_vector<KernelShaderEvalInput> &input,
                 device_vector<float4> &output);
-  bool eval_gpu(const ShaderEvalType type,
+  bool eval_gpu(Device *device,
+                const ShaderEvalType type,
                 device_vector<KernelShaderEvalInput> &input,
                 device_vector<float4> &output);
 

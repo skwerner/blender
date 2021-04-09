@@ -34,38 +34,66 @@ ShaderEval::ShaderEval(Device *device, Progress &progress) : device_(device), pr
 }
 
 bool ShaderEval::eval(const ShaderEvalType type,
-                      device_vector<KernelShaderEvalInput> &input,
-                      device_vector<float4> &output)
+                      const int max_num_points,
+                      const function<int(device_vector<KernelShaderEvalInput> &)> &fill_input,
+                      const function<void(device_vector<float4> &)> &read_output)
 {
-  /* Allocate and copy device buffers. */
-  DCHECK_EQ(input.device, device_);
-  DCHECK_EQ(output.device, device_);
-  DCHECK_LE(output.size(), input.size());
+  bool first_device = true;
+  bool success = true;
 
-  output.zero_to_device();
-  input.copy_to_device();
+  device_->foreach_device([&](Device *device) {
+    if (!first_device) {
+      LOG(ERROR) << "Multi-devices are not yet fully implemented, will evaluate shader on a "
+                    "single device.";
+      return;
+    }
+    first_device = false;
 
-  /* Evaluate on CPU or GPU. */
-  const bool success = (device_->info.type == DEVICE_CPU) ? eval_cpu(type, input, output) :
-                                                            eval_gpu(type, input, output);
+    device_vector<KernelShaderEvalInput> input(device, "ShaderEval input", MEM_READ_ONLY);
+    device_vector<float4> output(device, "ShaderEval output", MEM_READ_WRITE);
 
-  /* Copy data back from device if not cancelled. */
-  if (success) {
-    output.copy_from_device(0, 1, output.size());
-  }
+    /* Allocate and copy device buffers. */
+    DCHECK_EQ(input.device, device);
+    DCHECK_EQ(output.device, device);
+    DCHECK_LE(output.size(), input.size());
+
+    input.alloc(max_num_points);
+    int num_points = fill_input(input);
+    if (num_points == 0) {
+      return;
+    }
+
+    input.copy_to_device();
+    output.alloc(num_points);
+    output.zero_to_device();
+
+    /* Evaluate on CPU or GPU. */
+    success = (device->info.type == DEVICE_CPU) ? eval_cpu(device, type, input, output) :
+                                                  eval_gpu(device, type, input, output);
+
+    /* Copy data back from device if not cancelled. */
+    if (success) {
+      output.copy_from_device(0, 1, output.size());
+      read_output(output);
+    }
+
+    input.free();
+    output.free();
+  });
 
   return success;
 }
 
-bool ShaderEval::eval_cpu(const ShaderEvalType type,
+bool ShaderEval::eval_cpu(Device *device,
+                          const ShaderEvalType type,
                           device_vector<KernelShaderEvalInput> &input,
                           device_vector<float4> &output)
 {
   vector<CPUKernelThreadGlobals> kernel_thread_globals;
-  device_->get_cpu_kernel_thread_globals(kernel_thread_globals);
+  device->get_cpu_kernel_thread_globals(kernel_thread_globals);
 
   /* Find required kernel function. */
-  const CPUKernels &kernels = *(device_->get_cpu_kernels());
+  const CPUKernels &kernels = *(device->get_cpu_kernels());
 
   /* Simple parallel_for over all work items. */
   const int64_t work_size = output.size();
@@ -73,7 +101,7 @@ bool ShaderEval::eval_cpu(const ShaderEvalType type,
   float4 *output_data = output.data();
   bool success = true;
 
-  tbb::task_arena local_arena(device_->info.cpu_threads);
+  tbb::task_arena local_arena(device->info.cpu_threads);
   local_arena.execute([&]() {
     tbb::parallel_for(int64_t(0), work_size, [&](int64_t work_index) {
       /* TODO: is this fast enough? */
@@ -103,7 +131,8 @@ bool ShaderEval::eval_cpu(const ShaderEvalType type,
   return success;
 }
 
-bool ShaderEval::eval_gpu(const ShaderEvalType type,
+bool ShaderEval::eval_gpu(Device *device,
+                          const ShaderEvalType type,
                           device_vector<KernelShaderEvalInput> &input,
                           device_vector<float4> &output)
 {
@@ -122,7 +151,7 @@ bool ShaderEval::eval_gpu(const ShaderEvalType type,
   };
 
   /* Create device queue. */
-  unique_ptr<DeviceQueue> queue = device_->queue_create();
+  unique_ptr<DeviceQueue> queue = device->queue_create();
   queue->init_execution();
 
   /* Execute work on GPU in chunk, so we can cancel.

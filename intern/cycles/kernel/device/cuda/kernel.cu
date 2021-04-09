@@ -323,7 +323,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_convert_to_half_float(uchar4 *rgba,
-                                      float *buffer,
+                                      float *render_buffer,
                                       float sample_scale,
                                       int sx,
                                       int sy,
@@ -338,7 +338,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (x < sw && y < sh) {
     kernel_film_convert_to_half_float(
-        NULL, rgba, buffer, sample_scale, sx + x, sy + y, offset, stride);
+        NULL, rgba, render_buffer, sample_scale, sx + x, sy + y, offset, stride);
   }
 }
 

@@ -107,7 +107,7 @@ DEFINE_INTEGRATOR_SHADE_KERNEL(megakernel)
 
 void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       uchar4 *rgba,
-                                                      float *buffer,
+                                                      float *render_buffer,
                                                       float sample_scale,
                                                       int x,
                                                       int y,
@@ -117,7 +117,7 @@ void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
 #ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, convert_to_half_float);
 #else
-  kernel_film_convert_to_half_float(kg, rgba, buffer, sample_scale, x, y, offset, stride);
+  kernel_film_convert_to_half_float(kg, rgba, render_buffer, sample_scale, x, y, offset, stride);
 #endif /* KERNEL_STUB */
 }
 

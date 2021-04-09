@@ -50,7 +50,7 @@ KERNEL_INTEGRATOR_SHADE_FUNCTION(megakernel);
 
 void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
                                                       uchar4 *rgba,
-                                                      float *buffer,
+                                                      float *render_buffer,
                                                       float sample_scale,
                                                       int x,
                                                       int y,

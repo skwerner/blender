@@ -25,7 +25,7 @@
 __kernel void kernel_ocl_convert_to_half_float(
 	ccl_constant KernelData *data,
 	ccl_global uchar4 *rgba,
-	ccl_global float *buffer,
+	ccl_global float *render_buffer,
 
 	KERNEL_BUFFER_PARAMS,
 
@@ -43,7 +43,7 @@ __kernel void kernel_ocl_convert_to_half_float(
 	int y = sy + ccl_global_id(1);
 
 	if(x < sx + sw && y < sy + sh)
-		kernel_film_convert_to_half_float(kg, rgba, buffer, sample_scale, x, y, offset, stride);
+		kernel_film_convert_to_half_float(kg, rgba, render_buffer, sample_scale, x, y, offset, stride);
 }
 
 __kernel void kernel_ocl_zero_buffer(ccl_global float4 *buffer, uint64_t size, uint64_t offset)

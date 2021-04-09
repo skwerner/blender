@@ -633,22 +633,25 @@ ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
   for (int i = 0; i < sd->num_closure; i++) {
     const ShaderClosure *sc = &sd->closure[i];
 
-    if (sc == skip_sc || !CLOSURE_IS_BSDF(sc->type) ||
-        _shader_bsdf_exclude(sc->type, light_shader_flags)) {
+    if (sc == skip_sc) {
       continue;
     }
 
-    float bsdf_pdf = 0.0f;
-    float3 eval = bsdf_eval(kg, sd, sc, omega_in, is_transmission, &bsdf_pdf);
+    if (CLOSURE_IS_BSDF_OR_BSSRDF(sc->type)) {
+      if (CLOSURE_IS_BSDF(sc->type) && !_shader_bsdf_exclude(sc->type, light_shader_flags)) {
+        float bsdf_pdf = 0.0f;
+        float3 eval = bsdf_eval(kg, sd, sc, omega_in, is_transmission, &bsdf_pdf);
 
-    if (bsdf_pdf != 0.0f) {
-      const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
-                               CLOSURE_IS_BSDF_BSSRDF(sc->type));
-      bsdf_eval_accum(result_eval, is_diffuse, eval * sc->weight, 1.0f);
-      sum_pdf += bsdf_pdf * sc->sample_weight;
+        if (bsdf_pdf != 0.0f) {
+          const bool is_diffuse = (CLOSURE_IS_BSDF_DIFFUSE(sc->type) ||
+                                   CLOSURE_IS_BSDF_BSSRDF(sc->type));
+          bsdf_eval_accum(result_eval, is_diffuse, eval * sc->weight, 1.0f);
+          sum_pdf += bsdf_pdf * sc->sample_weight;
+        }
+      }
+
+      sum_sample_weight += sc->sample_weight;
     }
-
-    sum_sample_weight += sc->sample_weight;
   }
 
   *pdf = (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;

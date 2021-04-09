@@ -460,6 +460,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_diffuse_indirect = PASS_UNUSED;
   kfilm->pass_glossy_direct = PASS_UNUSED;
   kfilm->pass_glossy_indirect = PASS_UNUSED;
+  kfilm->pass_transmission_direct = PASS_UNUSED;
+  kfilm->pass_transmission_indirect = PASS_UNUSED;
   kfilm->pass_volume_direct = PASS_UNUSED;
   kfilm->pass_volume_indirect = PASS_UNUSED;
   kfilm->pass_volume_direct = PASS_UNUSED;

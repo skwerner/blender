@@ -341,7 +341,8 @@ void BlenderSync::sync_integrator()
     integrator->set_ao_bounces(0);
   }
 
-  /* UPDATE_NONE as we don't want to tag the integrator as modified, just tag dependent things */
+  /* UPDATE_NONE as we don't want to tag the integrator as modified (this was done by the set
+   * calls above), but we need to make sure that the dependent things are tagged. */
   integrator->tag_update(scene, Integrator::UPDATE_NONE);
 }
 

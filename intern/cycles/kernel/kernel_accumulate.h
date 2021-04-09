@@ -324,7 +324,7 @@ ccl_device void kernel_accum_adaptive_buffer(INTEGRATOR_STATE_CONST_ARGS,
    * Carlo global illumination" except that here it is applied per pixel and not in hierarchical
    * tiles. */
 
-  if (!kernel_data.film.pass_adaptive_aux_buffer ||
+  if (kernel_data.film.pass_adaptive_aux_buffer == PASS_UNUSED ||
       kernel_data.integrator.adaptive_threshold == 0.0f) {
     return;
   }
@@ -577,7 +577,7 @@ ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
 ccl_device_inline void kernel_accum_sample(INTEGRATOR_STATE_CONST_ARGS,
                                            ccl_global float *ccl_restrict render_buffer)
 {
-  if (!kernel_data.film.pass_sample_count) {
+  if (kernel_data.film.pass_sample_count == PASS_UNUSED) {
     return;
   }
 

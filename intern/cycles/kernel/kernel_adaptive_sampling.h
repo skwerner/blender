@@ -23,7 +23,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device_forceinline bool kernel_need_sample_pixel(INTEGRATOR_STATE_CONST_ARGS,
                                                      ccl_global float *render_buffer)
 {
-  if (!kernel_data.film.pass_adaptive_aux_buffer) {
+  if (kernel_data.film.pass_adaptive_aux_buffer == PASS_UNUSED) {
     return true;
   }
 
@@ -47,6 +47,8 @@ ccl_device void kernel_adaptive_sampling_convergence_check(const KernelGlobals *
                                                            int offset,
                                                            int stride)
 {
+  kernel_assert(kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED);
+
   const int render_pixel_index = offset + x + y * stride;
   ccl_global float *buffer = render_buffer +
                              (uint64_t)render_pixel_index * kernel_data.film.pass_stride;
@@ -86,6 +88,8 @@ ccl_device bool kernel_adaptive_sampling_filter_x(const KernelGlobals *kg,
                                                   int offset,
                                                   int stride)
 {
+  kernel_assert(kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED);
+
   bool any = false;
   bool prev = false;
   for (int x = start_x; x < start_x + width; ++x) {
@@ -121,6 +125,8 @@ ccl_device bool kernel_adaptive_sampling_filter_y(const KernelGlobals *kg,
                                                   int offset,
                                                   int stride)
 {
+  kernel_assert(kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED);
+
   bool prev = false;
   bool any = false;
   for (int y = start_y; y < start_y + height; ++y) {

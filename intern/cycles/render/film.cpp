@@ -551,6 +551,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_volume_direct = PASS_UNUSED;
   kfilm->pass_volume_indirect = PASS_UNUSED;
   kfilm->pass_shadow = PASS_UNUSED;
+  kfilm->pass_sample_count = PASS_UNUSED;
+  kfilm->pass_adaptive_aux_buffer = PASS_UNUSED;
 
   bool have_cryptomatte = false;
 

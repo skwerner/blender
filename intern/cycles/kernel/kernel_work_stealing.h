@@ -87,7 +87,7 @@ ccl_device bool get_next_work(const KernelGlobals *kg,
                               ccl_private uint *global_work_index)
 {
   bool got_work = false;
-  if (kernel_data.film.pass_adaptive_aux_buffer) {
+  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED) {
     do {
       got_work = get_next_work_item(kg, work_pools, total_work_size, ray_index, global_work_index);
       if (got_work) {

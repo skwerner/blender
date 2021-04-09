@@ -342,7 +342,7 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
      criteria. This is the heuristic from "A hierarchical automatic stopping condition for Monte
      Carlo global illumination" except that here it is applied per pixel and not in hierarchical
      tiles. */
-  if (kernel_data.film.pass_adaptive_aux_buffer &&
+  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED &&
       kernel_data.integrator.adaptive_threshold > 0.0f) {
     if (sample_is_even(kernel_data.integrator.sampling_pattern, sample)) {
       kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer,
@@ -363,7 +363,7 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
   /* Write the sample count as negative numbers initially to mark the samples as in progress.
    * Once the tile has finished rendering, the sign gets flipped and all the pixel values
    * are scaled as if they were taken at a uniform sample count. */
-  if (kernel_data.film.pass_sample_count) {
+  if (kernel_data.film.pass_sample_count != PASS_UNUSED) {
     /* Make sure it's a negative number. In progressive refine mode, this bit gets flipped between
      * passes. */
 #  ifdef __ATOMIC_PASS_WRITE__

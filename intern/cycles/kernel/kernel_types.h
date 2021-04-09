@@ -1230,9 +1230,9 @@ typedef struct KernelFilm {
 #endif
 
   /* viewport rendering options */
-  int display_pass_stride;
+  int display_pass_offset;
   int display_pass_components;
-  int display_divide_pass_stride;
+  int display_divide_pass_offset;
   int use_display_exposure;
   int use_display_pass_alpha;
 

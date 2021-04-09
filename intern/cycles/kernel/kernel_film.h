@@ -24,19 +24,19 @@ ccl_device float4 film_get_pass_result(const KernelGlobals *kg,
 {
   float4 pass_result;
 
-  int display_pass_stride = kernel_data.film.display_pass_stride;
+  int display_pass_offset = kernel_data.film.display_pass_offset;
   int display_pass_components = kernel_data.film.display_pass_components;
 
   if (display_pass_components == 4) {
-    float4 in = *(ccl_global float4 *)(buffer + display_pass_stride +
+    float4 in = *(ccl_global float4 *)(buffer + display_pass_offset +
                                        index * kernel_data.film.pass_stride);
     float transparency = (kernel_data.film.use_display_pass_alpha) ? in.w : 0.0f;
 
     pass_result = make_float4(in.x, in.y, in.z, transparency);
 
-    int display_divide_pass_stride = kernel_data.film.display_divide_pass_stride;
-    if (display_divide_pass_stride != -1) {
-      ccl_global float4 *divide_in = (ccl_global float4 *)(buffer + display_divide_pass_stride +
+    int display_divide_pass_offset = kernel_data.film.display_divide_pass_offset;
+    if (display_divide_pass_offset != -1) {
+      ccl_global float4 *divide_in = (ccl_global float4 *)(buffer + display_divide_pass_offset +
                                                            index * kernel_data.film.pass_stride);
       float3 divided = safe_divide_even_color(float4_to_float3(pass_result),
                                               float4_to_float3(*divide_in));
@@ -49,7 +49,7 @@ ccl_device float4 film_get_pass_result(const KernelGlobals *kg,
     }
   }
   else if (display_pass_components == 1) {
-    ccl_global float *in = (ccl_global float *)(buffer + display_pass_stride +
+    ccl_global float *in = (ccl_global float *)(buffer + display_pass_offset +
                                                 index * kernel_data.film.pass_stride);
     pass_result = make_float4(*in, *in, *in, 0.0f);
   }
@@ -78,7 +78,7 @@ ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
   int index = offset + x + y * stride;
 
   float4 rgba_in = film_get_pass_result(kg, buffer, index);
-  if (kernel_data.film.display_divide_pass_stride == -1) {
+  if (kernel_data.film.display_divide_pass_offset == -1) {
     rgba_in *= sample_scale;
   }
 

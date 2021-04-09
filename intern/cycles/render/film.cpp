@@ -440,9 +440,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->exposure = exposure;
   kfilm->pass_flag = 0;
 
-  kfilm->display_pass_stride = -1;
+  kfilm->display_pass_offset = -1;
   kfilm->display_pass_components = 0;
-  kfilm->display_divide_pass_stride = -1;
+  kfilm->display_divide_pass_offset = -1;
   kfilm->use_display_exposure = false;
   kfilm->use_display_pass_alpha = (display_pass == PASS_COMBINED);
 
@@ -631,13 +631,13 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     }
 
     if (pass.type == display_pass) {
-      kfilm->display_pass_stride = kfilm->pass_stride;
+      kfilm->display_pass_offset = kfilm->pass_stride;
       kfilm->display_pass_components = pass.components;
       kfilm->use_display_exposure = pass.exposure && (kfilm->exposure != 1.0f);
     }
     else if (pass.type == PASS_DIFFUSE_COLOR || pass.type == PASS_TRANSMISSION_COLOR ||
              pass.type == PASS_GLOSSY_COLOR) {
-      kfilm->display_divide_pass_stride = kfilm->pass_stride;
+      kfilm->display_divide_pass_offset = kfilm->pass_stride;
     }
 
     kfilm->pass_stride += pass.components;

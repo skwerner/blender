@@ -185,7 +185,7 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-  void reset_(BufferParams &params, int samples);
+  void do_delayed_reset();
 
   thread *session_thread;
 

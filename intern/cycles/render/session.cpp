@@ -270,8 +270,7 @@ RenderWork Session::run_update_for_next_iteration()
 
   if (delayed_reset.do_reset) {
     thread_scoped_lock buffers_lock(buffers_mutex);
-    reset_(delayed_reset.params, delayed_reset.samples);
-    delayed_reset.do_reset = false;
+    do_delayed_reset();
 
     /* After reset make sure the tile manager is at the first big tile. */
     have_tiles = tile_manager.next();
@@ -360,11 +359,16 @@ void Session::draw()
   path_trace_->draw();
 }
 
-void Session::reset_(BufferParams &buffer_params, int samples)
+void Session::do_delayed_reset()
 {
-  this->buffer_params = buffer_params;
+  if (!delayed_reset.do_reset) {
+    return;
+  }
+  delayed_reset.do_reset = false;
 
-  render_scheduler_.reset(buffer_params, samples);
+  buffer_params = delayed_reset.params;
+
+  render_scheduler_.reset(buffer_params, delayed_reset.samples);
   path_trace_->reset(buffer_params);
   tile_manager.reset(buffer_params);
 

@@ -41,7 +41,8 @@ void WorkTileScheduler::reset(const BufferParams &buffer_params, int sample_star
 
   image_size_px_ = make_int2(buffer_params.width, buffer_params.height);
 
-  buffer_params.get_offset_stride(offset_, stride_);
+  offset_ = buffer_params.offset;
+  stride_ = buffer_params.stride;
 
   /* Samples parameters. */
   sample_start_ = sample_start;

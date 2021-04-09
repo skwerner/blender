@@ -680,7 +680,6 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     BufferParams buffer_params;
     buffer_params.width = bake_width;
     buffer_params.height = bake_height;
-    buffer_params.passes = scene->passes;
 
     /* Update session. */
     session->reset(buffer_params, session_params.samples);
@@ -727,7 +726,8 @@ void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
       int components = b_pass.channels();
 
       /* Copy pixels from regular render passes. */
-      bool read = buffers->get_pass_rect(b_pass.name(), exposure, sample, components, &pixels[0]);
+      bool read = buffers->get_pass_rect(
+          session->scene->passes, b_pass.name(), exposure, sample, components, &pixels[0]);
 
       /* If denoising pass, */
       if (!read) {
@@ -748,7 +748,8 @@ void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
   else {
     /* copy combined pass */
     BL::RenderPass b_combined_pass(b_rlay.passes.find_by_name("Combined", b_rview_name.c_str()));
-    if (buffers->get_pass_rect("Combined", exposure, sample, 4, &pixels[0]))
+    if (buffers->get_pass_rect(
+            session->scene->passes, "Combined", exposure, sample, 4, &pixels[0]))
       b_combined_pass.rect(&pixels[0]);
   }
 }

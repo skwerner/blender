@@ -24,17 +24,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-DenoiserBufferParams::DenoiserBufferParams(const BufferParams &params)
-    : x(params.full_x),
-      y(params.full_y),
-      width(params.width),
-      height(params.height),
-      pass_stride(params.get_passes_size()),
-      pass_denoising_offset(params.get_denoising_offset())
-{
-  params.get_offset_stride(offset, stride);
-}
-
 unique_ptr<Denoiser> Denoiser::create(Device *device, const DenoiseParams &params)
 {
   DCHECK(params.use);

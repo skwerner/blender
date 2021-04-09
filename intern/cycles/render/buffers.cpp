@@ -43,7 +43,29 @@ BufferParams::BufferParams()
   denoising_data_pass = false;
 }
 
-void BufferParams::get_offset_stride(int &offset, int &stride) const
+void BufferParams::update_passes(vector<Pass> &passes)
+{
+  update_offset_stride();
+
+  pass_stride = 0;
+  pass_denoising_offset = 0;
+  for (const Pass &pass : passes) {
+    pass_stride += pass.components;
+    pass_denoising_offset += pass.components;
+
+    if (pass.type == PASS_SAMPLE_COUNT) {
+      pass_sample_count_offset = pass_stride;
+    }
+  }
+
+  if (denoising_data_pass) {
+    pass_stride += DENOISING_PASS_SIZE;
+  }
+
+  pass_stride = align_up(pass_stride, 4);
+}
+
+void BufferParams::update_offset_stride()
 {
   offset = -(full_x + full_y * width);
   stride = width;
@@ -53,32 +75,10 @@ bool BufferParams::modified(const BufferParams &params) const
 {
   return !(full_x == params.full_x && full_y == params.full_y && width == params.width &&
            height == params.height && full_width == params.full_width &&
-           full_height == params.full_height && Pass::equals_exact(passes, params.passes) &&
-           denoising_data_pass == params.denoising_data_pass);
-}
-
-int BufferParams::get_passes_size() const
-{
-  int size = 0;
-
-  for (size_t i = 0; i < passes.size(); i++)
-    size += passes[i].components;
-
-  if (denoising_data_pass) {
-    size += DENOISING_PASS_SIZE;
-  }
-
-  return align_up(size, 4);
-}
-
-int BufferParams::get_denoising_offset() const
-{
-  int offset = 0;
-
-  for (size_t i = 0; i < passes.size(); i++)
-    offset += passes[i].components;
-
-  return offset;
+           full_height == params.full_height &&
+           denoising_data_pass == params.denoising_data_pass && offset == params.offset &&
+           stride == params.stride && pass_stride == params.pass_stride &&
+           pass_denoising_offset == params.pass_denoising_offset);
 }
 
 /* Render Buffer Task */
@@ -120,10 +120,12 @@ RenderBuffers::~RenderBuffers()
 
 void RenderBuffers::reset(const BufferParams &params_)
 {
+  DCHECK(params_.pass_stride != -1);
+
   params = params_;
 
   /* re-allocate buffer */
-  buffer.alloc(params.width * params.get_passes_size(), params.height);
+  buffer.alloc(params.width * params.pass_stride, params.height);
   buffer.zero_to_device();
 }
 
@@ -134,10 +136,12 @@ void RenderBuffers::zero()
 
 bool RenderBuffers::copy_from_device()
 {
+  DCHECK(params.pass_stride != -1);
+
   if (!buffer.device_pointer)
     return false;
 
-  buffer.copy_from_device(0, params.width * params.get_passes_size(), params.height);
+  buffer.copy_from_device(0, params.width * params.pass_stride, params.height);
 
   return true;
 }
@@ -158,24 +162,24 @@ bool RenderBuffers::get_denoising_pass_rect(
   int offset;
   switch (type) {
     case DENOISING_PASS_DEPTH:
-      offset = params.get_denoising_offset() + DENOISING_PASS_DEPTH;
+      offset = params.pass_denoising_offset + DENOISING_PASS_DEPTH;
       break;
     case DENOISING_PASS_NORMAL:
-      offset = params.get_denoising_offset() + DENOISING_PASS_NORMAL;
+      offset = params.pass_denoising_offset + DENOISING_PASS_NORMAL;
       break;
     case DENOISING_PASS_ALBEDO:
-      offset = params.get_denoising_offset() + DENOISING_PASS_ALBEDO;
+      offset = params.pass_denoising_offset + DENOISING_PASS_ALBEDO;
       break;
     case DENOISING_PASS_COLOR:
-      offset = params.get_denoising_offset() + DENOISING_PASS_COLOR;
+      offset = params.pass_denoising_offset + DENOISING_PASS_COLOR;
       break;
     default:
       return false;
   }
   scale /= sample;
 
-  int pass_stride = params.get_passes_size();
-  int size = params.width * params.height;
+  const int pass_stride = params.pass_stride;
+  const int size = params.width * params.height;
 
   float *in = buffer.data() + offset;
 
@@ -227,10 +231,11 @@ class Scaler {
          const int sample,
          const float exposure)
       : pass_(pass),
-        pass_stride_(render_buffers->params.get_passes_size()),
+        pass_stride_(render_buffers->params.pass_stride),
         sample_inv_(1.0f / sample),
         exposure_(exposure),
-        sample_count_pass_(render_buffers->get_sample_count_buffer())
+        sample_count_pass_(render_buffers->buffer.data() +
+                           render_buffers->params.pass_sample_count_offset)
   {
     /* Special trick to only scale the samples count pass with the sample scale. Otherwise the pass
      * becomes a uniform 1.0. */
@@ -293,33 +298,19 @@ class Scaler {
 
 } /* namespace */
 
-const float *RenderBuffers::get_sample_count_buffer() const
-{
-  /* TODO(sergey): Cache the pass somehow. */
-
-  int sample_offset = 0;
-  for (const Pass &pass : params.passes) {
-    if (pass.type != PASS_SAMPLE_COUNT) {
-      sample_offset += pass.components;
-      continue;
-    }
-    return buffer.data() + sample_offset;
-  }
-
-  return nullptr;
-}
-
-bool RenderBuffers::get_pass_rect(
-    const string &name, float exposure, int sample, int components, float *pixels)
+bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
+                                  const string &name,
+                                  float exposure,
+                                  int sample,
+                                  int components,
+                                  float *pixels)
 {
   if (buffer.data() == NULL) {
     return false;
   }
 
   int pass_offset = 0;
-  for (size_t j = 0; j < params.passes.size(); j++) {
-    const Pass &pass = params.passes[j];
-
+  for (const Pass &pass : passes) {
     /* Pass is identified by both type and name, multiple of the same type
      * may exist with a different name. */
     if (pass.name != name) {
@@ -330,7 +321,7 @@ bool RenderBuffers::get_pass_rect(
     const PassType type = pass.type;
 
     const float *in = buffer.data() + pass_offset;
-    const int pass_stride = params.get_passes_size();
+    const int pass_stride = params.pass_stride;
 
     const Scaler scaler(this, pass, in, sample, exposure);
 
@@ -394,8 +385,7 @@ bool RenderBuffers::get_pass_rect(
       else if (pass.divide_type != PASS_NONE) {
         /* RGB lighting passes that need to divide out color */
         pass_offset = 0;
-        for (size_t k = 0; k < params.passes.size(); k++) {
-          Pass &color_pass = params.passes[k];
+        for (const Pass &color_pass : passes) {
           if (color_pass.type == pass.divide_type)
             break;
           pass_offset += color_pass.components;
@@ -445,8 +435,7 @@ bool RenderBuffers::get_pass_rect(
       else if (type == PASS_MOTION) {
         /* need to normalize by number of samples accumulated for motion */
         pass_offset = 0;
-        for (size_t k = 0; k < params.passes.size(); k++) {
-          Pass &color_pass = params.passes[k];
+        for (const Pass &color_pass : passes) {
           if (color_pass.type == PASS_MOTION_WEIGHT)
             break;
           pass_offset += color_pass.components;
@@ -503,6 +492,7 @@ bool RenderBuffers::get_pass_rect(
   return false;
 }
 
+#if 0
 bool RenderBuffers::set_pass_rect(PassType type, int components, float *pixels, int samples)
 {
   if (buffer.data() == NULL) {
@@ -520,8 +510,8 @@ bool RenderBuffers::set_pass_rect(PassType type, int components, float *pixels, 
     }
 
     float *out = buffer.data() + pass_offset;
-    int pass_stride = params.get_passes_size();
-    int size = params.width * params.height;
+    const int pass_stride = params.passes_size;
+    const int size = params.width * params.height;
 
     assert(pass.components == components);
 
@@ -545,5 +535,6 @@ bool RenderBuffers::set_pass_rect(PassType type, int components, float *pixels, 
 
   return false;
 }
+#endif
 
 CCL_NAMESPACE_END

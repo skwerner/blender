@@ -29,13 +29,13 @@ class DeviceDenoiser : public Denoiser {
  public:
   DeviceDenoiser(Device *device, const DenoiseParams &params);
 
-  virtual void denoise_buffer(const DenoiserBufferParams &buffer_params,
+  virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) override;
 
  protected:
   void denoise_buffer_on_device(Device *device,
-                                const DenoiserBufferParams &buffer_params,
+                                const BufferParams &buffer_params,
                                 RenderBuffers *render_buffers,
                                 const int num_samples);
 };

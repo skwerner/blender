@@ -49,17 +49,28 @@ class BufferParams {
   int full_width;
   int full_height;
 
-  /* passes */
-  vector<Pass> passes;
+  /* Denoising pass information.
+   *
+   * TODO(sergey): Make it runtime as the synchronization code should not worry about setting it.
+   */
   bool denoising_data_pass;
+
+  /* Runtime fields, only valid after `update_passes()`.
+   * Only fields either used all over the place or in this module. */
+  int offset = -1, stride = -1;
+  int pass_stride = -1;
+  int pass_sample_count_offset = -1;
+  int pass_denoising_offset = -1;
 
   /* functions */
   BufferParams();
 
-  void get_offset_stride(int &offset, int &stride) const;
+  /* Pre-calculate all fields which depends on the passes. */
+  void update_passes(vector<Pass> &passes);
+
+  void update_offset_stride();
+
   bool modified(const BufferParams &params) const;
-  int get_passes_size() const;
-  int get_denoising_offset() const;
 };
 
 /* Render Buffers */
@@ -81,15 +92,19 @@ class RenderBuffers {
   void zero();
 
   bool copy_from_device();
-  bool get_pass_rect(
-      const string &name, float exposure, int sample, int components, float *pixels);
+
+  bool get_pass_rect(const vector<Pass> &passes,
+                     const string &name,
+                     float exposure,
+                     int sample,
+                     int components,
+                     float *pixels);
   bool get_denoising_pass_rect(
       int offset, float exposure, int sample, int components, float *pixels);
-  bool set_pass_rect(PassType type, int components, float *pixels, int samples);
 
-  /* Get buffer of the Sample Count pass.
-   * If there is no such pass configured nullptr is returned.*/
-  const float *get_sample_count_buffer() const;
+#if 0
+  bool set_pass_rect(PassType type, int components, float *pixels, int samples);
+#endif
 };
 
 /* Render Tile

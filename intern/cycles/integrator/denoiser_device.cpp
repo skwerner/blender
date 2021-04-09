@@ -28,7 +28,7 @@ DeviceDenoiser::DeviceDenoiser(Device *device, const DenoiseParams &params)
 {
 }
 
-void DeviceDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
+void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                     RenderBuffers *render_buffers,
                                     const int num_samples)
 {
@@ -36,14 +36,14 @@ void DeviceDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
 }
 
 void DeviceDenoiser::denoise_buffer_on_device(Device *device,
-                                              const DenoiserBufferParams &buffer_params,
+                                              const BufferParams &buffer_params,
                                               RenderBuffers *render_buffers,
                                               const int num_samples)
 {
   DeviceDenoiseTask task;
 
-  task.x = buffer_params.x;
-  task.y = buffer_params.y;
+  task.x = buffer_params.full_x;
+  task.y = buffer_params.full_y;
   task.width = buffer_params.width;
   task.height = buffer_params.height;
 

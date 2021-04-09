@@ -227,9 +227,9 @@ void PathTrace::denoise(const RenderWork &render_work)
 
   const double start_time = time_dt();
 
-  const DenoiserBufferParams buffer_params(render_state_.scaled_render_buffer_params);
-  denoiser_->denoise_buffer(
-      buffer_params, full_render_buffers_.get(), get_num_samples_in_buffer());
+  denoiser_->denoise_buffer(render_state_.scaled_render_buffer_params,
+                            full_render_buffers_.get(),
+                            get_num_samples_in_buffer());
 
   if (!is_cancel_requested()) {
     render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
@@ -331,6 +331,8 @@ void PathTrace::render_update_resolution_divider(int resolution_divider)
                                                          orig_params.height / resolution_divider);
   render_state_.scaled_render_buffer_params.full_x = orig_params.full_x / resolution_divider;
   render_state_.scaled_render_buffer_params.full_y = orig_params.full_y / resolution_divider;
+
+  render_state_.scaled_render_buffer_params.update_offset_stride();
 
   /* TODO(sergey): Perform slicing of the render buffers for every work. */
   for (auto &&path_trace_work : path_trace_works_) {

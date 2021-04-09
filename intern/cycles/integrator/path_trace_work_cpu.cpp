@@ -70,9 +70,6 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
   const int64_t image_height = effective_buffer_params_.height;
   const int64_t total_pixels_num = image_width * image_height;
 
-  int offset, stride;
-  effective_buffer_params_.get_offset_stride(offset, stride);
-
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
     tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
@@ -90,8 +87,8 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
       work_tile.h = 1;
       work_tile.start_sample = start_sample;
       work_tile.num_samples = 1;
-      work_tile.offset = offset;
-      work_tile.stride = stride;
+      work_tile.offset = effective_buffer_params_.offset;
+      work_tile.stride = effective_buffer_params_.stride;
 
       CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
 
@@ -132,6 +129,8 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   const int full_y = effective_buffer_params_.full_y;
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
+  const int offset = effective_buffer_params_.offset;
+  const int stride = effective_buffer_params_.stride;
 
   half4 *rgba_half = gpu_display->map_texture_buffer();
   if (!rgba_half) {
@@ -139,9 +138,6 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
      * some implementations of GPUDisplay which can not map memory? */
     return;
   }
-
-  int offset, stride;
-  effective_buffer_params_.get_offset_stride(offset, stride);
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
@@ -169,11 +165,10 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
   const int full_y = effective_buffer_params_.full_y;
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
+  const int offset = effective_buffer_params_.offset;
+  const int stride = effective_buffer_params_.stride;
 
   float *render_buffer = render_buffers_->buffer.data();
-
-  int offset, stride;
-  effective_buffer_params_.get_offset_stride(offset, stride);
 
   bool any = false;
 

@@ -28,24 +28,6 @@ class BufferParams;
 class Device;
 class RenderBuffers;
 
-/* Pre-calculated parameters of the buffers.
- *
- * TODO(sergey): Consider making it more generic, A lot of path tracing/integrator routines needs
- * access to offset, stride, pass_stride without overhead of re-calculating them on every access.
- */
-class DenoiserBufferParams {
- public:
-  explicit DenoiserBufferParams(const BufferParams &params);
-
-  int x, y;
-  int width, height;
-
-  int offset, stride;
-
-  int pass_stride;
-  int pass_denoising_offset;
-};
-
 /* Implementation of a specific denoising algorithm.
  *
  * This class takes care of breaking down denosiing algorithm into a series of device calls or to
@@ -79,7 +61,7 @@ class Denoiser {
    * The `num_samples` corresponds to the number of samples in the render buffers. It is used
    * to scale buffers down to the "final" value in algorithms which don't do automatic exposure,
    * or which needs "final" value for data passes. */
-  virtual void denoise_buffer(const DenoiserBufferParams &buffer_params,
+  virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) = 0;
 

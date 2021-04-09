@@ -89,15 +89,15 @@ struct OIDNPass {
 static void oidn_add_pass_if_needed(oidn::FilterRef *oidn_filter,
                                     OIDNPass &oidn_pass,
                                     RenderBuffers *render_buffers,
-                                    const DenoiserBufferParams &buffer_params,
+                                    const BufferParams &buffer_params,
                                     const float scale)
 {
   if (!oidn_pass.use) {
     return;
   }
 
-  const int64_t x = buffer_params.x;
-  const int64_t y = buffer_params.y;
+  const int64_t x = buffer_params.full_x;
+  const int64_t y = buffer_params.full_y;
   const int64_t width = buffer_params.width;
   const int64_t height = buffer_params.height;
   const int64_t offset = buffer_params.offset;
@@ -143,7 +143,7 @@ static void oidn_add_pass_if_needed(oidn::FilterRef *oidn_filter,
 
 #endif
 
-void OIDNDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
+void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                   RenderBuffers *render_buffers,
                                   const int num_samples)
 {
@@ -157,16 +157,14 @@ void OIDNDenoiser::denoise_buffer(const DenoiserBufferParams &buffer_params,
 #ifdef WITH_OPENIMAGEDENOISE
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
-  const int denoising_offset = buffer_params.pass_denoising_offset;
-
   std::array<OIDNPass, 4> oidn_passes = {{
-      {"color", denoising_offset + DENOISING_PASS_COLOR, false, true},
+      {"color", buffer_params.pass_denoising_offset + DENOISING_PASS_COLOR, false, true},
       {"albedo",
-       denoising_offset + DENOISING_PASS_ALBEDO,
+       buffer_params.pass_denoising_offset + DENOISING_PASS_ALBEDO,
        true,
        params_.input_passes >= DENOISER_INPUT_RGB_ALBEDO},
       {"normal",
-       denoising_offset + DENOISING_PASS_NORMAL,
+       buffer_params.pass_denoising_offset + DENOISING_PASS_NORMAL,
        true,
        params_.input_passes >= DENOISER_INPUT_RGB_ALBEDO_NORMAL},
       {"output", 0, false, true},

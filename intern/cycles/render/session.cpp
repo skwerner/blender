@@ -290,7 +290,7 @@ RenderWork Session::run_update_for_next_iteration()
 
   /* Update adaptive sampling. */
   {
-    AdaptiveSampling adaptive_sampling = scene->integrator->adaptive_sampling_get();
+    AdaptiveSampling adaptive_sampling = scene->integrator->get_adaptive_sampling();
     adaptive_sampling.use &= params.adaptive_sampling;
     path_trace_->set_adaptive_sampling(adaptive_sampling);
   }

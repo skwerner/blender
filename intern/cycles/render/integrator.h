@@ -90,7 +90,7 @@ class Integrator : public Node {
 
   void tag_update(Scene *scene, uint32_t flag);
 
-  AdaptiveSampling adaptive_sampling_get() const;
+  AdaptiveSampling get_adaptive_sampling() const;
 };
 
 CCL_NAMESPACE_END

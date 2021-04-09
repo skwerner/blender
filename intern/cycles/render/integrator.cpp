@@ -244,7 +244,7 @@ void Integrator::tag_update(Scene *scene, uint32_t flag)
   }
 }
 
-AdaptiveSampling Integrator::adaptive_sampling_get() const
+AdaptiveSampling Integrator::get_adaptive_sampling() const
 {
   AdaptiveSampling adaptive_sampling;
 

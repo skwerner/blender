@@ -500,30 +500,30 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
 
 bool Scene::update(Progress &progress)
 {
-  /* update scene */
-  if (need_update()) {
-    /* Updated used shader tag so we know which features are need for the kernel. */
-    shader_manager->update_shaders_used(this);
-
-    /* Update max_closures. */
-    KernelIntegrator *kintegrator = &dscene.data.integrator;
-    if (params.background) {
-      kintegrator->max_closures = get_max_closure_count();
-    }
-    else {
-      /* Currently viewport render is faster with higher max_closures, needs investigating. */
-      kintegrator->max_closures = MAX_CLOSURE;
-    }
-
-    /* Load render kernels, before device update where we upload data to the GPU. */
-    load_kernels(progress, false);
-
-    progress.set_status("Updating Scene");
-    MEM_GUARDED_CALL(&progress, device_update, device, progress);
-
-    return true;
+  if (!need_update()) {
+    return false;
   }
-  return false;
+
+  /* Updated used shader tag so we know which features are need for the kernel. */
+  shader_manager->update_shaders_used(this);
+
+  /* Update max_closures. */
+  KernelIntegrator *kintegrator = &dscene.data.integrator;
+  if (params.background) {
+    kintegrator->max_closures = get_max_closure_count();
+  }
+  else {
+    /* Currently viewport render is faster with higher max_closures, needs investigating. */
+    kintegrator->max_closures = MAX_CLOSURE;
+  }
+
+  /* Load render kernels, before device update where we upload data to the GPU. */
+  load_kernels(progress, false);
+
+  progress.set_status("Updating Scene");
+  MEM_GUARDED_CALL(&progress, device_update, device, progress);
+
+  return true;
 }
 
 bool Scene::load_kernels(Progress &progress, bool lock_scene)

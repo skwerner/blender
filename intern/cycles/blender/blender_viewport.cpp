@@ -61,7 +61,7 @@ const bool BlenderViewportParameters::custom_viewport_parameters() const
   return !(use_scene_world && use_scene_lights);
 }
 
-PassType BlenderViewportParameters::get_viewport_display_render_pass(BL::SpaceView3D &b_v3d)
+PassType BlenderViewportParameters::get_render_pass(BL::SpaceView3D &b_v3d)
 {
   PassType display_pass = PASS_NONE;
   if (b_v3d) {
@@ -75,7 +75,7 @@ PassType BlenderViewportParameters::get_viewport_display_render_pass(BL::SpaceVi
 PassType update_viewport_display_passes(BL::SpaceView3D &b_v3d, vector<Pass> &passes)
 {
   if (b_v3d) {
-    PassType display_pass = BlenderViewportParameters::get_viewport_display_render_pass(b_v3d);
+    PassType display_pass = BlenderViewportParameters::get_render_pass(b_v3d);
 
     passes.clear();
     Pass::add(display_pass, passes);

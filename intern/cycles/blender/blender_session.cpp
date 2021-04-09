@@ -339,7 +339,6 @@ static void end_render_result(BL::RenderEngine &b_engine,
 
 void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
                                                  bool do_update_only,
-                                                 bool do_read_only,
                                                  bool highlight)
 {
   int x = rtile.x - session->buffer_params.full_x;
@@ -365,20 +364,7 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
 
   BL::RenderLayer b_rlay = *b_single_rlay;
 
-  if (do_read_only) {
-    /* copy each pass */
-    for (BL::RenderPass &b_pass : b_rlay.passes) {
-      /* find matching pass type */
-      PassType pass_type = BlenderSync::get_pass_type(b_pass);
-      int components = b_pass.channels();
-
-      rtile.buffers->set_pass_rect(
-          pass_type, components, (float *)b_pass.rect(), rtile.num_samples);
-    }
-
-    end_render_result(b_engine, b_rr, false, false, false);
-  }
-  else if (do_update_only) {
+  if (do_update_only) {
     /* Sample would be zero at initial tile update, which is only needed
      * to tag tile form blender side as IN PROGRESS for proper highlight
      * no buffers should be sent to blender yet. For denoise we also
@@ -398,14 +384,9 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
   }
 }
 
-void BlenderSession::read_render_tile(RenderTile &rtile)
-{
-  do_write_update_render_tile(rtile, false, true, false);
-}
-
 void BlenderSession::write_render_tile(RenderTile &rtile)
 {
-  do_write_update_render_tile(rtile, false, false, false);
+  do_write_update_render_tile(rtile, false, false);
 }
 
 void BlenderSession::update_render_tile(RenderTile &rtile, bool highlight)
@@ -415,9 +396,9 @@ void BlenderSession::update_render_tile(RenderTile &rtile, bool highlight)
    * would need to be investigated a bit further, but for now shall be fine
    */
   if (!b_engine.is_preview())
-    do_write_update_render_tile(rtile, true, false, highlight);
+    do_write_update_render_tile(rtile, true, highlight);
   else
-    do_write_update_render_tile(rtile, false, false, false);
+    do_write_update_render_tile(rtile, false, false);
 }
 
 static void add_cryptomatte_layer(BL::RenderResult &b_rr, string name, string manifest)
@@ -670,7 +651,6 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
    * name. */
   Pass::add(PASS_COMBINED, scene->passes, "Combined");
 
-  session->read_bake_tile_cb = function_bind(&BlenderSession::read_render_tile, this, _1);
   session->write_render_tile_cb = function_bind(&BlenderSession::write_render_tile, this, _1);
 
   if (!session->progress.get_cancel()) {
@@ -715,7 +695,6 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     session->wait();
   }
 
-  session->read_bake_tile_cb = function_null;
   session->write_render_tile_cb = function_null;
 }
 

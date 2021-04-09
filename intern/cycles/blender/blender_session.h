@@ -71,7 +71,6 @@ class BlenderSession {
 
   void write_render_result(BL::RenderLayer &b_rlay, RenderTile &rtile);
   void write_render_tile(RenderTile &rtile);
-  void read_render_tile(RenderTile &rtile);
 
   /* update functions are used to update display buffer only after sample was rendered
    * only needed for better visual feedback */
@@ -153,10 +152,7 @@ class BlenderSession {
   void do_write_update_render_result(BL::RenderLayer &b_rlay,
                                      RenderTile &rtile,
                                      bool do_update_only);
-  void do_write_update_render_tile(RenderTile &rtile,
-                                   bool do_update_only,
-                                   bool do_read_only,
-                                   bool highlight);
+  void do_write_update_render_tile(RenderTile &rtile, bool do_update_only, bool highlight);
 
   void builtin_images_load();
 

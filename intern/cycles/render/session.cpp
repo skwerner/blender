@@ -281,11 +281,7 @@ RenderWork Session::run_update_for_next_iteration()
    * the initial configuration when Session is created where the `set_samples()` is not used. */
   scene->integrator->set_aa_samples(params.samples);
 
-  /* Only provide denoiser parameters to the PathTrace if the denoiser will actually be used.
-   * Currently denoising is not supported for baking. */
-  if (!read_bake_tile_cb) {
-    path_trace_->set_denoiser_params(params.denoising);
-  }
+  path_trace_->set_denoiser_params(params.denoising);
 
   /* Update adaptive sampling. */
   {

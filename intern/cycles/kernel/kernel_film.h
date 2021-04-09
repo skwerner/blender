@@ -77,6 +77,13 @@ ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
 
   float4 rgba_in = film_get_pass_result(kg, buffer);
   if (kernel_data.film.display_divide_pass_offset == -1) {
+    /* Divide by adaptive sampling count.
+     * Note that the sample count pass gets divided by the overall sampls count, so that it gives
+     * meaningful result (rather than becoming uniform buffer filled with 1). */
+    if (kernel_data.film.pass_sample_count &&
+        kernel_data.film.pass_sample_count != kernel_data.film.display_pass_offset) {
+      sample_scale = 1.0f / buffer[kernel_data.film.pass_sample_count];
+    }
     rgba_in *= sample_scale;
   }
 

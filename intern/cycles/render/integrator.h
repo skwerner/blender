@@ -67,6 +67,7 @@ class Integrator : public Node {
 
   NODE_SOCKET_API(float, light_sampling_threshold)
 
+  NODE_SOCKET_API(bool, use_adaptive_sampling)
   NODE_SOCKET_API(int, adaptive_min_samples)
   NODE_SOCKET_API(float, adaptive_threshold)
 

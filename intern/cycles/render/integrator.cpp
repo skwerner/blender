@@ -68,6 +68,7 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(aa_samples, "AA Samples", 0);
   SOCKET_INT(start_sample, "Start Sample", 0);
 
+  SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
   SOCKET_FLOAT(adaptive_threshold, "Adaptive Threshold", 0.0f);
   SOCKET_INT(adaptive_min_samples, "Adaptive Min Samples", 0);
 
@@ -161,7 +162,12 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   kintegrator->sampling_pattern = sampling_pattern;
 
-  if (aa_samples > 0 && adaptive_threshold == 0.0f) {
+  const AdaptiveSampling adaptive_sampling = scene->integrator->get_adaptive_sampling();
+
+  if (!adaptive_sampling.use) {
+    kintegrator->adaptive_threshold = 0.0f;
+  }
+  else if (aa_samples > 0 && adaptive_threshold == 0.0f) {
     kintegrator->adaptive_threshold = max(0.001f, 1.0f / (float)aa_samples);
     VLOG(1) << "Cycles adaptive sampling: automatic threshold = "
             << kintegrator->adaptive_threshold;

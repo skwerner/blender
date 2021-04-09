@@ -307,26 +307,22 @@ void BlenderSync::sync_integrator()
 
   integrator->set_light_sampling_threshold(get_float(cscene, "light_sampling_threshold"));
 
+  const bool use_adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
+
   SamplingPattern sampling_pattern = (SamplingPattern)get_enum(
       cscene, "sampling_pattern", SAMPLING_NUM_PATTERNS, SAMPLING_PATTERN_SOBOL);
-
-  int adaptive_min_samples = INT_MAX;
-
-  if (RNA_boolean_get(&cscene, "use_adaptive_sampling")) {
+  if (use_adaptive_sampling) {
     sampling_pattern = SAMPLING_PATTERN_PMJ;
-    adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
-    integrator->set_adaptive_threshold(get_float(cscene, "adaptive_threshold"));
   }
-  else {
-    integrator->set_adaptive_threshold(0.0f);
-  }
-
   integrator->set_sampling_pattern(sampling_pattern);
 
+  integrator->set_use_adaptive_sampling(use_adaptive_sampling);
+  integrator->set_adaptive_threshold(get_float(cscene, "adaptive_threshold"));
+
+  int adaptive_min_samples = get_int(cscene, "adaptive_min_samples");
   if (get_boolean(cscene, "use_square_samples")) {
     adaptive_min_samples = min(adaptive_min_samples * adaptive_min_samples, INT_MAX);
   }
-
   integrator->set_adaptive_min_samples(adaptive_min_samples);
 
   if (b_scene.render().use_simplify()) {
@@ -826,8 +822,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
 
   params.use_profiling = params.device.has_profiling && !b_engine.is_preview() && background &&
                          BlenderSession::print_render_stats;
-
-  params.adaptive_sampling = RNA_boolean_get(&cscene, "use_adaptive_sampling");
 
   return params;
 }

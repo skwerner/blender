@@ -184,7 +184,10 @@ ccl_device_inline bool light_sample_from_position(
 
 ccl_device bool lights_intersect(const KernelGlobals *ccl_restrict kg,
                                  const Ray *ccl_restrict ray,
-                                 Intersection *ccl_restrict isect)
+                                 Intersection *ccl_restrict isect,
+                                 const int last_prim,
+                                 const int last_object,
+                                 const int last_type)
 {
   for (int lamp = 0; lamp < kernel_data.integrator.num_all_lights; lamp++) {
     const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
@@ -239,7 +242,8 @@ ccl_device bool lights_intersect(const KernelGlobals *ccl_restrict kg,
       continue;
     }
 
-    if (t < isect->t) {
+    if (t < isect->t &&
+        !(last_prim == lamp && last_object == OBJECT_NONE && last_type == PRIMITIVE_LAMP)) {
       isect->t = t;
       isect->u = u;
       isect->v = v;

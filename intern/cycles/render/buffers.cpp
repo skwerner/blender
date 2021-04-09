@@ -55,7 +55,7 @@ bool BufferParams::modified(const BufferParams &params) const
 {
   return !(full_x == params.full_x && full_y == params.full_y && width == params.width &&
            height == params.height && full_width == params.full_width &&
-           full_height == params.full_height && Pass::equals(passes, params.passes) &&
+           full_height == params.full_height && Pass::equals_exact(passes, params.passes) &&
            denoising_data_pass == params.denoising_data_pass);
 }
 

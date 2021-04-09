@@ -51,8 +51,21 @@ class Pass : public Node {
   PassType divide_type;
   ustring name;
 
-  static void add(PassType type, vector<Pass> &passes, const char *name = NULL);
-  static bool equals(const vector<Pass> &A, const vector<Pass> &B);
+  /* The has been created automatically as a requirement to various rendering functionality (such
+   * as adaptive sampling). */
+  bool is_auto;
+
+  static void add(PassType type,
+                  vector<Pass> &passes,
+                  const char *name = nullptr,
+                  bool is_auto = false);
+
+  /* Check whether two sets of passes are matching exactly. */
+  static bool equals_exact(const vector<Pass> &A, const vector<Pass> &B);
+
+  /* Check whether two sets of passes define same set of non-auto passes. */
+  static bool equals_no_auto(const vector<Pass> &A, const vector<Pass> &B);
+
   static bool contains(const vector<Pass> &passes, PassType);
 };
 

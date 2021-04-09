@@ -100,7 +100,7 @@ Pass::Pass() : Node(node_type)
 {
 }
 
-void Pass::add(PassType type, vector<Pass> &passes, const char *name)
+void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_auto)
 {
   for (Pass &pass : passes) {
     if (pass.type != type) {
@@ -119,18 +119,21 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
 
     /* If no name is specified, any pass of the correct type will match. */
     if (name == NULL) {
+      pass.is_auto &= is_auto;
       return;
     }
 
     /* If we already have a placeholder pass, rename that one. */
     if (pass.name.empty()) {
       pass.name = name;
+      pass.is_auto &= is_auto;
       return;
     }
 
     /* If neither existing nor requested pass have placeholder name, they
      * must match. */
     if (name == pass.name) {
+      pass.is_auto &= is_auto;
       return;
     }
   }
@@ -144,6 +147,7 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
   if (name) {
     pass.name = name;
   }
+  pass.is_auto = is_auto;
 
   switch (type) {
     case PASS_NONE:
@@ -280,7 +284,7 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     Pass::add(pass.divide_type, passes);
 }
 
-bool Pass::equals(const vector<Pass> &A, const vector<Pass> &B)
+bool Pass::equals_exact(const vector<Pass> &A, const vector<Pass> &B)
 {
   if (A.size() != B.size())
     return false;
@@ -288,6 +292,48 @@ bool Pass::equals(const vector<Pass> &A, const vector<Pass> &B)
   for (int i = 0; i < A.size(); i++)
     if (A[i].type != B[i].type || A[i].name != B[i].name)
       return false;
+
+  return true;
+}
+
+/* Get first index which is greater than the given one which correspongs to a non-auto pass.
+ * If there are only runtime passes after the given index, -1 is returned. */
+static const int get_next_no_auto__pass_index(const vector<Pass> &passes, int index)
+{
+  ++index;
+
+  while (index < passes.size()) {
+    if (!passes[index].is_auto) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+bool Pass::equals_no_auto(const vector<Pass> &A, const vector<Pass> &B)
+{
+  int index_a = -1, index_b = -1;
+
+  while (true) {
+    index_a = get_next_no_auto__pass_index(A, index_a);
+    index_b = get_next_no_auto__pass_index(A, index_b);
+
+    if (index_a == -1 && index_b == -1) {
+      break;
+    }
+
+    if (index_a == -1 || index_b == -1) {
+      return false;
+    }
+
+    const Pass &pass_a = A[index_a];
+    const Pass &pass_b = B[index_b];
+
+    if (pass_a.type != pass_b.type || pass_a.name != pass_b.name) {
+      return false;
+    }
+  }
 
   return true;
 }

@@ -350,10 +350,8 @@ void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
 
   Film *film = scene->film;
 
-  vector<Pass> prevpasses = scene->passes;
-
   if (b_v3d) {
-    film->set_display_pass(update_viewport_display_passes(b_v3d, scene->passes));
+    film->set_display_pass(BlenderViewportParameters::get_render_pass(b_v3d));
   }
 
   film->set_exposure(get_float(cscene, "film_exposure"));
@@ -380,11 +378,6 @@ void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
         film->set_mist_falloff(0.5f);
         break;
     }
-  }
-
-  if (!Pass::equals_no_auto(prevpasses, scene->passes)) {
-    film->tag_passes_update(scene, prevpasses, false);
-    film->tag_modified();
   }
 }
 
@@ -531,10 +524,10 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
   return -1;
 }
 
-vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
-                                             BL::ViewLayer &b_view_layer,
-                                             bool adaptive_sampling,
-                                             const DenoiseParams &denoising)
+void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
+                                     BL::ViewLayer &b_view_layer,
+                                     bool adaptive_sampling,
+                                     const DenoiseParams &denoising)
 {
   vector<Pass> passes;
 
@@ -659,10 +652,8 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
   scene->film->set_denoising_data_pass(denoising.use || denoising.store_passes);
 
   scene->film->set_pass_alpha_threshold(b_view_layer.pass_alpha_threshold());
-  scene->film->tag_passes_update(scene, passes);
+  scene->film->assign_and_tag_passes_update(scene, passes);
   scene->integrator->tag_update(scene, Integrator::UPDATE_ALL);
-
-  return passes;
 }
 
 void BlenderSync::free_data_after_sync(BL::Depsgraph &b_depsgraph)

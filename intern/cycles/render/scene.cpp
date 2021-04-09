@@ -526,6 +526,23 @@ bool Scene::update(Progress &progress)
   return true;
 }
 
+void Scene::update_passes()
+{
+  if (!integrator->is_modified() && !film->is_modified()) {
+    return;
+  }
+
+  const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
+  if (adaptive_sampling.use) {
+    Pass::add(PASS_SAMPLE_COUNT, passes, nullptr, true);
+    Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes, nullptr, true);
+  }
+  else {
+    Pass::remove_auto(passes, PASS_SAMPLE_COUNT);
+    Pass::remove_auto(passes, PASS_ADAPTIVE_AUX_BUFFER);
+  }
+}
+
 bool Scene::load_kernels(Progress &progress, bool lock_scene)
 {
   thread_scoped_lock scene_lock;

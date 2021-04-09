@@ -347,6 +347,31 @@ bool Pass::contains(const vector<Pass> &passes, PassType type)
   return false;
 }
 
+void Pass::remove_auto(vector<Pass> &passes, PassType type)
+{
+  const size_t num_passes = passes.size();
+
+  size_t i = 0;
+  while (i < num_passes) {
+    if (passes[i].type == type) {
+      break;
+    }
+    ++i;
+  }
+
+  if (i >= num_passes) {
+    /* Pass does not exist. */
+    return;
+  }
+
+  if (!passes[i].is_auto) {
+    /* Pass is not automatically created, can not remove. */
+    return;
+  }
+
+  passes.erase(passes.begin() + i);
+}
+
 /* Pixel Filter */
 
 static float filter_func_box(float /*v*/, float /*width*/)
@@ -734,24 +759,22 @@ void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *sce
   scene->lookup_tables->remove_table(&filter_table_offset);
 }
 
-void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
+void Film::assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes)
 {
-  if (Pass::contains(scene->passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
+  if (Pass::contains(scene->passes, PASS_UV) != Pass::contains(passes, PASS_UV)) {
     scene->geometry_manager->tag_update(scene, GeometryManager::UV_PASS_NEEDED);
 
     foreach (Shader *shader, scene->shaders)
       shader->need_update_uvs = true;
   }
-  else if (Pass::contains(scene->passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
+  else if (Pass::contains(scene->passes, PASS_MOTION) != Pass::contains(passes, PASS_MOTION)) {
     scene->geometry_manager->tag_update(scene, GeometryManager::MOTION_PASS_NEEDED);
   }
-  else if (Pass::contains(scene->passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
+  else if (Pass::contains(scene->passes, PASS_AO) != Pass::contains(passes, PASS_AO)) {
     scene->integrator->tag_update(scene, Integrator::AO_PASS_MODIFIED);
   }
 
-  if (update_passes) {
-    scene->passes = passes_;
-  }
+  scene->passes = passes;
 }
 
 int Film::get_aov_offset(Scene *scene, string name, bool &is_color)

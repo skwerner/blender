@@ -72,17 +72,4 @@ PassType BlenderViewportParameters::get_render_pass(BL::SpaceView3D &b_v3d)
   return display_pass;
 }
 
-PassType update_viewport_display_passes(BL::SpaceView3D &b_v3d, vector<Pass> &passes)
-{
-  if (b_v3d) {
-    PassType display_pass = BlenderViewportParameters::get_render_pass(b_v3d);
-
-    passes.clear();
-    Pass::add(display_pass, passes);
-
-    return display_pass;
-  }
-  return PASS_NONE;
-}
-
 CCL_NAMESPACE_END

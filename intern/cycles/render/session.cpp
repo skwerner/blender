@@ -366,7 +366,10 @@ void Session::do_delayed_reset()
   }
   delayed_reset.do_reset = false;
 
+  scene->update_passes();
+
   buffer_params = delayed_reset.params;
+  buffer_params.passes = scene->passes;
 
   render_scheduler_.reset(buffer_params, delayed_reset.samples);
   path_trace_->reset(buffer_params);
@@ -391,6 +394,11 @@ void Session::reset(BufferParams &buffer_params, int samples)
 
   thread_scoped_lock reset_lock(delayed_reset.mutex);
   thread_scoped_lock pause_lock(pause_mutex);
+
+  if (!buffer_params.passes.empty()) {
+    LOG(ERROR) << "Buffer parameters passed to Session::reset() should not have passes. "
+                  "Passes are to be set on Scene.";
+  }
 
   delayed_reset.params = buffer_params;
   delayed_reset.samples = samples;

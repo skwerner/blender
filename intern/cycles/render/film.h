@@ -66,7 +66,10 @@ class Pass : public Node {
   /* Check whether two sets of passes define same set of non-auto passes. */
   static bool equals_no_auto(const vector<Pass> &A, const vector<Pass> &B);
 
-  static bool contains(const vector<Pass> &passes, PassType);
+  static bool contains(const vector<Pass> &passes, PassType type);
+
+  /* Remove given pass type if it was automatically created. */
+  static void remove_auto(vector<Pass> &passes, PassType type);
 };
 
 class Film : public Node {
@@ -107,7 +110,7 @@ class Film : public Node {
   void device_update(Device *device, DeviceScene *dscene, Scene *scene);
   void device_free(Device *device, DeviceScene *dscene, Scene *scene);
 
-  void tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes = true);
+  void assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes);
 
   int get_aov_offset(Scene *scene, string name, bool &is_color);
 

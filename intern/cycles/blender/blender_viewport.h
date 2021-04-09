@@ -49,8 +49,6 @@ class BlenderViewportParameters {
   static PassType get_render_pass(BL::SpaceView3D &b_v3d);
 };
 
-PassType update_viewport_display_passes(BL::SpaceView3D &b_v3d, vector<Pass> &passes);
-
 CCL_NAMESPACE_END
 
 #endif

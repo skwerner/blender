@@ -518,11 +518,9 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
    * sampling passes creation to Scene. */
   sync->sync_integrator();
   const AdaptiveSampling adaptive_sampling = scene->integrator->get_adaptive_sampling();
-  vector<Pass> passes = sync->sync_render_passes(
-      b_rlay, b_view_layer, adaptive_sampling.use, session_params.denoising);
+  sync->sync_render_passes(b_rlay, b_view_layer, adaptive_sampling.use, session_params.denoising);
 
   /* Set buffer params, using film settings from sync_render_passes. */
-  buffer_params.passes = passes;
   buffer_params.denoising_data_pass = scene->film->get_denoising_data_pass();
 
   BL::RenderResult::views_iterator b_view_iter;

@@ -922,9 +922,8 @@ BufferParams BlenderSync::get_buffer_params(BL::RenderSettings &b_render,
     params.height = height;
   }
 
-  PassType display_pass = update_viewport_display_passes(b_v3d, params.passes);
-
   /* Can only denoise the combined image pass */
+  const PassType display_pass = BlenderViewportParameters::get_render_pass(b_v3d);
   params.denoising_data_pass = display_pass == PASS_COMBINED && use_denoiser;
 
   return params;

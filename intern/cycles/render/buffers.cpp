@@ -41,8 +41,6 @@ BufferParams::BufferParams()
   full_height = 0;
 
   denoising_data_pass = false;
-
-  Pass::add(PASS_COMBINED, passes);
 }
 
 void BufferParams::get_offset_stride(int &offset, int &stride) const

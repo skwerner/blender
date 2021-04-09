@@ -102,8 +102,8 @@ Pass::Pass() : Node(node_type)
 
 void Pass::add(PassType type, vector<Pass> &passes, const char *name)
 {
-  for (size_t i = 0; i < passes.size(); i++) {
-    if (passes[i].type != type) {
+  for (Pass &pass : passes) {
+    if (pass.type != type) {
       continue;
     }
 
@@ -123,14 +123,14 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     }
 
     /* If we already have a placeholder pass, rename that one. */
-    if (passes[i].name.empty()) {
-      passes[i].name = name;
+    if (pass.name.empty()) {
+      pass.name = name;
       return;
     }
 
     /* If neither existing nor requested pass have placeholder name, they
      * must match. */
-    if (name == passes[i].name) {
+    if (name == pass.name) {
       return;
     }
   }

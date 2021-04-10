@@ -29,6 +29,10 @@
 #    include "kernel/device/cpu/globals.h"
 #    include "kernel/device/cpu/image.h"
 
+#    include "kernel/integrator/integrator_path_state.h"
+#    include "kernel/integrator/integrator_state.h"
+#    include "kernel/integrator/integrator_state_util.h"
+
 #    include "kernel/integrator/integrator_init_from_camera.h"
 #    include "kernel/integrator/integrator_intersect_closest.h"
 #    include "kernel/integrator/integrator_intersect_shadow.h"

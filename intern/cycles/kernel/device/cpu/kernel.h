@@ -22,16 +22,13 @@
 
 #include "kernel/kernel_types.h"
 
-#include "kernel/integrator/integrator_path_state.h"
-#include "kernel/integrator/integrator_state.h"
-#include "kernel/integrator/integrator_state_util.h"
-
 CCL_NAMESPACE_BEGIN
 
 #define KERNEL_NAME_JOIN(x, y, z) x##_##y##_##z
 #define KERNEL_NAME_EVAL(arch, name) KERNEL_NAME_JOIN(kernel, arch, name)
 #define KERNEL_FUNCTION_FULL_NAME(name) KERNEL_NAME_EVAL(KERNEL_ARCH, name)
 
+struct IntegratorState;
 struct KernelGlobals;
 struct KernelData;
 

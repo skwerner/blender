@@ -256,6 +256,10 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
 
   adaptive_sampling.use = (get_sampling_pattern() == SAMPLING_PATTERN_PMJ);
 
+  if (!adaptive_sampling.use) {
+    return adaptive_sampling;
+  }
+
   if (aa_samples > 0 && adaptive_min_samples == 0) {
     adaptive_sampling.min_samples = max(4, (int)sqrtf(aa_samples));
     VLOG(1) << "Cycles adaptive sampling: automatic min samples = "

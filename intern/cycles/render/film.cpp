@@ -372,6 +372,19 @@ void Pass::remove_auto(vector<Pass> &passes, PassType type)
   passes.erase(passes.begin() + i);
 }
 
+void Pass::remove_all_auto(vector<Pass> &passes)
+{
+  vector<Pass> new_passes;
+
+  for (const Pass& pass : passes) {
+    if (!pass.is_auto) {
+      new_passes.push_back(pass);
+    }
+  }
+
+  passes = new_passes;
+}
+
 /* Pixel Filter */
 
 static float filter_func_box(float /*v*/, float /*width*/)

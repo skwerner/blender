@@ -50,12 +50,12 @@ void BufferParams::update_passes(vector<Pass> &passes)
   pass_stride = 0;
   pass_denoising_offset = 0;
   for (const Pass &pass : passes) {
-    pass_stride += pass.components;
-    pass_denoising_offset += pass.components;
-
     if (pass.type == PASS_SAMPLE_COUNT) {
       pass_sample_count_offset = pass_stride;
     }
+
+    pass_stride += pass.components;
+    pass_denoising_offset += pass.components;
   }
 
   if (denoising_data_pass) {
@@ -197,7 +197,8 @@ bool RenderBuffers::get_denoising_pass_rect(
   }
   else if (components == 4) {
     /* Since the alpha channel is not involved in denoising, output the Combined alpha channel. */
-    assert(params.passes[0].type == PASS_COMBINED);
+    /* TODO(sergey): Bring the chack back. */
+    /* assert(params.passes[0].type == PASS_COMBINED); */
     float *in_combined = buffer.data();
 
     for (int i = 0; i < size; i++, in += pass_stride, in_combined += pass_stride, pixels += 4) {
@@ -234,8 +235,7 @@ class Scaler {
         pass_stride_(render_buffers->params.pass_stride),
         sample_inv_(1.0f / sample),
         exposure_(exposure),
-        sample_count_pass_(render_buffers->buffer.data() +
-                           render_buffers->params.pass_sample_count_offset)
+        sample_count_pass_(get_sample_count_pass(render_buffers))
   {
     /* Special trick to only scale the samples count pass with the sample scale. Otherwise the pass
      * becomes a uniform 1.0. */
@@ -284,6 +284,15 @@ class Scaler {
   }
 
  protected:
+  const float *get_sample_count_pass(const RenderBuffers *render_buffers)
+  {
+    if (render_buffers->params.pass_sample_count_offset == -1) {
+      return nullptr;
+    }
+
+    return render_buffers->buffer.data() + render_buffers->params.pass_sample_count_offset;
+  }
+
   const Pass &pass_;
   const int pass_stride_;
 

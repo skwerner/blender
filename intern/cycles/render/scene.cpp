@@ -532,14 +532,16 @@ void Scene::update_passes()
     return;
   }
 
+  Pass::remove_all_auto(passes);
+
+  const PassType display_pass = film->get_display_pass();
+  Pass::add(display_pass, passes, nullptr, true);
+
+  /* Create passes needed for denoising. */
   const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
   if (adaptive_sampling.use) {
     Pass::add(PASS_SAMPLE_COUNT, passes, nullptr, true);
     Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes, nullptr, true);
-  }
-  else {
-    Pass::remove_auto(passes, PASS_SAMPLE_COUNT);
-    Pass::remove_auto(passes, PASS_ADAPTIVE_AUX_BUFFER);
   }
 }
 

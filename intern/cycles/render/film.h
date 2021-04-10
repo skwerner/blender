@@ -70,6 +70,9 @@ class Pass : public Node {
 
   /* Remove given pass type if it was automatically created. */
   static void remove_auto(vector<Pass> &passes, PassType type);
+
+  /* Remove all passes which were automatically created. */
+  static void remove_all_auto(vector<Pass> &passes);
 };
 
 class Film : public Node {

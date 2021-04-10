@@ -72,7 +72,6 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
 /* TODO */
 #if 0
 #  ifdef __VOLUME__
-  state->volume_bounce = 0;
   state->volume_bounds_bounce = 0;
 
   if (kernel_data.integrator.use_volumes) {

@@ -27,7 +27,10 @@ CCL_NAMESPACE_BEGIN
  */
 
 RenderScheduler::RenderScheduler(bool headless, bool background, int pixel_size)
-    : headless_(headless), background_(background), pixel_size_(pixel_size)
+    : headless_(headless),
+      background_(background),
+      pixel_size_(pixel_size),
+      default_start_resolution_divider_(pixel_size * 8)
 {
 }
 
@@ -101,7 +104,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.last_display_update_time = 0.0;
   state_.last_display_update_sample = -1;
 
-  first_render_time_.path_trace = 0.0;
+  first_render_time_.path_trace_per_sample = 0.0;
   first_render_time_.denoise_time = 0.0;
   first_render_time_.display_update_time = 0.0;
 
@@ -178,7 +181,8 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work, doub
   const double final_time_approx = approximate_final_time(render_work, time);
 
   if (work_is_usable_for_first_render_estimation(render_work)) {
-    first_render_time_.path_trace = final_time_approx;
+    first_render_time_.path_trace_per_sample = final_time_approx /
+                                               render_work.path_trace.num_samples;
   }
 
   path_trace_time_.total_time += final_time_approx;
@@ -307,24 +311,8 @@ static inline uint round_num_samples_to_power_of_2(const uint num_samples)
 
 int RenderScheduler::get_num_samples_to_path_trace() const
 {
-  /* Specvial trick for the fast navigation: schedule multiple samples during fats navigation
-   * (which will prefer to use lower resolution to keep up with refresh rate). This gives more
-   * usable visual feedback for artists. There are couple of tricks though:
-   *
-   * - When resolution divider is the previous to the final resolution schedule single sample.
-   *   This is so that rendering on lower resolution does not exceed time what it takes to render
-   *   first sample at the full resolution.
-   *
-   * - When denoising is used during navigation prefer using highetr resolution and less samples
-   *  (scheduling less samples here will make it so resolutiondivider calculation will use lower
-   *  value for the divider). This is because both OpenImageDenoiser and OptiX denoiser gives
-   * visually better results on higher resolution image with less samples. */
   if (state_.resolution_divider != pixel_size_) {
-    if (state_.resolution_divider != pixel_size_ * 2 && !is_denoise_active_during_update()) {
-      return min(num_samples_, kNumSamplesDuringUpdate);
-    }
-
-    return 1;
+    return get_num_samples_during_navigation(state_.resolution_divider);
   }
 
   /* Always start full resolution render  with a single sample. Gives more instant feedback to
@@ -359,6 +347,34 @@ int RenderScheduler::get_num_samples_to_path_trace() const
    * compute device can do. */
 
   return adaptive_sampling_.align_samples(path_trace_start_sample, num_samples_to_render);
+}
+
+int RenderScheduler::get_num_samples_during_navigation(int resolution_divider) const
+{
+  /* Specvial trick for the fast navigation: schedule multiple samples during fats navigation
+   * (which will prefer to use lower resolution to keep up with refresh rate). This gives more
+   * usable visual feedback for artists. There are couple of tricks though. */
+
+  if (is_denoise_active_during_update()) {
+    /* When resolution divider is the previous to the final resolution schedule single sample.
+     * This is so that rendering on lower resolution does not exceed time what it takes to render
+     * first sample at the full resolution. */
+    return 1;
+  }
+
+  if (resolution_divider <= pixel_size_ * 2) {
+    /* When denoising is used during navigation prefer using highetr resolution and less samples
+     * (scheduling less samples here will make it so resolutiondivider calculation will use lower
+     * value for the divider). This is because both OpenImageDenoiser and OptiX denoiser gives
+     * visually better results on higher resolution image with less samples. */
+    return 1;
+  }
+
+  /* Always render 4 samples, even if scene is configured for less.
+   * The idea here is to have enough information on the screen. Resolution divider of 2 allows us
+   * to have 4 time extra samples, so verall worst case timing is the same as the final resolution
+   * at one sample. */
+  return 4;
 }
 
 bool RenderScheduler::work_need_denoise(bool &delayed)
@@ -436,26 +452,27 @@ bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
 
 void RenderScheduler::update_start_resolution_divider()
 {
-  const int default_resolution_divider = calculate_resolution_divider_for_resolution(
-      buffer_params_.width, buffer_params_.height, kDefaultStartResolution);
-
   if (start_resolution_divider_ == 0) {
     /* Resolution divider has never been calculated before: use default resolution, so that we have
      * somewhat good initial behavior, giving a chance to collect real numbers. */
-    start_resolution_divider_ = default_resolution_divider;
+    start_resolution_divider_ = default_start_resolution_divider_;
     VLOG(3) << "Initial resolution divider is " << start_resolution_divider_;
     return;
   }
 
-  if (first_render_time_.path_trace == 0.0) {
+  if (first_render_time_.path_trace_per_sample == 0.0) {
     /* Not enough information to calculate better resolution, keep the existing one. */
     return;
   }
 
+  const int num_samples_during_navigation = get_num_samples_during_navigation(
+      default_start_resolution_divider_);
+
   const double desired_update_interval_in_seconds =
       guess_viewport_navigation_update_interval_in_seconds();
 
-  const double actual_time_per_update = first_render_time_.path_trace +
+  const double actual_time_per_update = first_render_time_.path_trace_per_sample *
+                                            num_samples_during_navigation +
                                         first_render_time_.denoise_time +
                                         first_render_time_.display_update_time;
 
@@ -474,7 +491,7 @@ void RenderScheduler::update_start_resolution_divider()
 
   /* Don't let resolution to go below the desired one: better be slower than provide a fully
    * unreadable viewport render. */
-  start_resolution_divider_ = min(new_resolution_divider, default_resolution_divider);
+  start_resolution_divider_ = min(new_resolution_divider, default_start_resolution_divider_);
 
   VLOG(3) << "Calculated resolution divider is " << start_resolution_divider_;
 }

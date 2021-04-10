@@ -127,6 +127,10 @@ class RenderScheduler {
   int get_start_sample_to_path_trace() const;
   int get_num_samples_to_path_trace() const;
 
+  /* Calculate how many samples there are to be rendered for the very first path trace after reset.
+   */
+  int get_num_samples_during_navigation(int resolution_divier) const;
+
   /* Check whether current work needs denoising.
    * Denoising is not needed if the denoiser is not configured, or when denosiing is happening too
    * often.
@@ -176,7 +180,7 @@ class RenderScheduler {
    * resolution. This timing information is used to estimate resolution divider for fats
    * navigation. */
   struct {
-    double path_trace;
+    double path_trace_per_sample;
     double denoise_time;
     double display_update_time;
   } first_render_time_;
@@ -204,15 +208,10 @@ class RenderScheduler {
   DenoiseParams denoiser_params_;
   AdaptiveSampling adaptive_sampling_;
 
-  /* Resolution which is used to calculate an initial resolution divider when there is no timing
-   * information about render times were known. */
-  static constexpr const int kDefaultStartResolution = 64;
-
-  /* Number of samples which will be scheduled duging interactive updates.
-   * The idea is to use lower resolution render with more samples. The actual logic is a bit more
-   * involved, so see comments in the resolution divider update function and calculation of number
-   * of samples for the render work function. */
-  static constexpr const int kNumSamplesDuringUpdate = 4;
+  /* Default value for the resolution divider which will be used when there is no render time
+   * information available yet.
+   * It is also what defines the upper limit of the automatically calculated resolution divider. */
+  int default_start_resolution_divider_ = 1;
 
   /* Initial resolution divider which will be used on render scheduler reset. */
   int start_resolution_divider_ = 0;

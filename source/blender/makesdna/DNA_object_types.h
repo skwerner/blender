@@ -26,6 +26,11 @@
 
 #include "DNA_object_enums.h"
 
+#include "DNA_customdata_types.h"
+#include "DNA_defs.h"
+#include "DNA_lineart_types.h"
+#include "DNA_listBase.h"
+
 #include "DNA_ID.h"
 #include "DNA_action_types.h" /* bAnimVizSettings */
 #include "DNA_customdata_types.h"
@@ -164,6 +169,11 @@ typedef struct Object_Runtime {
   struct GeometrySet *geometry_set_eval;
 
   /**
+   * Data from this geometry set is previewed in the spreadsheet editor.
+   */
+  struct GeometrySet *geometry_set_preview;
+
+  /**
    * Mesh structure created during object evaluation.
    * It has deformation only modifiers applied on it.
    */
@@ -199,6 +209,30 @@ typedef struct Object_Runtime {
   unsigned short local_collections_bits;
   short _pad2[3];
 } Object_Runtime;
+
+typedef struct ObjectLineArt {
+  short usage;
+  short flags;
+
+  /** if OBJECT_LRT_OWN_CREASE is set */
+  float crease_threshold;
+} ObjectLineArt;
+
+/**
+ * \warning while the values seem to be flags, they aren't treated as flags.
+ */
+enum eObjectLineArt_Usage {
+  OBJECT_LRT_INHERIT = 0,
+  OBJECT_LRT_INCLUDE = (1 << 0),
+  OBJECT_LRT_OCCLUSION_ONLY = (1 << 1),
+  OBJECT_LRT_EXCLUDE = (1 << 2),
+  OBJECT_LRT_INTERSECTION_ONLY = (1 << 3),
+  OBJECT_LRT_NO_INTERSECTION = (1 << 4),
+};
+
+enum eObjectLineArt_Flags {
+  OBJECT_LRT_OWN_CREASE = (1 << 0),
+};
 
 typedef struct Object {
   ID id;
@@ -405,6 +439,8 @@ typedef struct Object {
 
   struct PreviewImage *preview;
 
+  ObjectLineArt lineart;
+
   /** Runtime evaluation data (keep last). */
   Object_Runtime runtime;
 } Object;
@@ -595,6 +631,9 @@ enum {
   GP_EMPTY = 0,
   GP_STROKE = 1,
   GP_MONKEY = 2,
+  GP_LRT_SCENE = 3,
+  GP_LRT_OBJECT = 4,
+  GP_LRT_COLLECTION = 5,
 };
 
 /* boundtype */

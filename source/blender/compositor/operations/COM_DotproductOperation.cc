@@ -18,11 +18,13 @@
 
 #include "COM_DotproductOperation.h"
 
+namespace blender::compositor {
+
 DotproductOperation::DotproductOperation()
 {
-  this->addInputSocket(COM_DT_VECTOR);
-  this->addInputSocket(COM_DT_VECTOR);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Vector);
+  this->addInputSocket(DataType::Vector);
+  this->addOutputSocket(DataType::Value);
   this->setResolutionInputSocketIndex(0);
   this->m_input1Operation = nullptr;
   this->m_input2Operation = nullptr;
@@ -52,3 +54,5 @@ void DotproductOperation::executePixelSampled(float output[4],
   this->m_input2Operation->readSampled(input2, x, y, sampler);
   output[0] = -(input1[0] * input2[0] + input1[1] * input2[1] + input1[2] * input2[2]);
 }
+
+}  // namespace blender::compositor

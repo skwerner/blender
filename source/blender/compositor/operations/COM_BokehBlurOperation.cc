@@ -22,15 +22,18 @@
 
 #include "RE_pipeline.h"
 
+namespace blender::compositor {
+
 BokehBlurOperation::BokehBlurOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_COLOR, COM_SC_NO_RESIZE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_COLOR);
-  this->setComplex(true);
-  this->setOpenCL(true);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Color, ResizeMode::None);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Color);
+
+  flags.complex = true;
+  flags.open_cl = true;
 
   this->m_size = 1.0f;
   this->m_sizeavailable = false;
@@ -76,20 +79,21 @@ void BokehBlurOperation::executePixel(float output[4], int x, int y, void *data)
   float tempBoundingBox[4];
   float bokeh[4];
 
-  this->m_inputBoundingBoxReader->readSampled(tempBoundingBox, x, y, COM_PS_NEAREST);
+  this->m_inputBoundingBoxReader->readSampled(tempBoundingBox, x, y, PixelSampler::Nearest);
   if (tempBoundingBox[0] > 0.0f) {
     float multiplier_accum[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     MemoryBuffer *inputBuffer = (MemoryBuffer *)data;
+    const rcti &input_rect = inputBuffer->get_rect();
     float *buffer = inputBuffer->getBuffer();
     int bufferwidth = inputBuffer->getWidth();
-    int bufferstartx = inputBuffer->getRect()->xmin;
-    int bufferstarty = inputBuffer->getRect()->ymin;
+    int bufferstartx = input_rect.xmin;
+    int bufferstarty = input_rect.ymin;
     const float max_dim = MAX2(this->getWidth(), this->getHeight());
     int pixelSize = this->m_size * max_dim / 100.0f;
     zero_v4(color_accum);
 
     if (pixelSize < 2) {
-      this->m_inputProgram->readSampled(color_accum, x, y, COM_PS_NEAREST);
+      this->m_inputProgram->readSampled(color_accum, x, y, PixelSampler::Nearest);
       multiplier_accum[0] = 1.0f;
       multiplier_accum[1] = 1.0f;
       multiplier_accum[2] = 1.0f;
@@ -99,22 +103,22 @@ void BokehBlurOperation::executePixel(float output[4], int x, int y, void *data)
     int maxy = y + pixelSize;
     int minx = x - pixelSize;
     int maxx = x + pixelSize;
-    miny = MAX2(miny, inputBuffer->getRect()->ymin);
-    minx = MAX2(minx, inputBuffer->getRect()->xmin);
-    maxy = MIN2(maxy, inputBuffer->getRect()->ymax);
-    maxx = MIN2(maxx, inputBuffer->getRect()->xmax);
+    miny = MAX2(miny, input_rect.ymin);
+    minx = MAX2(minx, input_rect.xmin);
+    maxy = MIN2(maxy, input_rect.ymax);
+    maxx = MIN2(maxx, input_rect.xmax);
 
     int step = getStep();
-    int offsetadd = getOffsetAdd() * COM_NUM_CHANNELS_COLOR;
+    int offsetadd = getOffsetAdd() * COM_DATA_TYPE_COLOR_CHANNELS;
 
     float m = this->m_bokehDimension / pixelSize;
     for (int ny = miny; ny < maxy; ny += step) {
-      int bufferindex = ((minx - bufferstartx) * COM_NUM_CHANNELS_COLOR) +
-                        ((ny - bufferstarty) * COM_NUM_CHANNELS_COLOR * bufferwidth);
+      int bufferindex = ((minx - bufferstartx) * COM_DATA_TYPE_COLOR_CHANNELS) +
+                        ((ny - bufferstarty) * COM_DATA_TYPE_COLOR_CHANNELS * bufferwidth);
       for (int nx = minx; nx < maxx; nx += step) {
         float u = this->m_bokehMidX - (nx - x) * m;
         float v = this->m_bokehMidY - (ny - y) * m;
-        this->m_inputBokehProgram->readSampled(bokeh, u, v, COM_PS_NEAREST);
+        this->m_inputBokehProgram->readSampled(bokeh, u, v, PixelSampler::Nearest);
         madd_v4_v4v4(color_accum, bokeh, &buffer[bufferindex]);
         add_v4_v4(multiplier_accum, bokeh);
         bufferindex += offsetadd;
@@ -126,7 +130,7 @@ void BokehBlurOperation::executePixel(float output[4], int x, int y, void *data)
     output[3] = color_accum[3] * (1.0f / multiplier_accum[3]);
   }
   else {
-    this->m_inputProgram->readSampled(output, x, y, COM_PS_NEAREST);
+    this->m_inputProgram->readSampled(output, x, y, PixelSampler::Nearest);
   }
 }
 
@@ -223,7 +227,7 @@ void BokehBlurOperation::updateSize()
 {
   if (!this->m_sizeavailable) {
     float result[4];
-    this->getInputSocketReader(3)->readSampled(result, 0, 0, COM_PS_NEAREST);
+    this->getInputSocketReader(3)->readSampled(result, 0, 0, PixelSampler::Nearest);
     this->m_size = result[0];
     CLAMP(this->m_size, 0.0f, 10.0f);
     this->m_sizeavailable = true;
@@ -240,3 +244,5 @@ void BokehBlurOperation::determineResolution(unsigned int resolution[2],
     resolution[1] += 2 * this->m_size * max_dim / 100.0f;
   }
 }
+
+}  // namespace blender::compositor

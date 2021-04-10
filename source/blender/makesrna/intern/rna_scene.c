@@ -778,7 +778,6 @@ static void rna_Scene_objects_begin(CollectionPropertyIterator *iter, PointerRNA
   Scene *scene = (Scene *)ptr->data;
   iter->internal.custom = MEM_callocN(sizeof(BLI_Iterator), __func__);
 
-  ((BLI_Iterator *)iter->internal.custom)->valid = true;
   BKE_scene_objects_iterator_begin(iter->internal.custom, (void *)scene);
   iter->valid = ((BLI_Iterator *)iter->internal.custom)->valid;
 }
@@ -1896,10 +1895,10 @@ static void rna_Scene_use_persistent_data_update(Main *UNUSED(bmain),
                                                  Scene *UNUSED(scene),
                                                  PointerRNA *ptr)
 {
-  Scene *sce = (Scene *)ptr->owner_id;
+  Scene *scene = (Scene *)ptr->owner_id;
 
-  if (!(sce->r.mode & R_PERSISTENT_DATA)) {
-    RE_FreePersistentData();
+  if (!(scene->r.mode & R_PERSISTENT_DATA)) {
+    RE_FreePersistentData(scene);
   }
 }
 
@@ -2635,12 +2634,12 @@ static void rna_def_transform_orientation(BlenderRNA *brna)
   prop = RNA_def_property(srna, "matrix", PROP_FLOAT, PROP_MATRIX);
   RNA_def_property_float_sdna(prop, NULL, "mat");
   RNA_def_property_multi_array(prop, 2, rna_matrix_dimsize_3x3);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_TRANSFORM, NULL);
 
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
   RNA_def_struct_name_property(srna, prop);
   RNA_def_property_ui_text(prop, "Name", "Name of the custom transform orientation");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_TRANSFORM, NULL);
 }
 
 static void rna_def_transform_orientation_slot(BlenderRNA *brna)
@@ -2661,7 +2660,7 @@ static void rna_def_transform_orientation_slot(BlenderRNA *brna)
                               "rna_TransformOrientationSlot_type_set",
                               "rna_TransformOrientation_with_scene_itemf");
   RNA_def_property_ui_text(prop, "Orientation", "Transformation orientation");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_TRANSFORM, NULL);
 
   prop = RNA_def_property(srna, "custom_orientation", PROP_POINTER, PROP_NONE);
   RNA_def_property_struct_type(prop, "TransformOrientation");
@@ -2685,6 +2684,7 @@ static void rna_def_view3d_cursor(BlenderRNA *brna)
   RNA_def_struct_path_func(srna, "rna_View3DCursor_path");
   RNA_def_struct_ui_text(srna, "3D Cursor", "");
   RNA_def_struct_ui_icon(srna, ICON_CURSOR);
+  RNA_def_struct_clear_flag(srna, STRUCT_UNDO);
 
   prop = RNA_def_property(srna, "location", PROP_FLOAT, PROP_XYZ_LENGTH);
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
@@ -2855,7 +2855,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_boolean_sdna(prop, NULL, "auto_normalize", 1);
   RNA_def_property_ui_text(prop,
-                           "WPaint Auto-Normalize",
+                           "Weight Paint Auto-Normalize",
                            "Ensure all bone-deforming vertex groups add up "
                            "to 1.0 while weight painting");
   RNA_def_property_update(prop, 0, "rna_Scene_update_active_object_data");
@@ -2864,7 +2864,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_boolean_sdna(prop, NULL, "wpaint_lock_relative", 1);
   RNA_def_property_ui_text(prop,
-                           "WPaint Lock-Relative",
+                           "Weight Paint Lock-Relative",
                            "Display bone-deforming groups as if all locked deform groups "
                            "were deleted, and the remaining ones were re-normalized");
   RNA_def_property_update(prop, 0, "rna_Scene_update_active_object_data");
@@ -2873,7 +2873,7 @@ static void rna_def_tool_settings(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
   RNA_def_property_boolean_sdna(prop, NULL, "multipaint", 1);
   RNA_def_property_ui_text(prop,
-                           "WPaint Multi-Paint",
+                           "Weight Paint Multi-Paint",
                            "Paint across the weights of all selected bones, "
                            "maintaining their relative influence");
   RNA_def_property_update(prop, 0, "rna_Scene_update_active_object_data");
@@ -3041,19 +3041,19 @@ static void rna_def_tool_settings(BlenderRNA *brna)
       prop,
       "Only Locations",
       "Only transform object locations, without affecting rotation or scaling");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_TRANSFORM, NULL);
 
   prop = RNA_def_property(srna, "use_transform_data_origin", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "transform_flag", SCE_XFORM_DATA_ORIGIN);
   RNA_def_property_ui_text(
       prop, "Transform Origins", "Transform object origins, while leaving the shape in place");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_TRANSFORM, NULL);
 
   prop = RNA_def_property(srna, "use_transform_skip_children", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "transform_flag", SCE_XFORM_SKIP_CHILDREN);
   RNA_def_property_ui_text(
       prop, "Transform Parents", "Transform the parents, leaving the children in place");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_TRANSFORM, NULL);
 
   prop = RNA_def_property(srna, "use_transform_correct_face_attributes", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "uvcalc_flag", UVCALC_TRANSFORM_CORRECT);
@@ -3569,7 +3569,6 @@ static void rna_def_unified_paint_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "strength", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "alpha");
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
-  RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_range(prop, 0.0f, 10.0f);
   RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
   RNA_def_property_ui_text(
@@ -3579,7 +3578,6 @@ static void rna_def_unified_paint_settings(BlenderRNA *brna)
   prop = RNA_def_property(srna, "weight", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "weight");
   RNA_def_property_flag(prop, PROP_CONTEXT_UPDATE);
-  RNA_def_property_float_default(prop, 0.5f);
   RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.001, 3);
   RNA_def_property_ui_text(prop, "Weight", "Weight to assign in vertex groups");
@@ -6504,7 +6502,7 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   RNA_def_property_clear_flag(prop, PROP_ANIMATABLE);
   RNA_def_property_ui_text(prop, "Setup Stereo Mode", "");
   RNA_def_property_enum_funcs(prop, NULL, "rna_RenderSettings_views_format_set", NULL);
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_WINDOW, NULL);
 
   /* engine */
   prop = RNA_def_property(srna, "engine", PROP_ENUM, PROP_NONE);
@@ -6607,8 +6605,10 @@ static void rna_def_scene_render_data(BlenderRNA *brna)
   /* persistent data */
   prop = RNA_def_property(srna, "use_persistent_data", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "mode", R_PERSISTENT_DATA);
-  RNA_def_property_ui_text(
-      prop, "Persistent Data", "Keep render data around for faster re-renders");
+  RNA_def_property_ui_text(prop,
+                           "Persistent Data",
+                           "Keep render data around for faster re-renders and animation renders, "
+                           "at the cost of increased memory usage");
   RNA_def_property_update(prop, 0, "rna_Scene_use_persistent_data_update");
 
   /* Freestyle line thickness options */
@@ -7894,7 +7894,7 @@ void RNA_def_scene(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "MovieClip");
   RNA_def_property_ui_text(
       prop, "Active Movie Clip", "Active movie clip used for constraints and viewport drawing");
-  RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+  RNA_def_property_update(prop, NC_SCENE | ND_DRAW_RENDER_VIEWPORT, NULL);
 
   /* color management */
   prop = RNA_def_property(srna, "view_settings", PROP_POINTER, PROP_NONE);

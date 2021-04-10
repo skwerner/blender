@@ -366,7 +366,7 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
                type == PASS_BVH_INTERSECTIONS || type == PASS_RAY_BOUNCES) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
           float f = *in;
-          pixels[0] = f * scale;
+          pixels[0] = f * scaler.scale_exposure(i);
         }
       }
 #endif

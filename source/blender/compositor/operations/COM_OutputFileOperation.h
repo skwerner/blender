@@ -27,6 +27,8 @@
 
 #include "intern/openexr/openexr_multi.h"
 
+namespace blender::compositor {
+
 /* Writes the image to a single-layer file. */
 class OutputSingleLayerOperation : public NodeOperation {
  protected:
@@ -57,21 +59,16 @@ class OutputSingleLayerOperation : public NodeOperation {
                              const char *viewName,
                              const bool saveAsRender);
 
-  void executeRegion(rcti *rect, unsigned int tileNumber);
-  bool isOutputOperation(bool /*rendering*/) const
+  void executeRegion(rcti *rect, unsigned int tileNumber) override;
+  bool isOutputOperation(bool /*rendering*/) const override
   {
     return true;
   }
-  void initExecution();
-  void deinitExecution();
-  CompositorPriority getRenderPriority() const
+  void initExecution() override;
+  void deinitExecution() override;
+  eCompositorPriority getRenderPriority() const override
   {
-    return COM_PRIORITY_LOW;
-  }
-
-  bool isFileOutputOperation() const
-  {
-    return true;
+    return eCompositorPriority::Low;
   }
 };
 
@@ -91,8 +88,6 @@ struct OutputOpenExrLayer {
 /* Writes inputs into OpenEXR multilayer channels. */
 class OutputOpenExrMultiLayerOperation : public NodeOperation {
  protected:
-  typedef std::vector<OutputOpenExrLayer> LayerList;
-
   const Scene *m_scene;
   const RenderData *m_rd;
   const bNodeTree *m_tree;
@@ -100,7 +95,7 @@ class OutputOpenExrMultiLayerOperation : public NodeOperation {
   char m_path[FILE_MAX];
   char m_exr_codec;
   bool m_exr_half_float;
-  LayerList m_layers;
+  Vector<OutputOpenExrLayer> m_layers;
   const char *m_viewName;
 
   StampData *createStampData() const;
@@ -116,21 +111,16 @@ class OutputOpenExrMultiLayerOperation : public NodeOperation {
 
   void add_layer(const char *name, DataType datatype, bool use_layer);
 
-  void executeRegion(rcti *rect, unsigned int tileNumber);
-  bool isOutputOperation(bool /*rendering*/) const
+  void executeRegion(rcti *rect, unsigned int tileNumber) override;
+  bool isOutputOperation(bool /*rendering*/) const override
   {
     return true;
   }
-  void initExecution();
-  void deinitExecution();
-  CompositorPriority getRenderPriority() const
+  void initExecution() override;
+  void deinitExecution() override;
+  eCompositorPriority getRenderPriority() const override
   {
-    return COM_PRIORITY_LOW;
-  }
-
-  bool isFileOutputOperation() const
-  {
-    return true;
+    return eCompositorPriority::Low;
   }
 };
 
@@ -146,3 +136,5 @@ void free_exr_channels(void *exrhandle,
                        const char *layerName,
                        const DataType datatype);
 int get_datatype_size(DataType datatype);
+
+}  // namespace blender::compositor

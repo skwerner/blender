@@ -57,6 +57,7 @@ void node_operatortypes(void)
   WM_operatortype_append(NODE_OT_preview_toggle);
   WM_operatortype_append(NODE_OT_options_toggle);
   WM_operatortype_append(NODE_OT_hide_socket_toggle);
+  WM_operatortype_append(NODE_OT_active_preview_toggle);
   WM_operatortype_append(NODE_OT_node_copy_color);
 
   WM_operatortype_append(NODE_OT_duplicate);
@@ -68,6 +69,7 @@ void node_operatortypes(void)
   WM_operatortype_append(NODE_OT_link_make);
   WM_operatortype_append(NODE_OT_links_cut);
   WM_operatortype_append(NODE_OT_links_detach);
+  WM_operatortype_append(NODE_OT_links_mute);
   WM_operatortype_append(NODE_OT_add_reroute);
 
   WM_operatortype_append(NODE_OT_group_make);
@@ -89,6 +91,9 @@ void node_operatortypes(void)
   WM_operatortype_append(NODE_OT_backimage_sample);
 
   WM_operatortype_append(NODE_OT_add_group);
+  WM_operatortype_append(NODE_OT_add_object);
+  WM_operatortype_append(NODE_OT_add_collection);
+  WM_operatortype_append(NODE_OT_add_texture);
   WM_operatortype_append(NODE_OT_add_file);
   WM_operatortype_append(NODE_OT_add_mask);
 

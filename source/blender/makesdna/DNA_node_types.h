@@ -348,6 +348,8 @@ typedef struct bNode {
  * composite out nodes when editing tree
  */
 #define NODE_DO_OUTPUT_RECALC (1 << 17)
+/* A preview for the data in this node can be displayed in the spreadsheet editor. */
+#define NODE_ACTIVE_PREVIEW (1 << 18)
 
 /* node->update */
 /* XXX NODE_UPDATE is a generic update flag. More fine-grained updates
@@ -394,7 +396,6 @@ typedef struct bNodeLink {
   bNodeSocket *fromsock, *tosock;
 
   int flag;
-  /* A runtime storage for automatically sorted links to multi-input sockets. */
   int multi_input_socket_index;
 } bNodeLink;
 
@@ -403,6 +404,7 @@ typedef struct bNodeLink {
 #define NODE_LINK_VALID (1 << 1)
 #define NODE_LINK_TEST (1 << 2)           /* free test flag, undefined */
 #define NODE_LINK_TEMP_HIGHLIGHT (1 << 3) /* Link is highlighted for picking. */
+#define NODE_LINK_MUTED (1 << 4)          /* Link is muted. */
 
 /* tree->edit_quality/tree->render_quality */
 #define NTREE_QUALITY_HIGH 0
@@ -714,6 +716,12 @@ typedef struct NodeBilateralBlurData {
   short iter;
   char _pad[2];
 } NodeBilateralBlurData;
+
+typedef struct NodeAntiAliasingData {
+  float threshold;
+  float contrast_limit;
+  float corner_rounding;
+} NodeAntiAliasingData;
 
 /* NOTE: Only for do-version code. */
 typedef struct NodeHueSat {
@@ -1067,20 +1075,54 @@ typedef struct CryptomatteEntry {
   char _pad[4];
 } CryptomatteEntry;
 
-typedef struct NodeCryptomatte {
+typedef struct CryptomatteLayer {
+  struct CryptomatteEntry *next, *prev;
+  char name[64];
+} CryptomatteLayer;
+
+typedef struct NodeCryptomatte_Runtime {
+  /* Contains `CryptomatteLayer`. */
+  ListBase layers;
+  /* Temp storage for the cryptomatte picker. */
   float add[3];
   float remove[3];
-  /* Stores `entries` as a string for opening in 2.80-2.91. */
-  char *matte_id;
+} NodeCryptomatte_Runtime;
+
+typedef struct NodeCryptomatte {
+  /**
+   * `iuser` needs to be first element due to RNA limitations.
+   * When we define the #ImageData properties, we can't define them from
+   * `storage->iuser`, so storage needs to be cast to #ImageUser directly.
+   */
+  ImageUser iuser;
+
   /* Contains `CryptomatteEntry`. */
   ListBase entries;
+
+  /* MAX_NAME */
+  char layer_name[64];
+  /* Stores `entries` as a string for opening in 2.80-2.91. */
+  char *matte_id;
+
+  /** Legacy attributes */
+  /* Number of input sockets. */
   int num_inputs;
+
   char _pad[4];
+  NodeCryptomatte_Runtime runtime;
 } NodeCryptomatte;
 
 typedef struct NodeDenoise {
   char hdr;
 } NodeDenoise;
+
+typedef struct NodeAttributeClamp {
+  /* CustomDataType. */
+  uint8_t data_type;
+
+  /* NodeClampOperation. */
+  uint8_t operation;
+} NodeAttributeClamp;
 
 typedef struct NodeAttributeCompare {
   /* FloatCompareOperation. */
@@ -1092,6 +1134,14 @@ typedef struct NodeAttributeCompare {
 
   char _pad[5];
 } NodeAttributeCompare;
+
+typedef struct NodeAttributeMapRange {
+  /* GeometryNodeAttributeDataType */
+  uint8_t data_type;
+
+  /* NodeMapRangeType. */
+  uint8_t interpolation_type;
+} NodeAttributeMapRange;
 
 typedef struct NodeAttributeMath {
   /* NodeMathOperation. */
@@ -1226,6 +1276,36 @@ typedef struct NodeAttributeSeparateXYZ {
   /* GeometryNodeAttributeInputMode. */
   uint8_t input_type;
 } NodeAttributeSeparateXYZ;
+
+typedef struct NodeAttributeConvert {
+  /* CustomDataType. */
+  uint8_t data_type;
+  char _pad[1];
+  /* AttributeDomain. */
+  int16_t domain;
+} NodeAttributeConvert;
+
+typedef struct NodeGeometryMeshCircle {
+  /* GeometryNodeMeshCircleFillType. */
+  uint8_t fill_type;
+} NodeGeometryMeshCircle;
+
+typedef struct NodeGeometryMeshCylinder {
+  /* GeometryNodeMeshCircleFillType. */
+  uint8_t fill_type;
+} NodeGeometryMeshCylinder;
+
+typedef struct NodeGeometryMeshCone {
+  /* GeometryNodeMeshCircleFillType. */
+  uint8_t fill_type;
+} NodeGeometryMeshCone;
+
+typedef struct NodeGeometryMeshLine {
+  /* GeometryNodeMeshLineMode. */
+  uint8_t mode;
+  /* GeometryNodeMeshLineCountMode. */
+  uint8_t count_mode;
+} NodeGeometryMeshLine;
 
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0
@@ -1494,6 +1574,8 @@ typedef enum NodeVectorMathOperation {
   NODE_VECTOR_MATH_SINE = 21,
   NODE_VECTOR_MATH_COSINE = 22,
   NODE_VECTOR_MATH_TANGENT = 23,
+  NODE_VECTOR_MATH_REFRACT = 24,
+  NODE_VECTOR_MATH_FACEFORWARD = 25,
 } NodeVectorMathOperation;
 
 /* Boolean math node operations. */
@@ -1702,6 +1784,22 @@ typedef enum GeometryNodePointsToVolumeResolutionMode {
   GEO_NODE_POINTS_TO_VOLUME_RESOLUTION_MODE_AMOUNT = 0,
   GEO_NODE_POINTS_TO_VOLUME_RESOLUTION_MODE_SIZE = 1,
 } GeometryNodePointsToVolumeResolutionMode;
+
+typedef enum GeometryNodeMeshCircleFillType {
+  GEO_NODE_MESH_CIRCLE_FILL_NONE = 0,
+  GEO_NODE_MESH_CIRCLE_FILL_NGON = 1,
+  GEO_NODE_MESH_CIRCLE_FILL_TRIANGLE_FAN = 2,
+} GeometryNodeMeshCircleFillType;
+
+typedef enum GeometryNodeMeshLineMode {
+  GEO_NODE_MESH_LINE_MODE_END_POINTS = 0,
+  GEO_NODE_MESH_LINE_MODE_OFFSET = 1,
+} GeometryNodeMeshLineMode;
+
+typedef enum GeometryNodeMeshLineCountMode {
+  GEO_NODE_MESH_LINE_COUNT_TOTAL = 0,
+  GEO_NODE_MESH_LINE_COUNT_RESOLUTION = 1,
+} GeometryNodeMeshLineCountMode;
 
 #ifdef __cplusplus
 }

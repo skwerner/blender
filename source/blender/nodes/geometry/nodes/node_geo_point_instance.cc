@@ -14,13 +14,9 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "BKE_mesh.h"
 #include "BKE_persistent_data_handle.hh"
 
 #include "DNA_collection_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_pointcloud_types.h"
 
 #include "BLI_hash.h"
 
@@ -188,9 +184,8 @@ static void add_instances_from_geometry_component(InstancesComponent &instances,
 
   for (const int i : IndexRange(domain_size)) {
     if (instances_data[i].has_value()) {
-      float transform[4][4];
-      loc_eul_size_to_mat4(transform, positions[i], rotations[i], scales[i]);
-      instances.add_instance(*instances_data[i], transform, ids[i]);
+      const float4x4 matrix = float4x4::from_loc_eul_scale(positions[i], rotations[i], scales[i]);
+      instances.add_instance(*instances_data[i], matrix, ids[i]);
     }
   }
 }

@@ -22,7 +22,9 @@
 #include "COM_FastGaussianBlurOperation.h"
 #include "MEM_guardedalloc.h"
 
-FastGaussianBlurOperation::FastGaussianBlurOperation() : BlurBaseOperation(COM_DT_COLOR)
+namespace blender::compositor {
+
+FastGaussianBlurOperation::FastGaussianBlurOperation() : BlurBaseOperation(DataType::Color)
 {
   this->m_iirgaus = nullptr;
 }
@@ -80,7 +82,7 @@ void *FastGaussianBlurOperation::initializeTileData(rcti *rect)
   lockMutex();
   if (!this->m_iirgaus) {
     MemoryBuffer *newBuf = (MemoryBuffer *)this->m_inputProgram->initializeTileData(rect);
-    MemoryBuffer *copy = newBuf->duplicate();
+    MemoryBuffer *copy = new MemoryBuffer(*newBuf);
     updateSize();
 
     int c;
@@ -88,18 +90,18 @@ void *FastGaussianBlurOperation::initializeTileData(rcti *rect)
     this->m_sy = this->m_data.sizey * this->m_size / 2.0f;
 
     if ((this->m_sx == this->m_sy) && (this->m_sx > 0.0f)) {
-      for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
+      for (c = 0; c < COM_DATA_TYPE_COLOR_CHANNELS; c++) {
         IIR_gauss(copy, this->m_sx, c, 3);
       }
     }
     else {
       if (this->m_sx > 0.0f) {
-        for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
+        for (c = 0; c < COM_DATA_TYPE_COLOR_CHANNELS; c++) {
           IIR_gauss(copy, this->m_sx, c, 1);
         }
       }
       if (this->m_sy > 0.0f) {
-        for (c = 0; c < COM_NUM_CHANNELS_COLOR; c++) {
+        for (c = 0; c < COM_DATA_TYPE_COLOR_CHANNELS; c++) {
           IIR_gauss(copy, this->m_sy, c, 2);
         }
       }
@@ -122,7 +124,7 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
   unsigned int x, y, sz;
   unsigned int i;
   float *buffer = src->getBuffer();
-  const unsigned int num_channels = src->get_num_channels();
+  const uint8_t num_channels = src->get_num_channels();
 
   // <0.5 not valid, though can have a possibly useful sort of sharpening effect
   if (sigma < 0.5f) {
@@ -258,13 +260,13 @@ void FastGaussianBlurOperation::IIR_gauss(MemoryBuffer *src,
 ///
 FastGaussianBlurValueOperation::FastGaussianBlurValueOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
   this->m_iirgaus = nullptr;
   this->m_inputprogram = nullptr;
   this->m_sigma = 1.0f;
   this->m_overlay = 0;
-  setComplex(true);
+  flags.complex = true;
 }
 
 void FastGaussianBlurValueOperation::executePixel(float output[4], int x, int y, void *data)
@@ -310,14 +312,14 @@ void *FastGaussianBlurValueOperation::initializeTileData(rcti *rect)
   lockMutex();
   if (!this->m_iirgaus) {
     MemoryBuffer *newBuf = (MemoryBuffer *)this->m_inputprogram->initializeTileData(rect);
-    MemoryBuffer *copy = newBuf->duplicate();
+    MemoryBuffer *copy = new MemoryBuffer(*newBuf);
     FastGaussianBlurOperation::IIR_gauss(copy, this->m_sigma, 0, 3);
 
     if (this->m_overlay == FAST_GAUSS_OVERLAY_MIN) {
       float *src = newBuf->getBuffer();
       float *dst = copy->getBuffer();
       for (int i = copy->getWidth() * copy->getHeight(); i != 0;
-           i--, src += COM_NUM_CHANNELS_VALUE, dst += COM_NUM_CHANNELS_VALUE) {
+           i--, src += COM_DATA_TYPE_VALUE_CHANNELS, dst += COM_DATA_TYPE_VALUE_CHANNELS) {
         if (*src < *dst) {
           *dst = *src;
         }
@@ -327,7 +329,7 @@ void *FastGaussianBlurValueOperation::initializeTileData(rcti *rect)
       float *src = newBuf->getBuffer();
       float *dst = copy->getBuffer();
       for (int i = copy->getWidth() * copy->getHeight(); i != 0;
-           i--, src += COM_NUM_CHANNELS_VALUE, dst += COM_NUM_CHANNELS_VALUE) {
+           i--, src += COM_DATA_TYPE_VALUE_CHANNELS, dst += COM_DATA_TYPE_VALUE_CHANNELS) {
         if (*src > *dst) {
           *dst = *src;
         }
@@ -341,3 +343,5 @@ void *FastGaussianBlurValueOperation::initializeTileData(rcti *rect)
   unlockMutex();
   return this->m_iirgaus;
 }
+
+}  // namespace blender::compositor

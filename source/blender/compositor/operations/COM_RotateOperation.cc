@@ -19,11 +19,13 @@
 #include "COM_RotateOperation.h"
 #include "BLI_math.h"
 
+namespace blender::compositor {
+
 RotateOperation::RotateOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Color);
   this->setResolutionInputSocketIndex(0);
   this->m_imageSocket = nullptr;
   this->m_degreeSocket = nullptr;
@@ -48,7 +50,7 @@ inline void RotateOperation::ensureDegree()
 {
   if (!this->m_isDegreeSet) {
     float degree[4];
-    this->m_degreeSocket->readSampled(degree, 0, 0, COM_PS_NEAREST);
+    this->m_degreeSocket->readSampled(degree, 0, 0, PixelSampler::Nearest);
     double rad;
     if (this->m_doDegree2RadConversion) {
       rad = DEG2RAD((double)degree[0]);
@@ -105,3 +107,5 @@ bool RotateOperation::determineDependingAreaOfInterest(rcti *input,
 
   return NodeOperation::determineDependingAreaOfInterest(&newInput, readOperation, output);
 }
+
+}  // namespace blender::compositor

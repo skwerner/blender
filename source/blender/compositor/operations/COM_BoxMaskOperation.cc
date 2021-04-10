@@ -20,11 +20,13 @@
 #include "BLI_math.h"
 #include "DNA_node_types.h"
 
+namespace blender::compositor {
+
 BoxMaskOperation::BoxMaskOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
   this->m_inputMask = nullptr;
   this->m_inputValue = nullptr;
   this->m_cosine = 0.0f;
@@ -108,3 +110,5 @@ void BoxMaskOperation::deinitExecution()
   this->m_inputMask = nullptr;
   this->m_inputValue = nullptr;
 }
+
+}  // namespace blender::compositor

@@ -29,6 +29,7 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_ghash.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
@@ -37,8 +38,10 @@
 #include "DNA_mask_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sound_types.h"
+#include "DNA_space_types.h"
 
 #include "BKE_context.h"
+#include "BKE_global.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
@@ -55,6 +58,7 @@
 
 #include "SEQ_add.h"
 #include "SEQ_effects.h"
+#include "SEQ_proxy.h"
 #include "SEQ_relations.h"
 #include "SEQ_render.h"
 #include "SEQ_select.h"
@@ -224,33 +228,45 @@ static void load_data_init_from_operator(SeqLoadData *load_data, bContext *C, wm
   PropertyRNA *prop;
   const bool relative = (prop = RNA_struct_find_property(op->ptr, "relative_path")) &&
                         RNA_property_boolean_get(op->ptr, prop);
-  int is_file = -1;
   memset(load_data, 0, sizeof(SeqLoadData));
 
   load_data->start_frame = RNA_int_get(op->ptr, "frame_start");
   load_data->channel = RNA_int_get(op->ptr, "channel");
   load_data->image.end_frame = load_data->start_frame;
   load_data->image.len = 1;
-  load_data->fit_method = RNA_enum_get(op->ptr, "fit_method");
-  SEQ_tool_settings_fit_method_set(CTX_data_scene(C), load_data->fit_method);
+
+  if ((prop = RNA_struct_find_property(op->ptr, "fit_method"))) {
+    load_data->fit_method = RNA_enum_get(op->ptr, "fit_method");
+    SEQ_tool_settings_fit_method_set(CTX_data_scene(C), load_data->fit_method);
+  }
 
   if ((prop = RNA_struct_find_property(op->ptr, "filepath"))) {
-    /* Full path, file is set by the caller. */
     RNA_property_string_get(op->ptr, prop, load_data->path);
-    is_file = 1;
+    BLI_strncpy(load_data->name, BLI_path_basename(load_data->path), sizeof(load_data->name));
   }
   else if ((prop = RNA_struct_find_property(op->ptr, "directory"))) {
-    /* Full path, file is set by the caller. */
-    RNA_property_string_get(op->ptr, prop, load_data->path);
-    is_file = 0;
+    char *directory = RNA_string_get_alloc(op->ptr, "directory", NULL, 0);
+
+    if ((prop = RNA_struct_find_property(op->ptr, "files"))) {
+      RNA_PROP_BEGIN (op->ptr, itemptr, prop) {
+        char *filename = RNA_string_get_alloc(&itemptr, "name", NULL, 0);
+        BLI_strncpy(load_data->name, filename, sizeof(load_data->name));
+        BLI_snprintf(load_data->path, sizeof(load_data->path), "%s%s", directory, filename);
+        MEM_freeN(filename);
+        break;
+      }
+      RNA_PROP_END;
+    }
+    MEM_freeN(directory);
   }
 
-  if ((is_file != -1) && relative) {
+  if (relative) {
     BLI_path_rel(load_data->path, BKE_main_blendfile_path(bmain));
   }
 
   if ((prop = RNA_struct_find_property(op->ptr, "frame_end"))) {
     load_data->image.end_frame = RNA_property_int_get(op->ptr, prop);
+    load_data->effect.end_frame = load_data->image.end_frame;
   }
 
   if ((prop = RNA_struct_find_property(op->ptr, "cache")) &&
@@ -266,19 +282,6 @@ static void load_data_init_from_operator(SeqLoadData *load_data, bContext *C, wm
   if ((prop = RNA_struct_find_property(op->ptr, "use_framerate")) &&
       RNA_property_boolean_get(op->ptr, prop)) {
     load_data->flags |= SEQ_LOAD_MOVIE_SYNC_FPS;
-  }
-
-  if (is_file == 1) {
-    BLI_strncpy(load_data->name, BLI_path_basename(load_data->path), sizeof(load_data->name));
-  }
-  else if ((prop = RNA_struct_find_property(op->ptr, "files"))) {
-    RNA_PROP_BEGIN (op->ptr, itemptr, prop) {
-      char *name = RNA_string_get_alloc(&itemptr, "name", NULL, 0);
-      BLI_strncpy(load_data->name, name, sizeof(load_data->name));
-      MEM_freeN(name);
-      break;
-    }
-    RNA_PROP_END;
   }
 
   if ((prop = RNA_struct_find_property(op->ptr, "use_multiview")) &&
@@ -548,6 +551,55 @@ static bool sequencer_add_draw_check_fn(PointerRNA *UNUSED(ptr),
   return !(STR_ELEM(prop_id, "filepath", "directory", "filename"));
 }
 
+/* Strips are added in context of timeline which has different preview size than actual preview. We
+ * must search for preview area. In most cases there will be only one preview area, but there can
+ * be more with different preview sizes. */
+static IMB_Proxy_Size seq_get_proxy_size_flags(bContext *C)
+{
+  bScreen *screen = CTX_wm_screen(C);
+  IMB_Proxy_Size proxy_sizes = 0;
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+    LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+      switch (sl->spacetype) {
+        case SPACE_SEQ: {
+          SpaceSeq *sseq = (SpaceSeq *)sl;
+          if (!ELEM(sseq->view, SEQ_VIEW_PREVIEW, SEQ_VIEW_SEQUENCE_PREVIEW)) {
+            continue;
+          }
+          proxy_sizes |= SEQ_rendersize_to_proxysize(sseq->render_size);
+        }
+      }
+    }
+  }
+  return proxy_sizes;
+}
+
+static void seq_build_proxy(bContext *C, Sequence *seq)
+{
+  if (U.sequencer_proxy_setup != USER_SEQ_PROXY_SETUP_AUTOMATIC) {
+    return;
+  }
+
+  /* Enable and set proxy size. */
+  SEQ_proxy_set(seq, true);
+  seq->strip->proxy->build_size_flags = seq_get_proxy_size_flags(C);
+  seq->strip->proxy->build_flags |= SEQ_PROXY_SKIP_EXISTING;
+
+  /* Build proxy. */
+  GSet *file_list = BLI_gset_new(BLI_ghashutil_strhash_p, BLI_ghashutil_strcmp, "file list");
+  wmJob *wm_job = ED_seq_proxy_wm_job_get(C);
+  ProxyJob *pj = ED_seq_proxy_job_get(C, wm_job);
+  SEQ_proxy_rebuild_context(pj->main, pj->depsgraph, pj->scene, seq, file_list, &pj->queue);
+  BLI_gset_free(file_list, MEM_freeN);
+
+  if (!WM_jobs_is_running(wm_job)) {
+    G.is_break = false;
+    WM_jobs_start(CTX_wm_manager(C), wm_job);
+  }
+
+  ED_area_tag_redraw(CTX_wm_area(C));
+}
+
 static void sequencer_add_movie_multiple_strips(bContext *C,
                                                 wmOperator *op,
                                                 SeqLoadData *load_data)
@@ -578,6 +630,7 @@ static void sequencer_add_movie_multiple_strips(bContext *C,
       load_data->start_frame += seq_movie->enddisp - seq_movie->startdisp;
       seq_load_apply_generic_options(C, op, seq_sound);
       seq_load_apply_generic_options(C, op, seq_movie);
+      seq_build_proxy(C, seq_movie);
     }
   }
   RNA_END;
@@ -604,6 +657,7 @@ static bool sequencer_add_movie_single_strip(bContext *C, wmOperator *op, SeqLoa
   }
   seq_load_apply_generic_options(C, op, seq_sound);
   seq_load_apply_generic_options(C, op, seq_movie);
+  seq_build_proxy(C, seq_movie);
 
   return true;
 }
@@ -931,8 +985,10 @@ static void sequencer_add_image_strip_load_files(
     wmOperator *op, Sequence *seq, SeqLoadData *load_data, const int minframe, const int numdigits)
 {
   const bool use_placeholders = RNA_boolean_get(op->ptr, "use_placeholders");
-
-  SEQ_add_image_set_directory(seq, load_data->path);
+  /* size of Strip->dir. */
+  char directory[768];
+  BLI_split_dir_part(load_data->path, directory, sizeof(directory));
+  SEQ_add_image_set_directory(seq, directory);
 
   if (use_placeholders) {
     sequencer_image_seq_reserve_frames(

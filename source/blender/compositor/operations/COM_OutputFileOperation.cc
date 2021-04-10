@@ -40,6 +40,8 @@
 
 #include "RE_pipeline.h"
 
+namespace blender::compositor {
+
 void add_exr_channels(void *exrhandle,
                       const char *layerName,
                       const DataType datatype,
@@ -50,11 +52,11 @@ void add_exr_channels(void *exrhandle,
 {
   /* create channels */
   switch (datatype) {
-    case COM_DT_VALUE:
+    case DataType::Value:
       IMB_exr_add_channel(
           exrhandle, layerName, "V", viewName, 1, width, buf ? buf : nullptr, use_half_float);
       break;
-    case COM_DT_VECTOR:
+    case DataType::Vector:
       IMB_exr_add_channel(
           exrhandle, layerName, "X", viewName, 3, 3 * width, buf ? buf : nullptr, use_half_float);
       IMB_exr_add_channel(exrhandle,
@@ -74,7 +76,7 @@ void add_exr_channels(void *exrhandle,
                           buf ? buf + 2 : nullptr,
                           use_half_float);
       break;
-    case COM_DT_COLOR:
+    case DataType::Color:
       IMB_exr_add_channel(
           exrhandle, layerName, "R", viewName, 4, 4 * width, buf ? buf : nullptr, use_half_float);
       IMB_exr_add_channel(exrhandle,
@@ -124,13 +126,13 @@ void free_exr_channels(void *exrhandle,
 
     /* the pointer is stored in the first channel of each datatype */
     switch (datatype) {
-      case COM_DT_VALUE:
+      case DataType::Value:
         rect = IMB_exr_channel_rect(exrhandle, layerName, "V", srv->name);
         break;
-      case COM_DT_VECTOR:
+      case DataType::Vector:
         rect = IMB_exr_channel_rect(exrhandle, layerName, "X", srv->name);
         break;
-      case COM_DT_COLOR:
+      case DataType::Color:
         rect = IMB_exr_channel_rect(exrhandle, layerName, "R", srv->name);
         break;
       default:
@@ -145,11 +147,11 @@ void free_exr_channels(void *exrhandle,
 int get_datatype_size(DataType datatype)
 {
   switch (datatype) {
-    case COM_DT_VALUE:
+    case DataType::Value:
       return 1;
-    case COM_DT_VECTOR:
+    case DataType::Vector:
       return 3;
-    case COM_DT_COLOR:
+    case DataType::Color:
       return 4;
     default:
       return 0;
@@ -191,7 +193,7 @@ static void write_buffer_rect(rcti *rect,
 
   for (y = y1; y < y2 && (!breaked); y++) {
     for (x = x1; x < x2 && (!breaked); x++) {
-      reader->readSampled(color, x, y, COM_PS_NEAREST);
+      reader->readSampled(color, x, y, PixelSampler::Nearest);
 
       for (i = 0; i < size; i++) {
         buffer[offset + i] = color[i];
@@ -328,7 +330,7 @@ void OutputOpenExrMultiLayerOperation::add_layer(const char *name,
                                                  bool use_layer)
 {
   this->addInputSocket(datatype);
-  this->m_layers.push_back(OutputOpenExrLayer(name, datatype, use_layer));
+  this->m_layers.append(OutputOpenExrLayer(name, datatype, use_layer));
 }
 
 StampData *OutputOpenExrMultiLayerOperation::createStampData() const
@@ -338,17 +340,16 @@ StampData *OutputOpenExrMultiLayerOperation::createStampData() const
   RenderResult render_result;
   StampData *stamp_data = BKE_stamp_info_from_scene_static(m_scene);
   render_result.stamp_data = stamp_data;
-  for (int i = 0; i < this->m_layers.size(); i++) {
-    const OutputOpenExrLayer *layer = &this->m_layers[i];
+  for (const OutputOpenExrLayer &layer : m_layers) {
     /* Skip unconnected sockets. */
-    if (layer->imageInput == nullptr) {
+    if (layer.imageInput == nullptr) {
       continue;
     }
-    std::unique_ptr<MetaData> meta_data = layer->imageInput->getMetaData();
+    std::unique_ptr<MetaData> meta_data = layer.imageInput->getMetaData();
     if (meta_data) {
       blender::StringRef layer_name =
           blender::bke::cryptomatte::BKE_cryptomatte_extract_layer_name(
-              blender::StringRef(layer->name, BLI_strnlen(layer->name, sizeof(layer->name))));
+              blender::StringRef(layer.name, BLI_strnlen(layer.name, sizeof(layer.name))));
       meta_data->replaceHashNeutralCryptomatteKeys(layer_name);
       meta_data->addToRenderResult(&render_result);
     }
@@ -441,3 +442,5 @@ void OutputOpenExrMultiLayerOperation::deinitExecution()
     BKE_stamp_data_free(stamp_data);
   }
 }
+
+}  // namespace blender::compositor

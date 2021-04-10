@@ -224,6 +224,28 @@ static void ed_undo_step_post(bContext *C,
 
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
+  ScrArea *area = CTX_wm_area(C);
+
+  /* Set special modes for grease pencil */
+  if (area != NULL && (area->spacetype == SPACE_VIEW3D)) {
+    Object *obact = CTX_data_active_object(C);
+    if (obact && (obact->type == OB_GPENCIL)) {
+      /* set cursor */
+      if (ELEM(obact->mode,
+               OB_MODE_PAINT_GPENCIL,
+               OB_MODE_SCULPT_GPENCIL,
+               OB_MODE_WEIGHT_GPENCIL,
+               OB_MODE_VERTEX_GPENCIL)) {
+        ED_gpencil_toggle_brush_cursor(C, true, NULL);
+      }
+      else {
+        ED_gpencil_toggle_brush_cursor(C, false, NULL);
+      }
+      /* set workspace mode */
+      Base *basact = CTX_data_active_base(C);
+      ED_object_base_activate(C, basact);
+    }
+  }
 
   /* App-Handlers (post). */
   {
@@ -251,9 +273,11 @@ static void ed_undo_step_post(bContext *C,
   }
 }
 
-/** Undo or redo one step from current active one.
- *  May undo or redo several steps at once only if the target step is a 'skipped' one.
- *  The target step will be the one immediately before or after the active one. */
+/**
+ * Undo or redo one step from current active one.
+ * May undo or redo several steps at once only if the target step is a 'skipped' one.
+ * The target step will be the one immediately before or after the active one.
+ */
 static int ed_undo_step_direction(bContext *C, enum eUndoStepDir step, ReportList *reports)
 {
   BLI_assert(ELEM(step, STEP_UNDO, STEP_REDO));
@@ -286,9 +310,11 @@ static int ed_undo_step_direction(bContext *C, enum eUndoStepDir step, ReportLis
   return OPERATOR_FINISHED;
 }
 
-/** Undo the step matching given name.
- *  May undo several steps at once.
- *  The target step will be the one immediately before given named one. */
+/**
+ * Undo the step matching given name.
+ * May undo several steps at once.
+ * The target step will be the one immediately before given named one.
+ */
 static int ed_undo_step_by_name(bContext *C, const char *undo_name, ReportList *reports)
 {
   BLI_assert(undo_name != NULL);
@@ -332,9 +358,11 @@ static int ed_undo_step_by_name(bContext *C, const char *undo_name, ReportList *
   return OPERATOR_FINISHED;
 }
 
-/** Load the step matching given index in the stack.
- *  May undo or redo several steps at once.
- *  The target step will be the one indicated by the given index. */
+/**
+ * Load the step matching given index in the stack.
+ * May undo or redo several steps at once.
+ * The target step will be the one indicated by the given index.
+ */
 static int ed_undo_step_by_index(bContext *C, const int undo_index, ReportList *reports)
 {
   BLI_assert(undo_index >= 0);
@@ -911,9 +939,7 @@ void ED_undo_object_editmode_restore_helper(struct bContext *C,
  * and local collections may be used.
  * \{ */
 
-static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer,
-                                                         Object *obact,
-                                                         int *r_active_index)
+static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer, Object *obact)
 {
   const short object_type = obact->type;
 
@@ -929,9 +955,6 @@ static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer,
   LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
-      if (ob == obact) {
-        *r_active_index = len;
-      }
       ID *id = ob->data;
       if ((id->tag & LIB_TAG_DOIT) == 0) {
         len += 1;
@@ -944,16 +967,18 @@ static int undo_editmode_objects_from_view_layer_prepare(ViewLayer *view_layer,
 
 Object **ED_undo_editmode_objects_from_view_layer(ViewLayer *view_layer, uint *r_len)
 {
-  Object *obact = OBACT(view_layer);
-  if ((obact == NULL) || (obact->mode & OB_MODE_EDIT) == 0) {
+  Base *baseact = BASACT(view_layer);
+  if ((baseact == NULL) || (baseact->object->mode & OB_MODE_EDIT) == 0) {
     return MEM_mallocN(0, __func__);
   }
-  int active_index = 0;
-  const int len = undo_editmode_objects_from_view_layer_prepare(view_layer, obact, &active_index);
-  const short object_type = obact->type;
+  const int len = undo_editmode_objects_from_view_layer_prepare(view_layer, baseact->object);
+  const short object_type = baseact->object->type;
   int i = 0;
   Object **objects = MEM_malloc_arrayN(len, sizeof(*objects), __func__);
-  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+  /* Base iteration, starting with the active-base to ensure it's the first item in the array.
+   * Looping over the active-base twice is OK as the tag check prevents it being handled twice. */
+  for (Base *base = baseact, *base_next = FIRSTBASE(view_layer); base;
+       base = base_next, base_next = base_next ? base_next->next : NULL) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
       ID *id = ob->data;
@@ -964,25 +989,25 @@ Object **ED_undo_editmode_objects_from_view_layer(ViewLayer *view_layer, uint *r
     }
   }
   BLI_assert(i == len);
-  if (active_index > 0) {
-    SWAP(Object *, objects[0], objects[active_index]);
-  }
+  BLI_assert(objects[0] == baseact->object);
   *r_len = len;
   return objects;
 }
 
 Base **ED_undo_editmode_bases_from_view_layer(ViewLayer *view_layer, uint *r_len)
 {
-  Object *obact = OBACT(view_layer);
-  if ((obact == NULL) || (obact->mode & OB_MODE_EDIT) == 0) {
+  Base *baseact = BASACT(view_layer);
+  if ((baseact == NULL) || (baseact->object->mode & OB_MODE_EDIT) == 0) {
     return MEM_mallocN(0, __func__);
   }
-  int active_index = 0;
-  const int len = undo_editmode_objects_from_view_layer_prepare(view_layer, obact, &active_index);
-  const short object_type = obact->type;
+  const int len = undo_editmode_objects_from_view_layer_prepare(view_layer, baseact->object);
+  const short object_type = baseact->object->type;
   int i = 0;
   Base **base_array = MEM_malloc_arrayN(len, sizeof(*base_array), __func__);
-  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
+  /* Base iteration, starting with the active-base to ensure it's the first item in the array.
+   * Looping over the active-base twice is OK as the tag check prevents it being handled twice. */
+  for (Base *base = BASACT(view_layer), *base_next = FIRSTBASE(view_layer); base;
+       base = base_next, base_next = base_next ? base_next->next : NULL) {
     Object *ob = base->object;
     if ((ob->type == object_type) && (ob->mode & OB_MODE_EDIT)) {
       ID *id = ob->data;
@@ -992,10 +1017,9 @@ Base **ED_undo_editmode_bases_from_view_layer(ViewLayer *view_layer, uint *r_len
       }
     }
   }
+
   BLI_assert(i == len);
-  if (active_index > 0) {
-    SWAP(Base *, base_array[0], base_array[active_index]);
-  }
+  BLI_assert(base_array[0] == baseact);
   *r_len = len;
   return base_array;
 }

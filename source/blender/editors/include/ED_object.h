@@ -178,6 +178,9 @@ void ED_object_base_active_refresh(struct Main *bmain,
                                    struct Scene *scene,
                                    struct ViewLayer *view_layer);
 void ED_object_base_free_and_unlink(struct Main *bmain, struct Scene *scene, struct Object *ob);
+void ED_object_base_free_and_unlink_no_indirect_check(struct Main *bmain,
+                                                      struct Scene *scene,
+                                                      struct Object *ob);
 bool ED_object_base_deselect_all_ex(struct ViewLayer *view_layer,
                                     struct View3D *v3d,
                                     int action,
@@ -206,6 +209,8 @@ bool ED_object_editmode_exit_ex(struct Main *bmain,
                                 struct Object *obedit,
                                 int flag);
 bool ED_object_editmode_exit(struct bContext *C, int flag);
+
+bool ED_object_editmode_free_ex(struct Main *bmain, struct Object *obedit);
 
 bool ED_object_editmode_exit_multi_ex(struct Main *bmain,
                                       struct Scene *scene,

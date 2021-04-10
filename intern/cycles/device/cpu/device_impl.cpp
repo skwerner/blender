@@ -41,7 +41,6 @@
 #include "kernel/device/cpu/globals.h"
 #include "kernel/device/cpu/kernel.h"
 #include "kernel/kernel_types.h"
-#include "kernel/kernel_adaptive_sampling.h"
 
 #include "kernel/osl/osl_shader.h"
 #include "kernel/osl/osl_globals.h"

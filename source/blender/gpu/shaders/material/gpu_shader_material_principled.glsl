@@ -55,6 +55,7 @@ void node_bsdf_principled(vec4 base_color,
   float specular_weight = (1.0 - transmission);
   clearcoat = max(clearcoat, 0.0);
   transmission_roughness = 1.0 - (1.0 - roughness) * (1.0 - transmission_roughness);
+  specular = max(0.0, specular);
 
   CLOSURE_VARS_DECLARE_4(Diffuse, Glossy, Glossy, Refraction);
 
@@ -193,7 +194,7 @@ void node_bsdf_principled(vec4 base_color,
   result.radiance *= alpha;
   result.ssr_data.rgb *= alpha;
 #  ifdef USE_SSS
-  result.sss_irradiance *= alpha;
+  result.sss_albedo *= alpha;
 #  endif
 }
 

@@ -359,8 +359,8 @@ static void drw_viewport_colormanagement_set(void)
   }
   else if (DST.draw_ctx.space_data && DST.draw_ctx.space_data->spacetype == SPACE_NODE) {
     SpaceNode *snode = (SpaceNode *)DST.draw_ctx.space_data;
-    const eSpaceImage_Flag display_channels_mode = snode->flag;
-    const bool display_color_channel = (display_channels_mode & (SI_SHOW_ALPHA)) == 0;
+    const eSpaceNode_Flag display_channels_mode = snode->flag;
+    const bool display_color_channel = (display_channels_mode & SNODE_SHOW_ALPHA) == 0;
     if (display_color_channel) {
       use_render_settings = true;
     }
@@ -2601,8 +2601,7 @@ static void drw_draw_depth_loop_impl(struct Depsgraph *depsgraph,
 void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
                          ARegion *region,
                          View3D *v3d,
-                         GPUViewport *viewport,
-                         bool use_opengl_context)
+                         GPUViewport *viewport)
 {
   /* Reset before using it. */
   drw_state_prepare_clean_for_draw(&DST);
@@ -2618,7 +2617,7 @@ void DRW_draw_depth_loop(struct Depsgraph *depsgraph,
     }
   }
 
-  drw_draw_depth_loop_impl(depsgraph, region, v3d, viewport, use_opengl_context);
+  drw_draw_depth_loop_impl(depsgraph, region, v3d, viewport, false);
 }
 
 /**
@@ -2634,7 +2633,7 @@ void DRW_draw_depth_loop_gpencil(struct Depsgraph *depsgraph,
 
   use_drw_engine(&draw_engine_gpencil_type);
 
-  drw_draw_depth_loop_impl(depsgraph, region, v3d, viewport, true);
+  drw_draw_depth_loop_impl(depsgraph, region, v3d, viewport, false);
 }
 
 void DRW_draw_select_id(Depsgraph *depsgraph, ARegion *region, View3D *v3d, const rcti *rect)
@@ -2725,7 +2724,6 @@ void DRW_draw_depth_object(
 {
   RegionView3D *rv3d = region->regiondata;
 
-  DRW_opengl_context_enable();
   GPU_matrix_projection_set(rv3d->winmat);
   GPU_matrix_set(rv3d->viewmat);
   GPU_matrix_mul(object->obmat);
@@ -2784,7 +2782,6 @@ void DRW_draw_depth_object(
   GPU_matrix_set(rv3d->viewmat);
   GPU_depth_test(GPU_DEPTH_NONE);
   GPU_framebuffer_restore();
-  DRW_opengl_context_disable();
 }
 
 /** \} */
@@ -3092,7 +3089,7 @@ void DRW_opengl_context_destroy(void)
 void DRW_opengl_context_enable_ex(bool UNUSED(restore))
 {
   if (DST.gl_context != NULL) {
-    /* IMPORTANT: We dont support immediate mode in render mode!
+    /* IMPORTANT: We don't support immediate mode in render mode!
      * This shall remain in effect until immediate mode supports
      * multiple threads. */
     BLI_ticket_mutex_lock(DST.gl_context_mutex);

@@ -40,16 +40,6 @@ struct Object;
 struct PointCloud;
 struct Volume;
 
-/* Each geometry component has a specific type. The type determines what kind of data the component
- * stores. Functions modifying a geometry will usually just modify a subset of the component types.
- */
-enum class GeometryComponentType {
-  Mesh = 0,
-  PointCloud = 1,
-  Instances = 2,
-  Volume = 3,
-};
-
 enum class GeometryOwnershipType {
   /* The geometry is owned. This implies that it can be changed. */
   Owned = 0,
@@ -58,16 +48,6 @@ enum class GeometryOwnershipType {
   /* The geometry cannot be changed and someone else is responsible for freeing it. */
   ReadOnly = 2,
 };
-
-/* Make it possible to use the component type as key in hash tables. */
-namespace blender {
-template<> struct DefaultHash<GeometryComponentType> {
-  uint64_t operator()(const GeometryComponentType &value) const
-  {
-    return (uint64_t)value;
-  }
-};
-}  // namespace blender
 
 namespace blender::bke {
 class ComponentAttributeProviders;
@@ -155,11 +135,17 @@ class GeometryComponent {
 
  public:
   GeometryComponent(GeometryComponentType type);
-  virtual ~GeometryComponent();
+  virtual ~GeometryComponent() = default;
   static GeometryComponent *create(GeometryComponentType component_type);
 
   /* The returned component should be of the same type as the type this is called on. */
   virtual GeometryComponent *copy() const = 0;
+
+  /* Direct data is everything except for instances of objects/collections.
+   * If this returns true, the geometry set can be cached and is still valid after e.g. modifier
+   * evaluation ends. Instances can only be valid as long as the data they instance is valid. */
+  virtual bool owns_direct_data() const = 0;
+  virtual void ensure_owns_direct_data() = 0;
 
   void user_add() const;
   void user_remove() const;
@@ -200,7 +186,7 @@ class GeometryComponent {
                             const CustomDataType data_type);
 
   blender::Set<std::string> attribute_names() const;
-  void attribute_foreach(const AttributeForeachCallback callback) const;
+  bool attribute_foreach(const AttributeForeachCallback callback) const;
 
   virtual bool is_empty() const;
 
@@ -333,6 +319,10 @@ struct GeometrySet {
   friend bool operator==(const GeometrySet &a, const GeometrySet &b);
   uint64_t hash() const;
 
+  void clear();
+
+  void ensure_owns_direct_data();
+
   /* Utility methods for creation. */
   static GeometrySet create_with_mesh(
       Mesh *mesh, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
@@ -392,7 +382,10 @@ class MeshComponent : public GeometryComponent {
 
   bool is_empty() const final;
 
-  static constexpr inline GeometryComponentType static_type = GeometryComponentType::Mesh;
+  bool owns_direct_data() const override;
+  void ensure_owns_direct_data() override;
+
+  static constexpr inline GeometryComponentType static_type = GEO_COMPONENT_TYPE_MESH;
 
  private:
   const blender::bke::ComponentAttributeProviders *get_attribute_providers() const final;
@@ -422,7 +415,10 @@ class PointCloudComponent : public GeometryComponent {
 
   bool is_empty() const final;
 
-  static constexpr inline GeometryComponentType static_type = GeometryComponentType::PointCloud;
+  bool owns_direct_data() const override;
+  void ensure_owns_direct_data() override;
+
+  static constexpr inline GeometryComponentType static_type = GEO_COMPONENT_TYPE_POINT_CLOUD;
 
  private:
   const blender::bke::ComponentAttributeProviders *get_attribute_providers() const final;
@@ -462,7 +458,10 @@ class InstancesComponent : public GeometryComponent {
 
   bool is_empty() const final;
 
-  static constexpr inline GeometryComponentType static_type = GeometryComponentType::Instances;
+  bool owns_direct_data() const override;
+  void ensure_owns_direct_data() override;
+
+  static constexpr inline GeometryComponentType static_type = GEO_COMPONENT_TYPE_INSTANCES;
 };
 
 /** A geometry component that stores volume grids. */
@@ -484,5 +483,8 @@ class VolumeComponent : public GeometryComponent {
   const Volume *get_for_read() const;
   Volume *get_for_write();
 
-  static constexpr inline GeometryComponentType static_type = GeometryComponentType::Volume;
+  bool owns_direct_data() const override;
+  void ensure_owns_direct_data() override;
+
+  static constexpr inline GeometryComponentType static_type = GEO_COMPONENT_TYPE_VOLUME;
 };

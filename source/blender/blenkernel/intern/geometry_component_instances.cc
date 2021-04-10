@@ -35,7 +35,7 @@ using blender::Span;
 /** \name Geometry Component Implementation
  * \{ */
 
-InstancesComponent::InstancesComponent() : GeometryComponent(GeometryComponentType::Instances)
+InstancesComponent::InstancesComponent() : GeometryComponent(GEO_COMPONENT_TYPE_INSTANCES)
 {
 }
 
@@ -106,6 +106,18 @@ int InstancesComponent::instances_amount() const
 bool InstancesComponent::is_empty() const
 {
   return transforms_.size() == 0;
+}
+
+bool InstancesComponent::owns_direct_data() const
+{
+  /* The object and collection instances are not direct data. Instance transforms are direct data
+   * and are always owned. Therefore, instance components always own all their direct data. */
+  return true;
+}
+
+void InstancesComponent::ensure_owns_direct_data()
+{
+  BLI_assert(this->is_mutable());
 }
 
 static blender::Array<int> generate_unique_instance_ids(Span<int> original_ids)

@@ -12,15 +12,9 @@ uniform sampler2DArray planarDepth;
 
 struct Ray {
   vec3 origin;
+  /* Ray direction premultiplied by its maximum length. */
   vec3 direction;
 };
-
-vec3 raytrace_offset(vec3 P, vec3 Ng)
-{
-  /* TODO(fclem) better offset */
-  const float epsilon_f = 1e-4;
-  return P + epsilon_f * Ng;
-}
 
 /* Inputs expected to be in viewspace. */
 void raytrace_clip_ray_to_near_plane(inout Ray ray)
@@ -50,12 +44,12 @@ void raytrace_screenspace_ray_finalize(inout ScreenSpaceRay ray)
   ray.direction.zw += bias;
 
   ray.direction -= ray.origin;
-  float ray_len_sqr = len_squared(ray.direction.xyz);
   /* If the line is degenerate, make it cover at least one pixel
    * to not have to handle zero-pixel extent as a special case later */
-  if (ray_len_sqr < 0.00001) {
-    ray.direction.xy = vec2(0.0, 0.0001);
+  if (len_squared(ray.direction.xy) < 0.00001) {
+    ray.direction.xy = vec2(0.0, 0.00001);
   }
+  float ray_len_sqr = len_squared(ray.direction.xyz);
   /* Make ray.direction cover one pixel. */
   bool is_more_vertical = abs(ray.direction.x) < abs(ray.direction.y);
   ray.direction /= (is_more_vertical) ? abs(ray.direction.y) : abs(ray.direction.x);
@@ -63,7 +57,7 @@ void raytrace_screenspace_ray_finalize(inout ScreenSpaceRay ray)
   /* Clip to segment's end. */
   ray.max_time = sqrt(ray_len_sqr * safe_rcp(len_squared(ray.direction.xyz)));
   /* Clipping to frustum sides. */
-  float clip_dist = line_unit_box_intersect_dist(ray.origin.xyz, ray.direction.xyz);
+  float clip_dist = line_unit_box_intersect_dist_safe(ray.origin.xyz, ray.direction.xyz);
   ray.max_time = min(ray.max_time, clip_dist);
   /* Convert to texture coords [0..1] range. */
   ray.origin = ray.origin * 0.5 + 0.5;
@@ -106,12 +100,12 @@ struct RayTraceParameters {
   float roughness;
 };
 
-/* Return true on hit. */
-/* __ray_dir__ is the ray direction premultiplied by its maximum length */
+/* Returns true on hit. */
 /* TODO fclem remove the backface check and do it the SSR resolve code. */
 bool raytrace(Ray ray,
               RayTraceParameters params,
               const bool discard_backface,
+              const bool allow_self_intersection,
               out vec3 hit_position)
 {
   /* Clip to near plane for perspective view where there is a singularity at the camera origin. */
@@ -121,7 +115,12 @@ bool raytrace(Ray ray,
 
   ScreenSpaceRay ssray = raytrace_screenspace_ray_create(ray, params.thickness);
   /* Avoid no iteration. */
-  ssray.max_time = max(ssray.max_time, 1.1);
+  if (!allow_self_intersection && ssray.max_time < 1.1) {
+    hit_position = ssray.origin.xyz + ssray.direction.xyz;
+    return false;
+  }
+
+  ssray.max_time = max(1.1, ssray.max_time);
 
   float prev_delta = 0.0, prev_time = 0.0;
   float depth_sample = get_depth_from_view_z(ray.origin.z);
@@ -150,7 +149,7 @@ bool raytrace(Ray ray,
     /* Check if the ray is below the surface ... */
     hit = (delta < 0.0);
     /* ... and above it with the added thickness. */
-    hit = hit && (delta > ss_p.z - ss_p.w);
+    hit = hit && (delta > ss_p.z - ss_p.w || abs(delta) < abs(ssray.direction.z * stride * 2.0));
   }
   /* Discard backface hits. */
   hit = hit && !(discard_backface && prev_delta < 0.0);
@@ -173,19 +172,18 @@ bool raytrace_planar(Ray ray, RayTraceParameters params, int planar_ref_id, out 
   }
 
   ScreenSpaceRay ssray = raytrace_screenspace_ray_create(ray);
-  /* Avoid no iteration. */
-  ssray.max_time = max(ssray.max_time, 1.1);
 
   /* Planar Reflections have X mirrored. */
   ssray.origin.x = 1.0 - ssray.origin.x;
   ssray.direction.x = -ssray.direction.x;
 
   float prev_delta = 0.0, prev_time = 0.0;
-  float depth_sample = get_depth_from_view_z(ray.origin.z);
+  float depth_sample = texture(planarDepth, vec3(ssray.origin.xy, planar_ref_id)).r;
   float delta = depth_sample - ssray.origin.z;
 
-  /* Cross at least one pixel. */
-  float t = 1.001, time = 1.001;
+  float t = 0.0, time = 0.0;
+  /* On very sharp reflections, the ray can be perfectly aligned with the view direction
+   * making the tracing useless. Bypass tracing in this case. */
   bool hit = false;
   const float max_steps = 255.0;
   for (float iter = 1.0; !hit && (time < ssray.max_time) && (iter < max_steps); iter++) {
@@ -212,6 +210,8 @@ bool raytrace_planar(Ray ray, RayTraceParameters params, int planar_ref_id, out 
   time = mix(prev_time, time, saturate(prev_delta / (prev_delta - delta)));
 
   hit_position = ssray.origin.xyz + ssray.direction.xyz * time;
+  /* Planar Reflections have X mirrored. */
+  hit_position.x = 1.0 - hit_position.x;
 
   return hit;
 }

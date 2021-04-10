@@ -20,12 +20,14 @@
 
 #include "BLI_math.h"
 
+namespace blender::compositor {
+
 MathBaseOperation::MathBaseOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
   this->m_inputValue1Operation = nullptr;
   this->m_inputValue2Operation = nullptr;
   this->m_inputValue3Operation = nullptr;
@@ -748,3 +750,5 @@ void MathSmoothMaxOperation::executePixelSampled(float output[4],
 
   clampIfNeeded(output);
 }
+
+}  // namespace blender::compositor

@@ -437,15 +437,21 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
 
   /* Find how many instanced panels with this context string. */
   int list_panels_len = 0;
+  int start_index = -1;
   LISTBASE_FOREACH (const Panel *, panel, &region->panels) {
     if (panel->type) {
       if (panel->type->flag & PANEL_TYPE_INSTANCED) {
         if (panel_type_context_poll(region, panel->type, context)) {
+          if (panel == drag_panel) {
+            BLI_assert(start_index == -1); /* This panel should only appear once. */
+            start_index = list_panels_len;
+          }
           list_panels_len++;
         }
       }
     }
   }
+  BLI_assert(start_index != -1); /* The drag panel should definitely be in the list. */
 
   /* Sort the matching instanced panels by their display order. */
   PanelSort *panel_sort = MEM_callocN(list_panels_len * sizeof(*panel_sort), __func__);
@@ -471,6 +477,11 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
   }
 
   MEM_freeN(panel_sort);
+
+  if (move_to_index == start_index) {
+    /* In this case, the reorder was not changed, so don't do any updates or call the callback. */
+    return;
+  }
 
   /* Set the bit to tell the interface to instanced the list. */
   drag_panel->flag |= PNL_INSTANCED_LIST_ORDER_CHANGED;
@@ -2529,9 +2540,8 @@ PointerRNA *UI_region_panel_custom_data_under_cursor(const bContext *C, const wm
 {
   ARegion *region = CTX_wm_region(C);
 
-  Panel *panel = NULL;
   LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
-    panel = block->panel;
+    Panel *panel = block->panel;
     if (panel == NULL) {
       continue;
     }
@@ -2541,15 +2551,11 @@ PointerRNA *UI_region_panel_custom_data_under_cursor(const bContext *C, const wm
     ui_window_to_block(region, block, &mx, &my);
     const int mouse_state = ui_panel_mouse_state_get(block, panel, mx, my);
     if (ELEM(mouse_state, PANEL_MOUSE_INSIDE_CONTENT, PANEL_MOUSE_INSIDE_HEADER)) {
-      break;
+      return UI_panel_custom_data_get(panel);
     }
   }
 
-  if (panel == NULL) {
-    return NULL;
-  }
-
-  return UI_panel_custom_data_get(panel);
+  return NULL;
 }
 
 /** \} */

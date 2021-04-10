@@ -193,7 +193,7 @@ typedef enum {
 /* The outliner display modes that support the filter system.
  * Note: keep it synced with space_outliner.py */
 #define SUPPORT_FILTER_OUTLINER(space_outliner_) \
-  (ELEM((space_outliner_)->outlinevis, SO_VIEW_LAYER))
+  (ELEM((space_outliner_)->outlinevis, SO_VIEW_LAYER, SO_OVERRIDES_LIBRARY))
 
 /* Outliner Searching --
  *
@@ -348,8 +348,6 @@ void outliner_do_object_operation(struct bContext *C,
                                   struct SpaceOutliner *space_outliner,
                                   struct ListBase *lb,
                                   outliner_operation_fn operation_fn);
-
-int common_restrict_check(struct bContext *C, struct Object *ob);
 
 int outliner_flag_is_any_test(ListBase *lb, short flag, const int curlevel);
 bool outliner_flag_set(ListBase *lb, short flag, short set);

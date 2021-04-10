@@ -19,10 +19,7 @@
 #include "COM_ConvolutionEdgeFilterOperation.h"
 #include "BLI_math.h"
 
-ConvolutionEdgeFilterOperation::ConvolutionEdgeFilterOperation()
-{
-  /* pass */
-}
+namespace blender::compositor {
 
 void ConvolutionEdgeFilterOperation::executePixel(float output[4], int x, int y, void * /*data*/)
 {
@@ -97,3 +94,5 @@ void ConvolutionEdgeFilterOperation::executePixel(float output[4], int x, int y,
   output[2] = MAX2(output[2], 0.0f);
   output[3] = MAX2(output[3], 0.0f);
 }
+
+}  // namespace blender::compositor

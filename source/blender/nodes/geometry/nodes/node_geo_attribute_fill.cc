@@ -14,15 +14,10 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "node_geometry_util.hh"
-
-#include "BLI_rand.hh"
-
-#include "DNA_mesh_types.h"
-#include "DNA_pointcloud_types.h"
-
 #include "UI_interface.h"
 #include "UI_resources.h"
+
+#include "node_geometry_util.hh"
 
 static bNodeSocketTemplate geo_node_attribute_fill_in[] = {
     {SOCK_GEOMETRY, N_("Geometry")},
@@ -44,13 +39,14 @@ static void geo_node_attribute_fill_layout(uiLayout *layout, bContext *UNUSED(C)
 {
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
+  uiItemR(layout, ptr, "domain", 0, "", ICON_NONE);
   uiItemR(layout, ptr, "data_type", 0, "", ICON_NONE);
-  // uiItemR(layout, ptr, "domain", 0, "", ICON_NONE);
 }
 
 static void geo_node_attribute_fill_init(bNodeTree *UNUSED(tree), bNode *node)
 {
   node->custom1 = CD_PROP_FLOAT;
+  node->custom2 = ATTR_DOMAIN_AUTO;
 }
 
 static void geo_node_attribute_fill_update(bNodeTree *UNUSED(ntree), bNode *node)
@@ -73,7 +69,6 @@ static void geo_node_attribute_fill_update(bNodeTree *UNUSED(ntree), bNode *node
 namespace blender::nodes {
 
 static AttributeDomain get_result_domain(const GeometryComponent &component,
-                                         const GeoNodeExecParams &params,
                                          StringRef attribute_name)
 {
   /* Use the domain of the result attribute if it already exists. */
@@ -81,10 +76,7 @@ static AttributeDomain get_result_domain(const GeometryComponent &component,
   if (result_attribute) {
     return result_attribute->domain();
   }
-
-  /* Otherwise use the input domain chosen in the interface. */
-  const bNode &node = params.node();
-  return static_cast<AttributeDomain>(node.custom2);
+  return ATTR_DOMAIN_POINT;
 }
 
 static void fill_attribute(GeometryComponent &component, const GeoNodeExecParams &params)
@@ -96,10 +88,13 @@ static void fill_attribute(GeometryComponent &component, const GeoNodeExecParams
 
   const bNode &node = params.node();
   const CustomDataType data_type = static_cast<CustomDataType>(node.custom1);
-  const AttributeDomain domain = get_result_domain(component, params, attribute_name);
+  const AttributeDomain domain = static_cast<AttributeDomain>(node.custom2);
+  const AttributeDomain result_domain = (domain == ATTR_DOMAIN_AUTO) ?
+                                            get_result_domain(component, attribute_name) :
+                                            domain;
 
   OutputAttributePtr attribute = component.attribute_try_get_for_output(
-      attribute_name, domain, data_type);
+      attribute_name, result_domain, data_type);
   if (!attribute) {
     return;
   }

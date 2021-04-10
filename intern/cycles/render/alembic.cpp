@@ -396,22 +396,26 @@ static void add_uvs(AlembicProcedural *proc,
 
   ccl::set<chrono_t> times = get_relevant_sample_times(proc, time_sampling, uvs.getNumSamples());
 
+  /* Keys used to determine if the UVs do actually change over time. */
+  ArraySample::Key previous_indices_key;
+  ArraySample::Key previous_values_key;
+
   foreach (chrono_t time, times) {
     if (progress.get_cancel()) {
       return;
     }
 
     const ISampleSelector iss = ISampleSelector(time);
-    const IV2fGeomParam::Sample sample = uvs.getExpandedValue(iss);
-
     const IV2fGeomParam::Sample uvsample = uvs.getIndexedValue(iss);
 
     if (!uvsample.valid()) {
       continue;
     }
 
-    const array<int3> *triangles = cached_data.triangles.data_for_time_no_check(time);
-    const array<int3> *triangles_loops = cached_data.triangles_loops.data_for_time_no_check(time);
+    const array<int3> *triangles =
+        cached_data.triangles.data_for_time_no_check(time).get_data_or_null();
+    const array<int3> *triangles_loops =
+        cached_data.triangles_loops.data_for_time_no_check(time).get_data_or_null();
 
     if (!triangles || !triangles_loops) {
       continue;
@@ -422,21 +426,32 @@ static void add_uvs(AlembicProcedural *proc,
 
     float2 *data_float2 = reinterpret_cast<float2 *>(data.data());
 
-    const unsigned int *indices = uvsample.getIndices()->get();
-    const V2f *values = uvsample.getVals()->get();
+    const ArraySample::Key indices_key = uvsample.getIndices()->getKey();
+    const ArraySample::Key values_key = uvsample.getVals()->getKey();
 
-    for (const int3 &loop : *triangles_loops) {
-      unsigned int v0 = indices[loop.x];
-      unsigned int v1 = indices[loop.y];
-      unsigned int v2 = indices[loop.z];
+    if (indices_key == previous_indices_key && values_key == previous_values_key) {
+      attr.data.reuse_data_for_last_time(time);
+    }
+    else {
+      const unsigned int *indices = uvsample.getIndices()->get();
+      const V2f *values = uvsample.getVals()->get();
 
-      data_float2[0] = make_float2(values[v0][0], values[v0][1]);
-      data_float2[1] = make_float2(values[v1][0], values[v1][1]);
-      data_float2[2] = make_float2(values[v2][0], values[v2][1]);
-      data_float2 += 3;
+      for (const int3 &loop : *triangles_loops) {
+        unsigned int v0 = indices[loop.x];
+        unsigned int v1 = indices[loop.y];
+        unsigned int v2 = indices[loop.z];
+
+        data_float2[0] = make_float2(values[v0][0], values[v0][1]);
+        data_float2[1] = make_float2(values[v1][0], values[v1][1]);
+        data_float2[2] = make_float2(values[v2][0], values[v2][1]);
+        data_float2 += 3;
+      }
+
+      attr.data.add_data(data, time);
     }
 
-    attr.data.add_data(data, time);
+    previous_indices_key = indices_key;
+    previous_values_key = values_key;
   }
 }
 
@@ -458,7 +473,8 @@ static void add_normals(const Int32ArraySamplePtr face_indices,
                                                                     *normals.getTimeSampling());
       attr.std = ATTR_STD_VERTEX_NORMAL;
 
-      const array<float3> *vertices = cached_data.vertices.data_for_time_no_check(time);
+      const array<float3> *vertices =
+          cached_data.vertices.data_for_time_no_check(time).get_data_or_null();
 
       if (!vertices) {
         return;
@@ -493,7 +509,8 @@ static void add_normals(const Int32ArraySamplePtr face_indices,
                                                                     *normals.getTimeSampling());
       attr.std = ATTR_STD_VERTEX_NORMAL;
 
-      const array<float3> *vertices = cached_data.vertices.data_for_time_no_check(time);
+      const array<float3> *vertices =
+          cached_data.vertices.data_for_time_no_check(time).get_data_or_null();
 
       if (!vertices) {
         return;
@@ -597,7 +614,7 @@ NODE_DEFINE(AlembicObject)
   NodeType *type = NodeType::add("alembic_object", create);
 
   SOCKET_STRING(path, "Alembic Path", ustring());
-  SOCKET_NODE_ARRAY(used_shaders, "Used Shaders", &Shader::node_type);
+  SOCKET_NODE_ARRAY(used_shaders, "Used Shaders", Shader::get_node_type());
 
   SOCKET_INT(subd_max_level, "Max Subdivision Level", 1);
   SOCKET_FLOAT(subd_dicing_rate, "Subdivision Dicing Rate", 1.0f);
@@ -607,7 +624,7 @@ NODE_DEFINE(AlembicObject)
   return type;
 }
 
-AlembicObject::AlembicObject() : Node(node_type)
+AlembicObject::AlembicObject() : Node(get_node_type())
 {
   schema_type = INVALID;
 }
@@ -717,10 +734,14 @@ void AlembicObject::read_face_sets(SchemaType &schema,
 
 void AlembicObject::load_all_data(AlembicProcedural *proc,
                                   IPolyMeshSchema &schema,
-                                  float scale,
                                   Progress &progress)
 {
   cached_data.clear();
+
+  /* Only load data for the original Geometry. */
+  if (instance_of) {
+    return;
+  }
 
   const TimeSamplingPtr time_sampling = schema.getTimeSampling();
   cached_data.set_time_sampling(*time_sampling);
@@ -729,6 +750,11 @@ void AlembicObject::load_all_data(AlembicProcedural *proc,
 
   ccl::set<chrono_t> times = get_relevant_sample_times(
       proc, *time_sampling, schema.getNumSamples());
+
+  /* Key used to determine if the triangles change over time, if the key is the same as the
+   * last one, we can avoid creating a new entry in the cache and simply point to the last
+   * frame. */
+  ArraySample::Key previous_key;
 
   /* read topology */
   foreach (chrono_t time, times) {
@@ -741,22 +767,27 @@ void AlembicObject::load_all_data(AlembicProcedural *proc,
 
     add_positions(sample.getPositions(), time, cached_data);
 
-    /* Only copy triangles for other frames if the topology is changing over time as well.
-     *
-     * TODO(@kevindietrich): even for dynamic simulations, this is a waste of memory and
-     * processing time if only the positions are changing in a subsequence of frames but we
-     * cannot optimize in this current system if the attributes are changing over time as well,
-     * as we need valid data for each time point. This can be solved by using reference counting
-     * on the ccl::array and simply share the array across frames. */
+    /* Only copy triangles for other frames if the topology is changing over time as well. */
     if (schema.getTopologyVariance() != kHomogenousTopology || cached_data.triangles.size() == 0) {
-      /* start by reading the face sets (per face shader), as we directly split polygons to
-       * triangles
-       */
-      array<int> polygon_to_shader;
-      read_face_sets(schema, polygon_to_shader, iss);
+      const ArraySample::Key key = sample.getFaceIndices()->getKey();
 
-      add_triangles(
-          sample.getFaceCounts(), sample.getFaceIndices(), time, cached_data, polygon_to_shader);
+      if (key == previous_key) {
+        cached_data.triangles.reuse_data_for_last_time(time);
+        cached_data.triangles_loops.reuse_data_for_last_time(time);
+        cached_data.shader.reuse_data_for_last_time(time);
+      }
+      else {
+        /* start by reading the face sets (per face shader), as we directly split polygons to
+         * triangles
+         */
+        array<int> polygon_to_shader;
+        read_face_sets(schema, polygon_to_shader, iss);
+
+        add_triangles(
+            sample.getFaceCounts(), sample.getFaceIndices(), time, cached_data, polygon_to_shader);
+      }
+
+      previous_key = key;
     }
 
     if (normals.valid()) {
@@ -780,21 +811,17 @@ void AlembicObject::load_all_data(AlembicProcedural *proc,
     add_uvs(proc, uvs, cached_data, progress);
   }
 
-  if (progress.get_cancel()) {
-    return;
-  }
-
-  setup_transform_cache(scale);
-
   data_loaded = true;
 }
 
-void AlembicObject::load_all_data(AlembicProcedural *proc,
-                                  ISubDSchema &schema,
-                                  float scale,
-                                  Progress &progress)
+void AlembicObject::load_all_data(AlembicProcedural *proc, ISubDSchema &schema, Progress &progress)
 {
   cached_data.clear();
+
+  /* Only load data for the original Geometry. */
+  if (instance_of) {
+    return;
+  }
 
   AttributeRequestSet requested_attributes = get_requested_attributes();
 
@@ -920,18 +947,20 @@ void AlembicObject::load_all_data(AlembicProcedural *proc,
     return;
   }
 
-  setup_transform_cache(scale);
-
   data_loaded = true;
 }
 
 void AlembicObject::load_all_data(AlembicProcedural *proc,
                                   const ICurvesSchema &schema,
-                                  float scale,
                                   Progress &progress,
                                   float default_radius)
 {
   cached_data.clear();
+
+  /* Only load data for the original Geometry. */
+  if (instance_of) {
+    return;
+  }
 
   const TimeSamplingPtr time_sampling = schema.getTimeSampling();
   cached_data.set_time_sampling(*time_sampling);
@@ -1007,8 +1036,6 @@ void AlembicObject::load_all_data(AlembicProcedural *proc,
 
   // TODO(@kevindietrich): attributes, need example files
 
-  setup_transform_cache(scale);
-
   data_loaded = true;
 }
 
@@ -1016,6 +1043,10 @@ void AlembicObject::setup_transform_cache(float scale)
 {
   cached_data.transforms.clear();
   cached_data.transforms.invalidate_last_loaded_time();
+
+  if (scale == 0.0f) {
+    scale = 1.0f;
+  }
 
   if (xform_time_sampling) {
     cached_data.transforms.set_time_sampling(*xform_time_sampling);
@@ -1107,9 +1138,10 @@ void AlembicObject::read_attribute(const ICompoundProperty &arb_geom_params,
         attribute.element = ATTR_ELEMENT_CORNER;
         attribute.type_desc = TypeFloat2;
 
-        const array<int3> *triangles = cached_data.triangles.data_for_time_no_check(time);
-        const array<int3> *triangles_loops = cached_data.triangles_loops.data_for_time_no_check(
-            time);
+        const array<int3> *triangles =
+            cached_data.triangles.data_for_time_no_check(time).get_data_or_null();
+        const array<int3> *triangles_loops =
+            cached_data.triangles_loops.data_for_time_no_check(time).get_data_or_null();
 
         if (!triangles || !triangles_loops) {
           return;
@@ -1162,7 +1194,8 @@ void AlembicObject::read_attribute(const ICompoundProperty &arb_geom_params,
         attribute.element = ATTR_ELEMENT_CORNER_BYTE;
         attribute.type_desc = TypeRGBA;
 
-        const array<int3> *triangles = cached_data.triangles.data_for_time_no_check(time);
+        const array<int3> *triangles =
+            cached_data.triangles.data_for_time_no_check(time).get_data_or_null();
 
         if (!triangles) {
           return;
@@ -1218,7 +1251,8 @@ void AlembicObject::read_attribute(const ICompoundProperty &arb_geom_params,
         attribute.element = ATTR_ELEMENT_CORNER_BYTE;
         attribute.type_desc = TypeRGBA;
 
-        const array<int3> *triangles = cached_data.triangles.data_for_time_no_check(time);
+        const array<int3> *triangles =
+            cached_data.triangles.data_for_time_no_check(time).get_data_or_null();
 
         if (!triangles) {
           return;
@@ -1257,7 +1291,7 @@ static void update_attributes(AttributeSet &attributes, CachedData &cached_data,
   set<Attribute *> cached_attributes;
 
   for (CachedData::CachedAttribute &attribute : cached_data.attributes) {
-    const array<char> *attr_data = attribute.data.data_for_time(frame_time);
+    const array<char> *attr_data = attribute.data.data_for_time(frame_time).get_data_or_null();
 
     Attribute *attr = nullptr;
     if (attribute.std != ATTR_STD_NONE) {
@@ -1282,6 +1316,7 @@ static void update_attributes(AttributeSet &attributes, CachedData &cached_data,
     }
 
     memcpy(attr->data(), attr_data->data(), attr_data->size());
+    attr->modified = true;
   }
 
   /* remove any attributes not in cached_attributes */
@@ -1289,6 +1324,7 @@ static void update_attributes(AttributeSet &attributes, CachedData &cached_data,
   for (it = attributes.attributes.begin(); it != attributes.attributes.end();) {
     if (cached_attributes.find(&(*it)) == cached_attributes.end()) {
       attributes.attributes.erase(it++);
+      attributes.modified = true;
       continue;
     }
 
@@ -1309,12 +1345,12 @@ NODE_DEFINE(AlembicProcedural)
   SOCKET_FLOAT(default_radius, "Default Radius", 0.01f);
   SOCKET_FLOAT(scale, "Scale", 1.0f);
 
-  SOCKET_NODE_ARRAY(objects, "Objects", &AlembicObject::node_type);
+  SOCKET_NODE_ARRAY(objects, "Objects", AlembicObject::get_node_type());
 
   return type;
 }
 
-AlembicProcedural::AlembicProcedural() : Procedural(node_type)
+AlembicProcedural::AlembicProcedural() : Procedural(get_node_type())
 {
   objects_loaded = false;
   scene_ = nullptr;
@@ -1371,6 +1407,15 @@ void AlembicProcedural::generate(Scene *scene, Progress &progress)
       need_data_updates = true;
     }
 
+    /* Check if the shaders were modified. */
+    if (object->used_shaders_is_modified() && object->get_object() &&
+        object->get_object()->get_geometry()) {
+      Geometry *geometry = object->get_object()->get_geometry();
+      array<Node *> used_shaders = object->get_used_shaders();
+      geometry->set_used_shaders(used_shaders);
+      need_shader_updates = true;
+    }
+
     /* Check for changes in shaders (e.g. newly requested attributes). */
     foreach (Node *shader_node, object->get_used_shaders()) {
       Shader *shader = static_cast<Shader *>(shader_node);
@@ -1406,6 +1451,8 @@ void AlembicProcedural::generate(Scene *scene, Progress &progress)
 
   const chrono_t frame_time = (chrono_t)((frame - frame_offset) / frame_rate);
 
+  build_caches(progress);
+
   foreach (Node *node, objects) {
     AlembicObject *object = static_cast<AlembicObject *>(node);
 
@@ -1414,19 +1461,19 @@ void AlembicProcedural::generate(Scene *scene, Progress &progress)
     }
 
     /* skip constant objects */
-    if (object->has_data_loaded() && object->is_constant() && !object->is_modified() &&
-        !object->need_shader_update && !scale_is_modified()) {
+    if (object->is_constant() && !object->is_modified() && !object->need_shader_update &&
+        !scale_is_modified()) {
       continue;
     }
 
     if (object->schema_type == AlembicObject::POLY_MESH) {
-      read_mesh(object, frame_time, progress);
+      read_mesh(object, frame_time);
     }
     else if (object->schema_type == AlembicObject::CURVES) {
-      read_curves(object, frame_time, progress);
+      read_curves(object, frame_time);
     }
     else if (object->schema_type == AlembicObject::SUBD) {
-      read_subd(object, frame_time, progress);
+      read_subd(object, frame_time);
     }
 
     object->clear_modified();
@@ -1489,22 +1536,24 @@ void AlembicProcedural::load_objects(Progress &progress)
 
     Geometry *geometry = nullptr;
 
-    if (abc_object->schema_type == AlembicObject::CURVES) {
-      geometry = scene_->create_node<Hair>();
-    }
-    else if (abc_object->schema_type == AlembicObject::POLY_MESH ||
-             abc_object->schema_type == AlembicObject::SUBD) {
-      geometry = scene_->create_node<Mesh>();
-    }
-    else {
-      continue;
-    }
+    if (!abc_object->instance_of) {
+      if (abc_object->schema_type == AlembicObject::CURVES) {
+        geometry = scene_->create_node<Hair>();
+      }
+      else if (abc_object->schema_type == AlembicObject::POLY_MESH ||
+               abc_object->schema_type == AlembicObject::SUBD) {
+        geometry = scene_->create_node<Mesh>();
+      }
+      else {
+        continue;
+      }
 
-    geometry->set_owner(this);
-    geometry->name = abc_object->iobject.getName();
+      geometry->set_owner(this);
+      geometry->name = abc_object->iobject.getName();
 
-    array<Node *> used_shaders = abc_object->get_used_shaders();
-    geometry->set_used_shaders(used_shaders);
+      array<Node *> used_shaders = abc_object->get_used_shaders();
+      geometry->set_used_shaders(used_shaders);
+    }
 
     Object *object = scene_->create_node<Object>();
     object->set_owner(this);
@@ -1513,31 +1562,22 @@ void AlembicProcedural::load_objects(Progress &progress)
 
     abc_object->set_object(object);
   }
+
+  /* Share geometries between instances. */
+  foreach (Node *node, objects) {
+    AlembicObject *abc_object = static_cast<AlembicObject *>(node);
+
+    if (abc_object->instance_of) {
+      abc_object->get_object()->set_geometry(
+          abc_object->instance_of->get_object()->get_geometry());
+      abc_object->schema_type = abc_object->instance_of->schema_type;
+    }
+  }
 }
 
-void AlembicProcedural::read_mesh(AlembicObject *abc_object,
-                                  Abc::chrono_t frame_time,
-                                  Progress &progress)
+void AlembicProcedural::read_mesh(AlembicObject *abc_object, Abc::chrono_t frame_time)
 {
-  IPolyMesh polymesh(abc_object->iobject, Alembic::Abc::kWrapExisting);
-
-  Mesh *mesh = static_cast<Mesh *>(abc_object->get_object()->get_geometry());
-
   CachedData &cached_data = abc_object->get_cached_data();
-  IPolyMeshSchema schema = polymesh.getSchema();
-
-  if (!abc_object->has_data_loaded()) {
-    abc_object->load_all_data(this, schema, scale, progress);
-  }
-  else {
-    if (abc_object->need_shader_update) {
-      abc_object->update_shader_attributes(schema.getArbGeomParams(), progress);
-    }
-
-    if (scale_is_modified()) {
-      abc_object->setup_transform_cache(scale);
-    }
-  }
 
   /* update sockets */
 
@@ -1548,11 +1588,23 @@ void AlembicProcedural::read_mesh(AlembicObject *abc_object,
     object->tag_update(scene_);
   }
 
+  /* Only update sockets for the original Geometry. */
+  if (abc_object->instance_of) {
+    return;
+  }
+
+  Mesh *mesh = static_cast<Mesh *>(object->get_geometry());
+
+  /* Make sure shader ids are also updated. */
+  if (mesh->used_shaders_is_modified()) {
+    mesh->tag_shader_modified();
+  }
+
   cached_data.vertices.copy_to_socket(frame_time, mesh, mesh->get_verts_socket());
 
   cached_data.shader.copy_to_socket(frame_time, mesh, mesh->get_shader_socket());
 
-  array<int3> *triangle_data = cached_data.triangles.data_for_time(frame_time);
+  array<int3> *triangle_data = cached_data.triangles.data_for_time(frame_time).get_data_or_null();
   if (triangle_data) {
     array<int> triangles;
     array<bool> smooth;
@@ -1590,39 +1642,34 @@ void AlembicProcedural::read_mesh(AlembicObject *abc_object,
   }
 }
 
-void AlembicProcedural::read_subd(AlembicObject *abc_object,
-                                  Abc::chrono_t frame_time,
-                                  Progress &progress)
+void AlembicProcedural::read_subd(AlembicObject *abc_object, Abc::chrono_t frame_time)
 {
-  ISubD subd_mesh(abc_object->iobject, Alembic::Abc::kWrapExisting);
-  ISubDSchema schema = subd_mesh.getSchema();
-
-  Mesh *mesh = static_cast<Mesh *>(abc_object->get_object()->get_geometry());
-
-  /* Alembic is OpenSubDiv compliant, there is no option to set another subdivision type. */
-  mesh->set_subdivision_type(Mesh::SubdivisionType::SUBDIVISION_CATMULL_CLARK);
-
-  if (!abc_object->has_data_loaded()) {
-    abc_object->load_all_data(this, schema, scale, progress);
-  }
-  else {
-    if (abc_object->need_shader_update) {
-      abc_object->update_shader_attributes(schema.getArbGeomParams(), progress);
-    }
-
-    if (scale_is_modified()) {
-      abc_object->setup_transform_cache(scale);
-    }
-  }
-
-  mesh->set_subd_max_level(abc_object->get_subd_max_level());
-  mesh->set_subd_dicing_rate(abc_object->get_subd_dicing_rate());
-
   CachedData &cached_data = abc_object->get_cached_data();
 
   if (abc_object->subd_max_level_is_modified() || abc_object->subd_dicing_rate_is_modified()) {
     /* need to reset the current data is something changed */
     cached_data.invalidate_last_loaded_time();
+  }
+
+  /* Update sockets. */
+
+  Object *object = abc_object->get_object();
+  cached_data.transforms.copy_to_socket(frame_time, object, object->get_tfm_socket());
+
+  if (object->is_modified()) {
+    object->tag_update(scene_);
+  }
+
+  /* Only update sockets for the original Geometry. */
+  if (abc_object->instance_of) {
+    return;
+  }
+
+  Mesh *mesh = static_cast<Mesh *>(object->get_geometry());
+
+  /* Make sure shader ids are also updated. */
+  if (mesh->used_shaders_is_modified()) {
+    mesh->tag_shader_modified();
   }
 
   /* Cycles overwrites the original triangles when computing displacement, so we always have to
@@ -1637,14 +1684,10 @@ void AlembicProcedural::read_subd(AlembicObject *abc_object,
 
   mesh->clear_non_sockets();
 
-  /* Update sockets. */
-
-  Object *object = abc_object->get_object();
-  cached_data.transforms.copy_to_socket(frame_time, object, object->get_tfm_socket());
-
-  if (object->is_modified()) {
-    object->tag_update(scene_);
-  }
+  /* Alembic is OpenSubDiv compliant, there is no option to set another subdivision type. */
+  mesh->set_subdivision_type(Mesh::SubdivisionType::SUBDIVISION_CATMULL_CLARK);
+  mesh->set_subd_max_level(abc_object->get_subd_max_level());
+  mesh->set_subd_dicing_rate(abc_object->get_subd_dicing_rate());
 
   cached_data.vertices.copy_to_socket(frame_time, mesh, mesh->get_verts_socket());
 
@@ -1699,25 +1742,8 @@ void AlembicProcedural::read_subd(AlembicObject *abc_object,
   }
 }
 
-void AlembicProcedural::read_curves(AlembicObject *abc_object,
-                                    Abc::chrono_t frame_time,
-                                    Progress &progress)
+void AlembicProcedural::read_curves(AlembicObject *abc_object, Abc::chrono_t frame_time)
 {
-  ICurves curves(abc_object->iobject, Alembic::Abc::kWrapExisting);
-  Hair *hair = static_cast<Hair *>(abc_object->get_object()->get_geometry());
-
-  ICurvesSchema schema = curves.getSchema();
-
-  if (!abc_object->has_data_loaded() || default_radius_is_modified() ||
-      abc_object->radius_scale_is_modified()) {
-    abc_object->load_all_data(this, schema, scale, progress, default_radius);
-  }
-  else {
-    if (scale_is_modified()) {
-      abc_object->setup_transform_cache(scale);
-    }
-  }
-
   CachedData &cached_data = abc_object->get_cached_data();
 
   /* update sockets */
@@ -1727,6 +1753,18 @@ void AlembicProcedural::read_curves(AlembicObject *abc_object,
 
   if (object->is_modified()) {
     object->tag_update(scene_);
+  }
+
+  /* Only update sockets for the original Geometry. */
+  if (abc_object->instance_of) {
+    return;
+  }
+
+  Hair *hair = static_cast<Hair *>(object->get_geometry());
+
+  /* Make sure shader ids are also updated. */
+  if (hair->used_shaders_is_modified()) {
+    hair->tag_curve_shader_modified();
   }
 
   cached_data.curve_keys.copy_to_socket(frame_time, hair, hair->get_curve_keys_socket());
@@ -1867,15 +1905,92 @@ void AlembicProcedural::walk_hierarchy(
   else if (IFaceSet::matches(header)) {
     // ignore the face set, it will be read along with the data
   }
+  else if (IPoints::matches(header)) {
+    // unsupported for now
+  }
+  else if (INuPatch::matches(header)) {
+    // unsupported for now
+  }
   else {
-    // unsupported type for now (Points, NuPatch)
     next_object = parent.getChild(header.getName());
+
+    if (next_object.isInstanceRoot()) {
+      unordered_map<std::string, AlembicObject *>::const_iterator iter;
+
+      /* Was this object asked to be rendered? */
+      iter = object_map.find(next_object.getFullName());
+
+      if (iter != object_map.end()) {
+        AlembicObject *abc_object = iter->second;
+
+        /* Only try to render an instance if the original object is also rendered. */
+        iter = object_map.find(next_object.instanceSourcePath());
+
+        if (iter != object_map.end()) {
+          abc_object->iobject = next_object;
+          abc_object->instance_of = iter->second;
+
+          if (matrix_samples_data.samples) {
+            abc_object->xform_samples = *matrix_samples_data.samples;
+            abc_object->xform_time_sampling = matrix_samples_data.time_sampling;
+          }
+        }
+      }
+    }
   }
 
   if (next_object.valid()) {
     for (size_t i = 0; i < next_object.getNumChildren(); ++i) {
       walk_hierarchy(
           next_object, next_object.getChildHeader(i), matrix_samples_data, object_map, progress);
+    }
+  }
+}
+
+void AlembicProcedural::build_caches(Progress &progress)
+{
+  for (Node *node : objects) {
+    AlembicObject *object = static_cast<AlembicObject *>(node);
+
+    if (progress.get_cancel()) {
+      return;
+    }
+
+    if (object->schema_type == AlembicObject::POLY_MESH) {
+      if (!object->has_data_loaded()) {
+        IPolyMesh polymesh(object->iobject, Alembic::Abc::kWrapExisting);
+        IPolyMeshSchema schema = polymesh.getSchema();
+        object->load_all_data(this, schema, progress);
+      }
+      else if (object->need_shader_update) {
+        IPolyMesh polymesh(object->iobject, Alembic::Abc::kWrapExisting);
+        IPolyMeshSchema schema = polymesh.getSchema();
+        object->update_shader_attributes(schema.getArbGeomParams(), progress);
+      }
+    }
+    else if (object->schema_type == AlembicObject::CURVES) {
+      if (!object->has_data_loaded() || default_radius_is_modified() ||
+          object->radius_scale_is_modified()) {
+        ICurves curves(object->iobject, Alembic::Abc::kWrapExisting);
+        ICurvesSchema schema = curves.getSchema();
+        object->load_all_data(this, schema, progress, default_radius);
+      }
+    }
+    else if (object->schema_type == AlembicObject::SUBD) {
+      if (!object->has_data_loaded()) {
+        ISubD subd_mesh(object->iobject, Alembic::Abc::kWrapExisting);
+        ISubDSchema schema = subd_mesh.getSchema();
+        object->load_all_data(this, schema, progress);
+      }
+      else if (object->need_shader_update) {
+        ISubD subd_mesh(object->iobject, Alembic::Abc::kWrapExisting);
+        ISubDSchema schema = subd_mesh.getSchema();
+        object->update_shader_attributes(schema.getArbGeomParams(), progress);
+      }
+    }
+
+    if (scale_is_modified() || object->get_cached_data().transforms.size() == 0) {
+      object->setup_transform_cache(scale);
     }
   }
 }

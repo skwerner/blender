@@ -656,7 +656,7 @@ void BKE_paint_runtime_init(const ToolSettings *ts, Paint *paint)
     paint->runtime.ob_mode = OB_MODE_WEIGHT_GPENCIL;
   }
   else {
-    BLI_assert(0);
+    BLI_assert_unreachable();
   }
 }
 
@@ -1760,7 +1760,7 @@ void BKE_sculpt_update_object_before_eval(Object *ob)
   SculptSession *ss = ob->sculpt;
 
   if (ss && ss->building_vp_handle == false) {
-    if (!ss->cache && !ss->filter_cache) {
+    if (!ss->cache && !ss->filter_cache && !ss->expand_cache) {
       /* We free pbvh on changes, except in the middle of drawing a stroke
        * since it can't deal with changing PVBH node organization, we hope
        * topology does not change in the meantime .. weak. */

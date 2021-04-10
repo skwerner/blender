@@ -25,6 +25,8 @@
 #include "COM_ExecutionSystem.h"
 #include "COM_ViewerOperation.h"
 
+namespace blender::compositor {
+
 ViewerNode::ViewerNode(bNode *editorNode) : Node(editorNode)
 {
   /* pass */
@@ -47,7 +49,7 @@ void ViewerNode::convertToOperations(NodeConverter &converter,
   viewerOperation->setbNodeTree(context.getbNodeTree());
   viewerOperation->setImage(image);
   viewerOperation->setImageUser(imageUser);
-  viewerOperation->setChunkOrder((OrderOfChunks)editorNode->custom1);
+  viewerOperation->setChunkOrder((ChunkOrdering)editorNode->custom1);
   viewerOperation->setCenterX(editorNode->custom3);
   viewerOperation->setCenterY(editorNode->custom4);
   /* alpha socket gives either 1 or a custom alpha value if "use alpha" is enabled */
@@ -82,3 +84,5 @@ void ViewerNode::convertToOperations(NodeConverter &converter,
     converter.registerViewer(viewerOperation);
   }
 }
+
+}  // namespace blender::compositor

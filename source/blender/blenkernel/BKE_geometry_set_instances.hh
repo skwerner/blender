@@ -39,7 +39,12 @@ struct GeometryInstanceGroup {
   Vector<float4x4> transforms;
 };
 
-Vector<GeometryInstanceGroup> geometry_set_gather_instances(const GeometrySet &geometry_set);
+void geometry_set_instances_attribute_foreach(const GeometrySet &geometry_set,
+                                              const AttributeForeachCallback callback,
+                                              const int limit);
+
+void geometry_set_gather_instances(const GeometrySet &geometry_set,
+                                   Vector<GeometryInstanceGroup> &r_instance_groups);
 
 GeometrySet geometry_set_realize_mesh_for_modifier(const GeometrySet &geometry_set);
 GeometrySet geometry_set_realize_instances(const GeometrySet &geometry_set);
@@ -54,9 +59,9 @@ struct AttributeKind {
  * will contain the highest complexity data type and the highest priority domain among every
  * attribute with the given name on all of the input components.
  */
-void gather_attribute_info(Map<std::string, AttributeKind> &attributes,
-                           Span<GeometryComponentType> component_types,
-                           Span<bke::GeometryInstanceGroup> set_groups,
-                           const Set<std::string> &ignored_attributes);
+void geometry_set_gather_instances_attribute_info(Span<GeometryInstanceGroup> set_groups,
+                                                  Span<GeometryComponentType> component_types,
+                                                  const Set<std::string> &ignored_attributes,
+                                                  Map<std::string, AttributeKind> &r_attributes);
 
 }  // namespace blender::bke

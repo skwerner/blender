@@ -82,7 +82,7 @@ NODE_DEFINE(Integrator)
   return type;
 }
 
-Integrator::Integrator() : Node(node_type)
+Integrator::Integrator() : Node(get_node_type())
 {
 }
 

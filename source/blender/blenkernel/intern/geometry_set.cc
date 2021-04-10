@@ -49,23 +49,19 @@ GeometryComponent::GeometryComponent(GeometryComponentType type) : type_(type)
 {
 }
 
-GeometryComponent ::~GeometryComponent()
-{
-}
-
 GeometryComponent *GeometryComponent::create(GeometryComponentType component_type)
 {
   switch (component_type) {
-    case GeometryComponentType::Mesh:
+    case GEO_COMPONENT_TYPE_MESH:
       return new MeshComponent();
-    case GeometryComponentType::PointCloud:
+    case GEO_COMPONENT_TYPE_POINT_CLOUD:
       return new PointCloudComponent();
-    case GeometryComponentType::Instances:
+    case GEO_COMPONENT_TYPE_INSTANCES:
       return new InstancesComponent();
-    case GeometryComponentType::Volume:
+    case GEO_COMPONENT_TYPE_VOLUME:
       return new VolumeComponent();
   }
-  BLI_assert(false);
+  BLI_assert_unreachable();
   return nullptr;
 }
 
@@ -182,6 +178,10 @@ void GeometrySet::compute_boundbox_without_instances(float3 *r_min, float3 *r_ma
   if (mesh != nullptr) {
     BKE_mesh_wrapper_minmax(mesh, *r_min, *r_max);
   }
+  const Volume *volume = this->get_volume_for_read();
+  if (volume != nullptr) {
+    BKE_volume_min_max(volume, *r_min, *r_max);
+  }
 }
 
 std::ostream &operator<<(std::ostream &stream, const GeometrySet &geometry_set)
@@ -203,6 +203,25 @@ bool operator==(const GeometrySet &UNUSED(a), const GeometrySet &UNUSED(b))
 uint64_t GeometrySet::hash() const
 {
   return reinterpret_cast<uint64_t>(this);
+}
+
+/* Remove all geometry components from the geometry set. */
+void GeometrySet::clear()
+{
+  components_.clear();
+}
+
+/* Make sure that the geometry can be cached. This does not ensure ownership of object/collection
+ * instances. */
+void GeometrySet::ensure_owns_direct_data()
+{
+  for (GeometryComponentType type : components_.keys()) {
+    const GeometryComponent *component = this->get_component_for_read(type);
+    if (!component->owns_direct_data()) {
+      GeometryComponent &component_for_write = this->get_component_for_write(type);
+      component_for_write.ensure_owns_direct_data();
+    }
+  }
 }
 
 /* Returns a read-only mesh or null. */
@@ -322,21 +341,6 @@ void BKE_geometry_set_free(GeometrySet *geometry_set)
 bool BKE_geometry_set_has_instances(const GeometrySet *geometry_set)
 {
   return geometry_set->get_component_for_read<InstancesComponent>() != nullptr;
-}
-
-int BKE_geometry_set_instances(const GeometrySet *geometry_set,
-                               float (**r_transforms)[4][4],
-                               const int **r_almost_unique_ids,
-                               InstancedData **r_instanced_data)
-{
-  const InstancesComponent *component = geometry_set->get_component_for_read<InstancesComponent>();
-  if (component == nullptr) {
-    return 0;
-  }
-  *r_transforms = (float(*)[4][4])component->transforms().data();
-  *r_instanced_data = (InstancedData *)component->instanced_data().data();
-  *r_almost_unique_ids = (const int *)component->almost_unique_ids().data();
-  return component->instances_amount();
 }
 
 /** \} */

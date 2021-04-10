@@ -29,6 +29,8 @@
 #include "COM_SetValueOperation.h"
 #include "COM_SetVectorOperation.h"
 
+namespace blender::compositor {
+
 ImageNode::ImageNode(bNode *editorNode) : Node(editorNode)
 {
   /* pass */
@@ -46,13 +48,13 @@ NodeOperation *ImageNode::doMultilayerCheck(NodeConverter &converter,
   NodeOutput *outputSocket = this->getOutputSocket(outputsocketIndex);
   MultilayerBaseOperation *operation = nullptr;
   switch (datatype) {
-    case COM_DT_VALUE:
+    case DataType::Value:
       operation = new MultilayerValueOperation(render_layer, render_pass, view);
       break;
-    case COM_DT_VECTOR:
+    case DataType::Vector:
       operation = new MultilayerVectorOperation(render_layer, render_pass, view);
       break;
-    case COM_DT_COLOR:
+    case DataType::Color:
       operation = new MultilayerColorOperation(render_layer, render_pass, view);
       break;
     default:
@@ -77,7 +79,6 @@ void ImageNode::convertToOperations(NodeConverter &converter,
   Image *image = (Image *)editorNode->id;
   ImageUser *imageuser = (ImageUser *)editorNode->storage;
   int framenumber = context.getFramenumber();
-  int numberOfOutputs = this->getNumberOfOutputSockets();
   bool outputStraightAlpha = (editorNode->custom1 & CMP_NODE_IMAGE_USE_STRAIGHT_OUTPUT) != 0;
   BKE_image_user_frame_calc(image, imageuser, context.getFramenumber());
   /* force a load, we assume iuser index will be set OK anyway */
@@ -87,14 +88,11 @@ void ImageNode::convertToOperations(NodeConverter &converter,
     if (image->rr) {
       RenderLayer *rl = (RenderLayer *)BLI_findlink(&image->rr->layers, imageuser->layer);
       if (rl) {
-        NodeOutput *socket;
-        int index;
-
         is_multilayer_ok = true;
 
-        for (index = 0; index < numberOfOutputs; index++) {
+        for (int64_t index = 0; index < outputs.size(); index++) {
+          NodeOutput *socket = outputs[index];
           NodeOperation *operation = nullptr;
-          socket = this->getOutputSocket(index);
           bNodeSocket *bnodeSocket = socket->getbNodeSocket();
           NodeImageLayer *storage = (NodeImageLayer *)bnodeSocket->storage;
           RenderPass *rpass = (RenderPass *)BLI_findstring(
@@ -137,7 +135,7 @@ void ImageNode::convertToOperations(NodeConverter &converter,
                                               framenumber,
                                               index,
                                               view,
-                                              COM_DT_VALUE);
+                                              DataType::Value);
                 break;
                 /* using image operations for both 3 and 4 channels (RGB and RGBA respectively) */
                 /* XXX any way to detect actual vector images? */
@@ -150,7 +148,7 @@ void ImageNode::convertToOperations(NodeConverter &converter,
                                               framenumber,
                                               index,
                                               view,
-                                              COM_DT_VECTOR);
+                                              DataType::Vector);
                 break;
               case 4:
                 operation = doMultilayerCheck(converter,
@@ -161,7 +159,7 @@ void ImageNode::convertToOperations(NodeConverter &converter,
                                               framenumber,
                                               index,
                                               view,
-                                              COM_DT_COLOR);
+                                              DataType::Color);
                 break;
               default:
                 /* dummy operation is added below */
@@ -171,8 +169,7 @@ void ImageNode::convertToOperations(NodeConverter &converter,
               converter.addPreview(operation->getOutputSocket());
             }
             if (STREQ(rpass->name, RE_PASSNAME_COMBINED)) {
-              for (int alphaIndex = 0; alphaIndex < numberOfOutputs; alphaIndex++) {
-                NodeOutput *alphaSocket = this->getOutputSocket(alphaIndex);
+              for (NodeOutput *alphaSocket : getOutputSockets()) {
                 bNodeSocket *bnodeAlphaSocket = alphaSocket->getbNodeSocket();
                 if (!STREQ(bnodeAlphaSocket->name, "Alpha")) {
                   continue;
@@ -204,12 +201,13 @@ void ImageNode::convertToOperations(NodeConverter &converter,
 
     /* without this, multilayer that fail to load will crash blender T32490. */
     if (is_multilayer_ok == false) {
-      for (int i = 0; i < getNumberOfOutputSockets(); i++) {
-        converter.setInvalidOutput(getOutputSocket(i));
+      for (NodeOutput *output : getOutputSockets()) {
+        converter.setInvalidOutput(output);
       }
     }
   }
   else {
+    const int64_t numberOfOutputs = getOutputSockets().size();
     if (numberOfOutputs > 0) {
       ImageOperation *operation = new ImageOperation();
       operation->setImage(image);
@@ -263,13 +261,13 @@ void ImageNode::convertToOperations(NodeConverter &converter,
         NodeOutput *output = this->getOutputSocket(i);
         NodeOperation *operation = nullptr;
         switch (output->getDataType()) {
-          case COM_DT_VALUE: {
+          case DataType::Value: {
             SetValueOperation *valueoperation = new SetValueOperation();
             valueoperation->setValue(0.0f);
             operation = valueoperation;
             break;
           }
-          case COM_DT_VECTOR: {
+          case DataType::Vector: {
             SetVectorOperation *vectoroperation = new SetVectorOperation();
             vectoroperation->setX(0.0f);
             vectoroperation->setY(0.0f);
@@ -277,7 +275,7 @@ void ImageNode::convertToOperations(NodeConverter &converter,
             operation = vectoroperation;
             break;
           }
-          case COM_DT_COLOR: {
+          case DataType::Color: {
             SetColorOperation *coloroperation = new SetColorOperation();
             coloroperation->setChannel1(0.0f);
             coloroperation->setChannel2(0.0f);
@@ -296,4 +294,6 @@ void ImageNode::convertToOperations(NodeConverter &converter,
       }
     }
   }
-}
+}  // namespace blender::compositor
+
+}  // namespace blender::compositor

@@ -25,6 +25,8 @@
 
 #include "COM_VectorBlurOperation.h"
 
+namespace blender::compositor {
+
 /* Defined */
 #define PASS_VECTOR_MAX 10000.0f
 
@@ -45,16 +47,16 @@ void antialias_tagbuf(int xsize, int ysize, char *rectmove);
 /* VectorBlurOperation */
 VectorBlurOperation::VectorBlurOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addInputSocket(COM_DT_VALUE);  // ZBUF
-  this->addInputSocket(COM_DT_COLOR);  // SPEED
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addInputSocket(DataType::Value);  // ZBUF
+  this->addInputSocket(DataType::Color);  // SPEED
+  this->addOutputSocket(DataType::Color);
   this->m_settings = nullptr;
   this->m_cachedInstance = nullptr;
   this->m_inputImageProgram = nullptr;
   this->m_inputSpeedProgram = nullptr;
   this->m_inputZProgram = nullptr;
-  setComplex(true);
+  flags.complex = true;
 }
 void VectorBlurOperation::initExecution()
 {
@@ -69,7 +71,7 @@ void VectorBlurOperation::initExecution()
 void VectorBlurOperation::executePixel(float output[4], int x, int y, void *data)
 {
   float *buffer = (float *)data;
-  int index = (y * this->getWidth() + x) * COM_NUM_CHANNELS_COLOR;
+  int index = (y * this->getWidth() + x) * COM_DATA_TYPE_COLOR_CHANNELS;
   copy_v4_v4(output, &buffer[index]);
 }
 
@@ -847,7 +849,7 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
        * overestimates the contribution of foreground pixels but looks a
        * bit better without a sudden cutoff. */
       blendfac = ((samples - step) / (float)samples);
-      /* smoothstep to make it look a bit nicer as well */
+      /* Smooth-step to make it look a bit nicer as well. */
       blendfac = 3.0f * pow(blendfac, 2.0f) - 2.0f * pow(blendfac, 3.0f);
 
       /* accum */
@@ -897,3 +899,5 @@ void zbuf_accumulate_vecblur(NodeBlurData *nbd,
   }
   zbuf_free_span(&zspan);
 }
+
+}  // namespace blender::compositor

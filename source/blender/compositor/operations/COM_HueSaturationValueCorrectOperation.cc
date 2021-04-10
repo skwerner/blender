@@ -22,10 +22,12 @@
 
 #include "BKE_colortools.h"
 
+namespace blender::compositor {
+
 HueSaturationValueCorrectOperation::HueSaturationValueCorrectOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 
   this->m_inputProgram = nullptr;
 }
@@ -70,3 +72,5 @@ void HueSaturationValueCorrectOperation::deinitExecution()
   CurveBaseOperation::deinitExecution();
   this->m_inputProgram = nullptr;
 }
+
+}  // namespace blender::compositor

@@ -4863,6 +4863,11 @@ static int userpref_show_exec(bContext *C, wmOperator *op)
     region->flag |= RGN_FLAG_HIDDEN;
     ED_region_visibility_change_update(C, area, region);
 
+    /* And also show the region with "Load & Save" buttons. */
+    region = BKE_area_find_region_type(area, RGN_TYPE_EXECUTE);
+    region->flag &= ~RGN_FLAG_HIDDEN;
+    ED_region_visibility_change_update(C, area, region);
+
     return OPERATOR_FINISHED;
   }
   BKE_report(op->reports, RPT_ERROR, "Failed to open window!");
@@ -5539,10 +5544,6 @@ void ED_keymap_screen(wmKeyConfig *keyconf)
 {
   /* Screen Editing ------------------------------------------------ */
   WM_keymap_ensure(keyconf, "Screen Editing", 0, 0);
-
-  /* Header Editing ------------------------------------------------ */
-  /* note: this is only used when the cursor is inside the header */
-  WM_keymap_ensure(keyconf, "Header", 0, 0);
 
   /* Screen General ------------------------------------------------ */
   WM_keymap_ensure(keyconf, "Screen", 0, 0);

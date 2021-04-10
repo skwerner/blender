@@ -47,32 +47,13 @@ struct VFont;
 /* These two Lines with # tell makesdna this struct can be excluded. */
 #
 #
-typedef struct PathPoint {
-  /** Grr, cant get rid of tilt yet. */
-  float vec[4];
-  float quat[4];
-  float radius, weight;
-} PathPoint;
-
-/* These two Lines with # tell makesdna this struct can be excluded. */
-#
-#
-typedef struct Path {
-  struct PathPoint *data;
-  int len;
-  float totdist;
-} Path;
-
-/* These two Lines with # tell makesdna this struct can be excluded. */
-#
-#
 typedef struct BevPoint {
   float vec[3], tilt, radius, weight, offset;
   /** 2D Only. */
   float sina, cosa;
   /** 3D Only. */
   float dir[3], tan[3], quat[4];
-  short split_tag, dupe_tag;
+  short dupe_tag;
 } BevPoint;
 
 /* These two Lines with # tell makesdna this struct can be excluded. */
@@ -269,7 +250,12 @@ typedef struct Curve {
   char overflow;
   char spacemode, align_y;
   char bevel_mode;
-  char _pad[2];
+  /**
+   * Determine how the effective radius of the bevel point is computed when a taper object is
+   * specified. The effective radius is a function of the bevel point radius and the taper radius.
+   */
+  char taper_radius_mode;
+  char _pad;
 
   /* font part */
   short lines;
@@ -400,6 +386,16 @@ enum {
   CU_BEV_MODE_CURVE_PROFILE = 2,
 };
 
+/** #Curve.taper_radius_mode */
+enum {
+  /** Override the radius of the bevel point with the taper radius. */
+  CU_TAPER_RADIUS_OVERRIDE = 0,
+  /** Multiply the radius of the bevel point by the taper radius. */
+  CU_TAPER_RADIUS_MULTIPLY = 1,
+  /** Add the radius of the bevel point to the taper radius. */
+  CU_TAPER_RADIUS_ADD = 2,
+};
+
 /* Curve.overflow. */
 enum {
   CU_OVERFLOW_NONE = 0,
@@ -410,7 +406,6 @@ enum {
 /* Nurb.flag */
 enum {
   CU_SMOOTH = 1 << 0,
-  CU_2D = 1 << 3, /* moved from type since 2.4x */
 };
 
 /* Nurb.type */

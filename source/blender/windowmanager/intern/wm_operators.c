@@ -561,7 +561,7 @@ char *WM_prop_pystring_assign(bContext *C, PointerRNA *ptr, PropertyRNA *prop, i
   char *lhs = C ? wm_prop_pystring_from_context(C, ptr, prop, index) : NULL;
 
   if (lhs == NULL) {
-    /* fallback to bpy.data.foo[id] if we dont find in the context */
+    /* Fallback to `bpy.data.foo[id]` if we don't find in the context. */
     lhs = RNA_path_full_property_py(CTX_data_main(C), ptr, prop, index);
   }
 
@@ -1149,7 +1149,7 @@ int WM_operator_filesel(bContext *C, wmOperator *op, const wmEvent *UNUSED(event
 bool WM_operator_filesel_ensure_ext_imtype(wmOperator *op, const struct ImageFormatData *im_format)
 {
   char filepath[FILE_MAX];
-  /* dont NULL check prop, this can only run on ops with a 'filepath' */
+  /* Don't NULL check prop, this can only run on ops with a 'filepath'. */
   PropertyRNA *prop = RNA_struct_find_property(op->ptr, "filepath");
   RNA_property_string_get(op->ptr, prop, filepath);
   if (BKE_image_path_ensure_ext_from_imformat(filepath, im_format)) {
@@ -1229,7 +1229,7 @@ ID *WM_operator_drop_load_path(struct bContext *C, wmOperator *op, const short i
       id = (ID *)BKE_image_load_exists_ex(bmain, path, &exists);
     }
     else {
-      BLI_assert(0);
+      BLI_assert_unreachable();
     }
 
     if (!id) {
@@ -1248,7 +1248,7 @@ ID *WM_operator_drop_load_path(struct bContext *C, wmOperator *op, const short i
           BLI_path_rel(((Image *)id)->filepath, BKE_main_blendfile_path(bmain));
         }
         else {
-          BLI_assert(0);
+          BLI_assert_unreachable();
         }
       }
     }
@@ -1687,7 +1687,7 @@ static uiBlock *wm_block_search_menu(bContext *C, ARegion *region, void *userdat
     UI_but_func_menu_search(but);
   }
   else {
-    BLI_assert(0);
+    BLI_assert_unreachable();
   }
 
   UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);

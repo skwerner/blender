@@ -18,10 +18,12 @@
 
 #include "COM_MapValueOperation.h"
 
+namespace blender::compositor {
+
 MapValueOperation::MapValueOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
   this->m_inputOperation = nullptr;
 }
 
@@ -57,3 +59,5 @@ void MapValueOperation::deinitExecution()
 {
   this->m_inputOperation = nullptr;
 }
+
+}  // namespace blender::compositor

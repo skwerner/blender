@@ -22,6 +22,7 @@
 #  include "MEM_guardedalloc.h"
 #endif
 
+#include "BLI_array.hh"
 #include "BLI_rect.h"
 #include "BLI_vector.hh"
 
@@ -30,31 +31,49 @@
 #include "COM_MemoryProxy.h"
 #include "COM_Node.h"
 #include "COM_NodeOperation.h"
+#include "COM_WorkPackage.h"
 #include <vector>
+
+namespace blender::compositor {
 
 class ExecutionSystem;
 class MemoryProxy;
+class MemoryBuffer;
 class ReadBufferOperation;
 class Device;
 
-/**
- * \brief the execution state of a chunk in an ExecutionGroup
- * \ingroup Execution
- */
-enum class eChunkExecutionState {
+struct ExecutionGroupFlags {
+  bool initialized : 1;
   /**
-   * \brief chunk is not yet scheduled
+   * Is this ExecutionGroup an output ExecutionGroup
+   * An OutputExecution group are groups containing a
+   * ViewerOperation, CompositeOperation, PreviewOperation.
    */
-  NOT_SCHEDULED = 0,
+  bool is_output : 1;
+  bool complex : 1;
+
   /**
-   * \brief chunk is scheduled, but not yet executed
+   * Can this ExecutionGroup be scheduled on an OpenCLDevice.
    */
-  SCHEDULED = 1,
+  bool open_cl : 1;
+
   /**
-   * \brief chunk is executed.
+   * Schedule this execution group as a single chunk. This
+   * chunk will be executed by a single thread.
    */
-  EXECUTED = 2,
+  bool single_threaded : 1;
+
+  ExecutionGroupFlags()
+  {
+    initialized = false;
+    is_output = false;
+    complex = false;
+    open_cl = false;
+    single_threaded = false;
+  }
 };
+
+std::ostream &operator<<(std::ostream &os, const ExecutionGroupFlags &flags);
 
 /**
  * \brief Class ExecutionGroup is a group of Operations that are executed as one.
@@ -65,18 +84,17 @@ enum class eChunkExecutionState {
 class ExecutionGroup {
  private:
   // fields
+  /**
+   * Id of the execution group. For debugging purposes.
+   */
+  int m_id;
 
   /**
    * \brief list of operations in this ExecutionGroup
    */
-  blender::Vector<NodeOperation *> m_operations;
+  Vector<NodeOperation *> m_operations;
 
-  /**
-   * \brief is this ExecutionGroup an input ExecutionGroup
-   * an input execution group is a group that is at the end of the calculation
-   * (the output is important for the user).
-   */
-  bool m_is_output;
+  ExecutionGroupFlags m_flags;
 
   /**
    * \brief Width of the output
@@ -110,21 +128,6 @@ class ExecutionGroup {
   unsigned int m_chunks_len;
 
   /**
-   * \brief contains this ExecutionGroup a complex NodeOperation.
-   */
-  bool m_complex;
-
-  /**
-   * \brief can this ExecutionGroup be scheduled on an OpenCLDevice
-   */
-  bool m_openCL;
-
-  /**
-   * \brief Is this Execution group SingleThreaded
-   */
-  bool m_singleThreaded;
-
-  /**
    * \brief what is the maximum number field of all ReadBufferOperation in this ExecutionGroup.
    * \note this is used to construct the MemoryBuffers that will be passed during execution.
    */
@@ -133,7 +136,7 @@ class ExecutionGroup {
   /**
    * \brief All read operations of this execution group.
    */
-  blender::Vector<ReadBufferOperation *> m_read_operations;
+  Vector<ReadBufferOperation *> m_read_operations;
 
   /**
    * \brief reference to the original bNodeTree,
@@ -148,24 +151,9 @@ class ExecutionGroup {
   unsigned int m_chunks_finished;
 
   /**
-   * \brief m_chunk_execution_states holds per chunk the execution state. this state can be
-   *   - eChunkExecutionState::NOT_SCHEDULED: not scheduled
-   *   - eChunkExecutionState::SCHEDULED: scheduled
-   *   - eChunkExecutionState::EXECUTED: executed
+   * \brief m_work_packages holds all unit of work.
    */
-  blender::Vector<eChunkExecutionState> m_chunk_execution_states;
-
-  /**
-   * \brief indicator when this ExecutionGroup has valid Operations in its vector for Execution
-   * \note When building the ExecutionGroup Operations are added via recursion.
-   * First a WriteBufferOperations is added, then the.
-   * \note Operation containing the settings that is important for the ExecutiongGroup is added,
-   * \note When this occurs, these settings are copied over from the node to the ExecutionGroup
-   * \note and the Initialized flag is set to true.
-   * \see complex
-   * \see openCL
-   */
-  bool m_initialized;
+  Vector<WorkPackage> m_work_packages;
 
   /**
    * \brief denotes boundary for border compositing
@@ -183,28 +171,20 @@ class ExecutionGroup {
    * \brief check whether parameter operation can be added to the execution group
    * \param operation: the operation to be added
    */
-  bool canContainOperation(NodeOperation *operation);
-
-  /**
-   * \brief calculate the actual chunk size of this execution group.
-   * \note A chunk size is an unsigned int that is both the height and width of a chunk.
-   * \note The chunk size will not be stored in the chunkSize field. This needs to be done
-   * \note by the calling method.
-   */
-  unsigned int determineChunkSize();
+  bool can_contain(NodeOperation &operation);
 
   /**
    * \brief Determine the rect (minx, maxx, miny, maxy) of a chunk at a position.
-   * \note Only gives useful results after the determination of the chunksize
-   * \see determineChunkSize()
    */
-  void determineChunkRect(rcti *rect, const unsigned int xChunk, const unsigned int yChunk) const;
+  void determineChunkRect(rcti *r_rect,
+                          const unsigned int xChunk,
+                          const unsigned int yChunk) const;
 
   /**
    * \brief determine the number of chunks, based on the chunkSize, width and height.
    * \note The result are stored in the fields numberOfChunks, numberOfXChunks, numberOfYChunks
    */
-  void determineNumberOfChunks();
+  void init_number_of_chunks();
 
   /**
    * \brief try to schedule a specific chunk.
@@ -217,7 +197,7 @@ class ExecutionGroup {
    * true: package(s) are scheduled
    * false: scheduling is deferred (depending workpackages are scheduled)
    */
-  bool scheduleChunkWhenPossible(ExecutionSystem *graph, int xChunk, int yChunk);
+  bool scheduleChunkWhenPossible(ExecutionSystem *graph, const int chunk_x, const int chunk_y);
 
   /**
    * \brief try to schedule a specific area.
@@ -248,9 +228,27 @@ class ExecutionGroup {
                                         ReadBufferOperation *readOperation,
                                         rcti *output);
 
+  /**
+   * Return the execution order of the user visible chunks.
+   */
+  blender::Array<unsigned int> get_execution_order() const;
+
+  void init_read_buffer_operations();
+  void init_work_packages();
+
  public:
   // constructors
-  ExecutionGroup();
+  ExecutionGroup(int id);
+
+  int get_id() const
+  {
+    return m_id;
+  }
+
+  const ExecutionGroupFlags get_flags() const
+  {
+    return m_flags;
+  }
 
   // methods
   /**
@@ -264,23 +262,12 @@ class ExecutionGroup {
   bool addOperation(NodeOperation *operation);
 
   /**
-   * \brief is this ExecutionGroup an output ExecutionGroup
-   * \note An OutputExecution group are groups containing a
-   * \note ViewerOperation, CompositeOperation, PreviewOperation.
-   * \see NodeOperation.isOutputOperation
-   */
-  bool isOutputExecutionGroup() const
-  {
-    return this->m_is_output;
-  }
-
-  /**
    * \brief set whether this ExecutionGroup is an output
    * \param isOutput:
    */
   void setOutputExecutionGroup(bool is_output)
   {
-    this->m_is_output = is_output;
+    this->m_flags.is_output = is_output;
   }
 
   /**
@@ -316,14 +303,6 @@ class ExecutionGroup {
   }
 
   /**
-   * \brief does this ExecutionGroup contains a complex NodeOperation
-   */
-  bool isComplex() const
-  {
-    return m_complex;
-  }
-
-  /**
    * \brief get the output operation of this ExecutionGroup
    * \return NodeOperation *output operation
    */
@@ -333,7 +312,7 @@ class ExecutionGroup {
    * \brief compose multiple chunks into a single chunk
    * \return Memorybuffer *consolidated chunk
    */
-  MemoryBuffer *constructConsolidatedMemoryBuffer(MemoryProxy *memoryProxy, rcti *rect);
+  MemoryBuffer *constructConsolidatedMemoryBuffer(MemoryProxy &memoryProxy, rcti &rect);
 
   /**
    * \brief initExecution is called just before the execution of the whole graph will be done.
@@ -363,7 +342,7 @@ class ExecutionGroup {
    * \param rect: the rect of that chunk
    * \see determineChunkRect
    */
-  MemoryBuffer *allocateOutputBuffer(int chunkNumber, rcti *rect);
+  MemoryBuffer *allocateOutputBuffer(rcti &rect);
 
   /**
    * \brief after a chunk is executed the needed resources can be freed or unlocked.
@@ -397,25 +376,9 @@ class ExecutionGroup {
   void execute(ExecutionSystem *graph);
 
   /**
-   * \brief this method determines the MemoryProxy's where this execution group depends on.
-   * \note After this method determineDependingAreaOfInterest can be called to determine
-   * \note the area of the MemoryProxy.creator that has to be executed.
-   * \param memoryProxies: result
-   */
-  void determineDependingMemoryProxies(std::vector<MemoryProxy *> *memoryProxies);
-
-  /**
    * \brief Determine the rect (minx, maxx, miny, maxy) of a chunk.
-   * \note Only gives useful results after the determination of the chunksize
-   * \see determineChunkSize()
    */
-  void determineChunkRect(rcti *rect, const unsigned int chunkNumber) const;
-
-  /**
-   * \brief can this ExecutionGroup be scheduled on an OpenCLDevice
-   * \see WorkScheduler.schedule
-   */
-  bool isOpenCL();
+  void determineChunkRect(rcti *r_rect, const unsigned int chunkNumber) const;
 
   void setChunksize(int chunksize)
   {
@@ -426,7 +389,7 @@ class ExecutionGroup {
    * \brief get the Render priority of this ExecutionGroup
    * \see ExecutionSystem.execute
    */
-  CompositorPriority getRenderPriotrity();
+  eCompositorPriority getRenderPriority();
 
   /**
    * \brief set border for viewer operation
@@ -443,3 +406,7 @@ class ExecutionGroup {
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:ExecutionGroup")
 #endif
 };
+
+std::ostream &operator<<(std::ostream &os, const ExecutionGroup &execution_group);
+
+}  // namespace blender::compositor

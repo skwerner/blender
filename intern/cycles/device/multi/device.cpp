@@ -333,32 +333,20 @@ class MultiDevice : public Device {
     size_t existing_size = mem.device_size;
 
     /* The tile buffers are allocated on each device (see below), so copy to all of them */
-    if (strcmp(mem.name, "RenderBuffers") == 0) {
-      foreach (SubDevice &sub, devices) {
-        mem.device = sub.device;
-        mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
-        mem.device_size = existing_size;
+    foreach (const vector<SubDevice *> &island, peer_islands) {
+      SubDevice *owner_sub = find_suitable_mem_device(existing_key, island);
+      mem.device = owner_sub->device;
+      mem.device_pointer = (existing_key) ? owner_sub->ptr_map[existing_key] : 0;
+      mem.device_size = existing_size;
 
-        sub.device->mem_copy_to(mem);
-        sub.ptr_map[key] = mem.device_pointer;
-      }
-    }
-    else {
-      foreach (const vector<SubDevice *> &island, peer_islands) {
-        SubDevice *owner_sub = find_suitable_mem_device(existing_key, island);
-        mem.device = owner_sub->device;
-        mem.device_pointer = (existing_key) ? owner_sub->ptr_map[existing_key] : 0;
-        mem.device_size = existing_size;
+      owner_sub->device->mem_copy_to(mem);
+      owner_sub->ptr_map[key] = mem.device_pointer;
 
-        owner_sub->device->mem_copy_to(mem);
-        owner_sub->ptr_map[key] = mem.device_pointer;
-
-        if (mem.type == MEM_GLOBAL || mem.type == MEM_TEXTURE) {
-          /* Need to create texture objects and update pointer in kernel globals on all devices */
-          foreach (SubDevice *island_sub, island) {
-            if (island_sub != owner_sub) {
-              island_sub->device->mem_copy_to(mem);
-            }
+      if (mem.type == MEM_GLOBAL || mem.type == MEM_TEXTURE) {
+        /* Need to create texture objects and update pointer in kernel globals on all devices */
+        foreach (SubDevice *island_sub, island) {
+          if (island_sub != owner_sub) {
+            island_sub->device->mem_copy_to(mem);
           }
         }
       }
@@ -396,48 +384,14 @@ class MultiDevice : public Device {
     device_ptr key = (existing_key) ? existing_key : unique_key++;
     size_t existing_size = mem.device_size;
 
-    /* This is a hack to only allocate the tile buffers on denoising devices
-     * Similarly the tile buffers also need to be allocated separately on all devices so any
-     * overlap rendered for denoising does not interfere with each other */
-    if (strcmp(mem.name, "RenderBuffers") == 0) {
-      vector<device_ptr> device_pointers;
-      device_pointers.reserve(devices.size());
+    foreach (const vector<SubDevice *> &island, peer_islands) {
+      SubDevice *owner_sub = find_suitable_mem_device(existing_key, island);
+      mem.device = owner_sub->device;
+      mem.device_pointer = (existing_key) ? owner_sub->ptr_map[existing_key] : 0;
+      mem.device_size = existing_size;
 
-      foreach (SubDevice &sub, devices) {
-        mem.device = sub.device;
-        mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
-        mem.device_size = existing_size;
-
-        sub.device->mem_zero(mem);
-        sub.ptr_map[key] = mem.device_pointer;
-
-        device_pointers.push_back(mem.device_pointer);
-      }
-      foreach (SubDevice &sub, denoising_devices) {
-        if (matching_rendering_and_denoising_devices) {
-          sub.ptr_map[key] = device_pointers.front();
-          device_pointers.erase(device_pointers.begin());
-        }
-        else {
-          mem.device = sub.device;
-          mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
-          mem.device_size = existing_size;
-
-          sub.device->mem_zero(mem);
-          sub.ptr_map[key] = mem.device_pointer;
-        }
-      }
-    }
-    else {
-      foreach (const vector<SubDevice *> &island, peer_islands) {
-        SubDevice *owner_sub = find_suitable_mem_device(existing_key, island);
-        mem.device = owner_sub->device;
-        mem.device_pointer = (existing_key) ? owner_sub->ptr_map[existing_key] : 0;
-        mem.device_size = existing_size;
-
-        owner_sub->device->mem_zero(mem);
-        owner_sub->ptr_map[key] = mem.device_pointer;
-      }
+      owner_sub->device->mem_zero(mem);
+      owner_sub->ptr_map[key] = mem.device_pointer;
     }
 
     mem.device = this;

@@ -34,6 +34,7 @@ struct Base;
 struct BoundBox;
 struct Curve;
 struct Depsgraph;
+struct GeometrySet;
 struct GpencilModifierData;
 struct HookGpencilModifierData;
 struct HookModifierData;
@@ -68,6 +69,8 @@ void BKE_object_free_curve_cache(struct Object *ob);
 
 void BKE_object_free_derived_caches(struct Object *ob);
 void BKE_object_free_caches(struct Object *object);
+
+void BKE_object_set_preview_geometry_set(struct Object *ob, struct GeometrySet *geometry_set);
 
 void BKE_object_modifier_hook_reset(struct Object *ob, struct HookModifierData *hmd);
 void BKE_object_modifier_gpencil_hook_reset(struct Object *ob,
@@ -335,6 +338,12 @@ bool BKE_object_obdata_texspace_get(struct Object *ob,
 struct Mesh *BKE_object_get_evaluated_mesh(struct Object *object);
 struct Mesh *BKE_object_get_pre_modified_mesh(struct Object *object);
 struct Mesh *BKE_object_get_original_mesh(struct Object *object);
+
+/* Lattice accessors.
+ * These functions return either the regular lattice, or the edit-mode lattice,
+ * whichever is currently in use. */
+struct Lattice *BKE_object_get_lattice(const struct Object *object);
+struct Lattice *BKE_object_get_evaluated_lattice(const struct Object *object);
 
 int BKE_object_insert_ptcache(struct Object *ob);
 void BKE_object_delete_ptcache(struct Object *ob, int index);

@@ -812,7 +812,8 @@ bool ED_object_parent_set(ReportList *reports,
               if (md) {
                 ((CurveModifierData *)md)->object = par;
               }
-              if (par->runtime.curve_cache && par->runtime.curve_cache->path == NULL) {
+              if (par->runtime.curve_cache &&
+                  par->runtime.curve_cache->anim_path_accum_length == NULL) {
                 DEG_id_tag_update(&par->id, ID_RECALC_GEOMETRY);
               }
             }
@@ -1756,7 +1757,7 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
   }
 
   DEG_relations_tag_update(bmain);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ACTCHANGE, CTX_wm_view3d(C));
   WM_event_add_notifier(C, NC_OBJECT, NULL);
 
@@ -2712,7 +2713,7 @@ static int drop_named_material_invoke(bContext *C, wmOperator *op, const wmEvent
   DEG_id_tag_update(&base->object->id, ID_RECALC_TRANSFORM);
 
   WM_event_add_notifier(C, NC_OBJECT | ND_OB_SHADING, base->object);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
   WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_LINKS, ma);
 
   return OPERATOR_FINISHED;

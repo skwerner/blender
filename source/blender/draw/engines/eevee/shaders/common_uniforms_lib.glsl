@@ -12,9 +12,9 @@ layout(std140) uniform common_block
   vec4 volJitter;
   vec4 volCoordScale; /* To convert volume uvs to screen uvs */
   float volHistoryAlpha;
-  float volLightClamp;
   float volShadowSteps;
   bool volUseLights;
+  bool volUseSoftShadows;
   /* Screen Space Reflections */
   vec4 ssrParameters;
   float ssrBorderFac;
@@ -69,3 +69,5 @@ layout(std140) uniform common_block
 #define ssrQuality ssrParameters.x
 #define ssrThickness ssrParameters.y
 #define ssrPixelSize ssrParameters.zw
+
+#define ssrUvScale hizUvScale.zw

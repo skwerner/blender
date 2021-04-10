@@ -62,22 +62,13 @@
 #include "BLT_translation.h"
 
 #include "BKE_armature.h"
-#include "BKE_fcurve_driver.h"
-#include "BKE_idtype.h"
 #include "BKE_layer.h"
 #include "BKE_lib_id.h"
-#include "BKE_lib_override.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_outliner_treehash.h"
 
-#include "DEG_depsgraph.h"
-#include "DEG_depsgraph_build.h"
-
 #include "ED_screen.h"
-
-#include "WM_api.h"
-#include "WM_types.h"
 
 #include "RNA_access.h"
 
@@ -889,6 +880,10 @@ TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
   /* New C++ based type handle (`TreeElementType` in C, `AbstractTreeElement` in C++). Only some
    * support this, eventually this should replace `TreeElement` entirely. */
   te->type = outliner_tree_element_type_create(type, te, idv);
+  if (te->type) {
+    /* Element types ported to the new design are expected to have their name set at this point! */
+    BLI_assert(te->name != NULL);
+  }
 
   if (ELEM(type, TSE_SEQUENCE, TSE_SEQ_STRIP, TSE_SEQUENCE_DUP)) {
     /* pass */
@@ -911,6 +906,11 @@ TreeElement *outliner_add_element(SpaceOutliner *space_outliner,
   else if (type == TSE_SOME_ID) {
     if (!te->type) {
       BLI_assert(!"Expected this ID type to be ported to new Outliner tree-element design");
+    }
+  }
+  else if (ELEM(type, TSE_LIBRARY_OVERRIDE_BASE, TSE_LIBRARY_OVERRIDE)) {
+    if (!te->type) {
+      BLI_assert(!"Expected override types to be ported to new Outliner tree-element design");
     }
   }
   else {

@@ -43,11 +43,83 @@ struct MatrixSamplesData {
   Alembic::AbcCoreAbstract::TimeSamplingPtr time_sampling;
 };
 
-/* Helpers to detect if some type is a ccl::array. */
+/* Helpers to detect if some type is a `ccl::array`. */
 template<typename> struct is_array : public std::false_type {
 };
 
 template<typename T> struct is_array<array<T>> : public std::true_type {
+};
+
+/* Holds the data for a cache lookup at a given time, as well as information to
+ * help disambiguate successes or failures to get data from the cache. */
+template<typename T> class CacheLookupResult {
+  enum class State {
+    NEW_DATA,
+    ALREADY_LOADED,
+    NO_DATA_FOR_TIME,
+  };
+
+  T *data;
+  State state;
+
+ protected:
+  /* Prevent default construction outside of the class: for a valid result, we
+   * should use the static functions below. */
+  CacheLookupResult() = default;
+
+ public:
+  static CacheLookupResult new_data(T *data_)
+  {
+    CacheLookupResult result;
+    result.data = data_;
+    result.state = State::NEW_DATA;
+    return result;
+  }
+
+  static CacheLookupResult no_data_found_for_time()
+  {
+    CacheLookupResult result;
+    result.data = nullptr;
+    result.state = State::NO_DATA_FOR_TIME;
+    return result;
+  }
+
+  static CacheLookupResult already_loaded()
+  {
+    CacheLookupResult result;
+    result.data = nullptr;
+    result.state = State::ALREADY_LOADED;
+    return result;
+  }
+
+  /* This should only be call if new data is available. */
+  const T &get_data() const
+  {
+    assert(state == State::NEW_DATA);
+    assert(data != nullptr);
+    return *data;
+  }
+
+  T *get_data_or_null() const
+  {
+    // data_ should already be null if there is no new data so no need to check
+    return data;
+  }
+
+  bool has_new_data() const
+  {
+    return state == State::NEW_DATA;
+  }
+
+  bool has_already_loaded() const
+  {
+    return state == State::ALREADY_LOADED;
+  }
+
+  bool has_no_data_for_time() const
+  {
+    return state == State::NO_DATA_FOR_TIME;
+  }
 };
 
 /* Store the data set for an animation at every time points, or at the beginning of the animation
@@ -56,12 +128,25 @@ template<typename T> struct is_array<array<T>> : public std::true_type {
  * The data is supposed to be stored in chronological order, and is looked up using the current
  * animation time in seconds using the TimeSampling from the Alembic property. */
 template<typename T> class DataStore {
-  struct DataTimePair {
+  /* Holds information to map a cache entry for a given time to an index into the data array. */
+  struct TimeIndexPair {
+    /* Frame time for this entry. */
     double time = 0;
-    T data{};
+    /* Frame time for the data pointed to by `index`. */
+    double source_time = 0;
+    /* Index into the data array. */
+    size_t index = 0;
   };
 
-  vector<DataTimePair> data{};
+  /* This is the actual data that is stored. We deduplicate data across frames to avoid storing
+   * values if they have not changed yet (e.g. the triangles for a building before fracturing, or a
+   * fluid simulation before a break or splash) */
+  vector<T> data{};
+
+  /* This is used to map they entry for a given time to an index into the data array, multiple
+   * frames can point to the same index. */
+  vector<TimeIndexPair> index_data_map{};
+
   Alembic::AbcCoreAbstract::TimeSampling time_sampling{};
 
   double last_loaded_time = std::numeric_limits<double>::max();
@@ -79,49 +164,65 @@ template<typename T> class DataStore {
 
   /* Get the data for the specified time.
    * Return nullptr if there is no data or if the data for this time was already loaded. */
-  T *data_for_time(double time)
+  CacheLookupResult<T> data_for_time(double time)
   {
     if (size() == 0) {
-      return nullptr;
+      return CacheLookupResult<T>::no_data_found_for_time();
     }
 
-    std::pair<size_t, Alembic::Abc::chrono_t> index_pair;
-    index_pair = time_sampling.getNearIndex(time, data.size());
-    DataTimePair &data_pair = data[index_pair.first];
+    const TimeIndexPair &index = get_index_for_time(time);
 
-    if (last_loaded_time == data_pair.time) {
-      return nullptr;
+    if (index.index == -1ul) {
+      return CacheLookupResult<T>::no_data_found_for_time();
     }
 
-    last_loaded_time = data_pair.time;
+    if (last_loaded_time == index.time || last_loaded_time == index.source_time) {
+      return CacheLookupResult<T>::already_loaded();
+    }
 
-    return &data_pair.data;
+    last_loaded_time = index.source_time;
+
+    assert(index.index < data.size());
+
+    return CacheLookupResult<T>::new_data(&data[index.index]);
   }
 
   /* get the data for the specified time, but do not check if the data was already loaded for this
    * time return nullptr if there is no data */
-  T *data_for_time_no_check(double time)
+  CacheLookupResult<T> data_for_time_no_check(double time)
   {
     if (size() == 0) {
-      return nullptr;
+      return CacheLookupResult<T>::no_data_found_for_time();
     }
 
-    std::pair<size_t, Alembic::Abc::chrono_t> index_pair;
-    index_pair = time_sampling.getNearIndex(time, data.size());
-    DataTimePair &data_pair = data[index_pair.first];
-    return &data_pair.data;
+    const TimeIndexPair &index = get_index_for_time(time);
+
+    if (index.index == -1ul) {
+      return CacheLookupResult<T>::no_data_found_for_time();
+    }
+
+    assert(index.index < data.size());
+
+    return CacheLookupResult<T>::new_data(&data[index.index]);
   }
 
   void add_data(T &data_, double time)
   {
+    index_data_map.push_back({time, time, data.size()});
+
     if constexpr (is_array<T>::value) {
       data.emplace_back();
-      data.back().data.steal_data(data_);
-      data.back().time = time;
+      data.back().steal_data(data_);
       return;
     }
 
-    data.push_back({time, data_});
+    data.push_back(data_);
+  }
+
+  void reuse_data_for_last_time(double time)
+  {
+    const TimeIndexPair &data_index = index_data_map.back();
+    index_data_map.push_back({time, data_index.source_time, data_index.index});
   }
 
   bool is_constant() const
@@ -138,6 +239,7 @@ template<typename T> class DataStore {
   {
     invalidate_last_loaded_time();
     data.clear();
+    index_data_map.clear();
   }
 
   void invalidate_last_loaded_time()
@@ -149,16 +251,24 @@ template<typename T> class DataStore {
    * data for this time or it was already loaded, do nothing. */
   void copy_to_socket(double time, Node *node, const SocketType *socket)
   {
-    T *data_ = data_for_time(time);
+    CacheLookupResult<T> result = data_for_time(time);
 
-    if (data_ == nullptr) {
+    if (!result.has_new_data()) {
       return;
     }
 
     /* TODO(kevindietrich): arrays are emptied when passed to the sockets, so for now we copy the
      * arrays to avoid reloading the data */
-    T value = *data_;
+    T value = result.get_data();
     node->set(*socket, value);
+  }
+
+ private:
+  const TimeIndexPair &get_index_for_time(double time) const
+  {
+    std::pair<size_t, Alembic::Abc::chrono_t> index_pair;
+    index_pair = time_sampling.getNearIndex(time, index_data_map.size());
+    return index_data_map[index_pair.first];
   }
 };
 
@@ -254,15 +364,12 @@ class AlembicObject : public Node {
 
   void load_all_data(AlembicProcedural *proc,
                      Alembic::AbcGeom::IPolyMeshSchema &schema,
-                     float scale,
                      Progress &progress);
   void load_all_data(AlembicProcedural *proc,
                      Alembic::AbcGeom::ISubDSchema &schema,
-                     float scale,
                      Progress &progress);
   void load_all_data(AlembicProcedural *proc,
                      const Alembic::AbcGeom::ICurvesSchema &schema,
-                     float scale,
                      Progress &progress,
                      float default_radius);
 
@@ -278,6 +385,8 @@ class AlembicObject : public Node {
   };
 
   bool need_shader_update = true;
+
+  AlembicObject *instance_of = nullptr;
 
   Alembic::AbcCoreAbstract::TimeSamplingPtr xform_time_sampling;
   MatrixSampleMap xform_samples;
@@ -372,16 +481,23 @@ class AlembicProcedural : public Procedural {
    * invocation, and updates the data on subsequent invocations if the frame changed. */
   void generate(Scene *scene, Progress &progress);
 
-  /* Add an object to our list of objects, and tag the socket as modified. */
-  void add_object(AlembicObject *object);
-
   /* Tag for an update only if something was modified. */
   void tag_update(Scene *scene);
 
-  /* Returns a pointer to an existing or a newly created AlembicObject for the given path. */
+  /* This should be called by scene exporters to request the rendering of an object located
+   * in the Alembic archive at the given path.
+   *
+   * Since we lazily load object, the function does not validate the existence of the object
+   * in the archive. If no objects with such path if found in the archive during the next call
+   * to `generate`, it will be ignored.
+   *
+   * Returns a pointer to an existing or a newly created AlembicObject for the given path. */
   AlembicObject *get_or_create_object(const ustring &path);
 
  private:
+  /* Add an object to our list of objects, and tag the socket as modified. */
+  void add_object(AlembicObject *object);
+
   /* Load the data for all the objects whose data has not yet been loaded. */
   void load_objects(Progress &progress);
 
@@ -396,21 +512,17 @@ class AlembicProcedural : public Procedural {
 
   /* Read the data for an IPolyMesh at the specified frame_time. Creates corresponding Geometry and
    * Object Nodes in the Cycles scene if none exist yet. */
-  void read_mesh(AlembicObject *abc_object,
-                 Alembic::AbcGeom::Abc::chrono_t frame_time,
-                 Progress &progress);
+  void read_mesh(AlembicObject *abc_object, Alembic::AbcGeom::Abc::chrono_t frame_time);
 
   /* Read the data for an ICurves at the specified frame_time. Creates corresponding Geometry and
    * Object Nodes in the Cycles scene if none exist yet. */
-  void read_curves(AlembicObject *abc_object,
-                   Alembic::AbcGeom::Abc::chrono_t frame_time,
-                   Progress &progress);
+  void read_curves(AlembicObject *abc_object, Alembic::AbcGeom::Abc::chrono_t frame_time);
 
   /* Read the data for an ISubD at the specified frame_time. Creates corresponding Geometry and
    * Object Nodes in the Cycles scene if none exist yet. */
-  void read_subd(AlembicObject *abc_object,
-                 Alembic::AbcGeom::Abc::chrono_t frame_time,
-                 Progress &progress);
+  void read_subd(AlembicObject *abc_object, Alembic::AbcGeom::Abc::chrono_t frame_time);
+
+  void build_caches(Progress &progress);
 };
 
 CCL_NAMESPACE_END

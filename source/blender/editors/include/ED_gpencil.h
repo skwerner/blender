@@ -150,6 +150,7 @@ bool ED_gpencil_stroke_can_use(const struct bContext *C, const struct bGPDstroke
 bool ED_gpencil_stroke_material_editable(struct Object *ob,
                                          const struct bGPDlayer *gpl,
                                          const struct bGPDstroke *gps);
+bool ED_gpencil_stroke_material_visible(struct Object *ob, const struct bGPDstroke *gps);
 
 /* ----------- Grease Pencil Operators ----------------- */
 
@@ -250,6 +251,7 @@ void ED_gpencil_brush_draw_eraser(struct Brush *brush, int x, int y);
 
 void ED_gpencil_create_monkey(struct bContext *C, struct Object *ob, float mat[4][4]);
 void ED_gpencil_create_stroke(struct bContext *C, struct Object *ob, float mat[4][4]);
+void ED_gpencil_create_lineart(struct bContext *C, struct Object *ob);
 
 /* ------------ Object Utilities ------------ */
 struct Object *ED_gpencil_add_object(struct bContext *C,

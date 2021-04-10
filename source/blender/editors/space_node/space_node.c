@@ -74,7 +74,7 @@ void ED_node_tree_start(SpaceNode *snode, bNodeTree *ntree, ID *id, ID *from)
     copy_v2_v2(path->view_center, ntree->view_center);
 
     if (id) {
-      BLI_strncpy(path->node_name, id->name + 2, sizeof(path->node_name));
+      BLI_strncpy(path->display_name, id->name + 2, sizeof(path->display_name));
     }
 
     BLI_addtail(&snode->treepath, path);
@@ -111,6 +111,7 @@ void ED_node_tree_push(SpaceNode *snode, bNodeTree *ntree, bNode *gnode)
     }
 
     BLI_strncpy(path->node_name, gnode->name, sizeof(path->node_name));
+    BLI_strncpy(path->display_name, gnode->name, sizeof(path->display_name));
   }
   else {
     path->parent_key = NODE_INSTANCE_KEY_BASE;
@@ -175,7 +176,7 @@ int ED_node_tree_path_length(SpaceNode *snode)
   int length = 0;
   int i = 0;
   LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
-    length += strlen(path->node_name);
+    length += strlen(path->display_name);
     if (i > 0) {
       length += 1; /* for separator char */
     }
@@ -190,12 +191,12 @@ void ED_node_tree_path_get(SpaceNode *snode, char *value)
   value[0] = '\0';
   LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     if (i == 0) {
-      strcpy(value, path->node_name);
-      value += strlen(path->node_name);
+      strcpy(value, path->display_name);
+      value += strlen(path->display_name);
     }
     else {
-      sprintf(value, "/%s", path->node_name);
-      value += strlen(path->node_name) + 1;
+      sprintf(value, "/%s", path->display_name);
+      value += strlen(path->display_name) + 1;
     }
   }
 }
@@ -208,10 +209,10 @@ void ED_node_tree_path_get_fixedbuf(SpaceNode *snode, char *value, int max_lengt
   int i = 0;
   LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     if (i == 0) {
-      size = BLI_strncpy_rlen(value, path->node_name, max_length);
+      size = BLI_strncpy_rlen(value, path->display_name, max_length);
     }
     else {
-      size = BLI_snprintf_rlen(value, max_length, "/%s", path->node_name);
+      size = BLI_snprintf_rlen(value, max_length, "/%s", path->display_name);
     }
     max_length -= size;
     if (max_length <= 0) {
@@ -667,6 +668,30 @@ static bool node_group_drop_poll(bContext *UNUSED(C),
   return WM_drag_is_ID_type(drag, ID_NT);
 }
 
+static bool node_object_drop_poll(bContext *UNUSED(C),
+                                  wmDrag *drag,
+                                  const wmEvent *UNUSED(event),
+                                  const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_OB);
+}
+
+static bool node_collection_drop_poll(bContext *UNUSED(C),
+                                      wmDrag *drag,
+                                      const wmEvent *UNUSED(event),
+                                      const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_GR);
+}
+
+static bool node_texture_drop_poll(bContext *UNUSED(C),
+                                   wmDrag *drag,
+                                   const wmEvent *UNUSED(event),
+                                   const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_TE);
+}
+
 static bool node_ima_drop_poll(bContext *UNUSED(C),
                                wmDrag *drag,
                                const wmEvent *UNUSED(event),
@@ -720,6 +745,21 @@ static void node_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Node Editor", SPACE_NODE, RGN_TYPE_WINDOW);
 
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_object",
+                 node_object_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_collection",
+                 node_collection_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_texture",
+                 node_texture_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
   WM_dropbox_add(lb,
                  "NODE_OT_add_group",
                  node_group_drop_poll,

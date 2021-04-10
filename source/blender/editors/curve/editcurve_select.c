@@ -578,8 +578,8 @@ static int de_select_all_exec(bContext *C, wmOperator *op)
         changed = ED_curve_deselect_all(cu->editnurb);
         break;
       case SEL_INVERT:
-        changed = ED_curve_select_swap(cu->editnurb,
-                                       v3d->overlay.handle_display == CURVE_HANDLE_NONE);
+        changed = ED_curve_select_swap(
+            cu->editnurb, (v3d && (v3d->overlay.handle_display == CURVE_HANDLE_NONE)));
         break;
     }
 
@@ -1990,7 +1990,7 @@ static int edcu_shortest_path_pick_invoke(bContext *C, wmOperator *op, const wmE
     ED_object_base_activate(C, basact);
   }
 
-  DEG_id_tag_update(obedit->data, ID_RECALC_SELECT);
+  DEG_id_tag_update(obedit->data, ID_RECALC_SELECT | ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, obedit->data);
   return OPERATOR_FINISHED;
 }

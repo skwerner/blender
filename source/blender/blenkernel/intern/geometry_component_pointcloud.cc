@@ -27,7 +27,7 @@
 /** \name Geometry Component Implementation
  * \{ */
 
-PointCloudComponent::PointCloudComponent() : GeometryComponent(GeometryComponentType::PointCloud)
+PointCloudComponent::PointCloudComponent() : GeometryComponent(GEO_COMPONENT_TYPE_POINT_CLOUD)
 {
 }
 
@@ -107,6 +107,20 @@ bool PointCloudComponent::is_empty() const
   return pointcloud_ == nullptr;
 }
 
+bool PointCloudComponent::owns_direct_data() const
+{
+  return ownership_ == GeometryOwnershipType::Owned;
+}
+
+void PointCloudComponent::ensure_owns_direct_data()
+{
+  BLI_assert(this->is_mutable());
+  if (ownership_ != GeometryOwnershipType::Owned) {
+    pointcloud_ = BKE_pointcloud_copy_for_eval(pointcloud_, false);
+    ownership_ = GeometryOwnershipType::Owned;
+  }
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -115,9 +129,10 @@ bool PointCloudComponent::is_empty() const
 
 int PointCloudComponent::attribute_domain_size(const AttributeDomain domain) const
 {
-  BLI_assert(domain == ATTR_DOMAIN_POINT);
-  UNUSED_VARS_NDEBUG(domain);
   if (pointcloud_ == nullptr) {
+    return 0;
+  }
+  if (domain != ATTR_DOMAIN_POINT) {
     return 0;
   }
   return pointcloud_->totpoint;
@@ -175,7 +190,6 @@ static ComponentAttributeProviders create_attribute_providers_for_point_cloud()
       point_access,
       make_array_read_attribute<float3, ATTR_DOMAIN_POINT>,
       make_array_write_attribute<float3, ATTR_DOMAIN_POINT>,
-      nullptr,
       nullptr);
   static BuiltinCustomDataLayerProvider radius(
       "radius",
@@ -188,7 +202,6 @@ static ComponentAttributeProviders create_attribute_providers_for_point_cloud()
       point_access,
       make_array_read_attribute<float, ATTR_DOMAIN_POINT>,
       make_array_write_attribute<float, ATTR_DOMAIN_POINT>,
-      nullptr,
       nullptr);
   static CustomDataAttributeProvider point_custom_data(ATTR_DOMAIN_POINT, point_access);
   return ComponentAttributeProviders({&position, &radius}, {&point_custom_data});

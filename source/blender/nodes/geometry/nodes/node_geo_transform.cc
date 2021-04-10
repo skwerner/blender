@@ -18,7 +18,7 @@
 #  include <openvdb/openvdb.h>
 #endif
 
-#include "BLI_math_matrix.h"
+#include "BLI_float4x4.hh"
 
 #include "DNA_pointcloud_types.h"
 #include "DNA_volume_types.h"
@@ -57,19 +57,20 @@ static bool use_translate(const float3 rotation, const float3 scale)
   return true;
 }
 
-static void transform_mesh(Mesh *mesh,
-                           const float3 translation,
-                           const float3 rotation,
-                           const float3 scale)
+void transform_mesh(Mesh *mesh,
+                    const float3 translation,
+                    const float3 rotation,
+                    const float3 scale)
 {
   /* Use only translation if rotation and scale are zero. */
   if (use_translate(rotation, scale)) {
-    BKE_mesh_translate(mesh, translation, true);
+    if (!translation.is_zero()) {
+      BKE_mesh_translate(mesh, translation, false);
+    }
   }
   else {
-    float mat[4][4];
-    loc_eul_size_to_mat4(mat, translation, rotation, scale);
-    BKE_mesh_transform(mesh, mat, true);
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
+    BKE_mesh_transform(mesh, matrix.values, false);
     BKE_mesh_calc_normals(mesh);
   }
 }
@@ -81,15 +82,15 @@ static void transform_pointcloud(PointCloud *pointcloud,
 {
   /* Use only translation if rotation and scale don't apply. */
   if (use_translate(rotation, scale)) {
-    for (int i = 0; i < pointcloud->totpoint; i++) {
+    for (const int i : IndexRange(pointcloud->totpoint)) {
       add_v3_v3(pointcloud->co[i], translation);
     }
   }
   else {
-    float mat[4][4];
-    loc_eul_size_to_mat4(mat, translation, rotation, scale);
-    for (int i = 0; i < pointcloud->totpoint; i++) {
-      mul_m4_v3(mat, pointcloud->co[i]);
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
+    for (const int i : IndexRange(pointcloud->totpoint)) {
+      float3 &co = *(float3 *)pointcloud->co[i];
+      co = matrix * co;
     }
   }
 }
@@ -108,11 +109,9 @@ static void transform_instances(InstancesComponent &instances,
     }
   }
   else {
-    float mat[4][4];
-
-    loc_eul_size_to_mat4(mat, translation, rotation, scale);
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
     for (float4x4 &transform : transforms) {
-      mul_m4_m4_pre(transform.ptr(), mat);
+      transform = matrix * transform;
     }
   }
 }
@@ -131,11 +130,10 @@ static void transform_volume(Volume *volume,
       (scale.z == 0.0f) ? FLT_EPSILON : scale.z,
   };
 
-  Main *bmain = DEG_get_bmain(params.depsgraph());
+  const Main *bmain = DEG_get_bmain(params.depsgraph());
   BKE_volume_load(volume, bmain);
 
-  float matrix[4][4];
-  loc_eul_size_to_mat4(matrix, translation, rotation, limited_scale);
+  const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, limited_scale);
 
   openvdb::Mat4s vdb_matrix;
   memcpy(vdb_matrix.asPointer(), matrix, sizeof(float[4][4]));
@@ -143,7 +141,7 @@ static void transform_volume(Volume *volume,
 
   const int num_grids = BKE_volume_num_grids(volume);
   for (const int i : IndexRange(num_grids)) {
-    VolumeGrid *volume_grid = BKE_volume_grid_get(volume, i);
+    VolumeGrid *volume_grid = BKE_volume_grid_get_for_write(volume, i);
 
     openvdb::GridBase::Ptr grid = BKE_volume_grid_openvdb_for_write(volume, volume_grid, false);
     openvdb::math::Transform &grid_transform = grid->transform();

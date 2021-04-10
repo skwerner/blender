@@ -102,7 +102,7 @@ float D_ggx_opti(float NH, float a2)
   return M_PI * tmp * tmp; /* Doing RCP and mul a2 at the end */
 }
 
-float G1_Smith_GGX(float NX, float a2)
+float G1_Smith_GGX_opti(float NX, float a2)
 {
   /* Using Brian Karis approach and refactoring by NX/NX
    * this way the (2*NL)*(2*NV) in G = G1(V) * G1(L) gets canceled by the brdf denominator 4*NL*NV
@@ -122,7 +122,7 @@ float bsdf_ggx(vec3 N, vec3 L, vec3 V, float roughness)
   float NL = max(dot(N, L), 1e-8);
   float NV = max(dot(N, V), 1e-8);
 
-  float G = G1_Smith_GGX(NV, a2) * G1_Smith_GGX(NL, a2); /* Doing RCP at the end */
+  float G = G1_Smith_GGX_opti(NV, a2) * G1_Smith_GGX_opti(NL, a2); /* Doing RCP at the end */
   float D = D_ggx_opti(NH, a2);
 
   /* Denominator is canceled by G1_Smith */
@@ -138,55 +138,30 @@ void accumulate_light(vec3 light, float fac, inout vec4 accum)
 /* Same thing as Cycles without the comments to make it shorter. */
 vec3 ensure_valid_reflection(vec3 Ng, vec3 I, vec3 N)
 {
-  vec3 R = -reflect(I, N);
-
-  /* Reflection rays may always be at least as shallow as the incoming ray. */
-  float threshold = min(0.9 * dot(Ng, I), 0.025);
-  if (dot(Ng, R) >= threshold) {
-    return N;
-  }
-
-  float NdotNg = dot(N, Ng);
-  vec3 X = normalize(N - NdotNg * Ng);
-
-  float Ix = dot(I, X), Iz = dot(I, Ng);
-  float Ix2 = sqr(Ix), Iz2 = sqr(Iz);
-  float a = Ix2 + Iz2;
-
-  float b = sqrt(Ix2 * (a - sqr(threshold)));
-  float c = Iz * threshold + a;
-
-  float fac = 0.5 / a;
-  float N1_z2 = fac * (b + c), N2_z2 = fac * (-b + c);
-  bool valid1 = (N1_z2 > 1e-5) && (N1_z2 <= (1.0 + 1e-5));
-  bool valid2 = (N2_z2 > 1e-5) && (N2_z2 <= (1.0 + 1e-5));
-
-  vec2 N_new;
-  if (valid1 && valid2) {
-    /* If both are possible, do the expensive reflection-based check. */
-    vec2 N1 = vec2(sqrt(1.0 - N1_z2), sqrt(N1_z2));
-    vec2 N2 = vec2(sqrt(1.0 - N2_z2), sqrt(N2_z2));
-
-    float R1 = 2.0 * (N1.x * Ix + N1.y * Iz) * N1.y - Iz;
-    float R2 = 2.0 * (N2.x * Ix + N2.y * Iz) * N2.y - Iz;
-
-    valid1 = (R1 >= 1e-5);
-    valid2 = (R2 >= 1e-5);
-    if (valid1 && valid2) {
-      N_new = (R1 < R2) ? N1 : N2;
+  vec3 R;
+  float NI = dot(N, I);
+  float NgR, threshold;
+  /* Check if the incident ray is coming from behind normal N. */
+  if (NI > 0.0) {
+    /* Normal reflection. */
+    R = (2.0 * NI) * N - I;
+    NgR = dot(Ng, R);
+    /* Reflection rays may always be at least as shallow as the incoming ray. */
+    threshold = min(0.9 * dot(Ng, I), 0.01);
+    if (NgR >= threshold) {
+      return N;
     }
-    else {
-      N_new = (R1 > R2) ? N1 : N2;
-    }
-  }
-  else if (valid1 || valid2) {
-    float Nz2 = valid1 ? N1_z2 : N2_z2;
-    N_new = vec2(sqrt(1.0 - Nz2), sqrt(Nz2));
   }
   else {
-    return Ng;
+    /* Bad incident. */
+    R = -I;
+    NgR = dot(Ng, R);
+    threshold = 0.01;
   }
-  return N_new.x * X + N_new.y * Ng;
+  /* Lift the reflection above the threshold. */
+  R = R + Ng * (threshold - NgR);
+  /* Find a bisector. */
+  return safe_normalize(I * length(R) + R * length(I));
 }
 
 /* ----------- Cone angle Approximation --------- */

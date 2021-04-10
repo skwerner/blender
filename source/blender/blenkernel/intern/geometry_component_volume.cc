@@ -24,7 +24,7 @@
 /** \name Geometry Component Implementation
  * \{ */
 
-VolumeComponent::VolumeComponent() : GeometryComponent(GeometryComponentType::Volume)
+VolumeComponent::VolumeComponent() : GeometryComponent(GEO_COMPONENT_TYPE_VOLUME)
 {
 }
 
@@ -95,6 +95,20 @@ Volume *VolumeComponent::get_for_write()
     ownership_ = GeometryOwnershipType::Owned;
   }
   return volume_;
+}
+
+bool VolumeComponent::owns_direct_data() const
+{
+  return ownership_ == GeometryOwnershipType::Owned;
+}
+
+void VolumeComponent::ensure_owns_direct_data()
+{
+  BLI_assert(this->is_mutable());
+  if (ownership_ != GeometryOwnershipType::Owned) {
+    volume_ = BKE_volume_copy_for_eval(volume_, false);
+    ownership_ = GeometryOwnershipType::Owned;
+  }
 }
 
 /** \} */

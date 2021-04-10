@@ -1537,7 +1537,9 @@ string OpenCLDevice::kernel_build_options(const string *debug_src)
 #  endif
 
 #  ifdef WITH_NANOVDB
-  build_options += "-DWITH_NANOVDB ";
+  if (info.has_nanovdb) {
+    build_options += "-DWITH_NANOVDB ";
+  }
 #  endif
 
   return build_options;

@@ -542,9 +542,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     const PropertyType type = RNA_property_type(prop);
     const PropertySubType subtype = RNA_property_subtype(prop);
     bool is_anim = RNA_property_animateable(ptr, prop);
-    const bool is_editable = RNA_property_editable(ptr, prop);
     const bool is_idprop = RNA_property_is_idprop(prop);
-    const bool is_set = RNA_property_is_set(ptr, prop);
 
     /* second slower test,
      * saved people finding keyframe items in menus when its not possible */
@@ -567,7 +565,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 
     /* Keyframes */
     if (but->flag & UI_BUT_ANIMATED_KEY) {
-      /* replace/delete keyfraemes */
+      /* Replace/delete keyframes. */
       if (is_array_component) {
         uiItemBooleanO(layout,
                        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Replace Keyframes"),
@@ -893,12 +891,6 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
                      "all",
                      1);
     }
-    if (is_editable /*&& is_idprop*/ && is_set) {
-      uiItemO(layout,
-              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Unset"),
-              ICON_NONE,
-              "UI_OT_unset_property_button");
-    }
 
     if (is_idprop && !is_array && ELEM(type, PROP_INT, PROP_FLOAT)) {
       uiItemO(layout,
@@ -936,6 +928,12 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Data Path"),
             ICON_NONE,
             "UI_OT_copy_data_path_button");
+    uiItemBooleanO(layout,
+                   CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Full Data Path"),
+                   ICON_NONE,
+                   "UI_OT_copy_data_path_button",
+                   "full_path",
+                   true);
 
     if (ptr->owner_id && !is_whole_array &&
         ELEM(type, PROP_BOOLEAN, PROP_INT, PROP_FLOAT, PROP_ENUM)) {

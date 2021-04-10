@@ -222,7 +222,7 @@ void BKE_gpencil_blend_read_data(BlendDataReader *reader, bGPdata *gpd)
   /* relink palettes (old palettes deprecated, only to convert old files) */
   BLO_read_list(reader, &gpd->palettes);
   if (gpd->palettes.first != NULL) {
-    LISTBASE_FOREACH (Palette *, palette, &gpd->palettes) {
+    LISTBASE_FOREACH (bGPDpalette *, palette, &gpd->palettes) {
       BLO_read_list(reader, &palette->colors);
     }
   }
@@ -1293,7 +1293,8 @@ bGPDframe *BKE_gpencil_layer_frame_find(bGPDlayer *gpl, int cframe)
   return NULL;
 }
 
-/** Get the appropriate gp-frame from a given layer
+/**
+ * Get the appropriate gp-frame from a given layer
  * - this sets the layer's actframe var (if allowed to)
  * - extension beyond range (if first gp-frame is after all frame in interest and cannot add)
  *
@@ -1660,6 +1661,31 @@ bGPDlayer *BKE_gpencil_layer_active_get(bGPdata *gpd)
   }
 
   /* no active layer found */
+  return NULL;
+}
+
+bGPDlayer *BKE_gpencil_layer_get_by_name(bGPdata *gpd, char *name, int first_if_not_found)
+{
+  bGPDlayer *gpl;
+  int i = 0;
+
+  /* error checking */
+  if (ELEM(NULL, gpd, gpd->layers.first)) {
+    return NULL;
+  }
+
+  /* loop over layers until found (assume only one active) */
+  for (gpl = gpd->layers.first; gpl; gpl = gpl->next) {
+    if (STREQ(name, gpl->info)) {
+      return gpl;
+    }
+    i++;
+  }
+
+  /* no such layer */
+  if (first_if_not_found) {
+    return gpd->layers.first;
+  }
   return NULL;
 }
 
@@ -2419,6 +2445,34 @@ int BKE_gpencil_object_material_index_get(Object *ob, Material *ma)
   }
 
   return -1;
+}
+
+int BKE_gpencil_object_material_index_get_by_name(Object *ob, const char *name)
+{
+  short *totcol = BKE_object_material_len_p(ob);
+  Material *read_ma = NULL;
+  for (short i = 0; i < *totcol; i++) {
+    read_ma = BKE_object_material_get(ob, i + 1);
+    /* Material names are like "MAMaterial.001" */
+    if (STREQ(name, &read_ma->id.name[2])) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+Material *BKE_gpencil_object_material_ensure_by_name(Main *bmain,
+                                                     Object *ob,
+                                                     const char *name,
+                                                     int *r_index)
+{
+  int index = BKE_gpencil_object_material_index_get_by_name(ob, name);
+  if (index != -1) {
+    *r_index = index;
+    return BKE_object_material_get(ob, index + 1);
+  }
+  return BKE_gpencil_object_material_new(bmain, ob, name, r_index);
 }
 
 /**

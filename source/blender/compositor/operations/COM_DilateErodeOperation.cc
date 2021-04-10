@@ -22,12 +22,14 @@
 
 #include "MEM_guardedalloc.h"
 
+namespace blender::compositor {
+
 // DilateErode Distance Threshold
 DilateErodeThresholdOperation::DilateErodeThresholdOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
-  this->setComplex(true);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
+  this->flags.complex = true;
   this->m_inputProgram = nullptr;
   this->m_inset = 0.0f;
   this->m__switch = 0.5f;
@@ -70,19 +72,19 @@ void DilateErodeThresholdOperation::executePixel(float output[4], int x, int y, 
 
   MemoryBuffer *inputBuffer = (MemoryBuffer *)data;
   float *buffer = inputBuffer->getBuffer();
-  rcti *rect = inputBuffer->getRect();
-  const int minx = MAX2(x - this->m_scope, rect->xmin);
-  const int miny = MAX2(y - this->m_scope, rect->ymin);
-  const int maxx = MIN2(x + this->m_scope, rect->xmax);
-  const int maxy = MIN2(y + this->m_scope, rect->ymax);
-  const int bufferWidth = BLI_rcti_size_x(rect);
+  const rcti &input_rect = inputBuffer->get_rect();
+  const int minx = MAX2(x - this->m_scope, input_rect.xmin);
+  const int miny = MAX2(y - this->m_scope, input_rect.ymin);
+  const int maxx = MIN2(x + this->m_scope, input_rect.xmax);
+  const int maxy = MIN2(y + this->m_scope, input_rect.ymax);
+  const int bufferWidth = inputBuffer->getWidth();
   int offset;
 
   inputBuffer->read(inputValue, x, y);
   if (inputValue[0] > sw) {
     for (int yi = miny; yi < maxy; yi++) {
       const float dy = yi - y;
-      offset = ((yi - rect->ymin) * bufferWidth + (minx - rect->xmin));
+      offset = ((yi - input_rect.ymin) * bufferWidth + (minx - input_rect.xmin));
       for (int xi = minx; xi < maxx; xi++) {
         if (buffer[offset] < sw) {
           const float dx = xi - x;
@@ -97,7 +99,7 @@ void DilateErodeThresholdOperation::executePixel(float output[4], int x, int y, 
   else {
     for (int yi = miny; yi < maxy; yi++) {
       const float dy = yi - y;
-      offset = ((yi - rect->ymin) * bufferWidth + (minx - rect->xmin));
+      offset = ((yi - input_rect.ymin) * bufferWidth + (minx - input_rect.xmin));
       for (int xi = minx; xi < maxx; xi++) {
         if (buffer[offset] > sw) {
           const float dx = xi - x;
@@ -161,12 +163,12 @@ bool DilateErodeThresholdOperation::determineDependingAreaOfInterest(
 // Dilate Distance
 DilateDistanceOperation::DilateDistanceOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
-  this->setComplex(true);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
   this->m_inputProgram = nullptr;
   this->m_distance = 0.0f;
-  this->setOpenCL(true);
+  flags.complex = true;
+  flags.open_cl = true;
 }
 void DilateDistanceOperation::initExecution()
 {
@@ -190,19 +192,19 @@ void DilateDistanceOperation::executePixel(float output[4], int x, int y, void *
 
   MemoryBuffer *inputBuffer = (MemoryBuffer *)data;
   float *buffer = inputBuffer->getBuffer();
-  rcti *rect = inputBuffer->getRect();
-  const int minx = MAX2(x - this->m_scope, rect->xmin);
-  const int miny = MAX2(y - this->m_scope, rect->ymin);
-  const int maxx = MIN2(x + this->m_scope, rect->xmax);
-  const int maxy = MIN2(y + this->m_scope, rect->ymax);
-  const int bufferWidth = BLI_rcti_size_x(rect);
+  const rcti &input_rect = inputBuffer->get_rect();
+  const int minx = MAX2(x - this->m_scope, input_rect.xmin);
+  const int miny = MAX2(y - this->m_scope, input_rect.ymin);
+  const int maxx = MIN2(x + this->m_scope, input_rect.xmax);
+  const int maxy = MIN2(y + this->m_scope, input_rect.ymax);
+  const int bufferWidth = inputBuffer->getWidth();
   int offset;
 
   float value = 0.0f;
 
   for (int yi = miny; yi < maxy; yi++) {
     const float dy = yi - y;
-    offset = ((yi - rect->ymin) * bufferWidth + (minx - rect->xmin));
+    offset = ((yi - input_rect.ymin) * bufferWidth + (minx - input_rect.xmin));
     for (int xi = minx; xi < maxx; xi++) {
       const float dx = xi - x;
       const float dis = dx * dx + dy * dy;
@@ -269,19 +271,19 @@ void ErodeDistanceOperation::executePixel(float output[4], int x, int y, void *d
 
   MemoryBuffer *inputBuffer = (MemoryBuffer *)data;
   float *buffer = inputBuffer->getBuffer();
-  rcti *rect = inputBuffer->getRect();
-  const int minx = MAX2(x - this->m_scope, rect->xmin);
-  const int miny = MAX2(y - this->m_scope, rect->ymin);
-  const int maxx = MIN2(x + this->m_scope, rect->xmax);
-  const int maxy = MIN2(y + this->m_scope, rect->ymax);
-  const int bufferWidth = BLI_rcti_size_x(rect);
+  const rcti &input_rect = inputBuffer->get_rect();
+  const int minx = MAX2(x - this->m_scope, input_rect.xmin);
+  const int miny = MAX2(y - this->m_scope, input_rect.ymin);
+  const int maxx = MIN2(x + this->m_scope, input_rect.xmax);
+  const int maxy = MIN2(y + this->m_scope, input_rect.ymax);
+  const int bufferWidth = inputBuffer->getWidth();
   int offset;
 
   float value = 1.0f;
 
   for (int yi = miny; yi < maxy; yi++) {
     const float dy = yi - y;
-    offset = ((yi - rect->ymin) * bufferWidth + (minx - rect->xmin));
+    offset = ((yi - input_rect.ymin) * bufferWidth + (minx - input_rect.xmin));
     for (int xi = minx; xi < maxx; xi++) {
       const float dx = xi - x;
       const float dis = dx * dx + dy * dy;
@@ -319,9 +321,9 @@ void ErodeDistanceOperation::executeOpenCL(OpenCLDevice *device,
 // Dilate step
 DilateStepOperation::DilateStepOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VALUE);
-  this->setComplex(true);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Value);
+  this->flags.complex = true;
   this->m_inputProgram = nullptr;
 }
 void DilateStepOperation::initExecution()
@@ -568,3 +570,5 @@ void *ErodeStepOperation::initializeTileData(rcti *rect)
 
   return result;
 }
+
+}  // namespace blender::compositor

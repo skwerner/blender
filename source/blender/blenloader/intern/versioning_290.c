@@ -27,6 +27,7 @@
 #include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
+#include "DNA_armature_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
 #include "DNA_collection_types.h"
@@ -36,6 +37,7 @@
 #include "DNA_gpencil_modifier_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_hair_types.h"
+#include "DNA_light_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_modifier_types.h"
@@ -51,9 +53,11 @@
 
 #include "BKE_animsys.h"
 #include "BKE_armature.h"
+#include "BKE_attribute.h"
 #include "BKE_collection.h"
 #include "BKE_colortools.h"
 #include "BKE_cryptomatte.h"
+#include "BKE_curve.h"
 #include "BKE_fcurve.h"
 #include "BKE_gpencil.h"
 #include "BKE_lib_id.h"
@@ -62,6 +66,7 @@
 #include "BKE_multires.h"
 #include "BKE_node.h"
 
+#include "IMB_imbuf.h"
 #include "MEM_guardedalloc.h"
 
 #include "RNA_access.h"
@@ -99,6 +104,15 @@ static eSpaceSeq_Proxy_RenderSize get_sequencer_render_size(Main *bmain)
   }
 
   return render_size;
+}
+
+static bool can_use_proxy(const Sequence *seq, int psize)
+{
+  if (seq->strip->proxy == NULL) {
+    return false;
+  }
+  short size_flags = seq->strip->proxy->build_size_flags;
+  return (seq->flag & SEQ_USE_PROXY) != 0 && psize != IMB_PROXY_NONE && (size_flags & psize) != 0;
 }
 
 /* image_size is width or height depending what RNA property is converted - X or Y. */
@@ -149,7 +163,7 @@ static void seq_convert_transform_crop(const Scene *scene,
     image_size_x = s_elem->orig_width;
     image_size_y = s_elem->orig_height;
 
-    if (SEQ_can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
+    if (can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
       image_size_x /= SEQ_rendersize_to_scale_factor(render_size);
       image_size_y /= SEQ_rendersize_to_scale_factor(render_size);
     }
@@ -282,7 +296,7 @@ static void seq_convert_transform_crop_2(const Scene *scene,
   int image_size_x = s_elem->orig_width;
   int image_size_y = s_elem->orig_height;
 
-  if (SEQ_can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
+  if (can_use_proxy(seq, SEQ_rendersize_to_proxysize(render_size))) {
     image_size_x /= SEQ_rendersize_to_scale_factor(render_size);
     image_size_y /= SEQ_rendersize_to_scale_factor(render_size);
   }
@@ -362,6 +376,37 @@ static void seq_update_meta_disp_range(Editing *ed)
     /* Ensure that active seqbase points to active meta strip seqbase. */
     MetaStack *active_ms = SEQ_meta_stack_active_get(ed);
     SEQ_seqbase_active_set(ed, &active_ms->parseq->seqbase);
+  }
+}
+
+static void version_node_socket_duplicate(bNodeTree *ntree,
+                                          const int node_type,
+                                          const char *old_name,
+                                          const char *new_name)
+{
+  /* Duplicate a link going into the original socket. */
+  LISTBASE_FOREACH_MUTABLE (bNodeLink *, link, &ntree->links) {
+    if (link->tonode->type == node_type) {
+      bNode *node = link->tonode;
+      bNodeSocket *dest_socket = nodeFindSocket(node, SOCK_IN, new_name);
+      BLI_assert(dest_socket);
+      if (STREQ(link->tosock->name, old_name)) {
+        nodeAddLink(ntree, link->fromnode, link->fromsock, node, dest_socket);
+      }
+    }
+  }
+
+  /* Duplicate the default value from the old socket and assign it to the new socket. */
+  LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+    if (node->type == node_type) {
+      bNodeSocket *source_socket = nodeFindSocket(node, SOCK_IN, old_name);
+      bNodeSocket *dest_socket = nodeFindSocket(node, SOCK_IN, new_name);
+      BLI_assert(source_socket && dest_socket);
+      if (dest_socket->default_value) {
+        MEM_freeN(dest_socket->default_value);
+      }
+      dest_socket->default_value = MEM_dupallocN(source_socket->default_value);
+    }
   }
 }
 
@@ -627,6 +672,20 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
     }
   }
 
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 16)) {
+    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
+      seq_update_meta_disp_range(SEQ_editing_get(scene, false));
+    }
+
+    /* Add a separate socket for Grid node X and Y size. */
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_duplicate(ntree, GEO_NODE_MESH_PRIMITIVE_GRID, "Size X", "Size Y");
+      }
+      FOREACH_NODETREE_END;
+    }
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -639,10 +698,6 @@ void do_versions_after_linking_290(Main *bmain, ReportList *UNUSED(reports))
    */
   {
     /* Keep this block, even when empty. */
-
-    LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
-      seq_update_meta_disp_range(SEQ_editing_get(scene, false));
-    }
   }
 }
 
@@ -794,6 +849,26 @@ static void version_node_join_geometry_for_multi_input_socket(bNodeTree *ntree)
       nodeRemoveSocket(ntree, node, socket->next);
     }
   }
+}
+
+static ARegion *do_versions_add_region_if_not_found(ListBase *regionbase,
+                                                    int region_type,
+                                                    const char *name,
+                                                    int link_after_region_type)
+{
+  ARegion *link_after_region = NULL;
+  LISTBASE_FOREACH (ARegion *, region, regionbase) {
+    if (region->regiontype == region_type) {
+      return NULL;
+    }
+    if (region->regiontype == link_after_region_type) {
+      link_after_region = region;
+    }
+  }
+  ARegion *new_region = MEM_callocN(sizeof(ARegion), name);
+  new_region->regiontype = region_type;
+  BLI_insertlinkafter(regionbase, link_after_region, new_region);
+  return new_region;
 }
 
 /* NOLINTNEXTLINE: readability-function-size */
@@ -1462,7 +1537,7 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
       LISTBASE_FOREACH (Scene *, scene, &bmain->scenes) {
         if (scene->nodetree) {
           LISTBASE_FOREACH (bNode *, node, &scene->nodetree->nodes) {
-            if (node->type == CMP_NODE_CRYPTOMATTE) {
+            if (node->type == CMP_NODE_CRYPTOMATTE_LEGACY) {
               NodeCryptomatte *storage = (NodeCryptomatte *)node->storage;
               char *matte_id = storage->matte_id;
               if (matte_id == NULL || strlen(storage->matte_id) == 0) {
@@ -1821,6 +1896,119 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 12)) {
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          switch (sl->spacetype) {
+            case SPACE_SEQ: {
+              SpaceSeq *sseq = (SpaceSeq *)sl;
+              if (ELEM(sseq->render_size,
+                       SEQ_RENDER_SIZE_PROXY_100,
+                       SEQ_RENDER_SIZE_PROXY_75,
+                       SEQ_RENDER_SIZE_PROXY_50,
+                       SEQ_RENDER_SIZE_PROXY_25)) {
+                sseq->flag |= SEQ_USE_PROXIES;
+              }
+              if (sseq->render_size == SEQ_RENDER_SIZE_FULL) {
+                sseq->render_size = SEQ_RENDER_SIZE_PROXY_100;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          if (sl->spacetype == SPACE_SPREADSHEET) {
+            ListBase *regionbase = (sl == area->spacedata.first) ? &area->regionbase :
+                                                                   &sl->regionbase;
+            ARegion *new_footer = do_versions_add_region_if_not_found(
+                regionbase, RGN_TYPE_FOOTER, "footer for spreadsheet", RGN_TYPE_HEADER);
+            if (new_footer != NULL) {
+              new_footer->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP :
+                                                                        RGN_ALIGN_BOTTOM;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 13)) {
+    LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (STREQ(node->idname, "GeometryNodeSubdivideSmooth")) {
+            STRNCPY(node->idname, "GeometryNodeSubdivisionSurface");
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 14)) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "diff_fac")) {
+      LISTBASE_FOREACH (Light *, light, &bmain->lights) {
+        light->diff_fac = 1.0f;
+        light->volume_fac = 1.0f;
+      }
+    }
+
+    LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (node->type == GEO_NODE_ATTRIBUTE_FILL) {
+            node->custom2 = ATTR_DOMAIN_AUTO;
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 15)) {
+    LISTBASE_FOREACH (bNodeTree *, ntree, &bmain->nodetrees) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
+          if (STREQ(node->idname, "GeometryNodeMeshPlane")) {
+            STRNCPY(node->idname, "GeometryNodeMeshGrid");
+          }
+        }
+      }
+    }
+  }
+
+  if (!MAIN_VERSION_ATLEAST(bmain, 293, 16)) {
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_name(ntree, GEO_NODE_MESH_PRIMITIVE_GRID, "Size", "Size X");
+      }
+      FOREACH_NODETREE_END;
+    }
+
+    /* The CU_2D flag has been removed. */
+    LISTBASE_FOREACH (Curve *, cu, &bmain->curves) {
+#define CU_2D (1 << 3)
+      ListBase *nurbs = BKE_curve_nurbs_get(cu);
+      bool is_2d = true;
+
+      LISTBASE_FOREACH (Nurb *, nu, nurbs) {
+        if (nu->flag & CU_2D) {
+          nu->flag &= ~CU_2D;
+        }
+        else {
+          is_2d = false;
+        }
+      }
+#undef CU_2D
+      if (!is_2d && CU_IS_2D(cu)) {
+        cu->flag |= CU_3D;
+      }
+    }
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -1832,5 +2020,39 @@ void blo_do_versions_290(FileData *fd, Library *UNUSED(lib), Main *bmain)
    */
   {
     /* Keep this block, even when empty. */
+
+    FOREACH_NODETREE_BEGIN (bmain, ntree, id) {
+      if (ntree->type == NTREE_GEOMETRY) {
+        version_node_socket_name(ntree, GEO_NODE_VOLUME_TO_MESH, "Grid", "Density");
+      }
+    }
+    FOREACH_NODETREE_END;
+
+    if (!DNA_struct_elem_find(fd->filesdna, "bArmature", "float", "axes_position")) {
+      /* Convert the axes draw position to its old default (tip of bone). */
+      LISTBASE_FOREACH (struct bArmature *, arm, &bmain->armatures) {
+        arm->axes_position = 1.0;
+      }
+    }
+
+    /* Initialize the spread parameter for area lights*/
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "area_spread")) {
+      LISTBASE_FOREACH (Light *, la, &bmain->lights) {
+        la->area_spread = DEG2RADF(180.0f);
+      }
+    }
+
+    LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+      LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+        LISTBASE_FOREACH (SpaceLink *, sl, &area->spacedata) {
+          if (sl->spacetype == SPACE_NODE) {
+            SpaceNode *snode = (SpaceNode *)sl;
+            LISTBASE_FOREACH (bNodeTreePath *, path, &snode->treepath) {
+              STRNCPY(path->display_name, path->node_name);
+            }
+          }
+        }
+      }
+    }
   }
 }

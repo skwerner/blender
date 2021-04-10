@@ -20,6 +20,8 @@
 
 #include "IMB_colormanagement.h"
 
+namespace blender::compositor {
+
 ConvertBaseOperation::ConvertBaseOperation()
 {
   this->m_inputOperation = nullptr;
@@ -39,8 +41,8 @@ void ConvertBaseOperation::deinitExecution()
 
 ConvertValueToColorOperation::ConvertValueToColorOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertValueToColorOperation::executePixelSampled(float output[4],
@@ -58,8 +60,8 @@ void ConvertValueToColorOperation::executePixelSampled(float output[4],
 
 ConvertColorToValueOperation::ConvertColorToValueOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Value);
 }
 
 void ConvertColorToValueOperation::executePixelSampled(float output[4],
@@ -76,8 +78,8 @@ void ConvertColorToValueOperation::executePixelSampled(float output[4],
 
 ConvertColorToBWOperation::ConvertColorToBWOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Value);
 }
 
 void ConvertColorToBWOperation::executePixelSampled(float output[4],
@@ -94,8 +96,8 @@ void ConvertColorToBWOperation::executePixelSampled(float output[4],
 
 ConvertColorToVectorOperation::ConvertColorToVectorOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_VECTOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Vector);
 }
 
 void ConvertColorToVectorOperation::executePixelSampled(float output[4],
@@ -112,8 +114,8 @@ void ConvertColorToVectorOperation::executePixelSampled(float output[4],
 
 ConvertValueToVectorOperation::ConvertValueToVectorOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_VECTOR);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Vector);
 }
 
 void ConvertValueToVectorOperation::executePixelSampled(float output[4],
@@ -130,8 +132,8 @@ void ConvertValueToVectorOperation::executePixelSampled(float output[4],
 
 ConvertVectorToColorOperation::ConvertVectorToColorOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_VECTOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Vector);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertVectorToColorOperation::executePixelSampled(float output[4],
@@ -147,8 +149,8 @@ void ConvertVectorToColorOperation::executePixelSampled(float output[4],
 
 ConvertVectorToValueOperation::ConvertVectorToValueOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_VECTOR);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Vector);
+  this->addOutputSocket(DataType::Value);
 }
 
 void ConvertVectorToValueOperation::executePixelSampled(float output[4],
@@ -165,8 +167,8 @@ void ConvertVectorToValueOperation::executePixelSampled(float output[4],
 
 ConvertRGBToYCCOperation::ConvertRGBToYCCOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertRGBToYCCOperation::setMode(int mode)
@@ -207,8 +209,8 @@ void ConvertRGBToYCCOperation::executePixelSampled(float output[4],
 
 ConvertYCCToRGBOperation::ConvertYCCToRGBOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertYCCToRGBOperation::setMode(int mode)
@@ -253,8 +255,8 @@ void ConvertYCCToRGBOperation::executePixelSampled(float output[4],
 
 ConvertRGBToYUVOperation::ConvertRGBToYUVOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertRGBToYUVOperation::executePixelSampled(float output[4],
@@ -278,8 +280,8 @@ void ConvertRGBToYUVOperation::executePixelSampled(float output[4],
 
 ConvertYUVToRGBOperation::ConvertYUVToRGBOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertYUVToRGBOperation::executePixelSampled(float output[4],
@@ -303,8 +305,8 @@ void ConvertYUVToRGBOperation::executePixelSampled(float output[4],
 
 ConvertRGBToHSVOperation::ConvertRGBToHSVOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertRGBToHSVOperation::executePixelSampled(float output[4],
@@ -322,8 +324,8 @@ void ConvertRGBToHSVOperation::executePixelSampled(float output[4],
 
 ConvertHSVToRGBOperation::ConvertHSVToRGBOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertHSVToRGBOperation::executePixelSampled(float output[4],
@@ -344,8 +346,8 @@ void ConvertHSVToRGBOperation::executePixelSampled(float output[4],
 
 ConvertPremulToStraightOperation::ConvertPremulToStraightOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertPremulToStraightOperation::executePixelSampled(float output[4],
@@ -374,8 +376,8 @@ void ConvertPremulToStraightOperation::executePixelSampled(float output[4],
 
 ConvertStraightToPremulOperation::ConvertStraightToPremulOperation() : ConvertBaseOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Color);
 }
 
 void ConvertStraightToPremulOperation::executePixelSampled(float output[4],
@@ -399,8 +401,8 @@ void ConvertStraightToPremulOperation::executePixelSampled(float output[4],
 
 SeparateChannelOperation::SeparateChannelOperation()
 {
-  this->addInputSocket(COM_DT_COLOR);
-  this->addOutputSocket(COM_DT_VALUE);
+  this->addInputSocket(DataType::Color);
+  this->addOutputSocket(DataType::Value);
   this->m_inputOperation = nullptr;
 }
 void SeparateChannelOperation::initExecution()
@@ -427,11 +429,11 @@ void SeparateChannelOperation::executePixelSampled(float output[4],
 
 CombineChannelsOperation::CombineChannelsOperation()
 {
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addInputSocket(COM_DT_VALUE);
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addInputSocket(DataType::Value);
+  this->addOutputSocket(DataType::Color);
   this->setResolutionInputSocketIndex(0);
   this->m_inputChannel1Operation = nullptr;
   this->m_inputChannel2Operation = nullptr;
@@ -478,3 +480,5 @@ void CombineChannelsOperation::executePixelSampled(float output[4],
     output[3] = input[0];
   }
 }
+
+}  // namespace blender::compositor

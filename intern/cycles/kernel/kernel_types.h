@@ -1441,9 +1441,9 @@ typedef struct KernelAreaLight {
   float axisu[3];
   float invarea;
   float axisv[3];
-  float pad1;
+  float tan_spread;
   float dir[3];
-  float pad2;
+  float normalize_spread;
 } KernelAreaLight;
 
 typedef struct KernelDistantLight {

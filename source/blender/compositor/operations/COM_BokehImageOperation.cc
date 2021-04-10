@@ -19,9 +19,11 @@
 #include "COM_BokehImageOperation.h"
 #include "BLI_math.h"
 
+namespace blender::compositor {
+
 BokehImageOperation::BokehImageOperation()
 {
-  this->addOutputSocket(COM_DT_COLOR);
+  this->addOutputSocket(DataType::Color);
   this->m_deleteData = false;
 }
 void BokehImageOperation::initExecution()
@@ -124,3 +126,5 @@ void BokehImageOperation::determineResolution(unsigned int resolution[2],
   resolution[0] = COM_BLUR_BOKEH_PIXELS;
   resolution[1] = COM_BLUR_BOKEH_PIXELS;
 }
+
+}  // namespace blender::compositor

@@ -19,11 +19,13 @@
 #include "COM_ColorMatteOperation.h"
 #include "BLI_math.h"
 
+namespace blender::compositor {
+
 ColorMatteOperation::ColorMatteOperation()
 {
-  addInputSocket(COM_DT_COLOR);
-  addInputSocket(COM_DT_COLOR);
-  addOutputSocket(COM_DT_VALUE);
+  addInputSocket(DataType::Color);
+  addInputSocket(DataType::Color);
+  addOutputSocket(DataType::Value);
 
   this->m_inputImageProgram = nullptr;
   this->m_inputKeyProgram = nullptr;
@@ -79,3 +81,5 @@ void ColorMatteOperation::executePixelSampled(float output[4],
     output[0] = inColor[3]; /* make pixel just as transparent as it was before */
   }
 }
+
+}  // namespace blender::compositor

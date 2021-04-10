@@ -16,6 +16,8 @@
 
 #include "NOD_derived_node_tree.hh"
 
+#include "BLI_dot_export.hh"
+
 namespace blender::nodes {
 
 /* Construct a new derived node tree for a given root node tree. The generated derived node tree
@@ -38,6 +40,7 @@ DTreeContext &DerivedNodeTree::construct_context_recursively(DTreeContext *paren
   DTreeContext &context = *allocator_.construct<DTreeContext>().release();
   context.parent_context_ = parent_context;
   context.parent_node_ = parent_node;
+  context.derived_tree_ = this;
   context.tree_ = &get_tree_ref_from_map(node_tree_refs, btree);
   used_node_tree_refs_.add(context.tree_);
 
@@ -165,107 +168,210 @@ DInputSocket DOutputSocket::get_active_corresponding_group_output_socket() const
   return {};
 }
 
-/* Call the given callback for every "real" origin socket. "Real" means that reroutes, muted nodes
+/* Call `origin_fn` for every "real" origin socket. "Real" means that reroutes, muted nodes
  * and node groups are handled by this function. Origin sockets are ones where a node gets its
  * inputs from. */
-void DInputSocket::foreach_origin_socket(FunctionRef<void(DSocket)> callback) const
+void DInputSocket::foreach_origin_socket(FunctionRef<void(DSocket)> origin_fn) const
 {
   BLI_assert(*this);
-  for (const OutputSocketRef *linked_socket : socket_ref_->as_input().linked_sockets()) {
+  for (const OutputSocketRef *linked_socket : socket_ref_->as_input().logically_linked_sockets()) {
     const NodeRef &linked_node = linked_socket->node();
     DOutputSocket linked_dsocket{context_, linked_socket};
 
-    if (linked_node.is_muted()) {
-      /* If the node is muted, follow the internal links of the node. */
-      for (const InternalLinkRef *internal_link : linked_node.internal_links()) {
-        if (&internal_link->to() == linked_socket) {
-          DInputSocket input_of_muted_node{context_, &internal_link->from()};
-          input_of_muted_node.foreach_origin_socket(callback);
-        }
-      }
-    }
-    else if (linked_node.is_group_input_node()) {
+    if (linked_node.is_group_input_node()) {
       if (context_->is_root()) {
         /* This is a group input in the root node group. */
-        callback(linked_dsocket);
+        origin_fn(linked_dsocket);
       }
       else {
         DInputSocket socket_in_parent_group = linked_dsocket.get_corresponding_group_node_input();
-        if (socket_in_parent_group->is_linked()) {
+        if (socket_in_parent_group->is_logically_linked()) {
           /* Follow the links coming into the corresponding socket on the parent group node. */
-          socket_in_parent_group.foreach_origin_socket(callback);
+          socket_in_parent_group.foreach_origin_socket(origin_fn);
         }
         else {
           /* The corresponding input on the parent group node is not connected. Therefore, we use
            * the value of that input socket directly. */
-          callback(socket_in_parent_group);
+          origin_fn(socket_in_parent_group);
         }
       }
     }
     else if (linked_node.is_group_node()) {
       DInputSocket socket_in_group = linked_dsocket.get_active_corresponding_group_output_socket();
       if (socket_in_group) {
-        if (socket_in_group->is_linked()) {
+        if (socket_in_group->is_logically_linked()) {
           /* Follow the links coming into the group output node of the child node group. */
-          socket_in_group.foreach_origin_socket(callback);
+          socket_in_group.foreach_origin_socket(origin_fn);
         }
         else {
           /* The output of the child node group is not connected, so we have to get the value from
            * that socket. */
-          callback(socket_in_group);
+          origin_fn(socket_in_group);
         }
       }
     }
     else {
       /* The normal case: just use the value of a linked output socket. */
-      callback(linked_dsocket);
+      origin_fn(linked_dsocket);
     }
   }
 }
 
-/* Calls the given callback for every "real" target socket. "Real" means that reroutes, muted nodes
+/* Calls `target_fn` for every "real" target socket. "Real" means that reroutes, muted nodes
  * and node groups are handled by this function. Target sockets are on the nodes that use the value
- * from this socket.   */
-void DOutputSocket::foreach_target_socket(FunctionRef<void(DInputSocket)> callback) const
+ * from this socket. The `skipped_fn` function is called for sockets that have been skipped during
+ * the search for target sockets (e.g. reroutes).  */
+void DOutputSocket::foreach_target_socket(FunctionRef<void(DInputSocket)> target_fn,
+                                          FunctionRef<void(DSocket)> skipped_fn) const
 {
-  for (const InputSocketRef *linked_socket : socket_ref_->as_output().linked_sockets()) {
+  for (const SocketRef *skipped_socket : socket_ref_->logically_linked_skipped_sockets()) {
+    skipped_fn.call_safe({context_, skipped_socket});
+  }
+  for (const InputSocketRef *linked_socket : socket_ref_->as_output().logically_linked_sockets()) {
     const NodeRef &linked_node = linked_socket->node();
     DInputSocket linked_dsocket{context_, linked_socket};
 
-    if (linked_node.is_muted()) {
-      /* If the target node is muted, follow its internal links. */
-      for (const InternalLinkRef *internal_link : linked_node.internal_links()) {
-        if (&internal_link->from() == linked_socket) {
-          DOutputSocket output_of_muted_node{context_, &internal_link->to()};
-          output_of_muted_node.foreach_target_socket(callback);
-        }
-      }
-    }
-    else if (linked_node.is_group_output_node()) {
+    if (linked_node.is_group_output_node()) {
       if (context_->is_root()) {
         /* This is a group output in the root node group. */
-        callback(linked_dsocket);
+        target_fn(linked_dsocket);
       }
       else {
         /* Follow the links going out of the group node in the parent node group. */
         DOutputSocket socket_in_parent_group =
             linked_dsocket.get_corresponding_group_node_output();
-        socket_in_parent_group.foreach_target_socket(callback);
+        skipped_fn.call_safe(linked_dsocket);
+        skipped_fn.call_safe(socket_in_parent_group);
+        socket_in_parent_group.foreach_target_socket(target_fn, skipped_fn);
       }
     }
     else if (linked_node.is_group_node()) {
       /* Follow the links within the nested node group. */
       Vector<DOutputSocket> sockets_in_group =
           linked_dsocket.get_corresponding_group_input_sockets();
+      skipped_fn.call_safe(linked_dsocket);
       for (DOutputSocket socket_in_group : sockets_in_group) {
-        socket_in_group.foreach_target_socket(callback);
+        skipped_fn.call_safe(socket_in_group);
+        socket_in_group.foreach_target_socket(target_fn, skipped_fn);
       }
     }
     else {
       /* The normal case: just use the linked input socket as target. */
-      callback(linked_dsocket);
+      target_fn(linked_dsocket);
     }
   }
+}
+
+/* Each nested node group gets its own cluster. Just as node groups, clusters can be nested. */
+static dot::Cluster *get_dot_cluster_for_context(
+    dot::DirectedGraph &digraph,
+    const DTreeContext *context,
+    Map<const DTreeContext *, dot::Cluster *> &dot_clusters)
+{
+  return dot_clusters.lookup_or_add_cb(context, [&]() -> dot::Cluster * {
+    const DTreeContext *parent_context = context->parent_context();
+    if (parent_context == nullptr) {
+      return nullptr;
+    }
+    dot::Cluster *parent_cluster = get_dot_cluster_for_context(
+        digraph, parent_context, dot_clusters);
+    std::string cluster_name = context->tree().name() + " / " + context->parent_node()->name();
+    dot::Cluster &cluster = digraph.new_cluster(cluster_name);
+    cluster.set_parent_cluster(parent_cluster);
+    return &cluster;
+  });
+}
+
+/* Generates a graph in dot format. The generated graph has all node groups inlined. */
+std::string DerivedNodeTree::to_dot() const
+{
+  dot::DirectedGraph digraph;
+  digraph.set_rankdir(dot::Attr_rankdir::LeftToRight);
+
+  Map<const DTreeContext *, dot::Cluster *> dot_clusters;
+  Map<DInputSocket, dot::NodePort> dot_input_sockets;
+  Map<DOutputSocket, dot::NodePort> dot_output_sockets;
+
+  this->foreach_node([&](DNode node) {
+    /* Ignore nodes that should not show up in the final output. */
+    if (node->is_muted() || node->is_group_node() || node->is_reroute_node() || node->is_frame()) {
+      return;
+    }
+    if (!node.context()->is_root()) {
+      if (node->is_group_input_node() || node->is_group_output_node()) {
+        return;
+      }
+    }
+
+    dot::Cluster *cluster = get_dot_cluster_for_context(digraph, node.context(), dot_clusters);
+
+    dot::Node &dot_node = digraph.new_node("");
+    dot_node.set_parent_cluster(cluster);
+    dot_node.set_background_color("white");
+
+    Vector<std::string> input_names;
+    Vector<std::string> output_names;
+    for (const InputSocketRef *socket : node->inputs()) {
+      if (socket->is_available()) {
+        input_names.append(socket->name());
+      }
+    }
+    for (const OutputSocketRef *socket : node->outputs()) {
+      if (socket->is_available()) {
+        output_names.append(socket->name());
+      }
+    }
+
+    dot::NodeWithSocketsRef dot_node_with_sockets = dot::NodeWithSocketsRef(
+        dot_node, node->name(), input_names, output_names);
+
+    int input_index = 0;
+    for (const InputSocketRef *socket : node->inputs()) {
+      if (socket->is_available()) {
+        dot_input_sockets.add_new(DInputSocket{node.context(), socket},
+                                  dot_node_with_sockets.input(input_index));
+        input_index++;
+      }
+    }
+    int output_index = 0;
+    for (const OutputSocketRef *socket : node->outputs()) {
+      if (socket->is_available()) {
+        dot_output_sockets.add_new(DOutputSocket{node.context(), socket},
+                                   dot_node_with_sockets.output(output_index));
+        output_index++;
+      }
+    }
+  });
+
+  /* Floating inputs are used for example to visualize unlinked group node inputs. */
+  Map<DSocket, dot::Node *> dot_floating_inputs;
+
+  for (const auto item : dot_input_sockets.items()) {
+    DInputSocket to_socket = item.key;
+    dot::NodePort dot_to_port = item.value;
+    to_socket.foreach_origin_socket([&](DSocket from_socket) {
+      if (from_socket->is_output()) {
+        dot::NodePort *dot_from_port = dot_output_sockets.lookup_ptr(DOutputSocket(from_socket));
+        if (dot_from_port != nullptr) {
+          digraph.new_edge(*dot_from_port, dot_to_port);
+          return;
+        }
+      }
+      dot::Node &dot_node = *dot_floating_inputs.lookup_or_add_cb(from_socket, [&]() {
+        dot::Node &dot_node = digraph.new_node(from_socket->name());
+        dot_node.set_background_color("white");
+        dot_node.set_shape(dot::Attr_shape::Ellipse);
+        dot_node.set_parent_cluster(
+            get_dot_cluster_for_context(digraph, from_socket.context(), dot_clusters));
+        return &dot_node;
+      });
+      digraph.new_edge(dot_node, dot_to_port);
+    });
+  }
+
+  digraph.set_random_cluster_bgcolors();
+
+  return digraph.to_dot_string();
 }
 
 }  // namespace blender::nodes

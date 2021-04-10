@@ -311,8 +311,8 @@ static void object_free_data(ID *id)
   /* Free runtime curves data. */
   if (ob->runtime.curve_cache) {
     BKE_curve_bevelList_free(&ob->runtime.curve_cache->bev);
-    if (ob->runtime.curve_cache->path) {
-      free_path(ob->runtime.curve_cache->path);
+    if (ob->runtime.curve_cache->anim_path_accum_length) {
+      MEM_freeN((void *)ob->runtime.curve_cache->anim_path_accum_length);
     }
     MEM_freeN(ob->runtime.curve_cache);
     ob->runtime.curve_cache = NULL;
@@ -1188,8 +1188,8 @@ void BKE_object_free_curve_cache(Object *ob)
   if (ob->runtime.curve_cache) {
     BKE_displist_free(&ob->runtime.curve_cache->disp);
     BKE_curve_bevelList_free(&ob->runtime.curve_cache->bev);
-    if (ob->runtime.curve_cache->path) {
-      free_path(ob->runtime.curve_cache->path);
+    if (ob->runtime.curve_cache->anim_path_accum_length) {
+      MEM_freeN((void *)ob->runtime.curve_cache->anim_path_accum_length);
     }
     BKE_nurbList_free(&ob->runtime.curve_cache->deformed_nurbs);
     MEM_freeN(ob->runtime.curve_cache);
@@ -1359,8 +1359,9 @@ static bool object_modifier_type_copy_check(ModifierType md_type)
   return !ELEM(md_type, eModifierType_Hook, eModifierType_Collision);
 }
 
-/** Find a `psys` matching given `psys_src` in `ob_dst` (i.e. sharing the same ParticleSettings
- * ID), or add one, and return valid `psys` from `ob_dst`.
+/**
+ * Find a `psys` matching given `psys_src` in `ob_dst` (i.e. sharing the same ParticleSettings ID),
+ * or add one, and return valid `psys` from `ob_dst`.
  *
  * \note Order handling is fairly weak here. This code assumes that it is called **before** the
  * modifier using the psys is actually copied, and that this copied modifier will be added at the
@@ -1392,7 +1393,8 @@ static ParticleSystem *object_copy_modifier_particle_system_ensure(Main *bmain,
   return psys_dst;
 }
 
-/** Copy a single modifier.
+/**
+ * Copy a single modifier.
  *
  * \note **Do not** use this function to copy a whole modifier stack (see note below too). Use
  * `BKE_object_modifier_stack_copy` instead.
@@ -1400,7 +1402,8 @@ static ParticleSystem *object_copy_modifier_particle_system_ensure(Main *bmain,
  * \note Complex modifiers relaying on other data (like e.g. dynamic paint or fluid using particle
  * systems) are not always 100% 'correctly' copied here, since we have to use heuristics to decide
  * which particle system to use or add in `ob_dst`, and it's placement in the stack, etc. If used
- * more than once, this function should preferably be called in stack order. */
+ * more than once, this function should preferably be called in stack order.
+ */
 bool BKE_object_copy_modifier(
     Main *bmain, Scene *scene, Object *ob_dst, const Object *ob_src, ModifierData *md_src)
 {
@@ -1500,10 +1503,12 @@ bool BKE_object_copy_modifier(
   return true;
 }
 
-/** Copy a single GPencil modifier.
+/**
+ * Copy a single GPencil modifier.
  *
  * \note **Do not** use this function to copy a whole modifier stack. Use
- * `BKE_object_modifier_stack_copy` instead. */
+ * `BKE_object_modifier_stack_copy` instead.
+ */
 bool BKE_object_copy_gpencil_modifier(struct Object *ob_dst, GpencilModifierData *gmd_src)
 {
   BLI_assert(ob_dst->type == OB_GPENCIL);
@@ -1756,6 +1761,10 @@ void BKE_object_free_derived_caches(Object *ob)
     BKE_geometry_set_free(ob->runtime.geometry_set_eval);
     ob->runtime.geometry_set_eval = NULL;
   }
+  if (ob->runtime.geometry_set_preview != NULL) {
+    BKE_geometry_set_free(ob->runtime.geometry_set_preview);
+    ob->runtime.geometry_set_preview = NULL;
+  }
 }
 
 void BKE_object_free_caches(Object *object)
@@ -1804,6 +1813,18 @@ void BKE_object_free_caches(Object *object)
   if (update_flag != 0) {
     DEG_id_tag_update(&object->id, update_flag);
   }
+}
+
+/* Can be called from multiple threads. */
+void BKE_object_set_preview_geometry_set(Object *ob, struct GeometrySet *geometry_set)
+{
+  static ThreadMutex mutex = BLI_MUTEX_INITIALIZER;
+  BLI_mutex_lock(&mutex);
+  if (ob->runtime.geometry_set_preview != NULL) {
+    BKE_geometry_set_free(ob->runtime.geometry_set_preview);
+  }
+  ob->runtime.geometry_set_preview = geometry_set;
+  BLI_mutex_unlock(&mutex);
 }
 
 /**
@@ -1858,7 +1879,7 @@ bool BKE_object_data_is_in_editmode(const ID *id)
     case ID_AR:
       return ((const bArmature *)id)->edbo != NULL;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       return false;
   }
 }
@@ -1905,7 +1926,7 @@ char *BKE_object_data_editmode_flush_ptr_get(struct ID *id)
       return &arm->needs_flush_to_id;
     }
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       return NULL;
   }
   return NULL;
@@ -2620,11 +2641,7 @@ Object *BKE_object_duplicate(Main *bmain,
 
   Material ***matarar;
 
-  Object *obn = (Object *)BKE_id_copy(bmain, &ob->id);
-  id_us_min(&obn->id);
-  if (is_subprocess) {
-    ID_NEW_SET(ob, obn);
-  }
+  Object *obn = (Object *)BKE_id_copy_for_duplicate(bmain, &ob->id, dupflag);
 
   /* 0 == full linked. */
   if (dupflag == 0) {
@@ -3248,7 +3265,7 @@ static bool ob_parcurve(Object *ob, Object *par, float r_mat[4][4])
   if (par->runtime.curve_cache == NULL) {
     return false;
   }
-  if (par->runtime.curve_cache->path == NULL) {
+  if (par->runtime.curve_cache->anim_path_accum_length == NULL) {
     return false;
   }
 
@@ -3264,12 +3281,12 @@ static bool ob_parcurve(Object *ob, Object *par, float r_mat[4][4])
   else {
     ctime = cu->ctime;
   }
-  CLAMP(ctime, 0.0f, 1.0f);
 
   unit_m4(r_mat);
 
   /* vec: 4 items! */
-  if (where_on_path(par, ctime, vec, dir, (cu->flag & CU_FOLLOW) ? quat : NULL, &radius, NULL)) {
+  if (BKE_where_on_path(
+          par, ctime, vec, dir, (cu->flag & CU_FOLLOW) ? quat : NULL, &radius, NULL)) {
     if (cu->flag & CU_FOLLOW) {
       quat_apply_track(quat, ob->trackflag, ob->upflag);
       normalize_qt(quat);
@@ -4357,8 +4374,6 @@ void BKE_object_handle_update_ex(Depsgraph *depsgraph,
     BKE_object_handle_data_update(depsgraph, scene, ob);
   }
 
-  ob->id.recalc &= ID_RECALC_ALL;
-
   object_handle_update_proxy(depsgraph, scene, ob, do_proxy_update);
 }
 
@@ -4476,6 +4491,37 @@ Mesh *BKE_object_get_original_mesh(Object *object)
   BLI_assert((result->id.tag & (LIB_TAG_COPIED_ON_WRITE | LIB_TAG_COPIED_ON_WRITE_EVAL_RESULT)) ==
              0);
   return result;
+}
+
+Lattice *BKE_object_get_lattice(const Object *object)
+{
+  ID *data = object->data;
+  if (data == NULL || GS(data->name) != ID_LT) {
+    return NULL;
+  }
+
+  Lattice *lt = (Lattice *)data;
+  if (lt->editlatt) {
+    return lt->editlatt->latt;
+  }
+
+  return lt;
+}
+
+Lattice *BKE_object_get_evaluated_lattice(const Object *object)
+{
+  ID *data_eval = object->runtime.data_eval;
+
+  if (data_eval == NULL || GS(data_eval->name) != ID_LT) {
+    return NULL;
+  }
+
+  Lattice *lt_eval = (Lattice *)data_eval;
+  if (lt_eval->editlatt) {
+    return lt_eval->editlatt->latt;
+  }
+
+  return lt_eval;
 }
 
 static int pc_cmp(const void *a, const void *b)
@@ -4885,7 +4931,7 @@ static bool object_deforms_in_time(Object *object)
   return object_moves_in_time(object);
 }
 
-static bool constructive_modifier_is_deform_modified(ModifierData *md)
+static bool constructive_modifier_is_deform_modified(Object *ob, ModifierData *md)
 {
   /* TODO(sergey): Consider generalizing this a bit so all modifier logic
    * is concentrated in MOD_{modifier}.c file,
@@ -4900,7 +4946,8 @@ static bool constructive_modifier_is_deform_modified(ModifierData *md)
   }
   if (md->type == eModifierType_Mirror) {
     MirrorModifierData *mmd = (MirrorModifierData *)md;
-    return mmd->mirror_ob != NULL && object_moves_in_time(mmd->mirror_ob);
+    return mmd->mirror_ob != NULL &&
+           (object_moves_in_time(mmd->mirror_ob) || object_moves_in_time(ob));
   }
   if (md->type == eModifierType_Screw) {
     ScrewModifierData *smd = (ScrewModifierData *)md;
@@ -4984,7 +5031,7 @@ int BKE_object_is_deform_modified(Scene *scene, Object *ob)
     bool can_deform = mti->type == eModifierTypeType_OnlyDeform || is_modifier_animated;
 
     if (!can_deform) {
-      can_deform = constructive_modifier_is_deform_modified(md);
+      can_deform = constructive_modifier_is_deform_modified(ob, md);
     }
 
     if (can_deform) {

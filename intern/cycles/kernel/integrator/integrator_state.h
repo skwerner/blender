@@ -47,6 +47,7 @@
  * Can solve it with more macros if we encouter it, but rather ugly so postpone for now.
  */
 
+#include "kernel/kernel_globals.h"
 #include "kernel/kernel_types.h"
 
 #include "util/util_types.h"

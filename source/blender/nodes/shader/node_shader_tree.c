@@ -388,7 +388,7 @@ static void ntree_shader_groups_expand_inputs(bNodeTree *localtree)
 
     if (is_group || is_group_output) {
       LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
-        if (socket->link != NULL) {
+        if (socket->link != NULL && !(socket->link->flag & NODE_LINK_MUTED)) {
           bNodeLink *link = socket->link;
           /* Fix the case where the socket is actually converting the data. (see T71374)
            * We only do the case of lossy conversion to float.*/
@@ -557,7 +557,7 @@ static bool ntree_shader_has_displacement(bNodeTree *ntree,
     /* Non-cycles node is used as an output. */
     return false;
   }
-  if (displacement->link != NULL) {
+  if ((displacement->link != NULL) && !(displacement->link->flag & NODE_LINK_MUTED)) {
     *r_node = displacement->link->fromnode;
     *r_socket = displacement->link->fromsock;
     *r_link = displacement->link;
@@ -1027,31 +1027,4 @@ void ntreeShaderEndExecTree(bNodeTreeExec *exec)
     /* XXX clear nodetree backpointer to exec data, same problem as noted in ntreeBeginExecTree */
     ntree->execdata = NULL;
   }
-}
-
-/* TODO: left over from Blender Internal, could reuse for new texture nodes. */
-bool ntreeShaderExecTree(bNodeTree *ntree, int thread)
-{
-  ShaderCallData scd;
-  bNodeThreadStack *nts = NULL;
-  bNodeTreeExec *exec = ntree->execdata;
-  int compat;
-
-  /* ensure execdata is only initialized once */
-  if (!exec) {
-    BLI_thread_lock(LOCK_NODES);
-    if (!ntree->execdata) {
-      ntree->execdata = ntreeShaderBeginExecTree(ntree);
-    }
-    BLI_thread_unlock(LOCK_NODES);
-
-    exec = ntree->execdata;
-  }
-
-  nts = ntreeGetThreadStack(exec, thread);
-  compat = ntreeExecThreadNodes(exec, nts, &scd, thread);
-  ntreeReleaseThreadStack(nts);
-
-  /* if compat is zero, it has been using non-compatible nodes */
-  return compat;
 }

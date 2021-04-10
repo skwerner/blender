@@ -144,8 +144,21 @@ bool ED_view3d_camera_to_view_selected(struct Main *bmain,
 void ED_view3d_lastview_store(struct RegionView3D *rv3d);
 
 /* Depth buffer */
-void ED_view3d_depth_update(struct ARegion *region);
-float ED_view3d_depth_read_cached(const struct ViewContext *vc, const int mval[2]);
+typedef enum {
+  V3D_DEPTH_NO_GPENCIL = 0,
+  V3D_DEPTH_GPENCIL_ONLY,
+  V3D_DEPTH_OBJECT_ONLY,
+} eV3DDepthOverrideMode;
+void ED_view3d_depth_override(struct Depsgraph *depsgraph,
+                              struct ARegion *region,
+                              struct View3D *v3d,
+                              struct Object *obact,
+                              eV3DDepthOverrideMode mode,
+                              bool update_cache);
+bool ED_view3d_depth_read_cached(const ViewDepths *vd,
+                                 const int mval[2],
+                                 int margin,
+                                 float *r_depth);
 bool ED_view3d_depth_read_cached_normal(const ViewContext *vc,
                                         const int mval[2],
                                         float r_normal[3]);
@@ -163,14 +176,16 @@ typedef enum {
   V3D_PROJ_RET_OK = 0,
   /** can't avoid this when in perspective mode, (can't avoid) */
   V3D_PROJ_RET_CLIP_NEAR = 1,
+  /** After clip_end. */
+  V3D_PROJ_RET_CLIP_FAR = 2,
   /** so close to zero we can't apply a perspective matrix usefully */
-  V3D_PROJ_RET_CLIP_ZERO = 2,
+  V3D_PROJ_RET_CLIP_ZERO = 3,
   /** bounding box clip - RV3D_CLIPPING */
-  V3D_PROJ_RET_CLIP_BB = 3,
+  V3D_PROJ_RET_CLIP_BB = 4,
   /** outside window bounds */
-  V3D_PROJ_RET_CLIP_WIN = 4,
+  V3D_PROJ_RET_CLIP_WIN = 5,
   /** outside range (mainly for short), (can't avoid) */
-  V3D_PROJ_RET_OVERFLOW = 5,
+  V3D_PROJ_RET_OVERFLOW = 6,
 } eV3DProjStatus;
 
 /* some clipping tests are optional */
@@ -179,14 +194,14 @@ typedef enum {
   V3D_PROJ_TEST_CLIP_BB = (1 << 0),
   V3D_PROJ_TEST_CLIP_WIN = (1 << 1),
   V3D_PROJ_TEST_CLIP_NEAR = (1 << 2),
-  V3D_PROJ_TEST_CLIP_ZERO = (1 << 3),
+  V3D_PROJ_TEST_CLIP_FAR = (1 << 3),
+  V3D_PROJ_TEST_CLIP_ZERO = (1 << 4),
 } eV3DProjTest;
 
 #define V3D_PROJ_TEST_CLIP_DEFAULT \
   (V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_NEAR)
 #define V3D_PROJ_TEST_ALL \
-  (V3D_PROJ_TEST_CLIP_BB | V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_NEAR | \
-   V3D_PROJ_TEST_CLIP_ZERO)
+  (V3D_PROJ_TEST_CLIP_DEFAULT | V3D_PROJ_TEST_CLIP_FAR | V3D_PROJ_TEST_CLIP_ZERO)
 
 /* view3d_iterators.c */
 
@@ -479,11 +494,6 @@ bool ED_view3d_autodist(struct Depsgraph *depsgraph,
                         const bool alphaoverride,
                         const float fallback_depth_pt[3]);
 
-/* Only draw so #ED_view3d_autodist_simple can be called many times after. */
-void ED_view3d_autodist_init(struct Depsgraph *depsgraph,
-                             struct ARegion *region,
-                             struct View3D *v3d,
-                             int mode);
 bool ED_view3d_autodist_simple(struct ARegion *region,
                                const int mval[2],
                                float mouse_worldloc[3],

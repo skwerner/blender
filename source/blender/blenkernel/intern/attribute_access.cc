@@ -31,7 +31,6 @@
 #include "BLI_color.hh"
 #include "BLI_float2.hh"
 #include "BLI_span.hh"
-#include "BLI_threads.h"
 
 #include "CLG_log.h"
 
@@ -300,7 +299,7 @@ static int attribute_data_type_complexity(const CustomDataType data_type)
 #endif
     default:
       /* Only accept "generic" custom data types used by the attribute system. */
-      BLI_assert(false);
+      BLI_assert_unreachable();
       return 0;
   }
 }
@@ -332,7 +331,7 @@ static int attribute_domain_priority(const AttributeDomain domain)
     case ATTR_DOMAIN_CURVE:
       return 0;
 #endif
-    case ATTR_DOMAIN_POLYGON:
+    case ATTR_DOMAIN_FACE:
       return 1;
     case ATTR_DOMAIN_EDGE:
       return 2;
@@ -342,7 +341,7 @@ static int attribute_domain_priority(const AttributeDomain domain)
       return 4;
     default:
       /* Domain not supported in nodes yet. */
-      BLI_assert(false);
+      BLI_assert_unreachable();
       return 0;
   }
 }
@@ -373,10 +372,6 @@ ReadAttributePtr BuiltinCustomDataLayerProvider::try_get_for_read(
   const CustomData *custom_data = custom_data_access_.get_const_custom_data(component);
   if (custom_data == nullptr) {
     return {};
-  }
-
-  if (update_on_read_ != nullptr) {
-    update_on_read_(component);
   }
 
   const int domain_size = component.attribute_domain_size(domain_);
@@ -679,9 +674,10 @@ bool NamedLegacyCustomDataProvider::foreach_attribute(
   return true;
 }
 
-void NamedLegacyCustomDataProvider::supported_domains(Vector<AttributeDomain> &r_domains) const
+void NamedLegacyCustomDataProvider::foreach_domain(
+    const FunctionRef<void(AttributeDomain)> callback) const
 {
-  r_domains.append_non_duplicates(domain_);
+  callback(domain_);
 }
 
 }  // namespace blender::bke
@@ -707,7 +703,6 @@ bool GeometryComponent::attribute_domain_supported(const AttributeDomain domain)
 
 int GeometryComponent::attribute_domain_size(const AttributeDomain UNUSED(domain)) const
 {
-  BLI_assert(false);
   return 0;
 }
 
@@ -827,12 +822,16 @@ Set<std::string> GeometryComponent::attribute_names() const
   return attributes;
 }
 
-void GeometryComponent::attribute_foreach(const AttributeForeachCallback callback) const
+/**
+ * \return False if the callback explicitly returned false at any point, otherwise true,
+ * meaning the callback made it all the way through.
+ */
+bool GeometryComponent::attribute_foreach(const AttributeForeachCallback callback) const
 {
   using namespace blender::bke;
   const ComponentAttributeProviders *providers = this->get_attribute_providers();
   if (providers == nullptr) {
-    return;
+    return true;
   }
 
   /* Keep track handled attribute names to make sure that we do not return the same name twice. */
@@ -843,7 +842,7 @@ void GeometryComponent::attribute_foreach(const AttributeForeachCallback callbac
     if (provider->exists(*this)) {
       AttributeMetaData meta_data{provider->domain(), provider->data_type()};
       if (!callback(provider->name(), meta_data)) {
-        return;
+        return false;
       }
       handled_attribute_names.add_new(provider->name());
     }
@@ -857,9 +856,11 @@ void GeometryComponent::attribute_foreach(const AttributeForeachCallback callbac
           return true;
         });
     if (!continue_loop) {
-      return;
+      return false;
     }
   }
+
+  return true;
 }
 
 bool GeometryComponent::attribute_exists(const blender::StringRef attribute_name) const
@@ -898,7 +899,7 @@ ReadAttributePtr GeometryComponent::attribute_try_get_for_read(
     return {};
   }
 
-  if (attribute->domain() != domain) {
+  if (domain != ATTR_DOMAIN_AUTO && attribute->domain() != domain) {
     attribute = this->attribute_try_adapt_domain(std::move(attribute), domain);
     if (!attribute) {
       return {};

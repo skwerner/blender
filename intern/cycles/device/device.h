@@ -73,6 +73,7 @@ class DeviceInfo {
   string id; /* used for user preferences, should stay fixed with changing hardware config */
   int num;
   bool display_device;        /* GPU is used as a display device. */
+  bool has_nanovdb;           /* Support NanoVDB volumes. */
   bool has_half_images;       /* Support half-float textures. */
   bool has_volume_decoupled;  /* Decoupled volume shading. */
   bool has_osl;               /* Support Open Shading Language. */
@@ -92,6 +93,7 @@ class DeviceInfo {
     cpu_threads = 0;
     display_device = false;
     has_half_images = false;
+    has_nanovdb = false;
     has_volume_decoupled = false;
     has_osl = false;
     has_profiling = false;

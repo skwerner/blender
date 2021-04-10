@@ -127,6 +127,14 @@ static void rna_MaterialGpencil_update(Main *bmain, Scene *scene, PointerRNA *pt
   WM_main_add_notifier(NC_GPENCIL | ND_DATA, ma);
 }
 
+static void rna_MaterialLineArt_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
+{
+  Material *ma = (Material *)ptr->owner_id;
+  /* Need to tag geometry for line art modifier updates. */
+  DEG_id_tag_update(&ma->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_MATERIAL | ND_SHADING_DRAW, ma);
+}
+
 static void rna_Material_draw_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
   Material *ma = (Material *)ptr->owner_id;
@@ -671,6 +679,29 @@ static void rna_def_material_greasepencil(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Is Fill Visible", "True when opacity of fill is set high enough to be visible");
 }
+static void rna_def_material_lineart(BlenderRNA *brna)
+{
+  StructRNA *srna;
+  PropertyRNA *prop;
+
+  srna = RNA_def_struct(brna, "MaterialLineArt", NULL);
+  RNA_def_struct_sdna(srna, "MaterialLineArt");
+  RNA_def_struct_ui_text(srna, "Material Line Art", "");
+
+  prop = RNA_def_property(srna, "use_transparency", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_default(prop, 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "flags", LRT_MATERIAL_TRANSPARENCY_ENABLED);
+  RNA_def_property_ui_text(
+      prop, "Use Transparency", "Use transparency mask from this material in line art");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialLineArt_update");
+
+  prop = RNA_def_property(srna, "use_transparency_mask", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_default(prop, 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "transparency_mask", 1);
+  RNA_def_property_array(prop, 8);
+  RNA_def_property_ui_text(prop, "Mask", "");
+  RNA_def_property_update(prop, NC_GPENCIL | ND_SHADING, "rna_MaterialLineArt_update");
+}
 
 void RNA_def_material(BlenderRNA *brna)
 {
@@ -836,7 +867,13 @@ void RNA_def_material(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Is Grease Pencil", "True if this material has grease pencil data");
 
+  /* line art */
+  prop = RNA_def_property(srna, "lineart", PROP_POINTER, PROP_NONE);
+  RNA_def_property_pointer_sdna(prop, NULL, "lineart");
+  RNA_def_property_ui_text(prop, "Line Art Settings", "Line art settings for material");
+
   rna_def_material_greasepencil(brna);
+  rna_def_material_lineart(brna);
 
   RNA_api_material(srna);
 }

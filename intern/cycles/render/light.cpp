@@ -118,6 +118,7 @@ NODE_DEFINE(Light)
   SOCKET_VECTOR(axisv, "Axis V", zero_float3());
   SOCKET_FLOAT(sizev, "Size V", 1.0f);
   SOCKET_BOOLEAN(round, "Round", false);
+  SOCKET_FLOAT(spread, "Spread", M_PI_F);
 
   SOCKET_INT(map_resolution, "Map Resolution", 0);
 
@@ -139,12 +140,12 @@ NODE_DEFINE(Light)
   SOCKET_BOOLEAN(is_portal, "Is Portal", false);
   SOCKET_BOOLEAN(is_enabled, "Is Enabled", true);
 
-  SOCKET_NODE(shader, "Shader", &Shader::node_type);
+  SOCKET_NODE(shader, "Shader", Shader::get_node_type());
 
   return type;
 }
 
-Light::Light() : Node(node_type)
+Light::Light() : Node(get_node_type())
 {
 }
 
@@ -593,7 +594,7 @@ void LightManager::device_update_background(Device *device,
   Shader *shader = scene->background->get_shader(scene);
   int num_suns = 0;
   foreach (ShaderNode *node, shader->graph->nodes) {
-    if (node->type == EnvironmentTextureNode::node_type) {
+    if (node->type == EnvironmentTextureNode::get_node_type()) {
       EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
       ImageMetaData metadata;
       if (!env->handle.empty()) {
@@ -602,7 +603,7 @@ void LightManager::device_update_background(Device *device,
         environment_res.y = max(environment_res.y, metadata.height);
       }
     }
-    if (node->type == SkyTextureNode::node_type) {
+    if (node->type == SkyTextureNode::get_node_type()) {
       SkyTextureNode *sky = (SkyTextureNode *)node;
       if (sky->get_sky_type() == NODE_SKY_NISHITA && sky->get_sun_disc()) {
         /* Ensure that the input coordinates aren't transformed before they reach the node.
@@ -611,7 +612,7 @@ void LightManager::device_update_background(Device *device,
         const ShaderInput *vec_in = sky->input("Vector");
         if (vec_in && vec_in->link && vec_in->link->parent) {
           ShaderNode *vec_src = vec_in->link->parent;
-          if ((vec_src->type != TextureCoordinateNode::node_type) ||
+          if ((vec_src->type != TextureCoordinateNode::get_node_type()) ||
               (vec_in->link != vec_src->output("Generated"))) {
             environment_res.x = max(environment_res.x, 4096);
             environment_res.y = max(environment_res.y, 2048);
@@ -841,6 +842,15 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
       float invarea = (area != 0.0f) ? 1.0f / area : 1.0f;
       float3 dir = light->dir;
 
+      /* Convert from spread angle 0..180 to 90..0, clamping to a minimum
+       * angle to avoid excessive noise. */
+      const float min_spread_angle = 1.0f * M_PI_F / 180.0f;
+      const float spread_angle = 0.5f * (M_PI_F - max(light->spread, min_spread_angle));
+      /* Normalization computed using:
+       * integrate cos(x) (1 - tan(x) * tan(a)) * sin(x) from x = a to pi/2. */
+      const float tan_spread = tanf(spread_angle);
+      const float normalize_spread = 2.0f / (2.0f + (2.0f * spread_angle - M_PI_F) * tan_spread);
+
       dir = safe_normalize(dir);
 
       if (light->use_mis && area != 0.0f)
@@ -860,6 +870,8 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
       klights[light_index].area.dir[0] = dir.x;
       klights[light_index].area.dir[1] = dir.y;
       klights[light_index].area.dir[2] = dir.z;
+      klights[light_index].area.tan_spread = tan_spread;
+      klights[light_index].area.normalize_spread = normalize_spread;
     }
     else if (light->light_type == LIGHT_SPOT) {
       shader_id &= ~SHADER_AREA_LIGHT;

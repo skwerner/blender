@@ -22,14 +22,18 @@
 #  include "device/device_memory.h"
 #  include "device/device_queue.h"
 
+#  include "device/cuda/util.h"
+
 CCL_NAMESPACE_BEGIN
 
 class CUDADevice;
+class device_memory;
 
 /* Base class for CUDA queues. */
 class CUDADeviceQueue : public DeviceQueue {
  public:
   CUDADeviceQueue(CUDADevice *device);
+  ~CUDADeviceQueue();
 
   virtual void init_execution() override;
 
@@ -37,8 +41,13 @@ class CUDADeviceQueue : public DeviceQueue {
 
   virtual bool synchronize() override;
 
+  virtual void zero_to_device(device_memory &mem) override;
+  virtual void copy_to_device(device_memory &mem) override;
+  virtual void copy_from_device(device_memory &mem) override;
+
  protected:
   CUDADevice *cuda_device_;
+  CUstream cuda_stream_;
   double last_sync_time_;
 };
 

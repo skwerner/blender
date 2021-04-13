@@ -26,11 +26,17 @@ CCL_NAMESPACE_BEGIN
 
 /* CUDADeviceQueue */
 
-/* TODO: use CUDA stream. */
-
 CUDADeviceQueue::CUDADeviceQueue(CUDADevice *device)
-    : DeviceQueue(device), cuda_device_(device), last_sync_time_(0.0)
+    : DeviceQueue(device), cuda_device_(device), cuda_stream_(nullptr), last_sync_time_(0.0)
 {
+  const CUDAContextScope scope(cuda_device_);
+  cuda_device_assert(cuda_device_, cuStreamCreate(&cuda_stream_, CU_STREAM_NON_BLOCKING));
+}
+
+CUDADeviceQueue::~CUDADeviceQueue()
+{
+  const CUDAContextScope scope(cuda_device_);
+  cuStreamDestroy(cuda_stream_);
 }
 
 void CUDADeviceQueue::init_execution()
@@ -103,7 +109,7 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
                                     1,
                                     1,
                                     shared_mem_bytes,
-                                    0,
+                                    cuda_stream_,
                                     args,
                                     0));
 
@@ -117,13 +123,78 @@ bool CUDADeviceQueue::synchronize()
   }
 
   const CUDAContextScope scope(cuda_device_);
-  cuda_device_assert(cuda_device_, cuCtxSynchronize());
+  cuda_device_assert(cuda_device_, cuStreamSynchronize(cuda_stream_));
 
   double new_time = time_dt();
   VLOG(3) << "CUDA queue synchronize, elapsed " << new_time - last_sync_time_ << "s";
   last_sync_time_ = new_time;
 
   return !(cuda_device_->have_error());
+}
+
+void CUDADeviceQueue::zero_to_device(device_memory &mem)
+{
+  assert(mem.type != MEM_GLOBAL && mem.type != MEM_TEXTURE);
+
+  if (mem.memory_size() == 0) {
+    return;
+  }
+
+  /* Allocate on demand. */
+  if (mem.device_pointer == 0) {
+    cuda_device_->mem_alloc(mem);
+  }
+
+  /* Zero memory on device. */
+  assert(mem.device_pointer != 0);
+
+  const CUDAContextScope scope(cuda_device_);
+  cuda_device_assert(
+      cuda_device_,
+      cuMemsetD8Async((CUdeviceptr)mem.device_pointer, 0, mem.memory_size(), cuda_stream_));
+}
+
+void CUDADeviceQueue::copy_to_device(device_memory &mem)
+{
+  assert(mem.type != MEM_GLOBAL && mem.type != MEM_TEXTURE);
+
+  if (mem.memory_size() == 0) {
+    return;
+  }
+
+  /* Allocate on demand. */
+  if (mem.device_pointer == 0) {
+    cuda_device_->mem_alloc(mem);
+  }
+
+  assert(mem.device_pointer != 0);
+  assert(mem.host_pointer != nullptr);
+
+  /* Copy memory to device. */
+  const CUDAContextScope scope(cuda_device_);
+  cuda_device_assert(
+      cuda_device_,
+      cuMemcpyHtoDAsync(
+          (CUdeviceptr)mem.device_pointer, mem.host_pointer, mem.memory_size(), cuda_stream_));
+}
+
+void CUDADeviceQueue::copy_from_device(device_memory &mem)
+{
+  assert(mem.type != MEM_GLOBAL && mem.type != MEM_TEXTURE);
+
+  if (mem.memory_size() == 0) {
+    return;
+  }
+
+  assert(mem.device_pointer != 0);
+  assert(mem.host_pointer != nullptr);
+
+  /* Copy memory from device. */
+  const CUDAContextScope scope(cuda_device_);
+  cuda_device_assert(
+      cuda_device_,
+      cuMemcpyDtoHAsync(
+          mem.host_pointer, (CUdeviceptr)mem.device_pointer, mem.memory_size(), cuda_stream_));
 }
 
 CCL_NAMESPACE_END

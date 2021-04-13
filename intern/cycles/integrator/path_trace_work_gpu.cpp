@@ -163,12 +163,12 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
      * paths to keep the device occupied. */
     bool finished;
     if (enqueue_work_tiles(finished)) {
+      /* Copy stats from the device. */
+      queue_->copy_from_device(integrator_queue_counter_);
+
       if (!queue_->synchronize()) {
         break; /* Stop on error. */
       }
-
-      /* Copy stats from the device. */
-      integrator_queue_counter_.copy_from_device();
     }
 
     /* Stop if no more work remaining. */
@@ -178,12 +178,12 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 
     /* Enqueue on of the path iteration kernels. */
     if (enqueue_path_iteration()) {
+      /* Copy stats from the device. */
+      queue_->copy_from_device(integrator_queue_counter_);
+
       if (!queue_->synchronize()) {
         break; /* Stop on error. */
       }
-
-      /* Copy stats from the device. */
-      integrator_queue_counter_.copy_from_device();
     }
   }
 }
@@ -276,7 +276,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
       /* Compute array of all active paths for megakernel. */
       compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY, kernel);
-      num_queued_paths_.copy_from_device();
+      queue_->copy_from_device(num_queued_paths_);
+      queue_->synchronize();
       work_size = num_queued_paths_.data()[0];
     }
     else if (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
@@ -289,8 +290,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
       compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY, kernel);
     }
 
-    /* TODO: ensure this happens as part of queue stream. */
-    num_queued_paths_.zero_to_device();
+    queue_->zero_to_device(num_queued_paths_);
   }
 
   DCHECK_LE(work_size, get_max_num_paths());
@@ -341,7 +341,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
 
   if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
     /* Megakernel ignores sorting, zero the counter for the next iteration. */
-    integrator_sort_key_counter_.zero_to_device();
+    queue_->zero_to_device(integrator_sort_key_counter_);
   }
 }
 
@@ -375,8 +375,8 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, int queu
   }
 
   /* TODO: ensure this happens as part of queue stream. */
-  num_queued_paths_.zero_to_device();
-  integrator_sort_key_counter_.zero_to_device();
+  queue_->zero_to_device(num_queued_paths_);
+  queue_->zero_to_device(integrator_sort_key_counter_);
 }
 
 void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kernel)
@@ -464,7 +464,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
     work_tile = work_tiles[i];
   }
 
-  work_tiles_.copy_to_device();
+  queue_->copy_to_device(work_tiles_);
 
   /* TODO: consider launching a single kernel with an array of work tiles.
    * Mapping global index to the right tile with different sized tiles
@@ -475,8 +475,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
 
   if (max_active_path_index_ != 0) {
     compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, 0);
-    /* TODO: ensure this happens as part of queue stream. */
-    num_queued_paths_.zero_to_device();
+    queue_->zero_to_device(num_queued_paths_);
     d_path_index = (void *)queued_paths_.device_pointer;
   }
 

@@ -21,6 +21,7 @@
 CCL_NAMESPACE_BEGIN
 
 class Device;
+class device_memory;
 
 struct KernelWorkTile;
 
@@ -52,6 +53,12 @@ class DeviceQueue {
   /* Wait unit all enqueued kernels have finished execution.
    * Return false if there was an error executing any of the enqueued kernels. */
   virtual bool synchronize() = 0;
+
+  /* Copy memory to/from device as part of the command queue, to ensure
+   * operations are done in order without having to synchronize. */
+  virtual void zero_to_device(device_memory &mem) = 0;
+  virtual void copy_to_device(device_memory &mem) = 0;
+  virtual void copy_from_device(device_memory &mem) = 0;
 
   /* Device this queue has been created for. */
   Device *device;

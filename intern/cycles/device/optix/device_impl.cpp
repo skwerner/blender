@@ -83,8 +83,17 @@ CCL_NAMESPACE_BEGIN
     } \
     (void)0
 
-OptiXDevice::Denoiser::Denoiser(Device *device) : state(device, "__denoiser_state")
+OptiXDevice::Denoiser::Denoiser(CUDADevice *device)
+    : device(device), state(device, "__denoiser_state")
 {
+}
+
+OptiXDevice::Denoiser::~Denoiser()
+{
+  const CUDAContextScope scope(device);
+  if (optix_denoiser != nullptr) {
+    optixDenoiserDestroy(optix_denoiser);
+  }
 }
 
 OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
@@ -181,13 +190,9 @@ OptiXDevice::~OptiXDevice()
   /* Destroy launch streams. */
   for (CUstream stream : cuda_stream)
     cuStreamDestroy(stream);
-
-  if (denoiser != NULL) {
-    optixDenoiserDestroy(denoiser);
-  }
+#  endif
 
   optixDeviceContextDestroy(context);
-#  endif
 }
 
 #  if 0

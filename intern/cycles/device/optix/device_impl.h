@@ -114,7 +114,10 @@ class OptiXDevice : public CUDADevice {
 
   class Denoiser {
    public:
-    explicit Denoiser(Device *device);
+    explicit Denoiser(CUDADevice *device);
+    ~Denoiser();
+
+    CUDADevice *device;
 
     OptixDenoiser optix_denoiser = nullptr;
 

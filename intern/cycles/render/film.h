@@ -55,6 +55,11 @@ class Pass : public Node {
    * as adaptive sampling). */
   bool is_auto;
 
+  /* Is true when the actual storage of the pass is not aligned to any of boundary.
+   * For example, if the pass with 3 components is stored (and written by the kernel) as individual
+   * float components. */
+  bool is_unaligned;
+
   static void add(PassType type,
                   vector<Pass> &passes,
                   const char *name = nullptr,

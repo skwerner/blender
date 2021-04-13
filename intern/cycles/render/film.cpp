@@ -148,6 +148,7 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
     pass.name = name;
   }
   pass.is_auto = is_auto;
+  pass.is_unaligned = false;
 
   switch (type) {
     case PASS_NONE:
@@ -376,7 +377,7 @@ void Pass::remove_all_auto(vector<Pass> &passes)
 {
   vector<Pass> new_passes;
 
-  for (const Pass& pass : passes) {
+  for (const Pass &pass : passes) {
     if (!pass.is_auto) {
       new_passes.push_back(pass);
     }

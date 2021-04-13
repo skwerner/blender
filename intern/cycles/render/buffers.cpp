@@ -379,7 +379,12 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       }
     }
     else if (components == 3) {
-      DCHECK_EQ(pass.components, 4) << "Number of components mismatch for pass " << pass.name;
+      if (pass.is_unaligned) {
+        DCHECK_EQ(pass.components, 3) << "Number of components mismatch for pass " << pass.name;
+      }
+      else {
+        DCHECK_EQ(pass.components, 4) << "Number of components mismatch for pass " << pass.name;
+      }
 
       /* RGBA */
       if (type == PASS_SHADOW) {

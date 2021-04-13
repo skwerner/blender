@@ -198,7 +198,7 @@ bool RenderBuffers::get_denoising_pass_rect(
   else if (components == 4) {
     /* Since the alpha channel is not involved in denoising, output the Combined alpha channel. */
     /* TODO(sergey): Bring the chack back. */
-    /* assert(params.passes[0].type == PASS_COMBINED); */
+    /* DCHECK_EQ(params.passes[0].type, PASS_COMBINED); */
     float *in_combined = buffer.data();
 
     for (int i = 0; i < size; i++, in += pass_stride, in_combined += pass_stride, pixels += 4) {
@@ -344,7 +344,8 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       }
     }
     else if (components == 1) {
-      assert(pass.components == components);
+      DCHECK_EQ(pass.components, components)
+          << "Number of components mismatch for pass " << pass.name;
 
       /* Scalar */
       if (type == PASS_DEPTH) {
@@ -378,7 +379,7 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       }
     }
     else if (components == 3) {
-      assert(pass.components == 4);
+      DCHECK_EQ(pass.components, 4) << "Number of components mismatch for pass " << pass.name;
 
       /* RGBA */
       if (type == PASS_SHADOW) {
@@ -427,7 +428,8 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       }
     }
     else if (components == 4) {
-      assert(pass.components == components);
+      DCHECK_EQ(pass.components, components)
+          << "Number of components mismatch for pass " << pass.name;
 
       /* RGBA */
       if (type == PASS_SHADOW) {
@@ -522,7 +524,8 @@ bool RenderBuffers::set_pass_rect(PassType type, int components, float *pixels, 
     const int pass_stride = params.passes_size;
     const int size = params.width * params.height;
 
-    assert(pass.components == components);
+    DCHECK_EQ(pass.components, components)
+        << "Number of components mismatch for pass " << pass.name;
 
     for (int i = 0; i < size; i++, out += pass_stride, pixels += components) {
       if (pass.filter) {

@@ -92,11 +92,14 @@ class DeviceDenoiseTask {
   int offset, stride;
 
   int pass_stride;
-  int pass_denoising_offset;
 
   device_ptr buffer;
 
   int num_samples;
+
+  int pass_denoising_color;
+  int pass_denoising_normal;
+  int pass_denoising_albedo;
 
   DenoiseParams params;
 };

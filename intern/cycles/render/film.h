@@ -85,7 +85,6 @@ class Film : public Node {
   NODE_DECLARE
 
   NODE_SOCKET_API(float, exposure)
-  NODE_SOCKET_API(bool, denoising_data_pass)
   NODE_SOCKET_API(float, pass_alpha_threshold)
 
   NODE_SOCKET_API(PassType, display_pass)
@@ -105,7 +104,6 @@ class Film : public Node {
 
  private:
   int pass_stride;
-  int denoising_data_offset;
   size_t filter_table_offset;
 
  public:
@@ -123,7 +121,6 @@ class Film : public Node {
   int get_aov_offset(Scene *scene, string name, bool &is_color);
 
   int get_pass_stride() const;
-  int get_denoising_data_offset() const;
   size_t get_filter_table_offset() const;
 };
 

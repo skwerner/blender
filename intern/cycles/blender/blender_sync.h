@@ -74,9 +74,7 @@ class BlenderSync {
                  int height,
                  void **python_thread_state);
   void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
-  void sync_render_passes(BL::RenderLayer &b_render_layer,
-                          BL::ViewLayer &b_view_layer,
-                          const DenoiseParams &denoising);
+  void sync_render_passes(BL::RenderLayer &b_render_layer, BL::ViewLayer &b_view_layer);
   void sync_integrator();
   void sync_camera(BL::RenderSettings &b_render,
                    BL::Object &b_override,
@@ -107,11 +105,9 @@ class BlenderSync {
                                         BL::RegionView3D &b_rv3d,
                                         Camera *cam,
                                         int width,
-                                        int height,
-                                        const bool use_denoiser);
+                                        int height);
 
   static PassType get_pass_type(BL::RenderPass &b_pass);
-  static int get_denoising_pass(BL::RenderPass &b_pass);
 
  private:
   static DenoiseParams get_denoise_params(BL::Scene &b_scene,

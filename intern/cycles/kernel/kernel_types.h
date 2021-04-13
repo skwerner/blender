@@ -387,6 +387,9 @@ typedef enum PassType {
   PASS_TRANSMISSION_COLOR,
   /* No Scatter color since it's tricky to define what it would even mean. */
   PASS_MIST,
+  PASS_DENOISING_COLOR,
+  PASS_DENOISING_NORMAL,
+  PASS_DENOISING_ALBEDO,
   PASS_CATEGORY_DATA_END = 63,
 
   PASS_BAKE_PRIMITIVE,
@@ -403,15 +406,6 @@ typedef enum CryptomatteType {
   CRYPT_ASSET = (1 << 2),
   CRYPT_ACCURATE = (1 << 3),
 } CryptomatteType;
-
-typedef enum DenoisingPassOffsets {
-  DENOISING_PASS_COLOR = 0,
-  DENOISING_PASS_ALBEDO = 3,
-  DENOISING_PASS_NORMAL = 6,
-  DENOISING_PASS_DEPTH = 9,
-
-  DENOISING_PASS_SIZE = 10,
-} DenoisingPassOffsets;
 
 typedef enum eBakePassFilter {
   BAKE_FILTER_NONE = 0,
@@ -522,7 +516,6 @@ typedef ccl_addr_space struct PathRadiance {
 #ifdef __DENOISING_FEATURES__
   float3 denoising_normal;
   float3 denoising_albedo;
-  float denoising_depth;
 #endif /* __DENOISING_FEATURES__ */
 
 #ifdef __KERNEL_DEBUG__
@@ -1202,9 +1195,13 @@ typedef struct KernelFilm {
   float mist_inv_depth;
   float mist_falloff;
 
-  int pass_denoising_data;
+  int pass_denoising_color;
+  int pass_denoising_normal;
+  int pass_denoising_albedo;
+  /* Set to 1 if any of the above denoising passes present. */
+  int have_denoising_passes;
+
   int denoising_flags;
-  int pad1;
 
   int pass_aov_color;
   int pass_aov_value;

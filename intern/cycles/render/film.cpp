@@ -250,6 +250,21 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
     case PASS_CRYPTOMATTE:
       pass.components = 4;
       break;
+
+    case PASS_DENOISING_COLOR:
+      pass.components = 3;
+      pass.exposure = true;
+      pass.is_unaligned = true;
+      break;
+    case PASS_DENOISING_NORMAL:
+      pass.components = 3;
+      pass.is_unaligned = true;
+      break;
+    case PASS_DENOISING_ALBEDO:
+      pass.components = 3;
+      pass.is_unaligned = true;
+      break;
+
     case PASS_ADAPTIVE_AUX_BUFFER:
       pass.components = 4;
       break;
@@ -257,18 +272,21 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
       pass.components = 1;
       pass.exposure = false;
       break;
+
     case PASS_AOV_COLOR:
       pass.components = 4;
       break;
     case PASS_AOV_VALUE:
       pass.components = 1;
       break;
+
     case PASS_BAKE_PRIMITIVE:
     case PASS_BAKE_DIFFERENTIAL:
       pass.components = 4;
       pass.exposure = false;
       pass.filter = false;
       break;
+
     default:
       assert(false);
       break;
@@ -300,7 +318,7 @@ bool Pass::equals_exact(const vector<Pass> &A, const vector<Pass> &B)
 
 /* Get first index which is greater than the given one which correspongs to a non-auto pass.
  * If there are only runtime passes after the given index, -1 is returned. */
-static const int get_next_no_auto__pass_index(const vector<Pass> &passes, int index)
+static const int get_next_no_auto_pass_index(const vector<Pass> &passes, int index)
 {
   ++index;
 
@@ -318,8 +336,8 @@ bool Pass::equals_no_auto(const vector<Pass> &A, const vector<Pass> &B)
   int index_a = -1, index_b = -1;
 
   while (true) {
-    index_a = get_next_no_auto__pass_index(A, index_a);
-    index_b = get_next_no_auto__pass_index(A, index_b);
+    index_a = get_next_no_auto_pass_index(A, index_a);
+    index_b = get_next_no_auto_pass_index(A, index_b);
 
     if (index_a == -1 && index_b == -1) {
       break;
@@ -469,7 +487,6 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_depth, "Mist Depth", 100.0f);
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
-  SOCKET_BOOLEAN(denoising_data_pass, "Generate Denoising Data Pass", false);
   SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
 
   SOCKET_BOOLEAN(use_light_visibility, "Use Light Visibility", false);
@@ -538,6 +555,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_aov_value_num = 0;
   kfilm->pass_aov_color_num = 0;
 
+  kfilm->have_denoising_passes = 0;
+
   /* Mark with PASS_UNUSED to avoid mask test in the kernel. */
   kfilm->pass_background = PASS_UNUSED;
   kfilm->pass_emission = PASS_UNUSED;
@@ -553,6 +572,11 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_volume_direct = PASS_UNUSED;
   kfilm->pass_volume_indirect = PASS_UNUSED;
   kfilm->pass_shadow = PASS_UNUSED;
+
+  /* Mark passes as unused so that the kernel knows the pass is inaccessible. */
+  kfilm->pass_denoising_color = PASS_UNUSED;
+  kfilm->pass_denoising_normal = PASS_UNUSED;
+  kfilm->pass_denoising_albedo = PASS_UNUSED;
   kfilm->pass_sample_count = PASS_UNUSED;
   kfilm->pass_adaptive_aux_buffer = PASS_UNUSED;
 
@@ -695,12 +719,27 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
                                       kfilm->pass_stride;
         have_cryptomatte = true;
         break;
+
+      case PASS_DENOISING_COLOR:
+        kfilm->pass_denoising_color = kfilm->pass_stride;
+        kfilm->have_denoising_passes = 1;
+        break;
+      case PASS_DENOISING_NORMAL:
+        kfilm->pass_denoising_normal = kfilm->pass_stride;
+        kfilm->have_denoising_passes = 1;
+        break;
+      case PASS_DENOISING_ALBEDO:
+        kfilm->pass_denoising_albedo = kfilm->pass_stride;
+        kfilm->have_denoising_passes = 1;
+        break;
+
       case PASS_ADAPTIVE_AUX_BUFFER:
         kfilm->pass_adaptive_aux_buffer = kfilm->pass_stride;
         break;
       case PASS_SAMPLE_COUNT:
         kfilm->pass_sample_count = kfilm->pass_stride;
         break;
+
       case PASS_AOV_COLOR:
         if (kfilm->pass_aov_color_num == 0) {
           kfilm->pass_aov_color = kfilm->pass_stride;
@@ -729,12 +768,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     }
 
     kfilm->pass_stride += pass.components;
-  }
-
-  kfilm->pass_denoising_data = 0;
-  if (denoising_data_pass) {
-    kfilm->pass_denoising_data = kfilm->pass_stride;
-    kfilm->pass_stride += DENOISING_PASS_SIZE;
   }
 
   kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
@@ -766,7 +799,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->cryptomatte_depth = cryptomatte_depth;
 
   pass_stride = kfilm->pass_stride;
-  denoising_data_offset = kfilm->pass_denoising_data;
 
   clear_modified();
 }
@@ -820,11 +852,6 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
 int Film::get_pass_stride() const
 {
   return pass_stride;
-}
-
-int Film::get_denoising_data_offset() const
-{
-  return denoising_data_offset;
 }
 
 size_t Film::get_filter_table_offset() const

@@ -49,18 +49,18 @@ class BufferParams {
   int full_width;
   int full_height;
 
-  /* Denoising pass information.
-   *
-   * TODO(sergey): Make it runtime as the synchronization code should not worry about setting it.
-   */
-  bool denoising_data_pass;
-
-  /* Runtime fields, only valid after `update_passes()`.
-   * Only fields either used all over the place or in this module. */
+  /* Runtime fields, only valid after `update_passes()` or `update_offset_stride()`. */
   int offset = -1, stride = -1;
+
+  /* Runtime fields, only valid after `update_passes()`. */
   int pass_stride = -1;
-  int pass_sample_count_offset = -1;
-  int pass_denoising_offset = -1;
+
+  /* Offsets of passes needed for the rendering functionality like adaptive sampling and denoising.
+   * Pre-calculated so that they are available in areas where list of passes is not accessible. */
+  int pass_sample_count = -1;
+  int pass_denoising_color = -1;
+  int pass_denoising_normal = -1;
+  int pass_denoising_albedo = -1;
 
   /* functions */
   BufferParams();
@@ -99,8 +99,6 @@ class RenderBuffers {
                      int sample,
                      int components,
                      float *pixels);
-  bool get_denoising_pass_rect(
-      int offset, float exposure, int sample, int components, float *pixels);
 
 #if 0
   bool set_pass_rect(PassType type, int components, float *pixels, int samples);

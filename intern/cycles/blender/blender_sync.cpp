@@ -490,46 +490,29 @@ PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
   MAP_PASS("Debug BVH Intersections", PASS_BVH_INTERSECTIONS);
   MAP_PASS("Debug Ray Bounces", PASS_RAY_BOUNCES);
 #endif
+
+  MAP_PASS("Noisy Image", PASS_DENOISING_COLOR);
+  MAP_PASS("Denoising Normal", PASS_DENOISING_NORMAL);
+  MAP_PASS("Denoising Albedo", PASS_DENOISING_ALBEDO);
+
   MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
+
   MAP_PASS("AdaptiveAuxBuffer", PASS_ADAPTIVE_AUX_BUFFER);
   MAP_PASS("Debug Sample Count", PASS_SAMPLE_COUNT);
+
   if (string_startswith(name, cryptomatte_prefix)) {
     return PASS_CRYPTOMATTE;
   }
+
 #undef MAP_PASS
 
   return PASS_NONE;
 }
 
-int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
+void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_view_layer)
 {
-  string name = b_pass.name();
+  PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
 
-  if (name == "Noisy Image")
-    return DENOISING_PASS_COLOR;
-
-  if (name.substr(0, 10) != "Denoising ") {
-    return -1;
-  }
-  name = name.substr(10);
-
-#define MAP_PASS(passname, offset) \
-  if (name == passname) { \
-    return offset; \
-  } \
-  ((void)0)
-  MAP_PASS("Normal", DENOISING_PASS_NORMAL);
-  MAP_PASS("Albedo", DENOISING_PASS_ALBEDO);
-  MAP_PASS("Depth", DENOISING_PASS_DEPTH);
-#undef MAP_PASS
-
-  return -1;
-}
-
-void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
-                                     BL::ViewLayer &b_view_layer,
-                                     const DenoiseParams &denoising)
-{
   vector<Pass> passes;
 
   /* loop over passes */
@@ -544,14 +527,19 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
 
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
-  if (denoising.use || denoising.store_passes) {
+  if (get_boolean(crl, "denoising_store_passes")) {
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
-  }
+    Pass::add(PASS_DENOISING_COLOR, passes, "Noisy Image");
 
-  if (denoising.store_passes) {
     b_engine.add_pass("Denoising Normal", 3, "XYZ", b_view_layer.name().c_str());
+    Pass::add(PASS_DENOISING_NORMAL, passes, "Denoising Normal");
+
     b_engine.add_pass("Denoising Albedo", 3, "RGB", b_view_layer.name().c_str());
-    b_engine.add_pass("Denoising Depth", 1, "Z", b_view_layer.name().c_str());
+    Pass::add(PASS_DENOISING_ALBEDO, passes, "Denoising Albedo");
+  }
+  else if (get_boolean(cscene, "use_denoising")) {
+    b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
+    Pass::add(PASS_DENOISING_COLOR, passes, "Noisy Image");
   }
 
 #ifdef __KERNEL_DEBUG__
@@ -642,8 +630,6 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
       Pass::add(PASS_AOV_VALUE, passes, name.c_str());
     }
   }
-
-  scene->film->set_denoising_data_pass(denoising.use || denoising.store_passes);
 
   scene->film->set_pass_alpha_threshold(b_view_layer.pass_alpha_threshold());
   scene->film->assign_and_tag_passes_update(scene, passes);

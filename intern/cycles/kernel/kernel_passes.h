@@ -44,10 +44,6 @@ ccl_device_inline void kernel_write_denoising_features(
 
   ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
 
-  const float denoising_depth = ensure_finite(sd->ray_length);
-  kernel_write_pass_float(buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_DEPTH,
-                          denoising_depth);
-
   /* Skip implicitly transparent surfaces. */
   if (sd->flag & SD_HAS_ONLY_VOLUME) {
     return;
@@ -111,10 +107,10 @@ ccl_device_inline void kernel_write_denoising_features(
     const float3 denoising_normal = ensure_finite3(normal);
     const float3 denoising_albedo = ensure_finite3(denoising_feature_throughput * diffuse_albedo);
 
-    kernel_write_pass_float3_unaligned(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_NORMAL, denoising_normal);
-    kernel_write_pass_float3_unaligned(
-        buffer + kernel_data.film.pass_denoising_data + DENOISING_PASS_ALBEDO, denoising_albedo);
+    kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_normal,
+                                       denoising_normal);
+    kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_albedo,
+                                       denoising_albedo);
 
     INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_DENOISING_FEATURES;
   }

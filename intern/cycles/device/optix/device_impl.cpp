@@ -803,9 +803,8 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DeviceQueue *queue,
 {
   const int work_size = task.width * task.height;
 
-  const int pass_offset[3] = {(task.pass_denoising_offset + DENOISING_PASS_COLOR),
-                              (task.pass_denoising_offset + DENOISING_PASS_ALBEDO),
-                              (task.pass_denoising_offset + DENOISING_PASS_NORMAL)};
+  const int pass_offset[3] = {
+      task.pass_denoising_color, task.pass_denoising_albedo, task.pass_denoising_normal};
 
   const int input_passes = task.params.input_passes;
 

@@ -51,11 +51,14 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
   task.stride = buffer_params.stride;
 
   task.pass_stride = buffer_params.pass_stride;
-  task.pass_denoising_offset = buffer_params.pass_denoising_offset;
 
   task.buffer = render_buffers->buffer.device_pointer;
 
   task.num_samples = num_samples;
+
+  task.pass_denoising_color = buffer_params.pass_denoising_color;
+  task.pass_denoising_normal = buffer_params.pass_denoising_normal;
+  task.pass_denoising_albedo = buffer_params.pass_denoising_albedo;
 
   task.params = params_;
 

@@ -362,7 +362,7 @@ void Session::do_delayed_reset()
   }
   delayed_reset.do_reset = false;
 
-  scene->update_passes();
+  scene->update_passes(params.denoising);
 
   buffer_params = delayed_reset.params;
   buffer_params.update_passes(scene->passes);

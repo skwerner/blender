@@ -158,13 +158,13 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
   std::array<OIDNPass, 4> oidn_passes = {{
-      {"color", buffer_params.pass_denoising_offset + DENOISING_PASS_COLOR, false, true},
+      {"color", buffer_params.pass_denoising_color, false, true},
       {"albedo",
-       buffer_params.pass_denoising_offset + DENOISING_PASS_ALBEDO,
+       buffer_params.pass_denoising_albedo,
        true,
        params_.input_passes >= DENOISER_INPUT_RGB_ALBEDO},
       {"normal",
-       buffer_params.pass_denoising_offset + DENOISING_PASS_NORMAL,
+       buffer_params.pass_denoising_normal,
        true,
        params_.input_passes >= DENOISER_INPUT_RGB_ALBEDO_NORMAL},
       {"output", 0, false, true},

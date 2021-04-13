@@ -60,7 +60,7 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = SHADER_NONE;
 
 #ifdef __DENOISING_FEATURES__
-  if (kernel_data.film.pass_denoising_data) {
+  if (kernel_data.film.have_denoising_passes) {
     INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_DENOISING_FEATURES;
     INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) = one_float3();
   }

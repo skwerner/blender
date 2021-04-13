@@ -153,7 +153,7 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   /* Create GPU display. */
@@ -243,13 +243,8 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
 
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
-  BufferParams buffer_params = BlenderSync::get_buffer_params(b_render,
-                                                              b_null_space_view3d,
-                                                              b_null_region_view3d,
-                                                              scene->camera,
-                                                              width,
-                                                              height,
-                                                              session_params.denoising.use);
+  BufferParams buffer_params = BlenderSync::get_buffer_params(
+      b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
@@ -476,7 +471,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background, b_view_layer);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+      b_render, b_v3d, b_rv3d, scene->camera, width, height);
 
   /* temporary render result to find needed passes and views */
   BL::RenderResult b_rr = begin_render_result(
@@ -490,10 +485,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   session->set_denoising(session_params.denoising);
 
   /* Compute render passes and film settings. */
-  sync->sync_render_passes(b_rlay, b_view_layer, session_params.denoising);
-
-  /* Set buffer params, using film settings from sync_render_passes. */
-  buffer_params.denoising_data_pass = scene->film->get_denoising_data_pass();
+  sync->sync_render_passes(b_rlay, b_view_layer);
 
   BL::RenderResult::views_iterator b_view_iter;
 
@@ -702,20 +694,11 @@ void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
   if (!do_update_only) {
     /* copy each pass */
     for (BL::RenderPass &b_pass : b_rlay.passes) {
-      int components = b_pass.channels();
+      const int components = b_pass.channels();
 
-      /* Copy pixels from regular render passes. */
-      bool read = buffers->get_pass_rect(
+      /* Copy pixels from the render pass. */
+      const bool read = buffers->get_pass_rect(
           session->scene->passes, b_pass.name(), exposure, sample, components, &pixels[0]);
-
-      /* If denoising pass, */
-      if (!read) {
-        int denoising_offset = BlenderSync::get_denoising_pass(b_pass);
-        if (denoising_offset >= 0) {
-          read = buffers->get_denoising_pass_rect(
-              denoising_offset, exposure, sample, components, &pixels[0]);
-        }
-      }
 
       if (!read) {
         memset(&pixels[0], 0, pixels.size() * sizeof(float));
@@ -795,16 +778,9 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
-
-  if (!buffer_params.denoising_data_pass) {
-    session_params.denoising.use = false;
-  }
+      b_render, b_v3d, b_rv3d, scene->camera, width, height);
 
   session->set_denoising(session_params.denoising);
-
-  /* Update film if denoising data was enabled or disabled. */
-  scene->film->set_denoising_data_pass(buffer_params.denoising_data_pass);
 
   /* reset if needed */
   if (scene->need_reset()) {
@@ -874,7 +850,7 @@ void BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+          b_render, b_v3d, b_rv3d, scene->camera, width, height);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {

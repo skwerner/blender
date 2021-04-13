@@ -490,7 +490,8 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
   requested_features.use_background_light = light_manager->has_background_light(this);
 
   requested_features.use_baking = bake_manager->get_baking();
-  if (film->get_denoising_data_pass()) {
+
+  if (Pass::contains(passes, PASS_DENOISING_COLOR)) {
     requested_features.use_denoising = true;
     requested_features.use_shadow_tricks = true;
   }
@@ -526,7 +527,7 @@ bool Scene::update(Progress &progress)
   return true;
 }
 
-void Scene::update_passes()
+void Scene::update_passes(const DenoiseParams &denoise_params)
 {
   if (!integrator->is_modified() && !film->is_modified()) {
     return;
@@ -534,14 +535,24 @@ void Scene::update_passes()
 
   Pass::remove_all_auto(passes);
 
+  /* Display pass for viewport. */
   const PassType display_pass = film->get_display_pass();
   Pass::add(display_pass, passes, nullptr, true);
 
-  /* Create passes needed for denoising. */
+  /* Create passes needed for adaptive sampling. */
   const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
   if (adaptive_sampling.use) {
     Pass::add(PASS_SAMPLE_COUNT, passes, nullptr, true);
     Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes, nullptr, true);
+  }
+
+  /* Create passes needed for denoising. */
+  if (denoise_params.use || denoise_params.store_passes) {
+    Pass::add(PASS_DENOISING_COLOR, passes, nullptr, true);
+
+    /* TODO(sergey): Only use passes required by the denoiser when storage is not requested. */
+    Pass::add(PASS_DENOISING_NORMAL, passes, nullptr, true);
+    Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, true);
   }
 }
 

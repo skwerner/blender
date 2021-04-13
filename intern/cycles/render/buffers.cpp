@@ -39,27 +39,40 @@ BufferParams::BufferParams()
   full_y = 0;
   full_width = 0;
   full_height = 0;
-
-  denoising_data_pass = false;
 }
 
 void BufferParams::update_passes(vector<Pass> &passes)
 {
   update_offset_stride();
 
+  pass_sample_count = PASS_UNUSED;
+
+  pass_denoising_color = PASS_UNUSED;
+  pass_denoising_normal = PASS_UNUSED;
+  pass_denoising_albedo = PASS_UNUSED;
+
   pass_stride = 0;
-  pass_denoising_offset = 0;
   for (const Pass &pass : passes) {
-    if (pass.type == PASS_SAMPLE_COUNT) {
-      pass_sample_count_offset = pass_stride;
+    switch (pass.type) {
+      case PASS_SAMPLE_COUNT:
+        pass_sample_count = pass_stride;
+        break;
+
+      case PASS_DENOISING_COLOR:
+        pass_denoising_color = pass_stride;
+        break;
+      case PASS_DENOISING_NORMAL:
+        pass_denoising_normal = pass_stride;
+        break;
+      case PASS_DENOISING_ALBEDO:
+        pass_denoising_albedo = pass_stride;
+        break;
+
+      default:
+        break;
     }
 
     pass_stride += pass.components;
-    pass_denoising_offset += pass.components;
-  }
-
-  if (denoising_data_pass) {
-    pass_stride += DENOISING_PASS_SIZE;
   }
 
   pass_stride = align_up(pass_stride, 4);
@@ -73,12 +86,14 @@ void BufferParams::update_offset_stride()
 
 bool BufferParams::modified(const BufferParams &params) const
 {
-  return !(full_x == params.full_x && full_y == params.full_y && width == params.width &&
-           height == params.height && full_width == params.full_width &&
-           full_height == params.full_height &&
-           denoising_data_pass == params.denoising_data_pass && offset == params.offset &&
+  return !(width == params.width && height == params.height && full_x == params.full_x &&
+           full_y == params.full_y && full_width == params.full_width &&
+           full_height == params.full_height && offset == params.offset &&
            stride == params.stride && pass_stride == params.pass_stride &&
-           pass_denoising_offset == params.pass_denoising_offset);
+           pass_sample_count == params.pass_sample_count &&
+           pass_denoising_color == params.pass_denoising_color &&
+           pass_denoising_normal == params.pass_denoising_normal &&
+           pass_denoising_albedo == params.pass_denoising_albedo);
 }
 
 /* Render Buffer Task */
@@ -142,80 +157,6 @@ bool RenderBuffers::copy_from_device()
     return false;
 
   buffer.copy_from_device(0, params.width * params.pass_stride, params.height);
-
-  return true;
-}
-
-bool RenderBuffers::get_denoising_pass_rect(
-    int type, float exposure, int sample, int components, float *pixels)
-{
-  if (buffer.data() == NULL) {
-    return false;
-  }
-
-  float scale = 1.0f;
-  float alpha_scale = 1.0f / sample;
-  if (type == DENOISING_PASS_COLOR) {
-    scale *= exposure;
-  }
-
-  int offset;
-  switch (type) {
-    case DENOISING_PASS_DEPTH:
-      offset = params.pass_denoising_offset + DENOISING_PASS_DEPTH;
-      break;
-    case DENOISING_PASS_NORMAL:
-      offset = params.pass_denoising_offset + DENOISING_PASS_NORMAL;
-      break;
-    case DENOISING_PASS_ALBEDO:
-      offset = params.pass_denoising_offset + DENOISING_PASS_ALBEDO;
-      break;
-    case DENOISING_PASS_COLOR:
-      offset = params.pass_denoising_offset + DENOISING_PASS_COLOR;
-      break;
-    default:
-      return false;
-  }
-  scale /= sample;
-
-  const int pass_stride = params.pass_stride;
-  const int size = params.width * params.height;
-
-  float *in = buffer.data() + offset;
-
-  if (components == 1) {
-    for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
-      pixels[0] = in[0] * scale;
-    }
-  }
-  else if (components == 3) {
-    for (int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-      pixels[0] = in[0] * scale;
-      pixels[1] = in[1] * scale;
-      pixels[2] = in[2] * scale;
-    }
-  }
-  else if (components == 4) {
-    /* Since the alpha channel is not involved in denoising, output the Combined alpha channel. */
-    /* TODO(sergey): Bring the chack back. */
-    /* DCHECK_EQ(params.passes[0].type, PASS_COMBINED); */
-    float *in_combined = buffer.data();
-
-    for (int i = 0; i < size; i++, in += pass_stride, in_combined += pass_stride, pixels += 4) {
-      float3 val = make_float3(in[0], in[1], in[2]);
-      pixels[0] = val.x * scale;
-      pixels[1] = val.y * scale;
-      pixels[2] = val.z * scale;
-
-      /* Note that 3rd channel contains transparency = 1 - alpha at this point,
-       * so convert to alpha. Clamp since alpha might end up outside of 0..1 due
-       * to Russian roulette. */
-      pixels[3] = saturate(1.0f - in_combined[3] * alpha_scale);
-    }
-  }
-  else {
-    return false;
-  }
 
   return true;
 }
@@ -286,11 +227,11 @@ class Scaler {
  protected:
   const float *get_sample_count_pass(const RenderBuffers *render_buffers)
   {
-    if (render_buffers->params.pass_sample_count_offset == -1) {
+    if (render_buffers->params.pass_sample_count == -1) {
       return nullptr;
     }
 
-    return render_buffers->buffer.data() + render_buffers->params.pass_sample_count_offset;
+    return render_buffers->buffer.data() + render_buffers->params.pass_sample_count;
   }
 
   const Pass &pass_;
@@ -304,6 +245,18 @@ class Scaler {
   float scale_ = 0.0f;
   float scale_exposure_ = 0.0f;
 };
+
+int find_pass_offset_by_type(const vector<Pass> &passes, const PassType type)
+{
+  int pass_offset = 0;
+  for (const Pass &color_pass : passes) {
+    if (color_pass.type == type) {
+      return pass_offset;
+    }
+    pass_offset += color_pass.components;
+  }
+  return PASS_UNUSED;
+}
 
 } /* namespace */
 
@@ -401,14 +354,10 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       }
       else if (pass.divide_type != PASS_NONE) {
         /* RGB lighting passes that need to divide out color */
-        pass_offset = 0;
-        for (const Pass &color_pass : passes) {
-          if (color_pass.type == pass.divide_type)
-            break;
-          pass_offset += color_pass.components;
-        }
+        const int pass_divide = find_pass_offset_by_type(passes, pass.divide_type);
+        DCHECK_NE(pass_divide, PASS_UNUSED);
 
-        const float *in_divide = buffer.data() + pass_offset;
+        const float *in_divide = buffer.data() + pass_divide;
 
         for (int i = 0; i < size; i++, in += pass_stride, in_divide += pass_stride, pixels += 3) {
           const float3 f = make_float3(in[0], in[1], in[2]);
@@ -452,14 +401,10 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       }
       else if (type == PASS_MOTION) {
         /* need to normalize by number of samples accumulated for motion */
-        pass_offset = 0;
-        for (const Pass &color_pass : passes) {
-          if (color_pass.type == PASS_MOTION_WEIGHT)
-            break;
-          pass_offset += color_pass.components;
-        }
+        const int pass_motion_weight = find_pass_offset_by_type(passes, PASS_MOTION_WEIGHT);
+        DCHECK_NE(pass_motion_weight, PASS_UNUSED);
 
-        const float *in_weight = buffer.data() + pass_offset;
+        const float *in_weight = buffer.data() + pass_motion_weight;
 
         for (int i = 0; i < size; i++, in += pass_stride, in_weight += pass_stride, pixels += 4) {
           const float weight = in_weight[0];
@@ -484,6 +429,29 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
           pixels[1] = f.y * scale;
           pixels[2] = f.z;
           pixels[3] = f.w * scale;
+        }
+      }
+      else if (type == PASS_DENOISING_COLOR) {
+        const int pass_combined = find_pass_offset_by_type(passes, PASS_COMBINED);
+        DCHECK_NE(pass_combined, PASS_UNUSED);
+
+        const float *in_combined = buffer.data() + pass_combined;
+
+        /* Special code which converts noisy image pass from RGB to RGBA using alpha from the
+         * combined pass. */
+        for (int i = 0; i < size;
+             i++, in += pass_stride, in_combined += pass_stride, pixels += 4) {
+          float scale, scale_exposure;
+          scaler.scale_and_scale_exposure(i, scale, scale_exposure);
+
+          const float3 color = make_float3(in[0], in[1], in[2]) * scale_exposure;
+          const float transparency = in_combined[3] * scale;
+
+          pixels[0] = color.x;
+          pixels[1] = color.y;
+          pixels[2] = color.z;
+
+          pixels[3] = saturate(1.0f - transparency);
         }
       }
       else {

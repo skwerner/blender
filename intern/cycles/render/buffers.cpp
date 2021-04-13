@@ -338,7 +338,7 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
 
     if (components == 1 && type == PASS_RENDER_TIME) {
       /* Render time is not stored by kernel, but measured per tile. */
-      float val = (float)(1000.0 * render_time / (params.width * params.height * sample));
+      const float val = (float)(1000.0 * render_time / (params.width * params.height * sample));
       for (int i = 0; i < size; i++, pixels++) {
         pixels[0] = val;
       }
@@ -350,13 +350,13 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       /* Scalar */
       if (type == PASS_DEPTH) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
-          float f = *in;
+          const float f = *in;
           pixels[0] = (f == 0.0f) ? 1e10f : f * scaler.scale_exposure(i);
         }
       }
       else if (type == PASS_MIST) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
-          float f = *in;
+          const float f = *in;
           /* Note that we accumulate 1 - mist in the kernel to avoid having to
            * track the mist values in the integrator state. */
           pixels[0] = saturate(1.0f - f * scaler.scale_exposure(i));
@@ -366,14 +366,14 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       else if (type == PASS_BVH_TRAVERSED_NODES || type == PASS_BVH_TRAVERSED_INSTANCES ||
                type == PASS_BVH_INTERSECTIONS || type == PASS_RAY_BOUNCES) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
-          float f = *in;
+          const float f = *in;
           pixels[0] = f * scaler.scale_exposure(i);
         }
       }
 #endif
       else {
         for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
-          float f = *in;
+          const float f = *in;
           pixels[0] = f * scaler.scale_exposure(i);
         }
       }
@@ -384,12 +384,14 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       /* RGBA */
       if (type == PASS_SHADOW) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
-          float4 f = make_float4(in[0], in[1], in[2], in[3]);
-          float invw = (f.w > 0.0f) ? 1.0f / f.w : 1.0f;
+          const float weight = in[3];
+          const float weight_inv = (weight > 0.0f) ? 1.0f / weight : 1.0f;
 
-          pixels[0] = f.x * invw;
-          pixels[1] = f.y * invw;
-          pixels[2] = f.z * invw;
+          const float3 shadow = make_float3(in[0], in[1], in[2]) * weight_inv;
+
+          pixels[0] = shadow.x;
+          pixels[1] = shadow.y;
+          pixels[2] = shadow.z;
         }
       }
       else if (pass.divide_type != PASS_NONE) {
@@ -401,29 +403,27 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
           pass_offset += color_pass.components;
         }
 
-        float *in_divide = buffer.data() + pass_offset;
+        const float *in_divide = buffer.data() + pass_offset;
 
         for (int i = 0; i < size; i++, in += pass_stride, in_divide += pass_stride, pixels += 3) {
-          float3 f = make_float3(in[0], in[1], in[2]);
-          float3 f_divide = make_float3(in_divide[0], in_divide[1], in_divide[2]);
+          const float3 f = make_float3(in[0], in[1], in[2]);
+          const float3 f_divide = make_float3(in_divide[0], in_divide[1], in_divide[2]);
+          const float3 f_divided = safe_divide_even_color(f * exposure, f_divide);
 
-          f = safe_divide_even_color(f * exposure, f_divide);
-
-          pixels[0] = f.x;
-          pixels[1] = f.y;
-          pixels[2] = f.z;
+          pixels[0] = f_divided.x;
+          pixels[1] = f_divided.y;
+          pixels[2] = f_divided.z;
         }
       }
       else {
         /* RGB/vector */
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 3) {
           const float scale_exposure = scaler.scale_exposure(i);
+          const float3 f = make_float3(in[0], in[1], in[2]) * scale_exposure;
 
-          float3 f = make_float3(in[0], in[1], in[2]);
-
-          pixels[0] = f.x * scale_exposure;
-          pixels[1] = f.y * scale_exposure;
-          pixels[2] = f.z * scale_exposure;
+          pixels[0] = f.x;
+          pixels[1] = f.y;
+          pixels[2] = f.z;
         }
       }
     }
@@ -434,12 +434,14 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
       /* RGBA */
       if (type == PASS_SHADOW) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
-          float4 f = make_float4(in[0], in[1], in[2], in[3]);
-          float invw = (f.w > 0.0f) ? 1.0f / f.w : 1.0f;
+          const float weight = in[3];
+          const float weight_inv = (weight > 0.0f) ? 1.0f / weight : 1.0f;
 
-          pixels[0] = f.x * invw;
-          pixels[1] = f.y * invw;
-          pixels[2] = f.z * invw;
+          const float3 shadow = make_float3(in[0], in[1], in[2]) * weight_inv;
+
+          pixels[0] = shadow.x;
+          pixels[1] = shadow.y;
+          pixels[2] = shadow.z;
           pixels[3] = 1.0f;
         }
       }
@@ -452,24 +454,25 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
           pass_offset += color_pass.components;
         }
 
-        float *in_weight = buffer.data() + pass_offset;
+        const float *in_weight = buffer.data() + pass_offset;
 
         for (int i = 0; i < size; i++, in += pass_stride, in_weight += pass_stride, pixels += 4) {
-          float4 f = make_float4(in[0], in[1], in[2], in[3]);
-          float w = in_weight[0];
-          float invw = (w > 0.0f) ? 1.0f / w : 0.0f;
+          const float weight = in_weight[0];
+          const float weight_inv = (weight > 0.0f) ? 1.0f / weight : 0.0f;
 
-          pixels[0] = f.x * invw;
-          pixels[1] = f.y * invw;
-          pixels[2] = f.z * invw;
-          pixels[3] = f.w * invw;
+          const float4 motion = make_float4(in[0], in[1], in[2], in[3]) * weight_inv;
+
+          pixels[0] = motion.x;
+          pixels[1] = motion.y;
+          pixels[2] = motion.z;
+          pixels[3] = motion.w;
         }
       }
       else if (type == PASS_CRYPTOMATTE) {
         for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
           const float scale = scaler.scale(i);
 
-          float4 f = make_float4(in[0], in[1], in[2], in[3]);
+          const float4 f = make_float4(in[0], in[1], in[2], in[3]);
           /* x and z contain integer IDs, don't rescale them.
              y and w contain matte weights, they get scaled. */
           pixels[0] = f.x;
@@ -483,16 +486,16 @@ bool RenderBuffers::get_pass_rect(const vector<Pass> &passes,
           float scale, scale_exposure;
           scaler.scale_and_scale_exposure(i, scale, scale_exposure);
 
-          float4 f = make_float4(in[0], in[1], in[2], in[3]);
+          /* Note that 3rd channel contains transparency = 1 - alpha at this point. */
+          const float3 color = make_float3(in[0], in[1], in[2]) * scale_exposure;
+          const float transparency = in[3] * scale;
 
-          pixels[0] = f.x * scale_exposure;
-          pixels[1] = f.y * scale_exposure;
-          pixels[2] = f.z * scale_exposure;
+          pixels[0] = color.x;
+          pixels[1] = color.y;
+          pixels[2] = color.z;
 
-          /* Note that 3rd channel contains transparency = 1 - alpha at this point,
-           * so convert to alpha. Clamp since alpha might end up outside of 0..1 due
-           * to Russian roulette. */
-          pixels[3] = saturate(1.0f - f.w * scale);
+          /* Clamp since alpha might end up outside of 0..1 due to Russian roulette. */
+          pixels[3] = saturate(1.0f - transparency);
         }
       }
     }

@@ -30,10 +30,14 @@ TileManager::TileManager(int2 tile_size) : tile_size_(tile_size)
 
 void TileManager::reset(BufferParams &params)
 {
-  params_ = params;
+  buffer_params_ = params;
+
+  /* TODO(sergey): Multiple big tile support. */
 
   state_.next_tile_index = 0;
   state_.num_tiles = 1;
+
+  state_.current_tile = Tile();
 }
 
 bool TileManager::done()
@@ -49,7 +53,20 @@ bool TileManager::next()
 
   ++state_.next_tile_index;
 
+  state_.current_tile.x = buffer_params_.full_x;
+  state_.current_tile.y = buffer_params_.full_y;
+  state_.current_tile.width = buffer_params_.width;
+  state_.current_tile.height = buffer_params_.height;
+
+  state_.current_tile.full_x = buffer_params_.full_x;
+  state_.current_tile.full_y = buffer_params_.full_y;
+
   return true;
+}
+
+const Tile &TileManager::get_current_tile() const
+{
+  return state_.current_tile;
 }
 
 CCL_NAMESPACE_END

@@ -33,8 +33,6 @@ class BlenderSync;
 class ImageMetaData;
 class Scene;
 class Session;
-class RenderBuffers;
-class RenderTile;
 
 class BlenderSession {
  public:
@@ -69,13 +67,13 @@ class BlenderSession {
             const int bake_width,
             const int bake_height);
 
-  void write_render_result(BL::RenderLayer &b_rlay, RenderTile &rtile);
-  void write_render_tile(RenderTile &rtile);
+  void write_render_result(BL::RenderLayer &b_rlay);
+  void write_render_tile();
 
   /* update functions are used to update display buffer only after sample was rendered
    * only needed for better visual feedback */
-  void update_render_result(BL::RenderLayer &b_rlay, RenderTile &rtile);
-  void update_render_tile(RenderTile &rtile, bool highlight);
+  void update_render_result(BL::RenderLayer &b_rlay);
+  void update_render_tile();
 
   /* interactive updates */
   void synchronize(BL::Depsgraph &b_depsgraph);
@@ -149,10 +147,7 @@ class BlenderSession {
  protected:
   void stamp_view_layer_metadata(Scene *scene, const string &view_layer_name);
 
-  void do_write_update_render_result(BL::RenderLayer &b_rlay,
-                                     RenderTile &rtile,
-                                     bool do_update_only);
-  void do_write_update_render_tile(RenderTile &rtile, bool do_update_only, bool highlight);
+  void do_write_update_render_tile(bool do_update_only);
 
   void builtin_images_load();
 

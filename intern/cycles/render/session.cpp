@@ -28,6 +28,7 @@
 #include "render/light.h"
 #include "render/mesh.h"
 #include "render/object.h"
+#include "render/pass_accessor.h"
 #include "render/scene.h"
 #include "render/session.h"
 
@@ -65,46 +66,17 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
   /* Configure path tracer. */
   path_trace_ = make_unique<PathTrace>(device, &scene->dscene, render_scheduler_);
   path_trace_->set_progress(&progress);
-  path_trace_->buffer_update_cb = [&](RenderBuffers *render_buffers, int sample) {
-    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
-     * the the new progressive+adaptive nature of rendering. */
-
+  path_trace_->buffer_update_cb = [&]() {
     if (!update_render_tile_cb) {
       return;
     }
-
-    RenderTile render_tile;
-    render_tile.x = render_buffers->params.full_x;
-    render_tile.y = render_buffers->params.full_y;
-    render_tile.w = render_buffers->params.width;
-    render_tile.h = render_buffers->params.height;
-    render_tile.sample = sample;
-    render_tile.buffers = render_buffers;
-    render_tile.task = RenderTile::PATH_TRACE;
-
-    update_render_tile_cb(render_tile, false);
+    update_render_tile_cb();
   };
-  path_trace_->buffer_write_cb = [&](RenderBuffers *render_buffers, int sample) {
-    /* NOTE: Almost a duplicate of `update_cb`, but is done for a testing purposes, neither of
-     * this callbacks are final. */
-
-    /* TODO(sergey): Needs proper implementation, with all the update callbacks and status ported
-     * the the new progressive+adaptive nature of rendering. */
-
+  path_trace_->buffer_write_cb = [&]() {
     if (!write_render_tile_cb) {
       return;
     }
-
-    RenderTile render_tile;
-    render_tile.x = render_buffers->params.full_x;
-    render_tile.y = render_buffers->params.full_y;
-    render_tile.w = render_buffers->params.width;
-    render_tile.h = render_buffers->params.height;
-    render_tile.sample = sample;
-    render_tile.buffers = render_buffers;
-    render_tile.task = RenderTile::PATH_TRACE;
-
-    write_render_tile_cb(render_tile);
+    write_render_tile_cb();
   };
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
 
@@ -584,6 +556,20 @@ void Session::collect_statistics(RenderStats *render_stats)
   if (params.use_profiling && (params.device.type == DEVICE_CPU)) {
     render_stats->collect_profiling(scene, profiler);
   }
+}
+
+bool Session::get_pass_rect(const string &pass_name, int num_components, float *pixels)
+{
+  const float exposure = scene->film->get_exposure();
+  const int num_samples = render_scheduler_.get_num_rendered_samples();
+
+  PassAccessor pass_accessor(scene->passes, pass_name, num_components, exposure, num_samples);
+
+  if (!pass_accessor.is_valid()) {
+    return false;
+  }
+
+  return path_trace_->get_pass_rect(pass_accessor, pixels);
 }
 
 CCL_NAMESPACE_END

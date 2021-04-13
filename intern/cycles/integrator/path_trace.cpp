@@ -19,6 +19,7 @@
 #include "device/device.h"
 #include "integrator/render_scheduler.h"
 #include "render/gpu_display.h"
+#include "render/pass_accessor.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
@@ -262,7 +263,7 @@ void PathTrace::update_display(const RenderWork &render_work)
       VLOG(3) << "Invoke buffer update callback.";
 
       const double start_time = time_dt();
-      buffer_update_cb(full_render_buffers_.get(), get_num_samples_in_buffer());
+      buffer_update_cb();
       render_scheduler_.report_display_update_time(render_work, time_dt() - start_time);
     }
     else {
@@ -366,8 +367,7 @@ void PathTrace::buffer_write()
     return;
   }
 
-  const int num_samples_rendered = get_num_samples_in_buffer();
-  buffer_write_cb(full_render_buffers_.get(), num_samples_rendered);
+  buffer_write_cb();
 }
 
 void PathTrace::progress_update_if_needed()
@@ -379,6 +379,15 @@ void PathTrace::progress_update_if_needed()
   if (progress_update_cb) {
     progress_update_cb();
   }
+}
+
+bool PathTrace::get_pass_rect(PassAccessor &pass_accessor, float *pixels)
+{
+  if (!full_render_buffers_->copy_from_device()) {
+    return false;
+  }
+
+  return pass_accessor.get_pass_rect(full_render_buffers_.get(), pixels);
 }
 
 CCL_NAMESPACE_END

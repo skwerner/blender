@@ -32,6 +32,7 @@ class DeviceScene;
 class RenderBuffers;
 class RenderScheduler;
 class RenderWork;
+class PassAccessor;
 class Progress;
 class GPUDisplay;
 
@@ -95,16 +96,22 @@ class PathTrace {
    */
   void cancel();
 
+  /* Get pass data of the entire big tile.
+   * This call puts pass render result from all devices into the final pixels storage.
+   *
+   * Returns false if any of the accessor's `get_pass_rect()` returned false. */
+  bool get_pass_rect(PassAccessor &pass_accessor, float *pixels);
+
   /* Callback which communicates an updates state of the render buffer.
    * Is called during path tracing to communicate work-in-progress state of the final buffer.
    *
    * The samples indicates how many samples the buffer contains. */
-  function<void(RenderBuffers *render_buffers, int sample)> buffer_update_cb;
+  function<void(void)> buffer_update_cb;
 
   /* Callback which communicates final rendered buffer. Is called after pathtracing is done.
    *
    * The samples indicates how many samples the buffer contains. */
-  function<void(RenderBuffers *render_buffers, int sample)> buffer_write_cb;
+  function<void(void)> buffer_write_cb;
 
   /* Callback which is called to report current rendering progress.
    *

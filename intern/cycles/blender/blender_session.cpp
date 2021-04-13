@@ -328,14 +328,14 @@ static void end_render_result(BL::RenderEngine &b_engine,
   b_engine.end_result(b_rr, (int)cancel, (int)highlight, (int)do_merge_results);
 }
 
-void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
-                                                 bool do_update_only,
-                                                 bool highlight)
+void BlenderSession::do_write_update_render_tile(bool do_update_only)
 {
-  int x = rtile.x - session->buffer_params.full_x;
-  int y = rtile.y - session->buffer_params.full_y;
-  int w = rtile.w;
-  int h = rtile.h;
+  const Tile &tile = session->tile_manager.get_current_tile();
+
+  const int x = tile.x - tile.full_x;
+  const int y = tile.y - tile.full_y;
+  const int w = tile.width;
+  const int h = tile.height;
 
   /* get render result */
   BL::RenderResult b_rr = begin_render_result(
@@ -356,40 +356,30 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
   BL::RenderLayer b_rlay = *b_single_rlay;
 
   if (do_update_only) {
-    /* Sample would be zero at initial tile update, which is only needed
-     * to tag tile form blender side as IN PROGRESS for proper highlight
-     * no buffers should be sent to blender yet. For denoise we also
-     * keep showing the noisy buffers until denoise is done. */
-    bool merge = (rtile.sample != 0) && (rtile.task != RenderTile::DENOISE);
-
-    if (merge) {
-      update_render_result(b_rlay, rtile);
-    }
-
-    end_render_result(b_engine, b_rr, true, highlight, merge);
+    update_render_result(b_rlay);
   }
   else {
-    /* Write final render result. */
-    write_render_result(b_rlay, rtile);
-    end_render_result(b_engine, b_rr, false, false, true);
+    write_render_result(b_rlay);
   }
+
+  end_render_result(b_engine, b_rr, true, false, true);
 }
 
-void BlenderSession::write_render_tile(RenderTile &rtile)
+void BlenderSession::write_render_tile()
 {
-  do_write_update_render_tile(rtile, false, false);
+  do_write_update_render_tile(false);
 }
 
-void BlenderSession::update_render_tile(RenderTile &rtile, bool highlight)
+void BlenderSession::update_render_tile()
 {
   /* use final write for preview renders, otherwise render result wouldn't be
    * be updated in blender side
    * would need to be investigated a bit further, but for now shall be fine
    */
   if (!b_engine.is_preview())
-    do_write_update_render_tile(rtile, true, highlight);
+    do_write_update_render_tile(true);
   else
-    do_write_update_render_tile(rtile, false, false);
+    do_write_update_render_tile(false);
 }
 
 static void add_cryptomatte_layer(BL::RenderResult &b_rr, string name, string manifest)
@@ -461,9 +451,8 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   }
 
   /* set callback to write out render results */
-  session->write_render_tile_cb = function_bind(&BlenderSession::write_render_tile, this, _1);
-  session->update_render_tile_cb = function_bind(
-      &BlenderSession::update_render_tile, this, _1, _2);
+  session->write_render_tile_cb = [&]() { write_render_tile(); };
+  session->update_render_tile_cb = [&]() { update_render_tile(); };
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
 
@@ -622,7 +611,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
    * name. */
   Pass::add(PASS_COMBINED, scene->passes, "Combined");
 
-  session->write_render_tile_cb = function_bind(&BlenderSession::write_render_tile, this, _1);
+  session->write_render_tile_cb = [&]() { write_render_tile(); };
 
   if (!session->progress.get_cancel()) {
     /* Sync scene. */
@@ -668,62 +657,31 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
   session->write_render_tile_cb = function_null;
 }
 
-void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
-                                                   RenderTile &rtile,
-                                                   bool do_update_only)
+void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 {
-  RenderBuffers *buffers = rtile.buffers;
+  const Tile &tile = session->tile_manager.get_current_tile();
+  vector<float> pixels(tile.width * tile.height * 4);
 
-  /* copy data from device */
-  if (!buffers->copy_from_device())
-    return;
-
-  float exposure = scene->film->get_exposure();
-
-  vector<float> pixels(rtile.w * rtile.h * 4);
-
-  /* Adjust absolute sample number to the range. */
-  int sample = rtile.sample;
-#if 0
-  const int range_start_sample = session->tile_manager.range_start_sample;
-  if (range_start_sample != -1) {
-    sample -= range_start_sample;
-  }
-#endif
-
-  if (!do_update_only) {
-    /* copy each pass */
-    for (BL::RenderPass &b_pass : b_rlay.passes) {
-      const int components = b_pass.channels();
-
-      /* Copy pixels from the render pass. */
-      const bool read = buffers->get_pass_rect(
-          session->scene->passes, b_pass.name(), exposure, sample, components, &pixels[0]);
-
-      if (!read) {
-        memset(&pixels[0], 0, pixels.size() * sizeof(float));
-      }
-
-      b_pass.rect(&pixels[0]);
+  /* Copy each pass. */
+  for (BL::RenderPass &b_pass : b_rlay.passes) {
+    if (!session->get_pass_rect(b_pass.name(), b_pass.channels(), &pixels[0])) {
+      memset(&pixels[0], 0, pixels.size() * sizeof(float));
     }
-  }
-  else {
-    /* copy combined pass */
-    BL::RenderPass b_combined_pass(b_rlay.passes.find_by_name("Combined", b_rview_name.c_str()));
-    if (buffers->get_pass_rect(
-            session->scene->passes, "Combined", exposure, sample, 4, &pixels[0]))
-      b_combined_pass.rect(&pixels[0]);
+
+    b_pass.rect(&pixels[0]);
   }
 }
 
-void BlenderSession::write_render_result(BL::RenderLayer &b_rlay, RenderTile &rtile)
+void BlenderSession::update_render_result(BL::RenderLayer &b_rlay)
 {
-  do_write_update_render_result(b_rlay, rtile, false);
-}
+  const Tile &tile = session->tile_manager.get_current_tile();
+  vector<float> pixels(tile.width * tile.height * 4);
 
-void BlenderSession::update_render_result(BL::RenderLayer &b_rlay, RenderTile &rtile)
-{
-  do_write_update_render_result(b_rlay, rtile, true);
+  /* Copy combined pass. */
+  BL::RenderPass b_combined_pass(b_rlay.passes.find_by_name("Combined", b_rview_name.c_str()));
+  if (session->get_pass_rect("Combined", b_combined_pass.channels(), &pixels[0])) {
+    b_combined_pass.rect(&pixels[0]);
+  }
 }
 
 void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)

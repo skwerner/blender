@@ -57,7 +57,6 @@ class BufferParams {
 
   /* Offsets of passes needed for the rendering functionality like adaptive sampling and denoising.
    * Pre-calculated so that they are available in areas where list of passes is not accessible. */
-  int pass_sample_count = -1;
   int pass_denoising_color = -1;
   int pass_denoising_normal = -1;
   int pass_denoising_albedo = -1;
@@ -92,17 +91,6 @@ class RenderBuffers {
   void zero();
 
   bool copy_from_device();
-
-  bool get_pass_rect(const vector<Pass> &passes,
-                     const string &name,
-                     float exposure,
-                     int sample,
-                     int components,
-                     float *pixels);
-
-#if 0
-  bool set_pass_rect(PassType type, int components, float *pixels, int samples);
-#endif
 };
 
 /* Render Tile

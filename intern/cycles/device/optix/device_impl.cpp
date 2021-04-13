@@ -757,7 +757,7 @@ void OptiXDevice::launch_render(DeviceTask &task, RenderTile &rtile, int thread_
 #  endif
 
 /* --------------------------------------------------------------------
- * Context helpers.
+ * Buffer denoising.
  */
 
 void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)

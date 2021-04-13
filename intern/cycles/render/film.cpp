@@ -281,8 +281,9 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
    * so cryptomatte passes remain in the right order. */
   stable_sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
 
-  if (pass.divide_type != PASS_NONE)
-    Pass::add(pass.divide_type, passes);
+  if (pass.divide_type != PASS_NONE) {
+    Pass::add(pass.divide_type, passes, nullptr, is_auto);
+  }
 }
 
 bool Pass::equals_exact(const vector<Pass> &A, const vector<Pass> &B)

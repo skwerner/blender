@@ -86,13 +86,27 @@ class SessionParams {
   {
     /* Modified means we have to recreate the session, any parameter changes
      * that can be handled by an existing Session are omitted. */
-    return !(device == params.device && headless == params.headless &&
-             background == params.background && experimental == params.experimental &&
-             pixel_size == params.pixel_size && threads == params.threads &&
-             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem &&
-             denoising.type == params.denoising.type &&
-             denoising.input_passes == params.denoising.input_passes &&
-             (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
+    if (!(device == params.device && headless == params.headless &&
+          background == params.background && experimental == params.experimental &&
+          pixel_size == params.pixel_size && threads == params.threads &&
+          use_profiling == params.use_profiling && shadingsystem == params.shadingsystem)) {
+      return true;
+    }
+
+    const bool params_denoising_use = params.denoising.use &&
+                                      (params.device.denoisers & denoising.type);
+    if (denoising.use != params_denoising_use) {
+      return true;
+    }
+
+    if (denoising.use) {
+      if (!(denoising.type == params.denoising.type &&
+            denoising.input_passes == params.denoising.input_passes)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 };
 

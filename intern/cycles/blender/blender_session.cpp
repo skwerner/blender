@@ -490,12 +490,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   session->set_denoising(session_params.denoising);
 
   /* Compute render passes and film settings. */
-  /* TODO(sergey): Currently do extra integrator synchronization, so that we have access to
-   * adaptive sampling. This will be removed by a follow up development which will move adaptive
-   * sampling passes creation to Scene. */
-  sync->sync_integrator();
-  const AdaptiveSampling adaptive_sampling = scene->integrator->get_adaptive_sampling();
-  sync->sync_render_passes(b_rlay, b_view_layer, adaptive_sampling.use, session_params.denoising);
+  sync->sync_render_passes(b_rlay, b_view_layer, session_params.denoising);
 
   /* Set buffer params, using film settings from sync_render_passes. */
   buffer_params.denoising_data_pass = scene->film->get_denoising_data_pass();

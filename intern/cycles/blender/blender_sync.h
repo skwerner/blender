@@ -76,7 +76,6 @@ class BlenderSync {
   void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
   void sync_render_passes(BL::RenderLayer &b_render_layer,
                           BL::ViewLayer &b_view_layer,
-                          bool adaptive_sampling,
                           const DenoiseParams &denoising);
   void sync_integrator();
   void sync_camera(BL::RenderSettings &b_render,

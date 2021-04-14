@@ -550,9 +550,16 @@ void Scene::update_passes(const DenoiseParams &denoise_params)
   if (denoise_params.use || denoise_params.store_passes) {
     Pass::add(PASS_DENOISING_COLOR, passes, nullptr, true);
 
-    /* TODO(sergey): Only use passes required by the denoiser when storage is not requested. */
-    Pass::add(PASS_DENOISING_NORMAL, passes, nullptr, true);
-    Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, true);
+    /* NOTE: Enable all passes when storage is requested. This way it is possible to tweak denoiser
+     * parameters later on. */
+
+    if (denoise_params.store_passes || denoise_params.use_pass_normal) {
+      Pass::add(PASS_DENOISING_NORMAL, passes, nullptr, true);
+    }
+
+    if (denoise_params.store_passes || denoise_params.use_pass_albedo) {
+      Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, true);
+    }
   }
 }
 

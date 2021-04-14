@@ -308,39 +308,18 @@ static ShaderEvalType get_shader_type(const string &pass_type)
     return SHADER_EVAL_BAKE;
 }
 
-static BL::RenderResult begin_render_result(BL::RenderEngine &b_engine,
-                                            int x,
-                                            int y,
-                                            int w,
-                                            int h,
-                                            const char *layername,
-                                            const char *viewname)
-{
-  return b_engine.begin_result(x, y, w, h, layername, viewname);
-}
-
-static void end_render_result(BL::RenderEngine &b_engine,
-                              BL::RenderResult &b_rr,
-                              bool cancel,
-                              bool highlight,
-                              bool do_merge_results)
-{
-  b_engine.end_result(b_rr, (int)cancel, (int)highlight, (int)do_merge_results);
-}
-
 void BlenderSession::do_write_update_render_tile(bool do_update_only)
 {
   const int2 tile_offset = session->get_render_tile_offset();
   const int2 tile_size = session->get_render_tile_size();
 
   /* get render result */
-  BL::RenderResult b_rr = begin_render_result(b_engine,
-                                              tile_offset.x,
-                                              tile_offset.y,
-                                              tile_size.x,
-                                              tile_size.y,
-                                              b_rlay_name.c_str(),
-                                              b_rview_name.c_str());
+  BL::RenderResult b_rr = b_engine.begin_result(tile_offset.x,
+                                                tile_offset.y,
+                                                tile_size.x,
+                                                tile_size.y,
+                                                b_rlay_name.c_str(),
+                                                b_rview_name.c_str());
 
   /* can happen if the intersected rectangle gives 0 width or height */
   if (b_rr.ptr.data == NULL) {
@@ -363,7 +342,7 @@ void BlenderSession::do_write_update_render_tile(bool do_update_only)
     write_render_result(b_rlay);
   }
 
-  end_render_result(b_engine, b_rr, true, false, true);
+  b_engine.end_result(b_rr, true, false, true);
 }
 
 void BlenderSession::write_render_tile()
@@ -464,8 +443,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
       b_render, b_v3d, b_rv3d, scene->camera, width, height);
 
   /* temporary render result to find needed passes and views */
-  BL::RenderResult b_rr = begin_render_result(
-      b_engine, 0, 0, 1, 1, b_view_layer.name().c_str(), NULL);
+  BL::RenderResult b_rr = b_engine.begin_result(0, 0, 1, 1, b_view_layer.name().c_str(), NULL);
   BL::RenderResult::layers_iterator b_single_rlay;
   b_rr.layers.begin(b_single_rlay);
   BL::RenderLayer b_rlay = *b_single_rlay;
@@ -555,7 +533,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   stamp_view_layer_metadata(scene, b_rlay_name);
 
   /* free result without merging */
-  end_render_result(b_engine, b_rr, true, true, false);
+  b_engine.end_result(b_rr, true, true, false);
 
   double total_time, render_time;
   session->progress.get_time(total_time, render_time);

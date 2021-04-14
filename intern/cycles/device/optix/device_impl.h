@@ -138,7 +138,7 @@ class OptiXDevice : public CUDADevice {
   Denoiser denoiser_;
 
  public:
-  OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+  OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler);
   ~OptiXDevice();
 
  private:

@@ -96,8 +96,8 @@ OptiXDevice::Denoiser::~Denoiser()
   }
 }
 
-OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
-    : CUDADevice(info, stats, profiler, background), denoiser_(this)
+OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler)
+    : CUDADevice(info, stats, profiler), denoiser_(this)
 #  if 0
       sbt_data(this, "__sbt", MEM_READ_ONLY),
       launch_params(this, "__params"),

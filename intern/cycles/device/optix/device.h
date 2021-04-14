@@ -28,10 +28,7 @@ class Stats;
 
 bool device_optix_init();
 
-Device *device_optix_create(const DeviceInfo &info,
-                            Stats &stats,
-                            Profiler &profiler,
-                            bool background);
+Device *device_optix_create(const DeviceInfo &info, Stats &stats, Profiler &profiler);
 
 void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo> &devices);
 

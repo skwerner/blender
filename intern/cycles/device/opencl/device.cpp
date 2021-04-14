@@ -29,18 +29,14 @@
 
 CCL_NAMESPACE_BEGIN
 
-Device *device_opencl_create(const DeviceInfo &info,
-                             Stats &stats,
-                             Profiler &profiler,
-                             bool background)
+Device *device_opencl_create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
 {
 #ifdef WITH_OPENCL
-  return opencl_create_split_device(info, stats, profiler, background);
+  return opencl_create_split_device(info, stats, profiler);
 #else
   (void)info;
   (void)stats;
   (void)profiler;
-  (void)background;
 
   LOG(FATAL)
       << "Request to create OpenCL device without compiled-in support. Should never happen.";

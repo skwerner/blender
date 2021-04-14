@@ -49,8 +49,8 @@ class MultiDevice : public Device {
   vector<vector<SubDevice *>> peer_islands;
   bool matching_rendering_and_denoising_devices;
 
-  MultiDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
-      : Device(info, stats, profiler, background_), unique_key(1)
+  MultiDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler)
+      : Device(info, stats, profiler), unique_key(1)
   {
     foreach (const DeviceInfo &subinfo, info.multi_devices) {
       /* Always add CPU devices at the back since GPU devices can change
@@ -67,14 +67,14 @@ class MultiDevice : public Device {
 
       /* The pointer to 'sub->stats' will stay valid even after new devices
        * are added, since 'devices' is a linked list. */
-      sub->device = Device::create(subinfo, sub->stats, profiler, background);
+      sub->device = Device::create(subinfo, sub->stats, profiler);
     }
 
     foreach (const DeviceInfo &subinfo, info.denoising_devices) {
       denoising_devices.emplace_front();
       SubDevice *sub = &denoising_devices.front();
 
-      sub->device = Device::create(subinfo, sub->stats, profiler, background);
+      sub->device = Device::create(subinfo, sub->stats, profiler);
     }
 
     /* Build a list of peer islands for the available render devices */
@@ -476,12 +476,9 @@ class MultiDevice : public Device {
   }
 };
 
-Device *device_multi_create(const DeviceInfo &info,
-                            Stats &stats,
-                            Profiler &profiler,
-                            bool background)
+Device *device_multi_create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
 {
-  return new MultiDevice(info, stats, profiler, background);
+  return new MultiDevice(info, stats, profiler);
 }
 
 CCL_NAMESPACE_END

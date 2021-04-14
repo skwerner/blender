@@ -56,7 +56,7 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
 
   pause = false;
 
-  device = Device::create(params.device, stats, profiler, params.background);
+  device = Device::create(params.device, stats, profiler);
 
   scene = new Scene(scene_params, device);
 

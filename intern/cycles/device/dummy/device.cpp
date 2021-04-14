@@ -25,8 +25,8 @@ CCL_NAMESPACE_BEGIN
 
 class DummyDevice : public Device {
  public:
-  DummyDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background_)
-      : Device(info_, stats_, profiler_, background_)
+  DummyDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_)
+      : Device(info_, stats_, profiler_)
   {
     error_msg = info.error_msg;
   }
@@ -70,12 +70,9 @@ class DummyDevice : public Device {
   }
 };
 
-Device *device_dummy_create(const DeviceInfo &info,
-                            Stats &stats,
-                            Profiler &profiler,
-                            bool background)
+Device *device_dummy_create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
 {
-  return new DummyDevice(info, stats, profiler, background);
+  return new DummyDevice(info, stats, profiler);
 }
 
 CCL_NAMESPACE_END

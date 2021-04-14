@@ -99,14 +99,14 @@ void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
   }
 }
 
-Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
+Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
 {
 #ifdef WITH_MULTI
   if (!info.multi_devices.empty()) {
     /* Always create a multi device when info contains multiple devices.
      * This is done so that the type can still be e.g. DEVICE_CPU to indicate
      * that it is a homogeneous collection of devices, which simplifies checks. */
-    return device_multi_create(info, stats, profiler, background);
+    return device_multi_create(info, stats, profiler);
   }
 #endif
 
@@ -114,24 +114,24 @@ Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler,
 
   switch (info.type) {
     case DEVICE_CPU:
-      device = device_cpu_create(info, stats, profiler, background);
+      device = device_cpu_create(info, stats, profiler);
       break;
 #ifdef WITH_CUDA
     case DEVICE_CUDA:
       if (device_cuda_init())
-        device = device_cuda_create(info, stats, profiler, background);
+        device = device_cuda_create(info, stats, profiler);
       break;
 #endif
 #ifdef WITH_OPTIX
     case DEVICE_OPTIX:
       if (device_optix_init())
-        device = device_optix_create(info, stats, profiler, background);
+        device = device_optix_create(info, stats, profiler);
       break;
 #endif
 #ifdef WITH_OPENCL
     case DEVICE_OPENCL:
       if (device_opencl_init())
-        device = device_opencl_create(info, stats, profiler, background);
+        device = device_opencl_create(info, stats, profiler);
       break;
 #endif
     default:
@@ -139,7 +139,7 @@ Device *Device::create(const DeviceInfo &info, Stats &stats, Profiler &profiler,
   }
 
   if (device == NULL) {
-    device = device_dummy_create(info, stats, profiler, background);
+    device = device_dummy_create(info, stats, profiler);
   }
 
   return device;

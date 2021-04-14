@@ -272,12 +272,11 @@ class Device {
   friend class device_sub_ptr;
 
  protected:
-  Device(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool background)
-      : background(background), info(info_), stats(stats_), profiler(profiler_)
+  Device(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_)
+      : info(info_), stats(stats_), profiler(profiler_)
   {
   }
 
-  bool background;
   string error_msg;
 
   virtual device_ptr mem_alloc_sub_ptr(device_memory & /*mem*/, int /*offset*/, int /*size*/)
@@ -423,10 +422,7 @@ class Device {
   }
 
   /* static */
-  static Device *create(const DeviceInfo &info,
-                        Stats &stats,
-                        Profiler &profiler,
-                        bool background = true);
+  static Device *create(const DeviceInfo &info, Stats &stats, Profiler &profiler);
 
   static DeviceType type_from_string(const char *name);
   static string string_from_type(DeviceType type);

@@ -91,7 +91,7 @@ class CUDADevice : public Device {
 
   void set_error(const string &error) override;
 
-  CUDADevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_);
+  CUDADevice(const DeviceInfo &info, Stats &stats, Profiler &profiler);
 
   virtual ~CUDADevice();
 

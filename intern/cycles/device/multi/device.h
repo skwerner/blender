@@ -26,9 +26,6 @@ class DeviceInfo;
 class Profiler;
 class Stats;
 
-Device *device_multi_create(const DeviceInfo &info,
-                            Stats &stats,
-                            Profiler &profiler,
-                            bool background);
+Device *device_multi_create(const DeviceInfo &info, Stats &stats, Profiler &profiler);
 
 CCL_NAMESPACE_END

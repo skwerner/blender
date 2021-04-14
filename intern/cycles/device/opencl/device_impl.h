@@ -396,7 +396,7 @@ class OpenCLDevice : public Device {
   void opencl_error(const string &message);
   void opencl_assert_err(cl_int err, const char *where);
 
-  OpenCLDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+  OpenCLDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler);
   ~OpenCLDevice();
 
   static void CL_CALLBACK context_notify_callback(const char *err_info,
@@ -608,10 +608,7 @@ class OpenCLDevice : public Device {
   friend class OpenCLSplitKernelFunction;
 };
 
-Device *opencl_create_split_device(const DeviceInfo &info,
-                                   Stats &stats,
-                                   Profiler &profiler,
-                                   bool background);
+Device *opencl_create_split_device(const DeviceInfo &info, Stats &stats, Profiler &profiler);
 
 CCL_NAMESPACE_END
 

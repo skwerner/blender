@@ -87,18 +87,14 @@ void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo
 #endif
 }
 
-Device *device_optix_create(const DeviceInfo &info,
-                            Stats &stats,
-                            Profiler &profiler,
-                            bool background)
+Device *device_optix_create(const DeviceInfo &info, Stats &stats, Profiler &profiler)
 {
 #ifdef WITH_OPTIX
-  return new OptiXDevice(info, stats, profiler, background);
+  return new OptiXDevice(info, stats, profiler);
 #else
   (void)info;
   (void)stats;
   (void)profiler;
-  (void)background;
 
   LOG(FATAL) << "Request to create OptiX device without compiled-in support. Should never happen.";
 

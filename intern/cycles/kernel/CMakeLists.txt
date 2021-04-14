@@ -623,7 +623,7 @@ cycles_add_library(cycles_kernel "${LIB}"
 source_group("bvh" FILES ${SRC_BVH_HEADERS})
 source_group("closure" FILES ${SRC_CLOSURE_HEADERS})
 source_group("geom" FILES ${SRC_GEOM_HEADERS})
-source_group("integrator" FILES ${SRC_INTEGATOR_HEADERS})
+source_group("integrator" FILES ${SRC_INTEGRATOR_HEADERS})
 source_group("kernel" FILES ${SRC_HEADERS})
 source_group("device\\cpu" FILES ${SRC_DEVICE_CPU} ${SRC_DEVICE_CPU_HEADERS})
 source_group("device\\cuda" FILES ${SRC_DEVICE_CUDA} ${SRC_DEVICE_CUDA_HEADERS})

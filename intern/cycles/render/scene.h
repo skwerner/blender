@@ -41,7 +41,6 @@ class AttributeRequestSet;
 class Background;
 class BVH;
 class Camera;
-class DenoiseParams;
 class Device;
 class DeviceInfo;
 class Film;
@@ -295,7 +294,7 @@ class Scene : public NodeOwner {
   bool update(Progress &progress);
 
   /* Update passes so that they contain all passes required for the configured functionality. */
-  void update_passes(const DenoiseParams &denoise_params);
+  void update_passes();
 
   /* This function is used to create a node of a specified type instead of
    * calling 'new', and sets the scene as the owner of the node.

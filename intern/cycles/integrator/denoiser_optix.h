@@ -23,6 +23,9 @@ CCL_NAMESPACE_BEGIN
 class OptiXDenoiser : public DeviceDenoiser {
  public:
   OptiXDenoiser(Device *device, const DenoiseParams &params);
+
+ protected:
+  virtual uint get_device_type_mask() const override;
 };
 
 CCL_NAMESPACE_END

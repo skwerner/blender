@@ -200,12 +200,15 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
     return;
   }
 
-  /* TODO(sergey): Only re-create if the type did change. Otherwise simply update parameters of the
-   * existing denoiser. */
-  if (!denoiser_ || denoiser_->get_params().modified(params)) {
-    /* TODO(sergey): Create denoiser on a proper device. */
-    denoiser_ = Denoiser::create(device_, params);
+  if (denoiser_) {
+    const DenoiseParams old_denoiser_params = denoiser_->get_params();
+    if (old_denoiser_params.type == params.type) {
+      denoiser_->set_params(params);
+      return;
+    }
   }
+
+  denoiser_ = Denoiser::create(device_, params);
 }
 
 void PathTrace::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)

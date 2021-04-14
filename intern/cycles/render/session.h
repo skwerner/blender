@@ -54,13 +54,10 @@ class SessionParams {
 
   bool experimental;
   int samples;
-  int denoising_start_sample;
   int pixel_size;
   int threads;
 
   bool use_profiling;
-
-  DenoiseParams denoising;
 
   ShadingSystem shadingsystem;
 
@@ -73,7 +70,6 @@ class SessionParams {
 
     experimental = false;
     samples = 1024;
-    denoising_start_sample = 0;
     pixel_size = 1;
     threads = 0;
 
@@ -86,28 +82,10 @@ class SessionParams {
   {
     /* Modified means we have to recreate the session, any parameter changes
      * that can be handled by an existing Session are omitted. */
-    if (!(device == params.device && headless == params.headless &&
-          background == params.background && experimental == params.experimental &&
-          pixel_size == params.pixel_size && threads == params.threads &&
-          use_profiling == params.use_profiling && shadingsystem == params.shadingsystem)) {
-      return true;
-    }
-
-    const bool params_denoising_use = params.denoising.use &&
-                                      (params.device.denoisers & denoising.type);
-    if (denoising.use != params_denoising_use) {
-      return true;
-    }
-
-    if (denoising.use) {
-      if (!(denoising.type == params.denoising.type &&
-            denoising.use_pass_albedo == params.denoising.use_pass_albedo &&
-            denoising.use_pass_normal == params.denoising.use_pass_normal)) {
-        return true;
-      }
-    }
-
-    return false;
+    return !(device == params.device && headless == params.headless &&
+             background == params.background && experimental == params.experimental &&
+             pixel_size == params.pixel_size && threads == params.threads &&
+             use_profiling == params.use_profiling && shadingsystem == params.shadingsystem);
   }
 };
 
@@ -146,9 +124,6 @@ class Session {
   void set_pause(bool pause);
 
   void set_samples(int samples);
-
-  void set_denoising(const DenoiseParams &denoising);
-  void set_denoising_start_sample(int sample);
 
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
 

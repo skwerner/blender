@@ -38,6 +38,7 @@ class Denoiser {
  public:
   virtual ~Denoiser() = default;
 
+  void set_params(const DenoiseParams &params);
   const DenoiseParams &get_params() const;
 
   /* Create denoiser for the given device.

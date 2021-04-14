@@ -79,6 +79,25 @@ NODE_DEFINE(Integrator)
   sampling_pattern_enum.insert("pmj", SAMPLING_PATTERN_PMJ);
   SOCKET_ENUM(sampling_pattern, "Sampling Pattern", sampling_pattern_enum, SAMPLING_PATTERN_SOBOL);
 
+  static NodeEnum denoiser_type_enum;
+  denoiser_type_enum.insert("optix", DENOISER_OPTIX);
+  denoiser_type_enum.insert("openimagedenoise", DENOISER_OPENIMAGEDENOISE);
+
+  /* Construct default parameters, so that they are the source of truth for defaults. */
+  const DenoiseParams default_denoise_params;
+
+  SOCKET_BOOLEAN(use_denoise, "Use Denoiser", default_denoise_params.use);
+  SOCKET_BOOLEAN(
+      denoise_store_passes, "Store Denoiser Passes", default_denoise_params.store_passes);
+  SOCKET_ENUM(denoiser_type, "Denoiser Type", denoiser_type_enum, default_denoise_params.type);
+  SOCKET_INT(denoise_start_sample, "Start Sample to Denoise", default_denoise_params.start_sample);
+  SOCKET_BOOLEAN(use_denoise_pass_albedo,
+                 "Use Albedo Pass for Denoiser",
+                 default_denoise_params.use_pass_albedo);
+  SOCKET_BOOLEAN(use_denoise_pass_normal,
+                 "Use Normal  Pass for Denoiser Denoiser",
+                 default_denoise_params.use_pass_normal);
+
   return type;
 }
 
@@ -275,6 +294,24 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
   assert((adaptive_sampling.adaptive_step & (adaptive_sampling.adaptive_step - 1)) == 0);
 
   return adaptive_sampling;
+}
+
+DenoiseParams Integrator::get_denoise_params() const
+{
+  DenoiseParams denoise_params;
+
+  denoise_params.use = use_denoise;
+
+  denoise_params.store_passes = denoise_store_passes;
+
+  denoise_params.type = denoiser_type;
+
+  denoise_params.start_sample = denoise_start_sample;
+
+  denoise_params.use_pass_albedo = use_denoise_pass_albedo;
+  denoise_params.use_pass_normal = use_denoise_pass_normal;
+
+  return denoise_params;
 }
 
 CCL_NAMESPACE_END

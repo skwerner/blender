@@ -395,8 +395,13 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
 
   /* Viewport render. */
 
+  /* Navigation might render multiple samples at a lower resolution. Those are not to be counted as
+   * final samples. */
+  const int num_samples_finished = state_.resolution_divider == pixel_size_ ?
+                                       state_.num_rendered_samples :
+                                       1;
+
   /* Immediately denoise when we reach the start sample or last sample. */
-  const int num_samples_finished = state_.num_rendered_samples;
   if (num_samples_finished == denoiser_params_.start_sample ||
       num_samples_finished == num_samples_) {
     return true;
@@ -409,8 +414,7 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
 
   /* Avoid excessive denoising in viewport after reaching a certain amount of samples. */
   /* TODO(sergey): Consider making time interval and sample configurable. */
-  delayed = (state_.num_rendered_samples >= 20 &&
-             (time_dt() - state_.last_display_update_time) < 1.0);
+  delayed = (num_samples_finished >= 20 && (time_dt() - state_.last_display_update_time) < 1.0);
 
   return !delayed;
 }

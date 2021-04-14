@@ -79,9 +79,6 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
     write_render_tile_cb();
   };
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
-
-  /* Validate denoising parameters. */
-  set_denoising(params.denoising);
 }
 
 Session::~Session()
@@ -197,8 +194,12 @@ void Session::run_main_render_loop()
       /* update status and timing */
       update_status_time();
 
-      if (!device->error_message().empty())
-        progress.set_error(device->error_message());
+      if (device->have_error()) {
+        const string &error_message = device->error_message();
+        progress.set_error(error_message);
+        progress.set_cancel(error_message);
+        break;
+      }
     }
 
     progress.set_update();
@@ -253,7 +254,11 @@ RenderWork Session::run_update_for_next_iteration()
    * the initial configuration when Session is created where the `set_samples()` is not used. */
   scene->integrator->set_aa_samples(params.samples);
 
-  path_trace_->set_denoiser_params(params.denoising);
+  /* Update denoiser settings. */
+  {
+    const DenoiseParams denoise_params = scene->integrator->get_denoise_params();
+    path_trace_->set_denoiser_params(denoise_params);
+  }
 
   /* Update adaptive sampling. */
   {
@@ -334,7 +339,7 @@ void Session::do_delayed_reset()
   }
   delayed_reset.do_reset = false;
 
-  scene->update_passes(params.denoising);
+  scene->update_passes();
 
   buffer_params_ = delayed_reset.params;
   buffer_params_.update_passes(scene->passes);
@@ -405,25 +410,6 @@ void Session::set_pause(bool pause_)
   else if (pause_) {
     update_status_time(pause_);
   }
-}
-
-void Session::set_denoising(const DenoiseParams &denoising)
-{
-  params.denoising = denoising;
-
-  /* TODO(sergey): Finish decoupling denoiser implementation from device. */
-  if (!(params.device.denoisers & denoising.type)) {
-    if (params.denoising.use) {
-      progress.set_error("Denoiser type not supported by compute device");
-    }
-
-    params.denoising.use = false;
-  }
-}
-
-void Session::set_denoising_start_sample(int sample)
-{
-  params.denoising.start_sample = sample;
 }
 
 void Session::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)

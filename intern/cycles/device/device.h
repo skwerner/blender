@@ -82,7 +82,6 @@ class DeviceInfo {
   DenoiserTypeMask denoisers; /* Supported denoiser types. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
-  vector<DeviceInfo> denoising_devices;
   string error_msg;
 
   DeviceInfo()
@@ -108,9 +107,6 @@ class DeviceInfo {
            (type == info.type && num == info.num && description == info.description));
     return id == info.id;
   }
-
-  /* Add additional devices needed for the specified denoiser. */
-  void add_denoising_devices(DenoiserType denoiser_type);
 };
 
 class DeviceRequestedFeatures {

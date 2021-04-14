@@ -231,8 +231,12 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
 
+  /* TODO(sergey): This feels weak to pass view layer to the integrator, and even weaker to have an
+   * implicit check on whether it is a background render or not. What is the nicer thing here? */
+  const bool background = !b_v3d;
+
   sync_view_layer(b_v3d, b_view_layer);
-  sync_integrator();
+  sync_integrator(b_view_layer, background);
   sync_film(b_v3d);
   sync_shaders(b_depsgraph, b_v3d);
   sync_images();
@@ -258,7 +262,7 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
 
 /* Integrator */
 
-void BlenderSync::sync_integrator()
+void BlenderSync::sync_integrator(BL::ViewLayer &b_view_layer, bool background)
 {
   BL::RenderSettings r = b_scene.render();
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
@@ -339,8 +343,22 @@ void BlenderSync::sync_integrator()
     integrator->set_ao_bounces(0);
   }
 
-  /* UPDATE_NONE as we don't want to tag the integrator as modified (this was done by the set
-   * calls above), but we need to make sure that the dependent things are tagged. */
+  const DenoiseParams denoise_params = get_denoise_params(b_scene, b_view_layer, background);
+  integrator->set_use_denoise(denoise_params.use);
+
+  /* Only update denoiser parameters if the denoiser is actually used. This allows to tweak
+   * denoiser parameters before enabling it without render resetting on every change. The downside
+   * is that the interface and the integrator are technically out of sync. */
+  if (denoise_params.use) {
+    integrator->set_denoise_store_passes(denoise_params.store_passes);
+    integrator->set_denoiser_type(denoise_params.type);
+    integrator->set_denoise_start_sample(denoise_params.start_sample);
+    integrator->set_use_denoise_pass_albedo(denoise_params.use_pass_albedo);
+    integrator->set_use_denoise_pass_normal(denoise_params.use_pass_normal);
+  }
+
+  /* UPDATE_NONE as we don't want to tag the integrator as modified (this was done by the
+   * set calls above), but we need to make sure that the dependent things are tagged. */
   integrator->tag_update(scene, Integrator::UPDATE_NONE);
 }
 
@@ -718,8 +736,7 @@ bool BlenderSync::get_session_pause(BL::Scene &b_scene, bool background)
 SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
                                               BL::Preferences &b_preferences,
                                               BL::Scene &b_scene,
-                                              bool background,
-                                              BL::ViewLayer b_view_layer)
+                                              bool background)
 {
   SessionParams params;
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
@@ -755,20 +772,6 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
 
   /* Clamp samples. */
   params.samples = min(params.samples, Integrator::MAX_SAMPLES);
-
-  /* Denoising */
-  params.denoising = get_denoise_params(b_scene, b_view_layer, background);
-
-  if (params.denoising.use) {
-    /* Add additional denoising devices if we are rendering and denoising
-     * with different devices. */
-    params.device.add_denoising_devices(params.denoising.type);
-
-    /* Check if denoiser is supported by device. */
-    if (!(params.device.denoisers & params.denoising.type)) {
-      params.denoising.use = false;
-    }
-  }
 
   /* Viewport Performance */
   params.pixel_size = b_engine.get_preview_pixel_size(b_scene);
@@ -855,11 +858,13 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
 
   switch (input_passes) {
     case DENOISER_INPUT_RGB:
-      /* Nothing to do, color pass is always used by the denoiser. */
+      denoising.use_pass_albedo = false;
+      denoising.use_pass_normal = false;
       break;
 
     case DENOISER_INPUT_RGB_ALBEDO:
       denoising.use_pass_albedo = true;
+      denoising.use_pass_normal = false;
       break;
 
     case DENOISER_INPUT_RGB_ALBEDO_NORMAL:

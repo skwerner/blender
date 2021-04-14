@@ -527,7 +527,7 @@ bool Scene::update(Progress &progress)
   return true;
 }
 
-void Scene::update_passes(const DenoiseParams &denoise_params)
+void Scene::update_passes()
 {
   if (!integrator->is_modified() && !film->is_modified()) {
     return;
@@ -547,20 +547,23 @@ void Scene::update_passes(const DenoiseParams &denoise_params)
   }
 
   /* Create passes needed for denoising. */
-  if (denoise_params.use || denoise_params.store_passes) {
+  const bool denoise_store_passes = integrator->get_denoise_store_passes();
+  if (integrator->get_use_denoise() || denoise_store_passes) {
     Pass::add(PASS_DENOISING_COLOR, passes, nullptr, true);
 
     /* NOTE: Enable all passes when storage is requested. This way it is possible to tweak denoiser
      * parameters later on. */
 
-    if (denoise_params.store_passes || denoise_params.use_pass_normal) {
+    if (denoise_store_passes || integrator->get_use_denoise_pass_normal()) {
       Pass::add(PASS_DENOISING_NORMAL, passes, nullptr, true);
     }
 
-    if (denoise_params.store_passes || denoise_params.use_pass_albedo) {
+    if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
       Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, true);
     }
   }
+
+  film->tag_modified();
 }
 
 bool Scene::load_kernels(Progress &progress, bool lock_scene)

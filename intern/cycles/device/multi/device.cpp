@@ -44,10 +44,9 @@ class MultiDevice : public Device {
     int peer_island_index = -1;
   };
 
-  list<SubDevice> devices, denoising_devices;
+  list<SubDevice> devices;
   device_ptr unique_key;
   vector<vector<SubDevice *>> peer_islands;
-  bool matching_rendering_and_denoising_devices;
 
   MultiDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler)
       : Device(info, stats, profiler), unique_key(1)
@@ -67,13 +66,6 @@ class MultiDevice : public Device {
 
       /* The pointer to 'sub->stats' will stay valid even after new devices
        * are added, since 'devices' is a linked list. */
-      sub->device = Device::create(subinfo, sub->stats, profiler);
-    }
-
-    foreach (const DeviceInfo &subinfo, info.denoising_devices) {
-      denoising_devices.emplace_front();
-      SubDevice *sub = &denoising_devices.front();
-
       sub->device = Device::create(subinfo, sub->stats, profiler);
     }
 
@@ -100,34 +92,11 @@ class MultiDevice : public Device {
         }
       }
     }
-
-    /* Try to re-use memory when denoising and render devices use the same physical devices
-     * (e.g. OptiX denoising and CUDA rendering device pointing to the same GPU).
-     * Ordering has to match as well, so that 'DeviceTask::split' behaves consistent. */
-    matching_rendering_and_denoising_devices = denoising_devices.empty() ||
-                                               (devices.size() == denoising_devices.size());
-    if (matching_rendering_and_denoising_devices) {
-      for (list<SubDevice>::iterator device_it = devices.begin(),
-                                     denoising_device_it = denoising_devices.begin();
-           device_it != devices.end() && denoising_device_it != denoising_devices.end();
-           ++device_it, ++denoising_device_it) {
-        const DeviceInfo &info = device_it->device->info;
-        const DeviceInfo &denoising_info = denoising_device_it->device->info;
-        if ((info.type != DEVICE_CUDA && info.type != DEVICE_OPTIX) ||
-            (denoising_info.type != DEVICE_CUDA && denoising_info.type != DEVICE_OPTIX) ||
-            info.num != denoising_info.num) {
-          matching_rendering_and_denoising_devices = false;
-          break;
-        }
-      }
-    }
   }
 
   ~MultiDevice()
   {
     foreach (SubDevice &sub, devices)
-      delete sub.device;
-    foreach (SubDevice &sub, denoising_devices)
       delete sub.device;
   }
 
@@ -136,8 +105,6 @@ class MultiDevice : public Device {
     error_msg.clear();
 
     foreach (SubDevice &sub, devices)
-      error_msg += sub.device->error_message();
-    foreach (SubDevice &sub, denoising_devices)
       error_msg += sub.device->error_message();
 
     return error_msg;
@@ -180,15 +147,6 @@ class MultiDevice : public Device {
     foreach (SubDevice &sub, devices)
       if (!sub.device->load_kernels(requested_features))
         return false;
-
-    if (requested_features.use_denoising) {
-      /* Only need denoising feature, everything else is unused. */
-      DeviceRequestedFeatures denoising_features;
-      denoising_features.use_denoising = true;
-      foreach (SubDevice &sub, denoising_devices)
-        if (!sub.device->load_kernels(denoising_features))
-          return false;
-    }
 
     return true;
   }
@@ -441,12 +399,6 @@ class MultiDevice : public Device {
     int i = 0;
 
     foreach (SubDevice &sub, devices) {
-      if (sub.device == sub_device)
-        return i;
-      i++;
-    }
-
-    foreach (SubDevice &sub, denoising_devices) {
       if (sub.device == sub_device)
         return i;
       i++;

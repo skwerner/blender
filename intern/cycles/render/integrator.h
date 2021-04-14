@@ -19,6 +19,7 @@
 
 #include "kernel/kernel_types.h"
 
+#include "device/device_denoise.h" /* For the paramaters and type enum. */
 #include "graph/node.h"
 #include "integrator/adaptive_sampling.h"
 
@@ -73,6 +74,13 @@ class Integrator : public Node {
 
   NODE_SOCKET_API(SamplingPattern, sampling_pattern)
 
+  NODE_SOCKET_API(bool, use_denoise);
+  NODE_SOCKET_API(bool, denoise_store_passes);
+  NODE_SOCKET_API(DenoiserType, denoiser_type);
+  NODE_SOCKET_API(int, denoise_start_sample);
+  NODE_SOCKET_API(bool, use_denoise_pass_albedo);
+  NODE_SOCKET_API(bool, use_denoise_pass_normal);
+
   enum : uint32_t {
     AO_PASS_MODIFIED = (1 << 0),
     BACKGROUND_AO_MODIFIED = (1 << 1),
@@ -92,6 +100,7 @@ class Integrator : public Node {
   void tag_update(Scene *scene, uint32_t flag);
 
   AdaptiveSampling get_adaptive_sampling() const;
+  DenoiseParams get_denoise_params() const;
 };
 
 CCL_NAMESPACE_END

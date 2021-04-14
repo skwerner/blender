@@ -438,7 +438,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   SessionParams session_params = BlenderSync::get_session_params(
-      b_engine, b_userpref, b_scene, background, b_view_layer);
+      b_engine, b_userpref, b_scene, background);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
       b_render, b_v3d, b_rv3d, scene->camera, width, height);
 
@@ -448,9 +448,6 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   b_rr.layers.begin(b_single_rlay);
   BL::RenderLayer b_rlay = *b_single_rlay;
   b_rlay_name = b_view_layer.name();
-
-  /* Update denoising parameters. */
-  session->set_denoising(session_params.denoising);
 
   /* Compute render passes and film settings. */
   sync->sync_render_passes(b_rlay, b_view_layer);
@@ -682,7 +679,6 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* increase samples, but never decrease */
   session->set_samples(session_params.samples);
-  session->set_denoising_start_sample(session_params.denoising.start_sample);
   session->set_pause(session_pause);
 
   /* copy recalc flags, outside of mutex so we can decide to do the real
@@ -716,8 +712,6 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
       b_render, b_v3d, b_rv3d, scene->camera, width, height);
-
-  session->set_denoising(session_params.denoising);
 
   /* reset if needed */
   if (scene->need_reset()) {

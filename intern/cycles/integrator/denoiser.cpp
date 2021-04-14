@@ -52,6 +52,18 @@ Denoiser::Denoiser(Device *device, const DenoiseParams &params) : device_(device
   DCHECK(params.use);
 }
 
+void Denoiser::set_params(const DenoiseParams &params)
+{
+  DCHECK_EQ(params.type, params_.type);
+
+  if (params.type == params_.type) {
+    params_ = params;
+  }
+  else {
+    LOG(ERROR) << "Attempt to change denoiser type.";
+  }
+}
+
 const DenoiseParams &Denoiser::get_params() const
 {
   return params_;

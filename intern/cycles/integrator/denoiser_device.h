@@ -17,6 +17,7 @@
 #pragma once
 
 #include "integrator/denoiser.h"
+#include "util/util_unique_ptr.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -28,16 +29,40 @@ CCL_NAMESPACE_BEGIN
 class DeviceDenoiser : public Denoiser {
  public:
   DeviceDenoiser(Device *device, const DenoiseParams &params);
+  ~DeviceDenoiser();
 
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) override;
 
  protected:
+  /* Get device on which denoising is to happen.
+   * Will either use one of the devices used for rendering, or create a dedicated device if needed.
+   */
+  Device *get_denoiser_device();
+
+  /* Create denoiser device which is owned by this denoiser.
+   * Used in the cases when none of the devices used for rendering supports requetsed denoiser
+   * type. */
+  Device *create_denoiser_device();
+
+  /* Get device type mask which is used to filter available devices when new device needs to be
+   * created. */
+  virtual uint get_device_type_mask() const = 0;
+
   void denoise_buffer_on_device(Device *device,
                                 const BufferParams &buffer_params,
                                 RenderBuffers *render_buffers,
                                 const int num_samples);
+
+  /* Cached pointer to the device on which denoising will happen.
+   * Used to avoid lookup of a device for every denoising request. */
+  Device *denoiser_device_ = nullptr;
+
+  /* Denoiser device which was created to perform denoising in the case the none of the rendering
+   * devices are capable of denoising. */
+  unique_ptr<Device> local_denoiser_device_;
+  bool device_creation_attempted_ = false;
 };
 
 CCL_NAMESPACE_END

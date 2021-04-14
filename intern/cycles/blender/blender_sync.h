@@ -75,7 +75,7 @@ class BlenderSync {
                  void **python_thread_state);
   void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
   void sync_render_passes(BL::RenderLayer &b_render_layer, BL::ViewLayer &b_view_layer);
-  void sync_integrator();
+  void sync_integrator(BL::ViewLayer &b_view_layer, bool background);
   void sync_camera(BL::RenderSettings &b_render,
                    BL::Object &b_override,
                    int width,
@@ -93,12 +93,10 @@ class BlenderSync {
 
   /* get parameters */
   static SceneParams get_scene_params(BL::Scene &b_scene, bool background);
-  static SessionParams get_session_params(
-      BL::RenderEngine &b_engine,
-      BL::Preferences &b_userpref,
-      BL::Scene &b_scene,
-      bool background,
-      BL::ViewLayer b_view_layer = BL::ViewLayer(PointerRNA_NULL));
+  static SessionParams get_session_params(BL::RenderEngine &b_engine,
+                                          BL::Preferences &b_userpref,
+                                          BL::Scene &b_scene,
+                                          bool background);
   static bool get_session_pause(BL::Scene &b_scene, bool background);
   static BufferParams get_buffer_params(BL::RenderSettings &b_render,
                                         BL::SpaceView3D &b_v3d,

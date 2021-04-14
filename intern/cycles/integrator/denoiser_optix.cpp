@@ -24,7 +24,11 @@ CCL_NAMESPACE_BEGIN
 OptiXDenoiser::OptiXDenoiser(Device *device, const DenoiseParams &params)
     : DeviceDenoiser(device, params)
 {
-  DCHECK(device->info.denoisers & DENOISER_OPTIX);
+}
+
+uint OptiXDenoiser::get_device_type_mask() const
+{
+  return DEVICE_MASK_OPTIX;
 }
 
 CCL_NAMESPACE_END

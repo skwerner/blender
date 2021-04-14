@@ -121,7 +121,6 @@ class Session {
   Scene *scene;
   Progress progress;
   SessionParams params;
-  BufferParams buffer_params;
   Stats stats;
   Profiler profiler;
 
@@ -218,6 +217,7 @@ class Session {
   thread_mutex buffers_mutex;
 
   TileManager tile_manager_;
+  BufferParams buffer_params_;
 
   /* Render scheduler is used to get work to be rendered with the current big tile. */
   RenderScheduler render_scheduler_;

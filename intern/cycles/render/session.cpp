@@ -275,8 +275,8 @@ RenderWork Session::run_update_for_next_iteration()
     scoped_timer update_timer;
 
     const int resolution = render_work.resolution_divider;
-    const int width = max(1, buffer_params.full_width / resolution);
-    const int height = max(1, buffer_params.full_height / resolution);
+    const int width = max(1, buffer_params_.full_width / resolution);
+    const int height = max(1, buffer_params_.full_height / resolution);
 
     if (update_scene(width, height)) {
       profiler.reset(scene->shaders.size(), scene->objects.size());
@@ -336,12 +336,12 @@ void Session::do_delayed_reset()
 
   scene->update_passes(params.denoising);
 
-  buffer_params = delayed_reset.params;
-  buffer_params.update_passes(scene->passes);
+  buffer_params_ = delayed_reset.params;
+  buffer_params_.update_passes(scene->passes);
 
-  render_scheduler_.reset(buffer_params, delayed_reset.samples);
-  path_trace_->reset(buffer_params);
-  tile_manager_.reset(buffer_params);
+  render_scheduler_.reset(buffer_params_, delayed_reset.samples);
+  path_trace_->reset(buffer_params_);
+  tile_manager_.reset(buffer_params_);
 
   progress.reset_sample();
 

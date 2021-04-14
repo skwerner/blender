@@ -159,14 +159,8 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
 
   std::array<OIDNPass, 4> oidn_passes = {{
       {"color", buffer_params.pass_denoising_color, false, true},
-      {"albedo",
-       buffer_params.pass_denoising_albedo,
-       true,
-       params_.input_passes >= DENOISER_INPUT_RGB_ALBEDO},
-      {"normal",
-       buffer_params.pass_denoising_normal,
-       true,
-       params_.input_passes >= DENOISER_INPUT_RGB_ALBEDO_NORMAL},
+      {"albedo", buffer_params.pass_denoising_albedo, true, params_.use_pass_albedo},
+      {"normal", buffer_params.pass_denoising_normal, true, params_.use_pass_normal},
       {"output", 0, false, true},
   }};
 

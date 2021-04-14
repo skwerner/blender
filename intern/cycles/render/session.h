@@ -101,7 +101,8 @@ class SessionParams {
 
     if (denoising.use) {
       if (!(denoising.type == params.denoising.type &&
-            denoising.input_passes == params.denoising.input_passes)) {
+            denoising.use_pass_albedo == params.denoising.use_pass_albedo &&
+            denoising.use_pass_normal == params.denoising.use_pass_normal)) {
         return true;
       }
     }

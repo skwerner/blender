@@ -795,8 +795,18 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
                                               BL::ViewLayer &b_view_layer,
                                               bool background)
 {
+  enum DenoiserInput {
+    DENOISER_INPUT_RGB = 1,
+    DENOISER_INPUT_RGB_ALBEDO = 2,
+    DENOISER_INPUT_RGB_ALBEDO_NORMAL = 3,
+
+    DENOISER_INPUT_NUM,
+  };
+
   DenoiseParams denoising;
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
+
+  int input_passes = -1;
 
   if (background) {
     /* Final Render Denoising */
@@ -809,12 +819,12 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
         denoising.use = false;
       }
 
-      denoising.input_passes = (DenoiserInput)get_enum(
-          clayer,
-          (denoising.type == DENOISER_OPTIX) ? "denoising_optix_input_passes" :
-                                               "denoising_openimagedenoise_input_passes",
-          DENOISER_INPUT_NUM,
-          DENOISER_INPUT_RGB_ALBEDO_NORMAL);
+      input_passes = (DenoiserInput)get_enum(clayer,
+                                             (denoising.type == DENOISER_OPTIX) ?
+                                                 "denoising_optix_input_passes" :
+                                                 "denoising_openimagedenoise_input_passes",
+                                             DENOISER_INPUT_NUM,
+                                             DENOISER_INPUT_RGB_ALBEDO_NORMAL);
 
       denoising.store_passes = get_boolean(clayer, "denoising_store_passes");
     }
@@ -826,8 +836,8 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
         cscene, "preview_denoiser", DENOISER_NUM, DENOISER_NONE);
     denoising.start_sample = get_int(cscene, "preview_denoising_start_sample");
 
-    denoising.input_passes = (DenoiserInput)get_enum(
-        cscene, "preview_denoising_input_passes", DENOISER_INPUT_NUM, (int)denoising.input_passes);
+    input_passes = (DenoiserInput)get_enum(
+        cscene, "preview_denoising_input_passes", DENOISER_INPUT_NUM, DENOISER_INPUT_RGB_ALBEDO);
 
     /* Auto select fastest denoiser. */
     if (denoising.type == DENOISER_NONE) {
@@ -841,6 +851,25 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
         denoising.use = false;
       }
     }
+  }
+
+  switch (input_passes) {
+    case DENOISER_INPUT_RGB:
+      /* Nothing to do, color pass is always used by the denoiser. */
+      break;
+
+    case DENOISER_INPUT_RGB_ALBEDO:
+      denoising.use_pass_albedo = true;
+      break;
+
+    case DENOISER_INPUT_RGB_ALBEDO_NORMAL:
+      denoising.use_pass_albedo = true;
+      denoising.use_pass_normal = true;
+      break;
+
+    default:
+      LOG(ERROR) << "Unhandled input passes enum " << input_passes;
+      break;
   }
 
   return denoising;

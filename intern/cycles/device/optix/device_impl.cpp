@@ -760,6 +760,28 @@ void OptiXDevice::launch_render(DeviceTask &task, RenderTile &rtile, int thread_
  * Buffer denoising.
  */
 
+/* Calculate number of passes used by the denoiser. */
+static int denoise_buffer_num_passes(const DenoiseParams &params)
+{
+  int num_passes = 1;
+
+  if (params.use_pass_albedo) {
+    num_passes += 1;
+
+    if (params.use_pass_normal) {
+      num_passes += 1;
+    }
+  }
+
+  return num_passes;
+}
+
+/* Calculate number of floats per pixel for the input buffer used by the OptiX. */
+static int denoise_buffer_pass_stride(const DenoiseParams &params)
+{
+  return denoise_buffer_num_passes(params) * 3;
+}
+
 void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
 {
   const CUDAContextScope scope(this);
@@ -770,8 +792,10 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
 
   unique_ptr<DeviceQueue> queue = queue_create();
 
+  const int input_pass_stride = denoise_buffer_pass_stride(task.params);
+
   device_only_memory<float> input_rgb(this, "denoiser input rgb");
-  input_rgb.alloc_to_device(task.width * task.height * 3 * task.params.input_passes);
+  input_rgb.alloc_to_device(task.width * task.height * input_pass_stride);
 
   /* Make sure input data is in [0 .. 10000] range by scaling the input buffer by the number of
    *
@@ -806,7 +830,7 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DeviceQueue *queue,
   const int pass_offset[3] = {
       task.pass_denoising_color, task.pass_denoising_albedo, task.pass_denoising_normal};
 
-  const int input_passes = task.params.input_passes;
+  const int input_passes = denoise_buffer_num_passes(task.params);
 
   void *args[] = {const_cast<device_ptr *>(&d_input_rgb),
                   const_cast<device_ptr *>(&task.buffer),
@@ -869,11 +893,10 @@ bool OptiXDevice::denoise_ensure(const DeviceDenoiseTask &task)
 
 bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
 {
-  DCHECK_GE(params.input_passes, 1);
-  DCHECK_LE(params.input_passes, 3);
+  const int input_passes = denoise_buffer_num_passes(params);
 
   const bool recreate_denoiser = (denoiser_.optix_denoiser == nullptr) ||
-                                 (params.input_passes != denoiser_.input_passes);
+                                 (input_passes != denoiser_.input_passes);
   if (!recreate_denoiser) {
     return true;
   }
@@ -886,7 +909,7 @@ bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
   /* Create OptiX denoiser handle on demand when it is first used. */
   OptixDenoiserOptions denoiser_options;
   denoiser_options.inputKind = static_cast<OptixDenoiserInputKind>(OPTIX_DENOISER_INPUT_RGB +
-                                                                   (params.input_passes - 1));
+                                                                   (input_passes - 1));
 #  if OPTIX_ABI_VERSION < 28
   denoiser_options.pixelFormat = OPTIX_PIXEL_FORMAT_FLOAT3;
 #  endif
@@ -897,7 +920,7 @@ bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
       optixDenoiserSetModel(denoiser_.optix_denoiser, OPTIX_DENOISER_MODEL_KIND_HDR, nullptr, 0));
 
   /* OptiX denoiser handle was created with the requested number of input passes. */
-  denoiser_.input_passes = params.input_passes;
+  denoiser_.input_passes = input_passes;
 
   /* OptiX denoiser has been created, but it needs configuration. */
   denoiser_.is_configured = false;
@@ -946,6 +969,7 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
 
 bool OptiXDevice::denoise_run(const DeviceDenoiseTask &task, const device_ptr d_input_rgb)
 {
+  const int input_passes = denoise_buffer_num_passes(task.params);
   const int pixel_stride = 3 * sizeof(float);
   const int input_stride = task.width * pixel_stride;
 
@@ -978,7 +1002,7 @@ bool OptiXDevice::denoise_run(const DeviceDenoiseTask &task, const device_ptr d_
                           denoiser_.state.device_pointer,
                           denoiser_.scratch_offset,
                           input_layers,
-                          task.params.input_passes,
+                          input_passes,
                           0,
                           0,
                           output_layers,

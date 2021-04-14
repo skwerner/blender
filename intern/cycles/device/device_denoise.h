@@ -29,14 +29,6 @@ enum DenoiserType {
   DENOISER_ALL = ~0,
 };
 
-enum DenoiserInput {
-  DENOISER_INPUT_RGB = 1,
-  DENOISER_INPUT_RGB_ALBEDO = 2,
-  DENOISER_INPUT_RGB_ALBEDO_NORMAL = 3,
-
-  DENOISER_INPUT_NUM,
-};
-
 typedef int DenoiserTypeMask;
 
 class DenoiseParams {
@@ -53,10 +45,9 @@ class DenoiseParams {
   /* Viewport start sample. */
   int start_sample;
 
-  /** OIDN/Optix Denoiser **/
-
-  /* Passes handed over to the OIDN/OptiX denoiser (default to color + albedo). */
-  DenoiserInput input_passes;
+  /* Extra passes which are used by the denoiser (the color pass is always used). */
+  bool use_pass_albedo;
+  bool use_pass_normal;
 
   DenoiseParams()
   {
@@ -67,7 +58,8 @@ class DenoiseParams {
 
     /* Default to color + albedo only, since normal input does not always have the desired effect
      * when denoising with OptiX. */
-    input_passes = DENOISER_INPUT_RGB_ALBEDO;
+    use_pass_albedo = true;
+    use_pass_normal = false;
 
     start_sample = 0;
   }
@@ -75,7 +67,8 @@ class DenoiseParams {
   bool modified(const DenoiseParams &other) const
   {
     return !(use == other.use && store_passes == other.store_passes && type == other.type &&
-             start_sample == other.start_sample && input_passes == other.input_passes);
+             start_sample == other.start_sample && use_pass_albedo == other.use_pass_albedo &&
+             use_pass_normal == other.use_pass_normal);
   }
 };
 

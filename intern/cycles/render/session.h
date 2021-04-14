@@ -122,7 +122,6 @@ class Session {
   Progress progress;
   SessionParams params;
   BufferParams buffer_params;
-  TileManager tile_manager;
   Stats stats;
   Profiler profiler;
 
@@ -160,6 +159,14 @@ class Session {
   float get_progress();
 
   void collect_statistics(RenderStats *stats);
+
+  /* --------------------------------------------------------------------
+   * Tile and tile pixels aceess.
+   */
+
+  /* Get size and offset (relative to the buffer's full x/y) of the currently rendering tile. */
+  int2 get_render_tile_size() const;
+  int2 get_render_tile_offset() const;
 
   bool get_render_tile_pixels(const string &pass_name, int num_components, float *pixels);
 
@@ -209,6 +216,8 @@ class Session {
   thread_mutex pause_mutex;
   thread_mutex tile_mutex;
   thread_mutex buffers_mutex;
+
+  TileManager tile_manager_;
 
   /* Render scheduler is used to get work to be rendered with the current big tile. */
   RenderScheduler render_scheduler_;

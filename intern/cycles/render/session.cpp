@@ -44,7 +44,7 @@ CCL_NAMESPACE_BEGIN
 
 Session::Session(const SessionParams &params_, const SceneParams &scene_params)
     : params(params_),
-      tile_manager(make_int2(4096, 4096)),
+      tile_manager_(make_int2(4096, 4096)),
       render_scheduler_(params.headless, params.background, params.pixel_size)
 {
   TaskScheduler::init(params.threads);
@@ -114,7 +114,7 @@ Session::~Session()
 
 #if 0
   /* clean up */
-  tile_manager.device_free();
+  tile_manager_.device_free();
 #endif
 
   delete scene;
@@ -245,7 +245,7 @@ RenderWork Session::run_update_for_next_iteration()
     do_delayed_reset();
 
     /* After reset make sure the tile manager is at the first big tile. */
-    have_tiles = tile_manager.next();
+    have_tiles = tile_manager_.next();
   }
 
   /* Update number of samples in the integrator.
@@ -341,14 +341,14 @@ void Session::do_delayed_reset()
 
   render_scheduler_.reset(buffer_params, delayed_reset.samples);
   path_trace_->reset(buffer_params);
-  tile_manager.reset(buffer_params);
+  tile_manager_.reset(buffer_params);
 
   progress.reset_sample();
 
   /* TODO(sergey): Progress report needs to be worked on. */
 #if 0
-  bool show_progress = params.background || tile_manager.get_num_effective_samples() != INT_MAX;
-  progress.set_total_pixel_samples(show_progress ? tile_manager.state.total_pixel_samples : 0);
+  bool show_progress = params.background || tile_manager_.get_num_effective_samples() != INT_MAX;
+  progress.set_total_pixel_samples(show_progress ? tile_manager_.state.total_pixel_samples : 0);
 #endif
 
   if (!params.background) {
@@ -464,11 +464,11 @@ bool Session::update_scene(int width, int height)
 void Session::update_status_time(bool show_pause, bool show_done)
 {
 #if 0
-  int progressive_sample = tile_manager.state.sample;
-  int num_samples = tile_manager.get_num_effective_samples();
+  int progressive_sample = tile_manager_.state.sample;
+  int num_samples = tile_manager_.get_num_effective_samples();
 
   int tile = progress.get_rendered_tiles();
-  int num_tiles = tile_manager.state.num_tiles;
+  int num_tiles = tile_manager_.state.num_tiles;
 
   /* update status */
   string status, substatus;
@@ -496,7 +496,7 @@ void Session::update_status_time(bool show_pause, bool show_done)
       substatus += string_printf(", Denoised %d tiles", progress.get_denoised_tiles());
     }
   }
-  else if (tile_manager.num_samples == Integrator::MAX_SAMPLES)
+  else if (tile_manager_.num_samples == Integrator::MAX_SAMPLES)
     substatus = string_printf("Path Tracing Sample %d", progressive_sample + 1);
   else
     substatus = string_printf("Path Tracing Sample %d/%d", progressive_sample + 1, num_samples);
@@ -542,7 +542,7 @@ void Session::device_free()
   scene->device_free();
 
 #if 0
-  tile_manager.device_free();
+  tile_manager_.device_free();
 #endif
 
   /* used from background render only, so no need to
@@ -556,6 +556,24 @@ void Session::collect_statistics(RenderStats *render_stats)
   if (params.use_profiling && (params.device.type == DEVICE_CPU)) {
     render_stats->collect_profiling(scene, profiler);
   }
+}
+
+/* --------------------------------------------------------------------
+ * Tile and tile pixels aceess.
+ */
+
+int2 Session::get_render_tile_size() const
+{
+  const Tile &tile = tile_manager_.get_current_tile();
+
+  return make_int2(tile.width, tile.height);
+}
+
+int2 Session::get_render_tile_offset() const
+{
+  const Tile &tile = tile_manager_.get_current_tile();
+
+  return make_int2(tile.x - tile.full_x, tile.y - tile.full_y);
 }
 
 bool Session::get_render_tile_pixels(const string &pass_name, int num_components, float *pixels)

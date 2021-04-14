@@ -330,16 +330,17 @@ static void end_render_result(BL::RenderEngine &b_engine,
 
 void BlenderSession::do_write_update_render_tile(bool do_update_only)
 {
-  const Tile &tile = session->tile_manager.get_current_tile();
-
-  const int x = tile.x - tile.full_x;
-  const int y = tile.y - tile.full_y;
-  const int w = tile.width;
-  const int h = tile.height;
+  const int2 tile_offset = session->get_render_tile_offset();
+  const int2 tile_size = session->get_render_tile_size();
 
   /* get render result */
-  BL::RenderResult b_rr = begin_render_result(
-      b_engine, x, y, w, h, b_rlay_name.c_str(), b_rview_name.c_str());
+  BL::RenderResult b_rr = begin_render_result(b_engine,
+                                              tile_offset.x,
+                                              tile_offset.y,
+                                              tile_size.x,
+                                              tile_size.y,
+                                              b_rlay_name.c_str(),
+                                              b_rview_name.c_str());
 
   /* can happen if the intersected rectangle gives 0 width or height */
   if (b_rr.ptr.data == NULL) {
@@ -659,8 +660,8 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
 
 void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 {
-  const Tile &tile = session->tile_manager.get_current_tile();
-  vector<float> pixels(tile.width * tile.height * 4);
+  const int2 tile_size = session->get_render_tile_size();
+  vector<float> pixels(tile_size.x * tile_size.y * 4);
 
   /* Copy each pass. */
   for (BL::RenderPass &b_pass : b_rlay.passes) {
@@ -674,8 +675,8 @@ void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 
 void BlenderSession::update_render_result(BL::RenderLayer &b_rlay)
 {
-  const Tile &tile = session->tile_manager.get_current_tile();
-  vector<float> pixels(tile.width * tile.height * 4);
+  const int2 tile_size = session->get_render_tile_size();
+  vector<float> pixels(tile_size.x * tile_size.y * 4);
 
   /* Copy combined pass. */
   BL::RenderPass b_combined_pass(b_rlay.passes.find_by_name("Combined", b_rview_name.c_str()));

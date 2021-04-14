@@ -140,7 +140,7 @@ bool PassAccessor::is_valid() const
   return pass_ != nullptr;
 }
 
-bool PassAccessor::get_pass_rect(RenderBuffers *render_buffers, float *pixels)
+bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *pixels)
 {
   if (!pass_) {
     return false;
@@ -374,7 +374,7 @@ bool PassAccessor::set_pass_rect(PassType type, int components, float *pixels, i
 
     for (int i = 0; i < size; i++, out += pass_stride, pixels += components) {
       if (pass.filter) {
-        /* Scale by the number of samples, inverse of what we do in get_pass_rect.
+        /* Scale by the number of samples, inverse of what we do in get_render_tile_pixels.
          * A better solution would be to remove the need for set_pass_rect entirely,
          * and change baking to bake multiple objects in a tile at once. */
         for (int j = 0; j < components; j++) {

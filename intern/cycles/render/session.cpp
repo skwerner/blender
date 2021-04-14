@@ -558,7 +558,7 @@ void Session::collect_statistics(RenderStats *render_stats)
   }
 }
 
-bool Session::get_pass_rect(const string &pass_name, int num_components, float *pixels)
+bool Session::get_render_tile_pixels(const string &pass_name, int num_components, float *pixels)
 {
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
@@ -569,7 +569,7 @@ bool Session::get_pass_rect(const string &pass_name, int num_components, float *
     return false;
   }
 
-  return path_trace_->get_pass_rect(pass_accessor, pixels);
+  return path_trace_->get_render_tile_pixels(pass_accessor, pixels);
 }
 
 CCL_NAMESPACE_END

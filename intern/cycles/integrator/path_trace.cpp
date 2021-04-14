@@ -381,13 +381,13 @@ void PathTrace::progress_update_if_needed()
   }
 }
 
-bool PathTrace::get_pass_rect(PassAccessor &pass_accessor, float *pixels)
+bool PathTrace::get_render_tile_pixels(PassAccessor &pass_accessor, float *pixels)
 {
   if (!full_render_buffers_->copy_from_device()) {
     return false;
   }
 
-  return pass_accessor.get_pass_rect(full_render_buffers_.get(), pixels);
+  return pass_accessor.get_render_tile_pixels(full_render_buffers_.get(), pixels);
 }
 
 CCL_NAMESPACE_END

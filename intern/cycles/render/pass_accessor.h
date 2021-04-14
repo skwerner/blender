@@ -40,7 +40,7 @@ class PassAccessor {
   /* Get pass data from the given render buffers, perform needed filtering, and store result into
    * the pixels.
    * The result is stored sequentially starting from the very beginning of the pixels memory. */
-  bool get_pass_rect(RenderBuffers *render_buffers, float *pixels);
+  bool get_render_tile_pixels(RenderBuffers *render_buffers, float *pixels);
 
 #if 0
   bool set_pass_rect(PassType type, int components, float *pixels);

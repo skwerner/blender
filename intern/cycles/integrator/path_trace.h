@@ -99,8 +99,8 @@ class PathTrace {
   /* Get pass data of the entire big tile.
    * This call puts pass render result from all devices into the final pixels storage.
    *
-   * Returns false if any of the accessor's `get_pass_rect()` returned false. */
-  bool get_pass_rect(PassAccessor &pass_accessor, float *pixels);
+   * Returns false if any of the accessor's `get_render_tile_pixels()` returned false. */
+  bool get_render_tile_pixels(PassAccessor &pass_accessor, float *pixels);
 
   /* Callback which communicates an updates state of the render buffer.
    * Is called during path tracing to communicate work-in-progress state of the final buffer.

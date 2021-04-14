@@ -161,7 +161,7 @@ class Session {
 
   void collect_statistics(RenderStats *stats);
 
-  bool get_pass_rect(const string &pass_name, int num_components, float *pixels);
+  bool get_render_tile_pixels(const string &pass_name, int num_components, float *pixels);
 
  protected:
   struct DelayedReset {

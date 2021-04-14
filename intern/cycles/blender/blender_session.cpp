@@ -664,7 +664,7 @@ void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 
   /* Copy each pass. */
   for (BL::RenderPass &b_pass : b_rlay.passes) {
-    if (!session->get_pass_rect(b_pass.name(), b_pass.channels(), &pixels[0])) {
+    if (!session->get_render_tile_pixels(b_pass.name(), b_pass.channels(), &pixels[0])) {
       memset(&pixels[0], 0, pixels.size() * sizeof(float));
     }
 
@@ -679,7 +679,7 @@ void BlenderSession::update_render_result(BL::RenderLayer &b_rlay)
 
   /* Copy combined pass. */
   BL::RenderPass b_combined_pass(b_rlay.passes.find_by_name("Combined", b_rview_name.c_str()));
-  if (session->get_pass_rect("Combined", b_combined_pass.channels(), &pixels[0])) {
+  if (session->get_render_tile_pixels("Combined", b_combined_pass.channels(), &pixels[0])) {
     b_combined_pass.rect(&pixels[0]);
   }
 }

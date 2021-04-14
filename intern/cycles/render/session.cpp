@@ -423,11 +423,7 @@ void Session::set_denoising(const DenoiseParams &denoising)
 
 void Session::set_denoising_start_sample(int sample)
 {
-  if (sample != params.denoising.start_sample) {
-    params.denoising.start_sample = sample;
-
-    pause_cond.notify_all();
-  }
+  params.denoising.start_sample = sample;
 }
 
 void Session::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)

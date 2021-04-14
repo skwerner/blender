@@ -114,10 +114,7 @@ RenderTile::RenderTile()
 
 /* Render Buffers */
 
-RenderBuffers::RenderBuffers(Device *device)
-    : buffer(device, "RenderBuffers", MEM_READ_WRITE),
-      map_neighbor_copied(false),
-      render_time(0.0f)
+RenderBuffers::RenderBuffers(Device *device) : buffer(device, "RenderBuffers", MEM_READ_WRITE)
 {
 }
 

@@ -153,7 +153,7 @@ void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
 
 /* Adaptive sampling. */
 
-void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
+bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     const KernelGlobals *kg,
     ccl_global float *render_buffer,
     int x,
@@ -164,12 +164,14 @@ void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
 {
 #ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, adaptive_sampling_convergence_check);
+  return false;
 #else
-  kernel_adaptive_sampling_convergence_check(kg, render_buffer, x, y, sample, offset, stride);
+  return kernel_adaptive_sampling_convergence_check(
+      kg, render_buffer, x, y, sample, offset, stride);
 #endif
 }
 
-bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *kg,
                                                            ccl_global float *render_buffer,
                                                            int y,
                                                            int start_x,
@@ -179,13 +181,12 @@ bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *
 {
 #ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, adaptive_sampling_filter_x);
-  return false;
 #else
-  return kernel_adaptive_sampling_filter_x(kg, render_buffer, y, start_x, width, offset, stride);
+  kernel_adaptive_sampling_filter_x(kg, render_buffer, y, start_x, width, offset, stride);
 #endif
 }
 
-bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *kg,
                                                            ccl_global float *render_buffer,
                                                            int x,
                                                            int start_y,
@@ -195,9 +196,8 @@ bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *
 {
 #ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, adaptive_sampling_filter_y);
-  return false;
 #else
-  return kernel_adaptive_sampling_filter_y(kg, render_buffer, x, start_y, height, offset, stride);
+  kernel_adaptive_sampling_filter_y(kg, render_buffer, x, start_y, height, offset, stride);
 #endif
 }
 

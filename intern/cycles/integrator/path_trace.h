@@ -126,7 +126,7 @@ class PathTrace {
    *
    * Is separate from `render()` to simplify dealing with the early outputs and keeping
    * `render_cancel_` in the consistent state. */
-  void render_pipeline(const RenderWork &render_work);
+  void render_pipeline(RenderWork render_work);
 
   /* Initialize kernel execution on all integrator queues. */
   void render_init_kernel_execution();
@@ -135,7 +135,7 @@ class PathTrace {
   void render_update_resolution_divider(int resolution_divider);
 
   /* Perform path tracing part of the given render work. */
-  void path_trace(const RenderWork &render_work);
+  void path_trace(RenderWork &render_work);
 
   /* Perform denoising part of the given render work. */
   void denoise(const RenderWork &render_work);

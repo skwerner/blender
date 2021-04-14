@@ -39,7 +39,7 @@ ccl_device_forceinline bool kernel_need_sample_pixel(INTEGRATOR_STATE_CONST_ARGS
 
 /* Determines whether to continue sampling a given pixel or if it has sufficiently converged. */
 
-ccl_device void kernel_adaptive_sampling_convergence_check(const KernelGlobals *kg,
+ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *kg,
                                                            ccl_global float *render_buffer,
                                                            int x,
                                                            int y,
@@ -61,7 +61,7 @@ ccl_device void kernel_adaptive_sampling_convergence_check(const KernelGlobals *
      * output before doing any math.
      *
      * TODO(sergey): On a GPU it might be better to keep thread alive for better coherency? */
-    return;
+    return true;
   }
 
   const float4 I = *((ccl_global float4 *)buffer);
@@ -74,7 +74,10 @@ ccl_device void kernel_adaptive_sampling_convergence_check(const KernelGlobals *
   if (error < kernel_data.integrator.adaptive_threshold * (float)sample) {
     /* Set the fourth component to non-zero value to indicate that this pixel has converged. */
     buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] += 1.0f;
+    return true;
   }
+
+  return false;
 }
 
 /* This is a simple box filter in two passes.

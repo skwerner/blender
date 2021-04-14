@@ -170,7 +170,7 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
 
   float *render_buffer = render_buffers_->buffer.data();
 
-  bool any = false;
+  bool all_pixels_converged = true;
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
 
@@ -179,25 +179,31 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
     tbb::parallel_for(full_y, full_y + height, [&](int y) {
       CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
 
+      bool row_converged = true;
       for (int x = 0; x < width; ++x) {
-        kernels_.adaptive_sampling_convergence_check(
+        row_converged &= kernels_.adaptive_sampling_convergence_check(
             kernel_globals, render_buffer, full_x + x, y, sample, offset, stride);
       }
 
-      any |= kernels_.adaptive_sampling_filter_x(
-          kernel_globals, render_buffer, y, full_x, width, offset, stride);
+      if (!row_converged) {
+        kernels_.adaptive_sampling_filter_x(
+            kernel_globals, render_buffer, y, full_x, width, offset, stride);
+        all_pixels_converged = false;
+      }
     });
   });
 
-  local_arena.execute([&]() {
-    tbb::parallel_for(full_x, full_x + width, [&](int x) {
-      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
-      any |= kernels_.adaptive_sampling_filter_y(
-          kernel_globals, render_buffer, x, full_y, height, offset, stride);
+  if (!all_pixels_converged) {
+    local_arena.execute([&]() {
+      tbb::parallel_for(full_x, full_x + width, [&](int x) {
+        CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
+        kernels_.adaptive_sampling_filter_y(
+            kernel_globals, render_buffer, x, full_y, height, offset, stride);
+      });
     });
-  });
+  }
 
-  return !any;
+  return all_pixels_converged;
 }
 
 CCL_NAMESPACE_END

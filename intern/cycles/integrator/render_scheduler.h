@@ -81,7 +81,7 @@ class RenderScheduler {
    *
    * For example, if start sample is 10 and and 5 samples were rendered, then this call will
    * return 5.
-   * *
+   *
    * Note that this is based on the scheduling information. In practice this means that if someone
    * requested for work to render the scheduler considers the work done. */
   int get_num_rendered_samples() const;
@@ -89,6 +89,10 @@ class RenderScheduler {
   /* Reset scheduler, indicating that rendering will happen from scratch.
    * Resets current rendered state, as well as scheduling information. */
   void reset(const BufferParams &buffer_params, int num_samples);
+
+  /* Indicate that path tracing has finished (due to adaptive sampling convergency). Only remaining
+   * tasks like denoising will be scheduled after this. */
+  void set_path_trace_finished(RenderWork &render_work);
 
   /* Check whether all work has been scheduled. */
   bool done() const;
@@ -174,6 +178,8 @@ class RenderScheduler {
     double last_display_update_time = 0.0;
     /* Value of -1 means display was never updated. */
     int last_display_update_sample = -1;
+
+    bool path_trace_finished = false;
   } state_;
 
   /* Timing of tasks which were performed at the very first render work at 100% of the

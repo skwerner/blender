@@ -290,16 +290,32 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_PREFIX_SUM_DEFAULT_BL
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_adaptive_sampling_convergence_check(
-        float *render_buffer, int sx, int sy, int sw, int sh, int sample, int offset, int stride)
+    kernel_cuda_adaptive_sampling_convergence_check(float *render_buffer,
+                                                    int sx,
+                                                    int sy,
+                                                    int sw,
+                                                    int sh,
+                                                    int sample,
+                                                    int offset,
+                                                    int stride,
+                                                    int *all_pixels_converged)
 {
   const int work_index = ccl_global_id(0);
   const int y = work_index / sw;
   const int x = work_index - y * sw;
 
+  bool converged = true;
+
   if (x < sw && y < sh) {
-    kernel_adaptive_sampling_convergence_check(
-        NULL, render_buffer, sx + x, sy + y, sample, offset, stride);
+    converged = kernel_adaptive_sampling_convergence_check(
+        nullptr, render_buffer, sx + x, sy + y, sample, offset, stride);
+  }
+
+  /* NOTE: All threads specified in the mask must execute the intrinsic. */
+  if (__any_sync(0xffffffff, !converged)) {
+    if (threadIdx.x == 0) {
+      all_pixels_converged[0] = 0;
+    }
   }
 }
 

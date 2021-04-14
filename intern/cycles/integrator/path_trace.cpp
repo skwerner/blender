@@ -122,7 +122,7 @@ void PathTrace::render(const RenderWork &render_work)
   }
 }
 
-void PathTrace::render_pipeline(const RenderWork &render_work)
+void PathTrace::render_pipeline(RenderWork render_work)
 {
   /* For the interactive viewport clear the render buffer on first sample, so that changes in
    * resolution and camera and things ike that get explicitly zeroed. */
@@ -160,7 +160,7 @@ void PathTrace::render_init_kernel_execution()
   }
 }
 
-void PathTrace::path_trace(const RenderWork &render_work)
+void PathTrace::path_trace(RenderWork &render_work)
 {
   if (!render_work.path_trace.num_samples) {
     return;
@@ -176,15 +176,22 @@ void PathTrace::path_trace(const RenderWork &render_work)
   }
 
   const double start_time = time_dt();
+  bool all_pixels_converged = render_work.path_trace.adaptive_sampling_filter;
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
     path_trace_work->render_samples(render_work.path_trace.start_sample,
                                     render_work.path_trace.num_samples);
 
     if (render_work.path_trace.adaptive_sampling_filter) {
-      path_trace_work->adaptive_sampling_converge_and_filter(filter_sample);
+      all_pixels_converged &= path_trace_work->adaptive_sampling_converge_and_filter(
+          filter_sample);
     }
   });
+
+  if (all_pixels_converged) {
+    VLOG(3) << "All pixels converged.";
+    render_scheduler_.set_path_trace_finished(render_work);
+  }
 
   if (!is_cancel_requested()) {
     render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);

@@ -70,7 +70,7 @@ void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
 
 /* Adaptive sampling. */
 
-void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
+bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     const KernelGlobals *kg,
     ccl_global float *render_buffer,
     int x,
@@ -79,14 +79,14 @@ void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     int offset,
     int stride);
 
-bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_x)(const KernelGlobals *kg,
                                                            ccl_global float *render_buffer,
                                                            int y,
                                                            int start_x,
                                                            int width,
                                                            int offset,
                                                            int stride);
-bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *kg,
+void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *kg,
                                                            ccl_global float *render_buffer,
                                                            int x,
                                                            int start_y,

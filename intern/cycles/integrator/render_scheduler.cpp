@@ -104,6 +104,8 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.last_display_update_time = 0.0;
   state_.last_display_update_sample = -1;
 
+  state_.path_trace_finished = false;
+
   first_render_time_.path_trace_per_sample = 0.0;
   first_render_time_.denoise_time = 0.0;
   first_render_time_.display_update_time = 0.0;
@@ -113,10 +115,28 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   display_update_time_.reset();
 }
 
+void RenderScheduler::set_path_trace_finished(RenderWork &render_work)
+{
+  if (state_.resolution_divider != pixel_size_) {
+    return;
+  }
+
+  state_.path_trace_finished = true;
+
+  bool denoiser_delayed;
+  render_work.denoise = work_need_denoise(denoiser_delayed);
+
+  render_work.update_display = work_need_update_display(denoiser_delayed);
+}
+
 bool RenderScheduler::done() const
 {
   if (state_.resolution_divider != pixel_size_) {
     return false;
+  }
+
+  if (state_.path_trace_finished) {
+    return true;
   }
 
   return get_num_rendered_samples() >= num_samples_;
@@ -386,11 +406,16 @@ bool RenderScheduler::work_need_denoise(bool &delayed)
     return false;
   }
 
+  if (done()) {
+    /* Always denoise at the last sample. */
+    return true;
+  }
+
   if (background_) {
     /* Background render, only denoise when rendering the last sample. */
     /* TODO(sergey): Follow similar logic to viewport, giving an overview of how final denoised
      * image looks like even for the background rendering. */
-    return done();
+    return false;
   }
 
   /* Viewport render. */

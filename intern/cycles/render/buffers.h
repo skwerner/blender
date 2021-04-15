@@ -57,9 +57,10 @@ class BufferParams {
 
   /* Offsets of passes needed for the rendering functionality like adaptive sampling and denoising.
    * Pre-calculated so that they are available in areas where list of passes is not accessible. */
-  int pass_denoising_color = -1;
-  int pass_denoising_normal = -1;
-  int pass_denoising_albedo = -1;
+  int pass_sample_count = PASS_UNUSED;
+  int pass_denoising_color = PASS_UNUSED;
+  int pass_denoising_normal = PASS_UNUSED;
+  int pass_denoising_albedo = PASS_UNUSED;
 
   /* functions */
   BufferParams();

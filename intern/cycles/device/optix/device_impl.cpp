@@ -843,7 +843,8 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DeviceQueue *queue,
                   const_cast<int *>(&task.pass_stride),
                   const_cast<int *>(pass_offset),
                   const_cast<int *>(&input_passes),
-                  const_cast<int *>(&task.num_samples)};
+                  const_cast<int *>(&task.num_samples),
+                  const_cast<int *>(&task.pass_sample_count)};
 
   if (!queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args)) {
     return false;
@@ -867,7 +868,8 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(DeviceQueue *queue,
                   const_cast<int *>(&task.offset),
                   const_cast<int *>(&task.stride),
                   const_cast<int *>(&task.pass_stride),
-                  const_cast<int *>(&task.num_samples)};
+                  const_cast<int *>(&task.num_samples),
+                  const_cast<int *>(&task.pass_sample_count)};
 
   if (!queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args)) {
     return false;

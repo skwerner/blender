@@ -45,6 +45,7 @@ void BufferParams::update_passes(vector<Pass> &passes)
 {
   update_offset_stride();
 
+  pass_sample_count = PASS_UNUSED;
   pass_denoising_color = PASS_UNUSED;
   pass_denoising_normal = PASS_UNUSED;
   pass_denoising_albedo = PASS_UNUSED;
@@ -52,6 +53,10 @@ void BufferParams::update_passes(vector<Pass> &passes)
   pass_stride = 0;
   for (const Pass &pass : passes) {
     switch (pass.type) {
+      case PASS_SAMPLE_COUNT:
+        pass_sample_count = pass_stride;
+        break;
+
       case PASS_DENOISING_COLOR:
         pass_denoising_color = pass_stride;
         break;

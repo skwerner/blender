@@ -90,6 +90,7 @@ class DeviceDenoiseTask {
 
   int num_samples;
 
+  int pass_sample_count;
   int pass_denoising_color;
   int pass_denoising_normal;
   int pass_denoising_albedo;

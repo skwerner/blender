@@ -162,6 +162,7 @@ static DeviceDenoiseTask initialize_task(const BufferParams &buffer_params,
 
   task.num_samples = num_samples;
 
+  task.pass_sample_count = buffer_params.pass_sample_count;
   task.pass_denoising_color = buffer_params.pass_denoising_color;
   task.pass_denoising_normal = buffer_params.pass_denoising_normal;
   task.pass_denoising_albedo = buffer_params.pass_denoising_albedo;

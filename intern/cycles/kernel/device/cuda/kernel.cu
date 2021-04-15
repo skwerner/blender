@@ -430,43 +430,50 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                       int pass_stride,
                                       int3 pass_offset,
                                       int num_inputs,
-                                      int num_samples)
+                                      int num_samples,
+                                      int pass_sample_count)
 {
   const int work_index = ccl_global_id(0);
   const int y = work_index / sw;
   const int x = work_index - y * sw;
 
-  if (x < sw && y < sh) {
-    const float num_samples_inv = 1.0f / num_samples;
+  if (x >= sw || y >= sh) {
+    return;
+  }
 
-    const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
-    const float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
+  const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
+  const float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
 
-    if (num_inputs > 0) {
-      const float *in = buffer + pass_offset.x;
-      float *out = rgb + (x + y * sw) * 3;
-      out[0] = clamp(in[0] * num_samples_inv, 0.0f, 10000.0f);
-      out[1] = clamp(in[1] * num_samples_inv, 0.0f, 10000.0f);
-      out[2] = clamp(in[2] * num_samples_inv, 0.0f, 10000.0f);
-    }
+  float pixel_scale;
+  if (pass_sample_count == PASS_UNUSED) {
+    pixel_scale = 1.0f / num_samples;
+  }
+  else {
+    pixel_scale = 1.0f / buffer[pass_sample_count];
+  }
 
-#  if 0
-    if (num_inputs > 1) {
-      const float *in = buffer + pass_offset.y;
-      float *out = rgb + (x + y * sw) * 3 + (sw * sh) * 3;
-      out[0] = in[0] * num_samples_inv;
-      out[1] = in[1] * num_samples_inv;
-      out[2] = in[2] * num_samples_inv;
-    }
+  if (num_inputs > 0) {
+    const float *in = buffer + pass_offset.x;
+    float *out = rgb + (x + y * sw) * 3;
+    out[0] = clamp(in[0] * pixel_scale, 0.0f, 10000.0f);
+    out[1] = clamp(in[1] * pixel_scale, 0.0f, 10000.0f);
+    out[2] = clamp(in[2] * pixel_scale, 0.0f, 10000.0f);
+  }
 
-    if (num_inputs > 2) {
-      const float *in = buffer + pass_offset.y;
-      float *out = rgb + (x + y * sw) * 3 + (sw * sh * 2) * 3;
-      out[0] = in[0] * num_samples_inv;
-      out[1] = in[1] * num_samples_inv;
-      out[2] = in[2] * num_samples_inv;
-    }
-#  endif
+  if (num_inputs > 1) {
+    const float *in = buffer + pass_offset.y;
+    float *out = rgb + (x + y * sw) * 3 + (sw * sh) * 3;
+    out[0] = in[0] * pixel_scale;
+    out[1] = in[1] * pixel_scale;
+    out[2] = in[2] * pixel_scale;
+  }
+
+  if (num_inputs > 2) {
+    const float *in = buffer + pass_offset.y;
+    float *out = rgb + (x + y * sw) * 3 + (sw * sh * 2) * 3;
+    out[0] = in[0] * pixel_scale;
+    out[1] = in[1] * pixel_scale;
+    out[2] = in[2] * pixel_scale;
   }
 }
 
@@ -481,22 +488,33 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                         int offset,
                                         int stride,
                                         int pass_stride,
-                                        int num_samples)
+                                        int num_samples,
+                                        int pass_sample_count)
 {
   const int work_index = ccl_global_id(0);
   const int y = work_index / sw;
   const int x = work_index - y * sw;
 
-  if (x < sw && y < sh) {
-    const float *in = rgb + (x + y * sw) * 3;
-
-    const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
-    float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
-
-    buffer[0] = in[0] * num_samples;
-    buffer[1] = in[1] * num_samples;
-    buffer[2] = in[2] * num_samples;
+  if (x >= sw || y >= sh) {
+    return;
   }
+
+  const float *in = rgb + (x + y * sw) * 3;
+
+  const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
+  float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
+
+  float pixel_scale;
+  if (pass_sample_count == PASS_UNUSED) {
+    pixel_scale = num_samples;
+  }
+  else {
+    pixel_scale = buffer[pass_sample_count];
+  }
+
+  buffer[0] = in[0] * pixel_scale;
+  buffer[1] = in[1] * pixel_scale;
+  buffer[2] = in[2] * pixel_scale;
 }
 
 #endif

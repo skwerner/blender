@@ -20,6 +20,7 @@
 #include "bvh/bvh2.h"
 
 #include "device/device.h"
+#include "device/device_queue.h"
 
 #include "device/cpu/device.h"
 #include "device/cuda/device.h"
@@ -397,7 +398,8 @@ const CPUKernels *Device::get_cpu_kernels() const
   return nullptr;
 }
 
-void Device::get_cpu_kernel_thread_globals(vector<CPUKernelThreadGlobals> &kernel_thread_globals)
+void Device::get_cpu_kernel_thread_globals(
+    vector<CPUKernelThreadGlobals> & /*kernel_thread_globals*/)
 {
   LOG(FATAL) << "Device does not support CPU kernels.";
 }

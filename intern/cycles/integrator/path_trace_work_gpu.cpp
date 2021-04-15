@@ -630,15 +630,15 @@ void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, float sample
 
 bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter(int sample)
 {
-  if (!adaptive_sampling_convergence_check(sample)) {
-    return false;
+  if (adaptive_sampling_convergence_check(sample)) {
+    return true;
   }
 
   enqueue_adaptive_sampling_filter_x();
   enqueue_adaptive_sampling_filter_y();
   queue_->synchronize();
 
-  return true;
+  return false;
 }
 
 bool PathTraceWorkGPU::adaptive_sampling_convergence_check(int sample)

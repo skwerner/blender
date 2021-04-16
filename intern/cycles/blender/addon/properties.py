@@ -157,6 +157,7 @@ enum_view3d_shading_render_pass = (
     ('NORMAL', "Normal", "Show the Normal render pass", 33),
     ('UV', "UV", "Show the UV render pass", 34),
     ('MIST', "Mist", "Show the Mist render pass", 48),
+    ('SAMPLE_COUNT', "Sample Count", "Per-pixel number of samples", 44),
 )
 
 

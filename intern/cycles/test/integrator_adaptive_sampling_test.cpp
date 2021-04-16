@@ -75,9 +75,10 @@ TEST(AdaptiveSampling, align_samples)
   EXPECT_EQ(adaptive_sampling.align_samples(12, 60), 4);
 
   /* Start sample is the sample which is to be filtered. */
-  EXPECT_EQ(adaptive_sampling.align_samples(15, 4), 4);
-  EXPECT_EQ(adaptive_sampling.align_samples(15, 6), 5);
-  EXPECT_EQ(adaptive_sampling.align_samples(15, 10), 5);
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 4), 1);
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 6), 1);
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 10), 1);
+  EXPECT_EQ(adaptive_sampling.align_samples(58, 2), 2);
 
   /* Start sample is past the sample which is to be filtered. */
   EXPECT_EQ(adaptive_sampling.align_samples(16, 3), 3);
@@ -86,9 +87,10 @@ TEST(AdaptiveSampling, align_samples)
   EXPECT_EQ(adaptive_sampling.align_samples(16, 10), 4);
 
   /* Should never exceed requested number of samples. */
-  EXPECT_EQ(adaptive_sampling.align_samples(15, 2), 2);
+  EXPECT_EQ(adaptive_sampling.align_samples(15, 2), 1);
   EXPECT_EQ(adaptive_sampling.align_samples(16, 2), 2);
   EXPECT_EQ(adaptive_sampling.align_samples(17, 2), 2);
+  EXPECT_EQ(adaptive_sampling.align_samples(18, 2), 2);
 }
 
 TEST(AdaptiveSampling, need_filter)
@@ -98,10 +100,11 @@ TEST(AdaptiveSampling, need_filter)
   adaptive_sampling.min_samples = 11 /* rounded of sqrt(128) */;
   adaptive_sampling.adaptive_step = 4;
 
-  const vector<int> expected_samples_to_filter = {{15, 19, 23, 27, 31, 35, 39, 43}};
+  const vector<int> expected_samples_to_filter = {
+      {15, 19, 23, 27, 31, 35, 39, 43, 47, 51, 55, 59}};
 
   vector<int> actual_samples_to_filter;
-  for (int sample = 0; sample < 44; ++sample) {
+  for (int sample = 0; sample < 60; ++sample) {
     if (adaptive_sampling.need_filter(sample)) {
       actual_samples_to_filter.push_back(sample);
     }

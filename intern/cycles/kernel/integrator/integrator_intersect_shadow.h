@@ -44,7 +44,7 @@ ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
   return opaque_hit;
 }
 
-ccl_device_forceinline const int integrate_shadow_max_transparent_hits(INTEGRATOR_STATE_CONST_ARGS)
+ccl_device_forceinline int integrate_shadow_max_transparent_hits(INTEGRATOR_STATE_CONST_ARGS)
 {
   const int transparent_max_bounce = kernel_data.integrator.transparent_max_bounce;
   const int transparent_bounce = INTEGRATOR_STATE(shadow_path, transparent_bounce);

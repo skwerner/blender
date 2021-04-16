@@ -19,9 +19,23 @@
 #include "kernel/device/optix/compat.h"
 #include "kernel/device/optix/globals.h"
 #include "kernel/device/cuda/image.h"  // Texture lookup uses normal CUDA intrinsics
+#include "kernel/device/cuda/parallel_active_index.h"
+#include "kernel/device/cuda/parallel_prefix_sum.h"
+#include "kernel/device/cuda/parallel_sorted_index.h"
 
-#include "kernel/kernel_path.h"
+#include "kernel/integrator/integrator_path_state.h"
+#include "kernel/integrator/integrator_state.h"
+#include "kernel/integrator/integrator_state_util.h"
+
+#include "kernel/integrator/integrator_intersect_closest.h"
+#include "kernel/integrator/integrator_intersect_shadow.h"
+#include "kernel/integrator/integrator_intersect_subsurface.h"
+#include "kernel/integrator/integrator_megakernel.h"
+
+#include "kernel/kernel_adaptive_sampling.h"
 #include "kernel/kernel_bake.h"
+#include "kernel/kernel_film.h"
+#include "kernel/kernel_work_stealing.h"
 // clang-format on
 
 template<typename T> ccl_device_forceinline T *get_payload_ptr_0()
@@ -51,22 +65,28 @@ template<bool always = false> ccl_device_forceinline uint get_object_id()
     return OBJECT_NONE;
 }
 
-extern "C" __global__ void __raygen__kernel_optix_path_trace()
+extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_closest()
 {
-  KernelGlobals kg;  // Allocate stack storage for common data
+  const int global_index = optixGetLaunchIndex().x;
 
-  const uint3 launch_index = optixGetLaunchIndex();
-  // Keep threads for same pixel together to improve occupancy of warps
-  uint pixel_offset = launch_index.x / __params.tile.num_samples;
-  uint sample_offset = launch_index.x % __params.tile.num_samples;
+  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] : global_index;
+  integrator_intersect_closest(NULL, path_index);
+}
 
-  kernel_path_trace(&kg,
-                    __params.tile.buffer,
-                    __params.tile.start_sample + sample_offset,
-                    __params.tile.x + pixel_offset,
-                    __params.tile.y + launch_index.y,
-                    __params.tile.offset,
-                    __params.tile.stride);
+extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_shadow()
+{
+  const int global_index = optixGetLaunchIndex().x;
+
+  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] : global_index;
+  integrator_intersect_shadow(NULL, path_index);
+}
+
+extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_subsurface()
+{
+  const int global_index = optixGetLaunchIndex().x;
+
+  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] : global_index;
+  integrator_intersect_subsurface(NULL, path_index);
 }
 
 #ifdef __BAKING__

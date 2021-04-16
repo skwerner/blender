@@ -52,22 +52,22 @@
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_path_trace(KernelWorkTile *tile, uint work_size)
 {
-	int work_index = ccl_global_id(0);
-	bool thread_is_active = work_index < work_size;
-	uint x, y, sample;
-	KernelGlobals kg;
-	if(thread_is_active) {
-		get_work_pixel(tile, work_index, &x, &y, &sample);
+  int work_index = ccl_global_id(0);
+  bool thread_is_active = work_index < work_size;
+  uint x, y, sample;
+  KernelGlobals kg;
+  if(thread_is_active) {
+    get_work_pixel(tile, work_index, &x, &y, &sample);
 
-		kernel_path_trace(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-	}
+    kernel_path_trace(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
+  }
 
-	if(kernel_data.film.cryptomatte_passes) {
-		__syncthreads();
-		if(thread_is_active) {
-			kernel_cryptomatte_post(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-		}
-	}
+  if(kernel_data.film.cryptomatte_passes) {
+    __syncthreads();
+    if(thread_is_active) {
+      kernel_cryptomatte_post(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
+    }
+  }
 }
 #  endif
 

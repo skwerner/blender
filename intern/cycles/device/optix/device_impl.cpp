@@ -21,6 +21,7 @@
 #  include "bvh/bvh.h"
 #  include "bvh/bvh_optix.h"
 #  include "device/cuda/util.h"
+#  include "device/optix/queue.h"
 #  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"
@@ -32,6 +33,10 @@
 #  include "util/util_path.h"
 #  include "util/util_progress.h"
 #  include "util/util_time.h"
+
+#  undef __KERNEL_CPU__
+#define __KERNEL_OPTIX__
+#  include "kernel/device/optix/globals.h"
 
 #endif /* WITH_OPTIX */
 
@@ -97,11 +102,10 @@ OptiXDevice::Denoiser::~Denoiser()
 }
 
 OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profiler)
-    : CUDADevice(info, stats, profiler), denoiser_(this)
-#  if 0
+    : CUDADevice(info, stats, profiler),
       sbt_data(this, "__sbt", MEM_READ_ONLY),
       launch_params(this, "__params"),
-#  endif
+      denoiser_(this)
 {
   /* Store number of CUDA streams in device info. */
   this->info.cpu_threads = DebugFlags().optix.cuda_streams;
@@ -145,17 +149,17 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
 
 #  if 0
   /* Create launch streams. */
-  cuda_stream.resize(info.cpu_threads);
-  for (int i = 0; i < info.cpu_threads; ++i) {
+  cuda_stream.resize(this->info.cpu_threads);
+  for (int i = 0; i < this->info.cpu_threads; ++i) {
     check_result_cuda(cuStreamCreate(&cuda_stream[i], CU_STREAM_NON_BLOCKING));
   }
+#  endif
 
   /* Fix weird compiler bug that assigns wrong size. */
   launch_params.data_elements = sizeof(KernelParams);
 
   /* Allocate launch parameter buffer memory on device. */
-  launch_params.alloc_to_device(info.cpu_threads);
-#  endif
+  launch_params.alloc_to_device(this->info.cpu_threads);
 }
 
 OptiXDevice::~OptiXDevice()
@@ -195,6 +199,11 @@ OptiXDevice::~OptiXDevice()
   optixDeviceContextDestroy(context);
 }
 
+unique_ptr<DeviceQueue> OptiXDevice::gpu_queue_create()
+{
+  return make_unique<OptiXDeviceQueue>(this);
+}
+
 #  if 0
 bool OptiXDevice::show_samples() const
 {
@@ -203,7 +212,6 @@ bool OptiXDevice::show_samples() const
 }
 #  endif
 
-#  if 0
 BVHLayoutMask OptiXDevice::get_bvh_layout_mask() const
 {
   /* CUDA kernels are used when doing baking, so need to build a BVH those can understand too! */
@@ -214,9 +222,7 @@ BVHLayoutMask OptiXDevice::get_bvh_layout_mask() const
   /* OptiX has its own internal acceleration structure format. */
   return BVH_LAYOUT_OPTIX;
 }
-#  endif
 
-#  if 0
 string OptiXDevice::compile_kernel_get_common_cflags(
     const DeviceRequestedFeatures &requested_features)
 {
@@ -238,9 +244,7 @@ string OptiXDevice::compile_kernel_get_common_cflags(
 
   return common_cflags;
 }
-#  endif
 
-#  if 0
 bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features)
 {
   if (have_error()) {
@@ -280,18 +284,18 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
   OptixModuleCompileOptions module_options = {};
   module_options.maxRegisterCount = 0; /* Do not set an explicit register limit. */
-#    ifdef WITH_CYCLES_DEBUG
+#  ifdef WITH_CYCLES_DEBUG
   module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
   module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-#    else
+#  else
   module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
   module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
-#    endif
+#  endif
 
-#    if OPTIX_ABI_VERSION >= 41
+#  if OPTIX_ABI_VERSION >= 41
   module_options.boundValues = nullptr;
   module_options.numBoundValues = 0;
-#    endif
+#  endif
 
   OptixPipelineCompileOptions pipeline_options = {};
   /* Default to no motion blur and two-level graph, since it is the fastest option. */
@@ -303,7 +307,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   pipeline_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
   pipeline_options.pipelineLaunchParamsVariableName = "__params"; /* See globals.h */
 
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
   pipeline_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
   if (requested_features.use_hair) {
     if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
@@ -313,7 +317,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
     }
   }
-#    endif
+#  endif
 
   /* Keep track of whether motion blur is enabled, so to enable/disable motion in BVH builds
    * This is necessary since objects may be reported to have motion if the Vector pass is
@@ -338,7 +342,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
             "the Optix SDK to be able to compile Optix kernels on demand).");
         return false;
       }
-      ptx_filename = compile_kernel(requested_features, "kernel_optix", "optix", true);
+      ptx_filename = compile_kernel(requested_features, "kernel", "optix", true);
     }
     if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
       set_error("Failed to load OptiX kernel from '" + ptx_filename + "'");
@@ -359,9 +363,21 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   OptixProgramGroup groups[NUM_PROGRAM_GROUPS] = {};
   OptixProgramGroupDesc group_descs[NUM_PROGRAM_GROUPS] = {};
   OptixProgramGroupOptions group_options = {}; /* There are no options currently. */
-  group_descs[PG_RGEN].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-  group_descs[PG_RGEN].raygen.module = optix_module;
-  group_descs[PG_RGEN].raygen.entryFunctionName = "__raygen__kernel_optix_path_trace";
+  // group_descs[PG_RGEN].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+  // group_descs[PG_RGEN].raygen.module = optix_module;
+  // group_descs[PG_RGEN].raygen.entryFunctionName = "__raygen__kernel_optix_path_trace";
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST].raygen.module = optix_module;
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST].raygen.entryFunctionName =
+      "__raygen__kernel_optix_integrator_intersect_closest";
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_SHADOW].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_SHADOW].raygen.module = optix_module;
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_SHADOW].raygen.entryFunctionName =
+      "__raygen__kernel_optix_integrator_intersect_shadow";
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE].raygen.module = optix_module;
+  group_descs[PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE].raygen.entryFunctionName =
+      "__raygen__kernel_optix_integrator_intersect_subsurface";
   group_descs[PG_MISS].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
   group_descs[PG_MISS].miss.module = optix_module;
   group_descs[PG_MISS].miss.entryFunctionName = "__miss__kernel_optix_miss";
@@ -390,7 +406,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       group_descs[PG_HITS].hitgroup.entryFunctionNameIS = "__intersection__curve_ribbon";
     }
 
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
     if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
       OptixBuiltinISOptions builtin_options = {};
       builtin_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
@@ -416,7 +432,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
         group_descs[PG_HITS_MOTION].hitgroup.moduleIS = builtin_modules[1];
       }
     }
-#    endif
+#  endif
   }
 
   if (requested_features.use_subsurface || requested_features.use_shader_raytrace) {
@@ -479,38 +495,41 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   trace_css = std::max(trace_css, stack_size[PG_HITD].cssIS + stack_size[PG_HITD].cssAH);
   trace_css = std::max(trace_css, stack_size[PG_HITS].cssIS + stack_size[PG_HITS].cssAH);
   trace_css = std::max(trace_css, stack_size[PG_HITL].cssIS + stack_size[PG_HITL].cssAH);
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
   trace_css = std::max(trace_css,
                        stack_size[PG_HITD_MOTION].cssIS + stack_size[PG_HITD_MOTION].cssAH);
   trace_css = std::max(trace_css,
                        stack_size[PG_HITS_MOTION].cssIS + stack_size[PG_HITS_MOTION].cssAH);
-#    endif
+#  endif
 
   OptixPipelineLinkOptions link_options = {};
   link_options.maxTraceDepth = 1;
-#    ifdef WITH_CYCLES_DEBUG
+#  ifdef WITH_CYCLES_DEBUG
   link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-#    else
+#  else
   link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
-#    endif
-#    if OPTIX_ABI_VERSION < 24
+#  endif
+#  if OPTIX_ABI_VERSION < 24
   link_options.overrideUsesMotionBlur = motion_blur;
-#    endif
+#  endif
 
   { /* Create path tracing pipeline. */
     vector<OptixProgramGroup> pipeline_groups;
     pipeline_groups.reserve(NUM_PROGRAM_GROUPS);
-    pipeline_groups.push_back(groups[PG_RGEN]);
+    // pipeline_groups.push_back(groups[PG_RGEN]);
+    pipeline_groups.push_back(groups[PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST]);
+    pipeline_groups.push_back(groups[PG_RGEN_INTEGRATOR_INTERSECT_SHADOW]);
+    pipeline_groups.push_back(groups[PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE]);
     pipeline_groups.push_back(groups[PG_MISS]);
     pipeline_groups.push_back(groups[PG_HITD]);
     pipeline_groups.push_back(groups[PG_HITS]);
     pipeline_groups.push_back(groups[PG_HITL]);
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
     if (motion_blur) {
       pipeline_groups.push_back(groups[PG_HITD_MOTION]);
       pipeline_groups.push_back(groups[PG_HITS_MOTION]);
     }
-#    endif
+#  endif
     if (requested_features.use_shader_raytrace) {
       pipeline_groups.push_back(groups[PG_CALL + 0]);
       pipeline_groups.push_back(groups[PG_CALL + 1]);
@@ -527,7 +546,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
                                                &pipelines[PIP_PATH_TRACE]));
 
     /* Combine ray generation and trace continuation stack size. */
-    const unsigned int css = stack_size[PG_RGEN].cssRG + link_options.maxTraceDepth * trace_css;
+    // const unsigned int css = stack_size[PG_RGEN].cssRG + link_options.maxTraceDepth * trace_css;
+    const unsigned int css =
+        std::max(stack_size[PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST].cssRG,
+                 std::max(stack_size[PG_RGEN_INTEGRATOR_INTERSECT_SHADOW].cssRG,
+                          stack_size[PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE].cssRG)) +
+        link_options.maxTraceDepth * trace_css;
     /* Max direct callable depth is one of the following, so combine accordingly
      * - __raygen__ -> svm_eval_nodes
      * - __raygen__ -> kernel_volume_shadow -> svm_eval_nodes
@@ -560,12 +584,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     pipeline_groups.push_back(groups[PG_HITD]);
     pipeline_groups.push_back(groups[PG_HITS]);
     pipeline_groups.push_back(groups[PG_HITL]);
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
     if (motion_blur) {
       pipeline_groups.push_back(groups[PG_HITD_MOTION]);
       pipeline_groups.push_back(groups[PG_HITS_MOTION]);
     }
-#    endif
+#  endif
     if (requested_features.use_shader_raytrace) {
       pipeline_groups.push_back(groups[PG_CALL + 0]);
       pipeline_groups.push_back(groups[PG_CALL + 1]);
@@ -605,7 +629,6 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
   return true;
 }
-#  endif
 
 #  if 0
 void OptiXDevice::thread_run(DeviceTask &task, int thread_index) /* Main task entry point. */
@@ -1075,7 +1098,6 @@ void OptiXDevice::launch_shader_eval(DeviceTask &task, int thread_index)
 }
 #  endif
 
-#  if 0
 bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
                                   OptixBuildOperation operation,
                                   const OptixBuildInput &build_input,
@@ -1087,14 +1109,14 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
   OptixAccelBufferSizes sizes = {};
   OptixAccelBuildOptions options = {};
   options.operation = operation;
-  if (background) {
+  //if (background) {
     /* Prefer best performance and lowest memory consumption in background. */
     options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-  }
-  else {
-    /* Prefer fast updates in viewport. */
-    options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
-  }
+  //}
+  //else {
+  //  /* Prefer fast updates in viewport. */
+  //  options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
+  //}
 
   options.motionOptions.numKeys = num_motion_steps;
   options.motionOptions.flags = OPTIX_MOTION_FLAG_START_VANISH | OPTIX_MOTION_FLAG_END_VANISH;
@@ -1141,8 +1163,8 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
                                          out_data.device_pointer,
                                          sizes.outputSizeInBytes,
                                          &out_handle,
-                                         background ? &compacted_size_prop : NULL,
-                                         background ? 1 : 0));
+                                         /*background ? &compacted_size_prop :*/ NULL,
+                                         /*background ? 1 :*/ 0));
   bvh->traversable_handle = static_cast<uint64_t>(out_handle);
 
   /* Wait for all operations to finish. */
@@ -1150,34 +1172,34 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
 
   /* Compact acceleration structure to save memory (do not do this in viewport for faster builds).
    */
-  if (background) {
-    uint64_t compacted_size = sizes.outputSizeInBytes;
-    check_result_cuda_ret(
-        cuMemcpyDtoH(&compacted_size, compacted_size_prop.result, sizeof(compacted_size)));
-
-    /* Temporary memory is no longer needed, so free it now to make space. */
-    temp_mem.free();
-
-    /* There is no point compacting if the size does not change. */
-    if (compacted_size < sizes.outputSizeInBytes) {
-      device_only_memory<char> compacted_data(this, "optix compacted as");
-      compacted_data.alloc_to_device(compacted_size);
-      if (!compacted_data.device_pointer)
-        /* Do not compact if memory allocation for compacted acceleration structure fails.
-         * Can just use the uncompacted one then, so succeed here regardless. */
-        return true;
-
-      check_result_optix_ret(optixAccelCompact(
-          context, NULL, out_handle, compacted_data.device_pointer, compacted_size, &out_handle));
-      bvh->traversable_handle = static_cast<uint64_t>(out_handle);
-
-      /* Wait for compaction to finish. */
-      check_result_cuda_ret(cuStreamSynchronize(NULL));
-
-      std::swap(out_data.device_size, compacted_data.device_size);
-      std::swap(out_data.device_pointer, compacted_data.device_pointer);
-    }
-  }
+  //if (background) {
+  //  uint64_t compacted_size = sizes.outputSizeInBytes;
+  //  check_result_cuda_ret(
+  //      cuMemcpyDtoH(&compacted_size, compacted_size_prop.result, sizeof(compacted_size)));
+  //
+  //  /* Temporary memory is no longer needed, so free it now to make space. */
+  //  temp_mem.free();
+  //
+  //  /* There is no point compacting if the size does not change. */
+  //  if (compacted_size < sizes.outputSizeInBytes) {
+  //    device_only_memory<char> compacted_data(this, "optix compacted as");
+  //    compacted_data.alloc_to_device(compacted_size);
+  //    if (!compacted_data.device_pointer)
+  //      /* Do not compact if memory allocation for compacted acceleration structure fails.
+  //       * Can just use the uncompacted one then, so succeed here regardless. */
+  //      return true;
+  //
+  //    check_result_optix_ret(optixAccelCompact(
+  //        context, NULL, out_handle, compacted_data.device_pointer, compacted_size, &out_handle));
+  //    bvh->traversable_handle = static_cast<uint64_t>(out_handle);
+  //
+  //    /* Wait for compaction to finish. */
+  //    check_result_cuda_ret(cuStreamSynchronize(NULL));
+  //
+  //    std::swap(out_data.device_size, compacted_data.device_size);
+  //    std::swap(out_data.device_pointer, compacted_data.device_pointer);
+  //  }
+  //}
 
   return true;
 }
@@ -1200,14 +1222,14 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     /* Refit is only possible in viewport for now (because AS is built with
      * OPTIX_BUILD_FLAG_ALLOW_UPDATE only there, see above). */
     OptixBuildOperation operation = OPTIX_BUILD_OPERATION_BUILD;
-    if (refit && !background) {
-      assert(bvh_optix->traversable_handle != 0);
-      operation = OPTIX_BUILD_OPERATION_UPDATE;
-    }
-    else {
+    //if (refit && !background) {
+    //  assert(bvh_optix->traversable_handle != 0);
+    //  operation = OPTIX_BUILD_OPERATION_UPDATE;
+    //}
+    //else {
       bvh_optix->as_data.free();
       bvh_optix->traversable_handle = 0;
-    }
+    //}
 
     /* Build bottom level acceleration structures (BLAS). */
     Geometry *const geom = bvh->geometry[0];
@@ -1227,7 +1249,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       }
 
       device_vector<OptixAabb> aabb_data(this, "optix temp aabb data", MEM_READ_ONLY);
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
       device_vector<int> index_data(this, "optix temp index data", MEM_READ_ONLY);
       device_vector<float4> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
       /* Four control points for each curve segment. */
@@ -1237,7 +1259,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
         vertex_data.alloc(num_vertices * num_motion_steps);
       }
       else
-#    endif
+#  endif
         aabb_data.alloc(num_segments * num_motion_steps);
 
       /* Get AABBs for each motion step. */
@@ -1253,12 +1275,12 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
         for (size_t j = 0, i = 0; j < hair->num_curves(); ++j) {
           const Hair::Curve curve = hair->get_curve(j);
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
           const array<float> &curve_radius = hair->get_curve_radius();
-#    endif
+#  endif
 
           for (int segment = 0; segment < curve.num_segments(); ++segment, ++i) {
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
             if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
               int k0 = curve.first_key + segment;
               int k1 = k0 + 1;
@@ -1289,7 +1311,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
                   dot(cr2bsp3, px), dot(cr2bsp3, py), dot(cr2bsp3, pz), dot(cr2bsp3, pw));
             }
             else
-#    endif
+#  endif
             {
               BoundBox bounds = BoundBox::empty;
               curve.bounds_grow(segment, keys, hair->get_curve_radius().data(), bounds);
@@ -1308,33 +1330,33 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
       /* Upload AABB data to GPU. */
       aabb_data.copy_to_device();
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
       index_data.copy_to_device();
       vertex_data.copy_to_device();
-#    endif
+#  endif
 
       vector<device_ptr> aabb_ptrs;
       aabb_ptrs.reserve(num_motion_steps);
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
       vector<device_ptr> width_ptrs;
       vector<device_ptr> vertex_ptrs;
       width_ptrs.reserve(num_motion_steps);
       vertex_ptrs.reserve(num_motion_steps);
-#    endif
+#  endif
       for (size_t step = 0; step < num_motion_steps; ++step) {
         aabb_ptrs.push_back(aabb_data.device_pointer + step * num_segments * sizeof(OptixAabb));
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
         const device_ptr base_ptr = vertex_data.device_pointer +
                                     step * num_vertices * sizeof(float4);
         width_ptrs.push_back(base_ptr + 3 * sizeof(float)); /* Offset by vertex size. */
         vertex_ptrs.push_back(base_ptr);
-#    endif
+#  endif
       }
 
       /* Force a single any-hit call, so shadow record-all behavior works correctly. */
       unsigned int build_flags = OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL;
       OptixBuildInput build_input = {};
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
       if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
         build_input.type = OPTIX_BUILD_INPUT_TYPE_CURVES;
         build_input.curveArray.curveType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
@@ -1350,28 +1372,28 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
         build_input.curveArray.primitiveIndexOffset = hair->optix_prim_offset;
       }
       else
-#    endif
+#  endif
       {
         /* Disable visibility test any-hit program, since it is already checked during
          * intersection. Those trace calls that require anyhit can force it with a ray flag. */
         build_flags |= OPTIX_GEOMETRY_FLAG_DISABLE_ANYHIT;
 
         build_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-#    if OPTIX_ABI_VERSION < 23
+#  if OPTIX_ABI_VERSION < 23
         build_input.aabbArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
         build_input.aabbArray.numPrimitives = num_segments;
         build_input.aabbArray.strideInBytes = sizeof(OptixAabb);
         build_input.aabbArray.flags = &build_flags;
         build_input.aabbArray.numSbtRecords = 1;
         build_input.aabbArray.primitiveIndexOffset = hair->optix_prim_offset;
-#    else
+#  else
         build_input.customPrimitiveArray.aabbBuffers = (CUdeviceptr *)aabb_ptrs.data();
         build_input.customPrimitiveArray.numPrimitives = num_segments;
         build_input.customPrimitiveArray.strideInBytes = sizeof(OptixAabb);
         build_input.customPrimitiveArray.flags = &build_flags;
         build_input.customPrimitiveArray.numSbtRecords = 1;
         build_input.customPrimitiveArray.primitiveIndexOffset = hair->optix_prim_offset;
-#    endif
+#  endif
       }
 
       if (!build_optix_bvh(bvh_optix, operation, build_input, num_motion_steps)) {
@@ -1468,10 +1490,10 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     }
 
     /* Fill instance descriptions. */
-#    if OPTIX_ABI_VERSION < 41
+#  if OPTIX_ABI_VERSION < 41
     device_vector<OptixAabb> aabbs(this, "optix tlas aabbs", MEM_READ_ONLY);
     aabbs.alloc(bvh->objects.size());
-#    endif
+#  endif
     device_vector<OptixInstance> instances(this, "optix tlas instances", MEM_READ_ONLY);
     instances.alloc(bvh->objects.size());
 
@@ -1503,7 +1525,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       BVHOptiX *const blas = static_cast<BVHOptiX *>(ob->get_geometry()->bvh);
       OptixTraversableHandle handle = blas->traversable_handle;
 
-#    if OPTIX_ABI_VERSION < 41
+#  if OPTIX_ABI_VERSION < 41
       OptixAabb &aabb = aabbs[num_instances];
       aabb.minX = ob->bounds.min.x;
       aabb.minY = ob->bounds.min.y;
@@ -1511,7 +1533,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       aabb.maxX = ob->bounds.max.x;
       aabb.maxY = ob->bounds.max.y;
       aabb.maxZ = ob->bounds.max.z;
-#    endif
+#  endif
 
       OptixInstance &instance = instances[num_instances++];
       memset(&instance, 0, sizeof(instance));
@@ -1537,14 +1559,14 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
         /* Same applies to curves (so they can be skipped in local trace calls). */
         instance.visibilityMask |= 4;
 
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
         if (motion_blur && ob->get_geometry()->has_motion_blur() &&
             DebugFlags().optix.curves_api &&
             static_cast<const Hair *>(ob->get_geometry())->curve_shape == CURVE_THICK) {
           /* Select between motion blur and non-motion blur built-in intersection module. */
           instance.sbtOffset = PG_HITD_MOTION - PG_HITD;
         }
-#    endif
+#  endif
       }
 
       /* Insert motion traversable if object has motion. */
@@ -1637,20 +1659,20 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     }
 
     /* Upload instance descriptions. */
-#    if OPTIX_ABI_VERSION < 41
+#  if OPTIX_ABI_VERSION < 41
     aabbs.resize(num_instances);
     aabbs.copy_to_device();
-#    endif
+#  endif
     instances.resize(num_instances);
     instances.copy_to_device();
 
     /* Build top-level acceleration structure (TLAS) */
     OptixBuildInput build_input = {};
     build_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-#    if OPTIX_ABI_VERSION < 41 /* Instance AABBs no longer need to be set since OptiX 7.2 */
+#  if OPTIX_ABI_VERSION < 41 /* Instance AABBs no longer need to be set since OptiX 7.2 */
     build_input.instanceArray.aabbs = aabbs.device_pointer;
     build_input.instanceArray.numAabbs = num_instances;
-#    endif
+#  endif
     build_input.instanceArray.instances = instances.device_pointer;
     build_input.instanceArray.numInstances = num_instances;
 
@@ -1660,14 +1682,10 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     tlas_handle = bvh_optix->traversable_handle;
   }
 }
-#  endif
 
-#  if 0
 void OptiXDevice::const_copy_to(const char *name, void *host, size_t size)
 {
   /* Set constant memory for CUDA module. */
-  /* TODO(pmours): This is only used for tonemapping (see 'film_convert').
-   *               Could be removed by moving those functions to filter CUDA module. */
   CUDADevice::const_copy_to(name, host, size);
 
   if (strcmp(name, "__data") == 0) {
@@ -1682,17 +1700,19 @@ void OptiXDevice::const_copy_to(const char *name, void *host, size_t size)
   }
 
   /* Update data storage pointers in launch parameters. */
-#    define KERNEL_TEX(data_type, tex_name) \
-      if (strcmp(name, #tex_name) == 0) { \
-        update_launch_params(offsetof(KernelParams, tex_name), host, size); \
-        return; \
-      }
-#    include "kernel/kernel_textures.h"
-#    undef KERNEL_TEX
+#  define KERNEL_TEX(data_type, tex_name) \
+    if (strcmp(name, #tex_name) == 0) { \
+      update_launch_params(offsetof(KernelParams, tex_name), host, size); \
+      return; \
+    }
+  KERNEL_TEX(IntegratorState, __integrator_state)
+  KERNEL_TEX(IntegratorQueueCounter *, __integrator_queue_counter)
+  KERNEL_TEX(int *, __integrator_sort_key)
+  KERNEL_TEX(int *, __integrator_sort_key_counter)
+#  include "kernel/kernel_textures.h"
+#  undef KERNEL_TEX
 }
-#  endif
 
-#  if 0
 void OptiXDevice::update_launch_params(size_t offset, void *data, size_t data_size)
 {
   const CUDAContextScope scope(this);
@@ -1702,7 +1722,6 @@ void OptiXDevice::update_launch_params(size_t offset, void *data, size_t data_si
         launch_params.device_pointer + i * launch_params.data_elements + offset, data, data_size));
   }
 }
-#  endif
 
 #endif /* WITH_OPTIX */
 

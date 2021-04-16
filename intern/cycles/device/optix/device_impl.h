@@ -28,15 +28,16 @@
 #  endif
 
 #  include <optix_stubs.h>
+
 #endif /* WITH_OPTIX */
 
 CCL_NAMESPACE_BEGIN
 
 #ifdef WITH_OPTIX
 
-#  if 0
 class BVHOptiX;
 
+#  if 0
 /* Make sure this stays in sync with globals.h */
 struct ShaderParams {
   uint4 *input;
@@ -56,20 +57,24 @@ struct KernelParams {
 #    undef KERNEL_TEX
 };
 #  endif
+struct KernelParams;
 
 class OptiXDevice : public CUDADevice {
-#  if 0
+ public:
   /* List of OptiX program groups. */
   enum {
-    PG_RGEN,
+    // PG_RGEN,
+    PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST,
+    PG_RGEN_INTEGRATOR_INTERSECT_SHADOW,
+    PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE,
     PG_MISS,
     PG_HITD, /* Default hit group. */
     PG_HITS, /* __SHADOW_RECORD_ALL__ hit group. */
     PG_HITL, /* __BVH_LOCAL__ hit group (only used for triangles). */
-#    if OPTIX_ABI_VERSION >= 36
+#  if OPTIX_ABI_VERSION >= 36
     PG_HITD_MOTION,
     PG_HITS_MOTION,
-#    endif
+#  endif
     PG_BAKE, /* kernel_bake_evaluate */
     PG_DISP, /* kernel_displace_evaluate */
     PG_BACK, /* kernel_background_evaluate */
@@ -85,6 +90,7 @@ class OptiXDevice : public CUDADevice {
     char header[OPTIX_SBT_RECORD_HEADER_SIZE];
   };
 
+#  if 0
   /* Information stored about CUDA memory allocations/ */
   struct CUDAMem {
     bool free_map_host = false;
@@ -101,7 +107,6 @@ class OptiXDevice : public CUDADevice {
 
   OptixDeviceContext context = NULL;
 
-#  if 0
   OptixModule optix_module = NULL; /* All necessary OptiX kernels are in one module. */
   OptixModule builtin_modules[2] = {};
   OptixPipeline pipelines[NUM_PIPELINES] = {};
@@ -110,7 +115,6 @@ class OptiXDevice : public CUDADevice {
   device_vector<SbtRecord> sbt_data;
   device_only_memory<KernelParams> launch_params;
   OptixTraversableHandle tlas_handle = 0;
-#  endif
 
   class Denoiser {
    public:
@@ -144,6 +148,7 @@ class OptiXDevice : public CUDADevice {
  private:
 #  if 0
   bool show_samples() const override;
+#  endif
 
   BVHLayoutMask get_bvh_layout_mask() const override;
 
@@ -162,7 +167,8 @@ class OptiXDevice : public CUDADevice {
   void const_copy_to(const char *name, void *host, size_t size) override;
 
   void update_launch_params(size_t offset, void *data, size_t data_size);
-#  endif
+
+  virtual unique_ptr<DeviceQueue> gpu_queue_create() override;
 
   /* --------------------------------------------------------------------
    * Denoising.

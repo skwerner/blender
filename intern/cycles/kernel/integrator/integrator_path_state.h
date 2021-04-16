@@ -56,42 +56,93 @@ typedef struct IntegratorQueueCounter {
 
 #ifdef __KERNEL_GPU__
 
-#  define INTEGRATOR_PATH_INIT(next_kernel) \
-    atomic_fetch_and_add_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
-    INTEGRATOR_STATE_WRITE(path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
-#  define INTEGRATOR_PATH_NEXT(current_kernel, next_kernel) \
-    atomic_fetch_and_sub_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
-    atomic_fetch_and_add_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
-    INTEGRATOR_STATE_WRITE(path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
-#  define INTEGRATOR_PATH_TERMINATE(current_kernel) \
-    atomic_fetch_and_sub_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
-    INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
+#  ifdef __KERNEL_OPTIX__
 
-#  define INTEGRATOR_SHADOW_PATH_INIT(next_kernel) \
-    atomic_fetch_and_add_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
-    INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
-#  define INTEGRATOR_SHADOW_PATH_NEXT(current_kernel, next_kernel) \
-    atomic_fetch_and_sub_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
-    atomic_fetch_and_add_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
-    INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
-#  define INTEGRATOR_SHADOW_PATH_TERMINATE(current_kernel) \
-    atomic_fetch_and_sub_uint32( \
-        &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
-    INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+#    define INTEGRATOR_PATH_INIT(next_kernel) \
+      atomic_fetch_and_add_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_PATH_NEXT(current_kernel, next_kernel) \
+      atomic_fetch_and_sub_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      atomic_fetch_and_add_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_PATH_TERMINATE(current_kernel) \
+      atomic_fetch_and_sub_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
 
-#  define INTEGRATOR_PATH_SET_SORT_KEY(key) \
-    { \
-      const int key_ = key; \
-      __integrator_sort_key[path_index] = key_; \
-      atomic_fetch_and_add_uint32(&__integrator_sort_key_counter[key_], 1); \
-    }
+#    define INTEGRATOR_SHADOW_PATH_INIT(next_kernel) \
+      atomic_fetch_and_add_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_SHADOW_PATH_NEXT(current_kernel, next_kernel) \
+      atomic_fetch_and_sub_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      atomic_fetch_and_add_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_SHADOW_PATH_TERMINATE(current_kernel) \
+      atomic_fetch_and_sub_uint32(&__params.__integrator_queue_counter \
+                                       ->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], \
+                                  1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+
+#    define INTEGRATOR_PATH_SET_SORT_KEY(key) \
+      { \
+        const int key_ = key; \
+        __params.__integrator_sort_key[path_index] = key_; \
+        atomic_fetch_and_add_uint32(&__params.__integrator_sort_key_counter[key_], 1); \
+      }
+
+#  else
+
+#    define INTEGRATOR_PATH_INIT(next_kernel) \
+      atomic_fetch_and_add_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_PATH_NEXT(current_kernel, next_kernel) \
+      atomic_fetch_and_sub_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
+      atomic_fetch_and_add_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_PATH_TERMINATE(current_kernel) \
+      atomic_fetch_and_sub_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
+
+#    define INTEGRATOR_SHADOW_PATH_INIT(next_kernel) \
+      atomic_fetch_and_add_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_SHADOW_PATH_NEXT(current_kernel, next_kernel) \
+      atomic_fetch_and_sub_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
+      atomic_fetch_and_add_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = DEVICE_KERNEL_INTEGRATOR_##next_kernel;
+#    define INTEGRATOR_SHADOW_PATH_TERMINATE(current_kernel) \
+      atomic_fetch_and_sub_uint32( \
+          &__integrator_queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_##current_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+
+#    define INTEGRATOR_PATH_SET_SORT_KEY(key) \
+      { \
+        const int key_ = key; \
+        __integrator_sort_key[path_index] = key_; \
+        atomic_fetch_and_add_uint32(&__integrator_sort_key_counter[key_], 1); \
+      }
+
+#  endif
 
 #else
 

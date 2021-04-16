@@ -21,10 +21,13 @@
 #include "kernel/kernel_profiling.h"
 #include "kernel/kernel_types.h"
 
+#include "kernel/integrator/integrator_path_state.h"
+#include "kernel/integrator/integrator_state.h"
+
 CCL_NAMESPACE_BEGIN
 
 typedef struct ShaderParams {
-  uint4 *input;
+  KernelShaderEvalInput *input;
   float4 *output;
   int type;
   int filter;
@@ -34,7 +37,13 @@ typedef struct ShaderParams {
 } ShaderParams;
 
 typedef struct KernelParams {
-  KernelWorkTile tile;
+  IntegratorState __integrator_state;
+  IntegratorQueueCounter *__integrator_queue_counter;
+  int *__integrator_sort_key;
+  int *__integrator_sort_key_counter;
+  int *path_index_array;
+
+  //KernelWorkTile tile;
   KernelData data;
   ShaderParams shader;
 #define KERNEL_TEX(type, name) const type *name;
@@ -48,6 +57,8 @@ typedef struct KernelGlobals {
   Intersection hits_stack[64];
 } KernelGlobals;
 
+#ifdef __NVCC__
 extern "C" __constant__ KernelParams __params;
+#endif
 
 CCL_NAMESPACE_END

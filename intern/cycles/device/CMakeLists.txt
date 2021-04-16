@@ -93,6 +93,8 @@ set(SRC_OPTIX
   optix/device.h
   optix/device_impl.cpp
   optix/device_impl.h
+  optix/queue.cpp
+  optix/queue.h
 )
 
 set(SRC_HEADERS

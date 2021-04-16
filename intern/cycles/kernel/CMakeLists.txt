@@ -97,6 +97,7 @@ set(SRC_HEADERS
 )
 
 set(SRC_DEVICE_CPU_HEADERS
+  device/cpu/compat.h
   device/cpu/image.h
   device/cpu/globals.h
   device/cpu/kernel.h
@@ -116,10 +117,12 @@ set(SRC_DEVICE_CUDA_HEADERS
 )
 
 set(SRC_DEVICE_OPTIX_HEADERS
+  device/optix/compat.h
   device/optix/globals.h
 )
 
 set(SRC_DEVICE_OPENCL_HEADERS
+  device/opencl/compat.h
   device/opencl/image.h
   device/opencl/globals.h
 )

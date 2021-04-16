@@ -129,6 +129,25 @@ typedef struct IntegratorState {
 #  undef KERNEL_STRUCT_END_ARRAY
 } IntegratorState;
 
+#  ifdef __KERNEL_OPTIX__
+
+#    define INTEGRATOR_STATE_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
+#    define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
+#    define INTEGRATOR_STATE_PASS kg, path_index
+
+#    define INTEGRATOR_STATE_PASS_NULL kg, -1
+#    define INTEGRATOR_STATE_IS_NULL (path_index == -1)
+
+#    define INTEGRATOR_STATE(nested_struct, member) __params.__integrator_state.nested_struct.member[path_index]
+#    define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)
+
+#    define INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member) \
+      __params.__integrator_state.nested_struct[array_index].member[path_index]
+#    define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
+      INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member)
+
+#  else /* __KERNEL_OPTIX__ */
+
 ccl_device_constant IntegratorState __integrator_state;
 ccl_device_constant IntegratorQueueCounter *__integrator_queue_counter;
 
@@ -136,22 +155,24 @@ ccl_device_constant IntegratorQueueCounter *__integrator_queue_counter;
 ccl_device_constant int *__integrator_sort_key;
 ccl_device_constant int *__integrator_sort_key_counter;
 
-#  define INTEGRATOR_STATE_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
-#  define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
-#  define INTEGRATOR_STATE_PASS kg, path_index
+#    define INTEGRATOR_STATE_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
+#    define INTEGRATOR_STATE_CONST_ARGS const KernelGlobals *ccl_restrict kg, const int path_index
+#    define INTEGRATOR_STATE_PASS kg, path_index
 
-#  define INTEGRATOR_STATE_PASS_NULL kg, -1
-#  define INTEGRATOR_STATE_IS_NULL (path_index == -1)
+#    define INTEGRATOR_STATE_PASS_NULL kg, -1
+#    define INTEGRATOR_STATE_IS_NULL (path_index == -1)
 
-#  define INTEGRATOR_STATE(nested_struct, member) \
-    __integrator_state.nested_struct.member[path_index]
-#  define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)
+#    define INTEGRATOR_STATE(nested_struct, member) \
+      __integrator_state.nested_struct.member[path_index]
+#    define INTEGRATOR_STATE_WRITE(nested_struct, member) INTEGRATOR_STATE(nested_struct, member)
 
-#  define INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member) \
-    __integrator_state.nested_struct[array_index].member[path_index]
-#  define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
-    INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member)
+#    define INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member) \
+      __integrator_state.nested_struct[array_index].member[path_index]
+#    define INTEGRATOR_STATE_ARRAY_WRITE(nested_struct, array_index, member) \
+      INTEGRATOR_STATE_ARRAY(nested_struct, array_index, member)
 
-#endif /* __KERNEL__CPU__ */
+#  endif /* __KERNEL_OPTIX__ */
+
+#endif /* __KERNEL_CPU__ */
 
 CCL_NAMESPACE_END

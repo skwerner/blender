@@ -487,8 +487,6 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_depth, "Mist Depth", 100.0f);
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
-  SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
-
   SOCKET_BOOLEAN(use_light_visibility, "Use Light Visibility", false);
 
   NodeEnum *pass_type_enum = get_pass_type_enum();

@@ -100,8 +100,6 @@ class Film : public Node {
   NODE_SOCKET_API(CryptomatteType, cryptomatte_passes)
   NODE_SOCKET_API(int, cryptomatte_depth)
 
-  NODE_SOCKET_API(bool, use_adaptive_sampling)
-
  private:
   int pass_stride;
   size_t filter_table_offset;

@@ -177,8 +177,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
                                            FLT_MAX :
                                            sample_clamp_indirect * 3.0f;
 
-  kintegrator->start_sample = start_sample;
-
   kintegrator->sampling_pattern = sampling_pattern;
 
   const AdaptiveSampling adaptive_sampling = scene->integrator->get_adaptive_sampling();

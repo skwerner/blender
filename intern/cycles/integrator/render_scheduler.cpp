@@ -165,9 +165,9 @@ RenderWork RenderScheduler::get_render_work()
    * samples are rendered. */
   state_.num_rendered_samples += render_work.path_trace.num_samples;
 
-  render_work.path_trace.adaptive_sampling_filter = adaptive_sampling_.need_filter(
-      get_rendered_sample());
-  render_work.path_trace.adaptive_sampling_threshold = adaptive_sampling_.threshold;
+  render_work.adaptive_sampling.filter = adaptive_sampling_.need_filter(get_rendered_sample());
+  render_work.adaptive_sampling.threshold = adaptive_sampling_.threshold;
+  render_work.adaptive_sampling.reset = false;
 
   bool denoiser_delayed;
   render_work.denoise = work_need_denoise(denoiser_delayed);

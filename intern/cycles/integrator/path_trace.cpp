@@ -139,6 +139,11 @@ void PathTrace::render_pipeline(RenderWork render_work)
     return;
   }
 
+  adaptive_sample(render_work);
+  if (is_cancel_requested()) {
+    return;
+  }
+
   denoise(render_work);
   if (is_cancel_requested()) {
     return;
@@ -169,31 +174,42 @@ void PathTrace::path_trace(RenderWork &render_work)
   VLOG(3) << "Will path trace " << render_work.path_trace.num_samples
           << " samples at the resolution divider " << render_work.resolution_divider;
 
-  if (render_work.path_trace.adaptive_sampling_filter) {
-    VLOG(3) << "Will filter adaptive stopping buffer.";
-  }
-
   const double start_time = time_dt();
-
-  bool all_pixels_converged = render_work.path_trace.adaptive_sampling_filter;
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
     path_trace_work->render_samples(render_work.path_trace.start_sample,
                                     render_work.path_trace.num_samples);
+  });
 
-    if (render_work.path_trace.adaptive_sampling_filter) {
-      all_pixels_converged &= path_trace_work->adaptive_sampling_converge_and_filter(
-          render_work.path_trace.adaptive_sampling_threshold, false);
+  if (!is_cancel_requested()) {
+    render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
+  }
+}
+
+void PathTrace::adaptive_sample(RenderWork &render_work)
+{
+  if (!render_work.adaptive_sampling.filter) {
+    return;
+  }
+
+  bool all_pixels_converged = true;
+
+  VLOG(3) << "Will filter adaptive stopping buffer, threshold "
+          << render_work.adaptive_sampling.threshold;
+  if (render_work.adaptive_sampling.reset) {
+    VLOG(3) << "Will re-calculate convergency flag for currently converged pixels.";
+  }
+
+  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+    if (!path_trace_work->adaptive_sampling_converge_and_filter(
+            render_work.adaptive_sampling.threshold, render_work.adaptive_sampling.reset)) {
+      all_pixels_converged = false;
     }
   });
 
   if (all_pixels_converged) {
     VLOG(3) << "All pixels converged.";
     render_scheduler_.set_path_trace_finished(render_work);
-  }
-
-  if (!is_cancel_requested()) {
-    render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
   }
 }
 

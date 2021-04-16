@@ -30,10 +30,17 @@ class RenderWork {
   struct {
     int start_sample = 0;
     int num_samples = 0;
-
-    bool adaptive_sampling_filter = false;
-    float adaptive_sampling_threshold = 0.0f;
   } path_trace;
+
+  struct {
+    /* Check for convergency and filter the mask. */
+    bool filter = false;
+
+    float threshold = 0.0f;
+
+    /* Reset convergency flag when filtering, forcing a re-check of whether pixel did converge. */
+    bool reset = false;
+  } adaptive_sampling;
 
   bool denoise = false;
 
@@ -44,8 +51,7 @@ class RenderWork {
    * work. */
   inline operator bool() const
   {
-    return path_trace.num_samples || path_trace.adaptive_sampling_filter || denoise ||
-           update_display;
+    return path_trace.num_samples || adaptive_sampling.filter || denoise || update_display;
   }
 };
 

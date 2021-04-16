@@ -134,13 +134,13 @@ class PathTrace {
   /* Update the render state to possibly changed resolution divider. */
   void render_update_resolution_divider(int resolution_divider);
 
-  /* Perform path tracing part of the given render work. */
+  /* Perform various steps of the render work.
+   *
+   * Note that some steps might modify the work, forcing some steps to happen within this iteration
+   * of rendering. */
   void path_trace(RenderWork &render_work);
-
-  /* Perform denoising part of the given render work. */
+  void adaptive_sample(RenderWork &render_work);
   void denoise(const RenderWork &render_work);
-
-  /* Update display with the current render result. */
   void update_display(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */

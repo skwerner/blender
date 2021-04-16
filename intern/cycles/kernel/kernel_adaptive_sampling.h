@@ -39,8 +39,13 @@ ccl_device_forceinline bool kernel_need_sample_pixel(INTEGRATOR_STATE_CONST_ARGS
 
 /* Determines whether to continue sampling a given pixel or if it has sufficiently converged. */
 
-ccl_device bool kernel_adaptive_sampling_convergence_check(
-    const KernelGlobals *kg, ccl_global float *render_buffer, int x, int y, int offset, int stride)
+ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *kg,
+                                                           ccl_global float *render_buffer,
+                                                           int x,
+                                                           int y,
+                                                           float threshold,
+                                                           int offset,
+                                                           int stride)
 {
   kernel_assert(kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED);
   kernel_assert(kernel_data.film.pass_sample_count != PASS_UNUSED);
@@ -69,7 +74,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(
    * A small epsilon is added to the divisor to prevent division by zero. */
   const float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) /
                       (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
-  if (error < kernel_data.integrator.adaptive_threshold * sample) {
+  if (error < threshold * sample) {
     /* Set the fourth component to non-zero value to indicate that this pixel has converged. */
     buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] += 1.0f;
     return true;

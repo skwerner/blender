@@ -75,6 +75,7 @@ bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     ccl_global float *render_buffer,
     int x,
     int y,
+    float threshold,
     int offset,
     int stride);
 

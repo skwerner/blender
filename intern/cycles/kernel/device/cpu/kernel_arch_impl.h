@@ -154,13 +154,20 @@ void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
 /* Adaptive sampling. */
 
 bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
-    const KernelGlobals *kg, ccl_global float *render_buffer, int x, int y, int offset, int stride)
+    const KernelGlobals *kg,
+    ccl_global float *render_buffer,
+    int x,
+    int y,
+    float threshold,
+    int offset,
+    int stride)
 {
 #ifdef KERNEL_STUB
   STUB_ASSERT(KERNEL_ARCH, adaptive_sampling_convergence_check);
   return false;
 #else
-  return kernel_adaptive_sampling_convergence_check(kg, render_buffer, x, y, offset, stride);
+  return kernel_adaptive_sampling_convergence_check(
+      kg, render_buffer, x, y, threshold, offset, stride);
 #endif
 }
 

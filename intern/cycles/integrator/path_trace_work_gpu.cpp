@@ -628,9 +628,9 @@ void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, float sample
   queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
 }
 
-bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter()
+bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter(float threshold)
 {
-  if (adaptive_sampling_convergence_check()) {
+  if (adaptive_sampling_convergence_check(threshold)) {
     return true;
   }
 
@@ -641,7 +641,7 @@ bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter()
   return false;
 }
 
-bool PathTraceWorkGPU::adaptive_sampling_convergence_check()
+bool PathTraceWorkGPU::adaptive_sampling_convergence_check(float threshold)
 {
   device_vector<int> all_pixels_converged(device_, "all_pixels_converged", MEM_READ_WRITE);
   all_pixels_converged.alloc(1);
@@ -656,6 +656,7 @@ bool PathTraceWorkGPU::adaptive_sampling_convergence_check()
                   const_cast<int *>(&effective_buffer_params_.full_y),
                   const_cast<int *>(&effective_buffer_params_.width),
                   const_cast<int *>(&effective_buffer_params_.height),
+                  &threshold,
                   &effective_buffer_params_.offset,
                   &effective_buffer_params_.stride,
                   &all_pixels_converged.device_pointer};

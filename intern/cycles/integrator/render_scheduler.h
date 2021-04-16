@@ -32,6 +32,7 @@ class RenderWork {
     int num_samples = 0;
 
     bool adaptive_sampling_filter = false;
+    float adaptive_sampling_threshold = 0.0f;
   } path_trace;
 
   bool denoise = false;

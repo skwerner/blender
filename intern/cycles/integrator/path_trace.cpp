@@ -174,6 +174,7 @@ void PathTrace::path_trace(RenderWork &render_work)
   }
 
   const double start_time = time_dt();
+
   bool all_pixels_converged = render_work.path_trace.adaptive_sampling_filter;
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
@@ -181,7 +182,8 @@ void PathTrace::path_trace(RenderWork &render_work)
                                     render_work.path_trace.num_samples);
 
     if (render_work.path_trace.adaptive_sampling_filter) {
-      all_pixels_converged &= path_trace_work->adaptive_sampling_converge_and_filter();
+      all_pixels_converged &= path_trace_work->adaptive_sampling_converge_and_filter(
+          render_work.path_trace.adaptive_sampling_threshold);
     }
   });
 

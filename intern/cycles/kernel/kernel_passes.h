@@ -342,8 +342,7 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
      criteria. This is the heuristic from "A hierarchical automatic stopping condition for Monte
      Carlo global illumination" except that here it is applied per pixel and not in hierarchical
      tiles. */
-  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED &&
-      kernel_data.integrator.adaptive_threshold > 0.0f) {
+  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED) {
     if (sample_is_even(kernel_data.integrator.sampling_pattern, sample)) {
       kernel_write_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer,
                                make_float4(L_sum.x * 2.0f, L_sum.y * 2.0f, L_sum.z * 2.0f, 0.0f));

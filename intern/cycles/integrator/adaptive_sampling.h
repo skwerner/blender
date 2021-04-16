@@ -49,6 +49,7 @@ class AdaptiveSampling {
   bool use = false;
   int adaptive_step = 0;
   int min_samples = 0;
+  float threshold = 0.0f;
 };
 
 CCL_NAMESPACE_END

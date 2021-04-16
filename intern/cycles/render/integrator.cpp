@@ -179,20 +179,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
 
   kintegrator->sampling_pattern = sampling_pattern;
 
-  const AdaptiveSampling adaptive_sampling = scene->integrator->get_adaptive_sampling();
-
-  if (!adaptive_sampling.use) {
-    kintegrator->adaptive_threshold = 0.0f;
-  }
-  else if (aa_samples > 0 && adaptive_threshold == 0.0f) {
-    kintegrator->adaptive_threshold = max(0.001f, 1.0f / (float)aa_samples);
-    VLOG(1) << "Cycles adaptive sampling: automatic threshold = "
-            << kintegrator->adaptive_threshold;
-  }
-  else {
-    kintegrator->adaptive_threshold = adaptive_threshold;
-  }
-
   if (light_sampling_threshold > 0.0f) {
     kintegrator->light_inv_rr_threshold = 1.0f / light_sampling_threshold;
   }
@@ -290,6 +276,14 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
 
   DCHECK(is_power_of_two(adaptive_sampling.adaptive_step))
       << "Adaptive step must be a power of two for bitwise operations to work";
+
+  if (aa_samples > 0 && adaptive_threshold == 0.0f) {
+    adaptive_sampling.threshold = max(0.001f, 1.0f / (float)aa_samples);
+    VLOG(1) << "Cycles adaptive sampling: automatic threshold = " << adaptive_sampling.threshold;
+  }
+  else {
+    adaptive_sampling.threshold = adaptive_threshold;
+  }
 
   return adaptive_sampling;
 }

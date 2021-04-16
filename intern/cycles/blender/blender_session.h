@@ -119,6 +119,8 @@ class BlenderSession {
 
   void *python_thread_state;
 
+  bool use_developer_ui;
+
   /* Global state which is common for all render sessions created from Blender.
    * Usually denotes command line arguments.
    */

@@ -53,6 +53,7 @@ BlenderSync::BlenderSync(BL::RenderEngine &b_engine,
                          BL::Scene &b_scene,
                          Scene *scene,
                          bool preview,
+                         bool use_developer_ui,
                          Progress &progress)
     : b_engine(b_engine),
       b_data(b_data),
@@ -67,6 +68,7 @@ BlenderSync::BlenderSync(BL::RenderEngine &b_engine,
       scene(scene),
       preview(preview),
       experimental(false),
+      use_developer_ui(use_developer_ui),
       dicing_rate(1.0f),
       max_subdivisions(12),
       progress(progress)
@@ -372,6 +374,13 @@ void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
 
   if (b_v3d) {
     film->set_display_pass(BlenderViewportParameters::get_render_pass(b_v3d));
+
+    if (use_developer_ui) {
+      film->set_show_active_pixels(BlenderViewportParameters::get_show_active_pixels(b_v3d));
+    }
+    else {
+      film->set_show_active_pixels(false);
+    }
   }
 
   film->set_exposure(get_float(cscene, "film_exposure"));

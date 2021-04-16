@@ -1408,6 +1408,10 @@ class CyclesView3DShadingSettings(bpy.types.PropertyGroup):
         items=enum_view3d_shading_render_pass,
         default='COMBINED',
     )
+    show_active_pixels: BoolProperty(
+        name="Show Active Pixels",
+        description="When using adaptive sampling highlight pixels which are being sampled",
+    )
 
 
 def register():

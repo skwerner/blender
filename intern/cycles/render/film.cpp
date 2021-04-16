@@ -492,6 +492,8 @@ NODE_DEFINE(Film)
   NodeEnum *pass_type_enum = get_pass_type_enum();
   SOCKET_ENUM(display_pass, "Display Pass", *pass_type_enum, PASS_COMBINED);
 
+  SOCKET_BOOLEAN(show_active_pixels, "Show Active Pixels", false);
+
   static NodeEnum cryptomatte_passes_enum;
   cryptomatte_passes_enum.insert("none", CRYPT_NONE);
   cryptomatte_passes_enum.insert("object", CRYPT_OBJECT);
@@ -511,6 +513,7 @@ Film::Film() : Node(get_node_type())
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
   display_pass = PASS_COMBINED;
+  show_active_pixels = false;
 }
 
 Film::~Film()
@@ -546,6 +549,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->display_divide_pass_offset = -1;
   kfilm->use_display_exposure = false;
   kfilm->use_display_pass_alpha = (display_pass == PASS_COMBINED);
+  kfilm->show_active_pixels = show_active_pixels;
 
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;

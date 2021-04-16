@@ -59,6 +59,7 @@ class BlenderSync {
               BL::Scene &b_scene,
               Scene *scene,
               bool preview,
+              bool use_developer_ui,
               Progress &progress);
   ~BlenderSync();
 
@@ -226,6 +227,7 @@ class BlenderSync {
   Scene *scene;
   bool preview;
   bool experimental;
+  bool use_developer_ui;
 
   float dicing_rate;
   int max_subdivisions;

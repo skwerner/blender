@@ -72,4 +72,15 @@ PassType BlenderViewportParameters::get_render_pass(BL::SpaceView3D &b_v3d)
   return display_pass;
 }
 
+bool BlenderViewportParameters::get_show_active_pixels(BL::SpaceView3D &b_v3d)
+{
+  bool show_active_pixels = PASS_NONE;
+  if (b_v3d) {
+    BL::View3DShading b_view3dshading = b_v3d.shading();
+    PointerRNA cshading = RNA_pointer_get(&b_view3dshading.ptr, "cycles");
+    show_active_pixels = get_boolean(cshading, "show_active_pixels");
+  }
+  return show_active_pixels;
+}
+
 CCL_NAMESPACE_END

@@ -104,7 +104,9 @@ BlenderSession::BlenderSession(BL::RenderEngine &b_engine,
       width(width),
       height(height),
       preview_osl(false),
-      python_thread_state(NULL)
+      python_thread_state(NULL),
+      use_developer_ui(b_userpref.experimental().use_cycles_debug() &&
+                       b_userpref.view().show_developer_ui())
 {
   /* 3d view render */
   background = false;
@@ -142,7 +144,8 @@ void BlenderSession::create_session()
   scene->name = b_scene.name();
 
   /* create sync */
-  sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
+  sync = new BlenderSync(
+      b_engine, b_data, b_scene, scene, !background, use_developer_ui, session->progress);
   BL::Object b_camera_override(b_engine.camera_override());
   if (b_v3d) {
     sync->sync_view(b_v3d, b_rv3d, width, height);
@@ -234,7 +237,8 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   if (is_new_session) {
     /* Sync object should be re-created for new scene. */
     delete sync;
-    sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
+    sync = new BlenderSync(
+        b_engine, b_data, b_scene, scene, !background, use_developer_ui, session->progress);
   }
   else {
     /* Sync recalculations to do just the required updates. */

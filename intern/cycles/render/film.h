@@ -88,6 +88,7 @@ class Film : public Node {
   NODE_SOCKET_API(float, pass_alpha_threshold)
 
   NODE_SOCKET_API(PassType, display_pass)
+  NODE_SOCKET_API(bool, show_active_pixels)
 
   NODE_SOCKET_API(FilterType, filter_type)
   NODE_SOCKET_API(float, filter_width)

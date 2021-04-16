@@ -54,6 +54,15 @@ class CyclesButtonsPanel:
         return context.engine in cls.COMPAT_ENGINES
 
 
+class CyclesDebugButtonsPanel(CyclesButtonsPanel):
+    @classmethod
+    def poll(cls, context):
+        prefs = bpy.context.preferences
+        return (CyclesButtonsPanel.poll(context)
+                and prefs.experimental.use_cycles_debug
+                and prefs.view.show_developer_ui)
+
+
 # Adapt properties editor panel to display in node editor. We have to
 # copy the class rather than inherit due to the way bpy registration works.
 def node_panel(cls):
@@ -1798,18 +1807,11 @@ class CYCLES_RENDER_PT_bake_output(CyclesButtonsPanel, Panel):
                 layout.prop(cbk, "use_clear", text="Clear Image")
 
 
-class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
+class CYCLES_RENDER_PT_debug(CyclesDebugButtonsPanel, Panel):
     bl_label = "Debug"
     bl_context = "render"
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'CYCLES'}
-
-    @classmethod
-    def poll(cls, context):
-        prefs = bpy.context.preferences
-        return (CyclesButtonsPanel.poll(context)
-                and prefs.experimental.use_cycles_debug
-                and prefs.view.show_developer_ui)
 
     def draw(self, context):
         layout = self.layout
@@ -1948,25 +1950,47 @@ class CYCLES_RENDER_PT_simplify_culling(CyclesButtonsPanel, Panel):
         sub.prop(cscene, "distance_cull_margin", text="")
 
 
-class CYCLES_VIEW3D_PT_shading_render_pass(Panel):
+class CyclesShadingButtonsPanel(CyclesButtonsPanel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
-    bl_label = "Render Pass"
     bl_parent_id = 'VIEW3D_PT_shading'
-    COMPAT_ENGINES = {'CYCLES'}
 
     @classmethod
     def poll(cls, context):
         return (
-            context.engine in cls.COMPAT_ENGINES and
+            CyclesButtonsPanel.poll(context) and
             context.space_data.shading.type == 'RENDERED'
         )
+
+
+class CYCLES_VIEW3D_PT_shading_render_pass(CyclesShadingButtonsPanel, Panel):
+    bl_label = "Render Pass"
 
     def draw(self, context):
         shading = context.space_data.shading
 
         layout = self.layout
         layout.prop(shading.cycles, "render_pass", text="")
+
+
+class CYCLES_VIEW3D_PT_shading_debug(CyclesDebugButtonsPanel,
+                                     CyclesShadingButtonsPanel,
+                                     Panel):
+    bl_label = "Debug"
+
+    @classmethod
+    def poll(cls, context):
+        return (
+            CyclesDebugButtonsPanel.poll(context) and
+            CyclesShadingButtonsPanel.poll(context)
+        )
+
+    def draw(self, context):
+        shading = context.space_data.shading
+
+        layout = self.layout
+        layout.active = context.scene.cycles.use_adaptive_sampling
+        layout.prop(shading.cycles, "show_active_pixels")
 
 
 class CYCLES_VIEW3D_PT_shading_lighting(Panel):
@@ -2102,6 +2126,7 @@ classes = (
     CYCLES_VIEW3D_PT_simplify_greasepencil,
     CYCLES_VIEW3D_PT_shading_lighting,
     CYCLES_VIEW3D_PT_shading_render_pass,
+    CYCLES_VIEW3D_PT_shading_debug,
     CYCLES_RENDER_PT_motion_blur,
     CYCLES_RENDER_PT_motion_blur_curve,
     CYCLES_RENDER_PT_film,

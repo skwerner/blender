@@ -76,6 +76,8 @@ ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
   ccl_global float *buffer = render_buffer + render_buffer_offset;
 
   float4 rgba_in = film_get_pass_result(kg, buffer);
+
+  /* Filter the pixel if needed. */
   if (kernel_data.film.display_divide_pass_offset == -1) {
     /* Divide by adaptive sampling count.
      * Note that the sample count pass gets divided by the overall sampls count, so that it gives
@@ -85,6 +87,16 @@ ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
       sample_scale = 1.0f / buffer[kernel_data.film.pass_sample_count];
     }
     rgba_in *= sample_scale;
+  }
+
+  /* Highlight the pixel. */
+  if (kernel_data.film.show_active_pixels &&
+      kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED) {
+    if (buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] == 0.0f) {
+      const float3 active_rgb = make_float3(1.0f, 0.0f, 0.0f);
+      const float3 mix_rgb = interp(float4_to_float3(rgba_in), active_rgb, 0.5f);
+      rgba_in = make_float4(mix_rgb.x, mix_rgb.y, mix_rgb.z, rgba_in.w);
+    }
   }
 
   rgba_in.w = film_transparency_to_alpha(rgba_in.w);

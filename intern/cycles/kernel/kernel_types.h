@@ -1232,6 +1232,7 @@ typedef struct KernelFilm {
   int display_divide_pass_offset;
   int use_display_exposure;
   int use_display_pass_alpha;
+  int show_active_pixels;
 
   int pad4, pad5, pad6;
 } KernelFilm;

@@ -47,6 +47,8 @@ class BlenderViewportParameters {
   /* Retrieve the render pass type that needs to be displayed on the given `SpaceView3D`
    * When the `b_v3d` parameter is not given `PASS_NONE` will be returned. */
   static PassType get_render_pass(BL::SpaceView3D &b_v3d);
+
+  static bool get_show_active_pixels(BL::SpaceView3D &b_v3d);
 };
 
 CCL_NAMESPACE_END

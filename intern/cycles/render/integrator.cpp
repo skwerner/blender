@@ -286,10 +286,10 @@ AdaptiveSampling Integrator::get_adaptive_sampling() const
     adaptive_sampling.min_samples = max(4, adaptive_min_samples);
   }
 
-  adaptive_sampling.adaptive_step = 4;
+  adaptive_sampling.adaptive_step = 16;
 
-  /* Adaptive step must be a power of two for bitwise operations to work. */
-  assert((adaptive_sampling.adaptive_step & (adaptive_sampling.adaptive_step - 1)) == 0);
+  DCHECK(is_power_of_two(adaptive_sampling.adaptive_step))
+      << "Adaptive step must be a power of two for bitwise operations to work";
 
   return adaptive_sampling;
 }

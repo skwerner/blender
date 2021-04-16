@@ -44,6 +44,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
                                                            int x,
                                                            int y,
                                                            float threshold,
+                                                           bool reset,
                                                            int offset,
                                                            int stride)
 {
@@ -57,7 +58,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
   /* TODO(Stefan): Is this better in linear, sRGB or something else? */
 
   const float4 A = *(ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-  if (A.w != 0.0f) {
+  if (!reset && A.w != 0.0f) {
     /* If the pixel was considered converged, its state will not change in this kernmel. Early
      * output before doing any math.
      *
@@ -74,13 +75,11 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
    * A small epsilon is added to the divisor to prevent division by zero. */
   const float error = (fabsf(I.x - A.x) + fabsf(I.y - A.y) + fabsf(I.z - A.z)) /
                       (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
-  if (error < threshold * sample) {
-    /* Set the fourth component to non-zero value to indicate that this pixel has converged. */
-    buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] += 1.0f;
-    return true;
-  }
+  const bool did_converge = (error < threshold * sample);
 
-  return false;
+  buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] = did_converge;
+
+  return did_converge;
 }
 
 /* This is a simple box filter in two passes.

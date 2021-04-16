@@ -65,7 +65,7 @@ class PathTraceWork {
 
   /* Perform convergence test on the render buffer, and filter the convergence mask.
    * Returns true if all pixels did converge. */
-  virtual bool adaptive_sampling_converge_and_filter(float threshold) = 0;
+  virtual bool adaptive_sampling_converge_and_filter(float threshold, bool reset) = 0;
 
   /* Cheap-ish request to see whether rendering is requested and is to be stopped as soon as
    * possible, without waiting for any samples to be finished. */

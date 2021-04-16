@@ -159,6 +159,7 @@ bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     int x,
     int y,
     float threshold,
+    bool reset,
     int offset,
     int stride)
 {
@@ -167,7 +168,7 @@ bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
   return false;
 #else
   return kernel_adaptive_sampling_convergence_check(
-      kg, render_buffer, x, y, threshold, offset, stride);
+      kg, render_buffer, x, y, threshold, reset, offset, stride);
 #endif
 }
 

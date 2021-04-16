@@ -183,7 +183,7 @@ void PathTrace::path_trace(RenderWork &render_work)
 
     if (render_work.path_trace.adaptive_sampling_filter) {
       all_pixels_converged &= path_trace_work->adaptive_sampling_converge_and_filter(
-          render_work.path_trace.adaptive_sampling_threshold);
+          render_work.path_trace.adaptive_sampling_threshold, false);
     }
   });
 

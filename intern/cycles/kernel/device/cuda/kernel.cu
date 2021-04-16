@@ -296,6 +296,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                                     int sw,
                                                     int sh,
                                                     float threshold,
+                                                    bool reset,
                                                     int offset,
                                                     int stride,
                                                     int *all_pixels_converged)
@@ -308,7 +309,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (x < sw && y < sh) {
     converged = kernel_adaptive_sampling_convergence_check(
-        nullptr, render_buffer, sx + x, sy + y, threshold, offset, stride);
+        nullptr, render_buffer, sx + x, sy + y, threshold, reset, offset, stride);
   }
 
   /* NOTE: All threads specified in the mask must execute the intrinsic. */

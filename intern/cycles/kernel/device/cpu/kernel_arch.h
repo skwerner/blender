@@ -76,6 +76,7 @@ bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     int x,
     int y,
     float threshold,
+    bool reset,
     int offset,
     int stride);
 

@@ -646,7 +646,8 @@ bool PathTraceWorkGPU::adaptive_sampling_convergence_check(int sample)
   device_vector<int> all_pixels_converged(device_, "all_pixels_converged", MEM_READ_WRITE);
   all_pixels_converged.alloc(1);
   all_pixels_converged.data()[0] = 1;
-  all_pixels_converged.copy_to_device();
+
+  queue_->copy_to_device(all_pixels_converged);
 
   const int work_size = effective_buffer_params_.width * effective_buffer_params_.height;
 
@@ -662,7 +663,7 @@ bool PathTraceWorkGPU::adaptive_sampling_convergence_check(int sample)
 
   queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK, work_size, args);
 
-  all_pixels_converged.copy_from_device();
+  queue_->copy_from_device(all_pixels_converged);
   queue_->synchronize();
 
   return all_pixels_converged.data()[0];

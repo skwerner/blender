@@ -315,8 +315,8 @@ ccl_device_intersect bool scene_intersect_local(const KernelGlobals *kg,
         float3 dir = ray->D;
         float3 idir = ray->D;
         Transform ob_itfm;
-        rtc_ray.tfar = bvh_instance_motion_push(
-            kg, local_object, ray, &P, &dir, &idir, ray->t, &ob_itfm);
+        rtc_ray.tfar = ray->t *
+                       bvh_instance_motion_push(kg, local_object, ray, &P, &dir, &idir, &ob_itfm);
         /* bvh_instance_motion_push() returns the inverse transform but
          * it's not needed here. */
         (void)ob_itfm;

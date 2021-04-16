@@ -300,7 +300,7 @@ ccl_device_inline void optix_intersection_curve(const uint prim, const uint type
   if (isect.t != FLT_MAX)
     isect.t *= len;
 
-  if (curve_intersect(NULL, &isect, P, dir, visibility, object, prim, time, type)) {
+  if (curve_intersect(NULL, &isect, P, dir, isect.t, visibility, object, prim, time, type)) {
     optixReportIntersection(isect.t / len,
                             type & PRIMITIVE_ALL,
                             __float_as_int(isect.u),   // Attribute_0

@@ -147,13 +147,14 @@ ccl_device_inline
 
             switch (p_type) {
               case PRIMITIVE_TRIANGLE: {
-                hit = triangle_intersect(kg, isect_array, P, dir, visibility, object, prim_addr);
+                hit = triangle_intersect(
+                    kg, isect, P, dir, isect_t, visibility, object, prim_addr);
                 break;
               }
 #if BVH_FEATURE(BVH_MOTION)
               case PRIMITIVE_MOTION_TRIANGLE: {
                 hit = motion_triangle_intersect(
-                    kg, isect_array, P, dir, ray->time, visibility, object, prim_addr);
+                    kg, isect, P, dir, isect_t, ray->time, visibility, object, prim_addr);
                 break;
               }
 #endif
@@ -163,8 +164,16 @@ ccl_device_inline
               case PRIMITIVE_CURVE_RIBBON:
               case PRIMITIVE_MOTION_CURVE_RIBBON: {
                 const uint curve_type = kernel_tex_fetch(__prim_type, prim_addr);
-                hit = curve_intersect(
-                    kg, isect_array, P, dir, visibility, object, prim_addr, ray->time, curve_type);
+                hit = curve_intersect(kg,
+                                      isect,
+                                      P,
+                                      dir,
+                                      isect_t,
+                                      visibility,
+                                      object,
+                                      prim_addr,
+                                      ray->time,
+                                      curve_type);
                 break;
               }
 #endif
@@ -208,9 +217,9 @@ ccl_device_inline
           object = kernel_tex_fetch(__prim_object, -prim_addr - 1);
 
 #if BVH_FEATURE(BVH_MOTION)
-          isect_t = bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, isect_t, &ob_itfm);
+          isect_t *= bvh_instance_motion_push(kg, object, ray, &P, &dir, &idir, &ob_itfm);
 #else
-          isect_t = bvh_instance_push(kg, object, ray, &P, &dir, &idir, isect_t);
+          isect_t *= bvh_instance_push(kg, object, ray, &P, &dir, &idir);
 #endif
 
           num_hits_in_instance = 0;

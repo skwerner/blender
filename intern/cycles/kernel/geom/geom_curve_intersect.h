@@ -169,6 +169,7 @@ ccl_device_inline float2 half_plane_intersect(const float3 P, const float3 N, co
 }
 
 ccl_device bool curve_intersect_iterative(const float3 ray_dir,
+                                          float *ray_tfar,
                                           const float dt,
                                           const float4 curve[4],
                                           float u,
@@ -232,7 +233,7 @@ ccl_device bool curve_intersect_iterative(const float3 ray_dir,
 
     if (fabsf(f) < f_err && fabsf(g) < g_err) {
       t += dt;
-      if (!(0.0f <= t && t <= isect->t)) {
+      if (!(0.0f <= t && t <= *ray_tfar)) {
         return false; /* Rejects NaNs */
       }
       if (!(u >= 0.0f && u <= 1.0f)) {
@@ -249,6 +250,7 @@ ccl_device bool curve_intersect_iterative(const float3 ray_dir,
       }
 
       /* Record intersection. */
+      *ray_tfar = t;
       isect->t = t;
       isect->u = u;
       isect->v = 0.0f;
@@ -261,6 +263,7 @@ ccl_device bool curve_intersect_iterative(const float3 ray_dir,
 
 ccl_device bool curve_intersect_recursive(const float3 ray_orig,
                                           const float3 ray_dir,
+                                          float ray_tfar,
                                           float4 curve[4],
                                           Intersection *isect)
 {
@@ -341,7 +344,7 @@ ccl_device bool curve_intersect_recursive(const float3 ray_orig,
       }
 
       /* Intersect with cap-planes. */
-      float2 tp = make_float2(-dt, isect->t - dt);
+      float2 tp = make_float2(-dt, ray_tfar - dt);
       tp = make_float2(max(tp.x, tc_outer.x), min(tp.y, tc_outer.y));
       const float2 h0 = half_plane_intersect(
           float4_to_float3(P0), float4_to_float3(dP0du), ray_dir);
@@ -404,19 +407,19 @@ ccl_device bool curve_intersect_recursive(const float3 ray_orig,
                                           CURVE_NUM_BEZIER_SUBDIVISIONS;
         if (depth >= termDepth) {
           found |= curve_intersect_iterative(
-              ray_dir, dt, curve, u_outer0, tp0.x, use_backfacing, isect);
+              ray_dir, &ray_tfar, dt, curve, u_outer0, tp0.x, use_backfacing, isect);
         }
         else {
           recurse = true;
         }
       }
 
-      if (valid1 && (tp1.x + dt <= isect->t)) {
+      if (valid1 && (tp1.x + dt <= ray_tfar)) {
         const int termDepth = unstable1 ? CURVE_NUM_BEZIER_SUBDIVISIONS_UNSTABLE :
                                           CURVE_NUM_BEZIER_SUBDIVISIONS;
         if (depth >= termDepth) {
           found |= curve_intersect_iterative(
-              ray_dir, dt, curve, u_outer1, tp1.y, use_backfacing, isect);
+              ray_dir, &ray_tfar, dt, curve, u_outer1, tp1.y, use_backfacing, isect);
         }
         else {
           recurse = true;
@@ -542,7 +545,7 @@ ccl_device_inline float4 ribbon_to_ray_space(const float3 ray_space[3],
 
 ccl_device_inline bool ribbon_intersect(const float3 ray_org,
                                         const float3 ray_dir,
-                                        const float ray_tfar,
+                                        float ray_tfar,
                                         const int N,
                                         float4 curve[4],
                                         Intersection *isect)
@@ -590,7 +593,7 @@ ccl_device_inline bool ribbon_intersect(const float3 ray_org,
 
       /* Intersect quad. */
       float vu, vv, vt;
-      bool valid0 = ribbon_intersect_quad(isect->t, lp0, lp1, up1, up0, &vu, &vv, &vt);
+      bool valid0 = ribbon_intersect_quad(ray_tfar, lp0, lp1, up1, up0, &vu, &vv, &vt);
 
       if (valid0) {
         /* ignore self intersections */
@@ -604,6 +607,7 @@ ccl_device_inline bool ribbon_intersect(const float3 ray_org,
           vv = 2.0f * vv - 1.0f;
 
           /* Record intersection. */
+          ray_tfar = vt;
           isect->t = vt;
           isect->u = u + vu * step_size;
           isect->v = vv;
@@ -623,6 +627,7 @@ ccl_device_forceinline bool curve_intersect(const KernelGlobals *kg,
                                             Intersection *isect,
                                             const float3 P,
                                             const float3 dir,
+                                            const float tmax,
                                             uint visibility,
                                             int object,
                                             int curveAddr,
@@ -672,7 +677,7 @@ ccl_device_forceinline bool curve_intersect(const KernelGlobals *kg,
   if (type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON)) {
     /* todo: adaptive number of subdivisions could help performance here. */
     const int subdivisions = kernel_data.bvh.curve_subdivisions;
-    if (ribbon_intersect(P, dir, isect->t, subdivisions, curve, isect)) {
+    if (ribbon_intersect(P, dir, tmax, subdivisions, curve, isect)) {
       isect->prim = curveAddr;
       isect->object = object;
       isect->type = type;
@@ -682,7 +687,7 @@ ccl_device_forceinline bool curve_intersect(const KernelGlobals *kg,
     return false;
   }
   else {
-    if (curve_intersect_recursive(P, dir, curve, isect)) {
+    if (curve_intersect_recursive(P, dir, tmax, curve, isect)) {
       isect->prim = curveAddr;
       isect->object = object;
       isect->type = type;

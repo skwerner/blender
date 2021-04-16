@@ -423,13 +423,8 @@ ccl_device_inline float3 bvh_inverse_direction(float3 dir)
 
 /* Transform ray into object space to enter static object in BVH */
 
-ccl_device_inline float bvh_instance_push(const KernelGlobals *kg,
-                                          int object,
-                                          const Ray *ray,
-                                          float3 *P,
-                                          float3 *dir,
-                                          float3 *idir,
-                                          float t)
+ccl_device_inline float bvh_instance_push(
+    const KernelGlobals *kg, int object, const Ray *ray, float3 *P, float3 *dir, float3 *idir)
 {
   Transform tfm = object_fetch_transform(kg, object, OBJECT_INVERSE_TRANSFORM);
 
@@ -439,11 +434,7 @@ ccl_device_inline float bvh_instance_push(const KernelGlobals *kg,
   *dir = bvh_clamp_direction(normalize_len(transform_direction(&tfm, ray->D), &len));
   *idir = bvh_inverse_direction(*dir);
 
-  if (t != FLT_MAX) {
-    t *= len;
-  }
-
-  return t;
+  return len;
 }
 
 /* Transform ray to exit static object in BVH. */
@@ -495,7 +486,6 @@ ccl_device_inline float bvh_instance_motion_push(const KernelGlobals *kg,
                                                  float3 *P,
                                                  float3 *dir,
                                                  float3 *idir,
-                                                 float t,
                                                  Transform *itfm)
 {
   object_fetch_transform_motion_test(kg, object, ray->time, itfm);
@@ -506,11 +496,7 @@ ccl_device_inline float bvh_instance_motion_push(const KernelGlobals *kg,
   *dir = bvh_clamp_direction(normalize_len(transform_direction(itfm, ray->D), &len));
   *idir = bvh_inverse_direction(*dir);
 
-  if (t != FLT_MAX) {
-    t *= len;
-  }
-
-  return t;
+  return len;
 }
 
 /* Transform ray to exit motion blurred object in BVH. */

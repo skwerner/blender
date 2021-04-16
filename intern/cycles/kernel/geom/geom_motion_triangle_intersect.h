@@ -167,6 +167,7 @@ ccl_device_inline bool motion_triangle_intersect(const KernelGlobals *kg,
                                                  Intersection *isect,
                                                  float3 P,
                                                  float3 dir,
+                                                 float tmax,
                                                  float time,
                                                  uint visibility,
                                                  int object,
@@ -182,7 +183,7 @@ ccl_device_inline bool motion_triangle_intersect(const KernelGlobals *kg,
   float t, u, v;
   if (ray_triangle_intersect(P,
                              dir,
-                             isect->t,
+                             tmax,
 #if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
                              (ssef *)verts,
 #else

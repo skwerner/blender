@@ -74,9 +74,9 @@ ccl_device_inline
   if (!(object_flag & SD_OBJECT_TRANSFORM_APPLIED)) {
 #if BVH_FEATURE(BVH_MOTION)
     Transform ob_itfm;
-    isect_t = bvh_instance_motion_push(kg, local_object, ray, &P, &dir, &idir, isect_t, &ob_itfm);
+    isect_t *= bvh_instance_motion_push(kg, local_object, ray, &P, &dir, &idir, &ob_itfm);
 #else
-    isect_t = bvh_instance_push(kg, local_object, ray, &P, &dir, &idir, isect_t);
+    isect_t *= bvh_instance_push(kg, local_object, ray, &P, &dir, &idir);
 #endif
     object = local_object;
   }

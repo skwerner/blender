@@ -30,6 +30,7 @@ ccl_device_inline bool triangle_intersect(const KernelGlobals *kg,
                                           Intersection *isect,
                                           float3 P,
                                           float3 dir,
+                                          float tmax,
                                           uint visibility,
                                           int object,
                                           int prim_addr)
@@ -45,7 +46,7 @@ ccl_device_inline bool triangle_intersect(const KernelGlobals *kg,
   float t, u, v;
   if (ray_triangle_intersect(P,
                              dir,
-                             isect->t,
+                             tmax,
 #if defined(__KERNEL_SSE2__) && defined(__KERNEL_SSE__)
                              ssef_verts,
 #else

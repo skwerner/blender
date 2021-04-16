@@ -165,7 +165,7 @@ RenderWork RenderScheduler::get_render_work()
    * samples are rendered. */
   state_.num_rendered_samples += render_work.path_trace.num_samples;
 
-  render_work.adaptive_sampling.filter = adaptive_sampling_.need_filter(get_rendered_sample());
+  render_work.adaptive_sampling.filter = work_need_adaptive_filter();
   render_work.adaptive_sampling.threshold = adaptive_sampling_.threshold;
   render_work.adaptive_sampling.reset = false;
 
@@ -396,6 +396,11 @@ int RenderScheduler::get_num_samples_during_navigation(int resolution_divider) c
    * to have 4 time extra samples, so verall worst case timing is the same as the final resolution
    * at one sample. */
   return 4;
+}
+
+bool RenderScheduler::work_need_adaptive_filter() const
+{
+  return adaptive_sampling_.need_filter(get_rendered_sample());
 }
 
 bool RenderScheduler::work_need_denoise(bool &delayed)

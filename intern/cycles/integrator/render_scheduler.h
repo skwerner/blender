@@ -142,6 +142,9 @@ class RenderScheduler {
    */
   int get_num_samples_during_navigation(int resolution_divier) const;
 
+  /* Whether adaptive sampling convergence check and filter is to happen. */
+  bool work_need_adaptive_filter() const;
+
   /* Check whether current work needs denoising.
    * Denoising is not needed if the denoiser is not configured, or when denosiing is happening too
    * often.

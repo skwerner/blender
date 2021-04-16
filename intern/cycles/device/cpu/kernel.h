@@ -77,7 +77,6 @@ class CPUKernels {
                                  ccl_global float *render_buffer,
                                  int x,
                                  int y,
-                                 int sample,
                                  int offset,
                                  int stride)>;
 

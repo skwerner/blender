@@ -159,7 +159,7 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   gpu_display->unmap_texture_buffer();
 }
 
-bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
+bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter()
 {
   const int full_x = effective_buffer_params_.full_x;
   const int full_y = effective_buffer_params_.full_y;
@@ -182,7 +182,7 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(int sample)
       bool row_converged = true;
       for (int x = 0; x < width; ++x) {
         row_converged &= kernels_.adaptive_sampling_convergence_check(
-            kernel_globals, render_buffer, full_x + x, y, sample, offset, stride);
+            kernel_globals, render_buffer, full_x + x, y, offset, stride);
       }
 
       if (!row_converged) {

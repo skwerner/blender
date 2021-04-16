@@ -48,7 +48,7 @@ class PathTraceWorkGPU : public PathTraceWork {
 
   virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) override;
 
-  virtual bool adaptive_sampling_converge_and_filter(int sample) override;
+  virtual bool adaptive_sampling_converge_and_filter() override;
 
  protected:
   void alloc_integrator_state();
@@ -82,7 +82,7 @@ class PathTraceWorkGPU : public PathTraceWork {
    * This is a common part of both `copy_to_gpu_display` implementations. */
   void enqueue_film_convert(device_ptr d_rgba_half, float sample_scale);
 
-  bool adaptive_sampling_convergence_check(int sample);
+  bool adaptive_sampling_convergence_check();
   void enqueue_adaptive_sampling_filter_x();
   void enqueue_adaptive_sampling_filter_y();
 

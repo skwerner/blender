@@ -29,6 +29,9 @@ enum DenoiserType {
   DENOISER_ALL = ~0,
 };
 
+/* COnstruct human-readable string which denotes the denoiser type. */
+const char *denoiserTypeToHumanReadable(DenoiserType type);
+
 typedef int DenoiserTypeMask;
 
 class DenoiseParams {

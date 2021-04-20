@@ -19,6 +19,7 @@
 #include "integrator/adaptive_sampling.h"
 #include "integrator/denoiser.h" /* For DenoiseParams. */
 #include "render/buffers.h"
+#include "util/util_string.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -107,9 +108,14 @@ class RenderScheduler {
   RenderWork get_render_work();
 
   /* Report time (in seconds) which corresponding part of work took. */
-  void report_path_trace_time(const RenderWork &render_work, double time);
+  void report_path_trace_time(const RenderWork &render_work, double time, bool is_cancelled);
+  void report_adaptive_filter_time(const RenderWork &render_work, double time, bool is_cancelled);
   void report_denoise_time(const RenderWork &render_work, double time);
   void report_display_update_time(const RenderWork &render_work, double time);
+
+  /* Generate full multi-line report of the rendering process, including rendering parameters,
+   * times, and so on. */
+  string full_report() const;
 
  protected:
   /* Update start resolution divider based on the accumulated timing information, preserving nice
@@ -162,20 +168,52 @@ class RenderScheduler {
    * for the resolution divider calculation. */
   bool work_is_usable_for_first_render_estimation(const RenderWork &render_work);
 
-  struct TimeAverage {
+  /* Helper class to keep track of task timing.
+   *
+   * Contains two parts: wall time and average. The wall time is an actual wall time of how long it
+   * took to complete all tasks of a type. Is always advanced when PathTracer reports time update.
+   *
+   * The average time is used for scheduling purposes. It is estimated to be a time of how long it
+   * takes to perform task on the final resolution. */
+  class TimeWithAverage {
+   public:
     inline void reset()
     {
-      total_time = 0.0;
-      num_measured_times = 0;
+      total_wall_time_ = 0.0;
+
+      average_time_accumulator_ = 0.0;
+      num_average_times_ = 0;
+    }
+
+    inline void add_wall(double time)
+    {
+      total_wall_time_ += time;
+    }
+
+    inline void add_average(double time, int num_measurements = 1)
+    {
+      average_time_accumulator_ += time;
+      num_average_times_ += num_measurements;
+    }
+
+    inline double get_wall() const
+    {
+      return total_wall_time_;
     }
 
     inline double get_average() const
     {
-      return total_time / num_measured_times;
+      if (num_average_times_ == 0) {
+        return 0;
+      }
+      return average_time_accumulator_ / num_average_times_;
     }
 
-    double total_time = 0.0;
-    int num_measured_times = 0;
+   protected:
+    double total_wall_time_ = 0.0;
+
+    double average_time_accumulator_ = 0.0;
+    int num_average_times_ = 0;
   };
 
   struct {
@@ -201,9 +239,10 @@ class RenderScheduler {
     double display_update_time;
   } first_render_time_;
 
-  TimeAverage path_trace_time_;
-  TimeAverage denoise_time_;
-  TimeAverage display_update_time_;
+  TimeWithAverage path_trace_time_;
+  TimeWithAverage adaptive_filter_time_;
+  TimeWithAverage denoise_time_;
+  TimeWithAverage display_update_time_;
 
   /* Path tracing work will be scheduled for samples from within
    * [start_sample_, start_sample_ + num_samples_ - 1] range, inclusively. */

@@ -112,6 +112,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
 
   path_trace_time_.reset();
   denoise_time_.reset();
+  adaptive_filter_time_.reset();
   display_update_time_.reset();
 }
 
@@ -197,8 +198,16 @@ static double approximate_final_time(const RenderWork &render_work, double time)
   return time * resolution_divider_sq;
 }
 
-void RenderScheduler::report_path_trace_time(const RenderWork &render_work, double time)
+void RenderScheduler::report_path_trace_time(const RenderWork &render_work,
+                                             double time,
+                                             bool is_cancelled)
 {
+  path_trace_time_.add_wall(time);
+
+  if (is_cancelled) {
+    return;
+  }
+
   const double final_time_approx = approximate_final_time(render_work, time);
 
   if (work_is_usable_for_first_render_estimation(render_work)) {
@@ -206,36 +215,55 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work, doub
                                                render_work.path_trace.num_samples;
   }
 
-  path_trace_time_.total_time += final_time_approx;
-  path_trace_time_.num_measured_times += render_work.path_trace.num_samples;
+  path_trace_time_.add_average(final_time_approx, render_work.path_trace.num_samples);
 
   VLOG(4) << "Average path tracing time: " << path_trace_time_.get_average() << " seconds.";
 }
 
+void RenderScheduler::report_adaptive_filter_time(const RenderWork &render_work,
+                                                  double time,
+                                                  bool is_cancelled)
+{
+  adaptive_filter_time_.add_wall(time);
+
+  if (is_cancelled) {
+    return;
+  }
+
+  const double final_time_approx = approximate_final_time(render_work, time);
+
+  adaptive_filter_time_.add_average(final_time_approx, render_work.path_trace.num_samples);
+
+  VLOG(4) << "Average adaptive sampling filter  time: " << adaptive_filter_time_.get_average()
+          << " seconds.";
+}
+
 void RenderScheduler::report_denoise_time(const RenderWork &render_work, double time)
 {
+  denoise_time_.add_wall(time);
+
   const double final_time_approx = approximate_final_time(render_work, time);
 
   if (work_is_usable_for_first_render_estimation(render_work)) {
     first_render_time_.denoise_time = final_time_approx;
   }
 
-  denoise_time_.total_time += final_time_approx;
-  ++denoise_time_.num_measured_times;
+  denoise_time_.add_average(final_time_approx);
 
   VLOG(4) << "Average denoising time: " << denoise_time_.get_average() << " seconds.";
 }
 
 void RenderScheduler::report_display_update_time(const RenderWork &render_work, double time)
 {
+  display_update_time_.add_wall(time);
+
   const double final_time_approx = approximate_final_time(render_work, time);
 
   if (work_is_usable_for_first_render_estimation(render_work)) {
     first_render_time_.display_update_time = final_time_approx;
   }
 
-  display_update_time_.total_time += final_time_approx;
-  ++display_update_time_.num_measured_times;
+  display_update_time_.add_average(final_time_approx);
 
   VLOG(4) << "Average display update time: " << display_update_time_.get_average() << " seconds.";
 
@@ -243,6 +271,66 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
    * did happen have more reliable point in time (without path tracing and denoising parts of the
    * render work). */
   state_.last_display_update_time = time_dt();
+}
+
+string RenderScheduler::full_report() const
+{
+  string result = "\nRender Scheduler Summary\n\n";
+
+  result += "Adaptive sampling:\n";
+  result += "  Use: " + string_from_bool(adaptive_sampling_.use) + "\n";
+  if (adaptive_sampling_.use) {
+    result += "  Step: " + to_string(adaptive_sampling_.adaptive_step) + "\n";
+    result += "  Min Samples: " + to_string(adaptive_sampling_.min_samples) + "\n";
+    result += "  Threshold: " + to_string(adaptive_sampling_.threshold) + "\n";
+  }
+
+  result += "\nDenoiser:\n";
+  result += "  Use: " + string_from_bool(denoiser_params_.use) + "\n";
+  if (denoiser_params_.use) {
+    result += "  Type: " + string(denoiserTypeToHumanReadable(denoiser_params_.type)) + "\n";
+    result += "  Start Sample: " + to_string(denoiser_params_.start_sample) + "\n";
+
+    string passes = "Color";
+    if (denoiser_params_.use_pass_albedo) {
+      passes += ", Albedo";
+    }
+    if (denoiser_params_.use_pass_normal) {
+      passes += ", Normal";
+    }
+
+    result += "  Passes: " + passes + "\n";
+  }
+
+  result += "\nTime (in seconds):\n";
+  result += string_printf("  %20s %20s %20s\n", "", "Wall", "Average");
+  result += string_printf("  %20s %20f %20f\n",
+                          "Path Tracing",
+                          path_trace_time_.get_wall(),
+                          path_trace_time_.get_average());
+
+  if (adaptive_sampling_.use) {
+    result += string_printf("  %20s %20f %20f\n",
+                            "Adaptive Filter",
+                            adaptive_filter_time_.get_wall(),
+                            adaptive_filter_time_.get_average());
+  }
+
+  if (denoiser_params_.use) {
+    result += string_printf(
+        "  %20s %20f %20f\n", "Denoiser", denoise_time_.get_wall(), denoise_time_.get_average());
+  }
+
+  result += string_printf("  %20s %20f %20f\n",
+                          "Display Update",
+                          display_update_time_.get_wall(),
+                          display_update_time_.get_average());
+
+  const double total_time = path_trace_time_.get_wall() + adaptive_filter_time_.get_wall() +
+                            denoise_time_.get_wall() + display_update_time_.get_wall();
+  result += "\n  Total: " + to_string(total_time);
+
+  return result;
 }
 
 double RenderScheduler::guess_display_update_interval_in_seconds() const

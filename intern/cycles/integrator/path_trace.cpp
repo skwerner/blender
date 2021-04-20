@@ -181,9 +181,8 @@ void PathTrace::path_trace(RenderWork &render_work)
                                     render_work.path_trace.num_samples);
   });
 
-  if (!is_cancel_requested()) {
-    render_scheduler_.report_path_trace_time(render_work, time_dt() - start_time);
-  }
+  render_scheduler_.report_path_trace_time(
+      render_work, time_dt() - start_time, is_cancel_requested());
 }
 
 void PathTrace::adaptive_sample(RenderWork &render_work)
@@ -191,6 +190,8 @@ void PathTrace::adaptive_sample(RenderWork &render_work)
   if (!render_work.adaptive_sampling.filter) {
     return;
   }
+
+  const double start_time = time_dt();
 
   bool all_pixels_converged = true;
 
@@ -206,6 +207,9 @@ void PathTrace::adaptive_sample(RenderWork &render_work)
       all_pixels_converged = false;
     }
   });
+
+  render_scheduler_.report_adaptive_filter_time(
+      render_work, time_dt() - start_time, is_cancel_requested());
 
   if (all_pixels_converged) {
     VLOG(3) << "All pixels converged.";
@@ -257,9 +261,7 @@ void PathTrace::denoise(const RenderWork &render_work)
                             full_render_buffers_.get(),
                             get_num_samples_in_buffer());
 
-  if (!is_cancel_requested()) {
-    render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
-  }
+  render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)

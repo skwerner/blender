@@ -36,6 +36,7 @@ endif()
 
 set(SRC
   device.cpp
+  device_denoise.cpp
   device_graphics_interop.cpp
   device_kernel.cpp
   device_memory.cpp

@@ -125,6 +125,7 @@ typedef struct bNodeSocket {
 
   /** Custom dynamic defined label, MAX_NAME. */
   char label[64];
+  char description[64];
 
   /** Cached data from execution. */
   void *cache;
@@ -348,6 +349,8 @@ typedef struct bNode {
  * composite out nodes when editing tree
  */
 #define NODE_DO_OUTPUT_RECALC (1 << 17)
+/* A preview for the data in this node can be displayed in the spreadsheet editor. */
+#define NODE_ACTIVE_PREVIEW (1 << 18)
 
 /* node->update */
 /* XXX NODE_UPDATE is a generic update flag. More fine-grained updates
@@ -1304,6 +1307,11 @@ typedef struct NodeGeometryMeshLine {
   /* GeometryNodeMeshLineCountMode. */
   uint8_t count_mode;
 } NodeGeometryMeshLine;
+
+typedef struct NodeSwitch {
+  /* NodeSwitch. */
+  uint8_t input_type;
+} NodeSwitch;
 
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0

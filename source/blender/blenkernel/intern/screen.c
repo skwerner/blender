@@ -227,7 +227,12 @@ void BKE_screen_foreach_id_screen_area(LibraryForeachIDData *data, ScrArea *area
       case SPACE_SPREADSHEET: {
         SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
 
-        BKE_LIB_FOREACHID_PROCESS_ID(data, sspreadsheet->pinned_id, IDWALK_CB_NOP);
+        LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+          if (context->type == SPREADSHEET_CONTEXT_OBJECT) {
+            BKE_LIB_FOREACHID_PROCESS(
+                data, ((SpreadsheetContextObject *)context)->object, IDWALK_CB_NOP);
+          }
+        }
         break;
       }
       default:
@@ -1350,6 +1355,34 @@ static void write_area(BlendWriter *writer, ScrArea *area)
     }
     else if (sl->spacetype == SPACE_SPREADSHEET) {
       BLO_write_struct(writer, SpaceSpreadsheet, sl);
+
+      SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+      LISTBASE_FOREACH (SpreadsheetColumn *, column, &sspreadsheet->columns) {
+        BLO_write_struct(writer, SpreadsheetColumn, column);
+        BLO_write_struct(writer, SpreadsheetColumnID, column->id);
+        BLO_write_string(writer, column->id->name);
+      }
+      LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+        switch (context->type) {
+          case SPREADSHEET_CONTEXT_OBJECT: {
+            SpreadsheetContextObject *object_context = (SpreadsheetContextObject *)context;
+            BLO_write_struct(writer, SpreadsheetContextObject, object_context);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_MODIFIER: {
+            SpreadsheetContextModifier *modifier_context = (SpreadsheetContextModifier *)context;
+            BLO_write_struct(writer, SpreadsheetContextModifier, modifier_context);
+            BLO_write_string(writer, modifier_context->modifier_name);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_NODE: {
+            SpreadsheetContextNode *node_context = (SpreadsheetContextNode *)context;
+            BLO_write_struct(writer, SpreadsheetContextNode, node_context);
+            BLO_write_string(writer, node_context->node_name);
+            break;
+          }
+        }
+      }
     }
   }
 }
@@ -1702,6 +1735,31 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
       SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
 
       sspreadsheet->runtime = NULL;
+
+      BLO_read_list(reader, &sspreadsheet->columns);
+      LISTBASE_FOREACH (SpreadsheetColumn *, column, &sspreadsheet->columns) {
+        BLO_read_data_address(reader, &column->id);
+        BLO_read_data_address(reader, &column->id->name);
+      }
+
+      BLO_read_list(reader, &sspreadsheet->context_path);
+      LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+        switch (context->type) {
+          case SPREADSHEET_CONTEXT_NODE: {
+            SpreadsheetContextNode *node_context = (SpreadsheetContextNode *)context;
+            BLO_read_data_address(reader, &node_context->node_name);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_MODIFIER: {
+            SpreadsheetContextModifier *modifier_context = (SpreadsheetContextModifier *)context;
+            BLO_read_data_address(reader, &modifier_context->modifier_name);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_OBJECT: {
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -1918,7 +1976,12 @@ void BKE_screen_area_blend_read_lib(BlendLibReader *reader, ID *parent_id, ScrAr
       }
       case SPACE_SPREADSHEET: {
         SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
-        BLO_read_id_address(reader, parent_id->lib, &sspreadsheet->pinned_id);
+        LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+          if (context->type == SPREADSHEET_CONTEXT_OBJECT) {
+            BLO_read_id_address(
+                reader, parent_id->lib, &((SpreadsheetContextObject *)context)->object);
+          }
+        }
         break;
       }
       default:

@@ -41,6 +41,8 @@
 #include "BKE_scene.h"
 #include "BKE_texture.h"
 
+#include "DEG_depsgraph_build.h"
+
 #include "ED_node.h" /* own include */
 #include "ED_render.h"
 #include "ED_screen.h"
@@ -337,7 +339,25 @@ static bNodeTree *node_add_group_get_and_poll_group_node_tree(Main *bmain,
   if (!node_group) {
     return NULL;
   }
-  if ((node_group->type != ntree->type) || !nodeGroupPoll(ntree, node_group)) {
+
+  const char *disabled_hint = NULL;
+  if ((node_group->type != ntree->type) || !nodeGroupPoll(ntree, node_group, &disabled_hint)) {
+    if (disabled_hint) {
+      BKE_reportf(op->reports,
+                  RPT_ERROR,
+                  "Can not add node group '%s' to '%s':\n  %s",
+                  node_group->id.name + 2,
+                  ntree->id.name + 2,
+                  disabled_hint);
+    }
+    else {
+      BKE_reportf(op->reports,
+                  RPT_ERROR,
+                  "Can not add node group '%s' to '%s'",
+                  node_group->id.name + 2,
+                  ntree->id.name + 2);
+    }
+
     return NULL;
   }
 
@@ -473,6 +493,7 @@ static int node_add_object_exec(bContext *C, wmOperator *op)
   snode_dag_update(C, snode);
 
   ED_node_tag_update_nodetree(bmain, ntree, object_node);
+  DEG_relations_tag_update(bmain);
 
   return OPERATOR_FINISHED;
 }

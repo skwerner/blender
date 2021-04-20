@@ -156,6 +156,7 @@ set(SRC
   geometry/nodes/node_geo_attribute_separate_xyz.cc
   geometry/nodes/node_geo_attribute_vector_math.cc
   geometry/nodes/node_geo_boolean.cc
+  geometry/nodes/node_geo_bounding_box.cc
   geometry/nodes/node_geo_collection_info.cc
   geometry/nodes/node_geo_common.cc
   geometry/nodes/node_geo_edge_split.cc
@@ -179,6 +180,7 @@ set(SRC
   geometry/nodes/node_geo_points_to_volume.cc
   geometry/nodes/node_geo_subdivide.cc
   geometry/nodes/node_geo_subdivision_surface.cc
+  geometry/nodes/node_geo_switch.cc
   geometry/nodes/node_geo_transform.cc
   geometry/nodes/node_geo_triangulate.cc
   geometry/nodes/node_geo_volume_to_mesh.cc
@@ -315,6 +317,7 @@ set(SRC
   intern/node_tree_ref.cc
   intern/node_util.c
   intern/type_callbacks.cc
+  intern/type_conversions.cc
 
   composite/node_composite_util.h
   function/node_function_util.hh
@@ -336,6 +339,7 @@ set(SRC
   NOD_static_types.h
   NOD_texture.h
   NOD_type_callbacks.hh
+  NOD_type_conversions.hh
   intern/node_common.h
   intern/node_exec.h
   intern/node_util.h
@@ -389,6 +393,18 @@ endif()
 
 if(WITH_OPENSUBDIV)
   add_definitions(-DWITH_OPENSUBDIV)
+endif()
+
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
+  )
 endif()
 
 if(WITH_OPENVDB)

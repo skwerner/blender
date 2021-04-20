@@ -40,7 +40,6 @@ struct MDeformVert;
 struct Main;
 struct Nurb;
 struct Object;
-struct Path;
 struct TextBox;
 struct rctf;
 
@@ -50,7 +49,13 @@ typedef struct CurveCache {
   ListBase disp;
   ListBase bev;
   ListBase deformed_nurbs;
-  struct Path *path;
+  /* This array contains the accumulative length of the curve segments.
+   * So you can see this as a "total distance traveled" along the curve.
+   * The first entry is the length between point 0 and 1 while the last is the
+   * total length of the curve.
+   *
+   * Used by #BKE_where_on_path. */
+  const float *anim_path_accum_length;
 } CurveCache;
 
 /* Definitions needed for shape keys */

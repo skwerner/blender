@@ -466,16 +466,18 @@ bool SEQ_proxy_rebuild_context(Main *bmain,
       seq_open_anim_file(scene, nseq, true);
       sanim = BLI_findlink(&nseq->anims, i);
 
-      context->index_context = IMB_anim_index_rebuild_context(sanim->anim,
-                                                              context->tc_flags,
-                                                              context->size_flags,
-                                                              context->quality,
-                                                              context->overwrite,
-                                                              file_list);
-    }
-    if (!context->index_context) {
-      SEQ_proxy_rebuild_finish(context, false);
-      return false;
+      if (sanim->anim) {
+        context->index_context = IMB_anim_index_rebuild_context(sanim->anim,
+                                                                context->tc_flags,
+                                                                context->size_flags,
+                                                                context->quality,
+                                                                context->overwrite,
+                                                                file_list);
+      }
+      if (!context->index_context) {
+        MEM_freeN(context);
+        return false;
+      }
     }
 
     link = BLI_genericNodeN(context);
@@ -585,7 +587,7 @@ void SEQ_proxy_set(struct Sequence *seq, bool value)
     seq->flag |= SEQ_USE_PROXY;
     if (seq->strip->proxy == NULL) {
       seq->strip->proxy = MEM_callocN(sizeof(struct StripProxy), "StripProxy");
-      seq->strip->proxy->quality = 90;
+      seq->strip->proxy->quality = 50;
       seq->strip->proxy->build_tc_flags = SEQ_PROXY_TC_ALL;
       seq->strip->proxy->build_size_flags = SEQ_PROXY_IMAGE_SIZE_25;
     }

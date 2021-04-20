@@ -17,12 +17,12 @@
 #include <cstring>
 
 #include "BLI_listbase.h"
-#include "BLI_resource_scope.hh"
 
 #include "BKE_screen.h"
 
 #include "ED_screen.h"
 #include "ED_space_api.h"
+#include "ED_spreadsheet.h"
 
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
@@ -41,12 +41,16 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
+#include "BLF_api.h"
+
 #include "spreadsheet_intern.hh"
 
-#include "spreadsheet_column_layout.hh"
-#include "spreadsheet_from_geometry.hh"
+#include "spreadsheet_context.hh"
+#include "spreadsheet_data_source_geometry.hh"
 #include "spreadsheet_intern.hh"
+#include "spreadsheet_layout.hh"
 
+using namespace blender;
 using namespace blender::ed::spreadsheet;
 
 static SpaceLink *spreadsheet_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
@@ -85,6 +89,13 @@ static void spreadsheet_free(SpaceLink *sl)
 {
   SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
   MEM_SAFE_FREE(sspreadsheet->runtime);
+
+  LISTBASE_FOREACH_MUTABLE (SpreadsheetColumn *, column, &sspreadsheet->columns) {
+    spreadsheet_column_free(column);
+  }
+  LISTBASE_FOREACH_MUTABLE (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+    spreadsheet_context_free(context);
+  }
 }
 
 static void spreadsheet_init(wmWindowManager *UNUSED(wm), ScrArea *area)
@@ -102,11 +113,41 @@ static SpaceLink *spreadsheet_duplicate(SpaceLink *sl)
   SpaceSpreadsheet *sspreadsheet_new = (SpaceSpreadsheet *)MEM_dupallocN(sspreadsheet_old);
   sspreadsheet_new->runtime = (SpaceSpreadsheet_Runtime *)MEM_dupallocN(sspreadsheet_old->runtime);
 
+  BLI_listbase_clear(&sspreadsheet_new->columns);
+  LISTBASE_FOREACH (SpreadsheetColumn *, src_column, &sspreadsheet_old->columns) {
+    SpreadsheetColumn *new_column = spreadsheet_column_copy(src_column);
+    BLI_addtail(&sspreadsheet_new->columns, new_column);
+  }
+
+  BLI_listbase_clear(&sspreadsheet_new->context_path);
+  LISTBASE_FOREACH_MUTABLE (SpreadsheetContext *, src_context, &sspreadsheet_old->context_path) {
+    SpreadsheetContext *new_context = spreadsheet_context_copy(src_context);
+    BLI_addtail(&sspreadsheet_new->context_path, new_context);
+  }
+
   return (SpaceLink *)sspreadsheet_new;
 }
 
 static void spreadsheet_keymap(wmKeyConfig *UNUSED(keyconf))
 {
+}
+
+static void spreadsheet_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, ID *new_id)
+{
+  SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)slink;
+  LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+    if (context->type == SPREADSHEET_CONTEXT_OBJECT) {
+      SpreadsheetContextObject *object_context = (SpreadsheetContextObject *)context;
+      if ((ID *)object_context->object == old_id) {
+        if (new_id && GS(new_id->name) == ID_OB) {
+          object_context->object = (Object *)new_id;
+        }
+        else {
+          object_context->object = nullptr;
+        }
+      }
+    }
+  }
 }
 
 static void spreadsheet_main_region_init(wmWindowManager *wm, ARegion *region)
@@ -123,57 +164,207 @@ static void spreadsheet_main_region_init(wmWindowManager *wm, ARegion *region)
   WM_event_add_keymap_handler(&region->handlers, keymap);
 }
 
-static ID *get_used_id(const bContext *C)
+ID *ED_spreadsheet_get_current_id(struct SpaceSpreadsheet *sspreadsheet)
 {
-  SpaceSpreadsheet *sspreadsheet = CTX_wm_space_spreadsheet(C);
-  if (sspreadsheet->pinned_id != nullptr) {
-    return sspreadsheet->pinned_id;
+  if (BLI_listbase_is_empty(&sspreadsheet->context_path)) {
+    return nullptr;
   }
-  Object *active_object = CTX_data_active_object(C);
-  return (ID *)active_object;
+  SpreadsheetContext *root_context = (SpreadsheetContext *)sspreadsheet->context_path.first;
+  if (root_context->type != SPREADSHEET_CONTEXT_OBJECT) {
+    return nullptr;
+  }
+  SpreadsheetContextObject *object_context = (SpreadsheetContextObject *)root_context;
+  return (ID *)object_context->object;
 }
 
-class FallbackSpreadsheetDrawer : public SpreadsheetDrawer {
-};
+/* Check if the pinned context still exists. If it doesn't try to find a new context. */
+static void update_pinned_context_path_if_outdated(const bContext *C)
+{
+  SpaceSpreadsheet *sspreadsheet = CTX_wm_space_spreadsheet(C);
 
-static void gather_spreadsheet_columns(const bContext *C,
-                                       SpreadsheetColumnLayout &column_layout,
-                                       blender::ResourceScope &scope)
+  /* Currently, this only checks if the object has been deleted. In the future we can have a more
+   * sophisticated check for the entire context (including modifier and nodes). */
+  LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+    if (context->type == SPREADSHEET_CONTEXT_OBJECT) {
+      SpreadsheetContextObject *object_context = (SpreadsheetContextObject *)context;
+      if (object_context->object == nullptr) {
+        ED_spreadsheet_context_path_clear(sspreadsheet);
+        break;
+      }
+    }
+  }
+  if (BLI_listbase_is_empty(&sspreadsheet->context_path)) {
+    Object *active_object = CTX_data_active_object(C);
+    if (active_object != nullptr) {
+      SpreadsheetContext *new_context = spreadsheet_context_new(SPREADSHEET_CONTEXT_OBJECT);
+      ((SpreadsheetContextObject *)new_context)->object = active_object;
+      BLI_addtail(&sspreadsheet->context_path, new_context);
+    }
+  }
+
+  if (BLI_listbase_is_empty(&sspreadsheet->context_path)) {
+    /* Don't pin empty context_path, that could be annoying. */
+    sspreadsheet->flag &= ~SPREADSHEET_FLAG_PINNED;
+  }
+}
+
+static void update_context_path_from_context(const bContext *C)
+{
+  SpaceSpreadsheet *sspreadsheet = CTX_wm_space_spreadsheet(C);
+  Object *active_object = CTX_data_active_object(C);
+  if (active_object == nullptr) {
+    ED_spreadsheet_context_path_clear(sspreadsheet);
+    return;
+  }
+  if (!BLI_listbase_is_empty(&sspreadsheet->context_path)) {
+    SpreadsheetContext *root_context = (SpreadsheetContext *)sspreadsheet->context_path.first;
+    if (root_context->type == SPREADSHEET_CONTEXT_OBJECT) {
+      SpreadsheetContextObject *object_context = (SpreadsheetContextObject *)root_context;
+      if (object_context->object != active_object) {
+        ED_spreadsheet_context_path_clear(sspreadsheet);
+      }
+    }
+  }
+  if (BLI_listbase_is_empty(&sspreadsheet->context_path)) {
+    SpreadsheetContext *new_context = spreadsheet_context_new(SPREADSHEET_CONTEXT_OBJECT);
+    ((SpreadsheetContextObject *)new_context)->object = active_object;
+    BLI_addtail(&sspreadsheet->context_path, new_context);
+  }
+}
+
+static void update_context_path(const bContext *C)
+{
+  SpaceSpreadsheet *sspreadsheet = CTX_wm_space_spreadsheet(C);
+  if (sspreadsheet->flag & SPREADSHEET_FLAG_PINNED) {
+    update_pinned_context_path_if_outdated(C);
+  }
+  else {
+    update_context_path_from_context(C);
+  }
+}
+
+static std::unique_ptr<DataSource> get_data_source(const bContext *C)
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  ID *used_id = get_used_id(C);
+  SpaceSpreadsheet *sspreadsheet = CTX_wm_space_spreadsheet(C);
+  ID *used_id = ED_spreadsheet_get_current_id(sspreadsheet);
   if (used_id == nullptr) {
-    return;
+    return {};
   }
   const ID_Type id_type = GS(used_id->name);
   if (id_type != ID_OB) {
-    return;
+    return {};
   }
   Object *object_orig = (Object *)used_id;
-  if (!ELEM(object_orig->type, OB_MESH, OB_POINTCLOUD)) {
-    return;
+  if (!ELEM(object_orig->type, OB_MESH, OB_POINTCLOUD, OB_VOLUME)) {
+    return {};
   }
   Object *object_eval = DEG_get_evaluated_object(depsgraph, object_orig);
   if (object_eval == nullptr) {
-    return;
+    return {};
   }
 
-  return spreadsheet_columns_from_geometry(C, object_eval, column_layout, scope);
+  return data_source_from_geometry(C, object_eval);
+}
+
+static float get_column_width(const ColumnValues &values)
+{
+  if (values.default_width > 0) {
+    return values.default_width;
+  }
+  const int fontid = UI_style_get()->widget.uifont_id;
+  BLF_size(fontid, UI_DEFAULT_TEXT_POINTS, U.dpi);
+  const StringRefNull name = values.name();
+  const float name_width = BLF_width(fontid, name.data(), name.size());
+  return std::max<float>(name_width / UI_UNIT_X + 1.0f, 3.0f);
+}
+
+static float get_column_width_in_pixels(const ColumnValues &values)
+{
+  return get_column_width(values) * SPREADSHEET_WIDTH_UNIT;
+}
+
+static int get_index_column_width(const int tot_rows)
+{
+  const int fontid = UI_style_get()->widget.uifont_id;
+  BLF_size(fontid, UI_style_get_dpi()->widget.points * U.pixelsize, U.dpi);
+  return std::to_string(std::max(0, tot_rows - 1)).size() * BLF_width(fontid, "0", 1) +
+         UI_UNIT_X * 0.75;
+}
+
+static void update_visible_columns(ListBase &columns, DataSource &data_source)
+{
+  Set<SpreadsheetColumnID> used_ids;
+  LISTBASE_FOREACH_MUTABLE (SpreadsheetColumn *, column, &columns) {
+    std::unique_ptr<ColumnValues> values = data_source.get_column_values(*column->id);
+    /* Remove columns that don't exist anymore. */
+    if (!values) {
+      BLI_remlink(&columns, column);
+      spreadsheet_column_free(column);
+      continue;
+    }
+
+    used_ids.add(*column->id);
+  }
+
+  data_source.foreach_default_column_ids([&](const SpreadsheetColumnID &column_id) {
+    std::unique_ptr<ColumnValues> values = data_source.get_column_values(column_id);
+    if (values) {
+      if (used_ids.add(column_id)) {
+        SpreadsheetColumnID *new_id = spreadsheet_column_id_copy(&column_id);
+        SpreadsheetColumn *new_column = spreadsheet_column_new(new_id);
+        BLI_addtail(&columns, new_column);
+      }
+    }
+  });
 }
 
 static void spreadsheet_main_region_draw(const bContext *C, ARegion *region)
 {
   SpaceSpreadsheet *sspreadsheet = CTX_wm_space_spreadsheet(C);
+  update_context_path(C);
 
-  blender::ResourceScope scope;
-  SpreadsheetColumnLayout column_layout;
-  gather_spreadsheet_columns(C, column_layout, scope);
+  std::unique_ptr<DataSource> data_source = get_data_source(C);
+  if (!data_source) {
+    data_source = std::make_unique<DataSource>();
+  }
 
-  sspreadsheet->runtime->visible_rows = column_layout.row_indices.size();
-  sspreadsheet->runtime->tot_columns = column_layout.columns.size();
-  sspreadsheet->runtime->tot_rows = column_layout.tot_rows;
+  update_visible_columns(sspreadsheet->columns, *data_source);
 
-  std::unique_ptr<SpreadsheetDrawer> drawer = spreadsheet_drawer_from_column_layout(column_layout);
+  SpreadsheetLayout spreadsheet_layout;
+  ResourceScope scope;
+
+  LISTBASE_FOREACH (SpreadsheetColumn *, column, &sspreadsheet->columns) {
+    std::unique_ptr<ColumnValues> values_ptr = data_source->get_column_values(*column->id);
+    /* Should have been removed before if it does not exist anymore. */
+    BLI_assert(values_ptr);
+    const ColumnValues *values = scope.add(std::move(values_ptr), __func__);
+    const int width = get_column_width_in_pixels(*values);
+    spreadsheet_layout.columns.append({values, width});
+  }
+
+  const int tot_rows = data_source->tot_rows();
+  spreadsheet_layout.index_column_width = get_index_column_width(tot_rows);
+  spreadsheet_layout.row_indices = IndexRange(tot_rows).as_span();
+
+  if (const GeometryDataSource *geometry_data_source = dynamic_cast<const GeometryDataSource *>(
+          data_source.get())) {
+    Object *object_eval = geometry_data_source->object_eval();
+    Object *object_orig = DEG_get_original_object(object_eval);
+    if (object_orig->type == OB_MESH) {
+      if (object_orig->mode == OB_MODE_EDIT) {
+        if (sspreadsheet->filter_flag & SPREADSHEET_FILTER_SELECTED_ONLY) {
+          spreadsheet_layout.row_indices = geometry_data_source->get_selected_element_indices();
+        }
+      }
+    }
+  }
+
+  sspreadsheet->runtime->tot_columns = spreadsheet_layout.columns.size();
+  sspreadsheet->runtime->tot_rows = tot_rows;
+  sspreadsheet->runtime->visible_rows = spreadsheet_layout.row_indices.size();
+
+  std::unique_ptr<SpreadsheetDrawer> drawer = spreadsheet_drawer_from_layout(spreadsheet_layout);
   draw_spreadsheet_in_region(C, region, *drawer);
 
   /* Tag footer for redraw, because the main region updates data for the footer. */
@@ -222,6 +413,7 @@ static void spreadsheet_header_region_init(wmWindowManager *UNUSED(wm), ARegion 
 
 static void spreadsheet_header_region_draw(const bContext *C, ARegion *region)
 {
+  update_context_path(C);
   ED_region_header(C, region);
 }
 
@@ -327,6 +519,7 @@ void ED_spacetype_spreadsheet(void)
   st->duplicate = spreadsheet_duplicate;
   st->operatortypes = spreadsheet_operatortypes;
   st->keymap = spreadsheet_keymap;
+  st->id_remap = spreadsheet_id_remap;
 
   /* regions: main window */
   art = (ARegionType *)MEM_callocN(sizeof(ARegionType), "spacetype spreadsheet region");

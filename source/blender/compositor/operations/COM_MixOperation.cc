@@ -99,11 +99,6 @@ void MixBaseOperation::deinitExecution()
 
 /* ******** Mix Add Operation ******** */
 
-MixAddOperation::MixAddOperation()
-{
-  /* pass */
-}
-
 void MixAddOperation::executePixelSampled(float output[4], float x, float y, PixelSampler sampler)
 {
   float inputColor1[4];
@@ -127,11 +122,6 @@ void MixAddOperation::executePixelSampled(float output[4], float x, float y, Pix
 }
 
 /* ******** Mix Blend Operation ******** */
-
-MixBlendOperation::MixBlendOperation()
-{
-  /* pass */
-}
 
 void MixBlendOperation::executePixelSampled(float output[4],
                                             float x,
@@ -161,11 +151,6 @@ void MixBlendOperation::executePixelSampled(float output[4],
 }
 
 /* ******** Mix Burn Operation ******** */
-
-MixColorBurnOperation::MixColorBurnOperation()
-{
-  /* pass */
-}
 
 void MixColorBurnOperation::executePixelSampled(float output[4],
                                                 float x,
@@ -245,11 +230,6 @@ void MixColorBurnOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Color Operation ******** */
 
-MixColorOperation::MixColorOperation()
-{
-  /* pass */
-}
-
 void MixColorOperation::executePixelSampled(float output[4],
                                             float x,
                                             float y,
@@ -290,11 +270,6 @@ void MixColorOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Darken Operation ******** */
 
-MixDarkenOperation::MixDarkenOperation()
-{
-  /* pass */
-}
-
 void MixDarkenOperation::executePixelSampled(float output[4],
                                              float x,
                                              float y,
@@ -323,11 +298,6 @@ void MixDarkenOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Difference Operation ******** */
 
-MixDifferenceOperation::MixDifferenceOperation()
-{
-  /* pass */
-}
-
 void MixDifferenceOperation::executePixelSampled(float output[4],
                                                  float x,
                                                  float y,
@@ -355,11 +325,6 @@ void MixDifferenceOperation::executePixelSampled(float output[4],
 }
 
 /* ******** Mix Difference Operation ******** */
-
-MixDivideOperation::MixDivideOperation()
-{
-  /* pass */
-}
 
 void MixDivideOperation::executePixelSampled(float output[4],
                                              float x,
@@ -405,11 +370,6 @@ void MixDivideOperation::executePixelSampled(float output[4],
 }
 
 /* ******** Mix Dodge Operation ******** */
-
-MixDodgeOperation::MixDodgeOperation()
-{
-  /* pass */
-}
 
 void MixDodgeOperation::executePixelSampled(float output[4],
                                             float x,
@@ -494,11 +454,6 @@ void MixDodgeOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Glare Operation ******** */
 
-MixGlareOperation::MixGlareOperation()
-{
-  /* pass */
-}
-
 void MixGlareOperation::executePixelSampled(float output[4],
                                             float x,
                                             float y,
@@ -507,38 +462,32 @@ void MixGlareOperation::executePixelSampled(float output[4],
   float inputColor1[4];
   float inputColor2[4];
   float inputValue[4];
-  float value;
+  float value, input_weight, glare_weight;
 
   this->m_inputValueOperation->readSampled(inputValue, x, y, sampler);
   this->m_inputColor1Operation->readSampled(inputColor1, x, y, sampler);
   this->m_inputColor2Operation->readSampled(inputColor2, x, y, sampler);
   value = inputValue[0];
-  float mf = 2.0f - 2.0f * fabsf(value - 0.5f);
-
-  if (inputColor1[0] < 0.0f) {
-    inputColor1[0] = 0.0f;
+  /* Linear interpolation between 3 cases:
+   *  value=-1:output=input    value=0:output=input+glare   value=1:output=glare
+   */
+  if (value < 0.0f) {
+    input_weight = 1.0f;
+    glare_weight = 1.0f + value;
   }
-  if (inputColor1[1] < 0.0f) {
-    inputColor1[1] = 0.0f;
+  else {
+    input_weight = 1.0f - value;
+    glare_weight = 1.0f;
   }
-  if (inputColor1[2] < 0.0f) {
-    inputColor1[2] = 0.0f;
-  }
-
-  output[0] = mf * MAX2(inputColor1[0] + value * (inputColor2[0] - inputColor1[0]), 0.0f);
-  output[1] = mf * MAX2(inputColor1[1] + value * (inputColor2[1] - inputColor1[1]), 0.0f);
-  output[2] = mf * MAX2(inputColor1[2] + value * (inputColor2[2] - inputColor1[2]), 0.0f);
+  output[0] = input_weight * MAX2(inputColor1[0], 0.0f) + glare_weight * inputColor2[0];
+  output[1] = input_weight * MAX2(inputColor1[1], 0.0f) + glare_weight * inputColor2[1];
+  output[2] = input_weight * MAX2(inputColor1[2], 0.0f) + glare_weight * inputColor2[2];
   output[3] = inputColor1[3];
 
   clampIfNeeded(output);
 }
 
 /* ******** Mix Hue Operation ******** */
-
-MixHueOperation::MixHueOperation()
-{
-  /* pass */
-}
 
 void MixHueOperation::executePixelSampled(float output[4], float x, float y, PixelSampler sampler)
 {
@@ -576,11 +525,6 @@ void MixHueOperation::executePixelSampled(float output[4], float x, float y, Pix
 }
 
 /* ******** Mix Lighten Operation ******** */
-
-MixLightenOperation::MixLightenOperation()
-{
-  /* pass */
-}
 
 void MixLightenOperation::executePixelSampled(float output[4],
                                               float x,
@@ -628,11 +572,6 @@ void MixLightenOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Linear Light Operation ******** */
 
-MixLinearLightOperation::MixLinearLightOperation()
-{
-  /* pass */
-}
-
 void MixLinearLightOperation::executePixelSampled(float output[4],
                                                   float x,
                                                   float y,
@@ -676,11 +615,6 @@ void MixLinearLightOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Multiply Operation ******** */
 
-MixMultiplyOperation::MixMultiplyOperation()
-{
-  /* pass */
-}
-
 void MixMultiplyOperation::executePixelSampled(float output[4],
                                                float x,
                                                float y,
@@ -708,11 +642,6 @@ void MixMultiplyOperation::executePixelSampled(float output[4],
 }
 
 /* ******** Mix Overlay Operation ******** */
-
-MixOverlayOperation::MixOverlayOperation()
-{
-  /* pass */
-}
 
 void MixOverlayOperation::executePixelSampled(float output[4],
                                               float x,
@@ -759,11 +688,6 @@ void MixOverlayOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Saturation Operation ******** */
 
-MixSaturationOperation::MixSaturationOperation()
-{
-  /* pass */
-}
-
 void MixSaturationOperation::executePixelSampled(float output[4],
                                                  float x,
                                                  float y,
@@ -801,11 +725,6 @@ void MixSaturationOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Screen Operation ******** */
 
-MixScreenOperation::MixScreenOperation()
-{
-  /* pass */
-}
-
 void MixScreenOperation::executePixelSampled(float output[4],
                                              float x,
                                              float y,
@@ -834,11 +753,6 @@ void MixScreenOperation::executePixelSampled(float output[4],
 }
 
 /* ******** Mix Soft Light Operation ******** */
-
-MixSoftLightOperation::MixSoftLightOperation()
-{
-  /* pass */
-}
 
 void MixSoftLightOperation::executePixelSampled(float output[4],
                                                 float x,
@@ -881,11 +795,6 @@ void MixSoftLightOperation::executePixelSampled(float output[4],
 
 /* ******** Mix Subtract Operation ******** */
 
-MixSubtractOperation::MixSubtractOperation()
-{
-  /* pass */
-}
-
 void MixSubtractOperation::executePixelSampled(float output[4],
                                                float x,
                                                float y,
@@ -912,11 +821,6 @@ void MixSubtractOperation::executePixelSampled(float output[4],
 }
 
 /* ******** Mix Value Operation ******** */
-
-MixValueOperation::MixValueOperation()
-{
-  /* pass */
-}
 
 void MixValueOperation::executePixelSampled(float output[4],
                                             float x,

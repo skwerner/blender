@@ -16,7 +16,6 @@
 
 #include "DNA_mesh_types.h"
 
-#include "BKE_mesh.h"
 #include "BKE_mesh_boolean_convert.hh"
 
 #include "UI_interface.h"
@@ -86,11 +85,10 @@ static void geo_node_boolean_exec(GeoNodeExecParams params)
   const bool use_self = params.get_input<bool>("Self Intersection");
   const bool hole_tolerant = params.get_input<bool>("Hole Tolerant");
 
-  if (operation < 0 || operation > 2) {
-    BLI_assert(false);
-    params.set_output("Geometry", std::move(GeometrySet()));
-    return;
-  }
+#ifndef WITH_GMP
+  params.error_message_add(NodeWarningType::Error,
+                           TIP_("Disabled, Blender was compiled without GMP"));
+#endif
 
   Vector<const Mesh *> meshes;
   Vector<const float4x4 *> transforms;

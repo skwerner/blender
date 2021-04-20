@@ -457,13 +457,15 @@ DEF_ICON_VECTOR_COLORSET_DRAW_NTH(20, 19)
 #  undef DEF_ICON_VECTOR_COLORSET_DRAW_NTH
 
 static void vicon_collection_color_draw(
-    short color_tag, int x, int y, int UNUSED(w), int UNUSED(h), float UNUSED(alpha))
+    short color_tag, int x, int y, int w, int UNUSED(h), float UNUSED(alpha))
 {
   bTheme *btheme = UI_GetTheme();
   const ThemeCollectionColor *collection_color = &btheme->collection_color[color_tag];
 
+  const float aspect = (float)ICON_DEFAULT_WIDTH / (float)w;
+
   UI_icon_draw_ex(
-      x, y, ICON_OUTLINER_COLLECTION, U.inv_dpi_fac, 1.0f, 0.0f, collection_color->color, true);
+      x, y, ICON_OUTLINER_COLLECTION, aspect, 1.0f, 0.0f, collection_color->color, true);
 }
 
 #  define DEF_ICON_COLLECTION_COLOR_DRAW(index, color) \
@@ -1426,13 +1428,7 @@ static void icon_set_image(const bContext *C,
       scene = CTX_data_scene(C);
     }
     /* Immediate version */
-    ED_preview_icon_render(CTX_data_main(C),
-                           CTX_data_ensure_evaluated_depsgraph(C),
-                           scene,
-                           id,
-                           prv_img->rect[size],
-                           prv_img->w[size],
-                           prv_img->h[size]);
+    ED_preview_icon_render(C, scene, id, prv_img->rect[size], prv_img->w[size], prv_img->h[size]);
   }
 }
 

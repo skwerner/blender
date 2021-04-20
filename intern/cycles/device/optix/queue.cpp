@@ -17,6 +17,7 @@
 #ifdef WITH_OPTIX
 
 #  include "device/optix/queue.h"
+#  include "device/cuda/util.h"
 #  include "device/optix/device_impl.h"
 
 #  include "util/util_time.h"
@@ -53,11 +54,13 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
 
     device_ptr launch_params_ptr = optix_device->launch_params.device_pointer;
 
-    cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, path_index_array),
-                      args[0],  // &d_path_index
-                      sizeof(device_ptr),
-                      cuda_stream_);
-    cuStreamSynchronize(cuda_stream_);
+    cuda_device_assert(
+        cuda_device_,
+        cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, path_index_array),
+                          args[0],  // &d_path_index
+                          sizeof(device_ptr),
+                          cuda_stream_));
+    cuda_device_assert(cuda_device_, cuStreamSynchronize(cuda_stream_));
 
     OptixShaderBindingTable sbt_params = {};
     sbt_params.raygenRecord = optix_device->sbt_data.device_pointer +

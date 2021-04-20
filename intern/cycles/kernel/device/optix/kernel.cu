@@ -69,24 +69,27 @@ extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_closest()
 {
   const int global_index = optixGetLaunchIndex().x;
 
+  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] : global_index;
-  integrator_intersect_closest(NULL, path_index);
+  integrator_intersect_closest(&kg, path_index);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_shadow()
 {
   const int global_index = optixGetLaunchIndex().x;
 
+  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] : global_index;
-  integrator_intersect_shadow(NULL, path_index);
+  integrator_intersect_shadow(&kg, path_index);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_subsurface()
 {
   const int global_index = optixGetLaunchIndex().x;
 
+  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] : global_index;
-  integrator_intersect_subsurface(NULL, path_index);
+  integrator_intersect_subsurface(&kg, path_index);
 }
 
 #ifdef __BAKING__

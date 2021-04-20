@@ -43,6 +43,7 @@ struct CCLIntersectContext {
   int max_hits;
   int num_hits;
   float max_t;
+  bool opaque_hit;
 
   /* for SSS Rays: */
   LocalIntersection *local_isect;
@@ -56,6 +57,7 @@ struct CCLIntersectContext {
     max_hits = 1;
     num_hits = 0;
     max_t = FLT_MAX;
+    opaque_hit = false;
     isect_s = NULL;
     local_isect = NULL;
     local_object_id = -1;

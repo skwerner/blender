@@ -403,17 +403,13 @@ ccl_device_intersect bool scene_intersect_shadow_all(const KernelGlobals *kg,
     CCLIntersectContext ctx(kg, CCLIntersectContext::RAY_SHADOW_ALL);
     ctx.isect_s = isect;
     ctx.max_hits = max_hits;
-    ctx.num_hits = 0;
     IntersectContext rtc_ctx(&ctx);
     RTCRay rtc_ray;
     kernel_embree_setup_ray(*ray, rtc_ray, visibility);
     rtcOccluded1(kernel_data.bvh.scene, &rtc_ctx.context, &rtc_ray);
 
-    if (ctx.num_hits > max_hits) {
-      return true;
-    }
     *num_hits = ctx.num_hits;
-    return rtc_ray.tfar == -INFINITY;
+    return ctx.opaque_hit;
   }
 #    endif /* __EMBREE__ */
 

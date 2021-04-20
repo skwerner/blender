@@ -77,13 +77,22 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
 
   switch (ctx->type) {
     case CCLIntersectContext::RAY_SHADOW_ALL: {
-      /* Append the intersection to the end of the array. */
-      if (ctx->num_hits < ctx->max_hits || ray->tfar < ctx->max_t) {
-        Intersection current_isect;
-        kernel_embree_convert_hit(kg, ray, hit, &current_isect);
+      Intersection current_isect;
+      kernel_embree_convert_hit(kg, ray, hit, &current_isect);
 
+      /* If no transparent shadows, all light is blocked. */
+      const int flags = intersection_get_shader_flags(kg, &current_isect);
+      if (!(flags & (SD_HAS_TRANSPARENT_SHADOW)) || ctx->max_hits == 0) {
+        ctx->opaque_hit = true;
+        return;
+      }
+
+      /* Test if we need to record this transparent intersection. */
+      if (ctx->num_hits < ctx->max_hits || ray->tfar < ctx->max_t) {
         /* Skip already recorded intersections. */
-        for (int i = 0; i < ctx->num_hits; ++i) {
+        int num_recorded_hits = min(ctx->num_hits, ctx->max_hits);
+
+        for (int i = 0; i < num_recorded_hits; ++i) {
           if (current_isect.object == ctx->isect_s[i].object &&
               current_isect.prim == ctx->isect_s[i].prim && current_isect.t == ctx->isect_s[i].t) {
             /* This intersection was already recorded, skip it. */
@@ -94,35 +103,34 @@ static void rtc_filter_occluded_func(const RTCFilterFunctionNArguments *args)
 
         /* If maximum number of hits was reached, replace the intersection with the
          * highest distance. We want to find the N closest intersections. */
-        int isect_index = ctx->num_hits;
-        if (ctx->num_hits >= ctx->max_hits) {
-          float max_t = -FLT_MAX;
-          for (int i = 0; i < ctx->num_hits; ++i) {
+        int isect_index = num_recorded_hits;
+        if (isect_index >= ctx->max_hits) {
+          float max_t = ctx->isect_s[0].t;
+          isect_index = 0;
+
+          for (int i = 1; i < num_recorded_hits; ++i) {
             if (ctx->isect_s[i].t > max_t) {
               isect_index = i;
               max_t = ctx->isect_s[i].t;
             }
           }
-        }
-        ctx->max_t = min(current_isect.t, ctx->max_t);
-        /* TODO: is there some way we can tell Embree to stop intersecting beyond
-         * this distance when max number of hits is reached?. Or maybe it will
-         * become irrelevant if we make max_hits a very high number on the CPU. */
 
-        Intersection *isect = &ctx->isect_s[isect_index];
-        *isect = current_isect;
-        const int flags = intersection_get_shader_flags(kg, isect);
-        /* If no transparent shadows, all light is blocked. */
-        if (flags & (SD_HAS_TRANSPARENT_SHADOW)) {
-          /* This tells Embree to continue tracing. */
-          *args->valid = 0;
+          /* TODO: is there some way we can tell Embree to stop intersecting beyond
+           * this distance when max number of hits is reached?. Or maybe it will
+           * become irrelevant if we make max_hits a very high number on the CPU. */
+          ctx->max_t = min(current_isect.t, max_t);
         }
+
+        ctx->isect_s[isect_index] = current_isect;
       }
 
       /* Always increase the number of hits, even beyond ray.max_hits so that
        * the caller can detect this as and consider it opaque, or trace another
        * ray. */
       ++ctx->num_hits;
+
+      /* This tells Embree to continue tracing. */
+      *args->valid = 0;
       break;
     }
     case CCLIntersectContext::RAY_LOCAL:

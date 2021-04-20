@@ -277,7 +277,24 @@ string RenderScheduler::full_report() const
 {
   string result = "\nRender Scheduler Summary\n\n";
 
-  result += "Adaptive sampling:\n";
+  {
+    string mode;
+    if (headless_) {
+      mode = "Headless";
+    }
+    else if (background_) {
+      mode = "Background";
+    }
+    else {
+      mode = "Interactive";
+    }
+    result += "Mode: " + mode + "\n";
+  }
+
+  result += "Resolution: " + to_string(buffer_params_.width) + "x" +
+            to_string(buffer_params_.height) + "\n";
+
+  result += "\nAdaptive sampling:\n";
   result += "  Use: " + string_from_bool(adaptive_sampling_.use) + "\n";
   if (adaptive_sampling_.use) {
     result += "  Step: " + to_string(adaptive_sampling_.adaptive_step) + "\n";

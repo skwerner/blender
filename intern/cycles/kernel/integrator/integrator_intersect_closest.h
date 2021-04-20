@@ -30,12 +30,20 @@ CCL_NAMESPACE_BEGIN
 ccl_device_forceinline int integrator_intersect_next_shader(INTEGRATOR_STATE_ARGS,
                                                             const Intersection *ccl_restrict isect)
 {
-  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    return SHADER_NONE;
-  }
-
   /* Find shader from intersection. */
   const int shader = intersection_get_shader(kg, isect);
+
+  /* Optional AO bounce termination. */
+  if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
+    const int flags = kernel_tex_fetch(__shaders, shader).flags;
+
+    if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+      INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+    }
+    else {
+      return SHADER_NONE;
+    }
+  }
 
   /* Load random number state. */
   RNGState rng_state;
@@ -77,7 +85,6 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 
   /* Trick to use short AO rays to approximate indirect light at the end of the path. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    visibility = PATH_RAY_SHADOW;
     ray.t = kernel_data.background.ao_distance;
   }
 

@@ -125,6 +125,7 @@ typedef struct bNodeSocket {
 
   /** Custom dynamic defined label, MAX_NAME. */
   char label[64];
+  char description[64];
 
   /** Cached data from execution. */
   void *cache;
@@ -1306,6 +1307,11 @@ typedef struct NodeGeometryMeshLine {
   /* GeometryNodeMeshLineCountMode. */
   uint8_t count_mode;
 } NodeGeometryMeshLine;
+
+typedef struct NodeSwitch {
+  /* NodeSwitch. */
+  uint8_t input_type;
+} NodeSwitch;
 
 /* script node mode */
 #define NODE_SCRIPT_INTERNAL 0

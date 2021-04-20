@@ -67,7 +67,6 @@ ccl_device_forceinline bool kernel_path_scene_intersect(const KernelGlobals *kg,
   uint visibility = path_state_ray_visibility(kg, state);
 
   if (path_state_ao_bounce(kg, state)) {
-    visibility = PATH_RAY_SHADOW;
     ray->t = kernel_data.background.ao_distance;
   }
 
@@ -321,7 +320,13 @@ ccl_device_forceinline void kernel_path_integrate(const KernelGlobals *kg,
         break;
       }
       else if (path_state_ao_bounce(kg, state)) {
-        break;
+        if (intersection_get_shader_flags(kg, &isect) &
+            (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+          state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+        }
+        else {
+          break;
+        }
       }
 
       /* Setup shader data. */

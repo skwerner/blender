@@ -546,7 +546,7 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   for (BL::RenderPass &b_pass : b_rlay.passes) {
     PassType pass_type = get_pass_type(b_pass);
 
-    if (pass_type == PASS_MOTION && scene->integrator->get_motion_blur())
+    if (pass_type == PASS_MOTION && b_scene.render().use_motion_blur())
       continue;
     if (pass_type != PASS_NONE)
       Pass::add(pass_type, passes, b_pass.name().c_str());

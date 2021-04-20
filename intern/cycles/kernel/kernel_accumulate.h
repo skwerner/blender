@@ -108,24 +108,6 @@ ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *
 #endif
 }
 
-ccl_device_forceinline void kernel_accum_clamp_throughput(const KernelGlobals *kg,
-                                                          float3 *L,
-                                                          float3 *throughput,
-                                                          int bounce)
-{
-#ifdef __CLAMP_SAMPLE__
-  float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
-                               kernel_data.integrator.sample_clamp_direct;
-
-  float sum = reduce_add(fabs(*L));
-  if (sum > limit) {
-    float clamp_factor = limit / sum;
-    *L *= clamp_factor;
-    *throughput *= clamp_factor;
-  }
-#endif
-}
-
 #if 0
 ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
                                                  PathRadiance *L,

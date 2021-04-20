@@ -185,36 +185,9 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
   }
 #  endif
 
-  /* TODO: find the max_hits closest hits. */
-
-  // Offset into array with num_hits
-  Intersection *const isect = get_payload_ptr_0<Intersection>() + optixGetPayload_2();
-  isect->t = optixGetRayTmax();
-  isect->prim = prim;
-  isect->object = get_object_id();
-  isect->type = kernel_tex_fetch(__prim_type, prim);
-
-  if (optixIsTriangleHit()) {
-    const float2 barycentrics = optixGetTriangleBarycentrics();
-    isect->u = 1.0f - barycentrics.y - barycentrics.x;
-    isect->v = barycentrics.x;
-  }
-#  ifdef __HAIR__
-  else {
-    const float u = __uint_as_float(optixGetAttribute_0());
-    isect->u = u;
-    isect->v = __uint_as_float(optixGetAttribute_1());
-
-    // Filter out curve endcaps
-    if (u == 0.0f || u == 1.0f) {
-      return optixIgnoreIntersection();
-    }
-  }
-#  endif
-
 #  ifdef __TRANSPARENT_SHADOWS__
   // Detect if this surface has a shader with transparent shadows
-  if (!shader_transparent_shadow(NULL, isect) || optixGetPayload_2() >= optixGetPayload_3()) {
+  if (!shader_transparent_shadow(NULL, isect)) {
 #  endif
     // This is an opaque hit or the hit limit has been reached, abort traversal
     optixSetPayload_5(true);
@@ -222,7 +195,62 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
 #  ifdef __TRANSPARENT_SHADOWS__
   }
 
-  optixSetPayload_2(optixGetPayload_2() + 1);  // num_hits++
+  float u = 0.0f, v = 0.0f;
+  if (optixIsTriangleHit()) {
+    const float2 barycentrics = optixGetTriangleBarycentrics();
+    u = 1.0f - barycentrics.y - barycentrics.x;
+    v = barycentrics.x;
+  }
+#    ifdef __HAIR__
+  else {
+    u = __uint_as_float(optixGetAttribute_0());
+    v = __uint_as_float(optixGetAttribute_1());
+
+    // Filter out curve endcaps
+    if (u == 0.0f || u == 1.0f) {
+      return optixIgnoreIntersection();
+    }
+  }
+#    endif
+
+  const int num_hits = optixGetPayload_2() + 1;
+  optixSetPayload_2(num_hits);
+
+  const int max_hits = optixGetPayload_3();
+  int record_index = num_hits;
+
+  if (num_hits >= max_hits) {
+    /* If maximum number of hits reached, find a hit to replace. */
+    const int num_recorded_hits = min(max_hits, *num_hits);
+    Intersect *const isect_array = get_payload_ptr_0<Intersection>();
+    float max_recorded_t = isect_array[0].t;
+    int max_recorded_hit = 0;
+
+    for (int i = 1; i < num_recorded_hits; i++) {
+      if (isect_array[i].t > max_recorded_t) {
+        max_recorded_t = isect_array[i].t;
+        max_recorded_hit = i;
+      }
+    }
+
+    if (optixGetRayTmax() >= max_recorded_t) {
+      return optixIgnoreIntersection();
+    }
+
+    record_index = max_recoded_hit;
+  }
+
+  /* TODO: is there a way to shorten the ray length when max_hits is reached, so Optix
+   * can discard triangles beyond it? */
+
+  // Offset into array with num_hits
+  Intersection *const isect = get_payload_ptr_0<Intersection>() + record_index;
+  isect->u = u;
+  isect->v = v;
+  isect->t = optixGetRayTmax();
+  isect->prim = prim;
+  isect->object = get_object_id();
+  isect->type = kernel_tex_fetch(__prim_type, prim);
 
   // Continue tracing
   optixIgnoreIntersection();

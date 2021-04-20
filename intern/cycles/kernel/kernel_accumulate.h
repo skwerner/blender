@@ -98,6 +98,11 @@ ccl_device_inline float3 bsdf_eval_diffuse_glossy_ratio(const BsdfEval *eval)
 
 ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *L, int bounce)
 {
+  /* Make sure all components are finite, allowing the contribution to be usable by adaptive
+   * sampling convergence check, but also to make it so render result never causes issues with
+   * post-processing. */
+  *L = ensure_finite3(*L);
+
 #ifdef __CLAMP_SAMPLE__
   float limit = (bounce > 0) ? kernel_data.integrator.sample_clamp_indirect :
                                kernel_data.integrator.sample_clamp_direct;

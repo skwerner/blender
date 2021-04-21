@@ -455,6 +455,9 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
     if (hit) {
       t = ray.t;
     }
+    else if (bounce == 0) {
+      ray.P = P;
+    }
 
     /* Advance to new scatter location. */
     ray.P += t * ray.D;

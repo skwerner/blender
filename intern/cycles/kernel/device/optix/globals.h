@@ -26,26 +26,16 @@
 
 CCL_NAMESPACE_BEGIN
 
-typedef struct ShaderParams {
-  KernelShaderEvalInput *input;
-  float4 *output;
-  int type;
-  int filter;
-  int sx;
-  int offset;
-  int sample;
-} ShaderParams;
-
 typedef struct KernelParams {
+  const int *path_index_array;
+  float *render_buffer;
+
   IntegratorState __integrator_state;
   IntegratorQueueCounter *__integrator_queue_counter;
   int *__integrator_sort_key;
   int *__integrator_sort_key_counter;
-  int *path_index_array;
 
-  //KernelWorkTile tile;
   KernelData data;
-  ShaderParams shader;
 #define KERNEL_TEX(type, name) const type *name;
 #include "kernel/kernel_textures.h"
 } KernelParams;

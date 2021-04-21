@@ -28,36 +28,34 @@ CCL_NAMESPACE_BEGIN
 class BVHOptiX;
 struct KernelParams;
 
+/* List of OptiX program groups. */
+enum {
+  PG_RGEN_MEGAKERNEL,
+  PG_RGEN_INTERSECT_CLOSEST,
+  PG_RGEN_INTERSECT_SHADOW,
+  PG_RGEN_INTERSECT_SUBSURFACE,
+  PG_MISS,
+  PG_HITD, /* Default hit group. */
+  PG_HITS, /* __SHADOW_RECORD_ALL__ hit group. */
+  PG_HITL, /* __BVH_LOCAL__ hit group (only used for triangles). */
+#  if OPTIX_ABI_VERSION >= 36
+  PG_HITD_MOTION,
+  PG_HITS_MOTION,
+#  endif
+  PG_CALL,
+  NUM_PROGRAM_GROUPS = PG_CALL + 3
+};
+
+/* List of OptiX pipelines. */
+enum { PIP_MEGAKERNEL, PIP_INTERSECT, NUM_PIPELINES };
+
+/* A single shader binding table entry. */
+struct SbtRecord {
+  char header[OPTIX_SBT_RECORD_HEADER_SIZE];
+};
+
 class OptiXDevice : public CUDADevice {
  public:
-  /* List of OptiX program groups. */
-  enum {
-    PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST,
-    PG_RGEN_INTEGRATOR_INTERSECT_SHADOW,
-    PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE,
-    PG_MISS,
-    PG_HITD, /* Default hit group. */
-    PG_HITS, /* __SHADOW_RECORD_ALL__ hit group. */
-    PG_HITL, /* __BVH_LOCAL__ hit group (only used for triangles). */
-#  if OPTIX_ABI_VERSION >= 36
-    PG_HITD_MOTION,
-    PG_HITS_MOTION,
-#  endif
-    PG_BAKE, /* kernel_bake_evaluate */
-    PG_DISP, /* kernel_displace_evaluate */
-    PG_BACK, /* kernel_background_evaluate */
-    PG_CALL,
-    NUM_PROGRAM_GROUPS = PG_CALL + 3
-  };
-
-  /* List of OptiX pipelines. */
-  enum { PIP_PATH_TRACE, PIP_SHADER_EVAL, NUM_PIPELINES };
-
-  /* A single shader binding table entry. */
-  struct SbtRecord {
-    char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-  };
-
   OptixDeviceContext context = NULL;
 
   OptixModule optix_module = NULL; /* All necessary OptiX kernels are in one module. */

@@ -65,6 +65,16 @@ template<bool always = false> ccl_device_forceinline uint get_object_id()
     return OBJECT_NONE;
 }
 
+extern "C" __global__ void __raygen__kernel_optix_integrator_megakernel()
+{
+  const int global_index = optixGetLaunchIndex().x;
+
+  KernelGlobals kg;
+  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
+                                                       global_index;
+  integrator_megakernel(&kg, path_index, __params.render_buffer);
+}
+
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_closest()
 {
   const int global_index = optixGetLaunchIndex().x;
@@ -199,16 +209,18 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
   }
 #  endif
 
-  int record_index = optixGetPayload_2();
-  const int num_hits = record_index + 1;
-  optixSetPayload_2(num_hits);
+  int num_hits = optixGetPayload_2();
+  int record_index = num_hits;
   const int max_hits = optixGetPayload_3();
+
+  optixSetPayload_2(num_hits + 1);
+
+  Intersection *const isect_array = get_payload_ptr_0<Intersection>();
 
 #  ifdef __TRANSPARENT_SHADOWS__
   if (num_hits >= max_hits) {
     /* If maximum number of hits reached, find a hit to replace. */
     const int num_recorded_hits = min(max_hits, num_hits);
-    Intersection *const isect_array = get_payload_ptr_0<Intersection>();
     float max_recorded_t = isect_array[0].t;
     int max_recorded_hit = 0;
 
@@ -230,8 +242,7 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
    * can discard triangles beyond it? */
 #  endif
 
-  // Offset into array with num_hits
-  Intersection *const isect = get_payload_ptr_0<Intersection>() + record_index;
+  Intersection *const isect = isect_array + record_index;
   isect->u = u;
   isect->v = v;
   isect->t = optixGetRayTmax();
@@ -241,9 +252,9 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
 
 #  ifdef __TRANSPARENT_SHADOWS__
   // Detect if this surface has a shader with transparent shadows
-  if (!shader_transparent_shadow(NULL, isect)) {
+  if (!shader_transparent_shadow(NULL, isect) || max_hits == 0) {
 #  endif
-    // This is an opaque hit or the hit limit has been reached, abort traversal
+    // If no transparent shadows, all light is blocked and we can stop immediately
     optixSetPayload_5(true);
     return optixTerminateRay();
 #  ifdef __TRANSPARENT_SHADOWS__

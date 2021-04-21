@@ -40,7 +40,9 @@ void OptiXDeviceQueue::init_execution()
 
 bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *args[])
 {
-  if (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
+  /* TODO: Handle shading kernels when shader raytracing feature is requested */
+  if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL ||
+      kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
       kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
       kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE) {
     if (cuda_device_->have_error()) {
@@ -51,7 +53,8 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
 
     OptiXDevice *const optix_device = static_cast<OptiXDevice *>(cuda_device_);
 
-    device_ptr launch_params_ptr = optix_device->launch_params.device_pointer;
+    const device_ptr sbt_data_ptr = optix_device->sbt_data.device_pointer;
+    const device_ptr launch_params_ptr = optix_device->launch_params.device_pointer;
 
     cuda_device_assert(
         cuda_device_,
@@ -59,33 +62,56 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
                           args[0],  // &d_path_index
                           sizeof(device_ptr),
                           cuda_stream_));
+    if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
+      cuda_device_assert(
+          cuda_device_,
+          cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, render_buffer),
+                            args[1],  // &d_render_buffer
+                            sizeof(device_ptr),
+                            cuda_stream_));
+    }
+
     cuda_device_assert(cuda_device_, cuStreamSynchronize(cuda_stream_));
 
+    OptixPipeline pipeline = NULL;
     OptixShaderBindingTable sbt_params = {};
-    sbt_params.raygenRecord = optix_device->sbt_data.device_pointer +
-                              (OptiXDevice::PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST + kernel -
-                               DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST) *
-                                  sizeof(OptiXDevice::SbtRecord);
-    sbt_params.missRecordBase = optix_device->sbt_data.device_pointer +
-                                OptiXDevice::PG_MISS * sizeof(OptiXDevice::SbtRecord);
-    sbt_params.missRecordStrideInBytes = sizeof(OptiXDevice::SbtRecord);
+
+    switch (kernel) {
+      case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
+        pipeline = optix_device->pipelines[PIP_MEGAKERNEL];
+        sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_MEGAKERNEL * sizeof(SbtRecord);
+        break;
+      case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
+        pipeline = optix_device->pipelines[PIP_INTERSECT];
+        sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_CLOSEST * sizeof(SbtRecord);
+        break;
+      case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
+        pipeline = optix_device->pipelines[PIP_INTERSECT];
+        sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_SHADOW * sizeof(SbtRecord);
+        break;
+      case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
+        pipeline = optix_device->pipelines[PIP_INTERSECT];
+        sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_SUBSURFACE * sizeof(SbtRecord);
+        break;
+    }
+
+    sbt_params.missRecordBase = sbt_data_ptr + PG_MISS * sizeof(SbtRecord);
+    sbt_params.missRecordStrideInBytes = sizeof(SbtRecord);
     sbt_params.missRecordCount = 1;
-    sbt_params.hitgroupRecordBase = optix_device->sbt_data.device_pointer +
-                                    OptiXDevice::PG_HITD * sizeof(OptiXDevice::SbtRecord);
-    sbt_params.hitgroupRecordStrideInBytes = sizeof(OptiXDevice::SbtRecord);
+    sbt_params.hitgroupRecordBase = sbt_data_ptr + PG_HITD * sizeof(SbtRecord);
+    sbt_params.hitgroupRecordStrideInBytes = sizeof(SbtRecord);
 #  if OPTIX_ABI_VERSION >= 36
     sbt_params.hitgroupRecordCount = 5; /* PG_HITD(_MOTION), PG_HITS(_MOTION), PG_HITL */
 #  else
     sbt_params.hitgroupRecordCount = 3; /* PG_HITD, PG_HITS, PG_HITL */
 #  endif
-    sbt_params.callablesRecordBase = optix_device->sbt_data.device_pointer +
-                                     OptiXDevice::PG_CALL * sizeof(OptiXDevice::SbtRecord);
+    sbt_params.callablesRecordBase = sbt_data_ptr + PG_CALL * sizeof(SbtRecord);
     sbt_params.callablesRecordCount = 3;
-    sbt_params.callablesRecordStrideInBytes = sizeof(OptiXDevice::SbtRecord);
+    sbt_params.callablesRecordStrideInBytes = sizeof(SbtRecord);
 
     /* Launch the ray generation program. */
     optix_device_assert(optix_device,
-                        optixLaunch(optix_device->pipelines[OptiXDevice::PIP_PATH_TRACE],
+                        optixLaunch(pipeline,
                                     cuda_stream_,
                                     launch_params_ptr,
                                     optix_device->launch_params.data_elements,

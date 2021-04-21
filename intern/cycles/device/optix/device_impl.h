@@ -125,10 +125,10 @@ class OptiXDevice : public CUDADevice {
 
   /* Run corresponding conversion kernels, preparing data for the denoiser or copying data from the
    * denoiser result to the render buffer. */
-  bool denoise_filter_convert_to_rgb(DeviceQueue *queue,
+  bool denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,
                                      const DeviceDenoiseTask &task,
                                      const device_ptr d_input_rgb);
-  bool denoise_filter_convert_from_rgb(DeviceQueue *queue,
+  bool denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
                                        const DeviceDenoiseTask &task,
                                        const device_ptr d_input_rgb);
 
@@ -144,7 +144,9 @@ class OptiXDevice : public CUDADevice {
   bool denoise_configure_if_needed(const DeviceDenoiseTask &task);
 
   /* Run configured denoiser on the given task. */
-  bool denoise_run(const DeviceDenoiseTask &task, const device_ptr d_input_rgb);
+  bool denoise_run(OptiXDeviceQueue *queue,
+                   const DeviceDenoiseTask &task,
+                   const device_ptr d_input_rgb);
 };
 
 CCL_NAMESPACE_END

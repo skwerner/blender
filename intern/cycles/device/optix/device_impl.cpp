@@ -557,23 +557,23 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
     return;
   }
 
-  unique_ptr<DeviceQueue> queue = gpu_queue_create();
-
   const int input_pass_stride = denoise_buffer_pass_stride(task.params);
 
   device_only_memory<float> input_rgb(this, "denoiser input rgb");
   input_rgb.alloc_to_device(task.width * task.height * input_pass_stride);
 
+  OptiXDeviceQueue queue(this);
+
   /* Make sure input data is in [0 .. 10000] range by scaling the input buffer by the number of
    *
    * samples in the buffer. This will do (scaled) copy of the noisy image and needed passes into
    * an input buffer for the OptiX denoiser. */
-  if (!denoise_filter_convert_to_rgb(queue.get(), task, input_rgb.device_pointer)) {
+  if (!denoise_filter_convert_to_rgb(&queue, task, input_rgb.device_pointer)) {
     LOG(ERROR) << "Error connverting denoising passes to RGB buffer.";
     return;
   }
 
-  if (!denoise_run(task, input_rgb.device_pointer)) {
+  if (!denoise_run(&queue, task, input_rgb.device_pointer)) {
     LOG(ERROR) << "Error running OptiX denoiser.";
     return;
   }
@@ -582,13 +582,15 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
    *
    * This will scale the denoiser result up to match the number of samples ans store the result in
    * the combined pass. */
-  if (!denoise_filter_convert_from_rgb(queue.get(), task, input_rgb.device_pointer)) {
+  if (!denoise_filter_convert_from_rgb(&queue, task, input_rgb.device_pointer)) {
     LOG(ERROR) << "Error copying denoiser result to the combined pass.";
     return;
   }
+
+  queue.synchronize();
 }
 
-bool OptiXDevice::denoise_filter_convert_to_rgb(DeviceQueue *queue,
+bool OptiXDevice::denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,
                                                 const DeviceDenoiseTask &task,
                                                 const device_ptr d_input_rgb)
 {
@@ -613,14 +615,10 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DeviceQueue *queue,
                   const_cast<int *>(&task.num_samples),
                   const_cast<int *>(&task.pass_sample_count)};
 
-  if (!queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args)) {
-    return false;
-  }
-
-  return queue->synchronize();
+  return queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args);
 }
 
-bool OptiXDevice::denoise_filter_convert_from_rgb(DeviceQueue *queue,
+bool OptiXDevice::denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
                                                   const DeviceDenoiseTask &task,
                                                   const device_ptr d_input_rgb)
 {
@@ -638,11 +636,7 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(DeviceQueue *queue,
                   const_cast<int *>(&task.num_samples),
                   const_cast<int *>(&task.pass_sample_count)};
 
-  if (!queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args)) {
-    return false;
-  }
-
-  return queue->synchronize();
+  return queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);
 }
 
 bool OptiXDevice::denoise_ensure(const DeviceDenoiseTask &task)
@@ -745,7 +739,9 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
   return true;
 }
 
-bool OptiXDevice::denoise_run(const DeviceDenoiseTask &task, const device_ptr d_input_rgb)
+bool OptiXDevice::denoise_run(OptiXDeviceQueue *queue,
+                              const DeviceDenoiseTask &task,
+                              const device_ptr d_input_rgb)
 {
   const int input_passes = denoise_buffer_num_passes(task.params);
   const int pixel_stride = 3 * sizeof(float);
@@ -774,7 +770,7 @@ bool OptiXDevice::denoise_run(const DeviceDenoiseTask &task, const device_ptr d_
   /* Finally run denonising. */
   OptixDenoiserParams params = {}; /* All parameters are disabled/zero. */
   optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
-                                   0,
+                                   queue->stream(),
                                    &params,
                                    denoiser_.state.device_pointer,
                                    denoiser_.scratch_offset,

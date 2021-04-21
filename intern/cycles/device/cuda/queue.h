@@ -45,6 +45,11 @@ class CUDADeviceQueue : public DeviceQueue {
   virtual void copy_to_device(device_memory &mem) override;
   virtual void copy_from_device(device_memory &mem) override;
 
+  virtual CUstream stream()
+  {
+    return cuda_stream_;
+  }
+
  protected:
   CUDADevice *cuda_device_;
   CUstream cuda_stream_;

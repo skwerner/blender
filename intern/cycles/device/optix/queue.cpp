@@ -17,7 +17,6 @@
 #ifdef WITH_OPTIX
 
 #  include "device/optix/queue.h"
-#  include "device/cuda/util.h"
 #  include "device/optix/device_impl.h"
 
 #  include "util/util_time.h"
@@ -85,15 +84,15 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
     sbt_params.callablesRecordStrideInBytes = sizeof(OptiXDevice::SbtRecord);
 
     /* Launch the ray generation program. */
-    const OptixResult result = optixLaunch(optix_device->pipelines[OptiXDevice::PIP_PATH_TRACE],
-                                           cuda_stream_,
-                                           launch_params_ptr,
-                                           optix_device->launch_params.data_elements,
-                                           &sbt_params,
-                                           work_size,
-                                           1,
-                                           1);
-    assert(result == OPTIX_SUCCESS);
+    optix_device_assert(optix_device,
+                        optixLaunch(optix_device->pipelines[OptiXDevice::PIP_PATH_TRACE],
+                                    cuda_stream_,
+                                    launch_params_ptr,
+                                    optix_device->launch_params.data_elements,
+                                    &sbt_params,
+                                    work_size,
+                                    1,
+                                    1));
 
     return !(optix_device->have_error());
   }

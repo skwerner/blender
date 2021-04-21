@@ -18,8 +18,6 @@
 #ifdef WITH_OPTIX
 
 #  include "device/optix/device_impl.h"
-#  include "device/cuda/util.h"
-#  include "device/optix/queue.h"
 
 #  include "bvh/bvh.h"
 #  include "bvh/bvh_optix.h"
@@ -41,50 +39,6 @@
 #  include "kernel/device/optix/globals.h"
 
 CCL_NAMESPACE_BEGIN
-
-#  define check_result_cuda(stmt) \
-    { \
-      CUresult res = stmt; \
-      if (res != CUDA_SUCCESS) { \
-        const char *name; \
-        cuGetErrorName(res, &name); \
-        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
-        return; \
-      } \
-    } \
-    (void)0
-#  define check_result_cuda_ret(stmt) \
-    { \
-      CUresult res = stmt; \
-      if (res != CUDA_SUCCESS) { \
-        const char *name; \
-        cuGetErrorName(res, &name); \
-        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
-        return false; \
-      } \
-    } \
-    (void)0
-
-#  define check_result_optix(stmt) \
-    { \
-      enum OptixResult res = stmt; \
-      if (res != OPTIX_SUCCESS) { \
-        const char *name = optixGetErrorName(res); \
-        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
-        return; \
-      } \
-    } \
-    (void)0
-#  define check_result_optix_ret(stmt) \
-    { \
-      enum OptixResult res = stmt; \
-      if (res != OPTIX_SUCCESS) { \
-        const char *name = optixGetErrorName(res); \
-        set_error(string_printf("%s in %s (device_optix.cpp:%d)", name, #stmt, __LINE__)); \
-        return false; \
-      } \
-    } \
-    (void)0
 
 OptiXDevice::Denoiser::Denoiser(CUDADevice *device)
     : device(device), state(device, "__denoiser_state")
@@ -136,9 +90,9 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
 #  if OPTIX_ABI_VERSION >= 41 && defined(WITH_CYCLES_DEBUG)
   options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
 #  endif
-  check_result_optix(optixDeviceContextCreate(cuContext, &options, &context));
+  optix_assert(optixDeviceContextCreate(cuContext, &options, &context));
 #  ifdef WITH_CYCLES_LOGGING
-  check_result_optix(optixDeviceContextSetLogCallback(
+  optix_assert(optixDeviceContextSetLogCallback(
       context, options.logCallbackFunction, options.logCallbackData, options.logCallbackLevel));
 #  endif
 
@@ -314,18 +268,24 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       ptx_filename = compile_kernel(requested_features, "kernel", "optix", true);
     }
     if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
-      set_error("Failed to load OptiX kernel from '" + ptx_filename + "'");
+      set_error(string_printf("Failed to load OptiX kernel from '%s'", ptx_filename.c_str()));
       return false;
     }
 
-    check_result_optix_ret(optixModuleCreateFromPTX(context,
-                                                    &module_options,
-                                                    &pipeline_options,
-                                                    ptx_data.data(),
-                                                    ptx_data.size(),
-                                                    nullptr,
-                                                    0,
-                                                    &optix_module));
+    const OptixResult result = optixModuleCreateFromPTX(context,
+                                                        &module_options,
+                                                        &pipeline_options,
+                                                        ptx_data.data(),
+                                                        ptx_data.size(),
+                                                        nullptr,
+                                                        0,
+                                                        &optix_module);
+    if (result != OPTIX_SUCCESS) {
+      set_error(string_printf("Failed to load OptiX kernel from '%s' (%s)",
+                              ptx_filename.c_str(),
+                              optixGetErrorName(result)));
+      return false;
+    }
   }
 
   /* Create program groups. */
@@ -381,7 +341,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       builtin_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
       builtin_options.usesMotionBlur = false;
 
-      check_result_optix_ret(optixBuiltinISModuleGet(
+      optix_assert(optixBuiltinISModuleGet(
           context, &module_options, &pipeline_options, &builtin_options, &builtin_modules[0]));
 
       group_descs[PG_HITD].hitgroup.moduleIS = builtin_modules[0];
@@ -392,7 +352,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       if (motion_blur) {
         builtin_options.usesMotionBlur = true;
 
-        check_result_optix_ret(optixBuiltinISModuleGet(
+        optix_assert(optixBuiltinISModuleGet(
             context, &module_options, &pipeline_options, &builtin_options, &builtin_modules[1]));
 
         group_descs[PG_HITD_MOTION] = group_descs[PG_HITD];
@@ -444,7 +404,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
         "__direct_callable__subsurface_scatter_multi_setup";
   }
 
-  check_result_optix_ret(optixProgramGroupCreate(
+  optix_assert(optixProgramGroupCreate(
       context, group_descs, NUM_PROGRAM_GROUPS, &group_options, nullptr, 0, groups));
 
   /* Get program stack sizes. */
@@ -453,8 +413,8 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   sbt_data.alloc(NUM_PROGRAM_GROUPS);
   memset(sbt_data.host_pointer, 0, sizeof(SbtRecord) * NUM_PROGRAM_GROUPS);
   for (unsigned int i = 0; i < NUM_PROGRAM_GROUPS; ++i) {
-    check_result_optix_ret(optixSbtRecordPackHeader(groups[i], &sbt_data[i]));
-    check_result_optix_ret(optixProgramGroupGetStackSize(groups[i], &stack_size[i]));
+    optix_assert(optixSbtRecordPackHeader(groups[i], &sbt_data[i]));
+    optix_assert(optixProgramGroupGetStackSize(groups[i], &stack_size[i]));
   }
   sbt_data.copy_to_device(); /* Upload SBT to device. */
 
@@ -505,14 +465,14 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       pipeline_groups.push_back(groups[PG_CALL + 2]);
     }
 
-    check_result_optix_ret(optixPipelineCreate(context,
-                                               &pipeline_options,
-                                               &link_options,
-                                               pipeline_groups.data(),
-                                               pipeline_groups.size(),
-                                               nullptr,
-                                               0,
-                                               &pipelines[PIP_PATH_TRACE]));
+    optix_assert(optixPipelineCreate(context,
+                                     &pipeline_options,
+                                     &link_options,
+                                     pipeline_groups.data(),
+                                     pipeline_groups.size(),
+                                     nullptr,
+                                     0,
+                                     &pipelines[PIP_PATH_TRACE]));
 
     /* Combine ray generation and trace continuation stack size. */
     // const unsigned int css = stack_size[PG_RGEN].cssRG + link_options.maxTraceDepth * trace_css;
@@ -530,12 +490,11 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
                                       stack_size[PG_CALL + 2].dssDC);
 
     /* Set stack size depending on pipeline options. */
-    check_result_optix_ret(
-        optixPipelineSetStackSize(pipelines[PIP_PATH_TRACE],
-                                  0,
-                                  requested_features.use_shader_raytrace ? dss : 0,
-                                  css,
-                                  motion_blur ? 3 : 2));
+    optix_assert(optixPipelineSetStackSize(pipelines[PIP_PATH_TRACE],
+                                           0,
+                                           requested_features.use_shader_raytrace ? dss : 0,
+                                           css,
+                                           motion_blur ? 3 : 2));
   }
 
   /* Only need to create shader evaluation pipeline if one of these features is used: */
@@ -565,14 +524,14 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
       pipeline_groups.push_back(groups[PG_CALL + 2]);
     }
 
-    check_result_optix_ret(optixPipelineCreate(context,
-                                               &pipeline_options,
-                                               &link_options,
-                                               pipeline_groups.data(),
-                                               pipeline_groups.size(),
-                                               nullptr,
-                                               0,
-                                               &pipelines[PIP_SHADER_EVAL]));
+    optix_assert(optixPipelineCreate(context,
+                                     &pipeline_options,
+                                     &link_options,
+                                     pipeline_groups.data(),
+                                     pipeline_groups.size(),
+                                     nullptr,
+                                     0,
+                                     &pipelines[PIP_SHADER_EVAL]));
 
     /* Calculate continuation stack size based on the maximum of all ray generation stack sizes. */
     const unsigned int css = std::max(
@@ -583,12 +542,11 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
                              std::max(stack_size[PG_CALL + 1].dssDC,
                                       stack_size[PG_CALL + 2].dssDC);
 
-    check_result_optix_ret(
-        optixPipelineSetStackSize(pipelines[PIP_SHADER_EVAL],
-                                  0,
-                                  requested_features.use_shader_raytrace ? dss : 0,
-                                  css,
-                                  motion_blur ? 3 : 2));
+    optix_assert(optixPipelineSetStackSize(pipelines[PIP_SHADER_EVAL],
+                                           0,
+                                           requested_features.use_shader_raytrace ? dss : 0,
+                                           css,
+                                           motion_blur ? 3 : 2));
   }
 
   /* Clean up program group objects. */
@@ -759,9 +717,14 @@ bool OptiXDevice::denoise_create_if_needed(const DenoiseParams &params)
   denoiser_options.pixelFormat = OPTIX_PIXEL_FORMAT_FLOAT3;
 #  endif
 
-  check_result_optix_ret(
-      optixDenoiserCreate(context, &denoiser_options, &denoiser_.optix_denoiser));
-  check_result_optix_ret(
+  const OptixResult result = optixDenoiserCreate(
+      context, &denoiser_options, &denoiser_.optix_denoiser);
+  if (result != OPTIX_SUCCESS) {
+    set_error("Failed to create OptiX denoiser");
+    return false;
+  }
+
+  optix_assert(
       optixDenoiserSetModel(denoiser_.optix_denoiser, OPTIX_DENOISER_MODEL_KIND_HDR, nullptr, 0));
 
   /* OptiX denoiser handle was created with the requested number of input passes. */
@@ -781,7 +744,7 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
   }
 
   OptixDenoiserSizes sizes = {};
-  check_result_optix_ret(optixDenoiserComputeMemoryResources(
+  optix_assert(optixDenoiserComputeMemoryResources(
       denoiser_.optix_denoiser, task.width, task.height, &sizes));
 
 #  if OPTIX_ABI_VERSION < 28
@@ -795,15 +758,19 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
   denoiser_.state.alloc_to_device(denoiser_.scratch_offset + denoiser_.scratch_size);
 
   /* Initialize denoiser state for the current tile size. */
-  check_result_optix_ret(
-      optixDenoiserSetup(denoiser_.optix_denoiser,
-                         0,
-                         task.width,
-                         task.height,
-                         denoiser_.state.device_pointer,
-                         denoiser_.scratch_offset,
-                         denoiser_.state.device_pointer + denoiser_.scratch_offset,
-                         denoiser_.scratch_size));
+  const OptixResult result = optixDenoiserSetup(denoiser_.optix_denoiser,
+                                                0,
+                                                task.width,
+                                                task.height,
+                                                denoiser_.state.device_pointer,
+                                                denoiser_.scratch_offset,
+                                                denoiser_.state.device_pointer +
+                                                    denoiser_.scratch_offset,
+                                                denoiser_.scratch_size);
+  if (result != OPTIX_SUCCESS) {
+    set_error("Failed to set up OptiX denoiser");
+    return false;
+  }
 
   denoiser_.is_configured = true;
   denoiser_.configured_size.x = task.width;
@@ -840,19 +807,18 @@ bool OptiXDevice::denoise_run(const DeviceDenoiseTask &task, const device_ptr d_
 
   /* Finally run denonising. */
   OptixDenoiserParams params = {}; /* All parameters are disabled/zero. */
-  check_result_optix_ret(
-      optixDenoiserInvoke(denoiser_.optix_denoiser,
-                          0,
-                          &params,
-                          denoiser_.state.device_pointer,
-                          denoiser_.scratch_offset,
-                          input_layers,
-                          input_passes,
-                          0,
-                          0,
-                          output_layers,
-                          denoiser_.state.device_pointer + denoiser_.scratch_offset,
-                          denoiser_.scratch_size));
+  optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
+                                   0,
+                                   &params,
+                                   denoiser_.state.device_pointer,
+                                   denoiser_.scratch_offset,
+                                   input_layers,
+                                   input_passes,
+                                   0,
+                                   0,
+                                   output_layers,
+                                   denoiser_.state.device_pointer + denoiser_.scratch_offset,
+                                   denoiser_.scratch_size));
 
   return true;
 }
@@ -864,25 +830,28 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
 {
   const CUDAContextScope scope(this);
 
+  /* TODO: Choose between building for viewport or batch rendering again! */
+  const bool background = true;
+
   /* Compute memory usage. */
   OptixAccelBufferSizes sizes = {};
   OptixAccelBuildOptions options = {};
   options.operation = operation;
-  //if (background) {
+  if (background) {
     /* Prefer best performance and lowest memory consumption in background. */
     options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_TRACE | OPTIX_BUILD_FLAG_ALLOW_COMPACTION;
-  //}
-  //else {
-  //  /* Prefer fast updates in viewport. */
-  //  options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
-  //}
+  }
+  else {
+    /* Prefer fast updates in viewport. */
+    options.buildFlags = OPTIX_BUILD_FLAG_PREFER_FAST_BUILD | OPTIX_BUILD_FLAG_ALLOW_UPDATE;
+  }
 
   options.motionOptions.numKeys = num_motion_steps;
   options.motionOptions.flags = OPTIX_MOTION_FLAG_START_VANISH | OPTIX_MOTION_FLAG_END_VANISH;
   options.motionOptions.timeBegin = 0.0f;
   options.motionOptions.timeEnd = 1.0f;
 
-  check_result_optix_ret(optixAccelComputeMemoryUsage(context, &options, &build_input, 1, &sizes));
+  optix_assert(optixAccelComputeMemoryUsage(context, &options, &build_input, 1, &sizes));
 
   /* Allocate required output buffers. */
   device_only_memory<char> temp_mem(this, "optix temp as build mem");
@@ -912,55 +881,54 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
   compacted_size_prop.result = align_up(temp_mem.device_pointer + sizes.tempSizeInBytes, 8);
 
   OptixTraversableHandle out_handle = 0;
-  check_result_optix_ret(optixAccelBuild(context,
-                                         NULL,
-                                         &options,
-                                         &build_input,
-                                         1,
-                                         temp_mem.device_pointer,
-                                         sizes.tempSizeInBytes,
-                                         out_data.device_pointer,
-                                         sizes.outputSizeInBytes,
-                                         &out_handle,
-                                         /*background ? &compacted_size_prop :*/ NULL,
-                                         /*background ? 1 :*/ 0));
+  optix_assert(optixAccelBuild(context,
+                               NULL,
+                               &options,
+                               &build_input,
+                               1,
+                               temp_mem.device_pointer,
+                               sizes.tempSizeInBytes,
+                               out_data.device_pointer,
+                               sizes.outputSizeInBytes,
+                               &out_handle,
+                               background ? &compacted_size_prop : NULL,
+                               background ? 1 : 0));
   bvh->traversable_handle = static_cast<uint64_t>(out_handle);
 
   /* Wait for all operations to finish. */
-  check_result_cuda_ret(cuStreamSynchronize(NULL));
+  cuda_assert(cuStreamSynchronize(NULL));
 
   /* Compact acceleration structure to save memory (do not do this in viewport for faster builds).
    */
-  //if (background) {
-  //  uint64_t compacted_size = sizes.outputSizeInBytes;
-  //  check_result_cuda_ret(
-  //      cuMemcpyDtoH(&compacted_size, compacted_size_prop.result, sizeof(compacted_size)));
-  //
-  //  /* Temporary memory is no longer needed, so free it now to make space. */
-  //  temp_mem.free();
-  //
-  //  /* There is no point compacting if the size does not change. */
-  //  if (compacted_size < sizes.outputSizeInBytes) {
-  //    device_only_memory<char> compacted_data(this, "optix compacted as");
-  //    compacted_data.alloc_to_device(compacted_size);
-  //    if (!compacted_data.device_pointer)
-  //      /* Do not compact if memory allocation for compacted acceleration structure fails.
-  //       * Can just use the uncompacted one then, so succeed here regardless. */
-  //      return true;
-  //
-  //    check_result_optix_ret(optixAccelCompact(
-  //        context, NULL, out_handle, compacted_data.device_pointer, compacted_size, &out_handle));
-  //    bvh->traversable_handle = static_cast<uint64_t>(out_handle);
-  //
-  //    /* Wait for compaction to finish. */
-  //    check_result_cuda_ret(cuStreamSynchronize(NULL));
-  //
-  //    std::swap(out_data.device_size, compacted_data.device_size);
-  //    std::swap(out_data.device_pointer, compacted_data.device_pointer);
-  //  }
-  //}
+  if (background) {
+    uint64_t compacted_size = sizes.outputSizeInBytes;
+    cuda_assert(cuMemcpyDtoH(&compacted_size, compacted_size_prop.result, sizeof(compacted_size)));
 
-  return true;
+    /* Temporary memory is no longer needed, so free it now to make space. */
+    temp_mem.free();
+
+    /* There is no point compacting if the size does not change. */
+    if (compacted_size < sizes.outputSizeInBytes) {
+      device_only_memory<char> compacted_data(this, "optix compacted as");
+      compacted_data.alloc_to_device(compacted_size);
+      if (!compacted_data.device_pointer)
+        /* Do not compact if memory allocation for compacted acceleration structure fails.
+         * Can just use the uncompacted one then, so succeed here regardless. */
+        return !have_error();
+
+      optix_assert(optixAccelCompact(
+          context, NULL, out_handle, compacted_data.device_pointer, compacted_size, &out_handle));
+      bvh->traversable_handle = static_cast<uint64_t>(out_handle);
+
+      /* Wait for compaction to finish. */
+      cuda_assert(cuStreamSynchronize(NULL));
+
+      std::swap(out_data.device_size, compacted_data.device_size);
+      std::swap(out_data.device_pointer, compacted_data.device_pointer);
+    }
+  }
+
+  return !have_error();
 }
 
 void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
@@ -970,6 +938,9 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     Device::build_bvh(bvh, progress, refit);
     return;
   }
+
+  /* TODO: Choose between building for viewport or batch rendering again! */
+  const bool background = true;
 
   BVHOptiX *const bvh_optix = static_cast<BVHOptiX *>(bvh);
 
@@ -981,14 +952,14 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     /* Refit is only possible in viewport for now (because AS is built with
      * OPTIX_BUILD_FLAG_ALLOW_UPDATE only there, see above). */
     OptixBuildOperation operation = OPTIX_BUILD_OPERATION_BUILD;
-    //if (refit && !background) {
-    //  assert(bvh_optix->traversable_handle != 0);
-    //  operation = OPTIX_BUILD_OPERATION_UPDATE;
-    //}
-    //else {
+    if (refit && !background) {
+      assert(bvh_optix->traversable_handle != 0);
+      operation = OPTIX_BUILD_OPERATION_UPDATE;
+    }
+    else {
       bvh_optix->as_data.free();
       bvh_optix->traversable_handle = 0;
-    //}
+    }
 
     /* Build bottom level acceleration structures (BLAS). */
     Geometry *const geom = bvh->geometry[0];
@@ -1477,7 +1448,7 @@ void OptiXDevice::update_launch_params(size_t offset, void *data, size_t data_si
   const CUDAContextScope scope(this);
 
   for (int i = 0; i < info.cpu_threads; ++i) {
-    check_result_cuda(cuMemcpyHtoD(
+    cuda_assert(cuMemcpyHtoD(
         launch_params.device_pointer + i * launch_params.data_elements + offset, data, data_size));
   }
 }

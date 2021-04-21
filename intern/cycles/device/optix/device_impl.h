@@ -20,14 +20,8 @@
 #ifdef WITH_OPTIX
 
 #  include "device/cuda/device_impl.h"
-
-#  ifdef WITH_CUDA_DYNLOAD
-#    include <cuew.h>
-// Do not use CUDA SDK headers when using CUEW
-#    define OPTIX_DONT_INCLUDE_CUDA
-#  endif
-
-#  include <optix_stubs.h>
+#  include "device/optix/queue.h"
+#  include "device/optix/util.h"
 
 CCL_NAMESPACE_BEGIN
 

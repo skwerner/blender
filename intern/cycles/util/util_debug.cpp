@@ -72,7 +72,6 @@ DebugFlags::OptiX::OptiX()
 
 void DebugFlags::OptiX::reset()
 {
-  cuda_streams = 1;
   curves_api = false;
 }
 
@@ -138,7 +137,7 @@ std::ostream &operator<<(std::ostream &os, DebugFlagsConstRef debug_flags)
      << "  Adaptive Compile : " << string_from_bool(debug_flags.cuda.adaptive_compile) << "\n";
 
   os << "OptiX flags:\n"
-     << "  CUDA streams : " << debug_flags.optix.cuda_streams << "\n";
+     << "  Curves API : " << debug_flags.optix.curves_api << "\n";
 
   const char *opencl_device_type;
   switch (debug_flags.opencl.device_type) {

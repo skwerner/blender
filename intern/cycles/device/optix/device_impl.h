@@ -29,41 +29,15 @@
 
 #  include <optix_stubs.h>
 
-#endif /* WITH_OPTIX */
-
 CCL_NAMESPACE_BEGIN
 
-#ifdef WITH_OPTIX
-
 class BVHOptiX;
-
-#  if 0
-/* Make sure this stays in sync with globals.h */
-struct ShaderParams {
-  uint4 *input;
-  float4 *output;
-  int type;
-  int filter;
-  int sx;
-  int offset;
-  int sample;
-};
-struct KernelParams {
-  KernelWorkTile tile;
-  KernelData data;
-  ShaderParams shader;
-#    define KERNEL_TEX(type, name) const type *name;
-#    include "kernel/kernel_textures.h"
-#    undef KERNEL_TEX
-};
-#  endif
 struct KernelParams;
 
 class OptiXDevice : public CUDADevice {
  public:
   /* List of OptiX program groups. */
   enum {
-    // PG_RGEN,
     PG_RGEN_INTEGRATOR_INTERSECT_CLOSEST,
     PG_RGEN_INTEGRATOR_INTERSECT_SHADOW,
     PG_RGEN_INTEGRATOR_INTERSECT_SUBSURFACE,
@@ -89,21 +63,6 @@ class OptiXDevice : public CUDADevice {
   struct SbtRecord {
     char header[OPTIX_SBT_RECORD_HEADER_SIZE];
   };
-
-#  if 0
-  /* Information stored about CUDA memory allocations/ */
-  struct CUDAMem {
-    bool free_map_host = false;
-    CUarray array = NULL;
-    CUtexObject texobject = 0;
-    bool use_mapped_host = false;
-  };
-
-  /* Use a pool with multiple threads to support launches with multiple CUDA streams. */
-  // TaskPool task_pool;
-
-  vector<CUstream> cuda_stream;
-#  endif
 
   OptixDeviceContext context = NULL;
 
@@ -146,10 +105,6 @@ class OptiXDevice : public CUDADevice {
   ~OptiXDevice();
 
  private:
-#  if 0
-  bool show_samples() const override;
-#  endif
-
   BVHLayoutMask get_bvh_layout_mask() const override;
 
   string compile_kernel_get_common_cflags(
@@ -200,6 +155,6 @@ class OptiXDevice : public CUDADevice {
   bool denoise_run(const DeviceDenoiseTask &task, const device_ptr d_input_rgb);
 };
 
-#endif /* WITH_OPTIX */
-
 CCL_NAMESPACE_END
+
+#endif /* WITH_OPTIX */

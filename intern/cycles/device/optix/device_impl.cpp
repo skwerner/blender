@@ -15,18 +15,20 @@
  * limitations under the License.
  */
 
-#include "device/optix/device_impl.h"
-
 #ifdef WITH_OPTIX
-#  include "bvh/bvh.h"
-#  include "bvh/bvh_optix.h"
+
+#  include "device/optix/device_impl.h"
 #  include "device/cuda/util.h"
 #  include "device/optix/queue.h"
+
+#  include "bvh/bvh.h"
+#  include "bvh/bvh_optix.h"
 #  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"
 #  include "render/object.h"
 #  include "render/scene.h"
+
 #  include "util/util_debug.h"
 #  include "util/util_logging.h"
 #  include "util/util_md5.h"
@@ -38,11 +40,7 @@
 #  define __KERNEL_OPTIX__
 #  include "kernel/device/optix/globals.h"
 
-#endif /* WITH_OPTIX */
-
 CCL_NAMESPACE_BEGIN
-
-#ifdef WITH_OPTIX
 
 #  define check_result_cuda(stmt) \
     { \
@@ -107,9 +105,6 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
       launch_params(this, "__params"),
       denoiser_(this)
 {
-  /* Store number of CUDA streams in device info. */
-  this->info.cpu_threads = DebugFlags().optix.cuda_streams;
-
   /* Make the CUDA context current. */
   if (!cuContext) {
     /* Do not initialize if CUDA context creation failed already. */
@@ -147,14 +142,6 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
       context, options.logCallbackFunction, options.logCallbackData, options.logCallbackLevel));
 #  endif
 
-#  if 0
-  /* Create launch streams. */
-  cuda_stream.resize(this->info.cpu_threads);
-  for (int i = 0; i < this->info.cpu_threads; ++i) {
-    check_result_cuda(cuStreamCreate(&cuda_stream[i], CU_STREAM_NON_BLOCKING));
-  }
-#  endif
-
   /* Fix weird compiler bug that assigns wrong size. */
   launch_params.data_elements = sizeof(KernelParams);
 
@@ -164,17 +151,12 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
 
 OptiXDevice::~OptiXDevice()
 {
-#  if 0
-  /* Stop processing any more tasks. */
-  task_pool.cancel();
-
   /* Make CUDA context current. */
   const CUDAContextScope scope(this);
 
   sbt_data.free();
   texture_info.free();
   launch_params.free();
-  denoiser_state.free();
 
   /* Unload modules. */
   if (optix_module != NULL) {
@@ -191,11 +173,6 @@ OptiXDevice::~OptiXDevice()
     }
   }
 
-  /* Destroy launch streams. */
-  for (CUstream stream : cuda_stream)
-    cuStreamDestroy(stream);
-#  endif
-
   optixDeviceContextDestroy(context);
 }
 
@@ -203,14 +180,6 @@ unique_ptr<DeviceQueue> OptiXDevice::gpu_queue_create()
 {
   return make_unique<OptiXDeviceQueue>(this);
 }
-
-#  if 0
-bool OptiXDevice::show_samples() const
-{
-  /* Only show samples if not rendering multiple tiles in parallel. */
-  return info.cpu_threads == 1;
-}
-#  endif
 
 BVHLayoutMask OptiXDevice::get_bvh_layout_mask() const
 {
@@ -630,155 +599,6 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   return true;
 }
 
-#  if 0
-void OptiXDevice::thread_run(DeviceTask &task, int thread_index) /* Main task entry point. */
-{
-  if (have_error()) {
-    /* Abort early if there was an error previously. */
-    return;
-  }
-
-  if (task.type == DeviceTask::RENDER) {
-    if (thread_index != 0) {
-      /* Only execute denoising in a single thread (see also 'task_add'). */
-      task.tile_types &= ~RenderTile::DENOISE;
-    }
-
-    RenderTile tile;
-    while (task.acquire_tile(this, tile, task.tile_types)) {
-      if (tile.task == RenderTile::PATH_TRACE)
-        launch_render(task, tile, thread_index);
-      else if (tile.task == RenderTile::BAKE) {
-        /* Perform baking using CUDA, since it is not currently implemented in OptiX. */
-        device_vector<KernelWorkTile> work_tiles(this, "work_tiles", MEM_READ_ONLY);
-        CUDADevice::render(task, tile, work_tiles);
-      }
-      else if (tile.task == RenderTile::DENOISE)
-        launch_denoise(task, tile);
-      task.release_tile(tile);
-      if (task.get_cancel() && !task.need_finish_queue)
-        break; /* User requested cancellation. */
-      else if (have_error())
-        break; /* Abort rendering when encountering an error. */
-    }
-  }
-  else if (task.type == DeviceTask::DENOISE_BUFFER) {
-    /* Set up a single tile that covers the whole task and denoise it. */
-    RenderTile tile;
-    tile.x = task.x;
-    tile.y = task.y;
-    tile.w = task.w;
-    tile.h = task.h;
-    tile.buffer = task.buffer;
-    tile.num_samples = task.num_samples;
-    tile.start_sample = task.sample;
-    tile.offset = task.offset;
-    tile.stride = task.stride;
-    tile.buffers = task.buffers;
-
-    launch_denoise(task, tile);
-  }
-}
-#  endif
-
-#  if 0
-void OptiXDevice::launch_render(DeviceTask &task, RenderTile &rtile, int thread_index)
-{
-  assert(thread_index < launch_params.data_size);
-
-  /* Keep track of total render time of this tile. */
-  const scoped_timer timer(&rtile.buffers->render_time);
-
-  KernelWorkTile wtile;
-  wtile.x = rtile.x;
-  wtile.y = rtile.y;
-  wtile.w = rtile.w;
-  wtile.h = rtile.h;
-  wtile.offset = rtile.offset;
-  wtile.stride = rtile.stride;
-  wtile.buffer = (float *)rtile.buffer;
-
-  const int end_sample = rtile.start_sample + rtile.num_samples;
-  /* Keep this number reasonable to avoid running into TDRs. */
-  int step_samples = (info.display_device ? 8 : 32);
-
-  /* Offset into launch params buffer so that streams use separate data. */
-  device_ptr launch_params_ptr = launch_params.device_pointer +
-                                 thread_index * launch_params.data_elements;
-
-  const CUDAContextScope scope(this);
-
-  for (int sample = rtile.start_sample; sample < end_sample;) {
-    /* Copy work tile information to device. */
-    wtile.start_sample = sample;
-    wtile.num_samples = step_samples;
-    if (task.adaptive_sampling.use) {
-      wtile.num_samples = task.adaptive_sampling.align_samples(sample, step_samples);
-    }
-    wtile.num_samples = min(wtile.num_samples, end_sample - sample);
-    device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
-    check_result_cuda(
-        cuMemcpyHtoDAsync(d_wtile_ptr, &wtile, sizeof(wtile), cuda_stream[thread_index]));
-
-    OptixShaderBindingTable sbt_params = {};
-    sbt_params.raygenRecord = sbt_data.device_pointer + PG_RGEN * sizeof(SbtRecord);
-    sbt_params.missRecordBase = sbt_data.device_pointer + PG_MISS * sizeof(SbtRecord);
-    sbt_params.missRecordStrideInBytes = sizeof(SbtRecord);
-    sbt_params.missRecordCount = 1;
-    sbt_params.hitgroupRecordBase = sbt_data.device_pointer + PG_HITD * sizeof(SbtRecord);
-    sbt_params.hitgroupRecordStrideInBytes = sizeof(SbtRecord);
-#    if OPTIX_ABI_VERSION >= 36
-    sbt_params.hitgroupRecordCount = 5; /* PG_HITD(_MOTION), PG_HITS(_MOTION), PG_HITL */
-#    else
-    sbt_params.hitgroupRecordCount = 3; /* PG_HITD, PG_HITS, PG_HITL */
-#    endif
-    sbt_params.callablesRecordBase = sbt_data.device_pointer + PG_CALL * sizeof(SbtRecord);
-    sbt_params.callablesRecordCount = 3;
-    sbt_params.callablesRecordStrideInBytes = sizeof(SbtRecord);
-
-    /* Launch the ray generation program. */
-    check_result_optix(
-        optixLaunch(pipelines[PIP_PATH_TRACE],
-                    cuda_stream[thread_index],
-                    launch_params_ptr,
-                    launch_params.data_elements,
-                    &sbt_params,
-                    /* Launch with samples close to each other for better locality. */
-                    wtile.w * wtile.num_samples,
-                    wtile.h,
-                    1));
-
-    /* Run the adaptive sampling kernels at selected samples aligned to step samples. */
-    uint filter_sample = wtile.start_sample + wtile.num_samples - 1;
-    if (task.adaptive_sampling.use && task.adaptive_sampling.need_filter(filter_sample)) {
-      adaptive_sampling_filter(filter_sample, &wtile, d_wtile_ptr, cuda_stream[thread_index]);
-    }
-
-    /* Wait for launch to finish. */
-    check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    /* Update current sample, so it is displayed correctly. */
-    sample += wtile.num_samples;
-    rtile.sample = sample;
-    /* Update task progress after the kernel completed rendering. */
-    task.update_progress(&rtile, wtile.w * wtile.h * wtile.num_samples);
-
-    if (task.get_cancel() && !task.need_finish_queue) {
-      /* Cancel rendering. */
-      return;
-    }
-  }
-
-  /* Finalize adaptive sampling. */
-  if (task.adaptive_sampling.use) {
-    device_ptr d_wtile_ptr = launch_params_ptr + offsetof(KernelParams, tile);
-    adaptive_sampling_post(rtile, &wtile, d_wtile_ptr, cuda_stream[thread_index]);
-    check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
-    task.update_progress(&rtile, rtile.w * rtile.h * wtile.num_samples);
-  }
-}
-#  endif
-
 /* --------------------------------------------------------------------
  * Buffer denoising.
  */
@@ -1036,67 +856,6 @@ bool OptiXDevice::denoise_run(const DeviceDenoiseTask &task, const device_ptr d_
 
   return true;
 }
-
-#  if 0
-void OptiXDevice::launch_shader_eval(DeviceTask &task, int thread_index)
-{
-  unsigned int rgen_index = PG_BACK;
-  if (task.shader_eval_type >= SHADER_EVAL_BAKE)
-    rgen_index = PG_BAKE;
-  if (task.shader_eval_type == SHADER_EVAL_DISPLACE)
-    rgen_index = PG_DISP;
-
-  const CUDAContextScope scope(this);
-
-  device_ptr launch_params_ptr = launch_params.device_pointer +
-                                 thread_index * launch_params.data_elements;
-
-  for (int sample = 0; sample < task.num_samples; ++sample) {
-    ShaderParams params;
-    params.input = (uint4 *)task.shader_input;
-    params.output = (float4 *)task.shader_output;
-    params.type = task.shader_eval_type;
-    params.filter = task.shader_filter;
-    params.sx = task.shader_x;
-    params.offset = task.offset;
-    params.sample = sample;
-
-    check_result_cuda(cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, shader),
-                                        &params,
-                                        sizeof(params),
-                                        cuda_stream[thread_index]));
-
-    OptixShaderBindingTable sbt_params = {};
-    sbt_params.raygenRecord = sbt_data.device_pointer + rgen_index * sizeof(SbtRecord);
-    sbt_params.missRecordBase = sbt_data.device_pointer + PG_MISS * sizeof(SbtRecord);
-    sbt_params.missRecordStrideInBytes = sizeof(SbtRecord);
-    sbt_params.missRecordCount = 1;
-    sbt_params.hitgroupRecordBase = sbt_data.device_pointer + PG_HITD * sizeof(SbtRecord);
-    sbt_params.hitgroupRecordStrideInBytes = sizeof(SbtRecord);
-#    if OPTIX_ABI_VERSION >= 36
-    sbt_params.hitgroupRecordCount = 5; /* PG_HITD(_MOTION), PG_HITS(_MOTION), PG_HITL */
-#    else
-    sbt_params.hitgroupRecordCount = 3; /* PG_HITD, PG_HITS, PG_HITL */
-#    endif
-    sbt_params.callablesRecordBase = sbt_data.device_pointer + PG_CALL * sizeof(SbtRecord);
-    sbt_params.callablesRecordCount = 3;
-    sbt_params.callablesRecordStrideInBytes = sizeof(SbtRecord);
-
-    check_result_optix(optixLaunch(pipelines[PIP_SHADER_EVAL],
-                                   cuda_stream[thread_index],
-                                   launch_params_ptr,
-                                   launch_params.data_elements,
-                                   &sbt_params,
-                                   task.shader_w,
-                                   1,
-                                   1));
-
-    check_result_cuda(cuStreamSynchronize(cuda_stream[thread_index]));
-
-    task.update_progress(NULL);
-  }
-}
-#  endif
 
 bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
                                   OptixBuildOperation operation,
@@ -1723,6 +1482,6 @@ void OptiXDevice::update_launch_params(size_t offset, void *data, size_t data_si
   }
 }
 
-#endif /* WITH_OPTIX */
-
 CCL_NAMESPACE_END
+
+#endif /* WITH_OPTIX */

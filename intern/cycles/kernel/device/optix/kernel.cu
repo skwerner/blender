@@ -95,36 +95,6 @@ extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_subsurfac
   integrator_intersect_subsurface(&kg, path_index);
 }
 
-#ifdef __BAKING__
-extern "C" __global__ void __raygen__kernel_optix_bake()
-{
-  KernelGlobals kg;
-  const ShaderParams &p = __params.shader;
-  kernel_bake_evaluate(&kg,
-                       p.input,
-                       p.output,
-                       (ShaderEvalType)p.type,
-                       p.filter,
-                       p.sx + optixGetLaunchIndex().x,
-                       p.offset,
-                       p.sample);
-}
-#endif
-
-extern "C" __global__ void __raygen__kernel_optix_displace()
-{
-  KernelGlobals kg;
-  const ShaderParams &p = __params.shader;
-  kernel_displace_evaluate(&kg, p.input, p.output, p.sx + optixGetLaunchIndex().x);
-}
-
-extern "C" __global__ void __raygen__kernel_optix_background()
-{
-  KernelGlobals kg;
-  const ShaderParams &p = __params.shader;
-  kernel_background_evaluate(&kg, p.input, p.output, p.sx + optixGetLaunchIndex().x);
-}
-
 extern "C" __global__ void __miss__kernel_optix_miss()
 {
   // 'kernel_path_lamp_emission' checks intersection distance, so need to set it even on a miss

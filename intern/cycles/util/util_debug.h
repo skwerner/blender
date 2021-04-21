@@ -100,9 +100,6 @@ class DebugFlags {
     /* Reset flags to their defaults. */
     void reset();
 
-    /* Number of CUDA streams to launch kernels concurrently from. */
-    int cuda_streams;
-
     /* Use OptiX curves API for hair instead of custom implementation. */
     bool curves_api;
   };

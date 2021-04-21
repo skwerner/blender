@@ -100,7 +100,7 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
   launch_params.data_elements = sizeof(KernelParams);
 
   /* Allocate launch parameter buffer memory on device. */
-  launch_params.alloc_to_device(this->info.cpu_threads);
+  launch_params.alloc_to_device(1);
 }
 
 OptiXDevice::~OptiXDevice()
@@ -1447,10 +1447,7 @@ void OptiXDevice::update_launch_params(size_t offset, void *data, size_t data_si
 {
   const CUDAContextScope scope(this);
 
-  for (int i = 0; i < info.cpu_threads; ++i) {
-    cuda_assert(cuMemcpyHtoD(
-        launch_params.device_pointer + i * launch_params.data_elements + offset, data, data_size));
-  }
+  cuda_assert(cuMemcpyHtoD(launch_params.device_pointer + offset, data, data_size));
 }
 
 CCL_NAMESPACE_END

@@ -211,23 +211,13 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
   }
 #  endif
 
-#  ifdef __TRANSPARENT_SHADOWS__
-  // Detect if this surface has a shader with transparent shadows
-  if (!shader_transparent_shadow(NULL, isect)) {
-#  endif
-    // This is an opaque hit or the hit limit has been reached, abort traversal
-    optixSetPayload_5(true);
-    return optixTerminateRay();
-#  ifdef __TRANSPARENT_SHADOWS__
-  }
-
   float u = 0.0f, v = 0.0f;
   if (optixIsTriangleHit()) {
     const float2 barycentrics = optixGetTriangleBarycentrics();
     u = 1.0f - barycentrics.y - barycentrics.x;
     v = barycentrics.x;
   }
-#    ifdef __HAIR__
+#  ifdef __HAIR__
   else {
     u = __uint_as_float(optixGetAttribute_0());
     v = __uint_as_float(optixGetAttribute_1());
@@ -237,21 +227,38 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
       return optixIgnoreIntersection();
     }
   }
-#    endif
+#  endif
 
-#    ifdef __TRANSPARENT_SHADOWS__
-  // Detect if this surface has a shader with transparent shadows
-  if (!shader_transparent_shadow(NULL, isect) ||
-      (optixGetPayload_2() + 1) >= optixGetPayload_3()) {
-#    endif
-    // This is an opaque hit or the hit limit has been reached, abort traversal
-    optixSetPayload_5(true);
-    return optixTerminateRay();
-#    ifdef __TRANSPARENT_SHADOWS__
+  int record_index = optixGetPayload_2();
+  const int num_hits = record_index + 1;
+  optixSetPayload_2(num_hits);
+  const int max_hits = optixGetPayload_3();
+
+#  ifdef __TRANSPARENT_SHADOWS__
+  if (num_hits >= max_hits) {
+    /* If maximum number of hits reached, find a hit to replace. */
+    const int num_recorded_hits = min(max_hits, num_hits);
+    Intersection *const isect_array = get_payload_ptr_0<Intersection>();
+    float max_recorded_t = isect_array[0].t;
+    int max_recorded_hit = 0;
+
+    for (int i = 1; i < num_recorded_hits; i++) {
+      if (isect_array[i].t > max_recorded_t) {
+        max_recorded_t = isect_array[i].t;
+        max_recorded_hit = i;
+      }
+    }
+
+    if (optixGetRayTmax() >= max_recorded_t) {
+      return optixIgnoreIntersection();
+    }
+
+    record_index = max_recorded_hit;
   }
 
   /* TODO: is there a way to shorten the ray length when max_hits is reached, so Optix
    * can discard triangles beyond it? */
+#  endif
 
   // Offset into array with num_hits
   Intersection *const isect = get_payload_ptr_0<Intersection>() + record_index;
@@ -262,23 +269,33 @@ extern "C" __global__ void __anyhit__kernel_optix_shadow_all_hit()
   isect->object = get_object_id();
   isect->type = kernel_tex_fetch(__prim_type, prim);
 
+#  ifdef __TRANSPARENT_SHADOWS__
+  // Detect if this surface has a shader with transparent shadows
+  if (!shader_transparent_shadow(NULL, isect)) {
+#  endif
+    // This is an opaque hit or the hit limit has been reached, abort traversal
+    optixSetPayload_5(true);
+    return optixTerminateRay();
+#  ifdef __TRANSPARENT_SHADOWS__
+  }
+
   // Continue tracing
   optixIgnoreIntersection();
-#    endif
 #  endif
+#endif
 }
 
 extern "C" __global__ void __anyhit__kernel_optix_visibility_test()
 {
   uint visibility = optixGetPayload_4();
-#  ifdef __VISIBILITY_FLAG__
+#ifdef __VISIBILITY_FLAG__
   const uint prim = optixGetPrimitiveIndex();
   if ((kernel_tex_fetch(__prim_visibility, prim) & visibility) == 0) {
     return optixIgnoreIntersection();
   }
-#  endif
+#endif
 
-#  ifdef __HAIR__
+#ifdef __HAIR__
   if (!optixIsTriangleHit()) {
     // Filter out curve endcaps
     const float u = __uint_as_float(optixGetAttribute_0());
@@ -286,7 +303,7 @@ extern "C" __global__ void __anyhit__kernel_optix_visibility_test()
       return optixIgnoreIntersection();
     }
   }
-#  endif
+#endif
 
   // Shadow ray early termination
   if (visibility & PATH_RAY_SHADOW_OPAQUE) {
@@ -313,7 +330,7 @@ extern "C" __global__ void __closesthit__kernel_optix_hit()
   }
 }
 
-#  ifdef __HAIR__
+#ifdef __HAIR__
 ccl_device_inline void optix_intersection_curve(const uint prim, const uint type)
 {
   const uint object = get_object_id<true>();
@@ -326,11 +343,11 @@ ccl_device_inline void optix_intersection_curve(const uint prim, const uint type
   float len;
   dir = normalize_len(dir, &len);
 
-#    ifdef __OBJECT_MOTION__
+#  ifdef __OBJECT_MOTION__
   const float time = optixGetRayTime();
-#    else
+#  else
   const float time = 0.0f;
-#    endif
+#  endif
 
   Intersection isect;
   isect.t = optixGetRayTmax();
@@ -362,4 +379,4 @@ extern "C" __global__ void __intersection__curve_all()
   const uint type = kernel_tex_fetch(__prim_type, prim);
   optix_intersection_curve(prim, type);
 }
-#  endif
+#endif

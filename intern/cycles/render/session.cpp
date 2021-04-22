@@ -437,6 +437,8 @@ bool Session::update_scene(int width, int height)
 
   cam->set_screen_size(width, height);
 
+  path_trace_->load_kernels();
+
   if (scene->update(progress)) {
     return true;
   }

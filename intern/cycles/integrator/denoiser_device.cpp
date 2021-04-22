@@ -21,6 +21,7 @@
 #include "device/device_memory.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
+#include "util/util_progress.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -34,11 +35,16 @@ DeviceDenoiser::~DeviceDenoiser()
   /* Explicit implementation, to allow forward declaration of Device in the header. */
 }
 
+void DeviceDenoiser::load_kernels(Progress *progress)
+{
+  get_denoiser_device(progress);
+}
+
 void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                     RenderBuffers *render_buffers,
                                     const int num_samples)
 {
-  Device *denoiser_device = get_denoiser_device();
+  Device *denoiser_device = get_denoiser_device(nullptr);
 
   if (!denoiser_device) {
     device_->set_error("No device available to denoise on");
@@ -81,7 +87,7 @@ static Device *find_best_device(Device *device, DenoiserType type)
   return best_device;
 }
 
-Device *DeviceDenoiser::get_denoiser_device()
+Device *DeviceDenoiser::get_denoiser_device(Progress *progress)
 {
   /* The best device has been found already, avoid sequential lookups. */
   if (denoiser_device_ || device_creation_attempted_) {
@@ -98,6 +104,10 @@ Device *DeviceDenoiser::get_denoiser_device()
   denoiser_device_ = find_best_device(device_, params_.type);
   if (denoiser_device_) {
     return denoiser_device_;
+  }
+
+  if (progress) {
+    progress->set_status("Loading denoising kernels (may take a few minutes the first time)");
   }
 
   denoiser_device_ = create_denoiser_device();

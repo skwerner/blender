@@ -32,6 +32,8 @@ class OIDNDenoiser : public Denoiser {
   OIDNDenoiser(Device *device, const DenoiseParams &params);
   ~OIDNDenoiser();
 
+  virtual void load_kernels(Progress *progress) override;
+
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) override;

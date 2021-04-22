@@ -55,6 +55,13 @@ PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler 
   });
 }
 
+void PathTrace::load_kernels()
+{
+  if (denoiser_) {
+    denoiser_->load_kernels(progress_);
+  }
+}
+
 bool PathTrace::ready_to_reset()
 {
   /* The logic here is optimized for the best feedback in the viewport, which implies having a GPU

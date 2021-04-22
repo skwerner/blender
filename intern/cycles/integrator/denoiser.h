@@ -27,6 +27,7 @@ CCL_NAMESPACE_BEGIN
 class BufferParams;
 class Device;
 class RenderBuffers;
+class Progress;
 
 /* Implementation of a specific denoising algorithm.
  *
@@ -47,6 +48,12 @@ class Denoiser {
    *   This is checked in debug builds.
    * - The device might be MultiDevice. */
   static unique_ptr<Denoiser> create(Device *device, const DenoiseParams &params);
+
+  /* Create devices and load kernels needed for denoising.
+   * The progress is used to communicate state when kenrels actually needs to be loaded.
+   *
+   * NOTE: The `progress` is an optional argument, can be nullptr. */
+  virtual void load_kernels(Progress *progress) = 0;
 
   /* Denoise the entire buffer.
    *

@@ -49,6 +49,10 @@ class PathTrace {
    * sample. */
   PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler);
 
+  /* Create devices and load kernels which are created on-demand (for example, denoising devices).
+   * The progress is reported to the currently configure progress object (via `set_progress`). */
+  void load_kernels();
+
   /* Check whether now it is a good time to reset rendering.
    * Used to avoid very often resets in the viewport, giving it a chance to draw intermediate
    * render result. */

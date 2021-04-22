@@ -31,6 +31,8 @@ class DeviceDenoiser : public Denoiser {
   DeviceDenoiser(Device *device, const DenoiseParams &params);
   ~DeviceDenoiser();
 
+  virtual void load_kernels(Progress *progress) override;
+
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) override;
@@ -39,7 +41,7 @@ class DeviceDenoiser : public Denoiser {
   /* Get device on which denoising is to happen.
    * Will either use one of the devices used for rendering, or create a dedicated device if needed.
    */
-  Device *get_denoiser_device();
+  Device *get_denoiser_device(Progress *progress);
 
   /* Create denoiser device which is owned by this denoiser.
    * Used in the cases when none of the devices used for rendering supports requetsed denoiser

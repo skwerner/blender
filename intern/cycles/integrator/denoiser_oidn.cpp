@@ -61,6 +61,10 @@ OIDNDenoiser::~OIDNDenoiser()
    * per the OIDN denoiser header. */
 }
 
+void OIDNDenoiser::load_kernels(Progress * /*progress*/)
+{
+}
+
 #ifdef WITH_OPENIMAGEDENOISE
 struct OIDNPass {
   /* Name of an image which will be passed to the OIDN library.

@@ -32,6 +32,7 @@ RenderScheduler::RenderScheduler(bool headless, bool background, int pixel_size)
       pixel_size_(pixel_size),
       default_start_resolution_divider_(pixel_size * 8)
 {
+  use_progressive_noise_floor_ = !background_;
 }
 
 bool RenderScheduler::is_background() const
@@ -104,6 +105,10 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.last_display_update_time = 0.0;
   state_.last_display_update_sample = -1;
 
+  /* TODO(sergey): Choose better initial value. */
+  /* NOTE: The adaptive sampling settings might not be available here yet. */
+  state_.adaptive_sampling_threshold = 0.4f;
+
   state_.path_trace_finished = false;
 
   first_render_time_.path_trace_per_sample = 0.0;
@@ -116,10 +121,16 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   display_update_time_.reset();
 }
 
-void RenderScheduler::set_path_trace_finished(RenderWork &render_work)
+bool RenderScheduler::render_work_reschedule_on_converge(RenderWork &render_work)
 {
+  /* Move to the next resolution divider. Assume adaptive filtering is not needed during
+   * navigation. */
   if (state_.resolution_divider != pixel_size_) {
-    return;
+    return false;
+  }
+
+  if (render_work_reschedule_on_idle(render_work)) {
+    return true;
   }
 
   state_.path_trace_finished = true;
@@ -128,6 +139,35 @@ void RenderScheduler::set_path_trace_finished(RenderWork &render_work)
   render_work.denoise = work_need_denoise(denoiser_delayed);
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
+
+  return false;
+}
+
+bool RenderScheduler::render_work_reschedule_on_idle(RenderWork &render_work)
+{
+  if (!use_progressive_noise_floor_) {
+    return false;
+  }
+
+  /* Move to the next resolution divider. Assume adaptive filtering is not needed during
+   * navigation. */
+  if (state_.resolution_divider != pixel_size_) {
+    return false;
+  }
+
+  if (adaptive_sampling_.use) {
+    if (state_.adaptive_sampling_threshold > adaptive_sampling_.threshold) {
+      state_.adaptive_sampling_threshold = max(state_.adaptive_sampling_threshold / 2,
+                                               adaptive_sampling_.threshold);
+
+      render_work.adaptive_sampling.threshold = state_.adaptive_sampling_threshold;
+      render_work.adaptive_sampling.reset = true;
+
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool RenderScheduler::done() const
@@ -167,7 +207,7 @@ RenderWork RenderScheduler::get_render_work()
   state_.num_rendered_samples += render_work.path_trace.num_samples;
 
   render_work.adaptive_sampling.filter = work_need_adaptive_filter();
-  render_work.adaptive_sampling.threshold = adaptive_sampling_.threshold;
+  render_work.adaptive_sampling.threshold = work_adaptive_threshold();
   render_work.adaptive_sampling.reset = false;
 
   bool denoiser_delayed;
@@ -508,6 +548,15 @@ bool RenderScheduler::work_need_adaptive_filter() const
   return adaptive_sampling_.need_filter(get_rendered_sample());
 }
 
+float RenderScheduler::work_adaptive_threshold() const
+{
+  if (!use_progressive_noise_floor_) {
+    return adaptive_sampling_.threshold;
+  }
+
+  return max(state_.adaptive_sampling_threshold, adaptive_sampling_.threshold);
+}
+
 bool RenderScheduler::work_need_denoise(bool &delayed)
 {
   delayed = false;
@@ -581,6 +630,14 @@ bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
      */
     return true;
   }
+
+  /* For the development purposes of adaptive sampling it might be very useful to see all updates
+   * of active pixels after convergence check. However, it would cause a slowdown for regular usage
+   * users. Possibly, make it a debug panel option to allow rapid update to ease development
+   * without need to re-compiled. */
+  // if (work_need_adaptive_filter()) {
+  //   return true;
+  // }
 
   /* When adaptive sampling is used, its possible that only handful of samples of a very simple
    * scene will be scheduled to a powerful device (in order to not "miss" any of filtering points).

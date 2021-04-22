@@ -98,9 +98,18 @@ class RenderScheduler {
    * Resets current rendered state, as well as scheduling information. */
   void reset(const BufferParams &buffer_params, int num_samples);
 
-  /* Indicate that path tracing has finished (due to adaptive sampling convergency). Only remaining
-   * tasks like denoising will be scheduled after this. */
-  void set_path_trace_finished(RenderWork &render_work);
+  /* Reschedule adaptive sampling work when all pixels did converge.
+   * If there is nothing else to be done for the adaptive sampling (pixels did converge to the
+   * final threshold) then false is returned and the render scheduler will stop scheduling path
+   * tracing works. Otherwise will modify the work's adaptive sampling settings to continue with
+   * a lower threshold. */
+  bool render_work_reschedule_on_converge(RenderWork &render_work);
+
+  /* Reschedule adaptive sampling work when the device is mostly on idle, but not all pixels yet
+   * converged.
+   * If re-scheduling is not possible (adaptive sampling is happening with the final threshold, and
+   * the path tracer is to finish the current pixels) then false is returned. */
+  bool render_work_reschedule_on_idle(RenderWork &render_work);
 
   /* Check whether all work has been scheduled. */
   bool done() const;
@@ -150,6 +159,9 @@ class RenderScheduler {
 
   /* Whether adaptive sampling convergence check and filter is to happen. */
   bool work_need_adaptive_filter() const;
+
+  /* Calculate thretshold for adaptive sampling. */
+  float work_adaptive_threshold() const;
 
   /* Check whether current work needs denoising.
    * Denoising is not needed if the denoiser is not configured, or when denosiing is happening too
@@ -227,6 +239,10 @@ class RenderScheduler {
     /* Value of -1 means display was never updated. */
     int last_display_update_sample = -1;
 
+    /* Threshold for adaptive sampling which will be scheduled to work when not using progressive
+     * noise floor. */
+    float adaptive_sampling_threshold = 0.0f;
+
     bool path_trace_finished = false;
   } state_;
 
@@ -261,7 +277,12 @@ class RenderScheduler {
 
   BufferParams buffer_params_;
   DenoiseParams denoiser_params_;
+
   AdaptiveSampling adaptive_sampling_;
+
+  /* Progressively lower adaptive sampling threshold level, keeping the image at a uniform noise
+   * level. */
+  bool use_progressive_noise_floor_ = false;
 
   /* Default value for the resolution divider which will be used when there is no render time
    * information available yet.

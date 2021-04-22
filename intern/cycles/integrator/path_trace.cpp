@@ -196,29 +196,56 @@ void PathTrace::adaptive_sample(RenderWork &render_work)
     return;
   }
 
-  const double start_time = time_dt();
+  bool did_reschedule_on_idle = false;
 
-  bool all_pixels_converged = true;
-
-  VLOG(3) << "Will filter adaptive stopping buffer, threshold "
-          << render_work.adaptive_sampling.threshold;
-  if (render_work.adaptive_sampling.reset) {
-    VLOG(3) << "Will re-calculate convergency flag for currently converged pixels.";
-  }
-
-  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
-    if (path_trace_work->adaptive_sampling_converge_filter_count_active(
-            render_work.adaptive_sampling.threshold, render_work.adaptive_sampling.reset)) {
-      all_pixels_converged = false;
+  while (true) {
+    VLOG(3) << "Will filter adaptive stopping buffer, threshold "
+            << render_work.adaptive_sampling.threshold;
+    if (render_work.adaptive_sampling.reset) {
+      VLOG(3) << "Will re-calculate convergency flag for currently converged pixels.";
     }
-  });
 
-  render_scheduler_.report_adaptive_filter_time(
-      render_work, time_dt() - start_time, is_cancel_requested());
+    const double start_time = time_dt();
 
-  if (all_pixels_converged) {
-    VLOG(3) << "All pixels converged.";
-    render_scheduler_.set_path_trace_finished(render_work);
+    uint num_active_pixels = 0;
+    tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+      const uint num_active_pixels_in_work =
+          path_trace_work->adaptive_sampling_converge_filter_count_active(
+              render_work.adaptive_sampling.threshold, render_work.adaptive_sampling.reset);
+      if (num_active_pixels_in_work) {
+        atomic_add_and_fetch_u(&num_active_pixels, num_active_pixels_in_work);
+      }
+    });
+
+    render_scheduler_.report_adaptive_filter_time(
+        render_work, time_dt() - start_time, is_cancel_requested());
+
+    if (num_active_pixels == 0) {
+      VLOG(3) << "All pixels converged.";
+      if (!render_scheduler_.render_work_reschedule_on_converge(render_work)) {
+        break;
+      }
+      VLOG(3) << "Continuing with lower threshold.";
+    }
+    else if (did_reschedule_on_idle) {
+      break;
+    }
+    else if (num_active_pixels < 128 * 128) {
+      /* NOTE: The hardcoded value of 128^2 is more of an empirical value to keep GPU busy so that
+       * there is no performance loss from the progressive noise floor feature.
+       *
+       * A better heuristic is possible here: for example, use maximum of 128^2 and percentage of
+       * the final resolution. */
+      if (!render_scheduler_.render_work_reschedule_on_idle(render_work)) {
+        VLOG(3) << "Rescheduling is not possible: final threshold is reached.";
+        break;
+      }
+      VLOG(3) << "Rescheduling lower threshold.";
+      did_reschedule_on_idle = true;
+    }
+    else {
+      break;
+    }
   }
 }
 

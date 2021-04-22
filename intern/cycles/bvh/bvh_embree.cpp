@@ -347,7 +347,7 @@ void BVHEmbree::build(Progress &progress, Stats *stats, RTCDevice rtc_device_)
     scene = NULL;
   }
 
-  const bool dynamic = params.bvh_type == SceneParams::BVH_DYNAMIC;
+  const bool dynamic = params.bvh_type == BVH_TYPE_DYNAMIC;
 
   scene = rtcNewScene(rtc_device);
   const RTCSceneFlags scene_flags = (dynamic ? RTC_SCENE_FLAG_DYNAMIC : RTC_SCENE_FLAG_NONE) |

@@ -142,27 +142,6 @@ class DeviceScene {
 
 class SceneParams {
  public:
-  /* Type of BVH, in terms whether it is supported dynamic updates of meshes
-   * or whether modifying geometry requires full BVH rebuild.
-   */
-  enum BVHType {
-    /* BVH supports dynamic updates of geometry.
-     *
-     * Faster for updating BVH tree when doing modifications in viewport,
-     * but slower for rendering.
-     */
-    BVH_DYNAMIC = 0,
-    /* BVH tree is calculated for specific scene, updates in geometry
-     * requires full tree rebuild.
-     *
-     * Slower to update BVH tree when modifying objects in viewport, also
-     * slower to build final BVH tree but gives best possible render speed.
-     */
-    BVH_STATIC = 1,
-
-    BVH_NUM_TYPES,
-  };
-
   ShadingSystem shadingsystem;
 
   /* Requested BVH layout.
@@ -186,7 +165,7 @@ class SceneParams {
   {
     shadingsystem = SHADINGSYSTEM_SVM;
     bvh_layout = BVH_LAYOUT_BVH2;
-    bvh_type = BVH_DYNAMIC;
+    bvh_type = BVH_TYPE_DYNAMIC;
     use_bvh_spatial_split = false;
     use_bvh_unaligned_nodes = true;
     num_bvh_time_steps = 0;

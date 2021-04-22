@@ -670,7 +670,7 @@ void ObjectManager::device_update(Device *device,
 
   /* prepare for static BVH building */
   /* todo: do before to support getting object level coords? */
-  if (scene->params.bvh_type == SceneParams::BVH_STATIC) {
+  if (scene->params.bvh_type == BVH_TYPE_STATIC) {
     scoped_callback_timer timer([scene](double time) {
       if (scene->update_stats) {
         scene->update_stats->object.times.add_entry(

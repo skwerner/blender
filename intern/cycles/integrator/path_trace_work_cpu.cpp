@@ -23,6 +23,7 @@
 #include "render/gpu_display.h"
 #include "render/scene.h"
 
+#include "util/util_atomic.h"
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
 
@@ -168,7 +169,7 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   gpu_display->unmap_texture_buffer();
 }
 
-bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(float threshold, bool reset)
+int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)
 {
   const int full_x = effective_buffer_params_.full_x;
   const int full_y = effective_buffer_params_.full_y;
@@ -179,7 +180,7 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(float threshold, bo
 
   float *render_buffer = render_buffers_->buffer.data();
 
-  bool all_pixels_converged = true;
+  uint num_active_pixels = 0;
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
 
@@ -189,20 +190,25 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(float threshold, bo
       CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
 
       bool row_converged = true;
+      uint num_row_pixels_active = 0;
       for (int x = 0; x < width; ++x) {
-        row_converged &= kernels_.adaptive_sampling_convergence_check(
-            kernel_globals, render_buffer, full_x + x, y, threshold, reset, offset, stride);
+        if (!kernels_.adaptive_sampling_convergence_check(
+                kernel_globals, render_buffer, full_x + x, y, threshold, reset, offset, stride)) {
+          ++num_row_pixels_active;
+          row_converged = false;
+        }
       }
+
+      atomic_fetch_and_add_uint32(&num_active_pixels, num_row_pixels_active);
 
       if (!row_converged) {
         kernels_.adaptive_sampling_filter_x(
             kernel_globals, render_buffer, y, full_x, width, offset, stride);
-        all_pixels_converged = false;
       }
     });
   });
 
-  if (!all_pixels_converged) {
+  if (num_active_pixels) {
     local_arena.execute([&]() {
       tbb::parallel_for(full_x, full_x + width, [&](int x) {
         CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
@@ -212,7 +218,7 @@ bool PathTraceWorkCPU::adaptive_sampling_converge_and_filter(float threshold, bo
     });
   }
 
-  return all_pixels_converged;
+  return num_active_pixels;
 }
 
 CCL_NAMESPACE_END

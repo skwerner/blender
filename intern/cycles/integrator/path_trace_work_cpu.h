@@ -50,7 +50,7 @@ class PathTraceWorkCPU : public PathTraceWork {
 
   virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) override;
 
-  virtual bool adaptive_sampling_converge_and_filter(float threshold, bool reset) override;
+  virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) override;
 
  protected:
   /* Core path tracing routine. Renders given work time on the given queue. */

@@ -309,7 +309,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                                     bool reset,
                                                     int offset,
                                                     int stride,
-                                                    int *all_pixels_converged)
+                                                    uint *num_active_pixels)
 {
   const int work_index = ccl_global_id(0);
   const int y = work_index / sw;
@@ -323,10 +323,9 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   }
 
   /* NOTE: All threads specified in the mask must execute the intrinsic. */
-  if (__any_sync(0xffffffff, !converged)) {
-    if (threadIdx.x == 0) {
-      all_pixels_converged[0] = 0;
-    }
+  const uint num_active_pixels_mask = __ballot_sync(0xffffffff, !converged);
+  if (threadIdx.x == 0) {
+    atomic_fetch_and_add_uint32(num_active_pixels, __popc(num_active_pixels_mask));
   }
 }
 

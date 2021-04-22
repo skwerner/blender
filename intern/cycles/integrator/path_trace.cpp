@@ -207,7 +207,7 @@ void PathTrace::adaptive_sample(RenderWork &render_work)
   }
 
   tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
-    if (!path_trace_work->adaptive_sampling_converge_and_filter(
+    if (path_trace_work->adaptive_sampling_converge_filter_count_active(
             render_work.adaptive_sampling.threshold, render_work.adaptive_sampling.reset)) {
       all_pixels_converged = false;
     }

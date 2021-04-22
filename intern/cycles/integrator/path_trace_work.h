@@ -64,8 +64,8 @@ class PathTraceWork {
   virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) = 0;
 
   /* Perform convergence test on the render buffer, and filter the convergence mask.
-   * Returns true if all pixels did converge. */
-  virtual bool adaptive_sampling_converge_and_filter(float threshold, bool reset) = 0;
+   * Returns number of active pixels (the ones which did not converge yet). */
+  virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) = 0;
 
   /* Cheap-ish request to see whether rendering is requested and is to be stopped as soon as
    * possible, without waiting for any samples to be finished. */

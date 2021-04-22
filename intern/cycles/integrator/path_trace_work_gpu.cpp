@@ -646,26 +646,25 @@ void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, float sample
   queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
 }
 
-bool PathTraceWorkGPU::adaptive_sampling_converge_and_filter(float threshold, bool reset)
+int PathTraceWorkGPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)
 {
-  if (adaptive_sampling_convergence_check(threshold, reset)) {
-    return true;
+  const int num_active_pixels = adaptive_sampling_convergence_check_count_active(threshold, reset);
+
+  if (num_active_pixels) {
+    enqueue_adaptive_sampling_filter_x();
+    enqueue_adaptive_sampling_filter_y();
+    queue_->synchronize();
   }
 
-  enqueue_adaptive_sampling_filter_x();
-  enqueue_adaptive_sampling_filter_y();
-  queue_->synchronize();
-
-  return false;
+  return num_active_pixels;
 }
 
-bool PathTraceWorkGPU::adaptive_sampling_convergence_check(float threshold, bool reset)
+int PathTraceWorkGPU::adaptive_sampling_convergence_check_count_active(float threshold, bool reset)
 {
-  device_vector<int> all_pixels_converged(device_, "all_pixels_converged", MEM_READ_WRITE);
-  all_pixels_converged.alloc(1);
-  all_pixels_converged.data()[0] = 1;
+  device_vector<uint> num_active_pixels(device_, "num_active_pixels", MEM_READ_WRITE);
+  num_active_pixels.alloc(1);
 
-  queue_->copy_to_device(all_pixels_converged);
+  queue_->zero_to_device(num_active_pixels);
 
   const int work_size = effective_buffer_params_.width * effective_buffer_params_.height;
 
@@ -678,14 +677,14 @@ bool PathTraceWorkGPU::adaptive_sampling_convergence_check(float threshold, bool
                   &reset,
                   &effective_buffer_params_.offset,
                   &effective_buffer_params_.stride,
-                  &all_pixels_converged.device_pointer};
+                  &num_active_pixels.device_pointer};
 
   queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK, work_size, args);
 
-  queue_->copy_from_device(all_pixels_converged);
+  queue_->copy_from_device(num_active_pixels);
   queue_->synchronize();
 
-  return all_pixels_converged.data()[0];
+  return num_active_pixels.data()[0];
 }
 
 void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_x()

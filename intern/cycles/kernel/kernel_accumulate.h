@@ -321,17 +321,18 @@ ccl_device_forceinline ccl_global float *kernel_accum_pixel_render_buffer(
  * Adaptive sampling.
  */
 
-ccl_device_inline void kernel_accum_sample(INTEGRATOR_STATE_CONST_ARGS,
-                                           ccl_global float *ccl_restrict render_buffer)
+ccl_device_inline int kernel_accum_sample(INTEGRATOR_STATE_CONST_ARGS,
+                                          ccl_global float *ccl_restrict render_buffer,
+                                          int sample)
 {
   if (kernel_data.film.pass_sample_count == PASS_UNUSED) {
-    return;
+    return sample;
   }
 
   ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
                                                               render_buffer);
 
-  kernel_write_pass_float(buffer + kernel_data.film.pass_sample_count, 1.0f);
+  return (int)atomic_add_and_fetch_float(buffer + kernel_data.film.pass_sample_count, 1.0f) - 1;
 }
 
 ccl_device void kernel_accum_adaptive_buffer(INTEGRATOR_STATE_CONST_ARGS,

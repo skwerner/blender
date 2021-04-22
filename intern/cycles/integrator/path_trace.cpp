@@ -124,10 +124,8 @@ void PathTrace::render(const RenderWork &render_work)
 
 void PathTrace::render_pipeline(RenderWork render_work)
 {
-  /* For the interactive viewport clear the render buffer on first sample, so that changes in
-   * resolution and camera and things ike that get explicitly zeroed. */
-  if (!render_scheduler_.is_background() &&
-      render_work.path_trace.start_sample == render_scheduler_.get_start_sample()) {
+  /* TODO(sergey): For truly resumable render might need to avoid zero-ing. */
+  if (render_work.path_trace.start_sample == render_scheduler_.get_start_sample()) {
     full_render_buffers_->zero();
   }
 

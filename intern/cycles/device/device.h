@@ -166,6 +166,9 @@ class DeviceRequestedFeatures {
   /* Use background lights */
   bool use_background_light;
 
+  /* Use path tracing kernels. */
+  bool use_path_tracing;
+
   DeviceRequestedFeatures()
   {
     /* TODO(sergey): Find more meaningful defaults. */
@@ -186,6 +189,7 @@ class DeviceRequestedFeatures {
     use_shader_raytrace = false;
     use_true_displacement = false;
     use_background_light = false;
+    use_path_tracing = true;
   }
 
   bool modified(const DeviceRequestedFeatures &requested_features)

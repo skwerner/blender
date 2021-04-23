@@ -180,8 +180,10 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     return false;
   }
 
-  /* Baking is currently performed using CUDA, so no need to load OptiX kernels. */
-  if (requested_features.use_baking) {
+  /* Baking is currently performed using CUDA, so no need to load OptiX kernels.
+   * Can also skip creating OptiX module if only doing denoising (no path tracing).
+   */
+  if (requested_features.use_baking || !requested_features.use_path_tracing) {
     return true;
   }
 

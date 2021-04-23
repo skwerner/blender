@@ -146,6 +146,7 @@ Device *DeviceDenoiser::create_denoiser_device()
   /* Only need denoising feature, everything else is unused. */
   DeviceRequestedFeatures denoising_features;
   denoising_features.use_denoising = true;
+  denoising_features.use_path_tracing = false;
   if (!local_denoiser_device_->load_kernels(denoising_features)) {
     return nullptr;
   }

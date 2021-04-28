@@ -213,7 +213,7 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
 
   /* Find kernel to execute, with max number of queued paths. */
   int max_num_queued = 0;
-  DeviceKernel kernel = DEVICE_KERNEL_INTEGRATOR_NUM;
+  DeviceKernel kernel = DEVICE_KERNEL_NUM;
 
   for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
     if (queue_counter->num_queued[i] > max_num_queued) {

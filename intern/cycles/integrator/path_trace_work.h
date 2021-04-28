@@ -76,6 +76,12 @@ class PathTraceWork {
     return *cancel_requested_flag_;
   }
 
+  /* Access to the device which is used to path trace this work on. */
+  Device *get_device() const
+  {
+    return device_;
+  }
+
  protected:
   PathTraceWork(Device *device,
                 DeviceScene *device_scene,

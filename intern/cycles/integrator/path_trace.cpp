@@ -422,4 +422,110 @@ bool PathTrace::get_render_tile_pixels(PassAccessor &pass_accessor, float *pixel
   return pass_accessor.get_render_tile_pixels(full_render_buffers_.get(), pixels);
 }
 
+/* --------------------------------------------------------------------
+ * Report generation.
+ */
+
+/* Construct description of the device which will appear in the full report. */
+/* TODO(sergey): Consider making it more reusable utility. */
+static string full_device_info_description(const DeviceInfo &device_info)
+{
+  string full_description = device_info.description;
+
+  if (device_info.display_device) {
+    full_description += " (display)";
+  }
+
+  if (device_info.type == DEVICE_CPU) {
+    full_description += " (" + to_string(device_info.cpu_threads) + " threads)";
+  }
+
+  full_description += " [" + device_info.id + "]";
+
+  return full_description;
+}
+
+/* Construct string which will contain information about devices, possibly multiple of the devices.
+ *
+ * In the simple case the result looks like:
+ *
+ *   Message: Full Device Description
+ *
+ * If there are multiple devices then the result looks like:
+ *
+ *   Message: Full First Device Description
+ *            Full Second Device Description
+ *
+ * Note that the newlines are placed in a way so that the result can be easily concatenated to the
+ * full report. */
+static string device_info_list_report(const string &message, const DeviceInfo &device_info)
+{
+  string result = "\n" + message + ": ";
+  const string pad(message.length() + 2, ' ');
+
+  if (device_info.multi_devices.empty()) {
+    result += full_device_info_description(device_info) + "\n";
+    return result;
+  }
+
+  bool is_first = true;
+  for (const DeviceInfo &sub_device_info : device_info.multi_devices) {
+    if (!is_first) {
+      result += pad;
+    }
+
+    result += full_device_info_description(sub_device_info) + "\n";
+
+    is_first = false;
+  }
+
+  return result;
+}
+
+static string path_trace_devices_report(const vector<unique_ptr<PathTraceWork>> &path_trace_works)
+{
+  DeviceInfo device_info;
+  device_info.type = DEVICE_MULTI;
+
+  for (auto &&path_trace_work : path_trace_works) {
+    device_info.multi_devices.push_back(path_trace_work->get_device()->info);
+  }
+
+  return device_info_list_report("Path tracing on", device_info);
+}
+
+static string denoiser_device_report(const Denoiser *denoiser)
+{
+  if (!denoiser) {
+    return "";
+  }
+
+  if (!denoiser->get_params().use) {
+    return "";
+  }
+
+  const DeviceInfo device_info = denoiser->get_denoiser_device_info();
+  if (device_info.type == DEVICE_NONE) {
+    return "";
+  }
+
+  return device_info_list_report("Denoising on", device_info);
+}
+
+string PathTrace::full_report() const
+{
+  string result = "\nFull path tracing report\n";
+
+  result += path_trace_devices_report(path_trace_works_);
+  result += denoiser_device_report(denoiser_.get());
+
+  /* Report from the render scheduler, which includes:
+   * - Render mode (interactive, offline, headless)
+   * - Adaptive sampling and denoiser parameters
+   * - Breakdown of timing. */
+  result += render_scheduler_.full_report();
+
+  return result;
+}
+
 CCL_NAMESPACE_END

@@ -234,6 +234,31 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   render_buffers->buffer.copy_to_device();
 }
 
+DeviceInfo OIDNDenoiser::get_denoiser_device_info() const
+{
+  /* OpenImageDenoiser runs on CPU. Access the CPU device information with some safety fallbacks
+   * for possible variations of Cycles integration. */
+
+  vector<DeviceInfo> cpu_devices = Device::available_devices(DEVICE_MASK_CPU);
+
+  if (cpu_devices.empty()) {
+    LOG(ERROR) << "No CPU devices reported.";
+
+    DeviceInfo dummy_info;
+    dummy_info.type = DEVICE_NONE;
+    return dummy_info;
+  }
+
+  if (cpu_devices.size() > 1) {
+    DeviceInfo device_info;
+    device_info.type = DEVICE_MULTI;
+    device_info.multi_devices = cpu_devices;
+    return device_info;
+  }
+
+  return cpu_devices[0];
+}
+
 void OIDNDenoiser::initialize()
 {
 #ifdef WITH_OPENIMAGEDENOISE

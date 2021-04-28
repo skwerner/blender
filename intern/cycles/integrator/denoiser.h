@@ -19,6 +19,7 @@
 /* TODO(sergey): The integrator folder might not be the best. Is easy to move files around if the
  * better place is figured out. */
 
+#include "device/device.h"
 #include "device/device_denoise.h"
 #include "util/util_unique_ptr.h"
 
@@ -72,6 +73,20 @@ class Denoiser {
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) = 0;
+
+  /* Get access to the device information which is used to perform actual denoising.
+   * Note that this device:
+   *
+   * - Can be different from the device used during denoiser creation. This happens, for example,
+   *   when using OptiX denoiser and rendering on CPU.
+   *
+   * - The denoising device is lazily initialized, so if no denoising was perfoemed yet it is
+   *   possible that device info of type DEVICE_NONE will be returned.
+   *
+   * - No threading safety is ensured in this call. This means, that it is up to caller to ensure
+   *   that there is no threadingconflict between denoising task lazily initializing the device and
+   *   access to this device happen. */
+  virtual DeviceInfo get_denoiser_device_info() const = 0;
 
  protected:
   Denoiser(Device *device, const DenoiseParams &params);

@@ -229,4 +229,15 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
   }
 }
 
+DeviceInfo DeviceDenoiser::get_denoiser_device_info() const
+{
+  if (!denoiser_device_) {
+    DeviceInfo device_info;
+    device_info.type = DEVICE_NONE;
+    return device_info;
+  }
+
+  return denoiser_device_->info;
+}
+
 CCL_NAMESPACE_END

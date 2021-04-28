@@ -106,6 +106,10 @@ class PathTrace {
    * Returns false if any of the accessor's `get_render_tile_pixels()` returned false. */
   bool get_render_tile_pixels(PassAccessor &pass_accessor, float *pixels);
 
+  /* Generate full multi-line report of the rendering process, including rendering parameters,
+   * times, and so on. */
+  string full_report() const;
+
   /* Callback which communicates an updates state of the render buffer.
    * Is called during path tracing to communicate work-in-progress state of the final buffer.
    *

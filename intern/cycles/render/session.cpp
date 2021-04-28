@@ -162,7 +162,7 @@ void Session::run_main_render_loop()
         double total_time, render_time;
         progress.get_time(total_time, render_time);
         VLOG(2) << "Rendering in main loop is done in " << render_time << " seconds.";
-        VLOG(2) << "Full render scheduler report:" << render_scheduler_.full_report();
+        VLOG(2) << path_trace_->full_report();
       }
 
       if (params.background) {

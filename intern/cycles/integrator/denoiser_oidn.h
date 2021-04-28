@@ -38,6 +38,8 @@ class OIDNDenoiser : public Denoiser {
                               RenderBuffers *render_buffers,
                               const int num_samples) override;
 
+  virtual DeviceInfo get_denoiser_device_info() const override;
+
  protected:
   /* Make sure all lazily-initializable resources are initialized and are ready for use by the
    * denoising process. */

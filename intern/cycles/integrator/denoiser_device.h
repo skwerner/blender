@@ -37,6 +37,8 @@ class DeviceDenoiser : public Denoiser {
                               RenderBuffers *render_buffers,
                               const int num_samples) override;
 
+  virtual DeviceInfo get_denoiser_device_info() const override;
+
  protected:
   /* Get device on which denoising is to happen.
    * Will either use one of the devices used for rendering, or create a dedicated device if needed.

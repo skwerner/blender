@@ -44,9 +44,10 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
       work_tiles_(device, "work_tiles", MEM_READ_WRITE),
       gpu_display_rgba_half_(device, "display buffer half", MEM_READ_WRITE),
+      max_num_paths_(queue_->num_concurrent_states(sizeof(IntegratorState))),
       max_active_path_index_(0)
 {
-  work_tile_scheduler_.set_max_num_path_states(get_max_num_paths());
+  work_tile_scheduler_.set_max_num_path_states(max_num_paths_);
 }
 
 void PathTraceWorkGPU::alloc_integrator_state()
@@ -65,14 +66,13 @@ void PathTraceWorkGPU::alloc_integrator_state()
   }
 
   vector<device_ptr> device_struct;
-  const int max_num_paths = get_max_num_paths();
 
 #define KERNEL_STRUCT_BEGIN(name) for (int array_index = 0;; array_index++) {
 #define KERNEL_STRUCT_MEMBER(type, name) \
   { \
     device_only_memory<type> *array = new device_only_memory<type>(device_, \
                                                                    "integrator_state_" #name); \
-    array->alloc_to_device(max_num_paths); \
+    array->alloc_to_device(max_num_paths_); \
     /* TODO: skip for most arrays. */ \
     array->zero_to_device(); \
     device_struct.push_back(array->device_pointer); \
@@ -117,7 +117,7 @@ void PathTraceWorkGPU::alloc_integrator_queue()
   }
 
   if (queued_paths_.size() == 0) {
-    queued_paths_.alloc(get_max_num_paths());
+    queued_paths_.alloc(max_num_paths_);
     /* TODO: this could be skip if we had a function to just allocate on device. */
     queued_paths_.zero_to_device();
   }
@@ -127,7 +127,7 @@ void PathTraceWorkGPU::alloc_integrator_sorting()
 {
   /* Allocate arrays for shader sorting. */
   if (integrator_sort_key_counter_.size() == 0) {
-    integrator_sort_key_.alloc(get_max_num_paths());
+    integrator_sort_key_.alloc(max_num_paths_);
     /* TODO: this could be skip if we had a function to just allocate on device. */
     integrator_sort_key_.zero_to_device();
     device_->const_copy_to(
@@ -202,7 +202,6 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
     return false;
   }
 
-  const int max_num_paths = get_max_num_paths();
   const float megakernel_threshold = 0.02f;
   const bool use_megakernel = queue_->kernel_available(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) &&
                               (num_paths < megakernel_threshold * max_num_paths_);
@@ -294,7 +293,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     queue_->zero_to_device(num_queued_paths_);
   }
 
-  DCHECK_LE(work_size, get_max_num_paths());
+  DCHECK_LE(work_size, max_num_paths_);
 
   switch (kernel) {
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
@@ -386,7 +385,7 @@ void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kern
   /* TODO: this could be smaller for terminated paths based on amount of work we want
    * to schedule. */
   const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
-                            get_max_num_paths() :
+                            max_num_paths_ :
                             max_active_path_index_;
 
   void *d_queued_paths = (void *)queued_paths_.device_pointer;
@@ -400,7 +399,6 @@ void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kern
 bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 {
   const float regenerate_threshold = 0.5f;
-  const int max_num_paths = get_max_num_paths();
   int num_paths = get_num_active_paths();
 
   if (num_paths == 0) {
@@ -421,11 +419,11 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 
   /* Schedule when we're out of paths or there are too few paths to keep the
    * device occupied. */
-  if (num_paths == 0 || num_paths < regenerate_threshold * max_num_paths) {
+  if (num_paths == 0 || num_paths < regenerate_threshold * max_num_paths_) {
     /* Get work tiles until the maximum number of path is reached. */
-    while (num_paths < max_num_paths) {
+    while (num_paths < max_num_paths_) {
       KernelWorkTile work_tile;
-      if (work_tile_scheduler_.get_work(&work_tile, max_num_paths - num_paths)) {
+      if (work_tile_scheduler_.get_work(&work_tile, max_num_paths_ - num_paths)) {
         work_tiles.push_back(work_tile);
         num_paths += work_tile.w * work_tile.h * work_tile.num_samples;
       }
@@ -499,7 +497,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
 
     /* Offset work tile and path index pointers for next tile. */
     num_paths += tile_work_size;
-    DCHECK_LE(num_paths, get_max_num_paths());
+    DCHECK_LE(num_paths, max_num_paths_);
 
     /* TODO: this pointer manipulation won't work for OpenCL. */
     d_work_tile = (void *)(((KernelWorkTile *)d_work_tile) + 1);
@@ -510,7 +508,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
 
   /* TODO: this could be computed more accurately using on the last entry
    * in the queued_paths array passed to the kernel? */
-  max_active_path_index_ = min(max_active_path_index_ + num_paths, get_max_num_paths());
+  max_active_path_index_ = min(max_active_path_index_ + num_paths, max_num_paths_);
 }
 
 int PathTraceWorkGPU::get_num_active_paths()
@@ -524,13 +522,6 @@ int PathTraceWorkGPU::get_num_active_paths()
   }
 
   return num_paths;
-}
-
-int PathTraceWorkGPU::get_max_num_paths()
-{
-  /* TODO: compute automatically. */
-  /* TODO: must have at least num_threads_per_block. */
-  return 1048576;
 }
 
 void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)

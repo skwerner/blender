@@ -35,6 +35,8 @@ class CUDADeviceQueue : public DeviceQueue {
   CUDADeviceQueue(CUDADevice *device);
   ~CUDADeviceQueue();
 
+  virtual int num_concurrent_states(const size_t state_size) const override;
+
   virtual void init_execution() override;
 
   virtual bool kernel_available(DeviceKernel kernel) const override;

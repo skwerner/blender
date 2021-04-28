@@ -37,6 +37,13 @@ CUDADeviceQueue::~CUDADeviceQueue()
   cuStreamDestroy(cuda_stream_);
 }
 
+int CUDADeviceQueue::num_concurrent_states(const size_t) const
+{
+  /* TODO: compute automatically. */
+  /* TODO: must have at least num_threads_per_block. */
+  return 1048576;
+}
+
 void CUDADeviceQueue::init_execution()
 {
   /* Synchronize all textures and memory copies before executing task. */

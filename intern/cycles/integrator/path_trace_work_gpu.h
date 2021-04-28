@@ -86,8 +86,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   void enqueue_adaptive_sampling_filter_x();
   void enqueue_adaptive_sampling_filter_y();
 
-  /* Integrator queues.
-   * There are as many of queues as the concurrent queues the device supports. */
+  /* Integrator queue. */
   unique_ptr<DeviceQueue> queue_;
 
   /* Scheduler which gives work to path tracing threads. */
@@ -121,6 +120,9 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Cached result of device->should_use_graphics_interop(). */
   bool interop_use_checked_ = false;
   bool interop_use_ = false;
+
+  /* Maximum number of concurrent integrator states. */
+  int max_num_paths_;
 
   /* Maximum path index, effective number of paths used may be smaller than
    * the size of the integrator_state_ buffer so can avoid iterating over the

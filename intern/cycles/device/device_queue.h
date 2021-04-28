@@ -36,6 +36,10 @@ class DeviceQueue {
  public:
   virtual ~DeviceQueue();
 
+  /* Number of concurrent states to process for integrator,
+   * based on number of cores and/or available memory. */
+  virtual int num_concurrent_states(const size_t state_size) const = 0;
+
   /* Initialize execution of kernels on this queue.
    *
    * Will, for example, load all data required by the kernels from Device to global or path state.

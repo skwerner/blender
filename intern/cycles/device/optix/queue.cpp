@@ -58,6 +58,8 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
     return false;
   }
 
+  debug_enqueue(kernel, work_size);
+
   const CUDAContextScope scope(cuda_device_);
 
   OptiXDevice *const optix_device = static_cast<OptiXDevice *>(cuda_device_);

@@ -18,6 +18,8 @@
 
 #include "device/device_kernel.h"
 
+#include "util/util_map.h"
+
 CCL_NAMESPACE_BEGIN
 
 class Device;
@@ -32,7 +34,7 @@ struct KernelWorkTile;
  * This class encapsulates all properties needed for commands execution. */
 class DeviceQueue {
  public:
-  virtual ~DeviceQueue() = default;
+  virtual ~DeviceQueue();
 
   /* Initialize execution of kernels on this queue.
    *
@@ -66,6 +68,18 @@ class DeviceQueue {
  protected:
   /* Hide construction so that allocation via `Device` API is enforced. */
   explicit DeviceQueue(Device *device);
+
+  /* Implementations call these from the corresponding methods to generate debugging logs. */
+  void debug_init_execution();
+  void debug_enqueue(DeviceKernel kernel, const int work_size);
+  void debug_synchronize();
+
+  /* Combination of kernels enqueued together sync last synchronize. */
+  DeviceKernelMask last_kernels_enqueued_;
+  /* Time of synchronize call. */
+  double last_sync_time_;
+  /* Accumulated execution time for combinations of kernels launched together. */
+  map<DeviceKernelMask, double> stats_kernel_time_;
 };
 
 CCL_NAMESPACE_END

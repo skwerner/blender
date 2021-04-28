@@ -53,7 +53,6 @@ class CUDADeviceQueue : public DeviceQueue {
  protected:
   CUDADevice *cuda_device_;
   CUstream cuda_stream_;
-  double last_sync_time_;
 };
 
 CCL_NAMESPACE_END

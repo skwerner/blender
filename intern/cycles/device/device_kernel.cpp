@@ -96,4 +96,20 @@ std::ostream &operator<<(std::ostream &os, DeviceKernel kernel)
   return os;
 }
 
+string device_kernel_mask_as_string(DeviceKernelMask mask)
+{
+  string str;
+
+  for (uint64_t i = 0; i < sizeof(DeviceKernelMask) * 8; i++) {
+    if (mask & (uint64_t(1) << i)) {
+      if (!str.empty()) {
+        str += " ";
+      }
+      str += device_kernel_as_string((DeviceKernel)i);
+    }
+  }
+
+  return str;
+}
+
 CCL_NAMESPACE_END

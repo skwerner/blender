@@ -48,6 +48,11 @@ const CUDADeviceKernel &CUDADeviceKernels::get(DeviceKernel kernel) const
   return kernels_[(int)kernel];
 }
 
+bool CUDADeviceKernels::available(DeviceKernel kernel) const
+{
+  return kernels_[(int)kernel].function != nullptr;
+}
+
 CCL_NAMESPACE_END
 
 #endif /* WITH_CUDA*/

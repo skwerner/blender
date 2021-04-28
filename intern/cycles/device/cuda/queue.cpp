@@ -47,6 +47,11 @@ void CUDADeviceQueue::init_execution()
   debug_init_execution();
 }
 
+bool CUDADeviceQueue::kernel_available(DeviceKernel kernel) const
+{
+  return cuda_device_->kernels.available(kernel);
+}
+
 bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *args[])
 {
   if (cuda_device_->have_error()) {

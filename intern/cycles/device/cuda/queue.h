@@ -37,6 +37,8 @@ class CUDADeviceQueue : public DeviceQueue {
 
   virtual void init_execution() override;
 
+  virtual bool kernel_available(DeviceKernel kernel) const override;
+
   virtual bool enqueue(DeviceKernel kernel, const int work_size, void *args[]) override;
 
   virtual bool synchronize() override;

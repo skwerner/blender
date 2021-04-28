@@ -33,10 +33,10 @@ class CUDADevice;
 /* CUDA kernel and associate occupancy information. */
 class CUDADeviceKernel {
  public:
-  CUfunction function;
+  CUfunction function = nullptr;
 
-  int num_threads_per_block;
-  int min_blocks;
+  int num_threads_per_block = 0;
+  int min_blocks = 0;
 };
 
 /* Cache of CUDA kernels for each DeviceKernel. */
@@ -44,6 +44,7 @@ class CUDADeviceKernels {
  public:
   void load(CUDADevice *device);
   const CUDADeviceKernel &get(DeviceKernel kernel) const;
+  bool available(DeviceKernel kernel) const;
 
  protected:
   CUDADeviceKernel kernels_[DEVICE_KERNEL_NUM];

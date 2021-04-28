@@ -204,7 +204,8 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
 
   const int max_num_paths = get_max_num_paths();
   const float megakernel_threshold = 0.02f;
-  const bool use_megakernel = (num_paths < megakernel_threshold * max_num_paths);
+  const bool use_megakernel = queue_->kernel_available(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) &&
+                              (num_paths < megakernel_threshold * max_num_paths_);
 
   if (use_megakernel) {
     enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);

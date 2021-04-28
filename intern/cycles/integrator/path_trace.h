@@ -170,6 +170,8 @@ class PathTrace {
 
   RenderScheduler &render_scheduler_;
 
+  unique_ptr<GPUDisplay> gpu_display_;
+
   /* Per-compute device descriptors of work which is responsible for path tracing on its configured
    * device. */
   vector<unique_ptr<PathTraceWork>> path_trace_works_;
@@ -217,8 +219,6 @@ class PathTrace {
     thread_mutex mutex;
     thread_condition_variable condition;
   } render_cancel_;
-
-  unique_ptr<GPUDisplay> gpu_display_;
 
   /* Indicates whether a render result was drawn after latest session reset.
    * Used by `ready_to_reset()` to implement logic which feels the most interactive. */

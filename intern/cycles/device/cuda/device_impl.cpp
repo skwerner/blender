@@ -1333,6 +1333,9 @@ class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
   {
   }
 
+  CUDADeviceGraphicsInterop(const CUDADeviceGraphicsInterop &other) = delete;
+  CUDADeviceGraphicsInterop(CUDADeviceGraphicsInterop &&other) noexcept = delete;
+
   ~CUDADeviceGraphicsInterop()
   {
     CUDAContextScope scope(device_);
@@ -1341,6 +1344,9 @@ class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
       cuda_device_assert(device_, cuGraphicsUnregisterResource(cu_graphics_resource_));
     }
   }
+
+  CUDADeviceGraphicsInterop &operator=(const CUDADeviceGraphicsInterop &other) = delete;
+  CUDADeviceGraphicsInterop &operator=(CUDADeviceGraphicsInterop &&other) = delete;
 
   virtual void set_destination(const DeviceGraphicsInteropDestination &destination) override
   {

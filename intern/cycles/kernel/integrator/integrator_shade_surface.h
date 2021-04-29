@@ -330,7 +330,8 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
 #endif
   {
     /* Evaluate shader. */
-    shader_eval_surface(INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
+    shader_eval_surface<NODE_FEATURE_MASK_SURFACE>(
+        INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
   }
 
 #ifdef __SUBSURFACE__

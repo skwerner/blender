@@ -47,6 +47,7 @@ ccl_device AttributeDescriptor svm_node_attr_init(const KernelGlobals *kg,
   return desc;
 }
 
+template<uint node_feature_mask>
 ccl_device void svm_node_attr(const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node)
 {
   NodeAttributeOutputType type = NODE_ATTR_OUTPUT_FLOAT;
@@ -54,24 +55,26 @@ ccl_device void svm_node_attr(const KernelGlobals *kg, ShaderData *sd, float *st
   AttributeDescriptor desc = svm_node_attr_init(kg, sd, node, &type, &out_offset);
 
 #ifdef __VOLUME__
-  /* Volumes
-   * NOTE: moving this into its own node type might help improve performance. */
-  if (primitive_is_volume_attribute(sd, desc)) {
-    const float4 value = volume_attribute_float4(kg, sd, desc);
+  if (NODES_FEATURE(VOLUME)) {
+    /* Volumes
+     * NOTE: moving this into its own node type might help improve performance. */
+    if (primitive_is_volume_attribute(sd, desc)) {
+      const float4 value = volume_attribute_float4(kg, sd, desc);
 
-    if (type == NODE_ATTR_OUTPUT_FLOAT) {
-      const float f = volume_attribute_value_to_float(value);
-      stack_store_float(stack, out_offset, f);
+      if (type == NODE_ATTR_OUTPUT_FLOAT) {
+        const float f = volume_attribute_value_to_float(value);
+        stack_store_float(stack, out_offset, f);
+      }
+      else if (type == NODE_ATTR_OUTPUT_FLOAT3) {
+        const float3 f = volume_attribute_value_to_float3(value);
+        stack_store_float3(stack, out_offset, f);
+      }
+      else {
+        const float f = volume_attribute_value_to_alpha(value);
+        stack_store_float(stack, out_offset, f);
+      }
+      return;
     }
-    else if (type == NODE_ATTR_OUTPUT_FLOAT3) {
-      const float3 f = volume_attribute_value_to_float3(value);
-      stack_store_float3(stack, out_offset, f);
-    }
-    else {
-      const float f = volume_attribute_value_to_alpha(value);
-      stack_store_float(stack, out_offset, f);
-    }
-    return;
   }
 #endif
 

@@ -732,7 +732,7 @@ void ShaderManager::get_requested_features(Scene *scene,
                                            DeviceRequestedFeatures *requested_features)
 {
   requested_features->max_nodes_group = NODE_GROUP_LEVEL_0;
-  requested_features->nodes_features = 0;
+  requested_features->nodes_features = NODE_FEATURE_BSDF | NODE_FEATURE_EMISSION;
   for (int i = 0; i < scene->shaders.size(); i++) {
     Shader *shader = scene->shaders[i];
     if (!shader->used) {

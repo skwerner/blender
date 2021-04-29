@@ -1025,6 +1025,7 @@ ccl_device float3 shader_holdout_apply(const KernelGlobals *kg, ShaderData *sd)
 
 /* Surface Evaluation */
 
+template<uint node_feature_mask>
 ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
                                     ShaderData *sd,
                                     ccl_global float *buffer,
@@ -1059,7 +1060,8 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
 #endif
   {
 #ifdef __SVM__
-    svm_eval_nodes(INTEGRATOR_STATE_PASS, sd, buffer, SHADER_TYPE_SURFACE, path_flag);
+    svm_eval_nodes<node_feature_mask, SHADER_TYPE_SURFACE>(
+        INTEGRATOR_STATE_PASS, sd, buffer, path_flag);
 #else
     if (sd->object == OBJECT_NONE) {
       sd->closure_emission_background = make_float3(0.8f, 0.8f, 0.8f);
@@ -1076,7 +1078,7 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
 #endif
   }
 
-  if (sd->flag & SD_BSDF_NEEDS_LCG) {
+  if (NODES_FEATURE(BSDF) && (sd->flag & SD_BSDF_NEEDS_LCG)) {
     sd->lcg_state = lcg_state_init(INTEGRATOR_STATE(path, rng_hash),
                                    INTEGRATOR_STATE(path, rng_offset),
                                    INTEGRATOR_STATE(path, sample),
@@ -1275,7 +1277,8 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
     else
 #    endif
     {
-      svm_eval_nodes(INTEGRATOR_STATE_PASS, sd, NULL, SHADER_TYPE_VOLUME, path_flag);
+      svm_eval_nodes<NODE_FEATURE_MASK_VOLUME, SHADER_TYPE_VOLUME>(
+          INTEGRATOR_STATE_PASS, sd, NULL, path_flag);
     }
 #  endif
 
@@ -1302,7 +1305,8 @@ ccl_device void shader_eval_displacement(INTEGRATOR_STATE_CONST_ARGS, ShaderData
   else
 #  endif
   {
-    svm_eval_nodes(INTEGRATOR_STATE_PASS, sd, NULL, SHADER_TYPE_DISPLACEMENT, 0);
+    svm_eval_nodes<NODE_FEATURE_MASK_DISPLACEMENT, SHADER_TYPE_DISPLACEMENT>(
+        INTEGRATOR_STATE_PASS, sd, NULL, 0);
   }
 #endif
 }

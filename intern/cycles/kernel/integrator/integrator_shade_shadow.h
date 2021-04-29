@@ -41,7 +41,8 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
 
   /* Evaluate shader. */
   if (!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {
-    shader_eval_surface(INTEGRATOR_STATE_PASS, shadow_sd, NULL, PATH_RAY_SHADOW);
+    shader_eval_surface<NODE_FEATURE_MASK_SURFACE>(
+        INTEGRATOR_STATE_PASS, shadow_sd, NULL, PATH_RAY_SHADOW);
   }
 
   /* Compute transparency from closures. */

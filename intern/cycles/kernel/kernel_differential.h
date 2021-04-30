@@ -134,10 +134,10 @@ ccl_device_forceinline float differential_make_compact(const differential3 D)
 
 ccl_device_forceinline void differential_transfer_compact(ccl_addr_space differential3 *surface_dP,
                                                           const float ray_dP,
-                                                          float3 ray_D,
+                                                          const float3 /* ray_D */,
                                                           const float ray_dD,
-                                                          float3 surface_Ng,
-                                                          float ray_t)
+                                                          const float3 surface_Ng,
+                                                          const float ray_t)
 {
   /* ray differential transfer through homogeneous medium, to
    * compute dPdx/dy at a shading point from the incoming ray */

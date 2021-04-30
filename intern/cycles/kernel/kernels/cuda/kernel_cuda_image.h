@@ -178,7 +178,7 @@ ccl_device_inline T kernel_tex_image_interp_nanovdb(
 }
 #endif
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y)
+ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y, differential, differential)
 {
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
 

@@ -32,8 +32,6 @@ struct OIIOTexture {
 
 struct OIIOGlobals {
   OIIO::TextureSystem *tex_sys;
-  thread_mutex tex_paths_mutex;
-  vector<OIIOTexture> textures;
   float diffuse_blur;
   float glossy_blur;
 };

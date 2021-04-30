@@ -157,7 +157,7 @@ class ImageHandle {
   int num_tiles();
 
   ImageMetaData metadata();
-  int svm_slot(const int tile_index = 0) const;
+  int svm_slot(bool osl = false, const int tile_index = 0) const;
   device_texture *image_memory(const int tile_index = 0) const;
 
   VDBImageLoader *vdb_loader(const int tile_index = 0) const;

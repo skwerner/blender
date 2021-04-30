@@ -540,6 +540,9 @@ void ShaderManager::device_update_common(Device *device,
       ts->attribute("latlong_up", "z");
       ts->attribute("flip_t", 1);
       ts->attribute("max_tile_channels", 1);
+      if (scene->params.texture_limit > 0) {
+        ts->attribute("max_mip_res", scene->params.texture_limit);
+      }
       oiio_globals->tex_sys = ts;
       oiio_globals->diffuse_blur = scene->params.texture.diffuse_blur;
       oiio_globals->glossy_blur = scene->params.texture.glossy_blur;

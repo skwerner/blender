@@ -65,7 +65,8 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMe
   size_t channel_size = spec.format.basesize();
 
   bool is_float = false;
-  bool is_half = false;
+  bool is_half = spec.format == TypeDesc::HALF && features.has_half_float;
+  bool is_tiled = spec.tile_pixels() != 0;
 
   if (spec.format.is_floating_point()) {
     is_float = true;
@@ -78,15 +79,13 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMe
     }
   }
 
-  /* check if it's half float */
-  if (spec.format == TypeDesc::HALF && features.has_half_float) {
-    is_half = true;
-  }
-
   /* set type and channels */
   metadata.channels = spec.nchannels;
 
-  if (is_half) {
+  if (is_tiled) {
+    metadata.type = IMAGE_DATA_TYPE_OIIO;
+  }
+  else if (is_half) {
     metadata.type = (metadata.channels > 1) ? IMAGE_DATA_TYPE_HALF4 : IMAGE_DATA_TYPE_HALF;
   }
   else if (is_float) {
@@ -214,6 +213,7 @@ bool OIIOImageLoader::load_pixels(const ImageMetaData &metadata,
       break;
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
+    case IMAGE_DATA_TYPE_OIIO:
     case IMAGE_DATA_NUM_TYPES:
       break;
   }

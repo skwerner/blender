@@ -79,6 +79,8 @@ const char *name_from_type(ImageDataType type)
       return "nanovdb_float";
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
       return "nanovdb_float3";
+    case IMAGE_DATA_TYPE_OIIO:
+      return "openimageio";
     case IMAGE_DATA_NUM_TYPES:
       assert(!"System enumerator type, should never be used");
       return "";
@@ -153,13 +155,13 @@ ImageMetaData ImageHandle::metadata()
   return img->metadata;
 }
 
-int ImageHandle::svm_slot(const int tile_index) const
+int ImageHandle::svm_slot(bool osl, const int tile_index) const
 {
   if (tile_index >= tile_slots.size()) {
     return -1;
   }
 
-  if (manager->oiio_texture_system) {
+  if (osl) {
     ImageManager::Image *img = manager->images[tile_slots[tile_index]];
     if (!img->loader->osl_filepath().empty()) {
       return -1;
@@ -241,6 +243,11 @@ bool ImageMetaData::is_float() const
 
 void ImageMetaData::detect_colorspace()
 {
+  if (type == IMAGE_DATA_TYPE_OIIO) {
+    compress_as_srgb = false;
+    return;
+  }
+
   /* Convert used specified color spaces to one we know how to handle. */
   colorspace = ColorSpaceManager::detect_known_colorspace(
       colorspace, colorspace_file_format, is_float());
@@ -686,56 +693,9 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
                                  progress,
                                  scene->params.texture.auto_convert,
                                  cache_path);
-
-    /* When using OIIO directly from SVM, store the TextureHandle
-     * in an array for quicker lookup at shading time */
-    OIIOGlobals *oiio = (OIIOGlobals *)device->oiio_memory();
-    if (oiio) {
-      thread_scoped_lock lock(oiio->tex_paths_mutex);
-      if (oiio->textures.size() <= slot) {
-        oiio->textures.resize(slot + 1);
-      }
-      OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem *)oiio_texture_system;
-      OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(
-          OIIO::ustring(img->loader->osl_filepath()));
-      if (tex_sys->good(handle)) {
-        oiio->textures[slot].handle = handle;
-        switch (img->params.interpolation) {
-          case INTERPOLATION_SMART:
-            oiio->textures[slot].interpolation = OIIO::TextureOpt::InterpSmartBicubic;
-            break;
-          case INTERPOLATION_CUBIC:
-            oiio->textures[slot].interpolation = OIIO::TextureOpt::InterpBicubic;
-            break;
-          case INTERPOLATION_LINEAR:
-            oiio->textures[slot].interpolation = OIIO::TextureOpt::InterpBilinear;
-            break;
-          case INTERPOLATION_NONE:
-          case INTERPOLATION_CLOSEST:
-          default:
-            oiio->textures[slot].interpolation = OIIO::TextureOpt::InterpClosest;
-            break;
-        }
-        switch (img->params.extension) {
-          case EXTENSION_CLIP:
-            oiio->textures[slot].extension = OIIO::TextureOpt::WrapBlack;
-            break;
-          case EXTENSION_EXTEND:
-            oiio->textures[slot].extension = OIIO::TextureOpt::WrapClamp;
-            break;
-          case EXTENSION_REPEAT:
-          default:
-            oiio->textures[slot].extension = OIIO::TextureOpt::WrapPeriodic;
-            break;
-        }
-        oiio->textures[slot].is_linear = have_mip;
-      }
-      else {
-        oiio->textures[slot].handle = NULL;
-      }
+    if (have_mip) {
+      img->need_metadata = true;
     }
-    img->need_load = false;
-    return;
   }
 
   progress->set_status("Updating Images", "Loading " + img->loader->name());
@@ -759,6 +719,7 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
       device, img->mem_name.c_str(), slot, type, img->params.interpolation, img->params.extension);
   img->mem->info.use_transform_3d = img->metadata.use_transform_3d;
   img->mem->info.transform_3d = img->metadata.transform_3d;
+  img->mem->info.compress_as_srgb = img->metadata.compress_as_srgb;
 
   /* Create new texture. */
   if (type == IMAGE_DATA_TYPE_FLOAT4) {
@@ -855,7 +816,17 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
     }
   }
 #endif
+  else if (type == IMAGE_DATA_TYPE_OIIO) {
+    thread_scoped_lock device_lock(device_mutex);
+    void *pixels = img->mem->alloc(sizeof(OIIO::TextureSystem::TextureHandle*), 0);
 
+    if (pixels != NULL) {
+      OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem *)oiio_texture_system;
+      OIIO::TextureSystem::TextureHandle *handle = tex_sys->get_texture_handle(
+          OIIO::ustring(img->loader->osl_filepath()));
+      *((OIIO::TextureSystem::TextureHandle **)pixels) = tex_sys->good(handle) ? handle : NULL;
+    }
+  }
   {
     thread_scoped_lock device_lock(device_mutex);
     img->mem->copy_to_device();

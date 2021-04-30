@@ -422,10 +422,10 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
       for (int i = 0; i < num_nodes; i++) {
         int4 node;
         node.x = tiles[2 * i];
-        node.y = handle.svm_slot(2 * i);
+        node.y = handle.svm_slot(false, 2 * i);
         if (2 * i + 1 < tiles.size()) {
           node.z = tiles[2 * i + 1];
-          node.w = handle.svm_slot(2 * i + 1);
+          node.w = handle.svm_slot(false, 2 * i + 1);
         }
         else {
           node.z = -1;
@@ -471,13 +471,13 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
   const bool compress_as_srgb = metadata.compress_as_srgb;
   const ustring known_colorspace = metadata.colorspace;
 
-  if (handle.svm_slot() == -1) {
+  if (handle.svm_slot(true) == -1) {
     filename = compiler.scene->image_manager->get_mip_map_path(filename.string());
     compiler.parameter_texture(
         "filename", filename, compress_as_srgb ? u_colorspace_raw : known_colorspace);
   }
   else {
-    compiler.parameter_texture("filename", handle.svm_slot());
+    compiler.parameter_texture("filename", handle.svm_slot(true));
   }
 
   const bool unassociate_alpha = !(ColorSpaceManager::colorspace_is_data(colorspace) ||
@@ -627,12 +627,12 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
   const bool compress_as_srgb = metadata.compress_as_srgb;
   const ustring known_colorspace = metadata.colorspace;
 
-  if (handle.svm_slot() == -1) {
+  if (handle.svm_slot(true) == -1) {
     compiler.parameter_texture(
         "filename", filename, compress_as_srgb ? u_colorspace_raw : known_colorspace);
   }
   else {
-    compiler.parameter_texture("filename", handle.svm_slot());
+    compiler.parameter_texture("filename", handle.svm_slot(true));
   }
 
   compiler.parameter(this, "projection");
@@ -987,7 +987,7 @@ void SkyTextureNode::compile(OSLCompiler &compiler)
   compiler.parameter_array("nishita_data", sunsky.nishita_data, 10);
   /* nishita texture */
   if (sky_type == NODE_SKY_NISHITA) {
-    compiler.parameter_texture("filename", handle.svm_slot());
+    compiler.parameter_texture("filename", handle.svm_slot(true));
   }
   compiler.add(this, "node_sky_texture");
 }
@@ -1879,7 +1879,7 @@ void PointDensityTextureNode::compile(OSLCompiler &compiler)
       handle = image_manager->add_image(filename.string(), image_params());
     }
 
-    compiler.parameter_texture("filename", handle.svm_slot());
+    compiler.parameter_texture("filename", handle.svm_slot(true));
     if (space == NODE_TEX_VOXEL_SPACE_WORLD) {
       compiler.parameter("mapping", tfm);
       compiler.parameter("use_mapping", 1);

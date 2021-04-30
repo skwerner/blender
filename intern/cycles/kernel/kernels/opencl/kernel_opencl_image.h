@@ -123,6 +123,10 @@ ccl_device_inline float4 svm_image_texture_read(
     return make_float4(r.x, r.y, r.z, r.w);
   }
 #endif
+  /* Unsupported. */
+  else if (texture_type == IMAGE_DATA_TYPE_OIIO) {
+    return make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
+  }
   /* Byte */
   else {
     uchar r = tex_fetch(uchar, info, data_offset);
@@ -199,7 +203,7 @@ ccl_device_inline float svm_image_texture_frac(float x, int *ix)
   } \
   (void)0
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y)
+ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y, differential, differential)
 {
   const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
 

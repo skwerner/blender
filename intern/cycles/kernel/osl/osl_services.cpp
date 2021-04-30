@@ -1249,7 +1249,12 @@ bool OSLRenderServices::texture(ustring filename,
     }
     case OSLTextureHandle::SVM: {
       /* Packed texture. */
-      float4 rgba = kernel_tex_image_interp(kernel_globals, handle->svm_slot, s, 1.0f - t);
+      differential ds, dt;
+      ds.dx = dsdx;
+      ds.dy = dsdy;
+      dt.dx = dtdx;
+      dt.dy = dtdy;
+      float4 rgba = kernel_tex_image_interp(kernel_globals, handle->svm_slot, s, 1.0f - t, ds, dt);
 
       result[0] = rgba[0];
       if (nchannels > 1)

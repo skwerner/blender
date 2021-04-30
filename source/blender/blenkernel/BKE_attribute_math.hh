@@ -21,13 +21,17 @@
 
 #include "DNA_customdata_types.h"
 
+#include "FN_cpp_type.hh"
+
 namespace blender::attribute_math {
+
+using fn::CPPType;
 
 /**
  * Utility function that simplifies calling a templated function based on a custom data type.
  */
 template<typename Func>
-void convert_to_static_type(const CustomDataType data_type, const Func &func)
+inline void convert_to_static_type(const CustomDataType data_type, const Func &func)
 {
   switch (data_type) {
     case CD_PROP_FLOAT:
@@ -51,6 +55,32 @@ void convert_to_static_type(const CustomDataType data_type, const Func &func)
     default:
       BLI_assert_unreachable();
       break;
+  }
+}
+
+template<typename Func>
+inline void convert_to_static_type(const fn::CPPType &cpp_type, const Func &func)
+{
+  if (cpp_type.is<float>()) {
+    func(float());
+  }
+  else if (cpp_type.is<float2>()) {
+    func(float2());
+  }
+  else if (cpp_type.is<float3>()) {
+    func(float3());
+  }
+  else if (cpp_type.is<int>()) {
+    func(int());
+  }
+  else if (cpp_type.is<bool>()) {
+    func(bool());
+  }
+  else if (cpp_type.is<Color4f>()) {
+    func(Color4f());
+  }
+  else {
+    BLI_assert_unreachable();
   }
 }
 
@@ -95,6 +125,48 @@ inline Color4f mix3(const float3 &weights, const Color4f &v0, const Color4f &v1,
 {
   Color4f result;
   interp_v4_v4v4v4(result, v0, v1, v2, weights);
+  return result;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Mix two values of the same type.
+ *
+ * This is just basic linear interpolation.
+ * \{ */
+
+template<typename T> T mix2(const float factor, const T &a, const T &b);
+
+template<> inline bool mix2(const float factor, const bool &a, const bool &b)
+{
+  return ((1.0f - factor) * a + factor * b) >= 0.5f;
+}
+
+template<> inline int mix2(const float factor, const int &a, const int &b)
+{
+  return static_cast<int>((1.0f - factor) * a + factor * b);
+}
+
+template<> inline float mix2(const float factor, const float &a, const float &b)
+{
+  return (1.0f - factor) * a + factor * b;
+}
+
+template<> inline float2 mix2(const float factor, const float2 &a, const float2 &b)
+{
+  return float2::interpolate(a, b, factor);
+}
+
+template<> inline float3 mix2(const float factor, const float3 &a, const float3 &b)
+{
+  return float3::interpolate(a, b, factor);
+}
+
+template<> inline Color4f mix2(const float factor, const Color4f &a, const Color4f &b)
+{
+  Color4f result;
+  interp_v4_v4v4(result, a, b, factor);
   return result;
 }
 

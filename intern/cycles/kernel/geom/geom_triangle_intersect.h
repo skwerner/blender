@@ -210,11 +210,7 @@ ccl_device_inline float3 triangle_refine(const KernelGlobals *kg,
     if (UNLIKELY(t == 0.0f)) {
       return P;
     }
-#  ifdef __OBJECT_MOTION__
-    Transform tfm = sd->ob_itfm;
-#  else
-    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_INVERSE_TRANSFORM);
-#  endif
+    const Transform tfm = object_get_inverse_transform(kg, sd);
 
     P = transform_point(&tfm, P);
     D = transform_direction(&tfm, D * t);
@@ -244,12 +240,7 @@ ccl_device_inline float3 triangle_refine(const KernelGlobals *kg,
   }
 
   if (isect_object != OBJECT_NONE) {
-#  ifdef __OBJECT_MOTION__
-    Transform tfm = sd->ob_tfm;
-#  else
-    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_TRANSFORM);
-#  endif
-
+    const Transform tfm = object_get_transform(kg, sd);
     P = transform_point(&tfm, P);
   }
 
@@ -275,11 +266,7 @@ ccl_device_inline float3 triangle_refine_local(const KernelGlobals *kg,
   return triangle_refine(kg, sd, P, D, t, isect_object, isect_prim);
 #else
   if (isect_object != OBJECT_NONE) {
-#  ifdef __OBJECT_MOTION__
-    Transform tfm = sd->ob_itfm;
-#  else
-    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_INVERSE_TRANSFORM);
-#  endif
+    const Transform tfm = object_get_inverse_transform(kg, sd);
 
     P = transform_point(&tfm, P);
     D = transform_direction(&tfm, D);
@@ -311,12 +298,7 @@ ccl_device_inline float3 triangle_refine_local(const KernelGlobals *kg,
 #  endif /* __INTERSECTION_REFINE__ */
 
   if (isect_object != OBJECT_NONE) {
-#  ifdef __OBJECT_MOTION__
-    Transform tfm = sd->ob_tfm;
-#  else
-    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_TRANSFORM);
-#  endif
-
+    const Transform tfm = object_get_transform(kg, sd);
     P = transform_point(&tfm, P);
   }
 

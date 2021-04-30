@@ -707,11 +707,7 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
                                           const int isect_prim)
 {
   if (isect_object != OBJECT_NONE) {
-#  ifdef __OBJECT_MOTION__
-    Transform tfm = sd->ob_itfm;
-#  else
-    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_INVERSE_TRANSFORM);
-#  endif
+    const Transform tfm = object_get_inverse_transform(kg, sd);
 
     P = transform_point(&tfm, P);
     D = transform_direction(&tfm, D * t);
@@ -781,12 +777,7 @@ ccl_device_inline void curve_shader_setup(const KernelGlobals *kg,
 #  endif
 
   if (isect_object != OBJECT_NONE) {
-#  ifdef __OBJECT_MOTION__
-    Transform tfm = sd->ob_tfm;
-#  else
-    Transform tfm = object_fetch_transform(kg, isect_object, OBJECT_TRANSFORM);
-#  endif
-
+    const Transform tfm = object_get_transform(kg, sd);
     P = transform_point(&tfm, P);
   }
 

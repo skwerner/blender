@@ -935,10 +935,10 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
 #endif
 
 #ifdef __OBJECT_MOTION__
-  /* object <-> world space transformations, cached to avoid
-   * re-interpolating them constantly for shading */
-  Transform ob_tfm;
-  Transform ob_itfm;
+  /* Object <-> world space transformations for motion blur, cached to avoid
+   * re-interpolating them constantly for shading. */
+  Transform ob_tfm_motion;
+  Transform ob_itfm_motion;
 #endif
 
   /* ray start position, only set for backgrounds */

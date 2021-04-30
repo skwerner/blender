@@ -148,18 +148,19 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg,
       Transform tfm;
 
       if (time == sd->time)
-        tfm = sd->ob_tfm;
+        tfm = object_get_transform(kg, sd);
       else
         tfm = object_fetch_transform_motion_test(kg, object, time, NULL);
 #else
-      Transform tfm = object_fetch_transform(kg, object, OBJECT_TRANSFORM);
+      const Transform tfm = object_get_transform(kg, sd);
 #endif
       copy_matrix(result, tfm);
 
       return true;
     }
     else if (sd->type == PRIMITIVE_LAMP) {
-      copy_matrix(result, sd->ob_tfm);
+      const Transform tfm = lamp_fetch_transform(kg, sd->lamp, false);
+      copy_matrix(result, tfm);
 
       return true;
     }
@@ -185,18 +186,19 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg,
       Transform itfm;
 
       if (time == sd->time)
-        itfm = sd->ob_itfm;
+        itfm = object_get_inverse_transform(kg, sd);
       else
         object_fetch_transform_motion_test(kg, object, time, &itfm);
 #else
-      Transform itfm = object_fetch_transform(kg, object, OBJECT_INVERSE_TRANSFORM);
+      const Transform itfm = object_get_inverse_transform(kg, sd);
 #endif
       copy_matrix(result, itfm);
 
       return true;
     }
     else if (sd->type == PRIMITIVE_LAMP) {
-      copy_matrix(result, sd->ob_itfm);
+      const Transform itfm = lamp_fetch_transform(kg, sd->lamp, true);
+      copy_matrix(result, itfm);
 
       return true;
     }
@@ -277,21 +279,18 @@ bool OSLRenderServices::get_matrix(OSL::ShaderGlobals *sg,
    * a concept of shader space, so we just use object space for both. */
   if (xform) {
     const ShaderData *sd = (const ShaderData *)xform;
+    const KernelGlobals *kg = sd->osl_globals;
     int object = sd->object;
 
     if (object != OBJECT_NONE) {
-#ifdef __OBJECT_MOTION__
-      Transform tfm = sd->ob_tfm;
-#else
-      const KernelGlobals *kg = sd->osl_globals;
-      Transform tfm = object_fetch_transform(kg, object, OBJECT_TRANSFORM);
-#endif
+      const Transform tfm = object_get_transform(kg, sd);
       copy_matrix(result, tfm);
 
       return true;
     }
     else if (sd->type == PRIMITIVE_LAMP) {
-      copy_matrix(result, sd->ob_tfm);
+      const Transform tfm = lamp_fetch_transform(kg, sd->lamp, false);
+      copy_matrix(result, tfm);
 
       return true;
     }
@@ -308,21 +307,18 @@ bool OSLRenderServices::get_inverse_matrix(OSL::ShaderGlobals *sg,
    * a concept of shader space, so we just use object space for both. */
   if (xform) {
     const ShaderData *sd = (const ShaderData *)xform;
+    const KernelGlobals *kg = sd->osl_globals;
     int object = sd->object;
 
     if (object != OBJECT_NONE) {
-#ifdef __OBJECT_MOTION__
-      Transform tfm = sd->ob_itfm;
-#else
-      const KernelGlobals *kg = sd->osl_globals;
-      Transform tfm = object_fetch_transform(kg, object, OBJECT_INVERSE_TRANSFORM);
-#endif
+      const Transform tfm = object_get_inverse_transform(kg, sd);
       copy_matrix(result, tfm);
 
       return true;
     }
     else if (sd->type == PRIMITIVE_LAMP) {
-      copy_matrix(result, sd->ob_itfm);
+      const Transform itfm = lamp_fetch_transform(kg, sd->lamp, true);
+      copy_matrix(result, itfm);
 
       return true;
     }

@@ -113,6 +113,30 @@ ccl_device_inline Transform object_fetch_transform_motion_test(const KernelGloba
 }
 #endif
 
+/* Get transform matrix for shading point. */
+
+ccl_device_inline Transform object_get_transform(const KernelGlobals *kg, const ShaderData *sd)
+{
+#ifdef __OBJECT_MOTION__
+  return (sd->object_flag & SD_OBJECT_MOTION) ?
+             sd->ob_tfm_motion :
+             object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
+#else
+  return object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
+#endif
+}
+
+ccl_device_inline Transform object_get_inverse_transform(const KernelGlobals *kg,
+                                                         const ShaderData *sd)
+{
+#ifdef __OBJECT_MOTION__
+  return (sd->object_flag & SD_OBJECT_MOTION) ?
+             sd->ob_itfm_motion :
+             object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
+#else
+  return object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
+#endif
+}
 /* Transform position from object to world space */
 
 ccl_device_inline void object_position_transform(const KernelGlobals *kg,
@@ -120,11 +144,14 @@ ccl_device_inline void object_position_transform(const KernelGlobals *kg,
                                                  float3 *P)
 {
 #ifdef __OBJECT_MOTION__
-  *P = transform_point_auto(&sd->ob_tfm, *P);
-#else
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    *P = transform_point_auto(&sd->ob_tfm_motion, *P);
+    return;
+  }
+#endif
+
   Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
   *P = transform_point(&tfm, *P);
-#endif
 }
 
 /* Transform position from world to object space */
@@ -134,11 +161,14 @@ ccl_device_inline void object_inverse_position_transform(const KernelGlobals *kg
                                                          float3 *P)
 {
 #ifdef __OBJECT_MOTION__
-  *P = transform_point_auto(&sd->ob_itfm, *P);
-#else
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    *P = transform_point_auto(&sd->ob_itfm_motion, *P);
+    return;
+  }
+#endif
+
   Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
   *P = transform_point(&tfm, *P);
-#endif
 }
 
 /* Transform normal from world to object space */
@@ -148,10 +178,14 @@ ccl_device_inline void object_inverse_normal_transform(const KernelGlobals *kg,
                                                        float3 *N)
 {
 #ifdef __OBJECT_MOTION__
-  if ((sd->object != OBJECT_NONE) || (sd->type == PRIMITIVE_LAMP)) {
-    *N = normalize(transform_direction_transposed_auto(&sd->ob_tfm, *N));
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    if ((sd->object != OBJECT_NONE) || (sd->type == PRIMITIVE_LAMP)) {
+      *N = normalize(transform_direction_transposed_auto(&sd->ob_tfm_motion, *N));
+    }
+    return;
   }
-#else
+#endif
+
   if (sd->object != OBJECT_NONE) {
     Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
     *N = normalize(transform_direction_transposed(&tfm, *N));
@@ -160,7 +194,6 @@ ccl_device_inline void object_inverse_normal_transform(const KernelGlobals *kg,
     Transform tfm = lamp_fetch_transform(kg, sd->lamp, false);
     *N = normalize(transform_direction_transposed(&tfm, *N));
   }
-#endif
 }
 
 /* Transform normal from object to world space */
@@ -170,11 +203,14 @@ ccl_device_inline void object_normal_transform(const KernelGlobals *kg,
                                                float3 *N)
 {
 #ifdef __OBJECT_MOTION__
-  *N = normalize(transform_direction_transposed_auto(&sd->ob_itfm, *N));
-#else
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    *N = normalize(transform_direction_transposed_auto(&sd->ob_itfm_motion, *N));
+    return;
+  }
+#endif
+
   Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
   *N = normalize(transform_direction_transposed(&tfm, *N));
-#endif
 }
 
 /* Transform direction vector from object to world space */
@@ -184,11 +220,14 @@ ccl_device_inline void object_dir_transform(const KernelGlobals *kg,
                                             float3 *D)
 {
 #ifdef __OBJECT_MOTION__
-  *D = transform_direction_auto(&sd->ob_tfm, *D);
-#else
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    *D = transform_direction_auto(&sd->ob_tfm_motion, *D);
+    return;
+  }
+#endif
+
   Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
   *D = transform_direction(&tfm, *D);
-#endif
 }
 
 /* Transform direction vector from world to object space */
@@ -198,7 +237,7 @@ ccl_device_inline void object_inverse_dir_transform(const KernelGlobals *kg,
                                                     float3 *D)
 {
 #ifdef __OBJECT_MOTION__
-  *D = transform_direction_auto(&sd->ob_itfm, *D);
+  *D = transform_direction_auto(&sd->ob_itfm_motion, *D);
 #else
   Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
   *D = transform_direction(&tfm, *D);
@@ -213,11 +252,13 @@ ccl_device_inline float3 object_location(const KernelGlobals *kg, const ShaderDa
     return make_float3(0.0f, 0.0f, 0.0f);
 
 #ifdef __OBJECT_MOTION__
-  return make_float3(sd->ob_tfm.x.w, sd->ob_tfm.y.w, sd->ob_tfm.z.w);
-#else
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    return make_float3(sd->ob_tfm_motion.x.w, sd->ob_tfm_motion.y.w, sd->ob_tfm_motion.z.w);
+  }
+#endif
+
   Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
   return make_float3(tfm.x.w, tfm.y.w, tfm.z.w);
-#endif
 }
 
 /* Color of the object */

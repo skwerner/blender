@@ -49,12 +49,8 @@ CCL_NAMESPACE_BEGIN
 ccl_device void shader_setup_object_transforms(const KernelGlobals *kg, ShaderData *sd, float time)
 {
   if (sd->object_flag & SD_OBJECT_MOTION) {
-    sd->ob_tfm = object_fetch_transform_motion(kg, sd->object, time);
-    sd->ob_itfm = transform_quick_inverse(sd->ob_tfm);
-  }
-  else {
-    sd->ob_tfm = object_fetch_transform(kg, sd->object, OBJECT_TRANSFORM);
-    sd->ob_itfm = object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
+    sd->ob_tfm_motion = object_fetch_transform_motion(kg, sd->object, time);
+    sd->ob_itfm_motion = transform_quick_inverse(sd->ob_tfm_motion);
   }
 }
 #endif
@@ -299,16 +295,10 @@ ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restric
 
 #ifdef __OBJECT_MOTION__
     shader_setup_object_transforms(kg, sd, time);
-  }
-  else if (lamp != LAMP_NONE) {
-    sd->ob_tfm = lamp_fetch_transform(kg, lamp, false);
-    sd->ob_itfm = lamp_fetch_transform(kg, lamp, true);
-    sd->lamp = lamp;
-#else
-  }
-  else if (lamp != LAMP_NONE) {
-    sd->lamp = lamp;
 #endif
+  }
+  else if (lamp != LAMP_NONE) {
+    sd->lamp = lamp;
   }
 
   /* transform into world space */

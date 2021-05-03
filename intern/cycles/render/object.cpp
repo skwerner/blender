@@ -266,14 +266,7 @@ bool Object::is_traceable() const
 
 uint Object::visibility_for_tracing() const
 {
-  uint trace_visibility = visibility;
-  if (is_shadow_catcher) {
-    trace_visibility &= ~PATH_RAY_SHADOW_NON_CATCHER;
-  }
-  else {
-    trace_visibility &= ~PATH_RAY_SHADOW_CATCHER;
-  }
-  return trace_visibility;
+  return SHADOW_CATCHER_OBJECT_VISIBILITY(is_shadow_catcher, visibility & PATH_RAY_ALL_VISIBILITY);
 }
 
 float Object::compute_volume_step_size() const

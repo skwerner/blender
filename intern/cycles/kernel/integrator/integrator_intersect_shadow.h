@@ -18,14 +18,17 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Visibility for the shadow ray. */
 ccl_device_forceinline uint integrate_intersect_shadow_visibility(INTEGRATOR_STATE_CONST_ARGS)
 {
+  uint visibility = PATH_RAY_SHADOW;
+
+#ifdef __SHADOW_CATCHER__
   const uint32_t path_flag = INTEGRATOR_STATE(shadow_path, flag);
-#ifdef __SHADOW_TRICKS__
-  return (path_flag & PATH_RAY_SHADOW_CATCHER) ? PATH_RAY_SHADOW_NON_CATCHER : PATH_RAY_SHADOW;
-#else
-  return PATH_RAY_SHADOW;
+  visibility = SHADOW_CATCHER_PATH_VISIBILITY(path_flag, visibility);
 #endif
+
+  return visibility;
 }
 
 ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
@@ -34,8 +37,15 @@ ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
 {
   PROFILING_INIT(kg, PROFILING_SCENE_INTERSECT);
 
+  /* Mask which will pick only opaque visibility bits from the `visibility`.
+   * Calculate the mask at compile time: the visibility will either be a high bits for the shadow
+   * catcher objects, or lower bits for the regular objects (there is no need to check the path
+   * state here again). */
+  ccl_constexpr const uint opaque_mask = SHADOW_CATCHER_VISIBILITY_SHIFT(PATH_RAY_SHADOW_OPAQUE) |
+                                         PATH_RAY_SHADOW_OPAQUE;
+
   Intersection isect;
-  const bool opaque_hit = scene_intersect(kg, ray, visibility & PATH_RAY_SHADOW_OPAQUE, &isect);
+  const bool opaque_hit = scene_intersect(kg, ray, visibility & opaque_mask, &isect);
 
   if (!opaque_hit) {
     INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = 0;

@@ -203,7 +203,7 @@ ccl_device_inline float svm_image_texture_frac(float x, int *ix)
   } \
   (void)0
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y, differential, differential)
+ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y, differential, differential, uint)
 {
   const ccl_global TextureInfo *info = kernel_tex_info(kg, id);
 

@@ -818,7 +818,7 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
 #endif
   else if (type == IMAGE_DATA_TYPE_OIIO) {
     thread_scoped_lock device_lock(device_mutex);
-    void *pixels = img->mem->alloc(sizeof(OIIO::TextureSystem::TextureHandle*), 0);
+    void *pixels = img->mem->alloc(1, 1);
 
     if (pixels != NULL) {
       OIIO::TextureSystem *tex_sys = (OIIO::TextureSystem *)oiio_texture_system;

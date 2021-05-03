@@ -592,7 +592,7 @@ template<typename T> struct NanoVDBInterpolator {
 
 #undef SET_CUBIC_SPLINE_WEIGHTS
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y, differential ds, differential dt)
+ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, float y, differential ds, differential dt, uint path_flag)
 {
   const TextureInfo &info = kernel_tex_fetch(__texture_info, id);
   float4 r = make_float4(TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
@@ -625,12 +625,16 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
     case IMAGE_DATA_TYPE_OIIO:
     {
 #ifdef __OIIO__
+      /* Make sure we have all necessary data in place, if not, bail. */
       kernel_assert(kg->oiio);
       kernel_assert(kg->oiio->tex_sys);
       kernel_assert(info.data);
       if (!kg->oiio || !kg->oiio->tex_sys || !info.data) {
         return r;
       }
+      /* Options: Anisotropic is a quality/speed tradeoff.
+       * Interpolation and extensions are supported in OIIO under different constants.
+       * */
       OIIO::TextureOpt options;
       options.anisotropic = 8;
       float missingcolor[4] = {
@@ -666,13 +670,13 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
           options.swrap = options.twrap = OIIO::TextureOpt::WrapPeriodic;
           break;
       }
-#if 0
+
+      /* Texture lookup simplifications on less important paths. */
       if (path_flag & NEAREST_LOOKUP_PATHS && !(path_flag & PATH_RAY_SINGULAR)) {
         options.interpmode = OIIO::TextureOpt::InterpClosest;
         options.mipmode = OIIO::TextureOpt::MipModeOneLevel;
       }
       else {
-        options.interpmode = kg->oiio->textures[id].interpolation;
         options.mipmode = OIIO::TextureOpt::MipModeAniso;
       }
       if (path_flag & DIFFUSE_BLUR_PATHS) {
@@ -684,7 +688,7 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals *kg, int id, float x, fl
       else {
         options.sblur = options.tblur = 0.0f;
       }
-#endif
+  
       OIIO::TextureSystem::TextureHandle *handle = *((OIIO::TextureSystem::TextureHandle**)info.data);
       kernel_assert(handle && kg->oiio->tex_sys->good(handle));
       if(handle && !kg->oiio->tex_sys->good(handle)) {

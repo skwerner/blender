@@ -186,7 +186,7 @@ ccl_device float3 sky_radiance_nishita(KernelGlobals *kg,
       if (x > 1.0f) {
         x -= 1.0f;
       }
-      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, y, ds, dt));
+      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, y, ds, dt, 0));
     }
   }
   /* ground */
@@ -203,7 +203,7 @@ ccl_device float3 sky_radiance_nishita(KernelGlobals *kg,
       if (x > 1.0f) {
         x -= 1.0f;
       }
-      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, -0.5f, ds, dt)) * fade;
+      xyz = float4_to_float3(kernel_tex_image_interp(kg, texture_id, x, -0.5f, ds, dt, 0)) * fade;
     }
   }
 

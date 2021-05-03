@@ -487,7 +487,6 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
 
   compiler.parameter(this, "projection");
   compiler.parameter(this, "projection_blend");
-  compiler.parameter("compress_as_srgb", compress_as_srgb);
   compiler.parameter("ignore_alpha", alpha_type == IMAGE_ALPHA_IGNORE);
   compiler.parameter("unassociate_alpha", !alpha_out->links.empty() && unassociate_alpha);
   compiler.parameter("is_float", is_float);
@@ -637,7 +636,6 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
 
   compiler.parameter(this, "projection");
   compiler.parameter(this, "interpolation");
-  compiler.parameter("compress_as_srgb", compress_as_srgb);
   compiler.parameter("ignore_alpha", alpha_type == IMAGE_ALPHA_IGNORE);
   compiler.parameter("is_float", is_float);
   compiler.add(this, "node_environment_texture");

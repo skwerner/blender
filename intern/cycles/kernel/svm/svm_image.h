@@ -14,15 +14,6 @@
  * limitations under the License.
  */
 
-#ifdef __OIIO__
-#  include <OpenImageIO/texture.h>
-#  include "kernel/kernel_oiio_globals.h"
-#  define NEAREST_LOOKUP_PATHS \
-    (PATH_RAY_DIFFUSE | PATH_RAY_SHADOW | PATH_RAY_DIFFUSE_ANCESTOR | PATH_RAY_VOLUME_SCATTER | \
-     PATH_RAY_GLOSSY | PATH_RAY_EMISSION)
-#  define DIFFUSE_BLUR_PATHS (PATH_RAY_DIFFUSE | PATH_RAY_DIFFUSE_ANCESTOR)
-#endif
-
 CCL_NAMESPACE_BEGIN
 
 ccl_device float4 svm_image_texture(KernelGlobals *kg,
@@ -39,7 +30,7 @@ ccl_device float4 svm_image_texture(KernelGlobals *kg,
         TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
   }
 
-  float4 r = kernel_tex_image_interp(kg, id, x, y, ds, dt);
+  float4 r = kernel_tex_image_interp(kg, id, x, y, ds, dt, path_flag);
   const float alpha = r.w;
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {

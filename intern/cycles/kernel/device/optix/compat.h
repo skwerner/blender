@@ -86,6 +86,8 @@ __device__ half __float2half(const float f)
 // Zero initialize structs to help the compiler figure out scoping
 #define ccl_optional_struct_init = {}
 
+#define ccl_constexpr
+
 #define kernel_data __params.data  // See globals.h
 #define kernel_tex_array(t) __params.t
 #define kernel_tex_fetch(t, index) __params.t[(index)]

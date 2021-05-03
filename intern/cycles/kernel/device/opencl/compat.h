@@ -46,6 +46,7 @@
 #define ccl_ref
 #define ccl_align(n) __attribute__((aligned(n)))
 #define ccl_optional_struct_init
+#define ccl_constexpr
 #define ccl_attr_maybe_unused
 
 #if __OPENCL_VERSION__ >= 200 && !defined(__NV_CL_C_VERSION)

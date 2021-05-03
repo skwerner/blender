@@ -102,6 +102,7 @@ class ImageDeviceFeatures {
  public:
   bool has_half_float;
   bool has_nanovdb;
+  bool has_texture_cache;
 };
 
 /* Image loader base class, that can be subclassed to load image data

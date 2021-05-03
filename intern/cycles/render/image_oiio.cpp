@@ -82,7 +82,7 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMe
   /* set type and channels */
   metadata.channels = spec.nchannels;
 
-  if (is_tiled) {
+  if (is_tiled && features.has_texture_cache) {
     metadata.type = IMAGE_DATA_TYPE_OIIO;
   }
   else if (is_half) {

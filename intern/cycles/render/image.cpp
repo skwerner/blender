@@ -314,6 +314,7 @@ ImageManager::ImageManager(const DeviceInfo &info)
   /* Set image limits */
   features.has_half_float = info.has_half_images;
   features.has_nanovdb = info.has_nanovdb;
+  features.has_texture_cache = false;
 }
 
 ImageManager::~ImageManager()
@@ -325,6 +326,7 @@ ImageManager::~ImageManager()
 void ImageManager::set_oiio_texture_system(void *texture_system)
 {
   oiio_texture_system = texture_system;
+  features.has_texture_cache = texture_system != NULL;
 }
 
 bool ImageManager::set_animation_frame_update(int frame)
@@ -681,7 +683,7 @@ void ImageManager::device_load_image(Device *device, Scene *scene, int slot, Pro
 
   Image *img = images[slot];
 
-  if (oiio_texture_system && !img->builtin) {
+  if (features.has_texture_cache && !img->builtin) {
     /* Get or generate a mip mapped tile image file.
      * If we have a mip map, assume it's linear, not sRGB. */
     const char *cache_path = scene->params.texture.use_custom_cache_path ?

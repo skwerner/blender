@@ -82,11 +82,9 @@ __device__ half __float2half(const float f)
 #define ccl_ref
 #define ccl_align(n) __align__(n)
 #define ccl_optional_struct_init
-#define ccl_constexpr
 
-/* TODO(sergey): Should be able to use [[maybe_unused]] once the kernels are compiled with C++17
- * standard support, */
-#define ccl_attr_maybe_unused
+#define ccl_attr_maybe_unused [[maybe_unused]]
+#define ccl_constexpr constexpr
 
 #define ATTR_FALLTHROUGH
 

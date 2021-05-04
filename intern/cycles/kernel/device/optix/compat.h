@@ -79,14 +79,11 @@ __device__ half __float2half(const float f)
 #define ccl_ref
 #define ccl_align(n) __align__(n)
 
-/* TODO(sergey): Should be able to use [[maybe_unused]] once the kernels are compiled with C++17
- * standard support, */
-#define ccl_attr_maybe_unused
+#define ccl_attr_maybe_unused [[maybe_unused]]
+#define ccl_constexpr constexpr
 
 // Zero initialize structs to help the compiler figure out scoping
 #define ccl_optional_struct_init = {}
-
-#define ccl_constexpr
 
 #define kernel_data __params.data  // See globals.h
 #define kernel_tex_array(t) __params.t

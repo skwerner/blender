@@ -528,7 +528,7 @@ bool Scene::update(Progress &progress)
 
 void Scene::update_passes()
 {
-  if (!integrator->is_modified() && !film->is_modified()) {
+  if (!object_manager->need_update() && !integrator->is_modified() && !film->is_modified()) {
     return;
   }
 
@@ -560,6 +560,12 @@ void Scene::update_passes()
     if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
       Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, true);
     }
+  }
+
+  /* Create passes for shadow catcher. */
+  if (has_shadow_catcher()) {
+    Pass::add(PASS_SHADOW_CATCHER, passes, nullptr, true);
+    Pass::add(PASS_SHADOW_CATCHER_MATTE, passes, nullptr, true);
   }
 
   film->tag_modified();
@@ -628,6 +634,19 @@ int Scene::get_max_closure_count()
   }
 
   return max_closure_global;
+}
+
+bool Scene::has_shadow_catcher() const
+{
+  /* TODO(sergey): Calculate once when object manager changes. */
+
+  for (Object *object : objects) {
+    if (object->get_is_shadow_catcher()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 template<> Light *Scene::create_node<Light>()

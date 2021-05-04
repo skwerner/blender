@@ -48,6 +48,10 @@ class PassAccessor {
 
   int get_pass_offset(PassType type) const;
 
+  /* NOTE: Leaves pass and offset unchanged if the pass is not found. */
+  void get_pass_by_name(const string &name, const Pass **r_pass, int *r_offset) const;
+  void get_pass_by_type(const PassType type, const Pass **r_pass, int *r_offset) const;
+
  protected:
   const vector<Pass> &passes_;
 

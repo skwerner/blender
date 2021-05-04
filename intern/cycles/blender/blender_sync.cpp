@@ -522,6 +522,8 @@ PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
   MAP_PASS("Denoising Normal", PASS_DENOISING_NORMAL);
   MAP_PASS("Denoising Albedo", PASS_DENOISING_ALBEDO);
 
+  MAP_PASS("Shadow Catcher", PASS_SHADOW_CATCHER);
+
   MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
 
   MAP_PASS("AdaptiveAuxBuffer", PASS_ADAPTIVE_AUX_BUFFER);
@@ -602,6 +604,11 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   if (get_boolean(crl, "use_pass_volume_indirect")) {
     b_engine.add_pass("VolumeInd", 3, "RGB", b_view_layer.name().c_str());
     Pass::add(PASS_VOLUME_INDIRECT, passes, "VolumeInd");
+  }
+
+  if (get_boolean(crl, "use_pass_shadow_catcher")) {
+    b_engine.add_pass("Shadow Catcher", 4, "RGBA", b_view_layer.name().c_str());
+    Pass::add(PASS_SHADOW_CATCHER, passes, "Shadow Catcher");
   }
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.

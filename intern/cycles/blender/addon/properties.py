@@ -1209,6 +1209,13 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         update=update_render_passes,
     )
 
+    use_pass_shadow_catcher: BoolProperty(
+        name="Shadow Catcher",
+        description="Pass containing shadows and light which is to be multiplied into backdrop",
+        default=False,
+        update=update_render_passes,
+    )
+
     use_denoising: BoolProperty(
         name="Use Denoising",
         description="Denoise the rendered image",

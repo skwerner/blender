@@ -118,20 +118,19 @@ PassAccessor::PassAccessor(const vector<Pass> &passes,
                            int num_samples)
     : passes_(passes),
       pass_offset_(PASS_UNUSED),
+      pass_(nullptr),
       num_components_(num_components),
       exposure_(exposure),
       num_samples_(num_samples)
 {
-  int pass_offset = 0;
-  for (const Pass &pass : passes_) {
-    /* Pass is identified by both type and name, multiple of the same type may exist with a
-     * different name. */
-    if (pass.name == pass_name) {
-      pass_offset_ = pass_offset;
-      pass_ = &pass;
-      break;
-    }
-    pass_offset += pass.components;
+  get_pass_by_name(pass_name, &pass_, &pass_offset_);
+
+  /* When shadow catcher is used the combined pass is only used to get proper value for the
+   * shadow catcher pass. It is not very useful for artists as it is. What artists expect as a
+   * combined pass is something what is to be alpha-overed onto the footage. So we swap the
+   * combined pass with shadow catcher matte here. */
+  if (pass_ && pass_->type == PASS_COMBINED) {
+    get_pass_by_type(PASS_SHADOW_CATCHER_MATTE, &pass_, &pass_offset_);
   }
 }
 
@@ -326,6 +325,56 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
         pixels[3] = saturate(1.0f - transparency);
       }
     }
+    else if (type == PASS_SHADOW_CATCHER) {
+      /* For the shadow catcher pass we divide combined pass by the shadow catcher.
+       *
+       * The non-obvious trick here is that we add matte pass to the shadow catcher, so that we
+       * avoid division by zero. This solves artifacts around edges of the artificial object.
+       *
+       * Another trick we do here is to alpha-over the pass on top of white. and ignore the alpha.
+       * This way using transparent film to render artificial objects will be easy to be combined
+       * with a backdrop. */
+
+      const int pass_combined = get_pass_offset(PASS_COMBINED);
+      const int pass_matte = get_pass_offset(PASS_SHADOW_CATCHER_MATTE);
+
+      DCHECK_NE(pass_combined, PASS_UNUSED);
+      DCHECK_NE(pass_matte, PASS_UNUSED);
+
+      const float *in_combined = buffer_data + pass_combined;
+      const float *in_matte = buffer_data + pass_matte;
+
+      for (int i = 0; i < size; i++,
+               in += pass_stride,
+               in_combined += pass_stride,
+               in_matte += pass_stride,
+               pixels += 4) {
+        float scale, scale_exposure;
+        scaler.scale_and_scale_exposure(i, scale, scale_exposure);
+
+        const float3 color_catcher = make_float3(in[0], in[1], in[2]) * scale_exposure;
+        const float3 color_combined = make_float3(in_combined[0], in_combined[1], in_combined[2]) *
+                                      scale_exposure;
+        const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]) *
+                                   scale_exposure;
+
+        const float transparency = in_combined[3] * scale;
+        const float alpha = saturate(1.0f - transparency);
+
+        const float3 shadow_catcher = safe_divide_even_color(color_combined,
+                                                             color_catcher + color_matte);
+
+        /* Restore pre-multipled nature of the color, avoiding artifacts on the edges.
+         * Makes sense since the division of premultiplied color's "removes" alpha from the
+         * result. */
+        const float3 pixel = (1.0f - alpha) * one_float3() + alpha * shadow_catcher;
+
+        pixels[0] = pixel.x;
+        pixels[1] = pixel.y;
+        pixels[2] = pixel.z;
+        pixels[3] = 1.0f;
+      }
+    }
     else {
       for (int i = 0; i < size; i++, in += pass_stride, pixels += 4) {
         float scale, scale_exposure;
@@ -406,6 +455,34 @@ int PassAccessor::get_pass_offset(PassType type) const
   }
 
   return PASS_UNUSED;
+}
+
+void PassAccessor::get_pass_by_name(const string &name, const Pass **r_pass, int *r_offset) const
+{
+  int pass_offset = 0;
+  for (const Pass &pass : passes_) {
+    /* Pass is identified by both type and name, multiple of the same type may exist with a
+     * different name. */
+    if (pass.name == name) {
+      *r_offset = pass_offset;
+      *r_pass = &pass;
+      break;
+    }
+    pass_offset += pass.components;
+  }
+}
+
+void PassAccessor::get_pass_by_type(const PassType type, const Pass **r_pass, int *r_offset) const
+{
+  int pass_offset = 0;
+  for (const Pass &pass : passes_) {
+    if (pass.type == type) {
+      *r_offset = pass_offset;
+      *r_pass = &pass;
+      break;
+    }
+    pass_offset += pass.components;
+  }
 }
 
 CCL_NAMESPACE_END

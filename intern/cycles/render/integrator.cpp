@@ -217,6 +217,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
     }
   }
 
+  kintegrator->has_shadow_catcher = scene->has_shadow_catcher();
+
   dscene->sample_pattern_lut.clear_modified();
   clear_modified();
 }

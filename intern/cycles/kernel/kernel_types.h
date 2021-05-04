@@ -419,6 +419,16 @@ typedef enum PassType {
   PASS_DENOISING_COLOR,
   PASS_DENOISING_NORMAL,
   PASS_DENOISING_ALBEDO,
+
+  /* PASS_SHADOW_CATCHER accumulates contribution of shadow catcher object which is not affected by
+   * any other object. The pass accessor will divide the combined pass by the shadow catcher. The
+   * result of this division is then to be multiplied with the backdrop.
+   *
+   * PASS_SHADOW_CATCHER_MATTE contains pass which contains non-catcher objects. This pass is to be
+   * alpha-overed onto the backdrop (after multiplication). */
+  PASS_SHADOW_CATCHER,
+  PASS_SHADOW_CATCHER_MATTE,
+
 #ifdef __KERNEL_DEBUG__
   PASS_BVH_TRAVERSED_NODES,
   PASS_BVH_TRAVERSED_INSTANCES,
@@ -1217,7 +1227,12 @@ typedef struct KernelFilm {
 
   int pass_shadow;
   float pass_shadow_scale;
+
+  int pass_shadow_catcher;
+  int pass_shadow_catcher_matte;
+
   int filter_table_offset;
+
   int cryptomatte_passes;
   int cryptomatte_depth;
   int pass_cryptomatte;
@@ -1357,7 +1372,9 @@ typedef struct KernelIntegrator {
 
   int max_closures;
 
-  int pad1, pad2, pad3;
+  int has_shadow_catcher;
+
+  int pad1, pad2;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

@@ -67,7 +67,10 @@ class PathTraceWorkGPU : public PathTraceWork {
 
   int get_num_active_paths();
 
-  int get_max_num_paths();
+  /* Maximum number of paths which are allowed to be initialized from the camera.
+   * For the shadow catcher case we limit number of camera rays to make it so split is possible.
+   * If there are no shadow catcher in the scene, it the same as `max_num_paths_`. */
+  int get_max_num_camera_paths() const;
 
   /* Naive implementation of the `copy_to_gpu_display()` which performs film conversion on the
    * device, then copies pixels to the host and pushes them to the `gpu_display`. */
@@ -84,6 +87,12 @@ class PathTraceWorkGPU : public PathTraceWork {
   bool adaptive_sampling_convergence_check(float threshold, bool reset);
   void enqueue_adaptive_sampling_filter_x();
   void enqueue_adaptive_sampling_filter_y();
+
+  bool has_shadow_catcher() const;
+
+  /* Offset from the current path state index to its complementary shadow catcher state.
+   * If there are no shadow catchers in the scene is 0 to simplify some calculations. */
+  int get_shadow_catcher_state_offset() const;
 
   /* Integrator queue. */
   unique_ptr<DeviceQueue> queue_;

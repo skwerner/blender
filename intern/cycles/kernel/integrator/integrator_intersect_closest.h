@@ -20,6 +20,7 @@
 #include "kernel/kernel_light.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_projection.h"
+#include "kernel/kernel_shadow_catcher.h"
 
 #include "kernel/geom/geom.h"
 
@@ -132,6 +133,9 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
       if (shader != SHADER_NONE) {
         INTEGRATOR_PATH_SET_SORT_KEY(shader);
         INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_SURFACE);
+
+        const int object_flags = intersection_get_object_flags(kg, &isect);
+        kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags);
         return;
       }
       else {

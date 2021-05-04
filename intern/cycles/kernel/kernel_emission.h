@@ -118,14 +118,7 @@ ccl_device_inline bool light_sample_terminate(const KernelGlobals *ccl_restrict 
     return true;
   }
 
-  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f
-  /* TODO */
-#if 0
-#  ifdef __SHADOW_TRICKS__
-      && (state->flag & PATH_RAY_SHADOW_CATCHER) == 0
-#  endif
-#endif
-  ) {
+  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
     float probability = max3(fabs(bsdf_eval_sum(eval))) *
                         kernel_data.integrator.light_inv_rr_threshold;
     if (probability < 1.0f) {

@@ -261,6 +261,16 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
       num_states, indices, num_indices, [](const int path_index) {
+        if (kernel_data.integrator.has_shadow_catcher) {
+          /* NOTE: The kernel invocation limits number of states checked, ensuring that only
+           * non-shadow-catcher states are checked here. */
+
+          /* Only allow termination of both complementary states did finish their job. */
+          if (INTEGRATOR_SHADOW_CATCHER_STATE(path, queued_kernel) != 0 ||
+              INTEGRATOR_SHADOW_CATCHER_STATE(shadow_path, queued_kernel) != 0) {
+            return false;
+          }
+        }
         return (INTEGRATOR_STATE(path, queued_kernel) == 0) &&
                (INTEGRATOR_STATE(shadow_path, queued_kernel) == 0);
       });

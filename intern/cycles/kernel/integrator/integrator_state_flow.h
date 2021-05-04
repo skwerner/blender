@@ -92,6 +92,34 @@ CCL_NAMESPACE_BEGIN
       atomic_fetch_and_add_uint32(&kernel_integrator_state.sort_key_counter[key_], 1); \
     }
 
+#  define INTEGRATOR_SHADOW_CATCHER_PATH_INIT() \
+    { \
+      /* Path. */ \
+      { \
+        atomic_fetch_and_add_uint32( \
+            &kernel_integrator_state.queue_counter \
+                 ->num_queued[INTEGRATOR_SHADOW_CATCHER_STATE(path, queued_kernel)], \
+            1); \
+      } \
+      /* Shadow path. Note that it is optional. */ \
+      { \
+        const int shadow_kernel = INTEGRATOR_SHADOW_CATCHER_STATE(shadow_path, queued_kernel); \
+        if (shadow_kernel != 0) { \
+          atomic_fetch_and_add_uint32( \
+              &kernel_integrator_state.queue_counter->num_queued[shadow_kernel], 1); \
+        } \
+      } \
+      /* Sorting. */ \
+      { \
+        if (INTEGRATOR_SHADOW_CATCHER_STATE(path, queued_kernel) == \
+            DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE) { \
+          atomic_fetch_and_add_uint32( \
+              &kernel_integrator_state.sort_key_counter[INTEGRATOR_STATE(path, shader_sort_key)], \
+              1); \
+        } \
+      } \
+    }
+
 #else
 
 #  define INTEGRATOR_PATH_INIT(next_kernel) \
@@ -109,6 +137,8 @@ CCL_NAMESPACE_BEGIN
     INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
 
 #  define INTEGRATOR_PATH_SET_SORT_KEY(key)
+
+#  define INTEGRATOR_SHADOW_CATCHER_PATH_INIT()
 
 #endif
 

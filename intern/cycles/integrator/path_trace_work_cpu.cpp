@@ -21,6 +21,7 @@
 
 #include "render/buffers.h"
 #include "render/gpu_display.h"
+#include "render/scene.h"
 
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
@@ -101,8 +102,12 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
                                                     const KernelWorkTile &work_tile,
                                                     const int samples_num)
 {
-  IntegratorState integrator_state;
-  IntegratorState *state = &integrator_state;
+  const bool has_shadow_catcher = device_scene_->data.integrator.has_shadow_catcher;
+
+  IntegratorState integrator_states[2];
+
+  IntegratorState *state = &integrator_states[0];
+  IntegratorState *shadow_catcher_state = &integrator_states[1];
 
   KernelWorkTile sample_work_tile = work_tile;
   float *render_buffer = render_buffers_->buffer.data();
@@ -118,6 +123,10 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
     }
 
     kernels_.integrator_megakernel(kernel_globals, state, render_buffer);
+
+    if (has_shadow_catcher) {
+      kernels_.integrator_megakernel(kernel_globals, shadow_catcher_state, render_buffer);
+    }
 
     ++sample_work_tile.start_sample;
   }

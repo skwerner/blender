@@ -247,6 +247,7 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
       pass.components = 4;
       pass.exposure = true;
       break;
+
     case PASS_CRYPTOMATTE:
       pass.components = 4;
       break;
@@ -263,6 +264,15 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
     case PASS_DENOISING_ALBEDO:
       pass.components = 3;
       pass.is_unaligned = true;
+      break;
+
+    case PASS_SHADOW_CATCHER:
+      pass.components = 4;
+      pass.exposure = true;
+      break;
+    case PASS_SHADOW_CATCHER_MATTE:
+      pass.components = 4;
+      pass.exposure = true;
       break;
 
     case PASS_ADAPTIVE_AUX_BUFFER:
@@ -581,8 +591,19 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_denoising_albedo = PASS_UNUSED;
   kfilm->pass_sample_count = PASS_UNUSED;
   kfilm->pass_adaptive_aux_buffer = PASS_UNUSED;
+  kfilm->pass_shadow_catcher = PASS_UNUSED;
+  kfilm->pass_shadow_catcher_matte = PASS_UNUSED;
 
   bool have_cryptomatte = false;
+
+  /* When shadow catcher is used the combined pass is only used to get proper value for the
+   * shadow catcher pass. It is not very useful for artists as it is. What artists expect as a
+   * combined pass is something what is to be alpha-overed onto the footage. So we swap the
+   * combined pass with shadow catcher matte here. */
+  const PassType effective_display_pass_type = (display_pass == PASS_COMBINED &&
+                                                scene->has_shadow_catcher()) ?
+                                                   PASS_SHADOW_CATCHER_MATTE :
+                                                   display_pass;
 
   for (size_t i = 0; i < scene->passes.size(); i++) {
     Pass &pass = scene->passes[i];
@@ -735,6 +756,13 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         kfilm->have_denoising_passes = 1;
         break;
 
+      case PASS_SHADOW_CATCHER:
+        kfilm->pass_shadow_catcher = kfilm->pass_stride;
+        break;
+      case PASS_SHADOW_CATCHER_MATTE:
+        kfilm->pass_shadow_catcher_matte = kfilm->pass_stride;
+        break;
+
       case PASS_ADAPTIVE_AUX_BUFFER:
         kfilm->pass_adaptive_aux_buffer = kfilm->pass_stride;
         break;
@@ -759,7 +787,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
     }
 
-    if (pass.type == display_pass) {
+    if (pass.type == effective_display_pass_type) {
       kfilm->display_pass_offset = kfilm->pass_stride;
       kfilm->display_pass_components = pass.components;
       kfilm->use_display_exposure = pass.exposure && (kfilm->exposure != 1.0f);

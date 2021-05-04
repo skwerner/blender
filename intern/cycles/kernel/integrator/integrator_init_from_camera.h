@@ -21,6 +21,7 @@
 #include "kernel/kernel_camera.h"
 #include "kernel/kernel_path_state.h"
 #include "kernel/kernel_random.h"
+#include "kernel/kernel_shadow_catcher.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -71,6 +72,10 @@ ccl_device bool integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
 {
   /* Initialize path state to give basic buffer access and allow early outputs. */
   path_state_init(INTEGRATOR_STATE_PASS, tile, x, y);
+
+  /* Always make sure the state is initialized, so that features disabled in the kernel will not
+   * affect the logic on the host device. */
+  kernel_shadow_catcher_state_init(INTEGRATOR_STATE_PASS);
 
   /* Check whether the pixel has converged and should not be sampled anymore. */
   if (!kernel_need_sample_pixel(INTEGRATOR_STATE_PASS, render_buffer)) {

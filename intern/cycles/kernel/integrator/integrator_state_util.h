@@ -138,4 +138,45 @@ ccl_device_forceinline void integrator_state_copy_volume_stack_to_shadow(INTEGRA
   }
 }
 
+ccl_device_inline void integrator_state_copy_to_shadow_catcher(INTEGRATOR_STATE_ARGS)
+{
+  int index;
+
+  /* Rely on the compiler to optimize out unused assignments and `while(false)`'s. */
+
+#define KERNEL_STRUCT_BEGIN(name) \
+  index = 0; \
+  do {
+
+#define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
+  INTEGRATOR_SHADOW_CATCHER_STATE_WRITE(parent_struct, name) = INTEGRATOR_STATE(parent_struct, \
+                                                                                name);
+
+#define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
+  INTEGRATOR_SHADOW_CATCHER_STATE_ARRAY_WRITE( \
+      parent_struct, index, name) = INTEGRATOR_STATE_ARRAY(parent_struct, index, name);
+
+#define KERNEL_STRUCT_END(name) \
+  } \
+  while (false) \
+    ;
+
+#define KERNEL_STRUCT_END_ARRAY(name, array_size) \
+  ++index; \
+  } \
+  while (index < array_size) \
+    ;
+
+#include "kernel/integrator/integrator_state_template.h"
+
+#undef KERNEL_STRUCT_BEGIN
+#undef KERNEL_STRUCT_MEMBER
+#undef KERNEL_STRUCT_ARRAY_MEMBER
+#undef KERNEL_STRUCT_END
+#undef KERNEL_STRUCT_END_ARRAY
+
+  /* Make sure the device is aware of an extra kernel queued by the shadow catcher state. */
+  INTEGRATOR_SHADOW_CATCHER_PATH_INIT();
+}
+
 CCL_NAMESPACE_END

@@ -20,6 +20,15 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Initialize queues, so that the this path is considered terminated.
+ * Used for early outputs in the camera ray initialization, as well as initialization of split
+ * states for shadow catcher. */
+ccl_device_inline void path_state_init_queues(INTEGRATOR_STATE_ARGS)
+{
+  INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
+  INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+}
+
 /* Minimalistic initialization of the path state, which is needed for early outputs in the
  * integrator initialization to work. */
 ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
@@ -31,8 +40,7 @@ ccl_device_inline void path_state_init(INTEGRATOR_STATE_ARGS,
 
   INTEGRATOR_STATE_WRITE(path, render_pixel_index) = render_pixel_index;
 
-  INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
-  INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+  path_state_init_queues(INTEGRATOR_STATE_PASS);
 }
 
 /* Initialize the rest of the path state needed to continue the path integration. */

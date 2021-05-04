@@ -124,6 +124,31 @@ ccl_device_inline void kernel_write_denoising_features(
 }
 #endif /* __DENOISING_FEATURES__ */
 
+#ifdef __SHADOW_CATCHER__
+
+/* Write transparency to the matte pass at a bounce off the shadow catcher object (this is where
+ * the path split happens). */
+ccl_device_inline void kernel_write_shadow_catcher_bounce_data(
+    INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
+{
+  if (kernel_data.film.pass_shadow_catcher_matte == PASS_UNUSED) {
+    return;
+  }
+
+  if (!kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STATE_PASS, sd->object_flag)) {
+    return;
+  }
+
+  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
+
+  /* TODO(sergey): Use contribution and transparency based on the throughput, allowing to have
+   * transparent object between camera and shadow catcher. */
+
+  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3, 1.0f);
+}
+
+#endif /* __SHADOW_CATCHER__ */
+
 #if 0
 #  ifdef __KERNEL_DEBUG__
 ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *ccl_restrict kg,

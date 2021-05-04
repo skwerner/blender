@@ -30,7 +30,6 @@
 #include "kernel/integrator/integrator_intersect_closest.h"
 #include "kernel/integrator/integrator_intersect_shadow.h"
 #include "kernel/integrator/integrator_intersect_subsurface.h"
-#include "kernel/integrator/integrator_megakernel.h"
 
 #include "kernel/kernel_adaptive_sampling.h"
 #include "kernel/kernel_bake.h"
@@ -63,16 +62,6 @@ template<bool always = false> ccl_device_forceinline uint get_object_id()
   else
     // Set to OBJECT_NONE if this is not an instanced object
     return OBJECT_NONE;
-}
-
-extern "C" __global__ void __raygen__kernel_optix_integrator_megakernel()
-{
-  const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
-  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
-                                                       global_index;
-  integrator_megakernel(&kg, path_index, __params.render_buffer);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_closest()

@@ -40,8 +40,7 @@ void OptiXDeviceQueue::init_execution()
 
 static bool is_optix_specific_kernel(DeviceKernel kernel)
 {
-  return (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL ||
-          kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
+  return (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
           kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
           kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
 }
@@ -73,14 +72,6 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
                         args[0],  // &d_path_index
                         sizeof(device_ptr),
                         cuda_stream_));
-  if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
-    cuda_device_assert(
-        cuda_device_,
-        cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParamsOptiX, render_buffer),
-                          args[1],  // &d_render_buffer
-                          sizeof(device_ptr),
-                          cuda_stream_));
-  }
 
   cuda_device_assert(cuda_device_, cuStreamSynchronize(cuda_stream_));
 
@@ -88,10 +79,6 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
   OptixShaderBindingTable sbt_params = {};
 
   switch (kernel) {
-    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
-      pipeline = optix_device->pipelines[PIP_MEGAKERNEL];
-      sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_MEGAKERNEL * sizeof(SbtRecord);
-      break;
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
       pipeline = optix_device->pipelines[PIP_INTERSECT];
       sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_CLOSEST * sizeof(SbtRecord);
@@ -111,6 +98,7 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
+    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:

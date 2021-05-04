@@ -28,6 +28,11 @@ void CUDADeviceKernels::load(CUDADevice *device)
   for (int i = 0; i < (int)DEVICE_KERNEL_NUM; i++) {
     CUDADeviceKernel &kernel = kernels_[i];
 
+    /* No megakernel used for GPU. */
+    if (i == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
+      continue;
+    }
+
     const std::string function_name = std::string("kernel_cuda_") +
                                       device_kernel_as_string((DeviceKernel)i);
     cuda_device_assert(device,

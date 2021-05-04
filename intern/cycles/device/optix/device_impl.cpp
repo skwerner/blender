@@ -300,10 +300,6 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   OptixProgramGroup groups[NUM_PROGRAM_GROUPS] = {};
   OptixProgramGroupDesc group_descs[NUM_PROGRAM_GROUPS] = {};
   OptixProgramGroupOptions group_options = {}; /* There are no options currently. */
-  group_descs[PG_RGEN_MEGAKERNEL].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
-  group_descs[PG_RGEN_MEGAKERNEL].raygen.module = optix_module;
-  group_descs[PG_RGEN_MEGAKERNEL].raygen.entryFunctionName =
-      "__raygen__kernel_optix_integrator_megakernel";
   group_descs[PG_RGEN_INTERSECT_CLOSEST].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
   group_descs[PG_RGEN_INTERSECT_CLOSEST].raygen.module = optix_module;
   group_descs[PG_RGEN_INTERSECT_CLOSEST].raygen.entryFunctionName =
@@ -432,54 +428,6 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 #  if OPTIX_ABI_VERSION < 24
   link_options.overrideUsesMotionBlur = motion_blur;
 #  endif
-
-  { /* Create megakernel pipeline. */
-    vector<OptixProgramGroup> pipeline_groups;
-    pipeline_groups.reserve(NUM_PROGRAM_GROUPS);
-    pipeline_groups.push_back(groups[PG_RGEN_MEGAKERNEL]);
-    pipeline_groups.push_back(groups[PG_MISS]);
-    pipeline_groups.push_back(groups[PG_HITD]);
-    pipeline_groups.push_back(groups[PG_HITS]);
-    pipeline_groups.push_back(groups[PG_HITL]);
-#  if OPTIX_ABI_VERSION >= 36
-    if (motion_blur) {
-      pipeline_groups.push_back(groups[PG_HITD_MOTION]);
-      pipeline_groups.push_back(groups[PG_HITS_MOTION]);
-    }
-#  endif
-    if (requested_features.use_shader_raytrace) {
-      pipeline_groups.push_back(groups[PG_CALL + 0]);
-      pipeline_groups.push_back(groups[PG_CALL + 1]);
-      pipeline_groups.push_back(groups[PG_CALL + 2]);
-    }
-
-    optix_assert(optixPipelineCreate(context,
-                                     &pipeline_options,
-                                     &link_options,
-                                     pipeline_groups.data(),
-                                     pipeline_groups.size(),
-                                     nullptr,
-                                     0,
-                                     &pipelines[PIP_MEGAKERNEL]));
-
-    /* Combine ray generation and trace continuation stack size. */
-    const unsigned int css = stack_size[PG_RGEN_MEGAKERNEL].cssRG +
-                             link_options.maxTraceDepth * trace_css;
-    /* Max direct callable depth is one of the following, so combine accordingly
-     * - __raygen__ -> svm_eval_nodes
-     * - __raygen__ -> kernel_volume_shadow -> svm_eval_nodes
-     * - __raygen__ -> subsurface_scatter_multi_setup -> svm_eval_nodes */
-    const unsigned int dss = stack_size[PG_CALL + 0].dssDC +
-                             std::max(stack_size[PG_CALL + 1].dssDC,
-                                      stack_size[PG_CALL + 2].dssDC);
-
-    /* Set stack size depending on pipeline options. */
-    optix_assert(optixPipelineSetStackSize(pipelines[PIP_MEGAKERNEL],
-                                           0,
-                                           requested_features.use_shader_raytrace ? dss : 0,
-                                           css,
-                                           motion_blur ? 3 : 2));
-  }
 
   { /* Create intersection-only pipeline. */
     vector<OptixProgramGroup> pipeline_groups;

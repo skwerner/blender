@@ -221,23 +221,6 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
     return false;
   }
 
-#if 0
-  /* Megakernel does not support state split, so disable for the shadow catcher.
-   * It is possible to make it work, but currently we are planning to make the megakernel
-   * obsolete for the GPU rendering, so we don't spend time on making shadow catcher to work
-   * there */
-  if (!has_shadow_catcher()) {
-    const float megakernel_threshold = 0.02f;
-    const bool use_megakernel = queue_->kernel_available(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) &&
-                                (num_paths < megakernel_threshold * max_num_paths_);
-
-    if (use_megakernel) {
-      enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL);
-      return true;
-    }
-  }
-#endif
-
   /* Find kernel to execute, with max number of queued paths. */
   int max_num_queued = 0;
   DeviceKernel kernel = DEVICE_KERNEL_NUM;
@@ -282,13 +265,6 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
   IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
   int num_queued = queue_counter->num_queued[kernel];
 
-  if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
-    num_queued = 0;
-    for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
-      num_queued += queue_counter->num_queued[i];
-    }
-  }
-
   if (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE) {
     /* Compute array of active paths, sorted by shader. */
     work_size = num_queued;
@@ -300,15 +276,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     work_size = num_queued;
     d_path_index = (void *)queued_paths_.device_pointer;
 
-    if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
-      /* Compute array of all active paths for megakernel. */
-      compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY, kernel);
-      queue_->copy_from_device(num_queued_paths_);
-      queue_->synchronize();
-      work_size = num_queued_paths_.data()[0];
-    }
-    else if (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
-             kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW) {
+    if (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
+        kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW) {
       /* Compute array of active shadow paths for specific kernel. */
       compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY, kernel);
     }
@@ -336,8 +305,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
-    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
-    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL: {
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME: {
       /* Shading kernels with integrator state and render buffer. */
       void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
       void *args[] = {&d_path_index, &d_render_buffer, const_cast<int *>(&work_size)};
@@ -346,6 +314,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
       break;
     }
     case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:
@@ -365,11 +334,6 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
       LOG(FATAL) << "Unhandled kernel " << kernel << ", should never happen.";
       break;
     }
-  }
-
-  if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
-    /* Megakernel ignores sorting, zero the counter for the next iteration. */
-    queue_->zero_to_device(integrator_sort_key_counter_);
   }
 }
 

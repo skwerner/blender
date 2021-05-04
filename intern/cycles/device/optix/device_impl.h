@@ -30,7 +30,6 @@ struct KernelParamsOptiX;
 
 /* List of OptiX program groups. */
 enum {
-  PG_RGEN_MEGAKERNEL,
   PG_RGEN_INTERSECT_CLOSEST,
   PG_RGEN_INTERSECT_SHADOW,
   PG_RGEN_INTERSECT_SUBSURFACE,
@@ -47,7 +46,7 @@ enum {
 };
 
 /* List of OptiX pipelines. */
-enum { PIP_MEGAKERNEL, PIP_INTERSECT, NUM_PIPELINES };
+enum { PIP_INTERSECT, NUM_PIPELINES };
 
 /* A single shader binding table entry. */
 struct SbtRecord {

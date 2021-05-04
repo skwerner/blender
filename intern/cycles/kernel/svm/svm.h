@@ -258,9 +258,7 @@ ccl_device_noinline void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
       }
       case NODE_CLOSURE_BSDF:
-        if (NODES_FEATURE(BSDF)) {
-          svm_node_closure_bsdf(kg, sd, stack, node, type, path_flag, &offset);
-        }
+        svm_node_closure_bsdf<node_feature_mask>(kg, sd, stack, node, type, path_flag, &offset);
         break;
       case NODE_CLOSURE_EMISSION:
         if (NODES_FEATURE(EMISSION)) {

@@ -57,6 +57,7 @@ ccl_device void svm_node_glass_setup(
   }
 }
 
+template<uint node_feature_mask>
 ccl_device void svm_node_closure_bsdf(const KernelGlobals *kg,
                                       ShaderData *sd,
                                       float *stack,
@@ -76,7 +77,7 @@ ccl_device void svm_node_closure_bsdf(const KernelGlobals *kg,
   uint4 data_node = read_node(kg, offset);
 
   /* Only compute BSDF for surfaces, transparent variable is shared with volume extinction. */
-  if (mix_weight == 0.0f || shader_type != SHADER_TYPE_SURFACE) {
+  if (!NODES_FEATURE(BSDF) || mix_weight == 0.0f || shader_type != SHADER_TYPE_SURFACE) {
     if (type == CLOSURE_BSDF_PRINCIPLED_ID) {
       /* Read all principled BSDF extra data to get the right offset. */
       read_node(kg, offset);

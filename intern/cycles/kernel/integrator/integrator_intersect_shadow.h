@@ -41,8 +41,8 @@ ccl_device bool integrate_intersect_shadow_opaque(INTEGRATOR_STATE_ARGS,
    * Calculate the mask at compile time: the visibility will either be a high bits for the shadow
    * catcher objects, or lower bits for the regular objects (there is no need to check the path
    * state here again). */
-  ccl_constexpr const uint opaque_mask = SHADOW_CATCHER_VISIBILITY_SHIFT(PATH_RAY_SHADOW_OPAQUE) |
-                                         PATH_RAY_SHADOW_OPAQUE;
+  constexpr const uint opaque_mask = SHADOW_CATCHER_VISIBILITY_SHIFT(PATH_RAY_SHADOW_OPAQUE) |
+                                     PATH_RAY_SHADOW_OPAQUE;
 
   Intersection isect;
   const bool opaque_hit = scene_intersect(kg, ray, visibility & opaque_mask, &isect);

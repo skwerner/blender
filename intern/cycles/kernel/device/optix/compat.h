@@ -80,7 +80,6 @@ __device__ half __float2half(const float f)
 #define ccl_align(n) __align__(n)
 
 #define ccl_attr_maybe_unused [[maybe_unused]]
-#define ccl_constexpr constexpr
 
 // Zero initialize structs to help the compiler figure out scoping
 #define ccl_optional_struct_init = {}

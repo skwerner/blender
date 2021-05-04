@@ -42,12 +42,12 @@ ccl_device_inline void kernel_write_denoising_features(
     return;
   }
 
-  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
-
   /* Skip implicitly transparent surfaces. */
   if (sd->flag & SD_HAS_ONLY_VOLUME) {
     return;
   }
+
+  ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
 
   float3 normal = zero_float3();
   float3 diffuse_albedo = zero_float3();

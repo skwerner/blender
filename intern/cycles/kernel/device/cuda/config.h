@@ -82,8 +82,8 @@
 #  define CUDA_THREAD_MAX_REGISTERS 255
 
 /* tunable parameters */
-#  define CUDA_KERNEL_BLOCK_NUM_THREADS 256
-#  define CUDA_KERNEL_MAX_REGISTERS 64
+#  define CUDA_KERNEL_BLOCK_NUM_THREADS 512
+#  define CUDA_KERNEL_MAX_REGISTERS 96
 
 /* unknown architecture */
 #else

@@ -148,8 +148,8 @@ class DeviceRequestedFeatures {
   /* Use Transparent shadows */
   bool use_transparent;
 
-  /* Use various shadow tricks, such as shadow catcher. */
-  bool use_shadow_tricks;
+  /* Use shadow catcher. */
+  bool use_shadow_catcher;
 
   /* Per-uber shader usage flags. */
   bool use_principled;
@@ -183,7 +183,7 @@ class DeviceRequestedFeatures {
     use_volume = false;
     use_patch_evaluation = false;
     use_transparent = false;
-    use_shadow_tricks = false;
+    use_shadow_catcher = false;
     use_principled = false;
     use_denoising = false;
     use_shader_raytrace = false;
@@ -205,7 +205,7 @@ class DeviceRequestedFeatures {
              use_volume == requested_features.use_volume &&
              use_patch_evaluation == requested_features.use_patch_evaluation &&
              use_transparent == requested_features.use_transparent &&
-             use_shadow_tricks == requested_features.use_shadow_tricks &&
+             use_shadow_catcher == requested_features.use_shadow_catcher &&
              use_principled == requested_features.use_principled &&
              use_denoising == requested_features.use_denoising &&
              use_shader_raytrace == requested_features.use_shader_raytrace &&
@@ -248,8 +248,8 @@ class DeviceRequestedFeatures {
     if (!use_transparent && !use_volume) {
       build_options += " -D__NO_TRANSPARENT__";
     }
-    if (!use_shadow_tricks) {
-      build_options += " -D__NO_SHADOW_TRICKS__";
+    if (!use_shadow_catcher) {
+      build_options += " -D__NO_SHADOW_CATCHER__";
     }
     if (!use_principled) {
       build_options += " -D__NO_PRINCIPLED__";

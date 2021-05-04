@@ -471,7 +471,7 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
       requested_features.use_camera_motion |= geom->get_use_motion_blur();
     }
     if (object->get_is_shadow_catcher()) {
-      requested_features.use_shadow_tricks = true;
+      requested_features.use_shadow_catcher = true;
     }
     if (geom->is_mesh()) {
       Mesh *mesh = static_cast<Mesh *>(geom);
@@ -493,7 +493,6 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
 
   if (Pass::contains(passes, PASS_DENOISING_COLOR)) {
     requested_features.use_denoising = true;
-    requested_features.use_shadow_tricks = true;
   }
 
   return requested_features;

@@ -93,7 +93,7 @@ CCL_NAMESPACE_BEGIN
 #define __INTERSECTION_REFINE__
 #define __CLAMP_SAMPLE__
 #define __PATCH_EVAL__
-#define __SHADOW_TRICKS__
+#define __SHADOW_CATCHER__
 #define __DENOISING_FEATURES__
 #define __SHADER_RAYTRACE__
 #define __AO__
@@ -161,8 +161,8 @@ CCL_NAMESPACE_BEGIN
 #ifdef __NO_TRANSPARENT__
 #  undef __TRANSPARENT_SHADOWS__
 #endif
-#ifdef __NO_SHADOW_TRICKS__
-#  undef __SHADOW_TRICKS__
+#ifdef __NO_SHADOW_CATCHER__
+#  undef __SHADOW_CATCHER__
 #endif
 #ifdef __NO_PRINCIPLED__
 #  undef __PRINCIPLED__

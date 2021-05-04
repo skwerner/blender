@@ -88,7 +88,7 @@ const string OpenCLDevice::get_opencl_program_filename(const string &kernel_name
 void OpenCLDevice::enable_default_features(DeviceRequestedFeatures &features)
 {
   features.use_transparent = true;
-  features.use_shadow_tricks = true;
+  features.use_shadow_catcher = true;
   features.use_principled = true;
   features.use_denoising = true;
 
@@ -136,7 +136,7 @@ string OpenCLDevice::get_build_options(const DeviceRequestedFeatures &requested_
     features.use_camera_motion = false;
     features.use_baking = false;
     features.use_transparent = false;
-    features.use_shadow_tricks = false;
+    features.use_shadow_catcher = false;
     features.use_subsurface = false;
     features.use_volume = false;
     features.nodes_features &= ~NODE_FEATURE_VOLUME;
@@ -154,7 +154,7 @@ string OpenCLDevice::get_build_options(const DeviceRequestedFeatures &requested_
     features.use_object_motion = false;
     features.use_camera_motion = false;
     features.use_transparent = false;
-    features.use_shadow_tricks = false;
+    features.use_shadow_catcher = false;
     features.use_denoising = false;
     /* NOTE: currently possible to use surface nodes like `Hair Info`, `Bump` node.
      * Perhaps we should remove them in UI as it does not make any sense when

@@ -107,6 +107,9 @@ class PathTrace {
   bool get_render_tile_pixels(const PassAccessor &pass_accessor,
                               const PassAccessor::Destination &destination);
 
+  /* Set pass data for baking. */
+  bool set_render_tile_pixels(PassAccessor &pass_accessor, const PassAccessor::Source &source);
+
   /* Generate full multi-line report of the rendering process, including rendering parameters,
    * times, and so on. */
   string full_report() const;
@@ -121,6 +124,11 @@ class PathTrace {
    *
    * The samples indicates how many samples the buffer contains. */
   function<void(void)> buffer_write_cb;
+
+  /* Callback which initializes rendered buffer. Is called before pathtracing starts.
+   *
+   * This is used for baking. */
+  function<void(void)> buffer_read_cb;
 
   /* Callback which is called to report current rendering progress.
    *
@@ -161,6 +169,9 @@ class PathTrace {
 
   /* Write the big tile render buffer via the write callback. */
   void buffer_write();
+
+  /* Read the big tile render buffer via the read callback. */
+  void buffer_read();
 
   /* Run the progress_update_cb callback if it is needed. */
   void progress_update_if_needed();

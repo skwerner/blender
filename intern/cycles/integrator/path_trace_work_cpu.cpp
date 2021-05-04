@@ -106,6 +106,7 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
                                                     const int samples_num)
 {
   const bool has_shadow_catcher = device_scene_->data.integrator.has_shadow_catcher;
+  const bool has_bake = device_scene_->data.bake.use;
 
   IntegratorState integrator_states[2];
 
@@ -120,9 +121,17 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
       break;
     }
 
-    if (!kernels_.integrator_init_from_camera(
-            kernel_globals, state, &sample_work_tile, render_buffer)) {
-      break;
+    if (has_bake) {
+      if (!kernels_.integrator_init_from_bake(
+              kernel_globals, state, &sample_work_tile, render_buffer)) {
+        break;
+      }
+    }
+    else {
+      if (!kernels_.integrator_init_from_camera(
+              kernel_globals, state, &sample_work_tile, render_buffer)) {
+        break;
+      }
     }
 
     kernels_.integrator_megakernel(kernel_globals, state, render_buffer);

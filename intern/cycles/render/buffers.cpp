@@ -154,4 +154,9 @@ bool RenderBuffers::copy_from_device()
   return true;
 }
 
+void RenderBuffers::copy_to_device()
+{
+  buffer.copy_to_device();
+}
+
 CCL_NAMESPACE_END

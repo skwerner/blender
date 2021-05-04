@@ -75,6 +75,12 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
     }
     write_render_tile_cb();
   };
+  path_trace_->buffer_read_cb = [&]() {
+    if (!read_render_tile_cb) {
+      return;
+    }
+    read_render_tile_cb();
+  };
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
 }
 
@@ -572,6 +578,25 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const PassAccessor::Destination destination(pixels, num_components);
 
   return path_trace_->get_render_tile_pixels(pass_accessor, destination);
+}
+
+bool Session::set_render_tile_pixels(const string &pass_name,
+                                     int num_components,
+                                     const float *pixels)
+{
+  const Pass *pass = Film::get_actual_display_pass(scene->passes, pass_name);
+  if (!pass) {
+    return false;
+  }
+
+  const float exposure = scene->film->get_exposure();
+  const int num_samples = render_scheduler_.get_num_rendered_samples();
+
+  const PassAccessor::PassAccessInfo pass_access_info(*pass, *scene->film, scene->passes);
+  PassAccessorCPU pass_accessor(pass_access_info, exposure, num_samples);
+  PassAccessor::Source source(pixels, num_components);
+
+  return path_trace_->set_render_tile_pixels(pass_accessor, source);
 }
 
 CCL_NAMESPACE_END

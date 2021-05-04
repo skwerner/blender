@@ -34,6 +34,7 @@
 #    include "kernel/integrator/integrator_state_util.h"
 
 #    include "kernel/integrator/integrator_init_from_camera.h"
+#    include "kernel/integrator/integrator_init_from_bake.h"
 #    include "kernel/integrator/integrator_intersect_closest.h"
 #    include "kernel/integrator/integrator_intersect_shadow.h"
 #    include "kernel/integrator/integrator_intersect_subsurface.h"
@@ -97,6 +98,7 @@ CCL_NAMESPACE_BEGIN
   }
 
 DEFINE_INTEGRATOR_INIT_KERNEL(init_from_camera)
+DEFINE_INTEGRATOR_INIT_KERNEL(init_from_bake)
 DEFINE_INTEGRATOR_KERNEL(intersect_closest)
 DEFINE_INTEGRATOR_KERNEL(intersect_shadow)
 DEFINE_INTEGRATOR_KERNEL(intersect_subsurface)

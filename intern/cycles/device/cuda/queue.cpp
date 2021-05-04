@@ -99,6 +99,7 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
       shared_mem_bytes = (num_threads_per_block + 1) * sizeof(int);
       break;
     case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE:
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:

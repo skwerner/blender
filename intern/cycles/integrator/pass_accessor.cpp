@@ -72,6 +72,15 @@ PassAccessor::Destination::Destination(const PassType pass_type)
 }
 
 /* --------------------------------------------------------------------
+ * Pass source.
+ */
+
+PassAccessor::Source::Source(const float *pixels, int num_components)
+    : pixels(pixels), num_components(num_components)
+{
+}
+
+/* --------------------------------------------------------------------
  * Pass accessor.
  */
 
@@ -264,6 +273,29 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
 
   kfilm_convert->use_approximate_shadow_catcher = pass_access_info_.use_approximate_shadow_catcher;
   kfilm_convert->show_active_pixels = pass_access_info_.show_active_pixels;
+}
+
+bool PassAccessor::set_render_tile_pixels(RenderBuffers *render_buffers, const Source &source)
+{
+  if (render_buffers == nullptr || render_buffers->buffer.data() == nullptr) {
+    return false;
+  }
+
+  const BufferParams &buffer_params = render_buffers->params;
+
+  float *buffer_data = render_buffers->buffer.data();
+  const int pass_stride = buffer_params.pass_stride;
+  const int size = buffer_params.width * buffer_params.height;
+  const int num_components = source.num_components;
+
+  float *out = buffer_data + pass_access_info_.offset;
+  const float *in = source.pixels;
+
+  for (int i = 0; i < size; i++, out += pass_stride, in += num_components) {
+    memcpy(out, in, sizeof(float) * num_components);
+  }
+
+  return true;
 }
 
 CCL_NAMESPACE_END

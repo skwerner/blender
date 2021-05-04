@@ -141,11 +141,6 @@ unique_ptr<DeviceQueue> OptiXDevice::gpu_queue_create()
 
 BVHLayoutMask OptiXDevice::get_bvh_layout_mask() const
 {
-  /* CUDA kernels are used when doing baking, so need to build a BVH those can understand too! */
-  if (optix_module == NULL) {
-    return CUDADevice::get_bvh_layout_mask();
-  }
-
   /* OptiX has its own internal acceleration structure format. */
   return BVH_LAYOUT_OPTIX;
 }
@@ -181,10 +176,8 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     return false;
   }
 
-  /* Baking is currently performed using CUDA, so no need to load OptiX kernels.
-   * Can also skip creating OptiX module if only doing denoising (no path tracing).
-   */
-  if (requested_features.use_baking || !requested_features.use_path_tracing) {
+  /* Skip creating OptiX module if only doing denoising. */
+  if (!(requested_features.use_path_tracing || requested_features.use_baking)) {
     return true;
   }
 
@@ -930,12 +923,6 @@ bool OptiXDevice::build_optix_bvh(BVHOptiX *bvh,
 
 void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 {
-  if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2) {
-    /* For baking CUDA is used, build appropriate BVH for that. */
-    Device::build_bvh(bvh, progress, refit);
-    return;
-  }
-
   const bool use_fast_trace_bvh = (bvh->params.bvh_type == BVH_TYPE_STATIC);
 
   free_bvh_memory_delayed();

@@ -39,6 +39,7 @@ class CPUKernels {
                                                             ccl_global float *render_buffer)>;
 
   IntegratorInitFunction integrator_init_from_camera;
+  IntegratorInitFunction integrator_init_from_bake;
   IntegratorFunction integrator_intersect_closest;
   IntegratorFunction integrator_intersect_shadow;
   IntegratorFunction integrator_intersect_subsurface;

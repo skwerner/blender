@@ -70,6 +70,16 @@ class PassAccessor {
     int num_components = 0;
   };
 
+  class Source {
+   public:
+    Source() = default;
+    Source(const float *pixels, int num_components);
+
+    /* CPU-side pointers. only usable by the `PassAccessorCPU`. */
+    const float *pixels = nullptr;
+    int num_components = 0;
+  };
+
   PassAccessor(const PassAccessInfo &pass_access_info, float exposure, int num_samples);
 
   virtual ~PassAccessor() = default;
@@ -82,6 +92,8 @@ class PassAccessor {
   bool get_render_tile_pixels(const RenderBuffers *render_buffers,
                               const BufferParams &buffer_params,
                               const Destination &destination) const;
+  /* Set pass data for the given render buffers. Used for baking to read from passes. */
+  bool set_render_tile_pixels(RenderBuffers *render_buffers, const Source &source);
 
 #if 0
   bool set_pass_rect(PassType type, int components, float *pixels);

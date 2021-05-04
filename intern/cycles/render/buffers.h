@@ -92,6 +92,7 @@ class RenderBuffers {
   void zero();
 
   bool copy_from_device();
+  void copy_to_device();
 };
 
 /* Render Tile

@@ -334,6 +334,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
       break;
     }
     case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE:
     case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY:
@@ -552,8 +553,10 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
    * known maximum path index, which makes computing active index arrays slow. */
   compact_states(num_active_paths);
 
-  enqueue_work_tiles(
-      DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
+  enqueue_work_tiles((device_scene_->data.bake.use) ? DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE :
+                                                      DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA,
+                     work_tiles.data(),
+                     work_tiles.size());
   return true;
 }
 

@@ -26,6 +26,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
     /* Integrator. */
     case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA:
       return "integrator_init_from_camera";
+    case DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE:
+      return "integrator_init_from_bake";
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
       return "integrator_intersect_closest";
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:

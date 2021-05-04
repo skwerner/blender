@@ -75,6 +75,9 @@ class BlenderSession {
   void update_render_result(BL::RenderLayer &b_rlay);
   void update_render_tile();
 
+  /* read functions for baking input */
+  void read_render_tile();
+
   /* interactive updates */
   void synchronize(BL::Depsgraph &b_depsgraph);
 

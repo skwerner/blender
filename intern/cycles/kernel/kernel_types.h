@@ -1407,6 +1407,9 @@ typedef struct KernelTables {
 static_assert_align(KernelTables, 16);
 
 typedef struct KernelBake {
+  int use;
+  int pad1, pad2, pad3;
+
   int object_index;
   int tri_offset;
   int type;
@@ -1588,6 +1591,7 @@ static_assert_align(KernelShaderEvalInput, 16);
 
 typedef enum DeviceKernel {
   DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA = 0,
+  DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE,
   DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
   DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW,
   DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE,

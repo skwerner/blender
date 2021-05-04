@@ -30,6 +30,7 @@
 #  include "kernel/integrator/integrator_state_flow.h"
 #  include "kernel/integrator/integrator_state_util.h"
 
+#  include "kernel/integrator/integrator_init_from_bake.h"
 #  include "kernel/integrator/integrator_init_from_camera.h"
 #  include "kernel/integrator/integrator_intersect_closest.h"
 #  include "kernel/integrator/integrator_intersect_shadow.h"
@@ -117,6 +118,39 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   get_work_pixel(tile, tile_work_index, &x, &y, &sample);
 
   integrator_init_from_camera(nullptr, path_index, tile, render_buffer, x, y, sample);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_init_from_bake(const int *path_index_array,
+                                          KernelWorkTile *tiles,
+                                          const int num_tiles,
+                                          float *render_buffer,
+                                          const int max_tile_work_size)
+{
+  const int work_index = ccl_global_id(0);
+
+  if (work_index >= max_tile_work_size * num_tiles) {
+    return;
+  }
+
+  const int tile_index = work_index / max_tile_work_size;
+  const int tile_work_index = work_index - tile_index * max_tile_work_size;
+
+  const KernelWorkTile *tile = &tiles[tile_index];
+
+  if (tile_work_index >= tile->work_size) {
+    return;
+  }
+
+  const int path_index = (path_index_array) ?
+                             path_index_array[tile->path_index_offset + tile_work_index] :
+                             tile->path_index_offset + tile_work_index;
+
+  uint x, y, sample;
+  get_work_pixel(tile, tile_work_index, &x, &y, &sample);
+
+  integrator_init_from_bake(nullptr, path_index, tile, render_buffer, x, y, sample);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
@@ -571,30 +605,6 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     kernel_background_evaluate(NULL, input, output, offset + i);
   }
 }
-
-/* --------------------------------------------------------------------
- * Baking.
- */
-
-#  ifdef __BAKING__
-extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
-                                              CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_bake(KernelWorkTile *tile, uint work_size)
-{
-  /* TODO */
-#    if 0
-  int work_index = ccl_global_id(0);
-
-  if (work_index < work_size) {
-    uint x, y, sample;
-    get_work_pixel(tile, work_index, &x, &y, &sample);
-
-    KernelGlobals kg;
-    kernel_bake_evaluate(&kg, tile->buffer, sample, x, y, tile->offset, tile->stride);
-  }
-#    endif
-}
-#  endif
 
 /* --------------------------------------------------------------------
  * Denoising.

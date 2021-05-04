@@ -30,6 +30,7 @@ CCL_NAMESPACE_BEGIN
 CPUKernels::CPUKernels()
     : /* Integrator. */
       REGISTER_KERNEL(integrator_init_from_camera),
+      REGISTER_KERNEL(integrator_init_from_bake),
       REGISTER_KERNEL(integrator_intersect_closest),
       REGISTER_KERNEL(integrator_intersect_shadow),
       REGISTER_KERNEL(integrator_intersect_subsurface),

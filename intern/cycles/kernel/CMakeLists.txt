@@ -231,6 +231,7 @@ set(SRC_GEOM_HEADERS
 )
 
 set(SRC_INTEGRATOR_HEADERS
+  integrator/integrator_init_from_bake.h
   integrator/integrator_init_from_camera.h
   integrator/integrator_intersect_closest.h
   integrator/integrator_intersect_shadow.h

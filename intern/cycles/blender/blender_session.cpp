@@ -352,6 +352,44 @@ void BlenderSession::do_write_update_render_tile(bool do_update_only)
   b_engine.end_result(b_rr, true, false, true);
 }
 
+void BlenderSession::read_render_tile()
+{
+  const int2 tile_offset = session->get_render_tile_offset();
+  const int2 tile_size = session->get_render_tile_size();
+
+  /* get render result */
+  BL::RenderResult b_rr = b_engine.begin_result(tile_offset.x,
+                                                tile_offset.y,
+                                                tile_size.x,
+                                                tile_size.y,
+                                                b_rlay_name.c_str(),
+                                                b_rview_name.c_str());
+
+  /* can happen if the intersected rectangle gives 0 width or height */
+  if (b_rr.ptr.data == NULL) {
+    return;
+  }
+
+  BL::RenderResult::layers_iterator b_single_rlay;
+  b_rr.layers.begin(b_single_rlay);
+
+  /* layer will be missing if it was disabled in the UI */
+  if (b_single_rlay == b_rr.layers.end())
+    return;
+
+  BL::RenderLayer b_rlay = *b_single_rlay;
+
+  vector<float> pixels(tile_size.x * tile_size.y * 4);
+
+  /* Copy each pass.
+   * TODO:copy only the required ones for better performance? */
+  for (BL::RenderPass &b_pass : b_rlay.passes) {
+    session->set_render_tile_pixels(b_pass.name(), b_pass.channels(), (float *)b_pass.rect());
+  }
+
+  b_engine.end_result(b_rr, false, false, false);
+}
+
 void BlenderSession::write_render_tile()
 {
   do_write_update_render_tile(false);
@@ -594,6 +632,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
    * name. */
   Pass::add(PASS_COMBINED, scene->passes, "Combined");
 
+  session->read_render_tile_cb = [&]() { read_render_tile(); };
   session->write_render_tile_cb = [&]() { write_render_tile(); };
 
   if (!session->progress.get_cancel()) {
@@ -637,6 +676,7 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
     session->wait();
   }
 
+  session->read_render_tile_cb = function_null;
   session->write_render_tile_cb = function_null;
 }
 

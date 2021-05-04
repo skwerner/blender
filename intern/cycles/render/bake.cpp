@@ -76,8 +76,8 @@ void BakeManager::set(Scene *scene,
   type = type_;
   pass_filter = shader_type_to_pass_filter(type_, pass_filter_);
 
-  Pass::add(PASS_BAKE_PRIMITIVE, scene->passes);
-  Pass::add(PASS_BAKE_DIFFERENTIAL, scene->passes);
+  Pass::add(PASS_BAKE_PRIMITIVE, scene->passes, "BakePrimitive");
+  Pass::add(PASS_BAKE_DIFFERENTIAL, scene->passes, "BakeDifferential");
 
   if (type == SHADER_EVAL_UV) {
     /* force UV to be available */
@@ -104,27 +104,31 @@ void BakeManager::device_update(Device * /*device*/,
   if (!need_update())
     return;
 
-  scoped_callback_timer timer([scene](double time) {
-    if (scene->update_stats) {
-      scene->update_stats->bake.times.add_entry({"device_update", time});
-    }
-  });
-
   KernelBake *kbake = &dscene->data.bake;
+  memset(kbake, 0, sizeof(*kbake));
 
-  kbake->type = type;
-  kbake->pass_filter = pass_filter;
+  if (!object_name.empty()) {
+    scoped_callback_timer timer([scene](double time) {
+      if (scene->update_stats) {
+        scene->update_stats->bake.times.add_entry({"device_update", time});
+      }
+    });
 
-  int object_index = 0;
-  foreach (Object *object, scene->objects) {
-    const Geometry *geom = object->get_geometry();
-    if (object->name == object_name && geom->geometry_type == Geometry::MESH) {
-      kbake->object_index = object_index;
-      kbake->tri_offset = geom->prim_offset;
-      break;
+    kbake->use = true;
+    kbake->type = type;
+    kbake->pass_filter = pass_filter;
+
+    int object_index = 0;
+    foreach (Object *object, scene->objects) {
+      const Geometry *geom = object->get_geometry();
+      if (object->name == object_name && geom->geometry_type == Geometry::MESH) {
+        kbake->object_index = object_index;
+        kbake->tri_offset = geom->prim_offset;
+        break;
+      }
+
+      object_index++;
     }
-
-    object_index++;
   }
 
   need_update_ = false;

@@ -77,6 +77,16 @@ CCL_NAMESPACE_BEGIN
         &kernel_integrator_state.queue_counter->num_queued[current_kernel], 1); \
     INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
 
+#  define INTEGRATOR_PATH_INIT_SORTED(next_kernel, key) \
+    { \
+      const int key_ = key; \
+      atomic_fetch_and_add_uint32( \
+          &kernel_integrator_state.queue_counter->num_queued[next_kernel], 1); \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = next_kernel; \
+      INTEGRATOR_STATE_WRITE(path, shader_sort_key) = key_; \
+      atomic_fetch_and_add_uint32(&kernel_integrator_state.sort_key_counter[next_kernel][key_], \
+                                  1); \
+    }
 #  define INTEGRATOR_PATH_NEXT_SORTED(current_kernel, next_kernel, key) \
     { \
       const int key_ = key; \
@@ -119,6 +129,11 @@ CCL_NAMESPACE_BEGIN
 
 #  define INTEGRATOR_PATH_INIT(next_kernel) \
     INTEGRATOR_STATE_WRITE(path, queued_kernel) = next_kernel;
+#  define INTEGRATOR_PATH_INIT_SORTED(next_kernel, key) \
+    { \
+      INTEGRATOR_STATE_WRITE(path, queued_kernel) = next_kernel; \
+      (void)key; \
+    }
 #  define INTEGRATOR_PATH_NEXT(current_kernel, next_kernel) \
     { \
       INTEGRATOR_STATE_WRITE(path, queued_kernel) = next_kernel; \

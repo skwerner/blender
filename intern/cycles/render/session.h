@@ -105,6 +105,7 @@ class Session {
 
   function<void(void)> write_render_tile_cb;
   function<void(void)> update_render_tile_cb;
+  function<void(void)> read_render_tile_cb;
 
   explicit Session(const SessionParams &params, const SceneParams &scene_params);
   ~Session();
@@ -144,6 +145,7 @@ class Session {
   int2 get_render_tile_offset() const;
 
   bool get_render_tile_pixels(const string &pass_name, int num_components, float *pixels);
+  bool set_render_tile_pixels(const string &pass_name, int num_components, const float *pixels);
 
  protected:
   struct DelayedReset {

@@ -134,6 +134,7 @@ void PathTrace::render_pipeline(RenderWork render_work)
   /* TODO(sergey): For truly resumable render might need to avoid zero-ing. */
   if (render_work.path_trace.start_sample == render_scheduler_.get_start_sample()) {
     full_render_buffers_->zero();
+    buffer_read();
   }
 
   render_init_kernel_execution();
@@ -429,6 +430,16 @@ void PathTrace::buffer_write()
   buffer_write_cb();
 }
 
+void PathTrace::buffer_read()
+{
+  if (!buffer_read_cb) {
+    return;
+  }
+
+  buffer_read_cb();
+  full_render_buffers_->copy_to_device();
+}
+
 void PathTrace::progress_update_if_needed()
 {
   if (progress_ != nullptr) {
@@ -448,6 +459,12 @@ bool PathTrace::get_render_tile_pixels(const PassAccessor &pass_accessor,
   }
 
   return pass_accessor.get_render_tile_pixels(full_render_buffers_.get(), destination);
+}
+
+bool PathTrace::set_render_tile_pixels(PassAccessor &pass_accessor,
+                                       const PassAccessor::Source &source)
+{
+  return pass_accessor.set_render_tile_pixels(full_render_buffers_.get(), source);
 }
 
 /* --------------------------------------------------------------------

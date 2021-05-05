@@ -258,7 +258,7 @@ ccl_device_noinline void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
       }
       case NODE_CLOSURE_BSDF:
-        svm_node_closure_bsdf<node_feature_mask>(kg, sd, stack, node, type, path_flag, &offset);
+        svm_node_closure_bsdf<node_feature_mask, type>(kg, sd, stack, node, path_flag, &offset);
         break;
       case NODE_CLOSURE_EMISSION:
         if (NODES_FEATURE(EMISSION)) {
@@ -414,12 +414,12 @@ ccl_device_noinline void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
       case NODE_CLOSURE_VOLUME:
         if (NODES_FEATURE(VOLUME)) {
-          svm_node_closure_volume(kg, sd, stack, node, type);
+          svm_node_closure_volume<type>(kg, sd, stack, node);
         }
         break;
       case NODE_PRINCIPLED_VOLUME:
         if (NODES_FEATURE(VOLUME)) {
-          svm_node_principled_volume(kg, sd, stack, node, type, path_flag, &offset);
+          svm_node_principled_volume<type>(kg, sd, stack, node, path_flag, &offset);
         }
         break;
       case NODE_MATH:

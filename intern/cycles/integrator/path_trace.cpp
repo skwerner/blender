@@ -426,11 +426,36 @@ bool PathTrace::get_render_tile_pixels(PassAccessor &pass_accessor, float *pixel
  * Report generation.
  */
 
+static const char *device_type_for_description(const DeviceType type)
+{
+  switch (type) {
+    case DEVICE_NONE:
+      return "None";
+
+    case DEVICE_CPU:
+      return "CPU";
+    case DEVICE_OPENCL:
+      return "OpenCL";
+    case DEVICE_CUDA:
+      return "CUDA";
+    case DEVICE_OPTIX:
+      return "OptiX";
+    case DEVICE_DUMMY:
+      return "Dummy";
+    case DEVICE_MULTI:
+      return "Multi";
+  }
+
+  return "UNKNOWN";
+}
+
 /* Construct description of the device which will appear in the full report. */
 /* TODO(sergey): Consider making it more reusable utility. */
 static string full_device_info_description(const DeviceInfo &device_info)
 {
   string full_description = device_info.description;
+
+  full_description += " (" + string(device_type_for_description(device_info.type)) + ")";
 
   if (device_info.display_device) {
     full_description += " (display)";

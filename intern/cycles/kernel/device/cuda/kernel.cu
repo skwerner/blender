@@ -264,10 +264,7 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
 }
 
 extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
-    kernel_cuda_integrator_active_paths_array(int num_states,
-                                              int *indices,
-                                              int *num_indices,
-                                              int unused_kernel)
+    kernel_cuda_integrator_active_paths_array(int num_states, int *indices, int *num_indices)
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
       num_states, indices, num_indices, [](const int path_index) {
@@ -280,10 +277,10 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
     kernel_cuda_integrator_terminated_paths_array(int num_states,
                                                   int *indices,
                                                   int *num_indices,
-                                                  int unused_kernel)
+                                                  int indices_offset)
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
-      num_states, indices, num_indices, [](const int path_index) {
+      num_states, indices + indices_offset, num_indices, [](const int path_index) {
         if (kernel_data.integrator.has_shadow_catcher) {
           /* NOTE: The kernel invocation limits number of states checked, ensuring that only
            * non-shadow-catcher states are checked here. */
@@ -309,6 +306,36 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SORTED_INDEX_DEFAULT_
                    INTEGRATOR_STATE(path, shader_sort_key) :
                    CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY;
       });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_compact_paths_array(int num_states,
+                                               int *indices,
+                                               int *num_indices,
+                                               int num_active_paths)
+{
+  cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
+      num_states, indices, num_indices, [num_active_paths](const int path_index) {
+        return (path_index >= num_active_paths) &&
+               ((INTEGRATOR_STATE(path, queued_kernel) != 0) ||
+                (INTEGRATOR_STATE(shadow_path, queued_kernel) != 0));
+      });
+}
+
+extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE)
+    kernel_cuda_integrator_compact_states(const int *active_terminated_states,
+                                          const int active_states_offset,
+                                          const int terminated_states_offset,
+                                          const int work_size)
+{
+  const int global_index = ccl_global_id(0);
+
+  if (global_index < work_size) {
+    const int from_path_index = active_terminated_states[active_states_offset + global_index];
+    const int to_path_index = active_terminated_states[terminated_states_offset + global_index];
+
+    integrator_state_move(to_path_index, from_path_index);
+  }
 }
 
 extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_PREFIX_SUM_DEFAULT_BLOCK_SIZE)

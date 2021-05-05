@@ -240,12 +240,12 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
   /* Find kernel to execute, with max number of queued paths. */
   const IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
 
-  int num_paths = 0;
+  int num_active_paths = 0;
   for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
-    num_paths += queue_counter->num_queued[i];
+    num_active_paths += queue_counter->num_queued[i];
   }
 
-  if (num_paths == 0) {
+  if (num_active_paths == 0) {
     return false;
   }
 
@@ -306,8 +306,6 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
       /* Compute array of active paths for specific kernel. */
       compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY, kernel);
     }
-
-    queue_->zero_to_device(num_queued_paths_);
   }
 
   DCHECK_LE(work_size, max_num_paths_);
@@ -342,6 +340,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_STATES:
     case DEVICE_KERNEL_INTEGRATOR_RESET:
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
@@ -386,6 +386,8 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKe
     queue_->enqueue(DEVICE_KERNEL_PREFIX_SUM, work_size, args);
   }
 
+  queue_->zero_to_device(num_queued_paths_);
+
   /* Launch kernel to fill the active paths arrays. */
   {
     /* TODO: this could be smaller for terminated paths based on amount of work we want
@@ -403,7 +405,6 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKe
     queue_->enqueue(kernel, work_size, args);
   }
 
-  queue_->zero_to_device(num_queued_paths_);
   if (queued_kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE) {
     queue_->zero_to_device(integrator_shader_sort_counter_);
   }
@@ -417,20 +418,79 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKe
 
 void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel)
 {
-  /* Launch kernel to fill the active paths arrays. */
-  /* TODO: this could be smaller for terminated paths based on amount of work we want
-   * to schedule. */
-  const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
-                            min(max_num_paths_, get_max_num_camera_paths()) :
-                            max_active_path_index_;
   int d_queued_kernel = queued_kernel;
 
+  /* Launch kernel to fill the active paths arrays. */
+  const int work_size = max_active_path_index_;
   void *d_queued_paths = (void *)queued_paths_.device_pointer;
   void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
   void *args[] = {
       const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &d_queued_kernel};
 
+  queue_->zero_to_device(num_queued_paths_);
   queue_->enqueue(kernel, work_size, args);
+}
+
+void PathTraceWorkGPU::compact_states(const int num_active_paths)
+{
+  if (num_active_paths == 0) {
+    max_active_path_index_ = 0;
+  }
+
+  /* TODO: not supported for shadow catcher yet. That needs to switch to an atomic
+   * counter for new paths so that we can fill in the space left after compaction. */
+  if (has_shadow_catcher()) {
+    return;
+  }
+
+  /* Compact fragmented path states into the start of the array, moving any paths
+   * with index higher than the number of active paths into the gaps. */
+  if (max_active_path_index_ == num_active_paths) {
+    return;
+  }
+
+  void *d_compact_paths = (void *)queued_paths_.device_pointer;
+  void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
+
+  /* Create array with terminated paths that we can write to. */
+  {
+    /* TODO: can the work size be reduced here? */
+    int offset = num_active_paths;
+    int work_size = num_active_paths;
+    void *args[] = {&work_size, &d_compact_paths, &d_num_queued_paths, &offset};
+    queue_->zero_to_device(num_queued_paths_);
+    queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, work_size, args);
+  }
+
+  /* Create array of paths that we need to compact, where the path index is bigger
+   * than the number of active paths. */
+  {
+    int work_size = max_active_path_index_;
+    void *args[] = {
+        &work_size, &d_compact_paths, &d_num_queued_paths, const_cast<int *>(&num_active_paths)};
+    queue_->zero_to_device(num_queued_paths_);
+    queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_COMPACT_PATHS_ARRAY, work_size, args);
+  }
+
+  queue_->copy_from_device(num_queued_paths_);
+  queue_->synchronize();
+
+  int num_compact_paths = num_queued_paths_.data()[0];
+
+  /* Move paths into gaps. */
+  if (num_compact_paths > 0) {
+    int work_size = num_compact_paths;
+    int active_states_offset = 0;
+    int terminated_states_offset = num_active_paths;
+    void *args[] = {
+        &d_compact_paths, &active_states_offset, &terminated_states_offset, &work_size};
+    queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_COMPACT_STATES, work_size, args);
+  }
+
+  queue_->synchronize();
+
+  /* Adjust max active path index now we know which part of the array is actually used. */
+  max_active_path_index_ = num_active_paths;
 }
 
 bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
@@ -444,15 +504,11 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
     return false;
   }
 
-  int num_paths = get_num_active_paths();
-
-  if (num_paths == 0) {
-    max_active_path_index_ = 0;
-  }
+  int num_active_paths = get_num_active_paths();
 
   /* Don't schedule more work if cancelling. */
   if (is_cancel_requested()) {
-    if (num_paths == 0) {
+    if (num_active_paths == 0) {
       finished = true;
     }
     return false;
@@ -466,6 +522,7 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 
   /* Schedule when we're out of paths or there are too few paths to keep the
    * device occupied. */
+  int num_paths = num_active_paths;
   if (num_paths == 0 || num_paths < min_num_active_paths_) {
     /* Get work tiles until the maximum number of path is reached. */
     while (num_paths < max_num_camera_paths) {
@@ -490,6 +547,10 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
   if (work_tiles.size() == 0) {
     return false;
   }
+
+  /* Compact state array when number of paths becomes small relative to the
+   * known maximum path index, which makes computing active index arrays slow. */
+  compact_states(num_active_paths);
 
   enqueue_work_tiles(
       DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA, work_tiles.data(), work_tiles.size());
@@ -528,8 +589,20 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
   void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
 
   if (max_active_path_index_ != 0) {
-    compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, (DeviceKernel)0);
     queue_->zero_to_device(num_queued_paths_);
+
+    /* Limit work size to max known active path index + the number of paths we are going
+     * to enqueue, which may be smaller than the total number of paths possible. */
+    const int work_size = min(max_num_paths_, max_active_path_index_ + path_index_offset);
+    int queued_kernel = 0;
+
+    void *d_queued_paths = (void *)queued_paths_.device_pointer;
+    void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
+    void *args[] = {
+        const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &queued_kernel};
+
+    queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, work_size, args);
+
     d_path_index = (void *)queued_paths_.device_pointer;
   }
 

@@ -94,6 +94,7 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
     case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_PATHS_ARRAY:
       /* See parall_active_index.h for why this amount of shared memory is needed. */
       shared_mem_bytes = (num_threads_per_block + 1) * sizeof(int);
       break;
@@ -108,6 +109,7 @@ bool CUDADeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *ar
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
     case DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL:
+    case DEVICE_KERNEL_INTEGRATOR_COMPACT_STATES:
     case DEVICE_KERNEL_INTEGRATOR_RESET:
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:

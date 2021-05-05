@@ -179,4 +179,47 @@ ccl_device_inline void integrator_state_copy_to_shadow_catcher(INTEGRATOR_STATE_
   INTEGRATOR_SHADOW_CATCHER_PATH_INIT();
 }
 
+#if defined(__KERNEL_GPU__)
+ccl_device_inline void integrator_state_move(const int to_path_index, const int path_index)
+{
+  int index;
+
+  /* Rely on the compiler to optimize out unused assignments and `while(false)`'s. */
+
+#  define KERNEL_STRUCT_BEGIN(name) \
+    index = 0; \
+    do {
+
+#  define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
+    kernel_integrator_state.parent_struct.name[to_path_index] = \
+        kernel_integrator_state.parent_struct.name[path_index];
+
+#  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
+    kernel_integrator_state.parent_struct[index].name[to_path_index] = \
+        kernel_integrator_state.parent_struct[index].name[path_index];
+
+#  define KERNEL_STRUCT_END(name) \
+    } \
+    while (false) \
+      ;
+
+#  define KERNEL_STRUCT_END_ARRAY(name, array_size) \
+    ++index; \
+    } \
+    while (index < array_size) \
+      ;
+
+#  include "kernel/integrator/integrator_state_template.h"
+
+#  undef KERNEL_STRUCT_BEGIN
+#  undef KERNEL_STRUCT_MEMBER
+#  undef KERNEL_STRUCT_ARRAY_MEMBER
+#  undef KERNEL_STRUCT_END
+#  undef KERNEL_STRUCT_END_ARRAY
+
+  INTEGRATOR_STATE_WRITE(path, queued_kernel) = 0;
+  INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
+}
+#endif
+
 CCL_NAMESPACE_END

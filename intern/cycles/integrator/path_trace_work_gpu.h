@@ -70,6 +70,8 @@ class PathTraceWorkGPU : public PathTraceWork {
   void compute_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel);
   void compute_sorted_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel);
 
+  void compact_states(const int num_active_paths);
+
   int get_num_active_paths();
 
   /* Maximum number of paths which are allowed to be initialized from the camera.

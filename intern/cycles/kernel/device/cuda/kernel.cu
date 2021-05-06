@@ -26,8 +26,8 @@
 #  include "kernel/device/cuda/parallel_prefix_sum.h"
 #  include "kernel/device/cuda/parallel_sorted_index.h"
 
-#  include "kernel/integrator/integrator_path_state.h"
 #  include "kernel/integrator/integrator_state.h"
+#  include "kernel/integrator/integrator_state_flow.h"
 #  include "kernel/integrator/integrator_state_util.h"
 
 #  include "kernel/integrator/integrator_init_from_camera.h"
@@ -273,7 +273,7 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_SORTED_INDEX_DEFAULT_
   cuda_parallel_sorted_index_array<CUDA_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE>(
       num_states, indices, num_indices, key_prefix_sum, [kernel](const int path_index) {
         return (INTEGRATOR_STATE(path, queued_kernel) == kernel) ?
-                   __integrator_sort_key[path_index] :
+                   INTEGRATOR_STATE(path, shader_sort_key) :
                    CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY;
       });
 }

@@ -16,7 +16,6 @@
 
 #pragma once
 
-#include "kernel/integrator/integrator_path_state.h"
 #include "kernel/integrator/integrator_state.h"
 
 #include "device/device_graphics_interop.h"
@@ -51,7 +50,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   virtual bool adaptive_sampling_converge_and_filter(float threshold, bool reset) override;
 
  protected:
-  void alloc_integrator_state();
+  void alloc_integrator_soa();
   void alloc_integrator_queue();
   void alloc_integrator_sorting();
 
@@ -96,12 +95,12 @@ class PathTraceWorkGPU : public PathTraceWork {
   RenderBuffers *render_buffers_;
 
   /* Integrate state for paths. */
+  IntegratorStateGPU integrator_state_gpu_;
+  /* SoA arrays for integrator state. */
   vector<unique_ptr<device_memory>> integrator_state_soa_;
   /* Keep track of number of queued kernels. */
   device_vector<IntegratorQueueCounter> integrator_queue_counter_;
   /* Key for shader sorting. */
-  /* TODO: device only? */
-  device_vector<int> integrator_sort_key_;
   device_vector<int> integrator_sort_key_counter_;
 
   /* Temporary buffer to get an array of queued path for a particular kernel. */

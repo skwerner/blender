@@ -69,16 +69,17 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
 
   cuda_device_assert(
       cuda_device_,
-      cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, path_index_array),
+      cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParamsOptiX, path_index_array),
                         args[0],  // &d_path_index
                         sizeof(device_ptr),
                         cuda_stream_));
   if (kernel == DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL) {
-    cuda_device_assert(cuda_device_,
-                       cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParams, render_buffer),
-                                         args[1],  // &d_render_buffer
-                                         sizeof(device_ptr),
-                                         cuda_stream_));
+    cuda_device_assert(
+        cuda_device_,
+        cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParamsOptiX, render_buffer),
+                          args[1],  // &d_render_buffer
+                          sizeof(device_ptr),
+                          cuda_stream_));
   }
 
   cuda_device_assert(cuda_device_, cuStreamSynchronize(cuda_stream_));

@@ -21,20 +21,28 @@
 #include "kernel/kernel_profiling.h"
 #include "kernel/kernel_types.h"
 
+#include "kernel/integrator/integrator_state.h"
+
 CCL_NAMESPACE_BEGIN
 
-/* For CUDA, constant memory textures must be globals, so we can't put them
- * into a struct. As a result we don't actually use this struct and use actual
- * globals and simply pass along a NULL pointer everywhere, which we hope gets
- * optimized out. */
+/* Not actually used, just a NULL pointer that gets passed everywhere, which we
+ * hope gets optimized out by the compiler. */
+struct KernelGlobals {
+  int unused[1];
+};
 
+/* Global scene data and textures */
 __constant__ KernelData __data;
-typedef struct KernelGlobals {
-  /* NOTE: Keep the size in sync with SHADOW_STACK_MAX_HITS. */
-  Intersection hits_stack[64];
-} KernelGlobals;
-
 #define KERNEL_TEX(type, name) const __constant__ __device__ type *name;
 #include "kernel/kernel_textures.h"
+
+/* Integrator state */
+__constant__ IntegratorStateGPU __integrator_state;
+
+/* Abstraction macros */
+#define kernel_data __data
+#define kernel_tex_fetch(t, index) t[(index)]
+#define kernel_tex_array(t) (t)
+#define kernel_integrator_state __integrator_state
 
 CCL_NAMESPACE_END

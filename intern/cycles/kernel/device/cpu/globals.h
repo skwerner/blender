@@ -39,9 +39,6 @@ struct OSLShadingSystem;
 
 typedef unordered_map<float, float> CoverageMap;
 
-struct Intersection;
-struct VolumeStep;
-
 typedef struct KernelGlobals {
 #define KERNEL_TEX(type, name) texture<type> name;
 #include "kernel/kernel_textures.h"
@@ -58,23 +55,17 @@ typedef struct KernelGlobals {
 
   /* **** Run-time data ****  */
 
-  /* Heap-allocated storage for transparent shadows intersections. */
-  Intersection *transparent_shadow_intersections;
-
-  /* Storage for decoupled volume steps. */
-  VolumeStep *decoupled_volume_steps[2];
-  int decoupled_volume_steps_index;
-
   /* A buffer for storing per-pixel coverage for Cryptomatte. */
   CoverageMap *coverage_object;
   CoverageMap *coverage_material;
   CoverageMap *coverage_asset;
 
-  /* TODO(sergey): Either remove, or properly implement. */
-  int2 global_size;
-  int2 global_id;
-
   ProfilingState profiler;
 } KernelGlobals;
+
+/* Abstraction macros */
+#define kernel_tex_fetch(tex, index) (kg->tex.fetch(index))
+#define kernel_tex_array(tex) (kg->tex.data)
+#define kernel_data (kg->__data)
 
 CCL_NAMESPACE_END

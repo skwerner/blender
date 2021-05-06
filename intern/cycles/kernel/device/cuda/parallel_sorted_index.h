@@ -27,7 +27,7 @@ CCL_NAMESPACE_BEGIN
 #include "util/util_atomic.h"
 
 #define CUDA_PARALLEL_SORTED_INDEX_DEFAULT_BLOCK_SIZE 512
-#define CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY -1
+#define CUDA_PARALLEL_SORTED_INDEX_INACTIVE_KEY (~0)
 
 template<uint blocksize, typename GetKeyOp>
 __device__ void cuda_parallel_sorted_index_array(const uint num_states,

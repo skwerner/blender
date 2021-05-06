@@ -234,13 +234,13 @@ set(SRC_INTEGRATOR_HEADERS
   integrator/integrator_intersect_shadow.h
   integrator/integrator_intersect_subsurface.h
   integrator/integrator_megakernel.h
-  integrator/integrator_path_state.h
   integrator/integrator_shade_background.h
   integrator/integrator_shade_light.h
   integrator/integrator_shade_shadow.h
   integrator/integrator_shade_surface.h
   integrator/integrator_shade_volume.h
   integrator/integrator_state.h
+  integrator/integrator_state_flow.h
   integrator/integrator_state_template.h
   integrator/integrator_state_util.h
   integrator/integrator_subsurface.h

@@ -23,22 +23,6 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* TODO(sergey): Consider making more available function. Maybe `util_memory.h`? */
-static void safe_free(void *mem)
-{
-  if (mem == nullptr) {
-    return;
-  }
-  free(mem);
-}
-
-/* Get number of elements in a bound array. */
-/* TODO(sergey): Make this function more re-usable. */
-template<class T, int N> constexpr inline int ARRAY_SIZE(T (&/*array*/)[N])
-{
-  return N;
-}
-
 CPUKernelThreadGlobals::CPUKernelThreadGlobals()
 {
   reset_runtime_memory();
@@ -50,7 +34,6 @@ CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globa
 {
   reset_runtime_memory();
 
-  decoupled_volume_steps_index = 0;
   coverage_asset = nullptr;
   coverage_object = nullptr;
   coverage_material = nullptr;
@@ -70,12 +53,6 @@ CPUKernelThreadGlobals::CPUKernelThreadGlobals(CPUKernelThreadGlobals &&other) n
 
 CPUKernelThreadGlobals::~CPUKernelThreadGlobals()
 {
-  safe_free(transparent_shadow_intersections);
-
-  const int decoupled_count = ARRAY_SIZE(decoupled_volume_steps);
-  for (int i = 0; i < decoupled_count; ++i) {
-    safe_free(decoupled_volume_steps[i]);
-  }
 #ifdef WITH_OSL
   OSLShader::thread_free(this);
 #endif
@@ -96,13 +73,9 @@ CPUKernelThreadGlobals &CPUKernelThreadGlobals::operator=(CPUKernelThreadGlobals
 
 void CPUKernelThreadGlobals::reset_runtime_memory()
 {
-  transparent_shadow_intersections = nullptr;
-
 #ifdef WITH_OSL
   osl = nullptr;
 #endif
-
-  memset(decoupled_volume_steps, 0, sizeof(decoupled_volume_steps));
 }
 
 CCL_NAMESPACE_END

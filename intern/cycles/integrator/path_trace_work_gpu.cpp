@@ -38,7 +38,6 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       queue_(device->gpu_queue_create()),
       render_buffers_(buffers),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
-      integrator_sort_key_(device, "integrator_sort_key", MEM_READ_WRITE),
       integrator_sort_key_counter_(device, "integrator_sort_key_counter", MEM_READ_WRITE),
       queued_paths_(device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
@@ -47,36 +46,42 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       max_num_paths_(queue_->num_concurrent_states(sizeof(IntegratorState))),
       max_active_path_index_(0)
 {
+  memset(&integrator_state_gpu_, 0, sizeof(integrator_state_gpu_));
   work_tile_scheduler_.set_max_num_path_states(max_num_paths_);
 }
 
-void PathTraceWorkGPU::alloc_integrator_state()
+void PathTraceWorkGPU::alloc_integrator_soa()
 {
   /* IntegrateState allocated as structure of arrays.
    *
    * Allocate a device only memory buffer before for each struct member, and then
    * write the pointers into a struct that resides in constant memory.
    *
-   * This assumes the device side struct memory contains consecutive pointers for
-   * each struct member, with the same 64-bit size as device_ptr.
-   *
-   * TODO: store float3 in separate XYZ arrays. */
+   * TODO: store float3 in separate XYZ arrays.
+   * TODO: skip zeroing most arrays and leave uninitialized. */
+
   if (!integrator_state_soa_.empty()) {
     return;
   }
 
-  vector<device_ptr> device_struct;
-
 #define KERNEL_STRUCT_BEGIN(name) for (int array_index = 0;; array_index++) {
-#define KERNEL_STRUCT_MEMBER(type, name) \
+#define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
   { \
     device_only_memory<type> *array = new device_only_memory<type>(device_, \
                                                                    "integrator_state_" #name); \
     array->alloc_to_device(max_num_paths_); \
-    /* TODO: skip for most arrays. */ \
     array->zero_to_device(); \
-    device_struct.push_back(array->device_pointer); \
     integrator_state_soa_.emplace_back(array); \
+    integrator_state_gpu_.parent_struct.name = (type *)array->device_pointer; \
+  }
+#define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
+  { \
+    device_only_memory<type> *array = new device_only_memory<type>(device_, \
+                                                                   "integrator_state_" #name); \
+    array->alloc_to_device(max_num_paths_); \
+    array->zero_to_device(); \
+    integrator_state_soa_.emplace_back(array); \
+    integrator_state_gpu_.parent_struct[array_index].name = (type *)array->device_pointer; \
   }
 #define KERNEL_STRUCT_END(name) \
   break; \
@@ -89,12 +94,9 @@ void PathTraceWorkGPU::alloc_integrator_state()
 #include "kernel/integrator/integrator_state_template.h"
 #undef KERNEL_STRUCT_BEGIN
 #undef KERNEL_STRUCT_MEMBER
+#undef KERNEL_STRUCT_ARRAY_MEMBER
 #undef KERNEL_STRUCT_END
 #undef KERNEL_STRUCT_END_ARRAY
-
-  /* Copy to device side struct in constant memory. */
-  device_->const_copy_to(
-      "__integrator_state", device_struct.data(), device_struct.size() * sizeof(device_ptr));
 }
 
 void PathTraceWorkGPU::alloc_integrator_queue()
@@ -103,11 +105,8 @@ void PathTraceWorkGPU::alloc_integrator_queue()
     integrator_queue_counter_.alloc(1);
     integrator_queue_counter_.zero_to_device();
     integrator_queue_counter_.copy_from_device();
-
-    /* Copy to device side pointer in constant memory. */
-    device_->const_copy_to("__integrator_queue_counter",
-                           &integrator_queue_counter_.device_pointer,
-                           sizeof(device_ptr));
+    integrator_state_gpu_.queue_counter = (IntegratorQueueCounter *)
+                                              integrator_queue_counter_.device_pointer;
   }
 
   /* Allocate data for active path index arrays. */
@@ -126,21 +125,11 @@ void PathTraceWorkGPU::alloc_integrator_queue()
 void PathTraceWorkGPU::alloc_integrator_sorting()
 {
   /* Allocate arrays for shader sorting. */
-  if (integrator_sort_key_counter_.size() == 0) {
-    integrator_sort_key_.alloc(max_num_paths_);
-    /* TODO: this could be skip if we had a function to just allocate on device. */
-    integrator_sort_key_.zero_to_device();
-    device_->const_copy_to(
-        "__integrator_sort_key", &integrator_sort_key_.device_pointer, sizeof(device_ptr));
-  }
-
   const int num_shaders = device_scene_->shaders.size();
   if (integrator_sort_key_counter_.size() < num_shaders) {
     integrator_sort_key_counter_.alloc(num_shaders);
     integrator_sort_key_counter_.zero_to_device();
-    device_->const_copy_to("__integrator_sort_key_counter",
-                           &integrator_sort_key_counter_.device_pointer,
-                           sizeof(device_ptr));
+    integrator_state_gpu_.sort_key_counter = (int *)integrator_sort_key_counter_.device_pointer;
   }
 }
 
@@ -148,9 +137,13 @@ void PathTraceWorkGPU::init_execution()
 {
   queue_->init_execution();
 
-  alloc_integrator_state();
+  alloc_integrator_soa();
   alloc_integrator_queue();
   alloc_integrator_sorting();
+
+  /* Copy to device side struct in constant memory. */
+  device_->const_copy_to(
+      "__integrator_state", &integrator_state_gpu_, sizeof(integrator_state_gpu_));
 }
 
 void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)

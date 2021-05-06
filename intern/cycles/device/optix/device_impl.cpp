@@ -97,7 +97,7 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
 #  endif
 
   /* Fix weird compiler bug that assigns wrong size. */
-  launch_params.data_elements = sizeof(KernelParams);
+  launch_params.data_elements = sizeof(KernelParamsOptiX);
 
   /* Allocate launch parameter buffer memory on device. */
   launch_params.alloc_to_device(1);
@@ -1387,20 +1387,17 @@ void OptiXDevice::const_copy_to(const char *name, void *host, size_t size)
     KernelData *const data = (KernelData *)host;
     *(OptixTraversableHandle *)&data->bvh.scene = tlas_handle;
 
-    update_launch_params(offsetof(KernelParams, data), host, size);
+    update_launch_params(offsetof(KernelParamsOptiX, data), host, size);
     return;
   }
 
   /* Update data storage pointers in launch parameters. */
 #  define KERNEL_TEX(data_type, tex_name) \
     if (strcmp(name, #tex_name) == 0) { \
-      update_launch_params(offsetof(KernelParams, tex_name), host, size); \
+      update_launch_params(offsetof(KernelParamsOptiX, tex_name), host, size); \
       return; \
     }
   KERNEL_TEX(IntegratorState, __integrator_state)
-  KERNEL_TEX(IntegratorQueueCounter *, __integrator_queue_counter)
-  KERNEL_TEX(int *, __integrator_sort_key)
-  KERNEL_TEX(int *, __integrator_sort_key_counter)
 #  include "kernel/kernel_textures.h"
 #  undef KERNEL_TEX
 }

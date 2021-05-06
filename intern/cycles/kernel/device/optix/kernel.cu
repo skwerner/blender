@@ -23,8 +23,8 @@
 #include "kernel/device/cuda/parallel_prefix_sum.h"
 #include "kernel/device/cuda/parallel_sorted_index.h"
 
-#include "kernel/integrator/integrator_path_state.h"
 #include "kernel/integrator/integrator_state.h"
+#include "kernel/integrator/integrator_state_flow.h"
 #include "kernel/integrator/integrator_state_util.h"
 
 #include "kernel/integrator/integrator_intersect_closest.h"

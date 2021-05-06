@@ -109,15 +109,6 @@ template<typename T> struct texture {
 
 /* Macros to handle different memory storage on different devices */
 
-#define kernel_tex_fetch(tex, index) (kg->tex.fetch(index))
-#define kernel_tex_fetch_avxf(tex, index) (kg->tex.fetch_avxf(index))
-#define kernel_tex_fetch_ssef(tex, index) (kg->tex.fetch_ssef(index))
-#define kernel_tex_fetch_ssei(tex, index) (kg->tex.fetch_ssei(index))
-#define kernel_tex_lookup(tex, t, offset, size) (kg->tex.lookup(t, offset, size))
-#define kernel_tex_array(tex) (kg->tex.data)
-
-#define kernel_data (kg->__data)
-
 #ifdef __KERNEL_SSE2__
 typedef vector3<sseb> sse3b;
 typedef vector3<ssef> sse3f;

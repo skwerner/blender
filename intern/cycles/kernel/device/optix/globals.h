@@ -21,34 +21,39 @@
 #include "kernel/kernel_profiling.h"
 #include "kernel/kernel_types.h"
 
-#include "kernel/integrator/integrator_path_state.h"
 #include "kernel/integrator/integrator_state.h"
 
 CCL_NAMESPACE_BEGIN
 
-typedef struct KernelParams {
+/* Not actually used, just a NULL pointer that gets passed everywhere, which we
+ * hope gets optimized out by the compiler. */
+struct KernelGlobals {
+  int unused[1];
+};
+
+/* Launch parameters */
+struct KernelParamsOptiX {
+  /* Kernel arguments */
   const int *path_index_array;
   float *render_buffer;
 
-  IntegratorState __integrator_state;
-  IntegratorQueueCounter *__integrator_queue_counter;
-  int *__integrator_sort_key;
-  int *__integrator_sort_key_counter;
-
+  /* Global scene data and textures */
   KernelData data;
 #define KERNEL_TEX(type, name) const type *name;
 #include "kernel/kernel_textures.h"
-} KernelParams;
 
-typedef struct KernelGlobals {
-#ifdef __VOLUME__
-  VolumeState volume_state;
-#endif
-  Intersection hits_stack[64];
-} KernelGlobals;
+  /* Integrator state */
+  IntegratorStateGPU __integrator_state;
+};
 
 #ifdef __NVCC__
-extern "C" __constant__ KernelParams __params;
+extern "C" __constant__ KernelParamsOptiX __params;
 #endif
+
+/* Abstraction macros */
+#define kernel_data __params.data
+#define kernel_tex_array(t) __params.t
+#define kernel_tex_fetch(t, index) __params.t[(index)]
+#define kernel_integrator_state __params.__integrator_state
 
 CCL_NAMESPACE_END

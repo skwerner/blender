@@ -26,7 +26,7 @@
 CCL_NAMESPACE_BEGIN
 
 class BVHOptiX;
-struct KernelParams;
+struct KernelParamsOptiX;
 
 /* List of OptiX program groups. */
 enum {
@@ -64,7 +64,7 @@ class OptiXDevice : public CUDADevice {
 
   bool motion_blur = false;
   device_vector<SbtRecord> sbt_data;
-  device_only_memory<KernelParams> launch_params;
+  device_only_memory<KernelParamsOptiX> launch_params;
   OptixTraversableHandle tlas_handle = 0;
 
   class Denoiser {

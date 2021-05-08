@@ -751,34 +751,37 @@ ccl_device_inline bool light_select_reached_max_bounces(const KernelGlobals *kg,
 }
 
 ccl_device_noinline bool light_sample(const KernelGlobals *kg,
-                                      int lamp,
                                       float randu,
-                                      float randv,
-                                      float time,
-                                      float3 P,
-                                      int bounce,
+                                      const float randv,
+                                      const float time,
+                                      const float3 P,
+                                      const int bounce,
+                                      const int path_flag,
                                       LightSample *ls)
 {
-  if (lamp < 0) {
-    /* sample index */
-    int index = light_distribution_sample(kg, &randu);
+  /* Sample light index from distribution. */
+  const int index = light_distribution_sample(kg, &randu);
+  const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(__light_distribution,
+                                                                              index);
+  const int prim = kdistribution->prim;
 
-    /* fetch light data */
-    const ccl_global KernelLightDistribution *kdistribution = &kernel_tex_fetch(
-        __light_distribution, index);
-    int prim = kdistribution->prim;
+  if (prim >= 0) {
+    /* Mesh light. */
+    const int object = kdistribution->mesh_light.object_id;
 
-    if (prim >= 0) {
-      int object = kdistribution->mesh_light.object_id;
-      int shader_flag = kdistribution->mesh_light.shader_flag;
-
-      triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
-      ls->shader |= shader_flag;
-      return (ls->pdf > 0.0f);
+    /* Exclude synthetic meshes from shadow catcher pass. */
+    if ((path_flag & PATH_RAY_SHADOW_CATCHER_PASS) &&
+        !(kernel_tex_fetch(__object_flag, object) & SD_OBJECT_SHADOW_CATCHER)) {
+      return false;
     }
 
-    lamp = -prim - 1;
+    const int shader_flag = kdistribution->mesh_light.shader_flag;
+    triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
+    ls->shader |= shader_flag;
+    return (ls->pdf > 0.0f);
   }
+
+  const int lamp = -prim - 1;
 
   if (UNLIKELY(light_select_reached_max_bounces(kg, lamp, bounce))) {
     return false;

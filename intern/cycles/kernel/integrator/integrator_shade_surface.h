@@ -110,11 +110,12 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
   /* Sample position on a light. */
   LightSample ls ccl_optional_struct_init;
   {
+    const int path_flag = INTEGRATOR_STATE(path, flag);
     const uint bounce = INTEGRATOR_STATE(path, bounce);
     float light_u, light_v;
     path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
 
-    if (!light_sample(kg, -1, light_u, light_v, sd->time, sd->P, bounce, &ls)) {
+    if (!light_sample(kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, &ls)) {
       return;
     }
   }

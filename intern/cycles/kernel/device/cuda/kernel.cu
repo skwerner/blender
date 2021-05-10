@@ -496,7 +496,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
   }
 
   if (num_inputs > 2) {
-    const float *in = buffer + pass_offset.y;
+    const float *in = buffer + pass_offset.z;
     float *out = rgb + (x + y * sw) * 3 + (sw * sh * 2) * 3;
     out[0] = in[0] * pixel_scale;
     out[1] = in[1] * pixel_scale;

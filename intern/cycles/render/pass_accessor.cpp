@@ -41,7 +41,7 @@ class Scaler {
   {
     /* Special trick to only scale the samples count pass with the sample scale. Otherwise the pass
      * becomes a uniform 1.0. */
-    if (sample_count_pass_ == pass_buffer) {
+    if (sample_count_pass_ == reinterpret_cast<const uint *>(pass_buffer)) {
       sample_count_pass_ = nullptr;
     }
 
@@ -86,15 +86,15 @@ class Scaler {
   }
 
  protected:
-  const float *get_sample_count_pass(const PassAccessor *pass_accessor,
-                                     const RenderBuffers *render_buffers)
+  const uint *get_sample_count_pass(const PassAccessor *pass_accessor,
+                                    const RenderBuffers *render_buffers)
   {
     const int pass_sample_count = pass_accessor->get_pass_offset(PASS_SAMPLE_COUNT);
     if (pass_sample_count == PASS_UNUSED) {
       return nullptr;
     }
 
-    return render_buffers->buffer.data() + pass_sample_count;
+    return reinterpret_cast<const uint *>(render_buffers->buffer.data()) + pass_sample_count;
   }
 
   const Pass *pass_;
@@ -103,7 +103,7 @@ class Scaler {
   const float num_samples_inv_ = 1.0f;
   const float exposure_ = 1.0f;
 
-  const float *sample_count_pass_ = nullptr;
+  const uint *sample_count_pass_ = nullptr;
 
   float scale_ = 0.0f;
   float scale_exposure_ = 0.0f;
@@ -246,6 +246,16 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
         /* Note that we accumulate 1 - mist in the kernel to avoid having to
          * track the mist values in the integrator state. */
         pixels[0] = saturate(1.0f - f * scaler.scale_exposure(i));
+      }
+    }
+    else if (type == PASS_SAMPLE_COUNT) {
+      /* TODO(sergey): Consider normalizing into the [0..1] range, so that it is possible to see
+       * meaningful value when adaptive sampler stopped rendering image way before the maximum
+       * number of samples was reached (for examples when number of samples is set to 0 in
+       * viewport). */
+      for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
+        const float f = *in;
+        pixels[0] = __float_as_uint(f) * scaler.scale(i);
       }
     }
 #ifdef WITH_CYCLES_DEBUG

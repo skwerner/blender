@@ -68,7 +68,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
 
   const float4 I = *((ccl_global float4 *)buffer);
 
-  const float sample = buffer[kernel_data.film.pass_sample_count];
+  const float sample = __float_as_uint(buffer[kernel_data.film.pass_sample_count]);
 
   /* The per pixel error as seen in section 2.1 of
    * "A hierarchical automatic stopping condition for Monte Carlo global illumination"

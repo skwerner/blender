@@ -143,7 +143,7 @@ static void oidn_add_pass_if_needed(oidn::FilterRef *oidn_filter,
 
       float pixel_scale = scale;
       if (pass_sample_count != PASS_UNUSED) {
-        pixel_scale = 1.0f / buffer_pixel[pass_sample_count];
+        pixel_scale = 1.0f / __float_as_uint(buffer_pixel[pass_sample_count]);
       }
 
       scaled_row[x * 3 + 0] = pass_pixel[0] * pixel_scale;

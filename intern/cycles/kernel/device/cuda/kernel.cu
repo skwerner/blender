@@ -475,7 +475,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     pixel_scale = 1.0f / num_samples;
   }
   else {
-    pixel_scale = 1.0f / buffer[pass_sample_count];
+    pixel_scale = 1.0f / __float_as_uint(buffer[pass_sample_count]);
   }
 
   if (num_inputs > 0) {
@@ -535,7 +535,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     pixel_scale = num_samples;
   }
   else {
-    pixel_scale = buffer[pass_sample_count];
+    pixel_scale = __float_as_uint(buffer[pass_sample_count]);
   }
 
   buffer[0] = in[0] * pixel_scale;

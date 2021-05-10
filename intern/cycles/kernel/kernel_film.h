@@ -47,7 +47,14 @@ ccl_device float4 film_get_pass_result(const KernelGlobals *kg, ccl_global float
   }
   else if (display_pass_components == 1) {
     ccl_global const float *in = (ccl_global float *)(buffer + display_pass_offset);
-    pass_result = make_float4(*in, *in, *in, 0.0f);
+    if (kernel_data.film.pass_sample_count != PASS_UNUSED &&
+        kernel_data.film.pass_sample_count == display_pass_offset) {
+      const float value = __float_as_uint(*in);
+      pass_result = make_float4(value, value, value, 0.0f);
+    }
+    else {
+      pass_result = make_float4(*in, *in, *in, 0.0f);
+    }
   }
 
   return pass_result;
@@ -84,7 +91,7 @@ ccl_device void kernel_film_convert_to_half_float(const KernelGlobals *kg,
      * meaningful result (rather than becoming uniform buffer filled with 1). */
     if (kernel_data.film.pass_sample_count != PASS_UNUSED &&
         kernel_data.film.pass_sample_count != kernel_data.film.display_pass_offset) {
-      sample_scale = 1.0f / buffer[kernel_data.film.pass_sample_count];
+      sample_scale = 1.0f / __float_as_uint(buffer[kernel_data.film.pass_sample_count]);
     }
     rgba_in *= sample_scale;
   }

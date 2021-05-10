@@ -15,6 +15,7 @@
  */
 
 #include "BLI_compiler_attrs.h"
+#include "BLI_task.hh"
 
 #include "DNA_texture_types.h"
 
@@ -49,20 +50,19 @@ static void geo_node_attribute_sample_texture_layout(uiLayout *layout,
 namespace blender::nodes {
 
 static AttributeDomain get_result_domain(const GeometryComponent &component,
-                                         StringRef result_attribute_name,
-                                         StringRef map_attribute_name)
+                                         const StringRef result_name,
+                                         const StringRef map_name)
 {
   /* Use the domain of the result attribute if it already exists. */
-  ReadAttributeLookup result_attribute = component.attribute_try_get_for_read(
-      result_attribute_name);
-  if (result_attribute) {
-    return result_attribute.domain;
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(result_name);
+  if (result_info) {
+    return result_info->domain;
   }
 
   /* Otherwise use the name of the map attribute. */
-  ReadAttributeLookup map_attribute = component.attribute_try_get_for_read(map_attribute_name);
-  if (map_attribute) {
-    return map_attribute.domain;
+  std::optional<AttributeMetaData> map_info = component.attribute_get_meta_data(map_name);
+  if (map_info) {
+    return map_info->domain;
   }
 
   /* The node won't execute in this case, but we still have to return a value. */
@@ -96,14 +96,17 @@ static void execute_on_component(GeometryComponent &component, const GeoNodeExec
       mapping_name, result_domain, {0, 0, 0});
 
   MutableSpan<Color4f> colors = attribute_out.as_span();
-  for (const int i : IndexRange(mapping_attribute.size())) {
-    TexResult texture_result = {0};
-    const float3 position = mapping_attribute[i];
-    /* For legacy reasons we have to map [0, 1] to [-1, 1] to support uv mappings. */
-    const float3 remapped_position = position * 2.0f - float3(1.0f);
-    BKE_texture_get_value(nullptr, texture, remapped_position, &texture_result, false);
-    colors[i] = {texture_result.tr, texture_result.tg, texture_result.tb, texture_result.ta};
-  }
+  parallel_for(IndexRange(mapping_attribute.size()), 128, [&](IndexRange range) {
+    for (const int i : range) {
+      TexResult texture_result = {0};
+      const float3 position = mapping_attribute[i];
+      /* For legacy reasons we have to map [0, 1] to [-1, 1] to support uv mappings. */
+      const float3 remapped_position = position * 2.0f - float3(1.0f);
+      BKE_texture_get_value(nullptr, texture, remapped_position, &texture_result, false);
+      colors[i] = {texture_result.tr, texture_result.tg, texture_result.tb, texture_result.ta};
+    }
+  });
+
   attribute_out.save();
 }
 
@@ -118,6 +121,9 @@ static void geo_node_attribute_sample_texture_exec(GeoNodeExecParams params)
   }
   if (geometry_set.has<PointCloudComponent>()) {
     execute_on_component(geometry_set.get_component_for_write<PointCloudComponent>(), params);
+  }
+  if (geometry_set.has<CurveComponent>()) {
+    execute_on_component(geometry_set.get_component_for_write<CurveComponent>(), params);
   }
 
   params.set_output("Geometry", geometry_set);

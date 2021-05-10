@@ -234,9 +234,9 @@ static AttributeDomain get_result_domain(const GeometryComponent &component,
                                          StringRef result_name)
 {
   /* Use the domain of the result attribute if it already exists. */
-  ReadAttributeLookup result_attribute = component.attribute_try_get_for_read(result_name);
-  if (result_attribute) {
-    return result_attribute.domain;
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(result_name);
+  if (result_info) {
+    return result_info->domain;
   }
 
   /* Otherwise use the highest priority domain from existing input attributes, or the default. */
@@ -333,6 +333,9 @@ static void geo_node_attribute_compare_exec(GeoNodeExecParams params)
   }
   if (geometry_set.has<PointCloudComponent>()) {
     attribute_compare_calc(geometry_set.get_component_for_write<PointCloudComponent>(), params);
+  }
+  if (geometry_set.has<CurveComponent>()) {
+    attribute_compare_calc(geometry_set.get_component_for_write<CurveComponent>(), params);
   }
 
   params.set_output("Geometry", geometry_set);

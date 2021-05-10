@@ -24,6 +24,7 @@ set(INC_SYS
 
 set(SRC
   alembic.cpp
+  alembic_read.cpp
   attribute.cpp
   background.cpp
   bake.cpp
@@ -69,6 +70,7 @@ set(SRC
 
 set(SRC_HEADERS
   alembic.h
+  alembic_read.h
   attribute.h
   bake.h
   background.h

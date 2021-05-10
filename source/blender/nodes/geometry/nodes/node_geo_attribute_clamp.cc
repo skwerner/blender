@@ -126,13 +126,13 @@ static AttributeDomain get_result_domain(const GeometryComponent &component,
                                          StringRef source_name,
                                          StringRef result_name)
 {
-  ReadAttributeLookup result_attribute = component.attribute_try_get_for_read(result_name);
-  if (result_attribute) {
-    return result_attribute.domain;
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(result_name);
+  if (result_info) {
+    return result_info->domain;
   }
-  ReadAttributeLookup source_attribute = component.attribute_try_get_for_read(source_name);
-  if (source_attribute) {
-    return source_attribute.domain;
+  std::optional<AttributeMetaData> source_info = component.attribute_get_meta_data(source_name);
+  if (source_info) {
+    return source_info->domain;
   }
   return ATTR_DOMAIN_POINT;
 }
@@ -254,6 +254,9 @@ static void geo_node_attribute_clamp_exec(GeoNodeExecParams params)
   }
   if (geometry_set.has<PointCloudComponent>()) {
     clamp_attribute(geometry_set.get_component_for_write<PointCloudComponent>(), params);
+  }
+  if (geometry_set.has<CurveComponent>()) {
+    clamp_attribute(geometry_set.get_component_for_write<CurveComponent>(), params);
   }
 
   params.set_output("Geometry", geometry_set);

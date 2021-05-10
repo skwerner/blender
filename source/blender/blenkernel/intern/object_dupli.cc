@@ -36,6 +36,7 @@
 #include "BLI_math.h"
 #include "BLI_rand.h"
 #include "BLI_span.hh"
+#include "BLI_vector.hh"
 
 #include "DNA_anim_types.h"
 #include "DNA_collection_types.h"
@@ -73,6 +74,7 @@ using blender::Array;
 using blender::float3;
 using blender::float4x4;
 using blender::Span;
+using blender::Vector;
 
 /* -------------------------------------------------------------------- */
 /** \name Internal Duplicate Context
@@ -89,6 +91,13 @@ struct DupliContext {
   ViewLayer *view_layer;
   Object *object;
   float space_mat[4][4];
+
+  /**
+   * A stack that contains all the "parent" objects of a particular instance when recursive
+   * instancing is used. This is used to prevent objects from instancing themselves accidentally.
+   * Use a vector instead of a stack because we want to use the #contains method.
+   */
+  Vector<Object *> *instance_stack;
 
   int persistent_id[MAX_DUPLI_RECUR];
   int level;
@@ -113,7 +122,8 @@ static void init_context(DupliContext *r_ctx,
                          Depsgraph *depsgraph,
                          Scene *scene,
                          Object *ob,
-                         const float space_mat[4][4])
+                         const float space_mat[4][4],
+                         Vector<Object *> &instance_stack)
 {
   r_ctx->depsgraph = depsgraph;
   r_ctx->scene = scene;
@@ -122,6 +132,7 @@ static void init_context(DupliContext *r_ctx,
 
   r_ctx->object = ob;
   r_ctx->obedit = OBEDIT_FROM_OBACT(ob);
+  r_ctx->instance_stack = &instance_stack;
   if (space_mat) {
     copy_m4_m4(r_ctx->space_mat, space_mat);
   }
@@ -150,6 +161,7 @@ static void copy_dupli_context(
   }
 
   r_ctx->object = ob;
+  r_ctx->instance_stack = ctx->instance_stack;
   if (mat) {
     mul_m4_m4m4(r_ctx->space_mat, (float(*)[4])ctx->space_mat, mat);
   }
@@ -235,12 +247,19 @@ static void make_recursive_duplis(const DupliContext *ctx,
                                   const float space_mat[4][4],
                                   int index)
 {
+  if (ctx->instance_stack->contains(ob)) {
+    /* Avoid recursive instances. */
+    printf("Warning: '%s' object is trying to instance itself.\n", ob->id.name + 2);
+    return;
+  }
   /* Simple preventing of too deep nested collections with #MAX_DUPLI_RECUR. */
   if (ctx->level < MAX_DUPLI_RECUR) {
     DupliContext rctx;
     copy_dupli_context(&rctx, ctx, ob, space_mat, index);
     if (rctx.gen) {
+      ctx->instance_stack->append(ob);
       rctx.gen->make_duplis(&rctx);
+      ctx->instance_stack->remove_last();
     }
   }
 }
@@ -823,38 +842,38 @@ static void make_duplis_instances_component(const DupliContext *ctx)
     return;
   }
 
-  Span<float4x4> instance_offset_matrices = component->transforms();
+  Span<float4x4> instance_offset_matrices = component->instance_transforms();
+  Span<int> instance_reference_handles = component->instance_reference_handles();
   Span<int> almost_unique_ids = component->almost_unique_ids();
-  Span<InstancedData> instanced_data = component->instanced_data();
+  Span<InstanceReference> references = component->references();
 
-  for (int i = 0; i < component->instances_amount(); i++) {
-    const InstancedData &data = instanced_data[i];
+  for (int64_t i : instance_offset_matrices.index_range()) {
+    const InstanceReference &reference = references[instance_reference_handles[i]];
     const int id = almost_unique_ids[i];
 
-    if (data.type == INSTANCE_DATA_TYPE_OBJECT) {
-      Object *object = data.data.object;
-      if (object != nullptr) {
+    switch (reference.type()) {
+      case InstanceReference::Type::Object: {
+        Object &object = reference.object();
         float matrix[4][4];
         mul_m4_m4m4(matrix, ctx->object->obmat, instance_offset_matrices[i].values);
-        make_dupli(ctx, object, matrix, id);
+        make_dupli(ctx, &object, matrix, id);
 
         float space_matrix[4][4];
-        mul_m4_m4m4(space_matrix, instance_offset_matrices[i].values, object->imat);
+        mul_m4_m4m4(space_matrix, instance_offset_matrices[i].values, object.imat);
         mul_m4_m4_pre(space_matrix, ctx->object->obmat);
-        make_recursive_duplis(ctx, object, space_matrix, id);
+        make_recursive_duplis(ctx, &object, space_matrix, id);
+        break;
       }
-    }
-    else if (data.type == INSTANCE_DATA_TYPE_COLLECTION) {
-      Collection *collection = data.data.collection;
-      if (collection != nullptr) {
+      case InstanceReference::Type::Collection: {
+        Collection &collection = reference.collection();
         float collection_matrix[4][4];
         unit_m4(collection_matrix);
-        sub_v3_v3(collection_matrix[3], collection->instance_offset);
+        sub_v3_v3(collection_matrix[3], collection.instance_offset);
         mul_m4_m4_pre(collection_matrix, instance_offset_matrices[i].values);
         mul_m4_m4_pre(collection_matrix, ctx->object->obmat);
 
         eEvaluationMode mode = DEG_get_mode(ctx->depsgraph);
-        FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_BEGIN (collection, object, mode) {
+        FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_BEGIN (&collection, object, mode) {
           if (object == ctx->object) {
             continue;
           }
@@ -866,6 +885,10 @@ static void make_duplis_instances_component(const DupliContext *ctx)
           make_recursive_duplis(ctx, object, collection_matrix, id);
         }
         FOREACH_COLLECTION_VISIBLE_OBJECT_RECURSIVE_END;
+        break;
+      }
+      case InstanceReference::Type::None: {
+        break;
       }
     }
   }
@@ -1588,7 +1611,9 @@ ListBase *object_duplilist(Depsgraph *depsgraph, Scene *sce, Object *ob)
 {
   ListBase *duplilist = (ListBase *)MEM_callocN(sizeof(ListBase), "duplilist");
   DupliContext ctx;
-  init_context(&ctx, depsgraph, sce, ob, nullptr);
+  Vector<Object *> instance_stack;
+  instance_stack.append(ob);
+  init_context(&ctx, depsgraph, sce, ob, nullptr, instance_stack);
   if (ctx.gen) {
     ctx.duplilist = duplilist;
     ctx.gen->make_duplis(&ctx);

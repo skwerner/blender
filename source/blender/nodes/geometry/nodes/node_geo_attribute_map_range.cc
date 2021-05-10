@@ -15,6 +15,7 @@
  */
 
 #include "BLI_math_base_safe.h"
+#include "BLI_task.hh"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -208,28 +209,36 @@ static void map_range_float(const VArray<float> &attribute_input,
 
   switch (interpolation_type) {
     case NODE_MAP_RANGE_LINEAR: {
-      for (int i : span.index_range()) {
-        results[i] = map_linear(span[i], min_from, max_from, min_to, max_to);
-      }
+      parallel_for(span.index_range(), 2048, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i] = map_linear(span[i], min_from, max_from, min_to, max_to);
+        }
+      });
       break;
     }
     case NODE_MAP_RANGE_STEPPED: {
       const float steps = params.get_input<float>("Steps");
-      for (int i : span.index_range()) {
-        results[i] = map_stepped(span[i], min_from, max_from, min_to, max_to, steps);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i] = map_stepped(span[i], min_from, max_from, min_to, max_to, steps);
+        }
+      });
       break;
     }
     case NODE_MAP_RANGE_SMOOTHSTEP: {
-      for (int i : span.index_range()) {
-        results[i] = map_smoothstep(span[i], min_from, max_from, min_to, max_to);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i] = map_smoothstep(span[i], min_from, max_from, min_to, max_to);
+        }
+      });
       break;
     }
     case NODE_MAP_RANGE_SMOOTHERSTEP: {
-      for (int i : span.index_range()) {
-        results[i] = map_smootherstep(span[i], min_from, max_from, min_to, max_to);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i] = map_smootherstep(span[i], min_from, max_from, min_to, max_to);
+        }
+      });
       break;
     }
   }
@@ -240,9 +249,11 @@ static void map_range_float(const VArray<float> &attribute_input,
     const float clamp_min = min_to < max_to ? min_to : max_to;
     const float clamp_max = min_to < max_to ? max_to : min_to;
 
-    for (int i : results.index_range()) {
-      results[i] = std::clamp(results[i], clamp_min, clamp_max);
-    }
+    parallel_for(results.index_range(), 2048, [&](IndexRange range) {
+      for (const int i : range) {
+        results[i] = std::clamp(results[i], clamp_min, clamp_max);
+      }
+    });
   }
 }
 
@@ -262,36 +273,47 @@ static void map_range_float3(const VArray<float3> &attribute_input,
 
   switch (interpolation_type) {
     case NODE_MAP_RANGE_LINEAR: {
-      for (int i : span.index_range()) {
-        results[i].x = map_linear(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
-        results[i].y = map_linear(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
-        results[i].z = map_linear(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i].x = map_linear(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
+          results[i].y = map_linear(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
+          results[i].z = map_linear(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z);
+        }
+      });
       break;
     }
     case NODE_MAP_RANGE_STEPPED: {
       const float3 steps = params.get_input<float3>("Steps_001");
-      for (int i : span.index_range()) {
-        results[i].x = map_stepped(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x, steps.x);
-        results[i].y = map_stepped(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y, steps.y);
-        results[i].z = map_stepped(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z, steps.z);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i].x = map_stepped(
+              span[i].x, min_from.x, max_from.x, min_to.x, max_to.x, steps.x);
+          results[i].y = map_stepped(
+              span[i].y, min_from.y, max_from.y, min_to.y, max_to.y, steps.y);
+          results[i].z = map_stepped(
+              span[i].z, min_from.z, max_from.z, min_to.z, max_to.z, steps.z);
+        }
+      });
       break;
     }
     case NODE_MAP_RANGE_SMOOTHSTEP: {
-      for (int i : span.index_range()) {
-        results[i].x = map_smoothstep(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
-        results[i].y = map_smoothstep(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
-        results[i].z = map_smoothstep(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i].x = map_smoothstep(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
+          results[i].y = map_smoothstep(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
+          results[i].z = map_smoothstep(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z);
+        }
+      });
       break;
     }
     case NODE_MAP_RANGE_SMOOTHERSTEP: {
-      for (int i : span.index_range()) {
-        results[i].x = map_smootherstep(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
-        results[i].y = map_smootherstep(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
-        results[i].z = map_smootherstep(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z);
-      }
+      parallel_for(span.index_range(), 1024, [&](IndexRange range) {
+        for (const int i : range) {
+          results[i].x = map_smootherstep(span[i].x, min_from.x, max_from.x, min_to.x, max_to.x);
+          results[i].y = map_smootherstep(span[i].y, min_from.y, max_from.y, min_to.y, max_to.y);
+          results[i].z = map_smootherstep(span[i].z, min_from.z, max_from.z, min_to.z, max_to.z);
+        }
+      });
       break;
     }
   }
@@ -318,13 +340,13 @@ static AttributeDomain get_result_domain(const GeometryComponent &component,
                                          StringRef source_name,
                                          StringRef result_name)
 {
-  ReadAttributeLookup result_attribute = component.attribute_try_get_for_read(result_name);
-  if (result_attribute) {
-    return result_attribute.domain;
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(result_name);
+  if (result_info) {
+    return result_info->domain;
   }
-  ReadAttributeLookup source_attribute = component.attribute_try_get_for_read(source_name);
-  if (source_attribute) {
-    return source_attribute.domain;
+  std::optional<AttributeMetaData> source_info = component.attribute_get_meta_data(source_name);
+  if (source_info) {
+    return source_info->domain;
   }
   return ATTR_DOMAIN_POINT;
 }
@@ -387,6 +409,9 @@ static void geo_node_attribute_map_range_exec(GeoNodeExecParams params)
   }
   if (geometry_set.has<PointCloudComponent>()) {
     map_range_attribute(geometry_set.get_component_for_write<PointCloudComponent>(), params);
+  }
+  if (geometry_set.has<CurveComponent>()) {
+    map_range_attribute(geometry_set.get_component_for_write<CurveComponent>(), params);
   }
 
   params.set_output("Geometry", geometry_set);

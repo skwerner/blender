@@ -68,13 +68,12 @@ static void geo_node_attribute_fill_update(bNodeTree *UNUSED(ntree), bNode *node
 
 namespace blender::nodes {
 
-static AttributeDomain get_result_domain(const GeometryComponent &component,
-                                         StringRef attribute_name)
+static AttributeDomain get_result_domain(const GeometryComponent &component, const StringRef name)
 {
   /* Use the domain of the result attribute if it already exists. */
-  ReadAttributeLookup result_attribute = component.attribute_try_get_for_read(attribute_name);
-  if (result_attribute) {
-    return result_attribute.domain;
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(name);
+  if (result_info) {
+    return result_info->domain;
   }
   return ATTR_DOMAIN_POINT;
 }
@@ -143,6 +142,9 @@ static void geo_node_attribute_fill_exec(GeoNodeExecParams params)
   }
   if (geometry_set.has<PointCloudComponent>()) {
     fill_attribute(geometry_set.get_component_for_write<PointCloudComponent>(), params);
+  }
+  if (geometry_set.has<CurveComponent>()) {
+    fill_attribute(geometry_set.get_component_for_write<CurveComponent>(), params);
   }
 
   params.set_output("Geometry", geometry_set);

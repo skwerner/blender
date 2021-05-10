@@ -456,6 +456,10 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
       t = ray.t;
     }
     else if (bounce == 0) {
+      /* Restore original position if nothing was hit after the first bounce,
+       * without the ray_offset() that was added to avoid self-intersection.
+       * Otherwise if that offset is relatively large compared to the scattering
+       * radius, we never go back up high enough to exit the surface. */
       ray.P = P;
     }
 

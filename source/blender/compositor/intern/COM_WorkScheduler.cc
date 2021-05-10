@@ -263,10 +263,10 @@ static void opencl_initialize(const bool use_opencl)
             if (error2 != CL_SUCCESS) {
               printf("CLERROR[%d]: %s\n", error2, clewErrorString(error2));
             }
-            g_work_scheduler.opencl.devices.append(OpenCLDevice(g_work_scheduler.opencl.context,
-                                                                device,
-                                                                g_work_scheduler.opencl.program,
-                                                                vendorID));
+            g_work_scheduler.opencl.devices.append_as(g_work_scheduler.opencl.context,
+                                                      device,
+                                                      g_work_scheduler.opencl.program,
+                                                      vendorID);
           }
         }
         MEM_freeN(cldevices);
@@ -368,7 +368,7 @@ static void threading_model_queue_initialize(const int num_cpu_threads)
   /* Initialize CPU threads. */
   if (!g_work_scheduler.queue.initialized) {
     for (int index = 0; index < num_cpu_threads; index++) {
-      g_work_scheduler.queue.devices.append(CPUDevice(index));
+      g_work_scheduler.queue.devices.append_as(index);
     }
     BLI_thread_local_create(g_thread_device);
     g_work_scheduler.queue.initialized = true;
@@ -397,7 +397,6 @@ static void threading_model_task_execute(TaskPool *__restrict UNUSED(pool), void
   CPUDevice device(BLI_task_parallel_thread_id(nullptr));
   BLI_thread_local_set(g_thread_device, &device);
   device.execute(package);
-  delete package;
 }
 
 static void threading_model_task_schedule(WorkPackage *package)

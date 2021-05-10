@@ -30,6 +30,7 @@
 #include "BLI_map.hh"
 #include "BLI_set.hh"
 #include "BLI_user_counter.hh"
+#include "BLI_vector_set.hh"
 
 #include "BKE_attribute_access.hh"
 #include "BKE_geometry_set.h"
@@ -39,6 +40,7 @@ struct Mesh;
 struct Object;
 struct PointCloud;
 struct Volume;
+class CurveEval;
 
 enum class GeometryOwnershipType {
   /* The geometry is owned. This implies that it can be changed. */
@@ -68,6 +70,65 @@ struct AttributeMetaData {
 /* Returns false when the iteration should be stopped. */
 using AttributeForeachCallback = blender::FunctionRef<bool(blender::StringRefNull attribute_name,
                                                            const AttributeMetaData &meta_data)>;
+
+/**
+ * Base class for the attribute intializer types described below.
+ */
+struct AttributeInit {
+  enum class Type {
+    Default,
+    VArray,
+    MoveArray,
+  };
+  Type type;
+  AttributeInit(const Type type) : type(type)
+  {
+  }
+};
+
+/**
+ * Create an attribute using the default value for the data type.
+ * The default values may depend on the attribute provider implementation.
+ */
+struct AttributeInitDefault : public AttributeInit {
+  AttributeInitDefault() : AttributeInit(Type::Default)
+  {
+  }
+};
+
+/**
+ * Create an attribute by copying data from an existing virtual array. The virtual array
+ * must have the same type as the newly created attribute.
+ *
+ * Note that this can be used to fill the new attribute with the default
+ */
+struct AttributeInitVArray : public AttributeInit {
+  const blender::fn::GVArray *varray;
+
+  AttributeInitVArray(const blender::fn::GVArray *varray)
+      : AttributeInit(Type::VArray), varray(varray)
+  {
+  }
+};
+
+/**
+ * Create an attribute with a by passing ownership of a pre-allocated contiguous array of data.
+ * Sometimes data is created before a geometry component is available. In that case, it's
+ * preferable to move data directly to the created attribute to avoid a new allocation and a copy.
+ *
+ * Note that this will only have a benefit for attributes that are stored directly as contiguous
+ * arrays, so not for some built-in attributes.
+ *
+ * The array must be allocated with MEM_*, since `attribute_try_create` will free the array if it
+ * can't be used directly, and that is generally how Blender expects custom data to be allocated.
+ */
+struct AttributeInitMove : public AttributeInit {
+  void *data = nullptr;
+
+  AttributeInitMove(void *data) : AttributeInit(Type::MoveArray), data(data)
+  {
+  }
+};
 
 /**
  * This is the base class for specialized geometry component types.
@@ -102,6 +163,10 @@ class GeometryComponent {
   /* Return true when any attribute with this name exists, including built in attributes. */
   bool attribute_exists(const blender::StringRef attribute_name) const;
 
+  /* Return the data type and domain of an attribute with the given name if it exists. */
+  std::optional<AttributeMetaData> attribute_get_meta_data(
+      const blender::StringRef attribute_name) const;
+
   /* Returns true when the geometry component supports this attribute domain. */
   bool attribute_domain_supported(const AttributeDomain domain) const;
   /* Can only be used with supported domain types. */
@@ -133,11 +198,13 @@ class GeometryComponent {
   /* Returns true when the attribute has been created. */
   bool attribute_try_create(const blender::StringRef attribute_name,
                             const AttributeDomain domain,
-                            const CustomDataType data_type);
+                            const CustomDataType data_type,
+                            const AttributeInit &initializer);
 
   /* Try to create the builtin attribute with the given name. No data type or domain has to be
    * provided, because those are fixed for builtin attributes. */
-  bool attribute_try_create_builtin(const blender::StringRef attribute_name);
+  bool attribute_try_create_builtin(const blender::StringRef attribute_name,
+                                    const AttributeInit &initializer);
 
   blender::Set<std::string> attribute_names() const;
   bool attribute_foreach(const AttributeForeachCallback callback) const;
@@ -298,23 +365,34 @@ struct GeometrySet {
       Mesh *mesh, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
   static GeometrySet create_with_pointcloud(
       PointCloud *pointcloud, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
+  static GeometrySet create_with_curve(
+      CurveEval *curve, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
 
   /* Utility methods for access. */
   bool has_mesh() const;
   bool has_pointcloud() const;
   bool has_instances() const;
   bool has_volume() const;
+  bool has_curve() const;
+
   const Mesh *get_mesh_for_read() const;
   const PointCloud *get_pointcloud_for_read() const;
   const Volume *get_volume_for_read() const;
+  const CurveEval *get_curve_for_read() const;
+
   Mesh *get_mesh_for_write();
   PointCloud *get_pointcloud_for_write();
   Volume *get_volume_for_write();
+  CurveEval *get_curve_for_write();
 
   /* Utility methods for replacement. */
   void replace_mesh(Mesh *mesh, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
   void replace_pointcloud(PointCloud *pointcloud,
                           GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
+  void replace_volume(Volume *volume,
+                      GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
+  void replace_curve(CurveEval *curve,
+                     GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
 };
 
 /** A geometry component that can store a mesh. */
@@ -396,12 +474,113 @@ class PointCloudComponent : public GeometryComponent {
   const blender::bke::ComponentAttributeProviders *get_attribute_providers() const final;
 };
 
+/** A geometry component that stores curve data, in other words, a group of splines. */
+class CurveComponent : public GeometryComponent {
+ private:
+  CurveEval *curve_ = nullptr;
+  GeometryOwnershipType ownership_ = GeometryOwnershipType::Owned;
+
+ public:
+  CurveComponent();
+  ~CurveComponent();
+  GeometryComponent *copy() const override;
+
+  void clear();
+  bool has_curve() const;
+  void replace(CurveEval *curve, GeometryOwnershipType ownership = GeometryOwnershipType::Owned);
+  CurveEval *release();
+
+  const CurveEval *get_for_read() const;
+  CurveEval *get_for_write();
+
+  int attribute_domain_size(const AttributeDomain domain) const final;
+
+  bool is_empty() const final;
+
+  bool owns_direct_data() const override;
+  void ensure_owns_direct_data() override;
+
+  static constexpr inline GeometryComponentType static_type = GEO_COMPONENT_TYPE_CURVE;
+
+ private:
+  const blender::bke::ComponentAttributeProviders *get_attribute_providers() const final;
+};
+
+class InstanceReference {
+ public:
+  enum class Type {
+    /**
+     * An empty instance. This allows an `InstanceReference` to be default constructed without
+     * being in an invalid state. There might also be other use cases that we haven't explored much
+     * yet (such as changing the instance later on, and "disabling" some instances).
+     */
+    None,
+    Object,
+    Collection,
+  };
+
+ private:
+  Type type_ = Type::None;
+  /** Depending on the type this is either null, an Object or Collection pointer. */
+  void *data_ = nullptr;
+
+ public:
+  InstanceReference() = default;
+
+  InstanceReference(Object &object) : type_(Type::Object), data_(&object)
+  {
+  }
+
+  InstanceReference(Collection &collection) : type_(Type::Collection), data_(&collection)
+  {
+  }
+
+  Type type() const
+  {
+    return type_;
+  }
+
+  Object &object() const
+  {
+    BLI_assert(type_ == Type::Object);
+    return *(Object *)data_;
+  }
+
+  Collection &collection() const
+  {
+    BLI_assert(type_ == Type::Collection);
+    return *(Collection *)data_;
+  }
+
+  uint64_t hash() const
+  {
+    return blender::get_default_hash(data_);
+  }
+
+  friend bool operator==(const InstanceReference &a, const InstanceReference &b)
+  {
+    return a.data_ == b.data_;
+  }
+};
+
 /** A geometry component that stores instances. */
 class InstancesComponent : public GeometryComponent {
  private:
-  blender::Vector<blender::float4x4> transforms_;
-  blender::Vector<int> ids_;
-  blender::Vector<InstancedData> instanced_data_;
+  /**
+   * Indexed set containing information about the data that is instanced.
+   * Actual instances store an index ("handle") into this set.
+   */
+  blender::VectorSet<InstanceReference> references_;
+
+  /** Index into `references_`. Determines what data is instanced. */
+  blender::Vector<int> instance_reference_handles_;
+  /** Transformation of the instances. */
+  blender::Vector<blender::float4x4> instance_transforms_;
+  /**
+   * IDs of the instances. They are used for consistency over multiple frames for things like
+   * motion blur.
+   */
+  blender::Vector<int> instance_ids_;
 
   /* These almost unique ids are generated based on `ids_`, which might not contain unique ids at
    * all. They are *almost* unique, because under certain very unlikely circumstances, they are not
@@ -416,14 +595,22 @@ class InstancesComponent : public GeometryComponent {
   GeometryComponent *copy() const override;
 
   void clear();
-  void add_instance(Object *object, blender::float4x4 transform, const int id = -1);
-  void add_instance(Collection *collection, blender::float4x4 transform, const int id = -1);
-  void add_instance(InstancedData data, blender::float4x4 transform, const int id = -1);
 
-  blender::Span<InstancedData> instanced_data() const;
-  blender::Span<blender::float4x4> transforms() const;
-  blender::Span<int> ids() const;
-  blender::MutableSpan<blender::float4x4> transforms();
+  void reserve(int min_capacity);
+  void resize(int capacity);
+
+  int add_reference(InstanceReference reference);
+  void add_instance(int instance_handle, const blender::float4x4 &transform, const int id = -1);
+
+  blender::Span<InstanceReference> references() const;
+
+  blender::Span<int> instance_reference_handles() const;
+  blender::MutableSpan<int> instance_reference_handles();
+  blender::MutableSpan<blender::float4x4> instance_transforms();
+  blender::Span<blender::float4x4> instance_transforms() const;
+  blender::MutableSpan<int> instance_ids();
+  blender::Span<int> instance_ids() const;
+
   int instances_amount() const;
 
   blender::Span<int> almost_unique_ids() const;

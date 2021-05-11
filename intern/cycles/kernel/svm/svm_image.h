@@ -70,6 +70,40 @@ ccl_device void svm_node_tex_image(
     tex_co = make_float2(co.x, co.y);
   }
 
+  differential ds, dt;
+#ifdef __KERNEL_CPU__
+  if (stack_valid(dx_offset) && stack_valid(dy_offset)) {
+    float3 dx = stack_load_float3(stack, dx_offset);
+    float3 dy = stack_load_float3(stack, dy_offset);
+    float2 tex_co_dx, tex_co_dy;
+    if (projection == NODE_IMAGE_PROJ_SPHERE) {
+      dx = texco_remap_square(dx);
+      tex_co_dx = map_to_sphere(dx);
+      dy = texco_remap_square(dy);
+      tex_co_dy = map_to_sphere(dy);
+    }
+    else if (projection == NODE_IMAGE_PROJ_TUBE) {
+      dx = texco_remap_square(dx);
+      tex_co_dx = map_to_tube(dx);
+      dy = texco_remap_square(dy);
+      tex_co_dy = map_to_tube(dy);
+    }
+    else {
+      tex_co_dx = make_float2(dx.x, dx.y);
+      tex_co_dy = make_float2(dy.x, dy.y);
+    }
+    ds.dx = tex_co_dx.x - tex_co.x;
+    ds.dy = tex_co_dy.x - tex_co.x;
+    dt.dx = tex_co_dx.y - tex_co.y;
+    dt.dy = tex_co_dy.y - tex_co.y;
+  }
+  else
+#endif
+  {
+    ds = differential_zero();
+    dt = differential_zero();
+  }
+
   /* TODO(lukas): Consider moving tile information out of the SVM node.
    * TextureInfo seems a reasonable candidate. */
   int id = -1;
@@ -111,40 +145,6 @@ ccl_device void svm_node_tex_image(
   }
   else {
     id = -num_nodes;
-  }
-
-  differential ds, dt;
-#ifdef __KERNEL_CPU__
-  if (stack_valid(dx_offset) && stack_valid(dy_offset)) {
-    float3 dx = stack_load_float3(stack, dx_offset);
-    float3 dy = stack_load_float3(stack, dy_offset);
-    float2 tex_co_dx, tex_co_dy;
-    if (projection == NODE_IMAGE_PROJ_SPHERE) {
-      dx = texco_remap_square(dx);
-      tex_co_dx = map_to_sphere(dx);
-      dy = texco_remap_square(dy);
-      tex_co_dy = map_to_sphere(dy);
-    }
-    else if (projection == NODE_IMAGE_PROJ_TUBE) {
-      dx = texco_remap_square(dx);
-      tex_co_dx = map_to_tube(dx);
-      dy = texco_remap_square(dy);
-      tex_co_dy = map_to_tube(dy);
-    }
-    else {
-      tex_co_dx = make_float2(dx.x, dx.y);
-      tex_co_dy = make_float2(dy.x, dy.y);
-    }
-    ds.dx = tex_co_dx.x - tex_co.x;
-    ds.dy = tex_co_dy.x - tex_co.x;
-    dt.dx = tex_co_dx.y - tex_co.y;
-    dt.dy = tex_co_dy.y - tex_co.y;
-  }
-  else
-#endif
-  {
-    ds = differential_zero();
-    dt = differential_zero();
   }
 
   float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, ds, dt, flags, path_flag);

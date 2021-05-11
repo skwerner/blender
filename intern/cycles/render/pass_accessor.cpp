@@ -111,6 +111,60 @@ class Scaler {
 
 } /* namespace */
 
+static float4 shadow_catcher_calc_pixel(const float scale,
+                                        const float scale_exposure,
+                                        const float *in_combined,
+                                        const float *in_catcher,
+                                        const float *in_matte)
+{
+  const float3 color_catcher = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]) *
+                               scale_exposure;
+
+  const float3 color_combined = make_float3(in_combined[0], in_combined[1], in_combined[2]) *
+                                scale_exposure;
+
+  const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]) * scale_exposure;
+
+  const float transparency = in_combined[3] * scale;
+  const float alpha = saturate(1.0f - transparency);
+
+  const float3 shadow_catcher = safe_divide_even_color(color_combined,
+                                                       color_catcher + color_matte);
+
+  /* Restore pre-multipled nature of the color, avoiding artifacts on the edges.
+   * Makes sense since the division of premultiplied color's "removes" alpha from the
+   * result. */
+  const float3 pixel = (1.0f - alpha) * one_float3() + alpha * shadow_catcher;
+
+  return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);
+}
+
+static float4 shadow_catcher_calc_matte_with_shadow(const float scale,
+                                                    const float scale_exposure,
+                                                    const float *in_combined,
+                                                    const float *in_catcher,
+                                                    const float *in_matte)
+{
+  /* The approximation of the shadow is 1 - average(shadow_catcher_pass). A better approximation
+   * is possible.
+   *
+   * The matte is alpha-overed onto the shadow (which is kind of alpha-overing shadow onto footage,
+   * and then alpha-overing synthetic objects on top). */
+
+  const float4 shadow_catcher = shadow_catcher_calc_pixel(
+      scale, scale_exposure, in_combined, in_catcher, in_matte);
+
+  const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]) * scale_exposure;
+
+  const float transparency = in_matte[3] * scale;
+  const float alpha = saturate(1.0f - transparency);
+
+  return make_float4(color_matte[0],
+                     color_matte[1],
+                     color_matte[2],
+                     (1.0f - alpha) * (1.0f - average(shadow_catcher)) + alpha);
+}
+
 PassAccessor::PassAccessor(const vector<Pass> &passes,
                            const string &pass_name,
                            int num_components,
@@ -131,6 +185,13 @@ PassAccessor::PassAccessor(const vector<Pass> &passes,
    * combined pass with shadow catcher matte here. */
   if (pass_ && pass_->type == PASS_COMBINED) {
     get_pass_by_type(PASS_SHADOW_CATCHER_MATTE, &pass_, &pass_offset_);
+
+    /* When shadow catcher pass is created automatically, assume that pass with synthetic objects
+     * is expected to have shadows as well. */
+    const Pass *shadow_catcher_pass = nullptr;
+    if (get_pass_by_type(PASS_SHADOW_CATCHER, &shadow_catcher_pass)) {
+      approximate_shadow_in_matte_ = shadow_catcher_pass->is_auto;
+    }
   }
 }
 
@@ -342,37 +403,52 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
       DCHECK_NE(pass_matte, PASS_UNUSED);
 
       const float *in_combined = buffer_data + pass_combined;
+      const float *in_catcher = in;
       const float *in_matte = buffer_data + pass_matte;
 
       for (int i = 0; i < size; i++,
-               in += pass_stride,
                in_combined += pass_stride,
+               in_catcher += pass_stride,
                in_matte += pass_stride,
                pixels += 4) {
         float scale, scale_exposure;
         scaler.scale_and_scale_exposure(i, scale, scale_exposure);
 
-        const float3 color_catcher = make_float3(in[0], in[1], in[2]) * scale_exposure;
-        const float3 color_combined = make_float3(in_combined[0], in_combined[1], in_combined[2]) *
-                                      scale_exposure;
-        const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]) *
-                                   scale_exposure;
+        const float4 shadow_catcher = shadow_catcher_calc_pixel(
+            scale, scale_exposure, in_combined, in_catcher, in_matte);
 
-        const float transparency = in_combined[3] * scale;
-        const float alpha = saturate(1.0f - transparency);
+        pixels[0] = shadow_catcher.x;
+        pixels[1] = shadow_catcher.y;
+        pixels[2] = shadow_catcher.z;
+        pixels[3] = shadow_catcher.w;
+      }
+    }
+    else if (type == PASS_SHADOW_CATCHER_MATTE && approximate_shadow_in_matte_) {
+      const int pass_combined = get_pass_offset(PASS_COMBINED);
+      const int pass_shadow_catcher = get_pass_offset(PASS_SHADOW_CATCHER);
 
-        const float3 shadow_catcher = safe_divide_even_color(color_combined,
-                                                             color_catcher + color_matte);
+      DCHECK_NE(pass_combined, PASS_UNUSED);
+      DCHECK_NE(pass_shadow_catcher, PASS_UNUSED);
 
-        /* Restore pre-multipled nature of the color, avoiding artifacts on the edges.
-         * Makes sense since the division of premultiplied color's "removes" alpha from the
-         * result. */
-        const float3 pixel = (1.0f - alpha) * one_float3() + alpha * shadow_catcher;
+      const float *in_combined = buffer_data + pass_combined;
+      const float *in_catcher = buffer_data + pass_shadow_catcher;
+      const float *in_matte = in;
 
-        pixels[0] = pixel.x;
-        pixels[1] = pixel.y;
-        pixels[2] = pixel.z;
-        pixels[3] = 1.0f;
+      for (int i = 0; i < size; i++,
+               in_combined += pass_stride,
+               in_catcher += pass_stride,
+               in_matte += pass_stride,
+               pixels += 4) {
+        float scale, scale_exposure;
+        scaler.scale_and_scale_exposure(i, scale, scale_exposure);
+
+        const float4 matte = shadow_catcher_calc_matte_with_shadow(
+            scale, scale_exposure, in_combined, in_catcher, in_matte);
+
+        pixels[0] = matte.x;
+        pixels[1] = matte.y;
+        pixels[2] = matte.z;
+        pixels[3] = matte.w;
       }
     }
     else {
@@ -457,32 +533,38 @@ int PassAccessor::get_pass_offset(PassType type) const
   return PASS_UNUSED;
 }
 
-void PassAccessor::get_pass_by_name(const string &name, const Pass **r_pass, int *r_offset) const
+bool PassAccessor::get_pass_by_name(const string &name, const Pass **r_pass, int *r_offset) const
 {
   int pass_offset = 0;
   for (const Pass &pass : passes_) {
     /* Pass is identified by both type and name, multiple of the same type may exist with a
      * different name. */
     if (pass.name == name) {
-      *r_offset = pass_offset;
       *r_pass = &pass;
-      break;
+      if (r_offset) {
+        *r_offset = pass_offset;
+      }
+      return true;
     }
     pass_offset += pass.components;
   }
+  return false;
 }
 
-void PassAccessor::get_pass_by_type(const PassType type, const Pass **r_pass, int *r_offset) const
+bool PassAccessor::get_pass_by_type(const PassType type, const Pass **r_pass, int *r_offset) const
 {
   int pass_offset = 0;
   for (const Pass &pass : passes_) {
     if (pass.type == type) {
-      *r_offset = pass_offset;
       *r_pass = &pass;
-      break;
+      if (r_offset) {
+        *r_offset = pass_offset;
+      }
+      return true;
     }
     pass_offset += pass.components;
   }
+  return false;
 }
 
 CCL_NAMESPACE_END

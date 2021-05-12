@@ -162,7 +162,7 @@ static float4 shadow_catcher_calc_matte_with_shadow(const float scale,
   return make_float4(color_matte[0],
                      color_matte[1],
                      color_matte[2],
-                     (1.0f - alpha) * (1.0f - average(shadow_catcher)) + alpha);
+                     (1.0f - alpha) * (1.0f - average(float4_to_float3(shadow_catcher))) + alpha);
 }
 
 PassAccessor::PassAccessor(const vector<Pass> &passes,

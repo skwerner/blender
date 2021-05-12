@@ -237,11 +237,14 @@ ccl_device_inline void object_inverse_dir_transform(const KernelGlobals *kg,
                                                     float3 *D)
 {
 #ifdef __OBJECT_MOTION__
-  *D = transform_direction_auto(&sd->ob_itfm_motion, *D);
-#else
-  Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
-  *D = transform_direction(&tfm, *D);
+  if (sd->object_flag & SD_OBJECT_MOTION) {
+    *D = transform_direction_auto(&sd->ob_itfm_motion, *D);
+    return;
+  }
 #endif
+
+  const Transform tfm = object_fetch_transform(kg, sd->object, OBJECT_INVERSE_TRANSFORM);
+  *D = transform_direction(&tfm, *D);
 }
 
 /* Object center position */

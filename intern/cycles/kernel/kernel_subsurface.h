@@ -27,8 +27,9 @@ CCL_NAMESPACE_BEGIN
 ccl_device_inline float3
 subsurface_scatter_eval(ShaderData *sd, const ShaderClosure *sc, float disk_r, float r, bool all)
 {
-  /* this is the veach one-sample model with balance heuristic, some pdf
-   * factors drop out when using balance heuristic weighting */
+  /* This is the Veach one-sample model with balance heuristic, some pdf
+   * factors drop out when using balance heuristic weighting. For branched
+   * path tracing (all) we sample all closure and don't use MIS. */
   float3 eval_sum = zero_float3();
   float pdf_sum = 0.0f;
   float sample_weight_inv = 0.0f;

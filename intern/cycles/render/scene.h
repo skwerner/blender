@@ -175,7 +175,7 @@ class SceneParams {
     background = true;
   }
 
-  bool modified(const SceneParams &params)
+  bool modified(const SceneParams &params) const
   {
     return !(shadingsystem == params.shadingsystem && bvh_layout == params.bvh_layout &&
              bvh_type == params.bvh_type &&

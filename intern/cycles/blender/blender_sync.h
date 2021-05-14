@@ -124,7 +124,7 @@ class BlenderSync {
                    int width,
                    int height,
                    void **python_thread_state);
-  void sync_film(BL::SpaceView3D &b_v3d);
+  void sync_film(BL::ViewLayer &b_view_layer, BL::SpaceView3D &b_v3d);
   void sync_view();
 
   /* Shader */

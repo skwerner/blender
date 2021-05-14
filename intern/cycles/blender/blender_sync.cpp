@@ -254,7 +254,7 @@ void BlenderSync::sync_data(BL::RenderSettings &b_render,
 
   sync_view_layer(b_v3d, b_view_layer);
   sync_integrator(b_view_layer, background);
-  sync_film(b_v3d);
+  sync_film(b_view_layer, b_v3d);
   sync_shaders(b_depsgraph, b_v3d);
   sync_images();
 
@@ -383,9 +383,10 @@ void BlenderSync::sync_integrator(BL::ViewLayer &b_view_layer, bool background)
 
 /* Film */
 
-void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
+void BlenderSync::sync_film(BL::ViewLayer &b_view_layer, BL::SpaceView3D &b_v3d)
 {
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
+  PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
   Film *film = scene->film;
 
@@ -425,6 +426,8 @@ void BlenderSync::sync_film(BL::SpaceView3D &b_v3d)
         break;
     }
   }
+
+  film->set_use_approximate_shadow_catcher(!get_boolean(crl, "use_pass_shadow_catcher"));
 }
 
 /* Render Layer */

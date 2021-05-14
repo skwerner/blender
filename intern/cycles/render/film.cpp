@@ -130,6 +130,8 @@ NODE_DEFINE(Film)
 
   SOCKET_INT(cryptomatte_depth, "Cryptomatte Depth", 0);
 
+  SOCKET_BOOLEAN(use_approximate_shadow_catcher, "Use Approximate Shadow Catcher", false);
+
   return type;
 }
 

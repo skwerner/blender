@@ -562,7 +562,8 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
 
-  PassAccessor pass_accessor(scene->passes, pass_name, num_components, exposure, num_samples);
+  PassAccessor pass_accessor(
+      scene->film, scene->passes, pass_name, num_components, exposure, num_samples);
 
   if (!pass_accessor.is_valid()) {
     return false;

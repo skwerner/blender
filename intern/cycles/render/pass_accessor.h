@@ -22,6 +22,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class Film;
 class RenderBuffers;
 
 /* Helper class which allows to access pass data.
@@ -29,7 +30,8 @@ class RenderBuffers;
  * progressively update from various render buffers. */
 class PassAccessor {
  public:
-  PassAccessor(const vector<Pass> &passes,
+  PassAccessor(const Film *film,
+               const vector<Pass> &passes,
                const string &pass_name,
                int num_components,
                float exposure,
@@ -53,6 +55,8 @@ class PassAccessor {
   bool get_pass_by_type(const PassType type, const Pass **r_pass, int *r_offset = nullptr) const;
 
  protected:
+  const Film *film_;
+
   const vector<Pass> &passes_;
 
   int pass_offset_ = -1;
@@ -62,8 +66,6 @@ class PassAccessor {
 
   float exposure_ = 0.0f;
   int num_samples_ = 0;
-
-  bool approximate_shadow_in_matte_ = false;
 };
 
 CCL_NAMESPACE_END

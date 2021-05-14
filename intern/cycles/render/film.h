@@ -60,6 +60,10 @@ class Film : public Node {
   NODE_SOCKET_API(CryptomatteType, cryptomatte_passes)
   NODE_SOCKET_API(int, cryptomatte_depth)
 
+  /* Approximate shadow catcher pass into its matte pass, so that both artificial objects and
+   * shadows can be alpha-overed onto a backdrop. */
+  NODE_SOCKET_API(bool, use_approximate_shadow_catcher)
+
  private:
   size_t filter_table_offset_;
 

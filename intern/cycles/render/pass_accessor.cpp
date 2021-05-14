@@ -165,12 +165,14 @@ static float4 shadow_catcher_calc_matte_with_shadow(const float scale,
                      (1.0f - alpha) * (1.0f - average(float4_to_float3(shadow_catcher))) + alpha);
 }
 
-PassAccessor::PassAccessor(const vector<Pass> &passes,
+PassAccessor::PassAccessor(const Film *film,
+                           const vector<Pass> &passes,
                            const string &pass_name,
                            int num_components,
                            float exposure,
                            int num_samples)
-    : passes_(passes),
+    : film_(film),
+      passes_(passes),
       pass_offset_(PASS_UNUSED),
       pass_(nullptr),
       num_components_(num_components),
@@ -185,13 +187,6 @@ PassAccessor::PassAccessor(const vector<Pass> &passes,
    * combined pass with shadow catcher matte here. */
   if (pass_ && pass_->type == PASS_COMBINED) {
     get_pass_by_type(PASS_SHADOW_CATCHER_MATTE, &pass_, &pass_offset_);
-
-    /* When shadow catcher pass is created automatically, assume that pass with synthetic objects
-     * is expected to have shadows as well. */
-    const Pass *shadow_catcher_pass = nullptr;
-    if (get_pass_by_type(PASS_SHADOW_CATCHER, &shadow_catcher_pass)) {
-      approximate_shadow_in_matte_ = shadow_catcher_pass->is_auto;
-    }
   }
 }
 
@@ -433,7 +428,7 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
         pixels[3] = shadow_catcher.w;
       }
     }
-    else if (type == PASS_SHADOW_CATCHER_MATTE && approximate_shadow_in_matte_) {
+    else if (type == PASS_SHADOW_CATCHER_MATTE && film_->get_use_approximate_shadow_catcher()) {
       const int pass_combined = get_pass_offset(PASS_COMBINED);
       const int pass_shadow_catcher = get_pass_offset(PASS_SHADOW_CATCHER);
 

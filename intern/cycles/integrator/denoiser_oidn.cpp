@@ -183,7 +183,7 @@ static void oidn_scale_combined_pass_after_denoise(const BufferParams &buffer_pa
     float *buffer_row = buffer_data + buffer_offset + y * row_stride;
     for (int x = 0; x < width; ++x) {
       float *buffer_pixel = buffer_row + x * pixel_stride;
-      const float pixel_scale = buffer_pixel[pass_sample_count];
+      const float pixel_scale = __float_as_uint(buffer_pixel[pass_sample_count]);
 
       buffer_pixel[0] = buffer_pixel[0] * pixel_scale;
       buffer_pixel[1] = buffer_pixel[1] * pixel_scale;

@@ -45,6 +45,8 @@ struct bNodePreview;
 struct bNodeTreeExec;
 struct bNodeType;
 struct uiBlock;
+struct Tex;
+struct Material;
 
 #define NODE_MAXSTR 64
 
@@ -165,6 +167,8 @@ typedef enum eNodeSocketDatatype {
   SOCK_IMAGE = 9,
   SOCK_GEOMETRY = 10,
   SOCK_COLLECTION = 11,
+  SOCK_TEXTURE = 12,
+  SOCK_MATERIAL = 13,
 } eNodeSocketDatatype;
 
 /* socket shape */
@@ -592,6 +596,14 @@ typedef struct bNodeSocketValueImage {
 typedef struct bNodeSocketValueCollection {
   struct Collection *value;
 } bNodeSocketValueCollection;
+
+typedef struct bNodeSocketValueTexture {
+  struct Tex *value;
+} bNodeSocketValueTexture;
+
+typedef struct bNodeSocketValueMaterial {
+  struct Material *value;
+} bNodeSocketValueMaterial;
 
 /* data structs, for node->storage */
 enum {
@@ -1187,7 +1199,7 @@ typedef struct NodeAttributeVectorMath {
 typedef struct NodeAttributeVectorRotate {
   /* GeometryNodeAttributeVectorRotateMode */
   uint8_t mode;
-  
+
   /* GeometryNodeAttributeInputMode */
   uint8_t input_type_vector;
   uint8_t input_type_center;

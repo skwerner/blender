@@ -17,6 +17,7 @@
 #ifndef __FILM_H__
 #define __FILM_H__
 
+#include "render/pass.h"
 #include "util/util_string.h"
 #include "util/util_vector.h"
 
@@ -37,48 +38,6 @@ typedef enum FilterType {
 
   FILTER_NUM_TYPES,
 } FilterType;
-
-class Pass : public Node {
- public:
-  NODE_DECLARE
-
-  Pass();
-
-  PassType type;
-  int components;
-  bool filter;
-  bool exposure;
-  PassType divide_type;
-  ustring name;
-
-  /* The has been created automatically as a requirement to various rendering functionality (such
-   * as adaptive sampling). */
-  bool is_auto;
-
-  /* Is true when the actual storage of the pass is not aligned to any of boundary.
-   * For example, if the pass with 3 components is stored (and written by the kernel) as individual
-   * float components. */
-  bool is_unaligned;
-
-  static void add(PassType type,
-                  vector<Pass> &passes,
-                  const char *name = nullptr,
-                  bool is_auto = false);
-
-  /* Check whether two sets of passes are matching exactly. */
-  static bool equals_exact(const vector<Pass> &A, const vector<Pass> &B);
-
-  /* Check whether two sets of passes define same set of non-auto passes. */
-  static bool equals_no_auto(const vector<Pass> &A, const vector<Pass> &B);
-
-  static bool contains(const vector<Pass> &passes, PassType type);
-
-  /* Remove given pass type if it was automatically created. */
-  static void remove_auto(vector<Pass> &passes, PassType type);
-
-  /* Remove all passes which were automatically created. */
-  static void remove_all_auto(vector<Pass> &passes);
-};
 
 class Film : public Node {
  public:

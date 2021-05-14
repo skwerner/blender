@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "render/film.h"
+#include "render/pass.h"
 #include "util/util_string.h"
 #include "util/util_vector.h"
 

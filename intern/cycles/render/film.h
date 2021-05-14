@@ -76,8 +76,6 @@ class Film : public Node {
   void assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes);
 
   int get_aov_offset(Scene *scene, string name, bool &is_color);
-
-  size_t get_filter_table_offset() const;
 };
 
 CCL_NAMESPACE_END

@@ -493,9 +493,4 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
   return -1;
 }
 
-size_t Film::get_filter_table_offset() const
-{
-  return filter_table_offset;
-}
-
 CCL_NAMESPACE_END

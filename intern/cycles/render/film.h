@@ -61,7 +61,7 @@ class Film : public Node {
   NODE_SOCKET_API(int, cryptomatte_depth)
 
  private:
-  size_t filter_table_offset;
+  size_t filter_table_offset_;
 
  public:
   Film();

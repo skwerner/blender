@@ -133,10 +133,10 @@ NODE_DEFINE(Film)
   return type;
 }
 
-Film::Film() : Node(get_node_type())
+Film::Film() : Node(get_node_type()), filter_table_offset_(TABLE_OFFSET_INVALID)
 {
+
   use_light_visibility = false;
-  filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
   display_pass = PASS_COMBINED;
   show_active_pixels = false;
@@ -432,9 +432,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   /* update filter table */
   vector<float> table = filter_table(filter_type, filter_width);
-  scene->lookup_tables->remove_table(&filter_table_offset);
-  filter_table_offset = scene->lookup_tables->add_table(dscene, table);
-  kfilm->filter_table_offset = (int)filter_table_offset;
+  scene->lookup_tables->remove_table(&filter_table_offset_);
+  filter_table_offset_ = scene->lookup_tables->add_table(dscene, table);
+  kfilm->filter_table_offset = (int)filter_table_offset_;
 
   /* mist pass parameters */
   kfilm->mist_start = mist_start;
@@ -449,7 +449,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
 void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *scene)
 {
-  scene->lookup_tables->remove_table(&filter_table_offset);
+  scene->lookup_tables->remove_table(&filter_table_offset_);
 }
 
 void Film::assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes)

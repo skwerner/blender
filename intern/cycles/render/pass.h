@@ -67,6 +67,13 @@ class Pass : public Node {
 
   /* Remove all passes which were automatically created. */
   static void remove_all_auto(vector<Pass> &passes);
+
+  /* Returns nullptr if there is no pass with the given name or type. */
+  static const Pass *find(const vector<Pass> &passes, const string &name);
+  static const Pass *find(const vector<Pass> &passes, PassType type);
+
+  /* Returns PASS_UNUSED if there is no pass with the given type. */
+  static int get_offset(const vector<Pass> &passes, PassType type);
 };
 
 CCL_NAMESPACE_END

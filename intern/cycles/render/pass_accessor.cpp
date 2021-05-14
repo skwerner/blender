@@ -167,32 +167,18 @@ static float4 shadow_catcher_calc_matte_with_shadow(const float scale,
 
 PassAccessor::PassAccessor(const Film *film,
                            const vector<Pass> &passes,
-                           const string &pass_name,
+                           const Pass *pass,
                            int num_components,
                            float exposure,
                            int num_samples)
     : film_(film),
       passes_(passes),
-      pass_offset_(PASS_UNUSED),
-      pass_(nullptr),
+      pass_offset_(Pass::get_offset(passes, pass->type)),
+      pass_(pass),
       num_components_(num_components),
       exposure_(exposure),
       num_samples_(num_samples)
 {
-  get_pass_by_name(pass_name, &pass_, &pass_offset_);
-
-  /* When shadow catcher is used the combined pass is only used to get proper value for the
-   * shadow catcher pass. It is not very useful for artists as it is. What artists expect as a
-   * combined pass is something what is to be alpha-overed onto the footage. So we swap the
-   * combined pass with shadow catcher matte here. */
-  if (pass_ && pass_->type == PASS_COMBINED) {
-    get_pass_by_type(PASS_SHADOW_CATCHER_MATTE, &pass_, &pass_offset_);
-  }
-}
-
-bool PassAccessor::is_valid() const
-{
-  return pass_ != nullptr;
 }
 
 bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *pixels)
@@ -526,50 +512,7 @@ bool PassAccessor::set_pass_rect(PassType type, int components, float *pixels, i
 
 int PassAccessor::get_pass_offset(PassType type) const
 {
-  int pass_offset = 0;
-
-  for (const Pass &pass : passes_) {
-    if (pass.type == type) {
-      return pass_offset;
-    }
-    pass_offset += pass.components;
-  }
-
-  return PASS_UNUSED;
-}
-
-bool PassAccessor::get_pass_by_name(const string &name, const Pass **r_pass, int *r_offset) const
-{
-  int pass_offset = 0;
-  for (const Pass &pass : passes_) {
-    /* Pass is identified by both type and name, multiple of the same type may exist with a
-     * different name. */
-    if (pass.name == name) {
-      *r_pass = &pass;
-      if (r_offset) {
-        *r_offset = pass_offset;
-      }
-      return true;
-    }
-    pass_offset += pass.components;
-  }
-  return false;
-}
-
-bool PassAccessor::get_pass_by_type(const PassType type, const Pass **r_pass, int *r_offset) const
-{
-  int pass_offset = 0;
-  for (const Pass &pass : passes_) {
-    if (pass.type == type) {
-      *r_pass = &pass;
-      if (r_offset) {
-        *r_offset = pass_offset;
-      }
-      return true;
-    }
-    pass_offset += pass.components;
-  }
-  return false;
+  return Pass::get_offset(passes_, type);
 }
 
 CCL_NAMESPACE_END

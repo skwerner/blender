@@ -405,4 +405,40 @@ void Pass::remove_all_auto(vector<Pass> &passes)
   passes = new_passes;
 }
 
+const Pass *Pass::find(const vector<Pass> &passes, const string &name)
+{
+  for (const Pass &pass : passes) {
+    if (pass.name == name) {
+      return &pass;
+    }
+  }
+
+  return nullptr;
+}
+
+const Pass *Pass::find(const vector<Pass> &passes, PassType type)
+{
+  for (const Pass &pass : passes) {
+    if (pass.type == type) {
+      return &pass;
+    }
+  }
+
+  return nullptr;
+}
+
+int Pass::get_offset(const vector<Pass> &passes, PassType type)
+{
+  int pass_offset = 0;
+
+  for (const Pass &pass : passes) {
+    if (pass.type == type) {
+      return pass_offset;
+    }
+    pass_offset += pass.components;
+  }
+
+  return PASS_UNUSED;
+}
+
 CCL_NAMESPACE_END

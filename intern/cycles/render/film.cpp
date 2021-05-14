@@ -444,8 +444,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->cryptomatte_passes = cryptomatte_passes;
   kfilm->cryptomatte_depth = cryptomatte_depth;
 
-  pass_stride = kfilm->pass_stride;
-
   clear_modified();
 }
 
@@ -493,11 +491,6 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
   }
 
   return -1;
-}
-
-int Film::get_pass_stride() const
-{
-  return pass_stride;
 }
 
 size_t Film::get_filter_table_offset() const

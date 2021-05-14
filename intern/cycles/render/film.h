@@ -61,7 +61,6 @@ class Film : public Node {
   NODE_SOCKET_API(int, cryptomatte_depth)
 
  private:
-  int pass_stride;
   size_t filter_table_offset;
 
  public:
@@ -78,7 +77,6 @@ class Film : public Node {
 
   int get_aov_offset(Scene *scene, string name, bool &is_color);
 
-  int get_pass_stride() const;
   size_t get_filter_table_offset() const;
 };
 

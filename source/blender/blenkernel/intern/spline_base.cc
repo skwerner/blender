@@ -16,9 +16,13 @@
 
 #include "BLI_array.hh"
 #include "BLI_span.hh"
+#include "BLI_timeit.hh"
 
 #include "BKE_spline.hh"
 
+#include "FN_generic_virtual_array.hh"
+
+using blender::Array;
 using blender::float3;
 using blender::IndexRange;
 using blender::MutableSpan;
@@ -57,7 +61,8 @@ int Spline::evaluated_edges_size() const
 
 float Spline::length() const
 {
-  return this->evaluated_lengths().last();
+  Span<float> lengths = this->evaluated_lengths();
+  return (lengths.size() == 0) ? 0 : this->evaluated_lengths().last();
 }
 
 int Spline::segments_size() const
@@ -183,6 +188,20 @@ Span<float3> Spline::evaluated_tangents() const
   return evaluated_tangents_cache_;
 }
 
+static float3 rotate_direction_around_axis(const float3 &direction,
+                                           const float3 &axis,
+                                           const float angle)
+{
+  BLI_ASSERT_UNIT_V3(direction);
+  BLI_ASSERT_UNIT_V3(axis);
+
+  const float3 axis_scaled = axis * float3::dot(direction, axis);
+  const float3 diff = direction - axis_scaled;
+  const float3 cross = float3::cross(axis, diff);
+
+  return axis_scaled + diff * std::cos(angle) + cross * std::sin(angle);
+}
+
 static void calculate_normals_z_up(Span<float3> tangents, MutableSpan<float3> normals)
 {
   for (const int i : normals.index_range()) {
@@ -193,8 +212,6 @@ static void calculate_normals_z_up(Span<float3> tangents, MutableSpan<float3> no
 /**
  * Return non-owning access to the direction vectors perpendicular to the tangents at every
  * evaluated point. The method used to generate the normal vectors depends on Spline.normal_mode.
- *
- * TODO: Support changing the normal based on tilts.
  */
 Span<float3> Spline::evaluated_normals() const
 {
@@ -211,9 +228,17 @@ Span<float3> Spline::evaluated_normals() const
   evaluated_normals_cache_.resize(eval_size);
 
   Span<float3> tangents = evaluated_tangents();
+  MutableSpan<float3> normals = evaluated_normals_cache_;
 
   /* Only Z up normals are supported at the moment. */
-  calculate_normals_z_up(tangents, evaluated_normals_cache_);
+  calculate_normals_z_up(tangents, normals);
+
+  /* Rotate the generated normals with the interpolated tilt data. */
+  blender::fn::GVArray_Typed<float> tilts{
+      this->interpolate_to_evaluated_points(blender::fn::GVArray_For_Span(this->tilts()))};
+  for (const int i : normals.index_range()) {
+    normals[i] = rotate_direction_around_axis(normals[i], tangents[i], tilts[i]);
+  }
 
   normal_cache_dirty_ = false;
   return evaluated_normals_cache_;
@@ -241,6 +266,72 @@ Spline::LookupResult Spline::lookup_evaluated_length(const float length) const
   const float factor = (length - previous_length) / (lengths[index] - previous_length);
 
   return LookupResult{index, next_index, factor};
+}
+
+/**
+ * Return an array of evenly spaced samples along the length of the spline. The samples are indices
+ * and factors to the next index encoded in floats. The logic for converting from the float values
+ * to interpolation data is in #lookup_data_from_index_factor.
+ */
+Array<float> Spline::sample_uniform_index_factors(const int samples_size) const
+{
+  const Span<float> lengths = this->evaluated_lengths();
+
+  BLI_assert(samples_size > 0);
+  Array<float> samples(samples_size);
+
+  samples[0] = 0.0f;
+  if (samples_size == 1) {
+    return samples;
+  }
+
+  const float total_length = this->length();
+  const float sample_length = total_length / (samples_size - (is_cyclic_ ? 0 : 1));
+
+  /* Store the length at the previous evaluated point in a variable so it can
+   * start out at zero (the lengths array doesn't contain 0 for the first point). */
+  float prev_length = 0.0f;
+  int i_sample = 1;
+  for (const int i_evaluated : IndexRange(this->evaluated_edges_size())) {
+    const float length = lengths[i_evaluated];
+
+    /* Add every sample that fits in this evaluated edge. */
+    while ((sample_length * i_sample) < length && i_sample < samples_size) {
+      const float factor = (sample_length * i_sample - prev_length) / (length - prev_length);
+      samples[i_sample] = i_evaluated + factor;
+      i_sample++;
+    }
+
+    prev_length = length;
+  }
+
+  if (!is_cyclic_) {
+    /* In rare cases this can prevent overflow of the stored index. */
+    samples.last() = lengths.size();
+  }
+
+  return samples;
+}
+
+Spline::LookupResult Spline::lookup_data_from_index_factor(const float index_factor) const
+{
+  const int points_len = this->evaluated_points_size();
+
+  if (is_cyclic_) {
+    if (index_factor < points_len) {
+      const int index = std::floor(index_factor);
+      const int next_index = (index < points_len - 1) ? index + 1 : 0;
+      return LookupResult{index, next_index, index_factor - index};
+    }
+    return LookupResult{points_len - 1, 0, 1.0f};
+  }
+
+  if (index_factor < points_len - 1) {
+    const int index = std::floor(index_factor);
+    const int next_index = index + 1;
+    return LookupResult{index, next_index, index_factor - index};
+  }
+  return LookupResult{points_len - 2, points_len - 1, 1.0f};
 }
 
 void Spline::bounds_min_max(float3 &min, float3 &max, const bool use_evaluated) const

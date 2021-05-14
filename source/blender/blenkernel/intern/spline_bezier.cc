@@ -73,6 +73,18 @@ void BezierSpline::add_point(const float3 position,
   this->mark_cache_invalid();
 }
 
+void BezierSpline::resize(const int size)
+{
+  handle_types_left_.resize(size);
+  handle_positions_left_.resize(size);
+  positions_.resize(size);
+  handle_types_right_.resize(size);
+  handle_positions_right_.resize(size);
+  radii_.resize(size);
+  tilts_.resize(size);
+  this->mark_cache_invalid();
+}
+
 MutableSpan<float3> BezierSpline::positions()
 {
   return positions_;
@@ -107,10 +119,12 @@ MutableSpan<BezierSpline::HandleType> BezierSpline::handle_types_left()
 }
 Span<float3> BezierSpline::handle_positions_left() const
 {
+  this->ensure_auto_handles();
   return handle_positions_left_;
 }
 MutableSpan<float3> BezierSpline::handle_positions_left()
 {
+  this->ensure_auto_handles();
   return handle_positions_left_;
 }
 Span<BezierSpline::HandleType> BezierSpline::handle_types_right() const
@@ -123,11 +137,88 @@ MutableSpan<BezierSpline::HandleType> BezierSpline::handle_types_right()
 }
 Span<float3> BezierSpline::handle_positions_right() const
 {
+  this->ensure_auto_handles();
   return handle_positions_right_;
 }
 MutableSpan<float3> BezierSpline::handle_positions_right()
 {
+  this->ensure_auto_handles();
   return handle_positions_right_;
+}
+
+static float3 previous_position(Span<float3> positions, const bool cyclic, const int i)
+{
+  if (i == 0) {
+    if (cyclic) {
+      return positions[positions.size() - 1];
+    }
+    return 2.0f * positions[i] - positions[i + 1];
+  }
+  return positions[i - 1];
+}
+
+static float3 next_position(Span<float3> positions, const bool cyclic, const int i)
+{
+  if (i == positions.size() - 1) {
+    if (cyclic) {
+      return positions[0];
+    }
+    return 2.0f * positions[i] - positions[i - 1];
+  }
+  return positions[i + 1];
+}
+
+void BezierSpline::ensure_auto_handles() const
+{
+  if (!auto_handles_dirty_) {
+    return;
+  }
+
+  std::lock_guard lock{auto_handle_mutex_};
+  if (!auto_handles_dirty_) {
+    return;
+  }
+
+  for (const int i : IndexRange(this->size())) {
+    if (ELEM(HandleType::Auto, handle_types_left_[i], handle_types_right_[i])) {
+      const float3 prev_diff = positions_[i] - previous_position(positions_, is_cyclic_, i);
+      const float3 next_diff = next_position(positions_, is_cyclic_, i) - positions_[i];
+      float prev_len = prev_diff.length();
+      float next_len = next_diff.length();
+      if (prev_len == 0.0f) {
+        prev_len = 1.0f;
+      }
+      if (next_len == 0.0f) {
+        next_len = 1.0f;
+      }
+      const float3 dir = next_diff / next_len + prev_diff / prev_len;
+
+      /* This magic number is unfortunate, but comes from elsewhere in Blender. */
+      const float len = dir.length() * 2.5614f;
+      if (len != 0.0f) {
+        if (handle_types_left_[i] == HandleType::Auto) {
+          const float prev_len_clamped = std::min(prev_len, next_len * 5.0f);
+          handle_positions_left_[i] = positions_[i] + dir * -(prev_len_clamped / len);
+        }
+        if (handle_types_right_[i] == HandleType::Auto) {
+          const float next_len_clamped = std::min(next_len, prev_len * 5.0f);
+          handle_positions_right_[i] = positions_[i] + dir * (next_len_clamped / len);
+        }
+      }
+    }
+
+    if (handle_types_left_[i] == HandleType::Vector) {
+      const float3 prev = previous_position(positions_, is_cyclic_, i);
+      handle_positions_left_[i] = float3::interpolate(positions_[i], prev, 1.0f / 3.0f);
+    }
+
+    if (handle_types_right_[i] == HandleType::Vector) {
+      const float3 next = next_position(positions_, is_cyclic_, i);
+      handle_positions_right_[i] = float3::interpolate(positions_[i], next, 1.0f / 3.0f);
+    }
+  }
+
+  auto_handles_dirty_ = false;
 }
 
 void BezierSpline::translate(const blender::float3 &translation)
@@ -167,9 +258,13 @@ bool BezierSpline::point_is_sharp(const int index) const
 bool BezierSpline::segment_is_vector(const int index) const
 {
   if (index == this->size() - 1) {
-    BLI_assert(is_cyclic_);
-    return handle_types_right_.last() == HandleType::Vector &&
-           handle_types_left_.first() == HandleType::Vector;
+    if (is_cyclic_) {
+      return handle_types_right_.last() == HandleType::Vector &&
+             handle_types_left_.first() == HandleType::Vector;
+    }
+    /* There is actually no segment in this case, but it's nice to avoid
+     * having a special case for the last segment in calling code. */
+    return true;
   }
   return handle_types_right_[index] == HandleType::Vector &&
          handle_types_left_[index + 1] == HandleType::Vector;
@@ -183,19 +278,13 @@ void BezierSpline::mark_cache_invalid()
   tangent_cache_dirty_ = true;
   normal_cache_dirty_ = true;
   length_cache_dirty_ = true;
+  auto_handles_dirty_ = true;
 }
 
 int BezierSpline::evaluated_points_size() const
 {
-  const int points_len = this->size();
-  BLI_assert(points_len > 0);
-
-  const int last_offset = this->control_point_offsets().last();
-  if (is_cyclic_ && points_len > 1) {
-    return last_offset + (this->segment_is_vector(points_len - 1) ? 0 : resolution_);
-  }
-
-  return last_offset + 1;
+  BLI_assert(this->size() > 0);
+  return this->control_point_offsets().last();
 }
 
 /**
@@ -266,8 +355,12 @@ void BezierSpline::evaluate_bezier_segment(const int index,
 
 /**
  * Returns access to a cache of offsets into the evaluated point array for each control point.
- * This is important because while most control point edges generate the number of edges specified
- * by the resolution, vector segments only generate one edge.
+ * While most control point edges generate the number of edges specified by the resolution, vector
+ * segments only generate one edge.
+ *
+ * \note The length of the result is one greater than the number of points, so that the last item
+ * is the total number of evaluated points. This is useful to avoid recalculating the size of the
+ * last segment everywhere.
  */
 Span<int> BezierSpline::control_point_offsets() const
 {
@@ -281,12 +374,12 @@ Span<int> BezierSpline::control_point_offsets() const
   }
 
   const int points_len = this->size();
-  offset_cache_.resize(points_len);
+  offset_cache_.resize(points_len + 1);
 
   MutableSpan<int> offsets = offset_cache_;
 
   int offset = 0;
-  for (const int i : IndexRange(points_len - 1)) {
+  for (const int i : IndexRange(points_len)) {
     offsets[i] = offset;
     offset += this->segment_is_vector(i) ? 1 : resolution_;
   }
@@ -294,6 +387,40 @@ Span<int> BezierSpline::control_point_offsets() const
 
   offset_cache_dirty_ = false;
   return offsets;
+}
+
+static void calculate_mappings_linear_resolution(Span<int> offsets,
+                                                 const int size,
+                                                 const int resolution,
+                                                 const bool is_cyclic,
+                                                 MutableSpan<float> r_mappings)
+{
+  const float first_segment_len_inv = 1.0f / offsets[1];
+  for (const int i : IndexRange(0, offsets[1])) {
+    r_mappings[i] = i * first_segment_len_inv;
+  }
+
+  const int grain_size = std::max(2048 / resolution, 1);
+  parallel_for(IndexRange(1, size - 2), grain_size, [&](IndexRange range) {
+    for (const int i_control_point : range) {
+      const int segment_len = offsets[i_control_point + 1] - offsets[i_control_point];
+      const float segment_len_inv = 1.0f / segment_len;
+      for (const int i : IndexRange(segment_len)) {
+        r_mappings[offsets[i_control_point] + i] = i_control_point + i * segment_len_inv;
+      }
+    }
+  });
+
+  if (is_cyclic) {
+    const int last_segment_len = offsets[size] - offsets[size - 1];
+    const float last_segment_len_inv = 1.0f / last_segment_len;
+    for (const int i : IndexRange(last_segment_len)) {
+      r_mappings[offsets[size - 1] + i] = size - 1 + i * last_segment_len_inv;
+    }
+  }
+  else {
+    r_mappings.last() = size - 1;
+  }
 }
 
 /**
@@ -325,49 +452,8 @@ Span<float> BezierSpline::evaluated_mappings() const
   }
 
   Span<int> offsets = this->control_point_offsets();
-  Span<float> lengths = this->evaluated_lengths();
 
-  /* Subtract one from the index into the lengths array to get the length
-   * at the start point rather than the length at the end of the edge. */
-
-  const float first_segment_len = lengths[offsets[1] - 1];
-  for (const int eval_index : IndexRange(0, offsets[1])) {
-    const float point_len = eval_index == 0 ? 0.0f : lengths[eval_index - 1];
-    const float length_factor = (first_segment_len == 0.0f) ? 0.0f : 1.0f / first_segment_len;
-
-    mappings[eval_index] = point_len * length_factor;
-  }
-
-  const int grain_size = std::max(512 / resolution_, 1);
-  blender::parallel_for(IndexRange(1, size - 2), grain_size, [&](IndexRange range) {
-    for (const int i : range) {
-      const float segment_start_len = lengths[offsets[i] - 1];
-      const float segment_end_len = lengths[offsets[i + 1] - 1];
-      const float segment_len = segment_end_len - segment_start_len;
-      const float length_factor = (segment_len == 0.0f) ? 0.0f : 1.0f / segment_len;
-
-      for (const int eval_index : IndexRange(offsets[i], offsets[i + 1] - offsets[i])) {
-        const float factor = (lengths[eval_index - 1] - segment_start_len) * length_factor;
-        mappings[eval_index] = i + factor;
-      }
-    }
-  });
-
-  if (is_cyclic_) {
-    const float segment_start_len = lengths[offsets.last() - 1];
-    const float segment_end_len = this->length();
-    const float segment_len = segment_end_len - segment_start_len;
-    const float length_factor = (segment_len == 0.0f) ? 0.0f : 1.0f / segment_len;
-
-    for (const int eval_index : IndexRange(offsets.last(), eval_size - offsets.last())) {
-      const float factor = (lengths[eval_index - 1] - segment_start_len) * length_factor;
-      mappings[eval_index] = size - 1 + factor;
-    }
-    mappings.last() = 0.0f;
-  }
-  else {
-    mappings.last() = size - 1;
-  }
+  calculate_mappings_linear_resolution(offsets, size, resolution_, is_cyclic_, mappings);
 
   mapping_cache_dirty_ = false;
   return mappings;
@@ -384,28 +470,29 @@ Span<float3> BezierSpline::evaluated_positions() const
     return evaluated_position_cache_;
   }
 
+  this->ensure_auto_handles();
+
+  const int size = this->size();
   const int eval_size = this->evaluated_points_size();
   evaluated_position_cache_.resize(eval_size);
 
   MutableSpan<float3> positions = evaluated_position_cache_;
 
   Span<int> offsets = this->control_point_offsets();
-  BLI_assert(offsets.last() <= eval_size);
 
   const int grain_size = std::max(512 / resolution_, 1);
-  blender::parallel_for(IndexRange(this->size() - 1), grain_size, [&](IndexRange range) {
+  parallel_for(IndexRange(size - 1), grain_size, [&](IndexRange range) {
     for (const int i : range) {
       this->evaluate_bezier_segment(
           i, i + 1, positions.slice(offsets[i], offsets[i + 1] - offsets[i]));
     }
   });
-
-  const int i_last = this->size() - 1;
   if (is_cyclic_) {
-    this->evaluate_bezier_segment(i_last, 0, positions.slice(offsets.last(), resolution_));
+    this->evaluate_bezier_segment(
+        size - 1, 0, positions.slice(offsets[size - 1], offsets[size] - offsets[size - 1]));
   }
   else {
-    /* Since evualating the bezier segment doesn't add the final point,
+    /* Since evaluating the bezier segment doesn't add the final point,
      * it must be added manually in the non-cyclic case. */
     positions.last() = positions_.last();
   }
@@ -423,15 +510,22 @@ BezierSpline::InterpolationData BezierSpline::interpolation_data_from_index_fact
     const float index_factor) const
 {
   const int points_len = this->size();
-  const int index = std::floor(index_factor);
-  if (index == points_len) {
-    BLI_assert(is_cyclic_);
+
+  if (is_cyclic_) {
+    if (index_factor < points_len) {
+      const int index = std::floor(index_factor);
+      const int next_index = (index < points_len - 1) ? index + 1 : 0;
+      return InterpolationData{index, next_index, index_factor - index};
+    }
     return InterpolationData{points_len - 1, 0, 1.0f};
   }
-  if (index == points_len - 1) {
-    return InterpolationData{points_len - 2, points_len - 1, 1.0f};
+
+  if (index_factor < points_len - 1) {
+    const int index = std::floor(index_factor);
+    const int next_index = index + 1;
+    return InterpolationData{index, next_index, index_factor - index};
   }
-  return InterpolationData{index, index + 1, index_factor - index};
+  return InterpolationData{points_len - 2, points_len - 1, 1.0f};
 }
 
 /* Use a spline argument to avoid adding this to the header. */

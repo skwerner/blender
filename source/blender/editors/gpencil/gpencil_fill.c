@@ -1247,6 +1247,7 @@ static bool dilate_shape(ImBuf *ibuf)
 static void gpencil_get_outline_points(tGPDfill *tgpf, const bool dilate)
 {
   ImBuf *ibuf;
+  Brush *brush = tgpf->brush;
   float rgba[4];
   void *lock;
   int v[2];
@@ -1279,7 +1280,9 @@ static void gpencil_get_outline_points(tGPDfill *tgpf, const bool dilate)
 
   /* Dilate. */
   if (dilate) {
-    dilate_shape(ibuf);
+    for (int i = 0; i < brush->gpencil_settings->dilate_pixels; i++) {
+      dilate_shape(ibuf);
+    }
   }
 
   for (int idx = imagesize - 1; idx != 0; idx--) {
@@ -1686,7 +1689,7 @@ static tGPDfill *gpencil_session_init_fill(bContext *C, wmOperator *op)
   tgpf->gpd = gpd;
   tgpf->gpl = BKE_gpencil_layer_active_get(gpd);
   if (tgpf->gpl == NULL) {
-    tgpf->gpl = BKE_gpencil_layer_addnew(tgpf->gpd, DATA_("GP_Layer"), true);
+    tgpf->gpl = BKE_gpencil_layer_addnew(tgpf->gpd, DATA_("GP_Layer"), true, false);
   }
 
   tgpf->lock_axis = ts->gp_sculpt.lock_axis;

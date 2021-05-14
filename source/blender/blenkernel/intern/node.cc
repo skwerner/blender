@@ -303,6 +303,16 @@ static void library_foreach_node_socket(LibraryForeachIDData *data, bNodeSocket 
       BKE_LIB_FOREACHID_PROCESS(data, default_value->value, IDWALK_CB_USER);
       break;
     }
+    case SOCK_TEXTURE: {
+      bNodeSocketValueTexture *default_value = (bNodeSocketValueTexture *)sock->default_value;
+      BKE_LIB_FOREACHID_PROCESS(data, default_value->value, IDWALK_CB_USER);
+      break;
+    }
+    case SOCK_MATERIAL: {
+      bNodeSocketValueMaterial *default_value = (bNodeSocketValueMaterial *)sock->default_value;
+      BKE_LIB_FOREACHID_PROCESS(data, default_value->value, IDWALK_CB_USER);
+      break;
+    }
     case SOCK_FLOAT:
     case SOCK_VECTOR:
     case SOCK_RGBA:
@@ -434,6 +444,12 @@ static void write_node_socket_default_value(BlendWriter *writer, bNodeSocket *so
     case SOCK_COLLECTION:
       BLO_write_struct(writer, bNodeSocketValueCollection, sock->default_value);
       break;
+    case SOCK_TEXTURE:
+      BLO_write_struct(writer, bNodeSocketValueTexture, sock->default_value);
+      break;
+    case SOCK_MATERIAL:
+      BLO_write_struct(writer, bNodeSocketValueMaterial, sock->default_value);
+      break;
     case __SOCK_MESH:
     case SOCK_CUSTOM:
     case SOCK_SHADER:
@@ -500,6 +516,12 @@ void ntreeBlendWrite(BlendWriter *writer, bNodeTree *ntree)
       if ((ntree->type == NTREE_SHADER) &&
           ELEM(node->type, SH_NODE_CURVE_VEC, SH_NODE_CURVE_RGB)) {
         BKE_curvemapping_blend_write(writer, (const CurveMapping *)node->storage);
+      }
+      else if ((ntree->type == NTREE_GEOMETRY) && (node->type == GEO_NODE_ATTRIBUTE_CURVE_MAP)) {
+        BLO_write_struct_by_name(writer, node->typeinfo->storagename, node->storage);
+        NodeAttributeCurveMap *data = (NodeAttributeCurveMap *)node->storage;
+        BKE_curvemapping_blend_write(writer, (const CurveMapping *)data->curve_vec);
+        BKE_curvemapping_blend_write(writer, (const CurveMapping *)data->curve_rgb);
       }
       else if (ntree->type == NTREE_SHADER && (node->type == SH_NODE_SCRIPT)) {
         NodeShaderScript *nss = (NodeShaderScript *)node->storage;
@@ -676,6 +698,18 @@ void ntreeBlendReadData(BlendDataReader *reader, bNodeTree *ntree)
           BKE_curvemapping_blend_read(reader, (CurveMapping *)node->storage);
           break;
         }
+        case GEO_NODE_ATTRIBUTE_CURVE_MAP: {
+          NodeAttributeCurveMap *data = (NodeAttributeCurveMap *)node->storage;
+          BLO_read_data_address(reader, &data->curve_vec);
+          if (data->curve_vec) {
+            BKE_curvemapping_blend_read(reader, data->curve_vec);
+          }
+          BLO_read_data_address(reader, &data->curve_rgb);
+          if (data->curve_rgb) {
+            BKE_curvemapping_blend_read(reader, data->curve_rgb);
+          }
+          break;
+        }
         case SH_NODE_SCRIPT: {
           NodeShaderScript *nss = (NodeShaderScript *)node->storage;
           BLO_read_data_address(reader, &nss->bytecode);
@@ -802,6 +836,16 @@ static void lib_link_node_socket(BlendLibReader *reader, Library *lib, bNodeSock
       BLO_read_id_address(reader, lib, &default_value->value);
       break;
     }
+    case SOCK_TEXTURE: {
+      bNodeSocketValueTexture *default_value = (bNodeSocketValueTexture *)sock->default_value;
+      BLO_read_id_address(reader, lib, &default_value->value);
+      break;
+    }
+    case SOCK_MATERIAL: {
+      bNodeSocketValueMaterial *default_value = (bNodeSocketValueMaterial *)sock->default_value;
+      BLO_read_id_address(reader, lib, &default_value->value);
+      break;
+    }
     case SOCK_FLOAT:
     case SOCK_VECTOR:
     case SOCK_RGBA:
@@ -884,6 +928,16 @@ static void expand_node_socket(BlendExpander *expander, bNodeSocket *sock)
       case SOCK_COLLECTION: {
         bNodeSocketValueCollection *default_value = (bNodeSocketValueCollection *)
                                                         sock->default_value;
+        BLO_expand(expander, default_value->value);
+        break;
+      }
+      case SOCK_TEXTURE: {
+        bNodeSocketValueTexture *default_value = (bNodeSocketValueTexture *)sock->default_value;
+        BLO_expand(expander, default_value->value);
+        break;
+      }
+      case SOCK_MATERIAL: {
+        bNodeSocketValueMaterial *default_value = (bNodeSocketValueMaterial *)sock->default_value;
         BLO_expand(expander, default_value->value);
         break;
       }
@@ -1454,6 +1508,16 @@ static void socket_id_user_increment(bNodeSocket *sock)
       id_us_plus((ID *)default_value->value);
       break;
     }
+    case SOCK_TEXTURE: {
+      bNodeSocketValueTexture *default_value = (bNodeSocketValueTexture *)sock->default_value;
+      id_us_plus((ID *)default_value->value);
+      break;
+    }
+    case SOCK_MATERIAL: {
+      bNodeSocketValueMaterial *default_value = (bNodeSocketValueMaterial *)sock->default_value;
+      id_us_plus((ID *)default_value->value);
+      break;
+    }
     case SOCK_FLOAT:
     case SOCK_VECTOR:
     case SOCK_RGBA:
@@ -1488,6 +1552,20 @@ static void socket_id_user_decrement(bNodeSocket *sock)
     case SOCK_COLLECTION: {
       bNodeSocketValueCollection *default_value = (bNodeSocketValueCollection *)
                                                       sock->default_value;
+      if (default_value->value != nullptr) {
+        id_us_min(&default_value->value->id);
+      }
+      break;
+    }
+    case SOCK_TEXTURE: {
+      bNodeSocketValueTexture *default_value = (bNodeSocketValueTexture *)sock->default_value;
+      if (default_value->value != nullptr) {
+        id_us_min(&default_value->value->id);
+      }
+      break;
+    }
+    case SOCK_MATERIAL: {
+      bNodeSocketValueMaterial *default_value = (bNodeSocketValueMaterial *)sock->default_value;
       if (default_value->value != nullptr) {
         id_us_min(&default_value->value->id);
       }
@@ -1636,6 +1714,10 @@ const char *nodeStaticSocketType(int type, int subtype)
       return "NodeSocketGeometry";
     case SOCK_COLLECTION:
       return "NodeSocketCollection";
+    case SOCK_TEXTURE:
+      return "NodeSocketTexture";
+    case SOCK_MATERIAL:
+      return "NodeSocketMaterial";
   }
   return nullptr;
 }
@@ -1707,6 +1789,10 @@ const char *nodeStaticSocketInterfaceType(int type, int subtype)
       return "NodeSocketInterfaceGeometry";
     case SOCK_COLLECTION:
       return "NodeSocketInterfaceCollection";
+    case SOCK_TEXTURE:
+      return "NodeSocketInterfaceTexture";
+    case SOCK_MATERIAL:
+      return "NodeSocketInterfaceMaterial";
   }
   return nullptr;
 }
@@ -2172,6 +2258,17 @@ bNodeTree *ntreeCopyTree_ex_new_pointers(const bNodeTree *ntree,
   return new_ntree;
 }
 
+static int node_count_links(const bNodeTree *ntree, const bNodeSocket *socket)
+{
+  int count = 0;
+  LISTBASE_FOREACH (bNodeLink *, link, &ntree->links) {
+    if (ELEM(socket, link->fromsock, link->tosock)) {
+      count++;
+    }
+  }
+  return count;
+}
+
 /* also used via rna api, so we check for proper input output direction */
 bNodeLink *nodeAddLink(
     bNodeTree *ntree, bNode *fromnode, bNodeSocket *fromsock, bNode *tonode, bNodeSocket *tosock)
@@ -2206,6 +2303,10 @@ bNodeLink *nodeAddLink(
 
   if (ntree) {
     ntree->update |= NTREE_UPDATE_LINKS;
+  }
+
+  if (link->tosock->flag & SOCK_MULTI_INPUT) {
+    link->multi_input_socket_index = node_count_links(ntree, link->tosock) - 1;
   }
 
   return link;
@@ -4226,7 +4327,7 @@ void ntreeUpdateAllUsers(Main *main, ID *id)
 
   if (GS(id->name) == ID_NT) {
     bNodeTree *ngroup = (bNodeTree *)id;
-    if (ngroup->type == NTREE_GEOMETRY) {
+    if (ngroup->type == NTREE_GEOMETRY && (ngroup->update & NTREE_UPDATE_GROUP)) {
       LISTBASE_FOREACH (Object *, object, &main->objects) {
         LISTBASE_FOREACH (ModifierData *, md, &object->modifiers) {
           if (md->type == eModifierType_Nodes) {
@@ -4934,6 +5035,7 @@ static void registerGeometryNodes()
   register_node_type_geo_attribute_combine_xyz();
   register_node_type_geo_attribute_compare();
   register_node_type_geo_attribute_convert();
+  register_node_type_geo_attribute_curve_map();
   register_node_type_geo_attribute_fill();
   register_node_type_geo_attribute_map_range();
   register_node_type_geo_attribute_math();
@@ -4943,11 +5045,13 @@ static void registerGeometryNodes()
   register_node_type_geo_attribute_separate_xyz();
   register_node_type_geo_attribute_transfer();
   register_node_type_geo_attribute_vector_math();
+  register_node_type_geo_attribute_vector_rotate();
   register_node_type_geo_attribute_remove();
   register_node_type_geo_boolean();
   register_node_type_geo_bounding_box();
   register_node_type_geo_collection_info();
   register_node_type_geo_curve_to_mesh();
+  register_node_type_geo_curve_resample();
   register_node_type_geo_edge_split();
   register_node_type_geo_is_viewport();
   register_node_type_geo_join_geometry();

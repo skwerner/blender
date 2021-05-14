@@ -4956,28 +4956,6 @@ class VIEW3D_MT_assign_material(Menu):
                                 icon='LAYER_ACTIVE' if mat == mat_active else 'BLANK1').material = mat.name
 
 
-class VIEW3D_MT_gpencil_copy_layer(Menu):
-    bl_label = "Copy Layer to Object"
-
-    def draw(self, context):
-        layout = self.layout
-        view_layer = context.view_layer
-        obact = context.active_object
-        gpl = context.active_gpencil_layer
-
-        done = False
-        if gpl is not None:
-            for ob in view_layer.objects:
-                if ob.type == 'GPENCIL' and ob != obact:
-                    layout.operator("gpencil.layer_duplicate_object", text=ob.name).object = ob.name
-                    done = True
-
-            if done is False:
-                layout.label(text="No destination object", icon='ERROR')
-        else:
-            layout.label(text="No layer to copy", icon='ERROR')
-
-
 class VIEW3D_MT_edit_gpencil(Menu):
     bl_label = "Grease Pencil"
 
@@ -6191,10 +6169,7 @@ class VIEW3D_PT_overlay_geometry(Panel):
         sub.prop(overlay, "wireframe_opacity", text="Opacity")
 
         row = col.row(align=True)
-        if context.mode not in {
-                'EDIT_ARMATURE', 'POSE', 'OBJECT',
-                'PAINT_GPENCIL', 'VERTEX_GPENCIL', 'WEIGHT_GPENCIL', 'SCULPT_GPENCIL', 'EDIT_GPENCIL',
-        }:
+        if context.mode != 'OBJECT':
             row.prop(overlay, "show_fade_inactive", text="")
             sub = row.row()
             sub.active = overlay.show_fade_inactive
@@ -7645,7 +7620,6 @@ classes = (
     VIEW3D_MT_weight_gpencil,
     VIEW3D_MT_gpencil_animation,
     VIEW3D_MT_gpencil_simplify,
-    VIEW3D_MT_gpencil_copy_layer,
     VIEW3D_MT_gpencil_autoweights,
     VIEW3D_MT_gpencil_edit_context_menu,
     VIEW3D_MT_edit_curve,

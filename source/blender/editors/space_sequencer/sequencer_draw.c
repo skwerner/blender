@@ -885,10 +885,12 @@ static void draw_seq_background(Scene *scene,
     immUniformColor4ubv(col);
 
     if (seq->startstill) {
-      immRectf(pos, seq->startdisp, y1, (float)(seq->start), y2);
+      const float content_start = min_ff(seq->enddisp, seq->start);
+      immRectf(pos, seq->startdisp, y1, content_start, y2);
     }
     if (seq->endstill) {
-      immRectf(pos, (float)(seq->start + seq->len), y1, seq->enddisp, y2);
+      const float content_end = max_ff(seq->startdisp, seq->start + seq->len);
+      immRectf(pos, content_end, y1, seq->enddisp, y2);
     }
   }
 
@@ -1104,6 +1106,10 @@ static void draw_seq_strip(const bContext *C,
   y1 = seq->machine + SEQ_STRIP_OFSBOTTOM;
   x2 = (seq->endstill) ? (seq->start + seq->len) : seq->enddisp;
   y2 = seq->machine + SEQ_STRIP_OFSTOP;
+
+  /* Limit body to strip bounds. Meta strip can end up with content outside of strip range. */
+  x1 = min_ff(x1, seq->enddisp);
+  x2 = max_ff(x2, seq->startdisp);
 
   float text_margin_y;
   bool y_threshold;
@@ -1522,10 +1528,10 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
                                            ImBuf *ibuf,
                                            bool *r_glsl_used,
                                            eGPUTextureFormat *r_format,
-                                           eGPUDataFormat *r_data)
+                                           eGPUDataFormat *r_data,
+                                           void **r_buffer_cache_handle)
 {
   void *display_buffer;
-  void *cache_handle = NULL;
   bool force_fallback = false;
   *r_glsl_used = false;
   force_fallback |= (ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL);
@@ -1578,12 +1584,9 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
   /* There is data to be displayed, but GLSL is not initialized
    * properly, in this case we fallback to CPU-based display transform. */
   if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
-    display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
+    display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, r_buffer_cache_handle);
     *r_format = GPU_RGBA8;
     *r_data = GPU_DATA_UBYTE;
-  }
-  if (cache_handle) {
-    IMB_display_buffer_release(cache_handle);
   }
 
   return display_buffer;
@@ -1658,6 +1661,7 @@ static void sequencer_draw_display_buffer(const bContext *C,
                                           bool draw_backdrop)
 {
   void *display_buffer;
+  void *buffer_cache_handle = NULL;
 
   if (sseq->mainb == SEQ_DRAW_IMG_IMBUF && sseq->flag & SEQ_USE_ALPHA) {
     GPU_blend(GPU_BLEND_ALPHA);
@@ -1685,7 +1689,8 @@ static void sequencer_draw_display_buffer(const bContext *C,
     data = GPU_DATA_UBYTE;
   }
   else {
-    display_buffer = sequencer_OCIO_transform_ibuf(C, ibuf, &glsl_used, &format, &data);
+    display_buffer = sequencer_OCIO_transform_ibuf(
+        C, ibuf, &glsl_used, &format, &data, &buffer_cache_handle);
   }
 
   if (draw_backdrop) {
@@ -1743,6 +1748,10 @@ static void sequencer_draw_display_buffer(const bContext *C,
   }
   else {
     IMB_colormanagement_finish_glsl_draw();
+  }
+
+  if (buffer_cache_handle) {
+    IMB_display_buffer_release(buffer_cache_handle);
   }
 
   if (sseq->mainb == SEQ_DRAW_IMG_IMBUF && sseq->flag & SEQ_USE_ALPHA) {

@@ -290,7 +290,7 @@ static int sequencer_snap_exec(bContext *C, wmOperator *op)
 
   snap_frame = RNA_int_get(op->ptr, "frame");
 
-  /* Check metas. */
+  /* Check meta-strips. */
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
     if (seq->flag & SELECT && !(seq->depth == 0 && seq->flag & SEQ_LOCK) &&
         SEQ_transform_sequence_can_be_translated(seq)) {
@@ -1608,7 +1608,7 @@ static int sequencer_add_duplicate_exec(bContext *C, wmOperator *UNUSED(op))
     BLI_movelisttolist(ed->seqbasep, &nseqbase);
 
     for (; seq; seq = seq->next) {
-      SEQ_iterator_recursive_apply(seq, apply_unique_name_fn, scene);
+      SEQ_recursive_apply(seq, apply_unique_name_fn, scene);
     }
 
     WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
@@ -1867,13 +1867,13 @@ static int sequencer_meta_toggle_exec(bContext *C, wmOperator *UNUSED(op))
   Sequence *active_seq = SEQ_select_active_get(scene);
 
   if (active_seq && active_seq->type == SEQ_TYPE_META && active_seq->flag & SELECT) {
-    /* Enter metastrip. */
+    /* Enter meta-strip. */
     SEQ_meta_stack_alloc(ed, active_seq);
     SEQ_seqbase_active_set(ed, &active_seq->seqbase);
     SEQ_select_active_set(scene, NULL);
   }
   else {
-    /* Exit metastrip if possible. */
+    /* Exit meta-strip if possible. */
     if (BLI_listbase_is_empty(&ed->metastack)) {
       return OPERATOR_CANCELLED;
     }
@@ -1895,7 +1895,7 @@ void SEQUENCER_OT_meta_toggle(wmOperatorType *ot)
   /* Identifiers. */
   ot->name = "Toggle Meta Strip";
   ot->idname = "SEQUENCER_OT_meta_toggle";
-  ot->description = "Toggle a metastrip (to edit enclosed strips)";
+  ot->description = "Toggle a meta-strip (to edit enclosed strips)";
 
   /* Api callbacks. */
   ot->exec = sequencer_meta_toggle_exec;
@@ -1963,7 +1963,7 @@ void SEQUENCER_OT_meta_make(wmOperatorType *ot)
   /* Identifiers. */
   ot->name = "Make Meta Strip";
   ot->idname = "SEQUENCER_OT_meta_make";
-  ot->description = "Group selected strips into a metastrip";
+  ot->description = "Group selected strips into a meta-strip";
 
   /* Api callbacks. */
   ot->exec = sequencer_meta_make_exec;
@@ -2026,7 +2026,7 @@ void SEQUENCER_OT_meta_separate(wmOperatorType *ot)
   /* Identifiers. */
   ot->name = "UnMeta Strip";
   ot->idname = "SEQUENCER_OT_meta_separate";
-  ot->description = "Put the contents of a metastrip back in the sequencer";
+  ot->description = "Put the contents of a meta-strip back in the sequencer";
 
   /* Api callbacks. */
   ot->exec = sequencer_meta_separate_exec;
@@ -2465,7 +2465,7 @@ static int sequencer_paste_exec(bContext *C, wmOperator *op)
 
   for (iseq = iseq_first; iseq; iseq = iseq->next) {
     /* Make sure, that pasted strips have unique names. */
-    SEQ_iterator_recursive_apply(iseq, apply_unique_name_fn, scene);
+    SEQ_recursive_apply(iseq, apply_unique_name_fn, scene);
     /* Translate after name has been changed, otherwise this will affect animdata of original
      * strip. */
     SEQ_transform_translate_sequence(scene, iseq, ofs);

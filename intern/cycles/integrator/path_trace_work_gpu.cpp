@@ -593,13 +593,12 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, float 
     gpu_display_rgba_half_.alloc(width, height);
     /* TODO(sergey): There should be a way to make sure device-side memory is allocated without
      * transfering zeroes to the device. */
-    gpu_display_rgba_half_.zero_to_device();
+    queue_->zero_to_device(gpu_display_rgba_half_);
   }
 
   enqueue_film_convert(gpu_display_rgba_half_.device_pointer, sample_scale);
+  queue_->copy_from_device(gpu_display_rgba_half_);
   queue_->synchronize();
-
-  gpu_display_rgba_half_.copy_from_device();
 
   gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data());
 }

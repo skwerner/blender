@@ -60,9 +60,6 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
 
   scene = new Scene(scene_params, device);
 
-  /* Configure scheduler */
-  render_scheduler_.set_num_samples(params.samples);
-
   /* Configure path tracer. */
   path_trace_ = make_unique<PathTrace>(device, &scene->dscene, render_scheduler_);
   path_trace_->set_progress(&progress);
@@ -267,6 +264,8 @@ RenderWork Session::run_update_for_next_iteration()
     path_trace_->set_adaptive_sampling(adaptive_sampling);
   }
 
+  render_scheduler_.set_num_samples(params.samples);
+
   while (have_tiles) {
     render_work = render_scheduler_.get_render_work();
     if (render_work) {
@@ -382,9 +381,6 @@ void Session::set_samples(int samples)
 {
   if (samples != params.samples) {
     params.samples = samples;
-
-    /* TODO(sergey): Verify whether threading synchronization is needed here. */
-    render_scheduler_.set_num_samples(samples);
 
     pause_cond.notify_all();
   }

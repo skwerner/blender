@@ -319,12 +319,6 @@ class Device {
   Stats &stats;
   Profiler &profiler;
 
-  /* memory alignment */
-  virtual int mem_sub_ptr_alignment()
-  {
-    return MIN_ALIGNMENT_CPU_DATA_TYPES;
-  }
-
   /* constant memory */
   virtual void const_copy_to(const char *name, void *host, size_t size) = 0;
 

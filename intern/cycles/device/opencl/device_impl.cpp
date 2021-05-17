@@ -1083,11 +1083,6 @@ void OpenCLDevice::mem_free(device_memory &mem)
   }
 }
 
-int OpenCLDevice::mem_sub_ptr_alignment()
-{
-  return OpenCLInfo::mem_sub_ptr_alignment(cdDevice);
-}
-
 device_ptr OpenCLDevice::mem_alloc_sub_ptr(device_memory &mem, int offset, int size)
 {
   cl_mem_flags mem_flag;

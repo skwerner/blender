@@ -736,14 +736,19 @@ const EnumPropertyItem *ED_object_vgroup_selection_itemf_helper(const bContext *
     RNA_enum_items_add_value(&item, &totitem, WT_vertex_group_select_item, WT_VGROUP_ACTIVE);
   }
 
-  if (BKE_object_pose_armature_get(ob)) {
-    if (selection_mask & (1 << WT_VGROUP_BONE_SELECT)) {
-      RNA_enum_items_add_value(
-          &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_SELECT);
+  if (ob) {
+    if (BKE_object_pose_armature_get(ob)) {
+      if (selection_mask & (1 << WT_VGROUP_BONE_SELECT)) {
+        RNA_enum_items_add_value(
+            &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_SELECT);
+      }
     }
-    if (selection_mask & (1 << WT_VGROUP_BONE_DEFORM)) {
-      RNA_enum_items_add_value(
-          &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_DEFORM);
+
+    if (BKE_modifiers_is_deformed_by_armature(ob)) {
+      if (selection_mask & (1 << WT_VGROUP_BONE_DEFORM)) {
+        RNA_enum_items_add_value(
+            &item, &totitem, WT_vertex_group_select_item, WT_VGROUP_BONE_DEFORM);
+      }
     }
   }
 
@@ -783,7 +788,7 @@ static void vgroup_operator_subset_select_props(wmOperatorType *ot, bool use_act
                       DummyRNA_NULL_items,
                       use_active ? WT_VGROUP_ACTIVE : WT_VGROUP_ALL,
                       "Subset",
-                      "Define which subset of Groups shall be used");
+                      "Define which subset of groups shall be used");
 
   if (use_active) {
     RNA_def_enum_funcs(prop, rna_vertex_group_with_single_itemf);
@@ -1746,7 +1751,7 @@ static bool *vgroup_selected_get(Object *ob)
     /* Mirror the selection if X Mirror is enabled. */
     Mesh *me = BKE_mesh_from_object(ob);
 
-    if (me && (me->symmetry & ME_SYMMETRY_X) != 0) {
+    if (me && ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
       BKE_object_defgroup_mirror_selection(ob, defbase_tot, mask, mask, &sel_count);
     }
   }
@@ -2417,7 +2422,7 @@ void ED_vgroup_mirror(Object *ob,
 
       BM_mesh_elem_hflag_disable_all(em->bm, BM_VERT, BM_ELEM_TAG, false);
 
-      /* Go through the list of editverts and assign them */
+      /* Go through the list of edit-vertices and assign them. */
       BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
         if (!BM_elem_flag_test(eve, BM_ELEM_TAG)) {
           if ((eve_mirr = EDBM_verts_mirror_get(em, eve))) {
@@ -2597,7 +2602,7 @@ static void vgroup_assign_verts(Object *ob, const float weight)
 
       cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
 
-      /* Go through the list of editverts and assign them */
+      /* Go through the list of edit-vertices and assign them. */
       BM_ITER_MESH (eve, &iter, em->bm, BM_VERTS_OF_MESH) {
         if (BM_elem_flag_test(eve, BM_ELEM_SELECT)) {
           MDeformVert *dv;
@@ -4224,7 +4229,7 @@ void OBJECT_OT_vertex_group_sort(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  RNA_def_enum(ot->srna, "sort_type", vgroup_sort_type, SORT_TYPE_NAME, "Sort type", "Sort type");
+  RNA_def_enum(ot->srna, "sort_type", vgroup_sort_type, SORT_TYPE_NAME, "Sort Type", "Sort type");
 }
 
 /** \} */

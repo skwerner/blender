@@ -46,11 +46,6 @@ inline static uint colorDistance(Color32 c0, Color32 c1)
 }
 #endif
 
-/** Default constructor. */
-ColorBlock::ColorBlock()
-{
-}
-
 /** Init the color block from an array of colors. */
 ColorBlock::ColorBlock(const uint *linearImage)
 {
@@ -400,7 +395,7 @@ void ColorBlock::boundsRangeAlpha(Color32 *start, Color32 *end) const
 #endif
 
 #if 0
-/** Sort colors by abosolute value in their 16 bit representation. */
+/** Sort colors by absolute value in their 16 bit representation. */
 void ColorBlock::sortColorsByAbsoluteValue()
 {
   /* Dummy selection sort. */

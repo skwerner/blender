@@ -66,7 +66,8 @@
 #include "BKE_tracking.h"
 #include "DNA_material_types.h"
 
-#include "SEQ_sequencer.h"
+#include "SEQ_effects.h"
+#include "SEQ_iterator.h"
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
@@ -1140,7 +1141,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
   if (!MAIN_VERSION_ATLEAST(bmain, 276, 5)) {
-    ListBase *lbarray[MAX_LIBARRAY];
+    ListBase *lbarray[INDEX_ID_MAX];
     int a;
 
     /* Important to clear all non-persistent flags from older versions here,
@@ -1189,7 +1190,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
               }
             }
           }
-          /* Remove old deprecated region from filebrowsers */
+          /* Remove old deprecated region from file-browsers. */
           else if (sl->spacetype == SPACE_FILE) {
             LISTBASE_FOREACH (ARegion *, region, regionbase) {
               if (region->regiontype == RGN_TYPE_CHANNELS) {
@@ -1224,7 +1225,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
 
         if (seq->effectdata == NULL) {
-          struct SeqEffectHandle effect_handle = BKE_sequence_get_effect(seq);
+          struct SeqEffectHandle effect_handle = SEQ_effect_handle_get(seq);
           effect_handle.init(seq);
         }
 
@@ -1428,7 +1429,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
         if (clip->tracking.stabilization.scale == 0.0f) {
           /* ensure init.
-           * Was previously used for autoscale only,
+           * Was previously used for auto-scale only,
            * now used always (as "target scale") */
           clip->tracking.stabilization.scale = 1.0f;
         }
@@ -1656,7 +1657,7 @@ void blo_do_versions_270(FileData *fd, Library *UNUSED(lib), Main *bmain)
     if (!DNA_struct_elem_find(fd->filesdna, "Brush", "float", "falloff_angle")) {
       for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
         br->falloff_angle = DEG2RADF(80);
-        /* These flags are used for new feautres. They are not related to falloff_angle */
+        /* These flags are used for new features. They are not related to `falloff_angle`. */
         br->flag &= ~(BRUSH_INVERT_TO_SCRAPE_FILL | BRUSH_ORIGINAL_PLANE |
                       BRUSH_GRAB_ACTIVE_VERTEX | BRUSH_SCENE_SPACING | BRUSH_FRONTFACE_FALLOFF);
       }

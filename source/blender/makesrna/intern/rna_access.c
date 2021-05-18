@@ -52,6 +52,7 @@
 #include "BKE_report.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_build.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -1570,8 +1571,8 @@ StructRNA *RNA_property_pointer_type(PointerRNA *ptr, PropertyRNA *prop)
   if (prop->type == PROP_POINTER) {
     PointerPropertyRNA *pprop = (PointerPropertyRNA *)prop;
 
-    if (pprop->typef) {
-      return pprop->typef(ptr);
+    if (pprop->type_fn) {
+      return pprop->type_fn(ptr);
     }
     if (pprop->type) {
       return pprop->type;
@@ -1622,34 +1623,34 @@ void RNA_property_enum_items_ex(bContext *C,
 
   *r_free = false;
 
-  if (!use_static && eprop->itemf && (C != NULL || (prop->flag & PROP_ENUM_NO_CONTEXT))) {
-    const EnumPropertyItem *item;
+  if (!use_static && (eprop->item_fn != NULL)) {
+    const bool no_context = (prop->flag & PROP_ENUM_NO_CONTEXT) ||
+                            ((ptr->type->flag & STRUCT_NO_CONTEXT_WITHOUT_OWNER_ID) &&
+                             (ptr->owner_id == NULL));
+    if (C != NULL || no_context) {
+      const EnumPropertyItem *item;
 
-    if (prop->flag & PROP_ENUM_NO_CONTEXT) {
-      item = eprop->itemf(NULL, ptr, prop, r_free);
-    }
-    else {
-      item = eprop->itemf(C, ptr, prop, r_free);
-    }
+      item = eprop->item_fn(no_context ? NULL : C, ptr, prop, r_free);
 
-    /* any callbacks returning NULL should be fixed */
-    BLI_assert(item != NULL);
+      /* any callbacks returning NULL should be fixed */
+      BLI_assert(item != NULL);
 
-    if (r_totitem) {
-      int tot;
-      for (tot = 0; item[tot].identifier; tot++) {
-        /* pass */
+      if (r_totitem) {
+        int tot;
+        for (tot = 0; item[tot].identifier; tot++) {
+          /* pass */
+        }
+        *r_totitem = tot;
       }
-      *r_totitem = tot;
-    }
 
-    *r_item = item;
-  }
-  else {
-    *r_item = eprop->item;
-    if (r_totitem) {
-      *r_totitem = eprop->totitem;
+      *r_item = item;
+      return;
     }
+  }
+
+  *r_item = eprop->item;
+  if (r_totitem) {
+    *r_totitem = eprop->totitem;
   }
 }
 
@@ -1752,42 +1753,42 @@ void RNA_property_enum_items_gettexted_all(bContext *C,
     *r_totitem = eprop->totitem;
   }
 
-  if (eprop->itemf && (C != NULL || (prop->flag & PROP_ENUM_NO_CONTEXT))) {
-    const EnumPropertyItem *item;
-    int i;
-    bool free = false;
+  if (eprop->item_fn != NULL) {
+    const bool no_context = (prop->flag & PROP_ENUM_NO_CONTEXT) ||
+                            ((ptr->type->flag & STRUCT_NO_CONTEXT_WITHOUT_OWNER_ID) &&
+                             (ptr->owner_id == NULL));
+    if (C != NULL || no_context) {
+      const EnumPropertyItem *item;
+      int i;
+      bool free = false;
 
-    if (prop->flag & PROP_ENUM_NO_CONTEXT) {
-      item = eprop->itemf(NULL, ptr, prop, &free);
-    }
-    else {
-      item = eprop->itemf(C, ptr, prop, &free);
-    }
+      item = eprop->item_fn(no_context ? NULL : NULL, ptr, prop, &free);
 
-    /* any callbacks returning NULL should be fixed */
-    BLI_assert(item != NULL);
+      /* any callbacks returning NULL should be fixed */
+      BLI_assert(item != NULL);
 
-    for (i = 0; i < eprop->totitem; i++) {
-      bool exists = false;
-      int i_fixed;
+      for (i = 0; i < eprop->totitem; i++) {
+        bool exists = false;
+        int i_fixed;
 
-      /* Items that do not exist on list are returned,
-       * but have their names/identifiers NULL'ed out. */
-      for (i_fixed = 0; item[i_fixed].identifier; i_fixed++) {
-        if (STREQ(item[i_fixed].identifier, item_array[i].identifier)) {
-          exists = true;
-          break;
+        /* Items that do not exist on list are returned,
+         * but have their names/identifiers NULL'ed out. */
+        for (i_fixed = 0; item[i_fixed].identifier; i_fixed++) {
+          if (STREQ(item[i_fixed].identifier, item_array[i].identifier)) {
+            exists = true;
+            break;
+          }
+        }
+
+        if (!exists) {
+          item_array[i].name = NULL;
+          item_array[i].identifier = "";
         }
       }
 
-      if (!exists) {
-        item_array[i].name = NULL;
-        item_array[i].identifier = "";
+      if (free) {
+        MEM_freeN((void *)item);
       }
-    }
-
-    if (free) {
-      MEM_freeN((void *)item);
     }
   }
 
@@ -2288,6 +2289,11 @@ static void rna_property_update(
      * Python developers on the other hand will need to manually 'update_tag', see: T74000. */
     DEG_id_tag_update(ptr->owner_id,
                       ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_PARAMETERS);
+
+    /* When updating an ID pointer property, tag depsgraph for update. */
+    if (prop->type == PROP_POINTER && RNA_struct_is_ID(RNA_property_pointer_type(ptr, prop))) {
+      DEG_relations_tag_update(bmain);
+    }
 
     WM_main_add_notifier(NC_WINDOW, NULL);
     /* Not nice as well, but the only way to make sure material preview
@@ -3592,15 +3598,6 @@ int RNA_property_enum_get_default(PointerRNA *UNUSED(ptr), PropertyRNA *prop)
   return eprop->defaultvalue;
 }
 
-void *RNA_property_enum_py_data_get(PropertyRNA *prop)
-{
-  EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
-
-  BLI_assert(RNA_property_type(prop) == PROP_ENUM);
-
-  return eprop->py_data;
-}
-
 /**
  * Get the value of the item that is \a step items away from \a from_value.
  *
@@ -3656,8 +3653,8 @@ PointerRNA RNA_property_pointer_get(PointerRNA *ptr, PropertyRNA *prop)
     }
 
     /* for groups, data is idprop itself */
-    if (pprop->typef) {
-      return rna_pointer_inherit_refine(ptr, pprop->typef(ptr), idprop);
+    if (pprop->type_fn) {
+      return rna_pointer_inherit_refine(ptr, pprop->type_fn(ptr), idprop);
     }
     return rna_pointer_inherit_refine(ptr, pprop->type, idprop);
   }
@@ -3678,8 +3675,10 @@ void RNA_property_pointer_set(PointerRNA *ptr,
                               PointerRNA ptr_value,
                               ReportList *reports)
 {
-  PointerPropertyRNA *pprop = (PointerPropertyRNA *)prop;
+  /* Detect IDProperty and retrieve the actual PropertyRNA pointer before cast. */
   IDProperty *idprop = rna_idproperty_check(&prop, ptr);
+
+  PointerPropertyRNA *pprop = (PointerPropertyRNA *)prop;
   BLI_assert(RNA_property_type(prop) == PROP_POINTER);
 
   /* Check types. */
@@ -3696,7 +3695,7 @@ void RNA_property_pointer_set(PointerRNA *ptr,
     }
   }
   else {
-    /* Assigning to an IDProperty desguised as RNA one. */
+    /* Assigning to an IDProperty disguised as RNA one. */
     if (ptr_value.type != NULL && !RNA_struct_is_a(ptr_value.type, &RNA_ID)) {
       BKE_reportf(reports,
                   RPT_ERROR,
@@ -3733,7 +3732,7 @@ void RNA_property_pointer_set(PointerRNA *ptr,
       pprop->set(ptr, ptr_value, reports);
     }
   }
-  /* IDProperty desguised as RNA property (and not yet defined in ptr). */
+  /* IDProperty disguised as RNA property (and not yet defined in ptr). */
   else if (prop->flag & PROP_EDITABLE) {
     IDPropertyTemplate val = {0};
     IDProperty *group;
@@ -5696,8 +5695,7 @@ static char *rna_idp_path(PointerRNA *ptr,
   BLI_assert(haystack->type == IDP_GROUP);
 
   link.up = parent_link;
-  /* always set both name and index,
-   * else a stale value might get used */
+  /* Always set both name and index, else a stale value might get used. */
   link.name = NULL;
   link.index = -1;
 
@@ -5708,11 +5706,30 @@ static char *rna_idp_path(PointerRNA *ptr,
       path = rna_idp_path_create(&link);
       break;
     }
+
+    /* Early out in case the IDProperty type cannot contain RNA properties. */
+    if (!ELEM(iter->type, IDP_GROUP, IDP_IDPARRAY)) {
+      continue;
+    }
+
+    /* Ensure this is RNA. */
+    /* NOTE: `iter` might be a fully user-defined IDProperty (a.k.a. custom data), which name
+     * collides with an actual fully static RNA property of the same struct (which would then not
+     * be flagged with `PROP_IDPROPERTY`).
+     *
+     * That case must be ignored here, we only want to deal with runtime RNA properties stored in
+     * IDProps.
+     *
+     * See T84091. */
+    PropertyRNA *prop = RNA_struct_find_property(ptr, iter->name);
+    if (prop == NULL || (prop->flag & PROP_IDPROPERTY) == 0) {
+      continue;
+    }
+
     if (iter->type == IDP_GROUP) {
-      /* ensure this is RNA */
-      PropertyRNA *prop = RNA_struct_find_property(ptr, iter->name);
-      if (prop && prop->type == PROP_POINTER) {
+      if (prop->type == PROP_POINTER) {
         PointerRNA child_ptr = RNA_property_pointer_get(ptr, prop);
+        BLI_assert(!RNA_pointer_is_null(&child_ptr));
         link.name = iter->name;
         link.index = -1;
         if ((path = rna_idp_path(&child_ptr, iter, needle, &link))) {
@@ -5721,8 +5738,7 @@ static char *rna_idp_path(PointerRNA *ptr,
       }
     }
     else if (iter->type == IDP_IDPARRAY) {
-      PropertyRNA *prop = RNA_struct_find_property(ptr, iter->name);
-      if (prop && prop->type == PROP_COLLECTION) {
+      if (prop->type == PROP_COLLECTION) {
         IDProperty *array = IDP_IDPArray(iter);
         if (needle >= array && needle < (iter->len + array)) { /* found! */
           link.name = iter->name;
@@ -5735,6 +5751,7 @@ static char *rna_idp_path(PointerRNA *ptr,
         for (j = 0; j < iter->len; j++, array++) {
           PointerRNA child_ptr;
           if (RNA_property_collection_lookup_int(ptr, prop, j, &child_ptr)) {
+            BLI_assert(!RNA_pointer_is_null(&child_ptr));
             link.index = j;
             if ((path = rna_idp_path(&child_ptr, array, needle, &link))) {
               break;
@@ -5752,7 +5769,10 @@ static char *rna_idp_path(PointerRNA *ptr,
 }
 
 /**
- * Find the path from the structure referenced by the pointer to the #IDProperty object.
+ * Find the path from the structure referenced by the pointer to the runtime RNA-defined
+ * #IDProperty object.
+ *
+ * \note Does *not* handle pure user-defined IDProperties (a.k.a. custom properties).
  *
  * \param ptr: Reference to the object owning the custom property storage.
  * \param needle: Custom property object to find.
@@ -5797,26 +5817,29 @@ ID *RNA_find_real_ID_and_path(Main *bmain, ID *id, const char **r_path)
     *r_path = "";
   }
 
-  if ((id != NULL) && (id->flag & LIB_EMBEDDED_DATA)) {
-    switch (GS(id->name)) {
-      case ID_NT:
-        if (r_path) {
-          *r_path = "node_tree";
-        }
-        return BKE_node_tree_find_owner_ID(bmain, (bNodeTree *)id);
-      case ID_GR:
-        if (r_path) {
-          *r_path = "collection";
-        }
-        return (ID *)BKE_collection_master_scene_search(bmain, (struct Collection *)id);
-
-      default:
-        return NULL;
-    }
-  }
-  else {
+  if ((id == NULL) || (id->flag & LIB_EMBEDDED_DATA) == 0) {
     return id;
   }
+
+  const IDTypeInfo *id_type = BKE_idtype_get_info_from_id(id);
+  if (r_path) {
+    switch (GS(id->name)) {
+      case ID_NT:
+        *r_path = "node_tree";
+        break;
+      case ID_GR:
+        *r_path = "collection";
+        break;
+      default:
+        BLI_assert(!"Missing handling of embedded id type.");
+    }
+  }
+
+  if (id_type->owner_get == NULL) {
+    BLI_assert(!"Missing handling of embedded id type.");
+    return id;
+  }
+  return id_type->owner_get(bmain, id);
 }
 
 static char *rna_prepend_real_ID_path(Main *bmain, ID *id, char *path, ID **r_real_id)
@@ -6145,7 +6168,7 @@ char *RNA_path_full_property_py_ex(
   }
   else {
     if (use_fallback) {
-      /* fuzzy fallback. be explicit in our ignoranc. */
+      /* Fuzzy fallback. Be explicit in our ignorance. */
       data_path = RNA_property_identifier(prop);
       data_delim = " ... ";
     }

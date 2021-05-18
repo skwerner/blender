@@ -27,8 +27,6 @@
 
 #include "DNA_space_types.h"
 
-#include "RNA_access.h"
-
 #include "outliner_intern.h"
 
 static void outliner_context_selected_ids_recursive(const ListBase *subtree,
@@ -36,7 +34,7 @@ static void outliner_context_selected_ids_recursive(const ListBase *subtree,
 {
   LISTBASE_FOREACH (const TreeElement *, te, subtree) {
     const TreeStoreElem *tse = TREESTORE(te);
-    if ((tse->flag & TSE_SELECTED) && (ELEM(tse->type, 0, TSE_LAYER_COLLECTION))) {
+    if ((tse->flag & TSE_SELECTED) && (ELEM(tse->type, TSE_SOME_ID, TSE_LAYER_COLLECTION))) {
       CTX_data_id_list_add(result, tse->id);
     }
     outliner_context_selected_ids_recursive(&te->subtree, result);
@@ -50,7 +48,7 @@ static void outliner_context_selected_ids(const SpaceOutliner *space_outliner,
   CTX_data_type_set(result, CTX_DATA_TYPE_COLLECTION);
 }
 
-const char *outliner_context_dir[] = {"selected_ids", NULL};
+static const char *outliner_context_dir[] = {"selected_ids", NULL};
 
 int /*eContextResult*/ outliner_context(const bContext *C,
                                         const char *member,

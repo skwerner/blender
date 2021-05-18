@@ -437,15 +437,21 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
 
   /* Find how many instanced panels with this context string. */
   int list_panels_len = 0;
+  int start_index = -1;
   LISTBASE_FOREACH (const Panel *, panel, &region->panels) {
     if (panel->type) {
       if (panel->type->flag & PANEL_TYPE_INSTANCED) {
         if (panel_type_context_poll(region, panel->type, context)) {
+          if (panel == drag_panel) {
+            BLI_assert(start_index == -1); /* This panel should only appear once. */
+            start_index = list_panels_len;
+          }
           list_panels_len++;
         }
       }
     }
   }
+  BLI_assert(start_index != -1); /* The drag panel should definitely be in the list. */
 
   /* Sort the matching instanced panels by their display order. */
   PanelSort *panel_sort = MEM_callocN(list_panels_len * sizeof(*panel_sort), __func__);
@@ -471,6 +477,11 @@ static void reorder_instanced_panel_list(bContext *C, ARegion *region, Panel *dr
   }
 
   MEM_freeN(panel_sort);
+
+  if (move_to_index == start_index) {
+    /* In this case, the reorder was not changed, so don't do any updates or call the callback. */
+    return;
+  }
 
   /* Set the bit to tell the interface to instanced the list. */
   drag_panel->flag |= PNL_INSTANCED_LIST_ORDER_CHANGED;
@@ -583,7 +594,7 @@ static void set_panels_list_data_expand_flag(const bContext *C, const ARegion *r
 /** \name Panels
  * \{ */
 
-static bool panel_use_active_highlight(const Panel *panel)
+static bool panel_custom_data_active_get(const Panel *panel)
 {
   /* The caller should make sure the panel is active and has a type. */
   BLI_assert(UI_panel_is_active(panel));
@@ -597,6 +608,21 @@ static bool panel_use_active_highlight(const Panel *panel)
   }
 
   return false;
+}
+
+static void panel_custom_data_active_set(Panel *panel)
+{
+  /* Since the panel is interacted with, it should be active and have a type. */
+  BLI_assert(UI_panel_is_active(panel));
+  BLI_assert(panel->type != NULL);
+
+  if (panel->type->active_property[0] != '\0') {
+    PointerRNA *ptr = UI_panel_custom_data_get(panel);
+    BLI_assert(RNA_struct_find_property(ptr, panel->type->active_property) != NULL);
+    if (ptr != NULL && !RNA_pointer_is_null(ptr)) {
+      RNA_boolean_set(ptr, panel->type->active_property, true);
+    }
+  }
 }
 
 /**
@@ -911,9 +937,9 @@ bool UI_panel_matches_search_filter(const Panel *panel)
 /**
  * Set the flag telling the panel to use its search result status for its expansion.
  */
-static void panel_set_expansion_from_seach_filter_recursive(const bContext *C,
-                                                            Panel *panel,
-                                                            const bool use_search_closed)
+static void panel_set_expansion_from_search_filter_recursive(const bContext *C,
+                                                             Panel *panel,
+                                                             const bool use_search_closed)
 {
   /* This has to run on inactive panels that may not have a type,
    * but we can prevent running on header-less panels in some cases. */
@@ -924,21 +950,21 @@ static void panel_set_expansion_from_seach_filter_recursive(const bContext *C,
   LISTBASE_FOREACH (Panel *, child_panel, &panel->children) {
     /* Don't check if the sub-panel is active, otherwise the
      * expansion won't be reset when the parent is closed. */
-    panel_set_expansion_from_seach_filter_recursive(C, child_panel, use_search_closed);
+    panel_set_expansion_from_search_filter_recursive(C, child_panel, use_search_closed);
   }
 }
 
 /**
  * Set the flag telling every panel to override its expansion with its search result status.
  */
-static void region_panels_set_expansion_from_seach_filter(const bContext *C,
-                                                          ARegion *region,
-                                                          const bool use_search_closed)
+static void region_panels_set_expansion_from_search_filter(const bContext *C,
+                                                           ARegion *region,
+                                                           const bool use_search_closed)
 {
   LISTBASE_FOREACH (Panel *, panel, &region->panels) {
     /* Don't check if the panel is active, otherwise the expansion won't
      * be correct when switching back to tab after exiting search. */
-    panel_set_expansion_from_seach_filter_recursive(C, panel, use_search_closed);
+    panel_set_expansion_from_search_filter_recursive(C, panel, use_search_closed);
   }
   set_panels_list_data_expand_flag(C, region);
 }
@@ -1104,16 +1130,18 @@ static void panel_draw_highlight_border(const Panel *panel,
     radius = 0.0f;
   }
 
-  /* Abuse the property search theme color for now. */
   float color[4];
-  UI_GetThemeColor4fv(TH_MATCH, color);
-  UI_draw_roundbox_aa(false,
-                      rect->xmin,
-                      UI_panel_is_closed(panel) ? header_rect->ymin : rect->ymin,
-                      rect->xmax,
-                      header_rect->ymax,
-                      radius,
-                      color);
+  UI_GetThemeColor4fv(TH_SELECT_ACTIVE, color);
+  UI_draw_roundbox_4fv(
+      &(const rctf){
+          .xmin = rect->xmin,
+          .xmax = rect->xmax,
+          .ymin = UI_panel_is_closed(panel) ? header_rect->ymin : rect->ymin,
+          .ymax = header_rect->ymax,
+      },
+      false,
+      radius,
+      color);
 }
 
 static void panel_draw_aligned_widgets(const uiStyle *style,
@@ -1239,13 +1267,16 @@ static void panel_draw_aligned_backdrop(const Panel *panel,
         float color[4];
         UI_GetThemeColor4fv(TH_PANEL_SUB_BACK, color);
         /* Change the width a little bit to line up with sides. */
-        UI_draw_roundbox_aa(true,
-                            rect->xmin + U.pixelsize,
-                            rect->ymin + U.pixelsize,
-                            rect->xmax - U.pixelsize,
-                            rect->ymax,
-                            box_wcol->roundness * U.widget_unit,
-                            color);
+        UI_draw_roundbox_aa(
+            &(const rctf){
+                .xmin = rect->xmin + U.pixelsize,
+                .xmax = rect->xmax - U.pixelsize,
+                .ymin = rect->ymin + U.pixelsize,
+                .ymax = rect->ymax,
+            },
+            true,
+            box_wcol->roundness * U.widget_unit,
+            color);
       }
       else {
         immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
@@ -1319,7 +1350,7 @@ void ui_draw_aligned_panel(const uiStyle *style,
 {
   const Panel *panel = block->panel;
 
-  /* Add 0.001f to prevent flicker frpm float inaccuracy. */
+  /* Add 0.001f to prevent flicker from float inaccuracy. */
   const rcti header_rect = {
       rect->xmin,
       rect->xmax,
@@ -1342,7 +1373,7 @@ void ui_draw_aligned_panel(const uiStyle *style,
                                region_search_filter_active);
   }
 
-  if (panel_use_active_highlight(panel)) {
+  if (panel_custom_data_active_get(panel)) {
     panel_draw_highlight_border(panel, rect, &header_rect);
   }
 }
@@ -1530,20 +1561,26 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
     {
       /* Draw filled rectangle and outline for tab. */
       UI_draw_roundbox_corner_set(roundboxtype);
-      UI_draw_roundbox_4fv(true,
-                           rct->xmin,
-                           rct->ymin,
-                           rct->xmax,
-                           rct->ymax,
-                           tab_curve_radius,
-                           is_active ? theme_col_tab_active : theme_col_tab_inactive);
-      UI_draw_roundbox_4fv(false,
-                           rct->xmin,
-                           rct->ymin,
-                           rct->xmax,
-                           rct->ymax,
-                           tab_curve_radius,
-                           theme_col_tab_outline);
+      UI_draw_roundbox_4fv(
+          &(const rctf){
+              .xmin = rct->xmin,
+              .xmax = rct->xmax,
+              .ymin = rct->ymin,
+              .ymax = rct->ymax,
+          },
+          true,
+          tab_curve_radius,
+          is_active ? theme_col_tab_active : theme_col_tab_inactive);
+      UI_draw_roundbox_4fv(
+          &(const rctf){
+              .xmin = rct->xmin,
+              .xmax = rct->xmax,
+              .ymin = rct->ymin,
+              .ymax = rct->ymax,
+          },
+          false,
+          tab_curve_radius,
+          theme_col_tab_outline);
 
       /* Disguise the outline on one side to join the tab to the panel. */
       pos = GPU_vertformat_attr_add(
@@ -1897,10 +1934,10 @@ void UI_panels_end(const bContext *C, ARegion *region, int *r_x, int *r_y)
   const bool region_search_filter_active = region->flag & RGN_FLAG_SEARCH_FILTER_ACTIVE;
 
   if (properties_space_needs_realign(area, region)) {
-    region_panels_set_expansion_from_seach_filter(C, region, region_search_filter_active);
+    region_panels_set_expansion_from_search_filter(C, region, region_search_filter_active);
   }
   else if (region->flag & RGN_FLAG_SEARCH_FILTER_UPDATE) {
-    region_panels_set_expansion_from_seach_filter(C, region, region_search_filter_active);
+    region_panels_set_expansion_from_search_filter(C, region, region_search_filter_active);
   }
 
   if (region->flag & RGN_FLAG_SEARCH_FILTER_ACTIVE) {
@@ -2169,6 +2206,12 @@ static void ui_handle_panel_header(const bContext *C,
       ui_panel_drag_collapse_handler_add(C, UI_panel_is_closed(panel));
     }
 
+    /* Set panel custom data (modifier) active when expanding subpanels, but not top-level
+     * panels to allow collapsing and expanding without setting the active element. */
+    if (is_subpanel) {
+      panel_custom_data_active_set(panel);
+    }
+
     set_panels_list_data_expand_flag(C, region);
     panel_activate_state(C, panel, PANEL_STATE_ANIMATION);
     return;
@@ -2334,7 +2377,7 @@ static int ui_handle_panel_category_cycling(const wmEvent *event,
       PanelCategoryDyn *pc_dyn = UI_panel_category_find(region, category);
       if (LIKELY(pc_dyn)) {
         if (is_mousewheel) {
-          /* We can probably get rid of this and only allow ctrl-tabbing. */
+          /* We can probably get rid of this and only allow Ctrl-Tabbing. */
           pc_dyn = (event->type == WHEELDOWNMOUSE) ? pc_dyn->next : pc_dyn->prev;
         }
         else {
@@ -2497,9 +2540,8 @@ PointerRNA *UI_region_panel_custom_data_under_cursor(const bContext *C, const wm
 {
   ARegion *region = CTX_wm_region(C);
 
-  Panel *panel = NULL;
   LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
-    panel = block->panel;
+    Panel *panel = block->panel;
     if (panel == NULL) {
       continue;
     }
@@ -2509,15 +2551,11 @@ PointerRNA *UI_region_panel_custom_data_under_cursor(const bContext *C, const wm
     ui_window_to_block(region, block, &mx, &my);
     const int mouse_state = ui_panel_mouse_state_get(block, panel, mx, my);
     if (ELEM(mouse_state, PANEL_MOUSE_INSIDE_CONTENT, PANEL_MOUSE_INSIDE_HEADER)) {
-      break;
+      return UI_panel_custom_data_get(panel);
     }
   }
 
-  if (panel == NULL) {
-    return NULL;
-  }
-
-  return UI_panel_custom_data_get(panel);
+  return NULL;
 }
 
 /** \} */
@@ -2607,6 +2645,8 @@ static void panel_activate_state(const bContext *C, Panel *panel, const uiHandle
   }
 
   if (state == PANEL_STATE_DRAG) {
+    panel_custom_data_active_set(panel);
+
     panel_set_flag_recursive(panel, PNL_SELECT, true);
     panel_set_runtime_flag_recursive(panel, PANEL_IS_DRAG_DROP, true);
 

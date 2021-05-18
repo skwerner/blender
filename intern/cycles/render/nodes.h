@@ -501,6 +501,7 @@ class RGBToBWNode : public ShaderNode {
 class ConvertNode : public ShaderNode {
  public:
   ConvertNode(SocketType::Type from, SocketType::Type to, bool autoconvert = false);
+  ConvertNode(const ConvertNode &other);
   SHADER_NODE_BASE_CLASS(ConvertNode)
 
   void constant_fold(const ConstantFolder &folder);
@@ -1612,7 +1613,7 @@ class OSLNode : public ShaderNode {
 
   SHADER_NODE_NO_CLONE_CLASS(OSLNode)
 
-  /* ideally we could beter detect this, but we can't query this now */
+  /* Ideally we could better detect this, but we can't query this now. */
   bool has_spatial_varying()
   {
     return true;

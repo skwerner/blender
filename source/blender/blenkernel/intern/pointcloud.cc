@@ -183,6 +183,7 @@ IDTypeInfo IDType_ID_PT = {
     /* make_local */ nullptr,
     /* foreach_id */ pointcloud_foreach_id,
     /* foreach_cache */ nullptr,
+    /* owner_get */ nullptr,
 
     /* blend_write */ pointcloud_blend_write,
     /* blend_read_data */ pointcloud_blend_read_data,
@@ -190,6 +191,8 @@ IDTypeInfo IDType_ID_PT = {
     /* blend_read_expand */ pointcloud_blend_read_expand,
 
     /* blend_read_undo_preserve */ nullptr,
+
+    /* lib_override_apply_post */ nullptr,
 };
 
 static void pointcloud_random(PointCloud *pointcloud)
@@ -371,6 +374,25 @@ static void pointcloud_evaluate_modifiers(struct Depsgraph *depsgraph,
   }
 }
 
+static PointCloud *take_pointcloud_ownership_from_geometry_set(GeometrySet &geometry_set)
+{
+  if (!geometry_set.has<PointCloudComponent>()) {
+    return nullptr;
+  }
+  PointCloudComponent &pointcloud_component =
+      geometry_set.get_component_for_write<PointCloudComponent>();
+  PointCloud *pointcloud = pointcloud_component.release();
+  if (pointcloud != nullptr) {
+    /* Add back, but as read-only non-owning component. */
+    pointcloud_component.replace(pointcloud, GeometryOwnershipType::ReadOnly);
+  }
+  else {
+    /* The component was empty, we can also remove it. */
+    geometry_set.remove<PointCloudComponent>();
+  }
+  return pointcloud;
+}
+
 void BKE_pointcloud_data_update(struct Depsgraph *depsgraph, struct Scene *scene, Object *object)
 {
   /* Free any evaluated data and restore original data. */
@@ -382,10 +404,17 @@ void BKE_pointcloud_data_update(struct Depsgraph *depsgraph, struct Scene *scene
                                                                  GeometryOwnershipType::ReadOnly);
   pointcloud_evaluate_modifiers(depsgraph, scene, object, geometry_set);
 
+  PointCloud *pointcloud_eval = take_pointcloud_ownership_from_geometry_set(geometry_set);
+
+  /* If the geometry set did not contain a point cloud, we still create an empty one. */
+  if (pointcloud_eval == nullptr) {
+    pointcloud_eval = BKE_pointcloud_new_nomain(0);
+  }
+
   /* Assign evaluated object. */
-  PointCloud *dummy_pointcloud = BKE_pointcloud_new_nomain(0);
-  BKE_object_eval_assign_data(object, &dummy_pointcloud->id, true);
-  object->runtime.geometry_set_eval = new GeometrySet(geometry_set);
+  const bool eval_is_owned = pointcloud_eval != pointcloud;
+  BKE_object_eval_assign_data(object, &pointcloud_eval->id, eval_is_owned);
+  object->runtime.geometry_set_eval = new GeometrySet(std::move(geometry_set));
 }
 
 /* Draw Cache */

@@ -75,6 +75,10 @@ typedef enum eGPDbrush_Flag {
   GP_BRUSH_USE_STRENGTH_PRESSURE = (1 << 1),
   /* brush use pressure for alpha factor */
   GP_BRUSH_USE_JITTER_PRESSURE = (1 << 2),
+  /* Disable automatic zoom for filling. */
+  GP_BRUSH_FILL_FIT_DISABLE = (1 << 3),
+  /* Show extend fill help lines. */
+  GP_BRUSH_FILL_SHOW_EXTENDLINES = (1 << 4),
   /* fill hide transparent */
   GP_BRUSH_FILL_HIDE = (1 << 6),
   /* show fill help lines */
@@ -457,6 +461,7 @@ typedef enum eBrushSculptTool {
   SCULPT_TOOL_SMEAR = 29,
   SCULPT_TOOL_BOUNDARY = 30,
   SCULPT_TOOL_DISPLACEMENT_ERASER = 31,
+  SCULPT_TOOL_DISPLACEMENT_SMEAR = 32,
 } eBrushSculptTool;
 
 /* Brush.uv_sculpt_tool */

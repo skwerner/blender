@@ -36,10 +36,30 @@
 
 void geo_node_type_base(
     struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
-bool geo_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
+bool geo_node_poll_default(struct bNodeType *ntype,
+                           struct bNodeTree *ntree,
+                           const char **r_disabled_hint);
 
 namespace blender::nodes {
 void update_attribute_input_socket_availabilities(bNode &node,
                                                   const StringRef name,
-                                                  const GeometryNodeAttributeInputMode mode);
-}
+                                                  const GeometryNodeAttributeInputMode mode,
+                                                  const bool name_is_available = true);
+
+Array<uint32_t> get_geometry_element_ids_as_uints(const GeometryComponent &component,
+                                                  const AttributeDomain domain);
+
+void transform_mesh(Mesh *mesh,
+                    const float3 translation,
+                    const float3 rotation,
+                    const float3 scale);
+
+Mesh *create_cylinder_or_cone_mesh(const float radius_top,
+                                   const float radius_bottom,
+                                   const float depth,
+                                   const int verts_num,
+                                   const GeometryNodeMeshCircleFillType fill_type);
+
+Mesh *create_cube_mesh(const float size);
+
+}  // namespace blender::nodes

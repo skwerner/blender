@@ -134,7 +134,7 @@ static BezierCurve GenerateBezier(
   double alpha_l; /* Alpha values, left and right */
   double alpha_r;
   Vector2 tmp;          /* Utility variable */
-  BezierCurve bezCurve; /* RETURN bezier curve ctl pts */
+  BezierCurve bezCurve; /* RETURN bezier curve control points. */
 
   bezCurve = (Vector2 *)malloc(4 * sizeof(Vector2));
   nPts = last - first + 1;
@@ -461,10 +461,6 @@ static Vector2 V2SubII(Vector2 a, Vector2 b)
 }
 
 //------------------------- WRAPPER -----------------------------//
-
-FitCurveWrapper::FitCurveWrapper()
-{
-}
 
 FitCurveWrapper::~FitCurveWrapper()
 {

@@ -15,7 +15,7 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation.
  * All rights reserved.
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -167,7 +167,7 @@ bool BLI_tridiagonal_solve_cyclic(
     return false;
   }
 
-  /* prepare the noncyclic system; relies on tridiagonal_solve ignoring values */
+  /* Prepare the non-cyclic system; relies on tridiagonal_solve ignoring values. */
   memcpy(b2, b, bytes);
   b2[0] -= a0;
   b2[count - 1] -= cN;

@@ -148,10 +148,18 @@ static bool object_materials_supported_poll_ex(bContext *C, const Object *ob)
   if (!ED_operator_object_active_local_editable_ex(C, ob)) {
     return false;
   }
+  if (!OB_TYPE_SUPPORT_MATERIAL(ob->type)) {
+    return false;
+  }
+
+  /* Material linked to object. */
+  if (ob->matbits && ob->actcol && ob->matbits[ob->actcol - 1]) {
+    return true;
+  }
+
+  /* Material linked to obdata. */
   const ID *data = ob->data;
-  return (OB_TYPE_SUPPORT_MATERIAL(ob->type) &&
-          /* Object data checks. */
-          data && !ID_IS_LINKED(data) && !ID_IS_OVERRIDE_LIBRARY(data));
+  return (data && !ID_IS_LINKED(data) && !ID_IS_OVERRIDE_LIBRARY(data));
 }
 
 static bool object_materials_supported_poll(bContext *C)
@@ -1066,6 +1074,11 @@ static int view_layer_remove_aov_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
+
+  if (view_layer->active_aov == NULL) {
+    return OPERATOR_FINISHED;
+  }
+
   BKE_view_layer_remove_aov(view_layer, view_layer->active_aov);
 
   RenderEngineType *engine_type = RE_engines_find(scene->r.engine);
@@ -1216,7 +1229,7 @@ static int light_cache_bake_invoke(bContext *C, wmOperator *op, const wmEvent *U
 
   WM_jobs_start(wm, wm_job);
 
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   return OPERATOR_RUNNING_MODAL;
 }
@@ -1227,13 +1240,13 @@ void SCENE_OT_light_cache_bake(wmOperatorType *ot)
       {LIGHTCACHE_SUBSET_ALL,
        "ALL",
        0,
-       "All LightProbes",
+       "All Light Probes",
        "Bake both irradiance grids and reflection cubemaps"},
       {LIGHTCACHE_SUBSET_DIRTY,
        "DIRTY",
        0,
        "Dirty Only",
-       "Only bake lightprobes that are marked as dirty"},
+       "Only bake light probes that are marked as dirty"},
       {LIGHTCACHE_SUBSET_CUBE,
        "CUBEMAPS",
        0,

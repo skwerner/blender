@@ -1125,6 +1125,11 @@ void RNA_def_struct_name_property(struct StructRNA *srna, struct PropertyRNA *pr
     CLOG_ERROR(&LOG, "\"%s.%s\", must be a string property.", srna->identifier, prop->identifier);
     DefRNA.error = true;
   }
+  else if (srna->nameproperty != NULL) {
+    CLOG_ERROR(
+        &LOG, "\"%s.%s\", name property is already set.", srna->identifier, prop->identifier);
+    DefRNA.error = true;
+  }
   else {
     srna->nameproperty = prop;
   }
@@ -1293,7 +1298,7 @@ PropertyRNA *RNA_def_property(StructOrFunctionRNA *cont_,
 
     dcont = rna_find_container_def(cont);
 
-    /* XXX - toto, detect supertype collisions */
+    /* TODO: detect super-type collisions. */
     if (rna_findlink(&dcont->properties, identifier)) {
       CLOG_ERROR(&LOG, "duplicate identifier \"%s.%s\"", CONTAINER_RNA_ID(cont), identifier);
       DefRNA.error = true;
@@ -2088,7 +2093,7 @@ void RNA_def_property_string_default(PropertyRNA *prop, const char *value)
 
       if (value == NULL) {
         CLOG_ERROR(&LOG,
-                   "\"%s.%s\", NULL string passed (dont call in this case).",
+                   "\"%s.%s\", NULL string passed (don't call in this case).",
                    srna->identifier,
                    prop->identifier);
         DefRNA.error = true;
@@ -2097,7 +2102,7 @@ void RNA_def_property_string_default(PropertyRNA *prop, const char *value)
 
       if (!value[0]) {
         CLOG_ERROR(&LOG,
-                   "\"%s.%s\", empty string passed (dont call in this case).",
+                   "\"%s.%s\", empty string passed (don't call in this case).",
                    srna->identifier,
                    prop->identifier);
         DefRNA.error = true;
@@ -2404,6 +2409,10 @@ void RNA_def_property_int_sdna(PropertyRNA *prop, const char *structname, const 
 
       iprop->softmin = -10000; /* rather arbitrary .. */
       iprop->softmax = 10000;
+    }
+    else if (dp->dnatype && STREQ(dp->dnatype, "int8_t")) {
+      iprop->hardmin = iprop->softmin = INT8_MIN;
+      iprop->hardmax = iprop->softmax = INT8_MAX;
     }
 
     if (prop->subtype == PROP_UNSIGNED || prop->subtype == PROP_PERCENTAGE ||
@@ -3262,7 +3271,7 @@ void RNA_def_property_enum_funcs(PropertyRNA *prop,
         eprop->set = (PropEnumSetFunc)set;
       }
       if (item) {
-        eprop->itemf = (PropEnumItemFunc)item;
+        eprop->item_fn = (PropEnumItemFunc)item;
       }
       break;
     }
@@ -3287,7 +3296,7 @@ void RNA_def_property_enum_funcs_runtime(PropertyRNA *prop,
     eprop->set_ex = setfunc;
   }
   if (itemfunc) {
-    eprop->itemf = itemfunc;
+    eprop->item_fn = itemfunc;
   }
 
   if (getfunc || setfunc) {
@@ -3298,12 +3307,6 @@ void RNA_def_property_enum_funcs_runtime(PropertyRNA *prop,
       prop->flag &= ~PROP_EDITABLE;
     }
   }
-}
-
-void RNA_def_property_enum_py_data(PropertyRNA *prop, void *py_data)
-{
-  EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
-  eprop->py_data = py_data;
 }
 
 void RNA_def_property_string_funcs(PropertyRNA *prop,
@@ -3368,7 +3371,7 @@ void RNA_def_property_string_funcs_runtime(PropertyRNA *prop,
 }
 
 void RNA_def_property_pointer_funcs(
-    PropertyRNA *prop, const char *get, const char *set, const char *typef, const char *poll)
+    PropertyRNA *prop, const char *get, const char *set, const char *type_fn, const char *poll)
 {
   StructRNA *srna = DefRNA.laststruct;
 
@@ -3387,8 +3390,8 @@ void RNA_def_property_pointer_funcs(
       if (set) {
         pprop->set = (PropPointerSetFunc)set;
       }
-      if (typef) {
-        pprop->typef = (PropPointerTypeFunc)typef;
+      if (type_fn) {
+        pprop->type_fn = (PropPointerTypeFunc)type_fn;
       }
       if (poll) {
         pprop->poll = (PropPointerPollFunc)poll;
@@ -3816,7 +3819,7 @@ PropertyRNA *RNA_def_enum_flag(StructOrFunctionRNA *cont_,
 void RNA_def_enum_funcs(PropertyRNA *prop, EnumPropertyItemFunc itemfunc)
 {
   EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
-  eprop->itemf = itemfunc;
+  eprop->item_fn = itemfunc;
 }
 
 PropertyRNA *RNA_def_float(StructOrFunctionRNA *cont_,
@@ -4105,6 +4108,16 @@ PropertyRNA *RNA_def_float_percentage(StructOrFunctionRNA *cont_,
   PropertyRNA *prop;
 
   ASSERT_SOFT_HARD_LIMITS;
+
+#ifdef DEBUG
+  /* Properties with PROP_PERCENTAGE should use a range like 0 to 100, unlike PROP_FACTOR. */
+  if (hardmax < 2.0f) {
+    CLOG_WARN(&LOG,
+              "Percentage property with incorrect range: %s.%s",
+              CONTAINER_RNA_ID(cont),
+              identifier);
+  }
+#endif
 
   prop = RNA_def_property(cont, identifier, PROP_FLOAT, PROP_PERCENTAGE);
   RNA_def_property_float_default(prop, default_value);
@@ -4617,10 +4630,27 @@ void RNA_def_property_duplicate_pointers(StructOrFunctionRNA *cont_, PropertyRNA
   prop->flag_internal |= PROP_INTERN_FREE_POINTERS;
 }
 
+static void (*g_py_data_clear_fn)(PropertyRNA *prop) = NULL;
+
+/**
+ * Set the callback used to decrement the user count of a property.
+ *
+ * This function is called when freeing each dynamically defined property.
+ */
+void RNA_def_property_free_pointers_set_py_data_callback(
+    void (*py_data_clear_fn)(PropertyRNA *prop))
+{
+  g_py_data_clear_fn = py_data_clear_fn;
+}
+
 void RNA_def_property_free_pointers(PropertyRNA *prop)
 {
   if (prop->flag_internal & PROP_INTERN_FREE_POINTERS) {
     int a;
+
+    if (g_py_data_clear_fn) {
+      g_py_data_clear_fn(prop);
+    }
 
     if (prop->identifier) {
       MEM_freeN((void *)prop->identifier);

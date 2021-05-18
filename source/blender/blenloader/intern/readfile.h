@@ -33,17 +33,15 @@
 #include "DNA_windowmanager_types.h" /* for ReportType */
 #include "zlib.h"
 
+struct BLI_mmap_file;
 struct BLOCacheStorage;
-struct GSet;
 struct IDNameLib_Map;
 struct Key;
 struct MemFile;
 struct Object;
 struct OldNewMap;
-struct PartEff;
 struct ReportList;
 struct UserDef;
-struct View3D;
 
 typedef struct IDNameLib_Map IDNameLib_Map;
 
@@ -86,13 +84,14 @@ typedef struct FileData {
   /** Regular file reading. */
   int filedes;
 
-  /** Variables needed for reading from memory / stream. */
+  /** Variables needed for reading from memory / stream / memory-mapped files. */
   const char *buffer;
+  struct BLI_mmap_file *mmap_file;
   /** Variables needed for reading from memfile (undo). */
   struct MemFile *memfile;
   /** Whether we are undoing (< 0) or redoing (> 0), used to choose which 'unchanged' flag to use
    * to detect unchanged data from memfile. */
-  short undo_direction;
+  int undo_direction; /* eUndoStepDir */
 
   /** Variables needed for reading from file. */
   gzFile gzfiledes;
@@ -111,12 +110,23 @@ typedef struct FileData {
 
   int fileversion;
   /** Used to retrieve ID names from (bhead+1). */
-  int id_name_offs;
+  int id_name_offset;
+  /** Used to retrieve asset data from (bhead+1). NOTE: This may not be available in old files,
+   * will be -1 then! */
+  int id_asset_data_offset;
   /** For do_versions patching. */
   int globalf, fileflags;
 
   /** Optionally skip some data-blocks when they're not needed. */
   eBLOReadSkip skip_flags;
+
+  /**
+   * Tag to apply to all loaded ID data-blocks.
+   *
+   * \note This is initialized from #LibraryLink_Params.id_tag_extra since passing it as an
+   * argument would need an additional argument to be passed around when expanding library data.
+   */
+  int id_tag_extra;
 
   struct OldNewMap *datamap;
   struct OldNewMap *globmap;
@@ -136,6 +146,10 @@ typedef struct FileData {
   struct IDNameLib_Map *old_idmap;
 
   struct ReportList *reports;
+  /* Counters for amount of missing libraries, and missing IDs in libraries.
+   * Used to generate a synthetic report in the UI. */
+  int library_file_missing_count;
+  int library_id_missing_count;
 } FileData;
 
 #define SIZEOFBLENDERHEADER 12
@@ -159,6 +173,8 @@ void blo_end_packed_pointer_map(FileData *fd, struct Main *oldmain);
 void blo_add_library_pointer_map(ListBase *old_mainlist, FileData *fd);
 void blo_make_old_idmap_from_main(FileData *fd, struct Main *bmain);
 
+BHead *blo_read_asset_data_block(FileData *fd, BHead *bhead, struct AssetMetaData **r_asset_data);
+
 void blo_cache_storage_init(FileData *fd, struct Main *bmain);
 void blo_cache_storage_old_bmain_clear(FileData *fd, struct Main *bmain_old);
 void blo_cache_storage_end(FileData *fd);
@@ -170,6 +186,7 @@ BHead *blo_bhead_next(FileData *fd, BHead *thisblock);
 BHead *blo_bhead_prev(FileData *fd, BHead *thisblock);
 
 const char *blo_bhead_id_name(const FileData *fd, const BHead *bhead);
+struct AssetMetaData *blo_bhead_id_asset_data_address(const FileData *fd, const BHead *bhead);
 
 /* do versions stuff */
 
@@ -193,6 +210,7 @@ void blo_do_versions_260(struct FileData *fd, struct Library *lib, struct Main *
 void blo_do_versions_270(struct FileData *fd, struct Library *lib, struct Main *bmain);
 void blo_do_versions_280(struct FileData *fd, struct Library *lib, struct Main *bmain);
 void blo_do_versions_290(struct FileData *fd, struct Library *lib, struct Main *bmain);
+void blo_do_versions_300(struct FileData *fd, struct Library *lib, struct Main *bmain);
 void blo_do_versions_cycles(struct FileData *fd, struct Library *lib, struct Main *bmain);
 
 void do_versions_after_linking_250(struct Main *bmain);
@@ -200,6 +218,7 @@ void do_versions_after_linking_260(struct Main *bmain);
 void do_versions_after_linking_270(struct Main *bmain);
 void do_versions_after_linking_280(struct Main *bmain, struct ReportList *reports);
 void do_versions_after_linking_290(struct Main *bmain, struct ReportList *reports);
+void do_versions_after_linking_300(struct Main *bmain, struct ReportList *reports);
 void do_versions_after_linking_cycles(struct Main *bmain);
 
 /* This is rather unfortunate to have to expose this here, but better use that nasty hack in

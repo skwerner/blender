@@ -28,7 +28,7 @@ CCL_NAMESPACE_BEGIN
 
 Attribute::Attribute(
     ustring name, TypeDesc type, AttributeElement element, Geometry *geom, AttributePrimitive prim)
-    : name(name), std(ATTR_STD_NONE), type(type), element(element), flags(0)
+    : name(name), std(ATTR_STD_NONE), type(type), element(element), flags(0), modified(true)
 {
   /* string and matrix not supported! */
   assert(type == TypeDesc::TypeFloat || type == TypeDesc::TypeColor ||
@@ -82,6 +82,8 @@ void Attribute::add(const float &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const uchar4 &f)
@@ -93,6 +95,8 @@ void Attribute::add(const uchar4 &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const float2 &f)
@@ -104,6 +108,8 @@ void Attribute::add(const float2 &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const float3 &f)
@@ -115,6 +121,8 @@ void Attribute::add(const float3 &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const Transform &f)
@@ -126,6 +134,8 @@ void Attribute::add(const Transform &f)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
 }
 
 void Attribute::add(const char *data)
@@ -134,6 +144,26 @@ void Attribute::add(const char *data)
 
   for (size_t i = 0; i < size; i++)
     buffer.push_back(data[i]);
+
+  modified = true;
+}
+
+void Attribute::set_data_from(Attribute &&other)
+{
+  assert(other.std == std);
+  assert(other.type == type);
+  assert(other.element == element);
+
+  this->flags = other.flags;
+
+  if (this->buffer.size() != other.buffer.size()) {
+    this->buffer = std::move(other.buffer);
+    modified = true;
+  }
+  else if (memcmp(this->data(), other.data(), other.buffer.size()) != 0) {
+    this->buffer = std::move(other.buffer);
+    modified = true;
+  }
 }
 
 size_t Attribute::data_sizeof() const
@@ -410,6 +440,7 @@ Attribute *AttributeSet::add(ustring name, TypeDesc type, AttributeElement eleme
 
   Attribute new_attr(name, type, element, geometry, prim);
   attributes.emplace_back(std::move(new_attr));
+  modified = true;
   return &attributes.back();
 }
 
@@ -431,6 +462,7 @@ void AttributeSet::remove(ustring name)
 
     for (it = attributes.begin(); it != attributes.end(); it++) {
       if (&*it == attr) {
+        modified = true;
         attributes.erase(it);
         return;
       }
@@ -576,6 +608,7 @@ void AttributeSet::remove(AttributeStandard std)
 
     for (it = attributes.begin(); it != attributes.end(); it++) {
       if (&*it == attr) {
+        modified = true;
         attributes.erase(it);
         return;
       }
@@ -625,6 +658,45 @@ void AttributeSet::clear(bool preserve_voxel_data)
   else {
     attributes.clear();
   }
+}
+
+void AttributeSet::update(AttributeSet &&new_attributes)
+{
+  /* add or update old_attributes based on the new_attributes */
+  foreach (Attribute &attr, new_attributes.attributes) {
+    Attribute *nattr = add(attr.name, attr.type, attr.element);
+    nattr->std = attr.std;
+    nattr->set_data_from(std::move(attr));
+  }
+
+  /* remove any attributes not on new_attributes */
+  list<Attribute>::iterator it;
+  for (it = attributes.begin(); it != attributes.end();) {
+    if (it->std != ATTR_STD_NONE) {
+      if (new_attributes.find(it->std) == nullptr) {
+        modified = true;
+        attributes.erase(it++);
+        continue;
+      }
+    }
+    else if (it->name != "") {
+      if (new_attributes.find(it->name) == nullptr) {
+        modified = true;
+        attributes.erase(it++);
+        continue;
+      }
+    }
+
+    it++;
+  }
+}
+
+void AttributeSet::clear_modified()
+{
+  foreach (Attribute &attr, attributes) {
+    attr.modified = false;
+  }
+  modified = false;
 }
 
 /* AttributeRequest */

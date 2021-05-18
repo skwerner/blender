@@ -219,6 +219,7 @@ IDTypeInfo IDType_ID_TE = {
     .make_local = NULL,
     .foreach_id = texture_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = texture_blend_write,
     .blend_read_data = texture_blend_read_data,
@@ -226,6 +227,8 @@ IDTypeInfo IDType_ID_TE = {
     .blend_read_expand = texture_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* Utils for all IDs using those texture slots. */

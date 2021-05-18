@@ -2036,7 +2036,9 @@ string OpenCLDevice::kernel_build_options(const string *debug_src)
 #  endif
 
 #  ifdef WITH_NANOVDB
-  build_options += "-DWITH_NANOVDB ";
+  if (info.has_nanovdb) {
+    build_options += "-DWITH_NANOVDB ";
+  }
 #  endif
 
   return build_options;
@@ -2151,7 +2153,7 @@ void OpenCLDevice::release_program_safe(cl_program program)
   }
 }
 
-/* ** Those guys are for workign around some compiler-specific bugs ** */
+/* ** Those guys are for working around some compiler-specific bugs ** */
 
 cl_program OpenCLDevice::load_cached_kernel(ustring key, thread_scoped_lock &cache_locker)
 {

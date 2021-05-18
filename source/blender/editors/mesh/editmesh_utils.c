@@ -785,7 +785,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
       l = v->l;
       luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
       uv = luv->uv;
-      uv_vert_sel = luv->flag & MLOOPUV_VERTSEL;
+      uv_vert_sel = uvedit_uv_select_test(scene, l, cd_loop_uv_offset);
 
       lastv = NULL;
       iterv = vlist;
@@ -796,7 +796,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
         l = iterv->l;
         luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
         uv2 = luv->uv;
-        uv2_vert_sel = luv->flag & MLOOPUV_VERTSEL;
+        uv2_vert_sel = uvedit_uv_select_test(scene, l, cd_loop_uv_offset);
 
         /* Check if the uv loops share the same selection state (if not, they are not connected as
          * they have been ripped or other edit commands have separated them). */
@@ -1721,7 +1721,7 @@ void EDBM_project_snap_verts(
                                                     SCE_SNAP_MODE_FACE,
                                                     &(const struct SnapObjectParams){
                                                         .snap_select = SNAP_NOT_ACTIVE,
-                                                        .use_object_edit_cage = false,
+                                                        .edit_mode_type = SNAP_GEOM_FINAL,
                                                         .use_occlusion_test = true,
                                                     },
                                                     mval,

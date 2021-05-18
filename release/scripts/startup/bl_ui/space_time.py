@@ -107,6 +107,9 @@ class TIME_MT_editor_menus(Menu):
             text="Keying",
         )
 
+        # Add a separator to keep the popover button from aligning with the menu button.
+        sub.separator(factor=0.4)
+
         if horizontal:
             sub = row.row(align=True)
 
@@ -296,6 +299,7 @@ class TIME_PT_keyframing_settings(TimelinePanelButtons, Panel):
         col = layout.column(align=True)
         col.label(text="New Keyframe Type")
         col.prop(tool_settings, "keyframe_type", text="")
+
 
 class TIME_PT_auto_keyframing(TimelinePanelButtons, Panel):
     bl_label = "Auto Keyframing"

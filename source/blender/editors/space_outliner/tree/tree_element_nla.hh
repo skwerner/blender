@@ -23,7 +23,6 @@
 #include "tree_element.hh"
 
 struct NlaTrack;
-struct NlaStrip;
 
 namespace blender::ed::outliner {
 
@@ -47,7 +46,7 @@ class TreeElementNLATrack final : public AbstractTreeElement {
 
 class TreeElementNLAAction final : public AbstractTreeElement {
  public:
-  TreeElementNLAAction(TreeElement &legacy_te);
+  TreeElementNLAAction(TreeElement &legacy_te, const bAction &action);
 };
 
 }  // namespace blender::ed::outliner

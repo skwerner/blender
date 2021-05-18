@@ -96,7 +96,7 @@ NODE_DEFINE(Pass)
   return type;
 }
 
-Pass::Pass() : Node(node_type)
+Pass::Pass() : Node(get_node_type())
 {
 }
 
@@ -407,7 +407,7 @@ NODE_DEFINE(Film)
   return type;
 }
 
-Film::Film() : Node(node_type)
+Film::Film() : Node(get_node_type())
 {
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
@@ -688,16 +688,16 @@ void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *sce
 void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
 {
   if (Pass::contains(scene->passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
-    scene->geometry_manager->tag_update(scene);
+    scene->geometry_manager->tag_update(scene, GeometryManager::UV_PASS_NEEDED);
 
     foreach (Shader *shader, scene->shaders)
-      shader->need_update_geometry = true;
+      shader->need_update_uvs = true;
   }
   else if (Pass::contains(scene->passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
-    scene->geometry_manager->tag_update(scene);
+    scene->geometry_manager->tag_update(scene, GeometryManager::MOTION_PASS_NEEDED);
   }
   else if (Pass::contains(scene->passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
-    scene->integrator->tag_update(scene);
+    scene->integrator->tag_update(scene, Integrator::AO_PASS_MODIFIED);
   }
 
   if (update_passes) {

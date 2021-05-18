@@ -198,6 +198,8 @@ void WM_operator_properties_filesel(wmOperatorType *ot,
       ot->srna, "filter_blenlib", (filter & FILE_TYPE_BLENDERLIB) != 0, "Filter Blender IDs", "");
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 
+  /* TODO asset only filter? */
+
   prop = RNA_def_int(
       ot->srna,
       "filemode",
@@ -282,15 +284,15 @@ void WM_operator_properties_select_action_simple(wmOperatorType *ot,
  */
 void WM_operator_properties_select_random(wmOperatorType *ot)
 {
-  RNA_def_float_percentage(ot->srna,
-                           "percent",
-                           50.0f,
-                           0.0f,
-                           100.0f,
-                           "Percent",
-                           "Percentage of objects to select randomly",
-                           0.0f,
-                           100.0f);
+  RNA_def_float_factor(ot->srna,
+                       "ratio",
+                       0.5f,
+                       0.0f,
+                       1.0f,
+                       "Ratio",
+                       "Portion of items to select randomly",
+                       0.0f,
+                       1.0f);
   RNA_def_int(ot->srna,
               "seed",
               0,
@@ -432,7 +434,7 @@ void WM_operator_properties_select_operation_simple(wmOperatorType *ot)
 void WM_operator_properties_select_walk_direction(wmOperatorType *ot)
 {
   static const EnumPropertyItem direction_items[] = {
-      {UI_SELECT_WALK_UP, "UP", 0, "Prev", ""},
+      {UI_SELECT_WALK_UP, "UP", 0, "Previous", ""},
       {UI_SELECT_WALK_DOWN, "DOWN", 0, "Next", ""},
       {UI_SELECT_WALK_LEFT, "LEFT", 0, "Left", ""},
       {UI_SELECT_WALK_RIGHT, "RIGHT", 0, "Right", ""},

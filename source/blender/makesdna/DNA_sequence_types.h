@@ -55,6 +55,7 @@ typedef struct StripAnim {
 
 typedef struct StripElem {
   char name[256];
+  /** Ignore when zeroed. */
   int orig_width, orig_height;
 } StripElem;
 
@@ -278,12 +279,12 @@ typedef struct Editing {
   struct SeqCache *cache;
 
   /* Cache control */
-  float recycle_max_cost;
+  float recycle_max_cost; /* UNUSED only for versioning. */
   int cache_flag;
 
   struct PrefetchJob *prefetch_job;
 
-  /* Must be initialized only by BKE_sequencer_cache_create() */
+  /* Must be initialized only by seq_cache_create() */
   int64_t disk_cache_timestamp;
 } Editing;
 
@@ -354,6 +355,8 @@ typedef struct TextVars {
 enum {
   SEQ_TEXT_SHADOW = (1 << 0),
   SEQ_TEXT_BOX = (1 << 1),
+  SEQ_TEXT_BOLD = (1 << 2),
+  SEQ_TEXT_ITALIC = (1 << 3),
 };
 
 /* TextVars.align */

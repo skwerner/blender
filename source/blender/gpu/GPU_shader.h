@@ -27,11 +27,9 @@
 extern "C" {
 #endif
 
-struct GPUTexture;
-struct GPUUniformBuf;
 struct GPUVertBuf;
 
-/** Opaque type hidding blender::gpu::Shader */
+/** Opaque type hiding #blender::gpu::Shader */
 typedef struct GPUShader GPUShader;
 
 typedef enum eGPUShaderTFBType {

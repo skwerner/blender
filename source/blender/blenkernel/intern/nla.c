@@ -296,11 +296,16 @@ NlaTrack *BKE_nlatrack_add(AnimData *adt, NlaTrack *prev, const bool is_liboverr
   nlt->flag = NLATRACK_SELECTED | NLATRACK_OVERRIDELIBRARY_LOCAL;
   nlt->index = BLI_listbase_count(&adt->nla_tracks);
 
-  /* add track to stack, and make it the active one */
-  if (is_liboverride) {
-    for (; prev != NULL && (prev->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) == 0; prev = prev->next) {
+  /* In liboverride case, we only add local tracks after all those coming from the linked data,
+   * so we need to find the first local track. */
+  if (is_liboverride && prev != NULL && (prev->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) == 0) {
+    NlaTrack *first_local = prev->next;
+    for (; first_local != NULL && (first_local->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) == 0;
+         first_local = first_local->next) {
     }
+    prev = first_local != NULL ? first_local->prev : NULL;
   }
+  /* Add track to stack, and make it the active one. */
   if (prev != NULL) {
     BLI_insertlinkafter(&adt->nla_tracks, prev, nlt);
   }
@@ -429,8 +434,10 @@ NlaStrip *BKE_nla_add_soundstrip(Main *bmain, Scene *scene, Speaker *speaker)
   return strip;
 }
 
-/** Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
- * `IDTypeInfo` structure). */
+/**
+ * Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
+ * `IDTypeInfo` structure).
+ */
 void BKE_nla_strip_foreach_id(NlaStrip *strip, LibraryForeachIDData *data)
 {
   BKE_LIB_FOREACHID_PROCESS(data, strip->act, IDWALK_CB_USER);
@@ -1375,8 +1382,10 @@ static void nlastrip_fix_resize_overlaps(NlaStrip *strip)
   }
 }
 
-/** Recalculate the start and end frames for the strip to match the bounds of its action such that
- * the overall NLA animation result is unchanged. */
+/**
+ * Recalculate the start and end frames for the strip to match the bounds of its action such that
+ * the overall NLA animation result is unchanged.
+ */
 void BKE_nlastrip_recalculate_bounds_sync_action(NlaStrip *strip)
 {
   float prev_actstart;

@@ -251,6 +251,7 @@ IDTypeInfo IDType_ID_TXT = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = text_blend_write,
     .blend_read_data = text_blend_read_data,
@@ -258,6 +259,8 @@ IDTypeInfo IDType_ID_TXT = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /** \} */
@@ -520,7 +523,8 @@ Text *BKE_text_load_ex(Main *bmain, const char *file, const char *relpath, const
   return ta;
 }
 
-/** Load a text file.
+/**
+ * Load a text file.
  *
  * \note Text data-blocks have no user by default, only the 'real user' flag.
  */

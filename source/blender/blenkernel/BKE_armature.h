@@ -27,6 +27,8 @@
 extern "C" {
 #endif
 
+struct AnimationEvalContext;
+struct bAction;
 struct BMEditMesh;
 struct Bone;
 struct Depsgraph;
@@ -193,11 +195,12 @@ void BKE_pose_where_is_bone(struct Depsgraph *depsgraph,
                             bool do_extra);
 void BKE_pose_where_is_bone_tail(struct bPoseChannel *pchan);
 
-/* get_objectspace_bone_matrix has to be removed still */
-void get_objectspace_bone_matrix(struct Bone *bone,
-                                 float M_accumulatedMatrix[4][4],
-                                 int root,
-                                 int posed);
+/* Evaluate the action and apply it to the pose. If any pose bones are selected, only FCurves that
+ * relate to those bones are evaluated. */
+void BKE_pose_apply_action(struct Object *ob,
+                           struct bAction *action,
+                           struct AnimationEvalContext *anim_eval_context);
+
 void vec_roll_to_mat3(const float vec[3], const float roll, float r_mat[3][3]);
 void vec_roll_to_mat3_normalized(const float nor[3], const float roll, float r_mat[3][3]);
 void mat3_to_vec_roll(const float mat[3][3], float r_vec[3], float *r_roll);
@@ -338,6 +341,8 @@ void BKE_pchan_bbone_deform_segment_index(const struct bPoseChannel *pchan,
 
 #define PBONE_SELECTABLE(arm, bone) \
   (PBONE_VISIBLE(arm, bone) && !((bone)->flag & BONE_UNSELECTABLE))
+
+#define PBONE_SELECTED(arm, bone) (((bone)->flag & BONE_SELECTED) & PBONE_VISIBLE(arm, bone))
 
 /* context.selected_pose_bones */
 #define FOREACH_PCHAN_SELECTED_IN_OBJECT_BEGIN(_ob, _pchan) \

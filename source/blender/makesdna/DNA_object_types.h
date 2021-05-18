@@ -26,6 +26,11 @@
 
 #include "DNA_object_enums.h"
 
+#include "DNA_customdata_types.h"
+#include "DNA_defs.h"
+#include "DNA_lineart_types.h"
+#include "DNA_listBase.h"
+
 #include "DNA_ID.h"
 #include "DNA_action_types.h" /* bAnimVizSettings */
 #include "DNA_customdata_types.h"
@@ -38,9 +43,9 @@ extern "C" {
 
 struct AnimData;
 struct BoundBox;
-struct DerivedMesh;
+struct Curve;
 struct FluidsimSettings;
-struct GpencilBatchCache;
+struct GeometrySet;
 struct Ipo;
 struct Material;
 struct Mesh;
@@ -51,7 +56,6 @@ struct RigidBodyOb;
 struct SculptSession;
 struct SoftBody;
 struct bGPdata;
-struct GeometrySet;
 
 /* Vertex Groups - Name Info */
 typedef struct bDeformGroup {
@@ -150,16 +154,25 @@ typedef struct Object_Runtime {
    */
   struct ID *data_orig;
   /**
-   * Object data structure created during object evaluation.
-   * It has all modifiers applied.
+   * Object data structure created during object evaluation. It has all modifiers applied.
+   * The type is determined by the type of the original object. For example, for mesh and curve
+   * objects, this is a mesh. For a volume object, this is a volume.
    */
   struct ID *data_eval;
 
   /**
-   * Some objects support evaluating to a geometry set instead of a single ID. In those cases the
-   * evaluated geometry will be stored here instead of in #data_eval.
+   * Objects can evaluate to a geometry set instead of a single ID. In those cases, the evaluated
+   * geometry set will be stored here. An ID of the correct type is still stored in #data_eval.
+   * #geometry_set_eval might reference the ID pointed to by #data_eval as well, but does not own
+   * the data.
    */
   struct GeometrySet *geometry_set_eval;
+
+  /**
+   * A GHash that contains geometry sets for intermediate stages of evaluation. The keys are just a
+   * hash and are not owned by the map. The geometry sets are owned.
+   */
+  void *geometry_set_previews;
 
   /**
    * Mesh structure created during object evaluation.
@@ -185,12 +198,42 @@ typedef struct Object_Runtime {
    */
   struct Mesh *object_as_temp_mesh;
 
+  /**
+   * This is a curve representation of corresponding object.
+   * It created when Python calls `object.to_curve()`.
+   */
+  struct Curve *object_as_temp_curve;
+
   /** Runtime evaluated curve-specific data, not stored in the file. */
   struct CurveCache *curve_cache;
 
   unsigned short local_collections_bits;
   short _pad2[3];
 } Object_Runtime;
+
+typedef struct ObjectLineArt {
+  short usage;
+  short flags;
+
+  /** if OBJECT_LRT_OWN_CREASE is set */
+  float crease_threshold;
+} ObjectLineArt;
+
+/**
+ * \warning while the values seem to be flags, they aren't treated as flags.
+ */
+enum eObjectLineArt_Usage {
+  OBJECT_LRT_INHERIT = 0,
+  OBJECT_LRT_INCLUDE = (1 << 0),
+  OBJECT_LRT_OCCLUSION_ONLY = (1 << 1),
+  OBJECT_LRT_EXCLUDE = (1 << 2),
+  OBJECT_LRT_INTERSECTION_ONLY = (1 << 3),
+  OBJECT_LRT_NO_INTERSECTION = (1 << 4),
+};
+
+enum eObjectLineArt_Flags {
+  OBJECT_LRT_OWN_CREASE = (1 << 0),
+};
 
 typedef struct Object {
   ID id;
@@ -397,6 +440,8 @@ typedef struct Object {
 
   struct PreviewImage *preview;
 
+  ObjectLineArt lineart;
+
   /** Runtime evaluation data (keep last). */
   Object_Runtime runtime;
 } Object;
@@ -587,6 +632,9 @@ enum {
   GP_EMPTY = 0,
   GP_STROKE = 1,
   GP_MONKEY = 2,
+  GP_LRT_SCENE = 3,
+  GP_LRT_OBJECT = 4,
+  GP_LRT_COLLECTION = 5,
 };
 
 /* boundtype */

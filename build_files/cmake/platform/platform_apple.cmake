@@ -56,6 +56,7 @@ list(APPEND ZLIB_LIBRARIES ${BZIP2_LIBRARIES})
 if(WITH_OPENAL)
   find_package(OpenAL)
   if(NOT OPENAL_FOUND)
+    message(WARNING "OpenAL not found, disabling WITH_OPENAL")
     set(WITH_OPENAL OFF)
   endif()
 endif()
@@ -65,6 +66,7 @@ if(WITH_JACK)
     NAMES jackmp
   )
   if(NOT JACK_FRAMEWORK)
+    message(STATUS "JACK not found, disabling WITH_JACK")
     set(WITH_JACK OFF)
   else()
     set(JACK_INCLUDE_DIRS ${JACK_FRAMEWORK}/headers)
@@ -72,7 +74,11 @@ if(WITH_JACK)
 endif()
 
 if(NOT DEFINED LIBDIR)
-  set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
+  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64")
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin)
+  else()
+    set(LIBDIR ${CMAKE_SOURCE_DIR}/../lib/darwin_${CMAKE_OSX_ARCHITECTURES})
+  endif()
 else()
   message(STATUS "Using pre-compiled LIBDIR: ${LIBDIR}")
 endif()
@@ -98,6 +104,7 @@ endif()
 if(WITH_USD)
   find_package(USD)
   if(NOT USD_FOUND)
+    message(STATUS "USD not found, disabling WITH_USD")
     set(WITH_USD OFF)
   endif()
 endif()
@@ -127,22 +134,22 @@ if(WITH_CODEC_SNDFILE)
 endif()
 
 if(WITH_PYTHON)
-  # we use precompiled libraries for py 3.7 and up by default
-  set(PYTHON_VERSION 3.7)
+  # we use precompiled libraries for py 3.9 and up by default
+  set(PYTHON_VERSION 3.9)
   if(NOT WITH_PYTHON_MODULE AND NOT WITH_PYTHON_FRAMEWORK)
     # normally cached but not since we include them with blender
-    set(PYTHON_INCLUDE_DIR "${LIBDIR}/python/include/python${PYTHON_VERSION}m")
-    set(PYTHON_EXECUTABLE "${LIBDIR}/python/bin/python${PYTHON_VERSION}m")
-    set(PYTHON_LIBRARY ${LIBDIR}/python/lib/libpython${PYTHON_VERSION}m.a)
+    set(PYTHON_INCLUDE_DIR "${LIBDIR}/python/include/python${PYTHON_VERSION}")
+    set(PYTHON_EXECUTABLE "${LIBDIR}/python/bin/python${PYTHON_VERSION}")
+    set(PYTHON_LIBRARY ${LIBDIR}/python/lib/libpython${PYTHON_VERSION}.a)
     set(PYTHON_LIBPATH "${LIBDIR}/python/lib/python${PYTHON_VERSION}")
     # set(PYTHON_LINKFLAGS "-u _PyMac_Error")  # won't  build with this enabled
   else()
     # module must be compiled against Python framework
     set(_py_framework "/Library/Frameworks/Python.framework/Versions/${PYTHON_VERSION}")
 
-    set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}m")
-    set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}m")
-    set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}/config-${PYTHON_VERSION}m")
+    set(PYTHON_INCLUDE_DIR "${_py_framework}/include/python${PYTHON_VERSION}")
+    set(PYTHON_EXECUTABLE "${_py_framework}/bin/python${PYTHON_VERSION}")
+    set(PYTHON_LIBPATH "${_py_framework}/lib/python${PYTHON_VERSION}")
     # set(PYTHON_LIBRARY python${PYTHON_VERSION})
     # set(PYTHON_LINKFLAGS "-u _PyMac_Error -framework Python")  # won't  build with this enabled
 
@@ -201,6 +208,13 @@ set(PLATFORM_LINKFLAGS
 )
 
 list(APPEND PLATFORM_LINKLIBS c++)
+
+if(WITH_OPENIMAGEDENOISE)
+  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+    # OpenImageDenoise uses BNNS from the Accelerate framework.
+    string(APPEND PLATFORM_LINKFLAGS " -framework Accelerate")
+  endif()
+endif()
 
 if(WITH_JACK)
   string(APPEND PLATFORM_LINKFLAGS " -F/Library/Frameworks -weak_framework jackmp")
@@ -293,7 +307,12 @@ if(WITH_OPENIMAGEIO)
 endif()
 
 if(WITH_OPENCOLORIO)
-  find_package(OpenColorIO)
+  find_package(OpenColorIO 2.0.0)
+
+  if(NOT OPENCOLORIO_FOUND)
+    set(WITH_OPENCOLORIO OFF)
+    message(STATUS "OpenColorIO not found, disabling WITH_OPENCOLORIO")
+  endif()
 endif()
 
 if(WITH_OPENVDB)
@@ -305,8 +324,11 @@ if(WITH_OPENVDB)
 endif()
 
 if(WITH_NANOVDB)
-  set(NANOVDB ${LIBDIR}/nanovdb)
-  set(NANOVDB_INCLUDE_DIR ${NANOVDB}/include)
+  find_package(NanoVDB)
+endif()
+
+if(WITH_CPU_SIMD AND SUPPORT_NEON_BUILD)
+  find_package(sse2neon)
 endif()
 
 if(WITH_LLVM)
@@ -314,6 +336,13 @@ if(WITH_LLVM)
   if(NOT LLVM_FOUND)
     message(FATAL_ERROR "LLVM not found.")
   endif()
+  if(WITH_CLANG)
+    find_package(Clang)
+    if(NOT CLANG_FOUND)
+       message(FATAL_ERROR "Clang not found.")
+    endif()
+  endif()
+
 endif()
 
 if(WITH_CYCLES_OSL)
@@ -326,20 +355,14 @@ if(WITH_CYCLES_OSL)
   list(APPEND OSL_LIBRARIES ${OSL_LIB_COMP} -force_load ${OSL_LIB_EXEC} ${OSL_LIB_QUERY})
   find_path(OSL_INCLUDE_DIR OSL/oslclosure.h PATHS ${CYCLES_OSL}/include)
   find_program(OSL_COMPILER NAMES oslc PATHS ${CYCLES_OSL}/bin)
-  find_path(OSL_SHADER_DIR NAMES stdosl.h PATHS ${CYCLES_OSL}/shaders)
+  find_path(OSL_SHADER_DIR NAMES stdosl.h PATHS ${CYCLES_OSL}/share/OSL/shaders)
 
   if(OSL_INCLUDE_DIR AND OSL_LIBRARIES AND OSL_COMPILER AND OSL_SHADER_DIR)
     set(OSL_FOUND TRUE)
   else()
-    message(STATUS "OSL not found")
+    message(WARNING "OSL not found, disabling WITH_CYCLES_OSL")
     set(WITH_CYCLES_OSL OFF)
   endif()
-endif()
-
-if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-  set(WITH_CYCLES_EMBREE OFF)
-  set(WITH_OPENIMAGEDENOISE OFF)
-  set(WITH_CPU_SSE OFF)
 endif()
 
 if(WITH_CYCLES_EMBREE)
@@ -365,7 +388,7 @@ if(WITH_OPENIMAGEDENOISE)
 
   if(NOT OPENIMAGEDENOISE_FOUND)
     set(WITH_OPENIMAGEDENOISE OFF)
-    message(STATUS "OpenImageDenoise not found")
+    message(STATUS "OpenImageDenoise not found, disabling WITH_OPENIMAGEDENOISE")
   endif()
 endif()
 
@@ -390,10 +413,10 @@ if(WITH_OPENMP)
     set(OPENMP_FOUND ON)
     set(OpenMP_C_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
     set(OpenMP_CXX_FLAGS "-Xclang -fopenmp -I'${LIBDIR}/openmp/include'")
-    string(APPEND CMAKE_EXE_LINKER_FLAGS " -L'${LIBDIR}/openmp/lib' -lomp")
+    set(OpenMP_LINKER_FLAGS "-L'${LIBDIR}/openmp/lib' -lomp")
 
     # Copy libomp.dylib to allow executables like datatoc and tests to work.
-    # `@executable_path/../Resources/lib/` is a default dylib search path.
+    # `@executable_path/../Resources/lib/` `LC_ID_DYLIB` is added by the deps builder.
     # For single config generator datatoc, tests etc.
     execute_process(
       COMMAND mkdir -p ${CMAKE_BINARY_DIR}/Resources/lib
@@ -425,6 +448,14 @@ if(WITH_GMP)
   if(NOT GMP_FOUND)
     message(WARNING "GMP not found, disabling WITH_GMP")
     set(WITH_GMP OFF)
+  endif()
+endif()
+
+if(WITH_HARU)
+  find_package(Haru)
+  if(NOT HARU_FOUND)
+    message(WARNING "Haru not found, disabling WITH_HARU")
+    set(WITH_HARU OFF)
   endif()
 endif()
 
@@ -470,3 +501,17 @@ set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
 set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> Scr <TARGET> <LINK_FLAGS> <OBJECTS>")
 set(CMAKE_C_ARCHIVE_FINISH   "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
 set(CMAKE_CXX_ARCHIVE_FINISH "<CMAKE_RANLIB> -no_warning_for_no_symbols -c <TARGET>")
+
+if(WITH_COMPILER_CCACHE)
+  if(NOT CMAKE_GENERATOR STREQUAL "Xcode")
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+      # Makefiles and ninja
+      set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}" CACHE STRING "" FORCE)
+      set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}" CACHE STRING "" FORCE)
+    else()
+      message(WARNING "Ccache NOT found, disabling WITH_COMPILER_CCACHE")
+      set(WITH_COMPILER_CCACHE OFF)
+    endif()
+  endif()
+endif()

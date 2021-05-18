@@ -527,9 +527,7 @@ IMeshArena::IMeshArena()
   pimpl_ = std::make_unique<IMeshArenaImpl>();
 }
 
-IMeshArena::~IMeshArena()
-{
-}
+IMeshArena::~IMeshArena() = default;
 
 void IMeshArena::reserve(int vert_num_hint, int face_num_hint)
 {
@@ -753,27 +751,6 @@ struct BoundingBox {
   BoundingBox(const float3 &min, const float3 &max) : min(min), max(max)
   {
   }
-  BoundingBox(const BoundingBox &other) : min(other.min), max(other.max)
-  {
-  }
-  BoundingBox(BoundingBox &&other) noexcept : min(std::move(other.min)), max(std::move(other.max))
-  {
-  }
-  ~BoundingBox() = default;
-  BoundingBox operator=(const BoundingBox &other)
-  {
-    if (this != &other) {
-      min = other.min;
-      max = other.max;
-    }
-    return *this;
-  }
-  BoundingBox operator=(BoundingBox &&other) noexcept
-  {
-    min = std::move(other.min);
-    max = std::move(other.max);
-    return *this;
-  }
 
   void combine(const float3 &p)
   {
@@ -936,28 +913,6 @@ class CoplanarCluster {
   {
     this->add_tri(t, bb);
   }
-  CoplanarCluster(const CoplanarCluster &other) : tris_(other.tris_), bb_(other.bb_)
-  {
-  }
-  CoplanarCluster(CoplanarCluster &&other) noexcept
-      : tris_(std::move(other.tris_)), bb_(std::move(other.bb_))
-  {
-  }
-  ~CoplanarCluster() = default;
-  CoplanarCluster &operator=(const CoplanarCluster &other)
-  {
-    if (this != &other) {
-      tris_ = other.tris_;
-      bb_ = other.bb_;
-    }
-    return *this;
-  }
-  CoplanarCluster &operator=(CoplanarCluster &&other) noexcept
-  {
-    tris_ = std::move(other.tris_);
-    bb_ = std::move(other.bb_);
-    return *this;
-  }
 
   /* Assume that caller knows this will not be a duplicate. */
   void add_tri(int t, const BoundingBox &bb)
@@ -1055,58 +1010,23 @@ static std::ostream &operator<<(std::ostream &os, const CoplanarClusterInfo &cli
 enum ITT_value_kind { INONE, IPOINT, ISEGMENT, ICOPLANAR };
 
 struct ITT_value {
-  mpq3 p1;      /* Only relevant for IPOINT and ISEGMENT kind. */
-  mpq3 p2;      /* Only relevant for ISEGMENT kind. */
-  int t_source; /* Index of the source triangle that intersected the target one. */
-  enum ITT_value_kind kind;
+  mpq3 p1;           /* Only relevant for IPOINT and ISEGMENT kind. */
+  mpq3 p2;           /* Only relevant for ISEGMENT kind. */
+  int t_source = -1; /* Index of the source triangle that intersected the target one. */
+  enum ITT_value_kind kind = INONE;
 
-  ITT_value() : t_source(-1), kind(INONE)
-  {
-  }
-  ITT_value(ITT_value_kind k) : t_source(-1), kind(k)
+  ITT_value() = default;
+  explicit ITT_value(ITT_value_kind k) : kind(k)
   {
   }
   ITT_value(ITT_value_kind k, int tsrc) : t_source(tsrc), kind(k)
   {
   }
-  ITT_value(ITT_value_kind k, const mpq3 &p1) : p1(p1), t_source(-1), kind(k)
+  ITT_value(ITT_value_kind k, const mpq3 &p1) : p1(p1), kind(k)
   {
   }
-  ITT_value(ITT_value_kind k, const mpq3 &p1, const mpq3 &p2)
-      : p1(p1), p2(p2), t_source(-1), kind(k)
+  ITT_value(ITT_value_kind k, const mpq3 &p1, const mpq3 &p2) : p1(p1), p2(p2), kind(k)
   {
-  }
-  ITT_value(const ITT_value &other)
-      : p1(other.p1), p2(other.p2), t_source(other.t_source), kind(other.kind)
-  {
-  }
-  ITT_value(ITT_value &&other) noexcept
-      : p1(std::move(other.p1)),
-        p2(std::move(other.p2)),
-        t_source(other.t_source),
-        kind(other.kind)
-  {
-  }
-  ~ITT_value()
-  {
-  }
-  ITT_value &operator=(const ITT_value &other)
-  {
-    if (this != &other) {
-      kind = other.kind;
-      p1 = other.p1;
-      p2 = other.p2;
-      t_source = other.t_source;
-    }
-    return *this;
-  }
-  ITT_value &operator=(ITT_value &&other) noexcept
-  {
-    kind = other.kind;
-    p1 = std::move(other.p1);
-    p2 = std::move(other.p2);
-    t_source = other.t_source;
-    return *this;
   }
 };
 
@@ -1385,7 +1305,7 @@ static ITT_value itt_canon2(const mpq3 &p1,
   return ITT_value(ISEGMENT, intersect_1, intersect_2);
 }
 
-/* Helper function for intersect_tri_tri. Args have been canonicalized for triangle 1. */
+/* Helper function for intersect_tri_tri. Arguments have been canonicalized for triangle 1. */
 
 static ITT_value itt_canon1(const mpq3 &p1,
                             const mpq3 &q1,
@@ -2026,7 +1946,7 @@ class TriOverlaps {
     if (dbg_level > 0) {
       std::cout << "TriOverlaps construction\n";
     }
-    /* Tree type is 8 => octtree; axis = 6 => using XYZ axes only. */
+    /* Tree type is 8 => octree; axis = 6 => using XYZ axes only. */
     tree_ = BLI_bvhtree_new(tm.face_size(), FLT_EPSILON, 8, 6);
     /* In the common case of a binary boolean and no self intersection in
      * each shape, we will use two trees and simple bounding box overlap. */
@@ -2378,7 +2298,7 @@ static CDT_data calc_cluster_subdivided(const CoplanarClusterInfo &clinfo,
       }
     }
   }
-  /* Use CDT to subdivide the cluster triangles and the points and segs in itts. */
+  /* Use CDT to subdivide the cluster triangles and the points and segments in itts. */
   CDT_data cd_data = prepare_cdt_input_for_cluster(tm, clinfo, c, itts);
   do_cdt(cd_data);
   return cd_data;

@@ -50,12 +50,14 @@ set(SRC
   intern/blend_validate.c
   intern/readblenentry.c
   intern/readfile.c
+  intern/readfile_tempload.c
   intern/undofile.c
   intern/versioning_250.c
   intern/versioning_260.c
   intern/versioning_270.c
   intern/versioning_280.c
   intern/versioning_290.c
+  intern/versioning_300.c
   intern/versioning_cycles.c
   intern/versioning_defaults.c
   intern/versioning_dna.c

@@ -75,6 +75,7 @@
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
@@ -503,6 +504,7 @@ IDTypeInfo IDType_ID_PA = {
     .make_local = NULL,
     .foreach_id = particle_settings_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = particle_settings_blend_write,
     .blend_read_data = particle_settings_blend_read_data,
@@ -510,6 +512,8 @@ IDTypeInfo IDType_ID_PA = {
     .blend_read_expand = particle_settings_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
@@ -2301,7 +2305,7 @@ void psys_particle_on_emitter(ParticleSystemModifierData *psmd,
       }
       return;
     }
-    /* we cant use the num_dmcache */
+    /* we can't use the num_dmcache */
     psys_particle_on_dm(
         psmd->mesh_final, from, index, index_dmcache, fuv, foffset, vec, nor, utan, vtan, orco);
   }
@@ -2413,14 +2417,15 @@ int do_guides(Depsgraph *depsgraph,
       cu = (Curve *)eff->ob->data;
 
       if (pd->flag & PFIELD_GUIDE_PATH_ADD) {
-        if (where_on_path(
+        if (BKE_where_on_path(
                 eff->ob, data->strength * guidetime, guidevec, guidedir, NULL, &radius, &weight) ==
             0) {
           return 0;
         }
       }
       else {
-        if (where_on_path(eff->ob, guidetime, guidevec, guidedir, NULL, &radius, &weight) == 0) {
+        if (BKE_where_on_path(eff->ob, guidetime, guidevec, guidedir, NULL, &radius, &weight) ==
+            0) {
           return 0;
         }
       }
@@ -3921,7 +3926,7 @@ static ModifierData *object_add_or_copy_particle_system(
   }
 
   if (name == NULL) {
-    name = (psys_orig != NULL) ? psys_orig->name : DATA_("ParticleSettings");
+    name = (psys_orig != NULL) ? psys_orig->name : DATA_("ParticleSystem");
   }
 
   psys = ob->particlesystem.first;
@@ -3939,7 +3944,7 @@ static ModifierData *object_add_or_copy_particle_system(
     id_us_plus(&psys->part->id);
   }
   else {
-    psys->part = BKE_particlesettings_add(bmain, psys->name);
+    psys->part = BKE_particlesettings_add(bmain, DATA_("ParticleSettings"));
   }
   md = BKE_modifier_new(eModifierType_ParticleSystem);
   BLI_strncpy(md->name, psys->name, sizeof(md->name));
@@ -3948,6 +3953,7 @@ static ModifierData *object_add_or_copy_particle_system(
   psmd = (ParticleSystemModifierData *)md;
   psmd->psys = psys;
   BLI_addtail(&ob->modifiers, md);
+  BKE_object_modifier_set_active(ob, md);
 
   psys->totpart = 0;
   psys->flag = PSYS_CURRENT;

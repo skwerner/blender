@@ -66,7 +66,7 @@ template<typename Key> class GValueMap {
 
   /* Add a value to the container that is copy constructed from the given value. The caller remains
    * responsible for destructing and freeing the given value. */
-  template<typename ForwardKey> void add_new_by_copy(ForwardKey &&key, GMutablePointer value)
+  template<typename ForwardKey> void add_new_by_copy(ForwardKey &&key, GPointer value)
   {
     const CPPType &type = *value.type();
     void *buffer = allocator_.allocate(type.size(), type.alignment());
@@ -104,14 +104,12 @@ template<typename Key> class GValueMap {
     return return_value;
   }
 
-  template<typename T, typename ForwardKey> T lookup(const ForwardKey &key) const
+  template<typename T, typename ForwardKey> const T &lookup(const ForwardKey &key) const
   {
     GMutablePointer value = values_.lookup_as(key);
-    const CPPType &type = *value.type();
-    BLI_assert(type.is<T>());
-    T return_value;
-    type.copy_to_initialized(value.get(), &return_value);
-    return return_value;
+    BLI_assert(value.is_type<T>());
+    BLI_assert(value.get() != nullptr);
+    return *(const T *)value.get();
   }
 
   template<typename ForwardKey> bool contains(const ForwardKey &key) const

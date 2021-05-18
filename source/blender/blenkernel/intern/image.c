@@ -93,7 +93,7 @@
 
 #include "RE_pipeline.h"
 
-#include "SEQ_sequencer.h" /* seq_foreground_frame_get() */
+#include "SEQ_utils.h" /* SEQ_get_topmost_sequence() */
 
 #include "GPU_texture.h"
 
@@ -190,6 +190,7 @@ static void image_free_data(ID *id)
   BKE_previewimg_free(&image->preview);
 
   BLI_freelistN(&image->tiles);
+  BLI_freelistN(&image->gpu_refresh_areas);
 }
 
 static void image_foreach_cache(ID *id,
@@ -298,6 +299,8 @@ static void image_blend_read_data(BlendDataReader *reader, ID *id)
   LISTBASE_FOREACH (ImageTile *, tile, &ima->tiles) {
     tile->ok = IMA_OK;
   }
+  ima->gpuflag = 0;
+  BLI_listbase_clear(&ima->gpu_refresh_areas);
 }
 
 static void image_blend_read_lib(BlendLibReader *UNUSED(reader), ID *id)
@@ -328,6 +331,7 @@ IDTypeInfo IDType_ID_IM = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = image_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = image_blend_write,
     .blend_read_data = image_blend_read_data,
@@ -335,6 +339,8 @@ IDTypeInfo IDType_ID_IM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* prototypes */
@@ -2054,7 +2060,7 @@ static void stampdata(
   }
 
   if (use_dynamic && scene->r.stamp & R_STAMP_SEQSTRIP) {
-    const Sequence *seq = BKE_sequencer_foreground_frame_get(scene, scene->r.cfra);
+    const Sequence *seq = SEQ_get_topmost_sequence(scene, scene->r.cfra);
 
     if (seq) {
       STRNCPY(text, seq->name + 2);
@@ -3897,6 +3903,7 @@ RenderResult *BKE_image_acquire_renderresult(Scene *scene, Image *ima)
     }
     else {
       rr = BKE_image_get_renderslot(ima, ima->render_slot)->render;
+      ima->gpuflag |= IMA_GPU_REFRESH;
     }
 
     /* set proper views */

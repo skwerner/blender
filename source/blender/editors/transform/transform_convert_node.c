@@ -42,7 +42,6 @@
 
 /* -------------------------------------------------------------------- */
 /** \name Node Transform Creation
- *
  * \{ */
 
 /* transcribe given node into TransData2D for Transforming */
@@ -116,7 +115,7 @@ void createTransNodeData(TransInfo *t)
     return;
   }
 
-  /* nodes dont support PET and probably never will */
+  /* Nodes don't support PET and probably never will. */
   t->flag &= ~T_PROP_EDIT_ALL;
 
   /* set transform flags on nodes */
@@ -145,7 +144,6 @@ void createTransNodeData(TransInfo *t)
 
 /* -------------------------------------------------------------------- */
 /** \name Node Transform Creation
- *
  * \{ */
 
 void flushTransNodes(TransInfo *t)

@@ -56,6 +56,7 @@ extern const EnumPropertyItem rna_enum_mesh_select_mode_items[];
 extern const EnumPropertyItem rna_enum_mesh_select_mode_uv_items[];
 extern const EnumPropertyItem rna_enum_mesh_delimit_mode_items[];
 extern const EnumPropertyItem rna_enum_space_graph_mode_items[];
+extern const EnumPropertyItem rna_enum_space_file_browse_mode_items[];
 extern const EnumPropertyItem rna_enum_space_sequencer_view_type_items[];
 extern const EnumPropertyItem rna_enum_space_type_items[];
 extern const EnumPropertyItem rna_enum_space_image_mode_items[];
@@ -82,6 +83,7 @@ extern const EnumPropertyItem rna_enum_image_generated_type_items[];
 extern const EnumPropertyItem rna_enum_normal_space_items[];
 extern const EnumPropertyItem rna_enum_normal_swizzle_items[];
 extern const EnumPropertyItem rna_enum_bake_save_mode_items[];
+extern const EnumPropertyItem rna_enum_bake_target_items[];
 
 extern const EnumPropertyItem rna_enum_views_format_items[];
 extern const EnumPropertyItem rna_enum_views_format_multilayer_items[];
@@ -116,7 +118,10 @@ extern const EnumPropertyItem rna_enum_nla_mode_blend_items[];
 
 extern const EnumPropertyItem rna_enum_motionpath_bake_location_items[];
 
-extern const EnumPropertyItem rna_enum_event_value_items[];
+extern const EnumPropertyItem rna_enum_event_value_all_items[];
+extern const EnumPropertyItem rna_enum_event_value_keymouse_items[];
+extern const EnumPropertyItem rna_enum_event_value_tweak_items[];
+
 extern const EnumPropertyItem rna_enum_event_type_items[];
 extern const EnumPropertyItem rna_enum_event_type_mask_items[];
 
@@ -233,6 +238,7 @@ extern const EnumPropertyItem rna_enum_preference_section_items[];
 
 extern const EnumPropertyItem rna_enum_attribute_type_items[];
 extern const EnumPropertyItem rna_enum_attribute_domain_items[];
+extern const EnumPropertyItem rna_enum_attribute_domain_with_auto_items[];
 extern const EnumPropertyItem *rna_enum_attribute_domain_itemf(struct ID *id, bool *r_free);
 
 extern const EnumPropertyItem rna_enum_collection_color_items[];

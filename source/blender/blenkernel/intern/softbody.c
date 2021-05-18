@@ -1539,7 +1539,8 @@ static void sb_sfesf_threads_run(struct Depsgraph *depsgraph,
    * or even be UI option sb->spawn_cf_threads_nopts */
   int lowsprings = 100;
 
-  ListBase *effectors = BKE_effectors_create(depsgraph, ob, NULL, ob->soft->effector_weights);
+  ListBase *effectors = BKE_effectors_create(
+      depsgraph, ob, NULL, ob->soft->effector_weights, false);
 
   /* figure the number of threads while preventing pretty pointless threading overhead */
   totthread = BKE_scene_num_threads(scene);
@@ -2300,7 +2301,7 @@ static void softbody_calc_forces(
   }
 
   /* after spring scan because it uses Effoctors too */
-  ListBase *effectors = BKE_effectors_create(depsgraph, ob, NULL, sb->effector_weights);
+  ListBase *effectors = BKE_effectors_create(depsgraph, ob, NULL, sb->effector_weights, false);
 
   if (do_deflector) {
     float defforce[3];
@@ -3180,9 +3181,11 @@ void sbFree(Object *ob)
     return;
   }
 
+  const bool is_orig = (ob->id.tag & LIB_TAG_COPIED_ON_WRITE) == 0;
+
   free_softbody_intern(sb);
 
-  if ((ob->id.tag & LIB_TAG_NO_MAIN) == 0) {
+  if (is_orig) {
     /* Only free shared data on non-CoW copies */
     BKE_ptcache_free_list(&sb->shared->ptcaches);
     sb->shared->pointcache = NULL;

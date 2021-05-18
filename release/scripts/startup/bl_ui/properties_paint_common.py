@@ -277,11 +277,10 @@ class TextureMaskPanel(BrushPanel):
         layout.use_property_decorate = False
 
         brush = context.tool_settings.image_paint.brush
+        mask_tex_slot = brush.mask_texture_slot
 
         col = layout.column()
-        col.template_ID_preview(brush, "mask_texture", new="texture.new", rows=3, cols=8)
-
-        mask_tex_slot = brush.mask_texture_slot
+        col.template_ID_preview(mask_tex_slot, "texture", new="texture.new", rows=3, cols=8)
 
         # map_mode
         layout.row().prop(mask_tex_slot, "mask_map_mode", text="Mask Mapping")
@@ -550,7 +549,6 @@ def brush_settings(layout, context, brush, popover=False):
         if context.preferences.experimental.use_sculpt_tools_tilt and capabilities.has_tilt:
             layout.prop(brush, "tilt_strength_factor", slider=True)
 
-
         row = layout.row(align=True)
         row.prop(brush, "hardness", slider=True)
         row.prop(brush, "invert_hardness_pressure", text="")
@@ -615,7 +613,6 @@ def brush_settings(layout, context, brush, popover=False):
 
         # use_persistent, set_persistent_base
         if capabilities.has_persistence:
-            ob = context.sculpt_object
             layout.separator()
             layout.prop(brush, "use_persistent")
             layout.operator("sculpt.set_persistent_base")
@@ -765,6 +762,10 @@ def brush_settings(layout, context, brush, popover=False):
                 col.prop(brush, "surface_smooth_current_vertex")
                 col.prop(brush, "surface_smooth_iterations")
 
+        elif sculpt_tool == 'DISPLACEMENT_SMEAR':
+            col = layout.column()
+            col.prop(brush, "smear_deform_type")
+
         elif sculpt_tool == 'MASK':
             layout.row().prop(brush, "mask_tool", expand=True)
 
@@ -899,7 +900,7 @@ def brush_settings_advanced(layout, context, brush, popover=False):
     if popover:
         brush_settings(layout, context, brush, popover=True)
         layout.separator()
-        layout.label(text="Advanced:")
+        layout.label(text="Advanced")
 
     # These options are shared across many modes.
     use_accumulate = False
@@ -1212,14 +1213,22 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
 
     # FIXME: tools must use their own UI drawing!
     elif brush.gpencil_tool == 'FILL':
+        use_property_split_prev = layout.use_property_split
+        if compact:
+            row = layout.row(align=True)
+            row.prop(gp_settings, "fill_direction", text="", expand=True)
+        else:
+            layout.use_property_split = False
+            row = layout.row(align=True)
+            row.prop(gp_settings, "fill_direction", expand=True)
+
         row = layout.row(align=True)
-        row.prop(gp_settings, "fill_direction", text="", expand=True)
+        row.prop(gp_settings, "fill_factor")
         row = layout.row(align=True)
         row.prop(gp_settings, "fill_leak", text="Leak Size")
         row = layout.row(align=True)
         row.prop(brush, "size", text="Thickness")
-        row = layout.row(align=True)
-        row.prop(gp_settings, "fill_simplify_level", text="Simplify")
+        layout.use_property_split = use_property_split_prev
 
     else:  # brush.gpencil_tool == 'DRAW/TINT':
         row = layout.row(align=True)
@@ -1272,7 +1281,7 @@ def brush_basic_gpencil_paint_settings(layout, context, brush, *, compact=False)
                 layout.template_curve_mapping(settings, "thickness_primitive_curve", brush=True)
 
 
-def brush_basic_gpencil_sculpt_settings(layout, context, brush, *, compact=False):
+def brush_basic_gpencil_sculpt_settings(layout, _context, brush, *, compact=False):
     gp_settings = brush.gpencil_settings
     tool = brush.gpencil_sculpt_tool
 
@@ -1307,7 +1316,6 @@ def brush_basic_gpencil_sculpt_settings(layout, context, brush, *, compact=False
 
 
 def brush_basic_gpencil_weight_settings(layout, _context, brush, *, compact=False):
-    gp_settings = brush.gpencil_settings
     layout.prop(brush, "size", slider=True)
 
     row = layout.row(align=True)

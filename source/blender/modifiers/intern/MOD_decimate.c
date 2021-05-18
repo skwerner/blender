@@ -113,7 +113,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
   TIMEIT_START(decim);
 #endif
 
-  /* set up front so we dont show invalid info in the UI */
+  /* Set up front so we don't show invalid info in the UI. */
   updateFaceCount(ctx, dmd, mesh->totpoly);
 
   switch (dmd->mode) {
@@ -300,7 +300,6 @@ ModifierTypeInfo modifierType_Decimate = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

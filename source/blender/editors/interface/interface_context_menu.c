@@ -38,6 +38,7 @@
 #include "BKE_idprop.h"
 #include "BKE_screen.h"
 
+#include "ED_asset.h"
 #include "ED_keyframing.h"
 #include "ED_screen.h"
 
@@ -229,7 +230,7 @@ static uiBlock *menu_add_shortcut(bContext *C, ARegion *region, void *arg)
    * than being found on adding later... */
   wmKeyMap *km = WM_keymap_guess_opname(C, idname);
   wmKeyMapItem *kmi = WM_keymap_add_item(km, idname, EVT_AKEY, KM_PRESS, 0, 0);
-  int kmi_id = kmi->id;
+  const int kmi_id = kmi->id;
 
   /* This takes ownership of prop, or prop can be NULL for reset. */
   WM_keymap_item_properties_reset(kmi, prop);
@@ -279,7 +280,7 @@ static void menu_add_shortcut_cancel(struct bContext *C, void *arg1)
 
 #ifdef USE_KEYMAP_ADD_HACK
   wmKeyMap *km = WM_keymap_guess_opname(C, idname);
-  int kmi_id = g_kmi_id_hack;
+  const int kmi_id = g_kmi_id_hack;
   UNUSED_VARS(but);
 #else
   int kmi_id = WM_key_event_operator_id(C, idname, but->opcontext, prop, true, &km);
@@ -398,7 +399,7 @@ static void ui_but_user_menu_add(bContext *C, uiBut *but, bUserMenu *um)
                    "'%s').label",
                    idname);
           char *expr_result = NULL;
-          if (BPY_run_string_as_string(C, expr_imports, expr, __func__, &expr_result)) {
+          if (BPY_run_string_as_string(C, expr_imports, expr, NULL, &expr_result)) {
             STRNCPY(drawstr, expr_result);
             MEM_freeN(expr_result);
           }
@@ -541,9 +542,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
     const PropertyType type = RNA_property_type(prop);
     const PropertySubType subtype = RNA_property_subtype(prop);
     bool is_anim = RNA_property_animateable(ptr, prop);
-    const bool is_editable = RNA_property_editable(ptr, prop);
     const bool is_idprop = RNA_property_is_idprop(prop);
-    const bool is_set = RNA_property_is_set(ptr, prop);
 
     /* second slower test,
      * saved people finding keyframe items in menus when its not possible */
@@ -566,7 +565,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
 
     /* Keyframes */
     if (but->flag & UI_BUT_ANIMATED_KEY) {
-      /* replace/delete keyfraemes */
+      /* Replace/delete keyframes. */
       if (is_array_component) {
         uiItemBooleanO(layout,
                        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Replace Keyframes"),
@@ -783,7 +782,7 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
       /* Override Operators */
       uiItemS(layout);
 
-      if (but->flag & UI_BUT_OVERRIDEN) {
+      if (but->flag & UI_BUT_OVERRIDDEN) {
         if (is_array_component) {
 #if 0 /* Disabled for now. */
           ot = WM_operatortype_find("UI_OT_override_type_set_button", false);
@@ -892,12 +891,6 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
                      "all",
                      1);
     }
-    if (is_editable /*&& is_idprop*/ && is_set) {
-      uiItemO(layout,
-              CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Unset"),
-              ICON_NONE,
-              "UI_OT_unset_property_button");
-    }
 
     if (is_idprop && !is_array && ELEM(type, PROP_INT, PROP_FLOAT)) {
       uiItemO(layout,
@@ -935,6 +928,12 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Data Path"),
             ICON_NONE,
             "UI_OT_copy_data_path_button");
+    uiItemBooleanO(layout,
+                   CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy Full Data Path"),
+                   ICON_NONE,
+                   "UI_OT_copy_data_path_button",
+                   "full_path",
+                   true);
 
     if (ptr->owner_id && !is_whole_array &&
         ELEM(type, PROP_BOOLEAN, PROP_INT, PROP_FLOAT, PROP_ENUM)) {
@@ -950,6 +949,22 @@ bool ui_popup_context_menu_for_button(bContext *C, uiBut *but)
       ui_but_menu_add_path_operators(layout, ptr, prop);
       uiItemS(layout);
     }
+  }
+
+  /* If the button represents an id, it can set the "id" context pointer. */
+  if (U.experimental.use_asset_browser && ED_asset_can_make_single_from_context(C)) {
+    ID *id = CTX_data_pointer_get_type(C, "id", &RNA_ID).data;
+
+    /* Gray out items depending on if data-block is an asset. Preferably this could be done via
+     * operator poll, but that doesn't work since the operator also works with "selected_ids",
+     * which isn't cheap to check. */
+    uiLayout *sub = uiLayoutColumn(layout, true);
+    uiLayoutSetEnabled(sub, !id->asset_data);
+    uiItemO(sub, NULL, ICON_NONE, "ASSET_OT_mark");
+    sub = uiLayoutColumn(layout, true);
+    uiLayoutSetEnabled(sub, id->asset_data);
+    uiItemO(sub, NULL, ICON_NONE, "ASSET_OT_clear");
+    uiItemS(layout);
   }
 
   /* Pointer properties and string properties with

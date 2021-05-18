@@ -80,6 +80,7 @@ void IDNode::init(const ID *id, const char *UNUSED(subdata))
   /* Store ID-pointer. */
   id_type = GS(id->name);
   id_orig = (ID *)id;
+  id_orig_session_uuid = id->session_uuid;
   eval_flags = 0;
   previous_eval_flags = 0;
   customdata_masks = DEGCustomDataMeshMasks();
@@ -89,6 +90,7 @@ void IDNode::init(const ID *id, const char *UNUSED(subdata))
   is_collection_fully_expanded = false;
   has_base = false;
   is_user_modified = false;
+  id_cow_recalc_backup = 0;
 
   visible_components_mask = 0;
   previously_visible_components_mask = 0;

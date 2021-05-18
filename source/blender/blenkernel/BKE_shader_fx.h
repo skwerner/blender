@@ -27,14 +27,14 @@ extern "C" {
 #endif
 
 struct ARegionType;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct ID;
 struct ListBase;
 struct ModifierUpdateDepsgraphContext;
 struct Object;
 struct ShaderFxData;
-struct BlendWriter;
-struct BlendDataReader;
-struct BlendLibReader;
 
 #define SHADER_FX_ACTIVE(_fx, _is_render) \
   ((((_fx)->mode & eShaderFxMode_Realtime) && (_is_render == false)) || \
@@ -149,7 +149,7 @@ typedef struct ShaderFxTypeInfo {
 
 #define SHADERFX_TYPE_PANEL_PREFIX "FX_PT_"
 
-/* Initialize  global data (type info and some common global storages). */
+/* Initialize  global data (type info and some common global storage). */
 void BKE_shaderfx_init(void);
 
 void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);

@@ -533,7 +533,7 @@ static void bchunk_list_calc_trim_len(const BArrayInfo *info,
     data_trim_len = data_trim_len - data_last_chunk_len;
     if (data_last_chunk_len) {
       if (data_last_chunk_len < info->chunk_byte_size_min) {
-        /* may be zero and thats OK */
+        /* May be zero and that's OK. */
         data_trim_len -= info->chunk_byte_size;
         data_last_chunk_len += info->chunk_byte_size;
       }
@@ -1012,7 +1012,6 @@ static const BChunkRef *table_lookup(const BArrayInfo *info,
 
 /* -------------------------------------------------------------------- */
 /** \name Main Data De-Duplication Function
- *
  * \{ */
 
 /**
@@ -1290,7 +1289,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
 
     BLI_assert(i_prev <= data_len);
     for (size_t i = i_prev; i < data_len;) {
-      /* Assumes exiting chunk isnt a match! */
+      /* Assumes exiting chunk isn't a match! */
 
       const BChunkRef *cref_found = table_lookup(
           info, table, table_len, i_table_start, data, data_len, i, table_hash_array);
@@ -1318,7 +1317,7 @@ static BChunkList *bchunk_list_from_data_merge(const BArrayInfo *info,
           BChunk *chunk_found = cref_found->link;
 
           if (bchunk_data_compare(chunk_found, data, data_len, i_prev)) {
-            /* may be useful to remove table data, assuming we dont have
+            /* May be useful to remove table data, assuming we don't have
              * repeating memory where it would be useful to re-use chunks. */
             i += chunk_found->data_len;
             bchunk_list_append(info, bs_mem, chunk_list, chunk_found);

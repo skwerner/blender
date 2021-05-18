@@ -46,7 +46,7 @@ static void recount_totsels(BMesh *bm)
   int *tots[3];
   int i;
 
-  /* recount (tot * sel) variables */
+  /* Recount total selection variables. */
   bm->totvertsel = bm->totedgesel = bm->totfacesel = 0;
   tots[0] = &bm->totvertsel;
   tots[1] = &bm->totedgesel;
@@ -888,7 +888,7 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
       sub_v3_v3v3(r_plane, vec, eve->co);
     }
     else {
-      /* make a fake plane that's at rightangles to the normal
+      /* make a fake plane that's at right-angles to the normal
        * we can't make a crossvec from a vec that's the same as the vec
        * unlikely but possible, so make sure if the normal is (0, 0, 1)
        * that vec isn't the same or in the same direction even. */

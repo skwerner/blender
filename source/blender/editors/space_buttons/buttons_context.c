@@ -34,7 +34,6 @@
 #include "DNA_armature_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_collection_types.h"
-#include "DNA_light_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_material_types.h"
 #include "DNA_node_types.h"
@@ -53,7 +52,6 @@
 #include "BKE_paint.h"
 #include "BKE_particle.h"
 #include "BKE_screen.h"
-#include "BKE_texture.h"
 
 #include "RNA_access.h"
 
@@ -156,6 +154,29 @@ static bool buttons_context_path_world(ButsContextPath *path)
   return false;
 }
 
+static bool buttons_context_path_collection(ButsContextPath *path, wmWindow *window)
+{
+  PointerRNA *ptr = &path->ptr[path->len - 1];
+
+  /* if we already have a (pinned) collection, we're done */
+  if (RNA_struct_is_a(ptr->type, &RNA_Collection)) {
+    return true;
+  }
+  /* if we have a view layer, use the view layer's active collection */
+  if (buttons_context_path_view_layer(path, window)) {
+    ViewLayer *view_layer = path->ptr[path->len - 1].data;
+    Collection *c = view_layer->active_collection->collection;
+    if (c) {
+      RNA_id_pointer_create(&c->id, &path->ptr[path->len]);
+      path->len++;
+      return true;
+    }
+  }
+
+  /* no path to a collection possible */
+  return false;
+}
+
 static bool buttons_context_path_linestyle(ButsContextPath *path, wmWindow *window)
 {
   PointerRNA *ptr = &path->ptr[path->len - 1];
@@ -246,9 +267,11 @@ static bool buttons_context_path_data(ButsContextPath *path, int type)
     return true;
   }
 #endif
+#ifdef WITH_POINT_CLOUD
   if (RNA_struct_is_a(ptr->type, &RNA_PointCloud) && (type == -1 || type == OB_POINTCLOUD)) {
     return true;
   }
+#endif
   if (RNA_struct_is_a(ptr->type, &RNA_Volume) && (type == -1 || type == OB_VOLUME)) {
     return true;
   }
@@ -576,6 +599,9 @@ static bool buttons_context_path(
     case BCONTEXT_WORLD:
       found = buttons_context_path_world(path);
       break;
+    case BCONTEXT_COLLECTION: /* This is for Line Art collection flags */
+      found = buttons_context_path_collection(path, window);
+      break;
     case BCONTEXT_TOOL:
       found = true;
       break;
@@ -750,26 +776,25 @@ static bool is_pointer_in_path(ButsContextPath *path, PointerRNA *ptr)
   return false;
 }
 
-void ED_buttons_set_context(const bContext *C, PointerRNA *ptr, const int context)
+bool ED_buttons_should_sync_with_outliner(const bContext *C,
+                                          const SpaceProperties *sbuts,
+                                          ScrArea *area)
 {
   ScrArea *active_area = CTX_wm_area(C);
-  bScreen *screen = CTX_wm_screen(C);
+  const bool auto_sync = ED_area_has_shared_border(active_area, area) &&
+                         sbuts->outliner_sync == PROPERTIES_SYNC_AUTO;
+  return auto_sync || sbuts->outliner_sync == PROPERTIES_SYNC_ALWAYS;
+}
 
-  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
-    /* Only update for properties editors that are visible and share a border. */
-    if (area->spacetype != SPACE_PROPERTIES) {
-      continue;
-    }
-    if (!ED_area_has_shared_border(active_area, area)) {
-      continue;
-    }
-
-    SpaceProperties *sbuts = (SpaceProperties *)area->spacedata.first;
-    ButsContextPath path;
-    if (buttons_context_path(C, sbuts, &path, context, 0) && is_pointer_in_path(&path, ptr)) {
-      sbuts->mainbuser = context;
-      sbuts->mainb = sbuts->mainbuser;
-    }
+void ED_buttons_set_context(const bContext *C,
+                            SpaceProperties *sbuts,
+                            PointerRNA *ptr,
+                            const int context)
+{
+  ButsContextPath path;
+  if (buttons_context_path(C, sbuts, &path, context, 0) && is_pointer_in_path(&path, ptr)) {
+    sbuts->mainbuser = context;
+    sbuts->mainb = sbuts->mainbuser;
   }
 }
 
@@ -812,7 +837,9 @@ const char *buttons_context_dir[] = {
 #ifdef WITH_HAIR_NODES
     "hair",
 #endif
+#ifdef WITH_POINT_CLOUD
     "pointcloud",
+#endif
     "volume",
     NULL,
 };
@@ -822,6 +849,11 @@ int /*eContextResult*/ buttons_context(const bContext *C,
                                        bContextDataResult *result)
 {
   SpaceProperties *sbuts = CTX_wm_space_properties(C);
+  if (sbuts && sbuts->path == NULL) {
+    /* path is cleared for SCREEN_OT_redo_last, when global undo does a file-read which clears the
+     * path (see lib_link_workspace_layout_restore). */
+    buttons_context_compute(C, sbuts);
+  }
   ButsContextPath *path = sbuts ? sbuts->path : NULL;
 
   if (!path) {
@@ -845,13 +877,18 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     return CTX_RESULT_OK;
   }
   if (CTX_data_equals(member, "scene")) {
-    /* Do not return one here if scene not found in path,
+    /* Do not return one here if scene is not found in path,
      * in this case we want to get default context scene! */
     return set_pointer_type(path, result, &RNA_Scene);
   }
   if (CTX_data_equals(member, "world")) {
     set_pointer_type(path, result, &RNA_World);
     return CTX_RESULT_OK;
+  }
+  if (CTX_data_equals(member, "collection")) {
+    /* Do not return one here if collection is not found in path,
+     * in this case we want to get default context collection! */
+    return set_pointer_type(path, result, &RNA_Collection);
   }
   if (CTX_data_equals(member, "object")) {
     set_pointer_type(path, result, &RNA_Object);
@@ -899,10 +936,12 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     return CTX_RESULT_OK;
   }
 #endif
+#ifdef WITH_POINT_CLOUD
   if (CTX_data_equals(member, "pointcloud")) {
     set_pointer_type(path, result, &RNA_PointCloud);
     return CTX_RESULT_OK;
   }
+#endif
   if (CTX_data_equals(member, "volume")) {
     set_pointer_type(path, result, &RNA_Volume);
     return CTX_RESULT_OK;
@@ -941,17 +980,6 @@ int /*eContextResult*/ buttons_context(const bContext *C,
     }
 
     return CTX_RESULT_OK;
-  }
-  if (CTX_data_equals(member, "modifier")) {
-    PointerRNA *ptr = get_pointer_type(path, &RNA_Modifier);
-
-    if (ptr != NULL && !RNA_pointer_is_null(ptr)) {
-      Object *ob = (Object *)ptr->owner_id;
-      ModifierData *md = ptr->data;
-      CTX_data_pointer_set(result, &ob->id, &RNA_Modifier, md);
-      return CTX_RESULT_OK;
-    }
-    return CTX_RESULT_NO_DATA;
   }
   if (CTX_data_equals(member, "texture_user")) {
     ButsContextTexture *ct = sbuts->texuser;

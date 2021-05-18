@@ -39,6 +39,7 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
+#include "BKE_anim_path.h"
 #include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
@@ -68,7 +69,8 @@ static void initData(ModifierData *md)
 
   MEMCPY_STRUCT_AFTER(amd, DNA_struct_default_get(ArrayModifierData), modifier);
 
-  /* Open the first subpanel by default, it corresspnds to Relative offset which is enabled too. */
+  /* Open the first sub-panel by default,
+   * it corresponds to Relative offset which is enabled too. */
   md->ui_expand_flag = UI_PANEL_DATA_EXPAND_ROOT | UI_SUBPANEL_DATA_EXPAND_1;
 }
 
@@ -470,9 +472,9 @@ static Mesh *arrayModifier_doArray(ArrayModifierData *amd,
   if (amd->fit_type == MOD_ARR_FITCURVE && amd->curve_ob != NULL) {
     Object *curve_ob = amd->curve_ob;
     CurveCache *curve_cache = curve_ob->runtime.curve_cache;
-    if (curve_cache != NULL && curve_cache->path != NULL) {
+    if (curve_cache != NULL && curve_cache->anim_path_accum_length != NULL) {
       float scale_fac = mat4_to_scale(curve_ob->obmat);
-      length = scale_fac * curve_cache->path->totdist;
+      length = scale_fac * BKE_anim_path_get_length(curve_cache);
     }
   }
 
@@ -1019,7 +1021,6 @@ ModifierTypeInfo modifierType_Array = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,

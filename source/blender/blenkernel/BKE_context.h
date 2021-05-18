@@ -197,6 +197,7 @@ struct SpaceInfo *CTX_wm_space_info(const bContext *C);
 struct SpaceUserPref *CTX_wm_space_userpref(const bContext *C);
 struct SpaceClip *CTX_wm_space_clip(const bContext *C);
 struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C);
+struct SpaceSpreadsheet *CTX_wm_space_spreadsheet(const bContext *C);
 
 void CTX_wm_manager_set(bContext *C, struct wmWindowManager *wm);
 void CTX_wm_window_set(bContext *C, struct wmWindow *win);
@@ -205,8 +206,25 @@ void CTX_wm_area_set(bContext *C, struct ScrArea *area);
 void CTX_wm_region_set(bContext *C, struct ARegion *region);
 void CTX_wm_menu_set(bContext *C, struct ARegion *menu);
 void CTX_wm_gizmo_group_set(bContext *C, struct wmGizmoGroup *gzgroup);
-const char *CTX_wm_operator_poll_msg_get(struct bContext *C);
+
+/**
+ * Values to create the message that describes the reason poll failed.
+ *
+ * \note This must be called in the same context as the poll function that created it.
+ */
+struct bContextPollMsgDyn_Params {
+  /** The result is allocated . */
+  char *(*get_fn)(bContext *C, void *user_data);
+  /** Optionally free the user-data. */
+  void (*free_fn)(bContext *C, void *user_data);
+  void *user_data;
+};
+
+const char *CTX_wm_operator_poll_msg_get(struct bContext *C, bool *r_free);
 void CTX_wm_operator_poll_msg_set(struct bContext *C, const char *msg);
+void CTX_wm_operator_poll_msg_set_dynamic(bContext *C,
+                                          const struct bContextPollMsgDyn_Params *params);
+void CTX_wm_operator_poll_msg_clear(struct bContext *C);
 
 /* Data Context
  *

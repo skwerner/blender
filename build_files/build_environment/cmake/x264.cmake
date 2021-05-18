@@ -20,30 +20,22 @@ if(WIN32)
   set(X264_EXTRA_ARGS --enable-win32thread --cross-prefix=${MINGW_HOST}- --host=${MINGW_HOST})
 endif()
 
+if(BLENDER_PLATFORM_ARM)
+  set(X264_EXTRA_ARGS ${X264_EXTRA_ARGS} "--disable-asm")
+endif()
 
-if(APPLE)
-  if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-    set(X264_EXTRA_ARGS ${X264_EXTRA_ARGS} "--disable-asm")
-    set(X264_CONFIGURE_ENV echo .)
-  else()
-    set(X264_CONFIGURE_ENV
-      export AS=${LIBDIR}/nasm/bin/nasm
-    )
-  endif()
+if((APPLE AND NOT BLENDER_PLATFORM_ARM) OR (UNIX AND NOT APPLE))
+  set(X264_CONFIGURE_ENV
+    export AS=${LIBDIR}/nasm/bin/nasm
+  )
 else()
   set(X264_CONFIGURE_ENV echo .)
 endif()
 
-if(UNIX AND NOT APPLE)
-  set(X264_CONFIGURE_ENV
-    export AS=${LIBDIR}/nasm/bin/nasm
-  )
-endif()
-
 ExternalProject_Add(external_x264
-  URL ${X264_URI}
+  URL file://${PACKAGE_DIR}/${X264_FILE}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH SHA256=${X264_HASH}
+  URL_HASH ${X264_HASH_TYPE}=${X264_HASH}
   PREFIX ${BUILD_DIR}/x264
   CONFIGURE_COMMAND ${CONFIGURE_ENV} && ${X264_CONFIGURE_ENV} && cd ${BUILD_DIR}/x264/src/external_x264/ &&
     ${CONFIGURE_COMMAND} --prefix=${LIBDIR}/x264

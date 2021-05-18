@@ -261,18 +261,30 @@ struct SnapObjectContext *ED_gizmotypes_snap_3d_context_ensure(struct Scene *sce
                                                                const struct View3D *v3d,
                                                                struct wmGizmo *gz);
 
+typedef enum {
+  ED_SNAPGIZMO_TOGGLE_ALWAYS_TRUE = 1 << 0,
+  ED_SNAPGIZMO_OCCLUSION_ALWAYS_TRUE = 1 << 1,
+  ED_SNAPGIZMO_OCCLUSION_ALWAYS_FALSE = 1 << 2, /* TODO. */
+  ED_SNAPGIZMO_SNAP_ONLY_ACTIVE = 1 << 3,
+  ED_SNAPGIZMO_SNAP_EDIT_GEOM_FINAL = 1 << 4,
+  ED_SNAPGIZMO_SNAP_EDIT_GEOM_CAGE = 1 << 5,
+} eSnapGizmo;
+
+void ED_gizmotypes_snap_3d_flag_set(struct wmGizmo *gz, eSnapGizmo flag);
+void ED_gizmotypes_snap_3d_flag_clear(struct wmGizmo *gz, eSnapGizmo flag);
+bool ED_gizmotypes_snap_3d_flag_test(struct wmGizmo *gz, eSnapGizmo flag);
+
 bool ED_gizmotypes_snap_3d_invert_snap_get(struct wmGizmo *gz);
-void ED_gizmotypes_snap_3d_toggle_set(struct wmGizmo *gz, bool enable);
-void ED_gizmotypes_snap_3d_toggle_clear(struct wmGizmo *gz);
+bool ED_gizmotypes_snap_3d_is_enabled(struct wmGizmo *gz);
 
 short ED_gizmotypes_snap_3d_update(struct wmGizmo *gz,
                                    struct Depsgraph *depsgraph,
                                    const struct ARegion *region,
                                    const struct View3D *v3d,
                                    const struct wmWindowManager *wm,
-                                   const float mval_fl[2],
-                                   float r_loc[3],
-                                   float r_nor[3]);
+                                   const float mval_fl[2]);
+void ED_gizmotypes_snap_3d_data_get(
+    struct wmGizmo *gz, float r_loc[3], float r_nor[3], int r_elem_index[3], int *r_snap_elem);
 
 #ifdef __cplusplus
 }

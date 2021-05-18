@@ -252,7 +252,7 @@ void WM_operatortype_props_advanced_end(wmOperatorType *ot)
     return;
   }
 
-  RNA_pointer_create(NULL, ot->srna, NULL, &struct_ptr);
+  WM_operator_properties_create_ptr(&struct_ptr, ot);
 
   RNA_STRUCT_BEGIN (&struct_ptr, prop) {
     counter++;
@@ -424,9 +424,8 @@ static int wm_macro_modal(bContext *C, wmOperator *op, const wmEvent *event)
           wm_event_free_handler(&handler->head);
         }
 
-        /* if operator is blocking, grab cursor
-         * This may end up grabbing twice, but we don't care.
-         * */
+        /* If operator is blocking, grab cursor.
+         * This may end up grabbing twice, but we don't care. */
         if (op->opm->type->flag & OPTYPE_BLOCKING) {
           int bounds[4] = {-1, -1, -1, -1};
           int wrap = WM_CURSOR_WRAP_NONE;

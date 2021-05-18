@@ -320,6 +320,7 @@ IDTypeInfo IDType_ID_CU = {
     .make_local = NULL,
     .foreach_id = curve_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = curve_blend_write,
     .blend_read_data = curve_blend_read_data,
@@ -327,6 +328,8 @@ IDTypeInfo IDType_ID_CU = {
     .blend_read_expand = curve_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 static int cu_isectLL(const float v1[3],
@@ -411,6 +414,7 @@ void BKE_curve_init(Curve *cu, const short curve_type)
     cu->tb[0].w = cu->tb[0].h = 0.0;
   }
   else if (cu->type == OB_SURF) {
+    cu->flag |= CU_3D;
     cu->resolv = 4;
   }
   cu->bevel_profile = NULL;
@@ -459,24 +463,19 @@ short BKE_curve_type_get(const Curve *cu)
   return type;
 }
 
-void BKE_curve_curve_dimension_update(Curve *cu)
+void BKE_curve_dimension_update(Curve *cu)
 {
   ListBase *nurbs = BKE_curve_nurbs_get(cu);
+  bool is_2d = CU_IS_2D(cu);
 
-  if (cu->flag & CU_3D) {
-    LISTBASE_FOREACH (Nurb *, nu, nurbs) {
-      nu->flag &= ~CU_2D;
+  LISTBASE_FOREACH (Nurb *, nu, nurbs) {
+    if (is_2d) {
+      BKE_nurb_project_2d(nu);
     }
-  }
-  else {
-    LISTBASE_FOREACH (Nurb *, nu, nurbs) {
-      nu->flag |= CU_2D;
-      BKE_nurb_test_2d(nu);
 
-      /* since the handles are moved they need to be auto-located again */
-      if (nu->type == CU_BEZIER) {
-        BKE_nurb_handles_calc(nu);
-      }
+    /* since the handles are moved they need to be auto-located again */
+    if (nu->type == CU_BEZIER) {
+      BKE_nurb_handles_calc(nu);
     }
   }
 }
@@ -486,7 +485,10 @@ void BKE_curve_type_test(Object *ob)
   ob->type = BKE_curve_type_get(ob->data);
 
   if (ob->type == OB_CURVE) {
-    BKE_curve_curve_dimension_update((Curve *)ob->data);
+    Curve *cu = ob->data;
+    if (CU_IS_2D(cu)) {
+      BKE_curve_dimension_update(cu);
+    }
   }
 }
 
@@ -593,11 +595,11 @@ bool BKE_nurbList_index_get_co(ListBase *nurb, const int index, float r_co[3])
   return false;
 }
 
-int BKE_nurbList_verts_count(ListBase *nurb)
+int BKE_nurbList_verts_count(const ListBase *nurb)
 {
   int tot = 0;
 
-  LISTBASE_FOREACH (Nurb *, nu, nurb) {
+  LISTBASE_FOREACH (const Nurb *, nu, nurb) {
     if (nu->bezt) {
       tot += 3 * nu->pntsu;
     }
@@ -609,7 +611,7 @@ int BKE_nurbList_verts_count(ListBase *nurb)
   return tot;
 }
 
-int BKE_nurbList_verts_count_without_handles(ListBase *nurb)
+int BKE_nurbList_verts_count_without_handles(const ListBase *nurb)
 {
   int tot = 0;
 
@@ -742,15 +744,11 @@ void BKE_nurbList_duplicate(ListBase *lb1, const ListBase *lb2)
   }
 }
 
-void BKE_nurb_test_2d(Nurb *nu)
+void BKE_nurb_project_2d(Nurb *nu)
 {
   BezTriple *bezt;
   BPoint *bp;
   int a;
-
-  if ((nu->flag & CU_2D) == 0) {
-    return;
-  }
 
   if (nu->type == CU_BEZIER) {
     a = nu->pntsu;
@@ -776,7 +774,7 @@ void BKE_nurb_test_2d(Nurb *nu)
  * if use_radius is truth, minmax will take points' radius into account,
  * which will make boundbox closer to beveled curve.
  */
-void BKE_nurb_minmax(Nurb *nu, bool use_radius, float min[3], float max[3])
+void BKE_nurb_minmax(const Nurb *nu, bool use_radius, float min[3], float max[3])
 {
   BezTriple *bezt;
   BPoint *bp;
@@ -1925,7 +1923,7 @@ static int cu_isectLL(const float v1[3],
   return 0;
 }
 
-static bool bevelinside(BevList *bl1, BevList *bl2)
+static bool bevelinside(const BevList *bl1, const BevList *bl2)
 {
   /* is bl2 INSIDE bl1 ? with left-right method and "lambda's" */
   /* returns '1' if correct hole  */
@@ -2049,8 +2047,8 @@ static void calc_bevel_sin_cos(
   *r_cosa = x3 / t02;
 }
 
-static void tilt_bezpart(BezTriple *prevbezt,
-                         BezTriple *bezt,
+static void tilt_bezpart(const BezTriple *prevbezt,
+                         const BezTriple *bezt,
                          Nurb *nu,
                          float *tilt_array,
                          float *radius_array,
@@ -2058,7 +2056,7 @@ static void tilt_bezpart(BezTriple *prevbezt,
                          int resolu,
                          int stride)
 {
-  BezTriple *pprev, *next, *last;
+  const BezTriple *pprev, *next, *last;
   float fac, dfac, t[4];
   int a;
 
@@ -2373,7 +2371,7 @@ static void make_bevel_list_3D_minimum_twist(BevList *bl)
      * 0,1,2,3,4 --> 1,2,3,4,0
      *
      * this is why we compare last with second last
-     * */
+     */
     float vec_1[3] = {0, 1, 0}, vec_2[3] = {0, 1, 0}, angle, ang_fac, cross_tmp[3];
 
     BevPoint *bevp_first;
@@ -2709,8 +2707,9 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
       continue;
     }
 
-    /* check if we will calculate tilt data */
-    do_tilt = CU_DO_TILT(cu, nu);
+    /* Tilt, as the rotation angle of curve control points, is only calculated for 3D curves,
+     * (since this transformation affects the 3D space). */
+    do_tilt = (cu->flag & CU_3D) != 0;
 
     /* Normal display uses the radius, better just to calculate them. */
     do_radius = CU_DO_RADIUS(cu, nu);
@@ -2753,7 +2752,6 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
         bevp->tilt = bp->tilt;
         bevp->radius = bp->radius;
         bevp->weight = bp->weight;
-        bevp->split_tag = true;
         bp++;
         if (seglen != NULL && len != 0) {
           *seglen = len_v3v3(bevp->vec, bp->vec);
@@ -2825,7 +2823,6 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
           bevp->tilt = prevbezt->tilt;
           bevp->radius = prevbezt->radius;
           bevp->weight = prevbezt->weight;
-          bevp->split_tag = true;
           bevp->dupe_tag = false;
           bevp++;
           bl->nr++;
@@ -2874,21 +2871,6 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
                                           bevp->tan,
                                           resolu,
                                           sizeof(BevPoint));
-          }
-
-          /* indicate with handlecodes double points */
-          if (prevbezt->h1 == prevbezt->h2) {
-            if (ELEM(prevbezt->h1, 0, HD_VECT)) {
-              bevp->split_tag = true;
-            }
-          }
-          else {
-            if (ELEM(prevbezt->h1, 0, HD_VECT)) {
-              bevp->split_tag = true;
-            }
-            else if (ELEM(prevbezt->h2, 0, HD_VECT)) {
-              bevp->split_tag = true;
-            }
           }
 
           /* seglen */
@@ -3139,7 +3121,7 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
     }
 
     /* turning direction */
-    if ((cu->flag & CU_3D) == 0) {
+    if (CU_IS_2D(cu)) {
       sd = sortdata;
       for (a = 0; a < poly; a++, sd++) {
         if (sd->bl->hole == sd->dir) {
@@ -3159,7 +3141,7 @@ void BKE_curve_bevelList_make(Object *ob, ListBase *nurbs, bool for_render)
   }
 
   /* STEP 4: 2D-COSINES or 3D ORIENTATION */
-  if ((cu->flag & CU_3D) == 0) {
+  if (CU_IS_2D(cu)) {
     /* 2D Curves */
     LISTBASE_FOREACH (BevList *, bl, bev) {
       if (bl->nr < 2) {
@@ -4335,14 +4317,17 @@ void BKE_nurbList_handles_autocalc(ListBase *editnurb, uint8_t flag)
   }
 }
 
+/**
+ * \param code:
+ * - 1 (#HD_AUTO): set auto-handle.
+ * - 2 (#HD_VECT): set vector-handle.
+ * - 3 (#HD_ALIGN) it toggle, vector-handles become #HD_FREE.
+ *
+ * - 5: Set align, like 3 but no toggle.
+ * - 6: Clear align (setting #HD_FREE), like 3 but no toggle.
+ */
 void BKE_nurbList_handles_set(ListBase *editnurb, const char code)
 {
-  /* code==1: set autohandle */
-  /* code==2: set vectorhandle */
-  /* code==3 (HD_ALIGN) it toggle, vectorhandles become HD_FREE */
-  /* code==4: sets icu flag to become IPO_AUTO_HORIZ, horizontal extremes on auto-handles */
-  /* code==5: Set align, like 3 but no toggle */
-  /* code==6: Clear align, like 3 but no toggle */
   BezTriple *bezt;
   int a;
 
@@ -4675,12 +4660,12 @@ void BKE_nurb_direction_switch(Nurb *nu)
   }
 }
 
-void BKE_curve_nurbs_vert_coords_get(ListBase *lb, float (*vert_coords)[3], int vert_len)
+void BKE_curve_nurbs_vert_coords_get(const ListBase *lb, float (*vert_coords)[3], int vert_len)
 {
   float *co = vert_coords[0];
-  LISTBASE_FOREACH (Nurb *, nu, lb) {
+  LISTBASE_FOREACH (const Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
-      BezTriple *bezt = nu->bezt;
+      const BezTriple *bezt = nu->bezt;
       for (int i = 0; i < nu->pntsu; i++, bezt++) {
         copy_v3_v3(co, bezt->vec[0]);
         co += 3;
@@ -4691,7 +4676,7 @@ void BKE_curve_nurbs_vert_coords_get(ListBase *lb, float (*vert_coords)[3], int 
       }
     }
     else {
-      BPoint *bp = nu->bp;
+      const BPoint *bp = nu->bp;
       for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         copy_v3_v3(co, bp->vec);
         co += 3;
@@ -4702,7 +4687,7 @@ void BKE_curve_nurbs_vert_coords_get(ListBase *lb, float (*vert_coords)[3], int 
   UNUSED_VARS_NDEBUG(vert_len);
 }
 
-float (*BKE_curve_nurbs_vert_coords_alloc(ListBase *lb, int *r_vert_len))[3]
+float (*BKE_curve_nurbs_vert_coords_alloc(const ListBase *lb, int *r_vert_len))[3]
 {
   const int vert_len = BKE_nurbList_verts_count(lb);
   float(*vert_coords)[3] = MEM_malloc_arrayN(vert_len, sizeof(*vert_coords), __func__);
@@ -4741,9 +4726,7 @@ void BKE_curve_nurbs_vert_coords_apply_with_mat4(ListBase *lb,
     }
 
     if (constrain_2d) {
-      if (nu->flag & CU_2D) {
-        BKE_nurb_test_2d(nu);
-      }
+      BKE_nurb_project_2d(nu);
     }
 
     calchandlesNurb_intern(nu, SELECT, true);
@@ -4779,24 +4762,22 @@ void BKE_curve_nurbs_vert_coords_apply(ListBase *lb,
     }
 
     if (constrain_2d) {
-      if (nu->flag & CU_2D) {
-        BKE_nurb_test_2d(nu);
-      }
+      BKE_nurb_project_2d(nu);
     }
 
     calchandlesNurb_intern(nu, SELECT, true);
   }
 }
 
-float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_vert_len))[3]
+float (*BKE_curve_nurbs_key_vert_coords_alloc(const ListBase *lb, float *key, int *r_vert_len))[3]
 {
   int vert_len = BKE_nurbList_verts_count(lb);
   float(*cos)[3] = MEM_malloc_arrayN(vert_len, sizeof(*cos), __func__);
 
   float *co = cos[0];
-  LISTBASE_FOREACH (Nurb *, nu, lb) {
+  LISTBASE_FOREACH (const Nurb *, nu, lb) {
     if (nu->type == CU_BEZIER) {
-      BezTriple *bezt = nu->bezt;
+      const BezTriple *bezt = nu->bezt;
 
       for (int i = 0; i < nu->pntsu; i++, bezt++) {
         copy_v3_v3(co, &key[0]);
@@ -4809,7 +4790,7 @@ float (*BKE_curve_nurbs_key_vert_coords_alloc(ListBase *lb, float *key, int *r_v
       }
     }
     else {
-      BPoint *bp = nu->bp;
+      const BPoint *bp = nu->bp;
 
       for (int i = 0; i < nu->pntsu * nu->pntsv; i++, bp++) {
         copy_v3_v3(co, key);
@@ -5227,7 +5208,7 @@ bool BKE_curve_minmax(Curve *cu, bool use_radius, float min[3], float max[3])
     use_radius = false;
   }
   /* Do bounding box based on splines. */
-  LISTBASE_FOREACH (Nurb *, nu, nurb_lb) {
+  LISTBASE_FOREACH (const Nurb *, nu, nurb_lb) {
     BKE_nurb_minmax(nu, use_radius, min, max);
   }
   const bool result = (BLI_listbase_is_empty(nurb_lb) == false);
@@ -5423,12 +5404,12 @@ void BKE_curve_material_index_remove(Curve *cu, int index)
   }
 }
 
-bool BKE_curve_material_index_used(Curve *cu, int index)
+bool BKE_curve_material_index_used(const Curve *cu, int index)
 {
   const int curvetype = BKE_curve_type_get(cu);
 
   if (curvetype == OB_FONT) {
-    struct CharInfo *info = cu->strinfo;
+    const struct CharInfo *info = cu->strinfo;
     for (int i = cu->len_char32 - 1; i >= 0; i--, info++) {
       if (info->mat_nr == index) {
         return true;
@@ -5436,7 +5417,7 @@ bool BKE_curve_material_index_used(Curve *cu, int index)
     }
   }
   else {
-    LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
+    LISTBASE_FOREACH (const Nurb *, nu, &cu->nurb) {
       if (nu->mat_nr == index) {
         return true;
       }

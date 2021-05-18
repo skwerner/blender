@@ -24,6 +24,7 @@
 #include "render/mesh.h"
 #include "render/nodes.h"
 #include "render/object.h"
+#include "render/procedural.h"
 #include "render/scene.h"
 #include "render/shader.h"
 
@@ -131,9 +132,8 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
   }
 
   /* Iterate over all IDs in this depsgraph. */
-  BL::Depsgraph::updates_iterator b_update;
-  for (b_depsgraph.updates.begin(b_update); b_update != b_depsgraph.updates.end(); ++b_update) {
-    BL::ID b_id(b_update->id());
+  for (BL::DepsgraphUpdate &b_update : b_depsgraph.updates) {
+    BL::ID b_id(b_update.id());
 
     /* Material */
     if (b_id.is_a(&RNA_Material)) {
@@ -151,17 +151,17 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
       const bool is_geometry = object_is_geometry(b_ob);
       const bool is_light = !is_geometry && object_is_light(b_ob);
 
-      if (b_ob.is_instancer() && b_update->is_updated_shading()) {
+      if (b_ob.is_instancer() && b_update.is_updated_shading()) {
         /* Needed for e.g. object color updates on instancer. */
         object_map.set_recalc(b_ob);
       }
 
       if (is_geometry || is_light) {
-        const bool updated_geometry = b_update->is_updated_geometry();
+        const bool updated_geometry = b_update.is_updated_geometry();
 
         /* Geometry (mesh, hair, volume). */
         if (is_geometry) {
-          if (b_update->is_updated_transform() || b_update->is_updated_shading()) {
+          if (b_update.is_updated_transform() || b_update.is_updated_shading()) {
             object_map.set_recalc(b_ob);
           }
 
@@ -181,7 +181,7 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
         }
         /* Light */
         else if (is_light) {
-          if (b_update->is_updated_transform() || b_update->is_updated_shading()) {
+          if (b_update.is_updated_transform() || b_update.is_updated_shading()) {
             object_map.set_recalc(b_ob);
             light_map.set_recalc(b_ob);
           }
@@ -211,9 +211,11 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
     }
   }
 
-  BlenderViewportParameters new_viewport_parameters(b_v3d);
-  if (viewport_parameters.modified(new_viewport_parameters)) {
-    world_recalc = true;
+  if (b_v3d) {
+    BlenderViewportParameters new_viewport_parameters(b_v3d);
+    if (viewport_parameters.modified(new_viewport_parameters)) {
+      world_recalc = true;
+    }
   }
 }
 
@@ -302,11 +304,6 @@ void BlenderSync::sync_integrator()
   integrator->set_sample_clamp_direct(get_float(cscene, "sample_clamp_direct"));
   integrator->set_sample_clamp_indirect(get_float(cscene, "sample_clamp_indirect"));
   if (!preview) {
-    if (integrator->get_motion_blur() != r.use_motion_blur()) {
-      scene->object_manager->tag_update(scene);
-      scene->camera->tag_modified();
-    }
-
     integrator->set_motion_blur(r.use_motion_blur());
   }
 
@@ -363,7 +360,7 @@ void BlenderSync::sync_integrator()
 
   integrator->set_adaptive_min_samples(adaptive_min_samples);
 
-  if (b_scene.render().use_simplify()) {
+  if (get_boolean(cscene, "use_fast_gi")) {
     if (preview) {
       integrator->set_ao_bounces(get_int(cscene, "ao_bounces"));
     }
@@ -375,8 +372,8 @@ void BlenderSync::sync_integrator()
     integrator->set_ao_bounces(0);
   }
 
-  if (integrator->is_modified())
-    integrator->tag_update(scene);
+  /* UPDATE_NONE as we don't want to tag the integrator as modified, just tag dependent things */
+  integrator->tag_update(scene, Integrator::UPDATE_NONE);
 }
 
 /* Film */
@@ -471,16 +468,15 @@ void BlenderSync::sync_images()
     return;
   }
   /* Free buffers used by images which are not needed for render. */
-  BL::BlendData::images_iterator b_image;
-  for (b_data.images.begin(b_image); b_image != b_data.images.end(); ++b_image) {
+  for (BL::Image &b_image : b_data.images) {
     /* TODO(sergey): Consider making it an utility function to check
      * whether image is considered builtin.
      */
-    const bool is_builtin = b_image->packed_file() ||
-                            b_image->source() == BL::Image::source_GENERATED ||
-                            b_image->source() == BL::Image::source_MOVIE || b_engine.is_preview();
+    const bool is_builtin = b_image.packed_file() ||
+                            b_image.source() == BL::Image::source_GENERATED ||
+                            b_image.source() == BL::Image::source_MOVIE || b_engine.is_preview();
     if (is_builtin == false) {
-      b_image->buffers_free();
+      b_image.buffers_free();
     }
     /* TODO(sergey): Free builtin images not used by any shader. */
   }
@@ -573,7 +569,8 @@ int BlenderSync::get_denoising_pass(BL::RenderPass &b_pass)
   return -1;
 }
 
-vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
+vector<Pass> BlenderSync::sync_render_passes(BL::Scene &b_scene,
+                                             BL::RenderLayer &b_rlay,
                                              BL::ViewLayer &b_view_layer,
                                              bool adaptive_sampling,
                                              const DenoiseParams &denoising)
@@ -581,13 +578,10 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
   vector<Pass> passes;
 
   /* loop over passes */
-  BL::RenderLayer::passes_iterator b_pass_iter;
-
-  for (b_rlay.passes.begin(b_pass_iter); b_pass_iter != b_rlay.passes.end(); ++b_pass_iter) {
-    BL::RenderPass b_pass(*b_pass_iter);
+  for (BL::RenderPass &b_pass : b_rlay.passes) {
     PassType pass_type = get_pass_type(b_pass);
 
-    if (pass_type == PASS_MOTION && scene->integrator->get_motion_blur())
+    if (pass_type == PASS_MOTION && b_scene.render().use_motion_blur())
       continue;
     if (pass_type != PASS_NONE)
       Pass::add(pass_type, passes, b_pass.name().c_str());
@@ -706,9 +700,15 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
     }
   }
 
-  RNA_BEGIN (&crl, b_aov, "aovs") {
-    bool is_color = (get_enum(b_aov, "type") == 1);
-    string name = get_string(b_aov, "name");
+  BL::ViewLayer::aovs_iterator b_aov_iter;
+  for (b_view_layer.aovs.begin(b_aov_iter); b_aov_iter != b_view_layer.aovs.end(); ++b_aov_iter) {
+    BL::AOV b_aov(*b_aov_iter);
+    if (!b_aov.is_valid()) {
+      continue;
+    }
+
+    string name = b_aov.name();
+    bool is_color = b_aov.type() == BL::AOV::type_COLOR;
 
     if (is_color) {
       b_engine.add_pass(name.c_str(), 4, "RGBA", b_view_layer.name().c_str());
@@ -719,7 +719,6 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
       Pass::add(PASS_AOV_VALUE, passes, name.c_str());
     }
   }
-  RNA_END;
 
   scene->film->set_denoising_data_pass(denoising.use || denoising.store_passes);
   scene->film->set_denoising_clean_pass(scene->film->get_denoising_flags() &
@@ -729,7 +728,7 @@ vector<Pass> BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay,
 
   scene->film->set_pass_alpha_threshold(b_view_layer.pass_alpha_threshold());
   scene->film->tag_passes_update(scene, passes);
-  scene->integrator->tag_update(scene);
+  scene->integrator->tag_update(scene, Integrator::UPDATE_ALL);
 
   return passes;
 }
@@ -752,9 +751,8 @@ void BlenderSync::free_data_after_sync(BL::Depsgraph &b_depsgraph)
   /* TODO(sergey): We can actually remove the whole dependency graph,
    * but that will need some API support first.
    */
-  BL::Depsgraph::objects_iterator b_ob;
-  for (b_depsgraph.objects.begin(b_ob); b_ob != b_depsgraph.objects.end(); ++b_ob) {
-    b_ob->cache_release();
+  for (BL::Object &b_ob : b_depsgraph.objects) {
+    b_ob.cache_release();
   }
 }
 
@@ -762,7 +760,6 @@ void BlenderSync::free_data_after_sync(BL::Depsgraph &b_depsgraph)
 
 SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene, bool background)
 {
-  BL::RenderSettings r = b_scene.render();
   SceneParams params;
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
   const bool shadingsystem = RNA_boolean_get(&cscene, "shading_system");
@@ -785,11 +782,6 @@ SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene, bool background)
   params.hair_subdivisions = get_int(csscene, "subdivisions");
   params.hair_shape = (CurveShapeType)get_enum(
       csscene, "shape", CURVE_NUM_SHAPE_TYPES, CURVE_THICK);
-
-  if (background && params.shadingsystem != SHADINGSYSTEM_OSL)
-    params.persistent_data = r.use_persistent_data();
-  else
-    params.persistent_data = false;
 
   int texture_limit;
   if (background) {
@@ -853,7 +845,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
     preview_samples = preview_samples * preview_samples;
   }
 
-  if (get_enum(cscene, "progressive") == 0 && (params.device.type != DEVICE_OPTIX)) {
+  if (get_enum(cscene, "progressive") == 0 && params.device.has_branched_path) {
     if (background) {
       params.samples = aa_samples;
     }
@@ -952,7 +944,7 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   else if (shadingsystem == 1)
     params.shadingsystem = SHADINGSYSTEM_OSL;
 
-  /* color managagement */
+  /* Color management. */
   params.display_buffer_linear = b_engine.support_display_space_shader(b_scene);
 
   if (b_engine.is_preview()) {
@@ -1009,6 +1001,9 @@ DenoiseParams BlenderSync::get_denoise_params(BL::Scene &b_scene,
     denoising.type = (DenoiserType)get_enum(
         cscene, "preview_denoiser", DENOISER_NUM, DENOISER_NONE);
     denoising.start_sample = get_int(cscene, "preview_denoising_start_sample");
+
+    denoising.input_passes = (DenoiserInput)get_enum(
+        cscene, "preview_denoising_input_passes", DENOISER_INPUT_NUM, (int)denoising.input_passes);
 
     /* Auto select fastest denoiser. */
     if (denoising.type == DENOISER_NONE) {

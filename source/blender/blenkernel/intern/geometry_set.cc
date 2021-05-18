@@ -14,17 +14,28 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+#include "BLI_map.hh"
+
+#include "BKE_attribute.h"
+#include "BKE_attribute_access.hh"
 #include "BKE_geometry_set.hh"
 #include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_wrapper.h"
+#include "BKE_modifier.h"
 #include "BKE_pointcloud.h"
+#include "BKE_volume.h"
 
+#include "DNA_collection_types.h"
 #include "DNA_object_types.h"
+
+#include "BLI_rand.hh"
 
 #include "MEM_guardedalloc.h"
 
 using blender::float3;
+using blender::float4x4;
+using blender::Map;
 using blender::MutableSpan;
 using blender::Span;
 using blender::StringRef;
@@ -38,21 +49,19 @@ GeometryComponent::GeometryComponent(GeometryComponentType type) : type_(type)
 {
 }
 
-GeometryComponent ::~GeometryComponent()
-{
-}
-
 GeometryComponent *GeometryComponent::create(GeometryComponentType component_type)
 {
   switch (component_type) {
-    case GeometryComponentType::Mesh:
+    case GEO_COMPONENT_TYPE_MESH:
       return new MeshComponent();
-    case GeometryComponentType::PointCloud:
+    case GEO_COMPONENT_TYPE_POINT_CLOUD:
       return new PointCloudComponent();
-    case GeometryComponentType::Instances:
+    case GEO_COMPONENT_TYPE_INSTANCES:
       return new InstancesComponent();
+    case GEO_COMPONENT_TYPE_VOLUME:
+      return new VolumeComponent();
   }
-  BLI_assert(false);
+  BLI_assert_unreachable();
   return nullptr;
 }
 
@@ -147,6 +156,18 @@ void GeometrySet::add(const GeometryComponent &component)
   components_.add_new(component.type(), std::move(component_ptr));
 }
 
+/**
+ * Get all geometry components in this geometry set for read-only access.
+ */
+Vector<const GeometryComponent *> GeometrySet::get_components_for_read() const
+{
+  Vector<const GeometryComponent *> components;
+  for (const GeometryComponentPtr &ptr : components_.values()) {
+    components.append(ptr.get());
+  }
+  return components;
+}
+
 void GeometrySet::compute_boundbox_without_instances(float3 *r_min, float3 *r_max) const
 {
   const PointCloud *pointcloud = this->get_pointcloud_for_read();
@@ -156,6 +177,10 @@ void GeometrySet::compute_boundbox_without_instances(float3 *r_min, float3 *r_ma
   const Mesh *mesh = this->get_mesh_for_read();
   if (mesh != nullptr) {
     BKE_mesh_wrapper_minmax(mesh, *r_min, *r_max);
+  }
+  const Volume *volume = this->get_volume_for_read();
+  if (volume != nullptr) {
+    BKE_volume_min_max(volume, *r_min, *r_max);
   }
 }
 
@@ -180,6 +205,25 @@ uint64_t GeometrySet::hash() const
   return reinterpret_cast<uint64_t>(this);
 }
 
+/* Remove all geometry components from the geometry set. */
+void GeometrySet::clear()
+{
+  components_.clear();
+}
+
+/* Make sure that the geometry can be cached. This does not ensure ownership of object/collection
+ * instances. */
+void GeometrySet::ensure_owns_direct_data()
+{
+  for (GeometryComponentType type : components_.keys()) {
+    const GeometryComponent *component = this->get_component_for_read(type);
+    if (!component->owns_direct_data()) {
+      GeometryComponent &component_for_write = this->get_component_for_write(type);
+      component_for_write.ensure_owns_direct_data();
+    }
+  }
+}
+
 /* Returns a read-only mesh or null. */
 const Mesh *GeometrySet::get_mesh_for_read() const
 {
@@ -201,6 +245,13 @@ const PointCloud *GeometrySet::get_pointcloud_for_read() const
   return (component == nullptr) ? nullptr : component->get_for_read();
 }
 
+/* Returns a read-only volume or null. */
+const Volume *GeometrySet::get_volume_for_read() const
+{
+  const VolumeComponent *component = this->get_component_for_read<VolumeComponent>();
+  return (component == nullptr) ? nullptr : component->get_for_read();
+}
+
 /* Returns true when the geometry set has a point cloud component that has a point cloud. */
 bool GeometrySet::has_pointcloud() const
 {
@@ -213,6 +264,13 @@ bool GeometrySet::has_instances() const
 {
   const InstancesComponent *component = this->get_component_for_read<InstancesComponent>();
   return component != nullptr && component->instances_amount() >= 1;
+}
+
+/* Returns true when the geometry set has a volume component that has a volume. */
+bool GeometrySet::has_volume() const
+{
+  const VolumeComponent *component = this->get_component_for_read<VolumeComponent>();
+  return component != nullptr && component->has_volume();
 }
 
 /* Create a new geometry set that only contains the given mesh. */
@@ -248,6 +306,13 @@ void GeometrySet::replace_pointcloud(PointCloud *pointcloud, GeometryOwnershipTy
   pointcloud_component.replace(pointcloud, ownership);
 }
 
+/* Clear the existing volume and replace with the given one. */
+void GeometrySet::replace_volume(Volume *volume, GeometryOwnershipType ownership)
+{
+  VolumeComponent &volume_component = this->get_component_for_write<VolumeComponent>();
+  volume_component.replace(volume, ownership);
+}
+
 /* Returns a mutable mesh or null. No ownership is transferred. */
 Mesh *GeometrySet::get_mesh_for_write()
 {
@@ -262,286 +327,11 @@ PointCloud *GeometrySet::get_pointcloud_for_write()
   return component.get_for_write();
 }
 
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Mesh Component
- * \{ */
-
-MeshComponent::MeshComponent() : GeometryComponent(GeometryComponentType::Mesh)
+/* Returns a mutable volume or null. No ownership is transferred. */
+Volume *GeometrySet::get_volume_for_write()
 {
-}
-
-MeshComponent::~MeshComponent()
-{
-  this->clear();
-}
-
-GeometryComponent *MeshComponent::copy() const
-{
-  MeshComponent *new_component = new MeshComponent();
-  if (mesh_ != nullptr) {
-    new_component->mesh_ = BKE_mesh_copy_for_eval(mesh_, false);
-    new_component->ownership_ = GeometryOwnershipType::Owned;
-  }
-  return new_component;
-}
-
-void MeshComponent::clear()
-{
-  BLI_assert(this->is_mutable());
-  if (mesh_ != nullptr) {
-    if (ownership_ == GeometryOwnershipType::Owned) {
-      BKE_id_free(nullptr, mesh_);
-    }
-    mesh_ = nullptr;
-  }
-  vertex_group_names_.clear();
-}
-
-bool MeshComponent::has_mesh() const
-{
-  return mesh_ != nullptr;
-}
-
-/* Clear the component and replace it with the new mesh. */
-void MeshComponent::replace(Mesh *mesh, GeometryOwnershipType ownership)
-{
-  BLI_assert(this->is_mutable());
-  this->clear();
-  mesh_ = mesh;
-  ownership_ = ownership;
-}
-
-/* Return the mesh and clear the component. The caller takes over responsibility for freeing the
- * mesh (if the component was responsible before). */
-Mesh *MeshComponent::release()
-{
-  BLI_assert(this->is_mutable());
-  Mesh *mesh = mesh_;
-  mesh_ = nullptr;
-  return mesh;
-}
-
-void MeshComponent::copy_vertex_group_names_from_object(const Object &object)
-{
-  BLI_assert(this->is_mutable());
-  vertex_group_names_.clear();
-  int index = 0;
-  LISTBASE_FOREACH (const bDeformGroup *, group, &object.defbase) {
-    vertex_group_names_.add(group->name, index);
-    index++;
-  }
-}
-
-/* Get the mesh from this component. This method can be used by multiple threads at the same
- * time. Therefore, the returned mesh should not be modified. No ownership is transferred. */
-const Mesh *MeshComponent::get_for_read() const
-{
-  return mesh_;
-}
-
-/* Get the mesh from this component. This method can only be used when the component is mutable,
- * i.e. it is not shared. The returned mesh can be modified. No ownership is transferred. */
-Mesh *MeshComponent::get_for_write()
-{
-  BLI_assert(this->is_mutable());
-  if (ownership_ == GeometryOwnershipType::ReadOnly) {
-    mesh_ = BKE_mesh_copy_for_eval(mesh_, false);
-    ownership_ = GeometryOwnershipType::Owned;
-  }
-  return mesh_;
-}
-
-bool MeshComponent::is_empty() const
-{
-  return mesh_ == nullptr;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Pointcloud Component
- * \{ */
-
-PointCloudComponent::PointCloudComponent() : GeometryComponent(GeometryComponentType::PointCloud)
-{
-}
-
-PointCloudComponent::~PointCloudComponent()
-{
-  this->clear();
-}
-
-GeometryComponent *PointCloudComponent::copy() const
-{
-  PointCloudComponent *new_component = new PointCloudComponent();
-  if (pointcloud_ != nullptr) {
-    new_component->pointcloud_ = BKE_pointcloud_copy_for_eval(pointcloud_, false);
-    new_component->ownership_ = GeometryOwnershipType::Owned;
-  }
-  return new_component;
-}
-
-void PointCloudComponent::clear()
-{
-  BLI_assert(this->is_mutable());
-  if (pointcloud_ != nullptr) {
-    if (ownership_ == GeometryOwnershipType::Owned) {
-      BKE_id_free(nullptr, pointcloud_);
-    }
-    pointcloud_ = nullptr;
-  }
-}
-
-bool PointCloudComponent::has_pointcloud() const
-{
-  return pointcloud_ != nullptr;
-}
-
-/* Clear the component and replace it with the new point cloud. */
-void PointCloudComponent::replace(PointCloud *pointcloud, GeometryOwnershipType ownership)
-{
-  BLI_assert(this->is_mutable());
-  this->clear();
-  pointcloud_ = pointcloud;
-  ownership_ = ownership;
-}
-
-/* Return the point cloud and clear the component. The caller takes over responsibility for freeing
- * the point cloud (if the component was responsible before). */
-PointCloud *PointCloudComponent::release()
-{
-  BLI_assert(this->is_mutable());
-  PointCloud *pointcloud = pointcloud_;
-  pointcloud_ = nullptr;
-  return pointcloud;
-}
-
-/* Get the point cloud from this component. This method can be used by multiple threads at the same
- * time. Therefore, the returned point cloud should not be modified. No ownership is transferred.
- */
-const PointCloud *PointCloudComponent::get_for_read() const
-{
-  return pointcloud_;
-}
-
-/* Get the point cloud from this component. This method can only be used when the component is
- * mutable, i.e. it is not shared. The returned point cloud can be modified. No ownership is
- * transferred. */
-PointCloud *PointCloudComponent::get_for_write()
-{
-  BLI_assert(this->is_mutable());
-  if (ownership_ == GeometryOwnershipType::ReadOnly) {
-    pointcloud_ = BKE_pointcloud_copy_for_eval(pointcloud_, false);
-    ownership_ = GeometryOwnershipType::Owned;
-  }
-  return pointcloud_;
-}
-
-bool PointCloudComponent::is_empty() const
-{
-  return pointcloud_ == nullptr;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Instances Component
- * \{ */
-
-InstancesComponent::InstancesComponent() : GeometryComponent(GeometryComponentType::Instances)
-{
-}
-
-GeometryComponent *InstancesComponent::copy() const
-{
-  InstancesComponent *new_component = new InstancesComponent();
-  new_component->positions_ = positions_;
-  new_component->rotations_ = rotations_;
-  new_component->scales_ = scales_;
-  new_component->instanced_data_ = instanced_data_;
-  return new_component;
-}
-
-void InstancesComponent::clear()
-{
-  instanced_data_.clear();
-  positions_.clear();
-  rotations_.clear();
-  scales_.clear();
-}
-
-void InstancesComponent::add_instance(Object *object,
-                                      blender::float3 position,
-                                      blender::float3 rotation,
-                                      blender::float3 scale)
-{
-  InstancedData data;
-  data.type = INSTANCE_DATA_TYPE_OBJECT;
-  data.data.object = object;
-  this->add_instance(data, position, rotation, scale);
-}
-
-void InstancesComponent::add_instance(Collection *collection,
-                                      blender::float3 position,
-                                      blender::float3 rotation,
-                                      blender::float3 scale)
-{
-  InstancedData data;
-  data.type = INSTANCE_DATA_TYPE_COLLECTION;
-  data.data.collection = collection;
-  this->add_instance(data, position, rotation, scale);
-}
-
-void InstancesComponent::add_instance(InstancedData data,
-                                      blender::float3 position,
-                                      blender::float3 rotation,
-                                      blender::float3 scale)
-{
-  instanced_data_.append(data);
-  positions_.append(position);
-  rotations_.append(rotation);
-  scales_.append(scale);
-}
-
-Span<InstancedData> InstancesComponent::instanced_data() const
-{
-  return instanced_data_;
-}
-
-Span<float3> InstancesComponent::positions() const
-{
-  return positions_;
-}
-
-blender::Span<blender::float3> InstancesComponent::rotations() const
-{
-  return rotations_;
-}
-
-blender::Span<blender::float3> InstancesComponent::scales() const
-{
-  return scales_;
-}
-
-MutableSpan<float3> InstancesComponent::positions()
-{
-  return positions_;
-}
-
-int InstancesComponent::instances_amount() const
-{
-  const int size = instanced_data_.size();
-  BLI_assert(positions_.size() == size);
-  BLI_assert(rotations_.size() == size);
-  BLI_assert(scales_.size() == size);
-  return size;
-}
-
-bool InstancesComponent::is_empty() const
-{
-  return positions_.size() == 0;
+  VolumeComponent &component = this->get_component_for_write<VolumeComponent>();
+  return component.get_for_write();
 }
 
 /** \} */
@@ -558,23 +348,6 @@ void BKE_geometry_set_free(GeometrySet *geometry_set)
 bool BKE_geometry_set_has_instances(const GeometrySet *geometry_set)
 {
   return geometry_set->get_component_for_read<InstancesComponent>() != nullptr;
-}
-
-int BKE_geometry_set_instances(const GeometrySet *geometry_set,
-                               float (**r_positions)[3],
-                               float (**r_rotations)[3],
-                               float (**r_scales)[3],
-                               InstancedData **r_instanced_data)
-{
-  const InstancesComponent *component = geometry_set->get_component_for_read<InstancesComponent>();
-  if (component == nullptr) {
-    return 0;
-  }
-  *r_positions = (float(*)[3])component->positions().data();
-  *r_rotations = (float(*)[3])component->rotations().data();
-  *r_scales = (float(*)[3])component->scales().data();
-  *r_instanced_data = (InstancedData *)component->instanced_data().data();
-  return component->instances_amount();
 }
 
 /** \} */

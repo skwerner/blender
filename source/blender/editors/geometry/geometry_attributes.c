@@ -23,7 +23,6 @@
 
 #include "BKE_attribute.h"
 #include "BKE_context.h"
-#include "BKE_report.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -34,7 +33,6 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_geometry.h"
 #include "ED_object.h"
 
 #include "geometry_intern.h"
@@ -55,7 +53,11 @@ static const EnumPropertyItem *geometry_attribute_domain_itemf(bContext *C,
                                                                bool *r_free)
 {
   Object *ob = ED_object_context(C);
-  return rna_enum_attribute_domain_itemf(ob->data, r_free);
+  if (ob != NULL) {
+    return rna_enum_attribute_domain_itemf(ob->data, r_free);
+  }
+
+  return DummyRNA_NULL_items;
 }
 
 static int geometry_attribute_add_exec(bContext *C, wmOperator *op)

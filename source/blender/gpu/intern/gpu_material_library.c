@@ -23,6 +23,7 @@
  * GPU material library parsing and code generation.
  */
 
+#include <stdio.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
@@ -755,6 +756,10 @@ static void gpu_parse_material_library(GHash *hash, GPUMaterialLibrary *library)
 
     /* get parameters */
     while (*code && *code != ')') {
+      if (BLI_str_startswith(code, "const ")) {
+        code = gpu_str_skip_token(code, NULL, 0);
+      }
+
       /* test if it's an input or output */
       qual = FUNCTION_QUAL_IN;
       if (BLI_str_startswith(code, "out ")) {

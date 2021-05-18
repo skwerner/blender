@@ -86,7 +86,7 @@ void verify_id_properties_freed(DEGObjectIterData *data)
   const Object *dupli_object = data->dupli_object_current->ob;
   Object *temp_dupli_object = &data->temp_dupli_object;
   if (temp_dupli_object->id.properties == nullptr) {
-    // No ID properties in temp datablock -- no leak is possible.
+    // No ID properties in temp data-block -- no leak is possible.
     return;
   }
   if (temp_dupli_object->id.properties == dupli_object->id.properties) {
@@ -136,8 +136,8 @@ bool deg_iterator_components_step(BLI_Iterator *iter)
     return false;
   }
 
-  if (data->geometry_component_owner->type != OB_POINTCLOUD) {
-    /* Only point clouds support multiple geometry components currently. */
+  if (data->geometry_component_owner->runtime.geometry_set_eval == nullptr) {
+    /* Return the object itself, if it does not have a geometry set yet. */
     iter->current = data->geometry_component_owner;
     data->geometry_component_owner = nullptr;
     return true;
@@ -149,10 +149,16 @@ bool deg_iterator_components_step(BLI_Iterator *iter)
     return false;
   }
 
+  /* The mesh component. */
   if (data->geometry_component_id == 0) {
     data->geometry_component_id++;
 
-    /* The mesh component. */
+    /* Don't use a temporary object for this component, when the owner is a mesh object. */
+    if (data->geometry_component_owner->type == OB_MESH) {
+      iter->current = data->geometry_component_owner;
+      return true;
+    }
+
     const Mesh *mesh = geometry_set->get_mesh_for_read();
     if (mesh != nullptr) {
       Object *temp_object = &data->temp_geometry_component_object;
@@ -164,10 +170,17 @@ bool deg_iterator_components_step(BLI_Iterator *iter)
       return true;
     }
   }
+
+  /* The pointcloud component. */
   if (data->geometry_component_id == 1) {
     data->geometry_component_id++;
 
-    /* The pointcloud component. */
+    /* Don't use a temporary object for this component, when the owner is a point cloud object. */
+    if (data->geometry_component_owner->type == OB_POINTCLOUD) {
+      iter->current = data->geometry_component_owner;
+      return true;
+    }
+
     const PointCloud *pointcloud = geometry_set->get_pointcloud_for_read();
     if (pointcloud != nullptr) {
       Object *temp_object = &data->temp_geometry_component_object;
@@ -179,6 +192,33 @@ bool deg_iterator_components_step(BLI_Iterator *iter)
       return true;
     }
   }
+
+  /* The volume component. */
+  if (data->geometry_component_id == 2) {
+    data->geometry_component_id++;
+
+    /* Don't use a temporary object for this component, when the owner is a volume object. */
+    if (data->geometry_component_owner->type == OB_VOLUME) {
+      iter->current = data->geometry_component_owner;
+      return true;
+    }
+
+    const VolumeComponent *component = geometry_set->get_component_for_read<VolumeComponent>();
+    if (component != nullptr) {
+      const Volume *volume = component->get_for_read();
+
+      if (volume != nullptr) {
+        Object *temp_object = &data->temp_geometry_component_object;
+        *temp_object = *data->geometry_component_owner;
+        temp_object->type = OB_VOLUME;
+        temp_object->data = (void *)volume;
+        temp_object->runtime.select_id = data->geometry_component_owner->runtime.select_id;
+        iter->current = temp_object;
+        return true;
+      }
+    }
+  }
+
   data->geometry_component_owner = nullptr;
   return false;
 }
@@ -395,7 +435,7 @@ static void DEG_iterator_ids_step(BLI_Iterator *iter, deg::IDNode *id_node, bool
   if (only_updated && !(id_cow->recalc & ID_RECALC_ALL)) {
     bNodeTree *ntree = ntreeFromID(id_cow);
 
-    /* Nodetree is considered part of the datablock. */
+    /* Node-tree is considered part of the data-block. */
     if (!(ntree && (ntree->id.recalc & ID_RECALC_ALL))) {
       iter->skip = true;
       return;

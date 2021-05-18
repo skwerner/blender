@@ -30,7 +30,7 @@
 #include <sys/stat.h>
 
 #if defined(__NetBSD__) || defined(__DragonFly__) || defined(__HAIKU__)
-/* Other modern unix os's should probably use this also */
+/* Other modern unix OS's should probably use this also. */
 #  include <sys/statvfs.h>
 #  define USE_STATFS_STATVFS
 #endif
@@ -113,7 +113,7 @@ double BLI_dir_free_space(const char *dir)
   char tmp[4];
 
   tmp[0] = '\\';
-  tmp[1] = 0; /* Just a failsafe */
+  tmp[1] = 0; /* Just a fail-safe. */
   if (ELEM(dir[0] == '/', '\\')) {
     tmp[0] = '\\';
     tmp[1] = 0;
@@ -377,7 +377,7 @@ int BLI_exists(const char *path)
   struct stat st;
   BLI_assert(!BLI_path_is_rel(path));
   if (stat(path, &st)) {
-    return (0);
+    return 0;
   }
 #endif
   return (st.st_mode);

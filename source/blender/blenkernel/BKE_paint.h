@@ -34,6 +34,9 @@ extern "C" {
 
 struct BMFace;
 struct BMesh;
+struct BlendDataReader;
+struct BlendLibReader;
+struct BlendWriter;
 struct Brush;
 struct CurveMapping;
 struct Depsgraph;
@@ -55,7 +58,6 @@ struct Paint;
 struct PaintCurve;
 struct Palette;
 struct PaletteColor;
-struct ReportList;
 struct Scene;
 struct StrokeCache;
 struct SubdivCCG;
@@ -67,9 +69,6 @@ struct ViewLayer;
 struct bContext;
 struct bToolRef;
 struct tPaletteColorHSV;
-struct BlendWriter;
-struct BlendDataReader;
-struct BlendLibReader;
 
 extern const char PAINT_CURSOR_SCULPT[3];
 extern const char PAINT_CURSOR_VERTEX_PAINT[3];
@@ -366,7 +365,7 @@ typedef struct SculptBoundaryEditInfo {
   /* How many steps were needed to reach this vertex from the boundary. */
   int num_propagation_steps;
 
-  /* Stregth that is used to deform this vertex. */
+  /* Strength that is used to deform this vertex. */
   float strength_factor;
 } SculptBoundaryEditInfo;
 
@@ -470,9 +469,18 @@ typedef struct SculptSession {
   struct MPropCol *vcol;
   float *vmask;
 
-  /* Mesh connectivity */
+  /* Mesh connectivity maps. */
+  /* Vertices to adjacent polys. */
   struct MeshElemMap *pmap;
   int *pmap_mem;
+
+  /* Edges to adjacent polys. */
+  struct MeshElemMap *epmap;
+  int *epmap_mem;
+
+  /* Vertices to adjacent edges. */
+  struct MeshElemMap *vemap;
+  int *vemap_mem;
 
   /* Mesh Face Sets */
   /* Total number of polys of the base mesh. */
@@ -509,6 +517,7 @@ typedef struct SculptSession {
 
   struct StrokeCache *cache;
   struct FilterCache *filter_cache;
+  struct ExpandCache *expand_cache;
 
   /* Cursor data and active vertex for tools */
   int active_vertex_index;
@@ -531,7 +540,7 @@ typedef struct SculptSession {
   float gesture_initial_normal[3];
   bool gesture_initial_hit;
 
-  /* TODO(jbakker): Replace rv3d adn v3d with ViewContext */
+  /* TODO(jbakker): Replace rv3d and v3d with ViewContext */
   struct RegionView3D *rv3d;
   struct View3D *v3d;
   struct Scene *scene;
@@ -636,10 +645,9 @@ void BKE_sculpt_sync_face_sets_visibility_to_base_mesh(struct Mesh *mesh);
 void BKE_sculpt_sync_face_sets_visibility_to_grids(struct Mesh *mesh,
                                                    struct SubdivCCG *subdiv_ccg);
 
-/* Ensures that a Face Set data-layers exists. If it does not, it creates one respecting the
- * visibility stored in the vertices of the mesh. If it does, it copies the visibility from the
- * mesh to the Face Sets. */
 void BKE_sculpt_face_sets_ensure_from_base_mesh_visibility(struct Mesh *mesh);
+
+void BKE_sculpt_ensure_orig_mesh_data(struct Scene *scene, struct Object *object);
 
 bool BKE_sculptsession_use_pbvh_draw(const struct Object *ob, const struct View3D *v3d);
 

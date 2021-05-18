@@ -124,7 +124,20 @@ void EEVEE_cryptomatte_renderpasses_init(EEVEE_Data *vedata)
   if (!DRW_state_is_image_render()) {
     return;
   }
-  if (eevee_cryptomatte_active_layers(view_layer) != 0) {
+  const eViewLayerCryptomatteFlags active_layers = eevee_cryptomatte_active_layers(view_layer);
+  if (active_layers) {
+    struct CryptomatteSession *session = BKE_cryptomatte_init();
+    if ((active_layers & VIEW_LAYER_CRYPTOMATTE_OBJECT) != 0) {
+      BKE_cryptomatte_add_layer(session, "CryptoObject");
+    }
+    if ((active_layers & VIEW_LAYER_CRYPTOMATTE_MATERIAL) != 0) {
+      BKE_cryptomatte_add_layer(session, "CryptoMaterial");
+    }
+    if ((active_layers & VIEW_LAYER_CRYPTOMATTE_ASSET) != 0) {
+      BKE_cryptomatte_add_layer(session, "CryptoAsset");
+    }
+    g_data->cryptomatte_session = session;
+
     g_data->render_passes |= EEVEE_RENDER_PASS_CRYPTOMATTE | EEVEE_RENDER_PASS_VOLUME_LIGHT;
     g_data->cryptomatte_accurate_mode = (view_layer->cryptomatte_flag &
                                          VIEW_LAYER_CRYPTOMATTE_ACCURATE) != 0;
@@ -160,6 +173,14 @@ void EEVEE_cryptomatte_output_init(EEVEE_ViewLayerData *UNUSED(sldata),
     g_data->cryptomatte_download_buffer = MEM_malloc_arrayN(
         sizeof(float), buffer_size * num_cryptomatte_layers, __func__);
   }
+  else {
+    /* During multiview rendering the `cryptomatte_accum_buffer` is deallocated after all views
+     * have been rendered. Clear it here to be reused by the next view. */
+    memset(g_data->cryptomatte_accum_buffer,
+           0,
+           buffer_size * eevee_cryptomatte_pixel_stride(view_layer) *
+               sizeof(EEVEE_CryptomatteSample));
+  }
 
   DRW_texture_ensure_fullscreen_2d(&txl->cryptomatte, format, 0);
   GPU_framebuffer_ensure_config(&fbl->cryptomatte_fb,
@@ -193,24 +214,28 @@ static DRWShadingGroup *eevee_cryptomatte_shading_group_create(EEVEE_Data *vedat
   const ViewLayer *view_layer = draw_ctx->view_layer;
   const eViewLayerCryptomatteFlags cryptomatte_layers = eevee_cryptomatte_active_layers(
       view_layer);
+  EEVEE_PrivateData *g_data = vedata->stl->g_data;
   float cryptohash[4] = {0.0f};
 
   EEVEE_PassList *psl = vedata->psl;
   int layer_offset = 0;
   if ((cryptomatte_layers & VIEW_LAYER_CRYPTOMATTE_OBJECT) != 0) {
-    uint32_t cryptomatte_hash = BKE_cryptomatte_object_hash(ob);
+    uint32_t cryptomatte_hash = BKE_cryptomatte_object_hash(
+        g_data->cryptomatte_session, "CryptoObject", ob);
     float cryptomatte_color_value = BKE_cryptomatte_hash_to_float(cryptomatte_hash);
     cryptohash[layer_offset] = cryptomatte_color_value;
     layer_offset++;
   }
   if ((cryptomatte_layers & VIEW_LAYER_CRYPTOMATTE_MATERIAL) != 0) {
-    uint32_t cryptomatte_hash = BKE_cryptomatte_material_hash(material);
+    uint32_t cryptomatte_hash = BKE_cryptomatte_material_hash(
+        g_data->cryptomatte_session, "CryptoMaterial", material);
     float cryptomatte_color_value = BKE_cryptomatte_hash_to_float(cryptomatte_hash);
     cryptohash[layer_offset] = cryptomatte_color_value;
     layer_offset++;
   }
   if ((cryptomatte_layers & VIEW_LAYER_CRYPTOMATTE_ASSET) != 0) {
-    uint32_t cryptomatte_hash = BKE_cryptomatte_asset_hash(ob);
+    uint32_t cryptomatte_hash = BKE_cryptomatte_asset_hash(
+        g_data->cryptomatte_session, "CryptoAsset", ob);
     float cryptomatte_color_value = BKE_cryptomatte_hash_to_float(cryptomatte_hash);
     cryptohash[layer_offset] = cryptomatte_color_value;
     layer_offset++;
@@ -346,7 +371,7 @@ static void eevee_cryptomatte_download_buffer(EEVEE_Data *vedata, GPUFrameBuffer
                              download_buffer);
 
   /* Integrate download buffer into the accum buffer.
-   * The download buffer contains upto 3 floats per pixel (one float per cryptomatte layer.
+   * The download buffer contains up to 3 floats per pixel (one float per cryptomatte layer.
    *
    * NOTE: here we deviate from the cryptomatte standard. During integration the standard always
    * sort the samples by its weight to make sure that samples with the lowest weight
@@ -486,7 +511,7 @@ static void eevee_cryptomatte_postprocess_weights(EEVEE_Data *vedata)
     volumetric_transmittance_buffer = GPU_texture_read(
         txl->volume_transmittance_accum, GPU_DATA_FLOAT, 0);
   }
-  const int num_samples = effects->taa_current_sample;
+  const int num_samples = effects->taa_current_sample - 1;
 
   int accum_pixel_index = 0;
   int accum_pixel_stride = eevee_cryptomatte_pixel_stride(view_layer);
@@ -677,6 +702,16 @@ void EEVEE_cryptomatte_render_result(RenderLayer *rl,
   }
 }
 
+void EEVEE_cryptomatte_store_metadata(EEVEE_Data *vedata, RenderResult *render_result)
+{
+  EEVEE_PrivateData *g_data = vedata->stl->g_data;
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const ViewLayer *view_layer = draw_ctx->view_layer;
+  BLI_assert(g_data->cryptomatte_session);
+
+  BKE_cryptomatte_store_metadata(g_data->cryptomatte_session, render_result, view_layer);
+}
+
 /** \} */
 
 void EEVEE_cryptomatte_free(EEVEE_Data *vedata)
@@ -684,4 +719,8 @@ void EEVEE_cryptomatte_free(EEVEE_Data *vedata)
   EEVEE_PrivateData *g_data = vedata->stl->g_data;
   MEM_SAFE_FREE(g_data->cryptomatte_accum_buffer);
   MEM_SAFE_FREE(g_data->cryptomatte_download_buffer);
+  if (g_data->cryptomatte_session) {
+    BKE_cryptomatte_free(g_data->cryptomatte_session);
+    g_data->cryptomatte_session = NULL;
+  }
 }

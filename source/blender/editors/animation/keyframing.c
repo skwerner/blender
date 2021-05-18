@@ -483,7 +483,8 @@ int insert_bezt_fcurve(FCurve *fcu, const BezTriple *bezt, eInsertKeyFlags flag)
   return i;
 }
 
-/** Update the FCurve to allow insertion of `bezt` without modifying the curve shape.
+/**
+ * Update the FCurve to allow insertion of `bezt` without modifying the curve shape.
  *
  * Checks whether it is necessary to apply Bezier subdivision due to involvement of non-auto
  * handles. If necessary, changes `bezt` handles from Auto to Aligned.
@@ -614,7 +615,7 @@ int insert_vert_fcurve(
     return -1;
   }
 
-  /* set handletype and interpolation */
+  /* Set handle-type and interpolation. */
   if ((fcu->totvert > 2) && (flag & INSERTKEY_REPLACE) == 0) {
     BezTriple *bezt = (fcu->bezt + a);
 
@@ -639,7 +640,7 @@ int insert_vert_fcurve(
 
   /* don't recalculate handles if fast is set
    * - this is a hack to make importers faster
-   * - we may calculate twice (due to autohandle needing to be calculated twice)
+   * - we may calculate twice (due to auto-handle needing to be calculated twice)
    */
   if ((flag & INSERTKEY_FAST) == 0) {
     calchandles_fcurve(fcu);
@@ -1384,7 +1385,7 @@ static AnimationEvalContext nla_time_remap(const AnimationEvalContext *anim_eval
   if (adt && adt->action == act) {
     /* Get NLA context for value remapping. */
     *r_nla_context = BKE_animsys_get_nla_keyframing_context(
-        nla_cache, id_ptr, adt, anim_eval_context, false);
+        nla_cache, id_ptr, adt, anim_eval_context);
 
     /* Apply NLA-mapping to frame. */
     const float remapped_frame = BKE_nla_tweakedit_remap(
@@ -3034,17 +3035,7 @@ bool ED_autokeyframe_pchan(
     ANIM_apply_keyingset(C, &dsources, NULL, ks, MODIFYKEY_MODE_INSERT, (float)CFRA);
     BLI_freelistN(&dsources);
 
-    /* clear any unkeyed tags */
-    if (pchan->bone) {
-      pchan->bone->flag &= ~BONE_UNKEYED;
-    }
-
     return true;
-  }
-
-  /* add unkeyed tags */
-  if (pchan->bone) {
-    pchan->bone->flag |= BONE_UNKEYED;
   }
 
   return false;

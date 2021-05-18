@@ -93,7 +93,7 @@ void OVERLAY_grid_init(OVERLAY_Data *vedata)
   DRW_view_viewmat_get(NULL, viewmat, false);
   DRW_view_viewmat_get(NULL, viewinv, true);
 
-  /* if perps */
+  /* If perspective view or non-axis aligned view. */
   if (winmat[3][3] == 0.0f || rv3d->view == RV3D_VIEW_USER) {
     if (show_axis_x) {
       shd->grid_flag |= PLANE_XY | SHOW_AXIS_X;
@@ -232,7 +232,7 @@ void OVERLAY_grid_cache_init(OVERLAY_Data *vedata)
   DRW_shgroup_uniform_vec3(grp, "gridSize", shd->grid_size, 1);
   DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
   DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
-  if (shd->zneg_flag) {
+  if (shd->zneg_flag & SHOW_AXIS_Z) {
     DRW_shgroup_call(grp, geom, NULL);
   }
 
@@ -251,7 +251,7 @@ void OVERLAY_grid_cache_init(OVERLAY_Data *vedata)
   DRW_shgroup_uniform_vec3(grp, "planeAxes", shd->zplane_axes, 1);
   DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
   DRW_shgroup_uniform_texture_ref(grp, "depthBuffer", &dtxl->depth);
-  if (shd->zpos_flag) {
+  if (shd->zpos_flag & SHOW_AXIS_Z) {
     DRW_shgroup_call(grp, geom, NULL);
   }
 

@@ -35,6 +35,7 @@ struct BlendWriter;
 struct CustomData_MeshMasks;
 struct DepsNodeHandle;
 struct Depsgraph;
+struct GeometrySet;
 struct ID;
 struct ListBase;
 struct Main;
@@ -43,7 +44,6 @@ struct ModifierData;
 struct Object;
 struct Scene;
 struct bArmature;
-struct GeometrySet;
 
 typedef enum {
   /* Should not be used, only for None modifier type */
@@ -258,10 +258,6 @@ typedef struct ModifierTypeInfo {
                             const struct ModifierEvalContext *ctx,
                             struct GeometrySet *geometry_set);
 
-  struct Volume *(*modifyVolume)(struct ModifierData *md,
-                                 const struct ModifierEvalContext *ctx,
-                                 struct Volume *volume);
-
   /********************* Optional functions *********************/
 
   /**
@@ -399,7 +395,7 @@ typedef struct ModifierTypeInfo {
 /* Used to find a modifier's panel type. */
 #define MODIFIER_TYPE_PANEL_PREFIX "MOD_PT_"
 
-/* Initialize modifier's global data (type info and some common global storages). */
+/* Initialize modifier's global data (type info and some common global storage). */
 void BKE_modifier_init(void);
 
 const ModifierTypeInfo *BKE_modifier_get_info(ModifierType type);
@@ -453,7 +449,7 @@ void BKE_modifiers_foreach_tex_link(struct Object *ob, TexWalkFunc walk, void *u
 struct ModifierData *BKE_modifiers_findby_type(struct Object *ob, ModifierType type);
 struct ModifierData *BKE_modifiers_findby_name(struct Object *ob, const char *name);
 void BKE_modifiers_clear_errors(struct Object *ob);
-int BKE_modifiers_get_cage_index(struct Scene *scene,
+int BKE_modifiers_get_cage_index(const struct Scene *scene,
                                  struct Object *ob,
                                  int *r_lastPossibleCageIndex,
                                  bool is_virtual);
@@ -469,8 +465,8 @@ struct Object *BKE_modifiers_is_deformed_by_lattice(struct Object *ob);
 struct Object *BKE_modifiers_is_deformed_by_curve(struct Object *ob);
 bool BKE_modifiers_uses_multires(struct Object *ob);
 bool BKE_modifiers_uses_armature(struct Object *ob, struct bArmature *arm);
-bool BKE_modifiers_uses_subsurf_facedots(struct Scene *scene, struct Object *ob);
-bool BKE_modifiers_is_correctable_deformed(struct Scene *scene, struct Object *ob);
+bool BKE_modifiers_uses_subsurf_facedots(const struct Scene *scene, struct Object *ob);
+bool BKE_modifiers_is_correctable_deformed(const struct Scene *scene, struct Object *ob);
 void BKE_modifier_free_temporary_data(struct ModifierData *md);
 
 typedef struct CDMaskLink {
@@ -484,14 +480,14 @@ typedef struct CDMaskLink {
  * pointed to by md for correct evaluation, assuming the data indicated by
  * final_datamask is required at the end of the stack.
  */
-struct CDMaskLink *BKE_modifier_calc_data_masks(struct Scene *scene,
+struct CDMaskLink *BKE_modifier_calc_data_masks(const struct Scene *scene,
                                                 struct Object *ob,
                                                 struct ModifierData *md,
                                                 struct CustomData_MeshMasks *final_datamask,
                                                 int required_mode,
                                                 ModifierData *previewmd,
                                                 const struct CustomData_MeshMasks *previewmask);
-struct ModifierData *BKE_modifier_get_last_preview(struct Scene *scene,
+struct ModifierData *BKE_modifier_get_last_preview(const struct Scene *scene,
                                                    struct ModifierData *md,
                                                    int required_mode);
 

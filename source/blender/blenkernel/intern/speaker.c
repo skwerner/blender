@@ -107,6 +107,7 @@ IDTypeInfo IDType_ID_SPK = {
     .make_local = NULL,
     .foreach_id = speaker_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = speaker_blend_write,
     .blend_read_data = speaker_blend_read_data,
@@ -114,6 +115,8 @@ IDTypeInfo IDType_ID_SPK = {
     .blend_read_expand = speaker_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 void *BKE_speaker_add(Main *bmain, const char *name)

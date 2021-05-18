@@ -85,6 +85,7 @@
 #include "DNA_defaults.h"
 
 #include "DNA_armature_types.h"
+#include "DNA_asset_types.h"
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
 #include "DNA_camera_types.h"
@@ -117,6 +118,7 @@
 #include "DNA_world_types.h"
 
 #include "DNA_armature_defaults.h"
+#include "DNA_asset_defaults.h"
 #include "DNA_brush_defaults.h"
 #include "DNA_cachefile_defaults.h"
 #include "DNA_camera_defaults.h"
@@ -147,6 +149,9 @@
 
 #define SDNA_DEFAULT_DECL_STRUCT(struct_name) \
   static const struct_name DNA_DEFAULT_##struct_name = _DNA_DEFAULT_##struct_name
+
+/* DNA_asset_defaults.h */
+SDNA_DEFAULT_DECL_STRUCT(AssetMetaData);
 
 /* DNA_armature_defaults.h */
 SDNA_DEFAULT_DECL_STRUCT(bArmature);
@@ -310,6 +315,7 @@ SDNA_DEFAULT_DECL_STRUCT(TextureGpencilModifierData);
 SDNA_DEFAULT_DECL_STRUCT(ThickGpencilModifierData);
 SDNA_DEFAULT_DECL_STRUCT(TimeGpencilModifierData);
 SDNA_DEFAULT_DECL_STRUCT(TintGpencilModifierData);
+SDNA_DEFAULT_DECL_STRUCT(LineartGpencilModifierData);
 
 #undef SDNA_DEFAULT_DECL_STRUCT
 
@@ -338,7 +344,10 @@ extern const bTheme U_theme_default;
 /** Keep headers sorted. */
 const void *DNA_default_table[SDNA_TYPE_MAX] = {
 
-    /* DNA_arnature_defaults.h */
+    /* DNA_asset_defaults.h */
+    SDNA_DEFAULT_DECL(AssetMetaData),
+
+    /* DNA_armature_defaults.h */
     SDNA_DEFAULT_DECL(bArmature),
 
     /* DNA_brush_defaults.h */
@@ -417,6 +426,7 @@ const void *DNA_default_table[SDNA_TYPE_MAX] = {
     SDNA_DEFAULT_DECL(ToolSettings),
     SDNA_DEFAULT_DECL_EX(CurvePaintSettings, ToolSettings.curve_paint_settings),
     SDNA_DEFAULT_DECL_EX(ImagePaintSettings, ToolSettings.imapaint),
+    SDNA_DEFAULT_DECL_EX(UnifiedPaintSettings, ToolSettings.unified_paint_settings),
     SDNA_DEFAULT_DECL_EX(ParticleEditSettings, ToolSettings.particle),
     SDNA_DEFAULT_DECL_EX(ParticleBrushData, ToolSettings.particle.brush[0]),
     SDNA_DEFAULT_DECL_EX(MeshStatVis, ToolSettings.statvis),
@@ -530,6 +540,7 @@ const void *DNA_default_table[SDNA_TYPE_MAX] = {
     SDNA_DEFAULT_DECL(ThickGpencilModifierData),
     SDNA_DEFAULT_DECL(TimeGpencilModifierData),
     SDNA_DEFAULT_DECL(TintGpencilModifierData),
+    SDNA_DEFAULT_DECL(LineartGpencilModifierData),
 };
 #undef SDNA_DEFAULT_DECL
 #undef SDNA_DEFAULT_DECL_EX

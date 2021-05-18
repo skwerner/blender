@@ -292,7 +292,7 @@ static int gizmo_move_modal(bContext *C,
               (SCE_SNAP_MODE_VERTEX | SCE_SNAP_MODE_EDGE | SCE_SNAP_MODE_FACE),
               &(const struct SnapObjectParams){
                   .snap_select = SNAP_ALL,
-                  .use_object_edit_cage = true,
+                  .edit_mode_type = SNAP_GEOM_EDIT,
                   .use_occlusion_test = true,
               },
               mval_fl,
@@ -434,7 +434,6 @@ static int gizmo_move_cursor_get(wmGizmo *UNUSED(gz))
 
 /* -------------------------------------------------------------------- */
 /** \name Move Gizmo API
- *
  * \{ */
 
 static void GIZMO_GT_move_3d(wmGizmoType *gzt)

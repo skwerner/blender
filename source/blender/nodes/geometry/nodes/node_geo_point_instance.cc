@@ -231,11 +231,6 @@ static void geo_node_point_instance_exec(GeoNodeExecParams params)
                                  params);
   }
 
-  if (geometry_set.has<CurveComponent>()) {
-    add_instances_from_geometry_component(
-        instances, *geometry_set.get_component_for_read<CurveComponent>(), params);
-  }
-
   params.set_output("Geometry", std::move(geometry_set_out));
 }
 

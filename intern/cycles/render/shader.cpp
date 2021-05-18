@@ -33,6 +33,7 @@
 #include "render/tables.h"
 
 #include "util/util_foreach.h"
+#include "util/util_logging.h"
 #include "util/util_murmurhash.h"
 #include "util/util_task.h"
 #include "util/util_transform.h"
@@ -789,7 +790,7 @@ void ShaderManager::texture_system_init()
 
 void ShaderManager::texture_system_free()
 {
-  std::cout << ts->getstats(2) << std::endl;
+  VLOG(1) << ts->getstats(2);
   ts->reset_stats();
   ts->invalidate_all(true);
   TextureSystem::destroy(ts);

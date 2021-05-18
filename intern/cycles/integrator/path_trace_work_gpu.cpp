@@ -56,8 +56,7 @@ void PathTraceWorkGPU::alloc_integrator_soa()
    * Allocate a device only memory buffer before for each struct member, and then
    * write the pointers into a struct that resides in constant memory.
    *
-   * TODO: store float3 in separate XYZ arrays.
-   * TODO: skip zeroing most arrays and leave uninitialized. */
+   * TODO: store float3 in separate XYZ arrays. */
 
   if (!integrator_state_soa_.empty()) {
     return;
@@ -69,7 +68,6 @@ void PathTraceWorkGPU::alloc_integrator_soa()
     device_only_memory<type> *array = new device_only_memory<type>(device_, \
                                                                    "integrator_state_" #name); \
     array->alloc_to_device(max_num_paths_); \
-    array->zero_to_device(); \
     integrator_state_soa_.emplace_back(array); \
     integrator_state_gpu_.parent_struct.name = (type *)array->device_pointer; \
   }
@@ -78,7 +76,6 @@ void PathTraceWorkGPU::alloc_integrator_soa()
     device_only_memory<type> *array = new device_only_memory<type>(device_, \
                                                                    "integrator_state_" #name); \
     array->alloc_to_device(max_num_paths_); \
-    array->zero_to_device(); \
     integrator_state_soa_.emplace_back(array); \
     integrator_state_gpu_.parent_struct[array_index].name = (type *)array->device_pointer; \
   }
@@ -155,6 +152,8 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 
   work_tile_scheduler_.reset(effective_buffer_params_, start_sample, samples_num);
 
+  enqueue_reset();
+
   /* TODO: set a hard limit in case of undetected kernel failures? */
   while (true) {
     /* Enqueue work from the scheduler, on start or when there are not enough
@@ -167,6 +166,10 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
       if (!queue_->synchronize()) {
         break; /* Stop on error. */
       }
+    }
+
+    if (is_cancel_requested()) {
+      break;
     }
 
     /* Stop if no more work remaining. */
@@ -183,6 +186,24 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
         break; /* Stop on error. */
       }
     }
+
+    if (is_cancel_requested()) {
+      break;
+    }
+  }
+}
+
+void PathTraceWorkGPU::enqueue_reset()
+{
+  const int num_keys = integrator_sort_key_counter_.size();
+  void *args[] = {&max_num_paths_, const_cast<int *>(&num_keys)};
+  queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_RESET, max(max_num_paths_, num_keys), args);
+  queue_->zero_to_device(integrator_queue_counter_);
+
+  /* Tiles enqueue need to know number of active paths, which is based on this counter. Zero the
+   * counter on the host side because `zero_to_device()` is not doing it. */
+  if (integrator_queue_counter_.host_pointer) {
+    memset(integrator_queue_counter_.data(), 0, integrator_queue_counter_.memory_size());
   }
 }
 
@@ -328,6 +349,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY:
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
+    case DEVICE_KERNEL_INTEGRATOR_RESET:
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
     case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:

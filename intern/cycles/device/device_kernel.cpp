@@ -54,6 +54,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_terminated_paths_array";
     case DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY:
       return "integrator_sorted_paths_array";
+    case DEVICE_KERNEL_INTEGRATOR_RESET:
+      return "integrator_reset";
 
     /* Shader evaluation. */
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:

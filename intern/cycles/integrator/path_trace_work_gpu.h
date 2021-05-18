@@ -54,6 +54,8 @@ class PathTraceWorkGPU : public PathTraceWork {
   void alloc_integrator_queue();
   void alloc_integrator_sorting();
 
+  void enqueue_reset();
+
   bool enqueue_work_tiles(bool &finished);
   void enqueue_work_tiles(DeviceKernel kernel,
                           const KernelWorkTile work_tiles[],

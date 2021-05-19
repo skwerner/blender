@@ -32,19 +32,6 @@ TEST(tile_calculate_best_size, Basic)
             TileSize(1920, 1080, 1));
   EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1920 * 1080 * 100),
             TileSize(1920, 1080, 100));
-
-  /* Enough path states to only fit few samples of the entire image. */
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 100, 1920 * 1080 * 10),
-            TileSize(455, 455, 100));
-
-  /* Typical non-stressed configuration. */
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 1, 1024 * 1024),
-            TileSize(1024, 1024, 1));
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 8, 1024 * 1024),
-            TileSize(362, 362, 8));
-
-  /* Number of samples is much higher than the state can handle. */
-  EXPECT_EQ(tile_calculate_best_size(make_int2(1920, 1080), 10000, 10), TileSize(1, 1, 10));
 }
 
 CCL_NAMESPACE_END

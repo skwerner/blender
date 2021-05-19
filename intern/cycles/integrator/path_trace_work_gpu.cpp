@@ -221,6 +221,7 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
     return false;
   }
 
+#if 0
   /* Megakernel does not support state split, so disable for the shadow catcher.
    * It is possible to make it work, but currently we are planning to make the megakernel
    * obsolete for the GPU rendering, so we don't spend time on making shadow catcher to work
@@ -235,6 +236,7 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
       return true;
     }
   }
+#endif
 
   /* Find kernel to execute, with max number of queued paths. */
   int max_num_queued = 0;

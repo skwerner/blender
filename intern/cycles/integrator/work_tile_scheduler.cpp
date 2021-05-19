@@ -88,9 +88,9 @@ bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_
     return false;
   }
 
-  const int sample_range_index = work_index / total_tiles_num_;
+  const int sample_range_index = work_index % num_tiles_per_sample_range_;
   const int start_sample = sample_range_index * tile_size_.num_samples;
-  const int tile_index = work_index - sample_range_index * total_tiles_num_;
+  const int tile_index = work_index / num_tiles_per_sample_range_;
   const int tile_y = tile_index / num_tiles_x_;
   const int tile_x = tile_index - tile_y * num_tiles_x_;
 

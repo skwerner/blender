@@ -37,6 +37,15 @@ ccl_device_inline uint round_down_to_power_of_two(uint x)
   return prev_power_of_two(x);
 }
 
+ccl_device_inline uint round_up_to_power_of_two(uint x)
+{
+  if (is_power_of_two(x)) {
+    return x;
+  }
+
+  return next_power_of_two(x);
+}
+
 TileSize tile_calculate_best_size(const int2 &image_size,
                                   const int num_samples,
                                   const int max_num_path_states)
@@ -55,30 +64,30 @@ TileSize tile_calculate_best_size(const int2 &image_size,
   }
 
   /* The idea here is to keep number of samples per tile as much as possible to improve coherency
-   * across threads. */
-
-  const int num_path_states_per_sample = max(max_num_path_states / num_samples, 1);
+   * across threads.
+   *
+   * Some general ideas:
+   *  - Prefer smaller tiles with more samples, which improves spatial coherency of paths.
+   *  - Keep values a power of two, for more integer fit into the maximum number of paths. */
 
   TileSize tile_size;
 
-  if (true) {
-    /* Occupy as much of GPU threads as possible by the single tile.
-     * This could cause non-optimal load due to "wasted" path states (due to non-integer division)
-     * but currently it gives better performance. Possibly that coalescing will help with. */
-    tile_size.width = max(static_cast<int>(lround(sqrt(num_path_states_per_sample))), 1);
-    tile_size.height = max(num_path_states_per_sample / tile_size.width, 1);
+  /* Calculate tile size as if it is the most possible one to fit an entire range of samples.
+   * The idea here is to keep tiles as small as possible, and keep device occupied by scheduling
+   * multiple tiles with the same coordinates rendering different samples. */
+  const int num_path_states_per_sample = max_num_path_states / num_samples;
+  tile_size.width = round_down_to_power_of_two(lround(sqrt(num_path_states_per_sample)));
+  tile_size.height = tile_size.width;
+
+  if (num_samples == 1) {
+    tile_size.num_samples = 1;
   }
   else {
-    /* Round down to the power of two, so that all path states are occupied. */
-    /* TODO(sergey): Investigate why this is slower than the scheduling based on the code above and
-     * use this scheduling strategy instead. */
-    tile_size.width = round_down_to_power_of_two(
-        max(static_cast<int>(lround(sqrt(num_path_states_per_sample))), 1));
-    tile_size.height = tile_size.width;
+    /* Heuristic here is to have more uniform division of the sample range: for example prefer
+     * [32 <38 times>, 8] over [1024, 200]. This allows to greedily add more tiles early on. */
+    tile_size.num_samples = min(round_up_to_power_of_two(lround(sqrt(num_samples / 2))),
+                                static_cast<uint>(num_samples));
   }
-
-  tile_size.num_samples = min(num_samples,
-                              max_num_path_states / (tile_size.width * tile_size.height));
 
   DCHECK_LE(tile_size.width * tile_size.height * tile_size.num_samples, max_num_path_states);
 

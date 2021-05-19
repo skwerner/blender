@@ -72,23 +72,25 @@ void WorkTileScheduler::reset_scheduler_state()
   num_tiles_y_ = divide_up(image_size_px_.y, tile_size_.height);
 
   total_tiles_num_ = num_tiles_x_ * num_tiles_y_;
+  num_tiles_per_sample_range_ = divide_up(samples_num_, tile_size_.num_samples);
 
   next_work_index_ = 0;
-  total_work_size_ = total_tiles_num_ *
-                     static_cast<int>(ceilf(samples_num_ / tile_size_.num_samples));
+  total_work_size_ = total_tiles_num_ * num_tiles_per_sample_range_;
 }
 
 bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_size)
 {
   DCHECK_NE(max_num_path_states_, 0);
+  DCHECK_LE(max_work_size, max_num_path_states_);
 
   const int work_index = atomic_fetch_and_add_int32(&next_work_index_, 1);
   if (work_index >= total_work_size_) {
     return false;
   }
 
-  const int sample = work_index / total_tiles_num_;
-  const int tile_index = work_index - sample * total_tiles_num_;
+  const int sample_range_index = work_index / total_tiles_num_;
+  const int start_sample = sample_range_index * tile_size_.num_samples;
+  const int tile_index = work_index - sample_range_index * total_tiles_num_;
   const int tile_y = tile_index / num_tiles_x_;
   const int tile_x = tile_index - tile_y * num_tiles_x_;
 
@@ -97,8 +99,8 @@ bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_
   work_tile.y = tile_y * tile_size_.height;
   work_tile.w = tile_size_.width;
   work_tile.h = tile_size_.height;
-  work_tile.start_sample = sample_start_ + sample;
-  work_tile.num_samples = tile_size_.num_samples;
+  work_tile.start_sample = sample_start_ + start_sample;
+  work_tile.num_samples = min(tile_size_.num_samples, samples_num_ - start_sample);
   work_tile.offset = offset_;
   work_tile.stride = stride_;
 
@@ -108,8 +110,11 @@ bool WorkTileScheduler::get_work(KernelWorkTile *work_tile_, const int max_work_
   work_tile.x += image_full_offset_px_.x;
   work_tile.y += image_full_offset_px_.y;
 
-  DCHECK_LE(max_work_size, max_num_path_states_);
-  if (max_work_size && work_tile.w * work_tile.h * work_tile.num_samples > max_work_size) {
+  const int tile_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
+
+  DCHECK_GT(tile_work_size, 0);
+
+  if (max_work_size && tile_work_size > max_work_size) {
     /* The work did not fit into the requested limit of the work size. Unschedule the tile,
      * allowing others (or ourselves later one) to pick it up.
      *

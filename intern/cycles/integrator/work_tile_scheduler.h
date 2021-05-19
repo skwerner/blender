@@ -87,6 +87,10 @@ class WorkTileScheduler {
    * in the `get_work()`? */
   int total_tiles_num_ = 0;
 
+  /* In the case when the number of sam[les in the `tile_size_` is lower than samples_num_ denotes
+   * how many tiles are to be "stacked" to cover the entire requested range of samples. */
+  int num_tiles_per_sample_range_ = 0;
+
   int next_work_index_ = 0;
   int total_work_size_ = 0;
 };

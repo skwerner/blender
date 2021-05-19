@@ -94,22 +94,34 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
     kernel_cuda_integrator_init_from_camera(const int *path_index_array,
-                                            KernelWorkTile *tile,
+                                            KernelWorkTile *tiles,
+                                            const int num_tiles,
                                             float *render_buffer,
-                                            const int tile_work_size,
-                                            const int path_index_offset)
+                                            const int max_tile_work_size)
 {
-  const int global_index = ccl_global_id(0);
-  const int work_index = global_index;
-  bool thread_is_active = work_index < tile_work_size;
-  if (thread_is_active) {
-    const int path_index = (path_index_array) ? path_index_array[global_index] :
-                                                path_index_offset + global_index;
+  const int work_index = ccl_global_id(0);
 
-    uint x, y, sample;
-    get_work_pixel(tile, work_index, &x, &y, &sample);
-    integrator_init_from_camera(NULL, path_index, tile, render_buffer, x, y, sample);
+  if (work_index >= max_tile_work_size * num_tiles) {
+    return;
   }
+
+  const int tile_index = work_index / max_tile_work_size;
+  const int tile_work_index = work_index - tile_index * max_tile_work_size;
+
+  const KernelWorkTile *tile = &tiles[tile_index];
+
+  if (tile_work_index >= tile->work_size) {
+    return;
+  }
+
+  const int path_index = (path_index_array) ?
+                             path_index_array[tile->path_index_offset + tile_work_index] :
+                             tile->path_index_offset + tile_work_index;
+
+  uint x, y, sample;
+  get_work_pixel(tile, tile_work_index, &x, &y, &sample);
+
+  integrator_init_from_camera(nullptr, path_index, tile, render_buffer, x, y, sample);
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,

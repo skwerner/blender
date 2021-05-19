@@ -486,18 +486,26 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
     work_tiles_.alloc(num_work_tiles);
   }
 
+  int path_index_offset = 0;
+  int max_tile_work_size = 0;
   for (int i = 0; i < num_work_tiles; i++) {
     KernelWorkTile &work_tile = work_tiles_.data()[i];
     work_tile = work_tiles[i];
+
+    const int tile_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
+
+    work_tile.path_index_offset = path_index_offset;
+    work_tile.work_size = tile_work_size;
+
+    path_index_offset += tile_work_size;
+
+    max_tile_work_size = max(max_tile_work_size, tile_work_size);
   }
 
   queue_->copy_to_device(work_tiles_);
 
-  /* TODO: consider launching a single kernel with an array of work tiles.
-   * Mapping global index to the right tile with different sized tiles
-   * is not trivial so not done for now. */
-  void *d_work_tile = (void *)work_tiles_.device_pointer;
-  void *d_path_index = (void *)NULL;
+  void *d_work_tiles = (void *)work_tiles_.device_pointer;
+  void *d_path_index = (void *)nullptr;
   void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
 
   if (max_active_path_index_ != 0) {
@@ -506,33 +514,14 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
     d_path_index = (void *)queued_paths_.device_pointer;
   }
 
-  int num_paths = 0;
+  /* Launch kernel. */
+  void *args[] = {&d_path_index,
+                  &d_work_tiles,
+                  const_cast<int *>(&num_work_tiles),
+                  &d_render_buffer,
+                  const_cast<int *>(&max_tile_work_size)};
 
-  for (int i = 0; i < num_work_tiles; i++) {
-    KernelWorkTile &work_tile = work_tiles_.data()[i];
-
-    /* Compute kernel launch parameters. */
-    const int tile_work_size = work_tile.w * work_tile.h * work_tile.num_samples;
-
-    /* Launch kernel. */
-    void *args[] = {&d_path_index,
-                    &d_work_tile,
-                    &d_render_buffer,
-                    const_cast<int *>(&tile_work_size),
-                    &num_paths};
-
-    queue_->enqueue(kernel, tile_work_size, args);
-
-    /* Offset work tile and path index pointers for next tile. */
-    num_paths += tile_work_size;
-    DCHECK_LE(num_paths, get_max_num_camera_paths());
-
-    /* TODO: this pointer manipulation won't work for OpenCL. */
-    d_work_tile = (void *)(((KernelWorkTile *)d_work_tile) + 1);
-    if (d_path_index) {
-      d_path_index = (void *)(((int *)d_path_index) + tile_work_size);
-    }
-  }
+  queue_->enqueue(kernel, max_tile_work_size * num_work_tiles, args);
 
   /* TODO: this could be computed more accurately using on the last entry
    * in the queued_paths array passed to the kernel? */
@@ -541,8 +530,9 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
    *
    * TODO: What is more accurate approach here? What if the shadow catcher is hit after some
    * transparent bounce? Do we need to calculate this somewhere else as well? */
-  max_active_path_index_ = min(
-      max_active_path_index_ + num_paths + get_shadow_catcher_state_offset(), max_num_paths_);
+  max_active_path_index_ = min(max_active_path_index_ + path_index_offset +
+                                   get_shadow_catcher_state_offset(),
+                               max_num_paths_);
 }
 
 int PathTraceWorkGPU::get_num_active_paths()

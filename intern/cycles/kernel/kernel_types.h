@@ -1577,6 +1577,10 @@ typedef struct KernelWorkTile {
 
   int offset;
   uint stride;
+
+  /* Precalculated parameters used by init_from_camera kernel on GPU. */
+  int path_index_offset;
+  int work_size;
 } KernelWorkTile;
 
 /* Shader Evaluation.

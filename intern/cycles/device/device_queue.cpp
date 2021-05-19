@@ -64,7 +64,7 @@ void DeviceQueue::debug_init_execution()
 void DeviceQueue::debug_enqueue(DeviceKernel kernel, const int work_size)
 {
   if (VLOG_IS_ON(3)) {
-    VLOG(3) << "GPU queue launch " << device_kernel_as_string(kernel) << ", work_size "
+    VLOG(4) << "GPU queue launch " << device_kernel_as_string(kernel) << ", work_size "
             << work_size;
     last_kernels_enqueued_ |= (uint64_t(1) << (uint64_t)kernel);
   }
@@ -75,7 +75,7 @@ void DeviceQueue::debug_synchronize()
   if (VLOG_IS_ON(3)) {
     const double new_time = time_dt();
     const double elapsed_time = new_time - last_sync_time_;
-    VLOG(3) << "GPU queue synchronize, elapsed " << std::setw(10) << elapsed_time << "s";
+    VLOG(4) << "GPU queue synchronize, elapsed " << std::setw(10) << elapsed_time << "s";
 
     stats_kernel_time_[last_kernels_enqueued_] += elapsed_time;
 

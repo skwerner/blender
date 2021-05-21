@@ -249,7 +249,7 @@ class SceneParams {
              use_bvh_unaligned_nodes == params.use_bvh_unaligned_nodes &&
              num_bvh_time_steps == params.num_bvh_time_steps &&
              hair_subdivisions == params.hair_subdivisions && hair_shape == params.hair_shape &&
-             texture_limit == params.texture_limit);
+             texture_limit == params.texture_limit) || texture.modified(params.texture);
   }
 
   int curve_subdivisions()

@@ -152,6 +152,13 @@ class CUDADevice : public Device {
   virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create() override;
 
   virtual unique_ptr<DeviceQueue> gpu_queue_create() override;
+
+  int get_num_multiprocessors();
+  int get_max_num_threads_per_multiprocessor();
+
+ protected:
+  bool get_device_attribute(CUdevice_attribute attribute, int *value);
+  int get_device_default_attribute(CUdevice_attribute attribute, int default_value);
 };
 
 CCL_NAMESPACE_END

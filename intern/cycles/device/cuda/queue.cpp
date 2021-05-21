@@ -37,11 +37,23 @@ CUDADeviceQueue::~CUDADeviceQueue()
   cuStreamDestroy(cuda_stream_);
 }
 
-int CUDADeviceQueue::num_concurrent_states(const size_t) const
+int CUDADeviceQueue::num_concurrent_states(const size_t /*state_size*/) const
 {
   /* TODO: compute automatically. */
   /* TODO: must have at least num_threads_per_block. */
   return 1048576;
+}
+
+int CUDADeviceQueue::num_concurrent_busy_states()
+{
+  const int max_num_threads = cuda_device_->get_num_multiprocessors() *
+                              cuda_device_->get_max_num_threads_per_multiprocessor();
+
+  if (max_num_threads == 0) {
+    return 65536;
+  }
+
+  return 4 * max_num_threads;
 }
 
 void CUDADeviceQueue::init_execution()

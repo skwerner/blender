@@ -40,6 +40,11 @@ class DeviceQueue {
    * based on number of cores and/or available memory. */
   virtual int num_concurrent_states(const size_t state_size) const = 0;
 
+  /* Number of states which keeps the device occupied with work without loosing performance.
+   * The renderer will add more work (when available) when number of active paths falls below this
+   * value. */
+  virtual int num_concurrent_busy_states() = 0;
+
   /* Initialize execution of kernels on this queue.
    *
    * Will, for example, load all data required by the kernels from Device to global or path state.

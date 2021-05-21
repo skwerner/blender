@@ -1445,6 +1445,32 @@ unique_ptr<DeviceGraphicsInterop> CUDADevice::graphics_interop_create()
   return make_unique<CUDADeviceGraphicsInterop>(this);
 }
 
+int CUDADevice::get_num_multiprocessors()
+{
+  return get_device_default_attribute(CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT, 0);
+}
+
+int CUDADevice::get_max_num_threads_per_multiprocessor()
+{
+  return get_device_default_attribute(CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_MULTIPROCESSOR, 0);
+}
+
+bool CUDADevice::get_device_attribute(CUdevice_attribute attribute, int *value)
+{
+  CUDAContextScope scope(this);
+
+  return cuDeviceGetAttribute(value, attribute, cuDevice) == CUDA_SUCCESS;
+}
+
+int CUDADevice::get_device_default_attribute(CUdevice_attribute attribute, int default_value)
+{
+  int value = 0;
+  if (!get_device_attribute(attribute, &value)) {
+    return default_value;
+  }
+  return value;
+}
+
 CCL_NAMESPACE_END
 
 #endif

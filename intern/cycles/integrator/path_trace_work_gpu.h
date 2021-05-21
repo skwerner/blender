@@ -137,6 +137,10 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Maximum number of concurrent integrator states. */
   int max_num_paths_;
 
+  /* Minimum number of paths which keeps the device bust. If the actual number of paths falls below
+   * this value more work will be scheduled. */
+  int min_num_active_paths_;
+
   /* Maximum path index, effective number of paths used may be smaller than
    * the size of the integrator_state_ buffer so can avoid iterating over the
    * full buffer. */

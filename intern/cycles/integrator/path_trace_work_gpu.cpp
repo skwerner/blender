@@ -44,6 +44,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       work_tiles_(device, "work_tiles", MEM_READ_WRITE),
       gpu_display_rgba_half_(device, "display buffer half", MEM_READ_WRITE),
       max_num_paths_(queue_->num_concurrent_states(sizeof(IntegratorState))),
+      min_num_active_paths_(queue_->num_concurrent_busy_states()),
       max_active_path_index_(0)
 {
   memset(&integrator_state_gpu_, 0, sizeof(integrator_state_gpu_));
@@ -407,7 +408,6 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
     return false;
   }
 
-  const float regenerate_threshold = 0.5f;
   int num_paths = get_num_active_paths();
 
   if (num_paths == 0) {
@@ -430,7 +430,7 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 
   /* Schedule when we're out of paths or there are too few paths to keep the
    * device occupied. */
-  if (num_paths == 0 || num_paths < regenerate_threshold * max_num_camera_paths) {
+  if (num_paths == 0 || num_paths < min_num_active_paths_) {
     /* Get work tiles until the maximum number of path is reached. */
     while (num_paths < max_num_camera_paths) {
       KernelWorkTile work_tile;

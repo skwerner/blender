@@ -54,6 +54,9 @@ class PathTraceWorkGPU : public PathTraceWork {
   void alloc_integrator_queue();
   void alloc_integrator_sorting();
 
+  /* Returns DEVICE_KERNEL_NUM if there are no scheduled kernels. */
+  DeviceKernel get_most_queued_kernel() const;
+
   void enqueue_reset();
 
   bool enqueue_work_tiles(bool &finished);

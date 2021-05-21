@@ -193,6 +193,23 @@ void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
   }
 }
 
+DeviceKernel PathTraceWorkGPU::get_most_queued_kernel() const
+{
+  const IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
+
+  int max_num_queued = 0;
+  DeviceKernel kernel = DEVICE_KERNEL_NUM;
+
+  for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
+    if (queue_counter->num_queued[i] > max_num_queued) {
+      kernel = (DeviceKernel)i;
+      max_num_queued = queue_counter->num_queued[i];
+    }
+  }
+
+  return kernel;
+}
+
 void PathTraceWorkGPU::enqueue_reset()
 {
   const int num_keys = integrator_sort_key_counter_.size();
@@ -210,7 +227,7 @@ void PathTraceWorkGPU::enqueue_reset()
 bool PathTraceWorkGPU::enqueue_path_iteration()
 {
   /* Find kernel to execute, with max number of queued paths. */
-  IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
+  const IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
 
   int num_paths = 0;
   for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
@@ -222,17 +239,8 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
   }
 
   /* Find kernel to execute, with max number of queued paths. */
-  int max_num_queued = 0;
-  DeviceKernel kernel = DEVICE_KERNEL_NUM;
-
-  for (int i = 0; i < DEVICE_KERNEL_INTEGRATOR_NUM; i++) {
-    if (queue_counter->num_queued[i] > max_num_queued) {
-      kernel = (DeviceKernel)i;
-      max_num_queued = queue_counter->num_queued[i];
-    }
-  }
-
-  if (max_num_queued == 0) {
+  const DeviceKernel kernel = get_most_queued_kernel();
+  if (kernel == DEVICE_KERNEL_NUM) {
     return false;
   }
 
@@ -390,6 +398,15 @@ void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kern
 
 bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 {
+  /* If there are existing paths wait them to go to intersect closest kernel, which will align the
+   * wavefront of the existing and newely added paths. */
+  /* TODO: Check whether counting new intersection kernels here will have positive affect on the
+   * performance. */
+  const DeviceKernel kernel = get_most_queued_kernel();
+  if (kernel != DEVICE_KERNEL_NUM && kernel != DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST) {
+    return false;
+  }
+
   const float regenerate_threshold = 0.5f;
   int num_paths = get_num_active_paths();
 

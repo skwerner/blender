@@ -108,6 +108,8 @@ OptiXDevice::~OptiXDevice()
   /* Make CUDA context current. */
   const CUDAContextScope scope(this);
 
+  free_bvh_memory_delayed();
+
   sbt_data.free();
   texture_info.free();
   launch_params.free();
@@ -886,6 +888,8 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
   const bool use_fast_trace_bvh = (bvh->params.bvh_type == BVH_TYPE_STATIC);
 
+  free_bvh_memory_delayed();
+
   BVHOptiX *const bvh_optix = static_cast<BVHOptiX *>(bvh);
 
   progress.set_substatus("Building OptiX acceleration structure");
@@ -1355,6 +1359,24 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
     }
     tlas_handle = bvh_optix->traversable_handle;
   }
+}
+
+void OptiXDevice::release_optix_bvh(BVH *bvh)
+{
+  thread_scoped_lock lock(delayed_free_bvh_mutex);
+  /* Do delayed free of BVH memory, since geometry holding BVH might be deleted
+   * while GPU is still rendering. */
+  BVHOptiX *const bvh_optix = static_cast<BVHOptiX *>(bvh);
+
+  delayed_free_bvh_memory.emplace_back(std::move(bvh_optix->as_data));
+  delayed_free_bvh_memory.emplace_back(std::move(bvh_optix->motion_transform_data));
+  bvh_optix->traversable_handle = 0;
+}
+
+void OptiXDevice::free_bvh_memory_delayed()
+{
+  thread_scoped_lock lock(delayed_free_bvh_mutex);
+  delayed_free_bvh_memory.free_memory();
 }
 
 void OptiXDevice::const_copy_to(const char *name, void *host, size_t size)

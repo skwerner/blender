@@ -348,6 +348,9 @@ class Device {
   /* acceleration structure building */
   virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);
 
+  /* OptiX specific destructor. */
+  virtual void release_optix_bvh(BVH * /*bvh*/){};
+
   /* multi device */
   virtual int device_number(Device * /*sub_device*/)
   {

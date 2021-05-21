@@ -46,7 +46,7 @@ enum {
 };
 
 /* List of OptiX pipelines. */
-enum { PIP_INTERSECT, NUM_PIPELINES };
+enum { PIP_MEGAKERNEL, PIP_INTERSECT, NUM_PIPELINES };
 
 /* A single shader binding table entry. */
 struct SbtRecord {
@@ -65,6 +65,9 @@ class OptiXDevice : public CUDADevice {
   device_vector<SbtRecord> sbt_data;
   device_only_memory<KernelParamsOptiX> launch_params;
   OptixTraversableHandle tlas_handle = 0;
+
+  vector<device_only_memory<char>> delayed_free_bvh_memory;
+  thread_mutex delayed_free_bvh_mutex;
 
   class Denoiser {
    public:
@@ -109,6 +112,9 @@ class OptiXDevice : public CUDADevice {
                        uint16_t num_motion_steps);
 
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override;
+
+  void release_optix_bvh(BVH *bvh) override;
+  void free_bvh_memory_delayed();
 
   void const_copy_to(const char *name, void *host, size_t size) override;
 

@@ -140,7 +140,7 @@ ccl_device void noise_texture_4d(float4 co,
   }
 }
 
-ccl_device void svm_node_tex_noise(KernelGlobals *kg,
+ccl_device void svm_node_tex_noise(const KernelGlobals *kg,
                                    ShaderData *sd,
                                    float *stack,
                                    uint dimensions,

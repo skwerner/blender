@@ -14,15 +14,12 @@
  * limitations under the License.
  */
 
-/* TODO(sergey): Consider moving portable ctz/clz stuff to util. */
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
 /* "Correlated Multi-Jittered Sampling"
  * Andrew Kensler, Pixar Technical Memo 13-01, 2013 */
-
-/* TODO: find good value, suggested 64 gives pattern on cornell box ceiling. */
-#define CMJ_RANDOM_OFFSET_LIMIT 4096
 
 ccl_device_inline bool cmj_is_pow2(int i)
 {
@@ -133,69 +130,7 @@ ccl_device_inline float cmj_randfloat(uint i, uint p)
   return cmj_hash(i, p) * (1.0f / 4294967808.0f);
 }
 
-#ifdef __CMJ__
-ccl_device float cmj_sample_1D(int s, int N, int p)
-{
-  kernel_assert(s < N);
-
-  uint x = cmj_permute(s, N, p * 0x68bc21eb);
-  float jx = cmj_randfloat(s, p * 0x967a889b);
-
-  float invN = 1.0f / N;
-  return (x + jx) * invN;
-}
-
-/* TODO(sergey): Do some extra tests and consider moving to util_math.h. */
-ccl_device_inline int cmj_isqrt(int value)
-{
-#  if defined(__KERNEL_CUDA__)
-  return float_to_int(__fsqrt_ru(value));
-#  elif defined(__KERNEL_GPU__)
-  return float_to_int(sqrtf(value));
-#  else
-  /* This is a work around for fast-math on CPU which might replace sqrtf()
-   * with am approximated version.
-   */
-  return float_to_int(sqrtf(value) + 1e-6f);
-#  endif
-}
-
-ccl_device void cmj_sample_2D(int s, int N, int p, float *fx, float *fy)
-{
-  kernel_assert(s < N);
-
-  int m = cmj_isqrt(N);
-  int n = (N - 1) / m + 1;
-  float invN = 1.0f / N;
-  float invm = 1.0f / m;
-  float invn = 1.0f / n;
-
-  s = cmj_permute(s, N, p * 0x51633e2d);
-
-  int sdivm, smodm;
-
-  if (cmj_is_pow2(m)) {
-    sdivm = cmj_fast_div_pow2(s, m);
-    smodm = cmj_fast_mod_pow2(s, m);
-  }
-  else {
-    /* Doing `s * inmv` gives precision issues here. */
-    sdivm = s / m;
-    smodm = s - sdivm * m;
-  }
-
-  uint sx = cmj_permute(smodm, m, p * 0x68bc21eb);
-  uint sy = cmj_permute(sdivm, n, p * 0x02e5be93);
-
-  float jx = cmj_randfloat(s, p * 0x967a889b);
-  float jy = cmj_randfloat(s, p * 0x368cc8b7);
-
-  *fx = (sx + (sy + jx) * invn) * invm;
-  *fy = (s + jy) * invN;
-}
-#endif
-
-ccl_device float pmj_sample_1D(KernelGlobals *kg, int sample, int rng_hash, int dimension)
+ccl_device float pmj_sample_1D(const KernelGlobals *kg, int sample, int rng_hash, int dimension)
 {
   /* Fallback to random */
   if (sample >= NUM_PMJ_SAMPLES) {
@@ -209,7 +144,7 @@ ccl_device float pmj_sample_1D(KernelGlobals *kg, int sample, int rng_hash, int 
   }
 }
 
-ccl_device float2 pmj_sample_2D(KernelGlobals *kg, int sample, int rng_hash, int dimension)
+ccl_device float2 pmj_sample_2D(const KernelGlobals *kg, int sample, int rng_hash, int dimension)
 {
   if (sample >= NUM_PMJ_SAMPLES) {
     const int p = rng_hash + dimension;

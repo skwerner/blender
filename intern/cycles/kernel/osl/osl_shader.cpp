@@ -17,13 +17,15 @@
 #include <OSL/oslexec.h>
 
 // clang-format off
-#include "kernel/kernel_compat_cpu.h"
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
+
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_types.h"
-#include "kernel/split/kernel_split_data_types.h"
-#include "kernel/kernel_globals.h"
 
 #include "kernel/geom/geom_object.h"
+
+#include "kernel/integrator/integrator_state.h"
 
 #include "kernel/osl/osl_closures.h"
 #include "kernel/osl/osl_globals.h"
@@ -39,9 +41,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Threads */
 
-void OSLShader::thread_init(KernelGlobals *kg,
-                            KernelGlobals *kernel_globals,
-                            OSLGlobals *osl_globals)
+void OSLShader::thread_init(KernelGlobals *kg, OSLGlobals *osl_globals)
 {
   /* no osl used? */
   if (!osl_globals->use) {
@@ -87,8 +87,11 @@ void OSLShader::thread_free(KernelGlobals *kg)
 
 /* Globals */
 
-static void shaderdata_to_shaderglobals(
-    KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag, OSLThreadData *tdata)
+static void shaderdata_to_shaderglobals(const KernelGlobals *kg,
+                                        ShaderData *sd,
+                                        const IntegratorState *state,
+                                        int path_flag,
+                                        OSLThreadData *tdata)
 {
   OSL::ShaderGlobals *globals = &tdata->globals;
 
@@ -131,7 +134,10 @@ static void shaderdata_to_shaderglobals(
 
   /* Used by render-services. */
   sd->osl_globals = kg;
+  /* TODO */
+#if 0
   sd->osl_path_state = state;
+#endif
 }
 
 /* Surface */
@@ -171,7 +177,10 @@ static void flatten_surface_closure_tree(ShaderData *sd,
   }
 }
 
-void OSLShader::eval_surface(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
+void OSLShader::eval_surface(const KernelGlobals *kg,
+                             const IntegratorState *state,
+                             ShaderData *sd,
+                             int path_flag)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -276,7 +285,10 @@ static void flatten_background_closure_tree(ShaderData *sd,
   }
 }
 
-void OSLShader::eval_background(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
+void OSLShader::eval_background(const KernelGlobals *kg,
+                                const IntegratorState *state,
+                                ShaderData *sd,
+                                int path_flag)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -331,7 +343,10 @@ static void flatten_volume_closure_tree(ShaderData *sd,
   }
 }
 
-void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state, int path_flag)
+void OSLShader::eval_volume(const KernelGlobals *kg,
+                            const IntegratorState *state,
+                            ShaderData *sd,
+                            int path_flag)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -354,7 +369,9 @@ void OSLShader::eval_volume(KernelGlobals *kg, ShaderData *sd, PathState *state,
 
 /* Displacement */
 
-void OSLShader::eval_displacement(KernelGlobals *kg, ShaderData *sd, PathState *state)
+void OSLShader::eval_displacement(const KernelGlobals *kg,
+                                  const IntegratorState *state,
+                                  ShaderData *sd)
 {
   /* setup shader globals from shader data */
   OSLThreadData *tdata = kg->osl_tdata;
@@ -377,7 +394,7 @@ void OSLShader::eval_displacement(KernelGlobals *kg, ShaderData *sd, PathState *
 
 /* Attributes */
 
-int OSLShader::find_attribute(KernelGlobals *kg,
+int OSLShader::find_attribute(const KernelGlobals *kg,
                               const ShaderData *sd,
                               uint id,
                               AttributeDescriptor *desc)

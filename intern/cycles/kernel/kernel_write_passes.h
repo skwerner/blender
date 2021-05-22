@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #if defined(__SPLIT_KERNEL__) || defined(__KERNEL_CUDA__)
 #  define __ATOMIC_PASS_WRITE__
 #endif
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_inline void kernel_write_pass_float(ccl_global float *buffer, float value)
+ccl_device_inline void kernel_write_pass_float(ccl_global float *ccl_restrict buffer, float value)
 {
   ccl_global float *buf = buffer;
 #ifdef __ATOMIC_PASS_WRITE__
@@ -30,7 +32,8 @@ ccl_device_inline void kernel_write_pass_float(ccl_global float *buffer, float v
 #endif
 }
 
-ccl_device_inline void kernel_write_pass_float3(ccl_global float *buffer, float3 value)
+ccl_device_inline void kernel_write_pass_float3(ccl_global float *ccl_restrict buffer,
+                                                float3 value)
 {
 #ifdef __ATOMIC_PASS_WRITE__
   ccl_global float *buf_x = buffer + 0;
@@ -46,7 +49,8 @@ ccl_device_inline void kernel_write_pass_float3(ccl_global float *buffer, float3
 #endif
 }
 
-ccl_device_inline void kernel_write_pass_float4(ccl_global float *buffer, float4 value)
+ccl_device_inline void kernel_write_pass_float4(ccl_global float *ccl_restrict buffer,
+                                                float4 value)
 {
 #ifdef __ATOMIC_PASS_WRITE__
   ccl_global float *buf_x = buffer + 0;
@@ -65,7 +69,8 @@ ccl_device_inline void kernel_write_pass_float4(ccl_global float *buffer, float4
 }
 
 #ifdef __DENOISING_FEATURES__
-ccl_device_inline void kernel_write_pass_float_variance(ccl_global float *buffer, float value)
+ccl_device_inline void kernel_write_pass_float_variance(ccl_global float *ccl_restrict buffer,
+                                                        float value)
 {
   kernel_write_pass_float(buffer, value);
 
@@ -77,7 +82,8 @@ ccl_device_inline void kernel_write_pass_float_variance(ccl_global float *buffer
 #  ifdef __ATOMIC_PASS_WRITE__
 #    define kernel_write_pass_float3_unaligned kernel_write_pass_float3
 #  else
-ccl_device_inline void kernel_write_pass_float3_unaligned(ccl_global float *buffer, float3 value)
+ccl_device_inline void kernel_write_pass_float3_unaligned(ccl_global float *ccl_restrict buffer,
+                                                          float3 value)
 {
   buffer[0] += value.x;
   buffer[1] += value.y;
@@ -85,7 +91,8 @@ ccl_device_inline void kernel_write_pass_float3_unaligned(ccl_global float *buff
 }
 #  endif
 
-ccl_device_inline void kernel_write_pass_float3_variance(ccl_global float *buffer, float3 value)
+ccl_device_inline void kernel_write_pass_float3_variance(ccl_global float *ccl_restrict buffer,
+                                                         float3 value)
 {
   kernel_write_pass_float3_unaligned(buffer, value);
   kernel_write_pass_float3_unaligned(buffer + 3, value * value);

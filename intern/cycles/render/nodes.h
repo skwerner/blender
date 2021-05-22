@@ -550,6 +550,11 @@ class BsdfBaseNode : public ShaderNode {
     return false;
   }
 
+  virtual int get_feature()
+  {
+    return ShaderNode::get_feature() | NODE_FEATURE_BSDF;
+  }
+
  protected:
   ClosureType closure;
 };
@@ -786,6 +791,11 @@ class EmissionNode : public ShaderNode {
     return true;
   }
 
+  virtual int get_feature()
+  {
+    return ShaderNode::get_feature() | NODE_FEATURE_EMISSION;
+  }
+
   NODE_SOCKET_API(float3, color)
   NODE_SOCKET_API(float, strength)
   NODE_SOCKET_API(float, surface_mix_weight)
@@ -795,6 +805,11 @@ class BackgroundNode : public ShaderNode {
  public:
   SHADER_NODE_CLASS(BackgroundNode)
   void constant_fold(const ConstantFolder &folder);
+
+  virtual int get_feature()
+  {
+    return ShaderNode::get_feature() | NODE_FEATURE_EMISSION;
+  }
 
   NODE_SOCKET_API(float3, color)
   NODE_SOCKET_API(float, strength)

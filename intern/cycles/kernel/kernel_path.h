@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #ifdef __OSL__
 #  include "kernel/osl/osl_shader.h"
 #endif
@@ -54,7 +56,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
+ccl_device_forceinline bool kernel_path_scene_intersect(const KernelGlobals *kg,
                                                         ccl_addr_space PathState *state,
                                                         Ray *ray,
                                                         Intersection *isect,
@@ -82,7 +84,7 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
   return hit;
 }
 
-ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
+ccl_device_forceinline void kernel_path_lamp_emission(const KernelGlobals *kg,
                                                       ccl_addr_space PathState *state,
                                                       Ray *ray,
                                                       float3 throughput,
@@ -111,41 +113,10 @@ ccl_device_forceinline void kernel_path_lamp_emission(KernelGlobals *kg,
 #endif /* __LAMP_MIS__ */
 }
 
-ccl_device_forceinline void kernel_path_background(KernelGlobals *kg,
-                                                   ccl_addr_space PathState *state,
-                                                   ccl_addr_space Ray *ray,
-                                                   float3 throughput,
-                                                   ShaderData *sd,
-                                                   ccl_global float *buffer,
-                                                   PathRadiance *L)
-{
-  /* eval background shader if nothing hit */
-  if (kernel_data.background.transparent && (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND)) {
-    L->transparent += average(throughput);
-
-#ifdef __PASSES__
-    if (!(kernel_data.film.light_pass_flag & PASSMASK(BACKGROUND)))
-#endif /* __PASSES__ */
-      return;
-  }
-
-  /* When using the ao bounces approximation, adjust background
-   * shader intensity with ao factor. */
-  if (path_state_ao_bounce(kg, state)) {
-    throughput *= kernel_data.background.ao_bounces_factor;
-  }
-
-#ifdef __BACKGROUND__
-  /* sample background shader */
-  float3 L_background = indirect_background(kg, sd, state, buffer, ray);
-  path_radiance_accum_background(kg, L, state, throughput, L_background);
-#endif /* __BACKGROUND__ */
-}
-
 #ifndef __SPLIT_KERNEL__
 
 #  ifdef __VOLUME__
-ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *kg,
+ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(const KernelGlobals *kg,
                                                                 ShaderData *sd,
                                                                 PathState *state,
                                                                 Ray *ray,
@@ -250,82 +221,13 @@ ccl_device_forceinline VolumeIntegrateResult kernel_path_volume(KernelGlobals *k
 
 #endif /* __SPLIT_KERNEL__ */
 
-ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
-                                                     ShaderData *sd,
-                                                     ccl_addr_space PathState *state,
-                                                     ccl_addr_space Ray *ray,
-                                                     float3 throughput,
-                                                     ShaderData *emission_sd,
-                                                     PathRadiance *L,
-                                                     ccl_global float *buffer)
-{
-  PROFILING_INIT(kg, PROFILING_SHADER_APPLY);
-
-#ifdef __SHADOW_TRICKS__
-  if ((sd->object_flag & SD_OBJECT_SHADOW_CATCHER)) {
-    if (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND) {
-      state->flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_STORE_SHADOW_INFO);
-
-      float3 bg = zero_float3();
-      if (!kernel_data.background.transparent) {
-        bg = indirect_background(kg, emission_sd, state, NULL, ray);
-      }
-      path_radiance_accum_shadowcatcher(L, throughput, bg);
-    }
-  }
-  else if (state->flag & PATH_RAY_SHADOW_CATCHER) {
-    /* Only update transparency after shadow catcher bounce. */
-    L->shadow_transparency *= average(shader_bsdf_transparency(kg, sd));
-  }
-#endif /* __SHADOW_TRICKS__ */
-
-  /* holdout */
-#ifdef __HOLDOUT__
-  if (((sd->flag & SD_HOLDOUT) || (sd->object_flag & SD_OBJECT_HOLDOUT_MASK)) &&
-      (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND)) {
-    const float3 holdout_weight = shader_holdout_apply(kg, sd);
-    if (kernel_data.background.transparent) {
-      L->transparent += average(holdout_weight * throughput);
-    }
-    if (isequal_float3(holdout_weight, one_float3())) {
-      return false;
-    }
-  }
-#endif /* __HOLDOUT__ */
-
-  /* holdout mask objects do not write data passes */
-  kernel_write_data_passes(kg, buffer, L, sd, state, throughput);
-
-  /* blurring of bsdf after bounces, for rays that have a small likelihood
-   * of following this particular path (diffuse, rough glossy) */
-  if (kernel_data.integrator.filter_glossy != FLT_MAX) {
-    float blur_pdf = kernel_data.integrator.filter_glossy * state->min_ray_pdf;
-
-    if (blur_pdf < 1.0f) {
-      float blur_roughness = sqrtf(1.0f - blur_pdf) * 0.5f;
-      shader_bsdf_blur(kg, sd, blur_roughness);
-    }
-  }
-
-#ifdef __EMISSION__
-  /* emission */
-  if (sd->flag & SD_EMISSION) {
-    float3 emission = indirect_primitive_emission(
-        kg, sd, sd->ray_length, state->flag, state->ray_pdf);
-    path_radiance_accum_emission(kg, L, state, throughput, emission);
-  }
-#endif /* __EMISSION__ */
-
-  return true;
-}
-
 #ifdef __KERNEL_OPTIX__
 ccl_device_inline /* inline trace calls */
 #else
 ccl_device_noinline
 #endif
     void
-    kernel_path_ao(KernelGlobals *kg,
+    kernel_path_ao(const KernelGlobals *kg,
                    ShaderData *sd,
                    ShaderData *emission_sd,
                    PathRadiance *L,
@@ -376,148 +278,7 @@ ccl_device_noinline
 
 #ifndef __SPLIT_KERNEL__
 
-#  if defined(__BRANCHED_PATH__) || defined(__BAKING__)
-
-ccl_device void kernel_path_indirect(KernelGlobals *kg,
-                                     ShaderData *sd,
-                                     ShaderData *emission_sd,
-                                     Ray *ray,
-                                     float3 throughput,
-                                     PathState *state,
-                                     PathRadiance *L)
-{
-#    ifdef __SUBSURFACE__
-  SubsurfaceIndirectRays ss_indirect;
-  kernel_path_subsurface_init_indirect(&ss_indirect);
-
-  for (;;) {
-#    endif /* __SUBSURFACE__ */
-
-    /* path iteration */
-    for (;;) {
-      /* Find intersection with objects in scene. */
-      Intersection isect;
-      bool hit = kernel_path_scene_intersect(kg, state, ray, &isect, L);
-
-      /* Find intersection with lamps and compute emission for MIS. */
-      kernel_path_lamp_emission(kg, state, ray, throughput, &isect, sd, L);
-
-#    ifdef __VOLUME__
-      /* Volume integration. */
-      VolumeIntegrateResult result = kernel_path_volume(
-          kg, sd, state, ray, &throughput, &isect, hit, emission_sd, L);
-
-      if (result == VOLUME_PATH_SCATTERED) {
-        continue;
-      }
-      else if (result == VOLUME_PATH_MISSED) {
-        break;
-      }
-#    endif /* __VOLUME__*/
-
-      /* Shade background. */
-      if (!hit) {
-        kernel_path_background(kg, state, ray, throughput, sd, NULL, L);
-        break;
-      }
-      else if (path_state_ao_bounce(kg, state)) {
-        if (intersection_get_shader_flags(kg, &isect) &
-            (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
-          state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
-        }
-        else {
-          break;
-        }
-      }
-
-      /* Setup shader data. */
-      shader_setup_from_ray(kg, sd, &isect, ray);
-
-      /* Skip most work for volume bounding surface. */
-#    ifdef __VOLUME__
-      if (!(sd->flag & SD_HAS_ONLY_VOLUME)) {
-#    endif
-
-        /* Evaluate shader. */
-        shader_eval_surface(kg, sd, state, NULL, state->flag);
-        shader_prepare_closures(sd, state);
-
-        /* Apply shadow catcher, holdout, emission. */
-        if (!kernel_path_shader_apply(kg, sd, state, ray, throughput, emission_sd, L, NULL)) {
-          break;
-        }
-
-        /* path termination. this is a strange place to put the termination, it's
-         * mainly due to the mixed in MIS that we use. gives too many unneeded
-         * shader evaluations, only need emission if we are going to terminate */
-        float probability = path_state_continuation_probability(kg, state, throughput);
-
-        if (probability == 0.0f) {
-          break;
-        }
-        else if (probability != 1.0f) {
-          float terminate = path_state_rng_1D(kg, state, PRNG_TERMINATE);
-
-          if (terminate >= probability)
-            break;
-
-          throughput /= probability;
-        }
-
-#    ifdef __DENOISING_FEATURES__
-        kernel_update_denoising_features(kg, sd, state, L);
-#    endif
-
-#    ifdef __AO__
-        /* ambient occlusion */
-        if (kernel_data.integrator.use_ambient_occlusion) {
-          kernel_path_ao(kg, sd, emission_sd, L, state, throughput, zero_float3());
-        }
-#    endif /* __AO__ */
-
-#    ifdef __SUBSURFACE__
-        /* bssrdf scatter to a different location on the same object, replacing
-         * the closures with a diffuse BSDF */
-        if (sd->flag & SD_BSSRDF) {
-          if (kernel_path_subsurface_scatter(
-                  kg, sd, emission_sd, L, state, ray, &throughput, &ss_indirect)) {
-            break;
-          }
-        }
-#    endif /* __SUBSURFACE__ */
-
-#    if defined(__EMISSION__)
-        int all = (kernel_data.integrator.sample_all_lights_indirect) ||
-                  (state->flag & PATH_RAY_SHADOW_CATCHER);
-        kernel_branched_path_surface_connect_light(
-            kg, sd, emission_sd, state, throughput, 1.0f, L, all);
-#    endif /* defined(__EMISSION__) */
-
-#    ifdef __VOLUME__
-      }
-#    endif
-
-      if (!kernel_path_surface_bounce(kg, sd, &throughput, state, &L->state, ray))
-        break;
-    }
-
-#    ifdef __SUBSURFACE__
-    /* Trace indirect subsurface rays by restarting the loop. this uses less
-     * stack memory than invoking kernel_path_indirect.
-     */
-    if (ss_indirect.num_rays) {
-      kernel_path_subsurface_setup_indirect(kg, &ss_indirect, state, ray, L, &throughput);
-    }
-    else {
-      break;
-    }
-  }
-#    endif /* __SUBSURFACE__ */
-}
-
-#  endif /* defined(__BRANCHED_PATH__) || defined(__BAKING__) */
-
-ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
+ccl_device_forceinline void kernel_path_integrate(const KernelGlobals *kg,
                                                   PathState *state,
                                                   float3 throughput,
                                                   Ray *ray,
@@ -657,8 +418,13 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
 #  endif /* __SUBSURFACE__ */
 }
 
-ccl_device void kernel_path_trace(
-    KernelGlobals *kg, ccl_global float *buffer, int sample, int x, int y, int offset, int stride)
+ccl_device void kernel_path_trace(const KernelGlobals *kg,
+                                  ccl_global float *buffer,
+                                  int sample,
+                                  int x,
+                                  int y,
+                                  int offset,
+                                  int stride)
 {
   PROFILING_INIT(kg, PROFILING_RAY_SETUP);
 
@@ -668,7 +434,7 @@ ccl_device void kernel_path_trace(
 
   buffer += index * pass_stride;
 
-  if (kernel_data.film.pass_adaptive_aux_buffer) {
+  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED) {
     ccl_global float4 *aux = (ccl_global float4 *)(buffer +
                                                    kernel_data.film.pass_adaptive_aux_buffer);
     if ((*aux).w > 0.0f) {

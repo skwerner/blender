@@ -224,11 +224,6 @@ def with_osl():
     return _cycles.with_osl
 
 
-def with_network():
-    import _cycles
-    return _cycles.with_network
-
-
 def system_info():
     import _cycles
     return _cycles.system_info()
@@ -269,6 +264,7 @@ def list_render_passes(scene, srl):
     if crl.pass_debug_sample_count:            yield ("Debug Sample Count",            "X",   'VALUE')
     if crl.use_pass_volume_direct:             yield ("VolumeDir",                     "RGB", 'COLOR')
     if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
+    if crl.use_pass_shadow_catcher:            yield ("Shadow Catcher",                "RGBA", 'COLOR')
 
     # Cryptomatte passes.
     crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2
@@ -289,17 +285,6 @@ def list_render_passes(scene, srl):
             yield ("Denoising Normal",          "XYZ", 'VECTOR')
             yield ("Denoising Albedo",          "RGB", 'COLOR')
             yield ("Denoising Depth",           "Z",   'VALUE')
-
-            if scene.cycles.denoiser == 'NLM':
-                yield ("Denoising Shadowing",       "X",   'VALUE')
-                yield ("Denoising Variance",        "RGB", 'COLOR')
-                yield ("Denoising Intensity",       "X",   'VALUE')
-
-                clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
-                                 "denoising_glossy_direct", "denoising_glossy_indirect",
-                                 "denoising_transmission_direct", "denoising_transmission_indirect")
-                if any(getattr(crl, option) for option in clean_options):
-                    yield ("Denoising Clean", "RGB", 'COLOR')
 
     # Custom AOV passes.
     for aov in srl.aovs:

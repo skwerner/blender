@@ -79,9 +79,6 @@ class DebugFlags {
      * CPUs and GPUs can be selected here instead.
      */
     BVHLayout bvh_layout;
-
-    /* Whether split kernel is used */
-    bool split_kernel;
   };
 
   /* Descriptor of CUDA feature-set to be used. */
@@ -94,9 +91,6 @@ class DebugFlags {
     /* Whether adaptive feature based runtime compile is enabled or not.
      * Requires the CUDA Toolkit and only works on Linux atm. */
     bool adaptive_compile;
-
-    /* Whether split kernel is used */
-    bool split_kernel;
   };
 
   /* Descriptor of OptiX feature-set to be used. */
@@ -105,9 +99,6 @@ class DebugFlags {
 
     /* Reset flags to their defaults. */
     void reset();
-
-    /* Number of CUDA streams to launch kernels concurrently from. */
-    int cuda_streams;
 
     /* Use OptiX curves API for hair instead of custom implementation. */
     bool curves_api;
@@ -129,7 +120,7 @@ class DebugFlags {
       DEVICE_NONE,
       /* All OpenCL devices will be used. */
       DEVICE_ALL,
-      /* Default system OpenCL device will be used.  */
+      /* Default system OpenCL device will be used. */
       DEVICE_DEFAULT,
       /* Host processor will be used. */
       DEVICE_CPU,

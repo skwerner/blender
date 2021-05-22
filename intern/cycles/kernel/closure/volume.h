@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __VOLUME_H__
-#define __VOLUME_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -219,6 +218,52 @@ ccl_device int volume_phase_sample(const ShaderData *sd,
   return label;
 }
 
-CCL_NAMESPACE_END
+/* Volume sampling utilities. */
 
-#endif
+/* todo: this value could be tweaked or turned into a probability to avoid
+ * unnecessary work in volumes and subsurface scattering. */
+#define VOLUME_THROUGHPUT_EPSILON 1e-6f
+
+ccl_device float3 volume_color_transmittance(float3 sigma, float t)
+{
+  return exp3(-sigma * t);
+}
+
+ccl_device float volume_channel_get(float3 value, int channel)
+{
+  return (channel == 0) ? value.x : ((channel == 1) ? value.y : value.z);
+}
+
+ccl_device int volume_sample_channel(float3 albedo, float3 throughput, float rand, float3 *pdf)
+{
+  /* Sample color channel proportional to throughput and single scattering
+   * albedo, to significantly reduce noise with many bounce, following:
+   *
+   * "Practical and Controllable Subsurface Scattering for Production Path
+   *  Tracing". Matt Jen-Yuan Chiang, Peter Kutz, Brent Burley. SIGGRAPH 2016. */
+  float3 weights = fabs(throughput * albedo);
+  float sum_weights = weights.x + weights.y + weights.z;
+  float3 weights_pdf;
+
+  if (sum_weights > 0.0f) {
+    weights_pdf = weights / sum_weights;
+  }
+  else {
+    weights_pdf = make_float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f);
+  }
+
+  *pdf = weights_pdf;
+
+  /* OpenCL does not support -> on float3, so don't use pdf->x. */
+  if (rand < weights_pdf.x) {
+    return 0;
+  }
+  else if (rand < weights_pdf.x + weights_pdf.y) {
+    return 1;
+  }
+  else {
+    return 2;
+  }
+}
+
+CCL_NAMESPACE_END

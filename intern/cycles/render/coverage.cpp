@@ -17,11 +17,9 @@
 #include "render/coverage.h"
 #include "render/buffers.h"
 
-#include "kernel/kernel_compat_cpu.h"
-#include "kernel/kernel_types.h"
-#include "kernel/split/kernel_split_data.h"
+#include "kernel/device/cpu/compat.h"
+#include "kernel/device/cpu/globals.h"
 
-#include "kernel/kernel_globals.h"
 #include "kernel/kernel_id_passes.h"
 
 #include "util/util_map.h"
@@ -99,7 +97,7 @@ void Coverage::flatten_buffer(vector<CoverageMap> &coverage, const int pass_offs
 {
   /* Sort the coverage map and write it to the output */
   int pixel_index = 0;
-  int pass_stride = tile.buffers->params.get_passes_size();
+  const int pass_stride = tile.buffers->params.pass_stride;
   for (int y = 0; y < tile.h; ++y) {
     for (int x = 0; x < tile.w; ++x) {
       const CoverageMap &pixel = coverage[pixel_index];
@@ -140,7 +138,7 @@ void Coverage::flatten_buffer(vector<CoverageMap> &coverage, const int pass_offs
 void Coverage::sort_buffer(const int pass_offset)
 {
   /* Sort the coverage map and write it to the output */
-  int pass_stride = tile.buffers->params.get_passes_size();
+  const int pass_stride = tile.buffers->params.pass_stride;
   for (int y = 0; y < tile.h; ++y) {
     for (int x = 0; x < tile.w; ++x) {
       /* buffer offset */

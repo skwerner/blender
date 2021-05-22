@@ -156,7 +156,7 @@ class TextureCacheParams {
   {
   }
 
-  bool modified(const TextureCacheParams &params)
+  bool modified(const TextureCacheParams &params) const
   {
     return !(use_cache == params.use_cache && cache_size == params.cache_size &&
              tile_size == params.tile_size && diffuse_blur == params.diffuse_blur &&
@@ -186,27 +186,6 @@ class TextureCacheParams {
 
 class SceneParams {
  public:
-  /* Type of BVH, in terms whether it is supported dynamic updates of meshes
-   * or whether modifying geometry requires full BVH rebuild.
-   */
-  enum BVHType {
-    /* BVH supports dynamic updates of geometry.
-     *
-     * Faster for updating BVH tree when doing modifications in viewport,
-     * but slower for rendering.
-     */
-    BVH_DYNAMIC = 0,
-    /* BVH tree is calculated for specific scene, updates in geometry
-     * requires full tree rebuild.
-     *
-     * Slower to update BVH tree when modifying objects in viewport, also
-     * slower to build final BVH tree but gives best possible render speed.
-     */
-    BVH_STATIC = 1,
-
-    BVH_NUM_TYPES,
-  };
-
   ShadingSystem shadingsystem;
 
   /* Requested BVH layout.
@@ -231,7 +210,7 @@ class SceneParams {
   {
     shadingsystem = SHADINGSYSTEM_SVM;
     bvh_layout = BVH_LAYOUT_BVH2;
-    bvh_type = BVH_DYNAMIC;
+    bvh_type = BVH_TYPE_DYNAMIC;
     use_bvh_spatial_split = false;
     use_bvh_unaligned_nodes = true;
     num_bvh_time_steps = 0;
@@ -241,7 +220,7 @@ class SceneParams {
     background = true;
   }
 
-  bool modified(const SceneParams &params)
+  bool modified(const SceneParams &params) const
   {
     return !(shadingsystem == params.shadingsystem && bvh_layout == params.bvh_layout &&
              bvh_type == params.bvh_type &&
@@ -336,7 +315,12 @@ class Scene : public NodeOwner {
 
   void enable_update_stats();
 
-  bool update(Progress &progress, bool &kernel_switch_needed);
+  bool update(Progress &progress);
+
+  /* Update passes so that they contain all passes required for the configured functionality. */
+  void update_passes();
+
+  bool has_shadow_catcher() const;
 
   /* This function is used to create a node of a specified type instead of
    * calling 'new', and sets the scene as the owner of the node.

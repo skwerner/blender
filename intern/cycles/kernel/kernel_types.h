@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_TYPES_H__
-#define __KERNEL_TYPES_H__
+#pragma once
 
 #if !defined(__KERNEL_GPU__) && defined(WITH_EMBREE)
 #  include <embree3/rtcore.h>
@@ -60,6 +59,7 @@ CCL_NAMESPACE_BEGIN
 #define PRIM_NONE (~0)
 #define LAMP_NONE (~0)
 #define ID_NONE (0.0f)
+#define PASS_UNUSED (~0)
 
 #define VOLUME_STACK_SIZE 32
 
@@ -93,33 +93,29 @@ CCL_NAMESPACE_BEGIN
 #define __INTERSECTION_REFINE__
 #define __CLAMP_SAMPLE__
 #define __PATCH_EVAL__
-#define __SHADOW_TRICKS__
+#define __SHADOW_CATCHER__
 #define __DENOISING_FEATURES__
 #define __SHADER_RAYTRACE__
 #define __AO__
 #define __PASSES__
 #define __HAIR__
-
-/* Without these we get an AO render, used by OpenCL preview kernel. */
-#ifndef __KERNEL_AO_PREVIEW__
-#  define __SVM__
-#  define __EMISSION__
-#  define __HOLDOUT__
-#  define __MULTI_CLOSURE__
-#  define __TRANSPARENT_SHADOWS__
-#  define __BACKGROUND_MIS__
-#  define __LAMP_MIS__
-#  define __CAMERA_MOTION__
-#  define __OBJECT_MOTION__
-#  define __BAKING__
-#  define __PRINCIPLED__
-#  define __SUBSURFACE__
-#  define __VOLUME__
-#  define __VOLUME_SCATTER__
-#  define __CMJ__
-#  define __SHADOW_RECORD_ALL__
-#  define __BRANCHED_PATH__
-#endif
+#define __SVM__
+#define __EMISSION__
+#define __HOLDOUT__
+#define __MULTI_CLOSURE__
+#define __TRANSPARENT_SHADOWS__
+#define __BACKGROUND_MIS__
+#define __LAMP_MIS__
+#define __CAMERA_MOTION__
+#define __OBJECT_MOTION__
+#define __BAKING__
+#define __PRINCIPLED__
+#define __SUBSURFACE__
+#define __VOLUME__
+#define __VOLUME_SCATTER__
+#define __CMJ__
+#define __SHADOW_RECORD_ALL__
+#define __BRANCHED_PATH__
 
 /* Device specific features */
 #ifdef __KERNEL_CPU__
@@ -132,15 +128,8 @@ CCL_NAMESPACE_BEGIN
 #  define __OIIO__
 #endif /* __KERNEL_CPU__ */
 
-#ifdef __KERNEL_CUDA__
-#  ifdef __SPLIT_KERNEL__
-#    undef __BRANCHED_PATH__
-#  endif
-#endif /* __KERNEL_CUDA__ */
-
 #ifdef __KERNEL_OPTIX__
 #  undef __BAKING__
-#  undef __BRANCHED_PATH__
 #endif /* __KERNEL_OPTIX__ */
 
 #ifdef __KERNEL_OPENCL__
@@ -166,17 +155,14 @@ CCL_NAMESPACE_BEGIN
 #ifdef __NO_BAKING__
 #  undef __BAKING__
 #endif
-#ifdef __NO_BRANCHED_PATH__
-#  undef __BRANCHED_PATH__
-#endif
 #ifdef __NO_PATCH_EVAL__
 #  undef __PATCH_EVAL__
 #endif
 #ifdef __NO_TRANSPARENT__
 #  undef __TRANSPARENT_SHADOWS__
 #endif
-#ifdef __NO_SHADOW_TRICKS__
-#  undef __SHADOW_TRICKS__
+#ifdef __NO_SHADOW_CATCHER__
+#  undef __SHADOW_CATCHER__
 #endif
 #ifdef __NO_PRINCIPLED__
 #  undef __PRINCIPLED__
@@ -259,8 +245,7 @@ enum PathTraceDimension {
 
 enum SamplingPattern {
   SAMPLING_PATTERN_SOBOL = 0,
-  SAMPLING_PATTERN_CMJ = 1,
-  SAMPLING_PATTERN_PMJ = 2,
+  SAMPLING_PATTERN_PMJ = 1,
 
   SAMPLING_NUM_PATTERNS,
 };
@@ -268,7 +253,12 @@ enum SamplingPattern {
 /* these flags values correspond to raytypes in osl.cpp, so keep them in sync! */
 
 enum PathRayFlag {
-  /* Ray visibility. */
+  /* --------------------------------------------------------------------
+   * Ray visibility.
+   *
+   * NOTE: Recalculated after a surface bounce.
+   */
+
   PATH_RAY_CAMERA = (1 << 0),
   PATH_RAY_REFLECT = (1 << 1),
   PATH_RAY_TRANSMIT = (1 << 2),
@@ -276,56 +266,97 @@ enum PathRayFlag {
   PATH_RAY_GLOSSY = (1 << 4),
   PATH_RAY_SINGULAR = (1 << 5),
   PATH_RAY_TRANSPARENT = (1 << 6),
+  PATH_RAY_VOLUME_SCATTER = (1 << 7),
 
   /* Shadow ray visibility. */
-  PATH_RAY_SHADOW_OPAQUE_NON_CATCHER = (1 << 7),
-  PATH_RAY_SHADOW_OPAQUE_CATCHER = (1 << 8),
-  PATH_RAY_SHADOW_OPAQUE = (PATH_RAY_SHADOW_OPAQUE_NON_CATCHER | PATH_RAY_SHADOW_OPAQUE_CATCHER),
-  PATH_RAY_SHADOW_TRANSPARENT_NON_CATCHER = (1 << 9),
-  PATH_RAY_SHADOW_TRANSPARENT_CATCHER = (1 << 10),
-  PATH_RAY_SHADOW_TRANSPARENT = (PATH_RAY_SHADOW_TRANSPARENT_NON_CATCHER |
-                                 PATH_RAY_SHADOW_TRANSPARENT_CATCHER),
-  PATH_RAY_SHADOW_NON_CATCHER = (PATH_RAY_SHADOW_OPAQUE_NON_CATCHER |
-                                 PATH_RAY_SHADOW_TRANSPARENT_NON_CATCHER),
+  PATH_RAY_SHADOW_OPAQUE = (1 << 8),
+  PATH_RAY_SHADOW_TRANSPARENT = (1 << 9),
   PATH_RAY_SHADOW = (PATH_RAY_SHADOW_OPAQUE | PATH_RAY_SHADOW_TRANSPARENT),
 
-  /* Unused, free to reuse. */
-  PATH_RAY_UNUSED = (1 << 11),
+  /* Special flag to tag unaligned BVH nodes.
+   * Only set and used in BVH nodes to distinguish how to interpret bounding box information stored
+   * in the node (either it should be intersected as AABB or as OBB). */
+  PATH_RAY_NODE_UNALIGNED = (1 << 10),
 
-  /* Ray visibility for volume scattering. */
-  PATH_RAY_VOLUME_SCATTER = (1 << 12),
+  /* Subset of flags used for ray visibility for intersection.
+   *
+   * NOTE: SHADOW_CATCHER macros below assume there are no more than
+   * 16 visibility bits. */
+  PATH_RAY_ALL_VISIBILITY = ((1 << 11) - 1),
 
-  /* Special flag to tag unaligned BVH nodes. */
-  PATH_RAY_NODE_UNALIGNED = (1 << 13),
-
-  PATH_RAY_ALL_VISIBILITY = ((1 << 14) - 1),
+  /* --------------------------------------------------------------------
+   * Path flags.
+   */
 
   /* Don't apply multiple importance sampling weights to emission from
    * lamp or surface hits, because they were not direct light sampled. */
-  PATH_RAY_MIS_SKIP = (1 << 14),
+  PATH_RAY_MIS_SKIP = (1 << 11),
+
   /* Diffuse bounce earlier in the path, skip SSS to improve performance
    * and avoid branching twice with disk sampling SSS. */
-  PATH_RAY_DIFFUSE_ANCESTOR = (1 << 15),
+  PATH_RAY_DIFFUSE_ANCESTOR = (1 << 12),
+
   /* Single pass has been written. */
-  PATH_RAY_SINGLE_PASS_DONE = (1 << 16),
-  /* Ray is behind a shadow catcher .*/
-  PATH_RAY_SHADOW_CATCHER = (1 << 17),
-  /* Store shadow data for shadow catcher or denoising. */
-  PATH_RAY_STORE_SHADOW_INFO = (1 << 18),
+  PATH_RAY_SINGLE_PASS_DONE = (1 << 13),
+
   /* Zero background alpha, for camera or transparent glass rays. */
-  PATH_RAY_TRANSPARENT_BACKGROUND = (1 << 19),
+  PATH_RAY_TRANSPARENT_BACKGROUND = (1 << 14),
+
   /* Terminate ray immediately at next bounce. */
-  PATH_RAY_TERMINATE_IMMEDIATE = (1 << 20),
+  PATH_RAY_TERMINATE_IMMEDIATE = (1 << 15),
+
   /* Ray is to be terminated, but continue with transparent bounces and
    * emission as long as we encounter them. This is required to make the
    * MIS between direct and indirect light rays match, as shadow rays go
    * through transparent surfaces to reach emission too. */
-  PATH_RAY_TERMINATE_AFTER_TRANSPARENT = (1 << 21),
+  PATH_RAY_TERMINATE_AFTER_TRANSPARENT = (1 << 16),
+
   /* Ray is to be terminated. */
   PATH_RAY_TERMINATE = (PATH_RAY_TERMINATE_IMMEDIATE | PATH_RAY_TERMINATE_AFTER_TRANSPARENT),
+
   /* Path and shader is being evaluated for direct lighting emission. */
-  PATH_RAY_EMISSION = (1 << 22)
+  PATH_RAY_EMISSION = (1 << 17),
+
+  /* Perform subsurface scattering. */
+  PATH_RAY_SUBSURFACE = (1 << 18),
+
+  /* Contribute to denoising features. */
+  PATH_RAY_DENOISING_FEATURES = (1 << 19),
+
+  /* Render pass categories. */
+  PATH_RAY_REFLECT_PASS = (1 << 20),
+  PATH_RAY_TRANSMISSION_PASS = (1 << 21),
+  PATH_RAY_VOLUME_PASS = (1 << 22),
+  PATH_RAY_ANY_PASS = (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS | PATH_RAY_VOLUME_PASS),
+
+  /* Shadow ray is for a light or surface. */
+  PATH_RAY_SHADOW_FOR_LIGHT = (1 << 23),
+
+  /* A shadow catcher object was hit and the path was split into two. */
+  PATH_RAY_SHADOW_CATCHER_HIT = (1 << 24),
+
+  /* A shadow catcher object was hit and this path traces only shadow catchers, writing them into
+   * their dedicated pass for later division.
+   *
+   * NOTE: Is not covered with `PATH_RAY_ANY_PASS` because shadow catcher does special handling
+   * which is separate from the light passes. */
+  PATH_RAY_SHADOW_CATCHER_PASS = (1 << 25),
 };
+
+/* Configure ray visibility bits for rays and objects respectively,
+ * to make shadow catchers work.
+ *
+ * On shadow catcher paths we want to ignore any intersections with non-catchers,
+ * whereas on regular paths we want to intersect all objects. */
+
+#define SHADOW_CATCHER_VISIBILITY_SHIFT(visibility) ((visibility) << 16)
+
+#define SHADOW_CATCHER_PATH_VISIBILITY(path_flag, visibility) \
+  (((path_flag)&PATH_RAY_SHADOW_CATCHER_PASS) ? SHADOW_CATCHER_VISIBILITY_SHIFT(visibility) : \
+                                                (visibility))
+
+#define SHADOW_CATCHER_OBJECT_VISIBILITY(is_shadow_catcher, visibility) \
+  (((is_shadow_catcher) ? SHADOW_CATCHER_VISIBILITY_SHIFT(visibility) : 0) | (visibility))
 
 /* Closure Label */
 
@@ -346,37 +377,11 @@ typedef enum ClosureLabel {
 #define PASS_NAME_JOIN(a, b) a##_##b
 #define PASSMASK(pass) (1 << ((PASS_NAME_JOIN(PASS, pass)) % 32))
 
-#define PASSMASK_COMPONENT(comp) \
-  (PASSMASK(PASS_NAME_JOIN(comp, DIRECT)) | PASSMASK(PASS_NAME_JOIN(comp, INDIRECT)) | \
-   PASSMASK(PASS_NAME_JOIN(comp, COLOR)))
-
 typedef enum PassType {
   PASS_NONE = 0,
 
-  /* Main passes */
+  /* Light Passes */
   PASS_COMBINED = 1,
-  PASS_DEPTH,
-  PASS_NORMAL,
-  PASS_UV,
-  PASS_OBJECT_ID,
-  PASS_MATERIAL_ID,
-  PASS_MOTION,
-  PASS_MOTION_WEIGHT,
-#ifdef __KERNEL_DEBUG__
-  PASS_BVH_TRAVERSED_NODES,
-  PASS_BVH_TRAVERSED_INSTANCES,
-  PASS_BVH_INTERSECTIONS,
-  PASS_RAY_BOUNCES,
-#endif
-  PASS_RENDER_TIME,
-  PASS_CRYPTOMATTE,
-  PASS_AOV_COLOR,
-  PASS_AOV_VALUE,
-  PASS_ADAPTIVE_AUX_BUFFER,
-  PASS_SAMPLE_COUNT,
-  PASS_CATEGORY_MAIN_END = 31,
-
-  PASS_MIST = 32,
   PASS_EMISSION,
   PASS_BACKGROUND,
   PASS_AO,
@@ -384,17 +389,53 @@ typedef enum PassType {
   PASS_LIGHT, /* no real pass, used to force use_light_pass */
   PASS_DIFFUSE_DIRECT,
   PASS_DIFFUSE_INDIRECT,
-  PASS_DIFFUSE_COLOR,
   PASS_GLOSSY_DIRECT,
   PASS_GLOSSY_INDIRECT,
-  PASS_GLOSSY_COLOR,
   PASS_TRANSMISSION_DIRECT,
   PASS_TRANSMISSION_INDIRECT,
-  PASS_TRANSMISSION_COLOR,
-  PASS_VOLUME_DIRECT = 50,
+  PASS_VOLUME_DIRECT,
   PASS_VOLUME_INDIRECT,
+  PASS_CATEGORY_LIGHT_END = 31,
+
+  /* Data passes */
+  PASS_DEPTH = 32,
+  PASS_NORMAL,
+  PASS_UV,
+  PASS_OBJECT_ID,
+  PASS_MATERIAL_ID,
+  PASS_MOTION,
+  PASS_MOTION_WEIGHT,
+  PASS_RENDER_TIME,
+  PASS_CRYPTOMATTE,
+  PASS_AOV_COLOR,
+  PASS_AOV_VALUE,
+  PASS_ADAPTIVE_AUX_BUFFER,
+  PASS_SAMPLE_COUNT,
+  PASS_DIFFUSE_COLOR,
+  PASS_GLOSSY_COLOR,
+  PASS_TRANSMISSION_COLOR,
   /* No Scatter color since it's tricky to define what it would even mean. */
-  PASS_CATEGORY_LIGHT_END = 63,
+  PASS_MIST,
+  PASS_DENOISING_COLOR,
+  PASS_DENOISING_NORMAL,
+  PASS_DENOISING_ALBEDO,
+
+  /* PASS_SHADOW_CATCHER accumulates contribution of shadow catcher object which is not affected by
+   * any other object. The pass accessor will divide the combined pass by the shadow catcher. The
+   * result of this division is then to be multiplied with the backdrop.
+   *
+   * PASS_SHADOW_CATCHER_MATTE contains pass which contains non-catcher objects. This pass is to be
+   * alpha-overed onto the backdrop (after multiplication). */
+  PASS_SHADOW_CATCHER,
+  PASS_SHADOW_CATCHER_MATTE,
+
+#ifdef __KERNEL_DEBUG__
+  PASS_BVH_TRAVERSED_NODES,
+  PASS_BVH_TRAVERSED_INSTANCES,
+  PASS_BVH_INTERSECTIONS,
+  PASS_RAY_BOUNCES,
+#endif
+  PASS_CATEGORY_DATA_END = 63,
 
   PASS_BAKE_PRIMITIVE,
   PASS_BAKE_DIFFERENTIAL,
@@ -410,32 +451,6 @@ typedef enum CryptomatteType {
   CRYPT_ASSET = (1 << 2),
   CRYPT_ACCURATE = (1 << 3),
 } CryptomatteType;
-
-typedef enum DenoisingPassOffsets {
-  DENOISING_PASS_NORMAL = 0,
-  DENOISING_PASS_NORMAL_VAR = 3,
-  DENOISING_PASS_ALBEDO = 6,
-  DENOISING_PASS_ALBEDO_VAR = 9,
-  DENOISING_PASS_DEPTH = 12,
-  DENOISING_PASS_DEPTH_VAR = 13,
-  DENOISING_PASS_SHADOW_A = 14,
-  DENOISING_PASS_SHADOW_B = 17,
-  DENOISING_PASS_COLOR = 20,
-  DENOISING_PASS_COLOR_VAR = 23,
-  DENOISING_PASS_CLEAN = 26,
-
-  DENOISING_PASS_PREFILTERED_DEPTH = 0,
-  DENOISING_PASS_PREFILTERED_NORMAL = 1,
-  DENOISING_PASS_PREFILTERED_SHADOWING = 4,
-  DENOISING_PASS_PREFILTERED_ALBEDO = 5,
-  DENOISING_PASS_PREFILTERED_COLOR = 8,
-  DENOISING_PASS_PREFILTERED_VARIANCE = 11,
-  DENOISING_PASS_PREFILTERED_INTENSITY = 14,
-
-  DENOISING_PASS_SIZE_BASE = 26,
-  DENOISING_PASS_SIZE_CLEAN = 3,
-  DENOISING_PASS_SIZE_PREFILTERED = 15,
-} DenoisingPassOffsets;
 
 typedef enum eBakePassFilter {
   BAKE_FILTER_NONE = 0,
@@ -460,16 +475,6 @@ typedef enum BakePassFilterCombos {
   BAKE_FILTER_GLOSSY_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_GLOSSY),
   BAKE_FILTER_TRANSMISSION_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_TRANSMISSION),
 } BakePassFilterCombos;
-
-typedef enum DenoiseFlag {
-  DENOISING_CLEAN_DIFFUSE_DIR = (1 << 0),
-  DENOISING_CLEAN_DIFFUSE_IND = (1 << 1),
-  DENOISING_CLEAN_GLOSSY_DIR = (1 << 2),
-  DENOISING_CLEAN_GLOSSY_IND = (1 << 3),
-  DENOISING_CLEAN_TRANSMISSION_DIR = (1 << 4),
-  DENOISING_CLEAN_TRANSMISSION_IND = (1 << 5),
-  DENOISING_CLEAN_ALL_PASSES = (1 << 6) - 1,
-} DenoiseFlag;
 
 #ifdef __KERNEL_DEBUG__
 /* NOTE: This is a runtime-only struct, alignment is not
@@ -556,7 +561,6 @@ typedef ccl_addr_space struct PathRadiance {
 #ifdef __DENOISING_FEATURES__
   float3 denoising_normal;
   float3 denoising_albedo;
-  float denoising_depth;
 #endif /* __DENOISING_FEATURES__ */
 
 #ifdef __KERNEL_DEBUG__
@@ -565,20 +569,8 @@ typedef ccl_addr_space struct PathRadiance {
 } PathRadiance;
 
 typedef struct BsdfEval {
-#ifdef __PASSES__
-  int use_light_pass;
-#endif
-
   float3 diffuse;
-#ifdef __PASSES__
   float3 glossy;
-  float3 transmission;
-  float3 transparent;
-  float3 volume;
-#endif
-#ifdef __SHADOW_TRICKS__
-  float3 sum_no_mis;
-#endif
 } BsdfEval;
 
 /* Shader Flag */
@@ -662,8 +654,8 @@ typedef struct Ray {
 #endif
 
 #ifdef __RAY_DIFFERENTIALS__
-  differential3 dP;
-  differential3 dD;
+  float dP;
+  float dD;
 #endif
 } Ray;
 
@@ -710,7 +702,7 @@ typedef enum PrimitiveType {
   /* Total number of different traceable primitives.
    * NOTE: This is an actual value, not a bitflag.
    */
-  PRIMITIVE_NUM_TOTAL = 6,
+  PRIMITIVE_NUM_TOTAL = 7,
 } PrimitiveType;
 
 #define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM_TOTAL) | (type))
@@ -993,18 +985,18 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
 #endif
 
 #ifdef __OBJECT_MOTION__
-  /* object <-> world space transformations, cached to avoid
-   * re-interpolating them constantly for shading */
-  Transform ob_tfm;
-  Transform ob_itfm;
+  /* Object <-> world space transformations for motion blur, cached to avoid
+   * re-interpolating them constantly for shading. */
+  Transform ob_tfm_motion;
+  Transform ob_itfm_motion;
 #endif
 
   /* ray start position, only set for backgrounds */
   float3 ray_P;
-  differential3 ray_dP;
+  float ray_dP;
 
 #ifdef __OSL__
-  struct KernelGlobals *osl_globals;
+  const struct KernelGlobals *osl_globals;
   struct PathState *osl_path_state;
 #endif
 
@@ -1166,7 +1158,7 @@ typedef struct KernelCamera {
 
   /* render size */
   float width, height;
-  int resolution;
+  int pad1;
 
   /* anamorphic lens bokeh */
   float inv_aperture_ratio;
@@ -1240,7 +1232,12 @@ typedef struct KernelFilm {
 
   int pass_shadow;
   float pass_shadow_scale;
+
+  int pass_shadow_catcher;
+  int pass_shadow_catcher_matte;
+
   int filter_table_offset;
+
   int cryptomatte_passes;
   int cryptomatte_depth;
   int pass_cryptomatte;
@@ -1253,15 +1250,18 @@ typedef struct KernelFilm {
   float mist_inv_depth;
   float mist_falloff;
 
-  int pass_denoising_data;
-  int pass_denoising_clean;
+  int pass_denoising_color;
+  int pass_denoising_normal;
+  int pass_denoising_albedo;
+  /* Set to 1 if any of the above denoising passes present. */
+  int have_denoising_passes;
+
   int denoising_flags;
 
   int pass_aov_color;
   int pass_aov_value;
   int pass_aov_color_num;
   int pass_aov_value_num;
-  int pad1, pad2, pad3;
 
   /* XYZ to rendering color space transform. float4 instead of float3 to
    * ensure consistent padding/alignment across devices. */
@@ -1282,11 +1282,12 @@ typedef struct KernelFilm {
 #endif
 
   /* viewport rendering options */
-  int display_pass_stride;
+  int display_pass_offset;
   int display_pass_components;
-  int display_divide_pass_stride;
+  int display_divide_pass_offset;
   int use_display_exposure;
   int use_display_pass_alpha;
+  int show_active_pixels;
 
   int pad4, pad5, pad6;
 } KernelFilm;
@@ -1363,38 +1364,20 @@ typedef struct KernelIntegrator {
   float sample_clamp_direct;
   float sample_clamp_indirect;
 
-  /* branched path */
-  int branched;
-  int volume_decoupled;
-  int diffuse_samples;
-  int glossy_samples;
-  int transmission_samples;
-  int ao_samples;
-  int mesh_light_samples;
-  int subsurface_samples;
-  int sample_all_lights_direct;
-  int sample_all_lights_indirect;
-
   /* mis */
   int use_lamp_mis;
 
   /* sampler */
   int sampling_pattern;
-  int aa_samples;
-  int adaptive_min_samples;
-  int adaptive_step;
-  int adaptive_stop_per_sample;
-  float adaptive_threshold;
 
   /* volume render */
   int use_volumes;
   int volume_max_steps;
   float volume_step_rate;
-  int volume_samples;
-
-  int start_sample;
 
   int max_closures;
+
+  int has_shadow_catcher;
 
   int pad1, pad2;
 } KernelIntegrator;
@@ -1526,11 +1509,10 @@ typedef struct KernelLight {
   int type;
   float co[3];
   int shader_id;
-  int samples;
   float max_bounces;
   float random;
   float strength[3];
-  float pad1;
+  float pad1, pad2;
   Transform tfm;
   Transform itfm;
   union {
@@ -1580,110 +1562,6 @@ typedef struct KernelShader {
 } KernelShader;
 static_assert_align(KernelShader, 16);
 
-/* Declarations required for split kernel */
-
-/* Macro for queues */
-/* Value marking queue's empty slot */
-#define QUEUE_EMPTY_SLOT -1
-
-/*
- * Queue 1 - Active rays
- * Queue 2 - Background queue
- * Queue 3 - Shadow ray cast kernel - AO
- * Queue 4 - Shadow ray cast kernel - direct lighting
- */
-
-/* Queue names */
-enum QueueNumber {
-  /* All active rays and regenerated rays are enqueued here. */
-  QUEUE_ACTIVE_AND_REGENERATED_RAYS = 0,
-
-  /* All
-   * 1. Background-hit rays,
-   * 2. Rays that has exited path-iteration but needs to update output buffer
-   * 3. Rays to be regenerated
-   * are enqueued here.
-   */
-  QUEUE_HITBG_BUFF_UPDATE_TOREGEN_RAYS,
-
-  /* All rays for which a shadow ray should be cast to determine radiance
-   * contribution for AO are enqueued here.
-   */
-  QUEUE_SHADOW_RAY_CAST_AO_RAYS,
-
-  /* All rays for which a shadow ray should be cast to determine radiance
-   * contributing for direct lighting are enqueued here.
-   */
-  QUEUE_SHADOW_RAY_CAST_DL_RAYS,
-
-  /* Rays sorted according to shader->id */
-  QUEUE_SHADER_SORTED_RAYS,
-
-#ifdef __BRANCHED_PATH__
-  /* All rays moving to next iteration of the indirect loop for light */
-  QUEUE_LIGHT_INDIRECT_ITER,
-  /* Queue of all inactive rays. These are candidates for sharing work of indirect loops */
-  QUEUE_INACTIVE_RAYS,
-#  ifdef __VOLUME__
-  /* All rays moving to next iteration of the indirect loop for volumes */
-  QUEUE_VOLUME_INDIRECT_ITER,
-#  endif
-#  ifdef __SUBSURFACE__
-  /* All rays moving to next iteration of the indirect loop for subsurface */
-  QUEUE_SUBSURFACE_INDIRECT_ITER,
-#  endif
-#endif /* __BRANCHED_PATH__ */
-
-  NUM_QUEUES
-};
-
-/* We use RAY_STATE_MASK to get ray_state */
-#define RAY_STATE_MASK 0x0F
-#define RAY_FLAG_MASK 0xF0
-enum RayState {
-  RAY_INVALID = 0,
-  /* Denotes ray is actively involved in path-iteration. */
-  RAY_ACTIVE,
-  /* Denotes ray has completed processing all samples and is inactive. */
-  RAY_INACTIVE,
-  /* Denotes ray has exited path-iteration and needs to update output buffer. */
-  RAY_UPDATE_BUFFER,
-  /* Denotes ray needs to skip most surface shader work. */
-  RAY_HAS_ONLY_VOLUME,
-  /* Denotes ray has hit background */
-  RAY_HIT_BACKGROUND,
-  /* Denotes ray has to be regenerated */
-  RAY_TO_REGENERATE,
-  /* Denotes ray has been regenerated */
-  RAY_REGENERATED,
-  /* Denotes ray is moving to next iteration of the branched indirect loop */
-  RAY_LIGHT_INDIRECT_NEXT_ITER,
-  RAY_VOLUME_INDIRECT_NEXT_ITER,
-  RAY_SUBSURFACE_INDIRECT_NEXT_ITER,
-
-  /* Ray flags */
-
-  /* Flags to denote that the ray is currently evaluating the branched indirect loop */
-  RAY_BRANCHED_LIGHT_INDIRECT = (1 << 4),
-  RAY_BRANCHED_VOLUME_INDIRECT = (1 << 5),
-  RAY_BRANCHED_SUBSURFACE_INDIRECT = (1 << 6),
-  RAY_BRANCHED_INDIRECT = (RAY_BRANCHED_LIGHT_INDIRECT | RAY_BRANCHED_VOLUME_INDIRECT |
-                           RAY_BRANCHED_SUBSURFACE_INDIRECT),
-
-  /* Ray is evaluating an iteration of an indirect loop for another thread */
-  RAY_BRANCHED_INDIRECT_SHARED = (1 << 7),
-};
-
-#define ASSIGN_RAY_STATE(ray_state, ray_index, state) \
-  (ray_state[ray_index] = ((ray_state[ray_index] & RAY_FLAG_MASK) | state))
-#define IS_STATE(ray_state, ray_index, state) \
-  ((ray_index) != QUEUE_EMPTY_SLOT && ((ray_state)[(ray_index)] & RAY_STATE_MASK) == (state))
-#define ADD_RAY_FLAG(ray_state, ray_index, flag) \
-  (ray_state[ray_index] = (ray_state[ray_index] | flag))
-#define REMOVE_RAY_FLAG(ray_state, ray_index, flag) \
-  (ray_state[ray_index] = (ray_state[ray_index] & (~flag)))
-#define IS_FLAG(ray_state, ray_index, flag) (ray_state[ray_index] & flag)
-
 /* Patches */
 
 #define PATCH_MAX_CONTROL_VERTS 16
@@ -1696,7 +1574,7 @@ enum RayState {
 
 /* Work Tiles */
 
-typedef struct WorkTile {
+typedef struct KernelWorkTile {
   uint x, y, w, h;
 
   uint start_sample;
@@ -1705,13 +1583,69 @@ typedef struct WorkTile {
   int offset;
   uint stride;
 
-  ccl_global float *buffer;
-} WorkTile;
+  /* Precalculated parameters used by init_from_camera kernel on GPU. */
+  int path_index_offset;
+  int work_size;
+} KernelWorkTile;
+
+/* Shader Evaluation.
+ *
+ * Position on a primitive on an object at which we want to evaluate the
+ * shader for e.g. mesh displacement or light importance map. */
+
+typedef struct KernelShaderEvalInput {
+  int object;
+  int prim;
+  float u, v;
+} KernelShaderEvalInput;
+static_assert_align(KernelShaderEvalInput, 16);
 
 /* Pre-computed sample table sizes for PMJ02 sampler. */
 #define NUM_PMJ_SAMPLES (64 * 64)
 #define NUM_PMJ_PATTERNS 48
 
-CCL_NAMESPACE_END
+/* Device kernels.
+ *
+ * Identifier for kernels that can be executed in device queues. */
 
-#endif /*  __KERNEL_TYPES_H__ */
+typedef enum DeviceKernel {
+  DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA = 0,
+  DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+  DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW,
+  DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE,
+  DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND,
+  DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT,
+  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
+  DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME,
+  DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW,
+  DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL,
+
+  DEVICE_KERNEL_INTEGRATOR_QUEUED_PATHS_ARRAY,
+  DEVICE_KERNEL_INTEGRATOR_QUEUED_SHADOW_PATHS_ARRAY,
+  DEVICE_KERNEL_INTEGRATOR_ACTIVE_PATHS_ARRAY,
+  DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY,
+  DEVICE_KERNEL_INTEGRATOR_SORTED_PATHS_ARRAY,
+  DEVICE_KERNEL_INTEGRATOR_RESET,
+
+  DEVICE_KERNEL_SHADER_EVAL_DISPLACE,
+  DEVICE_KERNEL_SHADER_EVAL_BACKGROUND,
+
+  DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT,
+
+  DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK,
+  DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X,
+  DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y,
+
+  DEVICE_KERNEL_FILTER_CONVERT_TO_RGB,
+  DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB,
+
+  DEVICE_KERNEL_PREFIX_SUM,
+
+  DEVICE_KERNEL_NUM,
+} DeviceKernel;
+
+enum {
+  DEVICE_KERNEL_INTEGRATOR_NUM = DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL + 1,
+};
+
+CCL_NAMESPACE_END

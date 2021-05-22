@@ -700,7 +700,7 @@ ccl_device_noinline_cpu float noise_musgrave_ridged_multi_fractal_4d(
   return value;
 }
 
-ccl_device void svm_node_tex_musgrave(KernelGlobals *kg,
+ccl_device void svm_node_tex_musgrave(const KernelGlobals *kg,
                                       ShaderData *sd,
                                       float *stack,
                                       uint offsets1,

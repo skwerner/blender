@@ -25,6 +25,8 @@
  * the code has been extended and modified to support more primitives and work
  * with CPU/CUDA/OpenCL. */
 
+#pragma once
+
 #ifdef __EMBREE__
 #  include "kernel/bvh/bvh_embree.h"
 #endif
@@ -152,7 +154,7 @@ ccl_device_inline bool scene_intersect_valid(const Ray *ray)
   return isfinite_safe(ray->P.x) && isfinite_safe(ray->D.x) && len_squared(ray->D) != 0.0f;
 }
 
-ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect(const KernelGlobals *kg,
                                           const Ray *ray,
                                           const uint visibility,
                                           Intersection *isect)
@@ -238,7 +240,7 @@ ccl_device_intersect bool scene_intersect(KernelGlobals *kg,
 }
 
 #ifdef __BVH_LOCAL__
-ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_local(const KernelGlobals *kg,
                                                 const Ray *ray,
                                                 LocalIntersection *local_isect,
                                                 int local_object,
@@ -313,8 +315,8 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
         float3 dir = ray->D;
         float3 idir = ray->D;
         Transform ob_itfm;
-        rtc_ray.tfar = bvh_instance_motion_push(
-            kg, local_object, ray, &P, &dir, &idir, ray->t, &ob_itfm);
+        rtc_ray.tfar = ray->t *
+                       bvh_instance_motion_push(kg, local_object, ray, &P, &dir, &idir, &ob_itfm);
         /* bvh_instance_motion_push() returns the inverse transform but
          * it's not needed here. */
         (void)ob_itfm;
@@ -353,7 +355,7 @@ ccl_device_intersect bool scene_intersect_local(KernelGlobals *kg,
 #endif
 
 #ifdef __SHADOW_RECORD_ALL__
-ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_shadow_all(const KernelGlobals *kg,
                                                      const Ray *ray,
                                                      Intersection *isect,
                                                      uint visibility,
@@ -401,17 +403,13 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
     CCLIntersectContext ctx(kg, CCLIntersectContext::RAY_SHADOW_ALL);
     ctx.isect_s = isect;
     ctx.max_hits = max_hits;
-    ctx.num_hits = 0;
     IntersectContext rtc_ctx(&ctx);
     RTCRay rtc_ray;
     kernel_embree_setup_ray(*ray, rtc_ray, visibility);
     rtcOccluded1(kernel_data.bvh.scene, &rtc_ctx.context, &rtc_ray);
 
-    if (ctx.num_hits > max_hits) {
-      return true;
-    }
     *num_hits = ctx.num_hits;
-    return rtc_ray.tfar == -INFINITY;
+    return ctx.opaque_hit;
   }
 #    endif /* __EMBREE__ */
 
@@ -439,7 +437,7 @@ ccl_device_intersect bool scene_intersect_shadow_all(KernelGlobals *kg,
 #endif /* __SHADOW_RECORD_ALL__ */
 
 #ifdef __VOLUME__
-ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
+ccl_device_intersect bool scene_intersect_volume(const KernelGlobals *kg,
                                                  const Ray *ray,
                                                  Intersection *isect,
                                                  const uint visibility)
@@ -498,7 +496,7 @@ ccl_device_intersect bool scene_intersect_volume(KernelGlobals *kg,
 #endif /* __VOLUME__ */
 
 #ifdef __VOLUME_RECORD_ALL__
-ccl_device_intersect uint scene_intersect_volume_all(KernelGlobals *kg,
+ccl_device_intersect uint scene_intersect_volume_all(const KernelGlobals *kg,
                                                      const Ray *ray,
                                                      Intersection *isect,
                                                      const uint max_hits,

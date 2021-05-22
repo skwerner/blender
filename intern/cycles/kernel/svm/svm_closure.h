@@ -57,13 +57,9 @@ ccl_device void svm_node_glass_setup(
   }
 }
 
-ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
-                                      ShaderData *sd,
-                                      float *stack,
-                                      uint4 node,
-                                      ShaderType shader_type,
-                                      int path_flag,
-                                      int *offset)
+template<uint node_feature_mask, ShaderType shader_type>
+ccl_device void svm_node_closure_bsdf(
+    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int path_flag, int *offset)
 {
   uint type, param1_offset, param2_offset;
 
@@ -76,7 +72,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
   uint4 data_node = read_node(kg, offset);
 
   /* Only compute BSDF for surfaces, transparent variable is shared with volume extinction. */
-  if (mix_weight == 0.0f || shader_type != SHADER_TYPE_SURFACE) {
+  if ((!NODES_FEATURE(BSDF) || shader_type != SHADER_TYPE_SURFACE) || mix_weight == 0.0f) {
     if (type == CLOSURE_BSDF_PRINCIPLED_ID) {
       /* Read all principled BSDF extra data to get the right offset. */
       read_node(kg, offset);
@@ -803,7 +799,7 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
             float melanin_redness = stack_load_float_default(
                 stack, melanin_redness_ofs, data_node2.w);
 
-            /* Randomize melanin.  */
+            /* Randomize melanin. */
             float random_color = stack_load_float_default(stack, random_color_ofs, data_node3.z);
             random_color = clamp(random_color, 0.0f, 1.0f);
             float factor_random_color = 1.0f + 2.0f * (random - 0.5f) * random_color;
@@ -909,8 +905,11 @@ ccl_device void svm_node_closure_bsdf(KernelGlobals *kg,
   }
 }
 
-ccl_device void svm_node_closure_volume(
-    KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, ShaderType shader_type)
+template<ShaderType shader_type>
+ccl_device void svm_node_closure_volume(const KernelGlobals *kg,
+                                        ShaderData *sd,
+                                        float *stack,
+                                        uint4 node)
 {
 #ifdef __VOLUME__
   /* Only sum extinction for volumes, variable is shared with surface transparency. */
@@ -961,13 +960,9 @@ ccl_device void svm_node_closure_volume(
 #endif
 }
 
-ccl_device void svm_node_principled_volume(KernelGlobals *kg,
-                                           ShaderData *sd,
-                                           float *stack,
-                                           uint4 node,
-                                           ShaderType shader_type,
-                                           int path_flag,
-                                           int *offset)
+template<ShaderType shader_type>
+ccl_device void svm_node_principled_volume(
+    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int path_flag, int *offset)
 {
 #ifdef __VOLUME__
   uint4 value_node = read_node(kg, offset);
@@ -1149,7 +1144,7 @@ ccl_device void svm_node_closure_weight(ShaderData *sd, float *stack, uint weigh
   svm_node_closure_store_weight(sd, weight);
 }
 
-ccl_device void svm_node_emission_weight(KernelGlobals *kg,
+ccl_device void svm_node_emission_weight(const KernelGlobals *kg,
                                          ShaderData *sd,
                                          float *stack,
                                          uint4 node)
@@ -1186,7 +1181,7 @@ ccl_device void svm_node_mix_closure(ShaderData *sd, float *stack, uint4 node)
 /* (Bump) normal */
 
 ccl_device void svm_node_set_normal(
-    KernelGlobals *kg, ShaderData *sd, float *stack, uint in_direction, uint out_normal)
+    const KernelGlobals *kg, ShaderData *sd, float *stack, uint in_direction, uint out_normal)
 {
   float3 normal = stack_load_float3(stack, in_direction);
   sd->N = normal;

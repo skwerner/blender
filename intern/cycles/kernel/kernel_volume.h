@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 /* Ignore paths that have volume throughput below this value, to avoid unnecessary work
@@ -44,7 +46,7 @@ typedef struct VolumeShaderCoefficients {
 #ifdef __VOLUME__
 
 /* evaluate shader to get extinction coefficient at P */
-ccl_device_inline bool volume_shader_extinction_sample(KernelGlobals *kg,
+ccl_device_inline bool volume_shader_extinction_sample(const KernelGlobals *kg,
                                                        ShaderData *sd,
                                                        ccl_addr_space PathState *state,
                                                        float3 P,
@@ -64,7 +66,7 @@ ccl_device_inline bool volume_shader_extinction_sample(KernelGlobals *kg,
 }
 
 /* evaluate shader to get absorption, scattering and emission at P */
-ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
+ccl_device_inline bool volume_shader_sample(const KernelGlobals *kg,
                                             ShaderData *sd,
                                             ccl_addr_space PathState *state,
                                             float3 P,
@@ -99,19 +101,9 @@ ccl_device_inline bool volume_shader_sample(KernelGlobals *kg,
 
 #endif /* __VOLUME__ */
 
-ccl_device float3 volume_color_transmittance(float3 sigma, float t)
-{
-  return exp3(-sigma * t);
-}
-
-ccl_device float kernel_volume_channel_get(float3 value, int channel)
-{
-  return (channel == 0) ? value.x : ((channel == 1) ? value.y : value.z);
-}
-
 #ifdef __VOLUME__
 
-ccl_device float volume_stack_step_size(KernelGlobals *kg, ccl_addr_space VolumeStack *stack)
+ccl_device float volume_stack_step_size(const KernelGlobals *kg, ccl_addr_space VolumeStack *stack)
 {
   float step_size = FLT_MAX;
 
@@ -146,7 +138,7 @@ ccl_device float volume_stack_step_size(KernelGlobals *kg, ccl_addr_space Volume
   return step_size;
 }
 
-ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stack)
+ccl_device int volume_stack_sampling_method(const KernelGlobals *kg, VolumeStack *stack)
 {
   if (kernel_data.integrator.num_all_lights == 0)
     return 0;
@@ -176,7 +168,7 @@ ccl_device int volume_stack_sampling_method(KernelGlobals *kg, VolumeStack *stac
   return method;
 }
 
-ccl_device_inline void kernel_volume_step_init(KernelGlobals *kg,
+ccl_device_inline void kernel_volume_step_init(const KernelGlobals *kg,
                                                ccl_addr_space PathState *state,
                                                const float object_step_size,
                                                float t,
@@ -210,7 +202,7 @@ ccl_device_inline void kernel_volume_step_init(KernelGlobals *kg,
 
 /* homogeneous volume: assume shader evaluation at the starts gives
  * the extinction coefficient for the entire line segment */
-ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
+ccl_device void kernel_volume_shadow_homogeneous(const KernelGlobals *kg,
                                                  ccl_addr_space PathState *state,
                                                  Ray *ray,
                                                  ShaderData *sd,
@@ -224,7 +216,7 @@ ccl_device void kernel_volume_shadow_homogeneous(KernelGlobals *kg,
 
 /* heterogeneous volume: integrate stepping through the volume until we
  * reach the end, get absorbed entirely, or run out of iterations */
-ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
+ccl_device void kernel_volume_shadow_heterogeneous(const KernelGlobals *kg,
                                                    ccl_addr_space PathState *state,
                                                    Ray *ray,
                                                    ShaderData *sd,
@@ -287,7 +279,7 @@ ccl_device void kernel_volume_shadow_heterogeneous(KernelGlobals *kg,
 /* get the volume attenuation over line segment defined by ray, with the
  * assumption that there are no surfaces blocking light between the endpoints */
 #  if defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
-ccl_device_inline void kernel_volume_shadow(KernelGlobals *kg,
+ccl_device_inline void kernel_volume_shadow(const KernelGlobals *kg,
                                             ShaderData *shadow_sd,
                                             ccl_addr_space PathState *state,
                                             Ray *ray,
@@ -299,7 +291,7 @@ extern "C" __device__ void __direct_callable__kernel_volume_shadow(
 #  else
 ccl_device_noinline void kernel_volume_shadow(
 #  endif
-    KernelGlobals *kg,
+    const KernelGlobals *kg,
     ShaderData *shadow_sd,
     ccl_addr_space PathState *state,
     Ray *ray,
@@ -370,9 +362,9 @@ ccl_device float kernel_volume_distance_sample(
 {
   /* xi is [0, 1[ so log(0) should never happen, division by zero is
    * avoided because sample_sigma_t > 0 when SD_SCATTER is set */
-  float sample_sigma_t = kernel_volume_channel_get(sigma_t, channel);
+  float sample_sigma_t = volume_channel_get(sigma_t, channel);
   float3 full_transmittance = volume_color_transmittance(sigma_t, max_t);
-  float sample_transmittance = kernel_volume_channel_get(full_transmittance, channel);
+  float sample_transmittance = volume_channel_get(full_transmittance, channel);
 
   float sample_t = min(max_t, -logf(1.0f - xi * (1.0f - sample_transmittance)) / sample_sigma_t);
 
@@ -422,47 +414,12 @@ ccl_device float3 kernel_volume_emission_integrate(VolumeShaderCoefficients *coe
 
 /* Volume Path */
 
-ccl_device int kernel_volume_sample_channel(float3 albedo,
-                                            float3 throughput,
-                                            float rand,
-                                            float3 *pdf)
-{
-  /* Sample color channel proportional to throughput and single scattering
-   * albedo, to significantly reduce noise with many bounce, following:
-   *
-   * "Practical and Controllable Subsurface Scattering for Production Path
-   *  Tracing". Matt Jen-Yuan Chiang, Peter Kutz, Brent Burley. SIGGRAPH 2016. */
-  float3 weights = fabs(throughput * albedo);
-  float sum_weights = weights.x + weights.y + weights.z;
-  float3 weights_pdf;
-
-  if (sum_weights > 0.0f) {
-    weights_pdf = weights / sum_weights;
-  }
-  else {
-    weights_pdf = make_float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f);
-  }
-
-  *pdf = weights_pdf;
-
-  /* OpenCL does not support -> on float3, so don't use pdf->x. */
-  if (rand < weights_pdf.x) {
-    return 0;
-  }
-  else if (rand < weights_pdf.x + weights_pdf.y) {
-    return 1;
-  }
-  else {
-    return 2;
-  }
-}
-
 #ifdef __VOLUME__
 
 /* homogeneous volume: assume shader evaluation at the start gives
  * the volume shading coefficient for the entire line segment */
 ccl_device VolumeIntegrateResult
-kernel_volume_integrate_homogeneous(KernelGlobals *kg,
+kernel_volume_integrate_homogeneous(const KernelGlobals *kg,
                                     ccl_addr_space PathState *state,
                                     Ray *ray,
                                     ShaderData *sd,
@@ -486,14 +443,14 @@ kernel_volume_integrate_homogeneous(KernelGlobals *kg,
     float rphase = path_state_rng_1D(kg, state, PRNG_PHASE_CHANNEL);
     float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
     float3 channel_pdf;
-    int channel = kernel_volume_sample_channel(albedo, *throughput, rphase, &channel_pdf);
+    int channel = volume_sample_channel(albedo, *throughput, rphase, &channel_pdf);
 
     /* decide if we will hit or miss */
     bool scatter = true;
     float xi = path_state_rng_1D(kg, state, PRNG_SCATTER_DISTANCE);
 
     if (probalistic_scatter) {
-      float sample_sigma_t = kernel_volume_channel_get(coeff.sigma_t, channel);
+      float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
       float sample_transmittance = expf(-sample_sigma_t * t);
 
       if (1.0f - xi >= sample_transmittance) {
@@ -570,7 +527,7 @@ kernel_volume_integrate_homogeneous(KernelGlobals *kg,
  * iterations. this does probabilistically scatter or get transmitted through
  * for path tracing where we don't want to branch. */
 ccl_device VolumeIntegrateResult
-kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
+kernel_volume_integrate_heterogeneous_distance(const KernelGlobals *kg,
                                                ccl_addr_space PathState *state,
                                                Ray *ray,
                                                ShaderData *sd,
@@ -620,17 +577,17 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
         /* Sample channel, use MIS with balance heuristic. */
         float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
         float3 channel_pdf;
-        int channel = kernel_volume_sample_channel(albedo, tp, rphase, &channel_pdf);
+        int channel = volume_sample_channel(albedo, tp, rphase, &channel_pdf);
 
         /* compute transmittance over full step */
         transmittance = volume_color_transmittance(coeff.sigma_t, dt);
 
         /* decide if we will scatter or continue */
-        float sample_transmittance = kernel_volume_channel_get(transmittance, channel);
+        float sample_transmittance = volume_channel_get(transmittance, channel);
 
         if (1.0f - xi >= sample_transmittance) {
           /* compute sampling distance */
-          float sample_sigma_t = kernel_volume_channel_get(coeff.sigma_t, channel);
+          float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
           float new_dt = -logf(1.0f - xi) / sample_sigma_t;
           new_t = t + new_dt;
 
@@ -712,7 +669,7 @@ kernel_volume_integrate_heterogeneous_distance(KernelGlobals *kg,
  * between the endpoints. distance sampling is used to decide if we will
  * scatter or not. */
 ccl_device_noinline_cpu VolumeIntegrateResult
-kernel_volume_integrate(KernelGlobals *kg,
+kernel_volume_integrate(const KernelGlobals *kg,
                         ccl_addr_space PathState *state,
                         ShaderData *sd,
                         Ray *ray,
@@ -770,7 +727,7 @@ typedef struct VolumeSegment {
  * hitting or missing the volume. if we don't know the transmittance at the end of the
  * volume we can't generate stratified distance samples up to that transmittance */
 #    ifdef __VOLUME_DECOUPLED__
-ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
+ccl_device void kernel_volume_decoupled_record(const KernelGlobals *kg,
                                                PathState *state,
                                                Ray *ray,
                                                ShaderData *sd,
@@ -791,7 +748,7 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
      * and indirect light integration both having volume segments allocated.
      * We detect this using index in the pre-allocated memory. Currently we
      * only support two segments allocated at a time, if more needed some
-     * modifications to the KernelGlobals will be needed.
+     * modifications to the const KernelGlobals will be needed.
      *
      * This gives us restrictions that decoupled record should only happen
      * in the stack manner, meaning if there's subsequent call of decoupled
@@ -924,7 +881,7 @@ ccl_device void kernel_volume_decoupled_record(KernelGlobals *kg,
   }
 }
 
-ccl_device void kernel_volume_decoupled_free(KernelGlobals *kg, VolumeSegment *segment)
+ccl_device void kernel_volume_decoupled_free(const KernelGlobals *kg, VolumeSegment *segment)
 {
   if (segment->steps != &segment->stack_step) {
 #      ifdef __KERNEL_CPU__
@@ -945,7 +902,7 @@ ccl_device void kernel_volume_decoupled_free(KernelGlobals *kg, VolumeSegment *s
  * marching.
  *
  * function is expected to return VOLUME_PATH_SCATTERED when probalistic_scatter is false */
-ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *kg,
+ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(const KernelGlobals *kg,
                                                                  PathState *state,
                                                                  Ray *ray,
                                                                  ShaderData *sd,
@@ -960,14 +917,13 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 
   /* Sample color channel, use MIS with balance heuristic. */
   float3 channel_pdf;
-  int channel = kernel_volume_sample_channel(
-      segment->accum_albedo, *throughput, rphase, &channel_pdf);
+  int channel = volume_sample_channel(segment->accum_albedo, *throughput, rphase, &channel_pdf);
 
   float xi = rscatter;
 
   /* probabilistic scattering decision based on transmittance */
   if (probalistic_scatter) {
-    float sample_transmittance = kernel_volume_channel_get(segment->accum_transmittance, channel);
+    float sample_transmittance = volume_channel_get(segment->accum_transmittance, channel);
 
     if (1.0f - xi >= sample_transmittance) {
       /* rescale random number so we can reuse it */
@@ -1021,7 +977,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 
       for (int i = 0;; i++, step++) {
         /* todo: optimize using binary search */
-        step_cdf = kernel_volume_channel_get(step->cdf_distance, channel);
+        step_cdf = volume_channel_get(step->cdf_distance, channel);
 
         if (xi < step_cdf || i == segment->numsteps - 1)
           break;
@@ -1144,7 +1100,7 @@ ccl_device VolumeIntegrateResult kernel_volume_decoupled_scatter(KernelGlobals *
 #  endif /* __SPLIT_KERNEL */
 
 /* decide if we need to use decoupled or not */
-ccl_device bool kernel_volume_use_decoupled(KernelGlobals *kg,
+ccl_device bool kernel_volume_use_decoupled(const KernelGlobals *kg,
                                             bool heterogeneous,
                                             bool direct,
                                             int sampling_method)
@@ -1177,7 +1133,7 @@ ccl_device bool kernel_volume_use_decoupled(KernelGlobals *kg,
  * This is an array of object/shared ID's that the current segment of the path
  * is inside of. */
 
-ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
+ccl_device void kernel_volume_stack_init(const KernelGlobals *kg,
                                          ShaderData *stack_sd,
                                          ccl_addr_space const PathState *state,
                                          ccl_addr_space const Ray *ray,
@@ -1319,7 +1275,7 @@ ccl_device void kernel_volume_stack_init(KernelGlobals *kg,
   }
 }
 
-ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg,
+ccl_device void kernel_volume_stack_enter_exit(const KernelGlobals *kg,
                                                ShaderData *sd,
                                                ccl_addr_space VolumeStack *stack)
 {
@@ -1366,7 +1322,7 @@ ccl_device void kernel_volume_stack_enter_exit(KernelGlobals *kg,
 }
 
 #  ifdef __SUBSURFACE__
-ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
+ccl_device void kernel_volume_stack_update_for_subsurface(const KernelGlobals *kg,
                                                           ShaderData *stack_sd,
                                                           Ray *ray,
                                                           ccl_addr_space VolumeStack *stack)
@@ -1423,7 +1379,7 @@ ccl_device void kernel_volume_stack_update_for_subsurface(KernelGlobals *kg,
  * Use this function after the last bounce to get rid of all volumes apart from
  * the world's one after the last bounce to avoid render artifacts.
  */
-ccl_device_inline void kernel_volume_clean_stack(KernelGlobals *kg,
+ccl_device_inline void kernel_volume_clean_stack(const KernelGlobals *kg,
                                                  ccl_addr_space VolumeStack *volume_stack)
 {
   if (kernel_data.background.volume_shader != SHADER_NONE) {

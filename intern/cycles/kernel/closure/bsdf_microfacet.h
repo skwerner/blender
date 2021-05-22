@@ -30,8 +30,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __BSDF_MICROFACET_H__
-#define __BSDF_MICROFACET_H__
+#pragma once
+
+#include "kernel/kernel_lookup_table.h"
+#include "kernel/kernel_random.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -53,7 +55,7 @@ static_assert(sizeof(ShaderClosure) >= sizeof(MicrofacetBsdf), "MicrofacetBsdf i
 
 /* Beckmann and GGX microfacet importance sampling. */
 
-ccl_device_inline void microfacet_beckmann_sample_slopes(KernelGlobals *kg,
+ccl_device_inline void microfacet_beckmann_sample_slopes(const KernelGlobals *kg,
                                                          const float cos_theta_i,
                                                          const float sin_theta_i,
                                                          float randu,
@@ -193,7 +195,7 @@ ccl_device_inline void microfacet_ggx_sample_slopes(const float cos_theta_i,
   *slope_y = S * z * safe_sqrtf(1.0f + (*slope_x) * (*slope_x));
 }
 
-ccl_device_forceinline float3 microfacet_sample_stretched(KernelGlobals *kg,
+ccl_device_forceinline float3 microfacet_sample_stretched(const KernelGlobals *kg,
                                                           const float3 omega_i,
                                                           const float alpha_x,
                                                           const float alpha_y,
@@ -558,7 +560,7 @@ ccl_device float3 bsdf_microfacet_ggx_eval_transmit(const ShaderClosure *sc,
   return make_float3(out, out, out);
 }
 
-ccl_device int bsdf_microfacet_ggx_sample(KernelGlobals *kg,
+ccl_device int bsdf_microfacet_ggx_sample(const KernelGlobals *kg,
                                           const ShaderClosure *sc,
                                           float3 Ng,
                                           float3 I,
@@ -1006,7 +1008,7 @@ ccl_device float3 bsdf_microfacet_beckmann_eval_transmit(const ShaderClosure *sc
   return make_float3(out, out, out);
 }
 
-ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg,
+ccl_device int bsdf_microfacet_beckmann_sample(const KernelGlobals *kg,
                                                const ShaderClosure *sc,
                                                float3 Ng,
                                                float3 I,
@@ -1215,5 +1217,3 @@ ccl_device int bsdf_microfacet_beckmann_sample(KernelGlobals *kg,
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __BSDF_MICROFACET_H__ */

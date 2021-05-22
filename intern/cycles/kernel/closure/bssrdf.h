@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_BSSRDF_H__
-#define __KERNEL_BSSRDF_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -494,5 +493,3 @@ ccl_device_forceinline float bssrdf_pdf(const ShaderClosure *sc, float r)
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_BSSRDF_H__ */

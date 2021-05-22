@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void svm_node_combine_hsv(KernelGlobals *kg,
+ccl_device void svm_node_combine_hsv(const KernelGlobals *kg,
                                      ShaderData *sd,
                                      float *stack,
                                      uint hue_in,
@@ -38,7 +38,7 @@ ccl_device void svm_node_combine_hsv(KernelGlobals *kg,
     stack_store_float3(stack, color_out, color);
 }
 
-ccl_device void svm_node_separate_hsv(KernelGlobals *kg,
+ccl_device void svm_node_separate_hsv(const KernelGlobals *kg,
                                       ShaderData *sd,
                                       float *stack,
                                       uint color_in,

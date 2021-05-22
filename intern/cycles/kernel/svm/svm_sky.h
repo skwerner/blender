@@ -37,7 +37,7 @@ ccl_device float sky_perez_function(float *lam, float theta, float gamma)
          (1.0f + lam[2] * expf(lam[3] * gamma) + lam[4] * cgamma * cgamma);
 }
 
-ccl_device float3 sky_radiance_preetham(KernelGlobals *kg,
+ccl_device float3 sky_radiance_preetham(const KernelGlobals *kg,
                                         float3 dir,
                                         float sunphi,
                                         float suntheta,
@@ -90,7 +90,7 @@ ccl_device float sky_radiance_internal(float *configuration, float theta, float 
           configuration[6] * mieM + configuration[7] * zenith);
 }
 
-ccl_device float3 sky_radiance_hosek(KernelGlobals *kg,
+ccl_device float3 sky_radiance_hosek(const KernelGlobals *kg,
                                      float3 dir,
                                      float sunphi,
                                      float suntheta,
@@ -127,7 +127,7 @@ ccl_device float3 geographical_to_direction(float lat, float lon)
   return make_float3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
 }
 
-ccl_device float3 sky_radiance_nishita(KernelGlobals *kg,
+ccl_device float3 sky_radiance_nishita(const KernelGlobals *kg,
                                        float3 dir,
                                        float *nishita_data,
                                        uint texture_id)
@@ -212,7 +212,7 @@ ccl_device float3 sky_radiance_nishita(KernelGlobals *kg,
 }
 
 ccl_device void svm_node_tex_sky(
-    KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
+    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
 {
   /* Load data */
   uint dir_offset = node.y;

@@ -49,24 +49,28 @@ class BufferParams {
   int full_width;
   int full_height;
 
-  /* passes */
-  vector<Pass> passes;
-  bool denoising_data_pass;
-  /* If only some light path types should be target, an additional pass is needed. */
-  bool denoising_clean_pass;
-  /* When we're prefiltering the passes during rendering, we need to keep both the
-   * original and the prefiltered data around because neighboring tiles might still
-   * need the original data. */
-  bool denoising_prefiltered_pass;
+  /* Runtime fields, only valid after `update_passes()` or `update_offset_stride()`. */
+  int offset = -1, stride = -1;
+
+  /* Runtime fields, only valid after `update_passes()`. */
+  int pass_stride = -1;
+
+  /* Offsets of passes needed for the rendering functionality like adaptive sampling and denoising.
+   * Pre-calculated so that they are available in areas where list of passes is not accessible. */
+  int pass_sample_count = PASS_UNUSED;
+  int pass_denoising_color = PASS_UNUSED;
+  int pass_denoising_normal = PASS_UNUSED;
+  int pass_denoising_albedo = PASS_UNUSED;
 
   /* functions */
   BufferParams();
 
-  void get_offset_stride(int &offset, int &stride);
-  bool modified(const BufferParams &params);
-  int get_passes_size();
-  int get_denoising_offset();
-  int get_denoising_prefiltered_offset();
+  /* Pre-calculate all fields which depends on the passes. */
+  void update_passes(vector<Pass> &passes);
+
+  void update_offset_stride();
+
+  bool modified(const BufferParams &params) const;
 };
 
 /* Render Buffers */
@@ -78,52 +82,14 @@ class RenderBuffers {
 
   /* float buffer */
   device_vector<float> buffer;
-  bool map_neighbor_copied;
-  double render_time;
 
   explicit RenderBuffers(Device *device);
   ~RenderBuffers();
 
-  void reset(BufferParams &params);
+  void reset(const BufferParams &params);
   void zero();
 
   bool copy_from_device();
-  bool get_pass_rect(
-      const string &name, float exposure, int sample, int components, float *pixels);
-  bool get_denoising_pass_rect(
-      int offset, float exposure, int sample, int components, float *pixels);
-  bool set_pass_rect(PassType type, int components, float *pixels, int samples);
-};
-
-/* Display Buffer
- *
- * The buffer used for drawing during render, filled by converting the render
- * buffers to byte of half float storage */
-
-class DisplayBuffer {
- public:
-  /* buffer parameters */
-  BufferParams params;
-  /* dimensions for how much of the buffer is actually ready for display.
-   * with progressive render we can be using only a subset of the buffer.
-   * if these are zero, it means nothing can be drawn yet */
-  int draw_width, draw_height;
-  /* draw alpha channel? */
-  bool transparent;
-  /* use half float? */
-  bool half_float;
-  /* byte buffer for converted result */
-  device_pixels<uchar4> rgba_byte;
-  device_pixels<half4> rgba_half;
-
-  DisplayBuffer(Device *device, bool linear = false);
-  ~DisplayBuffer();
-
-  void reset(BufferParams &params);
-
-  void draw_set(int width, int height);
-  void draw(Device *device, const DeviceDrawParams &draw_params);
-  bool draw_ready();
 };
 
 /* Render Tile

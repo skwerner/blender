@@ -502,7 +502,7 @@ void ShaderManager::device_update_common(Device *device,
       (scene->params.shadingsystem == SHADINGSYSTEM_OSL || scene->params.texture.use_cache)) {
     /* set texture system */
     scene->image_manager->set_oiio_texture_system((void *)ts);
-    OIIOGlobals *oiio_globals = (OIIOGlobals *)device->oiio_memory();
+    OIIOGlobals *oiio_globals = (OIIOGlobals *)device->get_cpu_oiio_memory();
     if (oiio_globals) {
       /* update attributes from scene parms */
       ts->attribute("autotile",
@@ -745,7 +745,7 @@ void ShaderManager::get_requested_features(Scene *scene,
                                            DeviceRequestedFeatures *requested_features)
 {
   requested_features->max_nodes_group = NODE_GROUP_LEVEL_0;
-  requested_features->nodes_features = 0;
+  requested_features->nodes_features = NODE_FEATURE_BSDF | NODE_FEATURE_EMISSION;
   for (int i = 0; i < scene->shaders.size(); i++) {
     Shader *shader = scene->shaders[i];
     if (!shader->reference_count()) {

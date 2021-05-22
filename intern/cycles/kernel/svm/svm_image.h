@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float4 svm_image_texture(KernelGlobals *kg,
+ccl_device float4 svm_image_texture(const KernelGlobals *kg,
                                     int id,
                                     float x,
                                     float y,
@@ -48,8 +48,7 @@ ccl_device_inline float3 texco_remap_square(float3 co)
 }
 
 ccl_device void svm_node_tex_image(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset)
-{
+    const KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node, int *offset){
   uint co_offset, out_offset, alpha_offset, flags;
   uint projection, dx_offset, dy_offset, unused;
 
@@ -156,7 +155,7 @@ ccl_device void svm_node_tex_image(
 }
 
 ccl_device void svm_node_tex_image_box(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
+    const KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
   /* get object space normal */
   float3 N = sd->N;
@@ -279,7 +278,7 @@ ccl_device void svm_node_tex_image_box(
 }
 
 ccl_device void svm_node_tex_environment(
-    KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
+    const KernelGlobals *kg, ShaderData *sd, int path_flag, float *stack, uint4 node)
 {
   uint id = node.y;
   uint co_offset, out_offset, alpha_offset, flags;

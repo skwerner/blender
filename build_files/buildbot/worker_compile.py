@@ -49,13 +49,13 @@ def get_cmake_options(builder):
     if builder.platform == 'win':
         options.append('-DCUDA10_TOOLKIT_ROOT_DIR:PATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1')
         options.append('-DCUDA10_NVCC_EXECUTABLE:FILEPATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v10.1/bin/nvcc.exe')
-        options.append('-DCUDA11_TOOLKIT_ROOT_DIR:PATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.1')
-        options.append('-DCUDA11_NVCC_EXECUTABLE:FILEPATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.1/bin/nvcc.exe')
+        options.append('-DCUDA11_TOOLKIT_ROOT_DIR:PATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.3')
+        options.append('-DCUDA11_NVCC_EXECUTABLE:FILEPATH=C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.3/bin/nvcc.exe')
     elif builder.platform == 'linux':
         options.append('-DCUDA10_TOOLKIT_ROOT_DIR:PATH=/usr/local/cuda-10.1')
         options.append('-DCUDA10_NVCC_EXECUTABLE:FILEPATH=/usr/local/cuda-10.1/bin/nvcc')
-        options.append('-DCUDA11_TOOLKIT_ROOT_DIR:PATH=/usr/local/cuda-11.1')
-        options.append('-DCUDA11_NVCC_EXECUTABLE:FILEPATH=/usr/local/cuda-11.1/bin/nvcc')
+        options.append('-DCUDA11_TOOLKIT_ROOT_DIR:PATH=/usr/local/cuda-11.3')
+        options.append('-DCUDA11_NVCC_EXECUTABLE:FILEPATH=/usr/local/cuda-11.3/bin/nvcc')
 
     options.append("-C" + os.path.join(builder.blender_dir, config_file))
     options.append("-DCMAKE_INSTALL_PREFIX=%s" % (builder.install_dir))

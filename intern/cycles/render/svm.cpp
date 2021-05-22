@@ -494,6 +494,13 @@ void SVMCompiler::generate_svm_nodes(const ShaderNodeSet &nodes, CompilerState *
 
 void SVMCompiler::generate_closure_node(ShaderNode *node, CompilerState *state)
 {
+  /* Skip generating closure that are not supported or needed for a particular
+   * type of shader. For example a BSDF in a volume shader. */
+  const int node_feature = node->get_feature();
+  if ((state->node_feature_mask & node_feature) != node_feature) {
+    return;
+  }
+
   /* execute dependencies for closure */
   foreach (ShaderInput *in, node->inputs) {
     if (in->link != NULL) {
@@ -787,17 +794,21 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
         case SHADER_TYPE_SURFACE: /* generate surface shader */
           generate = true;
           shader->has_surface = true;
+          state.node_feature_mask = NODE_FEATURE_MASK_SURFACE;
           break;
         case SHADER_TYPE_VOLUME: /* generate volume shader */
           generate = true;
           shader->has_volume = true;
+          state.node_feature_mask = NODE_FEATURE_MASK_VOLUME;
           break;
         case SHADER_TYPE_DISPLACEMENT: /* generate displacement shader */
           generate = true;
           shader->has_displacement = true;
+          state.node_feature_mask = NODE_FEATURE_MASK_DISPLACEMENT;
           break;
         case SHADER_TYPE_BUMP: /* generate bump shader */
           generate = true;
+          state.node_feature_mask = NODE_FEATURE_MASK_BUMP;
           break;
         default:
           break;
@@ -966,6 +977,7 @@ SVMCompiler::CompilerState::CompilerState(ShaderGraph *graph)
     max_id = max(node->id, max_id);
   }
   nodes_done_flag.resize(max_id + 1, false);
+  node_feature_mask = NODE_FEATURE_ALL;
 }
 
 CCL_NAMESPACE_END

@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __BVH_TYPES__
-#define __BVH_TYPES__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -70,5 +69,3 @@ CCL_NAMESPACE_BEGIN
 #endif /* __KERNEL_DEBUG__ */
 
 CCL_NAMESPACE_END
-
-#endif /* __BVH_TYPES__ */

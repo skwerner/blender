@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __BSDF_OREN_NAYAR_H__
-#define __BSDF_OREN_NAYAR_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -129,5 +128,3 @@ ccl_device int bsdf_oren_nayar_sample(const ShaderClosure *sc,
 }
 
 CCL_NAMESPACE_END
-
-#endif /* __BSDF_OREN_NAYAR_H__ */

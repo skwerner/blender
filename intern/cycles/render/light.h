@@ -78,7 +78,6 @@ class Light : public Node {
   NODE_SOCKET_API(bool, is_enabled)
 
   NODE_SOCKET_API(Shader *, shader)
-  NODE_SOCKET_API(int, samples)
   NODE_SOCKET_API(int, max_bounces)
   NODE_SOCKET_API(uint, random_id)
 

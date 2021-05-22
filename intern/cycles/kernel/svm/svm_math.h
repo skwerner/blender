@@ -16,7 +16,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device void svm_node_math(KernelGlobals *kg,
+ccl_device void svm_node_math(const KernelGlobals *kg,
                               ShaderData *sd,
                               float *stack,
                               uint type,
@@ -35,7 +35,7 @@ ccl_device void svm_node_math(KernelGlobals *kg,
   stack_store_float(stack, result_stack_offset, result);
 }
 
-ccl_device void svm_node_vector_math(KernelGlobals *kg,
+ccl_device void svm_node_vector_math(const KernelGlobals *kg,
                                      ShaderData *sd,
                                      float *stack,
                                      uint type,

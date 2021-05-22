@@ -47,7 +47,7 @@
 #endif
 
 #ifdef WITH_OPENCL
-#  include "device/device_intern.h"
+#  include "device/opencl/device_opencl.h"
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -88,12 +88,9 @@ bool debug_flags_sync_from_scene(BL::Scene b_scene)
   flags.cpu.sse3 = get_boolean(cscene, "debug_use_cpu_sse3");
   flags.cpu.sse2 = get_boolean(cscene, "debug_use_cpu_sse2");
   flags.cpu.bvh_layout = (BVHLayout)get_enum(cscene, "debug_bvh_layout");
-  flags.cpu.split_kernel = get_boolean(cscene, "debug_use_cpu_split_kernel");
   /* Synchronize CUDA flags. */
   flags.cuda.adaptive_compile = get_boolean(cscene, "debug_use_cuda_adaptive_compile");
-  flags.cuda.split_kernel = get_boolean(cscene, "debug_use_cuda_split_kernel");
   /* Synchronize OptiX flags. */
-  flags.optix.cuda_streams = get_int(cscene, "debug_optix_cuda_streams");
   flags.optix.curves_api = get_boolean(cscene, "debug_optix_curves_api");
   /* Synchronize OpenCL device type. */
   switch (get_enum(cscene, "debug_opencl_device_type")) {
@@ -726,6 +723,10 @@ static bool image_parse_filepaths(PyObject *pyfilepaths, vector<string> &filepat
 
 static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *keywords)
 {
+#if 1
+  (void)args;
+  (void)keywords;
+#else
   static const char *keyword_list[] = {
       "preferences", "scene", "view_layer", "input", "output", "tile_size", "samples", NULL};
   PyObject *pypreferences, *pyscene, *pyviewlayer;
@@ -799,7 +800,7 @@ static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *key
   }
 
   /* Create denoiser. */
-  Denoiser denoiser(device);
+  DenoiserPipeline denoiser(device);
   denoiser.params = params;
   denoiser.input = input;
   denoiser.output = output;
@@ -816,6 +817,7 @@ static PyObject *denoise_func(PyObject * /*self*/, PyObject *args, PyObject *key
     PyErr_SetString(PyExc_ValueError, denoiser.error.c_str());
     return NULL;
   }
+#endif
 
   Py_RETURN_NONE;
 }
@@ -1125,14 +1127,6 @@ void *CCL_python_module_init()
   PyModule_AddObject(mod, "with_cycles_debug", Py_False);
   Py_INCREF(Py_False);
 #endif
-
-#ifdef WITH_NETWORK
-  PyModule_AddObject(mod, "with_network", Py_True);
-  Py_INCREF(Py_True);
-#else  /* WITH_NETWORK */
-  PyModule_AddObject(mod, "with_network", Py_False);
-  Py_INCREF(Py_False);
-#endif /* WITH_NETWORK */
 
 #ifdef WITH_EMBREE
   PyModule_AddObject(mod, "with_embree", Py_True);

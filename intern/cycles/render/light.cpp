@@ -14,18 +14,21 @@
  * limitations under the License.
  */
 
-#include "render/light.h"
 #include "device/device.h"
+
 #include "render/background.h"
 #include "render/film.h"
 #include "render/graph.h"
 #include "render/integrator.h"
+#include "render/light.h"
 #include "render/mesh.h"
 #include "render/nodes.h"
 #include "render/object.h"
 #include "render/scene.h"
 #include "render/shader.h"
 #include "render/stats.h"
+
+#include "integrator/shader_eval.h"
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
@@ -43,63 +46,49 @@ static void shade_background_pixels(Device *device,
                                     vector<float3> &pixels,
                                     Progress &progress)
 {
-  /* create input */
-  device_vector<uint4> d_input(device, "background_input", MEM_READ_ONLY);
-  device_vector<float4> d_output(device, "background_output", MEM_READ_WRITE);
-
-  uint4 *d_input_data = d_input.alloc(width * height);
-
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      float u = (x + 0.5f) / width;
-      float v = (y + 0.5f) / height;
-
-      uint4 in = make_uint4(__float_as_int(u), __float_as_int(v), 0, 0);
-      d_input_data[x + y * width] = in;
-    }
-  }
-
-  /* compute on device */
-  d_output.alloc(width * height);
-  d_output.zero_to_device();
-  d_input.copy_to_device();
-
+  /* Needs to be up to data for attribute access. */
   device->const_copy_to("__data", &dscene->data, sizeof(dscene->data));
 
-  DeviceTask main_task(DeviceTask::SHADER);
-  main_task.shader_input = d_input.device_pointer;
-  main_task.shader_output = d_output.device_pointer;
-  main_task.shader_eval_type = SHADER_EVAL_BACKGROUND;
-  main_task.shader_x = 0;
-  main_task.shader_w = width * height;
-  main_task.num_samples = 1;
-  main_task.get_cancel = function_bind(&Progress::get_cancel, &progress);
+  const int size = width * height;
+  pixels.resize(size);
 
-  /* disabled splitting for now, there's an issue with multi-GPU mem_copy_from */
-  list<DeviceTask> split_tasks;
-  main_task.split(split_tasks, 1, 128 * 128);
+  /* Evaluate shader on device. */
+  ShaderEval shader_eval(device, progress);
+  shader_eval.eval(
+      SHADER_EVAL_BACKGROUND,
+      size,
+      [&](device_vector<KernelShaderEvalInput> &d_input) {
+        /* Fill coordinates for shading. */
+        KernelShaderEvalInput *d_input_data = d_input.data();
 
-  foreach (DeviceTask &task, split_tasks) {
-    device->task_add(task);
-    device->task_wait();
-    d_output.copy_from_device(task.shader_x, 1, task.shader_w);
-  }
+        for (int y = 0; y < height; y++) {
+          for (int x = 0; x < width; x++) {
+            float u = (x + 0.5f) / width;
+            float v = (y + 0.5f) / height;
 
-  d_input.free();
+            KernelShaderEvalInput in;
+            in.object = OBJECT_NONE;
+            in.prim = PRIM_NONE;
+            in.u = u;
+            in.v = v;
+            d_input_data[x + y * width] = in;
+          }
+        }
 
-  float4 *d_output_data = d_output.data();
+        return size;
+      },
+      [&](device_vector<float4> &d_output) {
+        /* Copy output to pixel buffer. */
+        float4 *d_output_data = d_output.data();
 
-  pixels.resize(width * height);
-
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
-      pixels[y * width + x].x = d_output_data[y * width + x].x;
-      pixels[y * width + x].y = d_output_data[y * width + x].y;
-      pixels[y * width + x].z = d_output_data[y * width + x].z;
-    }
-  }
-
-  d_output.free();
+        for (int y = 0; y < height; y++) {
+          for (int x = 0; x < width; x++) {
+            pixels[y * width + x].x = d_output_data[y * width + x].x;
+            pixels[y * width + x].y = d_output_data[y * width + x].y;
+            pixels[y * width + x].z = d_output_data[y * width + x].z;
+          }
+        }
+      });
 }
 
 /* Light */
@@ -145,7 +134,6 @@ NODE_DEFINE(Light)
   SOCKET_BOOLEAN(use_transmission, "Use Transmission", true);
   SOCKET_BOOLEAN(use_scatter, "Use Scatter", true);
 
-  SOCKET_INT(samples, "Samples", 1);
   SOCKET_INT(max_bounces, "Max Bounces", 1024);
   SOCKET_UINT(random_id, "Random ID", 0);
 
@@ -166,10 +154,6 @@ void Light::tag_update(Scene *scene)
 {
   if (is_modified()) {
     scene->light_manager->tag_update(scene, LightManager::LIGHT_MODIFIED);
-
-    if (samples_is_modified()) {
-      scene->integrator->tag_update(scene, Integrator::LIGHT_SAMPLES_MODIFIED);
-    }
   }
 }
 
@@ -783,7 +767,6 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
     }
 
     klights[light_index].type = light->light_type;
-    klights[light_index].samples = light->samples;
     klights[light_index].strength[0] = light->strength.x;
     klights[light_index].strength[1] = light->strength.y;
     klights[light_index].strength[2] = light->strength.z;

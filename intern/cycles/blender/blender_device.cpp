@@ -68,13 +68,6 @@ DeviceInfo blender_device_info(BL::Preferences &b_preferences, BL::Scene &b_scen
       device = Device::get_multi_device(devices, threads, background);
     }
   }
-  else if (get_enum(cscene, "device") == 2) {
-    /* Find network device. */
-    vector<DeviceInfo> devices = Device::available_devices(DEVICE_MASK_NETWORK);
-    if (!devices.empty()) {
-      device = devices.front();
-    }
-  }
   else if (get_enum(cscene, "device") == 1) {
     /* Test if we are using GPU devices. */
     ComputeDevice compute_device = (ComputeDevice)get_enum(

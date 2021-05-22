@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef __KERNEL_WORK_STEALING_H__
-#define __KERNEL_WORK_STEALING_H__
+#pragma once
 
 CCL_NAMESPACE_BEGIN
 
@@ -24,7 +23,7 @@ CCL_NAMESPACE_BEGIN
  */
 
 /* Map global work index to tile, pixel X/Y and sample. */
-ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
+ccl_device_inline void get_work_pixel(ccl_global const KernelWorkTile *tile,
                                       uint global_work_index,
                                       ccl_private uint *x,
                                       ccl_private uint *y,
@@ -53,7 +52,7 @@ ccl_device_inline void get_work_pixel(ccl_global const WorkTile *tile,
 
 #ifdef __SPLIT_KERNEL__
 /* Returns true if there is work */
-ccl_device bool get_next_work_item(KernelGlobals *kg,
+ccl_device bool get_next_work_item(const KernelGlobals *kg,
                                    ccl_global uint *work_pools,
                                    uint total_work_size,
                                    uint ray_index,
@@ -81,18 +80,18 @@ ccl_device bool get_next_work_item(KernelGlobals *kg,
   return (*global_work_index < total_work_size);
 }
 
-ccl_device bool get_next_work(KernelGlobals *kg,
+ccl_device bool get_next_work(const KernelGlobals *kg,
                               ccl_global uint *work_pools,
                               uint total_work_size,
                               uint ray_index,
                               ccl_private uint *global_work_index)
 {
   bool got_work = false;
-  if (kernel_data.film.pass_adaptive_aux_buffer) {
+  if (kernel_data.film.pass_adaptive_aux_buffer != PASS_UNUSED) {
     do {
       got_work = get_next_work_item(kg, work_pools, total_work_size, ray_index, global_work_index);
       if (got_work) {
-        ccl_global WorkTile *tile = &kernel_split_params.tile;
+        ccl_global KernelWorkTile *tile = &kernel_split_params.tile;
         uint x, y, sample;
         get_work_pixel(tile, *global_work_index, &x, &y, &sample);
         uint buffer_offset = (tile->offset + x + y * tile->stride) * kernel_data.film.pass_stride;
@@ -113,5 +112,3 @@ ccl_device bool get_next_work(KernelGlobals *kg,
 #endif
 
 CCL_NAMESPACE_END
-
-#endif /* __KERNEL_WORK_STEALING_H__ */

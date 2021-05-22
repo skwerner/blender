@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 // clang-format off
 #include "kernel/closure/bsdf_ashikhmin_velvet.h"
 #include "kernel/closure/bsdf_diffuse.h"
@@ -109,7 +111,7 @@ ccl_device_inline float shift_cos_in(float cos_in, const float frequency_multipl
   return val;
 }
 
-ccl_device_inline int bsdf_sample(KernelGlobals *kg,
+ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
                                   ShaderData *sd,
                                   const ShaderClosure *sc,
                                   float randu,
@@ -487,18 +489,16 @@ ccl_device
 ccl_device_inline
 #endif
     float3
-    bsdf_eval(KernelGlobals *kg,
+    bsdf_eval(const KernelGlobals *kg,
               ShaderData *sd,
               const ShaderClosure *sc,
               const float3 omega_in,
+              const bool is_transmission,
               float *pdf)
 {
-  /* For curves use the smooth normal, particularly for ribbons the geometric
-   * normal gives too much darkening otherwise. */
-  const float3 Ng = (sd->type & PRIMITIVE_ALL_CURVE) ? sd->N : sd->Ng;
-  float3 eval;
+  float3 eval = zero_float3();
 
-  if (dot(Ng, omega_in) >= 0.0f) {
+  if (!is_transmission) {
     switch (sc->type) {
       case CLOSURE_BSDF_DIFFUSE_ID:
       case CLOSURE_BSDF_BSSRDF_ID:
@@ -584,7 +584,6 @@ ccl_device_inline
         break;
 #endif
       default:
-        eval = make_float3(0.0f, 0.0f, 0.0f);
         break;
     }
     if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {
@@ -677,7 +676,6 @@ ccl_device_inline
         break;
 #endif
       default:
-        eval = make_float3(0.0f, 0.0f, 0.0f);
         break;
     }
     if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {
@@ -690,7 +688,7 @@ ccl_device_inline
   return eval;
 }
 
-ccl_device void bsdf_blur(KernelGlobals *kg, ShaderClosure *sc, float roughness)
+ccl_device void bsdf_blur(const KernelGlobals *kg, ShaderClosure *sc, float roughness)
 {
   /* ToDo: do we want to blur volume closures? */
 #ifdef __SVM__

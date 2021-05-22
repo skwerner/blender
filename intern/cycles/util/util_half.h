@@ -67,17 +67,17 @@ struct half4 {
 
 #  ifdef __KERNEL_CUDA__
 
-ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
+ccl_device_inline void float4_store_half(half *h, float4 f)
 {
-  h[0] = __float2half(f.x * scale);
-  h[1] = __float2half(f.y * scale);
-  h[2] = __float2half(f.z * scale);
-  h[3] = __float2half(f.w * scale);
+  h[0] = __float2half(f.x);
+  h[1] = __float2half(f.y);
+  h[2] = __float2half(f.z);
+  h[3] = __float2half(f.w);
 }
 
 #  else
 
-ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
+ccl_device_inline void float4_store_half(half *h, float4 f)
 {
 #    ifndef __KERNEL_SSE2__
   for (int i = 0; i < 4; i++) {
@@ -87,8 +87,7 @@ ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
       uint i;
       float f;
     } in;
-    float fscale = f[i] * scale;
-    in.f = (fscale > 0.0f) ? ((fscale < 65504.0f) ? fscale : 65504.0f) : 0.0f;
+    in.f = (f[i] > 0.0f) ? ((f[i] < 65504.0f) ? f[i] : 65504.0f) : 0.0f;
     int x = in.i;
 
     int absolute = x & 0x7FFFFFFF;
@@ -100,8 +99,7 @@ ccl_device_inline void float4_store_half(half *h, float4 f, float scale)
   }
 #    else
   /* same as above with SSE */
-  ssef fscale = load4f(f) * scale;
-  ssef x = min(max(fscale, 0.0f), 65504.0f);
+  ssef x = min(max(load4f(f), 0.0f), 65504.0f);
 
 #      ifdef __KERNEL_AVX2__
   ssei rpack = _mm_cvtps_ph(x, 0);

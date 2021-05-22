@@ -62,22 +62,10 @@ class AddPresetSampling(AddPresetBase, Operator):
     preset_values = [
         "cycles.samples",
         "cycles.preview_samples",
-        "cycles.aa_samples",
-        "cycles.preview_aa_samples",
-        "cycles.diffuse_samples",
-        "cycles.glossy_samples",
-        "cycles.transmission_samples",
-        "cycles.ao_samples",
-        "cycles.mesh_light_samples",
-        "cycles.subsurface_samples",
-        "cycles.volume_samples",
         "cycles.use_square_samples",
-        "cycles.progressive",
         "cycles.seed",
         "cycles.sample_clamp_direct",
         "cycles.sample_clamp_indirect",
-        "cycles.sample_all_lights_direct",
-        "cycles.sample_all_lights_indirect",
     ]
 
     preset_subdir = "cycles/sampling"

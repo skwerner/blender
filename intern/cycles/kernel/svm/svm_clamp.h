@@ -18,7 +18,7 @@ CCL_NAMESPACE_BEGIN
 
 /* Clamp Node */
 
-ccl_device void svm_node_clamp(KernelGlobals *kg,
+ccl_device void svm_node_clamp(const KernelGlobals *kg,
                                ShaderData *sd,
                                float *stack,
                                uint value_stack_offset,

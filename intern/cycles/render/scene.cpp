@@ -490,7 +490,7 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
       requested_features.use_camera_motion |= geom->get_use_motion_blur();
     }
     if (object->get_is_shadow_catcher()) {
-      requested_features.use_shadow_tricks = true;
+      requested_features.use_shadow_catcher = true;
     }
     if (geom->is_mesh()) {
       Mesh *mesh = static_cast<Mesh *>(geom);
@@ -509,51 +509,82 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
   requested_features.use_background_light = light_manager->has_background_light(this);
 
   requested_features.use_baking = bake_manager->get_baking();
-  requested_features.use_integrator_branched = (integrator->get_method() ==
-                                                Integrator::BRANCHED_PATH);
-  if (film->get_denoising_data_pass()) {
+
+  if (Pass::contains(passes, PASS_DENOISING_COLOR)) {
     requested_features.use_denoising = true;
-    requested_features.use_shadow_tricks = true;
   }
 
   return requested_features;
 }
 
-bool Scene::update(Progress &progress, bool &kernel_switch_needed)
+bool Scene::update(Progress &progress)
 {
-  /* update scene */
-  if (need_update()) {
-    /* Update max_closures. */
-    KernelIntegrator *kintegrator = &dscene.data.integrator;
-    if (params.background) {
-      kintegrator->max_closures = get_max_closure_count();
-    }
-    else {
-      /* Currently viewport render is faster with higher max_closures, needs investigating. */
-      kintegrator->max_closures = MAX_CLOSURE;
-    }
-
-    /* Load render kernels, before device update where we upload data to the GPU. */
-    bool new_kernels_needed = load_kernels(progress, false);
-
-    progress.set_status("Updating Scene");
-    MEM_GUARDED_CALL(&progress, device_update, device, progress);
-
-    DeviceKernelStatus kernel_switch_status = device->get_active_kernel_switch_state();
-    kernel_switch_needed = kernel_switch_status == DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE ||
-                           kernel_switch_status == DEVICE_KERNEL_FEATURE_KERNEL_INVALID;
-    if (kernel_switch_status == DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL) {
-      progress.set_kernel_status("Compiling render kernels");
-    }
-    if (new_kernels_needed || kernel_switch_needed) {
-      progress.set_kernel_status("Compiling render kernels");
-      device->wait_for_availability(loaded_kernel_features);
-      progress.set_kernel_status("");
-    }
-
-    return true;
+  if (!need_update()) {
+    return false;
   }
-  return false;
+
+  /* Update max_closures. */
+  KernelIntegrator *kintegrator = &dscene.data.integrator;
+  if (params.background) {
+    kintegrator->max_closures = get_max_closure_count();
+  }
+  else {
+    /* Currently viewport render is faster with higher max_closures, needs investigating. */
+    kintegrator->max_closures = MAX_CLOSURE;
+  }
+
+  /* Load render kernels, before device update where we upload data to the GPU. */
+  load_kernels(progress, false);
+
+  progress.set_status("Updating Scene");
+  MEM_GUARDED_CALL(&progress, device_update, device, progress);
+
+  return true;
+}
+
+void Scene::update_passes()
+{
+  if (!object_manager->need_update() && !integrator->is_modified() && !film->is_modified()) {
+    return;
+  }
+
+  Pass::remove_all_auto(passes);
+
+  /* Display pass for viewport. */
+  const PassType display_pass = film->get_display_pass();
+  Pass::add(display_pass, passes, nullptr, true);
+
+  /* Create passes needed for adaptive sampling. */
+  const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
+  if (adaptive_sampling.use) {
+    Pass::add(PASS_SAMPLE_COUNT, passes, nullptr, true);
+    Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes, nullptr, true);
+  }
+
+  /* Create passes needed for denoising. */
+  const bool denoise_store_passes = integrator->get_denoise_store_passes();
+  if (integrator->get_use_denoise() || denoise_store_passes) {
+    Pass::add(PASS_DENOISING_COLOR, passes, nullptr, true);
+
+    /* NOTE: Enable all passes when storage is requested. This way it is possible to tweak denoiser
+     * parameters later on. */
+
+    if (denoise_store_passes || integrator->get_use_denoise_pass_normal()) {
+      Pass::add(PASS_DENOISING_NORMAL, passes, nullptr, true);
+    }
+
+    if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
+      Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, true);
+    }
+  }
+
+  /* Create passes for shadow catcher. */
+  if (has_shadow_catcher()) {
+    Pass::add(PASS_SHADOW_CATCHER, passes, nullptr, true);
+    Pass::add(PASS_SHADOW_CATCHER_MATTE, passes, nullptr, true);
+  }
+
+  film->tag_modified();
 }
 
 bool Scene::load_kernels(Progress &progress, bool lock_scene)
@@ -619,6 +650,19 @@ int Scene::get_max_closure_count()
   }
 
   return max_closure_global;
+}
+
+bool Scene::has_shadow_catcher() const
+{
+  /* TODO(sergey): Calculate once when object manager changes. */
+
+  for (Object *object : objects) {
+    if (object->get_is_shadow_catcher()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 template<> Light *Scene::create_node<Light>()

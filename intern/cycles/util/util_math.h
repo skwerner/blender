@@ -119,6 +119,11 @@ ccl_device_inline int min(int a, int b)
   return (a < b) ? a : b;
 }
 
+ccl_device_inline uint min(uint a, uint b)
+{
+  return (a < b) ? a : b;
+}
+
 ccl_device_inline float max(float a, float b)
 {
   return (a > b) ? a : b;
@@ -795,6 +800,18 @@ ccl_device_inline float compare_floats(float a, float b, float abs_diff, int ulp
 ccl_device_inline float precise_angle(float3 a, float3 b)
 {
   return 2.0f * atan2f(len(a - b), len(a + b));
+}
+
+/* Return value which is greater than the given one and is a power of two. */
+ccl_device_inline uint next_power_of_two(uint x)
+{
+  return x == 0 ? 1 : 1 << (32 - count_leading_zeros(x));
+}
+
+/* Return value which is lower than the given one and is a power of two. */
+ccl_device_inline uint prev_power_of_two(uint x)
+{
+  return x < 2 ? x : 1 << (31 - count_leading_zeros(x - 1));
 }
 
 CCL_NAMESPACE_END

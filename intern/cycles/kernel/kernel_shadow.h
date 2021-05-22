@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 CCL_NAMESPACE_BEGIN
 
 #ifdef __VOLUME__
@@ -22,7 +24,7 @@ CCL_NAMESPACE_BEGIN
 ccl_addr_space
 #  endif
     ccl_device_inline PathState *
-    shadow_blocked_volume_path_state(KernelGlobals *kg,
+    shadow_blocked_volume_path_state(const KernelGlobals *kg,
                                      VolumeState *volume_state,
                                      ccl_addr_space PathState *state,
                                      ShaderData *sd,
@@ -48,7 +50,7 @@ ccl_addr_space
 /* Attenuate throughput accordingly to the given intersection event.
  * Returns true if the throughput is zero and traversal can be aborted.
  */
-ccl_device_forceinline bool shadow_handle_transparent_isect(KernelGlobals *kg,
+ccl_device_forceinline bool shadow_handle_transparent_isect(const KernelGlobals *kg,
                                                             ShaderData *shadow_sd,
                                                             ccl_addr_space PathState *state,
 #ifdef __VOLUME__
@@ -87,7 +89,7 @@ ccl_device_forceinline bool shadow_handle_transparent_isect(KernelGlobals *kg,
 }
 
 /* Special version which only handles opaque shadows. */
-ccl_device bool shadow_blocked_opaque(KernelGlobals *kg,
+ccl_device bool shadow_blocked_opaque(const KernelGlobals *kg,
                                       ShaderData *shadow_sd,
                                       ccl_addr_space PathState *state,
                                       const uint visibility,
@@ -139,7 +141,7 @@ ccl_device bool shadow_blocked_opaque(KernelGlobals *kg,
  *
  * Note that hits array should be as big as max_hits+1.
  */
-ccl_device bool shadow_blocked_transparent_all_loop(KernelGlobals *kg,
+ccl_device bool shadow_blocked_transparent_all_loop(const KernelGlobals *kg,
                                                     ShaderData *sd,
                                                     ShaderData *shadow_sd,
                                                     ccl_addr_space PathState *state,
@@ -232,7 +234,7 @@ ccl_device bool shadow_blocked_transparent_all_loop(KernelGlobals *kg,
 /* Here we do all device specific trickery before invoking actual traversal
  * loop to help readability of the actual logic.
  */
-ccl_device bool shadow_blocked_transparent_all(KernelGlobals *kg,
+ccl_device bool shadow_blocked_transparent_all(const KernelGlobals *kg,
                                                ShaderData *sd,
                                                ShaderData *shadow_sd,
                                                ccl_addr_space PathState *state,
@@ -286,7 +288,7 @@ ccl_device bool shadow_blocked_transparent_all(KernelGlobals *kg,
 /* This function is only implementing device-independent traversal logic
  * which requires some precalculation done.
  */
-ccl_device bool shadow_blocked_transparent_stepped_loop(KernelGlobals *kg,
+ccl_device bool shadow_blocked_transparent_stepped_loop(const KernelGlobals *kg,
                                                         ShaderData *sd,
                                                         ShaderData *shadow_sd,
                                                         ccl_addr_space PathState *state,
@@ -365,7 +367,7 @@ ccl_device bool shadow_blocked_transparent_stepped_loop(KernelGlobals *kg,
   return blocked;
 }
 
-ccl_device bool shadow_blocked_transparent_stepped(KernelGlobals *kg,
+ccl_device bool shadow_blocked_transparent_stepped(const KernelGlobals *kg,
                                                    ShaderData *sd,
                                                    ShaderData *shadow_sd,
                                                    ccl_addr_space PathState *state,
@@ -383,7 +385,7 @@ ccl_device bool shadow_blocked_transparent_stepped(KernelGlobals *kg,
 #  endif /* __KERNEL_GPU__ || !__SHADOW_RECORD_ALL__ */
 #endif   /* __TRANSPARENT_SHADOWS__ */
 
-ccl_device_inline bool shadow_blocked(KernelGlobals *kg,
+ccl_device_inline bool shadow_blocked(const KernelGlobals *kg,
                                       ShaderData *sd,
                                       ShaderData *shadow_sd,
                                       ccl_addr_space PathState *state,

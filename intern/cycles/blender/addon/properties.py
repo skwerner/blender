@@ -39,11 +39,6 @@ enum_devices = (
     ('GPU', "GPU Compute", "Use GPU compute device for rendering, configured in the system tab in the user preferences"),
 )
 
-from _cycles import with_network
-if with_network:
-    enum_devices += (('NETWORK', "Networked Device", "Use networked device for rendering"),)
-del with_network
-
 enum_feature_set = (
     ('SUPPORTED', "Supported", "Only use finished and supported features"),
     ('EXPERIMENTAL', "Experimental", "Use experimental and incomplete features that might be broken or change in the future", 'ERROR', 1),
@@ -84,15 +79,6 @@ enum_curve_shape = (
     ('THICK', "3D Curves", "Render hair as 3D curve, for accurate results when viewing hair close up"),
 )
 
-enum_tile_order = (
-    ('CENTER', "Center", "Render from center to the edges"),
-    ('RIGHT_TO_LEFT', "Right to Left", "Render from right to left"),
-    ('LEFT_TO_RIGHT', "Left to Right", "Render from left to right"),
-    ('TOP_TO_BOTTOM', "Top to Bottom", "Render from top to bottom"),
-    ('BOTTOM_TO_TOP', "Bottom to Top", "Render from bottom to top"),
-    ('HILBERT_SPIRAL', "Hilbert Spiral", "Render in a Hilbert Spiral"),
-)
-
 enum_use_layer_samples = (
     ('USE', "Use", "Per render layer number of samples override scene samples"),
     ('BOUNDED', "Bounded", "Bound per render layer number of samples by global samples"),
@@ -101,13 +87,7 @@ enum_use_layer_samples = (
 
 enum_sampling_pattern = (
     ('SOBOL', "Sobol", "Use Sobol random sampling pattern"),
-    ('CORRELATED_MUTI_JITTER', "Correlated Multi-Jitter", "Use Correlated Multi-Jitter random sampling pattern"),
     ('PROGRESSIVE_MUTI_JITTER', "Progressive Multi-Jitter", "Use Progressive Multi-Jitter random sampling pattern"),
-)
-
-enum_integrator = (
-    ('BRANCHED_PATH', "Branched Path Tracing", "Path tracing integrator that branches on the first bounce, giving more control over the number of light and material samples"),
-    ('PATH', "Path Tracing", "Pure path tracing integrator"),
 )
 
 enum_volume_sampling = (
@@ -149,34 +129,35 @@ enum_view3d_shading_render_pass = (
     ('', "General", ""),
 
     ('COMBINED', "Combined", "Show the Combined Render pass", 1),
-    ('EMISSION', "Emission", "Show the Emission render pass", 33),
-    ('BACKGROUND', "Background", "Show the Background render pass", 34),
-    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass", 35),
+    ('EMISSION', "Emission", "Show the Emission render pass", 2),
+    ('BACKGROUND', "Background", "Show the Background render pass", 3),
+    ('AO', "Ambient Occlusion", "Show the Ambient Occlusion render pass", 4),
 
     ('', "Light", ""),
 
-    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass", 38),
-    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass", 39),
-    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass", 40),
+    ('DIFFUSE_DIRECT', "Diffuse Direct", "Show the Diffuse Direct render pass", 7),
+    ('DIFFUSE_INDIRECT', "Diffuse Indirect", "Show the Diffuse Indirect render pass", 8),
+    ('DIFFUSE_COLOR', "Diffuse Color", "Show the Diffuse Color render pass", 45),
 
-    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass", 41),
-    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass", 42),
-    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass", 43),
+    ('GLOSSY_DIRECT', "Glossy Direct", "Show the Glossy Direct render pass", 9),
+    ('GLOSSY_INDIRECT', "Glossy Indirect", "Show the Glossy Indirect render pass", 10),
+    ('GLOSSY_COLOR', "Glossy Color", "Show the Glossy Color render pass", 46),
 
     ('', "", ""),
 
-    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass", 44),
-    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 45),
-    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 46),
+    ('TRANSMISSION_DIRECT', "Transmission Direct", "Show the Transmission Direct render pass", 11),
+    ('TRANSMISSION_INDIRECT', "Transmission Indirect", "Show the Transmission Indirect render pass", 12),
+    ('TRANSMISSION_COLOR', "Transmission Color", "Show the Transmission Color render pass", 47),
 
-    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 50),
-    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 51),
+    ('VOLUME_DIRECT', "Volume Direct", "Show the Volume Direct render pass", 13),
+    ('VOLUME_INDIRECT', "Volume Indirect", "Show the Volume Indirect render pass", 14),
 
     ('', "Data", ""),
 
-    ('NORMAL', "Normal", "Show the Normal render pass", 3),
-    ('UV', "UV", "Show the UV render pass", 4),
-    ('MIST', "Mist", "Show the Mist render pass", 32),
+    ('NORMAL', "Normal", "Show the Normal render pass", 33),
+    ('UV', "UV", "Show the UV render pass", 34),
+    ('MIST', "Mist", "Show the Mist render pass", 48),
+    ('SAMPLE_COUNT', "Sample Count", "Per-pixel number of samples", 44),
 )
 
 
@@ -208,7 +189,7 @@ def enum_preview_denoiser(self, context):
 
 
 def enum_denoiser(self, context):
-    items = [('NLM', "NLM", "Cycles native non-local means denoiser, running on any compute device", 1)]
+    items = []
     items += enum_optix_denoiser(self, context)
     items += enum_openimagedenoise_denoiser(self, context)
     return items
@@ -246,13 +227,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Use Open Shading Language (CPU rendering only)",
     )
 
-    progressive: EnumProperty(
-        name="Integrator",
-        description="Method to sample lights and materials",
-        items=enum_integrator,
-        default='PATH',
-    )
-
     preview_pause: BoolProperty(
         name="Pause Preview",
         description="Pause all viewport preview renders",
@@ -273,8 +247,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     denoiser: EnumProperty(
         name="Denoiser",
         description="Denoise the image with the selected denoiser. "
-        "For denoising the image after rendering, denoising data render passes "
-        "also adapt to the selected denoiser",
+        "For denoising the image after rendering",
         items=enum_denoiser,
         default=1,
         update=update_render_passes,
@@ -304,61 +277,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         min=0, max=(1 << 24),
         default=32,
     )
-    aa_samples: IntProperty(
-        name="AA Samples",
-        description="Number of antialiasing samples to render for each pixel",
-        min=1, max=2097151,
-        default=128,
-    )
-    preview_aa_samples: IntProperty(
-        name="AA Samples",
-        description="Number of antialiasing samples to render in the viewport, unlimited if 0",
-        min=0, max=2097151,
-        default=32,
-    )
-
-    diffuse_samples: IntProperty(
-        name="Diffuse Samples",
-        description="Number of diffuse bounce samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
-    glossy_samples: IntProperty(
-        name="Glossy Samples",
-        description="Number of glossy bounce samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
-    transmission_samples: IntProperty(
-        name="Transmission Samples",
-        description="Number of transmission bounce samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
-    ao_samples: IntProperty(
-        name="Ambient Occlusion Samples",
-        description="Number of ambient occlusion samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
-    mesh_light_samples: IntProperty(
-        name="Mesh Light Samples",
-        description="Number of mesh emission light samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
-    subsurface_samples: IntProperty(
-        name="Subsurface Samples",
-        description="Number of subsurface scattering samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
-    volume_samples: IntProperty(
-        name="Volume Samples",
-        description="Number of volume scattering samples to render for each AA sample",
-        min=1, max=1024,
-        default=1,
-    )
 
     sampling_pattern: EnumProperty(
         name="Sampling Pattern",
@@ -374,17 +292,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default='USE',
     )
 
-    sample_all_lights_direct: BoolProperty(
-        name="Sample All Direct Lights",
-        description="Sample all lights (for direct samples), rather than randomly picking one",
-        default=True,
-    )
-
-    sample_all_lights_indirect: BoolProperty(
-        name="Sample All Indirect Lights",
-        description="Sample all lights (for indirect samples), rather than randomly picking one",
-        default=True,
-    )
     light_sampling_threshold: FloatProperty(
         name="Light Sampling Threshold",
         description="Probabilistically terminate light samples when the light contribution is below this threshold (more noise but faster rendering). "
@@ -625,21 +532,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=10.0,
     )
 
-    debug_tile_size: IntProperty(
-        name="Tile Size",
-        description="",
-        min=1, max=4096,
-        default=1024,
-    )
-
-    preview_start_resolution: IntProperty(
-        name="Start Resolution",
-        description="Resolution to start rendering preview at, "
-        "progressively increasing it to the full viewport size",
-        min=8, max=16384,
-        default=64,
-        subtype='PIXEL'
-    )
     preview_denoising_start_sample: IntProperty(
         name="Start Denoising",
         description="Sample to start denoising the preview at",
@@ -651,25 +543,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
         items=enum_denoising_input_passes,
         default='RGB_ALBEDO',
-    )
-
-    debug_reset_timeout: FloatProperty(
-        name="Reset timeout",
-        description="",
-        min=0.01, max=10.0,
-        default=0.1,
-    )
-    debug_cancel_timeout: FloatProperty(
-        name="Cancel timeout",
-        description="",
-        min=0.01, max=10.0,
-        default=0.1,
-    )
-    debug_text_timeout: FloatProperty(
-        name="Text timeout",
-        description="",
-        min=0.01, max=10.0,
-        default=1.0,
     )
 
     debug_bvh_type: EnumProperty(
@@ -693,21 +566,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Split BVH primitives by this number of time steps to speed up render time in cost of memory",
         default=0,
         min=0, max=16,
-    )
-    tile_order: EnumProperty(
-        name="Tile Order",
-        description="Tile order for rendering",
-        items=enum_tile_order,
-        default='HILBERT_SPIRAL',
-        options=set(),  # Not animatable!
-    )
-    use_progressive_refine: BoolProperty(
-        name="Progressive Refine",
-        description="Instead of rendering each tile until it is finished, "
-        "refine the whole image progressively "
-        "(this renders somewhat slower, "
-        "but time can be saved by manually stopping the render when the noise is low enough)",
-        default=False,
     )
 
     bake_type: EnumProperty(
@@ -913,12 +771,9 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         items=enum_bvh_layouts,
         default='EMBREE',
     )
-    debug_use_cpu_split_kernel: BoolProperty(name="Split Kernel", default=False)
 
     debug_use_cuda_adaptive_compile: BoolProperty(name="Adaptive Compile", default=False)
-    debug_use_cuda_split_kernel: BoolProperty(name="Split Kernel", default=False)
 
-    debug_optix_cuda_streams: IntProperty(name="CUDA Streams", default=1, min=1)
     debug_optix_curves_api: BoolProperty(name="Native OptiX Curve Primitive", default=False)
 
     debug_opencl_kernel_type: EnumProperty(
@@ -1100,12 +955,6 @@ class CyclesLightSettings(bpy.types.PropertyGroup):
         description="Light casts shadows",
         default=True,
     )
-    samples: IntProperty(
-        name="Samples",
-        description="Number of light samples to render for each AA sample",
-        min=1, max=10000,
-        default=1,
-    )
     max_bounces: IntProperty(
         name="Max Bounces",
         description="Maximum number of bounces the light will contribute to the render",
@@ -1152,12 +1001,6 @@ class CyclesWorldSettings(bpy.types.PropertyGroup):
         "higher values potentially produce less noise, at the cost of memory and speed",
         min=4, max=8192,
         default=1024,
-    )
-    samples: IntProperty(
-        name="Samples",
-        description="Number of light samples to render for each AA sample",
-        min=1, max=10000,
-        default=1,
     )
     max_bounces: IntProperty(
         name="Max Bounces",
@@ -1442,77 +1285,24 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         update=update_render_passes,
     )
 
+    use_pass_shadow_catcher: BoolProperty(
+        name="Shadow Catcher",
+        description="Pass containing shadows and light which is to be multiplied into backdrop",
+        default=False,
+        update=update_render_passes,
+    )
+
     use_denoising: BoolProperty(
         name="Use Denoising",
         description="Denoise the rendered image",
         default=True,
         update=update_render_passes,
     )
-    denoising_diffuse_direct: BoolProperty(
-        name="Diffuse Direct",
-        description="Denoise the direct diffuse lighting",
-        default=True,
-    )
-    denoising_diffuse_indirect: BoolProperty(
-        name="Diffuse Indirect",
-        description="Denoise the indirect diffuse lighting",
-        default=True,
-    )
-    denoising_glossy_direct: BoolProperty(
-        name="Glossy Direct",
-        description="Denoise the direct glossy lighting",
-        default=True,
-    )
-    denoising_glossy_indirect: BoolProperty(
-        name="Glossy Indirect",
-        description="Denoise the indirect glossy lighting",
-        default=True,
-    )
-    denoising_transmission_direct: BoolProperty(
-        name="Transmission Direct",
-        description="Denoise the direct transmission lighting",
-        default=True,
-    )
-    denoising_transmission_indirect: BoolProperty(
-        name="Transmission Indirect",
-        description="Denoise the indirect transmission lighting",
-        default=True,
-    )
-    denoising_strength: FloatProperty(
-        name="Denoising Strength",
-        description="Controls neighbor pixel weighting for the denoising filter (lower values preserve more detail, but aren't as smooth)",
-        min=0.0, max=1.0,
-        default=0.5,
-    )
-    denoising_feature_strength: FloatProperty(
-        name="Denoising Feature Strength",
-        description="Controls removal of noisy image feature passes (lower values preserve more detail, but aren't as smooth)",
-        min=0.0, max=1.0,
-        default=0.5,
-    )
-    denoising_radius: IntProperty(
-        name="Denoising Radius",
-        description="Size of the image area that's used to denoise a pixel (higher values are smoother, but might lose detail and are slower)",
-        min=1, max=25,
-        default=8,
-        subtype="PIXEL",
-    )
-    denoising_relative_pca: BoolProperty(
-        name="Relative Filter",
-        description="When removing pixels that don't carry information, use a relative threshold instead of an absolute one (can help to reduce artifacts, but might cause detail loss around edges)",
-        default=False,
-    )
     denoising_store_passes: BoolProperty(
         name="Store Denoising Passes",
         description="Store the denoising feature passes and the noisy image. The passes adapt to the denoiser selected for rendering",
         default=False,
         update=update_render_passes,
-    )
-    denoising_neighbor_frames: IntProperty(
-        name="Neighbor Frames",
-        description="Number of neighboring frames to use for denoising animations (more frames produce smoother results at the cost of performance)",
-        min=0, max=7,
-        default=0,
     )
 
     denoising_optix_input_passes: EnumProperty(
@@ -1699,6 +1489,10 @@ class CyclesView3DShadingSettings(bpy.types.PropertyGroup):
         description="Render pass to show in the 3D Viewport",
         items=enum_view3d_shading_render_pass,
         default='COMBINED',
+    )
+    show_active_pixels: BoolProperty(
+        name="Show Active Pixels",
+        description="When using adaptive sampling highlight pixels which are being sampled",
     )
 
 

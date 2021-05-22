@@ -61,7 +61,7 @@ const bool BlenderViewportParameters::custom_viewport_parameters() const
   return !(use_scene_world && use_scene_lights);
 }
 
-PassType BlenderViewportParameters::get_viewport_display_render_pass(BL::SpaceView3D &b_v3d)
+PassType BlenderViewportParameters::get_render_pass(BL::SpaceView3D &b_v3d)
 {
   PassType display_pass = PASS_NONE;
   if (b_v3d) {
@@ -72,17 +72,15 @@ PassType BlenderViewportParameters::get_viewport_display_render_pass(BL::SpaceVi
   return display_pass;
 }
 
-PassType update_viewport_display_passes(BL::SpaceView3D &b_v3d, vector<Pass> &passes)
+bool BlenderViewportParameters::get_show_active_pixels(BL::SpaceView3D &b_v3d)
 {
+  bool show_active_pixels = PASS_NONE;
   if (b_v3d) {
-    PassType display_pass = BlenderViewportParameters::get_viewport_display_render_pass(b_v3d);
-
-    passes.clear();
-    Pass::add(display_pass, passes);
-
-    return display_pass;
+    BL::View3DShading b_view3dshading = b_v3d.shading();
+    PointerRNA cshading = RNA_pointer_get(&b_view3dshading.ptr, "cycles");
+    show_active_pixels = get_boolean(cshading, "show_active_pixels");
   }
-  return PASS_NONE;
+  return show_active_pixels;
 }
 
 CCL_NAMESPACE_END

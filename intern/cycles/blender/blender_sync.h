@@ -74,7 +74,7 @@ class BlenderSync {
                  int width,
                  int height,
                  void **python_thread_state);
-  void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
+  void sync_view_layer(BL::ViewLayer &b_view_layer);
   void sync_render_passes(BL::RenderLayer &b_render_layer, BL::ViewLayer &b_view_layer);
   void sync_integrator(BL::ViewLayer &b_view_layer, bool background);
   void sync_camera(BL::RenderSettings &b_render,

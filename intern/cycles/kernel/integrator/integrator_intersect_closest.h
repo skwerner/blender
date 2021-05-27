@@ -70,8 +70,16 @@ ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
   }
 
   /* Setup next kernel to execute. */
-  const int next_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE;
-  INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST, next_kernel, shader);
+  if (flags & SD_HAS_RAYTRACE) {
+    INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                                DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
+                                shader);
+  }
+  else {
+    INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                                DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
+                                shader);
+  }
 
   return true;
 }

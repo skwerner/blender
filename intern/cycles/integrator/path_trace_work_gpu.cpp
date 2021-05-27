@@ -38,7 +38,9 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       queue_(device->gpu_queue_create()),
       render_buffers_(buffers),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
-      integrator_sort_key_counter_(device, "integrator_sort_key_counter", MEM_READ_WRITE),
+      integrator_shader_sort_counter_(device, "integrator_shader_sort_counter", MEM_READ_WRITE),
+      integrator_shader_raytrace_sort_counter_(
+          device, "integrator_shader_raytrace_sort_counter", MEM_READ_WRITE),
       queued_paths_(device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
       work_tiles_(device, "work_tiles", MEM_READ_WRITE),
@@ -123,12 +125,17 @@ void PathTraceWorkGPU::alloc_integrator_sorting()
 {
   /* Allocate arrays for shader sorting. */
   const int num_shaders = device_scene_->shaders.size();
-  if (integrator_sort_key_counter_.size() < num_shaders) {
-    integrator_sort_key_counter_.alloc(num_shaders);
-    integrator_sort_key_counter_.zero_to_device();
+  if (integrator_shader_sort_counter_.size() < num_shaders) {
+    integrator_shader_sort_counter_.alloc(num_shaders);
+    integrator_shader_sort_counter_.zero_to_device();
+
+    integrator_shader_raytrace_sort_counter_.alloc(num_shaders);
+    integrator_shader_raytrace_sort_counter_.zero_to_device();
 
     integrator_state_gpu_.sort_key_counter[DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE] =
-        (int *)integrator_sort_key_counter_.device_pointer;
+        (int *)integrator_shader_sort_counter_.device_pointer;
+    integrator_state_gpu_.sort_key_counter[DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE] =
+        (int *)integrator_shader_raytrace_sort_counter_.device_pointer;
   }
 }
 
@@ -218,7 +225,8 @@ void PathTraceWorkGPU::enqueue_reset()
   void *args[] = {&max_num_paths_};
   queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_RESET, max_num_paths_, args);
   queue_->zero_to_device(integrator_queue_counter_);
-  queue_->zero_to_device(integrator_sort_key_counter_);
+  queue_->zero_to_device(integrator_shader_sort_counter_);
+  queue_->zero_to_device(integrator_shader_raytrace_sort_counter_);
 
   /* Tiles enqueue need to know number of active paths, which is based on this counter. Zero the
    * counter on the host side because `zero_to_device()` is not doing it. */
@@ -250,6 +258,7 @@ bool PathTraceWorkGPU::enqueue_path_iteration()
   /* Finish shadows before potentially adding more shadow rays. We can only
    * store one shadow ray in the integrator state. */
   if (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE ||
+      kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE ||
       kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME) {
     if (queue_counter->num_queued[DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW]) {
       enqueue_path_iteration(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
@@ -276,7 +285,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
   IntegratorQueueCounter *queue_counter = integrator_queue_counter_.data();
   int num_queued = queue_counter->num_queued[kernel];
 
-  if (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE) {
+  if (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE ||
+      kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE) {
     /* Compute array of active paths, sorted by shader. */
     work_size = num_queued;
     d_path_index = (void *)queued_paths_.device_pointer;
@@ -316,6 +326,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME: {
       /* Shading kernels with integrator state and render buffer. */
       void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
@@ -370,7 +381,7 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKe
   /* Compute prefix sum of number of active paths with each shader. */
   {
     const int work_size = 1;
-    int num_shaders = integrator_sort_key_counter_.size();
+    int num_shaders = device_scene_->shaders.size();
     void *args[] = {&d_counter, &num_shaders};
     queue_->enqueue(DEVICE_KERNEL_PREFIX_SUM, work_size, args);
   }
@@ -394,10 +405,12 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKe
 
   queue_->zero_to_device(num_queued_paths_);
   if (queued_kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE) {
-    queue_->zero_to_device(integrator_sort_key_counter_);
+    queue_->zero_to_device(integrator_shader_sort_counter_);
+  }
+  else if (queued_kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE) {
+    queue_->zero_to_device(integrator_shader_raytrace_sort_counter_);
   }
   else {
-    /* TODO */
     assert(0);
   }
 }

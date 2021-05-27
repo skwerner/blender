@@ -381,24 +381,31 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
   return integrate_surface_bounce(INTEGRATOR_STATE_PASS, &sd, &rng_state);
 }
 
-template<uint node_feature_mask = NODE_FEATURE_MASK_SURFACE>
-ccl_device void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
-                                         ccl_global float *ccl_restrict render_buffer)
+template<uint node_feature_mask = NODE_FEATURE_MASK_SURFACE & ~NODE_FEATURE_RAYTRACE,
+         int current_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE>
+ccl_device_forceinline void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
+                                                     ccl_global float *ccl_restrict render_buffer)
 {
   if (integrate_surface<node_feature_mask>(INTEGRATOR_STATE_PASS, render_buffer)) {
     if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE) {
-      INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
-                           DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
+      INTEGRATOR_PATH_NEXT(current_kernel, DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
     }
     else {
       kernel_assert(INTEGRATOR_STATE(ray, t) != 0.0f);
-      INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
-                           DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
+      INTEGRATOR_PATH_NEXT(current_kernel, DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
     }
   }
   else {
-    INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE);
+    INTEGRATOR_PATH_TERMINATE(current_kernel);
   }
+}
+
+ccl_device_forceinline void integrator_shade_surface_raytrace(
+    INTEGRATOR_STATE_ARGS, ccl_global float *ccl_restrict render_buffer)
+{
+  integrator_shade_surface<NODE_FEATURE_MASK_SURFACE,
+                           DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE>(INTEGRATOR_STATE_PASS,
+                                                                            render_buffer);
 }
 
 CCL_NAMESPACE_END

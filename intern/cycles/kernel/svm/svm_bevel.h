@@ -214,6 +214,16 @@ ccl_device void svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS,
                                float *stack,
                                uint4 node)
 {
+#  if defined(__KERNEL_OPTIX__)
+  optixDirectCall<void>(1, INTEGRATOR_STATE_PASS, sd, stack, node);
+}
+
+extern "C" __device__ void __direct_callable__svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS,
+                                                             ShaderData *sd,
+                                                             float *stack,
+                                                             uint4 node)
+{
+#  endif
   uint num_samples, radius_offset, normal_offset, out_offset;
   svm_unpack_node_uchar4(node.y, &num_samples, &radius_offset, &normal_offset, &out_offset);
 

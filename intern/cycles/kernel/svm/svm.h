@@ -217,19 +217,6 @@ CCL_NAMESPACE_END
 CCL_NAMESPACE_BEGIN
 
 /* Main Interpreter Loop */
-/* TODO */
-#if 0  // defined(__KERNEL_OPTIX__) && defined(__SHADER_RAYTRACE__)
-ccl_device_inline void svm_eval_nodes(const KernelGlobals *kg,
-                                      ShaderData *sd,
-                                      ccl_global float *ccl_restrict buffer,
-                                      ShaderType type,
-                                      int path_flag)
-{
-  optixDirectCall<void>(0, kg, state, sd, buffer, type, path_flag);
-}
-extern "C" __device__ void __direct_callable__svm_eval_nodes(
-#endif
-
 template<uint node_feature_mask, ShaderType type>
 ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
                                ShaderData *sd,

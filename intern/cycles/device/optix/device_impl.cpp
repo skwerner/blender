@@ -188,12 +188,6 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     return true;
   }
 
-  /* TODO: Shader raytracing requires OptiX to overwrite the shading kernels too! */
-  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
-    set_error("AO and Bevel shader nodes are not currently supported with OptiX");
-    return false;
-  }
-
   const CUDAContextScope scope(this);
 
   /* Unload existing OptiX module and pipelines first. */
@@ -277,7 +271,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
             "the Optix SDK to be able to compile Optix kernels on demand).");
         return false;
       }
-      ptx_filename = compile_kernel(requested_features, "kernel", "optix", true);
+      ptx_filename = compile_kernel(requested_features,
+                                    (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) ?
+                                        "kernel_shader_raytrace" :
+                                        "kernel",
+                                    "optix",
+                                    true);
     }
     if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
       set_error(string_printf("Failed to load OptiX kernel from '%s'", ptx_filename.c_str()));
@@ -383,17 +382,17 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
   /* Shader raytracing replaces some functions with direct callables. */
   if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
-    group_descs[PG_CALL + 0].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    group_descs[PG_CALL + 0].callables.moduleDC = optix_module;
-    group_descs[PG_CALL + 0].callables.entryFunctionNameDC = "__direct_callable__svm_eval_nodes";
-    group_descs[PG_CALL + 1].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    group_descs[PG_CALL + 1].callables.moduleDC = optix_module;
-    group_descs[PG_CALL + 1].callables.entryFunctionNameDC =
-        "__direct_callable__kernel_volume_shadow";
-    group_descs[PG_CALL + 2].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
-    group_descs[PG_CALL + 2].callables.moduleDC = optix_module;
-    group_descs[PG_CALL + 2].callables.entryFunctionNameDC =
-        "__direct_callable__subsurface_scatter_multi_setup";
+    group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+    group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].raygen.module = optix_module;
+    group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].raygen.entryFunctionName =
+        "__raygen__kernel_optix_integrator_shade_surface_raytrace";
+    group_descs[PG_CALL_SVM_AO].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+    group_descs[PG_CALL_SVM_AO].callables.moduleDC = optix_module;
+    group_descs[PG_CALL_SVM_AO].callables.entryFunctionNameDC = "__direct_callable__svm_node_ao";
+    group_descs[PG_CALL_SVM_BEVEL].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
+    group_descs[PG_CALL_SVM_BEVEL].callables.moduleDC = optix_module;
+    group_descs[PG_CALL_SVM_BEVEL].callables.entryFunctionNameDC =
+        "__direct_callable__svm_node_bevel";
   }
 
   optix_assert(optixProgramGroupCreate(
@@ -436,6 +435,44 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 #  if OPTIX_ABI_VERSION < 24
   link_options.overrideUsesMotionBlur = motion_blur;
 #  endif
+
+  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
+    /* Create shader raytracing pipeline. */
+    vector<OptixProgramGroup> pipeline_groups;
+    pipeline_groups.reserve(NUM_PROGRAM_GROUPS);
+    pipeline_groups.push_back(groups[PG_RGEN_SHADE_SURFACE_RAYTRACE]);
+    pipeline_groups.push_back(groups[PG_MISS]);
+    pipeline_groups.push_back(groups[PG_HITD]);
+    pipeline_groups.push_back(groups[PG_HITS]);
+    pipeline_groups.push_back(groups[PG_HITL]);
+#  if OPTIX_ABI_VERSION >= 36
+    if (motion_blur) {
+      pipeline_groups.push_back(groups[PG_HITD_MOTION]);
+      pipeline_groups.push_back(groups[PG_HITS_MOTION]);
+    }
+#  endif
+    pipeline_groups.push_back(groups[PG_CALL_SVM_AO]);
+    pipeline_groups.push_back(groups[PG_CALL_SVM_BEVEL]);
+
+    optix_assert(optixPipelineCreate(context,
+                                     &pipeline_options,
+                                     &link_options,
+                                     pipeline_groups.data(),
+                                     pipeline_groups.size(),
+                                     nullptr,
+                                     0,
+                                     &pipelines[PIP_SHADE_RAYTRACE]));
+
+    /* Combine ray generation and trace continuation stack size. */
+    const unsigned int css = stack_size[PG_RGEN_SHADE_SURFACE_RAYTRACE].cssRG +
+                             link_options.maxTraceDepth * trace_css;
+    const unsigned int dss = std::max(stack_size[PG_CALL_SVM_AO].dssDC,
+                                      stack_size[PG_CALL_SVM_BEVEL].dssDC);
+
+    /* Set stack size depending on pipeline options. */
+    optix_assert(optixPipelineSetStackSize(
+        pipelines[PIP_SHADE_RAYTRACE], 0, dss, css, motion_blur ? 3 : 2));
+  }
 
   { /* Create intersection-only pipeline. */
     vector<OptixProgramGroup> pipeline_groups;

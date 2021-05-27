@@ -47,6 +47,7 @@ set(SRC_DEVICE_OPENCL
 
 set(SRC_DEVICE_OPTIX
   device/optix/kernel.cu
+  device/optix/kernel_shader_raytrace.cu
 )
 
 set(SRC_BVH_HEADERS
@@ -472,8 +473,7 @@ endif()
 # OptiX PTX modules
 
 if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
-  macro(CYCLES_OPTIX_KERNEL_ADD name flags)
-    set(input "device/optix/kernel.cu")
+  macro(CYCLES_OPTIX_KERNEL_ADD name input flags)
     set(output "${CMAKE_CURRENT_BINARY_DIR}/${name}.ptx")
 
     set(cuda_flags ${flags}
@@ -552,8 +552,14 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
     delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${output}" ${CYCLES_INSTALL_PATH}/lib)
   endmacro()
 
-  CYCLES_OPTIX_KERNEL_ADD(kernel_optix "")
-  CYCLES_OPTIX_KERNEL_ADD(kernel_optix_shader_raytrace "--keep-device-functions")
+  CYCLES_OPTIX_KERNEL_ADD(
+    kernel_optix
+    "device/optix/kernel.cu"
+    "")
+  CYCLES_OPTIX_KERNEL_ADD(
+    kernel_optix_shader_raytrace
+    "device/optix/kernel_shader_raytrace.cu"
+    "--keep-device-functions")
 
   add_custom_target(cycles_kernel_optix ALL DEPENDS ${optix_ptx})
   cycles_set_solution_folder(cycles_kernel_optix)

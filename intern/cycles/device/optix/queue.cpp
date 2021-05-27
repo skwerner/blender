@@ -40,7 +40,8 @@ void OptiXDeviceQueue::init_execution()
 
 static bool is_optix_specific_kernel(DeviceKernel kernel)
 {
-  return (kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
+  return (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE ||
+          kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
           kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
           kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
 }
@@ -73,12 +74,25 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
                         sizeof(device_ptr),
                         cuda_stream_));
 
+  if (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE) {
+    cuda_device_assert(
+        cuda_device_,
+        cuMemcpyHtoDAsync(launch_params_ptr + offsetof(KernelParamsOptiX, render_buffer),
+                          args[1],  // &d_render_buffer
+                          sizeof(device_ptr),
+                          cuda_stream_));
+  }
+
   cuda_device_assert(cuda_device_, cuStreamSynchronize(cuda_stream_));
 
   OptixPipeline pipeline = nullptr;
   OptixShaderBindingTable sbt_params = {};
 
   switch (kernel) {
+    case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
+      pipeline = optix_device->pipelines[PIP_SHADE_RAYTRACE];
+      sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_SHADE_SURFACE_RAYTRACE * sizeof(SbtRecord);
+      break;
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
       pipeline = optix_device->pipelines[PIP_INTERSECT];
       sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_CLOSEST * sizeof(SbtRecord);
@@ -132,18 +146,14 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
       return false;
   }
 
-  sbt_params.missRecordBase = sbt_data_ptr + PG_MISS * sizeof(SbtRecord);
+  sbt_params.missRecordBase = sbt_data_ptr + MISS_PROGRAM_GROUP_OFFSET * sizeof(SbtRecord);
   sbt_params.missRecordStrideInBytes = sizeof(SbtRecord);
-  sbt_params.missRecordCount = 1;
-  sbt_params.hitgroupRecordBase = sbt_data_ptr + PG_HITD * sizeof(SbtRecord);
+  sbt_params.missRecordCount = NUM_MIS_PROGRAM_GROUPS;
+  sbt_params.hitgroupRecordBase = sbt_data_ptr + HIT_PROGAM_GROUP_OFFSET * sizeof(SbtRecord);
   sbt_params.hitgroupRecordStrideInBytes = sizeof(SbtRecord);
-#  if OPTIX_ABI_VERSION >= 36
-  sbt_params.hitgroupRecordCount = 5; /* PG_HITD(_MOTION), PG_HITS(_MOTION), PG_HITL */
-#  else
-  sbt_params.hitgroupRecordCount = 3; /* PG_HITD, PG_HITS, PG_HITL */
-#  endif
-  sbt_params.callablesRecordBase = sbt_data_ptr + PG_CALL * sizeof(SbtRecord);
-  sbt_params.callablesRecordCount = 3;
+  sbt_params.hitgroupRecordCount = NUM_HIT_PROGRAM_GROUPS;
+  sbt_params.callablesRecordBase = sbt_data_ptr + CALLABLE_PROGRAM_GROUPS_BASE * sizeof(SbtRecord);
+  sbt_params.callablesRecordCount = NUM_CALLABLE_PROGRAM_GROUPS;
   sbt_params.callablesRecordStrideInBytes = sizeof(SbtRecord);
 
   /* Launch the ray generation program. */

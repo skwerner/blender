@@ -115,7 +115,8 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Keep track of number of queued kernels. */
   device_vector<IntegratorQueueCounter> integrator_queue_counter_;
   /* Shader sorting. */
-  device_vector<int> integrator_sort_key_counter_;
+  device_vector<int> integrator_shader_sort_counter_;
+  device_vector<int> integrator_shader_raytrace_sort_counter_;
 
   /* Temporary buffer to get an array of queued path for a particular kernel. */
   device_vector<int> queued_paths_;

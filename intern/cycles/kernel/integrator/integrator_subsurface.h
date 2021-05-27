@@ -531,8 +531,17 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
   const int shader = intersection_get_shader(kg, &ss_isect.hits[0]);
-  const int next_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE;
-  INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE, next_kernel, shader);
+  const int flags = kernel_tex_fetch(__shaders, shader).flags;
+  if (flags & SD_HAS_RAYTRACE) {
+    INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE,
+                                DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
+                                shader);
+  }
+  else {
+    INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE,
+                                DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
+                                shader);
+  }
 
   return true;
 }

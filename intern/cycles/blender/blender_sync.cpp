@@ -227,17 +227,12 @@ void BlenderSync::sync_recalc(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d
   if (b_v3d) {
     BlenderViewportParameters new_viewport_parameters(b_v3d);
 
-    if (viewport_parameters.modified(new_viewport_parameters)) {
+    if (viewport_parameters.shader_modified(new_viewport_parameters)) {
       world_recalc = true;
       has_updates_ = true;
     }
 
-    if (!has_updates_) {
-      Film *film = scene->film;
-
-      const PassType new_display_pass = BlenderViewportParameters::get_render_pass(b_v3d);
-      has_updates_ |= film->get_display_pass() != new_display_pass;
-    }
+    has_updates_ |= viewport_parameters.modified(new_viewport_parameters);
   }
 }
 
@@ -400,7 +395,8 @@ void BlenderSync::sync_film(BL::ViewLayer &b_view_layer, BL::SpaceView3D &b_v3d)
   Film *film = scene->film;
 
   if (b_v3d) {
-    film->set_display_pass(BlenderViewportParameters::get_render_pass(b_v3d));
+    const BlenderViewportParameters new_viewport_parameters(b_v3d);
+    film->set_display_pass(new_viewport_parameters.display_pass);
 
     if (use_developer_ui) {
       film->set_show_active_pixels(BlenderViewportParameters::get_show_active_pixels(b_v3d));

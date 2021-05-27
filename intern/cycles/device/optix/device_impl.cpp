@@ -162,11 +162,8 @@ string OptiXDevice::compile_kernel_get_common_cflags(
   }
 
   /* Specialization for shader raytracing. */
-  if (requested_features.use_shader_raytrace) {
+  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
     common_cflags += " --keep-device-functions";
-  }
-  else {
-    common_cflags += " -D __NO_SHADER_RAYTRACE__";
   }
 
   return common_cflags;
@@ -192,7 +189,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   /* TODO: Shader raytracing requires OptiX to overwrite the shading kernels too! */
-  if (requested_features.use_shader_raytrace) {
+  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
     set_error("AO and Bevel shader nodes are not currently supported with OptiX");
     return false;
   }
@@ -269,9 +266,10 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   { /* Load and compile PTX module with OptiX kernels. */
-    string ptx_data, ptx_filename = path_get(requested_features.use_shader_raytrace ?
-                                                 "lib/kernel_optix_shader_raytrace.ptx" :
-                                                 "lib/kernel_optix.ptx");
+    string ptx_data,
+        ptx_filename = path_get((requested_features.nodes_features & NODE_FEATURE_RAYTRACE) ?
+                                    "lib/kernel_optix_shader_raytrace.ptx" :
+                                    "lib/kernel_optix.ptx");
     if (use_adaptive_compilation() || path_file_size(ptx_filename) == -1) {
       if (!getenv("OPTIX_ROOT_DIR")) {
         set_error(
@@ -375,7 +373,8 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 #  endif
   }
 
-  if (requested_features.use_subsurface || requested_features.use_shader_raytrace) {
+  if (requested_features.use_subsurface ||
+      (requested_features.nodes_features & NODE_FEATURE_RAYTRACE)) {
     /* Add hit group for local intersections. */
     group_descs[PG_HITL].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
     group_descs[PG_HITL].hitgroup.moduleAH = optix_module;
@@ -383,7 +382,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   /* Shader raytracing replaces some functions with direct callables. */
-  if (requested_features.use_shader_raytrace) {
+  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
     group_descs[PG_CALL + 0].kind = OPTIX_PROGRAM_GROUP_KIND_CALLABLES;
     group_descs[PG_CALL + 0].callables.moduleDC = optix_module;
     group_descs[PG_CALL + 0].callables.entryFunctionNameDC = "__direct_callable__svm_eval_nodes";

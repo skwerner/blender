@@ -117,6 +117,7 @@ class Shader : public Node {
   bool has_surface;
   bool has_surface_emission;
   bool has_surface_transparent;
+  bool has_surface_raytrace;
   bool has_volume;
   bool has_displacement;
   bool has_surface_bssrdf;

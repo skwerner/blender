@@ -446,6 +446,8 @@ void SVMCompiler::generate_node(ShaderNode *node, ShaderNodeSet &done)
   if (current_type == SHADER_TYPE_SURFACE) {
     if (node->has_spatial_varying())
       current_shader->has_surface_spatial_varying = true;
+    if (node->get_feature() & NODE_FEATURE_RAYTRACE)
+      current_shader->has_surface_raytrace = true;
   }
   else if (current_type == SHADER_TYPE_VOLUME) {
     if (node->has_spatial_varying())
@@ -878,6 +880,7 @@ void SVMCompiler::compile(Shader *shader, array<int4> &svm_nodes, int index, Sum
   shader->has_surface = false;
   shader->has_surface_emission = false;
   shader->has_surface_transparent = false;
+  shader->has_surface_raytrace = false;
   shader->has_surface_bssrdf = false;
   shader->has_bump = has_bump;
   shader->has_bssrdf_bump = has_bump;

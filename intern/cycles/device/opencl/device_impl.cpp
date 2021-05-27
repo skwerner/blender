@@ -158,10 +158,9 @@ string OpenCLDevice::get_build_options(const DeviceRequestedFeatures &requested_
     /* NOTE: currently possible to use surface nodes like `Hair Info`, `Bump` node.
      * Perhaps we should remove them in UI as it does not make any sense when
      * rendering background. */
-    features.nodes_features &= ~NODE_FEATURE_VOLUME;
+    features.nodes_features &= ~(NODE_FEATURE_VOLUME | NODE_FEATURE_RAYTRACE);
     features.use_subsurface = false;
     features.use_volume = false;
-    features.use_shader_raytrace = false;
     features.use_patch_evaluation = false;
     features.use_integrator_branched = false;
     return features.get_build_options();
@@ -197,7 +196,6 @@ string OpenCLDevice::get_build_options(const DeviceRequestedFeatures &requested_
     if (opencl_program_name == "split_bundle") {
       features.max_nodes_group = 0;
       features.nodes_features = 0;
-      features.use_shader_raytrace = false;
     }
 
     /* No specific settings, just add the regular ones */

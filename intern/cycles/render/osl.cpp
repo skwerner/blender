@@ -769,7 +769,8 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
         current_shader->has_surface_bssrdf = true;
         current_shader->has_bssrdf_bump = true; /* can't detect yet */
       }
-      current_shader->has_bump = true; /* can't detect yet */
+      current_shader->has_bump = true;             /* can't detect yet */
+      current_shader->has_surface_raytrace = true; /* can't detect yet */
     }
 
     if (node->has_spatial_varying()) {
@@ -1065,6 +1066,8 @@ void OSLCompiler::generate_nodes(const ShaderNodeSet &nodes)
               current_shader->has_surface_emission = true;
             if (node->has_surface_transparent())
               current_shader->has_surface_transparent = true;
+            if (node->get_feature() & NODE_FEATURE_RAYTRACE)
+              current_shader->has_surface_raytrace = true;
             if (node->has_spatial_varying())
               current_shader->has_surface_spatial_varying = true;
             if (node->has_surface_bssrdf()) {

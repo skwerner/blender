@@ -216,10 +216,6 @@ class ShaderNode : public Node {
   {
     return false;
   }
-  virtual bool has_raytrace()
-  {
-    return false;
-  }
   vector<ShaderInput *> inputs;
   vector<ShaderOutput *> outputs;
 

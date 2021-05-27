@@ -284,6 +284,7 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
   }
 }
 
+template<uint node_feature_mask>
 ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 
@@ -306,8 +307,7 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
 #endif
   {
     /* Evaluate shader. */
-    shader_eval_surface<NODE_FEATURE_MASK_SURFACE>(
-        INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
+    shader_eval_surface<node_feature_mask>(INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
   }
 
 #ifdef __SUBSURFACE__
@@ -379,10 +379,11 @@ ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
   return integrate_surface_bounce(INTEGRATOR_STATE_PASS, &sd, &rng_state);
 }
 
+template<uint node_feature_mask = NODE_FEATURE_MASK_SURFACE>
 ccl_device void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
                                          ccl_global float *ccl_restrict render_buffer)
 {
-  if (integrate_surface(INTEGRATOR_STATE_PASS, render_buffer)) {
+  if (integrate_surface<node_feature_mask>(INTEGRATOR_STATE_PASS, render_buffer)) {
     if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SUBSURFACE) {
       INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
                            DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);

@@ -203,6 +203,7 @@ Shader::Shader() : Node(get_node_type())
   has_surface = false;
   has_surface_transparent = false;
   has_surface_emission = false;
+  has_surface_raytrace = false;
   has_surface_bssrdf = false;
   has_volume = false;
   has_displacement = false;
@@ -508,6 +509,8 @@ void ShaderManager::device_update_common(Device *device,
       flag |= SD_HAS_EMISSION;
     if (shader->has_surface_transparent && shader->get_use_transparent_shadow())
       flag |= SD_HAS_TRANSPARENT_SHADOW;
+    if (shader->has_surface_raytrace)
+      flag |= SD_HAS_RAYTRACE;
     if (shader->has_volume) {
       flag |= SD_HAS_VOLUME;
       has_volumes = true;
@@ -703,9 +706,6 @@ void ShaderManager::get_requested_graph_features(ShaderGraph *graph,
     }
     if (node->has_surface_transparent()) {
       requested_features->use_transparent = true;
-    }
-    if (node->has_raytrace()) {
-      requested_features->use_shader_raytrace = true;
     }
   }
 }

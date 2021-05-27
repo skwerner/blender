@@ -157,9 +157,6 @@ class DeviceRequestedFeatures {
   /* Denoising features. */
   bool use_denoising;
 
-  /* Use raytracing in shaders. */
-  bool use_shader_raytrace;
-
   /* Use true displacement */
   bool use_true_displacement;
 
@@ -186,7 +183,6 @@ class DeviceRequestedFeatures {
     use_shadow_catcher = false;
     use_principled = false;
     use_denoising = false;
-    use_shader_raytrace = false;
     use_true_displacement = false;
     use_background_light = false;
     use_path_tracing = true;
@@ -208,7 +204,6 @@ class DeviceRequestedFeatures {
              use_shadow_catcher == requested_features.use_shadow_catcher &&
              use_principled == requested_features.use_principled &&
              use_denoising == requested_features.use_denoising &&
-             use_shader_raytrace == requested_features.use_shader_raytrace &&
              use_true_displacement == requested_features.use_true_displacement &&
              use_background_light == requested_features.use_background_light);
   }
@@ -256,9 +251,6 @@ class DeviceRequestedFeatures {
     }
     if (!use_denoising) {
       build_options += " -D__NO_DENOISING__";
-    }
-    if (!use_shader_raytrace) {
-      build_options += " -D__NO_SHADER_RAYTRACE__";
     }
     return build_options;
   }

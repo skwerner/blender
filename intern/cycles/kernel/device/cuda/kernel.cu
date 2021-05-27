@@ -207,7 +207,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   if (global_index < work_size) {
     const int path_index = (path_index_array) ? path_index_array[global_index] : global_index;
-    integrator_shade_surface(NULL, path_index, render_buffer);
+    integrator_shade_surface<NODE_FEATURE_MASK_SURFACE & ~NODE_FEATURE_RAYTRACE>(
+        NULL, path_index, render_buffer);
   }
 }
 

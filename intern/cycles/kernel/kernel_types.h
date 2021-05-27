@@ -168,9 +168,6 @@ CCL_NAMESPACE_BEGIN
 #ifdef __NO_DENOISING__
 #  undef __DENOISING_FEATURES__
 #endif
-#ifdef __NO_SHADER_RAYTRACE__
-#  undef __SHADER_RAYTRACE__
-#endif
 
 /* Features that enable others */
 
@@ -858,11 +855,14 @@ enum ShaderDataFlag {
   SD_NEED_VOLUME_ATTRIBUTES = (1 << 28),
   /* Shader has emission */
   SD_HAS_EMISSION = (1 << 29),
+  /* Shader has raytracing */
+  SD_HAS_RAYTRACE = (1 << 30),
 
   SD_SHADER_FLAGS = (SD_USE_MIS | SD_HAS_TRANSPARENT_SHADOW | SD_HAS_VOLUME | SD_HAS_ONLY_VOLUME |
                      SD_HETEROGENEOUS_VOLUME | SD_HAS_BSSRDF_BUMP | SD_VOLUME_EQUIANGULAR |
                      SD_VOLUME_MIS | SD_VOLUME_CUBIC | SD_HAS_BUMP | SD_HAS_DISPLACEMENT |
-                     SD_HAS_CONSTANT_EMISSION | SD_NEED_VOLUME_ATTRIBUTES)
+                     SD_HAS_CONSTANT_EMISSION | SD_NEED_VOLUME_ATTRIBUTES | SD_HAS_EMISSION |
+                     SD_HAS_RAYTRACE)
 };
 
 /* Object flags. */

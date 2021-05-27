@@ -840,9 +840,9 @@ class AmbientOcclusionNode : public ShaderNode {
   {
     return NODE_GROUP_LEVEL_3;
   }
-  virtual bool has_raytrace()
+  virtual int get_feature()
   {
-    return true;
+    return NODE_FEATURE_RAYTRACE;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -1717,9 +1717,9 @@ class BevelNode : public ShaderNode {
   {
     return NODE_GROUP_LEVEL_3;
   }
-  virtual bool has_raytrace()
+  virtual int get_feature()
   {
-    return true;
+    return NODE_FEATURE_RAYTRACE;
   }
 
   NODE_SOCKET_API(float, radius)

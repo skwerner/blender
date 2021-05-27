@@ -561,13 +561,17 @@ ccl_device_noinline void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
 #  ifdef __SHADER_RAYTRACE__
       case NODE_BEVEL:
-        svm_node_bevel(INTEGRATOR_STATE_PASS, sd, stack, node);
+        if (NODES_FEATURE(RAYTRACE)) {
+          svm_node_bevel(INTEGRATOR_STATE_PASS, sd, stack, node);
+        }
         break;
       case NODE_AMBIENT_OCCLUSION:
-        svm_node_ao(INTEGRATOR_STATE_PASS, sd, stack, node);
+        if (NODES_FEATURE(RAYTRACE)) {
+          svm_node_ao(INTEGRATOR_STATE_PASS, sd, stack, node);
+        }
         break;
-#  endif /* __SHADER_RAYTRACE__ */
-#endif   /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
+#  endif
+#endif /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
 
 #if NODES_GROUP(NODE_GROUP_LEVEL_4)
       case NODE_TEX_VOXEL:

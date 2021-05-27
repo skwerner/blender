@@ -71,7 +71,7 @@ ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
 
   /* Setup next kernel to execute. */
   const int next_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE;
-  INTEGRATOR_PATH_NEXT_SORTED(INTERSECT_CLOSEST, next_kernel, shader);
+  INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST, next_kernel, shader);
 
   return true;
 }
@@ -117,7 +117,8 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {
     /* Continue with volume kernel if we are inside a volume, regardless
      * if we hit anything. */
-    INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_VOLUME);
+    INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                         DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME);
     return;
   }
 #endif
@@ -125,7 +126,8 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   if (hit) {
     /* Hit a surface, continue with light or surface kernel. */
     if (isect.type & PRIMITIVE_LAMP) {
-      INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_LIGHT);
+      INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                           DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT);
       return;
     }
     else {
@@ -136,14 +138,15 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
         return;
       }
       else {
-        INTEGRATOR_PATH_TERMINATE(INTERSECT_CLOSEST);
+        INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
         return;
       }
     }
   }
   else {
     /* Nothing hit, continue with background kernel. */
-    INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_BACKGROUND);
+    INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                         DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
     return;
   }
 }

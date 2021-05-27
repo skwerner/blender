@@ -106,11 +106,12 @@ ccl_device void integrator_shade_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, transparent_bounce) = transparent_bounce;
 
   if (transparent_bounce >= kernel_data.integrator.transparent_max_bounce) {
-    INTEGRATOR_PATH_TERMINATE(SHADE_LIGHT);
+    INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT);
     return;
   }
   else {
-    INTEGRATOR_PATH_NEXT(SHADE_LIGHT, INTERSECT_CLOSEST);
+    INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_SHADE_LIGHT,
+                         DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
     return;
   }
 

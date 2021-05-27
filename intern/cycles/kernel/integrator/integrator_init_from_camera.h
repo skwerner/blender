@@ -108,7 +108,7 @@ ccl_device bool integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
   path_state_init_integrator(INTEGRATOR_STATE_PASS, sample, rng_hash);
 
   /* Continue with intersect_closest kernel. */
-  INTEGRATOR_PATH_INIT(INTERSECT_CLOSEST);
+  INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
 
   return true;
 }

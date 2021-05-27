@@ -149,33 +149,6 @@ ccl_device_inline void kernel_write_shadow_catcher_bounce_data(
 
 #endif /* __SHADOW_CATCHER__ */
 
-#if 0
-#  ifdef __KERNEL_DEBUG__
-ccl_device_inline void kernel_write_debug_passes(const KernelGlobals *ccl_restrict kg,
-                                                 ccl_global float *ccl_restrict buffer,
-                                                 PathRadiance *L)
-{
-  int flag = kernel_data.film.pass_flag;
-  if (flag & PASSMASK(BVH_TRAVERSED_NODES)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_bvh_traversed_nodes,
-                            L->debug_data.num_bvh_traversed_nodes);
-  }
-  if (flag & PASSMASK(BVH_TRAVERSED_INSTANCES)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_bvh_traversed_instances,
-                            L->debug_data.num_bvh_traversed_instances);
-  }
-  if (flag & PASSMASK(BVH_INTERSECTIONS)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_bvh_intersections,
-                            L->debug_data.num_bvh_intersections);
-  }
-  if (flag & PASSMASK(RAY_BOUNCES)) {
-    kernel_write_pass_float(buffer + kernel_data.film.pass_ray_bounces,
-                            L->debug_data.num_ray_bounces);
-  }
-}
-#  endif /* __KERNEL_DEBUG__ */
-#endif
-
 #ifdef __KERNEL_CPU__
 #  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
     kernel_write_id_pass_cpu(buffer, depth * 2, id, matte_weight, kg->coverage_##name)
@@ -359,9 +332,6 @@ ccl_device_inline void kernel_write_result(const KernelGlobals *ccl_restrict kg,
     kernel_write_pass_float4(buffer, make_float4(L_sum.x, L_sum.y, L_sum.z, alpha));
   }
 
-#  ifdef __KERNEL_DEBUG__
-  kernel_write_debug_passes(kg, buffer, L);
-#  endif
 
   /* Adaptive Sampling. Fill the additional buffer with the odd samples and calculate our stopping
      criteria. This is the heuristic from "A hierarchical automatic stopping condition for Monte

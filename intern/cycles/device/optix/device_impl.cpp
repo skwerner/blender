@@ -217,6 +217,8 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
   OptixModuleCompileOptions module_options = {};
   module_options.maxRegisterCount = 0; /* Do not set an explicit register limit. */
+
+  /* TODO(sergey): Make it configurable via `DebugFlags` instead of compile-time. */
 #  ifdef WITH_CYCLES_DEBUG
   module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
   module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
@@ -422,6 +424,8 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
   OptixPipelineLinkOptions link_options = {};
   link_options.maxTraceDepth = 1;
+
+  /* TODO(sergey): Make it configurable via `DebugFlags` instead of compile-time. */
 #  ifdef WITH_CYCLES_DEBUG
   link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
 #  else

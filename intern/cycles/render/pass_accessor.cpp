@@ -239,15 +239,6 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
         pixels[0] = __float_as_uint(f) * scaler.scale(i);
       }
     }
-#ifdef WITH_CYCLES_DEBUG
-    else if (type == PASS_BVH_TRAVERSED_NODES || type == PASS_BVH_TRAVERSED_INSTANCES ||
-             type == PASS_BVH_INTERSECTIONS || type == PASS_RAY_BOUNCES) {
-      for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
-        const float f = *in;
-        pixels[0] = f * scaler.scale_exposure(i);
-      }
-    }
-#endif
     else {
       for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
         const float f = *in;

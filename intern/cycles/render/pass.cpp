@@ -40,12 +40,6 @@ const NodeEnum *Pass::get_type_enum()
     pass_type_enum.insert("material_id", PASS_MATERIAL_ID);
     pass_type_enum.insert("motion", PASS_MOTION);
     pass_type_enum.insert("motion_weight", PASS_MOTION_WEIGHT);
-#ifdef __KERNEL_DEBUG__
-    pass_type_enum.insert("traversed_nodes", PASS_BVH_TRAVERSED_NODES);
-    pass_type_enum.insert("traverse_instances", PASS_BVH_TRAVERSED_INSTANCES);
-    pass_type_enum.insert("bvh_intersections", PASS_BVH_INTERSECTIONS);
-    pass_type_enum.insert("ray_bounces", PASS_RAY_BOUNCES);
-#endif
     pass_type_enum.insert("render_time", PASS_RENDER_TIME);
     pass_type_enum.insert("cryptomatte", PASS_CRYPTOMATTE);
     pass_type_enum.insert("aov_color", PASS_AOV_COLOR);
@@ -195,15 +189,6 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
        */
       pass.components = 0;
       break;
-#ifdef WITH_CYCLES_DEBUG
-    case PASS_BVH_TRAVERSED_NODES:
-    case PASS_BVH_TRAVERSED_INSTANCES:
-    case PASS_BVH_INTERSECTIONS:
-    case PASS_RAY_BOUNCES:
-      pass.components = 1;
-      pass.exposure = false;
-      break;
-#endif
     case PASS_RENDER_TIME:
       /* This pass is handled entirely on the host side. */
       pass.components = 0;

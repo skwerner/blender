@@ -241,9 +241,6 @@ string CUDADevice::compile_kernel_get_common_cflags(
   if (extra_cflags) {
     cflags += string(" ") + string(extra_cflags);
   }
-#  ifdef WITH_CYCLES_DEBUG
-  cflags += " -D__KERNEL_DEBUG__";
-#  endif
 
 #  ifdef WITH_NANOVDB
   cflags += " -DWITH_NANOVDB";

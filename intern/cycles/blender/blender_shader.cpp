@@ -1370,7 +1370,7 @@ void BlenderSync::sync_world(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d,
 
   BL::World b_world = b_scene.world();
 
-  BlenderViewportParameters new_viewport_parameters(b_v3d);
+  BlenderViewportParameters new_viewport_parameters(b_v3d, use_developer_ui);
 
   if (world_recalc || update_all || b_world.ptr.data != world_map ||
       viewport_parameters.shader_modified(new_viewport_parameters)) {

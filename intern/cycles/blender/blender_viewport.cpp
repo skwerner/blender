@@ -26,11 +26,12 @@ BlenderViewportParameters::BlenderViewportParameters()
       studiolight_rotate_z(0.0f),
       studiolight_intensity(1.0f),
       studiolight_background_alpha(1.0f),
-      display_pass(PASS_COMBINED)
+      display_pass(PASS_COMBINED),
+      show_active_pixels(false)
 {
 }
 
-BlenderViewportParameters::BlenderViewportParameters(BL::SpaceView3D &b_v3d)
+BlenderViewportParameters::BlenderViewportParameters(BL::SpaceView3D &b_v3d, bool use_developer_ui)
     : BlenderViewportParameters()
 {
   if (!b_v3d) {
@@ -56,6 +57,9 @@ BlenderViewportParameters::BlenderViewportParameters(BL::SpaceView3D &b_v3d)
 
   /* Film. */
   display_pass = (PassType)get_enum(cshading, "render_pass", -1, -1);
+  if (use_developer_ui) {
+    show_active_pixels = get_boolean(cshading, "show_active_pixels");
+  }
 }
 
 bool BlenderViewportParameters::shader_modified(const BlenderViewportParameters &other) const
@@ -69,7 +73,7 @@ bool BlenderViewportParameters::shader_modified(const BlenderViewportParameters 
 
 bool BlenderViewportParameters::film_modified(const BlenderViewportParameters &other) const
 {
-  return display_pass != other.display_pass;
+  return display_pass != other.display_pass || show_active_pixels != other.show_active_pixels;
 }
 
 bool BlenderViewportParameters::modified(const BlenderViewportParameters &other) const
@@ -80,17 +84,6 @@ bool BlenderViewportParameters::modified(const BlenderViewportParameters &other)
 bool BlenderViewportParameters::use_custom_shader() const
 {
   return !(use_scene_world && use_scene_lights);
-}
-
-bool BlenderViewportParameters::get_show_active_pixels(BL::SpaceView3D &b_v3d)
-{
-  bool show_active_pixels = PASS_NONE;
-  if (b_v3d) {
-    BL::View3DShading b_view3dshading = b_v3d.shading();
-    PointerRNA cshading = RNA_pointer_get(&b_view3dshading.ptr, "cycles");
-    show_active_pixels = get_boolean(cshading, "show_active_pixels");
-  }
-  return show_active_pixels;
 }
 
 CCL_NAMESPACE_END

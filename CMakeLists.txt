@@ -404,13 +404,11 @@ set(CYCLES_CUDA_BINARIES_ARCH sm_30 sm_35 sm_37 sm_50 sm_52 sm_60 sm_61 sm_70 sm
 mark_as_advanced(CYCLES_CUDA_BINARIES_ARCH)
 unset(PLATFORM_DEFAULT)
 option(WITH_CYCLES_LOGGING  "Build Cycles with logging support" ON)
-option(WITH_CYCLES_DEBUG    "Build Cycles with extra debug capabilities" OFF)
 option(WITH_CYCLES_NATIVE_ONLY  "Build Cycles with native kernel only (which fits current CPU, use for development only)" OFF)
 option(WITH_CYCLES_KERNEL_ASAN  "Build Cycles kernels with address sanitizer when WITH_COMPILER_ASAN is on, even if it's very slow" OFF)
 mark_as_advanced(WITH_CYCLES_KERNEL_ASAN)
 mark_as_advanced(WITH_CYCLES_CUBIN_COMPILER)
 mark_as_advanced(WITH_CYCLES_LOGGING)
-mark_as_advanced(WITH_CYCLES_DEBUG)
 mark_as_advanced(WITH_CYCLES_NATIVE_ONLY)
 
 option(WITH_CYCLES_DEVICE_CUDA              "Enable Cycles CUDA compute support" ON)

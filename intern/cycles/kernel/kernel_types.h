@@ -1218,8 +1218,6 @@ typedef struct KernelFilm {
   /* Set to 1 if any of the above denoising passes present. */
   int have_denoising_passes;
 
-  int denoising_flags;
-
   int pass_aov_color;
   int pass_aov_value;
   int pass_aov_color_num;
@@ -1242,6 +1240,8 @@ typedef struct KernelFilm {
   int use_display_exposure;
   int use_display_pass_alpha;
   int show_active_pixels;
+
+  int pad;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 

@@ -338,18 +338,18 @@ ccl_device_inline float path_state_rng_1D_hash(const KernelGlobals *kg,
 }
 
 ccl_device_inline float path_branched_rng_1D(const KernelGlobals *kg,
-                                             uint rng_hash,
                                              const RNGState *rng_state,
                                              int branch,
                                              int num_branches,
                                              int dimension)
 {
-  return path_rng_1D(
-      kg, rng_hash, rng_state->sample * num_branches + branch, rng_state->rng_offset + dimension);
+  return path_rng_1D(kg,
+                     rng_state->rng_hash,
+                     rng_state->sample * num_branches + branch,
+                     rng_state->rng_offset + dimension);
 }
 
 ccl_device_inline void path_branched_rng_2D(const KernelGlobals *kg,
-                                            uint rng_hash,
                                             const RNGState *rng_state,
                                             int branch,
                                             int num_branches,
@@ -358,7 +358,7 @@ ccl_device_inline void path_branched_rng_2D(const KernelGlobals *kg,
                                             float *fy)
 {
   path_rng_2D(kg,
-              rng_hash,
+              rng_state->rng_hash,
               rng_state->sample * num_branches + branch,
               rng_state->rng_offset + dimension,
               fx,
@@ -373,15 +373,6 @@ ccl_device_inline float path_state_rng_light_termination(const KernelGlobals *kg
 {
   if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
     return path_state_rng_1D(kg, state, PRNG_LIGHT_TERMINATE);
-  }
-  return 0.0f;
-}
-
-ccl_device_inline float path_branched_rng_light_termination(
-    const KernelGlobals *kg, uint rng_hash, const RNGState *state, int branch, int num_branches)
-{
-  if (kernel_data.integrator.light_inv_rr_threshold > 0.0f) {
-    return path_branched_rng_1D(kg, rng_hash, state, branch, num_branches, PRNG_LIGHT_TERMINATE);
   }
   return 0.0f;
 }

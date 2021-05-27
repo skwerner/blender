@@ -33,8 +33,6 @@ ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
                                      float radius,
                                      int num_samples)
 {
-  /* TODO */
-#  if 0
   /* Early out if no sampling needed. */
   if (radius <= 0.0f || num_samples < 1 || sd->object == OBJECT_NONE) {
     return sd->N;
@@ -46,21 +44,27 @@ ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
   }
 
   /* Don't bevel for blurry indirect rays. */
-  if (state->min_ray_pdf < 8.0f) {
+  if (INTEGRATOR_STATE(path, min_ray_pdf) < 8.0f) {
     return sd->N;
   }
 
   /* Setup for multi intersection. */
   LocalIntersection isect;
-  uint lcg_state = lcg_state_init_addrspace(state, 0x64c6a40e);
+  uint lcg_state = lcg_state_init(INTEGRATOR_STATE(path, rng_hash),
+                                  INTEGRATOR_STATE(path, rng_offset),
+                                  INTEGRATOR_STATE(path, sample),
+                                  0x64c6a40e);
 
   /* Sample normals from surrounding points on surface. */
   float3 sum_N = make_float3(0.0f, 0.0f, 0.0f);
 
+  /* TODO: support ray-tracing in shadow shader evaluation? */
+  RNGState rng_state;
+  path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
+
   for (int sample = 0; sample < num_samples; sample++) {
     float disk_u, disk_v;
-    path_branched_rng_2D(
-        kg, state->rng_hash, state, sample, num_samples, PRNG_BEVEL_U, &disk_u, &disk_v);
+    path_branched_rng_2D(kg, &rng_state, sample, num_samples, PRNG_BEVEL_U, &disk_u, &disk_v);
 
     /* Pick random axis in local frame and point on disk. */
     float3 disk_N, disk_T, disk_B;
@@ -111,8 +115,8 @@ ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
     ray->P = sd->P + disk_N * disk_height + disk_P;
     ray->D = -disk_N;
     ray->t = 2.0f * disk_height;
-    ray->dP = sd->dP;
-    ray->dD = differential3_zero();
+    ray->dP = differential_zero_compact();
+    ray->dD = differential_zero_compact();
     ray->time = sd->time;
 
     /* Intersect with the same object. if multiple intersections are found it
@@ -125,16 +129,18 @@ ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
       /* Quickly retrieve P and Ng without setting up ShaderData. */
       float3 hit_P;
       if (sd->type & PRIMITIVE_TRIANGLE) {
-        hit_P = triangle_refine_local(kg, sd, &isect.hits[hit], ray);
+        hit_P = triangle_refine_local(
+            kg, sd, ray->P, ray->D, ray->t, isect.hits[hit].object, isect.hits[hit].prim);
       }
-#    ifdef __OBJECT_MOTION__
+#  ifdef __OBJECT_MOTION__
       else if (sd->type & PRIMITIVE_MOTION_TRIANGLE) {
         float3 verts[3];
         motion_triangle_vertices(
             kg, sd->object, kernel_tex_fetch(__prim_index, isect.hits[hit].prim), sd->time, verts);
-        hit_P = motion_triangle_refine_local(kg, sd, &isect.hits[hit], ray, verts);
+        hit_P = motion_triangle_refine_local(
+            kg, sd, ray->P, ray->D, ray->t, isect.hits[hit].object, isect.hits[hit].prim, verts);
       }
-#    endif /* __OBJECT_MOTION__ */
+#  endif /* __OBJECT_MOTION__ */
 
       /* Get geometric normal. */
       float3 hit_Ng = isect.Ng[hit];
@@ -158,11 +164,11 @@ ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
         if (sd->type & PRIMITIVE_TRIANGLE) {
           N = triangle_smooth_normal(kg, N, prim, u, v);
         }
-#    ifdef __OBJECT_MOTION__
+#  ifdef __OBJECT_MOTION__
         else if (sd->type & PRIMITIVE_MOTION_TRIANGLE) {
           N = motion_triangle_smooth_normal(kg, N, sd->object, prim, u, v, sd->time);
         }
-#    endif /* __OBJECT_MOTION__ */
+#  endif /* __OBJECT_MOTION__ */
       }
 
       /* Transform normals to world space. */
@@ -201,9 +207,6 @@ ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
   /* Normalize. */
   float3 N = safe_normalize(sum_N);
   return is_zero(N) ? sd->N : (sd->flag & SD_BACKFACING) ? -N : N;
-#  else
-  return sd->N;
-#  endif
 }
 
 ccl_device void svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS,

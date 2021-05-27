@@ -48,13 +48,14 @@ ccl_device_noinline float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
   float3 T, B;
   make_orthonormals(N, &T, &B);
 
+  /* TODO: support ray-tracing in shadow shader evaluation? */
+  RNGState rng_state;
+  path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
+
   int unoccluded = 0;
   for (int sample = 0; sample < num_samples; sample++) {
-    /* TODO */
-#  if 0
     float disk_u, disk_v;
-    path_branched_rng_2D(
-        kg, state->rng_hash, state, sample, num_samples, PRNG_BEVEL_U, &disk_u, &disk_v);
+    path_branched_rng_2D(kg, &rng_state, sample, num_samples, PRNG_BEVEL_U, &disk_u, &disk_v);
 
     float2 d = concentric_sample_disk(disk_u, disk_v);
     float3 D = make_float3(d.x, d.y, safe_sqrtf(1.0f - dot(d, d)));
@@ -65,8 +66,8 @@ ccl_device_noinline float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
     ray.D = D.x * T + D.y * B + D.z * N;
     ray.t = max_dist;
     ray.time = sd->time;
-    ray.dP = sd->dP;
-    ray.dD = differential3_zero();
+    ray.dP = differential_zero_compact();
+    ray.dD = differential_zero_compact();
 
     if (flags & NODE_AO_ONLY_LOCAL) {
       if (!scene_intersect_local(kg, &ray, NULL, sd->object, NULL, 0)) {
@@ -79,7 +80,6 @@ ccl_device_noinline float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
         unoccluded++;
       }
     }
-#  endif
   }
 
   return ((float)unoccluded) / num_samples;

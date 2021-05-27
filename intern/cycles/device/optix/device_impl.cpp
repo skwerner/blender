@@ -247,7 +247,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 #  if OPTIX_ABI_VERSION >= 36
   pipeline_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
   if (requested_features.use_hair) {
-    if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
+    if (DebugFlags().optix.use_curves_api && requested_features.use_hair_thick) {
       pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_ROUND_CUBIC_BSPLINE;
     }
     else {
@@ -347,7 +347,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     }
 
 #  if OPTIX_ABI_VERSION >= 36
-    if (DebugFlags().optix.curves_api && requested_features.use_hair_thick) {
+    if (DebugFlags().optix.use_curves_api && requested_features.use_hair_thick) {
       OptixBuiltinISOptions builtin_options = {};
       builtin_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
       builtin_options.usesMotionBlur = false;
@@ -939,7 +939,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       device_vector<float4> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
       /* Four control points for each curve segment. */
       const size_t num_vertices = num_segments * 4;
-      if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+      if (DebugFlags().optix.use_curves_api && hair->curve_shape == CURVE_THICK) {
         index_data.alloc(num_segments);
         vertex_data.alloc(num_vertices * num_motion_steps);
       }
@@ -966,7 +966,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
           for (int segment = 0; segment < curve.num_segments(); ++segment, ++i) {
 #  if OPTIX_ABI_VERSION >= 36
-            if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+            if (DebugFlags().optix.use_curves_api && hair->curve_shape == CURVE_THICK) {
               int k0 = curve.first_key + segment;
               int k1 = k0 + 1;
               int ka = max(k0 - 1, curve.first_key);
@@ -1042,7 +1042,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       unsigned int build_flags = OPTIX_GEOMETRY_FLAG_REQUIRE_SINGLE_ANYHIT_CALL;
       OptixBuildInput build_input = {};
 #  if OPTIX_ABI_VERSION >= 36
-      if (DebugFlags().optix.curves_api && hair->curve_shape == CURVE_THICK) {
+      if (DebugFlags().optix.use_curves_api && hair->curve_shape == CURVE_THICK) {
         build_input.type = OPTIX_BUILD_INPUT_TYPE_CURVES;
         build_input.curveArray.curveType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
         build_input.curveArray.numPrimitives = num_segments;
@@ -1246,7 +1246,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
 #  if OPTIX_ABI_VERSION >= 36
         if (motion_blur && ob->get_geometry()->has_motion_blur() &&
-            DebugFlags().optix.curves_api &&
+            DebugFlags().optix.use_curves_api &&
             static_cast<const Hair *>(ob->get_geometry())->curve_shape == CURVE_THICK) {
           /* Select between motion blur and non-motion blur built-in intersection module. */
           instance.sbtOffset = PG_HITD_MOTION - PG_HITD;

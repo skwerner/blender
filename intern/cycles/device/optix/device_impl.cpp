@@ -87,8 +87,10 @@ OptiXDevice::OptiXDevice(const DeviceInfo &info, Stats &stats, Profiler &profile
     }
   };
 #  endif
-#  if OPTIX_ABI_VERSION >= 41 && defined(WITH_CYCLES_DEBUG)
-  options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+#  if OPTIX_ABI_VERSION >= 41
+  if (DebugFlags().optix.use_debug) {
+    options.validationMode = OPTIX_DEVICE_CONTEXT_VALIDATION_MODE_ALL;
+  }
 #  endif
   optix_assert(optixDeviceContextCreate(cuContext, &options, &context));
 #  ifdef WITH_CYCLES_LOGGING
@@ -218,14 +220,14 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   OptixModuleCompileOptions module_options = {};
   module_options.maxRegisterCount = 0; /* Do not set an explicit register limit. */
 
-  /* TODO(sergey): Make it configurable via `DebugFlags` instead of compile-time. */
-#  ifdef WITH_CYCLES_DEBUG
-  module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
-  module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-#  else
-  module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
-  module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
-#  endif
+  if (DebugFlags().optix.use_debug) {
+    module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_0;
+    module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+  }
+  else {
+    module_options.optLevel = OPTIX_COMPILE_OPTIMIZATION_LEVEL_3;
+    module_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
+  }
 
 #  if OPTIX_ABI_VERSION >= 41
   module_options.boundValues = nullptr;
@@ -425,12 +427,13 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   OptixPipelineLinkOptions link_options = {};
   link_options.maxTraceDepth = 1;
 
-  /* TODO(sergey): Make it configurable via `DebugFlags` instead of compile-time. */
-#  ifdef WITH_CYCLES_DEBUG
-  link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
-#  else
-  link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
-#  endif
+  if (DebugFlags().optix.use_debug) {
+    link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_FULL;
+  }
+  else {
+    link_options.debugLevel = OPTIX_COMPILE_DEBUG_LEVEL_LINEINFO;
+  }
+
 #  if OPTIX_ABI_VERSION < 24
   link_options.overrideUsesMotionBlur = motion_blur;
 #  endif

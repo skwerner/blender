@@ -102,6 +102,10 @@ class DebugFlags {
 
     /* Use OptiX curves API for hair instead of custom implementation. */
     bool curves_api;
+
+    /* Load OptiX module with debug capabilities. Will lower logging verbosity level, enable
+     * validations, and lower optimization level. */
+    bool use_debug;
   };
 
   /* Descriptor of OpenCL feature-set to be used. */

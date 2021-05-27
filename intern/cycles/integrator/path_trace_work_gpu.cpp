@@ -126,7 +126,9 @@ void PathTraceWorkGPU::alloc_integrator_sorting()
   if (integrator_sort_key_counter_.size() < num_shaders) {
     integrator_sort_key_counter_.alloc(num_shaders);
     integrator_sort_key_counter_.zero_to_device();
-    integrator_state_gpu_.sort_key_counter = (int *)integrator_sort_key_counter_.device_pointer;
+
+    integrator_state_gpu_.sort_key_counter[DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE] =
+        (int *)integrator_sort_key_counter_.device_pointer;
   }
 }
 
@@ -213,10 +215,10 @@ DeviceKernel PathTraceWorkGPU::get_most_queued_kernel() const
 
 void PathTraceWorkGPU::enqueue_reset()
 {
-  const int num_keys = integrator_sort_key_counter_.size();
-  void *args[] = {&max_num_paths_, const_cast<int *>(&num_keys)};
-  queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_RESET, max(max_num_paths_, num_keys), args);
+  void *args[] = {&max_num_paths_};
+  queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_RESET, max_num_paths_, args);
   queue_->zero_to_device(integrator_queue_counter_);
+  queue_->zero_to_device(integrator_sort_key_counter_);
 
   /* Tiles enqueue need to know number of active paths, which is based on this counter. Zero the
    * counter on the host side because `zero_to_device()` is not doing it. */
@@ -346,15 +348,17 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
   }
 }
 
-void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, int queued_kernel)
+void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel)
 {
-  void *d_key_counter = (void *)integrator_sort_key_counter_.device_pointer;
+  int d_queued_kernel = queued_kernel;
+  void *d_counter = integrator_state_gpu_.sort_key_counter[d_queued_kernel];
+  assert(d_counter != nullptr);
 
   /* Compute prefix sum of number of active paths with each shader. */
   {
     const int work_size = 1;
     int num_shaders = integrator_sort_key_counter_.size();
-    void *args[] = {&d_key_counter, &num_shaders};
+    void *args[] = {&d_counter, &num_shaders};
     queue_->enqueue(DEVICE_KERNEL_PREFIX_SUM, work_size, args);
   }
 
@@ -369,18 +373,23 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, int queu
     void *args[] = {const_cast<int *>(&work_size),
                     &d_queued_paths,
                     &d_num_queued_paths,
-                    &d_key_counter,
-                    &queued_kernel};
+                    &d_counter,
+                    &d_queued_kernel};
 
     queue_->enqueue(kernel, work_size, args);
   }
 
-  /* TODO: ensure this happens as part of queue stream. */
   queue_->zero_to_device(num_queued_paths_);
-  queue_->zero_to_device(integrator_sort_key_counter_);
+  if (queued_kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE) {
+    queue_->zero_to_device(integrator_sort_key_counter_);
+  }
+  else {
+    /* TODO */
+    assert(0);
+  }
 }
 
-void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kernel)
+void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel)
 {
   /* Launch kernel to fill the active paths arrays. */
   /* TODO: this could be smaller for terminated paths based on amount of work we want
@@ -388,11 +397,12 @@ void PathTraceWorkGPU::compute_queued_paths(DeviceKernel kernel, int queued_kern
   const int work_size = (kernel == DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY) ?
                             min(max_num_paths_, get_max_num_camera_paths()) :
                             max_active_path_index_;
+  int d_queued_kernel = queued_kernel;
 
   void *d_queued_paths = (void *)queued_paths_.device_pointer;
   void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
   void *args[] = {
-      const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &queued_kernel};
+      const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &d_queued_kernel};
 
   queue_->enqueue(kernel, work_size, args);
 }
@@ -492,7 +502,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
   void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
 
   if (max_active_path_index_ != 0) {
-    compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, 0);
+    compute_queued_paths(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, (DeviceKernel)0);
     queue_->zero_to_device(num_queued_paths_);
     d_path_index = (void *)queued_paths_.device_pointer;
   }

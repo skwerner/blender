@@ -530,7 +530,9 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
   integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
 
-  INTEGRATOR_PATH_SET_SORT_KEY(intersection_get_shader(kg, &ss_isect.hits[0]));
+  const int shader = intersection_get_shader(kg, &ss_isect.hits[0]);
+  const int next_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE;
+  INTEGRATOR_PATH_NEXT_SORTED(INTERSECT_CLOSEST, next_kernel, shader);
 
   return true;
 }

@@ -28,21 +28,20 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_forceinline int integrator_intersect_next_shader(INTEGRATOR_STATE_ARGS,
-                                                            const Intersection *ccl_restrict isect)
+ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
+    INTEGRATOR_STATE_ARGS, const Intersection *ccl_restrict isect)
 {
   /* Find shader from intersection. */
   const int shader = intersection_get_shader(kg, isect);
+  const int flags = kernel_tex_fetch(__shaders, shader).flags;
 
   /* Optional AO bounce termination. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    const int flags = kernel_tex_fetch(__shaders, shader).flags;
-
     if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
       INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
     }
     else {
-      return SHADER_NONE;
+      return false;
     }
   }
 
@@ -60,19 +59,21 @@ ccl_device_forceinline int integrator_intersect_next_shader(INTEGRATOR_STATE_ARG
     const float terminate = path_state_rng_1D(kg, &rng_state, PRNG_TERMINATE);
 
     if (probability == 0.0f || terminate >= probability) {
-      const int flags = kernel_tex_fetch(__shaders, shader).flags;
-
       if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
         /* Mark path to be terminated right after shader evaluation. */
         INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_IMMEDIATE;
       }
       else {
-        return SHADER_NONE;
+        return false;
       }
     }
   }
 
-  return shader;
+  /* Setup next kernel to execute. */
+  const int next_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE;
+  INTEGRATOR_PATH_NEXT_SORTED(INTERSECT_CLOSEST, next_kernel, shader);
+
+  return true;
 }
 
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
@@ -129,11 +130,7 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
     }
     else {
       /* Hit a surface, continue with surface kernel unless terminated. */
-      const int shader = integrator_intersect_next_shader(INTEGRATOR_STATE_PASS, &isect);
-      if (shader != SHADER_NONE) {
-        INTEGRATOR_PATH_SET_SORT_KEY(shader);
-        INTEGRATOR_PATH_NEXT(INTERSECT_CLOSEST, SHADE_SURFACE);
-
+      if (integrator_intersect_shader_next_kernel(INTEGRATOR_STATE_PASS, &isect)) {
         const int object_flags = intersection_get_object_flags(kg, &isect);
         kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags);
         return;

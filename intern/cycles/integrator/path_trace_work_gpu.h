@@ -67,8 +67,8 @@ class PathTraceWorkGPU : public PathTraceWork {
   bool enqueue_path_iteration();
   void enqueue_path_iteration(DeviceKernel kernel);
 
-  void compute_queued_paths(DeviceKernel kernel, int queued_kernel);
-  void compute_sorted_queued_paths(DeviceKernel kernel, int queued_kernel);
+  void compute_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel);
+  void compute_sorted_queued_paths(DeviceKernel kernel, DeviceKernel queued_kernel);
 
   int get_num_active_paths();
 
@@ -114,7 +114,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   vector<unique_ptr<device_memory>> integrator_state_soa_;
   /* Keep track of number of queued kernels. */
   device_vector<IntegratorQueueCounter> integrator_queue_counter_;
-  /* Key for shader sorting. */
+  /* Shader sorting. */
   device_vector<int> integrator_sort_key_counter_;
 
   /* Temporary buffer to get an array of queued path for a particular kernel. */

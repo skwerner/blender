@@ -39,42 +39,39 @@ BufferParams::BufferParams()
   full_y = 0;
   full_width = 0;
   full_height = 0;
+
+  reset_pass_offset();
 }
 
 void BufferParams::update_passes(vector<Pass> &passes)
 {
   update_offset_stride();
-
-  pass_sample_count = PASS_UNUSED;
-  pass_denoising_color = PASS_UNUSED;
-  pass_denoising_normal = PASS_UNUSED;
-  pass_denoising_albedo = PASS_UNUSED;
+  reset_pass_offset();
 
   pass_stride = 0;
   for (const Pass &pass : passes) {
-    switch (pass.type) {
-      case PASS_SAMPLE_COUNT:
-        pass_sample_count = pass_stride;
-        break;
-
-      case PASS_DENOISING_COLOR:
-        pass_denoising_color = pass_stride;
-        break;
-      case PASS_DENOISING_NORMAL:
-        pass_denoising_normal = pass_stride;
-        break;
-      case PASS_DENOISING_ALBEDO:
-        pass_denoising_albedo = pass_stride;
-        break;
-
-      default:
-        break;
-    }
+    pass_offset_[pass.type] = pass_stride;
 
     pass_stride += pass.components;
   }
 
   pass_stride = align_up(pass_stride, 4);
+}
+
+void BufferParams::reset_pass_offset()
+{
+  for (int i = 0; i < PASS_NUM; ++i) {
+    pass_offset_[i] = PASS_UNUSED;
+  }
+}
+
+int BufferParams::get_pass_offset(PassType pass_type) const
+{
+  if (pass_type == PASS_NONE || pass_type == PASS_UNUSED) {
+    return PASS_UNUSED;
+  }
+
+  return pass_offset_[pass_type];
 }
 
 void BufferParams::update_offset_stride()
@@ -83,15 +80,16 @@ void BufferParams::update_offset_stride()
   stride = width;
 }
 
-bool BufferParams::modified(const BufferParams &params) const
+bool BufferParams::modified(const BufferParams &other) const
 {
-  return !(width == params.width && height == params.height && full_x == params.full_x &&
-           full_y == params.full_y && full_width == params.full_width &&
-           full_height == params.full_height && offset == params.offset &&
-           stride == params.stride && pass_stride == params.pass_stride &&
-           pass_denoising_color == params.pass_denoising_color &&
-           pass_denoising_normal == params.pass_denoising_normal &&
-           pass_denoising_albedo == params.pass_denoising_albedo);
+  if (!(width == other.width && height == other.height && full_x == other.full_x &&
+        full_y == other.full_y && full_width == other.full_width &&
+        full_height == other.full_height && offset == other.offset && stride == other.stride &&
+        pass_stride == other.pass_stride)) {
+    return true;
+  }
+
+  return memcmp(pass_offset_, other.pass_offset_, sizeof(pass_offset_)) != 0;
 }
 
 /* Render Buffer Task */

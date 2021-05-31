@@ -114,7 +114,7 @@ static void oidn_add_pass_if_needed(oidn::FilterRef *oidn_filter,
   const int64_t pixel_stride = pass_stride;
   const int64_t row_stride = stride * pixel_stride;
 
-  const int pass_sample_count = buffer_params.pass_sample_count;
+  const int pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
 
   float *buffer_data = reinterpret_cast<float *>(render_buffers->buffer.host_pointer);
 
@@ -159,7 +159,7 @@ static void oidn_add_pass_if_needed(oidn::FilterRef *oidn_filter,
 static void oidn_scale_combined_pass_after_denoise(const BufferParams &buffer_params,
                                                    RenderBuffers *render_buffers)
 {
-  const int pass_sample_count = buffer_params.pass_sample_count;
+  const int pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
   if (pass_sample_count == PASS_UNUSED) {
     return;
   }
@@ -205,14 +205,21 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   initialize();
 
 #ifdef WITH_OPENIMAGEDENOISE
-  const bool have_sample_count_pass = (buffer_params.pass_sample_count != PASS_UNUSED);
+  const bool have_sample_count_pass = (buffer_params.get_pass_offset(PASS_SAMPLE_COUNT) !=
+                                       PASS_UNUSED);
 
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
   std::array<OIDNPass, 4> oidn_passes = {{
-      {"color", buffer_params.pass_denoising_color, have_sample_count_pass, true},
-      {"albedo", buffer_params.pass_denoising_albedo, true, params_.use_pass_albedo},
-      {"normal", buffer_params.pass_denoising_normal, true, params_.use_pass_normal},
+      {"color", buffer_params.get_pass_offset(PASS_DENOISING_COLOR), have_sample_count_pass, true},
+      {"albedo",
+       buffer_params.get_pass_offset(PASS_DENOISING_ALBEDO),
+       true,
+       params_.use_pass_albedo},
+      {"normal",
+       buffer_params.get_pass_offset(PASS_DENOISING_NORMAL),
+       true,
+       params_.use_pass_normal},
       {"output", 0, false, true},
   }};
 

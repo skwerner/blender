@@ -154,41 +154,15 @@ Device *DeviceDenoiser::create_denoiser_device()
   return local_denoiser_device_.get();
 }
 
-/* Initialize fields of the task which are not related on device or device pointers. */
-static DeviceDenoiseTask initialize_task(const BufferParams &buffer_params,
-                                         const DenoiseParams &params,
-                                         const int num_samples)
-{
-  DeviceDenoiseTask task;
-
-  task.x = buffer_params.full_x;
-  task.y = buffer_params.full_y;
-  task.width = buffer_params.width;
-  task.height = buffer_params.height;
-
-  task.offset = buffer_params.offset;
-  task.stride = buffer_params.stride;
-
-  task.pass_stride = buffer_params.pass_stride;
-
-  task.num_samples = num_samples;
-
-  task.pass_sample_count = buffer_params.pass_sample_count;
-  task.pass_denoising_color = buffer_params.pass_denoising_color;
-  task.pass_denoising_normal = buffer_params.pass_denoising_normal;
-  task.pass_denoising_albedo = buffer_params.pass_denoising_albedo;
-
-  task.params = params;
-
-  return task;
-}
-
 void DeviceDenoiser::denoise_buffer_on_device(Device *device,
                                               const BufferParams &buffer_params,
                                               RenderBuffers *render_buffers,
                                               const int num_samples)
 {
-  DeviceDenoiseTask task = initialize_task(buffer_params, params_, num_samples);
+  DeviceDenoiseTask task;
+  task.params = params_;
+  task.num_samples = num_samples;
+  task.buffer_params = buffer_params;
 
   device_vector<float> local_buffer(device, "denoiser local buffer", MEM_READ_WRITE);
   bool local_buffer_used = false;

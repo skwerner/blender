@@ -27,8 +27,7 @@ namespace {
  * taking adaptive sampling into account. */
 class Scaler {
  public:
-  Scaler(const PassAccessor *pass_accessor,
-         RenderBuffers *render_buffers,
+  Scaler(RenderBuffers *render_buffers,
          const Pass *pass,
          const float *pass_buffer,
          const int num_samples,
@@ -37,7 +36,7 @@ class Scaler {
         pass_stride_(render_buffers->params.pass_stride),
         num_samples_inv_(1.0f / num_samples),
         exposure_(exposure),
-        sample_count_pass_(get_sample_count_pass(pass_accessor, render_buffers))
+        sample_count_pass_(get_sample_count_pass(render_buffers))
   {
     /* Special trick to only scale the samples count pass with the sample scale. Otherwise the pass
      * becomes a uniform 1.0. */
@@ -86,10 +85,9 @@ class Scaler {
   }
 
  protected:
-  const uint *get_sample_count_pass(const PassAccessor *pass_accessor,
-                                    const RenderBuffers *render_buffers)
+  const uint *get_sample_count_pass(const RenderBuffers *render_buffers)
   {
-    const int pass_sample_count = pass_accessor->get_pass_offset(PASS_SAMPLE_COUNT);
+    const int pass_sample_count = render_buffers->params.get_pass_offset(PASS_SAMPLE_COUNT);
     if (pass_sample_count == PASS_UNUSED) {
       return nullptr;
     }
@@ -165,15 +163,9 @@ static float4 shadow_catcher_calc_matte_with_shadow(const float scale,
                      (1.0f - alpha) * (1.0f - average(float4_to_float3(shadow_catcher))) + alpha);
 }
 
-PassAccessor::PassAccessor(const Film *film,
-                           const vector<Pass> &passes,
-                           const Pass *pass,
-                           int num_components,
-                           float exposure,
-                           int num_samples)
+PassAccessor::PassAccessor(
+    const Film *film, const Pass *pass, int num_components, float exposure, int num_samples)
     : film_(film),
-      passes_(passes),
-      pass_offset_(Pass::get_offset(passes, pass->type)),
       pass_(pass),
       num_components_(num_components),
       exposure_(exposure),
@@ -194,12 +186,12 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
   const BufferParams &params = render_buffers->params;
 
   const float *buffer_data = render_buffers->buffer.data();
-  const float *in = buffer_data + pass_offset_;
+  const float *in = buffer_data + render_buffers->params.get_pass_offset(pass_->type);
   const int pass_stride = params.pass_stride;
   const int size = params.width * params.height;
 
   const PassType type = pass_->type;
-  const Scaler scaler(this, render_buffers, pass_, in, num_samples_, exposure_);
+  const Scaler scaler(render_buffers, pass_, in, num_samples_, exposure_);
 
   if (num_components_ == 1 && type == PASS_RENDER_TIME) {
 #if 0
@@ -269,7 +261,7 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
     }
     else if (pass_->divide_type != PASS_NONE) {
       /* RGB lighting passes that need to divide out color */
-      const int pass_divide = get_pass_offset(pass_->divide_type);
+      const int pass_divide = render_buffers->params.get_pass_offset(pass_->divide_type);
       DCHECK_NE(pass_divide, PASS_UNUSED);
 
       const float *in_divide = buffer_data + pass_divide;
@@ -316,7 +308,7 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
     }
     else if (type == PASS_MOTION) {
       /* need to normalize by number of samples accumulated for motion */
-      const int pass_motion_weight = get_pass_offset(PASS_MOTION_WEIGHT);
+      const int pass_motion_weight = render_buffers->params.get_pass_offset(PASS_MOTION_WEIGHT);
       DCHECK_NE(pass_motion_weight, PASS_UNUSED);
 
       const float *in_weight = buffer_data + pass_motion_weight;
@@ -347,7 +339,7 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
       }
     }
     else if (type == PASS_DENOISING_COLOR) {
-      const int pass_combined = get_pass_offset(PASS_COMBINED);
+      const int pass_combined = render_buffers->params.get_pass_offset(PASS_COMBINED);
       DCHECK_NE(pass_combined, PASS_UNUSED);
 
       const float *in_combined = buffer_data + pass_combined;
@@ -378,8 +370,8 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
        * This way using transparent film to render artificial objects will be easy to be combined
        * with a backdrop. */
 
-      const int pass_combined = get_pass_offset(PASS_COMBINED);
-      const int pass_matte = get_pass_offset(PASS_SHADOW_CATCHER_MATTE);
+      const int pass_combined = render_buffers->params.get_pass_offset(PASS_COMBINED);
+      const int pass_matte = render_buffers->params.get_pass_offset(PASS_SHADOW_CATCHER_MATTE);
 
       DCHECK_NE(pass_combined, PASS_UNUSED);
       DCHECK_NE(pass_matte, PASS_UNUSED);
@@ -406,8 +398,8 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
       }
     }
     else if (type == PASS_SHADOW_CATCHER_MATTE && film_->get_use_approximate_shadow_catcher()) {
-      const int pass_combined = get_pass_offset(PASS_COMBINED);
-      const int pass_shadow_catcher = get_pass_offset(PASS_SHADOW_CATCHER);
+      const int pass_combined = render_buffers->params.get_pass_offset(PASS_COMBINED);
+      const int pass_shadow_catcher = render_buffers->params.get_pass_offset(PASS_SHADOW_CATCHER);
 
       DCHECK_NE(pass_combined, PASS_UNUSED);
       DCHECK_NE(pass_shadow_catcher, PASS_UNUSED);
@@ -500,10 +492,5 @@ bool PassAccessor::set_pass_rect(PassType type, int components, float *pixels, i
   return false;
 }
 #endif
-
-int PassAccessor::get_pass_offset(PassType type) const
-{
-  return Pass::get_offset(passes_, type);
-}
 
 CCL_NAMESPACE_END

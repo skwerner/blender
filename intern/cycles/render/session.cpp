@@ -588,8 +588,7 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
 
-  PassAccessor pass_accessor(
-      scene->film, scene->passes, pass, num_components, exposure, num_samples);
+  PassAccessor pass_accessor(scene->film, pass, num_components, exposure, num_samples);
 
   return path_trace_->get_render_tile_pixels(pass_accessor, pixels);
 }

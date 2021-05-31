@@ -17,6 +17,7 @@
 #pragma once
 
 #include "device/device_memory.h"
+#include "render/buffers.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -82,23 +83,12 @@ class DenoiseParams {
  * when these parameters do change. */
 class DeviceDenoiseTask {
  public:
-  int x, y;
-  int width, height;
-
-  int offset, stride;
-
-  int pass_stride;
-
-  device_ptr buffer;
+  DenoiseParams params;
 
   int num_samples;
+  BufferParams buffer_params;
 
-  int pass_sample_count;
-  int pass_denoising_color;
-  int pass_denoising_normal;
-  int pass_denoising_albedo;
-
-  DenoiseParams params;
+  device_ptr buffer;
 };
 
 CCL_NAMESPACE_END

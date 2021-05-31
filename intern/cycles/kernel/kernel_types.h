@@ -425,7 +425,9 @@ typedef enum PassType {
 
   PASS_BAKE_PRIMITIVE,
   PASS_BAKE_DIFFERENTIAL,
-  PASS_CATEGORY_BAKE_END = 95
+  PASS_CATEGORY_BAKE_END = 95,
+
+  PASS_NUM,
 } PassType;
 
 #define PASS_ANY (~0)

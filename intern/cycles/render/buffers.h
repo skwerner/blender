@@ -55,22 +55,24 @@ class BufferParams {
   /* Runtime fields, only valid after `update_passes()`. */
   int pass_stride = -1;
 
-  /* Offsets of passes needed for the rendering functionality like adaptive sampling and denoising.
-   * Pre-calculated so that they are available in areas where list of passes is not accessible. */
-  int pass_sample_count = PASS_UNUSED;
-  int pass_denoising_color = PASS_UNUSED;
-  int pass_denoising_normal = PASS_UNUSED;
-  int pass_denoising_albedo = PASS_UNUSED;
-
   /* functions */
   BufferParams();
 
   /* Pre-calculate all fields which depends on the passes. */
   void update_passes(vector<Pass> &passes);
 
+  /* Returns PASS_UNUSED if there is no such pass in the buffer. */
+  int get_pass_offset(PassType pass_type) const;
+
   void update_offset_stride();
 
-  bool modified(const BufferParams &params) const;
+  bool modified(const BufferParams &other) const;
+
+ protected:
+  void reset_pass_offset();
+
+  /* Indexed by pass type, indicates offset of the corresponding pass in the buffer. */
+  int pass_offset_[PASS_NUM];
 };
 
 /* Render Buffers */

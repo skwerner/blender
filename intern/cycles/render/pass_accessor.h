@@ -30,12 +30,8 @@ class RenderBuffers;
  * progressively update from various render buffers. */
 class PassAccessor {
  public:
-  PassAccessor(const Film *film,
-               const vector<Pass> &passes,
-               const Pass *pass,
-               int num_components,
-               float exposure,
-               int num_samples);
+  PassAccessor(
+      const Film *film, const Pass *pass, int num_components, float exposure, int num_samples);
 
   /* Get pass data from the given render buffers, perform needed filtering, and store result into
    * the pixels.
@@ -46,15 +42,9 @@ class PassAccessor {
   bool set_pass_rect(PassType type, int components, float *pixels);
 #endif
 
-  /* Returns PASS_UNUSED if there is no pass with the given type. */
-  int get_pass_offset(PassType type) const;
-
  protected:
   const Film *film_;
 
-  const vector<Pass> &passes_;
-
-  int pass_offset_ = -1;
   const Pass *pass_ = nullptr;
 
   int num_components_ = 0;

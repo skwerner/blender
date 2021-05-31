@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "render/pass_accessor.h"
+#include "integrator/pass_accessor.h"
 
 #include "render/buffers.h"
 #include "util/util_logging.h"

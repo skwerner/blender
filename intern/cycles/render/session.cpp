@@ -18,6 +18,7 @@
 #include <string.h>
 
 #include "device/device.h"
+#include "integrator/pass_accessor.h"
 #include "integrator/path_trace.h"
 #include "render/bake.h"
 #include "render/buffers.h"
@@ -28,7 +29,6 @@
 #include "render/light.h"
 #include "render/mesh.h"
 #include "render/object.h"
-#include "render/pass_accessor.h"
 #include "render/scene.h"
 #include "render/session.h"
 

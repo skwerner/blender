@@ -56,7 +56,6 @@ set(SRC
   osl.cpp
   particles.cpp
   pass.cpp
-  pass_accessor.cpp
   curves.cpp
   scene.cpp
   session.cpp
@@ -100,7 +99,6 @@ set(SRC_HEADERS
   osl.h
   particles.h
   pass.h
-  pass_accessor.h
   procedural.h
   curves.h
   scene.h

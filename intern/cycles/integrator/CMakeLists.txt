@@ -24,6 +24,7 @@ set(SRC
   denoiser_optix.cpp
   path_trace.cpp
   tile.cpp
+  pass_accessor.cpp
   path_trace_work.cpp
   path_trace_work_cpu.cpp
   path_trace_work_gpu.cpp
@@ -40,6 +41,7 @@ set(SRC_HEADERS
   denoiser_optix.h
   path_trace.h
   tile.h
+  pass_accessor.h
   path_trace_work.h
   path_trace_work_cpu.h
   path_trace_work_gpu.h

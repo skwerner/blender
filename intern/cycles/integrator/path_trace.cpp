@@ -17,9 +17,9 @@
 #include "integrator/path_trace.h"
 
 #include "device/device.h"
+#include "integrator/pass_accessor.h"
 #include "integrator/render_scheduler.h"
 #include "render/gpu_display.h"
-#include "render/pass_accessor.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"

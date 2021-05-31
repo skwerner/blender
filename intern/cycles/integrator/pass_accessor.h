@@ -49,16 +49,43 @@ class PassAccessor {
                float exposure,
                int num_samples);
 
+  virtual ~PassAccessor() = default;
+
   /* Get pass data from the given render buffers, perform needed filtering, and store result into
    * the pixels.
    * The result is stored sequentially starting from the very beginning of the pixels memory. */
-  bool get_render_tile_pixels(RenderBuffers *render_buffers, float *pixels);
+  bool get_render_tile_pixels(const RenderBuffers *render_buffers, float *pixels) const;
 
 #if 0
   bool set_pass_rect(PassType type, int components, float *pixels);
 #endif
 
  protected:
+#define DECLARE_PASS_ACCESSOR(pass) \
+  virtual void get_pass_##pass(const RenderBuffers *render_buffers, float *pixels) const = 0;
+
+  /* Float (scalar) passes. */
+  DECLARE_PASS_ACCESSOR(depth)
+  DECLARE_PASS_ACCESSOR(mist)
+  DECLARE_PASS_ACCESSOR(sample_count)
+  DECLARE_PASS_ACCESSOR(float)
+
+  /* Float3 passes. */
+  DECLARE_PASS_ACCESSOR(shadow3)
+  DECLARE_PASS_ACCESSOR(divide_even_color)
+  DECLARE_PASS_ACCESSOR(float3)
+
+  /* Float4 passes. */
+  DECLARE_PASS_ACCESSOR(shadow4)
+  DECLARE_PASS_ACCESSOR(motion)
+  DECLARE_PASS_ACCESSOR(cryptomatte)
+  DECLARE_PASS_ACCESSOR(denoising_color)
+  DECLARE_PASS_ACCESSOR(shadow_catcher)
+  DECLARE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
+  DECLARE_PASS_ACCESSOR(float4)
+
+#undef DECLARE_PASS_ACCESSOR
+
   PassAccessInfo pass_access_info_;
 
   int num_components_ = 0;

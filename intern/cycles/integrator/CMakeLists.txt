@@ -25,6 +25,7 @@ set(SRC
   path_trace.cpp
   tile.cpp
   pass_accessor.cpp
+  pass_accessor_cpu.cpp
   path_trace_work.cpp
   path_trace_work_cpu.cpp
   path_trace_work_gpu.cpp
@@ -42,6 +43,7 @@ set(SRC_HEADERS
   path_trace.h
   tile.h
   pass_accessor.h
+  pass_accessor_cpu.h
   path_trace_work.h
   path_trace_work_cpu.h
   path_trace_work_gpu.h

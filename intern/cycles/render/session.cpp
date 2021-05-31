@@ -18,7 +18,7 @@
 #include <string.h>
 
 #include "device/device.h"
-#include "integrator/pass_accessor.h"
+#include "integrator/pass_accessor_cpu.h"
 #include "integrator/path_trace.h"
 #include "render/bake.h"
 #include "render/buffers.h"
@@ -590,7 +590,7 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
 
   PassAccessor::PassAccessInfo pass_access_info(*pass, *scene->film, scene->passes);
 
-  PassAccessor pass_accessor(pass_access_info, num_components, exposure, num_samples);
+  PassAccessorCPU pass_accessor(pass_access_info, num_components, exposure, num_samples);
 
   return path_trace_->get_render_tile_pixels(pass_accessor, pixels);
 }

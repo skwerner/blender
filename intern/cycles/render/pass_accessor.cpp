@@ -29,7 +29,6 @@ class Scaler {
  public:
   Scaler(RenderBuffers *render_buffers,
          const Pass *pass,
-         const float *pass_buffer,
          const int num_samples,
          const float exposure)
       : pass_(pass),
@@ -38,12 +37,6 @@ class Scaler {
         exposure_(exposure),
         sample_count_pass_(get_sample_count_pass(render_buffers))
   {
-    /* Special trick to only scale the samples count pass with the sample scale. Otherwise the pass
-     * becomes a uniform 1.0. */
-    if (sample_count_pass_ == reinterpret_cast<const uint *>(pass_buffer)) {
-      sample_count_pass_ = nullptr;
-    }
-
     /* Pre-calculate values when adaptive sampling is not used. */
     if (!sample_count_pass_) {
       scale_ = pass->filter ? num_samples_inv_ : 1.0f;
@@ -191,7 +184,7 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
   const int size = params.width * params.height;
 
   const PassType type = pass_->type;
-  const Scaler scaler(render_buffers, pass_, in, num_samples_, exposure_);
+  const Scaler scaler(render_buffers, pass_, num_samples_, exposure_);
 
   if (num_components_ == 1 && type == PASS_RENDER_TIME) {
 #if 0
@@ -226,9 +219,10 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
        * meaningful value when adaptive sampler stopped rendering image way before the maximum
        * number of samples was reached (for examples when number of samples is set to 0 in
        * viewport). */
+      const float scale = 1.0f / num_samples_;
       for (int i = 0; i < size; i++, in += pass_stride, pixels++) {
         const float f = *in;
-        pixels[0] = __float_as_uint(f) * scaler.scale(i);
+        pixels[0] = __float_as_uint(f) * scale;
       }
     }
     else {

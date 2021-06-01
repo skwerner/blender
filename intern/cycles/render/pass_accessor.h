@@ -30,8 +30,24 @@ class RenderBuffers;
  * progressively update from various render buffers. */
 class PassAccessor {
  public:
-  PassAccessor(
-      const Film *film, const Pass *pass, int num_components, float exposure, int num_samples);
+  class PassAccessInfo {
+   public:
+    PassAccessInfo() = default;
+    PassAccessInfo(const Pass &pass, const Film &film, const vector<Pass> &passes);
+
+    PassType type = PASS_NONE;
+    int offset = -1;
+
+    /* For the shadow catcher matte pass: whether to approximate shadow catcher pass into its
+     * matte pass, so that both artificial objects and shadows can be alpha-overed onto a backdrop.
+     */
+    bool use_approximate_shadow_catcher = false;
+  };
+
+  PassAccessor(const PassAccessInfo &pass_access_info,
+               int num_pixel_components,
+               float exposure,
+               int num_samples);
 
   /* Get pass data from the given render buffers, perform needed filtering, and store result into
    * the pixels.
@@ -43,9 +59,7 @@ class PassAccessor {
 #endif
 
  protected:
-  const Film *film_;
-
-  const Pass *pass_ = nullptr;
+  PassAccessInfo pass_access_info_;
 
   int num_components_ = 0;
 

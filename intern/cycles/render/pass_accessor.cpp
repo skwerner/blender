@@ -21,6 +21,15 @@
 
 CCL_NAMESPACE_BEGIN
 
+PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
+                                             const Film &film,
+                                             const vector<Pass> &passes)
+    : type(pass.type),
+      offset(Pass::get_offset(passes, pass)),
+      use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher())
+{
+}
+
 namespace {
 
 /* Helper class which takes care of calculating sample scale and exposure scale for render passes,
@@ -28,10 +37,10 @@ namespace {
 class Scaler {
  public:
   Scaler(RenderBuffers *render_buffers,
-         const Pass *pass,
+         const PassInfo &pass_info,
          const int num_samples,
          const float exposure)
-      : pass_(pass),
+      : pass_info_(pass_info),
         pass_stride_(render_buffers->params.pass_stride),
         num_samples_inv_(1.0f / num_samples),
         exposure_(exposure),
@@ -39,8 +48,8 @@ class Scaler {
   {
     /* Pre-calculate values when adaptive sampling is not used. */
     if (!sample_count_pass_) {
-      scale_ = pass->filter ? num_samples_inv_ : 1.0f;
-      scale_exposure_ = pass->exposure ? scale_ * exposure_ : scale_;
+      scale_ = pass_info.use_filter ? num_samples_inv_ : 1.0f;
+      scale_exposure_ = pass_info.use_exposure ? scale_ * exposure_ : scale_;
     }
   }
 
@@ -50,7 +59,8 @@ class Scaler {
       return scale_;
     }
 
-    return (pass_->filter) ? 1.0f / (sample_count_pass_[pixel_index * pass_stride_]) : 1.0f;
+    return (pass_info_.use_filter) ? 1.0f / (sample_count_pass_[pixel_index * pass_stride_]) :
+                                     1.0f;
   }
 
   inline float scale_exposure(const int pixel_index) const
@@ -74,7 +84,7 @@ class Scaler {
     }
 
     scale = this->scale(pixel_index);
-    scale_exposure = (pass_->exposure) ? scale * exposure_ : scale;
+    scale_exposure = (pass_info_.use_exposure) ? scale * exposure_ : scale;
   }
 
  protected:
@@ -88,7 +98,7 @@ class Scaler {
     return reinterpret_cast<const uint *>(render_buffers->buffer.data()) + pass_sample_count;
   }
 
-  const Pass *pass_;
+  const PassInfo pass_info_;
   const int pass_stride_;
 
   const float num_samples_inv_ = 1.0f;
@@ -156,10 +166,11 @@ static float4 shadow_catcher_calc_matte_with_shadow(const float scale,
                      (1.0f - alpha) * (1.0f - average(float4_to_float3(shadow_catcher))) + alpha);
 }
 
-PassAccessor::PassAccessor(
-    const Film *film, const Pass *pass, int num_components, float exposure, int num_samples)
-    : film_(film),
-      pass_(pass),
+PassAccessor::PassAccessor(const PassAccessInfo &pass_access_info,
+                           int num_components,
+                           float exposure,
+                           int num_samples)
+    : pass_access_info_(pass_access_info),
       num_components_(num_components),
       exposure_(exposure),
       num_samples_(num_samples)
@@ -168,10 +179,6 @@ PassAccessor::PassAccessor(
 
 bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *pixels)
 {
-  if (!pass_) {
-    return false;
-  }
-
   if (render_buffers->buffer.data() == nullptr) {
     return false;
   }
@@ -179,12 +186,13 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
   const BufferParams &params = render_buffers->params;
 
   const float *buffer_data = render_buffers->buffer.data();
-  const float *in = buffer_data + render_buffers->params.get_pass_offset(pass_->type);
+  const float *in = buffer_data + pass_access_info_.offset;
   const int pass_stride = params.pass_stride;
   const int size = params.width * params.height;
 
-  const PassType type = pass_->type;
-  const Scaler scaler(render_buffers, pass_, num_samples_, exposure_);
+  const PassType type = pass_access_info_.type;
+  const PassInfo pass_info = Pass::get_info(type);
+  const Scaler scaler(render_buffers, pass_info, num_samples_, exposure_);
 
   if (num_components_ == 1 && type == PASS_RENDER_TIME) {
 #if 0
@@ -196,8 +204,8 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
 #endif
   }
   else if (num_components_ == 1) {
-    DCHECK_EQ(pass_->components, num_components_)
-        << "Number of components mismatch for pass " << pass_->name;
+    DCHECK_EQ(pass_info.num_components, 1)
+        << "Number of components mismatch for pass type " << pass_info.type;
 
     /* Scalar */
     if (type == PASS_DEPTH) {
@@ -233,11 +241,13 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
     }
   }
   else if (num_components_ == 3) {
-    if (pass_->is_unaligned) {
-      DCHECK_EQ(pass_->components, 3) << "Number of components mismatch for pass " << pass_->name;
+    if (pass_info.is_unaligned) {
+      DCHECK_EQ(pass_info.num_components, 3)
+          << "Number of components mismatch for pass type " << pass_info.type;
     }
     else {
-      DCHECK_EQ(pass_->components, 4) << "Number of components mismatch for pass " << pass_->name;
+      DCHECK_EQ(pass_info.num_components, 4)
+          << "Number of components mismatch for pass type " << pass_info.type;
     }
 
     /* RGBA */
@@ -253,9 +263,9 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
         pixels[2] = shadow.z;
       }
     }
-    else if (pass_->divide_type != PASS_NONE) {
+    else if (pass_info.divide_type != PASS_NONE) {
       /* RGB lighting passes that need to divide out color */
-      const int pass_divide = render_buffers->params.get_pass_offset(pass_->divide_type);
+      const int pass_divide = render_buffers->params.get_pass_offset(pass_info.divide_type);
       DCHECK_NE(pass_divide, PASS_UNUSED);
 
       const float *in_divide = buffer_data + pass_divide;
@@ -283,8 +293,8 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
     }
   }
   else if (num_components_ == 4) {
-    DCHECK_EQ(pass_->components, num_components_)
-        << "Number of components mismatch for pass " << pass_->name;
+    DCHECK_EQ(pass_info.num_components, 4)
+        << "Number of components mismatch for pass type " << pass_info.type;
 
     /* RGBA */
     if (type == PASS_SHADOW) {
@@ -391,7 +401,8 @@ bool PassAccessor::get_render_tile_pixels(RenderBuffers *render_buffers, float *
         pixels[3] = shadow_catcher.w;
       }
     }
-    else if (type == PASS_SHADOW_CATCHER_MATTE && film_->get_use_approximate_shadow_catcher()) {
+    else if (type == PASS_SHADOW_CATCHER_MATTE &&
+             pass_access_info_.use_approximate_shadow_catcher) {
       const int pass_combined = render_buffers->params.get_pass_offset(PASS_COMBINED);
       const int pass_shadow_catcher = render_buffers->params.get_pass_offset(PASS_SHADOW_CATCHER);
 

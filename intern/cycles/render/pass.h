@@ -25,6 +25,19 @@
 
 CCL_NAMESPACE_BEGIN
 
+struct PassInfo {
+  PassType type = PASS_NONE;
+  int num_components = -1;
+  bool use_filter = false;
+  bool use_exposure = false;
+  PassType divide_type = PASS_NONE;
+
+  /* Is true when the actual storage of the pass is not aligned to any of boundary.
+   * For example, if the pass with 3 components is stored (and written by the kernel) as individual
+   * float components. */
+  bool is_unaligned = false;
+};
+
 class Pass : public Node {
  public:
   NODE_DECLARE
@@ -42,12 +55,9 @@ class Pass : public Node {
    * as adaptive sampling). */
   bool is_auto;
 
-  /* Is true when the actual storage of the pass is not aligned to any of boundary.
-   * For example, if the pass with 3 components is stored (and written by the kernel) as individual
-   * float components. */
-  bool is_unaligned;
-
   static const NodeEnum *get_type_enum();
+
+  static PassInfo get_info(PassType type);
 
   static void add(PassType type,
                   vector<Pass> &passes,
@@ -72,8 +82,9 @@ class Pass : public Node {
   static const Pass *find(const vector<Pass> &passes, const string &name);
   static const Pass *find(const vector<Pass> &passes, PassType type);
 
-  /* Returns PASS_UNUSED if there is no pass with the given type. */
+  /* Returns PASS_UNUSED if there is no corresponding pass. */
   static int get_offset(const vector<Pass> &passes, PassType type);
+  static int get_offset(const vector<Pass> &passes, const Pass &pass);
 };
 
 CCL_NAMESPACE_END

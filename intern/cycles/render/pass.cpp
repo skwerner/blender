@@ -17,6 +17,7 @@
 #include "render/pass.h"
 
 #include "util/util_algorithm.h"
+#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -84,6 +85,166 @@ Pass::Pass() : Node(get_node_type())
 {
 }
 
+PassInfo Pass::get_info(PassType type)
+{
+  PassInfo pass_info;
+
+  pass_info.type = type;
+  pass_info.use_filter = true;
+  pass_info.use_exposure = false;
+  pass_info.divide_type = PASS_NONE;
+  pass_info.is_unaligned = false;
+
+  switch (type) {
+    case PASS_NONE:
+      pass_info.num_components = 0;
+      break;
+    case PASS_COMBINED:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      break;
+    case PASS_DEPTH:
+      pass_info.num_components = 1;
+      pass_info.use_filter = false;
+      break;
+    case PASS_MIST:
+      pass_info.num_components = 1;
+      break;
+    case PASS_NORMAL:
+      pass_info.num_components = 4;
+      break;
+    case PASS_UV:
+      pass_info.num_components = 4;
+      break;
+    case PASS_MOTION:
+      pass_info.num_components = 4;
+      pass_info.divide_type = PASS_MOTION_WEIGHT;
+      break;
+    case PASS_MOTION_WEIGHT:
+      pass_info.num_components = 1;
+      break;
+    case PASS_OBJECT_ID:
+    case PASS_MATERIAL_ID:
+      pass_info.num_components = 1;
+      pass_info.use_filter = false;
+      break;
+
+    case PASS_EMISSION:
+    case PASS_BACKGROUND:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      break;
+    case PASS_AO:
+      pass_info.num_components = 4;
+      break;
+    case PASS_SHADOW:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = false;
+      break;
+    case PASS_LIGHT:
+      /* This isn't a real pass, used by baking to see whether
+       * light data is needed or not.
+       *
+       * Set components to 0 so pass sort below happens in a
+       * determined way.
+       */
+      pass_info.num_components = 0;
+      break;
+    case PASS_RENDER_TIME:
+      /* This pass is handled entirely on the host side. */
+      pass_info.num_components = 0;
+      break;
+
+    case PASS_DIFFUSE_COLOR:
+    case PASS_GLOSSY_COLOR:
+    case PASS_TRANSMISSION_COLOR:
+      pass_info.num_components = 4;
+      break;
+    case PASS_DIFFUSE_DIRECT:
+    case PASS_DIFFUSE_INDIRECT:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      pass_info.divide_type = PASS_DIFFUSE_COLOR;
+      break;
+    case PASS_GLOSSY_DIRECT:
+    case PASS_GLOSSY_INDIRECT:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      pass_info.divide_type = PASS_GLOSSY_COLOR;
+      break;
+    case PASS_TRANSMISSION_DIRECT:
+    case PASS_TRANSMISSION_INDIRECT:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      pass_info.divide_type = PASS_TRANSMISSION_COLOR;
+      break;
+    case PASS_VOLUME_DIRECT:
+    case PASS_VOLUME_INDIRECT:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      break;
+
+    case PASS_CRYPTOMATTE:
+      pass_info.num_components = 4;
+      break;
+
+    case PASS_DENOISING_COLOR:
+      pass_info.num_components = 3;
+      pass_info.use_exposure = true;
+      pass_info.is_unaligned = true;
+      break;
+    case PASS_DENOISING_NORMAL:
+      pass_info.num_components = 3;
+      pass_info.is_unaligned = true;
+      break;
+    case PASS_DENOISING_ALBEDO:
+      pass_info.num_components = 3;
+      pass_info.is_unaligned = true;
+      break;
+
+    case PASS_SHADOW_CATCHER:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      break;
+    case PASS_SHADOW_CATCHER_MATTE:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = true;
+      break;
+
+    case PASS_ADAPTIVE_AUX_BUFFER:
+      pass_info.num_components = 4;
+      break;
+    case PASS_SAMPLE_COUNT:
+      pass_info.num_components = 1;
+      pass_info.use_exposure = false;
+      break;
+
+    case PASS_AOV_COLOR:
+      pass_info.num_components = 4;
+      break;
+    case PASS_AOV_VALUE:
+      pass_info.num_components = 1;
+      break;
+
+    case PASS_BAKE_PRIMITIVE:
+    case PASS_BAKE_DIFFERENTIAL:
+      pass_info.num_components = 4;
+      pass_info.use_exposure = false;
+      pass_info.use_filter = false;
+      break;
+
+    case PASS_CATEGORY_LIGHT_END:
+    case PASS_CATEGORY_DATA_END:
+    case PASS_CATEGORY_BAKE_END:
+    case PASS_NUM:
+      LOG(DFATAL) << "Unexpected pass type is used " << type;
+      pass_info.num_components = 0;
+      break;
+  }
+
+  return pass_info;
+}
+
 void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_auto)
 {
   for (Pass &pass : passes) {
@@ -122,159 +283,18 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
     }
   }
 
-  Pass pass;
+  const PassInfo pass_info = get_info(type);
 
+  Pass pass;
   pass.type = type;
-  pass.filter = true;
-  pass.exposure = false;
-  pass.divide_type = PASS_NONE;
+  pass.components = pass_info.num_components;
+  pass.filter = pass_info.use_filter;
+  pass.exposure = pass_info.use_exposure;
+  pass.divide_type = pass_info.divide_type;
+  pass.is_auto = is_auto;
+
   if (name) {
     pass.name = name;
-  }
-  pass.is_auto = is_auto;
-  pass.is_unaligned = false;
-
-  switch (type) {
-    case PASS_NONE:
-      pass.components = 0;
-      break;
-    case PASS_COMBINED:
-      pass.components = 4;
-      pass.exposure = true;
-      break;
-    case PASS_DEPTH:
-      pass.components = 1;
-      pass.filter = false;
-      break;
-    case PASS_MIST:
-      pass.components = 1;
-      break;
-    case PASS_NORMAL:
-      pass.components = 4;
-      break;
-    case PASS_UV:
-      pass.components = 4;
-      break;
-    case PASS_MOTION:
-      pass.components = 4;
-      pass.divide_type = PASS_MOTION_WEIGHT;
-      break;
-    case PASS_MOTION_WEIGHT:
-      pass.components = 1;
-      break;
-    case PASS_OBJECT_ID:
-    case PASS_MATERIAL_ID:
-      pass.components = 1;
-      pass.filter = false;
-      break;
-
-    case PASS_EMISSION:
-    case PASS_BACKGROUND:
-      pass.components = 4;
-      pass.exposure = true;
-      break;
-    case PASS_AO:
-      pass.components = 4;
-      break;
-    case PASS_SHADOW:
-      pass.components = 4;
-      pass.exposure = false;
-      break;
-    case PASS_LIGHT:
-      /* This isn't a real pass, used by baking to see whether
-       * light data is needed or not.
-       *
-       * Set components to 0 so pass sort below happens in a
-       * determined way.
-       */
-      pass.components = 0;
-      break;
-    case PASS_RENDER_TIME:
-      /* This pass is handled entirely on the host side. */
-      pass.components = 0;
-      break;
-
-    case PASS_DIFFUSE_COLOR:
-    case PASS_GLOSSY_COLOR:
-    case PASS_TRANSMISSION_COLOR:
-      pass.components = 4;
-      break;
-    case PASS_DIFFUSE_DIRECT:
-    case PASS_DIFFUSE_INDIRECT:
-      pass.components = 4;
-      pass.exposure = true;
-      pass.divide_type = PASS_DIFFUSE_COLOR;
-      break;
-    case PASS_GLOSSY_DIRECT:
-    case PASS_GLOSSY_INDIRECT:
-      pass.components = 4;
-      pass.exposure = true;
-      pass.divide_type = PASS_GLOSSY_COLOR;
-      break;
-    case PASS_TRANSMISSION_DIRECT:
-    case PASS_TRANSMISSION_INDIRECT:
-      pass.components = 4;
-      pass.exposure = true;
-      pass.divide_type = PASS_TRANSMISSION_COLOR;
-      break;
-    case PASS_VOLUME_DIRECT:
-    case PASS_VOLUME_INDIRECT:
-      pass.components = 4;
-      pass.exposure = true;
-      break;
-
-    case PASS_CRYPTOMATTE:
-      pass.components = 4;
-      break;
-
-    case PASS_DENOISING_COLOR:
-      pass.components = 3;
-      pass.exposure = true;
-      pass.is_unaligned = true;
-      break;
-    case PASS_DENOISING_NORMAL:
-      pass.components = 3;
-      pass.is_unaligned = true;
-      break;
-    case PASS_DENOISING_ALBEDO:
-      pass.components = 3;
-      pass.is_unaligned = true;
-      break;
-
-    case PASS_SHADOW_CATCHER:
-      pass.components = 4;
-      pass.exposure = true;
-      break;
-    case PASS_SHADOW_CATCHER_MATTE:
-      pass.components = 4;
-      pass.exposure = true;
-      break;
-
-    case PASS_ADAPTIVE_AUX_BUFFER:
-      pass.components = 4;
-      break;
-    case PASS_SAMPLE_COUNT:
-      pass.components = 1;
-      pass.exposure = false;
-      break;
-
-    case PASS_AOV_COLOR:
-      pass.components = 4;
-      break;
-    case PASS_AOV_VALUE:
-      pass.components = 1;
-      break;
-
-    case PASS_BAKE_PRIMITIVE:
-    case PASS_BAKE_DIFFERENTIAL:
-      pass.components = 4;
-      pass.exposure = false;
-      pass.filter = false;
-      break;
-
-    default:
-      assert(false);
-      break;
   }
 
   passes.push_back(pass);
@@ -421,6 +441,20 @@ int Pass::get_offset(const vector<Pass> &passes, PassType type)
       return pass_offset;
     }
     pass_offset += pass.components;
+  }
+
+  return PASS_UNUSED;
+}
+
+int Pass::get_offset(const vector<Pass> &passes, const Pass &pass)
+{
+  int pass_offset = 0;
+
+  for (const Pass &current_pass : passes) {
+    if (current_pass.type == pass.type && current_pass.name == pass.name) {
+      return pass_offset;
+    }
+    pass_offset += current_pass.components;
   }
 
   return PASS_UNUSED;

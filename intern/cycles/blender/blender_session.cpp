@@ -156,7 +156,7 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_v3d, b_rv3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   /* Create GPU display. */
@@ -251,7 +251,7 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
+      b_null_space_view3d, b_null_region_view3d, scene->camera, width, height);
   session->reset(buffer_params, session_params.samples);
 
   /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
@@ -447,7 +447,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_v3d, b_rv3d, scene->camera, width, height);
 
   /* temporary render result to find needed passes and views */
   BL::RenderResult b_rr = b_engine.begin_result(0, 0, 1, 1, b_view_layer.name().c_str(), NULL);
@@ -718,7 +718,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height);
+      b_v3d, b_rv3d, scene->camera, width, height);
 
   /* reset if needed */
   if (scene->need_reset()) {
@@ -788,7 +788,7 @@ void BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_render, b_v3d, b_rv3d, scene->camera, width, height);
+          b_v3d, b_rv3d, scene->camera, width, height);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {

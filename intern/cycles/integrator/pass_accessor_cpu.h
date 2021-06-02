@@ -18,8 +18,11 @@
 
 #include "integrator/pass_accessor.h"
 #include "render/buffers.h"
+#include "util/util_defines.h"
 
 CCL_NAMESPACE_BEGIN
+
+struct KernelFilmConvert;
 
 /* Pass accessor implementation for CPU side. */
 class PassAccessorCPU : public PassAccessor {
@@ -27,80 +30,13 @@ class PassAccessorCPU : public PassAccessor {
   using PassAccessor::PassAccessor;
 
  protected:
-  template<typename Processor>
-  inline void run_get_pass_processor(const RenderBuffers *render_buffers,
-                                     float *pixels,
-                                     const Processor &processor) const
-  {
-    const BufferParams &params = render_buffers->params;
-
-    const float *buffer_data = render_buffers->buffer.data();
-    const float *input_pixels = buffer_data + pass_access_info_.offset;
-
-    const int pass_stride = params.pass_stride;
-    const int64_t num_pixels = int64_t(params.width) * params.height;
-
-    for (int64_t i = 0; i < num_pixels; i++) {
-      const int64_t input_pixel_offset = i * pass_stride;
-      const float *in = input_pixels + input_pixel_offset;
-      float *pixel = pixels + i * num_components_;
-
-      processor(i, in, pixel);
-    }
-  }
+  void init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
+                                const RenderBuffers *render_buffers) const;
 
   template<typename Processor>
-  inline void run_get_pass_processor(const RenderBuffers *render_buffers,
-                                     const int pass_offset_a,
-                                     float *pixels,
-                                     const Processor &processor) const
-  {
-    const BufferParams &params = render_buffers->params;
-
-    const float *buffer_data = render_buffers->buffer.data();
-    const float *input_pixels = buffer_data + pass_access_info_.offset;
-    const float *input_pixels_pass_a = buffer_data + pass_offset_a;
-
-    const int pass_stride = params.pass_stride;
-    const int64_t num_pixels = int64_t(params.width) * params.height;
-
-    for (int64_t i = 0; i < num_pixels; i++) {
-      const int64_t input_pixel_offset = i * pass_stride;
-      const float *in = input_pixels + input_pixel_offset;
-      const float *in_pass_a = input_pixels_pass_a + input_pixel_offset;
-      float *pixel = pixels + i * num_components_;
-
-      processor(i, in, in_pass_a, pixel);
-    }
-  }
-
-  template<typename Processor>
-  inline void run_get_pass_processor(const RenderBuffers *render_buffers,
-                                     const int pass_offset_a,
-                                     const int pass_offset_b,
-                                     float *pixels,
-                                     const Processor &processor) const
-  {
-    const BufferParams &params = render_buffers->params;
-
-    const float *buffer_data = render_buffers->buffer.data();
-    const float *input_pixels = buffer_data + pass_access_info_.offset;
-    const float *input_pixels_pass_a = buffer_data + pass_offset_a;
-    const float *input_pixels_pass_b = buffer_data + pass_offset_b;
-
-    const int pass_stride = params.pass_stride;
-    const int64_t num_pixels = int64_t(params.width) * params.height;
-
-    for (int64_t i = 0; i < num_pixels; i++) {
-      const int64_t input_pixel_offset = i * pass_stride;
-      const float *in = input_pixels + input_pixel_offset;
-      const float *in_pass_a = input_pixels_pass_a + input_pixel_offset;
-      const float *in_pass_b = input_pixels_pass_b + input_pixel_offset;
-      float *pixel = pixels + i * num_components_;
-
-      processor(i, in, in_pass_a, in_pass_b, pixel);
-    }
-  }
+  inline void run_get_pass_kernel_processor(const RenderBuffers *render_buffers,
+                                            float *pixels,
+                                            const Processor &processor) const;
 
 #define DECLARE_PASS_ACCESSOR(pass) \
   virtual void get_pass_##pass(const RenderBuffers *render_buffers, float *pixels) const override;

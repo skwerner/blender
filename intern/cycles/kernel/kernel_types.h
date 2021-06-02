@@ -1247,6 +1247,30 @@ typedef struct KernelFilm {
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
+typedef struct KernelFilmConvert {
+  int pass_offset;
+
+  int pass_use_exposure;
+  int pass_use_filter;
+
+  int pass_divide;
+
+  int pass_combined;
+  int pass_sample_count;
+  int pass_motion_weight;
+  int pass_shadow_catcher;
+  int pass_shadow_catcher_matte;
+
+  float scale;
+  float exposure;
+  float scale_exposure;
+
+  int use_approximate_shadow_catcher;
+
+  int pad1, pad2, pad3;
+} KernelFilmConvert;
+static_assert_align(KernelFilmConvert, 16);
+
 typedef struct KernelBackground {
   /* only shader index */
   int surface_shader;

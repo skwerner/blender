@@ -17,6 +17,7 @@
 #include "integrator/pass_accessor_cpu.h"
 
 #include "util/util_logging.h"
+#include "util/util_tbb.h"
 
 // clang-format off
 #include "kernel/device/cpu/compat.h"
@@ -81,18 +82,16 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor(const RenderBuffers *
 
   const float *buffer_data = render_buffers->buffer.data();
 
-  const int pass_stride = params.pass_stride;
-  const int64_t num_pixels = int64_t(params.width) * params.height;
+  tbb::parallel_for(0, params.height, [&](int y) {
+    int64_t pixel_index = y * params.width;
+    for (int x = 0; x < params.width; ++x, ++pixel_index) {
+      const int64_t input_pixel_offset = pixel_index * params.pass_stride;
+      const float *buffer = buffer_data + input_pixel_offset;
+      float *pixel = pixels + pixel_index * num_components_;
 
-  /* TODO(sergey): Consider multi-threading. */
-
-  for (int64_t i = 0; i < num_pixels; i++) {
-    const int64_t input_pixel_offset = i * pass_stride;
-    const float *buffer = buffer_data + input_pixel_offset;
-    float *pixel = pixels + i * num_components_;
-
-    processor(&kfilm_convert, buffer, pixel);
-  }
+      processor(&kfilm_convert, buffer, pixel);
+    }
+  });
 }
 
 /* --------------------------------------------------------------------

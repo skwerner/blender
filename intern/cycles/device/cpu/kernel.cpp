@@ -39,8 +39,6 @@ CPUKernels::CPUKernels()
       REGISTER_KERNEL(integrator_shade_surface),
       REGISTER_KERNEL(integrator_shade_volume),
       REGISTER_KERNEL(integrator_megakernel),
-      /* Film. */
-      REGISTER_KERNEL(convert_to_half_float),
       /* Shader evaluation. */
       REGISTER_KERNEL(shader_eval_displace),
       REGISTER_KERNEL(shader_eval_background),

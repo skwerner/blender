@@ -49,19 +49,6 @@ class CPUKernels {
   IntegratorShadeFunction integrator_shade_volume;
   IntegratorShadeFunction integrator_megakernel;
 
-  /* Film. */
-
-  using ConvertToHalfFloatFunction = CPUKernelFunction<void (*)(const KernelGlobals *kg,
-                                                                uchar4 *rgba,
-                                                                float *buffer,
-                                                                float sample_scale,
-                                                                int x,
-                                                                int y,
-                                                                int offset,
-                                                                int stride)>;
-
-  ConvertToHalfFloatFunction convert_to_half_float;
-
   /* Shader evaluation. */
 
   using ShaderEvalFunction = CPUKernelFunction<void (*)(

@@ -33,9 +33,8 @@ CCL_NAMESPACE_BEGIN
  */
 
 void PassAccessorCPU::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
-                                               const RenderBuffers *render_buffers) const
+                                               const BufferParams &buffer_params) const
 {
-  const BufferParams &params = render_buffers->params;
   const PassInfo &pass_info = Pass::get_info(pass_access_info_.type);
 
   kfilm_convert->pass_offset = pass_access_info_.offset;
@@ -43,13 +42,16 @@ void PassAccessorCPU::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->pass_use_exposure = pass_info.use_exposure;
   kfilm_convert->pass_use_filter = pass_info.use_filter;
 
-  kfilm_convert->pass_divide = params.get_pass_offset(pass_info.divide_type);
+  kfilm_convert->pass_divide = buffer_params.get_pass_offset(pass_info.divide_type);
 
-  kfilm_convert->pass_combined = params.get_pass_offset(PASS_COMBINED);
-  kfilm_convert->pass_sample_count = params.get_pass_offset(PASS_SAMPLE_COUNT);
-  kfilm_convert->pass_motion_weight = params.get_pass_offset(PASS_MOTION_WEIGHT);
-  kfilm_convert->pass_shadow_catcher = params.get_pass_offset(PASS_SHADOW_CATCHER);
-  kfilm_convert->pass_shadow_catcher_matte = params.get_pass_offset(PASS_SHADOW_CATCHER_MATTE);
+  kfilm_convert->pass_combined = buffer_params.get_pass_offset(PASS_COMBINED);
+  kfilm_convert->pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
+  kfilm_convert->pass_adaptive_aux_buffer = buffer_params.get_pass_offset(
+      PASS_ADAPTIVE_AUX_BUFFER);
+  kfilm_convert->pass_motion_weight = buffer_params.get_pass_offset(PASS_MOTION_WEIGHT);
+  kfilm_convert->pass_shadow_catcher = buffer_params.get_pass_offset(PASS_SHADOW_CATCHER);
+  kfilm_convert->pass_shadow_catcher_matte = buffer_params.get_pass_offset(
+      PASS_SHADOW_CATCHER_MATTE);
 
   if (pass_info.use_filter) {
     kfilm_convert->scale = 1.0f / num_samples_;
@@ -68,28 +70,110 @@ void PassAccessorCPU::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->scale_exposure = kfilm_convert->scale * kfilm_convert->exposure;
 
   kfilm_convert->use_approximate_shadow_catcher = pass_access_info_.use_approximate_shadow_catcher;
+  kfilm_convert->show_active_pixels = pass_access_info_.show_active_pixels;
 }
 
 template<typename Processor>
 inline void PassAccessorCPU::run_get_pass_kernel_processor(const RenderBuffers *render_buffers,
-                                                           float *pixels,
+                                                           const BufferParams &buffer_params,
+                                                           const Destination &destination,
                                                            const Processor &processor) const
 {
   KernelFilmConvert kfilm_convert;
-  init_kernel_film_convert(&kfilm_convert, render_buffers);
+  init_kernel_film_convert(&kfilm_convert, buffer_params);
 
-  const BufferParams &params = render_buffers->params;
+  if (destination.pixels) {
+    /* NOTE: No overlays are applied since they are not used for final renders.
+     * Can be supported via some sort of specialization to avoid code duplication. */
 
+    run_get_pass_kernel_processor_float(
+        &kfilm_convert, render_buffers, buffer_params, destination, processor);
+  }
+
+  if (destination.pixels_half_rgba) {
+    /* TODO(sergey): Consider adding specialization to avoid per-pixel overlay check. */
+
+    if (destination.num_components == 1) {
+      run_get_pass_kernel_processor_half_rgba(&kfilm_convert,
+                                              render_buffers,
+                                              buffer_params,
+                                              destination,
+                                              [&processor](const KernelFilmConvert *kfilm_convert,
+                                                           ccl_global const float *buffer,
+                                                           float *pixel_rgba) {
+                                                float pixel;
+                                                processor(kfilm_convert, buffer, &pixel);
+
+                                                pixel_rgba[0] = pixel;
+                                                pixel_rgba[1] = pixel;
+                                                pixel_rgba[2] = pixel;
+                                                pixel_rgba[3] = 1.0f;
+                                              });
+    }
+    else if (destination.num_components == 3) {
+      run_get_pass_kernel_processor_half_rgba(&kfilm_convert,
+                                              render_buffers,
+                                              buffer_params,
+                                              destination,
+                                              [&processor](const KernelFilmConvert *kfilm_convert,
+                                                           ccl_global const float *buffer,
+                                                           float *pixel_rgba) {
+                                                processor(kfilm_convert, buffer, pixel_rgba);
+                                                pixel_rgba[3] = 1.0f;
+                                              });
+    }
+    else if (destination.num_components == 4) {
+      run_get_pass_kernel_processor_half_rgba(
+          &kfilm_convert, render_buffers, buffer_params, destination, processor);
+    }
+  }
+}
+
+template<typename Processor>
+inline void PassAccessorCPU::run_get_pass_kernel_processor_float(
+    const KernelFilmConvert *kfilm_convert,
+    const RenderBuffers *render_buffers,
+    const BufferParams &buffer_params,
+    const Destination &destination,
+    const Processor &processor) const
+{
   const float *buffer_data = render_buffers->buffer.data();
 
-  tbb::parallel_for(0, params.height, [&](int y) {
-    int64_t pixel_index = y * params.width;
-    for (int x = 0; x < params.width; ++x, ++pixel_index) {
-      const int64_t input_pixel_offset = pixel_index * params.pass_stride;
+  tbb::parallel_for(0, buffer_params.height, [&](int y) {
+    int64_t pixel_index = y * buffer_params.width;
+    for (int x = 0; x < buffer_params.width; ++x, ++pixel_index) {
+      const int64_t input_pixel_offset = pixel_index * buffer_params.pass_stride;
       const float *buffer = buffer_data + input_pixel_offset;
-      float *pixel = pixels + pixel_index * num_components_;
+      float *pixel = destination.pixels + pixel_index * destination.num_components;
 
-      processor(&kfilm_convert, buffer, pixel);
+      processor(kfilm_convert, buffer, pixel);
+    }
+  });
+}
+
+template<typename Processor>
+inline void PassAccessorCPU::run_get_pass_kernel_processor_half_rgba(
+    const KernelFilmConvert *kfilm_convert,
+    const RenderBuffers *render_buffers,
+    const BufferParams &buffer_params,
+    const Destination &destination,
+    const Processor &processor) const
+{
+  const float *buffer_data = render_buffers->buffer.data();
+
+  tbb::parallel_for(0, buffer_params.height, [&](int y) {
+    int64_t pixel_index = y * buffer_params.width;
+    for (int x = 0; x < buffer_params.width; ++x, ++pixel_index) {
+      const int64_t input_pixel_offset = pixel_index * buffer_params.pass_stride;
+      const float *buffer = buffer_data + input_pixel_offset;
+
+      float pixel[4];
+      processor(kfilm_convert, buffer, pixel);
+
+      film_apply_pass_pixel_overlays_rgba(kfilm_convert, buffer, pixel);
+
+      half4 *pixel_half_rgba = destination.pixels_half_rgba + pixel_index;
+      float4_store_half(&pixel_half_rgba->x, make_float4(pixel[0], pixel[1], pixel[2], pixel[3]));
     }
   });
 }
@@ -99,9 +183,12 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor(const RenderBuffers *
  */
 
 #define DEFINE_PASS_ACCESSOR(pass) \
-  void PassAccessorCPU::get_pass_##pass(const RenderBuffers *render_buffers, float *pixels) const \
+  void PassAccessorCPU::get_pass_##pass(const RenderBuffers *render_buffers, \
+                                        const BufferParams &buffer_params, \
+                                        const Destination &destination) const \
   { \
-    run_get_pass_kernel_processor(render_buffers, pixels, film_get_pass_pixel_##pass); \
+    run_get_pass_kernel_processor( \
+        render_buffers, buffer_params, destination, film_get_pass_pixel_##pass); \
   }
 
 /* Float (scalar) passes. */

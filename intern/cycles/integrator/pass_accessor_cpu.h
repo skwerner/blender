@@ -31,15 +31,32 @@ class PassAccessorCPU : public PassAccessor {
 
  protected:
   void init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
-                                const RenderBuffers *render_buffers) const;
+                                const BufferParams &buffer_params) const;
 
   template<typename Processor>
   inline void run_get_pass_kernel_processor(const RenderBuffers *render_buffers,
-                                            float *pixels,
+                                            const BufferParams &buffer_params,
+                                            const Destination &destination,
                                             const Processor &processor) const;
 
+  template<typename Processor>
+  inline void run_get_pass_kernel_processor_float(const KernelFilmConvert *kfilm_convert,
+                                                  const RenderBuffers *render_buffers,
+                                                  const BufferParams &buffer_params,
+                                                  const Destination &destination,
+                                                  const Processor &processor) const;
+
+  template<typename Processor>
+  inline void run_get_pass_kernel_processor_half_rgba(const KernelFilmConvert *kfilm_convert,
+                                                      const RenderBuffers *render_buffers,
+                                                      const BufferParams &buffer_params,
+                                                      const Destination &destination,
+                                                      const Processor &processor) const;
+
 #define DECLARE_PASS_ACCESSOR(pass) \
-  virtual void get_pass_##pass(const RenderBuffers *render_buffers, float *pixels) const override;
+  virtual void get_pass_##pass(const RenderBuffers *render_buffers, \
+                               const BufferParams &buffer_params, \
+                               const Destination &destination) const override;
 
   /* Float (scalar) passes. */
   DECLARE_PASS_ACCESSOR(depth)

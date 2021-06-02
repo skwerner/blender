@@ -19,6 +19,8 @@
 #include "device/cpu/kernel.h"
 #include "device/device.h"
 
+#include "integrator/pass_accessor_cpu.h"
+
 #include "render/buffers.h"
 #include "render/gpu_display.h"
 #include "render/scene.h"
@@ -133,15 +135,8 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
   }
 }
 
-void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
+void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples)
 {
-  const int full_x = effective_buffer_params_.full_x;
-  const int full_y = effective_buffer_params_.full_y;
-  const int width = effective_buffer_params_.width;
-  const int height = effective_buffer_params_.height;
-  const int offset = effective_buffer_params_.offset;
-  const int stride = effective_buffer_params_.stride;
-
   half4 *rgba_half = gpu_display->map_texture_buffer();
   if (!rgba_half) {
     /* TODO(sergey): Look into using copy_to_gpu_display() if mapping failed. Might be needed for
@@ -149,21 +144,20 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
     return;
   }
 
+  const KernelFilm &kfilm = device_scene_->data.film;
+
+  PassAccessor::PassAccessInfo pass_access_info;
+  pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
+  pass_access_info.offset = kfilm.display_pass_offset;
+  pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
+  pass_access_info.show_active_pixels = kfilm.show_active_pixels;
+
+  const PassAccessorCPU pass_accessor(pass_access_info, kfilm.exposure, num_samples);
+  const PassAccessor::Destination destination(pass_access_info.type, rgba_half);
+
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
-    tbb::parallel_for(0, height, [&](int y) {
-      CPUKernelThreadGlobals *kernel_globals = kernel_thread_globals_get(kernel_thread_globals_);
-      for (int x = 0; x < width; ++x) {
-        kernels_.convert_to_half_float(kernel_globals,
-                                       reinterpret_cast<uchar4 *>(rgba_half),
-                                       reinterpret_cast<float *>(buffers_->buffer.device_pointer),
-                                       sample_scale,
-                                       full_x + x,
-                                       full_y + y,
-                                       offset,
-                                       stride);
-      }
-    });
+    pass_accessor.get_render_tile_pixels(render_buffers_, effective_buffer_params_, destination);
   });
 
   gpu_display->unmap_texture_buffer();

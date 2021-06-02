@@ -588,11 +588,11 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
 
-  PassAccessor::PassAccessInfo pass_access_info(*pass, *scene->film, scene->passes);
+  const PassAccessor::PassAccessInfo pass_access_info(*pass, *scene->film, scene->passes);
+  const PassAccessorCPU pass_accessor(pass_access_info, exposure, num_samples);
+  const PassAccessor::Destination destination(pixels, num_components);
 
-  PassAccessorCPU pass_accessor(pass_access_info, num_components, exposure, num_samples);
-
-  return path_trace_->get_render_tile_pixels(pass_accessor, pixels);
+  return path_trace_->get_render_tile_pixels(pass_accessor, destination);
 }
 
 CCL_NAMESPACE_END

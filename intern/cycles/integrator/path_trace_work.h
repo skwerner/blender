@@ -61,7 +61,7 @@ class PathTraceWork {
   virtual void render_samples(int start_sample, int samples_num) = 0;
 
   /* Copy render result from this work to the corresponding place of the GPU display. */
-  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale) = 0;
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples) = 0;
 
   /* Perform convergence test on the render buffer, and filter the convergence mask.
    * Returns number of active pixels (the ones which did not converge yet). */

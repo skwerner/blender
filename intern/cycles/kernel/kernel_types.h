@@ -1236,14 +1236,18 @@ typedef struct KernelFilm {
   int pass_bake_differential;
 
   /* viewport rendering options */
+  int display_pass_type;
   int display_pass_offset;
+  int show_active_pixels;
+  int use_approximate_shadow_catcher;
+
+  /* deprecated */
   int display_pass_components;
   int display_divide_pass_offset;
   int use_display_exposure;
   int use_display_pass_alpha;
-  int show_active_pixels;
 
-  int pad;
+  int pad1, pad2, pad3;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1257,6 +1261,7 @@ typedef struct KernelFilmConvert {
 
   int pass_combined;
   int pass_sample_count;
+  int pass_adaptive_aux_buffer;
   int pass_motion_weight;
   int pass_shadow_catcher;
   int pass_shadow_catcher_matte;
@@ -1266,8 +1271,9 @@ typedef struct KernelFilmConvert {
   float scale_exposure;
 
   int use_approximate_shadow_catcher;
+  int show_active_pixels;
 
-  int pad1, pad2, pad3;
+  int pad1;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 

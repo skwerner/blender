@@ -107,24 +107,6 @@ DEFINE_INTEGRATOR_SHADE_KERNEL(shade_surface)
 DEFINE_INTEGRATOR_SHADE_KERNEL(shade_volume)
 DEFINE_INTEGRATOR_SHADE_KERNEL(megakernel)
 
-/* Film. */
-
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
-                                                      uchar4 *rgba,
-                                                      float *render_buffer,
-                                                      float sample_scale,
-                                                      int x,
-                                                      int y,
-                                                      int offset,
-                                                      int stride)
-{
-#ifdef KERNEL_STUB
-  STUB_ASSERT(KERNEL_ARCH, convert_to_half_float);
-#else
-  kernel_film_convert_to_half_float(kg, rgba, render_buffer, sample_scale, x, y, offset, stride);
-#endif /* KERNEL_STUB */
-}
-
 /* Shader evaluation. */
 
 void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,

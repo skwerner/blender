@@ -17,6 +17,7 @@
 #pragma once
 
 #include "integrator/denoiser.h"
+#include "integrator/pass_accessor.h"
 #include "integrator/path_trace_work.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
@@ -32,7 +33,6 @@ class DeviceScene;
 class RenderBuffers;
 class RenderScheduler;
 class RenderWork;
-class PassAccessor;
 class Progress;
 class GPUDisplay;
 
@@ -104,7 +104,8 @@ class PathTrace {
    * This call puts pass render result from all devices into the final pixels storage.
    *
    * Returns false if any of the accessor's `get_render_tile_pixels()` returned false. */
-  bool get_render_tile_pixels(PassAccessor &pass_accessor, float *pixels);
+  bool get_render_tile_pixels(const PassAccessor &pass_accessor,
+                              const PassAccessor::Destination &destination);
 
   /* Generate full multi-line report of the rendering process, including rendering parameters,
    * times, and so on. */

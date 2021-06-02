@@ -555,7 +555,7 @@ int PathTraceWorkGPU::get_max_num_camera_paths() const
   return max_num_paths_;
 }
 
-void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample_scale)
+void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples)
 {
   if (!interop_use_checked_) {
     Device *device = queue_->device;
@@ -572,16 +572,16 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, float sample
   }
 
   if (interop_use_) {
-    if (copy_to_gpu_display_interop(gpu_display, sample_scale)) {
+    if (copy_to_gpu_display_interop(gpu_display, num_samples)) {
       return;
     }
     interop_use_ = false;
   }
 
-  copy_to_gpu_display_naive(gpu_display, sample_scale);
+  copy_to_gpu_display_naive(gpu_display, num_samples);
 }
 
-void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, float sample_scale)
+void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, int num_samples)
 {
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
@@ -601,14 +601,14 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, float 
     queue_->zero_to_device(gpu_display_rgba_half_);
   }
 
-  enqueue_film_convert(gpu_display_rgba_half_.device_pointer, sample_scale);
+  enqueue_film_convert(gpu_display_rgba_half_.device_pointer, num_samples);
   queue_->copy_from_device(gpu_display_rgba_half_);
   queue_->synchronize();
 
   gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data());
 }
 
-bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, float sample_scale)
+bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, int num_samples)
 {
   Device *device = queue_->device;
 
@@ -625,7 +625,7 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, floa
     return false;
   }
 
-  enqueue_film_convert(d_rgba_half, sample_scale);
+  enqueue_film_convert(d_rgba_half, num_samples);
 
   device_graphics_interop_->unmap();
   queue_->synchronize();
@@ -633,8 +633,9 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, floa
   return true;
 }
 
-void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, float sample_scale)
+void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, int num_samples)
 {
+  const float sample_scale = 1.0f / num_samples;
   const int work_size = effective_buffer_params_.width * effective_buffer_params_.height;
 
   void *args[] = {&d_rgba_half,

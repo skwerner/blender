@@ -48,17 +48,6 @@ KERNEL_INTEGRATOR_SHADE_FUNCTION(megakernel);
 #undef KERNEL_INTEGRATOR_INIT_FUNCTION
 #undef KERNEL_INTEGRATOR_SHADE_FUNCTION
 
-/* Film. */
-
-void KERNEL_FUNCTION_FULL_NAME(convert_to_half_float)(const KernelGlobals *kg,
-                                                      uchar4 *rgba,
-                                                      float *render_buffer,
-                                                      float sample_scale,
-                                                      int x,
-                                                      int y,
-                                                      int offset,
-                                                      int stride);
-
 /* Shader evaluation. */
 
 void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,

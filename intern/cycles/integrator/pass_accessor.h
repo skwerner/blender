@@ -17,6 +17,7 @@
 #pragma once
 
 #include "render/pass.h"
+#include "util/util_half.h"
 #include "util/util_string.h"
 #include "util/util_vector.h"
 
@@ -24,6 +25,7 @@ CCL_NAMESPACE_BEGIN
 
 class Film;
 class RenderBuffers;
+class BufferParams;
 
 /* Helper class which allows to access pass data.
  * Is designed in a way that it is created once when the pass data is known, and then pixels gets
@@ -42,19 +44,34 @@ class PassAccessor {
      * matte pass, so that both artificial objects and shadows can be alpha-overed onto a backdrop.
      */
     bool use_approximate_shadow_catcher = false;
+
+    bool show_active_pixels = false;
   };
 
-  PassAccessor(const PassAccessInfo &pass_access_info,
-               int num_pixel_components,
-               float exposure,
-               int num_samples);
+  class Destination {
+   public:
+    Destination() = default;
+    Destination(float *pixels, int num_components);
+    Destination(const PassType pass_type, half4 *pixels);
+
+    float *pixels = nullptr;
+    half4 *pixels_half_rgba = nullptr;
+
+    int num_components = 0;
+  };
+
+  PassAccessor(const PassAccessInfo &pass_access_info, float exposure, int num_samples);
 
   virtual ~PassAccessor() = default;
 
   /* Get pass data from the given render buffers, perform needed filtering, and store result into
    * the pixels.
    * The result is stored sequentially starting from the very beginning of the pixels memory. */
-  bool get_render_tile_pixels(const RenderBuffers *render_buffers, float *pixels) const;
+  bool get_render_tile_pixels(const RenderBuffers *render_buffers,
+                              const Destination &destination) const;
+  bool get_render_tile_pixels(const RenderBuffers *render_buffers,
+                              const BufferParams &buffer_params,
+                              const Destination &destination) const;
 
 #if 0
   bool set_pass_rect(PassType type, int components, float *pixels);
@@ -62,7 +79,9 @@ class PassAccessor {
 
  protected:
 #define DECLARE_PASS_ACCESSOR(pass) \
-  virtual void get_pass_##pass(const RenderBuffers *render_buffers, float *pixels) const = 0;
+  virtual void get_pass_##pass(const RenderBuffers *render_buffers, \
+                               const BufferParams &buffer_params, \
+                               const Destination &destination) const = 0;
 
   /* Float (scalar) passes. */
   DECLARE_PASS_ACCESSOR(depth)
@@ -87,8 +106,6 @@ class PassAccessor {
 #undef DECLARE_PASS_ACCESSOR
 
   PassAccessInfo pass_access_info_;
-
-  int num_components_ = 0;
 
   float exposure_ = 0.0f;
   int num_samples_ = 0;

@@ -21,6 +21,10 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* --------------------------------------------------------------------
+ * Pass input information.
+ */
+
 PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
                                              const Film &film,
                                              const vector<Pass> &passes)
@@ -30,28 +34,65 @@ PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
 {
 }
 
-PassAccessor::PassAccessor(const PassAccessInfo &pass_access_info,
-                           int num_components,
-                           float exposure,
-                           int num_samples)
-    : pass_access_info_(pass_access_info),
-      num_components_(num_components),
-      exposure_(exposure),
-      num_samples_(num_samples)
+/* --------------------------------------------------------------------
+ * Pass destination.
+ */
+
+PassAccessor::Destination::Destination(float *pixels, int num_components)
+    : pixels(pixels), num_components(num_components)
 {
 }
 
-bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers, float *pixels) const
+PassAccessor::Destination::Destination(const PassType pass_type, half4 *pixels)
+    : pixels_half_rgba(pixels)
 {
-  if (render_buffers->buffer.data() == nullptr) {
+  const PassInfo pass_info = Pass::get_info(pass_type);
+
+  if (pass_info.divide_type != PASS_NONE) {
+    /* Divide is used for colors, which has 3 destination components.
+     * The passes which use division are stored as aligned float4 internally, and there is no
+     * implementation of divide_even_color for float4. So we force it here.
+     * The rest of the aligned float3 passes should be fine, because they have float4
+     * implementation. */
+    num_components = 3;
+  }
+  else {
+    num_components = pass_info.num_components;
+  }
+}
+
+/* --------------------------------------------------------------------
+ * Pass accessor.
+ */
+
+PassAccessor::PassAccessor(const PassAccessInfo &pass_access_info, float exposure, int num_samples)
+    : pass_access_info_(pass_access_info), exposure_(exposure), num_samples_(num_samples)
+{
+}
+
+bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
+                                          const Destination &destination) const
+{
+  if (render_buffers == nullptr || render_buffers->buffer.data() == nullptr) {
+    return false;
+  }
+
+  return get_render_tile_pixels(render_buffers, render_buffers->params, destination);
+}
+
+bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
+                                          const BufferParams &buffer_params,
+                                          const Destination &destination) const
+{
+  if (render_buffers == nullptr || render_buffers->buffer.data() == nullptr) {
     return false;
   }
 
   const PassType type = pass_access_info_.type;
   const PassInfo pass_info = Pass::get_info(type);
 
-  if (num_components_ == 1) {
-    DCHECK_EQ(pass_info.num_components, num_components_)
+  if (destination.num_components == 1) {
+    DCHECK_EQ(pass_info.num_components, destination.num_components)
         << "Number of components mismatch for pass type " << pass_info.type;
 
     /* Scalar */
@@ -59,19 +100,19 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers, f
       /* TODO(sergey): Needs implementation. */
     }
     else if (type == PASS_DEPTH) {
-      get_pass_depth(render_buffers, pixels);
+      get_pass_depth(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_MIST) {
-      get_pass_mist(render_buffers, pixels);
+      get_pass_mist(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_SAMPLE_COUNT) {
-      get_pass_sample_count(render_buffers, pixels);
+      get_pass_sample_count(render_buffers, buffer_params, destination);
     }
     else {
-      get_pass_float(render_buffers, pixels);
+      get_pass_float(render_buffers, buffer_params, destination);
     }
   }
-  else if (num_components_ == 3) {
+  else if (destination.num_components == 3) {
     if (pass_info.is_unaligned) {
       DCHECK_EQ(pass_info.num_components, 3)
           << "Number of components mismatch for pass type " << pass_info.type;
@@ -83,43 +124,43 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers, f
 
     /* RGBA */
     if (type == PASS_SHADOW) {
-      get_pass_shadow3(render_buffers, pixels);
+      get_pass_shadow3(render_buffers, buffer_params, destination);
     }
     else if (pass_info.divide_type != PASS_NONE) {
       /* RGB lighting passes that need to divide out color */
-      get_pass_divide_even_color(render_buffers, pixels);
+      get_pass_divide_even_color(render_buffers, buffer_params, destination);
     }
     else {
       /* RGB/vector */
-      get_pass_float3(render_buffers, pixels);
+      get_pass_float3(render_buffers, buffer_params, destination);
     }
   }
-  else if (num_components_ == 4) {
+  else if (destination.num_components == 4) {
     DCHECK_EQ(pass_info.num_components, 4)
         << "Number of components mismatch for pass type " << pass_info.type;
 
     /* RGBA */
     if (type == PASS_SHADOW) {
-      get_pass_shadow4(render_buffers, pixels);
+      get_pass_shadow4(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_MOTION) {
-      get_pass_motion(render_buffers, pixels);
+      get_pass_motion(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_CRYPTOMATTE) {
-      get_pass_cryptomatte(render_buffers, pixels);
+      get_pass_cryptomatte(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_DENOISING_COLOR) {
-      get_pass_denoising_color(render_buffers, pixels);
+      get_pass_denoising_color(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_SHADOW_CATCHER) {
-      get_pass_shadow_catcher(render_buffers, pixels);
+      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_SHADOW_CATCHER_MATTE &&
              pass_access_info_.use_approximate_shadow_catcher) {
-      get_pass_shadow_catcher_matte_with_shadow(render_buffers, pixels);
+      get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
     }
     else {
-      get_pass_float4(render_buffers, pixels);
+      get_pass_float4(render_buffers, buffer_params, destination);
     }
   }
 

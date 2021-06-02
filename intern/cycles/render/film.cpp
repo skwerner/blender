@@ -172,12 +172,14 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->exposure = exposure;
   kfilm->pass_flag = 0;
 
+  kfilm->display_pass_type = get_display_pass();
   kfilm->display_pass_offset = -1;
   kfilm->display_pass_components = 0;
   kfilm->display_divide_pass_offset = -1;
   kfilm->use_display_exposure = false;
   kfilm->use_display_pass_alpha = (display_pass == PASS_COMBINED);
   kfilm->show_active_pixels = show_active_pixels;
+  kfilm->use_approximate_shadow_catcher = get_use_approximate_shadow_catcher();
 
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;

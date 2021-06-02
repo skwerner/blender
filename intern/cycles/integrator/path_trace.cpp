@@ -342,7 +342,7 @@ void PathTrace::update_display(const RenderWork &render_work)
 
   const double start_time = time_dt();
 
-  const float sample_scale = 1.0f / get_num_samples_in_buffer();
+  const int num_samples = get_num_samples_in_buffer();
 
   if (!gpu_display_->update_begin(width, height)) {
     LOG(ERROR) << "Error beginning GPUDisplay update.";
@@ -354,7 +354,7 @@ void PathTrace::update_display(const RenderWork &render_work)
    * on an implementation of GPUDisplay it might not be possible to map GPUBuffer in a way that the
    * PathTraceWork expects it in a threaded environment. */
   for (auto &&path_trace_work : path_trace_works_) {
-    path_trace_work->copy_to_gpu_display(gpu_display_.get(), sample_scale);
+    path_trace_work->copy_to_gpu_display(gpu_display_.get(), num_samples);
   }
 
   gpu_display_->update_end();
@@ -440,13 +440,14 @@ void PathTrace::progress_update_if_needed()
   }
 }
 
-bool PathTrace::get_render_tile_pixels(PassAccessor &pass_accessor, float *pixels)
+bool PathTrace::get_render_tile_pixels(const PassAccessor &pass_accessor,
+                                       const PassAccessor::Destination &destination)
 {
   if (!full_render_buffers_->copy_from_device()) {
     return false;
   }
 
-  return pass_accessor.get_render_tile_pixels(full_render_buffers_.get(), pixels);
+  return pass_accessor.get_render_tile_pixels(full_render_buffers_.get(), destination);
 }
 
 /* --------------------------------------------------------------------

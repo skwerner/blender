@@ -430,6 +430,27 @@ ccl_device_inline void film_get_pass_pixel_shadow_catcher_matte_with_shadow(
 }
 
 /* --------------------------------------------------------------------
+ * Compositing and overlays.
+ */
+
+ccl_device_inline void film_apply_pass_pixel_overlays_rgba(
+    const KernelFilmConvert *ccl_restrict kfilm_convert,
+    ccl_global const float *ccl_restrict buffer,
+    float *ccl_restrict pixel)
+{
+  if (kfilm_convert->show_active_pixels &&
+      kfilm_convert->pass_adaptive_aux_buffer != PASS_UNUSED) {
+    if (buffer[kfilm_convert->pass_adaptive_aux_buffer + 3] == 0.0f) {
+      const float3 active_rgb = make_float3(1.0f, 0.0f, 0.0f);
+      const float3 mix_rgb = interp(make_float3(pixel[0], pixel[1], pixel[2]), active_rgb, 0.5f);
+      pixel[0] = mix_rgb.x;
+      pixel[1] = mix_rgb.y;
+      pixel[2] = mix_rgb.z;
+    }
+  }
+}
+
+/* --------------------------------------------------------------------
  * Legacy.
  */
 

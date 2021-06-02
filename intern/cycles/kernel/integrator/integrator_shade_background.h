@@ -23,8 +23,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_noinline_cpu float3 integrator_eval_background_shader(
-    INTEGRATOR_STATE_ARGS, ccl_global float *ccl_restrict render_buffer)
+ccl_device float3 integrator_eval_background_shader(INTEGRATOR_STATE_ARGS,
+                                                    ccl_global float *ccl_restrict render_buffer)
 {
 #ifdef __BACKGROUND__
   const int shader = kernel_data.background.surface_shader;

@@ -231,10 +231,10 @@ extern "C" __device__ void __direct_callable__svm_eval_nodes(
 #endif
 
 template<uint node_feature_mask, ShaderType type>
-ccl_device_noinline void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
-                                        ShaderData *sd,
-                                        ccl_global float *buffer,
-                                        int path_flag)
+ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
+                               ShaderData *sd,
+                               ccl_global float *buffer,
+                               int path_flag)
 {
   float stack[SVM_STACK_SIZE];
   int offset = sd->shader & SHADER_MASK;

@@ -289,7 +289,7 @@ ccl_device_inline void kernel_volume_shadow(const KernelGlobals *kg,
 }
 extern "C" __device__ void __direct_callable__kernel_volume_shadow(
 #  else
-ccl_device_noinline void kernel_volume_shadow(
+ccl_device void kernel_volume_shadow(
 #  endif
     const KernelGlobals *kg,
     ShaderData *shadow_sd,

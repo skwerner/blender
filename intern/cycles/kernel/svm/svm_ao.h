@@ -20,12 +20,12 @@ CCL_NAMESPACE_BEGIN
 
 #ifdef __SHADER_RAYTRACE__
 
-ccl_device_noinline float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
-                                 ShaderData *sd,
-                                 float3 N,
-                                 float max_dist,
-                                 int num_samples,
-                                 int flags)
+ccl_device float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
+                        ShaderData *sd,
+                        float3 N,
+                        float max_dist,
+                        int num_samples,
+                        int flags)
 {
   if (flags & NODE_AO_GLOBAL_RADIUS) {
     max_dist = kernel_data.background.ao_distance;

@@ -27,7 +27,7 @@ CCL_NAMESPACE_BEGIN
 #if 0
 #  ifdef __BAKING__
 
-ccl_device_noinline void compute_light_pass(const KernelGlobals *kg,
+ccl_device void compute_light_pass(const KernelGlobals *kg,
                                             ShaderData *sd,
                                             PathRadiance *L,
                                             uint rng_hash,

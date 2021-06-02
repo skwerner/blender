@@ -28,10 +28,10 @@ CCL_NAMESPACE_BEGIN
  * http://library.imageworks.com/pdfs/imageworks-library-BSSRDF-sampling.pdf
  */
 
-ccl_device_noinline float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
-                                     ShaderData *sd,
-                                     float radius,
-                                     int num_samples)
+ccl_device float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
+                            ShaderData *sd,
+                            float radius,
+                            int num_samples)
 {
   /* Early out if no sampling needed. */
   if (radius <= 0.0f || num_samples < 1 || sd->object == OBJECT_NONE) {

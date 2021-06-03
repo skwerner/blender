@@ -80,6 +80,12 @@ class Film : public Node {
   void assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes);
 
   int get_aov_offset(Scene *scene, string name, bool &is_color);
+
+  /* Get display pass from its name.
+   * Will do special logic to replace combined pass with shadow catcher matte. */
+  static const Pass *get_actual_display_pass(const vector<Pass> &passes, const string &pass_name);
+  static PassType get_actual_display_pass_type(const vector<Pass> &passes,
+                                               const PassType pass_type);
 };
 
 CCL_NAMESPACE_END

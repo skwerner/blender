@@ -426,7 +426,14 @@ void BlenderSync::sync_film(BL::ViewLayer &b_view_layer, BL::SpaceView3D &b_v3d)
     }
   }
 
-  film->set_use_approximate_shadow_catcher(!get_boolean(crl, "use_pass_shadow_catcher"));
+  /* Blender viewport does not support proper shadow catcher compositing, so force an approximate
+   * mode to improve visual feedback. */
+  if (b_v3d) {
+    film->set_use_approximate_shadow_catcher(true);
+  }
+  else {
+    film->set_use_approximate_shadow_catcher(!get_boolean(crl, "use_pass_shadow_catcher"));
+  }
 }
 
 /* Render Layer */

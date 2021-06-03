@@ -919,6 +919,11 @@ void ObjectManager::tag_update(Scene *scene, uint32_t flag)
   }
 
   scene->light_manager->tag_update(scene, LightManager::OBJECT_MANAGER);
+
+  /* Integrator's shadow catcher settings depends on object visibility settings. */
+  if (flag & (OBJECT_ADDED | OBJECT_REMOVED | OBJECT_MODIFIED)) {
+    scene->integrator->tag_update(scene, Integrator::OBJECT_MANAGER);
+  }
 }
 
 bool ObjectManager::need_update() const

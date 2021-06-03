@@ -121,6 +121,8 @@ ccl_device_inline uint path_rng_hash_init(const KernelGlobals *ccl_restrict kg,
 
 #ifdef __DEBUG_CORRELATION__
   srand48(rng_hash + sample);
+#else
+  (void)sample;
 #endif
 
   return rng_hash;

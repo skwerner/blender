@@ -317,11 +317,15 @@ if(WITH_CYCLES_CUDA_BINARIES)
   set(CUDA_VERSION "${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}")
 
   # warn for other versions
-  if((CUDA_VERSION MATCHES "101") OR (CUDA_VERSION MATCHES "102") OR (CUDA_VERSION MATCHES "111"))
+  if((CUDA_VERSION MATCHES "101") OR
+     (CUDA_VERSION MATCHES "102") OR
+     (CUDA_VERSION MATCHES "111") OR
+     (CUDA_VERSION MATCHES "112") OR
+     (CUDA_VERSION MATCHES "113"))
   else()
     message(WARNING
       "CUDA version ${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR} detected, "
-      "build may succeed but only CUDA 10.1, 10.2 and 11.1 are officially supported")
+      "build may succeed but only CUDA 10.1 to 11.3 are officially supported")
   endif()
 
   # build for each arch
@@ -477,6 +481,7 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
       -I "${CMAKE_CURRENT_SOURCE_DIR}/.."
       -I "${CMAKE_CURRENT_SOURCE_DIR}/device/cuda"
       --use_fast_math
+      -Wno-deprecated-gpu-targets
       -o ${output})
 
     if(WITH_NANOVDB)

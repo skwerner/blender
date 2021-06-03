@@ -1242,17 +1242,13 @@ typedef struct KernelFilm {
   int use_approximate_shadow_catcher;
 
   /* deprecated */
-  int display_pass_components;
-  int display_divide_pass_offset;
-  int use_display_exposure;
-  int use_display_pass_alpha;
-
   int pad1, pad2, pad3;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
 typedef struct KernelFilmConvert {
   int pass_offset;
+  int pass_stride;
 
   int pass_use_exposure;
   int pass_use_filter;
@@ -1272,8 +1268,6 @@ typedef struct KernelFilmConvert {
 
   int use_approximate_shadow_catcher;
   int show_active_pixels;
-
-  int pad1;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 
@@ -1614,7 +1608,20 @@ typedef enum DeviceKernel {
   DEVICE_KERNEL_SHADER_EVAL_DISPLACE,
   DEVICE_KERNEL_SHADER_EVAL_BACKGROUND,
 
-  DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT,
+  DEVICE_KERNEL_FILM_CONVERT_DEPTH_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_MIST_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_SAMPLE_COUNT_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_FLOAT_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_SHADOW3_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_DIVIDE_EVEN_COLOR_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_FLOAT3_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_SHADOW4_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_MOTION_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_CRYPTOMATTE_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_DENOISING_COLOR_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_MATTE_WITH_SHADOW_HALF_RGBA,
+  DEVICE_KERNEL_FILM_CONVERT_FLOAT4_HALF_RGBA,
 
   DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK,
   DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X,

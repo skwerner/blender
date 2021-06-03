@@ -17,8 +17,6 @@
 #pragma once
 
 #include "integrator/pass_accessor.h"
-#include "render/buffers.h"
-#include "util/util_defines.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -30,9 +28,6 @@ class PassAccessorCPU : public PassAccessor {
   using PassAccessor::PassAccessor;
 
  protected:
-  void init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
-                                const BufferParams &buffer_params) const;
-
   template<typename Processor>
   inline void run_get_pass_kernel_processor(const RenderBuffers *render_buffers,
                                             const BufferParams &buffer_params,

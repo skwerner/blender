@@ -19,6 +19,7 @@
 #include "render/pass.h"
 #include "util/util_half.h"
 #include "util/util_string.h"
+#include "util/util_types.h"
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
@@ -26,6 +27,7 @@ CCL_NAMESPACE_BEGIN
 class Film;
 class RenderBuffers;
 class BufferParams;
+struct KernelFilmConvert;
 
 /* Helper class which allows to access pass data.
  * Is designed in a way that it is created once when the pass data is known, and then pixels gets
@@ -54,8 +56,16 @@ class PassAccessor {
     Destination(float *pixels, int num_components);
     Destination(const PassType pass_type, half4 *pixels);
 
+    /* Destination will be initialized with the number of components which is native for the given
+     * pass type. */
+    explicit Destination(const PassType pass_type);
+
+    /* CPU-side pointers. only usable by the `PassAccessorCPU`. */
     float *pixels = nullptr;
     half4 *pixels_half_rgba = nullptr;
+
+    /* Device-side pointers. */
+    device_ptr d_pixels_half_rgba;
 
     int num_components = 0;
   };
@@ -78,6 +88,9 @@ class PassAccessor {
 #endif
 
  protected:
+  virtual void init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
+                                        const BufferParams &buffer_params) const;
+
 #define DECLARE_PASS_ACCESSOR(pass) \
   virtual void get_pass_##pass(const RenderBuffers *render_buffers, \
                                const BufferParams &buffer_params, \

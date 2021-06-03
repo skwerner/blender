@@ -18,10 +18,10 @@
 
 #include "device/device.h"
 
+#include "integrator/pass_accessor_gpu.h"
 #include "render/buffers.h"
 #include "render/gpu_display.h"
 #include "render/scene.h"
-
 #include "util/util_logging.h"
 #include "util/util_tbb.h"
 #include "util/util_time.h"
@@ -334,7 +334,20 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_RESET:
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
-    case DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT:
+    case DEVICE_KERNEL_FILM_CONVERT_DEPTH_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_MIST_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_SAMPLE_COUNT_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_FLOAT_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_SHADOW3_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_DIVIDE_EVEN_COLOR_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_FLOAT3_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_SHADOW4_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_MOTION_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_CRYPTOMATTE_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_DENOISING_COLOR_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_MATTE_WITH_SHADOW_HALF_RGBA:
+    case DEVICE_KERNEL_FILM_CONVERT_FLOAT4_HALF_RGBA:
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_X:
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y:
@@ -601,9 +614,9 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, int nu
     queue_->zero_to_device(gpu_display_rgba_half_);
   }
 
-  enqueue_film_convert(gpu_display_rgba_half_.device_pointer, num_samples);
-  queue_->copy_from_device(gpu_display_rgba_half_);
-  queue_->synchronize();
+  run_film_convert(gpu_display_rgba_half_.device_pointer, num_samples);
+
+  gpu_display_rgba_half_.copy_from_device();
 
   gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data());
 }
@@ -625,30 +638,30 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, int 
     return false;
   }
 
-  enqueue_film_convert(d_rgba_half, num_samples);
+  run_film_convert(d_rgba_half, num_samples);
 
   device_graphics_interop_->unmap();
-  queue_->synchronize();
 
   return true;
 }
 
-void PathTraceWorkGPU::enqueue_film_convert(device_ptr d_rgba_half, int num_samples)
+void PathTraceWorkGPU::run_film_convert(device_ptr d_rgba_half, int num_samples)
 {
-  const float sample_scale = 1.0f / num_samples;
-  const int work_size = effective_buffer_params_.width * effective_buffer_params_.height;
+  const KernelFilm &kfilm = device_scene_->data.film;
 
-  void *args[] = {&d_rgba_half,
-                  &render_buffers_->buffer.device_pointer,
-                  const_cast<float *>(&sample_scale),
-                  &effective_buffer_params_.full_x,
-                  &effective_buffer_params_.full_y,
-                  &effective_buffer_params_.width,
-                  &effective_buffer_params_.height,
-                  &effective_buffer_params_.offset,
-                  &effective_buffer_params_.stride};
+  /* TODO(sergey): De-duplicate with `PathTraceWorkCPU`. */
+  PassAccessor::PassAccessInfo pass_access_info;
+  pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
+  pass_access_info.offset = kfilm.display_pass_offset;
+  pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
+  pass_access_info.show_active_pixels = kfilm.show_active_pixels;
 
-  queue_->enqueue(DEVICE_KERNEL_CONVERT_TO_HALF_FLOAT, work_size, args);
+  const PassAccessorGPU pass_accessor(queue_.get(), pass_access_info, kfilm.exposure, num_samples);
+
+  PassAccessor::Destination destination(pass_access_info.type);
+  destination.d_pixels_half_rgba = d_rgba_half;
+
+  pass_accessor.get_render_tile_pixels(render_buffers_, effective_buffer_params_, destination);
 }
 
 int PathTraceWorkGPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)

@@ -67,31 +67,25 @@ template<bool always = false> ccl_device_forceinline uint get_object_id()
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_closest()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_intersect_closest(&kg, path_index);
+  integrator_intersect_closest(nullptr, path_index);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_shadow()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_intersect_shadow(&kg, path_index);
+  integrator_intersect_shadow(nullptr, path_index);
 }
 
 extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_subsurface()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_intersect_subsurface(&kg, path_index);
+  integrator_intersect_subsurface(nullptr, path_index);
 }
 
 extern "C" __global__ void __miss__kernel_optix_miss()

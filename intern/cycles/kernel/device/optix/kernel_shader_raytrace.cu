@@ -23,9 +23,7 @@
 extern "C" __global__ void __raygen__kernel_optix_integrator_shade_surface_raytrace()
 {
   const int global_index = optixGetLaunchIndex().x;
-
-  KernelGlobals kg;
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
-  integrator_shade_surface_raytrace(&kg, path_index, __params.render_buffer);
+  integrator_shade_surface_raytrace(nullptr, path_index, __params.render_buffer);
 }

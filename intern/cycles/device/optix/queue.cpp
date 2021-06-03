@@ -48,8 +48,6 @@ static bool is_optix_specific_kernel(DeviceKernel kernel)
 
 bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *args[])
 {
-  /* TODO: Handle shading kernels when shader raytracing feature is requested */
-
   if (!is_optix_specific_kernel(kernel)) {
     return CUDADeviceQueue::enqueue(kernel, work_size, args);
   }

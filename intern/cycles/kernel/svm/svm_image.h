@@ -116,10 +116,10 @@ ccl_device void svm_node_tex_image(
     stack_store_float(stack, alpha_offset, f.w);
 }
 
-ccl_device void svm_node_tex_image_box(const KernelGlobals *kg,
-                                       ShaderData *sd,
-                                       float *stack,
-                                       uint4 node)
+ccl_device_forceinline void svm_node_tex_image_box(const KernelGlobals *kg,
+                                                   ShaderData *sd,
+                                                   float *stack,
+                                                   uint4 node)
 {
   /* get object space normal */
   float3 N = sd->N;

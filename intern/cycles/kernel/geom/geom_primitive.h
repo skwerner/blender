@@ -109,11 +109,11 @@ ccl_device_inline float3 primitive_surface_attribute_float3(const KernelGlobals 
   }
 }
 
-ccl_device_inline float4 primitive_surface_attribute_float4(const KernelGlobals *kg,
-                                                            const ShaderData *sd,
-                                                            const AttributeDescriptor desc,
-                                                            float4 *dx,
-                                                            float4 *dy)
+ccl_device_forceinline float4 primitive_surface_attribute_float4(const KernelGlobals *kg,
+                                                                 const ShaderData *sd,
+                                                                 const AttributeDescriptor desc,
+                                                                 float4 *dx,
+                                                                 float4 *dy)
 {
   if (sd->type & PRIMITIVE_ALL_TRIANGLE) {
     if (subd_triangle_patch(kg, sd) == ~0)

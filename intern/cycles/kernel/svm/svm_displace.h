@@ -127,7 +127,7 @@ ccl_device void svm_node_displacement(const KernelGlobals *kg,
   stack_store_float3(stack, node.z, dP);
 }
 
-ccl_device void svm_node_vector_displacement(
+ccl_device_forceinline void svm_node_vector_displacement(
     const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, int *offset)
 {
   uint4 data_node = read_node(kg, offset);

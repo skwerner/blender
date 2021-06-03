@@ -27,7 +27,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_inline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
+ccl_device_forceinline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARGS,
+                                                           ShaderData *sd)
 {
   Intersection isect ccl_optional_struct_init;
   integrator_state_read_isect(INTEGRATOR_STATE_PASS, &isect);
@@ -39,9 +40,9 @@ ccl_device_inline void integrate_surface_shader_setup(INTEGRATOR_STATE_CONST_ARG
 }
 
 #ifdef __HOLDOUT__
-ccl_device_inline bool integrate_surface_holdout(INTEGRATOR_STATE_CONST_ARGS,
-                                                 ShaderData *sd,
-                                                 ccl_global float *ccl_restrict render_buffer)
+ccl_device_forceinline bool integrate_surface_holdout(INTEGRATOR_STATE_CONST_ARGS,
+                                                      ShaderData *sd,
+                                                      ccl_global float *ccl_restrict render_buffer)
 {
   /* Write holdout transparency to render buffer and stop if fully holdout. */
   const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
@@ -64,9 +65,10 @@ ccl_device_inline bool integrate_surface_holdout(INTEGRATOR_STATE_CONST_ARGS,
 #endif /* __HOLDOUT__ */
 
 #ifdef __EMISSION__
-ccl_device_inline void integrate_surface_emission(INTEGRATOR_STATE_CONST_ARGS,
-                                                  const ShaderData *sd,
-                                                  ccl_global float *ccl_restrict render_buffer)
+ccl_device_forceinline void integrate_surface_emission(INTEGRATOR_STATE_CONST_ARGS,
+                                                       const ShaderData *sd,
+                                                       ccl_global float *ccl_restrict
+                                                           render_buffer)
 {
   const uint32_t path_flag = INTEGRATOR_STATE(path, flag);
 
@@ -98,9 +100,9 @@ ccl_device_inline void integrate_surface_emission(INTEGRATOR_STATE_CONST_ARGS,
 #ifdef __EMISSION__
 /* Path tracing: sample point on light and evaluate light shader, then
  * queue shadow ray to be traced. */
-ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
-                                                      ShaderData *sd,
-                                                      const RNGState *rng_state)
+ccl_device_forceinline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
+                                                           ShaderData *sd,
+                                                           const RNGState *rng_state)
 {
   /* Test if there is a light or BSDF that needs direct light. */
   if (!(kernel_data.integrator.use_direct_light && (sd->flag & SD_BSDF_HAS_EVAL))) {
@@ -181,9 +183,9 @@ ccl_device_inline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS,
 #endif
 
 /* Path tracing: bounce off or through surface with new direction. */
-ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
-                                         ShaderData *sd,
-                                         const RNGState *rng_state)
+ccl_device_forceinline bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
+                                                     ShaderData *sd,
+                                                     const RNGState *rng_state)
 {
   /* Sample BSDF or BSSRDF. */
   if (sd->flag & (SD_BSDF | SD_BSSRDF)) {
@@ -285,8 +287,8 @@ ccl_device bool integrate_surface_bounce(INTEGRATOR_STATE_ARGS,
 }
 
 template<uint node_feature_mask>
-ccl_device_inline bool integrate_surface(INTEGRATOR_STATE_ARGS,
-                                         ccl_global float *ccl_restrict render_buffer)
+ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
+                                  ccl_global float *ccl_restrict render_buffer)
 
 {
   /* Setup shader data. */

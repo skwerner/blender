@@ -579,7 +579,7 @@ void Scene::update_passes()
   }
 
   /* Create passes for shadow catcher. */
-  if (has_shadow_catcher()) {
+  if (display_pass == PASS_SHADOW_CATCHER || has_shadow_catcher()) {
     Pass::add(PASS_SHADOW_CATCHER, passes, nullptr, true);
     Pass::add(PASS_SHADOW_CATCHER_MATTE, passes, nullptr, true);
   }

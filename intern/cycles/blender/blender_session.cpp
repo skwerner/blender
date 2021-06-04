@@ -607,8 +607,6 @@ static int bake_pass_filter_get(const int pass_filter)
 
   if ((pass_filter & BL::BakeSettings::pass_filter_EMIT) != 0)
     flag |= BAKE_FILTER_EMISSION;
-  if ((pass_filter & BL::BakeSettings::pass_filter_AO) != 0)
-    flag |= BAKE_FILTER_AO;
 
   return flag;
 }

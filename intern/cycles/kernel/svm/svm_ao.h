@@ -28,7 +28,7 @@ ccl_device float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
                         int flags)
 {
   if (flags & NODE_AO_GLOBAL_RADIUS) {
-    max_dist = kernel_data.background.ao_distance;
+    max_dist = kernel_data.integrator.ao_bounces_distance;
   }
 
   /* Early out if no sampling needed. */

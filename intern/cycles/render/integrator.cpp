@@ -53,6 +53,8 @@ NODE_DEFINE(Integrator)
   SOCKET_INT(transparent_max_bounce, "Transparent Max Bounce", 7);
 
   SOCKET_INT(ao_bounces, "AO Bounces", 0);
+  SOCKET_FLOAT(ao_factor, "AO Factor", 0.0f);
+  SOCKET_FLOAT(ao_distance, "AO Distance", FLT_MAX);
 
   SOCKET_INT(volume_max_steps, "Volume Max Steps", 1024);
   SOCKET_FLOAT(volume_step_rate, "Volume Step Rate", 1.0f);
@@ -144,6 +146,8 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->transparent_max_bounce = transparent_max_bounce + 1;
 
   kintegrator->ao_bounces = ao_bounces;
+  kintegrator->ao_bounces_distance = ao_distance;
+  kintegrator->ao_bounces_factor = ao_factor;
 
   /* Transparent Shadows
    * We only need to enable transparent shadows, if we actually have
@@ -167,9 +171,6 @@ void Integrator::device_update(Device *device, DeviceScene *dscene, Scene *scene
   kintegrator->filter_glossy = (filter_glossy == 0.0f) ? FLT_MAX : 1.0f / filter_glossy;
 
   kintegrator->seed = hash_uint2(seed, 0);
-
-  kintegrator->use_ambient_occlusion = ((Pass::contains(scene->passes, PASS_AO)) ||
-                                        dscene->data.background.ao_factor != 0.0f);
 
   kintegrator->sample_clamp_direct = (sample_clamp_direct == 0.0f) ? FLT_MAX :
                                                                      sample_clamp_direct * 3.0f;
@@ -234,7 +235,7 @@ void Integrator::tag_update(Scene *scene, uint32_t flag)
     tag_modified();
   }
 
-  if (flag & (AO_PASS_MODIFIED | BACKGROUND_AO_MODIFIED)) {
+  if (flag & AO_PASS_MODIFIED) {
     /* tag only the ao_bounces socket as modified so we avoid updating sample_pattern_lut
      * unnecessarily */
     tag_ao_bounces_modified();

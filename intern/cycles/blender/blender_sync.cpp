@@ -444,7 +444,6 @@ void BlenderSync::sync_view_layer(BL::ViewLayer &b_view_layer)
 
   /* Filter. */
   view_layer.use_background_shader = b_view_layer.use_sky();
-  view_layer.use_background_ao = b_view_layer.use_ao();
   /* Always enable surfaces for baking, otherwise there is nothing to bake to. */
   view_layer.use_surfaces = b_view_layer.use_solid() || scene->bake_manager->get_baking();
   view_layer.use_hair = b_view_layer.use_strand();

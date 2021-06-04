@@ -17,6 +17,7 @@
 #include "render/background.h"
 #include "render/colorspace.h"
 #include "render/graph.h"
+#include "render/integrator.h"
 #include "render/light.h"
 #include "render/nodes.h"
 #include "render/osl.h"
@@ -1367,6 +1368,7 @@ void BlenderSync::sync_materials(BL::Depsgraph &b_depsgraph, bool update_all)
 void BlenderSync::sync_world(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d, bool update_all)
 {
   Background *background = scene->background;
+  Integrator *integrator = scene->integrator;
 
   BL::World b_world = b_scene.world();
 
@@ -1462,9 +1464,8 @@ void BlenderSync::sync_world(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d,
       /* AO */
       BL::WorldLighting b_light = b_world.light_settings();
 
-      background->set_use_ao(b_light.use_ambient_occlusion());
-      background->set_ao_factor(b_light.ao_factor());
-      background->set_ao_distance(b_light.distance());
+      integrator->set_ao_factor(b_light.ao_factor());
+      integrator->set_ao_distance(b_light.distance());
 
       /* visibility */
       PointerRNA cvisibility = RNA_pointer_get(&b_world.ptr, "cycles_visibility");
@@ -1479,9 +1480,8 @@ void BlenderSync::sync_world(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d,
       background->set_visibility(visibility);
     }
     else {
-      background->set_use_ao(false);
-      background->set_ao_factor(0.0f);
-      background->set_ao_distance(FLT_MAX);
+      integrator->set_ao_factor(1.0f);
+      integrator->set_ao_distance(10.0f);
     }
 
     shader->set_graph(graph);
@@ -1503,7 +1503,6 @@ void BlenderSync::sync_world(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d,
 
   background->set_use_shader(view_layer.use_background_shader ||
                              viewport_parameters.use_custom_shader());
-  background->set_use_ao(background->get_use_ao() && view_layer.use_background_ao);
 
   background->tag_update(scene);
 }

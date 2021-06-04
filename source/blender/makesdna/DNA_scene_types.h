@@ -590,7 +590,7 @@ typedef enum eBakeSaveMode {
 /** #BakeData.pass_filter */
 typedef enum eBakePassFilter {
   R_BAKE_PASS_FILTER_NONE = 0,
-  R_BAKE_PASS_FILTER_AO = (1 << 0),
+  R_BAKE_PASS_FILTER_UNUSED = (1 << 0),
   R_BAKE_PASS_FILTER_EMIT = (1 << 1),
   R_BAKE_PASS_FILTER_DIFFUSE = (1 << 2),
   R_BAKE_PASS_FILTER_GLOSSY = (1 << 3),

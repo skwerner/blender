@@ -95,7 +95,7 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 
   /* Trick to use short AO rays to approximate indirect light at the end of the path. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    ray.t = kernel_data.background.ao_distance;
+    ray.t = kernel_data.integrator.ao_bounces_distance;
   }
 
   /* Scene Intersection. */

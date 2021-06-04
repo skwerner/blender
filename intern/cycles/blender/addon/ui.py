@@ -681,7 +681,6 @@ class CYCLES_RENDER_PT_filter(CyclesButtonsPanel, Panel):
 
         col = layout.column(heading="Include")
         col.prop(view_layer, "use_sky", text="Environment")
-        col.prop(view_layer, "use_ao", text="Ambient Occlusion")
         col.prop(view_layer, "use_solid", text="Surfaces")
         col.prop(view_layer, "use_strand", text="Hair")
         col.prop(view_layer, "use_volumes", text="Volumes")
@@ -1326,34 +1325,6 @@ class CYCLES_WORLD_PT_volume(CyclesButtonsPanel, Panel):
 
         world = context.world
         panel_node_draw(layout, world, 'OUTPUT_WORLD', 'Volume')
-
-
-class CYCLES_WORLD_PT_ambient_occlusion(CyclesButtonsPanel, Panel):
-    bl_label = "Ambient Occlusion"
-    bl_context = "world"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    @classmethod
-    def poll(cls, context):
-        return context.world and CyclesButtonsPanel.poll(context)
-
-    def draw_header(self, context):
-        light = context.world.light_settings
-        self.layout.prop(light, "use_ambient_occlusion", text="")
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        light = context.world.light_settings
-        scene = context.scene
-
-        col = layout.column()
-        sub = col.column()
-        sub.active = light.use_ambient_occlusion or scene.render.use_simplify
-        sub.prop(light, "ao_factor", text="Factor")
-        col.prop(light, "distance", text="Distance")
 
 
 class CYCLES_WORLD_PT_mist(CyclesButtonsPanel, Panel):
@@ -2138,7 +2109,6 @@ classes = (
     CYCLES_WORLD_PT_preview,
     CYCLES_WORLD_PT_surface,
     CYCLES_WORLD_PT_volume,
-    CYCLES_WORLD_PT_ambient_occlusion,
     CYCLES_WORLD_PT_mist,
     CYCLES_WORLD_PT_ray_visibility,
     CYCLES_WORLD_PT_settings,

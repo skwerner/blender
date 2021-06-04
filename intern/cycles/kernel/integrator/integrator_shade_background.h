@@ -116,7 +116,7 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   /* When using the ao bounces approximation, adjust background
    * shader intensity with ao factor. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    L *= kernel_data.background.ao_bounces_factor;
+    L *= kernel_data.integrator.ao_bounces_factor;
   }
 
   /* Write to render buffer. */

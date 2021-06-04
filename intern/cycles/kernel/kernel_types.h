@@ -1279,11 +1279,6 @@ typedef struct KernelBackground {
   int transparent;
   float transparent_roughness_squared_threshold;
 
-  /* ambient occlusion */
-  float ao_factor;
-  float ao_distance;
-  float ao_bounces_factor;
-
   /* portal sampling */
   float portal_weight;
   int num_portals;
@@ -1301,13 +1296,15 @@ typedef struct KernelBackground {
   int map_res_y;
 
   int use_mis;
+
+  /* Padding */
+  int pad1, pad2, pad3;
 } KernelBackground;
 static_assert_align(KernelBackground, 16);
 
 typedef struct KernelIntegrator {
   /* emission */
   int use_direct_light;
-  int use_ambient_occlusion;
   int num_distribution;
   int num_all_lights;
   float pdf_triangles;
@@ -1323,7 +1320,10 @@ typedef struct KernelIntegrator {
   int max_transmission_bounce;
   int max_volume_bounce;
 
+  /* AO bounces */
   int ao_bounces;
+  float ao_bounces_distance;
+  float ao_bounces_factor;
 
   /* transparent */
   int transparent_min_bounce;
@@ -1357,7 +1357,8 @@ typedef struct KernelIntegrator {
 
   int has_shadow_catcher;
 
-  int pad1, pad2;
+  /* padding */
+  int pad1;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 

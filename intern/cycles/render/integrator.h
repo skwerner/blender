@@ -45,6 +45,8 @@ class Integrator : public Node {
   NODE_SOCKET_API(int, transparent_max_bounce)
 
   NODE_SOCKET_API(int, ao_bounces)
+  NODE_SOCKET_API(float, ao_factor)
+  NODE_SOCKET_API(float, ao_distance)
 
   NODE_SOCKET_API(int, volume_max_steps)
   NODE_SOCKET_API(float, volume_step_rate)
@@ -83,8 +85,7 @@ class Integrator : public Node {
 
   enum : uint32_t {
     AO_PASS_MODIFIED = (1 << 0),
-    BACKGROUND_AO_MODIFIED = (1 << 1),
-    OBJECT_MANAGER = (1 << 2),
+    OBJECT_MANAGER = (1 << 1),
 
     /* tag everything in the manager for an update */
     UPDATE_ALL = ~0u,

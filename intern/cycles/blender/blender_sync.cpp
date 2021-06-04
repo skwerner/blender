@@ -496,7 +496,7 @@ void BlenderSync::sync_images()
 }
 
 /* Passes */
-PassType BlenderSync::get_pass_type(BL::RenderPass &b_pass)
+static PassType get_pass_type(BL::RenderPass &b_pass)
 {
   string name = b_pass.name();
 #define MAP_PASS(passname, passtype) \

@@ -102,8 +102,6 @@ class BlenderSync {
   static BufferParams get_buffer_params(
       BL::SpaceView3D &b_v3d, BL::RegionView3D &b_rv3d, Camera *cam, int width, int height);
 
-  static PassType get_pass_type(BL::RenderPass &b_pass);
-
  private:
   static DenoiseParams get_denoise_params(BL::Scene &b_scene,
                                           BL::ViewLayer &b_view_layer,

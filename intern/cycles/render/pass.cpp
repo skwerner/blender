@@ -36,6 +36,7 @@ const NodeEnum *Pass::get_type_enum()
     pass_type_enum.insert("combined", PASS_COMBINED);
     pass_type_enum.insert("depth", PASS_DEPTH);
     pass_type_enum.insert("normal", PASS_NORMAL);
+    pass_type_enum.insert("roughness", PASS_ROUGHNESS);
     pass_type_enum.insert("uv", PASS_UV);
     pass_type_enum.insert("object_id", PASS_OBJECT_ID);
     pass_type_enum.insert("material_id", PASS_MATERIAL_ID);
@@ -113,6 +114,9 @@ PassInfo Pass::get_info(PassType type)
     case PASS_NORMAL:
       pass_info.num_components = 4;
       break;
+    case PASS_ROUGHNESS:
+      pass_info.num_components = 1;
+      break;
     case PASS_UV:
       pass_info.num_components = 4;
       break;
@@ -140,15 +144,6 @@ PassInfo Pass::get_info(PassType type)
     case PASS_SHADOW:
       pass_info.num_components = 4;
       pass_info.use_exposure = false;
-      break;
-    case PASS_LIGHT:
-      /* This isn't a real pass, used by baking to see whether
-       * light data is needed or not.
-       *
-       * Set components to 0 so pass sort below happens in a
-       * determined way.
-       */
-      pass_info.num_components = 0;
       break;
     case PASS_RENDER_TIME:
       /* This pass is handled entirely on the host side. */

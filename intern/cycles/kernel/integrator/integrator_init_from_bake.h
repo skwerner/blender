@@ -88,6 +88,9 @@ ccl_device bool integrator_init_from_bake(INTEGRATOR_STATE_ARGS,
     path_rng_2D(kg, rng_hash, sample, PRNG_FILTER_U, &filter_x, &filter_y);
   }
 
+  /* Initialize path state for path integration. */
+  path_state_init_integrator(INTEGRATOR_STATE_PASS, sample, rng_hash);
+
   /* Barycentric UV with sub-pixel offset. */
   float u = primitive[2];
   float v = primitive[3];
@@ -103,48 +106,76 @@ ccl_device bool integrator_init_from_bake(INTEGRATOR_STATE_ARGS,
                                  1.0f - u);
   }
 
-  /* Setup ray. */
+  /* Position and normal on triangle. */
   float3 P, Ng;
   int shader;
   triangle_point_normal(kg, kernel_data.bake.object_index, prim, u, v, &P, &Ng, &shader);
   shader &= SHADER_MASK;
 
-  Ray ray ccl_optional_struct_init;
-  ray.P = P + Ng;
-  ray.D = -Ng;
-  ray.t = FLT_MAX;
-  ray.time = 0.5f;
+  if (kernel_data.film.pass_background != PASS_UNUSED) {
+    /* Environment baking. */
 
-  /* Setup differentials. */
-  float3 dPdu, dPdv;
-  triangle_dPdudv(kg, prim, &dPdu, &dPdv);
-  differential3 dP;
-  dP.dx = dPdu * dudx + dPdv * dvdx;
-  dP.dy = dPdu * dudy + dPdv * dvdy;
-  ray.dP = differential_make_compact(dP);
-  ray.dD = differential_zero_compact();
+    /* Setup and write ray. */
+    Ray ray ccl_optional_struct_init;
+    ray.P = zero_float3();
+    ray.D = normalize(P);
+    ray.t = FLT_MAX;
+    ray.time = 0.5f;
+    ray.dP = differential_zero_compact();
+    ray.dD = differential_zero_compact();
+    integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
 
-  /* Write ray. */
-  integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
+    /* Setup next kernel to execute. */
+    INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
+  }
+  else {
+    /* Surface baking. */
 
-  /* Setup and write intersection. */
-  Intersection isect ccl_optional_struct_init;
-  isect.object = kernel_data.bake.object_index;
-  isect.prim = prim;
-  isect.u = u;
-  isect.v = v;
-  isect.t = 1.0f;
-  isect.type = PRIMITIVE_TRIANGLE;
+    /* Setup ray. */
+    Ray ray ccl_optional_struct_init;
+    ray.P = P + Ng;
+    ray.D = -Ng;
+    ray.t = FLT_MAX;
+    ray.time = 0.5f;
+
+    /* Setup differentials. */
+    float3 dPdu, dPdv;
+    triangle_dPdudv(kg, prim, &dPdu, &dPdv);
+    differential3 dP;
+    dP.dx = dPdu * dudx + dPdv * dvdx;
+    dP.dy = dPdu * dudy + dPdv * dvdy;
+    ray.dP = differential_make_compact(dP);
+    ray.dD = differential_zero_compact();
+
+    /* Write ray. */
+    integrator_state_write_ray(INTEGRATOR_STATE_PASS, &ray);
+
+    /* Setup and write intersection. */
+    Intersection isect ccl_optional_struct_init;
+    isect.object = kernel_data.bake.object_index;
+    isect.prim = prim;
+    isect.u = u;
+    isect.v = v;
+    isect.t = 1.0f;
+    isect.type = PRIMITIVE_TRIANGLE;
 #ifdef __EMBREE__
-  isect.Ng = Ng;
+    isect.Ng = Ng;
 #endif
-  integrator_state_write_isect(INTEGRATOR_STATE_PASS, &isect);
+    integrator_state_write_isect(INTEGRATOR_STATE_PASS, &isect);
 
-  /* Initialize path state for path integration. */
-  path_state_init_integrator(INTEGRATOR_STATE_PASS, sample, rng_hash);
-
-  /* Continue with shade_surface kernel. */
-  INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader);
+    /* Setup next kernel to execute. */
+    const int flags = kernel_tex_fetch(__shaders, shader).flags;
+    if (flags & SD_HAS_RAYTRACE) {
+      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
+                                  shader);
+    }
+    else {
+      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
+                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
+                                  shader);
+    }
+  }
 
   return true;
 }

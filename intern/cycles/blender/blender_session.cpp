@@ -273,48 +273,6 @@ void BlenderSession::free_session()
   delete session;
 }
 
-static ShaderEvalType get_shader_type(const string &pass_type)
-{
-  const char *shader_type = pass_type.c_str();
-
-  /* data passes */
-  if (strcmp(shader_type, "NORMAL") == 0)
-    return SHADER_EVAL_NORMAL;
-  else if (strcmp(shader_type, "UV") == 0)
-    return SHADER_EVAL_UV;
-  else if (strcmp(shader_type, "ROUGHNESS") == 0)
-    return SHADER_EVAL_ROUGHNESS;
-  else if (strcmp(shader_type, "DIFFUSE_COLOR") == 0)
-    return SHADER_EVAL_DIFFUSE_COLOR;
-  else if (strcmp(shader_type, "GLOSSY_COLOR") == 0)
-    return SHADER_EVAL_GLOSSY_COLOR;
-  else if (strcmp(shader_type, "TRANSMISSION_COLOR") == 0)
-    return SHADER_EVAL_TRANSMISSION_COLOR;
-  else if (strcmp(shader_type, "EMIT") == 0)
-    return SHADER_EVAL_EMISSION;
-
-  /* light passes */
-  else if (strcmp(shader_type, "AO") == 0)
-    return SHADER_EVAL_AO;
-  else if (strcmp(shader_type, "COMBINED") == 0)
-    return SHADER_EVAL_COMBINED;
-  else if (strcmp(shader_type, "SHADOW") == 0)
-    return SHADER_EVAL_SHADOW;
-  else if (strcmp(shader_type, "DIFFUSE") == 0)
-    return SHADER_EVAL_DIFFUSE;
-  else if (strcmp(shader_type, "GLOSSY") == 0)
-    return SHADER_EVAL_GLOSSY;
-  else if (strcmp(shader_type, "TRANSMISSION") == 0)
-    return SHADER_EVAL_TRANSMISSION;
-
-  /* extra */
-  else if (strcmp(shader_type, "ENVIRONMENT") == 0)
-    return SHADER_EVAL_ENVIRONMENT;
-
-  else
-    return SHADER_EVAL_BAKE;
-}
-
 void BlenderSession::do_write_update_render_tile(bool do_update_only)
 {
   const int2 tile_offset = session->get_render_tile_offset();
@@ -587,48 +545,93 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   session->update_render_tile_cb = function_null;
 }
 
-static int bake_pass_filter_get(const int pass_filter)
+static PassType bake_type_to_pass(const string &bake_type_str, const int bake_filter)
 {
-  int flag = BAKE_FILTER_NONE;
+  const char *bake_type = bake_type_str.c_str();
 
-  if ((pass_filter & BL::BakeSettings::pass_filter_DIRECT) != 0)
-    flag |= BAKE_FILTER_DIRECT;
-  if ((pass_filter & BL::BakeSettings::pass_filter_INDIRECT) != 0)
-    flag |= BAKE_FILTER_INDIRECT;
-  if ((pass_filter & BL::BakeSettings::pass_filter_COLOR) != 0)
-    flag |= BAKE_FILTER_COLOR;
+  /* data passes */
+  if (strcmp(bake_type, "NORMAL") == 0) {
+    return PASS_NORMAL;
+  }
+  else if (strcmp(bake_type, "UV") == 0) {
+    return PASS_UV;
+  }
+  else if (strcmp(bake_type, "ROUGHNESS") == 0) {
+    return PASS_ROUGHNESS;
+  }
+  else if (strcmp(bake_type, "EMIT") == 0) {
+    return PASS_EMISSION;
+  }
+  /* light passes */
+  else if (strcmp(bake_type, "AO") == 0) {
+    return PASS_AO;
+  }
+  else if (strcmp(bake_type, "COMBINED") == 0) {
+    return PASS_COMBINED;
+  }
+  else if (strcmp(bake_type, "SHADOW") == 0) {
+    return PASS_SHADOW;
+  }
+  else if (strcmp(bake_type, "DIFFUSE") == 0) {
+    /* TODO: arbitrary combinations. */
+    if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+      return PASS_DIFFUSE_DIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_DIFFUSE_INDIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_COLOR) {
+      return PASS_DIFFUSE_COLOR;
+    }
+  }
+  else if (strcmp(bake_type, "GLOSSY") == 0) {
+    /* TODO: arbitrary combinations. */
+    if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+      return PASS_GLOSSY_DIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_GLOSSY_INDIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_COLOR) {
+      return PASS_GLOSSY_COLOR;
+    }
+  }
+  else if (strcmp(bake_type, "TRANSMISSION") == 0) {
+    /* TODO: arbitrary combinations. */
+    if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+      return PASS_TRANSMISSION_DIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_TRANSMISSION_INDIRECT;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_COLOR) {
+      return PASS_TRANSMISSION_COLOR;
+    }
+  }
+  /* extra */
+  else if (strcmp(bake_type, "ENVIRONMENT") == 0) {
+    return PASS_BACKGROUND;
+  }
 
-  if ((pass_filter & BL::BakeSettings::pass_filter_DIFFUSE) != 0)
-    flag |= BAKE_FILTER_DIFFUSE;
-  if ((pass_filter & BL::BakeSettings::pass_filter_GLOSSY) != 0)
-    flag |= BAKE_FILTER_GLOSSY;
-  if ((pass_filter & BL::BakeSettings::pass_filter_TRANSMISSION) != 0)
-    flag |= BAKE_FILTER_TRANSMISSION;
-
-  if ((pass_filter & BL::BakeSettings::pass_filter_EMIT) != 0)
-    flag |= BAKE_FILTER_EMISSION;
-
-  return flag;
+  return PASS_COMBINED;
 }
 
 void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
                           BL::Object &b_object,
-                          const string &pass_type,
-                          const int pass_filter,
+                          const string &bake_type,
+                          const int bake_filter,
                           const int bake_width,
                           const int bake_height)
 {
   b_depsgraph = b_depsgraph_;
 
-  ShaderEvalType shader_type = get_shader_type(pass_type);
-  int bake_pass_filter = bake_pass_filter_get(pass_filter);
-
   /* Initialize bake manager, before we load the baking kernels. */
-  scene->bake_manager->set(scene, b_object.name(), shader_type, bake_pass_filter);
+  scene->bake_manager->set(scene, b_object.name());
 
-  /* Passes are identified by name, so in order to return the combined pass we need to set the
-   * name. */
-  Pass::add(PASS_COMBINED, scene->passes, "Combined");
+  /* Add render pass that we want to bake, and name it Combined so that it is
+   * used as that on the Blender side. */
+  const PassType pass_type = bake_type_to_pass(bake_type, bake_filter);
+  Pass::add(pass_type, scene->passes, "Combined");
 
   session->read_render_tile_cb = [&]() { read_render_tile(); };
   session->write_render_tile_cb = [&]() { write_render_tile(); };
@@ -904,9 +907,9 @@ void BlenderSession::update_status_progress()
   }
 
   double current_time = time_dt();
-  /* When rendering in a window, redraw the status at least once per second to keep the elapsed and
-   * remaining time up-to-date. For headless rendering, only report when something significant
-   * changes to keep the console output readable. */
+  /* When rendering in a window, redraw the status at least once per second to keep the elapsed
+   * and remaining time up-to-date. For headless rendering, only report when something
+   * significant changes to keep the console output readable. */
   if (status != last_status || (!headless && (current_time - last_status_time) > 1.0)) {
     b_engine.update_stats("", (timestatus + scene_status + status).c_str());
     b_engine.update_memory_stats(mem_used, mem_peak);

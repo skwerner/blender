@@ -175,38 +175,6 @@ CCL_NAMESPACE_BEGIN
 #  define __BVH_LOCAL__
 #endif
 
-/* Shader Evaluation */
-
-typedef enum ShaderEvalType {
-  SHADER_EVAL_DISPLACE,
-  SHADER_EVAL_BACKGROUND,
-  /* bake types */
-  SHADER_EVAL_BAKE, /* no real shade, it's used in the code to
-                     * differentiate the type of shader eval from the above
-                     */
-  /* data passes */
-  SHADER_EVAL_NORMAL,
-  SHADER_EVAL_UV,
-  SHADER_EVAL_ROUGHNESS,
-  SHADER_EVAL_DIFFUSE_COLOR,
-  SHADER_EVAL_GLOSSY_COLOR,
-  SHADER_EVAL_TRANSMISSION_COLOR,
-  SHADER_EVAL_EMISSION,
-  SHADER_EVAL_AOV_COLOR,
-  SHADER_EVAL_AOV_VALUE,
-
-  /* light passes */
-  SHADER_EVAL_AO,
-  SHADER_EVAL_COMBINED,
-  SHADER_EVAL_SHADOW,
-  SHADER_EVAL_DIFFUSE,
-  SHADER_EVAL_GLOSSY,
-  SHADER_EVAL_TRANSMISSION,
-
-  /* extra */
-  SHADER_EVAL_ENVIRONMENT,
-} ShaderEvalType;
-
 /* Path Tracing
  * note we need to keep the u/v pairs at even values */
 
@@ -378,7 +346,6 @@ typedef enum PassType {
   PASS_BACKGROUND,
   PASS_AO,
   PASS_SHADOW,
-  PASS_LIGHT, /* no real pass, used to force use_light_pass */
   PASS_DIFFUSE_DIRECT,
   PASS_DIFFUSE_INDIRECT,
   PASS_GLOSSY_DIRECT,
@@ -392,6 +359,7 @@ typedef enum PassType {
   /* Data passes */
   PASS_DEPTH = 32,
   PASS_NORMAL,
+  PASS_ROUGHNESS,
   PASS_UV,
   PASS_OBJECT_ID,
   PASS_MATERIAL_ID,
@@ -1168,6 +1136,7 @@ typedef struct KernelFilm {
   int pass_combined;
   int pass_depth;
   int pass_normal;
+  int pass_roughness;
   int pass_motion;
 
   int pass_motion_weight;
@@ -1241,8 +1210,8 @@ typedef struct KernelFilm {
   int show_active_pixels;
   int use_approximate_shadow_catcher;
 
-  /* deprecated */
-  int pad1, pad2, pad3;
+  /* padding */
+  int pad1, pad2;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1409,12 +1378,9 @@ static_assert_align(KernelTables, 16);
 
 typedef struct KernelBake {
   int use;
-  int pad1, pad2, pad3;
-
   int object_index;
   int tri_offset;
-  int type;
-  int pass_filter;
+  int pad1;
 } KernelBake;
 static_assert_align(KernelBake, 16);
 

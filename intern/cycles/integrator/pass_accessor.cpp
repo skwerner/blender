@@ -99,6 +99,49 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   return get_render_tile_pixels(render_buffers, render_buffers->params, destination);
 }
 
+static void pad_pixels(const BufferParams &buffer_params,
+                       const PassAccessor::Destination &destination,
+                       const int src_num_components)
+{
+  /* When requesting a single channel pass as RGBA, or RGB pass as RGBA,
+   * fill in the additional components for convenience. */
+  const int dest_num_components = destination.num_components;
+
+  if (src_num_components >= dest_num_components) {
+    return;
+  }
+
+  const size_t size = buffer_params.width * buffer_params.height;
+  if (destination.pixels) {
+    float *pixel = destination.pixels;
+
+    for (size_t i = 0; i < size; i++, pixel += dest_num_components) {
+      if (dest_num_components >= 3 && src_num_components == 1) {
+        pixel[1] = pixel[0];
+        pixel[2] = pixel[0];
+      }
+      if (dest_num_components >= 4) {
+        pixel[3] = 1.0f;
+      }
+    }
+  }
+
+  if (destination.pixels_half_rgba) {
+    const float one = float_to_half(1.0f);
+    half4 *pixel = destination.pixels_half_rgba;
+
+    for (size_t i = 0; i < size; i++, pixel++) {
+      if (dest_num_components >= 3 && src_num_components == 1) {
+        pixel[0].y = pixel[0].x;
+        pixel[0].z = pixel[0].x;
+      }
+      if (dest_num_components >= 4) {
+        pixel[0].w = one;
+      }
+    }
+  }
+}
+
 bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
                                           const BufferParams &buffer_params,
                                           const Destination &destination) const
@@ -111,7 +154,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   const PassInfo pass_info = Pass::get_info(type);
 
   if (destination.num_components == 1) {
-    DCHECK_EQ(pass_info.num_components, destination.num_components)
+    DCHECK_LE(pass_info.num_components, destination.num_components)
         << "Number of components mismatch for pass type " << pass_info.type;
 
     /* Scalar */
@@ -133,11 +176,11 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   }
   else if (destination.num_components == 3) {
     if (pass_info.is_unaligned) {
-      DCHECK_EQ(pass_info.num_components, 3)
+      DCHECK_LE(pass_info.num_components, 3)
           << "Number of components mismatch for pass type " << pass_info.type;
     }
     else {
-      DCHECK_EQ(pass_info.num_components, 4)
+      DCHECK_LE(pass_info.num_components, 4)
           << "Number of components mismatch for pass type " << pass_info.type;
     }
 
@@ -182,6 +225,8 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       get_pass_float4(render_buffers, buffer_params, destination);
     }
   }
+
+  pad_pixels(buffer_params, destination, pass_info.num_components);
 
   return true;
 }

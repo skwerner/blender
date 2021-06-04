@@ -196,29 +196,33 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
         average(shader_bsdf_alpha(kg, sd)) >= kernel_data.film.pass_alpha_threshold) {
       if (INTEGRATOR_STATE(path, sample) == 0) {
         if (flag & PASSMASK(DEPTH)) {
-          float depth = camera_z_depth(kg, sd->P);
+          const float depth = camera_z_depth(kg, sd->P);
           kernel_write_pass_float(buffer + kernel_data.film.pass_depth, depth);
         }
         if (flag & PASSMASK(OBJECT_ID)) {
-          float id = object_pass_id(kg, sd->object);
+          const float id = object_pass_id(kg, sd->object);
           kernel_write_pass_float(buffer + kernel_data.film.pass_object_id, id);
         }
         if (flag & PASSMASK(MATERIAL_ID)) {
-          float id = shader_pass_id(kg, sd);
+          const float id = shader_pass_id(kg, sd);
           kernel_write_pass_float(buffer + kernel_data.film.pass_material_id, id);
         }
       }
 
       if (flag & PASSMASK(NORMAL)) {
-        float3 normal = shader_bsdf_average_normal(kg, sd);
+        const float3 normal = shader_bsdf_average_normal(kg, sd);
         kernel_write_pass_float3(buffer + kernel_data.film.pass_normal, normal);
       }
+      if (flag & PASSMASK(ROUGHNESS)) {
+        const float roughness = shader_bsdf_average_roughness(sd);
+        kernel_write_pass_float(buffer + kernel_data.film.pass_roughness, roughness);
+      }
       if (flag & PASSMASK(UV)) {
-        float3 uv = primitive_uv(kg, sd);
+        const float3 uv = primitive_uv(kg, sd);
         kernel_write_pass_float3(buffer + kernel_data.film.pass_uv, uv);
       }
       if (flag & PASSMASK(MOTION)) {
-        float4 speed = primitive_motion_vector(kg, sd);
+        const float4 speed = primitive_motion_vector(kg, sd);
         kernel_write_pass_float4(buffer + kernel_data.film.pass_motion, speed);
         kernel_write_pass_float(buffer + kernel_data.film.pass_motion_weight, 1.0f);
       }
@@ -234,17 +238,17 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
     if (matte_weight > 0.0f) {
       ccl_global float *cryptomatte_buffer = buffer + kernel_data.film.pass_cryptomatte;
       if (kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) {
-        float id = object_cryptomatte_id(kg, sd->object);
+        const float id = object_cryptomatte_id(kg, sd->object);
         cryptomatte_buffer += WRITE_ID_SLOT(
             cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, object);
       }
       if (kernel_data.film.cryptomatte_passes & CRYPT_MATERIAL) {
-        float id = shader_cryptomatte_id(kg, sd->shader);
+        const float id = shader_cryptomatte_id(kg, sd->shader);
         cryptomatte_buffer += WRITE_ID_SLOT(
             cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, material);
       }
       if (kernel_data.film.cryptomatte_passes & CRYPT_ASSET) {
-        float id = object_cryptomatte_asset_id(kg, sd->object);
+        const float id = object_cryptomatte_asset_id(kg, sd->object);
         cryptomatte_buffer += WRITE_ID_SLOT(
             cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, asset);
       }

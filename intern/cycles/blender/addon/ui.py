@@ -1671,7 +1671,6 @@ class CYCLES_RENDER_PT_bake_influence(CyclesButtonsPanel, Panel):
             col.prop(cbk, "use_pass_diffuse")
             col.prop(cbk, "use_pass_glossy")
             col.prop(cbk, "use_pass_transmission")
-            col.prop(cbk, "use_pass_ambient_occlusion")
             col.prop(cbk, "use_pass_emit")
 
         elif cscene.bake_type in {'DIFFUSE', 'GLOSSY', 'TRANSMISSION'}:

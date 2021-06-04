@@ -120,10 +120,6 @@ bool ShaderEval::eval_cpu(Device *device,
         case SHADER_EVAL_BACKGROUND:
           kernels.shader_eval_background(kg, input_data, output_data, work_index);
           break;
-        default:
-          LOG(FATAL) << "Unhandled shader evaluation " << type << ", should never happen.";
-          success = false;
-          return;
       }
     });
   });
@@ -145,9 +141,6 @@ bool ShaderEval::eval_gpu(Device *device,
     case SHADER_EVAL_BACKGROUND:
       kernel = DEVICE_KERNEL_SHADER_EVAL_BACKGROUND;
       break;
-    default:
-      LOG(FATAL) << "Unhandled shader evaluation " << type << ", should never happen.";
-      return false;
   };
 
   /* Create device queue. */

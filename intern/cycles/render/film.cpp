@@ -254,6 +254,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       case PASS_NORMAL:
         kfilm->pass_normal = kfilm->pass_stride;
         break;
+      case PASS_ROUGHNESS:
+        kfilm->pass_roughness = kfilm->pass_stride;
+        break;
       case PASS_UV:
         kfilm->pass_uv = kfilm->pass_stride;
         break;
@@ -284,9 +287,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
       case PASS_SHADOW:
         kfilm->pass_shadow = kfilm->pass_stride;
-        break;
-
-      case PASS_LIGHT:
         break;
 
       case PASS_DIFFUSE_COLOR:
@@ -397,7 +397,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
    *
    * We also don't need to perform light accumulations. Later we want to optimize this to suppress
    * light calculations. */
-  if (display_pass == PASS_NORMAL || display_pass == PASS_UV) {
+  if (display_pass == PASS_NORMAL || display_pass == PASS_UV || display_pass == PASS_ROUGHNESS) {
     kfilm->use_light_pass = 0;
   }
   else {

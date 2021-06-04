@@ -26,35 +26,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Keep it synced with kernel_bake.h logic */
-static int shader_type_to_pass_filter(ShaderEvalType type, int pass_filter)
-{
-  const int component_flags = pass_filter &
-                              (BAKE_FILTER_DIRECT | BAKE_FILTER_INDIRECT | BAKE_FILTER_COLOR);
-
-  switch (type) {
-    case SHADER_EVAL_AO:
-      return BAKE_FILTER_AO;
-    case SHADER_EVAL_SHADOW:
-      return BAKE_FILTER_DIRECT;
-    case SHADER_EVAL_DIFFUSE:
-      return BAKE_FILTER_DIFFUSE | component_flags;
-    case SHADER_EVAL_GLOSSY:
-      return BAKE_FILTER_GLOSSY | component_flags;
-    case SHADER_EVAL_TRANSMISSION:
-      return BAKE_FILTER_TRANSMISSION | component_flags;
-    case SHADER_EVAL_COMBINED:
-      return pass_filter;
-    default:
-      return 0;
-  }
-}
-
 BakeManager::BakeManager()
 {
-  type = SHADER_EVAL_BAKE;
-  pass_filter = 0;
-
   need_update_ = true;
 }
 
@@ -67,27 +40,12 @@ bool BakeManager::get_baking()
   return !object_name.empty();
 }
 
-void BakeManager::set(Scene *scene,
-                      const std::string &object_name_,
-                      ShaderEvalType type_,
-                      int pass_filter_)
+void BakeManager::set(Scene *scene, const std::string &object_name_)
 {
   object_name = object_name_;
-  type = type_;
-  pass_filter = shader_type_to_pass_filter(type_, pass_filter_);
 
   Pass::add(PASS_BAKE_PRIMITIVE, scene->passes, "BakePrimitive");
   Pass::add(PASS_BAKE_DIFFERENTIAL, scene->passes, "BakeDifferential");
-
-  if (type == SHADER_EVAL_UV) {
-    /* force UV to be available */
-    Pass::add(PASS_UV, scene->passes);
-  }
-
-  /* force use_light_pass to be true if we bake more than just colors */
-  if (pass_filter & ~BAKE_FILTER_COLOR) {
-    Pass::add(PASS_LIGHT, scene->passes);
-  }
 
   /* create device and update scene */
   scene->film->tag_modified();
@@ -115,8 +73,6 @@ void BakeManager::device_update(Device * /*device*/,
     });
 
     kbake->use = true;
-    kbake->type = type;
-    kbake->pass_filter = pass_filter;
 
     int object_index = 0;
     foreach (Object *object, scene->objects) {

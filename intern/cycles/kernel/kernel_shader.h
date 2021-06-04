@@ -777,7 +777,7 @@ ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
   return label;
 }
 
-ccl_device float shader_bsdf_average_roughness(ShaderData *sd)
+ccl_device float shader_bsdf_average_roughness(const ShaderData *sd)
 {
   float roughness = 0.0f;
   float sum_weight = 0.0f;

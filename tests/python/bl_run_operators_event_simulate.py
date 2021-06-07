@@ -31,7 +31,7 @@ Possible use cases for this script include:
 
 - Creating reproducible user interactions for the purpose of benchmarking and profiling.
 
-  Note that curse-motion actions report the update time between events
+  Note that cursor-motion actions report the update time between events
   which can be helpful when measuring optimizations.
 
 - As a convenient way to replay interactive actions that reproduce a bug.
@@ -86,7 +86,7 @@ Sculpt stroke:
         'event(type="WHEELDOWNMOUSE", value="TAP", repeat=2)' \
         'event(type="LEFTMOUSE", value="PRESS")' \
         'cursor_motion(path="CIRCLE", radius=300, steps=100, repeat=5)' \
-        'event(type="LEFTMOUSE", value="RELEASE")' \
+        'event(type="LEFTMOUSE", value="RELEASE")'
 
 
 Implementation
@@ -175,7 +175,7 @@ def mouse_location_get():
     )
 
 
-def run_event_simulate(*, event_iter):
+def run_event_simulate(*, event_iter, exit_fn):
     """
     Pass events from event_iter into Blender.
     """
@@ -188,8 +188,7 @@ def run_event_simulate(*, event_iter):
         if val is Ellipsis:
             bpy.app.use_event_simulate = False
             print("Finished simulation")
-
-            sys.exit(0)
+            exit_fn()
             return None
 
         # Run event simulation.
@@ -245,8 +244,8 @@ class action_handlers:
         if area is None:
             raise ArgumentTypeError("Area with ui_type=%r not found" % ui_type)
 
-        x = area.y + (area.width // 2)
-        y = area.x + (area.height // 2)
+        x = area.x + (area.width // 2)
+        y = area.y + (area.height // 2)
 
         yield dict(type='MOUSEMOVE', value='NOTHING', x=x, y=y)
         yield dict(type='SPACE', value='TAP', ctrl=True, alt=True)
@@ -494,6 +493,18 @@ def argparse_create():
         formatter_class=argparse.RawTextHelpFormatter,
     )
 
+    parser.add_argument(
+        "--keep-open",
+        dest="keep_open",
+        default=False,
+        action="store_true",
+        help=(
+            "Keep the window open instead of exiting once event simulation is complete.\n"
+            "This can be useful to inspect the state of the file once the simulation is complete."
+        ),
+        required=False,
+    )
+
     # Collect doc-strings from static methods in `actions`.
     actions_docstring = []
     for action_key in ACTION_DIR:
@@ -549,8 +560,8 @@ def main_event_iter(*, action_list):
     """
     area = find_main_area()
 
-    x_init = area.y + (area.width // 2)
-    y_init = area.x + (area.height // 2)
+    x_init = area.x + (area.width // 2)
+    y_init = area.y + (area.height // 2)
 
     yield dict(type='MOUSEMOVE', value='NOTHING', x=x_init, y=y_init)
 
@@ -570,7 +581,16 @@ def main():
 
     setup_default_preferences(bpy.context.preferences)
 
-    run_event_simulate(event_iter=main_event_iter(action_list=args.actions))
+    def exit_fn():
+        if not args.keep_open:
+            sys.exit(0)
+        else:
+            bpy.app.use_event_simulate = False
+
+    run_event_simulate(
+        event_iter=main_event_iter(action_list=args.actions),
+        exit_fn=exit_fn,
+    )
 
 
 if __name__ == "__main__":

@@ -149,11 +149,9 @@ class TriMeshTopology : NonCopyable {
    * Else return NO_INDEX. */
   int other_tri_if_manifold(Edge e, int t) const
   {
-    if (edge_tri_.contains(e)) {
-      auto *p = edge_tri_.lookup(e);
-      if (p->size() == 2) {
-        return ((*p)[0] == t) ? (*p)[1] : (*p)[0];
-      }
+    auto p = edge_tri_.lookup_ptr(e);
+    if (p != nullptr && (*p)->size() == 2) {
+      return ((**p)[0] == t) ? (**p)[1] : (**p)[0];
     }
     return NO_INDEX;
   }
@@ -1829,6 +1827,19 @@ static mpq_class closest_on_tri_to_point(const mpq3 &p,
   return mpq3::distance_squared_with_buffer(p, r, m);
 }
 
+static float closest_on_tri_to_point_float_dist_squared(const float3 &p,
+                                                        const double3 &a,
+                                                        const double3 &b,
+                                                        const double3 &c)
+{
+  float3 fa, fb, fc, closest;
+  copy_v3fl_v3db(fa, a);
+  copy_v3fl_v3db(fb, b);
+  copy_v3fl_v3db(fc, c);
+  closest_on_tri_to_point_v3(closest, p, fa, fb, fc);
+  return len_squared_v3v3(p, closest);
+}
+
 struct ComponentContainer {
   int containing_component{NO_INDEX};
   int nearest_cell{NO_INDEX};
@@ -1852,6 +1863,7 @@ static Vector<ComponentContainer> find_component_containers(int comp,
                                                             const IMesh &tm,
                                                             const PatchesInfo &pinfo,
                                                             const TriMeshTopology &tmtopo,
+                                                            Array<BoundingBox> &comp_bb,
                                                             IMeshArena *arena)
 {
   constexpr int dbg_level = 0;
@@ -1865,6 +1877,8 @@ static Vector<ComponentContainer> find_component_containers(int comp,
   if (dbg_level > 0) {
     std::cout << "test vertex in comp: " << test_v << "\n";
   }
+  const double3 &test_v_d = test_v->co;
+  float3 test_v_f(test_v_d[0], test_v_d[1], test_v_d[2]);
 
   mpq3 buf[7];
 
@@ -1875,10 +1889,17 @@ static Vector<ComponentContainer> find_component_containers(int comp,
     if (dbg_level > 0) {
       std::cout << "comp_other = " << comp_other << "\n";
     }
+    if (!bbs_might_intersect(comp_bb[comp], comp_bb[comp_other])) {
+      if (dbg_level > 0) {
+        std::cout << "bounding boxes don't overlap\n";
+      }
+      continue;
+    }
     int nearest_tri = NO_INDEX;
     int nearest_tri_close_vert = -1;
     int nearest_tri_close_edge = -1;
     mpq_class nearest_tri_dist_squared;
+    float nearest_tri_dist_squared_float = FLT_MAX;
     for (int p : components[comp_other]) {
       const Patch &patch = pinfo.patch(p);
       for (int t : patch.tris()) {
@@ -1888,6 +1909,12 @@ static Vector<ComponentContainer> find_component_containers(int comp,
         }
         int close_vert;
         int close_edge;
+        /* Try a cheap float test first. */
+        float d2_f = closest_on_tri_to_point_float_dist_squared(
+            test_v_f, tri[0]->co, tri[1]->co, tri[2]->co);
+        if (d2_f - FLT_EPSILON > nearest_tri_dist_squared_float) {
+          continue;
+        }
         mpq_class d2 = closest_on_tri_to_point(test_v->co_exact,
                                                tri[0]->co_exact,
                                                tri[1]->co_exact,
@@ -1910,6 +1937,7 @@ static Vector<ComponentContainer> find_component_containers(int comp,
           nearest_tri_close_edge = close_edge;
           nearest_tri_close_vert = close_vert;
           nearest_tri_dist_squared = d2;
+          nearest_tri_dist_squared_float = d2_f;
         }
       }
     }
@@ -1938,6 +1966,51 @@ static Vector<ComponentContainer> find_component_containers(int comp,
     }
   }
   return ans;
+}
+
+/**
+ * Populate the per-component bounding boxes, expanding them
+ * by an appropriate epsilon so that we conservatively will say
+ * that components could intersect if the BBs overlap.
+ */
+static void populate_comp_bbs(const Vector<Vector<int>> &components,
+                              const PatchesInfo &pinfo,
+                              const IMesh &im,
+                              Array<BoundingBox> &comp_bb)
+{
+  const int comp_grainsize = 16;
+  /* To get a good expansion epsilon, we need to find the maximum
+   * absolute value of any coordinate. Do it first per component,
+   * then get the overall max. */
+  Array<double> max_abs(components.size(), 0.0);
+  parallel_for(components.index_range(), comp_grainsize, [&](IndexRange comp_range) {
+    for (int c : comp_range) {
+      BoundingBox &bb = comp_bb[c];
+      double &maxa = max_abs[c];
+      for (int p : components[c]) {
+        const Patch &patch = pinfo.patch(p);
+        for (int t : patch.tris()) {
+          const Face &tri = *im.face(t);
+          for (const Vert *v : tri) {
+            bb.combine(v->co);
+            for (int i = 0; i < 3; ++i) {
+              maxa = max_dd(maxa, fabs(v->co[i]));
+            }
+          }
+        }
+      }
+    }
+  });
+  double all_max_abs = 0.0;
+  for (int c : components.index_range()) {
+    all_max_abs = max_dd(all_max_abs, max_abs[c]);
+  }
+  constexpr float pad_factor = 10.0f;
+  float pad = all_max_abs == 0.0 ? FLT_EPSILON : 2 * FLT_EPSILON * all_max_abs;
+  pad *= pad_factor;
+  for (int c : components.index_range()) {
+    comp_bb[c].expand(pad);
+  }
 }
 
 /**
@@ -1982,19 +2055,23 @@ static void finish_patch_cell_graph(const IMesh &tm,
   }
   int tot_components = components.size();
   Array<Vector<ComponentContainer>> comp_cont(tot_components);
-  for (int comp : components.index_range()) {
-    comp_cont[comp] = find_component_containers(
-        comp, components, ambient_cell, tm, pinfo, tmtopo, arena);
-  }
-  if (dbg_level > 0) {
-    std::cout << "component containers:\n";
-    for (int comp : comp_cont.index_range()) {
-      std::cout << comp << ": ";
-      for (const ComponentContainer &cc : comp_cont[comp]) {
-        std::cout << "[containing_comp=" << cc.containing_component
-                  << ", nearest_cell=" << cc.nearest_cell << ", d2=" << cc.dist_to_cell << "] ";
+  if (tot_components > 1) {
+    Array<BoundingBox> comp_bb(tot_components);
+    populate_comp_bbs(components, pinfo, tm, comp_bb);
+    for (int comp : components.index_range()) {
+      comp_cont[comp] = find_component_containers(
+          comp, components, ambient_cell, tm, pinfo, tmtopo, comp_bb, arena);
+    }
+    if (dbg_level > 0) {
+      std::cout << "component containers:\n";
+      for (int comp : comp_cont.index_range()) {
+        std::cout << comp << ": ";
+        for (const ComponentContainer &cc : comp_cont[comp]) {
+          std::cout << "[containing_comp=" << cc.containing_component
+                    << ", nearest_cell=" << cc.nearest_cell << ", d2=" << cc.dist_to_cell << "] ";
+        }
+        std::cout << "\n";
       }
-      std::cout << "\n";
     }
   }
   if (dbg_level > 1) {
@@ -3313,9 +3390,13 @@ static IMesh polymesh_from_trimesh_with_dissolve(const IMesh &tm_out,
     std::cout << "\nPOLYMESH_FROM_TRIMESH_WITH_DISSOLVE\n";
   }
   /* For now: need plane normals for all triangles. */
-  for (Face *tri : tm_out.faces()) {
-    tri->populate_plane(false);
-  }
+  const int grainsize = 1024;
+  parallel_for(tm_out.face_index_range(), grainsize, [&](IndexRange range) {
+    for (int i : range) {
+      Face *tri = tm_out.face(i);
+      tri->populate_plane(false);
+    }
+  });
   /* Gather all output triangles that are part of each input face.
    * face_output_tris[f] will be indices of triangles in tm_out
    * that have f as their original face. */

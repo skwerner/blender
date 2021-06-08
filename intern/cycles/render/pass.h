@@ -25,17 +25,27 @@
 
 CCL_NAMESPACE_BEGIN
 
+enum PassFlag {
+  PASS_FLAG_NONE = 0,
+
+  /* Is true when the actual storage of the pass is not aligned to any of boundary.
+   * For example, if the pass with 3 components is stored (and written by the kernel) as individual
+   * float components. */
+  PASS_FLAG_UNALIGNED = (1 << 0),
+
+  /* The has been created automatically as a requirement to various rendering functionality (such
+   * as adaptive sampling). */
+  PASS_FLAG_AUTO = (1 << 1),
+};
+using PassFlags = int;
+
 struct PassInfo {
   PassType type = PASS_NONE;
   int num_components = -1;
   bool use_filter = false;
   bool use_exposure = false;
   PassType divide_type = PASS_NONE;
-
-  /* Is true when the actual storage of the pass is not aligned to any of boundary.
-   * For example, if the pass with 3 components is stored (and written by the kernel) as individual
-   * float components. */
-  bool is_unaligned = false;
+  PassFlags flags;
 };
 
 class Pass : public Node {
@@ -50,10 +60,7 @@ class Pass : public Node {
   bool exposure;
   PassType divide_type;
   ustring name;
-
-  /* The has been created automatically as a requirement to various rendering functionality (such
-   * as adaptive sampling). */
-  bool is_auto;
+  PassFlags flags;
 
   static const NodeEnum *get_type_enum();
 
@@ -62,7 +69,7 @@ class Pass : public Node {
   static void add(PassType type,
                   vector<Pass> &passes,
                   const char *name = nullptr,
-                  bool is_auto = false);
+                  PassFlags flags = PASS_FLAG_NONE);
 
   /* Check whether two sets of passes are matching exactly. */
   static bool equals_exact(const vector<Pass> &A, const vector<Pass> &B);

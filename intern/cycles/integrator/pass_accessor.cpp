@@ -175,7 +175,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
   }
   else if (destination.num_components == 3) {
-    if (pass_info.is_unaligned) {
+    if (pass_info.flags & PASS_FLAG_UNALIGNED) {
       DCHECK_LE(pass_info.num_components, 3)
           << "Number of components mismatch for pass type " << pass_info.type;
     }

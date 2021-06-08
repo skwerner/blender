@@ -21,6 +21,20 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Combine pass flags together. Used to merge newly requested flags into an existing pass. */
+static PassFlags pass_flags_combine(const PassFlags flags_a, const PassFlags flags_b)
+{
+  PassFlags result = flags_a | flags_b;
+
+  /* If pass was ever requested to be created explicitly never fall back to treating the pass as
+   * an automatically created. */
+  if ((flags_a & PASS_FLAG_AUTO) == 0 || (flags_b & PASS_FLAG_AUTO) == 0) {
+    result &= ~PASS_FLAG_AUTO;
+  }
+
+  return result;
+}
+
 static bool compare_pass_order(const Pass &a, const Pass &b)
 {
   if (a.components == b.components)
@@ -94,7 +108,7 @@ PassInfo Pass::get_info(PassType type)
   pass_info.use_filter = true;
   pass_info.use_exposure = false;
   pass_info.divide_type = PASS_NONE;
-  pass_info.is_unaligned = false;
+  pass_info.flags = PASS_FLAG_NONE;
 
   switch (type) {
     case PASS_NONE:
@@ -186,15 +200,15 @@ PassInfo Pass::get_info(PassType type)
     case PASS_DENOISING_COLOR:
       pass_info.num_components = 3;
       pass_info.use_exposure = true;
-      pass_info.is_unaligned = true;
+      pass_info.flags |= PASS_FLAG_UNALIGNED;
       break;
     case PASS_DENOISING_NORMAL:
       pass_info.num_components = 3;
-      pass_info.is_unaligned = true;
+      pass_info.flags |= PASS_FLAG_UNALIGNED;
       break;
     case PASS_DENOISING_ALBEDO:
       pass_info.num_components = 3;
-      pass_info.is_unaligned = true;
+      pass_info.flags |= PASS_FLAG_UNALIGNED;
       break;
 
     case PASS_SHADOW_CATCHER:
@@ -240,7 +254,7 @@ PassInfo Pass::get_info(PassType type)
   return pass_info;
 }
 
-void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_auto)
+void Pass::add(PassType type, vector<Pass> &passes, const char *name, PassFlags flags)
 {
   for (Pass &pass : passes) {
     if (pass.type != type) {
@@ -259,21 +273,21 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
 
     /* If no name is specified, any pass of the correct type will match. */
     if (name == NULL) {
-      pass.is_auto &= is_auto;
+      pass.flags = pass_flags_combine(pass.flags, flags);
       return;
     }
 
     /* If we already have a placeholder pass, rename that one. */
     if (pass.name.empty()) {
       pass.name = name;
-      pass.is_auto &= is_auto;
+      pass.flags = pass_flags_combine(pass.flags, flags);
       return;
     }
 
     /* If neither existing nor requested pass have placeholder name, they
      * must match. */
     if (name == pass.name) {
-      pass.is_auto &= is_auto;
+      pass.flags = pass_flags_combine(pass.flags, flags);
       return;
     }
   }
@@ -286,7 +300,7 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
   pass.filter = pass_info.use_filter;
   pass.exposure = pass_info.use_exposure;
   pass.divide_type = pass_info.divide_type;
-  pass.is_auto = is_auto;
+  pass.flags = flags;
 
   if (name) {
     pass.name = name;
@@ -300,7 +314,7 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, bool is_au
   stable_sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
 
   if (pass.divide_type != PASS_NONE) {
-    Pass::add(pass.divide_type, passes, nullptr, is_auto);
+    Pass::add(pass.divide_type, passes, nullptr, flags);
   }
 }
 
@@ -323,7 +337,7 @@ static const int get_next_no_auto_pass_index(const vector<Pass> &passes, int ind
   ++index;
 
   while (index < passes.size()) {
-    if (!passes[index].is_auto) {
+    if ((passes[index].flags & PASS_FLAG_AUTO) == 0) {
       return index;
     }
   }
@@ -384,7 +398,7 @@ void Pass::remove_auto(vector<Pass> &passes, PassType type)
     return;
   }
 
-  if (!passes[i].is_auto) {
+  if ((passes[i].flags & PASS_FLAG_AUTO) == 0) {
     /* Pass is not automatically created, can not remove. */
     return;
   }
@@ -397,7 +411,7 @@ void Pass::remove_all_auto(vector<Pass> &passes)
   vector<Pass> new_passes;
 
   for (const Pass &pass : passes) {
-    if (!pass.is_auto) {
+    if ((pass.flags & PASS_FLAG_AUTO) == 0) {
       new_passes.push_back(pass);
     }
   }

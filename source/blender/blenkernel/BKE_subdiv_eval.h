@@ -21,17 +21,28 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_SUBDIV_EVAL_H__
-#define __BKE_SUBDIV_EVAL_H__
+#pragma once
 
 #include "BLI_sys_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Mesh;
 struct Subdiv;
 
 /* Returns true if evaluator is ready for use. */
 bool BKE_subdiv_eval_begin(struct Subdiv *subdiv);
-bool BKE_subdiv_eval_update_from_mesh(struct Subdiv *subdiv, const struct Mesh *mesh);
+
+/* coarse_vertex_cos is an optional argument which allows to override coordinates of the coarse
+ * mesh. */
+bool BKE_subdiv_eval_begin_from_mesh(struct Subdiv *subdiv,
+                                     const struct Mesh *mesh,
+                                     const float (*coarse_vertex_cos)[3]);
+bool BKE_subdiv_eval_refine_from_mesh(struct Subdiv *subdiv,
+                                      const struct Mesh *mesh,
+                                      const float (*coarse_vertex_cos)[3]);
 
 /* Makes sure displacement evaluator is initialized.
  *
@@ -40,6 +51,8 @@ bool BKE_subdiv_eval_update_from_mesh(struct Subdiv *subdiv, const struct Mesh *
 void BKE_subdiv_eval_init_displacement(struct Subdiv *subdiv);
 
 /* Single point queries. */
+
+/* Evaluate point at a limit surface, with optional derivatives and normal. */
 
 void BKE_subdiv_eval_limit_point(
     struct Subdiv *subdiv, const int ptex_face_index, const float u, const float v, float r_P[3]);
@@ -63,18 +76,19 @@ void BKE_subdiv_eval_limit_point_and_short_normal(struct Subdiv *subdiv,
                                                   float r_P[3],
                                                   short r_N[3]);
 
+/* Evaluate face-varying layer (such as UV). */
 void BKE_subdiv_eval_face_varying(struct Subdiv *subdiv,
                                   const int face_varying_channel,
                                   const int ptex_face_index,
                                   const float u,
                                   const float v,
-                                  float r_varying[2]);
+                                  float r_face_varying[2]);
 
 /* NOTE: Expects derivatives to be correct.
  *
  * TODO(sergey): This is currently used together with
- * BKE_subdiv_eval_final_point() which cas easily evaluate derivatives.
- * Would be nice to have dispalcement evaluation function which does not require
+ * BKE_subdiv_eval_final_point() which can easily evaluate derivatives.
+ * Would be nice to have displacement evaluation function which does not require
  * knowing derivatives ahead of a time. */
 void BKE_subdiv_eval_displacement(struct Subdiv *subdiv,
                                   const int ptex_face_index,
@@ -84,6 +98,7 @@ void BKE_subdiv_eval_displacement(struct Subdiv *subdiv,
                                   const float dPdv[3],
                                   float r_D[3]);
 
+/* Evaluate point on a limit surface with displacement applied to it. */
 void BKE_subdiv_eval_final_point(
     struct Subdiv *subdiv, const int ptex_face_index, const float u, const float v, float r_P[3]);
 
@@ -130,4 +145,6 @@ void BKE_subdiv_eval_limit_patch_resolution_point_and_short_normal(struct Subdiv
                                                                    const int normal_offset,
                                                                    const int normal_stride);
 
-#endif /* __BKE_SUBDIV_EVAL_H__ */
+#ifdef __cplusplus
+}
+#endif

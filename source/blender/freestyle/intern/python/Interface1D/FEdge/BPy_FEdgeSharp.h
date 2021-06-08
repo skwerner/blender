@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_FEDGESHARP_H__
-#define __FREESTYLE_PYTHON_FEDGESHARP_H__
+#pragma once
 
 #include "../BPy_FEdge.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject FEdgeSharp_Type;
 /*---------------------------Python BPy_FEdgeSharp structure definition----------*/
 typedef struct {
   BPy_FEdge py_fe;
-  FEdgeSharp *fes;
+  Freestyle::FEdgeSharp *fes;
 } BPy_FEdgeSharp;
 
 /*---------------------------Python BPy_FEdgeSharp visible prototypes-----------*/
@@ -50,5 +49,3 @@ void FEdgeSharp_mathutils_register_callback();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_FEDGESHARP_H__ */

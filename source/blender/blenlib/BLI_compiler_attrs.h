@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_COMPILER_ATTRS_H__
-#define __BLI_COMPILER_ATTRS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -100,4 +99,9 @@
 #  define ATTR_ALIGN(x) __attribute__((aligned(x)))
 #endif
 
-#endif /* __BLI_COMPILER_ATTRS_H__ */
+/* Alignment directive */
+#ifdef _WIN64
+#  define ALIGN_STRUCT __declspec(align(64))
+#else
+#  define ALIGN_STRUCT
+#endif

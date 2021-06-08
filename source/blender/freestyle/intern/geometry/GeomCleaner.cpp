@@ -29,7 +29,7 @@
 #  endif
 #endif
 
-#include <stdio.h>
+#include <cstdio>
 #include <list>
 #include <map>
 
@@ -54,8 +54,7 @@ void GeomCleaner::SortIndexedVertexArray(const float *iVertices,
   list<IndexedVertex> indexedVertices;
   unsigned i;
   for (i = 0; i < iVSize; i += 3) {
-    indexedVertices.push_back(
-        IndexedVertex(Vec3f(iVertices[i], iVertices[i + 1], iVertices[i + 2]), i / 3));
+    indexedVertices.emplace_back(Vec3f(iVertices[i], iVertices[i + 1], iVertices[i + 2]), i / 3);
   }
 
   // q-sort
@@ -99,7 +98,7 @@ void GeomCleaner::CompressIndexedVertexArray(const float *iVertices,
   vector<Vec3f> vertices;
   unsigned i;
   for (i = 0; i < iVSize; i += 3) {
-    vertices.push_back(Vec3f(iVertices[i], iVertices[i + 1], iVertices[i + 2]));
+    vertices.emplace_back(iVertices[i], iVertices[i + 1], iVertices[i + 2]);
   }
 
   unsigned *mapVertex = new unsigned[iVSize];
@@ -115,8 +114,9 @@ void GeomCleaner::CompressIndexedVertexArray(const float *iVertices,
   i = 1;
   for (; v != vertices.end(); v++) {
     current = *v;
-    if (current == previous)
+    if (current == previous) {
       mapVertex[i] = compressedVertices.size() - 1;
+    }
     else {
       compressedVertices.push_back(current);
       mapVertex[i] = compressedVertices.size() - 1;
@@ -202,11 +202,12 @@ void GeomCleaner::CleanIndexedVertexArray(const float *iVertices,
                                           unsigned *oVSize,
                                           unsigned **oIndices)
 {
-  typedef map<Vec3f, unsigned> cleanHashTable;
+  using cleanHashTable = map<Vec3f, unsigned>;
   vector<Vec3f> vertices;
   unsigned i;
-  for (i = 0; i < iVSize; i += 3)
-    vertices.push_back(Vec3f(iVertices[i], iVertices[i + 1], iVertices[i + 2]));
+  for (i = 0; i < iVSize; i += 3) {
+    vertices.emplace_back(iVertices[i], iVertices[i + 1], iVertices[i + 2]);
+  }
 
   cleanHashTable ht;
   vector<unsigned> newIndices;
@@ -244,8 +245,9 @@ void GeomCleaner::CleanIndexedVertexArray(const float *iVertices,
 
   // map new indices:
   *oIndices = new unsigned[iISize];
-  for (i = 0; i < iISize; i++)
+  for (i = 0; i < iISize; i++) {
     (*oIndices)[i] = 3 * newIndices[iIndices[i] / 3];
+  }
 }
 
 } /* namespace Freestyle */

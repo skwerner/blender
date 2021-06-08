@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_ARBITRARY_GRID_DENSITY_PROVIDER_H__
-#define __FREESTYLE_ARBITRARY_GRID_DENSITY_PROVIDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -40,7 +39,6 @@ class ArbitraryGridDensityProvider : public GridDensityProvider {
                                const GridHelpers::Transform &transform,
                                unsigned numCells);
   ArbitraryGridDensityProvider(OccluderSource &source, unsigned numCells);
-  virtual ~ArbitraryGridDensityProvider();
 
  protected:
   unsigned numCells;
@@ -52,7 +50,6 @@ class ArbitraryGridDensityProvider : public GridDensityProvider {
 class ArbitraryGridDensityProviderFactory : public GridDensityProviderFactory {
  public:
   ArbitraryGridDensityProviderFactory(unsigned numCells);
-  ~ArbitraryGridDensityProviderFactory();
 
   AutoPtr<GridDensityProvider> newGridDensityProvider(OccluderSource &source,
                                                       const real proscenium[4]);
@@ -66,5 +63,3 @@ class ArbitraryGridDensityProviderFactory : public GridDensityProviderFactory {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_ARBITRARY_GRID_DENSITY_PROVIDER_H__

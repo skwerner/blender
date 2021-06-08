@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_WALKERS_H__
-#define __BMESH_WALKERS_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -68,8 +67,6 @@ typedef struct BMWalker {
 /* define to make BMW_init more clear */
 #define BMW_MASK_NOP 0
 
-/* initialize a walker.  searchmask restricts some (not all) walkers to
- * elements with a specific tool flag set.  flags is specific to each walker.*/
 void BMW_init(struct BMWalker *walker,
               BMesh *bm,
               int type,
@@ -117,6 +114,7 @@ enum {
   BMW_FACELOOP,
   BMW_EDGERING,
   BMW_EDGEBOUNDARY,
+  BMW_EDGELOOP_NONMANIFOLD,
   /* BMW_RING, */
   BMW_LOOPDATA_ISLAND,
   BMW_ISLANDBOUND,
@@ -125,12 +123,10 @@ enum {
   BMW_CONNECTED_VERTEX,
   /* end of array index enum vals */
 
-  /* do not intitialze function pointers and struct size in BMW_init */
+  /* Do not initialize function pointers and struct size in #BMW_init. */
   BMW_CUSTOM,
   BMW_MAXWALKERS,
 };
 
 /* use with BMW_init, so as not to confuse with restrict flags */
 #define BMW_NIL_LAY 0
-
-#endif /* __BMESH_WALKERS_H__ */

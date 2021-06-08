@@ -21,45 +21,20 @@
  * \ingroup editorui
  */
 
-#ifndef __BIF_GLUTIL_H__
-#define __BIF_GLUTIL_H__
+#pragma once
 
-struct rctf;
+#include "GPU_texture.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct rcti;
 
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
 struct ImBuf;
 struct bContext;
-
-/* A few functions defined here are being DEPRECATED for Blender 2.8
- *
- * Do not use them in new code, and you are encouraged to
- * convert existing code to draw without these.
- *
- * These will be deleted before we ship 2.8!
- * - merwin
- */
-
-/**
- * Returns a float value as obtained by glGetFloatv.
- * The param must cause only one value to be gotten from GL.
- */
-float glaGetOneFloat(int param);
-int glaGetOneInt(int param);
-
-/**
- * Functions like glRasterPos2i, except ensures that the resulting
- * raster position is valid. \a known_good_x and \a known_good_y
- * should be coordinates of a point known to be within the current
- * view frustum.
- * \attention This routine should be used when the distance of \a x
- * and \a y away from the known good point is small (ie. for small icons
- * and for bitmap characters), when drawing large+zoomed images it is
- * possible for overflow to occur, the glaDrawPixelsSafe routine should
- * be used instead.
- */
-void glaRasterPosSafe2f(float x, float y, float known_good_x, float known_good_y);
 
 typedef struct IMMDrawPixelsTexState {
   struct GPUShader *shader;
@@ -92,21 +67,19 @@ void immDrawPixelsTex(IMMDrawPixelsTexState *state,
                       float y,
                       int img_w,
                       int img_h,
-                      int format,
-                      int type,
-                      int zoomfilter,
+                      eGPUTextureFormat gpu_format,
+                      bool use_filter,
                       void *rect,
                       float xzoom,
                       float yzoom,
-                      float color[4]);
+                      const float color[4]);
 void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                float x,
                                float y,
                                int img_w,
                                int img_h,
-                               int format,
-                               int type,
-                               int zoomfilter,
+                               eGPUTextureFormat gpu_format,
+                               bool use_filter,
                                void *rect,
                                float clip_min_x,
                                float clip_min_y,
@@ -114,29 +87,27 @@ void immDrawPixelsTex_clipping(IMMDrawPixelsTexState *state,
                                float clip_max_y,
                                float xzoom,
                                float yzoom,
-                               float color[4]);
+                               const float color[4]);
 void immDrawPixelsTexScaled(IMMDrawPixelsTexState *state,
                             float x,
                             float y,
                             int img_w,
                             int img_h,
-                            int format,
-                            int type,
-                            int zoomfilter,
+                            eGPUTextureFormat gpu_format,
+                            bool use_filter,
                             void *rect,
                             float scaleX,
                             float scaleY,
                             float xzoom,
                             float yzoom,
-                            float color[4]);
+                            const float color[4]);
 void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
                                      float x,
                                      float y,
                                      int img_w,
                                      int img_h,
-                                     int format,
-                                     int type,
-                                     int zoomfilter,
+                                     eGPUTextureFormat gpu_format,
+                                     bool use_filter,
                                      void *rect,
                                      float scaleX,
                                      float scaleY,
@@ -146,31 +117,49 @@ void immDrawPixelsTexScaled_clipping(IMMDrawPixelsTexState *state,
                                      float clip_max_y,
                                      float xzoom,
                                      float yzoom,
-                                     float color[4]);
+                                     const float color[4]);
 
-void set_inverted_drawing(int enable);
+/* Image buffer drawing functions, with display transform
+ *
+ * The view and display settings can either be specified manually,
+ * or retrieved from the context with the '_ctx' variations.
+ *
+ * For better performance clipping coordinates can be specified so parts of the
+ * image outside the view are skipped. */
 
-/* own working polygon offset */
-float bglPolygonOffsetCalc(const float winmat[16], float viewdist, float dist);
-void bglPolygonOffset(float viewdist, float dist);
+void ED_draw_imbuf(struct ImBuf *ibuf,
+                   float x,
+                   float y,
+                   bool use_filter,
+                   struct ColorManagedViewSettings *view_settings,
+                   struct ColorManagedDisplaySettings *display_settings,
+                   float zoom_x,
+                   float zoom_y);
+void ED_draw_imbuf_clipping(struct ImBuf *ibuf,
+                            float x,
+                            float y,
+                            bool use_filter,
+                            struct ColorManagedViewSettings *view_settings,
+                            struct ColorManagedDisplaySettings *display_settings,
+                            float clip_min_x,
+                            float clip_min_y,
+                            float clip_max_x,
+                            float clip_max_y,
+                            float zoom_x,
+                            float zoom_y);
 
-/* **** Color management helper functions for GLSL display/transform ***** */
-
-/* Draw imbuf on a screen, preferably using GLSL display transform */
-void glaDrawImBuf_glsl(struct ImBuf *ibuf,
+void ED_draw_imbuf_ctx(const struct bContext *C,
+                       struct ImBuf *ibuf,
                        float x,
                        float y,
-                       int zoomfilter,
-                       struct ColorManagedViewSettings *view_settings,
-                       struct ColorManagedDisplaySettings *display_settings,
+                       bool use_filter,
                        float zoom_x,
                        float zoom_y);
-void glaDrawImBuf_glsl_clipping(struct ImBuf *ibuf,
+void ED_draw_imbuf_ctx_clipping(const struct bContext *C,
+                                struct ImBuf *ibuf,
                                 float x,
                                 float y,
-                                int zoomfilter,
-                                struct ColorManagedViewSettings *view_settings,
-                                struct ColorManagedDisplaySettings *display_settings,
+                                bool use_filter,
                                 float clip_min_x,
                                 float clip_min_y,
                                 float clip_max_x,
@@ -178,26 +167,10 @@ void glaDrawImBuf_glsl_clipping(struct ImBuf *ibuf,
                                 float zoom_x,
                                 float zoom_y);
 
-/* Draw imbuf on a screen, preferably using GLSL display transform */
-void glaDrawImBuf_glsl_ctx(const struct bContext *C,
-                           struct ImBuf *ibuf,
-                           float x,
-                           float y,
-                           int zoomfilter,
-                           float zoom_x,
-                           float zoom_y);
-void glaDrawImBuf_glsl_ctx_clipping(const struct bContext *C,
-                                    struct ImBuf *ibuf,
-                                    float x,
-                                    float y,
-                                    int zoomfilter,
-                                    float clip_min_x,
-                                    float clip_min_y,
-                                    float clip_max_x,
-                                    float clip_max_y,
-                                    float zoom_x,
-                                    float zoom_y);
+int ED_draw_imbuf_method(struct ImBuf *ibuf);
 
 void immDrawBorderCorners(unsigned int pos, const struct rcti *border, float zoomx, float zoomy);
 
-#endif /* __BIF_GLUTIL_H__ */
+#ifdef __cplusplus
+}
+#endif

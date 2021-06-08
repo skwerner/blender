@@ -84,10 +84,10 @@ ccl_device_inline int fast_rint(float x)
 {
   /* used by sin/cos/tan range reduction. */
 #ifdef __KERNEL_SSE4__
-  /* Single roundps instruction on SSE4.1+ (for gcc/clang at least). */
+  /* Single `roundps` instruction on SSE4.1+ (for gcc/clang at least). */
   return float_to_int(rintf(x));
 #else
-  /* emulate rounding by adding/substracting 0.5. */
+  /* emulate rounding by adding/subtracting 0.5. */
   return float_to_int(x + copysignf(0.5f, x));
 #endif
 }
@@ -282,8 +282,10 @@ ccl_device float fast_acosf(float x)
   const float m = (f < 1.0f) ? 1.0f - (1.0f - f) : 1.0f;
   /* Based on http://www.pouet.net/topic.php?which=9132&page=2
    * 85% accurate (ulp 0)
-   * Examined 2130706434 values of acos: 15.2000597 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // without "denormal crush"
-   * Examined 2130706434 values of acos: 15.2007108 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // with "denormal crush"
+   * Examined 2130706434 values of acos:
+   *   15.2000597 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // without "denormal crush"
+   * Examined 2130706434 values of acos:
+   *   15.2007108 avg ulp diff, 4492 max ulp, 4.51803e-05 max error // with "denormal crush"
    */
   const float a = sqrtf(1.0f - m) *
                   (1.5707963267f + m * (-0.213300989f + m * (0.077980478f + m * -0.02164095f)));
@@ -312,8 +314,10 @@ ccl_device float fast_atanf(float x)
   const float s = 1.0f - (1.0f - k); /* Crush denormals. */
   const float t = s * s;
   /* http://mathforum.org/library/drmath/view/62672.html
-   * Examined 4278190080 values of atan: 2.36864877 avg ulp diff, 302 max ulp, 6.55651e-06 max error      // (with  denormals)
-   * Examined 4278190080 values of atan: 171160502 avg ulp diff, 855638016 max ulp, 6.55651e-06 max error // (crush denormals)
+   * Examined 4278190080 values of atan:
+   *   2.36864877 avg ulp diff, 302 max ulp, 6.55651e-06 max error      // (with  denormals)
+   * Examined 4278190080 values of atan:
+   *   171160502 avg ulp diff, 855638016 max ulp, 6.55651e-06 max error // (crush denormals)
    */
   float r = s * madd(0.43157974f, t, 1.0f) / madd(madd(0.05831938f, t, 0.76443945f), t, 1.0f);
   if (a > 1.0f) {
@@ -358,7 +362,7 @@ ccl_device float fast_atan2f(float y, float x)
 ccl_device float fast_log2f(float x)
 {
   /* NOTE: clamp to avoid special cases and make result "safe" from large
-   * negative values/nans. */
+   * negative values/NAN's. */
   x = clamp(x, FLT_MIN, FLT_MAX);
   unsigned bits = __float_as_uint(x);
   int exponent = (int)(bits >> 23) - 127;
@@ -441,7 +445,10 @@ ccl_device_inline float fast_expf(float x)
   return fast_exp2f(x / M_LN2_F);
 }
 
-#ifndef __KERNEL_GPU__
+#if defined(__KERNEL_CPU__) && !defined(_MSC_VER)
+/* MSVC seems to have a code-gen bug here in at least SSE41/AVX, see
+ * T78047 and T78869 for details. Just disable for now, it only makes
+ * a small difference in denoising performance. */
 ccl_device float4 fast_exp2f4(float4 x)
 {
   const float4 one = make_float4(1.0f);
@@ -461,6 +468,11 @@ ccl_device float4 fast_exp2f4(float4 x)
 ccl_device_inline float4 fast_expf4(float4 x)
 {
   return fast_exp2f4(x / M_LN2_F);
+}
+#else
+ccl_device_inline float4 fast_expf4(float4 x)
+{
+  return make_float4(fast_expf(x.x), fast_expf(x.y), fast_expf(x.z), fast_expf(x.w));
 }
 #endif
 
@@ -601,7 +613,7 @@ ccl_device_inline float fast_erfcf(float x)
 
 ccl_device_inline float fast_ierff(float x)
 {
-  /* From: Approximating the erfinv function by Mike Giles. */
+  /* From: Approximating the `erfinv` function by Mike Giles. */
   /* To avoid trouble at the limit, clamp input to 1-eps. */
   float a = fabsf(x);
   if (a > 0.99999994f) {

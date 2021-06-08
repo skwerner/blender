@@ -20,10 +20,11 @@
 
 namespace Freestyle {
 
-TextStrokeRenderer::TextStrokeRenderer(const char *iFileName) : StrokeRenderer()
+TextStrokeRenderer::TextStrokeRenderer(const char *iFileName)
 {
-  if (!iFileName)
+  if (!iFileName) {
     iFileName = "freestyle.txt";
+  }
   // open the stream:
   _ofstream.open(iFileName, ios::out);
   if (!_ofstream.is_open()) {
@@ -35,11 +36,6 @@ TextStrokeRenderer::TextStrokeRenderer(const char *iFileName) : StrokeRenderer()
   _ofstream << 0 << " " << 0 << " " << Canvas::getInstance()->width() << " "
             << Canvas::getInstance()->height() << endl;
   _ofstream << "%u x y z tleft tright r g b ..." << endl;
-}
-
-TextStrokeRenderer::~TextStrokeRenderer()
-{
-  Close();
 }
 
 void TextStrokeRenderer::RenderStrokeRep(StrokeRep *iStrokeRep) const
@@ -65,12 +61,6 @@ void TextStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
     ++v;
   }
   _ofstream << endl;
-}
-
-void TextStrokeRenderer::Close()
-{
-  if (_ofstream.is_open())
-    _ofstream.close();
 }
 
 } /* namespace Freestyle */

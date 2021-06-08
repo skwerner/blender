@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_PHYSICS_H__
-#define __ED_PHYSICS_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ReportList;
 struct bContext;
@@ -56,4 +59,6 @@ void ED_rigidbody_constraint_remove(struct Main *bmain, struct Scene *scene, str
 void ED_operatortypes_physics(void);
 void ED_keymap_physics(struct wmKeyConfig *keyconf);
 
-#endif /* __ED_PHYSICS_H__ */
+#ifdef __cplusplus
+}
+#endif

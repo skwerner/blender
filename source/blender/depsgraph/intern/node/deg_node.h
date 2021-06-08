@@ -23,15 +23,19 @@
 
 #pragma once
 
+#include "MEM_guardedalloc.h"
+
 #include "intern/depsgraph_type.h"
 
 #include "BLI_utildefines.h"
 
-struct GHash;
+#include "DEG_depsgraph_build.h"
+
 struct ID;
 struct Scene;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 struct OperationNode;
@@ -92,7 +96,10 @@ enum class NodeType {
   /* Used by all operations which are updating object when something is
    * changed in view layer. */
   OBJECT_FROM_LAYER,
-  /* Un-interestying datablock, which is a part of dependency graph, but does
+  /* Audio-related evaluation. */
+  AUDIO,
+  ARMATURE,
+  /* Un-interesting data-block, which is a part of dependency graph, but does
    * not have very distinctive update procedure.  */
   GENERIC_DATABLOCK,
 
@@ -110,22 +117,32 @@ enum class NodeType {
   SHADING_PARAMETERS,
   /* Point cache Component */
   POINT_CACHE,
+  /* Image Animation Component */
+  IMAGE_ANIMATION,
   /* Cache Component */
   /* TODO(sergey); Verify that we really need this. */
   CACHE,
   /* Batch Cache Component.
-   * TODO (dfelinto/sergey): rename to make it more generic. */
+   * TODO(dfelinto/sergey): rename to make it more generic. */
   BATCH_CACHE,
   /* Duplication system. Used to force duplicated objects visible when
    * when duplicator is visible. */
   DUPLI,
   /* Synchronization back to original datablock. */
   SYNCHRONIZATION,
+  /* Simulation component. */
+  SIMULATION,
 
   /* Total number of meaningful node types. */
   NUM_TYPES,
 };
 const char *nodeTypeAsString(NodeType type);
+
+NodeType nodeTypeFromSceneComponent(eDepsSceneComponentType component_type);
+eDepsSceneComponentType nodeTypeToSceneComponent(NodeType type);
+
+NodeType nodeTypeFromObjectComponent(eDepsObjectComponentType component_type);
+eDepsObjectComponentType nodeTypeToObjectComponent(NodeType type);
 
 /* All nodes in Depsgraph are descended from this. */
 struct Node {
@@ -151,7 +168,7 @@ struct Node {
    * The reason why all depsgraph nodes are descended from this type (apart
    * from basic serialization benefits - from the typeinfo) is that we can
    * have relationships between these nodes. */
-  typedef vector<Relation *> Relations;
+  typedef Vector<Relation *> Relations;
 
   string name;        /* Identifier - mainly for debugging purposes. */
   NodeType type;      /* Structural type of node. */
@@ -181,14 +198,16 @@ struct Node {
 
   virtual OperationNode *get_entry_operation()
   {
-    return NULL;
+    return nullptr;
   }
   virtual OperationNode *get_exit_operation()
   {
-    return NULL;
+    return nullptr;
   }
 
   virtual NodeClass get_class() const;
+
+  MEM_CXX_CLASS_ALLOC_FUNCS("Node");
 };
 
 /* Macros for common static typeinfo. */
@@ -198,4 +217,5 @@ struct Node {
 
 void deg_register_base_depsnodes();
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

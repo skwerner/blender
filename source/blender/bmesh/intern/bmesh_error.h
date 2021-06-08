@@ -14,17 +14,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_ERROR_H__
-#define __BMESH_ERROR_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  */
 
+#include "bmesh_operator_api.h"
+
 /*----------- bmop error system ----------*/
 
 /* pushes an error onto the bmesh error stack.
- * if msg is null, then the default message for the errorcode is used.*/
+ * if msg is null, then the default message for the `errcode` is used. */
 void BMO_error_raise(BMesh *bm, BMOperator *owner, int errcode, const char *msg);
 
 /* gets the topmost error from the stack.
@@ -32,7 +33,7 @@ void BMO_error_raise(BMesh *bm, BMOperator *owner, int errcode, const char *msg)
 int BMO_error_get(BMesh *bm, const char **msg, BMOperator **op);
 bool BMO_error_occurred(BMesh *bm);
 
-/* same as geterror, only pops the error off the stack as well */
+/* Same as #BMO_error_get, only pops the error off the stack as well. */
 int BMO_error_pop(BMesh *bm, const char **msg, BMOperator **op);
 void BMO_error_clear(BMesh *bm);
 
@@ -54,13 +55,8 @@ void BMO_error_clear(BMesh *bm);
 
 /*error messages*/
 enum {
-  BMERR_SELF_INTERSECTING = 1,
-  BMERR_DISSOLVEDISK_FAILED,
-  BMERR_CONNECTVERT_FAILED,
-  BMERR_WALKER_FAILED,
+  BMERR_CONNECTVERT_FAILED = 1,
   BMERR_DISSOLVEFACES_FAILED,
-  BMERR_TESSELLATION,
-  BMERR_NONMANIFOLD,
   BMERR_INVALID_SELECTION,
   BMERR_MESH_ERROR,
   BMERR_CONVEX_HULL_FAILED,
@@ -75,7 +71,7 @@ enum {
 #  define _BMESH_DUMMY_ABORT() (void)0
 #endif
 
-/* this is meant to be higher level then BLI_assert(),
+/* this is meant to be higher level than BLI_assert(),
  * its enabled even when in Release mode*/
 #define BMESH_ASSERT(a) \
   (void)((!(a)) ? ((fprintf(stderr, \
@@ -87,5 +83,3 @@ enum {
                     _BMESH_DUMMY_ABORT(), \
                     NULL)) : \
                   NULL)
-
-#endif /* __BMESH_ERROR_H__ */

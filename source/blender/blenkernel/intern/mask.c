@@ -28,36 +28,252 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_endian_switch.h"
 #include "BLI_ghash.h"
-#include "BLI_string.h"
-#include "BLI_string_utils.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
+#include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
 #include "DNA_mask_types.h"
-#include "DNA_node_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_space_types.h"
-#include "DNA_sequence_types.h"
 
 #include "BKE_animsys.h"
 #include "BKE_curve.h"
+#include "BKE_idtype.h"
 
-#include "BKE_library.h"
+#include "BKE_anim_data.h"
+#include "BKE_image.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_mask.h"
-#include "BKE_node.h"
-#include "BKE_sequencer.h"
-#include "BKE_tracking.h"
 #include "BKE_movieclip.h"
-#include "BKE_image.h"
+#include "BKE_tracking.h"
 
 #include "DEG_depsgraph_build.h"
 
+#include "BLO_read_write.h"
+
 static CLG_LogRef LOG = {"bke.mask"};
+
+static void mask_copy_data(Main *UNUSED(bmain),
+                           ID *id_dst,
+                           const ID *id_src,
+                           const int UNUSED(flag))
+{
+  Mask *mask_dst = (Mask *)id_dst;
+  const Mask *mask_src = (const Mask *)id_src;
+
+  BLI_listbase_clear(&mask_dst->masklayers);
+
+  /* TODO add unused flag to those as well. */
+  BKE_mask_layer_copy_list(&mask_dst->masklayers, &mask_src->masklayers);
+
+  /* enable fake user by default */
+  id_fake_user_set(&mask_dst->id);
+}
+
+static void mask_free_data(ID *id)
+{
+  Mask *mask = (Mask *)id;
+
+  /* free mask data */
+  BKE_mask_layer_free_list(&mask->masklayers);
+}
+
+static void mask_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Mask *mask = (Mask *)id;
+
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    LISTBASE_FOREACH (MaskSpline *, mask_spline, &mask_layer->splines) {
+      for (int i = 0; i < mask_spline->tot_point; i++) {
+        MaskSplinePoint *point = &mask_spline->points[i];
+        BKE_LIB_FOREACHID_PROCESS_ID(data, point->parent.id, IDWALK_CB_USER);
+      }
+    }
+  }
+}
+
+static void mask_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Mask *mask = (Mask *)id;
+  if (mask->id.us > 0 || BLO_write_is_undo(writer)) {
+    MaskLayer *masklay;
+
+    BLO_write_id_struct(writer, Mask, id_address, &mask->id);
+    BKE_id_blend_write(writer, &mask->id);
+
+    if (mask->adt) {
+      BKE_animdata_blend_write(writer, mask->adt);
+    }
+
+    for (masklay = mask->masklayers.first; masklay; masklay = masklay->next) {
+      MaskSpline *spline;
+      MaskLayerShape *masklay_shape;
+
+      BLO_write_struct(writer, MaskLayer, masklay);
+
+      for (spline = masklay->splines.first; spline; spline = spline->next) {
+        int i;
+
+        void *points_deform = spline->points_deform;
+        spline->points_deform = NULL;
+
+        BLO_write_struct(writer, MaskSpline, spline);
+        BLO_write_struct_array(writer, MaskSplinePoint, spline->tot_point, spline->points);
+
+        spline->points_deform = points_deform;
+
+        for (i = 0; i < spline->tot_point; i++) {
+          MaskSplinePoint *point = &spline->points[i];
+
+          if (point->tot_uw) {
+            BLO_write_struct_array(writer, MaskSplinePointUW, point->tot_uw, point->uw);
+          }
+        }
+      }
+
+      for (masklay_shape = masklay->splines_shapes.first; masklay_shape;
+           masklay_shape = masklay_shape->next) {
+        BLO_write_struct(writer, MaskLayerShape, masklay_shape);
+        BLO_write_float_array(
+            writer, masklay_shape->tot_vert * MASK_OBJECT_SHAPE_ELEM_SIZE, masklay_shape->data);
+      }
+    }
+  }
+}
+
+static void mask_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Mask *mask = (Mask *)id;
+  BLO_read_data_address(reader, &mask->adt);
+
+  BLO_read_list(reader, &mask->masklayers);
+
+  LISTBASE_FOREACH (MaskLayer *, masklay, &mask->masklayers) {
+    /* can't use newdataadr since it's a pointer within an array */
+    MaskSplinePoint *act_point_search = NULL;
+
+    BLO_read_list(reader, &masklay->splines);
+
+    LISTBASE_FOREACH (MaskSpline *, spline, &masklay->splines) {
+      MaskSplinePoint *points_old = spline->points;
+
+      BLO_read_data_address(reader, &spline->points);
+
+      for (int i = 0; i < spline->tot_point; i++) {
+        MaskSplinePoint *point = &spline->points[i];
+
+        if (point->tot_uw) {
+          BLO_read_data_address(reader, &point->uw);
+        }
+      }
+
+      /* detect active point */
+      if ((act_point_search == NULL) && (masklay->act_point >= points_old) &&
+          (masklay->act_point < points_old + spline->tot_point)) {
+        act_point_search = &spline->points[masklay->act_point - points_old];
+      }
+    }
+
+    BLO_read_list(reader, &masklay->splines_shapes);
+
+    LISTBASE_FOREACH (MaskLayerShape *, masklay_shape, &masklay->splines_shapes) {
+      BLO_read_data_address(reader, &masklay_shape->data);
+
+      if (masklay_shape->tot_vert) {
+        if (BLO_read_requires_endian_switch(reader)) {
+          BLI_endian_switch_float_array(masklay_shape->data,
+                                        masklay_shape->tot_vert * sizeof(float) *
+                                            MASK_OBJECT_SHAPE_ELEM_SIZE);
+        }
+      }
+    }
+
+    BLO_read_data_address(reader, &masklay->act_spline);
+    masklay->act_point = act_point_search;
+  }
+}
+
+static void lib_link_mask_parent(BlendLibReader *reader, Mask *mask, MaskParent *parent)
+{
+  BLO_read_id_address(reader, mask->id.lib, &parent->id);
+}
+
+static void mask_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Mask *mask = (Mask *)id;
+  LISTBASE_FOREACH (MaskLayer *, masklay, &mask->masklayers) {
+    MaskSpline *spline;
+
+    spline = masklay->splines.first;
+    while (spline) {
+      for (int i = 0; i < spline->tot_point; i++) {
+        MaskSplinePoint *point = &spline->points[i];
+
+        lib_link_mask_parent(reader, mask, &point->parent);
+      }
+
+      lib_link_mask_parent(reader, mask, &spline->parent);
+
+      spline = spline->next;
+    }
+  }
+}
+
+static void expand_mask_parent(BlendExpander *expander, MaskParent *parent)
+{
+  if (parent->id) {
+    BLO_expand(expander, parent->id);
+  }
+}
+
+static void mask_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Mask *mask = (Mask *)id;
+  LISTBASE_FOREACH (MaskLayer *, mask_layer, &mask->masklayers) {
+    LISTBASE_FOREACH (MaskSpline *, spline, &mask_layer->splines) {
+      for (int i = 0; i < spline->tot_point; i++) {
+        MaskSplinePoint *point = &spline->points[i];
+        expand_mask_parent(expander, &point->parent);
+      }
+
+      expand_mask_parent(expander, &spline->parent);
+    }
+  }
+}
+
+IDTypeInfo IDType_ID_MSK = {
+    .id_code = ID_MSK,
+    .id_filter = FILTER_ID_MSK,
+    .main_listbase_index = INDEX_ID_MSK,
+    .struct_size = sizeof(Mask),
+    .name = "Mask",
+    .name_plural = "masks",
+    .translation_context = BLT_I18NCONTEXT_ID_MASK,
+    .flags = 0,
+
+    .init_data = NULL,
+    .copy_data = mask_copy_data,
+    .free_data = mask_free_data,
+    .make_local = NULL,
+    .foreach_id = mask_foreach_id,
+    .foreach_cache = NULL,
+    .owner_get = NULL,
+
+    .blend_write = mask_blend_write,
+    .blend_read_data = mask_blend_read_data,
+    .blend_read_lib = mask_blend_read_lib,
+    .blend_read_expand = mask_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
+};
 
 static struct {
   ListBase splines;
@@ -72,13 +288,11 @@ static MaskSplinePoint *mask_spline_point_next(MaskSpline *spline,
     if (spline->flag & MASK_SPLINE_CYCLIC) {
       return &points_array[0];
     }
-    else {
-      return NULL;
-    }
+
+    return NULL;
   }
-  else {
-    return point + 1;
-  }
+
+  return point + 1;
 }
 
 static MaskSplinePoint *mask_spline_point_prev(MaskSpline *spline,
@@ -89,13 +303,11 @@ static MaskSplinePoint *mask_spline_point_prev(MaskSpline *spline,
     if (spline->flag & MASK_SPLINE_CYCLIC) {
       return &points_array[spline->tot_point - 1];
     }
-    else {
-      return NULL;
-    }
+
+    return NULL;
   }
-  else {
-    return point - 1;
-  }
+
+  return point - 1;
 }
 
 BezTriple *BKE_mask_spline_point_next_bezt(MaskSpline *spline,
@@ -106,13 +318,11 @@ BezTriple *BKE_mask_spline_point_next_bezt(MaskSpline *spline,
     if (spline->flag & MASK_SPLINE_CYCLIC) {
       return &(points_array[0].bezt);
     }
-    else {
-      return NULL;
-    }
+
+    return NULL;
   }
-  else {
-    return &((point + 1))->bezt;
-  }
+
+  return &((point + 1))->bezt;
 }
 
 MaskSplinePoint *BKE_mask_spline_point_array(MaskSpline *spline)
@@ -142,10 +352,12 @@ MaskLayer *BKE_mask_layer_new(Mask *mask, const char *name)
 {
   MaskLayer *masklay = MEM_callocN(sizeof(MaskLayer), __func__);
 
-  if (name && name[0])
+  if (name && name[0]) {
     BLI_strncpy(masklay->name, name, sizeof(masklay->name));
-  else
+  }
+  else {
     strcpy(masklay->name, "MaskLayer");
+  }
 
   BLI_addtail(&mask->masklayers, masklay);
 
@@ -178,8 +390,9 @@ void BKE_mask_layer_remove(Mask *mask, MaskLayer *masklay)
 
   mask->masklay_tot--;
 
-  if (mask->masklay_act >= mask->masklay_tot)
+  if (mask->masklay_act >= mask->masklay_tot) {
     mask->masklay_act = mask->masklay_tot - 1;
+  }
 }
 
 void BKE_mask_layer_unique_name(Mask *mask, MaskLayer *masklay)
@@ -222,6 +435,16 @@ MaskLayer *BKE_mask_layer_copy(const MaskLayer *masklay)
     MaskSpline *spline_new = BKE_mask_spline_copy(spline);
 
     BLI_addtail(&masklay_new->splines, spline_new);
+
+    if (spline == masklay->act_spline) {
+      masklay_new->act_spline = spline_new;
+    }
+
+    if (masklay->act_point >= spline->points &&
+        masklay->act_point < spline->points + spline->tot_point) {
+      const size_t point_index = masklay->act_point - spline->points;
+      masklay_new->act_point = spline_new->points + point_index;
+    }
   }
 
   /* correct animation */
@@ -270,7 +493,10 @@ MaskSpline *BKE_mask_spline_add(MaskLayer *masklay)
   spline->tot_point = 1;
 
   /* cyclic shapes are more usually used */
-  // spline->flag |= MASK_SPLINE_CYCLIC; // disable because its not so nice for drawing. could be done differently
+  /* Disable because its not so nice for drawing. could be done differently. */
+#if 0
+  spline->flag |= MASK_SPLINE_CYCLIC;
+#endif
 
   spline->weight_interp = MASK_SPLINE_INTERP_EASE;
 
@@ -294,7 +520,6 @@ void BKE_mask_point_direction_switch(MaskSplinePoint *point)
 {
   const int tot_uw = point->tot_uw;
   const int tot_uw_half = tot_uw / 2;
-  int i;
 
   float co_tmp[2];
 
@@ -303,20 +528,20 @@ void BKE_mask_point_direction_switch(MaskSplinePoint *point)
   copy_v2_v2(point->bezt.vec[0], point->bezt.vec[2]);
   copy_v2_v2(point->bezt.vec[2], co_tmp);
   /* in this case the flags are unlikely to be different but swap anyway */
-  SWAP(char, point->bezt.f1, point->bezt.f3);
-  SWAP(char, point->bezt.h1, point->bezt.h2);
+  SWAP(uint8_t, point->bezt.f1, point->bezt.f3);
+  SWAP(uint8_t, point->bezt.h1, point->bezt.h2);
 
   /* swap UW's */
   if (tot_uw > 1) {
     /* count */
-    for (i = 0; i < tot_uw_half; i++) {
+    for (int i = 0; i < tot_uw_half; i++) {
       MaskSplinePointUW *uw_a = &point->uw[i];
       MaskSplinePointUW *uw_b = &point->uw[tot_uw - (i + 1)];
       SWAP(MaskSplinePointUW, *uw_a, *uw_b);
     }
   }
 
-  for (i = 0; i < tot_uw; i++) {
+  for (int i = 0; i < tot_uw; i++) {
     MaskSplinePointUW *uw = &point->uw[i];
     uw->u = 1.0f - uw->u;
   }
@@ -382,7 +607,7 @@ float BKE_mask_spline_project_co(MaskSpline *spline,
   float u = -1.0f, du = 1.0f / N, u1 = start_u, u2 = start_u;
   float ang = -1.0f;
 
-  BLI_assert(ABS(sign) <= 1); /* (-1, 0, 1) */
+  BLI_assert(abs(sign) <= 1); /* (-1, 0, 1) */
 
   while (u1 > 0.0f || u2 < 1.0f) {
     float n1[2], n2[2], co1[2], co2[2];
@@ -399,8 +624,9 @@ float BKE_mask_spline_project_co(MaskSpline *spline,
 
         if (len_squared_v2(v1) > proj_eps_sq) {
           ang1 = angle_v2v2(v1, n1);
-          if (ang1 > (float)M_PI / 2.0f)
+          if (ang1 > (float)M_PI / 2.0f) {
             ang1 = (float)M_PI - ang1;
+          }
 
           if (ang < 0.0f || ang1 < ang) {
             ang = ang1;
@@ -424,8 +650,9 @@ float BKE_mask_spline_project_co(MaskSpline *spline,
 
         if (len_squared_v2(v2) > proj_eps_sq) {
           ang2 = angle_v2v2(v2, n2);
-          if (ang2 > (float)M_PI / 2.0f)
+          if (ang2 > (float)M_PI / 2.0f) {
             ang2 = (float)M_PI - ang2;
+          }
 
           if (ang2 < ang) {
             ang = ang2;
@@ -448,9 +675,9 @@ float BKE_mask_spline_project_co(MaskSpline *spline,
 
 /* point */
 
-eMaskhandleMode BKE_mask_point_handles_mode_get(MaskSplinePoint *point)
+eMaskhandleMode BKE_mask_point_handles_mode_get(const MaskSplinePoint *point)
 {
-  BezTriple *bezt = &point->bezt;
+  const BezTriple *bezt = &point->bezt;
 
   if (bezt->h1 == bezt->h2 && bezt->h1 == HD_ALIGN) {
     return MASK_HANDLE_MODE_STICK;
@@ -459,23 +686,25 @@ eMaskhandleMode BKE_mask_point_handles_mode_get(MaskSplinePoint *point)
   return MASK_HANDLE_MODE_INDIVIDUAL_HANDLES;
 }
 
-void BKE_mask_point_handle(MaskSplinePoint *point, eMaskWhichHandle which_handle, float handle[2])
+void BKE_mask_point_handle(const MaskSplinePoint *point,
+                           eMaskWhichHandle which_handle,
+                           float r_handle[2])
 {
-  BezTriple *bezt = &point->bezt;
+  const BezTriple *bezt = &point->bezt;
 
   if (which_handle == MASK_WHICH_HANDLE_STICK) {
     float vec[2];
 
     sub_v2_v2v2(vec, bezt->vec[0], bezt->vec[1]);
 
-    handle[0] = (bezt->vec[1][0] + vec[1]);
-    handle[1] = (bezt->vec[1][1] - vec[0]);
+    r_handle[0] = (bezt->vec[1][0] + vec[1]);
+    r_handle[1] = (bezt->vec[1][1] - vec[0]);
   }
   else if (which_handle == MASK_WHICH_HANDLE_LEFT) {
-    copy_v2_v2(handle, bezt->vec[0]);
+    copy_v2_v2(r_handle, bezt->vec[0]);
   }
   else if (which_handle == MASK_WHICH_HANDLE_RIGHT) {
-    copy_v2_v2(handle, bezt->vec[2]);
+    copy_v2_v2(r_handle, bezt->vec[2]);
   }
   else {
     BLI_assert(!"Unknown handle passed to BKE_mask_point_handle");
@@ -552,7 +781,7 @@ void BKE_mask_point_segment_co(MaskSpline *spline, MaskSplinePoint *point, float
       co, bezt->vec[1], bezt->vec[2], bezt_next->vec[0], bezt_next->vec[1], u);
 }
 
-BLI_INLINE void orthogonal_direction_get(float vec[2], float result[2])
+BLI_INLINE void orthogonal_direction_get(const float vec[2], float result[2])
 {
   result[0] = -vec[1];
   result[1] = vec[0];
@@ -631,15 +860,14 @@ float BKE_mask_point_weight_scalar(MaskSpline *spline, MaskSplinePoint *point, c
   if (!bezt_next) {
     return bezt->weight;
   }
-  else if (u <= 0.0f) {
+  if (u <= 0.0f) {
     return bezt->weight;
   }
-  else if (u >= 1.0f) {
+  if (u >= 1.0f) {
     return bezt_next->weight;
   }
-  else {
-    return mask_point_interp_weight(bezt, bezt_next, u);
-  }
+
+  return mask_point_interp_weight(bezt, bezt_next, u);
 }
 
 float BKE_mask_point_weight(MaskSpline *spline, MaskSplinePoint *point, const float u)
@@ -652,53 +880,49 @@ float BKE_mask_point_weight(MaskSpline *spline, MaskSplinePoint *point, const fl
   if (!bezt_next) {
     return bezt->weight;
   }
-  else if (u <= 0.0f) {
+  if (u <= 0.0f) {
     return bezt->weight;
   }
-  else if (u >= 1.0f) {
+  if (u >= 1.0f) {
     return bezt_next->weight;
   }
-  else {
-    float cur_u = 0.0f, cur_w = 0.0f, next_u = 0.0f, next_w = 0.0f, fac; /* Quite warnings */
-    int i;
 
-    for (i = 0; i <= point->tot_uw; i++) {
+  float cur_u = 0.0f, cur_w = 0.0f, next_u = 0.0f, next_w = 0.0f, fac; /* Quite warnings */
 
-      if (i == 0) {
-        cur_u = 0.0f;
-        cur_w = 1.0f; /* mask_point_interp_weight will scale it */
-      }
-      else {
-        cur_u = point->uw[i - 1].u;
-        cur_w = point->uw[i - 1].w;
-      }
-
-      if (i == point->tot_uw) {
-        next_u = 1.0f;
-        next_w = 1.0f; /* mask_point_interp_weight will scale it */
-      }
-      else {
-        next_u = point->uw[i].u;
-        next_w = point->uw[i].w;
-      }
-
-      if (u >= cur_u && u <= next_u) {
-        break;
-      }
-    }
-
-    fac = (u - cur_u) / (next_u - cur_u);
-
-    cur_w *= mask_point_interp_weight(bezt, bezt_next, cur_u);
-    next_w *= mask_point_interp_weight(bezt, bezt_next, next_u);
-
-    if (spline->weight_interp == MASK_SPLINE_INTERP_EASE) {
-      return cur_w + (next_w - cur_w) * (3.0f * fac * fac - 2.0f * fac * fac * fac);
+  for (int i = 0; i <= point->tot_uw; i++) {
+    if (i == 0) {
+      cur_u = 0.0f;
+      cur_w = 1.0f; /* mask_point_interp_weight will scale it */
     }
     else {
-      return (1.0f - fac) * cur_w + fac * next_w;
+      cur_u = point->uw[i - 1].u;
+      cur_w = point->uw[i - 1].w;
+    }
+
+    if (i == point->tot_uw) {
+      next_u = 1.0f;
+      next_w = 1.0f; /* mask_point_interp_weight will scale it */
+    }
+    else {
+      next_u = point->uw[i].u;
+      next_w = point->uw[i].w;
+    }
+
+    if (u >= cur_u && u <= next_u) {
+      break;
     }
   }
+
+  fac = (u - cur_u) / (next_u - cur_u);
+
+  cur_w *= mask_point_interp_weight(bezt, bezt_next, cur_u);
+  next_w *= mask_point_interp_weight(bezt, bezt_next, next_u);
+
+  if (spline->weight_interp == MASK_SPLINE_INTERP_EASE) {
+    return cur_w + (next_w - cur_w) * (3.0f * fac * fac - 2.0f * fac * fac * fac);
+  }
+
+  return (1.0f - fac) * cur_w + fac * next_w;
 }
 
 MaskSplinePointUW *BKE_mask_point_sort_uw(MaskSplinePoint *point, MaskSplinePointUW *uw)
@@ -728,10 +952,12 @@ MaskSplinePointUW *BKE_mask_point_sort_uw(MaskSplinePoint *point, MaskSplinePoin
 
 void BKE_mask_point_add_uw(MaskSplinePoint *point, float u, float w)
 {
-  if (!point->uw)
+  if (!point->uw) {
     point->uw = MEM_mallocN(sizeof(*point->uw), "mask point uw");
-  else
+  }
+  else {
     point->uw = MEM_reallocN(point->uw, (point->tot_uw + 1) * sizeof(*point->uw));
+  }
 
   point->uw[point->tot_uw].u = u;
   point->uw[point->tot_uw].w = w;
@@ -744,8 +970,6 @@ void BKE_mask_point_add_uw(MaskSplinePoint *point, float u, float w)
 
 void BKE_mask_point_select_set(MaskSplinePoint *point, const bool do_select)
 {
-  int i;
-
   if (do_select) {
     MASKPOINT_SEL_ALL(point);
   }
@@ -753,7 +977,7 @@ void BKE_mask_point_select_set(MaskSplinePoint *point, const bool do_select)
     MASKPOINT_DESEL_ALL(point);
   }
 
-  for (i = 0; i < point->tot_uw; i++) {
+  for (int i = 0; i < point->tot_uw; i++) {
     if (do_select) {
       point->uw[i].flag |= SELECT;
     }
@@ -816,10 +1040,12 @@ Mask *BKE_mask_new(Main *bmain, const char *name)
   Mask *mask;
   char mask_name[MAX_ID_NAME - 2];
 
-  if (name && name[0])
+  if (name && name[0]) {
     BLI_strncpy(mask_name, name, sizeof(mask_name));
-  else
+  }
+  else {
     strcpy(mask_name, "Mask");
+  }
 
   mask = mask_alloc(bmain, mask_name);
 
@@ -832,65 +1058,11 @@ Mask *BKE_mask_new(Main *bmain, const char *name)
   return mask;
 }
 
-/* TODO(sergey): Use generic BKE_libblock_copy_nolib() instead. */
-/* TODO(bastien): Use new super cool & generic BKE_id_copy_ex() instead! */
-Mask *BKE_mask_copy_nolib(Mask *mask)
-{
-  Mask *mask_new;
-
-  mask_new = MEM_dupallocN(mask);
-
-  /*take care here! - we may want to copy anim data  */
-  mask_new->adt = NULL;
-
-  BLI_listbase_clear(&mask_new->masklayers);
-
-  BKE_mask_layer_copy_list(&mask_new->masklayers, &mask->masklayers);
-
-  /* enable fake user by default */
-  id_fake_user_set(&mask->id);
-
-  return mask_new;
-}
-
-/**
- * Only copy internal data of Mask ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_mask_copy_data(Main *UNUSED(bmain),
-                        Mask *mask_dst,
-                        const Mask *mask_src,
-                        const int UNUSED(flag))
-{
-  BLI_listbase_clear(&mask_dst->masklayers);
-
-  BKE_mask_layer_copy_list(&mask_dst->masklayers,
-                           &mask_src->masklayers); /* TODO add unused flag to those as well. */
-
-  /* enable fake user by default */
-  id_fake_user_set(&mask_dst->id);
-}
-
-Mask *BKE_mask_copy(Main *bmain, const Mask *mask)
-{
-  Mask *mask_copy;
-  BKE_id_copy(bmain, &mask->id, (ID **)&mask_copy);
-  return mask_copy;
-}
-
-void BKE_mask_make_local(Main *bmain, Mask *mask, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &mask->id, true, lib_local);
-}
-
 void BKE_mask_point_free(MaskSplinePoint *point)
 {
-  if (point->uw)
+  if (point->uw) {
     MEM_freeN(point->uw);
+  }
 }
 
 void BKE_mask_spline_free(MaskSpline *spline)
@@ -932,16 +1104,14 @@ void BKE_mask_spline_free_list(ListBase *splines)
 
 static MaskSplinePoint *mask_spline_points_copy(const MaskSplinePoint *points, int tot_point)
 {
-  MaskSplinePoint *npoints;
-  int i;
+  MaskSplinePoint *npoints = MEM_dupallocN(points);
 
-  npoints = MEM_dupallocN(points);
-
-  for (i = 0; i < tot_point; i++) {
+  for (int i = 0; i < tot_point; i++) {
     MaskSplinePoint *point = &npoints[i];
 
-    if (point->uw)
+    if (point->uw) {
       point->uw = MEM_dupallocN(point->uw);
+    }
   }
 
   return npoints;
@@ -1028,15 +1198,6 @@ void BKE_mask_layer_free_list(ListBase *masklayers)
 
     masklay = masklay_next;
   }
-}
-
-/** Free (or release) any data used by this mask (does not free the mask itself). */
-void BKE_mask_free(Mask *mask)
-{
-  BKE_animdata_free((ID *)mask, false);
-
-  /* free mask data */
-  BKE_mask_layer_free_list(&mask->masklayers);
 }
 
 void BKE_mask_coord_from_frame(float r_co[2], const float co[2], const float frame_size[2])
@@ -1212,13 +1373,15 @@ static void mask_calc_point_handle(MaskSplinePoint *point,
 {
   BezTriple *bezt = &point->bezt;
   BezTriple *bezt_prev = NULL, *bezt_next = NULL;
-  //int handle_type = bezt->h1;
+  // int handle_type = bezt->h1;
 
-  if (point_prev)
+  if (point_prev) {
     bezt_prev = &point_prev->bezt;
+  }
 
-  if (point_next)
+  if (point_next) {
     bezt_next = &point_next->bezt;
+  }
 
 #if 1
   if (bezt_prev || bezt_next) {
@@ -1388,8 +1551,7 @@ void BKE_mask_layer_calc_handles(MaskLayer *masklay)
 {
   MaskSpline *spline;
   for (spline = masklay->splines.first; spline; spline = spline->next) {
-    int i;
-    for (i = 0; i < spline->tot_point; i++) {
+    for (int i = 0; i < spline->tot_point; i++) {
       BKE_mask_calc_handle_point(spline, &spline->points[i]);
     }
   }
@@ -1404,9 +1566,7 @@ void BKE_mask_spline_ensure_deform(MaskSpline *spline)
     // printf("alloc new deform spline\n");
 
     if (spline->points_deform) {
-      int i;
-
-      for (i = 0; i < allocated_points; i++) {
+      for (int i = 0; i < allocated_points; i++) {
         MaskSplinePoint *point = &spline->points_deform[i];
         BKE_mask_point_free(point);
       }
@@ -1441,22 +1601,6 @@ void BKE_mask_evaluate(Mask *mask, const float ctime, const bool do_newframe)
   }
 }
 
-/* the purpose of this function is to ensure spline->points_deform is never out of date.
- * for now re-evaluate all. eventually this might work differently */
-void BKE_mask_update_display(Mask *mask, float ctime)
-{
-  BKE_mask_evaluate(mask, ctime, false);
-}
-
-void BKE_mask_evaluate_all_masks(Main *bmain, float ctime, const bool do_newframe)
-{
-  Mask *mask;
-
-  for (mask = bmain->masks.first; mask; mask = mask->id.next) {
-    BKE_mask_evaluate(mask, ctime, do_newframe);
-  }
-}
-
 void BKE_mask_parent_init(MaskParent *parent)
 {
   parent->id_type = ID_MC;
@@ -1487,7 +1631,8 @@ static void mask_layer_shape_from_mask_point(BezTriple *bezt,
   fp[7] = bezt->radius;
 }
 
-static void mask_layer_shape_to_mask_point(BezTriple *bezt, float fp[MASK_OBJECT_SHAPE_ELEM_SIZE])
+static void mask_layer_shape_to_mask_point(BezTriple *bezt,
+                                           const float fp[MASK_OBJECT_SHAPE_ELEM_SIZE])
 {
   copy_v2_v2(bezt->vec[0], &fp[0]);
   copy_v2_v2(bezt->vec[1], &fp[2]);
@@ -1506,8 +1651,7 @@ void BKE_mask_layer_shape_from_mask(MaskLayer *masklay, MaskLayerShape *masklay_
 
     MaskSpline *spline;
     for (spline = masklay->splines.first; spline; spline = spline->next) {
-      int i;
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         mask_layer_shape_from_mask_point(&spline->points[i].bezt, fp);
         fp += MASK_OBJECT_SHAPE_ELEM_SIZE;
       }
@@ -1531,8 +1675,7 @@ void BKE_mask_layer_shape_to_mask(MaskLayer *masklay, MaskLayerShape *masklay_sh
 
     MaskSpline *spline;
     for (spline = masklay->splines.first; spline; spline = spline->next) {
-      int i;
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         mask_layer_shape_to_mask_point(&spline->points[i].bezt, fp);
         fp += MASK_OBJECT_SHAPE_ELEM_SIZE;
       }
@@ -1568,8 +1711,7 @@ void BKE_mask_layer_shape_to_mask_interp(MaskLayer *masklay,
 
     MaskSpline *spline;
     for (spline = masklay->splines.first; spline; spline = spline->next) {
-      int i;
-      for (i = 0; i < spline->tot_point; i++) {
+      for (int i = 0; i < spline->tot_point; i++) {
         BezTriple *bezt = &spline->points[i].bezt;
         /* *** BKE_mask_layer_shape_from_mask - swapped *** */
         interp_v2_v2v2_flfl(bezt->vec[0], fp_a, fp_b, fac, ifac);
@@ -1608,7 +1750,7 @@ MaskLayerShape *BKE_mask_layer_shape_find_frame(MaskLayer *masklay, const int fr
     if (frame == masklay_shape->frame) {
       return masklay_shape;
     }
-    else if (frame < masklay_shape->frame) {
+    if (frame < masklay_shape->frame) {
       break;
     }
   }
@@ -1616,7 +1758,9 @@ MaskLayerShape *BKE_mask_layer_shape_find_frame(MaskLayer *masklay, const int fr
   return NULL;
 }
 
-/* when returning 2 - the frame isnt found but before/after frames are */
+/**
+ * When returning 2 - the frame isn't found but before/after frames are.
+ */
 int BKE_mask_layer_shape_find_frame_range(MaskLayer *masklay,
                                           const float frame,
                                           MaskLayerShape **r_masklay_shape_a,
@@ -1631,17 +1775,16 @@ int BKE_mask_layer_shape_find_frame_range(MaskLayer *masklay,
       *r_masklay_shape_b = NULL;
       return 1;
     }
-    else if (frame < masklay_shape->frame) {
+    if (frame < masklay_shape->frame) {
       if (masklay_shape->prev) {
         *r_masklay_shape_a = masklay_shape->prev;
         *r_masklay_shape_b = masklay_shape;
         return 2;
       }
-      else {
-        *r_masklay_shape_a = masklay_shape;
-        *r_masklay_shape_b = NULL;
-        return 1;
-      }
+
+      *r_masklay_shape_a = masklay_shape;
+      *r_masklay_shape_b = NULL;
+      return 1;
     }
   }
 
@@ -1650,12 +1793,11 @@ int BKE_mask_layer_shape_find_frame_range(MaskLayer *masklay,
     *r_masklay_shape_b = NULL;
     return 1;
   }
-  else {
-    *r_masklay_shape_a = NULL;
-    *r_masklay_shape_b = NULL;
 
-    return 0;
-  }
+  *r_masklay_shape_a = NULL;
+  *r_masklay_shape_b = NULL;
+
+  return 0;
 }
 
 MaskLayerShape *BKE_mask_layer_shape_verify_frame(MaskLayer *masklay, const int frame)
@@ -1699,12 +1841,14 @@ static int mask_layer_shape_sort_cb(const void *masklay_shape_a_ptr,
   const MaskLayerShape *masklay_shape_a = masklay_shape_a_ptr;
   const MaskLayerShape *masklay_shape_b = masklay_shape_b_ptr;
 
-  if (masklay_shape_a->frame < masklay_shape_b->frame)
+  if (masklay_shape_a->frame < masklay_shape_b->frame) {
     return -1;
-  else if (masklay_shape_a->frame > masklay_shape_b->frame)
+  }
+  if (masklay_shape_a->frame > masklay_shape_b->frame) {
     return 1;
-  else
-    return 0;
+  }
+
+  return 0;
 }
 
 void BKE_mask_layer_shape_sort(MaskLayer *masklay)
@@ -1749,12 +1893,19 @@ static void interp_weights_uv_v2_calc(float r_uv[2],
                                       const float pt_a[2],
                                       const float pt_b[2])
 {
+  const float segment_len = len_v2v2(pt_a, pt_b);
+  if (segment_len == 0.0f) {
+    r_uv[0] = 1.0f;
+    r_uv[1] = 0.0f;
+    return;
+  }
+
   float pt_on_line[2];
   r_uv[0] = closest_to_line_v2(pt_on_line, pt, pt_a, pt_b);
-  r_uv[1] = (len_v2v2(pt_on_line, pt) / len_v2v2(pt_a, pt_b)) *
-            ((line_point_side_v2(pt_a, pt_b, pt) < 0.0f) ?
-                 -1.0f :
-                 1.0f); /* this line only sets the sign */
+
+  r_uv[1] = (len_v2v2(pt_on_line, pt) / segment_len) *
+            /* This line only sets the sign. */
+            ((line_point_side_v2(pt_a, pt_b, pt) < 0.0f) ? -1.0f : 1.0f);
 }
 
 static void interp_weights_uv_v2_apply(const float uv[2],
@@ -1786,7 +1937,8 @@ void BKE_mask_layer_shape_changed_add(MaskLayer *masklay,
 
   if (BKE_mask_layer_shape_spline_from_index(masklay, index, &spline, &spline_point_index)) {
     /* sanity check */
-    /* the point has already been removed in this array so subtract one when comparing with the shapes */
+    /* The point has already been removed in this array
+     * so subtract one when comparing with the shapes. */
     int tot = BKE_mask_layer_shape_totvert(masklay) - 1;
 
     /* for interpolation */
@@ -1801,9 +1953,8 @@ void BKE_mask_layer_shape_changed_add(MaskLayer *masklay,
     const int pi_prev_abs = pi_prev + index_offset;
     const int pi_next_abs = pi_next + index_offset;
 
-    int i;
     if (do_init_interpolate) {
-      for (i = 0; i < 3; i++) {
+      for (int i = 0; i < 3; i++) {
         interp_weights_uv_v2_calc(uv[i],
                                   spline->points[pi_curr].bezt.vec[i],
                                   spline->points[pi_prev].bezt.vec[i],
@@ -1838,7 +1989,7 @@ void BKE_mask_layer_shape_changed_add(MaskLayer *masklay,
           mask_layer_shape_from_mask_point(&spline->points[spline_point_index].bezt, fp);
 
           if (do_init_interpolate && spline->tot_point > 2) {
-            for (i = 0; i < 3; i++) {
+            for (int i = 0; i < 3; i++) {
               interp_weights_uv_v2_apply(
                   uv[i],
                   &fp[i * 2],
@@ -1953,8 +2104,7 @@ void BKE_mask_clipboard_copy_from_layer(MaskLayer *mask_layer)
   for (spline = mask_layer->splines.first; spline; spline = spline->next) {
     if (spline->flag & SELECT) {
       MaskSpline *spline_new = BKE_mask_spline_copy(spline);
-      int i;
-      for (i = 0; i < spline_new->tot_point; i++) {
+      for (int i = 0; i < spline_new->tot_point; i++) {
         MaskSplinePoint *point = &spline_new->points[i];
         if (point->parent.id) {
           if (!BLI_ghash_lookup(mask_clipboard.id_hash, point->parent.id)) {
@@ -1984,9 +2134,8 @@ void BKE_mask_clipboard_paste_to_layer(Main *bmain, MaskLayer *mask_layer)
 
   for (spline = mask_clipboard.splines.first; spline; spline = spline->next) {
     MaskSpline *spline_new = BKE_mask_spline_copy(spline);
-    int i;
 
-    for (i = 0; i < spline_new->tot_point; i++) {
+    for (int i = 0; i < spline_new->tot_point; i++) {
       MaskSplinePoint *point = &spline_new->points[i];
       if (point->parent.id) {
         const char *id_name = BLI_ghash_lookup(mask_clipboard.id_hash, point->parent.id);

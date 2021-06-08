@@ -25,7 +25,7 @@ CCL_NAMESPACE_BEGIN
 ccl_device void kernel_shader_setup(KernelGlobals *kg,
                                     ccl_local_param unsigned int *local_queue_atomics)
 {
-  /* Enqeueue RAY_TO_REGENERATE rays into QUEUE_HITBG_BUFF_UPDATE_TOREGEN_RAYS queue. */
+  /* Enqueue RAY_TO_REGENERATE rays into QUEUE_HITBG_BUFF_UPDATE_TOREGEN_RAYS queue. */
   if (ccl_local_id(0) == 0 && ccl_local_id(1) == 0) {
     *local_queue_atomics = 0;
   }
@@ -33,18 +33,16 @@ ccl_device void kernel_shader_setup(KernelGlobals *kg,
 
   int ray_index = ccl_global_id(1) * ccl_global_size(0) + ccl_global_id(0);
   int queue_index = kernel_split_params.queue_index[QUEUE_ACTIVE_AND_REGENERATED_RAYS];
-  if (ray_index >= queue_index) {
-    return;
+  if (ray_index < queue_index) {
+    ray_index = get_ray_index(kg,
+                              ray_index,
+                              QUEUE_ACTIVE_AND_REGENERATED_RAYS,
+                              kernel_split_state.queue_data,
+                              kernel_split_params.queue_size,
+                              0);
   }
-  ray_index = get_ray_index(kg,
-                            ray_index,
-                            QUEUE_ACTIVE_AND_REGENERATED_RAYS,
-                            kernel_split_state.queue_data,
-                            kernel_split_params.queue_size,
-                            0);
-
-  if (ray_index == QUEUE_EMPTY_SLOT) {
-    return;
+  else {
+    ray_index = QUEUE_EMPTY_SLOT;
   }
 
   char enqueue_flag = (IS_STATE(kernel_split_state.ray_state, ray_index, RAY_TO_REGENERATE)) ? 1 :

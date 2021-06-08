@@ -96,9 +96,7 @@ static void quad_verts_to_barycentric_tri(float tri[3][3],
 #endif
 
 /* -------------------------------------------------------------------- */
-/* Handle Loop Pairs */
-
-/** \name Loop Pairs
+/** \name Handle Loop Pairs
  * \{ */
 
 /**
@@ -126,7 +124,7 @@ static void bm_loop_pair_from_verts(BMVert *v_a, BMVert *v_b, BMLoop *l_pair[2])
 /**
  * Copy loop pair from one side to the other if either is missing,
  * this simplifies interpolation code so we only need to check if x/y are missing,
- * rather then checking each loop.
+ * rather than checking each loop.
  */
 static void bm_loop_pair_test_copy(BMLoop *l_pair_a[2], BMLoop *l_pair_b[2])
 {
@@ -205,7 +203,7 @@ static void barycentric_weights_v2_grid_cache(const uint xtot,
 static void bm_grid_fill_array(BMesh *bm,
                                BMVert **v_grid,
                                const uint xtot,
-                               unsigned const int ytot,
+                               const uint ytot,
                                const short mat_nr,
                                const bool use_smooth,
                                const bool use_flip,
@@ -328,8 +326,8 @@ static void bm_grid_fill_array(BMesh *bm,
       v = BM_vert_create(bm, co, NULL, BM_CREATE_NOP);
       v_grid[(y * xtot) + x] = v;
 
-      /* interpolate only along one axis, this could be changed
-       * but from user pov gives predictable results since these are selected loop */
+      /* Interpolate only along one axis, this could be changed
+       * but from user POV gives predictable results since these are selected loop. */
       if (use_vert_interp) {
         const float *w = weight_table[XY(x, y)];
 
@@ -485,7 +483,7 @@ static void bm_grid_fill(BMesh *bm,
 
   const uint xtot = (uint)BM_edgeloop_length_get(estore_a);
   const uint ytot = (uint)BM_edgeloop_length_get(estore_rail_a);
-  //BMVert *v;
+  // BMVert *v;
   uint i;
 #ifdef DEBUG
   uint x, y;
@@ -588,8 +586,8 @@ static bool bm_edge_test_cb(BMEdge *e, void *bm_v)
 
 static bool bm_edge_test_rail_cb(BMEdge *e, void *UNUSED(bm_v))
 {
-  /* normally operators dont check for hidden state
-   * but alternative would be to pass slot of rail edges */
+  /* Normally operators don't check for hidden state
+   * but alternative would be to pass slot of rail edges. */
   if (BM_elem_flag_test(e, BM_ELEM_HIDDEN)) {
     return false;
   }
@@ -616,7 +614,14 @@ void bmo_grid_fill_exec(BMesh *bm, BMOperator *op)
   count = BM_mesh_edgeloops_find(bm, &eloops, bm_edge_test_cb, (void *)bm);
 
   if (count != 2) {
-    BMO_error_raise(bm, op, BMERR_INVALID_SELECTION, "Select two edge loops");
+    /* Note that this error message has been adjusted to make sense when called
+     * from the operator 'MESH_OT_fill_grid' which has a 'prepare' pass which can
+     * extract two 'rail' loops from a single edge loop, see T72075. */
+    BMO_error_raise(bm,
+                    op,
+                    BMERR_INVALID_SELECTION,
+                    "Select two edge loops "
+                    "or a single closed edge loop from which two edge loops can be calculated");
     goto cleanup;
   }
 
@@ -682,8 +687,10 @@ void bmo_grid_fill_exec(BMesh *bm, BMOperator *op)
 
   /* add vertices if needed */
   {
-    struct BMEdgeLoopStore *estore_pairs[2][2] = {{estore_a, estore_b},
-                                                  {estore_rail_a, estore_rail_b}};
+    struct BMEdgeLoopStore *estore_pairs[2][2] = {
+        {estore_a, estore_b},
+        {estore_rail_a, estore_rail_b},
+    };
     int i;
 
     for (i = 0; i < 2; i++) {

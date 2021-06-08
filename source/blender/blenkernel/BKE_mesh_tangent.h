@@ -13,12 +13,17 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_MESH_TANGENT_H__
-#define __BKE_MESH_TANGENT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct ReportList;
 
 void BKE_mesh_calc_loop_tangent_single_ex(const struct MVert *mverts,
                                           const int numVerts,
@@ -78,4 +83,6 @@ void BKE_mesh_calc_loop_tangent_step_0(const struct CustomData *loopData,
                                        char *rren_uv_name,
                                        short *rtangent_mask);
 
-#endif /* __BKE_MESH_TANGENT_H__ */
+#ifdef __cplusplus
+}
+#endif

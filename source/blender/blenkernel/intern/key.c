@@ -22,18 +22,23 @@
  */
 
 #include <math.h>
-#include <string.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
+#include "BLI_endian_switch.h"
 #include "BLI_math_vector.h"
 #include "BLI_string_utils.h"
 #include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
+#include "DNA_ID.h"
 #include "DNA_anim_types.h"
 #include "DNA_key_types.h"
 #include "DNA_lattice_types.h"
@@ -42,28 +47,197 @@
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_animsys.h"
+#include "BKE_anim_data.h"
 #include "BKE_curve.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
+#include "BKE_editmesh.h"
+#include "BKE_idtype.h"
 #include "BKE_key.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_mesh.h"
-#include "BKE_editmesh.h"
 #include "BKE_scene.h"
 
 #include "RNA_access.h"
 
-#define KEY_MODE_DUMMY 0 /* use where mode isn't checked for */
-#define KEY_MODE_BPOINT 1
-#define KEY_MODE_BEZTRIPLE 2
+#include "BLO_read_write.h"
+
+static void shapekey_copy_data(Main *UNUSED(bmain),
+                               ID *id_dst,
+                               const ID *id_src,
+                               const int UNUSED(flag))
+{
+  Key *key_dst = (Key *)id_dst;
+  const Key *key_src = (const Key *)id_src;
+  BLI_duplicatelist(&key_dst->block, &key_src->block);
+
+  KeyBlock *kb_dst, *kb_src;
+  for (kb_src = key_src->block.first, kb_dst = key_dst->block.first; kb_dst;
+       kb_src = kb_src->next, kb_dst = kb_dst->next) {
+    if (kb_dst->data) {
+      kb_dst->data = MEM_dupallocN(kb_dst->data);
+    }
+    if (kb_src == key_src->refkey) {
+      key_dst->refkey = kb_dst;
+    }
+  }
+}
+
+static void shapekey_free_data(ID *id)
+{
+  Key *key = (Key *)id;
+  KeyBlock *kb;
+
+  while ((kb = BLI_pophead(&key->block))) {
+    if (kb->data) {
+      MEM_freeN(kb->data);
+    }
+    MEM_freeN(kb);
+  }
+}
+
+static void shapekey_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Key *key = (Key *)id;
+  BKE_LIB_FOREACHID_PROCESS_ID(data, key->from, IDWALK_CB_LOOPBACK);
+}
+
+static ID *shapekey_owner_get(Main *UNUSED(bmain), ID *id)
+{
+  return ((Key *)id)->from;
+}
+
+static void shapekey_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Key *key = (Key *)id;
+  const bool is_undo = BLO_write_is_undo(writer);
+  if (key->id.us > 0 || is_undo) {
+    /* write LibData */
+    BLO_write_id_struct(writer, Key, id_address, &key->id);
+    BKE_id_blend_write(writer, &key->id);
+
+    if (key->adt) {
+      BKE_animdata_blend_write(writer, key->adt);
+    }
+
+    /* direct data */
+    LISTBASE_FOREACH (KeyBlock *, kb, &key->block) {
+      KeyBlock tmp_kb = *kb;
+      /* Do not store actual geometry data in case this is a library override ID. */
+      if (ID_IS_OVERRIDE_LIBRARY(key) && !is_undo) {
+        tmp_kb.totelem = 0;
+        tmp_kb.data = NULL;
+      }
+      BLO_write_struct_at_address(writer, KeyBlock, kb, &tmp_kb);
+      if (tmp_kb.data != NULL) {
+        BLO_write_raw(writer, tmp_kb.totelem * key->elemsize, tmp_kb.data);
+      }
+    }
+  }
+}
 
 /* old defines from DNA_ipo_types.h for data-type, stored in DNA - don't modify! */
 #define IPO_FLOAT 4
 #define IPO_BEZTRIPLE 100
 #define IPO_BPOINT 101
+
+static void switch_endian_keyblock(Key *key, KeyBlock *kb)
+{
+  int elemsize = key->elemsize;
+  char *data = kb->data;
+
+  for (int a = 0; a < kb->totelem; a++) {
+    const char *cp = key->elemstr;
+    char *poin = data;
+
+    while (cp[0]) {    /* cp[0] == amount */
+      switch (cp[1]) { /* cp[1] = type */
+        case IPO_FLOAT:
+        case IPO_BPOINT:
+        case IPO_BEZTRIPLE: {
+          int b = cp[0];
+          BLI_endian_switch_float_array((float *)poin, b);
+          poin += sizeof(float) * b;
+          break;
+        }
+      }
+
+      cp += 2;
+    }
+    data += elemsize;
+  }
+}
+
+static void shapekey_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Key *key = (Key *)id;
+  BLO_read_list(reader, &(key->block));
+
+  BLO_read_data_address(reader, &key->adt);
+  BKE_animdata_blend_read_data(reader, key->adt);
+
+  BLO_read_data_address(reader, &key->refkey);
+
+  LISTBASE_FOREACH (KeyBlock *, kb, &key->block) {
+    BLO_read_data_address(reader, &kb->data);
+
+    if (BLO_read_requires_endian_switch(reader)) {
+      switch_endian_keyblock(key, kb);
+    }
+  }
+}
+
+static void shapekey_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Key *key = (Key *)id;
+  BLI_assert((key->id.tag & LIB_TAG_EXTERN) == 0);
+
+  BLO_read_id_address(reader, key->id.lib, &key->ipo); /* XXX deprecated - old animation system */
+  BLO_read_id_address(reader, key->id.lib, &key->from);
+}
+
+static void shapekey_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Key *key = (Key *)id;
+  BLO_expand(expander, key->ipo); /* XXX deprecated - old animation system */
+}
+
+IDTypeInfo IDType_ID_KE = {
+    .id_code = ID_KE,
+    .id_filter = 0,
+    .main_listbase_index = INDEX_ID_KE,
+    .struct_size = sizeof(Key),
+    .name = "Key",
+    .name_plural = "shape_keys",
+    .translation_context = BLT_I18NCONTEXT_ID_SHAPEKEY,
+    .flags = IDTYPE_FLAGS_NO_LIBLINKING | IDTYPE_FLAGS_NO_MAKELOCAL,
+
+    .init_data = NULL,
+    .copy_data = shapekey_copy_data,
+    .free_data = shapekey_free_data,
+    .make_local = NULL,
+    .foreach_id = shapekey_foreach_id,
+    .foreach_cache = NULL,
+    /* A bit weird, due to shapekeys not being strictly speaking embedded data... But they also
+     * share a lot with those (non linkable, only ever used by one owner ID, etc.). */
+    .owner_get = shapekey_owner_get,
+
+    .blend_write = shapekey_blend_write,
+    .blend_read_data = shapekey_blend_read_data,
+    .blend_read_lib = shapekey_blend_read_lib,
+    .blend_read_expand = shapekey_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
+};
+
+#define KEY_MODE_DUMMY 0 /* use where mode isn't checked for */
+#define KEY_MODE_BPOINT 1
+#define KEY_MODE_BEZTRIPLE 2
 
 /* Internal use only. */
 typedef struct WeightsArrayCache {
@@ -74,15 +248,7 @@ typedef struct WeightsArrayCache {
 /** Free (or release) any data used by this shapekey (does not free the key itself). */
 void BKE_key_free(Key *key)
 {
-  KeyBlock *kb;
-
-  BKE_animdata_free((ID *)key, false);
-
-  while ((kb = BLI_pophead(&key->block))) {
-    if (kb->data)
-      MEM_freeN(kb->data);
-    MEM_freeN(kb);
-  }
+  shapekey_free_data(&key->id);
 }
 
 void BKE_key_free_nolib(Key *key)
@@ -90,8 +256,9 @@ void BKE_key_free_nolib(Key *key)
   KeyBlock *kb;
 
   while ((kb = BLI_pophead(&key->block))) {
-    if (kb->data)
+    if (kb->data) {
       MEM_freeN(kb->data);
+    }
     MEM_freeN(kb);
   }
 }
@@ -101,7 +268,7 @@ Key *BKE_key_add(Main *bmain, ID *id) /* common function */
   Key *key;
   char *el;
 
-  key = BKE_libblock_alloc(bmain, ID_KE, "Key", 0);
+  key = BKE_id_new(bmain, ID_KE, "Key");
 
   key->type = KEY_NORMAL;
   key->from = id;
@@ -148,68 +315,6 @@ Key *BKE_key_add(Main *bmain, ID *id) /* common function */
   return key;
 }
 
-/**
- * Only copy internal data of ShapeKey ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_key_copy_data(Main *UNUSED(bmain),
-                       Key *key_dst,
-                       const Key *key_src,
-                       const int UNUSED(flag))
-{
-  BLI_duplicatelist(&key_dst->block, &key_src->block);
-
-  KeyBlock *kb_dst, *kb_src;
-  for (kb_src = key_src->block.first, kb_dst = key_dst->block.first; kb_dst;
-       kb_src = kb_src->next, kb_dst = kb_dst->next) {
-    if (kb_dst->data) {
-      kb_dst->data = MEM_dupallocN(kb_dst->data);
-    }
-    if (kb_src == key_src->refkey) {
-      key_dst->refkey = kb_dst;
-    }
-  }
-}
-
-Key *BKE_key_copy(Main *bmain, const Key *key)
-{
-  Key *key_copy;
-  BKE_id_copy(bmain, &key->id, (ID **)&key_copy);
-  return key_copy;
-}
-
-/* XXX TODO get rid of this! */
-Key *BKE_key_copy_nolib(Key *key)
-{
-  Key *keyn;
-  KeyBlock *kbn, *kb;
-
-  keyn = MEM_dupallocN(key);
-
-  keyn->adt = NULL;
-
-  BLI_duplicatelist(&keyn->block, &key->block);
-
-  kb = key->block.first;
-  kbn = keyn->block.first;
-  while (kbn) {
-
-    if (kbn->data)
-      kbn->data = MEM_dupallocN(kbn->data);
-    if (kb == key->refkey)
-      keyn->refkey = kbn;
-
-    kbn = kbn->next;
-    kb = kb->next;
-  }
-
-  return keyn;
-}
-
 /* Sort shape keys and Ipo curves after a change.  This assumes that at most
  * one key was moved, which is a valid assumption for the places it's
  * currently being called.
@@ -221,9 +326,11 @@ void BKE_key_sort(Key *key)
   KeyBlock *kb2;
 
   /* locate the key which is out of position */
-  for (kb = key->block.first; kb; kb = kb->next)
-    if ((kb->next) && (kb->pos > kb->next->pos))
+  for (kb = key->block.first; kb; kb = kb->next) {
+    if ((kb->next) && (kb->pos > kb->next->pos)) {
       break;
+    }
+  }
 
   /* if we find a key, move it */
   if (kb) {
@@ -372,27 +479,32 @@ static int setkeys(float fac, ListBase *lb, KeyBlock *k[], float t[4], int cycl)
   lastpos = k1->pos;
   dpos = lastpos - firstkey->pos;
 
-  if (fac < firstkey->pos)
+  if (fac < firstkey->pos) {
     fac = firstkey->pos;
-  else if (fac > k1->pos)
+  }
+  else if (fac > k1->pos) {
     fac = k1->pos;
+  }
 
   k1 = k[0] = k[1] = k[2] = k[3] = firstkey;
   t[0] = t[1] = t[2] = t[3] = k1->pos;
 
   /* if (fac < 0.0 || fac > 1.0) return 1; */
 
-  if (k1->next == NULL)
+  if (k1->next == NULL) {
     return 1;
+  }
 
   if (cycl) { /* pre-sort */
     k[2] = k1->next;
     k[3] = k[2]->next;
-    if (k[3] == NULL)
+    if (k[3] == NULL) {
       k[3] = k1;
+    }
     while (k1) {
-      if (k1->next == NULL)
+      if (k1->next == NULL) {
         k[0] = k1;
+      }
       k1 = k1->next;
     }
     /* k1 = k[1]; */ /* UNUSED */
@@ -406,16 +518,18 @@ static int setkeys(float fac, ListBase *lb, KeyBlock *k[], float t[4], int cycl)
       t[3] += dpos;
       ofs = 2.0f * dpos;
     }
-    if (fac < t[1])
+    if (fac < t[1]) {
       fac += dpos;
+    }
     k1 = k[3];
   }
   else { /* pre-sort */
     k[2] = k1->next;
     t[2] = k[2]->pos;
     k[3] = k[2]->next;
-    if (k[3] == NULL)
+    if (k[3] == NULL) {
       k[3] = k[2];
+    }
     t[3] = k[3]->pos;
     k1 = k[3];
   }
@@ -443,13 +557,15 @@ static int setkeys(float fac, ListBase *lb, KeyBlock *k[], float t[4], int cycl)
     t[3] = k1->pos + ofs;
     k[3] = k1;
 
-    if (ofs > 2.1f + lastpos)
+    if (ofs > 2.1f + lastpos) {
       break;
+    }
   }
 
   bsplinetype = 0;
-  if (k[1]->type == KEY_BSPLINE || k[2]->type == KEY_BSPLINE)
+  if (k[1]->type == KEY_BSPLINE || k[2]->type == KEY_BSPLINE) {
     bsplinetype = 1;
+  }
 
   if (cycl == 0) {
     if (bsplinetype == 0) { /* B spline doesn't go through the control points */
@@ -491,7 +607,13 @@ static int setkeys(float fac, ListBase *lb, KeyBlock *k[], float t[4], int cycl)
   return 0;
 }
 
-static void flerp(int tot, float *in, float *f0, float *f1, float *f2, float *f3, float *t)
+static void flerp(int tot,
+                  float *in,
+                  const float *f0,
+                  const float *f1,
+                  const float *f2,
+                  const float *f3,
+                  const float *t)
 {
   int a;
 
@@ -500,7 +622,7 @@ static void flerp(int tot, float *in, float *f0, float *f1, float *f2, float *f3
   }
 }
 
-static void rel_flerp(int tot, float *in, float *ref, float *out, float fac)
+static void rel_flerp(int tot, float *in, const float *ref, const float *out, float fac)
 {
   int a;
 
@@ -525,7 +647,7 @@ static char *key_block_get_data(Key *key, KeyBlock *actkb, KeyBlock *kb, char **
 
       if (me->edit_mesh && me->edit_mesh->bm->totvert == kb->totelem) {
         a = 0;
-        co = MEM_mallocN(sizeof(float) * 3 * me->edit_mesh->bm->totvert, "key_block_get_data");
+        co = MEM_mallocN(sizeof(float[3]) * me->edit_mesh->bm->totvert, "key_block_get_data");
 
         BM_ITER_MESH (eve, &iter, me->edit_mesh->bm, BM_VERTS_OF_MESH) {
           copy_v3_v3(co[a], eve->co);
@@ -597,11 +719,13 @@ static void cp_key(const int start,
   /* currently always 0, in future key_pointer_size may assign */
   ofs[1] = 0;
 
-  if (!key_pointer_size(key, mode, &poinsize, &ofs[0], &step))
+  if (!key_pointer_size(key, mode, &poinsize, &ofs[0], &step)) {
     return;
+  }
 
-  if (end > tot)
+  if (end > tot) {
     end = tot;
+  }
 
   if (tot != kb->totelem) {
     ktot = 0.0;
@@ -646,8 +770,9 @@ static void cp_key(const int start,
 
   for (a = start; a < end; a += step) {
     cp = key->elemstr;
-    if (mode == KEY_MODE_BEZTRIPLE)
+    if (mode == KEY_MODE_BEZTRIPLE) {
       cp = elemstr;
+    }
 
     ofsp = ofs;
 
@@ -657,9 +782,10 @@ static void cp_key(const int start,
         case IPO_FLOAT:
           if (weights) {
             memcpy(poin, kref, sizeof(float[KEYELEM_FLOAT_LEN_COORD]));
-            if (*weights != 0.0f)
+            if (*weights != 0.0f) {
               rel_flerp(
                   KEYELEM_FLOAT_LEN_COORD, (float *)poin, (float *)kref, (float *)k1, *weights);
+            }
             weights++;
           }
           else {
@@ -674,10 +800,12 @@ static void cp_key(const int start,
           break;
         default:
           /* should never happen */
-          if (freek1)
+          if (freek1) {
             MEM_freeN(freek1);
-          if (freekref)
+          }
+          if (freekref) {
             MEM_freeN(freekref);
+          }
           BLI_assert(!"invalid 'cp[1]'");
           return;
       }
@@ -702,10 +830,12 @@ static void cp_key(const int start,
     }
   }
 
-  if (freek1)
+  if (freek1) {
     MEM_freeN(freek1);
-  if (freekref)
+  }
+  if (freekref) {
     MEM_freeN(freekref);
+  }
 }
 
 static void cp_cu_key(Curve *cu,
@@ -727,8 +857,9 @@ static void cp_cu_key(Curve *cu,
       a1 = max_ii(a, start);
       a2 = min_ii(a + step, end);
 
-      if (a1 < a2)
+      if (a1 < a2) {
         cp_key(a1, a2, tot, out, key, actkb, kb, NULL, KEY_MODE_BPOINT);
+      }
     }
     else if (nu->bezt) {
       step = KEYELEM_ELEM_LEN_BEZTRIPLE * nu->pntsu;
@@ -737,8 +868,9 @@ static void cp_cu_key(Curve *cu,
       a1 = max_ii(a, start);
       a2 = min_ii(a + step, end);
 
-      if (a1 < a2)
+      if (a1 < a2) {
         cp_key(a1, a2, tot, out, key, actkb, kb, NULL, KEY_MODE_BEZTRIPLE);
+      }
     }
     else {
       step = 0;
@@ -763,11 +895,13 @@ static void key_evaluate_relative(const int start,
   /* currently always 0, in future key_pointer_size may assign */
   ofs[1] = 0;
 
-  if (!key_pointer_size(key, mode, &poinsize, &ofs[0], &step))
+  if (!key_pointer_size(key, mode, &poinsize, &ofs[0], &step)) {
     return;
+  }
 
-  if (end > tot)
+  if (end > tot) {
     end = tot;
+  }
 
   /* in case of beztriple */
   elemstr[0] = 1; /* nr of ipofloats */
@@ -791,19 +925,23 @@ static void key_evaluate_relative(const int start,
         KeyBlock *refb;
         float weight,
             *weights = per_keyblock_weights ? per_keyblock_weights[keyblock_index] : NULL;
-        char *freefrom = NULL, *freereffrom = NULL;
+        char *freefrom = NULL;
 
         /* reference now can be any block */
         refb = BLI_findlink(&key->block, kb->relative);
-        if (refb == NULL)
+        if (refb == NULL) {
           continue;
+        }
 
         poin = basispoin;
         from = key_block_get_data(key, actkb, kb, &freefrom);
-        reffrom = key_block_get_data(key, actkb, refb, &freereffrom);
+
+        /* For meshes, use the original values instead of the bmesh values to
+         * maintain a constant offset. */
+        reffrom = refb->data;
 
         poin += start * poinsize;
-        reffrom += key->elemsize * start;  // key elemsize yes!
+        reffrom += key->elemsize * start; /* key elemsize yes! */
         from += key->elemsize * start;
 
         for (b = start; b < end; b += step) {
@@ -811,8 +949,9 @@ static void key_evaluate_relative(const int start,
           weight = weights ? (*weights * icuval) : icuval;
 
           cp = key->elemstr;
-          if (mode == KEY_MODE_BEZTRIPLE)
+          if (mode == KEY_MODE_BEZTRIPLE) {
             cp = elemstr;
+          }
 
           ofsp = ofs;
 
@@ -842,10 +981,9 @@ static void key_evaluate_relative(const int start,
                 break;
               default:
                 /* should never happen */
-                if (freefrom)
+                if (freefrom) {
                   MEM_freeN(freefrom);
-                if (freereffrom)
-                  MEM_freeN(freereffrom);
+                }
                 BLI_assert(!"invalid 'cp[1]'");
                 return;
             }
@@ -859,14 +997,14 @@ static void key_evaluate_relative(const int start,
           reffrom += elemsize;
           from += elemsize;
 
-          if (weights)
+          if (weights) {
             weights++;
+          }
         }
 
-        if (freefrom)
+        if (freefrom) {
           MEM_freeN(freefrom);
-        if (freereffrom)
-          MEM_freeN(freereffrom);
+        }
       }
     }
   }
@@ -892,18 +1030,20 @@ static void do_key(const int start,
   /* currently always 0, in future key_pointer_size may assign */
   ofs[1] = 0;
 
-  if (!key_pointer_size(key, mode, &poinsize, &ofs[0], &step))
+  if (!key_pointer_size(key, mode, &poinsize, &ofs[0], &step)) {
     return;
+  }
 
-  if (end > tot)
+  if (end > tot) {
     end = tot;
+  }
 
   k1 = key_block_get_data(key, actkb, k[0], &freek1);
   k2 = key_block_get_data(key, actkb, k[1], &freek2);
   k3 = key_block_get_data(key, actkb, k[2], &freek3);
   k4 = key_block_get_data(key, actkb, k[3], &freek4);
 
-  /*  test for more or less points (per key!) */
+  /* Test for more or less points (per key!) */
   if (tot != k[0]->totelem) {
     k1tot = 0.0;
     flagflo |= 1;
@@ -1014,8 +1154,9 @@ static void do_key(const int start,
 
   for (a = start; a < end; a += step) {
     cp = key->elemstr;
-    if (mode == KEY_MODE_BEZTRIPLE)
+    if (mode == KEY_MODE_BEZTRIPLE) {
       cp = elemstr;
+    }
 
     ofsp = ofs;
 
@@ -1051,14 +1192,18 @@ static void do_key(const int start,
           break;
         default:
           /* should never happen */
-          if (freek1)
+          if (freek1) {
             MEM_freeN(freek1);
-          if (freek2)
+          }
+          if (freek2) {
             MEM_freeN(freek2);
-          if (freek3)
+          }
+          if (freek3) {
             MEM_freeN(freek3);
-          if (freek4)
+          }
+          if (freek4) {
             MEM_freeN(freek4);
+          }
           BLI_assert(!"invalid 'cp[1]'");
           return;
       }
@@ -1118,14 +1263,18 @@ static void do_key(const int start,
     }
   }
 
-  if (freek1)
+  if (freek1) {
     MEM_freeN(freek1);
-  if (freek2)
+  }
+  if (freek2) {
     MEM_freeN(freek2);
-  if (freek3)
+  }
+  if (freek3) {
     MEM_freeN(freek3);
-  if (freek4)
+  }
+  if (freek4) {
     MEM_freeN(freek4);
+  }
 }
 
 static float *get_weights_array(Object *ob, char *vgroup, WeightsArrayCache *cache)
@@ -1137,8 +1286,9 @@ static float *get_weights_array(Object *ob, char *vgroup, WeightsArrayCache *cac
   int totvert = 0, defgrp_index = 0;
 
   /* no vgroup string set? */
-  if (vgroup[0] == 0)
+  if (vgroup[0] == 0) {
     return NULL;
+  }
 
   /* gather dvert and totvert */
   if (ob->type == OB_MESH) {
@@ -1146,8 +1296,9 @@ static float *get_weights_array(Object *ob, char *vgroup, WeightsArrayCache *cac
     dvert = me->dvert;
     totvert = me->totvert;
 
-    if (me->edit_mesh && me->edit_mesh->bm->totvert == totvert)
+    if (me->edit_mesh && me->edit_mesh->bm->totvert == totvert) {
       em = me->edit_mesh;
+    }
   }
   else if (ob->type == OB_LATTICE) {
     Lattice *lt = ob->data;
@@ -1155,14 +1306,14 @@ static float *get_weights_array(Object *ob, char *vgroup, WeightsArrayCache *cac
     totvert = lt->pntsu * lt->pntsv * lt->pntsw;
   }
 
-  if (dvert == NULL)
+  if (dvert == NULL) {
     return NULL;
+  }
 
   /* find the group (weak loop-in-loop) */
-  defgrp_index = defgroup_name_index(ob, vgroup);
+  defgrp_index = BKE_object_defgroup_name_index(ob, vgroup);
   if (defgrp_index != -1) {
     float *weights;
-    int i;
 
     if (cache) {
       if (cache->defgroup_weights == NULL) {
@@ -1180,15 +1331,16 @@ static float *get_weights_array(Object *ob, char *vgroup, WeightsArrayCache *cac
     weights = MEM_mallocN(totvert * sizeof(float), "weights");
 
     if (em) {
+      int i;
       const int cd_dvert_offset = CustomData_get_offset(&em->bm->vdata, CD_MDEFORMVERT);
       BM_ITER_MESH_INDEX (eve, &iter, em->bm, BM_VERTS_OF_MESH, i) {
         dvert = BM_ELEM_CD_GET_VOID_P(eve, cd_dvert_offset);
-        weights[i] = defvert_find_weight(dvert, defgrp_index);
+        weights[i] = BKE_defvert_find_weight(dvert, defgrp_index);
       }
     }
     else {
-      for (i = 0; i < totvert; i++, dvert++) {
-        weights[i] = defvert_find_weight(dvert, defgrp_index);
+      for (int i = 0; i < totvert; i++, dvert++) {
+        weights[i] = BKE_defvert_find_weight(dvert, defgrp_index);
       }
     }
 
@@ -1366,8 +1518,9 @@ static void do_latt_key(Object *ob, Key *key, char *out, const int tot)
     }
   }
 
-  if (lt->flag & LT_OUTSIDE)
+  if (lt->flag & LT_OUTSIDE) {
     outside_lattice(lt);
+  }
 }
 
 /* returns key coordinates (+ tilt) when key applied, NULL otherwise */
@@ -1378,8 +1531,9 @@ float *BKE_key_evaluate_object_ex(Object *ob, int *r_totelem, float *arr, size_t
   char *out;
   int tot = 0, size = 0;
 
-  if (key == NULL || BLI_listbase_is_empty(&key->block))
+  if (key == NULL || BLI_listbase_is_empty(&key->block)) {
     return NULL;
+  }
 
   /* compute size of output array */
   if (ob->type == OB_MESH) {
@@ -1402,8 +1556,9 @@ float *BKE_key_evaluate_object_ex(Object *ob, int *r_totelem, float *arr, size_t
   }
 
   /* if nothing to interpolate, cancel */
-  if (tot == 0 || size == 0)
+  if (tot == 0 || size == 0) {
     return NULL;
+  }
 
   /* allocate array */
   if (arr == NULL) {
@@ -1421,8 +1576,9 @@ float *BKE_key_evaluate_object_ex(Object *ob, int *r_totelem, float *arr, size_t
     /* shape locked, copy the locked shape instead of blending */
     KeyBlock *kb = BLI_findlink(&key->block, ob->shapenr - 1);
 
-    if (kb && (kb->flag & KEYBLOCK_MUTE))
+    if (kb && (kb->flag & KEYBLOCK_MUTE)) {
       kb = key->refkey;
+    }
 
     if (kb == NULL) {
       kb = key->block.first;
@@ -1434,22 +1590,28 @@ float *BKE_key_evaluate_object_ex(Object *ob, int *r_totelem, float *arr, size_t
 
       cp_key(0, tot, tot, out, key, actkb, kb, weights, 0);
 
-      if (weights)
+      if (weights) {
         MEM_freeN(weights);
+      }
     }
-    else if (ELEM(ob->type, OB_CURVE, OB_SURF))
+    else if (ELEM(ob->type, OB_CURVE, OB_SURF)) {
       cp_cu_key(ob->data, key, actkb, kb, 0, tot, out, tot);
+    }
   }
   else {
 
-    if (ob->type == OB_MESH)
+    if (ob->type == OB_MESH) {
       do_mesh_key(ob, key, out, tot);
-    else if (ob->type == OB_LATTICE)
+    }
+    else if (ob->type == OB_LATTICE) {
       do_latt_key(ob, key, out, tot);
-    else if (ob->type == OB_CURVE)
+    }
+    else if (ob->type == OB_CURVE) {
       do_curve_key(ob, key, out, tot);
-    else if (ob->type == OB_SURF)
+    }
+    else if (ob->type == OB_SURF) {
       do_curve_key(ob, key, out, tot);
+    }
   }
 
   if (r_totelem) {
@@ -1462,6 +1624,134 @@ float *BKE_key_evaluate_object(Object *ob, int *r_totelem)
 {
   return BKE_key_evaluate_object_ex(ob, r_totelem, NULL, 0);
 }
+
+/**
+ * \param shape_index: The index to use or all (when -1).
+ */
+int BKE_keyblock_element_count_from_shape(const Key *key, const int shape_index)
+{
+  int result = 0;
+  int index = 0;
+  for (const KeyBlock *kb = key->block.first; kb; kb = kb->next, index++) {
+    if (ELEM(shape_index, -1, index)) {
+      result += kb->totelem;
+    }
+  }
+  return result;
+}
+
+int BKE_keyblock_element_count(const Key *key)
+{
+  return BKE_keyblock_element_count_from_shape(key, -1);
+}
+
+/**
+ * \param shape_index: The index to use or all (when -1).
+ */
+size_t BKE_keyblock_element_calc_size_from_shape(const Key *key, const int shape_index)
+{
+  return (size_t)BKE_keyblock_element_count_from_shape(key, shape_index) * key->elemsize;
+}
+
+size_t BKE_keyblock_element_calc_size(const Key *key)
+{
+  return BKE_keyblock_element_calc_size_from_shape(key, -1);
+}
+
+/* -------------------------------------------------------------------- */
+/** \name Key-Block Data Access
+ *
+ * Utilities for getting/setting key data as a single array,
+ * use #BKE_keyblock_element_calc_size to allocate the size of the data needed.
+ * \{ */
+
+/**
+ * \param shape_index: The index to use or all (when -1).
+ */
+void BKE_keyblock_data_get_from_shape(const Key *key, float (*arr)[3], const int shape_index)
+{
+  uint8_t *elements = (uint8_t *)arr;
+  int index = 0;
+  for (const KeyBlock *kb = key->block.first; kb; kb = kb->next, index++) {
+    if (ELEM(shape_index, -1, index)) {
+      const int block_elem_len = kb->totelem * key->elemsize;
+      memcpy(elements, kb->data, block_elem_len);
+      elements += block_elem_len;
+    }
+  }
+}
+
+void BKE_keyblock_data_get(const Key *key, float (*arr)[3])
+{
+  BKE_keyblock_data_get_from_shape(key, arr, -1);
+}
+
+/**
+ * Set the data to all key-blocks (or shape_index if != -1).
+ */
+void BKE_keyblock_data_set_with_mat4(Key *key,
+                                     const int shape_index,
+                                     const float (*coords)[3],
+                                     const float mat[4][4])
+{
+  if (key->elemsize != sizeof(float[3])) {
+    BLI_assert(!"Invalid elemsize");
+    return;
+  }
+
+  const float(*elements)[3] = coords;
+
+  int index = 0;
+  for (KeyBlock *kb = key->block.first; kb; kb = kb->next, index++) {
+    if (ELEM(shape_index, -1, index)) {
+      const int block_elem_len = kb->totelem;
+      float(*block_data)[3] = (float(*)[3])kb->data;
+      for (int data_offset = 0; data_offset < block_elem_len; ++data_offset) {
+        const float *src_data = (const float *)(elements + data_offset);
+        float *dst_data = (float *)(block_data + data_offset);
+        mul_v3_m4v3(dst_data, mat, src_data);
+      }
+      elements += block_elem_len;
+    }
+  }
+}
+
+/**
+ * Set the data for all key-blocks (or shape_index if != -1),
+ * transforming by \a mat.
+ */
+void BKE_keyblock_curve_data_set_with_mat4(
+    Key *key, const ListBase *nurb, const int shape_index, const void *data, const float mat[4][4])
+{
+  const uint8_t *elements = data;
+
+  int index = 0;
+  for (KeyBlock *kb = key->block.first; kb; kb = kb->next, index++) {
+    if (ELEM(shape_index, -1, index)) {
+      const int block_elem_size = kb->totelem * key->elemsize;
+      BKE_keyblock_curve_data_transform(nurb, mat, elements, kb->data);
+      elements += block_elem_size;
+    }
+  }
+}
+
+/**
+ * Set the data for all key-blocks (or shape_index if != -1).
+ */
+void BKE_keyblock_data_set(Key *key, const int shape_index, const void *data)
+{
+  const uint8_t *elements = data;
+  int index = 0;
+  for (KeyBlock *kb = key->block.first; kb; kb = kb->next, index++) {
+    if (ELEM(shape_index, -1, index)) {
+      const int block_elem_size = kb->totelem * key->elemsize;
+      memcpy(kb->data, elements, block_elem_size);
+      elements += block_elem_size;
+    }
+  }
+}
+
+/** \} */
 
 bool BKE_key_idtype_support(const short id_type)
 {
@@ -1513,8 +1803,9 @@ Key *BKE_key_from_id(ID *id)
 
 Key **BKE_key_from_object_p(const Object *ob)
 {
-  if (ob == NULL || ob->data == NULL)
+  if (ob == NULL || ob->data == NULL) {
     return NULL;
+  }
 
   return BKE_key_from_id_p(ob->data);
 }
@@ -1537,8 +1828,9 @@ KeyBlock *BKE_keyblock_add(Key *key, const char *name)
   int tot;
 
   kb = key->block.last;
-  if (kb)
+  if (kb) {
     curpos = kb->pos;
+  }
 
   kb = MEM_callocN(sizeof(KeyBlock), "Keyblock");
   BLI_addtail(&key->block, kb);
@@ -1549,10 +1841,12 @@ KeyBlock *BKE_keyblock_add(Key *key, const char *name)
     BLI_strncpy(kb->name, name, sizeof(kb->name));
   }
   else {
-    if (tot == 1)
+    if (tot == 1) {
       BLI_strncpy(kb->name, DATA_("Basis"), sizeof(kb->name));
-    else
+    }
+    else {
       BLI_snprintf(kb->name, sizeof(kb->name), DATA_("Key %d"), tot - 1);
+    }
   }
 
   BLI_uniquename(&key->block, kb, DATA_("Key"), '.', offsetof(KeyBlock, name), sizeof(kb->name));
@@ -1560,8 +1854,9 @@ KeyBlock *BKE_keyblock_add(Key *key, const char *name)
   kb->uid = key->uidgen++;
 
   key->totkey++;
-  if (key->totkey == 1)
+  if (key->totkey == 1) {
     key->refkey = kb;
+  }
 
   kb->slidermin = 0.0f;
   kb->slidermax = 1.0f;
@@ -1627,8 +1922,9 @@ KeyBlock *BKE_keyblock_from_object_reference(Object *ob)
 {
   Key *key = BKE_key_from_object(ob);
 
-  if (key)
+  if (key) {
     return key->refkey;
+  }
 
   return NULL;
 }
@@ -1636,17 +1932,15 @@ KeyBlock *BKE_keyblock_from_object_reference(Object *ob)
 /* get the appropriate KeyBlock given an index */
 KeyBlock *BKE_keyblock_from_key(Key *key, int index)
 {
-  KeyBlock *kb;
-  int i;
-
   if (key) {
-    kb = key->block.first;
+    KeyBlock *kb = key->block.first;
 
-    for (i = 1; i < key->totkey; i++) {
+    for (int i = 1; i < key->totkey; i++) {
       kb = kb->next;
 
-      if (index == i)
+      if (index == i) {
         return kb;
+      }
     }
   }
 
@@ -1682,8 +1976,9 @@ char *BKE_keyblock_curval_rnapath_get(Key *key, KeyBlock *kb)
   PropertyRNA *prop;
 
   /* sanity checks */
-  if (ELEM(NULL, key, kb))
+  if (ELEM(NULL, key, kb)) {
     return NULL;
+  }
 
   /* create the RNA pointer */
   RNA_pointer_create(&key->id, &RNA_ShapeKey, kb, &ptr);
@@ -1706,8 +2001,9 @@ void BKE_keyblock_update_from_lattice(Lattice *lt, KeyBlock *kb)
   BLI_assert(kb->totelem == lt->pntsu * lt->pntsv * lt->pntsw);
 
   tot = kb->totelem;
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   bp = lt->def;
   fp = kb->data;
@@ -1721,8 +2017,9 @@ void BKE_keyblock_convert_from_lattice(Lattice *lt, KeyBlock *kb)
   int tot;
 
   tot = lt->pntsu * lt->pntsv * lt->pntsw;
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   MEM_SAFE_FREE(kb->data);
 
@@ -1758,10 +2055,12 @@ int BKE_keyblock_curve_element_count(ListBase *nurb)
 
   nu = nurb->first;
   while (nu) {
-    if (nu->bezt)
+    if (nu->bezt) {
       tot += KEYELEM_ELEM_LEN_BEZTRIPLE * nu->pntsu;
-    else if (nu->bp)
+    }
+    else if (nu->bp) {
       tot += KEYELEM_ELEM_LEN_BPOINT * nu->pntsu * nu->pntsv;
+    }
 
     nu = nu->next;
   }
@@ -1780,8 +2079,9 @@ void BKE_keyblock_update_from_curve(Curve *UNUSED(cu), KeyBlock *kb, ListBase *n
   BLI_assert(BKE_keyblock_curve_element_count(nurb) == kb->totelem);
 
   tot = kb->totelem;
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   fp = kb->data;
   for (nu = nurb->first; nu; nu = nu->next) {
@@ -1806,14 +2106,46 @@ void BKE_keyblock_update_from_curve(Curve *UNUSED(cu), KeyBlock *kb, ListBase *n
   }
 }
 
+void BKE_keyblock_curve_data_transform(const ListBase *nurb,
+                                       const float mat[4][4],
+                                       const void *src_data,
+                                       void *dst_data)
+{
+  const float *src = src_data;
+  float *dst = dst_data;
+  for (Nurb *nu = nurb->first; nu; nu = nu->next) {
+    if (nu->bezt) {
+      for (int a = nu->pntsu; a; a--) {
+        for (int i = 0; i < 3; i++) {
+          mul_v3_m4v3(&dst[i * 3], mat, &src[i * 3]);
+        }
+        dst[9] = src[9];
+        dst[10] = src[10];
+        src += KEYELEM_FLOAT_LEN_BEZTRIPLE;
+        dst += KEYELEM_FLOAT_LEN_BEZTRIPLE;
+      }
+    }
+    else {
+      for (int a = nu->pntsu * nu->pntsv; a; a--) {
+        mul_v3_m4v3(dst, mat, src);
+        dst[3] = src[3];
+        dst[4] = src[4];
+        src += KEYELEM_FLOAT_LEN_BPOINT;
+        dst += KEYELEM_FLOAT_LEN_BPOINT;
+      }
+    }
+  }
+}
+
 void BKE_keyblock_convert_from_curve(Curve *cu, KeyBlock *kb, ListBase *nurb)
 {
   int tot;
 
   /* count */
   tot = BKE_keyblock_curve_element_count(nurb);
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   MEM_SAFE_FREE(kb->data);
 
@@ -1869,8 +2201,9 @@ void BKE_keyblock_update_from_mesh(Mesh *me, KeyBlock *kb)
   BLI_assert(me->totvert == kb->totelem);
 
   tot = me->totvert;
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   mvert = me->mvert;
   fp = kb->data;
@@ -1883,8 +2216,9 @@ void BKE_keyblock_convert_from_mesh(Mesh *me, Key *key, KeyBlock *kb)
 {
   const int len = me->totvert;
 
-  if (me->totvert == 0)
+  if (me->totvert == 0) {
     return;
+  }
 
   MEM_SAFE_FREE(kb->data);
 
@@ -1990,9 +2324,9 @@ void BKE_keyblock_mesh_calc_normals(struct KeyBlock *kb,
 }
 
 /************************* raw coords ************************/
-void BKE_keyblock_update_from_vertcos(Object *ob, KeyBlock *kb, float (*vertCos)[3])
+void BKE_keyblock_update_from_vertcos(Object *ob, KeyBlock *kb, const float (*vertCos)[3])
 {
-  float(*co)[3] = vertCos;
+  const float(*co)[3] = vertCos;
   float *fp = kb->data;
   int tot, a;
 
@@ -2015,8 +2349,9 @@ void BKE_keyblock_update_from_vertcos(Object *ob, KeyBlock *kb, float (*vertCos)
 #endif
 
   tot = kb->totelem;
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   /* Copy coords to keyblock */
   if (ELEM(ob->type, OB_MESH, OB_LATTICE)) {
@@ -2049,7 +2384,7 @@ void BKE_keyblock_update_from_vertcos(Object *ob, KeyBlock *kb, float (*vertCos)
   }
 }
 
-void BKE_keyblock_convert_from_vertcos(Object *ob, KeyBlock *kb, float (*vertCos)[3])
+void BKE_keyblock_convert_from_vertcos(Object *ob, KeyBlock *kb, const float (*vertCos)[3])
 {
   int tot = 0, elemsize;
 
@@ -2072,8 +2407,9 @@ void BKE_keyblock_convert_from_vertcos(Object *ob, KeyBlock *kb, float (*vertCos
     tot = BKE_keyblock_curve_element_count(&cu->nurb);
   }
 
-  if (tot == 0)
+  if (tot == 0) {
     return;
+  }
 
   kb->data = MEM_mallocN(tot * elemsize, __func__);
 
@@ -2101,8 +2437,9 @@ float (*BKE_keyblock_convert_to_vertcos(Object *ob, KeyBlock *kb))[3]
     tot = BKE_nurbList_verts_count(&cu->nurb);
   }
 
-  if (tot == 0)
+  if (tot == 0) {
     return NULL;
+  }
 
   co = vertCos = MEM_mallocN(tot * sizeof(*vertCos), __func__);
 
@@ -2140,7 +2477,7 @@ float (*BKE_keyblock_convert_to_vertcos(Object *ob, KeyBlock *kb))[3]
 }
 
 /************************* raw coord offsets ************************/
-void BKE_keyblock_update_from_offset(Object *ob, KeyBlock *kb, float (*ofs)[3])
+void BKE_keyblock_update_from_offset(Object *ob, KeyBlock *kb, const float (*ofs)[3])
 {
   int a;
   float *fp = kb->data;
@@ -2177,8 +2514,10 @@ void BKE_keyblock_update_from_offset(Object *ob, KeyBlock *kb, float (*ofs)[3])
 
 /* ==========================================================*/
 
-/** Move shape key from org_index to new_index. Safe, clamps index to valid range, updates reference keys,
- * the object's active shape index, the 'frame' value in case of absolute keys, etc.
+/**
+ * Move shape key from org_index to new_index. Safe, clamps index to valid range,
+ * updates reference keys, the object's active shape index,
+ * the 'frame' value in case of absolute keys, etc.
  * Note indices are expected in real values (not 'fake' shapenr +1 ones).
  *
  * \param org_index: if < 0, current object's active shape will be used as skey to move.
@@ -2206,8 +2545,8 @@ bool BKE_keyblock_move(Object *ob, int org_index, int new_index)
 
   rev = ((new_index - org_index) < 0) ? true : false;
 
-  /* We swap 'org' element with its previous/next neighbor (depending on direction of the move) repeatedly,
-   * until we reach final position.
+  /* We swap 'org' element with its previous/next neighbor (depending on direction of the move)
+   * repeatedly, until we reach final position.
    * This allows us to only loop on the list once! */
   for (kb = (rev ? key->block.last : key->block.first), i = (rev ? totkey - 1 : 0); kb;
        kb = (rev ? kb->prev : kb->next), rev ? i-- : i++) {
@@ -2244,7 +2583,8 @@ bool BKE_keyblock_move(Object *ob, int org_index, int new_index)
     }
   }
 
-  /* Need to update active shape number if it's affected, same principle as for relative indices above. */
+  /* Need to update active shape number if it's affected,
+   * same principle as for relative indices above. */
   if (org_index == act_index) {
     ob->shapenr = new_index + 1;
   }

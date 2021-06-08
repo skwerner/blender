@@ -23,15 +23,16 @@
  * \note The API matches BLI_ghash.c, but the implementation is different.
  */
 
+#include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_edgehash.h"
 #include "BLI_strict_flags.h"
+#include "BLI_utildefines.h"
 
 typedef struct _EdgeHash_Edge Edge;
 typedef struct _EdgeHash_Entry EdgeHashEntry;
@@ -144,8 +145,7 @@ static void edgehash_free_values(EdgeHash *eh, EdgeHashFreeFP free_value)
 
 BLI_INLINE void edgehash_insert_index(EdgeHash *eh, Edge edge, uint entry_index)
 {
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (index == SLOT_EMPTY) {
       eh->map[slot] = (int32_t)entry_index;
       break;
@@ -182,12 +182,11 @@ BLI_INLINE bool edgehash_ensure_can_insert(EdgeHash *eh)
 
 BLI_INLINE EdgeHashEntry *edgehash_insert(EdgeHash *eh, Edge edge, void *value)
 {
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (index == SLOT_EMPTY) {
       return edgehash_insert_at_slot(eh, slot, edge, value);
     }
-    else if (index == SLOT_DUMMY) {
+    if (index == SLOT_DUMMY) {
       eh->dummy_count--;
       return edgehash_insert_at_slot(eh, slot, edge, value);
     }
@@ -198,12 +197,11 @@ BLI_INLINE EdgeHashEntry *edgehash_lookup_entry(EdgeHash *eh, uint v0, uint v1)
 {
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (EH_INDEX_HAS_EDGE(eh, index, edge)) {
       return &eh->entries[index];
     }
-    else if (index == SLOT_EMPTY) {
+    if (index == SLOT_EMPTY) {
       return NULL;
     }
   }
@@ -211,8 +209,7 @@ BLI_INLINE EdgeHashEntry *edgehash_lookup_entry(EdgeHash *eh, uint v0, uint v1)
 
 BLI_INLINE void edgehash_change_index(EdgeHash *eh, Edge edge, int new_index)
 {
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (EH_INDEX_HAS_EDGE(eh, index, edge)) {
       eh->map[slot] = new_index;
       break;
@@ -293,13 +290,12 @@ bool BLI_edgehash_reinsert(EdgeHash *eh, uint v0, uint v1, void *value)
 {
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (EH_INDEX_HAS_EDGE(eh, index, edge)) {
       eh->entries[index].value = value;
       return false;
     }
-    else if (index == SLOT_EMPTY) {
+    if (index == SLOT_EMPTY) {
       if (edgehash_ensure_can_insert(eh)) {
         edgehash_insert(eh, edge, value);
       }
@@ -360,13 +356,12 @@ bool BLI_edgehash_ensure_p(EdgeHash *eh, uint v0, uint v1, void ***r_value)
 {
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (EH_INDEX_HAS_EDGE(eh, index, edge)) {
       *r_value = &eh->entries[index].value;
       return true;
     }
-    else if (index == SLOT_EMPTY) {
+    if (index == SLOT_EMPTY) {
       if (edgehash_ensure_can_insert(eh)) {
         *r_value = &edgehash_insert(eh, edge, NULL)->value;
       }
@@ -382,7 +377,7 @@ bool BLI_edgehash_ensure_p(EdgeHash *eh, uint v0, uint v1, void ***r_value)
  * Remove \a key (v0, v1) from \a eh, or return false if the key wasn't found.
  *
  * \param v0, v1: The key to remove.
- * \param valfreefp: Optional callback to free the value.
+ * \param free_value: Optional callback to free the value.
  * \return true if \a key was removed from \a eh.
  */
 bool BLI_edgehash_remove(EdgeHash *eh, uint v0, uint v1, EdgeHashFreeFP free_value)
@@ -407,8 +402,7 @@ void *BLI_edgehash_popkey(EdgeHash *eh, uint v0, uint v1)
 {
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(eh, edge, slot, index)
-  {
+  ITER_SLOTS (eh, edge, slot, index) {
     if (EH_INDEX_HAS_EDGE(eh, index, edge)) {
       void *value = eh->entries[index].value;
       eh->length--;
@@ -420,7 +414,7 @@ void *BLI_edgehash_popkey(EdgeHash *eh, uint v0, uint v1)
       }
       return value;
     }
-    else if (index == SLOT_EMPTY) {
+    if (index == SLOT_EMPTY) {
       return NULL;
     }
   }
@@ -546,8 +540,7 @@ int BLI_edgeset_len(EdgeSet *es)
 
 static void edgeset_insert_index(EdgeSet *es, Edge edge, uint entry_index)
 {
-  ITER_SLOTS(es, edge, slot, index)
-  {
+  ITER_SLOTS (es, edge, slot, index) {
     if (index == SLOT_EMPTY) {
       es->map[slot] = (int)entry_index;
       break;
@@ -587,12 +580,11 @@ bool BLI_edgeset_add(EdgeSet *es, uint v0, uint v1)
   edgeset_ensure_can_insert(es);
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(es, edge, slot, index)
-  {
+  ITER_SLOTS (es, edge, slot, index) {
     if (ES_INDEX_HAS_EDGE(es, index, edge)) {
       return false;
     }
-    else if (index == SLOT_EMPTY) {
+    if (index == SLOT_EMPTY) {
       edgeset_insert_at_slot(es, slot, edge);
       return true;
     }
@@ -608,8 +600,7 @@ void BLI_edgeset_insert(EdgeSet *es, uint v0, uint v1)
   edgeset_ensure_can_insert(es);
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(es, edge, slot, index)
-  {
+  ITER_SLOTS (es, edge, slot, index) {
     if (index == SLOT_EMPTY) {
       edgeset_insert_at_slot(es, slot, edge);
       return;
@@ -621,12 +612,11 @@ bool BLI_edgeset_haskey(EdgeSet *es, uint v0, uint v1)
 {
   Edge edge = init_edge(v0, v1);
 
-  ITER_SLOTS(es, edge, slot, index)
-  {
+  ITER_SLOTS (es, edge, slot, index) {
     if (ES_INDEX_HAS_EDGE(es, index, edge)) {
       return true;
     }
-    else if (index == SLOT_EMPTY) {
+    if (index == SLOT_EMPTY) {
       return false;
     }
   }

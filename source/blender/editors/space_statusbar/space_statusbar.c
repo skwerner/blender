@@ -18,8 +18,8 @@
  * \ingroup spstatusbar
  */
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -34,27 +34,26 @@
 #include "RNA_access.h"
 
 #include "UI_interface.h"
-#include "UI_view2d.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 /* ******************** default callbacks for statusbar space ********************  */
 
-static SpaceLink *statusbar_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *statusbar_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
-  ARegion *ar;
+  ARegion *region;
   SpaceStatusBar *sstatusbar;
 
   sstatusbar = MEM_callocN(sizeof(*sstatusbar), "init statusbar");
   sstatusbar->spacetype = SPACE_STATUSBAR;
 
   /* header region */
-  ar = MEM_callocN(sizeof(*ar), "header for statusbar");
-  BLI_addtail(&sstatusbar->regionbase, ar);
-  ar->regiontype = RGN_TYPE_HEADER;
-  ar->alignment = RGN_ALIGN_NONE;
+  region = MEM_callocN(sizeof(*region), "header for statusbar");
+  BLI_addtail(&sstatusbar->regionbase, region);
+  region->regiontype = RGN_TYPE_HEADER;
+  region->alignment = RGN_ALIGN_NONE;
 
   return (SpaceLink *)sstatusbar;
 }
@@ -65,7 +64,7 @@ static void statusbar_free(SpaceLink *UNUSED(sl))
 }
 
 /* spacetype; init callback */
-static void statusbar_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
+static void statusbar_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
 {
 }
 
@@ -81,7 +80,7 @@ static SpaceLink *statusbar_duplicate(SpaceLink *sl)
 /* add handlers, stuff you only do once or on area/region changes */
 static void statusbar_header_region_init(wmWindowManager *UNUSED(wm), ARegion *region)
 {
-  if (ELEM(region->alignment, RGN_ALIGN_RIGHT)) {
+  if (ELEM(RGN_ALIGN_ENUM_FROM_MASK(region->alignment), RGN_ALIGN_RIGHT)) {
     region->flag |= RGN_FLAG_DYNAMIC_SIZE;
   }
   ED_region_header_init(region);
@@ -95,53 +94,49 @@ static void statusbar_keymap(struct wmKeyConfig *UNUSED(keyconf))
 {
 }
 
-static void statusbar_header_region_listener(wmWindow *UNUSED(win),
-                                             ScrArea *UNUSED(sa),
-                                             ARegion *ar,
-                                             wmNotifier *wmn,
-                                             const Scene *UNUSED(scene))
+static void statusbar_header_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* context changes */
   switch (wmn->category) {
     case NC_SCREEN:
       if (ELEM(wmn->data, ND_LAYER, ND_ANIMPLAY)) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_WM:
       if (wmn->data == ND_JOB) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SCENE:
       if (wmn->data == ND_RENDER_RESULT) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SPACE:
       if (wmn->data == ND_SPACE_INFO) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_ID:
       if (wmn->action == NA_RENAME) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
   }
 }
 
-static void statusbar_header_region_message_subscribe(const bContext *UNUSED(C),
-                                                      WorkSpace *UNUSED(workspace),
-                                                      Scene *UNUSED(scene),
-                                                      bScreen *UNUSED(screen),
-                                                      ScrArea *UNUSED(sa),
-                                                      ARegion *ar,
-                                                      struct wmMsgBus *mbus)
+static void statusbar_header_region_message_subscribe(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  ARegion *region = params->region;
+
   wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
-      .owner = ar,
-      .user_data = ar,
+      .owner = region,
+      .user_data = region,
       .notify = ED_region_do_msg_notify_tag_redraw,
   };
 
@@ -158,7 +153,7 @@ void ED_spacetype_statusbar(void)
   st->spaceid = SPACE_STATUSBAR;
   strncpy(st->name, "Status Bar", BKE_ST_MAXNAME);
 
-  st->new = statusbar_new;
+  st->create = statusbar_create;
   st->free = statusbar_free;
   st->init = statusbar_init;
   st->duplicate = statusbar_duplicate;

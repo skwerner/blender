@@ -96,9 +96,9 @@ static void gizmo_primitive_draw_intern(wmGizmo *gz,
   GPU_matrix_push();
   GPU_matrix_mul(matrix_final);
 
-  GPU_blend(true);
+  GPU_blend(GPU_BLEND_ALPHA);
   gizmo_primitive_draw_geom(color_inner, color_outer, draw_style);
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   GPU_matrix_pop();
 
@@ -112,9 +112,9 @@ static void gizmo_primitive_draw_intern(wmGizmo *gz,
     GPU_matrix_push();
     GPU_matrix_mul(inter->init_matrix_final);
 
-    GPU_blend(true);
+    GPU_blend(GPU_BLEND_ALPHA);
     gizmo_primitive_draw_geom(color_inner, color_outer, draw_style);
-    GPU_blend(false);
+    GPU_blend(GPU_BLEND_NONE);
 
     GPU_matrix_pop();
   }
@@ -149,7 +149,6 @@ static int gizmo_primitive_invoke(bContext *UNUSED(C), wmGizmo *gz, const wmEven
 
 /* -------------------------------------------------------------------- */
 /** \name Primitive Gizmo API
- *
  * \{ */
 
 static void GIZMO_GT_primitive_3d(wmGizmoType *gzt)

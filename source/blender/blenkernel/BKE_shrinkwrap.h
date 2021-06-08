@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_SHRINKWRAP_H__
-#define __BKE_SHRINKWRAP_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -26,6 +25,10 @@
 /* Shrinkwrap stuff */
 #include "BKE_bvhutils.h"
 #include "BLI_bitmap.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*
  * Shrinkwrap is composed by a set of functions and options that define the type of shrink.
@@ -41,7 +44,6 @@
 
 struct BVHTree;
 struct MDeformVert;
-struct MVert;
 struct Mesh;
 struct ModifierEvalContext;
 struct Object;
@@ -111,8 +113,19 @@ void shrinkwrapModifier_deform(struct ShrinkwrapModifierData *smd,
                                float (*vertexCos)[3],
                                int numVerts);
 
+/* Used in editmesh_mask_extract.c to shrinkwrap the extracted mesh to the sculpt */
+void BKE_shrinkwrap_mesh_nearest_surface_deform(struct bContext *C,
+                                                struct Object *ob_source,
+                                                struct Object *ob_target);
+
+/* Used in object_remesh.c to preserve the details and volume in the voxel remesher */
+void BKE_shrinkwrap_remesh_target_project(struct Mesh *src_me,
+                                          struct Mesh *target_me,
+                                          struct Object *ob_target);
+
 /*
- * This function casts a ray in the given BVHTree.. but it takes into consideration the space_transform, that is:
+ * This function casts a ray in the given BVHTree.
+ * but it takes into consideration the space_transform, that is:
  *
  * if transf was configured with "SPACE_TRANSFORM_SETUP( &transf,  ob1, ob2 )"
  * then the input (vert, dir, BVHTreeRayHit) must be defined in ob1 coordinates space
@@ -129,7 +142,8 @@ bool BKE_shrinkwrap_project_normal(char options,
                                    struct ShrinkwrapTreeData *tree,
                                    BVHTreeRayHit *hit);
 
-/* Maps the point to the nearest surface, either by simple nearest, or by target normal projection. */
+/* Maps the point to the nearest surface, either by simple nearest,
+ * or by target normal projection. */
 void BKE_shrinkwrap_find_nearest_surface(struct ShrinkwrapTreeData *tree,
                                          struct BVHTreeNearest *nearest,
                                          float co[3],
@@ -155,7 +169,7 @@ void BKE_shrinkwrap_snap_point_to_surface(const struct ShrinkwrapTreeData *tree,
                                           float r_point_co[3]);
 
 /*
- * NULL initializers to local data
+ * NULL initializes to local data
  */
 #define NULL_ShrinkwrapCalcData \
   { \
@@ -174,4 +188,6 @@ void BKE_shrinkwrap_snap_point_to_surface(const struct ShrinkwrapTreeData *tree,
     0, \
   }
 
-#endif /* __BKE_SHRINKWRAP_H__ */
+#ifdef __cplusplus
+}
+#endif

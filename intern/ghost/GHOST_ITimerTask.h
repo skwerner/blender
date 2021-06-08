@@ -22,8 +22,7 @@
  * Declaration of GHOST_ITimerTask interface class.
  */
 
-#ifndef __GHOST_ITIMERTASK_H__
-#define __GHOST_ITIMERTASK_H__
+#pragma once
 
 #include "GHOST_Types.h"
 
@@ -56,7 +55,7 @@ class GHOST_ITimerTask {
 
   /**
    * Changes the timer callback.
-   * \param timerProc The timer callback.
+   * \param timerProc: The timer callback.
    */
   virtual void setTimerProc(const GHOST_TimerProcPtr timerProc) = 0;
 
@@ -76,5 +75,3 @@ class GHOST_ITimerTask {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_ITimerTask")
 #endif
 };
-
-#endif  // __GHOST_ITIMERTASK_H__

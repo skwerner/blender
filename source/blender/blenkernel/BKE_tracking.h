@@ -17,15 +17,17 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_TRACKING_H__
-#define __BKE_TRACKING_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Camera;
-struct Depsgraph;
 struct ImBuf;
 struct ListBase;
 struct MovieClipUser;
@@ -57,9 +59,7 @@ struct MovieTrackingReconstruction *BKE_tracking_get_active_reconstruction(
     struct MovieTracking *tracking);
 
 /* matrices for constraints and drawing */
-void BKE_tracking_get_camera_object_matrix(struct Scene *scene,
-                                           struct Object *ob,
-                                           float mat[4][4]);
+void BKE_tracking_get_camera_object_matrix(struct Object *camera_object, float mat[4][4]);
 void BKE_tracking_get_projection_matrix(struct MovieTracking *tracking,
                                         struct MovieTrackingObject *object,
                                         int framenr,
@@ -76,6 +76,8 @@ void BKE_tracking_clipboard_paste_tracks(struct MovieTracking *tracking,
                                          struct MovieTrackingObject *object);
 
 /* **** Track **** */
+struct MovieTrackingTrack *BKE_tracking_track_add_empty(struct MovieTracking *tracking,
+                                                        struct ListBase *tracks_list);
 struct MovieTrackingTrack *BKE_tracking_track_add(struct MovieTracking *tracking,
                                                   struct ListBase *tracksbase,
                                                   float x,
@@ -87,6 +89,23 @@ struct MovieTrackingTrack *BKE_tracking_track_duplicate(struct MovieTrackingTrac
 void BKE_tracking_track_unique_name(struct ListBase *tracksbase, struct MovieTrackingTrack *track);
 void BKE_tracking_track_free(struct MovieTrackingTrack *track);
 
+void BKE_tracking_track_first_last_frame_get(const struct MovieTrackingTrack *track,
+                                             int *r_first_frame,
+                                             int *r_last_frame);
+
+void BKE_tracking_tracks_first_last_frame_minmax(/*const*/ struct MovieTrackingTrack **tracks,
+                                                 const int num_tracks,
+                                                 int *r_first_frame,
+                                                 int *r_last_frame);
+
+int BKE_tracking_count_selected_tracks_in_list(const struct ListBase *tracks_list);
+int BKE_tracking_count_selected_tracks_in_active_object(/*const*/ struct MovieTracking *tracking);
+
+/* Get array of selected tracks from the current active object in the tracking structure.
+ * If nothing is selected then the result is nullptr and `r_num_tracks` is set to 0. */
+struct MovieTrackingTrack **BKE_tracking_selected_tracks_in_active_object(
+    struct MovieTracking *tracking, int *r_num_tracks);
+
 void BKE_tracking_track_flag_set(struct MovieTrackingTrack *track, int area, int flag);
 void BKE_tracking_track_flag_clear(struct MovieTrackingTrack *track, int area, int flag);
 
@@ -94,9 +113,14 @@ bool BKE_tracking_track_has_marker_at_frame(struct MovieTrackingTrack *track, in
 bool BKE_tracking_track_has_enabled_marker_at_frame(struct MovieTrackingTrack *track, int framenr);
 
 void BKE_tracking_track_path_clear(struct MovieTrackingTrack *track, int ref_frame, int action);
+
 void BKE_tracking_tracks_join(struct MovieTracking *tracking,
                               struct MovieTrackingTrack *dst_track,
                               struct MovieTrackingTrack *src_track);
+
+void BKE_tracking_tracks_average(struct MovieTrackingTrack *dst_track,
+                                 /*const*/ struct MovieTrackingTrack **src_tracks,
+                                 const int num_src_tracks);
 
 struct MovieTrackingTrack *BKE_tracking_track_get_named(struct MovieTracking *tracking,
                                                         struct MovieTrackingObject *object,
@@ -136,6 +160,17 @@ struct MovieTrackingMarker *BKE_tracking_marker_get_exact(struct MovieTrackingTr
                                                           int framenr);
 struct MovieTrackingMarker *BKE_tracking_marker_ensure(struct MovieTrackingTrack *track,
                                                        int framenr);
+
+/* Get marker position, possibly interpolating interpolating gap between keyframed/tracked markers.
+ *
+ * The result marker frame number is set to the requested frame number. Its flags are 0 if the
+ * marker is interpolated, and is set to original marker flag if there were no interpolation
+ * involved.
+ *
+ * Returns truth if the result is usable. */
+bool BKE_tracking_marker_get_interpolated(struct MovieTrackingTrack *track,
+                                          const int framenr,
+                                          struct MovieTrackingMarker *r_marker);
 
 void BKE_tracking_marker_pattern_minmax(const struct MovieTrackingMarker *marker,
                                         float min[2],
@@ -260,8 +295,16 @@ void BKE_tracking_distortion_undistort_v2(struct MovieDistortion *distortion,
                                           float r_co[2]);
 void BKE_tracking_distortion_free(struct MovieDistortion *distortion);
 
-void BKE_tracking_distort_v2(struct MovieTracking *tracking, const float co[2], float r_co[2]);
-void BKE_tracking_undistort_v2(struct MovieTracking *tracking, const float co[2], float r_co[2]);
+void BKE_tracking_distort_v2(struct MovieTracking *tracking,
+                             int image_width,
+                             int image_height,
+                             const float co[2],
+                             float r_co[2]);
+void BKE_tracking_undistort_v2(struct MovieTracking *tracking,
+                               int image_width,
+                               int image_height,
+                               const float co[2],
+                               float r_co[2]);
 
 struct ImBuf *BKE_tracking_undistort_frame(struct MovieTracking *tracking,
                                            struct ImBuf *ibuf,
@@ -275,6 +318,8 @@ struct ImBuf *BKE_tracking_distort_frame(struct MovieTracking *tracking,
                                          float overscan);
 
 void BKE_tracking_max_distortion_delta_across_bound(struct MovieTracking *tracking,
+                                                    int image_width,
+                                                    int image_height,
                                                     struct rcti *rect,
                                                     bool undistort,
                                                     float delta[2]);
@@ -282,7 +327,7 @@ void BKE_tracking_max_distortion_delta_across_bound(struct MovieTracking *tracki
 /* **** Image sampling **** */
 struct ImBuf *BKE_tracking_sample_pattern(int frame_width,
                                           int frame_height,
-                                          struct ImBuf *struct_ibuf,
+                                          struct ImBuf *search_ib,
                                           struct MovieTrackingTrack *track,
                                           struct MovieTrackingMarker *marker,
                                           bool from_anchor,
@@ -314,8 +359,7 @@ void BKE_tracking_refine_marker(struct MovieClip *clip,
 
 struct AutoTrackContext *BKE_autotrack_context_new(struct MovieClip *clip,
                                                    struct MovieClipUser *user,
-                                                   const bool backwards,
-                                                   const bool sequence);
+                                                   const bool is_backwards);
 bool BKE_autotrack_context_step(struct AutoTrackContext *context);
 void BKE_autotrack_context_sync(struct AutoTrackContext *context);
 void BKE_autotrack_context_sync_user(struct AutoTrackContext *context, struct MovieClipUser *user);
@@ -355,12 +399,18 @@ void BKE_tracking_reconstruction_solve(struct MovieReconstructContext *context,
 bool BKE_tracking_reconstruction_finish(struct MovieReconstructContext *context,
                                         struct MovieTracking *tracking);
 
+void BKE_tracking_reconstruction_report_error_message(struct MovieReconstructContext *context,
+                                                      const char *error_message);
+
+const char *BKE_tracking_reconstruction_error_message_get(
+    const struct MovieReconstructContext *context);
+
 void BKE_tracking_reconstruction_scale(struct MovieTracking *tracking, float scale[3]);
 
 /* **** Feature detection **** */
 void BKE_tracking_detect_fast(struct MovieTracking *tracking,
                               struct ListBase *tracksbase,
-                              struct ImBuf *imbuf,
+                              struct ImBuf *ibuf,
                               int framenr,
                               int margin,
                               int min_trackness,
@@ -455,7 +505,7 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 
 #define MARKER_VISIBLE(sc, track, marker) \
   (((marker)->flag & MARKER_DISABLED) == 0 || ((sc)->flag & SC_HIDE_DISABLED) == 0 || \
-   (sc->clip->tracking.act_track == track))
+   ((sc)->clip->tracking.act_track == track))
 
 #define TRACK_CLEAR_UPTO 0
 #define TRACK_CLEAR_REMAINED 1
@@ -473,4 +523,6 @@ void BKE_tracking_get_rna_path_prefix_for_plane_track(
 
 #define TRACK_AREA_ALL (TRACK_AREA_POINT | TRACK_AREA_PAT | TRACK_AREA_SEARCH)
 
+#ifdef __cplusplus
+}
 #endif

@@ -13,12 +13,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BLO_BLEND_DEFS_H__
-#define __BLO_BLEND_DEFS_H__
+#pragma once
 
 /** \file
  * \ingroup blenloader
- * \brief defines for blendfile codes
+ * \brief defines for blend-file codes.
  */
 
 /* INTEGER CODES */
@@ -72,5 +71,3 @@ enum {
 };
 
 #define BLEN_THUMB_MEMSIZE_FILE(_x, _y) (sizeof(int) * (2 + (size_t)(_x) * (size_t)(_y)))
-
-#endif /* __BLO_BLEND_DEFS_H__ */

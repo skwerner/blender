@@ -22,8 +22,7 @@
  * Declaration of GHOST_DisplayManagerCocoa class.
  */
 
-#ifndef __GHOST_DISPLAYMANAGERCOCOA_H__
-#define __GHOST_DISPLAYMANAGERCOCOA_H__
+#pragma once
 
 #ifndef __APPLE__
 #  error Apple only!
@@ -44,14 +43,14 @@ class GHOST_DisplayManagerCocoa : public GHOST_DisplayManager {
 
   /**
    * Returns the number of display devices on this system.
-   * \param numDisplays The number of displays on this system.
+   * \param numDisplays: The number of displays on this system.
    * \return Indication of success.
    */
   GHOST_TSuccess getNumDisplays(GHOST_TUns8 &numDisplays) const;
 
   /**
    * Returns the number of display settings for this display device.
-   * \param display The index of the display to query with 0 <= display < getNumDisplays().
+   * \param display: The index of the display to query with 0 <= display < getNumDisplays().
    * \param numSetting: The number of settings of the display device with this index.
    * \return Indication of success.
    */
@@ -59,9 +58,9 @@ class GHOST_DisplayManagerCocoa : public GHOST_DisplayManager {
 
   /**
    * Returns the current setting for this display device.
-   * \param display The index of the display to query with 0 <= display < getNumDisplays().
-   * \param index   The setting index to be returned.
-   * \param setting The setting of the display device with this index.
+   * \param display: The index of the display to query with 0 <= display < getNumDisplays().
+   * \param index: The setting index to be returned.
+   * \param setting: The setting of the display device with this index.
    * \return Indication of success.
    */
   GHOST_TSuccess getDisplaySetting(GHOST_TUns8 display,
@@ -70,8 +69,8 @@ class GHOST_DisplayManagerCocoa : public GHOST_DisplayManager {
 
   /**
    * Returns the current setting for this display device.
-   * \param display The index of the display to query with 0 <= display < getNumDisplays().
-   * \param setting The current setting of the display device with this index.
+   * \param display: The index of the display to query with 0 <= display < getNumDisplays().
+   * \param setting: The current setting of the display device with this index.
    * \return Indication of success.
    */
   GHOST_TSuccess getCurrentDisplaySetting(GHOST_TUns8 display,
@@ -79,19 +78,17 @@ class GHOST_DisplayManagerCocoa : public GHOST_DisplayManager {
 
   /**
    * Changes the current setting for this display device.
-   * \param display The index of the display to query with 0 <= display < getNumDisplays().
-   * \param setting The current setting of the display device with this index.
+   * \param display: The index of the display to query with 0 <= display < getNumDisplays().
+   * \param setting: The current setting of the display device with this index.
    * \return Indication of success.
    */
   GHOST_TSuccess setCurrentDisplaySetting(GHOST_TUns8 display,
                                           const GHOST_DisplaySetting &setting);
 
  protected:
-  //Do not cache values as OS X supports screen hot plug
+  // Do not cache values as OS X supports screen hot plug
   /** Cached number of displays. */
-  //CGDisplayCount m_numDisplays;
+  // CGDisplayCount m_numDisplays;
   /** Cached display id's for each display. */
-  //CGDirectDisplayID* m_displayIDs;
+  // CGDirectDisplayID* m_displayIDs;
 };
-
-#endif  // __GHOST_DISPLAYMANAGERCOCOA_H__

@@ -21,27 +21,25 @@ set(INC
   ../../blenkernel
   ../../blenlib
   ../../blentranslation
-  ../../depsgraph
   ../../bmesh
+  ../../depsgraph
+  ../../draw
   ../../gpu
   ../../imbuf
   ../../makesdna
   ../../makesrna
-  ../../render/extern/include
+  ../../render
   ../../windowmanager
   ../../../../intern/clog
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
   editface.c
   editmesh_add.c
   editmesh_add_gizmo.c
+  editmesh_automerge.c
   editmesh_bevel.c
   editmesh_bisect.c
   editmesh_extrude.c
@@ -53,6 +51,7 @@ set(SRC
   editmesh_knife.c
   editmesh_knife_project.c
   editmesh_loopcut.c
+  editmesh_mask_extract.c
   editmesh_path.c
   editmesh_polybuild.c
   editmesh_preselect_edgering.c
@@ -75,6 +74,7 @@ set(SRC
 set(LIB
   bf_blenkernel
   bf_blenlib
+  bf_windowmanager
 )
 
 if(WITH_INTERNATIONAL)
@@ -89,6 +89,9 @@ if(WITH_BULLET)
   add_definitions(-DWITH_BULLET)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+endif()
+
 
 blender_add_lib(bf_editor_mesh "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -63,7 +63,9 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
     }
     else {
       data_ = mem_allocate(from.datasize_);
-      memcpy(data_, from.data_, from.datasize_ * sizeof(T));
+      if (from.datasize_ > 0) {
+        memcpy(data_, from.data_, from.datasize_ * sizeof(T));
+      }
       datasize_ = from.datasize_;
       capacity_ = datasize_;
     }
@@ -73,7 +75,9 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
   {
     if (this != &from) {
       resize(from.size());
-      memcpy((void *)data_, from.data_, datasize_ * sizeof(T));
+      if (datasize_ > 0) {
+        memcpy((void *)data_, from.data_, datasize_ * sizeof(T));
+      }
     }
 
     return *this;
@@ -83,7 +87,7 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
   {
     resize(from.size());
 
-    if (from.size() > 0) {
+    if (from.size() > 0 && datasize_ > 0) {
       memcpy(data_, &from[0], datasize_ * sizeof(T));
     }
 
@@ -99,6 +103,9 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
   {
     if (datasize_ != other.datasize_) {
       return false;
+    }
+    if (datasize_ == 0) {
+      return true;
     }
 
     return memcmp(data_, other.data_, datasize_ * sizeof(T)) == 0;
@@ -122,6 +129,14 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
       from.datasize_ = 0;
       from.capacity_ = 0;
     }
+  }
+
+  void set_data(T *ptr_, size_t datasize)
+  {
+    clear();
+    data_ = ptr_;
+    datasize_ = datasize;
+    capacity_ = datasize;
   }
 
   T *steal_pointer()
@@ -204,6 +219,26 @@ template<typename T, size_t alignment = MIN_ALIGNMENT_CPU_DATA_TYPES> class arra
   {
     assert(i < datasize_);
     return data_[i];
+  }
+
+  T *begin()
+  {
+    return data_;
+  }
+
+  const T *begin() const
+  {
+    return data_;
+  }
+
+  T *end()
+  {
+    return data_ + datasize_;
+  }
+
+  const T *end() const
+  {
+    return data_ + datasize_;
   }
 
   void reserve(size_t newcapacity)

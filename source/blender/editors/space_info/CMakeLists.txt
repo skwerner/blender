@@ -22,19 +22,15 @@ set(INC
   ../../blenlib
   ../../blenloader
   ../../blentranslation
-  ../../depsgraph
-  ../../imbuf
   ../../bmesh
+  ../../depsgraph
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -56,6 +52,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_space_info "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

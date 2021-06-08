@@ -27,45 +27,54 @@
 static PyTypeObject BlenderAppBuildOptionsType;
 
 static PyStructSequence_Field app_builtopts_info_fields[] = {
-    /* names mostly follow CMake options, lowercase, after WITH_ */
-    {(char *)"bullet", NULL},
-    {(char *)"codec_avi", NULL},
-    {(char *)"codec_ffmpeg", NULL},
-    {(char *)"codec_sndfile", NULL},
-    {(char *)"compositor", NULL},
-    {(char *)"cycles", NULL},
-    {(char *)"cycles_osl", NULL},
-    {(char *)"freestyle", NULL},
-    {(char *)"image_cineon", NULL},
-    {(char *)"image_dds", NULL},
-    {(char *)"image_hdr", NULL},
-    {(char *)"image_openexr", NULL},
-    {(char *)"image_openjpeg", NULL},
-    {(char *)"image_tiff", NULL},
-    {(char *)"input_ndof", NULL},
-    {(char *)"audaspace", NULL},
-    {(char *)"international", NULL},
-    {(char *)"openal", NULL},
-    {(char *)"sdl", NULL},
-    {(char *)"sdl_dynload", NULL},
-    {(char *)"jack", NULL},
-    {(char *)"libmv", NULL},
-    {(char *)"mod_fluid", NULL},
-    {(char *)"mod_oceansim", NULL},
-    {(char *)"mod_remesh", NULL},
-    {(char *)"mod_smoke", NULL},
-    {(char *)"collada", NULL},
-    {(char *)"opencolorio", NULL},
-    {(char *)"openmp", NULL},
-    {(char *)"openvdb", NULL},
-    {(char *)"alembic", NULL},
+    /* names mostly follow CMake options, lowercase, after `WITH_` */
+    {"bullet", NULL},
+    {"codec_avi", NULL},
+    {"codec_ffmpeg", NULL},
+    {"codec_sndfile", NULL},
+    {"compositor", NULL},
+    {"cycles", NULL},
+    {"cycles_osl", NULL},
+    {"freestyle", NULL},
+    {"image_cineon", NULL},
+    {"image_dds", NULL},
+    {"image_hdr", NULL},
+    {"image_openexr", NULL},
+    {"image_openjpeg", NULL},
+    {"image_tiff", NULL},
+    {"input_ndof", NULL},
+    {"audaspace", NULL},
+    {"international", NULL},
+    {"openal", NULL},
+    {"opensubdiv", NULL},
+    {"sdl", NULL},
+    {"sdl_dynload", NULL},
+    {"coreaudio", NULL},
+    {"jack", NULL},
+    {"pulseaudio", NULL},
+    {"wasapi", NULL},
+    {"libmv", NULL},
+    {"mod_oceansim", NULL},
+    {"mod_remesh", NULL},
+    {"collada", NULL},
+    {"opencolorio", NULL},
+    {"openmp", NULL},
+    {"openvdb", NULL},
+    {"alembic", NULL},
+    {"usd", NULL},
+    {"fluid", NULL},
+    {"xr_openxr", NULL},
+    {"potrace", NULL},
+    {"pugixml", NULL},
+    {"haru", NULL},
+    /* Sentinel (this line prevents `clang-format` wrapping into columns). */
     {NULL},
 };
 
 static PyStructSequence_Desc app_builtopts_info_desc = {
-    (char *)"bpy.app.build_options",                                                /* name */
-    (char *)"This module contains information about options blender is built with", /* doc */
-    app_builtopts_info_fields,                                                      /* fields */
+    "bpy.app.build_options",                                                /* name */
+    "This module contains information about options blender is built with", /* doc */
+    app_builtopts_info_fields,                                              /* fields */
     ARRAY_SIZE(app_builtopts_info_fields) - 1,
 };
 
@@ -190,6 +199,12 @@ static PyObject *make_builtopts_info(void)
   SetObjIncref(Py_False);
 #endif
 
+#ifdef WITH_OPENSUBDIV
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
 #ifdef WITH_SDL
   SetObjIncref(Py_True);
 #else
@@ -202,19 +217,31 @@ static PyObject *make_builtopts_info(void)
   SetObjIncref(Py_False);
 #endif
 
+#ifdef WITH_COREAUDIO
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
 #ifdef WITH_JACK
   SetObjIncref(Py_True);
 #else
   SetObjIncref(Py_False);
 #endif
 
-#ifdef WITH_LIBMV
+#ifdef WITH_PULSEAUDIO
   SetObjIncref(Py_True);
 #else
   SetObjIncref(Py_False);
 #endif
 
-#ifdef WITH_MOD_FLUID
+#ifdef WITH_WASAPI
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_LIBMV
   SetObjIncref(Py_True);
 #else
   SetObjIncref(Py_False);
@@ -227,12 +254,6 @@ static PyObject *make_builtopts_info(void)
 #endif
 
 #ifdef WITH_MOD_REMESH
-  SetObjIncref(Py_True);
-#else
-  SetObjIncref(Py_False);
-#endif
-
-#ifdef WITH_SMOKE
   SetObjIncref(Py_True);
 #else
   SetObjIncref(Py_False);
@@ -268,6 +289,42 @@ static PyObject *make_builtopts_info(void)
   SetObjIncref(Py_False);
 #endif
 
+#ifdef WITH_USD
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_FLUID
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_XR_OPENXR
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_POTRACE
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_PUGIXML
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
+#ifdef WITH_HARU
+  SetObjIncref(Py_True);
+#else
+  SetObjIncref(Py_False);
+#endif
+
 #undef SetObjIncref
 
   return builtopts_info;
@@ -285,7 +342,7 @@ PyObject *BPY_app_build_options_struct(void)
   BlenderAppBuildOptionsType.tp_init = NULL;
   BlenderAppBuildOptionsType.tp_new = NULL;
   BlenderAppBuildOptionsType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   return ret;
 }

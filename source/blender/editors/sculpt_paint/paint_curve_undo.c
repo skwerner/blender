@@ -35,7 +35,6 @@
 #include "ED_undo.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 
 #include "paint_intern.h"
 
@@ -78,7 +77,9 @@ static void undocurve_free_data(UndoCurve *uc)
 
 typedef struct PaintCurveUndoStep {
   UndoStep step;
-  PaintCurve *pc;
+
+  UndoRefID_PaintCurve pc_ref;
+
   UndoCurve data;
 } PaintCurveUndoStep;
 
@@ -101,9 +102,12 @@ static bool paintcurve_undosys_step_encode(struct bContext *C,
                                            struct Main *UNUSED(bmain),
                                            UndoStep *us_p)
 {
-  if (C == NULL || !paint_curve_poll(C)) {
+  /* FIXME Double check this, it should not be needed here at all? undo system is supposed to
+   * ensure that. */
+  if (!paint_curve_poll(C)) {
     return false;
   }
+
   Paint *p = BKE_paint_get_active_from_context(C);
   PaintCurve *pc = p ? (p->brush ? p->brush->paint_curve : NULL) : NULL;
   if (pc == NULL) {
@@ -113,7 +117,7 @@ static bool paintcurve_undosys_step_encode(struct bContext *C,
   PaintCurveUndoStep *us = (PaintCurveUndoStep *)us_p;
   BLI_assert(us->step.data_size == 0);
 
-  us->pc = pc;
+  us->pc_ref.ptr = pc;
   undocurve_from_paintcurve(&us->data, pc);
 
   return true;
@@ -122,10 +126,11 @@ static bool paintcurve_undosys_step_encode(struct bContext *C,
 static void paintcurve_undosys_step_decode(struct bContext *UNUSED(C),
                                            struct Main *UNUSED(bmain),
                                            UndoStep *us_p,
-                                           int UNUSED(dir))
+                                           const eUndoStepDir UNUSED(dir),
+                                           bool UNUSED(is_final))
 {
   PaintCurveUndoStep *us = (PaintCurveUndoStep *)us_p;
-  undocurve_to_paintcurve(&us->data, us->pc);
+  undocurve_to_paintcurve(&us->data, us->pc_ref.ptr);
 }
 
 static void paintcurve_undosys_step_free(UndoStep *us_p)
@@ -134,18 +139,27 @@ static void paintcurve_undosys_step_free(UndoStep *us_p)
   undocurve_free_data(&us->data);
 }
 
+static void paintcurve_undosys_foreach_ID_ref(UndoStep *us_p,
+                                              UndoTypeForEachIDRefFn foreach_ID_ref_fn,
+                                              void *user_data)
+{
+  PaintCurveUndoStep *us = (PaintCurveUndoStep *)us_p;
+  foreach_ID_ref_fn(user_data, ((UndoRefID *)&us->pc_ref));
+}
+
 /* Export for ED_undo_sys. */
 void ED_paintcurve_undosys_type(UndoType *ut)
 {
   ut->name = "Paint Curve";
-  /* don't poll for now */
   ut->poll = paintcurve_undosys_poll;
   ut->step_encode_init = paintcurve_undosys_step_encode_init;
   ut->step_encode = paintcurve_undosys_step_encode;
   ut->step_decode = paintcurve_undosys_step_decode;
   ut->step_free = paintcurve_undosys_step_free;
 
-  ut->use_context = false;
+  ut->step_foreach_ID_ref = paintcurve_undosys_foreach_ID_ref;
+
+  ut->flags = 0;
 
   ut->step_size = sizeof(PaintCurveUndoStep);
 }
@@ -163,10 +177,12 @@ void ED_paintcurve_undo_push_begin(const char *name)
   BKE_undosys_step_push_init_with_type(ustack, C, name, BKE_UNDOSYS_TYPE_PAINTCURVE);
 }
 
-void ED_paintcurve_undo_push_end(void)
+void ED_paintcurve_undo_push_end(bContext *C)
 {
   UndoStack *ustack = ED_undo_stack_get();
-  BKE_undosys_step_push(ustack, NULL, NULL);
+  BKE_undosys_step_push(ustack, C, NULL);
+  BKE_undosys_stack_limit_steps_and_memory_defaults(ustack);
+  WM_file_tag_modified();
 }
 
 /** \} */

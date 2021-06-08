@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DOTPRODUCTOPERATION_H__
-#define __COM_DOTPRODUCTOPERATION_H__
+#pragma once
 
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class DotproductOperation : public NodeOperation {
  private:
@@ -28,10 +29,10 @@ class DotproductOperation : public NodeOperation {
 
  public:
   DotproductOperation();
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 };
 
-#endif
+}  // namespace blender::compositor

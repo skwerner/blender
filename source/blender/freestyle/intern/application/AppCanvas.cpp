@@ -18,26 +18,26 @@
  * \ingroup freestyle
  */
 
-#include "Controller.h"
-#include "AppView.h"
-#include "../image/Image.h"
-#include "../system/TimeStamp.h"
-#include "../stroke/StrokeRenderer.h"
 #include "AppCanvas.h"
 #include "AppConfig.h"
+#include "AppView.h"
+#include "Controller.h"
+
+#include "../image/Image.h"
+#include "../stroke/StrokeRenderer.h"
 #include "../stroke/StyleModule.h"
+#include "../system/TimeStamp.h"
 
 #include "../system/StringUtils.h"
-
 namespace Freestyle {
 
-AppCanvas::AppCanvas() : Canvas()
+AppCanvas::AppCanvas()
 {
-  _pViewer = 0;
+  _pViewer = nullptr;
   _MapsPath = Config::Path::getInstance()->getMapsDir().c_str();
 }
 
-AppCanvas::AppCanvas(AppView *iViewer) : Canvas()
+AppCanvas::AppCanvas(AppView *iViewer)
 {
   _pViewer = iViewer;
 }
@@ -49,7 +49,7 @@ AppCanvas::AppCanvas(const AppCanvas &iBrother) : Canvas(iBrother)
 
 AppCanvas::~AppCanvas()
 {
-  _pViewer = 0;
+  _pViewer = nullptr;
 }
 
 void AppCanvas::setViewer(AppView *iViewer)
@@ -104,8 +104,9 @@ void AppCanvas::init()
 void AppCanvas::postDraw()
 {
   for (unsigned int i = 0; i < _StyleModules.size(); i++) {
-    if (!_StyleModules[i]->getDisplayed() || !_Layers[i])
+    if (!_StyleModules[i]->getDisplayed() || !_Layers[i]) {
       continue;
+    }
     _Layers[i]->ScaleThickness(thickness());
   }
   Canvas::postDraw();
@@ -121,7 +122,7 @@ void AppCanvas::Erase()
 void AppCanvas::readColorPixels(int x, int y, int w, int h, RGBImage &oImage) const
 {
   float *rgb = new float[3 * w * h];
-  memset(rgb, 0, sizeof(float) * 3 * w * h);
+  memset(rgb, 0, sizeof(float[3]) * w * h);
   int xsch = width();
   int ysch = height();
   if (_pass_diffuse.buf) {
@@ -135,21 +136,32 @@ void AppCanvas::readColorPixels(int x, int y, int w, int h, RGBImage &oImage) co
     float yfac = ((float)recty) / ((float)(ymax - ymin));
 #if 0
     if (G.debug & G_DEBUG_FREESTYLE) {
-      printf("readColorPixels %d x %d @ (%d, %d) in %d x %d [%d x %d] -- %d x %d @ %d%%\n", w, h, x, y,
-             xsch, ysch, xmax - xmin, ymax - ymin, rectx, recty, (int)(xfac * 100.0f));
+      printf("readColorPixels %d x %d @ (%d, %d) in %d x %d [%d x %d] -- %d x %d @ %d%%\n",
+             w,
+             h,
+             x,
+             y,
+             xsch,
+             ysch,
+             xmax - xmin,
+             ymax - ymin,
+             rectx,
+             recty,
+             (int)(xfac * 100.0f));
     }
 #endif
     int ii, jj;
     for (int j = 0; j < h; j++) {
       jj = (int)((y - ymin + j) * yfac);
-      if (jj < 0 || jj >= recty)
+      if (jj < 0 || jj >= recty) {
         continue;
+      }
       for (int i = 0; i < w; i++) {
         ii = (int)((x - xmin + i) * xfac);
-        if (ii < 0 || ii >= rectx)
+        if (ii < 0 || ii >= rectx) {
           continue;
-        memcpy(
-            rgb + (w * j + i) * 3, _pass_diffuse.buf + (rectx * jj + ii) * 3, sizeof(float) * 3);
+        }
+        memcpy(rgb + (w * j + i) * 3, _pass_diffuse.buf + (rectx * jj + ii) * 3, sizeof(float[3]));
       }
     }
   }
@@ -173,19 +185,31 @@ void AppCanvas::readDepthPixels(int x, int y, int w, int h, GrayImage &oImage) c
     float yfac = ((float)recty) / ((float)(ymax - ymin));
 #if 0
     if (G.debug & G_DEBUG_FREESTYLE) {
-      printf("readDepthPixels %d x %d @ (%d, %d) in %d x %d [%d x %d] -- %d x %d @ %d%%\n", w, h, x, y,
-             xsch, ysch, xmax - xmin, ymax - ymin, rectx, recty, (int)(xfac * 100.0f));
+      printf("readDepthPixels %d x %d @ (%d, %d) in %d x %d [%d x %d] -- %d x %d @ %d%%\n",
+             w,
+             h,
+             x,
+             y,
+             xsch,
+             ysch,
+             xmax - xmin,
+             ymax - ymin,
+             rectx,
+             recty,
+             (int)(xfac * 100.0f));
     }
 #endif
     int ii, jj;
     for (int j = 0; j < h; j++) {
       jj = (int)((y - ymin + j) * yfac);
-      if (jj < 0 || jj >= recty)
+      if (jj < 0 || jj >= recty) {
         continue;
+      }
       for (int i = 0; i < w; i++) {
         ii = (int)((x - xmin + i) * xfac);
-        if (ii < 0 || ii >= rectx)
+        if (ii < 0 || ii >= rectx) {
           continue;
+        }
         z[w * j + i] = _pass_z.buf[rectx * jj + ii];
       }
     }
@@ -195,10 +219,12 @@ void AppCanvas::readDepthPixels(int x, int y, int w, int h, GrayImage &oImage) c
 
 void AppCanvas::RenderStroke(Stroke *iStroke)
 {
-  if (_basic)
+  if (_basic) {
     iStroke->RenderBasic(_Renderer);
-  else
+  }
+  else {
     iStroke->Render(_Renderer);
+  }
 }
 
 void AppCanvas::update()

@@ -22,18 +22,20 @@
  * \ingroup imbuf
  */
 
-#include "BLI_utildefines.h"
+#include <math.h>
+
 #include "BLI_math_color.h"
 #include "BLI_math_interp.h"
+#include "BLI_utildefines.h"
 #include "MEM_guardedalloc.h"
 
-#include "imbuf.h"
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "imbuf.h"
 
 #include "IMB_filter.h"
 
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_sys_types.h" /* for intptr_t support */
 
 static void imb_half_x_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
 {
@@ -85,10 +87,12 @@ static void imb_half_x_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
         *(destf++) = 0.5f * rf;
       }
     }
-    if (do_rect)
+    if (do_rect) {
       _p1 += (ibuf1->x << 2);
-    if (do_float)
+    }
+    if (do_float) {
       _p1f += (ibuf1->x << 2);
+    }
   }
 }
 
@@ -96,21 +100,25 @@ struct ImBuf *IMB_half_x(struct ImBuf *ibuf1)
 {
   struct ImBuf *ibuf2;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL) {
+    return NULL;
+  }
 
-  if (ibuf1->x <= 1)
+  if (ibuf1->x <= 1) {
     return (IMB_dupImBuf(ibuf1));
+  }
 
   ibuf2 = IMB_allocImBuf((ibuf1->x) / 2, ibuf1->y, ibuf1->planes, ibuf1->flags);
-  if (ibuf2 == NULL)
-    return (NULL);
+  if (ibuf2 == NULL) {
+    return NULL;
+  }
 
   imb_half_x_no_alloc(ibuf2, ibuf1);
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 struct ImBuf *IMB_double_fast_x(struct ImBuf *ibuf1)
@@ -119,17 +127,20 @@ struct ImBuf *IMB_double_fast_x(struct ImBuf *ibuf1)
   int *p1, *dest, i, col, do_rect, do_float;
   float *p1f, *destf;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL) {
+    return NULL;
+  }
 
   do_rect = (ibuf1->rect != NULL);
   do_float = (ibuf1->rect_float != NULL);
 
   ibuf2 = IMB_allocImBuf(2 * ibuf1->x, ibuf1->y, ibuf1->planes, ibuf1->flags);
-  if (ibuf2 == NULL)
-    return (NULL);
+  if (ibuf2 == NULL) {
+    return NULL;
+  }
 
   p1 = (int *)ibuf1->rect;
   dest = (int *)ibuf2->rect;
@@ -152,22 +163,24 @@ struct ImBuf *IMB_double_fast_x(struct ImBuf *ibuf1)
     }
   }
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 struct ImBuf *IMB_double_x(struct ImBuf *ibuf1)
 {
   struct ImBuf *ibuf2;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL) {
+    return NULL;
+  }
 
   ibuf2 = IMB_double_fast_x(ibuf1);
 
   imb_filterx(ibuf2);
-  return (ibuf2);
+  return ibuf2;
 }
 
 static void imb_half_y_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
@@ -228,10 +241,12 @@ static void imb_half_y_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
         *(destf++) = 0.5f * rf;
       }
     }
-    if (do_rect)
+    if (do_rect) {
       _p1 += (ibuf1->x << 3);
-    if (do_float)
+    }
+    if (do_float) {
       _p1f += (ibuf1->x << 3);
+    }
   }
 }
 
@@ -239,21 +254,25 @@ struct ImBuf *IMB_half_y(struct ImBuf *ibuf1)
 {
   struct ImBuf *ibuf2;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL) {
+    return NULL;
+  }
 
-  if (ibuf1->y <= 1)
+  if (ibuf1->y <= 1) {
     return (IMB_dupImBuf(ibuf1));
+  }
 
   ibuf2 = IMB_allocImBuf(ibuf1->x, (ibuf1->y) / 2, ibuf1->planes, ibuf1->flags);
-  if (ibuf2 == NULL)
-    return (NULL);
+  if (ibuf2 == NULL) {
+    return NULL;
+  }
 
   imb_half_y_no_alloc(ibuf2, ibuf1);
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 struct ImBuf *IMB_double_fast_y(struct ImBuf *ibuf1)
@@ -264,17 +283,20 @@ struct ImBuf *IMB_double_fast_y(struct ImBuf *ibuf1)
   int x, y;
   int do_rect, do_float;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL) {
+    return NULL;
+  }
 
   do_rect = (ibuf1->rect != NULL);
   do_float = (ibuf1->rect_float != NULL);
 
   ibuf2 = IMB_allocImBuf(ibuf1->x, 2 * ibuf1->y, ibuf1->planes, ibuf1->flags);
-  if (ibuf2 == NULL)
-    return (NULL);
+  if (ibuf2 == NULL) {
+    return NULL;
+  }
 
   p1 = (int *)ibuf1->rect;
   dest1 = (int *)ibuf2->rect;
@@ -284,34 +306,38 @@ struct ImBuf *IMB_double_fast_y(struct ImBuf *ibuf1)
   for (y = ibuf1->y; y > 0; y--) {
     if (do_rect) {
       dest2 = dest1 + ibuf2->x;
-      for (x = ibuf2->x; x > 0; x--)
+      for (x = ibuf2->x; x > 0; x--) {
         *dest1++ = *dest2++ = *p1++;
+      }
       dest1 = dest2;
     }
     if (do_float) {
       dest2f = dest1f + (4 * ibuf2->x);
-      for (x = ibuf2->x * 4; x > 0; x--)
+      for (x = ibuf2->x * 4; x > 0; x--) {
         *dest1f++ = *dest2f++ = *p1f++;
+      }
       dest1f = dest2f;
     }
   }
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 struct ImBuf *IMB_double_y(struct ImBuf *ibuf1)
 {
   struct ImBuf *ibuf2;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL) {
+    return NULL;
+  }
 
   ibuf2 = IMB_double_fast_y(ibuf1);
 
   IMB_filtery(ibuf2);
-  return (ibuf2);
+  return ibuf2;
 }
 
 /* pretty much specific functions which converts uchar <-> ushort but assumes
@@ -394,8 +420,9 @@ void imb_onehalf_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
         dest += 4;
       }
       cp1 = cp2;
-      if (ibuf1->x & 1)
+      if (ibuf1->x & 1) {
         cp1 += 4;
+      }
     }
   }
 
@@ -416,8 +443,9 @@ void imb_onehalf_no_alloc(struct ImBuf *ibuf2, struct ImBuf *ibuf1)
         destf += 4;
       }
       p1f = p2f;
-      if (ibuf1->x & 1)
+      if (ibuf1->x & 1) {
         p1f += 4;
+      }
     }
   }
 }
@@ -426,23 +454,28 @@ ImBuf *IMB_onehalf(struct ImBuf *ibuf1)
 {
   struct ImBuf *ibuf2;
 
-  if (ibuf1 == NULL)
-    return (NULL);
-  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL)
-    return (NULL);
+  if (ibuf1 == NULL) {
+    return NULL;
+  }
+  if (ibuf1->rect == NULL && ibuf1->rect_float == NULL) {
+    return NULL;
+  }
 
-  if (ibuf1->x <= 1)
+  if (ibuf1->x <= 1) {
     return (IMB_half_y(ibuf1));
-  if (ibuf1->y <= 1)
+  }
+  if (ibuf1->y <= 1) {
     return (IMB_half_x(ibuf1));
+  }
 
   ibuf2 = IMB_allocImBuf((ibuf1->x) / 2, (ibuf1->y) / 2, ibuf1->planes, ibuf1->flags);
-  if (ibuf2 == NULL)
-    return (NULL);
+  if (ibuf2 == NULL) {
+    return NULL;
+  }
 
   imb_onehalf_no_alloc(ibuf2, ibuf1);
 
-  return (ibuf2);
+  return ibuf2;
 }
 
 /* q_scale_linear_interpolation helper functions */
@@ -557,7 +590,8 @@ static void shrink_picture_byte(unsigned char *src,
 
       w = (weight1y * weight1x) >> 16;
 
-      /* ensure correct rounding, without this you get ugly banding, or too low color values (ton) */
+      /* Ensure correct rounding, without this you get ugly banding,
+       * or too low color values (ton). */
       dst_line1[x].r += (line[0] * w + 32767) >> 16;
       dst_line1[x].g += (line[1] * w + 32767) >> 16;
       dst_line1[x].b += (line[2] * w + 32767) >> 16;
@@ -845,7 +879,7 @@ static void q_scale_float(
  * Should be comparable in speed to the ImBuf ..._fast functions at least
  * for byte-buffers.
  *
- * NOTE: disabled, due to unacceptable inaccuracy and quality loss, see bug #18609 (ton)
+ * NOTE: disabled, due to unacceptable inaccuracy and quality loss, see bug T18609 (ton)
  */
 static bool q_scale_linear_interpolation(struct ImBuf *ibuf, int newx, int newy)
 {
@@ -854,7 +888,7 @@ static bool q_scale_linear_interpolation(struct ImBuf *ibuf, int newx, int newy)
   }
 
   if (ibuf->rect) {
-    unsigned char *newrect = MEM_mallocN(newx * newy * sizeof(int), "q_scale rect");
+    unsigned char *newrect = MEM_mallocN(sizeof(int) * newx * newy, "q_scale rect");
     q_scale_byte((unsigned char *)ibuf->rect, newrect, ibuf->x, ibuf->y, newx, newy);
 
     imb_freerectImBuf(ibuf);
@@ -862,7 +896,7 @@ static bool q_scale_linear_interpolation(struct ImBuf *ibuf, int newx, int newy)
     ibuf->rect = (unsigned int *)newrect;
   }
   if (ibuf->rect_float) {
-    float *newrect = MEM_mallocN(newx * newy * 4 * sizeof(float), "q_scale rectfloat");
+    float *newrect = MEM_mallocN(sizeof(float[4]) * newx * newy, "q_scale rectfloat");
     q_scale_float(ibuf->rect_float, newrect, ibuf->x, ibuf->y, newx, newy);
     imb_freerectfloatImBuf(ibuf);
     ibuf->mall |= IB_rectfloat;
@@ -890,20 +924,23 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
   nval[0] = nval[1] = nval[2] = nval[3] = 0.0f;
   nvalf[0] = nvalf[1] = nvalf[2] = nvalf[3] = 0.0f;
 
-  if (!do_rect && !do_float)
-    return (ibuf);
+  if (!do_rect && !do_float) {
+    return ibuf;
+  }
 
   if (do_rect) {
-    _newrect = MEM_mallocN(newx * ibuf->y * sizeof(uchar) * 4, "scaledownx");
-    if (_newrect == NULL)
-      return (ibuf);
+    _newrect = MEM_mallocN(sizeof(uchar[4]) * newx * ibuf->y, "scaledownx");
+    if (_newrect == NULL) {
+      return ibuf;
+    }
   }
   if (do_float) {
-    _newrectf = MEM_mallocN(newx * ibuf->y * sizeof(float) * 4, "scaledownxf");
+    _newrectf = MEM_mallocN(sizeof(float[4]) * newx * ibuf->y, "scaledownxf");
     if (_newrectf == NULL) {
-      if (_newrect)
+      if (_newrect) {
         MEM_freeN(_newrect);
-      return (ibuf);
+      }
+      return ibuf;
     }
   }
 
@@ -965,10 +1002,10 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
         val[3] = rect[3];
         rect += 4;
 
-        newrect[0] = ((nval[0] + sample * val[0]) / add + 0.5f);
-        newrect[1] = ((nval[1] + sample * val[1]) / add + 0.5f);
-        newrect[2] = ((nval[2] + sample * val[2]) / add + 0.5f);
-        newrect[3] = ((nval[3] + sample * val[3]) / add + 0.5f);
+        newrect[0] = roundf((nval[0] + sample * val[0]) / add);
+        newrect[1] = roundf((nval[1] + sample * val[1]) / add);
+        newrect[2] = roundf((nval[2] + sample * val[2]) / add);
+        newrect[3] = roundf((nval[3] + sample * val[3]) / add);
 
         newrect += 4;
       }
@@ -994,14 +1031,14 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
 
   if (do_rect) {
     // printf("%ld %ld\n", (uchar *)rect - ((uchar *)ibuf->rect), rect_size);
-    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug [#26502] */
+    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug T26502. */
     imb_freerectImBuf(ibuf);
     ibuf->mall |= IB_rect;
     ibuf->rect = (unsigned int *)_newrect;
   }
   if (do_float) {
     // printf("%ld %ld\n", rectf - ibuf->rect_float, rect_size);
-    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug [#26502] */
+    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug T26502. */
     imb_freerectfloatImBuf(ibuf);
     ibuf->mall |= IB_rectfloat;
     ibuf->rect_float = _newrectf;
@@ -1009,7 +1046,7 @@ static ImBuf *scaledownx(struct ImBuf *ibuf, int newx)
   (void)rect_size; /* UNUSED in release builds */
 
   ibuf->x = newx;
-  return (ibuf);
+  return ibuf;
 }
 
 static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
@@ -1028,20 +1065,23 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
   nval[0] = nval[1] = nval[2] = nval[3] = 0.0f;
   nvalf[0] = nvalf[1] = nvalf[2] = nvalf[3] = 0.0f;
 
-  if (!do_rect && !do_float)
-    return (ibuf);
+  if (!do_rect && !do_float) {
+    return ibuf;
+  }
 
   if (do_rect) {
-    _newrect = MEM_mallocN(newy * ibuf->x * sizeof(uchar) * 4, "scaledowny");
-    if (_newrect == NULL)
-      return (ibuf);
+    _newrect = MEM_mallocN(sizeof(uchar[4]) * newy * ibuf->x, "scaledowny");
+    if (_newrect == NULL) {
+      return ibuf;
+    }
   }
   if (do_float) {
-    _newrectf = MEM_mallocN(newy * ibuf->x * sizeof(float) * 4, "scaledownyf");
+    _newrectf = MEM_mallocN(sizeof(float[4]) * newy * ibuf->x, "scaledownyf");
     if (_newrectf == NULL) {
-      if (_newrect)
+      if (_newrect) {
         MEM_freeN(_newrect);
-      return (ibuf);
+      }
+      return ibuf;
     }
   }
 
@@ -1104,10 +1144,10 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
         val[3] = rect[3];
         rect += skipx;
 
-        newrect[0] = ((nval[0] + sample * val[0]) / add + 0.5f);
-        newrect[1] = ((nval[1] + sample * val[1]) / add + 0.5f);
-        newrect[2] = ((nval[2] + sample * val[2]) / add + 0.5f);
-        newrect[3] = ((nval[3] + sample * val[3]) / add + 0.5f);
+        newrect[0] = roundf((nval[0] + sample * val[0]) / add);
+        newrect[1] = roundf((nval[1] + sample * val[1]) / add);
+        newrect[2] = roundf((nval[2] + sample * val[2]) / add);
+        newrect[3] = roundf((nval[3] + sample * val[3]) / add);
 
         newrect += skipx;
       }
@@ -1133,14 +1173,14 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
 
   if (do_rect) {
     // printf("%ld %ld\n", (uchar *)rect - ((uchar *)ibuf->rect), rect_size);
-    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug [#26502] */
+    BLI_assert((uchar *)rect - ((uchar *)ibuf->rect) == rect_size); /* see bug T26502. */
     imb_freerectImBuf(ibuf);
     ibuf->mall |= IB_rect;
     ibuf->rect = (unsigned int *)_newrect;
   }
   if (do_float) {
     // printf("%ld %ld\n", rectf - ibuf->rect_float, rect_size);
-    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug [#26502] */
+    BLI_assert((rectf - ibuf->rect_float) == rect_size); /* see bug T26502. */
     imb_freerectfloatImBuf(ibuf);
     ibuf->mall |= IB_rectfloat;
     ibuf->rect_float = (float *)_newrectf;
@@ -1148,7 +1188,7 @@ static ImBuf *scaledowny(struct ImBuf *ibuf, int newy)
   (void)rect_size; /* UNUSED in release builds */
 
   ibuf->y = newy;
-  return (ibuf);
+  return ibuf;
 }
 
 static ImBuf *scaleupx(struct ImBuf *ibuf, int newx)
@@ -1171,24 +1211,28 @@ static ImBuf *scaleupx(struct ImBuf *ibuf, int newx)
   val_g = nval_g = diff_g = val_r = nval_r = diff_r = 0;
   val_af = nval_af = diff_af = val_bf = nval_bf = diff_bf = 0;
   val_gf = nval_gf = diff_gf = val_rf = nval_rf = diff_rf = 0;
-  if (ibuf == NULL)
-    return (NULL);
-  if (ibuf->rect == NULL && ibuf->rect_float == NULL)
-    return (ibuf);
+  if (ibuf == NULL) {
+    return NULL;
+  }
+  if (ibuf->rect == NULL && ibuf->rect_float == NULL) {
+    return ibuf;
+  }
 
   if (ibuf->rect) {
     do_rect = true;
     _newrect = MEM_mallocN(newx * ibuf->y * sizeof(int), "scaleupx");
-    if (_newrect == NULL)
-      return (ibuf);
+    if (_newrect == NULL) {
+      return ibuf;
+    }
   }
   if (ibuf->rect_float) {
     do_float = true;
-    _newrectf = MEM_mallocN(newx * ibuf->y * sizeof(float) * 4, "scaleupxf");
+    _newrectf = MEM_mallocN(sizeof(float[4]) * newx * ibuf->y, "scaleupxf");
     if (_newrectf == NULL) {
-      if (_newrect)
+      if (_newrect) {
         MEM_freeN(_newrect);
-      return (ibuf);
+      }
+      return ibuf;
     }
   }
 
@@ -1320,7 +1364,7 @@ static ImBuf *scaleupx(struct ImBuf *ibuf, int newx)
   }
 
   ibuf->x = newx;
-  return (ibuf);
+  return ibuf;
 }
 
 static ImBuf *scaleupy(struct ImBuf *ibuf, int newy)
@@ -1343,24 +1387,28 @@ static ImBuf *scaleupy(struct ImBuf *ibuf, int newy)
   val_g = nval_g = diff_g = val_r = nval_r = diff_r = 0;
   val_af = nval_af = diff_af = val_bf = nval_bf = diff_bf = 0;
   val_gf = nval_gf = diff_gf = val_rf = nval_rf = diff_rf = 0;
-  if (ibuf == NULL)
-    return (NULL);
-  if (ibuf->rect == NULL && ibuf->rect_float == NULL)
-    return (ibuf);
+  if (ibuf == NULL) {
+    return NULL;
+  }
+  if (ibuf->rect == NULL && ibuf->rect_float == NULL) {
+    return ibuf;
+  }
 
   if (ibuf->rect) {
     do_rect = true;
     _newrect = MEM_mallocN(ibuf->x * newy * sizeof(int), "scaleupy");
-    if (_newrect == NULL)
-      return (ibuf);
+    if (_newrect == NULL) {
+      return ibuf;
+    }
   }
   if (ibuf->rect_float) {
     do_float = true;
-    _newrectf = MEM_mallocN(ibuf->x * newy * sizeof(float) * 4, "scaleupyf");
+    _newrectf = MEM_mallocN(sizeof(float[4]) * ibuf->x * newy, "scaleupyf");
     if (_newrectf == NULL) {
-      if (_newrect)
+      if (_newrect) {
         MEM_freeN(_newrect);
-      return (ibuf);
+      }
+      return ibuf;
     }
   }
 
@@ -1499,7 +1547,7 @@ static ImBuf *scaleupy(struct ImBuf *ibuf, int newy)
   }
 
   ibuf->y = newy;
-  return (ibuf);
+  return ibuf;
 }
 
 static void scalefast_Z_ImBuf(ImBuf *ibuf, int newx, int newy)
@@ -1527,8 +1575,8 @@ static void scalefast_Z_ImBuf(ImBuf *ibuf, int newx, int newy)
     return;
   }
 
-  stepx = (65536.0 * (ibuf->x - 1.0) / (newx - 1.0)) + 0.5;
-  stepy = (65536.0 * (ibuf->y - 1.0) / (newy - 1.0)) + 0.5;
+  stepx = round(65536.0 * (ibuf->x - 1.0) / (newx - 1.0));
+  stepy = round(65536.0 * (ibuf->y - 1.0) / (newy - 1.0));
   ofsy = 32768;
 
   newzbuf = _newzbuf;
@@ -1572,33 +1620,39 @@ static void scalefast_Z_ImBuf(ImBuf *ibuf, int newx, int newy)
  */
 bool IMB_scaleImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy)
 {
-  if (ibuf == NULL)
+  if (ibuf == NULL) {
     return false;
-  if (ibuf->rect == NULL && ibuf->rect_float == NULL)
+  }
+  if (ibuf->rect == NULL && ibuf->rect_float == NULL) {
     return false;
+  }
 
   if (newx == ibuf->x && newy == ibuf->y) {
     return false;
   }
 
-  /* scaleup / scaledown functions below change ibuf->x and ibuf->y
-   * so we first scale the Z-buffer (if any) */
+  /* Scale-up / scale-down functions below change ibuf->x and ibuf->y
+   * so we first scale the Z-buffer (if any). */
   scalefast_Z_ImBuf(ibuf, newx, newy);
 
   /* try to scale common cases in a fast way */
-  /* disabled, quality loss is unacceptable, see report #18609  (ton) */
+  /* disabled, quality loss is unacceptable, see report T18609  (ton) */
   if (0 && q_scale_linear_interpolation(ibuf, newx, newy)) {
     return true;
   }
 
-  if (newx && (newx < ibuf->x))
+  if (newx && (newx < ibuf->x)) {
     scaledownx(ibuf, newx);
-  if (newy && (newy < ibuf->y))
+  }
+  if (newy && (newy < ibuf->y)) {
     scaledowny(ibuf, newy);
-  if (newx && (newx > ibuf->x))
+  }
+  if (newx && (newx > ibuf->x)) {
     scaleupx(ibuf, newx);
-  if (newy && (newy > ibuf->y))
+  }
+  if (newy && (newy > ibuf->y)) {
     scaleupy(ibuf, newy);
+  }
 
   return true;
 }
@@ -1625,37 +1679,44 @@ bool IMB_scalefastImBuf(struct ImBuf *ibuf, unsigned int newx, unsigned int newy
   _newrectf = NULL;
   newrectf = NULL;
 
-  if (ibuf == NULL)
+  if (ibuf == NULL) {
     return false;
-  if (ibuf->rect)
+  }
+  if (ibuf->rect) {
     do_rect = true;
-  if (ibuf->rect_float)
+  }
+  if (ibuf->rect_float) {
     do_float = true;
-  if (do_rect == false && do_float == false)
+  }
+  if (do_rect == false && do_float == false) {
     return false;
+  }
 
-  if (newx == ibuf->x && newy == ibuf->y)
+  if (newx == ibuf->x && newy == ibuf->y) {
     return false;
+  }
 
   if (do_rect) {
     _newrect = MEM_mallocN(newx * newy * sizeof(int), "scalefastimbuf");
-    if (_newrect == NULL)
+    if (_newrect == NULL) {
       return false;
+    }
     newrect = _newrect;
   }
 
   if (do_float) {
-    _newrectf = MEM_mallocN(newx * newy * sizeof(float) * 4, "scalefastimbuf f");
+    _newrectf = MEM_mallocN(sizeof(float[4]) * newx * newy, "scalefastimbuf f");
     if (_newrectf == NULL) {
-      if (_newrect)
+      if (_newrect) {
         MEM_freeN(_newrect);
+      }
       return false;
     }
     newrectf = _newrectf;
   }
 
-  stepx = (65536.0 * (ibuf->x - 1.0) / (newx - 1.0)) + 0.5;
-  stepy = (65536.0 * (ibuf->y - 1.0) / (newy - 1.0)) + 0.5;
+  stepx = round(65536.0 * (ibuf->x - 1.0) / (newx - 1.0));
+  stepy = round(65536.0 * (ibuf->y - 1.0) / (newy - 1.0));
   ofsy = 32768;
 
   for (y = newy; y > 0; y--, ofsy += stepy) {
@@ -1785,13 +1846,15 @@ void IMB_scaleImBuf_threaded(ImBuf *ibuf, unsigned int newx, unsigned int newy)
   init_data.newx = newx;
   init_data.newy = newy;
 
-  if (ibuf->rect)
+  if (ibuf->rect) {
     init_data.byte_buffer = MEM_mallocN(4 * newx * newy * sizeof(char),
                                         "threaded scale byte buffer");
+  }
 
-  if (ibuf->rect_float)
+  if (ibuf->rect_float) {
     init_data.float_buffer = MEM_mallocN(ibuf->channels * newx * newy * sizeof(float),
                                          "threaded scale float buffer");
+  }
 
   /* actual scaling threads */
   IMB_processor_apply_threaded(

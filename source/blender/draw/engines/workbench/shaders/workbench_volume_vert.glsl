@@ -1,10 +1,15 @@
 
-uniform mat4 ModelViewProjectionMatrix;
-uniform vec3 OrcoTexCoFactors[2];
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(gpu_shader_common_obinfos_lib.glsl)
+
 uniform float slicePosition;
 uniform int sliceAxis; /* -1 is no slice, 0 is X, 1 is Y, 2 is Z. */
 
+uniform mat4 volumeTextureToObject;
+
 in vec3 pos;
+
+RESOURCE_ID_VARYING
 
 #ifdef VOLUME_SLICE
 in vec3 uvs;
@@ -28,6 +33,13 @@ void main()
 #else
   vec3 final_pos = pos;
 #endif
-  final_pos = ((final_pos * 0.5 + 0.5) - OrcoTexCoFactors[0]) / OrcoTexCoFactors[1];
-  gl_Position = ModelViewProjectionMatrix * vec4(final_pos, 1.0);
+
+#ifdef VOLUME_SMOKE
+  final_pos = ((final_pos * 0.5 + 0.5) - OrcoTexCoFactors[0].xyz) / OrcoTexCoFactors[1].xyz;
+#else
+  final_pos = (volumeTextureToObject * vec4(final_pos * 0.5 + 0.5, 1.0)).xyz;
+#endif
+  gl_Position = point_object_to_ndc(final_pos);
+
+  PASS_RESOURCE_ID
 }

@@ -16,15 +16,17 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COMBINECOLORNODE_H__
-#define __COM_COMBINECOLORNODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 class CombineColorNode : public Node {
  public:
   CombineColorNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 
  protected:
   virtual NodeOperation *getColorConverter(const CompositorContext &context) const = 0;
@@ -36,7 +38,7 @@ class CombineRGBANode : public CombineColorNode {
   {
   }
 
-  NodeOperation *getColorConverter(const CompositorContext &context) const;
+  NodeOperation *getColorConverter(const CompositorContext &context) const override;
 };
 
 class CombineHSVANode : public CombineColorNode {
@@ -45,7 +47,7 @@ class CombineHSVANode : public CombineColorNode {
   {
   }
 
-  NodeOperation *getColorConverter(const CompositorContext &context) const;
+  NodeOperation *getColorConverter(const CompositorContext &context) const override;
 };
 
 class CombineYCCANode : public CombineColorNode {
@@ -54,7 +56,7 @@ class CombineYCCANode : public CombineColorNode {
   {
   }
 
-  NodeOperation *getColorConverter(const CompositorContext &context) const;
+  NodeOperation *getColorConverter(const CompositorContext &context) const override;
 };
 
 class CombineYUVANode : public CombineColorNode {
@@ -63,7 +65,7 @@ class CombineYUVANode : public CombineColorNode {
   {
   }
 
-  NodeOperation *getColorConverter(const CompositorContext &context) const;
+  NodeOperation *getColorConverter(const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

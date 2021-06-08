@@ -18,8 +18,8 @@
  * \ingroup pythonintern
  */
 
-#include <Python.h>
 #include "BLI_utildefines.h"
+#include <Python.h>
 
 #include "bpy_app_oiio.h"
 
@@ -32,18 +32,16 @@
 static PyTypeObject BlenderAppOIIOType;
 
 static PyStructSequence_Field app_oiio_info_fields[] = {
-    {(char *)"supported",
-     (char *)("Boolean, True when Blender is built with OpenImageIO support")},
-    {(char *)("version"), (char *)("The OpenImageIO version as a tuple of 3 numbers")},
-    {(char *)("version_string"), (char *)("The OpenImageIO version formatted as a string")},
+    {"supported", "Boolean, True when Blender is built with OpenImageIO support"},
+    {"version", "The OpenImageIO version as a tuple of 3 numbers"},
+    {"version_string", "The OpenImageIO version formatted as a string"},
     {NULL},
 };
 
 static PyStructSequence_Desc app_oiio_info_desc = {
-    (char *)"bpy.app.oiio", /* name */
-    (char
-         *)"This module contains information about OpeImageIO blender is linked against", /* doc */
-    app_oiio_info_fields, /* fields */
+    "bpy.app.oiio",                                                                /* name */
+    "This module contains information about OpeImageIO blender is linked against", /* doc */
+    app_oiio_info_fields,                                                          /* fields */
     ARRAY_SIZE(app_oiio_info_fields) - 1,
 };
 
@@ -79,8 +77,8 @@ static PyObject *make_oiio_info(void)
   SetStrItem("Unknown");
 #endif
 
-  if (PyErr_Occurred()) {
-    Py_CLEAR(oiio_info);
+  if (UNLIKELY(PyErr_Occurred())) {
+    Py_DECREF(oiio_info);
     return NULL;
   }
 
@@ -102,7 +100,7 @@ PyObject *BPY_app_oiio_struct(void)
   BlenderAppOIIOType.tp_init = NULL;
   BlenderAppOIIOType.tp_new = NULL;
   BlenderAppOIIOType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   return ret;
 }

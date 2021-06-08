@@ -16,7 +16,7 @@
 
 #include "bvh/bvh_unaligned.h"
 
-#include "render/mesh.h"
+#include "render/hair.h"
 #include "render/object.h"
 
 #include "bvh/bvh_binning.h"
@@ -68,13 +68,14 @@ bool BVHUnaligned::compute_aligned_space(const BVHReference &ref, Transform *ali
   const Object *object = objects_[ref.prim_object()];
   const int packed_type = ref.prim_type();
   const int type = (packed_type & PRIMITIVE_ALL);
-  if (type & PRIMITIVE_CURVE) {
+  /* No motion blur curves here, we can't fit them to aligned boxes well. */
+  if (type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_CURVE_THICK)) {
     const int curve_index = ref.prim_index();
     const int segment = PRIMITIVE_UNPACK_SEGMENT(packed_type);
-    const Mesh *mesh = object->mesh;
-    const Mesh::Curve &curve = mesh->get_curve(curve_index);
+    const Hair *hair = static_cast<const Hair *>(object->get_geometry());
+    const Hair::Curve &curve = hair->get_curve(curve_index);
     const int key = curve.first_key + segment;
-    const float3 v1 = mesh->curve_keys[key], v2 = mesh->curve_keys[key + 1];
+    const float3 v1 = hair->get_curve_keys()[key], v2 = hair->get_curve_keys()[key + 1];
     float length;
     const float3 axis = normalize_len(v2 - v1, &length);
     if (length > 1e-6f) {
@@ -93,13 +94,14 @@ BoundBox BVHUnaligned::compute_aligned_prim_boundbox(const BVHReference &prim,
   const Object *object = objects_[prim.prim_object()];
   const int packed_type = prim.prim_type();
   const int type = (packed_type & PRIMITIVE_ALL);
-  if (type & PRIMITIVE_CURVE) {
+  /* No motion blur curves here, we can't fit them to aligned boxes well. */
+  if (type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_CURVE_THICK)) {
     const int curve_index = prim.prim_index();
     const int segment = PRIMITIVE_UNPACK_SEGMENT(packed_type);
-    const Mesh *mesh = object->mesh;
-    const Mesh::Curve &curve = mesh->get_curve(curve_index);
+    const Hair *hair = static_cast<const Hair *>(object->get_geometry());
+    const Hair::Curve &curve = hair->get_curve(curve_index);
     curve.bounds_grow(
-        segment, &mesh->curve_keys[0], &mesh->curve_radius[0], aligned_space, bounds);
+        segment, &hair->get_curve_keys()[0], &hair->get_curve_radius()[0], aligned_space, bounds);
   }
   else {
     bounds = prim.bounds().transformed(&aligned_space);

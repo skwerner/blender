@@ -24,13 +24,14 @@
  * Defines in this header are only used to define blend file storage.
  * This allows us to rename variables & structs without breaking compatibility.
  *
- * - When renaming the member of a struct which has it's self been renamed
+ * - When renaming the member of a struct which has itself been renamed
  *   refer to the newer name, not the original.
  *
  * - Changes here only change generated code for `makesdna.c` and `makesrna.c`
  *   without impacting Blender's run-time, besides allowing us to use the new names.
  *
- * - Renaming something that has already been renamed can be done by editing the existing rename macro.
+ * - Renaming something that has already been renamed can be done
+ *   by editing the existing rename macro.
  *   All references to the previous destination name can be removed since they're
  *   never written to disk.
  *
@@ -57,10 +58,29 @@ DNA_STRUCT_RENAME(SpaceIpo, SpaceGraph)
 DNA_STRUCT_RENAME(SpaceOops, SpaceOutliner)
 DNA_STRUCT_RENAME_ELEM(BPoint, alfa, tilt)
 DNA_STRUCT_RENAME_ELEM(BezTriple, alfa, tilt)
+DNA_STRUCT_RENAME_ELEM(Bone, curveInX, curve_in_x)
+DNA_STRUCT_RENAME_ELEM(Bone, curveInY, curve_in_y)
+DNA_STRUCT_RENAME_ELEM(Bone, curveOutX, curve_out_x)
+DNA_STRUCT_RENAME_ELEM(Bone, curveOutY, curve_out_y)
+DNA_STRUCT_RENAME_ELEM(Bone, scaleIn, scale_in_x)
+DNA_STRUCT_RENAME_ELEM(Bone, scaleOut, scale_out_x)
+DNA_STRUCT_RENAME_ELEM(BrushGpencilSettings, gradient_f, hardeness)
+DNA_STRUCT_RENAME_ELEM(BrushGpencilSettings, gradient_s, aspect_ratio)
 DNA_STRUCT_RENAME_ELEM(Camera, YF_dofdist, dof_distance)
+DNA_STRUCT_RENAME_ELEM(Curve, len_wchar, len_char32)
 DNA_STRUCT_RENAME_ELEM(Camera, clipend, clip_end)
 DNA_STRUCT_RENAME_ELEM(Camera, clipsta, clip_start)
 DNA_STRUCT_RENAME_ELEM(Collection, dupli_ofs, instance_offset)
+DNA_STRUCT_RENAME_ELEM(FluidDomainSettings, cache_frame_pause_guiding, cache_frame_pause_guide)
+DNA_STRUCT_RENAME_ELEM(FluidDomainSettings, guiding_alpha, guide_alpha)
+DNA_STRUCT_RENAME_ELEM(FluidDomainSettings, guiding_beta, guide_beta)
+DNA_STRUCT_RENAME_ELEM(FluidDomainSettings, guiding_parent, guide_parent)
+DNA_STRUCT_RENAME_ELEM(FluidDomainSettings, guiding_source, guide_source)
+DNA_STRUCT_RENAME_ELEM(FluidDomainSettings, guiding_vel_factor, guide_vel_factor)
+DNA_STRUCT_RENAME_ELEM(FluidEffectorSettings, guiding_mode, guide_mode)
+DNA_STRUCT_RENAME_ELEM(Image, name, filepath)
+DNA_STRUCT_RENAME_ELEM(Library, name, filepath)
+DNA_STRUCT_RENAME_ELEM(MovieClip, name, filepath)
 DNA_STRUCT_RENAME_ELEM(Object, col, color)
 DNA_STRUCT_RENAME_ELEM(Object, dup_group, instance_collection)
 DNA_STRUCT_RENAME_ELEM(Object, dupfacesca, instance_faces_scale)
@@ -68,8 +88,26 @@ DNA_STRUCT_RENAME_ELEM(Object, size, scale)
 DNA_STRUCT_RENAME_ELEM(ParticleSettings, dup_group, instance_collection)
 DNA_STRUCT_RENAME_ELEM(ParticleSettings, dup_ob, instance_object)
 DNA_STRUCT_RENAME_ELEM(ParticleSettings, dupliweights, instance_weights)
+DNA_STRUCT_RENAME_ELEM(Text, name, filepath)
+DNA_STRUCT_RENAME_ELEM(ThemeSpace, scrubbing_background, time_scrub_background)
+DNA_STRUCT_RENAME_ELEM(ThemeSpace, show_back_grad, background_type)
+DNA_STRUCT_RENAME_ELEM(UserDef, gp_manhattendist, gp_manhattandist)
+DNA_STRUCT_RENAME_ELEM(VFont, name, filepath)
 DNA_STRUCT_RENAME_ELEM(View3D, far, clip_end)
 DNA_STRUCT_RENAME_ELEM(View3D, near, clip_start)
+DNA_STRUCT_RENAME_ELEM(View3D, ob_centre, ob_center)
+DNA_STRUCT_RENAME_ELEM(View3D, ob_centre_bone, ob_center_bone)
+DNA_STRUCT_RENAME_ELEM(View3D, ob_centre_cursor, ob_center_cursor)
+DNA_STRUCT_RENAME_ELEM(bGPDstroke, gradient_f, hardeness)
+DNA_STRUCT_RENAME_ELEM(bGPDstroke, gradient_s, aspect_ratio)
+DNA_STRUCT_RENAME_ELEM(bPoseChannel, curveInX, curve_in_x)
+DNA_STRUCT_RENAME_ELEM(bPoseChannel, curveInY, curve_in_y)
+DNA_STRUCT_RENAME_ELEM(bPoseChannel, curveOutX, curve_out_x)
+DNA_STRUCT_RENAME_ELEM(bPoseChannel, curveOutY, curve_out_y)
+DNA_STRUCT_RENAME_ELEM(bPoseChannel, scaleIn, scale_in_x)
+DNA_STRUCT_RENAME_ELEM(bPoseChannel, scaleOut, scale_out_x)
+DNA_STRUCT_RENAME_ELEM(bSameVolumeConstraint, flag, free_axis)
+DNA_STRUCT_RENAME_ELEM(bSound, name, filepath)
 DNA_STRUCT_RENAME_ELEM(bTheme, tact, space_action)
 DNA_STRUCT_RENAME_ELEM(bTheme, tbuts, space_properties)
 DNA_STRUCT_RENAME_ELEM(bTheme, tclip, space_clip)
@@ -87,3 +125,8 @@ DNA_STRUCT_RENAME_ELEM(bTheme, tstatusbar, space_statusbar)
 DNA_STRUCT_RENAME_ELEM(bTheme, ttopbar, space_topbar)
 DNA_STRUCT_RENAME_ELEM(bTheme, tuserpref, space_preferences)
 DNA_STRUCT_RENAME_ELEM(bTheme, tv3d, space_view3d)
+DNA_STRUCT_RENAME_ELEM(RigidBodyWorld, steps_per_second, substeps_per_frame)
+/* Write with a different name, old Blender versions crash loading files with non-NULL
+ * global_areas. See D9442. */
+DNA_STRUCT_RENAME_ELEM(wmWindow, global_area_map, global_areas)
+DNA_STRUCT_RENAME_ELEM(LineartGpencilModifierData, line_types, edge_types)

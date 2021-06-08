@@ -26,13 +26,13 @@
 #include "DNA_meshdata_types.h"
 #include "DNA_vec_types.h"
 
-#include "BLI_buffer.h"
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
+#include "BLI_buffer.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_mesh_mapping.h"
 #include "BKE_customdata.h"
+#include "BKE_mesh_mapping.h"
 #include "BLI_memarena.h"
 
 #include "BLI_strict_flags.h"
@@ -42,8 +42,8 @@
  * \{ */
 
 /* ngon version wip, based on BM_uv_vert_map_create */
-/* this replaces the non bmesh function (in trunk) which takes MTFace's, if we ever need it back we could
- * but for now this replaces it because its unused. */
+/* this replaces the non bmesh function (in trunk) which takes MTFace's,
+ * if we ever need it back we could but for now this replaces it because its unused. */
 
 UvVertMap *BKE_mesh_uv_vert_map_create(const MPoly *mpoly,
                                        const MLoop *mloop,
@@ -67,12 +67,15 @@ UvVertMap *BKE_mesh_uv_vert_map_create(const MPoly *mpoly,
 
   /* generate UvMapVert array */
   mp = mpoly;
-  for (a = 0; a < totpoly; a++, mp++)
-    if (!selected || (!(mp->flag & ME_HIDE) && (mp->flag & ME_FACE_SEL)))
+  for (a = 0; a < totpoly; a++, mp++) {
+    if (!selected || (!(mp->flag & ME_HIDE) && (mp->flag & ME_FACE_SEL))) {
       totuv += mp->totloop;
+    }
+  }
 
-  if (totuv == 0)
+  if (totuv == 0) {
     return NULL;
+  }
 
   vmap = (UvVertMap *)MEM_callocN(sizeof(*vmap), "UvVertMap");
   buf = vmap->buf = (UvMapVert *)MEM_callocN(sizeof(*vmap->buf) * (size_t)totuv, "UvMapVert");
@@ -142,15 +145,18 @@ UvVertMap *BKE_mesh_uv_vert_map_create(const MPoly *mpoly,
 
         if (fabsf(uv[0] - uv2[0]) < limit[0] && fabsf(uv[1] - uv2[1]) < limit[1] &&
             (!use_winding || winding[iterv->poly_index] == winding[v->poly_index])) {
-          if (lastv)
+          if (lastv) {
             lastv->next = next;
-          else
+          }
+          else {
             vlist = next;
+          }
           iterv->next = newvlist;
           newvlist = iterv;
         }
-        else
+        else {
           lastv = iterv;
+        }
 
         iterv = next;
       }
@@ -178,10 +184,12 @@ UvMapVert *BKE_mesh_uv_vert_map_get_vert(UvVertMap *vmap, unsigned int v)
 void BKE_mesh_uv_vert_map_free(UvVertMap *vmap)
 {
   if (vmap) {
-    if (vmap->vert)
+    if (vmap->vert) {
       MEM_freeN(vmap->vert);
-    if (vmap->buf)
+    }
+    if (vmap->buf) {
       MEM_freeN(vmap->buf);
+    }
     MEM_freeN(vmap);
   }
 }
@@ -212,8 +220,9 @@ static void mesh_vert_poly_or_loop_map_create(MeshElemMap **r_map,
   for (i = 0; i < totpoly; i++) {
     const MPoly *p = &mpoly[i];
 
-    for (j = 0; j < p->totloop; j++)
+    for (j = 0; j < p->totloop; j++) {
       map[mloop[p->loopstart + j].v].count++;
+    }
   }
 
   /* Assign indices mem */
@@ -242,7 +251,8 @@ static void mesh_vert_poly_or_loop_map_create(MeshElemMap **r_map,
 }
 
 /**
- * Generates a map where the key is the vertex and the value is a list of polys that use that vertex as a corner.
+ * Generates a map where the key is the vertex and the value
+ * is a list of polys that use that vertex as a corner.
  * The lists are allocated from one memory pool.
  */
 void BKE_mesh_vert_poly_map_create(MeshElemMap **r_map,
@@ -257,7 +267,8 @@ void BKE_mesh_vert_poly_map_create(MeshElemMap **r_map,
 }
 
 /**
- * Generates a map where the key is the vertex and the value is a list of loops that use that vertex as a corner.
+ * Generates a map where the key is the vertex and the value
+ * is a list of loops that use that vertex as a corner.
  * The lists are allocated from one memory pool.
  */
 void BKE_mesh_vert_loop_map_create(MeshElemMap **r_map,
@@ -272,7 +283,8 @@ void BKE_mesh_vert_loop_map_create(MeshElemMap **r_map,
 }
 
 /**
- * Generates a map where the key is the edge and the value is a list of looptris that use that edge.
+ * Generates a map where the key is the edge and the value
+ * is a list of looptris that use that edge.
  * The lists are allocated from one memory pool.
  */
 void BKE_mesh_vert_looptri_map_create(MeshElemMap **r_map,
@@ -320,7 +332,8 @@ void BKE_mesh_vert_looptri_map_create(MeshElemMap **r_map,
 }
 
 /**
- * Generates a map where the key is the vertex and the value is a list of edges that use that vertex as an endpoint.
+ * Generates a map where the key is the vertex and the value
+ * is a list of edges that use that vertex as an endpoint.
  * The lists are allocated from one memory pool.
  */
 void BKE_mesh_vert_edge_map_create(
@@ -363,7 +376,8 @@ void BKE_mesh_vert_edge_map_create(
 }
 
 /**
- * A version of #BKE_mesh_vert_edge_map_create that references connected vertices directly (not their edges).
+ * A version of #BKE_mesh_vert_edge_map_create that references connected vertices directly
+ * (not their edges).
  */
 void BKE_mesh_vert_edge_vert_map_create(
     MeshElemMap **r_map, int **r_mem, const MEdge *medge, int totvert, int totedge)
@@ -463,7 +477,8 @@ void BKE_mesh_edge_loop_map_create(MeshElemMap **r_map,
 }
 
 /**
- * Generates a map where the key is the edge and the value is a list of polygons that use that edge.
+ * Generates a map where the key is the edge and the value
+ * is a list of polygons that use that edge.
  * The lists are allocated from one memory pool.
  */
 void BKE_mesh_edge_poly_map_create(MeshElemMap **r_map,
@@ -616,6 +631,8 @@ typedef bool (*MeshRemap_CheckIslandBoundary)(const struct MPoly *mpoly,
                                               const struct MLoop *mloop,
                                               const struct MEdge *medge,
                                               const int nbr_egde_users,
+                                              const struct MPoly *mpoly_array,
+                                              const struct MeshElemMap *edge_poly_map,
                                               void *user_data);
 
 static void poly_edge_loop_islands_calc(const MEdge *medge,
@@ -641,8 +658,10 @@ static void poly_edge_loop_islands_calc(const MEdge *medge,
 
   int poly_prev = 0;
   const int temp_poly_group_id = 3; /* Placeholder value. */
-  const int poly_group_id_overflowed =
-      5; /* Group we could not find any available bit, will be reset to 0 at end */
+
+  /* Group we could not find any available bit, will be reset to 0 at end. */
+  const int poly_group_id_overflowed = 5;
+
   int tot_group = 0;
   bool group_id_overflow = false;
 
@@ -713,7 +732,7 @@ static void poly_edge_loop_islands_calc(const MEdge *medge,
         const MeshElemMap *map_ele = &edge_poly_map[me_idx];
         const int *p = map_ele->indices;
         int i = map_ele->count;
-        if (!edge_boundary_check(mp, ml, me, i, edge_boundary_check_data)) {
+        if (!edge_boundary_check(mp, ml, me, i, mpoly, map_ele, edge_boundary_check_data)) {
           for (; i--; p++) {
             /* if we meet other non initialized its a bug */
             BLI_assert(ELEM(poly_groups[*p], 0, poly_group_id));
@@ -730,7 +749,8 @@ static void poly_edge_loop_islands_calc(const MEdge *medge,
             num_edgeborders++;
           }
           if (use_bitflags) {
-            /* Find contiguous smooth groups already assigned, these are the values we can't reuse! */
+            /* Find contiguous smooth groups already assigned,
+             * these are the values we can't reuse! */
             for (; i--; p++) {
               int bit = poly_groups[*p];
               if (!ELEM(bit, 0, poly_group_id, poly_group_id_overflowed) &&
@@ -742,8 +762,9 @@ static void poly_edge_loop_islands_calc(const MEdge *medge,
         }
       }
     }
-    /* And now, we have all our poly from current group in poly_stack (from 0 to (ps_end_idx - 1)), as well as
-     * all smoothgroups bits we can't use in bit_poly_group_mask.
+    /* And now, we have all our poly from current group in poly_stack
+     * (from 0 to (ps_end_idx - 1)),
+     * as well as all smoothgroups bits we can't use in bit_poly_group_mask.
      */
     if (use_bitflags) {
       int i, *p, gid_bit = 0;
@@ -755,15 +776,18 @@ static void poly_edge_loop_islands_calc(const MEdge *medge,
       }
       if (UNLIKELY(gid_bit > 31)) {
         /* All bits used in contiguous smooth groups, we can't do much!
-         * Note: this is *very* unlikely - theoretically, four groups are enough, I don't think we can reach
-         *       this goal with such a simple algo, but I don't think either we'll never need all 32 groups!
+         * Note: this is *very* unlikely - theoretically, four groups are enough,
+         *       I don't think we can reach this goal with such a simple algorithm,
+         *       but I don't think either we'll never need all 32 groups!
          */
         printf(
             "Warning, could not find an available id for current smooth group, faces will me "
             "marked "
             "as out of any smooth group...\n");
-        poly_group_id =
-            poly_group_id_overflowed; /* Can't use 0, will have to set them to this value later. */
+
+        /* Can't use 0, will have to set them to this value later. */
+        poly_group_id = poly_group_id_overflowed;
+
         group_id_overflow = true;
       }
       if (gid_bit > tot_group) {
@@ -810,19 +834,29 @@ static bool poly_is_island_boundary_smooth_cb(const MPoly *mp,
                                               const MLoop *UNUSED(ml),
                                               const MEdge *me,
                                               const int nbr_egde_users,
+                                              const MPoly *mpoly_array,
+                                              const MeshElemMap *edge_poly_map,
                                               void *UNUSED(user_data))
 {
-  /* Edge is sharp if its poly is sharp, or edge itself is sharp, or edge is not used by exactly two polygons. */
-  return (!(mp->flag & ME_SMOOTH) || (me->flag & ME_SHARP) || (nbr_egde_users != 2));
+  /* Edge is sharp if one of its polys is flat, or edge itself is sharp,
+   * or edge is not used by exactly two polygons. */
+  if ((mp->flag & ME_SMOOTH) && !(me->flag & ME_SHARP) && (nbr_egde_users == 2)) {
+    /* In that case, edge appears to be smooth, but we need to check its other poly too. */
+    const MPoly *mp_other = (mp == &mpoly_array[edge_poly_map->indices[0]]) ?
+                                &mpoly_array[edge_poly_map->indices[1]] :
+                                &mpoly_array[edge_poly_map->indices[0]];
+    return (mp_other->flag & ME_SMOOTH) == 0;
+  }
+  return true;
 }
 
 /**
  * Calculate smooth groups from sharp edges.
  *
  * \param r_totgroup: The total number of groups, 1 or more.
- * \return Polygon aligned array of group index values (bitflags if use_bitflags is true), starting at 1
- *         (0 being used as 'invalid' flag).
- *         Note it's callers's responsibility to MEM_freeN returned array.
+ * \return Polygon aligned array of group index values (bitflags if use_bitflags is true),
+ * starting at 1 (0 being used as 'invalid' flag).
+ * Note it's callers's responsibility to MEM_freeN returned array.
  */
 int *BKE_mesh_calc_smoothgroups(const MEdge *medge,
                                 const int totedge,
@@ -919,7 +953,7 @@ void BKE_mesh_loop_islands_free(MeshIslandStore *island_store)
 
 void BKE_mesh_loop_islands_add(MeshIslandStore *island_store,
                                const int item_num,
-                               int *items_indices,
+                               const int *items_indices,
                                const int num_island_items,
                                int *island_item_indices,
                                const int num_innercut_items,
@@ -963,10 +997,11 @@ void BKE_mesh_loop_islands_add(MeshIslandStore *island_store,
          sizeof(*innrcut->indices) * (size_t)num_innercut_items);
 }
 
-/* TODO: I'm not sure edge seam flag is enough to define UV islands? Maybe we should also consider UVmaps values
+/* TODO: I'm not sure edge seam flag is enough to define UV islands?
+ *       Maybe we should also consider UVmaps values
  *       themselves (i.e. different UV-edges for a same mesh-edge => boundary edge too?).
- *       Would make things much more complex though, and each UVMap would then need its own mesh mapping,
- *       not sure we want that at all!
+ *       Would make things much more complex though,
+ *       and each UVMap would then need its own mesh mapping, not sure we want that at all!
  */
 typedef struct MeshCheckIslandBoundaryUv {
   const MLoop *loops;
@@ -978,6 +1013,8 @@ static bool mesh_check_island_boundary_uv(const MPoly *UNUSED(mp),
                                           const MLoop *ml,
                                           const MEdge *me,
                                           const int UNUSED(nbr_egde_users),
+                                          const MPoly *UNUSED(mpoly_array),
+                                          const MeshElemMap *UNUSED(edge_poly_map),
                                           void *user_data)
 {
   if (user_data) {
@@ -1010,10 +1047,9 @@ static bool mesh_check_island_boundary_uv(const MPoly *UNUSED(mp),
     }
     return false;
   }
-  else {
-    /* Edge is UV boundary if tagged as seam. */
-    return (me->flag & ME_SEAM) != 0;
-  }
+
+  /* Edge is UV boundary if tagged as seam. */
+  return (me->flag & ME_SEAM) != 0;
 }
 
 static bool mesh_calc_islands_loop_poly_uv(MVert *UNUSED(verts),
@@ -1043,8 +1079,9 @@ static bool mesh_calc_islands_loop_poly_uv(MVert *UNUSED(verts),
   int *loop_indices;
   int num_pidx, num_lidx;
 
-  /* Those are used to detect 'inner cuts', i.e. edges that are borders, and yet have two or more polys of
-   * a same group using them (typical case: seam used to unwrap properly a cylinder). */
+  /* Those are used to detect 'inner cuts', i.e. edges that are borders,
+   * and yet have two or more polys of a same group using them
+   * (typical case: seam used to unwrap properly a cylinder). */
   BLI_bitmap *edge_borders = NULL;
   int num_edge_borders = 0;
   char *edge_border_count = NULL;
@@ -1166,7 +1203,8 @@ static bool mesh_calc_islands_loop_poly_uv(MVert *UNUSED(verts),
 }
 
 /**
- * Calculate 'generic' UV islands, i.e. based only on actual geometry data (edge seams), not some UV layers coordinates.
+ * Calculate 'generic' UV islands, i.e. based only on actual geometry data (edge seams),
+ * not some UV layers coordinates.
  */
 bool BKE_mesh_calc_islands_loop_poly_edgeseam(MVert *verts,
                                               const int totvert,
@@ -1186,12 +1224,14 @@ bool BKE_mesh_calc_islands_loop_poly_edgeseam(MVert *verts,
  * Calculate UV islands.
  *
  * \note If no MLoopUV layer is passed, we only consider edges tagged as seams as UV boundaries.
- *     This has the advantages of simplicity, and being valid/common to all UV maps.
- *     However, it means actual UV islands without matching UV seams will not be handled correctly...
- *     If a valid UV layer is passed as \a luvs parameter, UV coordinates are also used to detect islands boundaries.
+ * This has the advantages of simplicity, and being valid/common to all UV maps.
+ * However, it means actual UV islands without matching UV seams will not be handled correctly...
+ * If a valid UV layer is passed as \a luvs parameter,
+ * UV coordinates are also used to detect islands boundaries.
  *
  * \note All this could be optimized...
- *     Not sure it would be worth the more complex code, though, those loops are supposed to be really quick to do...
+ * Not sure it would be worth the more complex code, though,
+ * those loops are supposed to be really quick to do...
  */
 bool BKE_mesh_calc_islands_loop_poly_uvmap(MVert *verts,
                                            const int totvert,

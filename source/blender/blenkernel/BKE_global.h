@@ -16,8 +16,7 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_GLOBAL_H__
-#define __BKE_GLOBAL_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -27,6 +26,7 @@
  *   for every fresh Blender run.
  */
 
+#include "BLI_utildefines.h"
 #include "DNA_listBase.h"
 
 #ifdef __cplusplus
@@ -59,7 +59,7 @@ typedef struct Global {
 
   short moving;
 
-  /** To indicate render is busy, prevent renderwindow events etc. */
+  /** To indicate render is busy, prevent render-window events etc. */
   bool is_rendering;
 
   /**
@@ -71,12 +71,13 @@ typedef struct Global {
    *   *     -1: Disable faster motion paths computation (since 08/2018).
    *   * 1 - 30: EEVEE debug/stats values (01/2018).
    *   *    101: Enable UI debug drawing of fullscreen area's corner widget (10/2014).
-   *   *    527: Old mysterious switch in behavior of MeshDeform modifier (before 04/2010).
    *   *    666: Use quicker batch delete for outliners' delete hierarchy (01/2019).
    *   *    777: Enable UI node panel's sockets polling (11/2011).
    *   *    799: Enable some mysterious new depsgraph behavior (05/2015).
-   *   *   1112: Disable new Cloth internal springs hanlding (09/2014).
+   *   *   1112: Disable new Cloth internal springs handling (09/2014).
    *   *   1234: Disable new dyntopo code fixing skinny faces generation (04/2015).
+   *   *   3001: Enable additional Fluid modifier (Mantaflow) options (02/2020).
+   *   *   4000: Line Art state output and debugging logs (03/2021).
    *   * 16384 and above: Reserved for python (add-ons) usage.
    */
   short debug_value;
@@ -107,10 +108,10 @@ typedef struct Global {
 /** #Global.f */
 enum {
   G_FLAG_RENDER_VIEWPORT = (1 << 0),
-  G_FLAG_BACKBUFSEL = (1 << 1),
   G_FLAG_PICKSEL = (1 << 2),
   /** Support simulating events (for testing). */
   G_FLAG_EVENT_SIMULATE = (1 << 3),
+  G_FLAG_USERPREF_NO_SAVE_ON_EXIT = (1 << 4),
 
   G_FLAG_SCRIPT_AUTOEXEC = (1 << 13),
   /** When this flag is set ignore the prefs #USER_SCRIPT_AUTOEXEC_DISABLE. */
@@ -121,7 +122,8 @@ enum {
 
 /** Don't overwrite these flags when reading a file. */
 #define G_FLAG_ALL_RUNTIME \
-  (G_FLAG_SCRIPT_AUTOEXEC | G_FLAG_SCRIPT_OVERRIDE_PREF | G_FLAG_EVENT_SIMULATE)
+  (G_FLAG_SCRIPT_AUTOEXEC | G_FLAG_SCRIPT_OVERRIDE_PREF | G_FLAG_EVENT_SIMULATE | \
+   G_FLAG_USERPREF_NO_SAVE_ON_EXIT)
 
 /** Flags to read from blend file. */
 #define G_FLAG_ALL_READFILE 0
@@ -142,46 +144,60 @@ enum {
   G_DEBUG_DEPSGRAPH_TIME = (1 << 11),       /* depsgraph timing statistics and messages */
   G_DEBUG_DEPSGRAPH_NO_THREADS = (1 << 12), /* single threaded depsgraph */
   G_DEBUG_DEPSGRAPH_PRETTY = (1 << 13),     /* use pretty colors in depsgraph messages */
+  G_DEBUG_DEPSGRAPH_UUID = (1 << 14),       /* use pretty colors in depsgraph messages */
   G_DEBUG_DEPSGRAPH = (G_DEBUG_DEPSGRAPH_BUILD | G_DEBUG_DEPSGRAPH_EVAL | G_DEBUG_DEPSGRAPH_TAG |
-                       G_DEBUG_DEPSGRAPH_TIME),
-  G_DEBUG_SIMDATA = (1 << 14),               /* sim debug data display */
-  G_DEBUG_GPU_MEM = (1 << 15),               /* gpu memory in status bar */
+                       G_DEBUG_DEPSGRAPH_TIME | G_DEBUG_DEPSGRAPH_UUID),
+  G_DEBUG_SIMDATA = (1 << 15),               /* sim debug data display */
   G_DEBUG_GPU = (1 << 16),                   /* gpu debug */
   G_DEBUG_IO = (1 << 17),                    /* IO Debugging (for Collada, ...)*/
-  G_DEBUG_GPU_SHADERS = (1 << 18),           /* GLSL shaders */
-  G_DEBUG_GPU_FORCE_WORKAROUNDS = (1 << 19), /* force gpu workarounds bypassing detections. */
+  G_DEBUG_GPU_FORCE_WORKAROUNDS = (1 << 18), /* force gpu workarounds bypassing detections. */
+  G_DEBUG_XR = (1 << 19),                    /* XR/OpenXR messages */
+  G_DEBUG_XR_TIME = (1 << 20),               /* XR/OpenXR timing messages */
+
+  G_DEBUG_GHOST = (1 << 21), /* Debug GHOST module. */
 };
 
 #define G_DEBUG_ALL \
   (G_DEBUG | G_DEBUG_FFMPEG | G_DEBUG_PYTHON | G_DEBUG_EVENTS | G_DEBUG_WM | G_DEBUG_JOBS | \
-   G_DEBUG_FREESTYLE | G_DEBUG_DEPSGRAPH | G_DEBUG_GPU_MEM | G_DEBUG_IO | G_DEBUG_GPU_SHADERS)
+   G_DEBUG_FREESTYLE | G_DEBUG_DEPSGRAPH | G_DEBUG_IO | G_DEBUG_GHOST)
 
 /** #Global.fileflags */
 enum {
   G_FILE_AUTOPACK = (1 << 0),
   G_FILE_COMPRESS = (1 << 1),
 
-  G_FILE_USERPREFS = (1 << 9),
+  // G_FILE_DEPRECATED_9 = (1 << 9),
   G_FILE_NO_UI = (1 << 10),
 
   /* Bits 11 to 22 (inclusive) are deprecated & need to be cleared */
 
-  /** On read, use #FileGlobal.filename instead of the real location on-disk,
-   * needed for recovering temp files so relative paths resolve */
-  G_FILE_RECOVER = (1 << 23),
-  /** On write, remap relative file paths to the new file location. */
-  G_FILE_RELATIVE_REMAP = (1 << 24),
-  /** On write, make backup `.blend1`, `.blend2` ... files, when the users preference is enabled */
-  G_FILE_HISTORY = (1 << 25),
+  /**
+   * On read, use #FileGlobal.filename instead of the real location on-disk,
+   * needed for recovering temp files so relative paths resolve.
+   *
+   * \note In some ways it would be nicer to make this an argument passed to file loading.
+   * In practice this means recover needs to be passed around to too many low level functions,
+   * so keep this as a flag.
+   */
+  G_FILE_RECOVER_READ = (1 << 23),
+  /**
+   * On write, assign use #FileGlobal.filename, otherwise leave it blank,
+   * needed so files can be recovered at their original locations.
+   *
+   * \note only #BLENDER_QUIT_FILE and auto-save files include recovery information.
+   * As users/developers may not want their paths exposed in publicly distributed files.
+   */
+  G_FILE_RECOVER_WRITE = (1 << 24),
   /** BMesh option to save as older mesh format */
   /* #define G_FILE_MESH_COMPAT       (1 << 26) */
-  /** On write, restore paths after editing them (G_FILE_RELATIVE_REMAP) */
-  G_FILE_SAVE_COPY = (1 << 27),
   /* #define G_FILE_GLSL_NO_ENV_LIGHTING (1 << 28) */ /* deprecated */
 };
 
-/** Don't overwrite these flags when reading a file. */
-#define G_FILE_FLAG_ALL_RUNTIME (G_FILE_NO_UI | G_FILE_RELATIVE_REMAP | G_FILE_SAVE_COPY)
+/**
+ * Run-time only #G.fileflags which are never read or written to/from Blend files.
+ * This means we can change the values without worrying about do-versions.
+ */
+#define G_FILE_FLAG_ALL_RUNTIME (G_FILE_NO_UI | G_FILE_RECOVER_READ | G_FILE_RECOVER_WRITE)
 
 /** ENDIAN_ORDER: indicates what endianness the platform where the file was written had. */
 #if !defined(__BIG_ENDIAN__) && !defined(__LITTLE_ENDIAN__)
@@ -217,6 +233,4 @@ extern Global G;
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

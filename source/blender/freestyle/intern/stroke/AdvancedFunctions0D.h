@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_ADVANCED_FUNCTIONS_0D_H__
-#define __FREESTYLE_ADVANCED_FUNCTIONS_0D_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -38,15 +37,15 @@ namespace Functions0D {
 
 // DensityF0D
 /*! Returns the density of the (result) image evaluated at an Interface0D.
- *  This density is evaluated using a pixels square window around the evaluation point and integrating
- *  these values using a gaussian.
+ *  This density is evaluated using a pixels square window around the evaluation point and
+ * integrating these values using a gaussian.
  */
 class DensityF0D : public UnaryFunction0D<double> {
  public:
   /*! Builds the functor from the gaussian sigma value.
    *  \param sigma:
-   *    sigma indicates the x value for which the gaussian function is 0.5. It leads to the window size value.
-   *    (the larger, the smoother)
+   *    sigma indicates the x value for which the gaussian function is 0.5.
+   *    It leads to the window size value. (the larger, the smoother)
    */
   DensityF0D(double sigma = 2) : UnaryFunction0D<double>()
   {
@@ -209,5 +208,3 @@ class GetViewMapGradientNormF0D : public UnaryFunction0D<float> {
 }  // end of namespace Functions0D
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_ADVANCED_FUNCTIONS_0D_H__

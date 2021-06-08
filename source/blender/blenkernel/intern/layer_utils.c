@@ -28,14 +28,75 @@
 
 #include "DNA_ID.h"
 #include "DNA_layer_types.h"
-#include "DNA_object_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
+/* -------------------------------------------------------------------- */
+/** \name Selected Object Array
+ * \{ */
+
+Object **BKE_view_layer_array_selected_objects_params(
+    struct ViewLayer *view_layer,
+    const struct View3D *v3d,
+    uint *r_len,
+    const struct ObjectsInViewLayerParams *params)
+{
+  if (params->no_dup_data) {
+    FOREACH_SELECTED_OBJECT_BEGIN (view_layer, v3d, ob_iter) {
+      ID *id = ob_iter->data;
+      if (id) {
+        id->tag |= LIB_TAG_DOIT;
+      }
+    }
+    FOREACH_SELECTED_OBJECT_END;
+  }
+
+  Object **object_array = NULL;
+  BLI_array_declare(object_array);
+
+  FOREACH_SELECTED_OBJECT_BEGIN (view_layer, v3d, ob_iter) {
+    if (params->filter_fn) {
+      if (!params->filter_fn(ob_iter, params->filter_userdata)) {
+        continue;
+      }
+    }
+
+    if (params->no_dup_data) {
+      ID *id = ob_iter->data;
+      if (id) {
+        if (id->tag & LIB_TAG_DOIT) {
+          id->tag &= ~LIB_TAG_DOIT;
+        }
+        else {
+          continue;
+        }
+      }
+    }
+
+    BLI_array_append(object_array, ob_iter);
+  }
+  FOREACH_SELECTED_OBJECT_END;
+
+  object_array = MEM_reallocN(object_array, sizeof(*object_array) * BLI_array_len(object_array));
+  /* We always need a valid allocation (prevent crash on free). */
+  if (object_array == NULL) {
+    object_array = MEM_mallocN(0, __func__);
+  }
+  *r_len = BLI_array_len(object_array);
+  return object_array;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Objects in Mode Array
+ * \{ */
+
 Base **BKE_view_layer_array_from_bases_in_mode_params(ViewLayer *view_layer,
-                                                      View3D *v3d,
+                                                      const View3D *v3d,
                                                       uint *r_len,
                                                       const struct ObjectsInModeParams *params)
 {
@@ -83,7 +144,7 @@ Base **BKE_view_layer_array_from_bases_in_mode_params(ViewLayer *view_layer,
 }
 
 Object **BKE_view_layer_array_from_objects_in_mode_params(ViewLayer *view_layer,
-                                                          View3D *v3d,
+                                                          const View3D *v3d,
                                                           uint *r_len,
                                                           const struct ObjectsInModeParams *params)
 {
@@ -96,6 +157,12 @@ Object **BKE_view_layer_array_from_objects_in_mode_params(ViewLayer *view_layer,
   }
   return (Object **)base_array;
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Filter Functions
+ * \{ */
 
 bool BKE_view_layer_filter_edit_mesh_has_uvs(Object *ob, void *UNUSED(user_data))
 {
@@ -124,3 +191,33 @@ bool BKE_view_layer_filter_edit_mesh_has_edges(Object *ob, void *UNUSED(user_dat
   }
   return false;
 }
+
+/**
+ * Use this in rare cases we need to detect a pair of objects (active, selected).
+ * This returns the other non-active selected object.
+ *
+ * Returns NULL with it finds multiple other selected objects
+ * as behavior in this case would be random from the user perspective.
+ */
+Object *BKE_view_layer_non_active_selected_object(struct ViewLayer *view_layer,
+                                                  const struct View3D *v3d)
+{
+  Object *ob_active = OBACT(view_layer);
+  Object *ob_result = NULL;
+  FOREACH_SELECTED_OBJECT_BEGIN (view_layer, v3d, ob_iter) {
+    if (ob_iter == ob_active) {
+      continue;
+    }
+
+    if (ob_result == NULL) {
+      ob_result = ob_iter;
+    }
+    else {
+      ob_result = NULL;
+      break;
+    }
+  }
+  FOREACH_SELECTED_OBJECT_END;
+  return ob_result;
+}
+/** \} */

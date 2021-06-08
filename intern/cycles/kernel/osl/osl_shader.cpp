@@ -16,6 +16,7 @@
 
 #include <OSL/oslexec.h>
 
+// clang-format off
 #include "kernel/kernel_compat_cpu.h"
 #include "kernel/kernel_montecarlo.h"
 #include "kernel/kernel_types.h"
@@ -28,6 +29,7 @@
 #include "kernel/osl/osl_globals.h"
 #include "kernel/osl/osl_services.h"
 #include "kernel/osl/osl_shader.h"
+// clang-format on
 
 #include "util/util_foreach.h"
 
@@ -49,7 +51,6 @@ void OSLShader::thread_init(KernelGlobals *kg,
 
   /* per thread kernel data init*/
   kg->osl = osl_globals;
-  kg->osl->services->thread_init(kernel_globals, osl_globals->ts);
 
   OSL::ShadingSystem *ss = kg->osl->ss;
   OSLThreadData *tdata = new OSLThreadData();
@@ -108,7 +109,7 @@ static void shaderdata_to_shaderglobals(
   globals->dvdy = sd->dv.dy;
   globals->dPdu = TO_VEC3(sd->dPdu);
   globals->dPdv = TO_VEC3(sd->dPdv);
-  globals->surfacearea = (sd->object == OBJECT_NONE) ? 1.0f : object_surface_area(kg, sd->object);
+  globals->surfacearea = 1.0f;
   globals->time = sd->time;
 
   /* booleans */
@@ -128,7 +129,7 @@ static void shaderdata_to_shaderglobals(
   /* clear trace data */
   tdata->tracedata.init = false;
 
-  /* used by renderservices */
+  /* Used by render-services. */
   sd->osl_globals = kg;
   sd->osl_path_state = state;
 }
@@ -383,10 +384,6 @@ int OSLShader::find_attribute(KernelGlobals *kg,
 {
   /* for OSL, a hash map is used to lookup the attribute by name. */
   int object = sd->object * ATTR_PRIM_TYPES;
-#ifdef __HAIR__
-  if (sd->type & PRIMITIVE_ALL_CURVE)
-    object += ATTR_PRIM_CURVE;
-#endif
 
   OSLGlobals::AttributeMap &attr_map = kg->osl->attribute_map[object];
   ustring stdname(std::string("geom:") +

@@ -27,13 +27,14 @@
 #include "util/util_list.h"
 #include "util/util_stats.h"
 #include "util/util_string.h"
-#include "util/util_thread.h"
 #include "util/util_texture.h"
+#include "util/util_thread.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
 
 CCL_NAMESPACE_BEGIN
 
+class BVH;
 class Progress;
 class RenderTile;
 
@@ -45,19 +46,21 @@ enum DeviceType {
   DEVICE_OPENCL,
   DEVICE_CUDA,
   DEVICE_NETWORK,
-  DEVICE_MULTI
+  DEVICE_MULTI,
+  DEVICE_OPTIX,
+  DEVICE_DUMMY,
 };
 
 enum DeviceTypeMask {
   DEVICE_MASK_CPU = (1 << DEVICE_CPU),
   DEVICE_MASK_OPENCL = (1 << DEVICE_OPENCL),
   DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
+  DEVICE_MASK_OPTIX = (1 << DEVICE_OPTIX),
   DEVICE_MASK_NETWORK = (1 << DEVICE_NETWORK),
   DEVICE_MASK_ALL = ~0
 };
 
 enum DeviceKernelStatus {
-  DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL = 0,
   DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE,
   DEVICE_KERNEL_USING_FEATURE_KERNEL,
   DEVICE_KERNEL_FEATURE_KERNEL_INVALID,
@@ -72,14 +75,21 @@ class DeviceInfo {
   string description;
   string id; /* used for user preferences, should stay fixed with changing hardware config */
   int num;
-  bool display_device;       /* GPU is used as a display device. */
-  bool has_half_images;      /* Support half-float textures. */
-  bool has_volume_decoupled; /* Decoupled volume shading. */
-  bool has_osl;              /* Support Open Shading Language. */
-  bool use_split_kernel;     /* Use split or mega kernel. */
-  bool has_profiling;        /* Supports runtime collection of profiling info. */
+  bool display_device;               /* GPU is used as a display device. */
+  bool has_half_images;              /* Support half-float textures. */
+  bool has_nanovdb;                  /* Support NanoVDB volumes. */
+  bool has_volume_decoupled;         /* Decoupled volume shading. */
+  bool has_branched_path;            /* Supports branched path tracing. */
+  bool has_adaptive_stop_per_sample; /* Per-sample adaptive sampling stopping. */
+  bool has_osl;                      /* Support Open Shading Language. */
+  bool use_split_kernel;             /* Use split or mega kernel. */
+  bool has_profiling;                /* Supports runtime collection of profiling info. */
+  bool has_peer_memory;              /* GPU has P2P access to memory of another GPU. */
+  DenoiserTypeMask denoisers;        /* Supported denoiser types. */
   int cpu_threads;
   vector<DeviceInfo> multi_devices;
+  vector<DeviceInfo> denoising_devices;
+  string error_msg;
 
   DeviceInfo()
   {
@@ -89,10 +99,15 @@ class DeviceInfo {
     cpu_threads = 0;
     display_device = false;
     has_half_images = false;
+    has_nanovdb = false;
     has_volume_decoupled = false;
+    has_branched_path = true;
+    has_adaptive_stop_per_sample = false;
     has_osl = false;
     use_split_kernel = false;
     has_profiling = false;
+    has_peer_memory = false;
+    denoisers = DENOISER_NONE;
   }
 
   bool operator==(const DeviceInfo &info)
@@ -102,6 +117,9 @@ class DeviceInfo {
            (type == info.type && num == info.num && description == info.description));
     return id == info.id;
   }
+
+  /* Add additional devices needed for the specified denoiser. */
+  void add_denoising_devices(DenoiserType denoiser_type);
 };
 
 class DeviceRequestedFeatures {
@@ -124,6 +142,7 @@ class DeviceRequestedFeatures {
 
   /* BVH/sampling kernel features. */
   bool use_hair;
+  bool use_hair_thick;
   bool use_object_motion;
   bool use_camera_motion;
 
@@ -166,10 +185,10 @@ class DeviceRequestedFeatures {
   DeviceRequestedFeatures()
   {
     /* TODO(sergey): Find more meaningful defaults. */
-    experimental = false;
     max_nodes_group = 0;
     nodes_features = 0;
     use_hair = false;
+    use_hair_thick = false;
     use_object_motion = false;
     use_camera_motion = false;
     use_baking = false;
@@ -188,10 +207,10 @@ class DeviceRequestedFeatures {
 
   bool modified(const DeviceRequestedFeatures &requested_features)
   {
-    return !(experimental == requested_features.experimental &&
-             max_nodes_group == requested_features.max_nodes_group &&
+    return !(max_nodes_group == requested_features.max_nodes_group &&
              nodes_features == requested_features.nodes_features &&
              use_hair == requested_features.use_hair &&
+             use_hair_thick == requested_features.use_hair_thick &&
              use_object_motion == requested_features.use_object_motion &&
              use_camera_motion == requested_features.use_camera_motion &&
              use_baking == requested_features.use_baking &&
@@ -311,7 +330,8 @@ class Device {
   virtual void mem_free_sub_ptr(device_ptr /*ptr*/){};
 
  public:
-  virtual ~Device();
+  /* noexcept needed to silence TBB warning. */
+  virtual ~Device() noexcept(false);
 
   /* info */
   DeviceInfo info;
@@ -380,7 +400,11 @@ class Device {
   }
 
   /* tasks */
-  virtual int get_split_task_count(DeviceTask &task) = 0;
+  virtual int get_split_task_count(DeviceTask &)
+  {
+    return 1;
+  }
+
   virtual void task_add(DeviceTask &task) = 0;
   virtual void task_wait() = 0;
   virtual void task_cancel() = 0;
@@ -399,6 +423,12 @@ class Device {
                            bool transparent,
                            const DeviceDrawParams &draw_params);
 
+  /* acceleration structure building */
+  virtual void build_bvh(BVH *bvh, Progress &progress, bool refit);
+
+  /* OptiX specific destructor. */
+  virtual void release_optix_bvh(BVH * /*bvh*/){};
+
 #ifdef WITH_NETWORK
   /* networking */
   void server_run();
@@ -412,11 +442,22 @@ class Device {
   {
     return 0;
   }
-  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/)
+  virtual void map_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
   {
   }
-  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTile * /*tiles*/)
+  virtual void unmap_neighbor_tiles(Device * /*sub_device*/, RenderTileNeighbors & /*neighbors*/)
   {
+  }
+
+  virtual bool is_resident(device_ptr /*key*/, Device *sub_device)
+  {
+    /* Memory is always resident if this is not a multi device, regardless of whether the pointer
+     * is valid or not (since it may not have been allocated yet). */
+    return sub_device == this;
+  }
+  virtual bool check_peer_access(Device * /*peer_device*/)
+  {
+    return false;
   }
 
   /* static */
@@ -429,6 +470,7 @@ class Device {
   static string string_from_type(DeviceType type);
   static vector<DeviceType> available_types();
   static vector<DeviceInfo> available_devices(uint device_type_mask = DEVICE_MASK_ALL);
+  static DeviceInfo dummy_device(const string &error_msg = "");
   static string device_capabilities(uint device_type_mask = DEVICE_MASK_ALL);
   static DeviceInfo get_multi_device(const vector<DeviceInfo> &subdevices,
                                      int threads,
@@ -456,6 +498,7 @@ class Device {
   static bool need_types_update, need_devices_update;
   static thread_mutex device_mutex;
   static vector<DeviceInfo> cuda_devices;
+  static vector<DeviceInfo> optix_devices;
   static vector<DeviceInfo> opencl_devices;
   static vector<DeviceInfo> cpu_devices;
   static vector<DeviceInfo> network_devices;

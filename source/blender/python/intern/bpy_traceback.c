@@ -24,8 +24,8 @@
 #include <Python.h>
 #include <frameobject.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_path_util.h"
+#include "BLI_utildefines.h"
 #ifdef WIN32
 #  include "BLI_string.h" /* BLI_strcasecmp */
 #endif
@@ -34,8 +34,8 @@
 
 static const char *traceback_filepath(PyTracebackObject *tb, PyObject **coerce)
 {
-  return PyBytes_AS_STRING(
-      (*coerce = PyUnicode_EncodeFSDefault(tb->tb_frame->f_code->co_filename)));
+  *coerce = PyUnicode_EncodeFSDefault(tb->tb_frame->f_code->co_filename);
+  return PyBytes_AS_STRING(*coerce);
 }
 
 /* copied from pythonrun.c, 3.4.0 */
@@ -140,21 +140,19 @@ void python_script_error_jump(const char *filepath, int *lineno, int *offset)
   PyErr_Fetch(&exception, &value, (PyObject **)&tb);
 
   if (exception && PyErr_GivenExceptionMatches(exception, PyExc_SyntaxError)) {
-    /* no traceback available when SyntaxError.
-     * python has no api's to this. reference parse_syntax_error() from pythonrun.c */
+    /* no trace-back available when `SyntaxError`.
+     * python has no API's to this. reference #parse_syntax_error() from pythonrun.c */
     PyErr_NormalizeException(&exception, &value, (PyObject **)&tb);
-    PyErr_Restore(exception, value, (PyObject *)tb); /* takes away reference! */
 
     if (value) { /* should always be true */
       PyObject *message;
       PyObject *filename_py, *text_py;
 
       if (parse_syntax_error(value, &message, &filename_py, lineno, offset, &text_py)) {
-        const char *filename = _PyUnicode_AsString(filename_py);
+        const char *filename = PyUnicode_AsUTF8(filename_py);
         /* python adds a '/', prefix, so check for both */
         if ((BLI_path_cmp(filename, filepath) == 0) ||
-            ((filename[0] == '\\' || filename[0] == '/') &&
-             BLI_path_cmp(filename + 1, filepath) == 0)) {
+            (ELEM(filename[0], '\\', '/') && BLI_path_cmp(filename + 1, filepath) == 0)) {
           /* good */
         }
         else {
@@ -165,6 +163,7 @@ void python_script_error_jump(const char *filepath, int *lineno, int *offset)
         *lineno = -1;
       }
     }
+    PyErr_Restore(exception, value, (PyObject *)tb); /* takes away reference! */
   }
   else {
     PyErr_NormalizeException(&exception, &value, (PyObject **)&tb);
@@ -177,7 +176,7 @@ void python_script_error_jump(const char *filepath, int *lineno, int *offset)
       PyObject *coerce;
       const char *tb_filepath = traceback_filepath(tb, &coerce);
       const int match = ((BLI_path_cmp(tb_filepath, filepath) == 0) ||
-                         ((tb_filepath[0] == '\\' || tb_filepath[0] == '/') &&
+                         (ELEM(tb_filepath[0], '\\', '/') &&
                           BLI_path_cmp(tb_filepath + 1, filepath) == 0));
       Py_DECREF(coerce);
 

@@ -77,13 +77,15 @@ class AddPresetBase:
                 setattr(cls, attr, trans)
             return trans
 
-        name = name.lower().strip()
+        name = name.strip()
         name = bpy.path.display_name_to_filepath(name)
         trans = maketrans_init()
-        return name.translate(trans)
+        # Strip surrounding "_" as they are displayed as spaces.
+        return name.translate(trans).strip("_")
 
     def execute(self, context):
         import os
+        from bpy.utils import is_path_builtin
 
         if hasattr(self, "pre_cb"):
             self.pre_cb(context)
@@ -91,15 +93,16 @@ class AddPresetBase:
         preset_menu_class = getattr(bpy.types, self.preset_menu)
 
         is_xml = getattr(preset_menu_class, "preset_type", None) == 'XML'
+        is_preset_add = not (self.remove_name or self.remove_active)
 
         if is_xml:
             ext = ".xml"
         else:
             ext = ".py"
 
-        name = self.name.strip()
-        if not (self.remove_name or self.remove_active):
+        name = self.name.strip() if is_preset_add else self.name
 
+        if is_preset_add:
             if not name:
                 return {'FINISHED'}
 
@@ -190,6 +193,11 @@ class AddPresetBase:
             if not filepath:
                 return {'CANCELLED'}
 
+            # Do not remove bundled presets
+            if is_path_builtin(filepath):
+                self.report({'WARNING'}, "Unable to remove default presets")
+                return {'CANCELLED'}
+
             try:
                 if hasattr(self, "remove"):
                     self.remove(context, filepath)
@@ -209,10 +217,10 @@ class AddPresetBase:
 
         return {'FINISHED'}
 
-    def check(self, context):
+    def check(self, _context):
         self.name = self.as_filename(self.name.strip())
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         if not (self.remove_active or self.remove_name):
             wm = context.window_manager
             return wm.invoke_props_dialog(self)
@@ -241,12 +249,12 @@ class ExecutePreset(Operator):
 
         # change the menu title to the most recently chosen option
         preset_class = getattr(bpy.types, self.menu_idname)
-        preset_class.bl_label = bpy.path.display_name(basename(filepath))
+        preset_class.bl_label = bpy.path.display_name(basename(filepath), title_case=False)
 
         ext = splitext(filepath)[1].lower()
 
         if ext not in {".py", ".xml"}:
-            self.report({'ERROR'}, "unknown filetype: %r" % ext)
+            self.report({'ERROR'}, "Unknown file type: %r" % ext)
             return {'CANCELLED'}
 
         if hasattr(preset_class, "reset_cb"):
@@ -383,8 +391,8 @@ class AddPresetFluid(AddPresetBase, Operator):
     ]
 
     preset_values = [
-        "fluid.settings.viscosity_base",
-        "fluid.settings.viscosity_exponent",
+        "fluid.domain_settings.viscosity_base",
+        "fluid.domain_settings.viscosity_exponent",
     ]
 
     preset_subdir = "fluid"
@@ -436,7 +444,7 @@ class AddPresetTrackingCamera(AddPresetBase, Operator):
         name="Include Focal Length",
         description="Include focal length into the preset",
         options={'SKIP_SAVE'},
-        default=True
+        default=True,
     )
 
     @property
@@ -495,7 +503,7 @@ class AddPresetTrackingSettings(AddPresetBase, Operator):
         "settings.use_default_mask",
         "settings.use_default_red_channel",
         "settings.use_default_green_channel",
-        "settings.use_default_blue_channel"
+        "settings.use_default_blue_channel",
         "settings.default_weight"
     ]
 
@@ -535,7 +543,7 @@ class AddPresetKeyconfig(AddPresetBase, Operator):
     preset_menu = "USERPREF_MT_keyconfigs"
     preset_subdir = "keyconfig"
 
-    def add(self, context, filepath):
+    def add(self, _context, filepath):
         bpy.ops.preferences.keyconfig_export(filepath=filepath)
         bpy.utils.keyconfig_set(filepath)
 
@@ -636,10 +644,7 @@ class AddPresetGpencilBrush(AddPresetBase, Operator):
         "brush.smooth_stroke_factor",
         "settings.pen_smooth_factor",
         "settings.pen_smooth_steps",
-        "settings.pen_thick_smooth_factor",
-        "settings.pen_thick_smooth_steps",
         "settings.pen_subdivision_steps",
-        "settings.random_subdiv",
         "settings.use_settings_random",
         "settings.random_pressure",
         "settings.random_strength",
@@ -669,7 +674,9 @@ class AddPresetGpencilMaterial(AddPresetBase, Operator):
         "gpcolor.color",
         "gpcolor.stroke_image",
         "gpcolor.pixel_size",
-        "gpcolor.use_stroke_pattern",
+        "gpcolor.mix_stroke_factor",
+        "gpcolor.alignment_mode",
+        "gpcolor.alignment_rotation",
         "gpcolor.fill_style",
         "gpcolor.fill_color",
         "gpcolor.fill_image",
@@ -677,18 +684,10 @@ class AddPresetGpencilMaterial(AddPresetBase, Operator):
         "gpcolor.mix_color",
         "gpcolor.mix_factor",
         "gpcolor.flip",
-        "gpcolor.pattern_shift",
-        "gpcolor.pattern_scale",
-        "gpcolor.pattern_radius",
-        "gpcolor.pattern_angle",
-        "gpcolor.pattern_gridsize",
-        "gpcolor.use_fill_pattern",
         "gpcolor.texture_offset",
         "gpcolor.texture_scale",
         "gpcolor.texture_angle",
-        "gpcolor.texture_opacity",
         "gpcolor.texture_clamp",
-        "gpcolor.texture_mix",
         "gpcolor.mix_factor",
         "gpcolor.show_stroke",
         "gpcolor.show_fill",

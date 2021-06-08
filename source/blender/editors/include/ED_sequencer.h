@@ -20,8 +20,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_SEQUENCER_H__
-#define __ED_SEQUENCER_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Scene;
 struct Sequence;
@@ -46,4 +49,6 @@ Sequence *ED_sequencer_special_preview_get(void);
 void ED_sequencer_special_preview_set(struct bContext *C, const int mval[2]);
 void ED_sequencer_special_preview_clear(void);
 
-#endif /*  __ED_SEQUENCER_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -13,29 +13,41 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_APPDIR_H__
-#define __BKE_APPDIR_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct ListBase;
+
+void BKE_appdir_init(void);
+void BKE_appdir_exit(void);
 
 /* note on naming: typical _get() suffix is omitted here,
  * since its the main purpose of the API. */
 const char *BKE_appdir_folder_default(void);
-const char *BKE_appdir_folder_id_ex(const int folder_id,
-                                    const char *subfolder,
-                                    char *path,
-                                    size_t path_len);
+const char *BKE_appdir_folder_home(void);
+bool BKE_appdir_folder_documents(char *dir);
+bool BKE_appdir_folder_id_ex(const int folder_id,
+                             const char *subfolder,
+                             char *path,
+                             size_t path_len);
 const char *BKE_appdir_folder_id(const int folder_id, const char *subfolder);
 const char *BKE_appdir_folder_id_create(const int folder_id, const char *subfolder);
 const char *BKE_appdir_folder_id_user_notest(const int folder_id, const char *subfolder);
-const char *BKE_appdir_folder_id_version(const int folder_id, const int ver, const bool do_check);
+const char *BKE_appdir_folder_id_version(const int folder_id,
+                                         const int version,
+                                         const bool check_is_dir);
 
 bool BKE_appdir_app_is_portable_install(void);
 bool BKE_appdir_app_template_any(void);
 bool BKE_appdir_app_template_id_search(const char *app_template, char *path, size_t path_len);
+bool BKE_appdir_app_template_has_userpref(const char *app_template);
 void BKE_appdir_app_templates(struct ListBase *templates);
 
 /* Initialize path to program executable */
@@ -44,6 +56,9 @@ void BKE_appdir_program_path_init(const char *argv0);
 const char *BKE_appdir_program_path(void);
 const char *BKE_appdir_program_dir(void);
 
+/* Return OS fonts directory. */
+bool BKE_appdir_font_folder_default(char *dir);
+
 /* find python executable */
 bool BKE_appdir_program_python_search(char *fullpath,
                                       const size_t fullpath_len,
@@ -51,8 +66,7 @@ bool BKE_appdir_program_python_search(char *fullpath,
                                       const int version_minor);
 
 /* Initialize path to temporary directory. */
-void BKE_tempdir_init(char *userdir);
-void BKE_tempdir_system_init(char *dir);
+void BKE_tempdir_init(const char *userdir);
 
 const char *BKE_tempdir_base(void);
 const char *BKE_tempdir_session(void);
@@ -87,5 +101,8 @@ enum {
 #define BLENDER_QUIT_FILE "quit.blend"
 #define BLENDER_BOOKMARK_FILE "bookmarks.txt"
 #define BLENDER_HISTORY_FILE "recent-files.txt"
+#define BLENDER_PLATFORM_SUPPORT_FILE "platform_support.txt"
 
-#endif /* __BKE_APPDIR_H__ */
+#ifdef __cplusplus
+}
+#endif

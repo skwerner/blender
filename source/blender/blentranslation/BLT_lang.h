@@ -21,8 +21,7 @@
  * \ingroup blt
  */
 
-#ifndef __BLT_LANG_H__
-#define __BLT_LANG_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,8 +41,8 @@ void BLT_lang_set(const char *);
 /* Get the current locale ([partial] ISO code, e.g. es_ES). */
 const char *BLT_lang_get(void);
 
-/* Get locale's elements (if relevant pointer is not NULL and element actually exists, e.g. if there is no variant,
- * *variant and *language_variant will always be NULL).
+/* Get locale's elements (if relevant pointer is not NULL and element actually exists, e.g.
+ * if there is no variant, *variant and *language_variant will always be NULL).
  * Non-null elements are always MEM_mallocN'ed, it's the caller's responsibility to free them.
  * NOTE: Always available, even in non-WITH_INTERNATIONAL builds.
  */
@@ -60,5 +59,3 @@ struct EnumPropertyItem *BLT_lang_RNA_enum_properties(void);
 #ifdef __cplusplus
 };
 #endif
-
-#endif /* __BLT_LANG_H__ */

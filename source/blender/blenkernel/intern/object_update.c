@@ -24,37 +24,43 @@
 #include "DNA_anim_types.h"
 #include "DNA_collection_types.h"
 #include "DNA_constraint_types.h"
+#include "DNA_gpencil_types.h"
 #include "DNA_key_types.h"
 #include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_modifier_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_animsys.h"
-#include "BKE_armature.h"
+#include "BKE_DerivedMesh.h"
 #include "BKE_action.h"
+#include "BKE_armature.h"
 #include "BKE_constraint.h"
 #include "BKE_curve.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
 #include "BKE_effect.h"
+#include "BKE_gpencil.h"
+#include "BKE_gpencil_modifier.h"
+#include "BKE_hair.h"
 #include "BKE_image.h"
 #include "BKE_key.h"
+#include "BKE_lattice.h"
 #include "BKE_layer.h"
 #include "BKE_light.h"
-#include "BKE_lattice.h"
 #include "BKE_material.h"
 #include "BKE_mball.h"
 #include "BKE_mesh.h"
 #include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
+#include "BKE_pointcloud.h"
 #include "BKE_scene.h"
-#include "BKE_gpencil.h"
+#include "BKE_volume.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -95,7 +101,7 @@ void BKE_object_eval_parent(Depsgraph *depsgraph, Object *ob)
   DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
 
   /* get local matrix (but don't calculate it, as that was done already!) */
-  // XXX: redundant?
+  /* XXX: redundant? */
   copy_m4_m4(locmat, ob->obmat);
 
   /* get parent effect matrix */
@@ -139,13 +145,20 @@ void BKE_object_eval_transform_final(Depsgraph *depsgraph, Object *ob)
 {
   DEG_debug_print_eval(depsgraph, __func__, ob->id.name, ob);
   /* Make sure inverse matrix is always up to date. This way users of it
-   * do not need to worry about relcalculating it. */
-  invert_m4_m4(ob->imat, ob->obmat);
+   * do not need to worry about recalculating it. */
+  invert_m4_m4_safe(ob->imat, ob->obmat);
   /* Set negative scale flag in object. */
-  if (is_negative_m4(ob->obmat))
+  if (is_negative_m4(ob->obmat)) {
     ob->transflag |= OB_NEG_SCALE;
-  else
+  }
+  else {
     ob->transflag &= ~OB_NEG_SCALE;
+  }
+
+  /* Assign evaluated version. */
+  if ((ob->type == OB_GPENCIL) && (ob->runtime.gpd_eval != NULL)) {
+    ob->data = ob->runtime.gpd_eval;
+  }
 }
 
 void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *ob)
@@ -159,20 +172,29 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
       BMEditMesh *em = (ob->mode & OB_MODE_EDIT) ? BKE_editmesh_from_object(ob) : NULL;
 #else
       BMEditMesh *em = (ob->mode & OB_MODE_EDIT) ? ((Mesh *)ob->data)->edit_mesh : NULL;
-      if (em && em->ob != ob) {
-        em = NULL;
-      }
 #endif
 
       CustomData_MeshMasks cddata_masks = scene->customdata_mask;
       CustomData_MeshMasks_update(&cddata_masks, &CD_MASK_BAREMESH);
+      /* Custom attributes should not be removed automatically. They might be used by the render
+       * engine or scripts. They can still be removed explicitly using geometry nodes. */
+      cddata_masks.vmask |= CD_MASK_PROP_ALL;
+      cddata_masks.emask |= CD_MASK_PROP_ALL;
+      cddata_masks.fmask |= CD_MASK_PROP_ALL;
+      cddata_masks.pmask |= CD_MASK_PROP_ALL;
+      cddata_masks.lmask |= CD_MASK_PROP_ALL;
+      /* Make sure Freestyle edge/face marks appear in DM for render (see T40315).
+       * Due to Line Art implementation, edge marks should also be shown in viewport. */
 #ifdef WITH_FREESTYLE
-      /* make sure Freestyle edge/face marks appear in DM for render (see T40315) */
-      if (DEG_get_mode(depsgraph) != DAG_EVAL_VIEWPORT) {
-        cddata_masks.emask |= CD_MASK_FREESTYLE_EDGE;
-        cddata_masks.pmask |= CD_MASK_FREESTYLE_FACE;
-      }
+      cddata_masks.emask |= CD_MASK_FREESTYLE_EDGE;
+      cddata_masks.pmask |= CD_MASK_FREESTYLE_FACE;
+      cddata_masks.vmask |= CD_MASK_MDEFORMVERT;
 #endif
+      if (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER) {
+        /* Always compute UVs, vertex colors as orcos for render. */
+        cddata_masks.lmask |= CD_MASK_MLOOPUV | CD_MASK_MLOOPCOL;
+        cddata_masks.vmask |= CD_MASK_ORCO | CD_MASK_PROP_COLOR;
+      }
       if (em) {
         makeDerivedMesh(depsgraph, scene, ob, em, &cddata_masks); /* was CD_MASK_BAREMESH */
       }
@@ -200,12 +222,29 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
 
     case OB_CURVE:
     case OB_SURF:
-    case OB_FONT:
-      BKE_displist_make_curveTypes(depsgraph, scene, ob, false, false, NULL);
+    case OB_FONT: {
+      bool for_render = (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
+      BKE_displist_make_curveTypes(depsgraph, scene, ob, for_render, false);
       break;
+    }
 
     case OB_LATTICE:
       BKE_lattice_modifiers_calc(depsgraph, scene, ob);
+      break;
+    case OB_GPENCIL: {
+      BKE_gpencil_prepare_eval_data(depsgraph, scene, ob);
+      BKE_gpencil_modifiers_calc(depsgraph, scene, ob);
+      BKE_gpencil_update_layer_transforms(depsgraph, ob);
+      break;
+    }
+    case OB_HAIR:
+      BKE_hair_data_update(depsgraph, scene, ob);
+      break;
+    case OB_POINTCLOUD:
+      BKE_pointcloud_data_update(depsgraph, scene, ob);
+      break;
+    case OB_VOLUME:
+      BKE_volume_data_update(depsgraph, scene, ob);
       break;
   }
 
@@ -233,33 +272,26 @@ void BKE_object_handle_data_update(Depsgraph *depsgraph, Scene *scene, Object *o
         psys_free(ob, psys);
         psys = tpsys;
       }
-      else
+      else {
         psys = psys->next;
+      }
     }
   }
-  BKE_object_eval_boundbox(depsgraph, ob);
 }
 
-/**
- * TODO(sergey): Ensure that bounding box is already calculated, and move this
- * into #BKE_object_synchronize_to_original().
- */
-void BKE_object_eval_boundbox(Depsgraph *depsgraph, Object *object)
+/** Bounding box from evaluated geometry. */
+static void object_sync_boundbox_to_original(Object *object_orig, Object *object_eval)
 {
-  if (!DEG_is_active(depsgraph)) {
-    return;
-  }
-  Object *ob_orig = DEG_get_original_object(object);
-  BoundBox *bb = BKE_object_boundbox_get(object);
+  BoundBox *bb = BKE_object_boundbox_get(object_eval);
   if (bb != NULL) {
-    if (ob_orig->runtime.bb == NULL) {
-      ob_orig->runtime.bb = MEM_mallocN(sizeof(*ob_orig->runtime.bb), __func__);
+    if (object_orig->runtime.bb == NULL) {
+      object_orig->runtime.bb = MEM_mallocN(sizeof(*object_orig->runtime.bb), __func__);
     }
-    *ob_orig->runtime.bb = *bb;
+    *object_orig->runtime.bb = *bb;
   }
 }
 
-void BKE_object_synchronize_to_original(Depsgraph *depsgraph, Object *object)
+void BKE_object_sync_to_original(Depsgraph *depsgraph, Object *object)
 {
   if (!DEG_is_active(depsgraph)) {
     return;
@@ -284,6 +316,8 @@ void BKE_object_synchronize_to_original(Depsgraph *depsgraph, Object *object)
       md_orig->error = BLI_strdup(md->error);
     }
   }
+
+  object_sync_boundbox_to_original(object_orig, object);
 }
 
 bool BKE_object_eval_proxy_copy(Depsgraph *depsgraph, Object *object)
@@ -335,6 +369,15 @@ void BKE_object_batch_cache_dirty_tag(Object *ob)
     case OB_GPENCIL:
       BKE_gpencil_batch_cache_dirty_tag(ob->data);
       break;
+    case OB_HAIR:
+      BKE_hair_batch_cache_dirty_tag(ob->data, BKE_HAIR_BATCH_DIRTY_ALL);
+      break;
+    case OB_POINTCLOUD:
+      BKE_pointcloud_batch_cache_dirty_tag(ob->data, BKE_POINTCLOUD_BATCH_DIRTY_ALL);
+      break;
+    case OB_VOLUME:
+      BKE_volume_batch_cache_dirty_tag(ob->data, BKE_VOLUME_BATCH_DIRTY_ALL);
+      break;
   }
 }
 
@@ -366,14 +409,6 @@ void BKE_object_eval_transform_all(Depsgraph *depsgraph, Scene *scene, Object *o
   BKE_object_eval_transform_final(depsgraph, object);
 }
 
-void BKE_object_eval_update_shading(Depsgraph *depsgraph, Object *object)
-{
-  DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
-  if (object->type == OB_MESH) {
-    BKE_mesh_batch_cache_dirty_tag(object->data, BKE_MESH_BATCH_DIRTY_SHADING);
-  }
-}
-
 void BKE_object_data_select_update(Depsgraph *depsgraph, ID *object_data)
 {
   DEG_debug_print_eval(depsgraph, __func__, object_data->name, object_data);
@@ -390,6 +425,21 @@ void BKE_object_data_select_update(Depsgraph *depsgraph, ID *object_data)
       break;
     default:
       break;
+  }
+}
+
+void BKE_object_select_update(Depsgraph *depsgraph, Object *object)
+{
+  DEG_debug_print_eval(depsgraph, __func__, object->id.name, object);
+  if (object->type == OB_MESH && !object->runtime.is_data_eval_owned) {
+    Mesh *mesh_input = (Mesh *)object->runtime.data_orig;
+    Mesh_Runtime *mesh_runtime = &mesh_input->runtime;
+    BLI_mutex_lock(mesh_runtime->eval_mutex);
+    BKE_object_data_select_update(depsgraph, object->data);
+    BLI_mutex_unlock(mesh_runtime->eval_mutex);
+  }
+  else {
+    BKE_object_data_select_update(depsgraph, object->data);
   }
 }
 
@@ -416,13 +466,13 @@ void BKE_object_eval_eval_base_flags(Depsgraph *depsgraph,
   BKE_base_eval_flags(base);
 
   /* For render, compute base visibility again since BKE_base_eval_flags
-   * assumed viewport visibility. Selectability does not matter here. */
+   * assumed viewport visibility. Select-ability does not matter here. */
   if (DEG_get_mode(depsgraph) == DAG_EVAL_RENDER) {
     if (base->flag & BASE_ENABLED_RENDER) {
-      base->flag |= BASE_VISIBLE;
+      base->flag |= BASE_VISIBLE_DEPSGRAPH;
     }
     else {
-      base->flag &= ~BASE_VISIBLE;
+      base->flag &= ~BASE_VISIBLE_DEPSGRAPH;
     }
   }
 
@@ -433,6 +483,7 @@ void BKE_object_eval_eval_base_flags(Depsgraph *depsgraph,
     object->base_flag &= ~(BASE_SELECTED | BASE_SELECTABLE);
   }
   object->base_local_view_bits = base->local_view_bits;
+  object->runtime.local_collections_bits = base->local_collections_bits;
 
   if (object->mode == OB_MODE_PARTICLE_EDIT) {
     for (ParticleSystem *psys = object->particlesystem.first; psys != NULL; psys = psys->next) {

@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_FEDGE_H__
-#define __FREESTYLE_PYTHON_FEDGE_H__
+#pragma once
 
 #include "../BPy_Interface1D.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject FEdge_Type;
 /*---------------------------Python BPy_FEdge structure definition----------*/
 typedef struct {
   BPy_Interface1D py_if1D;
-  FEdge *fe;
+  Freestyle::FEdge *fe;
 } BPy_FEdge;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_FEDGE_H__ */

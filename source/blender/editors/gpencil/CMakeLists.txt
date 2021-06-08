@@ -22,17 +22,13 @@ set(INC
   ../../blenlib
   ../../blentranslation
   ../../depsgraph
-  ../../imbuf
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -40,25 +36,35 @@ set(SRC
   annotate_paint.c
   drawgpencil.c
   editaction_gpencil.c
+  gpencil_add_blank.c
+  gpencil_add_lineart.c
   gpencil_add_monkey.c
   gpencil_add_stroke.c
   gpencil_armature.c
-  gpencil_brush.c
+  gpencil_bake_animation.c
   gpencil_convert.c
   gpencil_data.c
   gpencil_edit.c
+  gpencil_edit_curve.c
   gpencil_fill.c
   gpencil_interpolate.c
   gpencil_merge.c
+  gpencil_mesh.c
   gpencil_ops.c
   gpencil_ops_versioning.c
   gpencil_paint.c
   gpencil_primitive.c
+  gpencil_sculpt_paint.c
   gpencil_select.c
   gpencil_undo.c
   gpencil_utils.c
+  gpencil_uv.c
+  gpencil_vertex_ops.c
+  gpencil_vertex_paint.c
+  gpencil_weight_paint.c
 
   gpencil_intern.h
+  gpencil_trace.h
 )
 
 set(LIB
@@ -66,10 +72,23 @@ set(LIB
   bf_blenlib
 )
 
+if(WITH_POTRACE)
+  list(APPEND SRC
+    gpencil_trace_ops.c
+    gpencil_trace_utils.c
+  )
+  list(APPEND INC
+    ${POTRACE_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${POTRACE_LIBRARIES}
+  )
+  add_definitions(-DWITH_POTRACE)
+endif()
+
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_gpencil "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

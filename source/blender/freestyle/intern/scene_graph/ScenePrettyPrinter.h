@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_SCENE_PRETTY_PRINTER_H__
-#define __FREESTYLE_SCENE_PRETTY_PRINTER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -36,17 +35,20 @@ class ScenePrettyPrinter : public SceneVisitor {
  public:
   ScenePrettyPrinter(const string filename = "SceneLog.txt") : SceneVisitor()
   {
-    if (!filename.empty())
+    if (!filename.empty()) {
       _ofs.open(filename.c_str());
-    if (!_ofs.is_open())
+    }
+    if (!_ofs.is_open()) {
       cerr << "Warning, unable to open file \"" << filename << "\"" << endl;
+    }
     _space = "";
   }
 
   virtual ~ScenePrettyPrinter()
   {
-    if (_ofs.is_open())
+    if (_ofs.is_open()) {
       _ofs.close();
+    }
   }
 
   //
@@ -93,5 +95,3 @@ class ScenePrettyPrinter : public SceneVisitor {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_SCENE_PRETTY_PRINTER_H__

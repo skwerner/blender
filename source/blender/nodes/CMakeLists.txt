@@ -21,28 +21,32 @@
 set(INC
   .
   composite
+  function
+  geometry
   intern
   shader
   texture
+  ../editors/include
   ../blenkernel
   ../blenlib
   ../blentranslation
+  ../bmesh
   ../depsgraph
+  ../functions
   ../gpu
   ../imbuf
   ../makesdna
   ../makesrna
-  ../render/extern/include
-  ../../../intern/guardedalloc
+  ../render
   ../../../intern/glew-mx
+  ../../../intern/guardedalloc
+  ../../../intern/sky/include
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   composite/nodes/node_composite_alphaOver.c
+  composite/nodes/node_composite_antialiasing.c
   composite/nodes/node_composite_bilateralblur.c
   composite/nodes/node_composite_blur.c
   composite/nodes/node_composite_bokehblur.c
@@ -59,9 +63,10 @@ set(SRC
   composite/nodes/node_composite_composite.c
   composite/nodes/node_composite_cornerpin.c
   composite/nodes/node_composite_crop.c
-  composite/nodes/node_composite_cryptomatte.c
+  composite/nodes/node_composite_cryptomatte.cc
   composite/nodes/node_composite_curves.c
   composite/nodes/node_composite_defocus.c
+  composite/nodes/node_composite_denoise.c
   composite/nodes/node_composite_despeckle.c
   composite/nodes/node_composite_diffMatte.c
   composite/nodes/node_composite_dilate.c
@@ -70,6 +75,7 @@ set(SRC
   composite/nodes/node_composite_distanceMatte.c
   composite/nodes/node_composite_doubleEdgeMask.c
   composite/nodes/node_composite_ellipsemask.c
+  composite/nodes/node_composite_exposure.c
   composite/nodes/node_composite_filter.c
   composite/nodes/node_composite_flip.c
   composite/nodes/node_composite_gamma.c
@@ -126,6 +132,73 @@ set(SRC
   composite/node_composite_tree.c
   composite/node_composite_util.c
 
+  function/nodes/node_fn_boolean_math.cc
+  function/nodes/node_fn_float_compare.cc
+  function/nodes/node_fn_input_string.cc
+  function/nodes/node_fn_input_vector.cc
+  function/nodes/node_fn_random_float.cc
+  function/node_function_util.cc
+
+  geometry/nodes/node_geo_align_rotation_to_vector.cc
+  geometry/nodes/node_geo_attribute_clamp.cc
+  geometry/nodes/node_geo_attribute_color_ramp.cc
+  geometry/nodes/node_geo_attribute_combine_xyz.cc
+  geometry/nodes/node_geo_attribute_compare.cc
+  geometry/nodes/node_geo_attribute_convert.cc
+  geometry/nodes/node_geo_attribute_curve_map.cc
+  geometry/nodes/node_geo_attribute_fill.cc
+  geometry/nodes/node_geo_attribute_map_range.cc
+  geometry/nodes/node_geo_attribute_math.cc
+  geometry/nodes/node_geo_attribute_mix.cc
+  geometry/nodes/node_geo_attribute_proximity.cc
+  geometry/nodes/node_geo_attribute_randomize.cc
+  geometry/nodes/node_geo_attribute_remove.cc
+  geometry/nodes/node_geo_attribute_sample_texture.cc
+  geometry/nodes/node_geo_attribute_separate_xyz.cc
+  geometry/nodes/node_geo_attribute_transfer.cc
+  geometry/nodes/node_geo_attribute_vector_math.cc
+  geometry/nodes/node_geo_attribute_vector_rotate.cc
+  geometry/nodes/node_geo_boolean.cc
+  geometry/nodes/node_geo_bounding_box.cc
+  geometry/nodes/node_geo_collection_info.cc
+  geometry/nodes/node_geo_common.cc
+  geometry/nodes/node_geo_curve_length.cc  
+  geometry/nodes/node_geo_curve_to_mesh.cc
+  geometry/nodes/node_geo_curve_resample.cc
+  geometry/nodes/node_geo_delete_geometry.cc
+  geometry/nodes/node_geo_edge_split.cc
+  geometry/nodes/node_geo_input_material.cc
+  geometry/nodes/node_geo_is_viewport.cc
+  geometry/nodes/node_geo_join_geometry.cc
+  geometry/nodes/node_geo_material_assign.cc
+  geometry/nodes/node_geo_material_replace.cc
+  geometry/nodes/node_geo_mesh_primitive_circle.cc
+  geometry/nodes/node_geo_mesh_primitive_cone.cc
+  geometry/nodes/node_geo_mesh_primitive_cube.cc
+  geometry/nodes/node_geo_mesh_primitive_cylinder.cc
+  geometry/nodes/node_geo_mesh_primitive_grid.cc
+  geometry/nodes/node_geo_mesh_primitive_ico_sphere.cc
+  geometry/nodes/node_geo_mesh_primitive_line.cc
+  geometry/nodes/node_geo_mesh_primitive_uv_sphere.cc
+  geometry/nodes/node_geo_mesh_to_curve.cc
+  geometry/nodes/node_geo_object_info.cc
+  geometry/nodes/node_geo_point_distribute.cc
+  geometry/nodes/node_geo_point_instance.cc
+  geometry/nodes/node_geo_point_rotate.cc
+  geometry/nodes/node_geo_point_scale.cc
+  geometry/nodes/node_geo_point_separate.cc
+  geometry/nodes/node_geo_point_translate.cc
+  geometry/nodes/node_geo_points_to_volume.cc
+  geometry/nodes/node_geo_subdivide.cc
+  geometry/nodes/node_geo_subdivision_surface.cc
+  geometry/nodes/node_geo_switch.cc
+  geometry/nodes/node_geo_transform.cc
+  geometry/nodes/node_geo_triangulate.cc
+  geometry/nodes/node_geo_volume_to_mesh.cc
+  geometry/node_geometry_exec.cc
+  geometry/node_geometry_tree.cc
+  geometry/node_geometry_util.cc
+
   shader/nodes/node_shader_add_shader.c
   shader/nodes/node_shader_ambient_occlusion.c
   shader/nodes/node_shader_attribute.c
@@ -147,8 +220,9 @@ set(SRC
   shader/nodes/node_shader_bsdf_velvet.c
   shader/nodes/node_shader_bump.c
   shader/nodes/node_shader_camera.c
+  shader/nodes/node_shader_clamp.cc
   shader/nodes/node_shader_common.c
-  shader/nodes/node_shader_curves.c
+  shader/nodes/node_shader_curves.cc
   shader/nodes/node_shader_displacement.c
   shader/nodes/node_shader_eevee_specular.c
   shader/nodes/node_shader_emission.c
@@ -163,13 +237,15 @@ set(SRC
   shader/nodes/node_shader_layer_weight.c
   shader/nodes/node_shader_light_falloff.c
   shader/nodes/node_shader_light_path.c
+  shader/nodes/node_shader_map_range.cc
   shader/nodes/node_shader_mapping.c
-  shader/nodes/node_shader_math.c
+  shader/nodes/node_shader_math.cc
   shader/nodes/node_shader_mixRgb.c
   shader/nodes/node_shader_mix_shader.c
   shader/nodes/node_shader_normal.c
   shader/nodes/node_shader_normal_map.c
   shader/nodes/node_shader_object_info.c
+  shader/nodes/node_shader_output_aov.c
   shader/nodes/node_shader_output_light.c
   shader/nodes/node_shader_output_linestyle.c
   shader/nodes/node_shader_output_material.c
@@ -178,8 +254,8 @@ set(SRC
   shader/nodes/node_shader_rgb.c
   shader/nodes/node_shader_script.c
   shader/nodes/node_shader_sepcombHSV.c
-  shader/nodes/node_shader_sepcombRGB.c
-  shader/nodes/node_shader_sepcombXYZ.c
+  shader/nodes/node_shader_sepcombRGB.cc
+  shader/nodes/node_shader_sepcombXYZ.cc
   shader/nodes/node_shader_shaderToRgb.c
   shader/nodes/node_shader_squeeze.c
   shader/nodes/node_shader_subsurface_scattering.c
@@ -197,14 +273,18 @@ set(SRC
   shader/nodes/node_shader_tex_sky.c
   shader/nodes/node_shader_tex_voronoi.c
   shader/nodes/node_shader_tex_wave.c
+  shader/nodes/node_shader_tex_white_noise.c
   shader/nodes/node_shader_uvAlongStroke.c
   shader/nodes/node_shader_uvmap.c
-  shader/nodes/node_shader_valToRgb.c
-  shader/nodes/node_shader_value.c
-  shader/nodes/node_shader_vectMath.c
+  shader/nodes/node_shader_valToRgb.cc
+  shader/nodes/node_shader_value.cc
   shader/nodes/node_shader_vectTransform.c
   shader/nodes/node_shader_vector_displacement.c
+  shader/nodes/node_shader_vector_math.cc
+  shader/nodes/node_shader_vector_rotate.cc
+  shader/nodes/node_shader_vertex_color.c
   shader/nodes/node_shader_volume_absorption.c
+  shader/nodes/node_shader_volume_info.c
   shader/nodes/node_shader_volume_principled.c
   shader/nodes/node_shader_volume_scatter.c
   shader/nodes/node_shader_wavelength.c
@@ -238,27 +318,48 @@ set(SRC
   texture/node_texture_tree.c
   texture/node_texture_util.c
 
+  intern/derived_node_tree.cc
+  intern/math_functions.cc
   intern/node_common.c
-  intern/node_exec.c
-  intern/node_socket.c
+  intern/node_exec.cc
+  intern/node_geometry_exec.cc
+  intern/node_socket.cc
+  intern/node_tree_multi_function.cc
+  intern/node_tree_ref.cc
   intern/node_util.c
+  intern/type_callbacks.cc
+  intern/type_conversions.cc
 
   composite/node_composite_util.h
+  function/node_function_util.hh
   shader/node_shader_util.h
+  geometry/node_geometry_util.hh
   texture/node_texture_util.h
 
   NOD_common.h
   NOD_composite.h
+  NOD_derived_node_tree.hh
+  NOD_function.h
+  NOD_geometry.h
+  NOD_geometry_exec.hh
+  NOD_math_functions.hh
+  NOD_node_tree_multi_function.hh
+  NOD_node_tree_ref.hh
   NOD_shader.h
   NOD_socket.h
   NOD_static_types.h
   NOD_texture.h
+  NOD_type_callbacks.hh
+  NOD_type_conversions.hh
   intern/node_common.h
   intern/node_exec.h
   intern/node_util.h
 )
 
 set(LIB
+  bf_bmesh
+  bf_functions
+  bf_intern_sky
 )
 
 if(WITH_PYTHON)
@@ -268,11 +369,22 @@ if(WITH_PYTHON)
   list(APPEND INC_SYS
     ${PYTHON_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${PYTHON_LINKFLAGS}
+    ${PYTHON_LIBRARIES}
+  )
   add_definitions(-DWITH_PYTHON)
 endif()
 
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
+endif()
+
+if(WITH_TBB)
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+  add_definitions(-DWITH_TBB)
 endif()
 
 if(WITH_IMAGE_OPENEXR)
@@ -286,10 +398,31 @@ if(WITH_COMPOSITOR)
   add_definitions(-DWITH_COMPOSITOR)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
-
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
+endif()
+
+if(WITH_OPENSUBDIV)
+  add_definitions(-DWITH_OPENSUBDIV)
+endif()
+
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
+  )
+endif()
+
+if(WITH_OPENVDB)
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
+  )
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
 endif()
 
 blender_add_lib(bf_nodes "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

@@ -23,8 +23,10 @@ set(INC
   ../blenkernel
   ../blenlib
   ../blenloader
+  ../gpu
   ../makesdna
   ../makesrna
+  ../sequencer
   ../../../intern/guardedalloc
   ../../../intern/memutil
 )
@@ -63,6 +65,7 @@ set(SRC
   intern/thumbs_blend.c
   intern/thumbs_font.c
   intern/util.c
+  intern/util_gpu.c
   intern/writeimage.c
 
   IMB_colormanagement.h
@@ -90,6 +93,9 @@ set(LIB
   bf_intern_guardedalloc
   bf_intern_memutil
   bf_intern_opencolorio
+
+  ${PNG_LIBRARIES}
+  ${JPEG_LIBRARIES}
 )
 
 if(WITH_IMAGE_OPENEXR)
@@ -110,6 +116,9 @@ if(WITH_IMAGE_TIFF)
   list(APPEND SRC
     intern/tiff.c
   )
+  list(APPEND LIB
+    ${TIFF_LIBRARY}
+  )
   add_definitions(-DWITH_TIFF)
 endif()
 
@@ -128,13 +137,16 @@ if(WITH_IMAGE_OPENJPEG)
   list(APPEND SRC
     intern/jp2.c
   )
+  list(APPEND LIB
+    ${OPENJPEG_LIBRARIES}
+  )
 
   add_definitions(-DWITH_OPENJPEG ${OPENJPEG_DEFINES})
 endif()
 
 if(WITH_CODEC_AVI)
   list(APPEND INC
-    ../avi
+    ../io/avi
   )
   list(APPEND LIB
     bf_avi
@@ -149,13 +161,11 @@ if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
   )
-  add_definitions(-DWITH_FFMPEG)
-
-  remove_strict_c_flags_file(
-    intern/anim_movie.c
-    intern/indexer.c
-    intern/util.c
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
+    ${OPENJPEG_LIBRARIES}
   )
+  add_definitions(-DWITH_FFMPEG)
 endif()
 
 if(WITH_IMAGE_DDS)

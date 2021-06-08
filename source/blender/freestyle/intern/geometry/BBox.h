@@ -14,16 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BBOX_H__
-#define __BBOX_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  * \brief A class to hold a bounding box
  */
 
-#include <stdlib.h>
 #include <algorithm>
+#include <stdlib.h>
 
 #include "BLI_utildefines.h"
 
@@ -59,10 +58,12 @@ template<class Point> class BBox {
       return;
     }
     for (unsigned int i = 0; i < Point::dim(); i++) {
-      if (p[i] < _min[i])
+      if (p[i] < _min[i]) {
         _min[i] = p[i];
-      else if (p[i] > _max[i])
+      }
+      else if (p[i] > _max[i]) {
         _max[i] = p[i];
+      }
     }
     _empty = false;
   }
@@ -106,10 +107,12 @@ template<class Point> class BBox {
     }
     else {
       for (unsigned int i = 0; i < Point::dim(); i++) {
-        if (b.getMin()[i] < _min[i])
+        if (b.getMin()[i] < _min[i]) {
           _min[i] = b.getMin()[i];
-        if (b.getMax()[i] > _max[i])
+        }
+        if (b.getMax()[i] > _max[i]) {
           _max[i] = b.getMax()[i];
+        }
       }
     }
     return *this;
@@ -117,11 +120,13 @@ template<class Point> class BBox {
 
   inline bool inside(const Point &p)
   {
-    if (empty())
+    if (empty()) {
       return false;
+    }
     for (unsigned int i = 0; i < Point::dim(); i++) {
-      if ((_min[i] > p[i]) || (_max[i] < p[i]))
+      if ((_min[i] > p[i]) || (_max[i] < p[i])) {
         return false;
+      }
     }
     return true;
   }
@@ -150,5 +155,3 @@ template<class Point> BBox<Point> &operator+(const BBox<Point> &b1, const BBox<P
 }
 
 } /* namespace Freestyle */
-
-#endif  // __BBOX_H__

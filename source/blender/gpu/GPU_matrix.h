@@ -21,8 +21,7 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_MATRIX_H__
-#define __GPU_MATRIX_H__
+#pragma once
 
 #include "BLI_sys_types.h"
 
@@ -30,7 +29,7 @@
 extern "C" {
 #endif
 
-struct GPUShaderInterface;
+struct GPUShader;
 
 void GPU_matrix_reset(void); /* to Identity transform & empty stack */
 
@@ -52,12 +51,12 @@ void GPU_matrix_translate_3f(float x, float y, float z);
 void GPU_matrix_translate_3fv(const float vec[3]);
 void GPU_matrix_scale_3f(float x, float y, float z);
 void GPU_matrix_scale_3fv(const float vec[3]);
-void GPU_matrix_rotate_3f(float deg,
-                          float x,
-                          float y,
-                          float z); /* axis of rotation should be a unit vector */
-void GPU_matrix_rotate_3fv(float deg,
-                           const float axis[3]);   /* axis of rotation should be a unit vector */
+
+/* Axis of rotation should be a unit vector. */
+void GPU_matrix_rotate_3f(float deg, float x, float y, float z);
+/* Axis of rotation should be a unit vector. */
+void GPU_matrix_rotate_3fv(float deg, const float axis[3]);
+
 void GPU_matrix_rotate_axis(float deg, char axis); /* TODO: enum for axis? */
 
 void GPU_matrix_look_at(float eyeX,
@@ -90,22 +89,56 @@ void GPU_matrix_identity_projection_set(void);
 void GPU_matrix_projection_set(const float m[4][4]);
 
 void GPU_matrix_ortho_set(float left, float right, float bottom, float top, float near, float far);
+void GPU_matrix_ortho_set_z(float near, float far);
+
 void GPU_matrix_frustum_set(
     float left, float right, float bottom, float top, float near, float far);
 void GPU_matrix_perspective_set(float fovy, float aspect, float near, float far);
 
 /* 3D Projection between Window and World Space */
 
-void GPU_matrix_project(const float world[3],
-                        const float model[4][4],
-                        const float proj[4][4],
-                        const int view[4],
-                        float win[3]);
-bool GPU_matrix_unproject(const float win[3],
-                          const float model[4][4],
-                          const float proj[4][4],
-                          const int view[4],
-                          float world[3]);
+struct GPUMatrixUnproject_Precalc {
+  float model_inverted[4][4];
+  float view[4];
+  bool is_persp;
+  /**
+   * Result of #projmat_dimensions_db.
+   * Using double precision here is important as far clipping ranges
+   * can cause divide-by-zero when using float, see: T66937.
+   */
+  struct {
+    double xmin, xmax;
+    double ymin, ymax;
+    double zmin, zmax;
+  } dims;
+};
+
+bool GPU_matrix_unproject_precalc(struct GPUMatrixUnproject_Precalc *unproj_precalc,
+                                  const float model[4][4],
+                                  const float proj[4][4],
+                                  const int view[4]);
+
+void GPU_matrix_project_3fv(const float world[3],
+                            const float model[4][4],
+                            const float proj[4][4],
+                            const int view[4],
+                            float r_win[3]);
+
+void GPU_matrix_project_2fv(const float world[3],
+                            const float model[4][4],
+                            const float proj[4][4],
+                            const int view[4],
+                            float r_win[2]);
+
+bool GPU_matrix_unproject_3fv(const float win[3],
+                              const float model[4][4],
+                              const float proj[4][4],
+                              const int view[4],
+                              float r_world[3]);
+
+void GPU_matrix_unproject_3fv_with_precalc(const struct GPUMatrixUnproject_Precalc *unproj_precalc,
+                                           const float win[3],
+                                           float r_world[3]);
 
 /* 2D Projection Matrix */
 
@@ -120,10 +153,15 @@ const float (*GPU_matrix_normal_get(float m[3][3]))[3];
 const float (*GPU_matrix_normal_inverse_get(float m[3][3]))[3];
 
 /* set uniform values for currently bound shader */
-void GPU_matrix_bind(const struct GPUShaderInterface *);
+void GPU_matrix_bind(struct GPUShader *shader);
 bool GPU_matrix_dirty_get(void); /* since last bind */
 
-/* Python API needs to be able to inspect the stack so errors raise exceptions instead of crashing. */
+/* own working polygon offset */
+float GPU_polygon_offset_calc(const float (*winmat)[4], float viewdist, float dist);
+void GPU_polygon_offset(float viewdist, float dist);
+
+/* Python API needs to be able to inspect the stack so errors raise exceptions
+ * instead of crashing. */
 #ifdef USE_GPU_PY_MATRIX_API
 int GPU_matrix_stack_level_get_model_view(void);
 int GPU_matrix_stack_level_get_projection(void);
@@ -199,4 +237,7 @@ int GPU_matrix_stack_level_get_projection(void);
 #  define GPU_matrix_normal_inverse_get(x) GPU_matrix_normal_inverse_get(_GPU_MAT3_CAST(x))
 #endif /* SUPPRESS_GENERIC_MATRIX_API */
 
-#endif /* __GPU_MATRIX_H__ */
+/* Not part of the GPU_matrix API,
+ * however we need to check these limits in code that calls into these API's. */
+#define GPU_MATRIX_ORTHO_CLIP_NEAR_DEFAULT (-100)
+#define GPU_MATRIX_ORTHO_CLIP_FAR_DEFAULT (100)

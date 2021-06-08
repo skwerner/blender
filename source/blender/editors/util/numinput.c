@@ -20,13 +20,16 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
-#include "BLI_string_utf8.h"
 #include "BLI_string_cursor_utf8.h"
+#include "BLI_string_utf8.h"
+#include "BLI_utildefines.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_context.h"
+#include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_unit.h"
 
@@ -36,7 +39,7 @@
 #include "WM_types.h"
 
 #ifdef WITH_PYTHON
-#  include "BPY_extern.h"
+#  include "BPY_extern_run.h"
 #endif
 
 #include "ED_numinput.h"
@@ -45,7 +48,8 @@
 /* Numeric input which isn't allowing full numeric editing. */
 #define USE_FAKE_EDIT
 
-/** #NumInput.flag
+/**
+ * #NumInput.flag
  * (1 << 8) and below are reserved for public flags!
  */
 enum {
@@ -133,14 +137,14 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
           BLI_strncpy(val, "Invalid", sizeof(val));
         }
         else {
-          bUnit_AsString(val,
-                         sizeof(val),
-                         (double)(n->val[i] * fac),
-                         prec,
-                         n->unit_sys,
-                         n->unit_type[i],
-                         true,
-                         false);
+          BKE_unit_value_as_string_adaptive(val,
+                                            sizeof(val),
+                                            (double)(n->val[i] * fac),
+                                            prec,
+                                            n->unit_sys,
+                                            n->unit_type[i],
+                                            true,
+                                            false);
         }
 
         /* +1 because of trailing '\0' */
@@ -162,7 +166,7 @@ void outputNumInput(NumInput *n, char *str, UnitSettings *unit_settings)
         }
         else {
           char tstr[NUM_STR_REP_LEN];
-          bUnit_AsString(
+          BKE_unit_value_as_string_adaptive(
               tstr, ln, (double)n->val[i], prec, n->unit_sys, n->unit_type[i], true, false);
           BLI_snprintf(&str[j * ln], ln, "%s%s%s", cur, tstr, cur);
         }
@@ -238,26 +242,25 @@ bool applyNumInput(NumInput *n, float *vec)
 #endif
     return true;
   }
-  else {
-    /* Else, we set the 'org' values for numinput! */
-    for (j = 0; j <= n->idx_max; j++) {
-      n->val[j] = n->val_org[j] = vec[j];
-    }
-    return false;
+
+  /* Else, we set the 'org' values for numinput! */
+  for (j = 0; j <= n->idx_max; j++) {
+    n->val[j] = n->val_org[j] = vec[j];
   }
+  return false;
 }
 
 static void value_to_editstr(NumInput *n, int idx)
 {
   const int prec = 6; /* editing, higher precision needed. */
-  n->str_cur = bUnit_AsString(n->str,
-                              NUM_STR_REP_LEN,
-                              (double)n->val[idx],
-                              prec,
-                              n->unit_sys,
-                              n->unit_type[idx],
-                              true,
-                              false);
+  n->str_cur = BKE_unit_value_as_string_adaptive(n->str,
+                                                 NUM_STR_REP_LEN,
+                                                 (double)n->val[idx],
+                                                 prec,
+                                                 n->unit_sys,
+                                                 n->unit_type[idx],
+                                                 true,
+                                                 false);
 }
 
 static bool editstr_insert_at_cursor(NumInput *n, const char *buf, const int buf_len)
@@ -277,26 +280,36 @@ static bool editstr_insert_at_cursor(NumInput *n, const char *buf, const int buf
   return true;
 }
 
-bool user_string_to_number(
-    bContext *C, const char *str, const UnitSettings *unit, int type, double *r_value)
+bool user_string_to_number(bContext *C,
+                           const char *str,
+                           const UnitSettings *unit,
+                           int type,
+                           double *r_value,
+                           const bool use_single_line_error,
+                           char **r_error)
 {
 #ifdef WITH_PYTHON
+  struct BPy_RunErrInfo err_info = {
+      .use_single_line_error = use_single_line_error,
+      .r_string = r_error,
+  };
   double unit_scale = BKE_scene_unit_scale(unit, type, 1.0);
-  if (bUnit_ContainsUnit(str, type)) {
+  if (BKE_unit_string_contains_unit(str, type)) {
     char str_unit_convert[256];
     BLI_strncpy(str_unit_convert, str, sizeof(str_unit_convert));
-    bUnit_ReplaceString(
+    BKE_unit_replace_string(
         str_unit_convert, sizeof(str_unit_convert), str, unit_scale, unit->system, type);
 
-    return BPY_execute_string_as_number(C, NULL, str_unit_convert, true, r_value);
+    return BPY_run_string_as_number(C, NULL, str_unit_convert, &err_info, r_value);
   }
-  else {
-    int success = BPY_execute_string_as_number(C, NULL, str, true, r_value);
-    *r_value *= bUnit_PreferredInputUnitScalar(unit, type);
-    *r_value /= unit_scale;
-    return success;
-  }
+
+  int success = BPY_run_string_as_number(C, NULL, str, &err_info, r_value);
+  *r_value = BKE_unit_apply_preferred_unit(unit, type, *r_value);
+  *r_value /= unit_scale;
+  return success;
+
 #else
+  UNUSED_VARS(C, unit, type);
   *r_value = atof(str);
   return true;
 #endif
@@ -307,12 +320,10 @@ static bool editstr_is_simple_numinput(const char ascii)
   if (ascii >= '0' && ascii <= '9') {
     return true;
   }
-  else if (ascii == '.') {
+  if (ascii == '.') {
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
@@ -338,6 +349,21 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
     }
   }
 
+#ifdef USE_FAKE_EDIT
+  /* XXX Hack around keyboards without direct access to '=' nor '*'... */
+  if (ELEM(event->ascii, '=', '*')) {
+    if (!(n->flag & NUM_EDIT_FULL)) {
+      n->flag |= NUM_EDIT_FULL;
+      n->val_flag[idx] |= NUM_EDITED;
+      return true;
+    }
+    if (event->ctrl) {
+      n->flag &= ~NUM_EDIT_FULL;
+      return true;
+    }
+  }
+#endif
+
   switch (event->type) {
     case EVT_MODAL_MAP:
       if (ELEM(event->val, NUM_MODAL_INCREMENT_UP, NUM_MODAL_INCREMENT_DOWN)) {
@@ -352,7 +378,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
         ascii[0] = event->ascii;
       }
       break;
-    case BACKSPACEKEY:
+    case EVT_BACKSPACEKEY:
       /* Part specific to backspace... */
       if (!(n->val_flag[idx] & NUM_EDITED)) {
         copy_v3_v3(n->val, n->val_org);
@@ -379,7 +405,7 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
        * only difference is remove char(s) before/after the cursor. */
       dir = STRCUR_DIR_PREV;
       ATTR_FALLTHROUGH;
-    case DELKEY:
+    case EVT_DELKEY:
       if ((n->val_flag[idx] & NUM_EDITED) && n->str[0]) {
         int t_cur = cur = n->str_cur;
         if (event->ctrl) {
@@ -403,10 +429,10 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
         return false;
       }
       break;
-    case LEFTARROWKEY:
+    case EVT_LEFTARROWKEY:
       dir = STRCUR_DIR_PREV;
       ATTR_FALLTHROUGH;
-    case RIGHTARROWKEY:
+    case EVT_RIGHTARROWKEY:
       cur = n->str_cur;
       if (event->ctrl) {
         mode = STRCUR_JUMP_DELIM;
@@ -417,19 +443,19 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
         return true;
       }
       return false;
-    case HOMEKEY:
+    case EVT_HOMEKEY:
       if (n->str[0]) {
         n->str_cur = 0;
         return true;
       }
       return false;
-    case ENDKEY:
+    case EVT_ENDKEY:
       if (n->str[0]) {
         n->str_cur = strlen(n->str);
         return true;
       }
       return false;
-    case TABKEY:
+    case EVT_TABKEY:
 #ifdef USE_FAKE_EDIT
       n->val_flag[idx] &= ~(NUM_NEGATE | NUM_INVERSE);
 #endif
@@ -444,15 +470,16 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
         n->str_cur = 0;
       }
       return true;
-    case PADPERIOD:
-    case PERIODKEY:
+    case EVT_PADPERIOD:
+    case EVT_PERIODKEY:
       /* Force numdot, some OSs/countries generate a comma char in this case,
        * sic...  (T37992) */
       ascii[0] = '.';
       utf8_buf = ascii;
       break;
 #if 0
-    /* Those keys are not directly accessible in all layouts, preventing to generate matching events.
+    /* Those keys are not directly accessible in all layouts,
+     * preventing to generate matching events.
      * So we use a hack (ascii value) instead, see below.
      */
     case EQUALKEY:
@@ -470,29 +497,29 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
 #endif
 
 #ifdef USE_FAKE_EDIT
-    case PADMINUS:
-    case MINUSKEY:
+    case EVT_PADMINUS:
+    case EVT_MINUSKEY:
       if (event->ctrl || !(n->flag & NUM_EDIT_FULL)) {
         n->val_flag[idx] ^= NUM_NEGATE;
         updated = true;
       }
       break;
-    case PADSLASHKEY:
-    case SLASHKEY:
+    case EVT_PADSLASHKEY:
+    case EVT_SLASHKEY:
       if (event->ctrl || !(n->flag & NUM_EDIT_FULL)) {
         n->val_flag[idx] ^= NUM_INVERSE;
         updated = true;
       }
       break;
 #endif
-    case CKEY:
+    case EVT_CKEY:
       if (event->ctrl) {
-        /* Copy current str to the copypaste buffer. */
+        /* Copy current `str` to the copy/paste buffer. */
         WM_clipboard_text_set(n->str, 0);
         updated = true;
       }
       break;
-    case VKEY:
+    case EVT_VKEY:
       if (event->ctrl) {
         /* extract the first line from the clipboard */
         int pbuf_len;
@@ -519,21 +546,6 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
     utf8_buf = event->utf8_buf;
     ascii[0] = event->ascii;
   }
-
-#ifdef USE_FAKE_EDIT
-  /* XXX Hack around keyboards without direct access to '=' nor '*'... */
-  if (ELEM(ascii[0], '=', '*')) {
-    if (!(n->flag & NUM_EDIT_FULL)) {
-      n->flag |= NUM_EDIT_FULL;
-      n->val_flag[idx] |= NUM_EDITED;
-      return true;
-    }
-    else if (event->ctrl) {
-      n->flag &= ~NUM_EDIT_FULL;
-      return true;
-    }
-  }
-#endif
 
   /* Up to this point, if we have a ctrl modifier, skip.
    * This allows to still access most of modals' shortcuts even in numinput mode.
@@ -571,9 +583,19 @@ bool handleNumInput(bContext *C, NumInput *n, const wmEvent *event)
   if (n->str[0]) {
     const float val_prev = n->val[idx];
     Scene *sce = CTX_data_scene(C);
+    char *error = NULL;
 
     double val;
-    int success = user_string_to_number(C, n->str, &sce->unit, n->unit_type[idx], &val);
+    int success = user_string_to_number(
+        C, n->str, &sce->unit, n->unit_type[idx], &val, false, &error);
+
+    if (error) {
+      ReportList *reports = CTX_wm_reports(C);
+      printf("%s\n", error);
+      BKE_report(reports, RPT_ERROR, error);
+      BKE_report(reports, RPT_ERROR, IFACE_("Numeric input evaluation"));
+      MEM_freeN(error);
+    }
 
     if (success) {
       n->val[idx] = (float)val;

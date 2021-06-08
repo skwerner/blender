@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_BLENDER_UNDO_H__
-#define __BKE_BLENDER_UNDO_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -26,18 +25,20 @@ extern "C" {
 
 struct Main;
 struct MemFileUndoData;
-struct Scene;
 struct bContext;
+
+enum eUndoStepDir;
 
 #define BKE_UNDO_STR_MAX 64
 
 struct MemFileUndoData *BKE_memfile_undo_encode(struct Main *bmain,
                                                 struct MemFileUndoData *mfu_prev);
-bool BKE_memfile_undo_decode(struct MemFileUndoData *mfu, struct bContext *C);
+bool BKE_memfile_undo_decode(struct MemFileUndoData *mfu,
+                             const enum eUndoStepDir undo_direction,
+                             const bool use_old_bmain_data,
+                             struct bContext *C);
 void BKE_memfile_undo_free(struct MemFileUndoData *mfu);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_BLENDER_UNDO_H__ */

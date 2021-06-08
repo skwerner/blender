@@ -14,13 +14,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_HEAP_H__
-#define __BLI_HEAP_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  * \brief A min-heap / priority queue ADT
  */
+
+#include "BLI_math.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Heap;
 struct HeapNode;
@@ -52,4 +57,6 @@ void *BLI_heap_node_ptr(const HeapNode *heap) ATTR_WARN_UNUSED_RESULT ATTR_NONNU
 /* only for gtest */
 bool BLI_heap_is_valid(const Heap *heap);
 
-#endif /* __BLI_HEAP_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -22,6 +22,8 @@ import bpy
 from bpy.types import Menu, Panel, UIList
 from bl_ui.utils import PresetPanel
 
+from bpy.app.translations import pgettext_tip as tip_
+
 
 class RENDER_PT_presets(PresetPanel, Panel):
     bl_label = "Render Presets"
@@ -61,7 +63,7 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
     _frame_rate_args_prev = None
     _preset_class = None
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         RENDER_PT_presets.draw_panel_header(self.layout)
 
     @staticmethod
@@ -78,13 +80,13 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
             fps_rate = round(fps / fps_base, 2)
 
         # TODO: Change the following to iterate over existing presets
-        custom_framerate = (fps_rate not in {23.98, 24, 25, 29.97, 30, 50, 59.94, 60})
+        custom_framerate = (fps_rate not in {23.98, 24, 25, 29.97, 30, 50, 59.94, 60, 120, 240})
 
         if custom_framerate is True:
-            fps_label_text = f"Custom ({fps_rate!r} fps)"
+            fps_label_text = tip_("Custom (%.4g fps)") % fps_rate
             show_framerate = True
         else:
-            fps_label_text = f"{fps_rate!r} fps"
+            fps_label_text = tip_("%.4g fps") % fps_rate
             show_framerate = (preset_label == "Custom")
 
         RENDER_PT_dimensions._frame_rate_args_prev = args
@@ -92,14 +94,14 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
         return args
 
     @staticmethod
-    def draw_framerate(layout, sub, rd):
+    def draw_framerate(layout, rd):
         if RENDER_PT_dimensions._preset_class is None:
             RENDER_PT_dimensions._preset_class = bpy.types.RENDER_MT_framerate_presets
 
         args = rd.fps, rd.fps_base, RENDER_PT_dimensions._preset_class.bl_label
         fps_label_text, show_framerate = RENDER_PT_dimensions._draw_framerate_label(*args)
 
-        sub.menu("RENDER_MT_framerate_presets", text=fps_label_text)
+        layout.menu("RENDER_MT_framerate_presets", text=fps_label_text)
 
         if show_framerate:
             col = layout.column(align=True)
@@ -134,10 +136,8 @@ class RENDER_PT_dimensions(RenderOutputButtonsPanel, Panel):
         col.prop(scene, "frame_end", text="End")
         col.prop(scene, "frame_step", text="Step")
 
-        col = layout.split()
-        col.alignment = 'RIGHT'
-        col.label(text="Frame Rate")
-        self.draw_framerate(layout, col, rd)
+        col = layout.column(heading="Frame Rate")
+        self.draw_framerate(col, rd)
 
 
 class RENDER_PT_frame_remapping(RenderOutputButtonsPanel, Panel):
@@ -169,10 +169,8 @@ class RENDER_PT_post_processing(RenderOutputButtonsPanel, Panel):
 
         rd = context.scene.render
 
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-        col = flow.column()
+        col = layout.column(heading="Pipeline")
         col.prop(rd, "use_compositing")
-        col = flow.column()
         col.prop(rd, "use_sequencer")
 
         layout.prop(rd, "dither_intensity", text="Dither", slider=True)
@@ -190,43 +188,22 @@ class RENDER_PT_stamp(RenderOutputButtonsPanel, Panel):
 
         rd = context.scene.render
 
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-
-        col = flow.column()
-        col.prop(rd, "use_stamp_date", text="Date")
-        col = flow.column()
-        col.prop(rd, "use_stamp_time", text="Time")
-
-        col = flow.column()
-        col.prop(rd, "use_stamp_render_time", text="Render Time")
-        col = flow.column()
-        col.prop(rd, "use_stamp_frame", text="Frame")
-        col = flow.column()
-        col.prop(rd, "use_stamp_frame_range", text="Frame Range")
-        col = flow.column()
-        col.prop(rd, "use_stamp_memory", text="Memory")
-        col = flow.column()
-        col.prop(rd, "use_stamp_hostname", text="Hostname")
-
-        col = flow.column()
-        col.prop(rd, "use_stamp_camera", text="Camera")
-        col = flow.column()
-        col.prop(rd, "use_stamp_lens", text="Lens")
-
-        col = flow.column()
-        col.prop(rd, "use_stamp_scene", text="Scene")
-        col = flow.column()
-        col.prop(rd, "use_stamp_marker", text="Marker")
-
-        col = flow.column()
-        col.prop(rd, "use_stamp_filename", text="Filename")
-
-        col = flow.column()
-        col.prop(rd, "use_stamp_sequencer_strip", text="Strip Name")
-
         if rd.use_sequencer:
-            col = flow.column()
-            col.prop(rd, "use_stamp_strip_meta", text="Use Strip Metadata")
+            layout.prop(rd, "metadata_input")
+
+        col = layout.column(heading="Include")
+        col.prop(rd, "use_stamp_date", text="Date")
+        col.prop(rd, "use_stamp_time", text="Time")
+        col.prop(rd, "use_stamp_render_time", text="Render Time")
+        col.prop(rd, "use_stamp_frame", text="Frame")
+        col.prop(rd, "use_stamp_frame_range", text="Frame Range")
+        col.prop(rd, "use_stamp_memory", text="Memory")
+        col.prop(rd, "use_stamp_hostname", text="Hostname")
+        col.prop(rd, "use_stamp_camera", text="Camera")
+        col.prop(rd, "use_stamp_lens", text="Lens")
+        col.prop(rd, "use_stamp_scene", text="Scene")
+        col.prop(rd, "use_stamp_marker", text="Marker")
+        col.prop(rd, "use_stamp_filename", text="Filename")
 
 
 class RENDER_PT_stamp_note(RenderOutputButtonsPanel, Panel):
@@ -291,20 +268,16 @@ class RENDER_PT_output(RenderOutputButtonsPanel, Panel):
 
         layout.use_property_split = True
 
-        flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
-
-        col = flow.column()
-        col.active = not rd.is_movie_format
-        col.prop(rd, "use_overwrite")
-        col = flow.column()
-        col.active = not rd.is_movie_format
-        col.prop(rd, "use_placeholder")
-        col = flow.column()
+        col = layout.column(heading="Saving")
         col.prop(rd, "use_file_extension")
-        col = flow.column()
         col.prop(rd, "use_render_cache")
 
         layout.template_image_settings(image_settings, color_management=False)
+
+        if not rd.is_movie_format:
+            col = layout.column(heading="Image Sequence")
+            col.prop(rd, "use_overwrite")
+            col.prop(rd, "use_placeholder")
 
 
 class RENDER_PT_output_views(RenderOutputButtonsPanel, Panel):
@@ -313,7 +286,7 @@ class RENDER_PT_output_views(RenderOutputButtonsPanel, Panel):
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         rd = context.scene.render
         return rd.use_multiview
 
@@ -332,7 +305,7 @@ class RENDER_PT_encoding(RenderOutputButtonsPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         RENDER_PT_ffmpeg_presets.draw_panel_header(self.layout)
 
     @classmethod
@@ -374,14 +347,14 @@ class RENDER_PT_encoding_video(RenderOutputButtonsPanel, Panel):
         layout = self.layout
         ffmpeg = context.scene.render.ffmpeg
 
-        needs_codec = ffmpeg.format in {'AVI', 'QUICKTIME', 'MKV', 'OGG', 'MPEG4'}
+        needs_codec = ffmpeg.format in {'AVI', 'QUICKTIME', 'MKV', 'OGG', 'MPEG4', 'WEBM'}
         if needs_codec:
             layout.prop(ffmpeg, "codec")
 
         if needs_codec and ffmpeg.codec == 'NONE':
             return
 
-        if ffmpeg.codec in {'DNXHD'}:
+        if ffmpeg.codec == 'DNXHD':
             layout.prop(ffmpeg, "use_lossless_output")
 
         # Output quality
@@ -394,11 +367,11 @@ class RENDER_PT_encoding_video(RenderOutputButtonsPanel, Panel):
         # I-frames
         layout.prop(ffmpeg, "gopsize")
         # B-Frames
-        split = layout.split(factor=0.5)
-        split.prop(ffmpeg, "use_max_b_frames", text="Max B-frames")
-        pbox = split.column()
-        pbox.prop(ffmpeg, "max_b_frames", text="")
-        pbox.enabled = ffmpeg.use_max_b_frames
+        row = layout.row(align=True, heading="Max B-frames")
+        row.prop(ffmpeg, "use_max_b_frames", text="")
+        sub = row.row(align=True)
+        sub.active = ffmpeg.use_max_b_frames
+        sub.prop(ffmpeg, "max_b_frames", text="")
 
         if not use_crf or ffmpeg.constant_rate_factor == 'NONE':
             col = layout.column()
@@ -438,12 +411,14 @@ class RENDER_PT_encoding_audio(RenderOutputButtonsPanel, Panel):
             layout.prop(ffmpeg, "audio_codec", text="Audio Codec")
 
         if ffmpeg.audio_codec != 'NONE':
+            layout.prop(ffmpeg, "audio_channels")
+            layout.prop(ffmpeg, "audio_mixrate", text="Sample Rate")
             layout.prop(ffmpeg, "audio_bitrate")
             layout.prop(ffmpeg, "audio_volume", slider=True)
 
 
 class RENDER_UL_renderviews(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, index):
         view = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             if view.name in {"left", "right"}:
@@ -477,9 +452,7 @@ class RENDER_PT_stereoscopy(RenderOutputButtonsPanel, Panel):
         basic_stereo = rd.views_format == 'STEREO_3D'
 
         row = layout.row()
-        row.use_property_split = True
-        row.use_property_decorate = False
-        row.prop(rd, "views_format")
+        layout.row().prop(rd, "views_format", expand=True)
 
         if basic_stereo:
             row = layout.row()

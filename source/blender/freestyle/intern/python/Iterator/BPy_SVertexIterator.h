@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_SVERTEXITERATOR_H__
-#define __FREESTYLE_PYTHON_SVERTEXITERATOR_H__
+#pragma once
 
 #include "../BPy_Iterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject SVertexIterator_Type;
 /*---------------------------Python BPy_SVertexIterator structure definition----------*/
 typedef struct {
   BPy_Iterator py_it;
-  ViewEdgeInternal::SVertexIterator *sv_it;
+  Freestyle::ViewEdgeInternal::SVertexIterator *sv_it;
 } BPy_SVertexIterator;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -47,5 +46,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_SVERTEXITERATOR_H__ */

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -23,60 +23,81 @@
 
 #include <stdio.h>
 
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
+#include "BLI_hash.h"
 #include "BLI_math_vector.h"
-#include "BLI_rand.h"
 
-#include "PIL_time.h"
+#include "BLT_translation.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
+#include "MEM_guardedalloc.h"
+
+#include "DNA_defaults.h"
 #include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
+#include "BKE_colortools.h"
+#include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_object.h"
+#include "BKE_lib_query.h"
+#include "BKE_modifier.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
-#include "MOD_gpencil_util.h"
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
+#include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
   NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->flag |= GP_NOISE_MOD_LOCATION;
-  gpmd->flag |= GP_NOISE_FULL_STROKE;
-  gpmd->flag |= GP_NOISE_USE_RANDOM;
-  gpmd->factor = 0.5f;
-  gpmd->layername[0] = '\0';
-  gpmd->vgname[0] = '\0';
-  gpmd->step = 1;
-  gpmd->scene_frame = -999999;
-  gpmd->gp_frame = -999999;
 
-  gpmd->vrand1 = 1.0;
-  gpmd->vrand2 = 1.0;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(NoiseGpencilModifierData), modifier);
+
+  gpmd->curve_intensity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  CurveMapping *curve = gpmd->curve_intensity;
+  BKE_curvemap_reset(curve->cm, &curve->clipr, CURVE_PRESET_BELL, CURVEMAP_SLOPE_POSITIVE);
+  BKE_curvemapping_init(curve);
 }
 
 static void freeData(GpencilModifierData *md)
 {
-  NoiseGpencilModifierData *mmd = (NoiseGpencilModifierData *)md;
+  NoiseGpencilModifierData *gpmd = (NoiseGpencilModifierData *)md;
 
-  if (mmd->rng != NULL) {
-    BLI_rng_free(mmd->rng);
+  if (gpmd->curve_intensity) {
+    BKE_curvemapping_free(gpmd->curve_intensity);
   }
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  NoiseGpencilModifierData *gmd = (NoiseGpencilModifierData *)md;
+  NoiseGpencilModifierData *tgmd = (NoiseGpencilModifierData *)target;
+
+  if (tgmd->curve_intensity != NULL) {
+    BKE_curvemapping_free(tgmd->curve_intensity);
+    tgmd->curve_intensity = NULL;
+  }
+
+  BKE_gpencil_modifier_copydata_generic(md, target);
+
+  tgmd->curve_intensity = BKE_curvemapping_copy(gmd->curve_intensity);
 }
 
 static bool dependsOnTime(GpencilModifierData *md)
@@ -85,35 +106,42 @@ static bool dependsOnTime(GpencilModifierData *md)
   return (mmd->flag & GP_NOISE_USE_RANDOM) != 0;
 }
 
-/* aply noise effect based on stroke direction */
-static void deformStroke(
-    GpencilModifierData *md, Depsgraph *depsgraph, Object *ob, bGPDlayer *gpl, bGPDstroke *gps)
+static float *noise_table(int len, int offset, int seed)
+{
+  float *table = MEM_callocN(sizeof(float) * len, __func__);
+  for (int i = 0; i < len; i++) {
+    table[i] = BLI_hash_int_01(BLI_hash_int_2d(seed, i + offset + 1));
+  }
+  return table;
+}
+
+BLI_INLINE float table_sample(float *table, float x)
+{
+  return interpf(table[(int)ceilf(x)], table[(int)floor(x)], fractf(x));
+}
+
+/**
+ * Apply noise effect based on stroke direction.
+ */
+static void deformStroke(GpencilModifierData *md,
+                         Depsgraph *depsgraph,
+                         Object *ob,
+                         bGPDlayer *gpl,
+                         bGPDframe *gpf,
+                         bGPDstroke *gps)
 {
   NoiseGpencilModifierData *mmd = (NoiseGpencilModifierData *)md;
-  bGPDspoint *pt0, *pt1;
   MDeformVert *dvert = NULL;
-  float shift, vran, vdir;
+  /* Noise value in range [-1..1] */
   float normal[3];
   float vec1[3], vec2[3];
-  int sc_frame = 0;
-  int sc_diff = 0;
-  const int def_nr = defgroup_name_index(ob, mmd->vgname);
-  const float unit_v3[3] = {1.0f, 1.0f, 1.0f};
-
-  Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
-  GpencilModifierData *md_eval = BKE_gpencil_modifiers_findByName(object_eval, md->name);
-  NoiseGpencilModifierData *mmd_eval = (NoiseGpencilModifierData *)md_eval;
-
-  /* Random generator, only init once. (it uses eval to get same value in render) */
-  if (mmd_eval->rng == NULL) {
-    uint rng_seed = (uint)(PIL_check_seconds_timer_i() & UINT_MAX);
-    rng_seed ^= POINTER_AS_UINT(mmd);
-    mmd_eval->rng = BLI_rng_new(rng_seed);
-    mmd->rng = mmd_eval->rng;
-  }
+  const int def_nr = BKE_object_defgroup_name_index(ob, mmd->vgname);
+  const bool invert_group = (mmd->flag & GP_NOISE_INVERT_VGROUP) != 0;
+  const bool use_curve = (mmd->flag & GP_NOISE_CUSTOM_CURVE) != 0 && mmd->curve_intensity;
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
                                       1,
@@ -121,149 +149,118 @@ static void deformStroke(
                                       gps,
                                       mmd->flag & GP_NOISE_INVERT_LAYER,
                                       mmd->flag & GP_NOISE_INVERT_PASS,
-                                      mmd->flag & GP_NOISE_INVERT_LAYERPASS)) {
+                                      mmd->flag & GP_NOISE_INVERT_LAYERPASS,
+                                      mmd->flag & GP_NOISE_INVERT_MATERIAL)) {
     return;
   }
 
-  sc_frame = (int)DEG_get_ctime(depsgraph);
+  int seed = mmd->seed;
+  /* FIXME(fclem): This is really slow. We should get the stroke index in another way. */
+  int stroke_seed = BLI_findindex(&gpf->strokes, gps);
+  seed += stroke_seed;
 
-  zero_v3(vec2);
+  /* Make sure different modifiers get different seeds. */
+  seed += BLI_hash_string(ob->id.name + 2);
+  seed += BLI_hash_string(md->name);
 
-  /* calculate stroke normal*/
+  if (mmd->flag & GP_NOISE_USE_RANDOM) {
+    seed += ((int)DEG_get_ctime(depsgraph)) / mmd->step;
+  }
+
+  /* Sanitize as it can create out of bound reads. */
+  float noise_scale = clamp_f(mmd->noise_scale, 0.0f, 1.0f);
+
+  int len = ceilf(gps->totpoints * noise_scale) + 2;
+  float *noise_table_position = (mmd->factor > 0.0f) ?
+                                    noise_table(len, (int)floor(mmd->noise_offset), seed + 2) :
+                                    NULL;
+  float *noise_table_strength = (mmd->factor_strength > 0.0f) ?
+                                    noise_table(len, (int)floor(mmd->noise_offset), seed + 3) :
+                                    NULL;
+  float *noise_table_thickness = (mmd->factor_thickness > 0.0f) ?
+                                     noise_table(len, (int)floor(mmd->noise_offset), seed) :
+                                     NULL;
+  float *noise_table_uvs = (mmd->factor_uvs > 0.0f) ?
+                               noise_table(len, (int)floor(mmd->noise_offset), seed + 4) :
+                               NULL;
+
+  /* Calculate stroke normal. */
   if (gps->totpoints > 2) {
     BKE_gpencil_stroke_normal(gps, normal);
+    if (is_zero_v3(normal)) {
+      copy_v3_fl(normal, 1.0f);
+    }
   }
   else {
-    copy_v3_v3(normal, unit_v3);
+    copy_v3_fl(normal, 1.0f);
   }
 
   /* move points */
   for (int i = 0; i < gps->totpoints; i++) {
-    if (((i == 0) || (i == gps->totpoints - 1)) && ((mmd->flag & GP_NOISE_MOVE_EXTREME) == 0)) {
-      continue;
-    }
-
-    /* first point is special */
-    if (i == 0) {
-      if (gps->dvert) {
-        dvert = &gps->dvert[0];
-      }
-      pt0 = (gps->totpoints > 1) ? &gps->points[1] : &gps->points[0];
-      pt1 = &gps->points[0];
-    }
-    else {
-      int prev_idx = i - 1;
-      CLAMP_MIN(prev_idx, 0);
-      if (gps->dvert) {
-        dvert = &gps->dvert[prev_idx];
-      }
-      pt0 = &gps->points[prev_idx];
-      pt1 = &gps->points[i];
-    }
-
+    bGPDspoint *pt = &gps->points[i];
     /* verify vertex group */
-    const float weight = get_modifier_point_weight(
-        dvert, (mmd->flag & GP_NOISE_INVERT_VGROUP) != 0, def_nr);
+    dvert = gps->dvert != NULL ? &gps->dvert[i] : NULL;
+    float weight = get_modifier_point_weight(dvert, invert_group, def_nr);
     if (weight < 0.0f) {
       continue;
     }
 
-    /* initial vector (p0 -> p1) */
-    if (i == 0) {
-      sub_v3_v3v3(vec1, &pt0->x, &pt1->x);
+    if (use_curve) {
+      float value = (float)i / (gps->totpoints - 1);
+      weight *= BKE_curvemapping_evaluateF(mmd->curve_intensity, 0, value);
     }
-    else {
-      sub_v3_v3v3(vec1, &pt1->x, &pt0->x);
-    }
-    vran = len_v3(vec1);
-    /* vector orthogonal to normal */
-    cross_v3_v3v3(vec2, vec1, normal);
-    normalize_v3(vec2);
-    /* use random noise */
-    if (mmd->flag & GP_NOISE_USE_RANDOM) {
-      sc_diff = abs(mmd->scene_frame - sc_frame);
-      /* only recalc if the gp frame change or the number of scene frames is bigger than step */
-      if ((!gpl->actframe) || (mmd->gp_frame != gpl->actframe->framenum) ||
-          (sc_diff >= mmd->step)) {
-        vran = mmd->vrand1 = BLI_rng_get_float(mmd->rng);
-        vdir = mmd->vrand2 = BLI_rng_get_float(mmd->rng);
-        mmd->gp_frame = gpl->actframe->framenum;
-        mmd->scene_frame = sc_frame;
+
+    if (mmd->factor > 0.0f) {
+      /* Offset point randomly around the bi-normal vector. */
+      if (gps->totpoints == 1) {
+        copy_v3_fl3(vec1, 1.0f, 0.0f, 0.0f);
       }
-      else {
-        vran = mmd->vrand1;
-        if (mmd->flag & GP_NOISE_FULL_STROKE) {
-          vdir = mmd->vrand2;
-        }
-        else {
-          int f = (mmd->vrand2 * 10.0f) + i;
-          vdir = f % 2;
+      else if (i != gps->totpoints - 1) {
+        /* Initial vector (p1 -> p0). */
+        sub_v3_v3v3(vec1, &gps->points[i].x, &gps->points[i + 1].x);
+        /* if vec2 is zero, set to something */
+        if (len_squared_v3(vec1) < 1e-8f) {
+          copy_v3_fl3(vec1, 1.0f, 0.0f, 0.0f);
         }
       }
-    }
-    else {
-      vran = 1.0f;
-      if (mmd->flag & GP_NOISE_FULL_STROKE) {
-        vdir = gps->totpoints % 2;
-      }
       else {
-        vdir = i % 2;
+        /* Last point reuse the penultimate normal (still stored in vec1)
+         * because the previous point is already modified. */
       }
-      mmd->gp_frame = -999999;
+      /* Vector orthogonal to normal. */
+      cross_v3_v3v3(vec2, vec1, normal);
+      normalize_v3(vec2);
+
+      float noise = table_sample(noise_table_position,
+                                 i * noise_scale + fractf(mmd->noise_offset));
+      madd_v3_v3fl(&pt->x, vec2, (noise * 2.0f - 1.0f) * weight * mmd->factor * 0.1f);
     }
 
-    /* if vec2 is zero, set to something */
-    if (gps->totpoints < 3) {
-      if ((vec2[0] == 0.0f) && (vec2[1] == 0.0f) && (vec2[2] == 0.0f)) {
-        copy_v3_v3(vec2, unit_v3);
-      }
+    if (mmd->factor_thickness > 0.0f) {
+      float noise = table_sample(noise_table_thickness,
+                                 i * noise_scale + fractf(mmd->noise_offset));
+      pt->pressure *= max_ff(1.0f + (noise * 2.0f - 1.0f) * weight * mmd->factor_thickness, 0.0f);
+      CLAMP_MIN(pt->pressure, GPENCIL_STRENGTH_MIN);
     }
 
-    /* apply randomness to location of the point */
-    if (mmd->flag & GP_NOISE_MOD_LOCATION) {
-      /* factor is too sensitive, so need divide */
-      shift = ((vran * mmd->factor) / 1000.0f) * weight;
-      if (vdir > 0.5f) {
-        mul_v3_fl(vec2, shift);
-      }
-      else {
-        mul_v3_fl(vec2, shift * -1.0f);
-      }
-      add_v3_v3(&pt1->x, vec2);
+    if (mmd->factor_strength > 0.0f) {
+      float noise = table_sample(noise_table_strength,
+                                 i * noise_scale + fractf(mmd->noise_offset));
+      pt->strength *= max_ff(1.0f - noise * weight * mmd->factor_strength, 0.0f);
+      CLAMP(pt->strength, GPENCIL_STRENGTH_MIN, 1.0f);
     }
 
-    /* apply randomness to thickness */
-    if (mmd->flag & GP_NOISE_MOD_THICKNESS) {
-      if (vdir > 0.5f) {
-        pt1->pressure -= pt1->pressure * vran * mmd->factor * weight;
-      }
-      else {
-        pt1->pressure += pt1->pressure * vran * mmd->factor * weight;
-      }
-      CLAMP_MIN(pt1->pressure, GPENCIL_STRENGTH_MIN);
-    }
-
-    /* apply randomness to color strength */
-    if (mmd->flag & GP_NOISE_MOD_STRENGTH) {
-      if (vdir > 0.5f) {
-        pt1->strength -= pt1->strength * vran * mmd->factor * weight;
-      }
-      else {
-        pt1->strength += pt1->strength * vran * mmd->factor * weight;
-      }
-      CLAMP_MIN(pt1->strength, GPENCIL_STRENGTH_MIN);
-    }
-    /* apply randomness to uv rotation */
-    if (mmd->flag & GP_NOISE_MOD_UV) {
-      if (vdir > 0.5f) {
-        pt1->uv_rot -= pt1->uv_rot * vran * mmd->factor * weight;
-      }
-      else {
-        pt1->uv_rot += pt1->uv_rot * vran * mmd->factor * weight;
-      }
-      CLAMP(pt1->uv_rot, -M_PI_2, M_PI_2);
+    if (mmd->factor_uvs > 0.0f) {
+      float noise = table_sample(noise_table_uvs, i * noise_scale + fractf(mmd->noise_offset));
+      pt->uv_rot += (noise * 2.0f - 1.0f) * weight * mmd->factor_uvs * M_PI_2;
+      CLAMP(pt->uv_rot, -M_PI_2, M_PI_2);
     }
   }
+
+  MEM_SAFE_FREE(noise_table_position);
+  MEM_SAFE_FREE(noise_table_strength);
+  MEM_SAFE_FREE(noise_table_thickness);
+  MEM_SAFE_FREE(noise_table_uvs);
 }
 
 static void bakeModifier(struct Main *UNUSED(bmain),
@@ -273,13 +270,84 @@ static void bakeModifier(struct Main *UNUSED(bmain),
 {
   bGPdata *gpd = ob->data;
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-        deformStroke(md, depsgraph, ob, gpl, gps);
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+        deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
   }
+}
+
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
+{
+  NoiseGpencilModifierData *mmd = (NoiseGpencilModifierData *)md;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "factor", 0, IFACE_("Position"), ICON_NONE);
+  uiItemR(col, ptr, "factor_strength", 0, IFACE_("Strength"), ICON_NONE);
+  uiItemR(col, ptr, "factor_thickness", 0, IFACE_("Thickness"), ICON_NONE);
+  uiItemR(col, ptr, "factor_uvs", 0, IFACE_("UV"), ICON_NONE);
+  uiItemR(col, ptr, "noise_scale", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "noise_offset", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "seed", 0, NULL, ICON_NONE);
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void random_header_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiItemR(layout, ptr, "random", 0, IFACE_("Randomize"), ICON_NONE);
+}
+
+static void random_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayoutSetActive(layout, RNA_boolean_get(ptr, "random"));
+
+  uiItemR(layout, ptr, "step", 0, NULL, ICON_NONE);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, true);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Noise, panel_draw);
+  gpencil_modifier_subpanel_register(
+      region_type, "randomize", "", random_header_draw, random_panel_draw, panel_type);
+  PanelType *mask_panel_type = gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
+  gpencil_modifier_subpanel_register(region_type,
+                                     "curve",
+                                     "",
+                                     gpencil_modifier_curve_header_draw,
+                                     gpencil_modifier_curve_panel_draw,
+                                     mask_panel_type);
 }
 
 GpencilModifierTypeInfo modifierType_Gpencil_Noise = {
@@ -301,8 +369,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Noise = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ dependsOnTime,
-    /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ NULL,
+    /* panelRegister */ panelRegister,
 };

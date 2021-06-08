@@ -16,18 +16,18 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_IMAGEOPERATION_H__
-#define __COM_IMAGEOPERATION_H__
+#pragma once
 
-#include "COM_NodeOperation.h"
-#include "BLI_listbase.h"
 #include "BKE_image.h"
-extern "C" {
-#include "RE_pipeline.h"
-#include "RE_shader_ext.h"
-#include "RE_render_ext.h"
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
+#include "COM_NodeOperation.h"
 #include "MEM_guardedalloc.h"
-}
+
+#include "RE_pipeline.h"
+#include "RE_texture.h"
+
+namespace blender::compositor {
 
 /**
  * \brief Base class for all image operations
@@ -51,13 +51,14 @@ class BaseImageOperation : public NodeOperation {
   /**
    * Determine the output resolution. The resolution is retrieved from the Renderer
    */
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 
   virtual ImBuf *getImBuf();
 
  public:
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
   void setImage(Image *image)
   {
     this->m_image = image;
@@ -85,7 +86,7 @@ class ImageOperation : public BaseImageOperation {
    * Constructor
    */
   ImageOperation();
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 class ImageAlphaOperation : public BaseImageOperation {
  public:
@@ -93,7 +94,7 @@ class ImageAlphaOperation : public BaseImageOperation {
    * Constructor
    */
   ImageAlphaOperation();
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 class ImageDepthOperation : public BaseImageOperation {
  public:
@@ -101,6 +102,7 @@ class ImageDepthOperation : public BaseImageOperation {
    * Constructor
    */
   ImageDepthOperation();
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
-#endif
+
+}  // namespace blender::compositor

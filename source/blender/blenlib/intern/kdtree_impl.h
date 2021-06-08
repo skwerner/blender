@@ -20,10 +20,10 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_kdtree_impl.h"
-#include "BLI_utildefines.h"
+#include "BLI_math.h"
 #include "BLI_strict_flags.h"
+#include "BLI_utildefines.h"
 
 #define _CONCAT_AUX(MACRO_ARG1, MACRO_ARG2) MACRO_ARG1##MACRO_ARG2
 #define _CONCAT(MACRO_ARG1, MACRO_ARG2) _CONCAT_AUX(MACRO_ARG1, MACRO_ARG2)
@@ -58,7 +58,10 @@ struct KDTree {
 
 #define KD_NODE_UNSET ((uint)-1)
 
-/** When set we know all values are unbalanced, otherwise clear them when re-balancing: see T62210. */
+/**
+ * When set we know all values are unbalanced,
+ * otherwise clear them when re-balancing: see T62210.
+ */
 #define KD_NODE_ROOT_IS_INIT ((uint)-2)
 
 /* -------------------------------------------------------------------- */
@@ -76,7 +79,7 @@ static float len_squared_vnvn(const float v0[KD_DIMS], const float v1[KD_DIMS])
 {
   float d = 0.0f;
   for (uint j = 0; j < KD_DIMS; j++) {
-    d += SQUARE(v0[j] - v1[j]);
+    d += square_f(v0[j] - v1[j]);
   }
   return d;
 }
@@ -155,7 +158,7 @@ static uint kdtree_balance(KDTreeNode *nodes, uint nodes_len, uint axis, const u
     return 0 + ofs;
   }
 
-  /* quicksort style sorting around median */
+  /* Quick-sort style sorting around median. */
   left = 0;
   right = nodes_len - 1;
   median = nodes_len / 2;
@@ -732,7 +735,8 @@ int BLI_kdtree_nd_(range_search)(const KDTree *tree,
  * A version of #BLI_kdtree_3d_range_search which runs a callback
  * instead of allocating an array.
  *
- * \param search_cb: Called for every node found in \a range, false return value performs an early exit.
+ * \param search_cb: Called for every node found in \a range,
+ * false return value performs an early exit.
  *
  * \note the order of calls isn't sorted based on distance.
  */
@@ -874,7 +878,7 @@ static void deduplicate_recursive(const struct DeDuplicateParams *p, uint i)
  * the iteration order.
  * \param duplicates: An array of int's the length of #KDTree.nodes_len
  * Values initialized to -1 are candidates to me merged.
- * Setting the index to it's own position in the array prevents it from being touched,
+ * Setting the index to its own position in the array prevents it from being touched,
  * although it can still be used as a target.
  * \returns The number of merges found (includes any merges already in the \a duplicates array).
  *
@@ -889,7 +893,7 @@ int BLI_kdtree_nd_(calc_duplicates_fast)(const KDTree *tree,
   struct DeDuplicateParams p = {
       .nodes = tree->nodes,
       .range = range,
-      .range_sq = SQUARE(range),
+      .range_sq = square_f(range),
       .duplicates = duplicates,
       .duplicates_found = &found,
   };

@@ -1,10 +1,12 @@
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+
 /**
  * Separable Hexagonal Bokeh Blur by Colin Barré-Brisebois
  * https://colinbarrebrisebois.com/2017/04/18/hexagonal-bokeh-blur-revisited-part-1-basic-3-pass-version/
  * Converted and adapted from HLSL to GLSL by Clément Foucault
  */
 
-uniform mat4 ProjectionMatrix;
 uniform vec2 invertedViewportSize;
 uniform vec2 nearFar;
 uniform vec3 dofParams;
@@ -21,16 +23,6 @@ uniform sampler2D noiseTex;
 #define dof_aperturesize dofParams.x
 #define dof_distance dofParams.y
 #define dof_invsensorsize dofParams.z
-
-#define M_PI 3.1415926535897932 /* pi */
-
-float max_v4(vec4 v)
-{
-  return max(max(v.x, v.y), max(v.z, v.w));
-}
-
-#define weighted_sum(a, b, c, d, e, e_sum) \
-  ((a)*e.x + (b)*e.y + (c)*e.z + (d)*e.w) / max(1e-6, e_sum);
 
 /* divide by sensor size to get the normalized size */
 #define calculate_coc(zdepth) \
@@ -94,8 +86,7 @@ void main()
   /* now write output to weighted buffers. */
   /* Take far plane pixels in priority. */
   vec4 w = any(notEqual(far_weights, vec4(0.0))) ? far_weights : near_weights;
-  float tot_weight = dot(w, vec4(1.0));
-  halfResColor = weighted_sum(color1, color2, color3, color4, w, tot_weight);
+  halfResColor = weighted_sum(color1, color2, color3, color4, w);
   halfResColor = clamp(halfResColor, 0.0, 3.0);
 
   normalizedCoc = encode_coc(coc_near, coc_far);
@@ -113,18 +104,22 @@ layout(location = 1) out vec2 outCocs;
 
 void main()
 {
-  ivec4 texel = ivec4(gl_FragCoord.xyxy) * 2 + ivec4(0, 0, 1, 1);
+  vec4 texel = vec4(gl_FragCoord.xyxy) * 2.0 + vec4(0.0, 0.0, 1.0, 1.0);
+  texel = (texel - 0.5) / vec4(textureSize(sceneColorTex, 0).xyxy);
 
-  vec4 color1 = texelFetch(sceneColorTex, texel.xy, 0);
-  vec4 color2 = texelFetch(sceneColorTex, texel.zw, 0);
-  vec4 color3 = texelFetch(sceneColorTex, texel.zy, 0);
-  vec4 color4 = texelFetch(sceneColorTex, texel.xw, 0);
+  /* Using texelFetch can bypass the mip range setting on some platform.
+   * Using texture Lod fix this issue. Note that we need to disable filtering to get the right
+   * texel values. */
+  vec4 color1 = textureLod(sceneColorTex, texel.xy, 0.0);
+  vec4 color2 = textureLod(sceneColorTex, texel.zw, 0.0);
+  vec4 color3 = textureLod(sceneColorTex, texel.zy, 0.0);
+  vec4 color4 = textureLod(sceneColorTex, texel.xw, 0.0);
 
   vec4 depths;
-  vec2 cocs1 = texelFetch(inputCocTex, texel.xy, 0).rg;
-  vec2 cocs2 = texelFetch(inputCocTex, texel.zw, 0).rg;
-  vec2 cocs3 = texelFetch(inputCocTex, texel.zy, 0).rg;
-  vec2 cocs4 = texelFetch(inputCocTex, texel.xw, 0).rg;
+  vec2 cocs1 = textureLod(inputCocTex, texel.xy, 0.0).rg;
+  vec2 cocs2 = textureLod(inputCocTex, texel.zw, 0.0).rg;
+  vec2 cocs3 = textureLod(inputCocTex, texel.zy, 0.0).rg;
+  vec2 cocs4 = textureLod(inputCocTex, texel.xw, 0.0).rg;
 
   vec4 cocs_near = vec4(cocs1.r, cocs2.r, cocs3.r, cocs4.r) * MAX_COC_SIZE;
   vec4 cocs_far = vec4(cocs1.g, cocs2.g, cocs3.g, cocs4.g) * MAX_COC_SIZE;
@@ -139,8 +134,7 @@ void main()
 
   /* now write output to weighted buffers. */
   vec4 w = any(notEqual(far_weights, vec4(0.0))) ? far_weights : near_weights;
-  float tot_weight = dot(w, vec4(1.0));
-  outColor = weighted_sum(color1, color2, color3, color4, w, tot_weight);
+  outColor = weighted_sum(color1, color2, color3, color4, w);
 
   outCocs = encode_coc(coc_near, coc_far);
 }
@@ -251,12 +245,12 @@ void main()
   ivec2 texel = ivec2(uv * size);
 
   vec4 color = vec4(0.0);
-  float tot = 1e-4;
+  float tot = 0.0;
 
   float coc = decode_coc(texelFetch(inputCocTex, texel, 0).rg);
   float max_radius = coc;
   vec2 noise = get_random_vector(noiseOffset) * 0.2 * clamp(max_radius * 0.2 - 4.0, 0.0, 1.0);
-  for (int i = 0; i < NUM_SAMPLES; ++i) {
+  for (int i = 0; i < NUM_SAMPLES; i++) {
     vec2 tc = uv + (noise + samples[i].xy) * invertedViewportSize * max_radius;
 
     /* decode_signed_coc return biggest coc. */
@@ -272,7 +266,12 @@ void main()
     tot += weight;
   }
 
-  blurColor = color / tot;
+  if (tot > 0.0) {
+    blurColor = color / tot;
+  }
+  else {
+    blurColor = textureLod(halfResColorTex, uv, 0.0);
+  }
 }
 #endif
 
@@ -338,33 +337,33 @@ void main()
 
 #  define mnmx3(a, b, c) \
     mx3(a, b, c); \
-    s2(a, b);  // 3 exchanges
+    s2(a, b); /* 3 exchanges */
 #  define mnmx4(a, b, c, d) \
     s2(a, b); \
     s2(c, d); \
     s2(a, c); \
-    s2(b, d);  // 4 exchanges
+    s2(b, d); /* 4 exchanges */
 #  define mnmx5(a, b, c, d, e) \
     s2(a, b); \
     s2(c, d); \
     mn3(a, c, e); \
-    mx3(b, d, e);  // 6 exchanges
+    mx3(b, d, e); /* 6 exchanges */
 #  define mnmx6(a, b, c, d, e, f) \
     s2(a, d); \
     s2(b, e); \
     s2(c, f); \
     mn3(a, b, c); \
-    mx3(d, e, f);  // 7 exchanges
+    mx3(d, e, f); /* 7 exchanges */
 
   vec v[9];
 
   /* Add the pixels which make up our window to the pixel array. */
-  for (int dX = -1; dX <= 1; ++dX) {
-    for (int dY = -1; dY <= 1; ++dY) {
+  for (int dX = -1; dX <= 1; dX++) {
+    for (int dY = -1; dY <= 1; dY++) {
       vec2 offset = vec2(float(dX), float(dY));
-      /* If a pixel in the window is located at (x+dX, y+dY), put it at index (dX + R)(2R + 1) + (dY + R) of the
-       * pixel array. This will fill the pixel array, with the top left pixel of the window at pixel[0] and the
-       * bottom right pixel of the window at pixel[N-1]. */
+      /* If a pixel in the window is located at (x+dX, y+dY), put it at index (dX + R)(2R + 1) +
+       * (dY + R) of the pixel array. This will fill the pixel array, with the top left pixel of
+       * the window at pixel[0] and the bottom right pixel of the window at pixel[N-1]. */
       v[(dX + 1) * 3 + (dY + 1)] = toVec(texture(blurTex, uv + offset * pixel_size * rad));
     }
   }
@@ -385,7 +384,9 @@ void main()
  * ----------------- STEP 4 ------------------
  */
 #ifdef RESOLVE
-out vec4 finalColor;
+
+layout(location = 0, index = 0) out vec4 finalColorAdd;
+layout(location = 0, index = 1) out vec4 finalColorMul;
 
 void main()
 {
@@ -398,7 +399,8 @@ void main()
   float zdepth = linear_depth(depth);
   float coc = calculate_coc(zdepth);
 
-  finalColor = texture(halfResColorTex, uv);
-  finalColor.a = smoothstep(1.0, 3.0, abs(coc));
+  float blend = smoothstep(1.0, 3.0, abs(coc));
+  finalColorAdd = texture(halfResColorTex, uv) * blend;
+  finalColorMul = vec4(1.0 - blend);
 }
 #endif

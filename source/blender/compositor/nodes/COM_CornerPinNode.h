@@ -15,14 +15,13 @@
  * Copyright 2014, Blender Foundation.
  */
 
-#ifndef __COM_CORNERPINNODE_H__
-#define __COM_CORNERPINNODE_H__
+#pragma once
 
 #include "COM_Node.h"
 
-extern "C" {
 #include "DNA_node_types.h"
-}
+
+namespace blender::compositor {
 
 /**
  * \brief CornerPinNode
@@ -31,7 +30,8 @@ extern "C" {
 class CornerPinNode : public Node {
  public:
   CornerPinNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* __COM_CORNERPINNODE_H__ */
+}  // namespace blender::compositor

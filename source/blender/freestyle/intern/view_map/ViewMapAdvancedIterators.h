@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_MAP_ADVANCED_ITERATORS_H__
-#define __FREESTYLE_VIEW_MAP_ADVANCED_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -24,6 +23,7 @@
  */
 
 #include "ViewMap.h"
+#include "ViewMapIterators.h"
 
 #include "../system/Iterator.h"  //soc
 
@@ -165,11 +165,12 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
   {
   }
 
-  //protected://FIXME
+  // protected://FIXME
  public:
 #if 0
-  inline edge_iterator_base(value_type ifeA, value_type ifeB, value_type ibeA, value_type ibeB, value_type iter)
-  : parent_class()
+  inline edge_iterator_base(
+      value_type ifeA, value_type ifeB, value_type ibeA, value_type ibeB, value_type iter)
+      : parent_class()
   {
     _Nature = Nature::T_VERTEX;
     _feA = ifeA;
@@ -205,20 +206,24 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
  public:
   virtual bool begin() const
   {
-    if (_Nature & Nature::T_VERTEX)
+    if (_Nature & Nature::T_VERTEX) {
       return (_tvertex_iter == _tbegin);
-    //return (_tvertex_iter == _feA);
-    else
+      // return (_tvertex_iter == _feA);
+    }
+    else {
       return (_nontvertex_iter == _begin);
+    }
   }
 
   virtual bool end() const
   {
-    if (_Nature & Nature::T_VERTEX)
-      //return (_tvertex_iter.first == 0);
+    if (_Nature & Nature::T_VERTEX) {
+      // return (_tvertex_iter.first == 0);
       return (_tvertex_iter == _tend);
-    else
+    }
+    else {
       return (_nontvertex_iter == _end);
+    }
   }
 
   // operators
@@ -241,10 +246,12 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
   // comparibility
   virtual bool operator!=(const Self &b) const
   {
-    if (_Nature & Nature::T_VERTEX)
+    if (_Nature & Nature::T_VERTEX) {
       return (_tvertex_iter != b._tvertex_iter);
-    else
+    }
+    else {
       return (_nontvertex_iter != b._nontvertex_iter);
+    }
   }
 
   virtual bool operator==(const Self &b) const
@@ -255,11 +262,13 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
   // dereferencing
   virtual reference operator*() const
   {
-    if (_Nature & Nature::T_VERTEX)
-      //return _tvertex_iter;
+    if (_Nature & Nature::T_VERTEX) {
+      // return _tvertex_iter;
       return **_tvertex_iter;
-    else
+    }
+    else {
       return (*_nontvertex_iter);
+    }
   }
 
   virtual pointer operator->() const
@@ -274,8 +283,9 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
       value_type tmp = (**_tvertex_iter);
       ++_tvertex_iter;
       value_type tmp2 = (**_tvertex_iter);
-      if (tmp2.first == tmp.first)
+      if (tmp2.first == tmp.first) {
         ++_tvertex_iter;
+      }
 #if 0
       // Hack to deal with cusp. the result of a cusp is a TVertex having two identical viewedges.
       // In order to iterate properly, we chose to skip these last ones.
@@ -285,12 +295,15 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
           return;
         }
 
-        if (_tvertex_iter.first == _feA.first)
+        if (_tvertex_iter.first == _feA.first) {
           _tvertex_iter.first = _beB.first;
-        else if (_tvertex_iter.first == _beB.first)
+        }
+        else if (_tvertex_iter.first == _beB.first) {
           _tvertex_iter.first = 0;
-        else
+        }
+        else {
           _tvertex_iter.first = _feA.first;
+        }
         return;
       }
       if (_feA.first == _beB.first) {
@@ -299,12 +312,15 @@ class edge_iterator_base : public IteratorBase<Traits, InputIteratorTag_Traits> 
           return;
         }
 
-        if (_tvertex_iter.first == _feB.first)
+        if (_tvertex_iter.first == _feB.first) {
           _tvertex_iter.first = _beA.first;
-        else if (_tvertex_iter.first == _beA.first)
+        }
+        else if (_tvertex_iter.first == _beA.first) {
           _tvertex_iter.first = 0;
-        else
+        }
+        else {
           _tvertex_iter.first = _feB.first;
+        }
         return;
       }
       // End of hack
@@ -361,8 +377,8 @@ class edge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag_
 
  public:
   mutable value_type _ViewEdge;
-  //friend class edge_iterator_base<Nonconst_traits<ViewEdge*> >;
-  //friend class edge_iterator_base<Const_traits<ViewEdge*> >;
+  // friend class edge_iterator_base<Nonconst_traits<ViewEdge*> >;
+  // friend class edge_iterator_base<Const_traits<ViewEdge*> >;
   value_type _first;
   bool _orientation;
   typedef IteratorBase<Traits, BidirectionalIteratorTag_Traits> parent_class;
@@ -391,7 +407,7 @@ class edge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag_
     _orientation = iBrother._orientation;
   }
 
-  //protected://FIXME
+  // protected://FIXME
  public:
   inline edge_iterator_base(value_type iEdge, bool orientation = true) : parent_class()
   {
@@ -482,7 +498,7 @@ class edge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag_
   // dereferencing
   virtual reference operator*() const
   {
-    return (_ViewEdge);
+    return _ViewEdge;
   }
 
   virtual pointer operator->() const
@@ -549,7 +565,7 @@ class fedge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag
     _FEdgeB = iBrother._FEdgeB;
   }
 
-  //protected://FIXME
+  // protected://FIXME
  public:
   inline fedge_iterator_base(value_type iEdge, value_type iFEdgeB) : parent_class()
   {
@@ -610,7 +626,7 @@ class fedge_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTag
   // dereferencing
   virtual reference operator*() const
   {
-    return (_FEdge);
+    return _FEdge;
   }
 
   virtual pointer operator->() const
@@ -686,7 +702,7 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
     _PreviousFEdge = iBrother._PreviousFEdge;
   }
 
-  //protected://FIXME
+  // protected://FIXME
  public:
   inline vertex_iterator_base(value_type iVertex, FEdge *iPreviousFEdge, FEdge *iNextFEdge)
       : parent_class()
@@ -758,7 +774,7 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
   // dereferencing
   virtual reference operator*() const
   {
-    return (_SVertex);
+    return _SVertex;
   }
 
   virtual pointer operator->() const
@@ -799,5 +815,3 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
 }  // end of namespace ViewEdgeInternal
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_MAP_ADVANCED_ITERATORS_H__

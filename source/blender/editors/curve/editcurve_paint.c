@@ -31,17 +31,16 @@
 #include "BKE_curve.h"
 #include "BKE_fcurve.h"
 #include "BKE_report.h"
-#include "BKE_layer.h"
 
 #include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_space_api.h"
-#include "ED_screen.h"
-#include "ED_view3d.h"
 #include "ED_curve.h"
+#include "ED_screen.h"
+#include "ED_space_api.h"
+#include "ED_view3d.h"
 
 #include "GPU_batch.h"
 #include "GPU_batch_presets.h"
@@ -89,8 +88,6 @@ struct StrokeElem {
 };
 
 struct CurveDrawData {
-  Depsgraph *depsgraph;
-
   short init_event_type;
   short curve_type;
 
@@ -122,7 +119,7 @@ struct CurveDrawData {
 
   struct {
     float mouse[2];
-    /* used incase we can't calculate the depth */
+    /* Used in case we can't calculate the depth. */
     float location_world[3];
 
     float location_world_valid[3];
@@ -190,7 +187,7 @@ static bool stroke_elem_project(const struct CurveDrawData *cdd,
                                 float r_location_world[3],
                                 float r_normal_world[3])
 {
-  ARegion *ar = cdd->vc.ar;
+  ARegion *region = cdd->vc.region;
   RegionView3D *rv3d = cdd->vc.rv3d;
 
   bool is_location_world_set = false;
@@ -198,7 +195,8 @@ static bool stroke_elem_project(const struct CurveDrawData *cdd,
   /* project to 'location_world' */
   if (cdd->project.use_plane) {
     /* get the view vector to 'location' */
-    if (ED_view3d_win_to_3d_on_plane(ar, cdd->project.plane, mval_fl, true, r_location_world)) {
+    if (ED_view3d_win_to_3d_on_plane(
+            region, cdd->project.plane, mval_fl, true, r_location_world)) {
       if (r_normal_world) {
         zero_v3(r_normal_world);
       }
@@ -207,10 +205,12 @@ static bool stroke_elem_project(const struct CurveDrawData *cdd,
   }
   else {
     const ViewDepths *depths = rv3d->depths;
-    if (depths && ((unsigned int)mval_i[0] < depths->w) && ((unsigned int)mval_i[1] < depths->h)) {
-      const double depth = (double)ED_view3d_depth_read_cached(&cdd->vc, mval_i);
+    if (depths && ((uint)mval_i[0] < depths->w) && ((uint)mval_i[1] < depths->h)) {
+      float depth_fl = 1.0f;
+      ED_view3d_depth_read_cached(depths, mval_i, 0, &depth_fl);
+      const double depth = (double)depth_fl;
       if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-        if (ED_view3d_depth_unproject(ar, mval_i, depth, r_location_world)) {
+        if (ED_view3d_depth_unproject_v3(region, mval_i, depth, r_location_world)) {
           is_location_world_set = true;
           if (r_normal_world) {
             zero_v3(r_normal_world);
@@ -255,7 +255,7 @@ static bool stroke_elem_project_fallback(const struct CurveDrawData *cdd,
       cdd, mval_i, mval_fl, surface_offset, radius, r_location_world, r_normal_world);
   if (is_depth_found == false) {
     ED_view3d_win_to_3d(
-        cdd->vc.v3d, cdd->vc.ar, location_fallback_depth, mval_fl, r_location_world);
+        cdd->vc.v3d, cdd->vc.region, location_fallback_depth, mval_fl, r_location_world);
     zero_v3(r_normal_local);
   }
   mul_v3_m4v3(r_location_local, cdd->vc.obedit->imat, r_location_world);
@@ -348,7 +348,9 @@ static void curve_draw_stroke_from_operator(wmOperator *op)
 /** \name Operator Callbacks & Helpers
  * \{ */
 
-static void curve_draw_stroke_3d(const struct bContext *UNUSED(C), ARegion *UNUSED(ar), void *arg)
+static void curve_draw_stroke_3d(const struct bContext *UNUSED(C),
+                                 ARegion *UNUSED(region),
+                                 void *arg)
 {
   wmOperator *op = arg;
   struct CurveDrawData *cdd = op->customdata;
@@ -419,8 +421,8 @@ static void curve_draw_stroke_3d(const struct bContext *UNUSED(C), ARegion *UNUS
       uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
       immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
-      GPU_depth_test(false);
-      GPU_blend(true);
+      GPU_depth_test(GPU_DEPTH_NONE);
+      GPU_blend(GPU_BLEND_ALPHA);
       GPU_line_smooth(true);
       GPU_line_width(3.0f);
 
@@ -441,8 +443,8 @@ static void curve_draw_stroke_3d(const struct bContext *UNUSED(C), ARegion *UNUS
       immEnd();
 
       /* Reset defaults */
-      GPU_depth_test(true);
-      GPU_blend(false);
+      GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
+      GPU_blend(GPU_BLEND_NONE);
       GPU_line_smooth(false);
 
       immUnbindProgram();
@@ -463,14 +465,8 @@ static void curve_draw_event_add(wmOperator *op, const wmEvent *event)
 
   ARRAY_SET_ITEMS(selem->mval, event->mval[0], event->mval[1]);
 
-  /* handle pressure sensitivity (which is supplied by tablets) */
-  if (event->tablet_data) {
-    const wmTabletData *wmtab = event->tablet_data;
-    selem->pressure = wmtab->Pressure;
-  }
-  else {
-    selem->pressure = 1.0f;
-  }
+  /* handle pressure sensitivity (which is supplied by tablets or otherwise 1.0) */
+  selem->pressure = event->tablet.pressure;
 
   bool is_depth_found = stroke_elem_project_fallback_elem(
       cdd, cdd->prev.location_world_valid, selem);
@@ -487,7 +483,7 @@ static void curve_draw_event_add(wmOperator *op, const wmEvent *event)
   if (cdd->sample.use_substeps && cdd->prev.selem) {
     const struct StrokeElem selem_target = *selem;
     struct StrokeElem *selem_new_last = selem;
-    if (len_sq >= SQUARE(STROKE_SAMPLE_DIST_MAX_PX)) {
+    if (len_sq >= square_f(STROKE_SAMPLE_DIST_MAX_PX)) {
       int n = (int)ceil(sqrt((double)len_sq)) / STROKE_SAMPLE_DIST_MAX_PX;
 
       for (int i = 1; i < n; i++) {
@@ -511,7 +507,7 @@ static void curve_draw_event_add(wmOperator *op, const wmEvent *event)
 
   cdd->prev.selem = selem;
 
-  ED_region_tag_redraw(cdd->vc.ar);
+  ED_region_tag_redraw(cdd->vc.region);
 }
 
 static void curve_draw_event_add_first(wmOperator *op, const wmEvent *event)
@@ -577,12 +573,11 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
   BLI_assert(op->customdata == NULL);
 
   struct CurveDrawData *cdd = MEM_callocN(sizeof(*cdd), __func__);
-
-  cdd->depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
 
   if (is_invoke) {
-    ED_view3d_viewcontext_init(C, &cdd->vc);
-    if (ELEM(NULL, cdd->vc.ar, cdd->vc.rv3d, cdd->vc.v3d, cdd->vc.win, cdd->vc.scene)) {
+    ED_view3d_viewcontext_init(C, &cdd->vc, depsgraph);
+    if (ELEM(NULL, cdd->vc.region, cdd->vc.rv3d, cdd->vc.v3d, cdd->vc.win, cdd->vc.scene)) {
       MEM_freeN(cdd);
       BKE_report(op->reports, RPT_ERROR, "Unable to access 3D viewport");
       return false;
@@ -590,7 +585,7 @@ static bool curve_draw_init(bContext *C, wmOperator *op, bool is_invoke)
   }
   else {
     cdd->vc.bmain = CTX_data_main(C);
-    cdd->vc.depsgraph = CTX_data_depsgraph(C);
+    cdd->vc.depsgraph = depsgraph;
     cdd->vc.scene = CTX_data_scene(C);
     cdd->vc.view_layer = CTX_data_view_layer(C);
     cdd->vc.obedit = CTX_data_edit_object(C);
@@ -620,7 +615,7 @@ static void curve_draw_exit(wmOperator *op)
   struct CurveDrawData *cdd = op->customdata;
   if (cdd) {
     if (cdd->draw_handle_view) {
-      ED_region_draw_cb_exit(cdd->vc.ar->type, cdd->draw_handle_view);
+      ED_region_draw_cb_exit(cdd->vc.region->type, cdd->draw_handle_view);
       WM_cursor_modal_restore(cdd->vc.win);
     }
 
@@ -657,7 +652,7 @@ static void curve_draw_exec_precalc(wmOperator *op)
   prop = RNA_struct_find_property(op->ptr, "error_threshold");
   if (!RNA_property_is_set(op->ptr, prop)) {
 
-    /* error isnt set so we'll have to calculate it from the pixel values */
+    /* Error isn't set so we'll have to calculate it from the pixel values. */
     BLI_mempool_iter iter;
     const struct StrokeElem *selem, *selem_prev;
 
@@ -673,7 +668,7 @@ static void curve_draw_exec_precalc(wmOperator *op)
       selem_prev = selem;
     }
     scale_px = ((len_3d > 0.0f) && (len_2d > 0.0f)) ? (len_3d / len_2d) : 0.0f;
-    float error_threshold = (cps->error_threshold * U.pixelsize) * scale_px;
+    float error_threshold = (cps->error_threshold * U.dpi_fac) * scale_px;
     RNA_property_float_set(op->ptr, prop, error_threshold);
   }
 
@@ -692,7 +687,7 @@ static void curve_draw_exec_precalc(wmOperator *op)
       }
 
       if (len_squared_v2v2(selem_first->mval, selem_last->mval) <=
-          SQUARE(STROKE_CYCLIC_DIST_PX * U.pixelsize)) {
+          square_f(STROKE_CYCLIC_DIST_PX * U.dpi_fac)) {
         use_cyclic = true;
       }
     }
@@ -805,7 +800,7 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
     float *coords = MEM_mallocN(sizeof(*coords) * stroke_len * dims, __func__);
 
     float *cubic_spline = NULL;
-    unsigned int cubic_spline_len = 0;
+    uint cubic_spline_len = 0;
 
     /* error in object local space */
     const int fit_method = RNA_enum_get(op->ptr, "fit_method");
@@ -834,14 +829,14 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
       }
     }
 
-    unsigned int *corners = NULL;
-    unsigned int corners_len = 0;
+    uint *corners = NULL;
+    uint corners_len = 0;
 
     if ((fit_method == CURVE_PAINT_FIT_METHOD_SPLIT) && (corner_angle < (float)M_PI)) {
       /* this could be configurable... */
       const float corner_radius_min = error_threshold / 8;
       const float corner_radius_max = error_threshold * 2;
-      const unsigned int samples_max = 16;
+      const uint samples_max = 16;
 
       curve_fit_corners_detect_fl(coords,
                                   stroke_len,
@@ -854,9 +849,9 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
                                   &corners_len);
     }
 
-    unsigned int *corners_index = NULL;
-    unsigned int corners_index_len = 0;
-    unsigned int calc_flag = CURVE_FIT_CALC_HIGH_QUALIY;
+    uint *corners_index = NULL;
+    uint corners_index_len = 0;
+    uint calc_flag = CURVE_FIT_CALC_HIGH_QUALIY;
 
     if ((stroke_len > 2) && use_cyclic) {
       calc_flag |= CURVE_FIT_CALC_CYCLIC;
@@ -926,14 +921,14 @@ static int curve_draw_exec(bContext *C, wmOperator *op)
 
       if (corners_index) {
         /* ignore the first and last */
-        unsigned int i_start = 0, i_end = corners_index_len;
+        uint i_start = 0, i_end = corners_index_len;
 
         if ((corners_index_len >= 2) && (calc_flag & CURVE_FIT_CALC_CYCLIC) == 0) {
           i_start += 1;
           i_end -= 1;
         }
 
-        for (unsigned int i = i_start; i < i_end; i++) {
+        for (uint i = i_start; i < i_end; i++) {
           bezt = &nu->bezt[corners_index[i]];
           bezt->h1 = bezt->h2 = HD_FREE;
         }
@@ -1057,18 +1052,18 @@ static int curve_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
   const bool is_modal = RNA_boolean_get(op->ptr, "wait_for_input");
 
-  /* fallback (incase we can't find the depth on first test) */
+  /* Fallback (in case we can't find the depth on first test). */
   {
     const float mval_fl[2] = {UNPACK2(event->mval)};
     float center[3];
     negate_v3_v3(center, cdd->vc.rv3d->ofs);
-    ED_view3d_win_to_3d(cdd->vc.v3d, cdd->vc.ar, center, mval_fl, cdd->prev.location_world);
+    ED_view3d_win_to_3d(cdd->vc.v3d, cdd->vc.region, center, mval_fl, cdd->prev.location_world);
     copy_v3_v3(cdd->prev.location_world_valid, cdd->prev.location_world);
   }
 
   cdd->draw_handle_view = ED_region_draw_cb_activate(
-      cdd->vc.ar->type, curve_draw_stroke_3d, op, REGION_DRAW_POST_VIEW);
-  WM_cursor_modal_set(cdd->vc.win, BC_PAINTBRUSHCURSOR);
+      cdd->vc.region->type, curve_draw_stroke_3d, op, REGION_DRAW_POST_VIEW);
+  WM_cursor_modal_set(cdd->vc.win, WM_CURSOR_PAINT_BRUSH);
 
   {
     View3D *v3d = cdd->vc.v3d;
@@ -1079,7 +1074,7 @@ static int curve_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     const float *plane_no = NULL;
     const float *plane_co = NULL;
 
-    if ((cu->flag & CU_3D) == 0) {
+    if (CU_IS_2D(cu)) {
       /* 2D overrides other options */
       plane_co = obedit->obmat[3];
       plane_no = obedit->obmat[2];
@@ -1090,13 +1085,8 @@ static int curve_draw_invoke(bContext *C, wmOperator *op, const wmEvent *event)
         /* needed or else the draw matrix can be incorrect */
         view3d_operator_needs_opengl(C);
 
-        ED_view3d_autodist_init(cdd->vc.depsgraph, cdd->vc.ar, cdd->vc.v3d, 0);
-
-        if (cdd->vc.rv3d->depths) {
-          cdd->vc.rv3d->depths->damaged = true;
-        }
-
-        ED_view3d_depth_update(cdd->vc.ar);
+        ED_view3d_depth_override(
+            cdd->vc.depsgraph, cdd->vc.region, cdd->vc.v3d, NULL, V3D_DEPTH_NO_GPENCIL, true);
 
         if (cdd->vc.rv3d->depths != NULL) {
           cdd->project.use_depth = true;
@@ -1150,7 +1140,7 @@ static int curve_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
   if (event->type == cdd->init_event_type) {
     if (event->val == KM_RELEASE) {
-      ED_region_tag_redraw(cdd->vc.ar);
+      ED_region_tag_redraw(cdd->vc.region);
 
       curve_draw_exec_precalc(op);
 
@@ -1161,8 +1151,8 @@ static int curve_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
       return OPERATOR_FINISHED;
     }
   }
-  else if (ELEM(event->type, ESCKEY, RIGHTMOUSE)) {
-    ED_region_tag_redraw(cdd->vc.ar);
+  else if (ELEM(event->type, EVT_ESCKEY, RIGHTMOUSE)) {
+    ED_region_tag_redraw(cdd->vc.region);
     curve_draw_cancel(C, op);
     return OPERATOR_CANCELLED;
   }
@@ -1174,7 +1164,7 @@ static int curve_draw_modal(bContext *C, wmOperator *op, const wmEvent *event)
   else if (ELEM(event->type, MOUSEMOVE, INBETWEEN_MOUSEMOVE)) {
     if (cdd->state == CURVE_DRAW_PAINTING) {
       const float mval_fl[2] = {UNPACK2(event->mval)};
-      if (len_squared_v2v2(mval_fl, cdd->prev.mouse) > SQUARE(STROKE_SAMPLE_DIST_MIN_PX)) {
+      if (len_squared_v2v2(mval_fl, cdd->prev.mouse) > square_f(STROKE_SAMPLE_DIST_MIN_PX)) {
         curve_draw_event_add(op, event);
       }
     }

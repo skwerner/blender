@@ -23,14 +23,15 @@
  * Used for custom mesh data types (stored per vert/edge/loop/face)
  */
 
-#ifndef __DNA_CUSTOMDATA_TYPES_H__
-#define __DNA_CUSTOMDATA_TYPES_H__
+#pragma once
+
+#include "DNA_defs.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** descriptor and storage for a custom data layer */
+/** Descriptor and storage for a custom data layer. */
 typedef struct CustomDataLayer {
   /** Type of data in layer. */
   int type;
@@ -40,13 +41,13 @@ typedef struct CustomDataLayer {
   int flag;
   /** Number of the active layer of this type. */
   int active;
-  /** Number of the layer to rende.r*/
+  /** Number of the layer to render. */
   int active_rnd;
-  /** Number of the layer to rende.r*/
+  /** Number of the layer to render. */
   int active_clone;
-  /** Number of the layer to rende.r*/
+  /** Number of the layer to render. */
   int active_mask;
-  /** Shape keyblock unique id referenc.e*/
+  /** Shape keyblock unique id reference. */
   int uid;
   /** Layer name, MAX_CUSTOMDATA_LAYER_NAME. */
   char name[64];
@@ -61,9 +62,11 @@ typedef struct CustomDataExternal {
   char filename[1024];
 } CustomDataExternal;
 
-/** structure which stores custom element data associated with mesh elements
+/**
+ * Structure which stores custom element data associated with mesh elements
  * (vertices, edges or faces). The custom data is organized into a series of
- * layers, each with a data type (e.g. MTFace, MDeformVert, etc.). */
+ * layers, each with a data type (e.g. MTFace, MDeformVert, etc.).
+ */
 typedef struct CustomData {
   /** CustomDataLayers, ordered by type. */
   CustomDataLayer *layers;
@@ -72,8 +75,7 @@ typedef struct CustomData {
    * MUST be >= CD_NUMTYPES, but we cant use a define here.
    * Correct size is ensured in CustomData_update_typemap assert().
    */
-  int typemap[42];
-  char _pad0[4];
+  int typemap[51];
   /** Number of layers, size of layers array. */
   int totlayer, maxlayer;
   /** In editmode, total size of all data layers. */
@@ -93,7 +95,7 @@ typedef enum CustomDataType {
   CD_AUTO_FROM_NAME = -1,
 
   CD_MVERT = 0,
-#ifdef DNA_DEPRECATED
+#ifdef DNA_DEPRECATED_ALLOW
   CD_MSTICKY = 1, /* DEPRECATED */
 #endif
   CD_MDEFORMVERT = 2,
@@ -104,21 +106,23 @@ typedef enum CustomDataType {
   CD_ORIGINDEX = 7,
   CD_NORMAL = 8,
   CD_FACEMAP = 9, /* exclusive face group, each face can only be part of one */
-  CD_PROP_FLT = 10,
-  CD_PROP_INT = 11,
-  CD_PROP_STR = 12,
-  CD_ORIGSPACE = 13,               /* for modifier stack face location mapping */
-  CD_ORCO = 14,                    /* undeformed vertex coordinates, normalized to 0..1 range */
-  /*  CD_MTEXPOLY         = 15, */ /* deprecated */
+  CD_PROP_FLOAT = 10,
+  CD_PROP_INT32 = 11,
+  CD_PROP_STRING = 12,
+  CD_ORIGSPACE = 13, /* for modifier stack face location mapping */
+  CD_ORCO = 14,      /* undeformed vertex coordinates, normalized to 0..1 range */
+#ifdef DNA_DEPRECATED_ALLOW
+  CD_MTEXPOLY = 15, /* deprecated */
+#endif
   CD_MLOOPUV = 16,
   CD_MLOOPCOL = 17,
   CD_TANGENT = 18,
   CD_MDISPS = 19,
-  CD_PREVIEW_MCOL = 20, /* for displaying weightpaint colors */
-                        /*  CD_ID_MCOL          = 21, */
-  CD_TEXTURE_MLOOPCOL = 22,
+  CD_PREVIEW_MCOL = 20,           /* for displaying weightpaint colors */
+                                  /*  CD_ID_MCOL          = 21, */
+  /* CD_TEXTURE_MLOOPCOL = 22, */ /* UNUSED */
   CD_CLOTH_ORCO = 23,
-  CD_RECAST = 24,
+  /* CD_RECAST = 24, */ /* UNUSED */
 
   /* BMESH ONLY START */
   CD_MPOLY = 25,
@@ -140,8 +144,20 @@ typedef enum CustomDataType {
   CD_MLOOPTANGENT = 39,
   CD_TESSLOOPNORMAL = 40,
   CD_CUSTOMLOOPNORMAL = 41,
+  CD_SCULPT_FACE_SETS = 42,
 
-  CD_NUMTYPES = 42,
+  /* CD_LOCATION = 43, */ /* UNUSED */
+  /* CD_RADIUS = 44, */   /* UNUSED */
+  CD_HAIRCURVE = 45,
+  CD_HAIRMAPPING = 46,
+
+  CD_PROP_COLOR = 47,
+  CD_PROP_FLOAT3 = 48,
+  CD_PROP_FLOAT2 = 49,
+
+  CD_PROP_BOOL = 50,
+
+  CD_NUMTYPES = 51,
 } CustomDataType;
 
 /* Bits for CustomDataMask */
@@ -155,9 +171,9 @@ typedef enum CustomDataType {
 #define CD_MASK_ORIGINDEX (1 << CD_ORIGINDEX)
 #define CD_MASK_NORMAL (1 << CD_NORMAL)
 #define CD_MASK_FACEMAP (1 << CD_FACEMAP)
-#define CD_MASK_PROP_FLT (1 << CD_PROP_FLT)
-#define CD_MASK_PROP_INT (1 << CD_PROP_INT)
-#define CD_MASK_PROP_STR (1 << CD_PROP_STR)
+#define CD_MASK_PROP_FLOAT (1 << CD_PROP_FLOAT)
+#define CD_MASK_PROP_INT32 (1 << CD_PROP_INT32)
+#define CD_MASK_PROP_STRING (1 << CD_PROP_STRING)
 #define CD_MASK_ORIGSPACE (1 << CD_ORIGSPACE)
 #define CD_MASK_ORCO (1 << CD_ORCO)
 // #define CD_MASK_MTEXPOLY (1 << CD_MTEXPOLY)  /* DEPRECATED */
@@ -167,7 +183,7 @@ typedef enum CustomDataType {
 #define CD_MASK_MDISPS (1 << CD_MDISPS)
 #define CD_MASK_PREVIEW_MCOL (1 << CD_PREVIEW_MCOL)
 #define CD_MASK_CLOTH_ORCO (1 << CD_CLOTH_ORCO)
-#define CD_MASK_RECAST (1 << CD_RECAST)
+// #define CD_MASK_RECAST (1 << CD_RECAST)  /* DEPRECATED */
 
 /* BMESH ONLY START */
 #define CD_MASK_MPOLY (1 << CD_MPOLY)
@@ -189,9 +205,22 @@ typedef enum CustomDataType {
 #define CD_MASK_MLOOPTANGENT (1LL << CD_MLOOPTANGENT)
 #define CD_MASK_TESSLOOPNORMAL (1LL << CD_TESSLOOPNORMAL)
 #define CD_MASK_CUSTOMLOOPNORMAL (1LL << CD_CUSTOMLOOPNORMAL)
+#define CD_MASK_SCULPT_FACE_SETS (1LL << CD_SCULPT_FACE_SETS)
+#define CD_MASK_PROP_COLOR (1ULL << CD_PROP_COLOR)
+#define CD_MASK_PROP_FLOAT3 (1ULL << CD_PROP_FLOAT3)
+#define CD_MASK_PROP_FLOAT2 (1ULL << CD_PROP_FLOAT2)
+#define CD_MASK_PROP_BOOL (1ULL << CD_PROP_BOOL)
 
-/** Data types that may be defined for all mesh elements types. */
-#define CD_MASK_GENERIC_DATA (CD_MASK_PROP_FLT | CD_MASK_PROP_INT | CD_MASK_PROP_STR)
+/** Multires loop data. */
+#define CD_MASK_MULTIRES_GRIDS (CD_MASK_MDISPS | CD_GRID_PAINT_MASK)
+
+/* All data layers. */
+#define CD_MASK_ALL (~0LL)
+
+/* All generic attributes. */
+#define CD_MASK_PROP_ALL \
+  (CD_MASK_PROP_FLOAT | CD_MASK_PROP_FLOAT2 | CD_MASK_PROP_FLOAT3 | CD_MASK_PROP_INT32 | \
+   CD_MASK_PROP_COLOR | CD_MASK_PROP_STRING | CD_MASK_MLOOPCOL | CD_MASK_PROP_BOOL)
 
 typedef struct CustomData_MeshMasks {
   uint64_t vmask;
@@ -226,5 +255,3 @@ enum {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_CUSTOMDATA_TYPES_H__ */

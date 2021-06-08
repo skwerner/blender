@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_FILTERNODE_H__
-#define __COM_FILTERNODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief FilterNode
@@ -28,7 +29,8 @@
 class FilterNode : public Node {
  public:
   FilterNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* __COM_FILTERNODE_H__ */
+}  // namespace blender::compositor

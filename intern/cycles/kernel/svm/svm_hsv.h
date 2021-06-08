@@ -24,8 +24,8 @@ ccl_device void svm_node_hsv(
 {
   uint in_color_offset, fac_offset, out_color_offset;
   uint hue_offset, sat_offset, val_offset;
-  decode_node_uchar4(node.y, &in_color_offset, &fac_offset, &out_color_offset, NULL);
-  decode_node_uchar4(node.z, &hue_offset, &sat_offset, &val_offset, NULL);
+  svm_unpack_node_uchar3(node.y, &in_color_offset, &fac_offset, &out_color_offset);
+  svm_unpack_node_uchar3(node.z, &hue_offset, &sat_offset, &val_offset);
 
   float fac = stack_load_float(stack, fac_offset);
   float3 in_color = stack_load_float3(stack, in_color_offset);
@@ -37,7 +37,7 @@ ccl_device void svm_node_hsv(
 
   color = rgb_to_hsv(color);
 
-  /* remember: fmod doesn't work for negative numbers here */
+  /* Remember: `fmodf` doesn't work for negative numbers here. */
   color.x = fmodf(color.x + hue + 0.5f, 1.0f);
   color.y = saturate(color.y * sat);
   color.z *= val;
@@ -48,7 +48,7 @@ ccl_device void svm_node_hsv(
   color.y = fac * color.y + (1.0f - fac) * in_color.y;
   color.z = fac * color.z + (1.0f - fac) * in_color.z;
 
-  /* Clamp color to prevent negative values caused by oversaturation. */
+  /* Clamp color to prevent negative values caused by over saturation. */
   color.x = max(color.x, 0.0f);
   color.y = max(color.y, 0.0f);
   color.z = max(color.z, 0.0f);

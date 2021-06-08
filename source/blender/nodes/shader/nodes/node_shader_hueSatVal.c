@@ -25,21 +25,21 @@
 
 /* **************** Hue Saturation ******************** */
 static bNodeSocketTemplate sh_node_hue_sat_in[] = {
-    {SOCK_FLOAT, 1, N_("Hue"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Saturation"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Value"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Hue"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Saturation"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Value"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 2.0f, PROP_NONE},
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f},
+    {-1, ""},
 };
 static bNodeSocketTemplate sh_node_hue_sat_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 /* note: it would be possible to use CMP version for both nodes */
 static void do_hue_sat_fac(
-    bNode *UNUSED(node), float *out, float hue, float sat, float val, float in[4], float fac)
+    bNode *UNUSED(node), float *out, float hue, float sat, float val, const float in[4], float fac)
 {
   if (fac != 0.0f && (hue != 0.5f || sat != 1.0f || val != 1.0f)) {
     float col[3], hsv[3], mfac = 1.0f - fac;

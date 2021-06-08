@@ -22,17 +22,19 @@
 set(INC
   .
   intern
+  ../blenfont
   ../blenkernel
   ../blenlib
-  ../blenfont
+  ../blentranslation
+  ../bmesh
   ../depsgraph
+  ../editors/include
   ../makesdna
   ../makesrna
-  ../bmesh
-  ../render/extern/include
-  ../../../intern/elbeem/extern
-  ../../../intern/guardedalloc
+  ../render
+  ../windowmanager
   ../../../intern/eigen
+  ../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -41,12 +43,12 @@ set(INC_SYS
 
 set(SRC
   intern/FX_shader_util.h
+  intern/FX_ui_common.c
 
   intern/FX_shader_blur.c
   intern/FX_shader_colorize.c
   intern/FX_shader_flip.c
   intern/FX_shader_glow.c
-  intern/FX_shader_light.c
   intern/FX_shader_pixel.c
   intern/FX_shader_rim.c
   intern/FX_shader_shadow.c
@@ -54,6 +56,7 @@ set(SRC
   intern/FX_shader_util.c
   intern/FX_shader_wave.c
 
+  intern/FX_ui_common.h
   FX_shader_types.h
 )
 
@@ -64,6 +67,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_shader_fx "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

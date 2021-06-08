@@ -25,6 +25,8 @@
 
 #include <stddef.h>
 
+#include "DNA_ID.h"
+
 struct ID;
 
 /* Uncomment this to have verbose log about original and CoW pointers
@@ -41,26 +43,27 @@ struct ID;
 
 struct Depsgraph;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 class DepsgraphNodeBuilder;
 struct IDNode;
 
-/* Get fully expanded (ready for use) copy-on-write datablock for the given
- * original datablock.
+/* Get fully expanded (ready for use) copy-on-write data-block for the given
+ * original data-block.
  */
 ID *deg_expand_copy_on_write_datablock(const struct Depsgraph *depsgraph,
                                        const IDNode *id_node,
-                                       DepsgraphNodeBuilder *node_builder = NULL,
+                                       DepsgraphNodeBuilder *node_builder = nullptr,
                                        bool create_placeholders = false);
 ID *deg_expand_copy_on_write_datablock(const struct Depsgraph *depsgraph,
                                        struct ID *id_orig,
-                                       DepsgraphNodeBuilder *node_builder = NULL,
+                                       DepsgraphNodeBuilder *node_builder = nullptr,
                                        bool create_placeholders = false);
 
-/* Makes sure given CoW datablock is brought back to state of the original
- * datablock.
+/* Makes sure given CoW data-block is brought back to state of the original
+ * data-block.
  */
 ID *deg_update_copy_on_write_datablock(const struct Depsgraph *depsgraph, const IDNode *id_node);
 ID *deg_update_copy_on_write_datablock(const struct Depsgraph *depsgraph, struct ID *id_orig);
@@ -74,8 +77,7 @@ void deg_free_copy_on_write_datablock(struct ID *id_cow);
 void deg_evaluate_copy_on_write(struct ::Depsgraph *depsgraph, const struct IDNode *id_node);
 
 /* Check that given ID is properly expanded and does not have any shallow
- * copies inside.
-  */
+ * copies inside. */
 bool deg_validate_copy_on_write_datablock(ID *id_cow);
 
 /* Tag given ID block as being copy-on-wtritten. */
@@ -89,11 +91,13 @@ bool deg_copy_on_write_is_expanded(const struct ID *id_cow);
 
 /* Check whether copy-on-write datablock is needed for given ID.
  *
- * There are some exceptions on datablocks which are covered by dependency graph
+ * There are some exceptions on data-blocks which are covered by dependency graph
  * but which we don't want to start duplicating.
  *
  * This includes images.
  */
 bool deg_copy_on_write_is_needed(const ID *id_orig);
+bool deg_copy_on_write_is_needed(const ID_Type id_type);
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

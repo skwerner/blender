@@ -46,11 +46,9 @@ static void image_buf_fill_color_slice(
 
   /* blank image */
   if (rect_float) {
-    float linear_color[4];
-    srgb_to_linearrgb_v4(linear_color, color);
     for (y = 0; y < height; y++) {
       for (x = 0; x < width; x++) {
-        copy_v4_v4(rect_float, linear_color);
+        copy_v4_v4(rect_float, color);
         rect_float += 4;
       }
     }
@@ -123,8 +121,9 @@ static void image_buf_fill_checker_slice(
     dark = powf(-1.0f, floorf(y / checkerwidth));
 
     for (x = 0; x < width; x++) {
-      if (x % checkerwidth == 0)
+      if (x % checkerwidth == 0) {
         dark = -dark;
+      }
 
       if (rect_float) {
         if (dark > 0) {
@@ -182,10 +181,12 @@ static void image_buf_fill_checker_slice(
         }
       }
 
-      if (rect_float)
+      if (rect_float) {
         rect_float += 4;
-      if (rect)
+      }
+      if (rect) {
         rect += 4;
+      }
     }
   }
 }
@@ -234,13 +235,14 @@ static void checker_board_color_fill(
   hsv[1] = 1.0;
 
   hue_step = power_of_2_max_i(width / 8);
-  if (hue_step < 8)
+  if (hue_step < 8) {
     hue_step = 8;
+  }
 
   for (y = offset; y < height + offset; y++) {
+    /* Use a number lower than 1.0 else its too bright. */
+    hsv[2] = 0.1 + (y * (0.4 / total_height));
 
-    hsv[2] = 0.1 +
-             (y * (0.4 / total_height)); /* use a number lower then 1.0 else its too bright */
     for (x = 0; x < width; x++) {
       hsv[0] = (float)((double)(x / hue_step) * 1.0 / width * hue_step);
       hsv_to_rgb_v(hsv, rgb);
@@ -345,10 +347,12 @@ static void checker_board_grid_fill(
         }
       }
       else {
-        if (rect_float)
+        if (rect_float) {
           rect_float += 4;
-        if (rect)
+        }
+        if (rect) {
           rect += 4;
+        }
       }
     }
   }
@@ -375,10 +379,16 @@ static void checker_board_text(
   const float text_color[4] = {0.0, 0.0, 0.0, 1.0};
   const float text_outline[4] = {1.0, 1.0, 1.0, 1.0};
 
-  for (y = 0; y < height; y += step) {
-    text[1] = '1';
+  const char char_array[36] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
+  int first_char_index = 0;
+  for (y = 0; y < height; y += step) {
+    text[0] = char_array[first_char_index];
+
+    int second_char_index = 27;
     for (x = 0; x < width; x += step) {
+      text[1] = char_array[second_char_index];
+
       /* hard coded offset */
       pen_x = x + 33;
       pen_y = y + 44;
@@ -408,9 +418,9 @@ static void checker_board_text(
       BLF_position(mono, pen_x, pen_y, 0.0);
       BLF_draw_buffer(mono, text, 2);
 
-      text[1]++;
+      second_char_index = (second_char_index + 1) % ARRAY_SIZE(char_array);
     }
-    text[0]++;
+    first_char_index = (first_char_index + 1) % ARRAY_SIZE(char_array);
   }
 
   /* cleanup the buffer. */

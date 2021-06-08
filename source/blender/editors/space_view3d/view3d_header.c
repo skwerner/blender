@@ -21,13 +21,13 @@
  * \ingroup spview3d
  */
 
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_math_base.h"
 #include "BLI_utildefines.h"
@@ -40,15 +40,12 @@
 #include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
-#include "RNA_define.h"
-#include "RNA_enum_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_mesh.h"
 #include "ED_undo.h"
-#include "ED_screen.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -77,7 +74,8 @@ static int toggle_matcap_flip(bContext *C, wmOperator *UNUSED(op))
   else {
     Scene *scene = CTX_data_scene(C);
     scene->display.shading.flag ^= V3D_SHADING_MATCAP_FLIP_X;
-    WM_event_add_notifier(C, NC_SCENE | NA_EDITED, v3d);
+    DEG_id_tag_update(&scene->id, ID_RECALC_COPY_ON_WRITE);
+    WM_event_add_notifier(C, NC_SCENE | ND_RENDER_OPTIONS, scene);
   }
 
   return OPERATOR_FINISHED;
@@ -105,21 +103,21 @@ static void do_view3d_header_buttons(bContext *C, void *UNUSED(arg), int event)
   wmWindow *win = CTX_wm_window(C);
   const int ctrl = win->eventstate->ctrl, shift = win->eventstate->shift;
 
-  /* watch it: if sa->win does not exist, check that when calling direct drawing routines */
+  /* watch it: if area->win does not exist, check that when calling direct drawing routines */
 
   switch (event) {
     case B_SEL_VERT:
-      if (EDBM_selectmode_toggle(C, SCE_SELECT_VERTEX, -1, shift, ctrl)) {
+      if (EDBM_selectmode_toggle_multi(C, SCE_SELECT_VERTEX, -1, shift, ctrl)) {
         ED_undo_push(C, "Selectmode Set: Vertex");
       }
       break;
     case B_SEL_EDGE:
-      if (EDBM_selectmode_toggle(C, SCE_SELECT_EDGE, -1, shift, ctrl)) {
+      if (EDBM_selectmode_toggle_multi(C, SCE_SELECT_EDGE, -1, shift, ctrl)) {
         ED_undo_push(C, "Selectmode Set: Edge");
       }
       break;
     case B_SEL_FACE:
-      if (EDBM_selectmode_toggle(C, SCE_SELECT_FACE, -1, shift, ctrl)) {
+      if (EDBM_selectmode_toggle_multi(C, SCE_SELECT_FACE, -1, shift, ctrl)) {
         ED_undo_push(C, "Selectmode Set: Face");
       }
       break;
@@ -138,10 +136,11 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
   if (obedit && (obedit->type == OB_MESH)) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     uiLayout *row;
+    uiBut *but;
 
     row = uiLayoutRow(layout, true);
     block = uiLayoutGetBlock(row);
-    uiDefIconButBitS(
+    but = uiDefIconButBitS(
         block,
         UI_BTYPE_TOGGLE,
         SCE_SELECT_VERTEX,
@@ -157,23 +156,26 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
         0,
         0,
         TIP_("Vertex select - Shift-Click for multiple modes, Ctrl-Click contracts selection"));
-    uiDefIconButBitS(block,
-                     UI_BTYPE_TOGGLE,
-                     SCE_SELECT_EDGE,
-                     B_SEL_EDGE,
-                     ICON_EDGESEL,
-                     0,
-                     0,
-                     ceilf(UI_UNIT_X - U.pixelsize),
-                     UI_UNIT_Y,
-                     &em->selectmode,
-                     1.0,
-                     0.0,
-                     0,
-                     0,
-                     TIP_("Edge select - Shift-Click for multiple modes, Ctrl-Click "
-                          "expands/contracts selection"));
-    uiDefIconButBitS(
+    UI_but_flag_disable(but, UI_BUT_UNDO);
+    but = uiDefIconButBitS(
+        block,
+        UI_BTYPE_TOGGLE,
+        SCE_SELECT_EDGE,
+        B_SEL_EDGE,
+        ICON_EDGESEL,
+        0,
+        0,
+        ceilf(UI_UNIT_X - U.pixelsize),
+        UI_UNIT_Y,
+        &em->selectmode,
+        1.0,
+        0.0,
+        0,
+        0,
+        TIP_("Edge select - Shift-Click for multiple modes, "
+             "Ctrl-Click expands/contracts selection depending on the current mode"));
+    UI_but_flag_disable(but, UI_BUT_UNDO);
+    but = uiDefIconButBitS(
         block,
         UI_BTYPE_TOGGLE,
         SCE_SELECT_FACE,
@@ -189,6 +191,7 @@ void uiTemplateEditModeSelection(uiLayout *layout, struct bContext *C)
         0,
         0,
         TIP_("Face select - Shift-Click for multiple modes, Ctrl-Click expands selection"));
+    UI_but_flag_disable(but, UI_BUT_UNDO);
   }
 }
 
@@ -203,7 +206,7 @@ static void uiTemplatePaintModeSelection(uiLayout *layout, struct bContext *C)
     PointerRNA meshptr;
 
     RNA_pointer_create(ob->data, &RNA_Mesh, ob->data, &meshptr);
-    if (ob->mode & (OB_MODE_TEXTURE_PAINT)) {
+    if (ob->mode & OB_MODE_TEXTURE_PAINT) {
       uiItemR(layout, &meshptr, "use_paint_mask", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
     }
     else {

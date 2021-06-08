@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DISTANCEMATTENODE_H__
-#define __COM_DISTANCEMATTENODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief DistanceMatteNode
@@ -28,7 +29,8 @@
 class DistanceMatteNode : public Node {
  public:
   DistanceMatteNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* COM_DistanceMatteNODE_H */
+}  // namespace blender::compositor

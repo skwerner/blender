@@ -26,8 +26,8 @@
 /* debug builds only */
 #ifdef DEBUG
 
-#  include "BLI_utildefines.h"
 #  include "BLI_edgehash.h"
+#  include "BLI_utildefines.h"
 
 #  include "bmesh.h"
 
@@ -51,7 +51,8 @@
 #  endif
 
 /**
- * Check of this BMesh is valid, this function can be slow since its intended to help with debugging.
+ * Check of this BMesh is valid,
+ * this function can be slow since its intended to help with debugging.
  *
  * \return true when the mesh is valid.
  */

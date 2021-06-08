@@ -27,9 +27,9 @@
 #include "BLI_listbase.h"
 #include "BLI_threads.h"
 
-#include "BKE_sound.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
+#include "BKE_sound.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -50,10 +50,11 @@ typedef struct PreviewJob {
 
 typedef struct PreviewJobAudio {
   struct PreviewJobAudio *next, *prev;
+  struct Main *bmain;
   bSound *sound;
-  int lr; /* sample left or right */
+  int lr; /* Sample left or right. */
   int startframe;
-  bool waveform; /* reload sound or waveform */
+  bool waveform; /* Reload sound or waveform. */
 } PreviewJobAudio;
 
 static void free_preview_job(void *data)
@@ -65,7 +66,7 @@ static void free_preview_job(void *data)
   MEM_freeN(pj);
 }
 
-/* only this runs inside thread */
+/* Only this runs inside thread. */
 static void preview_startjob(void *data, short *stop, short *do_update, float *progress)
 {
   PreviewJob *pj = data;
@@ -79,7 +80,7 @@ static void preview_startjob(void *data, short *stop, short *do_update, float *p
     PreviewJobAudio *preview_next;
     bSound *sound = previewjb->sound;
 
-    BKE_sound_read_waveform(sound, stop);
+    BKE_sound_read_waveform(previewjb->bmain, sound, stop);
 
     if (*stop || G.is_break) {
       BLI_mutex_lock(pj->mutex);
@@ -88,7 +89,7 @@ static void preview_startjob(void *data, short *stop, short *do_update, float *p
       while (previewjb) {
         sound = previewjb->sound;
 
-        /* make sure we cleanup the loading flag! */
+        /* Make sure we cleanup the loading flag! */
         BLI_spin_lock(sound->spinlock);
         sound->tags &= ~SOUND_TAGS_WAVEFORM_LOADING;
         BLI_spin_unlock(sound->spinlock);
@@ -126,18 +127,18 @@ static void preview_endjob(void *data)
 
 void sequencer_preview_add_sound(const bContext *C, Sequence *seq)
 {
-  /* first, get the preview job, if it exists */
   wmJob *wm_job;
   PreviewJob *pj;
-  ScrArea *sa = CTX_wm_area(C);
+  ScrArea *area = CTX_wm_area(C);
   PreviewJobAudio *audiojob = MEM_callocN(sizeof(PreviewJobAudio), "preview_audio");
   wm_job = WM_jobs_get(CTX_wm_manager(C),
                        CTX_wm_window(C),
-                       sa,
+                       CTX_data_scene(C),
                        "Strip Previews",
                        WM_JOB_PROGRESS,
                        WM_JOB_TYPE_SEQ_BUILD_PREVIEW);
 
+  /* Get the preview job if it exists. */
   pj = WM_jobs_customdata_get(wm_job);
 
   if (!pj) {
@@ -151,8 +152,7 @@ void sequencer_preview_add_sound(const bContext *C, Sequence *seq)
     WM_jobs_callbacks(wm_job, preview_startjob, NULL, NULL, preview_endjob);
   }
 
-  /* attempt to lock mutex of job here */
-
+  audiojob->bmain = CTX_data_main(C);
   audiojob->sound = seq->sound;
 
   BLI_mutex_lock(pj->mutex);
@@ -165,5 +165,5 @@ void sequencer_preview_add_sound(const bContext *C, Sequence *seq)
     WM_jobs_start(CTX_wm_manager(C), wm_job);
   }
 
-  ED_area_tag_redraw(sa);
+  ED_area_tag_redraw(area);
 }

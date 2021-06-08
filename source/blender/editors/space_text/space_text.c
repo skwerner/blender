@@ -30,12 +30,12 @@
 #include "BLI_blenlib.h"
 
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_global.h"
+#include "BKE_lib_id.h"
 #include "BKE_screen.h"
-#include "BKE_text.h"
 
-#include "ED_space_api.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -48,13 +48,12 @@
 
 #include "text_format.h"
 #include "text_intern.h" /* own include */
-#include "GPU_framebuffer.h"
 
 /* ******************** default callbacks for text space ***************** */
 
-static SpaceLink *text_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *text_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
-  ARegion *ar;
+  ARegion *region;
   SpaceText *stext;
 
   stext = MEM_callocN(sizeof(SpaceText), "inittext");
@@ -63,33 +62,35 @@ static SpaceLink *text_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scen
   stext->lheight = 12;
   stext->tabnumber = 4;
   stext->margin_column = 80;
+  stext->showsyntax = true;
+  stext->showlinenrs = true;
 
   /* header */
-  ar = MEM_callocN(sizeof(ARegion), "header for text");
+  region = MEM_callocN(sizeof(ARegion), "header for text");
 
-  BLI_addtail(&stext->regionbase, ar);
-  ar->regiontype = RGN_TYPE_HEADER;
-  ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
+  BLI_addtail(&stext->regionbase, region);
+  region->regiontype = RGN_TYPE_HEADER;
+  region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_BOTTOM : RGN_ALIGN_TOP;
 
   /* footer */
-  ar = MEM_callocN(sizeof(ARegion), "footer for text");
-  BLI_addtail(&stext->regionbase, ar);
-  ar->regiontype = RGN_TYPE_FOOTER;
-  ar->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
+  region = MEM_callocN(sizeof(ARegion), "footer for text");
+  BLI_addtail(&stext->regionbase, region);
+  region->regiontype = RGN_TYPE_FOOTER;
+  region->alignment = (U.uiflag & USER_HEADER_BOTTOM) ? RGN_ALIGN_TOP : RGN_ALIGN_BOTTOM;
 
   /* properties region */
-  ar = MEM_callocN(sizeof(ARegion), "properties region for text");
+  region = MEM_callocN(sizeof(ARegion), "properties region for text");
 
-  BLI_addtail(&stext->regionbase, ar);
-  ar->regiontype = RGN_TYPE_UI;
-  ar->alignment = RGN_ALIGN_LEFT;
-  ar->flag = RGN_FLAG_HIDDEN;
+  BLI_addtail(&stext->regionbase, region);
+  region->regiontype = RGN_TYPE_UI;
+  region->alignment = RGN_ALIGN_RIGHT;
+  region->flag = RGN_FLAG_HIDDEN;
 
   /* main region */
-  ar = MEM_callocN(sizeof(ARegion), "main region for text");
+  region = MEM_callocN(sizeof(ARegion), "main region for text");
 
-  BLI_addtail(&stext->regionbase, ar);
-  ar->regiontype = RGN_TYPE_WINDOW;
+  BLI_addtail(&stext->regionbase, region);
+  region->regiontype = RGN_TYPE_WINDOW;
 
   return (SpaceLink *)stext;
 }
@@ -104,7 +105,7 @@ static void text_free(SpaceLink *sl)
 }
 
 /* spacetype; init callback */
-static void text_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
+static void text_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
 {
 }
 
@@ -114,17 +115,16 @@ static SpaceLink *text_duplicate(SpaceLink *sl)
 
   /* clear or remove stuff from old */
 
-  stextn->drawcache = NULL; /* space need it's own cache */
+  stextn->runtime.drawcache = NULL; /* space need its own cache */
 
   return (SpaceLink *)stextn;
 }
 
-static void text_listener(wmWindow *UNUSED(win),
-                          ScrArea *sa,
-                          wmNotifier *wmn,
-                          Scene *UNUSED(scene))
+static void text_listener(const wmSpaceTypeListenerParams *params)
 {
-  SpaceText *st = sa->spacedata.first;
+  ScrArea *area = params->area;
+  wmNotifier *wmn = params->notifier;
+  SpaceText *st = area->spacedata.first;
 
   /* context changes */
   switch (wmn->category) {
@@ -132,18 +132,14 @@ static void text_listener(wmWindow *UNUSED(win),
       /* check if active text was changed, no need to redraw if text isn't active
        * (reference == NULL) means text was unlinked, should update anyway for this
        * case -- no way to know was text active before unlinking or not */
-      if (wmn->reference && wmn->reference != st->text)
+      if (wmn->reference && wmn->reference != st->text) {
         break;
+      }
 
       switch (wmn->data) {
         case ND_DISPLAY:
-          ED_area_tag_redraw(sa);
-          break;
         case ND_CURSOR:
-          if (st->text && st->text == wmn->reference)
-            text_scroll_to_cursor__area(st, sa, true);
-
-          ED_area_tag_redraw(sa);
+          ED_area_tag_redraw(area);
           break;
       }
 
@@ -154,23 +150,20 @@ static void text_listener(wmWindow *UNUSED(win),
             text_update_edited(st->text);
           }
 
-          ED_area_tag_redraw(sa);
+          ED_area_tag_redraw(area);
           ATTR_FALLTHROUGH; /* fall down to tag redraw */
         case NA_ADDED:
         case NA_REMOVED:
-          ED_area_tag_redraw(sa);
-          break;
         case NA_SELECTED:
-          if (st->text && st->text == wmn->reference)
-            text_scroll_to_cursor__area(st, sa, true);
-
+          ED_area_tag_redraw(area);
           break;
       }
 
       break;
     case NC_SPACE:
-      if (wmn->data == ND_SPACE_TEXT)
-        ED_area_tag_redraw(sa);
+      if (wmn->data == ND_SPACE_TEXT) {
+        ED_area_tag_redraw(area);
+      }
       break;
   }
 }
@@ -193,10 +186,10 @@ static void text_operatortypes(void)
   WM_operatortype_append(TEXT_OT_duplicate_line);
 
   WM_operatortype_append(TEXT_OT_convert_whitespace);
-  WM_operatortype_append(TEXT_OT_uncomment);
-  WM_operatortype_append(TEXT_OT_comment);
+  WM_operatortype_append(TEXT_OT_comment_toggle);
   WM_operatortype_append(TEXT_OT_unindent);
   WM_operatortype_append(TEXT_OT_indent);
+  WM_operatortype_append(TEXT_OT_indent_or_autocomplete);
 
   WM_operatortype_append(TEXT_OT_select_line);
   WM_operatortype_append(TEXT_OT_select_all);
@@ -218,8 +211,6 @@ static void text_operatortypes(void)
 
   WM_operatortype_append(TEXT_OT_line_break);
   WM_operatortype_append(TEXT_OT_insert);
-
-  WM_operatortype_append(TEXT_OT_properties);
 
   WM_operatortype_append(TEXT_OT_find);
   WM_operatortype_append(TEXT_OT_find_set_selected);
@@ -243,58 +234,61 @@ static void text_keymap(struct wmKeyConfig *keyconf)
 
 const char *text_context_dir[] = {"edit_text", NULL};
 
-static int text_context(const bContext *C, const char *member, bContextDataResult *result)
+static int /*eContextResult*/ text_context(const bContext *C,
+                                           const char *member,
+                                           bContextDataResult *result)
 {
   SpaceText *st = CTX_wm_space_text(C);
 
   if (CTX_data_dir(member)) {
     CTX_data_dir_set(result, text_context_dir);
-    return 1;
+    return CTX_RESULT_OK;
   }
-  else if (CTX_data_equals(member, "edit_text")) {
-    CTX_data_id_pointer_set(result, &st->text->id);
-    return 1;
+  if (CTX_data_equals(member, "edit_text")) {
+    if (st->text != NULL) {
+      CTX_data_id_pointer_set(result, &st->text->id);
+    }
+    return CTX_RESULT_OK;
   }
 
-  return 0;
+  return CTX_RESULT_MEMBER_NOT_FOUND;
 }
 
 /********************* main region ********************/
 
 /* add handlers, stuff you only do once or on area/region changes */
-static void text_main_region_init(wmWindowManager *wm, ARegion *ar)
+static void text_main_region_init(wmWindowManager *wm, ARegion *region)
 {
   wmKeyMap *keymap;
   ListBase *lb;
 
-  UI_view2d_region_reinit(&ar->v2d, V2D_COMMONVIEW_STANDARD, ar->winx, ar->winy);
+  UI_view2d_region_reinit(&region->v2d, V2D_COMMONVIEW_STANDARD, region->winx, region->winy);
 
   /* own keymap */
   keymap = WM_keymap_ensure(wm->defaultconf, "Text Generic", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&region->handlers, keymap);
   keymap = WM_keymap_ensure(wm->defaultconf, "Text", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&region->handlers, keymap);
 
   /* add drop boxes */
   lb = WM_dropboxmap_find("Text", SPACE_TEXT, RGN_TYPE_WINDOW);
 
-  WM_event_add_dropbox_handler(&ar->handlers, lb);
+  WM_event_add_dropbox_handler(&region->handlers, lb);
 }
 
-static void text_main_region_draw(const bContext *C, ARegion *ar)
+static void text_main_region_draw(const bContext *C, ARegion *region)
 {
   /* draw entirely, view changes should be handled here */
   SpaceText *st = CTX_wm_space_text(C);
-  //View2D *v2d = &ar->v2d;
+  // View2D *v2d = &region->v2d;
 
   /* clear and setup matrix */
   UI_ThemeClearColor(TH_BACK);
-  GPU_clear(GPU_COLOR_BIT);
 
   // UI_view2d_view_ortho(v2d);
 
   /* data... */
-  draw_text_main(st, ar);
+  draw_text_main(st, region);
 
   /* reset view matrix */
   // UI_view2d_view_restore(C);
@@ -302,14 +296,15 @@ static void text_main_region_draw(const bContext *C, ARegion *ar)
   /* scrollers? */
 }
 
-static void text_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
+static void text_cursor(wmWindow *win, ScrArea *area, ARegion *region)
 {
-  SpaceText *st = sa->spacedata.first;
-  int wmcursor = BC_TEXTEDITCURSOR;
+  SpaceText *st = area->spacedata.first;
+  int wmcursor = WM_CURSOR_TEXT_EDIT;
 
-  if (st->text &&
-      BLI_rcti_isect_pt(&st->txtbar, win->eventstate->x - ar->winrct.xmin, st->txtbar.ymin)) {
-    wmcursor = CURSOR_STD;
+  if (st->text && BLI_rcti_isect_pt(&st->runtime.scroll_region_handle,
+                                    win->eventstate->x - region->winrct.xmin,
+                                    st->runtime.scroll_region_handle.ymin)) {
+    wmcursor = WM_CURSOR_DEFAULT;
   }
 
   WM_cursor_set(win, wmcursor);
@@ -320,7 +315,7 @@ static void text_cursor(wmWindow *win, ScrArea *sa, ARegion *ar)
 static bool text_drop_poll(bContext *UNUSED(C),
                            wmDrag *drag,
                            const wmEvent *UNUSED(event),
-                           const char **UNUSED(tooltip))
+                           const char **UNUSED(r_tooltip))
 {
   if (drag->type == WM_DRAG_PATH) {
     /* rule might not work? */
@@ -340,7 +335,7 @@ static void text_drop_copy(wmDrag *drag, wmDropBox *drop)
 static bool text_drop_paste_poll(bContext *UNUSED(C),
                                  wmDrag *drag,
                                  const wmEvent *UNUSED(event),
-                                 const char **UNUSED(tooltip))
+                                 const char **UNUSED(r_tooltip))
 {
   return (drag->type == WM_DRAG_ID);
 }
@@ -348,10 +343,10 @@ static bool text_drop_paste_poll(bContext *UNUSED(C),
 static void text_drop_paste(wmDrag *drag, wmDropBox *drop)
 {
   char *text;
-  ID *id = WM_drag_ID(drag, 0);
+  ID *id = WM_drag_get_local_ID(drag, 0);
 
   /* copy drag path to properties */
-  text = RNA_path_full_ID_py(id);
+  text = RNA_path_full_ID_py(G_MAIN, id);
   RNA_string_set(drop->ptr, "text", text);
   MEM_freeN(text);
 }
@@ -361,8 +356,8 @@ static void text_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Text", SPACE_TEXT, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "TEXT_OT_open", text_drop_poll, text_drop_copy);
-  WM_dropbox_add(lb, "TEXT_OT_insert", text_drop_paste_poll, text_drop_paste);
+  WM_dropbox_add(lb, "TEXT_OT_open", text_drop_poll, text_drop_copy, NULL);
+  WM_dropbox_add(lb, "TEXT_OT_insert", text_drop_paste_poll, text_drop_paste, NULL);
 }
 
 /* ************* end drop *********** */
@@ -370,49 +365,49 @@ static void text_dropboxes(void)
 /****************** header region ******************/
 
 /* add handlers, stuff you only do once or on area/region changes */
-static void text_header_region_init(wmWindowManager *UNUSED(wm), ARegion *ar)
+static void text_header_region_init(wmWindowManager *UNUSED(wm), ARegion *region)
 {
-  ED_region_header_init(ar);
+  ED_region_header_init(region);
 }
 
-static void text_header_region_draw(const bContext *C, ARegion *ar)
+static void text_header_region_draw(const bContext *C, ARegion *region)
 {
-  ED_region_header(C, ar);
+  ED_region_header(C, region);
 }
 
 /****************** properties region ******************/
 
 /* add handlers, stuff you only do once or on area/region changes */
-static void text_properties_region_init(wmWindowManager *wm, ARegion *ar)
+static void text_properties_region_init(wmWindowManager *wm, ARegion *region)
 {
   wmKeyMap *keymap;
 
-  ar->v2d.scroll = V2D_SCROLL_RIGHT | V2D_SCROLL_VERTICAL_HIDE;
-  ED_region_panels_init(wm, ar);
+  region->v2d.scroll = V2D_SCROLL_RIGHT | V2D_SCROLL_VERTICAL_HIDE;
+  ED_region_panels_init(wm, region);
 
   /* own keymaps */
   keymap = WM_keymap_ensure(wm->defaultconf, "Text Generic", SPACE_TEXT, 0);
-  WM_event_add_keymap_handler_bb(&ar->handlers, keymap, &ar->v2d.mask, &ar->winrct);
+  WM_event_add_keymap_handler_v2d_mask(&region->handlers, keymap);
 }
 
-static void text_properties_region_draw(const bContext *C, ARegion *ar)
+static void text_properties_region_draw(const bContext *C, ARegion *region)
 {
   SpaceText *st = CTX_wm_space_text(C);
 
-  ED_region_panels(C, ar);
+  ED_region_panels(C, region);
 
   /* this flag trick is make sure buttons have been added already */
   if (st->flags & ST_FIND_ACTIVATE) {
-    if (UI_textbutton_activate_rna(C, ar, st, "find_text")) {
+    if (UI_textbutton_activate_rna(C, region, st, "find_text")) {
       /* if the panel was already open we need to do another redraw */
-      ScrArea *sa = CTX_wm_area(C);
-      WM_event_add_notifier(C, NC_SPACE | ND_SPACE_TEXT, sa);
+      ScrArea *area = CTX_wm_area(C);
+      WM_event_add_notifier(C, NC_SPACE | ND_SPACE_TEXT, area);
     }
     st->flags &= ~ST_FIND_ACTIVATE;
   }
 }
 
-static void text_id_remap(ScrArea *UNUSED(sa), SpaceLink *slink, ID *old_id, ID *new_id)
+static void text_id_remap(ScrArea *UNUSED(area), SpaceLink *slink, ID *old_id, ID *new_id)
 {
   SpaceText *stext = (SpaceText *)slink;
 
@@ -437,7 +432,7 @@ void ED_spacetype_text(void)
   st->spaceid = SPACE_TEXT;
   strncpy(st->name, "Text", BKE_ST_MAXNAME);
 
-  st->new = text_new;
+  st->create = text_create;
   st->free = text_free;
   st->init = text_init;
   st->duplicate = text_duplicate;

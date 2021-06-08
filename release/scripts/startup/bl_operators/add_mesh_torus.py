@@ -17,11 +17,14 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8-80 compliant>
+from __future__ import annotations
+
 import bpy
 from bpy.types import Operator
 
 from bpy.props import (
     BoolProperty,
+    EnumProperty,
     FloatProperty,
     IntProperty,
 )
@@ -125,12 +128,12 @@ def add_uvs(mesh, minor_seg, major_seg):
 
 
 class AddTorus(Operator, object_utils.AddObjectHelper):
-    """Add a torus mesh"""
+    """Construct a torus mesh"""
     bl_idname = "mesh.primitive_torus_add"
     bl_label = "Add Torus"
     bl_options = {'REGISTER', 'UNDO', 'PRESET'}
 
-    def mode_update_callback(self, context):
+    def mode_update_callback(self, _context):
         if self.mode == 'EXT_INT':
             self.abso_major_rad = self.major_radius + self.minor_radius
             self.abso_minor_rad = self.major_radius - self.minor_radius
@@ -147,21 +150,22 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
         min=3, max=256,
         default=12,
     )
-    mode: bpy.props.EnumProperty(
-        name="Torus Dimensions",
+    mode: EnumProperty(
+        name="Dimensions Mode",
         items=(
             ('MAJOR_MINOR', "Major/Minor",
              "Use the major/minor radii for torus dimensions"),
             ('EXT_INT', "Exterior/Interior",
              "Use the exterior/interior radii for torus dimensions"),
         ),
-        update=mode_update_callback,
+        update=AddTorus.mode_update_callback,
     )
     major_radius: FloatProperty(
         name="Major Radius",
         description=("Radius from the origin to the "
                      "center of the cross sections"),
-        min=0.01, max=100.0,
+        soft_min=0.0, soft_max=100.0,
+        min=0.0, max=10_000.0,
         default=1.0,
         subtype='DISTANCE',
         unit='LENGTH',
@@ -169,7 +173,8 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
     minor_radius: FloatProperty(
         name="Minor Radius",
         description="Radius of the torus' cross section",
-        min=0.01, max=100.0,
+        soft_min=0.0, soft_max=100.0,
+        min=0.0, max=10_000.0,
         default=0.25,
         subtype='DISTANCE',
         unit='LENGTH',
@@ -177,7 +182,8 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
     abso_major_rad: FloatProperty(
         name="Exterior Radius",
         description="Total Exterior Radius of the torus",
-        min=0.01, max=100.0,
+        soft_min=0.0, soft_max=100.0,
+        min=0.0, max=10_000.0,
         default=1.25,
         subtype='DISTANCE',
         unit='LENGTH',
@@ -185,7 +191,8 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
     abso_minor_rad: FloatProperty(
         name="Interior Radius",
         description="Total Interior Radius of the torus",
-        min=0.01, max=100.0,
+        soft_min=0.0, soft_max=100.0,
+        min=0.0, max=10_000.0,
         default=0.75,
         subtype='DISTANCE',
         unit='LENGTH',
@@ -196,52 +203,35 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
         default=True,
     )
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
-        col = layout.column(align=True)
-        col.prop(self, "generate_uvs")
-        col.separator()
-        col.prop(self, "view_align")
+        layout.use_property_split = True
+        layout.use_property_decorate = False
 
-        col = layout.column(align=True)
-        col.label(text="Location")
-        col.prop(self, "location", text="")
+        layout.separator()
 
-        col = layout.column(align=True)
-        col.label(text="Rotation")
-        col.prop(self, "rotation", text="")
+        layout.prop(self, "major_segments")
+        layout.prop(self, "minor_segments")
 
-        col = layout.column(align=True)
-        col.label(text="Major Segments")
-        col.prop(self, "major_segments", text="")
+        layout.separator()
 
-        col = layout.column(align=True)
-        col.label(text="Minor Segments")
-        col.prop(self, "minor_segments", text="")
-
-        col = layout.column(align=True)
-        col.label(text="Torus Dimensions")
-        col.row().prop(self, "mode", expand=True)
-
+        layout.prop(self, "mode")
         if self.mode == 'MAJOR_MINOR':
-            col = layout.column(align=True)
-            col.label(text="Major Radius")
-            col.prop(self, "major_radius", text="")
-
-            col = layout.column(align=True)
-            col.label(text="Minor Radius")
-            col.prop(self, "minor_radius", text="")
+            layout.prop(self, "major_radius")
+            layout.prop(self, "minor_radius")
         else:
-            col = layout.column(align=True)
-            col.label(text="Exterior Radius")
-            col.prop(self, "abso_major_rad", text="")
+            layout.prop(self, "abso_major_rad")
+            layout.prop(self, "abso_minor_rad")
 
-            col = layout.column(align=True)
-            col.label(text="Interior Radius")
-            col.prop(self, "abso_minor_rad", text="")
+        layout.separator()
 
-    def invoke(self, context, event):
+        layout.prop(self, "generate_uvs")
+        layout.prop(self, "align")
+        layout.prop(self, "location")
+        layout.prop(self, "rotation")
+
+    def invoke(self, context, _event):
         object_utils.object_add_grid_scale_apply_operator(self, context)
         return self.execute(context)
 
@@ -252,10 +242,12 @@ class AddTorus(Operator, object_utils.AddObjectHelper):
             self.major_radius = self.abso_minor_rad + extra_helper
             self.minor_radius = extra_helper
 
-        verts_loc, faces = add_torus(self.major_radius,
-                                     self.minor_radius,
-                                     self.major_segments,
-                                     self.minor_segments)
+        verts_loc, faces = add_torus(
+            self.major_radius,
+            self.minor_radius,
+            self.major_segments,
+            self.minor_segments,
+        )
 
         mesh = bpy.data.meshes.new(data_("Torus"))
 

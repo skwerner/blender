@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_VIEWMAP_H__
-#define __FREESTYLE_PYTHON_VIEWMAP_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../view_map/ViewMap.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +38,7 @@ extern PyTypeObject ViewMap_Type;
 
 /*---------------------------Python BPy_ViewMap structure definition----------*/
 typedef struct {
-  PyObject_HEAD ViewMap *vm;
+  PyObject_HEAD Freestyle::ViewMap *vm;
 } BPy_ViewMap;
 
 /*---------------------------Python BPy_ViewMap visible prototypes-----------*/
@@ -53,5 +50,3 @@ int ViewMap_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_VIEWMAP_H__ */

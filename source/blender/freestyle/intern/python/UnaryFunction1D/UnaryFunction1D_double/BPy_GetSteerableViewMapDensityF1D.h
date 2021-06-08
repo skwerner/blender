@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_GETSTEERABLEVIEWMAPDENSITYF1D_H__
-#define __FREESTYLE_PYTHON_GETSTEERABLEVIEWMAPDENSITYF1D_H__
+#pragma once
 
 #include "../BPy_UnaryFunction1DDouble.h"
 
@@ -33,7 +32,8 @@ extern PyTypeObject GetSteerableViewMapDensityF1D_Type;
 
 #define BPy_GetSteerableViewMapDensityF1D_Check(v) \
   (PyObject_IsInstance((PyObject *)v, (PyObject *)&GetSteerableViewMapDensityF1D_Type))
-/*---------------------------Python BPy_GetSteerableViewMapDensityF1D structure definition----------*/
+/*---------------------------Python BPy_GetSteerableViewMapDensityF1D structure
+ * definition----------*/
 typedef struct {
   BPy_UnaryFunction1DDouble py_uf1D_double;
 } BPy_GetSteerableViewMapDensityF1D;
@@ -43,5 +43,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_GETSTEERABLEVIEWMAPDENSITYF1D_H__ */

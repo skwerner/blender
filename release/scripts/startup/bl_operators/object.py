@@ -103,7 +103,7 @@ class SelectPattern(Operator):
         wm = context.window_manager
         return wm.invoke_props_popup(self, event)
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.prop(self, "pattern")
@@ -126,14 +126,14 @@ class SelectCamera(Operator):
     extend: BoolProperty(
         name="Extend",
         description="Extend the selection",
-        default=False
+        default=False,
     )
 
     def execute(self, context):
         scene = context.scene
         view_layer = context.view_layer
         view = context.space_data
-        if view.type == 'VIEW_3D' and view.use_local_camera:
+        if view and view.type == 'VIEW_3D' and view.use_local_camera:
             camera = view.camera
         else:
             camera = scene.camera
@@ -194,7 +194,7 @@ class SelectHierarchy(Operator):
             for obj in selected_objects:
                 parent = obj.parent
 
-                if parent:
+                if parent and parent.visible_get():
                     if obj_act == obj:
                         act_new = parent
 
@@ -202,7 +202,7 @@ class SelectHierarchy(Operator):
 
         else:
             for obj in selected_objects:
-                select_new.extend(obj.children)
+                select_new.extend([child for child in obj.children if child.visible_get()])
 
             if select_new:
                 select_new.sort(key=lambda obj_iter: obj_iter.name)
@@ -223,7 +223,7 @@ class SelectHierarchy(Operator):
 
 
 class SubdivisionSet(Operator):
-    """Sets a Subdivision Surface Level (1-5)"""
+    """Sets a Subdivision Surface level (1 to 5)"""
 
     bl_idname = "object.subdivision_set"
     bl_label = "Subdivision Set"
@@ -237,7 +237,7 @@ class SubdivisionSet(Operator):
     )
     relative: BoolProperty(
         name="Relative",
-        description=("Apply the subsurf level as an offset "
+        description=("Apply the subdivision surface level as an offset "
                      "relative to the current level"),
         default=False,
     )
@@ -312,8 +312,7 @@ class SubdivisionSet(Operator):
 
 
 class ShapeTransfer(Operator):
-    """Copy another selected objects active shape to this one by """ \
-        """applying the relative offsets"""
+    """Copy the active shape key of another selected object to this one"""
 
     bl_idname = "object.shape_key_transfer"
     bl_label = "Transfer Shape Key"
@@ -567,7 +566,7 @@ class JoinUVs(Operator):
                                     uv_other = mesh_other.uv_layers.active
                                     if not uv_other:
                                         self.report({'ERROR'}, "Could not add "
-                                                    "a new UV map tp object "
+                                                    "a new UV map to object "
                                                     "'%s' (Mesh '%s')\n"
                                                     % (obj_other.name,
                                                        mesh_other.name,
@@ -576,6 +575,7 @@ class JoinUVs(Operator):
 
                                 # finally do the copy
                                 uv_other.data.foreach_set("uv", uv_array)
+                                mesh_other.update()
 
         if is_editmode:
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
@@ -586,9 +586,9 @@ class JoinUVs(Operator):
 
 
 class MakeDupliFace(Operator):
-    """Convert objects into dupli-face instanced"""
+    """Convert objects into instanced faces"""
     bl_idname = "object.make_dupli_face"
-    bl_label = "Make Dupli-Face"
+    bl_label = "Make Instance Face"
     bl_options = {'REGISTER', 'UNDO'}
 
     @staticmethod
@@ -610,7 +610,6 @@ class MakeDupliFace(Operator):
             rot = matrix.to_3x3()  # also contains scale
 
             return [(rot @ b) + trans for b in base_tri]
-        scene = context.scene
         linked = defaultdict(list)
         for obj in context.selected_objects:
             if obj.type == 'MESH':
@@ -744,7 +743,9 @@ class TransformsToDeltas(Operator):
     def transfer_rotation(self, obj):
         # TODO: add transforms together...
         if obj.rotation_mode == 'QUATERNION':
-            obj.delta_rotation_quaternion += obj.rotation_quaternion
+            delta = obj.delta_rotation_quaternion.copy()
+            obj.delta_rotation_quaternion = obj.rotation_quaternion
+            obj.delta_rotation_quaternion.rotate(delta)
 
             if self.reset_values:
                 obj.rotation_quaternion.identity()
@@ -799,7 +800,7 @@ class TransformsToDeltasAnim(Operator):
                 continue
 
             # first pass over F-Curves: ensure that we don't have conflicting
-            # transforms already (e.g. if this was applied already) [#29110]
+            # transforms already (e.g. if this was applied already) T29110.
             existingFCurves = {}
             for fcu in adt.action.fcurves:
                 # get "delta" path - i.e. the final paths which may clash
@@ -860,7 +861,7 @@ class TransformsToDeltasAnim(Operator):
 class DupliOffsetFromCursor(Operator):
     """Set offset used for collection instances based on cursor position"""
     bl_idname = "object.instance_offset_from_cursor"
-    bl_label = "Set Offset From Cursor"
+    bl_label = "Set Offset from Cursor"
     bl_options = {'INTERNAL', 'UNDO'}
 
     @classmethod
@@ -887,15 +888,15 @@ class LoadImageAsEmpty:
     filter_folder: BoolProperty(default=True, options={'HIDDEN', 'SKIP_SAVE'})
 
     view_align: BoolProperty(
-        name="Align to view",
-        default=True
+        name="Align to View",
+        default=True,
     )
 
     @classmethod
     def poll(cls, context):
         return context.mode == 'OBJECT'
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
@@ -913,10 +914,11 @@ class LoadImageAsEmpty:
             'INVOKE_REGION_WIN',
             type='IMAGE',
             location=cursor,
-            view_align=self.view_align,
+            align=('VIEW' if self.view_align else 'WORLD'),
         )
 
-        obj = context.active_object
+        view_layer = context.view_layer
+        obj = view_layer.objects.active
         obj.data = image
         obj.empty_display_size = 5.0
         self.set_settings(context, obj)

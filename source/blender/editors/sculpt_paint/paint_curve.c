@@ -18,8 +18,8 @@
  * \ingroup edsculpt
  */
 
-#include <string.h>
 #include <limits.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -35,10 +35,8 @@
 #include "BKE_main.h"
 #include "BKE_paint.h"
 
-#include "DEG_depsgraph.h"
-
-#include "ED_view3d.h"
 #include "ED_paint.h"
+#include "ED_view3d.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -60,13 +58,15 @@ bool paint_curve_poll(bContext *C)
   RegionView3D *rv3d = CTX_wm_region_view3d(C);
   SpaceImage *sima;
 
-  if (rv3d && !(ob && ((ob->mode & OB_MODE_ALL_PAINT) != 0)))
+  if (rv3d && !(ob && ((ob->mode & OB_MODE_ALL_PAINT) != 0))) {
     return false;
+  }
 
   sima = CTX_wm_space_image(C);
 
-  if (sima && sima->mode != SI_MODE_PAINT)
+  if (sima && sima->mode != SI_MODE_PAINT) {
     return false;
+  }
 
   p = BKE_paint_get_active_from_context(C);
 
@@ -87,36 +87,35 @@ static PaintCurvePoint *paintcurve_point_get_closest(
 {
   PaintCurvePoint *pcp, *closest = NULL;
   int i;
-  float dist, closest_dist = FLT_MAX;
+  float closest_dist = threshold;
 
   for (i = 0, pcp = pc->points; i < pc->tot_points; i++, pcp++) {
-    dist = len_manhattan_v2v2(pos, pcp->bez.vec[0]);
-    if (dist < threshold) {
-      if (dist < closest_dist) {
-        closest = pcp;
-        closest_dist = dist;
-        if (point)
-          *point = SEL_F1;
-      }
+    float dist[3];
+    char point_sel = 0;
+
+    dist[0] = len_manhattan_v2v2(pos, pcp->bez.vec[0]);
+    dist[1] = len_manhattan_v2v2(pos, pcp->bez.vec[1]);
+    dist[2] = len_manhattan_v2v2(pos, pcp->bez.vec[2]);
+
+    if (dist[1] < closest_dist) {
+      closest_dist = dist[1];
+      point_sel = SEL_F2;
     }
-    if (!ignore_pivot) {
-      dist = len_manhattan_v2v2(pos, pcp->bez.vec[1]);
-      if (dist < threshold) {
-        if (dist < closest_dist) {
-          closest = pcp;
-          closest_dist = dist;
-          if (point)
-            *point = SEL_F2;
+    if (dist[0] < closest_dist) {
+      closest_dist = dist[0];
+      point_sel = SEL_F1;
+    }
+    if (dist[2] < closest_dist) {
+      closest_dist = dist[2];
+      point_sel = SEL_F3;
+    }
+    if (point_sel) {
+      closest = pcp;
+      if (point) {
+        if (ignore_pivot && point_sel == SEL_F2) {
+          point_sel = (dist[0] < dist[2]) ? SEL_F1 : SEL_F3;
         }
-      }
-    }
-    dist = len_manhattan_v2v2(pos, pcp->bez.vec[2]);
-    if (dist < threshold) {
-      if (dist < closest_dist) {
-        closest = pcp;
-        closest_dist = dist;
-        if (point)
-          *point = SEL_F3;
+        *point = point_sel;
       }
     }
   }
@@ -143,19 +142,15 @@ static char paintcurve_point_side_index(const BezTriple *bezt,
     if ((bezt->f1 & SELECT) == (bezt->f3 & SELECT)) {
       return is_first ? SEL_F1 : SEL_F3;
     }
-    else if (bezt->f1 & SELECT) {
+    if (bezt->f1 & SELECT) {
       return SEL_F1;
     }
-    else if (bezt->f3 & SELECT) {
+    if (bezt->f3 & SELECT) {
       return SEL_F3;
     }
-    else {
-      return fallback;
-    }
+    return fallback;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 /******************* Operators *********************************/
@@ -194,31 +189,30 @@ static void paintcurve_point_add(bContext *C, wmOperator *op, const int loc[2])
   Paint *p = BKE_paint_get_active_from_context(C);
   Brush *br = p->brush;
   Main *bmain = CTX_data_main(C);
-  PaintCurve *pc;
-  PaintCurvePoint *pcp;
   wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
-  float vec[3] = {loc[0], loc[1], 0.0};
-  int add_index;
-  int i;
+  ARegion *region = CTX_wm_region(C);
+  const float vec[3] = {loc[0], loc[1], 0.0};
 
-  pc = br->paint_curve;
+  PaintCurve *pc = br->paint_curve;
   if (!pc) {
     br->paint_curve = pc = BKE_paint_curve_add(bmain, "PaintCurve");
   }
 
   ED_paintcurve_undo_push_begin(op->type->name);
 
-  pcp = MEM_mallocN((pc->tot_points + 1) * sizeof(PaintCurvePoint), "PaintCurvePoint");
-  add_index = pc->add_index;
+  PaintCurvePoint *pcp = MEM_mallocN((pc->tot_points + 1) * sizeof(PaintCurvePoint),
+                                     "PaintCurvePoint");
+  int add_index = pc->add_index;
 
   if (pc->points) {
-    if (add_index > 0)
+    if (add_index > 0) {
       memcpy(pcp, pc->points, add_index * sizeof(PaintCurvePoint));
-    if (add_index < pc->tot_points)
+    }
+    if (add_index < pc->tot_points) {
       memcpy(pcp + add_index + 1,
              pc->points + add_index,
              (pc->tot_points - add_index) * sizeof(PaintCurvePoint));
+    }
 
     MEM_freeN(pc->points);
   }
@@ -232,7 +226,7 @@ static void paintcurve_point_add(bContext *C, wmOperator *op, const int loc[2])
   copy_v3_v3(pcp[add_index].bez.vec[2], vec);
 
   /* last step, clear selection from all bezier handles expect the next */
-  for (i = 0; i < pc->tot_points; i++) {
+  for (int i = 0; i < pc->tot_points; i++) {
     pcp[i].bez.f1 = pcp[i].bez.f2 = pcp[i].bez.f3 = 0;
   }
 
@@ -247,14 +241,14 @@ static void paintcurve_point_add(bContext *C, wmOperator *op, const int loc[2])
     pcp[add_index].bez.h1 = HD_ALIGN;
   }
 
-  ED_paintcurve_undo_push_end();
+  ED_paintcurve_undo_push_end(C);
 
-  WM_paint_cursor_tag_redraw(window, ar);
+  WM_paint_cursor_tag_redraw(window, region);
 }
 
 static int paintcurve_add_point_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  int loc[2] = {event->mval[0], event->mval[1]};
+  const int loc[2] = {event->mval[0], event->mval[1]};
   paintcurve_point_add(C, op, loc);
   RNA_int_set_array(op->ptr, "location", loc);
   return OPERATOR_FINISHED;
@@ -308,7 +302,7 @@ static int paintcurve_delete_point_exec(bContext *C, wmOperator *op)
   PaintCurve *pc;
   PaintCurvePoint *pcp;
   wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   int i;
   int tot_del = 0;
   pc = br->paint_curve;
@@ -332,8 +326,9 @@ static int paintcurve_delete_point_exec(bContext *C, wmOperator *op)
     int j = 0;
     int new_tot = pc->tot_points - tot_del;
     PaintCurvePoint *points_new = NULL;
-    if (new_tot > 0)
+    if (new_tot > 0) {
       points_new = MEM_mallocN(new_tot * sizeof(PaintCurvePoint), "PaintCurvePoint");
+    }
 
     for (i = 0, pcp = pc->points; i < pc->tot_points; i++, pcp++) {
       if (!(pcp->bez.f2 & DELETE_TAG)) {
@@ -357,9 +352,9 @@ static int paintcurve_delete_point_exec(bContext *C, wmOperator *op)
 
 #undef DELETE_TAG
 
-  ED_paintcurve_undo_push_end();
+  ED_paintcurve_undo_push_end(C);
 
-  WM_paint_cursor_tag_redraw(window, ar);
+  WM_paint_cursor_tag_redraw(window, region);
 
   return OPERATOR_FINISHED;
 }
@@ -383,7 +378,7 @@ static bool paintcurve_point_select(
     bContext *C, wmOperator *op, const int loc[2], bool toggle, bool extend)
 {
   wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = CTX_wm_region(C);
+  ARegion *region = CTX_wm_region(C);
   Paint *p = BKE_paint_get_active_from_context(C);
   Brush *br = p->brush;
   PaintCurve *pc;
@@ -392,8 +387,9 @@ static bool paintcurve_point_select(
 
   pc = br->paint_curve;
 
-  if (!pc)
+  if (!pc) {
     return false;
+  }
 
   ED_paintcurve_undo_push_begin(op->type->name);
 
@@ -429,22 +425,28 @@ static bool paintcurve_point_select(
       BKE_paint_curve_clamp_endpoint_add_index(pc, pcp - pc->points);
 
       if (selflag == SEL_F2) {
-        if (extend)
+        if (extend) {
           pcp->bez.f2 ^= SELECT;
-        else
+        }
+        else {
           pcp->bez.f2 |= SELECT;
+        }
       }
       else if (selflag == SEL_F1) {
-        if (extend)
+        if (extend) {
           pcp->bez.f1 ^= SELECT;
-        else
+        }
+        else {
           pcp->bez.f1 |= SELECT;
+        }
       }
       else if (selflag == SEL_F3) {
-        if (extend)
+        if (extend) {
           pcp->bez.f3 ^= SELECT;
-        else
+        }
+        else {
           pcp->bez.f3 |= SELECT;
+        }
       }
     }
 
@@ -461,30 +463,28 @@ static bool paintcurve_point_select(
     }
 
     if (!pcp) {
-      ED_paintcurve_undo_push_end();
+      ED_paintcurve_undo_push_end(C);
       return false;
     }
   }
 
-  ED_paintcurve_undo_push_end();
+  ED_paintcurve_undo_push_end(C);
 
-  WM_paint_cursor_tag_redraw(window, ar);
+  WM_paint_cursor_tag_redraw(window, region);
 
   return true;
 }
 
 static int paintcurve_select_point_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 {
-  int loc[2] = {UNPACK2(event->mval)};
+  const int loc[2] = {UNPACK2(event->mval)};
   bool toggle = RNA_boolean_get(op->ptr, "toggle");
   bool extend = RNA_boolean_get(op->ptr, "extend");
   if (paintcurve_point_select(C, op, loc, toggle, extend)) {
     RNA_int_set_array(op->ptr, "location", loc);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static int paintcurve_select_point_exec(bContext *C, wmOperator *op)
@@ -495,8 +495,9 @@ static int paintcurve_select_point_exec(bContext *C, wmOperator *op)
     bool toggle = RNA_boolean_get(op->ptr, "toggle");
     bool extend = RNA_boolean_get(op->ptr, "extend");
     RNA_int_get_array(op->ptr, "location", loc);
-    if (paintcurve_point_select(C, op, loc, toggle, extend))
+    if (paintcurve_point_select(C, op, loc, toggle, extend)) {
       return OPERATOR_FINISHED;
+    }
   }
 
   return OPERATOR_CANCELLED;
@@ -557,8 +558,9 @@ static int paintcurve_slide_invoke(bContext *C, wmOperator *op, const wmEvent *e
   PaintCurve *pc = br->paint_curve;
   PaintCurvePoint *pcp;
 
-  if (!pc)
+  if (!pc) {
     return OPERATOR_PASS_THROUGH;
+  }
 
   if (do_select) {
     pcp = paintcurve_point_get_closest(pc, loc_fl, align, PAINT_CURVE_SELECT_THRESHOLD, &select);
@@ -575,7 +577,7 @@ static int paintcurve_slide_invoke(bContext *C, wmOperator *op, const wmEvent *e
   }
 
   if (pcp) {
-    ARegion *ar = CTX_wm_region(C);
+    ARegion *region = CTX_wm_region(C);
     wmWindow *window = CTX_wm_window(C);
     PointSlideData *psd = MEM_mallocN(sizeof(PointSlideData), "PointSlideData");
     copy_v2_v2_int(psd->initial_loc, event->mval);
@@ -589,15 +591,16 @@ static int paintcurve_slide_invoke(bContext *C, wmOperator *op, const wmEvent *e
     op->customdata = psd;
 
     /* first, clear all selection from points */
-    for (i = 0; i < pc->tot_points; i++)
+    for (i = 0; i < pc->tot_points; i++) {
       pc->points[i].bez.f1 = pc->points[i].bez.f3 = pc->points[i].bez.f2 = 0;
+    }
 
     /* only select the active point */
     PAINT_CURVE_POINT_SELECT(pcp, psd->select);
     BKE_paint_curve_clamp_endpoint_add_index(pc, pcp - pc->points);
 
     WM_event_add_modal_handler(C, op);
-    WM_paint_cursor_tag_redraw(window, ar);
+    WM_paint_cursor_tag_redraw(window, region);
     return OPERATOR_RUNNING_MODAL;
   }
 
@@ -611,19 +614,20 @@ static int paintcurve_slide_modal(bContext *C, wmOperator *op, const wmEvent *ev
   if (event->type == psd->event && event->val == KM_RELEASE) {
     MEM_freeN(psd);
     ED_paintcurve_undo_push_begin(op->type->name);
-    ED_paintcurve_undo_push_end();
+    ED_paintcurve_undo_push_end(C);
     return OPERATOR_FINISHED;
   }
 
   switch (event->type) {
     case MOUSEMOVE: {
-      ARegion *ar = CTX_wm_region(C);
+      ARegion *region = CTX_wm_region(C);
       wmWindow *window = CTX_wm_window(C);
       float diff[2] = {event->mval[0] - psd->initial_loc[0], event->mval[1] - psd->initial_loc[1]};
       if (psd->select == 1) {
         int i;
-        for (i = 0; i < 3; i++)
+        for (i = 0; i < 3; i++) {
           add_v2_v2v2(psd->pcp->bez.vec[i], diff, psd->point_initial_loc[i]);
+        }
       }
       else {
         add_v2_v2(diff, psd->point_initial_loc[psd->select]);
@@ -635,7 +639,7 @@ static int paintcurve_slide_modal(bContext *C, wmOperator *op, const wmEvent *ev
           add_v2_v2v2(psd->pcp->bez.vec[opposite], psd->pcp->bez.vec[1], diff);
         }
       }
-      WM_paint_cursor_tag_redraw(window, ar);
+      WM_paint_cursor_tag_redraw(window, region);
       break;
     }
     default:
@@ -714,15 +718,16 @@ static int paintcurve_cursor_invoke(bContext *C, wmOperator *UNUSED(op), const w
 
   switch (mode) {
     case PAINT_MODE_TEXTURE_2D: {
-      ARegion *ar = CTX_wm_region(C);
+      ARegion *region = CTX_wm_region(C);
       SpaceImage *sima = CTX_wm_space_image(C);
       float location[2];
 
-      if (!sima)
+      if (!sima) {
         return OPERATOR_CANCELLED;
+      }
 
       UI_view2d_region_to_view(
-          &ar->v2d, event->mval[0], event->mval[1], &location[0], &location[1]);
+          &region->v2d, event->mval[0], event->mval[1], &location[0], &location[1]);
       copy_v2_v2(sima->cursor, location);
       WM_event_add_notifier(C, NC_SPACE | ND_SPACE_IMAGE, NULL);
       break;

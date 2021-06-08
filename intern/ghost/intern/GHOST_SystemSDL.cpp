@@ -26,9 +26,9 @@
 
 #include "GHOST_WindowManager.h"
 
+#include "GHOST_EventButton.h"
 #include "GHOST_EventCursor.h"
 #include "GHOST_EventKey.h"
-#include "GHOST_EventButton.h"
 #include "GHOST_EventWheel.h"
 
 GHOST_SystemSDL::GHOST_SystemSDL() : GHOST_System()
@@ -37,10 +37,7 @@ GHOST_SystemSDL::GHOST_SystemSDL() : GHOST_System()
     printf("Error initializing SDL:  %s\n", SDL_GetError());
   }
 
-  /* SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1); */
-  /* SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4); */
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
   SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
   SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
@@ -52,7 +49,7 @@ GHOST_SystemSDL::~GHOST_SystemSDL()
   SDL_Quit();
 }
 
-GHOST_IWindow *GHOST_SystemSDL::createWindow(const STR_String &title,
+GHOST_IWindow *GHOST_SystemSDL::createWindow(const char *title,
                                              GHOST_TInt32 left,
                                              GHOST_TInt32 top,
                                              GHOST_TUns32 width,
@@ -61,7 +58,8 @@ GHOST_IWindow *GHOST_SystemSDL::createWindow(const STR_String &title,
                                              GHOST_TDrawingContextType type,
                                              GHOST_GLSettings glSettings,
                                              const bool exclusive,
-                                             const GHOST_TEmbedderWindowID parentWindow)
+                                             const bool /* is_dialog */,
+                                             const GHOST_IWindow *parentWindow)
 {
   GHOST_WindowSDL *window = NULL;
 
@@ -72,11 +70,10 @@ GHOST_IWindow *GHOST_SystemSDL::createWindow(const STR_String &title,
                                width,
                                height,
                                state,
-                               parentWindow,
                                type,
                                ((glSettings.flags & GHOST_glStereoVisual) != 0),
                                exclusive,
-                               glSettings.numOfAASamples);
+                               parentWindow);
 
   if (window) {
     if (GHOST_kWindowStateFullScreen == state) {
@@ -142,10 +139,9 @@ GHOST_TUns8 GHOST_SystemSDL::getNumDisplays() const
   return SDL_GetNumVideoDisplays();
 }
 
-GHOST_IContext *GHOST_SystemSDL::createOffscreenContext()
+GHOST_IContext *GHOST_SystemSDL::createOffscreenContext(GHOST_GLSettings glSettings)
 {
   GHOST_Context *context = new GHOST_ContextSDL(0,
-                                                0,
                                                 NULL,
                                                 0,  // profile bit
                                                 3,
@@ -238,6 +234,7 @@ static GHOST_TKey convertSDLKey(SDL_Scancode key)
       GXMAP(type, SDL_SCANCODE_RALT, GHOST_kKeyRightAlt);
       GXMAP(type, SDL_SCANCODE_LGUI, GHOST_kKeyOS);
       GXMAP(type, SDL_SCANCODE_RGUI, GHOST_kKeyOS);
+      GXMAP(type, SDL_SCANCODE_APPLICATION, GHOST_kKeyApp);
 
       GXMAP(type, SDL_SCANCODE_INSERT, GHOST_kKeyInsert);
       GXMAP(type, SDL_SCANCODE_DELETE, GHOST_kKeyDelete);
@@ -258,8 +255,8 @@ static GHOST_TKey convertSDLKey(SDL_Scancode key)
 
       /* keypad events */
 
-      /* note, sdl defines a bunch of kp defines I never saw before like
-       * SDL_SCANCODE_KP_PERCENT, SDL_SCANCODE_KP_XOR - campbell */
+      /* NOTE: SDL defines a bunch of key-pad identifiers that aren't supported by GHOST,
+       * such as #SDL_SCANCODE_KP_PERCENT, #SDL_SCANCODE_KP_XOR. */
       GXMAP(type, SDL_SCANCODE_KP_0, GHOST_kKeyNumpad0);
       GXMAP(type, SDL_SCANCODE_KP_1, GHOST_kKeyNumpad1);
       GXMAP(type, SDL_SCANCODE_KP_2, GHOST_kKeyNumpad2);
@@ -318,7 +315,7 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
       SDL_WindowEvent &sdl_sub_evt = sdl_event->window;
       GHOST_WindowSDL *window = findGhostWindow(
           SDL_GetWindowFromID_fallback(sdl_sub_evt.windowID));
-      //assert(window != NULL); // can be NULL on close window.
+      // assert(window != NULL); // can be NULL on close window.
 
       switch (sdl_sub_evt.event) {
         case SDL_WINDOWEVENT_EXPOSED:
@@ -343,9 +340,12 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
 
       break;
     }
-    case SDL_QUIT:
-      g_event = new GHOST_Event(getMilliSeconds(), GHOST_kEventQuit, NULL);
+
+    case SDL_QUIT: {
+      GHOST_IWindow *window = m_windowManager->getActiveWindow();
+      g_event = new GHOST_Event(getMilliSeconds(), GHOST_kEventQuitRequest, window);
       break;
+    }
 
     case SDL_MOUSEMOTION: {
       SDL_MouseMotionEvent &sdl_sub_evt = sdl_event->motion;
@@ -360,8 +360,8 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
       GHOST_TInt32 y_root = sdl_sub_evt.y + y_win;
 
 #if 0
-      if (window->getCursorGrabMode() != GHOST_kGrabDisable && window->getCursorGrabMode() != GHOST_kGrabNormal)
-      {
+      if (window->getCursorGrabMode() != GHOST_kGrabDisable &&
+          window->getCursorGrabMode() != GHOST_kGrabNormal) {
         GHOST_TInt32 x_new = x_root;
         GHOST_TInt32 y_new = y_root;
         GHOST_TInt32 x_accum, y_accum;
@@ -371,9 +371,9 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
         if (window->getCursorGrabBounds(bounds) == GHOST_kFailure)
           window->getClientBounds(bounds);
 
-        /* could also clamp to screen bounds
-         * wrap with a window outside the view will fail atm  */
-        bounds.wrapPoint(x_new, y_new, 8); /* offset of one incase blender is at screen bounds */
+        /* Could also clamp to screen bounds wrap with a window outside the view will fail atm.
+         * Use offset of 8 in case the window is at screen bounds. */
+        bounds.wrapPoint(x_new, y_new, 8, window->getCursorGrabAxis());
         window->getCursorGrabAccum(x_accum, y_accum);
 
         // cant use setCursorPosition because the mouse may have no focus!
@@ -390,17 +390,31 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
             SDL_WarpMouseInWindow(sdl_win, x_new - x_win, y_new - y_win);
           }
 
-          g_event = new GHOST_EventCursor(getMilliSeconds(), GHOST_kEventCursorMove, window, x_new, y_new);
+          g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                          GHOST_kEventCursorMove,
+                                          window,
+                                          x_new,
+                                          y_new,
+                                          GHOST_TABLET_DATA_NONE);
         }
         else {
-          g_event = new GHOST_EventCursor(getMilliSeconds(), GHOST_kEventCursorMove, window, x_root + x_accum, y_root + y_accum);
+          g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                          GHOST_kEventCursorMove,
+                                          window,
+                                          x_root + x_accum,
+                                          y_root + y_accum,
+                                          GHOST_TABLET_DATA_NONE);
         }
       }
       else
 #endif
       {
-        g_event = new GHOST_EventCursor(
-            getMilliSeconds(), GHOST_kEventCursorMove, window, x_root, y_root);
+        g_event = new GHOST_EventCursor(getMilliSeconds(),
+                                        GHOST_kEventCursorMove,
+                                        window,
+                                        x_root,
+                                        y_root,
+                                        GHOST_TABLET_DATA_NONE);
       }
       break;
     }
@@ -430,7 +444,8 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
       else
         break;
 
-      g_event = new GHOST_EventButton(getMilliSeconds(), type, window, gbmask);
+      g_event = new GHOST_EventButton(
+          getMilliSeconds(), type, window, gbmask, GHOST_TABLET_DATA_NONE);
       break;
     }
     case SDL_MOUSEWHEEL: {
@@ -453,7 +468,8 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
       assert(window != NULL);
 
       GHOST_TKey gkey = convertSDLKey(sdl_sub_evt.keysym.scancode);
-      /* note, the sdl_sub_evt.keysym.sym is truncated, for unicode support ghost has to be modified */
+      /* note, the sdl_sub_evt.keysym.sym is truncated,
+       * for unicode support ghost has to be modified */
       /* printf("%d\n", sym); */
       if (sym > 127) {
         switch (sym) {
@@ -585,7 +601,7 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
         }
       }
 
-      g_event = new GHOST_EventKey(getMilliSeconds(), type, window, gkey, sym, NULL);
+      g_event = new GHOST_EventKey(getMilliSeconds(), type, window, gkey, sym, NULL, false);
       break;
     }
   }
@@ -631,7 +647,7 @@ bool GHOST_SystemSDL::generateWindowExposeEvents()
     (*w_start)->validate();
 
     if (g_event) {
-      //printf("Expose events pushed\n");
+      // printf("Expose events pushed\n");
       pushEvent(g_event);
       anyProcessed = true;
     }
@@ -656,7 +672,7 @@ bool GHOST_SystemSDL::processEvents(bool waitForEvent)
 
       if (next == GHOST_kFireTimeNever) {
         SDL_WaitEventTimeout(NULL, -1);
-        //SleepTillEvent(m_display, -1);
+        // SleepTillEvent(m_display, -1);
       }
       else {
         GHOST_TInt64 maxSleep = next - getMilliSeconds();
@@ -696,9 +712,9 @@ GHOST_WindowSDL *GHOST_SystemSDL::findGhostWindow(SDL_Window *sdl_win)
   // We should always check the window manager's list of windows
   // and only process events on these windows.
 
-  std::vector<GHOST_IWindow *> &win_vec = m_windowManager->getWindows();
+  const std::vector<GHOST_IWindow *> &win_vec = m_windowManager->getWindows();
 
-  std::vector<GHOST_IWindow *>::iterator win_it = win_vec.begin();
+  std::vector<GHOST_IWindow *>::const_iterator win_it = win_vec.begin();
   std::vector<GHOST_IWindow *>::const_iterator win_end = win_vec.end();
 
   for (; win_it != win_end; ++win_it) {
@@ -715,11 +731,6 @@ void GHOST_SystemSDL::addDirtyWindow(GHOST_WindowSDL *bad_wind)
   GHOST_ASSERT((bad_wind != NULL), "addDirtyWindow() NULL ptr trapped (window)");
 
   m_dirty_windows.push_back(bad_wind);
-}
-
-bool GHOST_SystemSDL::supportsNativeDialogs(void)
-{
-  return false;
 }
 
 GHOST_TSuccess GHOST_SystemSDL::getButtons(GHOST_Buttons &buttons) const

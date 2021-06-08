@@ -21,10 +21,13 @@
  * \ingroup nodes
  */
 
-#ifndef __NOD_COMPOSITE_H__
-#define __NOD_COMPOSITE_H__
+#pragma once
 
 #include "BKE_node.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern struct bNodeTreeType *ntreeType_Composite;
 
@@ -53,6 +56,7 @@ void register_node_type_cmp_mix_rgb(void);
 void register_node_type_cmp_hue_sat(void);
 void register_node_type_cmp_brightcontrast(void);
 void register_node_type_cmp_gamma(void);
+void register_node_type_cmp_exposure(void);
 void register_node_type_cmp_invert(void);
 void register_node_type_cmp_alphaover(void);
 void register_node_type_cmp_zcombine(void);
@@ -74,6 +78,8 @@ void register_node_type_cmp_dilateerode(void);
 void register_node_type_cmp_inpaint(void);
 void register_node_type_cmp_despeckle(void);
 void register_node_type_cmp_defocus(void);
+void register_node_type_cmp_denoise(void);
+void register_node_type_cmp_antialiasing(void);
 
 void register_node_type_cmp_valtorgb(void);
 void register_node_type_cmp_rgbtobw(void);
@@ -101,6 +107,7 @@ void register_node_type_cmp_doubleedgemask(void);
 void register_node_type_cmp_keyingscreen(void);
 void register_node_type_cmp_keying(void);
 void register_node_type_cmp_cryptomatte(void);
+void register_node_type_cmp_cryptomatte_legacy(void);
 
 void register_node_type_cmp_translate(void);
 void register_node_type_cmp_rotate(void);
@@ -142,4 +149,6 @@ const char *node_cmp_rlayers_sock_to_pass(int sock_index);
 
 void register_node_type_cmp_custom_group(bNodeType *ntype);
 
+#ifdef __cplusplus
+}
 #endif

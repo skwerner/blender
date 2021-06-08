@@ -24,14 +24,15 @@ if(WIN32)
       set(PTHREAD_CPPFLAGS "/I. /DHAVE_CONFIG_H ")
     endif()
 
-    set(PTHREADS_BUILD cd ${BUILD_DIR}/pthreads/src/external_pthreads/ && cd && nmake VC-static /e CPPFLAGS=${PTHREAD_CPPFLAGS} /e XLIBS=/NODEFAULTLIB:msvcr)
+    set(PTHREADS_BUILD cd ${BUILD_DIR}/pthreads/src/external_pthreads/ && cd && nmake VC-static /e CPPFLAGS=${PTHREAD_CPPFLAGS})
 
     ExternalProject_Add(external_pthreads
-      URL ${PTHREADS_URI}
+      URL file://${PACKAGE_DIR}/${PTHREADS_FILE}
       DOWNLOAD_DIR ${DOWNLOAD_DIR}
-      URL_HASH MD5=${PTHREADS_HASH}
+      URL_HASH ${PTHREADS_HASH_TYPE}=${PTHREADS_HASH}
       PREFIX ${BUILD_DIR}/pthreads
       CONFIGURE_COMMAND echo .
+      PATCH_COMMAND COMMAND ${PATCH_CMD} -p 1 -d ${BUILD_DIR}/pthreads/src/external_pthreads < ${PATCH_DIR}/pthreads.diff
       BUILD_COMMAND ${PTHREADS_BUILD}
       INSTALL_COMMAND COMMAND
         ${CMAKE_COMMAND} -E copy ${BUILD_DIR}/pthreads/src/external_pthreads/libpthreadVC3${LIBEXT} ${LIBDIR}/pthreads/lib/pthreadVC3${LIBEXT} &&

@@ -26,14 +26,14 @@
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_operation.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
-struct GHash;
 struct ID;
 struct bPoseChannel;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct BoneComponentNode;
 struct Depsgraph;
@@ -54,6 +54,7 @@ struct ComponentNode : public Node {
 
     string identifier() const;
     bool operator==(const OperationIDKey &other) const;
+    uint64_t hash() const;
   };
 
   /* Typedef for container of operations */
@@ -65,7 +66,7 @@ struct ComponentNode : public Node {
   virtual string identifier() const override;
 
   /* Find an existing operation, if requested operation does not exist
-   * NULL will be returned. */
+   * nullptr will be returned. */
   OperationNode *find_operation(OperationIDKey key) const;
   OperationNode *find_operation(OperationCode opcode, const char *name, int name_tag) const;
 
@@ -83,12 +84,9 @@ struct ComponentNode : public Node {
    * when node may have been partially created earlier (e.g. parent ref before
    * parent item is added)
    *
-   * \param type: Operation node type (corresponding to context/component that
-   *              it operates in)
-   * \param optype: Role that operation plays within component
-   *                (i.e. where in eval process)
-   * \param op: The operation to perform
-   * \param name: Identifier for operation - used to find/locate it again */
+   * \param opcode: The operation to perform.
+   * \param name: Identifier for operation - used to find/locate it again.
+   */
   OperationNode *add_operation(const DepsEvalOperationCb &op,
                                OperationCode opcode,
                                const char *name,
@@ -115,11 +113,11 @@ struct ComponentNode : public Node {
 
   /* Operations stored as a hash map, for faster build.
    * This hash map will be freed when graph is fully built. */
-  GHash *operations_map;
+  Map<ComponentNode::OperationIDKey, OperationNode *> *operations_map;
 
   /* This is a "normal" list of operations, used by evaluation
    * and other routines after construction. */
-  vector<OperationNode *> operations;
+  Vector<OperationNode *> operations;
 
   OperationNode *entry_operation;
   OperationNode *exit_operation;
@@ -172,6 +170,7 @@ DEG_COMPONENT_NODE_DECLARE_NO_COW_TAG_ON_UPDATE(BatchCache);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Cache);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(CopyOnWrite);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Geometry);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(ImageAnimation);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(LayerCollections);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Parameters);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Particles);
@@ -186,7 +185,10 @@ DEG_COMPONENT_NODE_DECLARE_GENERIC(Transform);
 DEG_COMPONENT_NODE_DECLARE_NO_COW_TAG_ON_UPDATE(ObjectFromLayer);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Dupli);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(Synchronization);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(Audio);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(Armature);
 DEG_COMPONENT_NODE_DECLARE_GENERIC(GenericDatablock);
+DEG_COMPONENT_NODE_DECLARE_GENERIC(Simulation);
 
 /* Bone Component */
 struct BoneComponentNode : public ComponentNode {
@@ -199,4 +201,5 @@ struct BoneComponentNode : public ComponentNode {
 
 void deg_register_component_depsnodes();
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

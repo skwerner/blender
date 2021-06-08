@@ -19,15 +19,16 @@
  * \brief Class to define the Postscript rendering of a stroke
  */
 
-#include "Canvas.h"
 #include "PSStrokeRenderer.h"
+#include "Canvas.h"
 
 namespace Freestyle {
 
-PSStrokeRenderer::PSStrokeRenderer(const char *iFileName) : StrokeRenderer()
+PSStrokeRenderer::PSStrokeRenderer(const char *iFileName)
 {
-  if (!iFileName)
+  if (!iFileName) {
     iFileName = "freestyle.ps";
+  }
   // open the stream:
   _ofstream.open(iFileName, ios::out);
   if (!_ofstream.is_open()) {
@@ -38,11 +39,6 @@ PSStrokeRenderer::PSStrokeRenderer(const char *iFileName) : StrokeRenderer()
   _ofstream << "%%BoundingBox: " << 0 << " " << 0 << " " << Canvas::getInstance()->width() << " "
             << Canvas::getInstance()->height() << endl;
   _ofstream << "%%EndComments" << endl;
-}
-
-PSStrokeRenderer::~PSStrokeRenderer()
-{
-  Close();
 }
 
 void PSStrokeRenderer::RenderStrokeRep(StrokeRep *iStrokeRep) const
@@ -70,8 +66,8 @@ void PSStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
       svRep[2] = *(v[2]);
 
       color[0] = svRep[0]->color();
-      //color[1] = svRep[1]->color();
-      //color[2] = svRep[2]->color();
+      // color[1] = svRep[1]->color();
+      // color[2] = svRep[2]->color();
 
       _ofstream << "newpath" << endl;
       _ofstream << (color[0])[0] << " " << (color[0])[1] << " " << (color[0])[2] << " setrgbcolor"
@@ -87,12 +83,6 @@ void PSStrokeRenderer::RenderStrokeRepBasic(StrokeRep *iStrokeRep) const
       ++v[2];
     }
   }
-}
-
-void PSStrokeRenderer::Close()
-{
-  if (_ofstream.is_open())
-    _ofstream.close();
 }
 
 } /* namespace Freestyle */

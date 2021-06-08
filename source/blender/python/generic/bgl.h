@@ -18,8 +18,7 @@
  * \ingroup pygen
  */
 
-#ifndef __BGL_H__
-#define __BGL_H__
+#pragma once
 
 PyObject *BPyInit_bgl(void);
 
@@ -33,7 +32,8 @@ int BGL_typeSize(int type);
  * For Python access to OpenGL functions requiring a pointer.
  */
 typedef struct _Buffer {
-  PyObject_VAR_HEAD PyObject *parent;
+  PyObject_VAR_HEAD
+  PyObject *parent;
 
   int type; /* GL_BYTE, GL_SHORT, GL_INT, GL_FLOAT */
   int ndimensions;
@@ -52,5 +52,3 @@ typedef struct _Buffer {
 
 /** The type object */
 extern PyTypeObject BGL_bufferType;
-
-#endif /* __BGL_H__ */

@@ -81,13 +81,7 @@ ccl_device_inline Transform object_fetch_transform_motion(KernelGlobals *kg,
   const uint num_steps = kernel_tex_fetch(__objects, object).numsteps * 2 + 1;
 
   Transform tfm;
-#  ifdef __EMBREE__
-  if (kernel_data.bvh.scene) {
-    transform_motion_array_interpolate_straight(&tfm, motion, num_steps, time);
-  }
-  else
-#  endif
-    transform_motion_array_interpolate(&tfm, motion, num_steps, time);
+  transform_motion_array_interpolate(&tfm, motion, num_steps, time);
 
   return tfm;
 }
@@ -220,11 +214,15 @@ ccl_device_inline float3 object_location(KernelGlobals *kg, const ShaderData *sd
 #endif
 }
 
-/* Total surface area of object */
+/* Color of the object */
 
-ccl_device_inline float object_surface_area(KernelGlobals *kg, int object)
+ccl_device_inline float3 object_color(KernelGlobals *kg, int object)
 {
-  return kernel_tex_fetch(__objects, object).surface_area;
+  if (object == OBJECT_NONE)
+    return make_float3(0.0f, 0.0f, 0.0f);
+
+  const ccl_global KernelObject *kobject = &kernel_tex_fetch(__objects, object);
+  return make_float3(kobject->color[0], kobject->color[1], kobject->color[2]);
 }
 
 /* Pass ID number of object */
@@ -315,6 +313,26 @@ ccl_device_inline uint object_patch_map_offset(KernelGlobals *kg, int object)
   return kernel_tex_fetch(__objects, object).patch_map_offset;
 }
 
+/* Volume step size */
+
+ccl_device_inline float object_volume_density(KernelGlobals *kg, int object)
+{
+  if (object == OBJECT_NONE) {
+    return 1.0f;
+  }
+
+  return kernel_tex_fetch(__objects, object).volume_density;
+}
+
+ccl_device_inline float object_volume_step_size(KernelGlobals *kg, int object)
+{
+  if (object == OBJECT_NONE) {
+    return kernel_data.background.volume_step_size;
+  }
+
+  return kernel_tex_fetch(__object_volume_step, object);
+}
+
 /* Pass ID for shader */
 
 ccl_device int shader_pass_id(KernelGlobals *kg, const ShaderData *sd)
@@ -386,24 +404,10 @@ ccl_device float3 particle_angular_velocity(KernelGlobals *kg, int particle)
 
 ccl_device_inline float3 bvh_clamp_direction(float3 dir)
 {
-  /* clamp absolute values by exp2f(-80.0f) to avoid division by zero when calculating inverse direction */
-#if defined(__KERNEL_SSE__) && defined(__KERNEL_SSE2__)
-  const ssef oopes(8.271806E-25f, 8.271806E-25f, 8.271806E-25f, 0.0f);
-  const ssef mask = _mm_cmpgt_ps(fabs(dir), oopes);
-  const ssef signdir = signmsk(dir.m128) | oopes;
-#  ifndef __KERNEL_AVX__
-  ssef res = mask & ssef(dir);
-  res = _mm_or_ps(res, _mm_andnot_ps(mask, signdir));
-#  else
-  ssef res = _mm_blendv_ps(signdir, dir, mask);
-#  endif
-  return float3(res);
-#else  /* __KERNEL_SSE__ && __KERNEL_SSE2__ */
   const float ooeps = 8.271806E-25f;
   return make_float3((fabsf(dir.x) > ooeps) ? dir.x : copysignf(ooeps, dir.x),
                      (fabsf(dir.y) > ooeps) ? dir.y : copysignf(ooeps, dir.y),
                      (fabsf(dir.z) > ooeps) ? dir.z : copysignf(ooeps, dir.z));
-#endif /* __KERNEL_SSE__ && __KERNEL_SSE2__ */
 }
 
 ccl_device_inline float3 bvh_inverse_direction(float3 dir)
@@ -431,39 +435,7 @@ ccl_device_inline float bvh_instance_push(
   return t;
 }
 
-#ifdef __QBVH__
-/* Same as above, but optimized for QBVH scene intersection,
- * which needs to modify two max distances.
- *
- * TODO(sergey): Investigate if passing NULL instead of t1 gets optimized
- * so we can avoid having this duplication.
- */
-ccl_device_inline void qbvh_instance_push(KernelGlobals *kg,
-                                          int object,
-                                          const Ray *ray,
-                                          float3 *P,
-                                          float3 *dir,
-                                          float3 *idir,
-                                          float *t,
-                                          float *t1)
-{
-  Transform tfm = object_fetch_transform(kg, object, OBJECT_INVERSE_TRANSFORM);
-
-  *P = transform_point(&tfm, ray->P);
-
-  float len;
-  *dir = bvh_clamp_direction(normalize_len(transform_direction(&tfm, ray->D), &len));
-  *idir = bvh_inverse_direction(*dir);
-
-  if (*t != FLT_MAX)
-    *t *= len;
-
-  if (*t1 != -FLT_MAX)
-    *t1 *= len;
-}
-#endif
-
-/* Transorm ray to exit static object in BVH */
+/* Transform ray to exit static object in BVH. */
 
 ccl_device_inline float bvh_instance_pop(
     KernelGlobals *kg, int object, const Ray *ray, float3 *P, float3 *dir, float3 *idir, float t)
@@ -525,40 +497,7 @@ ccl_device_inline float bvh_instance_motion_push(KernelGlobals *kg,
   return t;
 }
 
-#  ifdef __QBVH__
-/* Same as above, but optimized for QBVH scene intersection,
- * which needs to modify two max distances.
- *
- * TODO(sergey): Investigate if passing NULL instead of t1 gets optimized
- * so we can avoid having this duplication.
- */
-ccl_device_inline void qbvh_instance_motion_push(KernelGlobals *kg,
-                                                 int object,
-                                                 const Ray *ray,
-                                                 float3 *P,
-                                                 float3 *dir,
-                                                 float3 *idir,
-                                                 float *t,
-                                                 float *t1,
-                                                 Transform *itfm)
-{
-  object_fetch_transform_motion_test(kg, object, ray->time, itfm);
-
-  *P = transform_point(itfm, ray->P);
-
-  float len;
-  *dir = bvh_clamp_direction(normalize_len(transform_direction(itfm, ray->D), &len));
-  *idir = bvh_inverse_direction(*dir);
-
-  if (*t != FLT_MAX)
-    *t *= len;
-
-  if (*t1 != -FLT_MAX)
-    *t1 *= len;
-}
-#  endif
-
-/* Transorm ray to exit motion blurred object in BVH */
+/* Transform ray to exit motion blurred object in BVH. */
 
 ccl_device_inline float bvh_instance_motion_pop(KernelGlobals *kg,
                                                 int object,

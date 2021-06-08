@@ -17,19 +17,22 @@
  * All rights reserved.
  */
 
-#ifndef __IMB_MOVIECACHE_H__
-#define __IMB_MOVIECACHE_H__
+#pragma once
 
 /** \file
  * \ingroup imbuf
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 /* Cache system for movie data - now supports storing ImBufs only
  * Supposed to provide unified cache system for movie clips, sequencer and
  * other movie-related areas */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ImBuf;
 struct MovieCache;
@@ -57,6 +60,7 @@ void IMB_moviecache_set_priority_callback(struct MovieCache *cache,
 void IMB_moviecache_put(struct MovieCache *cache, void *userkey, struct ImBuf *ibuf);
 bool IMB_moviecache_put_if_possible(struct MovieCache *cache, void *userkey, struct ImBuf *ibuf);
 struct ImBuf *IMB_moviecache_get(struct MovieCache *cache, void *userkey);
+void IMB_moviecache_remove(struct MovieCache *cache, void *userkey);
 bool IMB_moviecache_has_frame(struct MovieCache *cache, void *userkey);
 void IMB_moviecache_free(struct MovieCache *cache);
 
@@ -67,7 +71,7 @@ void IMB_moviecache_cleanup(struct MovieCache *cache,
                             void *userdata);
 
 void IMB_moviecache_get_cache_segments(
-    struct MovieCache *cache, int proxy, int render_flags, int *totseg_r, int **points_r);
+    struct MovieCache *cache, int proxy, int render_flags, int *r_totseg, int **r_points);
 
 struct MovieCacheIter;
 struct MovieCacheIter *IMB_moviecacheIter_new(struct MovieCache *cache);
@@ -77,4 +81,6 @@ void IMB_moviecacheIter_step(struct MovieCacheIter *iter);
 struct ImBuf *IMB_moviecacheIter_getImBuf(struct MovieCacheIter *iter);
 void *IMB_moviecacheIter_getUserKey(struct MovieCacheIter *iter);
 
+#ifdef __cplusplus
+}
 #endif

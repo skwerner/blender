@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_WALKERS_PRIVATE_H__
-#define __BMESH_WALKERS_PRIVATE_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -85,6 +84,13 @@ typedef struct BMwEdgeboundaryWalker {
   BMEdge *e;
 } BMwEdgeboundaryWalker;
 
+typedef struct BMwNonManifoldEdgeLoopWalker {
+  BMwGenericWalker header;
+  BMEdge *start, *cur;
+  BMVert *startv, *lastv;
+  int face_count; /* face count around the edge. */
+} BMwNonManifoldEdgeLoopWalker;
+
 typedef struct BMwUVEdgeWalker {
   BMwGenericWalker header;
   BMLoop *l;
@@ -94,5 +100,3 @@ typedef struct BMwConnectedVertexWalker {
   BMwGenericWalker header;
   BMVert *curvert;
 } BMwConnectedVertexWalker;
-
-#endif /* __BMESH_WALKERS_PRIVATE_H__ */

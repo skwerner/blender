@@ -25,12 +25,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_kdopbvh.h"
-#include "BLI_polyfill_2d.h"
-#include "BLI_math.h"
 #include "BLI_ghash.h"
+#include "BLI_kdopbvh.h"
+#include "BLI_math.h"
 #include "BLI_memarena.h"
+#include "BLI_polyfill_2d.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_bvhutils.h"
 
@@ -41,13 +41,13 @@
 #include "mathutils_bvhtree.h" /* own include */
 
 #ifndef MATH_STANDALONE
-#  include "DNA_object_types.h"
 #  include "DNA_mesh_types.h"
 #  include "DNA_meshdata_types.h"
+#  include "DNA_object_types.h"
 
 #  include "BKE_customdata.h"
 #  include "BKE_editmesh_bvh.h"
-#  include "BKE_library.h"
+#  include "BKE_lib_id.h"
 #  include "BKE_mesh.h"
 #  include "BKE_mesh_runtime.h"
 
@@ -61,7 +61,7 @@
 #include "BLI_strict_flags.h"
 
 /* -------------------------------------------------------------------- */
-/** \name Docstring (snippets)
+/** \name Documentation String (snippets)
  * \{ */
 
 #define PYBVH_FIND_GENERIC_DISTANCE_DOC \
@@ -97,8 +97,8 @@ typedef struct {
   float epsilon;
 
   float (*coords)[3];
-  unsigned int (*tris)[3];
-  unsigned int coords_len, tris_len;
+  uint (*tris)[3];
+  uint coords_len, tris_len;
 
   /* Optional members */
   /* aligned with 'tris' */
@@ -115,9 +115,9 @@ static PyObject *bvhtree_CreatePyObject(BVHTree *tree,
                                         float epsilon,
 
                                         float (*coords)[3],
-                                        unsigned int coords_len,
-                                        unsigned int (*tris)[3],
-                                        unsigned int tris_len,
+                                        uint coords_len,
+                                        uint (*tris)[3],
+                                        uint tris_len,
 
                                         /* optional arrays */
                                         int *orig_index,
@@ -276,7 +276,7 @@ static void py_bvhtree_raycast_cb(void *userdata,
   const PyBVHTree *self = userdata;
 
   const float(*coords)[3] = (const float(*)[3])self->coords;
-  const unsigned int *tri = self->tris[index];
+  const uint *tri = self->tris[index];
   const float *tri_co[3] = {coords[tri[0]], coords[tri[1]], coords[tri[2]]};
   float dist;
 
@@ -308,7 +308,7 @@ static void py_bvhtree_nearest_point_cb(void *userdata,
   PyBVHTree *self = userdata;
 
   const float(*coords)[3] = (const float(*)[3])self->coords;
-  const unsigned int *tri = self->tris[index];
+  const uint *tri = self->tris[index];
   const float *tri_co[3] = {coords[tri[0]], coords[tri[1]], coords[tri[2]]};
   float nearest_tmp[3], dist_sq;
 
@@ -333,8 +333,8 @@ PyDoc_STRVAR(py_bvhtree_ray_cast_doc,
              "\n"
              "   Cast a ray onto the mesh.\n"
              "\n"
-             "   :arg co: Start location of the ray in object space.\n"
-             "   :type co: :class:`Vector`\n"
+             "   :arg origin: Start location of the ray in object space.\n"
+             "   :type origin: :class:`Vector`\n"
              "   :arg direction: Direction of the ray in object space.\n"
              "   :type direction: :class:`Vector`\n" PYBVH_FIND_GENERIC_DISTANCE_DOC
                  PYBVH_FIND_GENERIC_RETURN_DOC);
@@ -349,7 +349,7 @@ static PyObject *py_bvhtree_ray_cast(PyBVHTree *self, PyObject *args)
   {
     PyObject *py_co, *py_direction;
 
-    if (!PyArg_ParseTuple(args, (char *)"OO|f:ray_cast", &py_co, &py_direction, &max_dist)) {
+    if (!PyArg_ParseTuple(args, "OO|f:ray_cast", &py_co, &py_direction, &max_dist)) {
       return NULL;
     }
 
@@ -397,7 +397,7 @@ static PyObject *py_bvhtree_find_nearest(PyBVHTree *self, PyObject *args)
   {
     PyObject *py_co;
 
-    if (!PyArg_ParseTuple(args, (char *)"O|f:find_nearest", &py_co, &max_dist)) {
+    if (!PyArg_ParseTuple(args, "O|f:find_nearest", &py_co, &max_dist)) {
       return NULL;
     }
 
@@ -434,8 +434,8 @@ static void py_bvhtree_nearest_point_range_cb(void *userdata,
   struct PyBVH_RangeData *data = userdata;
   PyBVHTree *self = data->self;
 
-  const float(*coords)[3] = (const float(*)[3])self->coords;
-  const unsigned int *tri = self->tris[index];
+  const float(*coords)[3] = self->coords;
+  const uint *tri = self->tris[index];
   const float *tri_co[3] = {coords[tri[0]], coords[tri[1]], coords[tri[2]]};
   float nearest_tmp[3], dist_sq;
 
@@ -478,7 +478,7 @@ static PyObject *py_bvhtree_find_nearest_range(PyBVHTree *self, PyObject *args)
   {
     PyObject *py_co;
 
-    if (!PyArg_ParseTuple(args, (char *)"O|f:find_nearest_range", &py_co, &max_dist)) {
+    if (!PyArg_ParseTuple(args, "O|f:find_nearest_range", &py_co, &max_dist)) {
       return NULL;
     }
 
@@ -493,7 +493,7 @@ static PyObject *py_bvhtree_find_nearest_range(PyBVHTree *self, PyObject *args)
     struct PyBVH_RangeData data = {
         .self = self,
         .result = ret,
-        .dist_sq = SQUARE(max_dist),
+        .dist_sq = square_f(max_dist),
     };
 
     BLI_bvhtree_range_query(self->tree, co, max_dist, py_bvhtree_nearest_point_range_cb, &data);
@@ -502,11 +502,11 @@ static PyObject *py_bvhtree_find_nearest_range(PyBVHTree *self, PyObject *args)
   return ret;
 }
 
-BLI_INLINE unsigned int overlap_hash(const void *overlap_v)
+BLI_INLINE uint overlap_hash(const void *overlap_v)
 {
   const BVHTreeOverlap *overlap = overlap_v;
   /* same constants as edge-hash */
-  return (((unsigned int)overlap->indexA * 65) ^ ((unsigned int)overlap->indexA * 31));
+  return (((uint)overlap->indexA * 65) ^ ((uint)overlap->indexA * 31));
 }
 
 BLI_INLINE bool overlap_cmp(const void *a_v, const void *b_v)
@@ -526,8 +526,8 @@ static bool py_bvhtree_overlap_cb(void *userdata, int index_a, int index_b, int 
   struct PyBVHTree_OverlapData *data = userdata;
   PyBVHTree *tree_a = data->tree_pair[0];
   PyBVHTree *tree_b = data->tree_pair[1];
-  const unsigned int *tri_a = tree_a->tris[index_a];
-  const unsigned int *tri_b = tree_b->tris[index_b];
+  const uint *tri_a = tree_a->tris[index_a];
+  const uint *tri_b = tree_b->tris[index_b];
   const float *tri_a_co[3] = {
       tree_a->coords[tri_a[0]], tree_a->coords[tri_a[1]], tree_a->coords[tri_a[2]]};
   const float *tri_b_co[3] = {
@@ -549,8 +549,7 @@ static bool py_bvhtree_overlap_cb(void *userdata, int index_a, int index_b, int 
     }
   }
 
-  return (isect_tri_tri_epsilon_v3(
-              UNPACK3(tri_a_co), UNPACK3(tri_b_co), ix_pair[0], ix_pair[1], data->epsilon) &&
+  return (isect_tri_tri_v3(UNPACK3(tri_a_co), UNPACK3(tri_b_co), ix_pair[0], ix_pair[1]) &&
           ((verts_shared == 0) || (len_squared_v3v3(ix_pair[0], ix_pair[1]) > data->epsilon)));
 }
 
@@ -569,7 +568,7 @@ static PyObject *py_bvhtree_overlap(PyBVHTree *self, PyBVHTree *other)
 {
   struct PyBVHTree_OverlapData data;
   BVHTreeOverlap *overlap;
-  unsigned int overlap_len = 0;
+  uint overlap_len = 0;
   PyObject *ret;
 
   if (!PyBVHTree_CheckExact(other)) {
@@ -590,12 +589,12 @@ static PyObject *py_bvhtree_overlap(PyBVHTree *self, PyBVHTree *other)
     /* pass */
   }
   else {
-    bool use_unique = (self->orig_index || other->orig_index);
+    const bool use_unique = (self->orig_index || other->orig_index);
     GSet *pair_test = use_unique ?
                           BLI_gset_new_ex(overlap_hash, overlap_cmp, __func__, overlap_len) :
                           NULL;
     /* simple case, no index remapping */
-    unsigned int i;
+    uint i;
 
     for (i = 0; i < overlap_len; i++) {
       PyObject *item;
@@ -664,8 +663,8 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
   MemArena *pf_arena = NULL;
 
   float(*coords)[3] = NULL;
-  unsigned int(*tris)[3] = NULL;
-  unsigned int coords_len, tris_len;
+  uint(*tris)[3] = NULL;
+  uint coords_len, tris_len;
   float epsilon = 0.0f;
   bool all_triangles = false;
 
@@ -673,12 +672,12 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
   int *orig_index = NULL;
   float(*orig_normal)[3] = NULL;
 
-  unsigned int i;
+  uint i;
   bool valid = true;
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kwargs,
-                                   (char *)"OO|$O&f:BVHTree.FromPolygons",
+                                   "OO|$O&f:BVHTree.FromPolygons",
                                    (char **)keywords,
                                    &py_coords,
                                    &py_tris,
@@ -696,7 +695,7 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
 
   if (valid) {
     PyObject **py_coords_fast_items = PySequence_Fast_ITEMS(py_coords_fast);
-    coords_len = (unsigned int)PySequence_Fast_GET_SIZE(py_coords_fast);
+    coords_len = (uint)PySequence_Fast_GET_SIZE(py_coords_fast);
     coords = MEM_mallocN((size_t)coords_len * sizeof(*coords), __func__);
 
     for (i = 0; i < coords_len; i++) {
@@ -715,14 +714,14 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
   else if (all_triangles) {
     /* all triangles, simple case */
     PyObject **py_tris_fast_items = PySequence_Fast_ITEMS(py_tris_fast);
-    tris_len = (unsigned int)PySequence_Fast_GET_SIZE(py_tris_fast);
+    tris_len = (uint)PySequence_Fast_GET_SIZE(py_tris_fast);
     tris = MEM_mallocN((size_t)tris_len * sizeof(*tris), __func__);
 
     for (i = 0; i < tris_len; i++) {
       PyObject *py_tricoords = py_tris_fast_items[i];
       PyObject *py_tricoords_fast;
       PyObject **py_tricoords_fast_items;
-      unsigned int *tri = tris[i];
+      uint *tri = tris[i];
       int j;
 
       if (!(py_tricoords_fast = PySequence_Fast(py_tricoords, error_prefix))) {
@@ -745,7 +744,7 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
 
       for (j = 0; j < 3; j++) {
         tri[j] = PyC_Long_AsU32(py_tricoords_fast_items[j]);
-        if (UNLIKELY(tri[j] >= (unsigned int)coords_len)) {
+        if (UNLIKELY(tri[j] >= (uint)coords_len)) {
           PyErr_Format(PyExc_ValueError,
                        "%s: index %d must be less than %d",
                        error_prefix,
@@ -763,11 +762,11 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
   }
   else {
     /* ngon support (much more involved) */
-    const unsigned int polys_len = (unsigned int)PySequence_Fast_GET_SIZE(py_tris_fast);
+    const uint polys_len = (uint)PySequence_Fast_GET_SIZE(py_tris_fast);
     struct PolyLink {
       struct PolyLink *next;
-      unsigned int len;
-      unsigned int poly[0];
+      uint len;
+      uint poly[0];
     } *plink_first = NULL, **p_plink_prev = &plink_first, *plink = NULL;
     int poly_index;
 
@@ -779,27 +778,27 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
       PyObject *py_tricoords = PySequence_Fast_GET_ITEM(py_tris_fast, i);
       PyObject *py_tricoords_fast;
       PyObject **py_tricoords_fast_items;
-      unsigned int py_tricoords_len;
-      unsigned int j;
+      uint py_tricoords_len;
+      uint j;
 
       if (!(py_tricoords_fast = PySequence_Fast(py_tricoords, error_prefix))) {
         valid = false;
         break;
       }
 
-      py_tricoords_len = (unsigned int)PySequence_Fast_GET_SIZE(py_tricoords_fast);
+      py_tricoords_len = (uint)PySequence_Fast_GET_SIZE(py_tricoords_fast);
       py_tricoords_fast_items = PySequence_Fast_ITEMS(py_tricoords_fast);
 
       plink = BLI_memarena_alloc(poly_arena,
                                  sizeof(*plink) + (sizeof(int) * (size_t)py_tricoords_len));
 
-      plink->len = (unsigned int)py_tricoords_len;
+      plink->len = (uint)py_tricoords_len;
       *p_plink_prev = plink;
       p_plink_prev = &plink->next;
 
       for (j = 0; j < py_tricoords_len; j++) {
         plink->poly[j] = PyC_Long_AsU32(py_tricoords_fast_items[j]);
-        if (UNLIKELY(plink->poly[j] >= (unsigned int)coords_len)) {
+        if (UNLIKELY(plink->poly[j] >= (uint)coords_len)) {
           PyErr_Format(PyExc_ValueError,
                        "%s: index %d must be less than %d",
                        error_prefix,
@@ -829,8 +828,8 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
 
     for (plink = plink_first, poly_index = 0, i = 0; plink; plink = plink->next, poly_index++) {
       if (plink->len == 3) {
-        unsigned int *tri = tris[i];
-        memcpy(tri, plink->poly, sizeof(unsigned int[3]));
+        uint *tri = tris[i];
+        memcpy(tri, plink->poly, sizeof(uint[3]));
         orig_index[i] = poly_index;
         normal_tri_v3(orig_normal[poly_index], coords[tri[0]], coords[tri[1]], coords[tri[2]]);
         i++;
@@ -841,8 +840,8 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
         const float *co_prev;
         const float *co_curr;
         float axis_mat[3][3];
-        unsigned int(*tris_offset)[3] = &tris[i];
-        unsigned int j;
+        uint(*tris_offset)[3] = &tris[i];
+        uint j;
 
         /* calc normal and setup 'proj_coords' */
         zero_v3(normal);
@@ -864,7 +863,7 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
 
         j = plink->len - 2;
         while (j--) {
-          unsigned int *tri = tris_offset[j];
+          uint *tri = tris_offset[j];
           /* remap to global indices */
           tri[0] = plink->poly[tri[0]];
           tri[1] = plink->poly[tri[1]];
@@ -914,16 +913,15 @@ static PyObject *C_BVHTree_FromPolygons(PyObject *UNUSED(cls), PyObject *args, P
     return bvhtree_CreatePyObject(
         tree, epsilon, coords, coords_len, tris, tris_len, orig_index, orig_normal);
   }
-  else {
-    if (coords) {
-      MEM_freeN(coords);
-    }
-    if (tris) {
-      MEM_freeN(tris);
-    }
 
-    return NULL;
+  if (coords) {
+    MEM_freeN(coords);
   }
+  if (tris) {
+    MEM_freeN(tris);
+  }
+
+  return NULL;
 }
 
 #ifndef MATH_STANDALONE
@@ -942,8 +940,8 @@ static PyObject *C_BVHTree_FromBMesh(PyObject *UNUSED(cls), PyObject *args, PyOb
   BPy_BMesh *py_bm;
 
   float(*coords)[3] = NULL;
-  unsigned int(*tris)[3] = NULL;
-  unsigned int coords_len, tris_len;
+  uint(*tris)[3] = NULL;
+  uint coords_len, tris_len;
   float epsilon = 0.0f;
 
   BMesh *bm;
@@ -951,7 +949,7 @@ static PyObject *C_BVHTree_FromBMesh(PyObject *UNUSED(cls), PyObject *args, PyOb
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kwargs,
-                                   (char *)"O!|$f:BVHTree.FromBMesh",
+                                   "O!|$f:BVHTree.FromBMesh",
                                    (char **)keywords,
                                    &BPy_BMesh_Type,
                                    &py_bm,
@@ -963,24 +961,21 @@ static PyObject *C_BVHTree_FromBMesh(PyObject *UNUSED(cls), PyObject *args, PyOb
 
   /* Get data for tessellation */
   {
-    int tris_len_dummy;
-
-    coords_len = (unsigned int)bm->totvert;
-    tris_len = (unsigned int)poly_to_tri_count(bm->totface, bm->totloop);
+    coords_len = (uint)bm->totvert;
+    tris_len = (uint)poly_to_tri_count(bm->totface, bm->totloop);
 
     coords = MEM_mallocN(sizeof(*coords) * (size_t)coords_len, __func__);
     tris = MEM_mallocN(sizeof(*tris) * (size_t)tris_len, __func__);
 
     looptris = MEM_mallocN(sizeof(*looptris) * (size_t)tris_len, __func__);
 
-    BM_mesh_calc_tessellation(bm, looptris, &tris_len_dummy);
-    BLI_assert(tris_len_dummy == (int)tris_len);
+    BM_mesh_calc_tessellation(bm, looptris);
   }
 
   {
     BMIter iter;
     BVHTree *tree;
-    unsigned int i;
+    uint i;
 
     int *orig_index = NULL;
     float(*orig_normal)[3] = NULL;
@@ -1006,9 +1001,9 @@ static PyObject *C_BVHTree_FromBMesh(PyObject *UNUSED(cls), PyObject *args, PyOb
       for (i = 0; i < tris_len; i++) {
         float co[3][3];
 
-        tris[i][0] = (unsigned int)BM_elem_index_get(looptris[i][0]->v);
-        tris[i][1] = (unsigned int)BM_elem_index_get(looptris[i][1]->v);
-        tris[i][2] = (unsigned int)BM_elem_index_get(looptris[i][2]->v);
+        tris[i][0] = (uint)BM_elem_index_get(looptris[i][0]->v);
+        tris[i][1] = (uint)BM_elem_index_get(looptris[i][1]->v);
+        tris[i][2] = (uint)BM_elem_index_get(looptris[i][2]->v);
 
         copy_v3_v3(co[0], coords[tris[i][0]]);
         copy_v3_v3(co[1], coords[tris[i][1]]);
@@ -1039,7 +1034,7 @@ static Mesh *bvh_get_mesh(const char *funcname,
 {
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
   /* we only need minimum mesh data for topology and vertex locations */
-  CustomData_MeshMasks data_masks = CD_MASK_BAREMESH;
+  const CustomData_MeshMasks data_masks = CD_MASK_BAREMESH;
   const bool use_render = DEG_get_mode(depsgraph) == DAG_EVAL_RENDER;
   *r_free_mesh = false;
 
@@ -1053,55 +1048,48 @@ static Mesh *bvh_get_mesh(const char *funcname,
             funcname);
         return NULL;
       }
-      else {
-        *r_free_mesh = true;
-        return mesh_create_eval_final_render(depsgraph, scene, ob, &data_masks);
-      }
+
+      *r_free_mesh = true;
+      return mesh_create_eval_final(depsgraph, scene, ob, &data_masks);
     }
-    else if (ob_eval != NULL) {
+    if (ob_eval != NULL) {
       if (use_cage) {
         return mesh_get_eval_deform(depsgraph, scene, ob_eval, &data_masks);
       }
-      else {
-        return mesh_get_eval_final(depsgraph, scene, ob_eval, &data_masks);
-      }
+
+      return mesh_get_eval_final(depsgraph, scene, ob_eval, &data_masks);
     }
-    else {
-      PyErr_Format(PyExc_ValueError,
-                   "%s(...): Cannot get evaluated data from given dependency graph / object pair",
-                   funcname);
+
+    PyErr_Format(PyExc_ValueError,
+                 "%s(...): Cannot get evaluated data from given dependency graph / object pair",
+                 funcname);
+    return NULL;
+  }
+
+  /* !use_deform */
+  if (use_render) {
+    if (use_cage) {
+      PyErr_Format(
+          PyExc_ValueError,
+          "%s(...): cage arg is unsupported when dependency graph evaluation mode is RENDER",
+          funcname);
       return NULL;
     }
+
+    *r_free_mesh = true;
+    return mesh_create_eval_no_deform_render(depsgraph, scene, ob, &data_masks);
   }
-  else {
-    /* !use_deform */
-    if (use_render) {
-      if (use_cage) {
-        PyErr_Format(
-            PyExc_ValueError,
-            "%s(...): cage arg is unsupported when dependency graph evaluation mode is RENDER",
-            funcname);
-        return NULL;
-      }
-      else {
-        *r_free_mesh = true;
-        return mesh_create_eval_no_deform_render(depsgraph, scene, ob, &data_masks);
-      }
-    }
-    else {
-      if (use_cage) {
-        PyErr_Format(PyExc_ValueError,
-                     "%s(...): cage arg is unsupported when deform=False and dependency graph "
-                     "evaluation mode is not RENDER",
-                     funcname);
-        return NULL;
-      }
-      else {
-        *r_free_mesh = true;
-        return mesh_create_eval_no_deform(depsgraph, scene, ob, &data_masks);
-      }
-    }
+
+  if (use_cage) {
+    PyErr_Format(PyExc_ValueError,
+                 "%s(...): cage arg is unsupported when deform=False and dependency graph "
+                 "evaluation mode is not RENDER",
+                 funcname);
+    return NULL;
   }
+
+  *r_free_mesh = true;
+  return mesh_create_eval_no_deform(depsgraph, scene, ob, &data_masks);
 }
 
 PyDoc_STRVAR(C_BVHTree_FromObject_doc,
@@ -1136,13 +1124,13 @@ static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyO
   const MLoop *mloop;
 
   float(*coords)[3] = NULL;
-  unsigned int(*tris)[3] = NULL;
-  unsigned int coords_len, tris_len;
+  uint(*tris)[3] = NULL;
+  uint coords_len, tris_len;
   float epsilon = 0.0f;
 
   if (!PyArg_ParseTupleAndKeywords(args,
                                    kwargs,
-                                   (char *)"OO|$O&O&f:BVHTree.FromObject",
+                                   "OO|$O&O&f:BVHTree.FromObject",
                                    (char **)keywords,
                                    &py_ob,
                                    &py_depsgraph,
@@ -1167,8 +1155,8 @@ static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyO
   {
     lt = BKE_mesh_runtime_looptri_ensure(mesh);
 
-    tris_len = (unsigned int)BKE_mesh_runtime_looptri_len(mesh);
-    coords_len = (unsigned int)mesh->totvert;
+    tris_len = (uint)BKE_mesh_runtime_looptri_len(mesh);
+    coords_len = (uint)mesh->totvert;
 
     coords = MEM_mallocN(sizeof(*coords) * (size_t)coords_len, __func__);
     tris = MEM_mallocN(sizeof(*tris) * (size_t)tris_len, __func__);
@@ -1183,7 +1171,7 @@ static PyObject *C_BVHTree_FromObject(PyObject *UNUSED(cls), PyObject *args, PyO
 
   {
     BVHTree *tree;
-    unsigned int i;
+    uint i;
 
     int *orig_index = NULL;
     float(*orig_normal)[3] = NULL;
@@ -1267,7 +1255,7 @@ PyTypeObject PyBVHTree_Type = {
     0,                                        /* tp_itemsize */
     /* methods */
     (destructor)py_bvhtree__tp_dealloc, /* tp_dealloc */
-    NULL,                               /* tp_print */
+    (printfunc)NULL,                    /* tp_print */
     NULL,                               /* tp_getattr */
     NULL,                               /* tp_setattr */
     NULL,                               /* tp_compare */
@@ -1340,7 +1328,7 @@ PyMODINIT_FUNC PyInit_mathutils_bvhtree(void)
     return NULL;
   }
 
-  PyModule_AddObject(m, "BVHTree", (PyObject *)&PyBVHTree_Type);
+  PyModule_AddType(m, &PyBVHTree_Type);
 
   return m;
 }

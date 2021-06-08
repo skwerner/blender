@@ -26,16 +26,21 @@
  */
 
 #include "BLI_alloca.h"
-#include "BLI_utildefines.h"
 #include "BLI_edgehash.h"
+#include "BLI_listbase.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_curve_types.h"
+#include "DNA_scene_types.h"
 
 #include "BKE_displist.h"
+#include "BKE_displist_tangent.h"
 
 #include "GPU_batch.h"
-#include "GPU_extensions.h"
+#include "GPU_capabilities.h"
+
+#include "draw_cache_inline.h"
 
 #include "draw_cache_impl.h" /* own include */
 
@@ -64,11 +69,11 @@ static int dl_tri_len(const DispList *dl)
   return 0;
 }
 
-/* see: displist_get_allverts */
+/* see: displist_vert_coords_alloc */
 static int curve_render_surface_vert_len_get(const ListBase *lb)
 {
   int vert_len = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     vert_len += dl_vert_len(dl);
   }
   return vert_len;
@@ -77,7 +82,7 @@ static int curve_render_surface_vert_len_get(const ListBase *lb)
 static int curve_render_surface_tri_len_get(const ListBase *lb)
 {
   int tri_len = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     tri_len += dl_tri_len(dl);
   }
   return tri_len;
@@ -170,36 +175,49 @@ static int displist_indexbufbuilder_tess_set(
   return v_idx;
 }
 
-void DRW_displist_vertbuf_create_pos_and_nor(ListBase *lb, GPUVertBuf *vbo)
+void DRW_displist_vertbuf_create_pos_and_nor(ListBase *lb, GPUVertBuf *vbo, const Scene *scene)
 {
+  const bool do_hq_normals = (scene->r.perf_flag & SCE_PERF_HQ_NORMALS) != 0 ||
+                             GPU_use_hq_normals_workaround();
+
   static GPUVertFormat format = {0};
+  static GPUVertFormat format_hq = {0};
   static struct {
     uint pos, nor;
+    uint pos_hq, nor_hq;
   } attr_id;
   if (format.attr_len == 0) {
     /* initialize vertex format */
     attr_id.pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     attr_id.nor = GPU_vertformat_attr_add(
         &format, "nor", GPU_COMP_I10, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    /* initialize vertex format */
+    attr_id.pos_hq = GPU_vertformat_attr_add(&format_hq, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    attr_id.nor_hq = GPU_vertformat_attr_add(
+        &format_hq, "nor", GPU_COMP_I16, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
   }
 
-  GPU_vertbuf_init_with_format(vbo, &format);
+  uint pos_id = do_hq_normals ? attr_id.pos_hq : attr_id.pos;
+  uint nor_id = do_hq_normals ? attr_id.nor_hq : attr_id.nor;
+
+  GPU_vertbuf_init_with_format(vbo, do_hq_normals ? &format_hq : &format);
   GPU_vertbuf_data_alloc(vbo, curve_render_surface_vert_len_get(lb));
 
   BKE_displist_normals_add(lb);
 
   int vbo_len_used = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     const bool ndata_is_single = dl->type == DL_INDEX3;
     if (ELEM(dl->type, DL_INDEX3, DL_INDEX4, DL_SURF)) {
       const float *fp_co = dl->verts;
       const float *fp_no = dl->nors;
       const int vbo_end = vbo_len_used + dl_vert_len(dl);
       while (vbo_len_used < vbo_end) {
-        GPU_vertbuf_attr_set(vbo, attr_id.pos, vbo_len_used, fp_co);
+        GPU_vertbuf_attr_set(vbo, pos_id, vbo_len_used, fp_co);
         if (fp_no) {
-          GPUPackedNormal vnor_pack = GPU_normal_convert_i10_v3(fp_no);
-          GPU_vertbuf_attr_set(vbo, attr_id.nor, vbo_len_used, &vnor_pack);
+          GPUNormal vnor_pack;
+          GPU_normal_convert_v3(&vnor_pack, fp_no, do_hq_normals);
+          GPU_vertbuf_attr_set(vbo, nor_id, vbo_len_used, &vnor_pack);
           if (ndata_is_single == false) {
             fp_no += 3;
           }
@@ -211,7 +229,7 @@ void DRW_displist_vertbuf_create_pos_and_nor(ListBase *lb, GPUVertBuf *vbo)
   }
 }
 
-void DRW_displist_vertbuf_create_wiredata(ListBase *lb, GPUVertBuf *vbo)
+void DRW_vertbuf_create_wiredata(GPUVertBuf *vbo, const int vert_len)
 {
   static GPUVertFormat format = {0};
   static struct {
@@ -229,21 +247,25 @@ void DRW_displist_vertbuf_create_wiredata(ListBase *lb, GPUVertBuf *vbo)
     }
   }
 
-  int vbo_len_used = curve_render_surface_vert_len_get(lb);
-
   GPU_vertbuf_init_with_format(vbo, &format);
-  GPU_vertbuf_data_alloc(vbo, vbo_len_used);
+  GPU_vertbuf_data_alloc(vbo, vert_len);
 
-  if (vbo->format.stride == 1) {
-    memset(vbo->data, 0xFF, (size_t)vbo_len_used);
+  if (GPU_vertbuf_get_format(vbo)->stride == 1) {
+    memset(GPU_vertbuf_get_data(vbo), 0xFF, (size_t)vert_len);
   }
   else {
     GPUVertBufRaw wd_step;
     GPU_vertbuf_attr_get_raw_data(vbo, attr_id.wd, &wd_step);
-    for (int i = 0; i < vbo_len_used; i++) {
+    for (int i = 0; i < vert_len; i++) {
       *((float *)GPU_vertbuf_raw_step(&wd_step)) = 1.0f;
     }
   }
+}
+
+void DRW_displist_vertbuf_create_wiredata(ListBase *lb, GPUVertBuf *vbo)
+{
+  const int vert_len = curve_render_surface_vert_len_get(lb);
+  DRW_vertbuf_create_wiredata(vbo, vert_len);
 }
 
 void DRW_displist_indexbuf_create_triangles_in_order(ListBase *lb, GPUIndexBuf *ibo)
@@ -255,7 +277,7 @@ void DRW_displist_indexbuf_create_triangles_in_order(ListBase *lb, GPUIndexBuf *
   GPU_indexbuf_init(&elb, GPU_PRIM_TRIS, tri_len, vert_len);
 
   int ofs = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     displist_indexbufbuilder_set((SetTriIndicesFn *)GPU_indexbuf_add_tri_verts,
                                  (SetTriIndicesFn *)GPU_indexbuf_add_tri_verts,
                                  &elb,
@@ -282,7 +304,7 @@ void DRW_displist_indexbuf_create_triangles_loop_split_by_material(ListBase *lb,
 
   /* calc each index buffer builder */
   uint v_idx = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     v_idx = displist_indexbufbuilder_tess_set((SetTriIndicesFn *)GPU_indexbuf_add_tri_verts,
                                               (SetTriIndicesFn *)GPU_indexbuf_add_tri_verts,
                                               &elb[dl->col],
@@ -320,7 +342,7 @@ void DRW_displist_indexbuf_create_lines_in_order(ListBase *lb, GPUIndexBuf *ibo)
   GPU_indexbuf_init(&elb, GPU_PRIM_LINES, tri_len * 3, vert_len);
 
   int ofs = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     displist_indexbufbuilder_set(
         set_overlay_wires_tri_indices, set_overlay_wires_quad_tri_indices, &elb, dl, ofs);
     ofs += dl_vert_len(dl);
@@ -343,6 +365,8 @@ static void surf_uv_quad(const DispList *dl, const uint quad[4], float r_uv[4][2
   }
 
   for (int i = 0; i < 4; i++) {
+    /* Note: For some reason the shading U and V are swapped compared to the
+     * one described in the surface format. */
     /* find uv based on vertex index into grid array */
     r_uv[i][0] = (quad[i] / dl->nr) / (float)orco_sizev;
     r_uv[i][1] = (quad[i] % dl->nr) / (float)orco_sizeu;
@@ -357,44 +381,122 @@ static void surf_uv_quad(const DispList *dl, const uint quad[4], float r_uv[4][2
   }
 }
 
+static void displist_vertbuf_attr_set_nor(GPUVertBufRaw *step,
+                                          const GPUNormal *n1,
+                                          const GPUNormal *n2,
+                                          const GPUNormal *n3,
+                                          const bool do_hq_normals)
+{
+  if (do_hq_normals) {
+    copy_v3_v3_short(GPU_vertbuf_raw_step(step), n1->high);
+    copy_v3_v3_short(GPU_vertbuf_raw_step(step), n2->high);
+    copy_v3_v3_short(GPU_vertbuf_raw_step(step), n3->high);
+  }
+  else {
+    *(GPUPackedNormal *)GPU_vertbuf_raw_step(step) = n1->low;
+    *(GPUPackedNormal *)GPU_vertbuf_raw_step(step) = n2->low;
+    *(GPUPackedNormal *)GPU_vertbuf_raw_step(step) = n3->low;
+  }
+}
+
 static void displist_vertbuf_attr_set_tri_pos_nor_uv(GPUVertBufRaw *pos_step,
                                                      GPUVertBufRaw *nor_step,
                                                      GPUVertBufRaw *uv_step,
+                                                     GPUVertBufRaw *tan_step,
                                                      const float v1[3],
                                                      const float v2[3],
                                                      const float v3[3],
-                                                     const GPUPackedNormal *n1,
-                                                     const GPUPackedNormal *n2,
-                                                     const GPUPackedNormal *n3,
+                                                     const GPUNormal *n1,
+                                                     const GPUNormal *n2,
+                                                     const GPUNormal *n3,
+                                                     const GPUNormal *t1,
+                                                     const GPUNormal *t2,
+                                                     const GPUNormal *t3,
                                                      const float uv1[2],
                                                      const float uv2[2],
-                                                     const float uv3[2])
+                                                     const float uv3[2],
+                                                     const bool do_hq_normals)
 {
   if (pos_step->size != 0) {
     copy_v3_v3(GPU_vertbuf_raw_step(pos_step), v1);
     copy_v3_v3(GPU_vertbuf_raw_step(pos_step), v2);
     copy_v3_v3(GPU_vertbuf_raw_step(pos_step), v3);
-
-    *(GPUPackedNormal *)GPU_vertbuf_raw_step(nor_step) = *n1;
-    *(GPUPackedNormal *)GPU_vertbuf_raw_step(nor_step) = *n2;
-    *(GPUPackedNormal *)GPU_vertbuf_raw_step(nor_step) = *n3;
+    displist_vertbuf_attr_set_nor(nor_step, n1, n2, n3, do_hq_normals);
   }
-
   if (uv_step->size != 0) {
     normal_float_to_short_v2(GPU_vertbuf_raw_step(uv_step), uv1);
     normal_float_to_short_v2(GPU_vertbuf_raw_step(uv_step), uv2);
     normal_float_to_short_v2(GPU_vertbuf_raw_step(uv_step), uv3);
   }
+  if (tan_step->size != 0) {
+    displist_vertbuf_attr_set_nor(tan_step, t1, t2, t3, do_hq_normals);
+  }
 }
 
-void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
-                                                         GPUVertBuf *vbo_pos_nor,
-                                                         GPUVertBuf *vbo_uv)
+#define SURFACE_QUAD_ITER_BEGIN(dl) \
+  { \
+    uint quad[4]; \
+    int quad_index = 0; \
+    int max_v = (dl->flag & DL_CYCL_V) ? dl->parts : (dl->parts - 1); \
+    int max_u = (dl->flag & DL_CYCL_U) ? dl->nr : (dl->nr - 1); \
+    for (int v = 0; v < max_v; v++) { \
+      quad[3] = dl->nr * v; \
+      quad[0] = quad[3] + 1; \
+      quad[2] = quad[3] + dl->nr; \
+      quad[1] = quad[0] + dl->nr; \
+      /* Cyclic wrap */ \
+      if (v == dl->parts - 1) { \
+        quad[1] -= dl->parts * dl->nr; \
+        quad[2] -= dl->parts * dl->nr; \
+      } \
+      for (int u = 0; u < max_u; u++, quad_index++) { \
+        /* Cyclic wrap */ \
+        if (u == dl->nr - 1) { \
+          quad[0] -= dl->nr; \
+          quad[1] -= dl->nr; \
+        }
+
+#define SURFACE_QUAD_ITER_END \
+  quad[2] = quad[1]; \
+  quad[1]++; \
+  quad[3] = quad[0]; \
+  quad[0]++; \
+  } \
+  } \
+  }
+
+static void displist_surf_fnors_ensure(const DispList *dl, float (**fnors)[3])
 {
+  int u_len = dl->nr - ((dl->flag & DL_CYCL_U) ? 0 : 1);
+  int v_len = dl->parts - ((dl->flag & DL_CYCL_V) ? 0 : 1);
+  const float(*verts)[3] = (const float(*)[3])dl->verts;
+  float(*nor_flat)[3] = MEM_mallocN(sizeof(float[3]) * u_len * v_len, __func__);
+  *fnors = nor_flat;
+
+  SURFACE_QUAD_ITER_BEGIN (dl) {
+    normal_quad_v3(*nor_flat, verts[quad[0]], verts[quad[1]], verts[quad[2]], verts[quad[3]]);
+    nor_flat++;
+  }
+  SURFACE_QUAD_ITER_END
+}
+
+void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv_and_tan(ListBase *lb,
+                                                                 GPUVertBuf *vbo_pos_nor,
+                                                                 GPUVertBuf *vbo_uv,
+                                                                 GPUVertBuf *vbo_tan,
+                                                                 const Scene *scene)
+{
+  const bool do_hq_normals = (scene->r.perf_flag & SCE_PERF_HQ_NORMALS) != 0 ||
+                             GPU_use_hq_normals_workaround();
+
   static GPUVertFormat format_pos_nor = {0};
+  static GPUVertFormat format_pos_nor_hq = {0};
   static GPUVertFormat format_uv = {0};
+  static GPUVertFormat format_tan = {0};
+  static GPUVertFormat format_tan_hq = {0};
   static struct {
-    uint pos, nor, uv;
+    uint pos, nor, uv, tan;
+    uint pos_hq, nor_hq, tan_hq;
   } attr_id;
   if (format_pos_nor.attr_len == 0) {
     /* initialize vertex format */
@@ -402,43 +504,89 @@ void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
         &format_pos_nor, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
     attr_id.nor = GPU_vertformat_attr_add(
         &format_pos_nor, "nor", GPU_COMP_I10, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
-    GPU_vertformat_triple_load(&format_pos_nor);
+    attr_id.pos_hq = GPU_vertformat_attr_add(
+        &format_pos_nor_hq, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
+    attr_id.nor_hq = GPU_vertformat_attr_add(
+        &format_pos_nor_hq, "nor", GPU_COMP_I16, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
+
     /* UVs are in [0..1] range. We can compress them. */
     attr_id.uv = GPU_vertformat_attr_add(
         &format_uv, "u", GPU_COMP_I16, 2, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    GPU_vertformat_alias_add(&format_uv, "au");
+
+    attr_id.tan = GPU_vertformat_attr_add(
+        &format_tan, "t", GPU_COMP_I10, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    GPU_vertformat_alias_add(&format_tan, "at");
+    attr_id.tan_hq = GPU_vertformat_attr_add(
+        &format_tan_hq, "t", GPU_COMP_I16, 3, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    GPU_vertformat_alias_add(&format_tan_hq, "at");
   }
+  uint pos_id = do_hq_normals ? attr_id.pos_hq : attr_id.pos;
+  uint nor_id = do_hq_normals ? attr_id.nor_hq : attr_id.nor;
+  uint tan_id = do_hq_normals ? attr_id.tan_hq : attr_id.tan;
 
   int vbo_len_capacity = curve_render_surface_tri_len_get(lb) * 3;
 
   GPUVertBufRaw pos_step = {0};
   GPUVertBufRaw nor_step = {0};
   GPUVertBufRaw uv_step = {0};
+  GPUVertBufRaw tan_step = {0};
+
+#define DRW_TEST_ASSIGN_VBO(v) (v = (DRW_vbo_requested(v) ? (v) : NULL))
 
   if (DRW_TEST_ASSIGN_VBO(vbo_pos_nor)) {
-    GPU_vertbuf_init_with_format(vbo_pos_nor, &format_pos_nor);
+    GPU_vertbuf_init_with_format(vbo_pos_nor,
+                                 do_hq_normals ? &format_pos_nor_hq : &format_pos_nor);
     GPU_vertbuf_data_alloc(vbo_pos_nor, vbo_len_capacity);
-    GPU_vertbuf_attr_get_raw_data(vbo_pos_nor, attr_id.pos, &pos_step);
-    GPU_vertbuf_attr_get_raw_data(vbo_pos_nor, attr_id.nor, &nor_step);
+    GPU_vertbuf_attr_get_raw_data(vbo_pos_nor, pos_id, &pos_step);
+    GPU_vertbuf_attr_get_raw_data(vbo_pos_nor, nor_id, &nor_step);
   }
   if (DRW_TEST_ASSIGN_VBO(vbo_uv)) {
     GPU_vertbuf_init_with_format(vbo_uv, &format_uv);
     GPU_vertbuf_data_alloc(vbo_uv, vbo_len_capacity);
     GPU_vertbuf_attr_get_raw_data(vbo_uv, attr_id.uv, &uv_step);
   }
+  if (DRW_TEST_ASSIGN_VBO(vbo_tan)) {
+    GPU_vertbuf_init_with_format(vbo_tan, do_hq_normals ? &format_tan_hq : &format_tan);
+    GPU_vertbuf_data_alloc(vbo_tan, vbo_len_capacity);
+    GPU_vertbuf_attr_get_raw_data(vbo_tan, tan_id, &tan_step);
+  }
+
+#undef DRW_TEST_ASSIGN_VBO
 
   BKE_displist_normals_add(lb);
 
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     const bool is_smooth = (dl->rt & CU_SMOOTH) != 0;
     if (ELEM(dl->type, DL_INDEX3, DL_INDEX4, DL_SURF)) {
-      const float(*verts)[3] = (float(*)[3])dl->verts;
-      const float(*nors)[3] = (float(*)[3])dl->nors;
+      const float(*verts)[3] = (const float(*)[3])dl->verts;
+      const float(*nors)[3] = (const float(*)[3])dl->nors;
       const int *idx = dl->index;
       float uv[4][2];
 
       if (dl->type == DL_INDEX3) {
         /* Currently 'DL_INDEX3' is always a flat surface with a single normal. */
-        const GPUPackedNormal pnor = GPU_normal_convert_i10_v3(dl->nors);
+        GPUNormal tangent_packed;
+        GPUNormal normal_packed;
+        GPU_normal_convert_v3(&normal_packed, dl->nors, do_hq_normals);
+        if (vbo_tan) {
+          float tan[4];
+          float(*tan_ptr)[4] = &tan;
+          BKE_displist_tangent_calc(dl, NULL, &tan_ptr);
+          GPU_normal_convert_v3(&tangent_packed, tan, do_hq_normals);
+          normal_float_to_short_v3(tangent_packed.high, tan);
+        }
+        else {
+          if (do_hq_normals) {
+            tangent_packed.high[0] = 0;
+            tangent_packed.high[1] = 0;
+            tangent_packed.high[2] = 0;
+          }
+          else {
+            tangent_packed.low = (GPUPackedNormal){0, 0, 0, 1};
+          }
+        }
+
         const float x_max = (float)(dl->nr - 1);
         uv[0][1] = uv[1][1] = uv[2][1] = 0.0f;
         const int i_end = dl->parts;
@@ -452,97 +600,98 @@ void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
           displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
                                                    &nor_step,
                                                    &uv_step,
+                                                   &tan_step,
                                                    verts[idx[0]],
                                                    verts[idx[2]],
                                                    verts[idx[1]],
-                                                   &pnor,
-                                                   &pnor,
-                                                   &pnor,
+                                                   &normal_packed,
+                                                   &normal_packed,
+                                                   &normal_packed,
+                                                   &tangent_packed,
+                                                   &tangent_packed,
+                                                   &tangent_packed,
                                                    uv[0],
                                                    uv[2],
-                                                   uv[1]);
+                                                   uv[1],
+                                                   do_hq_normals);
         }
       }
       else if (dl->type == DL_SURF) {
-        uint quad[4];
-        for (int a = 0; a < dl->parts; a++) {
-          if ((dl->flag & DL_CYCL_V) == 0 && a == dl->parts - 1) {
-            break;
-          }
+        float(*tangents)[4] = NULL;
+        float(*fnors)[3] = NULL;
 
-          int b;
-          if (dl->flag & DL_CYCL_U) {
-            quad[0] = dl->nr * a;
-            quad[3] = quad[0] + dl->nr - 1;
-            quad[1] = quad[0] + dl->nr;
-            quad[2] = quad[3] + dl->nr;
-            b = 0;
+        if (!is_smooth) {
+          displist_surf_fnors_ensure(dl, &fnors);
+        }
+
+        if (vbo_tan) {
+          BKE_displist_tangent_calc(dl, fnors, &tangents);
+        }
+
+        SURFACE_QUAD_ITER_BEGIN (dl) {
+          if (vbo_uv) {
+            surf_uv_quad(dl, quad, uv);
+          }
+          GPUNormal pnors_quad[4];
+          GPUNormal ptans_quad[4];
+
+          if (is_smooth) {
+            for (int j = 0; j < 4; j++) {
+              GPU_normal_convert_v3(&pnors_quad[j], nors[quad[j]], do_hq_normals);
+            }
           }
           else {
-            quad[3] = dl->nr * a;
-            quad[0] = quad[3] + 1;
-            quad[2] = quad[3] + dl->nr;
-            quad[1] = quad[0] + dl->nr;
-            b = 1;
-          }
-          if ((dl->flag & DL_CYCL_V) && a == dl->parts - 1) {
-            quad[1] -= dl->parts * dl->nr;
-            quad[2] -= dl->parts * dl->nr;
+            GPU_normal_convert_v3(&pnors_quad[0], fnors[quad_index], do_hq_normals);
+            pnors_quad[1] = pnors_quad[2] = pnors_quad[3] = pnors_quad[0];
           }
 
-          for (; b < dl->nr; b++) {
-            if (vbo_uv) {
-              surf_uv_quad(dl, quad, uv);
+          if (vbo_tan) {
+            for (int j = 0; j < 4; j++) {
+              float *tan = tangents[quad_index * 4 + j];
+              GPU_normal_convert_v3(&ptans_quad[j], tan, do_hq_normals);
             }
-
-            GPUPackedNormal pnors_quad[4];
-            if (is_smooth) {
-              for (int j = 0; j < 4; j++) {
-                pnors_quad[j] = GPU_normal_convert_i10_v3(nors[quad[j]]);
-              }
-            }
-            else {
-              float nor_flat[3];
-              normal_quad_v3(
-                  nor_flat, verts[quad[0]], verts[quad[1]], verts[quad[2]], verts[quad[3]]);
-              pnors_quad[0] = GPU_normal_convert_i10_v3(nor_flat);
-              pnors_quad[1] = pnors_quad[0];
-              pnors_quad[2] = pnors_quad[0];
-              pnors_quad[3] = pnors_quad[0];
-            }
-
-            displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
-                                                     &nor_step,
-                                                     &uv_step,
-                                                     verts[quad[2]],
-                                                     verts[quad[0]],
-                                                     verts[quad[1]],
-                                                     &pnors_quad[2],
-                                                     &pnors_quad[0],
-                                                     &pnors_quad[1],
-                                                     uv[2],
-                                                     uv[0],
-                                                     uv[1]);
-
-            displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
-                                                     &nor_step,
-                                                     &uv_step,
-                                                     verts[quad[0]],
-                                                     verts[quad[2]],
-                                                     verts[quad[3]],
-                                                     &pnors_quad[0],
-                                                     &pnors_quad[2],
-                                                     &pnors_quad[3],
-                                                     uv[0],
-                                                     uv[2],
-                                                     uv[3]);
-
-            quad[2] = quad[1];
-            quad[1]++;
-            quad[3] = quad[0];
-            quad[0]++;
           }
+
+          displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
+                                                   &nor_step,
+                                                   &uv_step,
+                                                   &tan_step,
+                                                   verts[quad[2]],
+                                                   verts[quad[0]],
+                                                   verts[quad[1]],
+                                                   &pnors_quad[2],
+                                                   &pnors_quad[0],
+                                                   &pnors_quad[1],
+                                                   &ptans_quad[2],
+                                                   &ptans_quad[0],
+                                                   &ptans_quad[1],
+                                                   uv[2],
+                                                   uv[0],
+                                                   uv[1],
+                                                   do_hq_normals);
+
+          displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
+                                                   &nor_step,
+                                                   &uv_step,
+                                                   &tan_step,
+                                                   verts[quad[0]],
+                                                   verts[quad[2]],
+                                                   verts[quad[3]],
+                                                   &pnors_quad[0],
+                                                   &pnors_quad[2],
+                                                   &pnors_quad[3],
+                                                   &ptans_quad[0],
+                                                   &ptans_quad[2],
+                                                   &ptans_quad[3],
+                                                   uv[0],
+                                                   uv[2],
+                                                   uv[3],
+                                                   do_hq_normals);
         }
+        SURFACE_QUAD_ITER_END
+
+        MEM_SAFE_FREE(tangents);
+        MEM_SAFE_FREE(fnors);
       }
       else {
         BLI_assert(dl->type == DL_INDEX4);
@@ -553,11 +702,12 @@ void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
         for (int i = 0; i < i_end; i++, idx += 4) {
           const bool is_tri = idx[2] != idx[3];
 
-          GPUPackedNormal pnors_idx[4];
+          GPUNormal ptan = {0};
+          GPUNormal pnors_idx[4];
           if (is_smooth) {
             int idx_len = is_tri ? 3 : 4;
             for (int j = 0; j < idx_len; j++) {
-              pnors_idx[j] = GPU_normal_convert_i10_v3(nors[idx[j]]);
+              GPU_normal_convert_v3(&pnors_idx[j], nors[idx[j]], do_hq_normals);
             }
           }
           else {
@@ -568,38 +718,46 @@ void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
             else {
               normal_quad_v3(nor_flat, verts[idx[0]], verts[idx[1]], verts[idx[2]], verts[idx[3]]);
             }
-            pnors_idx[0] = GPU_normal_convert_i10_v3(nor_flat);
-            pnors_idx[1] = pnors_idx[0];
-            pnors_idx[2] = pnors_idx[0];
-            pnors_idx[3] = pnors_idx[0];
+            GPU_normal_convert_v3(&pnors_idx[0], nor_flat, do_hq_normals);
+            pnors_idx[1] = pnors_idx[2] = pnors_idx[3] = pnors_idx[0];
           }
 
           displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
                                                    &nor_step,
                                                    &uv_step,
+                                                   &tan_step,
                                                    verts[idx[0]],
                                                    verts[idx[2]],
                                                    verts[idx[1]],
                                                    &pnors_idx[0],
                                                    &pnors_idx[2],
                                                    &pnors_idx[1],
+                                                   &ptan,
+                                                   &ptan,
+                                                   &ptan,
                                                    uv[0],
                                                    uv[2],
-                                                   uv[1]);
+                                                   uv[1],
+                                                   do_hq_normals);
 
-          if (idx[2] != idx[3]) {
+          if (is_tri) {
             displist_vertbuf_attr_set_tri_pos_nor_uv(&pos_step,
                                                      &nor_step,
                                                      &uv_step,
+                                                     &tan_step,
                                                      verts[idx[2]],
                                                      verts[idx[0]],
                                                      verts[idx[3]],
                                                      &pnors_idx[2],
                                                      &pnors_idx[0],
                                                      &pnors_idx[3],
+                                                     &ptan,
+                                                     &ptan,
+                                                     &ptan,
                                                      uv[2],
                                                      uv[0],
-                                                     uv[3]);
+                                                     uv[3],
+                                                     do_hq_normals);
           }
         }
       }
@@ -620,7 +778,7 @@ void DRW_displist_vertbuf_create_loop_pos_and_nor_and_uv(ListBase *lb,
   }
 }
 
-/* Edge detection/adjecency */
+/* Edge detection/adjacency. */
 #define NO_EDGE INT_MAX
 static void set_edge_adjacency_lines_indices(
     EdgeHash *eh, GPUIndexBufBuilder *elb, bool *r_is_manifold, uint v1, uint v2, uint v3)
@@ -683,7 +841,7 @@ void DRW_displist_indexbuf_create_edges_adjacency_lines(struct ListBase *lb,
   /* pack values to pass to `set_edges_adjacency_lines_indices` function. */
   void *thunk[3] = {&elb, eh, r_is_manifold};
   int v_idx = 0;
-  for (const DispList *dl = lb->first; dl; dl = dl->next) {
+  LISTBASE_FOREACH (const DispList *, dl, lb) {
     displist_indexbufbuilder_set((SetTriIndicesFn *)set_edges_adjacency_lines_indices,
                                  (SetTriIndicesFn *)set_edges_adjacency_lines_indices,
                                  thunk,
@@ -692,7 +850,7 @@ void DRW_displist_indexbuf_create_edges_adjacency_lines(struct ListBase *lb,
     v_idx += dl_vert_len(dl);
   }
 
-  /* Create edges for remaning non manifold edges. */
+  /* Create edges for remaining non manifold edges. */
   EdgeHashIterator *ehi;
   for (ehi = BLI_edgehashIterator_new(eh); BLI_edgehashIterator_isDone(ehi) == false;
        BLI_edgehashIterator_step(ehi)) {

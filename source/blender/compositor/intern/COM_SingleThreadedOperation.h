@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SINGLETHREADEDOPERATION_H__
-#define __COM_SINGLETHREADEDOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class SingleThreadedOperation : public NodeOperation {
  private:
@@ -27,34 +29,30 @@ class SingleThreadedOperation : public NodeOperation {
  protected:
   inline bool isCached()
   {
-    return this->m_cachedInstance != NULL;
+    return this->m_cachedInstance != nullptr;
   }
 
  public:
   SingleThreadedOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
 
   virtual MemoryBuffer *createMemoryBuffer(rcti *rect) = 0;
-
-  int isSingleThreaded()
-  {
-    return true;
-  }
 };
-#endif
+
+}  // namespace blender::compositor

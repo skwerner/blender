@@ -18,24 +18,31 @@
 
 class ExecutionGroup;
 
-#ifndef __COM_EXECUTIONSYSTEM_H__
-#define __COM_EXECUTIONSYSTEM_H__
+#pragma once
+
+#include "BKE_text.h"
+
+#include "COM_ExecutionGroup.h"
+#include "COM_Node.h"
+#include "COM_NodeOperation.h"
+#include "COM_SharedOperationBuffers.h"
 
 #include "DNA_color_types.h"
 #include "DNA_node_types.h"
-#include "COM_Node.h"
-#include "BKE_text.h"
-#include "COM_ExecutionGroup.h"
-#include "COM_NodeOperation.h"
+
+#include "BLI_vector.hh"
+
+namespace blender::compositor {
 
 /**
  * \page execution Execution model
- * In order to get to an efficient model for execution, several steps are being done. these steps are explained below.
+ * In order to get to an efficient model for execution, several steps are being done. these steps
+ * are explained below.
  *
- * \section EM_Step1 Step 1: translating blender node system to the new compsitor system
- * Blenders node structure is based on C structs (DNA). These structs are not efficient in the new architecture.
- * We want to use classes in order to simplify the system.
- * during this step the blender node_tree is evaluated and converted to a CPP node system.
+ * \section EM_Step1 Step 1: translating blender node system to the new compositor system
+ * Blenders node structure is based on C structs (DNA). These structs are not efficient in the new
+ * architecture. We want to use classes in order to simplify the system. during this step the
+ * blender node_tree is evaluated and converted to a CPP node system.
  *
  * \see ExecutionSystem
  * \see Converter.convert
@@ -43,44 +50,50 @@ class ExecutionGroup;
  *
  * \section EM_Step2 Step2: translating nodes to operations
  * Ungrouping the GroupNodes. Group nodes are node_tree's in node_tree's.
- * The new system only supports a single level of node_tree. We will 'flatten' the system in a single level.
+ * The new system only supports a single level of node_tree.
+ * We will 'flatten' the system in a single level.
  * \see GroupNode
  * \see ExecutionSystemHelper.ungroup
  *
- * Every node has the ability to convert itself to operations. The node itself is responsible to create a correct
- * NodeOperation setup based on its internal settings.
- * Most Node only need to convert it to its NodeOperation. Like a ColorToBWNode doesn't check anything,
- * but replaces itself with a ConvertColorToBWOperation.
- * More complex nodes can use different NodeOperation based on settings; like MixNode.
- * based on the selected Mixtype a different operation will be used.
- * for more information see the page about creating new Nodes. [@subpage newnode]
+ * Every node has the ability to convert itself to operations. The node itself is responsible to
+ * create a correct NodeOperation setup based on its internal settings. Most Node only need to
+ * convert it to its NodeOperation. Like a ColorToBWNode doesn't check anything, but replaces
+ * itself with a ConvertColorToBWOperation. More complex nodes can use different NodeOperation
+ * based on settings; like MixNode. based on the selected Mixtype a different operation will be
+ * used. for more information see the page about creating new Nodes. [@subpage newnode]
  *
  * \see ExecutionSystem.convertToOperations
  * \see Node.convertToOperations
  * \see NodeOperation base class for all operations in the system
  *
  * \section EM_Step3 Step3: add additional conversions to the operation system
- *   - Data type conversions: the system has 3 data types COM_DT_VALUE, COM_DT_VECTOR, COM_DT_COLOR.
- *     The user can connect a Value socket to a color socket.
- *     As values are ordered differently than colors a conversion happens.
+ *   - Data type conversions: the system has 3 data types DataType::Value, DataType::Vector,
+ * DataType::Color. The user can connect a Value socket to a color socket. As values are ordered
+ * differently than colors a conversion happens.
  *
  *   - Image size conversions: the system can automatically convert when resolutions do not match.
  *     An NodeInput has a resize mode. This can be any of the following settings.
- *     - [@ref InputSocketResizeMode.COM_SC_CENTER]: The center of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_FIT_WIDTH]: The width of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_FIT_HEIGHT]: the height of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_FIT]: The width, or the height of both images are aligned to make sure that it fits.
- *     - [@ref InputSocketResizeMode.COM_SC_STRETCH]: The width and the height of both images are aligned
- *     - [@ref InputSocketResizeMode.COM_SC_NO_RESIZE]: bottom left of the images are aligned.
+ *     - [@ref InputSocketResizeMode.ResizeMode::Center]:
+ *       The center of both images are aligned
+ *     - [@ref InputSocketResizeMode.ResizeMode::FitWidth]:
+ *       The width of both images are aligned
+ *     - [@ref InputSocketResizeMode.ResizeMode::FitHeight]:
+ *       The height of both images are aligned
+ *     - [@ref InputSocketResizeMode.ResizeMode::FitAny]:
+ *       The width, or the height of both images are aligned to make sure that it fits.
+ *     - [@ref InputSocketResizeMode.ResizeMode::Stretch]:
+ *       The width and the height of both images are aligned.
+ *     - [@ref InputSocketResizeMode.ResizeMode::None]:
+ *       Bottom left of the images are aligned.
  *
- * \see Converter.convertDataType Datatype conversions
+ * \see COM_convert_data_type Datatype conversions
  * \see Converter.convertResolution Image size conversions
  *
  * \section EM_Step4 Step4: group operations in executions groups
  * ExecutionGroup are groups of operations that are calculated as being one bigger operation.
  * All operations will be part of an ExecutionGroup.
- * Complex nodes will be added to separate groups. Between ExecutionGroup's the data will be stored in MemoryBuffers.
- * ReadBufferOperations and WriteBufferOperations are added where needed.
+ * Complex nodes will be added to separate groups. Between ExecutionGroup's the data will be stored
+ * in MemoryBuffers. ReadBufferOperations and WriteBufferOperations are added where needed.
  *
  * <pre>
  *
@@ -103,15 +116,20 @@ class ExecutionGroup;
  * \see ExecutionGroup class representing the ExecutionGroup
  */
 
+/* Forward declarations. */
+class ExecutionModel;
+
 /**
  * \brief the ExecutionSystem contains the whole compositor tree.
  */
 class ExecutionSystem {
- public:
-  typedef std::vector<NodeOperation *> Operations;
-  typedef std::vector<ExecutionGroup *> Groups;
-
  private:
+  /**
+   * Contains operations active buffers data. Buffers will be disposed once reader operations are
+   * finished.
+   */
+  SharedOperationBuffers active_buffers_;
+
   /**
    * \brief the context used during execution
    */
@@ -120,25 +138,19 @@ class ExecutionSystem {
   /**
    * \brief vector of operations
    */
-  Operations m_operations;
+  Vector<NodeOperation *> m_operations;
 
   /**
    * \brief vector of groups
    */
-  Groups m_groups;
-
- private:  //methods
-  /**
-   * find all execution group with output nodes
-   */
-  void findOutputExecutionGroup(vector<ExecutionGroup *> *result,
-                                CompositorPriority priority) const;
+  Vector<ExecutionGroup *> m_groups;
 
   /**
-   * find all execution group with output nodes
+   * Active execution model implementation.
    */
-  void findOutputExecutionGroup(vector<ExecutionGroup *> *result) const;
+  ExecutionModel *execution_model_;
 
+ private:  // methods
  public:
   /**
    * \brief Create a new ExecutionSystem and initialize it with the
@@ -161,7 +173,8 @@ class ExecutionSystem {
    */
   ~ExecutionSystem();
 
-  void set_operations(const Operations &operations, const Groups &groups);
+  void set_operations(const Vector<NodeOperation *> &operations,
+                      const Vector<ExecutionGroup *> &groups);
 
   /**
    * \brief execute this system
@@ -179,9 +192,14 @@ class ExecutionSystem {
     return this->m_context;
   }
 
- private:
-  void executeGroups(CompositorPriority priority);
+  SharedOperationBuffers &get_active_buffers()
+  {
+    return active_buffers_;
+  }
 
+  void execute_work(const rcti &work_rect, std::function<void(const rcti &split_rect)> work_func);
+
+ private:
   /* allow the DebugInfo class to look at internals */
   friend class DebugInfo;
 
@@ -190,4 +208,4 @@ class ExecutionSystem {
 #endif
 };
 
-#endif /* __COM_EXECUTIONSYSTEM_H__ */
+}  // namespace blender::compositor

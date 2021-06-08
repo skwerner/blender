@@ -21,20 +21,21 @@
 #include "BLI_math.h"
 #include "BLI_task.h"
 
-#include "DNA_defs.h"
 #include "DNA_customdata_types.h"
+#include "DNA_defs.h"
 #include "DNA_meshdata_types.h"
 
-#include "BKE_mesh.h"
-#include "BKE_mesh_tangent.h" /* for utility functions */
 #include "BKE_editmesh.h"
 #include "BKE_editmesh_tangent.h"
+#include "BKE_mesh.h"
+#include "BKE_mesh_tangent.h" /* for utility functions */
 
 #include "MEM_guardedalloc.h"
 
 /* interface */
 #include "mikktspace.h"
 
+/* -------------------------------------------------------------------- */
 /** \name Tangent Space Calculation
  * \{ */
 
@@ -104,7 +105,7 @@ static void emdm_ts_GetPosition(const SMikkTSpaceContext *pContext,
                                 const int face_num,
                                 const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -138,7 +139,7 @@ static void emdm_ts_GetTextureCoordinate(const SMikkTSpaceContext *pContext,
                                          const int face_num,
                                          const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -176,7 +177,7 @@ static void emdm_ts_GetNormal(const SMikkTSpaceContext *pContext,
                               const int face_num,
                               const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -221,7 +222,7 @@ static void emdm_ts_SetTSpace(const SMikkTSpaceContext *pContext,
                               const int face_num,
                               const int vert_index)
 {
-  //assert(vert_index >= 0 && vert_index < 4);
+  // BLI_assert(vert_index >= 0 && vert_index < 4);
   SGLSLEditMeshToTangent *pMesh = pContext->m_pUserData;
   const BMLoop **lt;
   const BMLoop *l;
@@ -251,9 +252,7 @@ finally:
   pRes[3] = fSign;
 }
 
-static void emDM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool),
-                                           void *taskdata,
-                                           int UNUSED(threadid))
+static void emDM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool), void *taskdata)
 {
   struct SGLSLEditMeshToTangent *mesh2tangent = taskdata;
   /* new computation method */
@@ -276,7 +275,8 @@ static void emDM_calc_loop_tangents_thread(TaskPool *__restrict UNUSED(pool),
 /**
  * \see #BKE_mesh_calc_loop_tangent, same logic but used arrays instead of #BMesh data.
  *
- * \note This function is not so normal, its using `bm->ldata` as input, but output's to `dm->loopData`.
+ * \note This function is not so normal, its using #BMesh.ldata as input,
+ * but output's to #Mesh.ldata.
  * This is done because #CD_TANGENT is cache data used only for drawing.
  */
 void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
@@ -322,15 +322,18 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
       }
     }
     if ((tangent_mask & DM_TANGENT_MASK_ORCO) &&
-        CustomData_get_named_layer_index(loopdata_out, CD_TANGENT, "") == -1)
+        CustomData_get_named_layer_index(loopdata_out, CD_TANGENT, "") == -1) {
       CustomData_add_layer_named(
           loopdata_out, CD_TANGENT, CD_CALLOC, NULL, (int)loopdata_out_len, "");
-    if (calc_act && act_uv_name[0])
+    }
+    if (calc_act && act_uv_name[0]) {
       BKE_mesh_add_loop_tangent_named_layer_for_uv(
           &bm->ldata, loopdata_out, (int)loopdata_out_len, act_uv_name);
-    if (calc_ren && ren_uv_name[0])
+    }
+    if (calc_ren && ren_uv_name[0]) {
       BKE_mesh_add_loop_tangent_named_layer_for_uv(
           &bm->ldata, loopdata_out, (int)loopdata_out_len, ren_uv_name);
+    }
     int totface = em->tottri;
 #ifdef USE_LOOPTRI_DETECT_QUADS
     int num_face_as_quad_map;
@@ -338,7 +341,7 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
 
     /* map faces to quads */
     if (em->tottri != bm->totface) {
-      /* over alloc, since we dont know how many ngon or quads we have */
+      /* Over allocate, since we don't know how many ngon or quads we have. */
 
       /* map fake face index to looptri */
       face_as_quad_map = MEM_mallocN(sizeof(int) * totface, __func__);
@@ -358,9 +361,8 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
 #endif
     /* Calculation */
     if (em->tottri != 0) {
-      TaskScheduler *scheduler = BLI_task_scheduler_get();
       TaskPool *task_pool;
-      task_pool = BLI_task_pool_create(scheduler, NULL);
+      task_pool = BLI_task_pool_create(NULL, TASK_PRIORITY_LOW);
 
       tangent_mask_curr = 0;
       /* Calculate tangent layers */
@@ -379,9 +381,8 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
         mesh2tangent->num_face_as_quad_map = num_face_as_quad_map;
 #endif
         mesh2tangent->precomputedFaceNormals = poly_normals;
-        /* Note, we assume we do have tessellated loop normals at this point (in case it is object-enabled),
-         * have to check this is valid...
-         */
+        /* Note, we assume we do have tessellated loop normals at this point
+         * (in case it is object-enabled), have to check this is valid. */
         mesh2tangent->precomputedLoopNormals = loop_normals;
         mesh2tangent->cd_loop_uv_offset = CustomData_get_n_offset(&bm->ldata, CD_MLOOPUV, n);
 
@@ -389,8 +390,9 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
         int htype_index = BM_LOOP;
         if (mesh2tangent->cd_loop_uv_offset == -1) {
           mesh2tangent->orco = vert_orco;
-          if (!mesh2tangent->orco)
+          if (!mesh2tangent->orco) {
             continue;
+          }
           /* needed for orco lookups */
           htype_index |= BM_VERT;
           tangent_mask_curr |= DM_TANGENT_MASK_ORCO;
@@ -413,8 +415,7 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
         mesh2tangent->looptris = (const BMLoop *(*)[3])em->looptris;
         mesh2tangent->tangent = loopdata_out->layers[index].data;
 
-        BLI_task_pool_push(
-            task_pool, emDM_calc_loop_tangents_thread, mesh2tangent, false, TASK_PRIORITY_LOW);
+        BLI_task_pool_push(task_pool, emDM_calc_loop_tangents_thread, mesh2tangent, false, NULL);
       }
 
       BLI_assert(tangent_mask_curr == tangent_mask);

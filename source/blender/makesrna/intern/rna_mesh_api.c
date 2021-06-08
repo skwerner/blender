@@ -21,8 +21,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "RNA_define.h"
 
@@ -39,17 +39,20 @@
 #  include "DNA_mesh_types.h"
 
 #  include "BKE_mesh.h"
-#  include "BKE_mesh_tangent.h"
 #  include "BKE_mesh_mapping.h"
 #  include "BKE_mesh_runtime.h"
+#  include "BKE_mesh_tangent.h"
 #  include "ED_mesh.h"
 
-static const char *rna_Mesh_unit_test_compare(struct Mesh *mesh, struct Mesh *mesh2)
+static const char *rna_Mesh_unit_test_compare(struct Mesh *mesh,
+                                              struct Mesh *mesh2,
+                                              float threshold)
 {
-  const char *ret = BKE_mesh_cmp(mesh, mesh2, FLT_EPSILON * 60);
+  const char *ret = BKE_mesh_cmp(mesh, mesh2, threshold);
 
-  if (!ret)
+  if (!ret) {
     ret = "Same";
+  }
 
   return ret;
 }
@@ -169,7 +172,7 @@ static void rna_Mesh_normals_split_custom_set_from_vertices(Mesh *mesh,
   DEG_id_tag_update(&mesh->id, 0);
 }
 
-static void rna_Mesh_transform(Mesh *mesh, float *mat, bool shape_keys)
+static void rna_Mesh_transform(Mesh *mesh, float mat[16], bool shape_keys)
 {
   BKE_mesh_transform(mesh, (float(*)[4])mat, shape_keys);
 
@@ -199,6 +202,14 @@ static void rna_Mesh_update_gpu_tag(Mesh *mesh)
 static void rna_Mesh_count_selected_items(Mesh *mesh, int r_count[3])
 {
   BKE_mesh_count_selected_items(mesh, r_count);
+}
+
+static void rna_Mesh_clear_geometry(Mesh *mesh)
+{
+  BKE_mesh_clear_geometry(mesh);
+
+  DEG_id_tag_update(&mesh->id, ID_RECALC_GEOMETRY);
+  WM_main_add_notifier(NC_GEOM | ND_DATA, mesh);
 }
 
 #else
@@ -277,7 +288,7 @@ void RNA_api_mesh(StructRNA *srna)
                                   "Define custom split normals of this mesh "
                                   "(use zero-vectors to keep auto ones)");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
+  /* TODO, see how array size of 0 works, this shouldn't be used */
   parm = RNA_def_float_array(func, "normals", 1, NULL, -1.0f, 1.0f, "", "Normals", 0.0f, 0.0f);
   RNA_def_property_multi_array(parm, 2, normals_array_dim);
   RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_REQUIRED);
@@ -290,7 +301,7 @@ void RNA_api_mesh(StructRNA *srna)
       "Define custom split normals of this mesh, from vertices' normals "
       "(use zero-vectors to keep auto ones)");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
-  /* TODO, see how array size of 0 works, this shouldnt be used */
+  /* TODO, see how array size of 0 works, this shouldn't be used */
   parm = RNA_def_float_array(func, "normals", 1, NULL, -1.0f, 1.0f, "", "Normals", 0.0f, 0.0f);
   RNA_def_property_multi_array(parm, 2, normals_array_dim);
   RNA_def_parameter_flags(parm, PROP_DYNAMIC, PARM_REQUIRED);
@@ -302,21 +313,30 @@ void RNA_api_mesh(StructRNA *srna)
                   0,
                   "Calculate Loose Edges",
                   "Calculate the loose state of each edge");
-  RNA_def_boolean(func,
-                  "calc_loop_triangles",
-                  0,
-                  "Calculate Triangules",
-                  "Force recalculation of triangle tessellation");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
 
   RNA_def_function(srna, "update_gpu_tag", "rna_Mesh_update_gpu_tag");
 
   func = RNA_def_function(srna, "unit_test_compare", "rna_Mesh_unit_test_compare");
   RNA_def_pointer(func, "mesh", "Mesh", "", "Mesh to compare to");
+  RNA_def_float_factor(func,
+                       "threshold",
+                       FLT_EPSILON * 60,
+                       0.0f,
+                       FLT_MAX,
+                       "Threshold",
+                       "Comparison tolerance threshold",
+                       0.0f,
+                       FLT_MAX);
   /* return value */
   parm = RNA_def_string(
       func, "result", "nothing", 64, "Return value", "String description of result of comparison");
   RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "clear_geometry", "rna_Mesh_clear_geometry");
+  RNA_def_function_ui_description(
+      func,
+      "Remove all geometry from the mesh. Note that this does not free shape keys or materials");
 
   func = RNA_def_function(srna, "validate", "BKE_mesh_validate");
   RNA_def_function_ui_description(func,

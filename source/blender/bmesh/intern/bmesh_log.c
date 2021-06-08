@@ -31,11 +31,11 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_mempool.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 
@@ -183,9 +183,7 @@ static float vert_mask_get(BMVert *v, const int cd_vert_mask_offset)
   if (cd_vert_mask_offset != -1) {
     return BM_ELEM_CD_GET_FLOAT(v, cd_vert_mask_offset);
   }
-  else {
-    return 0.0f;
-  }
+  return 0.0f;
 }
 
 /* Set a vertex's paint-mask value
@@ -307,9 +305,11 @@ static void bm_log_faces_restore(BMesh *bm, BMLog *log, GHash *faces)
   GHASH_ITER (gh_iter, faces) {
     void *key = BLI_ghashIterator_getKey(&gh_iter);
     BMLogFace *lf = BLI_ghashIterator_getValue(&gh_iter);
-    BMVert *v[3] = {bm_log_vert_from_id(log, lf->v_ids[0]),
-                    bm_log_vert_from_id(log, lf->v_ids[1]),
-                    bm_log_vert_from_id(log, lf->v_ids[2])};
+    BMVert *v[3] = {
+        bm_log_vert_from_id(log, lf->v_ids[0]),
+        bm_log_vert_from_id(log, lf->v_ids[1]),
+        bm_log_vert_from_id(log, lf->v_ids[2]),
+    };
     BMFace *f;
 
     f = BM_face_create_verts(bm, v, 3, NULL, BM_CREATE_NOP, true);
@@ -474,7 +474,7 @@ BMLog *BM_log_create(BMesh *bm)
   BMLog *log = MEM_callocN(sizeof(*log), __func__);
   const uint reserve_num = (uint)(bm->totvert + bm->totface);
 
-  log->unused_ids = range_tree_uint_alloc(0, (unsigned)-1);
+  log->unused_ids = range_tree_uint_alloc(0, (uint)-1);
   log->id_to_elem = BLI_ghash_new_ex(logkey_hash, logkey_cmp, __func__, reserve_num);
   log->elem_to_id = BLI_ghash_ptr_new_ex(__func__, reserve_num);
 
@@ -616,7 +616,7 @@ void BM_log_mesh_elems_reorder(BMesh *bm, BMLog *log)
   /* Create BMVert index remap array */
   id_to_idx = bm_log_compress_ids_to_indices(varr, (uint)bm->totvert);
   BM_ITER_MESH_INDEX (v, &bm_iter, bm, BM_VERTS_OF_MESH, i) {
-    const unsigned id = bm_log_vert_id_get(log, v);
+    const uint id = bm_log_vert_id_get(log, v);
     const void *key = POINTER_FROM_UINT(id);
     const void *val = BLI_ghash_lookup(id_to_idx, key);
     varr[i] = POINTER_AS_UINT(val);
@@ -626,7 +626,7 @@ void BM_log_mesh_elems_reorder(BMesh *bm, BMLog *log)
   /* Create BMFace index remap array */
   id_to_idx = bm_log_compress_ids_to_indices(farr, (uint)bm->totface);
   BM_ITER_MESH_INDEX (f, &bm_iter, bm, BM_FACES_OF_MESH, i) {
-    const unsigned id = bm_log_face_id_get(log, f);
+    const uint id = bm_log_face_id_get(log, f);
     const void *key = POINTER_FROM_UINT(id);
     const void *val = BLI_ghash_lookup(id_to_idx, key);
     farr[i] = POINTER_AS_UINT(val);
@@ -728,8 +728,8 @@ void BM_log_entry_drop(BMLogEntry *entry)
      * Also, design wise, a first entry should not have any deleted vertices since it
      * should not have anything to delete them -from-
      */
-    //bm_log_id_ghash_release(log, entry->deleted_faces);
-    //bm_log_id_ghash_release(log, entry->deleted_verts);
+    // bm_log_id_ghash_release(log, entry->deleted_faces);
+    // bm_log_id_ghash_release(log, entry->deleted_verts);
   }
   else if (!entry->next) {
     /* Release IDs of elements that are added by this entry. Since
@@ -786,7 +786,7 @@ void BM_log_redo(BMesh *bm, BMLog *log)
     /* Currently at the beginning of the undo stack, move to first entry */
     entry = log->entries.first;
   }
-  else if (entry && entry->next) {
+  else if (entry->next) {
     /* Move to next undo entry */
     entry = entry->next;
   }
@@ -815,7 +815,7 @@ void BM_log_redo(BMesh *bm, BMLog *log)
 /* Log a vertex before it is modified
  *
  * Before modifying vertex coordinates, masks, or hflags, call this
- * function to log it's current values. This is better than logging
+ * function to log its current values. This is better than logging
  * after the coordinates have been modified, because only those
  * vertices that are modified need to have their original values
  * stored.
@@ -1037,7 +1037,7 @@ const float *BM_log_original_vert_co(BMLog *log, BMVert *v)
 {
   BMLogEntry *entry = log->current_entry;
   const BMLogVert *lv;
-  unsigned v_id = bm_log_vert_id_get(log, v);
+  uint v_id = bm_log_vert_id_get(log, v);
   void *key = POINTER_FROM_UINT(v_id);
 
   BLI_assert(entry);
@@ -1055,7 +1055,7 @@ const short *BM_log_original_vert_no(BMLog *log, BMVert *v)
 {
   BMLogEntry *entry = log->current_entry;
   const BMLogVert *lv;
-  unsigned v_id = bm_log_vert_id_get(log, v);
+  uint v_id = bm_log_vert_id_get(log, v);
   void *key = POINTER_FROM_UINT(v_id);
 
   BLI_assert(entry);
@@ -1073,7 +1073,7 @@ float BM_log_original_mask(BMLog *log, BMVert *v)
 {
   BMLogEntry *entry = log->current_entry;
   const BMLogVert *lv;
-  unsigned v_id = bm_log_vert_id_get(log, v);
+  uint v_id = bm_log_vert_id_get(log, v);
   void *key = POINTER_FROM_UINT(v_id);
 
   BLI_assert(entry);
@@ -1088,7 +1088,7 @@ void BM_log_original_vert_data(BMLog *log, BMVert *v, const float **r_co, const 
 {
   BMLogEntry *entry = log->current_entry;
   const BMLogVert *lv;
-  unsigned v_id = bm_log_vert_id_get(log, v);
+  uint v_id = bm_log_vert_id_get(log, v);
   void *key = POINTER_FROM_UINT(v_id);
 
   BLI_assert(entry);
@@ -1125,11 +1125,9 @@ void bm_log_print(const BMLog *log, const char *description)
   int i;
 
   printf("%s:\n", description);
-  printf("    % 2d: [ initial ]%s\n", 0,
-         (!log->current_entry) ? current : "");
+  printf("    % 2d: [ initial ]%s\n", 0, (!log->current_entry) ? current : "");
   for (entry = log->entries.first, i = 1; entry; entry = entry->next, i++) {
-    printf("    % 2d: [%p]%s\n", i, entry,
-           (entry == log->current_entry) ? current : "");
+    printf("    % 2d: [%p]%s\n", i, entry, (entry == log->current_entry) ? current : "");
   }
 }
 #endif

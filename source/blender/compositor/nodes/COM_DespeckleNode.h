@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DESPECKLENODE_H__
-#define __COM_DESPECKLENODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief DespeckleNode
@@ -28,7 +29,8 @@
 class DespeckleNode : public Node {
  public:
   DespeckleNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

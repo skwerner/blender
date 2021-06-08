@@ -17,7 +17,7 @@
  *   OGF/Graphite: Geometry and Graphics Programming Library + Utilities
  *   Copyright (C) 2000 Bruno Levy
  *   Contact: Bruno Levy
- *      levy@loria.fr
+ *      <levy@loria.fr>
  *      ISA Project
  *      LORIA, INRIA Lorraine,
  *      Campus Scientifique, BP 239
@@ -25,8 +25,7 @@
  *      FRANCE
  */
 
-#ifndef __MESH_TOOLS_MATH_NORMAL_CYCLE__
-#define __MESH_TOOLS_MATH_NORMAL_CYCLE__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -65,7 +64,6 @@ template<class T> inline void ogf_swap(T &x, T &y)
  */
 class NormalCycle {
  public:
-  NormalCycle();
   void begin();
   void end();
   /**
@@ -145,5 +143,3 @@ inline void NormalCycle::accumulate_dihedral_angle(const Vec3r &edge,
 }  // namespace OGF
 
 } /* namespace Freestyle */
-
-#endif  // __MESH_TOOLS_MATH_NORMAL_CYCLE__

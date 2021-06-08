@@ -17,9 +17,15 @@
 #ifndef __DEVICE_INTERN_H__
 #define __DEVICE_INTERN_H__
 
+#include "util/util_string.h"
+#include "util/util_vector.h"
+
 CCL_NAMESPACE_BEGIN
 
 class Device;
+class DeviceInfo;
+class Profiler;
+class Stats;
 
 Device *device_cpu_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
 bool device_opencl_init();
@@ -27,6 +33,10 @@ Device *device_opencl_create(DeviceInfo &info, Stats &stats, Profiler &profiler,
 bool device_opencl_compile_kernel(const vector<string> &parameters);
 bool device_cuda_init();
 Device *device_cuda_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+bool device_optix_init();
+Device *device_optix_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+Device *device_dummy_create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background);
+
 Device *device_network_create(DeviceInfo &info,
                               Stats &stats,
                               Profiler &profiler,
@@ -36,6 +46,7 @@ Device *device_multi_create(DeviceInfo &info, Stats &stats, Profiler &profiler, 
 void device_cpu_info(vector<DeviceInfo> &devices);
 void device_opencl_info(vector<DeviceInfo> &devices);
 void device_cuda_info(vector<DeviceInfo> &devices);
+void device_optix_info(const vector<DeviceInfo> &cuda_devices, vector<DeviceInfo> &devices);
 void device_network_info(vector<DeviceInfo> &devices);
 
 string device_cpu_capabilities();

@@ -23,10 +23,10 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_linklist.h"
-#include "BLI_utildefines_stack.h"
 #include "BLI_alloca.h"
+#include "BLI_linklist.h"
+#include "BLI_math.h"
+#include "BLI_utildefines_stack.h"
 
 #include "bmesh.h"
 #include "bmesh_path_region.h" /* own include */
@@ -74,6 +74,7 @@ static bool bm_vert_pair_ends(BMVert *v_pivot, BMVert *v_end_pair[2])
 }
 #endif /* USE_EDGE_CHAIN */
 
+/* -------------------------------------------------------------------- */
 /** \name Vertex in Region Checks
  * \{ */
 
@@ -91,9 +92,9 @@ static bool bm_vert_region_test_chain(BMVert *v, int *const depths[2], const int
   if (bm_vert_region_test(v, depths, pass)) {
     return true;
   }
-  else if (BM_vert_is_edge_pair_manifold(v) && bm_vert_pair_ends(v, v_end_pair) &&
-           bm_vert_region_test(v_end_pair[0], depths, pass) &&
-           bm_vert_region_test(v_end_pair[1], depths, pass)) {
+  if (BM_vert_is_edge_pair_manifold(v) && bm_vert_pair_ends(v, v_end_pair) &&
+      bm_vert_region_test(v_end_pair[0], depths, pass) &&
+      bm_vert_region_test(v_end_pair[1], depths, pass)) {
     return true;
   }
 
@@ -116,7 +117,8 @@ static bool bm_vert_region_test_chain(BMVert *v, int *const depths[2], const int
  *
  * This is done in both directions, after that each vertices 'depth' is added to check
  * if its less than the number of passes needed to complete the search.
- * When it is, we know the path is one of possible paths that have the minimum topological distance.
+ * When it is, we know the path is one of possible paths
+ * that have the minimum topological distance.
  *
  * \note Only verts without BM_ELEM_TAG will be walked over.
  */
@@ -201,7 +203,8 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
 
 #ifdef USE_EDGE_CHAIN
     /* Expand initial state to end-point vertices when they only have 2x edges,
-     * this prevents odd behavior when source or destination are in the middle of a long chain of edges. */
+     * this prevents odd behavior when source or destination are in the middle
+     * of a long chain of edges. */
     if (ELEM(path_htype, BM_VERT, BM_EDGE)) {
       for (int i = 0; i < ele_verts_len[side]; i++) {
         BMVert *v = ele_verts[side][i];
@@ -221,8 +224,8 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
     }
 #endif /* USE_EDGE_CHAIN */
 
-    /* Keep walking over connected geometry until we find all the vertices in `ele_verts[side_other]`,
-     * or exit the loop when theres no connection. */
+    /* Keep walking over connected geometry until we find all the vertices in
+     * `ele_verts[side_other]`, or exit the loop when there's no connection. */
     found_all = false;
     for (pass = 1; (STACK_SIZE(stack) != 0); pass++) {
       while (STACK_SIZE(stack) != 0) {
@@ -266,7 +269,7 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
         } while ((e = BM_DISK_EDGE_NEXT(e, v_a)) != v_a->e);
       }
 
-      /* Stop searching once theres none left.
+      /* Stop searching once there's none left.
        * Note that this looks in-efficient, however until the target elements reached,
        * it will exit immediately.
        * After that, it takes as many passes as the element has edges to finish off. */
@@ -321,7 +324,8 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
         } while ((l_iter = l_iter->next) != l_first);
 #else
         /* Allowing a single failure on a face gives fewer 'gaps'.
-         * While correct, in practice they're often part of what a user would consider the 'region'. */
+         * While correct, in practice they're often part of what
+         * a user would consider the 'region'. */
         int ok_tests = f->len > 3 ? 1 : 0; /* how many times we may fail */
         do {
           if (!bm_vert_region_test_chain(l_iter->v, depths, pass)) {
@@ -383,6 +387,7 @@ static LinkNode *mesh_calc_path_region_elem(BMesh *bm,
 
 #undef USE_EDGE_CHAIN
 
+/* -------------------------------------------------------------------- */
 /** \name Main Functions (exposed externally).
  * \{ */
 

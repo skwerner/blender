@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BMESH_PRIVATE_H__
-#define __BMESH_PRIVATE_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -31,8 +30,8 @@
 /* returns positive nonzero on error */
 
 #ifdef NDEBUG
-/* no error checking for release,
-    * it can take most of the CPU time when running some tools */
+/* No error checking for release,
+ * it can take most of the CPU time when running some tools. */
 #  define BM_CHECK_ELEMENT(el) (void)(el)
 #else
 int bmesh_elem_check(void *element, const char htype);
@@ -86,9 +85,7 @@ enum {
   } \
   (void)0
 
-void poly_rotate_plane(const float normal[3], float (*verts)[3], unsigned const int nverts);
+void poly_rotate_plane(const float normal[3], float (*verts)[3], const uint nverts);
 
 /* include the rest of our private declarations */
 #include "bmesh_structure.h"
-
-#endif /* __BMESH_PRIVATE_H__ */

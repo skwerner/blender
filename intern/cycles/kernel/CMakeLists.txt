@@ -1,3 +1,17 @@
+# Copyright 2011-2020 Blender Foundation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 remove_extra_strict_flags()
 
 set(INC
@@ -36,6 +50,10 @@ set(SRC_CUDA_KERNELS
 )
 
 set(SRC_OPENCL_KERNELS
+  kernels/opencl/kernel_adaptive_stopping.cl
+  kernels/opencl/kernel_adaptive_filter_x.cl
+  kernels/opencl/kernel_adaptive_filter_y.cl
+  kernels/opencl/kernel_adaptive_adjust_samples.cl
   kernels/opencl/kernel_bake.cl
   kernels/opencl/kernel_base.cl
   kernels/opencl/kernel_displace.cl
@@ -64,6 +82,10 @@ set(SRC_OPENCL_KERNELS
   kernels/opencl/filter.cl
 )
 
+set(SRC_OPTIX_KERNELS
+  kernels/optix/kernel_optix.cu
+)
+
 set(SRC_BVH_HEADERS
   bvh/bvh.h
   bvh/bvh_nodes.h
@@ -71,30 +93,21 @@ set(SRC_BVH_HEADERS
   bvh/bvh_local.h
   bvh/bvh_traversal.h
   bvh/bvh_types.h
+  bvh/bvh_util.h
   bvh/bvh_volume.h
   bvh/bvh_volume_all.h
-  bvh/qbvh_nodes.h
-  bvh/qbvh_shadow_all.h
-  bvh/qbvh_local.h
-  bvh/qbvh_traversal.h
-  bvh/qbvh_volume.h
-  bvh/qbvh_volume_all.h
-  bvh/obvh_nodes.h
-  bvh/obvh_shadow_all.h
-  bvh/obvh_local.h
-  bvh/obvh_traversal.h
-  bvh/obvh_volume.h
-  bvh/obvh_volume_all.h
   bvh/bvh_embree.h
 )
 
 set(SRC_HEADERS
   kernel_accumulate.h
+  kernel_adaptive_sampling.h
   kernel_bake.h
   kernel_camera.h
   kernel_color.h
   kernel_compat_cpu.h
   kernel_compat_cuda.h
+  kernel_compat_optix.h
   kernel_compat_opencl.h
   kernel_differential.h
   kernel_emission.h
@@ -103,6 +116,8 @@ set(SRC_HEADERS
   kernel_id_passes.h
   kernel_jitter.h
   kernel_light.h
+  kernel_light_background.h
+  kernel_light_common.h
   kernel_math.h
   kernel_montecarlo.h
   kernel_passes.h
@@ -124,6 +139,7 @@ set(SRC_HEADERS
   kernel_types.h
   kernel_volume.h
   kernel_work_stealing.h
+  kernel_write_passes.h
 )
 
 set(SRC_KERNELS_CPU_HEADERS
@@ -138,6 +154,9 @@ set(SRC_KERNELS_CPU_HEADERS
 set(SRC_KERNELS_CUDA_HEADERS
   kernels/cuda/kernel_config.h
   kernels/cuda/kernel_cuda_image.h
+)
+
+set(SRC_KERNELS_OPTIX_HEADERS
 )
 
 set(SRC_KERNELS_OPENCL_HEADERS
@@ -168,17 +187,19 @@ set(SRC_CLOSURE_HEADERS
   closure/volume.h
   closure/bsdf_principled_diffuse.h
   closure/bsdf_principled_sheen.h
-    closure/bsdf_hair_principled.h
+  closure/bsdf_hair_principled.h
 )
 
 set(SRC_SVM_HEADERS
   svm/svm.h
   svm/svm_ao.h
+  svm/svm_aov.h
   svm/svm_attribute.h
   svm/svm_bevel.h
   svm/svm_blackbody.h
   svm/svm_bump.h
   svm/svm_camera.h
+  svm/svm_clamp.h
   svm/svm_closure.h
   svm/svm_convert.h
   svm/svm_checker.h
@@ -198,7 +219,9 @@ set(SRC_SVM_HEADERS
   svm/svm_invert.h
   svm/svm_light_path.h
   svm/svm_magic.h
+  svm/svm_map_range.h
   svm/svm_mapping.h
+  svm/svm_mapping_util.h
   svm/svm_math.h
   svm/svm_math_util.h
   svm/svm_mix.h
@@ -212,13 +235,16 @@ set(SRC_SVM_HEADERS
   svm/svm_sepcomb_vector.h
   svm/svm_sky.h
   svm/svm_tex_coord.h
-  svm/svm_texture.h
+  svm/svm_fractal_noise.h
   svm/svm_types.h
   svm/svm_value.h
+  svm/svm_vector_rotate.h
   svm/svm_vector_transform.h
   svm/svm_voronoi.h
   svm/svm_voxel.h
   svm/svm_wave.h
+  svm/svm_white_noise.h
+  svm/svm_vertex_color.h
 )
 
 set(SRC_GEOM_HEADERS
@@ -308,6 +334,10 @@ set(SRC_UTIL_HEADERS
 )
 
 set(SRC_SPLIT_HEADERS
+  split/kernel_adaptive_adjust_samples.h
+  split/kernel_adaptive_filter_x.h
+  split/kernel_adaptive_filter_y.h
+  split/kernel_adaptive_stopping.h
   split/kernel_branched.h
   split/kernel_buffer_update.h
   split/kernel_data_init.h
@@ -350,11 +380,11 @@ if(WITH_CYCLES_CUDA_BINARIES)
   set(CUDA_VERSION "${CUDA_VERSION_MAJOR}${CUDA_VERSION_MINOR}")
 
   # warn for other versions
-  if(CUDA_VERSION MATCHES "101")
+  if((CUDA_VERSION MATCHES "101") OR (CUDA_VERSION MATCHES "102") OR (CUDA_VERSION MATCHES "111"))
   else()
     message(WARNING
       "CUDA version ${CUDA_VERSION_MAJOR}.${CUDA_VERSION_MINOR} detected, "
-      "build may succeed but only CUDA 10.1 is officially supported")
+      "build may succeed but only CUDA 10.1, 10.2 and 11.1 are officially supported")
   endif()
 
   # build for each arch
@@ -376,16 +406,25 @@ if(WITH_CYCLES_CUDA_BINARIES)
   set(cuda_cubins)
 
   macro(CYCLES_CUDA_KERNEL_ADD arch prev_arch name flags sources experimental)
-    set(cuda_cubin ${name}_${arch}.cubin)
+    if(${arch} MATCHES "compute_.*")
+      set(format "ptx")
+    else()
+      set(format "cubin")
+    endif()
+    set(cuda_file ${name}_${arch}.${format})
 
     set(kernel_sources ${sources})
     if(NOT ${prev_arch} STREQUAL "none")
-      set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.cubin)
+      if(${prev_arch} MATCHES "compute_.*")
+        set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.ptx)
+      else()
+        set(kernel_sources ${kernel_sources} ${name}_${prev_arch}.cubin)
+      endif()
     endif()
 
     set(cuda_kernel_src "/kernels/cuda/${name}.cu")
 
-    set(cuda_flags
+    set(cuda_flags ${flags}
       -D CCL_NAMESPACE_BEGIN=
       -D CCL_NAMESPACE_END=
       -D NVCC
@@ -393,7 +432,7 @@ if(WITH_CYCLES_CUDA_BINARIES)
       -I ${CMAKE_CURRENT_SOURCE_DIR}/..
       -I ${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda
       --use_fast_math
-      -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_cubin})
+      -o ${CMAKE_CURRENT_BINARY_DIR}/${cuda_file})
 
     if(${experimental})
       set(cuda_flags ${cuda_flags} -D __KERNEL_EXPERIMENTAL__)
@@ -404,6 +443,12 @@ if(WITH_CYCLES_CUDA_BINARIES)
       set(cuda_flags ${cuda_flags} -D __KERNEL_DEBUG__)
     endif()
 
+    if(WITH_NANOVDB)
+      set(cuda_flags ${cuda_flags}
+        -D WITH_NANOVDB
+        -I "${NANOVDB_INCLUDE_DIR}")
+    endif()
+
     if(WITH_CYCLES_CUBIN_COMPILER)
       string(SUBSTRING ${arch} 3 -1 CUDA_ARCH)
 
@@ -411,47 +456,71 @@ if(WITH_CYCLES_CUDA_BINARIES)
       # cycles_cubin_cc since the env variable is read before main()
       if(APPLE)
         set(CUBIN_CC_ENV ${CMAKE_COMMAND}
-          -E env DYLD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib")
+          -E env DYLD_LIBRARY_PATH="${cuda_toolkit_root_dir}/lib")
       elseif(UNIX)
         set(CUBIN_CC_ENV ${CMAKE_COMMAND}
-          -E env LD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib64")
+          -E env LD_LIBRARY_PATH="${cuda_toolkit_root_dir}/lib64")
       endif()
 
       add_custom_command(
-        OUTPUT ${cuda_cubin}
+        OUTPUT ${cuda_file}
         COMMAND ${CUBIN_CC_ENV}
             "$<TARGET_FILE:cycles_cubin_cc>"
             -target ${CUDA_ARCH}
             -i ${CMAKE_CURRENT_SOURCE_DIR}${cuda_kernel_src}
             ${cuda_flags}
             -v
-            -cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
+            -cuda-toolkit-dir "${cuda_toolkit_root_dir}"
         DEPENDS ${kernel_sources} cycles_cubin_cc)
     else()
       add_custom_command(
-        OUTPUT ${cuda_cubin}
-        COMMAND ${CUDA_NVCC_EXECUTABLE}
+        OUTPUT ${cuda_file}
+        COMMAND ${cuda_nvcc_executable}
             -arch=${arch}
             ${CUDA_NVCC_FLAGS}
-            --cubin
+            --${format}
             ${CMAKE_CURRENT_SOURCE_DIR}${cuda_kernel_src}
             --ptxas-options="-v"
             ${cuda_flags}
         DEPENDS ${kernel_sources})
     endif()
-    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${cuda_cubin}" ${CYCLES_INSTALL_PATH}/lib)
-    list(APPEND cuda_cubins ${cuda_cubin})
+    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${cuda_file}" ${CYCLES_INSTALL_PATH}/lib)
+    list(APPEND cuda_cubins ${cuda_file})
 
     unset(cuda_debug_flags)
   endmacro()
 
   set(prev_arch "none")
   foreach(arch ${CYCLES_CUDA_BINARIES_ARCH})
-    if(${arch} MATCHES "sm_2.")
+    if(${arch} MATCHES ".*_2.")
       message(STATUS "CUDA binaries for ${arch} are no longer supported, skipped.")
-    elseif(${arch} MATCHES "sm_7." AND ${CUDA_VERSION} LESS 100)
+    elseif(${arch} MATCHES ".*_30")
+      if(DEFINED CUDA10_NVCC_EXECUTABLE)
+        set(cuda_nvcc_executable ${CUDA10_NVCC_EXECUTABLE})
+        set(cuda_toolkit_root_dir ${CUDA10_TOOLKIT_ROOT_DIR})
+      elseif(${CUDA_VERSION} LESS 110) # Support for sm_30 was removed in CUDA 11
+        set(cuda_nvcc_executable ${CUDA_NVCC_EXECUTABLE})
+        set(cuda_toolkit_root_dir ${CUDA_TOOLKIT_ROOT_DIR})
+      else()
+        message(STATUS "CUDA binaries for ${arch} require CUDA 10 or earlier, skipped.")
+      endif()
+    elseif(${arch} MATCHES ".*_7." AND ${CUDA_VERSION} LESS 100)
       message(STATUS "CUDA binaries for ${arch} require CUDA 10.0+, skipped.")
+    elseif(${arch} MATCHES ".*_8.")
+      if(DEFINED CUDA11_NVCC_EXECUTABLE)
+        set(cuda_nvcc_executable ${CUDA11_NVCC_EXECUTABLE})
+        set(cuda_toolkit_root_dir ${CUDA11_TOOLKIT_ROOT_DIR})
+      elseif(${CUDA_VERSION} GREATER_EQUAL 111) # Support for sm_86 was introduced in CUDA 11
+        set(cuda_nvcc_executable ${CUDA_NVCC_EXECUTABLE})
+        set(cuda_toolkit_root_dir ${CUDA_TOOLKIT_ROOT_DIR})
+      else()
+        message(STATUS "CUDA binaries for ${arch} require CUDA 11.1+, skipped.")
+      endif()
     else()
+      set(cuda_nvcc_executable ${CUDA_NVCC_EXECUTABLE})
+      set(cuda_toolkit_root_dir ${CUDA_TOOLKIT_ROOT_DIR})
+    endif()
+    if(DEFINED cuda_nvcc_executable AND DEFINED cuda_toolkit_root_dir)
       # Compile regular kernel
       CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} filter "" "${cuda_filter_sources}" FALSE)
       CYCLES_CUDA_KERNEL_ADD(${arch} ${prev_arch} kernel "" "${cuda_sources}" FALSE)
@@ -464,11 +533,106 @@ if(WITH_CYCLES_CUDA_BINARIES)
       if(WITH_CYCLES_CUDA_BUILD_SERIAL)
         set(prev_arch ${arch})
       endif()
+
+      unset(cuda_nvcc_executable)
+      unset(cuda_toolkit_root_dir)
     endif()
   endforeach()
 
   add_custom_target(cycles_kernel_cuda ALL DEPENDS ${cuda_cubins})
   cycles_set_solution_folder(cycles_kernel_cuda)
+endif()
+
+# OptiX PTX modules
+
+if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
+  macro(CYCLES_OPTIX_KERNEL_ADD name flags)
+    set(input "kernels/optix/kernel_optix.cu")
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/${name}.ptx")
+
+    set(cuda_flags ${flags}
+      -I "${OPTIX_INCLUDE_DIR}"
+      -I "${CMAKE_CURRENT_SOURCE_DIR}/.."
+      -I "${CMAKE_CURRENT_SOURCE_DIR}/kernels/cuda"
+      --use_fast_math
+      -o ${output})
+
+    if(WITH_CYCLES_DEBUG)
+      set(cuda_flags ${cuda_flags}
+        -D __KERNEL_DEBUG__)
+    endif()
+
+    if(WITH_NANOVDB)
+      set(cuda_flags ${cuda_flags}
+        -D WITH_NANOVDB
+        -I "${NANOVDB_INCLUDE_DIR}")
+    endif()
+
+    if(WITH_CYCLES_CUBIN_COMPILER)
+      # Needed to find libnvrtc-builtins.so. Can't do it from inside
+      # cycles_cubin_cc since the env variable is read before main()
+      if(APPLE)
+        set(CUBIN_CC_ENV ${CMAKE_COMMAND}
+          -E env DYLD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib")
+      elseif(UNIX)
+        set(CUBIN_CC_ENV ${CMAKE_COMMAND}
+          -E env LD_LIBRARY_PATH="${CUDA_TOOLKIT_ROOT_DIR}/lib64")
+      endif()
+
+      add_custom_command(
+        OUTPUT ${output}
+        DEPENDS
+          ${input}
+          ${SRC_HEADERS}
+          ${SRC_KERNELS_CUDA_HEADERS}
+          ${SRC_KERNELS_OPTIX_HEADERS}
+          ${SRC_BVH_HEADERS}
+          ${SRC_SVM_HEADERS}
+          ${SRC_GEOM_HEADERS}
+          ${SRC_CLOSURE_HEADERS}
+          ${SRC_UTIL_HEADERS}
+        COMMAND ${CUBIN_CC_ENV}
+            "$<TARGET_FILE:cycles_cubin_cc>"
+            -target 50
+            -ptx
+            -i ${CMAKE_CURRENT_SOURCE_DIR}/${input}
+            ${cuda_flags}
+            -v
+            -cuda-toolkit-dir "${CUDA_TOOLKIT_ROOT_DIR}"
+        DEPENDS ${kernel_sources} cycles_cubin_cc)
+    else()
+      add_custom_command(
+        OUTPUT
+          ${output}
+        DEPENDS
+          ${input}
+          ${SRC_HEADERS}
+          ${SRC_KERNELS_CUDA_HEADERS}
+          ${SRC_KERNELS_OPTIX_HEADERS}
+          ${SRC_BVH_HEADERS}
+          ${SRC_SVM_HEADERS}
+          ${SRC_GEOM_HEADERS}
+          ${SRC_CLOSURE_HEADERS}
+          ${SRC_UTIL_HEADERS}
+        COMMAND
+          ${CUDA_NVCC_EXECUTABLE}
+          --ptx
+          -arch=sm_50
+          ${cuda_flags}
+          ${input}
+        WORKING_DIRECTORY
+          "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+    list(APPEND optix_ptx ${output})
+
+    delayed_install("${CMAKE_CURRENT_BINARY_DIR}" "${output}" ${CYCLES_INSTALL_PATH}/lib)
+  endmacro()
+
+  CYCLES_OPTIX_KERNEL_ADD(kernel_optix "-D __NO_SHADER_RAYTRACE__")
+  CYCLES_OPTIX_KERNEL_ADD(kernel_optix_shader_raytrace "--keep-device-functions")
+
+  add_custom_target(cycles_kernel_optix ALL DEPENDS ${optix_ptx})
+  cycles_set_solution_folder(cycles_kernel_optix)
 endif()
 
 # OSL module
@@ -485,6 +649,19 @@ endif()
 
 include_directories(${INC})
 include_directories(SYSTEM ${INC_SYS})
+
+if(WITH_COMPILER_ASAN)
+  if(CMAKE_COMPILER_IS_GNUCC AND (NOT WITH_CYCLES_KERNEL_ASAN))
+    # GCC hangs compiling the big kernel files with asan and release, so disable by default.
+    string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -fno-sanitize=all")
+    string(APPEND CMAKE_CXX_FLAGS_DEBUG " -fno-sanitize=vptr")
+  elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
+    # With OSL, Cycles disables rtti in some modules, wich then breaks at linking
+    # when trying to use vptr sanitizer (included into 'undefined' general option).
+    string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " -fno-sanitize=vptr")
+    string(APPEND CMAKE_CXX_FLAGS_DEBUG " -fno-sanitize=vptr")
+  endif()
+endif()
 
 set_source_files_properties(kernels/cpu/kernel.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
 set_source_files_properties(kernels/cpu/kernel_split.cpp PROPERTIES COMPILE_FLAGS "${CYCLES_KERNEL_FLAGS}")
@@ -517,10 +694,12 @@ endif()
 cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_CPU_KERNELS}
   ${SRC_CUDA_KERNELS}
+  ${SRC_OPTIX_KERNELS}
   ${SRC_OPENCL_KERNELS}
   ${SRC_HEADERS}
   ${SRC_KERNELS_CPU_HEADERS}
   ${SRC_KERNELS_CUDA_HEADERS}
+  ${SRC_KERNELS_OPTIX_HEADERS}
   ${SRC_KERNELS_OPENCL_HEADERS}
   ${SRC_BVH_HEADERS}
   ${SRC_CLOSURE_HEADERS}
@@ -530,25 +709,42 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_SPLIT_HEADERS}
 )
 
+source_group("bvh" FILES ${SRC_BVH_HEADERS})
+source_group("closure" FILES ${SRC_CLOSURE_HEADERS})
+source_group("filter" FILES ${SRC_FILTER_HEADERS})
+source_group("geom" FILES ${SRC_GEOM_HEADERS})
+source_group("kernel" FILES ${SRC_HEADERS})
+source_group("kernel\\split" FILES ${SRC_SPLIT_HEADERS})
+source_group("kernels\\cpu" FILES ${SRC_CPU_KERNELS} ${SRC_KERNELS_CPU_HEADERS})
+source_group("kernels\\cuda" FILES ${SRC_CUDA_KERNELS} ${SRC_KERNELS_CUDA_HEADERS})
+source_group("kernels\\opencl" FILES ${SRC_OPENCL_KERNELS} ${SRC_KERNELS_OPENCL_HEADERS})
+source_group("kernels\\optix" FILES ${SRC_OPTIX_KERNELS} ${SRC_KERNELS_OPTIX_HEADERS})
+source_group("svm" FILES ${SRC_SVM_HEADERS})
+
 if(WITH_CYCLES_CUDA)
   add_dependencies(cycles_kernel cycles_kernel_cuda)
+endif()
+if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
+  add_dependencies(cycles_kernel cycles_kernel_optix)
 endif()
 
 # OpenCL kernel
 
-#set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
-#add_custom_command(
-#   OUTPUT ${KERNEL_PREPROCESSED}
-#   COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
-#   DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
-#add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
-#delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
+# set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
+# add_custom_command(
+#    OUTPUT ${KERNEL_PREPROCESSED}
+#    COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
+#    DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
+# add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
+# delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
 
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_OPENCL_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CUDA_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/cuda)
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_OPTIX_KERNELS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNELS_OPENCL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNELS_CUDA_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/cuda)
+delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_KERNELS_OPTIX_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/kernels/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_BVH_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/bvh)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_CLOSURE_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/closure)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_FILTER_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/filter)
@@ -556,3 +752,17 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTAL
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SPLIT_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/split)
+
+
+if(WITH_NANOVDB)
+  set(SRC_NANOVDB_HEADERS
+    nanovdb/NanoVDB.h
+    nanovdb/CNanoVDB.h
+  )
+  set(SRC_NANOVDB_UTIL_HEADERS
+    nanovdb/util/CSampleFromVoxels.h
+    nanovdb/util/SampleFromVoxels.h
+  )
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_HEADERS}" ${CYCLES_INSTALL_PATH}/source/nanovdb)
+  delayed_install(${NANOVDB_INCLUDE_DIR} "${SRC_NANOVDB_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/nanovdb/util)
+endif()

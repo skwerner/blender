@@ -21,8 +21,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -39,14 +39,14 @@
 
 #  include <stddef.h>
 
-#  include "BKE_animsys.h"
 #  include "BKE_fcurve.h"
 
 #  include "BLI_math.h"
 
 static void rna_FCurve_convert_to_samples(FCurve *fcu, ReportList *reports, int start, int end)
 {
-  /* XXX fcurve_store_samples uses end frame included, which is not consistent with usual behavior in Blender,
+  /* XXX fcurve_store_samples uses end frame included,
+   * which is not consistent with usual behavior in Blender,
    * nor python slices, etc. Let have public py API be consistent here at least. */
   end--;
   if (start > end) {
@@ -76,51 +76,7 @@ static void rna_FCurve_convert_to_keyframes(FCurve *fcu, ReportList *reports, in
     BKE_report(reports, RPT_WARNING, "FCurve has no sample points");
   }
   else {
-    BezTriple *bezt;
-    FPoint *fpt = fcu->fpt;
-    int tot_kf = end - start;
-    int tot_sp = fcu->totvert;
-
-    bezt = fcu->bezt = MEM_callocN(sizeof(*fcu->bezt) * (size_t)tot_kf, __func__);
-    fcu->totvert = tot_kf;
-
-    /* Get first sample point to 'copy' as keyframe. */
-    for (; tot_sp && (fpt->vec[0] < (float)start); fpt++, tot_sp--)
-      ;
-
-    /* Add heading dummy flat points if needed. */
-    for (; tot_kf && (fpt->vec[0] > (float)start); start++, bezt++, tot_kf--) {
-      /* Linear interpolation, of course. */
-      bezt->f1 = bezt->f2 = bezt->f3 = SELECT;
-      bezt->ipo = BEZT_IPO_LIN;
-      bezt->h1 = bezt->h2 = HD_AUTO_ANIM;
-      bezt->vec[1][0] = (float)start;
-      bezt->vec[1][1] = fpt->vec[1];
-    }
-
-    /* Copy actual sample points. */
-    for (; tot_kf && tot_sp; start++, bezt++, tot_kf--, fpt++, tot_sp--) {
-      /* Linear interpolation, of course. */
-      bezt->f1 = bezt->f2 = bezt->f3 = SELECT;
-      bezt->ipo = BEZT_IPO_LIN;
-      bezt->h1 = bezt->h2 = HD_AUTO_ANIM;
-      copy_v2_v2(bezt->vec[1], fpt->vec);
-    }
-
-    /* Add leading dummy flat points if needed. */
-    for (fpt--; tot_kf; start++, bezt++, tot_kf--) {
-      /* Linear interpolation, of course. */
-      bezt->f1 = bezt->f2 = bezt->f3 = SELECT;
-      bezt->ipo = BEZT_IPO_LIN;
-      bezt->h1 = bezt->h2 = HD_AUTO_ANIM;
-      bezt->vec[1][0] = (float)start;
-      bezt->vec[1][1] = fpt->vec[1];
-    }
-
-    MEM_SAFE_FREE(fcu->fpt);
-
-    /* Not strictly needed since we use linear interpolation, but better be consistent here. */
-    calchandles_fcurve(fcu);
+    fcurve_samples_to_keyframes(fcu, start, end);
     WM_main_add_notifier(NC_ANIMATION | ND_ANIMCHAN | NA_EDITED, NULL);
   }
 }

@@ -24,13 +24,19 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 
-#include "intern/GHOST_Debug.h"
 #include "GHOST_C-api.h"
-#include "GHOST_ISystem.h"
 #include "GHOST_IEvent.h"
 #include "GHOST_IEventConsumer.h"
+#include "GHOST_ISystem.h"
+#include "intern/GHOST_Debug.h"
+#ifdef WITH_XR_OPENXR
+#  include "GHOST_IXrContext.h"
+#  include "intern/GHOST_XrSession.h"
+#endif
 #include "intern/GHOST_CallbackEventConsumer.h"
+#include "intern/GHOST_XrException.h"
 
 GHOST_SystemHandle GHOST_CreateSystem(void)
 {
@@ -40,11 +46,30 @@ GHOST_SystemHandle GHOST_CreateSystem(void)
   return (GHOST_SystemHandle)system;
 }
 
+void GHOST_SystemInitDebug(GHOST_SystemHandle systemhandle, int is_debug_enabled)
+{
+  GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
+
+  system->initDebug(is_debug_enabled);
+}
+
 GHOST_TSuccess GHOST_DisposeSystem(GHOST_SystemHandle systemhandle)
 {
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
 
   return system->disposeSystem();
+}
+
+void GHOST_ShowMessageBox(GHOST_SystemHandle systemhandle,
+                          const char *title,
+                          const char *message,
+                          const char *help_label,
+                          const char *continue_label,
+                          const char *link,
+                          GHOST_DialogOptions dialog_options)
+{
+  GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
+  system->showMessageBox(title, message, help_label, continue_label, link, dialog_options);
 }
 
 GHOST_EventConsumerHandle GHOST_CreateEventConsumer(GHOST_EventCallbackProcPtr eventCallback,
@@ -111,11 +136,12 @@ void GHOST_GetAllDisplayDimensions(GHOST_SystemHandle systemhandle,
   system->getAllDisplayDimensions(*width, *height);
 }
 
-GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle)
+GHOST_ContextHandle GHOST_CreateOpenGLContext(GHOST_SystemHandle systemhandle,
+                                              GHOST_GLSettings glSettings)
 {
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
 
-  return (GHOST_ContextHandle)system->createOffscreenContext();
+  return (GHOST_ContextHandle)system->createOffscreenContext(glSettings);
 }
 
 GHOST_TSuccess GHOST_DisposeOpenGLContext(GHOST_SystemHandle systemhandle,
@@ -128,19 +154,30 @@ GHOST_TSuccess GHOST_DisposeOpenGLContext(GHOST_SystemHandle systemhandle,
 }
 
 GHOST_WindowHandle GHOST_CreateWindow(GHOST_SystemHandle systemhandle,
+                                      GHOST_WindowHandle parent_windowhandle,
                                       const char *title,
                                       GHOST_TInt32 left,
                                       GHOST_TInt32 top,
                                       GHOST_TUns32 width,
                                       GHOST_TUns32 height,
                                       GHOST_TWindowState state,
+                                      bool is_dialog,
                                       GHOST_TDrawingContextType type,
                                       GHOST_GLSettings glSettings)
 {
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
 
-  return (GHOST_WindowHandle)system->createWindow(
-      title, left, top, width, height, state, type, glSettings, false);
+  return (GHOST_WindowHandle)system->createWindow(title,
+                                                  left,
+                                                  top,
+                                                  width,
+                                                  height,
+                                                  state,
+                                                  type,
+                                                  glSettings,
+                                                  false,
+                                                  is_dialog,
+                                                  (GHOST_IWindow *)parent_windowhandle);
 }
 
 GHOST_TUserDataPtr GHOST_GetWindowUserData(GHOST_WindowHandle windowhandle)
@@ -154,6 +191,13 @@ void GHOST_SetWindowUserData(GHOST_WindowHandle windowhandle, GHOST_TUserDataPtr
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
 
   window->setUserData(userdata);
+}
+
+int GHOST_IsDialogWindow(GHOST_WindowHandle windowhandle)
+{
+  GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
+
+  return (int)window->isDialog();
 }
 
 GHOST_TSuccess GHOST_DisposeWindow(GHOST_SystemHandle systemhandle,
@@ -205,11 +249,11 @@ int GHOST_GetFullScreen(GHOST_SystemHandle systemhandle)
   return (int)system->getFullScreen();
 }
 
-int GHOST_ProcessEvents(GHOST_SystemHandle systemhandle, int waitForEvent)
+bool GHOST_ProcessEvents(GHOST_SystemHandle systemhandle, bool waitForEvent)
 {
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
 
-  return (int)system->processEvents(waitForEvent ? true : false);
+  return system->processEvents(waitForEvent);
 }
 
 void GHOST_DispatchEvents(GHOST_SystemHandle systemhandle)
@@ -264,30 +308,26 @@ GHOST_TSuccess GHOST_SetCursorShape(GHOST_WindowHandle windowhandle,
   return window->setCursorShape(cursorshape);
 }
 
-GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
-                                          GHOST_TUns8 bitmap[16][2],
-                                          GHOST_TUns8 mask[16][2],
-                                          int hotX,
-                                          int hotY)
+GHOST_TSuccess GHOST_HasCursorShape(GHOST_WindowHandle windowhandle,
+                                    GHOST_TStandardCursor cursorshape)
 {
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
 
-  return window->setCustomCursorShape(bitmap, mask, hotX, hotY);
+  return window->hasCursorShape(cursorshape);
 }
 
-GHOST_TSuccess GHOST_SetCustomCursorShapeEx(GHOST_WindowHandle windowhandle,
-                                            GHOST_TUns8 *bitmap,
-                                            GHOST_TUns8 *mask,
-                                            int sizex,
-                                            int sizey,
-                                            int hotX,
-                                            int hotY,
-                                            int fg_color,
-                                            int bg_color)
+GHOST_TSuccess GHOST_SetCustomCursorShape(GHOST_WindowHandle windowhandle,
+                                          GHOST_TUns8 *bitmap,
+                                          GHOST_TUns8 *mask,
+                                          int sizex,
+                                          int sizey,
+                                          int hotX,
+                                          int hotY,
+                                          GHOST_TUns8 canInvertColor)
 {
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
 
-  return window->setCustomCursorShape(bitmap, mask, sizex, sizey, hotX, hotY, fg_color, bg_color);
+  return window->setCustomCursorShape(bitmap, mask, sizex, sizey, hotX, hotY, canInvertColor);
 }
 
 int GHOST_GetCursorVisibility(GHOST_WindowHandle windowhandle)
@@ -324,6 +364,7 @@ GHOST_TSuccess GHOST_SetCursorPosition(GHOST_SystemHandle systemhandle,
 
 GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
                                    GHOST_TGrabCursorMode mode,
+                                   GHOST_TAxisFlag wrap_axis,
                                    int bounds[4],
                                    const int mouse_ungrab_xy[2])
 {
@@ -340,7 +381,7 @@ GHOST_TSuccess GHOST_SetCursorGrab(GHOST_WindowHandle windowhandle,
   }
 
   return window->setCursorGrab(
-      mode, bounds ? &bounds_rect : NULL, mouse_ungrab_xy ? mouse_xy : NULL);
+      mode, wrap_axis, bounds ? &bounds_rect : NULL, mouse_ungrab_xy ? mouse_xy : NULL);
 }
 
 GHOST_TSuccess GHOST_GetModifierKeyState(GHOST_SystemHandle systemhandle,
@@ -474,17 +515,15 @@ void GHOST_SetTitle(GHOST_WindowHandle windowhandle, const char *title)
 char *GHOST_GetTitle(GHOST_WindowHandle windowhandle)
 {
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
-  STR_String title;
+  std::string title = window->getTitle();
 
-  window->getTitle(title);
-
-  char *ctitle = (char *)malloc(title.Length() + 1);
+  char *ctitle = (char *)malloc(title.size() + 1);
 
   if (ctitle == NULL) {
     return NULL;
   }
 
-  strcpy(ctitle, title.Ptr());
+  strcpy(ctitle, title.c_str());
 
   return ctitle;
 }
@@ -611,13 +650,6 @@ GHOST_TSuccess GHOST_GetSwapInterval(GHOST_WindowHandle windowhandle, int *inter
   return window->getSwapInterval(*intervalOut);
 }
 
-GHOST_TUns16 GHOST_GetNumOfAASamples(GHOST_WindowHandle windowhandle)
-{
-  GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
-
-  return window->getNumOfAASamples();
-}
-
 GHOST_TSuccess GHOST_ActivateWindowDrawingContext(GHOST_WindowHandle windowhandle)
 {
   GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
@@ -628,8 +660,13 @@ GHOST_TSuccess GHOST_ActivateWindowDrawingContext(GHOST_WindowHandle windowhandl
 GHOST_TSuccess GHOST_ActivateOpenGLContext(GHOST_ContextHandle contexthandle)
 {
   GHOST_IContext *context = (GHOST_IContext *)contexthandle;
-
-  return context->activateDrawingContext();
+  if (context) {
+    return context->activateDrawingContext();
+  }
+  else {
+    GHOST_PRINTF("%s: Context not valid\n", __func__);
+    return GHOST_kFailure;
+  }
 }
 
 GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle)
@@ -637,6 +674,20 @@ GHOST_TSuccess GHOST_ReleaseOpenGLContext(GHOST_ContextHandle contexthandle)
   GHOST_IContext *context = (GHOST_IContext *)contexthandle;
 
   return context->releaseDrawingContext();
+}
+
+unsigned int GHOST_GetContextDefaultOpenGLFramebuffer(GHOST_ContextHandle contexthandle)
+{
+  GHOST_IContext *context = (GHOST_IContext *)contexthandle;
+
+  return context->getDefaultFramebuffer();
+}
+
+unsigned int GHOST_GetDefaultOpenGLFramebuffer(GHOST_WindowHandle windowhandle)
+{
+  GHOST_IWindow *window = (GHOST_IWindow *)windowhandle;
+
+  return window->getDefaultFramebuffer();
 }
 
 GHOST_TSuccess GHOST_InvalidateWindow(GHOST_WindowHandle windowhandle)
@@ -650,11 +701,6 @@ void GHOST_SetTabletAPI(GHOST_SystemHandle systemhandle, GHOST_TTabletAPI api)
 {
   GHOST_ISystem *system = (GHOST_ISystem *)systemhandle;
   system->setTabletAPI(api);
-}
-
-const GHOST_TabletData *GHOST_GetTabletData(GHOST_WindowHandle windowhandle)
-{
-  return ((GHOST_IWindow *)windowhandle)->GetTabletData();
 }
 
 GHOST_TInt32 GHOST_GetWidthRectangle(GHOST_RectangleHandle rectanglehandle)
@@ -795,18 +841,6 @@ int GHOST_toggleConsole(int action)
   return system->toggleConsole(action);
 }
 
-int GHOST_SupportsNativeDialogs(void)
-{
-  GHOST_ISystem *system = GHOST_ISystem::getSystem();
-  return system->supportsNativeDialogs();
-}
-
-int GHOST_confirmQuit(GHOST_WindowHandle windowhandle)
-{
-  GHOST_ISystem *system = GHOST_ISystem::getSystem();
-  return system->confirmQuit((GHOST_IWindow *)windowhandle);
-}
-
 int GHOST_UseNativePixels(void)
 {
   GHOST_ISystem *system = GHOST_ISystem::getSystem();
@@ -853,3 +887,212 @@ void GHOST_EndIME(GHOST_WindowHandle windowhandle)
 }
 
 #endif /* WITH_INPUT_IME */
+
+#ifdef WITH_XR_OPENXR
+
+#  define GHOST_XR_CAPI_CALL(call, ctx) \
+    try { \
+      call; \
+    } \
+    catch (GHOST_XrException & e) { \
+      (ctx)->dispatchErrorMessage(&e); \
+    }
+
+#  define GHOST_XR_CAPI_CALL_RET(call, ctx) \
+    try { \
+      return call; \
+    } \
+    catch (GHOST_XrException & e) { \
+      (ctx)->dispatchErrorMessage(&e); \
+    }
+
+void GHOST_XrSessionStart(GHOST_XrContextHandle xr_contexthandle,
+                          const GHOST_XrSessionBeginInfo *begin_info)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XR_CAPI_CALL(xr_context->startSession(begin_info), xr_context);
+}
+
+void GHOST_XrSessionEnd(GHOST_XrContextHandle xr_contexthandle)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XR_CAPI_CALL(xr_context->endSession(), xr_context);
+}
+
+void GHOST_XrSessionDrawViews(GHOST_XrContextHandle xr_contexthandle, void *draw_customdata)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XR_CAPI_CALL(xr_context->drawSessionViews(draw_customdata), xr_context);
+}
+
+int GHOST_XrSessionIsRunning(const GHOST_XrContextHandle xr_contexthandle)
+{
+  const GHOST_IXrContext *xr_context = (const GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XR_CAPI_CALL_RET(xr_context->isSessionRunning(), xr_context);
+  return 0; /* Only reached if exception is thrown. */
+}
+
+void GHOST_XrGraphicsContextBindFuncs(GHOST_XrContextHandle xr_contexthandle,
+                                      GHOST_XrGraphicsContextBindFn bind_fn,
+                                      GHOST_XrGraphicsContextUnbindFn unbind_fn)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XR_CAPI_CALL(xr_context->setGraphicsContextBindFuncs(bind_fn, unbind_fn), xr_context);
+}
+
+void GHOST_XrDrawViewFunc(GHOST_XrContextHandle xr_contexthandle, GHOST_XrDrawViewFn draw_view_fn)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XR_CAPI_CALL(xr_context->setDrawViewFunc(draw_view_fn), xr_context);
+}
+
+int GHOST_XrSessionNeedsUpsideDownDrawing(const GHOST_XrContextHandle xr_contexthandle)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+
+  GHOST_XR_CAPI_CALL_RET(xr_context->needsUpsideDownDrawing(), xr_context);
+  return 0; /* Only reached if exception is thrown. */
+}
+
+int GHOST_XrCreateActionSet(GHOST_XrContextHandle xr_contexthandle,
+                            const GHOST_XrActionSetInfo *info)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->createActionSet(*info), xr_context);
+  return 0;
+}
+
+void GHOST_XrDestroyActionSet(GHOST_XrContextHandle xr_contexthandle, const char *action_set_name)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL(xr_session->destroyActionSet(action_set_name), xr_context);
+}
+
+int GHOST_XrCreateActions(GHOST_XrContextHandle xr_contexthandle,
+                          const char *action_set_name,
+                          GHOST_TUns32 count,
+                          const GHOST_XrActionInfo *infos)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->createActions(action_set_name, count, infos), xr_context);
+  return 0;
+}
+
+void GHOST_XrDestroyActions(GHOST_XrContextHandle xr_contexthandle,
+                            const char *action_set_name,
+                            GHOST_TUns32 count,
+                            const char *const *action_names)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL(xr_session->destroyActions(action_set_name, count, action_names), xr_context);
+}
+
+int GHOST_XrCreateActionSpaces(GHOST_XrContextHandle xr_contexthandle,
+                               const char *action_set_name,
+                               GHOST_TUns32 count,
+                               const GHOST_XrActionSpaceInfo *infos)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->createActionSpaces(action_set_name, count, infos),
+                         xr_context);
+  return 0;
+}
+
+void GHOST_XrDestroyActionSpaces(GHOST_XrContextHandle xr_contexthandle,
+                                 const char *action_set_name,
+                                 GHOST_TUns32 count,
+                                 const GHOST_XrActionSpaceInfo *infos)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL(xr_session->destroyActionSpaces(action_set_name, count, infos), xr_context);
+}
+
+int GHOST_XrCreateActionBindings(GHOST_XrContextHandle xr_contexthandle,
+                                 const char *action_set_name,
+                                 GHOST_TUns32 count,
+                                 const GHOST_XrActionProfileInfo *infos)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->createActionBindings(action_set_name, count, infos),
+                         xr_context);
+  return 0;
+}
+
+void GHOST_XrDestroyActionBindings(GHOST_XrContextHandle xr_contexthandle,
+                                   const char *action_set_name,
+                                   GHOST_TUns32 count,
+                                   const GHOST_XrActionProfileInfo *infos)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL(xr_session->destroyActionBindings(action_set_name, count, infos), xr_context);
+}
+
+int GHOST_XrAttachActionSets(GHOST_XrContextHandle xr_contexthandle)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->attachActionSets(), xr_context);
+  return 0;
+}
+
+int GHOST_XrSyncActions(GHOST_XrContextHandle xr_contexthandle, const char *action_set_name)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->syncActions(action_set_name), xr_context);
+  return 0;
+}
+
+int GHOST_XrApplyHapticAction(GHOST_XrContextHandle xr_contexthandle,
+                              const char *action_set_name,
+                              const char *action_name,
+                              const GHOST_TInt64 *duration,
+                              const float *frequency,
+                              const float *amplitude)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->applyHapticAction(
+                             action_set_name, action_name, *duration, *frequency, *amplitude),
+                         xr_context);
+  return 0;
+}
+
+void GHOST_XrStopHapticAction(GHOST_XrContextHandle xr_contexthandle,
+                              const char *action_set_name,
+                              const char *action_name)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL(xr_session->stopHapticAction(action_set_name, action_name), xr_context);
+}
+
+void *GHOST_XrGetActionSetCustomdata(GHOST_XrContextHandle xr_contexthandle,
+                                     const char *action_set_name)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->getActionSetCustomdata(action_set_name), xr_context);
+  return 0;
+}
+
+void *GHOST_XrGetActionCustomdata(GHOST_XrContextHandle xr_contexthandle,
+                                  const char *action_set_name,
+                                  const char *action_name)
+{
+  GHOST_IXrContext *xr_context = (GHOST_IXrContext *)xr_contexthandle;
+  GHOST_XrSession *xr_session = xr_context->getSession();
+  GHOST_XR_CAPI_CALL_RET(xr_session->getActionCustomdata(action_set_name, action_name),
+                         xr_context);
+  return 0;
+}
+
+#endif /* WITH_XR_OPENXR */

@@ -15,7 +15,8 @@
  *
  * The Original Code is written by Rob Haarsma (phase)
  * All rights reserved.
- * This code parses the Freetype font outline data to chains of Blender's beziertriples.
+ *
+ * This code parses the Freetype font outline data to chains of Blender's bezier-triples.
  * Additional information can be found at the bottom of this file.
  *
  * Code that uses exotic character maps is present but commented out.
@@ -35,16 +36,16 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_ghash.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 #include "BLI_vfontdata.h"
-#include "BLI_listbase.h"
-#include "BLI_ghash.h"
-#include "BLI_string.h"
-#include "BLI_math.h"
 
-#include "DNA_vfont_types.h"
-#include "DNA_packedFile_types.h"
 #include "DNA_curve_types.h"
+#include "DNA_packedFile_types.h"
+#include "DNA_vfont_types.h"
 
 /* local variables */
 static FT_Library library;
@@ -134,7 +135,6 @@ static VChar *freetypechar_to_vchar(FT_Face face, FT_ULong charcode, VFontData *
       nu->type = CU_BEZIER;
       nu->pntsu = onpoints[j];
       nu->resolu = 8;
-      nu->flag = CU_2D;
       nu->flagu = CU_NURB_CYCLIC;
       nu->bezt = bezt;
 
@@ -306,7 +306,7 @@ static VFontData *objfnt_to_ftvfontdata(PackedFile *pf)
   /* Extract the first 256 character from TTF */
   lcode = charcode = FT_Get_First_Char(face, &glyph_index);
 
-  /* No charmap found from the ttf so we need to figure it out */
+  /* No `charmap` found from the TTF so we need to figure it out. */
   if (glyph_index == 0) {
     FT_CharMap found = NULL;
     FT_CharMap charmap;
@@ -386,7 +386,7 @@ static int check_freetypefont(PackedFile *pf)
   err = FT_New_Memory_Face(library, pf->data, pf->size, 0, &face);
   if (err) {
     success = 0;
-    //XXX error("This is not a valid font");
+    // XXX error("This is not a valid font");
   }
   else {
     glyph_index = FT_Get_Char_Index(face, 'A');
@@ -400,7 +400,7 @@ static int check_freetypefont(PackedFile *pf)
         success = 1;
       }
       else {
-        //XXX error("Selected Font has no outline data");
+        // XXX error("Selected Font has no outline data");
         success = 0;
       }
     }
@@ -497,7 +497,7 @@ VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
   return vchar_dst;
 }
 
-/*
+/**
  * from: http://www.freetype.org/freetype2/docs/glyphs/glyphs-6.html#section-1
  *
  * Vectorial representation of Freetype glyphs
@@ -508,27 +508,30 @@ VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
  * they come from the TrueType format. The latter are called cubic arcs and mostly come from the
  * Type1 format.
  *
- * Each arc is described through a series of start, end and control points. Each point of the outline
- * has a specific tag which indicates whether it is used to describe a line segment or an arc.
+ * Each arc is described through a series of start, end and control points.
+ * Each point of the outline has a specific tag which indicates whether it is
+ * used to describe a line segment or an arc.
  * The following rules are applied to decompose the contour's points into segments and arcs :
  *
  * # two successive "on" points indicate a line segment joining them.
  *
- * # one conic "off" point amidst two "on" points indicates a conic bezier arc, the "off" point being
- *   the control point, and the "on" ones the start and end points.
+ * # one conic "off" point amidst two "on" points indicates a conic bezier arc,
+ *   the "off" point being the control point, and the "on" ones the start and end points.
  *
- * # Two successive cubic "off" points amidst two "on" points indicate a cubic bezier arc. There must
- *   be exactly two cubic control points and two on points for each cubic arc (using a single cubic
- *   "off" point between two "on" points is forbidden, for example).
+ * # Two successive cubic "off" points amidst two "on" points indicate a cubic bezier arc.
+ *   There must be exactly two cubic control points and two on points for each cubic arc
+ *   (using a single cubic "off" point between two "on" points is forbidden, for example).
  *
- * # finally, two successive conic "off" points forces the rasterizer to create (during the scan-line
- *   conversion process exclusively) a virtual "on" point amidst them, at their exact middle. This
- *   greatly facilitates the definition of successive conic bezier arcs. Moreover, it's the way
- *   outlines are described in the TrueType specification.
+ * # finally, two successive conic "off" points forces the rasterizer to create
+ *   (during the scan-line conversion process exclusively) a virtual "on" point amidst them,
+ *   at their exact middle.
+ *   This greatly facilitates the definition of successive conic bezier arcs.
+ *   Moreover, it's the way outlines are described in the TrueType specification.
  *
  * Note that it is possible to mix conic and cubic arcs in a single contour, even though no current
  * font driver produces such outlines.
  *
+ * <pre>
  *                                   *            # on
  *                                                * off
  *                                __---__
@@ -560,9 +563,11 @@ VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int UNUSED(flag))
  *      Two "on" points
  *    and two "cubic" point
  *       between them
- * Each glyph's original outline points are located on a grid of indivisible units. The points are stored
- * in the font file as 16-bit integer grid coordinates, with the grid origin's being at (0, 0); they thus
- * range from -16384 to 16383.
+ * </pre>
+ *
+ * Each glyphs original outline points are located on a grid of indivisible units.
+ * The points are stored in the font file as 16-bit integer grid coordinates,
+ * with the grid origin's being at (0, 0); they thus range from -16384 to 16383.
  *
  * Convert conic to bezier arcs:
  * Conic P0 P1 P2

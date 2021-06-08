@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __IMAGEPYRAMID_H__
-#define __IMAGEPYRAMID_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -43,7 +42,7 @@ class ImagePyramid {
   {
   }
   ImagePyramid(const ImagePyramid &iBrother);
-  //ImagePyramid(const GrayImage& level0, unsigned nbLevels);
+  // ImagePyramid(const GrayImage& level0, unsigned nbLevels);
   virtual ~ImagePyramid();
 
   /*! Builds the pyramid.
@@ -88,7 +87,7 @@ class GaussianPyramid : public ImagePyramid {
   float _sigma;
 
  public:
-  GaussianPyramid(float iSigma = 1.f) : ImagePyramid()
+  GaussianPyramid(float iSigma = 1.0f) : ImagePyramid()
   {
     _sigma = iSigma;
   }
@@ -113,5 +112,3 @@ class GaussianPyramid : public ImagePyramid {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __IMAGEPYRAMID_H__

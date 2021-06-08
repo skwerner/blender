@@ -30,12 +30,11 @@
 
 #include "ceres/dense_qr_solver.h"
 
-
 #include <cstddef>
+
 #include "Eigen/Dense"
 #include "ceres/dense_sparse_matrix.h"
 #include "ceres/internal/eigen.h"
-#include "ceres/internal/scoped_ptr.h"
 #include "ceres/lapack.h"
 #include "ceres/linear_solver.h"
 #include "ceres/types.h"
@@ -79,7 +78,7 @@ LinearSolver::Summary DenseQRSolver::SolveUsingLAPACK(
 
   // TODO(sameeragarwal): Since we are copying anyways, the diagonal
   // can be appended to the matrix instead of doing it on A.
-  lhs_ =  A->matrix();
+  lhs_ = A->matrix();
 
   if (per_solve_options.D != NULL) {
     // Undo the modifications to the matrix A.
@@ -166,5 +165,5 @@ LinearSolver::Summary DenseQRSolver::SolveUsingEigen(
   return summary;
 }
 
-}   // namespace internal
-}   // namespace ceres
+}  // namespace internal
+}  // namespace ceres

@@ -22,14 +22,14 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_normal_map_in[] = {
-    {SOCK_FLOAT, 1, N_("Strength"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 10.0f},
-    {SOCK_RGBA, 1, N_("Color"), 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Strength"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 10.0f},
+    {SOCK_RGBA, N_("Color"), 0.5f, 0.5f, 1.0f, 1.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_normal_map_out[] = {
-    {SOCK_VECTOR, 0, N_("Normal"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static void node_shader_init_normal_map(bNodeTree *UNUSED(ntree), bNode *node)
@@ -54,82 +54,62 @@ static int gpu_shader_normal_map(GPUMaterial *mat,
                                  GPUNodeStack *out)
 {
   NodeShaderNormalMap *nm = node->storage;
-  GPUNodeLink *negnorm;
-  GPUNodeLink *realnorm;
+
   GPUNodeLink *strength;
-
-  float d[4] = {0, 0, 0, 0};
-
-  if (in[0].link)
+  if (in[0].link) {
     strength = in[0].link;
+  }
   else if (node->original) {
     bNodeSocket *socket = BLI_findlink(&node->original->inputs, 0);
     bNodeSocketValueFloat *socket_data = socket->default_value;
     strength = GPU_uniform(&socket_data->value);
   }
-  else
+  else {
     strength = GPU_constant(in[0].vec);
+  }
 
-  if (in[1].link)
-    realnorm = in[1].link;
+  GPUNodeLink *newnormal;
+  if (in[1].link) {
+    newnormal = in[1].link;
+  }
   else if (node->original) {
     bNodeSocket *socket = BLI_findlink(&node->original->inputs, 1);
     bNodeSocketValueRGBA *socket_data = socket->default_value;
-    realnorm = GPU_uniform(socket_data->value);
+    newnormal = GPU_uniform(socket_data->value);
   }
-  else
-    realnorm = GPU_constant(in[1].vec);
-
-  negnorm = GPU_builtin(GPU_VIEW_NORMAL);
-  GPU_link(mat, "math_max", strength, GPU_constant(d), &strength);
+  else {
+    newnormal = GPU_constant(in[1].vec);
+  }
 
   const char *color_to_normal_fnc_name = "color_to_normal_new_shading";
-  if (nm->space == SHD_SPACE_BLENDER_OBJECT || nm->space == SHD_SPACE_BLENDER_WORLD)
+  if (ELEM(nm->space, SHD_SPACE_BLENDER_OBJECT, SHD_SPACE_BLENDER_WORLD)) {
     color_to_normal_fnc_name = "color_to_blender_normal_new_shading";
+  }
+
+  GPU_link(mat, color_to_normal_fnc_name, newnormal, &newnormal);
   switch (nm->space) {
     case SHD_SPACE_TANGENT:
-      GPU_link(mat, "color_to_normal_new_shading", realnorm, &realnorm);
       GPU_link(mat,
                "node_normal_map",
                GPU_builtin(GPU_OBJECT_INFO),
-               GPU_attribute(CD_TANGENT, nm->uv_map),
-               negnorm,
-               realnorm,
-               &realnorm);
-      GPU_link(
-          mat, "vec_math_mix", strength, realnorm, GPU_builtin(GPU_VIEW_NORMAL), &out[0].link);
-      /* for uniform scale this is sufficient to match Cycles */
-      GPU_link(mat,
-               "direction_transform_m4v3",
-               out[0].link,
-               GPU_builtin(GPU_INVERSE_VIEW_MATRIX),
-               &out[0].link);
-      GPU_link(mat, "vect_normalize", out[0].link, &out[0].link);
-      return true;
+               GPU_attribute(mat, CD_TANGENT, nm->uv_map),
+               GPU_builtin(GPU_WORLD_NORMAL),
+               newnormal,
+               &newnormal);
+      break;
     case SHD_SPACE_OBJECT:
     case SHD_SPACE_BLENDER_OBJECT:
-      GPU_link(mat,
-               "direction_transform_m4v3",
-               negnorm,
-               GPU_builtin(GPU_INVERSE_VIEW_MATRIX),
-               &negnorm);
-      GPU_link(mat, color_to_normal_fnc_name, realnorm, &realnorm);
       GPU_link(
-          mat, "direction_transform_m4v3", realnorm, GPU_builtin(GPU_OBJECT_MATRIX), &realnorm);
+          mat, "direction_transform_m4v3", newnormal, GPU_builtin(GPU_OBJECT_MATRIX), &newnormal);
       break;
     case SHD_SPACE_WORLD:
     case SHD_SPACE_BLENDER_WORLD:
-      GPU_link(mat,
-               "direction_transform_m4v3",
-               negnorm,
-               GPU_builtin(GPU_INVERSE_VIEW_MATRIX),
-               &negnorm);
-      GPU_link(mat, color_to_normal_fnc_name, realnorm, &realnorm);
+      /* Nothing to do. */
       break;
   }
 
-  GPU_link(mat, "vec_math_mix", strength, realnorm, negnorm, &out[0].link);
-  GPU_link(mat, "vect_normalize", out[0].link, &out[0].link);
+  GPUNodeLink *oldnormal = GPU_builtin(GPU_WORLD_NORMAL);
+  GPU_link(mat, "node_normal_map_mix", strength, newnormal, oldnormal, &out[0].link);
 
   return true;
 }

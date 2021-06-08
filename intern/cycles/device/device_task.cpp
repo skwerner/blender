@@ -44,12 +44,22 @@ DeviceTask::DeviceTask(Type type_)
       shader_eval_type(0),
       shader_filter(0),
       shader_x(0),
-      shader_w(0)
+      shader_w(0),
+      buffers(nullptr),
+      tile_types(0),
+      denoising_from_render(false),
+      pass_stride(0),
+      frame_stride(0),
+      target_pass_stride(0),
+      pass_denoising_data(0),
+      pass_denoising_clean(0),
+      need_finish_queue(false),
+      integrator_branched(false)
 {
   last_update_time = time_dt();
 }
 
-int DeviceTask::get_subtask_count(int num, int max_size)
+int DeviceTask::get_subtask_count(int num, int max_size) const
 {
   if (max_size != 0) {
     int max_size_num;
@@ -77,7 +87,7 @@ int DeviceTask::get_subtask_count(int num, int max_size)
   return num;
 }
 
-void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size)
+void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size) const
 {
   num = get_subtask_count(num, max_size);
 
@@ -115,7 +125,7 @@ void DeviceTask::split(list<DeviceTask> &tasks, int num, int max_size)
 
 void DeviceTask::update_progress(RenderTile *rtile, int pixel_samples)
 {
-  if ((type != RENDER) && (type != SHADER))
+  if (type == FILM_CONVERT)
     return;
 
   if (update_progress_sample) {
@@ -133,6 +143,39 @@ void DeviceTask::update_progress(RenderTile *rtile, int pixel_samples)
 
       last_update_time = current_time;
     }
+  }
+}
+
+/* Adaptive Sampling */
+
+AdaptiveSampling::AdaptiveSampling() : use(true), adaptive_step(0), min_samples(0)
+{
+}
+
+/* Render samples in steps that align with the adaptive filtering. */
+int AdaptiveSampling::align_samples(int sample, int num_samples) const
+{
+  int end_sample = sample + num_samples;
+
+  /* Round down end sample to the nearest sample that needs filtering. */
+  end_sample &= ~(adaptive_step - 1);
+
+  if (end_sample <= sample) {
+    /* In order to reach the next sample that needs filtering, we'd need
+     * to increase num_samples. We don't do that in this function, so
+     * just keep it as is and don't filter this time around. */
+    return num_samples;
+  }
+  return end_sample - sample;
+}
+
+bool AdaptiveSampling::need_filter(int sample) const
+{
+  if (sample > min_samples) {
+    return (sample & (adaptive_step - 1)) == (adaptive_step - 1);
+  }
+  else {
+    return false;
   }
 }
 

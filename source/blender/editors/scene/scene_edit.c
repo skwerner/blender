@@ -28,21 +28,16 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_library.h"
-#include "BKE_library_remap.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
 #include "BKE_scene.h"
-#include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
 #include "BLT_translation.h"
-
-#include "DNA_object_types.h"
-#include "DNA_workspace_types.h"
 
 #include "ED_object.h"
 #include "ED_render.h"
@@ -66,13 +61,13 @@ Scene *ED_scene_add(Main *bmain, bContext *C, wmWindow *win, eSceneCopyMethod me
   else { /* different kinds of copying */
     Scene *scene_old = WM_window_get_active_scene(win);
 
-    scene_new = BKE_scene_copy(bmain, scene_old, method);
-
-    /* these can't be handled in blenkernel currently, so do them here */
+    /* We are going to deep-copy collections, objects and various object data, we need to have
+     * up-to-date obdata for that. */
     if (method == SCE_COPY_FULL) {
-      ED_editors_flush_edits(bmain, false);
-      ED_object_single_users(bmain, scene_new, true, true);
+      ED_editors_flush_edits(bmain);
     }
+
+    scene_new = BKE_scene_duplicate(bmain, scene_old, method);
   }
 
   WM_window_set_active_scene(bmain, C, win, scene_new);
@@ -86,7 +81,7 @@ Scene *ED_scene_add(Main *bmain, bContext *C, wmWindow *win, eSceneCopyMethod me
  * \note Only call outside of area/region loops
  * \return true if successful
  */
-bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
+bool ED_scene_delete(bContext *C, Main *bmain, Scene *scene)
 {
   Scene *scene_new;
 
@@ -94,14 +89,24 @@ bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
   wmWindowManager *wm = bmain->wm.first;
   WM_jobs_kill_type(wm, scene, WM_JOB_TYPE_ANY);
 
-  if (scene->id.prev)
+  if (scene->id.prev) {
     scene_new = scene->id.prev;
-  else if (scene->id.next)
+  }
+  else if (scene->id.next) {
     scene_new = scene->id.next;
-  else
+  }
+  else {
     return false;
+  }
 
-  WM_window_set_active_scene(bmain, C, win, scene_new);
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
+    if (win->parent != NULL) { /* We only care about main windows here... */
+      continue;
+    }
+    if (win->scene == scene) {
+      WM_window_set_active_scene(bmain, C, win, scene_new);
+    }
+  }
 
   BKE_id_delete(bmain, scene);
 
@@ -111,13 +116,13 @@ bool ED_scene_delete(bContext *C, Main *bmain, wmWindow *win, Scene *scene)
 /* Depsgraph updates after scene becomes active in a window. */
 void ED_scene_change_update(Main *bmain, Scene *scene, ViewLayer *layer)
 {
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, layer, true);
+  Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, layer);
 
   BKE_scene_set_background(bmain, scene);
-  DEG_graph_relations_update(depsgraph, bmain, scene, layer);
+  DEG_graph_relations_update(depsgraph);
   DEG_on_visible_update(bmain, false);
 
-  ED_render_engine_changed(bmain);
+  ED_render_engine_changed(bmain, false);
   ED_update_for_newframe(bmain, depsgraph);
 }
 
@@ -128,8 +133,8 @@ static bool view_layer_remove_poll(const Scene *scene, const ViewLayer *layer)
   if (act == -1) {
     return false;
   }
-  else if ((scene->view_layers.first == scene->view_layers.last) &&
-           (scene->view_layers.first == layer)) {
+  if ((scene->view_layers.first == scene->view_layers.last) &&
+      (scene->view_layers.first == layer)) {
     /* ensure 1 layer is kept */
     return false;
   }
@@ -170,12 +175,14 @@ bool ED_scene_view_layer_delete(Main *bmain, Scene *scene, ViewLayer *layer, Rep
 
   /* Remove from windows. */
   wmWindowManager *wm = bmain->wm.first;
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     if (win->scene == scene && STREQ(win->view_layer_name, layer->name)) {
       ViewLayer *first_layer = BKE_view_layer_default_view(scene);
       STRNCPY(win->view_layer_name, first_layer->name);
     }
   }
+
+  BKE_scene_free_view_layer_depsgraph(scene, layer);
 
   BKE_view_layer_free(layer);
 
@@ -233,20 +240,22 @@ static void SCENE_OT_new(wmOperatorType *ot)
 
 static bool scene_delete_poll(bContext *C)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  return (scene->id.prev || scene->id.next);
+  return BKE_scene_can_be_removed(bmain, scene);
 }
 
 static int scene_delete_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
 
-  if (ED_scene_delete(C, CTX_data_main(C), CTX_wm_window(C), scene) == false) {
+  if (ED_scene_delete(C, CTX_data_main(C), scene) == false) {
     return OPERATOR_CANCELLED;
   }
 
-  if (G.debug & G_DEBUG)
+  if (G.debug & G_DEBUG) {
     printf("scene delete %p\n", scene);
+  }
 
   WM_event_add_notifier(C, NC_SCENE | NA_REMOVED, scene);
 

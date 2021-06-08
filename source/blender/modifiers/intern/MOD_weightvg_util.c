@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2011 by Bastien Montagne.
@@ -27,6 +27,8 @@
 #include "BLI_rand.h"
 #include "BLI_string.h"
 
+#include "BLT_translation.h"
+
 #include "DNA_color_types.h" /* CurveMapping. */
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
@@ -35,55 +37,64 @@
 #include "DNA_scene_types.h"
 
 #include "BKE_colortools.h" /* CurveMapping. */
+#include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_deform.h"
 #include "BKE_modifier.h"
 #include "BKE_texture.h" /* Texture masking. */
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
+
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "MEM_guardedalloc.h"
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 #include "MOD_weightvg_util.h"
-#include "RE_shader_ext.h" /* Texture masking. */
+#include "RE_texture.h" /* Texture masking. */
 
 /* Maps new_w weights in place, using either one of the predefined functions, or a custom curve.
  * Return values are in new_w.
- * If indices is not NULL, it must be a table of same length as org_w and new_w, mapping to the real
- * vertex index (in case the weight tables do not cover the whole vertices...).
+ * If indices is not NULL, it must be a table of same length as org_w and new_w,
+ * mapping to the real vertex index (in case the weight tables do not cover the whole vertices...).
  * cmap might be NULL, in which case curve mapping mode will return unmodified data.
  */
-void weightvg_do_map(int num, float *new_w, short falloff_type, CurveMapping *cmap, RNG *rng)
+void weightvg_do_map(
+    int num, float *new_w, short falloff_type, const bool do_invert, CurveMapping *cmap, RNG *rng)
 {
   int i;
 
   /* Return immediately, if we have nothing to do! */
   /* Also security checks... */
-  if (((falloff_type == MOD_WVG_MAPPING_CURVE) && (cmap == NULL)) || !ELEM(falloff_type,
-                                                                           MOD_WVG_MAPPING_CURVE,
-                                                                           MOD_WVG_MAPPING_SHARP,
-                                                                           MOD_WVG_MAPPING_SMOOTH,
-                                                                           MOD_WVG_MAPPING_ROOT,
-                                                                           MOD_WVG_MAPPING_SPHERE,
-                                                                           MOD_WVG_MAPPING_RANDOM,
-                                                                           MOD_WVG_MAPPING_STEP)) {
+  if (!do_invert && (((falloff_type == MOD_WVG_MAPPING_CURVE) && (cmap == NULL)) ||
+                     !ELEM(falloff_type,
+                           MOD_WVG_MAPPING_CURVE,
+                           MOD_WVG_MAPPING_SHARP,
+                           MOD_WVG_MAPPING_SMOOTH,
+                           MOD_WVG_MAPPING_ROOT,
+                           MOD_WVG_MAPPING_SPHERE,
+                           MOD_WVG_MAPPING_RANDOM,
+                           MOD_WVG_MAPPING_STEP))) {
     return;
   }
 
   if (cmap && falloff_type == MOD_WVG_MAPPING_CURVE) {
-    curvemapping_initialize(cmap);
+    BKE_curvemapping_init(cmap);
   }
 
   /* Map each weight (vertex) to its new value, accordingly to the chosen mode. */
-  for (i = 0; i < num; ++i) {
+  for (i = 0; i < num; i++) {
     float fac = new_w[i];
 
     /* Code borrowed from the warp modifier. */
     /* Closely matches PROP_SMOOTH and similar. */
     switch (falloff_type) {
       case MOD_WVG_MAPPING_CURVE:
-        fac = curvemapping_evaluateF(cmap, 0, fac);
+        fac = BKE_curvemapping_evaluateF(cmap, 0, fac);
         break;
       case MOD_WVG_MAPPING_SHARP:
         fac = fac * fac;
@@ -103,17 +114,23 @@ void weightvg_do_map(int num, float *new_w, short falloff_type, CurveMapping *cm
       case MOD_WVG_MAPPING_STEP:
         fac = (fac >= 0.5f) ? 1.0f : 0.0f;
         break;
+      case MOD_WVG_MAPPING_NONE:
+        BLI_assert(do_invert);
+        break;
+      default:
+        BLI_assert(0);
     }
 
-    new_w[i] = fac;
+    new_w[i] = do_invert ? 1.0f - fac : fac;
   }
 }
 
 /* Applies new_w weights to org_w ones, using either a texture, vgroup or constant value as factor.
  * Return values are in org_w.
- * If indices is not NULL, it must be a table of same length as org_w and new_w, mapping to the real
- * vertex index (in case the weight tables do not cover the whole vertices...).
- * XXX The standard "factor" value is assumed in [0.0, 1.0] range. Else, weird results might appear.
+ * If indices is not NULL, it must be a table of same length as org_w and new_w,
+ * mapping to the real vertex index (in case the weight tables do not cover the whole vertices...).
+ * XXX The standard "factor" value is assumed in [0.0, 1.0] range.
+ * Else, weird results might appear.
  */
 void weightvg_do_mask(const ModifierEvalContext *ctx,
                       const int num,
@@ -129,14 +146,17 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
                       const int tex_use_channel,
                       const int tex_mapping,
                       Object *tex_map_object,
-                      const char *tex_uvlayer_name)
+                      const char *text_map_bone,
+                      const char *tex_uvlayer_name,
+                      const bool invert_vgroup_mask)
 {
   int ref_didx;
   int i;
 
   /* If influence factor is null, nothing to do! */
-  if (fact == 0.0f)
+  if (fact == 0.0f) {
     return;
+  }
 
   /* If we want to mask vgroup weights from a texture. */
   if (texture != NULL) {
@@ -153,6 +173,7 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
      */
     t_map.texture = texture;
     t_map.map_object = tex_map_object;
+    BLI_strncpy(t_map.map_bone, text_map_bone, sizeof(t_map.map_bone));
     BLI_strncpy(t_map.uvlayer_name, tex_uvlayer_name, sizeof(t_map.uvlayer_name));
     t_map.texmapping = tex_mapping;
 
@@ -162,7 +183,7 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
     MOD_init_texture(&t_map, ctx);
 
     /* For each weight (vertex), make the mix between org and new weights. */
-    for (i = 0; i < num; ++i) {
+    for (i = 0; i < num; i++) {
       int idx = indices ? indices[i] : i;
       TexResult texres;
       float hsv[3]; /* For HSV color space. */
@@ -209,7 +230,7 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
 
     MEM_freeN(tex_co);
   }
-  else if ((ref_didx = defgroup_name_index(ob, defgrp_name)) != -1) {
+  else if ((ref_didx = BKE_object_defgroup_name_index(ob, defgrp_name)) != -1) {
     MDeformVert *dvert = NULL;
 
     /* Check whether we want to set vgroup weights from a constant weight factor or a vertex
@@ -228,7 +249,10 @@ void weightvg_do_mask(const ModifierEvalContext *ctx,
     /* For each weight (vertex), make the mix between org and new weights. */
     for (i = 0; i < num; i++) {
       int idx = indices ? indices[i] : i;
-      const float f = defvert_find_weight(&dvert[idx], ref_didx) * fact;
+      const float f = (invert_vgroup_mask ?
+                           (1.0f - BKE_defvert_find_weight(&dvert[idx], ref_didx)) :
+                           BKE_defvert_find_weight(&dvert[idx], ref_didx)) *
+                      fact;
       org_w[i] = (new_w[i] * f) + (org_w[i] * (1.0f - f));
       /* If that vertex is not in ref vgroup, assume null factor, and hence do nothing! */
     }
@@ -258,23 +282,52 @@ void weightvg_update_vg(MDeformVert *dvert,
                         const bool do_add,
                         const float add_thresh,
                         const bool do_rem,
-                        const float rem_thresh)
+                        const float rem_thresh,
+                        const bool do_normalize)
 {
   int i;
+
+  float min_w = weights[0];
+  float norm_fac = 1.0f;
+  if (do_normalize) {
+    float max_w = weights[0];
+    for (i = 1; i < num; i++) {
+      const float w = weights[i];
+
+      /* No need to clamp here, normalization will ensure we stay within [0.0, 1.0] range. */
+      if (w < min_w) {
+        min_w = w;
+      }
+      else if (w > max_w) {
+        max_w = w;
+      }
+    }
+
+    const float range = max_w - min_w;
+    if (fabsf(range) > FLT_EPSILON) {
+      norm_fac = 1.0f / range;
+    }
+    else {
+      min_w = 0.0f;
+    }
+  }
 
   for (i = 0; i < num; i++) {
     float w = weights[i];
     MDeformVert *dv = &dvert[indices ? indices[i] : i];
     MDeformWeight *dw = dws ? dws[i] :
-                              ((defgrp_idx >= 0) ? defvert_find_index(dv, defgrp_idx) : NULL);
+                              ((defgrp_idx >= 0) ? BKE_defvert_find_index(dv, defgrp_idx) : NULL);
 
+    if (do_normalize) {
+      w = (w - min_w) * norm_fac;
+    }
     /* Never allow weights out of [0.0, 1.0] range. */
     CLAMP(w, 0.0f, 1.0f);
 
     /* If the vertex is in this vgroup, remove it if needed, or just update it. */
     if (dw != NULL) {
       if (do_rem && w < rem_thresh) {
-        defvert_remove_group(dv, dw);
+        BKE_defvert_remove_group(dv, dw);
       }
       else {
         dw->weight = w;
@@ -282,7 +335,52 @@ void weightvg_update_vg(MDeformVert *dvert,
     }
     /* Else, add it if needed! */
     else if (do_add && w > add_thresh) {
-      defvert_add_index_notest(dv, defgrp_idx, w);
+      BKE_defvert_add_index_notest(dv, defgrp_idx, w);
+    }
+  }
+}
+
+/* Common vertex weight mask interface elements for the modifier panels.
+ */
+void weightvg_ui_common(const bContext *C, PointerRNA *ob_ptr, PointerRNA *ptr, uiLayout *layout)
+{
+  PointerRNA mask_texture_ptr = RNA_pointer_get(ptr, "mask_texture");
+  bool has_mask_texture = !RNA_pointer_is_null(&mask_texture_ptr);
+  bool has_mask_vertex_group = RNA_string_length(ptr, "mask_vertex_group") != 0;
+  int mask_tex_mapping = RNA_enum_get(ptr, "mask_tex_mapping");
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "mask_constant", UI_ITEM_R_SLIDER, IFACE_("Global Influence:"), ICON_NONE);
+
+  if (!has_mask_texture) {
+    modifier_vgroup_ui(layout, ptr, ob_ptr, "mask_vertex_group", "invert_mask_vertex_group", NULL);
+  }
+
+  if (!has_mask_vertex_group) {
+    uiTemplateID(layout,
+                 C,
+                 ptr,
+                 "mask_texture",
+                 "texture.new",
+                 NULL,
+                 NULL,
+                 0,
+                 ICON_NONE,
+                 IFACE_("Mask Texture"));
+
+    if (has_mask_texture) {
+      uiItemR(layout, ptr, "mask_tex_use_channel", 0, IFACE_("Channel"), ICON_NONE);
+      uiItemR(layout, ptr, "mask_tex_mapping", 0, NULL, ICON_NONE);
+
+      if (mask_tex_mapping == MOD_DISP_MAP_OBJECT) {
+        uiItemR(layout, ptr, "mask_tex_map_object", 0, IFACE_("Object"), ICON_NONE);
+      }
+      else if (mask_tex_mapping == MOD_DISP_MAP_UV && RNA_enum_get(ob_ptr, "type") == OB_MESH) {
+        PointerRNA obj_data_ptr = RNA_pointer_get(ob_ptr, "data");
+        uiItemPointerR(
+            layout, ptr, "mask_tex_uv_layer", &obj_data_ptr, "uv_layers", NULL, ICON_NONE);
+      }
     }
   }
 }

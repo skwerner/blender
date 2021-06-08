@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FASTGRID_H__
-#define __FASTGRID_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -28,7 +27,8 @@ namespace Freestyle {
 
 /*! Class to define a regular grid used for ray casting computations
  *  We don't use a hashtable here. The grid is explicitly stored for faster computations.
- *  However, this might result in significant increase in memory usage (compared to the regular grid)
+ *  However, this might result in significant increase in memory usage
+ *  (compared to the regular grid).
  */
 class FastGrid : public Grid {
  public:
@@ -43,8 +43,9 @@ class FastGrid : public Grid {
     clear();
   }
 
-  /*! clears the grid
-   *  Deletes all the cells, clears the hashtable, resets size, size of cell, number of cells.
+  /*!
+   * clears the grid
+   * Deletes all the cells, clears the hashtable, resets size, size of cell, number of cells.
    */
   virtual void clear();
 
@@ -58,7 +59,7 @@ class FastGrid : public Grid {
    */
   virtual void configure(const Vec3r &orig, const Vec3r &size, unsigned nb);
 
-  /*! returns the cell whose coordinates are pased as argument */
+  /*! returns the cell whose coordinates are passed as argument */
   Cell *getCell(const Vec3u &p);
 
   /*! Fills the case p with the cell iCell */
@@ -74,5 +75,3 @@ class FastGrid : public Grid {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FASTGRID_H__

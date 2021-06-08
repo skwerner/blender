@@ -28,6 +28,8 @@ CCL_NAMESPACE_BEGIN
 struct Node;
 struct NodeType;
 
+typedef uint64_t SocketModifiedFlags;
+
 /* Socket Type */
 
 struct SocketType {
@@ -85,9 +87,10 @@ struct SocketType {
   int struct_offset;
   const void *default_value;
   const NodeEnum *enum_values;
-  const NodeType **node_type;
+  const NodeType *node_type;
   int flags;
   ustring ui_name;
+  SocketModifiedFlags modified_flag_bit;
 
   size_t size() const;
   bool is_array() const;
@@ -103,7 +106,7 @@ struct SocketType {
 struct NodeType {
   enum Type { NONE, SHADER };
 
-  explicit NodeType(Type type = NONE);
+  explicit NodeType(Type type = NONE, const NodeType *base = NULL);
   ~NodeType();
 
   void register_input(ustring name,
@@ -112,7 +115,7 @@ struct NodeType {
                       int struct_offset,
                       const void *default_value,
                       const NodeEnum *enum_values = NULL,
-                      const NodeType **node_type = NULL,
+                      const NodeType *node_type = NULL,
                       int flags = 0,
                       int extra_flags = 0);
   void register_output(ustring name, ustring ui_name, SocketType::Type type);
@@ -124,18 +127,26 @@ struct NodeType {
 
   ustring name;
   Type type;
+  const NodeType *base;
   vector<SocketType, std::allocator<SocketType>> inputs;
   vector<SocketType, std::allocator<SocketType>> outputs;
   CreateFunc create;
 
-  static NodeType *add(const char *name, CreateFunc create, Type type = NONE);
+  static NodeType *add(const char *name,
+                       CreateFunc create,
+                       Type type = NONE,
+                       const NodeType *base = NULL);
   static const NodeType *find(ustring name);
   static unordered_map<ustring, NodeType, ustringHash> &types();
 };
 
-/* Node Definition Macros */
+/* Node Definition Macros
+ *
+ * Node we use accessor to get node types to ensure correct static
+ * initialization order. */
 
 #define NODE_DECLARE \
+  static const NodeType *get_node_type(); \
   template<typename T> static const NodeType *register_type(); \
   static Node *create(const NodeType *type); \
   static const NodeType *node_type;
@@ -146,16 +157,34 @@ struct NodeType {
   { \
     return new structname(); \
   } \
+  const NodeType *structname::get_node_type() \
+  { \
+    return node_type; \
+  } \
   template<typename T> const NodeType *structname::register_type()
+
+#define NODE_ABSTRACT_DECLARE \
+  template<typename T> static const NodeType *register_base_type(); \
+  static const NodeType *get_node_base_type();
+
+#define NODE_ABSTRACT_DEFINE(structname) \
+  const NodeType *structname::get_node_base_type() \
+  { \
+    /* Base types constructed in this getter to ensure correct initialization \
+     * order. Regular types are not so they are auto-registered for XML parsing. */ \
+    static const NodeType *node_base_type = register_base_type<structname>(); \
+    return node_base_type; \
+  } \
+  template<typename T> const NodeType *structname::register_base_type()
 
 /* Sock Definition Macros */
 
-#define SOCKET_OFFSETOF(T, name) (((char *)&(((T *)1)->name)) - (char *)1)
-#define SOCKET_SIZEOF(T, name) (sizeof(((T *)1)->name))
+#define SOCKET_OFFSETOF(T, name) offsetof(T, name)
+#define SOCKET_SIZEOF(T, name) (sizeof(T::name))
 #define SOCKET_DEFINE(name, ui_name, default_value, datatype, TYPE, flags, ...) \
   { \
     static datatype defval = default_value; \
-    CHECK_TYPE(((T *)1)->name, datatype); \
+    CHECK_TYPE(T::name, datatype); \
     type->register_input(ustring(#name), \
                          ustring(ui_name), \
                          TYPE, \
@@ -252,8 +281,8 @@ struct NodeType {
                 ##__VA_ARGS__)
 #define SOCKET_NODE_ARRAY(name, ui_name, node_type, ...) \
   { \
-    static Node *defval = NULL; \
-    assert(SOCKET_SIZEOF(T, name) == sizeof(Node *)); \
+    static array<Node *> defval = {}; \
+    assert(SOCKET_SIZEOF(T, name) == sizeof(array<Node *>)); \
     type->register_input(ustring(#name), \
                          ustring(ui_name), \
                          SocketType::NODE_ARRAY, \

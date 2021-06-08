@@ -17,9 +17,9 @@
 
 set(INC
   .
-  ../../bmesh
   ../../blenkernel
   ../../blenlib
+  ../../bmesh
   ../../depsgraph
   ../../makesdna
   ../../../../intern/guardedalloc
@@ -55,10 +55,17 @@ set(LIB
   bf_blenkernel
   bf_blenlib
   bf_python_mathutils
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
+endif()
+
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
 endif()
 
 blender_add_lib(bf_python_bmesh "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

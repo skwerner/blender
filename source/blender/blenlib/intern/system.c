@@ -18,20 +18,22 @@
  * \ingroup bli
  */
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "BLI_utildefines.h"
-#include "BLI_system.h"
+#include "BLI_math_base.h"
 #include "BLI_string.h"
+#include "BLI_system.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
 /* for backtrace and gethostname/GetComputerName */
 #if defined(WIN32)
 #  include <intrin.h>
-#  include <windows.h>
-#  include <dbghelp.h>
+
+#  include "BLI_winstuff.h"
 #else
 #  include <execinfo.h>
 #  include <unistd.h>
@@ -69,6 +71,8 @@ int BLI_cpu_support_sse2(void)
 #endif
 }
 
+/* Windows stack-walk lives in system_win32.c */
+#if !defined(_MSC_VER)
 /**
  * Write a backtrace into a file for systems which support it.
  */
@@ -76,9 +80,9 @@ void BLI_system_backtrace(FILE *fp)
 {
   /* ------------- */
   /* Linux / Apple */
-#if defined(__linux__) || defined(__APPLE__)
+#  if defined(__linux__) || defined(__APPLE__)
 
-#  define SIZE 100
+#    define SIZE 100
   void *buffer[SIZE];
   int nptrs;
   char **strings;
@@ -93,54 +97,25 @@ void BLI_system_backtrace(FILE *fp)
   }
 
   free(strings);
-#  undef SIZE
-
-  /* -------- */
-  /* Windows  */
-#elif defined(_MSC_VER)
-
-#  ifndef NDEBUG
-#    define MAXSYMBOL 256
-#    define SIZE 100
-  unsigned short i;
-  void *stack[SIZE];
-  unsigned short nframes;
-  SYMBOL_INFO *symbolinfo;
-  HANDLE process;
-
-  process = GetCurrentProcess();
-
-  SymInitialize(process, NULL, TRUE);
-
-  nframes = CaptureStackBackTrace(0, SIZE, stack, NULL);
-  symbolinfo = MEM_callocN(sizeof(SYMBOL_INFO) + MAXSYMBOL * sizeof(char), "crash Symbol table");
-  symbolinfo->MaxNameLen = MAXSYMBOL - 1;
-  symbolinfo->SizeOfStruct = sizeof(SYMBOL_INFO);
-
-  for (i = 0; i < nframes; i++) {
-    SymFromAddr(process, (DWORD64)(stack[i]), 0, symbolinfo);
-
-    fprintf(fp, "%u: %s - 0x%0X\n", nframes - i - 1, symbolinfo->Name, symbolinfo->Address);
-  }
-
-  MEM_freeN(symbolinfo);
-#    undef MAXSYMBOL
 #    undef SIZE
+
 #  else
-  fprintf(fp, "Crash backtrace not supported on release builds\n");
-#  endif /* NDEBUG */
-#else    /* _MSC_VER */
   /* ------------------ */
   /* non msvc/osx/linux */
   (void)fp;
-#endif
+#  endif
 }
+#endif
 /* end BLI_system_backtrace */
 
 /* NOTE: The code for CPU brand string is adopted from Cycles. */
 
 #if !defined(_WIN32) || defined(FREE_WINDOWS)
-static void __cpuid(int data[4], int selector)
+static void __cpuid(
+    /* Cannot be const, because it is modified below.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    int data[4],
+    int selector)
 {
 #  if defined(__x86_64__)
   asm("cpuid" : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3]) : "a"(selector));
@@ -153,6 +128,7 @@ static void __cpuid(int data[4], int selector)
       : "a"(selector)
       : "ebx");
 #  else
+  (void)selector;
   data[0] = data[1] = data[2] = data[3] = 0;
 #  endif
 }
@@ -160,7 +136,7 @@ static void __cpuid(int data[4], int selector)
 
 char *BLI_cpu_brand_string(void)
 {
-  char buf[48] = {0};
+  char buf[49] = {0};
   int result[4] = {0};
   __cpuid(result, 0x80000000);
   if (result[0] >= (int)0x80000004) {
@@ -172,6 +148,19 @@ char *BLI_cpu_brand_string(void)
     return brand;
   }
   return NULL;
+}
+
+int BLI_cpu_support_sse41(void)
+{
+  int result[4], num;
+  __cpuid(result, 0);
+  num = result[0];
+
+  if (num >= 1) {
+    __cpuid(result, 0x00000001);
+    return (result[2] & ((int)1 << 19)) != 0;
+  }
+  return 0;
 }
 
 void BLI_hostname_get(char *buffer, size_t bufsize)
@@ -188,4 +177,21 @@ void BLI_hostname_get(char *buffer, size_t bufsize)
     strncpy(buffer, "-unknown-", bufsize);
   }
 #endif
+}
+
+size_t BLI_system_memory_max_in_megabytes(void)
+{
+  /* Maximum addressable bytes on this platform.
+   *
+   * NOTE: Due to the shift arithmetic this is a half of the memory. */
+  const size_t limit_bytes_half = (((size_t)1) << ((sizeof(size_t[8])) - 1));
+  /* Convert it to megabytes and return. */
+  return (limit_bytes_half >> 20) * 2;
+}
+
+int BLI_system_memory_max_in_megabytes_int(void)
+{
+  const size_t limit_megabytes = BLI_system_memory_max_in_megabytes();
+  /* NOTE: The result will fit into integer. */
+  return (int)min_zz(limit_megabytes, (size_t)INT_MAX);
 }

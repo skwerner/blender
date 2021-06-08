@@ -22,9 +22,9 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_heap_simple.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_heap_simple.h"
 
 #include "bmesh.h"
 
@@ -43,9 +43,11 @@
  *   - never step over the same element twice (tag elements as #ELE_TOUCHED).
  *     this avoids going into an eternal loop if there are many possible branches (see T45582).
  *   - when running into a branch, create a new #PathLinkState state and add to the heap.
- *   - when the target is reached, finish - since none of the other paths can be shorter then the one just found.
+ *   - when the target is reached,
+ *     finish - since none of the other paths can be shorter than the one just found.
  * - if the connection can't be found - fail.
- * - with the connection found, split all edges tagging verts (or tag verts that sit on the intersection).
+ * - with the connection found, split all edges tagging verts
+ *   (or tag verts that sit on the intersection).
  * - run the standard connect operator.
  */
 
@@ -153,16 +155,14 @@ static int min_dist_dir_test(MinDistDir *mddir, const float dist_dir[3], const f
   if (mddir->dist_min[0] == FLT_MAX) {
     return 0;
   }
-  else {
-    if (dot_v3v3(dist_dir, mddir->dir) > 0.0f) {
-      if (dist_sq < mddir->dist_min[0]) {
-        return 0;
-      }
+  if (dot_v3v3(dist_dir, mddir->dir) > 0.0f) {
+    if (dist_sq < mddir->dist_min[0]) {
+      return 0;
     }
-    else {
-      if (dist_sq < mddir->dist_min[1]) {
-        return 1;
-      }
+  }
+  else {
+    if (dist_sq < mddir->dist_min[1]) {
+      return 1;
     }
   }
 
@@ -180,8 +180,8 @@ static void min_dist_dir_update(MinDistDir *dist, const float dist_dir[3])
 
 static int state_isect_co_pair(const PathContext *pc, const float co_a[3], const float co_b[3])
 {
-  const float diff_a = dot_m3_v3_row_x((float(*)[3])pc->matrix, co_a) - pc->axis_sep;
-  const float diff_b = dot_m3_v3_row_x((float(*)[3])pc->matrix, co_b) - pc->axis_sep;
+  const float diff_a = dot_m3_v3_row_x(pc->matrix, co_a) - pc->axis_sep;
+  const float diff_b = dot_m3_v3_row_x(pc->matrix, co_b) - pc->axis_sep;
 
   const int test_a = (fabsf(diff_a) < CONNECT_EPS) ? 0 : (diff_a < 0.0f) ? -1 : 1;
   const int test_b = (fabsf(diff_b) < CONNECT_EPS) ? 0 : (diff_b < 0.0f) ? -1 : 1;
@@ -189,14 +189,12 @@ static int state_isect_co_pair(const PathContext *pc, const float co_a[3], const
   if ((test_a && test_b) && (test_a != test_b)) {
     return 1; /* on either side */
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static int state_isect_co_exact(const PathContext *pc, const float co[3])
 {
-  const float diff = dot_m3_v3_row_x((float(*)[3])pc->matrix, co) - pc->axis_sep;
+  const float diff = dot_m3_v3_row_x(pc->matrix, co) - pc->axis_sep;
   return (fabsf(diff) <= CONNECT_EPS);
 }
 
@@ -206,8 +204,8 @@ static float state_calc_co_pair_fac(const PathContext *pc,
 {
   float diff_a, diff_b, diff_tot;
 
-  diff_a = fabsf(dot_m3_v3_row_x((float(*)[3])pc->matrix, co_a) - pc->axis_sep);
-  diff_b = fabsf(dot_m3_v3_row_x((float(*)[3])pc->matrix, co_b) - pc->axis_sep);
+  diff_a = fabsf(dot_m3_v3_row_x(pc->matrix, co_a) - pc->axis_sep);
+  diff_b = fabsf(dot_m3_v3_row_x(pc->matrix, co_b) - pc->axis_sep);
   diff_tot = (diff_a + diff_b);
   return (diff_tot > FLT_EPSILON) ? (diff_a / diff_tot) : 0.5f;
 }
@@ -520,7 +518,8 @@ static void bm_vert_pair_to_matrix(BMVert *v_pair[2], float r_unit_mat[3][3])
     project_plane_normalized_v3_v3v3(basis_nor_a, v_pair[0]->no, basis_dir);
     project_plane_normalized_v3_v3v3(basis_nor_b, v_pair[1]->no, basis_dir);
 
-    /* don't normalize before combining so as normals approach the direction, they have less effect (T46784). */
+    /* Don't normalize before combining so as normals approach the direction,
+     * they have less effect (T46784). */
 
     /* combine the normals */
     /* for flipped faces */

@@ -22,8 +22,7 @@
  * Declaration of GHOST_Buttons struct.
  */
 
-#ifndef __GHOST_BUTTONS_H__
-#define __GHOST_BUTTONS_H__
+#pragma once
 
 #include "GHOST_Types.h"
 
@@ -41,15 +40,15 @@ struct GHOST_Buttons {
 
   /**
    * Returns the state of a single button.
-   * \param mask Key button to return.
+   * \param mask: Key button to return.
    * \return The state of the button (pressed == true).
    */
   bool get(GHOST_TButtonMask mask) const;
 
   /**
    * Updates the state of a single button.
-   * \param mask Button state to update.
-   * \param down The new state of the button.
+   * \param mask: Button state to update.
+   * \param down: The new state of the button.
    */
   void set(GHOST_TButtonMask mask, bool down);
 
@@ -62,5 +61,3 @@ struct GHOST_Buttons {
   GHOST_TUns8 m_ButtonMiddle : 1;
   GHOST_TUns8 m_ButtonRight : 1;
 };
-
-#endif  // __GHOST_BUTTONS_H__

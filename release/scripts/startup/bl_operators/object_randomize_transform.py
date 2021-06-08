@@ -18,13 +18,12 @@
 
 # <pep8-80 compliant>
 
-import bpy
 from bpy.types import Operator
 from mathutils import Vector
 
 
 def randomize_selected(context, seed, delta,
-                       loc, rot, scale, scale_even, scale_min):
+                       loc, rot, scale, scale_even, _scale_min):
 
     import random
     from random import uniform
@@ -98,7 +97,7 @@ from bpy.props import (
 
 
 class RandomizeLocRotSize(Operator):
-    """Randomize objects loc/rot/scale"""
+    """Randomize objects location, rotation, and scale"""
     bl_idname = "object.randomize_transform"
     bl_label = "Randomize Transform"
     bl_options = {'REGISTER', 'UNDO'}

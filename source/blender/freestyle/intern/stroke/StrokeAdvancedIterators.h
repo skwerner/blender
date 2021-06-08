@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STROKE_ADVANCED_ITERATORS_H__
-#define __FREESTYLE_STROKE_ADVANCED_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -23,6 +22,7 @@
  */
 
 #include "Stroke.h"
+#include "StrokeIterators.h"
 
 namespace Freestyle {
 
@@ -51,7 +51,7 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
   typedef vertex_iterator_base<vertex_nonconst_traits> iterator;
   typedef vertex_iterator_base<vertex_const_traits> const_iterator;
 
-  //protected:
+  // protected:
  public:
   vertex_container_iterator _it;
   vertex_container_iterator _begin;
@@ -59,7 +59,7 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
 
  public:
   friend class Stroke;
-  //friend class vertex_iterator;
+  // friend class vertex_iterator;
 
   inline vertex_iterator_base() : parent_class()
   {
@@ -79,7 +79,7 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
     _end = iBrother._end;
   }
 
-  //protected: //FIXME
+  // protected: //FIXME
  public:
   inline vertex_iterator_base(vertex_container_iterator it,
                               vertex_container_iterator begin,
@@ -178,5 +178,3 @@ class vertex_iterator_base : public IteratorBase<Traits, BidirectionalIteratorTa
 }  // end of namespace StrokeInternal
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STROKE_ADVANCED_ITERATORS_H__

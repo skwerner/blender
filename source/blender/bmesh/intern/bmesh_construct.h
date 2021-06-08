@@ -14,12 +14,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_CONSTRUCT_H__
-#define __BMESH_CONSTRUCT_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  */
+
+#include "bmesh_core.h"
 
 struct BMAllocTemplate;
 
@@ -61,13 +62,17 @@ void BM_elem_attrs_copy_ex(BMesh *bm_src,
                            const void *ele_src_v,
                            void *ele_dst_v,
                            const char hflag_mask,
-                           const uint64_t cd_mask);
+                           const uint64_t cd_mask_exclude);
 void BM_elem_attrs_copy(BMesh *bm_src, BMesh *bm_dst, const void *ele_src_v, void *ele_dst_v);
 void BM_elem_select_copy(BMesh *bm_dst, void *ele_dst_v, const void *ele_src_v);
 
 void BM_mesh_copy_init_customdata(BMesh *bm_dst,
                                   BMesh *bm_src,
                                   const struct BMAllocTemplate *allocsize);
+void BM_mesh_copy_init_customdata_all_layers(BMesh *bm_dst,
+                                             BMesh *bm_src,
+                                             const char htype,
+                                             const struct BMAllocTemplate *allocsize);
 BMesh *BM_mesh_copy(BMesh *bm_old);
 
 char BM_face_flag_from_mflag(const char mflag);
@@ -76,5 +81,3 @@ char BM_vert_flag_from_mflag(const char mflag);
 char BM_face_flag_to_mflag(BMFace *f);
 short BM_edge_flag_to_mflag(BMEdge *e);
 char BM_vert_flag_to_mflag(BMVert *v);
-
-#endif /* __BMESH_CONSTRUCT_H__ */

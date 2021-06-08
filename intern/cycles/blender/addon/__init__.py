@@ -15,15 +15,15 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 bl_info = {
     "name": "Cycles Render Engine",
     "author": "",
     "blender": (2, 80, 0),
-    "location": "Info header, render engine menu",
-    "description": "Cycles Render Engine integration",
+    "description": "Cycles renderer integration",
     "warning": "",
-    "wiki_url": "https://docs.blender.org/manual/en/dev/render/cycles/",
+    "doc_url": "https://docs.blender.org/manual/en/latest/render/cycles/",
     "tracker_url": "",
     "support": 'OFFICIAL',
     "category": "Render"}
@@ -55,11 +55,12 @@ from . import (
 class CyclesRender(bpy.types.RenderEngine):
     bl_idname = 'CYCLES'
     bl_label = "Cycles"
-    bl_use_shading_nodes = True
+    bl_use_eevee_viewport = True
     bl_use_preview = True
     bl_use_exclude_layers = True
     bl_use_save_buffers = True
     bl_use_spherical_stereo = True
+    bl_use_custom_freestyle = True
 
     def __init__(self):
         self.session = None
@@ -83,20 +84,20 @@ class CyclesRender(bpy.types.RenderEngine):
     def render(self, depsgraph):
         engine.render(self, depsgraph)
 
-    def bake(self, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result):
-        engine.bake(self, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result)
+    def bake(self, depsgraph, obj, pass_type, pass_filter, width, height):
+        engine.bake(self, depsgraph, obj, pass_type, pass_filter, width, height)
 
     # viewport render
-    def view_update(self, context):
+    def view_update(self, context, depsgraph):
         if not self.session:
             engine.create(self, context.blend_data,
                           context.region, context.space_data, context.region_data)
 
-        engine.reset(self, context.blend_data, context.depsgraph)
-        engine.sync(self, context.depsgraph, context.blend_data)
+        engine.reset(self, context.blend_data, depsgraph)
+        engine.sync(self, depsgraph, context.blend_data)
 
-    def view_draw(self, context):
-        engine.draw(self, context.depsgraph, context.region, context.space_data, context.region_data)
+    def view_draw(self, context, depsgraph):
+        engine.draw(self, depsgraph, context.region, context.space_data, context.region_data)
 
     def update_script_node(self, node):
         if engine.with_osl():

@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SETALPHANODE_H__
-#define __COM_SETALPHANODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief SetAlphaNode
@@ -30,7 +31,8 @@ class SetAlphaNode : public Node {
   SetAlphaNode(bNode *editorNode) : Node(editorNode)
   {
   }
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

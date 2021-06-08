@@ -17,18 +17,21 @@
  * All rights reserved.
  */
 
-#ifndef __IMB_COLORMANAGEMENT_INTERN_H__
-#define __IMB_COLORMANAGEMENT_INTERN_H__
+#pragma once
 
 /** \file
  * \ingroup imbuf
  */
 
-#include "DNA_listBase.h"
 #include "BLI_sys_types.h"
+#include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ImBuf;
-struct OCIO_ConstProcessorRcPtr;
+struct OCIO_ConstCPUProcessorRcPtr;
 
 extern float imbuf_luma_coefficients[3];
 extern float imbuf_xyz_to_rgb[3][3];
@@ -43,11 +46,18 @@ typedef struct ColorSpace {
   char name[MAX_COLORSPACE_NAME];
   char description[MAX_COLORSPACE_DESCRIPTION];
 
-  struct OCIO_ConstProcessorRcPtr *to_scene_linear;
-  struct OCIO_ConstProcessorRcPtr *from_scene_linear;
+  struct OCIO_ConstCPUProcessorRcPtr *to_scene_linear;
+  struct OCIO_ConstCPUProcessorRcPtr *from_scene_linear;
 
   bool is_invertible;
   bool is_data;
+
+  /* Additional info computed only when needed since it's not cheap. */
+  struct {
+    bool cached;
+    bool is_srgb;
+    bool is_scene_linear;
+  } info;
 } ColorSpace;
 
 typedef struct ColorManagedDisplay {
@@ -56,8 +66,8 @@ typedef struct ColorManagedDisplay {
   char name[MAX_COLORSPACE_NAME];
   ListBase views; /* LinkData.data -> ColorManagedView */
 
-  struct OCIO_ConstProcessorRcPtr *to_scene_linear;
-  struct OCIO_ConstProcessorRcPtr *from_scene_linear;
+  struct OCIO_ConstCPUProcessorRcPtr *to_scene_linear;
+  struct OCIO_ConstCPUProcessorRcPtr *from_scene_linear;
 } ColorManagedDisplay;
 
 typedef struct ColorManagedView {
@@ -116,4 +126,6 @@ void colorspace_set_default_role(char *colorspace, int size, int role);
 void colormanage_imbuf_set_default_spaces(struct ImBuf *ibuf);
 void colormanage_imbuf_make_linear(struct ImBuf *ibuf, const char *from_colorspace);
 
-#endif /* __IMB_COLORMANAGEMENT_INTERN_H__ */
+#ifdef __cplusplus
+}
+#endif

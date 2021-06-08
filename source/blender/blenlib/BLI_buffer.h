@@ -14,14 +14,17 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_BUFFER_H__
-#define __BLI_BUFFER_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
-typedef struct {
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct BLI_Buffer {
   void *data;
   const size_t elem_size;
   size_t count, alloc_count;
@@ -74,6 +77,16 @@ void BLI_buffer_resize(BLI_Buffer *buffer, const size_t new_count);
 /* Ensure size, throwing away old data, respecting BLI_BUFFER_USE_CALLOC */
 void BLI_buffer_reinit(BLI_Buffer *buffer, const size_t new_count);
 
+/* Append an array of elements. */
+void _bli_buffer_append_array(BLI_Buffer *buffer, void *data, size_t count);
+#define BLI_buffer_append_array(buffer_, type_, data_, count_) \
+  { \
+    type_ *__tmp = (data_); \
+    BLI_assert(sizeof(type_) == (buffer_)->elem_size); \
+    _bli_buffer_append_array(buffer_, __tmp, count_); \
+  } \
+  (void)0
+
 /* Does not free the buffer structure itself */
 void _bli_buffer_free(BLI_Buffer *buffer);
 #define BLI_buffer_free(name_) \
@@ -83,4 +96,16 @@ void _bli_buffer_free(BLI_Buffer *buffer);
   } \
   (void)0
 
-#endif /* __BLI_BUFFER_H__ */
+/* A buffer embedded in a struct. Using memcpy is allowed until first resize. */
+#define BLI_buffer_field_init(name_, type_) \
+  { \
+    memset(name_, 0, sizeof(*name_)); \
+    *(size_t *)&((name_)->elem_size) = sizeof(type_); \
+  } \
+  (void)0
+
+#define BLI_buffer_field_free(name_) _bli_buffer_free(name_)
+
+#ifdef __cplusplus
+}
+#endif

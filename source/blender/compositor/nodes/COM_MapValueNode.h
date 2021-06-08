@@ -16,11 +16,13 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_MAPVALUENODE_H__
-#define __COM_MAPVALUENODE_H__
+#pragma once
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
+
 /**
  * \brief MapValueNode
  * \ingroup Node
@@ -28,7 +30,8 @@
 class MapValueNode : public Node {
  public:
   MapValueNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* __COM_MAPVALUENODE_H__ */
+}  // namespace blender::compositor

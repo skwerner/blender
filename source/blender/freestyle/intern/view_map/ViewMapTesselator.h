@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_MAP_TESSELATOR_H__
-#define __FREESTYLE_VIEW_MAP_TESSELATOR_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -26,8 +25,8 @@
 #include "ViewMap.h"
 
 #include "../scene_graph/LineRep.h"
-#include "../scene_graph/NodeShape.h"
 #include "../scene_graph/NodeGroup.h"
+#include "../scene_graph/NodeShape.h"
 #include "../scene_graph/OrientedLineRep.h"
 #include "../scene_graph/VertexRep.h"
 
@@ -57,11 +56,12 @@ class ViewMapTesselator {
   {
   }
 
-  /*! Builds a set of lines rep contained under a a NodeShape, itself contained under a NodeGroup from a ViewMap */
+  /*! Builds a set of lines rep contained under a a NodeShape, itself contained under a NodeGroup
+   * from a ViewMap */
   NodeGroup *Tesselate(ViewMap *iViewMap);
 
-  /*! Builds a set of lines rep contained under a a NodeShape, itself contained under a NodeGroup from a set of
-   *  view edges
+  /*! Builds a set of lines rep contained under a a NodeShape, itself contained under a NodeGroup
+   * from a set of view edges
    */
   template<class ViewEdgesIterator>
   NodeGroup *Tesselate(ViewEdgesIterator begin, ViewEdgesIterator end);
@@ -156,7 +156,7 @@ NodeGroup *ViewMapTesselator::Tesselate(ViewEdgesIterator begin, ViewEdgesIterat
   NodeGroup *group = new NodeGroup;
   NodeShape *tshape = new NodeShape;
   group->AddChild(tshape);
-  //tshape->frs_material().setDiffuse(0.0f, 0.0f, 0.0f, 1.0f);
+  // tshape->frs_material().setDiffuse(0.0f, 0.0f, 0.0f, 1.0f);
   tshape->setFrsMaterial(_FrsMaterial);
 
   LineRep *line;
@@ -165,7 +165,8 @@ NodeGroup *ViewMapTesselator::Tesselate(ViewEdgesIterator begin, ViewEdgesIterat
   FEdge *nextFEdge, *currentEdge;
 
   int id = 0;
-  //for (vector<ViewEdge*>::const_iterator c = viewedges.begin(), cend = viewedges.end(); c != cend; c++)
+  // for (vector<ViewEdge*>::const_iterator c = viewedges.begin(), cend = viewedges.end(); c !=
+  // cend; c++)
   for (ViewEdgesIterator c = begin, cend = end; c != cend; c++) {
 #if 0
     if ((*c)->qi() > 0) {
@@ -178,36 +179,38 @@ NodeGroup *ViewMapTesselator::Tesselate(ViewEdgesIterator begin, ViewEdgesIterat
     firstEdge = (*c)->fedgeA();
 
 #if 0
-    if (firstEdge->invisibility() > 0)
+    if (firstEdge->invisibility() > 0) {
       continue;
+    }
 #endif
 
     line = new OrientedLineRep();
-    if (_overloadFrsMaterial)
+    if (_overloadFrsMaterial) {
       line->setFrsMaterial(_FrsMaterial);
+    }
 
     // there might be chains containing a single element
     if (0 == (firstEdge)->nextEdge()) {
       line->setStyle(LineRep::LINES);
-      //line->AddVertex((*c)->vertexA()->point3D());
-      //line->AddVertex((*c)->vertexB()->point3D());
+      // line->AddVertex((*c)->vertexA()->point3D());
+      // line->AddVertex((*c)->vertexB()->point3D());
       AddVertexToLine(line, firstEdge->vertexA());
       AddVertexToLine(line, firstEdge->vertexB());
     }
     else {
       line->setStyle(LineRep::LINE_STRIP);
 
-      //firstEdge = (*c);
+      // firstEdge = (*c);
       nextFEdge = firstEdge;
       currentEdge = firstEdge;
       do {
-        //line->AddVertex(nextFEdge->vertexA()->point3D());
+        // line->AddVertex(nextFEdge->vertexA()->point3D());
         AddVertexToLine(line, nextFEdge->vertexA());
         currentEdge = nextFEdge;
         nextFEdge = nextFEdge->nextEdge();
       } while ((nextFEdge != NULL) && (nextFEdge != firstEdge));
       // Add the last vertex
-      //line->AddVertex(currentEdge->vertexB()->point3D());
+      // line->AddVertex(currentEdge->vertexB()->point3D());
       AddVertexToLine(line, currentEdge->vertexB());
     }
 
@@ -221,5 +224,3 @@ NodeGroup *ViewMapTesselator::Tesselate(ViewEdgesIterator begin, ViewEdgesIterat
 }
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_MAP_TESSELATOR_H__

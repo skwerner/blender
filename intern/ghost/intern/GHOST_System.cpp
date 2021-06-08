@@ -23,13 +23,13 @@
 
 #include "GHOST_System.h"
 
-#include <time.h>
+#include <chrono>
 #include <stdio.h> /* just for printf */
 
 #include "GHOST_DisplayManager.h"
 #include "GHOST_EventManager.h"
-#include "GHOST_TimerTask.h"
 #include "GHOST_TimerManager.h"
+#include "GHOST_TimerTask.h"
 #include "GHOST_WindowManager.h"
 
 #ifdef WITH_INPUT_NDOF
@@ -46,7 +46,8 @@ GHOST_System::GHOST_System()
 #ifdef WITH_INPUT_NDOF
       m_ndofManager(0),
 #endif
-      m_tabletAPI(GHOST_kTabletAutomatic)
+      m_tabletAPI(GHOST_kTabletAutomatic),
+      m_is_debug_enabled(false)
 {
 }
 
@@ -57,12 +58,9 @@ GHOST_System::~GHOST_System()
 
 GHOST_TUns64 GHOST_System::getMilliSeconds() const
 {
-  GHOST_TUns64 millis = ::clock();
-  if (CLOCKS_PER_SEC != 1000) {
-    millis *= 1000;
-    millis /= CLOCKS_PER_SEC;
-  }
-  return millis;
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
 }
 
 GHOST_ITimerTask *GHOST_System::installTimer(GHOST_TUns64 delay,
@@ -129,8 +127,7 @@ bool GHOST_System::validWindow(GHOST_IWindow *window)
 GHOST_TSuccess GHOST_System::beginFullScreen(const GHOST_DisplaySetting &setting,
                                              GHOST_IWindow **window,
                                              const bool stereoVisual,
-                                             const bool alphaBackground,
-                                             const GHOST_TUns16 numOfAASamples)
+                                             const bool alphaBackground)
 {
   GHOST_TSuccess success = GHOST_kFailure;
   GHOST_ASSERT(m_windowManager, "GHOST_System::beginFullScreen(): invalid window manager");
@@ -139,13 +136,13 @@ GHOST_TSuccess GHOST_System::beginFullScreen(const GHOST_DisplaySetting &setting
       m_displayManager->getCurrentDisplaySetting(GHOST_DisplayManager::kMainDisplay,
                                                  m_preFullScreenSetting);
 
-      //GHOST_PRINT("GHOST_System::beginFullScreen(): activating new display settings\n");
+      // GHOST_PRINT("GHOST_System::beginFullScreen(): activating new display settings\n");
       success = m_displayManager->setCurrentDisplaySetting(GHOST_DisplayManager::kMainDisplay,
                                                            setting);
       if (success == GHOST_kSuccess) {
-        //GHOST_PRINT("GHOST_System::beginFullScreen(): creating full-screen window\n");
+        // GHOST_PRINT("GHOST_System::beginFullScreen(): creating full-screen window\n");
         success = createFullScreenWindow(
-            (GHOST_Window **)window, setting, stereoVisual, alphaBackground, numOfAASamples);
+            (GHOST_Window **)window, setting, stereoVisual, alphaBackground);
         if (success == GHOST_kSuccess) {
           m_windowManager->beginFullScreen(*window, stereoVisual);
         }
@@ -182,11 +179,11 @@ GHOST_TSuccess GHOST_System::endFullScreen(void)
   GHOST_TSuccess success = GHOST_kFailure;
   GHOST_ASSERT(m_windowManager, "GHOST_System::endFullScreen(): invalid window manager");
   if (m_windowManager->getFullScreen()) {
-    //GHOST_IWindow* window = m_windowManager->getFullScreenWindow();
-    //GHOST_PRINT("GHOST_System::endFullScreen(): leaving window manager full-screen mode\n");
+    // GHOST_IWindow* window = m_windowManager->getFullScreenWindow();
+    // GHOST_PRINT("GHOST_System::endFullScreen(): leaving window manager full-screen mode\n");
     success = m_windowManager->endFullScreen();
     GHOST_ASSERT(m_displayManager, "GHOST_System::endFullScreen(): invalid display manager");
-    //GHOST_PRINT("GHOST_System::endFullScreen(): leaving full-screen mode\n");
+    // GHOST_PRINT("GHOST_System::endFullScreen(): leaving full-screen mode\n");
     success = m_displayManager->setCurrentDisplaySetting(GHOST_DisplayManager::kMainDisplay,
                                                          m_preFullScreenSetting);
   }
@@ -309,12 +306,12 @@ GHOST_TSuccess GHOST_System::init()
   m_windowManager = new GHOST_WindowManager();
   m_eventManager = new GHOST_EventManager();
 
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
   if (m_eventManager) {
     m_eventPrinter = new GHOST_EventPrinter();
     m_eventManager->addConsumer(m_eventPrinter);
   }
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
   if (m_timerManager && m_windowManager && m_eventManager) {
     return GHOST_kSuccess;
@@ -353,8 +350,7 @@ GHOST_TSuccess GHOST_System::exit()
 GHOST_TSuccess GHOST_System::createFullScreenWindow(GHOST_Window **window,
                                                     const GHOST_DisplaySetting &settings,
                                                     const bool stereoVisual,
-                                                    const bool alphaBackground,
-                                                    const GHOST_TUns16 numOfAASamples)
+                                                    const bool alphaBackground)
 {
   GHOST_GLSettings glSettings = {0};
 
@@ -362,14 +358,13 @@ GHOST_TSuccess GHOST_System::createFullScreenWindow(GHOST_Window **window,
     glSettings.flags |= GHOST_glStereoVisual;
   if (alphaBackground)
     glSettings.flags |= GHOST_glAlphaBackground;
-  glSettings.numOfAASamples = numOfAASamples;
 
   /* note: don't use getCurrentDisplaySetting() because on X11 we may
-   * be zoomed in and the desktop may be bigger then the viewport. */
+   * be zoomed in and the desktop may be bigger than the viewport. */
   GHOST_ASSERT(m_displayManager,
                "GHOST_System::createFullScreenWindow(): invalid display manager");
-  //GHOST_PRINT("GHOST_System::createFullScreenWindow(): creating full-screen window\n");
-  *window = (GHOST_Window *)createWindow(STR_String(""),
+  // GHOST_PRINT("GHOST_System::createFullScreenWindow(): creating full-screen window\n");
+  *window = (GHOST_Window *)createWindow("",
                                          0,
                                          0,
                                          settings.xPixels,
@@ -381,16 +376,6 @@ GHOST_TSuccess GHOST_System::createFullScreenWindow(GHOST_Window **window,
   return (*window == NULL) ? GHOST_kFailure : GHOST_kSuccess;
 }
 
-int GHOST_System::confirmQuit(GHOST_IWindow * /*window*/) const
-{
-  return 1;
-}
-
-bool GHOST_System::supportsNativeDialogs(void)
-{
-  return 1;
-}
-
 bool GHOST_System::useNativePixel(void)
 {
   m_nativePixel = true;
@@ -400,4 +385,14 @@ bool GHOST_System::useNativePixel(void)
 void GHOST_System::useWindowFocus(const bool use_focus)
 {
   m_windowFocus = use_focus;
+}
+
+void GHOST_System::initDebug(bool is_debug_enabled)
+{
+  m_is_debug_enabled = is_debug_enabled;
+}
+
+bool GHOST_System::isDebugEnabled()
+{
+  return m_is_debug_enabled;
 }

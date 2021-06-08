@@ -15,14 +15,14 @@
  */
 
 #include "render/camera.h"
-#include "render/integrator.h"
 #include "render/graph.h"
+#include "render/integrator.h"
 #include "render/light.h"
 #include "render/mesh.h"
-#include "render/object.h"
-#include "render/scene.h"
 #include "render/nodes.h"
+#include "render/object.h"
 #include "render/particles.h"
+#include "render/scene.h"
 #include "render/shader.h"
 
 #include "blender/blender_object_cull.h"
@@ -32,6 +32,7 @@
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
 #include "util/util_logging.h"
+#include "util/util_task.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -50,16 +51,17 @@ bool BlenderSync::BKE_object_is_modified(BL::Object &b_ob)
   }
   else {
     /* object level material links */
-    BL::Object::material_slots_iterator slot;
-    for (b_ob.material_slots.begin(slot); slot != b_ob.material_slots.end(); ++slot)
-      if (slot->link() == BL::MaterialSlot::link_OBJECT)
+    for (BL::MaterialSlot &b_slot : b_ob.material_slots) {
+      if (b_slot.link() == BL::MaterialSlot::link_OBJECT) {
         return true;
+      }
+    }
   }
 
   return false;
 }
 
-bool BlenderSync::object_is_mesh(BL::Object &b_ob)
+bool BlenderSync::object_is_geometry(BL::Object &b_ob)
 {
   BL::ID b_ob_data = b_ob.data();
 
@@ -67,10 +69,16 @@ bool BlenderSync::object_is_mesh(BL::Object &b_ob)
     return false;
   }
 
-  if (b_ob.type() == BL::Object::type_CURVE) {
+  BL::Object::type_enum type = b_ob.type();
+
+  if (type == BL::Object::type_VOLUME || type == BL::Object::type_HAIR) {
+    /* Will be exported attached to mesh. */
+    return true;
+  }
+  else if (type == BL::Object::type_CURVE) {
     /* Skip exporting curves without faces, overhead can be
      * significant if there are many for path animation. */
-    BL::Curve b_curve(b_ob.data());
+    BL::Curve b_curve(b_ob_data);
 
     return (b_curve.bevel_object() || b_curve.extrude() != 0.0f || b_curve.bevel_depth() != 0.0f ||
             b_curve.dimensions() == BL::Curve::dimensions_2D || b_ob.modifiers.length());
@@ -88,206 +96,59 @@ bool BlenderSync::object_is_light(BL::Object &b_ob)
   return (b_ob_data && b_ob_data.is_a(&RNA_Light));
 }
 
-static uint object_ray_visibility(BL::Object &b_ob)
+void BlenderSync::sync_object_motion_init(BL::Object &b_parent, BL::Object &b_ob, Object *object)
 {
-  PointerRNA cvisibility = RNA_pointer_get(&b_ob.ptr, "cycles_visibility");
-  uint flag = 0;
+  /* Initialize motion blur for object, detecting if it's enabled and creating motion
+   * steps array if so. */
+  array<Transform> motion;
+  object->set_motion(motion);
 
-  flag |= get_boolean(cvisibility, "camera") ? PATH_RAY_CAMERA : 0;
-  flag |= get_boolean(cvisibility, "diffuse") ? PATH_RAY_DIFFUSE : 0;
-  flag |= get_boolean(cvisibility, "glossy") ? PATH_RAY_GLOSSY : 0;
-  flag |= get_boolean(cvisibility, "transmission") ? PATH_RAY_TRANSMIT : 0;
-  flag |= get_boolean(cvisibility, "shadow") ? PATH_RAY_SHADOW : 0;
-  flag |= get_boolean(cvisibility, "scatter") ? PATH_RAY_VOLUME_SCATTER : 0;
-
-  return flag;
-}
-
-/* Light */
-
-void BlenderSync::sync_light(BL::Object &b_parent,
-                             int persistent_id[OBJECT_PERSISTENT_ID_SIZE],
-                             BL::Object &b_ob,
-                             BL::Object &b_ob_instance,
-                             int random_id,
-                             Transform &tfm,
-                             bool *use_portal)
-{
-  /* test if we need to sync */
-  Light *light;
-  ObjectKey key(b_parent, persistent_id, b_ob_instance);
-
-  if (!light_map.sync(&light, b_ob, b_parent, key)) {
-    if (light->is_portal)
-      *use_portal = true;
+  Scene::MotionType need_motion = scene->need_motion();
+  if (need_motion == Scene::MOTION_NONE || !object->get_geometry()) {
     return;
   }
 
-  BL::Light b_light(b_ob.data());
+  Geometry *geom = object->get_geometry();
+  geom->set_use_motion_blur(false);
+  geom->set_motion_steps(0);
 
-  /* type */
-  switch (b_light.type()) {
-    case BL::Light::type_POINT: {
-      BL::PointLight b_point_light(b_light);
-      light->size = b_point_light.shadow_soft_size();
-      light->type = LIGHT_POINT;
-      break;
+  uint motion_steps;
+
+  if (need_motion == Scene::MOTION_BLUR) {
+    motion_steps = object_motion_steps(b_parent, b_ob, Object::MAX_MOTION_STEPS);
+    geom->set_motion_steps(motion_steps);
+    if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
+      geom->set_use_motion_blur(true);
     }
-    case BL::Light::type_SPOT: {
-      BL::SpotLight b_spot_light(b_light);
-      light->size = b_spot_light.shadow_soft_size();
-      light->type = LIGHT_SPOT;
-      light->spot_angle = b_spot_light.spot_size();
-      light->spot_smooth = b_spot_light.spot_blend();
-      break;
-    }
-    /* Hemi were removed from 2.8 */
-    // case BL::Light::type_HEMI: {
-    //  light->type = LIGHT_DISTANT;
-    //  light->size = 0.0f;
-    //  break;
-    // }
-    case BL::Light::type_SUN: {
-      BL::SunLight b_sun_light(b_light);
-      light->size = b_sun_light.shadow_soft_size();
-      light->type = LIGHT_DISTANT;
-      break;
-    }
-    case BL::Light::type_AREA: {
-      BL::AreaLight b_area_light(b_light);
-      light->size = 1.0f;
-      light->axisu = transform_get_column(&tfm, 0);
-      light->axisv = transform_get_column(&tfm, 1);
-      light->sizeu = b_area_light.size();
-      switch (b_area_light.shape()) {
-        case BL::AreaLight::shape_SQUARE:
-          light->sizev = light->sizeu;
-          light->round = false;
-          break;
-        case BL::AreaLight::shape_RECTANGLE:
-          light->sizev = b_area_light.size_y();
-          light->round = false;
-          break;
-        case BL::AreaLight::shape_DISK:
-          light->sizev = light->sizeu;
-          light->round = true;
-          break;
-        case BL::AreaLight::shape_ELLIPSE:
-          light->sizev = b_area_light.size_y();
-          light->round = true;
-          break;
-      }
-      light->type = LIGHT_AREA;
-      break;
-    }
-  }
-
-  /* location and (inverted!) direction */
-  light->co = transform_get_column(&tfm, 3);
-  light->dir = -transform_get_column(&tfm, 2);
-  light->tfm = tfm;
-
-  /* shader */
-  vector<Shader *> used_shaders;
-  find_shader(b_light, used_shaders, scene->default_light);
-  light->shader = used_shaders[0];
-
-  /* shadow */
-  PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
-  PointerRNA clight = RNA_pointer_get(&b_light.ptr, "cycles");
-  light->cast_shadow = get_boolean(clight, "cast_shadow");
-  light->use_mis = get_boolean(clight, "use_multiple_importance_sampling");
-
-  int samples = get_int(clight, "samples");
-  if (get_boolean(cscene, "use_square_samples"))
-    light->samples = samples * samples;
-  else
-    light->samples = samples;
-
-  light->max_bounces = get_int(clight, "max_bounces");
-
-  if (b_ob != b_ob_instance) {
-    light->random_id = random_id;
   }
   else {
-    light->random_id = hash_int_2d(hash_string(b_ob.name().c_str()), 0);
+    motion_steps = 3;
+    geom->set_motion_steps(motion_steps);
   }
 
-  if (light->type == LIGHT_AREA)
-    light->is_portal = get_boolean(clight, "is_portal");
-  else
-    light->is_portal = false;
+  motion.resize(motion_steps, transform_empty());
 
-  if (light->is_portal)
-    *use_portal = true;
+  if (motion_steps) {
+    motion[motion_steps / 2] = object->get_tfm();
 
-  /* visibility */
-  uint visibility = object_ray_visibility(b_ob);
-  light->use_diffuse = (visibility & PATH_RAY_DIFFUSE) != 0;
-  light->use_glossy = (visibility & PATH_RAY_GLOSSY) != 0;
-  light->use_transmission = (visibility & PATH_RAY_TRANSMIT) != 0;
-  light->use_scatter = (visibility & PATH_RAY_VOLUME_SCATTER) != 0;
+    /* update motion socket before trying to access object->motion_time */
+    object->set_motion(motion);
 
-  /* tag */
-  light->tag_update(scene);
-}
-
-void BlenderSync::sync_background_light(bool use_portal)
-{
-  BL::World b_world = b_scene.world();
-
-  if (b_world) {
-    PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
-    PointerRNA cworld = RNA_pointer_get(&b_world.ptr, "cycles");
-
-    enum SamplingMethod { SAMPLING_NONE = 0, SAMPLING_AUTOMATIC, SAMPLING_MANUAL, SAMPLING_NUM };
-    int sampling_method = get_enum(cworld, "sampling_method", SAMPLING_NUM, SAMPLING_AUTOMATIC);
-    bool sample_as_light = (sampling_method != SAMPLING_NONE);
-
-    if (sample_as_light || use_portal) {
-      /* test if we need to sync */
-      Light *light;
-      ObjectKey key(b_world, 0, b_world);
-
-      if (light_map.sync(&light, b_world, b_world, key) || world_recalc ||
-          b_world.ptr.data != world_map) {
-        light->type = LIGHT_BACKGROUND;
-        if (sampling_method == SAMPLING_MANUAL) {
-          light->map_resolution = get_int(cworld, "sample_map_resolution");
-        }
-        else {
-          light->map_resolution = 0;
-        }
-        light->shader = scene->default_background;
-        light->use_mis = sample_as_light;
-        light->max_bounces = get_int(cworld, "max_bounces");
-
-        int samples = get_int(cworld, "samples");
-        if (get_boolean(cscene, "use_square_samples"))
-          light->samples = samples * samples;
-        else
-          light->samples = samples;
-
-        light->tag_update(scene);
-        light_map.set_recalc(b_world);
-      }
+    for (size_t step = 0; step < motion_steps; step++) {
+      motion_times.insert(object->motion_time(step));
     }
   }
-
-  world_map = b_world.ptr.data;
-  world_recalc = false;
 }
-
-/* Object */
 
 Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
                                  BL::ViewLayer &b_view_layer,
                                  BL::DepsgraphObjectInstance &b_instance,
                                  float motion_time,
-                                 bool show_self,
-                                 bool show_particles,
+                                 bool use_particle_hair,
+                                 bool show_lights,
                                  BlenderObjectCulling &culling,
-                                 bool *use_portal)
+                                 bool *use_portal,
+                                 TaskPool *geom_task_pool)
 {
   const bool is_instance = b_instance.is_instance();
   BL::Object b_ob = b_instance.object();
@@ -304,11 +165,14 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
   /* light is handled separately */
   if (!motion && object_is_light(b_ob)) {
+    if (!show_lights) {
+      return NULL;
+    }
+
     /* TODO: don't use lights for excluded layers used as mask layer,
      * when dynamic overrides are back. */
 #if 0
-    if(!((layer_flag & view_layer.holdout_layer) &&
-         (layer_flag & view_layer.exclude_layer)))
+    if (!((layer_flag & view_layer.holdout_layer) && (layer_flag & view_layer.exclude_layer)))
 #endif
     {
       sync_light(b_parent,
@@ -324,7 +188,7 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   }
 
   /* only interested in object that we can create meshes from */
-  if (!object_is_mesh(b_ob)) {
+  if (!object_is_geometry(b_ob)) {
     return NULL;
   }
 
@@ -345,13 +209,14 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
   /* TODO: make holdout objects on excluded layer invisible for non-camera rays. */
 #if 0
-  if(use_holdout && (layer_flag & view_layer.exclude_layer)) {
+  if (use_holdout && (layer_flag & view_layer.exclude_layer)) {
     visibility &= ~(PATH_RAY_ALL_VISIBILITY - PATH_RAY_CAMERA);
   }
 #endif
 
   /* Clear camera visibility for indirect only objects. */
-  bool use_indirect_only = b_parent.indirect_only_get(PointerRNA_NULL, b_view_layer);
+  bool use_indirect_only = !use_holdout &&
+                           b_parent.indirect_only_get(PointerRNA_NULL, b_view_layer);
   if (use_indirect_only) {
     visibility &= ~PATH_RAY_CAMERA;
   }
@@ -361,8 +226,12 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
     return NULL;
   }
 
+  /* Use task pool only for non-instances, since sync_dupli_particle accesses
+   * geometry. This restriction should be removed for better performance. */
+  TaskPool *object_geom_task_pool = (is_instance) ? NULL : geom_task_pool;
+
   /* key to lookup object */
-  ObjectKey key(b_parent, persistent_id, b_ob_instance);
+  ObjectKey key(b_parent, persistent_id, b_ob_instance, use_particle_hair);
   Object *object;
 
   /* motion vector case */
@@ -373,46 +242,56 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
       /* Set transform at matching motion time step. */
       int time_index = object->motion_step(motion_time);
       if (time_index >= 0) {
-        object->motion[time_index] = tfm;
+        array<Transform> motion = object->get_motion();
+        motion[time_index] = tfm;
+        object->set_motion(motion);
       }
 
       /* mesh deformation */
-      if (object->mesh)
-        sync_mesh_motion(b_depsgraph, b_ob, object, motion_time);
+      if (object->get_geometry())
+        sync_geometry_motion(b_depsgraph,
+                             b_ob_instance,
+                             object,
+                             motion_time,
+                             use_particle_hair,
+                             object_geom_task_pool);
     }
 
     return object;
   }
 
   /* test if we need to sync */
-  bool object_updated = false;
-
-  if (object_map.sync(&object, b_ob, b_parent, key))
-    object_updated = true;
+  bool object_updated = object_map.add_or_update(&object, b_ob, b_parent, key) ||
+                        (tfm != object->get_tfm());
 
   /* mesh sync */
-  object->mesh = sync_mesh(
-      b_depsgraph, b_ob, b_ob_instance, object_updated, show_self, show_particles);
+  /* b_ob is owned by the iterator and will go out of scope at the end of the block.
+   * b_ob_instance is the original object and will remain valid for deferred geometry
+   * sync. */
+  Geometry *geometry = sync_geometry(b_depsgraph,
+                                     b_ob_instance,
+                                     b_ob_instance,
+                                     object_updated,
+                                     use_particle_hair,
+                                     object_geom_task_pool);
+  object->set_geometry(geometry);
 
   /* special case not tracked by object update flags */
 
-  /* holdout */
-  if (use_holdout != object->use_holdout) {
-    object->use_holdout = use_holdout;
-    scene->object_manager->tag_update(scene);
+  if (sync_object_attributes(b_instance, object)) {
     object_updated = true;
   }
 
-  if (visibility != object->visibility) {
-    object->visibility = visibility;
-    object_updated = true;
-  }
+  /* holdout */
+  object->set_use_holdout(use_holdout);
+
+  object->set_visibility(visibility);
 
   bool is_shadow_catcher = get_boolean(cobject, "is_shadow_catcher");
-  if (is_shadow_catcher != object->is_shadow_catcher) {
-    object->is_shadow_catcher = is_shadow_catcher;
-    object_updated = true;
-  }
+  object->set_is_shadow_catcher(is_shadow_catcher);
+
+  float shadow_terminator_offset = get_float(cobject, "shadow_terminator_offset");
+  object->set_shadow_terminator_offset(shadow_terminator_offset);
 
   /* sync the asset name for Cryptomatte */
   BL::Object parent = b_ob.parent();
@@ -426,68 +305,35 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   else {
     parent_name = b_ob.name();
   }
-  if (object->asset_name != parent_name) {
-    object->asset_name = parent_name;
-    object_updated = true;
-  }
+  object->set_asset_name(parent_name);
 
   /* object sync
    * transform comparison should not be needed, but duplis don't work perfect
    * in the depsgraph and may not signal changes, so this is a workaround */
-  if (object_updated || (object->mesh && object->mesh->need_update) || tfm != object->tfm) {
+  if (object->is_modified() || object_updated ||
+      (object->get_geometry() && object->get_geometry()->is_modified())) {
     object->name = b_ob.name().c_str();
-    object->pass_id = b_ob.pass_index();
-    object->tfm = tfm;
-    object->motion.clear();
-
-    /* motion blur */
-    Scene::MotionType need_motion = scene->need_motion();
-    if (need_motion != Scene::MOTION_NONE && object->mesh) {
-      Mesh *mesh = object->mesh;
-      mesh->use_motion_blur = false;
-      mesh->motion_steps = 0;
-
-      uint motion_steps;
-
-      if (need_motion == Scene::MOTION_BLUR) {
-        motion_steps = object_motion_steps(b_parent, b_ob);
-        mesh->motion_steps = motion_steps;
-        if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
-          mesh->use_motion_blur = true;
-        }
-      }
-      else {
-        motion_steps = 3;
-        mesh->motion_steps = motion_steps;
-      }
-
-      object->motion.clear();
-      object->motion.resize(motion_steps, transform_empty());
-
-      if (motion_steps) {
-        object->motion[motion_steps / 2] = tfm;
-
-        for (size_t step = 0; step < motion_steps; step++) {
-          motion_times.insert(object->motion_time(step));
-        }
-      }
-    }
+    object->set_pass_id(b_ob.pass_index());
+    object->set_color(get_float3(b_ob.color()));
+    object->set_tfm(tfm);
 
     /* dupli texture coordinates and random_id */
     if (is_instance) {
-      object->dupli_generated = 0.5f * get_float3(b_instance.orco()) -
-                                make_float3(0.5f, 0.5f, 0.5f);
-      object->dupli_uv = get_float2(b_instance.uv());
-      object->random_id = b_instance.random_id();
+      object->set_dupli_generated(0.5f * get_float3(b_instance.orco()) -
+                                  make_float3(0.5f, 0.5f, 0.5f));
+      object->set_dupli_uv(get_float2(b_instance.uv()));
+      object->set_random_id(b_instance.random_id());
     }
     else {
-      object->dupli_generated = make_float3(0.0f, 0.0f, 0.0f);
-      object->dupli_uv = make_float2(0.0f, 0.0f);
-      object->random_id = hash_int_2d(hash_string(object->name.c_str()), 0);
+      object->set_dupli_generated(zero_float3());
+      object->set_dupli_uv(zero_float2());
+      object->set_random_id(hash_uint2(hash_string(object->name.c_str()), 0));
     }
 
     object->tag_update(scene);
   }
+
+  sync_object_motion_init(b_parent, b_ob, object);
 
   if (is_instance) {
     /* Sync possible particle data. */
@@ -497,23 +343,158 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   return object;
 }
 
+/* This function mirrors drw_uniform_property_lookup in draw_instance_data.cpp */
+static bool lookup_property(BL::ID b_id, const string &name, float4 *r_value)
+{
+  PointerRNA ptr;
+  PropertyRNA *prop;
+
+  if (!RNA_path_resolve(&b_id.ptr, name.c_str(), &ptr, &prop)) {
+    return false;
+  }
+
+  if (prop == NULL) {
+    return false;
+  }
+
+  PropertyType type = RNA_property_type(prop);
+  int arraylen = RNA_property_array_length(&ptr, prop);
+
+  if (arraylen == 0) {
+    float value;
+
+    if (type == PROP_FLOAT)
+      value = RNA_property_float_get(&ptr, prop);
+    else if (type == PROP_INT)
+      value = RNA_property_int_get(&ptr, prop);
+    else
+      return false;
+
+    *r_value = make_float4(value, value, value, 1.0f);
+    return true;
+  }
+  else if (type == PROP_FLOAT && arraylen <= 4) {
+    *r_value = make_float4(0.0f, 0.0f, 0.0f, 1.0f);
+    RNA_property_float_get_array(&ptr, prop, &r_value->x);
+    return true;
+  }
+
+  return false;
+}
+
+/* This function mirrors drw_uniform_attribute_lookup in draw_instance_data.cpp */
+static float4 lookup_instance_property(BL::DepsgraphObjectInstance &b_instance,
+                                       const string &name,
+                                       bool use_instancer)
+{
+  string idprop_name = string_printf("[\"%s\"]", name.c_str());
+  float4 value;
+
+  /* If requesting instance data, check the parent particle system and object. */
+  if (use_instancer && b_instance.is_instance()) {
+    BL::ParticleSystem b_psys = b_instance.particle_system();
+
+    if (b_psys) {
+      if (lookup_property(b_psys.settings(), idprop_name, &value) ||
+          lookup_property(b_psys.settings(), name, &value)) {
+        return value;
+      }
+    }
+    if (lookup_property(b_instance.parent(), idprop_name, &value) ||
+        lookup_property(b_instance.parent(), name, &value)) {
+      return value;
+    }
+  }
+
+  /* Check the object and mesh. */
+  BL::Object b_ob = b_instance.object();
+  BL::ID b_data = b_ob.data();
+
+  if (lookup_property(b_ob, idprop_name, &value) || lookup_property(b_ob, name, &value) ||
+      lookup_property(b_data, idprop_name, &value) || lookup_property(b_data, name, &value)) {
+    return value;
+  }
+
+  return make_float4(0.0f);
+}
+
+bool BlenderSync::sync_object_attributes(BL::DepsgraphObjectInstance &b_instance, Object *object)
+{
+  /* Find which attributes are needed. */
+  AttributeRequestSet requests = object->get_geometry()->needed_attributes();
+
+  /* Delete attributes that became unnecessary. */
+  vector<ParamValue> &attributes = object->attributes;
+  bool changed = false;
+
+  for (int i = attributes.size() - 1; i >= 0; i--) {
+    if (!requests.find(attributes[i].name())) {
+      attributes.erase(attributes.begin() + i);
+      changed = true;
+    }
+  }
+
+  /* Update attribute values. */
+  foreach (AttributeRequest &req, requests.requests) {
+    ustring name = req.name;
+
+    std::string real_name;
+    BlenderAttributeType type = blender_attribute_name_split_type(name, &real_name);
+
+    if (type != BL::ShaderNodeAttribute::attribute_type_GEOMETRY) {
+      bool use_instancer = (type == BL::ShaderNodeAttribute::attribute_type_INSTANCER);
+      float4 value = lookup_instance_property(b_instance, real_name, use_instancer);
+
+      /* Try finding the existing attribute value. */
+      ParamValue *param = NULL;
+
+      for (size_t i = 0; i < attributes.size(); i++) {
+        if (attributes[i].name() == name) {
+          param = &attributes[i];
+          break;
+        }
+      }
+
+      /* Replace or add the value. */
+      ParamValue new_param(name, TypeDesc::TypeFloat4, 1, &value);
+      assert(new_param.datasize() == sizeof(value));
+
+      if (!param) {
+        changed = true;
+        attributes.push_back(new_param);
+      }
+      else if (memcmp(param->data(), &value, sizeof(value)) != 0) {
+        changed = true;
+        *param = new_param;
+      }
+    }
+  }
+
+  return changed;
+}
+
 /* Object Loop */
 
-void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph, float motion_time)
+void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
+                               BL::SpaceView3D &b_v3d,
+                               float motion_time)
 {
+  /* Task pool for multithreaded geometry sync. */
+  TaskPool geom_task_pool;
+
   /* layer data */
   bool motion = motion_time != 0.0f;
 
   if (!motion) {
     /* prepare for sync */
     light_map.pre_sync();
-    mesh_map.pre_sync();
+    geometry_map.pre_sync();
     object_map.pre_sync();
     particle_system_map.pre_sync();
     motion_times.clear();
   }
   else {
-    mesh_motion_synced.clear();
+    geometry_motion_synced.clear();
   }
 
   /* initialize culling */
@@ -522,60 +503,83 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph, float motion_time)
   /* object loop */
   bool cancel = false;
   bool use_portal = false;
+  const bool show_lights = BlenderViewportParameters(b_v3d).use_scene_lights;
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
-
   BL::Depsgraph::object_instances_iterator b_instance_iter;
+
   for (b_depsgraph.object_instances.begin(b_instance_iter);
        b_instance_iter != b_depsgraph.object_instances.end() && !cancel;
        ++b_instance_iter) {
     BL::DepsgraphObjectInstance b_instance = *b_instance_iter;
     BL::Object b_ob = b_instance.object();
 
-    /* load per-object culling data */
+    /* Viewport visibility. */
+    const bool show_in_viewport = !b_v3d || b_ob.visible_in_viewport_get(b_v3d);
+    if (show_in_viewport == false) {
+      continue;
+    }
+
+    /* Load per-object culling data. */
     culling.init_object(scene, b_ob);
 
-    /* test if object needs to be hidden */
-    const bool show_self = b_instance.show_self();
-    const bool show_particles = b_instance.show_particles();
+    /* Ensure the object geom supporting the hair is processed before adding
+     * the hair processing task to the task pool, calling .to_mesh() on the
+     * same object in parallel does not work. */
+    const bool sync_hair = b_instance.show_particles() && object_has_particle_hair(b_ob);
 
-    if (show_self || show_particles) {
-      /* object itself */
+    /* Object itself. */
+    if (b_instance.show_self()) {
       sync_object(b_depsgraph,
                   b_view_layer,
                   b_instance,
                   motion_time,
-                  show_self,
-                  show_particles,
+                  false,
+                  show_lights,
                   culling,
-                  &use_portal);
+                  &use_portal,
+                  sync_hair ? NULL : &geom_task_pool);
+    }
+
+    /* Particle hair as separate object. */
+    if (sync_hair) {
+      sync_object(b_depsgraph,
+                  b_view_layer,
+                  b_instance,
+                  motion_time,
+                  true,
+                  show_lights,
+                  culling,
+                  &use_portal,
+                  &geom_task_pool);
     }
 
     cancel = progress.get_cancel();
   }
 
+  geom_task_pool.wait_work();
+
   progress.set_sync_status("");
 
   if (!cancel && !motion) {
-    sync_background_light(use_portal);
+    sync_background_light(b_v3d, use_portal);
 
-    /* handle removed data and modified pointers */
-    if (light_map.post_sync())
-      scene->light_manager->tag_update(scene);
-    if (mesh_map.post_sync())
-      scene->mesh_manager->tag_update(scene);
-    if (object_map.post_sync())
-      scene->object_manager->tag_update(scene);
-    if (particle_system_map.post_sync())
-      scene->particle_system_manager->tag_update(scene);
+    /* Handle removed data and modified pointers, as this may free memory, delete Nodes in the
+     * right order to ensure that dependent data is freed after their users. Objects should be
+     * freed before particle systems and geometries. */
+    light_map.post_sync();
+    object_map.post_sync();
+    geometry_map.post_sync();
+    particle_system_map.post_sync();
   }
 
   if (motion)
-    mesh_motion_synced.clear();
+    geometry_motion_synced.clear();
 }
 
 void BlenderSync::sync_motion(BL::RenderSettings &b_render,
                               BL::Depsgraph &b_depsgraph,
+                              BL::SpaceView3D &b_v3d,
                               BL::Object &b_override,
                               int width,
                               int height,
@@ -589,20 +593,18 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
   if (b_override)
     b_cam = b_override;
 
-  Camera prevcam = *(scene->camera);
-
   int frame_center = b_scene.frame_current();
   float subframe_center = b_scene.frame_subframe();
   float frame_center_delta = 0.0f;
 
   if (scene->need_motion() != Scene::MOTION_PASS &&
-      scene->camera->motion_position != Camera::MOTION_POSITION_CENTER) {
-    float shuttertime = scene->camera->shuttertime;
-    if (scene->camera->motion_position == Camera::MOTION_POSITION_END) {
+      scene->camera->get_motion_position() != Camera::MOTION_POSITION_CENTER) {
+    float shuttertime = scene->camera->get_shuttertime();
+    if (scene->camera->get_motion_position() == Camera::MOTION_POSITION_END) {
       frame_center_delta = -shuttertime * 0.5f;
     }
     else {
-      assert(scene->camera->motion_position == Camera::MOTION_POSITION_START);
+      assert(scene->camera->get_motion_position() == Camera::MOTION_POSITION_START);
       frame_center_delta = shuttertime * 0.5f;
     }
 
@@ -612,13 +614,20 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     python_thread_state_restore(python_thread_state);
     b_engine.frame_set(frame, subframe);
     python_thread_state_save(python_thread_state);
-    sync_camera_motion(b_render, b_cam, width, height, 0.0f);
-    sync_objects(b_depsgraph, 0.0f);
+    if (b_cam) {
+      sync_camera_motion(b_render, b_cam, width, height, 0.0f);
+    }
+    sync_objects(b_depsgraph, b_v3d);
   }
 
-  /* always sample these times for camera motion */
-  motion_times.insert(-1.0f);
-  motion_times.insert(1.0f);
+  /* Insert motion times from camera. Motion times from other objects
+   * have already been added in a sync_objects call. */
+  if (b_cam) {
+    uint camera_motion_steps = object_motion_steps(b_cam, b_cam);
+    for (size_t step = 0; step < camera_motion_steps; step++) {
+      motion_times.insert(scene->camera->motion_time(step));
+    }
+  }
 
   /* note iteration over motion_times set happens in sorted order */
   foreach (float relative_time, motion_times) {
@@ -643,13 +652,11 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     b_engine.frame_set(frame, subframe);
     python_thread_state_save(python_thread_state);
 
-    /* sync camera, only supports two times at the moment */
-    if (relative_time == -1.0f || relative_time == 1.0f) {
-      sync_camera_motion(b_render, b_cam, width, height, relative_time);
-    }
+    /* Syncs camera motion if relative_time is one of the camera's motion times. */
+    sync_camera_motion(b_render, b_cam, width, height, relative_time);
 
     /* sync object */
-    sync_objects(b_depsgraph, relative_time);
+    sync_objects(b_depsgraph, b_v3d, relative_time);
   }
 
   /* we need to set the python thread state again because this
@@ -658,10 +665,6 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
   python_thread_state_restore(python_thread_state);
   b_engine.frame_set(frame_center, subframe_center);
   python_thread_state_save(python_thread_state);
-
-  /* tag camera for motion update */
-  if (scene->camera->motion_modified(prevcam))
-    scene->camera->tag_update();
 }
 
 CCL_NAMESPACE_END

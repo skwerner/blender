@@ -25,11 +25,11 @@
 
 /* **************** VECTOR BLUR ******************** */
 static bNodeSocketTemplate cmp_node_vecblur_in[] = {
-    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Z"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
-    {SOCK_VECTOR, 1, N_("Speed"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_VELOCITY},
-    {-1, 0, ""}};
-static bNodeSocketTemplate cmp_node_vecblur_out[] = {{SOCK_RGBA, 0, N_("Image")}, {-1, 0, ""}};
+    {SOCK_RGBA, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_FLOAT, N_("Z"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
+    {SOCK_VECTOR, N_("Speed"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_VELOCITY},
+    {-1, ""}};
+static bNodeSocketTemplate cmp_node_vecblur_out[] = {{SOCK_RGBA, N_("Image")}, {-1, ""}};
 
 static void node_composit_init_vecblur(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -39,7 +39,7 @@ static void node_composit_init_vecblur(bNodeTree *UNUSED(ntree), bNode *node)
   nbd->fac = 1.0f;
 }
 
-/* custom1: itterations, custom2: maxspeed (0 = nolimit) */
+/* custom1: iterations, custom2: maxspeed (0 = nolimit) */
 void register_node_type_cmp_vecblur(void)
 {
   static bNodeType ntype;

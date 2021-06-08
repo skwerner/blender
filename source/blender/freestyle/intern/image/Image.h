@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __IMAGE_H__
-#define __IMAGE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -35,9 +34,10 @@ namespace Freestyle {
 //
 ///////////////////////////////////////////////////////////////////////////////
 
-/*! This class allows the storing of part of an image, while allowing a normal access to its pixel values.
- *  You can for example only a rectangle of sw*sh, whose lower-left corner is at (ox, oy), of an image of
- *  size w*h, and access these pixels using x,y coordinates specified in the whole image coordinate system.
+/*! This class allows the storing of part of an image, while allowing a normal access to its pixel
+ * values. You can for example only a rectangle of sw*sh, whose lower-left corner is at (ox, oy),
+ * of an image of size w*h, and access these pixels using x,y coordinates specified in the whole
+ * image coordinate system.
  */
 class FrsImage {
  public:
@@ -209,7 +209,8 @@ class RGBImage : public FrsImage {
   /*! Builds an RGB partial image from the useful part buffer.
    *  \param rgb:
    *    The array of size 3*sw*sh containing the RGB values of the sw*sh pixels we need to stored.
-   *    These sw*sh pixels constitute a rectangular part of a bigger RGB image containing w*h pixels.
+   *    These sw*sh pixels constitute a rectangular part of a bigger
+   *    RGB image containing w*h pixels.
    *  \param w:
    *    The width of the complete image
    *  \param h:
@@ -236,8 +237,9 @@ class RGBImage : public FrsImage {
 
   virtual ~RGBImage()
   {
-    if (_rgb)
+    if (_rgb) {
       delete[] _rgb;
+    }
   }
 
   inline float getR(unsigned x, unsigned y) const
@@ -346,7 +348,8 @@ class GrayImage : public FrsImage {
   /*! Builds a partial image from the useful part buffer.
    *  \param lvl:
    *    The array of size sw*sh containing the gray values of the sw*sh pixels we need to stored.
-   *    These sw*sh pixels constitute a rectangular part of a bigger gray image containing w*h pixels.
+   *    These sw*sh pixels constitute a rectangular part of a bigger
+   *    gray image containing w*h pixels.
    *  \param w:
    *    The width of the complete image
    *  \param h:
@@ -373,8 +376,9 @@ class GrayImage : public FrsImage {
 
   virtual ~GrayImage()
   {
-    if (_lvl)
+    if (_lvl) {
       delete[] _lvl;
+    }
   }
 
   inline void setPixel(unsigned x, unsigned y, float v)
@@ -389,7 +393,7 @@ class GrayImage : public FrsImage {
 
   /*! Sets the array.
    *    copy
-   *      If true, the array is copie, otherwise the pounsigneder is copied
+   *      If true, the array is copied, otherwise the pounsigneder is copied
    */
   void setArray(float *lvl,
                 unsigned width,
@@ -425,5 +429,3 @@ class GrayImage : public FrsImage {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __IMAGE_H__

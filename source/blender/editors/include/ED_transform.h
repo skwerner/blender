@@ -21,23 +21,17 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TRANSFORM_H__
-#define __ED_TRANSFORM_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ******************* Registration Function ********************** */
 
-struct ARegion;
-struct ListBase;
-struct Main;
 struct Object;
-struct SnapObjectContext;
-struct SnapObjectParams;
-struct View3D;
-struct WorkSpace;
 struct bContext;
-struct wmEvent;
 struct wmKeyConfig;
-struct wmKeyMap;
 struct wmOperatorType;
 
 void ED_keymap_transform(struct wmKeyConfig *keyconf);
@@ -46,7 +40,7 @@ void transform_operatortypes(void);
 /* ******************** Macros & Prototypes *********************** */
 
 /* MODE AND NUMINPUT FLAGS */
-enum TfmMode {
+typedef enum {
   TFM_INIT = -1,
   TFM_DUMMY,
   TFM_TRANSLATION,
@@ -83,25 +77,11 @@ enum TfmMode {
   TFM_BONE_ENVELOPE_DIST,
   TFM_NORMAL_ROTATION,
   TFM_GPENCIL_OPACITY,
-};
-
-/* TRANSFORM CONTEXTS */
-#define CTX_NONE 0
-#define CTX_TEXTURE (1 << 0)
-#define CTX_EDGE (1 << 1)
-#define CTX_NO_PET (1 << 2)
-#define CTX_NO_MIRROR (1 << 3)
-#define CTX_AUTOCONFIRM (1 << 4)
-#define CTX_MOVIECLIP (1 << 6)
-#define CTX_MASK (1 << 7)
-#define CTX_PAINT_CURVE (1 << 8)
-#define CTX_GPENCIL_STROKES (1 << 9)
-#define CTX_CURSOR (1 << 10)
+} eTfmMode;
 
 /* Standalone call to get the transformation center corresponding to the current situation
  * returns 1 if successful, 0 otherwise (usually means there's no selection)
- * (if 0 is returns, *vec is unmodified)
- * */
+ * (if false is returns, `cent3d` is unmodified). */
 bool calculateTransformCenter(struct bContext *C,
                               int centerMode,
                               float cent3d[3],
@@ -109,10 +89,7 @@ bool calculateTransformCenter(struct bContext *C,
 
 struct Object;
 struct Scene;
-struct TransInfo;
-struct wmGizmoGroup;
 struct wmGizmoGroupType;
-struct wmOperator;
 
 /* UNUSED */
 // int BIF_snappingSupported(struct Object *obedit);
@@ -122,19 +99,21 @@ struct TransformOrientation;
 struct bContext;
 
 void BIF_clearTransformOrientation(struct bContext *C);
-void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
+void BIF_removeTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 void BIF_removeTransformOrientationIndex(struct bContext *C, int index);
-void BIF_createTransformOrientation(struct bContext *C,
+bool BIF_createTransformOrientation(struct bContext *C,
                                     struct ReportList *reports,
                                     const char *name,
                                     const bool use_view,
                                     const bool activate,
                                     const bool overwrite);
-void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *ts);
+void BIF_selectTransformOrientation(struct bContext *C, struct TransformOrientation *target);
 
 void ED_getTransformOrientationMatrix(const struct bContext *C,
-                                      float orientation_mat[3][3],
-                                      const short around);
+                                      struct Object *ob,
+                                      struct Object *obedit,
+                                      const short around,
+                                      float r_orientation_mat[3][3]);
 
 int BIF_countTransformOrientation(const struct bContext *C);
 
@@ -158,8 +137,22 @@ int BIF_countTransformOrientation(const struct bContext *C);
 #define P_GPENCIL_EDIT (1 << 13)
 #define P_CURSOR_EDIT (1 << 14)
 #define P_CLNOR_INVALIDATE (1 << 15)
+/* For properties performed when confirming the transformation. */
+#define P_POST_TRANSFORM (1 << 19)
 
 void Transform_Properties(struct wmOperatorType *ot, int flags);
+
+/* *** transform_orientations.c *** */
+void ED_transform_calc_orientation_from_type(const struct bContext *C, float r_mat[3][3]);
+short ED_transform_calc_orientation_from_type_ex(const struct bContext *C,
+                                                 float r_mat[3][3],
+                                                 /* extra args */
+                                                 struct Scene *scene,
+                                                 struct RegionView3D *rv3d,
+                                                 struct Object *ob,
+                                                 struct Object *obedit,
+                                                 const short orientation_index,
+                                                 const int pivot_point);
 
 /* transform gizmos */
 
@@ -171,56 +164,13 @@ void VIEW3D_GGT_xform_shear(struct wmGizmoGroupType *gzgt);
 /* *** transform_gizmo_extrude_3d.c *** */
 void VIEW3D_GGT_xform_extrude(struct wmGizmoGroupType *gzgt);
 
-bool ED_widgetgroup_gizmo2d_poll(const struct bContext *C, struct wmGizmoGroupType *gzgt);
-void ED_widgetgroup_gizmo2d_setup(const struct bContext *C, struct wmGizmoGroup *gzgroup);
-void ED_widgetgroup_gizmo2d_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
-void ED_widgetgroup_gizmo2d_draw_prepare(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+/* Generic 2D transform gizmo callback assignment. */
+void ED_widgetgroup_gizmo2d_xform_callbacks_set(struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_xform_no_cage_callbacks_set(struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_resize_callbacks_set(struct wmGizmoGroupType *gzgt);
+void ED_widgetgroup_gizmo2d_rotate_callbacks_set(struct wmGizmoGroupType *gzgt);
 
-/* Snapping */
-
-#define SNAP_MIN_DISTANCE 30
 #define SNAP_INCREMENTAL_ANGLE DEG2RAD(5.0)
-
-bool peelObjectsTransform(struct TransInfo *t,
-                          const float mval[2],
-                          const bool use_peel_object,
-                          /* return args */
-                          float r_loc[3],
-                          float r_no[3],
-                          float *r_thickness);
-bool peelObjectsSnapContext(struct SnapObjectContext *sctx,
-                            const float mval[2],
-                            const struct SnapObjectParams *params,
-                            const bool use_peel_object,
-                            /* return args */
-                            float r_loc[3],
-                            float r_no[3],
-                            float *r_thickness);
-
-bool snapObjectsTransform(struct TransInfo *t,
-                          const float mval[2],
-                          float *dist_px,
-                          /* return args */
-                          float r_loc[3],
-                          float r_no[3]);
-bool snapNodesTransform(struct TransInfo *t,
-                        const int mval[2],
-                        /* return args */
-                        float r_loc[2],
-                        float *r_dist_px,
-                        char *r_node_border);
-
-void ED_transform_calc_orientation_from_type(const struct bContext *C, float r_mat[3][3]);
-void ED_transform_calc_orientation_from_type_ex(const struct bContext *C,
-                                                float r_mat[3][3],
-                                                /* extra args */
-                                                struct Scene *scene,
-                                                struct RegionView3D *rv3d,
-                                                struct Object *ob,
-                                                struct Object *obedit,
-                                                const short orientation_type,
-                                                int orientation_index_custom,
-                                                const int pivot_point);
 
 struct TransformBounds {
   float center[3];      /* Center for transform widget. */
@@ -235,11 +185,12 @@ struct TransformCalcParams {
   uint use_only_center : 1;
   uint use_local_axis : 1;
   /* Use 'Scene.orientation_type' when zero, otherwise subtract one and use. */
-  ushort orientation_type;
-  ushort orientation_index_custom;
+  ushort orientation_index;
 };
 int ED_transform_calc_gizmo_stats(const struct bContext *C,
                                   const struct TransformCalcParams *params,
                                   struct TransformBounds *tbounds);
 
-#endif /* __ED_TRANSFORM_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -22,8 +22,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
+#include "BLI_math.h"
 
 #include "bmesh.h"
 
@@ -109,7 +109,7 @@ static BMEdge *bmo_edge_copy(BMOperator *op,
   BMO_slot_map_elem_insert(op, slot_edgemap_out, e_src, e_dst);
   BMO_slot_map_elem_insert(op, slot_edgemap_out, e_dst, e_src);
 
-  /* add to new/old edge map if necassary */
+  /* Add to new/old edge map if necessary. */
   if (rlen < 2) {
     /* not sure what non-manifold cases of greater than three
      * radial should do. */
@@ -449,7 +449,7 @@ void bmo_split_exec(BMesh *bm, BMOperator *op)
     }
   }
 
-  /* connect outputs of dupe to delete, exluding keep geometry */
+  /* connect outputs of dupe to delete, excluding keep geometry */
   BMO_mesh_delete_oflag_context(bm, SPLIT_INPUT, DEL_FACES);
 
   /* now we make our outputs by copying the dupe output */
@@ -543,9 +543,14 @@ void bmo_spin_exec(BMesh *bm, BMOperator *op)
       BMO_op_initf(bm,
                    &extop,
                    op->flag,
-                   "extrude_face_region geom=%S use_normal_flip=%b use_normal_from_adjacent=%b",
+                   "extrude_face_region "
+                   "geom=%S "
+                   "use_keep_orig=%b "
+                   "use_normal_flip=%b "
+                   "use_normal_from_adjacent=%b",
                    op,
                    "geom_last.out",
+                   use_merge,
                    use_normal_flip && (a == 0),
                    (a != 0));
       BMO_op_exec(bm, &extop);

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __MATHUTILS_H__
-#define __MATHUTILS_H__
+#pragma once
 
 /** \file
  * \ingroup pymathutils
@@ -32,8 +31,8 @@ extern char BaseMathObject_is_frozen_doc[];
 extern char BaseMathObject_owner_doc[];
 
 #define BASE_MATH_NEW(struct_name, root_type, base_type) \
-  (struct_name *)((base_type ? (base_type)->tp_alloc(base_type, 0) : \
-                               _PyObject_GC_New(&(root_type))));
+  ((struct_name *)((base_type ? (base_type)->tp_alloc(base_type, 0) : \
+                                _PyObject_GC_New(&(root_type)))))
 
 /** BaseMathObject.flag */
 enum {
@@ -52,27 +51,29 @@ enum {
 #define BASE_MATH_FLAG_DEFAULT 0
 
 #define BASE_MATH_MEMBERS(_data) \
-  PyObject_VAR_HEAD float \
-      *_data; /* array of data (alias), wrapped status depends on wrapped status */ \
-  PyObject * \
-      cb_user; /* if this vector references another object, otherwise NULL,                     \
-                               * *Note* this owns its reference */ \
-  unsigned char cb_type; /* which user funcs do we adhere to, RNA, etc */ \
-  unsigned char \
-      cb_subtype; /* subtype: location, rotation...                                                \
-                               * to avoid defining many new functions for every attribute of the same type */ \
-  unsigned char flag /* wrapped data type? */
+  /** Array of data (alias), wrapped status depends on wrapped status. */ \
+  PyObject_VAR_HEAD \
+  float *_data; \
+  /** If this vector references another object, otherwise NULL, *Note* this owns its reference */ \
+  PyObject *cb_user; \
+  /** Which user funcs do we adhere to, RNA, etc */ \
+  unsigned char cb_type; \
+  /** Subtype: location, rotation... \
+   * to avoid defining many new functions for every attribute of the same type */ \
+  unsigned char cb_subtype; \
+  /** Wrapped data type. */ \
+  unsigned char flag
 
 typedef struct {
   BASE_MATH_MEMBERS(data);
 } BaseMathObject;
 
 /* types */
-#include "mathutils_Vector.h"
+#include "mathutils_Color.h"
+#include "mathutils_Euler.h"
 #include "mathutils_Matrix.h"
 #include "mathutils_Quaternion.h"
-#include "mathutils_Euler.h"
-#include "mathutils_Color.h"
+#include "mathutils_Vector.h"
 
 /* avoid checking all types */
 #define BaseMathObject_CheckExact(v) (Py_TYPE(v)->tp_dealloc == (destructor)BaseMathObject_dealloc)
@@ -90,21 +91,21 @@ void BaseMathObject_dealloc(BaseMathObject *self);
 
 PyMODINIT_FUNC PyInit_mathutils(void);
 
-int EXPP_FloatsAreEqual(float A, float B, int floatSteps);
+int EXPP_FloatsAreEqual(float A, float B, int maxDiff);
 int EXPP_VectorsAreEqual(const float *vecA, const float *vecB, int size, int floatSteps);
 
 typedef struct Mathutils_Callback Mathutils_Callback;
 
-typedef int (*BaseMathCheckFunc)(BaseMathObject *);    /* checks the user is still valid */
-typedef int (*BaseMathGetFunc)(BaseMathObject *, int); /* gets the vector from the user */
-typedef int (*BaseMathSetFunc)(BaseMathObject *,
-                               int); /* sets the users vector values once its modified */
-typedef int (*BaseMathGetIndexFunc)(BaseMathObject *,
-                                    int,
-                                    int); /* same as above but only for an index */
-typedef int (*BaseMathSetIndexFunc)(BaseMathObject *,
-                                    int,
-                                    int); /* same as above but only for an index */
+/** Checks the user is still valid. */
+typedef int (*BaseMathCheckFunc)(BaseMathObject *);
+/** Gets the vector from the user. */
+typedef int (*BaseMathGetFunc)(BaseMathObject *, int);
+/** Sets the users vector values once its modified. */
+typedef int (*BaseMathSetFunc)(BaseMathObject *, int);
+/** Same as above but only for an index. */
+typedef int (*BaseMathGetIndexFunc)(BaseMathObject *, int, int);
+/** Same as above but only for an index. */
+typedef int (*BaseMathSetIndexFunc)(BaseMathObject *, int, int);
 
 struct Mathutils_Callback {
   BaseMathCheckFunc check;
@@ -166,6 +167,16 @@ int mathutils_array_parse_alloc_v(float **array,
                                   int array_dim,
                                   PyObject *value,
                                   const char *error_prefix);
+int mathutils_int_array_parse(int *array,
+                              int array_dim,
+                              PyObject *value,
+                              const char *error_prefix);
+int mathutils_array_parse_alloc_vi(int **array,
+                                   int array_dim,
+                                   PyObject *value,
+                                   const char *error_prefix);
+int mathutils_array_parse_alloc_viseq(
+    int **array, int **start_table, int **len_table, PyObject *value, const char *error_prefix);
 int mathutils_any_to_rotmat(float rmat[3][3], PyObject *value, const char *error_prefix);
 
 Py_hash_t mathutils_array_hash(const float *float_array, size_t array_len);
@@ -178,11 +189,9 @@ Py_hash_t mathutils_array_hash(const float *float_array, size_t array_len);
 
 #define MU_ARRAY_FLAGS (MU_ARRAY_ZERO | MU_ARRAY_SPILL)
 
-int column_vector_multiplication(float rvec[4], VectorObject *vec, MatrixObject *mat);
+int column_vector_multiplication(float r_vec[4], VectorObject *vec, MatrixObject *mat);
 
 #ifndef MATH_STANDALONE
 /* dynstr as python string utility functions */
 PyObject *mathutils_dynstr_to_py(struct DynStr *ds);
 #endif
-
-#endif /* __MATHUTILS_H__ */

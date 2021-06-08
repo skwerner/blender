@@ -14,16 +14,18 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_MESH_H__
-#define __BMESH_MESH_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  */
 
+#include "bmesh_class.h"
+
 struct BMAllocTemplate;
 struct BMLoopNorEditDataArray;
 struct MLoopNorSpaceArray;
+struct BMPartialUpdate;
 
 void BM_mesh_elem_toolflags_ensure(BMesh *bm);
 void BM_mesh_elem_toolflags_clear(BMesh *bm);
@@ -39,45 +41,11 @@ void BM_mesh_free(BMesh *bm);
 void BM_mesh_data_free(BMesh *bm);
 void BM_mesh_clear(BMesh *bm);
 
-void BM_mesh_normals_update(BMesh *bm);
-void BM_verts_calc_normal_vcos(BMesh *bm,
-                               const float (*fnos)[3],
-                               const float (*vcos)[3],
-                               float (*vnos)[3]);
-void BM_loops_calc_normal_vcos(BMesh *bm,
-                               const float (*vcos)[3],
-                               const float (*vnos)[3],
-                               const float (*pnos)[3],
-                               const bool use_split_normals,
-                               const float split_angle,
-                               float (*r_lnos)[3],
-                               struct MLoopNorSpaceArray *r_lnors_spacearr,
-                               short (*clnors_data)[2],
-                               const int cd_loop_clnors_offset,
-                               const bool do_rebuild);
-
-bool BM_loop_check_cyclic_smooth_fan(BMLoop *l_curr);
-void BM_lnorspacearr_store(BMesh *bm, float (*r_lnors)[3]);
-void BM_lnorspace_invalidate(BMesh *bm, const bool do_invalidate_all);
-void BM_lnorspace_rebuild(BMesh *bm, bool preserve_clnor);
-void BM_lnorspace_update(BMesh *bm);
-void BM_normals_loops_edges_tag(BMesh *bm, const bool do_edges);
-#ifndef NDEBUG
-void BM_lnorspace_err(BMesh *bm);
-#endif
-
-/* Loop Generics */
-struct BMLoopNorEditDataArray *BM_loop_normal_editdata_array_init(BMesh *bm);
-void BM_loop_normal_editdata_array_free(struct BMLoopNorEditDataArray *lnors_ed_arr);
-int BM_total_loop_select(BMesh *bm);
-
-void BM_edges_sharp_from_angle_set(BMesh *bm, const float split_angle);
-
 void bmesh_edit_begin(BMesh *bm, const BMOpTypeFlag type_flag);
 void bmesh_edit_end(BMesh *bm, const BMOpTypeFlag type_flag);
 
 void BM_mesh_elem_index_ensure_ex(BMesh *bm, const char htype, int elem_offset[4]);
-void BM_mesh_elem_index_ensure(BMesh *bm, const char hflag);
+void BM_mesh_elem_index_ensure(BMesh *bm, const char htype);
 void BM_mesh_elem_index_validate(
     BMesh *bm, const char *location, const char *func, const char *msg_a, const char *msg_b);
 
@@ -113,6 +81,7 @@ BLI_INLINE BMFace *BM_face_at_index(BMesh *bm, const int index)
 BMVert *BM_vert_at_index_find(BMesh *bm, const int index);
 BMEdge *BM_edge_at_index_find(BMesh *bm, const int index);
 BMFace *BM_face_at_index_find(BMesh *bm, const int index);
+BMLoop *BM_loop_at_index_find(BMesh *bm, const int index);
 
 BMVert *BM_vert_at_index_find_or_table(BMesh *bm, const int index);
 BMEdge *BM_edge_at_index_find_or_table(BMesh *bm, const int index);
@@ -158,4 +127,10 @@ extern const BMAllocTemplate bm_mesh_chunksize_default;
 #define BMALLOC_TEMPLATE_FROM_ME(...) \
   VA_NARGS_CALL_OVERLOAD(_VA_BMALLOC_TEMPLATE_FROM_ME_, __VA_ARGS__)
 
-#endif /* __BMESH_MESH_H__ */
+/* Vertex coords access. */
+void BM_mesh_vert_coords_get(BMesh *bm, float (*vert_coords)[3]);
+float (*BM_mesh_vert_coords_alloc(BMesh *bm, int *r_vert_len))[3];
+void BM_mesh_vert_coords_apply(BMesh *bm, const float (*vert_coords)[3]);
+void BM_mesh_vert_coords_apply_with_mat4(BMesh *bm,
+                                         const float (*vert_coords)[3],
+                                         const float mat[4][4]);

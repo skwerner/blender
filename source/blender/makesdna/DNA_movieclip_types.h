@@ -21,12 +21,15 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_MOVIECLIP_TYPES_H__
-#define __DNA_MOVIECLIP_TYPES_H__
+#pragma once
 
 #include "DNA_ID.h"
-#include "DNA_tracking_types.h"
-#include "DNA_color_types.h" /* for color management */
+#include "DNA_color_types.h"    /* for color management */
+#include "DNA_tracking_types.h" /* for #MovieTracking */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 struct ImBuf;
@@ -57,13 +60,24 @@ typedef struct MovieClipProxy {
   short build_tc_flag;
 } MovieClipProxy;
 
+typedef struct MovieClip_RuntimeGPUTexture {
+  void *next, *prev;
+  MovieClipUser user;
+  /** Not written in file 3 = TEXTARGET_COUNT. */
+  struct GPUTexture *gputexture[3];
+} MovieClip_RuntimeGPUTexture;
+
+typedef struct MovieClip_Runtime {
+  struct ListBase gputextures;
+} MovieClip_Runtime;
+
 typedef struct MovieClip {
   ID id;
   /** Animation data (must be immediately after id for utilities to use it). */
   struct AnimData *adt;
 
   /** File path, 1024 = FILE_MAX. */
-  char name[1024];
+  char filepath[1024];
 
   /** Sequence or movie. */
   int source;
@@ -86,7 +100,7 @@ typedef struct MovieClip {
   struct MovieTracking tracking;
   /**
    * Context of tracking job used to synchronize data
-   * like framenumber in SpaceClip clip user.
+   * like frame-number in SpaceClip clip user.
    */
   void *tracking_context;
 
@@ -100,7 +114,7 @@ typedef struct MovieClip {
   /**
    * Scene frame number footage starts playing at affects all data
    * which is associated with a clip such as motion tracking,
-   * camera reconstruciton and so.
+   * camera Reconstruction and so.
    */
   int start_frame;
   /**
@@ -111,6 +125,8 @@ typedef struct MovieClip {
 
   /* color management */
   ColorManagedColorspaceSettings colorspace_settings;
+
+  struct MovieClip_Runtime runtime;
 } MovieClip;
 
 typedef struct MovieClipScopes {
@@ -128,19 +144,19 @@ typedef struct MovieClipScopes {
   struct ImBuf *track_search;
   /** #ImBuf displayed in track preview. */
   struct ImBuf *track_preview;
-  /** Sub-pizel position of marker in track ImBuf. */
+  /** Sub-pixel position of marker in track ImBuf. */
   float track_pos[2];
   /** Active track is disabled, special notifier should be drawn. */
   short track_disabled;
   /** Active track is locked, no transformation should be allowed. */
   short track_locked;
-  /** Frame number scopes are created for. */
-  int framenr;
+  /** Frame number scopes are created for (measured in scene frames). */
+  int scene_framenr;
   /** Track scopes are created for. */
   struct MovieTrackingTrack *track;
   /** Marker scopes are created for. */
   struct MovieTrackingMarker *marker;
-  /** Scale used for sliding from previewe area. */
+  /** Scale used for sliding from preview area. */
   float slide_scale[2];
 } MovieClipScopes;
 
@@ -160,12 +176,6 @@ enum {
 enum {
   MCLIP_SRC_SEQUENCE = 1,
   MCLIP_SRC_MOVIE = 2,
-};
-
-/* MovieClip->selection types */
-enum {
-  MCLIP_SEL_NONE = 0,
-  MCLIP_SEL_TRACK = 1,
 };
 
 /* MovieClip->flag */
@@ -194,4 +204,6 @@ enum {
   MCLIP_PROXY_RENDER_USE_FALLBACK_RENDER = 2,
 };
 
+#ifdef __cplusplus
+}
 #endif

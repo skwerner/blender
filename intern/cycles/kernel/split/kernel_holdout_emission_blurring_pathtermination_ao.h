@@ -73,23 +73,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
                             kernel_split_params.queue_size,
                             0);
 
-#ifdef __COMPUTE_DEVICE_GPU__
-  /* If we are executing on a GPU device, we exit all threads that are not
-   * required.
-   *
-   * If we are executing on a CPU device, then we need to keep all threads
-   * active since we have barrier() calls later in the kernel. CPU devices,
-   * expect all threads to execute barrier statement.
-   */
-  if (ray_index == QUEUE_EMPTY_SLOT) {
-    return;
-  }
-#endif /* __COMPUTE_DEVICE_GPU__ */
-
-#ifndef __COMPUTE_DEVICE_GPU__
   if (ray_index != QUEUE_EMPTY_SLOT) {
-#endif
-
     ccl_global PathState *state = 0x0;
     float3 throughput;
 
@@ -114,9 +98,9 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
 
     if (IS_STATE(ray_state, ray_index, RAY_ACTIVE)) {
       /* Path termination. this is a strange place to put the termination, it's
-     * mainly due to the mixed in MIS that we use. gives too many unneeded
-     * shader evaluations, only need emission if we are going to terminate.
-     */
+       * mainly due to the mixed in MIS that we use. gives too many unneeded
+       * shader evaluations, only need emission if we are going to terminate.
+       */
       float probability = path_state_continuation_probability(kg, state, throughput);
 
       if (probability == 0.0f) {
@@ -132,10 +116,12 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
         }
       }
 
+#ifdef __DENOISING_FEATURES__
       if (IS_STATE(ray_state, ray_index, RAY_ACTIVE)) {
         PathRadiance *L = &kernel_split_state.path_radiance[ray_index];
         kernel_update_denoising_features(kg, sd, state, L);
       }
+#endif
     }
 
 #ifdef __AO__
@@ -146,10 +132,7 @@ ccl_device void kernel_holdout_emission_blurring_pathtermination_ao(
       }
     }
 #endif /* __AO__ */
-
-#ifndef __COMPUTE_DEVICE_GPU__
   }
-#endif
 
 #ifdef __AO__
   /* Enqueue to-shadow-ray-cast rays. */

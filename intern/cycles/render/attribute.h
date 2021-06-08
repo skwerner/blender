@@ -17,10 +17,13 @@
 #ifndef __ATTRIBUTE_H__
 #define __ATTRIBUTE_H__
 
+#include "render/image.h"
+
 #include "kernel/kernel_types.h"
 
 #include "util/util_list.h"
 #include "util/util_param.h"
+#include "util/util_set.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
 
@@ -30,15 +33,25 @@ class Attribute;
 class AttributeRequest;
 class AttributeRequestSet;
 class AttributeSet;
-class ImageManager;
+class ImageHandle;
+class Geometry;
+class Hair;
 class Mesh;
 struct Transform;
 
-/* Attributes for voxels are images */
+/* AttrKernelDataType.
+ *
+ * The data type of the device arrays storing the attribute's data. Those data types are different
+ * than the ones for attributes as some attribute types are stored in the same array, e.g. Point,
+ * Vector, and Transform are all stored as float3 in the kernel.
+ *
+ * The values of this enumeration are also used as flags to detect changes in AttributeSet. */
 
-struct VoxelAttribute {
-  ImageManager *manager;
-  int slot;
+enum AttrKernelDataType {
+  FLOAT = 0,
+  FLOAT2 = 1,
+  FLOAT3 = 2,
+  UCHAR4 = 3,
 };
 
 /* Attribute
@@ -56,17 +69,25 @@ class Attribute {
   AttributeElement element;
   uint flags; /* enum AttributeFlag */
 
-  Attribute()
-  {
-  }
+  bool modified;
+
+  Attribute(ustring name,
+            TypeDesc type,
+            AttributeElement element,
+            Geometry *geom,
+            AttributePrimitive prim);
+  Attribute(Attribute &&other) = default;
+  Attribute(const Attribute &other) = delete;
+  Attribute &operator=(const Attribute &other) = delete;
   ~Attribute();
+
   void set(ustring name, TypeDesc type, AttributeElement element);
-  void resize(Mesh *mesh, AttributePrimitive prim, bool reserve_only);
+  void resize(Geometry *geom, AttributePrimitive prim, bool reserve_only);
   void resize(size_t num_elements);
 
   size_t data_sizeof() const;
-  size_t element_size(Mesh *mesh, AttributePrimitive prim) const;
-  size_t buffer_size(Mesh *mesh, AttributePrimitive prim) const;
+  size_t element_size(Geometry *geom, AttributePrimitive prim) const;
+  size_t buffer_size(Geometry *geom, AttributePrimitive prim) const;
 
   char *data()
   {
@@ -102,10 +123,12 @@ class Attribute {
     assert(data_sizeof() == sizeof(Transform));
     return (Transform *)data();
   }
-  VoxelAttribute *data_voxel()
+
+  /* Attributes for voxels are images */
+  ImageHandle &data_voxel()
   {
-    assert(data_sizeof() == sizeof(VoxelAttribute));
-    return (VoxelAttribute *)data();
+    assert(data_sizeof() == sizeof(ImageHandle));
+    return *(ImageHandle *)data();
   }
 
   const char *data() const
@@ -137,10 +160,10 @@ class Attribute {
     assert(data_sizeof() == sizeof(Transform));
     return (const Transform *)data();
   }
-  const VoxelAttribute *data_voxel() const
+  const ImageHandle &data_voxel() const
   {
-    assert(data_sizeof() == sizeof(VoxelAttribute));
-    return (const VoxelAttribute *)data();
+    assert(data_sizeof() == sizeof(ImageHandle));
+    return *(const ImageHandle *)data();
   }
 
   void zero_data(void *dst);
@@ -150,13 +173,18 @@ class Attribute {
   void add(const float2 &f);
   void add(const float3 &f);
   void add(const uchar4 &f);
-  void add(const Transform &f);
-  void add(const VoxelAttribute &f);
+  void add(const Transform &tfm);
   void add(const char *data);
+
+  void set_data_from(Attribute &&other);
 
   static bool same_storage(TypeDesc a, TypeDesc b);
   static const char *standard_name(AttributeStandard std);
   static AttributeStandard name_standard(const char *name);
+
+  static AttrKernelDataType kernel_type(const Attribute &attr);
+
+  void get_uv_tiles(Geometry *geom, AttributePrimitive prim, unordered_set<int> &tiles) const;
 };
 
 /* Attribute Set
@@ -164,13 +192,15 @@ class Attribute {
  * Set of attributes on a mesh. */
 
 class AttributeSet {
+  uint32_t modified_flag;
+
  public:
-  Mesh *triangle_mesh;
-  Mesh *curve_mesh;
-  Mesh *subd_mesh;
+  Geometry *geometry;
+  AttributePrimitive prim;
   list<Attribute> attributes;
 
-  AttributeSet();
+  AttributeSet(Geometry *geometry, AttributePrimitive prim);
+  AttributeSet(AttributeSet &&) = default;
   ~AttributeSet();
 
   Attribute *add(ustring name, TypeDesc type, AttributeElement element);
@@ -185,8 +215,27 @@ class AttributeSet {
 
   void remove(Attribute *attribute);
 
+  void remove(list<Attribute>::iterator it);
+
   void resize(bool reserve_only = false);
   void clear(bool preserve_voxel_data = false);
+
+  /* Update the attributes in this AttributeSet with the ones from the new set,
+   * and remove any attribute not found on the new set from this. */
+  void update(AttributeSet &&new_attributes);
+
+  /* Return whether the attributes of the given kernel_type are modified, where "modified" means
+   * that some attributes of the given type were added or removed from this AttributeSet. This does
+   * not mean that the data of the remaining attributes in this AttributeSet were also modified. To
+   * check this, use Attribute.modified. */
+  bool modified(AttrKernelDataType kernel_type) const;
+
+  void clear_modified();
+
+ private:
+  /* Set the relevant modified flag for the attribute. Only attributes that are stored in device
+   * arrays will be considered for tagging this AttributeSet as modified. */
+  void tag_modified(const Attribute &attr);
 };
 
 /* AttributeRequest
@@ -200,9 +249,9 @@ class AttributeRequest {
   ustring name;
   AttributeStandard std;
 
-  /* temporary variables used by MeshManager */
-  TypeDesc triangle_type, curve_type, subd_type;
-  AttributeDescriptor triangle_desc, curve_desc, subd_desc;
+  /* temporary variables used by GeometryManager */
+  TypeDesc type, subd_type;
+  AttributeDescriptor desc, subd_desc;
 
   explicit AttributeRequest(ustring name_);
   explicit AttributeRequest(AttributeStandard std);

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2016 Blender Foundation.
@@ -26,17 +26,18 @@
 #include "DNA_cachefile_types.h"
 #include "DNA_space_types.h"
 
-#include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 
 #include "BKE_cachefile.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
 
 #include "RNA_access.h"
+
+#include "DEG_depsgraph.h"
 
 #include "UI_interface.h"
 
@@ -93,7 +94,7 @@ static int cachefile_open_exec(bContext *C, wmOperator *op)
 
   CacheFile *cache_file = BKE_libblock_alloc(bmain, ID_CF, BLI_path_basename(filename), 0);
   BLI_strncpy(cache_file->filepath, filename, FILE_MAX);
-  BKE_cachefile_reload(bmain, cache_file);
+  DEG_id_tag_update(&cache_file->id, ID_RECALC_COPY_ON_WRITE);
 
   /* Will be set when running invoke, not exec directly. */
   if (op->customdata != NULL) {
@@ -106,7 +107,7 @@ static int cachefile_open_exec(bContext *C, wmOperator *op)
 
       PointerRNA idptr;
       RNA_id_pointer_create(&cache_file->id, &idptr);
-      RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr);
+      RNA_property_pointer_set(&pprop->ptr, pprop->prop, idptr, NULL);
       RNA_property_update(C, &pprop->ptr, pprop->prop);
     }
 
@@ -129,15 +130,15 @@ void CACHEFILE_OT_open(wmOperatorType *ot)
   WM_operator_properties_filesel(ot,
                                  FILE_TYPE_ALEMBIC | FILE_TYPE_FOLDER,
                                  FILE_BLENDER,
-                                 FILE_SAVE,
-                                 WM_FILESEL_FILEPATH,
+                                 FILE_OPENFILE,
+                                 WM_FILESEL_FILEPATH | WM_FILESEL_RELPATH,
                                  FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_ALPHA);
+                                 FILE_SORT_DEFAULT);
 }
 
 /* ***************************** Reload Operator **************************** */
 
-static int cachefile_reload_exec(bContext *C, wmOperator *op)
+static int cachefile_reload_exec(bContext *C, wmOperator *UNUSED(op))
 {
   CacheFile *cache_file = CTX_data_edit_cachefile(C);
 
@@ -145,14 +146,10 @@ static int cachefile_reload_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  Main *bmain = CTX_data_main(C);
-
-  BLI_freelistN(&cache_file->object_paths);
-  BKE_cachefile_reload(bmain, cache_file);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  BKE_cachefile_reload(depsgraph, cache_file);
 
   return OPERATOR_FINISHED;
-
-  UNUSED_VARS(op);
 }
 
 void CACHEFILE_OT_reload(wmOperatorType *ot)

@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_KEYFRAMES_DRAW_H__
-#define __ED_KEYFRAMES_DRAW_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct AnimData;
 struct CacheFile;
@@ -31,7 +34,6 @@ struct FCurve;
 struct ListBase;
 struct MaskLayer;
 struct Object;
-struct Palette;
 struct Scene;
 struct View2D;
 struct bAction;
@@ -93,6 +95,8 @@ typedef enum eActKeyBlock_Hold {
   ACTKEYBLOCK_FLAG_ANY_HOLD = (1 << 2),
   /* The curve segment uses non-bezier interpolation */
   ACTKEYBLOCK_FLAG_NON_BEZIER = (1 << 3),
+  /* The block is grease pencil */
+  ACTKEYBLOCK_FLAG_GPENCIL = (1 << 4),
 } eActKeyBlock_Flag;
 
 /* *********************** Keyframe Drawing ****************************** */
@@ -127,7 +131,7 @@ typedef enum eKeyframeExtremeDrawOpts {
   KEYFRAME_EXTREME_MAX = (1 << 1),
   /* Grouped keys have different states. */
   KEYFRAME_EXTREME_MIXED = (1 << 2),
-  /* Both neigbors are equal to this key. */
+  /* Both neighbors are equal to this key. */
   KEYFRAME_EXTREME_FLAT = (1 << 3),
 } eKeyframeExtremeDrawOpts;
 
@@ -145,8 +149,8 @@ void draw_keyframe_shape(float x,
                          unsigned int size_id,
                          unsigned int color_id,
                          unsigned int outline_color_id,
-                         unsigned int linemask_id,
-                         short ipo_type,
+                         unsigned int flags_id,
+                         short handle_type,
                          short extreme_type);
 
 /* ******************************* Methods ****************************** */
@@ -253,18 +257,18 @@ void gpencil_to_keylist(struct bDopeSheet *ads,
 /* Grease Pencil Layer */
 void gpl_to_keylist(struct bDopeSheet *ads, struct bGPDlayer *gpl, struct DLRBT_Tree *keys);
 /* Mask */
-void mask_to_keylist(struct bDopeSheet *UNUSED(ads),
-                     struct MaskLayer *masklay,
-                     struct DLRBT_Tree *keys);
+void mask_to_keylist(struct bDopeSheet *ads, struct MaskLayer *masklay, struct DLRBT_Tree *keys);
 
 /* ActKeyColumn API ---------------- */
 /* Comparator callback used for ActKeyColumns and cframe float-value pointer */
 short compare_ak_cfraPtr(void *node, void *data);
 
 /* Checks if ActKeyColumn has any block data */
-bool actkeyblock_is_valid(ActKeyColumn *ab);
+bool actkeyblock_is_valid(ActKeyColumn *ac);
 
 /* Checks if ActKeyColumn can be used as a block (i.e. drawn/used to detect "holds") */
-int actkeyblock_get_valid_hold(ActKeyColumn *ab);
+int actkeyblock_get_valid_hold(ActKeyColumn *ac);
 
-#endif /*  __ED_KEYFRAMES_DRAW_H__ */
+#ifdef __cplusplus
+}
+#endif

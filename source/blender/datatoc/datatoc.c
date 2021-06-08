@@ -22,8 +22,8 @@
  */
 
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* #define VERBOSE */
 
@@ -80,8 +80,9 @@ int main(int argc, char **argv)
 
   argv_len = (int)strlen(argv[1]);
   for (i = 0; i < argv_len; i++) {
-    if (argv[1][i] == '.')
+    if (argv[1][i] == '.') {
       argv[1][i] = '_';
+    }
   }
 
   fpout = fopen(argv[2], "w");
@@ -93,11 +94,11 @@ int main(int argc, char **argv)
   fprintf(fpout, "/* DataToC output of file <%s> */\n\n", argv[1]);
 
   /* Quiet 'missing-variable-declarations' warning. */
-  fprintf(fpout, "extern int datatoc_%s_size;\n", argv[1]);
-  fprintf(fpout, "extern char datatoc_%s[];\n\n", argv[1]);
+  fprintf(fpout, "extern const int datatoc_%s_size;\n", argv[1]);
+  fprintf(fpout, "extern const char datatoc_%s[];\n\n", argv[1]);
 
-  fprintf(fpout, "int datatoc_%s_size = %d;\n", argv[1], (int)size);
-  fprintf(fpout, "char datatoc_%s[] = {\n", argv[1]);
+  fprintf(fpout, "const int datatoc_%s_size = %d;\n", argv[1], (int)size);
+  fprintf(fpout, "const char datatoc_%s[] = {\n", argv[1]);
   while (size--) {
     /* if we want to open in an editor
      * this is nicer to avoid very long lines */
@@ -111,7 +112,7 @@ int main(int argc, char **argv)
     fprintf(fpout, "%3d,", getc(fpin));
   }
 
-  /* trailing NULL terminator, this isnt needed in some cases and
+  /* Trailing NULL terminator, this isn't needed in some cases and
    * won't be taken into account by the size variable, but its useful when dealing with
    * NULL terminated string data */
   fprintf(fpout, "0\n};\n\n");

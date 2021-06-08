@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_INPAINTOPERATION_H__
-#define __COM_INPAINTOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class InpaintSimpleOperation : public NodeOperation {
  protected:
@@ -34,26 +36,26 @@ class InpaintSimpleOperation : public NodeOperation {
 
   int *m_pixelorder;
   int m_area_size;
-  short *m_manhatten_distance;
+  short *m_manhattan_distance;
 
  public:
   InpaintSimpleOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setIterations(int iterations)
   {
@@ -62,10 +64,10 @@ class InpaintSimpleOperation : public NodeOperation {
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
  private:
-  void calc_manhatten_distance();
+  void calc_manhattan_distance();
   void clamp_xy(int &x, int &y);
   float *get_pixel(int x, int y);
   int mdist(int x, int y);
@@ -73,4 +75,4 @@ class InpaintSimpleOperation : public NodeOperation {
   void pix_step(int x, int y);
 };
 
-#endif
+}  // namespace blender::compositor

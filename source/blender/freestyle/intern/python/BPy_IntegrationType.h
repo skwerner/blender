@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_INTEGRATIONTYPE_H__
-#define __FREESTYLE_PYTHON_INTEGRATIONTYPE_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../view_map/Interface1D.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,5 +46,3 @@ int IntegrationType_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_INTEGRATIONTYPE_H__ */

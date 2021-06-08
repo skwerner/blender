@@ -27,6 +27,8 @@
 extern "C" {
 #endif
 
+using namespace Freestyle;
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 //------------------------INSTANCE METHODS ----------------------------------
@@ -35,24 +37,18 @@ PyDoc_STRVAR(CurvePointIterator_doc,
              "Class hierarchy: :class:`Iterator` > :class:`CurvePointIterator`\n"
              "\n"
              "Class representing an iterator on a curve.  Allows an iterating\n"
-             "outside initial vertices.  A CurvePoint is instanciated and returned\n"
+             "outside initial vertices.  A CurvePoint is instantiated and returned\n"
              "through the .object attribute.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(step=0.0)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds a CurvePointIterator object using either the default constructor,\n"
+             "   copy constructor, or the overloaded constructor.\n"
              "\n"
              "   :arg brother: A CurvePointIterator object.\n"
              "   :type brother: :class:`CurvePointIterator`\n"
-             "\n"
-             ".. method:: __init__(step=0.0)\n"
-             "\n"
-             "   Builds a CurvePointIterator object.\n"
-             "\n"
              "   :arg step: A resampling resolution with which the curve is resampled.\n"
              "      If zero, no resampling is done (i.e., the iterator iterates over\n"
              "      initial vertices).\n"
@@ -60,20 +56,23 @@ PyDoc_STRVAR(CurvePointIterator_doc,
 
 static int CurvePointIterator_init(BPy_CurvePointIterator *self, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist_1[] = {"brother", NULL};
-  static const char *kwlist_2[] = {"step", NULL};
-  PyObject *brother = 0;
+  static const char *kwlist_1[] = {"brother", nullptr};
+  static const char *kwlist_2[] = {"step", nullptr};
+  PyObject *brother = nullptr;
   float step;
 
   if (PyArg_ParseTupleAndKeywords(
           args, kwds, "|O!", (char **)kwlist_1, &CurvePointIterator_Type, &brother)) {
-    if (!brother)
+    if (!brother) {
       self->cp_it = new CurveInternal::CurvePointIterator();
-    else
+    }
+    else {
       self->cp_it = new CurveInternal::CurvePointIterator(
           *(((BPy_CurvePointIterator *)brother)->cp_it));
+    }
   }
-  else if (PyErr_Clear(), PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist_2, &step)) {
+  else if ((void)PyErr_Clear(),
+           PyArg_ParseTupleAndKeywords(args, kwds, "f", (char **)kwlist_2, &step)) {
     self->cp_it = new CurveInternal::CurvePointIterator(step);
   }
   else {
@@ -95,7 +94,7 @@ static PyObject *CurvePointIterator_object_get(BPy_CurvePointIterator *self, voi
 {
   if (self->cp_it->isEnd()) {
     PyErr_SetString(PyExc_RuntimeError, "iteration has stopped");
-    return NULL;
+    return nullptr;
   }
   return BPy_CurvePoint_from_CurvePoint(self->cp_it->operator*());
 }
@@ -121,64 +120,56 @@ static PyObject *CurvePointIterator_u_get(BPy_CurvePointIterator *self, void *UN
 }
 
 static PyGetSetDef BPy_CurvePointIterator_getseters[] = {
-    {(char *)"object",
+    {"object",
      (getter)CurvePointIterator_object_get,
-     (setter)NULL,
-     (char *)CurvePointIterator_object_doc,
-     NULL},
-    {(char *)"t",
-     (getter)CurvePointIterator_t_get,
-     (setter)NULL,
-     (char *)CurvePointIterator_t_doc,
-     NULL},
-    {(char *)"u",
-     (getter)CurvePointIterator_u_get,
-     (setter)NULL,
-     (char *)CurvePointIterator_u_doc,
-     NULL},
-    {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
+     (setter) nullptr,
+     CurvePointIterator_object_doc,
+     nullptr},
+    {"t", (getter)CurvePointIterator_t_get, (setter) nullptr, CurvePointIterator_t_doc, nullptr},
+    {"u", (getter)CurvePointIterator_u_get, (setter) nullptr, CurvePointIterator_u_doc, nullptr},
+    {nullptr, nullptr, nullptr, nullptr, nullptr} /* Sentinel */
 };
 
 /*-----------------------BPy_CurvePointIterator type definition ------------------------------*/
 
 PyTypeObject CurvePointIterator_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "CurvePointIterator", /* tp_name */
-    sizeof(BPy_CurvePointIterator),                      /* tp_basicsize */
-    0,                                                   /* tp_itemsize */
-    0,                                                   /* tp_dealloc */
-    0,                                                   /* tp_print */
-    0,                                                   /* tp_getattr */
-    0,                                                   /* tp_setattr */
-    0,                                                   /* tp_reserved */
-    0,                                                   /* tp_repr */
-    0,                                                   /* tp_as_number */
-    0,                                                   /* tp_as_sequence */
-    0,                                                   /* tp_as_mapping */
-    0,                                                   /* tp_hash  */
-    0,                                                   /* tp_call */
-    0,                                                   /* tp_str */
-    0,                                                   /* tp_getattro */
-    0,                                                   /* tp_setattro */
-    0,                                                   /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,            /* tp_flags */
-    CurvePointIterator_doc,                              /* tp_doc */
-    0,                                                   /* tp_traverse */
-    0,                                                   /* tp_clear */
-    0,                                                   /* tp_richcompare */
-    0,                                                   /* tp_weaklistoffset */
-    0,                                                   /* tp_iter */
-    0,                                                   /* tp_iternext */
-    0,                                                   /* tp_methods */
-    0,                                                   /* tp_members */
-    BPy_CurvePointIterator_getseters,                    /* tp_getset */
-    &Iterator_Type,                                      /* tp_base */
-    0,                                                   /* tp_dict */
-    0,                                                   /* tp_descr_get */
-    0,                                                   /* tp_descr_set */
-    0,                                                   /* tp_dictoffset */
-    (initproc)CurvePointIterator_init,                   /* tp_init */
-    0,                                                   /* tp_alloc */
-    0,                                                   /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "CurvePointIterator", /* tp_name */
+    sizeof(BPy_CurvePointIterator),                         /* tp_basicsize */
+    0,                                                      /* tp_itemsize */
+    nullptr,                                                /* tp_dealloc */
+    0,                                                      /* tp_vectorcall_offset */
+    nullptr,                                                /* tp_getattr */
+    nullptr,                                                /* tp_setattr */
+    nullptr,                                                /* tp_reserved */
+    nullptr,                                                /* tp_repr */
+    nullptr,                                                /* tp_as_number */
+    nullptr,                                                /* tp_as_sequence */
+    nullptr,                                                /* tp_as_mapping */
+    nullptr,                                                /* tp_hash  */
+    nullptr,                                                /* tp_call */
+    nullptr,                                                /* tp_str */
+    nullptr,                                                /* tp_getattro */
+    nullptr,                                                /* tp_setattro */
+    nullptr,                                                /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,               /* tp_flags */
+    CurvePointIterator_doc,                                 /* tp_doc */
+    nullptr,                                                /* tp_traverse */
+    nullptr,                                                /* tp_clear */
+    nullptr,                                                /* tp_richcompare */
+    0,                                                      /* tp_weaklistoffset */
+    nullptr,                                                /* tp_iter */
+    nullptr,                                                /* tp_iternext */
+    nullptr,                                                /* tp_methods */
+    nullptr,                                                /* tp_members */
+    BPy_CurvePointIterator_getseters,                       /* tp_getset */
+    &Iterator_Type,                                         /* tp_base */
+    nullptr,                                                /* tp_dict */
+    nullptr,                                                /* tp_descr_get */
+    nullptr,                                                /* tp_descr_set */
+    0,                                                      /* tp_dictoffset */
+    (initproc)CurvePointIterator_init,                      /* tp_init */
+    nullptr,                                                /* tp_alloc */
+    nullptr,                                                /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

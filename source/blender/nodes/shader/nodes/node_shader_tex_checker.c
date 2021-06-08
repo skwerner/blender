@@ -22,11 +22,10 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tex_checker_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-    {SOCK_RGBA, 1, N_("Color1"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
-    {SOCK_RGBA, 1, N_("Color2"), 0.2f, 0.2f, 0.2f, 1.0f, 0.0f, 1.0f},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {SOCK_RGBA, N_("Color1"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_("Color2"), 0.2f, 0.2f, 0.2f, 1.0f, 0.0f, 1.0f},
     {SOCK_FLOAT,
-     1,
      N_("Scale"),
      5.0f,
      0.0f,
@@ -36,13 +35,12 @@ static bNodeSocketTemplate sh_node_tex_checker_in[] = {
      1000.0f,
      PROP_NONE,
      SOCK_NO_INTERNAL_LINK},
-    {-1, 0, ""},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_tex_checker_out[] = {
-    {SOCK_RGBA, 0, N_("Color"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
     {SOCK_FLOAT,
-     0,
      N_("Fac"),
      0.0f,
      0.0f,
@@ -52,7 +50,7 @@ static bNodeSocketTemplate sh_node_tex_checker_out[] = {
      1.0f,
      PROP_FACTOR,
      SOCK_NO_INTERNAL_LINK},
-    {-1, 0, ""},
+    {-1, ""},
 };
 
 static void node_shader_init_tex_checker(bNodeTree *UNUSED(ntree), bNode *node)
@@ -70,11 +68,7 @@ static int node_shader_gpu_tex_checker(GPUMaterial *mat,
                                        GPUNodeStack *in,
                                        GPUNodeStack *out)
 {
-  if (!in[0].link) {
-    in[0].link = GPU_attribute(CD_ORCO, "");
-    GPU_link(mat, "generated_texco", GPU_builtin(GPU_VIEW_POSITION), in[0].link, &in[0].link);
-  }
-
+  node_shader_gpu_default_tex_coord(mat, node, &in[0].link);
   node_shader_gpu_tex_mapping(mat, node, in, out);
 
   return GPU_stack_link(mat, node, "node_tex_checker", in, out);

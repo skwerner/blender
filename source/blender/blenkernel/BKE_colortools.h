@@ -16,13 +16,18 @@
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
  */
-#ifndef __BKE_COLORTOOLS_H__
-#define __BKE_COLORTOOLS_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct BlendDataReader;
+struct BlendWriter;
 struct ColorManagedColorspaceSettings;
 struct ColorManagedDisplaySettings;
 struct ColorManagedViewSettings;
@@ -34,17 +39,19 @@ struct ImBuf;
 struct Scopes;
 struct rctf;
 
-void curvemapping_set_defaults(
+void BKE_curvemapping_set_defaults(
     struct CurveMapping *cumap, int tot, float minx, float miny, float maxx, float maxy);
-struct CurveMapping *curvemapping_add(int tot, float minx, float miny, float maxx, float maxy);
-void curvemapping_free_data(struct CurveMapping *cumap);
-void curvemapping_free(struct CurveMapping *cumap);
-void curvemapping_copy_data(struct CurveMapping *target, const struct CurveMapping *cumap);
-struct CurveMapping *curvemapping_copy(const struct CurveMapping *cumap);
-void curvemapping_set_black_white_ex(const float black[3], const float white[3], float r_bwmul[3]);
-void curvemapping_set_black_white(struct CurveMapping *cumap,
-                                  const float black[3],
-                                  const float white[3]);
+struct CurveMapping *BKE_curvemapping_add(int tot, float minx, float miny, float maxx, float maxy);
+void BKE_curvemapping_free_data(struct CurveMapping *cumap);
+void BKE_curvemapping_free(struct CurveMapping *cumap);
+void BKE_curvemapping_copy_data(struct CurveMapping *target, const struct CurveMapping *cumap);
+struct CurveMapping *BKE_curvemapping_copy(const struct CurveMapping *cumap);
+void BKE_curvemapping_set_black_white_ex(const float black[3],
+                                         const float white[3],
+                                         float r_bwmul[3]);
+void BKE_curvemapping_set_black_white(struct CurveMapping *cumap,
+                                      const float black[3],
+                                      const float white[3]);
 
 enum {
   CURVEMAP_SLOPE_NEGATIVE = 0,
@@ -52,56 +59,64 @@ enum {
   CURVEMAP_SLOPE_POS_NEG = 2,
 };
 
-void curvemap_reset(struct CurveMap *cuma, const struct rctf *clipr, int preset, int slope);
-void curvemap_remove(struct CurveMap *cuma, const short flag);
-bool curvemap_remove_point(struct CurveMap *cuma, struct CurveMapPoint *cmp);
-struct CurveMapPoint *curvemap_insert(struct CurveMap *cuma, float x, float y);
-void curvemap_handle_set(struct CurveMap *cuma, int type);
+void BKE_curvemapping_reset_view(struct CurveMapping *cumap);
+void BKE_curvemap_reset(struct CurveMap *cuma, const struct rctf *clipr, int preset, int slope);
+void BKE_curvemap_remove(struct CurveMap *cuma, const short flag);
+bool BKE_curvemap_remove_point(struct CurveMap *cuma, struct CurveMapPoint *cmp);
+struct CurveMapPoint *BKE_curvemap_insert(struct CurveMap *cuma, float x, float y);
+void BKE_curvemap_handle_set(struct CurveMap *cuma, int type);
 
-void curvemapping_changed(struct CurveMapping *cumap, const bool rem_doubles);
-void curvemapping_changed_all(struct CurveMapping *cumap);
+void BKE_curvemapping_changed(struct CurveMapping *cumap, const bool rem_doubles);
+void BKE_curvemapping_changed_all(struct CurveMapping *cumap);
 
 /* call before _all_ evaluation functions */
-void curvemapping_initialize(struct CurveMapping *cumap);
+void BKE_curvemapping_init(struct CurveMapping *cumap);
 
 /* keep these (const CurveMap) - to help with thread safety */
 /* single curve, no table check */
-float curvemap_evaluateF(const struct CurveMap *cuma, float value);
+float BKE_curvemap_evaluateF(const struct CurveMapping *cumap,
+                             const struct CurveMap *cuma,
+                             float value);
 /* single curve, with table check */
-float curvemapping_evaluateF(const struct CurveMapping *cumap, int cur, float value);
-void curvemapping_evaluate3F(const struct CurveMapping *cumap,
-                             float vecout[3],
-                             const float vecin[3]);
-void curvemapping_evaluateRGBF(const struct CurveMapping *cumap,
-                               float vecout[3],
-                               const float vecin[3]);
-void curvemapping_evaluate_premulRGB(const struct CurveMapping *cumap,
-                                     unsigned char vecout_byte[3],
-                                     const unsigned char vecin_byte[3]);
-void curvemapping_evaluate_premulRGBF_ex(const struct CurveMapping *cumap,
-                                         float vecout[3],
-                                         const float vecin[3],
-                                         const float black[3],
-                                         const float bwmul[3]);
-void curvemapping_evaluate_premulRGBF(const struct CurveMapping *cumap,
-                                      float vecout[3],
-                                      const float vecin[3]);
-int curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
-void curvemapping_table_RGBA(const struct CurveMapping *cumap, float **array, int *size);
+float BKE_curvemapping_evaluateF(const struct CurveMapping *cumap, int cur, float value);
+void BKE_curvemapping_evaluate3F(const struct CurveMapping *cumap,
+                                 float vecout[3],
+                                 const float vecin[3]);
+void BKE_curvemapping_evaluateRGBF(const struct CurveMapping *cumap,
+                                   float vecout[3],
+                                   const float vecin[3]);
+void BKE_curvemapping_evaluate_premulRGB(const struct CurveMapping *cumap,
+                                         unsigned char vecout_byte[3],
+                                         const unsigned char vecin_byte[3]);
+void BKE_curvemapping_evaluate_premulRGBF_ex(const struct CurveMapping *cumap,
+                                             float vecout[3],
+                                             const float vecin[3],
+                                             const float black[3],
+                                             const float bwmul[3]);
+void BKE_curvemapping_evaluate_premulRGBF(const struct CurveMapping *cumap,
+                                          float vecout[3],
+                                          const float vecin[3]);
+bool BKE_curvemapping_RGBA_does_something(const struct CurveMapping *cumap);
+void BKE_curvemapping_table_RGBA(const struct CurveMapping *cumap, float **array, int *size);
 
 /* non-const, these modify the curve */
-void curvemapping_premultiply(struct CurveMapping *cumap, int restore);
+void BKE_curvemapping_premultiply(struct CurveMapping *cumap, int restore);
+
+void BKE_curvemapping_blend_write(struct BlendWriter *writer, const struct CurveMapping *cumap);
+void BKE_curvemapping_curves_blend_write(struct BlendWriter *writer,
+                                         const struct CurveMapping *cumap);
+void BKE_curvemapping_blend_read(struct BlendDataReader *reader, struct CurveMapping *cumap);
 
 void BKE_histogram_update_sample_line(struct Histogram *hist,
                                       struct ImBuf *ibuf,
                                       const struct ColorManagedViewSettings *view_settings,
                                       const struct ColorManagedDisplaySettings *display_settings);
-void scopes_update(struct Scopes *scopes,
-                   struct ImBuf *ibuf,
-                   const struct ColorManagedViewSettings *view_settings,
-                   const struct ColorManagedDisplaySettings *display_settings);
-void scopes_free(struct Scopes *scopes);
-void scopes_new(struct Scopes *scopes);
+void BKE_scopes_update(struct Scopes *scopes,
+                       struct ImBuf *ibuf,
+                       const struct ColorManagedViewSettings *view_settings,
+                       const struct ColorManagedDisplaySettings *display_settings);
+void BKE_scopes_free(struct Scopes *scopes);
+void BKE_scopes_new(struct Scopes *scopes);
 
 void BKE_color_managed_display_settings_init(struct ColorManagedDisplaySettings *settings);
 void BKE_color_managed_display_settings_copy(struct ColorManagedDisplaySettings *new_settings,
@@ -125,6 +140,11 @@ void BKE_color_managed_view_settings_copy(struct ColorManagedViewSettings *new_s
                                           const struct ColorManagedViewSettings *settings);
 void BKE_color_managed_view_settings_free(struct ColorManagedViewSettings *settings);
 
+void BKE_color_managed_view_settings_blend_write(struct BlendWriter *writer,
+                                                 struct ColorManagedViewSettings *settings);
+void BKE_color_managed_view_settings_blend_read_data(struct BlendDataReader *reader,
+                                                     struct ColorManagedViewSettings *settings);
+
 void BKE_color_managed_colorspace_settings_init(
     struct ColorManagedColorspaceSettings *colorspace_settings);
 void BKE_color_managed_colorspace_settings_copy(
@@ -133,4 +153,7 @@ void BKE_color_managed_colorspace_settings_copy(
 bool BKE_color_managed_colorspace_settings_equals(
     const struct ColorManagedColorspaceSettings *settings1,
     const struct ColorManagedColorspaceSettings *settings2);
+
+#ifdef __cplusplus
+}
 #endif

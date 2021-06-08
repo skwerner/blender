@@ -29,26 +29,32 @@
 extern "C" {
 #endif
 
+using namespace Freestyle;
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 //-------------------MODULE INITIALIZATION--------------------------------
 int UnaryPredicate0D_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == nullptr) {
     return -1;
+  }
 
-  if (PyType_Ready(&UnaryPredicate0D_Type) < 0)
+  if (PyType_Ready(&UnaryPredicate0D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&UnaryPredicate0D_Type);
   PyModule_AddObject(module, "UnaryPredicate0D", (PyObject *)&UnaryPredicate0D_Type);
 
-  if (PyType_Ready(&FalseUP0D_Type) < 0)
+  if (PyType_Ready(&FalseUP0D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&FalseUP0D_Type);
   PyModule_AddObject(module, "FalseUP0D", (PyObject *)&FalseUP0D_Type);
 
-  if (PyType_Ready(&TrueUP0D_Type) < 0)
+  if (PyType_Ready(&TrueUP0D_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&TrueUP0D_Type);
   PyModule_AddObject(module, "TrueUP0D", (PyObject *)&TrueUP0D_Type);
 
@@ -81,10 +87,11 @@ static char UnaryPredicate0D___doc__[] =
 
 static int UnaryPredicate0D___init__(BPy_UnaryPredicate0D *self, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {NULL};
+  static const char *kwlist[] = {nullptr};
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "", (char **)kwlist)) {
     return -1;
+  }
   self->up0D = new UnaryPredicate0D();
   self->up0D->py_up0D = (PyObject *)self;
   return 0;
@@ -92,8 +99,7 @@ static int UnaryPredicate0D___init__(BPy_UnaryPredicate0D *self, PyObject *args,
 
 static void UnaryPredicate0D___dealloc__(BPy_UnaryPredicate0D *self)
 {
-  if (self->up0D)
-    delete self->up0D;
+  delete self->up0D;
   Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -106,30 +112,31 @@ static PyObject *UnaryPredicate0D___call__(BPy_UnaryPredicate0D *self,
                                            PyObject *args,
                                            PyObject *kwds)
 {
-  static const char *kwlist[] = {"it", NULL};
+  static const char *kwlist[] = {"it", nullptr};
   PyObject *py_if0D_it;
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "O!", (char **)kwlist, &Interface0DIterator_Type, &py_if0D_it))
-    return NULL;
+          args, kwds, "O!", (char **)kwlist, &Interface0DIterator_Type, &py_if0D_it)) {
+    return nullptr;
+  }
 
   Interface0DIterator *if0D_it = ((BPy_Interface0DIterator *)py_if0D_it)->if0D_it;
 
   if (!if0D_it) {
     string class_name(Py_TYPE(self)->tp_name);
     PyErr_SetString(PyExc_RuntimeError, (class_name + " has no Interface0DIterator").c_str());
-    return NULL;
+    return nullptr;
   }
   if (typeid(*(self->up0D)) == typeid(UnaryPredicate0D)) {
     PyErr_SetString(PyExc_TypeError, "__call__ method not properly overridden");
-    return NULL;
+    return nullptr;
   }
   if (self->up0D->operator()(*if0D_it) < 0) {
     if (!PyErr_Occurred()) {
       string class_name(Py_TYPE(self)->tp_name);
       PyErr_SetString(PyExc_RuntimeError, (class_name + " __call__ method failed").c_str());
     }
-    return NULL;
+    return nullptr;
   }
   return PyBool_from_bool(self->up0D->result);
 }
@@ -147,54 +154,54 @@ static PyObject *UnaryPredicate0D_name_get(BPy_UnaryPredicate0D *self, void *UNU
 }
 
 static PyGetSetDef BPy_UnaryPredicate0D_getseters[] = {
-    {(char *)"name",
+    {"name",
      (getter)UnaryPredicate0D_name_get,
-     (setter)NULL,
-     (char *)UnaryPredicate0D_name_doc,
-     NULL},
-    {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
+     (setter) nullptr,
+     UnaryPredicate0D_name_doc,
+     nullptr},
+    {nullptr, nullptr, nullptr, nullptr, nullptr} /* Sentinel */
 };
 
 /*-----------------------BPy_UnaryPredicate0D type definition ------------------------------*/
 
 PyTypeObject UnaryPredicate0D_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "UnaryPredicate0D", /* tp_name */
-    sizeof(BPy_UnaryPredicate0D),                      /* tp_basicsize */
-    0,                                                 /* tp_itemsize */
-    (destructor)UnaryPredicate0D___dealloc__,          /* tp_dealloc */
-    0,                                                 /* tp_print */
-    0,                                                 /* tp_getattr */
-    0,                                                 /* tp_setattr */
-    0,                                                 /* tp_reserved */
-    (reprfunc)UnaryPredicate0D___repr__,               /* tp_repr */
-    0,                                                 /* tp_as_number */
-    0,                                                 /* tp_as_sequence */
-    0,                                                 /* tp_as_mapping */
-    0,                                                 /* tp_hash  */
-    (ternaryfunc)UnaryPredicate0D___call__,            /* tp_call */
-    0,                                                 /* tp_str */
-    0,                                                 /* tp_getattro */
-    0,                                                 /* tp_setattro */
-    0,                                                 /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,          /* tp_flags */
-    UnaryPredicate0D___doc__,                          /* tp_doc */
-    0,                                                 /* tp_traverse */
-    0,                                                 /* tp_clear */
-    0,                                                 /* tp_richcompare */
-    0,                                                 /* tp_weaklistoffset */
-    0,                                                 /* tp_iter */
-    0,                                                 /* tp_iternext */
-    0,                                                 /* tp_methods */
-    0,                                                 /* tp_members */
-    BPy_UnaryPredicate0D_getseters,                    /* tp_getset */
-    0,                                                 /* tp_base */
-    0,                                                 /* tp_dict */
-    0,                                                 /* tp_descr_get */
-    0,                                                 /* tp_descr_set */
-    0,                                                 /* tp_dictoffset */
-    (initproc)UnaryPredicate0D___init__,               /* tp_init */
-    0,                                                 /* tp_alloc */
-    PyType_GenericNew,                                 /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "UnaryPredicate0D", /* tp_name */
+    sizeof(BPy_UnaryPredicate0D),                         /* tp_basicsize */
+    0,                                                    /* tp_itemsize */
+    (destructor)UnaryPredicate0D___dealloc__,             /* tp_dealloc */
+    0,                                                    /* tp_vectorcall_offset */
+    nullptr,                                              /* tp_getattr */
+    nullptr,                                              /* tp_setattr */
+    nullptr,                                              /* tp_reserved */
+    (reprfunc)UnaryPredicate0D___repr__,                  /* tp_repr */
+    nullptr,                                              /* tp_as_number */
+    nullptr,                                              /* tp_as_sequence */
+    nullptr,                                              /* tp_as_mapping */
+    nullptr,                                              /* tp_hash  */
+    (ternaryfunc)UnaryPredicate0D___call__,               /* tp_call */
+    nullptr,                                              /* tp_str */
+    nullptr,                                              /* tp_getattro */
+    nullptr,                                              /* tp_setattro */
+    nullptr,                                              /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,             /* tp_flags */
+    UnaryPredicate0D___doc__,                             /* tp_doc */
+    nullptr,                                              /* tp_traverse */
+    nullptr,                                              /* tp_clear */
+    nullptr,                                              /* tp_richcompare */
+    0,                                                    /* tp_weaklistoffset */
+    nullptr,                                              /* tp_iter */
+    nullptr,                                              /* tp_iternext */
+    nullptr,                                              /* tp_methods */
+    nullptr,                                              /* tp_members */
+    BPy_UnaryPredicate0D_getseters,                       /* tp_getset */
+    nullptr,                                              /* tp_base */
+    nullptr,                                              /* tp_dict */
+    nullptr,                                              /* tp_descr_get */
+    nullptr,                                              /* tp_descr_set */
+    0,                                                    /* tp_dictoffset */
+    (initproc)UnaryPredicate0D___init__,                  /* tp_init */
+    nullptr,                                              /* tp_alloc */
+    PyType_GenericNew,                                    /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

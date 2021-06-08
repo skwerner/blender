@@ -53,6 +53,9 @@ set(ICON_NAMES
   collapsemenu
   x
   duplicate
+  trash
+  collection_new
+  options
   node
   node_sel
   window
@@ -65,6 +68,7 @@ set(ICON_NAMES
   panel_close
   copy_id
   eyedropper
+  checkmark
   auto
   checkbox_dehlt
   checkbox_hlt
@@ -75,6 +79,10 @@ set(ICON_NAMES
   screen_back
   rightarrow
   downarrow_hlt
+  fcurve_snapshot
+  object_hidden
+  topbar
+  statusbar
   plugin
   help
   ghost_enabled
@@ -101,6 +109,7 @@ set(ICON_NAMES
   three_dots
   fullscreen_enter
   fullscreen_exit
+  brushes_all
   light
   material
   texture
@@ -125,6 +134,7 @@ set(ICON_NAMES
   info
   sequence
   text
+  spreadsheet
   sound
   action
   nla
@@ -132,7 +142,7 @@ set(ICON_NAMES
   time
   nodetree
   console
-  clip
+  tracker
   asset_manager
   node_compositing
   node_texture
@@ -140,6 +150,7 @@ set(ICON_NAMES
   object_datamode
   editmode_hlt
   uv
+  uv_data
   vpaint_hlt
   tpaint_hlt
   wpaint_hlt
@@ -213,6 +224,7 @@ set(ICON_NAMES
   mouse_lmb_drag
   mouse_mmb_drag
   mouse_rmb_drag
+  memory
   preset_new
   decorate
   decorate_keyframe
@@ -223,7 +235,8 @@ set(ICON_NAMES
   decorate_unlocked
   decorate_locked
   decorate_override
-  sealed
+  fund
+  tracker_data
   heart
   orphan_data
   user
@@ -245,6 +258,7 @@ set(ICON_NAMES
   outliner_ob_greasepencil
   outliner_ob_lightprobe
   outliner_ob_image
+  outliner_collection
   restrict_color_off
   restrict_color_on
   hide_on
@@ -253,6 +267,7 @@ set(ICON_NAMES
   restrict_select_off
   restrict_render_on
   restrict_render_off
+  restrict_instanced_off
   outliner_data_empty
   outliner_data_mesh
   outliner_data_curve
@@ -264,17 +279,21 @@ set(ICON_NAMES
   outliner_data_font
   outliner_data_surface
   outliner_data_speaker
+  outliner_data_lightprobe
+  outliner_data_gp_layer
   outliner_data_greasepencil
   gp_select_points
   gp_select_strokes
   gp_multiframe_editing
   gp_only_selected
+  gp_select_between_strokes
   modifier_off
   modifier_on
   onionskin_off
   onionskin_on
   restrict_view_on
   restrict_view_off
+  restrict_instanced_on
   mesh_plane
   mesh_cube
   mesh_circle
@@ -336,7 +355,9 @@ set(ICON_NAMES
   force_boid
   force_turbulence
   force_drag
-  force_smokeflow
+  force_fluidflow
+  rigid_body
+  rigid_body_constraint
   image_plane
   image_background
   image_reference
@@ -345,6 +366,16 @@ set(ICON_NAMES
   node_top
   node_side
   node_corner
+  anchor_top
+  anchor_bottom
+  anchor_left
+  anchor_right
+  anchor_center
+  select_set
+  select_extend
+  select_subtract
+  select_intersect
+  select_difference
   align_left
   align_center
   align_right
@@ -358,6 +389,38 @@ set(ICON_NAMES
   underline
   small_caps
   modifier
+  con_action
+  holdout_off
+  holdout_on
+  indirect_only_off
+  indirect_only_on
+  con_camerasolver
+  con_followtrack
+  con_objectsolver
+  con_loclike
+  con_rotlike
+  con_sizelike
+  con_translike
+  con_distlimit
+  con_loclimit
+  con_rotlimit
+  con_sizelimit
+  con_samevol
+  con_transform
+  con_transform_cache
+  con_clampto
+  con_kinematic
+  con_locktrack
+  con_splineik
+  con_stretchto
+  con_trackto
+  con_armature
+  con_childof
+  con_floor
+  con_followpath
+  con_pivot
+  con_shrinkwrap
+  modifier_data
   mod_wave
   mod_build
   mod_decim
@@ -387,7 +450,7 @@ set(ICON_NAMES
   mod_explode
   mod_fluidsim
   mod_multires
-  mod_smoke
+  mod_fluid
   mod_solidify
   mod_screw
   mod_vertex_weight
@@ -416,6 +479,7 @@ set(ICON_NAMES
   pause
   prev_keyframe
   next_keyframe
+  play_sound
   play_reverse
   preview_range
   action_tweak
@@ -431,8 +495,6 @@ set(ICON_NAMES
   key_hlt
   mute_ipo_off
   mute_ipo_on
-  visible_ipo_off
-  visible_ipo_on
   driver
   solo_off
   solo_on
@@ -459,6 +521,7 @@ set(ICON_NAMES
   vertexsel
   edgesel
   facesel
+  cursor
   pivot_boundbox
   pivot_cursor
   pivot_individual
@@ -467,6 +530,7 @@ set(ICON_NAMES
   center_only
   smoothcurve
   spherecurve
+  inversesquarecurve
   rootcurve
   sharpcurve
   lincurve
@@ -475,10 +539,13 @@ set(ICON_NAMES
   prop_off
   prop_on
   prop_con
-  sculpt_dyntopo
+  prop_projected
   particle_point
   particle_tip
   particle_path
+  snap_face_center
+  snap_perpendicular
+  snap_midpoint
   snap_off
   snap_on
   snap_normal
@@ -516,6 +583,9 @@ set(ICON_NAMES
   uv_facesel
   uv_islandsel
   uv_sync_select
+  transform_origins
+  gizmo
+  orientation_cursor
   normals_vertex
   normals_face
   normals_vertex_face
@@ -531,12 +601,20 @@ set(ICON_NAMES
   axis_side
   axis_front
   axis_top
-  ndof_dom
-  ndof_turn
-  ndof_fly
-  ndof_trans
   layer_used
   layer_active
+  outliner_ob_hair
+  outliner_data_hair
+  hair_data
+  outliner_ob_pointcloud
+  outliner_data_pointcloud
+  pointcloud_data
+  outliner_ob_volume
+  outliner_data_volume
+  volume_data
+  home
+  documents
+  temp
   sortalpha
   sortbyext
   sorttime
@@ -548,6 +626,7 @@ set(ICON_NAMES
   fontpreview
   filter
   newfolder
+  folder_redirect
   file_parent
   file_refresh
   file_folder
@@ -569,9 +648,10 @@ set(ICON_NAMES
   loop_forwards
   back
   forward
+  file_archive
+  file_cache
   file_volume
-  alembic
-  volume
+  file_3d
   file_hidden
   file_backup
   disk_drive
@@ -593,16 +673,27 @@ set(ICON_NAMES
   linenumbers_off
   linenumbers_on
   scriptplugins
+  disc
+  desktop
+  external_drive
+  network_drive
   seq_sequencer
   seq_preview
   seq_luma_waveform
   seq_chroma_scope
   seq_histogram
   seq_splitview
+  seq_strip_meta
+  seq_strip_duplicate
   image_rgb
   image_rgb_alpha
   image_alpha
   image_zdepth
+  handle_autoclamped
+  handle_auto
+  handle_aligned
+  handle_vector
+  handle_free
   view_perspective
   view_ortho
   view_camera
@@ -616,6 +707,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.gpencil_draw.draw
   brush.gpencil_draw.erase
   brush.gpencil_draw.fill
+  brush.gpencil_draw.tint
   brush.paint_texture.airbrush
   brush.paint_texture.clone
   brush.paint_texture.draw
@@ -629,6 +721,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.paint_vertex.average
   brush.paint_vertex.blur
   brush.paint_vertex.draw
+  brush.paint_vertex.replace
   brush.paint_vertex.smear
   brush.paint_weight.average
   brush.paint_weight.blur
@@ -643,24 +736,35 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   brush.particle.smooth
   brush.particle.weight
   brush.sculpt.blob
+  brush.sculpt.boundary
   brush.sculpt.clay
   brush.sculpt.clay_strips
+  brush.sculpt.clay_thumb
+  brush.sculpt.cloth
   brush.sculpt.crease
+  brush.sculpt.displacement_eraser
+  brush.sculpt.displacement_smear
   brush.sculpt.draw
+  brush.sculpt.draw_face_sets
+  brush.sculpt.draw_sharp
+  brush.sculpt.elastic_deform
   brush.sculpt.fill
   brush.sculpt.flatten
   brush.sculpt.grab
   brush.sculpt.inflate
   brush.sculpt.layer
   brush.sculpt.mask
+  brush.sculpt.multiplane_scrape
   brush.sculpt.nudge
   brush.sculpt.pinch
+  brush.sculpt.pose
   brush.sculpt.rotate
   brush.sculpt.scrape
   brush.sculpt.simplify
   brush.sculpt.smooth
   brush.sculpt.snake_hook
   brush.sculpt.thumb
+  brush.sculpt.topology
   brush.uv_sculpt.grab
   brush.uv_sculpt.pinch
   brush.uv_sculpt.relax
@@ -692,6 +796,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.gpencil.primitive_circle
   ops.gpencil.primitive_curve
   ops.gpencil.primitive_line
+  ops.gpencil.primitive_polyline
   ops.gpencil.radius
   ops.gpencil.sculpt_clone
   ops.gpencil.sculpt_grab
@@ -704,10 +809,12 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.gpencil.sculpt_twist
   ops.gpencil.sculpt_weight
   ops.gpencil.stroke_cutter
+  ops.gpencil.transform_fill
   ops.mesh.bevel
   ops.mesh.bisect
   ops.mesh.dupli_extrude_cursor
   ops.mesh.extrude_faces_move
+  ops.mesh.extrude_manifold
   ops.mesh.extrude_region_move
   ops.mesh.extrude_region_shrink_fatten
   ops.mesh.inset
@@ -727,6 +834,7 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.mesh.spin.duplicate
   ops.mesh.vertices_smooth
   ops.node.links_cut
+  ops.paint.eyedropper_add
   ops.paint.vertex_color_fill
   ops.paint.weight_fill
   ops.paint.weight_gradient
@@ -735,8 +843,19 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
   ops.pose.breakdowner
   ops.pose.push
   ops.pose.relax
+  ops.sculpt.border_face_set
   ops.sculpt.border_hide
   ops.sculpt.border_mask
+  ops.sculpt.box_trim
+  ops.sculpt.cloth_filter
+  ops.sculpt.face_set_edit
+  ops.sculpt.lasso_face_set
+  ops.sculpt.lasso_mask
+  ops.sculpt.lasso_trim
+  ops.sculpt.line_mask
+  ops.sculpt.line_project
+  ops.sculpt.mesh_filter
+  ops.sequencer.blade
   ops.transform.bone_envelope
   ops.transform.bone_size
   ops.transform.edge_slide
@@ -757,8 +876,6 @@ set_property(GLOBAL PROPERTY ICON_GEOM_NAMES
 )
 
 data_to_c_simple(../../../../release/datafiles/bfont.pfb SRC)
-data_to_c_simple(../../../../release/datafiles/bfont.ttf SRC)
-data_to_c_simple(../../../../release/datafiles/bmonofont.ttf SRC)
 
 if(WITH_BLENDER)
   # blender only (not player)
@@ -772,22 +889,23 @@ if(WITH_BLENDER)
 
     # images
     data_to_c_simple(../../../../release/datafiles/splash.png SRC)
-    data_to_c_simple(../../../../release/datafiles/splash_2x.png SRC)
+    data_to_c_simple(../../../../release/datafiles/alert_icons.png SRC)
+    data_to_c_simple(../../../../release/datafiles/blender_logo.png SRC)
     # XXX These are handy, but give nasty "false changes" in svn :/
-    #svg_to_png(../../../../release/datafiles/blender_icons.svg
-               #../../../../release/datafiles/blender_icons16.png
-               #90 SRC)
+    # svg_to_png(../../../../release/datafiles/blender_icons.svg
+    #            ../../../../release/datafiles/blender_icons16.png
+    #            90 SRC)
 
     data_to_c_simple_icons(../../../../release/datafiles/blender_icons16 "icon16_" "${ICON_NAMES}" SRC)
-    #data_to_c_simple(../../../../release/datafiles/blender_icons16.png SRC)
-    #svg_to_png(../../../../release/datafiles/blender_icons.svg
-               #../../../../release/datafiles/blender_icons32.png
-               #180 SRC)
+    # data_to_c_simple(../../../../release/datafiles/blender_icons16.png SRC)
+    # svg_to_png(../../../../release/datafiles/blender_icons.svg
+    #            ../../../../release/datafiles/blender_icons32.png
+    #            180 SRC)
     data_to_c_simple_icons(../../../../release/datafiles/blender_icons32 "icon32_" "${ICON_NAMES}" SRC)
-    #data_to_c_simple(../../../../release/datafiles/blender_icons32.png SRC)
-    #svg_to_png(../../../../release/datafiles/prvicons.svg
-               #../../../../release/datafiles/prvicons.png
-               #90 SRC)
+    # data_to_c_simple(../../../../release/datafiles/blender_icons32.png SRC)
+    # svg_to_png(../../../../release/datafiles/prvicons.svg
+    #            ../../../../release/datafiles/prvicons.png
+    #            90 SRC)
     data_to_c_simple(../../../../release/datafiles/prvicons.png SRC)
 
     # brushes
@@ -837,6 +955,8 @@ if(WITH_BLENDER)
     data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_block.png SRC)
     data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_marker.png SRC)
     data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_fill.png SRC)
+    data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_airbrush.png SRC)
+    data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_chisel.png SRC)
     data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_erase_soft.png SRC)
     data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_erase_hard.png SRC)
     data_to_c_simple(../../../../release/datafiles/brushicons/gp_brush_erase_stroke.png SRC)

@@ -21,8 +21,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_CONTEXTWGL_H__
-#define __GHOST_CONTEXTWGL_H__
+#pragma once
 
 //#define WIN32_COMPOSITING
 
@@ -35,13 +34,15 @@
 #endif
 
 class GHOST_ContextWGL : public GHOST_Context {
+  /* XR code needs low level graphics data to send to OpenXR. */
+  friend class GHOST_XrGraphicsBindingOpenGL;
+
  public:
   /**
    * Constructor.
    */
   GHOST_ContextWGL(bool stereoVisual,
                    bool alphaBackground,
-                   GHOST_TUns16 numOfAASamples,
                    HWND hWnd,
                    HDC hDC,
                    int contextProfileMask,
@@ -57,19 +58,19 @@ class GHOST_ContextWGL : public GHOST_Context {
 
   /**
    * Swaps front and back buffers of a window.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess swapBuffers();
 
   /**
    * Activates the drawing context of this window.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess activateDrawingContext();
 
   /**
    * Release the drawing context of the calling thread.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess releaseDrawingContext();
 
@@ -87,28 +88,23 @@ class GHOST_ContextWGL : public GHOST_Context {
   GHOST_TSuccess releaseNativeHandles();
 
   /**
-   * Sets the swap interval for swapBuffers.
-   * \param interval The swap interval to use.
+   * Sets the swap interval for #swapBuffers.
+   * \param interval: The swap interval to use.
    * \return A boolean success indicator.
    */
   GHOST_TSuccess setSwapInterval(int interval);
 
   /**
-   * Gets the current swap interval for swapBuffers.
-   * \param intervalOut Variable to store the swap interval if it can be read.
+   * Gets the current swap interval for #swapBuffers.
+   * \param intervalOut: Variable to store the swap interval if it can be read.
    * \return Whether the swap interval can be read.
    */
   GHOST_TSuccess getSwapInterval(int &intervalOut);
 
  private:
-  int choose_pixel_format(
-      bool stereoVisual, int numOfAASamples, bool needAlpha, bool needStencil, bool sRGB);
-
-  int choose_pixel_format_arb(
-      bool stereoVisual, int numOfAASamples, bool needAlpha, bool needStencil, bool sRGB);
-
-  int _choose_pixel_format_arb_1(
-      bool stereoVisual, int numOfAASamples, bool needAlpha, bool needStencil, bool sRGB);
+  int choose_pixel_format(bool stereoVisual, bool needAlpha);
+  int choose_pixel_format_arb(bool stereoVisual, bool needAlpha);
+  int _choose_pixel_format_arb_1(bool stereoVisual, bool needAlpha);
 
   void initContextWGLEW(PIXELFORMATDESCRIPTOR &preferredPFD);
 
@@ -133,5 +129,3 @@ class GHOST_ContextWGL : public GHOST_Context {
   static HGLRC s_sharedHGLRC;
   static int s_sharedCount;
 };
-
-#endif  // __GHOST_CONTEXTWGL_H__

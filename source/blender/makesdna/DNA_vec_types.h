@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VEC_TYPES_H__
-#define __DNA_VEC_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* types */
 
@@ -83,4 +86,15 @@ typedef struct rctf {
   float ymin, ymax;
 } rctf;
 
+/** dual quaternion. */
+typedef struct DualQuat {
+  float quat[4];
+  float trans[4];
+
+  float scale[4][4];
+  float scale_weight;
+} DualQuat;
+
+#ifdef __cplusplus
+}
 #endif

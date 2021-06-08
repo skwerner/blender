@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_AVERAGE_AREA_GRID_DENSITY_PROVIDER_H__
-#define __FREESTYLE_AVERAGE_AREA_GRID_DENSITY_PROVIDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -40,7 +39,6 @@ class AverageAreaGridDensityProvider : public GridDensityProvider {
                                  const GridHelpers::Transform &transform,
                                  real sizeFactor);
   AverageAreaGridDensityProvider(OccluderSource &source, real sizeFactor);
-  virtual ~AverageAreaGridDensityProvider();
 
  private:
   void initialize(const real proscenium[4], real sizeFactor);
@@ -49,7 +47,6 @@ class AverageAreaGridDensityProvider : public GridDensityProvider {
 class AverageAreaGridDensityProviderFactory : public GridDensityProviderFactory {
  public:
   AverageAreaGridDensityProviderFactory(real sizeFactor);
-  ~AverageAreaGridDensityProviderFactory();
 
   AutoPtr<GridDensityProvider> newGridDensityProvider(OccluderSource &source,
                                                       const real proscenium[4]);
@@ -63,5 +60,3 @@ class AverageAreaGridDensityProviderFactory : public GridDensityProviderFactory 
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_AVERAGE_AREA_GRID_DENSITY_PROVIDER_H__

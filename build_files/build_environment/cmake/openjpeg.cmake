@@ -28,9 +28,9 @@ else()
 endif()
 
 ExternalProject_Add(external_openjpeg
-  URL ${OPENJPEG_URI}
+  URL file://${PACKAGE_DIR}/${OPENJPEG_FILE}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH SHA256=${OPENJPEG_HASH}
+  URL_HASH ${OPENJPEG_HASH_TYPE}=${OPENJPEG_HASH}
   PREFIX ${BUILD_DIR}/openjpeg
   CONFIGURE_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/openjpeg/src/external_openjpeg-build && ${CMAKE_COMMAND} ${OPENJPEG_EXTRA_ARGS} -DCMAKE_INSTALL_PREFIX=${LIBDIR}/openjpeg -DBUILD_SHARED_LIBS=Off -DBUILD_THIRDPARTY=OFF ${BUILD_DIR}/openjpeg/src/external_openjpeg
   BUILD_COMMAND ${CONFIGURE_ENV} && cd ${BUILD_DIR}/openjpeg/src/external_openjpeg-build/ && make -j${MAKE_THREADS}
@@ -38,13 +38,13 @@ ExternalProject_Add(external_openjpeg
   INSTALL_DIR ${LIBDIR}/openjpeg
 )
 
-#on windows ffmpeg wants a mingw build, while oiio needs a msvc build
+# On windows ffmpeg wants a mingw build, while oiio needs a msvc build.
 if(MSVC)
   set(OPENJPEG_EXTRA_ARGS ${DEFAULT_CMAKE_FLAGS})
   ExternalProject_Add(external_openjpeg_msvc
-    URL ${OPENJPEG_URI}
+    URL file://${PACKAGE_DIR}/${OPENJPEG_FILE}
     DOWNLOAD_DIR ${DOWNLOAD_DIR}
-    URL_HASH SHA256=${OPENJPEG_HASH}
+    URL_HASH ${OPENJPEG_HASH_TYPE}=${OPENJPEG_HASH}
     PREFIX ${BUILD_DIR}/openjpeg_msvc
     CMAKE_ARGS ${OPENJPEG_EXTRA_ARGS} -DCMAKE_INSTALL_PREFIX=${LIBDIR}/openjpeg_msvc -DBUILD_SHARED_LIBS=Off -DBUILD_THIRDPARTY=OFF
     INSTALL_DIR ${LIBDIR}/openjpeg_msvc

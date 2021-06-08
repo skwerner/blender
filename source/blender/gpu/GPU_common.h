@@ -21,10 +21,10 @@
  * \ingroup gpu
  */
 
-#ifndef __GPU_COMMON_H__
-#define __GPU_COMMON_H__
+#pragma once
 
 #define PROGRAM_NO_OPTI 0
+//#define GPU_NO_USE_PY_REFERENCES
 
 #if defined(NDEBUG)
 #  define TRUST_NO_ONE 0
@@ -33,13 +33,9 @@
 #  define TRUST_NO_ONE 1
 #endif
 
-#if defined(WITH_OPENGL)
-#  include <GL/glew.h>
-#endif
-
+#include "BLI_sys_types.h"
 #include <stdbool.h>
 #include <stdint.h>
-#include "BLI_sys_types.h"
 
 #if TRUST_NO_ONE
 #  include <assert.h>
@@ -51,5 +47,3 @@
 #else
 #  define GPU_INLINE static inline __attribute__((always_inline)) __attribute__((__unused__))
 #endif
-
-#endif /* __GPU_COMMON_H__ */

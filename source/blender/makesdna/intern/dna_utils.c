@@ -26,10 +26,10 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_sys_types.h"
-#include "BLI_utildefines.h"
 #include "BLI_assert.h"
 #include "BLI_ghash.h"
+#include "BLI_sys_types.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_memarena.h"
 
@@ -232,6 +232,20 @@ void DNA_alias_maps(enum eDNA_RenameDir version_dir, GHash **r_struct_map, GHash
     for (int i = 0; i < ARRAY_SIZE(data); i++) {
       BLI_ghash_insert(struct_map, (void *)data[i][elem_key], (void *)data[i][elem_val]);
     }
+
+    if (version_dir == DNA_RENAME_STATIC_FROM_ALIAS) {
+      const char *renames[][2] = {
+          {"uint8_t", "uchar"},
+          {"int16_t", "short"},
+          {"uint16_t", "ushort"},
+          {"int32_t", "int"},
+          {"uint32_t", "int"},
+      };
+      for (int i = 0; i < ARRAY_SIZE(renames); i++) {
+        BLI_ghash_insert(struct_map, (void *)renames[i][0], (void *)renames[i][1]);
+      }
+    }
+
     *r_struct_map = struct_map;
 
     /* We know the direction of this, for local use. */
@@ -265,7 +279,7 @@ void DNA_alias_maps(enum eDNA_RenameDir version_dir, GHash **r_struct_map, GHash
       const char **str_pair = MEM_mallocN(sizeof(char *) * 2, __func__);
       str_pair[0] = BLI_ghash_lookup_default(struct_map_local, data[i][0], (void *)data[i][0]);
       str_pair[1] = data[i][elem_key];
-      BLI_ghash_insert(elem_map, str_pair, (void *)data[i][elem_val]);
+      BLI_ghash_insert(elem_map, (void *)str_pair, (void *)data[i][elem_val]);
     }
     *r_elem_map = elem_map;
   }

@@ -26,31 +26,31 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
-#include "BLI_path_util.h"
 #include "BLI_fileops.h"
 #include "BLI_ghash.h"
 #include "BLI_hash_md5.h"
+#include "BLI_path_util.h"
+#include "BLI_string.h"
 #include "BLI_system.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 #include BLI_SYSTEM_PID_H
 
 #include "DNA_space_types.h" /* For FILE_MAX_LIBEXTRA */
 
 #include "BLO_readfile.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
-#include "IMB_thumbs.h"
+#include "IMB_imbuf_types.h"
 #include "IMB_metadata.h"
+#include "IMB_thumbs.h"
 
 #include <ctype.h>
-#include <string.h>
-#include <time.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
 
 #ifdef WIN32
 /* Need to include windows.h so _WIN32_IE is defined. */
@@ -60,11 +60,11 @@
 #    define _WIN32_IE 0x0400
 #  endif
 /* For SHGetSpecialFolderPath, has to be done before BLI_winstuff
-    * because 'near' is disabled through BLI_windstuff */
-#  include <shlobj.h>
-#  include <direct.h> /* chdir */
+ * because 'near' is disabled through BLI_windstuff */
 #  include "BLI_winstuff.h"
 #  include "utfconv.h"
+#  include <direct.h> /* #chdir */
+#  include <shlobj.h>
 #endif
 
 #if defined(WIN32) || defined(__APPLE__)
@@ -99,8 +99,9 @@ static bool get_thumb_dir(char *dir, ThumbSize size)
 #  else
   const char *home = BLI_getenv("HOME");
 #  endif
-  if (!home)
+  if (!home) {
     return 0;
+  }
   s += BLI_strncpy_rlen(s, home, FILE_MAX);
 
 #  ifdef USE_FREEDESKTOP
@@ -131,11 +132,17 @@ static bool get_thumb_dir(char *dir, ThumbSize size)
 
 #undef THUMBNAILS
 
-/** ----- begin of adapted code from glib ---
+/* --- Begin of adapted code from glib. --- */
+
+/* -------------------------------------------------------------------- */
+/** \name Escape URI String
+ *
  * The following code is adapted from function g_escape_uri_string from the gnome glib
  * Source: http://svn.gnome.org/viewcvs/glib/trunk/glib/gconvert.c?view=markup
  * released under the Gnu General Public License.
- */
+ *
+ * \{ */
+
 typedef enum {
   UNSAFE_ALL = 0x1,        /* Escape all unsafe characters   */
   UNSAFE_ALLOW_PLUS = 0x2, /* Allows '+'  */
@@ -144,111 +151,24 @@ typedef enum {
   UNSAFE_SLASHES = 0x20,   /* Allows all characters except for '/' and '%' */
 } UnsafeCharacterSet;
 
+/* Don't lose comment alignment. */
+/* clang-format off */
 static const unsigned char acceptable[96] = {
     /* A table of the ASCII chars from space (32) to DEL (127) */
     /*      !    "    #    $    %    &    '    (    )    *    +    ,    -    .    / */
-    0x00,
-    0x3F,
-    0x20,
-    0x20,
-    0x28,
-    0x00,
-    0x2C,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x2A,
-    0x28,
-    0x3F,
-    0x3F,
-    0x1C,
+    0x00,0x3F,0x20,0x20,0x28,0x00,0x2C,0x3F,0x3F,0x3F,0x3F,0x2A,0x28,0x3F,0x3F,0x1C,
     /* 0    1    2    3    4    5    6    7    8    9    :    ;    <    =    >    ? */
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x38,
-    0x20,
-    0x20,
-    0x2C,
-    0x20,
-    0x20,
+    0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x38,0x20,0x20,0x2C,0x20,0x20,
     /* @    A    B    C    D    E    F    G    H    I    J    K    L    M    N    O */
-    0x38,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
+    0x38,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,
     /* P    Q    R    S    T    U    V    W    X    Y    Z    [    \    ]    ^    _ */
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x20,
-    0x20,
-    0x20,
-    0x20,
-    0x3F,
+    0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x20,0x20,0x20,0x20,0x3F,
     /* `    a    b    c    d    e    f    g    h    i    j    k    l    m    n    o */
-    0x20,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
+    0x20,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,
     /* p    q    r    s    t    u    v    w    x    y    z    {    |    }    ~  DEL */
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x3F,
-    0x20,
-    0x20,
-    0x20,
-    0x3F,
-    0x20,
+    0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x3F,0x20,0x20,0x20,0x3F,0x20,
 };
+/* clang-format on */
 
 static const char hex[17] = "0123456789abcdef";
 
@@ -294,7 +214,9 @@ static void escape_uri_string(const char *string,
   *q = '\0';
 }
 
-/** ----- end of adapted code from glib --- */
+/** \} */
+
+/* --- End of adapted code from glib. --- */
 
 static bool thumbhash_from_path(const char *UNUSED(path), ThumbSource source, char *r_hash)
 {
@@ -452,8 +374,9 @@ static ImBuf *thumb_create_ex(const char *file_path,
     }
     if (size == THB_FAIL) {
       img = IMB_allocImBuf(1, 1, 32, IB_rect | IB_metadata);
-      if (!img)
+      if (!img) {
         return NULL;
+      }
     }
     else {
       if (ELEM(source, THB_SOURCE_IMAGE, THB_SOURCE_BLEND, THB_SOURCE_FONT)) {
@@ -470,7 +393,7 @@ static ImBuf *thumb_create_ex(const char *file_path,
               img = IMB_thumb_load_font(file_path, tsize, tsize);
               break;
             default:
-              BLI_assert(0); /* This should never happen */
+              BLI_assert_unreachable(); /* This should never happen */
           }
         }
 
@@ -500,8 +423,9 @@ static ImBuf *thumb_create_ex(const char *file_path,
           BLI_snprintf(mtime, sizeof(mtime), "%ld", (long int)info.st_mtime);
         }
       }
-      if (!img)
+      if (!img) {
         return NULL;
+      }
 
       if (img->x > img->y) {
         scaledx = (float)tsize;
@@ -734,7 +658,8 @@ ImBuf *IMB_thumb_manage(const char *org_path, ThumbSize size, ThumbSource source
     }
   }
 
-  /* Our imbuf **must** have a valid rect (i.e. 8-bits/channels) data, we rely on this in draw code.
+  /* Our imbuf **must** have a valid rect (i.e. 8-bits/channels)
+   * data, we rely on this in draw code.
    * However, in some cases we may end loading 16bits PNGs, which generated float buffers.
    * This should be taken care of in generation step, but add also a safeguard here! */
   if (img) {
@@ -813,7 +738,7 @@ void IMB_thumb_path_unlock(const char *path)
 
   if (thumb_locks.locked_paths) {
     if (!BLI_gset_remove(thumb_locks.locked_paths, key, MEM_freeN)) {
-      BLI_assert(0);
+      BLI_assert_unreachable();
     }
     BLI_condition_notify_all(&thumb_locks.cond);
   }

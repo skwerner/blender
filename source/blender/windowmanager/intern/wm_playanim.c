@@ -27,16 +27,16 @@
  * this could be made into its own module, alongside creator.
  */
 
-#include <sys/types.h>
 #include <fcntl.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
+#include <sys/types.h>
 
 #ifndef WIN32
-#  include <unistd.h>
 #  include <sys/times.h>
 #  include <sys/wait.h>
+#  include <unistd.h>
 #else
 #  include <io.h>
 #endif
@@ -44,30 +44,33 @@
 
 #include "PIL_time.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
+#include "BLI_rect.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
-#include "IMB_imbuf_types.h"
+#include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "BKE_image.h"
 
 #include "BIF_glutil.h"
 
 #include "GPU_context.h"
-#include "GPU_matrix.h"
+#include "GPU_framebuffer.h"
 #include "GPU_immediate.h"
 #include "GPU_immediate_util.h"
 #include "GPU_init_exit.h"
+#include "GPU_matrix.h"
 #include "GPU_state.h"
 
+#include "BLF_api.h"
 #include "DNA_scene_types.h"
 #include "ED_datafiles.h" /* for fonts */
 #include "GHOST_C-api.h"
-#include "BLF_api.h"
 
 #include "DEG_depsgraph.h"
 
@@ -94,64 +97,85 @@ static AUD_Device *audio_device = NULL;
 struct PlayState;
 static void playanim_window_zoom(struct PlayState *ps, const float zoom_offset);
 
+/**
+ * The current state of the player.
+ *
+ * \warning Don't store results of parsing command-line arguments
+ * in this struct if they need to persist across playing back different
+ * files as these will be cleared when playing other files (drag & drop).
+ */
 typedef struct PlayState {
 
-  /* window and viewport size */
+  /** Window and viewport size. */
   int win_x, win_y;
 
-  /* current zoom level */
+  /** Current zoom level. */
   float zoom;
 
-  /* playback state */
+  /** Playback direction (-1, 1). */
   short direction;
+  /** Set the next frame to implement frame stepping (using shortcuts). */
   short next_frame;
 
+  /** Playback once then wait. */
   bool once;
-  bool turbo;
+  /** Play forwards/backwards. */
   bool pingpong;
+  /** Disable frame skipping. */
   bool noskip;
+  /** Display current frame over the window. */
   bool indicator;
+  /** Single-frame stepping has been enabled (frame loading and update pending). */
   bool sstep;
+  /** Playback has stopped the image has been displayed. */
   bool wait2;
+  /** Playback stopped state once stop/start variables have been handled. */
   bool stopped;
+  /**
+   * When disabled the current animation will exit,
+   * after this either the application exits or a new animation window is opened.
+   *
+   * This is used so drag & drop can load new files which setup a newly created animation window.
+   */
   bool go;
-  /* waiting for images to load */
+  /** True when waiting for images to load. */
   bool loading;
-  /* x/y image flip */
+  /** X/Y image flip (set via key bindings). */
   bool draw_flip[2];
 
+  /** The number of frames to step each update (default to 1, command line argument). */
   int fstep;
 
-  /* current picture */
+  /** Current frame (picture). */
   struct PlayAnimPict *picture;
 
-  /* set once at the start */
+  /** Image size in pixels, set once at the start. */
   int ibufx, ibufy;
+  /** Mono-space font ID. */
   int fontid;
 
-  /* saves passing args */
-  struct ImBuf *curframe_ibuf;
-
-  /* restarts player for file drop */
+  /** Restarts player for file drop (drag & drop). */
   char dropped_file[FILE_MAX];
 
+  /** Force update when scrubbing with the cursor. */
   bool need_frame_update;
+  /** The current frame calculated by scrubbing the mouse cursor. */
   int frame_cursor_x;
+
+  ColorManagedViewSettings view_settings;
+  ColorManagedDisplaySettings display_settings;
 } PlayState;
 
 /* for debugging */
 #if 0
-void print_ps(PlayState *ps)
+static void print_ps(PlayState *ps)
 {
   printf("ps:\n");
   printf("    direction=%d,\n", (int)ps->direction);
-  printf("    next=%d,\n", ps->next);
   printf("    once=%d,\n", ps->once);
-  printf("    turbo=%d,\n", ps->turbo);
   printf("    pingpong=%d,\n", ps->pingpong);
   printf("    noskip=%d,\n", ps->noskip);
   printf("    sstep=%d,\n", ps->sstep);
-  printf("    pause=%d,\n", ps->pause);
   printf("    wait2=%d,\n", ps->wait2);
   printf("    stopped=%d,\n", ps->stopped);
   printf("    go=%d,\n\n", ps->go);
@@ -236,6 +260,12 @@ typedef struct PlayAnimPict {
   struct anim *anim;
   int frame;
   int IB_flags;
+
+#ifdef USE_FRAME_CACHE_LIMIT
+  /** Back pointer to the #LinkData node for this struct in the #g_frame_cache.pics list. */
+  LinkData *frame_cache_node;
+  size_t size_in_memory;
+#endif
 } PlayAnimPict;
 
 static struct ListBase picsbase = {NULL, NULL};
@@ -247,9 +277,103 @@ static double fps_movie;
 #endif
 
 #ifdef USE_FRAME_CACHE_LIMIT
-static struct ListBase inmempicsbase = {NULL, NULL};
-static int added_images = 0;
-#endif
+static struct {
+  /** A list of #LinkData nodes referencing #PlayAnimPict to track cached frames. */
+  struct ListBase pics;
+  /** Number if elements in `pics`. */
+  int pics_len;
+  /** Keep track of memory used by #g_frame_cache.pics when `g_frame_cache.memory_limit != 0`. */
+  size_t pics_size_in_memory;
+  /** Optionally limit the amount of memory used for cache (in bytes), ignored when zero. */
+  size_t memory_limit;
+} g_frame_cache = {
+    .pics = {NULL, NULL},
+    .pics_len = 0,
+    .pics_size_in_memory = 0,
+    .memory_limit = 0,
+};
+
+static void frame_cache_add(PlayAnimPict *pic)
+{
+  pic->frame_cache_node = BLI_genericNodeN(pic);
+  BLI_addhead(&g_frame_cache.pics, pic->frame_cache_node);
+  g_frame_cache.pics_len++;
+
+  if (g_frame_cache.memory_limit != 0) {
+    BLI_assert(pic->size_in_memory == 0);
+    pic->size_in_memory = IMB_get_size_in_memory(pic->ibuf);
+    g_frame_cache.pics_size_in_memory += pic->size_in_memory;
+  }
+}
+
+static void frame_cache_remove(PlayAnimPict *pic)
+{
+  LinkData *node = pic->frame_cache_node;
+  IMB_freeImBuf(pic->ibuf);
+  if (g_frame_cache.memory_limit != 0) {
+    BLI_assert(pic->size_in_memory != 0);
+    g_frame_cache.pics_size_in_memory -= pic->size_in_memory;
+    pic->size_in_memory = 0;
+  }
+  pic->ibuf = NULL;
+  pic->frame_cache_node = NULL;
+  BLI_freelinkN(&g_frame_cache.pics, node);
+  g_frame_cache.pics_len--;
+}
+
+/* Don't free the current frame by moving it to the head of the list. */
+static void frame_cache_touch(PlayAnimPict *pic)
+{
+  BLI_assert(pic->frame_cache_node->data == pic);
+  BLI_remlink(&g_frame_cache.pics, pic->frame_cache_node);
+  BLI_addhead(&g_frame_cache.pics, pic->frame_cache_node);
+}
+
+static bool frame_cache_limit_exceeded(void)
+{
+  return g_frame_cache.memory_limit ?
+             (g_frame_cache.pics_size_in_memory > g_frame_cache.memory_limit) :
+             (g_frame_cache.pics_len > PLAY_FRAME_CACHE_MAX);
+}
+
+static void frame_cache_limit_apply(ImBuf *ibuf_keep)
+{
+  /* Really basic memory conservation scheme. Keep frames in a FIFO queue. */
+  LinkData *node = g_frame_cache.pics.last;
+  while (node && frame_cache_limit_exceeded()) {
+    PlayAnimPict *pic = node->data;
+    BLI_assert(pic->frame_cache_node == node);
+
+    node = node->prev;
+    if (pic->ibuf && pic->ibuf != ibuf_keep) {
+      frame_cache_remove(pic);
+    }
+  }
+}
+
+#endif /* USE_FRAME_CACHE_LIMIT */
+
+static ImBuf *ibuf_from_picture(PlayAnimPict *pic)
+{
+  ImBuf *ibuf = NULL;
+
+  if (pic->ibuf) {
+    ibuf = pic->ibuf;
+  }
+  else if (pic->anim) {
+    ibuf = IMB_anim_absolute(pic->anim, pic->frame, IMB_TC_NONE, IMB_PROXY_NONE);
+  }
+  else if (pic->mem) {
+    /* use correct colorspace here */
+    ibuf = IMB_ibImageFromMemory(pic->mem, pic->size, pic->IB_flags, NULL, pic->name);
+  }
+  else {
+    /* use correct colorspace here */
+    ibuf = IMB_loadiffname(pic->name, pic->IB_flags, NULL);
+  }
+
+  return ibuf;
+}
 
 static PlayAnimPict *playanim_step(PlayAnimPict *playanim, int step)
 {
@@ -269,73 +393,198 @@ static PlayAnimPict *playanim_step(PlayAnimPict *playanim, int step)
 static int pupdate_time(void)
 {
   static double ltime;
-  double time;
 
-  time = PIL_check_seconds_timer();
+  double time = PIL_check_seconds_timer();
 
   ptottime += (time - ltime);
   ltime = time;
   return (ptottime < 0);
 }
 
+static void *ocio_transform_ibuf(PlayState *ps,
+                                 ImBuf *ibuf,
+                                 bool *r_glsl_used,
+                                 eGPUTextureFormat *r_format,
+                                 eGPUDataFormat *r_data,
+                                 void **r_buffer_cache_handle)
+{
+  void *display_buffer;
+  bool force_fallback = false;
+  *r_glsl_used = false;
+  force_fallback |= (ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL);
+  force_fallback |= (ibuf->dither != 0.0f);
+
+  /* Default */
+  *r_format = GPU_RGBA8;
+  *r_data = GPU_DATA_UBYTE;
+
+  /* Fallback to CPU based color space conversion. */
+  if (force_fallback) {
+    *r_glsl_used = false;
+    display_buffer = NULL;
+  }
+  else if (ibuf->rect_float) {
+    display_buffer = ibuf->rect_float;
+
+    *r_data = GPU_DATA_FLOAT;
+    if (ibuf->channels == 4) {
+      *r_format = GPU_RGBA16F;
+    }
+    else if (ibuf->channels == 3) {
+      /* Alpha is implicitly 1. */
+      *r_format = GPU_RGB16F;
+    }
+
+    if (ibuf->float_colorspace) {
+      *r_glsl_used = IMB_colormanagement_setup_glsl_draw_from_space(&ps->view_settings,
+                                                                    &ps->display_settings,
+                                                                    ibuf->float_colorspace,
+                                                                    ibuf->dither,
+                                                                    false,
+                                                                    false);
+    }
+    else {
+      *r_glsl_used = IMB_colormanagement_setup_glsl_draw(
+          &ps->view_settings, &ps->display_settings, ibuf->dither, false);
+    }
+  }
+  else if (ibuf->rect) {
+    display_buffer = ibuf->rect;
+    *r_glsl_used = IMB_colormanagement_setup_glsl_draw_from_space(&ps->view_settings,
+                                                                  &ps->display_settings,
+                                                                  ibuf->rect_colorspace,
+                                                                  ibuf->dither,
+                                                                  false,
+                                                                  false);
+  }
+  else {
+    display_buffer = NULL;
+  }
+
+  /* There is data to be displayed, but GLSL is not initialized
+   * properly, in this case we fallback to CPU-based display transform. */
+  if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
+    display_buffer = IMB_display_buffer_acquire(
+        ibuf, &ps->view_settings, &ps->display_settings, r_buffer_cache_handle);
+    *r_format = GPU_RGBA8;
+    *r_data = GPU_DATA_UBYTE;
+  }
+
+  return display_buffer;
+}
+
+static void draw_display_buffer(PlayState *ps, ImBuf *ibuf)
+{
+  void *display_buffer;
+
+  /* Format needs to be created prior to any #immBindShader call.
+   * Do it here because OCIO binds its own shader. */
+  eGPUTextureFormat format;
+  eGPUDataFormat data;
+  bool glsl_used = false;
+  GPUVertFormat *imm_format = immVertexFormat();
+  uint pos = GPU_vertformat_attr_add(imm_format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+  uint texCoord = GPU_vertformat_attr_add(
+      imm_format, "texCoord", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+
+  void *buffer_cache_handle = NULL;
+  display_buffer = ocio_transform_ibuf(ps, ibuf, &glsl_used, &format, &data, &buffer_cache_handle);
+
+  GPUTexture *texture = GPU_texture_create_2d("display_buf", ibuf->x, ibuf->y, 1, format, NULL);
+  GPU_texture_update(texture, data, display_buffer);
+  GPU_texture_filter_mode(texture, false);
+
+  GPU_texture_bind(texture, 0);
+
+  if (!glsl_used) {
+    immBindBuiltinProgram(GPU_SHADER_2D_IMAGE_COLOR);
+    immUniformColor3f(1.0f, 1.0f, 1.0f);
+    immUniform1i("image", 0);
+  }
+
+  immBegin(GPU_PRIM_TRI_FAN, 4);
+
+  rctf preview;
+  rctf canvas;
+
+  BLI_rctf_init(&canvas, 0.0f, 1.0f, 0.0f, 1.0f);
+  BLI_rctf_init(&preview, 0.0f, 1.0f, 0.0f, 1.0f);
+
+  if (ps->draw_flip[0]) {
+    SWAP(float, canvas.xmin, canvas.xmax);
+  }
+  if (ps->draw_flip[1]) {
+    SWAP(float, canvas.ymin, canvas.ymax);
+  }
+
+  immAttr2f(texCoord, canvas.xmin, canvas.ymin);
+  immVertex2f(pos, preview.xmin, preview.ymin);
+
+  immAttr2f(texCoord, canvas.xmin, canvas.ymax);
+  immVertex2f(pos, preview.xmin, preview.ymax);
+
+  immAttr2f(texCoord, canvas.xmax, canvas.ymax);
+  immVertex2f(pos, preview.xmax, preview.ymax);
+
+  immAttr2f(texCoord, canvas.xmax, canvas.ymin);
+  immVertex2f(pos, preview.xmax, preview.ymin);
+
+  immEnd();
+
+  GPU_texture_unbind(texture);
+  GPU_texture_free(texture);
+
+  if (!glsl_used) {
+    immUnbindProgram();
+  }
+  else {
+    IMB_colormanagement_finish_glsl_draw();
+  }
+
+  if (buffer_cache_handle) {
+    IMB_display_buffer_release(buffer_cache_handle);
+  }
+}
+
 static void playanim_toscreen(
     PlayState *ps, PlayAnimPict *picture, struct ImBuf *ibuf, int fontid, int fstep)
 {
-  float offs_x, offs_y;
-  float span_x, span_y;
-
   if (ibuf == NULL) {
     printf("%s: no ibuf for picture '%s'\n", __func__, picture ? picture->name : "<NIL>");
-    return;
-  }
-  if (ibuf->rect == NULL && ibuf->rect_float) {
-    IMB_rect_from_float(ibuf);
-    imb_freerectfloatImBuf(ibuf);
-  }
-  if (ibuf->rect == NULL) {
     return;
   }
 
   GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
   /* size within window */
-  span_x = (ps->zoom * ibuf->x) / (float)ps->win_x;
-  span_y = (ps->zoom * ibuf->y) / (float)ps->win_y;
+  float span_x = (ps->zoom * ibuf->x) / (float)ps->win_x;
+  float span_y = (ps->zoom * ibuf->y) / (float)ps->win_y;
 
   /* offset within window */
-  offs_x = 0.5f * (1.0f - span_x);
-  offs_y = 0.5f * (1.0f - span_y);
+  float offs_x = 0.5f * (1.0f - span_x);
+  float offs_y = 0.5f * (1.0f - span_y);
 
   CLAMP(offs_x, 0.0f, 1.0f);
   CLAMP(offs_y, 0.0f, 1.0f);
 
-  glClearColor(0.1, 0.1, 0.1, 0.0);
-  glClear(GL_COLOR_BUFFER_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   /* checkerboard for case alpha */
   if (ibuf->planes == 32) {
-    GPU_blend(true);
-    glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    GPU_blend(GPU_BLEND_ALPHA);
 
-    imm_draw_box_checker_2d(offs_x, offs_y, offs_x + span_x, offs_y + span_y);
+    imm_draw_box_checker_2d_ex(offs_x,
+                               offs_y,
+                               offs_x + span_x,
+                               offs_y + span_y,
+                               (const float[4]){0.15, 0.15, 0.15, 1.0},
+                               (const float[4]){0.20, 0.20, 0.20, 1.0},
+                               8);
   }
 
-  IMMDrawPixelsTexState state = immDrawPixelsTexSetup(GPU_SHADER_2D_IMAGE_COLOR);
+  draw_display_buffer(ps, ibuf);
 
-  immDrawPixelsTex(&state,
-                   offs_x + (ps->draw_flip[0] ? span_x : 0.0f),
-                   offs_y + (ps->draw_flip[1] ? span_y : 0.0f),
-                   ibuf->x,
-                   ibuf->y,
-                   GL_RGBA,
-                   GL_UNSIGNED_BYTE,
-                   GL_NEAREST,
-                   ibuf->rect,
-                   ((ps->draw_flip[0] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_x),
-                   ((ps->draw_flip[1] ? -1.0f : 1.0f)) * (ps->zoom / (float)ps->win_y),
-                   NULL);
-
-  GPU_blend(false);
+  GPU_blend(GPU_BLEND_NONE);
 
   pupdate_time();
 
@@ -388,26 +637,19 @@ static void playanim_toscreen(
 static void build_pict_list_ex(
     PlayState *ps, const char *first, int totframes, int fstep, int fontid)
 {
-  char filepath[FILE_MAX];
-  uchar *mem;
-  //  short val;
-  PlayAnimPict *picture = NULL;
-  struct ImBuf *ibuf = NULL;
-  struct anim *anim;
-
   if (IMB_isanim(first)) {
     /* OCIO_TODO: support different input color space */
-    anim = IMB_open_anim(first, IB_rect, 0, NULL);
+    struct anim *anim = IMB_open_anim(first, IB_rect, 0, NULL);
     if (anim) {
       int pic;
-      ibuf = IMB_anim_absolute(anim, 0, IMB_TC_NONE, IMB_PROXY_NONE);
+      struct ImBuf *ibuf = IMB_anim_absolute(anim, 0, IMB_TC_NONE, IMB_PROXY_NONE);
       if (ibuf) {
         playanim_toscreen(ps, NULL, ibuf, fontid, fstep);
         IMB_freeImBuf(ibuf);
       }
 
       for (pic = 0; pic < IMB_anim_get_duration(anim, IMB_TC_NONE); pic++) {
-        picture = (PlayAnimPict *)MEM_callocN(sizeof(PlayAnimPict), "Pict");
+        PlayAnimPict *picture = (PlayAnimPict *)MEM_callocN(sizeof(PlayAnimPict), "Pict");
         picture->anim = anim;
         picture->frame = pic;
         picture->IB_flags = IB_rect;
@@ -420,6 +662,14 @@ static void build_pict_list_ex(
     }
   }
   else {
+    /* Load images into cache until the cache is full,
+     * this resolves choppiness for images that are slow to load, see: T81751. */
+#ifdef USE_FRAME_CACHE_LIMIT
+    bool fill_cache = true;
+#else
+    bool fill_cache = false;
+#endif
+
     int count = 0;
 
     int fp_framenr;
@@ -428,8 +678,10 @@ static void build_pict_list_ex(
       unsigned short digits;
     } fp_decoded;
 
+    char filepath[FILE_MAX];
     BLI_strncpy(filepath, first, sizeof(filepath));
-    fp_framenr = BLI_stringdec(filepath, fp_decoded.head, fp_decoded.tail, &fp_decoded.digits);
+    fp_framenr = BLI_path_sequence_decode(
+        filepath, fp_decoded.head, fp_decoded.tail, &fp_decoded.digits);
 
     pupdate_time();
     ptottime = 1.0;
@@ -446,7 +698,7 @@ static void build_pict_list_ex(
      */
 
     while (IMB_ispic(filepath) && totframes) {
-      bool hasevent;
+      bool has_event;
       size_t size;
       int file;
 
@@ -456,7 +708,7 @@ static void build_pict_list_ex(
         return;
       }
 
-      picture = (PlayAnimPict *)MEM_callocN(sizeof(PlayAnimPict), "picture");
+      PlayAnimPict *picture = (PlayAnimPict *)MEM_callocN(sizeof(PlayAnimPict), "picture");
       if (picture == NULL) {
         printf("Not enough memory for pict struct '%s'\n", filepath);
         close(file);
@@ -473,6 +725,7 @@ static void build_pict_list_ex(
       picture->size = size;
       picture->IB_flags = IB_rect;
 
+      uchar *mem;
       if (fromdisk == false) {
         mem = MEM_mallocN(size, "build pic list");
         if (mem == NULL) {
@@ -503,31 +756,42 @@ static void build_pict_list_ex(
 
       pupdate_time();
 
-      if (ptottime > 1.0) {
+      const bool display_imbuf = ptottime > 1.0;
+
+      if (display_imbuf || fill_cache) {
         /* OCIO_TODO: support different input color space */
-        if (picture->mem) {
-          ibuf = IMB_ibImageFromMemory(
-              picture->mem, picture->size, picture->IB_flags, NULL, picture->name);
-        }
-        else {
-          ibuf = IMB_loadiffname(picture->name, picture->IB_flags, NULL);
-        }
+        ImBuf *ibuf = ibuf_from_picture(picture);
+
         if (ibuf) {
-          playanim_toscreen(ps, picture, ibuf, fontid, fstep);
-          IMB_freeImBuf(ibuf);
+          if (display_imbuf) {
+            playanim_toscreen(ps, picture, ibuf, fontid, fstep);
+          }
+#ifdef USE_FRAME_CACHE_LIMIT
+          if (fill_cache) {
+            picture->ibuf = ibuf;
+            frame_cache_add(picture);
+            fill_cache = !frame_cache_limit_exceeded();
+          }
+          else
+#endif
+          {
+            IMB_freeImBuf(ibuf);
+          }
         }
-        pupdate_time();
-        ptottime = 0.0;
+
+        if (display_imbuf) {
+          pupdate_time();
+          ptottime = 0.0;
+        }
       }
 
       /* create a new filepath each time */
       fp_framenr += fstep;
-      BLI_stringenc(filepath, fp_decoded.head, fp_decoded.tail, fp_decoded.digits, fp_framenr);
+      BLI_path_sequence_encode(
+          filepath, fp_decoded.head, fp_decoded.tail, fp_decoded.digits, fp_framenr);
 
-      while ((hasevent = GHOST_ProcessEvents(g_WS.ghost_system, 0))) {
-        if (hasevent) {
-          GHOST_DispatchEvents(g_WS.ghost_system);
-        }
+      while ((has_event = GHOST_ProcessEvents(g_WS.ghost_system, false))) {
+        GHOST_DispatchEvents(g_WS.ghost_system);
         if (ps->loading == false) {
           return;
         }
@@ -536,7 +800,6 @@ static void build_pict_list_ex(
       totframes--;
     }
   }
-  return;
 }
 
 static void build_pict_list(PlayState *ps, const char *first, int totframes, int fstep, int fontid)
@@ -627,15 +890,13 @@ static void change_frame(PlayState *ps)
 static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
 {
   PlayState *ps = (PlayState *)ps_void;
-  GHOST_TEventType type = GHOST_GetEventType(evt);
-  int val;
+  const GHOST_TEventType type = GHOST_GetEventType(evt);
+  /* Convert ghost event into value keyboard or mouse. */
+  const int val = ELEM(type, GHOST_kEventKeyDown, GHOST_kEventButtonDown);
 
   // print_ps(ps);
 
   playanim_event_qual_update();
-
-  /* convert ghost event into value keyboard or mouse */
-  val = ELEM(type, GHOST_kEventKeyDown, GHOST_kEventButtonDown);
 
   /* first check if we're busy loading files */
   if (ps->loading) {
@@ -660,8 +921,8 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
     return 1;
   }
 
-  if (ps->wait2 && ps->stopped) {
-    ps->stopped = false;
+  if (ps->wait2 && ps->stopped == false) {
+    ps->stopped = true;
   }
 
   if (ps->wait2) {
@@ -820,9 +1081,9 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
         case GHOST_kKeyNumpadSlash:
           if (val) {
             if (g_WS.qual & WS_QUAL_SHIFT) {
-              if (ps->curframe_ibuf) {
+              if (ps->picture && ps->picture->ibuf) {
                 printf(" Name: %s | Speed: %.2f frames/s\n",
-                       ps->curframe_ibuf->name,
+                       ps->picture->ibuf->name,
                        ps->fstep / swaptime);
               }
             }
@@ -1053,17 +1314,18 @@ static int ghost_event_proc(GHOST_EventHandle evt, GHOST_TUserDataPtr ps_void)
       /* zoom always show entire image */
       ps->zoom = MIN2(zoomx, zoomy);
 
-      glViewport(0, 0, ps->win_x, ps->win_y);
-      glScissor(0, 0, ps->win_x, ps->win_y);
+      GPU_viewport(0, 0, ps->win_x, ps->win_y);
+      GPU_scissor(0, 0, ps->win_x, ps->win_y);
 
       playanim_gl_matrix();
 
       ptottime = 0.0;
-      playanim_toscreen(ps, ps->picture, ps->curframe_ibuf, ps->fontid, ps->fstep);
+      playanim_toscreen(
+          ps, ps->picture, ps->picture ? ps->picture->ibuf : NULL, ps->fontid, ps->fstep);
 
       break;
     }
-    case GHOST_kEventQuit:
+    case GHOST_kEventQuitRequest:
     case GHOST_kEventWindowClose: {
       ps->go = false;
       break;
@@ -1102,6 +1364,7 @@ static void playanim_window_open(const char *title, int posx, int posy, int size
   posy = (scr_h - posy - sizey);
 
   g_WS.ghost_window = GHOST_CreateWindow(g_WS.ghost_system,
+                                         NULL,
                                          title,
                                          posx,
                                          posy,
@@ -1109,6 +1372,7 @@ static void playanim_window_open(const char *title, int posx, int posy, int size
                                          sizey,
                                          /* could optionally start fullscreen */
                                          GHOST_kWindowStateNormal,
+                                         false,
                                          GHOST_kDrawingContextTypeOpenGL,
                                          glsettings);
 }
@@ -1134,7 +1398,9 @@ static void playanim_window_zoom(PlayState *ps, const float zoom_offset)
   GHOST_SetClientSize(g_WS.ghost_window, sizex, sizey);
 }
 
-/* return path for restart */
+/**
+ * \return The a path used to restart the animation player or NULL to exit.
+ */
 static char *wm_main_playanim_intern(int argc, const char **argv)
 {
   struct ImBuf *ibuf = NULL;
@@ -1149,12 +1415,10 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
   PlayState ps = {0};
 
-  /* ps.doubleb   = true;*/ /* UNUSED */
   ps.go = true;
   ps.direction = true;
   ps.next_frame = 1;
   ps.once = false;
-  ps.turbo = false;
   ps.pingpong = false;
   ps.noskip = false;
   ps.sstep = false;
@@ -1165,7 +1429,6 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
   ps.indicator = false;
   ps.dropped_file[0] = 0;
   ps.zoom = 1.0f;
-  /* resetmap = false */
   ps.draw_flip[0] = false;
   ps.draw_flip[1] = false;
 
@@ -1173,6 +1436,11 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
   ps.fontid = -1;
 
+  STRNCPY(ps.display_settings.display_device,
+          IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DEFAULT_BYTE));
+  IMB_colormanagement_init_default_view_settings(&ps.view_settings, &ps.display_settings);
+
+  /* Skip the first argument which is assumed to be '-a' (used to launch this player). */
   while (argc > 1) {
     if (argv[1][0] == '-') {
       switch (argv[1][1]) {
@@ -1227,6 +1495,15 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
           argc--;
           argv++;
           break;
+        case 'c': {
+#ifdef USE_FRAME_CACHE_LIMIT
+          const int memory_in_mb = max_ii(0, atoi(argv[2]));
+          g_frame_cache.memory_limit = (size_t)memory_in_mb * (1024 * 1024);
+#endif
+          argc--;
+          argv++;
+          break;
+        }
         default:
           printf("unknown option '%c': skipping\n", argv[1][1]);
           break;
@@ -1279,22 +1556,20 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     g_WS.ghost_system = GHOST_CreateSystem();
     GHOST_AddEventConsumer(g_WS.ghost_system, consumer);
 
-    playanim_window_open("Blender:Anim", start_x, start_y, ibuf->x, ibuf->y);
+    playanim_window_open("Blender Animation Player", start_x, start_y, ibuf->x, ibuf->y);
   }
 
   GHOST_GetMainDisplayDimensions(g_WS.ghost_system, &maxwinx, &maxwiny);
 
-  //GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
+  // GHOST_ActivateWindowDrawingContext(g_WS.ghost_window);
 
   /* initialize OpenGL immediate mode */
-  g_WS.gpu_context = GPU_context_create();
+  g_WS.gpu_context = GPU_context_create(g_WS.ghost_window);
   GPU_init();
-  immActivate();
 
   /* initialize the font */
   BLF_init();
-  ps.fontid = BLF_load_mem(
-      "monospace", (unsigned char *)datatoc_bmonofont_ttf, datatoc_bmonofont_ttf_size);
+  ps.fontid = BLF_load_mono_default(false);
   BLF_size(ps.fontid, 11, 72);
 
   ps.ibufx = ibuf->x;
@@ -1310,13 +1585,12 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
     maxwiny = ibuf->y * (1 + (maxwiny / ibuf->y));
   }
 
-  glClearColor(0.1, 0.1, 0.1, 0.0);
-  glClear(GL_COLOR_BUFFER_BIT);
+  GPU_clear_color(0.1f, 0.1f, 0.1f, 0.0f);
 
   int win_x, win_y;
   playanim_window_get_size(&win_x, &win_y);
-  glViewport(0, 0, win_x, win_y);
-  glScissor(0, 0, win_x, win_y);
+  GPU_viewport(0, 0, win_x, win_y);
+  GPU_scissor(0, 0, win_x, win_y);
   playanim_gl_matrix();
 
   GHOST_SwapWindowBuffers(g_WS.ghost_window);
@@ -1397,60 +1671,29 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 #endif
 
     while (ps.picture) {
-      int hasevent;
+      bool has_event;
 #ifndef USE_IMB_CACHE
-      if (ibuf != NULL && ibuf->ftype == 0) {
+      if (ibuf != NULL && ibuf->ftype == IMB_FTYPE_NONE) {
         IMB_freeImBuf(ibuf);
       }
 #endif
-      if (ps.picture->ibuf) {
-        ibuf = ps.picture->ibuf;
-      }
-      else if (ps.picture->anim) {
-        ibuf = IMB_anim_absolute(ps.picture->anim, ps.picture->frame, IMB_TC_NONE, IMB_PROXY_NONE);
-      }
-      else if (ps.picture->mem) {
-        /* use correct colorspace here */
-        ibuf = IMB_ibImageFromMemory(
-            ps.picture->mem, ps.picture->size, ps.picture->IB_flags, NULL, ps.picture->name);
-      }
-      else {
-        /* use correct colorspace here */
-        ibuf = IMB_loadiffname(ps.picture->name, ps.picture->IB_flags, NULL);
-      }
+
+      ibuf = ibuf_from_picture(ps.picture);
 
       if (ibuf) {
-#ifdef USE_FRAME_CACHE_LIMIT
-        LinkData *node;
-#endif
-
 #ifdef USE_IMB_CACHE
         ps.picture->ibuf = ibuf;
 #endif
 
 #ifdef USE_FRAME_CACHE_LIMIT
-        /* really basic memory conservation scheme. Keep frames in a fifo queue */
-        node = inmempicsbase.last;
-
-        while (node && added_images > PLAY_FRAME_CACHE_MAX) {
-          PlayAnimPict *pic = node->data;
-
-          if (pic->ibuf && pic->ibuf != ibuf) {
-            LinkData *node_tmp;
-            IMB_freeImBuf(pic->ibuf);
-            pic->ibuf = NULL;
-            node_tmp = node->prev;
-            BLI_freelinkN(&inmempicsbase, node);
-            added_images--;
-            node = node_tmp;
-          }
-          else {
-            node = node->prev;
-          }
+        if (ps.picture->frame_cache_node == NULL) {
+          frame_cache_add(ps.picture);
         }
+        else {
+          frame_cache_touch(ps.picture);
+        }
+        frame_cache_limit_apply(ibuf);
 
-        BLI_addhead(&inmempicsbase, BLI_genericNodeN(ps.picture));
-        added_images++;
 #endif /* USE_FRAME_CACHE_LIMIT */
 
         BLI_strncpy(ibuf->name, ps.picture->name, sizeof(ibuf->name));
@@ -1482,14 +1725,14 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
       ps.next_frame = ps.direction;
 
-      while ((hasevent = GHOST_ProcessEvents(g_WS.ghost_system, 0))) {
+      while ((has_event = GHOST_ProcessEvents(g_WS.ghost_system, false))) {
         GHOST_DispatchEvents(g_WS.ghost_system);
       }
       if (ps.go == false) {
         break;
       }
       change_frame(&ps);
-      if (!hasevent) {
+      if (!has_event) {
         PIL_sleep_ms(1);
       }
       if (ps.wait2) {
@@ -1498,14 +1741,15 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 
       ps.wait2 = ps.sstep;
 
-      if (ps.wait2 == false && ps.stopped == false) {
-        ps.stopped = true;
+      if (ps.wait2 == false && ps.stopped) {
+        ps.stopped = false;
       }
 
       pupdate_time();
 
       if (ps.picture && ps.next_frame) {
-        /* always at least set one step */
+        /* Advance to the next frame, always at least set one step.
+         * Implement frame-skipping when enabled and playback is not fast enough. */
         while (ps.picture) {
           ps.picture = playanim_step(ps.picture, ps.next_frame);
 
@@ -1518,7 +1762,7 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
             }
           }
 
-          if (ps.wait2 || ptottime < swaptime || ps.turbo || ps.noskip) {
+          if (ps.wait2 || ptottime < swaptime || ps.noskip) {
             break;
           }
           ptottime -= swaptime;
@@ -1558,8 +1802,12 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
 #endif
 
   BLI_freelistN(&picsbase);
-  BLI_freelistN(&inmempicsbase);
-  added_images = 0;
+
+#ifdef USE_FRAME_CACHE_LIMIT
+  BLI_freelistN(&g_frame_cache.pics);
+  g_frame_cache.pics_len = 0;
+  g_frame_cache.pics_size_in_memory = 0;
+#endif
 
 #ifdef WITH_AUDASPACE
   if (playback_handle) {
@@ -1577,8 +1825,6 @@ static char *wm_main_playanim_intern(int argc, const char **argv)
    * but many areas could skip initialization too for anim play */
 
   GPU_shader_free_builtin_shaders();
-
-  immDeactivate();
 
   if (g_WS.gpu_context) {
     GPU_context_active_set(g_WS.gpu_context);
@@ -1629,8 +1875,8 @@ void WM_main_playanim(int argc, const char **argv)
 
     AUD_initOnce();
 
-    if (!(audio_device = AUD_init("OpenAL", specs, 1024, "Blender"))) {
-      audio_device = AUD_init("Null", specs, 0, "Blender");
+    if (!(audio_device = AUD_init(NULL, specs, 1024, "Blender"))) {
+      audio_device = AUD_init("None", specs, 0, "Blender");
     }
   }
 #endif

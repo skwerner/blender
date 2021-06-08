@@ -27,9 +27,24 @@
 
 #include "node_exec.h"
 
-bool sh_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+bool sh_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree, const char **r_disabled_hint)
 {
-  return STREQ(ntree->idname, "ShaderNodeTree");
+  if (!STREQ(ntree->idname, "ShaderNodeTree")) {
+    *r_disabled_hint = "Not a shader node tree";
+    return false;
+  }
+  return true;
+}
+
+static bool sh_fn_poll_default(bNodeType *UNUSED(ntype),
+                               bNodeTree *ntree,
+                               const char **r_disabled_hint)
+{
+  if (!STREQ(ntree->idname, "ShaderNodeTree") && !STREQ(ntree->idname, "GeometryNodeTree")) {
+    *r_disabled_hint = "Not a shader or geometry node tree";
+    return false;
+  }
+  return true;
 }
 
 void sh_node_type_base(
@@ -42,6 +57,12 @@ void sh_node_type_base(
   ntype->update_internal_links = node_update_internal_links_default;
 }
 
+void sh_fn_node_type_base(bNodeType *ntype, int type, const char *name, short nclass, short flag)
+{
+  sh_node_type_base(ntype, type, name, nclass, flag);
+  ntype->poll = sh_fn_poll_default;
+}
+
 /* ****** */
 
 void nodestack_get_vec(float *in, short type_in, bNodeStack *ns)
@@ -49,10 +70,12 @@ void nodestack_get_vec(float *in, short type_in, bNodeStack *ns)
   const float *from = ns->vec;
 
   if (type_in == SOCK_FLOAT) {
-    if (ns->sockettype == SOCK_FLOAT)
+    if (ns->sockettype == SOCK_FLOAT) {
       *in = *from;
-    else
+    }
+    else {
       *in = (from[0] + from[1] + from[2]) / 3.0f;
+    }
   }
   else if (type_in == SOCK_VECTOR) {
     if (ns->sockettype == SOCK_FLOAT) {
@@ -86,7 +109,8 @@ void node_gpu_stack_from_data(struct GPUNodeStack *gs, int type, bNodeStack *ns)
   memset(gs, 0, sizeof(*gs));
 
   if (ns == NULL) {
-    /* node_get_stack() will generate NULL bNodeStack pointers for unknown/unsupported types of sockets... */
+    /* node_get_stack() will generate NULL bNodeStack pointers
+     * for unknown/unsupported types of sockets. */
     zero_v4(gs->vec);
     gs->link = NULL;
     gs->type = GPU_NONE;
@@ -98,18 +122,24 @@ void node_gpu_stack_from_data(struct GPUNodeStack *gs, int type, bNodeStack *ns)
     nodestack_get_vec(gs->vec, type, ns);
     gs->link = ns->data;
 
-    if (type == SOCK_FLOAT)
+    if (type == SOCK_FLOAT) {
       gs->type = GPU_FLOAT;
-    else if (type == SOCK_INT)
+    }
+    else if (type == SOCK_INT) {
       gs->type = GPU_FLOAT; /* HACK: Support as float. */
-    else if (type == SOCK_VECTOR)
+    }
+    else if (type == SOCK_VECTOR) {
       gs->type = GPU_VEC3;
-    else if (type == SOCK_RGBA)
+    }
+    else if (type == SOCK_RGBA) {
       gs->type = GPU_VEC4;
-    else if (type == SOCK_SHADER)
+    }
+    else if (type == SOCK_SHADER) {
       gs->type = GPU_CLOSURE;
-    else
+    }
+    else {
       gs->type = GPU_NONE;
+    }
 
     gs->hasinput = ns->hasinput && ns->data;
     /* XXX Commented out the ns->data check here, as it seems it's not always set,
@@ -133,8 +163,9 @@ static void gpu_stack_from_data_list(GPUNodeStack *gs, ListBase *sockets, bNodeS
   bNodeSocket *sock;
   int i;
 
-  for (sock = sockets->first, i = 0; sock; sock = sock->next, i++)
+  for (sock = sockets->first, i = 0; sock; sock = sock->next, i++) {
     node_gpu_stack_from_data(&gs[i], sock->type, ns[i]);
+  }
 
   gs[i].end = true;
 }
@@ -144,8 +175,9 @@ static void data_from_gpu_stack_list(ListBase *sockets, bNodeStack **ns, GPUNode
   bNodeSocket *sock;
   int i;
 
-  for (sock = sockets->first, i = 0; sock; sock = sock->next, i++)
+  for (sock = sockets->first, i = 0; sock; sock = sock->next, i++) {
     node_data_from_gpu_stack(ns[i], &gs[i]);
+  }
 }
 
 bNode *nodeGetActiveTexture(bNodeTree *ntree)
@@ -154,23 +186,28 @@ bNode *nodeGetActiveTexture(bNodeTree *ntree)
   bNode *node, *tnode, *inactivenode = NULL, *activetexnode = NULL, *activegroup = NULL;
   bool hasgroup = false;
 
-  if (!ntree)
+  if (!ntree) {
     return NULL;
+  }
 
   for (node = ntree->nodes.first; node; node = node->next) {
     if (node->flag & NODE_ACTIVE_TEXTURE) {
       activetexnode = node;
       /* if active we can return immediately */
-      if (node->flag & NODE_ACTIVE)
+      if (node->flag & NODE_ACTIVE) {
         return node;
+      }
     }
-    else if (!inactivenode && node->typeinfo->nclass == NODE_CLASS_TEXTURE)
+    else if (!inactivenode && node->typeinfo->nclass == NODE_CLASS_TEXTURE) {
       inactivenode = node;
+    }
     else if (node->type == NODE_GROUP) {
-      if (node->flag & NODE_ACTIVE)
+      if (node->flag & NODE_ACTIVE) {
         activegroup = node;
-      else
+      }
+      else {
         hasgroup = true;
+      }
     }
   }
 
@@ -178,20 +215,23 @@ bNode *nodeGetActiveTexture(bNodeTree *ntree)
   if (activegroup) {
     tnode = nodeGetActiveTexture((bNodeTree *)activegroup->id);
     /* active node takes priority, so ignore any other possible nodes here */
-    if (tnode)
+    if (tnode) {
       return tnode;
+    }
   }
 
-  if (activetexnode)
+  if (activetexnode) {
     return activetexnode;
+  }
 
   if (hasgroup) {
     /* node active texture node in this tree, look inside groups */
     for (node = ntree->nodes.first; node; node = node->next) {
       if (node->type == NODE_GROUP) {
         tnode = nodeGetActiveTexture((bNodeTree *)node->id);
-        if (tnode && ((tnode->flag & NODE_ACTIVE_TEXTURE) || !inactivenode))
+        if (tnode && ((tnode->flag & NODE_ACTIVE_TEXTURE) || !inactivenode)) {
           return tnode;
+        }
       }
     }
   }
@@ -212,28 +252,54 @@ void ntreeExecGPUNodes(bNodeTreeExec *exec, GPUMaterial *mat, bNode *output_node
 
   stack = exec->stack;
 
-  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; ++n, ++nodeexec) {
+  for (n = 0, nodeexec = exec->nodeexec; n < exec->totnodes; n++, nodeexec++) {
     node = nodeexec->node;
 
     do_it = false;
     /* for groups, only execute outputs for edited group */
     if (node->typeinfo->nclass == NODE_CLASS_OUTPUT) {
-      if ((output_node != NULL) && (node == output_node))
+      if ((output_node != NULL) && (node == output_node)) {
         do_it = true;
+      }
     }
     else {
       do_it = true;
     }
 
     if (do_it) {
-      if (node->typeinfo->gpufunc) {
+      if (node->typeinfo->gpu_fn) {
         node_get_stack(node, stack, nsin, nsout);
         gpu_stack_from_data_list(gpuin, &node->inputs, nsin);
         gpu_stack_from_data_list(gpuout, &node->outputs, nsout);
-        if (node->typeinfo->gpufunc(mat, node, &nodeexec->data, gpuin, gpuout))
+        if (node->typeinfo->gpu_fn(mat, node, &nodeexec->data, gpuin, gpuout)) {
           data_from_gpu_stack_list(&node->outputs, nsout, gpuout);
+        }
       }
     }
+  }
+}
+
+void node_shader_gpu_bump_tex_coord(GPUMaterial *mat, bNode *node, GPUNodeLink **link)
+{
+  if (node->branch_tag == 1) {
+    /* Add one time the value fo derivative to the input vector. */
+    GPU_link(mat, "dfdx_v3", *link, link);
+  }
+  else if (node->branch_tag == 2) {
+    /* Add one time the value fo derivative to the input vector. */
+    GPU_link(mat, "dfdy_v3", *link, link);
+  }
+  else {
+    /* nothing to do, reference center value. */
+  }
+}
+
+void node_shader_gpu_default_tex_coord(GPUMaterial *mat, bNode *node, GPUNodeLink **link)
+{
+  if (!*link) {
+    *link = GPU_attribute(mat, CD_ORCO, "");
+    GPU_link(mat, "generated_texco", GPU_builtin(GPU_VIEW_POSITION), *link, link);
+    node_shader_gpu_bump_tex_coord(mat, node, link);
   }
 }
 
@@ -259,9 +325,24 @@ void node_shader_gpu_tex_mapping(GPUMaterial *mat,
     tmat2 = GPU_uniform((float *)texmap->mat[2]);
     tmat3 = GPU_uniform((float *)texmap->mat[3]);
 
-    GPU_link(mat, "mapping", in[0].link, tmat0, tmat1, tmat2, tmat3, tmin, tmax, &in[0].link);
+    GPU_link(mat, "mapping_mat4", in[0].link, tmat0, tmat1, tmat2, tmat3, tmin, tmax, &in[0].link);
 
-    if (texmap->type == TEXMAP_TYPE_NORMAL)
-      GPU_link(mat, "texco_norm", in[0].link, &in[0].link);
+    if (texmap->type == TEXMAP_TYPE_NORMAL) {
+      GPU_link(mat, "vector_normalize", in[0].link, &in[0].link);
+    }
   }
+}
+
+void get_XYZ_to_RGB_for_gpu(XYZ_to_RGB *data)
+{
+  const float *xyz_to_rgb = IMB_colormanagement_get_xyz_to_rgb();
+  data->r[0] = xyz_to_rgb[0];
+  data->r[1] = xyz_to_rgb[3];
+  data->r[2] = xyz_to_rgb[6];
+  data->g[0] = xyz_to_rgb[1];
+  data->g[1] = xyz_to_rgb[4];
+  data->g[2] = xyz_to_rgb[7];
+  data->b[0] = xyz_to_rgb[2];
+  data->b[1] = xyz_to_rgb[5];
+  data->b[2] = xyz_to_rgb[8];
 }

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BEZIER_H__
-#define __BEZIER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -42,7 +41,6 @@ class BezierCurveSegment {
   std::vector<Vec2d> _Vertices;
 
  public:
-  BezierCurveSegment();
   virtual ~BezierCurveSegment();
 
   void AddControlPoint(const Vec2d &iPoint);
@@ -92,5 +90,3 @@ class BezierCurve {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __BEZIER_H__

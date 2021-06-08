@@ -21,9 +21,13 @@
 
 #  include <OSL/oslexec.h>
 
+#  include <OpenImageIO/refcnt.h>
+#  include <OpenImageIO/unordered_map_concurrent.h>
+
 #  include "util/util_map.h"
 #  include "util/util_param.h"
 #  include "util/util_thread.h"
+#  include "util/util_unique_ptr.h"
 #  include "util/util_vector.h"
 
 #  ifndef WIN32
@@ -33,6 +37,13 @@ using std::isfinite;
 CCL_NAMESPACE_BEGIN
 
 class OSLRenderServices;
+class ColorSpaceProcessor;
+
+/* OSL Globals
+ *
+ * Data needed by OSL render services, that is global to a rendering session.
+ * This includes all OSL shaders, name to attribute mapping and texture handles.
+ */
 
 struct OSLGlobals {
   OSLGlobals()
@@ -79,6 +90,7 @@ struct OSLTraceData {
   ShaderData sd;
   bool setup;
   bool init;
+  bool hit;
 };
 
 /* thread key for thread specific data lookup */

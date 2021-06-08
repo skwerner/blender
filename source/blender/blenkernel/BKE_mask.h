@@ -17,12 +17,15 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MASK_H__
-#define __BKE_MASK_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Depsgraph;
 struct Image;
@@ -38,7 +41,6 @@ struct MaskSplinePoint;
 struct MaskSplinePointUW;
 struct MovieClip;
 struct MovieClipUser;
-struct Scene;
 
 /* mask_ops.c */
 typedef enum {
@@ -78,7 +80,7 @@ void BKE_mask_layer_rename(struct Mask *mask,
                            char *oldname,
                            char *newname);
 
-struct MaskLayer *BKE_mask_layer_copy(const struct MaskLayer *layer);
+struct MaskLayer *BKE_mask_layer_copy(const struct MaskLayer *masklay);
 void BKE_mask_layer_copy_list(struct ListBase *masklayers_new, const struct ListBase *masklayers);
 
 /* splines */
@@ -103,10 +105,10 @@ float BKE_mask_spline_project_co(struct MaskSpline *spline,
                                  const eMaskSign sign);
 
 /* point */
-eMaskhandleMode BKE_mask_point_handles_mode_get(struct MaskSplinePoint *point);
-void BKE_mask_point_handle(struct MaskSplinePoint *point,
+eMaskhandleMode BKE_mask_point_handles_mode_get(const struct MaskSplinePoint *point);
+void BKE_mask_point_handle(const struct MaskSplinePoint *point,
                            eMaskWhichHandle which_handle,
-                           float handle[2]);
+                           float r_handle[2]);
 void BKE_mask_point_set_handle(struct MaskSplinePoint *point,
                                eMaskWhichHandle which_handle,
                                float loc[2],
@@ -139,16 +141,6 @@ void BKE_mask_point_select_set_handle(struct MaskSplinePoint *point,
 
 /* general */
 struct Mask *BKE_mask_new(struct Main *bmain, const char *name);
-void BKE_mask_copy_data(struct Main *bmain,
-                        struct Mask *mask_dst,
-                        const struct Mask *mask_src,
-                        const int flag);
-struct Mask *BKE_mask_copy_nolib(struct Mask *mask);
-struct Mask *BKE_mask_copy(struct Main *bmain, const struct Mask *mask);
-
-void BKE_mask_make_local(struct Main *bmain, struct Mask *mask, const bool lib_local);
-
-void BKE_mask_free(struct Mask *mask);
 
 void BKE_mask_coord_from_frame(float r_co[2], const float co[2], const float frame_size[2]);
 void BKE_mask_coord_from_movieclip(struct MovieClip *clip,
@@ -171,9 +163,6 @@ void BKE_mask_coord_to_image(struct Image *image,
 
 /* parenting */
 
-void BKE_mask_update_display(struct Mask *mask, float ctime);
-
-void BKE_mask_evaluate_all_masks(struct Main *bmain, float ctime, const bool do_newframe);
 void BKE_mask_evaluate(struct Mask *mask, const float ctime, const bool do_newframe);
 void BKE_mask_layer_evaluate(struct MaskLayer *masklay, const float ctime, const bool do_newframe);
 void BKE_mask_parent_init(struct MaskParent *parent);
@@ -244,10 +233,10 @@ void BKE_mask_clipboard_paste_to_layer(struct Main *bmain, struct MaskLayer *mas
 #define MASKPOINT_ISSEL_KNOT(p) (((p)->bezt.f2 & SELECT) != 0)
 
 #define MASKPOINT_ISSEL_HANDLE(point, which_handle) \
-  (((which_handle == MASK_WHICH_HANDLE_STICK) ? \
+  ((((which_handle) == MASK_WHICH_HANDLE_STICK) ? \
         ((((point)->bezt.f1 | (point)->bezt.f3) & SELECT)) : \
-        ((which_handle == MASK_WHICH_HANDLE_LEFT) ? ((point)->bezt.f1 & SELECT) : \
-                                                    ((point)->bezt.f3 & SELECT))) != 0)
+        (((which_handle) == MASK_WHICH_HANDLE_LEFT) ? ((point)->bezt.f1 & SELECT) : \
+                                                      ((point)->bezt.f3 & SELECT))) != 0)
 
 #define MASKPOINT_SEL_ALL(p) \
   { \
@@ -280,18 +269,18 @@ int BKE_mask_spline_differentiate_calc_total(const struct MaskSpline *spline,
                                              const unsigned int resol);
 
 float (*BKE_mask_spline_differentiate_with_resolution(struct MaskSpline *spline,
-                                                      unsigned int *tot_diff_point,
-                                                      const unsigned int resol))[2];
+                                                      const unsigned int resol,
+                                                      unsigned int *r_tot_diff_point))[2];
 void BKE_mask_spline_feather_collapse_inner_loops(struct MaskSpline *spline,
                                                   float (*feather_points)[2],
                                                   const unsigned int tot_feather_point);
 float (*BKE_mask_spline_differentiate(
-    struct MaskSpline *spline, int width, int height, unsigned int *tot_diff_point))[2];
+    struct MaskSpline *spline, int width, int height, unsigned int *r_tot_diff_point))[2];
 float (*BKE_mask_spline_feather_differentiated_points_with_resolution(
     struct MaskSpline *spline,
-    unsigned int *tot_feather_point,
     const unsigned int resol,
-    const bool do_feather_isect))[2];
+    const bool do_feather_isect,
+    unsigned int *r_tot_feather_point))[2];
 
 /* *** mask point functions which involve evaluation *** */
 float (*BKE_mask_spline_feather_points(struct MaskSpline *spline, int *tot_feather_point))[2];
@@ -300,7 +289,7 @@ float *BKE_mask_point_segment_diff(struct MaskSpline *spline,
                                    struct MaskSplinePoint *point,
                                    int width,
                                    int height,
-                                   unsigned int *tot_diff_point);
+                                   unsigned int *r_tot_diff_point);
 
 float *BKE_mask_point_segment_feather_diff(struct MaskSpline *spline,
                                            struct MaskSplinePoint *point,
@@ -334,4 +323,6 @@ void BKE_maskrasterize_buffer(MaskRasterHandle *mr_handle,
                               const unsigned int height,
                               float *buffer);
 
-#endif /* __BKE_MASK_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CHAIN_H__
-#define __FREESTYLE_CHAIN_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -39,7 +38,7 @@ class Chain : public Curve {
       _fedgeB;  // the last FEdge of the ViewEdge passed to the last call for push_viewedge_back().
 
  public:
-  /*! Defult constructor. */
+  /*! Default constructor. */
   Chain() : Curve()
   {
     _splittingId = 0;
@@ -65,8 +64,9 @@ class Chain : public Curve {
   {
     // only the last splitted deletes this id
     if (_splittingId) {
-      if (*_splittingId == _Id)
+      if (*_splittingId == _Id) {
         delete _splittingId;
+      }
     }
   }
 
@@ -108,5 +108,3 @@ class Chain : public Curve {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CHAIN_H__

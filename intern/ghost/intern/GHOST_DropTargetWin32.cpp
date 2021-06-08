@@ -21,17 +21,17 @@
  * \ingroup GHOST
  */
 
-#include "GHOST_Debug.h"
 #include "GHOST_DropTargetWin32.h"
+#include "GHOST_Debug.h"
 #include <shellapi.h>
 
 #include "utf_winfunc.h"
 #include "utfconv.h"
 
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
 // utility
 void printLastError(void);
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
 
 GHOST_DropTargetWin32::GHOST_DropTargetWin32(GHOST_WindowWin32 *window, GHOST_SystemWin32 *system)
     : m_window(window), m_system(system)
@@ -119,7 +119,8 @@ HRESULT __stdcall GHOST_DropTargetWin32::DragOver(DWORD grfKeyState, POINTL pt, 
   }
   else {
     *pdwEffect = DROPEFFECT_NONE;
-    // *pdwEffect = DROPEFFECT_COPY; // XXX Uncomment to test drop. Drop will not be called if pdwEffect == DROPEFFECT_NONE.
+    // XXX Uncomment to test drop. Drop will not be called if pdwEffect == DROPEFFECT_NONE.
+    // *pdwEffect = DROPEFFECT_COPY;
   }
   m_system->pushDragDropEvent(
       GHOST_kEventDraggingUpdated, m_draggedObjectType, m_window, pt.x, pt.y, NULL);
@@ -177,8 +178,8 @@ DWORD GHOST_DropTargetWin32::allowedDropEffect(DWORD dwAllowed)
 GHOST_TDragnDropTypes GHOST_DropTargetWin32::getGhostType(IDataObject *pDataObject)
 {
   /* Text
-   * Note: Unicode text is available as CF_TEXT too, the system can do the
-   * conversion, but we do the conversion ourself with WC_NO_BEST_FIT_CHARS.
+   * NOTE: Unicode text is available as CF_TEXT too, the system can do the
+   * conversion, but we do the conversion our self with #WC_NO_BEST_FIT_CHARS.
    */
   FORMATETC fmtetc = {CF_TEXT, 0, DVASPECT_CONTENT, -1, TYMED_HGLOBAL};
   if (pDataObject->QueryGetData(&fmtetc) == S_OK) {
@@ -205,12 +206,12 @@ void *GHOST_DropTargetWin32::getGhostData(IDataObject *pDataObject)
       return getDropDataAsString(pDataObject);
       break;
     case GHOST_kDragnDropTypeBitmap:
-      //return getDropDataAsBitmap(pDataObject);
+      // return getDropDataAsBitmap(pDataObject);
       break;
     default:
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
       ::printf("\nGHOST_kDragnDropTypeUnknown");
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
       return NULL;
       break;
   }
@@ -283,10 +284,10 @@ void *GHOST_DropTargetWin32::getDropDataAsString(IDataObject *pDataObject)
       // Free memory
       ::GlobalUnlock(stgmed.hGlobal);
       ::ReleaseStgMedium(&stgmed);
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
       ::printf("\n<converted droped unicode string>\n%s\n</droped converted unicode string>\n",
                tmp_string);
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
       return tmp_string;
     }
   }
@@ -322,10 +323,10 @@ void *GHOST_DropTargetWin32::getDropDataAsString(IDataObject *pDataObject)
 int GHOST_DropTargetWin32::WideCharToANSI(LPCWSTR in, char *&out)
 {
   int size;
-  out = NULL;  //caller should free if != NULL
+  out = NULL;  // caller should free if != NULL
 
   // Get the required size.
-  size = ::WideCharToMultiByte(CP_ACP,      //System Default Codepage
+  size = ::WideCharToMultiByte(CP_ACP,      // System Default Codepage
                                0x00000400,  // WC_NO_BEST_FIT_CHARS
                                in,
                                -1,  //-1 null terminated, makes output null terminated too.
@@ -335,9 +336,9 @@ int GHOST_DropTargetWin32::WideCharToANSI(LPCWSTR in, char *&out)
                                NULL);
 
   if (!size) {
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
     ::printLastError();
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
     return 0;
   }
 
@@ -350,16 +351,16 @@ int GHOST_DropTargetWin32::WideCharToANSI(LPCWSTR in, char *&out)
   size = ::WideCharToMultiByte(CP_ACP, 0x00000400, in, -1, (LPSTR)out, size, NULL, NULL);
 
   if (!size) {
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
     ::printLastError();
-#endif  //GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG
     ::free(out);
     out = NULL;
   }
   return size;
 }
 
-#ifdef GHOST_DEBUG
+#ifdef WITH_GHOST_DEBUG
 void printLastError(void)
 {
   LPTSTR s;
@@ -377,4 +378,4 @@ void printLastError(void)
     LocalFree(s);
   }
 }
-#endif  // GHOST_DEBUG
+#endif  // WITH_GHOST_DEBUG

@@ -14,18 +14,20 @@
  * limitations under the License.
  */
 
-#include "render/camera.h"
-#include "device/device.h"
 #include "render/film.h"
+#include "device/device.h"
+#include "render/camera.h"
 #include "render/integrator.h"
 #include "render/mesh.h"
 #include "render/scene.h"
+#include "render/stats.h"
 #include "render/tables.h"
 
 #include "util/util_algorithm.h"
 #include "util/util_foreach.h"
 #include "util/util_math.h"
 #include "util/util_math_cdf.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -38,10 +40,97 @@ static bool compare_pass_order(const Pass &a, const Pass &b)
   return (a.components > b.components);
 }
 
+static NodeEnum *get_pass_type_enum()
+{
+  static NodeEnum pass_type_enum;
+  pass_type_enum.insert("combined", PASS_COMBINED);
+  pass_type_enum.insert("depth", PASS_DEPTH);
+  pass_type_enum.insert("normal", PASS_NORMAL);
+  pass_type_enum.insert("uv", PASS_UV);
+  pass_type_enum.insert("object_id", PASS_OBJECT_ID);
+  pass_type_enum.insert("material_id", PASS_MATERIAL_ID);
+  pass_type_enum.insert("motion", PASS_MOTION);
+  pass_type_enum.insert("motion_weight", PASS_MOTION_WEIGHT);
+#ifdef __KERNEL_DEBUG__
+  pass_type_enum.insert("traversed_nodes", PASS_BVH_TRAVERSED_NODES);
+  pass_type_enum.insert("traverse_instances", PASS_BVH_TRAVERSED_INSTANCES);
+  pass_type_enum.insert("bvh_intersections", PASS_BVH_INTERSECTIONS);
+  pass_type_enum.insert("ray_bounces", PASS_RAY_BOUNCES);
+#endif
+  pass_type_enum.insert("render_time", PASS_RENDER_TIME);
+  pass_type_enum.insert("cryptomatte", PASS_CRYPTOMATTE);
+  pass_type_enum.insert("aov_color", PASS_AOV_COLOR);
+  pass_type_enum.insert("aov_value", PASS_AOV_VALUE);
+  pass_type_enum.insert("adaptive_aux_buffer", PASS_ADAPTIVE_AUX_BUFFER);
+  pass_type_enum.insert("sample_count", PASS_SAMPLE_COUNT);
+  pass_type_enum.insert("mist", PASS_MIST);
+  pass_type_enum.insert("emission", PASS_EMISSION);
+  pass_type_enum.insert("background", PASS_BACKGROUND);
+  pass_type_enum.insert("ambient_occlusion", PASS_AO);
+  pass_type_enum.insert("shadow", PASS_SHADOW);
+  pass_type_enum.insert("diffuse_direct", PASS_DIFFUSE_DIRECT);
+  pass_type_enum.insert("diffuse_indirect", PASS_DIFFUSE_INDIRECT);
+  pass_type_enum.insert("diffuse_color", PASS_DIFFUSE_COLOR);
+  pass_type_enum.insert("glossy_direct", PASS_GLOSSY_DIRECT);
+  pass_type_enum.insert("glossy_indirect", PASS_GLOSSY_INDIRECT);
+  pass_type_enum.insert("glossy_color", PASS_GLOSSY_COLOR);
+  pass_type_enum.insert("transmission_direct", PASS_TRANSMISSION_DIRECT);
+  pass_type_enum.insert("transmission_indirect", PASS_TRANSMISSION_INDIRECT);
+  pass_type_enum.insert("transmission_color", PASS_TRANSMISSION_COLOR);
+  pass_type_enum.insert("volume_direct", PASS_VOLUME_DIRECT);
+  pass_type_enum.insert("volume_indirect", PASS_VOLUME_INDIRECT);
+  pass_type_enum.insert("bake_primitive", PASS_BAKE_PRIMITIVE);
+  pass_type_enum.insert("bake_differential", PASS_BAKE_DIFFERENTIAL);
+
+  return &pass_type_enum;
+}
+
+NODE_DEFINE(Pass)
+{
+  NodeType *type = NodeType::add("pass", create);
+
+  NodeEnum *pass_type_enum = get_pass_type_enum();
+  SOCKET_ENUM(type, "Type", *pass_type_enum, PASS_COMBINED);
+  SOCKET_STRING(name, "Name", ustring());
+
+  return type;
+}
+
+Pass::Pass() : Node(get_node_type())
+{
+}
+
 void Pass::add(PassType type, vector<Pass> &passes, const char *name)
 {
   for (size_t i = 0; i < passes.size(); i++) {
-    if (passes[i].type == type && (name ? (passes[i].name == name) : passes[i].name.empty())) {
+    if (passes[i].type != type) {
+      continue;
+    }
+
+    /* An empty name is used as a placeholder to signal that any pass of
+     * that type is fine (because the content always is the same).
+     * This is important to support divide_type: If the pass that has a
+     * divide_type is added first, a pass for divide_type with an empty
+     * name will be added. Then, if a matching pass with a name is later
+     * requested, the existing placeholder will be renamed to that.
+     * If the divide_type is explicitly allocated with a name first and
+     * then again as part of another pass, the second one will just be
+     * skipped because that type already exists. */
+
+    /* If no name is specified, any pass of the correct type will match. */
+    if (name == NULL) {
+      return;
+    }
+
+    /* If we already have a placeholder pass, rename that one. */
+    if (passes[i].name.empty()) {
+      passes[i].name = name;
+      return;
+    }
+
+    /* If neither existing nor requested pass have placeholder name, they
+     * must match. */
+    if (name == passes[i].name) {
       return;
     }
   }
@@ -128,7 +217,6 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_DIFFUSE_COLOR:
     case PASS_GLOSSY_COLOR:
     case PASS_TRANSMISSION_COLOR:
-    case PASS_SUBSURFACE_COLOR:
       pass.components = 4;
       break;
     case PASS_DIFFUSE_DIRECT:
@@ -149,12 +237,6 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
       pass.exposure = true;
       pass.divide_type = PASS_TRANSMISSION_COLOR;
       break;
-    case PASS_SUBSURFACE_DIRECT:
-    case PASS_SUBSURFACE_INDIRECT:
-      pass.components = 4;
-      pass.exposure = true;
-      pass.divide_type = PASS_SUBSURFACE_COLOR;
-      break;
     case PASS_VOLUME_DIRECT:
     case PASS_VOLUME_INDIRECT:
       pass.components = 4;
@@ -163,6 +245,25 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
     case PASS_CRYPTOMATTE:
       pass.components = 4;
       break;
+    case PASS_ADAPTIVE_AUX_BUFFER:
+      pass.components = 4;
+      break;
+    case PASS_SAMPLE_COUNT:
+      pass.components = 1;
+      pass.exposure = false;
+      break;
+    case PASS_AOV_COLOR:
+      pass.components = 4;
+      break;
+    case PASS_AOV_VALUE:
+      pass.components = 1;
+      break;
+    case PASS_BAKE_PRIMITIVE:
+    case PASS_BAKE_DIFFERENTIAL:
+      pass.components = 4;
+      pass.exposure = false;
+      pass.filter = false;
+      break;
     default:
       assert(false);
       break;
@@ -170,9 +271,10 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name)
 
   passes.push_back(pass);
 
-  /* order from by components, to ensure alignment so passes with size 4
-   * come first and then passes with size 1 */
-  sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
+  /* Order from by components, to ensure alignment so passes with size 4
+   * come first and then passes with size 1. Note this must use stable sort
+   * so cryptomatte passes remain in the right order. */
+  stable_sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
 
   if (pass.divide_type != PASS_NONE)
     Pass::add(pass.divide_type, passes);
@@ -267,7 +369,7 @@ NODE_DEFINE(Film)
   NodeType *type = NodeType::add("film", create);
 
   SOCKET_FLOAT(exposure, "Exposure", 0.8f);
-  SOCKET_FLOAT(pass_alpha_threshold, "Pass Alpha Threshold", 0.5f);
+  SOCKET_FLOAT(pass_alpha_threshold, "Pass Alpha Threshold", 0.0f);
 
   static NodeEnum filter_enum;
   filter_enum.insert("box", FILTER_BOX);
@@ -281,35 +383,57 @@ NODE_DEFINE(Film)
   SOCKET_FLOAT(mist_depth, "Mist Depth", 100.0f);
   SOCKET_FLOAT(mist_falloff, "Mist Falloff", 1.0f);
 
-  SOCKET_BOOLEAN(use_sample_clamp, "Use Sample Clamp", false);
-
   SOCKET_BOOLEAN(denoising_data_pass, "Generate Denoising Data Pass", false);
   SOCKET_BOOLEAN(denoising_clean_pass, "Generate Denoising Clean Pass", false);
   SOCKET_BOOLEAN(denoising_prefiltered_pass, "Generate Denoising Prefiltered Pass", false);
   SOCKET_INT(denoising_flags, "Denoising Flags", 0);
+  SOCKET_BOOLEAN(use_adaptive_sampling, "Use Adaptive Sampling", false);
+
+  SOCKET_BOOLEAN(use_light_visibility, "Use Light Visibility", false);
+
+  NodeEnum *pass_type_enum = get_pass_type_enum();
+  SOCKET_ENUM(display_pass, "Display Pass", *pass_type_enum, PASS_COMBINED);
+
+  static NodeEnum cryptomatte_passes_enum;
+  cryptomatte_passes_enum.insert("none", CRYPT_NONE);
+  cryptomatte_passes_enum.insert("object", CRYPT_OBJECT);
+  cryptomatte_passes_enum.insert("material", CRYPT_MATERIAL);
+  cryptomatte_passes_enum.insert("asset", CRYPT_ASSET);
+  cryptomatte_passes_enum.insert("accurate", CRYPT_ACCURATE);
+  SOCKET_ENUM(cryptomatte_passes, "Cryptomatte Passes", cryptomatte_passes_enum, CRYPT_NONE);
+
+  SOCKET_INT(cryptomatte_depth, "Cryptomatte Depth", 0);
 
   return type;
 }
 
-Film::Film() : Node(node_type)
+Film::Film() : Node(get_node_type())
 {
-  Pass::add(PASS_COMBINED, passes);
-
   use_light_visibility = false;
   filter_table_offset = TABLE_OFFSET_INVALID;
   cryptomatte_passes = CRYPT_NONE;
-
-  need_update = true;
+  display_pass = PASS_COMBINED;
 }
 
 Film::~Film()
 {
 }
 
+void Film::add_default(Scene *scene)
+{
+  Pass::add(PASS_COMBINED, scene->passes);
+}
+
 void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  if (!need_update)
+  if (!is_modified())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->film.times.add_entry({"update", time});
+    }
+  });
 
   device_free(device, dscene, scene);
 
@@ -318,14 +442,23 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   /* update __data */
   kfilm->exposure = exposure;
   kfilm->pass_flag = 0;
+
+  kfilm->display_pass_stride = -1;
+  kfilm->display_pass_components = 0;
+  kfilm->display_divide_pass_stride = -1;
+  kfilm->use_display_exposure = false;
+  kfilm->use_display_pass_alpha = (display_pass == PASS_COMBINED);
+
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;
-  kfilm->use_light_pass = use_light_visibility || use_sample_clamp;
+  kfilm->use_light_pass = use_light_visibility;
+  kfilm->pass_aov_value_num = 0;
+  kfilm->pass_aov_color_num = 0;
 
   bool have_cryptomatte = false;
 
-  for (size_t i = 0; i < passes.size(); i++) {
-    Pass &pass = passes[i];
+  for (size_t i = 0; i < scene->passes.size(); i++) {
+    Pass &pass = scene->passes[i];
 
     if (pass.type == PASS_NONE) {
       continue;
@@ -343,10 +476,12 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
     if (pass.type <= PASS_CATEGORY_MAIN_END) {
       kfilm->pass_flag |= pass_flag;
     }
-    else {
-      assert(pass.type <= PASS_CATEGORY_LIGHT_END);
+    else if (pass.type <= PASS_CATEGORY_LIGHT_END) {
       kfilm->use_light_pass = 1;
       kfilm->light_pass_flag |= pass_flag;
+    }
+    else {
+      assert(pass.type <= PASS_CATEGORY_BAKE_END);
     }
 
     switch (pass.type) {
@@ -403,9 +538,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       case PASS_TRANSMISSION_COLOR:
         kfilm->pass_transmission_color = kfilm->pass_stride;
         break;
-      case PASS_SUBSURFACE_COLOR:
-        kfilm->pass_subsurface_color = kfilm->pass_stride;
-        break;
       case PASS_DIFFUSE_INDIRECT:
         kfilm->pass_diffuse_indirect = kfilm->pass_stride;
         break;
@@ -414,9 +546,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
       case PASS_TRANSMISSION_INDIRECT:
         kfilm->pass_transmission_indirect = kfilm->pass_stride;
-        break;
-      case PASS_SUBSURFACE_INDIRECT:
-        kfilm->pass_subsurface_indirect = kfilm->pass_stride;
         break;
       case PASS_VOLUME_INDIRECT:
         kfilm->pass_volume_indirect = kfilm->pass_stride;
@@ -430,11 +559,15 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
       case PASS_TRANSMISSION_DIRECT:
         kfilm->pass_transmission_direct = kfilm->pass_stride;
         break;
-      case PASS_SUBSURFACE_DIRECT:
-        kfilm->pass_subsurface_direct = kfilm->pass_stride;
-        break;
       case PASS_VOLUME_DIRECT:
         kfilm->pass_volume_direct = kfilm->pass_stride;
+        break;
+
+      case PASS_BAKE_PRIMITIVE:
+        kfilm->pass_bake_primitive = kfilm->pass_stride;
+        break;
+      case PASS_BAKE_DIFFERENTIAL:
+        kfilm->pass_bake_differential = kfilm->pass_stride;
         break;
 
 #ifdef WITH_CYCLES_DEBUG
@@ -459,9 +592,37 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
                                       kfilm->pass_stride;
         have_cryptomatte = true;
         break;
+      case PASS_ADAPTIVE_AUX_BUFFER:
+        kfilm->pass_adaptive_aux_buffer = kfilm->pass_stride;
+        break;
+      case PASS_SAMPLE_COUNT:
+        kfilm->pass_sample_count = kfilm->pass_stride;
+        break;
+      case PASS_AOV_COLOR:
+        if (kfilm->pass_aov_color_num == 0) {
+          kfilm->pass_aov_color = kfilm->pass_stride;
+        }
+        kfilm->pass_aov_color_num++;
+        break;
+      case PASS_AOV_VALUE:
+        if (kfilm->pass_aov_value_num == 0) {
+          kfilm->pass_aov_value = kfilm->pass_stride;
+        }
+        kfilm->pass_aov_value_num++;
+        break;
       default:
         assert(false);
         break;
+    }
+
+    if (pass.type == display_pass) {
+      kfilm->display_pass_stride = kfilm->pass_stride;
+      kfilm->display_pass_components = pass.components;
+      kfilm->use_display_exposure = pass.exposure && (kfilm->exposure != 1.0f);
+    }
+    else if (pass.type == PASS_DIFFUSE_COLOR || pass.type == PASS_TRANSMISSION_COLOR ||
+             pass.type == PASS_GLOSSY_COLOR) {
+      kfilm->display_divide_pass_stride = kfilm->pass_stride;
     }
 
     kfilm->pass_stride += pass.components;
@@ -485,7 +646,18 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   }
 
   kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
-  kfilm->pass_alpha_threshold = pass_alpha_threshold;
+
+  /* When displaying the normal/uv pass in the viewport we need to disable
+   * transparency.
+   *
+   * We also don't need to perform light accumulations. Later we want to optimize this to suppress
+   * light calculations. */
+  if (display_pass == PASS_NORMAL || display_pass == PASS_UV) {
+    kfilm->use_light_pass = 0;
+  }
+  else {
+    kfilm->pass_alpha_threshold = pass_alpha_threshold;
+  }
 
   /* update filter table */
   vector<float> table = filter_table(filter_type, filter_width);
@@ -505,7 +677,7 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   denoising_data_offset = kfilm->pass_denoising_data;
   denoising_clean_offset = kfilm->pass_denoising_clean;
 
-  need_update = false;
+  clear_modified();
 }
 
 void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *scene)
@@ -513,28 +685,67 @@ void Film::device_free(Device * /*device*/, DeviceScene * /*dscene*/, Scene *sce
   scene->lookup_tables->remove_table(&filter_table_offset);
 }
 
-bool Film::modified(const Film &film)
+void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_, bool update_passes)
 {
-  return !Node::equals(film) || !Pass::equals(passes, film.passes);
-}
-
-void Film::tag_passes_update(Scene *scene, const vector<Pass> &passes_)
-{
-  if (Pass::contains(passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
-    scene->mesh_manager->tag_update(scene);
+  if (Pass::contains(scene->passes, PASS_UV) != Pass::contains(passes_, PASS_UV)) {
+    scene->geometry_manager->tag_update(scene, GeometryManager::UV_PASS_NEEDED);
 
     foreach (Shader *shader, scene->shaders)
-      shader->need_update_mesh = true;
+      shader->need_update_uvs = true;
   }
-  else if (Pass::contains(passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION))
-    scene->mesh_manager->tag_update(scene);
+  else if (Pass::contains(scene->passes, PASS_MOTION) != Pass::contains(passes_, PASS_MOTION)) {
+    scene->geometry_manager->tag_update(scene, GeometryManager::MOTION_PASS_NEEDED);
+  }
+  else if (Pass::contains(scene->passes, PASS_AO) != Pass::contains(passes_, PASS_AO)) {
+    scene->integrator->tag_update(scene, Integrator::AO_PASS_MODIFIED);
+  }
 
-  passes = passes_;
+  if (update_passes) {
+    scene->passes = passes_;
+  }
 }
 
-void Film::tag_update(Scene * /*scene*/)
+int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
 {
-  need_update = true;
+  int num_color = 0, num_value = 0;
+  foreach (const Pass &pass, scene->passes) {
+    if (pass.type == PASS_AOV_COLOR) {
+      num_color++;
+    }
+    else if (pass.type == PASS_AOV_VALUE) {
+      num_value++;
+    }
+    else {
+      continue;
+    }
+
+    if (pass.name == name) {
+      is_color = (pass.type == PASS_AOV_COLOR);
+      return (is_color ? num_color : num_value) - 1;
+    }
+  }
+
+  return -1;
+}
+
+int Film::get_pass_stride() const
+{
+  return pass_stride;
+}
+
+int Film::get_denoising_data_offset() const
+{
+  return denoising_data_offset;
+}
+
+int Film::get_denoising_clean_offset() const
+{
+  return denoising_clean_offset;
+}
+
+size_t Film::get_filter_table_offset() const
+{
+  return filter_table_offset;
 }
 
 CCL_NAMESPACE_END

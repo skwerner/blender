@@ -21,8 +21,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_CONTEXTEGL_H__
-#define __GHOST_CONTEXTEGL_H__
+#pragma once
 
 #include "GHOST_Context.h"
 
@@ -42,7 +41,6 @@ class GHOST_ContextEGL : public GHOST_Context {
    * Constructor.
    */
   GHOST_ContextEGL(bool stereoVisual,
-                   GHOST_TUns16 numOfAASamples,
                    EGLNativeWindowType nativeWindow,
                    EGLNativeDisplayType nativeDisplay,
                    EGLint contextProfileMask,
@@ -59,19 +57,19 @@ class GHOST_ContextEGL : public GHOST_Context {
 
   /**
    * Swaps front and back buffers of a window.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess swapBuffers();
 
   /**
    * Activates the drawing context of this window.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess activateDrawingContext();
 
   /**
    * Release the drawing context of the calling thread.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   GHOST_TSuccess releaseDrawingContext();
 
@@ -89,21 +87,21 @@ class GHOST_ContextEGL : public GHOST_Context {
   GHOST_TSuccess releaseNativeHandles();
 
   /**
-   * Sets the swap interval for swapBuffers.
-   * \param interval The swap interval to use.
+   * Sets the swap interval for #swapBuffers.
+   * \param interval: The swap interval to use.
    * \return A boolean success indicator.
    */
   GHOST_TSuccess setSwapInterval(int interval);
 
   /**
-   * Gets the current swap interval for swapBuffers.
-   * \param intervalOut Variable to store the swap interval if it can be read.
+   * Gets the current swap interval for #swapBuffers.
+   * \param intervalOut: Variable to store the swap interval if it can be read.
    * \return Whether the swap interval can be read.
    */
   GHOST_TSuccess getSwapInterval(int &intervalOut);
 
  private:
-  void initContextEGLEW();
+  bool initContextEGLEW();
 
   EGLNativeDisplayType m_nativeDisplay;
   EGLNativeWindowType m_nativeWindow;
@@ -138,5 +136,3 @@ class GHOST_ContextEGL : public GHOST_Context {
   static HMODULE s_d3dcompiler;
 #endif
 };
-
-#endif  // __GHOST_CONTEXTEGL_H__

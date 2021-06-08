@@ -30,8 +30,6 @@
 
 #include "ED_mball.h"
 #include "ED_screen.h"
-#include "ED_select_utils.h"
-#include "ED_object.h"
 
 #include "mball_intern.h"
 
@@ -55,11 +53,11 @@ void ED_operatormacros_metaball(void)
 
   ot = WM_operatortype_append_macro("MBALL_OT_duplicate_move",
                                     "Duplicate",
-                                    "Make copies of the selected metaelements and move them",
+                                    "Make copies of the selected metaball elements and move them",
                                     OPTYPE_UNDO | OPTYPE_REGISTER);
   WM_operatortype_macro_define(ot, "MBALL_OT_duplicate_metaelems");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
-  RNA_enum_set(otmacro->ptr, "proportional", 0);
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
 }
 
 void ED_keymap_metaball(wmKeyConfig *keyconf)

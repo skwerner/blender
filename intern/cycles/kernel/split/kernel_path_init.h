@@ -26,7 +26,7 @@ ccl_device void kernel_path_init(KernelGlobals *kg)
   int ray_index = ccl_global_id(0) + ccl_global_id(1) * ccl_global_size(0);
 
   /* This is the first assignment to ray_state;
-   * So we dont use ASSIGN_RAY_STATE macro.
+   * So we don't use ASSIGN_RAY_STATE macro.
    */
   kernel_split_state.ray_state[ray_index] = RAY_ACTIVE;
 
@@ -59,8 +59,7 @@ ccl_device void kernel_path_init(KernelGlobals *kg)
      * These rays proceed with path-iteration.
      */
     kernel_split_state.throughput[ray_index] = make_float3(1.0f, 1.0f, 1.0f);
-    path_radiance_init(&kernel_split_state.path_radiance[ray_index],
-                       kernel_data.film.use_light_pass);
+    path_radiance_init(kg, &kernel_split_state.path_radiance[ray_index]);
     path_state_init(kg,
                     AS_SHADER_DATA(&kernel_split_state.sd_DL_shadow[ray_index]),
                     &kernel_split_state.path_state[ray_index],

@@ -25,16 +25,14 @@
 
 #include "DNA_light_types.h"
 #include "DNA_material_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
-#include "DNA_workspace_types.h"
-#include "DNA_world_types.h"
 #include "DNA_windowmanager_types.h"
+#include "DNA_world_types.h"
 
 #include "DRW_engine.h"
 
@@ -44,141 +42,153 @@
 
 #include "BKE_context.h"
 #include "BKE_icons.h"
-#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_node.h"
 #include "BKE_paint.h"
 #include "BKE_scene.h"
-#include "BKE_workspace.h"
 
 #include "RE_engine.h"
 #include "RE_pipeline.h"
 
 #include "ED_node.h"
+#include "ED_paint.h"
 #include "ED_render.h"
 #include "ED_view3d.h"
 
 #include "DEG_depsgraph.h"
+#include "DEG_depsgraph_query.h"
 
 #include "WM_api.h"
 
-#include "render_intern.h"  // own include
+#include <stdio.h>
 
 /***************************** Render Engines ********************************/
 
-void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, int updated)
+/* Update 3D viewport render or draw engine on changes to the scene or view settings . */
+void ED_render_view3d_update(Depsgraph *depsgraph,
+                             wmWindow *window,
+                             ScrArea *area,
+                             const bool updated)
 {
-  /* viewport rendering update on data changes, happens after depsgraph
-   * updates if there was any change. context is set to the 3d view */
+  Main *bmain = DEG_get_bmain(depsgraph);
+  Scene *scene = DEG_get_input_scene(depsgraph);
+  ViewLayer *view_layer = DEG_get_input_view_layer(depsgraph);
+
+  LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
+    if (region->regiontype != RGN_TYPE_WINDOW) {
+      continue;
+    }
+
+    View3D *v3d = area->spacedata.first;
+    RegionView3D *rv3d = region->regiondata;
+    RenderEngine *engine = rv3d->render_engine;
+
+    /* call update if the scene changed, or if the render engine
+     * tagged itself for update (e.g. because it was busy at the
+     * time of the last update) */
+    if (engine && (updated || (engine->flag & RE_ENGINE_DO_UPDATE))) {
+      /* Create temporary context to execute callback in. */
+      bContext *C = CTX_create();
+      CTX_data_main_set(C, bmain);
+      CTX_data_scene_set(C, scene);
+      CTX_wm_manager_set(C, bmain->wm.first);
+      CTX_wm_window_set(C, window);
+      CTX_wm_screen_set(C, WM_window_get_active_screen(window));
+      CTX_wm_area_set(C, area);
+      CTX_wm_region_set(C, region);
+
+      engine->flag &= ~RE_ENGINE_DO_UPDATE;
+      /* NOTE: Important to pass non-updated depsgraph, This is because this function is called
+       * from inside dependency graph evaluation. Additionally, if we pass fully evaluated one
+       * we will lose updates stored in the graph. */
+      engine->type->view_update(engine, C, CTX_data_depsgraph_pointer(C));
+
+      CTX_free(C);
+    }
+    else {
+      RenderEngineType *engine_type = ED_view3d_engine_type(scene, v3d->shading.type);
+      if (updated) {
+        DRW_notify_view_update((&(DRWUpdateContext){
+            .bmain = bmain,
+            .depsgraph = depsgraph,
+            .scene = scene,
+            .view_layer = view_layer,
+            .region = region,
+            .v3d = v3d,
+            .engine_type = engine_type,
+        }));
+      }
+    }
+  }
+}
+
+/* Update all 3D viewport render and draw engines on changes to the scene.
+ * This is called by the dependency graph when it detects changes. */
+void ED_render_scene_update(const DEGEditorUpdateContext *update_ctx, const bool updated)
+{
   Main *bmain = update_ctx->bmain;
-  Scene *scene = update_ctx->scene;
-  ViewLayer *view_layer = update_ctx->view_layer;
-  bContext *C;
-  wmWindowManager *wm;
-  wmWindow *win;
   static bool recursive_check = false;
 
   /* don't do this render engine update if we're updating the scene from
    * other threads doing e.g. rendering or baking jobs */
-  if (!BLI_thread_is_main())
+  if (!BLI_thread_is_main()) {
     return;
+  }
 
   /* don't call this recursively for frame updates */
-  if (recursive_check)
+  if (recursive_check) {
     return;
+  }
 
   /* Do not call if no WM available, see T42688. */
-  if (BLI_listbase_is_empty(&bmain->wm))
+  if (BLI_listbase_is_empty(&bmain->wm)) {
     return;
+  }
 
   recursive_check = true;
 
-  C = CTX_create();
-  CTX_data_main_set(C, bmain);
-  CTX_data_scene_set(C, scene);
+  wmWindowManager *wm = bmain->wm.first;
+  LISTBASE_FOREACH (wmWindow *, window, &wm->windows) {
+    bScreen *screen = WM_window_get_active_screen(window);
 
-  CTX_wm_manager_set(C, bmain->wm.first);
-  wm = bmain->wm.first;
-
-  for (win = wm->windows.first; win; win = win->next) {
-    bScreen *sc = WM_window_get_active_screen(win);
-    ScrArea *sa;
-    ARegion *ar;
-
-    CTX_wm_window_set(C, win);
-
-    for (sa = sc->areabase.first; sa; sa = sa->next) {
-      if (sa->spacetype != SPACE_VIEW3D) {
-        continue;
-      }
-      View3D *v3d = sa->spacedata.first;
-      for (ar = sa->regionbase.first; ar; ar = ar->next) {
-        if (ar->regiontype != RGN_TYPE_WINDOW) {
-          continue;
-        }
-        RegionView3D *rv3d = ar->regiondata;
-        RenderEngine *engine = rv3d->render_engine;
-        /* call update if the scene changed, or if the render engine
-         * tagged itself for update (e.g. because it was busy at the
-         * time of the last update) */
-        if (engine && (updated || (engine->flag & RE_ENGINE_DO_UPDATE))) {
-
-          CTX_wm_screen_set(C, sc);
-          CTX_wm_area_set(C, sa);
-          CTX_wm_region_set(C, ar);
-
-          engine->flag &= ~RE_ENGINE_DO_UPDATE;
-          engine->type->view_update(engine, C);
-        }
-        else {
-          RenderEngineType *engine_type = ED_view3d_engine_type(scene, v3d->shading.type);
-          if (updated) {
-            DRW_notify_view_update((&(DRWUpdateContext){
-                .bmain = bmain,
-                .depsgraph = update_ctx->depsgraph,
-                .scene = scene,
-                .view_layer = view_layer,
-                .ar = ar,
-                .v3d = (View3D *)sa->spacedata.first,
-                .engine_type = engine_type,
-            }));
-          }
-        }
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      if (area->spacetype == SPACE_VIEW3D) {
+        ED_render_view3d_update(update_ctx->depsgraph, window, area, updated);
       }
     }
   }
-
-  CTX_free(C);
 
   recursive_check = false;
 }
 
-void ED_render_engine_area_exit(Main *bmain, ScrArea *sa)
+void ED_render_engine_area_exit(Main *bmain, ScrArea *area)
 {
   /* clear all render engines in this area */
-  ARegion *ar;
+  ARegion *region;
   wmWindowManager *wm = bmain->wm.first;
 
-  if (sa->spacetype != SPACE_VIEW3D)
+  if (area->spacetype != SPACE_VIEW3D) {
     return;
+  }
 
-  for (ar = sa->regionbase.first; ar; ar = ar->next) {
-    if (ar->regiontype != RGN_TYPE_WINDOW || !(ar->regiondata))
+  for (region = area->regionbase.first; region; region = region->next) {
+    if (region->regiontype != RGN_TYPE_WINDOW || !(region->regiondata)) {
       continue;
-    ED_view3d_stop_render_preview(wm, ar);
+    }
+    ED_view3d_stop_render_preview(wm, region);
   }
 }
 
-void ED_render_engine_changed(Main *bmain)
+void ED_render_engine_changed(Main *bmain, const bool update_scene_data)
 {
   /* on changing the render engine type, clear all running render engines */
-  for (bScreen *sc = bmain->screens.first; sc; sc = sc->id.next) {
-    for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
-      ED_render_engine_area_exit(bmain, sa);
+  for (bScreen *screen = bmain->screens.first; screen; screen = screen->id.next) {
+    LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+      ED_render_engine_area_exit(bmain, area);
     }
   }
-  RE_FreePersistentData();
+  RE_FreePersistentData(NULL);
   /* Inform all render engines and draw managers. */
   DEGEditorUpdateContext update_ctx = {NULL};
   update_ctx.bmain = bmain;
@@ -186,20 +196,20 @@ void ED_render_engine_changed(Main *bmain)
     update_ctx.scene = scene;
     LISTBASE_FOREACH (ViewLayer *, view_layer, &scene->view_layers) {
       /* TDODO(sergey): Iterate over depsgraphs instead? */
-      update_ctx.depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+      update_ctx.depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
       update_ctx.view_layer = view_layer;
       ED_render_id_flush_update(&update_ctx, &scene->id);
     }
-    if (scene->nodetree) {
+    if (scene->nodetree && update_scene_data) {
       ntreeCompositUpdateRLayers(scene->nodetree);
     }
   }
 }
 
-void ED_render_view_layer_changed(Main *bmain, bScreen *sc)
+void ED_render_view_layer_changed(Main *bmain, bScreen *screen)
 {
-  for (ScrArea *sa = sc->areabase.first; sa; sa = sa->next) {
-    ED_render_engine_area_exit(bmain, sa);
+  LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+    ED_render_engine_area_exit(bmain, area);
   }
 }
 
@@ -237,8 +247,9 @@ static void texture_changed(Main *bmain, Tex *tex)
     /* find compositing nodes */
     if (scene->use_nodes && scene->nodetree) {
       for (node = scene->nodetree->nodes.first; node; node = node->next) {
-        if (node->id == &tex->id)
+        if (node->id == &tex->id) {
           ED_node_tag_update_id(&scene->id);
+        }
       }
     }
   }
@@ -258,9 +269,11 @@ static void image_changed(Main *bmain, Image *ima)
   BKE_icon_changed(BKE_icon_id_ensure(&ima->id));
 
   /* textures */
-  for (tex = bmain->textures.first; tex; tex = tex->id.next)
-    if (tex->ima == ima)
+  for (tex = bmain->textures.first; tex; tex = tex->id.next) {
+    if (tex->type == TEX_IMAGE && tex->ima == ima) {
       texture_changed(bmain, tex);
+    }
+  }
 }
 
 static void scene_changed(Main *bmain, Scene *scene)
@@ -271,7 +284,7 @@ static void scene_changed(Main *bmain, Scene *scene)
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
     if (ob->mode & OB_MODE_TEXTURE_PAINT) {
       BKE_texpaint_slots_refresh_object(scene, ob);
-      BKE_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
+      ED_paint_proj_mesh_data_check(scene, ob, NULL, NULL, NULL, NULL);
     }
   }
 }

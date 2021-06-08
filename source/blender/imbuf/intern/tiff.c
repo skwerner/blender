@@ -43,8 +43,8 @@
 
 #include "BKE_global.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "IMB_filetype.h"
 
@@ -57,9 +57,10 @@
 #  include "utfconv.h"
 #endif
 
-/***********************
- * Local declarations. *
- ***********************/
+/* -------------------------------------------------------------------- */
+/** \name Local Declarations
+ * \{ */
+
 /* Reading and writing of an in-memory TIFF file. */
 static tsize_t imb_tiff_ReadProc(thandle_t handle, tdata_t data, tsize_t n);
 static tsize_t imb_tiff_WriteProc(thandle_t handle, tdata_t data, tsize_t n);
@@ -69,42 +70,57 @@ static toff_t imb_tiff_SizeProc(thandle_t handle);
 static int imb_tiff_DummyMapProc(thandle_t fd, tdata_t *pbase, toff_t *psize);
 static void imb_tiff_DummyUnmapProc(thandle_t fd, tdata_t base, toff_t size);
 
-/* Structure for in-memory TIFF file. */
+/** Structure for in-memory TIFF file. */
 typedef struct ImbTIFFMemFile {
-  const unsigned char *mem; /* Location of first byte of TIFF file. */
-  toff_t offset;            /* Current offset within the file.      */
-  tsize_t size;             /* Size of the TIFF file.               */
+  /** Location of first byte of TIFF file. */
+  const unsigned char *mem;
+  /** Current offset within the file. */
+  toff_t offset;
+  /** Size of the TIFF file. */
+  tsize_t size;
 } ImbTIFFMemFile;
 #define IMB_TIFF_GET_MEMFILE(x) ((ImbTIFFMemFile *)(x))
 
-/*****************************
- * Function implementations. *
- *****************************/
+/** \} */
 
-static void imb_tiff_DummyUnmapProc(thandle_t fd, tdata_t base, toff_t size)
+/* -------------------------------------------------------------------- */
+/** \name Function Implementations
+ * \{ */
+
+static void imb_tiff_DummyUnmapProc(
+    thandle_t fd,
+    tdata_t base,
+    /* Cannot be const, because this function implements #TIFFUnmapFileProc.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    toff_t size)
 {
   (void)fd;
   (void)base;
   (void)size;
 }
 
-static int imb_tiff_DummyMapProc(thandle_t fd, tdata_t *pbase, toff_t *psize)
+static int imb_tiff_DummyMapProc(
+    thandle_t fd,
+    tdata_t *pbase,
+    /* Cannot be const, because this function implements #TIFFMapFileProc.
+     * NOLINTNEXTLINE: readability-non-const-parameter. */
+    toff_t *psize)
 {
   (void)fd;
   (void)pbase;
   (void)psize;
 
-  return (0);
+  return 0;
 }
 
 /**
  * Reads data from an in-memory TIFF file.
  *
- * \param handle: Handle of the TIFF file (pointer to ImbTIFFMemFile).
- * \param data:   Buffer to contain data (treat as (void *)).
- * \param n:      Number of bytes to read.
+ * \param handle: Handle of the TIFF file (pointer to #ImbTIFFMemFile).
+ * \param data: Buffer to contain data (treat as (void *)).
+ * \param n: Number of bytes to read.
  *
- * \return: Number of bytes actually read.
+ * \return Number of bytes actually read.
  *   0 = EOF.
  */
 static tsize_t imb_tiff_ReadProc(thandle_t handle, tdata_t data, tsize_t n)
@@ -122,17 +138,21 @@ static tsize_t imb_tiff_ReadProc(thandle_t handle, tdata_t data, tsize_t n)
 
   /* find the actual number of bytes to read (copy) */
   nCopy = n;
-  if ((tsize_t)mfile->offset >= mfile->size)
+  if ((tsize_t)mfile->offset >= mfile->size) {
     nRemaining = 0;
-  else
+  }
+  else {
     nRemaining = mfile->size - mfile->offset;
+  }
 
-  if (nCopy > nRemaining)
+  if (nCopy > nRemaining) {
     nCopy = nRemaining;
+  }
 
   /* on EOF, return immediately and read (copy) nothing */
-  if (nCopy <= 0)
-    return (0);
+  if (nCopy <= 0) {
+    return 0;
+  }
 
   /* all set -> do the read (copy) */
   srcAddr = (void *)(&(mfile->mem[mfile->offset]));
@@ -160,16 +180,16 @@ static tsize_t imb_tiff_WriteProc(thandle_t handle, tdata_t data, tsize_t n)
 /**
  * Seeks to a new location in an in-memory TIFF file.
  *
- * \param handle: Handle of the TIFF file (pointer to ImbTIFFMemFile).
- * \param ofs:    Offset value (interpreted according to whence below).
+ * \param handle: Handle of the TIFF file (pointer to #ImbTIFFMemFile).
+ * \param ofs: Offset value (interpreted according to whence below).
  * \param whence: This can be one of three values:
  * SEEK_SET - The offset is set to ofs bytes.
  * SEEK_CUR - The offset is set to its current location plus ofs bytes.
  * SEEK_END - (This is unsupported and will return -1, indicating an
  *             error).
  *
- * \return: Resulting offset location within the file, measured in bytes from
- *          the beginning of the file.  (-1) indicates an error.
+ * \return Resulting offset location within the file, measured in bytes from
+ * the beginning of the file.  (-1) indicates an error.
  */
 static toff_t imb_tiff_SeekProc(thandle_t handle, toff_t ofs, int whence)
 {
@@ -212,9 +232,9 @@ static toff_t imb_tiff_SeekProc(thandle_t handle, toff_t ofs, int whence)
  *       are made to access the file after that point.  However, no such
  *       attempts should ever be made (in theory).
  *
- * \param handle: Handle of the TIFF file (pointer to ImbTIFFMemFile).
+ * \param handle: Handle of the TIFF file (pointer to #ImbTIFFMemFile).
  *
- * \return: 0
+ * \return 0
  */
 static int imb_tiff_CloseProc(thandle_t handle)
 {
@@ -224,7 +244,7 @@ static int imb_tiff_CloseProc(thandle_t handle)
   mfile = IMB_TIFF_GET_MEMFILE(handle);
   if (!mfile || !mfile->mem) {
     fprintf(stderr, "imb_tiff_CloseProc: !mfile || !mfile->mem!\n");
-    return (0);
+    return 0;
   }
 
   /* virtually close the file */
@@ -232,13 +252,13 @@ static int imb_tiff_CloseProc(thandle_t handle)
   mfile->offset = 0;
   mfile->size = 0;
 
-  return (0);
+  return 0;
 }
 
 /**
  * Returns the size of an in-memory TIFF file in bytes.
  *
- * \return: Size of file (in bytes).
+ * \return Size of file (in bytes).
  */
 static toff_t imb_tiff_SizeProc(thandle_t handle)
 {
@@ -248,7 +268,7 @@ static toff_t imb_tiff_SizeProc(thandle_t handle)
   mfile = IMB_TIFF_GET_MEMFILE(handle);
   if (!mfile || !mfile->mem) {
     fprintf(stderr, "imb_tiff_SizeProc: !mfile || !mfile->mem!\n");
-    return (0);
+    return 0;
   }
 
   /* return the size */
@@ -274,6 +294,12 @@ static TIFF *imb_tiff_client_open(ImbTIFFMemFile *memFile, const unsigned char *
                         imb_tiff_DummyUnmapProc);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Load TIFF
+ * \{ */
+
 /**
  * Checks whether a given memory buffer contains a TIFF file.
  *
@@ -290,13 +316,16 @@ static TIFF *imb_tiff_client_open(ImbTIFFMemFile *memFile, const unsigned char *
  * hence my manual comparison. - Jonathan Merritt (lancelet) 4th Sept 2005.
  */
 #define IMB_TIFF_NCB 4 /* number of comparison bytes used */
-int imb_is_a_tiff(const unsigned char *mem)
+bool imb_is_a_tiff(const unsigned char *buf, size_t size)
 {
-  char big_endian[IMB_TIFF_NCB] = {0x4d, 0x4d, 0x00, 0x2a};
-  char lil_endian[IMB_TIFF_NCB] = {0x49, 0x49, 0x2a, 0x00};
+  const char big_endian[IMB_TIFF_NCB] = {0x4d, 0x4d, 0x00, 0x2a};
+  const char lil_endian[IMB_TIFF_NCB] = {0x49, 0x49, 0x2a, 0x00};
+  if (size < IMB_TIFF_NCB) {
+    return false;
+  }
 
-  return ((memcmp(big_endian, mem, IMB_TIFF_NCB) == 0) ||
-          (memcmp(lil_endian, mem, IMB_TIFF_NCB) == 0));
+  return ((memcmp(big_endian, buf, IMB_TIFF_NCB) == 0) ||
+          (memcmp(lil_endian, buf, IMB_TIFF_NCB) == 0));
 }
 
 static void scanline_contig_16bit(float *rectf,
@@ -330,20 +359,22 @@ static void scanline_separate_16bit(float *rectf,
                                     int chan)
 {
   int i;
-  for (i = 0; i < scanline_w; i++)
+  for (i = 0; i < scanline_w; i++) {
     rectf[i * 4 + chan] = sbuf[i] / 65535.0;
+  }
 }
 
 static void scanline_separate_32bit(float *rectf, const float *fbuf, int scanline_w, int chan)
 {
   int i;
-  for (i = 0; i < scanline_w; i++)
+  for (i = 0; i < scanline_w; i++) {
     rectf[i * 4 + chan] = fbuf[i];
+  }
 }
 
 static void imb_read_tiff_resolution(ImBuf *ibuf, TIFF *image)
 {
-  uint16 unit;
+  uint16_t unit;
   float xres;
   float yres;
 
@@ -453,21 +484,27 @@ static int imb_read_tiff_pixels(ImBuf *ibuf, TIFF *image)
         size_t ib_offset = (size_t)ibuf->x * 4 * ((size_t)ibuf->y - ((size_t)row + 1));
 
         if (bitspersample == 32) {
-          if (chan == 3 && spp == 3) /* fill alpha if only RGB TIFF */
+          if (chan == 3 && spp == 3) { /* fill alpha if only RGB TIFF */
             copy_vn_fl(fbuf, ibuf->x, 1.0f);
-          else if (chan >= spp) /* for grayscale, duplicate first channel into G and B */
+          }
+          else if (chan >= spp) { /* for grayscale, duplicate first channel into G and B */
             success |= TIFFReadScanline(image, fbuf, row, 0);
-          else
+          }
+          else {
             success |= TIFFReadScanline(image, fbuf, row, chan);
+          }
           scanline_separate_32bit(tmpibuf->rect_float + ib_offset, fbuf, ibuf->x, chan);
         }
         else if (bitspersample == 16) {
-          if (chan == 3 && spp == 3) /* fill alpha if only RGB TIFF */
+          if (chan == 3 && spp == 3) { /* fill alpha if only RGB TIFF */
             copy_vn_ushort(sbuf, ibuf->x, 65535);
-          else if (chan >= spp) /* for grayscale, duplicate first channel into G and B */
+          }
+          else if (chan >= spp) { /* for grayscale, duplicate first channel into G and B */
             success |= TIFFReadScanline(image, fbuf, row, 0);
-          else
+          }
+          else {
             success |= TIFFReadScanline(image, sbuf, row, chan);
+          }
           scanline_separate_16bit(tmpibuf->rect_float + ib_offset, sbuf, ibuf->x, chan);
         }
       }
@@ -475,16 +512,20 @@ static int imb_read_tiff_pixels(ImBuf *ibuf, TIFF *image)
   }
 
   if (success) {
-    /* Code seems to be not needed for 16 bits tif, on PPC G5 OSX (ton) */
-    if (bitspersample < 16)
-      if (ENDIAN_ORDER == B_ENDIAN)
+    /* Code seems to be not needed for 16 bits TIFF, on PPC G5 OSX (ton) */
+    if (bitspersample < 16) {
+      if (ENDIAN_ORDER == B_ENDIAN) {
         IMB_convert_rgba_to_abgr(tmpibuf);
+      }
+    }
 
     /* assign rect last */
-    if (tmpibuf->rect_float)
+    if (tmpibuf->rect_float) {
       ibuf->rect_float = tmpibuf->rect_float;
-    else
+    }
+    else {
       ibuf->rect = tmpibuf->rect;
+    }
     ibuf->mall |= ib_flag;
     ibuf->flags |= ib_flag;
 
@@ -492,10 +533,12 @@ static int imb_read_tiff_pixels(ImBuf *ibuf, TIFF *image)
   }
 
 cleanup:
-  if (bitspersample == 32)
+  if (bitspersample == 32) {
     _TIFFfree(fbuf);
-  else if (bitspersample == 16)
+  }
+  else if (bitspersample == 16) {
     _TIFFfree(sbuf);
+  }
 
   IMB_freeImBuf(tmpibuf);
 
@@ -504,18 +547,19 @@ cleanup:
 
 void imb_inittiff(void)
 {
-  if (!(G.debug & G_DEBUG))
+  if (!(G.debug & G_DEBUG)) {
     TIFFSetErrorHandler(NULL);
+  }
 }
 
 /**
  * Loads a TIFF file.
- * \param mem:   Memory containing the TIFF file.
- * \param size:  Size of the mem buffer.
+ * \param mem: Memory containing the TIFF file.
+ * \param size: Size of the mem buffer.
  * \param flags: If flags has IB_test set then the file is not actually loaded,
- *                but all other operations take place.
+ * but all other operations take place.
  *
- * \return: A newly allocated ImBuf structure if successful, otherwise NULL.
+ * \return A newly allocated #ImBuf structure if successful, otherwise NULL.
  */
 ImBuf *imb_loadtiff(const unsigned char *mem,
                     size_t size,
@@ -525,20 +569,17 @@ ImBuf *imb_loadtiff(const unsigned char *mem,
   TIFF *image = NULL;
   ImBuf *ibuf = NULL, *hbuf;
   ImbTIFFMemFile memFile;
-  uint32 width, height;
+  uint32_t width, height;
   char *format = NULL;
   int level;
   short spp;
   int ib_depth;
   int found;
 
-  /* check whether or not we have a TIFF file */
-  if (size < IMB_TIFF_NCB) {
-    fprintf(stderr, "imb_loadtiff: size < IMB_TIFF_NCB\n");
+  /* Check whether or not we have a TIFF file. */
+  if (imb_is_a_tiff(mem, size) == 0) {
     return NULL;
   }
-  if (imb_is_a_tiff(mem) == 0)
-    return NULL;
 
   /* both 8 and 16 bit PNGs are default to standard byte colorspace */
   colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_BYTE);
@@ -599,8 +640,9 @@ ImBuf *imb_loadtiff(const unsigned char *mem,
 
       /* create empty mipmap levels in advance */
       for (level = 0; level < numlevel; level++) {
-        if (!TIFFSetDirectory(image, level))
+        if (!TIFFSetDirectory(image, level)) {
           break;
+        }
 
         if (level > 0) {
           width = (width > 1) ? width / 2 : 1;
@@ -611,8 +653,9 @@ ImBuf *imb_loadtiff(const unsigned char *mem,
           hbuf->ftype = ibuf->ftype;
           ibuf->mipmap[level - 1] = hbuf;
         }
-        else
+        else {
           hbuf = ibuf;
+        }
 
         hbuf->flags |= IB_tilecache;
 
@@ -647,7 +690,7 @@ void imb_loadtiletiff(
     ImBuf *ibuf, const unsigned char *mem, size_t size, int tx, int ty, unsigned int *rect)
 {
   TIFF *image = NULL;
-  uint32 width, height;
+  uint32_t width, height;
   ImbTIFFMemFile memFile;
 
   image = imb_tiff_client_open(&memFile, mem, size);
@@ -666,50 +709,59 @@ void imb_loadtiletiff(
         /* tiff pixels are bottom to top, tiles are top to bottom */
         if (TIFFReadRGBATile(
                 image, tx * ibuf->tilex, (ibuf->ytiles - 1 - ty) * ibuf->tiley, rect) == 1) {
-          if (ibuf->tiley > ibuf->y)
+          if (ibuf->tiley > ibuf->y) {
             memmove(rect,
                     rect + ibuf->tilex * (ibuf->tiley - ibuf->y),
                     sizeof(int) * ibuf->tilex * ibuf->y);
+          }
         }
-        else
+        else {
           printf("imb_loadtiff: failed to read tiff tile at mipmap level %d\n", ibuf->miplevel);
+        }
       }
     }
-    else
+    else {
       printf("imb_loadtiff: mipmap level %d has unexpected size %ux%u instead of %dx%d\n",
              ibuf->miplevel,
              width,
              height,
              ibuf->x,
              ibuf->y);
+    }
   }
-  else
+  else {
     printf("imb_loadtiff: could not find mipmap level %d\n", ibuf->miplevel);
+  }
 
   /* close the client layer interface to the in-memory file */
   TIFFClose(image);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Save TIFF
+ * \{ */
+
 /**
  * Saves a TIFF file.
  *
- * ImBuf structures with 1, 3 or 4 bytes per pixel (GRAY, RGB, RGBA
+ * #ImBuf structures with 1, 3 or 4 bytes per pixel (GRAY, RGB, RGBA
  * respectively) are accepted, and interpreted correctly.  Note that the TIFF
  * convention is to use pre-multiplied alpha, which can be achieved within
  * Blender by setting "Premul" alpha handling.  Other alpha conventions are
  * not strictly correct, but are permitted anyhow.
  *
- * \param ibuf:  Image buffer.
- * \param name:  Name of the TIFF file to create.
+ * \param ibuf: Image buffer.
+ * \param name: Name of the TIFF file to create.
  * \param flags: Currently largely ignored.
  *
- * \return: 1 if the function is successful, 0 on failure.
+ * \return 1 if the function is successful, 0 on failure.
  */
-
-int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
+bool imb_savetiff(ImBuf *ibuf, const char *filepath, int flags)
 {
   TIFF *image = NULL;
-  uint16 samplesperpixel, bitspersample;
+  uint16_t samplesperpixel, bitspersample;
   size_t npixels;
   unsigned char *pixels = NULL;
   unsigned char *from = NULL, *to = NULL;
@@ -722,61 +774,68 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
   /* check for a valid number of bytes per pixel.  Like the PNG writer,
    * the TIFF writer supports 1, 3 or 4 bytes per pixel, corresponding
    * to gray, RGB, RGBA respectively. */
-  samplesperpixel = (uint16)((ibuf->planes + 7) >> 3);
+  samplesperpixel = (uint16_t)((ibuf->planes + 7) >> 3);
   if ((samplesperpixel > 4) || (samplesperpixel == 2)) {
     fprintf(stderr,
             "imb_savetiff: unsupported number of bytes per "
             "pixel: %d\n",
             samplesperpixel);
-    return (0);
+    return 0;
   }
 
-  if ((ibuf->foptions.flag & TIF_16BIT) && ibuf->rect_float)
+  if ((ibuf->foptions.flag & TIF_16BIT) && ibuf->rect_float) {
     bitspersample = 16;
-  else
+  }
+  else {
     bitspersample = 8;
+  }
 
-  if (ibuf->foptions.flag & TIF_COMPRESS_DEFLATE)
+  if (ibuf->foptions.flag & TIF_COMPRESS_DEFLATE) {
     compress_mode = COMPRESSION_DEFLATE;
-  else if (ibuf->foptions.flag & TIF_COMPRESS_LZW)
+  }
+  else if (ibuf->foptions.flag & TIF_COMPRESS_LZW) {
     compress_mode = COMPRESSION_LZW;
-  else if (ibuf->foptions.flag & TIF_COMPRESS_PACKBITS)
+  }
+  else if (ibuf->foptions.flag & TIF_COMPRESS_PACKBITS) {
     compress_mode = COMPRESSION_PACKBITS;
+  }
 
   /* open TIFF file for writing */
   if (flags & IB_mem) {
-    /* bork at the creation of a TIFF in memory */
+    /* Failed to allocate TIFF in memory. */
     fprintf(stderr,
             "imb_savetiff: creation of in-memory TIFF files is "
             "not yet supported.\n");
-    return (0);
+    return 0;
   }
-  else {
-    /* create image as a file */
+
+  /* create image as a file */
 #ifdef WIN32
-    wchar_t *wname = alloc_utf16_from_8(name, 0);
-    image = TIFFOpenW(wname, "w");
-    free(wname);
+  wchar_t *wname = alloc_utf16_from_8(filepath, 0);
+  image = TIFFOpenW(wname, "w");
+  free(wname);
 #else
-    image = TIFFOpen(name, "w");
+  image = TIFFOpen(filepath, "w");
 #endif
-  }
+
   if (image == NULL) {
     fprintf(stderr, "imb_savetiff: could not open TIFF for writing.\n");
-    return (0);
+    return 0;
   }
 
   /* allocate array for pixel data */
   npixels = ibuf->x * ibuf->y;
-  if (bitspersample == 16)
+  if (bitspersample == 16) {
     pixels16 = (unsigned short *)_TIFFmalloc(npixels * samplesperpixel * sizeof(unsigned short));
-  else
+  }
+  else {
     pixels = (unsigned char *)_TIFFmalloc(npixels * samplesperpixel * sizeof(unsigned char));
+  }
 
   if (pixels == NULL && pixels16 == NULL) {
     fprintf(stderr, "imb_savetiff: could not allocate pixels array.\n");
     TIFFClose(image);
-    return (0);
+    return 0;
   }
 
   /* setup pointers */
@@ -796,10 +855,12 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
   if (samplesperpixel == 4) {
     unsigned short extraSampleTypes[1];
 
-    if (bitspersample == 16)
+    if (bitspersample == 16) {
       extraSampleTypes[0] = EXTRASAMPLE_ASSOCALPHA;
-    else
+    }
+    else {
       extraSampleTypes[0] = EXTRASAMPLE_UNASSALPHA;
+    }
 
     /* RGBA images */
     TIFFSetField(image, TIFFTAG_EXTRASAMPLES, 1, extraSampleTypes);
@@ -825,7 +886,7 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
         /* convert from float source */
         float rgb[4];
 
-        if (channels_in_float == 3 || channels_in_float == 4) {
+        if (ELEM(channels_in_float, 3, 4)) {
           if (ibuf->float_colorspace || (ibuf->colormanage_flag & IMB_COLORMANAGE_IS_DATA)) {
             /* Float buffer was managed already, no need in color
              * space conversion.
@@ -856,12 +917,14 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
           rgb[3] = 1.0f;
         }
 
-        for (i = 0; i < samplesperpixel; i++, to_i++)
+        for (i = 0; i < samplesperpixel; i++, to_i++) {
           to16[to_i] = unit_float_to_ushort_clamp(rgb[i]);
+        }
       }
       else {
-        for (i = 0; i < samplesperpixel; i++, to_i++, from_i++)
+        for (i = 0; i < samplesperpixel; i++, to_i++, from_i++) {
           to[to_i] = from[from_i];
+        }
       }
     }
   }
@@ -892,18 +955,24 @@ int imb_savetiff(ImBuf *ibuf, const char *name, int flags)
       -1) {
     fprintf(stderr, "imb_savetiff: Could not write encoded TIFF.\n");
     TIFFClose(image);
-    if (pixels)
+    if (pixels) {
       _TIFFfree(pixels);
-    if (pixels16)
+    }
+    if (pixels16) {
       _TIFFfree(pixels16);
-    return (1);
+    }
+    return 1;
   }
 
   /* close the TIFF file */
   TIFFClose(image);
-  if (pixels)
+  if (pixels) {
     _TIFFfree(pixels);
-  if (pixels16)
+  }
+  if (pixels16) {
     _TIFFfree(pixels16);
-  return (1);
+  }
+  return 1;
 }
+
+/** \} */

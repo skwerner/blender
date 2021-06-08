@@ -27,8 +27,8 @@
 #include <Python.h>
 #include <structmember.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "bpy_utils_units.h"
 
@@ -66,22 +66,22 @@ static const char *bpyunits_ucategorie_items[] = {
 
 /**
  * These fields are just empty placeholders, actual values get set in initializations functions.
- * This allows us to avoid many handwriting, and above all, to keep all systems/categories definition stuff in
- * ``BKE_unit.h``.
+ * This allows us to avoid many handwriting, and above all,
+ * to keep all systems/categories definition stuff in ``BKE_unit.h``.
  */
 static PyStructSequence_Field bpyunits_systems_fields[ARRAY_SIZE(bpyunits_usystem_items)];
 static PyStructSequence_Field bpyunits_categories_fields[ARRAY_SIZE(bpyunits_ucategorie_items)];
 
 static PyStructSequence_Desc bpyunits_systems_desc = {
-    (char *)"bpy.utils.units.systems",                                /* name */
-    (char *)"This named tuple contains all pre-defined unit systems", /* doc */
-    bpyunits_systems_fields,                                          /* fields */
+    "bpy.utils.units.systems",                               /* name */
+    "This named tuple contains all predefined unit systems", /* doc */
+    bpyunits_systems_fields,                                 /* fields */
     ARRAY_SIZE(bpyunits_systems_fields) - 1,
 };
 static PyStructSequence_Desc bpyunits_categories_desc = {
-    (char *)"bpy.utils.units.categories",                           /* name */
-    (char *)"This named tuple contains all pre-defined unit names", /* doc */
-    bpyunits_categories_fields,                                     /* fields */
+    "bpy.utils.units.categories",                          /* name */
+    "This named tuple contains all predefined unit names", /* doc */
+    bpyunits_categories_fields,                            /* fields */
     ARRAY_SIZE(bpyunits_categories_fields) - 1,
 };
 
@@ -134,7 +134,7 @@ static bool bpyunits_validate(const char *usys_str, const char *ucat_str, int *r
     return false;
   }
 
-  if (!bUnit_IsValid(*r_usys, *r_ucat)) {
+  if (!BKE_unit_is_valid(*r_usys, *r_ucat)) {
     PyErr_Format(PyExc_ValueError,
                  "%.200s / %.200s unit system/category combination is not valid.",
                  usys_str,
@@ -197,7 +197,7 @@ static PyObject *bpyunits_to_value(PyObject *UNUSED(self), PyObject *args, PyObj
   str = PyMem_MALLOC(sizeof(*str) * (size_t)str_len);
   BLI_strncpy(str, inpt, (size_t)str_len);
 
-  bUnit_ReplaceString(str, (int)str_len, uref, scale, usys, ucat);
+  BKE_unit_replace_string(str, (int)str_len, uref, scale, usys, ucat);
 
   if (!PyC_RunString_AsNumber(NULL, str, "<bpy_units_api>", &result)) {
     if (PyErr_Occurred()) {
@@ -281,18 +281,21 @@ static PyObject *bpyunits_to_string(PyObject *UNUSED(self), PyObject *args, PyOb
 
   {
     /* Maximum expected length of string result:
-     * - number itself: precision + decimal dot + up to four 'above dot' digits.
-     * - unit: up to ten chars (six currently, let's be conservative, also because we use some utf8 chars).
-     * This can be repeated twice (e.g. 1m20cm), and we add ten more spare chars (spaces, trailing '\0'...).
+     * - Number itself: precision + decimal dot + up to four 'above dot' digits.
+     * - Unit: up to ten chars
+     *   (six currently, let's be conservative, also because we use some utf8 chars).
+     * This can be repeated twice (e.g. 1m20cm), and we add ten more spare chars
+     * (spaces, trailing '\0'...).
      * So in practice, 64 should be more than enough.
      */
     char buf1[64], buf2[64], *str;
     PyObject *result;
 
-    bUnit_AsString(buf1, sizeof(buf1), value, precision, usys, ucat, (bool)split_unit, false);
+    BKE_unit_value_as_string_adaptive(
+        buf1, sizeof(buf1), value, precision, usys, ucat, (bool)split_unit, false);
 
     if (compatible_unit) {
-      bUnit_ToUnitAltName(buf2, sizeof(buf2), buf1, usys, ucat);
+      BKE_unit_name_to_alt(buf2, sizeof(buf2), buf1, usys, ucat);
       str = buf2;
     }
     else {

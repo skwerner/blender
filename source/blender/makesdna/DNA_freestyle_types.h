@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __DNA_FREESTYLE_TYPES_H__
-#define __DNA_FREESTYLE_TYPES_H__
+#pragma once
 
 /** \file
  * \ingroup DNA
@@ -44,6 +43,7 @@ enum {
   FREESTYLE_ADVANCED_OPTIONS_FLAG = 1 << 4,
   FREESTYLE_CULLING = 1 << 5,
   FREESTYLE_VIEW_MAP_CACHE = 1 << 6,
+  FREESTYLE_AS_RENDER_PASS = 1 << 7,
 };
 
 /* FreestyleConfig::mode */
@@ -154,5 +154,3 @@ typedef struct FreestyleConfig {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __DNA_FREESTYLE_TYPES_H__ */

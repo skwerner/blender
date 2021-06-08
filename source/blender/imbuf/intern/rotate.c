@@ -26,16 +26,17 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "imbuf.h"
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "imbuf.h"
 
 void IMB_flipy(struct ImBuf *ibuf)
 {
   int x, y;
 
-  if (ibuf == NULL)
+  if (ibuf == NULL) {
     return;
+  }
 
   if (ibuf->rect) {
     unsigned int *top, *bottom, *line;
@@ -89,8 +90,9 @@ void IMB_flipx(struct ImBuf *ibuf)
   int x, y, xr, xl, yi;
   float px_f[4];
 
-  if (ibuf == NULL)
+  if (ibuf == NULL) {
     return;
+  }
 
   x = ibuf->x;
   y = ibuf->y;
@@ -106,11 +108,11 @@ void IMB_flipx(struct ImBuf *ibuf)
   if (ibuf->rect_float) {
     for (yi = y - 1; yi >= 0; yi--) {
       for (xr = x - 1, xl = 0; xr >= xl; xr--, xl++) {
-        memcpy(&px_f, &ibuf->rect_float[((x * yi) + xr) * 4], 4 * sizeof(float));
+        memcpy(&px_f, &ibuf->rect_float[((x * yi) + xr) * 4], sizeof(float[4]));
         memcpy(&ibuf->rect_float[((x * yi) + xr) * 4],
                &ibuf->rect_float[((x * yi) + xl) * 4],
-               4 * sizeof(float));
-        memcpy(&ibuf->rect_float[((x * yi) + xl) * 4], &px_f, 4 * sizeof(float));
+               sizeof(float[4]));
+        memcpy(&ibuf->rect_float[((x * yi) + xl) * 4], &px_f, sizeof(float[4]));
       }
     }
   }

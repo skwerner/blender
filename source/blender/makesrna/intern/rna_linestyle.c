@@ -32,8 +32,8 @@
 #include "DNA_material_types.h"
 #include "DNA_texture_types.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 const EnumPropertyItem rna_enum_linestyle_color_modifier_type_items[] = {
     {LS_MODIFIER_ALONG_STROKE, "ALONG_STROKE", ICON_MODIFIER, "Along Stroke", ""},
@@ -257,7 +257,7 @@ static char *rna_LineStyle_color_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("color_modifiers[\"%s\"]", name_esc);
 }
 
@@ -265,7 +265,7 @@ static char *rna_LineStyle_alpha_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("alpha_modifiers[\"%s\"]", name_esc);
 }
 
@@ -273,7 +273,7 @@ static char *rna_LineStyle_thickness_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("thickness_modifiers[\"%s\"]", name_esc);
 }
 
@@ -281,13 +281,13 @@ static char *rna_LineStyle_geometry_modifier_path(PointerRNA *ptr)
 {
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
   char name_esc[sizeof(m->name) * 2];
-  BLI_strescape(name_esc, m->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, m->name, sizeof(name_esc));
   return BLI_sprintfN("geometry_modifiers[\"%s\"]", name_esc);
 }
 
 static void rna_LineStyleColorModifier_name_set(PointerRNA *ptr, const char *value)
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
 
   BLI_strncpy_utf8(m->name, value, sizeof(m->name));
@@ -301,7 +301,7 @@ static void rna_LineStyleColorModifier_name_set(PointerRNA *ptr, const char *val
 
 static void rna_LineStyleAlphaModifier_name_set(PointerRNA *ptr, const char *value)
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
 
   BLI_strncpy_utf8(m->name, value, sizeof(m->name));
@@ -315,7 +315,7 @@ static void rna_LineStyleAlphaModifier_name_set(PointerRNA *ptr, const char *val
 
 static void rna_LineStyleThicknessModifier_name_set(PointerRNA *ptr, const char *value)
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
 
   BLI_strncpy_utf8(m->name, value, sizeof(m->name));
@@ -329,7 +329,7 @@ static void rna_LineStyleThicknessModifier_name_set(PointerRNA *ptr, const char 
 
 static void rna_LineStyleGeometryModifier_name_set(PointerRNA *ptr, const char *value)
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
   LineStyleModifier *m = (LineStyleModifier *)ptr->data;
 
   BLI_strncpy_utf8(m->name, value, sizeof(m->name));
@@ -343,29 +343,31 @@ static void rna_LineStyleGeometryModifier_name_set(PointerRNA *ptr, const char *
 
 static void rna_LineStyle_mtex_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
   rna_iterator_array_begin(iter, (void *)linestyle->mtex, sizeof(MTex *), MAX_MTEX, 0, NULL);
 }
 
 static PointerRNA rna_LineStyle_active_texture_get(PointerRNA *ptr)
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
   Tex *tex;
 
   tex = give_current_linestyle_texture(linestyle);
   return rna_pointer_inherit_refine(ptr, &RNA_Texture, tex);
 }
 
-static void rna_LineStyle_active_texture_set(PointerRNA *ptr, PointerRNA value)
+static void rna_LineStyle_active_texture_set(PointerRNA *ptr,
+                                             PointerRNA value,
+                                             struct ReportList *UNUSED(reports))
 {
-  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
 
   set_current_linestyle_texture(linestyle, value.data);
 }
 
 static void rna_LineStyle_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  FreestyleLineStyle *linestyle = ptr->id.data;
+  FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->owner_id;
 
   DEG_id_tag_update(&linestyle->id, 0);
   WM_main_add_notifier(NC_LINESTYLE, linestyle);
@@ -375,8 +377,9 @@ static void rna_LineStyle_use_nodes_update(bContext *C, PointerRNA *ptr)
 {
   FreestyleLineStyle *linestyle = (FreestyleLineStyle *)ptr->data;
 
-  if (linestyle->use_nodes && linestyle->nodetree == NULL)
+  if (linestyle->use_nodes && linestyle->nodetree == NULL) {
     BKE_linestyle_default_shader(C, linestyle);
+  }
 
   rna_LineStyle_update(CTX_data_main(C), CTX_data_scene(C), ptr);
 }
@@ -1570,7 +1573,7 @@ static void rna_def_linestyle_modifiers(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "pivot_u", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "pivot_u");
-  RNA_def_property_range(prop, 0.f, 1.f);
+  RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_ui_text(prop,
                            "Stroke Point Parameter",
                            "Pivot in terms of the stroke point parameter u (0 <= u <= 1)");
@@ -1917,7 +1920,7 @@ static void rna_def_linestyle(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "thickness_ratio", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "thickness_ratio");
-  RNA_def_property_range(prop, 0.f, 1.f);
+  RNA_def_property_range(prop, 0.0f, 1.0f);
   RNA_def_property_ui_text(
       prop,
       "Thickness Ratio",
@@ -2176,7 +2179,7 @@ static void rna_def_linestyle(BlenderRNA *brna)
   prop = RNA_def_property(srna, "texture_spacing", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "texstep");
   RNA_def_property_range(prop, 0.01f, 100.0f);
-  RNA_def_property_ui_text(prop, "Texture spacing", "Spacing for textures along stroke length");
+  RNA_def_property_ui_text(prop, "Texture Spacing", "Spacing for textures along stroke length");
   RNA_def_property_update(prop, NC_LINESTYLE, "rna_LineStyle_update");
 
   /* anim */
@@ -2185,6 +2188,7 @@ static void rna_def_linestyle(BlenderRNA *brna)
   /* nodes */
   prop = RNA_def_property(srna, "node_tree", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "nodetree");
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Node Tree", "Node tree for node-based shaders");
 
   prop = RNA_def_property(srna, "use_nodes", PROP_BOOLEAN, PROP_NONE);

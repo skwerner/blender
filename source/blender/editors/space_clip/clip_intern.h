@@ -21,8 +21,7 @@
  * \ingroup spclip
  */
 
-#ifndef __CLIP_INTERN_H__
-#define __CLIP_INTERN_H__
+#pragma once
 
 struct ARegion;
 struct MovieClip;
@@ -35,7 +34,7 @@ struct bContext;
 struct wmOperatorType;
 
 /* channel heights */
-#define CHANNEL_FIRST (-0.8f * U.widget_unit)
+#define CHANNEL_FIRST (-UI_TIME_SCRUB_MARGIN_Y - CHANNEL_HEIGHT_HALF - CHANNEL_SKIP)
 #define CHANNEL_HEIGHT (0.8f * U.widget_unit)
 #define CHANNEL_HEIGHT_HALF (0.4f * U.widget_unit)
 #define CHANNEL_SKIP (0.1f * U.widget_unit)
@@ -54,26 +53,26 @@ struct wmOperatorType;
 void ED_clip_buttons_register(struct ARegionType *art);
 
 /* clip_dopesheet_draw.c */
-void clip_draw_dopesheet_main(struct SpaceClip *sc, struct ARegion *ar, struct Scene *scene);
-void clip_draw_dopesheet_channels(const struct bContext *C, struct ARegion *ar);
+void clip_draw_dopesheet_main(struct SpaceClip *sc, struct ARegion *region, struct Scene *scene);
+void clip_draw_dopesheet_channels(const struct bContext *C, struct ARegion *region);
 
 /* clip_dopesheet_ops.c */
 void CLIP_OT_dopesheet_select_channel(struct wmOperatorType *ot);
 void CLIP_OT_dopesheet_view_all(struct wmOperatorType *ot);
 
 /* clip_draw.c */
-void clip_draw_main(const struct bContext *C, struct SpaceClip *sc, struct ARegion *ar);
+void clip_draw_main(const struct bContext *C, struct SpaceClip *sc, struct ARegion *region);
 void clip_draw_grease_pencil(struct bContext *C, int onlyv2d);
-void clip_draw_cache_and_notes(const bContext *C, SpaceClip *sc, ARegion *ar);
+void clip_draw_cache_and_notes(const bContext *C, SpaceClip *sc, ARegion *region);
 
 /* clip_editor.c */
 void clip_start_prefetch_job(const struct bContext *C);
 
 /* clip_graph_draw.c */
-void clip_draw_graph(struct SpaceClip *sc, struct ARegion *ar, struct Scene *scene);
+void clip_draw_graph(struct SpaceClip *sc, struct ARegion *region, struct Scene *scene);
 
 /* clip_graph_ops.c */
-void ED_clip_graph_center_current_frame(struct Scene *scene, struct ARegion *ar);
+void ED_clip_graph_center_current_frame(struct Scene *scene, struct ARegion *region);
 
 void CLIP_OT_graph_select(struct wmOperatorType *ot);
 void CLIP_OT_graph_select_box(struct wmOperatorType *ot);
@@ -94,6 +93,7 @@ void CLIP_OT_view_zoom_out(struct wmOperatorType *ot);
 void CLIP_OT_view_zoom_ratio(struct wmOperatorType *ot);
 void CLIP_OT_view_all(struct wmOperatorType *ot);
 void CLIP_OT_view_selected(struct wmOperatorType *ot);
+void CLIP_OT_view_center_cursor(struct wmOperatorType *ot);
 void CLIP_OT_change_frame(wmOperatorType *ot);
 void CLIP_OT_rebuild_proxy(struct wmOperatorType *ot);
 void CLIP_OT_mode_set(struct wmOperatorType *ot);
@@ -108,41 +108,50 @@ void CLIP_OT_set_scene_frames(wmOperatorType *ot);
 
 void CLIP_OT_cursor_set(struct wmOperatorType *ot);
 
+void CLIP_OT_lock_selection_toggle(struct wmOperatorType *ot);
+
 /* clip_toolbar.c */
-struct ARegion *ED_clip_has_properties_region(struct ScrArea *sa);
-void CLIP_OT_tools(struct wmOperatorType *ot);
-void CLIP_OT_properties(struct wmOperatorType *ot);
+struct ARegion *ED_clip_has_properties_region(struct ScrArea *area);
 
 /* clip_utils.c */
-void clip_graph_tracking_values_iterate_track(
-    struct SpaceClip *sc,
-    struct MovieTrackingTrack *track,
-    void *userdata,
-    void (*func)(void *userdata,
-                 struct MovieTrackingTrack *track,
-                 struct MovieTrackingMarker *marker,
-                 int coord,
-                 int scene_framenr,
-                 float val),
-    void (*segment_start)(
-        void *userdata, struct MovieTrackingTrack *track, int coord, bool is_point),
-    void (*segment_end)(void *userdata, int coord));
+
+typedef enum {
+  CLIP_VALUE_SOURCE_SPEED_X,
+  CLIP_VALUE_SOURCE_SPEED_Y,
+  CLIP_VALUE_SOURCE_REPROJECTION_ERROR,
+} eClipCurveValueSource;
+
+typedef void (*ClipTrackValueCallback)(void *userdata,
+                                       struct MovieTrackingTrack *track,
+                                       struct MovieTrackingMarker *marker,
+                                       eClipCurveValueSource value_source,
+                                       int scene_framenr,
+                                       float val);
+
+typedef void (*ClipTrackValueSegmentStartCallback)(void *userdata,
+                                                   struct MovieTrackingTrack *track,
+                                                   eClipCurveValueSource value_source,
+                                                   bool is_point);
+
+typedef void (*ClipTrackValueSegmentEndCallback)(void *userdata,
+                                                 eClipCurveValueSource value_source);
+
+bool clip_graph_value_visible(struct SpaceClip *sc, eClipCurveValueSource value_source);
+
+void clip_graph_tracking_values_iterate_track(struct SpaceClip *sc,
+                                              struct MovieTrackingTrack *track,
+                                              void *userdata,
+                                              ClipTrackValueCallback func,
+                                              ClipTrackValueSegmentStartCallback segment_start,
+                                              ClipTrackValueSegmentEndCallback segment_end);
 
 void clip_graph_tracking_values_iterate(struct SpaceClip *sc,
                                         bool selected_only,
                                         bool include_hidden,
                                         void *userdata,
-                                        void (*func)(void *userdata,
-                                                     struct MovieTrackingTrack *track,
-                                                     struct MovieTrackingMarker *marker,
-                                                     int coord,
-                                                     int scene_framenr,
-                                                     float val),
-                                        void (*segment_start)(void *userdata,
-                                                              struct MovieTrackingTrack *track,
-                                                              int coord,
-                                                              bool is_point),
-                                        void (*segment_end)(void *userdata, int coord));
+                                        ClipTrackValueCallback func,
+                                        ClipTrackValueSegmentStartCallback segment_start,
+                                        ClipTrackValueSegmentEndCallback segment_end);
 
 void clip_graph_tracking_iterate(struct SpaceClip *sc,
                                  bool selected_only,
@@ -162,13 +171,20 @@ void clip_delete_plane_track(struct bContext *C,
                              struct MovieClip *clip,
                              struct MovieTrackingPlaneTrack *plane_track);
 
+void clip_view_offset_for_center_to_point(
+    SpaceClip *sc, const float x, const float y, float *r_offset_x, float *r_offset_y);
 void clip_view_center_to_point(SpaceClip *sc, float x, float y);
+
+bool clip_view_calculate_view_selection(
+    const struct bContext *C, bool fit, float *r_offset_x, float *r_offset_y, float *r_zoom);
+
+bool clip_view_has_locked_selection(const struct bContext *C);
 
 void clip_draw_sfra_efra(struct View2D *v2d, struct Scene *scene);
 
 /* tracking_ops.c */
 struct MovieTrackingTrack *tracking_marker_check_slide(
-    struct bContext *C, const struct wmEvent *event, int *area_r, int *action_r, int *corner_r);
+    struct bContext *C, const struct wmEvent *event, int *r_area, int *r_action, int *r_corner);
 
 void CLIP_OT_add_marker(struct wmOperatorType *ot);
 void CLIP_OT_add_marker_at_click(struct wmOperatorType *ot);
@@ -182,6 +198,7 @@ void CLIP_OT_clear_solution(struct wmOperatorType *ot);
 
 void CLIP_OT_clear_track_path(struct wmOperatorType *ot);
 void CLIP_OT_join_tracks(struct wmOperatorType *ot);
+void CLIP_OT_average_tracks(struct wmOperatorType *ot);
 
 void CLIP_OT_disable_markers(struct wmOperatorType *ot);
 void CLIP_OT_hide_tracks(struct wmOperatorType *ot);
@@ -235,5 +252,3 @@ void CLIP_OT_select_box(struct wmOperatorType *ot);
 void CLIP_OT_select_lasso(struct wmOperatorType *ot);
 void CLIP_OT_select_circle(struct wmOperatorType *ot);
 void CLIP_OT_select_grouped(struct wmOperatorType *ot);
-
-#endif /* __CLIP_INTERN_H__ */

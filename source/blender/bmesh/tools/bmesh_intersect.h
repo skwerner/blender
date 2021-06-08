@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_INTERSECT_H__
-#define __BMESH_INTERSECT_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 bool BM_mesh_intersect(BMesh *bm,
                        struct BMLoop *(*looptris)[3],
@@ -43,4 +46,6 @@ enum {
   BMESH_ISECT_BOOLEAN_DIFFERENCE = 2,
 };
 
-#endif /* __BMESH_INTERSECT_H__ */
+#ifdef __cplusplus
+}
+#endif

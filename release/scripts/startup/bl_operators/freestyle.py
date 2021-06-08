@@ -20,6 +20,9 @@
 
 import bpy
 
+from bpy.types import (
+    Operator,
+)
 from bpy.props import (
     BoolProperty,
     EnumProperty,
@@ -27,7 +30,7 @@ from bpy.props import (
 )
 
 
-class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
+class SCENE_OT_freestyle_fill_range_by_selection(Operator):
     """Fill the Range Min/Max entries by the min/max distance between selected mesh objects and the source object """
     """(either a user-specified object or the active camera)"""
     bl_idname = "scene.freestyle_fill_range_by_selection"
@@ -89,16 +92,16 @@ class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
             min_dist = sys.float_info.max
             max_dist = -min_dist
             if m.type == 'DISTANCE_FROM_CAMERA':
-                ob_to_cam = matrix_to_camera * ob.matrix_world
+                ob_to_cam = matrix_to_camera @ ob.matrix_world
                 for vert in selected_verts:
                     # dist in the camera space
-                    dist = (ob_to_cam * vert.co).length
+                    dist = (ob_to_cam @ vert.co).length
                     min_dist = min(dist, min_dist)
                     max_dist = max(dist, max_dist)
             elif m.type == 'DISTANCE_FROM_OBJECT':
                 for vert in selected_verts:
                     # dist in the world space
-                    dist = (ob.matrix_world * vert.co - target_location).length
+                    dist = (ob.matrix_world @ vert.co - target_location).length
                     min_dist = min(dist, min_dist)
                     max_dist = max(dist, max_dist)
             # Fill the Range Min/Max entries with the computed distances
@@ -106,24 +109,24 @@ class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
             m.range_max = max_dist
             return {'FINISHED'}
         # Find selected mesh objects
-        selection = [ob for ob in scene.objects if ob.select_get() and ob.type == 'MESH' and ob.name != source.name]
+        selection = [ob for ob in scene.objects if ob.select_get() and ob.type == 'MESH' and ob.name != ref.name]
         if selection:
             # Compute the min/max distance from the reference to mesh vertices
             min_dist = sys.float_info.max
             max_dist = -min_dist
             if m.type == 'DISTANCE_FROM_CAMERA':
                 for ob in selection:
-                    ob_to_cam = matrix_to_camera * ob.matrix_world
+                    ob_to_cam = matrix_to_camera @ ob.matrix_world
                     for vert in ob.data.vertices:
                         # dist in the camera space
-                        dist = (ob_to_cam * vert.co).length
+                        dist = (ob_to_cam @ vert.co).length
                         min_dist = min(dist, min_dist)
                         max_dist = max(dist, max_dist)
             elif m.type == 'DISTANCE_FROM_OBJECT':
                 for ob in selection:
                     for vert in ob.data.vertices:
                         # dist in the world space
-                        dist = (ob.matrix_world * vert.co - target_location).length
+                        dist = (ob.matrix_world @ vert.co - target_location).length
                         min_dist = min(dist, min_dist)
                         max_dist = max(dist, max_dist)
             # Fill the Range Min/Max entries with the computed distances
@@ -132,7 +135,7 @@ class SCENE_OT_freestyle_fill_range_by_selection(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class SCENE_OT_freestyle_add_edge_marks_to_keying_set(bpy.types.Operator):
+class SCENE_OT_freestyle_add_edge_marks_to_keying_set(Operator):
     '''Add the data paths to the Freestyle Edge Mark property of selected edges to the active keying set'''
     bl_idname = "scene.freestyle_add_edge_marks_to_keying_set"
     bl_label = "Add Edge Marks to Keying Set"
@@ -163,7 +166,7 @@ class SCENE_OT_freestyle_add_edge_marks_to_keying_set(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class SCENE_OT_freestyle_add_face_marks_to_keying_set(bpy.types.Operator):
+class SCENE_OT_freestyle_add_face_marks_to_keying_set(Operator):
     '''Add the data paths to the Freestyle Face Mark property of selected polygons to the active keying set'''
     bl_idname = "scene.freestyle_add_face_marks_to_keying_set"
     bl_label = "Add Face Marks to Keying Set"
@@ -194,7 +197,7 @@ class SCENE_OT_freestyle_add_face_marks_to_keying_set(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class SCENE_OT_freestyle_module_open(bpy.types.Operator):
+class SCENE_OT_freestyle_module_open(Operator):
     """Open a style module file"""
     bl_idname = "scene.freestyle_module_open"
     bl_label = "Open Style Module File"
@@ -212,14 +215,14 @@ class SCENE_OT_freestyle_module_open(bpy.types.Operator):
         view_layer = context.view_layer
         return view_layer and view_layer.freestyle_settings.mode == 'SCRIPT'
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         self.freestyle_module = context.freestyle_module
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
-    def execute(self, context):
-        text = bpy.data.texts.load(self.filepath, self.make_internal)
+    def execute(self, _context):
+        text = bpy.data.texts.load(self.filepath, internal=self.make_internal)
         self.freestyle_module.script = text
         return {'FINISHED'}
 

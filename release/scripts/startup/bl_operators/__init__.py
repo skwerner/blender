@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
+from __future__ import annotations
 
 # support reloading sub-modules
 if "bpy" in locals():
@@ -27,12 +28,13 @@ if "bpy" in locals():
 _modules = [
     "add_mesh_torus",
     "anim",
+    "assets",
     "clip",
     "console",
     "constraint",
     "file",
+    "geometry_nodes",
     "image",
-    "mask",
     "mesh",
     "node",
     "object",
@@ -43,10 +45,10 @@ _modules = [
     "rigidbody",
     "screen_play_rendered_anim",
     "sequencer",
+    "spreadsheet",
     "userpref",
     "uvcalc_follow_active",
     "uvcalc_lightmap",
-    "uvcalc_smart_project",
     "vertexpaint_dirt",
     "view3d",
     "wm",

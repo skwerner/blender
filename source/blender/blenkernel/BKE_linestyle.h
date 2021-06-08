@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_LINESTYLE_H__
-#define __BKE_LINESTYLE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -38,22 +37,11 @@ extern "C" {
 
 struct ColorBand;
 struct Main;
-struct Object;
 struct ViewLayer;
 struct bContext;
 
 void BKE_linestyle_init(struct FreestyleLineStyle *linestyle);
 FreestyleLineStyle *BKE_linestyle_new(struct Main *bmain, const char *name);
-void BKE_linestyle_free(FreestyleLineStyle *linestyle);
-void BKE_linestyle_copy_data(struct Main *bmain,
-                             struct FreestyleLineStyle *linestyle_dst,
-                             const struct FreestyleLineStyle *linestyle_src,
-                             const int flag);
-FreestyleLineStyle *BKE_linestyle_copy(struct Main *bmain, const FreestyleLineStyle *linestyle);
-
-void BKE_linestyle_make_local(struct Main *bmain,
-                              struct FreestyleLineStyle *linestyle,
-                              const bool lib_local);
 
 FreestyleLineStyle *BKE_linestyle_active_from_view_layer(struct ViewLayer *view_layer);
 
@@ -116,5 +104,3 @@ void BKE_linestyle_default_shader(const struct bContext *C, FreestyleLineStyle *
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_LINESTYLE_H__ */

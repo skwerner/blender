@@ -26,7 +26,7 @@
 
 #include "BLI_utildefines.h"
 
-#include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 
 #include "RNA_access.h"
 
@@ -57,7 +57,7 @@ PyObject *pyrna_driver_get_variable_value(struct ChannelDriver *driver, struct D
       }
       else {
         /* object & property */
-        PropertyType type = RNA_property_type(prop);
+        const PropertyType type = RNA_property_type(prop);
         if (type == PROP_ENUM) {
           /* Note that enum's are converted to strings by default,
            * we want to avoid that, see: T52213 */
@@ -91,7 +91,7 @@ bool pyrna_driver_is_equal_anim_rna(const PathResolvedRNA *anim_rna, const PyObj
     const PointerRNA *ptr_a = &anim_rna->ptr;
     const PointerRNA *ptr_b = &(((const BPy_StructRNA *)py_anim_rna)->ptr);
 
-    if ((ptr_a->id.data == ptr_b->id.data) && (ptr_a->type == ptr_b->type) &&
+    if ((ptr_a->owner_id == ptr_b->owner_id) && (ptr_a->type == ptr_b->type) &&
         (ptr_a->data == ptr_b->data)) {
       return true;
     }

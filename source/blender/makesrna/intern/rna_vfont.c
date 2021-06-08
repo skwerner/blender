@@ -37,10 +37,10 @@
 
 #  include "WM_api.h"
 
-/* matching fnction in rna_ID.c */
+/* Matching function in rna_ID.c */
 static int rna_VectorFont_filepath_editable(PointerRNA *ptr, const char **UNUSED(r_info))
 {
-  VFont *vfont = ptr->id.data;
+  VFont *vfont = (VFont *)ptr->owner_id;
   if (BKE_vfont_is_builtin(vfont)) {
     return 0;
   }
@@ -51,7 +51,7 @@ static void rna_VectorFont_reload_update(Main *UNUSED(bmain),
                                          Scene *UNUSED(scene),
                                          PointerRNA *ptr)
 {
-  VFont *vf = ptr->id.data;
+  VFont *vf = (VFont *)ptr->owner_id;
   BKE_vfont_free_data(vf);
 
   /* update */
@@ -72,7 +72,7 @@ void RNA_def_vfont(BlenderRNA *brna)
   RNA_def_struct_ui_icon(srna, ICON_FILE_FONT);
 
   prop = RNA_def_property(srna, "filepath", PROP_STRING, PROP_FILEPATH);
-  RNA_def_property_string_sdna(prop, NULL, "name");
+  RNA_def_property_string_sdna(prop, NULL, "filepath");
   RNA_def_property_editable_func(prop, "rna_VectorFont_filepath_editable");
   RNA_def_property_ui_text(prop, "File Path", "");
   RNA_def_property_update(prop, NC_GEOM | ND_DATA, "rna_VectorFont_reload_update");

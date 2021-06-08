@@ -20,8 +20,11 @@
  * This file defines the 'bgl' module, used for drawing text in OpenGL.
  */
 
-#include <Python.h>
+/* Future-proof, See https://docs.python.org/3/c-api/arg.html#strings-and-buffers */
+#define PY_SSIZE_T_CLEAN
+
 #include "blf_py_api.h"
+#include <Python.h>
 
 #include "../../blenfont/BLF_api.h"
 
@@ -176,14 +179,14 @@ PyDoc_STRVAR(py_blf_draw_doc,
 static PyObject *py_blf_draw(PyObject *UNUSED(self), PyObject *args)
 {
   const char *text;
-  int text_length;
+  Py_ssize_t text_length;
   int fontid;
 
   if (!PyArg_ParseTuple(args, "is#:blf.draw", &fontid, &text, &text_length)) {
     return NULL;
   }
 
-  BLF_draw(fontid, text, (unsigned int)text_length);
+  BLF_draw(fontid, text, (uint)text_length);
 
   Py_RETURN_NONE;
 }
@@ -370,7 +373,7 @@ static PyObject *py_blf_shadow(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  if (level != 0 && level != 3 && level != 5) {
+  if (!ELEM(level, 0, 3, 5)) {
     PyErr_SetString(PyExc_TypeError, "blf.shadow expected arg to be in (0, 3, 5)");
     return NULL;
   }
@@ -468,7 +471,7 @@ static PyMethodDef BLF_methods[] = {
     {NULL, NULL, 0, NULL},
 };
 
-PyDoc_STRVAR(BLF_doc, "This module provides access to blenders text drawing functions.");
+PyDoc_STRVAR(BLF_doc, "This module provides access to Blender's text drawing functions.");
 static struct PyModuleDef BLF_module_def = {
     PyModuleDef_HEAD_INIT,
     "blf",       /* m_name */

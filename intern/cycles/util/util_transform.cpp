@@ -46,8 +46,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "util/util_projection.h"
 #include "util/util_transform.h"
+#include "util/util_projection.h"
 
 #include "util/util_boundbox.h"
 #include "util/util_math.h"
@@ -227,6 +227,7 @@ static void transform_decompose(DecomposedTransform *decomp, const Transform *tf
   M.y.w = 0.0f;
   M.z.w = 0.0f;
 
+#if 0
   Transform R = M;
   float norm;
   int iteration = 0;
@@ -260,10 +261,46 @@ static void transform_decompose(DecomposedTransform *decomp, const Transform *tf
   decomp->y.w = scale.x.x;
   decomp->z = make_float4(scale.x.y, scale.x.z, scale.y.x, scale.y.y);
   decomp->w = make_float4(scale.y.z, scale.z.x, scale.z.y, scale.z.z);
+#else
+  float3 colx = transform_get_column(&M, 0);
+  float3 coly = transform_get_column(&M, 1);
+  float3 colz = transform_get_column(&M, 2);
+
+  /* extract scale and shear first */
+  float3 scale, shear;
+  scale.x = len(colx);
+  colx = safe_divide_float3_float(colx, scale.x);
+  shear.z = dot(colx, coly);
+  coly -= shear.z * colx;
+  scale.y = len(coly);
+  coly = safe_divide_float3_float(coly, scale.y);
+  shear.y = dot(colx, colz);
+  colz -= shear.y * colx;
+  shear.x = dot(coly, colz);
+  colz -= shear.x * coly;
+  scale.z = len(colz);
+  colz = safe_divide_float3_float(colz, scale.z);
+
+  transform_set_column(&M, 0, colx);
+  transform_set_column(&M, 1, coly);
+  transform_set_column(&M, 2, colz);
+
+  if (transform_negative_scale(M)) {
+    scale *= -1.0f;
+    M = M * transform_scale(-1.0f, -1.0f, -1.0f);
+  }
+
+  decomp->x = transform_to_quat(M);
+
+  decomp->y.w = scale.x;
+  decomp->z = make_float4(shear.z, shear.y, 0.0f, scale.y);
+  decomp->w = make_float4(shear.x, 0.0f, 0.0f, scale.z);
+#endif
 }
 
 void transform_motion_decompose(DecomposedTransform *decomp, const Transform *motion, size_t size)
 {
+  /* Decompose and correct rotation. */
   for (size_t i = 0; i < size; i++) {
     transform_decompose(decomp + i, motion + i);
 
@@ -271,7 +308,28 @@ void transform_motion_decompose(DecomposedTransform *decomp, const Transform *mo
       /* Ensure rotation around shortest angle, negated quaternions are the same
        * but this means we don't have to do the check in quat_interpolate */
       if (dot(decomp[i - 1].x, decomp[i].x) < 0.0f)
-        decomp[i - 1].x = -decomp[i - 1].x;
+        decomp[i].x = -decomp[i].x;
+    }
+  }
+
+  /* Copy rotation to decomposed transform where scale is degenerate. This avoids weird object
+   * rotation interpolation when the scale goes to 0 for a time step.
+   *
+   * Note that this is very simple and naive implementation, which only deals with degenerated
+   * scale happening only on one frame. It is possible to improve it further by interpolating
+   * rotation into s degenerated range using rotation from time-steps from adjacent non-degenerated
+   * time steps. */
+  for (size_t i = 0; i < size; i++) {
+    const float3 scale = make_float3(decomp[i].y.w, decomp[i].z.w, decomp[i].w.w);
+    if (!is_zero(scale)) {
+      continue;
+    }
+
+    if (i > 0) {
+      decomp[i].x = decomp[i - 1].x;
+    }
+    else if (i < size - 1) {
+      decomp[i].x = decomp[i + 1].x;
     }
   }
 }

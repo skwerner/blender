@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __POLYGON_H__
-#define __POLYGON_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -100,8 +99,9 @@ template<class Point> class Polygon {
   inline Point getCenter()
   {
     Point result;
-    for (typename vector<Point>::iterator it = _vertices.begin(); it != _vertices.end(); it++)
+    for (typename vector<Point>::iterator it = _vertices.begin(); it != _vertices.end(); it++) {
       result += *it;
+    }
     result /= _vertices.size();
     return result;
   }
@@ -138,18 +138,21 @@ template<class Point> class Polygon {
   /////////////////////////////////////////////////////////////////////////////
   inline void computeBBox()
   {
-    if (_vertices.empty())
+    if (_vertices.empty()) {
       return;
+    }
 
     _max = _vertices[0];
     _min = _vertices[0];
 
     for (typename vector<Point>::iterator it = _vertices.begin(); it != _vertices.end(); it++) {
       for (unsigned int i = 0; i < Point::dim(); i++) {
-        if ((*it)[i] > _max[i])
+        if ((*it)[i] > _max[i]) {
           _max[i] = (*it)[i];
-        if ((*it)[i] < _min[i])
+        }
+        if ((*it)[i] < _min[i]) {
           _min[i] = (*it)[i];
+        }
       }
     }
   }
@@ -211,8 +214,9 @@ class Polygon3r : public Polygon<Vec3r> {
                            real epsilon = M_EPSILON) const
   {
 #if 0
-  if (_vertices.size() < 3)
-    return false;
+    if (_vertices.size() < 3) {
+      return false;
+    }
 #endif
     return GeomUtils::intersectRayTriangle(
         orig, dir, _vertices[0], _vertices[1], _vertices[2], t, u, v, epsilon);
@@ -225,5 +229,3 @@ class Polygon3r : public Polygon<Vec3r> {
 }  // end of namespace Geometry
 
 } /* namespace Freestyle */
-
-#endif  // __POLYGON_H__

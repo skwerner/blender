@@ -27,7 +27,7 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* Own subclass-ed vestion of std::vector. Subclass is needed because:
+/* Own subclass-ed version of std::vector. Subclass is needed because:
  *
  * - Use own allocator which keeps track of used/peak memory.
  * - Have method to ensure capacity is re-set to 0.
@@ -43,8 +43,8 @@ class vector : public std::vector<value_type, allocator_type> {
   /* Try as hard as possible to use zero memory. */
   void free_memory()
   {
-    BaseClass::resize(0);
-    BaseClass::shrink_to_fit();
+    vector<value_type, allocator_type> empty;
+    BaseClass::swap(empty);
   }
 
   /* Some external API might demand working with std::vector. */

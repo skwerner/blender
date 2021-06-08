@@ -25,11 +25,19 @@ from rna_prop_ui import PropertyPanel
 class MESH_MT_vertex_group_context_menu(Menu):
     bl_label = "Vertex Group Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
-        layout.operator("object.vertex_group_sort", icon='SORTALPHA', text="Sort by Name").sort_type = 'NAME'
-        layout.operator("object.vertex_group_sort", icon='BONE_DATA', text="Sort by Bone Hierarchy").sort_type = 'BONE_HIERARCHY'
+        layout.operator(
+            "object.vertex_group_sort",
+            icon='SORTALPHA',
+            text="Sort by Name",
+        ).sort_type = 'NAME'
+        layout.operator(
+            "object.vertex_group_sort",
+            icon='BONE_DATA',
+            text="Sort by Bone Hierarchy",
+        ).sort_type = 'BONE_HIERARCHY'
         layout.separator()
         layout.operator("object.vertex_group_copy", icon='DUPLICATE')
         layout.operator("object.vertex_group_copy_to_linked")
@@ -38,23 +46,30 @@ class MESH_MT_vertex_group_context_menu(Menu):
         layout.operator("object.vertex_group_mirror", icon='ARROW_LEFTRIGHT').use_topology = False
         layout.operator("object.vertex_group_mirror", text="Mirror Vertex Group (Topology)").use_topology = True
         layout.separator()
-        layout.operator("object.vertex_group_remove_from", icon='X', text="Remove from All Groups").use_all_groups = True
+        layout.operator(
+            "object.vertex_group_remove_from",
+            icon='X',
+            text="Remove from All Groups",
+        ).use_all_groups = True
         layout.operator("object.vertex_group_remove_from", text="Clear Active Group").use_all_verts = True
         layout.operator("object.vertex_group_remove", text="Delete All Unlocked Groups").all_unlocked = True
         layout.operator("object.vertex_group_remove", text="Delete All Groups").all = True
         layout.separator()
-        layout.operator("object.vertex_group_lock", icon='LOCKED', text="Lock All").action = 'LOCK'
-        layout.operator("object.vertex_group_lock", icon='UNLOCKED', text="UnLock All").action = 'UNLOCK'
-        layout.operator("object.vertex_group_lock", text="Lock Invert All").action = 'INVERT'
+        props = layout.operator("object.vertex_group_lock", icon='LOCKED', text="Lock All")
+        props.action, props.mask = 'LOCK', 'ALL'
+        props = layout.operator("object.vertex_group_lock", icon='UNLOCKED', text="Unlock All")
+        props.action, props.mask = 'UNLOCK', 'ALL'
+        props = layout.operator("object.vertex_group_lock", text="Lock Invert All")
+        props.action, props.mask = 'INVERT', 'ALL'
 
 
 class MESH_MT_shape_key_context_menu(Menu):
     bl_label = "Shape Key Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
-        layout.operator("object.shape_key_add", icon='ADD', text="New Shape From Mix").from_mix = True
+        layout.operator("object.shape_key_add", icon='ADD', text="New Shape from Mix").from_mix = True
         layout.separator()
         layout.operator("object.shape_key_mirror", icon='ARROW_LEFTRIGHT').use_topology = False
         layout.operator("object.shape_key_mirror", text="Mirror Shape Key (Topology)").use_topology = True
@@ -64,12 +79,12 @@ class MESH_MT_shape_key_context_menu(Menu):
         layout.separator()
         layout.operator("object.shape_key_remove", icon='X', text="Delete All Shape Keys").all = True
         layout.separator()
-        layout.operator("object.shape_key_move", icon='TRIA_UP_BAR', text="Move To Top").type = 'TOP'
-        layout.operator("object.shape_key_move", icon='TRIA_DOWN_BAR', text="Move To Bottom").type = 'BOTTOM'
+        layout.operator("object.shape_key_move", icon='TRIA_UP_BAR', text="Move to Top").type = 'TOP'
+        layout.operator("object.shape_key_move", icon='TRIA_DOWN_BAR', text="Move to Bottom").type = 'BOTTOM'
 
 
 class MESH_UL_vgroups(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data_, _active_propname, _index):
         # assert(isinstance(item, bpy.types.VertexGroup))
         vgroup = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
@@ -82,18 +97,18 @@ class MESH_UL_vgroups(UIList):
 
 
 class MESH_UL_fmaps(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, bpy.types.FaceMap))
         fmap = item
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             layout.prop(fmap, "name", text="", emboss=False, icon='FACE_MAPS')
-        elif self.layout_type in {'GRID'}:
+        elif self.layout_type == 'GRID':
             layout.alignment = 'CENTER'
             layout.label(text="", icon_value=icon)
 
 
 class MESH_UL_shape_keys(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, active_data, _active_propname, index):
         # assert(isinstance(item, bpy.types.ShapeKey))
         obj = active_data
         # key = data
@@ -102,12 +117,13 @@ class MESH_UL_shape_keys(UIList):
             split = layout.split(factor=0.66, align=False)
             split.prop(key_block, "name", text="", emboss=False, icon_value=icon)
             row = split.row(align=True)
+            row.emboss = 'UI_EMBOSS_NONE_OR_STATUS'
             if key_block.mute or (obj.mode == 'EDIT' and not (obj.use_shape_key_edit_mode and obj.type == 'MESH')):
                 row.active = False
             if not item.id_data.use_relative:
-                row.prop(key_block, "frame", text="", emboss=False)
+                row.prop(key_block, "frame", text="")
             elif index > 0:
-                row.prop(key_block, "value", text="", emboss=False)
+                row.prop(key_block, "value", text="")
             else:
                 row.label(text="")
             row.prop(key_block, "mute", text="", emboss=False)
@@ -117,7 +133,7 @@ class MESH_UL_shape_keys(UIList):
 
 
 class MESH_UL_uvmaps(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, (bpy.types.MeshTexturePolyLayer, bpy.types.MeshLoopColorLayer)))
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             layout.prop(item, "name", text="", emboss=False, icon='GROUP_UVS')
@@ -129,7 +145,7 @@ class MESH_UL_uvmaps(UIList):
 
 
 class MESH_UL_vcols(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         # assert(isinstance(item, (bpy.types.MeshTexturePolyLayer, bpy.types.MeshLoopColorLayer)))
         if self.layout_type in {'DEFAULT', 'COMPACT'}:
             layout.prop(item, "name", text="", emboss=False, icon='GROUP_VCOL')
@@ -180,28 +196,15 @@ class DATA_PT_normals(MeshButtonsPanel, Panel):
 
         mesh = context.mesh
 
-        col = layout.column()
-        col.prop(mesh, "show_double_sided")
-
-
-class DATA_PT_normals_auto_smooth(MeshButtonsPanel, Panel):
-    bl_label = "Auto Smooth"
-    bl_parent_id = "DATA_PT_normals"
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    def draw_header(self, context):
-        mesh = context.mesh
-
-        self.layout.prop(mesh, "use_auto_smooth", text="")
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        mesh = context.mesh
-
-        layout.active = mesh.use_auto_smooth and not mesh.has_custom_normals
-        layout.prop(mesh, "auto_smooth_angle", text="Angle")
+        col = layout.column(align=False, heading="Auto Smooth")
+        col.use_property_decorate = False
+        row = col.row(align=True)
+        sub = row.row(align=True)
+        sub.prop(mesh, "use_auto_smooth", text="")
+        sub = sub.row(align=True)
+        sub.active = mesh.use_auto_smooth and not mesh.has_custom_normals
+        sub.prop(mesh, "auto_smooth_angle", text="")
+        row.prop_decorator(mesh, "auto_smooth_angle")
 
 
 class DATA_PT_texture_space(MeshButtonsPanel, Panel):
@@ -263,7 +266,11 @@ class DATA_PT_vertex_groups(MeshButtonsPanel, Panel):
             col.operator("object.vertex_group_move", icon='TRIA_UP', text="").direction = 'UP'
             col.operator("object.vertex_group_move", icon='TRIA_DOWN', text="").direction = 'DOWN'
 
-        if ob.vertex_groups and (ob.mode == 'EDIT' or (ob.mode == 'WEIGHT_PAINT' and ob.type == 'MESH' and ob.data.use_paint_mask_vertex)):
+        if (
+                ob.vertex_groups and
+                (ob.mode == 'EDIT' or
+                 (ob.mode == 'WEIGHT_PAINT' and ob.type == 'MESH' and ob.data.use_paint_mask_vertex))
+        ):
             row = layout.row()
 
             sub = row.row(align=True)
@@ -340,9 +347,11 @@ class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
 
         enable_edit = ob.mode != 'EDIT'
         enable_edit_value = False
+        enable_pin = False
 
-        if ob.show_only_shape_key is False:
-            if enable_edit or (ob.type == 'MESH' and ob.use_shape_key_edit_mode):
+        if enable_edit or (ob.use_shape_key_edit_mode and ob.type == 'MESH'):
+            enable_pin = True
+            if ob.show_only_shape_key is False:
                 enable_edit_value = True
 
         row = layout.row()
@@ -380,7 +389,7 @@ class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
             sub = row.row(align=True)
             sub.label()  # XXX, for alignment only
             subsub = sub.row(align=True)
-            subsub.active = enable_edit_value
+            subsub.active = enable_pin
             subsub.prop(ob, "show_only_shape_key", text="")
             sub.prop(ob, "use_shape_key_edit_mode", text="")
 
@@ -390,10 +399,9 @@ class DATA_PT_shape_keys(MeshButtonsPanel, Panel):
             else:
                 sub.operator("object.shape_key_retime", icon='RECOVER_LAST', text="")
 
+            layout.use_property_split = True
             if key.use_relative:
                 if ob.active_shape_key_index != 0:
-                    layout.use_property_split = True
-
                     row = layout.row()
                     row.active = enable_edit_value
                     row.prop(kb, "value")
@@ -454,6 +462,75 @@ class DATA_PT_vertex_colors(MeshButtonsPanel, Panel):
         col.operator("mesh.vertex_color_remove", icon='REMOVE', text="")
 
 
+class DATA_PT_sculpt_vertex_colors(MeshButtonsPanel, Panel):
+    bl_label = "Sculpt Vertex Colors"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    @classmethod
+    def poll(cls, context):
+        return super().poll(context) and context.preferences.experimental.use_sculpt_vertex_colors
+
+    def draw(self, context):
+        layout = self.layout
+
+        me = context.mesh
+
+        row = layout.row()
+        col = row.column()
+
+        col.template_list(
+            "MESH_UL_vcols",
+            "svcols",
+            me,
+            "sculpt_vertex_colors",
+            me.sculpt_vertex_colors,
+            "active_index",
+            rows=2,
+        )
+
+        col = row.column(align=True)
+        col.operator("mesh.sculpt_vertex_color_add", icon='ADD', text="")
+        col.operator("mesh.sculpt_vertex_color_remove", icon='REMOVE', text="")
+
+        row = layout.row()
+        col = row.column()
+        col.operator("sculpt.vertex_to_loop_colors", text="Store Sculpt Vertex Color")
+        col.operator("sculpt.loop_to_vertex_colors", text="Load Sculpt Vertex Color")
+
+
+class DATA_PT_remesh(MeshButtonsPanel, Panel):
+    bl_label = "Remesh"
+    bl_options = {'DEFAULT_CLOSED'}
+    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+        row = layout.row()
+
+        mesh = context.mesh
+        row.prop(mesh, "remesh_mode", text="Mode", expand=True)
+        col = layout.column()
+        if mesh.remesh_mode == 'VOXEL':
+            col.prop(mesh, "remesh_voxel_size")
+            col.prop(mesh, "remesh_voxel_adaptivity")
+            col.prop(mesh, "use_remesh_fix_poles")
+            col.prop(mesh, "use_remesh_smooth_normals")
+
+            col = layout.column(heading="Preserve")
+            col.prop(mesh, "use_remesh_preserve_volume", text="Volume")
+            col.prop(mesh, "use_remesh_preserve_paint_mask", text="Paint Mask")
+            col.prop(mesh, "use_remesh_preserve_sculpt_face_sets", text="Face Sets")
+            if context.preferences.experimental.use_sculpt_vertex_colors:
+                col.prop(mesh, "use_remesh_preserve_vertex_colors", text="Vertex Colors")
+
+            col.operator("object.voxel_remesh", text="Voxel Remesh")
+        else:
+            col.operator("object.quadriflow_remesh", text="QuadriFlow Remesh")
+
+
 class DATA_PT_customdata(MeshButtonsPanel, Panel):
     bl_label = "Geometry Data"
     bl_options = {'DEFAULT_CLOSED'}
@@ -462,6 +539,7 @@ class DATA_PT_customdata(MeshButtonsPanel, Panel):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         obj = context.object
         me = context.mesh
@@ -475,12 +553,12 @@ class DATA_PT_customdata(MeshButtonsPanel, Panel):
         else:
             col.operator("mesh.customdata_custom_splitnormals_add", icon='ADD')
 
-        col = layout.column()
+        col = layout.column(heading="Store")
 
-        col.enabled = (obj.mode != 'EDIT')
-        col.prop(me, "use_customdata_vertex_bevel")
-        col.prop(me, "use_customdata_edge_bevel")
-        col.prop(me, "use_customdata_edge_crease")
+        col.enabled = obj is not None and obj.mode != 'EDIT'
+        col.prop(me, "use_customdata_vertex_bevel", text="Vertex Bevel Weight")
+        col.prop(me, "use_customdata_edge_bevel", text="Edge Bevel Weight")
+        col.prop(me, "use_customdata_edge_crease", text="Edge Crease")
 
 
 class DATA_PT_custom_props_mesh(MeshButtonsPanel, PropertyPanel, Panel):
@@ -502,10 +580,11 @@ classes = (
     DATA_PT_shape_keys,
     DATA_PT_uv_texture,
     DATA_PT_vertex_colors,
+    DATA_PT_sculpt_vertex_colors,
     DATA_PT_face_maps,
     DATA_PT_normals,
-    DATA_PT_normals_auto_smooth,
     DATA_PT_texture_space,
+    DATA_PT_remesh,
     DATA_PT_customdata,
     DATA_PT_custom_props_mesh,
 )

@@ -18,8 +18,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_NUMINPUT_H__
-#define __ED_NUMINPUT_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define NUM_STR_REP_LEN 64
 #define NUM_MAX_ELEMENTS 3
@@ -78,12 +81,16 @@ struct UnitSettings;
 
 /**
  * There are important things to note here for code using numinput:
- * - Values passed to #applyNumInput() should be valid and are stored as default ones (val_org), if it is not EDITED.
- * - bool returned by #applyNumInput should be used to decide whether to apply numinput-specific post-process to data.
- * - Once #applyNumInput has been called, #hasNumInput returns a valid value to decide whether to use numinput
- *   as drawstr source or not (i.e. to call #outputNumInput).
+ * - Values passed to #applyNumInput() should be valid and are stored as default ones (val_org),
+ *   if it is not EDITED.
+ * - bool returned by #applyNumInput should be used to decide whether to apply
+ *   numinput-specific post-process to data.
+ * - Once #applyNumInput has been called,
+ *   #hasNumInput returns a valid value to decide whether to use numinput as drawstr source or not
+ *   (i.e. to call #outputNumInput).
  *
- * Those two steps have to be separated (so do not use a common call to #hasNumInput() to do both in the same time!).
+ * Those two steps have to be separated
+ * (so do not use a common call to #hasNumInput() to do both in the same time!).
  */
 
 void initNumInput(NumInput *n);
@@ -92,12 +99,20 @@ bool hasNumInput(const NumInput *n);
 bool applyNumInput(NumInput *n, float *vec);
 bool handleNumInput(struct bContext *C, NumInput *n, const struct wmEvent *event);
 
+/** Share with `TFM_MODAL_CANCEL` in `transform.h`. */
 #define NUM_MODAL_INCREMENT_UP 18
 #define NUM_MODAL_INCREMENT_DOWN 19
 
-bool user_string_to_number(
-    bContext *C, const char *str, const struct UnitSettings *unit, int type, double *r_value);
+bool user_string_to_number(bContext *C,
+                           const char *str,
+                           const struct UnitSettings *unit,
+                           int type,
+                           double *r_value,
+                           const bool use_single_line_error,
+                           char **r_error);
 
 /** \} */
 
-#endif /* __ED_NUMINPUT_H__ */
+#ifdef __cplusplus
+}
+#endif

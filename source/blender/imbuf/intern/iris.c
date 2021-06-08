@@ -23,15 +23,15 @@
 
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
+#include "BLI_utildefines.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
 #include "IMB_filetype.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "imbuf.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_colormanagement_intern.h"
@@ -109,7 +109,7 @@ static void readheader(MFileOffset *inf, IMAGE *image);
 static int writeheader(FILE *outf, IMAGE *image);
 
 static ushort getshort(MFileOffset *inf);
-static uint getlong(MFileOffset *inf);
+static uint getlong(MFileOffset *mofs);
 static void putshort(FILE *outf, ushort val);
 static int putlong(FILE *outf, uint val);
 static int writetab(FILE *outf, uint *tab, int len);
@@ -122,7 +122,7 @@ static int expandrow2(
 static void interleaverow(uchar *lptr, const uchar *cptr, int z, int n);
 static void interleaverow2(float *lptr, const uchar *cptr, int z, int n);
 static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt);
-static void lumrow(uchar *rgbptr, uchar *lumptr, int n);
+static void lumrow(const uchar *rgbptr, uchar *lumptr, int n);
 
 /*
  * byte order independent read/write of shorts and ints.
@@ -221,10 +221,12 @@ static void test_endian_zbuf(struct ImBuf *ibuf)
   int len;
   int *zval;
 
-  if (BIG_LONG(1) == 1)
+  if (BIG_LONG(1) == 1) {
     return;
-  if (ibuf->zbuf == NULL)
+  }
+  if (ibuf->zbuf == NULL) {
     return;
+  }
 
   len = ibuf->x * ibuf->y;
   zval = ibuf->zbuf;
@@ -241,8 +243,11 @@ static void test_endian_zbuf(struct ImBuf *ibuf)
 /* this one is only def-ed once, strangely... */
 #define GSS(x) (((uchar *)(x))[1] << 8 | ((uchar *)(x))[0])
 
-int imb_is_a_iris(const uchar *mem)
+bool imb_is_a_iris(const uchar *mem, size_t size)
 {
+  if (size < 2) {
+    return false;
+  }
   return ((GS(mem) == IMAGIC) || (GSS(mem) == IMAGIC));
 }
 
@@ -265,11 +270,13 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
   ImBuf *ibuf = NULL;
   uchar dirty_flag = 0;
 
-  if (size < HEADER_SIZE) {
+  if (!imb_is_a_iris(mem, size)) {
     return NULL;
   }
 
-  if (!imb_is_a_iris(mem)) {
+  /* Could pe part of the magic check above,
+   * by convention this check only requests the size needed to read it's magic though. */
+  if (size < HEADER_SIZE) {
     return NULL;
   }
 
@@ -279,18 +286,18 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
   readheader(inf, &image);
   if (image.imagic != IMAGIC) {
     fprintf(stderr, "longimagedata: bad magic number in image file\n");
-    return (NULL);
+    return NULL;
   }
 
   rle = ISRLE(image.type);
   bpp = BPP(image.type);
-  if (bpp != 1 && bpp != 2) {
+  if (!ELEM(bpp, 1, 2)) {
     fprintf(stderr, "longimagedata: image must have 1 or 2 byte per pix chan\n");
-    return (NULL);
+    return NULL;
   }
   if ((uint)image.zsize > 8) {
     fprintf(stderr, "longimagedata: channels over 8 not supported\n");
-    return (NULL);
+    return NULL;
   }
 
   const int xsize = image.xsize;
@@ -299,9 +306,10 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
 
   if (flags & IB_test) {
     ibuf = IMB_allocImBuf(image.xsize, image.ysize, 8 * image.zsize, 0);
-    if (ibuf)
+    if (ibuf) {
       ibuf->ftype = IMB_FTYPE_IMAGIC;
-    return (ibuf);
+    }
+    return ibuf;
   }
 
   if (rle) {
@@ -334,8 +342,9 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
         }
         cur = starttab[y + z * ysize];
       }
-      if (badorder)
+      if (badorder) {
         break;
+      }
     }
 
     if (bpp == 1) {
@@ -344,8 +353,9 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
       if (!ibuf) {
         goto fail_rle;
       }
-      if (ibuf->planes > 32)
+      if (ibuf->planes > 32) {
         ibuf->planes = 32;
+      }
       base = ibuf->rect;
       zbase = (uint *)ibuf->zbuf;
 
@@ -458,8 +468,9 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
       if (!ibuf) {
         goto fail_uncompressed;
       }
-      if (ibuf->planes > 32)
+      if (ibuf->planes > 32) {
         ibuf->planes = 32;
+      }
 
       base = ibuf->rect;
       zbase = (uint *)ibuf->zbuf;
@@ -469,10 +480,12 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
 
       for (size_t z = 0; z < zsize; z++) {
 
-        if (z < 4)
+        if (z < 4) {
           lptr = base;
-        else if (z < 8)
+        }
+        else if (z < 8) {
           lptr = zbase;
+        }
 
         for (size_t y = 0; y < ysize; y++) {
           const uchar *rledat_next = rledat + xsize;
@@ -590,7 +603,7 @@ struct ImBuf *imb_loadiris(const uchar *mem, size_t size, int flags, char colors
     IMB_convert_rgba_to_abgr(ibuf);
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 /* static utility functions for longimagedata */
@@ -640,8 +653,9 @@ static int expandrow2(
     pixel = (iptr[0] << 8) | (iptr[1] << 0);
     iptr = iptr_next;
 
-    if (!(count = (pixel & 0x7f)))
+    if (!(count = (pixel & 0x7f))) {
       return false;
+    }
     const float *optr_next = optr + count;
     EXPAND_CAPACITY_AT_OUTPUT_OK_OR_FAIL(optr_next);
     if (pixel & 0x80) {
@@ -725,8 +739,9 @@ static int expandrow(
     EXPAND_CAPACITY_AT_INPUT_OK_OR_FAIL(iptr_next);
     pixel = *iptr;
     iptr = iptr_next;
-    if (!(count = (pixel & 0x7f)))
+    if (!(count = (pixel & 0x7f))) {
       return false;
+    }
     const uchar *optr_next = optr + ((int)count * 4);
     EXPAND_CAPACITY_AT_OUTPUT_OK_OR_FAIL(optr_next);
 
@@ -797,7 +812,7 @@ fail:
  * Added: zbuf write
  */
 
-static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *name, int *zptr)
+static bool output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *name, int *zptr)
 {
   FILE *outf;
   IMAGE *image;
@@ -809,8 +824,9 @@ static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *
 
   goodwrite = 1;
   outf = BLI_fopen(name, "wb");
-  if (!outf)
+  if (!outf) {
     return 0;
+  }
 
   tablen = ysize * zsize * sizeof(int);
 
@@ -824,10 +840,12 @@ static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *
   memset(image, 0, sizeof(IMAGE));
   image->imagic = IMAGIC;
   image->type = RLE(1);
-  if (zsize > 1)
+  if (zsize > 1) {
     image->dim = 3;
-  else
+  }
+  else {
     image->dim = 2;
+  }
   image->xsize = xsize;
   image->ysize = ysize;
   image->zsize = zsize;
@@ -862,8 +880,9 @@ static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *
       pos += len;
     }
     lptr += xsize;
-    if (zptr)
+    if (zptr) {
       zptr += xsize;
+    }
   }
 
   fseek(outf, HEADER_SIZE, SEEK_SET);
@@ -875,17 +894,17 @@ static int output_iris(uint *lptr, int xsize, int ysize, int zsize, const char *
   MEM_freeN(rlebuf);
   MEM_freeN(lumbuf);
   fclose(outf);
-  if (goodwrite)
+  if (goodwrite) {
     return 1;
-  else {
-    fprintf(stderr, "output_iris: not enough space for image!!\n");
-    return 0;
   }
+
+  fprintf(stderr, "output_iris: not enough space for image!!\n");
+  return 0;
 }
 
 /* static utility functions for output_iris */
 
-static void lumrow(uchar *rgbptr, uchar *lumptr, int n)
+static void lumrow(const uchar *rgbptr, uchar *lumptr, int n)
 {
   lumptr += CHANOFFSET(0);
   while (n--) {
@@ -909,8 +928,9 @@ static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt)
   while (iptr < ibufend) {
     sptr = iptr;
     iptr += 8;
-    while ((iptr < ibufend) && ((iptr[-8] != iptr[-4]) || (iptr[-4] != iptr[0])))
+    while ((iptr < ibufend) && ((iptr[-8] != iptr[-4]) || (iptr[-4] != iptr[0]))) {
       iptr += 4;
+    }
     iptr -= 8;
     count = (iptr - sptr) / 4;
     while (count) {
@@ -939,8 +959,9 @@ static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt)
     sptr = iptr;
     cc = *iptr;
     iptr += 4;
-    while ((iptr < ibufend) && (*iptr == cc))
+    while ((iptr < ibufend) && (*iptr == cc)) {
       iptr += 4;
+    }
     count = (iptr - sptr) / 4;
     while (count) {
       todo = count > 126 ? 126 : count;
@@ -953,23 +974,23 @@ static int compressrow(uchar *lbuf, uchar *rlebuf, int z, int cnt)
   return optr - (uchar *)rlebuf;
 }
 
-int imb_saveiris(struct ImBuf *ibuf, const char *name, int flags)
+bool imb_saveiris(struct ImBuf *ibuf, const char *filepath, int flags)
 {
   short zsize;
-  int ret;
 
   zsize = (ibuf->planes + 7) >> 3;
-  if (flags & IB_zbuf && ibuf->zbuf != NULL)
+  if (flags & IB_zbuf && ibuf->zbuf != NULL) {
     zsize = 8;
+  }
 
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  ret = output_iris(ibuf->rect, ibuf->x, ibuf->y, zsize, name, ibuf->zbuf);
+  const bool ok = output_iris(ibuf->rect, ibuf->x, ibuf->y, zsize, filepath, ibuf->zbuf);
 
   /* restore! Quite clumsy, 2 times a switch... maybe better a malloc ? */
   IMB_convert_rgba_to_abgr(ibuf);
   test_endian_zbuf(ibuf);
 
-  return (ret);
+  return ok;
 }

@@ -33,16 +33,15 @@
 #include "BLI_threads.h"
 
 #include "BKE_bvhutils.h"
+#include "BKE_lib_id.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_runtime.h"
-#include "BKE_subdiv_ccg.h"
 #include "BKE_shrinkwrap.h"
+#include "BKE_subdiv_ccg.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Mesh Runtime Struct Utils
  * \{ */
-
-static ThreadRWMutex loops_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 
 /**
  * Default values defined at read time.
@@ -50,6 +49,8 @@ static ThreadRWMutex loops_cache_lock = PTHREAD_RWLOCK_INITIALIZER;
 void BKE_mesh_runtime_reset(Mesh *mesh)
 {
   memset(&mesh->runtime, 0, sizeof(mesh->runtime));
+  mesh->runtime.eval_mutex = MEM_mallocN(sizeof(ThreadMutex), "mesh runtime eval_mutex");
+  BLI_mutex_init(mesh->runtime.eval_mutex);
 }
 
 /* Clear all pointers which we don't want to be shared on copying the datablock.
@@ -59,16 +60,30 @@ void BKE_mesh_runtime_reset_on_copy(Mesh *mesh, const int UNUSED(flag))
 {
   Mesh_Runtime *runtime = &mesh->runtime;
 
+  runtime->mesh_eval = NULL;
   runtime->edit_data = NULL;
   runtime->batch_cache = NULL;
   runtime->subdiv_ccg = NULL;
   memset(&runtime->looptris, 0, sizeof(runtime->looptris));
   runtime->bvh_cache = NULL;
   runtime->shrinkwrap_data = NULL;
+
+  mesh->runtime.eval_mutex = MEM_mallocN(sizeof(ThreadMutex), "mesh runtime eval_mutex");
+  BLI_mutex_init(mesh->runtime.eval_mutex);
 }
 
 void BKE_mesh_runtime_clear_cache(Mesh *mesh)
 {
+  if (mesh->runtime.eval_mutex != NULL) {
+    BLI_mutex_end(mesh->runtime.eval_mutex);
+    MEM_freeN(mesh->runtime.eval_mutex);
+    mesh->runtime.eval_mutex = NULL;
+  }
+  if (mesh->runtime.mesh_eval != NULL) {
+    mesh->runtime.mesh_eval->edit_mesh = NULL;
+    BKE_id_free(NULL, mesh->runtime.mesh_eval);
+    mesh->runtime.mesh_eval = NULL;
+  }
   BKE_mesh_runtime_clear_geometry(mesh);
   BKE_mesh_batch_cache_free(mesh);
   BKE_mesh_runtime_clear_edit_data(mesh);
@@ -78,7 +93,8 @@ void BKE_mesh_runtime_clear_cache(Mesh *mesh)
 /**
  * Ensure the array is large enough
  *
- * \note This function must always be thread-protected by caller. It should only be used by internal code.
+ * \note This function must always be thread-protected by caller.
+ * It should only be used by internal code.
  */
 static void mesh_ensure_looptri_data(Mesh *mesh)
 {
@@ -138,25 +154,21 @@ int BKE_mesh_runtime_looptri_len(const Mesh *mesh)
 /* This is a ported copy of dm_getLoopTriArray(dm). */
 const MLoopTri *BKE_mesh_runtime_looptri_ensure(Mesh *mesh)
 {
-  MLoopTri *looptri;
+  ThreadMutex *mesh_eval_mutex = (ThreadMutex *)mesh->runtime.eval_mutex;
+  BLI_mutex_lock(mesh_eval_mutex);
 
-  BLI_rw_mutex_lock(&loops_cache_lock, THREAD_LOCK_READ);
-  looptri = mesh->runtime.looptris.array;
-  BLI_rw_mutex_unlock(&loops_cache_lock);
+  MLoopTri *looptri = mesh->runtime.looptris.array;
 
   if (looptri != NULL) {
     BLI_assert(BKE_mesh_runtime_looptri_len(mesh) == mesh->runtime.looptris.len);
   }
   else {
-    BLI_rw_mutex_lock(&loops_cache_lock, THREAD_LOCK_WRITE);
-    /* We need to ensure array is still NULL inside mutex-protected code, some other thread might have already
-     * recomputed those looptris. */
-    if (mesh->runtime.looptris.array == NULL) {
-      BKE_mesh_runtime_looptri_recalc(mesh);
-    }
+    BKE_mesh_runtime_looptri_recalc(mesh);
     looptri = mesh->runtime.looptris.array;
-    BLI_rw_mutex_unlock(&loops_cache_lock);
   }
+
+  BLI_mutex_unlock(mesh_eval_mutex);
+
   return looptri;
 }
 
@@ -166,8 +178,7 @@ void BKE_mesh_runtime_verttri_from_looptri(MVertTri *r_verttri,
                                            const MLoopTri *looptri,
                                            int looptri_num)
 {
-  int i;
-  for (i = 0; i < looptri_num; i++) {
+  for (int i = 0; i < looptri_num; i++) {
     r_verttri[i].tri[0] = mloop[looptri[i].tri[0]].v;
     r_verttri[i].tri[1] = mloop[looptri[i].tri[1]].v;
     r_verttri[i].tri[2] = mloop[looptri[i].tri[2]].v;
@@ -184,28 +195,40 @@ bool BKE_mesh_runtime_ensure_edit_data(struct Mesh *mesh)
   return true;
 }
 
+bool BKE_mesh_runtime_reset_edit_data(Mesh *mesh)
+{
+  EditMeshData *edit_data = mesh->runtime.edit_data;
+  if (edit_data == NULL) {
+    return false;
+  }
+
+  MEM_SAFE_FREE(edit_data->polyCos);
+  MEM_SAFE_FREE(edit_data->polyNos);
+  MEM_SAFE_FREE(edit_data->vertexCos);
+  MEM_SAFE_FREE(edit_data->vertexNos);
+
+  return true;
+}
+
 bool BKE_mesh_runtime_clear_edit_data(Mesh *mesh)
 {
   if (mesh->runtime.edit_data == NULL) {
     return false;
   }
+  BKE_mesh_runtime_reset_edit_data(mesh);
 
-  if (mesh->runtime.edit_data->polyCos != NULL)
-    MEM_freeN((void *)mesh->runtime.edit_data->polyCos);
-  if (mesh->runtime.edit_data->polyNos != NULL)
-    MEM_freeN((void *)mesh->runtime.edit_data->polyNos);
-  if (mesh->runtime.edit_data->vertexCos != NULL)
-    MEM_freeN((void *)mesh->runtime.edit_data->vertexCos);
-  if (mesh->runtime.edit_data->vertexNos != NULL)
-    MEM_freeN((void *)mesh->runtime.edit_data->vertexNos);
+  MEM_freeN(mesh->runtime.edit_data);
+  mesh->runtime.edit_data = NULL;
 
-  MEM_SAFE_FREE(mesh->runtime.edit_data);
   return true;
 }
 
 void BKE_mesh_runtime_clear_geometry(Mesh *mesh)
 {
-  bvhcache_free(&mesh->runtime.bvh_cache);
+  if (mesh->runtime.bvh_cache) {
+    bvhcache_free(mesh->runtime.bvh_cache);
+    mesh->runtime.bvh_cache = NULL;
+  }
   MEM_SAFE_FREE(mesh->runtime.looptris.array);
   /* TODO(sergey): Does this really belong here? */
   if (mesh->runtime.subdiv_ccg != NULL) {
@@ -222,10 +245,10 @@ void BKE_mesh_runtime_clear_geometry(Mesh *mesh)
  * \{ */
 
 /* Draw Engine */
-void (*BKE_mesh_batch_cache_dirty_tag_cb)(Mesh *me, int mode) = NULL;
+void (*BKE_mesh_batch_cache_dirty_tag_cb)(Mesh *me, eMeshBatchDirtyMode mode) = NULL;
 void (*BKE_mesh_batch_cache_free_cb)(Mesh *me) = NULL;
 
-void BKE_mesh_batch_cache_dirty_tag(Mesh *me, int mode)
+void BKE_mesh_batch_cache_dirty_tag(Mesh *me, eMeshBatchDirtyMode mode)
 {
   if (me->runtime.batch_cache) {
     BKE_mesh_batch_cache_dirty_tag_cb(me, mode);
@@ -240,6 +263,7 @@ void BKE_mesh_batch_cache_free(Mesh *me)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Mesh runtime debug helpers.
  * \{ */
 /* evaluated mesh info printing function,
@@ -285,9 +309,15 @@ char *BKE_mesh_runtime_debug_info(Mesh *me_eval)
 #  if 0
   const char *tstr;
   switch (me_eval->type) {
-    case DM_TYPE_CDDM:     tstr = "DM_TYPE_CDDM";     break;
-    case DM_TYPE_CCGDM:    tstr = "DM_TYPE_CCGDM";     break;
-    default:               tstr = "UNKNOWN";           break;
+    case DM_TYPE_CDDM:
+      tstr = "DM_TYPE_CDDM";
+      break;
+    case DM_TYPE_CCGDM:
+      tstr = "DM_TYPE_CCGDM";
+      break;
+    default:
+      tstr = "UNKNOWN";
+      break;
   }
   BLI_dynstr_appendf(dynstr, "    'type': '%s',\n", tstr);
 #  endif

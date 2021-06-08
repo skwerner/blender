@@ -27,16 +27,17 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "BLI_utildefines.h"
 #include "BLI_stack.h"
+#include "BLI_utildefines.h"
 
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 
-namespace DEG {
+namespace blender::deg {
 
 namespace {
 
@@ -75,22 +76,22 @@ struct CyclesSolverState {
   int num_cycles;
 };
 
-BLI_INLINE void set_node_visited_state(Node *node, eCyclicCheckVisitedState state)
+inline void set_node_visited_state(Node *node, eCyclicCheckVisitedState state)
 {
   node->custom_flags = (node->custom_flags & ~0x3) | (int)state;
 }
 
-BLI_INLINE eCyclicCheckVisitedState get_node_visited_state(Node *node)
+inline eCyclicCheckVisitedState get_node_visited_state(Node *node)
 {
   return (eCyclicCheckVisitedState)(node->custom_flags & 0x3);
 }
 
-BLI_INLINE void set_node_num_visited_children(Node *node, int num_children)
+inline void set_node_num_visited_children(Node *node, int num_children)
 {
   node->custom_flags = (node->custom_flags & 0x3) | (num_children << 2);
 }
 
-BLI_INLINE int get_node_num_visited_children(Node *node)
+inline int get_node_num_visited_children(Node *node)
 {
   return node->custom_flags >> 2;
 }
@@ -99,8 +100,8 @@ void schedule_node_to_stack(CyclesSolverState *state, OperationNode *node)
 {
   StackEntry entry;
   entry.node = node;
-  entry.from = NULL;
-  entry.via_relation = NULL;
+  entry.from = nullptr;
+  entry.via_relation = nullptr;
   BLI_stack_push(state->traversal_stack, &entry);
   set_node_visited_state(node, NODE_IN_STACK);
 }
@@ -149,7 +150,7 @@ bool check_relation_can_murder(Relation *relation)
 
 Relation *select_relation_to_murder(Relation *relation, StackEntry *cycle_start_entry)
 {
-  /* More or less russian roulette solver, which will make sure only
+  /* More or less Russian roulette solver, which will make sure only
    * specially marked relations are kept alive.
    *
    * TODO(sergey): There might be better strategies here. */
@@ -176,26 +177,22 @@ void solve_cycles(CyclesSolverState *state)
     OperationNode *node = entry->node;
     bool all_child_traversed = true;
     const int num_visited = get_node_num_visited_children(node);
-    for (int i = num_visited; i < node->outlinks.size(); ++i) {
+    for (int i = num_visited; i < node->outlinks.size(); i++) {
       Relation *rel = node->outlinks[i];
       if (rel->to->type == NodeType::OPERATION) {
         OperationNode *to = (OperationNode *)rel->to;
         eCyclicCheckVisitedState to_state = get_node_visited_state(to);
         if (to_state == NODE_IN_STACK) {
-          printf("Dependency cycle detected:\n");
-          printf("  '%s' depends on '%s' through '%s'\n",
-                 to->full_identifier().c_str(),
-                 node->full_identifier().c_str(),
-                 rel->name);
+          string cycle_str = "  " + to->full_identifier() + " depends on\n  " +
+                             node->full_identifier() + " via '" + rel->name + "'\n";
           StackEntry *current = entry;
           while (current->node != to) {
-            BLI_assert(current != NULL);
-            printf("  '%s' depends on '%s' through '%s'\n",
-                   current->node->full_identifier().c_str(),
-                   current->from->node->full_identifier().c_str(),
-                   current->via_relation->name);
+            BLI_assert(current != nullptr);
+            cycle_str += "  " + current->from->node->full_identifier() + " via '" +
+                         current->via_relation->name + "'\n";
             current = current->from;
           }
+          printf("Dependency cycle detected:\n%s", cycle_str.c_str());
           Relation *sacrificial_relation = select_relation_to_murder(rel, entry);
           sacrificial_relation->flag |= RELATION_FLAG_CYCLIC;
           ++state->num_cycles;
@@ -237,4 +234,4 @@ void deg_graph_detect_cycles(Depsgraph *graph)
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

@@ -33,17 +33,17 @@
 
 #include <string.h>
 
-#include "MEM_guardedalloc.h"
-#include "BLI_listbase.h"
-#include "BLI_linklist.h"
 #include "BLI_alloca.h"
 #include "BLI_ghash.h"
-#include "BLI_mempool.h"
+#include "BLI_linklist.h"
 #include "BLI_linklist_stack.h"
+#include "BLI_listbase.h"
+#include "BLI_mempool.h"
+#include "MEM_guardedalloc.h"
 
 #include "bmesh.h"
 
-#include "tools/bmesh_region_match.h" /* own incldue */
+#include "tools/bmesh_region_match.h" /* own include */
 
 /* avoid re-creating ghash and pools for each search */
 #define USE_WALKER_REUSE
@@ -67,8 +67,6 @@
 #include "BLI_strict_flags.h"
 
 /* -------------------------------------------------------------------- */
-/* UUID-Walk API */
-
 /** \name Internal UUIDWalk API
  * \{ */
 
@@ -95,13 +93,13 @@ typedef struct UUIDWalk {
   BLI_mempool *step_pool;
   BLI_mempool *step_pool_items;
 
-  /* Optionaly use face-tag to isolate search */
+  /* Optionally use face-tag to isolate search */
   bool use_face_isolate;
 
   /* Increment for each pass added */
   UUID_Int pass;
 
-  /* runtime vars, aviod re-creating each pass */
+  /* runtime vars, avoid re-creating each pass */
   struct {
     GHash *verts_uuid; /* BMVert -> UUID */
     GSet *faces_step;  /* BMFace */
@@ -139,9 +137,7 @@ BLI_INLINE bool bm_uuidwalk_face_test(UUIDWalk *uuidwalk, BMFace *f)
   if (uuidwalk->use_face_isolate) {
     return BM_elem_flag_test_bool(f, BM_ELEM_TAG);
   }
-  else {
-    return true;
-  }
+  return true;
 }
 
 BLI_INLINE bool bm_uuidwalk_vert_lookup(UUIDWalk *uuidwalk, BMVert *v, UUID_Int *r_uuid)
@@ -152,9 +148,7 @@ BLI_INLINE bool bm_uuidwalk_vert_lookup(UUIDWalk *uuidwalk, BMVert *v, UUID_Int 
     *r_uuid = (UUID_Int)(*ret);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 BLI_INLINE bool bm_uuidwalk_face_lookup(UUIDWalk *uuidwalk, BMFace *f, UUID_Int *r_uuid)
@@ -165,9 +159,7 @@ BLI_INLINE bool bm_uuidwalk_face_lookup(UUIDWalk *uuidwalk, BMFace *f, UUID_Int 
     *r_uuid = (UUID_Int)(*ret);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 static uint ghashutil_bmelem_indexhash(const void *key)
@@ -566,12 +558,10 @@ static int bm_face_len_cmp(const void *v1, const void *v2)
   if (f1->len > f2->len) {
     return 1;
   }
-  else if (f1->len < f2->len) {
+  if (f1->len < f2->len) {
     return -1;
   }
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 static uint bm_uuidwalk_init_from_edge(UUIDWalk *uuidwalk, BMEdge *e)
@@ -623,6 +613,7 @@ static uint bm_uuidwalk_init_from_edge(UUIDWalk *uuidwalk, BMEdge *e)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal UUIDFaceStep API
  * \{ */
 
@@ -854,8 +845,7 @@ static BMFace **bm_mesh_region_match_pair(
     uint i;
 
     faces_result = MEM_mallocN(sizeof(*faces_result) * (faces_result_len + 1), __func__);
-    GHASH_ITER_INDEX(gh_iter, w_dst->faces_uuid, i)
-    {
+    GHASH_ITER_INDEX (gh_iter, w_dst->faces_uuid, i) {
       BMFace *f = BLI_ghashIterator_getKey(&gh_iter);
       faces_result[i] = f;
     }
@@ -916,11 +906,17 @@ static void bm_face_array_visit(BMFace **faces,
 
 #ifdef USE_PIVOT_SEARCH
 
+/* -------------------------------------------------------------------- */
 /** \name Internal UUIDWalk API
  * \{ */
 
 /* signed user id */
 typedef intptr_t SUID_Int;
+
+BLI_INLINE intptr_t abs_intptr(intptr_t a)
+{
+  return (a < 0) ? -a : a;
+}
 
 static bool bm_edge_is_region_boundary(BMEdge *e)
 {
@@ -933,10 +929,8 @@ static bool bm_edge_is_region_boundary(BMEdge *e)
     } while ((l_iter = l_iter->radial_next) != e->l);
     return false;
   }
-  else {
-    /* boundary */
-    return true;
-  }
+  /* boundary */
+  return true;
 }
 
 static void bm_face_region_pivot_edge_use_best(GHash *gh,
@@ -985,7 +979,7 @@ static SUID_Int bm_face_region_vert_boundary_id(BMVert *v)
 
   id ^= (tot * PRIME_VERT_MID_B);
 
-  return id ? ABS(id) : 1;
+  return id ? abs_intptr(id) : 1;
 
 #  undef PRIME_VERT_SMALL_A
 #  undef PRIME_VERT_SMALL_B
@@ -1040,7 +1034,7 @@ static SUID_Int bm_face_region_vert_pass_id(GHash *gh, BMVert *v)
   /* disallow 0 & min (since it can't be flipped) */
   id = (UNLIKELY(id == 0) ? 1 : UNLIKELY(id < id_min) ? id_min : id);
 
-  return ABS(id);
+  return abs_intptr(id);
 
 #  undef PRIME_VERT_MID_A
 #  undef PRIME_VERT_MID_B
@@ -1100,7 +1094,7 @@ static BMEdge *bm_face_region_pivot_edge_find(BMFace **faces_region,
         }
       }
       else {
-        /* use incase (depth == 0), no interior verts */
+        /* Use in case (depth == 0), no interior verts. */
         e_pivot_fallback = e;
       }
     } while ((l_iter = l_iter->next) != l_first);
@@ -1232,11 +1226,11 @@ static BMEdge *bm_face_region_pivot_edge_find(BMFace **faces_region,
 
 #endif /* USE_PIVOT_SEARCH */
 
-/* -------------------------------------------------------------------- */
 /* Quick UUID pass - identify candidates */
 
 #ifdef USE_PIVOT_FASTMATCH
 
+/* -------------------------------------------------------------------- */
 /** \name Fast Match
  * \{ */
 
@@ -1305,7 +1299,9 @@ static UUIDFashMatch *bm_vert_fasthash_create(BMesh *bm, const uint depth)
   return id_curr;
 }
 
-static void bm_vert_fasthash_edge_order(UUIDFashMatch *fm, const BMEdge *e, UUIDFashMatch e_fm[2])
+static void bm_vert_fasthash_edge_order(const UUIDFashMatch *fm,
+                                        const BMEdge *e,
+                                        UUIDFashMatch e_fm[2])
 {
   e_fm[0] = fm[BM_elem_index_get(e->v1)];
   e_fm[1] = fm[BM_elem_index_get(e->v2)];

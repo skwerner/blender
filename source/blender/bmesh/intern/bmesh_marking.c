@@ -31,8 +31,8 @@
 
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 
 #include "bmesh.h"
 #include "bmesh_structure.h"
@@ -46,7 +46,7 @@ static void recount_totsels(BMesh *bm)
   int *tots[3];
   int i;
 
-  /* recount (tot * sel) variables */
+  /* Recount total selection variables. */
   bm->totvertsel = bm->totedgesel = bm->totfacesel = 0;
   tots[0] = &bm->totvertsel;
   tots[1] = &bm->totedgesel;
@@ -66,6 +66,7 @@ static void recount_totsels(BMesh *bm)
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name BMesh helper functions for selection & hide flushing.
  * \{ */
 
@@ -163,7 +164,7 @@ static bool bm_edge_is_face_visible_any(const BMEdge *e)
  * Remove isolated selected elements when in a mode doesn't support them.
  * eg: in edge-mode a selected vertex must be connected to a selected edge.
  *
- * \note this could be made apart of #BM_mesh_select_mode_flush_ex
+ * \note this could be made a part of #BM_mesh_select_mode_flush_ex
  */
 void BM_mesh_select_mode_clean_ex(BMesh *bm, const short selectmode)
 {
@@ -540,7 +541,8 @@ void BM_face_select_set(BMesh *bm, BMFace *f, const bool select)
   }
 }
 
-/** \name Non flushing versions element selection.
+/* -------------------------------------------------------------------- */
+/** \name Non Flushing Versions Element Selection
  * \{ */
 
 void BM_edge_select_set_noflush(BMesh *bm, BMEdge *e, const bool select)
@@ -733,9 +735,9 @@ void BM_elem_select_set(BMesh *bm, BMElem *ele, const bool select)
 }
 
 /* this replaces the active flag used in uv/face mode */
-void BM_mesh_active_face_set(BMesh *bm, BMFace *efa)
+void BM_mesh_active_face_set(BMesh *bm, BMFace *f)
 {
-  bm->act_face = efa;
+  bm->act_face = f;
 }
 
 BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_selected)
@@ -743,7 +745,7 @@ BMFace *BM_mesh_active_face_get(BMesh *bm, const bool is_sloppy, const bool is_s
   if (bm->act_face && (!is_selected || BM_elem_flag_test(bm->act_face, BM_ELEM_SELECT))) {
     return bm->act_face;
   }
-  else if (is_sloppy) {
+  if (is_sloppy) {
     BMIter iter;
     BMFace *f = NULL;
     BMEditSelection *ese;
@@ -856,7 +858,7 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
     add_v3_v3v3(r_normal, eed->v1->no, eed->v2->no);
     sub_v3_v3v3(plane, eed->v2->co, eed->v1->co);
 
-    /* the 2 vertex normals will be close but not at rightangles to the edge
+    /* the 2 vertex normals will be close but not at right angles to the edge
      * for rotate about edge we want them to be at right angles, so we need to
      * do some extra calculation to correct the vert normals,
      * we need the plane for this */
@@ -870,9 +872,11 @@ void BM_editselection_normal(BMEditSelection *ese, float r_normal[3])
   }
 }
 
-/* Calculate a plane that is rightangles to the edge/vert/faces normal
+/**
+ * Calculate a plane that is right angles to the edge/vert/faces normal
  * also make the plane run along an axis that is related to the geometry,
- * because this is used for the gizmos Y axis. */
+ * because this is used for the gizmos Y axis.
+ */
 void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
 {
   if (ese->htype == BM_VERT) {
@@ -884,8 +888,8 @@ void BM_editselection_plane(BMEditSelection *ese, float r_plane[3])
       sub_v3_v3v3(r_plane, vec, eve->co);
     }
     else {
-      /* make a fake  plane thats at rightangles to the normal
-       * we cant make a crossvec from a vec thats the same as the vec
+      /* make a fake plane that's at right-angles to the normal
+       * we can't make a crossvec from a vec that's the same as the vec
        * unlikely but possible, so make sure if the normal is (0, 0, 1)
        * that vec isn't the same or in the same direction even. */
       if (eve->no[0] < 0.5f) {
@@ -951,9 +955,7 @@ bool _bm_select_history_remove(BMesh *bm, BMHeader *ele)
     BLI_freelinkN(&bm->selected, ese);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void _bm_select_history_store_notest(BMesh *bm, BMHeader *ele)
@@ -1019,13 +1021,13 @@ void BM_select_history_validate(BMesh *bm)
 bool BM_select_history_active_get(BMesh *bm, BMEditSelection *ese)
 {
   BMEditSelection *ese_last = bm->selected.last;
-  BMFace *efa = BM_mesh_active_face_get(bm, false, false);
+  BMFace *efa = BM_mesh_active_face_get(bm, false, true);
 
   ese->next = ese->prev = NULL;
 
   if (ese_last) {
-    if (ese_last->htype ==
-        BM_FACE) { /* if there is an active face, use it over the last selected face */
+    /* If there is an active face, use it over the last selected face. */
+    if (ese_last->htype == BM_FACE) {
       if (efa) {
         ese->ele = (BMElem *)efa;
       }
@@ -1081,12 +1083,12 @@ void BM_select_history_merge_from_targetmap(
 {
 
 #ifdef DEBUG
-  for (BMEditSelection *ese = bm->selected.first; ese; ese = ese->next) {
+  LISTBASE_FOREACH (BMEditSelection *, ese, &bm->selected) {
     BLI_assert(BM_ELEM_API_FLAG_TEST(ese->ele, _FLAG_OVERLAP) == 0);
   }
 #endif
 
-  for (BMEditSelection *ese = bm->selected.first; ese; ese = ese->next) {
+  LISTBASE_FOREACH (BMEditSelection *, ese, &bm->selected) {
     BM_ELEM_API_FLAG_ENABLE(ese->ele, _FLAG_OVERLAP);
 
     /* Only loop when (use_chain == true). */
@@ -1231,7 +1233,8 @@ void BM_mesh_elem_hflag_enable_test(BMesh *bm,
 
   /* note, better not attempt a fast path for selection as done with de-select
    * because hidden geometry and different selection modes can give different results,
-   * we could of course check for no hidden faces and then use quicker method but its not worth it. */
+   * we could of course check for no hidden faces and then use
+   * quicker method but its not worth it. */
 
   for (i = 0; i < 3; i++) {
     if (htype & flag_types[i]) {

@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORBALANCENODE_H__
-#define __COM_COLORBALANCENODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ColorBalanceNode
@@ -28,7 +29,8 @@
 class ColorBalanceNode : public Node {
  public:
   ColorBalanceNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* COM_ColorBalanceNODE_H */
+}  // namespace blender::compositor

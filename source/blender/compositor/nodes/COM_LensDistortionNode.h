@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_LENSDISTORTIONNODE_H__
-#define __COM_LENSDISTORTIONNODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief LensDistortionNode
@@ -28,7 +29,8 @@
 class LensDistortionNode : public Node {
  public:
   LensDistortionNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

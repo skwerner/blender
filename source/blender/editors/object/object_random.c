@@ -50,7 +50,7 @@ static bool object_rand_transverts(TransVertStore *tvs,
                                    const float offset,
                                    const float uniform,
                                    const float normal_factor,
-                                   const unsigned int seed)
+                                   const uint seed)
 {
   bool use_normal = (normal_factor != 0.0f);
   struct RNG *rng;
@@ -100,7 +100,7 @@ static int object_rand_verts_exec(bContext *C, wmOperator *op)
   const float offset = RNA_float_get(op->ptr, "offset");
   const float uniform = RNA_float_get(op->ptr, "uniform");
   const float normal_factor = RNA_float_get(op->ptr, "normal");
-  const unsigned int seed = RNA_int_get(op->ptr, "seed");
+  const uint seed = RNA_int_get(op->ptr, "seed");
 
   bool changed_multi = false;
   uint objects_len = 0;
@@ -159,7 +159,7 @@ void TRANSFORM_OT_vertex_random(struct wmOperatorType *ot)
 
   /* props */
   ot->prop = RNA_def_float_distance(
-      ot->srna, "offset", 0.1f, -FLT_MAX, FLT_MAX, "Amount", "Distance to offset", -10.0f, 10.0f);
+      ot->srna, "offset", 0.0f, -FLT_MAX, FLT_MAX, "Amount", "Distance to offset", -10.0f, 10.0f);
   RNA_def_float_factor(ot->srna,
                        "uniform",
                        0.0f,
@@ -180,4 +180,7 @@ void TRANSFORM_OT_vertex_random(struct wmOperatorType *ot)
                        1.0f);
   RNA_def_int(
       ot->srna, "seed", 0, 0, 10000, "Random Seed", "Seed for the random number generator", 0, 50);
+
+  /* Set generic modal callbacks. */
+  WM_operator_type_modal_from_exec_for_object_edit_coords(ot);
 }

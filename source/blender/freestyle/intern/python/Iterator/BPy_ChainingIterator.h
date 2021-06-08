@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_CHAININGITERATOR_H__
-#define __FREESTYLE_PYTHON_CHAININGITERATOR_H__
+#pragma once
 
 #include "BPy_ViewEdgeIterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject ChainingIterator_Type;
 /*---------------------------Python BPy_ChainingIterator structure definition----------*/
 typedef struct {
   BPy_ViewEdgeIterator py_ve_it;
-  ChainingIterator *c_it;
+  Freestyle::ChainingIterator *c_it;
 } BPy_ChainingIterator;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -47,5 +46,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_CHAININGITERATOR_H__ */

@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BMESH_STRUCTURE_H__
-#define __BMESH_STRUCTURE_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -34,7 +33,7 @@
 /* LOOP CYCLE MANAGEMENT */
 bool bmesh_loop_validate(BMFace *f) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
-/* DISK CYCLE MANAGMENT */
+/* DISK CYCLE MANAGEMENT */
 void bmesh_disk_edge_append(BMEdge *e, BMVert *v) ATTR_NONNULL();
 void bmesh_disk_edge_remove(BMEdge *e, BMVert *v) ATTR_NONNULL();
 BLI_INLINE BMEdge *bmesh_disk_edge_next_safe(const BMEdge *e,
@@ -60,7 +59,7 @@ BMLoop *bmesh_disk_faceloop_find_first_visible(const BMEdge *e,
 BMEdge *bmesh_disk_faceedge_find_next(const BMEdge *e, const BMVert *v) ATTR_WARN_UNUSED_RESULT
     ATTR_NONNULL();
 
-/* RADIAL CYCLE MANAGMENT */
+/* RADIAL CYCLE MANAGEMENT */
 void bmesh_radial_loop_append(BMEdge *e, BMLoop *l) ATTR_NONNULL();
 void bmesh_radial_loop_remove(BMEdge *e, BMLoop *l) ATTR_NONNULL();
 void bmesh_radial_loop_unlink(BMLoop *l) ATTR_NONNULL();
@@ -93,5 +92,3 @@ BMEdge *bmesh_disk_edge_exists(const BMVert *v1, const BMVert *v2) ATTR_WARN_UNU
 bool bmesh_disk_validate(int len, BMEdge *e, BMVert *v) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL();
 
 #include "intern/bmesh_structure_inline.h"
-
-#endif /* __BMESH_STRUCTURE_H__ */

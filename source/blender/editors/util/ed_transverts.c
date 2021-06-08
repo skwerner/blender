@@ -27,18 +27,19 @@
 #include "DNA_curve_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_meta_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BKE_curve.h"
-#include "BKE_lattice.h"
-#include "BKE_editmesh.h"
 #include "BKE_DerivedMesh.h"
+#include "BKE_armature.h"
 #include "BKE_context.h"
+#include "BKE_curve.h"
+#include "BKE_editmesh.h"
+#include "BKE_lattice.h"
 #include "BKE_mesh_iterators.h"
 
 #include "DEG_depsgraph.h"
@@ -53,7 +54,7 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
   const int mode = tvs->mode;
   BLI_assert(ED_transverts_check_obedit(obedit) == true);
 
-  DEG_id_tag_update(obedit->data, 0);
+  DEG_id_tag_update(obedit->data, ID_RECALC_GEOMETRY);
 
   if (obedit->type == OB_MESH) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
@@ -74,8 +75,9 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
         while (a--) {
           if (bezt->hide == 0) {
             bool skip_handle = false;
-            if (bezt->f2 & SELECT)
+            if (bezt->f2 & SELECT) {
               skip_handle = (mode & TM_SKIP_HANDLES) != 0;
+            }
 
             if ((bezt->f1 & SELECT) && !skip_handle) {
               BLI_assert(tv->loc == bezt->vec[0]);
@@ -109,8 +111,10 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
         }
       }
 
-      BKE_nurb_test_2d(nu);
-      BKE_nurb_handles_test(nu, true); /* test for bezier too */
+      if (CU_IS_2D(cu)) {
+        BKE_nurb_project_2d(nu);
+      }
+      BKE_nurb_handles_test(nu, true, false); /* test for bezier too */
       nu = nu->next;
     }
   }
@@ -131,8 +135,9 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
           add_v3_v3(ebo->tail, diffvec);
 
           a++;
-          if (a < tvs->transverts_tot)
+          if (a < tvs->transverts_tot) {
             tv++;
+          }
         }
       }
     }
@@ -150,14 +155,16 @@ void ED_transverts_update_obedit(TransVertStore *tvs, Object *obedit)
         }
       }
     }
-    if (arm->flag & ARM_MIRROR_EDIT)
+    if (arm->flag & ARM_MIRROR_EDIT) {
       ED_armature_edit_transform_mirror_update(obedit);
+    }
   }
   else if (obedit->type == OB_LATTICE) {
     Lattice *lt = obedit->data;
 
-    if (lt->editlatt->latt->flag & LT_OUTSIDE)
+    if (lt->editlatt->latt->flag & LT_OUTSIDE) {
       outside_lattice(lt->editlatt->latt);
+    }
   }
 }
 
@@ -176,7 +183,7 @@ static void set_mapped_co(void *vuserdata,
     tv = &tv[BM_elem_index_get(eve)];
 
     /* be clever, get the closest vertex to the original,
-     * behaves most logically when the mirror modifier is used for eg [#33051]*/
+     * behaves most logically when the mirror modifier is used for eg T33051*/
     if ((tv->flag & TX_VERT_USE_MAPLOC) == 0) {
       /* first time */
       copy_v3_v3(tv->maploc, co);
@@ -247,8 +254,9 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
       }
 
       BM_ITER_MESH (eve, &iter, bm, BM_VERTS_OF_MESH) {
-        if (BM_elem_index_get(eve) == TM_INDEX_ON)
+        if (BM_elem_index_get(eve) == TM_INDEX_ON) {
           tvs->transverts_tot++;
+        }
       }
     }
     else {
@@ -270,8 +278,9 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
       }
 
       BM_ITER_MESH (eve, &iter, bm, BM_VERTS_OF_MESH) {
-        if (BM_elem_index_get(eve) == TM_INDEX_ON)
+        if (BM_elem_index_get(eve) == TM_INDEX_ON) {
           tvs->transverts_tot++;
+        }
       }
     }
     /* for any of the 3 loops above which all dirty the indices */
@@ -363,10 +372,12 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
     ListBase *nurbs = BKE_curve_editNurbs_get(cu);
 
     for (nu = nurbs->first; nu; nu = nu->next) {
-      if (nu->type == CU_BEZIER)
+      if (nu->type == CU_BEZIER) {
         totmalloc += 3 * nu->pntsu;
-      else
+      }
+      else {
         totmalloc += nu->pntsu * nu->pntsv;
+      }
     }
     tv = tvs->transverts = MEM_callocN(totmalloc * sizeof(TransVert), __func__);
 
@@ -378,8 +389,9 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
         while (a--) {
           if (bezt->hide == 0) {
             bool skip_handle = false;
-            if (bezt->f2 & SELECT)
+            if (bezt->f2 & SELECT) {
               skip_handle = (mode & TM_SKIP_HANDLES) != 0;
+            }
 
             if ((bezt->f1 & SELECT) && !skip_handle) {
               copy_v3_v3(tv->oldloc, bezt->vec[0]);
@@ -485,8 +497,8 @@ void ED_transverts_create_from_obedit(TransVertStore *tvs, Object *obedit, const
   }
 
   if (!tvs->transverts_tot && tvs->transverts) {
-    /* prevent memory leak. happens for curves/latticies due to */
-    /* difficult condition of adding points to trans data */
+    /* Prevent memory leak. happens for curves/lattices due to
+     * difficult condition of adding points to trans data. */
     MEM_freeN(tvs->transverts);
     tvs->transverts = NULL;
   }

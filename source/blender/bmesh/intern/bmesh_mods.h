@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_MODS_H__
-#define __BMESH_MODS_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -52,12 +51,14 @@ BMEdge *BM_vert_collapse_faces(BMesh *bm,
                                float fac,
                                const bool do_del,
                                const bool join_faces,
-                               const bool kill_degenerate_faces);
+                               const bool kill_degenerate_faces,
+                               const bool kill_duplicate_faces);
 BMEdge *BM_vert_collapse_edge(BMesh *bm,
                               BMEdge *e_kill,
                               BMVert *v_kill,
                               const bool do_del,
-                              const bool kill_degenerate_faces);
+                              const bool kill_degenerate_faces,
+                              const bool kill_duplicate_faces);
 
 BMVert *BM_edge_collapse(BMesh *bm,
                          BMEdge *e_kill,
@@ -65,7 +66,7 @@ BMVert *BM_edge_collapse(BMesh *bm,
                          const bool do_del,
                          const bool kill_degenerate_faces);
 
-BMVert *BM_edge_split(BMesh *bm, BMEdge *e, BMVert *v, BMEdge **r_e, float percent);
+BMVert *BM_edge_split(BMesh *bm, BMEdge *e, BMVert *v, BMEdge **r_e, float fac);
 
 BMVert *BM_edge_split_n(BMesh *bm, BMEdge *e, int numcuts, BMVert **r_varr);
 
@@ -79,19 +80,18 @@ bool BM_edge_rotate_check_degenerate(BMEdge *e, BMLoop *l1, BMLoop *l2);
 bool BM_edge_rotate_check_beauty(BMEdge *e, BMLoop *l1, BMLoop *l2);
 BMEdge *BM_edge_rotate(BMesh *bm, BMEdge *e, const bool ccw, const short check_flag);
 
-/* flags for BM_edge_rotate */
+/** Flags for #BM_edge_rotate */
 enum {
-  BM_EDGEROT_CHECK_EXISTS =
-      (1 << 0), /* disallow to rotate when the new edge matches an existing one */
-  BM_EDGEROT_CHECK_SPLICE =
-      (1 << 1), /* overrides existing check, if the edge already, rotate and merge them */
-  BM_EDGEROT_CHECK_DEGENERATE = (1
-                                 << 2), /* disallow creating bow-tie, concave or zero area faces */
-  BM_EDGEROT_CHECK_BEAUTY = (1 << 3),   /* disallow to rotate into ugly topology */
+  /** Disallow rotating when the new edge matches an existing one. */
+  BM_EDGEROT_CHECK_EXISTS = (1 << 0),
+  /** Overrides existing check, if the edge already, rotate and merge them. */
+  BM_EDGEROT_CHECK_SPLICE = (1 << 1),
+  /** Disallow creating bow-tie, concave or zero area faces */
+  BM_EDGEROT_CHECK_DEGENERATE = (1 << 2),
+  /** Disallow rotating into ugly topology. */
+  BM_EDGEROT_CHECK_BEAUTY = (1 << 3),
 };
 
 BMVert *BM_face_loop_separate(BMesh *bm, BMLoop *l_sep);
 BMVert *BM_face_loop_separate_multi_isolated(BMesh *bm, BMLoop *l_sep);
 BMVert *BM_face_loop_separate_multi(BMesh *bm, BMLoop **larr, int larr_len);
-
-#endif /* __BMESH_MODS_H__ */

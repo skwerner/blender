@@ -23,9 +23,7 @@
 
 using namespace std;
 
-namespace Freestyle {
-
-namespace Functions1D {
+namespace Freestyle::Functions1D {
 
 int GetXF1D::operator()(Interface1D &inter)
 {
@@ -134,16 +132,18 @@ int ChainingTimeStampF1D::operator()(Interface1D &inter)
 {
   TimeStamp *timestamp = TimeStamp::instance();
   ViewEdge *ve = dynamic_cast<ViewEdge *>(&inter);
-  if (ve)
+  if (ve) {
     ve->setChainingTimeStamp(timestamp->getTimeStamp());
+  }
   return 0;
 }
 
 int IncrementChainingTimeStampF1D::operator()(Interface1D &inter)
 {
   ViewEdge *ve = dynamic_cast<ViewEdge *>(&inter);
-  if (ve)
+  if (ve) {
     ve->setChainingTimeStamp(ve->getChainingTimeStamp() + 1);
+  }
   return 0;
 }
 
@@ -157,8 +157,9 @@ int GetShapeF1D::operator()(Interface1D &inter)
   }
   else {
     Interface0DIterator it = inter.verticesBegin(), itend = inter.verticesEnd();
-    for (; it != itend; ++it)
+    for (; it != itend; ++it) {
       shapesSet.insert(Functions0D::getShapeF0D(it));
+    }
     shapesVector.insert<set<ViewShape *>::iterator>(
         shapesVector.begin(), shapesSet.begin(), shapesSet.end());
   }
@@ -216,16 +217,17 @@ void getOccludeeF1D(Interface1D &inter, set<ViewShape *> &oShapes)
   ViewEdge *ve = dynamic_cast<ViewEdge *>(&inter);
   if (ve) {
     ViewShape *aShape = ve->aShape();
-    if (aShape == 0) {
-      oShapes.insert((ViewShape *)0);
+    if (aShape == nullptr) {
+      oShapes.insert((ViewShape *)nullptr);
       return;
     }
     oShapes.insert(aShape);
   }
   else {
     Interface0DIterator it = inter.verticesBegin(), itend = inter.verticesEnd();
-    for (; it != itend; ++it)
+    for (; it != itend; ++it) {
       oShapes.insert(Functions0D::getOccludeeF0D(it));
+    }
   }
 }
 
@@ -241,8 +243,9 @@ void getOccludersF1D(Interface1D &inter, set<ViewShape *> &oShapes)
     for (; it != itend; ++it) {
       set<ViewShape *> shapes;
       Functions0D::getOccludersF0D(it, shapes);
-      for (set<ViewShape *>::iterator s = shapes.begin(), send = shapes.end(); s != send; ++s)
+      for (set<ViewShape *>::iterator s = shapes.begin(), send = shapes.end(); s != send; ++s) {
         oShapes.insert(*s);
+      }
     }
   }
 }
@@ -255,11 +258,10 @@ void getShapeF1D(Interface1D &inter, set<ViewShape *> &oShapes)
   }
   else {
     Interface0DIterator it = inter.verticesBegin(), itend = inter.verticesEnd();
-    for (; it != itend; ++it)
+    for (; it != itend; ++it) {
       oShapes.insert(Functions0D::getShapeF0D(it));
+    }
   }
 }
 
-}  // end of namespace Functions1D
-
-} /* namespace Freestyle */
+}  // namespace Freestyle::Functions1D

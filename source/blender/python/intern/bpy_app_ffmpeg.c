@@ -18,8 +18,8 @@
  * \ingroup pythonintern
  */
 
-#include <Python.h>
 #include "BLI_utildefines.h"
+#include <Python.h>
 
 #include "bpy_app_ffmpeg.h"
 
@@ -36,13 +36,13 @@
 static PyTypeObject BlenderAppFFmpegType;
 
 #define DEF_FFMPEG_LIB_VERSION(lib) \
-  {(char *)(#lib "_version"), (char *)("The " #lib " version  as a tuple of 3 numbers")}, \
+  {(#lib "_version"), ("The " #lib " version  as a tuple of 3 numbers")}, \
   { \
-    (char *)(#lib "_version_string"), (char *)("The " #lib " version formatted as a string") \
+    (#lib "_version_string"), ("The " #lib " version formatted as a string") \
   }
 
 static PyStructSequence_Field app_ffmpeg_info_fields[] = {
-    {(char *)"supported", (char *)("Boolean, True when Blender is built with FFmpeg support")},
+    {"supported", "Boolean, True when Blender is built with FFmpeg support"},
 
     DEF_FFMPEG_LIB_VERSION(avcodec),
     DEF_FFMPEG_LIB_VERSION(avdevice),
@@ -55,9 +55,9 @@ static PyStructSequence_Field app_ffmpeg_info_fields[] = {
 #undef DEF_FFMPEG_LIB_VERSION
 
 static PyStructSequence_Desc app_ffmpeg_info_desc = {
-    (char *)"bpy.app.ffmpeg",                                                          /* name */
-    (char *)"This module contains information about FFmpeg blender is linked against", /* doc */
-    app_ffmpeg_info_fields,                                                            /* fields */
+    "bpy.app.ffmpeg",                                                          /* name */
+    "This module contains information about FFmpeg blender is linked against", /* doc */
+    app_ffmpeg_info_fields,                                                    /* fields */
     ARRAY_SIZE(app_ffmpeg_info_fields) - 1,
 };
 
@@ -75,7 +75,7 @@ static PyObject *make_ffmpeg_info(void)
     return NULL;
   }
 
-#if 0  // UNUSED
+#if 0 /* UNUSED */
 #  define SetIntItem(flag) PyStructSequence_SET_ITEM(ffmpeg_info, pos++, PyLong_FromLong(flag))
 #endif
 #ifndef WITH_FFMPEG
@@ -116,8 +116,8 @@ static PyObject *make_ffmpeg_info(void)
 
 #undef FFMPEG_LIB_VERSION
 
-  if (PyErr_Occurred()) {
-    Py_CLEAR(ffmpeg_info);
+  if (UNLIKELY(PyErr_Occurred())) {
+    Py_DECREF(ffmpeg_info);
     return NULL;
   }
 
@@ -140,7 +140,7 @@ PyObject *BPY_app_ffmpeg_struct(void)
   BlenderAppFFmpegType.tp_init = NULL;
   BlenderAppFFmpegType.tp_new = NULL;
   BlenderAppFFmpegType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   return ret;
 }

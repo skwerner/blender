@@ -15,10 +15,11 @@
  * Copyright 2014, Blender Foundation.
  */
 
-#ifndef __COM_SUNBEAMSNODE_H__
-#define __COM_SUNBEAMSNODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief SunBeamsNode
@@ -27,7 +28,8 @@
 class SunBeamsNode : public Node {
  public:
   SunBeamsNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

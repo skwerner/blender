@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_READSTEERABLEVIEWMAPPIXELF0D_H__
-#define __FREESTYLE_PYTHON_READSTEERABLEVIEWMAPPIXELF0D_H__
+#pragma once
 
 #include "../BPy_UnaryFunction0DFloat.h"
 
@@ -34,7 +33,8 @@ extern PyTypeObject ReadSteerableViewMapPixelF0D_Type;
 #define BPy_ReadSteerableViewMapPixelF0D_Check(v) \
   (PyObject_IsInstance((PyObject *)v, (PyObject *)&ReadSteerableViewMapPixelF0D_Type))
 
-/*---------------------------Python BPy_ReadSteerableViewMapPixelF0D structure definition----------*/
+/*---------------------------Python BPy_ReadSteerableViewMapPixelF0D structure
+ * definition----------*/
 typedef struct {
   BPy_UnaryFunction0DFloat py_uf0D_float;
 } BPy_ReadSteerableViewMapPixelF0D;
@@ -44,5 +44,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_READSTEERABLEVIEWMAPPIXELF0D_H__ */

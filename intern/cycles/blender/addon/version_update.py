@@ -15,145 +15,12 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 import bpy
 import math
 
 from bpy.app.handlers import persistent
-
-
-def foreach_cycles_nodetree_group(nodetree, traversed):
-    for node in nodetree.nodes:
-        if node.bl_idname == 'ShaderNodeGroup':
-            group = node.node_tree
-            if group and group not in traversed:
-                traversed.add(group)
-                yield group, group.library
-                yield from foreach_cycles_nodetree_group(group, traversed)
-
-
-def foreach_cycles_nodetree():
-    traversed = set()
-
-    for material in bpy.data.materials:
-        nodetree = material.node_tree
-        if nodetree:
-            yield nodetree, material.library
-            yield from foreach_cycles_nodetree_group(nodetree, traversed)
-
-    for world in bpy.data.worlds:
-        nodetree = world.node_tree
-        if nodetree:
-            yield nodetree, world.library
-            foreach_cycles_nodetree_group(nodetree, traversed)
-
-    for light in bpy.data.lights:
-        nodetree = light.node_tree
-        if nodetree:
-            yield nodetree, light.library
-            foreach_cycles_nodetree_group(nodetree, traversed)
-
-
-def displacement_node_insert(nodetree):
-    # Gather links to replace
-    displacement_links = []
-    for link in nodetree.links:
-        if (
-                link.to_node.bl_idname == 'ShaderNodeOutputMaterial' and
-                link.from_node.bl_idname != 'ShaderNodeDisplacement' and
-                link.to_socket.identifier == 'Displacement'
-        ):
-            displacement_links.append(link)
-
-    # Replace links with displacement node
-    for link in displacement_links:
-        from_node = link.from_node
-        from_socket = link.from_socket
-        to_node = link.to_node
-        to_socket = link.to_socket
-
-        nodetree.links.remove(link)
-
-        node = nodetree.nodes.new(type='ShaderNodeDisplacement')
-        node.location[0] = 0.5 * (from_node.location[0] + to_node.location[0])
-        node.location[1] = 0.5 * (from_node.location[1] + to_node.location[1])
-        node.inputs['Scale'].default_value = 0.1
-        node.inputs['Midlevel'].default_value = 0.0
-
-        nodetree.links.new(from_socket, node.inputs['Height'])
-        nodetree.links.new(node.outputs['Displacement'], to_socket)
-
-
-def displacement_principled_nodes(node):
-    if node.bl_idname == 'ShaderNodeDisplacement':
-        if node.space != 'WORLD':
-            node.space = 'OBJECT'
-    if node.bl_idname == 'ShaderNodeBsdfPrincipled':
-        if node.subsurface_method != 'RANDOM_WALK':
-            node.subsurface_method = 'BURLEY'
-
-
-def square_roughness_node_insert(nodetree):
-    roughness_node_types = {
-        'ShaderNodeBsdfAnisotropic',
-        'ShaderNodeBsdfGlass',
-        'ShaderNodeBsdfGlossy',
-        'ShaderNodeBsdfRefraction'}
-
-    # Update default values
-    for node in nodetree.nodes:
-        if node.bl_idname in roughness_node_types:
-            roughness_input = node.inputs['Roughness']
-            roughness_input.default_value = math.sqrt(max(roughness_input.default_value, 0.0))
-
-    # Gather roughness links to replace
-    roughness_links = []
-    for link in nodetree.links:
-        if link.to_node.bl_idname in roughness_node_types and \
-           link.to_socket.identifier == 'Roughness':
-            roughness_links.append(link)
-
-    # Replace links with sqrt node
-    for link in roughness_links:
-        from_node = link.from_node
-        from_socket = link.from_socket
-        to_node = link.to_node
-        to_socket = link.to_socket
-
-        nodetree.links.remove(link)
-
-        node = nodetree.nodes.new(type='ShaderNodeMath')
-        node.operation = 'POWER'
-        node.location[0] = 0.5 * (from_node.location[0] + to_node.location[0])
-        node.location[1] = 0.5 * (from_node.location[1] + to_node.location[1])
-
-        nodetree.links.new(from_socket, node.inputs[0])
-        node.inputs[1].default_value = 0.5
-        nodetree.links.new(node.outputs['Value'], to_socket)
-
-
-def mapping_node_order_flip(node):
-    """
-    Flip euler order of mapping shader node
-    """
-    if node.bl_idname == 'ShaderNodeMapping':
-        rot = node.rotation.copy()
-        rot.order = 'ZYX'
-        quat = rot.to_quaternion()
-        node.rotation = quat.to_euler('XYZ')
-
-
-def vector_curve_node_remap(node):
-    """
-    Remap values of vector curve node from normalized to absolute values
-    """
-    if node.bl_idname == 'ShaderNodeVectorCurve':
-        node.mapping.use_clip = False
-        for curve in node.mapping.curves:
-            for point in curve.points:
-                point.location.x = (point.location.x * 2.0) - 1.0
-                point.location.y = (point.location.y - 0.5) * 2.0
-        node.mapping.update()
 
 
 def custom_bake_remap(scene):
@@ -176,10 +43,7 @@ def custom_bake_remap(scene):
         'GLOSSY_COLOR',
         'TRANSMISSION_DIRECT',
         'TRANSMISSION_INDIRECT',
-        'TRANSMISSION_COLOR',
-        'SUBSURFACE_DIRECT',
-        'SUBSURFACE_INDIRECT',
-        'SUBSURFACE_COLOR')
+        'TRANSMISSION_COLOR')
 
     diffuse_direct_idx = bake_lookup.index('DIFFUSE_DIRECT')
 
@@ -211,28 +75,6 @@ def custom_bake_remap(scene):
     elif end == 'COLOR':
         scene.render.bake.use_pass_direct = False
         scene.render.bake.use_pass_indirect = False
-
-
-def ambient_occlusion_node_relink(nodetree):
-    for node in nodetree.nodes:
-        if node.bl_idname == 'ShaderNodeAmbientOcclusion':
-            node.samples = 1
-            node.only_local = False
-            node.inputs['Distance'].default_value = 0.0
-
-    # Gather links to replace
-    ao_links = []
-    for link in nodetree.links:
-        if link.from_node.bl_idname == 'ShaderNodeAmbientOcclusion':
-            ao_links.append(link)
-
-    # Replace links
-    for link in ao_links:
-        from_node = link.from_node
-        to_socket = link.to_socket
-
-        nodetree.links.remove(link)
-        nodetree.links.new(from_node.outputs['Color'], to_socket)
 
 
 @persistent
@@ -267,7 +109,7 @@ def do_versions(self):
         library_versions.setdefault(library.version, []).append(library)
 
     # Do versioning per library, since they might have different versions.
-    max_need_versioning = (2, 80, 41)
+    max_need_versioning = (2, 93, 7)
     for version, libraries in library_versions.items():
         if version > max_need_versioning:
             continue
@@ -296,9 +138,11 @@ def do_versions(self):
             # Caustics Reflective/Refractive separation in 272
             if version <= (2, 72, 0):
                 cscene = scene.cycles
-                if (cscene.get("no_caustics", False) and
-                    not cscene.is_property_set("caustics_reflective") and
-                    not cscene.is_property_set("caustics_refractive")):
+                if (
+                        cscene.get("no_caustics", False) and
+                        not cscene.is_property_set("caustics_reflective") and
+                        not cscene.is_property_set("caustics_refractive")
+                ):
                     cscene.caustics_reflective = False
                     cscene.caustics_refractive = False
 
@@ -350,6 +194,40 @@ def do_versions(self):
                     cscene.blur_glossy = 0.0
                 if not cscene.is_property_set("sample_clamp_indirect"):
                     cscene.sample_clamp_indirect = 0.0
+
+            if version <= (2, 92, 4):
+                if scene.render.engine == 'CYCLES':
+                  for view_layer in scene.view_layers:
+                    cview_layer = view_layer.cycles
+                    view_layer.use_pass_cryptomatte_object = cview_layer.get("use_pass_crypto_object", False)
+                    view_layer.use_pass_cryptomatte_material = cview_layer.get("use_pass_crypto_material", False)
+                    view_layer.use_pass_cryptomatte_asset = cview_layer.get("use_pass_crypto_asset", False)
+                    view_layer.pass_cryptomatte_depth = cview_layer.get("pass_crypto_depth", 6)
+                    view_layer.use_pass_cryptomatte_accurate = cview_layer.get("pass_crypto_accurate", True)
+
+            if version <= (2, 93, 7):
+                if scene.render.engine == 'CYCLES':
+                  for view_layer in scene.view_layers:
+                    cview_layer = view_layer.cycles
+                    for caov in cview_layer.get("aovs", []):
+                        aov_name = caov.get("name", "AOV")
+                        if aov_name in view_layer.aovs:
+                            continue
+                        baov = view_layer.aovs.add()
+                        baov.name = caov.get("name", "AOV")
+                        baov.type = "COLOR" if caov.get("type", 1) == 1 else "VALUE"
+
+            if version <= (2, 93, 16):
+                cscene = scene.cycles
+                ao_bounces = cscene.get("ao_bounces", 0)
+                ao_bounces_render = cscene.get("ao_bounces_render", 0)
+                if scene.render.use_simplify and (ao_bounces or ao_bounces_render):
+                    cscene.use_fast_gi = True
+                    cscene.ao_bounces = ao_bounces
+                    cscene.ao_bounces_render = ao_bounces_render
+                else:
+                    cscene.ao_bounces = 1
+                    cscene.ao_bounces_render = 1
 
         # Lamps
         for light in bpy.data.lights:
@@ -411,48 +289,3 @@ def do_versions(self):
                 cmat = mat.cycles
                 if not cmat.is_property_set("displacement_method"):
                     cmat.displacement_method = 'DISPLACEMENT'
-
-        # Nodes
-        for nodetree, library in foreach_cycles_nodetree():
-            if library not in libraries:
-                continue
-
-            # Euler order was ZYX in previous versions.
-            if version <= (2, 73, 4):
-                for node in nodetree.nodes:
-                    mapping_node_order_flip(node)
-
-            if version <= (2, 76, 5):
-                for node in nodetree.nodes:
-                    vector_curve_node_remap(node)
-
-            if version <= (2, 79, 1) or \
-               (version >= (2, 80, 0) and version <= (2, 80, 3)):
-                displacement_node_insert(nodetree)
-
-            if version <= (2, 79, 2):
-                for node in nodetree.nodes:
-                    displacement_principled_nodes(node)
-
-            if version <= (2, 79, 3) or \
-               (version >= (2, 80, 0) and version <= (2, 80, 4)):
-                # Switch to squared roughness convention
-                square_roughness_node_insert(nodetree)
-
-            if version <= (2, 79, 4):
-                ambient_occlusion_node_relink(nodetree)
-
-        # Particles
-        for part in bpy.data.particles:
-            if part.library not in libraries:
-                continue
-
-            # Copy cycles hair settings to internal settings
-            if version <= (2, 80, 15):
-                cpart = part.get("cycles", None)
-                if cpart:
-                    part.shape = cpart.get("shape", 0.0)
-                    part.root_radius = cpart.get("root_width", 1.0)
-                    part.tip_radius = cpart.get("tip_width", 0.0)
-                    part.radius_scale = cpart.get("radius_scale", 0.01)
-                    part.use_close_tip = cpart.get("use_closetip", True)

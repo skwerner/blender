@@ -14,15 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_LINK_UTILS_H__
-#define __BLI_LINK_UTILS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  * \brief Single link-list utility macros. (header only api).
  *
  * Use this api when the structure defines its own ``next`` pointer
- * and a double linked list such as #ListBase isnt needed.
+ * and a double linked list such as #ListBase isn't needed.
  */
 
 #define BLI_LINKS_PREPEND(list, link) \
@@ -61,11 +60,9 @@
 #define BLI_LINKS_FREE(list) \
   { \
     while (list) { \
-      void *next = list->next; \
+      void *next = (list)->next; \
       MEM_freeN(list); \
       list = next; \
     } \
   } \
   (void)0
-
-#endif /* __BLI_LINK_UTILS_H__ */

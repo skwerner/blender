@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_UNARYFUNCTION1DVOID_H__
-#define __FREESTYLE_PYTHON_UNARYFUNCTION1DVOID_H__
+#pragma once
 
 #include "../BPy_UnaryFunction1D.h"
 
@@ -37,7 +36,7 @@ extern PyTypeObject UnaryFunction1DVoid_Type;
 /*---------------------------Python BPy_UnaryFunction1DVoid structure definition----------*/
 typedef struct {
   BPy_UnaryFunction1D py_uf1D;
-  UnaryFunction1D_void *uf1D_void;
+  Freestyle::UnaryFunction1D_void *uf1D_void;
 } BPy_UnaryFunction1DVoid;
 
 /*---------------------------Python BPy_UnaryFunction1DVoid visible prototypes-----------*/
@@ -48,5 +47,3 @@ int UnaryFunction1DVoid_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_UNARYFUNCTION1DVOID_H__ */

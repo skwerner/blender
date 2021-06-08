@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CULLED_OCCLUDER_SOURCE_H__
-#define __FREESTYLE_CULLED_OCCLUDER_SOURCE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -37,7 +36,6 @@ class CulledOccluderSource : public OccluderSource {
                        WingedEdge &we,
                        ViewMap &viewMap,
                        bool extensiveFEdgeSearch = true);
-  virtual ~CulledOccluderSource();
 
   void cullViewEdges(ViewMap &viewMap, bool extensiveFEdgeSearch);
 
@@ -57,5 +55,3 @@ class CulledOccluderSource : public OccluderSource {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CULLED_OCCLUDER_SOURCE_H__

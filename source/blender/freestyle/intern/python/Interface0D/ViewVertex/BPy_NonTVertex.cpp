@@ -27,40 +27,43 @@
 extern "C" {
 #endif
 
+using namespace Freestyle;
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 /*----------------------NonTVertex methods ----------------------------*/
 
-PyDoc_STRVAR(NonTVertex_doc,
-             "Class hierarchy: :class:`Interface0D` > :class:`ViewVertex` > :class:`NonTVertex`\n"
-             "\n"
-             "View vertex for corners, cusps, etc. associated to a single SVertex.\n"
-             "Can be associated to 2 or more view edges.\n"
-             "\n"
-             ".. method:: __init__()\n"
-             "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(svertex)\n"
-             "\n"
-             "   Build a NonTVertex from a SVertex.\n"
-             "\n"
-             "   :arg svertex: An SVertex object.\n"
-             "   :type svertex: :class:`SVertex`");
+PyDoc_STRVAR(
+    NonTVertex_doc,
+    "Class hierarchy: :class:`Interface0D` > :class:`ViewVertex` > :class:`NonTVertex`\n"
+    "\n"
+    "View vertex for corners, cusps, etc. associated to a single SVertex.\n"
+    "Can be associated to 2 or more view edges.\n"
+    "\n"
+    ".. method:: __init__()\n"
+    "            __init__(svertex)\n"
+    "\n"
+    "   Builds a :class:`NonTVertex` using the default constructor or a :class:`SVertex`.\n"
+    "\n"
+    "   :arg svertex: An SVertex object.\n"
+    "   :type svertex: :class:`SVertex`");
 
 /* Note: No copy constructor in Python because the C++ copy constructor is 'protected'. */
 
 static int NonTVertex_init(BPy_NonTVertex *self, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist[] = {"svertex", NULL};
-  PyObject *obj = 0;
+  static const char *kwlist[] = {"svertex", nullptr};
+  PyObject *obj = nullptr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist, &SVertex_Type, &obj))
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist, &SVertex_Type, &obj)) {
     return -1;
-  if (!obj)
+  }
+  if (!obj) {
     self->ntv = new NonTVertex();
-  else
+  }
+  else {
     self->ntv = new NonTVertex(((BPy_SVertex *)obj)->sv);
+  }
   self->py_vv.vv = self->ntv;
   self->py_vv.py_if0D.if0D = self->ntv;
   self->py_vv.py_if0D.borrowed = false;
@@ -77,8 +80,9 @@ PyDoc_STRVAR(NonTVertex_svertex_doc,
 static PyObject *NonTVertex_svertex_get(BPy_NonTVertex *self, void *UNUSED(closure))
 {
   SVertex *v = self->ntv->svertex();
-  if (v)
+  if (v) {
     return BPy_SVertex_from_SVertex(*v);
+  }
   Py_RETURN_NONE;
 }
 
@@ -93,53 +97,53 @@ static int NonTVertex_svertex_set(BPy_NonTVertex *self, PyObject *value, void *U
 }
 
 static PyGetSetDef BPy_NonTVertex_getseters[] = {
-    {(char *)"svertex",
+    {"svertex",
      (getter)NonTVertex_svertex_get,
      (setter)NonTVertex_svertex_set,
-     (char *)NonTVertex_svertex_doc,
-     NULL},
-    {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
+     NonTVertex_svertex_doc,
+     nullptr},
+    {nullptr, nullptr, nullptr, nullptr, nullptr} /* Sentinel */
 };
 
 /*-----------------------BPy_NonTVertex type definition ------------------------------*/
 PyTypeObject NonTVertex_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "NonTVertex", /* tp_name */
-    sizeof(BPy_NonTVertex),                      /* tp_basicsize */
-    0,                                           /* tp_itemsize */
-    0,                                           /* tp_dealloc */
-    0,                                           /* tp_print */
-    0,                                           /* tp_getattr */
-    0,                                           /* tp_setattr */
-    0,                                           /* tp_reserved */
-    0,                                           /* tp_repr */
-    0,                                           /* tp_as_number */
-    0,                                           /* tp_as_sequence */
-    0,                                           /* tp_as_mapping */
-    0,                                           /* tp_hash  */
-    0,                                           /* tp_call */
-    0,                                           /* tp_str */
-    0,                                           /* tp_getattro */
-    0,                                           /* tp_setattro */
-    0,                                           /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,    /* tp_flags */
-    NonTVertex_doc,                              /* tp_doc */
-    0,                                           /* tp_traverse */
-    0,                                           /* tp_clear */
-    0,                                           /* tp_richcompare */
-    0,                                           /* tp_weaklistoffset */
-    0,                                           /* tp_iter */
-    0,                                           /* tp_iternext */
-    0,                                           /* tp_methods */
-    0,                                           /* tp_members */
-    BPy_NonTVertex_getseters,                    /* tp_getset */
-    &ViewVertex_Type,                            /* tp_base */
-    0,                                           /* tp_dict */
-    0,                                           /* tp_descr_get */
-    0,                                           /* tp_descr_set */
-    0,                                           /* tp_dictoffset */
-    (initproc)NonTVertex_init,                   /* tp_init */
-    0,                                           /* tp_alloc */
-    0,                                           /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "NonTVertex", /* tp_name */
+    sizeof(BPy_NonTVertex),                         /* tp_basicsize */
+    0,                                              /* tp_itemsize */
+    nullptr,                                        /* tp_dealloc */
+    0,                                              /* tp_vectorcall_offset */
+    nullptr,                                        /* tp_getattr */
+    nullptr,                                        /* tp_setattr */
+    nullptr,                                        /* tp_reserved */
+    nullptr,                                        /* tp_repr */
+    nullptr,                                        /* tp_as_number */
+    nullptr,                                        /* tp_as_sequence */
+    nullptr,                                        /* tp_as_mapping */
+    nullptr,                                        /* tp_hash  */
+    nullptr,                                        /* tp_call */
+    nullptr,                                        /* tp_str */
+    nullptr,                                        /* tp_getattro */
+    nullptr,                                        /* tp_setattro */
+    nullptr,                                        /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,       /* tp_flags */
+    NonTVertex_doc,                                 /* tp_doc */
+    nullptr,                                        /* tp_traverse */
+    nullptr,                                        /* tp_clear */
+    nullptr,                                        /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    nullptr,                                        /* tp_iter */
+    nullptr,                                        /* tp_iternext */
+    nullptr,                                        /* tp_methods */
+    nullptr,                                        /* tp_members */
+    BPy_NonTVertex_getseters,                       /* tp_getset */
+    &ViewVertex_Type,                               /* tp_base */
+    nullptr,                                        /* tp_dict */
+    nullptr,                                        /* tp_descr_get */
+    nullptr,                                        /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)NonTVertex_init,                      /* tp_init */
+    nullptr,                                        /* tp_alloc */
+    nullptr,                                        /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

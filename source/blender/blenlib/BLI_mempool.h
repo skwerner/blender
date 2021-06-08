@@ -17,18 +17,18 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_MEMPOOL_H__
-#define __BLI_MEMPOOL_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_utildefines.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
 
 struct BLI_mempool;
 struct BLI_mempool_chunk;
@@ -77,8 +77,10 @@ enum {
   BLI_MEMPOOL_NOP = 0,
   /** allow iterating on this mempool.
    *
-   * \note this requires that the first four bytes of the elements never begin with 'free' (FREEWORD).
-   * \note order of iteration is only assured to be the order of allocation when no chunks have been freed.
+   * \note this requires that the first four bytes of the elements
+   * never begin with 'free' (#FREEWORD).
+   * \note order of iteration is only assured to be the
+   * order of allocation when no chunks have been freed.
    */
   BLI_MEMPOOL_ALLOW_ITER = (1 << 0),
 };
@@ -94,5 +96,3 @@ void BLI_mempool_iter_threadsafe_free(BLI_mempool_iter *iter_arr) ATTR_NONNULL()
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MEMPOOL_H__ */

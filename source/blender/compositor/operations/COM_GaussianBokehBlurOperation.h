@@ -16,11 +16,13 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GAUSSIANBOKEHBLUROPERATION_H__
-#define __COM_GAUSSIANBOKEHBLUROPERATION_H__
-#include "COM_NodeOperation.h"
+#pragma once
+
 #include "COM_BlurBaseOperation.h"
+#include "COM_NodeOperation.h"
 #include "COM_QualityStepHelper.h"
+
+namespace blender::compositor {
 
 class GaussianBokehBlurOperation : public BlurBaseOperation {
  private:
@@ -30,21 +32,21 @@ class GaussianBokehBlurOperation : public BlurBaseOperation {
 
  public:
   GaussianBokehBlurOperation();
-  void initExecution();
-  void *initializeTileData(rcti *rect);
+  void initExecution() override;
+  void *initializeTileData(rcti *rect) override;
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 };
 
 class GaussianBlurReferenceOperation : public BlurBaseOperation {
@@ -59,21 +61,21 @@ class GaussianBlurReferenceOperation : public BlurBaseOperation {
 
  public:
   GaussianBlurReferenceOperation();
-  void initExecution();
-  void *initializeTileData(rcti *rect);
+  void initExecution() override;
+  void *initializeTileData(rcti *rect) override;
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 };
 
-#endif
+}  // namespace blender::compositor

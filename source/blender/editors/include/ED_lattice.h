@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_LATTICE_H__
-#define __ED_LATTICE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Base;
 struct Object;
@@ -44,4 +47,6 @@ bool ED_lattice_deselect_all_multi(struct bContext *C);
 /* editlattice_undo.c */
 void ED_lattice_undosys_type(struct UndoType *ut);
 
-#endif /* __ED_LATTICE_H__ */
+#ifdef __cplusplus
+}
+#endif

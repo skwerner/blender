@@ -24,24 +24,21 @@
 #include "DNA_object_types.h"
 
 #include "BLI_math.h"
+#include "BLI_string.h"
 
 #include "BKE_context.h"
-#include "BKE_report.h"
 #include "BKE_editmesh.h"
 #include "BKE_layer.h"
+#include "BKE_report.h"
 
-#include "RNA_define.h"
 #include "RNA_access.h"
-#include "RNA_enum_types.h"
+#include "RNA_define.h"
 
-#include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-
-#include "UI_resources.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -57,7 +54,7 @@ static int edbm_spin_exec(bContext *C, wmOperator *op)
 {
   ViewLayer *view_layer = CTX_data_view_layer(C);
   float cent[3], axis[3];
-  float d[3] = {0.0f, 0.0f, 0.0f};
+  const float d[3] = {0.0f, 0.0f, 0.0f};
 
   RNA_float_get_array(op->ptr, "center", cent);
   RNA_float_get_array(op->ptr, "axis", axis);
@@ -111,7 +108,7 @@ static int edbm_spin_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    EDBM_update_generic(em, true, true);
+    EDBM_update_generic(obedit->data, true, true);
   }
 
   MEM_freeN(objects);
@@ -172,7 +169,7 @@ static bool edbm_spin_poll_property(const bContext *UNUSED(C),
   const bool dupli = RNA_boolean_get(op->ptr, "dupli");
 
   if (dupli) {
-    if (STREQ(prop_id, "use_auto_merge") || STREQ(prop_id, "use_normal_flip")) {
+    if (STR_ELEM(prop_id, "use_auto_merge", "use_normal_flip")) {
       return false;
     }
   }
@@ -199,8 +196,11 @@ void MESH_OT_spin(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
   /* props */
-  RNA_def_int(ot->srna, "steps", 9, 0, 1000000, "Steps", "Steps", 0, 1000);
-  RNA_def_boolean(ot->srna, "dupli", 0, "Dupli", "Make Duplicates");
+  RNA_def_int(ot->srna, "steps", 12, 0, 1000000, "Steps", "Steps", 0, 1000);
+
+  prop = RNA_def_boolean(ot->srna, "dupli", 0, "Use Duplicates", "");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
   prop = RNA_def_float(ot->srna,
                        "angle",
                        DEG2RADF(90.0f),

@@ -20,8 +20,7 @@
  * \note light addition to Python.h, use py_capi_utils.h for larger features.
  */
 
-#ifndef __PYTHON_UTILDEFINES_H__
-#define __PYTHON_UTILDEFINES_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,7 +44,8 @@ Py_LOCAL_INLINE(PyObject *) Py_INCREF_RET(PyObject *op)
   return op;
 }
 
-/* append & transfer ownership to the list, avoids inline Py_DECREF all over (which is quite a large macro) */
+/* Append & transfer ownership to the list,
+ * avoids inline Py_DECREF all over (which is quite a large macro). */
 Py_LOCAL_INLINE(int) PyList_APPEND(PyObject *op, PyObject *v)
 {
   int ret = PyList_Append(op, v);
@@ -56,5 +56,3 @@ Py_LOCAL_INLINE(int) PyList_APPEND(PyObject *op, PyObject *v)
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __PYTHON_UTILDEFINES_H__ */

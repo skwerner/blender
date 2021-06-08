@@ -29,7 +29,7 @@
 
 #include "WM_api.h"
 
-#include "render_intern.h"  // own include
+#include "render_intern.h" /* own include */
 
 /***************************** render ***********************************/
 
@@ -42,6 +42,7 @@ void ED_operatortypes_render(void)
   WM_operatortype_append(OBJECT_OT_material_slot_deselect);
   WM_operatortype_append(OBJECT_OT_material_slot_copy);
   WM_operatortype_append(OBJECT_OT_material_slot_move);
+  WM_operatortype_append(OBJECT_OT_material_slot_remove_unused);
 
   WM_operatortype_append(MATERIAL_OT_new);
   WM_operatortype_append(TEXTURE_OT_new);
@@ -52,6 +53,8 @@ void ED_operatortypes_render(void)
 
   WM_operatortype_append(SCENE_OT_view_layer_add);
   WM_operatortype_append(SCENE_OT_view_layer_remove);
+  WM_operatortype_append(SCENE_OT_view_layer_add_aov);
+  WM_operatortype_append(SCENE_OT_view_layer_remove_aov);
 
   WM_operatortype_append(SCENE_OT_render_view_add);
   WM_operatortype_append(SCENE_OT_render_view_remove);

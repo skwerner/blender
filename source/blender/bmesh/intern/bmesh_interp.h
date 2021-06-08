@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_INTERP_H__
-#define __BMESH_INTERP_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -32,7 +31,7 @@ void BM_loop_interp_multires_ex(BMesh *bm,
                                 const int cd_loop_mdisp_offset);
 void BM_loop_interp_multires(BMesh *bm, BMLoop *l_dst, const BMFace *f_src);
 
-void BM_face_interp_multires_ex(BMesh *UNUSED(bm),
+void BM_face_interp_multires_ex(BMesh *bm,
                                 BMFace *f_dst,
                                 const BMFace *f_src,
                                 const float f_dst_center[3],
@@ -82,5 +81,3 @@ void BM_vert_loop_groups_data_layer_merge_weights(BMesh *bm,
                                                   struct LinkNode *groups,
                                                   const int layer_n,
                                                   const float *loop_weights);
-
-#endif /* __BMESH_INTERP_H__ */

@@ -23,11 +23,12 @@
 
 #include "intern/node/deg_node.h"
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "BLI_utildefines.h"
 
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_factory.h"
@@ -35,7 +36,7 @@
 #include "intern/node/deg_node_operation.h"
 #include "intern/node/deg_node_time.h"
 
-namespace DEG {
+namespace blender::deg {
 
 const char *nodeClassAsString(NodeClass node_class)
 {
@@ -99,17 +100,22 @@ const char *nodeTypeAsString(NodeType type)
       return "CACHE";
     case NodeType::POINT_CACHE:
       return "POINT_CACHE";
+    case NodeType::IMAGE_ANIMATION:
+      return "IMAGE_ANIMATION";
     case NodeType::BATCH_CACHE:
       return "BATCH_CACHE";
-    /* Duplication. */
     case NodeType::DUPLI:
       return "DUPLI";
-    /* Synchronization. */
     case NodeType::SYNCHRONIZATION:
       return "SYNCHRONIZATION";
-    /* Generic datablock. */
+    case NodeType::AUDIO:
+      return "AUDIO";
+    case NodeType::ARMATURE:
+      return "ARMATURE";
     case NodeType::GENERIC_DATABLOCK:
       return "GENERIC_DATABLOCK";
+    case NodeType::SIMULATION:
+      return "SIMULATION";
 
     /* Total number of meaningful node types. */
     case NodeType::NUM_TYPES:
@@ -117,6 +123,138 @@ const char *nodeTypeAsString(NodeType type)
   }
   BLI_assert(!"Unhandled node type, should never happen.");
   return "UNKNOWN";
+}
+
+NodeType nodeTypeFromSceneComponent(eDepsSceneComponentType component)
+{
+  switch (component) {
+    case DEG_SCENE_COMP_PARAMETERS:
+      return NodeType::PARAMETERS;
+    case DEG_SCENE_COMP_ANIMATION:
+      return NodeType::ANIMATION;
+    case DEG_SCENE_COMP_SEQUENCER:
+      return NodeType::SEQUENCER;
+  }
+  return NodeType::UNDEFINED;
+}
+
+eDepsSceneComponentType nodeTypeToSceneComponent(NodeType type)
+{
+  switch (type) {
+    case NodeType::PARAMETERS:
+      return DEG_SCENE_COMP_PARAMETERS;
+    case NodeType::ANIMATION:
+      return DEG_SCENE_COMP_ANIMATION;
+    case NodeType::SEQUENCER:
+      return DEG_SCENE_COMP_SEQUENCER;
+
+    case NodeType::OPERATION:
+    case NodeType::TIMESOURCE:
+    case NodeType::ID_REF:
+    case NodeType::LAYER_COLLECTIONS:
+    case NodeType::COPY_ON_WRITE:
+    case NodeType::OBJECT_FROM_LAYER:
+    case NodeType::AUDIO:
+    case NodeType::ARMATURE:
+    case NodeType::GENERIC_DATABLOCK:
+    case NodeType::PARTICLE_SYSTEM:
+    case NodeType::PARTICLE_SETTINGS:
+    case NodeType::SHADING_PARAMETERS:
+    case NodeType::POINT_CACHE:
+    case NodeType::IMAGE_ANIMATION:
+    case NodeType::BATCH_CACHE:
+    case NodeType::DUPLI:
+    case NodeType::SYNCHRONIZATION:
+    case NodeType::UNDEFINED:
+    case NodeType::NUM_TYPES:
+    case NodeType::TRANSFORM:
+    case NodeType::GEOMETRY:
+    case NodeType::EVAL_POSE:
+    case NodeType::BONE:
+    case NodeType::SHADING:
+    case NodeType::CACHE:
+    case NodeType::PROXY:
+    case NodeType::SIMULATION:
+      return DEG_SCENE_COMP_PARAMETERS;
+  }
+  BLI_assert(!"Unhandled node type, not suppsed to happen.");
+  return DEG_SCENE_COMP_PARAMETERS;
+}
+
+NodeType nodeTypeFromObjectComponent(eDepsObjectComponentType component_type)
+{
+  switch (component_type) {
+    case DEG_OB_COMP_ANY:
+      return NodeType::UNDEFINED;
+    case DEG_OB_COMP_PARAMETERS:
+      return NodeType::PARAMETERS;
+    case DEG_OB_COMP_PROXY:
+      return NodeType::PROXY;
+    case DEG_OB_COMP_ANIMATION:
+      return NodeType::ANIMATION;
+    case DEG_OB_COMP_TRANSFORM:
+      return NodeType::TRANSFORM;
+    case DEG_OB_COMP_GEOMETRY:
+      return NodeType::GEOMETRY;
+    case DEG_OB_COMP_EVAL_POSE:
+      return NodeType::EVAL_POSE;
+    case DEG_OB_COMP_BONE:
+      return NodeType::BONE;
+    case DEG_OB_COMP_SHADING:
+      return NodeType::SHADING;
+    case DEG_OB_COMP_CACHE:
+      return NodeType::CACHE;
+  }
+  return NodeType::UNDEFINED;
+}
+
+eDepsObjectComponentType nodeTypeToObjectComponent(NodeType type)
+{
+  switch (type) {
+    case NodeType::PARAMETERS:
+      return DEG_OB_COMP_PARAMETERS;
+    case NodeType::PROXY:
+      return DEG_OB_COMP_PROXY;
+    case NodeType::ANIMATION:
+      return DEG_OB_COMP_ANIMATION;
+    case NodeType::TRANSFORM:
+      return DEG_OB_COMP_TRANSFORM;
+    case NodeType::GEOMETRY:
+      return DEG_OB_COMP_GEOMETRY;
+    case NodeType::EVAL_POSE:
+      return DEG_OB_COMP_EVAL_POSE;
+    case NodeType::BONE:
+      return DEG_OB_COMP_BONE;
+    case NodeType::SHADING:
+      return DEG_OB_COMP_SHADING;
+    case NodeType::CACHE:
+      return DEG_OB_COMP_CACHE;
+
+    case NodeType::OPERATION:
+    case NodeType::TIMESOURCE:
+    case NodeType::ID_REF:
+    case NodeType::SEQUENCER:
+    case NodeType::LAYER_COLLECTIONS:
+    case NodeType::COPY_ON_WRITE:
+    case NodeType::OBJECT_FROM_LAYER:
+    case NodeType::AUDIO:
+    case NodeType::ARMATURE:
+    case NodeType::GENERIC_DATABLOCK:
+    case NodeType::PARTICLE_SYSTEM:
+    case NodeType::PARTICLE_SETTINGS:
+    case NodeType::SHADING_PARAMETERS:
+    case NodeType::POINT_CACHE:
+    case NodeType::IMAGE_ANIMATION:
+    case NodeType::BATCH_CACHE:
+    case NodeType::DUPLI:
+    case NodeType::SYNCHRONIZATION:
+    case NodeType::SIMULATION:
+    case NodeType::UNDEFINED:
+    case NodeType::NUM_TYPES:
+      return DEG_OB_COMP_PARAMETERS;
+  }
+  BLI_assert(!"Unhandled node type, not suppsed to happen.");
+  return DEG_OB_COMP_PARAMETERS;
 }
 
 /*******************************************************************************
@@ -160,10 +298,10 @@ Node::~Node()
 {
   /* Free links. */
   /* NOTE: We only free incoming links. This is to avoid double-free of links
-   * when we're trying to free same link from both it's sides. We don't have
+   * when we're trying to free same link from both its sides. We don't have
    * dangling links so this is not a problem from memory leaks point of view. */
   for (Relation *rel : inlinks) {
-    OBJECT_GUARDED_DELETE(rel, Relation);
+    delete rel;
   }
 }
 
@@ -178,12 +316,11 @@ NodeClass Node::get_class() const
   if (type == NodeType::OPERATION) {
     return NodeClass::OPERATION;
   }
-  else if (type < NodeType::PARAMETERS) {
+  if (type < NodeType::PARAMETERS) {
     return NodeClass::GENERIC;
   }
-  else {
-    return NodeClass::COMPONENT;
-  }
+
+  return NodeClass::COMPONENT;
 }
 
 /*******************************************************************************
@@ -202,4 +339,4 @@ void deg_register_base_depsnodes()
   register_node_typeinfo(&DNTI_ID_REF);
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

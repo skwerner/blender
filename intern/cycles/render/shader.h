@@ -23,8 +23,8 @@
 #  include <OSL/oslexec.h>
 #endif
 
-#include "render/attribute.h"
 #include "kernel/kernel_types.h"
+#include "render/attribute.h"
 
 #include "graph/node.h"
 
@@ -81,29 +81,35 @@ class Shader : public Node {
  public:
   NODE_DECLARE
 
-  int pass_id;
-
   /* shader graph */
   ShaderGraph *graph;
 
+  NODE_SOCKET_API(int, pass_id)
+
   /* sampling */
-  bool use_mis;
-  bool use_transparent_shadow;
-  bool heterogeneous_volume;
-  VolumeSampling volume_sampling_method;
-  int volume_interpolation_method;
+  NODE_SOCKET_API(bool, use_mis)
+  NODE_SOCKET_API(bool, use_transparent_shadow)
+  NODE_SOCKET_API(bool, heterogeneous_volume)
+  NODE_SOCKET_API(VolumeSampling, volume_sampling_method)
+  NODE_SOCKET_API(int, volume_interpolation_method)
+  NODE_SOCKET_API(float, volume_step_rate)
+
+  /* displacement */
+  NODE_SOCKET_API(DisplacementMethod, displacement_method)
+
+  float prev_volume_step_rate;
 
   /* synchronization */
-  bool need_update;
-  bool need_update_mesh;
-  bool need_sync_object;
+  bool need_update_uvs;
+  bool need_update_attribute;
+  bool need_update_displacement;
 
   /* If the shader has only volume components, the surface is assumed to
    * be transparent.
    * However, graph optimization might remove the volume subgraph, but
    * since the user connected something to the volume output the surface
    * should still be transparent.
-   * Therefore, has_volume_connected stores whether some volume subtree
+   * Therefore, has_volume_connected stores whether some volume sub-tree
    * was connected before optimization. */
   bool has_volume_connected;
 
@@ -118,19 +124,14 @@ class Shader : public Node {
   bool has_bssrdf_bump;
   bool has_surface_spatial_varying;
   bool has_volume_spatial_varying;
-  bool has_object_dependency;
-  bool has_attribute_dependency;
+  bool has_volume_attribute_dependency;
   bool has_integrator_dependency;
-
-  /* displacement */
-  DisplacementMethod displacement_method;
 
   /* requested mesh attributes */
   AttributeRequestSet attributes;
 
   /* determined before compiling */
   uint id;
-  bool used;
 
 #ifdef WITH_OSL
   /* osl shading state references */
@@ -143,13 +144,17 @@ class Shader : public Node {
   Shader();
   ~Shader();
 
-  /* Checks whether the shader consists of just a emission node with fixed inputs that's connected directly to the output.
-   * If yes, it sets the content of emission to the constant value (color * strength), which is then used for speeding up light evaluation. */
+  /* Checks whether the shader consists of just a emission node with fixed inputs that's connected
+   * directly to the output.
+   * If yes, it sets the content of emission to the constant value (color * strength), which is
+   * then used for speeding up light evaluation. */
   bool is_constant_emission(float3 *emission);
 
   void set_graph(ShaderGraph *graph);
   void tag_update(Scene *scene);
   void tag_used(Scene *scene);
+
+  bool need_update_geometry() const;
 };
 
 /* Shader Manager virtual base class
@@ -159,9 +164,18 @@ class Shader : public Node {
 
 class ShaderManager {
  public:
-  bool need_update;
+  enum : uint32_t {
+    SHADER_ADDED = (1 << 0),
+    SHADER_MODIFIED = (1 << 2),
+    INTEGRATOR_MODIFIED = (1 << 3),
 
-  static ShaderManager *create(Scene *scene, int shadingsystem);
+    /* tag everything in the manager for an update */
+    UPDATE_ALL = ~0u,
+
+    UPDATE_NONE = 0u,
+  };
+
+  static ShaderManager *create(int shadingsystem);
   virtual ~ShaderManager();
 
   virtual void reset(Scene *scene) = 0;
@@ -172,13 +186,13 @@ class ShaderManager {
   }
 
   /* device update */
-  virtual void device_update(Device *device,
-                             DeviceScene *dscene,
-                             Scene *scene,
-                             Progress &progress) = 0;
+  void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
+  virtual void device_update_specific(Device *device,
+                                      DeviceScene *dscene,
+                                      Scene *scene,
+                                      Progress &progress) = 0;
   virtual void device_free(Device *device, DeviceScene *dscene, Scene *scene) = 0;
 
-  void device_update_shaders_used(Scene *scene);
   void device_update_common(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
   void device_free_common(Device *device, DeviceScene *dscene, Scene *scene);
 
@@ -202,8 +216,16 @@ class ShaderManager {
 
   string get_cryptomatte_materials(Scene *scene);
 
+  void tag_update(Scene *scene, uint32_t flag);
+
+  bool need_update() const;
+
+  void init_xyz_transforms();
+
  protected:
   ShaderManager();
+
+  uint32_t update_flags;
 
   typedef unordered_map<ustring, uint, ustringHash> AttributeIDMap;
   AttributeIDMap unique_attribute_id;

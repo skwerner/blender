@@ -21,12 +21,12 @@
  * \ingroup texnodes
  */
 
-#include "node_texture_util.h"
 #include "NOD_texture.h"
+#include "node_texture_util.h"
 
 static bNodeSocketTemplate outputs[] = {
-    {SOCK_RGBA, 0, N_("Image")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image")},
+    {-1, ""},
 };
 
 static void colorfn(
@@ -53,24 +53,30 @@ static void colorfn(
       px = (int)((x - xoff) * xsize);
       py = (int)((y - yoff) * ysize);
 
-      if ((!xsize) || (!ysize))
+      if ((!xsize) || (!ysize)) {
         return;
+      }
 
       if (!ibuf->rect_float) {
         BLI_thread_lock(LOCK_IMAGE);
-        if (!ibuf->rect_float)
+        if (!ibuf->rect_float) {
           IMB_float_from_rect(ibuf);
+        }
         BLI_thread_unlock(LOCK_IMAGE);
       }
 
-      while (px < 0)
+      while (px < 0) {
         px += ibuf->x;
-      while (py < 0)
+      }
+      while (py < 0) {
         py += ibuf->y;
-      while (px >= ibuf->x)
+      }
+      while (px >= ibuf->x) {
         px -= ibuf->x;
-      while (py >= ibuf->y)
+      }
+      while (py >= ibuf->y) {
         py -= ibuf->y;
+      }
 
       result = ibuf->rect_float + py * ibuf->x * 4 + px * 4;
       copy_v4_v4(out, result);

@@ -22,63 +22,22 @@
 #include "bvh/bvh_params.h"
 #include "bvh_split.h"
 
+#include "render/curves.h"
+#include "render/hair.h"
 #include "render/mesh.h"
 #include "render/object.h"
 #include "render/scene.h"
-#include "render/curves.h"
 
 #include "util/util_algorithm.h"
 #include "util/util_foreach.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
-#include "util/util_stack_allocator.h"
-#include "util/util_simd.h"
-#include "util/util_time.h"
 #include "util/util_queue.h"
+#include "util/util_simd.h"
+#include "util/util_stack_allocator.h"
+#include "util/util_time.h"
 
 CCL_NAMESPACE_BEGIN
-
-/* BVH Build Task */
-
-class BVHBuildTask : public Task {
- public:
-  BVHBuildTask(
-      BVHBuild *build, InnerNode *node, int child, const BVHObjectBinning &range, int level)
-      : range_(range)
-  {
-    run = function_bind(&BVHBuild::thread_build_node, build, node, child, &range_, level);
-  }
-
- private:
-  BVHObjectBinning range_;
-};
-
-class BVHSpatialSplitBuildTask : public Task {
- public:
-  BVHSpatialSplitBuildTask(BVHBuild *build,
-                           InnerNode *node,
-                           int child,
-                           const BVHRange &range,
-                           const vector<BVHReference> &references,
-                           int level)
-      : range_(range),
-        references_(references.begin() + range.start(), references.begin() + range.end())
-  {
-    range_.set_start(0);
-    run = function_bind(&BVHBuild::thread_build_spatial_split_node,
-                        build,
-                        node,
-                        child,
-                        &range_,
-                        &references_,
-                        level,
-                        _1);
-  }
-
- private:
-  BVHRange range_;
-  vector<BVHReference> references_;
-};
 
 /* Constructor / Destructor */
 
@@ -194,23 +153,30 @@ void BVHBuild::add_reference_triangles(BoundBox &root, BoundBox &center, Mesh *m
   }
 }
 
-void BVHBuild::add_reference_curves(BoundBox &root, BoundBox &center, Mesh *mesh, int i)
+void BVHBuild::add_reference_curves(BoundBox &root, BoundBox &center, Hair *hair, int i)
 {
   const Attribute *curve_attr_mP = NULL;
-  if (mesh->has_motion_blur()) {
-    curve_attr_mP = mesh->curve_attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
+  if (hair->has_motion_blur()) {
+    curve_attr_mP = hair->attributes.find(ATTR_STD_MOTION_VERTEX_POSITION);
   }
-  const size_t num_curves = mesh->num_curves();
+
+  const PrimitiveType primitive_type =
+      (curve_attr_mP != NULL) ?
+          ((hair->curve_shape == CURVE_RIBBON) ? PRIMITIVE_MOTION_CURVE_RIBBON :
+                                                 PRIMITIVE_MOTION_CURVE_THICK) :
+          ((hair->curve_shape == CURVE_RIBBON) ? PRIMITIVE_CURVE_RIBBON : PRIMITIVE_CURVE_THICK);
+
+  const size_t num_curves = hair->num_curves();
   for (uint j = 0; j < num_curves; j++) {
-    const Mesh::Curve curve = mesh->get_curve(j);
-    const float *curve_radius = &mesh->curve_radius[0];
+    const Hair::Curve curve = hair->get_curve(j);
+    const float *curve_radius = &hair->get_curve_radius()[0];
     for (int k = 0; k < curve.num_keys - 1; k++) {
       if (curve_attr_mP == NULL) {
         /* Really simple logic for static hair. */
         BoundBox bounds = BoundBox::empty;
-        curve.bounds_grow(k, &mesh->curve_keys[0], curve_radius, bounds);
+        curve.bounds_grow(k, &hair->get_curve_keys()[0], curve_radius, bounds);
         if (bounds.valid()) {
-          int packed_type = PRIMITIVE_PACK_SEGMENT(PRIMITIVE_CURVE, k);
+          int packed_type = PRIMITIVE_PACK_SEGMENT(primitive_type, k);
           references.push_back(BVHReference(bounds, j, i, packed_type));
           root.grow(bounds);
           center.grow(bounds.center2());
@@ -223,15 +189,15 @@ void BVHBuild::add_reference_curves(BoundBox &root, BoundBox &center, Mesh *mesh
          */
         /* TODO(sergey): Support motion steps for spatially split BVH. */
         BoundBox bounds = BoundBox::empty;
-        curve.bounds_grow(k, &mesh->curve_keys[0], curve_radius, bounds);
-        const size_t num_keys = mesh->curve_keys.size();
-        const size_t num_steps = mesh->motion_steps;
+        curve.bounds_grow(k, &hair->get_curve_keys()[0], curve_radius, bounds);
+        const size_t num_keys = hair->get_curve_keys().size();
+        const size_t num_steps = hair->get_motion_steps();
         const float3 *key_steps = curve_attr_mP->data_float3();
         for (size_t step = 0; step < num_steps - 1; step++) {
           curve.bounds_grow(k, key_steps + step * num_keys, curve_radius, bounds);
         }
         if (bounds.valid()) {
-          int packed_type = PRIMITIVE_PACK_SEGMENT(PRIMITIVE_MOTION_CURVE, k);
+          int packed_type = PRIMITIVE_PACK_SEGMENT(primitive_type, k);
           references.push_back(BVHReference(bounds, j, i, packed_type));
           root.grow(bounds);
           center.grow(bounds.center2());
@@ -244,10 +210,10 @@ void BVHBuild::add_reference_curves(BoundBox &root, BoundBox &center, Mesh *mesh
          */
         const int num_bvh_steps = params.num_motion_curve_steps * 2 + 1;
         const float num_bvh_steps_inv_1 = 1.0f / (num_bvh_steps - 1);
-        const size_t num_steps = mesh->motion_steps;
-        const float3 *curve_keys = &mesh->curve_keys[0];
+        const size_t num_steps = hair->get_motion_steps();
+        const float3 *curve_keys = &hair->get_curve_keys()[0];
         const float3 *key_steps = curve_attr_mP->data_float3();
-        const size_t num_keys = mesh->curve_keys.size();
+        const size_t num_keys = hair->get_curve_keys().size();
         /* Calculate bounding box of the previous time step.
          * Will be reused later to avoid duplicated work on
          * calculating BVH time step boundbox.
@@ -287,7 +253,7 @@ void BVHBuild::add_reference_curves(BoundBox &root, BoundBox &center, Mesh *mesh
           bounds.grow(curr_bounds);
           if (bounds.valid()) {
             const float prev_time = (float)(bvh_step - 1) * num_bvh_steps_inv_1;
-            int packed_type = PRIMITIVE_PACK_SEGMENT(PRIMITIVE_MOTION_CURVE, k);
+            int packed_type = PRIMITIVE_PACK_SEGMENT(primitive_type, k);
             references.push_back(BVHReference(bounds, j, i, packed_type, prev_time, curr_time));
             root.grow(bounds);
             center.grow(bounds.center2());
@@ -302,13 +268,15 @@ void BVHBuild::add_reference_curves(BoundBox &root, BoundBox &center, Mesh *mesh
   }
 }
 
-void BVHBuild::add_reference_mesh(BoundBox &root, BoundBox &center, Mesh *mesh, int i)
+void BVHBuild::add_reference_geometry(BoundBox &root, BoundBox &center, Geometry *geom, int i)
 {
-  if (params.primitive_mask & PRIMITIVE_ALL_TRIANGLE) {
+  if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
+    Mesh *mesh = static_cast<Mesh *>(geom);
     add_reference_triangles(root, center, mesh, i);
   }
-  if (params.primitive_mask & PRIMITIVE_ALL_CURVE) {
-    add_reference_curves(root, center, mesh, i);
+  else if (geom->geometry_type == Geometry::HAIR) {
+    Hair *hair = static_cast<Hair *>(geom);
+    add_reference_curves(root, center, hair, i);
   }
 }
 
@@ -319,14 +287,28 @@ void BVHBuild::add_reference_object(BoundBox &root, BoundBox &center, Object *ob
   center.grow(ob->bounds.center2());
 }
 
-static size_t count_curve_segments(Mesh *mesh)
+static size_t count_curve_segments(Hair *hair)
 {
-  size_t num = 0, num_curves = mesh->num_curves();
+  size_t num = 0, num_curves = hair->num_curves();
 
   for (size_t i = 0; i < num_curves; i++)
-    num += mesh->get_curve(i).num_keys - 1;
+    num += hair->get_curve(i).num_keys - 1;
 
   return num;
+}
+
+static size_t count_primitives(Geometry *geom)
+{
+  if (geom->geometry_type == Geometry::MESH || geom->geometry_type == Geometry::VOLUME) {
+    Mesh *mesh = static_cast<Mesh *>(geom);
+    return mesh->num_triangles();
+  }
+  else if (geom->geometry_type == Geometry::HAIR) {
+    Hair *hair = static_cast<Hair *>(geom);
+    return count_curve_segments(hair);
+  }
+
+  return 0;
 }
 
 void BVHBuild::add_references(BVHRange &root)
@@ -339,24 +321,14 @@ void BVHBuild::add_references(BVHRange &root)
       if (!ob->is_traceable()) {
         continue;
       }
-      if (!ob->mesh->is_instanced()) {
-        if (params.primitive_mask & PRIMITIVE_ALL_TRIANGLE) {
-          num_alloc_references += ob->mesh->num_triangles();
-        }
-        if (params.primitive_mask & PRIMITIVE_ALL_CURVE) {
-          num_alloc_references += count_curve_segments(ob->mesh);
-        }
+      if (!ob->get_geometry()->is_instanced()) {
+        num_alloc_references += count_primitives(ob->get_geometry());
       }
       else
         num_alloc_references++;
     }
     else {
-      if (params.primitive_mask & PRIMITIVE_ALL_TRIANGLE) {
-        num_alloc_references += ob->mesh->num_triangles();
-      }
-      if (params.primitive_mask & PRIMITIVE_ALL_CURVE) {
-        num_alloc_references += count_curve_segments(ob->mesh);
-      }
+      num_alloc_references += count_primitives(ob->get_geometry());
     }
   }
 
@@ -372,13 +344,13 @@ void BVHBuild::add_references(BVHRange &root)
         ++i;
         continue;
       }
-      if (!ob->mesh->is_instanced())
-        add_reference_mesh(bounds, center, ob->mesh, i);
+      if (!ob->get_geometry()->is_instanced())
+        add_reference_geometry(bounds, center, ob->get_geometry(), i);
       else
         add_reference_object(bounds, center, ob, i);
     }
     else
-      add_reference_mesh(bounds, center, ob->mesh, i);
+      add_reference_geometry(bounds, center, ob->get_geometry(), i);
 
     i++;
 
@@ -388,7 +360,7 @@ void BVHBuild::add_references(BVHRange &root)
 
   /* happens mostly on empty meshes */
   if (!bounds.valid())
-    bounds.grow(make_float3(0.0f, 0.0f, 0.0f));
+    bounds.grow(zero_float3());
 
   root = BVHRange(bounds, center, 0, references.size());
 }
@@ -416,22 +388,6 @@ BVHNode *BVHBuild::run()
   }
 
   spatial_min_overlap = root.bounds().safe_area() * params.spatial_split_alpha;
-  if (params.use_spatial_split) {
-    /* NOTE: The API here tries to be as much ready for multi-threaded build
-     * as possible, but at the same time it tries not to introduce any
-     * changes in behavior for until all refactoring needed for threading is
-     * finished.
-     *
-     * So we currently allocate single storage for now, which is only used by
-     * the only thread working on the spatial BVH build.
-     */
-    spatial_storage.resize(TaskScheduler::num_threads() + 1);
-    size_t num_bins = max(root.size(), (int)BVHParams::NUM_SPATIAL_BINS) - 1;
-    foreach (BVHSpatialStorage &storage, spatial_storage) {
-      storage.right_bounds.clear();
-    }
-    spatial_storage[0].right_bounds.resize(num_bins);
-  }
   spatial_free_index = 0;
 
   need_prim_time = params.num_motion_curve_steps > 0 || params.num_motion_triangle_steps > 0;
@@ -458,7 +414,8 @@ BVHNode *BVHBuild::run()
 
   if (params.use_spatial_split) {
     /* Perform multithreaded spatial split build. */
-    rootnode = build_node(root, &references, 0, 0);
+    BVHSpatialStorage *local_storage = &spatial_storage.local();
+    rootnode = build_node(root, references, 0, local_storage);
     task_pool.wait_work();
   }
   else {
@@ -467,6 +424,9 @@ BVHNode *BVHBuild::run()
     rootnode = build_node(rootbin, 0);
     task_pool.wait_work();
   }
+
+  /* clean up temporary memory usage by threads */
+  spatial_storage.clear();
 
   /* delete if we canceled */
   if (rootnode) {
@@ -522,41 +482,46 @@ void BVHBuild::progress_update()
   progress_start_time = time_dt();
 }
 
-void BVHBuild::thread_build_node(InnerNode *inner, int child, BVHObjectBinning *range, int level)
+void BVHBuild::thread_build_node(InnerNode *inner,
+                                 int child,
+                                 const BVHObjectBinning &range,
+                                 int level)
 {
   if (progress.get_cancel())
     return;
 
   /* build nodes */
-  BVHNode *node = build_node(*range, level);
+  BVHNode *node = build_node(range, level);
 
   /* set child in inner node */
   inner->children[child] = node;
 
   /* update progress */
-  if (range->size() < THREAD_TASK_SIZE) {
+  if (range.size() < THREAD_TASK_SIZE) {
     /*rotate(node, INT_MAX, 5);*/
 
     thread_scoped_lock lock(build_mutex);
 
-    progress_count += range->size();
+    progress_count += range.size();
     progress_update();
   }
 }
 
 void BVHBuild::thread_build_spatial_split_node(InnerNode *inner,
                                                int child,
-                                               BVHRange *range,
-                                               vector<BVHReference> *references,
-                                               int level,
-                                               int thread_id)
+                                               const BVHRange &range,
+                                               vector<BVHReference> &references,
+                                               int level)
 {
   if (progress.get_cancel()) {
     return;
   }
 
+  /* Get per-thread memory for spatial split. */
+  BVHSpatialStorage *local_storage = &spatial_storage.local();
+
   /* build nodes */
-  BVHNode *node = build_node(*range, references, level, thread_id);
+  BVHNode *node = build_node(range, references, level, local_storage);
 
   /* set child in inner node */
   inner->children[child] = node;
@@ -579,14 +544,22 @@ bool BVHBuild::range_within_max_leaf_size(const BVHRange &range,
   for (int i = 0; i < size; i++) {
     const BVHReference &ref = references[range.start() + i];
 
-    if (ref.prim_type() & PRIMITIVE_CURVE)
-      num_curves++;
-    if (ref.prim_type() & PRIMITIVE_MOTION_CURVE)
-      num_motion_curves++;
-    else if (ref.prim_type() & PRIMITIVE_TRIANGLE)
-      num_triangles++;
-    else if (ref.prim_type() & PRIMITIVE_MOTION_TRIANGLE)
-      num_motion_triangles++;
+    if (ref.prim_type() & PRIMITIVE_ALL_CURVE) {
+      if (ref.prim_type() & PRIMITIVE_ALL_MOTION) {
+        num_motion_curves++;
+      }
+      else {
+        num_curves++;
+      }
+    }
+    else if (ref.prim_type() & PRIMITIVE_ALL_TRIANGLE) {
+      if (ref.prim_type() & PRIMITIVE_ALL_MOTION) {
+        num_motion_triangles++;
+      }
+      else {
+        num_triangles++;
+      }
+    }
   }
 
   return (num_triangles <= params.max_triangle_leaf_size) &&
@@ -668,8 +641,8 @@ BVHNode *BVHBuild::build_node(const BVHObjectBinning &range, int level)
     /* Threaded build */
     inner = new InnerNode(bounds);
 
-    task_pool.push(new BVHBuildTask(this, inner, 0, left, level + 1), true);
-    task_pool.push(new BVHBuildTask(this, inner, 1, right, level + 1), true);
+    task_pool.push([=] { thread_build_node(inner, 0, left, level + 1); });
+    task_pool.push([=] { thread_build_node(inner, 1, right, level + 1); });
   }
 
   if (do_unalinged_split) {
@@ -681,9 +654,9 @@ BVHNode *BVHBuild::build_node(const BVHObjectBinning &range, int level)
 
 /* multithreaded spatial split builder */
 BVHNode *BVHBuild::build_node(const BVHRange &range,
-                              vector<BVHReference> *references,
+                              vector<BVHReference> &references,
                               int level,
-                              int thread_id)
+                              BVHSpatialStorage *storage)
 {
   /* Update progress.
    *
@@ -700,18 +673,17 @@ BVHNode *BVHBuild::build_node(const BVHRange &range,
   if (!(range.size() > 0 && params.top_level && level == 0)) {
     if (params.small_enough_for_leaf(range.size(), level)) {
       progress_count += range.size();
-      return create_leaf_node(range, *references);
+      return create_leaf_node(range, references);
     }
   }
 
   /* Perform splitting test. */
-  BVHSpatialStorage *storage = &spatial_storage[thread_id];
   BVHMixedSplit split(this, storage, range, references, level);
 
   if (!(range.size() > 0 && params.top_level && level == 0)) {
     if (split.no_split) {
       progress_count += range.size();
-      return create_leaf_node(range, *references);
+      return create_leaf_node(range, references);
     }
   }
   float leafSAH = params.sah_primitive_cost * split.leafSAH;
@@ -724,14 +696,14 @@ BVHNode *BVHBuild::build_node(const BVHRange &range,
   Transform aligned_space;
   bool do_unalinged_split = false;
   if (params.use_unaligned_nodes && splitSAH > params.unaligned_split_threshold * leafSAH) {
-    aligned_space = unaligned_heuristic.compute_aligned_space(range, &references->at(0));
+    aligned_space = unaligned_heuristic.compute_aligned_space(range, &references.at(0));
     unaligned_split = BVHMixedSplit(
         this, storage, range, references, level, &unaligned_heuristic, &aligned_space);
     /* unalignedLeafSAH = params.sah_primitive_cost * split.leafSAH; */
     unalignedSplitSAH = params.sah_node_cost * unaligned_split.bounds.half_area() +
                         params.sah_primitive_cost * unaligned_split.nodeSAH;
     /* TOOD(sergey): Check we can create leaf already. */
-    /* Check whether unaligned split is better than the regulat one. */
+    /* Check whether unaligned split is better than the regular one. */
     if (unalignedSplitSAH < splitSAH) {
       do_unalinged_split = true;
     }
@@ -750,8 +722,7 @@ BVHNode *BVHBuild::build_node(const BVHRange &range,
 
   BoundBox bounds;
   if (do_unalinged_split) {
-    bounds = unaligned_heuristic.compute_aligned_boundbox(
-        range, &references->at(0), aligned_space);
+    bounds = unaligned_heuristic.compute_aligned_boundbox(range, &references.at(0), aligned_space);
   }
   else {
     bounds = range.bounds();
@@ -763,24 +734,35 @@ BVHNode *BVHBuild::build_node(const BVHRange &range,
     /* Local build. */
 
     /* Build left node. */
-    vector<BVHReference> copy(references->begin() + right.start(),
-                              references->begin() + right.end());
+    vector<BVHReference> right_references(references.begin() + right.start(),
+                                          references.begin() + right.end());
     right.set_start(0);
 
-    BVHNode *leftnode = build_node(left, references, level + 1, thread_id);
+    BVHNode *leftnode = build_node(left, references, level + 1, storage);
 
     /* Build right node. */
-    BVHNode *rightnode = build_node(right, &copy, level + 1, thread_id);
+    BVHNode *rightnode = build_node(right, right_references, level + 1, storage);
 
     inner = new InnerNode(bounds, leftnode, rightnode);
   }
   else {
     /* Threaded build. */
     inner = new InnerNode(bounds);
-    task_pool.push(new BVHSpatialSplitBuildTask(this, inner, 0, left, *references, level + 1),
-                   true);
-    task_pool.push(new BVHSpatialSplitBuildTask(this, inner, 1, right, *references, level + 1),
-                   true);
+
+    vector<BVHReference> left_references(references.begin() + left.start(),
+                                         references.begin() + left.end());
+    vector<BVHReference> right_references(references.begin() + right.start(),
+                                          references.begin() + right.end());
+    right.set_start(0);
+
+    /* Create tasks for left and right nodes, using copy for most arguments and
+     * move for reference to avoid memory copies. */
+    task_pool.push([=, refs = std::move(left_references)]() mutable {
+      thread_build_spatial_split_node(inner, 0, left, refs, level + 1);
+    });
+    task_pool.push([=, refs = std::move(right_references)]() mutable {
+      thread_build_spatial_split_node(inner, 1, right, refs, level + 1);
+    });
   }
 
   if (do_unalinged_split) {
@@ -860,7 +842,7 @@ BVHNode *BVHBuild::create_leaf_node(const BVHRange &range, const vector<BVHRefer
   vector<BVHReference, LeafReferenceStackAllocator> object_references;
 
   uint visibility[PRIMITIVE_NUM_TOTAL] = {0};
-  /* NOTE: Keep initializtion in sync with actual number of primitives. */
+  /* NOTE: Keep initialization in sync with actual number of primitives. */
   BoundBox bounds[PRIMITIVE_NUM_TOTAL] = {
       BoundBox::empty, BoundBox::empty, BoundBox::empty, BoundBox::empty};
   int ob_num = 0;
@@ -869,7 +851,7 @@ BVHNode *BVHBuild::create_leaf_node(const BVHRange &range, const vector<BVHRefer
   for (int i = 0; i < range.size(); i++) {
     const BVHReference &ref = references[range.start() + i];
     if (ref.prim_index() != -1) {
-      int type_index = bitscan(ref.prim_type() & PRIMITIVE_ALL);
+      uint32_t type_index = bitscan((uint32_t)(ref.prim_type() & PRIMITIVE_ALL));
       p_ref[type_index].push_back(ref);
       p_type[type_index].push_back(ref.prim_type());
       p_index[type_index].push_back(ref.prim_index());
@@ -878,9 +860,6 @@ BVHNode *BVHBuild::create_leaf_node(const BVHRange &range, const vector<BVHRefer
 
       bounds[type_index].grow(ref.bounds());
       visibility[type_index] |= objects[ref.prim_object()]->visibility_for_tracing();
-      if (ref.prim_type() & PRIMITIVE_ALL_CURVE) {
-        visibility[type_index] |= PATH_RAY_CURVE;
-      }
       ++num_new_prims;
     }
     else {

@@ -18,9 +18,14 @@
  * \ingroup editors
  */
 
-#ifndef __ED_USERPREF_H__
-#define __ED_USERPREF_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void ED_operatortypes_userpref(void);
 
-#endif /* __ED_USERPREF_H__ */
+#ifdef __cplusplus
+}
+#endif

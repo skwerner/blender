@@ -16,21 +16,24 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DILATEERODENODE_H__
-#define __COM_DILATEERODENODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief DilateErodeNode
  * \ingroup Node
  */
 class DilateErodeNode : public Node {
-  NodeBlurData
-      m_alpha_blur; /* only used for blurring alpha, since the dilate/erode node doesn't have this */
+  /** only used for blurring alpha, since the dilate/erode node doesn't have this. */
+  NodeBlurData m_alpha_blur;
+
  public:
   DilateErodeNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

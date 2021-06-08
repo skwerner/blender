@@ -37,12 +37,17 @@
  * over other previous ones.
  */
 
-#include <assert.h>
 #include "node_texture_util.h"
 
-bool tex_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+bool tex_node_poll_default(bNodeType *UNUSED(ntype),
+                           bNodeTree *ntree,
+                           const char **r_disabled_hint)
 {
-  return STREQ(ntree->idname, "TextureNodeTree");
+  if (!STREQ(ntree->idname, "TextureNodeTree")) {
+    *r_disabled_hint = "Not a texture node tree";
+    return false;
+  }
+  return true;
 }
 
 void tex_node_type_base(
@@ -60,8 +65,9 @@ static void tex_call_delegate(TexDelegate *dg, float *out, TexParams *params, sh
   if (dg->node->need_exec) {
     dg->fn(out, params, dg->node, dg->in, thread);
 
-    if (dg->cdata->do_preview)
+    if (dg->cdata->do_preview) {
       tex_do_preview(dg->preview, params->previewco, out, dg->cdata->do_manage);
+    }
   }
 }
 
@@ -71,8 +77,9 @@ static void tex_input(float *out, int sz, bNodeStack *in, TexParams *params, sho
   if (dg) {
     tex_call_delegate(dg, in->vec, params, thread);
 
-    if (in->hasoutput && in->sockettype == SOCK_FLOAT)
+    if (in->hasoutput && in->sockettype == SOCK_FLOAT) {
       in->vec[1] = in->vec[2] = in->vec[0];
+    }
   }
   memcpy(out, in->vec, sz * sizeof(float));
 }
@@ -143,12 +150,13 @@ void tex_output(bNode *node,
     /* do not add a delegate if the node is muted */
     return;
   }
+
+  if (!out->data) {
+    /* Freed in tex_end_exec (node.cc) */
+    dg = out->data = MEM_mallocN(sizeof(TexDelegate), "tex delegate");
+  }
   else {
-    if (!out->data)
-      /* Freed in tex_end_exec (node.c) */
-      dg = out->data = MEM_mallocN(sizeof(TexDelegate), "tex delegate");
-    else
-      dg = out->data;
+    dg = out->data;
   }
 
   dg->cdata = cdata;

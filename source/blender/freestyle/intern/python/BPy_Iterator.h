@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_ITERATOR_H__
-#define __FREESTYLE_PYTHON_ITERATOR_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../system/Iterator.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,7 +38,7 @@ extern PyTypeObject Iterator_Type;
 
 /*---------------------------Python BPy_Iterator structure definition----------*/
 typedef struct {
-  PyObject_HEAD Iterator *it;
+  PyObject_HEAD Freestyle::Iterator *it;
 } BPy_Iterator;
 
 /*---------------------------Python BPy_Iterator visible prototypes-----------*/
@@ -53,5 +50,3 @@ int Iterator_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_ITERATOR_H__ */

@@ -23,14 +23,10 @@
 
 #include "DNA_node_types.h"
 
-#include "BLI_utildefines.h"
-
 #include "BKE_context.h"
 
 #include "ED_node.h" /* own include */
 #include "ED_screen.h"
-#include "ED_select_utils.h"
-#include "ED_transform.h"
 
 #include "RNA_access.h"
 
@@ -41,9 +37,6 @@
 
 void node_operatortypes(void)
 {
-  WM_operatortype_append(NODE_OT_properties);
-  WM_operatortype_append(NODE_OT_toolbar);
-
   WM_operatortype_append(NODE_OT_select);
   WM_operatortype_append(NODE_OT_select_all);
   WM_operatortype_append(NODE_OT_select_linked_to);
@@ -75,6 +68,7 @@ void node_operatortypes(void)
   WM_operatortype_append(NODE_OT_link_make);
   WM_operatortype_append(NODE_OT_links_cut);
   WM_operatortype_append(NODE_OT_links_detach);
+  WM_operatortype_append(NODE_OT_links_mute);
   WM_operatortype_append(NODE_OT_add_reroute);
 
   WM_operatortype_append(NODE_OT_group_make);
@@ -95,6 +89,10 @@ void node_operatortypes(void)
   WM_operatortype_append(NODE_OT_backimage_fit);
   WM_operatortype_append(NODE_OT_backimage_sample);
 
+  WM_operatortype_append(NODE_OT_add_group);
+  WM_operatortype_append(NODE_OT_add_object);
+  WM_operatortype_append(NODE_OT_add_collection);
+  WM_operatortype_append(NODE_OT_add_texture);
   WM_operatortype_append(NODE_OT_add_file);
   WM_operatortype_append(NODE_OT_add_mask);
 
@@ -146,7 +144,6 @@ void ED_operatormacros_node(void)
                                     "Move nodes and attach to frame",
                                     OPTYPE_UNDO | OPTYPE_REGISTER);
   mot = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
-  RNA_boolean_set(mot->ptr, "release_confirm", true);
   WM_operatortype_macro_define(ot, "NODE_OT_attach");
   WM_operatortype_macro_define(ot, "NODE_OT_insert_offset");
 
@@ -156,7 +153,6 @@ void ED_operatormacros_node(void)
                                     "Move nodes and attach to frame",
                                     OPTYPE_UNDO | OPTYPE_REGISTER);
   mot = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
-  RNA_boolean_set(mot->ptr, "release_confirm", true);
   RNA_boolean_set(mot->ptr, "remove_on_cancel", true);
   WM_operatortype_macro_define(ot, "NODE_OT_attach");
   WM_operatortype_macro_define(ot, "NODE_OT_insert_offset");
@@ -171,7 +167,6 @@ void ED_operatormacros_node(void)
                                     OPTYPE_UNDO | OPTYPE_REGISTER);
   WM_operatortype_macro_define(ot, "NODE_OT_detach");
   mot = WM_operatortype_macro_define(ot, "TRANSFORM_OT_translate");
-  RNA_boolean_set(mot->ptr, "release_confirm", true);
   WM_operatortype_macro_define(ot, "NODE_OT_attach");
 
   ot = WM_operatortype_append_macro("NODE_OT_duplicate_move",

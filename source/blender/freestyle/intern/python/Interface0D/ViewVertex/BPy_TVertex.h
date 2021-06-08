@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_TVERTEX_H__
-#define __FREESTYLE_PYTHON_TVERTEX_H__
+#pragma once
 
 #include "../BPy_ViewVertex.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject TVertex_Type;
 /*---------------------------Python BPy_TVertex structure definition----------*/
 typedef struct {
   BPy_ViewVertex py_vv;
-  TVertex *tv;
+  Freestyle::TVertex *tv;
 } BPy_TVertex;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_TVERTEX_H__ */

@@ -1,4 +1,18 @@
 
+/* Required by some nodes. */
+#pragma BLENDER_REQUIRE(common_hair_lib.glsl)
+#pragma BLENDER_REQUIRE(common_utiltex_lib.glsl)
+
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+#pragma BLENDER_REQUIRE(common_uniforms_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_type_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_diffuse_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_glossy_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_translucent_lib.glsl)
+#pragma BLENDER_REQUIRE(closure_eval_refraction_lib.glsl)
+#pragma BLENDER_REQUIRE(surface_lib.glsl)
+
 #ifdef USE_ALPHA_HASH
 
 /* From the paper "Hashed Alpha Testing" by Chris Wyman and Morgan McGuire */
@@ -12,14 +26,11 @@ float hash3d(vec3 a)
   return hash(vec2(hash(a.xy), a.z));
 }
 
-uniform float hashAlphaOffset;
-uniform float hashAlphaScale = 1.0; /* Roughly in pixel */
-
 float hashed_alpha_threshold(vec3 co)
 {
   /* Find the discretized derivatives of our coordinates. */
   float max_deriv = max(length(dFdx(co)), length(dFdy(co)));
-  float pix_scale = 1.0 / (hashAlphaScale * max_deriv);
+  float pix_scale = 1.0 / (alphaHashScale * max_deriv);
 
   /* Find two nearest log-discretized noise scales. */
   float pix_scale_log = log2(pix_scale);
@@ -48,39 +59,28 @@ float hashed_alpha_threshold(vec3 co)
   /* Find our final, uniformly distributed alpha threshold. */
   float threshold = (x < one_a) ? ((x < a) ? cases.x : cases.y) : cases.z;
 
+  /* Jitter the threshold for TAA accumulation. */
+  threshold = fract(threshold + alphaHashOffset);
+
   /* Avoids threshold == 0. */
   threshold = clamp(threshold, 1.0e-6, 1.0);
 
-  /* Jitter the threshold for TAA accumulation. */
-  return fract(threshold + hashAlphaOffset);
+  return threshold;
 }
 
 #endif
 
-#ifdef USE_ALPHA_CLIP
-uniform float alphaThreshold;
-#endif
-
 void main()
 {
-  /* For now do nothing.
-   * In the future, output object motion blur. */
-
-#if defined(USE_ALPHA_HASH) || defined(USE_ALPHA_CLIP)
-#  define NODETREE_EXEC
+#if defined(USE_ALPHA_HASH)
 
   Closure cl = nodetree_exec();
 
-#  if defined(USE_ALPHA_HASH)
+  float opacity = saturate(1.0 - avg(cl.transmittance));
+
   /* Hashed Alpha Testing */
-  if (cl.opacity < hashed_alpha_threshold(worldPosition)) {
+  if (opacity < hashed_alpha_threshold(worldPosition)) {
     discard;
   }
-#  elif defined(USE_ALPHA_CLIP)
-  /* Alpha clip */
-  if (cl.opacity <= alphaThreshold) {
-    discard;
-  }
-#  endif
 #endif
 }

@@ -2,8 +2,8 @@
 
 # ./blender.bin --background -noaudio --python tests/python/bl_pyapi_mathutils.py -- --verbose
 import unittest
-from mathutils import Matrix, Vector, Quaternion
-from mathutils import kdtree
+from mathutils import Matrix, Vector, Quaternion, Euler
+from mathutils import kdtree, geometry
 import math
 
 # keep globals immutable
@@ -233,6 +233,27 @@ class MatrixTesting(unittest.TestCase):
 
         self.assertEqual(mat @ mat, prod_mat)
 
+    def test_loc_rot_scale(self):
+        euler = Euler((math.radians(90), 0, math.radians(90)), 'ZYX')
+        expected = Matrix(((0, -5, 0, 1),
+                           (0, 0, -6, 2),
+                           (4, 0, 0, 3),
+                           (0, 0, 0, 1)))
+
+        result = Matrix.LocRotScale((1, 2, 3), euler, (4, 5, 6))
+        self.assertAlmostEqualMatrix(result, expected, 4)
+
+        result = Matrix.LocRotScale((1, 2, 3), euler.to_quaternion(), (4, 5, 6))
+        self.assertAlmostEqualMatrix(result, expected, 4)
+
+        result = Matrix.LocRotScale((1, 2, 3), euler.to_matrix(), (4, 5, 6))
+        self.assertAlmostEqualMatrix(result, expected, 4)
+
+    def assertAlmostEqualMatrix(self, first, second, size, *, places=6, msg=None, delta=None):
+        for i in range(size):
+            for j in range(size):
+                self.assertAlmostEqual(first[i][j], second[i][j], places=places, msg=msg, delta=delta)
+
 
 class VectorTesting(unittest.TestCase):
 
@@ -442,20 +463,20 @@ class KDTreeTesting(unittest.TestCase):
 
                     ret_regular = k_odd.find(co)
                     self.assertEqual(ret_regular[1] % 2, 1)
-                    ret_filter = k_all.find(co, lambda i: (i % 2) == 1)
+                    ret_filter = k_all.find(co, filter=lambda i: (i % 2) == 1)
                     self.assertAlmostEqualVector(ret_regular, ret_filter)
 
                     ret_regular = k_evn.find(co)
                     self.assertEqual(ret_regular[1] % 2, 0)
-                    ret_filter = k_all.find(co, lambda i: (i % 2) == 0)
+                    ret_filter = k_all.find(co, filter=lambda i: (i % 2) == 0)
                     self.assertAlmostEqualVector(ret_regular, ret_filter)
 
         # filter out all values (search odd tree for even values and the reverse)
         co = (0,) * 3
-        ret_filter = k_odd.find(co, lambda i: (i % 2) == 0)
+        ret_filter = k_odd.find(co, filter=lambda i: (i % 2) == 0)
         self.assertEqual(ret_filter[1], None)
 
-        ret_filter = k_evn.find(co, lambda i: (i % 2) == 1)
+        ret_filter = k_evn.find(co, filter=lambda i: (i % 2) == 1)
         self.assertEqual(ret_filter[1], None)
 
     def test_kdtree_invalid_size(self):
@@ -486,6 +507,43 @@ class KDTreeTesting(unittest.TestCase):
         # bad return value
         with self.assertRaises(ValueError):
             k.find((0,) * 3, filter=lambda i: None)
+
+
+class TesselatePolygon(unittest.TestCase):
+    def test_empty(self):
+        self.assertEqual([], geometry.tessellate_polygon([]))
+
+    def test_2d(self):
+        polyline = [
+            Vector((-0.14401324093341827, 0.1266411542892456)),
+            Vector((-0.14401324093341827, 0.13)),
+            Vector((0.13532273471355438, 0.1266411542892456)),
+            Vector((0.13532273471355438, 0.13)),
+        ]
+        expect = [(0, 1, 2), (0, 3, 2)]
+        self.assertEqual(expect, geometry.tessellate_polygon([polyline]))
+
+    def test_3d(self):
+        polyline = [
+            Vector((-0.14401324093341827, 0.1266411542892456, -0.13966798782348633)),
+            Vector((-0.14401324093341827, 0.1266411542892456, 0.13966798782348633)),
+            Vector((0.13532273471355438, 0.1266411542892456, 0.13966798782348633)),
+            Vector((0.13532273471355438, 0.1266411542892456, -0.13966798782348633)),
+        ]
+        expect = [(2, 3, 0), (2, 0, 1)]
+        self.assertEqual(expect, geometry.tessellate_polygon([polyline]))
+
+    def test_3d_degenerate(self):
+        polyline = [
+            Vector((-0.14401324093341827, -0.15269476175308228, -0.13966798782348633)),
+            Vector((0.13532273471355438, -0.15269476175308228, -0.13966798782348633)),
+            Vector((0.13532273471355438, -0.15269476175308228, -0.13966798782348633)),
+            Vector((-0.14401324093341827, -0.15269476175308228, -0.13966798782348633)),
+        ]
+        # If this returns a proper result, rather than [(0, 0, 0)], it could mean that
+        # degenerate geometry is handled properly.
+        expect = [(0, 0, 0)]
+        self.assertEqual(expect, geometry.tessellate_polygon([polyline]))
 
 
 if __name__ == '__main__':

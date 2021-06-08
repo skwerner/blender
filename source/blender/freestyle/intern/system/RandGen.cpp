@@ -49,7 +49,8 @@ namespace Freestyle {
     long l = (long)(x) * (long)(y); \
     (z)[0] = LOW(l); \
     (z)[1] = HIGH(l); \
-  }
+  } \
+  ((void)0)
 
 #define CARRY(x, y) ((unsigned long)((long)(x) + (long)(y)) > MASK)
 #define ADDEQU(x, y, z) (z = CARRY(x, (y)), x = LOW(x + (y)))
@@ -69,10 +70,10 @@ namespace Freestyle {
     (void)0
 
 #  define NEST(TYPE, f, F) \
-    TYPE f(register unsigned short *xsubi) \
+    TYPE f(unsigned short *xsubi) \
     { \
-      register int i; \
-      register TYPE v; \
+      int i; \
+      TYPE v; \
       unsigned temp[3]; \
       for (i = 0; i < 3; i++) { \
         temp[i] = x[i]; \

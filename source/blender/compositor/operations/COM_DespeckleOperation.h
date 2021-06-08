@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DESPECKLEOPERATION_H__
-#define __COM_DESPECKLEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class DespeckleOperation : public NodeOperation {
  private:
@@ -36,8 +38,8 @@ class DespeckleOperation : public NodeOperation {
   DespeckleOperation();
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
-  void executePixel(float output[4], int x, int y, void *data);
+                                        rcti *output) override;
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   void setThreshold(float threshold)
   {
@@ -48,8 +50,8 @@ class DespeckleOperation : public NodeOperation {
     this->m_threshold_neighbor = threshold;
   }
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 };
 
-#endif
+}  // namespace blender::compositor

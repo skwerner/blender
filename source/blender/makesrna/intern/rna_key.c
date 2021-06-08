@@ -21,14 +21,14 @@
 #include <stdlib.h>
 
 #include "DNA_ID.h"
-#include "DNA_scene_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_key_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -46,6 +46,7 @@
 
 #  include "DNA_object_types.h"
 
+#  include "BLI_listbase.h"
 #  include "BLI_string_utils.h"
 
 #  include "BKE_animsys.h"
@@ -87,8 +88,8 @@ static void rna_ShapeKey_name_set(PointerRNA *ptr, const char *value)
   BLI_strncpy_utf8(kb->name, value, sizeof(kb->name));
 
   /* make sure the name is truly unique */
-  if (ptr->id.data) {
-    Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  if (ptr->owner_id) {
+    Key *key = rna_ShapeKey_find_key(ptr->owner_id);
     BLI_uniquename(&key->block,
                    kb,
                    CTX_DATA_(BLT_I18NCONTEXT_ID_SHAPEKEY, "Key"),
@@ -167,13 +168,14 @@ static void rna_ShapeKey_slider_max_set(PointerRNA *ptr, float value)
 #  undef SHAPEKEY_SLIDER_TOL
 
 /* ***** Normals accessors for shapekeys. ***** */
-/* Note: with this we may recompute several times the same data, should we want to access verts, then polys, then loops
- *       normals... However, such case looks rather unlikely - and not worth adding some kind of caching in KeyBlocks.
+/* Note: with this we may recompute several times the same data, should we want to access verts,
+ *       then polys, then loops normals... However,
+ *       such case looks rather unlikely - and not worth adding some kind of caching in KeyBlocks.
  */
 
 static Mesh *rna_KeyBlock_normals_get_mesh(PointerRNA *ptr, ID *id)
 {
-  Key *key = rna_ShapeKey_find_key((id == NULL && ptr != NULL) ? ptr->id.data : id);
+  Key *key = rna_ShapeKey_find_key((id == NULL && ptr != NULL) ? ptr->owner_id : id);
   id = key ? key->from : NULL;
 
   if (id != NULL) {
@@ -287,8 +289,9 @@ PointerRNA rna_object_shapekey_index_get(ID *id, int value)
   KeyBlock *kb = NULL;
   PointerRNA ptr;
 
-  if (key && value < key->totkey)
+  if (key && value < key->totkey) {
     kb = BLI_findlink(&key->block, value);
+  }
 
   RNA_pointer_create(id, &RNA_ShapeKey, kb, &ptr);
 
@@ -301,8 +304,9 @@ int rna_object_shapekey_index_set(ID *id, PointerRNA value, int current)
 
   if (key) {
     int a = BLI_findindex(&key->block, value.data);
-    if (a != -1)
+    if (a != -1) {
       return a;
+    }
   }
 
   return current;
@@ -312,14 +316,16 @@ static PointerRNA rna_ShapeKey_relative_key_get(PointerRNA *ptr)
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
 
-  return rna_object_shapekey_index_get(ptr->id.data, kb->relative);
+  return rna_object_shapekey_index_get(ptr->owner_id, kb->relative);
 }
 
-static void rna_ShapeKey_relative_key_set(PointerRNA *ptr, PointerRNA value)
+static void rna_ShapeKey_relative_key_set(PointerRNA *ptr,
+                                          PointerRNA value,
+                                          struct ReportList *UNUSED(reports))
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
 
-  kb->relative = rna_object_shapekey_index_set(ptr->id.data, value, kb->relative);
+  kb->relative = rna_object_shapekey_index_set(ptr->owner_id, value, kb->relative);
 }
 
 static void rna_ShapeKeyPoint_co_get(PointerRNA *ptr, float *values)
@@ -560,7 +566,7 @@ static void rna_ShapeKey_data_begin_mixed(CollectionPropertyIterator *iter,
 
 static void rna_ShapeKey_data_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb = (KeyBlock *)ptr->data;
   int tot = kb->totelem, size = key->elemsize;
 
@@ -570,7 +576,7 @@ static void rna_ShapeKey_data_begin(CollectionPropertyIterator *iter, PointerRNA
     NurbInfo info = {0};
 
     /* Check if all sub-curves have the same type. */
-    for (Nurb *nu = cu->nurb.first; nu; nu = nu->next) {
+    LISTBASE_FOREACH (Nurb *, nu, &cu->nurb) {
       if (type == NULL) {
         type = rna_ShapeKey_curve_point_type(nu);
         rna_ShapeKey_NurbInfo_init(&info, nu);
@@ -597,7 +603,7 @@ static void rna_ShapeKey_data_begin(CollectionPropertyIterator *iter, PointerRNA
 
 static int rna_ShapeKey_data_length(PointerRNA *ptr)
 {
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb = (KeyBlock *)ptr->data;
   int tot = kb->totelem;
 
@@ -610,7 +616,7 @@ static int rna_ShapeKey_data_length(PointerRNA *ptr)
 
 static PointerRNA rna_ShapeKey_data_get(CollectionPropertyIterator *iter)
 {
-  Key *key = rna_ShapeKey_find_key(iter->parent.id.data);
+  Key *key = rna_ShapeKey_find_key(iter->parent.owner_id);
   void *ptr = rna_iterator_array_get(iter);
   StructRNA *type = &RNA_ShapeKeyPoint;
 
@@ -632,7 +638,7 @@ static PointerRNA rna_ShapeKey_data_get(CollectionPropertyIterator *iter)
 
 int rna_ShapeKey_data_lookup_int(PointerRNA *ptr, int index, PointerRNA *r_ptr)
 {
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb = (KeyBlock *)ptr->data;
   int elemsize = key->elemsize;
   char *databuf = kb->data;
@@ -667,20 +673,22 @@ int rna_ShapeKey_data_lookup_int(PointerRNA *ptr, int index, PointerRNA *r_ptr)
 static char *rna_ShapeKey_path(PointerRNA *ptr)
 {
   KeyBlock *kb = (KeyBlock *)ptr->data;
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
   char name_esc[sizeof(kb->name) * 2];
 
-  BLI_strescape(name_esc, kb->name, sizeof(name_esc));
+  BLI_str_escape(name_esc, kb->name, sizeof(name_esc));
 
-  if ((id) && (GS(id->name) != ID_KE))
+  if ((id) && (GS(id->name) != ID_KE)) {
     return BLI_sprintfN("shape_keys.key_blocks[\"%s\"]", name_esc);
-  else
+  }
+  else {
     return BLI_sprintfN("key_blocks[\"%s\"]", name_esc);
+  }
 }
 
 static void rna_Key_update_data(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  Key *key = ptr->id.data;
+  Key *key = (Key *)ptr->owner_id;
   Object *ob;
 
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
@@ -691,17 +699,27 @@ static void rna_Key_update_data(Main *bmain, Scene *UNUSED(scene), PointerRNA *p
   }
 }
 
+static void rna_ShapeKey_update_minmax(Main *bmain, Scene *scene, PointerRNA *ptr)
+{
+  KeyBlock *data = (KeyBlock *)ptr->data;
+  if (IN_RANGE_INCL(data->curval, data->slidermin, data->slidermax)) {
+    return;
+  }
+  CLAMP(data->curval, data->slidermin, data->slidermax);
+  rna_Key_update_data(bmain, scene, ptr);
+}
+
 static KeyBlock *rna_ShapeKeyData_find_keyblock(Key *key, float *point)
 {
   KeyBlock *kb;
 
   /* sanity checks */
-  if (ELEM(NULL, key, point))
+  if (ELEM(NULL, key, point)) {
     return NULL;
+  }
 
-  /* we'll need to manually search through the keyblocks and check
-   * if the point is somewhere in the middle of each block's data
-   */
+  /* We'll need to manually search through the key-blocks and check
+   * if the point is somewhere in the middle of each block's data. */
   for (kb = key->block.first; kb; kb = kb->next) {
     if (kb->data) {
       float *start = (float *)kb->data;
@@ -722,7 +740,8 @@ static KeyBlock *rna_ShapeKeyData_find_keyblock(Key *key, float *point)
        */
       end = (float *)((char *)start + (key->elemsize * kb->totelem));
 
-      /* if point's address is less than the end, then it is somewhere between start and end, so in array */
+      /* If point's address is less than the end,
+       * then it is somewhere between start and end, so in array. */
       if (end > point) {
         /* we've found the owner of the point data */
         return kb;
@@ -747,8 +766,8 @@ static int rna_ShapeKeyPoint_get_index(Key *key, KeyBlock *kb, float *point)
 
 static char *rna_ShapeKeyPoint_path(PointerRNA *ptr)
 {
-  ID *id = (ID *)ptr->id.data;
-  Key *key = rna_ShapeKey_find_key(ptr->id.data);
+  ID *id = ptr->owner_id;
+  Key *key = rna_ShapeKey_find_key(ptr->owner_id);
   KeyBlock *kb;
   float *point = (float *)ptr->data;
 
@@ -765,15 +784,18 @@ static char *rna_ShapeKeyPoint_path(PointerRNA *ptr)
       index = rna_ShapeKey_curve_find_index(key, index);
     }
 
-    BLI_strescape(name_esc_kb, kb->name, sizeof(name_esc_kb));
+    BLI_str_escape(name_esc_kb, kb->name, sizeof(name_esc_kb));
 
-    if (GS(id->name) == ID_KE)
+    if (GS(id->name) == ID_KE) {
       return BLI_sprintfN("key_blocks[\"%s\"].data[%d]", name_esc_kb, index);
-    else
+    }
+    else {
       return BLI_sprintfN("shape_keys.key_blocks[\"%s\"].data[%d]", name_esc_kb, index);
+    }
   }
-  else
+  else {
     return NULL; /* XXX: there's really no way to resolve this... */
+  }
 }
 
 #else
@@ -905,6 +927,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
    * (to test results) */
   prop = RNA_def_property(srna, "value", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "curval");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_float_funcs(prop, NULL, "rna_ShapeKey_value_set", "rna_ShapeKey_value_range");
   RNA_def_property_ui_range(prop, -10.0f, 10.0f, 10, 3);
   RNA_def_property_ui_text(prop, "Value", "Value of shape key at the current frame");
@@ -931,6 +954,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "mute", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", KEYBLOCK_MUTE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Mute", "Toggle this shape key");
   RNA_def_property_ui_icon(prop, ICON_CHECKBOX_HLT, -1);
   RNA_def_property_update(prop, 0, "rna_Key_update_data");
@@ -941,6 +965,7 @@ static void rna_def_keyblock(BlenderRNA *brna)
   RNA_def_property_float_funcs(
       prop, NULL, "rna_ShapeKey_slider_min_set", "rna_ShapeKey_slider_min_range");
   RNA_def_property_ui_text(prop, "Slider Min", "Minimum for slider");
+  RNA_def_property_update(prop, 0, "rna_ShapeKey_update_minmax");
 
   prop = RNA_def_property(srna, "slider_max", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "slidermax");
@@ -949,10 +974,12 @@ static void rna_def_keyblock(BlenderRNA *brna)
   RNA_def_property_float_funcs(
       prop, NULL, "rna_ShapeKey_slider_max_set", "rna_ShapeKey_slider_max_range");
   RNA_def_property_ui_text(prop, "Slider Max", "Maximum for slider");
+  RNA_def_property_update(prop, 0, "rna_ShapeKey_update_minmax");
 
   prop = RNA_def_property(srna, "data", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "data", "totelem");
   RNA_def_property_struct_type(prop, "UnknownType");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_IGNORE);
   RNA_def_property_ui_text(prop, "Data", "");
   RNA_def_property_collection_funcs(prop,
                                     "rna_ShapeKey_data_begin",
@@ -964,8 +991,8 @@ static void rna_def_keyblock(BlenderRNA *brna)
                                     NULL,
                                     NULL);
 
-  /* XXX multi-dim dynamic arrays are very badly supported by (py)rna currently, those are defined for the day
-   *     it works better, for now user will get a 1D tuple...
+  /* XXX multi-dim dynamic arrays are very badly supported by (py)rna currently,
+   *     those are defined for the day it works better, for now user will get a 1D tuple.
    */
   func = RNA_def_function(srna, "normals_vertex_get", "rna_KeyBlock_normals_vert_calc");
   RNA_def_function_ui_description(func,
@@ -1015,6 +1042,7 @@ static void rna_def_key(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "key_blocks", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_collection_sdna(prop, NULL, "block", NULL);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_struct_type(prop, "ShapeKey");
   RNA_def_property_ui_text(prop, "Key Blocks", "Shape keys");
 
@@ -1022,6 +1050,7 @@ static void rna_def_key(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "user", PROP_POINTER, PROP_NONE);
   RNA_def_property_flag(prop, PROP_NEVER_NULL);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
   RNA_def_property_pointer_sdna(prop, NULL, "from");
   RNA_def_property_ui_text(prop, "User", "Data-block using these shape keys");
 
@@ -1037,6 +1066,7 @@ static void rna_def_key(BlenderRNA *brna)
   prop = RNA_def_property(srna, "eval_time", PROP_FLOAT, PROP_NONE);
   RNA_def_property_float_sdna(prop, NULL, "ctime");
   RNA_def_property_range(prop, MINFRAME, MAXFRAME);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "Evaluation Time", "Evaluation time for absolute shape keys");
   RNA_def_property_update(prop, 0, "rna_Key_update_data");
 }

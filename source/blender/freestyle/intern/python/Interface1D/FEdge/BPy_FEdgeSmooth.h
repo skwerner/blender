@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_FEDGESMOOTH_H__
-#define __FREESTYLE_PYTHON_FEDGESMOOTH_H__
+#pragma once
 
 #include "../BPy_FEdge.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject FEdgeSmooth_Type;
 /*---------------------------Python BPy_FEdgeSmooth structure definition----------*/
 typedef struct {
   BPy_FEdge py_fe;
-  FEdgeSmooth *fes;
+  Freestyle::FEdgeSmooth *fes;
 } BPy_FEdgeSmooth;
 
 /*---------------------------Python BPy_FEdgeSmooth visible prototypes-----------*/
@@ -51,5 +50,3 @@ void FEdgeSmooth_mathutils_register_callback();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_FEDGESMOOTH_H__ */

@@ -22,13 +22,15 @@
 
 #include "../BPy_Convert.h"
 #include "../BPy_Id.h"
+#include "../BPy_Nature.h"
 #include "../Interface0D/BPy_SVertex.h"
 #include "../Interface1D/BPy_ViewEdge.h"
-#include "../BPy_Nature.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+using namespace Freestyle;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
@@ -48,20 +50,13 @@ PyDoc_STRVAR(FEdge_doc,
              "from one to the other.\n"
              "\n"
              ".. method:: FEdge()\n"
+             "            FEdge(brother)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: FEdge(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds an :class:`FEdge` using the default constructor,\n"
+             "   copy constructor, or between two :class:`SVertex` objects.\n"
              "\n"
              "   :arg brother: An FEdge object.\n"
              "   :type brother: :class:`FEdge`\n"
-             "\n"
-             ".. method:: FEdge(first_vertex, second_vertex)\n"
-             "\n"
-             "   Builds an FEdge going from the first vertex to the second.\n"
-             "\n"
              "   :arg first_vertex: The first SVertex.\n"
              "   :type first_vertex: :class:`SVertex`\n"
              "   :arg second_vertex: The second SVertex.\n"
@@ -69,17 +64,19 @@ PyDoc_STRVAR(FEdge_doc,
 
 static int FEdge_init(BPy_FEdge *self, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist_1[] = {"brother", NULL};
-  static const char *kwlist_2[] = {"first_vertex", "second_vertex", NULL};
-  PyObject *obj1 = 0, *obj2 = 0;
+  static const char *kwlist_1[] = {"brother", nullptr};
+  static const char *kwlist_2[] = {"first_vertex", "second_vertex", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr;
 
   if (PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist_1, &FEdge_Type, &obj1)) {
-    if (!obj1)
+    if (!obj1) {
       self->fe = new FEdge();
-    else
+    }
+    else {
       self->fe = new FEdge(*(((BPy_FEdge *)obj1)->fe));
+    }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!",
@@ -108,29 +105,31 @@ static Py_ssize_t FEdge_sq_length(BPy_FEdge * /*self*/)
 
 static PyObject *FEdge_sq_item(BPy_FEdge *self, int keynum)
 {
-  if (keynum < 0)
+  if (keynum < 0) {
     keynum += FEdge_sq_length(self);
-  if (keynum == 0 || keynum == 1) {
+  }
+  if (ELEM(keynum, 0, 1)) {
     SVertex *v = self->fe->operator[](keynum);
-    if (v)
+    if (v) {
       return BPy_SVertex_from_SVertex(*v);
+    }
     Py_RETURN_NONE;
   }
   PyErr_Format(PyExc_IndexError, "FEdge[index]: index %d out of range", keynum);
-  return NULL;
+  return nullptr;
 }
 
 static PySequenceMethods BPy_FEdge_as_sequence = {
     (lenfunc)FEdge_sq_length,    /* sq_length */
-    NULL,                        /* sq_concat */
-    NULL,                        /* sq_repeat */
+    nullptr,                     /* sq_concat */
+    nullptr,                     /* sq_repeat */
     (ssizeargfunc)FEdge_sq_item, /* sq_item */
-    NULL,                        /* sq_slice */
-    NULL,                        /* sq_ass_item */
-    NULL,                        /* *was* sq_ass_slice */
-    NULL,                        /* sq_contains */
-    NULL,                        /* sq_inplace_concat */
-    NULL,                        /* sq_inplace_repeat */
+    nullptr,                     /* sq_slice */
+    nullptr,                     /* sq_ass_item */
+    nullptr,                     /* *was* sq_ass_slice */
+    nullptr,                     /* sq_contains */
+    nullptr,                     /* sq_inplace_concat */
+    nullptr,                     /* sq_inplace_repeat */
 };
 
 /*----------------------FEdge get/setters ----------------------------*/
@@ -143,8 +142,9 @@ PyDoc_STRVAR(FEdge_first_svertex_doc,
 static PyObject *FEdge_first_svertex_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   SVertex *A = self->fe->vertexA();
-  if (A)
+  if (A) {
     return BPy_SVertex_from_SVertex(*A);
+  }
   Py_RETURN_NONE;
 }
 
@@ -166,8 +166,9 @@ PyDoc_STRVAR(FEdge_second_svertex_doc,
 static PyObject *FEdge_second_svertex_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   SVertex *B = self->fe->vertexB();
-  if (B)
+  if (B) {
     return BPy_SVertex_from_SVertex(*B);
+  }
   Py_RETURN_NONE;
 }
 
@@ -190,8 +191,9 @@ PyDoc_STRVAR(FEdge_next_fedge_doc,
 static PyObject *FEdge_next_fedge_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   FEdge *fe = self->fe->nextEdge();
-  if (fe)
+  if (fe) {
     return Any_BPy_FEdge_from_FEdge(*fe);
+  }
   Py_RETURN_NONE;
 }
 
@@ -214,8 +216,9 @@ PyDoc_STRVAR(FEdge_previous_fedge_doc,
 static PyObject *FEdge_previous_fedge_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   FEdge *fe = self->fe->previousEdge();
-  if (fe)
+  if (fe) {
     return Any_BPy_FEdge_from_FEdge(*fe);
+  }
   Py_RETURN_NONE;
 }
 
@@ -237,8 +240,9 @@ PyDoc_STRVAR(FEdge_viewedge_doc,
 static PyObject *FEdge_viewedge_get(BPy_FEdge *self, void *UNUSED(closure))
 {
   ViewEdge *ve = self->fe->viewedge();
-  if (ve)
+  if (ve) {
     return BPy_ViewEdge_from_ViewEdge(*ve);
+  }
   Py_RETURN_NONE;
 }
 
@@ -314,85 +318,81 @@ static int FEdge_nature_set(BPy_FEdge *self, PyObject *value, void *UNUSED(closu
 }
 
 static PyGetSetDef BPy_FEdge_getseters[] = {
-    {(char *)"first_svertex",
+    {"first_svertex",
      (getter)FEdge_first_svertex_get,
      (setter)FEdge_first_svertex_set,
-     (char *)FEdge_first_svertex_doc,
-     NULL},
-    {(char *)"second_svertex",
+     FEdge_first_svertex_doc,
+     nullptr},
+    {"second_svertex",
      (getter)FEdge_second_svertex_get,
      (setter)FEdge_second_svertex_set,
-     (char *)FEdge_second_svertex_doc,
-     NULL},
-    {(char *)"next_fedge",
+     FEdge_second_svertex_doc,
+     nullptr},
+    {"next_fedge",
      (getter)FEdge_next_fedge_get,
      (setter)FEdge_next_fedge_set,
-     (char *)FEdge_next_fedge_doc,
-     NULL},
-    {(char *)"previous_fedge",
+     FEdge_next_fedge_doc,
+     nullptr},
+    {"previous_fedge",
      (getter)FEdge_previous_fedge_get,
      (setter)FEdge_previous_fedge_set,
-     (char *)FEdge_previous_fedge_doc,
-     NULL},
-    {(char *)"viewedge",
+     FEdge_previous_fedge_doc,
+     nullptr},
+    {"viewedge",
      (getter)FEdge_viewedge_get,
      (setter)FEdge_viewedge_set,
-     (char *)FEdge_viewedge_doc,
-     NULL},
-    {(char *)"is_smooth",
+     FEdge_viewedge_doc,
+     nullptr},
+    {"is_smooth",
      (getter)FEdge_is_smooth_get,
      (setter)FEdge_is_smooth_set,
-     (char *)FEdge_is_smooth_doc,
-     NULL},
-    {(char *)"id", (getter)FEdge_id_get, (setter)FEdge_id_set, (char *)FEdge_id_doc, NULL},
-    {(char *)"nature",
-     (getter)FEdge_nature_get,
-     (setter)FEdge_nature_set,
-     (char *)FEdge_nature_doc,
-     NULL},
-    {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
+     FEdge_is_smooth_doc,
+     nullptr},
+    {"id", (getter)FEdge_id_get, (setter)FEdge_id_set, FEdge_id_doc, nullptr},
+    {"nature", (getter)FEdge_nature_get, (setter)FEdge_nature_set, FEdge_nature_doc, nullptr},
+    {nullptr, nullptr, nullptr, nullptr, nullptr} /* Sentinel */
 };
 
 /*-----------------------BPy_FEdge type definition ------------------------------*/
 
 PyTypeObject FEdge_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "FEdge",   /* tp_name */
-    sizeof(BPy_FEdge),                        /* tp_basicsize */
-    0,                                        /* tp_itemsize */
-    0,                                        /* tp_dealloc */
-    0,                                        /* tp_print */
-    0,                                        /* tp_getattr */
-    0,                                        /* tp_setattr */
-    0,                                        /* tp_reserved */
-    0,                                        /* tp_repr */
-    0,                                        /* tp_as_number */
-    &BPy_FEdge_as_sequence,                   /* tp_as_sequence */
-    0,                                        /* tp_as_mapping */
-    0,                                        /* tp_hash  */
-    0,                                        /* tp_call */
-    0,                                        /* tp_str */
-    0,                                        /* tp_getattro */
-    0,                                        /* tp_setattro */
-    0,                                        /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /* tp_flags */
-    FEdge_doc,                                /* tp_doc */
-    0,                                        /* tp_traverse */
-    0,                                        /* tp_clear */
-    0,                                        /* tp_richcompare */
-    0,                                        /* tp_weaklistoffset */
-    0,                                        /* tp_iter */
-    0,                                        /* tp_iternext */
-    0,                                        /* tp_methods */
-    0,                                        /* tp_members */
-    BPy_FEdge_getseters,                      /* tp_getset */
-    &Interface1D_Type,                        /* tp_base */
-    0,                                        /* tp_dict */
-    0,                                        /* tp_descr_get */
-    0,                                        /* tp_descr_set */
-    0,                                        /* tp_dictoffset */
-    (initproc)FEdge_init,                     /* tp_init */
-    0,                                        /* tp_alloc */
-    0,                                        /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "FEdge", /* tp_name */
+    sizeof(BPy_FEdge),                         /* tp_basicsize */
+    0,                                         /* tp_itemsize */
+    nullptr,                                   /* tp_dealloc */
+    0,                                         /* tp_vectorcall_offset */
+    nullptr,                                   /* tp_getattr */
+    nullptr,                                   /* tp_setattr */
+    nullptr,                                   /* tp_reserved */
+    nullptr,                                   /* tp_repr */
+    nullptr,                                   /* tp_as_number */
+    &BPy_FEdge_as_sequence,                    /* tp_as_sequence */
+    nullptr,                                   /* tp_as_mapping */
+    nullptr,                                   /* tp_hash  */
+    nullptr,                                   /* tp_call */
+    nullptr,                                   /* tp_str */
+    nullptr,                                   /* tp_getattro */
+    nullptr,                                   /* tp_setattro */
+    nullptr,                                   /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,  /* tp_flags */
+    FEdge_doc,                                 /* tp_doc */
+    nullptr,                                   /* tp_traverse */
+    nullptr,                                   /* tp_clear */
+    nullptr,                                   /* tp_richcompare */
+    0,                                         /* tp_weaklistoffset */
+    nullptr,                                   /* tp_iter */
+    nullptr,                                   /* tp_iternext */
+    nullptr,                                   /* tp_methods */
+    nullptr,                                   /* tp_members */
+    BPy_FEdge_getseters,                       /* tp_getset */
+    &Interface1D_Type,                         /* tp_base */
+    nullptr,                                   /* tp_dict */
+    nullptr,                                   /* tp_descr_get */
+    nullptr,                                   /* tp_descr_set */
+    0,                                         /* tp_dictoffset */
+    (initproc)FEdge_init,                      /* tp_init */
+    nullptr,                                   /* tp_alloc */
+    nullptr,                                   /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

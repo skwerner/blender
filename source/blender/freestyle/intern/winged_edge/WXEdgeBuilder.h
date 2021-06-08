@@ -14,13 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_WX_EDGE_BUILDER_H__
-#define __FREESTYLE_WX_EDGE_BUILDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Class inherited from WingedEdgeBuilder and designed to build a WX (WingedEdge + extended info
- *         (silhouette etc...)) structure from a polygonal model
+ * \brief Class inherited from WingedEdgeBuilder and designed to build a WX (WingedEdge + extended
+ * info (silhouette etc...)) structure from a polygonal model
  */
 
 #include "WingedEdgeBuilder.h"
@@ -37,7 +36,7 @@ class WXEdgeBuilder : public WingedEdgeBuilder {
   virtual ~WXEdgeBuilder()
   {
   }
-  VISIT_DECL(IndexedFaceSet)
+  VISIT_DECL(IndexedFaceSet);
 
  protected:
   virtual void buildWVertices(WShape &shape, const float *vertices, unsigned vsize);
@@ -48,5 +47,3 @@ class WXEdgeBuilder : public WingedEdgeBuilder {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_WX_EDGE_BUILDER_H__

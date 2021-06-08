@@ -30,9 +30,15 @@ set(SRC
   msgfmt.c
 )
 
+setup_libdirs()
 add_cc_flags_custom_test(msgfmt)
 
+if(WIN32)
+  string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " /nodefaultlib:MSVCRT.lib")
+endif()
+
 add_executable(msgfmt ${SRC})
+setup_platform_linker_flags(msgfmt)
 
 target_link_libraries(msgfmt bf_blenlib)
 target_link_libraries(msgfmt bf_intern_guardedalloc)

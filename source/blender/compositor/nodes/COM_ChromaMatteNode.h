@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_CHROMAMATTENODE_H__
-#define __COM_CHROMAMATTENODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ChromaMatteNode
@@ -28,7 +29,8 @@
 class ChromaMatteNode : public Node {
  public:
   ChromaMatteNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* COM_ChromaMatteNODE_H */
+}  // namespace blender::compositor

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CANVAS_H__
-#define __FREESTYLE_CANVAS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -137,8 +136,8 @@ class Canvas {
   }
 
   /* Maps management */
-  /*! Loads an image map. The map will be scaled (without preserving the ratio in order to fit the actual
-   *  canvas size.).
+  /*! Loads an image map. The map will be scaled
+   *  (without preserving the ratio in order to fit the actual canvas size.).
    *  The image must be a gray values image...
    *  \param iFileName:
    *    The name of the image file
@@ -160,9 +159,11 @@ class Canvas {
    *  \param level:
    *    The level of the pyramid from which the pixel must be read.
    *  \param x:
-   *    The abscissa of the desired pixel specified in level0 coordinate system. The origin is the lower left corner.
+   *    The abscissa of the desired pixel specified in level0 coordinate system.
+   *    The origin is the lower left corner.
    *  \param y:
-   *    The ordinate of the desired pixel specified in level0 coordinate system. The origin is the lower left corner.
+   *    The ordinate of the desired pixel specified in level0 coordinate system.
+   *    The origin is the lower left corner.
    */
   float readMapPixel(const char *iMapName, int level, int x, int y);
 
@@ -242,7 +243,7 @@ class Canvas {
 
   void resetModified(bool iMod = false);
   void causalStyleModules(std::vector<unsigned> &vec, unsigned index = 0);
-  void setModified(unsigned index, bool b);
+  void setModified(unsigned index, bool iMod);
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("Freestyle:Canvas")
@@ -250,5 +251,3 @@ class Canvas {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CANVAS_H__

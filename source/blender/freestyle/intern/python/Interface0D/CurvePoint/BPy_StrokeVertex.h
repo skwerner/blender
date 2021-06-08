@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_STROKEVERTEX_H__
-#define __FREESTYLE_PYTHON_STROKEVERTEX_H__
+#pragma once
 
 #include "../BPy_CurvePoint.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject StrokeVertex_Type;
 /*---------------------------Python BPy_StrokeVertex structure definition----------*/
 typedef struct {
   BPy_CurvePoint py_cp;
-  StrokeVertex *sv;
+  Freestyle::StrokeVertex *sv;
 } BPy_StrokeVertex;
 
 /*---------------------------Python BPy_StrokeVertex visible prototypes-----------*/
@@ -51,5 +50,3 @@ void StrokeVertex_mathutils_register_callback();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_STROKEVERTEX_H__ */

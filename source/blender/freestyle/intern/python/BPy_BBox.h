@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_BBOX_H__
-#define __FREESTYLE_PYTHON_BBOX_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
@@ -27,9 +26,6 @@ extern "C" {
 
 #include "../geometry/BBox.h"
 #include "../geometry/Geom.h"
-
-using namespace Freestyle;
-using namespace Freestyle::Geometry;
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,7 +39,7 @@ extern PyTypeObject BBox_Type;
 
 /*---------------------------Python BPy_BBox structure definition----------*/
 typedef struct {
-  PyObject_HEAD BBox<Vec3r> *bb;
+  PyObject_HEAD Freestyle::BBox<Freestyle::Geometry::Vec3r> *bb;
 } BPy_BBox;
 
 /*---------------------------Python BPy_BBox visible prototypes-----------*/
@@ -55,5 +51,3 @@ int BBox_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_BBOX_H__ */

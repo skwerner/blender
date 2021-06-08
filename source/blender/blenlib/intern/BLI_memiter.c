@@ -37,9 +37,10 @@
  * but tests show this doesn't give noticeable speedup.
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
+#include "BLI_asan.h"
 #include "BLI_utildefines.h"
 
 #include "BLI_memiter.h" /* own include */
@@ -50,17 +51,6 @@
 
 /* TODO: Valgrind. */
 
-/* Clang defines this. */
-#ifndef __has_feature
-#  define __has_feature(x) 0
-#endif
-#if defined(__SANITIZE_ADDRESS__) || __has_feature(address_sanitizer)
-#  include "sanitizer/asan_interface.h"
-#else
-#  define ASAN_POISON_MEMORY_REGION(addr, size) UNUSED_VARS(addr, size)
-#  define ASAN_UNPOISON_MEMORY_REGION(addr, size) UNUSED_VARS(addr, size)
-#endif
-
 typedef uintptr_t data_t;
 typedef intptr_t offset_t;
 
@@ -68,7 +58,7 @@ typedef intptr_t offset_t;
  * typically we rely on the 'count' to avoid iterating past the end. */
 // #define USE_TERMINATE_PARANOID
 
-/* Currently totalloc isnt used. */
+/* Currently totalloc isn't used. */
 // #define USE_TOTALLOC
 
 /* pad must be power of two */
@@ -113,7 +103,7 @@ static void memiter_set_rewind_offset(BLI_memiter *mi)
 {
   BLI_memiter_elem *elem = (BLI_memiter_elem *)mi->data_curr;
 
-  ASAN_UNPOISON_MEMORY_REGION(elem, sizeof(BLI_memiter_elem));
+  BLI_asan_unpoison(elem, sizeof(BLI_memiter_elem));
 
   elem->size = (offset_t)(((data_t *)mi->tail) - mi->data_curr);
   BLI_assert(elem->size < 0);
@@ -196,14 +186,14 @@ void *BLI_memiter_alloc(BLI_memiter *mi, uint elem_size)
     mi->data_last = chunk->data + (chunk_size - 1);
     data_curr_next = mi->data_curr + (1 + data_offset);
 
-    ASAN_POISON_MEMORY_REGION(chunk->data, chunk_size * sizeof(data_t));
+    BLI_asan_poison(chunk->data, chunk_size * sizeof(data_t));
   }
 
   BLI_assert(data_curr_next <= mi->data_last);
 
   BLI_memiter_elem *elem = (BLI_memiter_elem *)mi->data_curr;
 
-  ASAN_UNPOISON_MEMORY_REGION(elem, sizeof(BLI_memiter_elem) + elem_size);
+  BLI_asan_unpoison(elem, sizeof(BLI_memiter_elem) + elem_size);
 
   elem->size = (offset_t)elem_size;
   mi->data_curr = data_curr_next;
@@ -239,6 +229,10 @@ static void memiter_free_data(BLI_memiter *mi)
   BLI_memiter_chunk *chunk = mi->head;
   while (chunk) {
     BLI_memiter_chunk *chunk_next = chunk->next;
+
+    /* Unpoison memory because MEM_freeN might overwrite it. */
+    BLI_asan_unpoison(chunk, MEM_allocN_len(chunk));
+
     MEM_freeN(chunk);
     chunk = chunk_next;
   }
@@ -275,9 +269,7 @@ void *BLI_memiter_elem_first(BLI_memiter *mi)
     BLI_memiter_elem *elem = (BLI_memiter_elem *)chunk->data;
     return elem->data;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void *BLI_memiter_elem_first_size(BLI_memiter *mi, uint *r_size)
@@ -288,9 +280,7 @@ void *BLI_memiter_elem_first_size(BLI_memiter *mi, uint *r_size)
     *r_size = (uint)elem->size;
     return elem->data;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /** \} */
@@ -340,9 +330,7 @@ void *BLI_memiter_iter_step_size(BLI_memiter_handle *iter, uint *r_size)
     iter->elem = (BLI_memiter_elem *)&data[data_offset_from_size(size)];
     return (void *)data;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 void *BLI_memiter_iter_step(BLI_memiter_handle *iter)
@@ -358,9 +346,7 @@ void *BLI_memiter_iter_step(BLI_memiter_handle *iter)
     iter->elem = (BLI_memiter_elem *)&data[data_offset_from_size(size)];
     return (void *)data;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /** \} */

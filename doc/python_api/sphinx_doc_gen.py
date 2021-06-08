@@ -41,8 +41,7 @@ Sphinx: HTML generation
   After you have built doc/python_api/sphinx-in (see above),
   generate html docs by running:
 
-    cd doc/python_api
-    sphinx-build sphinx-in sphinx-out
+    sphinx-build doc/python_api/sphinx-in doc/python_api/sphinx-out
 
 
 Sphinx: PDF generation
@@ -76,17 +75,28 @@ def rna_info_BuildRNAInfo_cache():
 rna_info_BuildRNAInfo_cache.ret = None
 # --- end rna_info cache
 
-# import rpdb2; rpdb2.start_embedded_debugger('test')
 import os
 import sys
 import inspect
 import shutil
 import logging
+import warnings
+
+from textwrap import indent
 
 from platform import platform
 PLATFORM = platform().split('-')[0].lower()  # 'linux', 'darwin', 'windows'
 
 SCRIPT_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# For now, ignore add-ons and internal subclasses of 'bpy.types.PropertyGroup'.
+#
+# Besides disabling this line, the main change will be to add a
+# 'toctree' to 'write_rst_index' which contains the generated rst files.
+# This 'toctree' can be generated automatically.
+#
+# See: D6261 for reference.
+USE_ONLY_BUILTIN_RNA_TYPES = True
 
 
 def handle_args():
@@ -163,7 +173,7 @@ def handle_args():
                         dest="log",
                         default=False,
                         action='store_true',
-                        help="Log the output of the api dump and sphinx|latex "
+                        help="Log the output of the API dump and sphinx|latex "
                              "warnings and errors (default=False).\n"
                              "If given, save logs in:\n"
                              "* OUTPUT_DIR/.bpy.log\n"
@@ -215,6 +225,9 @@ else:
         "aud",
         "bgl",
         "blf",
+        "bl_math",
+        "imbuf",
+        "imbuf.types",
         "bmesh",
         "bmesh.ops",
         "bmesh.types",
@@ -232,11 +245,15 @@ else:
         "bpy.types",  # supports filtering
         "bpy.utils",
         "bpy.utils.previews",
+        "bpy.utils.units",
         "bpy_extras",
         "gpu",
         "gpu.types",
         "gpu.matrix",
         "gpu.select",
+        "gpu.shader",
+        "gpu.state",
+        "gpu.texture",
         "gpu_extras",
         "idprop.types",
         "mathutils",
@@ -320,8 +337,6 @@ EXTRA_SOURCE_FILES = (
     "../../../release/scripts/templates_py/ui_previews_custom_icon.py",
     "../examples/bmesh.ops.1.py",
     "../examples/bpy.app.translations.py",
-    "../static/favicon.ico",
-    "../static/blender_logo.svg",
 )
 
 
@@ -340,9 +355,9 @@ RST_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, "rst"))
 # stored in ./rst/info_*
 INFO_DOCS = (
     ("info_quickstart.rst",
-     "Quickstart: new to Blender or scripting and want to get your feet wet?"),
+     "Quickstart: New to Blender or scripting and want to get your feet wet?"),
     ("info_overview.rst",
-     "API Overview: a more complete explanation of Python integration"),
+     "API Overview: A more complete explanation of Python integration"),
     ("info_api_reference.rst",
      "API Reference Usage: examples of how to use the API reference docs"),
     ("info_best_practice.rst",
@@ -350,8 +365,8 @@ INFO_DOCS = (
     ("info_tips_and_tricks.rst",
      "Tips and Tricks: Hints to help you while writing scripts for Blender"),
     ("info_gotcha.rst",
-     "Gotcha's: some of the problems you may come up against when writing scripts"),
-    ("change_log.rst", "List of changes since last Blender release"),
+     "Gotcha's: Some of the problems you may encounter when writing scripts"),
+    ("change_log.rst", "Change Log: List of changes since last Blender release"),
 )
 
 # only support for properties atm.
@@ -396,29 +411,21 @@ MODULE_GROUPING = {
 
 # -------------------------------BLENDER----------------------------------------
 
-blender_version_strings = [str(v) for v in bpy.app.version]
-is_release = bpy.app.version_cycle in {"rc", "release"}
-
 # converting bytes to strings, due to T30154
 BLENDER_REVISION = str(bpy.app.build_hash, 'utf_8')
-BLENDER_DATE = str(bpy.app.build_date, 'utf_8')
 
-if is_release:
-    # '2.62a'
-    BLENDER_VERSION_DOTS = ".".join(blender_version_strings[:2]) + bpy.app.version_char
-else:
-    # '2.62.1'
-    BLENDER_VERSION_DOTS = ".".join(blender_version_strings)
+# '2.83.0 Beta' or '2.83.0' or '2.83.1'
+BLENDER_VERSION_DOTS = bpy.app.version_string
+
 if BLENDER_REVISION != "Unknown":
-    # '2.62a SHA1' (release) or '2.62.1 SHA1' (non-release)
-    BLENDER_VERSION_DOTS += " " + BLENDER_REVISION
-
-if is_release:
-    # '2_62a_release'
-    BLENDER_VERSION_PATH = "%s%s_release" % ("_".join(blender_version_strings[:2]), bpy.app.version_char)
+    # SHA1 Git hash
+    BLENDER_VERSION_HASH = BLENDER_REVISION
 else:
-    # '2_62_1'
-    BLENDER_VERSION_PATH = "_".join(blender_version_strings)
+    # Fallback: Should not be used
+    BLENDER_VERSION_HASH = "Hash Unknown"
+
+# '2_83'
+BLENDER_VERSION_PATH = "%d_%d" % (bpy.app.version[0], bpy.app.version[1])
 
 # --------------------------DOWNLOADABLE FILES----------------------------------
 
@@ -439,25 +446,30 @@ if ARGS.sphinx_build:
 
     if ARGS.log:
         SPHINX_BUILD_LOG = os.path.join(ARGS.output_dir, ".sphinx-build.log")
-        SPHINX_BUILD = ["sphinx-build",
-                        "-w", SPHINX_BUILD_LOG,
-                        SPHINX_IN, SPHINX_OUT]
+        SPHINX_BUILD = [
+            "sphinx-build",
+            "-w", SPHINX_BUILD_LOG,
+            SPHINX_IN, SPHINX_OUT,
+        ]
 
 # pdf build
 if ARGS.sphinx_build_pdf:
     SPHINX_OUT_PDF = os.path.join(ARGS.output_dir, "sphinx-out_pdf")
-    SPHINX_BUILD_PDF = ["sphinx-build",
-                        "-b", "latex",
-                        SPHINX_IN, SPHINX_OUT_PDF]
+    SPHINX_BUILD_PDF = [
+        "sphinx-build",
+        "-b", "latex",
+        SPHINX_IN, SPHINX_OUT_PDF,
+    ]
     SPHINX_MAKE_PDF = ["make", "-C", SPHINX_OUT_PDF]
     SPHINX_MAKE_PDF_STDOUT = None
 
     if ARGS.log:
         SPHINX_BUILD_PDF_LOG = os.path.join(ARGS.output_dir, ".sphinx-build_pdf.log")
-        SPHINX_BUILD_PDF = ["sphinx-build", "-b", "latex",
-                            "-w", SPHINX_BUILD_PDF_LOG,
-                            SPHINX_IN, SPHINX_OUT_PDF]
-
+        SPHINX_BUILD_PDF = [
+            "sphinx-build", "-b", "latex",
+            "-w", SPHINX_BUILD_PDF_LOG,
+            SPHINX_IN, SPHINX_OUT_PDF,
+        ]
         sphinx_make_pdf_log = os.path.join(ARGS.output_dir, ".latex_make.log")
         SPHINX_MAKE_PDF_STDOUT = open(sphinx_make_pdf_log, "w", encoding="utf-8")
 
@@ -482,6 +494,18 @@ if _BPY_PROP_COLLECTION_FAKE:
 else:
     _BPY_PROP_COLLECTION_ID = "collection"
 
+if _BPY_STRUCT_FAKE:
+    bpy_struct = bpy.types.bpy_struct
+else:
+    bpy_struct = None
+
+
+def import_value_from_module(module_name, import_name):
+    ns = {}
+    exec_str = "from %s import %s as value" % (module_name, import_name)
+    exec(exec_str, ns, ns)
+    return ns["value"]
+
 
 def escape_rst(text):
     """ Escape plain text which may contain characters used by RST.
@@ -502,7 +526,7 @@ def is_struct_seq(value):
 
 
 def undocumented_message(module_name, type_name, identifier):
-    return "Undocumented `contribute <https://developer.blender.org/T51061>`"
+    return "Undocumented, consider `contributing <https://developer.blender.org/T51061>`__."
 
 
 def range_str(val):
@@ -521,6 +545,13 @@ def range_str(val):
 
 
 def example_extract_docstring(filepath):
+    '''
+    Return (text, line_no, line_no_has_content) where:
+    - ``text`` is the doc-string text.
+    - ``line_no`` is the line the doc-string text ends.
+    - ``line_no_has_content`` when False, this file only contains a doc-string.
+      There is no need to include the remainder.
+    '''
     file = open(filepath, "r", encoding="utf-8")
     line = file.readline()
     line_no = 0
@@ -529,9 +560,9 @@ def example_extract_docstring(filepath):
         line_no += 1
     else:
         file.close()
-        return "", 0
+        return "", 0, True
 
-    for line in file.readlines():
+    for line in file:
         line_no += 1
         if line.startswith('"""'):
             break
@@ -539,8 +570,17 @@ def example_extract_docstring(filepath):
             text.append(line.rstrip())
 
     line_no += 1
+    line_no_has_content = False
+
+    # Skip over blank lines so the Python code doesn't have blank lines at the top.
+    for line in file:
+        if line.strip():
+            line_no_has_content = True
+            break
+        line_no += 1
+
     file.close()
-    return "\n".join(text), line_no
+    return "\n".join(text), line_no, line_no_has_content
 
 
 def title_string(text, heading_char, double=False):
@@ -559,16 +599,18 @@ def write_example_ref(ident, fw, example_id, ext="py"):
         filepath = os.path.join("..", "examples", "%s.%s" % (example_id, ext))
         filepath_full = os.path.join(os.path.dirname(fw.__self__.name), filepath)
 
-        text, line_no = example_extract_docstring(filepath_full)
+        text, line_no, line_no_has_content = example_extract_docstring(filepath_full)
 
         for line in text.split("\n"):
             fw("%s\n" % (ident + line).rstrip())
         fw("\n")
 
-        fw("%s.. literalinclude:: %s\n" % (ident, filepath))
-        if line_no > 0:
-            fw("%s   :lines: %d-\n" % (ident, line_no))
-        fw("\n")
+        # Some files only contain a doc-string.
+        if line_no_has_content:
+            fw("%s.. literalinclude:: %s\n" % (ident, filepath))
+            if line_no > 0:
+                fw("%s   :lines: %d-\n" % (ident, line_no))
+            fw("\n")
         EXAMPLE_SET_USED.add(example_id)
     else:
         if bpy.app.debug:
@@ -732,13 +774,12 @@ def pyprop2sphinx(ident, fw, identifier, py_prop):
     else:
         fw(ident + ".. attribute:: %s\n\n" % identifier)
     write_indented_lines(ident + "   ", fw, py_prop.__doc__)
+    fw("\n")
     if py_prop.fset is None:
         fw(ident + "   (readonly)\n\n")
-    else:
-        fw("\n")
 
 
-def pymodule2sphinx(basepath, module_name, module, title):
+def pymodule2sphinx(basepath, module_name, module, title, module_all_extra):
     import types
     attribute_set = set()
     filepath = os.path.join(basepath, module_name + ".rst")
@@ -785,41 +826,50 @@ def pymodule2sphinx(basepath, module_name, module, title):
         fw(module.__doc__.strip())
         fw("\n\n")
 
-    write_example_ref("", fw, module_name)
-
     # write submodules
     # we could also scan files but this ensures __all__ is used correctly
-    if module_all is not None:
+    if module_all or module_all_extra:
         submod_name = None
         submod = None
         submod_ls = []
-        for submod_name in module_all:
-            ns = {}
-            exec_str = "from %s import %s as submod" % (module.__name__, submod_name)
-            exec(exec_str, ns, ns)
-            submod = ns["submod"]
+        for submod_name in (module_all or ()):
+            submod = import_value_from_module(module_name, submod_name)
             if type(submod) == types.ModuleType:
                 submod_ls.append((submod_name, submod))
+
+        for submod_name in module_all_extra:
+            if submod_name in attribute_set:
+                continue
+            submod = import_value_from_module(module_name, submod_name)
+            # No type checks, since there are non-module types we treat as modules
+            # such as `bpy.app.translations` & `bpy.app.handlers`.
+            submod_ls.append((submod_name, submod))
 
         del submod_name
         del submod
 
         if submod_ls:
             fw(".. toctree::\n")
-            fw("   :maxdepth: 1\n\n")
+            fw("   :maxdepth: 1\n")
+            fw("   :caption: Submodules\n\n")
 
             for submod_name, submod in submod_ls:
                 submod_name_full = "%s.%s" % (module_name, submod_name)
-                fw("   %s.rst\n\n" % submod_name_full)
+                fw("   %s.rst\n" % submod_name_full)
 
-                pymodule2sphinx(basepath, submod_name_full, submod, "%s submodule" % module_name)
+                pymodule2sphinx(basepath, submod_name_full, submod, "%s submodule" % module_name, ())
+            fw("\n")
         del submod_ls
     # done writing submodules!
+
+    write_example_ref("", fw, module_name)
 
     # write members of the module
     # only tested with PyStructs which are not exactly modules
     for key, descr in sorted(type(module).__dict__.items()):
         if key.startswith("__"):
+            continue
+        if key in module_all_extra:
             continue
         # naughty, we also add getset's into PyStructs, this is not typical py but also not incorrect.
 
@@ -843,6 +893,8 @@ def pymodule2sphinx(basepath, module_name, module, title):
     # sort by the valye type
     descr_sorted.sort(key=lambda descr_data: str(descr_data[3]))
     for key, descr, value, value_type in descr_sorted:
+        if key in module_all_extra:
+            continue
 
         # must be documented as a submodule
         if is_struct_seq(value):
@@ -884,6 +936,9 @@ def pymodule2sphinx(basepath, module_name, module, title):
     module_dir_value_type.sort(key=lambda triple: str(triple[2]))
 
     for attribute, value, value_type in module_dir_value_type:
+        if attribute in module_all_extra:
+            continue
+
         if value_type == FunctionType:
             pyfunc2sphinx("", fw, module_name, None, attribute, value, is_class=False)
         # both the same at the moment but to be future proof
@@ -899,7 +954,7 @@ def pymodule2sphinx(basepath, module_name, module, title):
             # constant, not much fun we can do here except to list it.
             # TODO, figure out some way to document these!
             fw(".. data:: %s\n\n" % attribute)
-            write_indented_lines("   ", fw, "constant value %s" % repr(value), False)
+            write_indented_lines("   ", fw, "Constant value %s" % repr(value), False)
             fw("\n")
         else:
             BPY_LOGGER.debug("\tnot documenting %s.%s of %r type" % (module_name, attribute, value_type.__name__))
@@ -980,7 +1035,7 @@ def pymodule2sphinx(basepath, module_name, module, title):
 # Changes in Blender will force errors here
 context_type_map = {
     # context_member: (RNA type, is_collection)
-    "active_base": ("ObjectBase", False),
+    "active_annotation_layer": ("GPencilLayer", False),
     "active_bone": ("EditBone", False),
     "active_gpencil_frame": ("GreasePencilLayer", True),
     "active_gpencil_layer": ("GPencilLayer", True),
@@ -988,6 +1043,9 @@ context_type_map = {
     "active_object": ("Object", False),
     "active_operator": ("Operator", False),
     "active_pose_bone": ("PoseBone", False),
+    "active_editable_fcurve": ("FCurve", False),
+    "annotation_data": ("GreasePencil", False),
+    "annotation_data_owner": ("ID", False),
     "armature": ("Armature", False),
     "bone": ("Bone", False),
     "brush": ("Brush", False),
@@ -1003,15 +1061,16 @@ context_type_map = {
     "edit_movieclip": ("MovieClip", False),
     "edit_object": ("Object", False),
     "edit_text": ("Text", False),
-    "editable_bases": ("ObjectBase", True),
     "editable_bones": ("EditBone", True),
     "editable_gpencil_layers": ("GPencilLayer", True),
     "editable_gpencil_strokes": ("GPencilStroke", True),
     "editable_objects": ("Object", True),
+    "editable_fcurves": ("FCurve", True),
     "fluid": ("FluidSimulationModifier", False),
     "gpencil": ("GreasePencil", False),
     "gpencil_data": ("GreasePencil", False),
     "gpencil_data_owner": ("ID", False),
+    "hair": ("Hair", False),
     "image_paint_object": ("Object", False),
     "lattice": ("Lattice", False),
     "light": ("Light", False),
@@ -1028,41 +1087,41 @@ context_type_map = {
     "particle_settings": ("ParticleSettings", False),
     "particle_system": ("ParticleSystem", False),
     "particle_system_editable": ("ParticleSystem", False),
+    "pointcloud": ("PointCloud", False),
     "pose_bone": ("PoseBone", False),
     "pose_object": ("Object", False),
     "scene": ("Scene", False),
     "sculpt_object": ("Object", False),
-    "selectable_bases": ("ObjectBase", True),
     "selectable_objects": ("Object", True),
-    "selected_bases": ("ObjectBase", True),
     "selected_bones": ("EditBone", True),
-    "selected_editable_bases": ("ObjectBase", True),
     "selected_editable_bones": ("EditBone", True),
     "selected_editable_fcurves": ("FCurve", True),
+    "selected_editable_keyframes": ("Keyframe", True),
     "selected_editable_objects": ("Object", True),
     "selected_editable_sequences": ("Sequence", True),
+    "selected_nla_strips": ("NlaStrip", True),
     "selected_nodes": ("Node", True),
     "selected_objects": ("Object", True),
     "selected_pose_bones": ("PoseBone", True),
     "selected_pose_bones_from_active_object": ("PoseBone", True),
     "selected_sequences": ("Sequence", True),
+    "selected_visible_fcurves": ("FCurve", True),
     "sequences": ("Sequence", True),
-    "smoke": ("SmokeModifier", False),
     "soft_body": ("SoftBodyModifier", False),
     "speaker": ("Speaker", False),
     "texture": ("Texture", False),
     "texture_slot": ("MaterialTextureSlot", False),
     "texture_user": ("ID", False),
     "texture_user_property": ("Property", False),
-    "uv_sculpt_object": ("Object", False),
     "vertex_paint_object": ("Object", False),
     "view_layer": ("ViewLayer", False),
-    "visible_bases": ("ObjectBase", True),
     "visible_bones": ("EditBone", True),
     "visible_gpencil_layers": ("GPencilLayer", True),
     "visible_objects": ("Object", True),
     "visible_pose_bones": ("PoseBone", True),
+    "visible_fcurves": ("FCurve", True),
     "weight_paint_object": ("Object", False),
+    "volume": ("Volume", False),
     "world": ("World", False),
 }
 
@@ -1079,7 +1138,7 @@ def pycontext2sphinx(basepath):
     fw("The context members available depend on the area of Blender which is currently being accessed.\n")
     fw("\n")
     fw("Note that all context values are readonly,\n")
-    fw("but may be modified through the data api or by running operators\n\n")
+    fw("but may be modified through the data API or by running operators\n\n")
 
     def write_contex_cls():
 
@@ -1159,7 +1218,7 @@ def pycontext2sphinx(basepath):
     # for member in sorted(unique):
     #     print('        "%s": ("", False),' % member)
     if len(context_type_map) > len(unique):
-        raise Exception(
+        warnings.warn(
             "Some types are not used: %s" %
             str([member for member in context_type_map if member not in unique]))
     else:
@@ -1182,12 +1241,15 @@ def pyrna_enum2sphinx(prop, use_empty_descriptions=False):
                 break
 
     if ok:
-        return "".join(["* ``%s`` %s.\n" %
-                        (identifier,
-                         ", ".join(escape_rst(val) for val in (name, description) if val),
-                         )
-                        for identifier, name, description in prop.enum_items
-                        ])
+        return "".join([
+            "* ``%s``\n"
+            "%s.\n" % (
+                identifier,
+                # Account for multi-line enum descriptions, allowing this to be a block of text.
+                indent(" -- ".join(escape_rst(val) for val in (name, description) if val) or "Undocumented", "  "),
+            )
+            for identifier, name, description in prop.enum_items
+        ])
     else:
         return ""
 
@@ -1198,8 +1260,34 @@ def pyrna2sphinx(basepath):
     # structs, funcs, ops, props = rna_info.BuildRNAInfo()
     structs, funcs, ops, props = rna_info_BuildRNAInfo_cache()
 
+    if USE_ONLY_BUILTIN_RNA_TYPES:
+        # Ignore properties that use non 'bpy.types' properties.
+        structs_blacklist = {
+            v.identifier for v in structs.values()
+            if v.module_name != "bpy.types"
+        }
+        for k, v in structs.items():
+            for p in v.properties:
+                for identifier in (
+                        getattr(p.srna, "identifier", None),
+                        getattr(p.fixed_type, "identifier", None),
+                ):
+                    if identifier is not None:
+                        if identifier in structs_blacklist:
+                            RNA_BLACKLIST.setdefault(k, set()).add(identifier)
+        del structs_blacklist
+
+        structs = {
+            k: v for k, v in structs.items()
+            if v.module_name == "bpy.types"
+        }
+
     if FILTER_BPY_TYPES is not None:
-        structs = {k: v for k, v in structs.items() if k[1] in FILTER_BPY_TYPES}
+        structs = {
+            k: v for k, v in structs.items()
+            if k[1] in FILTER_BPY_TYPES
+            if v.module_name == "bpy.types"
+        }
 
     if FILTER_BPY_OPS is not None:
         ops = {k: v for k, v in ops.items() if v.module_name in FILTER_BPY_OPS}
@@ -1228,7 +1316,7 @@ def pyrna2sphinx(basepath):
             fw(ident + ":%s%s:\n\n" % (id_name, identifier))
 
             if prop.name or prop.description:
-                fw(ident + "   " + ", ".join(val for val in (prop.name, prop.description) if val) + "\n\n")
+                fw(indent(", ".join(val for val in (prop.name, prop.description) if val), ident + "   ") + "\n\n")
 
             # special exception, can't use generic code here for enums
             if enum_text:
@@ -1246,7 +1334,10 @@ def pyrna2sphinx(basepath):
         # if not struct.identifier == "Object":
         #     return
 
-        filepath = os.path.join(basepath, "bpy.types.%s.rst" % struct.identifier)
+        struct_module_name = struct.module_name
+        if USE_ONLY_BUILTIN_RNA_TYPES:
+            assert(struct_module_name == "bpy.types")
+        filepath = os.path.join(basepath, "%s.%s.rst" % (struct_module_name, struct.identifier))
         file = open(filepath, "w", encoding="utf-8")
         fw = file.write
 
@@ -1264,10 +1355,10 @@ def pyrna2sphinx(basepath):
 
         fw(title_string(title, "="))
 
-        fw(".. module:: bpy.types\n\n")
+        fw(".. currentmodule:: %s\n\n" % struct_module_name)
 
         # docs first?, ok
-        write_example_ref("", fw, "bpy.types.%s" % struct_id)
+        write_example_ref("", fw, "%s.%s" % (struct_module_name, struct_id))
 
         base_ids = [base.identifier for base in struct.get_bases()]
 
@@ -1327,7 +1418,8 @@ def pyrna2sphinx(basepath):
             else:
                 fw("   .. attribute:: %s\n\n" % prop.identifier)
             if prop.description:
-                fw("      %s\n\n" % prop.description)
+                write_indented_lines("      ", fw, prop.description, False)
+                fw("\n")
 
             # special exception, can't use generic code here for enums
             if prop.type == "enum":
@@ -1374,7 +1466,7 @@ def pyrna2sphinx(basepath):
                        (prop.identifier,
                         ", ".join((val for val in (descr, type_descr) if val))))
 
-            write_example_ref("      ", fw, "bpy.types." + struct_id + "." + func.identifier)
+            write_example_ref("      ", fw, struct_module_name + "." + struct_id + "." + func.identifier)
 
             fw("\n")
 
@@ -1402,7 +1494,7 @@ def pyrna2sphinx(basepath):
 
             if _BPY_STRUCT_FAKE:
                 descr_items = [
-                    (key, descr) for key, descr in sorted(bpy.types.Struct.__bases__[0].__dict__.items())
+                    (key, descr) for key, descr in sorted(bpy_struct.__dict__.items())
                     if not key.startswith("__")
                 ]
 
@@ -1414,9 +1506,6 @@ def pyrna2sphinx(basepath):
             for base in bases:
                 for prop in base.properties:
                     lines.append("   * :class:`%s.%s`\n" % (base.identifier, prop.identifier))
-
-                for identifier, py_prop in base.get_py_properties():
-                    lines.append("   * :class:`%s.%s`\n" % (base.identifier, identifier))
 
                 for identifier, py_prop in base.get_py_properties():
                     lines.append("   * :class:`%s.%s`\n" % (base.identifier, identifier))
@@ -1444,6 +1533,8 @@ def pyrna2sphinx(basepath):
                     lines.append("   * :class:`%s.%s`\n" % (base.identifier, func.identifier))
                 for identifier, py_func in base.get_py_functions():
                     lines.append("   * :class:`%s.%s`\n" % (base.identifier, identifier))
+                for identifier, py_func in base.get_py_c_functions():
+                    lines.append("   * :class:`%s.%s`\n" % (base.identifier, identifier))
 
             if lines:
                 fw(".. rubric:: Inherited Functions\n\n")
@@ -1464,8 +1555,8 @@ def pyrna2sphinx(basepath):
             fw(".. hlist::\n")
             fw("   :columns: 2\n\n")
 
-            # context does its own thing
-            # "active_base": ("ObjectBase", False),
+            # Context does its own thing.
+            # "active_object": ("Object", False),
             for ref_attr, (ref_type, ref_is_seq) in sorted(context_type_map.items()):
                 if ref_type == struct_id:
                     fw("   * :mod:`bpy.context.%s`\n" % ref_attr)
@@ -1489,15 +1580,14 @@ def pyrna2sphinx(basepath):
                 continue
             write_struct(struct)
 
-        def fake_bpy_type(class_value, class_name, descr_str, use_subclasses=True):
-            filepath = os.path.join(basepath, "bpy.types.%s.rst" % class_name)
+        def fake_bpy_type(class_module_name, class_value, class_name, descr_str, use_subclasses=True):
+            filepath = os.path.join(basepath, "%s.%s.rst" % (class_module_name, class_name))
             file = open(filepath, "w", encoding="utf-8")
             fw = file.write
 
             fw(title_string(class_name, "="))
 
-            fw(".. module:: bpy.types\n")
-            fw("\n")
+            fw(".. currentmodule:: %s\n\n" % class_module_name)
 
             if use_subclasses:
                 subclass_ids = [
@@ -1511,8 +1601,8 @@ def pyrna2sphinx(basepath):
             fw(".. class:: %s\n\n" % class_name)
             fw("   %s\n\n" % descr_str)
             fw("   .. note::\n\n")
-            fw("      Note that bpy.types.%s is not actually available from within Blender,\n"
-               "      it only exists for the purpose of documentation.\n\n" % class_name)
+            fw("      Note that :class:`%s.%s` is not actually available from within Blender,\n"
+               "      it only exists for the purpose of documentation.\n\n" % (class_module_name, class_name))
 
             descr_items = [
                 (key, descr) for key, descr in sorted(class_value.__dict__.items())
@@ -1531,16 +1621,18 @@ def pyrna2sphinx(basepath):
 
         # write fake classes
         if _BPY_STRUCT_FAKE:
-            class_value = bpy.types.Struct.__bases__[0]
+            class_value = bpy_struct
             fake_bpy_type(
-                class_value, _BPY_STRUCT_FAKE,
-                "built-in base class for all classes in bpy.types.", use_subclasses=True)
+                "bpy.types", class_value, _BPY_STRUCT_FAKE,
+                "built-in base class for all classes in bpy.types.", use_subclasses=True,
+            )
 
         if _BPY_PROP_COLLECTION_FAKE:
             class_value = bpy.data.objects.__class__
             fake_bpy_type(
-                class_value, _BPY_PROP_COLLECTION_FAKE,
-                "built-in class used for all collections.", use_subclasses=False)
+                "bpy.types", class_value, _BPY_PROP_COLLECTION_FAKE,
+                "built-in class used for all collections.", use_subclasses=False,
+            )
 
     # operators
     def write_ops():
@@ -1612,26 +1704,50 @@ def write_sphinx_conf_py(basepath):
     fw("import sys, os\n\n")
     fw("extensions = ['sphinx.ext.intersphinx']\n\n")
     fw("intersphinx_mapping = {'blender_manual': ('https://docs.blender.org/manual/en/dev/', None)}\n\n")
-    fw("project = 'Blender'\n")
+    fw("project = 'Blender %s Python API'\n" % BLENDER_VERSION_DOTS)
     fw("master_doc = 'index'\n")
     fw("copyright = u'Blender Foundation'\n")
-    fw("version = '%s'\n" % BLENDER_VERSION_DOTS)
-    fw("release = '%s'\n" % BLENDER_VERSION_DOTS)
+    fw("version = '%s'\n" % BLENDER_VERSION_HASH)
+    fw("release = '%s'\n" % BLENDER_VERSION_HASH)
 
     # Quiet file not in table-of-contents warnings.
     fw("exclude_patterns = [\n")
     fw("    'include__bmesh.rst',\n")
     fw("]\n\n")
 
-    fw("html_title = 'Blender %s Python API'\n" % BLENDER_VERSION_DOTS)
-    fw("html_theme = 'sphinx_rtd_theme'\n")
+    fw("html_title = 'Blender Python API'\n")
+
+    fw("html_theme = 'default'\n")
+    # The theme 'sphinx_rtd_theme' is no longer distributed with sphinx by default, only use when available.
+    fw(r"""
+try:
+    __import__('sphinx_rtd_theme')
+    html_theme = 'sphinx_rtd_theme'
+except ModuleNotFoundError:
+    pass
+""")
+
+    fw("if html_theme == 'sphinx_rtd_theme':\n")
+    fw("    html_theme_options = {\n")
+    # fw("        'analytics_id': '',\n")
+    # fw("        'collapse_navigation': True,\n")
+    fw("        'sticky_navigation': False,\n")
+    fw("        'navigation_depth': 1,\n")
+    # fw("        'includehidden': True,\n")
+    # fw("        'titles_only': False\n")
+    fw("    }\n\n")
+
     # not helpful since the source is generated, adds to upload size.
     fw("html_copy_source = False\n")
     fw("html_show_sphinx = False\n")
+    fw("html_baseurl = 'https://docs.blender.org/api/current/'\n")
+    fw("html_use_opensearch = 'https://docs.blender.org/api/current'\n")
     fw("html_split_index = True\n")
-    fw("html_extra_path = ['__/static/favicon.ico', '__/static/blender_logo.svg']\n")
-    fw("html_favicon = '__/static/favicon.ico'\n")
-    fw("html_logo = '__/static/blender_logo.svg'\n\n")
+    fw("html_static_path = ['static']\n")
+    fw("html_extra_path = ['static/favicon.ico', 'static/blender_logo.svg']\n")
+    fw("html_favicon = 'static/favicon.ico'\n")
+    fw("html_logo = 'static/blender_logo.svg'\n")
+    fw("html_last_updated_fmt = '%m/%d/%Y'\n\n")
 
     # needed for latex, pdf gen
     fw("latex_elements = {\n")
@@ -1651,11 +1767,12 @@ class PatchedPythonDomain(PythonDomain):
             del node['refspecific']
         return super(PatchedPythonDomain, self).resolve_xref(
             env, fromdocname, builder, typ, target, node, contnode)
-
-def setup(sphinx):
-    sphinx.override_domain(PatchedPythonDomain)
 """)
     # end workaround
+
+    fw("def setup(app):\n")
+    fw("    app.add_css_file('css/theme_overrides.css')\n")
+    fw("    app.add_domain(PatchedPythonDomain, override=True)\n\n")
 
     file.close()
 
@@ -1667,7 +1784,7 @@ def execfile(filepath):
     file_handle.close()
 
 
-def write_rst_contents(basepath):
+def write_rst_index(basepath):
     '''
     Write the rst file of the main page, needed for sphinx (index.html)
     '''
@@ -1675,14 +1792,14 @@ def write_rst_contents(basepath):
     file = open(filepath, "w", encoding="utf-8")
     fw = file.write
 
-    fw(title_string("Blender Python API Documentation", "%", double=True))
+    fw(title_string("Blender %s Python API Documentation" % BLENDER_VERSION_DOTS, "%", double=True))
     fw("\n")
-    fw("Welcome to the API reference for Blender %s, built %s.\n" %
-       (BLENDER_VERSION_DOTS, BLENDER_DATE))
+    fw("Welcome to the Python API documentation for `Blender <https://www.blender.org>`__, ")
+    fw("the free and open source 3D creation suite.\n")
     fw("\n")
 
     # fw("`A PDF version of this document is also available <%s>`_\n" % BLENDER_PDF_FILENAME)
-    fw("This site can be downloaded for offline use: `Download the full Documentation (zipped HTML files) <%s>`_\n" %
+    fw("This site can be used offline: `Download the full documentation (zipped HTML files) <%s>`__\n" %
        BLENDER_ZIP_FILENAME)
     fw("\n")
 
@@ -1701,12 +1818,12 @@ def write_rst_contents(basepath):
     app_modules = (
         "bpy.context",  # note: not actually a module
         "bpy.data",     # note: not actually a module
+        "bpy.msgbus",   # note: not actually a module
         "bpy.ops",
         "bpy.types",
 
         # py modules
         "bpy.utils",
-        "bpy.utils.previews",
         "bpy.path",
         "bpy.app",
 
@@ -1725,14 +1842,28 @@ def write_rst_contents(basepath):
 
     standalone_modules = (
         # submodules are added in parent page
-        "mathutils", "freestyle", "bgl", "blf", "gpu", "gpu_extras",
-        "aud", "bpy_extras", "idprop.types", "bmesh",
+        "aud",
+        "bgl",
+        "bl_math",
+        "blf",
+        "bmesh",
+        "bpy_extras",
+        "freestyle",
+        "gpu",
+        "gpu_extras",
+        "idprop.types",
+        "imbuf",
+        "mathutils",
     )
 
     for mod in standalone_modules:
         if mod not in EXCLUDE_MODULES:
             fw("   %s\n" % mod)
     fw("\n")
+
+    fw(title_string("Indices", "="))
+    fw("* :ref:`genindex`\n")
+    fw("* :ref:`modindex`\n\n")
 
     # special case, this 'bmesh.ops.rst' is extracted from C source
     if "bmesh.ops" not in EXCLUDE_MODULES:
@@ -1769,6 +1900,7 @@ def write_rst_types_index(basepath):
         file = open(filepath, "w", encoding="utf-8")
         fw = file.write
         fw(title_string("Types (bpy.types)", "="))
+        fw(".. module:: bpy.types\n\n")
         fw(".. toctree::\n")
         fw("   :glob:\n\n")
         fw("   bpy.types.*\n\n")
@@ -1784,11 +1916,36 @@ def write_rst_ops_index(basepath):
         file = open(filepath, "w", encoding="utf-8")
         fw = file.write
         fw(title_string("Operators (bpy.ops)", "="))
+        fw(".. module:: bpy.ops\n\n")
         write_example_ref("", fw, "bpy.ops")
         fw(".. toctree::\n")
+        fw("   :caption: Submodules\n")
         fw("   :glob:\n\n")
         fw("   bpy.ops.*\n\n")
         file.close()
+
+
+def write_rst_msgbus(basepath):
+    """
+    Write the rst files of bpy.msgbus module
+    """
+    if 'bpy.msgbus' in EXCLUDE_MODULES:
+        return
+
+    # Write the index.
+    filepath = os.path.join(basepath, "bpy.msgbus.rst")
+    file = open(filepath, "w", encoding="utf-8")
+    fw = file.write
+    fw(title_string("Message Bus (bpy.msgbus)", "="))
+    write_example_ref("", fw, "bpy.msgbus")
+    fw(".. toctree::\n")
+    fw("   :glob:\n\n")
+    fw("   bpy.msgbus.*\n\n")
+    file.close()
+
+    # Write the contents.
+    pymodule2sphinx(basepath, 'bpy.msgbus', bpy.msgbus, 'Message Bus', ())
+    EXAMPLE_SET_USED.add("bpy.msgbus")
 
 
 def write_rst_data(basepath):
@@ -1802,7 +1959,7 @@ def write_rst_data(basepath):
         file = open(filepath, "w", encoding="utf-8")
         fw = file.write
         fw(title_string("Data Access (bpy.data)", "="))
-        fw(".. module:: bpy\n")
+        fw(".. module:: bpy.data\n")
         fw("\n")
         fw("This module is used for all Blender/Python access.\n")
         fw("\n")
@@ -1832,12 +1989,17 @@ def write_rst_importable_modules(basepath):
         # C_modules
         "aud": "Audio System",
         "blf": "Font Drawing",
+        "imbuf": "Image Buffer",
+        "imbuf.types": "Image Buffer Types",
         "gpu": "GPU Shader Module",
         "gpu.types": "GPU Types",
-        "gpu.matrix": "GPU Matrix",
-        "gpu.select": "GPU Select",
-        "gpu.shader": "GPU Shader",
+        "gpu.matrix": "GPU Matrix Utilities",
+        "gpu.select": "GPU Select Utilities",
+        "gpu.shader": "GPU Shader Utilities",
+        "gpu.state": "GPU State Utilities",
+        "gpu.texture": "GPU Texture Utilities",
         "bmesh": "BMesh Module",
+        "bmesh.ops": "BMesh Operators",
         "bmesh.types": "BMesh Types",
         "bmesh.utils": "BMesh Utilities",
         "bmesh.geometry": "BMesh Geometry Utilities",
@@ -1854,6 +2016,7 @@ def write_rst_importable_modules(basepath):
         "mathutils.kdtree": "KDTree Utilities",
         "mathutils.interpolate": "Interpolation Utilities",
         "mathutils.noise": "Noise Utilities",
+        "bl_math": "Additional Math Functions",
         "freestyle": "Freestyle Module",
         "freestyle.types": "Freestyle Types",
         "freestyle.predicates": "Freestyle Predicates",
@@ -1862,11 +2025,32 @@ def write_rst_importable_modules(basepath):
         "freestyle.shaders": "Freestyle Shaders",
         "freestyle.utils": "Freestyle Utilities",
     }
+
+    # This is needed since some of the sub-modules listed above are not actual modules.
+    # Examples include `bpy.app.translations` & `bpy.app.handlers`.
+    #
+    # Most of these are `PyStructSequence` internally,
+    # however we don't want to document all of these as modules since some only contain
+    # a few values (version number for e.g).
+    #
+    # If we remove this logic and document all `PyStructSequence` as sub-modules it means
+    # `bpy.app.timers` for example would be presented on the same level as library information
+    # access such as `bpy.app.sdl` which doesn't seem useful since it hides more useful
+    # module-like objects among library data access.
+    importable_modules_parent_map = {}
+    for mod_name in importable_modules.keys():
+        if mod_name in EXCLUDE_MODULES:
+            continue
+        if "." in mod_name:
+            mod_name, submod_name = mod_name.rsplit(".", 1)
+            importable_modules_parent_map.setdefault(mod_name, []).append(submod_name)
+
     for mod_name, mod_descr in importable_modules.items():
-        if mod_name not in EXCLUDE_MODULES:
-            module = __import__(mod_name,
-                                fromlist=[mod_name.rsplit(".", 1)[-1]])
-            pymodule2sphinx(basepath, mod_name, module, mod_descr)
+        if mod_name in EXCLUDE_MODULES:
+            continue
+        module_all_extra = importable_modules_parent_map.get(mod_name, ())
+        module = __import__(mod_name, fromlist=[mod_name.rsplit(".", 1)[-1]])
+        pymodule2sphinx(basepath, mod_name, module, mod_descr, module_all_extra)
 
 
 def copy_handwritten_rsts(basepath):
@@ -1914,6 +2098,12 @@ def copy_handwritten_extra(basepath):
         shutil.copy2(f_src, f_dst)
 
 
+def copy_theme_assets(basepath):
+    shutil.copytree(os.path.join(SCRIPT_DIR, "static"),
+                    os.path.join(basepath, "static"),
+                    copy_function=shutil.copy)
+
+
 def rna2sphinx(basepath):
 
     try:
@@ -1925,7 +2115,7 @@ def rna2sphinx(basepath):
     write_sphinx_conf_py(basepath)
 
     # main page
-    write_rst_contents(basepath)
+    write_rst_index(basepath)
 
     # context
     if "bpy.context" not in EXCLUDE_MODULES:
@@ -1938,6 +2128,7 @@ def rna2sphinx(basepath):
     write_rst_bpy(basepath)                 # bpy, disabled by default
     write_rst_types_index(basepath)         # bpy.types
     write_rst_ops_index(basepath)           # bpy.ops
+    write_rst_msgbus(basepath)              # bpy.msgbus
     pyrna2sphinx(basepath)                  # bpy.types.* and bpy.ops.*
     write_rst_data(basepath)                # bpy.data
     write_rst_importable_modules(basepath)
@@ -1947,6 +2138,9 @@ def rna2sphinx(basepath):
 
     # copy source files referenced
     copy_handwritten_extra(basepath)
+
+    # copy extra files needed for theme
+    copy_theme_assets(basepath)
 
 
 def align_sphinx_in_to_sphinx_in_tmp(dir_src, dir_dst):
@@ -2005,7 +2199,7 @@ def refactor_sphinx_log(sphinx_logfile):
             refactored_logfile.write("%-12s %s\n             %s\n" % log)
 
 
-def monkey_patch():
+def setup_monkey_patch():
     filepath = os.path.join(SCRIPT_DIR, "sphinx_doc_gen_monkeypatch.py")
     global_namespace = {"__file__": filepath, "__name__": "__main__"}
     file = open(filepath, 'rb')
@@ -2013,10 +2207,35 @@ def monkey_patch():
     file.close()
 
 
+# Avoid adding too many changes here.
+def setup_blender():
+    import bpy
+
+    # Remove handlers since the functions get included
+    # in the doc-string and don't have meaningful names.
+    lists_to_restore = []
+    for var in bpy.app.handlers:
+        if isinstance(var, list):
+            lists_to_restore.append((var[:], var))
+            var.clear()
+
+    return {
+        "lists_to_restore": lists_to_restore,
+    }
+
+
+def teardown_blender(setup_data):
+    for var_src, var_dst in setup_data["lists_to_restore"]:
+        var_dst[:] = var_src
+
+
 def main():
 
-    # first monkey patch to load in fake members
-    monkey_patch()
+    # First monkey patch to load in fake members.
+    setup_monkey_patch()
+
+    # Perform changes to Blender it's self.
+    setup_data = setup_blender()
 
     # eventually, create the dirs
     for dir_path in [ARGS.output_dir, SPHINX_IN]:
@@ -2104,7 +2323,7 @@ def main():
                 shutil.rmtree(REFERENCE_PATH, True)
 
             # copy SPHINX_OUT to the REFERENCE_PATH
-            ignores = ('.doctrees', 'objects.inv', '.buildinfo')
+            ignores = ('.doctrees', '.buildinfo')
             shutil.copytree(SPHINX_OUT,
                             REFERENCE_PATH,
                             ignore=shutil.ignore_patterns(*ignores))
@@ -2121,6 +2340,8 @@ def main():
             # copy the pdf to REFERENCE_PATH
             shutil.copy(os.path.join(SPHINX_OUT_PDF, "contents.pdf"),
                         os.path.join(REFERENCE_PATH, BLENDER_PDF_FILENAME))
+
+    teardown_blender(setup_data)
 
     sys.exit()
 

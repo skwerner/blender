@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "bvh/bvh2.h"
+
 #include "device/device.h"
 #include "device/device_intern.h"
 
@@ -25,11 +27,11 @@
 #include "util/util_logging.h"
 #include "util/util_math.h"
 #include "util/util_opengl.h"
-#include "util/util_time.h"
+#include "util/util_string.h"
 #include "util/util_system.h"
+#include "util/util_time.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
-#include "util/util_string.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -38,6 +40,7 @@ bool Device::need_devices_update = true;
 thread_mutex Device::device_mutex;
 vector<DeviceInfo> Device::opencl_devices;
 vector<DeviceInfo> Device::cuda_devices;
+vector<DeviceInfo> Device::optix_devices;
 vector<DeviceInfo> Device::cpu_devices;
 vector<DeviceInfo> Device::network_devices;
 uint Device::devices_initialized_mask = 0;
@@ -76,7 +79,7 @@ std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &reques
 
 /* Device */
 
-Device::~Device()
+Device::~Device() noexcept(false)
 {
   if (!background) {
     if (vertex_buffer != 0) {
@@ -208,13 +211,13 @@ bool Device::bind_fallback_display_space_shader(const float width, const float h
     glUseProgram(fallback_shader_program);
     image_texture_location = glGetUniformLocation(fallback_shader_program, "image_texture");
     if (image_texture_location < 0) {
-      LOG(ERROR) << "Shader doesn't containt the 'image_texture' uniform.";
+      LOG(ERROR) << "Shader doesn't contain the 'image_texture' uniform.";
       return false;
     }
 
     fullscreen_location = glGetUniformLocation(fallback_shader_program, "fullscreen");
     if (fullscreen_location < 0) {
-      LOG(ERROR) << "Shader doesn't containt the 'fullscreen' uniform.";
+      LOG(ERROR) << "Shader doesn't contain the 'fullscreen' uniform.";
       return false;
     }
 
@@ -287,7 +290,8 @@ void Device::draw_pixels(device_memory &rgba,
   }
 
   glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-  /* invalidate old contents - avoids stalling if buffer is still waiting in queue to be rendered */
+  /* invalidate old contents - avoids stalling if buffer is still waiting in queue to be rendered
+   */
   glBufferData(GL_ARRAY_BUFFER, 16 * sizeof(float), NULL, GL_STREAM_DRAW);
 
   float *vpointer = (float *)glMapBuffer(GL_ARRAY_BUFFER, GL_WRITE_ONLY);
@@ -362,9 +366,31 @@ void Device::draw_pixels(device_memory &rgba,
   }
 }
 
+void Device::build_bvh(BVH *bvh, Progress &progress, bool refit)
+{
+  assert(bvh->params.bvh_layout == BVH_LAYOUT_BVH2);
+
+  BVH2 *const bvh2 = static_cast<BVH2 *>(bvh);
+  if (refit) {
+    bvh2->refit(progress);
+  }
+  else {
+    bvh2->build(progress, &stats);
+  }
+}
+
 Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background)
 {
-  Device *device;
+#ifdef WITH_MULTI
+  if (!info.multi_devices.empty()) {
+    /* Always create a multi device when info contains multiple devices.
+     * This is done so that the type can still be e.g. DEVICE_CPU to indicate
+     * that it is a homogeneous collection of devices, which simplifies checks. */
+    return device_multi_create(info, stats, profiler, background);
+  }
+#endif
+
+  Device *device = NULL;
 
   switch (info.type) {
     case DEVICE_CPU:
@@ -374,13 +400,12 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_CUDA:
       if (device_cuda_init())
         device = device_cuda_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
-#ifdef WITH_MULTI
-    case DEVICE_MULTI:
-      device = device_multi_create(info, stats, profiler, background);
+#ifdef WITH_OPTIX
+    case DEVICE_OPTIX:
+      if (device_optix_init())
+        device = device_optix_create(info, stats, profiler, background);
       break;
 #endif
 #ifdef WITH_NETWORK
@@ -392,12 +417,14 @@ Device *Device::create(DeviceInfo &info, Stats &stats, Profiler &profiler, bool 
     case DEVICE_OPENCL:
       if (device_opencl_init())
         device = device_opencl_create(info, stats, profiler, background);
-      else
-        device = NULL;
       break;
 #endif
     default:
-      return NULL;
+      break;
+  }
+
+  if (device == NULL) {
+    device = device_dummy_create(info, stats, profiler, background);
   }
 
   return device;
@@ -409,6 +436,8 @@ DeviceType Device::type_from_string(const char *name)
     return DEVICE_CPU;
   else if (strcmp(name, "CUDA") == 0)
     return DEVICE_CUDA;
+  else if (strcmp(name, "OPTIX") == 0)
+    return DEVICE_OPTIX;
   else if (strcmp(name, "OPENCL") == 0)
     return DEVICE_OPENCL;
   else if (strcmp(name, "NETWORK") == 0)
@@ -425,6 +454,8 @@ string Device::string_from_type(DeviceType type)
     return "CPU";
   else if (type == DEVICE_CUDA)
     return "CUDA";
+  else if (type == DEVICE_OPTIX)
+    return "OPTIX";
   else if (type == DEVICE_OPENCL)
     return "OPENCL";
   else if (type == DEVICE_NETWORK)
@@ -441,6 +472,9 @@ vector<DeviceType> Device::available_types()
   types.push_back(DEVICE_CPU);
 #ifdef WITH_CUDA
   types.push_back(DEVICE_CUDA);
+#endif
+#ifdef WITH_OPTIX
+  types.push_back(DEVICE_OPTIX);
 #endif
 #ifdef WITH_OPENCL
   types.push_back(DEVICE_OPENCL);
@@ -473,15 +507,31 @@ vector<DeviceInfo> Device::available_devices(uint mask)
   }
 #endif
 
-#ifdef WITH_CUDA
-  if (mask & DEVICE_MASK_CUDA) {
+#if defined(WITH_CUDA) || defined(WITH_OPTIX)
+  if (mask & (DEVICE_MASK_CUDA | DEVICE_MASK_OPTIX)) {
     if (!(devices_initialized_mask & DEVICE_MASK_CUDA)) {
       if (device_cuda_init()) {
         device_cuda_info(cuda_devices);
       }
       devices_initialized_mask |= DEVICE_MASK_CUDA;
     }
-    foreach (DeviceInfo &info, cuda_devices) {
+    if (mask & DEVICE_MASK_CUDA) {
+      foreach (DeviceInfo &info, cuda_devices) {
+        devices.push_back(info);
+      }
+    }
+  }
+#endif
+
+#ifdef WITH_OPTIX
+  if (mask & DEVICE_MASK_OPTIX) {
+    if (!(devices_initialized_mask & DEVICE_MASK_OPTIX)) {
+      if (device_optix_init()) {
+        device_optix_info(cuda_devices, optix_devices);
+      }
+      devices_initialized_mask |= DEVICE_MASK_OPTIX;
+    }
+    foreach (DeviceInfo &info, optix_devices) {
       devices.push_back(info);
     }
   }
@@ -510,6 +560,14 @@ vector<DeviceInfo> Device::available_devices(uint mask)
 #endif
 
   return devices;
+}
+
+DeviceInfo Device::dummy_device(const string &error_msg)
+{
+  DeviceInfo info;
+  info.type = DEVICE_DUMMY;
+  info.error_msg = error_msg;
+  return info;
 }
 
 string Device::device_capabilities(uint mask)
@@ -555,15 +613,20 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
   }
 
   DeviceInfo info;
-  info.type = DEVICE_MULTI;
+  info.type = subdevices.front().type;
   info.id = "MULTI";
   info.description = "Multi Device";
   info.num = 0;
 
   info.has_half_images = true;
+  info.has_nanovdb = true;
   info.has_volume_decoupled = true;
+  info.has_branched_path = true;
+  info.has_adaptive_stop_per_sample = true;
   info.has_osl = true;
   info.has_profiling = true;
+  info.has_peer_memory = false;
+  info.denoisers = DENOISER_ALL;
 
   foreach (const DeviceInfo &device, subdevices) {
     /* Ensure CPU device does not slow down GPU. */
@@ -593,11 +656,24 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
       info.multi_devices.push_back(device);
     }
 
+    /* Create unique ID for this combination of devices. */
+    info.id += device.id;
+
+    /* Set device type to MULTI if subdevices are not of a common type. */
+    if (device.type != info.type) {
+      info.type = DEVICE_MULTI;
+    }
+
     /* Accumulate device info. */
     info.has_half_images &= device.has_half_images;
+    info.has_nanovdb &= device.has_nanovdb;
     info.has_volume_decoupled &= device.has_volume_decoupled;
+    info.has_branched_path &= device.has_branched_path;
+    info.has_adaptive_stop_per_sample &= device.has_adaptive_stop_per_sample;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;
+    info.has_peer_memory |= device.has_peer_memory;
+    info.denoisers &= device.denoisers;
   }
 
   return info;
@@ -612,9 +688,61 @@ void Device::free_memory()
 {
   devices_initialized_mask = 0;
   cuda_devices.free_memory();
+  optix_devices.free_memory();
   opencl_devices.free_memory();
   cpu_devices.free_memory();
   network_devices.free_memory();
+}
+
+/* DeviceInfo */
+
+void DeviceInfo::add_denoising_devices(DenoiserType denoiser_type)
+{
+  assert(denoising_devices.empty());
+
+  if (denoiser_type == DENOISER_OPTIX && type != DEVICE_OPTIX) {
+    vector<DeviceInfo> optix_devices = Device::available_devices(DEVICE_MASK_OPTIX);
+    if (!optix_devices.empty()) {
+      /* Convert to a special multi device with separate denoising devices. */
+      if (multi_devices.empty()) {
+        multi_devices.push_back(*this);
+      }
+
+      /* Try to use the same physical devices for denoising. */
+      for (const DeviceInfo &cuda_device : multi_devices) {
+        if (cuda_device.type == DEVICE_CUDA) {
+          for (const DeviceInfo &optix_device : optix_devices) {
+            if (cuda_device.num == optix_device.num) {
+              id += optix_device.id;
+              denoising_devices.push_back(optix_device);
+              break;
+            }
+          }
+        }
+      }
+
+      if (denoising_devices.empty()) {
+        /* Simply use the first available OptiX device. */
+        const DeviceInfo optix_device = optix_devices.front();
+        id += optix_device.id; /* Uniquely identify this special multi device. */
+        denoising_devices.push_back(optix_device);
+      }
+
+      denoisers = denoiser_type;
+    }
+  }
+  else if (denoiser_type == DENOISER_OPENIMAGEDENOISE && type != DEVICE_CPU) {
+    /* Convert to a special multi device with separate denoising devices. */
+    if (multi_devices.empty()) {
+      multi_devices.push_back(*this);
+    }
+
+    /* Add CPU denoising devices. */
+    DeviceInfo cpu_device = Device::available_devices(DEVICE_MASK_CPU).front();
+    denoising_devices.push_back(cpu_device);
+
+    denoisers = denoiser_type;
+  }
 }
 
 CCL_NAMESPACE_END

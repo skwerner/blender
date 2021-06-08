@@ -21,16 +21,13 @@
  * \ingroup spaction
  */
 
-#include <stdlib.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "DNA_space_types.h"
 
 #include "ED_anim_api.h"
-#include "ED_markers.h"
 #include "ED_transform.h"
-#include "ED_object.h"
-#include "ED_select_utils.h"
 
 #include "action_intern.h"
 
@@ -43,9 +40,6 @@
 
 void action_operatortypes(void)
 {
-  /* view */
-  WM_operatortype_append(ACTION_OT_properties);
-
   /* keyframes */
   /* selection */
   WM_operatortype_append(ACTION_OT_clickselect);
@@ -66,6 +60,7 @@ void action_operatortypes(void)
   WM_operatortype_append(ACTION_OT_handle_type);
   WM_operatortype_append(ACTION_OT_interpolation_type);
   WM_operatortype_append(ACTION_OT_extrapolation_type);
+  WM_operatortype_append(ACTION_OT_easing_type);
   WM_operatortype_append(ACTION_OT_keyframe_type);
   WM_operatortype_append(ACTION_OT_sample);
   WM_operatortype_append(ACTION_OT_clean);
@@ -105,7 +100,7 @@ void ED_operatormacros_action(void)
   WM_operatortype_macro_define(ot, "ACTION_OT_duplicate");
   otmacro = WM_operatortype_macro_define(ot, "TRANSFORM_OT_transform");
   RNA_enum_set(otmacro->ptr, "mode", TFM_TIME_DUPLICATE);
-  RNA_enum_set(otmacro->ptr, "proportional", PROP_EDIT_OFF);
+  RNA_boolean_set(otmacro->ptr, "use_proportional_edit", false);
 }
 
 /* ************************** registration - keymaps **********************************/
@@ -118,8 +113,10 @@ void action_keymap(wmKeyConfig *keyconf)
   WM_keymap_ensure(keyconf, "Dopesheet Generic", SPACE_ACTION, 0);
 
   /* channels */
-  /* Channels are not directly handled by the Action Editor module, but are inherited from the Animation module.
-   * All the relevant operations, keymaps, drawing, etc. can therefore all be found in that module instead, as these
+  /* Channels are not directly handled by the Action Editor module,
+   * but are inherited from the Animation module.
+   * All the relevant operations, keymaps, drawing, etc.
+   * can therefore all be found in that module instead, as these
    * are all used for the Graph-Editor too.
    */
 

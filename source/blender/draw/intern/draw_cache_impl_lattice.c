@@ -25,17 +25,17 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_curve_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_userdef_types.h"
 
-#include "BKE_lattice.h"
-#include "BKE_deform.h"
 #include "BKE_colorband.h"
+#include "BKE_deform.h"
+#include "BKE_lattice.h"
 
 #include "GPU_batch.h"
 
@@ -83,10 +83,9 @@ static int lattice_render_verts_len_get(Lattice *lt)
   if ((lt->flag & LT_OUTSIDE) == 0) {
     return vert_len_calc(u, v, w);
   }
-  else {
-    /* TODO remove internal coords */
-    return vert_len_calc(u, v, w);
-  }
+
+  /* TODO remove internal coords */
+  return vert_len_calc(u, v, w);
 }
 
 static int lattice_render_edges_len_get(Lattice *lt)
@@ -102,10 +101,9 @@ static int lattice_render_edges_len_get(Lattice *lt)
   if ((lt->flag & LT_OUTSIDE) == 0) {
     return edge_len_calc(u, v, w);
   }
-  else {
-    /* TODO remove internal coords */
-    return edge_len_calc(u, v, w);
-  }
+
+  /* TODO remove internal coords */
+  return edge_len_calc(u, v, w);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -127,7 +125,7 @@ typedef struct LatticeRenderData {
 
   int actbp;
 
-  struct MDeformVert *dvert;
+  const struct MDeformVert *dvert;
 } LatticeRenderData;
 
 enum {
@@ -212,62 +210,6 @@ static const BPoint *lattice_render_data_vert_bpoint(const LatticeRenderData *rd
   return &rdata->bp[vert_idx];
 }
 
-/* TODO, move into shader? */
-static void rgb_from_weight(float r_rgb[3], const float weight)
-{
-  const float blend = ((weight / 2.0f) + 0.5f);
-
-  if (weight <= 0.25f) { /* blue->cyan */
-    r_rgb[0] = 0.0f;
-    r_rgb[1] = blend * weight * 4.0f;
-    r_rgb[2] = blend;
-  }
-  else if (weight <= 0.50f) { /* cyan->green */
-    r_rgb[0] = 0.0f;
-    r_rgb[1] = blend;
-    r_rgb[2] = blend * (1.0f - ((weight - 0.25f) * 4.0f));
-  }
-  else if (weight <= 0.75f) { /* green->yellow */
-    r_rgb[0] = blend * ((weight - 0.50f) * 4.0f);
-    r_rgb[1] = blend;
-    r_rgb[2] = 0.0f;
-  }
-  else if (weight <= 1.0f) { /* yellow->red */
-    r_rgb[0] = blend;
-    r_rgb[1] = blend * (1.0f - ((weight - 0.75f) * 4.0f));
-    r_rgb[2] = 0.0f;
-  }
-  else {
-    /* exceptional value, unclamped or nan,
-     * avoid uninitialized memory use */
-    r_rgb[0] = 1.0f;
-    r_rgb[1] = 0.0f;
-    r_rgb[2] = 1.0f;
-  }
-}
-
-static void lattice_render_data_weight_col_get(const LatticeRenderData *rdata,
-                                               const int vert_idx,
-                                               const int actdef,
-                                               float r_col[4])
-{
-  if (actdef > -1) {
-    float weight = defvert_find_weight(rdata->dvert + vert_idx, actdef);
-
-    if (U.flag & USER_CUSTOM_RANGE) {
-      BKE_colorband_evaluate(&U.coba_weight, weight, r_col);
-    }
-    else {
-      rgb_from_weight(r_col, weight);
-    }
-
-    r_col[3] = 1.0f;
-  }
-  else {
-    zero_v4(r_col);
-  }
-}
-
 /* ---------------------------------------------------------------------- */
 /* Lattice GPUBatch Cache */
 
@@ -308,12 +250,11 @@ static bool lattice_batch_cache_valid(Lattice *lt)
   if (cache->is_dirty) {
     return false;
   }
-  else {
-    if ((cache->dims.u_len != lt->pntsu) || (cache->dims.v_len != lt->pntsv) ||
-        (cache->dims.w_len != lt->pntsw) ||
-        ((cache->show_only_outside != ((lt->flag & LT_OUTSIDE) != 0)))) {
-      return false;
-    }
+
+  if ((cache->dims.u_len != lt->pntsu) || (cache->dims.v_len != lt->pntsv) ||
+      (cache->dims.w_len != lt->pntsw) ||
+      ((cache->show_only_outside != ((lt->flag & LT_OUTSIDE) != 0)))) {
+    return false;
   }
 
   return true;
@@ -340,12 +281,16 @@ static void lattice_batch_cache_init(Lattice *lt)
   cache->is_dirty = false;
 }
 
-static LatticeBatchCache *lattice_batch_cache_get(Lattice *lt)
+void DRW_lattice_batch_cache_validate(Lattice *lt)
 {
   if (!lattice_batch_cache_valid(lt)) {
     lattice_batch_cache_clear(lt);
     lattice_batch_cache_init(lt);
   }
+}
+
+static LatticeBatchCache *lattice_batch_cache_get(Lattice *lt)
+{
   return lt->batch_cache;
 }
 
@@ -398,34 +343,29 @@ static GPUVertBuf *lattice_batch_cache_get_pos(LatticeRenderData *rdata,
   BLI_assert(rdata->types & LR_DATATYPE_VERT);
 
   if (cache->pos == NULL) {
-    static GPUVertFormat format = {0};
-    static struct {
+    GPUVertFormat format = {0};
+    struct {
       uint pos, col;
     } attr_id;
 
-    GPU_vertformat_clear(&format);
-
-    /* initialize vertex format */
     attr_id.pos = GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
-
     if (use_weight) {
-      attr_id.col = GPU_vertformat_attr_add(&format, "color", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
+      attr_id.col = GPU_vertformat_attr_add(&format, "weight", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
     }
 
     const int vert_len = lattice_render_data_verts_len_get(rdata);
 
     cache->pos = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(cache->pos, vert_len);
-    for (int i = 0; i < vert_len; ++i) {
+    for (int i = 0; i < vert_len; i++) {
       const BPoint *bp = lattice_render_data_vert_bpoint(rdata, i);
       GPU_vertbuf_attr_set(cache->pos, attr_id.pos, i, bp->vec);
 
       if (use_weight) {
-        float w_col[4];
-        lattice_render_data_weight_col_get(rdata, i, actdef, w_col);
-        w_col[3] = 1.0f;
-
-        GPU_vertbuf_attr_set(cache->pos, attr_id.col, i, w_col);
+        const float no_active_weight = 666.0f;
+        float weight = (actdef > -1) ? BKE_defvert_find_weight(rdata->dvert + i, actdef) :
+                                       no_active_weight;
+        GPU_vertbuf_attr_set(cache->pos, attr_id.col, i, &weight);
       }
     }
   }
@@ -449,11 +389,11 @@ static GPUIndexBuf *lattice_batch_cache_get_edges(LatticeRenderData *rdata,
 #define LATT_INDEX(u, v, w) ((((w)*rdata->dims.v_len + (v)) * rdata->dims.u_len) + (u))
 
     for (int w = 0; w < rdata->dims.w_len; w++) {
-      int wxt = (w == 0 || w == rdata->dims.w_len - 1);
+      int wxt = (ELEM(w, 0, rdata->dims.w_len - 1));
       for (int v = 0; v < rdata->dims.v_len; v++) {
-        int vxt = (v == 0 || v == rdata->dims.v_len - 1);
+        int vxt = (ELEM(v, 0, rdata->dims.v_len - 1));
         for (int u = 0; u < rdata->dims.u_len; u++) {
-          int uxt = (u == 0 || u == rdata->dims.u_len - 1);
+          int uxt = (ELEM(u, 0, rdata->dims.u_len - 1));
 
           if (w && ((uxt || vxt) || !rdata->show_only_outside)) {
             GPU_indexbuf_add_line_verts(&elb, LATT_INDEX(u, v, w - 1), LATT_INDEX(u, v, w));
@@ -512,7 +452,7 @@ static void lattice_batch_cache_create_overlay_batches(Lattice *lt)
 
     GPUVertBuf *vbo = GPU_vertbuf_create_with_format(&format);
     GPU_vertbuf_data_alloc(vbo, vert_len);
-    for (int i = 0; i < vert_len; ++i) {
+    for (int i = 0; i < vert_len; i++) {
       const BPoint *bp = lattice_render_data_vert_bpoint(rdata, i);
 
       char vflag = 0;

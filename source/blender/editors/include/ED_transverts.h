@@ -21,8 +21,11 @@
  * \ingroup editors
  */
 
-#ifndef __ED_TRANSVERTS_H__
-#define __ED_TRANSVERTS_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Object;
 
@@ -47,9 +50,12 @@ bool ED_transverts_poll(struct bContext *C);
 
 /* currently only used for bmesh index values */
 enum {
-  TM_INDEX_ON = 1,    /* tag to make trans verts */
-  TM_INDEX_OFF = 0,   /* don't make verts */
-  TM_INDEX_SKIP = -1, /* dont make verts (when the index values point to trans-verts) */
+  /** Tag to make trans verts. */
+  TM_INDEX_ON = 1,
+  /** Don't make verts. */
+  TM_INDEX_OFF = 0,
+  /** Don't make verts (when the index values point to trans-verts). */
+  TM_INDEX_SKIP = -1,
 };
 
 /* mode flags: */
@@ -68,4 +74,6 @@ enum {
   TX_VERT_USE_NORMAL = (1 << 2), /* avoid nonzero check */
 };
 
-#endif /* __ED_TRANSVERTS_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -27,13 +27,9 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/eigen
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -45,8 +41,6 @@ set(SRC
   geometry/geom_arrow_gizmo.c
   geometry/geom_cube_gizmo.c
   geometry/geom_dial_gizmo.c
-  gizmo_group_types/value2d_gizmo_group.c
-  gizmo_types/arrow2d_gizmo.c
   gizmo_types/arrow3d_gizmo.c
   gizmo_types/blank3d_gizmo.c
   gizmo_types/button2d_gizmo.c
@@ -55,12 +49,11 @@ set(SRC
   gizmo_types/dial3d_gizmo.c
   gizmo_types/move3d_gizmo.c
   gizmo_types/primitive3d_gizmo.c
-  gizmo_types/value2d_gizmo.c
+  gizmo_types/snap3d_gizmo.c
 )
 
 set(LIB
 )
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_gizmo_library "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

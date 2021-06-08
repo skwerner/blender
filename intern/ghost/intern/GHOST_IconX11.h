@@ -22,10 +22,10 @@
  * Icon image data for X11.
  */
 
-#ifndef __GHOST_ICONX11_H__
-#define __GHOST_ICONX11_H__
+#pragma once
 
-/*
+/**
+ * \code{.py}
  * import bpy
  * import textwrap
  *
@@ -43,6 +43,7 @@
  *     print("%d,%d," % (w, h))
  *     text = ", ".join(["0x%x" % p for p in pixels])
  *     print(textwrap.fill(text, width=120), end=",\n")
+ * \endcode
  */
 
 /**
@@ -1013,5 +1014,3 @@ static const unsigned long BLENDER_ICONS_WM_X11[] = {
     0x0,        0x0,        0x0,        0x0,        0x0,        0x0,        0x0,        0x0,
     0x0,        0x0,        0x0,        0x0,        0x0,        0x0,        0x0,        0x0,
 };
-
-#endif  // __GHOST_ICONX11_H__

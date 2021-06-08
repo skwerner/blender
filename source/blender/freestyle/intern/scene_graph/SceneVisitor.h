@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_SCENE_VISITOR_H__
-#define __FREESTYLE_SCENE_VISITOR_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -41,12 +40,12 @@ namespace Freestyle {
   { \
   }
 
-#define VISIT_DECL(type) virtual void visit##type(type &);
+#define VISIT_DECL(type) virtual void visit##type(type &)
 
 #define VISIT_COMPLETE_DECL(type) \
   virtual void visit##type##Before(type &); \
   virtual void visit##type(type &); \
-  virtual void visit##type##After(type &);
+  virtual void visit##type##After(type &)
 
 class Node;
 class NodeShape;
@@ -111,5 +110,3 @@ class SceneVisitor {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_SCENE_VISITOR_H__

@@ -27,11 +27,15 @@ namespace Freestyle {
 
 void OrientedLineRep::accept(SceneVisitor &v)
 {
-  Rep::accept(v);
-  if (!frs_material())
+  Rep::accept(v);  // NOLINT(bugprone-parent-virtual-call), this seems to intentionally *not* call
+                   // the parent class' accept() function, but rather the grandparent's. The
+                   // v.visitLineRep(*this); call below is actually what the parent class would do.
+  if (!frs_material()) {
     v.visitOrientedLineRep(*this);
-  else
+  }
+  else {
     v.visitLineRep(*this);
+  }
 }
 
 } /* namespace Freestyle */

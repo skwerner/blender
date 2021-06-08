@@ -22,30 +22,20 @@
  * \brief Preset shapes that can be drawn from any gizmo type.
  */
 
-#include "MEM_guardedalloc.h"
-
 #include "BLI_math.h"
 
-#include "DNA_view3d_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_context.h"
 
-#include "GPU_draw.h"
-#include "GPU_immediate.h"
-#include "GPU_immediate_util.h"
 #include "GPU_matrix.h"
 #include "GPU_select.h"
 
 #include "DEG_depsgraph.h"
 
-#include "RNA_access.h"
-
 #include "WM_types.h"
-#include "WM_api.h"
 
 #include "ED_view3d.h"
-#include "ED_screen.h"
 
 /* own includes */
 #include "ED_gizmo_library.h"     /* own include */
@@ -57,7 +47,7 @@
  * Given a single axis, orient the matrix to a different direction.
  */
 static void single_axis_convert(int src_axis,
-                                float src_mat[4][4],
+                                const float src_mat[4][4],
                                 int dst_axis,
                                 float dst_mat[4][4])
 {
@@ -76,7 +66,7 @@ static void single_axis_convert(int src_axis,
  * Use for all geometry.
  */
 static void ed_gizmo_draw_preset_geometry(const struct wmGizmo *gz,
-                                          float mat[4][4],
+                                          const float mat[4][4],
                                           int select_id,
                                           const GizmoGeomInfo *info)
 {
@@ -125,6 +115,8 @@ void ED_gizmo_draw_preset_circle(const struct wmGizmo *gz,
 void ED_gizmo_draw_preset_facemap(
     const bContext *C, const struct wmGizmo *gz, Object *ob, const int facemap, int select_id)
 {
+  /* Dependency graph is supposed to be evaluated prior to draw. */
+  Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   const bool is_select = (select_id != -1);
   const bool is_highlight = is_select && (gz->state & WM_GIZMO_STATE_HIGHLIGHT) != 0;
 
@@ -137,7 +129,7 @@ void ED_gizmo_draw_preset_facemap(
 
   GPU_matrix_push();
   GPU_matrix_mul(ob->obmat);
-  ED_draw_object_facemap(CTX_data_depsgraph(C), ob, color, facemap);
+  ED_draw_object_facemap(depsgraph, ob, color, facemap);
   GPU_matrix_pop();
 
   if (is_select) {

@@ -25,9 +25,9 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_heap.h"
 #include "BLI_strict_flags.h"
+#include "BLI_utildefines.h"
 
 /***/
 
@@ -67,6 +67,7 @@ struct Heap {
   } nodes;
 };
 
+/* -------------------------------------------------------------------- */
 /** \name Internal Functions
  * \{ */
 
@@ -146,6 +147,7 @@ static void heap_up(Heap *heap, uint i)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Internal Memory Management
  * \{ */
 
@@ -187,6 +189,7 @@ static void heap_node_free(Heap *heap, HeapNode *node)
 
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Public Heap API
  * \{ */
 
@@ -330,7 +333,7 @@ float BLI_heap_top_value(const Heap *heap)
 }
 
 /**
- * Pop the top node off the heap and return it's pointer.
+ * Pop the top node off the heap and return its pointer.
  */
 void *BLI_heap_pop_min(Heap *heap)
 {
@@ -366,7 +369,7 @@ void BLI_heap_remove(Heap *heap, HeapNode *node)
 /**
  * Can be used to avoid #BLI_heap_remove, #BLI_heap_insert calls,
  * balancing the tree still has a performance cost,
- * but is often much less than remove/insert, difference is most noticable with large heaps.
+ * but is often much less than remove/insert, difference is most noticeable with large heaps.
  */
 void BLI_heap_node_value_update(Heap *heap, HeapNode *node, float value)
 {
@@ -393,14 +396,14 @@ void BLI_heap_node_value_update_ptr(Heap *heap, HeapNode *node, float value, voi
   }
 }
 
-float BLI_heap_node_value(const HeapNode *node)
+float BLI_heap_node_value(const HeapNode *heap)
 {
-  return node->value;
+  return heap->value;
 }
 
-void *BLI_heap_node_ptr(const HeapNode *node)
+void *BLI_heap_node_ptr(const HeapNode *heap)
 {
-  return node->ptr;
+  return heap->ptr;
 }
 
 static bool heap_is_minheap(const Heap *heap, uint root)

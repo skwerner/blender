@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_OBJECT_DEFORM_H__
-#define __BKE_OBJECT_DEFORM_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -33,7 +32,7 @@ struct Object;
 struct bDeformGroup;
 
 /* General vgroup operations */
-void BKE_object_defgroup_remap_update_users(struct Object *ob, int *map);
+void BKE_object_defgroup_remap_update_users(struct Object *ob, const int *map);
 
 bool BKE_object_defgroup_array_get(struct ID *id, struct MDeformVert **dvert_arr, int *dvert_tot);
 
@@ -76,6 +75,16 @@ bool *BKE_object_defgroup_selected_get(struct Object *ob,
                                        int defbase_tot,
                                        int *r_dg_flags_sel_tot);
 
+bool BKE_object_defgroup_check_lock_relative(const bool *lock_flags,
+                                             const bool *validmap,
+                                             int index);
+bool BKE_object_defgroup_check_lock_relative_multi(int defbase_tot,
+                                                   const bool *lock_flags,
+                                                   const bool *selected,
+                                                   int sel_tot);
+void BKE_object_defgroup_split_locked_validmap(
+    int defbase_tot, const bool *locked, const bool *deform, bool *r_locked, bool *r_unlocked);
+
 void BKE_object_defgroup_mirror_selection(struct Object *ob,
                                           int defbase_tot,
                                           const bool *selection,
@@ -85,5 +94,3 @@ void BKE_object_defgroup_mirror_selection(struct Object *ob,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BKE_OBJECT_DEFORM_H__ */

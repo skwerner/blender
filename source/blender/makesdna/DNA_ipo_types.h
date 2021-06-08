@@ -20,21 +20,25 @@
 /** \file
  * \ingroup DNA
  * \deprecated
- *   The contents of this file are now officially deprecated. They were used for the 'old' animation system,
- *   which has (as of 2.50) been replaced with a completely new system by Joshua Leung (aligorith). All defines,
- *   etc. are only still maintained to provide backwards compatibility for old files.
+ *   The contents of this file are now officially deprecated.
+ *   They were used for the 'old' animation system,
+ *   which has (as of 2.50) been replaced with a completely new system by Joshua Leung (aligorith).
+ *   All defines, etc. are only still maintained to provide backwards compatibility for old files.
  */
 
-#ifndef __DNA_IPO_TYPES_H__
-#define __DNA_IPO_TYPES_H__
+#pragma once
 
-#include "DNA_listBase.h"
 #include "DNA_curve_types.h"
+#include "DNA_listBase.h"
 #include "DNA_vec_types.h"
 
 #include "DNA_ID.h"
 
 #include "BLI_compiler_attrs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------- Type Defines --------------------------- */
 
@@ -73,8 +77,9 @@ typedef struct IpoCurve {
   short totvert;
   /** Interpolation and extrapolation modes . */
   short ipo, extrap;
-  /** Flag= settings; rt= ???. */
-  short flag, rt;
+  /** Flag= settings. */
+  short flag;
+  char _pad0[2];
   /** Minimum/maximum y-extents for curve. */
   float ymin, ymax;
   /** ???. */
@@ -517,4 +522,6 @@ typedef struct Ipo {
 /* invalid flag: currently only used for buggy pydriver expressions */
 #define IPO_DRIVER_FLAG_INVALID (1 << 0)
 
+#ifdef __cplusplus
+}
 #endif

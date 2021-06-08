@@ -31,8 +31,8 @@
 
 #  include "MEM_guardedalloc.h"
 
-#  include "BLI_utildefines.h"
 #  include "BLI_fileops.h"
+#  include "BLI_utildefines.h"
 
 #  include "blf_internal.h"
 
@@ -59,13 +59,15 @@ static unsigned long ft_ansi_stream_io(FT_Stream stream,
                                        unsigned long count)
 {
   FILE *file;
-  if (!count && offset > stream->size)
+  if (!count && offset > stream->size) {
     return 1;
+  }
 
   file = STREAM_FILE(stream);
 
-  if (stream->pos != offset)
-    fseek(file, offset, SEEK_SET);
+  if (stream->pos != offset) {
+    BLI_fseek(file, offset, SEEK_SET);
+  }
 
   return fread(buffer, 1, count, file);
 }
@@ -91,7 +93,7 @@ static FT_Error FT_Stream_Open__win32_compat(FT_Stream stream, const char *filep
     return FT_THROW(Cannot_Open_Resource);
   }
 
-  fseek(file, 0, SEEK_END);
+  BLI_fseek(file, 0LL, SEEK_END);
   stream->size = ftell(file);
   if (!stream->size) {
     fprintf(stderr,
@@ -102,7 +104,7 @@ static FT_Error FT_Stream_Open__win32_compat(FT_Stream stream, const char *filep
     return FT_THROW(Cannot_Open_Stream);
   }
 
-  fseek(file, 0, SEEK_SET);
+  BLI_fseek(file, 0LL, SEEK_SET);
 
   stream->descriptor.pointer = file;
   stream->read = ft_ansi_stream_io;

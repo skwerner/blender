@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_ROTATEOPERATION_H__
-#define __COM_ROTATEOPERATION_H__
+#pragma once
 
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class RotateOperation : public NodeOperation {
  private:
@@ -36,10 +37,10 @@ class RotateOperation : public NodeOperation {
   RotateOperation();
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
-  void initExecution();
-  void deinitExecution();
+                                        rcti *output) override;
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
+  void initExecution() override;
+  void deinitExecution() override;
   void setDoDegree2RadConversion(bool abool)
   {
     this->m_doDegree2RadConversion = abool;
@@ -48,4 +49,4 @@ class RotateOperation : public NodeOperation {
   void ensureDegree();
 };
 
-#endif
+}  // namespace blender::compositor

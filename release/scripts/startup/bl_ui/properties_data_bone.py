@@ -73,36 +73,44 @@ class BONE_PT_transform(BoneButtonsPanel, Panel):
             pchan = ob.pose.bones[bone.name]
             col.active = not (bone.parent and bone.use_connect)
 
-            sub = col.row(align=True)
-            sub.prop(pchan, "location")
-            sub.prop(pchan, "lock_location", text="")
+            row = col.row(align=True)
+            row.prop(pchan, "location")
+            row.use_property_decorate = False
+            row.prop(pchan, "lock_location", text="", emboss=False, icon='DECORATE_UNLOCKED')
 
-            col = layout.column()
             rotation_mode = pchan.rotation_mode
             if rotation_mode == 'QUATERNION':
-                sub = col.row(align=True)
-                sub.prop(pchan, "rotation_quaternion", text="Rotation")
-                subsub = sub.column(align=True)
-                subsub.prop(pchan, "lock_rotation_w", text="")
-                subsub.prop(pchan, "lock_rotation", text="")
+                col = layout.column()
+                row = col.row(align=True)
+                row.prop(pchan, "rotation_quaternion", text="Rotation")
+                sub = row.column(align=True)
+                sub.use_property_decorate = False
+                sub.prop(pchan, "lock_rotation_w", text="", emboss=False, icon='DECORATE_UNLOCKED')
+                sub.prop(pchan, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
             elif rotation_mode == 'AXIS_ANGLE':
-                sub = col.row(align=True)
-                sub.prop(pchan, "rotation_axis_angle", text="Rotation")
-                subsub = sub.column(align=True)
-                subsub.prop(pchan, "lock_rotation_w", text="")
-                subsub.prop(pchan, "lock_rotation", text="")
+                col = layout.column()
+                row = col.row(align=True)
+                row.prop(pchan, "rotation_axis_angle", text="Rotation")
+
+                sub = row.column(align=True)
+                sub.use_property_decorate = False
+                sub.prop(pchan, "lock_rotation_w", text="", emboss=False, icon='DECORATE_UNLOCKED')
+                sub.prop(pchan, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
             else:
-                sub = col.row(align=True)
-                sub.prop(pchan, "rotation_euler", text="Rotation")
-                sub.prop(pchan, "lock_rotation", text="")
+                col = layout.column()
+                row = col.row(align=True)
+                row.prop(pchan, "rotation_euler", text="Rotation")
+                row.use_property_decorate = False
+                row.prop(pchan, "lock_rotation", text="", emboss=False, icon='DECORATE_UNLOCKED')
+            row = layout.row(align=True)
+            row.prop(pchan, "rotation_mode", text='Mode')
+            row.label(text="", icon='BLANK1')
 
             col = layout.column()
-            sub = col.row(align=True)
-            sub.prop(pchan, "scale")
-            sub.prop(pchan, "lock_scale", text="")
-
-            col = layout.column()
-            col.prop(pchan, "rotation_mode")
+            row = col.row(align=True)
+            row.prop(pchan, "scale")
+            row.use_property_decorate = False
+            row.prop(pchan, "lock_scale", text="", emboss=False, icon='DECORATE_UNLOCKED')
 
         elif context.edit_bone:
             bone = context.edit_bone
@@ -113,10 +121,6 @@ class BONE_PT_transform(BoneButtonsPanel, Panel):
             col = layout.column()
             col.prop(bone, "roll")
             col.prop(bone, "lock")
-
-            col = layout.column()
-            col.prop(bone, "tail_radius")
-            col.prop(bone, "envelope_distance")
 
 
 class BONE_PT_curved(BoneButtonsPanel, Panel):
@@ -143,6 +147,10 @@ class BONE_PT_curved(BoneButtonsPanel, Panel):
 
         layout.prop(bone, "bbone_segments", text="Segments")
 
+        col = layout.column(align=True)
+        col.prop(bone, "bbone_x", text="Display Size X")
+        col.prop(bone, "bbone_z", text="Z")
+
         topcol = layout.column()
         topcol.active = bone.bbone_segments > 1
 
@@ -160,8 +168,12 @@ class BONE_PT_curved(BoneButtonsPanel, Panel):
         col.prop(bone, "use_endroll_as_inroll")
 
         col = topcol.column(align=True)
-        col.prop(bbone, "bbone_scalein", text="Scale In")
-        col.prop(bbone, "bbone_scaleout", text="Out")
+        col.prop(bbone, "bbone_scaleinx", text="Scale In X")
+        col.prop(bbone, "bbone_scaleiny", text="In Y")
+
+        col = topcol.column(align=True)
+        col.prop(bbone, "bbone_scaleoutx", text="Scale Out X")
+        col.prop(bbone, "bbone_scaleouty", text="Out Y")
 
         col = topcol.column(align=True)
         col.prop(bbone, "bbone_easein", text="Ease In")
@@ -220,11 +232,13 @@ class BONE_PT_relations(BoneButtonsPanel, Panel):
         sub = col.column()
         sub.active = (bone.parent is not None)
         sub.prop(bone, "use_connect")
-        sub.prop(bone, "use_inherit_rotation")
-        sub.prop(bone, "use_inherit_scale")
         sub = col.column()
         sub.active = (not bone.parent or not bone.use_connect)
         sub.prop(bone, "use_local_location")
+        sub = col.column()
+        sub.active = (bone.parent is not None)
+        sub.prop(bone, "use_inherit_rotation")
+        sub.prop(bone, "inherit_scale")
 
 
 class BONE_PT_display(BoneButtonsPanel, Panel):
@@ -241,6 +255,27 @@ class BONE_PT_display(BoneButtonsPanel, Panel):
         layout = self.layout
         layout.use_property_split = True
 
+        bone = context.bone
+        if bone is None:
+            bone = context.edit_bone
+
+        if bone:
+            col = layout.column()
+            col.prop(bone, "hide", text="Hide", toggle=False)
+
+
+class BONE_PT_display_custom_shape(BoneButtonsPanel, Panel):
+    bl_label = "Custom Shape"
+    bl_parent_id = "BONE_PT_display"
+
+    @classmethod
+    def poll(cls, context):
+        return context.bone
+
+    def draw(self, context):
+        layout = self.layout
+        layout.use_property_split = True
+
         ob = context.object
         bone = context.bone
         pchan = None
@@ -250,21 +285,24 @@ class BONE_PT_display(BoneButtonsPanel, Panel):
         elif bone is None:
             bone = context.edit_bone
 
-        if bone:
-
+        if bone and pchan:
             col = layout.column()
-            col.prop(bone, "hide", text="Hide")
+            col.prop(pchan, "custom_shape")
+
             sub = col.column()
             sub.active = bool(pchan and pchan.custom_shape)
-            sub.prop(bone, "show_wire", text="Wireframe")
+            sub.separator()
 
-            if pchan:
-                col = layout.column()
-                col.prop(pchan, "custom_shape")
-                if pchan.custom_shape:
-                    col.prop(pchan, "use_custom_shape_bone_size", text="Bone Size")
-                    col.prop(pchan, "custom_shape_scale", text="Scale")
-                    col.prop_search(pchan, "custom_shape_transform", ob.pose, "bones")
+            sub.prop(pchan, "custom_shape_scale_xyz", text="Scale")
+            sub.prop(pchan, "custom_shape_translation", text="Translation")
+            sub.prop(pchan, "custom_shape_rotation_euler", text="Rotation")
+
+            sub.prop_search(pchan, "custom_shape_transform",
+                            ob.pose, "bones", text="Override Transform")
+            sub.prop(pchan, "use_custom_shape_bone_size")
+
+            sub.separator()
+            sub.prop(bone, "show_wire", text="Wireframe")
 
 
 class BONE_PT_inverse_kinematics(BoneButtonsPanel, Panel):
@@ -417,6 +455,7 @@ classes = (
     BONE_PT_inverse_kinematics,
     BONE_PT_deform,
     BONE_PT_display,
+    BONE_PT_display_custom_shape,
     BONE_PT_custom_props,
 )
 

@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_ADJACENCYITERATOR_H__
-#define __FREESTYLE_PYTHON_ADJACENCYITERATOR_H__
+#pragma once
 
 #include "../BPy_Iterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject AdjacencyIterator_Type;
 /*---------------------------Python BPy_AdjacencyIterator structure definition----------*/
 typedef struct {
   BPy_Iterator py_it;
-  AdjacencyIterator *a_it;
+  Freestyle::AdjacencyIterator *a_it;
   bool at_start;
 } BPy_AdjacencyIterator;
 
@@ -48,5 +47,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_ADJACENCYITERATOR_H__ */

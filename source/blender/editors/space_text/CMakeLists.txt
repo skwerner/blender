@@ -25,13 +25,10 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
-)
 
 set(SRC
   space_text.c
@@ -56,7 +53,6 @@ set(LIB
   bf_blenlib
 )
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_PYTHON)
   list(APPEND INC

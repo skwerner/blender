@@ -24,52 +24,66 @@ set(INC
   ../blenlib
   ../blenloader
   ../blentranslation
+  ../bmesh
   ../depsgraph
   ../draw
+  ../functions
+  ../gpencil_modifiers
   ../gpu
   ../ikplugin
   ../imbuf
   ../makesdna
   ../makesrna
-  ../bmesh
   ../modifiers
-  ../gpencil_modifiers
-  ../shader_fx
   ../nodes
-  ../physics
-  ../render/extern/include
+  ../render
+  ../sequencer
+  ../shader_fx
+  ../simulation
+  ../../../intern/eigen
   ../../../intern/ghost
-  ../../../intern/guardedalloc
   ../../../intern/glew-mx
+  ../../../intern/guardedalloc
   ../../../intern/iksolver/extern
-  ../../../intern/memutil
-  ../../../intern/mikktspace
   ../../../intern/atomic
   ../../../intern/clog
   ../../../intern/libmv
+  ../../../intern/mantaflow/extern
+  ../../../intern/memutil
+  ../../../intern/mikktspace
   ../../../intern/opensubdiv
   ../../../extern/curve_fit_nd
+
+  # dna_type_offsets.h
+  ${CMAKE_CURRENT_BINARY_DIR}/../makesdna/intern
 )
 
 set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
   ${ZLIB_INCLUDE_DIRS}
 )
 
 set(SRC
+  ${CMAKE_SOURCE_DIR}/release/datafiles/userdef/userdef_default.c
   intern/CCGSubSurf.c
   intern/CCGSubSurf_legacy.c
-  intern/CCGSubSurf_opensubdiv.c
-  intern/CCGSubSurf_opensubdiv_converter.c
   intern/CCGSubSurf_util.c
-  intern/DerivedMesh.c
+  intern/DerivedMesh.cc
   intern/action.c
+  intern/action_mirror.c
   intern/addon.c
-  intern/anim.c
+  intern/anim_data.c
+  intern/anim_path.c
   intern/anim_sys.c
+  intern/anim_visualization.c
   intern/appdir.c
   intern/armature.c
+  intern/armature_deform.c
+  intern/armature_pose.cc
   intern/armature_update.c
+  intern/asset.cc
+  intern/attribute.c
+  intern/attribute_access.cc
+  intern/attribute_math.cc
   intern/autoexec.c
   intern/blender.c
   intern/blender_copybuffer.c
@@ -81,6 +95,7 @@ set(SRC
   intern/brush.c
   intern/bvhutils.c
   intern/cachefile.c
+  intern/callbacks.c
   intern/camera.c
   intern/cdderivedmesh.c
   intern/cloth.c
@@ -91,15 +106,21 @@ set(SRC
   intern/constraint.c
   intern/context.c
   intern/crazyspace.c
+  intern/cryptomatte.cc
   intern/curve.c
+  intern/curve_bevel.c
+  intern/curve_convert.c
   intern/curve_decimate.c
+  intern/curve_deform.c
+  intern/curve_eval.cc
+  intern/curveprofile.c
   intern/customdata.c
   intern/customdata_file.c
   intern/data_transfer.c
   intern/deform.c
-  intern/displist.c
+  intern/displist.cc
+  intern/displist_tangent.c
   intern/dynamicpaint.c
-  intern/editderivedmesh.c
   intern/editlattice.c
   intern/editmesh.c
   intern/editmesh_bvh.c
@@ -107,34 +128,52 @@ set(SRC
   intern/editmesh_tangent.c
   intern/effect.c
   intern/fcurve.c
-  intern/fluidsim.c
+  intern/fcurve_cache.c
+  intern/fcurve_driver.c
+  intern/fluid.c
   intern/fmodifier.c
   intern/font.c
   intern/freestyle.c
+  intern/geometry_component_curve.cc
+  intern/geometry_component_instances.cc
+  intern/geometry_component_mesh.cc
+  intern/geometry_component_pointcloud.cc
+  intern/geometry_component_volume.cc
+  intern/geometry_set.cc
+  intern/geometry_set_instances.cc
   intern/gpencil.c
+  intern/gpencil_curve.c
+  intern/gpencil_geom.c
   intern/gpencil_modifier.c
-  intern/icons.c
+  intern/hair.c
+  intern/icons.cc
   intern/icons_rasterize.c
-  intern/idcode.c
   intern/idprop.c
   intern/idprop_utils.c
+  intern/idtype.c
   intern/image.c
   intern/image_gen.c
+  intern/image_gpu.c
+  intern/image_save.c
   intern/ipo.c
+  intern/kelvinlet.c
   intern/key.c
   intern/keyconfig.c
   intern/lattice.c
+  intern/lattice_deform.c
   intern/layer.c
   intern/layer_utils.c
+  intern/lib_id.c
+  intern/lib_id_delete.c
+  intern/lib_override.c
+  intern/lib_query.c
+  intern/lib_remap.c
   intern/library.c
-  intern/library_idmap.c
-  intern/library_override.c
-  intern/library_query.c
-  intern/library_remap.c
   intern/light.c
   intern/lightprobe.c
   intern/linestyle.c
   intern/main.c
+  intern/main_idmap.c
   intern/mask.c
   intern/mask_evaluate.c
   intern/mask_rasterize.c
@@ -142,28 +181,45 @@ set(SRC
   intern/mball.c
   intern/mball_tessellate.c
   intern/mesh.c
+  intern/mesh_boolean_convert.cc
   intern/mesh_convert.c
   intern/mesh_evaluate.c
+  intern/mesh_fair.cc
   intern/mesh_iterators.c
   intern/mesh_mapping.c
   intern/mesh_merge.c
+  intern/mesh_mirror.c
   intern/mesh_remap.c
+  intern/mesh_remesh_voxel.c
   intern/mesh_runtime.c
+  intern/mesh_sample.cc
   intern/mesh_tangent.c
   intern/mesh_validate.c
+  intern/mesh_validate.cc
+  intern/mesh_wrapper.c
   intern/modifier.c
   intern/movieclip.c
   intern/multires.c
   intern/multires_reshape.c
+  intern/multires_reshape_apply_base.c
+  intern/multires_reshape_ccg.c
+  intern/multires_reshape_smooth.c
+  intern/multires_reshape_subdivide.c
+  intern/multires_reshape_util.c
+  intern/multires_reshape_vertcos.c
   intern/multires_subdiv.c
+  intern/multires_unsubdivide.c
+  intern/multires_versioning.c
   intern/nla.c
-  intern/node.c
+  intern/node.cc
+  intern/node_ui_storage.cc
   intern/object.c
   intern/object_deform.c
-  intern/object_dupli.c
+  intern/object_dupli.cc
   intern/object_facemap.c
   intern/object_update.c
   intern/ocean.c
+  intern/ocean_spectrum.c
   intern/outliner_treehash.c
   intern/packedFile.c
   intern/paint.c
@@ -175,20 +231,22 @@ set(SRC
   intern/pbvh.c
   intern/pbvh_bmesh.c
   intern/pointcache.c
+  intern/pointcloud.cc
+  intern/preferences.c
   intern/report.c
   intern/rigidbody.c
   intern/scene.c
   intern/screen.c
-  intern/seqcache.c
-  intern/seqeffects.c
-  intern/seqmodifier.c
-  intern/sequencer.c
   intern/shader_fx.c
   intern/shrinkwrap.c
-  intern/smoke.c
+  intern/simulation.cc
   intern/softbody.c
   intern/sound.c
   intern/speaker.c
+  intern/spline_base.cc
+  intern/spline_bezier.cc
+  intern/spline_nurbs.cc
+  intern/spline_poly.cc
   intern/studiolight.c
   intern/subdiv.c
   intern/subdiv_ccg.c
@@ -196,15 +254,17 @@ set(SRC
   intern/subdiv_ccg_material.c
   intern/subdiv_converter.c
   intern/subdiv_converter_mesh.c
+  intern/subdiv_deform.c
   intern/subdiv_displacement.c
   intern/subdiv_displacement_multires.c
   intern/subdiv_eval.c
   intern/subdiv_foreach.c
   intern/subdiv_mesh.c
   intern/subdiv_stats.c
+  intern/subdiv_topology.c
   intern/subsurf_ccg.c
-  intern/suggestions.c
   intern/text.c
+  intern/text_suggestions.c
   intern/texture.c
   intern/tracking.c
   intern/tracking_auto.c
@@ -216,6 +276,9 @@ set(SRC
   intern/tracking_util.c
   intern/undo_system.c
   intern/unit.c
+  intern/volume.cc
+  intern/volume_render.cc
+  intern/volume_to_mesh.cc
   intern/workspace.c
   intern/world.c
   intern/writeavi.c
@@ -223,10 +286,16 @@ set(SRC
   BKE_DerivedMesh.h
   BKE_action.h
   BKE_addon.h
-  BKE_anim.h
+  BKE_anim_data.h
+  BKE_anim_path.h
+  BKE_anim_visualization.h
   BKE_animsys.h
   BKE_appdir.h
   BKE_armature.h
+  BKE_asset.h
+  BKE_attribute.h
+  BKE_attribute_access.hh
+  BKE_attribute_math.hh
   BKE_autoexec.h
   BKE_blender.h
   BKE_blender_copybuffer.h
@@ -239,6 +308,7 @@ set(SRC
   BKE_brush.h
   BKE_bvhutils.h
   BKE_cachefile.h
+  BKE_callbacks.h
   BKE_camera.h
   BKE_ccg.h
   BKE_cdderivedmesh.h
@@ -250,12 +320,18 @@ set(SRC
   BKE_constraint.h
   BKE_context.h
   BKE_crazyspace.h
+  BKE_cryptomatte.h
+  BKE_cryptomatte.hh
   BKE_curve.h
+  BKE_curveprofile.h
   BKE_customdata.h
   BKE_customdata_file.h
   BKE_data_transfer.h
   BKE_deform.h
+  BKE_spline.hh
   BKE_displist.h
+  BKE_displist_tangent.h
+  BKE_duplilist.h
   BKE_dynamicpaint.h
   BKE_editlattice.h
   BKE_editmesh.h
@@ -264,45 +340,63 @@ set(SRC
   BKE_editmesh_tangent.h
   BKE_effect.h
   BKE_fcurve.h
-  BKE_fluidsim.h
+  BKE_fcurve_driver.h
+  BKE_fluid.h
   BKE_font.h
   BKE_freestyle.h
+  BKE_geometry_set.h
+  BKE_geometry_set.hh
+  BKE_geometry_set_instances.hh
   BKE_global.h
   BKE_gpencil.h
+  BKE_gpencil_curve.h
+  BKE_gpencil_geom.h
   BKE_gpencil_modifier.h
+  BKE_hair.h
   BKE_icons.h
-  BKE_idcode.h
   BKE_idprop.h
+  BKE_idtype.h
   BKE_image.h
+  BKE_image_save.h
   BKE_ipo.h
+  BKE_kelvinlet.h
   BKE_key.h
   BKE_keyconfig.h
   BKE_lattice.h
   BKE_layer.h
+  BKE_lib_id.h
+  BKE_lib_override.h
+  BKE_lib_query.h
+  BKE_lib_remap.h
   BKE_library.h
-  BKE_library_idmap.h
-  BKE_library_override.h
-  BKE_library_query.h
-  BKE_library_remap.h
   BKE_light.h
   BKE_lightprobe.h
   BKE_linestyle.h
   BKE_main.h
+  BKE_main_idmap.h
   BKE_mask.h
   BKE_material.h
   BKE_mball.h
   BKE_mball_tessellate.h
   BKE_mesh.h
+  BKE_mesh_boolean_convert.hh
+  BKE_mesh_fair.h
   BKE_mesh_iterators.h
   BKE_mesh_mapping.h
+  BKE_mesh_mirror.h
   BKE_mesh_remap.h
+  BKE_mesh_remesh_voxel.h
   BKE_mesh_runtime.h
+  BKE_mesh_sample.hh
   BKE_mesh_tangent.h
+  BKE_mesh_types.h
+  BKE_mesh_wrapper.h
   BKE_modifier.h
   BKE_movieclip.h
   BKE_multires.h
   BKE_nla.h
   BKE_node.h
+  BKE_node_ui_storage.hh
   BKE_object.h
   BKE_object_deform.h
   BKE_object_facemap.h
@@ -313,30 +407,37 @@ set(SRC
   BKE_particle.h
   BKE_pbvh.h
   BKE_pointcache.h
+  BKE_pointcloud.h
+  BKE_preferences.h
   BKE_report.h
   BKE_rigidbody.h
   BKE_scene.h
   BKE_screen.h
-  BKE_sequencer.h
+  BKE_sequencer_offscreen.h
   BKE_shader_fx.h
   BKE_shrinkwrap.h
-  BKE_smoke.h
+  BKE_simulation.h
   BKE_softbody.h
   BKE_sound.h
   BKE_speaker.h
   BKE_studiolight.h
   BKE_subdiv.h
   BKE_subdiv_ccg.h
+  BKE_subdiv_deform.h
   BKE_subdiv_eval.h
   BKE_subdiv_foreach.h
   BKE_subdiv_mesh.h
+  BKE_subdiv_topology.h
   BKE_subsurf.h
-  BKE_suggestions.h
   BKE_text.h
+  BKE_text_suggestions.h
   BKE_texture.h
   BKE_tracking.h
   BKE_undo_system.h
   BKE_unit.h
+  BKE_volume.h
+  BKE_volume_render.h
+  BKE_volume_to_mesh.hh
   BKE_workspace.h
   BKE_world.h
   BKE_writeavi.h
@@ -347,8 +448,13 @@ set(SRC
   intern/CCGSubSurf.h
   intern/CCGSubSurf_inline.h
   intern/CCGSubSurf_intern.h
+  intern/attribute_access_intern.hh
   intern/data_transfer_intern.h
+  intern/lib_intern.h
   intern/multires_inline.h
+  intern/multires_reshape.h
+  intern/multires_unsubdivide.h
+  intern/ocean_intern.h
   intern/pbvh_intern.h
   intern/subdiv_converter.h
   intern/subdiv_inline.h
@@ -362,6 +468,7 @@ set(LIB
   bf_bmesh
   bf_depsgraph
   bf_draw
+  bf_functions
   bf_gpencil_modifiers
   bf_gpu
   bf_ikplugin
@@ -374,11 +481,9 @@ set(LIB
   bf_intern_opensubdiv  # Uses stub when disabled.
   bf_modifiers
   bf_nodes
-  bf_physics
-  bf_python
-  bf_python_bmesh
   bf_rna
   bf_shader_fx
+  bf_simulation
 )
 
 if(WITH_BINRELOC)
@@ -391,7 +496,6 @@ if(WITH_BINRELOC)
   add_definitions(-DWITH_BINRELOC)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WIN32)
   list(APPEND INC
@@ -405,6 +509,10 @@ if(WITH_AUDASPACE)
   list(APPEND INC_SYS
     ${AUDASPACE_C_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
+  )
 endif()
 
 if(WITH_BULLET)
@@ -414,20 +522,20 @@ if(WITH_BULLET)
   list(APPEND INC
     ../../../intern/rigidbody
   )
+
+  if(NOT WITH_SYSTEM_BULLET)
+    list(APPEND LIB
+      extern_bullet
+    )
+  endif()
+
   list(APPEND LIB
     bf_intern_rigidbody
-    extern_bullet
+
+    ${BULLET_LIBRARIES}
   )
   add_definitions(-DWITH_BULLET)
 endif()
-
-#if(WITH_MOD_CLOTH_ELTOPO)
-#   list(APPEND INC
-#       ../../../extern/eltopo
-#       ../../../extern/eltopo/eltopo3d
-#   )
-#   add_definitions(-DWITH_ELTOPO)
-#endif()
 
 if(WITH_IMAGE_OPENEXR)
   add_definitions(-DWITH_OPENEXR)
@@ -463,7 +571,7 @@ endif()
 
 if(WITH_CODEC_AVI)
   list(APPEND INC
-    ../avi
+    ../io/avi
   )
   add_definitions(-DWITH_AVI)
 endif()
@@ -479,16 +587,19 @@ if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
   )
-  add_definitions(-DWITH_FFMPEG)
-
-  remove_strict_c_flags_file(
-    intern/writeffmpeg.c
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
   )
+  add_definitions(-DWITH_FFMPEG)
 endif()
 
 if(WITH_PYTHON)
   list(APPEND INC
     ../python
+  )
+  list(APPEND LIB
+    bf_python
+    bf_python_bmesh
   )
   add_definitions(-DWITH_PYTHON)
 
@@ -509,23 +620,10 @@ if(WITH_PYTHON)
 endif()
 
 if(WITH_MOD_FLUID)
-  list(APPEND INC
-    ../../../intern/elbeem/extern
-  )
   list(APPEND LIB
-    bf_intern_elbeem
+    bf_intern_mantaflow
   )
-  add_definitions(-DWITH_MOD_FLUID)
-endif()
-
-if(WITH_MOD_SMOKE)
-  list(APPEND INC
-    ../../../intern/smoke/extern
-  )
-  list(APPEND LIB
-    bf_intern_smoke
-  )
-  add_definitions(-DWITH_SMOKE)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_MOD_OCEANSIM)
@@ -540,6 +638,9 @@ if(WITH_LZO)
   if(WITH_SYSTEM_LZO)
     list(APPEND INC_SYS
       ${LZO_INCLUDE_DIR}
+    )
+    list(APPEND LIB
+      ${LZO_LIBRARIES}
     )
     add_definitions(-DWITH_SYSTEM_LZO)
   else()
@@ -571,6 +672,9 @@ if(WITH_FFTW3)
   list(APPEND INC_SYS
     ${FFTW3_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${FFTW3_LIBRARIES}
+  )
   add_definitions(-DFFTW3=1)
 endif()
 
@@ -584,7 +688,7 @@ endif()
 
 if(WITH_ALEMBIC)
   list(APPEND INC
-    ../alembic
+    ../io/alembic
   )
   add_definitions(-DWITH_ALEMBIC)
 endif()
@@ -593,28 +697,84 @@ if(WITH_OPENSUBDIV)
   list(APPEND INC_SYS
     ${OPENSUBDIV_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${OPENSUBDIV_LIBRARIES}
+  )
   add_definitions(-DWITH_OPENSUBDIV)
 endif()
 
 if(WITH_OPENVDB)
   list(APPEND INC
-     ../../../intern/openvdb
+    ../../../intern/openvdb
+  )
+  list(APPEND INC_SYS
+    ${OPENVDB_INCLUDE_DIRS}
   )
   list(APPEND LIB
-     bf_intern_openvdb
+    bf_intern_openvdb
+    ${OPENVDB_LIBRARIES}
   )
-  add_definitions(-DWITH_OPENVDB)
-
-  if(WITH_OPENVDB_BLOSC)
-    add_definitions(
-      -DWITH_OPENVDB_BLOSC
-    )
-  endif()
+  add_definitions(-DWITH_OPENVDB ${OPENVDB_DEFINITIONS})
 endif()
 
-## Warnings as errors, this is too strict!
-#if(MSVC)
-#   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX")
-#endif()
+if(WITH_QUADRIFLOW)
+  list(APPEND INC
+    ../../../intern/quadriflow
+  )
+  list(APPEND LIB
+    bf_intern_quadriflow
+  )
+  add_definitions(-DWITH_QUADRIFLOW)
+endif()
+
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
+endif()
+
+if(WITH_TBB)
+  add_definitions(-DWITH_TBB)
+
+  list(APPEND INC_SYS
+    ${TBB_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${TBB_LIBRARIES}
+  )
+endif()
+
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+endif()
+
+# # Warnings as errors, this is too strict!
+# if(MSVC)
+#    string(APPEND CMAKE_C_FLAGS " /WX")
+# endif()
 
 blender_add_lib(bf_blenkernel "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+# Needed so we can use dna_type_offsets.h for defaults initialization.
+add_dependencies(bf_blenkernel bf_dna)
+
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    intern/armature_test.cc
+    intern/cryptomatte_test.cc
+    intern/fcurve_test.cc
+    intern/lattice_deform_test.cc
+    intern/layer_test.cc
+    intern/lib_id_test.cc
+    intern/tracking_test.cc
+  )
+  set(TEST_INC
+    ../editors/include
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_blenkernel_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB}")
+endif()

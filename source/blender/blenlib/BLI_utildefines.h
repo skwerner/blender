@@ -17,6 +17,7 @@
  * All rights reserved.
  */
 
+/* Use a define instead of `#pragma once` because of `BLI_memory_utils.h` */
 #ifndef __BLI_UTILDEFINES_H__
 #define __BLI_UTILDEFINES_H__
 
@@ -24,13 +25,9 @@
  * \ingroup bli
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* avoid many includes for now */
-#include "BLI_sys_types.h"
 #include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h"
 #include "BLI_utildefines_variadic.h"
 
 /* We could remove in future. */
@@ -38,6 +35,10 @@ extern "C" {
 
 /* include after _VA_NARGS macro */
 #include "BLI_compiler_typecheck.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /** \name Min/Max Macros
@@ -136,50 +137,66 @@ extern "C" {
   (void)0
 #define DO_MIN(vec, min) \
   { \
-    if ((min)[0] > (vec)[0]) \
+    if ((min)[0] > (vec)[0]) { \
       (min)[0] = (vec)[0]; \
-    if ((min)[1] > (vec)[1]) \
+    } \
+    if ((min)[1] > (vec)[1]) { \
       (min)[1] = (vec)[1]; \
-    if ((min)[2] > (vec)[2]) \
+    } \
+    if ((min)[2] > (vec)[2]) { \
       (min)[2] = (vec)[2]; \
+    } \
   } \
   (void)0
 #define DO_MAX(vec, max) \
   { \
-    if ((max)[0] < (vec)[0]) \
+    if ((max)[0] < (vec)[0]) { \
       (max)[0] = (vec)[0]; \
-    if ((max)[1] < (vec)[1]) \
+    } \
+    if ((max)[1] < (vec)[1]) { \
       (max)[1] = (vec)[1]; \
-    if ((max)[2] < (vec)[2]) \
+    } \
+    if ((max)[2] < (vec)[2]) { \
       (max)[2] = (vec)[2]; \
+    } \
   } \
   (void)0
 #define DO_MINMAX(vec, min, max) \
   { \
-    if ((min)[0] > (vec)[0]) \
+    if ((min)[0] > (vec)[0]) { \
       (min)[0] = (vec)[0]; \
-    if ((min)[1] > (vec)[1]) \
+    } \
+    if ((min)[1] > (vec)[1]) { \
       (min)[1] = (vec)[1]; \
-    if ((min)[2] > (vec)[2]) \
+    } \
+    if ((min)[2] > (vec)[2]) { \
       (min)[2] = (vec)[2]; \
-    if ((max)[0] < (vec)[0]) \
+    } \
+    if ((max)[0] < (vec)[0]) { \
       (max)[0] = (vec)[0]; \
-    if ((max)[1] < (vec)[1]) \
+    } \
+    if ((max)[1] < (vec)[1]) { \
       (max)[1] = (vec)[1]; \
-    if ((max)[2] < (vec)[2]) \
+    } \
+    if ((max)[2] < (vec)[2]) { \
       (max)[2] = (vec)[2]; \
+    } \
   } \
   (void)0
 #define DO_MINMAX2(vec, min, max) \
   { \
-    if ((min)[0] > (vec)[0]) \
+    if ((min)[0] > (vec)[0]) { \
       (min)[0] = (vec)[0]; \
-    if ((min)[1] > (vec)[1]) \
+    } \
+    if ((min)[1] > (vec)[1]) { \
       (min)[1] = (vec)[1]; \
-    if ((max)[0] < (vec)[0]) \
+    } \
+    if ((max)[0] < (vec)[0]) { \
       (max)[0] = (vec)[0]; \
-    if ((max)[1] < (vec)[1]) \
+    } \
+    if ((max)[1] < (vec)[1]) { \
       (max)[1] = (vec)[1]; \
+    } \
   } \
   (void)0
 
@@ -246,32 +263,43 @@ extern "C" {
 /** \name Equal to Any Element (ELEM) Macro
  * \{ */
 
+/* Manual line breaks for readability. */
+/* clang-format off */
+
 /* ELEM#(v, ...): is the first arg equal any others? */
-/* internal helpers*/
+/* internal helpers. */
 #define _VA_ELEM2(v, a) ((v) == (a))
-#define _VA_ELEM3(v, a, b) (_VA_ELEM2(v, a) || ((v) == (b)))
-#define _VA_ELEM4(v, a, b, c) (_VA_ELEM3(v, a, b) || ((v) == (c)))
-#define _VA_ELEM5(v, a, b, c, d) (_VA_ELEM4(v, a, b, c) || ((v) == (d)))
-#define _VA_ELEM6(v, a, b, c, d, e) (_VA_ELEM5(v, a, b, c, d) || ((v) == (e)))
-#define _VA_ELEM7(v, a, b, c, d, e, f) (_VA_ELEM6(v, a, b, c, d, e) || ((v) == (f)))
-#define _VA_ELEM8(v, a, b, c, d, e, f, g) (_VA_ELEM7(v, a, b, c, d, e, f) || ((v) == (g)))
-#define _VA_ELEM9(v, a, b, c, d, e, f, g, h) (_VA_ELEM8(v, a, b, c, d, e, f, g) || ((v) == (h)))
+#define _VA_ELEM3(v, a, b) \
+  (_VA_ELEM2(v, a) || _VA_ELEM2(v, b))
+#define _VA_ELEM4(v, a, b, c) \
+  (_VA_ELEM3(v, a, b) || _VA_ELEM2(v, c))
+#define _VA_ELEM5(v, a, b, c, d) \
+  (_VA_ELEM4(v, a, b, c) || _VA_ELEM2(v, d))
+#define _VA_ELEM6(v, a, b, c, d, e) \
+  (_VA_ELEM5(v, a, b, c, d) || _VA_ELEM2(v, e))
+#define _VA_ELEM7(v, a, b, c, d, e, f) \
+  (_VA_ELEM6(v, a, b, c, d, e) || _VA_ELEM2(v, f))
+#define _VA_ELEM8(v, a, b, c, d, e, f, g) \
+  (_VA_ELEM7(v, a, b, c, d, e, f) || _VA_ELEM2(v, g))
+#define _VA_ELEM9(v, a, b, c, d, e, f, g, h) \
+  (_VA_ELEM8(v, a, b, c, d, e, f, g) || _VA_ELEM2(v, h))
 #define _VA_ELEM10(v, a, b, c, d, e, f, g, h, i) \
-  (_VA_ELEM9(v, a, b, c, d, e, f, g, h) || ((v) == (i)))
+  (_VA_ELEM9(v, a, b, c, d, e, f, g, h) || _VA_ELEM2(v, i))
 #define _VA_ELEM11(v, a, b, c, d, e, f, g, h, i, j) \
-  (_VA_ELEM10(v, a, b, c, d, e, f, g, h, i) || ((v) == (j)))
+  (_VA_ELEM10(v, a, b, c, d, e, f, g, h, i) || _VA_ELEM2(v, j))
 #define _VA_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) \
-  (_VA_ELEM11(v, a, b, c, d, e, f, g, h, i, j) || ((v) == (k)))
+  (_VA_ELEM11(v, a, b, c, d, e, f, g, h, i, j) || _VA_ELEM2(v, k))
 #define _VA_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) \
-  (_VA_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) || ((v) == (l)))
+  (_VA_ELEM12(v, a, b, c, d, e, f, g, h, i, j, k) || _VA_ELEM2(v, l))
 #define _VA_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) \
-  (_VA_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) || ((v) == (m)))
+  (_VA_ELEM13(v, a, b, c, d, e, f, g, h, i, j, k, l) || _VA_ELEM2(v, m))
 #define _VA_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) \
-  (_VA_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) || ((v) == (n)))
+  (_VA_ELEM14(v, a, b, c, d, e, f, g, h, i, j, k, l, m) || _VA_ELEM2(v, n))
 #define _VA_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) \
-  (_VA_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) || ((v) == (o)))
+  (_VA_ELEM15(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n) || _VA_ELEM2(v, o))
 #define _VA_ELEM17(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) \
-  (_VA_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) || ((v) == (p)))
+  (_VA_ELEM16(v, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) || _VA_ELEM2(v, p))
+/* clang-format on */
 
 /* reusable ELEM macro */
 #define ELEM(...) VA_NARGS_CALL_OVERLOAD(_VA_ELEM, __VA_ARGS__)
@@ -281,33 +309,6 @@ extern "C" {
 /* -------------------------------------------------------------------- */
 /** \name Simple Math Macros
  * \{ */
-
-/* avoid multiple access for supported compilers */
-#if defined(__GNUC__) || defined(__clang__)
-
-#  define ABS(a) \
-    ({ \
-      typeof(a) a_ = (a); \
-      ((a_) < 0 ? (-(a_)) : (a_)); \
-    })
-#  define SQUARE(a) \
-    ({ \
-      typeof(a) a_ = (a); \
-      ((a_) * (a_)); \
-    })
-#  define CUBE(a) \
-    ({ \
-      typeof(a) a_ = (a); \
-      ((a_) * (a_) * (a_)); \
-    })
-
-#else
-
-#  define ABS(a) ((a) < 0 ? (-(a)) : (a))
-#  define SQUARE(a) ((a) * (a))
-#  define CUBE(a) ((a) * (a) * (a))
-
-#endif
 
 /* Float equality checks. */
 
@@ -346,24 +347,28 @@ extern "C" {
 
 #define CLAMP(a, b, c) \
   { \
-    if ((a) < (b)) \
+    if ((a) < (b)) { \
       (a) = (b); \
-    else if ((a) > (c)) \
+    } \
+    else if ((a) > (c)) { \
       (a) = (c); \
+    } \
   } \
   (void)0
 
 #define CLAMP_MAX(a, c) \
   { \
-    if ((a) > (c)) \
+    if ((a) > (c)) { \
       (a) = (c); \
+    } \
   } \
   (void)0
 
 #define CLAMP_MIN(a, b) \
   { \
-    if ((a) < (b)) \
+    if ((a) < (b)) { \
       (a) = (b); \
+    } \
   } \
   (void)0
 
@@ -643,11 +648,11 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 /** \name String Macros
  * \{ */
 
-/* Macro to convert a value to string in the preprocessor
- * STRINGIFY_ARG: gives the argument as a string
- * STRINGIFY_APPEND: appends any argument 'b' onto the string argument 'a',
- *   used by STRINGIFY because some preprocessors warn about zero arguments
- * STRINGIFY: gives the argument's value as a string */
+/* Macro to convert a value to string in the pre-processor:
+ * - `STRINGIFY_ARG`: gives the argument as a string
+ * - `STRINGIFY_APPEND`: appends any argument 'b' onto the string argument 'a',
+ *   used by `STRINGIFY` because some preprocessors warn about zero arguments
+ * - `STRINGIFY`: gives the argument's value as a string. */
 #define STRINGIFY_ARG(x) "" #x
 #define STRINGIFY_APPEND(a, b) "" a #b
 #define STRINGIFY(x) STRINGIFY_APPEND("", x)
@@ -692,7 +697,8 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
  *     args = [(chr(ord('a') + (c % 26)) + (chr(ord('0') + (c // 26)))) for c in range(i + 1)]
  *     print("#define _VA_UNUSED_VARS_%d(%s) \\" % (i + 1, ", ".join(args)))
  *     print("\t((void)(%s)%s)" %
- *             (args[0], ((", _VA_UNUSED_VARS_" + str(i) + "(%s)") if i else "%s") % ", ".join((args[1:]))))
+ *             (args[0], ((", _VA_UNUSED_VARS_" + str(i) + "(%s)") if i else "%s") %
+ *              ", ".join((args[1:]))))
  * \endcode
  */
 
@@ -770,13 +776,51 @@ extern bool BLI_memory_is_zero(const void *arr, const size_t arr_size);
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name C++ Macros
+ * \{ */
+
+#ifdef __cplusplus
+
+/* Useful to port C code using enums to C++ where enums are strongly typed.
+ * To use after the enum declaration. */
+/* If any enumerator `C` is set to say `A|B`, then `C` would be the max enum value. */
+#  define ENUM_OPERATORS(_enum_type, _max_enum_value) \
+    inline constexpr _enum_type operator|(_enum_type a, _enum_type b) \
+    { \
+      return static_cast<_enum_type>(static_cast<int>(a) | b); \
+    } \
+    inline constexpr _enum_type operator&(_enum_type a, _enum_type b) \
+    { \
+      return static_cast<_enum_type>(static_cast<int>(a) & b); \
+    } \
+    inline constexpr _enum_type operator~(_enum_type a) \
+    { \
+      return static_cast<_enum_type>(~static_cast<int>(a) & (2 * _max_enum_value - 1)); \
+    } \
+    inline _enum_type &operator|=(_enum_type &a, _enum_type b) \
+    { \
+      return a = static_cast<_enum_type>(static_cast<int>(a) | b); \
+    } \
+    inline _enum_type &operator&=(_enum_type &a, _enum_type b) \
+    { \
+      return a = static_cast<_enum_type>(static_cast<int>(a) & b); \
+    }
+
+#else
+/* Output nothing. */
+#  define ENUM_OPERATORS(_type, _max)
+#endif
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Misc Macros
  * \{ */
 
 /** Useful for debugging. */
 #define AT __FILE__ ":" STRINGIFY(__LINE__)
 
-/** No-op for expressions we don't want to instansiate, but must remian valid. */
+/** No-op for expressions we don't want to instantiate, but must remain valid. */
 #define EXPR_NOP(expr) (void)(0 ? ((void)(expr), 1) : 0)
 
 /** \} */

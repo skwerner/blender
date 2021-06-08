@@ -32,7 +32,7 @@
 
 #include "BKE_collection.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_object.h"
 #include "BKE_report.h"
@@ -40,8 +40,8 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "ED_screen.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -49,6 +49,8 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
+
+#include "UI_interface_icons.h"
 
 #include "object_intern.h"
 
@@ -79,8 +81,9 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C,
 
     /* if 2 or more collections, add option to add to all collections */
     collection = NULL;
-    while ((collection = BKE_collection_object_find(bmain, scene, collection, ob)))
+    while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
       count++;
+    }
 
     if (count >= 2) {
       item_tmp.identifier = item_tmp.name = "All Collections";
@@ -93,7 +96,7 @@ static const EnumPropertyItem *collection_object_active_itemf(bContext *C,
     collection = NULL;
     while ((collection = BKE_collection_object_find(bmain, scene, collection, ob))) {
       item_tmp.identifier = item_tmp.name = collection->id.name + 2;
-      /* item_tmp.icon = ICON_ARMATURE_DATA; */
+      item_tmp.icon = UI_icon_color_from_collection(collection);
       item_tmp.value = i;
       RNA_enum_item_add(&item, &totitem, &item_tmp);
       i++;
@@ -135,20 +138,23 @@ static int objects_add_active_exec(bContext *C, wmOperator *op)
   bool is_cycle = false;
   bool updated = false;
 
-  if (ob == NULL)
+  if (ob == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
   /* now add all selected objects to the collection(s) */
-  FOREACH_COLLECTION_BEGIN(bmain, scene, Collection *, collection)
-  {
-    if (single_collection && collection != single_collection)
+  FOREACH_COLLECTION_BEGIN (bmain, scene, Collection *, collection) {
+    if (single_collection && collection != single_collection) {
       continue;
-    if (!BKE_collection_has_object(collection, ob))
+    }
+    if (!BKE_collection_has_object(collection, ob)) {
       continue;
+    }
 
     CTX_DATA_BEGIN (C, Base *, base, selected_editable_bases) {
-      if (BKE_collection_has_object(collection, base->object))
+      if (BKE_collection_has_object(collection, base->object)) {
         continue;
+      }
 
       if (!BKE_collection_object_cyclic_check(bmain, base->object, collection)) {
         BKE_collection_object_add(bmain, collection, base->object);
@@ -163,11 +169,13 @@ static int objects_add_active_exec(bContext *C, wmOperator *op)
   }
   FOREACH_COLLECTION_END;
 
-  if (is_cycle)
+  if (is_cycle) {
     BKE_report(op->reports, RPT_WARNING, "Skipped some collections because of cycle detected");
+  }
 
-  if (!updated)
+  if (!updated) {
     return OPERATOR_CANCELLED;
+  }
 
   DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_GROUP | NA_EDITED, NULL);
@@ -180,7 +188,7 @@ void COLLECTION_OT_objects_add_active(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Add Selected To Active Collection";
+  ot->name = "Add Selected to Active Collection";
   ot->description = "Add the object to an object collection that contains the active object";
   ot->idname = "COLLECTION_OT_objects_add_active";
 
@@ -215,15 +223,16 @@ static int objects_remove_active_exec(bContext *C, wmOperator *op)
       bmain, scene, ob, single_collection_index);
   bool ok = false;
 
-  if (ob == NULL)
+  if (ob == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
   /* Linking to same collection requires its own loop so we can avoid
    * looking up the active objects collections each time. */
-  FOREACH_COLLECTION_BEGIN(bmain, scene, Collection *, collection)
-  {
-    if (single_collection && collection != single_collection)
+  FOREACH_COLLECTION_BEGIN (bmain, scene, Collection *, collection) {
+    if (single_collection && collection != single_collection) {
       continue;
+    }
 
     if (BKE_collection_has_object(collection, ob)) {
       /* Remove collections from selected objects */
@@ -237,8 +246,9 @@ static int objects_remove_active_exec(bContext *C, wmOperator *op)
   }
   FOREACH_COLLECTION_END;
 
-  if (!ok)
+  if (!ok) {
     BKE_report(op->reports, RPT_ERROR, "Active object contains no collections");
+  }
 
   DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_GROUP | NA_EDITED, NULL);
@@ -251,7 +261,7 @@ void COLLECTION_OT_objects_remove_active(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Remove Selected From Active Collection";
+  ot->name = "Remove Selected from Active Collection";
   ot->description = "Remove the object from an object collection that contains the active object";
   ot->idname = "COLLECTION_OT_objects_remove_active";
 
@@ -294,8 +304,8 @@ static int collection_objects_remove_all_exec(bContext *C, wmOperator *UNUSED(op
 void COLLECTION_OT_objects_remove_all(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Remove From All Unlinked Collections";
-  ot->description = "Remove selected objects from all collections not used in a scene";
+  ot->name = "Remove from All Collections";
+  ot->description = "Remove selected objects from all collections";
   ot->idname = "COLLECTION_OT_objects_remove_all";
 
   /* api callbacks */
@@ -316,15 +326,17 @@ static int collection_objects_remove_exec(bContext *C, wmOperator *op)
       bmain, scene, ob, single_collection_index);
   bool updated = false;
 
-  if (ob == NULL)
+  if (ob == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
-  FOREACH_COLLECTION_BEGIN(bmain, scene, Collection *, collection)
-  {
-    if (single_collection && collection != single_collection)
+  FOREACH_COLLECTION_BEGIN (bmain, scene, Collection *, collection) {
+    if (single_collection && collection != single_collection) {
       continue;
-    if (!BKE_collection_has_object(collection, ob))
+    }
+    if (!BKE_collection_has_object(collection, ob)) {
       continue;
+    }
 
     /* now remove all selected objects from the collection */
     CTX_DATA_BEGIN (C, Base *, base, selected_editable_bases) {
@@ -336,8 +348,9 @@ static int collection_objects_remove_exec(bContext *C, wmOperator *op)
   }
   FOREACH_COLLECTION_END;
 
-  if (!updated)
+  if (!updated) {
     return OPERATOR_CANCELLED;
+  }
 
   DEG_relations_tag_update(bmain);
   WM_event_add_notifier(C, NC_GROUP | NA_EDITED, NULL);
@@ -350,7 +363,7 @@ void COLLECTION_OT_objects_remove(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Remove From Collection";
+  ot->name = "Remove from Collection";
   ot->description = "Remove selected objects from a collection";
   ot->idname = "COLLECTION_OT_objects_remove";
 
@@ -421,8 +434,9 @@ static int collection_add_exec(bContext *C, wmOperator *UNUSED(op))
   Object *ob = ED_object_context(C);
   Main *bmain = CTX_data_main(C);
 
-  if (ob == NULL)
+  if (ob == NULL) {
     return OPERATOR_CANCELLED;
+  }
 
   Collection *collection = BKE_collection_add(bmain, NULL, "Collection");
   id_fake_user_set(&collection->id);
@@ -457,8 +471,9 @@ static int collection_link_exec(bContext *C, wmOperator *op)
   Object *ob = ED_object_context(C);
   Collection *collection = BLI_findlink(&bmain->collections, RNA_enum_get(op->ptr, "collection"));
 
-  if (ELEM(NULL, ob, collection))
+  if (ELEM(NULL, ob, collection)) {
     return OPERATOR_CANCELLED;
+  }
 
   /* Early return check, if the object is already in collection
    * we could skip all the dependency check and just consider
@@ -468,9 +483,21 @@ static int collection_link_exec(bContext *C, wmOperator *op)
     return OPERATOR_FINISHED;
   }
 
-  /* Adding object to collection which is used as duplicollection for self is bad idea.
+  /* Currently this should not be allowed (might be supported in the future though...). */
+  if (ID_IS_OVERRIDE_LIBRARY(&collection->id)) {
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is overridden");
+    return OPERATOR_CANCELLED;
+  }
+  /* Linked collections are already checked for by using RNA_collection_local_itemf
+   * but operator can be called without invoke */
+  if (ID_IS_LINKED(&collection->id)) {
+    BKE_report(op->reports, RPT_ERROR, "Could not add the collection because it is linked");
+    return OPERATOR_CANCELLED;
+  }
+
+  /* Adding object to collection which is used as dupli-collection for self is bad idea.
    *
-   * It is also  bad idea to add object to collection which is in collection which
+   * It is also bad idea to add object to collection which is in collection which
    * contains our current object.
    */
   if (BKE_collection_object_cyclic_check(bmain, ob, collection)) {
@@ -520,8 +547,9 @@ static int collection_remove_exec(bContext *C, wmOperator *UNUSED(op))
   Object *ob = ED_object_context(C);
   Collection *collection = CTX_data_pointer_get_type(C, "collection", &RNA_Collection).data;
 
-  if (!ob || !collection)
+  if (!ob || !collection) {
     return OPERATOR_CANCELLED;
+  }
 
   BKE_collection_object_remove(bmain, collection, ob, false);
 
@@ -553,8 +581,9 @@ static int collection_unlink_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
   Collection *collection = CTX_data_pointer_get_type(C, "collection", &RNA_Collection).data;
 
-  if (!collection)
+  if (!collection) {
     return OPERATOR_CANCELLED;
+  }
 
   BKE_id_delete(bmain, collection);
 
@@ -586,8 +615,9 @@ static int select_grouped_exec(bContext *C, wmOperator *UNUSED(op))
   Scene *scene = CTX_data_scene(C);
   Collection *collection = CTX_data_pointer_get_type(C, "collection", &RNA_Collection).data;
 
-  if (!collection)
+  if (!collection) {
     return OPERATOR_CANCELLED;
+  }
 
   CTX_DATA_BEGIN (C, Base *, base, visible_bases) {
     if (((base->flag & BASE_SELECTED) == 0) && ((base->flag & BASE_SELECTABLE) != 0)) {

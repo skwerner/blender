@@ -18,10 +18,13 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_MODIFIERTYPES_H__
-#define __MOD_MODIFIERTYPES_H__
+#pragma once
 
 #include "BKE_modifier.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ****************** Type structures for all modifiers ****************** */
 
@@ -56,7 +59,7 @@ extern ModifierTypeInfo modifierType_Mask;
 extern ModifierTypeInfo modifierType_SimpleDeform;
 extern ModifierTypeInfo modifierType_Multires;
 extern ModifierTypeInfo modifierType_Surface;
-extern ModifierTypeInfo modifierType_Smoke;
+extern ModifierTypeInfo modifierType_Fluid;
 extern ModifierTypeInfo modifierType_ShapeKey;
 extern ModifierTypeInfo modifierType_Solidify;
 extern ModifierTypeInfo modifierType_Screw;
@@ -75,14 +78,21 @@ extern ModifierTypeInfo modifierType_UVWarp;
 extern ModifierTypeInfo modifierType_MeshCache;
 extern ModifierTypeInfo modifierType_LaplacianDeform;
 extern ModifierTypeInfo modifierType_Wireframe;
+extern ModifierTypeInfo modifierType_Weld;
 extern ModifierTypeInfo modifierType_DataTransfer;
 extern ModifierTypeInfo modifierType_NormalEdit;
 extern ModifierTypeInfo modifierType_CorrectiveSmooth;
 extern ModifierTypeInfo modifierType_MeshSequenceCache;
 extern ModifierTypeInfo modifierType_SurfaceDeform;
 extern ModifierTypeInfo modifierType_WeightedNormal;
+extern ModifierTypeInfo modifierType_Nodes;
+extern ModifierTypeInfo modifierType_MeshToVolume;
+extern ModifierTypeInfo modifierType_VolumeDisplace;
+extern ModifierTypeInfo modifierType_VolumeToMesh;
 
 /* MOD_util.c */
 void modifier_type_init(ModifierTypeInfo *types[]);
 
-#endif /* __MOD_MODIFIERTYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

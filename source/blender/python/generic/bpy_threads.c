@@ -23,20 +23,17 @@
 
 #include <Python.h>
 
-#include "BLI_utildefines.h"
 #include "../BPY_extern.h"
+#include "BLI_utildefines.h"
 
 /* analogue of PyEval_SaveThread() */
 BPy_ThreadStatePtr BPY_thread_save(void)
 {
-  PyThreadState *tstate = PyThreadState_Swap(NULL);
-  /* note: tstate can be NULL when quitting Blender */
-
-  if (tstate && PyEval_ThreadsInitialized()) {
-    PyEval_ReleaseLock();
+  /* The thread-state can be NULL when quitting Blender. */
+  if (_PyThreadState_UncheckedGet()) {
+    return (BPy_ThreadStatePtr)PyEval_SaveThread();
   }
-
-  return (BPy_ThreadStatePtr)tstate;
+  return NULL;
 }
 
 /* analogue of PyEval_RestoreThread() */

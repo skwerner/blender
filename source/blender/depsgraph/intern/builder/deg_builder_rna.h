@@ -26,16 +26,17 @@
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_operation.h"
 
-struct GHash;
 struct ID;
 struct PointerRNA;
 struct PropertyRNA;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct Depsgraph;
 struct Node;
 class RNANodeQueryIDData;
+class DepsgraphBuilder;
 
 /* For queries which gives operation node or key defines whether we are
  * interested in a result of the given property or whether we are linking some
@@ -72,18 +73,19 @@ class RNANodeIdentifier {
  * dependency graph which satisfies given RNA pointer or RAN path. */
 class RNANodeQuery {
  public:
-  RNANodeQuery(Depsgraph *depsgraph);
+  RNANodeQuery(Depsgraph *depsgraph, DepsgraphBuilder *builder);
   ~RNANodeQuery();
 
   Node *find_node(const PointerRNA *ptr, const PropertyRNA *prop, RNAPointerSource source);
 
  protected:
   Depsgraph *depsgraph_;
+  DepsgraphBuilder *builder_;
 
   /* Indexed by an ID, returns RNANodeQueryIDData associated with that ID. */
-  GHash *id_data_map_;
+  Map<const ID *, unique_ptr<RNANodeQueryIDData>> id_data_map_;
 
-  /* Construct identifier of the node which correspods given configuration
+  /* Construct identifier of the node which corresponds given configuration
    * of RNA property. */
   RNANodeIdentifier construct_node_identifier(const PointerRNA *ptr,
                                               const PropertyRNA *prop,
@@ -91,6 +93,20 @@ class RNANodeQuery {
 
   /* Make sure ID data exists for the given ID, and returns it. */
   RNANodeQueryIDData *ensure_id_data(const ID *id);
+
+  /* Check whether prop_identifier contains rna_path_component.
+   *
+   * This checks more than a sub-string:
+   *
+   * prop_identifier           contains(prop_identifier, "location")
+   * ------------------------  -------------------------------------
+   * location                  true
+   * ["test_location"]         false
+   * pose["bone"].location     true
+   * pose["bone"].location.x   true
+   */
+  static bool contains(const char *prop_identifier, const char *rna_path_component);
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

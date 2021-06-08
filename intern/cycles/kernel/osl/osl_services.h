@@ -25,8 +25,9 @@
  * attributes.
  */
 
-#include <OSL/oslexec.h>
 #include <OSL/oslclosure.h>
+#include <OSL/oslexec.h>
+#include <OSL/rendererservices.h>
 
 #ifdef WITH_PTEX
 class PtexCache;
@@ -40,12 +41,45 @@ class Shader;
 struct ShaderData;
 struct float3;
 struct KernelGlobals;
+
+/* OSL Texture Handle
+ *
+ * OSL texture lookups are string based. If those strings are known at compile
+ * time, the OSL compiler can cache a texture handle to use instead of a string.
+ *
+ * By default it uses TextureSystem::TextureHandle. But since we want to support
+ * different kinds of textures and color space conversions, this is our own handle
+ * with additional data.
+ *
+ * These are stored in a concurrent hash map, because OSL can compile multiple
+ * shaders in parallel. */
+
+struct OSLTextureHandle : public OIIO::RefCnt {
+  enum Type { OIIO, SVM, IES, BEVEL, AO };
+
+  OSLTextureHandle(Type type = OIIO, int svm_slot = -1)
+      : type(type), svm_slot(svm_slot), oiio_handle(NULL), processor(NULL)
+  {
+  }
+
+  Type type;
+  int svm_slot;
+  OSL::TextureSystem::TextureHandle *oiio_handle;
+  ColorSpaceProcessor *processor;
+};
+
+typedef OIIO::intrusive_ptr<OSLTextureHandle> OSLTextureHandleRef;
+typedef OIIO::unordered_map_concurrent<ustring, OSLTextureHandleRef, ustringHash>
+    OSLTextureHandleMap;
+
+/* OSL Render Services
+ *
+ * Interface for OSL to access attributes, textures and other scene data. */
+
 class OSLRenderServices : public OSL::RendererServices {
  public:
-  OSLRenderServices();
+  OSLRenderServices(OSL::TextureSystem *texture_system);
   ~OSLRenderServices();
-
-  void thread_init(KernelGlobals *kernel_globals, OSL::TextureSystem *ts);
 
   bool get_matrix(OSL::ShaderGlobals *sg,
                   OSL::Matrix44 &result,
@@ -140,7 +174,12 @@ class OSLRenderServices : public OSL::RendererServices {
                   void *val,
                   bool derivatives) override;
 
+#if OSL_LIBRARY_VERSION_CODE >= 11100
+  TextureSystem::TextureHandle *get_texture_handle(ustring filename,
+                                                   OSL::ShadingContext *context) override;
+#else
   TextureSystem::TextureHandle *get_texture_handle(ustring filename) override;
+#endif
 
   bool good(TextureSystem::TextureHandle *texture_handle) override;
 
@@ -191,6 +230,17 @@ class OSLRenderServices : public OSL::RendererServices {
                    float *dresultdt,
                    ustring *errormessage) override;
 
+#if OSL_LIBRARY_VERSION_CODE >= 11100
+  bool get_texture_info(ustring filename,
+                        TextureHandle *texture_handle,
+                        TexturePerthread *texture_thread_info,
+                        OSL::ShadingContext *shading_context,
+                        int subimage,
+                        ustring dataname,
+                        TypeDesc datatype,
+                        void *data,
+                        ustring *errormessage) override;
+#else
   bool get_texture_info(OSL::ShaderGlobals *sg,
                         ustring filename,
                         TextureHandle *texture_handle,
@@ -198,6 +248,7 @@ class OSLRenderServices : public OSL::RendererServices {
                         ustring dataname,
                         TypeDesc datatype,
                         void *data) override;
+#endif
 
   static bool get_background_attribute(
       KernelGlobals *kg, ShaderData *sd, ustring name, TypeDesc type, bool derivatives, void *val);
@@ -212,6 +263,7 @@ class OSLRenderServices : public OSL::RendererServices {
   static ustring u_raster;
   static ustring u_ndc;
   static ustring u_object_location;
+  static ustring u_object_color;
   static ustring u_object_index;
   static ustring u_geom_dupli_generated;
   static ustring u_geom_dupli_uv;
@@ -255,12 +307,12 @@ class OSLRenderServices : public OSL::RendererServices {
   static ustring u_at_bevel;
   static ustring u_at_ao;
 
- private:
-  KernelGlobals *kernel_globals;
-  OSL::TextureSystem *osl_ts;
-#ifdef WITH_PTEX
-  PtexCache *ptex_cache;
-#endif
+  /* Texture system and texture handle map are part of the services instead of
+   * globals to be shared between different render sessions. This saves memory,
+   * and is required because texture handles are cached as part of the shared
+   * shading system. */
+  OSL::TextureSystem *texture_system;
+  OSLTextureHandleMap textures;
 };
 
 CCL_NAMESPACE_END

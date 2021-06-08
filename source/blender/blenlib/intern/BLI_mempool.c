@@ -29,8 +29,8 @@
  *   (optionally when using the #BLI_MEMPOOL_ALLOW_ITER flag).
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "atomic_ops.h"
 
@@ -63,8 +63,9 @@
 
 /**
  * Important that this value is an is _not_  aligned with ``sizeof(void *)``.
- * So having a pointer to 2/4/8... aligned memory is enough to ensure the freeword will never be used.
- * To be safe, use a word thats the same in both directions.
+ * So having a pointer to 2/4/8... aligned memory is enough to ensure
+ * the freeword will never be used.
+ * To be safe, use a word that's the same in both directions.
  */
 #define FREEWORD \
   ((sizeof(void *) > sizeof(int32_t)) ? MAKE_ID_8('e', 'e', 'r', 'f', 'f', 'r', 'e', 'e') : \
@@ -75,7 +76,7 @@
  */
 #define USEDWORD MAKE_ID('u', 's', 'e', 'd')
 
-/* currently totalloc isnt used */
+/* Currently totalloc isn't used. */
 // #define USE_TOTALLOC
 
 /* optimize pool size */
@@ -525,7 +526,7 @@ void BLI_mempool_as_array(BLI_mempool *pool, void *data)
  */
 void *BLI_mempool_as_arrayN(BLI_mempool *pool, const char *allocstr)
 {
-  char *data = MEM_mallocN((size_t)(pool->totused * pool->esize), allocstr);
+  char *data = MEM_malloc_arrayN(pool->totused, pool->esize, allocstr);
   BLI_mempool_as_array(pool, data);
   return data;
 }
@@ -547,8 +548,10 @@ void BLI_mempool_iternew(BLI_mempool *pool, BLI_mempool_iter *iter)
 /**
  * Initialize an array of mempool iterators, #BLI_MEMPOOL_ALLOW_ITER flag must be set.
  *
- * This is used in threaded code, to generate as much iterators as needed (each task should have its own),
- * such that each iterator goes over its own single chunk, and only getting the next chunk to iterate over has to be
+ * This is used in threaded code, to generate as much iterators as needed
+ * (each task should have its own),
+ * such that each iterator goes over its own single chunk,
+ * and only getting the next chunk to iterate over has to be
  * protected against concurrency (which can be done in a lockless way).
  *
  * To be used when creating a task for each single item in the pool is totally overkill.
@@ -608,11 +611,9 @@ static void *bli_mempool_iternext(BLI_mempool_iter *iter)
         if (iter->curchunk == NULL) {
           return ret;
         }
-        if (atomic_cas_ptr(
-                    (void **)iter->curchunk_threaded_shared,
-                    iter->curchunk,
-                    iter->curchunk->next) == iter->curchunk)
-        {
+        if (atomic_cas_ptr((void **)iter->curchunk_threaded_shared,
+                           iter->curchunk,
+                           iter->curchunk->next) == iter->curchunk) {
           break;
         }
       }

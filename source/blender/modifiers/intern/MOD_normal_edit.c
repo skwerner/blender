@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
@@ -27,17 +27,29 @@
 #include "BLI_bitmap.h"
 #include "BLI_math.h"
 
-#include "DNA_object_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_mesh_types.h"
+#include "BLT_translation.h"
 
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_mesh.h"
+#include "DNA_defaults.h"
+#include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
 #include "BKE_deform.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_mesh.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_ui_common.h"
 #include "MOD_util.h"
 
 static void generate_vert_coordinates(Mesh *mesh,
@@ -62,13 +74,15 @@ static void generate_vert_coordinates(Mesh *mesh,
     }
   }
 
-  /* Get size (i.e. deformation of the spheroid generating normals), either from target object, or own geometry. */
+  /* Get size (i.e. deformation of the spheroid generating normals),
+   * either from target object, or own geometry. */
   if (r_size != NULL) {
     if (ob_center != NULL) {
       /* Using 'scale' as 'size' here. The input object is typically an empty
        * who's scale is used to define an ellipsoid instead of a simple sphere. */
 
-      /* Not we are not interested in signs here - they are even troublesome actually, due to security clamping! */
+      /* Not we are not interested in signs here - they are even troublesome actually,
+       * due to security clamping! */
       abs_v3_v3(r_size, ob_center->scale);
     }
     else {
@@ -247,7 +261,8 @@ static void normalEditModifier_do_radial(NormalEditModifierData *enmd,
    * Then, we want to find out for each vert its (a, b, c) triple (proportional to (A, B, C) one).
    *
    * Ellipsoid basic equation: ``(x^2/a^2) + (y^2/b^2) + (z^2/c^2) = 1.``
-   * Since we want to find (a, b, c) matching this equation and proportional to (A, B, C), we can do:
+   * Since we want to find (a, b, c) matching this equation and proportional to (A, B, C),
+   * we can do:
    * <pre>
    *     m = B / A
    *     n = C / A
@@ -458,10 +473,18 @@ static bool is_valid_target(NormalEditModifierData *enmd)
   if (enmd->mode == MOD_NORMALEDIT_MODE_RADIAL) {
     return true;
   }
-  else if ((enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) && enmd->target) {
+  if ((enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) && enmd->target) {
     return true;
   }
-  modifier_setError((ModifierData *)enmd, "Invalid target settings");
+  return false;
+}
+
+static bool is_valid_target_with_error(const Object *ob, NormalEditModifierData *enmd)
+{
+  if (is_valid_target(enmd)) {
+    return true;
+  }
+  BKE_modifier_set_error(ob, (ModifierData *)enmd, "Invalid target settings");
   return false;
 }
 
@@ -476,160 +499,166 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
                                     (enmd->mix_limit == (float)M_PI));
 
   /* Do not run that modifier at all if autosmooth is disabled! */
-  if (!is_valid_target(enmd) || mesh->totloop == 0) {
+  if (!is_valid_target_with_error(ctx->object, enmd) || mesh->totloop == 0) {
     return mesh;
   }
 
-  /* XXX TODO ARG GRRR XYQWNMPRXTYY
-   * Once we fully switch to Mesh evaluation of modifiers, we can expect to get that flag from the COW copy.
-   * But for now, it is lost in the DM intermediate step, so we need to directly check orig object's data. */
+  /* XXX TODO(Rohan Rathi):
+   * Once we fully switch to Mesh evaluation of modifiers,
+   * we can expect to get that flag from the COW copy.
+   * But for now, it is lost in the DM intermediate step,
+   * so we need to directly check orig object's data. */
 #if 0
-  if (!(mesh->flag & ME_AUTOSMOOTH)) {
+  if (!(mesh->flag & ME_AUTOSMOOTH))
 #else
-  if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH)) {
+  if (!(((Mesh *)ob->data)->flag & ME_AUTOSMOOTH))
 #endif
-  modifier_setError((ModifierData *)enmd, "Enable 'Auto Smooth' option in mesh settings");
-  return mesh;
-}
+  {
+    BKE_modifier_set_error(
+        ob, (ModifierData *)enmd, "Enable 'Auto Smooth' in Object Data Properties");
+    return mesh;
+  }
 
-Mesh *result;
-if (mesh->medge == ((Mesh *)ob->data)->medge) {
-  /* We need to duplicate data here, otherwise setting custom normals (which may also affect sharp edges) could
-     * modify org mesh, see T43671. */
-  BKE_id_copy_ex(NULL, &mesh->id, (ID **)&result, LIB_ID_COPY_LOCALIZE);
-}
-else {
-  result = mesh;
-}
+  Mesh *result;
+  if (mesh->medge == ((Mesh *)ob->data)->medge) {
+    /* We need to duplicate data here, otherwise setting custom normals
+     * (which may also affect sharp edges) could
+     * modify original mesh, see T43671. */
+    result = (Mesh *)BKE_id_copy_ex(NULL, &mesh->id, NULL, LIB_ID_COPY_LOCALIZE);
+  }
+  else {
+    result = mesh;
+  }
 
-const int num_verts = result->totvert;
-const int num_edges = result->totedge;
-const int num_loops = result->totloop;
-const int num_polys = result->totpoly;
-MVert *mvert = result->mvert;
-MEdge *medge = result->medge;
-MLoop *mloop = result->mloop;
-MPoly *mpoly = result->mpoly;
+  const int num_verts = result->totvert;
+  const int num_edges = result->totedge;
+  const int num_loops = result->totloop;
+  const int num_polys = result->totpoly;
+  MVert *mvert = result->mvert;
+  MEdge *medge = result->medge;
+  MLoop *mloop = result->mloop;
+  MPoly *mpoly = result->mpoly;
 
-int defgrp_index;
-MDeformVert *dvert;
+  int defgrp_index;
+  MDeformVert *dvert;
 
-float (*loopnors)[3] = NULL;
-short (*clnors)[2] = NULL;
+  float(*loopnors)[3] = NULL;
+  short(*clnors)[2] = NULL;
 
-float (*polynors)[3];
+  float(*polynors)[3];
 
-CustomData *ldata = &result->ldata;
-if (CustomData_has_layer(ldata, CD_NORMAL)) {
-  loopnors = CustomData_get_layer(ldata, CD_NORMAL);
-}
-else {
-  loopnors = CustomData_add_layer(ldata, CD_NORMAL, CD_CALLOC, NULL, num_loops);
-}
+  CustomData *ldata = &result->ldata;
 
-/* Compute poly (always needed) and vert normals. */
-CustomData *pdata = &result->pdata;
-polynors = CustomData_get_layer(pdata, CD_NORMAL);
-if (!polynors) {
-  polynors = CustomData_add_layer(pdata, CD_NORMAL, CD_CALLOC, NULL, num_polys);
-}
-BKE_mesh_calc_normals_poly(mvert,
-                           NULL,
-                           num_verts,
-                           mloop,
-                           mpoly,
-                           num_loops,
-                           num_polys,
-                           polynors,
-                           (result->runtime.cd_dirty_vert & CD_MASK_NORMAL) ? false : true);
+  /* Compute poly (always needed) and vert normals. */
+  CustomData *pdata = &result->pdata;
+  polynors = CustomData_get_layer(pdata, CD_NORMAL);
+  if (!polynors) {
+    polynors = CustomData_add_layer(pdata, CD_NORMAL, CD_CALLOC, NULL, num_polys);
+    CustomData_set_layer_flag(pdata, CD_NORMAL, CD_FLAG_TEMPORARY);
+  }
+  BKE_mesh_calc_normals_poly(mvert,
+                             NULL,
+                             num_verts,
+                             mloop,
+                             mpoly,
+                             num_loops,
+                             num_polys,
+                             polynors,
+                             (result->runtime.cd_dirty_vert & CD_MASK_NORMAL) ? false : true);
 
-result->runtime.cd_dirty_vert &= ~CD_MASK_NORMAL;
+  result->runtime.cd_dirty_vert &= ~CD_MASK_NORMAL;
 
-if (use_current_clnors) {
-  clnors = CustomData_duplicate_referenced_layer(ldata, CD_CUSTOMLOOPNORMAL, num_loops);
+  clnors = CustomData_get_layer(ldata, CD_CUSTOMLOOPNORMAL);
+  if (use_current_clnors) {
+    clnors = CustomData_duplicate_referenced_layer(ldata, CD_CUSTOMLOOPNORMAL, num_loops);
+    loopnors = MEM_malloc_arrayN((size_t)num_loops, sizeof(*loopnors), __func__);
 
-  BKE_mesh_normals_loop_split(mvert,
-                              num_verts,
-                              medge,
-                              num_edges,
-                              mloop,
-                              loopnors,
-                              num_loops,
-                              mpoly,
-                              (const float(*)[3])polynors,
-                              num_polys,
-                              true,
-                              result->smoothresh,
-                              NULL,
-                              clnors,
-                              NULL);
-}
+    BKE_mesh_normals_loop_split(mvert,
+                                num_verts,
+                                medge,
+                                num_edges,
+                                mloop,
+                                loopnors,
+                                num_loops,
+                                mpoly,
+                                (const float(*)[3])polynors,
+                                num_polys,
+                                true,
+                                result->smoothresh,
+                                NULL,
+                                clnors,
+                                NULL);
+  }
 
-if (!clnors) {
-  clnors = CustomData_add_layer(ldata, CD_CUSTOMLOOPNORMAL, CD_CALLOC, NULL, num_loops);
-}
+  if (clnors == NULL) {
+    clnors = CustomData_add_layer(ldata, CD_CUSTOMLOOPNORMAL, CD_CALLOC, NULL, num_loops);
+  }
 
-MOD_get_vgroup(ob, result, enmd->defgrp_name, &dvert, &defgrp_index);
+  MOD_get_vgroup(ob, result, enmd->defgrp_name, &dvert, &defgrp_index);
 
-if (enmd->mode == MOD_NORMALEDIT_MODE_RADIAL) {
-  normalEditModifier_do_radial(enmd,
-                               ctx,
-                               ob,
-                               result,
-                               clnors,
-                               loopnors,
-                               polynors,
-                               enmd->mix_mode,
-                               enmd->mix_factor,
-                               enmd->mix_limit,
-                               dvert,
-                               defgrp_index,
-                               use_invert_vgroup,
-                               mvert,
-                               num_verts,
-                               medge,
-                               num_edges,
-                               mloop,
-                               num_loops,
-                               mpoly,
-                               num_polys);
-}
-else if (enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) {
-  normalEditModifier_do_directional(enmd,
-                                    ctx,
-                                    ob,
-                                    result,
-                                    clnors,
-                                    loopnors,
-                                    polynors,
-                                    enmd->mix_mode,
-                                    enmd->mix_factor,
-                                    enmd->mix_limit,
-                                    dvert,
-                                    defgrp_index,
-                                    use_invert_vgroup,
-                                    mvert,
-                                    num_verts,
-                                    medge,
-                                    num_edges,
-                                    mloop,
-                                    num_loops,
-                                    mpoly,
-                                    num_polys);
-}
+  if (enmd->mode == MOD_NORMALEDIT_MODE_RADIAL) {
+    normalEditModifier_do_radial(enmd,
+                                 ctx,
+                                 ob,
+                                 result,
+                                 clnors,
+                                 loopnors,
+                                 polynors,
+                                 enmd->mix_mode,
+                                 enmd->mix_factor,
+                                 enmd->mix_limit,
+                                 dvert,
+                                 defgrp_index,
+                                 use_invert_vgroup,
+                                 mvert,
+                                 num_verts,
+                                 medge,
+                                 num_edges,
+                                 mloop,
+                                 num_loops,
+                                 mpoly,
+                                 num_polys);
+  }
+  else if (enmd->mode == MOD_NORMALEDIT_MODE_DIRECTIONAL) {
+    normalEditModifier_do_directional(enmd,
+                                      ctx,
+                                      ob,
+                                      result,
+                                      clnors,
+                                      loopnors,
+                                      polynors,
+                                      enmd->mix_mode,
+                                      enmd->mix_factor,
+                                      enmd->mix_limit,
+                                      dvert,
+                                      defgrp_index,
+                                      use_invert_vgroup,
+                                      mvert,
+                                      num_verts,
+                                      medge,
+                                      num_edges,
+                                      mloop,
+                                      num_loops,
+                                      mpoly,
+                                      num_polys);
+  }
 
-return result;
+  /* Currently Modifier stack assumes there is no poly normal data passed around... */
+  CustomData_free_layers(pdata, CD_NORMAL, num_polys);
+  MEM_SAFE_FREE(loopnors);
+
+  result->runtime.is_original = false;
+
+  return result;
 }
 
 static void initData(ModifierData *md)
 {
   NormalEditModifierData *enmd = (NormalEditModifierData *)md;
 
-  enmd->mode = MOD_NORMALEDIT_MODE_RADIAL;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(enmd, modifier));
 
-  enmd->mix_mode = MOD_NORMALEDIT_MIX_COPY;
-  enmd->mix_factor = 1.0f;
-  enmd->mix_limit = M_PI;
+  MEMCPY_STRUCT_AFTER(enmd, DNA_struct_default_get(NormalEditModifierData), modifier);
 }
 
 static void requiredDataMask(Object *UNUSED(ob),
@@ -651,11 +680,11 @@ static bool dependsOnNormals(ModifierData *UNUSED(md))
   return true;
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   NormalEditModifierData *enmd = (NormalEditModifierData *)md;
 
-  walk(userData, ob, &enmd->target, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&enmd->target, IDWALK_CB_NOP);
 }
 
 static bool isDisabled(const struct Scene *UNUSED(scene),
@@ -676,26 +705,106 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *mesh)
 {
   return normalEditModifier_do((NormalEditModifierData *)md, ctx, ctx->object, mesh);
 }
 
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  int mode = RNA_enum_get(ptr, "mode");
+
+  uiItemR(layout, ptr, "mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "target", 0, NULL, ICON_NONE);
+
+  col = uiLayoutColumn(layout, false);
+  uiLayoutSetActive(col, mode == MOD_NORMALEDIT_MODE_DIRECTIONAL);
+  uiItemR(col, ptr, "use_direction_parallel", 0, NULL, ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+/* This panel could be open by default, but it isn't currently. */
+static void mix_mode_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *row;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA ob_ptr;
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, &ob_ptr);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "mix_mode", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "mix_factor", 0, NULL, ICON_NONE);
+
+  modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", NULL);
+
+  row = uiLayoutRow(layout, true);
+  uiItemR(row, ptr, "mix_limit", 0, NULL, ICON_NONE);
+  uiItemR(row,
+          ptr,
+          "no_polynors_fix",
+          0,
+          "",
+          (RNA_boolean_get(ptr, "no_polynors_fix") ? ICON_LOCKED : ICON_UNLOCKED));
+}
+
+static void offset_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  int mode = RNA_enum_get(ptr, "mode");
+  PointerRNA target_ptr = RNA_pointer_get(ptr, "target");
+  bool needs_object_offset = (mode == MOD_NORMALEDIT_MODE_RADIAL &&
+                              RNA_pointer_is_null(&target_ptr)) ||
+                             (mode == MOD_NORMALEDIT_MODE_DIRECTIONAL &&
+                              RNA_boolean_get(ptr, "use_direction_parallel"));
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiLayoutSetActive(layout, needs_object_offset);
+  uiItemR(layout, ptr, "offset", 0, NULL, ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(
+      region_type, eModifierType_NormalEdit, panel_draw);
+  modifier_subpanel_register(region_type, "mix", "Mix", NULL, mix_mode_panel_draw, panel_type);
+  modifier_subpanel_register(region_type, "offset", "Offset", NULL, offset_panel_draw, panel_type);
+}
+
 ModifierTypeInfo modifierType_NormalEdit = {
-    /* name */ "Set Split Normals",
+    /* name */ "NormalEdit",
     /* structName */ "NormalEditModifierData",
     /* structSize */ sizeof(NormalEditModifierData),
+    /* srna */ &RNA_NormalEditModifier,
     /* type */ eModifierTypeType_Constructive,
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_SupportsMapping |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_NORMALEDIT,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyGeometrySet */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,
@@ -704,8 +813,10 @@ ModifierTypeInfo modifierType_NormalEdit = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ dependsOnNormals,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

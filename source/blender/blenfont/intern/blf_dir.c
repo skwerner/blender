@@ -36,16 +36,19 @@
 
 #include "DNA_vec_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "BLF_api.h"
-#include "blf_internal_types.h"
 #include "blf_internal.h"
+#include "blf_internal_types.h"
+
+#include "BKE_global.h"
+#include "BKE_main.h"
 
 static ListBase global_font_dir = {NULL, NULL};
 
@@ -55,8 +58,9 @@ static DirBLF *blf_dir_find(const char *path)
 
   p = global_font_dir.first;
   while (p) {
-    if (BLI_path_cmp(p->path, path) == 0)
+    if (BLI_path_cmp(p->path, path) == 0) {
       return p;
+    }
     p = p->next;
   }
   return NULL;
@@ -67,8 +71,9 @@ void BLF_dir_add(const char *path)
   DirBLF *dir;
 
   dir = blf_dir_find(path);
-  if (dir) /* already in the list ? just return. */
+  if (dir) { /* already in the list ? just return. */
     return;
+  }
 
   dir = (DirBLF *)MEM_callocN(sizeof(DirBLF), "BLF_dir_add");
   dir->path = BLI_strdup(path);
@@ -95,8 +100,9 @@ char **BLF_dir_get(int *ndir)
   int i, count;
 
   count = BLI_listbase_count(&global_font_dir);
-  if (!count)
+  if (!count) {
     return NULL;
+  }
 
   dirs = (char **)MEM_callocN(sizeof(char *) * count, "BLF_dir_get");
   p = global_font_dir.first;
@@ -112,11 +118,8 @@ char **BLF_dir_get(int *ndir)
 
 void BLF_dir_free(char **dirs, int count)
 {
-  char *path;
-  int i;
-
-  for (i = 0; i < count; i++) {
-    path = dirs[i];
+  for (int i = 0; i < count; i++) {
+    char *path = dirs[i];
     MEM_freeN(path);
   }
   MEM_freeN(dirs);
@@ -137,16 +140,20 @@ char *blf_dir_search(const char *file)
   }
 
   if (!s) {
-    /* check the current directory, why not ? */
-    if (BLI_exists(file))
-      s = BLI_strdup(file);
+    /* Assume file is either an absolute path, or a relative path to current directory. */
+    BLI_strncpy(full_path, file, sizeof(full_path));
+    BLI_path_abs(full_path, BKE_main_blendfile_path(G_MAIN));
+    if (BLI_exists(full_path)) {
+      s = BLI_strdup(full_path);
+    }
   }
 
   return s;
 }
 
-/* Some font have additional file with metrics information,
- * in general, the extension of the file is: .afm or .pfm
+/**
+ * Some font have additional file with metrics information,
+ * in general, the extension of the file is: `.afm` or `.pfm`
  */
 char *blf_dir_metrics_search(const char *filename)
 {
@@ -166,14 +173,16 @@ char *blf_dir_metrics_search(const char *filename)
     s[2] = 'm';
 
     /* first check .afm */
-    if (BLI_exists(mfile))
+    if (BLI_exists(mfile)) {
       return mfile;
+    }
 
     /* and now check .pfm */
     s[0] = 'p';
 
-    if (BLI_exists(mfile))
+    if (BLI_exists(mfile)) {
       return mfile;
+    }
   }
   MEM_freeN(mfile);
   return NULL;

@@ -15,16 +15,9 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # ***** END GPL LICENSE BLOCK *****
-if(WIN32)
-  set(HARVEST_CMD cmd /C FOR /d /r ${BUILD_DIR}/python/src/external_python/run/lib/site-packages %d IN (__pycache__) DO @IF EXIST "%d" rd /s /q "%d" &&
-    ${CMAKE_COMMAND} -E copy_directory  ${BUILD_DIR}/python/src/external_python/run/lib/site-packages/idna ${HARVEST_TARGET}/Release/site-packages/idna &&
-    ${CMAKE_COMMAND} -E copy_directory  ${BUILD_DIR}/python/src/external_python/run/lib/site-packages/chardet ${HARVEST_TARGET}/Release/site-packages/chardet &&
-    ${CMAKE_COMMAND} -E copy_directory  ${BUILD_DIR}/python/src/external_python/run/lib/site-packages/urllib3 ${HARVEST_TARGET}/Release/site-packages/urllib3 &&
-    ${CMAKE_COMMAND} -E copy_directory  ${BUILD_DIR}/python/src/external_python/run/lib/site-packages/certifi ${HARVEST_TARGET}/Release/site-packages/certifi &&
-    ${CMAKE_COMMAND} -E copy_directory  ${BUILD_DIR}/python/src/external_python/run/lib/site-packages/requests ${HARVEST_TARGET}/Release/site-packages/requests
-  )
-else()
-  set(HARVEST_CMD echo .)
+
+if(WIN32 AND BUILD_MODE STREQUAL Debug)
+  set(SITE_PACKAGES_EXTRA --global-option build --global-option --debug)
 endif()
 
 ExternalProject_Add(external_python_site_packages
@@ -32,10 +25,19 @@ ExternalProject_Add(external_python_site_packages
   CONFIGURE_COMMAND ""
   BUILD_COMMAND ""
   PREFIX ${BUILD_DIR}/site_packages
-  INSTALL_COMMAND ${PYTHON_BINARY} -m pip install idna==${IDNA_VERSION} chardet==${CHARDET_VERSION} urllib3==${URLLIB3_VERSION} certifi==${CERTIFI_VERSION} requests==${REQUESTS_VERSION} --no-binary :all: && ${HARVEST_CMD}
+  INSTALL_COMMAND ${PYTHON_BINARY} -m pip install ${SITE_PACKAGES_EXTRA} cython==${CYTHON_VERSION} idna==${IDNA_VERSION} chardet==${CHARDET_VERSION} urllib3==${URLLIB3_VERSION} certifi==${CERTIFI_VERSION} requests==${REQUESTS_VERSION} --no-binary :all:
 )
+
+if(USE_PIP_NUMPY)
+  # Use only wheel (and not build from source) to stop NumPy from linking against buggy
+  # Accelerate framework backend on macOS. Official wheels are built with OpenBLAS.
+  ExternalProject_Add_Step(external_python_site_packages after_install
+    COMMAND ${PYTHON_BINARY} -m pip install --no-cache-dir numpy==${NUMPY_VERSION} --only-binary :all:
+    DEPENDEES install
+  )
+endif()
 
 add_dependencies(
   external_python_site_packages
-  Make_Python_Environment
+  external_python
 )

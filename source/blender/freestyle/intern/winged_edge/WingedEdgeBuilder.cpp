@@ -16,8 +16,8 @@
 
 /** \file
  * \ingroup freestyle
- * \brief Class to render a WingedEdge data structure from a polyhedral data structure organized in nodes
- *         of a scene graph
+ * \brief Class to render a WingedEdge data structure from a polyhedral data structure organized in
+ * nodes of a scene graph
  */
 
 #include <set>
@@ -34,20 +34,21 @@ namespace Freestyle {
 
 void WingedEdgeBuilder::visitIndexedFaceSet(IndexedFaceSet &ifs)
 {
-  if (_pRenderMonitor && _pRenderMonitor->testBreak())
+  if (_pRenderMonitor && _pRenderMonitor->testBreak()) {
     return;
+  }
   WShape *shape = new WShape;
   if (!buildWShape(*shape, ifs)) {
     delete shape;
     return;
   }
   shape->setId(ifs.getId().getFirst());
-  //ifs.setId(shape->GetId());
+  // ifs.setId(shape->GetId());
 }
 
 void WingedEdgeBuilder::visitNodeShape(NodeShape &ns)
 {
-  //Sets the current material to iShapeode->material:
+  // Sets the current material to iShapeode->material:
   _current_frs_material = &(ns.frs_material());
 }
 
@@ -63,13 +64,12 @@ void WingedEdgeBuilder::visitNodeTransform(NodeTransform &tn)
   _current_matrix = new_matrix;
 }
 
-void WingedEdgeBuilder::visitNodeTransformAfter(NodeTransform &)
+void WingedEdgeBuilder::visitNodeTransformAfter(NodeTransform &UNUSED(transform))
 {
-  if (_current_matrix)
-    delete _current_matrix;
+  delete _current_matrix;
 
   if (_matrices_stack.empty()) {
-    _current_matrix = NULL;
+    _current_matrix = nullptr;
     return;
   }
 
@@ -81,7 +81,7 @@ bool WingedEdgeBuilder::buildWShape(WShape &shape, IndexedFaceSet &ifs)
 {
   unsigned int vsize = ifs.vsize();
   unsigned int nsize = ifs.nsize();
-  //soc unused - unsigned tsize = ifs.tsize();
+  // soc unused - unsigned tsize = ifs.tsize();
 
   const float *vertices = ifs.vertices();
   const float *normals = ifs.normals();
@@ -108,17 +108,20 @@ bool WingedEdgeBuilder::buildWShape(WShape &shape, IndexedFaceSet &ifs)
   vector<FrsMaterial> frs_materials;
   if (ifs.msize()) {
     const FrsMaterial *const *mats = ifs.frs_materials();
-    for (unsigned i = 0; i < ifs.msize(); ++i)
+    for (unsigned i = 0; i < ifs.msize(); ++i) {
       frs_materials.push_back(*(mats[i]));
+    }
     shape.setFrsMaterials(frs_materials);
   }
 
 #if 0
   const FrsMaterial *mat = (ifs.frs_material());
-  if (mat)
+  if (mat) {
     shape.setFrsMaterial(*mat);
-  else if (_current_frs_material)
+  }
+  else if (_current_frs_material) {
     shape.setFrsMaterial(*_current_frs_material);
+  }
 #endif
   const IndexedFaceSet::FaceEdgeMark *faceEdgeMarks = ifs.faceEdgeMarks();
 
@@ -130,14 +133,15 @@ bool WingedEdgeBuilder::buildWShape(WShape &shape, IndexedFaceSet &ifs)
 
   const unsigned int *vindices = ifs.vindices();
   const unsigned int *nindices = ifs.nindices();
-  const unsigned int *tindices = NULL;
+  const unsigned int *tindices = nullptr;
   if (ifs.tsize()) {
     tindices = ifs.tindices();
   }
 
-  const unsigned int *mindices = NULL;
-  if (ifs.msize())
+  const unsigned int *mindices = nullptr;
+  if (ifs.msize()) {
     mindices = ifs.mindices();
+  }
   const unsigned int *numVertexPerFace = ifs.numVertexPerFaces();
   const unsigned int numfaces = ifs.numFaces();
 
@@ -182,18 +186,21 @@ bool WingedEdgeBuilder::buildWShape(WShape &shape, IndexedFaceSet &ifs)
     }
     vindices += numVertexPerFace[index];
     nindices += numVertexPerFace[index];
-    if (mindices)
+    if (mindices) {
       mindices += numVertexPerFace[index];
-    if (tindices)
+    }
+    if (tindices) {
       tindices += numVertexPerFace[index];
+    }
     faceEdgeMarks++;
   }
 
   delete[] new_vertices;
   delete[] new_normals;
 
-  if (shape.GetFaceList().size() == 0)  // this may happen due to degenerate triangles
+  if (shape.GetFaceList().empty()) {  // this may happen due to degenerate triangles
     return false;
+  }
 
 #if 0
   // compute bbox
@@ -207,11 +214,13 @@ bool WingedEdgeBuilder::buildWShape(WShape &shape, IndexedFaceSet &ifs)
   vector<WVertex *> &wvertices = shape.getVertexList();
   for (vector<WVertex *>::iterator wv = wvertices.begin(), wvend = wvertices.end(); wv != wvend;
        ++wv) {
-    if ((*wv)->isBoundary())
+    if ((*wv)->isBoundary()) {
       continue;
-    if ((*wv)->GetEdges().size() ==
-        0)  // This means that the WVertex has no incoming edges... (12-Sep-2011 T.K.)
+    }
+    if ((*wv)->GetEdges().empty()) {
+      // This means that the WVertex has no incoming edges... (12-Sep-2011 T.K.)
       continue;
+    }
     normalsSet.clear();
     WVertex::face_iterator fit = (*wv)->faces_begin();
     WVertex::face_iterator fitend = (*wv)->faces_end();
@@ -256,7 +265,7 @@ void WingedEdgeBuilder::buildTriangleStrip(const float * /*vertices*/,
 {
   unsigned nDoneVertices = 2;  // number of vertices already treated
   unsigned nTriangle = 0;      // number of the triangle currently being treated
-  //int nVertex = 0;            // vertex number
+  // int nVertex = 0;            // vertex number
 
   WShape *currentShape = _current_wshape;  // the current shape being built
   vector<WVertex *> triangleVertices;
@@ -265,31 +274,31 @@ void WingedEdgeBuilder::buildTriangleStrip(const float * /*vertices*/,
   vector<bool> triangleFaceEdgeMarks;
 
   while (nDoneVertices < nvertices) {
-    //clear the vertices list:
+    // clear the vertices list:
     triangleVertices.clear();
-    //Then rebuild it:
+    // Then rebuild it:
     if (0 == nTriangle % 2) {  // if nTriangle is even
       triangleVertices.push_back(currentShape->getVertexList()[vindices[nTriangle] / 3]);
       triangleVertices.push_back(currentShape->getVertexList()[vindices[nTriangle + 1] / 3]);
       triangleVertices.push_back(currentShape->getVertexList()[vindices[nTriangle + 2] / 3]);
 
-      triangleNormals.push_back(Vec3f(normals[nindices[nTriangle]],
-                                      normals[nindices[nTriangle] + 1],
-                                      normals[nindices[nTriangle] + 2]));
-      triangleNormals.push_back(Vec3f(normals[nindices[nTriangle + 1]],
-                                      normals[nindices[nTriangle + 1] + 1],
-                                      normals[nindices[nTriangle + 1] + 2]));
-      triangleNormals.push_back(Vec3f(normals[nindices[nTriangle + 2]],
-                                      normals[nindices[nTriangle + 2] + 1],
-                                      normals[nindices[nTriangle + 2] + 2]));
+      triangleNormals.emplace_back(normals[nindices[nTriangle]],
+                                   normals[nindices[nTriangle] + 1],
+                                   normals[nindices[nTriangle] + 2]);
+      triangleNormals.emplace_back(normals[nindices[nTriangle + 1]],
+                                   normals[nindices[nTriangle + 1] + 1],
+                                   normals[nindices[nTriangle + 1] + 2]);
+      triangleNormals.emplace_back(normals[nindices[nTriangle + 2]],
+                                   normals[nindices[nTriangle + 2] + 1],
+                                   normals[nindices[nTriangle + 2] + 2]);
 
       if (texCoords) {
-        triangleTexCoords.push_back(
-            Vec2f(texCoords[tindices[nTriangle]], texCoords[tindices[nTriangle] + 1]));
-        triangleTexCoords.push_back(
-            Vec2f(texCoords[tindices[nTriangle + 1]], texCoords[tindices[nTriangle + 1] + 1]));
-        triangleTexCoords.push_back(
-            Vec2f(texCoords[tindices[nTriangle + 2]], texCoords[tindices[nTriangle + 2] + 1]));
+        triangleTexCoords.emplace_back(texCoords[tindices[nTriangle]],
+                                       texCoords[tindices[nTriangle] + 1]);
+        triangleTexCoords.emplace_back(texCoords[tindices[nTriangle + 1]],
+                                       texCoords[tindices[nTriangle + 1] + 1]);
+        triangleTexCoords.emplace_back(texCoords[tindices[nTriangle + 2]],
+                                       texCoords[tindices[nTriangle + 2] + 1]);
       }
     }
     else {  // if nTriangle is odd
@@ -297,23 +306,23 @@ void WingedEdgeBuilder::buildTriangleStrip(const float * /*vertices*/,
       triangleVertices.push_back(currentShape->getVertexList()[vindices[nTriangle + 2] / 3]);
       triangleVertices.push_back(currentShape->getVertexList()[vindices[nTriangle + 1] / 3]);
 
-      triangleNormals.push_back(Vec3f(normals[nindices[nTriangle]],
-                                      normals[nindices[nTriangle] + 1],
-                                      normals[nindices[nTriangle] + 2]));
-      triangleNormals.push_back(Vec3f(normals[nindices[nTriangle + 2]],
-                                      normals[nindices[nTriangle + 2] + 1],
-                                      normals[nindices[nTriangle + 2] + 2]));
-      triangleNormals.push_back(Vec3f(normals[nindices[nTriangle + 1]],
-                                      normals[nindices[nTriangle + 1] + 1],
-                                      normals[nindices[nTriangle + 1] + 2]));
+      triangleNormals.emplace_back(normals[nindices[nTriangle]],
+                                   normals[nindices[nTriangle] + 1],
+                                   normals[nindices[nTriangle] + 2]);
+      triangleNormals.emplace_back(normals[nindices[nTriangle + 2]],
+                                   normals[nindices[nTriangle + 2] + 1],
+                                   normals[nindices[nTriangle + 2] + 2]);
+      triangleNormals.emplace_back(normals[nindices[nTriangle + 1]],
+                                   normals[nindices[nTriangle + 1] + 1],
+                                   normals[nindices[nTriangle + 1] + 2]);
 
       if (texCoords) {
-        triangleTexCoords.push_back(
-            Vec2f(texCoords[tindices[nTriangle]], texCoords[tindices[nTriangle] + 1]));
-        triangleTexCoords.push_back(
-            Vec2f(texCoords[tindices[nTriangle + 2]], texCoords[tindices[nTriangle + 2] + 1]));
-        triangleTexCoords.push_back(
-            Vec2f(texCoords[tindices[nTriangle + 1]], texCoords[tindices[nTriangle + 1] + 1]));
+        triangleTexCoords.emplace_back(texCoords[tindices[nTriangle]],
+                                       texCoords[tindices[nTriangle] + 1]);
+        triangleTexCoords.emplace_back(texCoords[tindices[nTriangle + 2]],
+                                       texCoords[tindices[nTriangle + 2] + 1]);
+        triangleTexCoords.emplace_back(texCoords[tindices[nTriangle + 1]],
+                                       texCoords[tindices[nTriangle + 1] + 1]);
       }
     }
     triangleFaceEdgeMarks.push_back((iFaceEdgeMarks[nTriangle / 3] & IndexedFaceSet::FACE_MARK) !=
@@ -377,22 +386,21 @@ void WingedEdgeBuilder::buildTriangles(const float * /*vertices*/,
     triangleVertices.push_back(currentShape->getVertexList()[vindices[3 * i + 1] / 3]);
     triangleVertices.push_back(currentShape->getVertexList()[vindices[3 * i + 2] / 3]);
 
-    triangleNormals.push_back(Vec3f(
-        normals[nindices[3 * i]], normals[nindices[3 * i] + 1], normals[nindices[3 * i] + 2]));
-    triangleNormals.push_back(Vec3f(normals[nindices[3 * i + 1]],
-                                    normals[nindices[3 * i + 1] + 1],
-                                    normals[nindices[3 * i + 1] + 2]));
-    triangleNormals.push_back(Vec3f(normals[nindices[3 * i + 2]],
-                                    normals[nindices[3 * i + 2] + 1],
-                                    normals[nindices[3 * i + 2] + 2]));
+    triangleNormals.emplace_back(
+        normals[nindices[3 * i]], normals[nindices[3 * i] + 1], normals[nindices[3 * i] + 2]);
+    triangleNormals.emplace_back(normals[nindices[3 * i + 1]],
+                                 normals[nindices[3 * i + 1] + 1],
+                                 normals[nindices[3 * i + 1] + 2]);
+    triangleNormals.emplace_back(normals[nindices[3 * i + 2]],
+                                 normals[nindices[3 * i + 2] + 1],
+                                 normals[nindices[3 * i + 2] + 2]);
 
     if (texCoords) {
-      triangleTexCoords.push_back(
-          Vec2f(texCoords[tindices[3 * i]], texCoords[tindices[3 * i] + 1]));
-      triangleTexCoords.push_back(
-          Vec2f(texCoords[tindices[3 * i + 1]], texCoords[tindices[3 * i + 1] + 1]));
-      triangleTexCoords.push_back(
-          Vec2f(texCoords[tindices[3 * i + 2]], texCoords[tindices[3 * i + 2] + 1]));
+      triangleTexCoords.emplace_back(texCoords[tindices[3 * i]], texCoords[tindices[3 * i] + 1]);
+      triangleTexCoords.emplace_back(texCoords[tindices[3 * i + 1]],
+                                     texCoords[tindices[3 * i + 1] + 1]);
+      triangleTexCoords.emplace_back(texCoords[tindices[3 * i + 2]],
+                                     texCoords[tindices[3 * i + 2] + 1]);
     }
 
     triangleFaceEdgeMarks.push_back((iFaceEdgeMarks[i] & IndexedFaceSet::FACE_MARK) != 0);
@@ -400,12 +408,14 @@ void WingedEdgeBuilder::buildTriangles(const float * /*vertices*/,
     triangleFaceEdgeMarks.push_back((iFaceEdgeMarks[i] & IndexedFaceSet::EDGE_MARK_V2V3) != 0);
     triangleFaceEdgeMarks.push_back((iFaceEdgeMarks[i] & IndexedFaceSet::EDGE_MARK_V3V1) != 0);
   }
-  if (mindices)
+  if (mindices) {
     currentShape->MakeFace(
         triangleVertices, triangleNormals, triangleTexCoords, triangleFaceEdgeMarks, mindices[0]);
-  else
+  }
+  else {
     currentShape->MakeFace(
         triangleVertices, triangleNormals, triangleTexCoords, triangleFaceEdgeMarks, 0);
+  }
 }
 
 void WingedEdgeBuilder::transformVertices(const float *vertices,
@@ -419,8 +429,9 @@ void WingedEdgeBuilder::transformVertices(const float *vertices,
   for (unsigned int i = 0; i < vsize / 3; i++) {
     HVec3r hv_tmp(v[0], v[1], v[2]);
     HVec3r hv(transform * hv_tmp);
-    for (unsigned int j = 0; j < 3; j++)
+    for (unsigned int j = 0; j < 3; j++) {
       pv[j] = hv[j] / hv[3];
+    }
     v += 3;
     pv += 3;
   }
@@ -437,8 +448,9 @@ void WingedEdgeBuilder::transformNormals(const float *normals,
   for (unsigned int i = 0; i < nsize / 3; i++) {
     Vec3r hn(n[0], n[1], n[2]);
     hn = GeomUtils::rotateVector(transform, hn);
-    for (unsigned int j = 0; j < 3; j++)
+    for (unsigned int j = 0; j < 3; j++) {
       pn[j] = hn[j];
+    }
     n += 3;
     pn += 3;
   }

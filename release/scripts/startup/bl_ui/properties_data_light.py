@@ -97,12 +97,19 @@ class DATA_PT_EEVEE_light(DataButtonsPanel, Panel):
         col = layout.column()
         col.prop(light, "color")
         col.prop(light, "energy")
-        col.prop(light, "specular_factor", text="Specular")
 
         col.separator()
 
-        if light.type in {'POINT', 'SPOT', 'SUN'}:
+        col.prop(light, "diffuse_factor", text="Diffuse")
+        col.prop(light, "specular_factor", text="Specular")
+        col.prop(light, "volume_factor", text="Volume")
+
+        col.separator()
+
+        if light.type in {'POINT', 'SPOT'}:
             col.prop(light, "shadow_soft_size", text="Radius")
+        elif light.type == 'SUN':
+            col.prop(light, "angle")
         elif light.type == 'AREA':
             col.prop(light, "shape")
 
@@ -132,17 +139,15 @@ class DATA_PT_EEVEE_light_distance(DataButtonsPanel, Panel):
         light = context.light
 
         layout = self.layout
-        layout.active = light.use_shadow
         layout.prop(light, "use_custom_distance", text="")
 
     def draw(self, context):
         layout = self.layout
         light = context.light
+        layout.active = light.use_custom_distance
         layout.use_property_split = True
 
-        col = layout.column()
-
-        col.prop(light, "cutoff_distance", text="Distance")
+        layout.prop(light, "cutoff_distance", text="Distance")
 
 
 class DATA_PT_EEVEE_shadow(DataButtonsPanel, Panel):
@@ -173,17 +178,10 @@ class DATA_PT_EEVEE_shadow(DataButtonsPanel, Panel):
 
         col = layout.column()
         sub = col.column(align=True)
-        sub.prop(light, "shadow_buffer_clip_start", text="Clip Start")
-        if light.type == 'SUN':
-            sub.prop(light, "shadow_buffer_clip_end", text="End")
-
-        col.prop(light, "shadow_buffer_soft", text="Softness")
-
-        col.separator()
+        if light.type != 'SUN':
+            sub.prop(light, "shadow_buffer_clip_start", text="Clip Start")
 
         col.prop(light, "shadow_buffer_bias", text="Bias")
-        col.prop(light, "shadow_buffer_exp", text="Exponent")
-        col.prop(light, "shadow_buffer_bleed_bias", text="Bleed Bias")
 
 
 class DATA_PT_EEVEE_shadow_cascaded_shadow_map(DataButtonsPanel, Panel):
@@ -243,7 +241,6 @@ class DATA_PT_EEVEE_shadow_contact(DataButtonsPanel, Panel):
         col.active = light.use_shadow and light.use_contact_shadow
 
         col.prop(light, "contact_shadow_distance", text="Distance")
-        col.prop(light, "contact_shadow_soft_size", text="Softness")
         col.prop(light, "contact_shadow_bias", text="Bias")
         col.prop(light, "contact_shadow_thickness", text="Thickness")
 
@@ -317,7 +314,8 @@ class DATA_PT_falloff_curve(DataButtonsPanel, Panel):
     def draw(self, context):
         light = context.light
 
-        self.layout.template_curve_mapping(light, "falloff_curve", use_negative_slope=True)
+        self.layout.template_curve_mapping(
+            light, "falloff_curve", use_negative_slope=True)
 
 
 class DATA_PT_custom_props_light(DataButtonsPanel, PropertyPanel, Panel):
@@ -333,8 +331,8 @@ classes = (
     DATA_PT_EEVEE_light,
     DATA_PT_EEVEE_light_distance,
     DATA_PT_EEVEE_shadow,
-    DATA_PT_EEVEE_shadow_contact,
     DATA_PT_EEVEE_shadow_cascaded_shadow_map,
+    DATA_PT_EEVEE_shadow_contact,
     DATA_PT_area,
     DATA_PT_spot,
     DATA_PT_falloff_curve,

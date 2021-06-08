@@ -14,12 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STEERABLE_VIEW_MAP_H__
-#define __FREESTYLE_STEERABLE_VIEW_MAP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Convenient access to the steerable ViewMap to which any element of the ViewMap belongs to.
+ * \brief Convenient access to the steerable ViewMap to which any element of the ViewMap belongs
+ * to.
  */
 
 #include <map>
@@ -42,8 +42,8 @@ class FEdge;
 class ImagePyramid;
 class GrayImage;
 
-/*! This class checks for every FEdge in which steerable it belongs and stores the mapping allowing to retrieve
- *  this information from the FEdge Id.
+/*! This class checks for every FEdge in which steerable it belongs and stores the mapping
+ *  allowing to retrieve this information from the FEdge Id.
  */
 class SteerableViewMap {
  protected:
@@ -66,8 +66,8 @@ class SteerableViewMap {
   virtual void Reset();
 
   /*! Adds a FEdge to steerable VM.
-   *  Returns the nbOrientations weights corresponding to the FEdge contributions to the nbOrientations
-   *  directional maps.
+   *  Returns the nbOrientations weights corresponding to the FEdge contributions to the
+   *  nbOrientations directional maps.
    */
   double *AddFEdge(FEdge *iFEdge);
 
@@ -78,7 +78,7 @@ class SteerableViewMap {
    *  \param dir:
    *    The direction
    */
-  unsigned getSVMNumber(const Vec2f &dir);
+  unsigned getSVMNumber(Vec2f dir);
 
   /*! Returns the number of the SVM to which a FEdge belongs most.
    *  \param id:
@@ -86,12 +86,14 @@ class SteerableViewMap {
    */
   unsigned getSVMNumber(unsigned id);
 
-  /*! Builds _nbOrientations+1 pyramids of images from the _nbOrientations+1 base images of the steerable viewmap.
+  /*! Builds _nbOrientations+1 pyramids of images from the _nbOrientations+1 base images of the
+   *  steerable viewmap.
    *  \param steerableBases:
    *    The _nbOrientations+1 images constituting the basis for the steerable pyramid.
    *  \param copy:
    *    If false, the data is not duplicated, and Canvas deals with the memory management of these
-   *    _nbOrientations+1 images. If true, data is copied, and it's up to the caller to delete the images.
+   *    _nbOrientations+1 images. If true, data is copied, and it's up to the caller to delete
+   *    the images.
    *  \param iNbLevels:
    *    The number of levels desired for each pyramid.
    *    If iNbLevels == 0, the complete pyramid is built.
@@ -116,13 +118,16 @@ class SteerableViewMap {
    *  \param iLevel:
    *    The level of the pyramid we want to read
    *  \param x:
-   *    The abscissa of the desired pixel specified in level0 coordinate system. The origin is the lower left corner.
+   *    The abscissa of the desired pixel specified in level0 coordinate system.
+   *    The origin is the lower left corner.
    *  \param y:
-   *    The ordinate of the desired pixel specified in level0 coordinate system. The origin is the lower left corner.
+   *    The ordinate of the desired pixel specified in level0 coordinate system.
+   *    The origin is the lower left corner.
    */
   float readSteerableViewMapPixel(unsigned iOrientation, int iLevel, int x, int y);
 
-  /*! Reads a pixel in the one of the level of the pyramid containing the images of the complete ViewMap.
+  /*! Reads a pixel in the one of the level of the pyramid containing the images
+   *  of the complete ViewMap.
    *  Returns a value between 0 and 1.
    *  Equivalent to : readSteerableViewMapPixel(nbOrientations, x, y)
    */
@@ -150,5 +155,3 @@ class SteerableViewMap {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STEERABLE_VIEW_MAP_H__

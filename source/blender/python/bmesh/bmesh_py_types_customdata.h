@@ -21,8 +21,7 @@
  * \ingroup pybmesh
  */
 
-#ifndef __BMESH_PY_TYPES_CUSTOMDATA_H__
-#define __BMESH_PY_TYPES_CUSTOMDATA_H__
+#pragma once
 
 /* all use BPy_BMLayerAccess struct */
 extern PyTypeObject BPy_BMLayerAccessVert_Type;
@@ -39,20 +38,23 @@ extern PyTypeObject BPy_BMLayerItem_Type;
 
 /* all layers for vert/edge/face/loop */
 typedef struct BPy_BMLayerAccess {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   char htype;
 } BPy_BMLayerAccess;
 
 /* access different layer types deform/uv/vertexcolor */
 typedef struct BPy_BMLayerCollection {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   char htype;
   int type; /* customdata type - CD_XXX */
 } BPy_BMLayerCollection;
 
 /* access a specific layer directly */
 typedef struct BPy_BMLayerItem {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   char htype;
   int type;  /* customdata type - CD_XXX */
   int index; /* index of this layer type */
@@ -67,5 +69,3 @@ void BPy_BM_init_types_customdata(void);
 /* __getitem__ / __setitem__ */
 PyObject *BPy_BMLayerItem_GetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer);
 int BPy_BMLayerItem_SetItem(BPy_BMElem *py_ele, BPy_BMLayerItem *py_layer, PyObject *value);
-
-#endif /* __BMESH_PY_TYPES_CUSTOMDATA_H__ */

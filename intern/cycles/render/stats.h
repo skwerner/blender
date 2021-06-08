@@ -29,7 +29,7 @@ CCL_NAMESPACE_BEGIN
  * semantic around the units of size, it just should be the same for all
  * entries.
  *
- * This is a generic entry foi all size-related statistics, which helps
+ * This is a generic entry for all size-related statistics, which helps
  * avoiding duplicating code for things like sorting.
  */
 class NamedSizeEntry {
@@ -39,6 +39,15 @@ class NamedSizeEntry {
 
   string name;
   size_t size;
+};
+
+class NamedTimeEntry {
+ public:
+  NamedTimeEntry();
+  NamedTimeEntry(const string &name, double time);
+
+  string name;
+  double time;
 };
 
 /* Container of named size entries. Used, for example, to store per-mesh memory
@@ -62,6 +71,35 @@ class NamedSizeStats {
    * makes sure all accumulating  values are properly updated.
    */
   vector<NamedSizeEntry> entries;
+};
+
+class NamedTimeStats {
+ public:
+  NamedTimeStats();
+
+  /* Add entry to the statistics. */
+  void add_entry(const NamedTimeEntry &entry)
+  {
+    total_time += entry.time;
+    entries.push_back(entry);
+  }
+
+  /* Generate full human-readable report. */
+  string full_report(int indent_level = 0);
+
+  /* Total time of all entries. */
+  double total_time;
+
+  /* NOTE: Is fine to read directly, but for adding use add_entry(), which
+   * makes sure all accumulating  values are properly updated.
+   */
+  vector<NamedTimeEntry> entries;
+
+  void clear()
+  {
+    total_time = 0.0;
+    entries.clear();
+  }
 };
 
 class NamedNestedSampleStats {
@@ -153,6 +191,39 @@ class RenderStats {
   NamedNestedSampleStats kernel;
   NamedSampleCountStats shaders;
   NamedSampleCountStats objects;
+};
+
+class UpdateTimeStats {
+ public:
+  /* Generate full human-readable report. */
+  string full_report(int indent_level = 0);
+
+  NamedTimeStats times;
+};
+
+class SceneUpdateStats {
+ public:
+  SceneUpdateStats();
+
+  UpdateTimeStats geometry;
+  UpdateTimeStats image;
+  UpdateTimeStats light;
+  UpdateTimeStats object;
+  UpdateTimeStats background;
+  UpdateTimeStats bake;
+  UpdateTimeStats camera;
+  UpdateTimeStats film;
+  UpdateTimeStats integrator;
+  UpdateTimeStats osl;
+  UpdateTimeStats particles;
+  UpdateTimeStats scene;
+  UpdateTimeStats svm;
+  UpdateTimeStats tables;
+  UpdateTimeStats procedurals;
+
+  string full_report();
+
+  void clear();
 };
 
 CCL_NAMESPACE_END

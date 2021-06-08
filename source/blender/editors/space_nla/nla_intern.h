@@ -21,8 +21,7 @@
  * \ingroup spnla
  */
 
-#ifndef __NLA_INTERN_H__
-#define __NLA_INTERN_H__
+#pragma once
 
 /* internal exports only */
 
@@ -32,21 +31,18 @@
 /* **************************************** */
 /* space_nla.c / nla_buttons.c */
 
-ARegion *nla_has_buttons_region(ScrArea *sa);
-
 bool nla_panel_context(const bContext *C,
                        PointerRNA *adt_ptr,
                        PointerRNA *nlt_ptr,
                        PointerRNA *strip_ptr);
 
 void nla_buttons_register(ARegionType *art);
-void NLA_OT_properties(wmOperatorType *ot);
 
 /* **************************************** */
 /* nla_draw.c */
 
-void draw_nla_main_data(bAnimContext *ac, SpaceNla *snla, ARegion *ar);
-void draw_nla_channel_list(const bContext *C, bAnimContext *ac, ARegion *ar);
+void draw_nla_main_data(bAnimContext *ac, SpaceNla *snla, ARegion *region);
+void draw_nla_channel_list(const bContext *C, bAnimContext *ac, ARegion *region);
 
 /* **************************************** */
 /* nla_select.c */
@@ -152,5 +148,3 @@ bool nlaedit_is_tweakmode_on(bAnimContext *ac);
 
 void nla_operatortypes(void);
 void nla_keymap(wmKeyConfig *keyconf);
-
-#endif /* __NLA_INTERN_H__ */

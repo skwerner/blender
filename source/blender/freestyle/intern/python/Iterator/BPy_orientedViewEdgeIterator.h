@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_ORIENTEDVIEWEDGEITERATOR_H__
-#define __FREESTYLE_PYTHON_ORIENTEDVIEWEDGEITERATOR_H__
+#pragma once
 
 #include "../BPy_Iterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject orientedViewEdgeIterator_Type;
 /*---------------------------Python BPy_orientedViewEdgeIterator structure definition----------*/
 typedef struct {
   BPy_Iterator py_it;
-  ViewVertexInternal::orientedViewEdgeIterator *ove_it;
+  Freestyle::ViewVertexInternal::orientedViewEdgeIterator *ove_it;
   bool reversed;
   bool at_start;
 } BPy_orientedViewEdgeIterator;
@@ -49,5 +48,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_ORIENTEDVIEWEDGEITERATOR_H__ */

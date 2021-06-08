@@ -17,7 +17,7 @@
 /** \file
  * \ingroup pythonintern
  *
- * This file inserts an exit callback into pythons 'atexit' module.
+ * This file inserts an exit callback into Python's 'atexit' module.
  * Without this sys.exit() can crash because blender is not properly closing
  * resources.
  */
@@ -26,23 +26,23 @@
 
 #include "BLI_utildefines.h"
 
-#include "bpy_capi_utils.h"
 #include "bpy.h" /* own include */
+#include "bpy_capi_utils.h"
 
 #include "WM_api.h"
 
 static PyObject *bpy_atexit(PyObject *UNUSED(self), PyObject *UNUSED(args), PyObject *UNUSED(kw))
 {
   /* close down enough of blender at least not to crash */
-  struct bContext *C = BPy_GetContext();
+  struct bContext *C = BPY_context_get();
 
-  WM_exit_ext(C, 0);
+  WM_exit_ex(C, false);
 
   Py_RETURN_NONE;
 }
 
 static PyMethodDef meth_bpy_atexit = {"bpy_atexit", (PyCFunction)bpy_atexit, METH_NOARGS, NULL};
-static PyObject *func_bpy_atregister = NULL; /* borrowed referebce, atexit holds */
+static PyObject *func_bpy_atregister = NULL; /* borrowed reference, `atexit` holds. */
 
 static void atexit_func_call(const char *func_name, PyObject *atexit_func_arg)
 {

@@ -22,20 +22,18 @@
  *
  * A general (pointer -> pointer) chaining hash table
  * for 'Abstract Data Types' (known as an ADT Hash Table).
- *
- * \note edgehash.c is based on this, make sure they stay in sync.
  */
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdarg.h>
 #include <limits.h>
+#include <stdarg.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_mempool.h"
 #include "BLI_sys_types.h" /* for intptr_t support */
 #include "BLI_utildefines.h"
-#include "BLI_mempool.h"
 
 #define GHASH_INTERNAL_API
 #include "BLI_ghash.h" /* own include */
@@ -73,7 +71,8 @@ BLI_STATIC_ASSERT(ARRAY_SIZE(hashsizes) == GHASH_MAX_SIZE, "Invalid 'hashsizes' 
 /**
  * \note Max load #GHASH_LIMIT_GROW used to be 3. (pre 2.74).
  * Python uses 0.6666, tommyhashlib even goes down to 0.5.
- * Reducing our from 3 to 0.75 gives huge speedup (about twice quicker pure GHash insertions/lookup,
+ * Reducing our from 3 to 0.75 gives huge speedup
+ * (about twice quicker pure GHash insertions/lookup,
  * about 25% - 30% quicker 'dynamic-topology' stroke drawing e.g.).
  * Min load #GHASH_LIMIT_SHRINK is a quarter of max load, to avoid resizing to quickly.
  */
@@ -219,8 +218,8 @@ static void ghash_buckets_resize(GHash *gh, const uint nbuckets)
     if (nbuckets > nbuckets_old) {
       for (i = 0; i < nbuckets_old; i++) {
         for (Entry *e = buckets_old[i], *e_next; e; e = e_next) {
-          const unsigned hash = ghash_entryhash(gh, e);
-          const unsigned bucket_index = ghash_bucket_index(gh, hash);
+          const uint hash = ghash_entryhash(gh, e);
+          const uint bucket_index = ghash_bucket_index(gh, hash);
           e_next = e->next;
           e->next = buckets_new[bucket_index];
           buckets_new[bucket_index] = e;
@@ -231,8 +230,8 @@ static void ghash_buckets_resize(GHash *gh, const uint nbuckets)
       for (i = 0; i < nbuckets_old; i++) {
 #ifdef GHASH_USE_MODULO_BUCKETS
         for (Entry *e = buckets_old[i], *e_next; e; e = e_next) {
-          const unsigned hash = ghash_entryhash(gh, e);
-          const unsigned bucket_index = ghash_bucket_index(gh, hash);
+          const uint hash = ghash_entryhash(gh, e);
+          const uint bucket_index = ghash_bucket_index(gh, hash);
           e_next = e->next;
           e->next = buckets_new[bucket_index];
           buckets_new[bucket_index] = e;
@@ -240,7 +239,7 @@ static void ghash_buckets_resize(GHash *gh, const uint nbuckets)
 #else
         /* No need to recompute hashes in this case, since our mask is just smaller,
          * all items in old bucket 'i' will go in same new bucket (i & new_mask)! */
-        const unsigned bucket_index = ghash_bucket_index(gh, i);
+        const uint bucket_index = ghash_bucket_index(gh, i);
         BLI_assert(!buckets_old[i] ||
                    (bucket_index == ghash_bucket_index(gh, ghash_entryhash(gh, buckets_old[i]))));
         Entry *e;
@@ -379,7 +378,8 @@ BLI_INLINE void ghash_buckets_reset(GHash *gh, const uint nentries)
 
 /**
  * Internal lookup function.
- * Takes hash and bucket_index arguments to avoid calling #ghash_keyhash and #ghash_bucket_index multiple times.
+ * Takes hash and bucket_index arguments to avoid calling #ghash_keyhash and #ghash_bucket_index
+ * multiple times.
  */
 BLI_INLINE Entry *ghash_lookup_entry_ex(GHash *gh, const void *key, const uint bucket_index)
 {
@@ -397,7 +397,8 @@ BLI_INLINE Entry *ghash_lookup_entry_ex(GHash *gh, const void *key, const uint b
 
 /**
  * Internal lookup function, returns previous entry of target one too.
- * Takes bucket_index argument to avoid calling #ghash_keyhash and #ghash_bucket_index multiple times.
+ * Takes bucket_index argument to avoid calling #ghash_keyhash and #ghash_bucket_index
+ * multiple times.
  * Useful when modifying buckets somehow (like removing an entry...).
  */
 BLI_INLINE Entry *ghash_lookup_entry_prev_ex(GHash *gh,
@@ -451,7 +452,8 @@ static GHash *ghash_new(GHashHashFP hashfp,
 
 /**
  * Internal insert function.
- * Takes hash and bucket_index arguments to avoid calling #ghash_keyhash and #ghash_bucket_index multiple times.
+ * Takes hash and bucket_index arguments to avoid calling #ghash_keyhash and #ghash_bucket_index
+ * multiple times.
  */
 BLI_INLINE void ghash_insert_ex(GHash *gh, void *key, void *val, const uint bucket_index)
 {
@@ -536,10 +538,8 @@ BLI_INLINE bool ghash_insert_safe(GHash *gh,
     }
     return false;
   }
-  else {
-    ghash_insert_ex(gh, key, val, bucket_index);
-    return true;
-  }
+  ghash_insert_ex(gh, key, val, bucket_index);
+  return true;
 }
 
 BLI_INLINE bool ghash_insert_safe_keyonly(GHash *gh,
@@ -562,10 +562,8 @@ BLI_INLINE bool ghash_insert_safe_keyonly(GHash *gh,
     }
     return false;
   }
-  else {
-    ghash_insert_ex_keyonly(gh, key, bucket_index);
-    return true;
-  }
+  ghash_insert_ex_keyonly(gh, key, bucket_index);
+  return true;
 }
 
 /**
@@ -723,7 +721,8 @@ GHash *BLI_ghash_new(GHashHashFP hashfp, GHashCmpFP cmpfp, const char *info)
 }
 
 /**
- * Copy given GHash. Keys and values are also copied if relevant callback is provided, else pointers remain the same.
+ * Copy given GHash. Keys and values are also copied if relevant callback is provided,
+ * else pointers remain the same.
  */
 GHash *BLI_ghash_copy(GHash *gh, GHashKeyCopyFP keycopyfp, GHashValCopyFP valcopyfp)
 {
@@ -775,7 +774,7 @@ bool BLI_ghash_reinsert(
 /**
  * Replaces the key of an item in the \a gh.
  *
- * Use when a key is re-allocated or it's memory location is changed.
+ * Use when a key is re-allocated or its memory location is changed.
  *
  * \returns The previous key or NULL if not found, the caller may free if it's needed.
  */
@@ -789,9 +788,7 @@ void *BLI_ghash_replace_key(GHash *gh, void *key)
     e->e.key = key;
     return key_prev;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /**
@@ -881,7 +878,7 @@ bool BLI_ghash_ensure_p_ex(GHash *gh, const void *key, void ***r_key, void ***r_
   const bool haskey = (e != NULL);
 
   if (!haskey) {
-    /* pass 'key' incase we resize */
+    /* Pass 'key' in case we resize. */
     e = BLI_mempool_alloc(gh->entrypool);
     ghash_insert_ex_keyonly_entry(gh, (void *)key, bucket_index, (Entry *)e);
     e->e.key = NULL; /* caller must re-assign */
@@ -912,9 +909,7 @@ bool BLI_ghash_remove(GHash *gh,
     BLI_mempool_free(gh->entrypool, e);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 /* same as above but return the value,
@@ -937,9 +932,7 @@ void *BLI_ghash_popkey(GHash *gh, const void *key, GHashKeyFreeFP keyfreefp)
     BLI_mempool_free(gh->entrypool, e);
     return val;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /**
@@ -951,7 +944,8 @@ bool BLI_ghash_haskey(GHash *gh, const void *key)
 }
 
 /**
- * Remove a random entry from \a gh, returning true if a key/value pair could be removed, false otherwise.
+ * Remove a random entry from \a gh, returning true
+ * if a key/value pair could be removed, false otherwise.
  *
  * \param r_key: The removed key.
  * \param r_val: The removed value.
@@ -971,10 +965,9 @@ bool BLI_ghash_pop(GHash *gh, GHashIterState *state, void **r_key, void **r_val)
     BLI_mempool_free(gh->entrypool, e);
     return true;
   }
-  else {
-    *r_key = *r_val = NULL;
-    return false;
-  }
+
+  *r_key = *r_val = NULL;
+  return false;
 }
 
 /**
@@ -1052,7 +1045,7 @@ void BLI_ghash_flag_clear(GHash *gh, uint flag)
  * #BLI_ghash_len(gh) times before becoming done.
  *
  * \param gh: The GHash to iterate over.
- * \return Pointer to a new DynStr.
+ * \return Pointer to a new iterator.
  */
 GHashIterator *BLI_ghashIterator_new(GHash *gh)
 {
@@ -1183,7 +1176,7 @@ bool BLI_gset_ensure_p_ex(GSet *gs, const void *key, void ***r_key)
   const bool haskey = (e != NULL);
 
   if (!haskey) {
-    /* pass 'key' incase we resize */
+    /* Pass 'key' in case we resize */
     e = BLI_mempool_alloc(((GHash *)gs)->entrypool);
     ghash_insert_ex_keyonly_entry((GHash *)gs, (void *)key, bucket_index, (Entry *)e);
     e->key = NULL; /* caller must re-assign */
@@ -1242,10 +1235,9 @@ bool BLI_gset_pop(GSet *gs, GSetIterState *state, void **r_key)
     BLI_mempool_free(((GHash *)gs)->entrypool, e);
     return true;
   }
-  else {
-    *r_key = NULL;
-    return false;
-  }
+
+  *r_key = NULL;
+  return false;
 }
 
 void BLI_gset_clear_ex(GSet *gs, GSetKeyFreeFP keyfreefp, const uint nentries_reserve)
@@ -1305,9 +1297,7 @@ void *BLI_gset_pop_key(GSet *gs, const void *key)
     BLI_mempool_free(((GHash *)gs)->entrypool, e);
     return key_ret;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 /** \} */
@@ -1332,7 +1322,8 @@ int BLI_gset_buckets_len(GSet *gs)
 
 /**
  * Measure how well the hash function performs (1.0 is approx as good as random distribution),
- * and return a few other stats like load, variance of the distribution of the entries in the buckets, etc.
+ * and return a few other stats like load,
+ * variance of the distribution of the entries in the buckets, etc.
  *
  * Smaller is better!
  */

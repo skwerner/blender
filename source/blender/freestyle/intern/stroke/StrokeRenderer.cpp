@@ -35,15 +35,9 @@ namespace Freestyle {
 /*                                */
 /**********************************/
 
-TextureManager *StrokeRenderer::_textureManager = 0;
+TextureManager *StrokeRenderer::_textureManager = nullptr;
 
-StrokeRenderer::StrokeRenderer()
-{
-}
-
-StrokeRenderer::~StrokeRenderer()
-{
-}
+StrokeRenderer::~StrokeRenderer() = default;
 
 bool StrokeRenderer::loadTextures()
 {
@@ -59,7 +53,7 @@ bool StrokeRenderer::loadTextures()
 /*                                */
 /**********************************/
 
-TextureManager *TextureManager::_pInstance = 0;
+TextureManager *TextureManager::_pInstance = nullptr;
 
 string TextureManager::_patterns_path;
 
@@ -74,34 +68,35 @@ TextureManager::TextureManager()
 
 TextureManager::~TextureManager()
 {
-  if (!_brushesMap.empty())
+  if (!_brushesMap.empty()) {
     _brushesMap.clear();
-  _pInstance = 0;
+  }
+  _pInstance = nullptr;
 }
 
 void TextureManager::load()
 {
-  if (_hasLoadedTextures)
+  if (_hasLoadedTextures) {
     return;
+  }
   loadStandardBrushes();
   _hasLoadedTextures = true;
 }
 
-unsigned TextureManager::getBrushTextureIndex(string name, Stroke::MediumType loadingMode)
+unsigned TextureManager::getBrushTextureIndex(string name, Stroke::MediumType iType)
 {
-  BrushTexture bt(name, loadingMode);
+  BrushTexture bt(name, iType);
   brushesMap::iterator b = _brushesMap.find(bt);
   if (b == _brushesMap.end()) {
-    unsigned texId = loadBrush(name, loadingMode);
+    unsigned texId = loadBrush(name, iType);
     _brushesMap[bt] = texId;
     return texId;
     // XXX!
     cerr << "brush file " << name << " not found" << endl;
     return 0;
   }
-  else {
-    return _brushesMap[bt];
-  }
+
+  return _brushesMap[bt];
 }
 
 void TextureManager::Options::setPatternsPath(const string &path)

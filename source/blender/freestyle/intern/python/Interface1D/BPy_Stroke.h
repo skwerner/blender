@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_STROKE_H__
-#define __FREESTYLE_PYTHON_STROKE_H__
+#pragma once
 
 #include "../BPy_Interface1D.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject Stroke_Type;
 /*---------------------------Python BPy_Stroke structure definition----------*/
 typedef struct {
   BPy_Interface1D py_if1D;
-  Stroke *s;
+  Freestyle::Stroke *s;
 } BPy_Stroke;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_STROKE_H__ */

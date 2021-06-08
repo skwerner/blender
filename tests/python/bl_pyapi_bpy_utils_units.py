@@ -37,13 +37,13 @@ class UnitsTesting(unittest.TestCase):
         ('IMPERIAL', 'LENGTH', 3, False, False, 0.3048, "1'"),
         ('IMPERIAL', 'LENGTH', 3, False, True, 0.3048, "1ft"),
         ('IMPERIAL', 'LENGTH', 4, True, False, 0.3048 * 2 + 0.0254 * 5.5, "2' 5.5\""),
-        ('IMPERIAL', 'LENGTH', 3, False, False, 1609.344 * 1e6, "1000000mi"),
-        ('IMPERIAL', 'LENGTH', 6, False, False, 1609.344 * 1e6, "1000000mi"),
-        ('METRIC', 'LENGTH', 3, True, False, 1000 * 2 + 0.001 * 15, "2km 2cm"),
-        ('METRIC', 'LENGTH', 5, True, False, 1234.56789, "1km 234.6m"),
-        ('METRIC', 'LENGTH', 6, True, False, 1234.56789, "1km 234.57m"),
-        ('METRIC', 'LENGTH', 9, False, False, 1234.56789, "1.234568km"),
-        ('METRIC', 'LENGTH', 9, True, False, 1000.000123456789, "1km 0.123mm"),
+        ('IMPERIAL', 'LENGTH', 3, False, False, 1609.344 * 1e6, "1000000 mi"),
+        ('IMPERIAL', 'LENGTH', 6, False, False, 1609.344 * 1e6, "1000000 mi"),
+        ('METRIC', 'LENGTH', 3, True, False, 1000 * 2 + 0.001 * 15, "2 km 2 cm"),
+        ('METRIC', 'LENGTH', 5, True, False, 1234.56789, "1 km 234.6 m"),
+        ('METRIC', 'LENGTH', 6, True, False, 1234.56789, "1 km 234.57 m"),
+        ('METRIC', 'LENGTH', 9, False, False, 1234.56789, "1.234568 km"),
+        ('METRIC', 'LENGTH', 9, True, False, 1000.000123456789, "1 km 0.123 mm"),
     )
 
     def test_units_inputs(self):
@@ -54,7 +54,7 @@ class UnitsTesting(unittest.TestCase):
             return ((abs(v1 - v2) / max(abs(v1), abs(v2))) <= e)
 
         for usys, utype, ref, inpt, val in self.INPUT_TESTS:
-            opt_val = units.to_value(usys, utype, inpt, ref)
+            opt_val = units.to_value(usys, utype, inpt, str_ref_unit=ref)
             # Note: almostequal is not good here, precision is fixed on decimal digits, not variable with
             # magnitude of numbers (i.e. 1609.4416 ~= 1609.4456 fails even at 5 of 'places'...).
             self.assertTrue(similar_values(opt_val, val, 1e-7),
@@ -63,7 +63,7 @@ class UnitsTesting(unittest.TestCase):
 
     def test_units_outputs(self):
         for usys, utype, prec, sep, compat, val, output in self.OUTPUT_TESTS:
-            opt_str = units.to_string(usys, utype, val, prec, sep, compat)
+            opt_str = units.to_string(usys, utype, val, precision=prec, split_unit=sep, compatible_unit=compat)
             self.assertEqual(
                 opt_str, output,
                 msg=(

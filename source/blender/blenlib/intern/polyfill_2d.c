@@ -43,11 +43,11 @@
  * No globals - keep threadsafe.
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "BLI_memarena.h"
 #include "BLI_alloca.h"
+#include "BLI_memarena.h"
 
 #include "BLI_polyfill_2d.h" /* own include */
 
@@ -85,7 +85,7 @@ typedef signed char eSign;
  * This is a single purpose KDTree based on BLI_kdtree with some modifications
  * to better suit polyfill2d.
  * - #KDTreeNode2D is kept small (only 16 bytes),
- *   by not storing coords in the nodes and using index values rather then pointers
+ *   by not storing coords in the nodes and using index values rather than pointers
  *   to reference neg/pos values.
  *
  * - #kdtree2d_isect_tri is the only function currently used.
@@ -177,12 +177,11 @@ BLI_INLINE eSign signum_enum(float a)
   if (UNLIKELY(a == 0.0f)) {
     return 0;
   }
-  else if (a > 0.0f) {
+  if (a > 0.0f) {
     return 1;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 /**
@@ -193,7 +192,10 @@ BLI_INLINE eSign signum_enum(float a)
  */
 BLI_INLINE float area_tri_signed_v2_alt_2x(const float v1[2], const float v2[2], const float v3[2])
 {
-  return ((v1[0] * (v2[1] - v3[1])) + (v2[0] * (v3[1] - v1[1])) + (v3[0] * (v1[1] - v2[1])));
+  float d2[2], d3[2];
+  sub_v2_v2v2(d2, v2, v1);
+  sub_v2_v2v2(d3, v3, v1);
+  return (d2[0] * d3[1]) - (d3[0] * d2[1]);
 }
 
 static eSign span_tri_v2_sign(const float v1[2], const float v2[2], const float v3[2])
@@ -247,11 +249,11 @@ static uint kdtree2d_balance_recursive(
   if (totnode <= 0) {
     return KDNODE_UNSET;
   }
-  else if (totnode == 1) {
+  if (totnode == 1) {
     return 0 + ofs;
   }
 
-  /* quicksort style sorting around median */
+  /* Quick-sort style sorting around median. */
   neg = 0;
   pos = totnode - 1;
   median = totnode / 2;
@@ -282,7 +284,7 @@ static uint kdtree2d_balance_recursive(
     }
   }
 
-  /* set node and sort subnodes */
+  /* Set node and sort sub-nodes. */
   node = &nodes[median];
   node->axis = axis;
   axis = !axis;
@@ -327,9 +329,8 @@ static void kdtree2d_node_remove(struct KDTree2D *tree, uint index)
   if (node_index == KDNODE_UNSET) {
     return;
   }
-  else {
-    tree->nodes_map[index] = KDNODE_UNSET;
-  }
+
+  tree->nodes_map[index] = KDNODE_UNSET;
 
   node = &tree->nodes[node_index];
   tree->totnode -= 1;
@@ -718,7 +719,7 @@ static bool pf_ear_tip_check(PolyFill *pf, PolyIndex *pi_ear_tip)
        * the area sign will be positive if the point is strictly inside.
        * It will be 0 on the edge, which we want to include as well. */
 
-      /* note: check (v3, v1) first since it fails _far_ more often then the other 2 checks
+      /* note: check (v3, v1) first since it fails _far_ more often than the other 2 checks
        * (those fail equally).
        * It's logical - the chance is low that points exist on the
        * same side as the ear we're clipping off. */
@@ -780,7 +781,7 @@ static void polyfill_prepare(PolyFill *pf,
     coords_sign = (cross_poly_v2(coords, coords_tot) >= 0.0f) ? 1 : -1;
   }
   else {
-    /* check we're passing in correcty args */
+    /* check we're passing in correct args */
 #ifdef USE_STRICT_ASSERT
 #  ifndef NDEBUG
     if (coords_sign == 1) {
@@ -906,6 +907,19 @@ void BLI_polyfill_calc(const float (*coords)[2],
                        const int coords_sign,
                        uint (*r_tris)[3])
 {
+  /* Fallback to heap memory for large allocations.
+   * Avoid running out of stack memory on systems with 512kb stack (macOS).
+   * This happens at around 13,000 points, use a much lower value to be safe. */
+  if (UNLIKELY(coords_tot > 8192)) {
+    /* The buffer size only accounts for the index allocation,
+     * worst case we do two allocations when concave, while we should try to be efficient,
+     * any caller that relies on this frequently should use #BLI_polyfill_calc_arena directly. */
+    MemArena *arena = BLI_memarena_new(sizeof(PolyIndex) * coords_tot, __func__);
+    BLI_polyfill_calc_arena(coords, coords_tot, coords_sign, r_tris, arena);
+    BLI_memarena_free(arena);
+    return;
+  }
+
   PolyFill pf;
   PolyIndex *indices = BLI_array_alloca(indices, coords_tot);
 

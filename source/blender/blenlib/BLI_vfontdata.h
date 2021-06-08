@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_VFONTDATA_H__
-#define __BLI_VFONTDATA_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -27,6 +26,10 @@
  */
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct PackedFile;
 struct VFont;
@@ -52,4 +55,6 @@ VFontData *BLI_vfontdata_copy(const VFontData *vfont_src, const int flag);
 VChar *BLI_vfontchar_from_freetypefont(struct VFont *vfont, unsigned long character);
 VChar *BLI_vfontchar_copy(const VChar *vchar_src, const int flag);
 
+#ifdef __cplusplus
+}
 #endif

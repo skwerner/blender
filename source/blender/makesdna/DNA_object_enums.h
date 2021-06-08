@@ -20,10 +20,13 @@
  * Enums typedef's for use in public headers.
  */
 
-#ifndef __DNA_OBJECT_ENUMS_H__
-#define __DNA_OBJECT_ENUMS_H__
+#pragma once
 
-/* Object.mode */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** #Object.mode */
 typedef enum eObjectMode {
   OB_MODE_OBJECT = 0,
   OB_MODE_EDIT = 1 << 0,
@@ -37,20 +40,42 @@ typedef enum eObjectMode {
   OB_MODE_PAINT_GPENCIL = 1 << 8,
   OB_MODE_SCULPT_GPENCIL = 1 << 9,
   OB_MODE_WEIGHT_GPENCIL = 1 << 10,
+  OB_MODE_VERTEX_GPENCIL = 1 << 11,
 } eObjectMode;
 
-/* Any mode where the brush system is used. */
+/** #Object.dt, #View3DShading.type */
+typedef enum eDrawType {
+  OB_BOUNDBOX = 1,
+  OB_WIRE = 2,
+  OB_SOLID = 3,
+  OB_MATERIAL = 4,
+  OB_TEXTURE = 5,
+  OB_RENDER = 6,
+} eDrawType;
+
+/** Any mode where the brush system is used. */
 #define OB_MODE_ALL_PAINT \
   (OB_MODE_SCULPT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_TEXTURE_PAINT)
 
 #define OB_MODE_ALL_PAINT_GPENCIL \
-  (OB_MODE_PAINT_GPENCIL | OB_MODE_SCULPT_GPENCIL | OB_MODE_WEIGHT_GPENCIL)
+  (OB_MODE_PAINT_GPENCIL | OB_MODE_SCULPT_GPENCIL | OB_MODE_WEIGHT_GPENCIL | \
+   OB_MODE_VERTEX_GPENCIL)
 
-/* Any mode that uses Object.sculpt. */
+/** Any mode that uses Object.sculpt. */
 #define OB_MODE_ALL_SCULPT (OB_MODE_SCULPT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT)
 
-/* Any mode that has data we need to free when switching modes, see: #ED_object_mode_generic_exit */
-#define OB_MODE_ALL_MODE_DATA \
-  (OB_MODE_EDIT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_SCULPT | OB_MODE_POSE)
+/** Any mode that uses weightpaint. */
+#define OB_MODE_ALL_WEIGHT_PAINT (OB_MODE_WEIGHT_PAINT | OB_MODE_WEIGHT_GPENCIL)
 
-#endif /* __DNA_OBJECT_ENUMS_H__ */
+/**
+ * Any mode that has data or for Grease Pencil modes, we need to free when switching modes,
+ * see: #ED_object_mode_generic_exit
+ */
+#define OB_MODE_ALL_MODE_DATA \
+  (OB_MODE_EDIT | OB_MODE_VERTEX_PAINT | OB_MODE_WEIGHT_PAINT | OB_MODE_SCULPT | OB_MODE_POSE | \
+   OB_MODE_PAINT_GPENCIL | OB_MODE_EDIT_GPENCIL | OB_MODE_SCULPT_GPENCIL | \
+   OB_MODE_WEIGHT_GPENCIL | OB_MODE_VERTEX_GPENCIL)
+
+#ifdef __cplusplus
+}
+#endif

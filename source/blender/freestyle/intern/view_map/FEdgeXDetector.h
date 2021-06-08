@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_FEDGE_X_DETECTOR_H__
-#define __FREESTYLE_FEDGE_X_DETECTOR_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -74,31 +73,34 @@ class FEdgeXDetector {
   virtual void processShapes(WingedEdge &);
 
   // GENERAL STUFF
-  virtual void preProcessShape(WXShape *iShape);
+  virtual void preProcessShape(WXShape *iWShape);
   virtual void preProcessFace(WXFace *iFace);
   virtual void computeCurvatures(WXVertex *iVertex);
 
   // SILHOUETTE
-  virtual void processSilhouetteShape(WXShape *iShape);
+  virtual void processSilhouetteShape(WXShape *iWShape);
   virtual void ProcessSilhouetteFace(WXFace *iFace);
   virtual void ProcessSilhouetteEdge(WXEdge *iEdge);
 
   // CREASE
-  virtual void processCreaseShape(WXShape *iShape);
+  virtual void processCreaseShape(WXShape *iWShape);
   virtual void ProcessCreaseEdge(WXEdge *iEdge);
 
   /*! Sets the minimum angle for detecting crease edges
    *  \param angle:
-   *    The angular threshold in degrees (between 0 and 180) for detecting crease edges. An edge is considered
-   *    a crease edge if the angle between two faces sharing the edge is smaller than the given threshold.
+   *    The angular threshold in degrees (between 0 and 180) for detecting crease edges. An edge is
+   * considered a crease edge if the angle between two faces sharing the edge is smaller than the
+   * given threshold.
    */
   // XXX angle should be in radian...
   inline void setCreaseAngle(float angle)
   {
-    if (angle < 0.0)
+    if (angle < 0.0) {
       angle = 0.0;
-    else if (angle > 180.0)
+    }
+    else if (angle > 180.0) {
       angle = 180.0;
+    }
     angle = cos(M_PI * (180.0 - angle) / 180.0);
     if (angle != _creaseAngle) {
       _creaseAngle = angle;
@@ -107,15 +109,15 @@ class FEdgeXDetector {
   }
 
   // BORDER
-  virtual void processBorderShape(WXShape *iShape);
+  virtual void processBorderShape(WXShape *iWShape);
   virtual void ProcessBorderEdge(WXEdge *iEdge);
 
   // RIDGES AND VALLEYS
-  virtual void processRidgesAndValleysShape(WXShape *iShape);
+  virtual void processRidgesAndValleysShape(WXShape *iWShape);
   virtual void ProcessRidgeFace(WXFace *iFace);
 
   // SUGGESTIVE CONTOURS
-  virtual void processSuggestiveContourShape(WXShape *iShape);
+  virtual void processSuggestiveContourShape(WXShape *iWShape);
   virtual void ProcessSuggestiveContourFace(WXFace *iFace);
   virtual void postProcessSuggestiveContourShape(WXShape *iShape);
   virtual void postProcessSuggestiveContourFace(WXFace *iFace);
@@ -209,9 +211,9 @@ class FEdgeXDetector {
  protected:
   Vec3f _Viewpoint;
 #if 0
-  real _bbox_diagonal; // diagonal of the current processed shape bbox
+  real _bbox_diagonal;  // diagonal of the current processed shape bbox
 #endif
-  //oldtmp values
+  // oldtmp values
   bool _computeViewIndependent;
   real _meanK1;
   real _meanKr;
@@ -243,5 +245,3 @@ class FEdgeXDetector {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_FEDGE_X_DETECTOR_H__

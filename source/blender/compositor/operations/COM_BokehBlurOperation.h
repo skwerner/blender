@@ -16,11 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_BOKEHBLUROPERATION_H__
-#define __COM_BOKEHBLUROPERATION_H__
+#pragma once
 
 #include "COM_NodeOperation.h"
 #include "COM_QualityStepHelper.h"
+
+namespace blender::compositor {
 
 class BokehBlurOperation : public NodeOperation, public QualityStepHelper {
  private:
@@ -38,25 +39,25 @@ class BokehBlurOperation : public NodeOperation, public QualityStepHelper {
  public:
   BokehBlurOperation();
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
   void setSize(float size)
   {
@@ -68,14 +69,16 @@ class BokehBlurOperation : public NodeOperation, public QualityStepHelper {
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp) override;
 
   void setExtendBounds(bool extend_bounds)
   {
     this->m_extend_bounds = extend_bounds;
   }
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 };
-#endif
+
+}  // namespace blender::compositor

@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_VIEWEDGE_H__
-#define __FREESTYLE_PYTHON_VIEWEDGE_H__
+#pragma once
 
 #include "../BPy_Interface1D.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject ViewEdge_Type;
 /*---------------------------Python BPy_ViewEdge structure definition----------*/
 typedef struct {
   BPy_Interface1D py_if1D;
-  ViewEdge *ve;
+  Freestyle::ViewEdge *ve;
 } BPy_ViewEdge;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_VIEWEDGE_H__ */

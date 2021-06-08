@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_UNARYFUNCTION1DUNSIGNED_H__
-#define __FREESTYLE_PYTHON_UNARYFUNCTION1DUNSIGNED_H__
+#pragma once
 
 #include "../BPy_UnaryFunction1D.h"
 
@@ -37,7 +36,7 @@ extern PyTypeObject UnaryFunction1DUnsigned_Type;
 /*---------------------------Python BPy_UnaryFunction1DUnsigned structure definition----------*/
 typedef struct {
   BPy_UnaryFunction1D py_uf1D;
-  UnaryFunction1D<unsigned int> *uf1D_unsigned;
+  Freestyle::UnaryFunction1D<unsigned int> *uf1D_unsigned;
 } BPy_UnaryFunction1DUnsigned;
 
 /*---------------------------Python BPy_UnaryFunction1DUnsigned visible prototypes-----------*/
@@ -48,5 +47,3 @@ int UnaryFunction1DUnsigned_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_UNARYFUNCTION1DUNSIGNED_H__ */

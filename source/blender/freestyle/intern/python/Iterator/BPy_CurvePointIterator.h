@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_CURVEPOINTITERATOR_H__
-#define __FREESTYLE_PYTHON_CURVEPOINTITERATOR_H__
+#pragma once
 
 #include "../BPy_Iterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject CurvePointIterator_Type;
 /*---------------------------Python BPy_CurvePointIterator structure definition----------*/
 typedef struct {
   BPy_Iterator py_it;
-  CurveInternal::CurvePointIterator *cp_it;
+  Freestyle::CurveInternal::CurvePointIterator *cp_it;
 } BPy_CurvePointIterator;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -47,5 +46,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_CURVEPOINTITERATOR_H__ */

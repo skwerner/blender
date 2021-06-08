@@ -15,7 +15,6 @@
  *
  * The Original Code is Copyright (C) 2006 Blender Foundation.
  * All rights reserved.
-
  */
 
 /** \file
@@ -27,8 +26,8 @@
 /* **************** Bokeh image Tools  ******************** */
 
 static bNodeSocketTemplate cmp_node_bokehimage_out[] = {
-    {SOCK_RGBA, 0, N_("Image"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static void node_composit_init_bokehimage(bNodeTree *UNUSED(ntree), bNode *node)

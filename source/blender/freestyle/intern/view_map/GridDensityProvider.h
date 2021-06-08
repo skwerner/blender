@@ -14,17 +14,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_GRID_DENSITY_PROVIDER_H__
-#define __FREESTYLE_GRID_DENSITY_PROVIDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  * \brief Class to define a cell grid surrounding the projected image of a scene
  */
 
-#include <stdexcept>
 #include <algorithm>
 #include <memory>
+#include <stdexcept>
 
 #include "AutoPtrHelper.h"
 #include "OccluderSource.h"
@@ -110,7 +109,8 @@ class GridDensityProvider {
     Vec3r p6 = transform(Vec3r(xM, ym, zM));
     Vec3r p7 = transform(Vec3r(xM, yM, zm));
     Vec3r p8 = transform(Vec3r(xM, yM, zM));
-    // Determine the proscenium face according to the min and max values of the transformed x and y coordinates
+    // Determine the proscenium face according to the min and max values of the transformed x and y
+    // coordinates
     proscenium[0] = std::min(std::min(std::min(p1.x(), p2.x()), std::min(p3.x(), p4.x())),
                              std::min(std::min(p5.x(), p6.x()), std::min(p7.x(), p8.x())));
     proscenium[1] = std::max(std::max(std::max(p1.x(), p2.x()), std::max(p3.x(), p4.x())),
@@ -166,5 +166,3 @@ class GridDensityProviderFactory {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_GRID_DENSITY_PROVIDER_H__

@@ -18,8 +18,8 @@
  * \ingroup pythonintern
  */
 
-#include <Python.h>
 #include "BLI_utildefines.h"
+#include <Python.h>
 
 #include "bpy_app_opensubdiv.h"
 
@@ -32,17 +32,16 @@
 static PyTypeObject BlenderAppOpenSubdivType;
 
 static PyStructSequence_Field app_opensubdiv_info_fields[] = {
-    {(char *)"supported", (char *)("Boolean, True when Blender is built with OpenSubdiv support")},
-    {(char *)("version"), (char *)("The OpenSubdiv version as a tuple of 3 numbers")},
-    {(char *)("version_string"), (char *)("The OpenSubdiv version formatted as a string")},
+    {"supported", "Boolean, True when Blender is built with OpenSubdiv support"},
+    {"version", "The OpenSubdiv version as a tuple of 3 numbers"},
+    {"version_string", "The OpenSubdiv version formatted as a string"},
     {NULL},
 };
 
 static PyStructSequence_Desc app_opensubdiv_info_desc = {
-    (char *)"bpy.app.opensubdiv", /* name */
-    (char
-         *)"This module contains information about OpenSubdiv blender is linked against", /* doc */
-    app_opensubdiv_info_fields, /* fields */
+    "bpy.app.opensubdiv",                                                          /* name */
+    "This module contains information about OpenSubdiv blender is linked against", /* doc */
+    app_opensubdiv_info_fields,                                                    /* fields */
     ARRAY_SIZE(app_opensubdiv_info_fields) - 1,
 };
 
@@ -64,7 +63,7 @@ static PyObject *make_opensubdiv_info(void)
 #define SetObjItem(obj) PyStructSequence_SET_ITEM(opensubdiv_info, pos++, obj)
 
 #ifdef WITH_OPENSUBDIV
-  int curversion = openSubdiv_getVersionHex();
+  const int curversion = openSubdiv_getVersionHex();
   SetObjItem(PyBool_FromLong(1));
   SetObjItem(PyC_Tuple_Pack_I32(curversion / 10000, (curversion / 100) % 100, curversion % 100));
   SetObjItem(PyUnicode_FromFormat(
@@ -75,8 +74,8 @@ static PyObject *make_opensubdiv_info(void)
   SetStrItem("Unknown");
 #endif
 
-  if (PyErr_Occurred()) {
-    Py_CLEAR(opensubdiv_info);
+  if (UNLIKELY(PyErr_Occurred())) {
+    Py_DECREF(opensubdiv_info);
     return NULL;
   }
 
@@ -97,7 +96,7 @@ PyObject *BPY_app_opensubdiv_struct(void)
   /* prevent user from creating new instances */
   BlenderAppOpenSubdivType.tp_init = NULL;
   BlenderAppOpenSubdivType.tp_new = NULL;
-  /* without this we can't do set(sys.modules) [#29635] */
+  /* without this we can't do set(sys.modules) T29635. */
   BlenderAppOpenSubdivType.tp_hash = (hashfunc)_Py_HashPointer;
 
   return ret;

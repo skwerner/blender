@@ -18,8 +18,7 @@
  * \ingroup modifiers
  */
 
-#ifndef __MOD_GPENCIL_MODIFIERTYPES_H__
-#define __MOD_GPENCIL_MODIFIERTYPES_H__
+#pragma once
 
 #include "BKE_gpencil_modifier.h"
 
@@ -36,14 +35,16 @@ extern GpencilModifierTypeInfo modifierType_Gpencil_Array;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Build;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Opacity;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Lattice;
+extern GpencilModifierTypeInfo modifierType_Gpencil_Length;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Mirror;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Smooth;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Hook;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Offset;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Armature;
 extern GpencilModifierTypeInfo modifierType_Gpencil_Time;
+extern GpencilModifierTypeInfo modifierType_Gpencil_Multiply;
+extern GpencilModifierTypeInfo modifierType_Gpencil_Texture;
+extern GpencilModifierTypeInfo modifierType_Gpencil_Lineart;
 
 /* MOD_gpencil_util.c */
 void gpencil_modifier_type_init(GpencilModifierTypeInfo *types[]);
-
-#endif /* __MOD_GPENCIL_MODIFIERTYPES_H__ */

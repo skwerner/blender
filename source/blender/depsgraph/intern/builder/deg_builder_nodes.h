@@ -31,28 +31,28 @@
 
 #include "DEG_depsgraph.h"
 
-struct Base;
 struct CacheFile;
 struct Camera;
 struct Collection;
 struct FCurve;
-struct GHash;
+struct FreestyleLineSet;
+struct FreestyleLineStyle;
 struct ID;
+struct IDProperty;
 struct Image;
 struct Key;
 struct LayerCollection;
 struct Light;
 struct LightProbe;
 struct ListBase;
-struct MTex;
 struct Main;
 struct Mask;
 struct Material;
 struct MovieClip;
 struct Object;
 struct ParticleSettings;
-struct Probe;
 struct Scene;
+struct Simulation;
 struct Speaker;
 struct Tex;
 struct World;
@@ -60,23 +60,24 @@ struct bAction;
 struct bArmature;
 struct bConstraint;
 struct bGPdata;
+struct bNodeSocket;
 struct bNodeTree;
 struct bPoseChannel;
+struct bSound;
 
-struct PropertyRNA;
-
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct ComponentNode;
 struct Depsgraph;
+class DepsgraphBuilderCache;
 struct IDNode;
-struct Node;
 struct OperationNode;
 struct TimeSourceNode;
 
 class DepsgraphNodeBuilder : public DepsgraphBuilder {
  public:
-  DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph);
+  DepsgraphNodeBuilder(Main *bmain, Depsgraph *graph, DepsgraphBuilderCache *cache);
   ~DepsgraphNodeBuilder();
 
   /* For given original ID get ID which is created by CoW system. */
@@ -97,8 +98,10 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
     return (T *)cow->id.orig_id;
   }
 
-  void begin_build();
-  void end_build();
+  virtual void begin_build();
+  virtual void end_build();
+
+  int foreach_id_cow_detect_need_for_update_callback(ID *id_cow_self, ID *id_pointer);
 
   IDNode *add_id_node(ID *id);
   IDNode *find_id_node(ID *id);
@@ -108,27 +111,27 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
 
   OperationNode *add_operation_node(ComponentNode *comp_node,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
   OperationNode *add_operation_node(ID *id,
                                     NodeType comp_type,
                                     const char *comp_name,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
   OperationNode *add_operation_node(ID *id,
                                     NodeType comp_type,
                                     OperationCode opcode,
-                                    const DepsEvalOperationCb &op = NULL,
+                                    const DepsEvalOperationCb &op = nullptr,
                                     const char *name = "",
                                     int name_tag = -1);
 
   OperationNode *ensure_operation_node(ID *id,
                                        NodeType comp_type,
                                        OperationCode opcode,
-                                       const DepsEvalOperationCb &op = NULL,
+                                       const DepsEvalOperationCb &op = nullptr,
                                        const char *name = "",
                                        int name_tag = -1);
 
@@ -149,62 +152,90 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   OperationNode *find_operation_node(
       ID *id, NodeType comp_type, OperationCode opcode, const char *name = "", int name_tag = -1);
 
-  void build_id(ID *id);
-  void build_layer_collections(ListBase *lb);
-  void build_view_layer(Scene *scene,
-                        ViewLayer *view_layer,
-                        eDepsNode_LinkedState_Type linked_state);
-  void build_collection(LayerCollection *from_layer_collection, Collection *collection);
-  void build_object(int base_index,
-                    Object *object,
-                    eDepsNode_LinkedState_Type linked_state,
-                    bool is_visible);
-  void build_object_flags(int base_index, Object *object, eDepsNode_LinkedState_Type linked_state);
-  void build_object_data(Object *object, bool is_object_visible);
-  void build_object_data_camera(Object *object);
-  void build_object_data_geometry(Object *object, bool is_object_visible);
-  void build_object_data_geometry_datablock(ID *obdata, bool is_object_visible);
-  void build_object_data_light(Object *object);
-  void build_object_data_lightprobe(Object *object);
-  void build_object_data_speaker(Object *object);
-  void build_object_transform(Object *object);
-  void build_object_constraints(Object *object);
-  void build_object_pointcache(Object *object);
-  void build_pose_constraints(Object *object,
-                              bPoseChannel *pchan,
-                              int pchan_index,
-                              bool is_object_visible);
-  void build_rigidbody(Scene *scene);
-  void build_particle_systems(Object *object, bool is_object_visible);
-  void build_particle_settings(ParticleSettings *part);
-  void build_animdata(ID *id);
-  void build_animdata_nlastrip_targets(ListBase *strips);
-  void build_animation_images(ID *id);
-  void build_action(bAction *action);
-  void build_driver(ID *id, FCurve *fcurve, int driver_index);
-  void build_driver_variables(ID *id, FCurve *fcurve);
-  void build_driver_id_property(ID *id, const char *rna_path);
-  void build_parameters(ID *id);
-  void build_ik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
-  void build_splineik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
-  void build_rig(Object *object, bool is_object_visible);
-  void build_proxy_rig(Object *object);
-  void build_armature(bArmature *armature);
-  void build_shapekeys(Key *key);
-  void build_camera(Camera *camera);
-  void build_light(Light *lamp);
-  void build_nodetree(bNodeTree *ntree);
-  void build_material(Material *ma);
-  void build_texture(Tex *tex);
-  void build_image(Image *image);
-  void build_world(World *world);
-  void build_compositor(Scene *scene);
-  void build_gpencil(bGPdata *gpd);
-  void build_cachefile(CacheFile *cache_file);
-  void build_mask(Mask *mask);
-  void build_movieclip(MovieClip *clip);
-  void build_lightprobe(LightProbe *probe);
-  void build_speaker(Speaker *speaker);
+  virtual void build_id(ID *id);
+
+  /* Build function for ID types that do not need their own build_xxx() function. */
+  virtual void build_generic_id(ID *id);
+
+  virtual void build_idproperties(IDProperty *id_property);
+
+  virtual void build_scene_render(Scene *scene, ViewLayer *view_layer);
+  virtual void build_scene_parameters(Scene *scene);
+  virtual void build_scene_compositor(Scene *scene);
+
+  virtual void build_layer_collections(ListBase *lb);
+  virtual void build_view_layer(Scene *scene,
+                                ViewLayer *view_layer,
+                                eDepsNode_LinkedState_Type linked_state);
+  virtual void build_collection(LayerCollection *from_layer_collection, Collection *collection);
+  virtual void build_object(int base_index,
+                            Object *object,
+                            eDepsNode_LinkedState_Type linked_state,
+                            bool is_visible);
+  virtual void build_object_proxy_from(Object *object, bool is_object_visible);
+  virtual void build_object_proxy_group(Object *object, bool is_object_visible);
+  virtual void build_object_instance_collection(Object *object, bool is_object_visible);
+  virtual void build_object_from_layer(int base_index,
+                                       Object *object,
+                                       eDepsNode_LinkedState_Type linked_state);
+  virtual void build_object_flags(int base_index,
+                                  Object *object,
+                                  eDepsNode_LinkedState_Type linked_state);
+  virtual void build_object_data(Object *object, bool is_object_visible);
+  virtual void build_object_data_camera(Object *object);
+  virtual void build_object_data_geometry(Object *object, bool is_object_visible);
+  virtual void build_object_data_geometry_datablock(ID *obdata, bool is_object_visible);
+  virtual void build_object_data_light(Object *object);
+  virtual void build_object_data_lightprobe(Object *object);
+  virtual void build_object_data_speaker(Object *object);
+  virtual void build_object_transform(Object *object);
+  virtual void build_object_constraints(Object *object);
+  virtual void build_object_pointcache(Object *object);
+  virtual void build_pose_constraints(Object *object,
+                                      bPoseChannel *pchan,
+                                      int pchan_index,
+                                      bool is_object_visible);
+  virtual void build_rigidbody(Scene *scene);
+  virtual void build_particle_systems(Object *object, bool is_object_visible);
+  virtual void build_particle_settings(ParticleSettings *part);
+  virtual void build_animdata(ID *id);
+  virtual void build_animdata_nlastrip_targets(ListBase *strips);
+  virtual void build_animation_images(ID *id);
+  virtual void build_action(bAction *action);
+  virtual void build_driver(ID *id, FCurve *fcurve, int driver_index);
+  virtual void build_driver_variables(ID *id, FCurve *fcurve);
+  virtual void build_driver_id_property(ID *id, const char *rna_path);
+  virtual void build_parameters(ID *id);
+  virtual void build_dimensions(Object *object);
+  virtual void build_ik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
+  virtual void build_splineik_pose(Object *object, bPoseChannel *pchan, bConstraint *con);
+  virtual void build_rig(Object *object, bool is_object_visible);
+  virtual void build_proxy_rig(Object *object, bool is_object_visible);
+  virtual void build_armature(bArmature *armature);
+  virtual void build_armature_bones(ListBase *bones);
+  virtual void build_shapekeys(Key *key);
+  virtual void build_camera(Camera *camera);
+  virtual void build_light(Light *lamp);
+  virtual void build_nodetree(bNodeTree *ntree);
+  virtual void build_nodetree_socket(bNodeSocket *socket);
+  virtual void build_material(Material *ma);
+  virtual void build_materials(Material **materials, int num_materials);
+  virtual void build_freestyle_lineset(FreestyleLineSet *fls);
+  virtual void build_freestyle_linestyle(FreestyleLineStyle *linestyle);
+  virtual void build_texture(Tex *tex);
+  virtual void build_image(Image *image);
+  virtual void build_world(World *world);
+  virtual void build_gpencil(bGPdata *gpd);
+  virtual void build_cachefile(CacheFile *cache_file);
+  virtual void build_mask(Mask *mask);
+  virtual void build_movieclip(MovieClip *clip);
+  virtual void build_lightprobe(LightProbe *probe);
+  virtual void build_speaker(Speaker *speaker);
+  virtual void build_sound(bSound *sound);
+  virtual void build_simulation(Simulation *simulation);
+  virtual void build_scene_sequencer(Scene *scene);
+  virtual void build_scene_audio(Scene *scene);
+  virtual void build_scene_speakers(Scene *scene, ViewLayer *view_layer);
 
   /* Per-ID information about what was already in the dependency graph.
    * Allows to re-use certain values, to speed up following evaluation. */
@@ -231,7 +262,7 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
     string name;
     int name_tag;
   };
-  vector<SavedEntryTag> saved_entry_tags_;
+  Vector<SavedEntryTag> saved_entry_tags_;
 
   struct BuilderWalkUserData {
     DepsgraphNodeBuilder *builder;
@@ -247,6 +278,9 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
                               bool is_reference,
                               void *user_data);
 
+  void tag_previously_tagged_nodes();
+  void update_invalid_cow_pointers();
+
   /* State which demotes currently built entities. */
   Scene *scene_;
   ViewLayer *view_layer_;
@@ -254,17 +288,18 @@ class DepsgraphNodeBuilder : public DepsgraphBuilder {
   /* NOTE: Collection are possibly built recursively, so be careful when
    * setting the current state. */
   Collection *collection_;
-  /* Accumulated flag over the hierarchy opf currently building collections.
+  /* Accumulated flag over the hierarchy of currently building collections.
    * Denotes whether all the hierarchy from parent of collection_ to the
    * very root is visible (aka not restricted.). */
   bool is_parent_collection_visible_;
 
-  /* Indexed by original ID, values are IDInfo. */
-  GHash *id_info_hash_;
+  /* Indexed by original ID.session_uuid, values are IDInfo. */
+  Map<uint, IDInfo *> id_info_hash_;
 
   /* Set of IDs which were already build. Makes it easier to keep track of
    * what was already built and what was not. */
   BuilderMap built_map_;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

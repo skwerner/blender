@@ -33,11 +33,11 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_alloca.h"
+#include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 #include "BLI_utildefines_stack.h"
-#include "BLI_alloca.h"
-#include "BLI_math.h"
-#include "BLI_listbase.h"
 
 #include "BKE_curve.h"
 
@@ -203,7 +203,7 @@ finally:
 static GSet *bm_edgering_pair_calc(BMesh *bm, ListBase *eloops_rim)
 {
   /**
-   * Method for for finding pairs:
+   * Method for finding pairs:
    *
    * - first create (vert -> eloop) mapping.
    * - loop over all eloops.
@@ -212,7 +212,7 @@ static GSet *bm_edgering_pair_calc(BMesh *bm, ListBase *eloops_rim)
    *       - use the edge-verts and (vert -> eloop) map
    *         to create a pair of eloop pointers, add these to a hash.
    *
-   * \note, each loop pair will be found twice.
+   * \note Each loop pair will be found twice.
    * could sort and optimize this but not really so important.
    */
 
@@ -828,6 +828,11 @@ static void bm_face_slice(BMesh *bm, BMLoop *l, const int cuts)
   for (i = 0; i < cuts; i++) {
     /* no chance of double */
     BM_face_split(bm, l_new->f, l_new->prev, l_new->next->next, &l_new, NULL, false);
+    if (l_new == NULL) {
+      /* This happens when l_new->prev and l_new->next->next are adjacent. Since
+       * this sets l_new to NULL, we cannot continue this for-loop. */
+      break;
+    }
     if (l_new->f->len < l_new->radial_next->f->len) {
       l_new = l_new->radial_next;
     }
@@ -902,9 +907,7 @@ static void bm_edgering_pair_order(BMesh *bm,
         if (BM_elem_flag_test(v_other, BM_ELEM_TAG)) {
           break;
         }
-        else {
-          v_other = NULL;
-        }
+        v_other = NULL;
       }
     }
     BLI_assert(v_other != NULL);
@@ -929,7 +932,7 @@ static void bm_edgering_pair_order(BMesh *bm,
     BLI_assert(bm_edgering_pair_order_is_flipped(bm, el_store_a, el_store_b) == false);
   }
   else {
-    /* if we dont share and edge - flip */
+    /* If we don't share and edge - flip. */
     BMEdge *e = BM_edge_exists(((LinkData *)lb_a->first)->data, ((LinkData *)lb_b->first)->data);
     if (e == NULL || !BMO_edge_flag_test(bm, e, EDGE_RING)) {
       BM_edgeloop_flip(bm, el_store_b);
@@ -1145,7 +1148,7 @@ void bmo_subdivide_edgering_exec(BMesh *bm, BMOperator *op)
   }
   else if (count == 2) {
     /* this case could be removed,
-     * but simple to avoid 'bm_edgering_pair_calc' in this case since theres only one. */
+     * but simple to avoid 'bm_edgering_pair_calc' in this case since there's only one. */
     struct BMEdgeLoopStore *el_store_a = eloops_rim.first;
     struct BMEdgeLoopStore *el_store_b = eloops_rim.last;
     LoopPairStore *lpair;
@@ -1183,8 +1186,7 @@ void bmo_subdivide_edgering_exec(BMesh *bm, BMOperator *op)
     lpair_arr = BLI_array_alloca(lpair_arr, BLI_gset_len(eloop_pairs_gs));
 
     /* first cache pairs */
-    GSET_ITER_INDEX(gs_iter, eloop_pairs_gs, i)
-    {
+    GSET_ITER_INDEX (gs_iter, eloop_pairs_gs, i) {
       GHashPair *eloop_pair = BLI_gsetIterator_getKey(&gs_iter);
       struct BMEdgeLoopStore *el_store_a = (void *)eloop_pair->first;
       struct BMEdgeLoopStore *el_store_b = (void *)eloop_pair->second;
@@ -1201,8 +1203,7 @@ void bmo_subdivide_edgering_exec(BMesh *bm, BMOperator *op)
       BLI_assert(bm_verts_tag_count(bm) == 0);
     }
 
-    GSET_ITER_INDEX(gs_iter, eloop_pairs_gs, i)
-    {
+    GSET_ITER_INDEX (gs_iter, eloop_pairs_gs, i) {
       GHashPair *eloop_pair = BLI_gsetIterator_getKey(&gs_iter);
       struct BMEdgeLoopStore *el_store_a = (void *)eloop_pair->first;
       struct BMEdgeLoopStore *el_store_b = (void *)eloop_pair->second;

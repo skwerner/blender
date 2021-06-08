@@ -25,6 +25,7 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_math_base.h"
 #include "BLI_utildefines.h"
 
 #include "DNA_meta_types.h"
@@ -35,6 +36,7 @@
 
 #include "GPU_batch.h"
 
+#include "DRW_render.h"
 #include "draw_cache_impl.h" /* own include */
 
 static void metaball_batch_cache_clear(MetaBall *mb);
@@ -98,12 +100,16 @@ static void metaball_batch_cache_init(MetaBall *mb)
   cache->is_manifold = false;
 }
 
-static MetaBallBatchCache *metaball_batch_cache_get(MetaBall *mb)
+void DRW_mball_batch_cache_validate(MetaBall *mb)
 {
   if (!metaball_batch_cache_valid(mb)) {
     metaball_batch_cache_clear(mb);
     metaball_batch_cache_init(mb);
   }
+}
+
+static MetaBallBatchCache *metaball_batch_cache_get(MetaBall *mb)
+{
   return mb->batch_cache;
 }
 
@@ -146,12 +152,14 @@ void DRW_mball_batch_cache_free(MetaBall *mb)
   MEM_SAFE_FREE(mb->batch_cache);
 }
 
-static GPUVertBuf *mball_batch_cache_get_pos_and_normals(Object *ob, MetaBallBatchCache *cache)
+static GPUVertBuf *mball_batch_cache_get_pos_and_normals(Object *ob,
+                                                         MetaBallBatchCache *cache,
+                                                         const struct Scene *scene)
 {
   if (cache->pos_nor_in_order == NULL) {
     ListBase *lb = &ob->runtime.curve_cache->disp;
-    cache->pos_nor_in_order = MEM_callocN(sizeof(GPUVertBuf), __func__);
-    DRW_displist_vertbuf_create_pos_and_nor(lb, cache->pos_nor_in_order);
+    cache->pos_nor_in_order = GPU_vertbuf_calloc();
+    DRW_displist_vertbuf_create_pos_and_nor(lb, cache->pos_nor_in_order, scene);
   }
   return cache->pos_nor_in_order;
 }
@@ -160,7 +168,7 @@ static GPUIndexBuf *mball_batch_cache_get_edges_adj_lines(Object *ob, MetaBallBa
 {
   if (cache->edges_adj_lines == NULL) {
     ListBase *lb = &ob->runtime.curve_cache->disp;
-    cache->edges_adj_lines = MEM_callocN(sizeof(GPUVertBuf), __func__);
+    cache->edges_adj_lines = GPU_indexbuf_calloc();
     DRW_displist_indexbuf_create_edges_adjacency_lines(
         lb, cache->edges_adj_lines, &cache->is_manifold);
   }
@@ -179,13 +187,15 @@ GPUBatch *DRW_metaball_batch_cache_get_triangles_with_normals(Object *ob)
 
   MetaBall *mb = ob->data;
   MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const struct Scene *scene = draw_ctx->scene;
 
   if (cache->batch == NULL) {
     ListBase *lb = &ob->runtime.curve_cache->disp;
-    GPUIndexBuf *ibo = MEM_callocN(sizeof(GPUIndexBuf), __func__);
+    GPUIndexBuf *ibo = GPU_indexbuf_calloc();
     DRW_displist_indexbuf_create_triangles_in_order(lb, ibo);
     cache->batch = GPU_batch_create_ex(GPU_PRIM_TRIS,
-                                       mball_batch_cache_get_pos_and_normals(ob, cache),
+                                       mball_batch_cache_get_pos_and_normals(ob, cache, scene),
                                        ibo,
                                        GPU_BATCH_OWNS_INDEX);
   }
@@ -202,13 +212,15 @@ GPUBatch **DRW_metaball_batch_cache_get_surface_shaded(Object *ob,
     return NULL;
   }
 
+  BLI_assert(gpumat_array_len == DRW_metaball_material_count_get(mb));
+
   MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
   if (cache->shaded_triangles == NULL) {
     cache->mat_len = gpumat_array_len;
     cache->shaded_triangles = MEM_callocN(sizeof(*cache->shaded_triangles) * cache->mat_len,
                                           __func__);
     cache->shaded_triangles[0] = DRW_metaball_batch_cache_get_triangles_with_normals(ob);
-    for (int i = 1; i < cache->mat_len; ++i) {
+    for (int i = 1; i < cache->mat_len; i++) {
       cache->shaded_triangles[i] = NULL;
     }
   }
@@ -223,20 +235,23 @@ GPUBatch *DRW_metaball_batch_cache_get_wireframes_face(Object *ob)
 
   MetaBall *mb = ob->data;
   MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const struct Scene *scene = draw_ctx->scene;
 
   if (cache->face_wire.batch == NULL) {
     ListBase *lb = &ob->runtime.curve_cache->disp;
 
-    GPUVertBuf *vbo_wiredata = MEM_callocN(sizeof(GPUVertBuf), __func__);
+    GPUVertBuf *vbo_wiredata = GPU_vertbuf_calloc();
     DRW_displist_vertbuf_create_wiredata(lb, vbo_wiredata);
 
-    GPUIndexBuf *ibo = MEM_callocN(sizeof(GPUIndexBuf), __func__);
+    GPUIndexBuf *ibo = GPU_indexbuf_calloc();
     DRW_displist_indexbuf_create_lines_in_order(lb, ibo);
 
-    cache->face_wire.batch = GPU_batch_create_ex(GPU_PRIM_LINES,
-                                                 mball_batch_cache_get_pos_and_normals(ob, cache),
-                                                 ibo,
-                                                 GPU_BATCH_OWNS_INDEX);
+    cache->face_wire.batch = GPU_batch_create_ex(
+        GPU_PRIM_LINES,
+        mball_batch_cache_get_pos_and_normals(ob, cache, scene),
+        ibo,
+        GPU_BATCH_OWNS_INDEX);
 
     GPU_batch_vertbuf_add_ex(cache->face_wire.batch, vbo_wiredata, true);
   }
@@ -253,11 +268,14 @@ struct GPUBatch *DRW_metaball_batch_cache_get_edge_detection(struct Object *ob,
 
   MetaBall *mb = ob->data;
   MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const struct Scene *scene = draw_ctx->scene;
 
   if (cache->edge_detection == NULL) {
-    cache->edge_detection = GPU_batch_create(GPU_PRIM_LINES_ADJ,
-                                             mball_batch_cache_get_pos_and_normals(ob, cache),
-                                             mball_batch_cache_get_edges_adj_lines(ob, cache));
+    cache->edge_detection = GPU_batch_create(
+        GPU_PRIM_LINES_ADJ,
+        mball_batch_cache_get_pos_and_normals(ob, cache, scene),
+        mball_batch_cache_get_edges_adj_lines(ob, cache));
   }
 
   if (r_is_manifold) {
@@ -265,4 +283,23 @@ struct GPUBatch *DRW_metaball_batch_cache_get_edge_detection(struct Object *ob,
   }
 
   return cache->edge_detection;
+}
+
+struct GPUVertBuf *DRW_mball_batch_cache_pos_vertbuf_get(Object *ob)
+{
+  if (!BKE_mball_is_basis(ob)) {
+    return NULL;
+  }
+
+  MetaBall *mb = ob->data;
+  MetaBallBatchCache *cache = metaball_batch_cache_get(mb);
+  const DRWContextState *draw_ctx = DRW_context_state_get();
+  const struct Scene *scene = draw_ctx->scene;
+
+  return mball_batch_cache_get_pos_and_normals(ob, cache, scene);
+}
+
+int DRW_metaball_material_count_get(MetaBall *mb)
+{
+  return max_ii(1, mb->totcol);
 }

@@ -23,10 +23,11 @@
  * or other details.
  * Typical view-control usage:
  *
- * - acquire a view-control (#ED_view3d_cameracontrol_acquire).
- * - modify ``rv3d->ofs``, ``rv3d->viewquat``.
- * - update the view data (#ED_view3d_cameracontrol_acquire) - within a loop which draws the viewport.
- * - finish and release the view-control (#ED_view3d_cameracontrol_release),
+ * - Acquire a view-control (#ED_view3d_cameracontrol_acquire).
+ * - Modify ``rv3d->ofs``, ``rv3d->viewquat``.
+ * - Update the view data (#ED_view3d_cameracontrol_acquire) -
+ *   within a loop which draws the viewport.
+ * - Finish and release the view-control (#ED_view3d_cameracontrol_release),
  *   either keeping the current view or restoring the initial view.
  *
  * Notes:
@@ -36,9 +37,9 @@
  * - updating can optionally keyframe the camera object.
  */
 
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
 #include "DNA_camera_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -49,11 +50,7 @@
 
 #include "DEG_depsgraph.h"
 
-#include "ED_screen.h"
-
 #include "view3d_intern.h" /* own include */
-
-#include "BLI_strict_flags.h"
 
 typedef struct View3DCameraControl {
 
@@ -86,10 +83,9 @@ typedef struct View3DCameraControl {
   float ofs_backup[3];
   /* backup the views offset in case the user cancels flying in non camera mode */
 
-  /* backup the views quat in case the user cancels flying in non camera mode.
-   * (quat for view, eul for camera) */
+  /* backup the views quat in case the user cancels flying in non camera mode. */
   float rot_backup[4];
-  /* remember if were ortho or not, only used for restoring the view if it was a ortho view */
+  /* remember if we're ortho or not, only used for restoring the view if it was a ortho view */
   char persp_backup;
 
   /* are we flying an ortho camera in perspective view,
@@ -101,7 +97,7 @@ typedef struct View3DCameraControl {
   void *obtfm;
 } View3DCameraControl;
 
-BLI_INLINE Object *view3d_cameracontrol_object(View3DCameraControl *vctrl)
+BLI_INLINE Object *view3d_cameracontrol_object(const View3DCameraControl *vctrl)
 {
   return vctrl->root_parent ? vctrl->root_parent : vctrl->ctx_v3d->camera;
 }
@@ -116,9 +112,8 @@ Object *ED_view3d_cameracontrol_object_get(View3DCameraControl *vctrl)
   if (rv3d->persp == RV3D_CAMOB) {
     return view3d_cameracontrol_object(vctrl);
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 /**
@@ -128,8 +123,7 @@ Object *ED_view3d_cameracontrol_object_get(View3DCameraControl *vctrl)
 struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph,
                                                             Scene *scene,
                                                             View3D *v3d,
-                                                            RegionView3D *rv3d,
-                                                            const bool use_parent_root)
+                                                            RegionView3D *rv3d)
 {
   View3DCameraControl *vctrl;
 
@@ -140,7 +134,8 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
   vctrl->ctx_v3d = v3d;
   vctrl->ctx_rv3d = rv3d;
 
-  vctrl->use_parent_root = use_parent_root;
+  vctrl->use_parent_root = v3d->camera != NULL &&
+                           v3d->camera->transflag & OB_TRANSFORM_ADJUST_ROOT_PARENT_FOR_VIEW_LOCK;
 
   vctrl->persp_backup = rv3d->persp;
   vctrl->dist_backup = rv3d->dist;
@@ -154,7 +149,7 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
 
   if (rv3d->persp == RV3D_CAMOB) {
     Object *ob_back;
-    if (use_parent_root && (vctrl->root_parent = v3d->camera->parent)) {
+    if (vctrl->use_parent_root && (vctrl->root_parent = v3d->camera->parent)) {
       while (vctrl->root_parent->parent) {
         vctrl->root_parent = vctrl->root_parent->parent;
       }
@@ -182,7 +177,7 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
     copy_qt_qt(vctrl->rot_backup, rv3d->viewquat);
     copy_v3_v3(vctrl->ofs_backup, rv3d->ofs);
 
-    /* the dist defines a vector that is infront of the offset
+    /* The dist defines a vector that is in front of the offset
      * to rotate the view about.
      * this is no good for fly mode because we
      * want to rotate about the viewers center.
@@ -199,6 +194,56 @@ struct View3DCameraControl *ED_view3d_cameracontrol_acquire(Depsgraph *depsgraph
 }
 
 /**
+ * A version of #BKE_object_apply_mat4 that respects #Object.protectflag,
+ * applying the locking back to the view to avoid the view.
+ * This is needed so the view doesn't get out of sync with the object,
+ * causing visible jittering when in fly/walk mode for e.g.
+ *
+ * \note This could be exposed as an API option, as we might not want the view
+ * to be constrained by the thing it's controlling.
+ */
+static bool object_apply_mat4_with_protect(Object *ob,
+                                           const float obmat[4][4],
+                                           const bool use_parent,
+                                           /* Only use when applying lock. */
+                                           RegionView3D *rv3d,
+                                           const float view_mat[4][4])
+{
+  const bool use_protect = (ob->protectflag != 0);
+  bool view_changed = false;
+
+  ObjectTfmProtectedChannels obtfm;
+  if (use_protect) {
+    BKE_object_tfm_protected_backup(ob, &obtfm);
+  }
+
+  BKE_object_apply_mat4(ob, obmat, true, use_parent);
+
+  if (use_protect) {
+    float obmat_noprotect[4][4], obmat_protect[4][4];
+
+    BKE_object_to_mat4(ob, obmat_noprotect);
+    BKE_object_tfm_protected_restore(ob, &obtfm, ob->protectflag);
+    BKE_object_to_mat4(ob, obmat_protect);
+
+    if (!equals_m4m4(obmat_noprotect, obmat_protect)) {
+      /* Apply the lock protection back to the view, without this the view
+       * keeps moving, ignoring the object locking, causing jittering in some cases. */
+      float diff_mat[4][4];
+      float view_mat_protect[4][4];
+      float obmat_noprotect_inv[4][4];
+      invert_m4_m4(obmat_noprotect_inv, obmat_noprotect);
+      mul_m4_m4m4(diff_mat, obmat_protect, obmat_noprotect_inv);
+
+      mul_m4_m4m4(view_mat_protect, diff_mat, view_mat);
+      ED_view3d_from_m4(view_mat_protect, rv3d->ofs, rv3d->viewquat, &rv3d->dist);
+      view_changed = true;
+    }
+  }
+  return view_changed;
+}
+
+/**
  * Updates cameras from the ``rv3d`` values, optionally auto-keyframing.
  */
 void ED_view3d_cameracontrol_update(View3DCameraControl *vctrl,
@@ -208,8 +253,8 @@ void ED_view3d_cameracontrol_update(View3DCameraControl *vctrl,
                                     const bool do_rotate,
                                     const bool do_translate)
 {
-  /* we are in camera view so apply the view ofs and quat to the view matrix and set the camera
-   * to the view */
+  /* We are in camera view so apply the view offset and rotation to the view matrix
+   * and set the camera to the view. */
 
   Scene *scene = vctrl->ctx_scene;
   View3D *v3d = vctrl->ctx_v3d;
@@ -217,21 +262,25 @@ void ED_view3d_cameracontrol_update(View3DCameraControl *vctrl,
 
   ID *id_key;
 
+  float view_mat[4][4];
+  ED_view3d_to_m4(view_mat, rv3d->ofs, rv3d->viewquat, rv3d->dist);
+
   /* transform the parent or the camera? */
   if (vctrl->root_parent) {
     Object *ob_update;
 
-    float view_mat[4][4];
     float prev_view_imat[4][4];
     float diff_mat[4][4];
     float parent_mat[4][4];
 
     invert_m4_m4(prev_view_imat, vctrl->view_mat_prev);
-    ED_view3d_to_m4(view_mat, rv3d->ofs, rv3d->viewquat, rv3d->dist);
     mul_m4_m4m4(diff_mat, view_mat, prev_view_imat);
     mul_m4_m4m4(parent_mat, diff_mat, vctrl->root_parent->obmat);
 
-    BKE_object_apply_mat4(vctrl->root_parent, parent_mat, true, false);
+    if (object_apply_mat4_with_protect(vctrl->root_parent, parent_mat, false, rv3d, view_mat)) {
+      /* Calculate again since the view locking changes the matrix.  */
+      ED_view3d_to_m4(view_mat, rv3d->ofs, rv3d->viewquat, rv3d->dist);
+    }
 
     ob_update = v3d->camera->parent;
     while (ob_update) {
@@ -244,18 +293,16 @@ void ED_view3d_cameracontrol_update(View3DCameraControl *vctrl,
     id_key = &vctrl->root_parent->id;
   }
   else {
-    float view_mat[4][4];
     float scale_mat[4][4];
     float scale_back[3];
 
     /* even though we handle the scale matrix, this still changes over time */
     copy_v3_v3(scale_back, v3d->camera->scale);
 
-    ED_view3d_to_m4(view_mat, rv3d->ofs, rv3d->viewquat, rv3d->dist);
     size_to_mat4(scale_mat, v3d->camera->scale);
     mul_m4_m4m4(view_mat, view_mat, scale_mat);
 
-    BKE_object_apply_mat4(v3d->camera, view_mat, true, true);
+    object_apply_mat4_with_protect(v3d->camera, view_mat, true, rv3d, view_mat);
 
     DEG_id_tag_update(&v3d->camera->id, ID_RECALC_TRANSFORM);
 

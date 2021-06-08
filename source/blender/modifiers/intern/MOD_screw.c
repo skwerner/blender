@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2005 by the Blender Foundation.
@@ -26,38 +26,60 @@
 
 #include "BLI_utildefines.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
+#include "BLI_math.h"
 
+#include "BLT_translation.h"
+
+#include "DNA_defaults.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
-#include "BKE_library_query.h"
+#include "BKE_context.h"
+#include "BKE_lib_query.h"
 #include "BKE_mesh.h"
+#include "BKE_screen.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "RNA_access.h"
 
 #include "DEG_depsgraph_build.h"
 #include "DEG_depsgraph_query.h"
 
-#include "MOD_modifiertypes.h"
 #include "MEM_guardedalloc.h"
+
+#include "MOD_modifiertypes.h"
+#include "MOD_ui_common.h"
+
+static void initData(ModifierData *md)
+{
+  ScrewModifierData *ltmd = (ScrewModifierData *)md;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(ltmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(ltmd, DNA_struct_default_get(ScrewModifierData), modifier);
+}
 
 #include "BLI_strict_flags.h"
 
 /* used for gathering edge connectivity */
 typedef struct ScrewVertConnect {
-  float dist;        /* distance from the center axis */
-  float co[3];       /* location relative to the transformed axis */
-  float no[3];       /* calc normal of the vertex */
-  unsigned int v[2]; /* 2  verts on either side of this one */
-  MEdge *e[2];       /* edges on either side, a bit of a waste since each edge ref's 2 edges */
+  float dist;  /* distance from the center axis */
+  float co[3]; /* location relative to the transformed axis */
+  float no[3]; /* calc normal of the vertex */
+  uint v[2];   /* 2  verts on either side of this one */
+  MEdge *e[2]; /* edges on either side, a bit of a waste since each edge ref's 2 edges */
   char flag;
 } ScrewVertConnect;
 
 typedef struct ScrewVertIter {
   ScrewVertConnect *v_array;
   ScrewVertConnect *v_poin;
-  unsigned int v, v_other;
+  uint v, v_other;
   MEdge *e;
 } ScrewVertIter;
 
@@ -67,8 +89,8 @@ typedef struct ScrewVertIter {
 
 static void screwvert_iter_init(ScrewVertIter *iter,
                                 ScrewVertConnect *array,
-                                unsigned int v_init,
-                                unsigned int dir)
+                                uint v_init,
+                                uint dir)
 {
   iter->v_array = array;
   iter->v = v_init;
@@ -112,7 +134,7 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
                                          const float axis_offset[3],
                                          const float merge_threshold)
 {
-  const float merge_threshold_sq = SQUARE(merge_threshold);
+  const float merge_threshold_sq = square_f(merge_threshold);
   const bool use_offset = axis_offset != NULL;
   uint tot_doubles = 0;
   for (uint i = 0; i < totvert; i += 1) {
@@ -131,6 +153,9 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
       mvert_new[i].flag |= ME_VERT_TMP_TAG;
       tot_doubles += 1;
       copy_v3_v3(mvert_new[i].co, axis_co);
+    }
+    else {
+      mvert_new[i].flag &= ~ME_VERT_TMP_TAG & 0xFF;
     }
   }
 
@@ -162,20 +187,7 @@ static Mesh *mesh_remove_doubles_on_axis(Mesh *result,
   return result;
 }
 
-static void initData(ModifierData *md)
-{
-  ScrewModifierData *ltmd = (ScrewModifierData *)md;
-  ltmd->ob_axis = NULL;
-  ltmd->angle = (float)(M_PI * 2.0);
-  ltmd->axis = 2;
-  ltmd->flag = MOD_SCREW_SMOOTH_SHADING;
-  ltmd->steps = 16;
-  ltmd->render_steps = 16;
-  ltmd->iter = 1;
-  ltmd->merge_dist = 0.01f;
-}
-
-static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mesh *meshData)
+static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *meshData)
 {
   Mesh *mesh = meshData;
   Mesh *result;
@@ -184,10 +196,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   int *origindex;
   int mpoly_index = 0;
-  unsigned int step;
-  unsigned int i, j;
-  unsigned int i1, i2;
-  unsigned int step_tot = use_render_params ? ltmd->render_steps : ltmd->steps;
+  uint step;
+  uint i, j;
+  uint i1, i2;
+  uint step_tot = use_render_params ? ltmd->render_steps : ltmd->steps;
   const bool do_flip = (ltmd->flag & MOD_SCREW_NORMAL_FLIP) != 0;
 
   const int quad_ord[4] = {
@@ -203,17 +215,16 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       3,
   };
 
-  unsigned int maxVerts = 0, maxEdges = 0, maxPolys = 0;
-  const unsigned int totvert = (unsigned int)mesh->totvert;
-  const unsigned int totedge = (unsigned int)mesh->totedge;
-  const unsigned int totpoly = (unsigned int)mesh->totpoly;
+  uint maxVerts = 0, maxEdges = 0, maxPolys = 0;
+  const uint totvert = (uint)mesh->totvert;
+  const uint totedge = (uint)mesh->totedge;
+  const uint totpoly = (uint)mesh->totpoly;
 
-  unsigned int *edge_poly_map = NULL; /* orig edge to orig poly */
-  unsigned int *vert_loop_map = NULL; /* orig vert to orig loop */
+  uint *edge_poly_map = NULL; /* orig edge to orig poly */
+  uint *vert_loop_map = NULL; /* orig vert to orig loop */
 
   /* UV Coords */
-  const unsigned int mloopuv_layers_tot = (unsigned int)CustomData_number_of_layers(&mesh->ldata,
-                                                                                    CD_MLOOPUV);
+  const uint mloopuv_layers_tot = (uint)CustomData_number_of_layers(&mesh->ldata, CD_MLOOPUV);
   MLoopUV **mloopuv_layers = BLI_array_alloca(mloopuv_layers, mloopuv_layers_tot);
   float uv_u_scale;
   float uv_v_minmax[2] = {FLT_MAX, -FLT_MAX};
@@ -232,11 +243,11 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   float mtx_tx_inv[4][4]; /* inverted */
   float mtx_tmp_a[4][4];
 
-  unsigned int vc_tot_linked = 0;
+  uint vc_tot_linked = 0;
   short other_axis_1, other_axis_2;
   const float *tmpf1, *tmpf2;
 
-  unsigned int edge_offset;
+  uint edge_offset;
 
   MPoly *mpoly_orig, *mpoly_new, *mp_new;
   MLoop *mloop_orig, *mloop_new, *ml_new;
@@ -250,8 +261,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   const char mpoly_flag = (ltmd->flag & MOD_SCREW_SMOOTH_SHADING) ? ME_SMOOTH : 0;
 
   /* don't do anything? */
-  if (!totvert)
+  if (!totvert) {
     return BKE_mesh_new_nomain_from_template(mesh, 0, 0, 0, 0, 0);
+  }
 
   switch (ltmd->axis) {
     case 0:
@@ -286,7 +298,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       float totlen = len_v3(mtx_tx[3]);
 
       if (totlen != 0.0f) {
-        float zero[3] = {0.0f, 0.0f, 0.0f};
+        const float zero[3] = {0.0f, 0.0f, 0.0f};
         float cp[3];
         screw_ofs = closest_to_line_v3(cp, mtx_tx[3], zero, axis_vec);
       }
@@ -316,15 +328,14 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         cross_v3_v3v3(c1, cross2, axis_vec);
         cross_v3_v3v3(c2, axis_vec, c1);
 
-
         angle = angle_v3v3(cross1, c2);
 
         cross_v3_v3v3(axis_tmp, cross1, c2);
         normalize_v3(axis_tmp);
 
-        if (len_v3v3(axis_tmp, axis_vec) > 1.0f)
+        if (len_v3v3(axis_tmp, axis_vec) > 1.0f) {
           angle = -angle;
-
+        }
       }
     }
 #endif
@@ -346,14 +357,13 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   /* multiplying the steps is a bit tricky, this works best */
   step_tot = ((step_tot + 1) * ltmd->iter) - (ltmd->iter - 1);
 
-  /* will the screw be closed?
-   * Note! smaller then FLT_EPSILON * 100 gives problems with float precision so its never closed. */
+  /* Will the screw be closed?
+   * Note! smaller than `FLT_EPSILON * 100`
+   * gives problems with float precision so its never closed. */
   if (fabsf(screw_ofs) <= (FLT_EPSILON * 100.0f) &&
-      fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f)) {
+      fabsf(fabsf(angle) - ((float)M_PI * 2.0f)) <= (FLT_EPSILON * 100.0f) && step_tot > 3) {
     close = 1;
     step_tot--;
-    if (step_tot < 3)
-      step_tot = 3;
 
     maxVerts = totvert * step_tot;    /* -1 because we're joining back up */
     maxEdges = (totvert * step_tot) + /* these are the edges between new verts */
@@ -364,8 +374,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   }
   else {
     close = 0;
-    if (step_tot < 3)
-      step_tot = 3;
+    if (step_tot < 2) {
+      step_tot = 2;
+    }
 
     maxVerts = totvert * step_tot;          /* -1 because we're joining back up */
     maxEdges = (totvert * (step_tot - 1)) + /* these are the edges between new verts */
@@ -398,12 +409,12 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   CustomData_copy_data(&mesh->vdata, &result->vdata, 0, 0, (int)totvert);
 
   if (mloopuv_layers_tot) {
-    float zero_co[3] = {0};
+    const float zero_co[3] = {0};
     plane_from_point_normal_v3(uv_axis_plane, zero_co, axis_vec);
   }
 
   if (mloopuv_layers_tot) {
-    unsigned int uv_lay;
+    uint uv_lay;
     for (uv_lay = 0; uv_lay < mloopuv_layers_tot; uv_lay++) {
       mloopuv_layers[uv_lay] = CustomData_get_layer_n(&result->ldata, CD_MLOOPUV, (int)uv_lay);
     }
@@ -435,6 +446,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     med_new->v2 = med_orig->v2;
     med_new->crease = med_orig->crease;
     med_new->flag = med_orig->flag & ~ME_LOOSEEDGE;
+    /* Tag mvert as not loose.
+     * NOTE: ME_VERT_TMP_TAG is given to be cleared by BKE_mesh_new_nomain_from_template. */
+    mvert_new[med_orig->v1].flag |= ME_VERT_TMP_TAG;
+    mvert_new[med_orig->v2].flag |= ME_VERT_TMP_TAG;
   }
 
   /* build polygon -> edge map */
@@ -450,18 +465,18 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     memset(vert_loop_map, 0xff, sizeof(*vert_loop_map) * totvert);
 
     for (i = 0, mp_orig = mpoly_orig; i < totpoly; i++, mp_orig++) {
-      unsigned int loopstart = (unsigned int)mp_orig->loopstart;
-      unsigned int loopend = loopstart + (unsigned int)mp_orig->totloop;
+      uint loopstart = (uint)mp_orig->loopstart;
+      uint loopend = loopstart + (uint)mp_orig->totloop;
 
       MLoop *ml_orig = &mloop_orig[loopstart];
-      unsigned int k;
+      uint k;
       for (k = loopstart; k < loopend; k++, ml_orig++) {
         edge_poly_map[ml_orig->e] = i;
         vert_loop_map[ml_orig->v] = k;
 
         /* also order edges based on faces */
         if (medge_new[ml_orig->e].v1 != ml_orig->v) {
-          SWAP(unsigned int, medge_new[ml_orig->e].v1, medge_new[ml_orig->e].v2);
+          SWAP(uint, medge_new[ml_orig->e].v1, medge_new[ml_orig->e].v2);
         }
       }
     }
@@ -471,9 +486,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     /*
      * Normal Calculation (for face flipping)
      * Sort edge verts for correct face flipping
-     * NOT REALLY NEEDED but face flipping is nice.
-     *
-     * */
+     * NOT REALLY NEEDED but face flipping is nice. */
 
     /* Notice!
      *
@@ -481,7 +494,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
      * extra space by abusing the vert array before its filled with new verts.
      * The new array for vert_connect must be at least sizeof(ScrewVertConnect) * totvert
      * and the size of our resulting meshes array is sizeof(MVert) * totvert * 3
-     * so its safe to use the second 2 thrids of MVert the array for vert_connect,
+     * so its safe to use the second 2 thirds of MVert the array for vert_connect,
      * just make sure ScrewVertConnect struct is no more than twice as big as MVert,
      * at the moment there is no chance of that being a problem,
      * unless MVert becomes half its current size.
@@ -492,7 +505,8 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
      */
 
     vert_connect = MEM_malloc_arrayN(totvert, sizeof(ScrewVertConnect), "ScrewVertConnect");
-    //vert_connect = (ScrewVertConnect *) &medge_new[totvert];  /* skip the first slice of verts */
+    /* skip the first slice of verts. */
+    // vert_connect = (ScrewVertConnect *) &medge_new[totvert];
     vc = vert_connect;
 
     /* Copy Vert Locations */
@@ -585,7 +599,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
          * so resulting faces are flipped the right way */
         vc_tot_linked = 0; /* count the number of linked verts for this loop */
         if (vc->flag == 0) {
-          unsigned int v_best = SV_UNUSED, ed_loop_closed = 0; /* vert and vert new */
+          uint v_best = SV_UNUSED, ed_loop_closed = 0; /* vert and vert new */
           ScrewVertIter lt_iter;
           float fl = -1.0f;
 
@@ -604,7 +618,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
               /*printf("\t\tVERT: %i\n", lt_iter.v);*/
               if (lt_iter.v_poin->flag) {
                 /*printf("\t\t\tBreaking Found end\n");*/
-                //endpoints[0] = endpoints[1] = SV_UNUSED;
+                // endpoints[0] = endpoints[1] = SV_UNUSED;
                 ed_loop_closed = 1; /* circle */
                 break;
               }
@@ -685,15 +699,17 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
             /*printf("flip direction %i\n", ed_loop_flip);*/
 
-            /* switch the flip option if set
-             * note: flip is now done at face level so copying vgroup slizes is easier */
+            /* Switch the flip option if set
+             * NOTE: flip is now done at face level so copying group slices is easier. */
 #if 0
-            if (do_flip)
+            if (do_flip) {
               ed_loop_flip = !ed_loop_flip;
+            }
 #endif
 
-            if (angle < 0.0f)
+            if (angle < 0.0f) {
               ed_loop_flip = !ed_loop_flip;
+            }
 
             /* if its closed, we only need 1 loop */
             for (j = ed_loop_closed; j < 2; j++) {
@@ -706,8 +722,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
               /* If this is the vert off the best vert and
                * the best vert has 2 edges connected too it
                * then swap the flip direction */
-              if (j == 1 && SV_IS_VALID(vc_tmp->v[0]) && SV_IS_VALID(vc_tmp->v[1]))
+              if (j == 1 && SV_IS_VALID(vc_tmp->v[0]) && SV_IS_VALID(vc_tmp->v[1])) {
                 ed_loop_flip = !ed_loop_flip;
+              }
 
               while (lt_iter.v_poin && lt_iter.v_poin->flag != 2) {
                 /*printf("\tOrdering Vert V %i\n", lt_iter.v);*/
@@ -717,28 +734,36 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
                   if (lt_iter.v == lt_iter.e->v1) {
                     if (ed_loop_flip == 0) {
                       /*printf("\t\t\tFlipping 0\n");*/
-                      SWAP(unsigned int, lt_iter.e->v1, lt_iter.e->v2);
+                      SWAP(uint, lt_iter.e->v1, lt_iter.e->v2);
                     }
-                    /* else {
-                        printf("\t\t\tFlipping Not 0\n");
-                       }*/
+#if 0
+                    else {
+                      printf("\t\t\tFlipping Not 0\n");
+                    }
+#endif
                   }
                   else if (lt_iter.v == lt_iter.e->v2) {
                     if (ed_loop_flip == 1) {
                       /*printf("\t\t\tFlipping 1\n");*/
-                      SWAP(unsigned int, lt_iter.e->v1, lt_iter.e->v2);
+                      SWAP(uint, lt_iter.e->v1, lt_iter.e->v2);
                     }
-                    /* else {
-                        printf("\t\t\tFlipping Not 1\n");
-                       }*/
+#if 0
+                    else {
+                      printf("\t\t\tFlipping Not 1\n");
+                    }
+#endif
                   }
-                  /* else {
-                      printf("\t\tIncorrect edge topology");
-                     }*/
+#if 0
+                  else {
+                    printf("\t\tIncorrect edge topology");
+                  }
+#endif
                 }
-                /* else {
-                    printf("\t\tNo Edge at this point\n");
-                   }*/
+#if 0
+                else {
+                  printf("\t\tNo Edge at this point\n");
+                }
+#endif
                 screwvert_iter_step(&lt_iter);
               }
             }
@@ -753,7 +778,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
          * use edge connectivity work this out */
         if (SV_IS_VALID(vc->v[0])) {
           if (SV_IS_VALID(vc->v[1])) {
-            /* 2 edges connedted */
+            /* 2 edges connected. */
             /* make 2 connecting vert locations relative to the middle vert */
             sub_v3_v3v3(tmp_vec1, mvert_new[vc->v[0]].co, mvert_new[i].co);
             sub_v3_v3v3(tmp_vec2, mvert_new[vc->v[1]].co, mvert_new[i].co);
@@ -806,8 +831,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         }
 
         /* we won't be looping on this data again so copy normals here */
-        if ((angle < 0.0f) != do_flip)
+        if ((angle < 0.0f) != do_flip) {
           negate_v3(vc->no);
+        }
 
         normalize_v3(vc->no);
         normal_float_to_short_v3(mvert_new[i].no, vc->no);
@@ -828,7 +854,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   /* Add Faces */
   for (step = 1; step < step_tot; step++) {
-    const unsigned int varray_stride = totvert * step;
+    const uint varray_stride = totvert * step;
     float step_angle;
     float nor_tx[3];
     float mat[4][4];
@@ -843,8 +869,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
     }
     copy_m4_m3(mat, mat3);
 
-    if (screw_ofs)
+    if (screw_ofs) {
       madd_v3_v3fl(mat[3], axis_vec, screw_ofs * ((float)step / (float)(step_tot - 1)));
+    }
 
     /* copy a slice */
     CustomData_copy_data(&mesh->vdata, &result->vdata, 0, (int)varray_stride, (int)totvert);
@@ -882,6 +909,9 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       med_new->v1 = varray_stride + j;
       med_new->v2 = med_new->v1 - totvert;
       med_new->flag = ME_EDGEDRAW | ME_EDGERENDER;
+      if ((mv_new_base->flag & ME_VERT_TMP_TAG) == 0) {
+        med_new->flag |= ME_LOOSEEDGE;
+      }
       med_new++;
     }
   }
@@ -894,12 +924,15 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
 
   if (close) {
     /* last loop of edges, previous loop doesn't account for the last set of edges */
-    const unsigned int varray_stride = (step_tot - 1) * totvert;
+    const uint varray_stride = (step_tot - 1) * totvert;
 
     for (i = 0; i < totvert; i++) {
       med_new->v1 = i;
       med_new->v2 = varray_stride + i;
       med_new->flag = ME_EDGEDRAW | ME_EDGERENDER;
+      if ((mvert_new[i].flag & ME_VERT_TMP_TAG) == 0) {
+        med_new->flag |= ME_LOOSEEDGE;
+      }
       med_new++;
     }
   }
@@ -912,12 +945,12 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   edge_offset = totedge + (totvert * (step_tot - (close ? 0 : 1)));
 
   for (i = 0; i < totedge; i++, med_new_firstloop++) {
-    const unsigned int step_last = step_tot - (close ? 1 : 2);
-    const unsigned int mpoly_index_orig = totpoly ? edge_poly_map[i] : UINT_MAX;
+    const uint step_last = step_tot - (close ? 1 : 2);
+    const uint mpoly_index_orig = totpoly ? edge_poly_map[i] : UINT_MAX;
     const bool has_mpoly_orig = (mpoly_index_orig != UINT_MAX);
     float uv_v_offset_a, uv_v_offset_b;
 
-    const unsigned int mloop_index_orig[2] = {
+    const uint mloop_index_orig[2] = {
         vert_loop_map ? vert_loop_map[medge_new[i].v1] : UINT_MAX,
         vert_loop_map ? vert_loop_map[medge_new[i].v2] : UINT_MAX,
     };
@@ -976,7 +1009,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
             &mesh->ldata, &result->ldata, (int)mloop_index_orig[0], l_index + 3, 1);
 
         if (mloopuv_layers_tot) {
-          unsigned int uv_lay;
+          uint uv_lay;
           const float uv_u_offset_a = (float)(step)*uv_u_scale;
           const float uv_u_offset_b = (float)(step + 1) * uv_u_scale;
           for (uv_lay = 0; uv_lay < mloopuv_layers_tot; uv_lay++) {
@@ -993,7 +1026,7 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
         if (mloopuv_layers_tot) {
           int l_index = (int)(ml_new - mloop_new);
 
-          unsigned int uv_lay;
+          uint uv_lay;
           const float uv_u_offset_a = (float)(step)*uv_u_scale;
           const float uv_u_offset_b = (float)(step + 1) * uv_u_scale;
           for (uv_lay = 0; uv_lay < mloopuv_layers_tot; uv_lay++) {
@@ -1061,10 +1094,10 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
   /* validate loop edges */
 #if 0
   {
-    unsigned i = 0;
+    uint i = 0;
     printf("\n");
     for (; i < maxPolys * 4; i += 4) {
-      unsigned int ii;
+      uint ii;
       ml_new = mloop_new + i;
       ii = findEd(medge_new, maxEdges, ml_new[0].v, ml_new[1].v);
       printf("%d %d -- ", ii, ml_new[0].e);
@@ -1081,7 +1114,6 @@ static Mesh *applyModifier(ModifierData *md, const ModifierEvalContext *ctx, Mes
       ii = findEd(medge_new, maxEdges, ml_new[3].v, ml_new[0].v);
       printf("%d %d\n", ii, ml_new[3].e);
       ml_new[3].e = ii;
-
     }
   }
 #endif
@@ -1124,29 +1156,108 @@ static void updateDepsgraph(ModifierData *md, const ModifierUpdateDepsgraphConte
   }
 }
 
-static void foreachObjectLink(ModifierData *md, Object *ob, ObjectWalkFunc walk, void *userData)
+static void foreachIDLink(ModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   ScrewModifierData *ltmd = (ScrewModifierData *)md;
 
-  walk(userData, ob, &ltmd->ob_axis, IDWALK_CB_NOP);
+  walk(userData, ob, (ID **)&ltmd->ob_axis, IDWALK_CB_NOP);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *sub, *row, *col;
+  uiLayout *layout = panel->layout;
+  int toggles_flag = UI_ITEM_R_TOGGLE | UI_ITEM_R_FORCE_BLANK_DECORATE;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  PointerRNA screw_obj_ptr = RNA_pointer_get(ptr, "object");
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "angle", 0, NULL, ICON_NONE);
+  row = uiLayoutRow(col, false);
+  uiLayoutSetActive(row,
+                    RNA_pointer_is_null(&screw_obj_ptr) ||
+                        !RNA_boolean_get(ptr, "use_object_screw_offset"));
+  uiItemR(row, ptr, "screw_offset", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "iterations", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+  col = uiLayoutColumn(layout, false);
+  row = uiLayoutRow(col, false);
+  uiItemR(row, ptr, "axis", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(col, ptr, "object", 0, IFACE_("Axis Object"), ICON_NONE);
+  sub = uiLayoutColumn(col, false);
+  uiLayoutSetActive(sub, !RNA_pointer_is_null(&screw_obj_ptr));
+  uiItemR(sub, ptr, "use_object_screw_offset", 0, NULL, ICON_NONE);
+
+  uiItemS(layout);
+
+  col = uiLayoutColumn(layout, true);
+  uiItemR(col, ptr, "steps", 0, IFACE_("Steps Viewport"), ICON_NONE);
+  uiItemR(col, ptr, "render_steps", 0, IFACE_("Render"), ICON_NONE);
+
+  uiItemS(layout);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Merge"));
+  uiItemR(row, ptr, "use_merge_vertices", 0, "", ICON_NONE);
+  sub = uiLayoutRow(row, true);
+  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_merge_vertices"));
+  uiItemR(sub, ptr, "merge_threshold", 0, "", ICON_NONE);
+
+  uiItemS(layout);
+
+  row = uiLayoutRowWithHeading(layout, true, IFACE_("Stretch UVs"));
+  uiItemR(row, ptr, "use_stretch_u", toggles_flag, IFACE_("U"), ICON_NONE);
+  uiItemR(row, ptr, "use_stretch_v", toggles_flag, IFACE_("V"), ICON_NONE);
+
+  modifier_panel_end(layout, ptr);
+}
+
+static void normals_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *col;
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "use_smooth_shade", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_normal_calculate", 0, NULL, ICON_NONE);
+  uiItemR(col, ptr, "use_normal_flip", 0, NULL, ICON_NONE);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = modifier_panel_register(region_type, eModifierType_Screw, panel_draw);
+  modifier_subpanel_register(
+      region_type, "normals", "Normals", NULL, normals_panel_draw, panel_type);
 }
 
 ModifierTypeInfo modifierType_Screw = {
     /* name */ "Screw",
     /* structName */ "ScrewModifierData",
     /* structSize */ sizeof(ScrewModifierData),
+    /* srna */ &RNA_ScrewModifier,
     /* type */ eModifierTypeType_Constructive,
 
     /* flags */ eModifierTypeFlag_AcceptsMesh | eModifierTypeFlag_AcceptsCVs |
         eModifierTypeFlag_SupportsEditmode | eModifierTypeFlag_EnableInEditmode,
+    /* icon */ ICON_MOD_SCREW,
 
-    /* copyData */ modifier_copyData_generic,
+    /* copyData */ BKE_modifier_copydata_generic,
 
     /* deformVerts */ NULL,
     /* deformMatrices */ NULL,
     /* deformVertsEM */ NULL,
     /* deformMatricesEM */ NULL,
-    /* applyModifier */ applyModifier,
+    /* modifyMesh */ modifyMesh,
+    /* modifyHair */ NULL,
+    /* modifyGeometrySet */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ NULL,
@@ -1155,8 +1266,10 @@ ModifierTypeInfo modifierType_Screw = {
     /* updateDepsgraph */ updateDepsgraph,
     /* dependsOnTime */ NULL,
     /* dependsOnNormals */ NULL,
-    /* foreachObjectLink */ foreachObjectLink,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
     /* freeRuntimeData */ NULL,
+    /* panelRegister */ panelRegister,
+    /* blendWrite */ NULL,
+    /* blendRead */ NULL,
 };

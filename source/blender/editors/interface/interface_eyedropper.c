@@ -21,10 +21,8 @@
  * \ingroup edinterface
  */
 
-#include "DNA_space_types.h"
 #include "DNA_screen_types.h"
-
-#include "BLI_blenlib.h"
+#include "DNA_space_types.h"
 
 #include "BKE_context.h"
 #include "BKE_screen.h"
@@ -54,14 +52,14 @@ wmKeyMap *eyedropper_modal_keymap(wmKeyConfig *keyconf)
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper Modal Map");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Eyedropper Modal Map");
 
   /* this function is called for each spacetype, only needs to add map once */
   if (keymap && keymap->modal_items) {
     return NULL;
   }
 
-  keymap = WM_modalkeymap_add(keyconf, "Eyedropper Modal Map", modal_items);
+  keymap = WM_modalkeymap_ensure(keyconf, "Eyedropper Modal Map", modal_items);
 
   /* assign to operators */
   WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_colorramp");
@@ -69,6 +67,7 @@ wmKeyMap *eyedropper_modal_keymap(wmKeyConfig *keyconf)
   WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_id");
   WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_depth");
   WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_driver");
+  WM_modalkeymap_assign(keymap, "UI_OT_eyedropper_gpencil_color");
 
   return keymap;
 }
@@ -77,18 +76,18 @@ wmKeyMap *eyedropper_colorband_modal_keymap(wmKeyConfig *keyconf)
 {
   static const EnumPropertyItem modal_items_point[] = {
       {EYE_MODAL_POINT_CANCEL, "CANCEL", 0, "Cancel", ""},
-      {EYE_MODAL_POINT_SAMPLE, "SAMPLE_SAMPLE", 0, "Sample a point", ""},
+      {EYE_MODAL_POINT_SAMPLE, "SAMPLE_SAMPLE", 0, "Sample a Point", ""},
       {EYE_MODAL_POINT_CONFIRM, "SAMPLE_CONFIRM", 0, "Confirm Sampling", ""},
       {EYE_MODAL_POINT_RESET, "SAMPLE_RESET", 0, "Reset Sampling", ""},
       {0, NULL, 0, NULL, NULL},
   };
 
-  wmKeyMap *keymap = WM_modalkeymap_get(keyconf, "Eyedropper ColorRamp PointSampling Map");
+  wmKeyMap *keymap = WM_modalkeymap_find(keyconf, "Eyedropper ColorRamp PointSampling Map");
   if (keymap && keymap->modal_items) {
     return keymap;
   }
 
-  keymap = WM_modalkeymap_add(
+  keymap = WM_modalkeymap_ensure(
       keyconf, "Eyedropper ColorRamp PointSampling Map", modal_items_point);
 
   /* assign to operators */
@@ -104,26 +103,46 @@ wmKeyMap *eyedropper_colorband_modal_keymap(wmKeyConfig *keyconf)
  */
 /** \name Generic Shared Functions
  * \{ */
-
-void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *ar, const char *name)
+static void eyedropper_draw_cursor_text_ex(const int x, const int y, const char *name)
 {
   const uiFontStyle *fstyle = UI_FSTYLE_WIDGET;
-  wmWindow *win = CTX_wm_window(C);
-  int x = win->eventstate->x;
-  int y = win->eventstate->y;
+
   const float col_fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
   const float col_bg[4] = {0.0f, 0.0f, 0.0f, 0.2f};
 
-  if ((name[0] == '\0') || (BLI_rcti_isect_pt(&ar->winrct, x, y) == false)) {
+  UI_fontstyle_draw_simple_backdrop(fstyle, x, y + U.widget_unit, name, col_fg, col_bg);
+}
+
+void eyedropper_draw_cursor_text_window(const struct wmWindow *window, const char *name)
+{
+  if (name[0] == '\0') {
     return;
   }
 
-  x = x - ar->winrct.xmin;
-  y = y - ar->winrct.ymin;
+  const int x = window->eventstate->x;
+  const int y = window->eventstate->y;
 
-  y += U.widget_unit;
+  eyedropper_draw_cursor_text_ex(x, y, name);
+}
 
-  UI_fontstyle_draw_simple_backdrop(fstyle, x, y, name, col_fg, col_bg);
+void eyedropper_draw_cursor_text_region(const struct bContext *C,
+                                        const ARegion *region,
+                                        const char *name)
+{
+  wmWindow *win = CTX_wm_window(C);
+  const int x = win->eventstate->x;
+  const int y = win->eventstate->y;
+
+  if ((name[0] == '\0') || (BLI_rcti_isect_pt(&region->winrct, x, y) == false)) {
+    return;
+  }
+
+  const int mval[2] = {
+      x - region->winrct.xmin,
+      y - region->winrct.ymin,
+  };
+
+  eyedropper_draw_cursor_text_ex(mval[0], mval[1], name);
 }
 
 /**
@@ -138,17 +157,15 @@ void eyedropper_draw_cursor_text(const struct bContext *C, const ARegion *ar, co
 uiBut *eyedropper_get_property_button_under_mouse(bContext *C, const wmEvent *event)
 {
   bScreen *screen = CTX_wm_screen(C);
-  ScrArea *sa = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
-  ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_ANY, event->x, event->y);
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, event->x, event->y);
+  const ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_ANY, event->x, event->y);
 
-  uiBut *but = ui_but_find_mouse_over(ar, event);
+  uiBut *but = ui_but_find_mouse_over(region, event);
 
   if (ELEM(NULL, but, but->rnapoin.data, but->rnaprop)) {
     return NULL;
   }
-  else {
-    return but;
-  }
+  return but;
 }
 
 /** \} */

@@ -19,8 +19,8 @@
 #include "GHOST_NDOFManagerCocoa.h"
 #include "GHOST_SystemCocoa.h"
 
-#include <stdint.h>
 #include <dlfcn.h>
+#include <stdint.h>
 
 #if DEBUG_NDOF_DRIVER
 #  include <cstdio>
@@ -121,7 +121,8 @@ static bool load_driver_functions()
     return true;
   }
 
-  module = dlopen("3DconnexionClient.framework/3DconnexionClient", RTLD_LAZY | RTLD_LOCAL);
+  module = dlopen("/Library/Frameworks/3DconnexionClient.framework/3DconnexionClient",
+                  RTLD_LAZY | RTLD_LOCAL);
 
   if (module) {
     LOAD_FUNC(SetConnexionHandlers);

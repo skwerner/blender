@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CAST_H__
-#define __FREESTYLE_CAST_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -27,12 +26,11 @@ namespace Freestyle {
 namespace Cast {
 template<class T, class U> U *cast(T *in)
 {
-  if (!in)
+  if (!in) {
     return NULL;
+  }
   return dynamic_cast<U *>(in);
 }
 }  // end of namespace Cast
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CAST_H__

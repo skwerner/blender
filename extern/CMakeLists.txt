@@ -45,11 +45,6 @@ if(WITH_DRACO)
   add_subdirectory(draco)
 endif()
 
-# now only available in a branch
-#if(WITH_MOD_CLOTH_ELTOPO)
-#   add_subdirectory(eltopo)
-#endif()
-
 if(WITH_BINRELOC)
   add_subdirectory(binreloc)
 endif()
@@ -77,7 +72,7 @@ if(WITH_CYCLES OR WITH_COMPOSITOR OR WITH_OPENSUBDIV)
   endif()
 endif()
 
-if(WITH_X11 AND WITH_GHOST_XDND)
+if(WITH_GHOST_X11 AND WITH_GHOST_XDND)
   add_subdirectory(xdnd)
 endif()
 
@@ -104,4 +99,17 @@ endif()
 if(WITH_AUDASPACE AND NOT WITH_SYSTEM_AUDASPACE)
   set(AUDASPACE_CMAKE_CFG ${CMAKE_CURRENT_SOURCE_DIR}/audaspace/blender_config.cmake)
   add_subdirectory(audaspace)
+endif()
+
+if(WITH_QUADRIFLOW)
+  set(QUADRIFLOW_CMAKE_CFG ${CMAKE_CURRENT_SOURCE_DIR}/quadriflow/blender_config.cmake)
+  add_subdirectory(quadriflow)
+endif()
+
+if(WITH_MOD_FLUID)
+  add_subdirectory(mantaflow)
+endif()
+
+if (WITH_COMPOSITOR)
+	add_subdirectory(smaa_areatex)
 endif()

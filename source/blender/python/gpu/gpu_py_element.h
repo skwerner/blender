@@ -18,17 +18,15 @@
  * \ingroup bpygpu
  */
 
-#ifndef __GPU_PY_ELEMENT_H__
-#define __GPU_PY_ELEMENT_H__
+#pragma once
 
 extern PyTypeObject BPyGPUIndexBuf_Type;
 
 #define BPyGPUIndexBuf_Check(v) (Py_TYPE(v) == &BPyGPUIndexBuf_Type)
 
 typedef struct BPyGPUIndexBuf {
-  PyObject_VAR_HEAD struct GPUIndexBuf *elem;
+  PyObject_VAR_HEAD
+  struct GPUIndexBuf *elem;
 } BPyGPUIndexBuf;
 
 PyObject *BPyGPUIndexBuf_CreatePyObject(struct GPUIndexBuf *elem);
-
-#endif /* __GPU_PY_ELEMENT_H__ */

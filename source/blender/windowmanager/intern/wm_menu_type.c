@@ -20,6 +20,8 @@
  * Menu Registry.
  */
 
+#include <stdio.h>
+
 #include "BLI_sys_types.h"
 
 #include "DNA_windowmanager_types.h"
@@ -27,8 +29,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 #include "BKE_screen.h"
@@ -41,10 +43,8 @@ static GHash *menutypes_hash = NULL;
 
 MenuType *WM_menutype_find(const char *idname, bool quiet)
 {
-  MenuType *mt;
-
   if (idname[0]) {
-    mt = BLI_ghash_lookup(menutypes_hash, idname);
+    MenuType *mt = BLI_ghash_lookup(menutypes_hash, idname);
     if (mt) {
       return mt;
     }
@@ -57,6 +57,11 @@ MenuType *WM_menutype_find(const char *idname, bool quiet)
   return NULL;
 }
 
+void WM_menutype_iter(GHashIterator *ghi)
+{
+  BLI_ghashIterator_init(ghi, menutypes_hash);
+}
+
 bool WM_menutype_add(MenuType *mt)
 {
   BLI_assert((mt->description == NULL) || (mt->description[0]));
@@ -66,12 +71,10 @@ bool WM_menutype_add(MenuType *mt)
 
 void WM_menutype_freelink(MenuType *mt)
 {
-  bool ok;
-
-  ok = BLI_ghash_remove(menutypes_hash, mt->idname, NULL, MEM_freeN);
+  bool ok = BLI_ghash_remove(menutypes_hash, mt->idname, NULL, MEM_freeN);
 
   BLI_assert(ok);
-  (void)ok;
+  UNUSED_VARS_NDEBUG(ok);
 }
 
 /* called on initialize WM_init() */
@@ -87,8 +90,8 @@ void WM_menutype_free(void)
 
   GHASH_ITER (gh_iter, menutypes_hash) {
     MenuType *mt = BLI_ghashIterator_getValue(&gh_iter);
-    if (mt->ext.free) {
-      mt->ext.free(mt->ext.data);
+    if (mt->rna_ext.free) {
+      mt->rna_ext.free(mt->rna_ext.data);
     }
   }
 

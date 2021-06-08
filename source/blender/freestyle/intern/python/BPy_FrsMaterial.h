@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_FRSMATERIAL_H__
-#define __FREESTYLE_PYTHON_FRSMATERIAL_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../scene_graph/FrsMaterial.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +39,7 @@ extern PyTypeObject FrsMaterial_Type;
 
 /*---------------------------Python BPy_FrsMaterial structure definition----------*/
 typedef struct {
-  PyObject_HEAD FrsMaterial *m;
+  PyObject_HEAD Freestyle::FrsMaterial *m;
 } BPy_FrsMaterial;
 
 /*---------------------------Python BPy_FrsMaterial visible prototypes-----------*/
@@ -55,5 +52,3 @@ void FrsMaterial_mathutils_register_callback();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_FRSMATERIAL_H__ */

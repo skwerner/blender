@@ -17,8 +17,8 @@
 #ifndef __SESSION_H__
 #define __SESSION_H__
 
-#include "render/buffers.h"
 #include "device/device.h"
+#include "render/buffers.h"
 #include "render/shader.h"
 #include "render/stats.h"
 #include "render/tile.h"
@@ -53,16 +53,15 @@ class SessionParams {
   int2 tile_size;
   TileOrder tile_order;
   int start_resolution;
+  int denoising_start_sample;
   int pixel_size;
   int threads;
+  bool adaptive_sampling;
 
   bool use_profiling;
 
   bool display_buffer_linear;
 
-  bool run_denoising;
-  bool write_denoising_passes;
-  bool full_denoising;
   DenoiseParams denoising;
 
   double cancel_timeout;
@@ -84,14 +83,12 @@ class SessionParams {
     samples = 1024;
     tile_size = make_int2(64, 64);
     start_resolution = INT_MAX;
+    denoising_start_sample = 0;
     pixel_size = 1;
     threads = 0;
+    adaptive_sampling = false;
 
     use_profiling = false;
-
-    run_denoising = false;
-    write_denoising_passes = false;
-    full_denoising = false;
 
     display_buffer_linear = false;
 
@@ -106,18 +103,22 @@ class SessionParams {
 
   bool modified(const SessionParams &params)
   {
+    /* Modified means we have to recreate the session, any parameter changes
+     * that can be handled by an existing Session are omitted. */
     return !(device == params.device && background == params.background &&
-             progressive_refine == params.progressive_refine
-             /* && samples == params.samples */
-             && progressive == params.progressive && experimental == params.experimental &&
+             progressive_refine == params.progressive_refine &&
+             progressive == params.progressive && experimental == params.experimental &&
              tile_size == params.tile_size && start_resolution == params.start_resolution &&
              pixel_size == params.pixel_size && threads == params.threads &&
+             adaptive_sampling == params.adaptive_sampling &&
              use_profiling == params.use_profiling &&
              display_buffer_linear == params.display_buffer_linear &&
              cancel_timeout == params.cancel_timeout && reset_timeout == params.reset_timeout &&
              text_timeout == params.text_timeout &&
              progressive_update_timeout == params.progressive_update_timeout &&
-             tile_order == params.tile_order && shadingsystem == params.shadingsystem);
+             tile_order == params.tile_order && shadingsystem == params.shadingsystem &&
+             denoising.type == params.denoising.type &&
+             (denoising.use == params.denoising.use || (device.denoisers & denoising.type)));
   }
 };
 
@@ -140,21 +141,24 @@ class Session {
 
   function<void(RenderTile &)> write_render_tile_cb;
   function<void(RenderTile &, bool)> update_render_tile_cb;
+  function<void(RenderTile &)> read_bake_tile_cb;
 
   explicit Session(const SessionParams &params);
   ~Session();
 
   void start();
+  void cancel();
   bool draw(BufferParams &params, DeviceDrawParams &draw_params);
   void wait();
 
   bool ready_to_reset();
   void reset(BufferParams &params, int samples);
-  void set_samples(int samples);
   void set_pause(bool pause);
+  void set_samples(int samples);
+  void set_denoising(const DenoiseParams &denoising);
+  void set_denoising_start_sample(int sample);
 
   bool update_scene();
-  bool load_kernels(bool lock_scene = true);
 
   void device_free();
 
@@ -176,8 +180,9 @@ class Session {
 
   void update_status_time(bool show_pause = false, bool show_done = false);
 
-  void tonemap(int sample);
-  void render();
+  void render(bool use_denoise);
+  void copy_to_display_buffer(int sample);
+
   void reset_(BufferParams &params, int samples);
 
   void run_cpu();
@@ -188,12 +193,16 @@ class Session {
   bool draw_gpu(BufferParams &params, DeviceDrawParams &draw_params);
   void reset_gpu(BufferParams &params, int samples);
 
-  bool acquire_tile(Device *tile_device, RenderTile &tile);
-  void update_tile_sample(RenderTile &tile);
-  void release_tile(RenderTile &tile);
+  bool render_need_denoise(bool &delayed);
 
-  void map_neighbor_tiles(RenderTile *tiles, Device *tile_device);
-  void unmap_neighbor_tiles(RenderTile *tiles, Device *tile_device);
+  bool steal_tile(RenderTile &tile, Device *tile_device, thread_scoped_lock &tile_lock);
+  bool get_tile_stolen();
+  bool acquire_tile(RenderTile &tile, Device *tile_device, uint tile_types);
+  void update_tile_sample(RenderTile &tile);
+  void release_tile(RenderTile &tile, const bool need_denoise);
+
+  void map_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
+  void unmap_neighbor_tiles(RenderTileNeighbors &neighbors, Device *tile_device);
 
   bool device_use_gl;
 
@@ -202,8 +211,8 @@ class Session {
   volatile bool display_outdated;
 
   volatile bool gpu_draw_ready;
-  volatile bool gpu_need_tonemap;
-  thread_condition_variable gpu_need_tonemap_cond;
+  volatile bool gpu_need_display_buffer_update;
+  thread_condition_variable gpu_need_display_buffer_update_cond;
 
   bool pause;
   thread_condition_variable pause_cond;
@@ -211,25 +220,25 @@ class Session {
   thread_mutex tile_mutex;
   thread_mutex buffers_mutex;
   thread_mutex display_mutex;
-
-  bool kernels_loaded;
-  DeviceRequestedFeatures loaded_kernel_features;
+  thread_condition_variable denoising_cond;
+  thread_condition_variable tile_steal_cond;
 
   double reset_time;
+  double last_update_time;
+  double last_display_time;
+
+  RenderTile stolen_tile;
+  typedef enum {
+    NOT_STEALING,     /* There currently is no tile stealing in progress. */
+    WAITING_FOR_TILE, /* A device is waiting for another device to release a tile. */
+    RELEASING_TILE,   /* A device has releasing a stealable tile. */
+    GOT_TILE /* A device has released a stealable tile, which is now stored in stolen_tile. */
+  } TileStealingState;
+  std::atomic<TileStealingState> tile_stealing_state;
+  int stealable_tiles;
 
   /* progressive refine */
-  double last_update_time;
   bool update_progressive_refine(bool cancel);
-
-  DeviceRequestedFeatures get_requested_device_features();
-
-  /* ** Split kernel routines ** */
-
-  /* Maximumnumber of closure during session lifetime. */
-  int max_closure_global;
-
-  /* Get maximum number of closures to be used in kernel. */
-  int get_max_closure_count();
 };
 
 CCL_NAMESPACE_END

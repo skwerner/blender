@@ -19,11 +19,11 @@
  * \brief Classes to define a View Map (ViewVertex, ViewEdge, etc.)
  */
 
-#include <float.h>
+#include <cfloat>
 
 #include "ViewMap.h"
-#include "ViewMapIterators.h"
 #include "ViewMapAdvancedIterators.h"
+#include "ViewMapIterators.h"
 
 #include "../geometry/GeomUtils.h"
 
@@ -37,7 +37,7 @@ namespace Freestyle {
 /*                                */
 /**********************************/
 
-ViewMap *ViewMap::_pInstance = NULL;
+ViewMap *ViewMap::_pInstance = nullptr;
 
 ViewMap::~ViewMap()
 {
@@ -103,7 +103,7 @@ const FEdge *ViewMap::getClosestFEdge(real x, real y) const
 {
   // find the closest of this candidates:
   real minDist = DBL_MAX;
-  FEdge *winner = NULL;
+  FEdge *winner = nullptr;
   for (fedges_container::const_iterator fe = _FEdges.begin(), feend = _FEdges.end(); fe != feend;
        fe++) {
     Vec2d A((*fe)->vertexA()->point2D()[0], (*fe)->vertexA()->point2D()[1]);
@@ -122,7 +122,7 @@ const ViewEdge *ViewMap::getClosestViewEdge(real x, real y) const
 {
   // find the closest of this candidates:
   real minDist = DBL_MAX;
-  FEdge *winner = NULL;
+  FEdge *winner = nullptr;
   for (fedges_container::const_iterator fe = _FEdges.begin(), feend = _FEdges.end(); fe != feend;
        fe++) {
     Vec2d A((*fe)->vertexA()->point2D()[0], (*fe)->vertexA()->point2D()[1]);
@@ -133,8 +133,9 @@ const ViewEdge *ViewMap::getClosestViewEdge(real x, real y) const
       winner = (*fe);
     }
   }
-  if (!winner)
-    return NULL;
+  if (!winner) {
+    return nullptr;
+  }
 
   return winner->viewedge();
 }
@@ -155,16 +156,18 @@ TVertex *ViewMap::CreateTVertex(const Vec3r &iA3D,
   SVertex *Ia = shapeA->CreateSVertex(iA3D, iA2D, iFEdgeA->vertexA()->getId());
   SVertex *Ib = shapeB->CreateSVertex(iB3D, iB2D, iFEdgeB->vertexA()->getId());
 
-  // depending on which of these 2 svertices is the nearest from the viewpoint, we're going to build the TVertex
-  // by giving them in an order or another (the first one must be the nearest)
+  // depending on which of these 2 svertices is the nearest from the viewpoint, we're going to
+  // build the TVertex by giving them in an order or another (the first one must be the nearest)
   real dista = Ia->point2D()[2];
   real distb = Ib->point2D()[2];
 
   TVertex *tvertex;
-  if (dista < distb)
+  if (dista < distb) {
     tvertex = new TVertex(Ia, Ib);
-  else
+  }
+  else {
     tvertex = new TVertex(Ib, Ia);
+  }
 
   tvertex->setId(id);
 
@@ -183,16 +186,17 @@ TVertex *ViewMap::CreateTVertex(const Vec3r &iA3D,
 ViewVertex *ViewMap::InsertViewVertex(SVertex *iVertex, vector<ViewEdge *> &newViewEdges)
 {
   NonTVertex *vva = dynamic_cast<NonTVertex *>(iVertex->viewvertex());
-  if (vva)
+  if (vva) {
     return vva;
-  // because it is not already a ViewVertex, this SVertex must have only 2 FEdges. The incoming one still belongs
-  // to ioEdge, the outgoing one now belongs to newVEdge
+  }
+  // because it is not already a ViewVertex, this SVertex must have only 2 FEdges. The incoming one
+  // still belongs to ioEdge, the outgoing one now belongs to newVEdge
   const vector<FEdge *> &fedges = iVertex->fedges();
   if (fedges.size() != 2) {
     cerr << "ViewMap warning: Can't split the ViewEdge" << endl;
-    return NULL;
+    return nullptr;
   }
-  FEdge *fend(NULL), *fbegin(NULL);
+  FEdge *fend(nullptr), *fbegin(nullptr);
   for (vector<FEdge *>::const_iterator fe = fedges.begin(), feend = fedges.end(); fe != feend;
        ++fe) {
     if ((*fe)->vertexB() == iVertex) {
@@ -201,14 +205,15 @@ ViewVertex *ViewMap::InsertViewVertex(SVertex *iVertex, vector<ViewEdge *> &newV
     if ((*fe)->vertexA() == iVertex) {
       fbegin = (*fe);
     }
-    if ((fbegin != NULL) && (fend != NULL))
+    if ((fbegin != nullptr) && (fend != nullptr)) {
       break;
+    }
   }
   ViewEdge *ioEdge = fbegin->viewedge();
   ViewShape *vshape = ioEdge->viewShape();
   vva = new NonTVertex(iVertex);
   // if the ViewEdge is a closed loop, we don't create a new VEdge
-  if (ioEdge->A() == 0) {
+  if (ioEdge->A() == nullptr) {
     // closed loop
     ioEdge->setA(vva);
     ioEdge->setB(vva);
@@ -220,8 +225,8 @@ ViewVertex *ViewMap::InsertViewVertex(SVertex *iVertex, vector<ViewEdge *> &newV
     ioEdge->setFEdgeB(fend);
 
     // Update FEdges
-    fend->setNextEdge(NULL);
-    fbegin->setPreviousEdge(NULL);
+    fend->setNextEdge(nullptr);
+    fbegin->setPreviousEdge(nullptr);
 
     // update new View Vertex:
     vva->AddOutgoingViewEdge(ioEdge);
@@ -235,25 +240,26 @@ ViewVertex *ViewMap::InsertViewVertex(SVertex *iVertex, vector<ViewEdge *> &newV
     ViewEdge *newVEdge = new ViewEdge(vva, ioEdge->B(), fbegin, ioEdge->fedgeB(), vshape);
     newVEdge->setId(Id(ioEdge->getId().getFirst(), ioEdge->getId().getSecond() + 1));
     newVEdge->setNature(ioEdge->getNature());
-    //newVEdge->UpdateFEdges(); // done in the ViewEdge constructor
+    // newVEdge->UpdateFEdges(); // done in the ViewEdge constructor
     // Update old ViewEdge
     ioEdge->setB(vva);
     ioEdge->setFEdgeB(fend);
 
     // Update FEdges
-    fend->setNextEdge(NULL);
-    fbegin->setPreviousEdge(NULL);
+    fend->setNextEdge(nullptr);
+    fbegin->setPreviousEdge(nullptr);
 
     // update new View Vertex:
     vva->AddOutgoingViewEdge(newVEdge);
     vva->AddIncomingViewEdge(ioEdge);
 
     NonTVertex *vvb = dynamic_cast<NonTVertex *>(newVEdge->B());
-    if (vvb)
+    if (vvb) {
       vvb->Replace(ioEdge, newVEdge);
+    }
 
     // update ViewShape
-    //vshape->AddEdge(newVEdge);
+    // vshape->AddEdge(newVEdge);
     // update SShape
     vshape->sshape()->AddChain(fbegin);
     // update ViewMap
@@ -271,7 +277,7 @@ ViewVertex *ViewMap::InsertViewVertex(SVertex *iVertex, vector<ViewEdge *> &newV
 }
 
 #if 0
-FEdge *ViewMap::Connect(FEdge *ioEdge, SVertex *ioVertex, vector<ViewEdge*>& oNewVEdges)
+FEdge *ViewMap::Connect(FEdge *ioEdge, SVertex *ioVertex, vector<ViewEdge *> &oNewVEdges)
 {
   SShape *sshape = ioEdge->shape();
   FEdge *newFEdge = sshape->SplitEdgeIn2(ioEdge, ioVertex);
@@ -293,15 +299,19 @@ FEdge *ViewMap::Connect(FEdge *ioEdge, SVertex *ioVertex, vector<ViewEdge*>& oNe
 static bool ViewEdgeComp(ViewVertex::directedViewEdge &dve1, ViewVertex::directedViewEdge &dve2)
 {
   FEdge *fe1;
-  if (dve1.second)
+  if (dve1.second) {
     fe1 = dve1.first->fedgeB();
-  else
+  }
+  else {
     fe1 = dve1.first->fedgeA();
+  }
   FEdge *fe2;
-  if (dve2.second)
+  if (dve2.second) {
     fe2 = dve2.first->fedgeB();
-  else
+  }
+  else {
     fe2 = dve2.first->fedgeA();
+  }
 
   Vec3r V1 = fe1->orientation2d();
   Vec2r v1(V1.x(), V1.y());
@@ -310,18 +320,18 @@ static bool ViewEdgeComp(ViewVertex::directedViewEdge &dve1, ViewVertex::directe
   Vec2r v2(V2.x(), V2.y());
   v2.normalize();
   if (v1.y() > 0) {
-    if (v2.y() < 0)
+    if (v2.y() < 0) {
       return true;
-    else
-      return (v1.x() > v2.x());
+    }
+
+    return (v1.x() > v2.x());
   }
-  else {
-    if (v2.y() > 0)
-      return false;
-    else
-      return (v1.x() < v2.x());
+
+  if (v2.y() > 0) {
+    return false;
   }
-  return false;
+
+  return (v1.x() < v2.x());
 }
 
 void TVertex::setFrontEdgeA(ViewEdge *iFrontEdgeA, bool incoming)
@@ -333,8 +343,9 @@ void TVertex::setFrontEdgeA(ViewEdge *iFrontEdgeA, bool incoming)
   _FrontEdgeA = directedViewEdge(iFrontEdgeA, incoming);
   if (!_sortedEdges.empty()) {
     edge_pointers_container::iterator dve = _sortedEdges.begin(), dveend = _sortedEdges.end();
-    for (; (dve != dveend) && ViewEdgeComp(**dve, _FrontEdgeA); ++dve)
-      ;
+    for (; (dve != dveend) && ViewEdgeComp(**dve, _FrontEdgeA); ++dve) {
+      /* pass */
+    }
     _sortedEdges.insert(dve, &_FrontEdgeA);
   }
   else {
@@ -351,8 +362,9 @@ void TVertex::setFrontEdgeB(ViewEdge *iFrontEdgeB, bool incoming)
   _FrontEdgeB = directedViewEdge(iFrontEdgeB, incoming);
   if (!_sortedEdges.empty()) {
     edge_pointers_container::iterator dve = _sortedEdges.begin(), dveend = _sortedEdges.end();
-    for (; (dve != dveend) && ViewEdgeComp(**dve, _FrontEdgeB); ++dve)
-      ;
+    for (; (dve != dveend) && ViewEdgeComp(**dve, _FrontEdgeB); ++dve) {
+      /* pass */
+    }
     _sortedEdges.insert(dve, &_FrontEdgeB);
   }
   else {
@@ -369,8 +381,9 @@ void TVertex::setBackEdgeA(ViewEdge *iBackEdgeA, bool incoming)
   _BackEdgeA = directedViewEdge(iBackEdgeA, incoming);
   if (!_sortedEdges.empty()) {
     edge_pointers_container::iterator dve = _sortedEdges.begin(), dveend = _sortedEdges.end();
-    for (; (dve != dveend) && ViewEdgeComp(**dve, _BackEdgeA); ++dve)
-      ;
+    for (; (dve != dveend) && ViewEdgeComp(**dve, _BackEdgeA); ++dve) {
+      /* pass */
+    }
     _sortedEdges.insert(dve, &_BackEdgeA);
   }
   else {
@@ -387,8 +400,9 @@ void TVertex::setBackEdgeB(ViewEdge *iBackEdgeB, bool incoming)
   _BackEdgeB = directedViewEdge(iBackEdgeB, incoming);
   if (!_sortedEdges.empty()) {
     edge_pointers_container::iterator dve = _sortedEdges.begin(), dveend = _sortedEdges.end();
-    for (; (dve != dveend) && ViewEdgeComp(**dve, _BackEdgeB); ++dve)
-      ;
+    for (; (dve != dveend) && ViewEdgeComp(**dve, _BackEdgeB); ++dve) {
+      /* pass */
+    }
     _sortedEdges.insert(dve, &_BackEdgeB);
   }
   else {
@@ -421,25 +435,27 @@ void TVertex::Replace(ViewEdge *iOld, ViewEdge *iNew)
 /*! iterators access */
 ViewVertex::edge_iterator TVertex::edges_begin()
 {
-  //return edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, _FrontEdgeA);
+  // return edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, _FrontEdgeA);
   return edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.begin());
 }
 
 ViewVertex::const_edge_iterator TVertex::edges_begin() const
 {
-  //return const_edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, _FrontEdgeA);
+  // return const_edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, _FrontEdgeA);
   return const_edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.begin());
 }
 
 ViewVertex::edge_iterator TVertex::edges_end()
 {
-  //return edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, directedViewEdge(0,true));
+  // return edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB,
+  // directedViewEdge(0,true));
   return edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.end());
 }
 
 ViewVertex::const_edge_iterator TVertex::edges_end() const
 {
-  //return const_edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, directedViewEdge(0, true));
+  // return const_edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB,
+  // directedViewEdge(0, true));
   return const_edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.end());
 }
 
@@ -448,21 +464,26 @@ ViewVertex::edge_iterator TVertex::edges_iterator(ViewEdge *iEdge)
   for (edge_pointers_container::iterator it = _sortedEdges.begin(), itend = _sortedEdges.end();
        it != itend;
        it++) {
-    if ((*it)->first == iEdge)
+    if ((*it)->first == iEdge) {
       return edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), it);
+    }
   }
   return edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.begin());
 
 #if 0
   directedViewEdge dEdge;
-  if (_FrontEdgeA.first == iEdge)
+  if (_FrontEdgeA.first == iEdge) {
     dEdge = _FrontEdgeA;
-  else if (_FrontEdgeB.first == iEdge)
+  }
+  else if (_FrontEdgeB.first == iEdge) {
     dEdge = _FrontEdgeB;
-  else if (_BackEdgeA.first == iEdge)
+  }
+  else if (_BackEdgeA.first == iEdge) {
     dEdge = _BackEdgeA;
-  else if (_BackEdgeB.first == iEdge)
+  }
+  else if (_BackEdgeB.first == iEdge) {
     dEdge = _BackEdgeB;
+  }
   return edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, dEdge);
 #endif
 }
@@ -473,21 +494,26 @@ ViewVertex::const_edge_iterator TVertex::edges_iterator(ViewEdge *iEdge) const
                                                itend = _sortedEdges.end();
        it != itend;
        it++) {
-    if ((*it)->first == iEdge)
+    if ((*it)->first == iEdge) {
       return const_edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), it);
+    }
   }
   return const_edge_iterator(_sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.begin());
 
 #if 0
   directedViewEdge dEdge;
-  if (_FrontEdgeA.first == iEdge)
+  if (_FrontEdgeA.first == iEdge) {
     dEdge = _FrontEdgeA;
-  else if (_FrontEdgeB.first == iEdge)
+  }
+  else if (_FrontEdgeB.first == iEdge) {
     dEdge = _FrontEdgeB;
-  else if (_BackEdgeA.first == iEdge)
+  }
+  else if (_BackEdgeA.first == iEdge) {
     dEdge = _BackEdgeA;
-  else if (_BackEdgeB.first == iEdge)
+  }
+  else if (_BackEdgeB.first == iEdge) {
     dEdge = _BackEdgeB;
+  }
   return const_edge_iterator(_FrontEdgeA, _FrontEdgeB, _BackEdgeA, _BackEdgeB, dEdge);
 #endif
 }
@@ -509,9 +535,10 @@ ViewVertexInternal::orientedViewEdgeIterator TVertex::edgesIterator(ViewEdge *iE
   for (edge_pointers_container::iterator it = _sortedEdges.begin(), itend = _sortedEdges.end();
        it != itend;
        it++) {
-    if ((*it)->first == iEdge)
+    if ((*it)->first == iEdge) {
       return ViewVertexInternal::orientedViewEdgeIterator(
           _sortedEdges.begin(), _sortedEdges.end(), it);
+    }
   }
   return ViewVertexInternal::orientedViewEdgeIterator(
       _sortedEdges.begin(), _sortedEdges.end(), _sortedEdges.begin());
@@ -531,8 +558,9 @@ void NonTVertex::AddOutgoingViewEdge(ViewEdge *iVEdge)
   directedViewEdge idve(iVEdge, false);
   if (!_ViewEdges.empty()) {
     edges_container::iterator dve = _ViewEdges.begin(), dveend = _ViewEdges.end();
-    for (; (dve != dveend) && ViewEdgeComp(*dve, idve); ++dve)
-      ;
+    for (; (dve != dveend) && ViewEdgeComp(*dve, idve); ++dve) {
+      /* pass */
+    }
     _ViewEdges.insert(dve, idve);
   }
   else {
@@ -546,8 +574,9 @@ void NonTVertex::AddIncomingViewEdge(ViewEdge *iVEdge)
   directedViewEdge idve(iVEdge, true);
   if (!_ViewEdges.empty()) {
     edges_container::iterator dve = _ViewEdges.begin(), dveend = _ViewEdges.end();
-    for (; (dve != dveend) && ViewEdgeComp(*dve, idve); ++dve)
-      ;
+    for (; (dve != dveend) && ViewEdgeComp(*dve, idve); ++dve) {
+      /* pass */
+    }
     _ViewEdges.insert(dve, idve);
   }
   else {
@@ -580,8 +609,9 @@ ViewVertex::edge_iterator NonTVertex::edges_iterator(ViewEdge *iEdge)
 {
   for (edges_container::iterator it = _ViewEdges.begin(), itend = _ViewEdges.end(); it != itend;
        it++) {
-    if ((it)->first == iEdge)
+    if ((it)->first == iEdge) {
       return edge_iterator(_ViewEdges.begin(), _ViewEdges.end(), it);
+    }
   }
   return edge_iterator(_ViewEdges.begin(), _ViewEdges.end(), _ViewEdges.begin());
 }
@@ -591,8 +621,9 @@ ViewVertex::const_edge_iterator NonTVertex::edges_iterator(ViewEdge *iEdge) cons
   for (edges_container::const_iterator it = _ViewEdges.begin(), itend = _ViewEdges.end();
        it != itend;
        it++) {
-    if ((it)->first == iEdge)
+    if ((it)->first == iEdge) {
       return const_edge_iterator(_ViewEdges.begin(), _ViewEdges.end(), it);
+    }
   }
   return const_edge_iterator(_ViewEdges.begin(), _ViewEdges.end(), _ViewEdges.begin());
 }
@@ -613,9 +644,10 @@ ViewVertexInternal::orientedViewEdgeIterator NonTVertex::edgesIterator(ViewEdge 
 {
   for (edges_container::iterator it = _ViewEdges.begin(), itend = _ViewEdges.end(); it != itend;
        it++) {
-    if ((it)->first == iEdge)
+    if ((it)->first == iEdge) {
       return ViewVertexInternal::orientedViewEdgeIterator(
           _ViewEdges.begin(), _ViewEdges.end(), it);
+    }
   }
   return ViewVertexInternal::orientedViewEdgeIterator(
       _ViewEdges.begin(), _ViewEdges.end(), _ViewEdges.begin());
@@ -677,56 +709,56 @@ ViewEdge::const_fedge_iterator ViewEdge::fedge_iterator_last() const
 
 ViewEdge::fedge_iterator ViewEdge::fedge_iterator_end()
 {
-  return fedge_iterator(0, this->_FEdgeB);
+  return fedge_iterator(nullptr, this->_FEdgeB);
 }
 
 ViewEdge::const_fedge_iterator ViewEdge::fedge_iterator_end() const
 {
-  return const_fedge_iterator(0, this->_FEdgeB);
+  return const_fedge_iterator(nullptr, this->_FEdgeB);
 }
 
 //! embedding vertex iterator
 ViewEdge::const_vertex_iterator ViewEdge::vertices_begin() const
 {
-  return const_vertex_iterator(this->_FEdgeA->vertexA(), 0, _FEdgeA);
+  return const_vertex_iterator(this->_FEdgeA->vertexA(), nullptr, _FEdgeA);
 }
 
 ViewEdge::vertex_iterator ViewEdge::vertices_begin()
 {
-  return vertex_iterator(this->_FEdgeA->vertexA(), 0, _FEdgeA);
+  return vertex_iterator(this->_FEdgeA->vertexA(), nullptr, _FEdgeA);
 }
 
 ViewEdge::const_vertex_iterator ViewEdge::vertices_last() const
 {
-  return const_vertex_iterator(this->_FEdgeB->vertexB(), _FEdgeB, 0);
+  return const_vertex_iterator(this->_FEdgeB->vertexB(), _FEdgeB, nullptr);
 }
 
 ViewEdge::vertex_iterator ViewEdge::vertices_last()
 {
-  return vertex_iterator(this->_FEdgeB->vertexB(), _FEdgeB, 0);
+  return vertex_iterator(this->_FEdgeB->vertexB(), _FEdgeB, nullptr);
 }
 
 ViewEdge::const_vertex_iterator ViewEdge::vertices_end() const
 {
-  return const_vertex_iterator(0, _FEdgeB, 0);
+  return const_vertex_iterator(nullptr, _FEdgeB, nullptr);
 }
 
 ViewEdge::vertex_iterator ViewEdge::vertices_end()
 {
-  return vertex_iterator(0, _FEdgeB, 0);
+  return vertex_iterator(nullptr, _FEdgeB, nullptr);
 }
 
 Interface0DIterator ViewEdge::verticesBegin()
 {
   Interface0DIterator ret(new ViewEdgeInternal::SVertexIterator(
-      this->_FEdgeA->vertexA(), this->_FEdgeA->vertexA(), NULL, _FEdgeA, 0.0f));
+      this->_FEdgeA->vertexA(), this->_FEdgeA->vertexA(), nullptr, _FEdgeA, 0.0f));
   return ret;
 }
 
 Interface0DIterator ViewEdge::verticesEnd()
 {
   Interface0DIterator ret(new ViewEdgeInternal::SVertexIterator(
-      NULL, this->_FEdgeA->vertexA(), _FEdgeB, NULL, getLength2D()));
+      nullptr, this->_FEdgeA->vertexA(), _FEdgeB, nullptr, getLength2D()));
   return ret;
 }
 
@@ -761,7 +793,7 @@ ViewShape::~ViewShape()
 
   if (_SShape) {
     delete _SShape;
-    _SShape = NULL;
+    _SShape = nullptr;
   }
 }
 
@@ -802,7 +834,7 @@ void ViewEdge::UpdateFEdges()
   do {
     currentEdge->setViewEdge(this);
     currentEdge = currentEdge->nextEdge();
-  } while ((currentEdge != NULL) && (currentEdge != _FEdgeB));
+  } while (!ELEM(currentEdge, NULL, _FEdgeB));
   // last one
   _FEdgeB->setViewEdge(this);
 }

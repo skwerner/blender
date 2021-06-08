@@ -1,25 +1,18 @@
 set BUILD_GENERATOR_POST=
 set BUILD_PLATFORM_SELECT=
-if "%BUILD_ARCH%"=="x64" (
-	set MSBUILD_PLATFORM=x64
-) else if "%BUILD_ARCH%"=="x86" (
-	set MSBUILD_PLATFORM=win32
-	if "%WITH_CLANG%"=="1" (
-		echo Clang not supported for X86
-		exit /b 1
-	)
+set MSBUILD_PLATFORM=x64
+
+if "%BUILD_WITH_SCCACHE%"=="1" (
+		echo sccache is only supported with ninja as the build system. 
+		exit /b 1 
 )
 
 if "%WITH_CLANG%"=="1" (
 	set CLANG_CMAKE_ARGS=-T"llvm"
-	if "%WITH_ASAN%"=="1" (
+)
+
+if "%WITH_ASAN%"=="1" (
 		set ASAN_CMAKE_ARGS=-DWITH_COMPILER_ASAN=On
-	)
-) else (
-	if "%WITH_ASAN%"=="1" (
-		echo ASAN is only supported with clang.
-		exit /b 1 
-	)
 )
 
 if "%WITH_PYDEBUG%"=="1" (
@@ -67,21 +60,17 @@ if "%MUST_CONFIGURE%"=="1" (
 		exit /b 1
 	)
 )
-
-echo call "%VCVARS%" %BUILD_ARCH% > %BUILD_DIR%\rebuild.cmd
+echo echo off > %BUILD_DIR%\rebuild.cmd
+echo if "%%VSCMD_VER%%" == "" ^( >> %BUILD_DIR%\rebuild.cmd
+echo   call "%VCVARS%" %BUILD_ARCH% >> %BUILD_DIR%\rebuild.cmd
+echo ^) >> %BUILD_DIR%\rebuild.cmd
 echo "%CMAKE%" . >> %BUILD_DIR%\rebuild.cmd
 echo echo %%TIME%% ^> buildtime.txt >> %BUILD_DIR%\rebuild.cmd
 echo msbuild ^
-	%BUILD_DIR%\Blender.sln ^
-	/target:build ^
+	%BUILD_DIR%\INSTALL.vcxproj ^
 	/property:Configuration=%BUILD_TYPE% ^
 	/maxcpucount:2 ^
 	/verbosity:minimal ^
 	/p:platform=%MSBUILD_PLATFORM% ^
 	/flp:Summary;Verbosity=minimal;LogFile=%BUILD_DIR%\Build.log >> %BUILD_DIR%\rebuild.cmd
-echo msbuild ^
-	%BUILD_DIR%\INSTALL.vcxproj ^
-	/property:Configuration=%BUILD_TYPE% ^
-	/verbosity:minimal ^
-	/p:platform=%MSBUILD_PLATFORM% >> %BUILD_DIR%\rebuild.cmd
 echo echo %%TIME%% ^>^> buildtime.txt >> %BUILD_DIR%\rebuild.cmd

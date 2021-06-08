@@ -18,8 +18,7 @@
  * \ingroup RNA
  */
 
-#ifndef __RNA_MESH_UTILS_H__
-#define __RNA_MESH_UTILS_H__
+#pragma once
 
 /* Macros to help reduce code clutter in rna_mesh.c */
 
@@ -83,7 +82,8 @@
     return rna_pointer_inherit_refine(ptr, &RNA_##layer_rna_type, layer); \
   } \
 \
-  static void rna_Mesh_##collection_name##_##active_type##_set(PointerRNA *ptr, PointerRNA value) \
+  static void rna_Mesh_##collection_name##_##active_type##_set( \
+      PointerRNA *ptr, PointerRNA value, struct ReportList *UNUSED(reports)) \
   { \
     Mesh *me = rna_mesh(ptr); \
     CustomData *data = rna_mesh_##customdata_type(ptr); \
@@ -122,5 +122,3 @@
       BKE_mesh_update_customdata_pointers(me, true); \
     } \
   }
-
-#endif /* __RNA_MESH_UTILS_H__ */

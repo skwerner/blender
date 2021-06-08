@@ -42,7 +42,7 @@ addons_fake_modules = {}
 def _initialize():
     path_list = paths()
     for path in path_list:
-        _bpy.utils._sys_path_ensure(path)
+        _bpy.utils._sys_path_ensure_append(path)
     for addon in _preferences.addons:
         enable(addon.module)
 
@@ -138,10 +138,10 @@ def modules_refresh(module_cache=addons_fake_modules):
                 mod.__file__ = mod_path
                 mod.__time__ = os.path.getmtime(mod_path)
             except:
-                print("AST error parsing bl_info for:", mod_name)
+                print("AST error parsing bl_info for:", repr(mod_path))
                 import traceback
                 traceback.print_exc()
-                raise
+                return None
 
             if force_support is not None:
                 mod.bl_info["support"] = force_support
@@ -172,8 +172,8 @@ def modules_refresh(module_cache=addons_fake_modules):
                 if mod.__file__ != mod_path:
                     print(
                         "multiple addons with the same name:\n"
-                        "  " f"{mod.__file__!r}" "\n"
-                        "  " f"{mod_path!r}"
+                        "  %r\n"
+                        "  %r" % (mod.__file__, mod_path)
                     )
                     error_duplicates.append((mod.bl_info["name"], mod.__file__, mod_path))
 
@@ -241,7 +241,7 @@ def check(module_name):
 
     if loaded_state is Ellipsis:
         print(
-            "Warning: addon-module " f"{module_name:s}" " found module "
+            "Warning: addon-module", module_name, "found module "
             "but without '__addon_enabled__' field, "
             "possible name collision from file:",
             repr(getattr(mod, "__file__", "<unknown>")),
@@ -295,7 +295,7 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
     from bpy_restrict_state import RestrictBlend
 
     if handle_error is None:
-        def handle_error(ex):
+        def handle_error(_ex):
             import traceback
             traceback.print_exc()
 
@@ -342,13 +342,17 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
     # Split registering up into 3 steps so we can undo
     # if it fails par way through.
 
-    # disable the context, using the context at all is
-    # really bad while loading an addon, don't do it!
+    # Disable the context: using the context at all
+    # while loading an addon is really bad, don't do it!
     with RestrictBlend():
 
         # 1) try import
         try:
             mod = __import__(module_name)
+            if mod.__file__ is None:
+                # This can happen when the addon has been removed but there are
+                # residual `.pyc` files left behind.
+                raise ImportError(name=module_name)
             mod.__time__ = os.path.getmtime(mod.__file__)
             mod.__addon_enabled__ = False
         except Exception as ex:
@@ -362,24 +366,22 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
                 _addon_remove(module_name)
             return None
 
-        # 1.1) fail when add-on is too old
+        # 1.1) Fail when add-on is too old.
         # This is a temporary 2.8x migration check, so we can manage addons that are supported.
 
         if mod.bl_info.get("blender", (0, 0, 0)) < (2, 80, 0):
             if _bpy.app.debug:
-                print(f"Warning: Add-on '{module_name:s}' has not been upgraded to 2.8, ignoring")
+                print("Warning: Add-on '%s' was not upgraded for 2.80, ignoring" % module_name)
             return None
 
-        # 2) try register collected modules
-        # removed, addons need to handle own registration now.
+        # 2) Try register collected modules.
+        # Removed register_module, addons need to handle their own registration now.
 
-        use_owner = mod.bl_info.get("use_owner", True)
-        if use_owner:
-            from _bpy import _bl_owner_id_get, _bl_owner_id_set
-            owner_id_prev = _bl_owner_id_get()
-            _bl_owner_id_set(module_name)
+        from _bpy import _bl_owner_id_get, _bl_owner_id_set
+        owner_id_prev = _bl_owner_id_get()
+        _bl_owner_id_set(module_name)
 
-        # 3) try run the modules register function
+        # 3) Try run the modules register function.
         try:
             mod.register()
         except Exception as ex:
@@ -393,8 +395,7 @@ def enable(module_name, *, default_set=False, persistent=False, handle_error=Non
                 _addon_remove(module_name)
             return None
         finally:
-            if use_owner:
-                _bl_owner_id_set(owner_id_prev)
+            _bl_owner_id_set(owner_id_prev)
 
     # * OK loaded successfully! *
     mod.__addon_enabled__ = True
@@ -420,7 +421,7 @@ def disable(module_name, *, default_set=False, handle_error=None):
     import sys
 
     if handle_error is None:
-        def handle_error(ex):
+        def handle_error(_ex):
             import traceback
             traceback.print_exc()
 
@@ -442,8 +443,9 @@ def disable(module_name, *, default_set=False, handle_error=None):
             handle_error(ex)
     else:
         print(
-            "addon_utils.disable: " f"{module_name:s}" " not",
-            ("disabled" if mod is None else "loaded")
+            "addon_utils.disable: %s not %s" % (
+                module_name,
+                "disabled" if mod is None else "loaded")
         )
 
     # could be in more than once, unlikely but better do this just in case.
@@ -467,7 +469,7 @@ def reset_all(*, reload_scripts=False):
     paths_list = paths()
 
     for path in paths_list:
-        _bpy.utils._sys_path_ensure(path)
+        _bpy.utils._sys_path_ensure_append(path)
         for mod_name, _mod_path in _bpy.path.module_names(path):
             is_enabled, is_loaded = check(mod_name)
 
@@ -494,9 +496,20 @@ def disable_all():
         item for item in sys.modules.items()
         if getattr(item[1], "__addon_enabled__", False)
     ]
+    # Check the enabled state again since it's possible the disable call
+    # of one add-on disables others.
     for mod_name, mod in addon_modules:
         if getattr(mod, "__addon_enabled__", False):
             disable(mod_name)
+
+
+def _blender_manual_url_prefix():
+    if _bpy.app.version_cycle in {"rc", "release"}:
+        manual_version = "%d.%d" % _bpy.app.version[:2]
+    else:
+        manual_version = "dev"
+
+    return "https://docs.blender.org/manual/en/" + manual_version
 
 
 def module_bl_info(mod, info_basis=None):
@@ -508,12 +521,11 @@ def module_bl_info(mod, info_basis=None):
             "blender": (),
             "location": "",
             "description": "",
-            "wiki_url": "",
+            "doc_url": "",
             "support": 'COMMUNITY',
             "category": "",
             "warning": "",
             "show_expanded": False,
-            "use_owner": True,
         }
 
     addon_info = getattr(mod, "bl_info", {})
@@ -531,9 +543,14 @@ def module_bl_info(mod, info_basis=None):
     if not addon_info["name"]:
         addon_info["name"] = mod.__name__
 
-    # Temporary auto-magic, don't use_owner for import export menus.
-    if mod.bl_info["category"] == "Import-Export":
-        mod.bl_info["use_owner"] = False
+    doc_url = addon_info["doc_url"]
+    if doc_url:
+        doc_url_prefix = "{BLENDER_MANUAL_URL}"
+        if doc_url_prefix in doc_url:
+            addon_info["doc_url"] = doc_url.replace(
+                doc_url_prefix,
+                _blender_manual_url_prefix(),
+            )
 
     addon_info["_init"] = None
     return addon_info

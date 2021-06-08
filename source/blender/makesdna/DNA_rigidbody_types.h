@@ -22,10 +22,14 @@
  * \brief Types and defines for representing Rigid Body entities
  */
 
-#ifndef __DNA_RIGIDBODY_TYPES_H__
-#define __DNA_RIGIDBODY_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
+#include "DNA_object_force_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Collection;
 
@@ -41,7 +45,7 @@ typedef struct RigidBodyWorld_Shared {
   struct ListBase ptcaches;
 
   /* References to Physics Sim objects. Exist at runtime only ---------------------- */
-  /** Physics sim world (i.e. btDiscreteDynamicsWorld). */
+  /** Physics sim world (i.e. #btDiscreteDynamicsWorld). */
   void *physics_world;
 } RigidBodyWorld_Shared;
 
@@ -59,7 +63,7 @@ typedef struct RigidBodyWorld {
   /** Array to access group objects by index, only used at runtime. */
   struct Object **objects;
 
-  /** Group containing objects to use for Rigid Body Constraint.s*/
+  /** Group containing objects to use for Rigid Body Constraints. */
   struct Collection *constraints;
 
   char _pad[4];
@@ -68,19 +72,19 @@ typedef struct RigidBodyWorld {
 
   /** This pointer is shared between all evaluated copies. */
   struct RigidBodyWorld_Shared *shared;
-  /** Moved to shared->pointcache. */
+  /** Moved to `shared->pointcache`. */
   struct PointCache *pointcache DNA_DEPRECATED;
-  /** Moved to shared->ptcaches. */
+  /** Moved to `shared->ptcaches`. */
   struct ListBase ptcaches DNA_DEPRECATED;
   /** Number of objects in rigid body group. */
   int numbodies;
 
-  /** Number of simulation steps thaken per second. */
-  short steps_per_second;
+  /** Number of simulation sub-steps steps taken per frame. */
+  short substeps_per_frame;
   /** Number of constraint solver iterations made per simulation step. */
   short num_solver_iterations;
 
-  /** (eRigidBodyWorld_Flag) settings for this RigidBodyWorld. */
+  /** (#eRigidBodyWorld_Flag) settings for this RigidBodyWorld. */
   int flag;
   /** Used to speed up or slow down the simulation. */
   float time_scale;
@@ -91,8 +95,8 @@ typedef enum eRigidBodyWorld_Flag {
   /* should sim world be skipped when evaluating (user setting) */
   RBW_FLAG_MUTED = (1 << 0),
   /* sim data needs to be rebuilt */
-  RBW_FLAG_NEEDS_REBUILD = (1 << 1),
-  /* usse split impulse when stepping the simulation */
+  /* RBW_FLAG_NEEDS_REBUILD = (1 << 1), */ /* UNUSED */
+  /** Use split impulse when stepping the simulation. */
   RBW_FLAG_USE_SPLIT_IMPULSE = (1 << 2),
 } eRigidBodyWorld_Flag;
 
@@ -171,7 +175,7 @@ typedef enum eRigidBodyOb_Type {
   /* active geometry participant in simulation. is directly controlled by sim */
   RBO_TYPE_ACTIVE = 0,
   /* passive geometry participant in simulation. is directly controlled by animsys */
-  RBO_TYPE_PASSIVE,
+  RBO_TYPE_PASSIVE = 1,
 } eRigidBodyOb_Type;
 
 /* Flags for RigidBodyOb */
@@ -199,30 +203,30 @@ typedef enum eRigidBody_Shape {
   /** Simple box (i.e. bounding box). */
   RB_SHAPE_BOX = 0,
   /** Sphere. */
-  RB_SHAPE_SPHERE,
+  RB_SHAPE_SPHERE = 1,
   /** Rounded "pill" shape (i.e. calcium tablets). */
-  RB_SHAPE_CAPSULE,
+  RB_SHAPE_CAPSULE = 2,
   /** Cylinder (i.e. pringles can). */
-  RB_SHAPE_CYLINDER,
+  RB_SHAPE_CYLINDER = 3,
   /** Cone (i.e. party hat). */
-  RB_SHAPE_CONE,
+  RB_SHAPE_CONE = 4,
 
   /** Convex hull (minimal shrinkwrap encompassing all verts). */
-  RB_SHAPE_CONVEXH,
+  RB_SHAPE_CONVEXH = 5,
   /** Triangulated mesh. */
-  RB_SHAPE_TRIMESH,
+  RB_SHAPE_TRIMESH = 6,
 
   /* concave mesh approximated using primitives */
-  //RB_SHAPE_COMPOUND,
+  RB_SHAPE_COMPOUND = 7,
 } eRigidBody_Shape;
 
 typedef enum eRigidBody_MeshSource {
   /* base mesh */
   RBO_MESH_BASE = 0,
   /* only deformations */
-  RBO_MESH_DEFORM,
+  RBO_MESH_DEFORM = 1,
   /* final derived mesh */
-  RBO_MESH_FINAL,
+  RBO_MESH_FINAL = 2,
 } eRigidBody_MeshSource;
 
 /* ******************************** */
@@ -305,34 +309,34 @@ typedef enum eRigidBodyCon_Type {
   /** lets bodies rotate around a specified point */
   RBC_TYPE_POINT = 0,
   /** lets bodies rotate around a specified axis */
-  RBC_TYPE_HINGE,
+  RBC_TYPE_HINGE = 1,
   /** simulates wheel suspension */
-  RBC_TYPE_HINGE2,
-  /** restricts movent to a specified axis */
-  RBC_TYPE_SLIDER,
-  /** lets object rotate within a cpecified cone */
-  RBC_TYPE_CONE_TWIST,
+  /* RBC_TYPE_HINGE2 = 2, */ /* UNUSED */
+  /** Restricts moment to a specified axis. */
+  RBC_TYPE_SLIDER = 3,
+  /** lets object rotate within a specified cone */
+  /* RBC_TYPE_CONE_TWIST = 4, */ /* UNUSED */
   /** allows user to specify constraint axes */
-  RBC_TYPE_6DOF,
+  RBC_TYPE_6DOF = 5,
   /** like 6DOF but has springs */
-  RBC_TYPE_6DOF_SPRING,
+  RBC_TYPE_6DOF_SPRING = 6,
   /** simulates a universal joint */
-  RBC_TYPE_UNIVERSAL,
+  /* RBC_TYPE_UNIVERSAL = 7, */ /* UNUSED */
   /** glues two bodies together */
-  RBC_TYPE_FIXED,
+  RBC_TYPE_FIXED = 8,
   /** similar to slider but also allows rotation around slider axis */
-  RBC_TYPE_PISTON,
+  RBC_TYPE_PISTON = 9,
   /** Simplified spring constraint with only once axis that's
    * automatically placed between the connected bodies */
-  RBC_TYPE_SPRING,
-  /** dirves bodies by applying linear and angular forces */
-  RBC_TYPE_MOTOR,
+  /* RBC_TYPE_SPRING = 10, */ /* UNUSED */
+  /** Drives bodies by applying linear and angular forces. */
+  RBC_TYPE_MOTOR = 11,
 } eRigidBodyCon_Type;
 
 /* Spring implementation type for RigidBodyOb */
 typedef enum eRigidBodyCon_SpringType {
   RBC_SPRING_TYPE1 = 0, /* btGeneric6DofSpringConstraint */
-  RBC_SPRING_TYPE2,     /* btGeneric6DofSpring2Constraint */
+  RBC_SPRING_TYPE2 = 1, /* btGeneric6DofSpring2Constraint */
 } eRigidBodyCon_SpringType;
 
 /* Flags for RigidBodyCon */
@@ -369,4 +373,6 @@ typedef enum eRigidBodyCon_Flag {
 
 /* ******************************** */
 
-#endif /* __DNA_RIGIDBODY_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

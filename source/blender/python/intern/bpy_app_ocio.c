@@ -18,8 +18,8 @@
  * \ingroup pythonintern
  */
 
-#include <Python.h>
 #include "BLI_utildefines.h"
+#include <Python.h>
 
 #include "bpy_app_ocio.h"
 
@@ -32,18 +32,19 @@
 static PyTypeObject BlenderAppOCIOType;
 
 static PyStructSequence_Field app_ocio_info_fields[] = {
-    {(char *)"supported",
-     (char *)("Boolean, True when Blender is built with OpenColorIO support")},
-    {(char *)("version"), (char *)("The OpenColorIO version as a tuple of 3 numbers")},
-    {(char *)("version_string"), (char *)("The OpenColorIO version formatted as a string")},
+    {"supported", "Boolean, True when Blender is built with OpenColorIO support"},
+    {"version", "The OpenColorIO version as a tuple of 3 numbers"},
+    {"version_string", "The OpenColorIO version formatted as a string"},
     {NULL},
 };
 
 static PyStructSequence_Desc app_ocio_info_desc = {
-    (char *)"bpy.app.ocio", /* name */
-    (char
-         *)"This module contains information about OpenColorIO blender is linked against", /* doc */
-    app_ocio_info_fields, /* fields */
+    /* name */
+    "bpy.app.ocio",
+    /* doc */
+    "This module contains information about OpenColorIO blender is linked against",
+    /* fields */
+    app_ocio_info_fields,
     ARRAY_SIZE(app_ocio_info_fields) - 1,
 };
 
@@ -80,8 +81,8 @@ static PyObject *make_ocio_info(void)
   SetStrItem("Unknown");
 #endif
 
-  if (PyErr_Occurred()) {
-    Py_CLEAR(ocio_info);
+  if (UNLIKELY(PyErr_Occurred())) {
+    Py_DECREF(ocio_info);
     return NULL;
   }
 
@@ -103,7 +104,7 @@ PyObject *BPY_app_ocio_struct(void)
   BlenderAppOCIOType.tp_init = NULL;
   BlenderAppOCIOType.tp_new = NULL;
   BlenderAppOCIOType.tp_hash = (hashfunc)
-      _Py_HashPointer; /* without this we can't do set(sys.modules) [#29635] */
+      _Py_HashPointer; /* without this we can't do set(sys.modules) T29635. */
 
   return ret;
 }

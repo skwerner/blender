@@ -21,11 +21,10 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_TEXTURE_TYPES_H__
-#define __DNA_TEXTURE_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
 #include "DNA_image_types.h" /* ImageUser */
 
 #ifdef __cplusplus
@@ -35,7 +34,6 @@ extern "C" {
 struct AnimData;
 struct ColorBand;
 struct CurveMapping;
-struct ImBuf;
 struct Image;
 struct Ipo;
 struct Object;
@@ -59,7 +57,8 @@ typedef struct MTex {
   short colormodel, pmapto, pmaptoneg;
   short normapspace, which_output;
   float r, g, b, k;
-  float def_var, rt;
+  float def_var;
+  char _pad1[4];
 
   /* common */
   float colfac, varfac;
@@ -194,7 +193,7 @@ typedef struct Tex {
 
   float cropxmin, cropymin, cropxmax, cropymax;
   int texfilter;
-  int afmax;  // anisotropic filter maximum value, ewa -> max eccentricity, feline -> max probes
+  int afmax; /* anisotropic filter maximum value, ewa -> max eccentricity, feline -> max probes */
   short xrepeat, yrepeat;
   short extend;
 
@@ -320,8 +319,7 @@ typedef struct ColorMapping {
 #define TEX_DERIVATIVEMAP (1 << 14)
 
 /* texfilter */
-// TXF_BOX -> blender's old texture filtering method
-#define TXF_BOX 0
+#define TXF_BOX 0 /* Blender's old texture filtering method. */
 #define TXF_EWA 1
 #define TXF_FELINE 2
 #define TXF_AREA 3
@@ -407,8 +405,8 @@ typedef struct ColorMapping {
 
 /* return value */
 #define TEX_INT 0
-#define TEX_RGB 1
-#define TEX_NOR 2
+#define TEX_RGB (1 << 0)
+#define TEX_NOR (1 << 1)
 
 /* pr_texture in material, world, light. */
 #define TEX_PR_TEXTURE 0
@@ -529,6 +527,4 @@ enum {
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

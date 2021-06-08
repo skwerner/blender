@@ -16,12 +16,15 @@
 
 #include "device/device.h"
 
+#include "render/background.h"
+#include "render/colorspace.h"
 #include "render/graph.h"
 #include "render/light.h"
+#include "render/nodes.h"
 #include "render/osl.h"
 #include "render/scene.h"
 #include "render/shader.h"
-#include "render/nodes.h"
+#include "render/stats.h"
 
 #ifdef WITH_OSL
 
@@ -29,6 +32,7 @@
 #  include "kernel/osl/osl_services.h"
 #  include "kernel/osl/osl_shader.h"
 
+#  include "util/util_aligned_malloc.h"
 #  include "util/util_foreach.h"
 #  include "util/util_logging.h"
 #  include "util/util_md5.h"
@@ -53,6 +57,7 @@ OSLRenderServices *OSLShaderManager::services_shared = NULL;
 int OSLShaderManager::ss_shared_users = 0;
 thread_mutex OSLShaderManager::ss_shared_mutex;
 thread_mutex OSLShaderManager::ss_mutex;
+int OSLCompiler::texture_shared_unique_id = 0;
 
 /* Shader Manager */
 
@@ -71,9 +76,9 @@ OSLShaderManager::~OSLShaderManager()
 void OSLShaderManager::free_memory()
 {
 #  ifdef OSL_HAS_BLENDER_CLEANUP_FIX
-  /* There is a problem with llvm+osl: The order global destructors across
+  /* There is a problem with LLVM+OSL: The order global destructors across
    * different compilation units run cannot be guaranteed, on windows this means
-   * that the llvm destructors run before the osl destructors, causing a crash
+   * that the LLVM destructors run before the osl destructors, causing a crash
    * when the process exits. the OSL in svn has a special cleanup hack to
    * sidestep this behavior */
   OSL::pvt::LLVM_Util::Cleanup();
@@ -86,23 +91,30 @@ void OSLShaderManager::reset(Scene * /*scene*/)
   shading_system_init();
 }
 
-void OSLShaderManager::device_update(Device *device,
-                                     DeviceScene *dscene,
-                                     Scene *scene,
-                                     Progress &progress)
+void OSLShaderManager::device_update_specific(Device *device,
+                                              DeviceScene *dscene,
+                                              Scene *scene,
+                                              Progress &progress)
 {
-  if (!need_update)
+  if (!need_update())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->osl.times.add_entry({"device_update", time});
+    }
+  });
 
   VLOG(1) << "Total " << scene->shaders.size() << " shaders.";
 
   device_free(device, dscene, scene);
 
-  /* determine which shaders are in use */
-  device_update_shaders_used(scene);
+  /* set texture system */
+  scene->image_manager->set_osl_texture_system((void *)ts);
 
   /* create shaders */
   OSLGlobals *og = (OSLGlobals *)device->osl_memory();
+  Shader *background_shader = scene->background->get_shader(scene);
 
   foreach (Shader *shader, scene->shaders) {
     assert(shader->graph);
@@ -115,12 +127,12 @@ void OSLShaderManager::device_update(Device *device,
      * compile shaders alternating */
     thread_scoped_lock lock(ss_mutex);
 
-    OSLCompiler compiler((void *)this, (void *)ss, scene->image_manager, scene->light_manager);
-    compiler.background = (shader == scene->default_background);
-    compiler.compile(scene, og, shader);
+    OSLCompiler compiler(this, services, ss, scene);
+    compiler.background = (shader == background_shader);
+    compiler.compile(og, shader);
 
-    if (shader->use_mis && shader->has_surface_emission)
-      scene->light_manager->need_update = true;
+    if (shader->get_use_mis() && shader->has_surface_emission)
+      scene->light_manager->tag_update(scene, LightManager::SHADER_COMPILED);
   }
 
   /* setup shader engine */
@@ -128,24 +140,25 @@ void OSLShaderManager::device_update(Device *device,
   og->ts = ts;
   og->services = services;
 
-  int background_id = scene->shader_manager->get_shader_id(scene->default_background);
+  int background_id = scene->shader_manager->get_shader_id(background_shader);
   og->background_state = og->surface_state[background_id & SHADER_MASK];
   og->use = true;
 
   foreach (Shader *shader, scene->shaders)
-    shader->need_update = false;
+    shader->clear_modified();
 
-  need_update = false;
+  update_flags = UPDATE_NONE;
 
-  /* set texture system */
-  scene->image_manager->set_osl_texture_system((void *)ts);
+  /* add special builtin texture types */
+  services->textures.insert(ustring("@ao"), new OSLTextureHandle(OSLTextureHandle::AO));
+  services->textures.insert(ustring("@bevel"), new OSLTextureHandle(OSLTextureHandle::BEVEL));
 
   device_update_common(device, dscene, scene, progress);
 
   {
     /* Perform greedyjit optimization.
      *
-     * This might waste time on optimizing gorups which are never actually
+     * This might waste time on optimizing groups which are never actually
      * used, but this prevents OSL from allocating data on TLS at render
      * time.
      *
@@ -218,7 +231,8 @@ void OSLShaderManager::shading_system_init()
   thread_scoped_lock lock(ss_shared_mutex);
 
   if (ss_shared_users == 0) {
-    services_shared = new OSLRenderServices();
+    /* Must use aligned new due to concurrent hash map. */
+    services_shared = util_aligned_new<OSLRenderServices>(ts_shared);
 
     string shader_path = path_get("shader");
 #  ifdef _WIN32
@@ -287,7 +301,7 @@ void OSLShaderManager::shading_system_free()
     delete ss_shared;
     ss_shared = NULL;
 
-    delete services_shared;
+    util_aligned_delete(services_shared);
     services_shared = NULL;
   }
 
@@ -309,7 +323,7 @@ bool OSLShaderManager::osl_compile(const string &inputfile, const string &output
   string include_path_arg = string("-I") + shader_path;
   options.push_back(include_path_arg);
 
-  stdosl_path = path_get("shader/stdosl.h");
+  stdosl_path = path_join(shader_path, "stdcycles.h");
 
   /* compile */
   OSL::OSLCompiler *compiler = new OSL::OSLCompiler(&OSL::ErrorHandler::default_handler());
@@ -366,7 +380,7 @@ const char *OSLShaderManager::shader_load_filepath(string filepath)
         return hash;
     }
 
-    /* autocompile .OSL to .OSO if needed */
+    /* Auto-compile .OSL to .OSO if needed. */
     if (oso_modified_time == 0 || (oso_modified_time < modified_time)) {
       OSLShaderManager::osl_compile(filepath, osopath);
       modified_time = path_modified_time(osopath);
@@ -430,27 +444,36 @@ const char *OSLShaderManager::shader_load_bytecode(const string &hash, const str
   return loaded_shaders.find(hash)->first.c_str();
 }
 
-OSLNode *OSLShaderManager::osl_node(const std::string &filepath,
+/* This is a static function to avoid RTTI link errors with only this
+ * file being compiled without RTTI to match OSL and LLVM libraries. */
+OSLNode *OSLShaderManager::osl_node(ShaderGraph *graph,
+                                    ShaderManager *manager,
+                                    const std::string &filepath,
                                     const std::string &bytecode_hash,
                                     const std::string &bytecode)
 {
+  if (!manager->use_osl()) {
+    return NULL;
+  }
+
   /* create query */
+  OSLShaderManager *osl_manager = static_cast<OSLShaderManager *>(manager);
   const char *hash;
 
   if (!filepath.empty()) {
-    hash = shader_load_filepath(filepath);
+    hash = osl_manager->shader_load_filepath(filepath);
   }
   else {
-    hash = shader_test_loaded(bytecode_hash);
+    hash = osl_manager->shader_test_loaded(bytecode_hash);
     if (!hash)
-      hash = shader_load_bytecode(bytecode_hash, bytecode);
+      hash = osl_manager->shader_load_bytecode(bytecode_hash, bytecode);
   }
 
   if (!hash) {
     return NULL;
   }
 
-  OSLShaderInfo *info = shader_loaded_info(hash);
+  OSLShaderInfo *info = osl_manager->shader_loaded_info(hash);
 
   /* count number of inputs */
   size_t num_inputs = 0;
@@ -467,7 +490,7 @@ OSLNode *OSLShaderManager::osl_node(const std::string &filepath,
   }
 
   /* create node */
-  OSLNode *node = OSLNode::create(num_inputs);
+  OSLNode *node = OSLNode::create(graph, num_inputs);
 
   /* add new sockets from parameters */
   set<void *> used_sockets;
@@ -539,7 +562,7 @@ OSLNode *OSLShaderManager::osl_node(const std::string &filepath,
     }
   }
 
-  /* set bytcode hash or filepath */
+  /* Set byte-code hash or file-path. */
   if (!bytecode_hash.empty()) {
     node->bytecode_hash = bytecode_hash;
   }
@@ -555,15 +578,12 @@ OSLNode *OSLShaderManager::osl_node(const std::string &filepath,
 
 /* Graph Compiler */
 
-OSLCompiler::OSLCompiler(void *manager_,
-                         void *shadingsys_,
-                         ImageManager *image_manager_,
-                         LightManager *light_manager_)
+OSLCompiler::OSLCompiler(OSLShaderManager *manager,
+                         OSLRenderServices *services,
+                         OSL::ShadingSystem *ss,
+                         Scene *scene)
+    : scene(scene), manager(manager), services(services), ss(ss)
 {
-  manager = manager_;
-  shadingsys = shadingsys_;
-  image_manager = image_manager_;
-  light_manager = light_manager_;
   current_type = SHADER_TYPE_SURFACE;
   current_shader = NULL;
   background = false;
@@ -649,11 +669,9 @@ bool OSLCompiler::node_skip_input(ShaderNode *node, ShaderInput *input)
 
 void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
-
   /* load filepath */
   if (isfilepath) {
-    name = ((OSLShaderManager *)manager)->shader_load_filepath(name);
+    name = manager->shader_load_filepath(name);
 
     if (name == NULL)
       return;
@@ -664,9 +682,6 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
     if (!input->link) {
       /* checks to untangle graphs */
       if (node_skip_input(node, input))
-        continue;
-      /* already has default value assigned */
-      else if (input->flags() & SocketType::DEFAULT_LINK_MASK)
         continue;
 
       string param_name = compatible_name(node, input);
@@ -731,7 +746,7 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
   }
 
   /* test if we shader contains specific closures */
-  OSLShaderInfo *info = ((OSLShaderManager *)manager)->shader_loaded_info(name);
+  OSLShaderInfo *info = manager->shader_loaded_info(name);
 
   if (current_type == SHADER_TYPE_SURFACE) {
     if (info) {
@@ -753,14 +768,8 @@ void OSLCompiler::add(ShaderNode *node, const char *name, bool isfilepath)
   else if (current_type == SHADER_TYPE_VOLUME) {
     if (node->has_spatial_varying())
       current_shader->has_volume_spatial_varying = true;
-  }
-
-  if (node->has_object_dependency()) {
-    current_shader->has_object_dependency = true;
-  }
-
-  if (node->has_attribute_dependency()) {
-    current_shader->has_attribute_dependency = true;
+    if (node->has_attribute_dependency())
+      current_shader->has_volume_attribute_dependency = true;
   }
 
   if (node->has_integrator_dependency()) {
@@ -778,7 +787,6 @@ static TypeDesc array_typedesc(TypeDesc typedesc, int arraylength)
 
 void OSLCompiler::parameter(ShaderNode *node, const char *name)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ustring uname = ustring(name);
   const SocketType &socket = *(node->type->find_input(uname));
 
@@ -930,56 +938,47 @@ void OSLCompiler::parameter(ShaderNode *node, const char *name)
 
 void OSLCompiler::parameter(const char *name, float f)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypeFloat, &f);
 }
 
 void OSLCompiler::parameter_color(const char *name, float3 f)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypeColor, &f);
 }
 
 void OSLCompiler::parameter_point(const char *name, float3 f)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypePoint, &f);
 }
 
 void OSLCompiler::parameter_normal(const char *name, float3 f)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypeNormal, &f);
 }
 
 void OSLCompiler::parameter_vector(const char *name, float3 f)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypeVector, &f);
 }
 
 void OSLCompiler::parameter(const char *name, int f)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypeInt, &f);
 }
 
 void OSLCompiler::parameter(const char *name, const char *s)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ss->Parameter(name, TypeDesc::TypeString, &s);
 }
 
 void OSLCompiler::parameter(const char *name, ustring s)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   const char *str = s.c_str();
   ss->Parameter(name, TypeDesc::TypeString, &str);
 }
 
 void OSLCompiler::parameter(const char *name, const Transform &tfm)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   ProjectionTransform projection(tfm);
   projection = projection_transpose(projection);
   ss->Parameter(name, TypeDesc::TypeMatrix, (float *)&projection);
@@ -987,7 +986,6 @@ void OSLCompiler::parameter(const char *name, const Transform &tfm)
 
 void OSLCompiler::parameter_array(const char *name, const float f[], int arraylen)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   TypeDesc type = TypeDesc::TypeFloat;
   type.arraylen = arraylen;
   ss->Parameter(name, type, f);
@@ -1004,7 +1002,6 @@ void OSLCompiler::parameter_color_array(const char *name, const array<float3> &f
     table[i][2] = f[i].z;
   }
 
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
   TypeDesc type = TypeDesc::TypeColor;
   type.arraylen = table.size();
   ss->Parameter(name, type, table.data());
@@ -1082,8 +1079,6 @@ void OSLCompiler::generate_nodes(const ShaderNodeSet &nodes)
 
 OSL::ShaderGroupRef OSLCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType type)
 {
-  OSL::ShadingSystem *ss = (OSL::ShadingSystem *)shadingsys;
-
   current_type = type;
 
   OSL::ShaderGroupRef group = ss->ShaderGroupBegin(shader->name.c_str());
@@ -1123,20 +1118,20 @@ OSL::ShaderGroupRef OSLCompiler::compile_type(Shader *shader, ShaderGraph *graph
   return group;
 }
 
-void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
+void OSLCompiler::compile(OSLGlobals *og, Shader *shader)
 {
-  if (shader->need_update) {
+  if (shader->is_modified()) {
     ShaderGraph *graph = shader->graph;
     ShaderNode *output = (graph) ? graph->output() : NULL;
 
-    bool has_bump = (shader->displacement_method != DISPLACE_TRUE) &&
+    bool has_bump = (shader->get_displacement_method() != DISPLACE_TRUE) &&
                     output->input("Surface")->link && output->input("Displacement")->link;
 
     /* finalize */
     shader->graph->finalize(scene,
                             has_bump,
                             shader->has_integrator_dependency,
-                            shader->displacement_method == DISPLACE_BOTH);
+                            shader->get_displacement_method() == DISPLACE_BOTH);
 
     current_shader = shader;
 
@@ -1150,12 +1145,11 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
     shader->has_displacement = false;
     shader->has_surface_spatial_varying = false;
     shader->has_volume_spatial_varying = false;
-    shader->has_object_dependency = false;
-    shader->has_attribute_dependency = false;
+    shader->has_volume_attribute_dependency = false;
     shader->has_integrator_dependency = false;
 
     /* generate surface shader */
-    if (shader->used && graph && output->input("Surface")->link) {
+    if (shader->reference_count() && graph && output->input("Surface")->link) {
       shader->osl_surface_ref = compile_type(shader, shader->graph, SHADER_TYPE_SURFACE);
 
       if (has_bump)
@@ -1171,7 +1165,7 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
     }
 
     /* generate volume shader */
-    if (shader->used && graph && output->input("Volume")->link) {
+    if (shader->reference_count() && graph && output->input("Volume")->link) {
       shader->osl_volume_ref = compile_type(shader, shader->graph, SHADER_TYPE_VOLUME);
       shader->has_volume = true;
     }
@@ -1179,7 +1173,7 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
       shader->osl_volume_ref = OSL::ShaderGroupRef();
 
     /* generate displacement shader */
-    if (shader->used && graph && output->input("Displacement")->link) {
+    if (shader->reference_count() && graph && output->input("Displacement")->link) {
       shader->osl_displacement_ref = compile_type(shader, shader->graph, SHADER_TYPE_DISPLACEMENT);
       shader->has_displacement = true;
     }
@@ -1192,6 +1186,35 @@ void OSLCompiler::compile(Scene *scene, OSLGlobals *og, Shader *shader)
   og->volume_state.push_back(shader->osl_volume_ref);
   og->displacement_state.push_back(shader->osl_displacement_ref);
   og->bump_state.push_back(shader->osl_surface_bump_ref);
+}
+
+void OSLCompiler::parameter_texture(const char *name, ustring filename, ustring colorspace)
+{
+  /* Textured loaded through the OpenImageIO texture cache. For this
+   * case we need to do runtime color space conversion. */
+  OSLTextureHandle *handle = new OSLTextureHandle(OSLTextureHandle::OIIO);
+  handle->processor = ColorSpaceManager::get_processor(colorspace);
+  services->textures.insert(filename, handle);
+  parameter(name, filename);
+}
+
+void OSLCompiler::parameter_texture(const char *name, int svm_slot)
+{
+  /* Texture loaded through SVM image texture system. We generate a unique
+   * name, which ends up being used in OSLRenderServices::get_texture_handle
+   * to get handle again. Note that this name must be unique between multiple
+   * render sessions as the render services are shared. */
+  ustring filename(string_printf("@svm%d", texture_shared_unique_id++).c_str());
+  services->textures.insert(filename, new OSLTextureHandle(OSLTextureHandle::SVM, svm_slot));
+  parameter(name, filename);
+}
+
+void OSLCompiler::parameter_texture_ies(const char *name, int svm_slot)
+{
+  /* IES light textures stored in SVM. */
+  ustring filename(string_printf("@svm%d", texture_shared_unique_id++).c_str());
+  services->textures.insert(filename, new OSLTextureHandle(OSLTextureHandle::IES, svm_slot));
+  parameter(name, filename);
 }
 
 #else
@@ -1245,6 +1268,20 @@ void OSLCompiler::parameter_array(const char * /*name*/, const float /*f*/[], in
 }
 
 void OSLCompiler::parameter_color_array(const char * /*name*/, const array<float3> & /*f*/)
+{
+}
+
+void OSLCompiler::parameter_texture(const char * /* name */,
+                                    ustring /* filename */,
+                                    ustring /* colorspace */)
+{
+}
+
+void OSLCompiler::parameter_texture(const char * /* name */, int /* svm_slot */)
+{
+}
+
+void OSLCompiler::parameter_texture_ies(const char * /* name */, int /* svm_slot */)
 {
 }
 

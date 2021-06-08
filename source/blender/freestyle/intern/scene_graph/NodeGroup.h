@@ -14,13 +14,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_NODE_GROUP_H__
-#define __FREESTYLE_NODE_GROUP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  * \brief Class to represent a group node. This node can contains several children.
- * \brief It also contains a transform matrix indicating the transform state of the underlying children.
+ * \brief It also contains a transform matrix indicating the transform state of the underlying
+ * children.
  */
 
 #include <vector>
@@ -53,7 +53,7 @@ class NodeGroup : public Node {
   /*! Detaches all the children */
   virtual void DetachChildren();
 
-  /*! Detached the sepcified child */
+  /*! Detached the specified child */
   virtual void DetachChild(Node *iChild);
 
   /*! Retrieve children */
@@ -79,5 +79,3 @@ class NodeGroup : public Node {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_NODE_GROUP_H__

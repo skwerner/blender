@@ -22,11 +22,10 @@
  * Declaration of GHOST_IEvent interface class.
  */
 
-#ifndef __GHOST_IEVENT_H__
-#define __GHOST_IEVENT_H__
+#pragma once
 
-#include <stddef.h>
 #include "GHOST_Types.h"
+#include <stddef.h>
 
 class GHOST_IWindow;
 
@@ -78,5 +77,3 @@ class GHOST_IEvent {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_IEvent")
 #endif
 };
-
-#endif  // __GHOST_IEVENT_H__

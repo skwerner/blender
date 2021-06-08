@@ -16,7 +16,11 @@
  * Copyright 2012, Blender Foundation.
  */
 
+#pragma once
+
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief KeyingNode
@@ -40,7 +44,7 @@ class KeyingNode : public Node {
                                     int distance) const;
   NodeOperationOutput *setupDespill(NodeConverter &converter,
                                     NodeOperationOutput *despillInput,
-                                    NodeInput *inputSrceen,
+                                    NodeInput *inputScreen,
                                     float factor,
                                     float colorBalance) const;
   NodeOperationOutput *setupClip(NodeConverter &converter,
@@ -53,5 +57,8 @@ class KeyingNode : public Node {
 
  public:
   KeyingNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
+
+}  // namespace blender::compositor

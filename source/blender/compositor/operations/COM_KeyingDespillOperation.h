@@ -16,10 +16,11 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_KEYINGDESPILLOPERATION_H__
-#define __COM_KEYINGDESPILLOPERATION_H__
+#pragma once
 
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 /**
  * Class with implementation of keying despill node
@@ -34,8 +35,8 @@ class KeyingDespillOperation : public NodeOperation {
  public:
   KeyingDespillOperation();
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 
   void setDespillFactor(float value)
   {
@@ -46,7 +47,7 @@ class KeyingDespillOperation : public NodeOperation {
     this->m_colorBalance = value;
   }
 
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
-#endif
+}  // namespace blender::compositor

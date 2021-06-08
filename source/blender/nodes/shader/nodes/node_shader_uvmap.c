@@ -24,8 +24,8 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_uvmap_out[] = {
-    {SOCK_VECTOR, 0, N_("UV"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("UV"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static void node_shader_init_uvmap(bNodeTree *UNUSED(ntree), bNode *node)
@@ -41,9 +41,13 @@ static int node_shader_gpu_uvmap(GPUMaterial *mat,
                                  GPUNodeStack *out)
 {
   NodeShaderUVMap *attr = node->storage;
-  GPUNodeLink *mtface = GPU_attribute(CD_MTFACE, attr->uv_map);
+  GPUNodeLink *mtface = GPU_attribute(mat, CD_MTFACE, attr->uv_map);
 
-  return GPU_stack_link(mat, node, "node_uvmap", in, out, mtface);
+  GPU_stack_link(mat, node, "node_uvmap", in, out, mtface);
+
+  node_shader_gpu_bump_tex_coord(mat, node, &out[0].link);
+
+  return 1;
 }
 
 /* node type definition */

@@ -7,7 +7,7 @@ set(PROJECT_VENDOR       "Blender Foundation")
 
 set(MAJOR_VERSION ${BLENDER_VERSION_MAJOR})
 set(MINOR_VERSION ${BLENDER_VERSION_MINOR})
-set(PATCH_VERSION ${BLENDER_VERSION_CHAR_INDEX})
+set(PATCH_VERSION ${BLENDER_VERSION_PATCH})
 
 set(CPACK_SYSTEM_NAME ${CMAKE_SYSTEM_NAME})
 set(CPACK_PACKAGE_DESCRIPTION ${PROJECT_DESCRIPTION})
@@ -80,26 +80,32 @@ if(APPLE)
 endif()
 
 if(WIN32)
-  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Blender Foundation/Blender")
-  set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "Blender Foundation/Blender")
+  set(CPACK_PACKAGE_INSTALL_DIRECTORY "Blender Foundation/Blender ${MAJOR_VERSION}.${MINOR_VERSION}")
+  set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "Blender Foundation/Blender ${MAJOR_VERSION}.${MINOR_VERSION}")
 
   set(CPACK_NSIS_MUI_ICON ${CMAKE_SOURCE_DIR}/release/windows/icons/winblender.ico)
   set(CPACK_NSIS_COMPRESSOR "/SOLID lzma")
 
-  set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_SOURCE_DIR}/release/text/GPL3-license.txt)
+  set(CPACK_RESOURCE_FILE_LICENSE ${CMAKE_SOURCE_DIR}/release/license/GPL-3.0.txt)
   set(CPACK_WIX_PRODUCT_ICON ${CMAKE_SOURCE_DIR}/release/windows/icons/winblender.ico)
-  set(CPACK_WIX_UPGRADE_GUID "B767E4FD-7DE7-4094-B051-3AE62E13A17A")
+
+  set(BLENDER_NAMESPACE_GUID "507F933F-5898-404A-9A05-18282FD491A6")
+
+  string(UUID CPACK_WIX_UPGRADE_GUID
+    NAMESPACE ${BLENDER_NAMESPACE_GUID}
+    NAME ${CPACK_PACKAGE_INSTALL_DIRECTORY}
+    TYPE SHA1 UPPER
+  )
 
   set(CPACK_WIX_TEMPLATE ${LIBDIR}/package/installer_wix/WIX.template)
   set(CPACK_WIX_UI_BANNER ${LIBDIR}/package/installer_wix/WIX_UI_BANNER.bmp)
   set(CPACK_WIX_UI_DIALOG ${LIBDIR}/package/installer_wix/WIX_UI_DIALOG.bmp)
 
-  #force lzma instead of deflate
-  set(CPACK_WIX_LIGHT_EXTRA_FLAGS -dcl:high)
+  set(CPACK_WIX_LIGHT_EXTRA_FLAGS -dcl:medium)
 endif()
 
-set(CPACK_PACKAGE_EXECUTABLES "blender" "blender")
-set(CPACK_CREATE_DESKTOP_LINKS "blender" "blender")
+set(CPACK_PACKAGE_EXECUTABLES "blender-launcher" "blender")
+set(CPACK_CREATE_DESKTOP_LINKS "blender-launcher" "blender")
 
 include(CPack)
 
@@ -129,7 +135,7 @@ elseif(UNIX)
 
   add_package_archive(
     "${PROJECT_NAME}-${BLENDER_VERSION}-${BUILD_REV}-${PACKAGE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
-    "tar.bz2")
+    "tar.xz")
 endif()
 
 unset(MAJOR_VERSION)

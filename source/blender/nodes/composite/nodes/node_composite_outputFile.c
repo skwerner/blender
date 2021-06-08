@@ -21,9 +21,9 @@
  * \ingroup cmpnodes
  */
 
-#include <string.h>
-#include "BLI_utildefines.h"
 #include "BLI_string_utils.h"
+#include "BLI_utildefines.h"
+#include <string.h>
 
 #include "BKE_context.h"
 
@@ -46,8 +46,9 @@ static bool unique_path_unique_check(void *arg, const char *name)
   for (sock = data->lb->first; sock; sock = sock->next) {
     if (sock != data->sock) {
       NodeImageMultiFileSocket *sockdata = sock->storage;
-      if (STREQ(sockdata->path, name))
+      if (STREQ(sockdata->path, name)) {
         return true;
+      }
     }
   }
   return false;
@@ -66,8 +67,9 @@ void ntreeCompositOutputFileUniquePath(ListBase *list,
   data.sock = sock;
 
   /* See if we are given an empty string */
-  if (ELEM(NULL, sock, defname))
+  if (ELEM(NULL, sock, defname)) {
     return;
+  }
 
   sockdata = sock->storage;
   BLI_uniquename_cb(
@@ -85,8 +87,9 @@ static bool unique_layer_unique_check(void *arg, const char *name)
   for (sock = data->lb->first; sock; sock = sock->next) {
     if (sock != data->sock) {
       NodeImageMultiFileSocket *sockdata = sock->storage;
-      if (STREQ(sockdata->layer, name))
+      if (STREQ(sockdata->layer, name)) {
         return true;
+      }
     }
   }
   return false;
@@ -105,8 +108,9 @@ void ntreeCompositOutputFileUniqueLayer(ListBase *list,
   data.sock = sock;
 
   /* See if we are given an empty string */
-  if (ELEM(NULL, sock, defname))
+  if (ELEM(NULL, sock, defname)) {
     return;
+  }
 
   sockdata = sock->storage;
   BLI_uniquename_cb(
@@ -137,10 +141,12 @@ bNodeSocket *ntreeCompositOutputFileAddSocket(bNodeTree *ntree,
       sockdata->format.imtype = R_IMF_IMTYPE_OPENEXR;
     }
   }
-  else
+  else {
     BKE_imformat_defaults(&sockdata->format);
+  }
   /* use node data format by default */
   sockdata->use_node_format = true;
+  sockdata->save_as_render = true;
 
   nimf->active_input = BLI_findindex(&node->inputs, sock);
 
@@ -153,11 +159,13 @@ int ntreeCompositOutputFileRemoveActiveSocket(bNodeTree *ntree, bNode *node)
   bNodeSocket *sock = BLI_findlink(&node->inputs, nimf->active_input);
   int totinputs = BLI_listbase_count(&node->inputs);
 
-  if (!sock)
+  if (!sock) {
     return 0;
+  }
 
-  if (nimf->active_input == totinputs - 1)
+  if (nimf->active_input == totinputs - 1) {
     --nimf->active_input;
+  }
 
   /* free format data */
   MEM_freeN(sock->storage);
@@ -184,7 +192,7 @@ void ntreeCompositOutputFileSetLayer(bNode *node, bNodeSocket *sock, const char 
 static void init_output_file(const bContext *C, PointerRNA *ptr)
 {
   Scene *scene = CTX_data_scene(C);
-  bNodeTree *ntree = ptr->id.data;
+  bNodeTree *ntree = (bNodeTree *)ptr->owner_id;
   bNode *node = ptr->data;
   NodeImageMultiFile *nimf = MEM_callocN(sizeof(NodeImageMultiFile), "node image multi file");
   ImageFormatData *format = NULL;
@@ -201,8 +209,9 @@ static void init_output_file(const bContext *C, PointerRNA *ptr)
 
     format = &nimf->format;
   }
-  else
+  else {
     BKE_imformat_defaults(&nimf->format);
+  }
 
   /* add one socket by default */
   ntreeCompositOutputFileAddSocket(ntree, node, "Image", format);
@@ -220,7 +229,9 @@ static void free_output_file(bNode *node)
   MEM_freeN(node->storage);
 }
 
-static void copy_output_file(bNodeTree *UNUSED(dest_ntree), bNode *dest_node, bNode *src_node)
+static void copy_output_file(bNodeTree *UNUSED(dest_ntree),
+                             bNode *dest_node,
+                             const bNode *src_node)
 {
   bNodeSocket *src_sock, *dest_sock;
 
@@ -239,7 +250,7 @@ static void update_output_file(bNodeTree *ntree, bNode *node)
   bNodeSocket *sock, *sock_next;
   PointerRNA ptr;
 
-  /* XXX fix for #36706: remove invalid sockets added with bpy API.
+  /* XXX fix for T36706: remove invalid sockets added with bpy API.
    * This is not ideal, but prevents crashes from missing storage.
    * FileOutput node needs a redesign to support this properly.
    */
@@ -273,7 +284,7 @@ void register_node_type_cmp_output_file(void)
   node_type_socket_templates(&ntype, NULL, NULL);
   ntype.initfunc_api = init_output_file;
   node_type_storage(&ntype, "NodeImageMultiFile", free_output_file, copy_output_file);
-  node_type_update(&ntype, update_output_file, NULL);
+  node_type_update(&ntype, update_output_file);
 
   nodeRegisterType(&ntype);
 }

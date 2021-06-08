@@ -16,99 +16,188 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float average_fac(float3 v)
+ccl_device void svm_vector_math(float *value,
+                                float3 *vector,
+                                NodeVectorMathType type,
+                                float3 a,
+                                float3 b,
+                                float3 c,
+                                float param1)
 {
-  return (fabsf(v.x) + fabsf(v.y) + fabsf(v.z)) / 3.0f;
+  switch (type) {
+    case NODE_VECTOR_MATH_ADD:
+      *vector = a + b;
+      break;
+    case NODE_VECTOR_MATH_SUBTRACT:
+      *vector = a - b;
+      break;
+    case NODE_VECTOR_MATH_MULTIPLY:
+      *vector = a * b;
+      break;
+    case NODE_VECTOR_MATH_DIVIDE:
+      *vector = safe_divide_float3_float3(a, b);
+      break;
+    case NODE_VECTOR_MATH_CROSS_PRODUCT:
+      *vector = cross(a, b);
+      break;
+    case NODE_VECTOR_MATH_PROJECT:
+      *vector = project(a, b);
+      break;
+    case NODE_VECTOR_MATH_REFLECT:
+      *vector = reflect(a, b);
+      break;
+    case NODE_VECTOR_MATH_REFRACT:
+      *vector = refract(a, normalize(b), param1);
+      break;
+    case NODE_VECTOR_MATH_FACEFORWARD:
+      *vector = faceforward(a, b, c);
+      break;
+    case NODE_VECTOR_MATH_MULTIPLY_ADD:
+      *vector = a * b + c;
+      break;
+    case NODE_VECTOR_MATH_DOT_PRODUCT:
+      *value = dot(a, b);
+      break;
+    case NODE_VECTOR_MATH_DISTANCE:
+      *value = distance(a, b);
+      break;
+    case NODE_VECTOR_MATH_LENGTH:
+      *value = len(a);
+      break;
+    case NODE_VECTOR_MATH_SCALE:
+      *vector = a * param1;
+      break;
+    case NODE_VECTOR_MATH_NORMALIZE:
+      *vector = safe_normalize(a);
+      break;
+    case NODE_VECTOR_MATH_SNAP:
+      *vector = floor(safe_divide_float3_float3(a, b)) * b;
+      break;
+    case NODE_VECTOR_MATH_FLOOR:
+      *vector = floor(a);
+      break;
+    case NODE_VECTOR_MATH_CEIL:
+      *vector = ceil(a);
+      break;
+    case NODE_VECTOR_MATH_MODULO:
+      *vector = make_float3(safe_modulo(a.x, b.x), safe_modulo(a.y, b.y), safe_modulo(a.z, b.z));
+      break;
+    case NODE_VECTOR_MATH_WRAP:
+      *vector = make_float3(wrapf(a.x, b.x, c.x), wrapf(a.y, b.y, c.y), wrapf(a.z, b.z, c.z));
+      break;
+    case NODE_VECTOR_MATH_FRACTION:
+      *vector = a - floor(a);
+      break;
+    case NODE_VECTOR_MATH_ABSOLUTE:
+      *vector = fabs(a);
+      break;
+    case NODE_VECTOR_MATH_MINIMUM:
+      *vector = min(a, b);
+      break;
+    case NODE_VECTOR_MATH_MAXIMUM:
+      *vector = max(a, b);
+      break;
+    case NODE_VECTOR_MATH_SINE:
+      *vector = make_float3(sinf(a.x), sinf(a.y), sinf(a.z));
+      break;
+    case NODE_VECTOR_MATH_COSINE:
+      *vector = make_float3(cosf(a.x), cosf(a.y), cosf(a.z));
+      break;
+    case NODE_VECTOR_MATH_TANGENT:
+      *vector = make_float3(tanf(a.x), tanf(a.y), tanf(a.z));
+      break;
+    default:
+      *vector = zero_float3();
+      *value = 0.0f;
+  }
 }
 
-ccl_device void svm_vector_math(
-    float *Fac, float3 *Vector, NodeVectorMath type, float3 Vector1, float3 Vector2)
+ccl_device float svm_math(NodeMathType type, float a, float b, float c)
 {
-  if (type == NODE_VECTOR_MATH_ADD) {
-    *Vector = Vector1 + Vector2;
-    *Fac = average_fac(*Vector);
+  switch (type) {
+    case NODE_MATH_ADD:
+      return a + b;
+    case NODE_MATH_SUBTRACT:
+      return a - b;
+    case NODE_MATH_MULTIPLY:
+      return a * b;
+    case NODE_MATH_DIVIDE:
+      return safe_divide(a, b);
+    case NODE_MATH_POWER:
+      return safe_powf(a, b);
+    case NODE_MATH_LOGARITHM:
+      return safe_logf(a, b);
+    case NODE_MATH_SQRT:
+      return safe_sqrtf(a);
+    case NODE_MATH_INV_SQRT:
+      return inversesqrtf(a);
+    case NODE_MATH_ABSOLUTE:
+      return fabsf(a);
+    case NODE_MATH_RADIANS:
+      return a * (M_PI_F / 180.0f);
+    case NODE_MATH_DEGREES:
+      return a * (180.0f / M_PI_F);
+    case NODE_MATH_MINIMUM:
+      return fminf(a, b);
+    case NODE_MATH_MAXIMUM:
+      return fmaxf(a, b);
+    case NODE_MATH_LESS_THAN:
+      return a < b;
+    case NODE_MATH_GREATER_THAN:
+      return a > b;
+    case NODE_MATH_ROUND:
+      return floorf(a + 0.5f);
+    case NODE_MATH_FLOOR:
+      return floorf(a);
+    case NODE_MATH_CEIL:
+      return ceilf(a);
+    case NODE_MATH_FRACTION:
+      return a - floorf(a);
+    case NODE_MATH_MODULO:
+      return safe_modulo(a, b);
+    case NODE_MATH_TRUNC:
+      return a >= 0.0f ? floorf(a) : ceilf(a);
+    case NODE_MATH_SNAP:
+      return floorf(safe_divide(a, b)) * b;
+    case NODE_MATH_WRAP:
+      return wrapf(a, b, c);
+    case NODE_MATH_PINGPONG:
+      return pingpongf(a, b);
+    case NODE_MATH_SINE:
+      return sinf(a);
+    case NODE_MATH_COSINE:
+      return cosf(a);
+    case NODE_MATH_TANGENT:
+      return tanf(a);
+    case NODE_MATH_SINH:
+      return sinhf(a);
+    case NODE_MATH_COSH:
+      return coshf(a);
+    case NODE_MATH_TANH:
+      return tanhf(a);
+    case NODE_MATH_ARCSINE:
+      return safe_asinf(a);
+    case NODE_MATH_ARCCOSINE:
+      return safe_acosf(a);
+    case NODE_MATH_ARCTANGENT:
+      return atanf(a);
+    case NODE_MATH_ARCTAN2:
+      return atan2f(a, b);
+    case NODE_MATH_SIGN:
+      return compatible_signf(a);
+    case NODE_MATH_EXPONENT:
+      return expf(a);
+    case NODE_MATH_COMPARE:
+      return ((a == b) || (fabsf(a - b) <= fmaxf(c, FLT_EPSILON))) ? 1.0f : 0.0f;
+    case NODE_MATH_MULTIPLY_ADD:
+      return a * b + c;
+    case NODE_MATH_SMOOTH_MIN:
+      return smoothminf(a, b, c);
+    case NODE_MATH_SMOOTH_MAX:
+      return -smoothminf(-a, -b, c);
+    default:
+      return 0.0f;
   }
-  else if (type == NODE_VECTOR_MATH_SUBTRACT) {
-    *Vector = Vector1 - Vector2;
-    *Fac = average_fac(*Vector);
-  }
-  else if (type == NODE_VECTOR_MATH_AVERAGE) {
-    *Vector = safe_normalize_len(Vector1 + Vector2, Fac);
-  }
-  else if (type == NODE_VECTOR_MATH_DOT_PRODUCT) {
-    *Fac = dot(Vector1, Vector2);
-    *Vector = make_float3(0.0f, 0.0f, 0.0f);
-  }
-  else if (type == NODE_VECTOR_MATH_CROSS_PRODUCT) {
-    *Vector = safe_normalize_len(cross(Vector1, Vector2), Fac);
-  }
-  else if (type == NODE_VECTOR_MATH_NORMALIZE) {
-    *Vector = safe_normalize_len(Vector1, Fac);
-  }
-  else {
-    *Fac = 0.0f;
-    *Vector = make_float3(0.0f, 0.0f, 0.0f);
-  }
-}
-
-ccl_device float svm_math(NodeMath type, float Fac1, float Fac2)
-{
-  float Fac;
-
-  if (type == NODE_MATH_ADD)
-    Fac = Fac1 + Fac2;
-  else if (type == NODE_MATH_SUBTRACT)
-    Fac = Fac1 - Fac2;
-  else if (type == NODE_MATH_MULTIPLY)
-    Fac = Fac1 * Fac2;
-  else if (type == NODE_MATH_DIVIDE)
-    Fac = safe_divide(Fac1, Fac2);
-  else if (type == NODE_MATH_SINE)
-    Fac = sinf(Fac1);
-  else if (type == NODE_MATH_COSINE)
-    Fac = cosf(Fac1);
-  else if (type == NODE_MATH_TANGENT)
-    Fac = tanf(Fac1);
-  else if (type == NODE_MATH_ARCSINE)
-    Fac = safe_asinf(Fac1);
-  else if (type == NODE_MATH_ARCCOSINE)
-    Fac = safe_acosf(Fac1);
-  else if (type == NODE_MATH_ARCTANGENT)
-    Fac = atanf(Fac1);
-  else if (type == NODE_MATH_POWER)
-    Fac = safe_powf(Fac1, Fac2);
-  else if (type == NODE_MATH_LOGARITHM)
-    Fac = safe_logf(Fac1, Fac2);
-  else if (type == NODE_MATH_MINIMUM)
-    Fac = fminf(Fac1, Fac2);
-  else if (type == NODE_MATH_MAXIMUM)
-    Fac = fmaxf(Fac1, Fac2);
-  else if (type == NODE_MATH_ROUND)
-    Fac = floorf(Fac1 + 0.5f);
-  else if (type == NODE_MATH_LESS_THAN)
-    Fac = Fac1 < Fac2;
-  else if (type == NODE_MATH_GREATER_THAN)
-    Fac = Fac1 > Fac2;
-  else if (type == NODE_MATH_MODULO)
-    Fac = safe_modulo(Fac1, Fac2);
-  else if (type == NODE_MATH_ABSOLUTE)
-    Fac = fabsf(Fac1);
-  else if (type == NODE_MATH_ARCTAN2)
-    Fac = atan2f(Fac1, Fac2);
-  else if (type == NODE_MATH_FLOOR)
-    Fac = floorf(Fac1);
-  else if (type == NODE_MATH_CEIL)
-    Fac = ceilf(Fac1);
-  else if (type == NODE_MATH_FRACT)
-    Fac = Fac1 - floorf(Fac1);
-  else if (type == NODE_MATH_SQRT)
-    Fac = safe_sqrtf(Fac1);
-  else if (type == NODE_MATH_CLAMP)
-    Fac = saturate(Fac1);
-  else
-    Fac = 0.0f;
-
-  return Fac;
 }
 
 /* Calculate color in range 800..12000 using an approximation
@@ -156,10 +245,15 @@ ccl_device float3 svm_math_blackbody_color(float t)
     return make_float3(4.70366907f, 0.0f, 0.0f);
   }
 
-  int i = (t >= 6365.0f) ?
-              5 :
-              (t >= 3315.0f) ? 4 :
-                               (t >= 1902.0f) ? 3 : (t >= 1449.0f) ? 2 : (t >= 1167.0f) ? 1 : 0;
+  /* Manually align for readability. */
+  /* clang-format off */
+  int i = (t >= 6365.0f) ? 5 :
+          (t >= 3315.0f) ? 4 :
+          (t >= 1902.0f) ? 3 :
+          (t >= 1449.0f) ? 2 :
+          (t >= 1167.0f) ? 1 :
+                           0;
+  /* clang-format on */
 
   ccl_constant float *r = blackbody_table_r[i];
   ccl_constant float *g = blackbody_table_g[i];

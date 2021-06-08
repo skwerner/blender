@@ -19,7 +19,6 @@
 
 # <pep8-80 compliant>
 
-import bpy
 from bpy.types import Operator
 from mathutils import Vector
 
@@ -71,8 +70,8 @@ def worldspace_bounds_from_object_data(depsgraph, obj):
     matrix_world = obj.matrix_world.copy()
 
     # Initialize the variables with the last vertex
-
-    me = obj.to_mesh(depsgraph=depsgraph, apply_modifiers=True)
+    ob_eval = obj.evaluated_get(depsgraph)
+    me = ob_eval.to_mesh()
     verts = me.vertices
 
     val = matrix_world @ (verts[-1].co if verts else Vector((0.0, 0.0, 0.0)))
@@ -114,7 +113,7 @@ def worldspace_bounds_from_object_data(depsgraph, obj):
         if val > up:
             up = val
 
-    bpy.data.meshes.remove(me)
+    ob_eval.to_mesh_clear()
 
     return Vector((left, front, up)), Vector((right, back, down))
 
@@ -127,7 +126,7 @@ def align_objects(context,
                   relative_to,
                   bb_quality):
 
-    depsgraph = context.depsgraph
+    depsgraph = context.evaluated_depsgraph_get()
     scene = context.scene
 
     cursor = scene.cursor.location
@@ -135,7 +134,7 @@ def align_objects(context,
     # We are accessing runtime data such as evaluated bounding box, so we need to
     # be sure it is properly updated and valid (bounding box might be lost on operator
     # redo).
-    scene.update()
+    context.view_layer.update()
 
     Left_Front_Up_SEL = [0.0, 0.0, 0.0]
     Right_Back_Down_SEL = [0.0, 0.0, 0.0]
@@ -358,7 +357,7 @@ from bpy.props import (
 
 
 class AlignObjects(Operator):
-    """Align Objects"""
+    """Align objects"""
     bl_idname = "object.align"
     bl_label = "Align Objects"
     bl_options = {'REGISTER', 'UNDO'}
@@ -366,14 +365,14 @@ class AlignObjects(Operator):
     bb_quality: BoolProperty(
         name="High Quality",
         description=(
-            "Enables high quality calculation of the "
+            "Enables high quality but slow calculation of the "
             "bounding box for perfect results on complex "
-            "shape meshes with rotation/scale (Slow)"
+            "shape meshes with rotation/scale"
         ),
         default=True,
     )
     align_mode: EnumProperty(
-        name="Align Mode:",
+        name="Align Mode",
         description="Side of object to use for alignment",
         items=(
             ('OPT_1', "Negative Sides", ""),
@@ -383,10 +382,10 @@ class AlignObjects(Operator):
         default='OPT_2',
     )
     relative_to: EnumProperty(
-        name="Relative To:",
+        name="Relative To",
         description="Reference location to align to",
         items=(
-            ('OPT_1', "Scene Origin", "Use the Scene Origin as the position for the selected objects to align to"),
+            ('OPT_1', "Scene Origin", "Use the scene origin as the position for the selected objects to align to"),
             ('OPT_2', "3D Cursor", "Use the 3D cursor as the position for the selected objects to align to"),
             ('OPT_3', "Selection", "Use the selected objects as the position for the selected objects to align to"),
             ('OPT_4', "Active", "Use the active object as the position for the selected objects to align to"),

@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_VIEWVERTEX_H__
-#define __FREESTYLE_PYTHON_VIEWVERTEX_H__
+#pragma once
 
 #include "../BPy_Interface0D.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject ViewVertex_Type;
 /*---------------------------Python BPy_ViewVertex structure definition----------*/
 typedef struct {
   BPy_Interface0D py_if0D;
-  ViewVertex *vv;
+  Freestyle::ViewVertex *vv;
 } BPy_ViewVertex;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_VIEWVERTEX_H__ */

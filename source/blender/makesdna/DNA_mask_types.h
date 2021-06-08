@@ -24,13 +24,16 @@
  * for image masking in the compositor and sequencer.
  */
 
-#ifndef __DNA_MASK_TYPES_H__
-#define __DNA_MASK_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
-#include "DNA_listBase.h"
 #include "DNA_curve_types.h"
+#include "DNA_defs.h"
+#include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct Mask {
   ID id;
@@ -90,7 +93,7 @@ typedef struct MaskSplinePointUW {
 } MaskSplinePointUW;
 
 typedef struct MaskSplinePoint {
-  /** Actual point coordinates and it's handles . */
+  /** Actual point coordinates and its handles . */
   BezTriple bezt;
   char _pad[4];
   /** Number of uv feather values. */
@@ -128,7 +131,7 @@ typedef struct MaskLayerShape {
 
   /** U coordinate along spline segment and weight of this point. */
   float *data;
-  /** To ensure no buffer overruns's: alloc size is (tot_vert * MASK_OBJECT_SHAPE_ELEM_SIZE). */
+  /** To ensure no buffer overrun's: alloc size is `(tot_vert * MASK_OBJECT_SHAPE_ELEM_SIZE)`. */
   int tot_vert;
   /** Different flags of this point. */
   int frame;
@@ -222,10 +225,10 @@ enum {
 };
 
 /* MaskSpaceInfo->overlay_mode */
-enum {
+typedef enum eMaskOverlayMode {
   MASK_OVERLAY_ALPHACHANNEL = 0,
   MASK_OVERLAY_COMBINED = 1,
-};
+} eMaskOverlayMode;
 
 /* masklay->blend */
 enum {
@@ -265,4 +268,6 @@ enum {
   MASK_ANIMF_EXPAND = (1 << 4),
 };
 
-#endif /* __DNA_MASK_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

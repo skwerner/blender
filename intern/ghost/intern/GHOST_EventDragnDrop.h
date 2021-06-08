@@ -21,8 +21,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_EVENTDRAGNDROP_H__
-#define __GHOST_EVENTDRAGNDROP_H__
+#pragma once
 
 #include "GHOST_Event.h"
 extern "C" {
@@ -35,40 +34,43 @@ extern "C" {
  *
  * The dragging sequence is performed in four phases:
  *
- * <li> Start sequence (GHOST_kEventDraggingEntered) that tells a drag'n'drop operation has started.
- * Already gives the object data type, and the entering mouse location
+ * - Start sequence (GHOST_kEventDraggingEntered) that tells
+ *   a drag'n'drop operation has started.
+ *   Already gives the object data type, and the entering mouse location
  *
- * <li> Update mouse position (GHOST_kEventDraggingUpdated) sent upon each mouse move until the drag'n'drop operation
- * stops, to give the updated mouse position. Useful to highlight a potential destination, and update the status
- * (through GHOST_setAcceptDragOperation) telling if the object can be dropped at
- * the current cursor position.
+ * - Update mouse position (GHOST_kEventDraggingUpdated) sent upon each mouse move until the
+ *   drag'n'drop operation stops, to give the updated mouse position.
+ *   Useful to highlight a potential destination, and update the status
+ *   (through GHOST_setAcceptDragOperation) telling if the object can be dropped at the current
+ *   cursor position.
  *
- * <li> Abort drag'n'drop sequence (GHOST_kEventDraggingExited) sent when the user moved the mouse outside the window.
+ * - Abort drag'n'drop sequence (GHOST_kEventDraggingExited)
+ *   sent when the user moved the mouse outside the window.
  *
- * <li> Send the dropped data (GHOST_kEventDraggingDropDone)
+ * - Send the dropped data (GHOST_kEventDraggingDropDone)
  *
- * <li> Outside of the normal sequence, dropped data can be sent (GHOST_kEventDraggingDropOnIcon).
- * This can happen when the user drops an object on the application icon.
- * (Also used in OSX to pass the filename of the document the user doubled-clicked in the finder)
+ * - Outside of the normal sequence, dropped data can be sent (GHOST_kEventDraggingDropOnIcon).
+ *   This can happen when the user drops an object on the application icon.
+ *   (Also used in OSX to pass the filename of the document the user doubled-clicked in the finder)
  *
- * <br><br>Note that the mouse positions are given in Blender coordinates (y=0 at bottom)
+ * Note that the mouse positions are given in Blender coordinates (y=0 at bottom)
  *
- * <br>Currently supported object types :
- * <li>UTF-8 string
- * <li>array of strings representing filenames (GHOST_TStringArray)
- * <li>bitmap ImBuf
+ * Currently supported object types:
+ * - UTF-8 string.
+ * - array of strings representing filenames (GHOST_TStringArray).
+ * - bitmap #ImBuf.
  */
 class GHOST_EventDragnDrop : public GHOST_Event {
  public:
   /**
    * Constructor.
-   * \param time      The time this event was generated.
-   * \param type      The type of this event.
-   * \param dataType  The type of the drop candidate object
-   * \param window    The window where the event occurred
-   * \param x         The x-coordinate of the location the cursor was at at the time of the event.
-   * \param y         The y-coordinate of the location the cursor was at at the time of the event.
-   * \param data      The "content" dropped in the window
+   * \param time: The time this event was generated.
+   * \param type: The type of this event.
+   * \param dataType: The type of the drop candidate object.
+   * \param window: The window where the event occurred.
+   * \param x: The x-coordinate of the location the cursor was at the time of the event.
+   * \param y: The y-coordinate of the location the cursor was at the time of the event.
+   * \param data: The "content" dropped in the window.
    */
   GHOST_EventDragnDrop(GHOST_TUns64 time,
                        GHOST_TEventType type,
@@ -88,7 +90,7 @@ class GHOST_EventDragnDrop : public GHOST_Event {
 
   ~GHOST_EventDragnDrop()
   {
-    //Free the dropped object data
+    // Free the dropped object data
     if (m_dragnDropEventData.data == NULL)
       return;
 
@@ -119,5 +121,3 @@ class GHOST_EventDragnDrop : public GHOST_Event {
   /** The x,y-coordinates of the cursor position. */
   GHOST_TEventDragnDropData m_dragnDropEventData;
 };
-
-#endif  // __GHOST_EVENTDRAGNDROP_H__

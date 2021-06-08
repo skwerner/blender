@@ -16,16 +16,17 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_EFFECT_H__
-#define __BKE_EFFECT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
-#include "DNA_modifier_types.h"
-
 #include "BLI_utildefines.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Collection;
 struct Depsgraph;
@@ -120,12 +121,14 @@ void BKE_effector_relations_free(struct ListBase *lb);
 struct ListBase *BKE_effectors_create(struct Depsgraph *depsgraph,
                                       struct Object *ob_src,
                                       struct ParticleSystem *psys_src,
-                                      struct EffectorWeights *weights);
+                                      struct EffectorWeights *weights,
+                                      bool use_rotation);
 void BKE_effectors_apply(struct ListBase *effectors,
                          struct ListBase *colliders,
                          struct EffectorWeights *weights,
                          struct EffectedPoint *point,
                          float *force,
+                         float *wind_force,
                          float *impulse);
 void BKE_effectors_free(struct ListBase *lb);
 
@@ -143,7 +146,7 @@ float effector_falloff(struct EffectorCache *eff,
                        struct EffectorData *efd,
                        struct EffectedPoint *point,
                        struct EffectorWeights *weights);
-int closest_point_on_surface(SurfaceModifierData *surmd,
+int closest_point_on_surface(struct SurfaceModifierData *surmd,
                              const float co[3],
                              float surface_co[3],
                              float surface_nor[3],
@@ -154,20 +157,23 @@ int get_effector_data(struct EffectorCache *eff,
                       int real_velocity);
 
 /* required for particle_system.c */
-//void do_physical_effector(struct EffectorData *eff, struct EffectorPoint *point, float *total_force);
-//float effector_falloff(struct EffectorData *eff, struct EffectorPoint *point, struct EffectorWeights *weights);
+#if 0
+void do_physical_effector(struct EffectorData *eff,
+                          struct EffectorPoint *point,
+                          float *total_force);
+float effector_falloff(struct EffectorData *eff,
+                       struct EffectorPoint *point,
+                       struct EffectorWeights *weights);
+#endif
 
 /* EffectedPoint->flag */
 #define PE_WIND_AS_SPEED 1
-#define PE_DYNAMIC_ROTATION 2
 #define PE_USE_NORMAL_DATA 4
 
 /* EffectorData->flag */
 #define PE_VELOCITY_TO_IMPULSE 1
 
 /* ======== Simulation Debugging ======== */
-
-#define SIM_DEBUG_HASH_BASE 5381
 
 unsigned int BKE_sim_debug_data_hash(int i);
 unsigned int BKE_sim_debug_data_hash_combine(unsigned int kx, unsigned int ky);
@@ -272,4 +278,6 @@ void BKE_sim_debug_data_remove_element(unsigned int hash);
 void BKE_sim_debug_data_clear(void);
 void BKE_sim_debug_data_clear_category(const char *category);
 
+#ifdef __cplusplus
+}
 #endif

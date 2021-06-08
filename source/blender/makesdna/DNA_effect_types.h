@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_EFFECT_TYPES_H__
-#define __DNA_EFFECT_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* don't forget, new effects also in writefile.c for dna!!! */
 
@@ -68,13 +71,15 @@
 
 typedef struct Effect {
   struct Effect *next, *prev;
-  short type, flag, buttype, rt;
+  short type, flag, buttype;
+  char _pad0[2];
 
 } Effect;
 
 typedef struct BuildEff {
   struct BuildEff *next, *prev;
-  short type, flag, buttype, rt;
+  short type, flag, buttype;
+  char _pad0[2];
 
   float len, sfra;
 
@@ -85,7 +90,8 @@ typedef struct BuildEff {
 typedef struct Particle {
   float co[3], no[3];
   float time, lifetime;
-  short mat_nr, rt;
+  short mat_nr;
+  char _pad0[2];
 } Particle;
 
 struct Collection;
@@ -131,4 +137,6 @@ typedef struct WaveEff {
 
 } WaveEff;
 
+#ifdef __cplusplus
+}
 #endif

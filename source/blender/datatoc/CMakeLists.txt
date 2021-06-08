@@ -1,7 +1,7 @@
 # ***** BEGIN GPL LICENSE BLOCK *****
 #
 # This program is free software; you can redistribute it and/or
-# modify it under the terms of the GNU General Public LicenseS
+# modify it under the terms of the GNU General Public Licenses
 # as published by the Free Software Foundation; either version 2
 # of the License, or (at your option) any later version.
 #
@@ -34,7 +34,7 @@ if(NOT WITH_HEADLESS)
   set(SRC
     datatoc_icon.c
   )
-  setup_platform_linker_flags()
+  setup_platform_linker_flags(datatoc)
   if(WIN32)
     include_directories(
       ../blenlib
@@ -52,13 +52,17 @@ if(NOT WITH_HEADLESS)
   endif()
 
   include_directories(${PNG_INCLUDE_DIRS})
-  link_directories(${PNG_LIBPATH} ${ZLIB_LIBPATH})
+  if(NOT APPLE)
+    # APPLE platform uses full paths for linking libraries.
+    link_directories(${PNG_LIBPATH} ${ZLIB_LIBPATH})
+  endif()
 
   add_executable(datatoc_icon ${SRC})
+  setup_platform_linker_flags(datatoc_icon)
 
   target_link_libraries(datatoc_icon ${PNG_LIBRARIES} ${ZLIB_LIBRARIES})
   # PNG library uses pow() and floow(), so seems -lm is required for proper
-  # workign binary.
+  # working binary.
   if(UNIX AND NOT APPLE)
     target_link_libraries(datatoc_icon m)
   endif()

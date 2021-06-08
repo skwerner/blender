@@ -21,10 +21,13 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_VIEW2D_TYPES_H__
-#define __DNA_VIEW2D_TYPES_H__
+#pragma once
 
 #include "DNA_vec_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* ---------------------------------- */
 
@@ -67,13 +70,6 @@ typedef struct View2D {
 
   /** Pivot point for transforms (rotate and scale). */
   short around;
-
-  /** Different offset per tab, for buttons. */
-  float *tab_offset;
-  /** Number of tabs stored. */
-  int tab_num;
-  /** Current tab. */
-  int tab_cur;
 
   /* Usually set externally (as in, not in view2d files). */
   /** Alpha of vertical and horizontal scrollbars (range is [0, 255]). */
@@ -137,7 +133,7 @@ enum {
   /* apply pixel offsets on y-axis when setting view matrices */
   V2D_PIXELOFS_Y = (1 << 3),
   /* view settings need to be set still... */
-  V2D_IS_INITIALISED = (1 << 10),
+  V2D_IS_INIT = (1 << 10),
 };
 
 /* scroller flags for View2D (v2d->scroll) */
@@ -151,10 +147,10 @@ enum {
   V2D_SCROLL_BOTTOM = (1 << 3),
   /* UNUSED                    = (1 << 4), */
   V2D_SCROLL_HORIZONTAL = (V2D_SCROLL_TOP | V2D_SCROLL_BOTTOM),
-  /* scale markings - vertical */
-  V2D_SCROLL_SCALE_VERTICAL = (1 << 5),
-  /* scale markings - horizontal */
-  V2D_SCROLL_SCALE_HORIZONTAL = (1 << 6),
+  /* display vertical scale handles */
+  V2D_SCROLL_VERTICAL_HANDLES = (1 << 5),
+  /* display horizontal scale handles */
+  V2D_SCROLL_HORIZONTAL_HANDLES = (1 << 6),
   /* induce hiding of scrollbars - set by region drawing in response to size of region */
   V2D_SCROLL_VERTICAL_HIDE = (1 << 7),
   V2D_SCROLL_HORIZONTAL_HIDE = (1 << 8),
@@ -182,4 +178,6 @@ enum {
   V2D_ALIGN_NO_NEG_Y = (1 << 3),
 };
 
+#ifdef __cplusplus
+}
 #endif

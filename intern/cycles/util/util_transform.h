@@ -148,6 +148,32 @@ ccl_device_inline Transform make_transform(float a,
   return t;
 }
 
+ccl_device_inline Transform euler_to_transform(const float3 euler)
+{
+  float cx = cosf(euler.x);
+  float cy = cosf(euler.y);
+  float cz = cosf(euler.z);
+  float sx = sinf(euler.x);
+  float sy = sinf(euler.y);
+  float sz = sinf(euler.z);
+
+  Transform t;
+  t.x.x = cy * cz;
+  t.y.x = cy * sz;
+  t.z.x = -sy;
+
+  t.x.y = sy * sx * cz - cx * sz;
+  t.y.y = sy * sx * sz + cx * cz;
+  t.z.y = cy * sx;
+
+  t.x.z = sy * cx * cz + sx * sz;
+  t.y.z = sy * cx * sz - sx * cz;
+  t.z.z = cy * cx;
+
+  t.x.w = t.y.w = t.z.w = 0.0f;
+  return t;
+}
+
 /* Constructs a coordinate frame from a normalized normal. */
 ccl_device_inline Transform make_transform_frame(float3 N)
 {
@@ -159,6 +185,12 @@ ccl_device_inline Transform make_transform_frame(float3 N)
 }
 
 #ifndef __KERNEL_GPU__
+
+ccl_device_inline Transform transform_zero()
+{
+  Transform zero = {zero_float4(), zero_float4(), zero_float4()};
+  return zero;
+}
 
 ccl_device_inline Transform operator*(const Transform a, const Transform b)
 {
@@ -318,28 +350,28 @@ ccl_device_inline Transform transform_empty()
 
 ccl_device_inline float4 quat_interpolate(float4 q1, float4 q2, float t)
 {
-  /* use simpe nlerp instead of slerp. it's faster and almost the same */
+  /* Optix is using lerp to interpolate motion transformations. */
+#ifdef __KERNEL_OPTIX__
   return normalize((1.0f - t) * q1 + t * q2);
-
-#if 0
+#else  /* __KERNEL_OPTIX__ */
   /* note: this does not ensure rotation around shortest angle, q1 and q2
    * are assumed to be matched already in transform_motion_decompose */
   float costheta = dot(q1, q2);
 
   /* possible optimization: it might be possible to precompute theta/qperp */
 
-  if(costheta > 0.9995f) {
+  if (costheta > 0.9995f) {
     /* linear interpolation in degenerate case */
-    return normalize((1.0f - t)*q1 + t*q2);
+    return normalize((1.0f - t) * q1 + t * q2);
   }
-  else  {
+  else {
     /* slerp */
     float theta = acosf(clamp(costheta, -1.0f, 1.0f));
     float4 qperp = normalize(q2 - q1 * costheta);
     float thetap = theta * t;
     return q1 * cosf(thetap) + qperp * sinf(thetap);
   }
-#endif
+#endif /* __KERNEL_OPTIX__ */
 }
 
 ccl_device_inline Transform transform_quick_inverse(Transform M)
@@ -440,30 +472,18 @@ ccl_device void transform_motion_array_interpolate(Transform *tfm,
   transform_compose(tfm, &decomp);
 }
 
-#ifndef __KERNEL_GPU__
-
-#  ifdef WITH_EMBREE
-ccl_device void transform_motion_array_interpolate_straight(
-    Transform *tfm, const ccl_global DecomposedTransform *motion, uint numsteps, float time)
+ccl_device_inline bool transform_isfinite_safe(Transform *tfm)
 {
-  /* Figure out which steps we need to interpolate. */
-  int maxstep = numsteps - 1;
-  int step = min((int)(time * maxstep), maxstep - 1);
-  float t = time * maxstep - step;
-
-  const ccl_global DecomposedTransform *a = motion + step;
-  const ccl_global DecomposedTransform *b = motion + step + 1;
-  Transform step1, step2;
-
-  transform_compose(&step1, a);
-  transform_compose(&step2, b);
-
-  /* matrix lerp */
-  tfm->x = (1.0f - t) * step1.x + t * step2.x;
-  tfm->y = (1.0f - t) * step1.y + t * step2.y;
-  tfm->z = (1.0f - t) * step1.z + t * step2.z;
+  return isfinite4_safe(tfm->x) && isfinite4_safe(tfm->y) && isfinite4_safe(tfm->z);
 }
-#  endif
+
+ccl_device_inline bool transform_decomposed_isfinite_safe(DecomposedTransform *decomp)
+{
+  return isfinite4_safe(decomp->x) && isfinite4_safe(decomp->y) && isfinite4_safe(decomp->z) &&
+         isfinite4_safe(decomp->w);
+}
+
+#ifndef __KERNEL_GPU__
 
 class BoundBox2D;
 

@@ -16,11 +16,13 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORCURVEOPERATION_H__
-#define __COM_COLORCURVEOPERATION_H__
+#pragma once
+
+#include "COM_CurveBaseOperation.h"
 #include "COM_NodeOperation.h"
 #include "DNA_color_types.h"
-#include "COM_CurveBaseOperation.h"
+
+namespace blender::compositor {
 
 class ColorCurveOperation : public CurveBaseOperation {
  private:
@@ -36,19 +38,19 @@ class ColorCurveOperation : public CurveBaseOperation {
   ColorCurveOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 };
 
 class ConstantLevelColorCurveOperation : public CurveBaseOperation {
@@ -65,19 +67,19 @@ class ConstantLevelColorCurveOperation : public CurveBaseOperation {
   ConstantLevelColorCurveOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setBlackLevel(float black[3])
   {
@@ -89,4 +91,4 @@ class ConstantLevelColorCurveOperation : public CurveBaseOperation {
   }
 };
 
-#endif
+}  // namespace blender::compositor

@@ -33,6 +33,8 @@ class DebugFlags {
   /* Use static BVH in viewport, to match final render exactly. */
   bool viewport_static_bvh;
 
+  bool running_inside_blender;
+
   /* Descriptor of CPU feature-set to be used. */
   struct CPU {
     CPU();
@@ -71,10 +73,10 @@ class DebugFlags {
       return sse2;
     }
 
-    /* Requested BVH size.
+    /* Requested BVH layout.
      *
-     * Rendering will use widest possible BVH which is below or equal
-     * this one.
+     * By default the fastest will be used. For debugging the BVH used by other
+     * CPUs and GPUs can be selected here instead.
      */
     BVHLayout bvh_layout;
 
@@ -95,6 +97,20 @@ class DebugFlags {
 
     /* Whether split kernel is used */
     bool split_kernel;
+  };
+
+  /* Descriptor of OptiX feature-set to be used. */
+  struct OptiX {
+    OptiX();
+
+    /* Reset flags to their defaults. */
+    void reset();
+
+    /* Number of CUDA streams to launch kernels concurrently from. */
+    int cuda_streams;
+
+    /* Use OptiX curves API for hair instead of custom implementation. */
+    bool curves_api;
   };
 
   /* Descriptor of OpenCL feature-set to be used. */
@@ -141,7 +157,8 @@ class DebugFlags {
     /* Use debug version of the kernel. */
     bool debug;
 
-    /* TODO(mai): Currently this is only for OpenCL, but we should have it implemented for all devices. */
+    /* TODO(mai): Currently this is only for OpenCL, but we should have it implemented for all
+     * devices. */
     /* Artificial memory limit in bytes (0 if disabled). */
     size_t mem_limit;
   };
@@ -161,6 +178,9 @@ class DebugFlags {
 
   /* Requested CUDA flags. */
   CUDA cuda;
+
+  /* Requested OptiX flags. */
+  OptiX optix;
 
   /* Requested OpenCL flags. */
   OpenCL opencl;

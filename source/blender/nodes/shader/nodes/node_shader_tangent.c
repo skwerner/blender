@@ -22,8 +22,8 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tangent_out[] = {
-    {SOCK_VECTOR, 0, N_("Tangent"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Tangent"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static void node_shader_init_tangent(bNodeTree *UNUSED(ntree), bNode *node)
@@ -42,34 +42,30 @@ static int node_shader_gpu_tangent(GPUMaterial *mat,
   NodeShaderTangent *attr = node->storage;
 
   if (attr->direction_type == SHD_TANGENT_UVMAP) {
-    return GPU_stack_link(mat,
-                          node,
-                          "node_tangentmap",
-                          in,
-                          out,
-                          GPU_attribute(CD_TANGENT, ""),
-                          GPU_builtin(GPU_INVERSE_VIEW_MATRIX));
+    return GPU_stack_link(
+        mat, node, "node_tangentmap", in, out, GPU_attribute(mat, CD_TANGENT, attr->uv_map));
+  }
+
+  GPUNodeLink *orco = GPU_attribute(mat, CD_ORCO, "");
+
+  if (attr->axis == SHD_TANGENT_AXIS_X) {
+    GPU_link(mat, "tangent_orco_x", orco, &orco);
+  }
+  else if (attr->axis == SHD_TANGENT_AXIS_Y) {
+    GPU_link(mat, "tangent_orco_y", orco, &orco);
   }
   else {
-    GPUNodeLink *orco = GPU_attribute(CD_ORCO, "");
-
-    if (attr->axis == SHD_TANGENT_AXIS_X)
-      GPU_link(mat, "tangent_orco_x", orco, &orco);
-    else if (attr->axis == SHD_TANGENT_AXIS_Y)
-      GPU_link(mat, "tangent_orco_y", orco, &orco);
-    else
-      GPU_link(mat, "tangent_orco_z", orco, &orco);
-
-    return GPU_stack_link(mat,
-                          node,
-                          "node_tangent",
-                          in,
-                          out,
-                          GPU_builtin(GPU_VIEW_NORMAL),
-                          orco,
-                          GPU_builtin(GPU_OBJECT_MATRIX),
-                          GPU_builtin(GPU_INVERSE_VIEW_MATRIX));
+    GPU_link(mat, "tangent_orco_z", orco, &orco);
   }
+
+  return GPU_stack_link(mat,
+                        node,
+                        "node_tangent",
+                        in,
+                        out,
+                        GPU_builtin(GPU_WORLD_NORMAL),
+                        orco,
+                        GPU_builtin(GPU_OBJECT_MATRIX));
 }
 
 /* node type definition */

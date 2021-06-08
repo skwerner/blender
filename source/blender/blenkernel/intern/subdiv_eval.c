@@ -26,9 +26,9 @@
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
 #include "BKE_subdiv.h"
@@ -46,7 +46,7 @@ bool BKE_subdiv_eval_begin(Subdiv *subdiv)
      * or when OpenSubdiv is disabled */
     return false;
   }
-  else if (subdiv->evaluator == NULL) {
+  if (subdiv->evaluator == NULL) {
     BKE_subdiv_stats_begin(&subdiv->stats, SUBDIV_STATS_EVALUATOR_CREATE);
     subdiv->evaluator = openSubdiv_createEvaluatorFromTopologyRefiner(subdiv->topology_refiner);
     BKE_subdiv_stats_end(&subdiv->stats, SUBDIV_STATS_EVALUATOR_CREATE);
@@ -61,7 +61,9 @@ bool BKE_subdiv_eval_begin(Subdiv *subdiv)
   return true;
 }
 
-static void set_coarse_positions(Subdiv *subdiv, const Mesh *mesh)
+static void set_coarse_positions(Subdiv *subdiv,
+                                 const Mesh *mesh,
+                                 const float (*coarse_vertex_cos)[3])
 {
   const MVert *mvert = mesh->mvert;
   const MLoop *mloop = mesh->mloop;
@@ -78,14 +80,21 @@ static void set_coarse_positions(Subdiv *subdiv, const Mesh *mesh)
       BLI_BITMAP_ENABLE(vertex_used_map, loop->v);
     }
   }
-  for (int vertex_index = 0, manifold_veretx_index = 0; vertex_index < mesh->totvert;
+  for (int vertex_index = 0, manifold_vertex_index = 0; vertex_index < mesh->totvert;
        vertex_index++) {
     if (!BLI_BITMAP_TEST_BOOL(vertex_used_map, vertex_index)) {
       continue;
     }
-    const MVert *vertex = &mvert[vertex_index];
-    subdiv->evaluator->setCoarsePositions(subdiv->evaluator, vertex->co, manifold_veretx_index, 1);
-    manifold_veretx_index++;
+    const float *vertex_co;
+    if (coarse_vertex_cos != NULL) {
+      vertex_co = coarse_vertex_cos[vertex_index];
+    }
+    else {
+      const MVert *vertex = &mvert[vertex_index];
+      vertex_co = vertex->co;
+    }
+    subdiv->evaluator->setCoarsePositions(subdiv->evaluator, vertex_co, manifold_vertex_index, 1);
+    manifold_vertex_index++;
   }
   MEM_freeN(vertex_used_map);
 }
@@ -101,30 +110,38 @@ static void set_face_varying_data_from_uv(Subdiv *subdiv,
   /* TODO(sergey): OpenSubdiv's C-API converter can change winding of
    * loops of a face, need to watch for that, to prevent wrong UVs assigned.
    */
-  for (int face_index = 0; face_index < num_faces; ++face_index) {
+  for (int face_index = 0; face_index < num_faces; face_index++) {
     const int num_face_vertices = topology_refiner->getNumFaceVertices(topology_refiner,
                                                                        face_index);
-    const int *uv_indicies = topology_refiner->getFaceFVarValueIndices(
+    const int *uv_indices = topology_refiner->getFaceFVarValueIndices(
         topology_refiner, face_index, layer_index);
     for (int vertex_index = 0; vertex_index < num_face_vertices; vertex_index++, mluv++) {
-      evaluator->setFaceVaryingData(
-          evaluator, layer_index, mluv->uv, uv_indicies[vertex_index], 1);
+      evaluator->setFaceVaryingData(evaluator, layer_index, mluv->uv, uv_indices[vertex_index], 1);
     }
   }
 }
 
-bool BKE_subdiv_eval_update_from_mesh(Subdiv *subdiv, const Mesh *mesh)
+bool BKE_subdiv_eval_begin_from_mesh(Subdiv *subdiv,
+                                     const Mesh *mesh,
+                                     const float (*coarse_vertex_cos)[3])
 {
   if (!BKE_subdiv_eval_begin(subdiv)) {
     return false;
   }
+  return BKE_subdiv_eval_refine_from_mesh(subdiv, mesh, coarse_vertex_cos);
+}
+
+bool BKE_subdiv_eval_refine_from_mesh(Subdiv *subdiv,
+                                      const Mesh *mesh,
+                                      const float (*coarse_vertex_cos)[3])
+{
   if (subdiv->evaluator == NULL) {
     /* NOTE: This situation is supposed to be handled by begin(). */
     BLI_assert(!"Is not supposed to happen");
     return false;
   }
   /* Set coordinates of base mesh vertices. */
-  set_coarse_positions(subdiv, mesh);
+  set_coarse_positions(subdiv, mesh, coarse_vertex_cos);
   /* Set face-varyign data to UV maps. */
   const int num_uv_layers = CustomData_number_of_layers(&mesh->ldata, CD_MLOOPUV);
   for (int layer_index = 0; layer_index < num_uv_layers; layer_index++) {
@@ -166,6 +183,29 @@ void BKE_subdiv_eval_limit_point_and_derivatives(Subdiv *subdiv,
                                                  float r_dPdv[3])
 {
   subdiv->evaluator->evaluateLimit(subdiv->evaluator, ptex_face_index, u, v, r_P, r_dPdu, r_dPdv);
+
+  /* NOTE: In a very rare occasions derivatives are evaluated to zeros or are exactly equal.
+   * This happens, for example, in single vertex on Suzannne's nose (where two quads have 2 common
+   * edges).
+   *
+   * This makes tangent space displacement (such as multires) impossible to be used in those
+   * vertices, so those needs to be addressed in one way or another.
+   *
+   * Simplest thing to do: step inside of the face a little bit, where there is known patch at
+   * which there must be proper derivatives. This might break continuity of normals, but is better
+   * that giving totally unusable derivatives. */
+
+  if (r_dPdu != NULL && r_dPdv != NULL) {
+    if ((is_zero_v3(r_dPdu) || is_zero_v3(r_dPdv)) || equals_v3v3(r_dPdu, r_dPdv)) {
+      subdiv->evaluator->evaluateLimit(subdiv->evaluator,
+                                       ptex_face_index,
+                                       u * 0.999f + 0.0005f,
+                                       v * 0.999f + 0.0005f,
+                                       r_P,
+                                       r_dPdu,
+                                       r_dPdv);
+    }
+  }
 }
 
 void BKE_subdiv_eval_limit_point_and_normal(Subdiv *subdiv,

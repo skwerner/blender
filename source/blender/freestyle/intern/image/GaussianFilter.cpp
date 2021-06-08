@@ -19,7 +19,7 @@
  * \brief Class to perform gaussian filtering operations on an image
  */
 
-#include <stdlib.h>
+#include <cstdlib>
 
 #include "GaussianFilter.h"
 
@@ -28,7 +28,7 @@ namespace Freestyle {
 GaussianFilter::GaussianFilter(float iSigma)
 {
   _sigma = iSigma;
-  _mask = 0;
+  _mask = nullptr;
   computeMask();
 }
 
@@ -55,16 +55,15 @@ GaussianFilter &GaussianFilter::operator=(const GaussianFilter &iBrother)
 
 GaussianFilter::~GaussianFilter()
 {
-  if (0 != _mask) {
-    delete[] _mask;
-  }
+  delete[] _mask;
 }
 
 int GaussianFilter::computeMaskSize(float sigma)
 {
   int maskSize = (int)floor(4 * sigma) + 1;
-  if (0 == (maskSize % 2))
+  if (0 == (maskSize % 2)) {
     ++maskSize;
+  }
 
   return maskSize;
 }
@@ -77,9 +76,7 @@ void GaussianFilter::setSigma(float sigma)
 
 void GaussianFilter::computeMask()
 {
-  if (0 != _mask) {
-    delete[] _mask;
-  }
+  delete[] _mask;
 
   _maskSize = computeMaskSize(_sigma);
   _storedMaskSize = (_maskSize + 1) >> 1;

@@ -23,9 +23,11 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_alloca.h"
+#include "BLI_math.h"
 #include "BLI_memarena.h"
+#include "BLI_utildefines_stack.h"
+
 #include "BKE_customdata.h"
 
 #include "bmesh.h"
@@ -38,14 +40,17 @@
 #define ELE_NEW 1
 
 /* -------------------------------------------------------------------- */
-/* Generic Interp Face (use for both types of inset) */
-
-/**
+/** \name Generic Face Interpolation
+ *
+ *  Use for both kinds of inset.
+ *
  * Interpolation, this is more complex for regions since we're not creating new faces
  * and throwing away old ones, so instead, store face data needed for interpolation.
  *
- * \note This uses CustomData functions in quite a low-level way which should be
- * avoided, but in this case its hard to do without storing a duplicate mesh. */
+ * \note This uses #CustomData functions in quite a low-level way which should be
+ * avoided, but in this case its hard to do without storing a duplicate mesh.
+ *
+ * \{ */
 
 /* just enough of a face to store interpolation data we can use once the inset is done */
 typedef struct InterpFace {
@@ -186,14 +191,13 @@ static void bm_loop_customdata_merge(BMesh *bm,
                                 BM_ELEM_CD_GET_VOID_P(l_a_outer, offset),
                                 BM_ELEM_CD_GET_VOID_P(l_b_outer, offset)) == true)
 
-    /* epsilon for comparing UV's is too big, gives noticable problems */
+    /* Epsilon for comparing UV's is too big, gives noticeable problems. */
 #  if 0
         &&
         /* check if the data ends up diverged */
-        (CustomData_data_equals(
-             type,
-             BM_ELEM_CD_GET_VOID_P(l_a_inner, offset),
-             BM_ELEM_CD_GET_VOID_P(l_b_inner, offset)) == false)
+        (CustomData_data_equals(type,
+                                BM_ELEM_CD_GET_VOID_P(l_a_inner, offset),
+                                BM_ELEM_CD_GET_VOID_P(l_b_inner, offset)) == false)
 #  endif
     ) {
       /* no need to allocate a temp block:
@@ -247,8 +251,13 @@ static void bm_loop_customdata_merge(BMesh *bm,
 }
 #endif /* USE_LOOP_CUSTOMDATA_MERGE */
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* Inset Individual */
+/** \name Inset Individual
+ *
+ * Each face has a smaller face created inside it (simple logic).
+ * \{ */
 
 static void bmo_face_inset_individual(BMesh *bm,
                                       BMFace *f,
@@ -448,8 +457,13 @@ void bmo_inset_individual_exec(BMesh *bm, BMOperator *op)
   }
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/* Inset Region */
+/** \name Inset Region
+ *
+ * The boundary between tagged and untagged faces is inset (more involved logic).
+ * \{ */
 
 typedef struct SplitEdgeInfo {
   float no[3];
@@ -460,7 +474,7 @@ typedef struct SplitEdgeInfo {
 } SplitEdgeInfo;
 
 /**
- * return the tag loop where there is...
+ * Return the tag loop where there is:
  * - only 1 tagged face attached to this edge.
  * - 1 or more untagged faces.
  *
@@ -492,9 +506,7 @@ static BMLoop *bm_edge_is_mixed_face_tag(BMLoop *l)
 
     return ((tot_tag == 1) && (tot_untag >= 1)) ? l_tag : NULL;
   }
-  else {
-    return NULL;
-  }
+  return NULL;
 }
 
 static float bm_edge_info_average_length(BMVert *v, SplitEdgeInfo *edge_info)
@@ -513,22 +525,155 @@ static float bm_edge_info_average_length(BMVert *v, SplitEdgeInfo *edge_info)
     }
   }
 
-  BLI_assert(tot != 0);
-  return len / (float)tot;
+  if (tot != 0) {
+    return len / (float)tot;
+  }
+  return -1.0f;
 }
 
 /**
- * implementation is as follows...
+ * Fill in any vertices that are in the inset region but not connected to an edge being inset.
  *
- * - set all faces as tagged/untagged based on selection.
- * - find all edges that have 1 tagged, 1 untagged face.
- * - separate these edges and tag vertices, set their index to point to the original edge.
- * - build faces between old/new edges.
- * - inset the new edges into their faces.
+ *
+ * This is lazily initialized since it's a relatively expensive operation,
+ * and it's not needed in cases where all vertices being inset are connected to
+ * edges that are part of the inset.
+ *
+ * \note This only runs under the following conditions:
+ *
+ * - "depth" is non-zero.
+ * - "use_relative_offset" is enabled.
+ * - There are interior vertices which aren't used by an edge being inset.
  */
+static float bm_edge_info_average_length_fallback(BMVert *v_lookup,
+                                                  SplitEdgeInfo *edge_info,
+                                                  BMesh *bm,
+                                                  void **vert_lengths_p)
+{
+  struct {
+    /**
+     * Use to fill in length accumulated values based on the topological distance
+     * to vertices at the inset boundaries.
+     *
+     * Unlike edge-lengths of vertices immediately around the vertex,
+     * this ensures the values are more evenly distributed.
+     */
+    float length_accum;
+    /**
+     * The number of connected vertices we have added to `length_accum`.
+     * The sign of the value is used to avoid mixing current and previous passes.
+     *
+     * - Zero:      Uninitialized, can be added to `vert_stack`.
+     * - Positive:  Part of the current pass, `length_accum` has not yet been divided.
+     * - Minus One: Part of previous passes, `length_accum` value has been divided.
+     */
+    int count;
+  } *vert_lengths = *vert_lengths_p;
+
+  /* Only run this once, if needed. */
+  if (UNLIKELY(vert_lengths == NULL)) {
+    BMVert **vert_stack = MEM_mallocN(sizeof(*vert_stack) * bm->totvert, __func__);
+    STACK_DECLARE(vert_stack);
+    STACK_INIT(vert_stack, bm->totvert);
+
+    vert_lengths = MEM_callocN(sizeof(*vert_lengths) * bm->totvert, __func__);
+
+    /* Needed for 'vert_lengths' lookup from connected vertices. */
+    BM_mesh_elem_index_ensure(bm, BM_VERT);
+
+    {
+      BMIter iter;
+      BMEdge *e;
+      BM_ITER_MESH (e, &iter, bm, BM_EDGES_OF_MESH) {
+        if (BM_elem_index_get(e) != -1) {
+          for (int i = 0; i < 2; i++) {
+            BMVert *v = *((&e->v1) + i);
+            if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
+              const int v_index = BM_elem_index_get(v);
+              if (vert_lengths[v_index].count == 0) {
+                STACK_PUSH(vert_stack, v);
+                /* Needed for the first pass, avoid a separate loop to handle the first pass. */
+                vert_lengths[v_index].count = 1;
+                /* We know the edge lengths exist in this case, should never be -1. */
+                vert_lengths[v_index].length_accum = bm_edge_info_average_length(v, edge_info);
+                BLI_assert(vert_lengths[v_index].length_accum != -1.0f);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    /* While there are vertices without their accumulated lengths divided by the count. */
+    while (STACK_SIZE(vert_stack) != 0) {
+      int stack_index = STACK_SIZE(vert_stack);
+      while (stack_index--) {
+        BMVert *v = vert_stack[stack_index];
+        STACK_REMOVE(vert_stack, stack_index);
+        const int v_index = BM_elem_index_get(v);
+
+        BLI_assert(vert_lengths[v_index].count > 0);
+        vert_lengths[v_index].length_accum /= (float)vert_lengths[v_index].count;
+        vert_lengths[v_index].count = -1; /* Ignore in future passes. */
+
+        BMIter iter;
+        BMEdge *e;
+        BM_ITER_ELEM (e, &iter, v, BM_EDGES_OF_VERT) {
+          if (!BM_elem_flag_test(e, BM_ELEM_TAG)) {
+            continue;
+          }
+          BMVert *v_other = BM_edge_other_vert(e, v);
+          if (!BM_elem_flag_test(v_other, BM_ELEM_TAG)) {
+            continue;
+          }
+          int v_other_index = BM_elem_index_get(v_other);
+          if (vert_lengths[v_other_index].count >= 0) {
+            if (vert_lengths[v_other_index].count == 0) {
+              STACK_PUSH(vert_stack, v_other);
+            }
+            BLI_assert(vert_lengths[v_index].length_accum >= 0.0f);
+            vert_lengths[v_other_index].count += 1;
+            vert_lengths[v_other_index].length_accum += vert_lengths[v_index].length_accum;
+          }
+        }
+      }
+    }
+    MEM_freeN(vert_stack);
+    *vert_lengths_p = vert_lengths;
+  }
+
+  BLI_assert(vert_lengths[BM_elem_index_get(v_lookup)].length_accum >= 0.0f);
+  return vert_lengths[BM_elem_index_get(v_lookup)].length_accum;
+}
+
+static float bm_edge_info_average_length_with_fallback(
+    BMVert *v,
+    SplitEdgeInfo *edge_info,
+
+    /* Needed for 'bm_edge_info_average_length_fallback' */
+    BMesh *bm,
+    void **vert_lengths_p)
+{
+
+  const float length = bm_edge_info_average_length(v, edge_info);
+  if (length != -1.0f) {
+    return length;
+  }
+  return bm_edge_info_average_length_fallback(v, edge_info, bm, vert_lengths_p);
+}
 
 void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
 {
+  /*
+   * Implementation:
+   *
+   * - Set all faces as tagged/untagged based on selection.
+   * - Find all edges that have 1 tagged, 1 untagged face.
+   * - Separate these edges and tag vertices, set their index to point to the original edge.
+   * - Build faces between old/new edges.
+   * - Inset the new edges into their faces.
+   */
+
   const bool use_outset = BMO_slot_bool_get(op->slots_in, "use_outset");
   const bool use_boundary = BMO_slot_bool_get(op->slots_in, "use_boundary") &&
                             (use_outset == false);
@@ -550,7 +695,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
   SplitEdgeInfo *es;
 
   /* Interpolation Vars */
-  /* an array alligned with faces but only fill items which are used. */
+  /* an array aligned with faces but only fill items which are used. */
   InterpFace **iface_array = NULL;
   int iface_array_len;
   MemArena *interp_arena = NULL;
@@ -589,7 +734,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
         /* tag if boundary is enabled */
         (use_boundary && BM_edge_is_boundary(e) && BM_elem_flag_test(e->l->f, BM_ELEM_TAG)) ||
 
-        /* tag if edge is an interior edge inbetween a tagged and untagged face */
+        /* tag if edge is an interior edge in between a tagged and untagged face */
         (bm_edge_is_mixed_face_tag(e->l))) {
       /* tag */
       BM_elem_flag_enable(e->v1, BM_ELEM_TAG);
@@ -660,7 +805,8 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
     BM_edge_calc_face_tangent(es->e_new, es->l, es->no);
 
     if (es->e_new == es->e_old) { /* happens on boundary edges */
-      /* take care here, we're creating this double edge which _must_ have its verts replaced later on */
+      /* Take care here, we're creating this double edge which _must_
+       * have its verts replaced later on. */
       es->e_old = BM_edge_create(bm, es->e_new->v1, es->e_new->v2, es->e_new, BM_CREATE_NOP);
     }
 
@@ -710,9 +856,10 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
   }
 #endif
 
-  /* execute the split and position verts, it would be most obvious to loop over verts
-   * here but don't do this since we will be splitting them off (iterating stuff you modify is bad juju)
-   * instead loop over edges then their verts */
+  /* Execute the split and position verts, it would be most obvious to loop
+   * over verts here but don't do this since we will be splitting them off
+   * (iterating stuff you modify is bad juju)
+   * instead loop over edges then their verts. */
   for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
     for (int j = 0; j < 2; j++) {
       v = (j == 0) ? es->e_new->v1 : es->e_new->v2;
@@ -820,10 +967,10 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
                   is_mid = false;
                 }
 
-                /* distable gives odd results at times, see [#39288] */
+                /* Disable since this gives odd results at times, see T39288. */
 #if 0
                 else if (compare_v3v3(f_a->no, f_b->no, 0.001f) == false) {
-                  /* epsilon increased to fix [#32329] */
+                  /* epsilon increased to fix T32329. */
 
                   /* faces don't touch,
                    * just get cross product of their normals, its *good enough*
@@ -868,9 +1015,11 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
 
               if (use_even_boundary) {
 
-                /* This case where only one edge attached to v_split
+                /**
+                 * This case where only one edge attached to #v_split
                  * is used - ei - the face to inset is on a boundary.
                  *
+                 * <pre>
                  *                  We want the inset to align flush with the
                  *                  boundary edge, not the normal of the interior
                  *             <--- edge which would give an unsightly bump.
@@ -885,8 +1034,9 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
                  * --+-----------------+-----------------------+--
                  *   |                                         |
                  *   |                                         |
+                 * </pre>
                  *
-                 * note, the fact we are doing location comparisons on verts that are moved about
+                 * \note The fact we are doing location comparisons on verts that are moved about
                  * doesn't matter because the direction will remain the same in this case.
                  */
 
@@ -1047,15 +1197,16 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
     f = BM_face_create_verts(bm, varr, j, es->l->f, BM_CREATE_NOP, true);
     BMO_face_flag_enable(bm, f, ELE_NEW);
 
-    /* copy for loop data, otherwise UV's and vcols are no good.
+    /* Copy for loop data, otherwise UV's and vcols are no good.
      * tiny speedup here we could be more clever and copy from known adjacent data
-     * also - we could attempt to interpolate the loop data, this would be much slower but more useful too */
-#if 0
-    /* don't use this because face boundaries have no adjacent loops and won't be filled in.
-     * instead copy from the opposite side with the code below */
-    BM_face_copy_shared(bm, f, NULL, NULL);
-#else
-    {
+     * also - we could attempt to interpolate the loop data,
+     * this would be much slower but more useful too. */
+    if (0) {
+      /* Don't use this because face boundaries have no adjacent loops and won't be filled in.
+       * instead copy from the opposite side with the code below */
+      BM_face_copy_shared(bm, f, NULL, NULL);
+    }
+    else {
       /* 2 inner loops on the edge between the new face and the original */
       BMLoop *l_a;
       BMLoop *l_b;
@@ -1109,7 +1260,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
         CustomData_bmesh_copy_data(&bm->ldata, &bm->ldata, iface->blocks_l[i_a], &l_b->head.data);
         CustomData_bmesh_copy_data(&bm->ldata, &bm->ldata, iface->blocks_l[i_b], &l_a->head.data);
 
-#  ifdef USE_LOOP_CUSTOMDATA_MERGE
+#ifdef USE_LOOP_CUSTOMDATA_MERGE
         if (has_math_ldata) {
           BMEdge *e_connect;
 
@@ -1136,7 +1287,7 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
                                      BM_edge_other_loop(e_connect, l_b->next));
           }
         }
-#  endif /* USE_LOOP_CUSTOMDATA_MERGE */
+#endif /* USE_LOOP_CUSTOMDATA_MERGE */
       }
       else {
         BM_elem_attrs_copy(bm, bm, l_a_other, l_b);
@@ -1144,82 +1295,98 @@ void bmo_inset_region_exec(BMesh *bm, BMOperator *op)
       }
     }
   }
-#endif
 
-    if (use_interpolate) {
-      for (i = 0; i < iface_array_len; i++) {
-        if (iface_array[i]) {
-          bm_interp_face_free(iface_array[i], bm);
-        }
+  if (use_interpolate) {
+    for (i = 0; i < iface_array_len; i++) {
+      if (iface_array[i]) {
+        bm_interp_face_free(iface_array[i], bm);
       }
-
-      BLI_memarena_free(interp_arena);
-      MEM_freeN(iface_array);
     }
 
-    /* we could flag new edges/verts too, is it useful? */
-    BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "faces.out", BM_FACE, ELE_NEW);
+    BLI_memarena_free(interp_arena);
+    MEM_freeN(iface_array);
+  }
 
-    /* cheap feature to add depth to the inset */
-    if (depth != 0.0f) {
-      float(*varr_co)[3];
-      BMOIter oiter;
+  /* we could flag new edges/verts too, is it useful? */
+  BMO_slot_buffer_from_enabled_flag(bm, op, op->slots_out, "faces.out", BM_FACE, ELE_NEW);
 
-      /* we need to re-calculate tagged normals, but for this purpose we can copy tagged verts from the
-     * faces they inset from,  */
-      for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
-        zero_v3(es->e_new->v1->no);
-        zero_v3(es->e_new->v2->no);
+  /* cheap feature to add depth to the inset */
+  if (depth != 0.0f) {
+    float(*varr_co)[3];
+    BMOIter oiter;
+
+    /* We need to re-calculate tagged normals,
+     * but for this purpose we can copy tagged verts from the faces they inset from. */
+    for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
+      zero_v3(es->e_new->v1->no);
+      zero_v3(es->e_new->v2->no);
+    }
+    for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
+      const float *no = es->l->f->no;
+      add_v3_v3(es->e_new->v1->no, no);
+      add_v3_v3(es->e_new->v2->no, no);
+    }
+    for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
+      /* annoying, avoid normalizing twice */
+      if (len_squared_v3(es->e_new->v1->no) != 1.0f) {
+        normalize_v3(es->e_new->v1->no);
       }
-      for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
-        const float *no = es->l->f->no;
-        add_v3_v3(es->e_new->v1->no, no);
-        add_v3_v3(es->e_new->v2->no, no);
+      if (len_squared_v3(es->e_new->v2->no) != 1.0f) {
+        normalize_v3(es->e_new->v2->no);
       }
-      for (i = 0, es = edge_info; i < edge_info_len; i++, es++) {
-        /* annoying, avoid normalizing twice */
-        if (len_squared_v3(es->e_new->v1->no) != 1.0f) {
-          normalize_v3(es->e_new->v1->no);
-        }
-        if (len_squared_v3(es->e_new->v2->no) != 1.0f) {
-          normalize_v3(es->e_new->v2->no);
-        }
-      }
-      /* done correcting edge verts normals */
+    }
+    /* done correcting edge verts normals */
 
-      /* untag verts */
-      BM_mesh_elem_hflag_disable_all(bm, BM_VERT, BM_ELEM_TAG, false);
+    /* untag verts */
+    BM_mesh_elem_hflag_disable_all(bm, BM_VERT, BM_ELEM_TAG, false);
 
-      /* tag face verts */
-      BMO_ITER (f, &oiter, op->slots_in, "faces", BM_FACE) {
-        BM_ITER_ELEM (v, &iter, f, BM_VERTS_OF_FACE) {
-          BM_elem_flag_enable(v, BM_ELEM_TAG);
-        }
-      }
+    /* tag face verts */
+    BMO_ITER (f, &oiter, op->slots_in, "faces", BM_FACE) {
+      BMLoop *l_iter, *l_first;
+      l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+      do {
+        BM_elem_flag_enable(l_iter->v, BM_ELEM_TAG);
+        BM_elem_flag_enable(l_iter->e, BM_ELEM_TAG);
+      } while ((l_iter = l_iter->next) != l_first);
+    }
 
-      /* do in 2 passes so moving the verts doesn't feed back into face angle checks
+    /* do in 2 passes so moving the verts doesn't feed back into face angle checks
      * which BM_vert_calc_shell_factor uses. */
 
-      /* over allocate */
-      varr_co = MEM_callocN(sizeof(*varr_co) * bm->totvert, __func__);
+    /* over allocate */
+    varr_co = MEM_callocN(sizeof(*varr_co) * bm->totvert, __func__);
+    void *vert_lengths_p = NULL;
 
-      BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-        if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
-          const float fac = (depth *
-                             (use_relative_offset ? bm_edge_info_average_length(v, edge_info) :
-                                                    1.0f) *
-                             (use_even_boundary ? BM_vert_calc_shell_factor(v) : 1.0f));
-          madd_v3_v3v3fl(varr_co[i], v->co, v->no, fac);
-        }
+    BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+      if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
+        const float fac =
+            depth *
+            (use_relative_offset ?
+                 bm_edge_info_average_length_with_fallback(
+                     v,
+                     edge_info,
+                     /* Variables needed for filling interior values for vertex lengths. */
+                     bm,
+                     &vert_lengths_p) :
+                 1.0f) *
+            (use_even_boundary ? BM_vert_calc_shell_factor(v) : 1.0f);
+        madd_v3_v3v3fl(varr_co[i], v->co, v->no, fac);
       }
-
-      BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
-        if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
-          copy_v3_v3(v->co, varr_co[i]);
-        }
-      }
-      MEM_freeN(varr_co);
     }
 
-    MEM_freeN(edge_info);
+    if (vert_lengths_p != NULL) {
+      MEM_freeN(vert_lengths_p);
+    }
+
+    BM_ITER_MESH_INDEX (v, &iter, bm, BM_VERTS_OF_MESH, i) {
+      if (BM_elem_flag_test(v, BM_ELEM_TAG)) {
+        copy_v3_v3(v->co, varr_co[i]);
+      }
+    }
+    MEM_freeN(varr_co);
   }
+
+  MEM_freeN(edge_info);
+}
+
+/** \} */

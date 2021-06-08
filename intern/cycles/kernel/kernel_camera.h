@@ -71,7 +71,7 @@ ccl_device void camera_sample_perspective(KernelGlobals *kg,
   }
 #endif
 
-  float3 P = make_float3(0.0f, 0.0f, 0.0f);
+  float3 P = zero_float3();
   float3 D = Pcamera;
 
   /* modify ray for depth of field */
@@ -128,9 +128,9 @@ ccl_device void camera_sample_perspective(KernelGlobals *kg,
 #ifdef __RAY_DIFFERENTIALS__
     /* Ray differentials, computed from scratch using the raster coordinates
      * because we don't want to be affected by depth of field. We compute
-     * ray origin and direction for the center and two neighbouring pixels
+     * ray origin and direction for the center and two neighboring pixels
      * and simply take their differences. */
-    float3 Pnostereo = transform_point(&cameratoworld, make_float3(0.0f, 0.0f, 0.0f));
+    float3 Pnostereo = transform_point(&cameratoworld, zero_float3());
 
     float3 Pcenter = Pnostereo;
     float3 Dcenter = Pcamera;
@@ -237,7 +237,9 @@ ccl_device void camera_sample_orthographic(KernelGlobals *kg,
 /* Panorama Camera */
 
 ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
+#ifdef __CAMERA_MOTION__
                                               const ccl_global DecomposedTransform *cam_motion,
+#endif
                                               float raster_x,
                                               float raster_y,
                                               float lens_u,
@@ -248,7 +250,7 @@ ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
   float3 Pcamera = transform_perspective(&rastertocamera, make_float3(raster_x, raster_y, 0.0f));
 
   /* create ray form raster position */
-  float3 P = make_float3(0.0f, 0.0f, 0.0f);
+  float3 P = zero_float3();
   float3 D = panorama_to_direction(cam, Pcamera.x, Pcamera.y);
 
   /* indicates ray should not receive any light, outside of the lens */
@@ -303,7 +305,7 @@ ccl_device_inline void camera_sample_panorama(ccl_constant KernelCamera *cam,
 #ifdef __RAY_DIFFERENTIALS__
   /* Ray differentials, computed from scratch using the raster coordinates
    * because we don't want to be affected by depth of field. We compute
-   * ray origin and direction for the center and two neighbouring pixels
+   * ray origin and direction for the center and two neighboring pixels
    * and simply take their differences. */
   float3 Pcenter = Pcamera;
   float3 Dcenter = panorama_to_direction(cam, Pcenter.x, Pcenter.y);
@@ -377,9 +379,9 @@ ccl_device_inline void camera_sample(KernelGlobals *kg,
     const int shutter_table_offset = kernel_data.cam.shutter_table_offset;
     ray->time = lookup_table_read(kg, time, shutter_table_offset, SHUTTER_TABLE_SIZE);
     /* TODO(sergey): Currently single rolling shutter effect type only
-     * where scanlines are acquired from top to bottom and whole scanline
+     * where scan-lines are acquired from top to bottom and whole scan-line
      * is acquired at once (no delay in acquisition happens between pixels
-     * of single scanline).
+     * of single scan-line).
      *
      * Might want to support more models in the future.
      */
@@ -413,8 +415,12 @@ ccl_device_inline void camera_sample(KernelGlobals *kg,
     camera_sample_orthographic(kg, raster_x, raster_y, lens_u, lens_v, ray);
   }
   else {
+#ifdef __CAMERA_MOTION__
     const ccl_global DecomposedTransform *cam_motion = kernel_tex_array(__camera_motion);
     camera_sample_panorama(&kernel_data.cam, cam_motion, raster_x, raster_y, lens_u, lens_v, ray);
+#else
+    camera_sample_panorama(&kernel_data.cam, raster_x, raster_y, lens_u, lens_v, ray);
+#endif
   }
 }
 
@@ -435,8 +441,22 @@ ccl_device_inline float camera_distance(KernelGlobals *kg, float3 P)
     float3 camD = make_float3(cameratoworld.x.z, cameratoworld.y.z, cameratoworld.z.z);
     return fabsf(dot((P - camP), camD));
   }
-  else
+  else {
     return len(P - camP);
+  }
+}
+
+ccl_device_inline float camera_z_depth(KernelGlobals *kg, float3 P)
+{
+  if (kernel_data.cam.type != CAMERA_PANORAMA) {
+    Transform worldtocamera = kernel_data.cam.worldtocamera;
+    return transform_point(&worldtocamera, P).z;
+  }
+  else {
+    Transform cameratoworld = kernel_data.cam.cameratoworld;
+    float3 camP = make_float3(cameratoworld.x.w, cameratoworld.y.w, cameratoworld.z.w);
+    return len(P - camP);
+  }
 }
 
 ccl_device_inline float3 camera_direction_from_point(KernelGlobals *kg, float3 P)

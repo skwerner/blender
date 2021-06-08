@@ -21,22 +21,27 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SCREEN_TYPES_H__
-#define __DNA_SCREEN_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
-#include "DNA_view2d_types.h"
 #include "DNA_vec_types.h"
+#include "DNA_view2d_types.h"
 
 #include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct ARegion;
 struct ARegionType;
 struct PanelType;
+struct PointerRNA;
 struct Scene;
 struct SpaceLink;
 struct SpaceType;
+struct uiBlock;
 struct uiLayout;
 struct wmDrawBuffer;
 struct wmTimer;
@@ -94,7 +99,7 @@ typedef struct bScreen {
   /** If set, screen has timer handler added in window. */
   struct wmTimer *animtimer;
   /** Context callback. */
-  void *context;
+  void /*bContextDataCallback*/ *context;
 
   /** Runtime. */
   struct wmTooltipState *tool_tip;
@@ -129,6 +134,26 @@ typedef struct ScrAreaMap {
   ListBase areabase;
 } ScrAreaMap;
 
+typedef struct Panel_Runtime {
+  /* Applied to Panel.ofsx, but saved separately so we can track changes between redraws. */
+  int region_ofsx;
+
+  char _pad[4];
+
+  /**
+   * Pointer for storing which data the panel corresponds to.
+   * Useful when there can be multiple instances of the same panel type.
+   *
+   * \note A panel and its sub-panels share the same custom data pointer.
+   * This avoids freeing the same pointer twice when panels are removed.
+   */
+  struct PointerRNA *custom_data_ptr;
+
+  /* Pointer to the panel's block. Useful when changes to panel #uiBlocks
+   * need some context from traversal of the panel "tree". */
+  struct uiBlock *block;
+} Panel_Runtime;
+
 /** The part from uiBlock that needs saved in file. */
 typedef struct Panel {
   struct Panel *next, *prev;
@@ -139,7 +164,7 @@ typedef struct Panel {
   struct uiLayout *layout;
 
   /** Defined as UI_MAX_NAME_STR. */
-  char panelname[64], tabname[64];
+  char panelname[64];
   /** Panel name is identifier for restoring location. */
   char drawname[64];
   /** Offset within the region. */
@@ -149,28 +174,56 @@ typedef struct Panel {
   /** Panel size excluding children. */
   int blocksizex, blocksizey;
   short labelofs;
-  char _pad[2];
   short flag, runtime_flag;
-  short control;
-  short snap;
+  char _pad[6];
   /** Panels are aligned according to increasing sort-order. */
   int sortorder;
-  /** This panel is tabbed in *paneltab. */
-  struct Panel *paneltab;
   /** Runtime for panel manipulation. */
   void *activedata;
   /** Sub panels. */
   ListBase children;
+
+  Panel_Runtime runtime;
 } Panel;
+
+/**
+ * Used for passing expansion between instanced panel data and the panels themselves.
+ * There are 16 defines because the expansion data is typically stored in a short.
+ *
+ * \note Expansion for instanced panels is stored in depth first order. For example, the value of
+ * UI_SUBPANEL_DATA_EXPAND_2 correspond to mean the expansion of the second subpanel or the first
+ * subpanel's first subpanel.
+ */
+typedef enum uiPanelDataExpansion {
+  UI_PANEL_DATA_EXPAND_ROOT = (1 << 0),
+  UI_SUBPANEL_DATA_EXPAND_1 = (1 << 1),
+  UI_SUBPANEL_DATA_EXPAND_2 = (1 << 2),
+  UI_SUBPANEL_DATA_EXPAND_3 = (1 << 3),
+  UI_SUBPANEL_DATA_EXPAND_4 = (1 << 4),
+  UI_SUBPANEL_DATA_EXPAND_5 = (1 << 5),
+  UI_SUBPANEL_DATA_EXPAND_6 = (1 << 6),
+  UI_SUBPANEL_DATA_EXPAND_7 = (1 << 7),
+  UI_SUBPANEL_DATA_EXPAND_8 = (1 << 8),
+  UI_SUBPANEL_DATA_EXPAND_9 = (1 << 9),
+  UI_SUBPANEL_DATA_EXPAND_10 = (1 << 10),
+  UI_SUBPANEL_DATA_EXPAND_11 = (1 << 11),
+  UI_SUBPANEL_DATA_EXPAND_12 = (1 << 12),
+  UI_SUBPANEL_DATA_EXPAND_13 = (1 << 13),
+  UI_SUBPANEL_DATA_EXPAND_14 = (1 << 14),
+  UI_SUBPANEL_DATA_EXPAND_15 = (1 << 15),
+  UI_SUBPANEL_DATA_EXPAND_16 = (1 << 16),
+} uiPanelDataExpansion;
 
 /**
  * Notes on Panel Categories:
  *
- * - #ARegion.panels_category (#PanelCategoryDyn) is a runtime only list of categories collected during draw.
+ * - #ARegion.panels_category (#PanelCategoryDyn)
+ *   is a runtime only list of categories collected during draw.
  *
- * - #ARegion.panels_category_active (#PanelCategoryStack) is basically a list of strings (category id's).
+ * - #ARegion.panels_category_active (#PanelCategoryStack)
+ *   is basically a list of strings (category id's).
  *
- * Clicking on a tab moves it to the front of ar->panels_category_active,
+ * Clicking on a tab moves it to the front of region->panels_category_active,
  * If the context changes so this tab is no longer displayed,
  * then the first-most tab in #ARegion.panels_category_active is used.
  *
@@ -232,7 +285,7 @@ typedef struct uiList { /* some list UI data need to be saved in file */
   /** Defined as UI_MAX_NAME_STR. */
   char list_id[64];
 
-  /** How items are layedout in the list. */
+  /** How items are laid out in the list. */
   int layout_type;
   int flag;
 
@@ -266,16 +319,12 @@ typedef struct TransformOrientation {
 typedef struct uiPreview {
   struct uiPreview *next, *prev;
 
-  /** Defined as UI_MAX_NAME_STR. */
+  /** Defined as #UI_MAX_NAME_STR. */
   char preview_id[64];
   short height;
   char _pad1[6];
 } uiPreview;
 
-/* These two lines with # tell makesdna this struct can be excluded.
- * Should be: #ifndef WITH_GLOBAL_AREA_WRITING */
-#
-#
 typedef struct ScrGlobalAreaData {
   /* Global areas have a non-dynamic size. That means, changing the window
    * size doesn't affect their size at all. However, they can still be
@@ -298,8 +347,8 @@ enum GlobalAreaFlag {
 };
 
 typedef enum GlobalAreaAlign {
-  GLOBAL_AREA_ALIGN_TOP,
-  GLOBAL_AREA_ALIGN_BOTTOM,
+  GLOBAL_AREA_ALIGN_TOP = 0,
+  GLOBAL_AREA_ALIGN_BOTTOM = 1,
 } GlobalAreaAlign;
 
 typedef struct ScrArea_Runtime {
@@ -311,7 +360,7 @@ typedef struct ScrArea_Runtime {
 typedef struct ScrArea {
   struct ScrArea *next, *prev;
 
-  /** Ordered (bl, tl, tr, br). */
+  /** Ordered (bottom-left, top-left, top-right, bottom-right). */
   ScrVert *v1, *v2, *v3, *v4;
   /** If area==full, this is the parent. */
   bScreen *full;
@@ -344,7 +393,7 @@ typedef struct ScrArea {
    * runtime variable, updated by executing operators.
    */
   short region_active_win;
-  char temp, _pad;
+  char _pad[2];
 
   /** Callbacks for this space type. */
   struct SpaceType *type;
@@ -375,6 +424,16 @@ typedef struct ScrArea {
 typedef struct ARegion_Runtime {
   /* Panel category to use between 'layout' and 'draw'. */
   const char *category;
+
+  /**
+   * The visible part of the region, use with region overlap not to draw
+   * on top of the overlapping regions.
+   *
+   * Lazy initialize, zero'd when unset, relative to #ARegion.winrct x/y min. */
+  rcti visible_rect;
+
+  /* The offset needed to not overlap with window scrollbars. Only used by HUD regions for now. */
+  int offset_x, offset_y;
 } ARegion_Runtime;
 
 typedef struct ARegion {
@@ -399,13 +458,15 @@ typedef struct ARegion {
   short flag;
 
   /** Current split size in unscaled pixels (if zero it uses regiontype).
-   * To convert to pixels use: `UI_DPI_FAC * ar->sizex + 0.5f`. */
+   * To convert to pixels use: `UI_DPI_FAC * region->sizex + 0.5f`.
+   * However to get the current region size, you should usually use winx/winy from above, not this!
+   */
   short sizex, sizey;
 
   /** Private, cached notifier events. */
   short do_draw;
   /** Private, cached notifier events. */
-  short do_draw_overlay;
+  short do_draw_paintcursor;
   /** Private, set for indicate drawing overlapped. */
   short overlap;
   /** Temporary copy of flag settings for clean fullscreen. */
@@ -451,16 +512,19 @@ enum {
 #ifdef DNA_DEPRECATED_ALLOW
   AREA_TEMP_INFO = (1 << 3), /* versioned to make slot reusable */
 #endif
-  /* update size of regions within the area */
+  /** Update size of regions within the area. */
   AREA_FLAG_REGION_SIZE_UPDATE = (1 << 3),
   AREA_FLAG_ACTIVE_TOOL_UPDATE = (1 << 4),
-  //  AREA_FLAG_UNUSED_5           = (1 << 5),
-  /* used to check if we should switch back to prevspace (of a different type) */
-  AREA_FLAG_TEMP_TYPE = (1 << 6),
-  /* for temporary fullscreens (file browser, image editor render)
-   * that are opened above user set fullscreens */
+  // AREA_FLAG_UNUSED_5 = (1 << 5),
+
+  AREA_FLAG_UNUSED_6 = (1 << 6), /* cleared */
+
+  /**
+   * For temporary full-screens (file browser, image editor render)
+   * that are opened above user set full-screens.
+   */
   AREA_FLAG_STACKED_FULLSCREEN = (1 << 7),
-  /* update action zones (even if the mouse is not intersecting them) */
+  /** Update action zones (even if the mouse is not intersecting them). */
   AREA_FLAG_ACTIONZONES_UPDATE = (1 << 8),
 };
 
@@ -471,7 +535,7 @@ enum {
 
 /** #bScreen.flag */
 enum {
-  SCREEN_COLLAPSE_TOPBAR = 1,
+  SCREEN_DEPRECATED = 1,
   SCREEN_COLLAPSE_STATUSBAR = 2,
 };
 
@@ -501,28 +565,15 @@ typedef enum eScreen_Redraws_Flag {
 /** #Panel.flag */
 enum {
   PNL_SELECT = (1 << 0),
-  PNL_CLOSEDX = (1 << 1),
-  PNL_CLOSEDY = (1 << 2),
-  PNL_CLOSED = (PNL_CLOSEDX | PNL_CLOSEDY),
-  /*PNL_TABBED    = (1 << 3), */ /*UNUSED*/
-  PNL_OVERLAP = (1 << 4),
+  PNL_UNUSED_1 = (1 << 1), /* Cleared */
+  PNL_CLOSED = (1 << 2),
+  /* PNL_TABBED = (1 << 3), */  /*UNUSED*/
+  /* PNL_OVERLAP = (1 << 4), */ /*UNUSED*/
   PNL_PIN = (1 << 5),
   PNL_POPOVER = (1 << 6),
+  /** The panel has been drag-drop reordered and the instanced panel list needs to be rebuilt. */
+  PNL_INSTANCED_LIST_ORDER_CHANGED = (1 << 7),
 };
-
-/** #Panel.snap - for snapping to screen edges */
-#define PNL_SNAP_NONE 0
-/* #define PNL_SNAP_TOP     1 */
-/* #define PNL_SNAP_RIGHT       2 */
-#define PNL_SNAP_BOTTOM 4
-/* #define PNL_SNAP_LEFT        8 */
-
-/* #define PNL_SNAP_DIST        9.0 */
-
-/* paneltype flag */
-#define PNL_DEFAULT_CLOSED 1
-#define PNL_NO_HEADER 2
-#define PNL_LAYOUT_VERT_BAR 4
 
 /* Fallback panel category (only for old scripts which need updating) */
 #define PNL_CATEGORY_FALLBACK "Misc"
@@ -544,7 +595,7 @@ enum {
 #define UI_LIST_AUTO_SIZE_THRESHOLD 1
 
 /* uiList filter flags (dyn_data) */
-/* WARNING! Those values are used by integer RNA too, which does not handle well values > INT_MAX...
+/* WARNING! Those values are used by integer RNA too, which does not handle well values > INT_MAX.
  *          So please do not use 32nd bit here. */
 enum {
   UILST_FLT_ITEM = 1 << 30, /* This item has passed the filter process successfully. */
@@ -560,7 +611,7 @@ enum {
 enum {
   /* Plain values (only one is valid at a time, once masked with UILST_FLT_SORT_MASK. */
   /** Just for sake of consistency. */
-  UILST_FLT_SORT_INDEX = 0,
+  /* UILST_FLT_SORT_INDEX = 0, */ /* UNUSED */
   UILST_FLT_SORT_ALPHA = 1,
 
   /* Bitflags affecting behavior of any kind of sorting. */
@@ -574,7 +625,7 @@ enum {
 
 /* regiontype, first two are the default set */
 /* Do NOT change order, append on end. Types are hardcoded needed */
-enum {
+typedef enum eRegionType {
   RGN_TYPE_WINDOW = 0,
   RGN_TYPE_HEADER = 1,
   RGN_TYPE_CHANNELS = 2,
@@ -589,49 +640,94 @@ enum {
   /* A place for buttons to trigger execution of something that was set up in other regions. */
   RGN_TYPE_EXECUTE = 10,
   RGN_TYPE_FOOTER = 11,
-};
+  RGN_TYPE_TOOL_HEADER = 12,
+
+#define RGN_TYPE_LEN (RGN_TYPE_TOOL_HEADER + 1)
+} eRegionType;
+
 /* use for function args */
 #define RGN_TYPE_ANY -1
 
 /* Region supports panel tabs (categories). */
 #define RGN_TYPE_HAS_CATEGORY_MASK (1 << RGN_TYPE_UI)
 
-/* region alignment */
-#define RGN_ALIGN_NONE 0
-#define RGN_ALIGN_TOP 1
-#define RGN_ALIGN_BOTTOM 2
-#define RGN_ALIGN_LEFT 3
-#define RGN_ALIGN_RIGHT 4
-#define RGN_ALIGN_HSPLIT 5
-#define RGN_ALIGN_VSPLIT 6
-#define RGN_ALIGN_FLOAT 7
-#define RGN_ALIGN_QSPLIT 8
-#define RGN_ALIGN_ENUM_MASK 0x0F
+/* Check for any kind of header region. */
+#define RGN_TYPE_IS_HEADER_ANY(regiontype) \
+  (((1 << (regiontype)) & \
+    ((1 << RGN_TYPE_HEADER) | 1 << (RGN_TYPE_TOOL_HEADER) | (1 << RGN_TYPE_FOOTER))) != 0)
 
-#define RGN_SPLIT_PREV 32
+/** #ARegion.alignment */
+enum {
+  RGN_ALIGN_NONE = 0,
+  RGN_ALIGN_TOP = 1,
+  RGN_ALIGN_BOTTOM = 2,
+  RGN_ALIGN_LEFT = 3,
+  RGN_ALIGN_RIGHT = 4,
+  RGN_ALIGN_HSPLIT = 5,
+  RGN_ALIGN_VSPLIT = 6,
+  RGN_ALIGN_FLOAT = 7,
+  RGN_ALIGN_QSPLIT = 8,
+  /* Maximum 15. */
+
+  /* Flags start here. */
+  RGN_SPLIT_PREV = 32,
+};
+
+/** Mask out flags so we can check the alignment. */
+#define RGN_ALIGN_ENUM_FROM_MASK(align) ((align) & ((1 << 4) - 1))
+#define RGN_ALIGN_FLAG_FROM_MASK(align) ((align) & ~((1 << 4) - 1))
 
 /** #ARegion.flag */
 enum {
   RGN_FLAG_HIDDEN = (1 << 0),
   RGN_FLAG_TOO_SMALL = (1 << 1),
-  /* Force delayed reinit of region size data, so that region size is calculated
+  /**
+   * Force delayed reinit of region size data, so that region size is calculated
    * just big enough to show all its content (if enough space is available).
-   * Note that only ED_region_header supports this right now. */
+   * Note that only ED_region_header supports this right now.
+   */
   RGN_FLAG_DYNAMIC_SIZE = (1 << 2),
-  /* Region data is NULL'd on read, never written. */
+  /** Region data is NULL'd on read, never written. */
   RGN_FLAG_TEMP_REGIONDATA = (1 << 3),
-  /* The region must either use its prefsizex/y or be hidden. */
+  /** The region must either use its prefsizex/y or be hidden. */
   RGN_FLAG_PREFSIZE_OR_HIDDEN = (1 << 4),
   /** Size has been clamped (floating regions only). */
   RGN_FLAG_SIZE_CLAMP_X = (1 << 5),
   RGN_FLAG_SIZE_CLAMP_Y = (1 << 6),
+  /** When the user sets the region is hidden,
+   * needed for floating regions that may be hidden for other reasons. */
+  RGN_FLAG_HIDDEN_BY_USER = (1 << 7),
+  /** Property search filter is active. */
+  RGN_FLAG_SEARCH_FILTER_ACTIVE = (1 << 8),
+  /**
+   * Update the expansion of the region's panels and switch contexts. Only Set
+   * temporarily when the search filter is updated and cleared at the end of the
+   * region's layout pass. so that expansion is still interactive,
+   */
+  RGN_FLAG_SEARCH_FILTER_UPDATE = (1 << 9),
 };
 
 /** #ARegion.do_draw */
-#define RGN_DRAW 1
-#define RGN_DRAW_PARTIAL 2
-#define RGN_DRAWING 4
-#define RGN_DRAW_REFRESH_UI 8 /* re-create uiBlock's where possible */
-#define RGN_DRAW_NO_REBUILD 16
+enum {
+  /* Region must be fully redrawn. */
+  RGN_DRAW = 1,
+  /* Redraw only part of region, for sculpting and painting to get smoother
+   * stroke painting on heavy meshes. */
+  RGN_DRAW_PARTIAL = 2,
+  /* For outliner, to do faster redraw without rebuilding outliner tree.
+   * For 3D viewport, to display a new progressive render sample without
+   * while other buffers and overlays remain unchanged. */
+  RGN_DRAW_NO_REBUILD = 4,
 
-#endif /* __DNA_SCREEN_TYPES_H__ */
+  /* Set while region is being drawn. */
+  RGN_DRAWING = 8,
+  /* For popups, to refresh UI layout along with drawing. */
+  RGN_REFRESH_UI = 16,
+
+  /* Only editor overlays (currently gizmos only!) should be redrawn. */
+  RGN_DRAW_EDITOR_OVERLAYS = 32,
+};
+
+#ifdef __cplusplus
+}
+#endif

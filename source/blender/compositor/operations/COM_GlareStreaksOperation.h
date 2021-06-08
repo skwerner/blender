@@ -16,11 +16,13 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GLARESTREAKSOPERATION_H__
-#define __COM_GLARESTREAKSOPERATION_H__
+#pragma once
+
+#include "COM_GlareBaseOperation.h"
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
-#include "COM_GlareBaseOperation.h"
+
+namespace blender::compositor {
 
 class GlareStreaksOperation : public GlareBaseOperation {
  public:
@@ -29,6 +31,7 @@ class GlareStreaksOperation : public GlareBaseOperation {
   }
 
  protected:
-  void generateGlare(float *data, MemoryBuffer *inputTile, NodeGlare *settings);
+  void generateGlare(float *data, MemoryBuffer *inputTile, NodeGlare *settings) override;
 };
-#endif
+
+}  // namespace blender::compositor

@@ -16,22 +16,25 @@
  * Copyright 2018, Blender Foundation.
  */
 
-#ifndef __COM_CRYPTOMATTEOPERATION_H__
-#define __COM_CRYPTOMATTEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class CryptomatteOperation : public NodeOperation {
  private:
-  std::vector<float> m_objectIndex;
+  Vector<float> m_objectIndex;
 
  public:
-  std::vector<SocketReader *> inputs;
+  Vector<SocketReader *> inputs;
 
   CryptomatteOperation(size_t num_inputs = 6);
 
-  void initExecution();
-  void executePixel(float output[4], int x, int y, void *data);
+  void initExecution() override;
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   void addObjectIndex(float objectIndex);
 };
-#endif
+
+}  // namespace blender::compositor

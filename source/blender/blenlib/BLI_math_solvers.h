@@ -15,21 +15,20 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation
  * All rights reserved.
- * */
+ */
 
-#ifndef __BLI_MATH_SOLVERS_H__
-#define __BLI_MATH_SOLVERS_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
+#include "BLI_compiler_attrs.h"
+#include "BLI_math_inline.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "BLI_compiler_attrs.h"
-#include "BLI_math_inline.h"
 
 #ifdef BLI_MATH_GCC_WARN_PRAGMA
 #  pragma GCC diagnostic push
@@ -42,7 +41,7 @@ bool BLI_eigen_solve_selfadjoint_m3(const float m3[3][3],
                                     float r_eigen_values[3],
                                     float r_eigen_vectors[3][3]);
 
-void BLI_svd_m3(const float m3[3][3], float r_U[3][3], float r_S[], float r_V[3][3]);
+void BLI_svd_m3(const float m3[3][3], float r_U[3][3], float r_S[3], float r_V[3][3]);
 
 /***************************** Simple Solvers ************************************/
 
@@ -76,5 +75,3 @@ bool BLI_newton3d_solve(Newton3D_DeltaFunc func_delta,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_MATH_SOLVERS_H__ */

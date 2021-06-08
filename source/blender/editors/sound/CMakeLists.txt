@@ -19,8 +19,10 @@ set(INC
   ../include
   ../../blenkernel
   ../../blenlib
+  ../../depsgraph
   ../../makesdna
   ../../makesrna
+  ../../sequencer
   ../../windowmanager
   ../../../../intern/guardedalloc
 )
@@ -46,6 +48,9 @@ if(WITH_AUDASPACE)
   )
   list(APPEND LIB
     bf_intern_audaspace
+
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
   )
   add_definitions(-DWITH_AUDASPACE)
 endif()

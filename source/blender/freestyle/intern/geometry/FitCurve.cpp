@@ -20,9 +20,9 @@
  * \brief from "Graphics Gems", Academic Press, 1990
  */
 
+#include <cmath>
+#include <cstdio>
 #include <cstdlib>  // for malloc and free
-#include <stdio.h>
-#include <math.h>
 
 #include "FitCurve.h"
 
@@ -30,7 +30,7 @@ using namespace std;
 
 namespace Freestyle {
 
-typedef Vector2 *BezierCurve;
+using BezierCurve = Vector2 *;
 
 /* Forward declarations */
 static double *Reparameterize(Vector2 *d, int first, int last, double *u, BezierCurve bezCurve);
@@ -134,7 +134,7 @@ static BezierCurve GenerateBezier(
   double alpha_l; /* Alpha values, left and right */
   double alpha_r;
   Vector2 tmp;          /* Utility variable */
-  BezierCurve bezCurve; /* RETURN bezier curve ctl pts */
+  BezierCurve bezCurve; /* RETURN bezier curve control points. */
 
   bezCurve = (Vector2 *)malloc(4 * sizeof(Vector2));
   nPts = last - first + 1;
@@ -181,8 +181,8 @@ static BezierCurve GenerateBezier(
   alpha_l = det_X_C1 / det_C0_C1;
   alpha_r = det_C0_X / det_C0_C1;
 
-  /* If alpha negative, use the Wu/Barsky heuristic (see text) (if alpha is 0, you get coincident control points
-   * that lead to divide by zero in any subsequent NewtonRaphsonRootFind() call).
+  /* If alpha negative, use the Wu/Barsky heuristic (see text) (if alpha is 0, you get coincident
+   * control points that lead to divide by zero in any subsequent NewtonRaphsonRootFind() call).
    */
   if (alpha_l < 1.0e-6 || alpha_r < 1.0e-6) {
     double dist = V2DistanceBetween2Points(&d[last], &d[first]) / 3.0;
@@ -194,14 +194,15 @@ static BezierCurve GenerateBezier(
     return bezCurve;
   }
 
-  /* First and last control points of the Bezier curve are positioned exactly at the first and last data points
-   * Control points 1 and 2 are positioned an alpha distance out on the tangent vectors, left and right, respectively
+  /* First and last control points of the Bezier curve are positioned exactly at the first and last
+   * data points Control points 1 and 2 are positioned an alpha distance out on the tangent
+   * vectors, left and right, respectively
    */
   bezCurve[0] = d[first];
   bezCurve[3] = d[last];
   V2Add(&bezCurve[0], V2Scale(&tHat1, alpha_l), &bezCurve[1]);
   V2Add(&bezCurve[3], V2Scale(&tHat2, alpha_r), &bezCurve[2]);
-  return (bezCurve);
+  return bezCurve;
 }
 
 /*
@@ -222,7 +223,7 @@ static double *Reparameterize(Vector2 *d, int first, int last, double *u, Bezier
   for (i = first; i <= last; i++) {
     uPrime[i - first] = NewtonRaphsonRootFind(bezCurve, d[i], u[i - first]);
   }
-  return (uPrime);
+  return uPrime;
 }
 
 /*
@@ -265,8 +266,9 @@ static double NewtonRaphsonRootFind(BezierCurve Q, Vector2 P, double u)
                 (Q_u[1] - P[1]) * (Q2_u[1]);
 
   /* u = u - f(u)/f'(u) */
-  if (denominator == 0)  // FIXME
+  if (denominator == 0) {  // FIXME
     return u;
+  }
   uPrime = u - (numerator / denominator);
   return uPrime;
 }
@@ -460,10 +462,6 @@ static Vector2 V2SubII(Vector2 a, Vector2 b)
 
 //------------------------- WRAPPER -----------------------------//
 
-FitCurveWrapper::FitCurveWrapper()
-{
-}
-
 FitCurveWrapper::~FitCurveWrapper()
 {
   _vertices.clear();
@@ -471,8 +469,9 @@ FitCurveWrapper::~FitCurveWrapper()
 
 void FitCurveWrapper::DrawBezierCurve(int n, Vector2 *curve)
 {
-  for (int i = 0; i <= n; ++i)
+  for (int i = 0; i <= n; ++i) {
     _vertices.push_back(curve[i]);
+  }
 }
 
 void FitCurveWrapper::FitCurve(vector<Vec2d> &data, vector<Vec2d> &oCurve, double error)
@@ -490,7 +489,7 @@ void FitCurveWrapper::FitCurve(vector<Vec2d> &data, vector<Vec2d> &oCurve, doubl
 
   // copy results
   for (vector<Vector2>::iterator v = _vertices.begin(), vend = _vertices.end(); v != vend; ++v) {
-    oCurve.push_back(Vec2d(v->x(), v->y()));
+    oCurve.emplace_back(v->x(), v->y());
   }
 }
 

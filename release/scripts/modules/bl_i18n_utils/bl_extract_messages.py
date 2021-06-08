@@ -22,8 +22,6 @@
 # XXX: This script is meant to be used from inside Blender!
 #      You should not directly use this script, rather use update_msg.py!
 
-import collections
-import copy
 import datetime
 import os
 import re
@@ -166,7 +164,8 @@ def print_info(reports, pot):
     spell_errors = check_ctxt.get("spell_errors")
 
     # XXX Temp, no multi_rnatip nor py_in_rna, see below.
-    keys = multi_lines | not_capitalized | end_point | undoc_ops | spell_errors.keys()
+    # Also, multi-lines tooltips are valid now.
+    keys = not_capitalized | end_point | undoc_ops | spell_errors.keys()
     if keys:
         _print("WARNINGS:")
         for key in keys:
@@ -174,8 +173,9 @@ def print_info(reports, pot):
                 _print("\tThe following operators are undocumented!")
             else:
                 _print("\t“{}”|“{}”:".format(*key))
-                if multi_lines and key in multi_lines:
-                    _print("\t\t-> newline in this message!")
+                # We support multi-lines tooltips now...
+                # ~ if multi_lines and key in multi_lines:
+                # ~     _print("\t\t-> newline in this message!")
                 if not_capitalized and key in not_capitalized:
                     _print("\t\t-> message not capitalized!")
                 if end_point and key in end_point:
@@ -231,59 +231,6 @@ def dump_rna_messages(msgs, reports, settings, verbose=False):
 
         # More builtin classes we don't need to parse.
         blacklist_rna_class |= {cls for cls in bpy.types.Property.__subclasses__()}
-
-        # None of this seems needed anymore, and it's broken anyway with current master (blender 2.79.1)...
-        """
-        _rna = {getattr(bpy.types, cls) for cls in dir(bpy.types)}
-
-        # Classes which are attached to collections can be skipped too, these are api access only.
-        # XXX This is not true, some of those show in UI, see e.g. tooltip of KeyingSets.active...
-        #~ for cls in _rna:
-            #~ for prop in cls.bl_rna.properties:
-                #~ if prop.type == 'COLLECTION':
-                    #~ prop_cls = prop.srna
-                    #~ if prop_cls is not None:
-                        #~ blacklist_rna_class.add(prop_cls.__class__)
-
-        # Now here is the *ugly* hack!
-        # Unfortunately, all classes we want to access are not available from bpy.types (OperatorProperties subclasses
-        # are not here, as they have the same name as matching Operator ones :( ). So we use __subclasses__() calls
-        # to walk through all rna hierarchy.
-        # But unregistered classes remain listed by relevant __subclasses__() calls (be it a Py or BPY/RNA bug),
-        # and obviously the matching RNA struct exists no more, so trying to access their data (even the identifier)
-        # quickly leads to segfault!
-        # To address this, we have to blacklist classes which __name__ does not match any __name__ from bpy.types
-        # (we can't use only RNA identifiers, as some py-defined classes has a different name that rna id,
-        # and we can't use class object themselves, because OperatorProperties subclasses are not in bpy.types!)...
-
-        _rna_clss_ids = {cls.__name__ for cls in _rna} | {cls.bl_rna.identifier for cls in _rna}
-
-        # All registrable types.
-        blacklist_rna_class |= {cls for cls in bpy.types.OperatorProperties.__subclasses__() +
-                                               bpy.types.Operator.__subclasses__() +
-                                               bpy.types.OperatorMacro.__subclasses__() +
-                                               bpy.types.Header.__subclasses__() +
-                                               bpy.types.Panel.__subclasses__() +
-                                               bpy.types.Menu.__subclasses__() +
-                                               bpy.types.UIList.__subclasses__()
-                                    if cls.__name__ not in _rna_clss_ids}
-
-        # Collect internal operators
-        # extend with all internal operators
-        # note that this uses internal api introspection functions
-        # XXX Do not skip INTERNAL's anymore, some of those ops show up in UI now!
-        # all possible operator names
-        #op_ids = (set(cls.bl_rna.identifier for cls in bpy.types.OperatorProperties.__subclasses__()) |
-        #          set(cls.bl_rna.identifier for cls in bpy.types.Operator.__subclasses__()) |
-        #          set(cls.bl_rna.identifier for cls in bpy.types.OperatorMacro.__subclasses__()))
-
-        #get_instance = __import__("_bpy").ops.get_instance
-        #path_resolve = type(bpy.context).__base__.path_resolve
-        #for idname in op_ids:
-            #op = get_instance(idname)
-            #if 'INTERNAL' in path_resolve(op, "bl_options"):
-                #blacklist_rna_class.add(idname)
-        """
 
         return blacklist_rna_class
 
@@ -507,9 +454,11 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
         Recursively get strings, needed in case we have "Blah" + "Blah", passed as an argument in that case it won't
         evaluate to a string. However, break on some kind of stopper nodes, like e.g. Subscript.
         """
-        if type(node) == ast.Str:
+        # New in py 3.8: all constants are of type 'ast.Constant'.
+        # 'ast.Str' will have to be removed when we officially switch to this version.
+        if type(node) in {ast.Str, getattr(ast, "Constant", None)}:
             eval_str = ast.literal_eval(node)
-            if eval_str:
+            if eval_str and type(eval_str) == str:
                 yield (is_split, eval_str, (node,))
         else:
             is_split = (type(node) in separate_nodes)
@@ -607,6 +556,7 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
         "msgid": ((("msgctxt",), _ctxt_to_ctxt),
                   ),
         "message": (),
+        "heading": (),
     }
 
     context_kw_set = {}
@@ -651,8 +601,8 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
     # We manually add funcs from bpy.app.translations
     for func_id, func_ids in pgettext_variants:
         func_translate_args[func_id] = pgettext_variants_args
-        for func_id in func_ids:
-            func_translate_args[func_id] = pgettext_variants_args
+        for sub_func_id in func_ids:
+            func_translate_args[sub_func_id] = pgettext_variants_args
     # print(func_translate_args)
 
     # Break recursive nodes look up on some kind of nodes.
@@ -675,6 +625,7 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
         }
 
     for fp in files:
+        # ~ print("Checking File ", fp)
         with open(fp, 'r', encoding="utf8") as filedata:
             root_node = ast.parse(filedata.read(), fp, 'exec')
 
@@ -682,8 +633,8 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
 
         for node in ast.walk(root_node):
             if type(node) == ast.Call:
-                # print("found function at")
-                # print("%s:%d" % (fp, node.lineno))
+                # ~ print("found function at")
+                # ~ print("%s:%d" % (fp, node.lineno))
 
                 # We can't skip such situations! from blah import foo\nfoo("bar") would also be an ast.Name func!
                 if type(node.func) == ast.Name:
@@ -708,31 +659,31 @@ def dump_py_messages_from_files(msgs, reports, files, settings):
                                 if kw.arg == arg_kw:
                                     context_elements[arg_kw] = kw.value
                                     break
-                    # print(context_elements)
+                    # ~ print(context_elements)
                     for kws, proc in translate_kw[msgid]:
                         if set(kws) <= context_elements.keys():
                             args = tuple(context_elements[k] for k in kws)
-                            #print("running ", proc, " with ", args)
+                            # ~ print("running ", proc, " with ", args)
                             ctxt = proc(*args)
                             if ctxt:
                                 msgctxts[msgid] = ctxt
                                 break
 
-                # print(translate_args)
+                # ~ print(func_args)
                 # do nothing if not found
                 for arg_kw, (arg_pos, _) in func_args.items():
                     msgctxt = msgctxts[arg_kw]
                     estr_lst = [(None, ())]
                     if arg_pos < len(node.args):
                         estr_lst = extract_strings_split(node.args[arg_pos])
-                        #print(estr, nds)
                     else:
                         for kw in node.keywords:
                             if kw.arg == arg_kw:
+                                # ~ print(kw.arg, kw.value)
                                 estr_lst = extract_strings_split(kw.value)
                                 break
-                        #print(estr, nds)
                     for estr, nds in estr_lst:
+                        # ~ print(estr, nds)
                         if estr:
                             if nds:
                                 msgsrc = "{}:{}".format(fp_rel, sorted({nd.lineno for nd in nds})[0])
@@ -782,7 +733,9 @@ def dump_src_messages(msgs, reports, settings):
     _clean_str = re.compile(settings.str_clean_re).finditer
 
     def clean_str(s):
-        return "".join(m.group("clean") for m in _clean_str(s))
+        # The encode/decode to/from 'raw_unicode_escape' allows to transform the C-type unicode hexadecimal escapes
+        # (like '\u2715' for the '×' symbol) back into a proper unicode character.
+        return "".join(m.group("clean") for m in _clean_str(s)).encode('raw_unicode_escape').decode('raw_unicode_escape')
 
     def dump_src_file(path, rel_path, msgs, reports, settings):
         def process_entry(_msgctxt, _msgid):
@@ -816,7 +769,7 @@ def dump_src_messages(msgs, reports, settings):
             }
 
         data = ""
-        with open(path) as f:
+        with open(path, encoding="utf8") as f:
             data = f.read()
         for srch in pygettexts:
             m = srch(data)
@@ -849,7 +802,7 @@ def dump_src_messages(msgs, reports, settings):
     forbidden = set()
     forced = set()
     if os.path.isfile(settings.SRC_POTFILES):
-        with open(settings.SRC_POTFILES) as src:
+        with open(settings.SRC_POTFILES, encoding="utf8") as src:
             for l in src:
                 if l[0] == '-':
                     forbidden.add(l[1:].rstrip('\n'))
@@ -890,7 +843,12 @@ def dump_messages(do_messages, do_checks, settings):
     # For now, enable all official addons, before extracting msgids.
     addons = utils.enable_addons(support={"OFFICIAL"})
     # Note this is not needed if we have been started with factory settings, but just in case...
-    utils.enable_addons(support={"COMMUNITY", "TESTING"}, disable=True)
+    # XXX This is not working well, spent a whole day trying to understand *why* we still have references of
+    #     those removed calsses in things like `bpy.types.OperatorProperties.__subclasses__()`
+    #     (could not even reproduce it from regular py console in Blender with UI...).
+    #     For some reasons, cleanup does not happen properly, *and* we have no way to tell which class is valid
+    #     and which has been unregistered. So for now, just go for the dirty, easy way: do not disable add-ons. :(
+    # ~ utils.enable_addons(support={"COMMUNITY", "TESTING"}, disable=True)
 
     reports = _gen_reports(_gen_check_ctxt(settings) if do_checks else None)
 
@@ -904,7 +862,7 @@ def dump_messages(do_messages, do_checks, settings):
     dump_src_messages(msgs, reports, settings)
 
     # Get strings from addons' categories.
-    for uid, label, tip in bpy.types.WindowManager.addon_filter[1]['items'](bpy.context.window_manager, bpy.context):
+    for uid, label, tip in bpy.types.WindowManager.addon_filter.keywords['items'](bpy.context.window_manager, bpy.context):
         process_msg(msgs, settings.DEFAULT_CONTEXT, label, "Add-ons' categories", reports, None, settings)
         if tip:
             process_msg(msgs, settings.DEFAULT_CONTEXT, tip, "Add-ons' categories", reports, None, settings)

@@ -21,8 +21,7 @@
  * \ingroup nodes
  */
 
-#ifndef __NODE_UTIL_H__
-#define __NODE_UTIL_H__
+#pragma once
 
 #include "DNA_listBase.h"
 
@@ -37,6 +36,10 @@
 #include "GPU_material.h" /* For Shader muting GPU code... */
 
 #include "RNA_access.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct bNode;
 struct bNodeTree;
@@ -58,20 +61,24 @@ extern void node_free_standard_storage(struct bNode *node);
 
 extern void node_copy_curves(struct bNodeTree *dest_ntree,
                              struct bNode *dest_node,
-                             struct bNode *src_node);
+                             const struct bNode *src_node);
 extern void node_copy_standard_storage(struct bNodeTree *dest_ntree,
                                        struct bNode *dest_node,
-                                       struct bNode *src_node);
+                                       const struct bNode *src_node);
 extern void *node_initexec_curves(struct bNodeExecContext *context,
                                   struct bNode *node,
                                   bNodeInstanceKey key);
 
-/**** Labels ****/
+/**** Updates ****/
+void node_sock_label(struct bNodeSocket *sock, const char *name);
+void node_sock_label_clear(struct bNodeSocket *sock);
+void node_math_update(struct bNodeTree *ntree, struct bNode *node);
 
+/**** Labels ****/
 void node_blend_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_image_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
-void node_vect_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
+void node_vector_math_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 void node_filter_label(struct bNodeTree *ntree, struct bNode *node, char *label, int maxlen);
 
 /*** Link Handling */
@@ -100,4 +107,6 @@ void node_socket_set_vector(struct bNodeTree *ntree,
                             struct bNodeSocket *sock,
                             const float *value);
 
+#ifdef __cplusplus
+}
 #endif

@@ -35,8 +35,8 @@
 #include "DNA_ID.h"
 
 #include "BKE_global.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 
 #include "IMB_imbuf.h"
@@ -53,10 +53,11 @@ Main *BKE_main_new(void)
 void BKE_main_free(Main *mainvar)
 {
   /* also call when reading a file, erase all, etc */
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int a;
 
-  /* Since we are removing whole main, no need to bother 'properly' (and slowly) removing each ID from it. */
+  /* Since we are removing whole main, no need to bother 'properly'
+   * (and slowly) removing each ID from it. */
   const int free_flag = (LIB_ID_FREE_NO_MAIN | LIB_ID_FREE_NO_UI_USER |
                          LIB_ID_FREE_NO_USER_REFCOUNT | LIB_ID_FREE_NO_DEG_TAG);
 
@@ -181,7 +182,7 @@ void BKE_main_free(Main *mainvar)
           BKE_id_free_ex(mainvar, id, free_flag, false);
           break;
         default:
-          BLI_assert(0);
+          BLI_assert_unreachable();
           break;
       }
 #endif
@@ -208,85 +209,135 @@ void BKE_main_unlock(struct Main *bmain)
   BLI_spin_unlock((SpinLock *)bmain->lock);
 }
 
-static int main_relations_create_idlink_cb(void *user_data,
-                                           ID *id_self,
-                                           ID **id_pointer,
-                                           int cb_flag)
+static int main_relations_create_idlink_cb(LibraryIDLinkCallbackData *cb_data)
 {
-  MainIDRelations *rel = user_data;
+  MainIDRelations *bmain_relations = cb_data->user_data;
+  ID *id_self = cb_data->id_self;
+  ID **id_pointer = cb_data->id_pointer;
+  const int cb_flag = cb_data->cb_flag;
 
   if (*id_pointer) {
-    MainIDRelationsEntry *entry, **entry_p;
+    MainIDRelationsEntry **entry_p;
 
-    entry = BLI_mempool_alloc(rel->entry_pool);
-    if (BLI_ghash_ensure_p(rel->id_user_to_used, id_self, (void ***)&entry_p)) {
-      entry->next = *entry_p;
+    /* Add `id_pointer` as child of `id_self`. */
+    {
+      if (!BLI_ghash_ensure_p(
+              bmain_relations->relations_from_pointers, id_self, (void ***)&entry_p)) {
+        *entry_p = MEM_callocN(sizeof(**entry_p), __func__);
+        (*entry_p)->session_uuid = id_self->session_uuid;
+      }
+      else {
+        BLI_assert((*entry_p)->session_uuid == id_self->session_uuid);
+      }
+      MainIDRelationsEntryItem *to_id_entry = BLI_mempool_alloc(bmain_relations->entry_items_pool);
+      to_id_entry->next = (*entry_p)->to_ids;
+      to_id_entry->id_pointer.to = id_pointer;
+      to_id_entry->session_uuid = (*id_pointer != NULL) ? (*id_pointer)->session_uuid :
+                                                          MAIN_ID_SESSION_UUID_UNSET;
+      to_id_entry->usage_flag = cb_flag;
+      (*entry_p)->to_ids = to_id_entry;
     }
-    else {
-      entry->next = NULL;
-    }
-    entry->id_pointer = id_pointer;
-    entry->usage_flag = cb_flag;
-    *entry_p = entry;
 
-    entry = BLI_mempool_alloc(rel->entry_pool);
-    if (BLI_ghash_ensure_p(rel->id_used_to_user, *id_pointer, (void ***)&entry_p)) {
-      entry->next = *entry_p;
+    /* Add `id_self` as parent of `id_pointer`. */
+    if (*id_pointer != NULL) {
+      if (!BLI_ghash_ensure_p(
+              bmain_relations->relations_from_pointers, *id_pointer, (void ***)&entry_p)) {
+        *entry_p = MEM_callocN(sizeof(**entry_p), __func__);
+        (*entry_p)->session_uuid = (*id_pointer)->session_uuid;
+      }
+      else {
+        BLI_assert((*entry_p)->session_uuid == (*id_pointer)->session_uuid);
+      }
+      MainIDRelationsEntryItem *from_id_entry = BLI_mempool_alloc(
+          bmain_relations->entry_items_pool);
+      from_id_entry->next = (*entry_p)->from_ids;
+      from_id_entry->id_pointer.from = id_self;
+      from_id_entry->session_uuid = id_self->session_uuid;
+      from_id_entry->usage_flag = cb_flag;
+      (*entry_p)->from_ids = from_id_entry;
     }
-    else {
-      entry->next = NULL;
-    }
-    entry->id_pointer = (ID **)id_self;
-    entry->usage_flag = cb_flag;
-    *entry_p = entry;
   }
 
   return IDWALK_RET_NOP;
 }
 
 /** Generate the mappings between used IDs and their users, and vice-versa. */
-void BKE_main_relations_create(Main *bmain)
+void BKE_main_relations_create(Main *bmain, const short flag)
 {
   if (bmain->relations != NULL) {
     BKE_main_relations_free(bmain);
   }
 
   bmain->relations = MEM_mallocN(sizeof(*bmain->relations), __func__);
-  bmain->relations->id_used_to_user = BLI_ghash_new(
+  bmain->relations->relations_from_pointers = BLI_ghash_new(
       BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
-  bmain->relations->id_user_to_used = BLI_ghash_new(
-      BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
-  bmain->relations->entry_pool = BLI_mempool_create(
-      sizeof(MainIDRelationsEntry), 128, 128, BLI_MEMPOOL_NOP);
+  bmain->relations->entry_items_pool = BLI_mempool_create(
+      sizeof(MainIDRelationsEntryItem), 128, 128, BLI_MEMPOOL_NOP);
+
+  bmain->relations->flag = flag;
 
   ID *id;
-  FOREACH_MAIN_ID_BEGIN(bmain, id)
-  {
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
+    const int idwalk_flag = IDWALK_READONLY |
+                            ((flag & MAINIDRELATIONS_INCLUDE_UI) != 0 ? IDWALK_INCLUDE_UI : 0);
+
+    /* Ensure all IDs do have an entry, even if they are not connected to any other. */
+    MainIDRelationsEntry **entry_p;
+    if (!BLI_ghash_ensure_p(bmain->relations->relations_from_pointers, id, (void ***)&entry_p)) {
+      *entry_p = MEM_callocN(sizeof(**entry_p), __func__);
+      (*entry_p)->session_uuid = id->session_uuid;
+    }
+    else {
+      BLI_assert((*entry_p)->session_uuid == id->session_uuid);
+    }
+
     BKE_library_foreach_ID_link(
-        NULL, id, main_relations_create_idlink_cb, bmain->relations, IDWALK_READONLY);
+        NULL, id, main_relations_create_idlink_cb, bmain->relations, idwalk_flag);
   }
   FOREACH_MAIN_ID_END;
 }
 
 void BKE_main_relations_free(Main *bmain)
 {
-  if (bmain->relations) {
-    if (bmain->relations->id_used_to_user) {
-      BLI_ghash_free(bmain->relations->id_used_to_user, NULL, NULL);
+  if (bmain->relations != NULL) {
+    if (bmain->relations->relations_from_pointers != NULL) {
+      BLI_ghash_free(bmain->relations->relations_from_pointers, NULL, MEM_freeN);
     }
-    if (bmain->relations->id_user_to_used) {
-      BLI_ghash_free(bmain->relations->id_user_to_used, NULL, NULL);
-    }
-    BLI_mempool_destroy(bmain->relations->entry_pool);
+    BLI_mempool_destroy(bmain->relations->entry_items_pool);
     MEM_freeN(bmain->relations);
     bmain->relations = NULL;
   }
 }
 
+/** Set or clear given `tag` in all relation entries of given `bmain`. */
+void BKE_main_relations_tag_set(struct Main *bmain,
+                                const MainIDRelationsEntryTags tag,
+                                const bool value)
+{
+  if (bmain->relations == NULL) {
+    return;
+  }
+
+  GHashIterator *gh_iter;
+  for (gh_iter = BLI_ghashIterator_new(bmain->relations->relations_from_pointers);
+       !BLI_ghashIterator_done(gh_iter);
+       BLI_ghashIterator_step(gh_iter)) {
+    MainIDRelationsEntry *entry = BLI_ghashIterator_getValue(gh_iter);
+    if (value) {
+      entry->tags |= tag;
+    }
+    else {
+      entry->tags &= ~tag;
+    }
+  }
+  BLI_ghashIterator_free(gh_iter);
+}
+
 /**
  * Create a GSet storing all IDs present in given \a bmain, by their pointers.
  *
- * \param gset: If not NULL, given GSet will be extended with IDs from given \a bmain, instead of creating a new one.
+ * \param gset: If not NULL, given GSet will be extended with IDs from given \a bmain,
+ * instead of creating a new one.
  */
 GSet *BKE_main_gset_create(Main *bmain, GSet *gset)
 {
@@ -295,8 +346,7 @@ GSet *BKE_main_gset_create(Main *bmain, GSet *gset)
   }
 
   ID *id;
-  FOREACH_MAIN_ID_BEGIN(bmain, id)
-  {
+  FOREACH_MAIN_ID_BEGIN (bmain, id) {
     BLI_gset_add(gset, id);
   }
   FOREACH_MAIN_ID_END;
@@ -350,8 +400,8 @@ ImBuf *BKE_main_thumbnail_to_imbuf(Main *bmain, BlendThumbnail *data)
   }
 
   if (data) {
-    /* Note: we cannot use IMB_allocFromBuffer(), since it tries to dupalloc passed buffer, which will fail
-     *       here (we do not want to pass the first two ints!). */
+    /* Note: we cannot use IMB_allocFromBuffer(), since it tries to dupalloc passed buffer,
+     *       which will fail here (we do not want to pass the first two ints!). */
     img = IMB_allocImBuf(
         (unsigned int)data->width, (unsigned int)data->height, 32, IB_rect | IB_metadata);
     memcpy(img->rect, data->rect, BLEN_THUMB_MEMSIZE(data->width, data->height) - sizeof(*data));
@@ -383,7 +433,8 @@ const char *BKE_main_blendfile_path(const Main *bmain)
 /**
  * Return filepath of global main #G_MAIN.
  *
- * \warning Usage is not recommended, you should always try to get a valid Main pointer from context...
+ * \warning Usage is not recommended,
+ * you should always try to get a valid Main pointer from context...
  */
 const char *BKE_main_blendfile_path_from_global(void)
 {
@@ -468,32 +519,46 @@ ListBase *which_libbase(Main *bmain, short type)
       return &(bmain->cachefiles);
     case ID_WS:
       return &(bmain->workspaces);
+    case ID_HA:
+      return &(bmain->hairs);
+    case ID_PT:
+      return &(bmain->pointclouds);
+    case ID_VO:
+      return &(bmain->volumes);
+    case ID_SIM:
+      return &(bmain->simulations);
   }
   return NULL;
 }
 
 /**
- * puts into array *lb pointers to all the #ListBase structs in main,
- * and returns the number of them as the function result. This is useful for
- * generic traversal of all the blocks in a Main (by traversing all the
- * lists in turn), without worrying about block types.
+ * Put the pointers to all the #ListBase structs in given `bmain` into the `*lb[INDEX_ID_MAX]`
+ * array, and return the number of those for convenience.
  *
- * \note #MAX_LIBARRAY define should match this code */
-int set_listbasepointers(Main *bmain, ListBase **lb)
+ * This is useful for generic traversal of all the blocks in a #Main (by traversing all the lists
+ * in turn), without worrying about block types.
+ *
+ * \note The order of each ID type #ListBase in the array is determined by the `INDEX_ID_<IDTYPE>`
+ * enum definitions in `DNA_ID.h`. See also the #FOREACH_MAIN_ID_BEGIN macro in `BKE_main.h`
+ */
+int set_listbasepointers(Main *bmain, ListBase *lb[INDEX_ID_MAX])
 {
-  /* BACKWARDS! also watch order of free-ing! (mesh<->mat), first items freed last.
-   * This is important because freeing data decreases usercounts of other datablocks,
-   * if this data is its self freed it can crash. */
-  lb[INDEX_ID_LI] = &(
-      bmain->libraries); /* Libraries may be accessed from pretty much any other ID... */
+  /* Libraries may be accessed from pretty much any other ID. */
+  lb[INDEX_ID_LI] = &(bmain->libraries);
+
   lb[INDEX_ID_IP] = &(bmain->ipo);
-  lb[INDEX_ID_AC] = &(
-      bmain->actions); /* moved here to avoid problems when freeing with animato (aligorith) */
+
+  /* Moved here to avoid problems when freeing with animato (aligorith). */
+  lb[INDEX_ID_AC] = &(bmain->actions);
+
   lb[INDEX_ID_KE] = &(bmain->shapekeys);
-  lb[INDEX_ID_PAL] = &(
-      bmain->palettes); /* referenced by gpencil, so needs to be before that to avoid crashes */
-  lb[INDEX_ID_GD] = &(
-      bmain->gpencils); /* referenced by nodes, objects, view, scene etc, before to free after. */
+
+  /* Referenced by gpencil, so needs to be before that to avoid crashes. */
+  lb[INDEX_ID_PAL] = &(bmain->palettes);
+
+  /* Referenced by nodes, objects, view, scene etc, before to free after. */
+  lb[INDEX_ID_GD] = &(bmain->gpencils);
+
   lb[INDEX_ID_NT] = &(bmain->nodetrees);
   lb[INDEX_ID_IM] = &(bmain->images);
   lb[INDEX_ID_TE] = &(bmain->textures);
@@ -501,8 +566,7 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_VF] = &(bmain->fonts);
 
   /* Important!: When adding a new object type,
-   * the specific data should be inserted here
-   */
+   * the specific data should be inserted here. */
 
   lb[INDEX_ID_AR] = &(bmain->armatures);
 
@@ -510,6 +574,9 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_ME] = &(bmain->meshes);
   lb[INDEX_ID_CU] = &(bmain->curves);
   lb[INDEX_ID_MB] = &(bmain->metaballs);
+  lb[INDEX_ID_HA] = &(bmain->hairs);
+  lb[INDEX_ID_PT] = &(bmain->pointclouds);
+  lb[INDEX_ID_VO] = &(bmain->volumes);
 
   lb[INDEX_ID_LT] = &(bmain->lattices);
   lb[INDEX_ID_LA] = &(bmain->lights);
@@ -534,8 +601,9 @@ int set_listbasepointers(Main *bmain, ListBase **lb)
   lb[INDEX_ID_WS] = &(bmain->workspaces); /* before wm, so it's freed after it! */
   lb[INDEX_ID_WM] = &(bmain->wm);
   lb[INDEX_ID_MSK] = &(bmain->masks);
+  lb[INDEX_ID_SIM] = &(bmain->simulations);
 
   lb[INDEX_ID_NULL] = NULL;
 
-  return (MAX_LIBARRAY - 1);
+  return (INDEX_ID_MAX - 1);
 }

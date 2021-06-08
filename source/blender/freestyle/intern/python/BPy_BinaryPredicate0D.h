@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_BINARYPREDICATE0D_H__
-#define __FREESTYLE_PYTHON_BINARYPREDICATE0D_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../stroke/Predicates0D.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +39,7 @@ extern PyTypeObject BinaryPredicate0D_Type;
 
 /*---------------------------Python BPy_BinaryPredicate0D structure definition----------*/
 typedef struct {
-  PyObject_HEAD BinaryPredicate0D *bp0D;
+  PyObject_HEAD Freestyle::BinaryPredicate0D *bp0D;
 } BPy_BinaryPredicate0D;
 
 /*---------------------------Python BPy_BinaryPredicate0D visible prototypes-----------*/
@@ -54,5 +51,3 @@ int BinaryPredicate0D_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_BINARYPREDICATE0D_H__ */

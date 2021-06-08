@@ -24,6 +24,8 @@
 CCL_NAMESPACE_BEGIN
 
 class BVHBuild;
+class Hair;
+class Mesh;
 struct Transform;
 
 /* Object Split */
@@ -42,7 +44,7 @@ class BVHObjectSplit {
   BVHObjectSplit(BVHBuild *builder,
                  BVHSpatialStorage *storage,
                  const BVHRange &range,
-                 vector<BVHReference> *references,
+                 vector<BVHReference> &references,
                  float nodeSAH,
                  const BVHUnaligned *unaligned_heuristic = NULL,
                  const Transform *aligned_space = NULL);
@@ -80,7 +82,7 @@ class BVHSpatialSplit {
   BVHSpatialSplit(const BVHBuild &builder,
                   BVHSpatialStorage *storage,
                   const BVHRange &range,
-                  vector<BVHReference> *references,
+                  vector<BVHReference> &references,
                   float nodeSAH,
                   const BVHUnaligned *unaligned_heuristic = NULL,
                   const Transform *aligned_space = NULL);
@@ -103,7 +105,7 @@ class BVHSpatialSplit {
   /* Lower-level functions which calculates boundaries of left and right nodes
    * needed for spatial split.
    *
-   * Operates directly with primitive specified by it's index, reused by higher
+   * Operates directly with primitive specified by its index, reused by higher
    * level splitting functions.
    */
   void split_triangle_primitive(const Mesh *mesh,
@@ -113,7 +115,7 @@ class BVHSpatialSplit {
                                 float pos,
                                 BoundBox &left_bounds,
                                 BoundBox &right_bounds);
-  void split_curve_primitive(const Mesh *mesh,
+  void split_curve_primitive(const Hair *hair,
                              const Transform *tfm,
                              int prim_index,
                              int segment_index,
@@ -134,7 +136,7 @@ class BVHSpatialSplit {
                                 BoundBox &left_bounds,
                                 BoundBox &right_bounds);
   void split_curve_reference(const BVHReference &ref,
-                             const Mesh *mesh,
+                             const Hair *hair,
                              int dim,
                              float pos,
                              BoundBox &left_bounds,
@@ -185,7 +187,7 @@ class BVHMixedSplit {
   __forceinline BVHMixedSplit(BVHBuild *builder,
                               BVHSpatialStorage *storage,
                               const BVHRange &range,
-                              vector<BVHReference> *references,
+                              vector<BVHReference> &references,
                               int level,
                               const BVHUnaligned *unaligned_heuristic = NULL,
                               const Transform *aligned_space = NULL)
@@ -195,7 +197,7 @@ class BVHMixedSplit {
     }
     else {
       bounds = unaligned_heuristic->compute_aligned_boundbox(
-          range, &references->at(0), *aligned_space);
+          range, &references.at(0), *aligned_space);
     }
     /* find split candidates. */
     float area = bounds.safe_area();
@@ -218,7 +220,7 @@ class BVHMixedSplit {
 
     /* leaf SAH is the lowest => create leaf. */
     minSAH = min(min(leafSAH, object.sah), spatial.sah);
-    no_split = (minSAH == leafSAH && builder->range_within_max_leaf_size(range, *references));
+    no_split = (minSAH == leafSAH && builder->range_within_max_leaf_size(range, references));
   }
 
   __forceinline void split(BVHBuild *builder,

@@ -18,9 +18,9 @@
  * \ingroup edutil
  */
 
-#include "BLI_utildefines.h"
 #include "BLI_kdtree.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "ED_select_utils.h"
 
@@ -88,13 +88,13 @@ int ED_select_similar_compare_float(const float delta, const float thresh, const
 {
   switch (compare) {
     case SIM_CMP_EQ:
-      return (fabsf(delta) < thresh + FLT_EPSILON);
+      return (fabsf(delta) <= thresh);
     case SIM_CMP_GT:
-      return ((delta + thresh) > -FLT_EPSILON);
+      return ((delta + thresh) >= 0.0);
     case SIM_CMP_LT:
-      return ((delta - thresh) < FLT_EPSILON);
+      return ((delta - thresh) <= 0.0);
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       return 0;
   }
 }
@@ -115,8 +115,8 @@ bool ED_select_similar_compare_float_tree(const KDTree_1d *tree,
     case SIM_CMP_GT:
       /* Compare against the shortest edge. */
       /* -FLT_MAX leads to some precision issues and the wrong edge being selected.
-       * For example, in a tree with 1, 2 and 3, which is stored squared as 1, 4, 9, it returns as the nearest
-       * length/node the "4" instead of "1". */
+       * For example, in a tree with 1, 2 and 3, which is stored squared as 1, 4, 9,
+       * it returns as the nearest length/node the "4" instead of "1". */
       nearest_edge_length = -1.0f;
       break;
     case SIM_CMP_LT:
@@ -124,7 +124,7 @@ bool ED_select_similar_compare_float_tree(const KDTree_1d *tree,
       nearest_edge_length = FLT_MAX;
       break;
     default:
-      BLI_assert(0);
+      BLI_assert_unreachable();
       return false;
   }
 

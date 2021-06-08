@@ -21,12 +21,16 @@
  * \ingroup editors
  */
 
-#ifndef __ED_RENDER_H__
-#define __ED_RENDER_H__
+#pragma once
 
 #include "DNA_vec_types.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct DEGEditorUpdateContext;
+struct Depsgraph;
 struct ID;
 struct MTex;
 struct Main;
@@ -35,6 +39,7 @@ struct Scene;
 struct ScrArea;
 struct bContext;
 struct bScreen;
+struct wmWindow;
 struct wmWindowManager;
 
 /* render_ops.c */
@@ -43,14 +48,18 @@ void ED_operatortypes_render(void);
 
 /* render_update.c */
 
-void ED_render_engine_changed(struct Main *bmain);
-void ED_render_engine_area_exit(struct Main *bmain, struct ScrArea *sa);
-void ED_render_view_layer_changed(struct Main *bmain, struct bScreen *sc);
+void ED_render_engine_changed(struct Main *bmain, const bool update_scene_data);
+void ED_render_engine_area_exit(struct Main *bmain, struct ScrArea *area);
+void ED_render_view_layer_changed(struct Main *bmain, struct bScreen *screen);
 
 /* Callbacks handling data update events coming from depsgraph. */
 
 void ED_render_id_flush_update(const struct DEGEditorUpdateContext *update_ctx, struct ID *id);
-void ED_render_scene_update(const struct DEGEditorUpdateContext *update_ctx, int updated);
+void ED_render_scene_update(const struct DEGEditorUpdateContext *update_ctx, const bool updated);
+void ED_render_view3d_update(struct Depsgraph *depsgraph,
+                             struct wmWindow *window,
+                             struct ScrArea *area,
+                             const bool updated);
 
 struct Scene *ED_render_job_get_scene(const struct bContext *C);
 struct Scene *ED_render_job_get_current_scene(const struct bContext *C);
@@ -82,7 +91,7 @@ void ED_preview_shader_job(const struct bContext *C,
                            int sizex,
                            int sizey,
                            int method);
-void ED_preview_icon_render(struct Main *bmain,
+void ED_preview_icon_render(const struct bContext *C,
                             struct Scene *scene,
                             struct ID *id,
                             unsigned int *rect,
@@ -93,7 +102,8 @@ void ED_preview_icon_job(const struct bContext *C,
                          struct ID *id,
                          unsigned int *rect,
                          int sizex,
-                         int sizey);
+                         int sizey,
+                         const bool delay);
 void ED_preview_kill_jobs(struct wmWindowManager *wm, struct Main *bmain);
 
 void ED_preview_draw(const struct bContext *C, void *idp, void *parentp, void *slot, rcti *rect);
@@ -102,4 +112,6 @@ void ED_render_clear_mtex_copybuf(void);
 
 void ED_render_internal_init(void);
 
+#ifdef __cplusplus
+}
 #endif

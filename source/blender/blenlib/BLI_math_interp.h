@@ -17,12 +17,15 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_MATH_INTERP_H__
-#define __BLI_MATH_INTERP_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void BLI_bicubic_interpolation_fl(
     const float *buffer, float *output, int width, int height, int components, float u, float v);
@@ -85,7 +88,9 @@ void BLI_ewa_filter(const int width,
                     const float du[2],
                     const float dv[2],
                     ewa_filter_read_pixel_cb read_pixel_cb,
-                    void *customdata,
+                    void *userdata,
                     float result[4]);
 
-#endif /* __BLI_MATH_INTERP_H__ */
+#ifdef __cplusplus
+}
+#endif

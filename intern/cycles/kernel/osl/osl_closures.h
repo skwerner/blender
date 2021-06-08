@@ -33,12 +33,12 @@
 #ifndef __OSL_CLOSURES_H__
 #define __OSL_CLOSURES_H__
 
-#include "util/util_types.h"
 #include "kernel/kernel_types.h"
+#include "util/util_types.h"
 
+#include <OSL/genclosure.h>
 #include <OSL/oslclosure.h>
 #include <OSL/oslexec.h>
-#include <OSL/genclosure.h>
 
 CCL_NAMESPACE_BEGIN
 
@@ -51,6 +51,7 @@ OSL::ClosureParam *closure_bsdf_transparent_params();
 OSL::ClosureParam *closure_bssrdf_params();
 OSL::ClosureParam *closure_absorption_params();
 OSL::ClosureParam *closure_henyey_greenstein_params();
+OSL::ClosureParam *closure_bsdf_microfacet_params();
 OSL::ClosureParam *closure_bsdf_microfacet_multi_ggx_params();
 OSL::ClosureParam *closure_bsdf_microfacet_multi_ggx_glass_params();
 OSL::ClosureParam *closure_bsdf_microfacet_multi_ggx_aniso_params();
@@ -70,6 +71,7 @@ void closure_bsdf_transparent_prepare(OSL::RendererServices *, int id, void *dat
 void closure_bssrdf_prepare(OSL::RendererServices *, int id, void *data);
 void closure_absorption_prepare(OSL::RendererServices *, int id, void *data);
 void closure_henyey_greenstein_prepare(OSL::RendererServices *, int id, void *data);
+void closure_bsdf_microfacet_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_microfacet_multi_ggx_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_microfacet_multi_ggx_glass_prepare(OSL::RendererServices *, int id, void *data);
 void closure_bsdf_microfacet_multi_ggx_aniso_prepare(OSL::RendererServices *, int id, void *data);

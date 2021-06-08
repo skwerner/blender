@@ -25,12 +25,8 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -39,7 +35,9 @@ set(SRC
   graph_edit.c
   graph_ops.c
   graph_select.c
+  graph_slider_ops.c
   graph_utils.c
+  graph_view.c
   space_graph.c
 
   graph_intern.h
@@ -56,6 +54,9 @@ if(WITH_AUDASPACE)
   )
   list(APPEND LIB
     bf_intern_audaspace
+
+    ${AUDASPACE_C_LIBRARIES}
+    ${AUDASPACE_PY_LIBRARIES}
   )
   add_definitions(-DWITH_AUDASPACE)
 endif()
@@ -64,6 +65,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_space_graph "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

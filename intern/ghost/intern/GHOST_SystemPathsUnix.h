@@ -21,17 +21,16 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_SYSTEMPATHSUNIX_H__
-#define __GHOST_SYSTEMPATHSUNIX_H__
+#pragma once
 
-#include "GHOST_SystemPaths.h"
 #include "../GHOST_Types.h"
+#include "GHOST_SystemPaths.h"
 
 class GHOST_SystemPathsUnix : public GHOST_SystemPaths {
  public:
   /**
    * Constructor
-   * this class should only be instanciated by GHOST_ISystem.
+   * this class should only be instantiated by GHOST_ISystem.
    */
   GHOST_SystemPathsUnix();
 
@@ -55,6 +54,12 @@ class GHOST_SystemPathsUnix : public GHOST_SystemPaths {
   const GHOST_TUns8 *getUserDir(int version, const char *versionstr) const;
 
   /**
+   * Determine a special ("well known") and easy to reach user directory.
+   * \return Unsigned char string pointing to user dir (eg `~/Documents/`).
+   */
+  const GHOST_TUns8 *getUserSpecialDir(GHOST_TUserSpecialDirTypes type) const;
+
+  /**
    * Determine the directory of the current binary
    * \return Unsigned char string pointing to the binary dir
    */
@@ -65,5 +70,3 @@ class GHOST_SystemPathsUnix : public GHOST_SystemPaths {
    */
   void addToSystemRecentFiles(const char *filename) const;
 };
-
-#endif /* __GHOST_SYSTEMPATHSUNIX_H__ */

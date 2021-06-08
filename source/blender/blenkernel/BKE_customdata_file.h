@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_CUSTOMDATA_FILE_H__
-#define __BKE_CUSTOMDATA_FILE_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define CDF_TYPE_IMAGE 0
 #define CDF_TYPE_MESH 1
@@ -53,4 +56,6 @@ void cdf_remove(const char *filename);
 CDataFileLayer *cdf_layer_find(CDataFile *cdf, int type, const char *name);
 CDataFileLayer *cdf_layer_add(CDataFile *cdf, int type, const char *name, size_t datasize);
 
-#endif /* __BKE_CUSTOMDATA_FILE_H__ */
+#ifdef __cplusplus
+}
+#endif

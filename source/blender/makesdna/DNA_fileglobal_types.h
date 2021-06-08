@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_FILEGLOBAL_TYPES_H__
-#define __DNA_FILEGLOBAL_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * FileGlobal stores a part of the current user-interface settings at
@@ -55,4 +58,6 @@ typedef struct FileGlobal {
 /* or: in 2.42, subversion 1, same as above, minversion then is 2.42, min subversion 1 */
 /* (defines for version are in the BKE_blender_version.h file, for historic reasons) */
 
+#ifdef __cplusplus
+}
 #endif

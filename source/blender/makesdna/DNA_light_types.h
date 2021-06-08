@@ -21,11 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_LIGHT_TYPES_H__
-#define __DNA_LIGHT_TYPES_H__
+#pragma once
 
-#include "DNA_defs.h"
 #include "DNA_ID.h"
+#include "DNA_defs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #ifndef MAX_MTEX
 #  define MAX_MTEX 18
@@ -34,7 +37,6 @@
 struct AnimData;
 struct CurveMapping;
 struct Ipo;
-struct MTex;
 struct bNodeTree;
 
 typedef struct Light {
@@ -59,12 +61,18 @@ typedef struct Light {
   char _pad2[2];
 
   float clipsta, clipend;
-  float bias, soft, bleedbias, bleedexp;
+  float bias;
+  float soft;      /* DEPRECATED kept for compatibility. */
+  float bleedbias; /* DEPRECATED kept for compatibility. */
+  float bleedexp;  /* DEPRECATED kept for compatibility. */
   short bufsize, samp, buffers, filtertype;
   char bufflag, buftype;
 
   short area_shape;
   float area_size, area_sizey, area_sizez;
+  float area_spread;
+
+  float sun_angle;
 
   /* texact is for buttons */
   short texact, shadhalostep;
@@ -80,8 +88,12 @@ typedef struct Light {
   float cascade_fade;
   int cascade_count;
 
-  float contact_dist, contact_bias, contact_spread, contact_thickness;
+  float contact_dist;
+  float contact_bias;
+  float contact_spread; /* DEPRECATED kept for compatibility. */
+  float contact_thickness;
 
+  float diff_fac, volume_fac;
   float spec_fac, att_dist;
 
   /* preview */
@@ -96,8 +108,8 @@ typedef struct Light {
 /* flag */
 #define LA_DS_EXPAND (1 << 0)
 /* NOTE: this must have the same value as MA_DS_SHOW_TEXS,
-   * otherwise anim-editors will not read correctly
-   */
+ * otherwise anim-editors will not read correctly
+ */
 #define LA_DS_SHOW_TEXS (1 << 2)
 
 /* type */
@@ -148,4 +160,6 @@ typedef struct Light {
 #define LA_AREA_DISK 4
 #define LA_AREA_ELLIPSE 5
 
-#endif /* __DNA_LIGHT_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2017, Blender Foundation
@@ -22,36 +22,47 @@
  */
 
 #include <stdio.h>
+#include <string.h> /* For #MEMCPY_STRUCT_AFTER. */
 
-#include "MEM_guardedalloc.h"
-
+#include "BLI_listbase.h"
 #include "BLI_utildefines.h"
 
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_gpencil_modifier_types.h"
+#include "BLT_translation.h"
 
-#include "BKE_gpencil.h"
+#include "DNA_defaults.h"
+#include "DNA_gpencil_modifier_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+
+#include "BKE_context.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_lib_query.h"
+#include "BKE_modifier.h"
+#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 
-#include "MOD_gpencil_util.h"
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "MOD_gpencil_modifiertypes.h"
+#include "MOD_gpencil_ui_common.h"
+#include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
   SubdivGpencilModifierData *gpmd = (SubdivGpencilModifierData *)md;
-  gpmd->pass_index = 0;
-  gpmd->level = 1;
-  gpmd->layername[0] = '\0';
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(gpmd, modifier));
+
+  MEMCPY_STRUCT_AFTER(gpmd, DNA_struct_default_get(SubdivGpencilModifierData), modifier);
 }
 
 static void copyData(const GpencilModifierData *md, GpencilModifierData *target)
 {
-  BKE_gpencil_modifier_copyData_generic(md, target);
+  BKE_gpencil_modifier_copydata_generic(md, target);
 }
 
 /* subdivide stroke to get more control points */
@@ -59,24 +70,37 @@ static void deformStroke(GpencilModifierData *md,
                          Depsgraph *UNUSED(depsgraph),
                          Object *ob,
                          bGPDlayer *gpl,
+                         bGPDframe *UNUSED(gpf),
                          bGPDstroke *gps)
 {
   SubdivGpencilModifierData *mmd = (SubdivGpencilModifierData *)md;
+  bGPdata *gpd = ob->data;
+
+  /* It makes sense when adding points to a straight line */
+  /* e.g. for creating thickness variation in later modifiers. */
+  const int minimum_vert = (mmd->flag & GP_SUBDIV_SIMPLE) ? 2 : 3;
 
   if (!is_stroke_affected_by_modifier(ob,
                                       mmd->layername,
+                                      mmd->material,
                                       mmd->pass_index,
                                       mmd->layer_pass,
-                                      3,
+                                      minimum_vert,
                                       gpl,
                                       gps,
                                       mmd->flag & GP_SUBDIV_INVERT_LAYER,
                                       mmd->flag & GP_SUBDIV_INVERT_PASS,
-                                      mmd->flag & GP_SUBDIV_INVERT_LAYERPASS)) {
+                                      mmd->flag & GP_SUBDIV_INVERT_LAYERPASS,
+                                      mmd->flag & GP_SUBDIV_INVERT_MATERIAL)) {
     return;
   }
 
-  BKE_gpencil_subdivide(gps, mmd->level, mmd->flag);
+  BKE_gpencil_stroke_subdivide(gpd, gps, mmd->level, mmd->type);
+
+  /* If the stroke is cyclic, must generate the closing geometry. */
+  if (gps->flag & GP_STROKE_CYCLIC) {
+    BKE_gpencil_stroke_close(gps);
+  }
 }
 
 static void bakeModifier(struct Main *UNUSED(bmain),
@@ -86,25 +110,51 @@ static void bakeModifier(struct Main *UNUSED(bmain),
 {
   bGPdata *gpd = ob->data;
 
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    for (bGPDframe *gpf = gpl->frames.first; gpf; gpf = gpf->next) {
-      for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
-        deformStroke(md, depsgraph, ob, gpl, gps);
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
+      LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
+        deformStroke(md, depsgraph, ob, gpl, gpf, gps);
       }
     }
   }
 }
 
-static int getDuplicationFactor(GpencilModifierData *md)
+static void foreachIDLink(GpencilModifierData *md, Object *ob, IDWalkFunc walk, void *userData)
 {
   SubdivGpencilModifierData *mmd = (SubdivGpencilModifierData *)md;
-  int t = (mmd->level + 1) * (mmd->level + 1);
-  CLAMP_MIN(t, 2);
-  return t;
+
+  walk(userData, ob, (ID **)&mmd->material, IDWALK_CB_USER);
+}
+
+static void panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  uiLayout *layout = panel->layout;
+
+  PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, NULL);
+
+  uiLayoutSetPropSep(layout, true);
+
+  uiItemR(layout, ptr, "subdivision_type", 0, NULL, ICON_NONE);
+  uiItemR(layout, ptr, "level", 0, IFACE_("Subdivisions"), ICON_NONE);
+
+  gpencil_modifier_panel_end(layout, ptr);
+}
+
+static void mask_panel_draw(const bContext *UNUSED(C), Panel *panel)
+{
+  gpencil_modifier_masking_panel_draw(panel, true, false);
+}
+
+static void panelRegister(ARegionType *region_type)
+{
+  PanelType *panel_type = gpencil_modifier_panel_register(
+      region_type, eGpencilModifierType_Subdiv, panel_draw);
+  gpencil_modifier_subpanel_register(
+      region_type, "mask", "Influence", NULL, mask_panel_draw, panel_type);
 }
 
 GpencilModifierTypeInfo modifierType_Gpencil_Subdiv = {
-    /* name */ "Subdivision",
+    /* name */ "Subdivide",
     /* structName */ "SubdivGpencilModifierData",
     /* structSize */ sizeof(SubdivGpencilModifierData),
     /* type */ eGpencilModifierTypeType_Gpencil,
@@ -122,8 +172,7 @@ GpencilModifierTypeInfo modifierType_Gpencil_Subdiv = {
     /* isDisabled */ NULL,
     /* updateDepsgraph */ NULL,
     /* dependsOnTime */ NULL,
-    /* foreachObjectLink */ NULL,
-    /* foreachIDLink */ NULL,
+    /* foreachIDLink */ foreachIDLink,
     /* foreachTexLink */ NULL,
-    /* getDuplicationFactor */ getDuplicationFactor,
+    /* panelRegister */ panelRegister,
 };

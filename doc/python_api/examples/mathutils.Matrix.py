@@ -11,12 +11,16 @@ mat_sca = mathutils.Matrix.Scale(0.5, 4, (0.0, 0.0, 1.0))
 mat_rot = mathutils.Matrix.Rotation(math.radians(45.0), 4, 'X')
 
 # combine transformations
-mat_out = mat_loc * mat_rot * mat_sca
+mat_out = mat_loc @ mat_rot @ mat_sca
 print(mat_out)
 
-# extract components back out of the matrix
+# extract components back out of the matrix as two vectors and a quaternion
 loc, rot, sca = mat_out.decompose()
 print(loc, rot, sca)
+
+# recombine extracted components
+mat_out2 = mathutils.Matrix.LocRotScale(loc, rot, sca)
+print(mat_out2)
 
 # it can also be useful to access components of a matrix directly
 mat = mathutils.Matrix()

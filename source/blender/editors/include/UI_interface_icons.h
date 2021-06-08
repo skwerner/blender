@@ -21,16 +21,21 @@
  * \ingroup editorui
  */
 
-#ifndef __UI_INTERFACE_ICONS_H__
-#define __UI_INTERFACE_ICONS_H__
+#pragma once
 
+/* Required for #eIconSizes which can't be forward declared if this file is included in C++. */
+#include "DNA_ID_enums.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct Collection;
 struct ID;
 struct PointerRNA;
 struct PreviewImage;
 struct Scene;
 struct bContext;
-
-enum eIconSizes;
 
 typedef struct IconFile {
   struct IconFile *next, *prev;
@@ -48,39 +53,47 @@ typedef struct IconFile {
 
 #define PREVIEW_DEFAULT_HEIGHT 128
 
+typedef enum eAlertIcon {
+  ALERT_ICON_WARNING = 0,
+  ALERT_ICON_QUESTION = 1,
+  ALERT_ICON_ERROR = 2,
+  ALERT_ICON_INFO = 3,
+  ALERT_ICON_BLENDER = 4,
+  ALERT_ICON_MAX,
+} eAlertIcon;
+
+struct ImBuf *UI_icon_alert_imbuf_get(eAlertIcon icon);
+
 /*
  * Resizable Icons for Blender
  */
 void UI_icons_init(void);
+void UI_icons_reload_internal_textures(void);
+
 int UI_icon_get_width(int icon_id);
 int UI_icon_get_height(int icon_id);
+bool UI_icon_get_theme_color(int icon_id, unsigned char color[4]);
 
-void UI_id_icon_render(const struct bContext *C,
+void UI_icon_render_id(const struct bContext *C,
                        struct Scene *scene,
                        struct ID *id,
-                       const bool big,
+                       const enum eIconSizes size,
                        const bool use_job);
-int UI_preview_render_size(enum eIconSizes size);
+int UI_icon_preview_to_render_size(enum eIconSizes size);
 
 void UI_icon_draw(float x, float y, int icon_id);
 void UI_icon_draw_alpha(float x, float y, int icon_id, float alpha);
-void UI_icon_draw_preview(float x, float y, int icon_id);
-void UI_icon_draw_preview_aspect(float x, float y, int icon_id, float aspect);
-void UI_icon_draw_preview_aspect_size(
-    float x, float y, int icon_id, float aspect, float alpha, int size);
+void UI_icon_draw_preview(float x, float y, int icon_id, float aspect, float alpha, int size);
 
-void UI_icon_draw_aspect(
-    float x, float y, int icon_id, float aspect, float alpha, const char mono_color[4]);
-void UI_icon_draw_aspect_color(
-    float x, float y, int icon_id, float aspect, const float rgb[3], const char mono_color[4]);
-void UI_icon_draw_size(float x, float y, int size, int icon_id, float alpha);
-void UI_icon_draw_desaturate(float x,
-                             float y,
-                             int icon_id,
-                             float aspect,
-                             float alpha,
-                             float desaturate,
-                             const char mono_color[4]);
+void UI_icon_draw_ex(float x,
+                     float y,
+                     int icon_id,
+                     float aspect,
+                     float alpha,
+                     float desaturate,
+                     const uchar mono_color[4],
+                     const bool mono_border);
+
 void UI_icons_free(void);
 void UI_icons_free_drawinfo(void *drawinfo);
 
@@ -92,7 +105,12 @@ int UI_iconfile_get_index(const char *filename);
 
 struct PreviewImage *UI_icon_to_preview(int icon_id);
 
-int UI_rnaptr_icon_get(struct bContext *C, struct PointerRNA *ptr, int rnaicon, const bool big);
-int UI_idcode_icon_get(const int idcode);
+int UI_icon_from_rnaptr(struct bContext *C, struct PointerRNA *ptr, int rnaicon, const bool big);
+int UI_icon_from_idcode(const int idcode);
+int UI_icon_from_library(const struct ID *id);
+int UI_icon_from_object_mode(const int mode);
+int UI_icon_color_from_collection(const struct Collection *collection);
 
-#endif /*  __UI_INTERFACE_ICONS_H__ */
+#ifdef __cplusplus
+}
+#endif

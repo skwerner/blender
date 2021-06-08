@@ -26,13 +26,9 @@ set(INC
   ../../makesrna
   ../../windowmanager
   ../../../../intern/clog
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
   ../../../../extern/curve_fit_nd
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
 )
 
 set(SRC
@@ -40,6 +36,7 @@ set(SRC
   editcurve.c
   editcurve_add.c
   editcurve_paint.c
+  editcurve_query.c
   editcurve_select.c
   editcurve_undo.c
   editfont.c
@@ -58,6 +55,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_curve "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

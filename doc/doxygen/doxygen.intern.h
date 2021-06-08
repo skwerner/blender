@@ -18,10 +18,6 @@
  *  \ingroup intern
  */
 
-/** \defgroup elbeem elbeem
- *  \ingroup intern
- */
-
 /** \defgroup iksolver iksolver
  *  \ingroup intern
  */
@@ -58,10 +54,19 @@
  *  \ingroup intern undoc
  *  \todo add to doxygen
  */
+/** \defgroup audcoreaudio Audaspace CoreAudio
+ *  \ingroup audaspace
+ */
 /** \defgroup audfx Audaspace FX
  *  \ingroup audaspace
  */
 /** \defgroup audopenal Audaspace OpenAL
+ *  \ingroup audaspace
+ */
+/** \defgroup audpulseaudio Audaspace PulseAudio
+ *  \ingroup audaspace
+ */
+/** \defgroup audwasapi Audaspace WASAPI
  *  \ingroup audaspace
  */
 /** \defgroup audpython Audaspace Python

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __GRIDHELPERS_H__
-#define __GRIDHELPERS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -126,8 +125,8 @@ class Transform {
 
 inline bool insideProscenium(const real proscenium[4], const Polygon3r &polygon)
 {
-  // N.B. The bounding box check is redundant for inserting occluders into cells, because the cell selection code
-  // in insertOccluders has already guaranteed that the bounding boxes will overlap.
+  // N.B. The bounding box check is redundant for inserting occluders into cells, because the cell
+  // selection code in insertOccluders has already guaranteed that the bounding boxes will overlap.
   // First check the viewport edges, since they are the easiest case
   // Check if the bounding box is entirely outside the proscenium
   Vec3r bbMin, bbMax;
@@ -212,5 +211,3 @@ inline void expandProscenium(real proscenium[4], const Vec3r &point)
 };  // namespace GridHelpers
 
 } /* namespace Freestyle */
-
-#endif  // __GRIDHELPERS_H__

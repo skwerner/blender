@@ -13,8 +13,7 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __WM_TOOLSYSTEM_H__
-#define __WM_TOOLSYSTEM_H__
+#pragma once
 
 /** \file
  * \ingroup wm
@@ -41,9 +40,9 @@ struct wmOperatorType;
 
 /* wm_toolsystem.c  */
 
-#define WM_TOOLSYSTEM_SPACE_MASK ((1 << SPACE_IMAGE) | (1 << SPACE_NODE) | (1 << SPACE_VIEW3D))
-
-/* Values that define a categoey of active tool. */
+#define WM_TOOLSYSTEM_SPACE_MASK \
+  ((1 << SPACE_IMAGE) | (1 << SPACE_NODE) | (1 << SPACE_VIEW3D) | (1 << SPACE_SEQ))
+/* Values that define a category of active tool. */
 typedef struct bToolKey {
   int space_type;
   int mode;
@@ -54,11 +53,13 @@ struct bToolRef *WM_toolsystem_ref_find(struct WorkSpace *workspace, const bTool
 bool WM_toolsystem_ref_ensure(struct WorkSpace *workspace,
                               const bToolKey *tkey,
                               struct bToolRef **r_tref);
-struct bToolRef *WM_toolsystem_ref_set_by_id(struct bContext *C,
-                                             struct WorkSpace *workspace,
-                                             const bToolKey *tkey,
-                                             const char *name,
-                                             bool cycle);
+
+struct bToolRef *WM_toolsystem_ref_set_by_id_ex(struct bContext *C,
+                                                struct WorkSpace *workspace,
+                                                const bToolKey *tkey,
+                                                const char *name,
+                                                bool cycle);
+struct bToolRef *WM_toolsystem_ref_set_by_id(struct bContext *C, const char *name);
 
 struct bToolRef_Runtime *WM_toolsystem_runtime_from_context(struct bContext *C);
 struct bToolRef_Runtime *WM_toolsystem_runtime_find(struct WorkSpace *workspace,
@@ -75,7 +76,7 @@ void WM_toolsystem_reinit_all(struct bContext *C, struct wmWindow *win);
 void WM_toolsystem_ref_set_from_runtime(struct bContext *C,
                                         struct WorkSpace *workspace,
                                         struct bToolRef *tref,
-                                        const struct bToolRef_Runtime *tool,
+                                        const struct bToolRef_Runtime *tref_rt,
                                         const char *idname);
 
 void WM_toolsystem_ref_sync_from_context(struct Main *bmain,
@@ -85,17 +86,17 @@ void WM_toolsystem_ref_sync_from_context(struct Main *bmain,
 void WM_toolsystem_init(struct bContext *C);
 
 int WM_toolsystem_mode_from_spacetype(struct ViewLayer *view_layer,
-                                      struct ScrArea *sa,
+                                      struct ScrArea *area,
                                       int space_type);
 bool WM_toolsystem_key_from_context(struct ViewLayer *view_layer,
-                                    struct ScrArea *sa,
+                                    struct ScrArea *area,
                                     bToolKey *tkey);
 
 void WM_toolsystem_update_from_context_view3d(struct bContext *C);
 void WM_toolsystem_update_from_context(struct bContext *C,
                                        struct WorkSpace *workspace,
                                        struct ViewLayer *view_layer,
-                                       struct ScrArea *sa);
+                                       struct ScrArea *area);
 
 bool WM_toolsystem_active_tool_is_brush(const struct bContext *C);
 
@@ -132,11 +133,9 @@ void WM_toolsystem_refresh_active(struct bContext *C);
 
 void WM_toolsystem_refresh_screen_area(struct WorkSpace *workspace,
                                        struct ViewLayer *view_layer,
-                                       struct ScrArea *sa);
+                                       struct ScrArea *area);
 void WM_toolsystem_refresh_screen_all(struct Main *bmain);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __WM_TOOLSYSTEM_API_H__ */

@@ -20,23 +20,22 @@
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_bitmap.h"
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
-#include "BLI_bitmap.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
-#include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_context.h"
 #include "BKE_customdata.h"
 #include "BKE_global.h"
 #include "BKE_mesh.h"
-
-#include "BIF_gl.h"
+#include "BKE_object.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
@@ -45,8 +44,6 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
-
-#include "GPU_draw.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -61,12 +58,12 @@ void paintface_flush_flags(struct bContext *C, Object *ob, short flag)
   MPoly *polys, *mp_orig;
   const int *index_array = NULL;
   int totpoly;
-  int i;
 
   BLI_assert((flag & ~(SELECT | ME_HIDE)) == 0);
 
-  if (me == NULL)
+  if (me == NULL) {
     return;
+  }
 
   /* note, call #BKE_mesh_flush_hidden_from_verts_ex first when changing hidden flags */
 
@@ -76,20 +73,20 @@ void paintface_flush_flags(struct bContext *C, Object *ob, short flag)
     BKE_mesh_flush_select_from_polys(me);
   }
 
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
 
   if (ob_eval == NULL) {
     return;
   }
 
-  Mesh *me_orig = ob_eval->runtime.mesh_orig;
-  Mesh *me_eval = ob_eval->runtime.mesh_eval;
+  Mesh *me_orig = (Mesh *)ob_eval->runtime.data_orig;
+  Mesh *me_eval = (Mesh *)ob_eval->runtime.data_eval;
   bool updated = false;
 
   if (me_orig != NULL && me_eval != NULL && me_orig->totpoly == me->totpoly) {
     /* Update the COW copy of the mesh. */
-    for (i = 0; i < me->totpoly; i++) {
+    for (int i = 0; i < me->totpoly; i++) {
       me_orig->mpoly[i].flag = me->mpoly[i].flag;
     }
 
@@ -103,7 +100,7 @@ void paintface_flush_flags(struct bContext *C, Object *ob, short flag)
       totpoly = me_eval->totpoly;
 
       /* loop over final derived polys */
-      for (i = 0; i < totpoly; i++) {
+      for (int i = 0; i < totpoly; i++) {
         if (index_array[i] != ORIGINDEX_NONE) {
           /* Copy flags onto the final derived poly from the original mesh poly */
           mp_orig = me->mpoly + index_array[i];
@@ -120,7 +117,7 @@ void paintface_flush_flags(struct bContext *C, Object *ob, short flag)
       BKE_mesh_batch_cache_dirty_tag(me_eval, BKE_MESH_BATCH_DIRTY_ALL);
     }
     else {
-      BKE_mesh_batch_cache_dirty_tag(me_eval, BKE_MESH_BATCH_DIRTY_SELECT);
+      BKE_mesh_batch_cache_dirty_tag(me_eval, BKE_MESH_BATCH_DIRTY_SELECT_PAINT);
     }
 
     DEG_id_tag_update(ob->data, ID_RECALC_SELECT);
@@ -139,8 +136,9 @@ void paintface_hide(bContext *C, Object *ob, const bool unselected)
   int a;
 
   me = BKE_mesh_from_object(ob);
-  if (me == NULL || me->totpoly == 0)
+  if (me == NULL || me->totpoly == 0) {
     return;
+  }
 
   mpoly = me->mpoly;
   a = me->totpoly;
@@ -170,8 +168,9 @@ void paintface_reveal(bContext *C, Object *ob, const bool select)
   int a;
 
   me = BKE_mesh_from_object(ob);
-  if (me == NULL || me->totpoly == 0)
+  if (me == NULL || me->totpoly == 0) {
     return;
+  }
 
   mpoly = me->mpoly;
   a = me->totpoly;
@@ -190,7 +189,7 @@ void paintface_reveal(bContext *C, Object *ob, const bool select)
 
 /* Set tface seams based on edge data, uses hash table to find seam edges. */
 
-static void select_linked_tfaces_with_seams(Mesh *me, const unsigned int index, const bool select)
+static void select_linked_tfaces_with_seams(Mesh *me, const uint index, const bool select)
 {
   MPoly *mp;
   MLoop *ml;
@@ -201,7 +200,7 @@ static void select_linked_tfaces_with_seams(Mesh *me, const unsigned int index, 
   BLI_bitmap *edge_tag = BLI_BITMAP_NEW(me->totedge, __func__);
   BLI_bitmap *poly_tag = BLI_BITMAP_NEW(me->totpoly, __func__);
 
-  if (index != (unsigned int)-1) {
+  if (index != (uint)-1) {
     /* only put face under cursor in array */
     mp = &me->mpoly[index];
     BKE_mesh_poly_edgebitmap_insert(edge_tag, mp, me->mloop + mp->loopstart);
@@ -227,8 +226,9 @@ static void select_linked_tfaces_with_seams(Mesh *me, const unsigned int index, 
     /* expand selection */
     mp = me->mpoly;
     for (a = 0; a < me->totpoly; a++, mp++) {
-      if (mp->flag & ME_HIDE)
+      if (mp->flag & ME_HIDE) {
         continue;
+      }
 
       if (!BLI_BITMAP_TEST(poly_tag, a)) {
         mark = false;
@@ -266,11 +266,12 @@ static void select_linked_tfaces_with_seams(Mesh *me, const unsigned int index, 
 void paintface_select_linked(bContext *C, Object *ob, const int mval[2], const bool select)
 {
   Mesh *me;
-  unsigned int index = (unsigned int)-1;
+  uint index = (uint)-1;
 
   me = BKE_mesh_from_object(ob);
-  if (me == NULL || me->totpoly == 0)
+  if (me == NULL || me->totpoly == 0) {
     return;
+  }
 
   if (mval) {
     if (!ED_mesh_pick_face(C, ob, mval, ED_MESH_PICK_DEFAULT_FACE_DIST, &index)) {
@@ -364,8 +365,9 @@ bool paintface_minmax(Object *ob, float r_min[3], float r_max[3])
   mvert = me->mvert;
   mp = me->mpoly;
   for (a = me->totpoly; a > 0; a--, mp++) {
-    if (mp->flag & ME_HIDE || !(mp->flag & ME_FACE_SEL))
+    if (mp->flag & ME_HIDE || !(mp->flag & ME_FACE_SEL)) {
       continue;
+    }
 
     ml = me->mloop + mp->totloop;
     for (b = 0; b < mp->totloop; b++, ml++) {
@@ -399,8 +401,9 @@ bool paintface_mouse_select(
   }
 
   mpoly_sel = me->mpoly + index;
-  if (mpoly_sel->flag & ME_HIDE)
+  if (mpoly_sel->flag & ME_HIDE) {
     return false;
+  }
 
   /* clear flags */
   if (!extend && !deselect && !toggle) {
@@ -416,10 +419,12 @@ bool paintface_mouse_select(
     mpoly_sel->flag &= ~ME_FACE_SEL;
   }
   else if (toggle) {
-    if (mpoly_sel->flag & ME_FACE_SEL)
+    if (mpoly_sel->flag & ME_FACE_SEL) {
       mpoly_sel->flag &= ~ME_FACE_SEL;
-    else
+    }
+    else {
       mpoly_sel->flag |= ME_FACE_SEL;
+    }
   }
   else {
     mpoly_sel->flag |= ME_FACE_SEL;
@@ -428,76 +433,8 @@ bool paintface_mouse_select(
   /* image window redraw */
 
   paintface_flush_flags(C, ob, SELECT);
-  ED_region_tag_redraw(CTX_wm_region(C));  // XXX - should redraw all 3D views
+  ED_region_tag_redraw(CTX_wm_region(C)); /* XXX - should redraw all 3D views */
   return true;
-}
-
-bool do_paintface_box_select(ViewContext *vc, const rcti *rect, int sel_op)
-{
-  Object *ob = vc->obact;
-  Mesh *me;
-
-  me = BKE_mesh_from_object(ob);
-  if ((me == NULL) || (me->totpoly == 0)) {
-    return false;
-  }
-
-  bool changed = false;
-  if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    changed |= paintface_deselect_all_visible(vc->C, vc->obact, SEL_DESELECT, false);
-  }
-
-  if (BLI_rcti_is_empty(rect)) {
-    /* pass */
-  }
-  else {
-    MPoly *mpoly;
-    uint *rt;
-    int a, index;
-
-    char *selar = MEM_callocN(me->totpoly + 1, "selar");
-
-    uint buf_len;
-    uint *buf = ED_view3d_select_id_read_rect(vc, rect, &buf_len);
-
-    rt = buf;
-
-    a = buf_len;
-    while (a--) {
-      if (*rt) {
-        index = *rt;
-        if (index <= me->totpoly) {
-          selar[index] = 1;
-        }
-      }
-      rt++;
-    }
-
-    mpoly = me->mpoly;
-    for (a = 1; a <= me->totpoly; a++, mpoly++) {
-      if ((mpoly->flag & ME_HIDE) == 0) {
-        const bool is_select = mpoly->flag & ME_FACE_SEL;
-        const bool is_inside = (selar[a] != 0);
-        const int sel_op_result = ED_select_op_action_deselected(sel_op, is_select, is_inside);
-        if (sel_op_result != -1) {
-          SET_FLAG_FROM_TEST(mpoly->flag, sel_op_result, ME_FACE_SEL);
-          changed = true;
-        }
-      }
-    }
-
-    MEM_freeN(buf);
-    MEM_freeN(selar);
-
-#ifdef __APPLE__
-    glReadBuffer(GL_BACK);
-#endif
-  }
-
-  if (changed) {
-    paintface_flush_flags(vc->C, vc->obact, SELECT);
-  }
-  return changed;
 }
 
 /*  (similar to void paintface_flush_flags(Object *ob))
@@ -506,21 +443,23 @@ bool do_paintface_box_select(ViewContext *vc, const rcti *rect, int sel_op)
 void paintvert_flush_flags(Object *ob)
 {
   Mesh *me = BKE_mesh_from_object(ob);
-  Mesh *me_eval = ob->runtime.mesh_eval;
+  Mesh *me_eval = BKE_object_get_evaluated_mesh(ob);
   MVert *mvert_eval, *mv;
   const int *index_array = NULL;
   int totvert;
   int i;
 
-  if (me == NULL)
+  if (me == NULL) {
     return;
+  }
 
   /* we could call this directly in all areas that change selection,
    * since this could become slow for realtime updates (circle-select for eg) */
   BKE_mesh_flush_select_from_verts(me);
 
-  if (me_eval == NULL)
+  if (me_eval == NULL) {
     return;
+  }
 
   index_array = CustomData_get_layer(&me_eval->vdata, CD_ORIGINDEX);
 
@@ -553,8 +492,10 @@ void paintvert_tag_select_update(struct bContext *C, struct Object *ob)
   WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob->data);
 }
 
-/*  note: if the caller passes false to flush_flags,
- *  then they will need to run paintvert_flush_flags(ob) themselves */
+/**
+ * \note if the caller passes false to flush_flags,
+ * then they will need to run #paintvert_flush_flags(ob) themselves.
+ */
 bool paintvert_deselect_all_visible(Object *ob, int action, bool flush_flags)
 {
   Mesh *me;

@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_NONTVERTEX_H__
-#define __FREESTYLE_PYTHON_NONTVERTEX_H__
+#pragma once
 
 #include "../BPy_ViewVertex.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject NonTVertex_Type;
 /*---------------------------Python BPy_NonTVertex structure definition----------*/
 typedef struct {
   BPy_ViewVertex py_vv;
-  NonTVertex *ntv;
+  Freestyle::NonTVertex *ntv;
 } BPy_NonTVertex;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_NONTVERTEX_H__ */

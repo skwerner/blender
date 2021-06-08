@@ -17,12 +17,13 @@
 /** \file
  * \ingroup blenloader
  *
- * Utils to check/validate a Main is in sane state, only checks relations between datablocks and libraries for now.
+ * Utils to check/validate a Main is in sane state,
+ * only checks relations between data-blocks and libraries for now.
  *
  * \note Does not *fix* anything, only reports found errors.
  */
 
-#include <string.h>  // for strrchr strncmp strstr
+#include <string.h> /* for #strrchr #strncmp #strstr */
 
 #include "BLI_utildefines.h"
 
@@ -31,11 +32,12 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_sdna_types.h"
 #include "DNA_key_types.h"
+#include "DNA_sdna_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "BKE_key.h"
+#include "BKE_lib_id.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -45,7 +47,10 @@
 
 #include "readfile.h"
 
-/** Check (but do *not* fix) that all linked data-blocks are still valid (i.e. pointing to the right library). */
+/**
+ * Check (but do *not* fix) that all linked data-blocks are still valid
+ * (i.e. pointing to the right library).
+ */
 bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 {
   ListBase mainlist;
@@ -55,7 +60,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
 
   blo_split_main(&mainlist, bmain);
 
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int i = set_listbasepointers(bmain, lbarray);
   while (i--) {
     for (ID *id = lbarray[i]->first; id != NULL; id = id->next) {
@@ -65,7 +70,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                     RPT_ERROR,
                     "ID %s is in local database while being linked from library %s!",
                     id->name,
-                    id->lib->name);
+                    id->lib->filepath);
       }
     }
   }
@@ -73,19 +78,19 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
   for (Main *curmain = bmain->next; curmain != NULL; curmain = curmain->next) {
     Library *curlib = curmain->curlib;
     if (curlib == NULL) {
-      BKE_report(reports, RPT_ERROR, "Library database with NULL library datablock!");
+      BKE_report(reports, RPT_ERROR, "Library database with NULL library data-block!");
       continue;
     }
 
-    BKE_library_filepath_set(bmain, curlib, curlib->name);
-    BlendHandle *bh = BLO_blendhandle_from_file(curlib->filepath, reports);
+    BKE_library_filepath_set(bmain, curlib, curlib->filepath);
+    BlendHandle *bh = BLO_blendhandle_from_file(curlib->filepath_abs, reports);
 
     if (bh == NULL) {
       BKE_reportf(reports,
                   RPT_ERROR,
                   "Library ID %s not found at expected path %s!",
                   curlib->id.name,
-                  curlib->filepath);
+                  curlib->filepath_abs);
       continue;
     }
 
@@ -102,12 +107,12 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                     RPT_ERROR,
                     "Library ID %s in library %s, this should not happen!",
                     id->name,
-                    curlib->name);
+                    curlib->filepath);
         continue;
       }
 
       int totnames = 0;
-      LinkNode *names = BLO_blendhandle_get_datablock_names(bh, GS(id->name), &totnames);
+      LinkNode *names = BLO_blendhandle_get_datablock_names(bh, GS(id->name), false, &totnames);
       for (; id != NULL; id = id->next) {
         if (id->lib == NULL) {
           is_valid = false;
@@ -115,7 +120,7 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                       RPT_ERROR,
                       "ID %s has NULL lib pointer while being in library %s!",
                       id->name,
-                      curlib->name);
+                      curlib->filepath);
           continue;
         }
         if (id->lib != curlib) {
@@ -138,12 +143,12 @@ bool BLO_main_validate_libraries(Main *bmain, ReportList *reports)
                       RPT_ERROR,
                       "ID %s not found in library %s anymore!",
                       id->name,
-                      id->lib->name);
+                      id->lib->filepath);
           continue;
         }
       }
 
-      BLI_linklist_free(names, free);
+      BLI_linklist_freeN(names);
     }
 
     BLO_blendhandle_close(bh);
@@ -168,10 +173,8 @@ bool BLO_main_validate_shapekeys(Main *bmain, ReportList *reports)
 
   BKE_main_lock(bmain);
 
-  FOREACH_MAIN_LISTBASE_BEGIN(bmain, lb)
-  {
-    FOREACH_MAIN_LISTBASE_ID_BEGIN(lb, id)
-    {
+  FOREACH_MAIN_LISTBASE_BEGIN (bmain, lb) {
+    FOREACH_MAIN_LISTBASE_ID_BEGIN (lb, id) {
       if (!BKE_key_idtype_support(GS(id->name))) {
         break;
       }

@@ -28,19 +28,18 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_space_types.h"
-#include "DNA_screen_types.h"
+#include "DNA_camera_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BLI_string.h"
 #include "BLI_math_vector.h"
+#include "BLI_string.h"
 
 #include "BKE_context.h"
 #include "BKE_screen.h"
 #include "BKE_unit.h"
-
-#include "DEG_depsgraph.h"
 
 #include "RNA_access.h"
 
@@ -53,8 +52,8 @@
 #include "ED_space_api.h"
 #include "ED_view3d.h"
 
-#include "interface_intern.h"
 #include "interface_eyedropper_intern.h"
+#include "interface_intern.h"
 
 /**
  * \note #DepthDropper is only internal name to avoid confusion with other kinds of eye-droppers.
@@ -65,9 +64,9 @@ typedef struct DepthDropper {
   bool is_undo;
 
   bool is_set;
-  float init_depth; /* for resetting on cancel */
+  float init_depth; /* For resetting on cancel. */
 
-  bool accum_start; /* has mouse been presed */
+  bool accum_start; /* Has mouse been pressed. */
   float accum_depth;
   int accum_tot;
 
@@ -76,10 +75,10 @@ typedef struct DepthDropper {
   char name[200];
 } DepthDropper;
 
-static void depthdropper_draw_cb(const struct bContext *C, ARegion *ar, void *arg)
+static void depthdropper_draw_cb(const struct bContext *C, ARegion *region, void *arg)
 {
   DepthDropper *ddr = arg;
-  eyedropper_draw_cursor_text(C, ar, ddr->name);
+  eyedropper_draw_cursor_text_region(C, region, ddr->name);
 }
 
 static int depthdropper_init(bContext *C, wmOperator *op)
@@ -102,8 +101,9 @@ static int depthdropper_init(bContext *C, wmOperator *op)
     if (rv3d && rv3d->persp == RV3D_CAMOB) {
       View3D *v3d = CTX_wm_view3d(C);
       if (v3d->camera && v3d->camera->data && !ID_IS_LINKED(v3d->camera->data)) {
-        RNA_id_pointer_create(v3d->camera->data, &ddr->ptr);
-        ddr->prop = RNA_struct_find_property(&ddr->ptr, "dof_distance");
+        Camera *camera = (Camera *)v3d->camera->data;
+        RNA_pointer_create(&camera->id, &RNA_CameraDOFSettings, &camera->dof, &ddr->ptr);
+        ddr->prop = RNA_struct_find_property(&ddr->ptr, "focus_distance");
         ddr->is_undo = true;
       }
     }
@@ -154,50 +154,50 @@ static void depthdropper_depth_sample_pt(
 {
   /* we could use some clever */
   bScreen *screen = CTX_wm_screen(C);
-  ScrArea *sa = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
+  ScrArea *area = BKE_screen_find_area_xy(screen, SPACE_TYPE_ANY, mx, my);
   Scene *scene = CTX_data_scene(C);
 
   ScrArea *area_prev = CTX_wm_area(C);
-  ARegion *ar_prev = CTX_wm_region(C);
+  ARegion *region_prev = CTX_wm_region(C);
 
   ddr->name[0] = '\0';
 
-  if (sa) {
-    if (sa->spacetype == SPACE_VIEW3D) {
-      ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_WINDOW, mx, my);
-      if (ar) {
-        struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
-        View3D *v3d = sa->spacedata.first;
-        RegionView3D *rv3d = ar->regiondata;
+  if (area) {
+    if (area->spacetype == SPACE_VIEW3D) {
+      ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
+      if (region) {
+        struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+        View3D *v3d = area->spacedata.first;
+        RegionView3D *rv3d = region->regiondata;
         /* weak, we could pass in some reference point */
         const float *view_co = v3d->camera ? v3d->camera->obmat[3] : rv3d->viewinv[3];
-        const int mval[2] = {mx - ar->winrct.xmin, my - ar->winrct.ymin};
+        const int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
         float co[3];
 
-        CTX_wm_area_set(C, sa);
-        CTX_wm_region_set(C, ar);
+        CTX_wm_area_set(C, area);
+        CTX_wm_region_set(C, region);
 
         /* grr, always draw else we leave stale text */
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
 
         view3d_operator_needs_opengl(C);
 
-        if (ED_view3d_autodist(depsgraph, ar, v3d, mval, co, true, NULL)) {
-          const float mval_center_fl[2] = {(float)ar->winx / 2, (float)ar->winy / 2};
+        if (ED_view3d_autodist(depsgraph, region, v3d, mval, co, true, NULL)) {
+          const float mval_center_fl[2] = {(float)region->winx / 2, (float)region->winy / 2};
           float co_align[3];
 
           /* quick way to get view-center aligned point */
-          ED_view3d_win_to_3d(v3d, ar, co, mval_center_fl, co_align);
+          ED_view3d_win_to_3d(v3d, region, co, mval_center_fl, co_align);
 
           *r_depth = len_v3v3(view_co, co_align);
 
-          bUnit_AsString2(ddr->name,
-                          sizeof(ddr->name),
-                          (double)*r_depth,
-                          4,
-                          B_UNIT_LENGTH,
-                          &scene->unit,
-                          false);
+          BKE_unit_value_as_string(ddr->name,
+                                   sizeof(ddr->name),
+                                   (double)*r_depth,
+                                   4,
+                                   B_UNIT_LENGTH,
+                                   &scene->unit,
+                                   false);
         }
         else {
           BLI_strncpy(ddr->name, "Nothing under cursor", sizeof(ddr->name));
@@ -207,7 +207,7 @@ static void depthdropper_depth_sample_pt(
   }
 
   CTX_wm_area_set(C, area_prev);
-  CTX_wm_region_set(C, ar_prev);
+  CTX_wm_region_set(C, region_prev);
 }
 
 /* sets the sample depth RGB, maintaining A */
@@ -309,16 +309,17 @@ static int depthdropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSE
 {
   /* init */
   if (depthdropper_init(C, op)) {
-    WM_cursor_modal_set(CTX_wm_window(C), BC_EYEDROPPER_CURSOR);
+    wmWindow *win = CTX_wm_window(C);
+    /* Workaround for de-activating the button clearing the cursor, see T76794 */
+    UI_context_active_but_clear(C, win, CTX_wm_region(C));
+    WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 /* Repeat operator */
@@ -331,9 +332,7 @@ static int depthdropper_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool depthdropper_poll(bContext *C)
@@ -350,7 +349,7 @@ static bool depthdropper_poll(bContext *C)
     if ((RNA_property_type(prop) == PROP_FLOAT) &&
         (RNA_property_subtype(prop) & PROP_UNIT_LENGTH) &&
         (RNA_property_array_check(prop) == false)) {
-      return 1;
+      return true;
     }
   }
   else {
@@ -358,12 +357,12 @@ static bool depthdropper_poll(bContext *C)
     if (rv3d && rv3d->persp == RV3D_CAMOB) {
       View3D *v3d = CTX_wm_view3d(C);
       if (v3d->camera && v3d->camera->data && !ID_IS_LINKED(v3d->camera->data)) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void UI_OT_eyedropper_depth(wmOperatorType *ot)

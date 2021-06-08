@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_LISTBASE_H__
-#define __BLI_LISTBASE_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -27,8 +26,8 @@
 #include "BLI_compiler_attrs.h"
 #include "BLI_utildefines.h"
 #include "DNA_listBase.h"
-//struct ListBase;
-//struct LinkData;
+// struct ListBase;
+// struct LinkData;
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,13 +85,15 @@ void BLI_insertlinkbefore(struct ListBase *listbase, void *vnextlink, void *vnew
     ATTR_NONNULL(1);
 void BLI_insertlinkafter(struct ListBase *listbase, void *vprevlink, void *vnewlink)
     ATTR_NONNULL(1);
-void BLI_insertlinkreplace(ListBase *listbase, void *v_l_src, void *v_l_dst) ATTR_NONNULL(1, 2, 3);
+void BLI_insertlinkreplace(ListBase *listbase, void *vreplacelink, void *vnewlink)
+    ATTR_NONNULL(1, 2, 3);
 void BLI_listbase_sort(struct ListBase *listbase, int (*cmp)(const void *, const void *))
     ATTR_NONNULL(1, 2);
 void BLI_listbase_sort_r(ListBase *listbase,
                          int (*cmp)(void *, const void *, const void *),
                          void *thunk) ATTR_NONNULL(1, 2);
 bool BLI_listbase_link_move(ListBase *listbase, void *vlink, int step) ATTR_NONNULL();
+bool BLI_listbase_move_index(ListBase *listbase, int from, int to) ATTR_NONNULL();
 void BLI_freelist(struct ListBase *listbase) ATTR_NONNULL(1);
 int BLI_listbase_count_at_most(const struct ListBase *listbase,
                                const int count_max) ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1);
@@ -171,14 +172,30 @@ struct LinkData *BLI_genericNodeN(void *data);
 #define LISTBASE_FOREACH(type, var, list) \
   for (type var = (type)((list)->first); var != NULL; var = (type)(((Link *)(var))->next))
 
-/** A verion of #LISTBASE_FOREACH that supports removing the item we're looping over. */
+/**
+ * A version of #LISTBASE_FOREACH that supports incrementing an index variable at every step.
+ * Including this in the macro helps prevent mistakes where "continue" mistakenly skips the
+ * incrementation.
+ */
+#define LISTBASE_FOREACH_INDEX(type, var, list, index_var) \
+  for (type var = (((void)(index_var = 0)), (type)((list)->first)); var != NULL; \
+       var = (type)(((Link *)(var))->next), index_var++)
+
+#define LISTBASE_FOREACH_BACKWARD(type, var, list) \
+  for (type var = (type)((list)->last); var != NULL; var = (type)(((Link *)(var))->prev))
+
+/** A version of #LISTBASE_FOREACH that supports removing the item we're looping over. */
 #define LISTBASE_FOREACH_MUTABLE(type, var, list) \
   for (type var = (type)((list)->first), *var##_iter_next; \
        ((var != NULL) ? ((void)(var##_iter_next = (type)(((Link *)(var))->next)), 1) : 0); \
        var = var##_iter_next)
 
+/** A version of #LISTBASE_FOREACH_BACKWARD that supports removing the item we're looping over. */
+#define LISTBASE_FOREACH_BACKWARD_MUTABLE(type, var, list) \
+  for (type var = (type)((list)->last), *var##_iter_prev; \
+       ((var != NULL) ? ((void)(var##_iter_prev = (type)(((Link *)(var))->prev)), 1) : 0); \
+       var = var##_iter_prev)
+
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_LISTBASE_H__ */

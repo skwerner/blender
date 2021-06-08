@@ -20,8 +20,7 @@
  * BMesh inline iterator functions.
  */
 
-#ifndef __BMESH_ITERATORS_INLINE_H__
-#define __BMESH_ITERATORS_INLINE_H__
+#pragma once
 
 /* inline here optimizes out the switch statement when called with
  * constant values (which is very common), nicer for loop-in-loop situations */
@@ -174,7 +173,8 @@ ATTR_WARN_UNUSED_RESULT ATTR_NONNULL(1) BLI_INLINE
 }
 
 /**
- * \brief Parallel (threaded) iterator, only available for most basic itertypes (verts/edges/faces of mesh).
+ * \brief Parallel (threaded) iterator,
+ * only available for most basic itertypes (verts/edges/faces of mesh).
  *
  * Uses BLI_task_parallel_mempool to iterate over all items of underlying matching mempool.
  *
@@ -209,5 +209,3 @@ BLI_INLINE void BM_iter_parallel(BMesh *bm,
 }
 
 #endif /* __BLI_TASK_H__ */
-
-#endif /* __BMESH_ITERATORS_INLINE_H__ */

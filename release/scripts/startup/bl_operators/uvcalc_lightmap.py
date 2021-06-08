@@ -233,15 +233,16 @@ class prettyface:
         return self.width, self.height
 
 
-def lightmap_uvpack(meshes,
-                    PREF_SEL_ONLY=True,
-                    PREF_NEW_UVLAYER=False,
-                    PREF_PACK_IN_ONE=False,
-                    PREF_APPLY_IMAGE=False,
-                    PREF_IMG_PX_SIZE=512,
-                    PREF_BOX_DIV=8,
-                    PREF_MARGIN_DIV=512
-                    ):
+def lightmap_uvpack(
+        meshes,
+        PREF_SEL_ONLY=True,
+        PREF_NEW_UVLAYER=False,
+        PREF_PACK_IN_ONE=False,
+        PREF_APPLY_IMAGE=False,
+        PREF_IMG_PX_SIZE=512,
+        PREF_BOX_DIV=8,
+        PREF_MARGIN_DIV=512,
+):
     """
     BOX_DIV if the maximum division of the UV map that
     a box may be consolidated into.
@@ -558,13 +559,17 @@ def lightmap_uvpack(meshes,
 
 
 def unwrap(operator, context, **kwargs):
-     # switch to object mode
+    # switch to object mode
     is_editmode = context.object and context.object.mode == 'EDIT'
     if is_editmode:
         bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
     # define list of meshes
-    meshes = list({me for obj in context.selected_objects if obj.type == 'MESH' for me in (obj.data,) if me.polygons and me.library is None})
+    meshes = list({
+        me for obj in context.selected_objects
+        if obj.type == 'MESH'
+        if (me := obj.data).polygons and me.library is None
+    })
 
     if not meshes:
         operator.report({'ERROR'}, "No mesh object")
@@ -594,7 +599,7 @@ class LightMapPack(Operator):
     # Proper solution would be to make undo stack aware of such things,
     # but for now just disable redo. Keep undo here so unwanted changes to uv
     # coords might be undone.
-    # This fixes infinite image creation reported there [#30968] (sergey)
+    # This fixes infinite image creation reported there T30968 (sergey)
     bl_options = {'UNDO'}
 
     PREF_CONTEXT: bpy.props.EnumProperty(
@@ -607,10 +612,10 @@ class LightMapPack(Operator):
 
     # Image & UVs...
     PREF_PACK_IN_ONE: BoolProperty(
-        name="Share Tex Space",
+        name="Share Texture Space",
         description=(
-            "Objects Share texture space, map all objects "
-            "into 1 uvmap"
+            "Objects share texture space, map all objects "
+            "into a single UV map"
         ),
         default=True,
     )
@@ -623,20 +628,20 @@ class LightMapPack(Operator):
         name="New Image",
         description=(
             "Assign new images for every mesh (only one if "
-            "shared tex space enabled)"
+            "Share Texture Space is enabled)"
         ),
         default=False,
     )
     PREF_IMG_PX_SIZE: IntProperty(
         name="Image Size",
-        description="Width and Height for the new image",
+        description="Width and height for the new image",
         min=64, max=5000,
         default=512,
     )
     # UV Packing...
     PREF_BOX_DIV: IntProperty(
         name="Pack Quality",
-        description="Pre Packing before the complex boxpack",
+        description="Pre-packing before the complex boxpack",
         min=1, max=48,
         default=12,
     )
@@ -650,6 +655,7 @@ class LightMapPack(Operator):
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
+        layout.use_property_decorate = False
 
         is_editmode = context.active_object.mode == 'EDIT'
         if is_editmode:
@@ -686,7 +692,7 @@ class LightMapPack(Operator):
 
         return unwrap(self, context, **kwargs)
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         wm = context.window_manager
         return wm.invoke_props_dialog(self)
 

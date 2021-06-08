@@ -18,13 +18,15 @@
  * \ingroup pythonintern
  */
 
-#ifndef __BPY_RNA_H__
-#define __BPY_RNA_H__
+#pragma once
 
 /* --- bpy build options --- */
 #ifdef WITH_PYTHON_SAFETY
 
-/* play it safe and keep optional for now, need to test further now this affects looping on 10000's of verts for eg. */
+/**
+ * Play it safe and keep optional for now,
+ * need to test further now this affects looping on 10000's of verts for eg.
+ */
 #  define USE_WEAKREFS
 
 /* method to invalidate removed py data, XXX, slow to remove objects, otherwise no overhead */
@@ -63,6 +65,10 @@
 /* --- end bpy build options --- */
 
 struct ID;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 extern PyTypeObject pyrna_struct_meta_idprop_Type;
 extern PyTypeObject pyrna_struct_Type;
@@ -146,8 +152,10 @@ typedef struct {
   PropertyRNA *prop;
 
   /* Arystan: this is a hack to allow sub-item r/w access like: face.uv[n][m] */
-  int arraydim; /* array dimension, e.g: 0 for face.uv, 2 for face.uv[n][m], etc. */
-  int arrayoffset; /* array first item offset, e.g. if face.uv is [4][2], arrayoffset for face.uv[n] is 2n */
+  /** Array dimension, e.g: 0 for face.uv, 2 for face.uv[n][m], etc. */
+  int arraydim;
+  /** Array first item offset, e.g. if face.uv is [4][2], arrayoffset for face.uv[n] is 2n. */
+  int arrayoffset;
 } BPy_PropertyArrayRNA;
 
 typedef struct {
@@ -169,9 +177,6 @@ typedef struct {
   FunctionRNA *func;
 } BPy_FunctionRNA;
 
-/* cheap trick */
-#define BPy_BaseTypeRNA BPy_PropertyRNA
-
 StructRNA *srna_from_self(PyObject *self, const char *error_prefix);
 StructRNA *pyrna_struct_as_srna(PyObject *self, const bool parent, const char *error_prefix);
 
@@ -180,7 +185,6 @@ PyObject *BPY_rna_module(void);
 void BPY_update_rna_module(void);
 /*PyObject *BPY_rna_doc(void);*/
 PyObject *BPY_rna_types(void);
-void BPY_rna_register_cb(void);
 
 PyObject *pyrna_struct_CreatePyObject(PointerRNA *ptr);
 PyObject *pyrna_prop_CreatePyObject(PointerRNA *ptr, PropertyRNA *prop);
@@ -197,12 +201,12 @@ int pyrna_pydict_to_props(PointerRNA *ptr,
                           const char *error_prefix);
 PyObject *pyrna_prop_to_py(PointerRNA *ptr, PropertyRNA *prop);
 
-unsigned int *pyrna_set_to_enum_bitmap(const struct EnumPropertyItem *items,
-                                       PyObject *value,
-                                       int type_size,
-                                       bool type_convert_sign,
-                                       int bitmap_size,
-                                       const char *error_prefix);
+uint *pyrna_set_to_enum_bitmap(const struct EnumPropertyItem *items,
+                               PyObject *value,
+                               int type_size,
+                               bool type_convert_sign,
+                               int bitmap_size,
+                               const char *error_prefix);
 PyObject *pyrna_enum_bitfield_to_py(const struct EnumPropertyItem *items, int value);
 int pyrna_set_to_enum_bitfield(const struct EnumPropertyItem *items,
                                PyObject *value,
@@ -215,6 +219,10 @@ int pyrna_enum_value_from_id(const EnumPropertyItem *item,
                              const char *error_prefix);
 
 int pyrna_deferred_register_class(struct StructRNA *srna, PyTypeObject *py_class);
+
+void pyrna_struct_type_extend_capi(struct StructRNA *srna,
+                                   struct PyMethodDef *py_method,
+                                   struct PyGetSetDef *py_getset);
 
 /* called before stopping python */
 void pyrna_alloc_types(void);
@@ -257,4 +265,6 @@ extern PyMethodDef meth_bpy_owner_id_get;
 
 extern BPy_StructRNA *bpy_context_module;
 
+#ifdef __cplusplus
+}
 #endif

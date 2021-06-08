@@ -16,15 +16,15 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_CONVOLUTIONEDGEFILTEROPERATION_H__
-#define __COM_CONVOLUTIONEDGEFILTEROPERATION_H__
+#pragma once
 
 #include "COM_ConvolutionFilterOperation.h"
 
+namespace blender::compositor {
+
 class ConvolutionEdgeFilterOperation : public ConvolutionFilterOperation {
  public:
-  ConvolutionEdgeFilterOperation();
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 };
 
-#endif
+}  // namespace blender::compositor

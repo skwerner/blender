@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_CHAINPREDICATEITERATOR_H__
-#define __FREESTYLE_PYTHON_CHAINPREDICATEITERATOR_H__
+#pragma once
 
 #include "BPy_ChainingIterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject ChainPredicateIterator_Type;
 /*---------------------------Python BPy_ChainPredicateIterator structure definition----------*/
 typedef struct {
   BPy_ChainingIterator py_c_it;
-  ChainPredicateIterator *cp_it;
+  Freestyle::ChainPredicateIterator *cp_it;
   PyObject *upred;
   PyObject *bpred;
 } BPy_ChainPredicateIterator;
@@ -49,5 +48,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_CHAINPREDICATEITERATOR_H__ */

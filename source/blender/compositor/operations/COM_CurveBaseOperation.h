@@ -16,10 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_CURVEBASEOPERATION_H__
-#define __COM_CURVEBASEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "DNA_color_types.h"
+
+namespace blender::compositor {
 
 class CurveBaseOperation : public NodeOperation {
  protected:
@@ -35,9 +37,10 @@ class CurveBaseOperation : public NodeOperation {
   /**
    * Initialize the execution
    */
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 
   void setCurveMapping(CurveMapping *mapping);
 };
-#endif
+
+}  // namespace blender::compositor

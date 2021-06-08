@@ -22,14 +22,14 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_shadertorgb_in[] = {
-    {SOCK_SHADER, 1, N_("Shader")},
-    {-1, 0, ""},
+    {SOCK_SHADER, N_("Shader")},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_shadertorgb_out[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {SOCK_FLOAT, 0, N_("Alpha")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {SOCK_FLOAT, N_("Alpha")},
+    {-1, ""},
 };
 
 static int node_shader_gpu_shadertorgb(GPUMaterial *mat,
@@ -38,6 +38,10 @@ static int node_shader_gpu_shadertorgb(GPUMaterial *mat,
                                        GPUNodeStack *in,
                                        GPUNodeStack *out)
 {
+  /* Because node_shader_to_rgba is using fallback_cubemap()
+   * we need to tag material as glossy. */
+  GPU_material_flag_set(mat, GPU_MATFLAG_GLOSSY);
+
   return GPU_stack_link(mat, node, "node_shader_to_rgba", in, out);
 }
 

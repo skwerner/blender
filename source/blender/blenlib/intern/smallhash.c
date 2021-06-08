@@ -20,15 +20,17 @@
 /** \file
  * \ingroup bli
  *
- * A light stack-friendly hash library, it uses stack space for relatively small, fixed size hash tables
- * but falls back to heap memory once the stack limits reached (#SMSTACKSIZE).
+ * A light stack-friendly hash library, it uses stack space for relatively small,
+ * fixed size hash tables but falls back to heap memory once the stack limits reached
+ * (#SMSTACKSIZE).
  *
- * based on a doubling hashing approach (non-chaining) which uses more buckets then entries
+ * based on a doubling hashing approach (non-chaining) which uses more buckets than entries
  * stepping over buckets when two keys share the same hash so any key can find a free bucket.
  *
  * See: https://en.wikipedia.org/wiki/Double_hashing
  *
- * \warning This should _only_ be used for small hashes where allocating a hash every time is unacceptable.
+ * \warning This should _only_ be used for small hashes
+ * where allocating a hash every time is unacceptable.
  * Otherwise #GHash should be used instead.
  *
  * #SmallHashEntry.key
@@ -42,8 +44,8 @@
  * use the maximum values to avoid real pointers colliding with magic numbers.
  */
 
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "BLI_sys_types.h"
 
@@ -220,12 +222,12 @@ void BLI_smallhash_release(SmallHash *sh)
   }
 }
 
-void BLI_smallhash_insert(SmallHash *sh, uintptr_t key, void *val)
+void BLI_smallhash_insert(SmallHash *sh, uintptr_t key, void *item)
 {
   SmallHashEntry *e;
 
   BLI_assert(key != SMHASH_KEY_UNUSED);
-  BLI_assert(smallhash_val_is_used(val));
+  BLI_assert(smallhash_val_is_used(item));
   BLI_assert(BLI_smallhash_haskey(sh, key) == false);
 
   if (UNLIKELY(smallhash_test_expand_buckets(++sh->nentries, sh->nbuckets))) {
@@ -234,7 +236,7 @@ void BLI_smallhash_insert(SmallHash *sh, uintptr_t key, void *val)
 
   e = smallhash_lookup_first_free(sh, key);
   e->key = key;
-  e->val = val;
+  e->val = item;
 }
 
 /**
@@ -251,10 +253,9 @@ bool BLI_smallhash_reinsert(SmallHash *sh, uintptr_t key, void *item)
     e->val = item;
     return false;
   }
-  else {
-    BLI_smallhash_insert(sh, key, item);
-    return true;
-  }
+
+  BLI_smallhash_insert(sh, key, item);
+  return true;
 }
 
 #ifdef USE_REMOVE
@@ -348,6 +349,7 @@ void **BLI_smallhash_iternew_p(const SmallHash *sh, SmallHashIter *iter, uintptr
   return BLI_smallhash_iternext_p(iter, key);
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Debugging & Introspection
  * \{ */
 
@@ -370,8 +372,9 @@ void BLI_smallhash_print(SmallHash *sh)
       printf("%2x", (uint)sh->buckets[i].key);
     }
 
-    if (i != sh->nbuckets - 1)
+    if (i != sh->nbuckets - 1) {
       printf(", ");
+    }
 
     c += 6;
 

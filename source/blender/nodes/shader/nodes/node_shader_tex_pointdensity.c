@@ -19,19 +19,19 @@
 
 #include "../node_shader_util.h"
 
-#include "RE_render_ext.h"
+#include "RE_texture.h"
 
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_tex_pointdensity_in[] = {
-    {SOCK_VECTOR, 1, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {SOCK_VECTOR, N_("Vector"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_tex_pointdensity_out[] = {
-    {SOCK_RGBA, 0, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 0, N_("Density"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_("Density"), 0.0f, 0.0f, 0.0f, 0.0f, -10000.0f, 10000.0f},
+    {-1, ""},
 };
 
 static void node_shader_init_tex_pointdensity(bNodeTree *UNUSED(ntree), bNode *node)
@@ -57,7 +57,7 @@ static void node_shader_free_tex_pointdensity(bNode *node)
 
 static void node_shader_copy_tex_pointdensity(bNodeTree *UNUSED(dest_ntree),
                                               bNode *dest_node,
-                                              bNode *src_node)
+                                              const bNode *src_node)
 {
   dest_node->storage = MEM_dupallocN(src_node->storage);
   NodeShaderTexPointDensity *point_density = dest_node->storage;

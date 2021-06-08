@@ -20,14 +20,16 @@
  * UI List Registry.
  */
 
+#include <stdio.h>
+
 #include "BLI_sys_types.h"
 
 #include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_screen.h"
 
@@ -38,10 +40,8 @@ static GHash *uilisttypes_hash = NULL;
 
 uiListType *WM_uilisttype_find(const char *idname, bool quiet)
 {
-  uiListType *ult;
-
   if (idname[0]) {
-    ult = BLI_ghash_lookup(uilisttypes_hash, idname);
+    uiListType *ult = BLI_ghash_lookup(uilisttypes_hash, idname);
     if (ult) {
       return ult;
     }
@@ -62,12 +62,11 @@ bool WM_uilisttype_add(uiListType *ult)
 
 void WM_uilisttype_freelink(uiListType *ult)
 {
-  bool ok;
 
-  ok = BLI_ghash_remove(uilisttypes_hash, ult->idname, NULL, MEM_freeN);
+  bool ok = BLI_ghash_remove(uilisttypes_hash, ult->idname, NULL, MEM_freeN);
 
   BLI_assert(ok);
-  (void)ok;
+  UNUSED_VARS_NDEBUG(ok);
 }
 
 /* called on initialize WM_init() */
@@ -79,11 +78,10 @@ void WM_uilisttype_init(void)
 void WM_uilisttype_free(void)
 {
   GHashIterator gh_iter;
-
   GHASH_ITER (gh_iter, uilisttypes_hash) {
     uiListType *ult = BLI_ghashIterator_getValue(&gh_iter);
-    if (ult->ext.free) {
-      ult->ext.free(ult->ext.data);
+    if (ult->rna_ext.free) {
+      ult->rna_ext.free(ult->rna_ext.data);
     }
   }
 

@@ -26,12 +26,8 @@ set(INC
   ../../makesdna
   ../../makesrna
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -40,6 +36,7 @@ set(SRC
   mask_edit.c
   mask_editaction.c
   mask_ops.c
+  mask_query.c
   mask_relationships.c
   mask_select.c
   mask_shapekey.c
@@ -50,6 +47,5 @@ set(SRC
 set(LIB
 )
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_mask "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

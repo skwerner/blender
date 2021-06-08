@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_FRSCURVE_H__
-#define __FREESTYLE_PYTHON_FRSCURVE_H__
+#pragma once
 
 #include "../BPy_Interface1D.h"
 
@@ -38,7 +37,7 @@ extern PyTypeObject FrsCurve_Type;
 /*---------------------------Python BPy_FrsCurve structure definition----------*/
 typedef struct {
   BPy_Interface1D py_if1D;
-  Curve *c;
+  Freestyle::Curve *c;
 } BPy_FrsCurve;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -46,5 +45,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_FRSCURVE_H__ */

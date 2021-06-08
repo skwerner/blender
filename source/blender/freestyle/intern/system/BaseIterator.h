@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_BASE_ITERATOR_H__
-#define __FREESTYLE_BASE_ITERATOR_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -30,7 +29,7 @@
 
 namespace Freestyle {
 
-// use for iterators defintions
+// use for iterators definitions
 template<class Element> class Nonconst_traits;
 
 template<class Element> class Const_traits {
@@ -103,5 +102,3 @@ template<class Traits, class IteratorTagTraits> class IteratorBase {
 };
 
 } /* namespace Freestyle */
-
-#endif  // BASEITERATOR_H

@@ -14,14 +14,16 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "GHOST_Debug.h"
 #include "GHOST_NDOFManager.h"
-#include "GHOST_EventNDOF.h"
+#include "GHOST_Debug.h"
 #include "GHOST_EventKey.h"
+#include "GHOST_EventNDOF.h"
 #include "GHOST_WindowManager.h"
-#include <string.h>  // for memory functions
-#include <stdio.h>   // for error/info reporting
+
+#include <limits.h>
 #include <math.h>
+#include <stdio.h>   // for error/info reporting
+#include <string.h>  // for memory functions
 
 #ifdef DEBUG_NDOF_MOTION
 // printable version of each GHOST_TProgress value
@@ -96,21 +98,23 @@ static const NDOF_ButtonT Modern3Dx_HID_map[] = {
     NDOF_BUTTON_SHIFT,    NDOF_BUTTON_CTRL,     NDOF_BUTTON_ROTATE, NDOF_BUTTON_PANZOOM,
     NDOF_BUTTON_DOMINANT, NDOF_BUTTON_PLUS,     NDOF_BUTTON_MINUS};
 
-static const NDOF_ButtonT SpaceExplorer_HID_map[] = {NDOF_BUTTON_1,
-                                                     NDOF_BUTTON_2,
-                                                     NDOF_BUTTON_TOP,
-                                                     NDOF_BUTTON_LEFT,
-                                                     NDOF_BUTTON_RIGHT,
-                                                     NDOF_BUTTON_FRONT,
-                                                     NDOF_BUTTON_ESC,
-                                                     NDOF_BUTTON_ALT,
-                                                     NDOF_BUTTON_SHIFT,
-                                                     NDOF_BUTTON_CTRL,
-                                                     NDOF_BUTTON_FIT,
-                                                     NDOF_BUTTON_MENU,
-                                                     NDOF_BUTTON_PLUS,
-                                                     NDOF_BUTTON_MINUS,
-                                                     NDOF_BUTTON_ROTATE};
+static const NDOF_ButtonT SpaceExplorer_HID_map[] = {
+    NDOF_BUTTON_1,
+    NDOF_BUTTON_2,
+    NDOF_BUTTON_TOP,
+    NDOF_BUTTON_LEFT,
+    NDOF_BUTTON_RIGHT,
+    NDOF_BUTTON_FRONT,
+    NDOF_BUTTON_ESC,
+    NDOF_BUTTON_ALT,
+    NDOF_BUTTON_SHIFT,
+    NDOF_BUTTON_CTRL,
+    NDOF_BUTTON_FIT,
+    NDOF_BUTTON_MENU,
+    NDOF_BUTTON_PLUS,
+    NDOF_BUTTON_MINUS,
+    NDOF_BUTTON_ROTATE,
+};
 
 // this is the older SpacePilot (sans Pro)
 // thanks to polosson for info about this device
@@ -123,18 +127,20 @@ static const NDOF_ButtonT SpacePilot_HID_map[] = {
     NDOF_BUTTON_NONE  // the CONFIG button -- what does it do?
 };
 
-static const NDOF_ButtonT Generic_HID_map[] = {NDOF_BUTTON_1,
-                                               NDOF_BUTTON_2,
-                                               NDOF_BUTTON_3,
-                                               NDOF_BUTTON_4,
-                                               NDOF_BUTTON_5,
-                                               NDOF_BUTTON_6,
-                                               NDOF_BUTTON_7,
-                                               NDOF_BUTTON_8,
-                                               NDOF_BUTTON_9,
-                                               NDOF_BUTTON_A,
-                                               NDOF_BUTTON_B,
-                                               NDOF_BUTTON_C};
+static const NDOF_ButtonT Generic_HID_map[] = {
+    NDOF_BUTTON_1,
+    NDOF_BUTTON_2,
+    NDOF_BUTTON_3,
+    NDOF_BUTTON_4,
+    NDOF_BUTTON_5,
+    NDOF_BUTTON_6,
+    NDOF_BUTTON_7,
+    NDOF_BUTTON_8,
+    NDOF_BUTTON_9,
+    NDOF_BUTTON_A,
+    NDOF_BUTTON_B,
+    NDOF_BUTTON_C,
+};
 
 static const int genericButtonCount = sizeof(Generic_HID_map) / sizeof(NDOF_ButtonT);
 
@@ -314,7 +320,7 @@ void GHOST_NDOFManager::sendKeyEvent(GHOST_TKey key,
                                      GHOST_IWindow *window)
 {
   GHOST_TEventType type = press ? GHOST_kEventKeyDown : GHOST_kEventKeyUp;
-  GHOST_EventKey *event = new GHOST_EventKey(time, type, window, key);
+  GHOST_EventKey *event = new GHOST_EventKey(time, type, window, key, false);
 
 #ifdef DEBUG_NDOF_BUTTONS
   printf("keyboard %s\n", press ? "down" : "up");

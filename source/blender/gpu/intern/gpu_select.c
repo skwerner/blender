@@ -23,12 +23,10 @@
  * Interface for accessing gpu-related methods for selection. The semantics are
  * similar to glRenderMode(GL_SELECT) from older OpenGL versions.
  */
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "GPU_select.h"
-#include "GPU_extensions.h"
-#include "GPU_glew.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -69,7 +67,8 @@ static GPUSelectState g_select_state = {0};
 void GPU_select_begin(uint *buffer, uint bufsize, const rcti *input, char mode, int oldhits)
 {
   if (mode == GPU_SELECT_NEAREST_SECOND_PASS) {
-    /* In the case hits was '-1', don't start the second pass since it's not going to give useful results.
+    /* In the case hits was '-1',
+     * don't start the second pass since it's not going to give useful results.
      * As well as buffer overflow in 'gpu_select_query_load_id'. */
     BLI_assert(oldhits != -1);
   }
@@ -99,7 +98,8 @@ void GPU_select_begin(uint *buffer, uint bufsize, const rcti *input, char mode, 
 }
 
 /**
- * loads a new selection id and ends previous query, if any. In second pass of selection it also returns
+ * loads a new selection id and ends previous query, if any.
+ * In second pass of selection it also returns
  * if id has been hit on the first pass already.
  * Thus we can skip drawing un-hit objects.
  *
@@ -108,8 +108,9 @@ void GPU_select_begin(uint *buffer, uint bufsize, const rcti *input, char mode, 
 bool GPU_select_load_id(uint id)
 {
   /* if no selection mode active, ignore */
-  if (!g_select_state.select_is_active)
+  if (!g_select_state.select_is_active) {
     return true;
+  }
 
   switch (g_select_state.algorithm) {
     case ALGO_GL_QUERY: {
@@ -117,7 +118,7 @@ bool GPU_select_load_id(uint id)
     }
     default: /* ALGO_GL_PICK */
     {
-      return gpu_select_pick_load_id(id);
+      return gpu_select_pick_load_id(id, false);
     }
   }
 }
@@ -191,7 +192,7 @@ bool GPU_select_is_cached(void)
  */
 
 /**
- * Helper function, nothing special but avoids doing inline since hit's aren't sorted by depth
+ * Helper function, nothing special but avoids doing inline since hits aren't sorted by depth
  * and purpose of 4x buffer indices isn't so clear.
  *
  * Note that comparing depth as uint is fine.
@@ -211,6 +212,24 @@ const uint *GPU_select_buffer_near(const uint *buffer, int hits)
   return buffer_near;
 }
 
+uint GPU_select_buffer_remove_by_id(uint *buffer, int hits, uint select_id)
+{
+  uint *buffer_src = buffer;
+  uint *buffer_dst = buffer;
+  int hits_final = 0;
+  for (int i = 0; i < hits; i++) {
+    if (buffer_src[3] != select_id) {
+      if (buffer_dst != buffer_src) {
+        memcpy(buffer_dst, buffer_src, sizeof(int[4]));
+      }
+      buffer_dst += 4;
+      hits_final += 1;
+    }
+    buffer_src += 4;
+  }
+  return hits_final;
+}
+
 /* Part of the solution copied from `rect_subregion_stride_calc`. */
 void GPU_select_buffer_stride_realign(const rcti *src, const rcti *dst, uint *r_buf)
 {
@@ -226,11 +245,17 @@ void GPU_select_buffer_stride_realign(const rcti *src, const rcti *dst, uint *r_
   const int dst_x = BLI_rcti_size_x(dst);
   const int dst_y = BLI_rcti_size_y(dst);
 
-  int last_px_written = dst_x * dst_y - 1;
   int last_px_id = src_x * (y + dst_y - 1) + (x + dst_x - 1);
-  const int skip = src_x - dst_x;
-
   memset(&r_buf[last_px_id + 1], 0, (src_x * src_y - (last_px_id + 1)) * sizeof(*r_buf));
+
+  if (last_px_id < 0) {
+    /* Nothing to write. */
+    BLI_assert(last_px_id == -1);
+    return;
+  }
+
+  int last_px_written = dst_x * dst_y - 1;
+  const int skip = src_x - dst_x;
 
   while (true) {
     for (int i = dst_x; i--;) {

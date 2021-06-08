@@ -25,23 +25,23 @@ set(INC
   ../blentranslation
   ../editors/include
   ../gpu
+  ../imbuf
   ../makesdna
   ../makesrna
-  ../imbuf
-  ../../../intern/guardedalloc
   ../../../intern/glew-mx
+  ../../../intern/guardedalloc
 )
 
 set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
   ${FREETYPE_INCLUDE_DIRS}
 )
 
 set(SRC
   intern/blf.c
+  intern/blf_default.c
   intern/blf_dir.c
   intern/blf_font.c
-  intern/blf_font_i18n.c
+  intern/blf_font_default.c
   intern/blf_glyph.c
   intern/blf_thumbs.c
   intern/blf_util.c
@@ -54,6 +54,8 @@ set(SRC
 set(LIB
   bf_gpu
   bf_intern_guardedalloc
+
+  ${FREETYPE_LIBRARY}
 )
 
 if(WIN32)
@@ -73,6 +75,5 @@ if(WITH_PYTHON)
   )
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_blenfont "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

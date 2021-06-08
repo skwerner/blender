@@ -21,8 +21,7 @@
  * \ingroup pybmesh
  */
 
-#ifndef __BMESH_PY_TYPES_H__
-#define __BMESH_PY_TYPES_H__
+#pragma once
 
 extern PyTypeObject BPy_BMesh_Type;
 extern PyTypeObject BPy_BMVert_Type;
@@ -54,38 +53,45 @@ extern PyTypeObject BPy_BMIter_Type;
 
 /* cast from _any_ bmesh type - they all have BMesh first */
 typedef struct BPy_BMGeneric {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
 } BPy_BMGeneric;
 
 /* BPy_BMVert/BPy_BMEdge/BPy_BMFace/BPy_BMLoop can cast to this */
 typedef struct BPy_BMElem {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   struct BMElem *ele;
 } BPy_BMElem;
 
 typedef struct BPy_BMesh {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   int flag;
 } BPy_BMesh;
 
 /* element types */
 typedef struct BPy_BMVert {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   struct BMVert *v;
 } BPy_BMVert;
 
 typedef struct BPy_BMEdge {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   struct BMEdge *e;
 } BPy_BMEdge;
 
 typedef struct BPy_BMFace {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   struct BMFace *f;
 } BPy_BMFace;
 
 typedef struct BPy_BMLoop {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   struct BMLoop *l;
 } BPy_BMLoop;
 
@@ -99,7 +105,8 @@ typedef struct BPy_BMLoop {
  * - BPy_BMLoopSeq_Type
  */
 typedef struct BPy_BMElemSeq {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
 
   /* if this is a sequence on an existing element,
    * loops of faces for eg.
@@ -115,7 +122,8 @@ typedef struct BPy_BMElemSeq {
 } BPy_BMElemSeq;
 
 typedef struct BPy_BMIter {
-  PyObject_VAR_HEAD struct BMesh *bm; /* keep first */
+  PyObject_VAR_HEAD
+  struct BMesh *bm; /* keep first */
   BMIter iter;
 } BPy_BMIter;
 
@@ -140,8 +148,8 @@ PyObject *BPy_BMFaceSeq_CreatePyObject(BMesh *bm);
 PyObject *BPy_BMLoopSeq_CreatePyObject(BMesh *bm);
 PyObject *BPy_BMIter_CreatePyObject(BMesh *bm);
 
-PyObject *BPy_BMElem_CreatePyObject(BMesh *bm,
-                                    BMHeader *ele); /* just checks type and creates v/e/f/l */
+/* Just checks type and creates v/e/f/l. */
+PyObject *BPy_BMElem_CreatePyObject(BMesh *bm, BMHeader *ele);
 
 void *BPy_BMElem_PySeq_As_Array_FAST(BMesh **r_bm,
                                      PyObject *seq_fast,
@@ -177,7 +185,7 @@ int bpy_bm_generic_valid_check(BPy_BMGeneric *self);
 int bpy_bm_generic_valid_check_source(BMesh *bm_source,
                                       const char *error_prefix,
                                       void **args,
-                                      unsigned int args_n) ATTR_NONNULL(1, 2);
+                                      uint args_tot) ATTR_NONNULL(1, 2);
 
 #define BPY_BM_CHECK_OBJ(obj) \
   if (UNLIKELY(bpy_bm_generic_valid_check((BPy_BMGeneric *)obj) == -1)) { \
@@ -228,5 +236,3 @@ extern struct PyC_FlagSet bpy_bm_htype_vert_edge_face_flags[];
 extern struct PyC_FlagSet bpy_bm_htype_all_flags[];
 extern struct PyC_FlagSet bpy_bm_hflag_all_flags[];
 #endif
-
-#endif /* __BMESH_PY_TYPES_H__ */

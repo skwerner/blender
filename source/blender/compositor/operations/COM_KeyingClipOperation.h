@@ -16,10 +16,11 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_KEYINGCLIPOPERATION_H__
-#define __COM_KEYINGCLIPOPERATION_H__
+#pragma once
 
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 /**
  * Class with implementation of black/white clipping for keying node
@@ -60,13 +61,13 @@ class KeyingClipOperation : public NodeOperation {
     this->m_isEdgeMatte = value;
   }
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
 
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 };
 
-#endif
+}  // namespace blender::compositor

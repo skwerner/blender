@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_NATURE_H__
-#define __FREESTYLE_PYTHON_NATURE_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../winged_edge/Nature.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,5 +50,3 @@ int Nature_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_NATURE_H__ */

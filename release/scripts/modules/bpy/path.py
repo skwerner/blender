@@ -198,15 +198,17 @@ def _clean_utf8(name):
 _display_name_literals = {
     ":": "_colon_",
     "+": "_plus_",
+    "/": "_slash_",
 }
 
 
-def display_name(name, *, has_ext=True):
+def display_name(name, *, has_ext=True, title_case=True):
     """
     Creates a display string from name to be used menus and the user interface.
-    Capitalize the first letter in all lowercase names,
-    mixed case names are kept as is. Intended for use with
-    filenames and module names.
+    Intended for use with filenames and module names.
+
+    :arg has_ext: Remove file extension from name
+    :arg title_case: Convert lowercase names to title case
     """
 
     if has_ext:
@@ -220,7 +222,7 @@ def display_name(name, *, has_ext=True):
     # (when paths can't start with numbers for eg).
     name = name.replace("_", " ").lstrip(" ")
 
-    if name.islower():
+    if title_case and name.islower():
         name = name.lower().title()
 
     name = _clean_utf8(name)
@@ -352,7 +354,8 @@ def module_names(path, recursive=False):
         elif filename.endswith(".py") and filename != "__init__.py":
             fullpath = join(path, filename)
             modules.append((filename[0:-3], fullpath))
-        elif "." not in filename:
+        elif not filename.startswith("."):
+            # Skip hidden files since they are used by for version control.
             directory = join(path, filename)
             fullpath = join(directory, "__init__.py")
             if isfile(fullpath):
@@ -368,7 +371,7 @@ def module_names(path, recursive=False):
 
 def basename(path):
     """
-    Equivalent to os.path.basename, but skips a "//" prefix.
+    Equivalent to ``os.path.basename``, but skips a "//" prefix.
 
     Use for Windows compatibility.
     """

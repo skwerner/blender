@@ -22,25 +22,15 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_bsdf_glossy_in[] = {
-    {SOCK_RGBA, 1, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Roughness"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_VECTOR,
-     1,
-     N_("Normal"),
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     -1.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_("Roughness"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_bsdf_glossy_out[] = {
-    {SOCK_SHADER, 0, N_("BSDF")},
-    {-1, 0, ""},
+    {SOCK_SHADER, N_("BSDF")},
+    {-1, ""},
 };
 
 static void node_shader_init_glossy(bNodeTree *UNUSED(ntree), bNode *node)
@@ -54,15 +44,25 @@ static int node_shader_gpu_bsdf_glossy(GPUMaterial *mat,
                                        GPUNodeStack *in,
                                        GPUNodeStack *out)
 {
-  if (!in[2].link)
+  if (!in[2].link) {
     GPU_link(mat, "world_normals_get", &in[2].link);
+  }
 
-  if (node->custom1 == SHD_GLOSSY_SHARP)
+  if (node->custom1 == SHD_GLOSSY_SHARP) {
     GPU_link(mat, "set_value_zero", &in[1].link);
+  }
 
   GPU_material_flag_set(mat, GPU_MATFLAG_GLOSSY);
 
-  return GPU_stack_link(mat, node, "node_bsdf_glossy", in, out, GPU_constant(&node->ssr_id));
+  float use_multi_scatter = (node->custom1 == SHD_GLOSSY_MULTI_GGX) ? 1.0f : 0.0f;
+
+  return GPU_stack_link(mat,
+                        node,
+                        "node_bsdf_glossy",
+                        in,
+                        out,
+                        GPU_constant(&use_multi_scatter),
+                        GPU_constant(&node->ssr_id));
 }
 
 /* node type definition */

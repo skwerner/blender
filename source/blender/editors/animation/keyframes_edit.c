@@ -20,17 +20,17 @@
  * \ingroup edanimation
  */
 
+#include <float.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
-#include <float.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_lasso_2d.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
 #include "DNA_object_types.h"
@@ -43,7 +43,8 @@
 #include "ED_keyframes_edit.h"
 #include "ED_markers.h"
 
-/* This file defines an API and set of callback-operators for non-destructive editing of keyframe data.
+/* This file defines an API and set of callback-operators for
+ * non-destructive editing of keyframe data.
  *
  * Two API functions are defined for actually performing the operations on the data:
  * ANIM_fcurve_keyframes_loop()
@@ -69,7 +70,7 @@
 /* This function is used to loop over BezTriples in the given F-Curve, applying a given
  * operation on them, and optionally applies an F-Curve validation function afterwards.
  */
-// TODO: make this function work on samples too...
+/* TODO: make this function work on samples too. */
 short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
                                  FCurve *fcu,
                                  KeyframeEditFunc key_ok,
@@ -78,13 +79,14 @@ short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
 {
   BezTriple *bezt;
   short ok = 0;
-  unsigned int i;
+  uint i;
 
   /* sanity check */
-  if (ELEM(NULL, fcu, fcu->bezt))
+  if (ELEM(NULL, fcu, fcu->bezt)) {
     return 0;
+  }
 
-  /* set the F-Curve into the editdata so that it can be accessed */
+  /* Set the F-Curve into the edit-data so that it can be accessed. */
   if (ked) {
     ked->fcu = fcu;
     ked->curIndex = 0;
@@ -106,27 +108,31 @@ short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
 
         /* Only operate on this BezTriple if it fulfills the criteria of the validation func */
         if ((ok = key_ok(ked, bezt))) {
-          if (ked)
+          if (ked) {
             ked->curflags = ok;
+          }
 
           /* Exit with return-code '1' if function returns positive
            * This is useful if finding if some BezTriple satisfies a condition.
            */
-          if (key_cb(ked, bezt))
+          if (key_cb(ked, bezt)) {
             return 1;
+          }
         }
       }
     }
     else {
       for (bezt = fcu->bezt, i = 0; i < fcu->totvert; bezt++, i++) {
-        if (ked)
+        if (ked) {
           ked->curIndex = i;
+        }
 
         /* Exit with return-code '1' if function returns positive
          * This is useful if finding if some BezTriple satisfies a condition.
          */
-        if (key_cb(ked, bezt))
+        if (key_cb(ked, bezt)) {
           return 1;
+        }
       }
     }
   }
@@ -139,14 +145,15 @@ short ANIM_fcurve_keyframes_loop(KeyframeEditData *ked,
   }
 
   /* if fcu_cb (F-Curve post-editing callback) has been specified then execute it */
-  if (fcu_cb)
+  if (fcu_cb) {
     fcu_cb(fcu);
+  }
 
   /* done */
   return 0;
 }
 
-/* -------------------------------- Further Abstracted (Not Exposed Directly) ----------------------------- */
+/* --------------------- Further Abstracted (Not Exposed Directly) ----------------------------- */
 
 /* This function is used to loop over the keyframe data in an Action Group */
 static short agrp_keyframes_loop(KeyframeEditData *ked,
@@ -158,13 +165,15 @@ static short agrp_keyframes_loop(KeyframeEditData *ked,
   FCurve *fcu;
 
   /* sanity check */
-  if (agrp == NULL)
+  if (agrp == NULL) {
     return 0;
+  }
 
   /* only iterate over the F-Curves that are in this group */
   for (fcu = agrp->channels.first; fcu && fcu->grp == agrp; fcu = fcu->next) {
-    if (ANIM_fcurve_keyframes_loop(ked, fcu, key_ok, key_cb, fcu_cb))
+    if (ANIM_fcurve_keyframes_loop(ked, fcu, key_ok, key_cb, fcu_cb)) {
       return 1;
+    }
   }
 
   return 0;
@@ -180,13 +189,15 @@ static short act_keyframes_loop(KeyframeEditData *ked,
   FCurve *fcu;
 
   /* sanity check */
-  if (act == NULL)
+  if (act == NULL) {
     return 0;
+  }
 
   /* just loop through all F-Curves */
   for (fcu = act->curves.first; fcu; fcu = fcu->next) {
-    if (ANIM_fcurve_keyframes_loop(ked, fcu, key_ok, key_cb, fcu_cb))
+    if (ANIM_fcurve_keyframes_loop(ked, fcu, key_ok, key_cb, fcu_cb)) {
       return 1;
+    }
   }
 
   return 0;
@@ -209,8 +220,9 @@ static short ob_keyframes_loop(KeyframeEditData *ked,
   bAnimListElem dummychan = {NULL};
   Base dummybase = {NULL};
 
-  if (ob == NULL)
+  if (ob == NULL) {
     return 0;
+  }
 
   /* create a dummy wrapper data to work with */
   dummybase.object = ob;
@@ -225,10 +237,11 @@ static short ob_keyframes_loop(KeyframeEditData *ked,
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-  /* loop through each F-Curve, applying the operation as required, but stopping on the first one */
+  /* Loop through each F-Curve, applying the operation as required,
+   * but stopping on the first one. */
   for (ale = anim_data.first; ale; ale = ale->next) {
     if (ANIM_fcurve_keyframes_loop(ked, (FCurve *)ale->data, key_ok, key_cb, fcu_cb)) {
       ret = 1;
@@ -258,8 +271,9 @@ static short scene_keyframes_loop(KeyframeEditData *ked,
 
   bAnimListElem dummychan = {NULL};
 
-  if (sce == NULL)
+  if (sce == NULL) {
     return 0;
+  }
 
   /* create a dummy wrapper data to work with */
   dummychan.type = ANIMTYPE_SCENE;
@@ -272,10 +286,11 @@ static short scene_keyframes_loop(KeyframeEditData *ked,
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
-  /* loop through each F-Curve, applying the operation as required, but stopping on the first one */
+  /* Loop through each F-Curve, applying the operation as required,
+   * but stopping on the first one. */
   for (ale = anim_data.first; ale; ale = ale->next) {
     if (ANIM_fcurve_keyframes_loop(ked, (FCurve *)ale->data, key_ok, key_cb, fcu_cb)) {
       ret = 1;
@@ -301,8 +316,9 @@ static short summary_keyframes_loop(KeyframeEditData *ked,
   int filter, ret_code = 0;
 
   /* sanity check */
-  if (ac == NULL)
+  if (ac == NULL) {
     return 0;
+  }
 
   /* get F-Curves to take keyframes from */
   filter = ANIMFILTER_DATA_VISIBLE;
@@ -318,7 +334,7 @@ static short summary_keyframes_loop(KeyframeEditData *ked,
       case ALE_FCURVE:
       default: {
         if (ked && ked->iterflags) {
-          /* make backups of the current values, so that a localised fix
+          /* make backups of the current values, so that a localized fix
            * (e.g. NLA time remapping) can be applied to these values
            */
           float f1 = ked->f1;
@@ -327,10 +343,12 @@ static short summary_keyframes_loop(KeyframeEditData *ked,
           if (ked->iterflags & (KED_F1_NLA_UNMAP | KED_F2_NLA_UNMAP)) {
             AnimData *adt = ANIM_nla_mapping_get(ac, ale);
 
-            if (ked->iterflags & KED_F1_NLA_UNMAP)
+            if (ked->iterflags & KED_F1_NLA_UNMAP) {
               ked->f1 = BKE_nla_tweakedit_remap(adt, f1, NLATIME_CONVERT_UNMAP);
-            if (ked->iterflags & KED_F2_NLA_UNMAP)
+            }
+            if (ked->iterflags & KED_F2_NLA_UNMAP) {
               ked->f2 = BKE_nla_tweakedit_remap(adt, f2, NLATIME_CONVERT_UNMAP);
+            }
           }
 
           /* now operate on the channel as per normal */
@@ -348,8 +366,9 @@ static short summary_keyframes_loop(KeyframeEditData *ked,
       }
     }
 
-    if (ret_code)
+    if (ret_code) {
       break;
+    }
   }
 
   ANIM_animdata_freelist(&anim_data);
@@ -368,8 +387,9 @@ short ANIM_animchannel_keyframes_loop(KeyframeEditData *ked,
                                       FcuEditFunc fcu_cb)
 {
   /* sanity checks */
-  if (ale == NULL)
+  if (ale == NULL) {
     return 0;
+  }
 
   /* method to use depends on the type of keyframe data */
   switch (ale->datatype) {
@@ -407,8 +427,9 @@ short ANIM_animchanneldata_keyframes_loop(KeyframeEditData *ked,
                                           FcuEditFunc fcu_cb)
 {
   /* sanity checks */
-  if (data == NULL)
+  if (data == NULL) {
     return 0;
+  }
 
   /* method to use depends on the type of keyframe data */
   switch (keytype) {
@@ -435,11 +456,29 @@ short ANIM_animchanneldata_keyframes_loop(KeyframeEditData *ked,
   return 0;
 }
 
+void ANIM_animdata_keyframe_callback(bAnimContext *ac,
+                                     eAnimFilter_Flags filter,
+                                     KeyframeEditFunc callback_fn)
+{
+  ListBase anim_data = {NULL, NULL};
+  bAnimListElem *ale;
+
+  ANIM_animdata_filter(ac, &anim_data, filter, ac->data, ac->datatype);
+
+  for (ale = anim_data.first; ale; ale = ale->next) {
+    ANIM_fcurve_keyframes_loop(NULL, ale->key_data, NULL, callback_fn, calchandles_fcurve);
+    ale->update |= ANIM_UPDATE_DEFAULT;
+  }
+
+  ANIM_animdata_update(ac, &anim_data);
+  ANIM_animdata_freelist(&anim_data);
+}
+
 /* ************************************************************************** */
 /* Keyframe Integrity Tools */
 
 /* Rearrange keyframes if some are out of order */
-// used to be recalc_*_ipos() where * was object or action
+/* used to be recalc_*_ipos() where * was object or action */
 void ANIM_editkeyframes_refresh(bAnimContext *ac)
 {
   ListBase anim_data = {NULL, NULL};
@@ -467,21 +506,31 @@ void ANIM_editkeyframes_refresh(bAnimContext *ac)
 /* ------------------------ */
 /* Some macros to make this easier... */
 
-/* run the given check on the 3 handles
- * - check should be a macro, which takes the handle index as its single arg, which it substitutes later
- * - requires that a var, of type short, is named 'ok', and has been initialized to 0
+/* run the given check on the 3 handles:
+ * - Check should be a macro, which takes the handle index as its single arg,
+ *   which it substitutes later.
+ * - Requires that a var, of type short, is named 'ok',
+ *   and has been initialized to 0.
  */
 #define KEYFRAME_OK_CHECKS(check) \
   { \
     CHECK_TYPE(ok, short); \
-    if (check(1)) \
+    if (check(1)) { \
       ok |= KEYFRAME_OK_KEY; \
-\
+    } \
     if (ked && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) { \
-      if (check(0)) \
-        ok |= KEYFRAME_OK_H1; \
-      if (check(2)) \
-        ok |= KEYFRAME_OK_H2; \
+      /* Only act on visible items, so check handle visibility state. */ \
+      const bool handles_visible = ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ? \
+                                        (BEZT_ISSEL_ANY(bezt)) : \
+                                        true); \
+      if (handles_visible) { \
+        if (check(0)) { \
+          ok |= KEYFRAME_OK_H1; \
+        } \
+        if (check(2)) { \
+          ok |= KEYFRAME_OK_H2; \
+        } \
+      } \
     } \
   } \
   (void)0
@@ -519,19 +568,20 @@ static short ok_bezier_selected(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
   /* this macro checks all beztriple handles for selection...
    * only one of the verts has to be selected for this to be ok...
    */
-  if (BEZT_ISSEL_ANY(bezt))
+  if (BEZT_ISSEL_ANY(bezt)) {
     return KEYFRAME_OK_ALL;
-  else
-    return 0;
+  }
+  return 0;
 }
 
 static short ok_bezier_value(KeyframeEditData *ked, BezTriple *bezt)
 {
   short ok = 0;
 
-  /* value is stored in f1 property
-   * - this float accuracy check may need to be dropped?
-   * - should value be stored in f2 instead so that we won't have conflicts when using f1 for frames too?
+  /* Value is stored in f1 property:
+   * - This float accuracy check may need to be dropped?
+   * - Should value be stored in f2 instead
+   *   so that we won't have conflicts when using f1 for frames too?
    */
 #define KEY_CHECK_OK(_index) IS_EQF(bezt->vec[_index][1], ked->f1)
   KEYFRAME_OK_CHECKS(KEY_CHECK_OK);
@@ -567,8 +617,7 @@ static short ok_bezier_region(KeyframeEditData *ked, BezTriple *bezt)
     /* return ok flags */
     return ok;
   }
-  else
-    return 0;
+  return 0;
 }
 
 /**
@@ -582,7 +631,7 @@ bool keyframe_region_lasso_test(const KeyframeEdit_LassoData *data_lasso, const 
     BLI_rctf_transform_pt_v(data_lasso->rectf_view, data_lasso->rectf_scaled, xy_view, xy);
 
     if (BLI_lasso_is_point_inside(
-            data_lasso->mcords, data_lasso->mcords_tot, xy_view[0], xy_view[1], INT_MAX)) {
+            data_lasso->mcoords, data_lasso->mcoords_len, xy_view[0], xy_view[1], INT_MAX)) {
       return true;
     }
   }
@@ -603,8 +652,7 @@ static short ok_bezier_region_lasso(KeyframeEditData *ked, BezTriple *bezt)
     /* return ok flags */
     return ok;
   }
-  else
-    return 0;
+  return 0;
 }
 
 static short ok_bezier_channel_lasso(KeyframeEditData *ked, BezTriple *bezt)
@@ -628,8 +676,9 @@ static short ok_bezier_channel_lasso(KeyframeEditData *ked, BezTriple *bezt)
     pt[0] = bezt->vec[1][0];
     pt[1] = ked->channel_y;
 
-    if (keyframe_region_lasso_test(data, pt))
+    if (keyframe_region_lasso_test(data, pt)) {
       return KEYFRAME_OK_KEY;
+    }
   }
   return 0;
 }
@@ -665,8 +714,7 @@ static short ok_bezier_region_circle(KeyframeEditData *ked, BezTriple *bezt)
     /* return ok flags */
     return ok;
   }
-  else
-    return 0;
+  return 0;
 }
 
 static short ok_bezier_channel_circle(KeyframeEditData *ked, BezTriple *bezt)
@@ -690,8 +738,9 @@ static short ok_bezier_channel_circle(KeyframeEditData *ked, BezTriple *bezt)
     pt[0] = bezt->vec[1][0];
     pt[1] = ked->channel_y;
 
-    if (keyframe_region_circle_test(data, pt))
+    if (keyframe_region_circle_test(data, pt)) {
       return KEYFRAME_OK_KEY;
+    }
   }
   return 0;
 }
@@ -785,7 +834,7 @@ void bezt_remap_times(KeyframeEditData *ked, BezTriple *bezt)
   const float scale = (rmap->newMax - rmap->newMin) / (rmap->oldMax - rmap->oldMin);
 
   /* perform transform on all three handles unless indicated otherwise */
-  // TODO: need to include some checks for that
+  /* TODO: need to include some checks for that */
 
   bezt->vec[0][0] = scale * (bezt->vec[0][0] - rmap->oldMin) + rmap->newMin;
   bezt->vec[1][0] = scale * (bezt->vec[1][0] - rmap->oldMin) + rmap->newMin;
@@ -798,8 +847,9 @@ void bezt_remap_times(KeyframeEditData *ked, BezTriple *bezt)
 /* snaps the keyframe to the nearest frame */
 static short snap_bezier_nearest(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->vec[1][0] = (float)(floorf(bezt->vec[1][0] + 0.5f));
+  }
   return 0;
 }
 
@@ -809,8 +859,9 @@ static short snap_bezier_nearestsec(KeyframeEditData *ked, BezTriple *bezt)
   const Scene *scene = ked->scene;
   const float secf = (float)FPS;
 
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->vec[1][0] = (floorf(bezt->vec[1][0] / secf + 0.5f) * secf);
+  }
   return 0;
 }
 
@@ -818,16 +869,18 @@ static short snap_bezier_nearestsec(KeyframeEditData *ked, BezTriple *bezt)
 static short snap_bezier_cframe(KeyframeEditData *ked, BezTriple *bezt)
 {
   const Scene *scene = ked->scene;
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->vec[1][0] = (float)CFRA;
+  }
   return 0;
 }
 
 /* snaps the keyframe time to the nearest marker's frame */
 static short snap_bezier_nearmarker(KeyframeEditData *ked, BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->vec[1][0] = (float)ED_markers_find_nearest_marker_time(&ked->list, bezt->vec[1][0]);
+  }
   return 0;
 }
 
@@ -837,10 +890,12 @@ static short snap_bezier_horizontal(KeyframeEditData *UNUSED(ked), BezTriple *be
   if (bezt->f2 & SELECT) {
     bezt->vec[0][1] = bezt->vec[2][1] = bezt->vec[1][1];
 
-    if (ELEM(bezt->h1, HD_AUTO, HD_AUTO_ANIM, HD_VECT))
+    if (ELEM(bezt->h1, HD_AUTO, HD_AUTO_ANIM, HD_VECT)) {
       bezt->h1 = HD_ALIGN;
-    if (ELEM(bezt->h2, HD_AUTO, HD_AUTO_ANIM, HD_VECT))
+    }
+    if (ELEM(bezt->h2, HD_AUTO, HD_AUTO_ANIM, HD_VECT)) {
       bezt->h2 = HD_ALIGN;
+    }
   }
   return 0;
 }
@@ -848,23 +903,25 @@ static short snap_bezier_horizontal(KeyframeEditData *UNUSED(ked), BezTriple *be
 /* frame to snap to is stored in the custom data -> first float value slot */
 static short snap_bezier_time(KeyframeEditData *ked, BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->vec[1][0] = ked->f1;
+  }
   return 0;
 }
 
 /* value to snap to is stored in the custom data -> first float value slot */
 static short snap_bezier_value(KeyframeEditData *ked, BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->vec[1][1] = ked->f1;
+  }
   return 0;
 }
 
-KeyframeEditFunc ANIM_editkeyframes_snap(short type)
+KeyframeEditFunc ANIM_editkeyframes_snap(short mode)
 {
   /* eEditKeyframes_Snap */
-  switch (type) {
+  switch (mode) {
     case SNAP_KEYS_NEARFRAME: /* snap to nearest frame */
       return snap_bezier_nearest;
     case SNAP_KEYS_CURFRAME: /* snap to current frame */
@@ -888,26 +945,20 @@ KeyframeEditFunc ANIM_editkeyframes_snap(short type)
 
 static void mirror_bezier_xaxis_ex(BezTriple *bezt, const float center)
 {
-  float diff;
-  int i;
-
-  for (i = 0; i < 3; i++) {
-    diff = (center - bezt->vec[i][0]);
+  for (int i = 0; i < 3; i++) {
+    float diff = (center - bezt->vec[i][0]);
     bezt->vec[i][0] = (center + diff);
   }
   swap_v3_v3(bezt->vec[0], bezt->vec[2]);
 
-  SWAP(char, bezt->h1, bezt->h2);
-  SWAP(char, bezt->f1, bezt->f3);
+  SWAP(uint8_t, bezt->h1, bezt->h2);
+  SWAP(uint8_t, bezt->f1, bezt->f3);
 }
 
 static void mirror_bezier_yaxis_ex(BezTriple *bezt, const float center)
 {
-  float diff;
-  int i;
-
-  for (i = 0; i < 3; i++) {
-    diff = (center - bezt->vec[i][1]);
+  for (int i = 0; i < 3; i++) {
+    float diff = (center - bezt->vec[i][1]);
     bezt->vec[i][1] = (center + diff);
   }
 }
@@ -974,10 +1025,10 @@ static short mirror_bezier_value(KeyframeEditData *ked, BezTriple *bezt)
 }
 
 /* Note: for markers and 'value', the values to use must be supplied as the first float value */
-// calchandles_fcurve
-KeyframeEditFunc ANIM_editkeyframes_mirror(short type)
+/* calchandles_fcurve */
+KeyframeEditFunc ANIM_editkeyframes_mirror(short mode)
 {
-  switch (type) {
+  switch (mode) {
     case MIRROR_KEYS_CURFRAME: /* mirror over current frame */
       return mirror_bezier_cframe;
     case MIRROR_KEYS_YAXIS: /* mirror over frame 0 */
@@ -998,29 +1049,40 @@ KeyframeEditFunc ANIM_editkeyframes_mirror(short type)
 /* ******************************************* */
 /* Settings */
 
-/* standard validation step for a few of these (implemented as macro for inlining without fn-call overhead):
- * "if the handles are not of the same type, set them to type free"
+/**
+ * Standard validation step for a few of these
+ * (implemented as macro for inlining without fn-call overhead):
+ * "if the handles are not of the same type, set them to type free".
  */
 #define ENSURE_HANDLES_MATCH(bezt) \
   if (bezt->h1 != bezt->h2) { \
-    if (ELEM(bezt->h1, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) \
+    if (ELEM(bezt->h1, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) { \
       bezt->h1 = HD_FREE; \
-    if (ELEM(bezt->h2, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) \
+    } \
+    if (ELEM(bezt->h2, HD_ALIGN, HD_AUTO, HD_AUTO_ANIM)) { \
       bezt->h2 = HD_FREE; \
+    } \
   } \
   (void)0
 
 /* Sets the selected bezier handles to type 'auto' */
 static short set_bezier_auto(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if ((bezt->f1 & SELECT) || (bezt->f3 & SELECT)) {
-    if (bezt->f1 & SELECT)
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_AUTO;
+  }
+  else {
+    if (bezt->f1 & SELECT) {
       bezt->h1 = HD_AUTO;
-    if (bezt->f3 & SELECT)
+    }
+    if (bezt->f3 & SELECT) {
       bezt->h2 = HD_AUTO;
+    }
 
     ENSURE_HANDLES_MATCH(bezt);
   }
+
   return 0;
 }
 
@@ -1029,64 +1091,103 @@ static short set_bezier_auto(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
  */
 static short set_bezier_auto_clamped(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if ((bezt->f1 & SELECT) || (bezt->f3 & SELECT)) {
-    if (bezt->f1 & SELECT)
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_AUTO_ANIM;
+  }
+  else {
+    if (bezt->f1 & SELECT) {
       bezt->h1 = HD_AUTO_ANIM;
-    if (bezt->f3 & SELECT)
+    }
+    if (bezt->f3 & SELECT) {
       bezt->h2 = HD_AUTO_ANIM;
+    }
 
     ENSURE_HANDLES_MATCH(bezt);
   }
+
   return 0;
 }
 
 /* Sets the selected bezier handles to type 'vector'  */
 static short set_bezier_vector(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f1 & SELECT)
-    bezt->h1 = HD_VECT;
-  if (bezt->f3 & SELECT)
-    bezt->h2 = HD_VECT;
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_VECT;
+  }
+  else {
+    if (bezt->f1 & SELECT) {
+      bezt->h1 = HD_VECT;
+    }
+    if (bezt->f3 & SELECT) {
+      bezt->h2 = HD_VECT;
+    }
+  }
+
   return 0;
 }
 
-/* Queries if the handle should be set to 'free' or 'align' */
-// NOTE: this was used for the 'toggle free/align' option
-//      currently this isn't used, but may be restored later
+/**
+ * Queries if the handle should be set to 'free' or 'align'.
+ *
+ * \note This was used for the 'toggle free/align' option
+ * currently this isn't used, but may be restored later.
+ */
 static short bezier_isfree(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if ((bezt->f1 & SELECT) && (bezt->h1))
+  if ((bezt->f1 & SELECT) && (bezt->h1)) {
     return 1;
-  if ((bezt->f3 & SELECT) && (bezt->h2))
+  }
+  if ((bezt->f3 & SELECT) && (bezt->h2)) {
     return 1;
+  }
   return 0;
 }
 
 /* Sets selected bezier handles to type 'align' */
 static short set_bezier_align(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f1 & SELECT)
-    bezt->h1 = HD_ALIGN;
-  if (bezt->f3 & SELECT)
-    bezt->h2 = HD_ALIGN;
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_ALIGN;
+  }
+  else {
+    if (bezt->f1 & SELECT) {
+      bezt->h1 = HD_ALIGN;
+    }
+    if (bezt->f3 & SELECT) {
+      bezt->h2 = HD_ALIGN;
+    }
+  }
+
   return 0;
 }
 
 /* Sets selected bezier handles to type 'free'  */
 static short set_bezier_free(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f1 & SELECT)
-    bezt->h1 = HD_FREE;
-  if (bezt->f3 & SELECT)
-    bezt->h2 = HD_FREE;
+  /* If the key is selected, always apply to both handles. */
+  if (bezt->f2 & SELECT) {
+    bezt->h1 = bezt->h2 = HD_FREE;
+  }
+  else {
+    if (bezt->f1 & SELECT) {
+      bezt->h1 = HD_FREE;
+    }
+    if (bezt->f3 & SELECT) {
+      bezt->h2 = HD_FREE;
+    }
+  }
+
   return 0;
 }
 
 /* Set all selected Bezier Handles to a single type */
-// calchandles_fcurve
-KeyframeEditFunc ANIM_editkeyframes_handles(short code)
+/* calchandles_fcurve */
+KeyframeEditFunc ANIM_editkeyframes_handles(short mode)
 {
-  switch (code) {
+  switch (mode) {
     case HD_AUTO: /* auto */
       return set_bezier_auto;
     case HD_AUTO_ANIM: /* auto clamped */
@@ -1108,100 +1209,113 @@ KeyframeEditFunc ANIM_editkeyframes_handles(short code)
 
 static short set_bezt_constant(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_CONST;
+  }
   return 0;
 }
 
 static short set_bezt_linear(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_LIN;
+  }
   return 0;
 }
 
 static short set_bezt_bezier(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_BEZ;
+  }
   return 0;
 }
 
 static short set_bezt_back(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_BACK;
+  }
   return 0;
 }
 
 static short set_bezt_bounce(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_BOUNCE;
+  }
   return 0;
 }
 
 static short set_bezt_circle(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_CIRC;
+  }
   return 0;
 }
 
 static short set_bezt_cubic(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_CUBIC;
+  }
   return 0;
 }
 
 static short set_bezt_elastic(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_ELASTIC;
+  }
   return 0;
 }
 
 static short set_bezt_expo(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_EXPO;
+  }
   return 0;
 }
 
 static short set_bezt_quad(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_QUAD;
+  }
   return 0;
 }
 
 static short set_bezt_quart(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_QUART;
+  }
   return 0;
 }
 
 static short set_bezt_quint(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_QUINT;
+  }
   return 0;
 }
 
 static short set_bezt_sine(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->ipo = BEZT_IPO_SINE;
+  }
   return 0;
 }
 
 /* Set the interpolation type of the selected BezTriples in each F-Curve to the specified one */
-// ANIM_editkeyframes_ipocurve_ipotype() !
-KeyframeEditFunc ANIM_editkeyframes_ipo(short code)
+/* ANIM_editkeyframes_ipocurve_ipotype() ! */
+KeyframeEditFunc ANIM_editkeyframes_ipo(short mode)
 {
-  switch (code) {
+  switch (mode) {
     /* interpolation */
     case BEZT_IPO_CONST: /* constant */
       return set_bezt_constant;
@@ -1239,43 +1353,48 @@ KeyframeEditFunc ANIM_editkeyframes_ipo(short code)
 
 static short set_keytype_keyframe(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     BEZKEYTYPE(bezt) = BEZT_KEYTYPE_KEYFRAME;
+  }
   return 0;
 }
 
 static short set_keytype_breakdown(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     BEZKEYTYPE(bezt) = BEZT_KEYTYPE_BREAKDOWN;
+  }
   return 0;
 }
 
 static short set_keytype_extreme(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     BEZKEYTYPE(bezt) = BEZT_KEYTYPE_EXTREME;
+  }
   return 0;
 }
 
 static short set_keytype_jitter(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     BEZKEYTYPE(bezt) = BEZT_KEYTYPE_JITTER;
+  }
   return 0;
 }
 
 static short set_keytype_moving_hold(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     BEZKEYTYPE(bezt) = BEZT_KEYTYPE_MOVEHOLD;
+  }
   return 0;
 }
 
 /* Set the interpolation type of the selected BezTriples in each F-Curve to the specified one */
-KeyframeEditFunc ANIM_editkeyframes_keytype(short code)
+KeyframeEditFunc ANIM_editkeyframes_keytype(short mode)
 {
-  switch (code) {
+  switch (mode) {
     case BEZT_KEYTYPE_BREAKDOWN: /* breakdown */
       return set_keytype_breakdown;
 
@@ -1298,29 +1417,33 @@ KeyframeEditFunc ANIM_editkeyframes_keytype(short code)
 
 static short set_easingtype_easein(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->easing = BEZT_IPO_EASE_IN;
+  }
   return 0;
 }
 
 static short set_easingtype_easeout(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->easing = BEZT_IPO_EASE_OUT;
+  }
   return 0;
 }
 
 static short set_easingtype_easeinout(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->easing = BEZT_IPO_EASE_IN_OUT;
+  }
   return 0;
 }
 
 static short set_easingtype_easeauto(KeyframeEditData *UNUSED(ked), BezTriple *bezt)
 {
-  if (bezt->f2 & SELECT)
+  if (bezt->f2 & SELECT) {
     bezt->easing = BEZT_IPO_EASE_AUTO;
+  }
   return 0;
 }
 
@@ -1347,14 +1470,22 @@ KeyframeEditFunc ANIM_editkeyframes_easing(short mode)
 
 static short select_bezier_add(KeyframeEditData *ked, BezTriple *bezt)
 {
+  /* Only act on visible items, so check handle visibility state. */
+  const bool handles_visible = ked && ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ?
+                                           (BEZT_ISSEL_ANY(bezt)) :
+                                           true);
+
   /* if we've got info on what to select, use it, otherwise select all */
-  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) {
-    if (ked->curflags & KEYFRAME_OK_KEY)
+  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES) && handles_visible) {
+    if (ked->curflags & KEYFRAME_OK_KEY) {
       bezt->f2 |= SELECT;
-    if (ked->curflags & KEYFRAME_OK_H1)
+    }
+    if (ked->curflags & KEYFRAME_OK_H1) {
       bezt->f1 |= SELECT;
-    if (ked->curflags & KEYFRAME_OK_H2)
+    }
+    if (ked->curflags & KEYFRAME_OK_H2) {
       bezt->f3 |= SELECT;
+    }
   }
   else {
     BEZT_SEL_ALL(bezt);
@@ -1365,14 +1496,22 @@ static short select_bezier_add(KeyframeEditData *ked, BezTriple *bezt)
 
 static short select_bezier_subtract(KeyframeEditData *ked, BezTriple *bezt)
 {
+  /* Only act on visible items, so check handle visibility state. */
+  const bool handles_visible = ked && ((ked->iterflags & KEYFRAME_ITER_HANDLES_DEFAULT_INVISIBLE) ?
+                                           (BEZT_ISSEL_ANY(bezt)) :
+                                           true);
+
   /* if we've got info on what to deselect, use it, otherwise deselect all */
-  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES)) {
-    if (ked->curflags & KEYFRAME_OK_KEY)
+  if ((ked) && (ked->iterflags & KEYFRAME_ITER_INCL_HANDLES) && handles_visible) {
+    if (ked->curflags & KEYFRAME_OK_KEY) {
       bezt->f2 &= ~SELECT;
-    if (ked->curflags & KEYFRAME_OK_H1)
+    }
+    if (ked->curflags & KEYFRAME_OK_H1) {
       bezt->f1 &= ~SELECT;
-    if (ked->curflags & KEYFRAME_OK_H2)
+    }
+    if (ked->curflags & KEYFRAME_OK_H2) {
       bezt->f3 &= ~SELECT;
+    }
   }
   else {
     BEZT_DESEL_ALL(bezt);
@@ -1470,8 +1609,9 @@ static short selmap_build_bezier_less(KeyframeEditData *ked, BezTriple *bezt)
     if (i > 0) {
       BezTriple *prev = bezt - 1;
 
-      if (BEZT_ISSEL_ANY(prev) == 0)
+      if (BEZT_ISSEL_ANY(prev) == 0) {
         return 0;
+      }
     }
     else if (i == 0) {
       /* current keyframe is selected at an endpoint, so should get deselected */
@@ -1482,8 +1622,9 @@ static short selmap_build_bezier_less(KeyframeEditData *ked, BezTriple *bezt)
     if (i < (fcu->totvert - 1)) {
       BezTriple *next = bezt + 1;
 
-      if (BEZT_ISSEL_ANY(next) == 0)
+      if (BEZT_ISSEL_ANY(next) == 0) {
         return 0;
+      }
     }
     else if (i == (fcu->totvert - 1)) {
       /* current keyframe is selected at an endpoint, so should get deselected */

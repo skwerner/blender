@@ -26,14 +26,15 @@
  * Only included in WM_api.h
  */
 
-#ifndef __WM_GIZMO_API_H__
-#define __WM_GIZMO_API_H__
+#pragma once
 
 struct ARegion;
 struct GHashIterator;
 struct IDProperty;
 struct Main;
 struct PropertyRNA;
+struct ScrArea;
+struct bToolRef;
 struct wmGizmo;
 struct wmGizmoGroup;
 struct wmGizmoGroupType;
@@ -46,8 +47,13 @@ struct wmGizmoType;
 struct wmKeyConfig;
 struct wmMsgSubscribeKey;
 struct wmMsgSubscribeValue;
+struct wmWindowManager;
 
 #include "wm_gizmo_fn.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* -------------------------------------------------------------------- */
 /* wmGizmo */
@@ -66,7 +72,7 @@ void WM_gizmo_unlink(ListBase *gizmolist,
 
 bool WM_gizmo_select_unlink(struct wmGizmoMap *gzmap, struct wmGizmo *gz);
 bool WM_gizmo_select_set(struct wmGizmoMap *gzmap, struct wmGizmo *gz, bool select);
-void WM_gizmo_highlight_set(struct wmGizmoMap *gzmap, struct wmGizmo *gz);
+bool WM_gizmo_highlight_set(struct wmGizmoMap *gzmap, struct wmGizmo *gz);
 
 void WM_gizmo_modal_set_from_setup(struct wmGizmoMap *gzmap,
                                    struct bContext *C,
@@ -90,7 +96,7 @@ void WM_gizmo_set_matrix_rotation_from_yz_axis(struct wmGizmo *gz,
                                                const float y_axis[3],
                                                const float z_axis[3]);
 
-void WM_gizmo_set_matrix_offset_location(struct wmGizmo *gz, const float origin[3]);
+void WM_gizmo_set_matrix_offset_location(struct wmGizmo *gz, const float offset[3]);
 void WM_gizmo_set_matrix_offset_rotation_from_z_axis(struct wmGizmo *gz, const float z_axis[3]);
 void WM_gizmo_set_matrix_offset_rotation_from_yz_axis(struct wmGizmo *gz,
                                                       const float y_axis[3],
@@ -124,32 +130,31 @@ void WM_gizmo_calc_matrix_final(const struct wmGizmo *gz, float r_mat[4][4]);
 
 /* properties */
 void WM_gizmo_properties_create_ptr(struct PointerRNA *ptr, struct wmGizmoType *gzt);
-void WM_gizmo_properties_create(struct PointerRNA *ptr, const char *opstring);
+void WM_gizmo_properties_create(struct PointerRNA *ptr, const char *gtstring);
 void WM_gizmo_properties_alloc(struct PointerRNA **ptr,
                                struct IDProperty **properties,
-                               const char *wtstring);
+                               const char *gtstring);
 void WM_gizmo_properties_sanitize(struct PointerRNA *ptr, const bool no_context);
 bool WM_gizmo_properties_default(struct PointerRNA *ptr, const bool do_update);
-void WM_gizmo_properties_reset(struct wmGizmo *op);
+void WM_gizmo_properties_reset(struct wmGizmo *gz);
 void WM_gizmo_properties_clear(struct PointerRNA *ptr);
 void WM_gizmo_properties_free(struct PointerRNA *ptr);
 
 /* wm_gizmo_type.c */
 const struct wmGizmoType *WM_gizmotype_find(const char *idname, bool quiet);
-void WM_gizmotype_append(void (*wtfunc)(struct wmGizmoType *));
-void WM_gizmotype_append_ptr(void (*mnpfunc)(struct wmGizmoType *, void *), void *userdata);
+void WM_gizmotype_append(void (*gtfunc)(struct wmGizmoType *));
+void WM_gizmotype_append_ptr(void (*gtfunc)(struct wmGizmoType *, void *), void *userdata);
 bool WM_gizmotype_remove(struct bContext *C, struct Main *bmain, const char *idname);
 void WM_gizmotype_remove_ptr(struct bContext *C, struct Main *bmain, struct wmGizmoType *gzt);
+void WM_gizmotype_free_ptr(struct wmGizmoType *gzt);
 void WM_gizmotype_iter(struct GHashIterator *ghi);
 
 /* wm_gizmo_group_type.c */
 struct wmGizmoGroupType *WM_gizmogrouptype_find(const char *idname, bool quiet);
 struct wmGizmoGroupType *WM_gizmogrouptype_append(void (*wtfunc)(struct wmGizmoGroupType *));
-struct wmGizmoGroupType *WM_gizmogrouptype_append_ptr(void (*mnpfunc)(struct wmGizmoGroupType *,
-                                                                      void *),
+struct wmGizmoGroupType *WM_gizmogrouptype_append_ptr(void (*wtfunc)(struct wmGizmoGroupType *,
+                                                                     void *),
                                                       void *userdata);
-bool WM_gizmogrouptype_free(const char *idname);
-void WM_gizmogrouptype_free_ptr(struct wmGizmoGroupType *wt);
 void WM_gizmogrouptype_iter(struct GHashIterator *ghi);
 
 struct wmGizmoGroupTypeRef *WM_gizmogrouptype_append_and_link(
@@ -158,11 +163,13 @@ struct wmGizmoGroupTypeRef *WM_gizmogrouptype_append_and_link(
 /* wm_gizmo_map.c */
 
 /* Dynamic Updates (for RNA runtime registration) */
-void WM_gizmoconfig_update_tag_init(struct wmGizmoMapType *gzmap_type,
-                                    struct wmGizmoGroupType *gzgt);
-void WM_gizmoconfig_update_tag_remove(struct wmGizmoMapType *gzmap_type,
-                                      struct wmGizmoGroupType *gzgt);
+void WM_gizmoconfig_update_tag_group_type_init(struct wmGizmoMapType *gzmap_type,
+                                               struct wmGizmoGroupType *gzgt);
+void WM_gizmoconfig_update_tag_group_type_remove(struct wmGizmoMapType *gzmap_type,
+                                                 struct wmGizmoGroupType *gzgt);
 void WM_gizmoconfig_update(struct Main *bmain);
+
+void WM_gizmoconfig_update_tag_group_remove(struct wmGizmoMap *gzmap);
 
 /* wm_maniulator_target_props.c */
 struct wmGizmoProperty *WM_gizmo_target_property_array(struct wmGizmo *gz);
@@ -229,16 +236,40 @@ void WM_gizmo_do_msg_notify_tag_refresh(struct bContext *C,
                                         struct wmMsgSubscribeValue *msg_val);
 void WM_gizmo_target_property_subscribe_all(struct wmGizmo *gz,
                                             struct wmMsgBus *mbus,
-                                            struct ARegion *ar);
+                                            struct ARegion *region);
+
+void WM_gizmo_target_property_anim_autokey(struct bContext *C,
+                                           const struct wmGizmo *gz,
+                                           struct wmGizmoProperty *gz_prop);
 
 /* -------------------------------------------------------------------- */
 /* wmGizmoGroup */
 
 /* Callbacks for 'wmGizmoGroupType.setup_keymap' */
-struct wmKeyMap *WM_gizmogroup_keymap_common(const struct wmGizmoGroupType *gzgt,
-                                             struct wmKeyConfig *config);
-struct wmKeyMap *WM_gizmogroup_keymap_common_select(const struct wmGizmoGroupType *gzgt,
-                                                    struct wmKeyConfig *config);
+struct wmKeyMap *WM_gizmogroup_setup_keymap_generic(const struct wmGizmoGroupType *gzgt,
+                                                    struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmogroup_setup_keymap_generic_select(const struct wmGizmoGroupType *gzgt,
+                                                           struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmogroup_setup_keymap_generic_drag(const struct wmGizmoGroupType *gzgt,
+                                                         struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmogroup_setup_keymap_generic_maybe_drag(const struct wmGizmoGroupType *gzgt,
+                                                               struct wmKeyConfig *kc);
+
+/* Utility functions (not callbacks). */
+struct wmKeyMap *WM_gizmo_keymap_generic_with_keyconfig(struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmo_keymap_generic(struct wmWindowManager *wm);
+
+struct wmKeyMap *WM_gizmo_keymap_generic_select_with_keyconfig(struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmo_keymap_generic_select(struct wmWindowManager *wm);
+
+struct wmKeyMap *WM_gizmo_keymap_generic_drag_with_keyconfig(struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmo_keymap_generic_drag(struct wmWindowManager *wm);
+
+struct wmKeyMap *WM_gizmo_keymap_generic_click_drag_with_keyconfig(struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmo_keymap_generic_click_drag(struct wmWindowManager *wm);
+
+struct wmKeyMap *WM_gizmo_keymap_generic_maybe_drag_with_keyconfig(struct wmKeyConfig *kc);
+struct wmKeyMap *WM_gizmo_keymap_generic_maybe_drag(struct wmWindowManager *wm);
 
 void WM_gizmogroup_ensure_init(const struct bContext *C, struct wmGizmoGroup *gzgroup);
 
@@ -255,16 +286,23 @@ const struct ListBase *WM_gizmomap_group_list(struct wmGizmoMap *gzmap);
 struct wmGizmoGroup *WM_gizmomap_group_find(struct wmGizmoMap *gzmap, const char *idname);
 struct wmGizmoGroup *WM_gizmomap_group_find_ptr(struct wmGizmoMap *gzmap,
                                                 const struct wmGizmoGroupType *gzgt);
+
+eWM_GizmoFlagMapDrawStep WM_gizmomap_drawstep_from_gizmo_group(const struct wmGizmoGroup *gzgroup);
+void WM_gizmomap_tag_refresh_drawstep(struct wmGizmoMap *gzmap,
+                                      const eWM_GizmoFlagMapDrawStep drawstep);
 void WM_gizmomap_tag_refresh(struct wmGizmoMap *gzmap);
+
+bool WM_gizmomap_tag_delay_refresh_for_tweak_check(struct wmGizmoMap *gzmap);
+
 void WM_gizmomap_draw(struct wmGizmoMap *gzmap,
                       const struct bContext *C,
                       const eWM_GizmoFlagMapDrawStep drawstep);
-void WM_gizmomap_add_handlers(struct ARegion *ar, struct wmGizmoMap *gzmap);
+void WM_gizmomap_add_handlers(struct ARegion *region, struct wmGizmoMap *gzmap);
 bool WM_gizmomap_select_all(struct bContext *C, struct wmGizmoMap *gzmap, const int action);
 bool WM_gizmomap_cursor_set(const struct wmGizmoMap *gzmap, struct wmWindow *win);
-void WM_gizmomap_message_subscribe(struct bContext *C,
+void WM_gizmomap_message_subscribe(const struct bContext *C,
                                    struct wmGizmoMap *gzmap,
-                                   struct ARegion *ar,
+                                   struct ARegion *region,
                                    struct wmMsgBus *mbus);
 bool WM_gizmomap_is_any_selected(const struct wmGizmoMap *gzmap);
 bool WM_gizmomap_minmax(const struct wmGizmoMap *gzmap,
@@ -273,8 +311,11 @@ bool WM_gizmomap_minmax(const struct wmGizmoMap *gzmap,
                         float r_min[3],
                         float r_max[3]);
 
-struct ARegion *WM_gizmomap_tooltip_init(
-    struct bContext *C, struct ARegion *ar, int *pass, double *pass_delay, bool *r_exit_on_event);
+struct ARegion *WM_gizmomap_tooltip_init(struct bContext *C,
+                                         struct ARegion *region,
+                                         int *pass,
+                                         double *pass_delay,
+                                         bool *r_exit_on_event);
 
 /* -------------------------------------------------------------------- */
 /* wmGizmoMapType */
@@ -298,7 +339,7 @@ void WM_gizmomaptype_group_init_runtime(const struct Main *bmain,
                                         struct wmGizmoGroupType *gzgt);
 wmGizmoGroup *WM_gizmomaptype_group_init_runtime_with_region(struct wmGizmoMapType *gzmap_type,
                                                              struct wmGizmoGroupType *gzgt,
-                                                             struct ARegion *ar);
+                                                             struct ARegion *region);
 void WM_gizmomaptype_group_unlink(struct bContext *C,
                                   struct Main *bmain,
                                   struct wmGizmoMapType *gzmap_type,
@@ -332,6 +373,13 @@ void WM_gizmo_group_type_unlink_delayed_ptr_ex(struct wmGizmoGroupType *gzgt,
 void WM_gizmo_group_type_unlink_delayed_ptr(struct wmGizmoGroupType *gzgt);
 void WM_gizmo_group_type_unlink_delayed(const char *idname);
 
+void WM_gizmo_group_unlink_delayed_ptr_from_space(struct wmGizmoGroupType *gzgt,
+                                                  struct wmGizmoMapType *gzmap_type,
+                                                  struct ScrArea *area);
+
+void WM_gizmo_group_type_free_ptr(wmGizmoGroupType *gzgt);
+bool WM_gizmo_group_type_free(const char *idname);
+
 /* Has the result of unlinking and linking (re-initializes gizmo's). */
 void WM_gizmo_group_type_reinit_ptr_ex(struct Main *bmain,
                                        struct wmGizmoGroupType *gzgt,
@@ -342,6 +390,17 @@ void WM_gizmo_group_type_reinit(struct Main *bmain, const char *idname);
 /* Utilities */
 bool WM_gizmo_context_check_drawstep(const struct bContext *C, eWM_GizmoFlagMapDrawStep step);
 
-bool WM_gizmo_group_type_poll(const struct bContext *C, const struct wmGizmoGroupType *gzgt);
+void WM_gizmo_group_remove_by_tool(struct bContext *C,
+                                   struct Main *bmain,
+                                   const struct wmGizmoGroupType *gzgt,
+                                   const struct bToolRef *tref);
 
-#endif /* __WM_GIZMO_API_H__ */
+void WM_gizmo_group_tag_remove(struct wmGizmoGroup *gzgroup);
+
+/* Wrap Group Type Callbacks. */
+bool WM_gizmo_group_type_poll(const struct bContext *C, const struct wmGizmoGroupType *gzgt);
+void WM_gizmo_group_refresh(const struct bContext *C, struct wmGizmoGroup *gzgroup);
+
+#ifdef __cplusplus
+}
+#endif

@@ -14,12 +14,13 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLENDER_STROKE_RENDERER_H__
-#define __BLENDER_STROKE_RENDERER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  */
+
+#include "BLI_map.hh"
 
 #include "../stroke/StrokeRenderer.h"
 #include "../system/FreestyleConfig.h"
@@ -50,15 +51,15 @@ class BlenderStrokeRenderer : public StrokeRenderer {
   Object *NewMesh() const;
 
   struct StrokeGroup {
-    explicit StrokeGroup() : totvert(0), totedge(0), totpoly(0), totloop(0), totcol(0)
+    explicit StrokeGroup() : totvert(0), totedge(0), totpoly(0), totloop(0)
     {
     }
     vector<StrokeRep *> strokes;
+    blender::Map<Material *, int> materials;
     int totvert;
     int totedge;
     int totpoly;
     int totloop;
-    int totcol;
   };
   vector<StrokeGroup *> strokeGroups, texturedStrokeGroups;
 
@@ -100,5 +101,3 @@ class BlenderStrokeRenderer : public StrokeRenderer {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __BLENDER_STROKE_RENDERER_H__

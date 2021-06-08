@@ -16,10 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_BILATERALBLUROPERATION_H__
-#define __COM_BILATERALBLUROPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "COM_QualityStepHelper.h"
+
+namespace blender::compositor {
 
 class BilateralBlurOperation : public NodeOperation, public QualityStepHelper {
  private:
@@ -32,27 +34,28 @@ class BilateralBlurOperation : public NodeOperation, public QualityStepHelper {
   BilateralBlurOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
   void setData(NodeBilateralBlurData *data)
   {
     this->m_data = data;
   }
 };
-#endif
+
+}  // namespace blender::compositor

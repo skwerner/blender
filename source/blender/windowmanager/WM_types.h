@@ -19,24 +19,35 @@
 
 /** \file
  * \ingroup wm
- */
-
-#ifndef __WM_TYPES_H__
-#define __WM_TYPES_H__
-
-/**
+ *
+ *
  * Overview of WM structs
  * ======================
  *
- * <pre>
- * > wmWindowManager    (window manager stores a list of windows)
- * > > wmWindow         (window has an active screen)
- * > > > bScreen        (link to ScrAreas via 'areabase')
- * > > > > ScrArea      (stores multiple spaces via space links via 'spacedata')
- * > > > > > SpaceLink  (base struct for space data for all different space types)
- * > > > > ScrArea      (stores multiple regions via 'regionbase')
- * > > > > > ARegion
- * </pre>
+ * - #wmWindowManager.windows -> #wmWindow <br>
+ *   Window manager stores a list of windows.
+ *
+ *   - #wmWindow.screen -> #bScreen <br>
+ *     Window has an active screen.
+ *
+ *     - #bScreen.areabase -> #ScrArea <br>
+ *       Link to #ScrArea.
+ *
+ *       - #ScrArea.spacedata <br>
+ *         Stores multiple spaces via space links.
+ *
+ *         - #SpaceLink <br>
+ *           Base struct for space data for all different space types.
+ *
+ *       - #ScrArea.regionbase -> #ARegion <br>
+ *         Stores multiple regions.
+ *
+ *     - #bScreen.regionbase -> #ARegion <br>
+ *       Global screen level regions, e.g. popups, popovers, menus.
+ *
+ *   - #wmWindow.global_areas -> #ScrAreaMap <br>
+ *     Global screen via 'areabase', e.g. top-bar & status-bar.
+ *
  *
  * Window Layout
  * =============
@@ -70,7 +81,7 @@
  * ScrArea's store a list of space data (SpaceLinks), each of unique type.
  * The first one is the displayed in the UI, others are added as needed.
  *
- * +----------------------------+  <-- sa->spacedata.first;
+ * +----------------------------+  <-- area->spacedata.first;
  * |                            |
  * |                            |---+  <-- other inactive SpaceLink's stored.
  * |                            |   |
@@ -88,65 +99,103 @@
  *
  * A common way to get the space from the ScrArea:
  * \code{.c}
- * if (sa->spacetype == SPACE_VIEW3D) {
- *     View3D *v3d = sa->spacedata.first;
+ * if (area->spacetype == SPACE_VIEW3D) {
+ *     View3D *v3d = area->spacedata.first;
  *     ...
  * }
  * \endcode
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#pragma once
 
 struct ID;
 struct ImBuf;
 struct bContext;
 struct wmEvent;
-struct wmMsgBus;
 struct wmOperator;
 struct wmWindowManager;
 
-#include "RNA_types.h"
+#include "BLI_compiler_attrs.h"
 #include "DNA_listBase.h"
 #include "DNA_vec_types.h"
-#include "BLI_compiler_attrs.h"
+#include "RNA_types.h"
 
 /* exported types for WM */
+#include "gizmo/WM_gizmo_types.h"
 #include "wm_cursors.h"
 #include "wm_event_types.h"
-#include "gizmo/WM_gizmo_types.h"
 
 /* Include external gizmo API's */
 #include "gizmo/WM_gizmo_api.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef void (*wmGenericUserDataFreeFn)(void *data);
+
+typedef struct wmGenericUserData {
+  void *data;
+  /** When NULL, use #MEM_freeN. */
+  wmGenericUserDataFreeFn free_fn;
+  bool use_free;
+} wmGenericUserData;
+
+typedef void (*wmGenericCallbackFn)(struct bContext *C, void *user_data);
+
+typedef struct wmGenericCallback {
+  wmGenericCallbackFn exec;
+  void *user_data;
+  wmGenericUserDataFreeFn free_user_data;
+} wmGenericCallback;
+
 /* ************** wmOperatorType ************************ */
 
-/* flag */
+/** #wmOperatorType.flag */
 enum {
-  OPTYPE_REGISTER = (1 << 0), /* register operators in stack after finishing */
-  OPTYPE_UNDO = (1 << 1),     /* do undo push after after */
-  OPTYPE_BLOCKING = (1 << 2), /* let blender grab all input from the WM (X11) */
+  /** Register operators in stack after finishing (needed for redo). */
+  OPTYPE_REGISTER = (1 << 0),
+  /** Do an undo push after the operator runs. */
+  OPTYPE_UNDO = (1 << 1),
+  /** Let Blender grab all input from the WM (X11). */
+  OPTYPE_BLOCKING = (1 << 2),
   OPTYPE_MACRO = (1 << 3),
-  OPTYPE_GRAB_CURSOR =
-      (1 << 4), /* grabs the cursor and optionally enables continuous cursor wrapping */
-  OPTYPE_PRESET = (1 << 5), /* show preset menu */
 
-  /* some operators are mainly for internal use
-   * and don't make sense to be accessed from the
-   * search menu, even if poll() returns true.
-   * currently only used for the search toolbox */
-  OPTYPE_INTERNAL = (1 << 6),
+  /** Grabs the cursor and optionally enables continuous cursor wrapping. */
+  OPTYPE_GRAB_CURSOR_XY = (1 << 4),
+  /** Only warp on the X axis. */
+  OPTYPE_GRAB_CURSOR_X = (1 << 5),
+  /** Only warp on the Y axis. */
+  OPTYPE_GRAB_CURSOR_Y = (1 << 6),
 
-  OPTYPE_LOCK_BYPASS = (1 << 7), /* Allow operator to run when interface is locked */
-  OPTYPE_UNDO_GROUPED =
-      (1 << 8), /* Special type of undo which doesn't store itself multiple times */
-  OPTYPE_USE_EVAL_DATA =
-      (1 << 9), /* Need evaluated data (i.e. a valid, up-to-date depsgraph for current context) */
+  /** Show preset menu. */
+  OPTYPE_PRESET = (1 << 7),
+
+  /**
+   * Some operators are mainly for internal use and don't make sense
+   * to be accessed from the search menu, even if poll() returns true.
+   * Currently only used for the search toolbox.
+   */
+  OPTYPE_INTERNAL = (1 << 8),
+
+  /** Allow operator to run when interface is locked. */
+  OPTYPE_LOCK_BYPASS = (1 << 9),
+  /** Special type of undo which doesn't store itself multiple times. */
+  OPTYPE_UNDO_GROUPED = (1 << 10),
 };
 
-/* context to call operator in for WM_operator_name_call */
-/* rna_ui.c contains EnumPropertyItem's of these, keep in sync */
+/** For #WM_cursor_grab_enable wrap axis. */
+enum {
+  WM_CURSOR_WRAP_NONE = 0,
+  WM_CURSOR_WRAP_X,
+  WM_CURSOR_WRAP_Y,
+  WM_CURSOR_WRAP_XY,
+};
+
+/**
+ * Context to call operator in for #WM_operator_name_call.
+ * rna_ui.c contains EnumPropertyItem's of these, keep in sync.
+ */
 enum {
   /* if there's invoke, call it, otherwise exec */
   WM_OP_INVOKE_DEFAULT,
@@ -210,8 +259,7 @@ typedef enum eOperatorPropTags {
 typedef struct wmNotifier {
   struct wmNotifier *next, *prev;
 
-  struct wmWindowManager *wm;
-  struct wmWindow *window;
+  const struct wmWindow *window;
 
   unsigned int category, data, subtype, action;
 
@@ -243,6 +291,9 @@ typedef struct wmNotifier {
 #define NC_TEXT (12 << 24)
 #define NC_WORLD (13 << 24)
 #define NC_ANIMATION (14 << 24)
+/* When passing a space as reference data with this (e.g. `WM_event_add_notifier(..., space)`),
+ * the notifier will only be sent to this space. That avoids unnecessary updates for unrelated
+ * spaces. */
 #define NC_SPACE (15 << 24)
 #define NC_GEOM (16 << 24)
 #define NC_NODE (17 << 24)
@@ -254,6 +305,8 @@ typedef struct wmNotifier {
 #define NC_LINESTYLE (23 << 24)
 #define NC_CAMERA (24 << 24)
 #define NC_LIGHTPROBE (25 << 24)
+/* Changes to asset data in the current .blend. */
+#define NC_ASSET (26 << 24)
 
 /* data type, 256 entries is enough, it can overlap */
 #define NOTE_DATA 0x00FF0000
@@ -265,6 +318,8 @@ typedef struct wmNotifier {
 #define ND_HISTORY (4 << 16)
 #define ND_JOB (5 << 16)
 #define ND_UNDO (6 << 16)
+#define ND_XR_DATA_CHANGED (7 << 16)
+#define ND_LIB_OVERRIDE_CHANGED (8 << 16)
 
 /* NC_SCREEN */
 #define ND_LAYOUTBROWSE (1 << 16)
@@ -284,7 +339,10 @@ typedef struct wmNotifier {
 #define ND_RENDER_OPTIONS (4 << 16)
 #define ND_NODES (5 << 16)
 #define ND_SEQUENCER (6 << 16)
+/* Note: If an object was added, removed, merged/joined, ..., it is not enough to notify with
+ * this. This affects the layer so also send a layer change notifier (e.g. ND_LAYER_CONTENT)! */
 #define ND_OB_ACTIVE (7 << 16)
+/* See comment on ND_OB_ACTIVE. */
 #define ND_OB_SELECT (8 << 16)
 #define ND_OB_VISIBLE (9 << 16)
 #define ND_OB_RENDER (10 << 16)
@@ -315,6 +373,9 @@ typedef struct wmNotifier {
 #define ND_LOD (30 << 16)
 #define ND_DRAW_RENDER_VIEWPORT \
   (31 << 16) /* for camera & sequencer viewport update, also /w NC_SCENE */
+#define ND_SHADERFX (32 << 16)
+/* For updating motion paths in 3dview. */
+#define ND_DRAW_ANIMVIZ (33 << 16)
 
 /* NC_MATERIAL Material */
 #define ND_SHADING (30 << 16)
@@ -325,7 +386,6 @@ typedef struct wmNotifier {
 /* NC_LAMP Light */
 #define ND_LIGHTING (40 << 16)
 #define ND_LIGHTING_DRAW (41 << 16)
-#define ND_SKY (42 << 16)
 
 /* NC_WORLD World */
 #define ND_WORLD_DRAW (45 << 16)
@@ -341,6 +401,7 @@ typedef struct wmNotifier {
 #define ND_NLA (73 << 16)
 #define ND_NLA_ACTCHANGE (74 << 16)
 #define ND_FCURVES_ORDER (75 << 16)
+#define ND_NLA_ORDER (76 << 16)
 
 /* NC_GPENCIL */
 #define ND_GPENCIL_EDITMODE (85 << 16)
@@ -360,20 +421,22 @@ typedef struct wmNotifier {
 #define ND_SPACE_IMAGE (4 << 16)
 #define ND_SPACE_FILE_PARAMS (5 << 16)
 #define ND_SPACE_FILE_LIST (6 << 16)
-#define ND_SPACE_NODE (7 << 16)
-#define ND_SPACE_OUTLINER (8 << 16)
-#define ND_SPACE_VIEW3D (9 << 16)
-#define ND_SPACE_PROPERTIES (10 << 16)
-#define ND_SPACE_TEXT (11 << 16)
-#define ND_SPACE_TIME (12 << 16)
-#define ND_SPACE_GRAPH (13 << 16)
-#define ND_SPACE_DOPESHEET (14 << 16)
-#define ND_SPACE_NLA (15 << 16)
-#define ND_SPACE_SEQUENCER (16 << 16)
-#define ND_SPACE_NODE_VIEW (17 << 16)
-#define ND_SPACE_CHANGED (18 << 16) /*sent to a new editor type after it's replaced an old one*/
-#define ND_SPACE_CLIP (19 << 16)
-#define ND_SPACE_FILE_PREVIEW (20 << 16)
+#define ND_SPACE_ASSET_PARAMS (7 << 16)
+#define ND_SPACE_NODE (8 << 16)
+#define ND_SPACE_OUTLINER (9 << 16)
+#define ND_SPACE_VIEW3D (10 << 16)
+#define ND_SPACE_PROPERTIES (11 << 16)
+#define ND_SPACE_TEXT (12 << 16)
+#define ND_SPACE_TIME (13 << 16)
+#define ND_SPACE_GRAPH (14 << 16)
+#define ND_SPACE_DOPESHEET (15 << 16)
+#define ND_SPACE_NLA (16 << 16)
+#define ND_SPACE_SEQUENCER (17 << 16)
+#define ND_SPACE_NODE_VIEW (18 << 16)
+#define ND_SPACE_CHANGED (19 << 16) /*sent to a new editor type after it's replaced an old one*/
+#define ND_SPACE_CLIP (20 << 16)
+#define ND_SPACE_FILE_PREVIEW (21 << 16)
+#define ND_SPACE_SPREADSHEET (22 << 16)
 
 /* subtype, 256 entries too */
 #define NOTE_SUBTYPE 0x0000FF00
@@ -393,6 +456,10 @@ typedef struct wmNotifier {
 
 /* subtype 3d view editing */
 #define NS_VIEW3D_GPU (16 << 8)
+#define NS_VIEW3D_SHADING (17 << 8)
+
+/* subtype layer editing */
+#define NS_LAYER_COLLECTION (24 << 8)
 
 /* action classification */
 #define NOTE_ACTION (0x000000FF)
@@ -402,7 +469,9 @@ typedef struct wmNotifier {
 #define NA_REMOVED 4
 #define NA_RENAME 5
 #define NA_SELECTED 6
-#define NA_PAINTING 7
+#define NA_ACTIVATED 7
+#define NA_PAINTING 8
+#define NA_JOB_FINISHED 9
 
 /* ************** Gesture Manager data ************** */
 
@@ -415,90 +484,166 @@ typedef struct wmNotifier {
 #define WM_GESTURE_CIRCLE 5
 #define WM_GESTURE_STRAIGHTLINE 6
 
-/* wmGesture is registered to window listbase, handled by operator callbacks */
-/* tweak gesture is builtin feature */
+/**
+ * wmGesture is registered to #wmWindow.gesture, handled by operator callbacks.
+ * Tweak gesture is builtin feature.
+ */
 typedef struct wmGesture {
   struct wmGesture *next, *prev;
-  int event_type;   /* event->type */
-  int type;         /* gesture type define */
-  rcti winrct;      /* bounds of region to draw gesture within */
-  int points;       /* optional, amount of points stored */
-  int points_alloc; /* optional, maximum amount of points stored */
+  /** #wmEvent.type */
+  int event_type;
+  /** Gesture type define. */
+  int type;
+  /** bounds of region to draw gesture within. */
+  rcti winrct;
+  /** optional, amount of points stored. */
+  int points;
+  /** optional, maximum amount of points stored. */
+  int points_alloc;
   int modal_state;
+  /** optional, draw the active side of the straightline gesture. */
+  bool draw_active_side;
 
-  /* For modal operators which may be running idle, waiting for an event to activate the gesture.
-   * Typically this is set when the user is click-dragging the gesture (border and circle select for eg). */
+  /**
+   * For modal operators which may be running idle, waiting for an event to activate the gesture.
+   * Typically this is set when the user is click-dragging the gesture
+   * (box and circle select for eg).
+   */
   uint is_active : 1;
-  /* Previous value of is-active (use to detect first run & edge cases). */
+  /** Previous value of is-active (use to detect first run & edge cases). */
   uint is_active_prev : 1;
-  /* Use for gestures that support both immediate or delayed activation. */
+  /** Use for gestures that support both immediate or delayed activation. */
   uint wait_for_input : 1;
+  /** Use for gestures that can be moved, like box selection */
+  uint move : 1;
+  /** For gestures that support snapping, stores if snapping is enabled using the modal keymap
+   * toggle. */
+  uint use_snap : 1;
+  /** For gestures that support flip, stores if flip is enabled using the modal keymap
+   * toggle. */
+  uint use_flip : 1;
 
+  /**
+   * customdata
+   * - for border is a #rcti.
+   * - for circle is recti, (xmin, ymin) is center, xmax radius.
+   * - for lasso is short array.
+   * - for straight line is a recti: (xmin,ymin) is start, (xmax, ymax) is end.
+   */
   void *customdata;
-  /* customdata for border is a recti */
-  /* customdata for circle is recti, (xmin, ymin) is center, xmax radius */
-  /* customdata for lasso is short array */
-  /* customdata for straight line is a recti: (xmin,ymin) is start, (xmax, ymax) is end */
 
-  /* free pointer to use for operator allocs (if set, its freed on exit)*/
-  void *userdata;
-  bool userdata_free;
+  /** Free pointer to use for operator allocs (if set, its freed on exit). */
+  wmGenericUserData user_data;
 } wmGesture;
 
 /* ************** wmEvent ************************ */
 
-/* each event should have full modifier state */
-/* event comes from eventmanager and from keymap */
+typedef struct wmTabletData {
+  /** 0=EVT_TABLET_NONE, 1=EVT_TABLET_STYLUS, 2=EVT_TABLET_ERASER. */
+  int active;
+  /** range 0.0 (not touching) to 1.0 (full pressure). */
+  float pressure;
+  /** range 0.0 (upright) to 1.0 (tilted fully against the tablet surface). */
+  float x_tilt;
+  /** as above. */
+  float y_tilt;
+  /** Interpret mouse motion as absolute as typical for tablets. */
+  char is_motion_absolute;
+} wmTabletData;
+
+/**
+ * Each event should have full modifier state.
+ * event comes from event manager and from keymap.
+ *
+ *
+ * Previous State
+ * ==============
+ *
+ * Events hold information about the previous event,
+ * this is used for detecting click and double-click events (the timer is needed for double-click).
+ * See #wm_event_add_ghostevent for implementation details.
+ *
+ * Notes:
+ *
+ * - The previous values are only set for mouse button and keyboard events.
+ *   See: #ISMOUSE_BUTTON & #ISKEYBOARD macros.
+ *
+ * - Previous x/y are exceptions: #wmEvent.prevx & #wmEvent.prevy
+ *   these are set on mouse motion, see #MOUSEMOVE & track-pad events.
+ *
+ * - Modal key-map handling sets `prevval` & `prevtype` to `val` & `type`,
+ *   this allows modal keys-maps to check the original values (needed in some cases).
+ */
 typedef struct wmEvent {
   struct wmEvent *next, *prev;
 
-  short type;       /* event code itself (short, is also in keymap) */
-  short val;        /* press, release, scrollvalue */
-  int x, y;         /* mouse pointer position, screen coord */
-  int mval[2];      /* region mouse position, name convention pre 2.5 :) */
-  char utf8_buf[6]; /* from, ghost if utf8 is enabled for the platform,
-             * BLI_str_utf8_size() must _always_ be valid, check
-             * when assigning s we don't need to check on every access after */
-  char ascii;       /* from ghost, fallback if utf8 isn't set */
-  char pad;
+  /** Event code itself (short, is also in key-map). */
+  short type;
+  /** Press, release, scroll-value. */
+  short val;
+  /** Mouse pointer position, screen coord. */
+  int x, y;
+  /** Region relative mouse position (name convention before Blender 2.5). */
+  int mval[2];
+  /**
+   * From, ghost if utf8 is enabled for the platform,
+   * #BLI_str_utf8_size() must _always_ be valid, check
+   * when assigning s we don't need to check on every access after.
+   */
+  char utf8_buf[6];
+  /** From ghost, fallback if utf8 isn't set. */
+  char ascii;
 
-  /* previous state, used for double click and the 'click' */
+  /**
+   * Generated by auto-repeat, note that this must only ever be set for keyboard events
+   * where `ISKEYBOARD(event->type) == true`.
+   *
+   * See #KMI_REPEAT_IGNORE for details on how key-map handling uses this.
+   */
+  char is_repeat;
+
+  /** The previous value of `type`. */
   short prevtype;
+  /** The previous value of `val`. */
   short prevval;
-  int prevx, prevy;
+  /** The time when the key is pressed, see #PIL_check_seconds_timer. */
   double prevclicktime;
+  /** The location when the key is pressed (used to enforce drag thresholds). */
   int prevclickx, prevclicky;
+  /**
+   * The previous value of #wmEvent.x #wmEvent.y,
+   * Unlike other previous state variables, this is set on any mouse motion.
+   * Use `prevclickx` & `prevclicky` for the value at time of pressing.
+   */
+  int prevx, prevy;
 
-  /* modifier states */
-  short shift, ctrl, alt, oskey; /* oskey is apple or windowskey, value denotes order of pressed */
-  short keymodifier;             /* rawkey modifier */
+  /** Modifier states. */
+  /** 'oskey' is apple or windows-key, value denotes order of pressed. */
+  short shift, ctrl, alt, oskey;
+  /** Raw-key modifier (allow using any key as a modifier). */
+  short keymodifier;
 
-  /* set in case a KM_PRESS went by unhandled */
-  char check_click;
-  char check_drag;
-  char is_motion_absolute;
+  /** Tablet info, available for mouse move and button events. */
+  wmTabletData tablet;
 
-  /* keymap item, set by handler (weak?) */
-  const char *keymap_idname;
-
-  /* tablet info, only use when the tablet is active */
-  const struct wmTabletData *tablet_data;
-
-  /* custom data */
-  short custom; /* custom data type, stylus, 6dof, see wm_event_types.h */
+  /* Custom data. */
+  /** Custom data type, stylus, 6dof, see wm_event_types.h */
+  short custom;
   short customdatafree;
   int pad2;
-  void *customdata; /* ascii, unicode, mouse coords, angles, vectors, dragdrop info */
+  /** Ascii, unicode, mouse-coords, angles, vectors, NDOF data, drag-drop info. */
+  void *customdata;
 
+  /**
+   * True if the operating system inverted the delta x/y values and resulting
+   * `prevx`, `prevy` values, for natural scroll direction.
+   * For absolute scroll direction, the delta must be negated again.
+   */
+  char is_direction_inverted;
 } wmEvent;
 
 /**
- * Values below are considered a click, above are considered a drag.
- */
-#define WM_EVENT_CURSOR_CLICK_DRAG_THRESHOLD (U.tweak_threshold * U.dpi_fac)
-
-/**
- * Values below are ignored when detecting if the user interntionally moved the cursor.
+ * Values below are ignored when detecting if the user intentionally moved the cursor.
  * Keep this very small since it's used for selection cycling for eg,
  * where we want intended adjustments to pass this threshold and select new items.
  *
@@ -506,116 +651,180 @@ typedef struct wmEvent {
  */
 #define WM_EVENT_CURSOR_MOTION_THRESHOLD ((float)U.move_threshold * U.dpi_fac)
 
-/* ************** custom wmEvent data ************** */
-typedef struct wmTabletData {
-  int Active;     /* 0=EVT_TABLET_NONE, 1=EVT_TABLET_STYLUS, 2=EVT_TABLET_ERASER */
-  float Pressure; /* range 0.0 (not touching) to 1.0 (full pressure) */
-  float Xtilt;    /* range 0.0 (upright) to 1.0 (tilted fully against the tablet surface) */
-  float Ytilt;    /* as above */
-} wmTabletData;
-
-typedef enum { /* motion progress, for modal handlers */
-               P_NOT_STARTED,
-               P_STARTING,    /* <-- */
-               P_IN_PROGRESS, /* <-- only these are sent for NDOF motion*/
-               P_FINISHING,   /* <-- */
-               P_FINISHED,
+/** Motion progress, for modal handlers. */
+typedef enum {
+  P_NOT_STARTED,
+  P_STARTING,    /* <-- */
+  P_IN_PROGRESS, /* <-- only these are sent for NDOF motion. */
+  P_FINISHING,   /* <-- */
+  P_FINISHED,
 } wmProgress;
 
 #ifdef WITH_INPUT_NDOF
 typedef struct wmNDOFMotionData {
   /* awfully similar to GHOST_TEventNDOFMotionData... */
-  /* Each component normally ranges from -1 to +1, but can exceed that.
-   * These use blender standard view coordinates, with positive rotations being CCW about the axis. */
-  float tvec[3]; /* translation */
-  float rvec[3]; /* rotation: */
-  /* axis = (rx,ry,rz).normalized */
-  /* amount = (rx,ry,rz).magnitude [in revolutions, 1.0 = 360 deg] */
-  float dt;            /* time since previous NDOF Motion event */
-  wmProgress progress; /* is this the first event, the last, or one of many in between? */
+  /**
+   * Each component normally ranges from -1 to +1, but can exceed that.
+   * These use blender standard view coordinates,
+   * with positive rotations being CCW about the axis.
+   */
+  /** Translation. */
+  float tvec[3];
+  /** Rotation.
+   * <pre>
+   * axis = (rx,ry,rz).normalized.
+   * amount = (rx,ry,rz).magnitude [in revolutions, 1.0 = 360 deg]
+   * </pre>
+   */
+  float rvec[3];
+  /** Time since previous NDOF Motion event. */
+  float dt;
+  /** Is this the first event, the last, or one of many in between? */
+  wmProgress progress;
 } wmNDOFMotionData;
 #endif /* WITH_INPUT_NDOF */
 
-typedef enum { /* Timer flags */
-               WM_TIMER_NO_FREE_CUSTOM_DATA =
-                   1 << 0, /* Do not attempt to free customdata pointer even if non-NULL. */
+#ifdef WITH_XR_OPENXR
+/* Similar to GHOST_XrPose. */
+typedef struct wmXrPose {
+  float position[3];
+  /* Blender convention (w, x, y, z) */
+  float orientation_quat[4];
+} wmXrPose;
+
+typedef struct wmXrActionState {
+  union {
+    bool state_boolean;
+    float state_float;
+    float state_vector2f[2];
+    wmXrPose state_pose;
+  };
+  int type; /* eXrActionType */
+} wmXrActionState;
+#endif
+
+/** Timer flags. */
+typedef enum {
+  /** Do not attempt to free customdata pointer even if non-NULL. */
+  WM_TIMER_NO_FREE_CUSTOM_DATA = 1 << 0,
 } wmTimerFlags;
 
 typedef struct wmTimer {
   struct wmTimer *next, *prev;
 
-  struct wmWindow *win; /* window this timer is attached to (optional) */
+  /** Window this timer is attached to (optional). */
+  struct wmWindow *win;
 
-  double timestep;    /* set by timer user */
-  int event_type;     /* set by timer user, goes to event system */
-  wmTimerFlags flags; /* Various flags controlling timer options, see below. */
-  void *customdata;   /* set by timer user, to allow custom values */
+  /** Set by timer user. */
+  double timestep;
+  /** Set by timer user, goes to event system. */
+  int event_type;
+  /** Various flags controlling timer options, see below. */
+  wmTimerFlags flags;
+  /** Set by timer user, to allow custom values. */
+  void *customdata;
 
-  double duration; /* total running time in seconds */
-  double delta;    /* time since previous step in seconds */
+  /** Total running time in seconds. */
+  double duration;
+  /** Time since previous step in seconds. */
+  double delta;
 
-  double ltime; /* internal, last time timer was activated */
-  double ntime; /* internal, next time we want to activate the timer */
-  double stime; /* internal, when the timer started */
-  bool sleep;   /* internal, put timers to sleep when needed */
+  /** Internal, last time timer was activated. */
+  double ltime;
+  /** Internal, next time we want to activate the timer. */
+  double ntime;
+  /** Internal, when the timer started. */
+  double stime;
+  /** Internal, put timers to sleep when needed. */
+  bool sleep;
 } wmTimer;
 
 typedef struct wmOperatorType {
-  const char *name;   /* text for ui, undo */
-  const char *idname; /* unique identifier */
+  /** Text for UI, undo. */
+  const char *name;
+  /** Unique identifier. */
+  const char *idname;
   const char *translation_context;
-  const char *description; /* tooltips and python docs */
-  const char *undo_group;  /* identifier to group operators together */
+  /** Use for tool-tips and Python docs. */
+  const char *description;
+  /** Identifier to group operators together. */
+  const char *undo_group;
 
-  /* this callback executes the operator without any interactive input,
+  /**
+   * This callback executes the operator without any interactive input,
    * parameters may be provided through operator properties. cannot use
    * any interface code or input device state.
-   * - see defines below for return values */
+   * See defines below for return values.
+   */
   int (*exec)(struct bContext *, struct wmOperator *) ATTR_WARN_UNUSED_RESULT;
 
-  /* this callback executes on a running operator whenever as property
+  /**
+   * This callback executes on a running operator whenever as property
    * is changed. It can correct its own properties or report errors for
    * invalid settings in exceptional cases.
-   * Boolean return value, True denotes a change has been made and to redraw */
+   * Boolean return value, True denotes a change has been made and to redraw.
+   */
   bool (*check)(struct bContext *, struct wmOperator *);
 
-  /* for modal temporary operators, initially invoke is called. then
+  /**
+   * For modal temporary operators, initially invoke is called. then
    * any further events are handled in modal. if the operation is
    * canceled due to some external reason, cancel is called
-   * - see defines below for return values */
+   * See defines below for return values.
+   */
   int (*invoke)(struct bContext *,
                 struct wmOperator *,
                 const struct wmEvent *) ATTR_WARN_UNUSED_RESULT;
 
-  /* Called when a modal operator is canceled (not used often).
-   * Internal cleanup can be done here if needed. */
+  /**
+   * Called when a modal operator is canceled (not used often).
+   * Internal cleanup can be done here if needed.
+   */
   void (*cancel)(struct bContext *, struct wmOperator *);
 
-  /* Modal is used for operators which continuously run, eg:
+  /**
+   * Modal is used for operators which continuously run, eg:
    * fly mode, knife tool, circle select are all examples of modal operators.
    * Modal operators can handle events which would normally access other operators,
-   * they keep running until they don't return `OPERATOR_RUNNING_MODAL`. */
+   * they keep running until they don't return `OPERATOR_RUNNING_MODAL`.
+   */
   int (*modal)(struct bContext *,
                struct wmOperator *,
                const struct wmEvent *) ATTR_WARN_UNUSED_RESULT;
 
-  /* verify if the operator can be executed in the current context, note
-   * that the operator might still fail to execute even if this return true */
+  /**
+   * Verify if the operator can be executed in the current context, note
+   * that the operator might still fail to execute even if this return true.
+   */
   bool (*poll)(struct bContext *) ATTR_WARN_UNUSED_RESULT;
 
-  /* Use to check of properties should be displayed in auto-generated UI.
-   * Use 'check' callback to enforce refreshing. */
+  /**
+   * Use to check if properties should be displayed in auto-generated UI.
+   * Use 'check' callback to enforce refreshing.
+   */
   bool (*poll_property)(const struct bContext *C,
                         struct wmOperator *op,
                         const PropertyRNA *prop) ATTR_WARN_UNUSED_RESULT;
 
-  /* optional panel for redo and repeat, autogenerated if not set */
+  /** Optional panel for redo and repeat, auto-generated if not set. */
   void (*ui)(struct bContext *, struct wmOperator *);
 
-  /* rna for properties */
+  /**
+   * Return a different name to use in the user interface, based on property values.
+   * The returned string does not need to be freed.
+   */
+  const char *(*get_name)(struct wmOperatorType *, struct PointerRNA *);
+
+  /**
+   * Return a different description to use in the user interface, based on property values.
+   * The returned string must be freed by the caller, unless NULL.
+   */
+  char *(*get_description)(struct bContext *C, struct wmOperatorType *, struct PointerRNA *);
+
+  /** rna for properties */
   struct StructRNA *srna;
 
-  /* previous settings - for initializing on re-use */
+  /** previous settings - for initializing on re-use */
   struct IDProperty *last_properties;
 
   /**
@@ -627,36 +836,52 @@ typedef struct wmOperatorType {
    */
   PropertyRNA *prop;
 
-  /* struct wmOperatorTypeMacro */
+  /** struct wmOperatorTypeMacro */
   ListBase macro;
 
-  /* pointer to modal keymap, do not free! */
+  /** pointer to modal keymap, do not free! */
   struct wmKeyMap *modalkeymap;
 
-  /* python needs the operator type as well */
+  /** python needs the operator type as well */
   bool (*pyop_poll)(struct bContext *, struct wmOperatorType *ot) ATTR_WARN_UNUSED_RESULT;
 
-  /* RNA integration */
-  ExtensionRNA ext;
+  /** RNA integration */
+  ExtensionRNA rna_ext;
 
-  /* Flag last for padding */
+  /** Flag last for padding */
   short flag;
 
 } wmOperatorType;
 
+/**
+ * Wrapper to reference a #wmOperatorType together with some set properties and other relevant
+ * information to invoke the operator in a customizable way.
+ */
+typedef struct wmOperatorCallParams {
+  struct wmOperatorType *optype;
+  struct PointerRNA *opptr;
+  short opcontext;
+} wmOperatorCallParams;
+
 #ifdef WITH_INPUT_IME
 /* *********** Input Method Editor (IME) *********** */
-
-/* similar to GHOST_TEventImeData */
+/**
+ * \note similar to #GHOST_TEventImeData.
+ */
 typedef struct wmIMEData {
   size_t result_len, composite_len;
 
-  char *str_result;    /* utf8 encoding */
-  char *str_composite; /* utf8 encoding */
+  /** utf8 encoding */
+  char *str_result;
+  /** utf8 encoding */
+  char *str_composite;
 
-  int cursor_pos; /* cursor position in the IME composition. */
-  int sel_start;  /* beginning of the selection */
-  int sel_end;    /* end of the selection */
+  /** Cursor position in the IME composition. */
+  int cursor_pos;
+  /** Beginning of the selection. */
+  int sel_start;
+  /** End of the selection. */
+  int sel_end;
 
   bool is_ime_composing;
 } wmIMEData;
@@ -669,11 +894,13 @@ typedef void (*wmPaintCursorDraw)(struct bContext *C, int, int, void *customdata
 /* *************** Drag and drop *************** */
 
 #define WM_DRAG_ID 0
-#define WM_DRAG_RNA 1
-#define WM_DRAG_PATH 2
-#define WM_DRAG_NAME 3
-#define WM_DRAG_VALUE 4
-#define WM_DRAG_COLOR 5
+#define WM_DRAG_ASSET 1
+#define WM_DRAG_RNA 2
+#define WM_DRAG_PATH 3
+#define WM_DRAG_NAME 4
+#define WM_DRAG_VALUE 5
+#define WM_DRAG_COLOR 6
+#define WM_DRAG_DATASTACK 7
 
 typedef enum wmDragFlags {
   WM_DRAG_NOP = 0,
@@ -688,43 +915,68 @@ typedef struct wmDragID {
   struct ID *from_parent;
 } wmDragID;
 
+typedef struct wmDragAsset {
+  char name[64]; /* MAX_NAME */
+  /* Always freed. */
+  const char *path;
+  int id_type;
+} wmDragAsset;
+
 typedef struct wmDrag {
   struct wmDrag *next, *prev;
 
-  int icon, type; /* type, see WM_DRAG defines above */
+  int icon;
+  /** See 'WM_DRAG_' defines above. */
+  int type;
   void *poin;
   char path[1024]; /* FILE_MAX */
   double value;
 
-  struct ImBuf *imb; /* if no icon but imbuf should be drawn around cursor */
+  /** If no icon but imbuf should be drawn around cursor. */
+  struct ImBuf *imb;
   float scale;
   int sx, sy;
 
-  char opname[200]; /* if set, draws operator name*/
+  /** If set, draws operator name. */
+  char opname[200];
   unsigned int flags;
 
-  ListBase ids; /* List of wmDragIDs, all are guaranteed to have the same ID type. */
+  /** List of wmDragIDs, all are guaranteed to have the same ID type. */
+  ListBase ids;
 } wmDrag;
 
-/* dropboxes are like keymaps, part of the screen/area/region definition */
-/* allocation and free is on startup and exit */
+/**
+ * Dropboxes are like keymaps, part of the screen/area/region definition.
+ * Allocation and free is on startup and exit.
+ */
 typedef struct wmDropBox {
   struct wmDropBox *next, *prev;
 
-  /* test if the dropbox is active, then can print optype name */
+  /** Test if the dropbox is active, then can print optype name. */
   bool (*poll)(struct bContext *, struct wmDrag *, const wmEvent *, const char **);
 
-  /* before exec, this copies drag info to wmDrop properties */
+  /** Before exec, this copies drag info to #wmDrop properties. */
   void (*copy)(struct wmDrag *, struct wmDropBox *);
 
-  /* if poll survives, operator is called */
-  wmOperatorType *ot; /* not saved in file, so can be pointer */
+  /**
+   * If the operator is cancelled (returns `OPERATOR_CANCELLED`), this can be used for cleanup of
+   * `copy()` resources.
+   */
+  void (*cancel)(struct Main *, struct wmDrag *, struct wmDropBox *);
 
-  struct IDProperty
-      *properties; /* operator properties, assigned to ptr->data and can be written to a file */
-  struct PointerRNA *ptr; /* rna pointer to access properties */
+  /**
+   * If poll succeeds, operator is called.
+   * Not saved in file, so can be pointer.
+   */
+  wmOperatorType *ot;
 
-  short opcontext; /* default invoke */
+  /** Operator properties, assigned to ptr->data and can be written to a file. */
+  struct IDProperty *properties;
+  /** RNA pointer to access properties. */
+  struct PointerRNA *ptr;
+
+  /** Default invoke. */
+  short opcontext;
 
 } wmDropBox;
 
@@ -735,18 +987,22 @@ typedef struct wmDropBox {
 typedef struct wmTooltipState {
   /** Create tooltip on this event. */
   struct wmTimer *timer;
+  /** The area the tooltip is created in. */
+  struct ScrArea *area_from;
   /** The region the tooltip is created in. */
   struct ARegion *region_from;
   /** The tooltip region. */
   struct ARegion *region;
   /** Create the tooltip region (assign to 'region'). */
   struct ARegion *(*init)(struct bContext *C,
-                          struct ARegion *ar,
+                          struct ARegion *region,
                           int *pass,
                           double *pass_delay,
                           bool *r_exit_on_event);
   /** Exit on any event, not needed for buttons since their highlight state is used. */
   bool exit_on_event;
+  /** Cursor location at the point of tooltip creation. */
+  int event_xy[2];
   /** Pass, use when we want multiple tips, count down to zero. */
   int pass;
 } wmTooltipState;
@@ -772,5 +1028,3 @@ extern struct CLG_LogRef *WM_LOG_MSGBUS_SUB;
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __WM_TYPES_H__ */

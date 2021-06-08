@@ -22,31 +22,46 @@ from bpy.types import Menu, Panel, UIList
 from rna_prop_ui import PropertyPanel
 from bl_ui.utils import PresetPanel
 
-from .properties_grease_pencil_common import (
+from bl_ui.properties_grease_pencil_common import (
     GreasePencilMaterialsPanel,
 )
 
 
-class GPENCIL_MT_color_context_menu(Menu):
-    bl_label = "Layer"
+class GPENCIL_MT_material_context_menu(Menu):
+    bl_label = "Material Specials"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
-        layout.operator("gpencil.color_reveal", icon='RESTRICT_VIEW_OFF', text="Show All")
-        layout.operator("gpencil.color_hide", icon='RESTRICT_VIEW_ON', text="Hide Others").unselected = True
+        layout.operator("gpencil.material_reveal", icon='RESTRICT_VIEW_OFF', text="Show All")
+        layout.operator("gpencil.material_hide", icon='RESTRICT_VIEW_ON', text="Hide Others").unselected = True
 
         layout.separator()
 
-        layout.operator("gpencil.color_lock_all", icon='LOCKED', text="Lock All")
-        layout.operator("gpencil.color_unlock_all", icon='UNLOCKED', text="UnLock All")
+        layout.operator("gpencil.material_lock_all", icon='LOCKED', text="Lock All")
+        layout.operator("gpencil.material_unlock_all", icon='UNLOCKED', text="Unlock All")
 
-        layout.operator("gpencil.stroke_lock_color", text="Lock Unselected")
+        layout.operator("gpencil.material_lock_unused", text="Lock Unselected")
         layout.operator("gpencil.lock_layer", text="Lock Unused")
+
+        layout.separator()
+
+        layout.operator("gpencil.material_to_vertex_color", text="Convert Materials to Vertex Color")
+        layout.operator("gpencil.extract_palette_vertex", text="Extract Palette from Vertex Color")
+
+        layout.separator()
+
+        layout.operator("gpencil.materials_copy_to_object", text="Copy Material to Selected").only_active = True
+        layout.operator("gpencil.materials_copy_to_object", text="Copy All Materials to Selected").only_active = False
+
+        layout.separator()
+
+        layout.operator("gpencil.stroke_merge_material", text="Merge Similar")
+        layout.operator("object.material_slot_remove_unused")
 
 
 class GPENCIL_UL_matslots(UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         slot = item
         ma = slot.material
         if (ma is not None) and (ma.grease_pencil is not None):
@@ -61,13 +76,14 @@ class GPENCIL_UL_matslots(UIList):
                 row.prop(ma, "name", text="", emboss=False, icon_value=icon)
 
                 row = layout.row(align=True)
-                row.prop(gpcolor, "lock", text="", emboss=False)
-                row.prop(gpcolor, "hide", text="", emboss=False)
+
                 if gpcolor.ghost is True:
                     icon = 'ONIONSKIN_OFF'
                 else:
                     icon = 'ONIONSKIN_ON'
                 row.prop(gpcolor, "ghost", text="", icon=icon, emboss=False)
+                row.prop(gpcolor, "hide", text="", emboss=False)
+                row.prop(gpcolor, "lock", text="", emboss=False)
 
             elif self.layout_type == 'GRID':
                 layout.alignment = 'CENTER'
@@ -104,10 +120,10 @@ class MATERIAL_PT_gpencil_slots(GreasePencilMaterialsPanel, Panel):
 class MATERIAL_PT_gpencil_surface(GPMaterialButtonsPanel, Panel):
     bl_label = "Surface"
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         MATERIAL_PT_gpencil_material_presets.draw_panel_header(self.layout)
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
         layout.use_property_split = True
 
@@ -120,6 +136,7 @@ class MATERIAL_PT_gpencil_strokecolor(GPMaterialButtonsPanel, Panel):
         ma = context.material
         if ma is not None and ma.grease_pencil is not None:
             gpcolor = ma.grease_pencil
+            self.layout.enabled = not gpcolor.lock
             self.layout.prop(gpcolor, "show_stroke", text="")
 
     def draw(self, context):
@@ -131,27 +148,33 @@ class MATERIAL_PT_gpencil_strokecolor(GPMaterialButtonsPanel, Panel):
             gpcolor = ma.grease_pencil
 
             col = layout.column()
-            col.active = not gpcolor.lock
+            col.enabled = not gpcolor.lock
 
             col.prop(gpcolor, "mode")
 
             col.prop(gpcolor, "stroke_style", text="Style")
+
+            col.prop(gpcolor, "color", text="Base Color")
+            col.prop(gpcolor, "use_stroke_holdout")
 
             if gpcolor.stroke_style == 'TEXTURE':
                 row = col.row()
                 row.enabled = not gpcolor.lock
                 col = row.column(align=True)
                 col.template_ID(gpcolor, "stroke_image", open="image.open")
+
+            if gpcolor.stroke_style == 'TEXTURE':
+                row = col.row()
+                row.prop(gpcolor, "mix_stroke_factor", text="Blend", slider=True)
                 if gpcolor.mode == 'LINE':
                     col.prop(gpcolor, "pixel_size", text="UV Factor")
 
-                col.prop(gpcolor, "use_stroke_pattern", text="Use As Pattern")
-
-            if gpcolor.stroke_style == 'SOLID' or gpcolor.use_stroke_pattern is True:
-                col.prop(gpcolor, "color", text="Color")
-
             if gpcolor.mode in {'DOTS', 'BOX'}:
-                col.prop(gpcolor, "use_follow_path", text="Follow Drawing Path")
+                col.prop(gpcolor, "alignment_mode")
+                col.prop(gpcolor, "alignment_rotation")
+
+            if gpcolor.mode == 'LINE':
+                col.prop(gpcolor, "use_overlap_strokes")
 
 
 class MATERIAL_PT_gpencil_fillcolor(GPMaterialButtonsPanel, Panel):
@@ -161,6 +184,7 @@ class MATERIAL_PT_gpencil_fillcolor(GPMaterialButtonsPanel, Panel):
     def draw_header(self, context):
         ma = context.material
         gpcolor = ma.grease_pencil
+        self.layout.enabled = not gpcolor.lock
         self.layout.prop(gpcolor, "show_fill", text="")
 
     def draw(self, context):
@@ -172,57 +196,42 @@ class MATERIAL_PT_gpencil_fillcolor(GPMaterialButtonsPanel, Panel):
 
         # color settings
         col = layout.column()
-        col.active = not gpcolor.lock
+        col.enabled = not gpcolor.lock
         col.prop(gpcolor, "fill_style", text="Style")
 
-        if gpcolor.fill_style == 'GRADIENT':
+        if gpcolor.fill_style == 'SOLID':
+            col.prop(gpcolor, "fill_color", text="Base Color")
+            col.prop(gpcolor, "use_fill_holdout")
+
+        elif gpcolor.fill_style == 'GRADIENT':
             col.prop(gpcolor, "gradient_type")
 
-        if gpcolor.fill_style != 'TEXTURE':
-            col.prop(gpcolor, "fill_color", text="Color")
+            col.prop(gpcolor, "fill_color", text="Base Color")
+            col.prop(gpcolor, "mix_color", text="Secondary Color")
+            col.prop(gpcolor, "use_fill_holdout")
+            col.prop(gpcolor, "mix_factor", text="Blend", slider=True)
+            col.prop(gpcolor, "flip", text="Flip Colors")
 
-            if gpcolor.fill_style in {'GRADIENT', 'CHESSBOARD'}:
-                col.prop(gpcolor, "mix_color", text="Secondary Color")
+            col.prop(gpcolor, "texture_offset", text="Location")
 
-            if gpcolor.fill_style == 'GRADIENT':
-                col.prop(gpcolor, "mix_factor", text="Mix Factor", slider=True)
+            row = col.row()
+            row.enabled = gpcolor.gradient_type == 'LINEAR'
+            row.prop(gpcolor, "texture_angle", text="Rotation")
 
-            if gpcolor.fill_style in {'GRADIENT', 'CHESSBOARD'}:
-                col.prop(gpcolor, "flip", text="Flip Colors")
+            col.prop(gpcolor, "texture_scale", text="Scale")
 
-                col.prop(gpcolor, "pattern_shift", text="Location")
-                col.prop(gpcolor, "pattern_scale", text="Scale")
+        elif gpcolor.fill_style == 'TEXTURE':
+            col.prop(gpcolor, "fill_color", text="Base Color")
+            col.prop(gpcolor, "use_fill_holdout")
 
-            if gpcolor.gradient_type == 'RADIAL' and gpcolor.fill_style not in {'SOLID', 'CHESSBOARD'}:
-                col.prop(gpcolor, "pattern_radius", text="Radius")
-            else:
-                if gpcolor.fill_style != 'SOLID':
-                    col.prop(gpcolor, "pattern_angle", text="Angle")
-
-            if gpcolor.fill_style == 'CHESSBOARD':
-                col.prop(gpcolor, "pattern_gridsize", text="Box Size")
-
-        # Texture
-        if gpcolor.fill_style == 'TEXTURE' or (gpcolor.texture_mix is True and gpcolor.fill_style == 'SOLID'):
             col.template_ID(gpcolor, "fill_image", open="image.open")
 
-            if gpcolor.fill_style == 'TEXTURE':
-                col.prop(gpcolor, "use_fill_pattern", text="Use As Pattern")
-                if gpcolor.use_fill_pattern is True:
-                    col.prop(gpcolor, "fill_color", text="Color")
+            col.prop(gpcolor, "mix_factor", text="Blend", slider=True)
 
-            col.prop(gpcolor, "texture_offset", text="Offset")
+            col.prop(gpcolor, "texture_offset", text="Location")
+            col.prop(gpcolor, "texture_angle", text="Rotation")
             col.prop(gpcolor, "texture_scale", text="Scale")
-            col.prop(gpcolor, "texture_angle")
-            col.prop(gpcolor, "texture_opacity")
             col.prop(gpcolor, "texture_clamp", text="Clip Image")
-
-            if gpcolor.use_fill_pattern is False:
-                col.prop(gpcolor, "texture_mix", text="Mix With Color")
-
-                if gpcolor.texture_mix is True:
-                    col.prop(gpcolor, "fill_color", text="Mix Color")
-                    col.prop(gpcolor, "mix_factor", text="Mix Factor", slider=True)
 
 
 class MATERIAL_PT_gpencil_preview(GPMaterialButtonsPanel, Panel):
@@ -242,8 +251,8 @@ class MATERIAL_PT_gpencil_custom_props(GPMaterialButtonsPanel, PropertyPanel, Pa
     _property_type = bpy.types.Material
 
 
-class MATERIAL_PT_gpencil_options(GPMaterialButtonsPanel, Panel):
-    bl_label = "Options"
+class MATERIAL_PT_gpencil_settings(GPMaterialButtonsPanel, Panel):
+    bl_label = "Settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -265,18 +274,19 @@ class MATERIAL_PT_gpencil_material_presets(PresetPanel, Panel):
 
 classes = (
     GPENCIL_UL_matslots,
-    GPENCIL_MT_color_context_menu,
+    GPENCIL_MT_material_context_menu,
     MATERIAL_PT_gpencil_slots,
     MATERIAL_PT_gpencil_preview,
     MATERIAL_PT_gpencil_material_presets,
     MATERIAL_PT_gpencil_surface,
     MATERIAL_PT_gpencil_strokecolor,
     MATERIAL_PT_gpencil_fillcolor,
-    MATERIAL_PT_gpencil_options,
+    MATERIAL_PT_gpencil_settings,
     MATERIAL_PT_gpencil_custom_props,
 )
 
 if __name__ == "__main__":  # only for live edit.
     from bpy.utils import register_class
+
     for cls in classes:
         register_class(cls)

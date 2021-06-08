@@ -24,26 +24,24 @@
 
 #ifdef WIN32
 
-#  include <stdlib.h>
-#  include <stdio.h>
 #  include <conio.h>
+#  include <stdio.h>
+#  include <stdlib.h>
 
 #  include "MEM_guardedalloc.h"
 
 #  define WIN32_SKIP_HKEY_PROTECTION  // need to use HKEY
-#  include "BLI_winstuff.h"
-#  include "BLI_utildefines.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
-
-#  include "../blenkernel/BKE_global.h" /* G.background, bad level include (no function calls) */
+#  include "BLI_utildefines.h"
+#  include "BLI_winstuff.h"
 
 #  include "utf_winfunc.h"
 #  include "utfconv.h"
 
 /* FILE_MAXDIR + FILE_MAXFILE */
 
-int BLI_getInstallationDir(char *str)
+int BLI_windows_get_executable_dir(char *str)
 {
   char dir[FILE_MAXDIR];
   int a;
@@ -60,19 +58,19 @@ int BLI_getInstallationDir(char *str)
   return 1;
 }
 
-static void RegisterBlendExtension_Fail(HKEY root)
+static void register_blend_extension_failed(HKEY root, const bool background)
 {
   printf("failed\n");
   if (root) {
     RegCloseKey(root);
   }
-  if (!G.background) {
+  if (!background) {
     MessageBox(0, "Could not register file extension.", "Blender error", MB_OK | MB_ICONERROR);
   }
   TerminateProcess(GetCurrentProcess(), 1);
 }
 
-void RegisterBlendExtension(void)
+void BLI_windows_register_blend_extension(const bool background)
 {
   LONG lresult;
   HKEY hkey = 0;
@@ -96,9 +94,9 @@ void RegisterBlendExtension(void)
   GetModuleFileName(0, BlPath, MAX_PATH);
 
   /* Replace the actual app name with the wrapper. */
-  blender_app = strstr(BlPath, "blender-app.exe");
+  blender_app = strstr(BlPath, "blender.exe");
   if (blender_app != NULL) {
-    strcpy(blender_app, "blender.exe");
+    strcpy(blender_app, "blender-launcher.exe");
   }
 
   /* root is HKLM by default */
@@ -108,7 +106,7 @@ void RegisterBlendExtension(void)
     usr_mode = true;
     lresult = RegOpenKeyEx(HKEY_CURRENT_USER, "Software\\Classes", 0, KEY_ALL_ACCESS, &root);
     if (lresult != ERROR_SUCCESS) {
-      RegisterBlendExtension_Fail(0);
+      register_blend_extension_failed(0, background);
     }
   }
 
@@ -120,7 +118,7 @@ void RegisterBlendExtension(void)
     RegCloseKey(hkey);
   }
   if (lresult != ERROR_SUCCESS) {
-    RegisterBlendExtension_Fail(root);
+    register_blend_extension_failed(root, background);
   }
 
   lresult = RegCreateKeyEx(root,
@@ -138,7 +136,7 @@ void RegisterBlendExtension(void)
     RegCloseKey(hkey);
   }
   if (lresult != ERROR_SUCCESS) {
-    RegisterBlendExtension_Fail(root);
+    register_blend_extension_failed(root, background);
   }
 
   lresult = RegCreateKeyEx(root,
@@ -156,7 +154,7 @@ void RegisterBlendExtension(void)
     RegCloseKey(hkey);
   }
   if (lresult != ERROR_SUCCESS) {
-    RegisterBlendExtension_Fail(root);
+    register_blend_extension_failed(root, background);
   }
 
   lresult = RegCreateKeyEx(
@@ -167,29 +165,19 @@ void RegisterBlendExtension(void)
     RegCloseKey(hkey);
   }
   if (lresult != ERROR_SUCCESS) {
-    RegisterBlendExtension_Fail(root);
+    register_blend_extension_failed(root, background);
   }
 
-  BLI_getInstallationDir(InstallDir);
+  BLI_windows_get_executable_dir(InstallDir);
   GetSystemDirectory(SysDir, FILE_MAXDIR);
-#  ifdef _WIN64
-  ThumbHandlerDLL = "BlendThumb64.dll";
-#  else
-  IsWow64Process(GetCurrentProcess(), &IsWOW64);
-  if (IsWOW64 == true) {
-    ThumbHandlerDLL = "BlendThumb64.dll";
-  }
-  else {
-    ThumbHandlerDLL = "BlendThumb.dll";
-  }
-#  endif
+  ThumbHandlerDLL = "BlendThumb.dll";
   snprintf(
       RegCmd, MAX_PATH * 2, "%s\\regsvr32 /s \"%s\\%s\"", SysDir, InstallDir, ThumbHandlerDLL);
   system(RegCmd);
 
   RegCloseKey(root);
   printf("success (%s)\n", usr_mode ? "user" : "system");
-  if (!G.background) {
+  if (!background) {
     sprintf(MBox,
             "File extension registered for %s.",
             usr_mode ? "the current user. To register for all users, run as an administrator" :
@@ -199,7 +187,7 @@ void RegisterBlendExtension(void)
   TerminateProcess(GetCurrentProcess(), 0);
 }
 
-void get_default_root(char *root)
+void BLI_windows_get_default_root_dir(char *root)
 {
   char str[MAX_PATH + 1];
 
@@ -246,7 +234,7 @@ void get_default_root(char *root)
         }
       }
       if (0 == rc) {
-        printf("ERROR in 'get_default_root': can't find a valid drive!\n");
+        printf("ERROR in 'BLI_windows_get_default_root_dir': can't find a valid drive!\n");
         root[0] = 'C';
         root[1] = ':';
         root[2] = '\\';
@@ -255,30 +243,6 @@ void get_default_root(char *root)
     }
   }
 }
-
-/* UNUSED */
-#  if 0
-int check_file_chars(char *filename)
-{
-  char *p = filename;
-  while (*p) {
-    switch (*p) {
-      case ':':
-      case '?':
-      case '*':
-      case '|':
-      case '\\':
-      case '/':
-      case '\"':
-        return 0;
-        break;
-    }
-
-    p++;
-  }
-  return 1;
-}
-#  endif
 
 #else
 

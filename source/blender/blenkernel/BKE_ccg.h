@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CCG_H__
-#define __BKE_CCG_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -30,6 +29,10 @@
 /* declares fprintf() and abort(), needed for BLI_assert */
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct CCGSubSurf;
 
@@ -159,4 +162,6 @@ BLI_INLINE CCGElem *CCG_elem_next(const CCGKey *key, CCGElem *elem)
   return CCG_elem_offset(key, elem, 1);
 }
 
+#ifdef __cplusplus
+}
 #endif

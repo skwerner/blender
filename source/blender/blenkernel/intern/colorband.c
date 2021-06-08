@@ -23,17 +23,17 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
-#include "BLI_math_color.h"
 #include "BLI_heap.h"
+#include "BLI_math.h"
+#include "BLI_math_color.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_key_types.h"
 #include "DNA_texture_types.h"
 
 #include "BKE_colorband.h"
-#include "BKE_material.h"
 #include "BKE_key.h"
+#include "BKE_material.h"
 
 void BKE_colorband_init(ColorBand *coba, bool rangetype)
 {
@@ -338,38 +338,49 @@ static float colorband_hue_interp(
 
   switch (ipotype_hue) {
     case COLBAND_HUE_NEAR: {
-      if ((h1 < h2) && (h2 - h1) > +0.5f)
+      if ((h1 < h2) && (h2 - h1) > +0.5f) {
         mode = 1;
-      else if ((h1 > h2) && (h2 - h1) < -0.5f)
+      }
+      else if ((h1 > h2) && (h2 - h1) < -0.5f) {
         mode = 2;
-      else
+      }
+      else {
         mode = 0;
+      }
       break;
     }
     case COLBAND_HUE_FAR: {
       /* Do full loop in Hue space in case both stops are the same... */
-      if (h1 == h2)
+      if (h1 == h2) {
         mode = 1;
-      else if ((h1 < h2) && (h2 - h1) < +0.5f)
+      }
+      else if ((h1 < h2) && (h2 - h1) < +0.5f) {
         mode = 1;
-      else if ((h1 > h2) && (h2 - h1) > -0.5f)
+      }
+      else if ((h1 > h2) && (h2 - h1) > -0.5f) {
         mode = 2;
-      else
+      }
+      else {
         mode = 0;
+      }
       break;
     }
     case COLBAND_HUE_CCW: {
-      if (h1 > h2)
+      if (h1 > h2) {
         mode = 2;
-      else
+      }
+      else {
         mode = 0;
+      }
       break;
     }
     case COLBAND_HUE_CW: {
-      if (h1 < h2)
+      if (h1 < h2) {
         mode = 1;
-      else
+      }
+      else {
         mode = 0;
+      }
       break;
     }
   }
@@ -403,13 +414,15 @@ bool BKE_colorband_evaluate(const ColorBand *coba, float in, float out[4])
   int ipotype;
   int a;
 
-  if (coba == NULL || coba->tot == 0)
+  if (coba == NULL || coba->tot == 0) {
     return false;
+  }
 
   cbd1 = coba->data;
 
-  /* Note: when ipotype >= COLBAND_INTERP_B_SPLINE, we cannot do early-out with a constant color before
-   * first color stop and after last one, because interpolation starts before and ends after those... */
+  /* Note: when ipotype >= COLBAND_INTERP_B_SPLINE,
+   * we cannot do early-out with a constant color before first color stop and after last one,
+   * because interpolation starts before and ends after those... */
   ipotype = (coba->color_mode == COLBAND_BLEND_RGB) ? coba->ipotype : COLBAND_INTERP_LINEAR;
 
   if (coba->tot == 1) {
@@ -472,7 +485,7 @@ bool BKE_colorband_evaluate(const ColorBand *coba, float in, float out[4])
       }
       else {
         /* was setting to 0.0 in 2.56 & previous, but this
-         * is incorrect for the last element, see [#26732] */
+         * is incorrect for the last element, see T26732. */
         fac = (a != coba->tot) ? 0.0f : 1.0f;
       }
 
@@ -480,14 +493,18 @@ bool BKE_colorband_evaluate(const ColorBand *coba, float in, float out[4])
         /* ipo from right to left: 3 2 1 0 */
         float t[4];
 
-        if (a >= coba->tot - 1)
+        if (a >= coba->tot - 1) {
           cbd0 = cbd1;
-        else
+        }
+        else {
           cbd0 = cbd1 + 1;
-        if (a < 2)
+        }
+        if (a < 2) {
           cbd3 = cbd2;
-        else
+        }
+        else {
           cbd3 = cbd2 - 1;
+        }
 
         CLAMP(fac, 0.0f, 1.0f);
 
@@ -502,10 +519,7 @@ bool BKE_colorband_evaluate(const ColorBand *coba, float in, float out[4])
         out[1] = t[3] * cbd3->g + t[2] * cbd2->g + t[1] * cbd1->g + t[0] * cbd0->g;
         out[2] = t[3] * cbd3->b + t[2] * cbd2->b + t[1] * cbd1->b + t[0] * cbd0->b;
         out[3] = t[3] * cbd3->a + t[2] * cbd2->a + t[1] * cbd1->a + t[0] * cbd0->a;
-        CLAMP(out[0], 0.0f, 1.0f);
-        CLAMP(out[1], 0.0f, 1.0f);
-        CLAMP(out[2], 0.0f, 1.0f);
-        CLAMP(out[3], 0.0f, 1.0f);
+        clamp_v4(out, 0.0f, 1.0f);
       }
       else {
         if (ipotype == COLBAND_INTERP_EASE) {
@@ -561,18 +575,21 @@ void BKE_colorband_evaluate_table_rgba(const ColorBand *coba, float **array, int
   *size = CM_TABLE + 1;
   *array = MEM_callocN(sizeof(float) * (*size) * 4, "ColorBand");
 
-  for (a = 0; a < *size; a++)
+  for (a = 0; a < *size; a++) {
     BKE_colorband_evaluate(coba, (float)a / (float)CM_TABLE, &(*array)[a * 4]);
+  }
 }
 
 static int vergcband(const void *a1, const void *a2)
 {
   const CBData *x1 = a1, *x2 = a2;
 
-  if (x1->pos > x2->pos)
+  if (x1->pos > x2->pos) {
     return 1;
-  else if (x1->pos < x2->pos)
+  }
+  if (x1->pos < x2->pos) {
     return -1;
+  }
   return 0;
 }
 
@@ -580,11 +597,13 @@ void BKE_colorband_update_sort(ColorBand *coba)
 {
   int a;
 
-  if (coba->tot < 2)
+  if (coba->tot < 2) {
     return;
+  }
 
-  for (a = 0; a < coba->tot; a++)
+  for (a = 0; a < coba->tot; a++) {
     coba->data[a].cur = a;
+  }
 
   qsort(coba->data, coba->tot, sizeof(CBData), vergcband);
 
@@ -601,18 +620,17 @@ CBData *BKE_colorband_element_add(struct ColorBand *coba, float position)
   if (coba->tot == MAXCOLORBAND) {
     return NULL;
   }
+
+  CBData *xnew;
+
+  xnew = &coba->data[coba->tot];
+  xnew->pos = position;
+
+  if (coba->tot != 0) {
+    BKE_colorband_evaluate(coba, position, &xnew->r);
+  }
   else {
-    CBData *xnew;
-
-    xnew = &coba->data[coba->tot];
-    xnew->pos = position;
-
-    if (coba->tot != 0) {
-      BKE_colorband_evaluate(coba, position, &xnew->r);
-    }
-    else {
-      zero_v4(&xnew->r);
-    }
+    zero_v4(&xnew->r);
   }
 
   coba->tot++;
@@ -623,21 +641,22 @@ CBData *BKE_colorband_element_add(struct ColorBand *coba, float position)
   return coba->data + coba->cur;
 }
 
-int BKE_colorband_element_remove(struct ColorBand *coba, int index)
+bool BKE_colorband_element_remove(struct ColorBand *coba, int index)
 {
-  int a;
+  if (coba->tot < 2) {
+    return false;
+  }
 
-  if (coba->tot < 2)
-    return 0;
-
-  if (index < 0 || index >= coba->tot)
-    return 0;
+  if (index < 0 || index >= coba->tot) {
+    return false;
+  }
 
   coba->tot--;
-  for (a = index; a < coba->tot; a++) {
+  for (int a = index; a < coba->tot; a++) {
     coba->data[a] = coba->data[a + 1];
   }
-  if (coba->cur)
+  if (coba->cur) {
     coba->cur--;
-  return 1;
+  }
+  return true;
 }

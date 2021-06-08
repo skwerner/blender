@@ -38,7 +38,7 @@
 
 bUserMenu *BKE_blender_user_menu_find(ListBase *lb, char space_type, const char *context)
 {
-  for (bUserMenu *um = lb->first; um; um = um->next) {
+  LISTBASE_FOREACH (bUserMenu *, um, lb) {
     if ((space_type == um->space_type) && (STREQ(context, um->context))) {
       return um;
     }
@@ -97,7 +97,6 @@ void BKE_blender_user_menu_item_free(bUserMenuItem *umi)
     bUserMenuItem_Op *umi_op = (bUserMenuItem_Op *)umi;
     if (umi_op->prop) {
       IDP_FreeProperty(umi_op->prop);
-      MEM_freeN(umi_op->prop);
     }
   }
   MEM_freeN(umi);

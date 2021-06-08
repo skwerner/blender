@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_Q_INFORMATION_MAP_H__
-#define __FREESTYLE_Q_INFORMATION_MAP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -38,7 +37,7 @@ class QInformationMap : public InformationMap {
   QInformationMap(const QInformationMap &);
   QInformationMap &operator=(const QInformationMap &);
 
-  //float getSmoothedPixel(int x, int y, float sigma = 0.2f);1
+  // float getSmoothedPixel(int x, int y, float sigma = 0.2f);1
   virtual float getMean(int x, int y);
   virtual void retrieveMeanAndVariance(int x, int y, float &oMean, float &oVariance);
 
@@ -59,5 +58,3 @@ class QInformationMap : public InformationMap {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_Q_INFORMATION_MAP_H__

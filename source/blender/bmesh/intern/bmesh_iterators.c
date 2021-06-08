@@ -24,8 +24,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
+#include "BLI_utildefines.h"
 
 #include "bmesh.h"
 #include "intern/bmesh_private.h"
@@ -158,7 +158,7 @@ int BMO_iter_as_array(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
 /**
  * \brief Iterator as Array
  *
- * Allocates a new array, has the advantage that you dont need to know the size ahead of time.
+ * Allocates a new array, has the advantage that you don't need to know the size ahead of time.
  *
  * Takes advantage of less common iterator usage to avoid counting twice,
  * which you might end up doing when #BM_iter_as_array is used.
@@ -177,7 +177,7 @@ void *BM_iter_as_arrayN(BMesh *bm,
 
   BLI_assert(stack_array_size == 0 || (stack_array_size && stack_array));
 
-  /* we can't rely on coun't being set */
+  /* We can't rely on #BMIter.count being set. */
   switch (itype) {
     case BM_VERTS_OF_MESH:
       iter.count = bm->totvert;
@@ -206,10 +206,9 @@ void *BM_iter_as_arrayN(BMesh *bm,
     }
     return array;
   }
-  else {
-    *r_len = 0;
-    return NULL;
-  }
+
+  *r_len = 0;
+  return NULL;
 }
 
 void *BMO_iter_as_arrayN(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
@@ -244,10 +243,9 @@ void *BMO_iter_as_arrayN(BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
     *r_len = i;
     return array;
   }
-  else {
-    *r_len = 0;
-    return NULL;
-  }
+
+  *r_len = 0;
+  return NULL;
 }
 
 int BM_iter_mesh_bitmap_from_filter(const char itype,
@@ -411,8 +409,8 @@ int BM_iter_mesh_count_flag(const char itype, BMesh *bm, const char hflag, const
  * VERT OF MESH CALLBACKS
  */
 
-/* see bug [#36923] for why we need this,
- * allow adding but not removing, this isnt _totally_ safe since
+/* see bug T36923 for why we need this,
+ * allow adding but not removing, this isn't _totally_ safe since
  * you could add/remove within the same loop, but catches common cases
  */
 #ifdef DEBUG

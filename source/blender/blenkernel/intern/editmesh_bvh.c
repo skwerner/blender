@@ -23,8 +23,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_kdopbvh.h"
+#include "BLI_math.h"
 
 #include "BKE_editmesh.h"
 
@@ -66,14 +66,13 @@ BMBVHTree *BKE_bmbvh_new_ex(BMesh *bm,
 
   BMBVHTree *bmtree = MEM_callocN(sizeof(*bmtree), "BMBVHTree");
   float cos[3][3];
-  int i;
   int tottri;
 
   /* avoid testing every tri */
   BMFace *f_test, *f_test_prev;
   bool test_fn_ret;
 
-  /* BKE_editmesh_tessface_calc() must be called already */
+  /* BKE_editmesh_looptri_calc() must be called already */
   BLI_assert(looptris_tot != 0 || bm->totface == 0);
 
   if (cos_cage) {
@@ -95,7 +94,7 @@ BMBVHTree *BKE_bmbvh_new_ex(BMesh *bm,
     test_fn_ret = false;
 
     tottri = 0;
-    for (i = 0; i < looptris_tot; i++) {
+    for (int i = 0; i < looptris_tot; i++) {
       f_test = looptris[i][0]->f;
       if (f_test != f_test_prev) {
         test_fn_ret = test_fn(f_test, user_data);
@@ -116,7 +115,7 @@ BMBVHTree *BKE_bmbvh_new_ex(BMesh *bm,
   f_test_prev = NULL;
   test_fn_ret = false;
 
-  for (i = 0; i < looptris_tot; i++) {
+  for (int i = 0; i < looptris_tot; i++) {
     if (test_fn) {
       /* note, the arrays wont align now! take care */
       f_test = looptris[i][0]->f;
@@ -316,8 +315,9 @@ BMFace *BKE_bmbvh_ray_cast(BMBVHTree *bmtree,
   struct RayCastUserData bmcb_data;
   const float dist = r_dist ? *r_dist : FLT_MAX;
 
-  if (bmtree->cos_cage)
+  if (bmtree->cos_cage) {
     BLI_assert(!(bmtree->bm->elem_index_dirty & BM_VERT));
+  }
 
   hit.dist = dist;
   hit.index = -1;
@@ -380,8 +380,9 @@ BMFace *BKE_bmbvh_ray_cast_filter(BMBVHTree *bmtree,
   bmcb_data_filter.filter_cb = filter_cb;
   bmcb_data_filter.filter_userdata = filter_userdata;
 
-  if (bmtree->cos_cage)
+  if (bmtree->cos_cage) {
     BLI_assert(!(bmtree->bm->elem_index_dirty & BM_VERT));
+  }
 
   hit.dist = dist;
   hit.index = -1;
@@ -420,13 +421,11 @@ static void bmbvh_find_vert_closest_cb(void *userdata,
   struct VertSearchUserData *bmcb_data = userdata;
   const BMLoop **ltri = bmcb_data->looptris[index];
   const float dist_max_sq = bmcb_data->dist_max_sq;
-  int i;
 
   const float *tri_cos[3];
-
   bmbvh_tri_from_face(tri_cos, ltri, bmcb_data->cos_cage);
 
-  for (i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     const float dist_sq = len_squared_v3v3(co, tri_cos[i]);
     if (dist_sq < hit->dist_sq && dist_sq < dist_max_sq) {
       copy_v3_v3(hit->co, tri_cos[i]);
@@ -445,8 +444,9 @@ BMVert *BKE_bmbvh_find_vert_closest(BMBVHTree *bmtree, const float co[3], const 
   struct VertSearchUserData bmcb_data;
   const float dist_max_sq = dist_max * dist_max;
 
-  if (bmtree->cos_cage)
+  if (bmtree->cos_cage) {
     BLI_assert(!(bmtree->bm->elem_index_dirty & BM_VERT));
+  }
 
   hit.dist_sq = dist_max_sq;
   hit.index = -1;
@@ -505,8 +505,9 @@ struct BMFace *BKE_bmbvh_find_face_closest(BMBVHTree *bmtree,
   struct FaceSearchUserData bmcb_data;
   const float dist_max_sq = dist_max * dist_max;
 
-  if (bmtree->cos_cage)
+  if (bmtree->cos_cage) {
     BLI_assert(!(bmtree->bm->elem_index_dirty & BM_VERT));
+  }
 
   hit.dist_sq = dist_max_sq;
   hit.index = -1;
@@ -559,8 +560,7 @@ static bool bmbvh_overlap_cb(void *userdata, int index_a, int index_b, int UNUSE
     }
   }
 
-  return (isect_tri_tri_epsilon_v3(
-              UNPACK3(tri_a_co), UNPACK3(tri_b_co), ix_pair[0], ix_pair[1], data->epsilon) &&
+  return (isect_tri_tri_v3(UNPACK3(tri_a_co), UNPACK3(tri_b_co), ix_pair[0], ix_pair[1]) &&
           /* if we share a vertex, check the intersection isn't a 'point' */
           ((verts_shared == 0) || (len_squared_v3v3(ix_pair[0], ix_pair[1]) > data->epsilon)));
 }
@@ -581,4 +581,27 @@ BVHTreeOverlap *BKE_bmbvh_overlap(const BMBVHTree *bmtree_a,
 
   return BLI_bvhtree_overlap(
       bmtree_a->tree, bmtree_b->tree, r_overlap_tot, bmbvh_overlap_cb, &data);
+}
+
+static bool bmbvh_overlap_self_cb(void *userdata, int index_a, int index_b, int thread)
+{
+  if (index_a < index_b) {
+    return bmbvh_overlap_cb(userdata, index_a, index_b, thread);
+  }
+  return false;
+}
+
+/**
+ * Overlap indices reference the looptri's
+ */
+BVHTreeOverlap *BKE_bmbvh_overlap_self(const BMBVHTree *bmtree, unsigned int *r_overlap_tot)
+{
+  struct BMBVHTree_OverlapData data;
+
+  data.tree_pair[0] = bmtree;
+  data.tree_pair[1] = bmtree;
+  data.epsilon = BLI_bvhtree_get_epsilon(bmtree->tree);
+
+  return BLI_bvhtree_overlap(
+      bmtree->tree, bmtree->tree, r_overlap_tot, bmbvh_overlap_self_cb, &data);
 }

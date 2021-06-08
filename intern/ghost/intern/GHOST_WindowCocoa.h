@@ -22,18 +22,18 @@
  * Declaration of GHOST_WindowCocoa class.
  */
 
-#ifndef __GHOST_WINDOWCOCOA_H__
-#define __GHOST_WINDOWCOCOA_H__
+#pragma once
 
 #ifndef __APPLE__
 #  error Apple OSX only!
 #endif  // __APPLE__
 
 #include "GHOST_Window.h"
-#include "STR_String.h"
 
-@class CocoaWindow;
+@class CAMetalLayer;
+@class CocoaMetalView;
 @class CocoaOpenGLView;
+@class CocoaWindow;
 @class NSCursor;
 @class NSScreen;
 
@@ -44,20 +44,19 @@ class GHOST_WindowCocoa : public GHOST_Window {
   /**
    * Constructor.
    * Creates a new window and opens it.
-   * To check if the window was created properly, use the getValid() method.
-   * \param systemCocoa       The associated system class to forward events to
-   * \param title             The text shown in the title bar of the window.
-   * \param left              The coordinate of the left edge of the window.
-   * \param bottom            The coordinate of the bottom edge of the window.
-   * \param width             The width the window.
-   * \param height            The height the window.
-   * \param state             The state the window is initially opened with.
-   * \param type              The type of drawing context installed in this window.
-   * \param stereoVisual      Stereo visual for quad buffered stereo.
-   * \param numOfAASamples    Number of samples used for AA (zero if no AA)
+   * To check if the window was created properly, use the #getValid() method.
+   * \param systemCocoa: The associated system class to forward events to.
+   * \param title: The text shown in the title bar of the window.
+   * \param left: The coordinate of the left edge of the window.
+   * \param bottom: The coordinate of the bottom edge of the window.
+   * \param width: The width the window.
+   * \param height: The height the window.
+   * \param state: The state the window is initially opened with.
+   * \param type: The type of drawing context installed in this window.
+   * \param stereoVisual: Stereo visual for quad buffered stereo.
    */
   GHOST_WindowCocoa(GHOST_SystemCocoa *systemCocoa,
-                    const STR_String &title,
+                    const char *title,
                     GHOST_TInt32 left,
                     GHOST_TInt32 bottom,
                     GHOST_TUns32 width,
@@ -65,8 +64,9 @@ class GHOST_WindowCocoa : public GHOST_Window {
                     GHOST_TWindowState state,
                     GHOST_TDrawingContextType type = GHOST_kDrawingContextTypeNone,
                     const bool stereoVisual = false,
-                    const GHOST_TUns16 numOfAASamples = 0,
-                    bool is_debug = false);
+                    bool is_debug = false,
+                    bool dialog = false,
+                    GHOST_WindowCocoa *parentWindow = 0);
 
   /**
    * Destructor.
@@ -88,46 +88,46 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Sets the title displayed in the title bar.
-   * \param title The title to display in the title bar.
+   * \param title: The title to display in the title bar.
    */
-  void setTitle(const STR_String &title);
-
+  void setTitle(const char *title);
   /**
    * Returns the title displayed in the title bar.
-   * \param title The title displayed in the title bar.
+   * \param title: The title displayed in the title bar.
    */
-  void getTitle(STR_String &title) const;
+  std::string getTitle() const;
 
   /**
    * Returns the window rectangle dimensions.
-   * The dimensions are given in screen coordinates that are relative to the upper-left corner of the screen.
-   * \param bounds The bounding rectangle of the window.
+   * The dimensions are given in screen coordinates that are
+   * relative to the upper-left corner of the screen.
+   * \param bounds: The bounding rectangle of the window.
    */
   void getWindowBounds(GHOST_Rect &bounds) const;
 
   /**
    * Returns the client rectangle dimensions.
    * The left and top members of the rectangle are always zero.
-   * \param bounds The bounding rectangle of the client area of the window.
+   * \param bounds: The bounding rectangle of the client area of the window.
    */
   void getClientBounds(GHOST_Rect &bounds) const;
 
   /**
    * Resizes client rectangle width.
-   * \param width The new width of the client area of the window.
+   * \param width: The new width of the client area of the window.
    */
   GHOST_TSuccess setClientWidth(GHOST_TUns32 width);
 
   /**
    * Resizes client rectangle height.
-   * \param height The new height of the client area of the window.
+   * \param height: The new height of the client area of the window.
    */
   GHOST_TSuccess setClientHeight(GHOST_TUns32 height);
 
   /**
    * Resizes client rectangle.
-   * \param width     The new width of the client area of the window.
-   * \param height    The new height of the client area of the window.
+   * \param width: The new width of the client area of the window.
+   * \param height: The new height of the client area of the window.
    */
   GHOST_TSuccess setClientSize(GHOST_TUns32 width, GHOST_TUns32 height);
 
@@ -139,17 +139,17 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Sets the window "modified" status, indicating unsaved changes
-   * \param isUnsavedChanges Unsaved changes or not
+   * \param isUnsavedChanges: Unsaved changes or not.
    * \return Indication of success.
    */
   GHOST_TSuccess setModifiedState(bool isUnsavedChanges);
 
   /**
    * Converts a point in screen coordinates to client rectangle coordinates
-   * \param inX   The x-coordinate on the screen.
-   * \param inY   The y-coordinate on the screen.
-   * \param outX  The x-coordinate in the client rectangle.
-   * \param outY  The y-coordinate in the client rectangle.
+   * \param inX: The x-coordinate on the screen.
+   * \param inY: The y-coordinate on the screen.
+   * \param outX: The x-coordinate in the client rectangle.
+   * \param outY: The y-coordinate in the client rectangle.
    */
   void screenToClient(GHOST_TInt32 inX,
                       GHOST_TInt32 inY,
@@ -158,10 +158,10 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Converts a point in screen coordinates to client rectangle coordinates
-   * \param inX   The x-coordinate in the client rectangle.
-   * \param inY   The y-coordinate in the client rectangle.
-   * \param outX  The x-coordinate on the screen.
-   * \param outY  The y-coordinate on the screen.
+   * \param inX: The x-coordinate in the client rectangle.
+   * \param inY: The y-coordinate in the client rectangle.
+   * \param outX: The x-coordinate on the screen.
+   * \param outY: The y-coordinate on the screen.
    */
   void clientToScreen(GHOST_TInt32 inX,
                       GHOST_TInt32 inY,
@@ -171,10 +171,10 @@ class GHOST_WindowCocoa : public GHOST_Window {
   /**
    * Converts a point in screen coordinates to client rectangle coordinates
    * but without the y coordinate conversion needed for ghost compatibility.
-   * \param inX   The x-coordinate in the client rectangle.
-   * \param inY   The y-coordinate in the client rectangle.
-   * \param outX  The x-coordinate on the screen.
-   * \param outY  The y-coordinate on the screen.
+   * \param inX: The x-coordinate in the client rectangle.
+   * \param inY: The y-coordinate in the client rectangle.
+   * \param outX: The x-coordinate on the screen.
+   * \param outY: The y-coordinate on the screen.
    */
   void clientToScreenIntern(GHOST_TInt32 inX,
                             GHOST_TInt32 inY,
@@ -184,10 +184,10 @@ class GHOST_WindowCocoa : public GHOST_Window {
   /**
    * Converts a point in screen coordinates to client rectangle coordinates,
    * but without the y coordinate conversion needed for ghost compatibility.
-   * \param inX   The x-coordinate in the client rectangle.
-   * \param inY   The y-coordinate in the client rectangle.
-   * \param outX  The x-coordinate on the screen.
-   * \param outY  The y-coordinate on the screen.
+   * \param inX: The x-coordinate in the client rectangle.
+   * \param inY: The y-coordinate in the client rectangle.
+   * \param outX: The x-coordinate on the screen.
+   * \param outY: The y-coordinate on the screen.
    */
   void screenToClientIntern(GHOST_TInt32 inX,
                             GHOST_TInt32 inY,
@@ -202,24 +202,22 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Sets the state of the window (normal, minimized, maximized).
-   * \param state The state of the window.
+   * \param state: The state of the window.
    * \return Indication of success.
    */
   GHOST_TSuccess setState(GHOST_TWindowState state);
 
   /**
    * Sets the order of the window (bottom, top).
-   * \param order The order of the window.
+   * \param order: The order of the window.
    * \return Indication of success.
    */
   GHOST_TSuccess setOrder(GHOST_TWindowOrder order);
 
+  NSCursor *getStandardCursor(GHOST_TStandardCursor cursor) const;
   void loadCursor(bool visible, GHOST_TStandardCursor cursor) const;
 
-  const GHOST_TabletData *GetTabletData()
-  {
-    return &m_tablet;
-  }
+  bool isDialog() const;
 
   GHOST_TabletData &GetCocoaTabletData()
   {
@@ -228,7 +226,7 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   /**
    * Sets the progress bar value displayed in the window/application icon
-   * \param progress The progress % (0.0 to 1.0)
+   * \param progress: The progress percentage (0.0 to 1.0).
    */
   GHOST_TSuccess setProgressBar(float progress);
 
@@ -267,7 +265,7 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
  protected:
   /**
-   * \param type  The type of rendering context create.
+   * \param type: The type of rendering context create.
    * \return Indication of success.
    */
   GHOST_Context *newDrawingContext(GHOST_TDrawingContextType type);
@@ -295,6 +293,7 @@ class GHOST_WindowCocoa : public GHOST_Window {
    * native window system calls.
    */
   GHOST_TSuccess setWindowCursorShape(GHOST_TStandardCursor shape);
+  GHOST_TSuccess hasCursorShape(GHOST_TStandardCursor shape);
 
   /**
    * Sets the cursor shape on the window using
@@ -306,19 +305,15 @@ class GHOST_WindowCocoa : public GHOST_Window {
                                             int sizey,
                                             int hotX,
                                             int hotY,
-                                            int fg_color,
-                                            int bg_color);
+                                            bool canInvertColor);
 
-  GHOST_TSuccess setWindowCustomCursorShape(GHOST_TUns8 bitmap[16][2],
-                                            GHOST_TUns8 mask[16][2],
-                                            int hotX,
-                                            int hotY);
-
-  /** The window containing the OpenGL view */
+  /** The window containing the view */
   CocoaWindow *m_window;
 
-  /** The openGL view */
+  /** The view, either Metal or OpenGL */
   CocoaOpenGLView *m_openGLView;
+  CocoaMetalView *m_metalView;
+  CAMetalLayer *m_metalLayer;
 
   /** The mother SystemCocoa class to send events */
   GHOST_SystemCocoa *m_systemCocoa;
@@ -329,6 +324,5 @@ class GHOST_WindowCocoa : public GHOST_Window {
 
   bool m_immediateDraw;
   bool m_debug_context;  // for debug messages during context setup
+  bool m_is_dialog;
 };
-
-#endif  // __GHOST_WINDOWCOCOA_H__

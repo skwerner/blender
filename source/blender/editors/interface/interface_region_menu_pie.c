@@ -26,7 +26,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -104,13 +103,12 @@ static float ui_pie_menu_title_width(const char *name, int icon)
 
 uiPieMenu *UI_pie_menu_begin(struct bContext *C, const char *title, int icon, const wmEvent *event)
 {
-  uiStyle *style;
+  const uiStyle *style = UI_style_get_dpi();
   uiPieMenu *pie;
   short event_type;
 
   wmWindow *win = CTX_wm_window(C);
 
-  style = UI_style_get_dpi();
   pie = MEM_callocN(sizeof(*pie), "pie menu");
 
   pie->block_radial = UI_block_begin(C, NULL, __func__, UI_EMBOSS);
@@ -124,26 +122,26 @@ uiPieMenu *UI_pie_menu_begin(struct bContext *C, const char *title, int icon, co
    * it is always assumed to be click style */
   if (event->type == LEFTMOUSE || ELEM(event->val, KM_RELEASE, KM_CLICK)) {
     pie->block_radial->pie_data.flags |= UI_PIE_CLICK_STYLE;
-    pie->block_radial->pie_data.event = EVENT_NONE;
-    win->lock_pie_event = EVENT_NONE;
+    pie->block_radial->pie_data.event_type = EVENT_NONE;
+    win->pie_event_type_lock = EVENT_NONE;
   }
   else {
-    if (win->last_pie_event != EVENT_NONE) {
+    if (win->pie_event_type_last != EVENT_NONE) {
       /* original pie key has been released, so don't propagate the event */
-      if (win->lock_pie_event == EVENT_NONE) {
+      if (win->pie_event_type_lock == EVENT_NONE) {
         event_type = EVENT_NONE;
         pie->block_radial->pie_data.flags |= UI_PIE_CLICK_STYLE;
       }
       else {
-        event_type = win->last_pie_event;
+        event_type = win->pie_event_type_last;
       }
     }
     else {
       event_type = event->type;
     }
 
-    pie->block_radial->pie_data.event = event_type;
-    win->lock_pie_event = event_type;
+    pie->block_radial->pie_data.event_type = event_type;
+    win->pie_event_type_lock = event_type;
   }
 
   pie->layout = UI_block_layout(
@@ -208,12 +206,12 @@ void UI_pie_menu_end(bContext *C, uiPieMenu *pie)
   wmWindow *window = CTX_wm_window(C);
   uiPopupBlockHandle *menu;
 
-  menu = ui_popup_block_create(C, NULL, NULL, NULL, ui_block_func_PIE, pie);
+  menu = ui_popup_block_create(C, NULL, NULL, NULL, ui_block_func_PIE, pie, NULL);
   menu->popup = true;
   menu->towardstime = PIL_check_seconds_timer();
 
   UI_popup_handlers_add(C, &window->modalhandlers, menu, WM_HANDLER_ACCEPT_DBL_CLICK);
-  WM_event_add_mousemove(C);
+  WM_event_add_mousemove(window);
 
   MEM_freeN(pie);
 }
@@ -310,12 +308,14 @@ int UI_pie_menu_invoke_from_rna_enum(struct bContext *C,
 /**
  * \name Pie Menu Levels
  *
- * Pie menus can't contain more than 8 items (yet). When using #uiItemsFullEnumO, a "More" button is created that calls
+ * Pie menus can't contain more than 8 items (yet).
+ * When using #uiItemsFullEnumO, a "More" button is created that calls
  * a new pie menu if the enum has too many items. We call this a new "level".
  * Indirect recursion is used, so that a theoretically unlimited number of items is supported.
  *
- * This is a implementation specifically for operator enums, needed since the object mode pie now has more than 8
- * items. Ideally we'd have some way of handling this for all kinds of pie items, but that's tricky.
+ * This is a implementation specifically for operator enums,
+ * needed since the object mode pie now has more than 8 items.
+ * Ideally we'd have some way of handling this for all kinds of pie items, but that's tricky.
  *
  * - Julian (Feb 2016)
  *
@@ -386,13 +386,13 @@ void ui_pie_menu_level_create(uiBlock *block,
 {
   const int totitem_parent = PIE_MAX_ITEMS - 1;
   const int totitem_remain = totitem - totitem_parent;
-  size_t array_size = sizeof(EnumPropertyItem) * totitem_remain;
+  const size_t array_size = sizeof(EnumPropertyItem) * totitem_remain;
 
   /* used as but->func_argN so freeing is handled elsewhere */
   EnumPropertyItem *remaining = MEM_mallocN(array_size + sizeof(EnumPropertyItem),
                                             "pie_level_item_array");
   memcpy(remaining, items + totitem_parent, array_size);
-  /* a NULL terminating sentinal element is required */
+  /* A NULL terminating sentinel element is required. */
   memset(&remaining[totitem_remain], 0, sizeof(EnumPropertyItem));
 
   /* yuk, static... issue is we can't reliably free this without doing dangerous changes */

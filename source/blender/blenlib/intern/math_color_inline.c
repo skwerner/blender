@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -35,14 +34,14 @@
 
 /******************************** Color Space ********************************/
 
-#  ifdef __SSE2__
+#  ifdef BLI_HAVE_SSE2
 
 MALWAYS_INLINE __m128 srgb_to_linearrgb_v4_simd(const __m128 c)
 {
   __m128 cmp = _mm_cmplt_ps(c, _mm_set1_ps(0.04045f));
   __m128 lt = _mm_max_ps(_mm_mul_ps(c, _mm_set1_ps(1.0f / 12.92f)), _mm_set1_ps(0.0f));
   __m128 gtebase = _mm_mul_ps(_mm_add_ps(c, _mm_set1_ps(0.055f)),
-                              _mm_set1_ps(1.0f / 1.055f)); /* fma */
+                              _mm_set1_ps(1.0f / 1.055f)); /* FMA. */
   __m128 gte = _bli_math_fastpow24(gtebase);
   return _bli_math_blend_sse(cmp, lt, gte);
 }
@@ -76,7 +75,7 @@ MINLINE void linearrgb_to_srgb_v3_v3(float srgb[3], const float linear[3])
   srgb[2] = r[2];
 }
 
-#  else  /* __SSE2__ */
+#  else  /* BLI_HAVE_SSE2 */
 
 MINLINE void srgb_to_linearrgb_v3_v3(float linear[3], const float srgb[3])
 {
@@ -91,7 +90,7 @@ MINLINE void linearrgb_to_srgb_v3_v3(float srgb[3], const float linear[3])
   srgb[1] = linearrgb_to_srgb(linear[1]);
   srgb[2] = linearrgb_to_srgb(linear[2]);
 }
-#  endif /* __SSE2__ */
+#  endif /* BLI_HAVE_SSE2 */
 
 MINLINE void srgb_to_linearrgb_v4(float linear[4], const float srgb[4])
 {
@@ -225,8 +224,8 @@ MINLINE void srgb_to_linearrgb_uchar4_predivide(float linear[4], const unsigned 
   srgb_to_linearrgb_predivide_v4(linear, fsrgb);
 }
 
-MINLINE void rgba_char_args_set(
-    char col[4], const char r, const char g, const char b, const char a)
+MINLINE void rgba_uchar_args_set(
+    uchar col[4], const uchar r, const uchar g, const uchar b, const uchar a)
 {
   col[0] = r;
   col[1] = g;
@@ -243,8 +242,8 @@ MINLINE void rgba_float_args_set(
   col[3] = a;
 }
 
-MINLINE void rgba_char_args_test_set(
-    char col[4], const char r, const char g, const char b, const char a)
+MINLINE void rgba_uchar_args_test_set(
+    uchar col[4], const uchar r, const uchar g, const uchar b, const uchar a)
 {
   if (col[3] == 0) {
     col[0] = r;
@@ -261,12 +260,13 @@ MINLINE void cpack_cpy_3ub(unsigned char r_col[3], const unsigned int pack)
   r_col[2] = ((pack) >> 16) & 0xFF;
 }
 
+/* -------------------------------------------------------------------- */
 /** \name RGB/Grayscale Functions
  *
  * \warning
  * These are only an approximation,
- * in almost _all_ cases, #IMB_colormanagement_get_luminance should be used instead.
- * however for screen-only colors which don't depend on the currently loaded profile - this is preferred.
+ * in almost _all_ cases, #IMB_colormanagement_get_luminance should be used instead. However for
+ * screen-only colors which don't depend on the currently loaded profile - this is preferred.
  * Checking theme colors for contrast, etc. Basically anything outside the render pipeline.
  *
  * \{ */
@@ -304,11 +304,11 @@ MINLINE int compare_rgb_uchar(const unsigned char col_a[3],
                               const int limit)
 {
   const int r = (int)col_a[0] - (int)col_b[0];
-  if (ABS(r) < limit) {
+  if (abs(r) < limit) {
     const int g = (int)col_a[1] - (int)col_b[1];
-    if (ABS(g) < limit) {
+    if (abs(g) < limit) {
       const int b = (int)col_a[2] - (int)col_b[2];
-      if (ABS(b) < limit) {
+      if (abs(b) < limit) {
         return 1;
       }
     }
@@ -317,19 +317,27 @@ MINLINE int compare_rgb_uchar(const unsigned char col_a[3],
   return 0;
 }
 
+/* Using a triangle distribution which gives a more final uniform noise.
+ * See Banding in Games:A Noisy Rant(revision 5) Mikkel Gjøl, Playdead (slide 27) */
+/* Return triangle noise in [-0.5..1.5[ range */
 MINLINE float dither_random_value(float s, float t)
 {
-  static float vec[2] = {12.9898f, 78.233f};
-  float value;
-
-  value = sinf(s * vec[0] + t * vec[1]) * 43758.5453f;
-  return value - floorf(value);
+  /* Original code from https://www.shadertoy.com/view/4t2SDh */
+  /* The noise reshaping technique does not work on CPU.
+   * We generate and merge two distribution instead */
+  /* Uniform noise in [0..1[ range */
+  float nrnd0 = sinf(s * 12.9898f + t * 78.233f) * 43758.5453f;
+  float nrnd1 = sinf(s * 19.9898f + t * 119.233f) * 43798.5453f;
+  nrnd0 -= floorf(nrnd0);
+  nrnd1 -= floorf(nrnd1);
+  /* Convert uniform distribution into triangle-shaped distribution. */
+  return nrnd0 + nrnd1 - 0.5f;
 }
 
 MINLINE void float_to_byte_dither_v3(
     unsigned char b[3], const float f[3], float dither, float s, float t)
 {
-  float dither_value = dither_random_value(s, t) * 0.005f * dither;
+  float dither_value = dither_random_value(s, t) * 0.0033f * dither;
 
   b[0] = unit_float_to_uchar_clamp(dither_value + f[0]);
   b[1] = unit_float_to_uchar_clamp(dither_value + f[1]);

@@ -18,8 +18,10 @@
  * \ingroup wm
  */
 
-#include "BLI_utildefines.h"
+#include <stdio.h>
+
 #include "BLI_ghash.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_context.h"
 
@@ -35,9 +37,10 @@
 #include "wm.h"
 
 /* own includes */
-#include "wm_gizmo_wmapi.h"
 #include "wm_gizmo_intern.h"
+#include "wm_gizmo_wmapi.h"
 
+/* -------------------------------------------------------------------- */
 /** \name GizmoGroup Type Append
  *
  * \note This follows conventions from #WM_operatortype_find #WM_operatortype_append & friends.
@@ -97,10 +100,10 @@ static void wm_gizmogrouptype_append__end(wmGizmoGroupType *gzgt)
   /* if not set, use default */
   if (gzgt->setup_keymap == NULL) {
     if (gzgt->flag & WM_GIZMOGROUPTYPE_SELECT) {
-      gzgt->setup_keymap = WM_gizmogroup_keymap_common_select;
+      gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic_select;
     }
     else {
-      gzgt->setup_keymap = WM_gizmogroup_keymap_common;
+      gzgt->setup_keymap = WM_gizmogroup_setup_keymap_generic;
     }
   }
 
@@ -144,14 +147,14 @@ wmGizmoGroupTypeRef *WM_gizmogrouptype_append_and_link(wmGizmoMapType *gzmap_typ
  */
 static void gizmogrouptype_free(wmGizmoGroupType *gzgt)
 {
-  if (gzgt->ext.srna) { /* python gizmo group, allocs own string */
+  if (gzgt->rna_ext.srna) { /* python gizmo group, allocs own string */
     MEM_freeN((void *)gzgt->idname);
   }
 
   MEM_freeN(gzgt);
 }
 
-void WM_gizmogrouptype_free_ptr(wmGizmoGroupType *gzgt)
+void WM_gizmo_group_type_free_ptr(wmGizmoGroupType *gzgt)
 {
   BLI_assert(gzgt == WM_gizmogrouptype_find(gzgt->idname, false));
 
@@ -162,7 +165,7 @@ void WM_gizmogrouptype_free_ptr(wmGizmoGroupType *gzgt)
   /* XXX, TODO, update the world! */
 }
 
-bool WM_gizmogrouptype_free(const char *idname)
+bool WM_gizmo_group_type_free(const char *idname)
 {
   wmGizmoGroupType *gzgt = BLI_ghash_lookup(global_gizmogrouptype_hash, idname);
 
@@ -170,7 +173,7 @@ bool WM_gizmogrouptype_free(const char *idname)
     return false;
   }
 
-  WM_gizmogrouptype_free_ptr(gzgt);
+  WM_gizmo_group_type_free_ptr(gzgt);
 
   return true;
 }

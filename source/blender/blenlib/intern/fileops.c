@@ -24,35 +24,42 @@
 #include <stdlib.h> /* malloc */
 #include <string.h>
 
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include <errno.h>
 
 #include "zlib.h"
 
 #ifdef WIN32
-#  include <io.h>
-#  include "BLI_winstuff.h"
-#  include "BLI_callbacks.h"
 #  include "BLI_fileops_types.h"
+#  include "BLI_winstuff.h"
 #  include "utf_winfunc.h"
 #  include "utfconv.h"
+#  include <io.h>
+#  include <shellapi.h>
+#  include <shobjidl.h>
+#  include <windows.h>
 #else
-#  include <sys/param.h>
+#  if defined(__APPLE__)
+#    include <CoreFoundation/CoreFoundation.h>
+#    include <objc/message.h>
+#    include <objc/runtime.h>
+#  endif
 #  include <dirent.h>
+#  include <sys/param.h>
+#  include <sys/wait.h>
 #  include <unistd.h>
-#  include <sys/stat.h>
 #endif
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
-#include "BLI_path_util.h"
 #include "BLI_fileops.h"
-#include "BLI_sys_types.h"  // for intptr_t support
+#include "BLI_path_util.h"
+#include "BLI_string.h"
+#include "BLI_sys_types.h" /* for intptr_t support */
+#include "BLI_utildefines.h"
 
 #if 0 /* UNUSED */
 /* gzip the file in from and write it to "to".
@@ -70,11 +77,13 @@ int BLI_file_gzip(const char *from, const char *to)
   /* level 1 is very close to 3 (the default) in terms of file size,
    * but about twice as fast, best use for speedy saving - campbell */
   gzfile = BLI_gzopen(to, "wb1");
-  if (gzfile == NULL)
+  if (gzfile == NULL) {
     return -1;
+  }
   file = BLI_open(from, O_BINARY | O_RDONLY, 0);
-  if (file == -1)
+  if (file == -1) {
     return -2;
+  }
 
   while (1) {
     readsize = read(file, buffer, sizeof(buffer));
@@ -84,8 +93,9 @@ int BLI_file_gzip(const char *from, const char *to)
       fprintf(stderr, "Error reading file %s: %s.\n", from, strerror(errno));
       break;
     }
-    else if (readsize == 0)
-      break;  /* done reading */
+    else if (readsize == 0) {
+      break; /* done reading */
+    }
 
     if (gzwrite(gzfile, buffer, readsize) <= 0) {
       rval = -1; /* error happened in writing */
@@ -102,7 +112,7 @@ int BLI_file_gzip(const char *from, const char *to)
 #endif
 
 /* gzip the file in from_file and write it to memory to_mem, at most size bytes.
- * return the unziped size
+ * return the unzipped size
  */
 char *BLI_file_ungzip_to_mem(const char *from_file, int *r_size)
 {
@@ -147,6 +157,103 @@ char *BLI_file_ungzip_to_mem(const char *from_file, int *r_size)
 
   return mem;
 }
+
+#define CHUNK (256 * 1024)
+
+/* gzip byte array from memory and write it to file at certain position.
+ * return size of gzip stream.
+ */
+size_t BLI_gzip_mem_to_file_at_pos(
+    void *buf, size_t len, FILE *file, size_t gz_stream_offset, int compression_level)
+{
+  int ret, flush;
+  unsigned have;
+  z_stream strm;
+  unsigned char out[CHUNK];
+
+  BLI_fseek(file, gz_stream_offset, 0);
+
+  strm.zalloc = Z_NULL;
+  strm.zfree = Z_NULL;
+  strm.opaque = Z_NULL;
+  ret = deflateInit(&strm, compression_level);
+  if (ret != Z_OK) {
+    return 0;
+  }
+
+  strm.avail_in = len;
+  strm.next_in = (Bytef *)buf;
+  flush = Z_FINISH;
+
+  do {
+    strm.avail_out = CHUNK;
+    strm.next_out = out;
+    ret = deflate(&strm, flush);
+    if (ret == Z_STREAM_ERROR) {
+      return 0;
+    }
+    have = CHUNK - strm.avail_out;
+    if (fwrite(out, 1, have, file) != have || ferror(file)) {
+      deflateEnd(&strm);
+      return 0;
+    }
+  } while (strm.avail_out == 0);
+
+  if (strm.avail_in != 0 || ret != Z_STREAM_END) {
+    return 0;
+  }
+
+  deflateEnd(&strm);
+  return (size_t)strm.total_out;
+}
+
+/* read and decompress gzip stream from file at certain position to buffer.
+ * return size of decompressed data.
+ */
+size_t BLI_ungzip_file_to_mem_at_pos(void *buf, size_t len, FILE *file, size_t gz_stream_offset)
+{
+  int ret;
+  z_stream strm;
+  size_t chunk = 256 * 1024;
+  unsigned char in[CHUNK];
+
+  BLI_fseek(file, gz_stream_offset, 0);
+
+  strm.zalloc = Z_NULL;
+  strm.zfree = Z_NULL;
+  strm.opaque = Z_NULL;
+  strm.avail_in = 0;
+  strm.next_in = Z_NULL;
+  ret = inflateInit(&strm);
+  if (ret != Z_OK) {
+    return 0;
+  }
+
+  do {
+    strm.avail_in = fread(in, 1, chunk, file);
+    strm.next_in = in;
+    if (ferror(file)) {
+      inflateEnd(&strm);
+      return 0;
+    }
+
+    do {
+      strm.avail_out = len;
+      strm.next_out = (Bytef *)buf + strm.total_out;
+
+      ret = inflate(&strm, Z_NO_FLUSH);
+      if (ret == Z_STREAM_ERROR) {
+        return 0;
+      }
+    } while (strm.avail_out == 0);
+
+  } while (ret != Z_STREAM_END);
+
+  inflateEnd(&strm);
+  return (size_t)strm.total_out;
+}
+
+#undef CHUNK
 
 /**
  * Returns true if the file with the specified name can be written.
@@ -250,7 +357,12 @@ void *BLI_gzopen(const char *filename, const char *mode)
 
   /* xxx Creates file before transcribing the path */
   if (mode[0] == 'w') {
-    fclose(ufopen(filename, "a"));
+    FILE *file = ufopen(filename, "a");
+    if (file == NULL) {
+      /* File couldn't be opened, e.g. due to permission error. */
+      return NULL;
+    }
+    fclose(file);
   }
 
   /* temporary #if until we update all libraries to 1.2.7
@@ -284,6 +396,64 @@ int BLI_access(const char *filename, int mode)
   BLI_assert(!BLI_path_is_rel(filename));
 
   return uaccess(filename, mode);
+}
+
+static bool delete_soft(const wchar_t *path_16, const char **error_message)
+{
+  /* Deletes file or directory to recycling bin. The latter moves all contained files and
+   * directories recursively to the recycling bin as well. */
+  IFileOperation *pfo;
+  IShellItem *pSI;
+
+  HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
+  if (FAILED(hr)) {
+    *error_message = "Failed to initialize COM";
+    goto error_1;
+  }
+
+  hr = CoCreateInstance(
+      &CLSID_FileOperation, NULL, CLSCTX_ALL, &IID_IFileOperation, (void **)&pfo);
+  if (FAILED(hr)) {
+    *error_message = "Failed to create FileOperation instance";
+    goto error_2;
+  }
+
+  /* Flags for deletion:
+   * FOF_ALLOWUNDO: Enables moving file to recycling bin.
+   * FOF_SILENT: Don't show progress dialog box.
+   * FOF_WANTNUKEWARNING: Show dialog box if file can't be moved to recycling bin. */
+  hr = pfo->lpVtbl->SetOperationFlags(pfo, FOF_ALLOWUNDO | FOF_SILENT | FOF_WANTNUKEWARNING);
+
+  if (FAILED(hr)) {
+    *error_message = "Failed to set operation flags";
+    goto error_2;
+  }
+
+  hr = SHCreateItemFromParsingName(path_16, NULL, &IID_IShellItem, (void **)&pSI);
+  if (FAILED(hr)) {
+    *error_message = "Failed to parse path";
+    goto error_2;
+  }
+
+  hr = pfo->lpVtbl->DeleteItem(pfo, pSI, NULL);
+  if (FAILED(hr)) {
+    *error_message = "Failed to prepare delete operation";
+    goto error_2;
+  }
+
+  hr = pfo->lpVtbl->PerformOperations(pfo);
+
+  if (FAILED(hr)) {
+    *error_message = "Failed to delete file or directory";
+  }
+
+error_2:
+  pfo->lpVtbl->Release(pfo);
+  CoUninitialize(); /* Has to be uninitialized when CoInitializeEx returns either S_OK or S_FALSE
+                     */
+error_1:
+  return FAILED(hr);
 }
 
 static bool delete_unique(const char *path, const bool dir)
@@ -329,7 +499,7 @@ static bool delete_recursive(const char *dir)
 
       /* dir listing produces dir path without trailing slash... */
       BLI_strncpy(path, fl->path, sizeof(path));
-      BLI_add_slash(path);
+      BLI_path_slash_ensure(path);
 
       if (delete_recursive(path)) {
         err = true;
@@ -340,7 +510,7 @@ static bool delete_recursive(const char *dir)
         err = true;
       }
     }
-    ++fl;
+    fl++;
   }
 
   if (!err && delete_unique(dir, true)) {
@@ -368,6 +538,24 @@ int BLI_delete(const char *file, bool dir, bool recursive)
   return err;
 }
 
+/**
+ * Moves the files or directories to the recycling bin.
+ */
+int BLI_delete_soft(const char *file, const char **error_message)
+{
+  int err;
+
+  BLI_assert(!BLI_path_is_rel(file));
+
+  UTF16_ENCODE(file);
+
+  err = delete_soft(file_16, error_message);
+
+  UTF16_UN_ENCODE(file);
+
+  return err;
+}
+
 /* Not used anywhere! */
 #  if 0
 int BLI_move(const char *file, const char *to)
@@ -377,13 +565,13 @@ int BLI_move(const char *file, const char *to)
 
   /* windows doesn't support moving to a directory
    * it has to be 'mv filename filename' and not
-   * 'mv filename destdir' */
+   * 'mv filename destination_directory' */
 
   BLI_strncpy(str, to, sizeof(str));
   /* points 'to' to a directory ? */
-  if (BLI_last_slash(str) == (str + strlen(str) - 1)) {
-    if (BLI_last_slash(file) != NULL) {
-      strcat(str, BLI_last_slash(file) + 1);
+  if (BLI_path_slash_rfind(str) == (str + strlen(str) - 1)) {
+    if (BLI_path_slash_rfind(file) != NULL) {
+      strcat(str, BLI_path_slash_rfind(file) + 1);
     }
   }
 
@@ -413,9 +601,9 @@ int BLI_copy(const char *file, const char *to)
 
   BLI_strncpy(str, to, sizeof(str));
   /* points 'to' to a directory ? */
-  if (BLI_last_slash(str) == (str + strlen(str) - 1)) {
-    if (BLI_last_slash(file) != NULL) {
-      strcat(str, BLI_last_slash(file) + 1);
+  if (BLI_path_slash_rfind(str) == (str + strlen(str) - 1)) {
+    if (BLI_path_slash_rfind(file) != NULL) {
+      strcat(str, BLI_path_slash_rfind(file) + 1);
     }
   }
 
@@ -457,7 +645,7 @@ bool BLI_dir_create_recursive(const char *dirname)
    * blah1/blah2 (without slash) */
 
   BLI_strncpy(tmp, dirname, sizeof(tmp));
-  BLI_del_slash(tmp);
+  BLI_path_slash_rstrip(tmp);
 
   /* check special case "c:\foo", don't try create "c:", harmless but prints an error below */
   if (isalpha(tmp[0]) && (tmp[1] == ':') && tmp[2] == '\0') {
@@ -471,7 +659,7 @@ bool BLI_dir_create_recursive(const char *dirname)
     return false;
   }
 
-  lslash = (char *)BLI_last_slash(tmp);
+  lslash = (char *)BLI_path_slash_rfind(tmp);
 
   if (lslash) {
     /* Split about the last slash and recurse */
@@ -516,7 +704,7 @@ enum {
   /* operation requested not to perform recursive digging for current path */
   RecursiveOp_Callback_StopRecurs = 1,
 
-  /* error occured in callback and recursive walking should stop immediately */
+  /* error occurred in callback and recursive walking should stop immediately */
   RecursiveOp_Callback_Error = 2,
 };
 
@@ -542,7 +730,7 @@ static void join_dirfile_alloc(char **dst, size_t *alloc_len, const char *dir, c
 static char *strip_last_slash(const char *dir)
 {
   char *result = BLI_strdup(dir);
-  BLI_del_slash(result);
+  BLI_path_slash_rstrip(result);
 
   return result;
 }
@@ -718,6 +906,100 @@ static int delete_single_file(const char *from, const char *UNUSED(to))
   return RecursiveOp_Callback_OK;
 }
 
+#  ifdef __APPLE__
+static int delete_soft(const char *file, const char **error_message)
+{
+  int ret = -1;
+
+  Class NSAutoreleasePoolClass = objc_getClass("NSAutoreleasePool");
+  SEL allocSel = sel_registerName("alloc");
+  SEL initSel = sel_registerName("init");
+  id poolAlloc = ((id(*)(Class, SEL))objc_msgSend)(NSAutoreleasePoolClass, allocSel);
+  id pool = ((id(*)(id, SEL))objc_msgSend)(poolAlloc, initSel);
+
+  Class NSStringClass = objc_getClass("NSString");
+  SEL stringWithUTF8StringSel = sel_registerName("stringWithUTF8String:");
+  id pathString = ((id(*)(Class, SEL, const char *))objc_msgSend)(
+      NSStringClass, stringWithUTF8StringSel, file);
+
+  Class NSFileManagerClass = objc_getClass("NSFileManager");
+  SEL defaultManagerSel = sel_registerName("defaultManager");
+  id fileManager = ((id(*)(Class, SEL))objc_msgSend)(NSFileManagerClass, defaultManagerSel);
+
+  Class NSURLClass = objc_getClass("NSURL");
+  SEL fileURLWithPathSel = sel_registerName("fileURLWithPath:");
+  id nsurl = ((id(*)(Class, SEL, id))objc_msgSend)(NSURLClass, fileURLWithPathSel, pathString);
+
+  SEL trashItemAtURLSel = sel_registerName("trashItemAtURL:resultingItemURL:error:");
+  BOOL deleteSuccessful = ((BOOL(*)(id, SEL, id, id, id))objc_msgSend)(
+      fileManager, trashItemAtURLSel, nsurl, nil, nil);
+
+  if (deleteSuccessful) {
+    ret = 0;
+  }
+  else {
+    *error_message = "The Cocoa API call to delete file or directory failed";
+  }
+
+  SEL drainSel = sel_registerName("drain");
+  ((void (*)(id, SEL))objc_msgSend)(pool, drainSel);
+
+  return ret;
+}
+#  else
+static int delete_soft(const char *file, const char **error_message)
+{
+  const char *args[5];
+  const char *process_failed;
+
+  char *xdg_current_desktop = getenv("XDG_CURRENT_DESKTOP");
+  char *xdg_session_desktop = getenv("XDG_SESSION_DESKTOP");
+
+  if ((xdg_current_desktop != NULL && STREQ(xdg_current_desktop, "KDE")) ||
+      (xdg_session_desktop != NULL && STREQ(xdg_session_desktop, "KDE"))) {
+    args[0] = "kioclient5";
+    args[1] = "move";
+    args[2] = file;
+    args[3] = "trash:/";
+    args[4] = NULL;
+    process_failed = "kioclient5 reported failure";
+  }
+  else {
+    args[0] = "gio";
+    args[1] = "trash";
+    args[2] = file;
+    args[3] = NULL;
+    process_failed = "gio reported failure";
+  }
+
+  int pid = fork();
+
+  if (pid != 0) {
+    /* Parent process */
+    int wstatus = 0;
+
+    waitpid(pid, &wstatus, 0);
+
+    if (!WIFEXITED(wstatus)) {
+      *error_message =
+          "Blender may not support moving files or directories to trash on your system.";
+      return -1;
+    }
+    if (WIFEXITED(wstatus) && WEXITSTATUS(wstatus)) {
+      *error_message = process_failed;
+      return -1;
+    }
+
+    return 0;
+  }
+
+  execvp(args[0], (char **)args);
+
+  *error_message = "Forking process failed.";
+  return -1; /* This should only be reached if execvp fails and stack isn't replaced. */
+}
+#  endif
+
 FILE *BLI_fopen(const char *filename, const char *mode)
 {
   BLI_assert(!BLI_path_is_rel(filename));
@@ -759,16 +1041,27 @@ int BLI_delete(const char *file, bool dir, bool recursive)
   if (recursive) {
     return recursive_operation(file, NULL, NULL, delete_single_file, delete_callback_post);
   }
-  else if (dir) {
+  if (dir) {
     return rmdir(file);
   }
-  else {
-    return remove(file);
-  }
+  return remove(file);
 }
 
 /**
- * Do the two paths denote the same filesystem object?
+ * Soft deletes the specified file or directory (depending on dir) by moving the files to the
+ * recycling bin, optionally doing recursive delete of directory contents.
+ *
+ * \return zero on success (matching 'remove' behavior).
+ */
+int BLI_delete_soft(const char *file, const char **error_message)
+{
+  BLI_assert(!BLI_path_is_rel(file));
+
+  return delete_soft(file, error_message);
+}
+
+/**
+ * Do the two paths denote the same file-system object?
  */
 static bool check_the_same(const char *path_a, const char *path_b)
 {
@@ -894,8 +1187,7 @@ static int copy_single_file(const char *from, const char *to)
 
     return RecursiveOp_Callback_OK;
   }
-  else if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode) || S_ISFIFO(st.st_mode) ||
-           S_ISSOCK(st.st_mode)) {
+  if (S_ISCHR(st.st_mode) || S_ISBLK(st.st_mode) || S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode)) {
     /* copy special type of file */
     if (mknod(to, st.st_mode, st.st_rdev)) {
       perror("mknod");
@@ -908,7 +1200,7 @@ static int copy_single_file(const char *from, const char *to)
 
     return RecursiveOp_Callback_OK;
   }
-  else if (!S_ISREG(st.st_mode)) {
+  if (!S_ISREG(st.st_mode)) {
     fprintf(stderr, "Copying of this kind of files isn't supported yet\n");
     return RecursiveOp_Callback_Error;
   }
@@ -946,8 +1238,9 @@ static int move_callback_pre(const char *from, const char *to)
 {
   int ret = rename(from, to);
 
-  if (ret)
+  if (ret) {
     return copy_callback_pre(from, to);
+  }
 
   return RecursiveOp_Callback_StopRecurs;
 }
@@ -956,8 +1249,9 @@ static int move_single_file(const char *from, const char *to)
 {
   int ret = rename(from, to);
 
-  if (ret)
+  if (ret) {
     return copy_single_file(from, to);
+  }
 
   return RecursiveOp_Callback_OK;
 }
@@ -987,7 +1281,7 @@ static const char *check_destination(const char *file, const char *to)
       size_t len = 0;
 
       str = strip_last_slash(file);
-      filename = BLI_last_slash(str);
+      filename = BLI_path_slash_rfind(str);
 
       if (!filename) {
         MEM_freeN(str);
@@ -1045,7 +1339,7 @@ bool BLI_dir_create_recursive(const char *dirname)
   if (BLI_is_dir(dirname)) {
     return true;
   }
-  else if (BLI_exists(dirname)) {
+  if (BLI_exists(dirname)) {
     return false;
   }
 
@@ -1060,9 +1354,9 @@ bool BLI_dir_create_recursive(const char *dirname)
   BLI_strncpy(tmp, dirname, size);
 
   /* Avoids one useless recursion in case of '/foo/bar/' path... */
-  BLI_del_slash(tmp);
+  BLI_path_slash_rstrip(tmp);
 
-  lslash = (char *)BLI_last_slash(tmp);
+  lslash = (char *)BLI_path_slash_rfind(tmp);
   if (lslash) {
     /* Split about the last slash and recurse */
     *lslash = 0;

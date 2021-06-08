@@ -77,12 +77,12 @@ static bool bm_vert_dissolve_fan_test(BMVert *v)
 
 static bool bm_vert_dissolve_fan(BMesh *bm, BMVert *v)
 {
-  /* collapse under 2 conditions.
+  /* Collapse under 2 conditions:
    * - vert connects to 4 manifold edges (and 4 faces).
    * - vert connects to 1 manifold edge, 2 boundary edges (and 2 faces).
    *
    * This covers boundary verts of a quad grid and center verts.
-   * note that surrounding faces dont have to be quads.
+   * note that surrounding faces don't have to be quads.
    */
 
   BMIter iter;
@@ -110,7 +110,7 @@ static bool bm_vert_dissolve_fan(BMesh *bm, BMVert *v)
   if (tot_edge == 2) {
     /* check for 2 wire verts only */
     if (tot_edge_wire == 2) {
-      return (BM_vert_collapse_edge(bm, v->e, v, true, true) != NULL);
+      return (BM_vert_collapse_edge(bm, v->e, v, true, true, true) != NULL);
     }
   }
   else if (tot_edge == 4) {
@@ -177,8 +177,8 @@ void BM_mesh_decimate_unsubdivide_ex(BMesh *bm, const int iterations, const bool
 #else
   BMVert **vert_seek_a = MEM_mallocN(sizeof(BMVert *) * bm->totvert, __func__);
   BMVert **vert_seek_b = MEM_mallocN(sizeof(BMVert *) * bm->totvert, __func__);
-  unsigned vert_seek_a_tot = 0;
-  unsigned vert_seek_b_tot = 0;
+  uint vert_seek_a_tot = 0;
+  uint vert_seek_b_tot = 0;
 #endif
 
   BMIter iter;
@@ -231,7 +231,7 @@ void BM_mesh_decimate_unsubdivide_ex(BMesh *bm, const int iterations, const bool
           if (BMO_vert_flag_test(bm, v, ELE_VERT_TAG))
 #endif
           {
-            /* check again incase the topology changed */
+            /* Check again in case the topology changed. */
             if (bm_vert_dissolve_fan_test(v)) {
               v_first = v;
             }
@@ -264,7 +264,7 @@ void BM_mesh_decimate_unsubdivide_ex(BMesh *bm, const int iterations, const bool
           }
           else {
             /* works better to allow these verts to be checked again */
-            //BM_elem_index_set(v, VERT_INDEX_IGNORE);  /* set_dirty! */
+            // BM_elem_index_set(v, VERT_INDEX_IGNORE);  /* set_dirty! */
           }
         }
       }

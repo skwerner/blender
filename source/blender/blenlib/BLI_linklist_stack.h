@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_LINKLIST_STACK_H__
-#define __BLI_LINKLIST_STACK_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -33,12 +32,9 @@
  */
 
 /* -------------------------------------------------------------------- */
-/* Linked Stack using BLI_mempool
- *
- * Uses mempool for storage.
- */
-
 /** \name Linked Stack (mempool)
+ *
+ * Uses #BLI_mempool for storage.
  * \{ */
 
 #define BLI_LINKSTACK_DECLARE(var, type) \
@@ -95,13 +91,12 @@
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/* Linked Stack, using stack memory (alloca)
+/** \name Linked Stack (alloca)
+ *
+ * Linked Stack, using stack memory (alloca).
  *
  * alloca never frees, pop'd items are stored in a free-list for reuse.
  * only use for lists small enough to fit on the stack.
- */
-
-/** \name Linked Stack (alloca)
  * \{ */
 
 #ifdef __GNUC__
@@ -194,5 +189,3 @@
   (void)0
 
 /** \} */
-
-#endif /* __BLI_LINKLIST_STACK_H__ */

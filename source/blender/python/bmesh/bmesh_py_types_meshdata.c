@@ -20,20 +20,20 @@
 /** \file
  * \ingroup pybmesh
  *
- * This file defines customdata types which can't be accessed as primitive
- * python types such as MDeformVert, MLoopUV, MTexPoly
+ * This file defines custom-data types which can't be accessed as primitive
+ * python types such as #MDeformVert, #MLoopUV.
  */
 
 #include <Python.h>
 
 #include "../mathutils/mathutils.h"
 
-#include "DNA_object_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_math_base.h"
 #include "BLI_math_vector.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_deform.h"
 
@@ -48,7 +48,8 @@
 #define BPy_BMLoopUV_Check(v) (Py_TYPE(v) == &BPy_BMLoopUV_Type)
 
 typedef struct BPy_BMLoopUV {
-  PyObject_VAR_HEAD MLoopUV *data;
+  PyObject_VAR_HEAD
+  MLoopUV *data;
 } BPy_BMLoopUV;
 
 PyDoc_STRVAR(bpy_bmloopuv_uv_doc,
@@ -65,14 +66,12 @@ static int bpy_bmloopuv_uv_set(BPy_BMLoopUV *self, PyObject *value, void *UNUSED
     copy_v2_v2(self->data->uv, tvec);
     return 0;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 PyDoc_STRVAR(bpy_bmloopuv_flag__pin_uv_doc, "UV pin state.\n\n:type: boolean");
 PyDoc_STRVAR(bpy_bmloopuv_flag__select_doc, "UV select state.\n\n:type: boolean");
-PyDoc_STRVAR(bpy_bmloopuv_flag__select_edge_doc, "UV edge select state.\n\n:type: boolean");
 
 static PyObject *bpy_bmloopuv_flag_get(BPy_BMLoopUV *self, void *flag_p)
 {
@@ -99,26 +98,17 @@ static int bpy_bmloopuv_flag_set(BPy_BMLoopUV *self, PyObject *value, void *flag
 
 static PyGetSetDef bpy_bmloopuv_getseters[] = {
     /* attributes match rna_def_mloopuv  */
-    {(char *)"uv",
-     (getter)bpy_bmloopuv_uv_get,
-     (setter)bpy_bmloopuv_uv_set,
-     (char *)bpy_bmloopuv_uv_doc,
-     NULL},
-    {(char *)"pin_uv",
+    {"uv", (getter)bpy_bmloopuv_uv_get, (setter)bpy_bmloopuv_uv_set, bpy_bmloopuv_uv_doc, NULL},
+    {"pin_uv",
      (getter)bpy_bmloopuv_flag_get,
      (setter)bpy_bmloopuv_flag_set,
-     (char *)bpy_bmloopuv_flag__pin_uv_doc,
+     bpy_bmloopuv_flag__pin_uv_doc,
      (void *)MLOOPUV_PINNED},
-    {(char *)"select",
+    {"select",
      (getter)bpy_bmloopuv_flag_get,
      (setter)bpy_bmloopuv_flag_set,
-     (char *)bpy_bmloopuv_flag__select_doc,
+     bpy_bmloopuv_flag__select_doc,
      (void *)MLOOPUV_VERTSEL},
-    {(char *)"select_edge",
-     (getter)bpy_bmloopuv_flag_get,
-     (setter)bpy_bmloopuv_flag_set,
-     (char *)bpy_bmloopuv_flag__select_edge_doc,
-     (void *)MLOOPUV_EDGESEL},
 
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
 };
@@ -131,7 +121,7 @@ static void bm_init_types_bmloopuv(void)
 
   BPy_BMLoopUV_Type.tp_name = "BMLoopUV";
 
-  BPy_BMLoopUV_Type.tp_doc = NULL;  // todo
+  BPy_BMLoopUV_Type.tp_doc = NULL; /* todo */
 
   BPy_BMLoopUV_Type.tp_getset = bpy_bmloopuv_getseters;
 
@@ -146,10 +136,9 @@ int BPy_BMLoopUV_AssignPyObject(struct MLoopUV *mloopuv, PyObject *value)
     PyErr_Format(PyExc_TypeError, "expected BMLoopUV, not a %.200s", Py_TYPE(value)->tp_name);
     return -1;
   }
-  else {
-    *((MLoopUV *)mloopuv) = *(((BPy_BMLoopUV *)value)->data);
-    return 0;
-  }
+
+  *((MLoopUV *)mloopuv) = *(((BPy_BMLoopUV *)value)->data);
+  return 0;
 }
 
 PyObject *BPy_BMLoopUV_CreatePyObject(struct MLoopUV *mloopuv)
@@ -167,7 +156,8 @@ PyObject *BPy_BMLoopUV_CreatePyObject(struct MLoopUV *mloopuv)
 #define BPy_BMVertSkin_Check(v) (Py_TYPE(v) == &BPy_BMVertSkin_Type)
 
 typedef struct BPy_BMVertSkin {
-  PyObject_VAR_HEAD MVertSkin *data;
+  PyObject_VAR_HEAD
+  MVertSkin *data;
 } BPy_BMVertSkin;
 
 PyDoc_STRVAR(bpy_bmvertskin_radius_doc,
@@ -184,9 +174,8 @@ static int bpy_bmvertskin_radius_set(BPy_BMVertSkin *self, PyObject *value, void
     copy_v2_v2(self->data->radius, tvec);
     return 0;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
 PyDoc_STRVAR(bpy_bmvertskin_flag__use_root_doc,
@@ -219,20 +208,20 @@ static int bpy_bmvertskin_flag_set(BPy_BMVertSkin *self, PyObject *value, void *
 
 static PyGetSetDef bpy_bmvertskin_getseters[] = {
     /* attributes match rna_mesh_gen  */
-    {(char *)"radius",
+    {"radius",
      (getter)bpy_bmvertskin_radius_get,
      (setter)bpy_bmvertskin_radius_set,
-     (char *)bpy_bmvertskin_radius_doc,
+     bpy_bmvertskin_radius_doc,
      NULL},
-    {(char *)"use_root",
+    {"use_root",
      (getter)bpy_bmvertskin_flag_get,
      (setter)bpy_bmvertskin_flag_set,
-     (char *)bpy_bmvertskin_flag__use_root_doc,
+     bpy_bmvertskin_flag__use_root_doc,
      (void *)MVERT_SKIN_ROOT},
-    {(char *)"use_loose",
+    {"use_loose",
      (getter)bpy_bmvertskin_flag_get,
      (setter)bpy_bmvertskin_flag_set,
-     (char *)bpy_bmvertskin_flag__use_loose_doc,
+     bpy_bmvertskin_flag__use_loose_doc,
      (void *)MVERT_SKIN_LOOSE},
 
     {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
@@ -246,7 +235,7 @@ static void bm_init_types_bmvertskin(void)
 
   BPy_BMVertSkin_Type.tp_name = "BMVertSkin";
 
-  BPy_BMVertSkin_Type.tp_doc = NULL;  // todo
+  BPy_BMVertSkin_Type.tp_doc = NULL; /* todo */
 
   BPy_BMVertSkin_Type.tp_getset = bpy_bmvertskin_getseters;
 
@@ -261,10 +250,9 @@ int BPy_BMVertSkin_AssignPyObject(struct MVertSkin *mvertskin, PyObject *value)
     PyErr_Format(PyExc_TypeError, "expected BMVertSkin, not a %.200s", Py_TYPE(value)->tp_name);
     return -1;
   }
-  else {
-    *((MVertSkin *)mvertskin) = *(((BPy_BMVertSkin *)value)->data);
-    return 0;
-  }
+
+  *((MVertSkin *)mvertskin) = *(((BPy_BMVertSkin *)value)->data);
+  return 0;
 }
 
 PyObject *BPy_BMVertSkin_CreatePyObject(struct MVertSkin *mvertskin)
@@ -286,17 +274,17 @@ PyObject *BPy_BMVertSkin_CreatePyObject(struct MVertSkin *mvertskin)
 #define MLOOPCOL_FROM_CAPSULE(color_capsule) \
   ((MLoopCol *)PyCapsule_GetPointer(color_capsule, NULL))
 
-static void mloopcol_to_float(const MLoopCol *mloopcol, float r_col[3])
+static void mloopcol_to_float(const MLoopCol *mloopcol, float r_col[4])
 {
-  rgba_uchar_to_float(r_col, (const unsigned char *)&mloopcol->r);
+  rgba_uchar_to_float(r_col, (const uchar *)&mloopcol->r);
 }
 
-static void mloopcol_from_float(MLoopCol *mloopcol, const float col[3])
+static void mloopcol_from_float(MLoopCol *mloopcol, const float col[4])
 {
-  rgba_float_to_uchar((unsigned char *)&mloopcol->r, col);
+  rgba_float_to_uchar((uchar *)&mloopcol->r, col);
 }
 
-static unsigned char mathutils_bmloopcol_cb_index = -1;
+static uchar mathutils_bmloopcol_cb_index = -1;
 
 static int mathutils_bmloopcol_check(BaseMathObject *UNUSED(bmo))
 {
@@ -361,15 +349,14 @@ int BPy_BMLoopColor_AssignPyObject(struct MLoopCol *mloopcol, PyObject *value)
     mloopcol_from_float(mloopcol, tvec);
     return 0;
   }
-  else {
-    return -1;
-  }
+
+  return -1;
 }
 
-PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *data)
+PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *mloopcol)
 {
   PyObject *color_capsule;
-  color_capsule = PyCapsule_New(data, NULL, NULL);
+  color_capsule = PyCapsule_New(mloopcol, NULL, NULL);
   return Vector_CreatePyObject_cb(color_capsule, 4, mathutils_bmloopcol_cb_index, 0);
 }
 
@@ -384,19 +371,21 @@ PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *data)
  * This is python type wraps a deform vert as a python dictionary,
  * hiding the #MDeformWeight on access, since the mapping is very close, eg:
  *
- * C:
- *     weight = defvert_find_weight(dv, group_nr);
- *     defvert_remove_group(dv, dw)
+ * \code{.c}
+ * weight = BKE_defvert_find_weight(dv, group_nr);
+ * BKE_defvert_remove_group(dv, dw)
+ * \endcode
  *
- * Py:
- *     weight = dv[group_nr]
- *     del dv[group_nr]
+ * \code{.py}
+ * weight = dv[group_nr]
+ * del dv[group_nr]
+ * \endcode
  *
- * \note: there is nothing BMesh specific here,
+ * \note There is nothing BMesh specific here,
  * its only that BMesh is the only part of blender that uses a hand written api like this.
  * This type could eventually be used to access lattice weights.
  *
- * \note: Many of blender-api's dict-like-wrappers act like ordered dicts,
+ * \note Many of blender-api's dict-like-wrappers act like ordered dicts,
  * This is intentionally _not_ ordered, the weights can be in any order and it won't matter,
  * the order should not be used in the api in any meaningful way (as with a python dict)
  * only expose as mapping, not a sequence.
@@ -405,7 +394,8 @@ PyObject *BPy_BMLoopColor_CreatePyObject(struct MLoopCol *data)
 #define BPy_BMDeformVert_Check(v) (Py_TYPE(v) == &BPy_BMDeformVert_Type)
 
 typedef struct BPy_BMDeformVert {
-  PyObject_VAR_HEAD MDeformVert *data;
+  PyObject_VAR_HEAD
+  MDeformVert *data;
 } BPy_BMDeformVert;
 
 /* Mapping Protocols
@@ -424,25 +414,22 @@ static PyObject *bpy_bmdeformvert_subscript(BPy_BMDeformVert *self, PyObject *ke
     if (i == -1 && PyErr_Occurred()) {
       return NULL;
     }
-    else {
-      MDeformWeight *dw = defvert_find_index(self->data, i);
 
-      if (dw == NULL) {
-        PyErr_SetString(PyExc_KeyError,
-                        "BMDeformVert[key] = x: "
-                        "key not found");
-        return NULL;
-      }
-      else {
-        return PyFloat_FromDouble(dw->weight);
-      }
+    MDeformWeight *dw = BKE_defvert_find_index(self->data, i);
+
+    if (dw == NULL) {
+      PyErr_SetString(PyExc_KeyError,
+                      "BMDeformVert[key] = x: "
+                      "key not found");
+      return NULL;
     }
+
+    return PyFloat_FromDouble(dw->weight);
   }
-  else {
-    PyErr_Format(
-        PyExc_TypeError, "BMDeformVert keys must be integers, not %.200s", Py_TYPE(key)->tp_name);
-    return NULL;
-  }
+
+  PyErr_Format(
+      PyExc_TypeError, "BMDeformVert keys must be integers, not %.200s", Py_TYPE(key)->tp_name);
+  return NULL;
 }
 
 static int bpy_bmdeformvert_ass_subscript(BPy_BMDeformVert *self, PyObject *key, PyObject *value)
@@ -463,38 +450,36 @@ static int bpy_bmdeformvert_ass_subscript(BPy_BMDeformVert *self, PyObject *key,
                         "weight keys can't be negative");
         return -1;
       }
-      else {
-        MDeformWeight *dw = defvert_verify_index(self->data, i);
-        const float f = PyFloat_AsDouble(value);
-        if (f == -1 && PyErr_Occurred()) {  // parsed key not a number
-          PyErr_SetString(PyExc_TypeError,
-                          "BMDeformVert[key] = x: "
-                          "assigned value not a number");
-          return -1;
-        }
 
-        dw->weight = clamp_f(f, 0.0f, 1.0f);
+      MDeformWeight *dw = BKE_defvert_ensure_index(self->data, i);
+      const float f = PyFloat_AsDouble(value);
+      if (f == -1 && PyErr_Occurred()) {  // parsed key not a number
+        PyErr_SetString(PyExc_TypeError,
+                        "BMDeformVert[key] = x: "
+                        "assigned value not a number");
+        return -1;
       }
+
+      dw->weight = clamp_f(f, 0.0f, 1.0f);
     }
     else {
       /* del dvert[group_index] */
-      MDeformWeight *dw = defvert_find_index(self->data, i);
+      MDeformWeight *dw = BKE_defvert_find_index(self->data, i);
 
       if (dw == NULL) {
         PyErr_SetString(PyExc_KeyError,
                         "del BMDeformVert[key]: "
                         "key not found");
       }
-      defvert_remove_group(self->data, dw);
+      BKE_defvert_remove_group(self->data, dw);
     }
 
     return 0;
   }
-  else {
-    PyErr_Format(
-        PyExc_TypeError, "BMDeformVert keys must be integers, not %.200s", Py_TYPE(key)->tp_name);
-    return -1;
-  }
+
+  PyErr_Format(
+      PyExc_TypeError, "BMDeformVert keys must be integers, not %.200s", Py_TYPE(key)->tp_name);
+  return -1;
 }
 
 static int bpy_bmdeformvert_contains(BPy_BMDeformVert *self, PyObject *value)
@@ -506,7 +491,7 @@ static int bpy_bmdeformvert_contains(BPy_BMDeformVert *self, PyObject *value)
     return -1;
   }
 
-  return (defvert_find_index(self->data, key) != NULL) ? 1 : 0;
+  return (BKE_defvert_find_index(self->data, key) != NULL) ? 1 : 0;
 }
 
 /* only defined for __contains__ */
@@ -515,8 +500,8 @@ static PySequenceMethods bpy_bmdeformvert_as_sequence = {
     NULL,                          /* sq_concat */
     NULL,                          /* sq_repeat */
 
-    /* note: if this is set PySequence_Check() returns True,
-   * but in this case we dont want to be treated as a seq */
+    /* Note: if this is set #PySequence_Check() returns True,
+     * but in this case we don't want to be treated as a seq. */
     NULL, /* sq_item */
 
     NULL,                                  /* sq_slice */
@@ -624,16 +609,14 @@ static PyObject *bpy_bmdeformvert_get(BPy_BMDeformVert *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "i|O:get", &key, &def)) {
     return NULL;
   }
-  else {
-    MDeformWeight *dw = defvert_find_index(self->data, key);
 
-    if (dw) {
-      return PyFloat_FromDouble(dw->weight);
-    }
-    else {
-      return Py_INCREF_RET(def);
-    }
+  MDeformWeight *dw = BKE_defvert_find_index(self->data, key);
+
+  if (dw) {
+    return PyFloat_FromDouble(dw->weight);
   }
+
+  return Py_INCREF_RET(def);
 }
 
 PyDoc_STRVAR(bpy_bmdeformvert_clear_doc,
@@ -642,7 +625,7 @@ PyDoc_STRVAR(bpy_bmdeformvert_clear_doc,
              "   Clears all weights.\n");
 static PyObject *bpy_bmdeformvert_clear(BPy_BMDeformVert *self)
 {
-  defvert_clear(self->data);
+  BKE_defvert_clear(self->data);
 
   Py_RETURN_NONE;
 }
@@ -665,7 +648,7 @@ static void bm_init_types_bmdvert(void)
 
   BPy_BMDeformVert_Type.tp_name = "BMDeformVert";
 
-  BPy_BMDeformVert_Type.tp_doc = NULL;  // todo
+  BPy_BMDeformVert_Type.tp_doc = NULL; /* todo */
 
   BPy_BMDeformVert_Type.tp_as_sequence = &bpy_bmdeformvert_as_sequence;
   BPy_BMDeformVert_Type.tp_as_mapping = &bpy_bmdeformvert_as_mapping;
@@ -683,13 +666,12 @@ int BPy_BMDeformVert_AssignPyObject(struct MDeformVert *dvert, PyObject *value)
     PyErr_Format(PyExc_TypeError, "expected BMDeformVert, not a %.200s", Py_TYPE(value)->tp_name);
     return -1;
   }
-  else {
-    MDeformVert *dvert_src = ((BPy_BMDeformVert *)value)->data;
-    if (LIKELY(dvert != dvert_src)) {
-      defvert_copy(dvert, dvert_src);
-    }
-    return 0;
+
+  MDeformVert *dvert_src = ((BPy_BMDeformVert *)value)->data;
+  if (LIKELY(dvert != dvert_src)) {
+    BKE_defvert_copy(dvert, dvert_src);
   }
+  return 0;
 }
 
 PyObject *BPy_BMDeformVert_CreatePyObject(struct MDeformVert *dvert)

@@ -21,10 +21,13 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_BOID_TYPES_H__
-#define __DNA_BOID_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum eBoidRuleType {
   eBoidRuleType_None = 0,
@@ -32,7 +35,7 @@ typedef enum eBoidRuleType {
   eBoidRuleType_Goal = 1,
   /** get away from assigned object or loudest assigned signal source */
   eBoidRuleType_Avoid = 2,
-  /** manoeuver to avoid collisions with other boids and deflector object in near future */
+  /** Maneuver to avoid collisions with other boids and deflector object in near future. */
   eBoidRuleType_AvoidCollision = 3,
   /** keep from going through other boids */
   eBoidRuleType_Separate = 4,
@@ -47,14 +50,13 @@ typedef enum eBoidRuleType {
 #if 0
   /** go to enemy closest to target and attack when in range */
   eBoidRuleType_Protect = 9,
-  /** find a deflector move to it's other side from closest enemy */
+  /** find a deflector move to its other side from closest enemy */
   eBoidRuleType_Hide = 10,
   /** move along a assigned curve or closest curve in a group */
   eBoidRuleType_FollowPath = 11,
-  /** move next to a deflector object's in direction of it's tangent */
+  /** move next to a deflector object's in direction of its tangent */
   eBoidRuleType_FollowWall = 12,
 #endif
-  NUM_BOID_RULE_TYPES,
 } eBoidRuleType;
 
 /* boidrule->flag */
@@ -95,7 +97,8 @@ typedef struct BoidRuleFollowLeader {
 } BoidRuleFollowLeader;
 typedef struct BoidRuleAverageSpeed {
   BoidRule rule;
-  float wander, level, speed, rt;
+  float wander, level, speed;
+  char _pad0[4];
 } BoidRuleAverageSpeed;
 typedef struct BoidRuleFight {
   BoidRule rule;
@@ -108,7 +111,6 @@ typedef enum eBoidMode {
   eBoidMode_Climbing = 2,
   eBoidMode_Falling = 3,
   eBoidMode_Liftoff = 4,
-  NUM_BOID_MODES,
 } eBoidMode;
 
 typedef struct BoidData {
@@ -117,13 +119,13 @@ typedef struct BoidData {
 } BoidData;
 
 // planned for near future
-//typedef enum BoidConditionMode {
+// typedef enum BoidConditionMode {
 //  eBoidConditionType_Then = 0,
 //  eBoidConditionType_And = 1,
 //  eBoidConditionType_Or = 2,
 //  NUM_BOID_CONDITION_MODES
 //} BoidConditionMode;
-//typedef enum BoidConditionType {
+// typedef enum BoidConditionType {
 //  eBoidConditionType_None = 0,
 //  eBoidConditionType_Signal = 1,
 //  eBoidConditionType_NoSignal = 2,
@@ -135,7 +137,7 @@ typedef struct BoidData {
 //  eBoidConditionType_Touching = 8,
 //  NUM_BOID_CONDITION_TYPES
 //} BoidConditionType;
-//typedef struct BoidCondition {
+// typedef struct BoidCondition {
 //  struct BoidCondition *next, *prev;
 //  int state_id;
 //  short type, mode;
@@ -149,7 +151,6 @@ typedef enum eBoidRulesetType {
   eBoidRulesetType_Fuzzy = 0,
   eBoidRulesetType_Random = 1,
   eBoidRulesetType_Average = 2,
-  NUM_BOID_RULESET_TYPES,
 } eBoidRulesetType;
 #define BOIDSTATE_CURRENT 1
 typedef struct BoidState {
@@ -170,19 +171,19 @@ typedef struct BoidState {
 } BoidState;
 
 // planned for near future
-//typedef struct BoidSignal {
+// typedef struct BoidSignal {
 //  struct BoidSignal *next, *prev;
 //  float loc[3];
 //  float volume, falloff;
 //  int id;
 //} BoidSignal;
-//typedef struct BoidSignalDefine {
+// typedef struct BoidSignalDefine {
 //  struct BoidSignalDefine *next, *prev;
-//  int id, rt;
+//  int id, _pad[4];
 //  char name[32];
 //} BoidSignalDefine;
 
-//typedef struct BoidSimulationData {
+// typedef struct BoidSimulationData {
 //  ListBase signal_defines;/* list of defined signals */
 //  ListBase signals[20];   /* gathers signals from all channels */
 //  struct KDTree_3d *signaltrees[20];
@@ -227,4 +228,6 @@ typedef struct BoidSettings {
 //#define BOID_RULE_WITH_BOIDS      (1 << 4)        /* avoid collision */
 //#define BOID_RULE_WITH_DEFLECTORS (1 << 5)    /* avoid collision */
 
+#ifdef __cplusplus
+}
 #endif

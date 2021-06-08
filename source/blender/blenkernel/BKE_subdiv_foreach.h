@@ -21,10 +21,13 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_SUBDIV_FOREACH_H__
-#define __BKE_SUBDIV_FOREACH_H__
+#pragma once
 
 #include "BLI_sys_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Mesh;
 struct Subdiv;
@@ -116,8 +119,8 @@ typedef struct SubdivForeachContext {
   SubdivForeachVertexFromCornerCb vertex_every_corner;
   SubdivForeachVertexFromEdgeCb vertex_every_edge;
   /* Those callbacks are run once per subdivision vertex, ptex is undefined
-   * as in it will be whatever first ptex face happened to be tarversed in
-   * the multi-threaded environment ahd which shares "emitting" vertex or
+   * as in it will be whatever first ptex face happened to be traversed in
+   * the multi-threaded environment and which shares "emitting" vertex or
    * edge.
    */
   SubdivForeachVertexFromCornerCb vertex_corner;
@@ -156,10 +159,14 @@ typedef struct SubdivForeachContext {
 /* Invokes callbacks in the order and with values which corresponds to creation
  * of final subdivided mesh.
  *
+ * Main goal is to abstract all the traversal routines to give geometry element
+ * indices (for vertices, edges, loops, polygons) in the same way as subdivision
+ * modifier will do for a dense mesh.
+ *
  * Returns truth if the whole topology was traversed, without any early exits.
  *
  * TODO(sergey): Need to either get rid of subdiv or of coarse_mesh.
- * The main point here is th be abel to get base level topology, which can be
+ * The main point here is to be able to get base level topology, which can be
  * done with either of those. Having both of them is kind of redundant.
  */
 bool BKE_subdiv_foreach_subdiv_geometry(struct Subdiv *subdiv,
@@ -167,4 +174,6 @@ bool BKE_subdiv_foreach_subdiv_geometry(struct Subdiv *subdiv,
                                         const struct SubdivToMeshSettings *mesh_settings,
                                         const struct Mesh *coarse_mesh);
 
-#endif /* __BKE_SUBDIV_FOREACH_H__ */
+#ifdef __cplusplus
+}
+#endif

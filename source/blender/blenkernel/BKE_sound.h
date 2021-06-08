@@ -16,12 +16,15 @@
  * The Original Code is Copyright (C) 2001-2002 by NaN Holding BV.
  * All rights reserved.
  */
-#ifndef __BKE_SOUND_H__
-#define __BKE_SOUND_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define SOUND_WAVE_SAMPLES_PER_SECOND 250
 
@@ -29,6 +32,7 @@
 #  include <AUD_Device.h>
 #endif
 
+struct Depsgraph;
 struct Main;
 struct Sequence;
 struct bSound;
@@ -61,37 +65,65 @@ struct bSound *BKE_sound_new_file_exists(struct Main *bmain, const char *filepat
 #if 0
 struct bSound *BKE_sound_new_buffer(struct Main *bmain, struct bSound *source);
 
-struct bSound *BKE_sound_new_limiter(struct Main *bmain, struct bSound *source, float start, float end);
+struct bSound *BKE_sound_new_limiter(struct Main *bmain,
+                                     struct bSound *source,
+                                     float start,
+                                     float end);
 #endif
 
 void BKE_sound_cache(struct bSound *sound);
 
 void BKE_sound_delete_cache(struct bSound *sound);
 
+void BKE_sound_reset_runtime(struct bSound *sound);
 void BKE_sound_load(struct Main *main, struct bSound *sound);
+void BKE_sound_ensure_loaded(struct Main *bmain, struct bSound *sound);
 
-void BKE_sound_free(struct bSound *sound);
+/* Matches AUD_Channels. */
+typedef enum eSoundChannels {
+  SOUND_CHANNELS_INVALID = 0,
+  SOUND_CHANNELS_MONO = 1,
+  SOUND_CHANNELS_STEREO = 2,
+  SOUND_CHANNELS_STEREO_LFE = 3,
+  SOUND_CHANNELS_SURROUND4 = 4,
+  SOUND_CHANNELS_SURROUND5 = 5,
+  SOUND_CHANNELS_SURROUND51 = 6,
+  SOUND_CHANNELS_SURROUND61 = 7,
+  SOUND_CHANNELS_SURROUND71 = 8,
+} eSoundChannels;
 
-void BKE_sound_copy_data(struct Main *bmain,
-                         struct bSound *sound_dst,
-                         const struct bSound *sound_src,
-                         const int flag);
+typedef struct SoundInfo {
+  struct {
+    eSoundChannels channels;
+  } specs;
+  float length;
+} SoundInfo;
 
-void BKE_sound_make_local(struct Main *bmain, struct bSound *sound, const bool lib_local);
+/* Get information about given sound. Returns truth on success., false if sound can not be loaded
+ * or if the codes is not supported. */
+bool BKE_sound_info_get(struct Main *main, struct bSound *sound, SoundInfo *sound_info);
 
 #if defined(WITH_AUDASPACE)
-AUD_Device *BKE_sound_mixdown(struct Scene *scene, AUD_DeviceSpecs specs, int start, float volume);
+AUD_Device *BKE_sound_mixdown(const struct Scene *scene,
+                              AUD_DeviceSpecs specs,
+                              int start,
+                              float volume);
 #endif
 
+void BKE_sound_reset_scene_runtime(struct Scene *scene);
 void BKE_sound_create_scene(struct Scene *scene);
+void BKE_sound_ensure_scene(struct Scene *scene);
 
 void BKE_sound_destroy_scene(struct Scene *scene);
+
+void BKE_sound_lock(void);
+void BKE_sound_unlock(void);
 
 void BKE_sound_reset_scene_specs(struct Scene *scene);
 
 void BKE_sound_mute_scene(struct Scene *scene, int muted);
 
-void BKE_sound_update_fps(struct Scene *scene);
+void BKE_sound_update_fps(struct Main *bmain, struct Scene *scene);
 
 void BKE_sound_update_scene_listener(struct Scene *scene);
 
@@ -131,20 +163,33 @@ void BKE_sound_stop_scene(struct Scene *scene);
 
 void BKE_sound_seek_scene(struct Main *bmain, struct Scene *scene);
 
-float BKE_sound_sync_scene(struct Scene *scene);
+double BKE_sound_sync_scene(struct Scene *scene);
 
 int BKE_sound_scene_playing(struct Scene *scene);
 
 void BKE_sound_free_waveform(struct bSound *sound);
 
-void BKE_sound_read_waveform(struct bSound *sound, short *stop);
+void BKE_sound_read_waveform(struct Main *bmain, struct bSound *sound, short *stop);
 
-void BKE_sound_update_scene(struct Main *bmain, struct Scene *scene);
+void BKE_sound_update_scene(struct Depsgraph *depsgraph, struct Scene *scene);
 
 void *BKE_sound_get_factory(void *sound);
 
-float BKE_sound_get_length(struct bSound *sound);
+float BKE_sound_get_length(struct Main *bmain, struct bSound *sound);
 
 char **BKE_sound_get_device_names(void);
 
-#endif /* __BKE_SOUND_H__ */
+typedef void (*SoundJackSyncCallback)(struct Main *bmain, int mode, double time);
+
+void BKE_sound_jack_sync_callback_set(SoundJackSyncCallback callback);
+void BKE_sound_jack_scene_update(struct Scene *scene, int mode, double time);
+
+/* Dependency graph evaluation. */
+
+struct Depsgraph;
+
+void BKE_sound_evaluate(struct Depsgraph *depsgraph, struct Main *bmain, struct bSound *sound);
+
+#ifdef __cplusplus
+}
+#endif

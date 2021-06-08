@@ -25,96 +25,117 @@
 
 #include <cstring>
 
-#include "DNA_anim_types.h"
-#include "DNA_layer_types.h"
 #include "DNA_ID.h"
+#include "DNA_anim_types.h"
+#include "DNA_armature_types.h"
+#include "DNA_layer_types.h"
 #include "DNA_object_types.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 #include "BLI_stack.h"
+#include "BLI_utildefines.h"
 
-extern "C" {
-#include "BKE_animsys.h"
-}
+#include "BKE_action.h"
 
+#include "intern/builder/deg_builder_cache.h"
+#include "intern/builder/deg_builder_remove_noop.h"
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_relation.h"
 #include "intern/depsgraph_tag.h"
 #include "intern/depsgraph_type.h"
 #include "intern/eval/deg_eval_copy_on_write.h"
 #include "intern/node/deg_node.h"
-#include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_id.h"
 #include "intern/node/deg_node_operation.h"
 
 #include "DEG_depsgraph.h"
 
-namespace DEG {
+namespace blender::deg {
+
+bool deg_check_id_in_depsgraph(const Depsgraph *graph, ID *id_orig)
+{
+  IDNode *id_node = graph->find_id_node(id_orig);
+  return id_node != nullptr;
+}
+
+bool deg_check_base_in_depsgraph(const Depsgraph *graph, Base *base)
+{
+  Object *object_orig = base->base_orig->object;
+  IDNode *id_node = graph->find_id_node(&object_orig->id);
+  if (id_node == nullptr) {
+    return false;
+  }
+  return id_node->has_base;
+}
 
 /*******************************************************************************
  * Base class for builders.
  */
 
-namespace {
-
-struct VisibilityCheckData {
-  eEvaluationMode eval_mode;
-  bool is_visibility_animated;
-};
-
-void visibility_animated_check_cb(ID * /*id*/, FCurve *fcu, void *user_data)
-{
-  VisibilityCheckData *data = reinterpret_cast<VisibilityCheckData *>(user_data);
-  if (data->is_visibility_animated) {
-    return;
-  }
-  if (data->eval_mode == DAG_EVAL_VIEWPORT) {
-    if (STREQ(fcu->rna_path, "hide_viewport")) {
-      data->is_visibility_animated = true;
-    }
-  }
-  else if (data->eval_mode == DAG_EVAL_RENDER) {
-    if (STREQ(fcu->rna_path, "hide_render")) {
-      data->is_visibility_animated = true;
-    }
-  }
-}
-
-bool is_object_visibility_animated(const Depsgraph *graph, Object *object)
-{
-  AnimData *anim_data = BKE_animdata_from_id(&object->id);
-  if (anim_data == NULL) {
-    return false;
-  }
-  VisibilityCheckData data;
-  data.eval_mode = graph->mode;
-  data.is_visibility_animated = false;
-  BKE_fcurves_id_cb(&object->id, visibility_animated_check_cb, &data);
-  return data.is_visibility_animated;
-}
-
-}  // namespace
-
-bool deg_check_base_available_for_build(const Depsgraph *graph, Base *base)
-{
-  const int base_flag = (graph->mode == DAG_EVAL_VIEWPORT) ? BASE_ENABLED_VIEWPORT :
-                                                             BASE_ENABLED_RENDER;
-  if (base->flag & base_flag) {
-    return true;
-  }
-  if (is_object_visibility_animated(graph, base->object)) {
-    return true;
-  }
-  return false;
-}
-
-DepsgraphBuilder::DepsgraphBuilder(Main *bmain, Depsgraph *graph) : bmain_(bmain), graph_(graph)
+DepsgraphBuilder::DepsgraphBuilder(Main *bmain, Depsgraph *graph, DepsgraphBuilderCache *cache)
+    : bmain_(bmain), graph_(graph), cache_(cache)
 {
 }
 
 bool DepsgraphBuilder::need_pull_base_into_graph(Base *base)
 {
-  return deg_check_base_available_for_build(graph_, base);
+  /* Simple check: enabled bases are always part of dependency graph. */
+  const int base_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? BASE_ENABLED_VIEWPORT :
+                                                              BASE_ENABLED_RENDER;
+  if (base->flag & base_flag) {
+    return true;
+  }
+  /* More involved check: since we don't support dynamic changes in dependency graph topology and
+   * all visible objects are to be part of dependency graph, we pull all objects which has animated
+   * visibility. */
+  Object *object = base->object;
+  AnimatedPropertyID property_id;
+  if (graph_->mode == DAG_EVAL_VIEWPORT) {
+    property_id = AnimatedPropertyID(&object->id, &RNA_Object, "hide_viewport");
+  }
+  else if (graph_->mode == DAG_EVAL_RENDER) {
+    property_id = AnimatedPropertyID(&object->id, &RNA_Object, "hide_render");
+  }
+  else {
+    BLI_assert(!"Unknown evaluation mode.");
+    return false;
+  }
+  return cache_->isPropertyAnimated(&object->id, property_id);
+}
+
+bool DepsgraphBuilder::check_pchan_has_bbone(Object *object, const bPoseChannel *pchan)
+{
+  BLI_assert(object->type == OB_ARMATURE);
+  if (pchan == nullptr || pchan->bone == nullptr) {
+    return false;
+  }
+  /* We don't really care whether segments are higher than 1 due to static user input (as in,
+   * rigger entered value like 3 manually), or due to animation. In either way we need to create
+   * special evaluation. */
+  if (pchan->bone->segments > 1) {
+    return true;
+  }
+  bArmature *armature = static_cast<bArmature *>(object->data);
+  AnimatedPropertyID property_id(&armature->id, &RNA_Bone, pchan->bone, "bbone_segments");
+  /* Check both Object and Armature animation data, because drivers modifying Armature
+   * state could easily be created in the Object AnimData. */
+  return cache_->isPropertyAnimated(&object->id, property_id) ||
+         cache_->isPropertyAnimated(&armature->id, property_id);
+}
+
+bool DepsgraphBuilder::check_pchan_has_bbone_segments(Object *object, const bPoseChannel *pchan)
+{
+  /* Proxies don't have BONE_SEGMENTS */
+  if (ID_IS_LINKED(object) && object->proxy_from != nullptr) {
+    return false;
+  }
+  return check_pchan_has_bbone(object, pchan);
+}
+
+bool DepsgraphBuilder::check_pchan_has_bbone_segments(Object *object, const char *bone_name)
+{
+  const bPoseChannel *pchan = BKE_pose_channel_find_name(object->pose, bone_name);
+  return check_pchan_has_bbone_segments(object, pchan);
 }
 
 /*******************************************************************************
@@ -131,10 +152,9 @@ void deg_graph_build_flush_visibility(Depsgraph *graph)
 
   BLI_Stack *stack = BLI_stack_new(sizeof(OperationNode *), "DEG flush layers stack");
   for (IDNode *id_node : graph->id_nodes) {
-    GHASH_FOREACH_BEGIN (ComponentNode *, comp_node, id_node->components) {
+    for (ComponentNode *comp_node : id_node->components.values()) {
       comp_node->affects_directly_visible |= id_node->is_directly_visible;
     }
-    GHASH_FOREACH_END();
   }
   for (OperationNode *op_node : graph->operations) {
     op_node->custom_flags = 0;
@@ -183,10 +203,12 @@ void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
 {
   /* Make sure dependencies of visible ID datablocks are visible. */
   deg_graph_build_flush_visibility(graph);
+  deg_graph_remove_unused_noops(graph);
+
   /* Re-tag IDs for update if it was tagged before the relations
    * update tag. */
   for (IDNode *id_node : graph->id_nodes) {
-    ID *id = id_node->id_orig;
+    ID *id_orig = id_node->id_orig;
     id_node->finalize_build(graph);
     int flag = 0;
     /* Tag rebuild if special evaluation flags changed. */
@@ -201,14 +223,17 @@ void deg_graph_build_finalize(Main *bmain, Depsgraph *graph)
       flag |= ID_RECALC_COPY_ON_WRITE;
       /* This means ID is being added to the dependency graph first
        * time, which is similar to "ob-visible-change" */
-      if (GS(id->name) == ID_OB) {
+      if (GS(id_orig->name) == ID_OB) {
         flag |= ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY;
       }
     }
+    /* Restore recalc flags from original ID, which could possibly contain recalc flags set by
+     * an operator and then were carried on by the undo system. */
+    flag |= id_orig->recalc;
     if (flag != 0) {
       graph_id_tag_update(bmain, graph, id_node->id_orig, flag, DEG_UPDATE_SOURCE_RELATIONS);
     }
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

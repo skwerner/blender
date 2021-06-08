@@ -21,21 +21,18 @@ set(INC
   ../../blenlib
   ../../blenloader
   ../../blentranslation
+  ../../bmesh
   ../../depsgraph
   ../../draw
   ../../gpu
   ../../imbuf
-  ../../bmesh
   ../../makesdna
   ../../makesrna
-  ../../render/extern/include
+  ../../render
+  ../../sequencer
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -55,9 +52,12 @@ set(LIB
 
 if(WITH_HEADLESS)
   add_definitions(-DWITH_HEADLESS)
+else()
+  list(APPEND LIB
+    bf_editor_datafiles
+  )
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 if(WITH_FREESTYLE)
   list(APPEND INC

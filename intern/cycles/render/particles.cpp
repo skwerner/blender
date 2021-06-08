@@ -14,9 +14,10 @@
  * limitations under the License.
  */
 
-#include "device/device.h"
 #include "render/particles.h"
+#include "device/device.h"
 #include "render/scene.h"
+#include "render/stats.h"
 
 #include "util/util_foreach.h"
 #include "util/util_hash.h"
@@ -29,7 +30,13 @@ CCL_NAMESPACE_BEGIN
 
 /* Particle System */
 
-ParticleSystem::ParticleSystem()
+NODE_DEFINE(ParticleSystem)
+{
+  NodeType *type = NodeType::add("particle_system", create);
+  return type;
+}
+
+ParticleSystem::ParticleSystem() : Node(get_node_type())
 {
 }
 
@@ -39,14 +46,14 @@ ParticleSystem::~ParticleSystem()
 
 void ParticleSystem::tag_update(Scene *scene)
 {
-  scene->particle_system_manager->need_update = true;
+  scene->particle_system_manager->tag_update(scene);
 }
 
 /* Particle System Manager */
 
 ParticleSystemManager::ParticleSystemManager()
 {
-  need_update = true;
+  need_update_ = true;
 }
 
 ParticleSystemManager::~ParticleSystemManager()
@@ -102,8 +109,14 @@ void ParticleSystemManager::device_update(Device *device,
                                           Scene *scene,
                                           Progress &progress)
 {
-  if (!need_update)
+  if (!need_update())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->particles.times.add_entry({"device_update", time});
+    }
+  });
 
   VLOG(1) << "Total " << scene->particle_systems.size() << " particle systems.";
 
@@ -115,7 +128,7 @@ void ParticleSystemManager::device_update(Device *device,
   if (progress.get_cancel())
     return;
 
-  need_update = false;
+  need_update_ = false;
 }
 
 void ParticleSystemManager::device_free(Device *, DeviceScene *dscene)
@@ -125,7 +138,12 @@ void ParticleSystemManager::device_free(Device *, DeviceScene *dscene)
 
 void ParticleSystemManager::tag_update(Scene * /*scene*/)
 {
-  need_update = true;
+  need_update_ = true;
+}
+
+bool ParticleSystemManager::need_update() const
+{
+  return need_update_;
 }
 
 CCL_NAMESPACE_END

@@ -33,6 +33,8 @@
 #include "DNA_scene_types.h"
 #include "DNA_windowmanager_types.h"
 
+#include "BLF_api.h"
+
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
@@ -40,49 +42,49 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_anim.h"
+#include "BKE_armature.h"
 #include "BKE_blender_version.h"
+#include "BKE_context.h"
 #include "BKE_curve.h"
 #include "BKE_displist.h"
+#include "BKE_editmesh.h"
+#include "BKE_gpencil.h"
 #include "BKE_key.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
+#include "BKE_object.h"
 #include "BKE_paint.h"
 #include "BKE_particle.h"
-#include "BKE_editmesh.h"
-#include "BKE_object.h"
-#include "BKE_gpencil.h"
+#include "BKE_pbvh.h"
 #include "BKE_scene.h"
 #include "BKE_subdiv_ccg.h"
 
 #include "DEG_depsgraph_query.h"
 
 #include "ED_info.h"
-#include "ED_armature.h"
 
-#include "GPU_extensions.h"
+#include "UI_resources.h"
 
-#define MAX_INFO_LEN 512
+#include "GPU_capabilities.h"
+
 #define MAX_INFO_NUM_LEN 16
 
 typedef struct SceneStats {
-  uint64_t totvert, totvertsel;
+  uint64_t totvert, totvertsel, totvertsculpt;
   uint64_t totedge, totedgesel;
-  uint64_t totface, totfacesel;
+  uint64_t totface, totfacesel, totfacesculpt;
   uint64_t totbone, totbonesel;
   uint64_t totobj, totobjsel;
   uint64_t totlamp, totlampsel;
   uint64_t tottri;
   uint64_t totgplayer, totgpframe, totgpstroke, totgppoint;
-
-  char infostr[MAX_INFO_LEN];
 } SceneStats;
 
 typedef struct SceneStatsFmt {
   /* Totals */
-  char totvert[MAX_INFO_NUM_LEN], totvertsel[MAX_INFO_NUM_LEN];
+  char totvert[MAX_INFO_NUM_LEN], totvertsel[MAX_INFO_NUM_LEN], totvertsculpt[MAX_INFO_NUM_LEN];
   char totface[MAX_INFO_NUM_LEN], totfacesel[MAX_INFO_NUM_LEN];
-  char totedge[MAX_INFO_NUM_LEN], totedgesel[MAX_INFO_NUM_LEN];
+  char totedge[MAX_INFO_NUM_LEN], totedgesel[MAX_INFO_NUM_LEN], totfacesculpt[MAX_INFO_NUM_LEN];
   char totbone[MAX_INFO_NUM_LEN], totbonesel[MAX_INFO_NUM_LEN];
   char totobj[MAX_INFO_NUM_LEN], totobjsel[MAX_INFO_NUM_LEN];
   char totlamp[MAX_INFO_NUM_LEN], totlampsel[MAX_INFO_NUM_LEN];
@@ -121,8 +123,12 @@ static bool stats_mesheval(Mesh *me_eval, bool is_selected, SceneStats *stats)
   return true;
 }
 
-static void stats_object(Object *ob, SceneStats *stats)
+static void stats_object(Object *ob, SceneStats *stats, GSet *objects_gset)
 {
+  if ((ob->base_flag & BASE_VISIBLE_VIEWLAYER) == 0) {
+    return;
+  }
+
   const bool is_selected = (ob->base_flag & BASE_SELECTED) != 0;
 
   stats->totobj++;
@@ -133,7 +139,10 @@ static void stats_object(Object *ob, SceneStats *stats)
   switch (ob->type) {
     case OB_MESH: {
       /* we assume evaluated mesh is already built, this strictly does stats now. */
-      Mesh *me_eval = ob->runtime.mesh_eval;
+      Mesh *me_eval = BKE_object_get_evaluated_mesh(ob);
+      if (!BLI_gset_add(objects_gset, me_eval)) {
+        break;
+      }
       stats_mesheval(me_eval, is_selected, stats);
       break;
     }
@@ -146,16 +155,26 @@ static void stats_object(Object *ob, SceneStats *stats)
     case OB_SURF:
     case OB_CURVE:
     case OB_FONT: {
-      Mesh *me_eval = ob->runtime.mesh_eval;
+      Mesh *me_eval = BKE_object_get_evaluated_mesh(ob);
+      if ((me_eval != NULL) && !BLI_gset_add(objects_gset, me_eval)) {
+        break;
+      }
+
       if (stats_mesheval(me_eval, is_selected, stats)) {
         break;
       }
-      ATTR_FALLTHROUGH; /* Falltrough to displist. */
+      ATTR_FALLTHROUGH; /* Fallthrough to displist. */
     }
     case OB_MBALL: {
       int totv = 0, totf = 0, tottri = 0;
 
       if (ob->runtime.curve_cache && ob->runtime.curve_cache->disp.first) {
+        /* Note: We only get the same curve_cache for instances of the same curve/font/...
+         * For simple linked duplicated objects, each has its own dispList. */
+        if (!BLI_gset_add(objects_gset, ob->runtime.curve_cache)) {
+          break;
+        }
+
         BKE_displist_count(&ob->runtime.curve_cache->disp, &totv, &totf, &tottri);
       }
 
@@ -172,6 +191,9 @@ static void stats_object(Object *ob, SceneStats *stats)
     case OB_GPENCIL: {
       if (is_selected) {
         bGPdata *gpd = (bGPdata *)ob->data;
+        if (!BLI_gset_add(objects_gset, gpd)) {
+          break;
+        }
         /* GPXX Review if we can move to other place when object change
          * maybe to depsgraph evaluation
          */
@@ -182,6 +204,11 @@ static void stats_object(Object *ob, SceneStats *stats)
         stats->totgpstroke += gpd->totstroke;
         stats->totgppoint += gpd->totpoint;
       }
+      break;
+    }
+    case OB_HAIR:
+    case OB_POINTCLOUD:
+    case OB_VOLUME: {
       break;
     }
   }
@@ -226,7 +253,7 @@ static void stats_object_edit(Object *obedit, SceneStats *stats)
         stats->totbonesel++;
       }
 
-      /* if this is a connected child and it's parent is being moved, remove our root */
+      /* if this is a connected child and its parent is being moved, remove our root */
       if ((ebo->flag & BONE_CONNECTED) && (ebo->flag & BONE_ROOTSEL) && ebo->parent &&
           (ebo->parent->flag & BONE_TIPSEL)) {
         stats->totvertsel--;
@@ -324,15 +351,38 @@ static void stats_object_pose(Object *ob, SceneStats *stats)
   }
 }
 
-static void stats_object_sculpt_dynamic_topology(Object *ob, SceneStats *stats)
+static bool stats_is_object_dynamic_topology_sculpt(Object *ob)
 {
-  stats->totvert = ob->sculpt->bm->totvert;
-  stats->tottri = ob->sculpt->bm->totface;
+  if (ob == NULL) {
+    return false;
+  }
+  const eObjectMode object_mode = ob->mode;
+  return ((object_mode & OB_MODE_SCULPT) && ob->sculpt && ob->sculpt->bm);
 }
 
-static bool stats_is_object_dynamic_topology_sculpt(Object *ob, const eObjectMode object_mode)
+static void stats_object_sculpt(Object *ob, SceneStats *stats)
 {
-  return (ob && (object_mode & OB_MODE_SCULPT) && ob->sculpt && ob->sculpt->bm);
+
+  SculptSession *ss = ob->sculpt;
+
+  if (!ss) {
+    return;
+  }
+
+  switch (BKE_pbvh_type(ss->pbvh)) {
+    case PBVH_FACES:
+      stats->totvertsculpt = ss->totvert;
+      stats->totfacesculpt = ss->totfaces;
+      break;
+    case PBVH_BMESH:
+      stats->totvertsculpt = ob->sculpt->bm->totvert;
+      stats->tottri = ob->sculpt->bm->totface;
+      break;
+    case PBVH_GRIDS:
+      stats->totvertsculpt = BKE_pbvh_get_grid_num_vertices(ss->pbvh);
+      stats->totfacesculpt = BKE_pbvh_get_grid_num_faces(ss->pbvh);
+      break;
+  }
 }
 
 /* Statistics displayed in info header. Called regularly on scene changes. */
@@ -344,25 +394,39 @@ static void stats_update(Depsgraph *depsgraph, ViewLayer *view_layer)
 
   if (obedit) {
     /* Edit Mode */
-    FOREACH_OBJECT_IN_MODE_BEGIN (view_layer, ((View3D *)NULL), ob->type, ob->mode, ob_iter) {
-      stats_object_edit(ob_iter, &stats);
+    FOREACH_OBJECT_BEGIN (view_layer, ob_iter) {
+      if (ob_iter->base_flag & BASE_VISIBLE_VIEWLAYER) {
+        if (ob_iter->mode == OB_MODE_EDIT) {
+          stats_object_edit(ob_iter, &stats);
+          stats.totobjsel++;
+        }
+        stats.totobj++;
+      }
     }
-    FOREACH_OBJECT_IN_MODE_END;
+    FOREACH_OBJECT_END;
   }
   else if (ob && (ob->mode & OB_MODE_POSE)) {
     /* Pose Mode */
     stats_object_pose(ob, &stats);
   }
-  else if (ob && stats_is_object_dynamic_topology_sculpt(ob, ob->mode)) {
-    /* Dynamic-topology sculpt mode */
-    stats_object_sculpt_dynamic_topology(ob, &stats);
+  else if (stats_is_object_dynamic_topology_sculpt(ob)) {
+    /* Dynamic topology. Do not count all vertices, dynamic topology stats are initialized later as
+     * part of sculpt stats. */
   }
   else {
     /* Objects */
+    GSet *objects_gset = BLI_gset_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
     DEG_OBJECT_ITER_FOR_RENDER_ENGINE_BEGIN (depsgraph, ob_iter) {
-      stats_object(ob_iter, &stats);
+      stats_object(ob_iter, &stats, objects_gset);
     }
     DEG_OBJECT_ITER_FOR_RENDER_ENGINE_END;
+    BLI_gset_free(objects_gset, NULL);
+  }
+
+  if (ob && (ob->mode & OB_MODE_SCULPT)) {
+    /* Sculpt Mode. When dynamic topology is not enabled both sculpt stats and scene stats are
+     * collected. */
+    stats_object_sculpt(ob, &stats);
   }
 
   if (!view_layer->stats) {
@@ -372,36 +436,45 @@ static void stats_update(Depsgraph *depsgraph, ViewLayer *view_layer)
   *(view_layer->stats) = stats;
 }
 
-static void stats_string(ViewLayer *view_layer)
+void ED_info_stats_clear(ViewLayer *view_layer)
 {
-#define MAX_INFO_MEM_LEN 64
+  if (view_layer->stats) {
+    MEM_freeN(view_layer->stats);
+    view_layer->stats = NULL;
+  }
+}
+
+static bool format_stats(Main *bmain,
+                         Scene *scene,
+                         ViewLayer *view_layer,
+                         SceneStatsFmt *stats_fmt)
+{
+  /* Create stats if they don't already exist. */
+  if (!view_layer->stats) {
+    /* Do not not access dependency graph if interface is marked as locked. */
+    wmWindowManager *wm = bmain->wm.first;
+    if (wm->is_interface_locked) {
+      return false;
+    }
+    Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
+    stats_update(depsgraph, view_layer);
+  }
+
   SceneStats *stats = view_layer->stats;
-  SceneStatsFmt stats_fmt;
-  LayerCollection *layer_collection = view_layer->active_collection;
-  Object *ob = OBACT(view_layer);
-  Object *obedit = OBEDIT_FROM_OBACT(ob);
-  eObjectMode object_mode = ob ? ob->mode : OB_MODE_OBJECT;
-  uintptr_t mem_in_use, mmap_in_use;
-  char memstr[MAX_INFO_MEM_LEN];
-  char gpumemstr[MAX_INFO_MEM_LEN] = "";
-  char formatted_mem[15];
-  char *s;
-  size_t ofs = 0;
 
-  mem_in_use = MEM_get_memory_in_use();
-  mmap_in_use = MEM_get_mapped_memory_in_use();
-
-  /* Generate formatted numbers */
-#define SCENE_STATS_FMT_INT(_id) BLI_str_format_uint64_grouped(stats_fmt._id, stats->_id)
+  /* Generate formatted numbers. */
+#define SCENE_STATS_FMT_INT(_id) BLI_str_format_uint64_grouped(stats_fmt->_id, stats->_id)
 
   SCENE_STATS_FMT_INT(totvert);
   SCENE_STATS_FMT_INT(totvertsel);
+  SCENE_STATS_FMT_INT(totvertsculpt);
 
   SCENE_STATS_FMT_INT(totedge);
   SCENE_STATS_FMT_INT(totedgesel);
 
   SCENE_STATS_FMT_INT(totface);
   SCENE_STATS_FMT_INT(totfacesel);
+  SCENE_STATS_FMT_INT(totfacesculpt);
 
   SCENE_STATS_FMT_INT(totbone);
   SCENE_STATS_FMT_INT(totbonesel);
@@ -420,152 +493,300 @@ static void stats_string(ViewLayer *view_layer)
   SCENE_STATS_FMT_INT(totgppoint);
 
 #undef SCENE_STATS_FMT_INT
+  return true;
+}
 
-  /* get memory statistics */
-  BLI_str_format_byte_unit(formatted_mem, mem_in_use - mmap_in_use, true);
-  ofs = BLI_snprintf(memstr, MAX_INFO_MEM_LEN, IFACE_(" | Mem: %s"), formatted_mem);
-
-  if (mmap_in_use) {
-    BLI_str_format_byte_unit(formatted_mem, mmap_in_use, true);
-    BLI_snprintf(memstr + ofs, MAX_INFO_MEM_LEN - ofs, IFACE_(" (%s)"), formatted_mem);
-  }
-
-  if (GPU_mem_stats_supported()) {
-    int gpu_free_mem, gpu_tot_memory;
-
-    GPU_mem_stats_get(&gpu_tot_memory, &gpu_free_mem);
-
-    BLI_str_format_byte_unit(formatted_mem, gpu_free_mem, true);
-    ofs = BLI_snprintf(gpumemstr, MAX_INFO_MEM_LEN, IFACE_(" | Free GPU Mem: %s"), formatted_mem);
-
-    if (gpu_tot_memory) {
-      BLI_str_format_byte_unit(formatted_mem, gpu_tot_memory, true);
-      BLI_snprintf(gpumemstr + ofs, MAX_INFO_MEM_LEN - ofs, IFACE_("/%s"), formatted_mem);
-    }
-  }
-
-  s = stats->infostr;
-  ofs = 0;
+static void get_stats_string(
+    char *info, int len, size_t *ofs, ViewLayer *view_layer, SceneStatsFmt *stats_fmt)
+{
+  Object *ob = OBACT(view_layer);
+  Object *obedit = OBEDIT_FROM_OBACT(ob);
+  eObjectMode object_mode = ob ? ob->mode : OB_MODE_OBJECT;
+  LayerCollection *layer_collection = view_layer->active_collection;
 
   if (object_mode == OB_MODE_OBJECT) {
-    ofs += BLI_snprintf(s + ofs,
-                        MAX_INFO_LEN - ofs,
-                        "%s | ",
-                        BKE_collection_ui_name_get(layer_collection->collection));
+    *ofs += BLI_snprintf_rlen(info + *ofs,
+                              len - *ofs,
+                              "%s | ",
+                              BKE_collection_ui_name_get(layer_collection->collection));
   }
 
   if (ob) {
-    ofs += BLI_snprintf(s + ofs, MAX_INFO_LEN - ofs, "%s | ", ob->id.name + 2);
+    *ofs += BLI_snprintf_rlen(info + *ofs, len - *ofs, "%s | ", ob->id.name + 2);
   }
 
   if (obedit) {
     if (BKE_keyblock_from_object(obedit)) {
-      ofs += BLI_strncpy_rlen(s + ofs, IFACE_("(Key) "), MAX_INFO_LEN - ofs);
+      *ofs += BLI_strncpy_rlen(info + *ofs, TIP_("(Key) "), len - *ofs);
     }
 
     if (obedit->type == OB_MESH) {
-      ofs += BLI_snprintf(s + ofs,
-                          MAX_INFO_LEN - ofs,
-                          IFACE_("Verts:%s/%s | Edges:%s/%s | Faces:%s/%s | Tris:%s"),
-                          stats_fmt.totvertsel,
-                          stats_fmt.totvert,
-                          stats_fmt.totedgesel,
-                          stats_fmt.totedge,
-                          stats_fmt.totfacesel,
-                          stats_fmt.totface,
-                          stats_fmt.tottri);
+      *ofs += BLI_snprintf_rlen(info + *ofs,
+                                len - *ofs,
+                                TIP_("Verts:%s/%s | Edges:%s/%s | Faces:%s/%s | Tris:%s"),
+                                stats_fmt->totvertsel,
+                                stats_fmt->totvert,
+                                stats_fmt->totedgesel,
+                                stats_fmt->totedge,
+                                stats_fmt->totfacesel,
+                                stats_fmt->totface,
+                                stats_fmt->tottri);
     }
     else if (obedit->type == OB_ARMATURE) {
-      ofs += BLI_snprintf(s + ofs,
-                          MAX_INFO_LEN - ofs,
-                          IFACE_("Verts:%s/%s | Bones:%s/%s"),
-                          stats_fmt.totvertsel,
-                          stats_fmt.totvert,
-                          stats_fmt.totbonesel,
-                          stats_fmt.totbone);
+      *ofs += BLI_snprintf_rlen(info + *ofs,
+                                len - *ofs,
+                                TIP_("Joints:%s/%s | Bones:%s/%s"),
+                                stats_fmt->totvertsel,
+                                stats_fmt->totvert,
+                                stats_fmt->totbonesel,
+                                stats_fmt->totbone);
     }
     else {
-      ofs += BLI_snprintf(s + ofs,
-                          MAX_INFO_LEN - ofs,
-                          IFACE_("Verts:%s/%s"),
-                          stats_fmt.totvertsel,
-                          stats_fmt.totvert);
+      *ofs += BLI_snprintf_rlen(
+          info + *ofs, len - *ofs, TIP_("Verts:%s/%s"), stats_fmt->totvertsel, stats_fmt->totvert);
     }
-
-    ofs += BLI_strncpy_rlen(s + ofs, memstr, MAX_INFO_LEN - ofs);
-    ofs += BLI_strncpy_rlen(s + ofs, gpumemstr, MAX_INFO_LEN - ofs);
   }
   else if (ob && (object_mode & OB_MODE_POSE)) {
-    ofs += BLI_snprintf(s + ofs,
-                        MAX_INFO_LEN - ofs,
-                        IFACE_("Bones:%s/%s %s%s"),
-                        stats_fmt.totbonesel,
-                        stats_fmt.totbone,
-                        memstr,
-                        gpumemstr);
+    *ofs += BLI_snprintf_rlen(
+        info + *ofs, len - *ofs, TIP_("Bones:%s/%s"), stats_fmt->totbonesel, stats_fmt->totbone);
   }
   else if ((ob) && (ob->type == OB_GPENCIL)) {
-    ofs += BLI_snprintf(s + ofs,
-                        MAX_INFO_LEN - ofs,
-                        IFACE_("Layers:%s | Frames:%s | Strokes:%s | Points:%s | Objects:%s/%s"),
-                        stats_fmt.totgplayer,
-                        stats_fmt.totgpframe,
-                        stats_fmt.totgpstroke,
-                        stats_fmt.totgppoint,
-                        stats_fmt.totobjsel,
-                        stats_fmt.totobj);
-
-    ofs += BLI_strncpy_rlen(s + ofs, memstr, MAX_INFO_LEN - ofs);
-    ofs += BLI_strncpy_rlen(s + ofs, gpumemstr, MAX_INFO_LEN - ofs);
+    *ofs += BLI_snprintf_rlen(info + *ofs,
+                              len - *ofs,
+                              TIP_("Layers:%s | Frames:%s | Strokes:%s | Points:%s"),
+                              stats_fmt->totgplayer,
+                              stats_fmt->totgpframe,
+                              stats_fmt->totgpstroke,
+                              stats_fmt->totgppoint);
   }
-  else if (stats_is_object_dynamic_topology_sculpt(ob, object_mode)) {
-    ofs += BLI_snprintf(s + ofs,
-                        MAX_INFO_LEN - ofs,
-                        IFACE_("Verts:%s | Tris:%s%s"),
-                        stats_fmt.totvert,
-                        stats_fmt.tottri,
-                        gpumemstr);
+  else if (ob && (object_mode & OB_MODE_SCULPT)) {
+    if (stats_is_object_dynamic_topology_sculpt(ob)) {
+      *ofs += BLI_snprintf_rlen(info + *ofs,
+                                len - *ofs,
+                                TIP_("Verts:%s | Tris:%s"),
+                                stats_fmt->totvert,
+                                stats_fmt->tottri);
+    }
+    else {
+      *ofs += BLI_snprintf_rlen(info + *ofs,
+                                len - *ofs,
+                                TIP_("Verts:%s/%s | Faces:%s/%s"),
+                                stats_fmt->totvertsculpt,
+                                stats_fmt->totvert,
+                                stats_fmt->totfacesculpt,
+                                stats_fmt->totface);
+    }
   }
   else {
-    ofs += BLI_snprintf(s + ofs,
-                        MAX_INFO_LEN - ofs,
-                        IFACE_("Verts:%s | Faces:%s | Tris:%s | Objects:%s/%s%s%s"),
-                        stats_fmt.totvert,
-                        stats_fmt.totface,
-                        stats_fmt.tottri,
-                        stats_fmt.totobjsel,
-                        stats_fmt.totobj,
-                        memstr,
-                        gpumemstr);
+    *ofs += BLI_snprintf_rlen(info + *ofs,
+                              len - *ofs,
+                              TIP_("Verts:%s | Faces:%s | Tris:%s"),
+                              stats_fmt->totvert,
+                              stats_fmt->totface,
+                              stats_fmt->tottri);
   }
 
-  ofs += BLI_snprintf(s + ofs, MAX_INFO_LEN - ofs, " | %s", versionstr);
-#undef MAX_INFO_MEM_LEN
+  *ofs += BLI_snprintf_rlen(
+      info + *ofs, len - *ofs, TIP_(" | Objects:%s/%s"), stats_fmt->totobjsel, stats_fmt->totobj);
 }
 
-#undef MAX_INFO_LEN
-
-void ED_info_stats_clear(ViewLayer *view_layer)
+static const char *info_statusbar_string(Main *bmain,
+                                         Scene *scene,
+                                         ViewLayer *view_layer,
+                                         char statusbar_flag)
 {
-  if (view_layer->stats) {
-    MEM_freeN(view_layer->stats);
-    view_layer->stats = NULL;
+  char formatted_mem[15];
+  size_t ofs = 0;
+  static char info[256];
+  int len = sizeof(info);
+
+  info[0] = '\0';
+
+  /* Scene statistics. */
+  if (statusbar_flag & STATUSBAR_SHOW_STATS) {
+    SceneStatsFmt stats_fmt;
+    if (format_stats(bmain, scene, view_layer, &stats_fmt)) {
+      get_stats_string(info + ofs, len, &ofs, view_layer, &stats_fmt);
+    }
   }
+
+  /* Memory status. */
+  if (statusbar_flag & STATUSBAR_SHOW_MEMORY) {
+    if (info[0]) {
+      ofs += BLI_snprintf_rlen(info + ofs, len - ofs, " | ");
+    }
+    uintptr_t mem_in_use = MEM_get_memory_in_use();
+    BLI_str_format_byte_unit(formatted_mem, mem_in_use, false);
+    ofs += BLI_snprintf_rlen(info + ofs, len, TIP_("Memory: %s"), formatted_mem);
+  }
+
+  /* GPU VRAM status. */
+  if ((statusbar_flag & STATUSBAR_SHOW_VRAM) && (GPU_mem_stats_supported())) {
+    int gpu_free_mem_kb, gpu_tot_mem_kb;
+    GPU_mem_stats_get(&gpu_tot_mem_kb, &gpu_free_mem_kb);
+    float gpu_total_gb = gpu_tot_mem_kb / 1048576.0f;
+    float gpu_free_gb = gpu_free_mem_kb / 1048576.0f;
+    if (info[0]) {
+      ofs += BLI_snprintf_rlen(info + ofs, len - ofs, " | ");
+    }
+    if (gpu_free_mem_kb && gpu_tot_mem_kb) {
+      ofs += BLI_snprintf_rlen(info + ofs,
+                               len - ofs,
+                               TIP_("VRAM: %.1f/%.1f GiB"),
+                               gpu_total_gb - gpu_free_gb,
+                               gpu_total_gb);
+    }
+    else {
+      /* Can only show amount of GPU VRAM available. */
+      ofs += BLI_snprintf_rlen(info + ofs, len - ofs, TIP_("VRAM: %.1f GiB Free"), gpu_free_gb);
+    }
+  }
+
+  /* Blender version. */
+  if (statusbar_flag & STATUSBAR_SHOW_VERSION) {
+    if (info[0]) {
+      ofs += BLI_snprintf_rlen(info + ofs, len - ofs, " | ");
+    }
+    ofs += BLI_snprintf_rlen(info + ofs, len - ofs, TIP_("%s"), BKE_blender_version_string());
+  }
+
+  return info;
 }
 
-const char *ED_info_stats_string(Main *bmain, Scene *scene, ViewLayer *view_layer)
+const char *ED_info_statusbar_string(Main *bmain, Scene *scene, ViewLayer *view_layer)
 {
-  /* Loopin through dependency graph when interface is locked in not safe.
-   * Thew interface is marked as locked when jobs wants to modify the
-   * dependency graph. */
-  wmWindowManager *wm = bmain->wm.first;
-  if (wm->is_interface_locked) {
-    return "";
+  return info_statusbar_string(bmain, scene, view_layer, U.statusbar_flag);
+}
+
+const char *ED_info_statistics_string(Main *bmain, Scene *scene, ViewLayer *view_layer)
+{
+  const eUserpref_StatusBar_Flag statistics_status_bar_flag = STATUSBAR_SHOW_STATS |
+                                                              STATUSBAR_SHOW_MEMORY |
+                                                              STATUSBAR_SHOW_VERSION;
+
+  return info_statusbar_string(bmain, scene, view_layer, statistics_status_bar_flag);
+}
+
+static void stats_row(int col1,
+                      const char *key,
+                      int col2,
+                      const char *value1,
+                      const char *value2,
+                      int *y,
+                      int height)
+{
+  *y -= height;
+  BLF_draw_default(col1, *y, 0.0f, key, 128);
+  char values[128];
+  BLI_snprintf(values, sizeof(values), (value2) ? "%s / %s" : "%s", value1, value2);
+  BLF_draw_default(col2, *y, 0.0f, values, sizeof(values));
+}
+
+void ED_info_draw_stats(
+    Main *bmain, Scene *scene, ViewLayer *view_layer, int x, int *y, int height)
+{
+  SceneStatsFmt stats_fmt;
+  if (!format_stats(bmain, scene, view_layer, &stats_fmt)) {
+    return;
   }
-  Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
-  if (!view_layer->stats) {
-    stats_update(depsgraph, view_layer);
+
+  Object *ob = OBACT(view_layer);
+  Object *obedit = OBEDIT_FROM_OBACT(ob);
+  eObjectMode object_mode = ob ? ob->mode : OB_MODE_OBJECT;
+  const int font_id = BLF_default();
+
+  UI_FontThemeColor(font_id, TH_TEXT_HI);
+  BLF_enable(font_id, BLF_SHADOW);
+  const float shadow_color[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+  BLF_shadow(font_id, 5, shadow_color);
+  BLF_shadow_offset(font_id, 1, -1);
+
+  /* Translated labels for each stat row. */
+  enum {
+    OBJ,
+    VERTS,
+    EDGES,
+    FACES,
+    TRIS,
+    JOINTS,
+    BONES,
+    LAYERS,
+    FRAMES,
+    STROKES,
+    POINTS,
+    MAX_LABELS_COUNT
+  };
+  char labels[MAX_LABELS_COUNT][64];
+
+  STRNCPY(labels[OBJ], IFACE_("Objects"));
+  STRNCPY(labels[VERTS], IFACE_("Vertices"));
+  STRNCPY(labels[EDGES], IFACE_("Edges"));
+  STRNCPY(labels[FACES], IFACE_("Faces"));
+  STRNCPY(labels[TRIS], IFACE_("Triangles"));
+  STRNCPY(labels[JOINTS], IFACE_("Joints"));
+  STRNCPY(labels[BONES], IFACE_("Bones"));
+  STRNCPY(labels[LAYERS], IFACE_("Layers"));
+  STRNCPY(labels[FRAMES], IFACE_("Frames"));
+  STRNCPY(labels[STROKES], IFACE_("Strokes"));
+  STRNCPY(labels[POINTS], IFACE_("Points"));
+
+  int longest_label = 0;
+  int i;
+  for (i = 0; i < MAX_LABELS_COUNT; ++i) {
+    longest_label = max_ii(longest_label, BLF_width(font_id, labels[i], sizeof(labels[i])));
   }
-  stats_string(view_layer);
-  return view_layer->stats->infostr;
+
+  int col1 = x;
+  int col2 = x + longest_label + (0.5f * U.widget_unit);
+
+  /* Add some extra margin above this section. */
+  *y -= (0.6f * height);
+
+  if (object_mode == OB_MODE_OBJECT) {
+    stats_row(col1, labels[OBJ], col2, stats_fmt.totobjsel, stats_fmt.totobj, y, height);
+  }
+
+  if (obedit) {
+    if (obedit->type == OB_MESH) {
+      stats_row(col1, labels[OBJ], col2, stats_fmt.totobjsel, stats_fmt.totobj, y, height);
+      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsel, stats_fmt.totvert, y, height);
+      stats_row(col1, labels[EDGES], col2, stats_fmt.totedgesel, stats_fmt.totedge, y, height);
+      stats_row(col1, labels[FACES], col2, stats_fmt.totfacesel, stats_fmt.totface, y, height);
+      stats_row(col1, labels[TRIS], col2, stats_fmt.tottri, NULL, y, height);
+    }
+    else if (obedit->type == OB_ARMATURE) {
+      stats_row(col1, labels[JOINTS], col2, stats_fmt.totvertsel, stats_fmt.totvert, y, height);
+      stats_row(col1, labels[BONES], col2, stats_fmt.totbonesel, stats_fmt.totbone, y, height);
+    }
+    else {
+      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsel, stats_fmt.totvert, y, height);
+    }
+  }
+  else if (ob && (object_mode & OB_MODE_POSE)) {
+    stats_row(col1, labels[BONES], col2, stats_fmt.totbonesel, stats_fmt.totbone, y, height);
+  }
+  else if ((ob) && (ob->type == OB_GPENCIL)) {
+    stats_row(col1, labels[LAYERS], col2, stats_fmt.totgplayer, NULL, y, height);
+    stats_row(col1, labels[FRAMES], col2, stats_fmt.totgpframe, NULL, y, height);
+    stats_row(col1, labels[STROKES], col2, stats_fmt.totgpstroke, NULL, y, height);
+    stats_row(col1, labels[POINTS], col2, stats_fmt.totgppoint, NULL, y, height);
+  }
+  else if (ob && (object_mode & OB_MODE_SCULPT)) {
+    if (stats_is_object_dynamic_topology_sculpt(ob)) {
+      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsculpt, NULL, y, height);
+      stats_row(col1, labels[TRIS], col2, stats_fmt.tottri, NULL, y, height);
+    }
+    else {
+      stats_row(col1, labels[VERTS], col2, stats_fmt.totvertsculpt, stats_fmt.totvert, y, height);
+      stats_row(col1, labels[FACES], col2, stats_fmt.totfacesculpt, stats_fmt.totface, y, height);
+    }
+  }
+  else {
+    stats_row(col1, labels[VERTS], col2, stats_fmt.totvert, NULL, y, height);
+    stats_row(col1, labels[EDGES], col2, stats_fmt.totedge, NULL, y, height);
+    stats_row(col1, labels[FACES], col2, stats_fmt.totface, NULL, y, height);
+    stats_row(col1, labels[TRIS], col2, stats_fmt.tottri, NULL, y, height);
+  }
+
+  BLF_disable(font_id, BLF_SHADOW);
 }

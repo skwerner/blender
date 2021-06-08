@@ -21,26 +21,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_appdir.h"
 #include "BKE_blendfile.h"
 #include "BKE_context.h"
-#include "BKE_idcode.h"
-#include "BKE_layer.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_main.h"
-#include "BKE_report.h"
-#include "BKE_scene.h"
 #include "BKE_screen.h"
 #include "BKE_workspace.h"
 
 #include "BLO_readfile.h"
 
-#include "DNA_object_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_windowmanager_types.h"
 #include "DNA_workspace_types.h"
@@ -49,12 +44,8 @@
 #include "ED_object.h"
 #include "ED_screen.h"
 
-#include "MEM_guardedalloc.h"
-
 #include "RNA_access.h"
 #include "RNA_define.h"
-
-#include "DEG_depsgraph.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -63,10 +54,10 @@
 
 #include "WM_api.h"
 #include "WM_types.h"
-#include "WM_toolsystem.h"
 
 #include "screen_intern.h"
 
+/* -------------------------------------------------------------------- */
 /** \name Workspace API
  *
  * \brief API for managing workspaces and their data.
@@ -89,55 +80,36 @@ static void workspace_change_update(WorkSpace *workspace_new,
   /* needs to be done before changing mode! (to ensure right context) */
   UNUSED_VARS(workspace_old, workspace_new, C, wm);
 #if 0
-  Object *ob_act = CTX_data_active_object(C)
-  eObjectMode mode_old = workspace_old->object_mode;
+  Object *ob_act = CTX_data_active_object(C) eObjectMode mode_old = workspace_old->object_mode;
   eObjectMode mode_new = workspace_new->object_mode;
 
   if (mode_old != mode_new) {
-    ED_object_mode_compat_set(C, ob_act, mode_new, &wm->reports);
-    ED_object_mode_toggle(C, mode_new);
+    ED_object_mode_set(C, mode_new);
   }
 #endif
-}
-
-static bool workspace_change_find_new_layout_cb(const WorkSpaceLayout *layout, void *UNUSED(arg))
-{
-  /* return false to stop the iterator if we've found a layout that can be activated */
-  return workspace_layout_set_poll(layout) ? false : true;
 }
 
 static WorkSpaceLayout *workspace_change_get_new_layout(Main *bmain,
                                                         WorkSpace *workspace_new,
                                                         wmWindow *win)
 {
-  /* ED_workspace_duplicate may have stored a layout to activate once the workspace gets activated. */
   WorkSpaceLayout *layout_old = WM_window_get_active_layout(win);
   WorkSpaceLayout *layout_new;
-  bScreen *screen_new;
 
+  /* ED_workspace_duplicate may have stored a layout to activate
+   * once the workspace gets activated. */
   if (win->workspace_hook->temp_workspace_store) {
     layout_new = win->workspace_hook->temp_layout_store;
   }
   else {
-    layout_new = BKE_workspace_hook_layout_for_workspace_get(win->workspace_hook, workspace_new);
+    layout_new = BKE_workspace_active_layout_for_workspace_get(win->workspace_hook, workspace_new);
     if (!layout_new) {
-      layout_new = BKE_workspace_layouts_get(workspace_new)->first;
+      layout_new = workspace_new->layouts.first;
     }
   }
-  screen_new = BKE_workspace_layout_screen_get(layout_new);
 
-  if (screen_new->winid) {
-    /* screen is already used, try to find a free one */
-    WorkSpaceLayout *layout_temp = BKE_workspace_layout_iter_circular(
-        workspace_new, layout_new, workspace_change_find_new_layout_cb, NULL, false);
-    if (!layout_temp) {
-      /* fallback solution: duplicate layout from old workspace */
-      layout_temp = ED_workspace_layout_duplicate(bmain, workspace_new, layout_old, win);
-    }
-    layout_new = layout_temp;
-  }
-
-  return layout_new;
+  return ED_workspace_screen_change_ensure_unused_layout(
+      bmain, workspace_new, layout_new, layout_old, win);
 }
 
 /**
@@ -159,18 +131,18 @@ bool ED_workspace_change(WorkSpace *workspace_new, bContext *C, wmWindowManager 
 
   win->workspace_hook->temp_layout_store = NULL;
   if (workspace_old == workspace_new) {
-    /* Could also return true, everything that needs to be done was done (nothing :P), but nothing changed */
+    /* Could also return true, everything that needs to be done was done (nothing :P),
+     * but nothing changed */
     return false;
   }
 
-  screen_new = screen_change_prepare(screen_old, screen_new, bmain, C, win);
-  BLI_assert(BKE_workspace_layout_screen_get(layout_new) == screen_new);
+  screen_change_prepare(screen_old, screen_new, bmain, C, win);
 
   if (screen_new == NULL) {
     return false;
   }
 
-  BKE_workspace_hook_layout_for_workspace_set(win->workspace_hook, workspace_new, layout_new);
+  BKE_workspace_active_layout_set(win->workspace_hook, win->winid, workspace_new, layout_new);
   BKE_workspace_active_set(win->workspace_hook, workspace_new);
 
   /* update screen *after* changing workspace - which also causes the
@@ -180,12 +152,9 @@ bool ED_workspace_change(WorkSpace *workspace_new, bContext *C, wmWindowManager 
 
   BLI_assert(CTX_wm_workspace(C) == workspace_new);
 
-  WM_toolsystem_unlink_all(C, workspace_old);
-  /* Area initialization will initialize based on the new workspace. */
-
   /* Automatic mode switching. */
   if (workspace_new->object_mode != workspace_old->object_mode) {
-    ED_object_mode_generic_enter(C, workspace_new->object_mode);
+    ED_object_mode_set(C, workspace_new->object_mode);
   }
 
   return true;
@@ -198,16 +167,16 @@ bool ED_workspace_change(WorkSpace *workspace_new, bContext *C, wmWindowManager 
 WorkSpace *ED_workspace_duplicate(WorkSpace *workspace_old, Main *bmain, wmWindow *win)
 {
   WorkSpaceLayout *layout_active_old = BKE_workspace_active_layout_get(win->workspace_hook);
-  ListBase *layouts_old = BKE_workspace_layouts_get(workspace_old);
   WorkSpace *workspace_new = ED_workspace_add(bmain, workspace_old->id.name + 2);
 
   workspace_new->flags = workspace_old->flags;
+  workspace_new->object_mode = workspace_old->object_mode;
+  workspace_new->order = workspace_old->order;
   BLI_duplicatelist(&workspace_new->owner_ids, &workspace_old->owner_ids);
 
   /* TODO(campbell): tools */
 
-  for (WorkSpaceLayout *layout_old = layouts_old->first; layout_old;
-       layout_old = layout_old->next) {
+  LISTBASE_FOREACH (WorkSpaceLayout *, layout_old, &workspace_old->layouts) {
     WorkSpaceLayout *layout_new = ED_workspace_layout_duplicate(
         bmain, workspace_new, layout_old, win);
 
@@ -230,7 +199,7 @@ bool ED_workspace_delete(WorkSpace *workspace, Main *bmain, bContext *C, wmWindo
   ListBase ordered;
   BKE_id_ordered_list(&ordered, &bmain->workspaces);
   WorkSpace *prev = NULL, *next = NULL;
-  for (LinkData *link = ordered.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &ordered) {
     if (link->data == workspace) {
       prev = link->prev ? link->prev->data : NULL;
       next = link->next ? link->next->data : NULL;
@@ -240,7 +209,7 @@ bool ED_workspace_delete(WorkSpace *workspace, Main *bmain, bContext *C, wmWindo
   BLI_freelistN(&ordered);
   BLI_assert((prev != NULL) || (next != NULL));
 
-  for (wmWindow *win = wm->windows.first; win; win = win->next) {
+  LISTBASE_FOREACH (wmWindow *, win, &wm->windows) {
     WorkSpace *workspace_active = WM_window_get_active_workspace(win);
     if (workspace_active == workspace) {
       ED_workspace_change((prev != NULL) ? prev : next, C, wm, win);
@@ -263,8 +232,8 @@ void ED_workspace_scene_data_sync(WorkSpaceInstanceHook *hook, Scene *scene)
 
 /** \} Workspace API */
 
+/* -------------------------------------------------------------------- */
 /** \name Workspace Operators
- *
  * \{ */
 
 static WorkSpace *workspace_context_get(bContext *C)
@@ -274,8 +243,7 @@ static WorkSpace *workspace_context_get(bContext *C)
     return (WorkSpace *)id;
   }
 
-  wmWindow *win = CTX_wm_window(C);
-  return WM_window_get_active_workspace(win);
+  return CTX_wm_workspace(C);
 }
 
 static bool workspace_context_poll(bContext *C)
@@ -329,30 +297,6 @@ static void WORKSPACE_OT_delete(wmOperatorType *ot)
   ot->exec = workspace_delete_exec;
 }
 
-static bool workspace_append_activate_poll(bContext *C)
-{
-  wmOperatorType *ot = WM_operatortype_find("WM_OT_append", false);
-  return WM_operator_poll(C, ot);
-}
-
-static int workspace_append(bContext *C, const char *directory, const char *idname)
-{
-  wmOperatorType *ot = WM_operatortype_find("WM_OT_append", false);
-  PointerRNA opptr;
-  int retval;
-
-  WM_operator_properties_create_ptr(&opptr, ot);
-  RNA_string_set(&opptr, "directory", directory);
-  RNA_string_set(&opptr, "filename", idname);
-  RNA_boolean_set(&opptr, "autoselect", false);
-
-  retval = WM_operator_name_call_ptr(C, ot, WM_OP_EXEC_DEFAULT, &opptr);
-
-  WM_operator_properties_free(&opptr);
-
-  return retval;
-}
-
 static int workspace_append_activate_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
@@ -365,10 +309,12 @@ static int workspace_append_activate_exec(bContext *C, wmOperator *op)
   RNA_string_get(op->ptr, "idname", idname);
   RNA_string_get(op->ptr, "filepath", filepath);
 
-  if (workspace_append(C, filepath, idname) != OPERATOR_CANCELLED) {
-    WorkSpace *appended_workspace = BLI_findstring(
-        &bmain->workspaces, idname, offsetof(ID, name) + 2);
-    BLI_assert(appended_workspace != NULL);
+  WorkSpace *appended_workspace = (WorkSpace *)WM_file_append_datablock(
+      bmain, CTX_data_scene(C), CTX_data_view_layer(C), CTX_wm_view3d(C), filepath, ID_WS, idname);
+
+  if (appended_workspace) {
+    /* Set defaults. */
+    BLO_update_defaults_workspace(appended_workspace, NULL);
 
     /* Reorder to last position. */
     BKE_id_reorder(&bmain->workspaces, &appended_workspace->id, NULL, true);
@@ -391,7 +337,6 @@ static void WORKSPACE_OT_append_activate(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = workspace_append_activate_exec;
-  ot->poll = workspace_append_activate_poll;
 
   RNA_def_string(ot->srna,
                  "idname",
@@ -441,26 +386,23 @@ static void workspace_append_button(uiLayout *layout,
                                     const Main *from_main)
 {
   const ID *id = (ID *)workspace;
-  PointerRNA opptr;
-  char lib_path[FILE_MAX_LIBEXTRA];
   const char *filepath = from_main->name;
 
   if (strlen(filepath) == 0) {
     filepath = BLO_EMBEDDED_STARTUP_BLEND;
   }
 
-  BLI_path_join(lib_path, sizeof(lib_path), filepath, BKE_idcode_to_name(GS(id->name)), NULL);
-
   BLI_assert(STREQ(ot_append->idname, "WORKSPACE_OT_append_activate"));
+
+  PointerRNA opptr;
   uiItemFullO_ptr(
       layout, ot_append, workspace->id.name + 2, ICON_NONE, NULL, WM_OP_EXEC_DEFAULT, 0, &opptr);
   RNA_string_set(&opptr, "idname", id->name + 2);
-  RNA_string_set(&opptr, "filepath", lib_path);
+  RNA_string_set(&opptr, "filepath", filepath);
 }
 
-static void workspace_add_menu(bContext *C, uiLayout *layout, void *template_v)
+static void workspace_add_menu(bContext *UNUSED(C), uiLayout *layout, void *template_v)
 {
-  Main *bmain = CTX_data_main(C);
   const char *app_template = template_v;
   bool has_startup_items = false;
 
@@ -469,13 +411,8 @@ static void workspace_add_menu(bContext *C, uiLayout *layout, void *template_v)
   WorkspaceConfigFileData *builtin_config = workspace_system_file_read(app_template);
 
   if (startup_config) {
-    for (WorkSpace *workspace = startup_config->workspaces.first; workspace;
-         workspace = workspace->id.next) {
+    LISTBASE_FOREACH (WorkSpace *, workspace, &startup_config->workspaces) {
       uiLayout *row = uiLayoutRow(layout, false);
-      if (BLI_findstring(&bmain->workspaces, workspace->id.name, offsetof(ID, name))) {
-        uiLayoutSetActive(row, false);
-      }
-
       workspace_append_button(row, ot_append, workspace, startup_config->main);
       has_startup_items = true;
     }
@@ -484,8 +421,7 @@ static void workspace_add_menu(bContext *C, uiLayout *layout, void *template_v)
   if (builtin_config) {
     bool has_title = false;
 
-    for (WorkSpace *workspace = builtin_config->workspaces.first; workspace;
-         workspace = workspace->id.next) {
+    LISTBASE_FOREACH (WorkSpace *, workspace, &builtin_config->workspaces) {
       if (startup_config &&
           BLI_findstring(&startup_config->workspaces, workspace->id.name, offsetof(ID, name))) {
         continue;
@@ -499,10 +435,6 @@ static void workspace_add_menu(bContext *C, uiLayout *layout, void *template_v)
       }
 
       uiLayout *row = uiLayoutRow(layout, false);
-      if (BLI_findstring(&bmain->workspaces, workspace->id.name, offsetof(ID, name))) {
-        uiLayoutSetActive(row, false);
-      }
-
       workspace_append_button(row, ot_append, workspace, builtin_config->main);
     }
   }
@@ -525,7 +457,7 @@ static int workspace_add_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
   ListBase templates;
   BKE_appdir_app_templates(&templates);
 
-  for (LinkData *link = templates.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &templates) {
     char *template = link->data;
     char display_name[FILE_MAX];
 

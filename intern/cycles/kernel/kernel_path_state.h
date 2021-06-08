@@ -41,9 +41,11 @@ ccl_device_inline void path_state_init(KernelGlobals *kg,
   if (kernel_data.film.pass_denoising_data) {
     state->flag |= PATH_RAY_STORE_SHADOW_INFO;
     state->denoising_feature_weight = 1.0f;
+    state->denoising_feature_throughput = one_float3();
   }
   else {
     state->denoising_feature_weight = 0.0f;
+    state->denoising_feature_throughput = zero_float3();
   }
 #endif /* __DENOISING_FEATURES__ */
 
@@ -209,8 +211,8 @@ ccl_device_inline float path_state_continuation_probability(KernelGlobals *kg,
     return 0.0f;
   }
   else if (state->flag & PATH_RAY_TRANSPARENT) {
-    /* Do at least one bounce without RR. */
-    if (state->transparent_bounce <= 1) {
+    /* Do at least specified number of bounces without RR. */
+    if (state->transparent_bounce <= kernel_data.integrator.transparent_min_bounce) {
       return 1.0f;
     }
 #ifdef __SHADOW_TRICKS__
@@ -221,8 +223,8 @@ ccl_device_inline float path_state_continuation_probability(KernelGlobals *kg,
 #endif
   }
   else {
-    /* Do at least one bounce without RR. */
-    if (state->bounce <= 1) {
+    /* Do at least specified number of bounces without RR. */
+    if (state->bounce <= kernel_data.integrator.min_bounce) {
       return 1.0f;
     }
 #ifdef __SHADOW_TRICKS__

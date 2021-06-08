@@ -24,13 +24,14 @@
  * Contains the doxygen documentation main page.
  */
 
-#ifndef __GHOST_ISYSTEM_H__
-#define __GHOST_ISYSTEM_H__
+#pragma once
 
-#include "GHOST_Types.h"
+#include <stdlib.h>
+
 #include "GHOST_IContext.h"
 #include "GHOST_ITimerTask.h"
 #include "GHOST_IWindow.h"
+#include "GHOST_Types.h"
 
 class GHOST_IEventConsumer;
 
@@ -50,7 +51,7 @@ class GHOST_IEventConsumer;
  * Blender.
  * <br><br>
  * Enough history. What does GHOST have to offer?<br>
- * In short: everything that Blender needed from GLUT to run on all it's supported
+ * In short: everything that Blender needed from GLUT to run on all its supported
  * operating systems and some extra's.
  * This includes :
  *
@@ -182,10 +183,10 @@ class GHOST_ISystem {
    * Installs a timer.
    * Note that, on most operating systems, messages need to be processed in order
    * for the timer callbacks to be invoked.
-   * \param delay     The time to wait for the first call to the timerProc (in milliseconds)
-   * \param interval  The interval between calls to the timerProc (in milliseconds)
-   * \param timerProc The callback invoked when the interval expires,
-   * \param userData  Placeholder for user data.
+   * \param delay: The time to wait for the first call to the timerProc (in milliseconds).
+   * \param interval: The interval between calls to the timerProc (in milliseconds).
+   * \param timerProc: The callback invoked when the interval expires.
+   * \param userData: Placeholder for user data.
    * \return A timer task (0 if timer task installation failed).
    */
   virtual GHOST_ITimerTask *installTimer(GHOST_TUns64 delay,
@@ -195,7 +196,7 @@ class GHOST_ISystem {
 
   /**
    * Removes a timer.
-   * \param timerTask Timer task to be removed.
+   * \param timerTask: Timer task to be removed.
    * \return Indication of success.
    */
   virtual GHOST_TSuccess removeTimer(GHOST_ITimerTask *timerTask) = 0;
@@ -226,19 +227,21 @@ class GHOST_ISystem {
    * Create a new window.
    * The new window is added to the list of windows managed.
    * Never explicitly delete the window, use disposeWindow() instead.
-   * \param   title           The name of the window (displayed in the title bar of the window if the OS supports it).
-   * \param   left            The coordinate of the left edge of the window.
-   * \param   top             The coordinate of the top edge of the window.
-   * \param   width           The width the window.
-   * \param   height          The height the window.
-   * \param   state           The state of the window when opened.
-   * \param   type            The type of drawing context installed in this window.
+   * \param title: The name of the window
+   * (displayed in the title bar of the window if the OS supports it).
+   * \param left: The coordinate of the left edge of the window.
+   * \param top: The coordinate of the top edge of the window.
+   * \param width: The width the window.
+   * \param height: The height the window.
+   * \param state: The state of the window when opened.
+   * \param type: The type of drawing context installed in this window.
    * \param glSettings: Misc OpenGL settings.
-   * \param exclusive: Use to show the window ontop and ignore others (used fullscreen).
-   * \param   parentWindow    Parent (embedder) window
-   * \return  The new window (or 0 if creation failed).
+   * \param exclusive: Use to show the window on top and ignore others (used full-screen).
+   * \param is_dialog: Stay on top of parent window, no icon in taskbar, can't be minimized.
+   * \param parentWindow: Parent (embedder) window
+   * \return The new window (or 0 if creation failed).
    */
-  virtual GHOST_IWindow *createWindow(const STR_String &title,
+  virtual GHOST_IWindow *createWindow(const char *title,
                                       GHOST_TInt32 left,
                                       GHOST_TInt32 top,
                                       GHOST_TUns32 width,
@@ -247,62 +250,62 @@ class GHOST_ISystem {
                                       GHOST_TDrawingContextType type,
                                       GHOST_GLSettings glSettings,
                                       const bool exclusive = false,
-                                      const GHOST_TEmbedderWindowID parentWindow = 0) = 0;
+                                      const bool is_dialog = false,
+                                      const GHOST_IWindow *parentWindow = NULL) = 0;
 
   /**
    * Dispose a window.
-   * \param   window Pointer to the window to be disposed.
-   * \return  Indication of success.
+   * \param window: Pointer to the window to be disposed.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess disposeWindow(GHOST_IWindow *window) = 0;
 
   /**
    * Create a new offscreen context.
    * Never explicitly delete the context, use disposeContext() instead.
-   * \return  The new context (or 0 if creation failed).
+   * \return The new context (or 0 if creation failed).
    */
-  virtual GHOST_IContext *createOffscreenContext() = 0;
+  virtual GHOST_IContext *createOffscreenContext(GHOST_GLSettings glSettings) = 0;
 
   /**
    * Dispose of a context.
-   * \param   context Pointer to the context to be disposed.
-   * \return  Indication of success.
+   * \param context: Pointer to the context to be disposed.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess disposeContext(GHOST_IContext *context) = 0;
 
   /**
    * Returns whether a window is valid.
-   * \param   window Pointer to the window to be checked.
-   * \return  Indication of validity.
+   * \param window: Pointer to the window to be checked.
+   * \return Indication of validity.
    */
   virtual bool validWindow(GHOST_IWindow *window) = 0;
 
   /**
    * Begins full screen mode.
-   * \param setting   The new setting of the display.
-   * \param window    Window displayed in full screen.
+   * \param setting: The new setting of the display.
+   * \param window: Window displayed in full screen.
    *                  This window is invalid after full screen has been ended.
-   * \return  Indication of success.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess beginFullScreen(const GHOST_DisplaySetting &setting,
                                          GHOST_IWindow **window,
                                          const bool stereoVisual,
-                                         const bool alphaBackground = 0,
-                                         const GHOST_TUns16 numOfAASamples = 0) = 0;
+                                         const bool alphaBackground = 0) = 0;
 
   /**
    * Updates the resolution while in fullscreen mode.
-   * \param setting   The new setting of the display.
-   * \param window    Window displayed in full screen.
+   * \param setting: The new setting of the display.
+   * \param window: Window displayed in full screen.
    *
-   * \return  Indication of success.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess updateFullScreen(const GHOST_DisplaySetting &setting,
                                           GHOST_IWindow **window) = 0;
 
   /**
    * Ends full screen mode.
-   * \return  Indication of success.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess endFullScreen(void) = 0;
 
@@ -328,7 +331,7 @@ class GHOST_ISystem {
 
   /**
    * Retrieves events from the system and stores them in the queue.
-   * \param waitForEvent Flag to wait for an event (or return immediately).
+   * \param waitForEvent: Flag to wait for an event (or return immediately).
    * \return Indication of the presence of events.
    */
   virtual bool processEvents(bool waitForEvent) = 0;
@@ -340,14 +343,14 @@ class GHOST_ISystem {
 
   /**
    * Adds the given event consumer to our list.
-   * \param consumer The event consumer to add.
+   * \param consumer: The event consumer to add.
    * \return Indication of success.
    */
   virtual GHOST_TSuccess addEventConsumer(GHOST_IEventConsumer *consumer) = 0;
 
   /**
    * Removes the given event consumer to our list.
-   * \param consumer The event consumer to remove.
+   * \param consumer: The event consumer to remove.
    * \return Indication of success.
    */
   virtual GHOST_TSuccess removeEventConsumer(GHOST_IEventConsumer *consumer) = 0;
@@ -358,18 +361,18 @@ class GHOST_ISystem {
 
   /**
    * Returns the current location of the cursor (location in screen coordinates)
-   * \param x         The x-coordinate of the cursor.
-   * \param y         The y-coordinate of the cursor.
-   * \return          Indication of success.
+   * \param x: The x-coordinate of the cursor.
+   * \param y: The y-coordinate of the cursor.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess getCursorPosition(GHOST_TInt32 &x, GHOST_TInt32 &y) const = 0;
 
   /**
    * Updates the location of the cursor (location in screen coordinates).
    * Not all operating systems allow the cursor to be moved (without the input device being moved).
-   * \param x         The x-coordinate of the cursor.
-   * \param y         The y-coordinate of the cursor.
-   * \return          Indication of success.
+   * \param x: The x-coordinate of the cursor.
+   * \param y: The y-coordinate of the cursor.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess setCursorPosition(GHOST_TInt32 x, GHOST_TInt32 y) = 0;
 
@@ -378,39 +381,39 @@ class GHOST_ISystem {
    ***************************************************************************************/
 
   /**
-   * Returns the state of a modifier key (ouside the message queue).
-   * \param mask      The modifier key state to retrieve.
-   * \param isDown    The state of a modifier key (true == pressed).
-   * \return          Indication of success.
+   * Returns the state of a modifier key (outside the message queue).
+   * \param mask: The modifier key state to retrieve.
+   * \param isDown: The state of a modifier key (true == pressed).
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess getModifierKeyState(GHOST_TModifierKeyMask mask, bool &isDown) const = 0;
 
   /**
-   * Returns the state of a mouse button (ouside the message queue).
-   * \param mask      The button state to retrieve.
-   * \param isDown    Button state.
-   * \return          Indication of success.
+   * Returns the state of a mouse button (outside the message queue).
+   * \param mask: The button state to retrieve.
+   * \param isDown: Button state.
+   * \return Indication of success.
    */
   virtual GHOST_TSuccess getButtonState(GHOST_TButtonMask mask, bool &isDown) const = 0;
 
   /**
    * Set which tablet API to use. Only affects Windows, other platforms have a single API.
-   * \param api Enum indicating which API to use.
+   * \param api: Enum indicating which API to use.
    */
   virtual void setTabletAPI(GHOST_TTabletAPI api) = 0;
 
 #ifdef WITH_INPUT_NDOF
   /**
    * Sets 3D mouse deadzone
-   * \param deadzone: Deadzone of the 3D mouse (both for rotation and pan) relative to full range
+   * \param deadzone: Dead-zone of the 3D mouse (both for rotation and pan) relative to full range
    */
   virtual void setNDOFDeadZone(float deadzone) = 0;
 #endif
 
   /**
    * Toggles console
-   * \param action
-   * - 0: Hides
+   * \param action:
+   * - 0: Hides.
    * - 1: Shows
    * - 2: Toggles
    * - 3: Hides if it runs not from  command line
@@ -435,16 +438,40 @@ class GHOST_ISystem {
    */
   virtual void putClipboard(GHOST_TInt8 *buffer, bool selection) const = 0;
 
-  /**
-   * Confirms quitting he program when there is just one window left open
-   * in the application
-   */
-  virtual int confirmQuit(GHOST_IWindow *window) const = 0;
+  /***************************************************************************************
+   * System Message Box.
+   ***************************************************************************************/
 
   /**
-   * Informs if the system provides native dialogs (eg. confirm quit)
+   * Show a system message box
+   *
+   * \param title: The title of the message box.
+   * \param message: The message to display.
+   * \param help_label: Help button label.
+   * \param continue_label: Continue button label.
+   * \param link: An optional hyperlink.
+   * \param dialog_options: Options  how to display the message.
    */
-  virtual bool supportsNativeDialogs(void) = 0;
+  virtual GHOST_TSuccess showMessageBox(const char * /*title*/,
+                                        const char * /*message*/,
+                                        const char * /*help_label*/,
+                                        const char * /*continue_label*/,
+                                        const char * /*link*/,
+                                        GHOST_DialogOptions /*dialog_options*/) const = 0;
+
+  /***************************************************************************************
+   * Debugging
+   ***************************************************************************************/
+
+  /**
+   * Specify whether debug messages are to be shown.
+   */
+  virtual void initDebug(bool is_debug_enabled) = 0;
+
+  /**
+   * Check whether debug messages are to be shown.
+   */
+  virtual bool isDebugEnabled() = 0;
 
  protected:
   /**
@@ -466,5 +493,3 @@ class GHOST_ISystem {
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_ISystem")
 #endif
 };
-
-#endif  // __GHOST_ISYSTEM_H__

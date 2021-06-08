@@ -31,52 +31,34 @@
 
 CCL_NAMESPACE_BEGIN
 
+class Hair;
 class Mesh;
 
 class BVHEmbree : public BVH {
  public:
-  virtual void build(Progress &progress, Stats *stats) override;
-  virtual ~BVHEmbree();
-  RTCScene scene;
-  static void destroy(RTCScene);
+  void build(Progress &progress, Stats *stats, RTCDevice rtc_device);
+  void refit(Progress &progress);
 
-  /* Building process. */
-  virtual BVHNode *widen_children_nodes(const BVHNode *root) override;
+  RTCScene scene;
 
  protected:
   friend class BVH;
-  BVHEmbree(const BVHParams &params, const vector<Object *> &objects);
-
-  virtual void pack_nodes(const BVHNode *) override;
-  virtual void refit_nodes() override;
+  BVHEmbree(const BVHParams &params,
+            const vector<Geometry *> &geometry,
+            const vector<Object *> &objects);
+  virtual ~BVHEmbree();
 
   void add_object(Object *ob, int i);
   void add_instance(Object *ob, int i);
-  void add_curves(Object *ob, int i);
-  void add_triangles(Object *ob, int i);
-
-  ssize_t mem_used;
-
-  void add_delayed_delete_scene(RTCScene scene)
-  {
-    delayed_delete_scenes.push_back(scene);
-  }
-  BVHEmbree *top_level;
+  void add_curves(const Object *ob, const Hair *hair, int i);
+  void add_triangles(const Object *ob, const Mesh *mesh, int i);
 
  private:
-  void delete_rtcScene();
-  void update_tri_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh);
-  void update_curve_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh);
+  void set_tri_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh, const bool update);
+  void set_curve_vertex_buffer(RTCGeometry geom_id, const Hair *hair, const bool update);
 
-  static RTCDevice rtc_shared_device;
-  static int rtc_shared_users;
-  static thread_mutex rtc_shared_mutex;
-
-  Stats *stats;
-  vector<RTCScene> delayed_delete_scenes;
-  int curve_subdivisions;
+  RTCDevice rtc_device;
   enum RTCBuildQuality build_quality;
-  bool use_curves, use_ribbons, dynamic_scene;
 };
 
 CCL_NAMESPACE_END

@@ -28,8 +28,8 @@
 
 #include "bmesh.h"
 
-#include "BKE_deform.h"
 #include "BKE_customdata.h"
+#include "BKE_deform.h"
 
 #include "bmesh_wireframe.h"
 
@@ -142,13 +142,13 @@ static bool bm_loop_is_radial_boundary(BMLoop *l_first)
   if (l == l_first) {
     return true; /* a real boundary */
   }
-  else {
-    do {
-      if (BM_elem_flag_test(l->f, BM_ELEM_TAG)) {
-        return false;
-      }
-    } while ((l = l->radial_next) != l_first);
-  }
+
+  do {
+    if (BM_elem_flag_test(l->f, BM_ELEM_TAG)) {
+      return false;
+    }
+  } while ((l = l->radial_next) != l_first);
+
   return true;
 }
 
@@ -270,7 +270,7 @@ void BM_mesh_wireframe(BMesh *bm,
 
         if (cd_dvert_offset != -1) {
           MDeformVert *dvert = BM_ELEM_CD_GET_VOID_P(v_src, cd_dvert_offset);
-          float defgrp_fac = defvert_find_weight(dvert, defgrp_index);
+          float defgrp_fac = BKE_defvert_find_weight(dvert, defgrp_index);
 
           if (defgrp_invert) {
             defgrp_fac = 1.0f - defgrp_fac;

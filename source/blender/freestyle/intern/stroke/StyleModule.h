@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STYLE_MODULE_H__
-#define __FREESTYLE_STYLE_MODULE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -85,8 +84,9 @@ class StyleModule {
 
     StrokeLayer *sl = new StrokeLayer;
     for (Operators::StrokesContainer::iterator it = strokes_set->begin(); it != strokes_set->end();
-         ++it)
+         ++it) {
       sl->AddStroke(*it);
+    }
 
     Operators::reset();
     return sl;
@@ -153,8 +153,9 @@ class StyleModule {
 
   void setModified(bool b = true)
   {
-    if (_always_refresh)
+    if (_always_refresh) {
       return;
+    }
     _modified = b;
   }
 
@@ -180,5 +181,3 @@ class StyleModule {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STYLE_MODULE_H__

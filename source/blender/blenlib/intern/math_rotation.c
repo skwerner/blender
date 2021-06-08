@@ -23,7 +23,6 @@
  * \ingroup bli
  */
 
-#include <assert.h>
 #include "BLI_math.h"
 
 #include "BLI_strict_flags.h"
@@ -50,12 +49,12 @@ void unit_qt(float q[4])
   q[1] = q[2] = q[3] = 0.0f;
 }
 
-void copy_qt_qt(float q1[4], const float q2[4])
+void copy_qt_qt(float q[4], const float a[4])
 {
-  q1[0] = q2[0];
-  q1[1] = q2[1];
-  q1[2] = q2[2];
-  q1[3] = q2[3];
+  q[0] = a[0];
+  q[1] = a[1];
+  q[2] = a[2];
+  q[3] = a[3];
 }
 
 bool is_zero_qt(const float q[4])
@@ -63,21 +62,21 @@ bool is_zero_qt(const float q[4])
   return (q[0] == 0 && q[1] == 0 && q[2] == 0 && q[3] == 0);
 }
 
-void mul_qt_qtqt(float q[4], const float q1[4], const float q2[4])
+void mul_qt_qtqt(float q[4], const float a[4], const float b[4])
 {
   float t0, t1, t2;
 
-  t0 = q1[0] * q2[0] - q1[1] * q2[1] - q1[2] * q2[2] - q1[3] * q2[3];
-  t1 = q1[0] * q2[1] + q1[1] * q2[0] + q1[2] * q2[3] - q1[3] * q2[2];
-  t2 = q1[0] * q2[2] + q1[2] * q2[0] + q1[3] * q2[1] - q1[1] * q2[3];
-  q[3] = q1[0] * q2[3] + q1[3] * q2[0] + q1[1] * q2[2] - q1[2] * q2[1];
+  t0 = a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3];
+  t1 = a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2];
+  t2 = a[0] * b[2] + a[2] * b[0] + a[3] * b[1] - a[1] * b[3];
+  q[3] = a[0] * b[3] + a[3] * b[0] + a[1] * b[2] - a[2] * b[1];
   q[0] = t0;
   q[1] = t1;
   q[2] = t2;
 }
 
 /**
- * \note:
+ * \note
  * Assumes a unit quaternion?
  *
  * in fact not, but you may want to use a unit quat, read on...
@@ -93,24 +92,24 @@ void mul_qt_qtqt(float q[4], const float q1[4], const float q2[4])
  * For people used to python mathutils, its like:
  * def mul_qt_v3(q, v): (q * Quaternion((0.0, v[0], v[1], v[2])) * q.conjugated())[1:]
  *
- * \note: multiplying by 3x3 matrix is ~25% faster.
+ * \note Multiplying by 3x3 matrix is ~25% faster.
  */
-void mul_qt_v3(const float q[4], float v[3])
+void mul_qt_v3(const float q[4], float r[3])
 {
   float t0, t1, t2;
 
-  t0 = -q[1] * v[0] - q[2] * v[1] - q[3] * v[2];
-  t1 = q[0] * v[0] + q[2] * v[2] - q[3] * v[1];
-  t2 = q[0] * v[1] + q[3] * v[0] - q[1] * v[2];
-  v[2] = q[0] * v[2] + q[1] * v[1] - q[2] * v[0];
-  v[0] = t1;
-  v[1] = t2;
+  t0 = -q[1] * r[0] - q[2] * r[1] - q[3] * r[2];
+  t1 = q[0] * r[0] + q[2] * r[2] - q[3] * r[1];
+  t2 = q[0] * r[1] + q[3] * r[0] - q[1] * r[2];
+  r[2] = q[0] * r[2] + q[1] * r[1] - q[2] * r[0];
+  r[0] = t1;
+  r[1] = t2;
 
-  t1 = t0 * -q[1] + v[0] * q[0] - v[1] * q[3] + v[2] * q[2];
-  t2 = t0 * -q[2] + v[1] * q[0] - v[2] * q[1] + v[0] * q[3];
-  v[2] = t0 * -q[3] + v[2] * q[0] - v[0] * q[2] + v[1] * q[1];
-  v[0] = t1;
-  v[1] = t2;
+  t1 = t0 * -q[1] + r[0] * q[0] - r[1] * q[3] + r[2] * q[2];
+  t2 = t0 * -q[2] + r[1] * q[0] - r[2] * q[1] + r[0] * q[3];
+  r[2] = t0 * -q[3] + r[2] * q[0] - r[0] * q[2] + r[1] * q[1];
+  r[0] = t1;
+  r[1] = t2;
 }
 
 void conjugate_qt_qt(float q1[4], const float q2[4])
@@ -128,9 +127,9 @@ void conjugate_qt(float q[4])
   q[3] = -q[3];
 }
 
-float dot_qtqt(const float q1[4], const float q2[4])
+float dot_qtqt(const float a[4], const float b[4])
 {
-  return q1[0] * q2[0] + q1[1] * q2[1] + q1[2] * q2[2] + q1[3] * q2[3];
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2] + a[3] * b[3];
 }
 
 void invert_qt(float q[4])
@@ -177,16 +176,16 @@ void mul_qt_fl(float q[4], const float f)
   q[3] *= f;
 }
 
-void sub_qt_qtqt(float q[4], const float q1[4], const float q2[4])
+void sub_qt_qtqt(float q[4], const float a[4], const float b[4])
 {
-  float nq2[4];
+  float n_b[4];
 
-  nq2[0] = -q2[0];
-  nq2[1] = q2[1];
-  nq2[2] = q2[2];
-  nq2[3] = q2[3];
+  n_b[0] = -b[0];
+  n_b[1] = b[1];
+  n_b[2] = b[2];
+  n_b[3] = b[3];
 
-  mul_qt_qtqt(q, q1, nq2);
+  mul_qt_qtqt(q, a, n_b);
 }
 
 /* raise a unit quaternion to the specified power */
@@ -212,11 +211,13 @@ void quat_to_compatible_quat(float q[4], const float a[4], const float old[4])
   float old_unit[4];
   /* Skips `!finite_v4(old)` case too. */
   if (normalize_qt_qt(old_unit, old) > eps) {
+    float q_negate[4];
     float delta[4];
     rotation_between_quats_to_quat(delta, old_unit, a);
     mul_qt_qtqt(q, old, delta);
-    if ((q[0] < 0.0f) != (old[0] < 0.0f)) {
-      negate_v4(q);
+    negate_v4_v4(q_negate, q);
+    if (len_squared_v4v4(q_negate, old) < len_squared_v4v4(q, old)) {
+      copy_qt_qt(q, q_negate);
     }
   }
   else {
@@ -319,47 +320,62 @@ void quat_to_mat4(float m[4][4], const float q[4])
 
 void mat3_normalized_to_quat(float q[4], const float mat[3][3])
 {
-  double tr, s;
-
   BLI_ASSERT_UNIT_M3(mat);
 
-  tr = 0.25 * (double)(1.0f + mat[0][0] + mat[1][1] + mat[2][2]);
+  /* Check the trace of the matrix - bad precision if close to -1. */
+  const float trace = mat[0][0] + mat[1][1] + mat[2][2];
 
-  if (tr > (double)1e-4f) {
-    s = sqrt(tr);
-    q[0] = (float)s;
-    s = 1.0 / (4.0 * s);
-    q[1] = (float)((double)(mat[1][2] - mat[2][1]) * s);
-    q[2] = (float)((double)(mat[2][0] - mat[0][2]) * s);
-    q[3] = (float)((double)(mat[0][1] - mat[1][0]) * s);
+  if (trace > 0) {
+    float s = 2.0f * sqrtf(1.0f + trace);
+
+    q[0] = 0.25f * s;
+
+    s = 1.0f / s;
+
+    q[1] = (mat[1][2] - mat[2][1]) * s;
+    q[2] = (mat[2][0] - mat[0][2]) * s;
+    q[3] = (mat[0][1] - mat[1][0]) * s;
   }
   else {
+    /* Find the biggest diagonal element to choose the best formula.
+     * Here trace should also be always >= 0, avoiding bad precision. */
     if (mat[0][0] > mat[1][1] && mat[0][0] > mat[2][2]) {
-      s = 2.0f * sqrtf(1.0f + mat[0][0] - mat[1][1] - mat[2][2]);
-      q[1] = (float)(0.25 * s);
+      float s = 2.0f * sqrtf(1.0f + mat[0][0] - mat[1][1] - mat[2][2]);
 
-      s = 1.0 / s;
-      q[0] = (float)((double)(mat[1][2] - mat[2][1]) * s);
-      q[2] = (float)((double)(mat[1][0] + mat[0][1]) * s);
-      q[3] = (float)((double)(mat[2][0] + mat[0][2]) * s);
+      q[1] = 0.25f * s;
+
+      s = 1.0f / s;
+
+      q[0] = (mat[1][2] - mat[2][1]) * s;
+      q[2] = (mat[1][0] + mat[0][1]) * s;
+      q[3] = (mat[2][0] + mat[0][2]) * s;
     }
     else if (mat[1][1] > mat[2][2]) {
-      s = 2.0f * sqrtf(1.0f + mat[1][1] - mat[0][0] - mat[2][2]);
-      q[2] = (float)(0.25 * s);
+      float s = 2.0f * sqrtf(1.0f + mat[1][1] - mat[0][0] - mat[2][2]);
 
-      s = 1.0 / s;
-      q[0] = (float)((double)(mat[2][0] - mat[0][2]) * s);
-      q[1] = (float)((double)(mat[1][0] + mat[0][1]) * s);
-      q[3] = (float)((double)(mat[2][1] + mat[1][2]) * s);
+      q[2] = 0.25f * s;
+
+      s = 1.0f / s;
+
+      q[0] = (mat[2][0] - mat[0][2]) * s;
+      q[1] = (mat[1][0] + mat[0][1]) * s;
+      q[3] = (mat[2][1] + mat[1][2]) * s;
     }
     else {
-      s = 2.0f * sqrtf(1.0f + mat[2][2] - mat[0][0] - mat[1][1]);
-      q[3] = (float)(0.25 * s);
+      float s = 2.0f * sqrtf(1.0f + mat[2][2] - mat[0][0] - mat[1][1]);
 
-      s = 1.0 / s;
-      q[0] = (float)((double)(mat[0][1] - mat[1][0]) * s);
-      q[1] = (float)((double)(mat[2][0] + mat[0][2]) * s);
-      q[2] = (float)((double)(mat[2][1] + mat[1][2]) * s);
+      q[3] = 0.25f * s;
+
+      s = 1.0f / s;
+
+      q[0] = (mat[0][1] - mat[1][0]) * s;
+      q[1] = (mat[2][0] + mat[0][2]) * s;
+      q[2] = (mat[2][1] + mat[1][2]) * s;
+    }
+
+    /* Make sure w is nonnegative for a canonical result. */
+    if (q[0] < 0) {
+      negate_v4(q);
     }
   }
 
@@ -535,6 +551,60 @@ void rotation_between_quats_to_quat(float q[4], const float q1[4], const float q
   mul_qt_qtqt(q, tquat, q2);
 }
 
+/**
+ * Decompose a quaternion into a swing rotation (quaternion with the selected
+ * axis component locked at zero), followed by a twist rotation around the axis.
+ *
+ * \param q: input quaternion.
+ * \param axis: twist axis in [0,1,2]
+ * \param r_swing: if not NULL, receives the swing quaternion.
+ * \param r_twist: if not NULL, receives the twist quaternion.
+ * \returns twist angle.
+ */
+float quat_split_swing_and_twist(const float q_in[4], int axis, float r_swing[4], float r_twist[4])
+{
+  BLI_assert(axis >= 0 && axis <= 2);
+
+  /* The calculation requires a canonical quaternion. */
+  float q[4];
+
+  if (q_in[0] < 0) {
+    negate_v4_v4(q, q_in);
+  }
+  else {
+    copy_v4_v4(q, q_in);
+  }
+
+  /* Half-twist angle can be computed directly. */
+  float t = atan2f(q[axis + 1], q[0]);
+
+  if (r_swing || r_twist) {
+    float sin_t = sinf(t), cos_t = cosf(t);
+
+    /* Compute swing by multiplying the original quaternion by inverted twist. */
+    if (r_swing) {
+      float twist_inv[4];
+
+      twist_inv[0] = cos_t;
+      zero_v3(twist_inv + 1);
+      twist_inv[axis + 1] = -sin_t;
+
+      mul_qt_qtqt(r_swing, q, twist_inv);
+
+      BLI_assert(fabsf(r_swing[axis + 1]) < BLI_ASSERT_UNIT_EPSILON);
+    }
+
+    /* Output twist last just in case q overlaps r_twist. */
+    if (r_twist) {
+      r_twist[0] = cos_t;
+      zero_v3(r_twist + 1);
+      r_twist[axis + 1] = sin_t;
+    }
+  }
+
+  return 2.0f * t;
+}
+
 /* -------------------------------------------------------------------- */
 /** \name Quaternion Angle
  *
@@ -598,9 +668,8 @@ float angle_signed_normalized_qt(const float q[4])
   if (q[0] >= 0.0f) {
     return 2.0f * saacos(q[0]);
   }
-  else {
-    return -2.0f * saacos(-q[0]);
-  }
+
+  return -2.0f * saacos(-q[0]);
 }
 
 float angle_signed_normalized_qtqt(const float q1[4], const float q2[4])
@@ -608,11 +677,10 @@ float angle_signed_normalized_qtqt(const float q1[4], const float q2[4])
   if (dot_qtqt(q1, q2) >= 0.0f) {
     return angle_normalized_qtqt(q1, q2);
   }
-  else {
-    float q2_copy[4];
-    negate_v4_v4(q2_copy, q2);
-    return -angle_normalized_qtqt(q1, q2_copy);
-  }
+
+  float q2_copy[4];
+  negate_v4_v4(q2_copy, q2);
+  return -angle_normalized_qtqt(q1, q2_copy);
 }
 
 float angle_signed_qt(const float q[4])
@@ -629,11 +697,10 @@ float angle_signed_qtqt(const float q1[4], const float q2[4])
   if (dot_qtqt(q1, q2) >= 0.0f) {
     return angle_qtqt(q1, q2);
   }
-  else {
-    float q2_copy[4];
-    negate_v4_v4(q2_copy, q2);
-    return -angle_qtqt(q1, q2_copy);
-  }
+
+  float q2_copy[4];
+  negate_v4_v4(q2_copy, q2);
+  return -angle_qtqt(q1, q2_copy);
 }
 
 /** \} */
@@ -644,8 +711,8 @@ void vec_to_quat(float q[4], const float vec[3], short axis, const short upflag)
   float nor[3], tvec[3];
   float angle, si, co, len;
 
-  assert(axis >= 0 && axis <= 5);
-  assert(upflag >= 0 && upflag <= 2);
+  BLI_assert(axis >= 0 && axis <= 5);
+  BLI_assert(upflag >= 0 && upflag <= 2);
 
   /* first set the quat to unit */
   unit_qt(q);
@@ -824,38 +891,38 @@ void interp_dot_slerp(const float t, const float cosom, float r_w[2])
   }
 }
 
-void interp_qt_qtqt(float result[4], const float quat1[4], const float quat2[4], const float t)
+void interp_qt_qtqt(float q[4], const float a[4], const float b[4], const float t)
 {
   float quat[4], cosom, w[2];
 
-  BLI_ASSERT_UNIT_QUAT(quat1);
-  BLI_ASSERT_UNIT_QUAT(quat2);
+  BLI_ASSERT_UNIT_QUAT(a);
+  BLI_ASSERT_UNIT_QUAT(b);
 
-  cosom = dot_qtqt(quat1, quat2);
+  cosom = dot_qtqt(a, b);
 
   /* rotate around shortest angle */
   if (cosom < 0.0f) {
     cosom = -cosom;
-    negate_v4_v4(quat, quat1);
+    negate_v4_v4(quat, a);
   }
   else {
-    copy_qt_qt(quat, quat1);
+    copy_qt_qt(quat, a);
   }
 
   interp_dot_slerp(t, cosom, w);
 
-  result[0] = w[0] * quat[0] + w[1] * quat2[0];
-  result[1] = w[0] * quat[1] + w[1] * quat2[1];
-  result[2] = w[0] * quat[2] + w[1] * quat2[2];
-  result[3] = w[0] * quat[3] + w[1] * quat2[3];
+  q[0] = w[0] * quat[0] + w[1] * b[0];
+  q[1] = w[0] * quat[1] + w[1] * b[1];
+  q[2] = w[0] * quat[2] + w[1] * b[2];
+  q[3] = w[0] * quat[3] + w[1] * b[3];
 }
 
-void add_qt_qtqt(float result[4], const float quat1[4], const float quat2[4], const float t)
+void add_qt_qtqt(float q[4], const float a[4], const float b[4], const float t)
 {
-  result[0] = quat1[0] + t * quat2[0];
-  result[1] = quat1[1] + t * quat2[1];
-  result[2] = quat1[2] + t * quat2[2];
-  result[3] = quat1[3] + t * quat2[3];
+  q[0] = a[0] + t * b[0];
+  q[1] = a[1] + t * b[1];
+  q[2] = a[2] + t * b[2];
+  q[3] = a[3] + t * b[3];
 }
 
 /* same as tri_to_quat() but takes pre-computed normal from the triangle
@@ -915,12 +982,12 @@ void tri_to_quat_ex(
 /**
  * \return the length of the normal, use to test for degenerate triangles.
  */
-float tri_to_quat(float quat[4], const float v1[3], const float v2[3], const float v3[3])
+float tri_to_quat(float q[4], const float a[3], const float b[3], const float c[3])
 {
   float vec[3];
-  const float len = normal_tri_v3(vec, v1, v2, v3);
+  const float len = normal_tri_v3(vec, a, b, c);
 
-  tri_to_quat_ex(quat, v1, v2, v3, vec);
+  tri_to_quat_ex(q, a, b, c, vec);
   return len;
 }
 
@@ -931,25 +998,25 @@ void print_qt(const char *str, const float q[4])
 
 /******************************** Axis Angle *********************************/
 
-void axis_angle_normalized_to_quat(float q[4], const float axis[3], const float angle)
+void axis_angle_normalized_to_quat(float r[4], const float axis[3], const float angle)
 {
   const float phi = 0.5f * angle;
   const float si = sinf(phi);
   const float co = cosf(phi);
   BLI_ASSERT_UNIT_V3(axis);
-  q[0] = co;
-  mul_v3_v3fl(q + 1, axis, si);
+  r[0] = co;
+  mul_v3_v3fl(r + 1, axis, si);
 }
 
-void axis_angle_to_quat(float q[4], const float axis[3], const float angle)
+void axis_angle_to_quat(float r[4], const float axis[3], const float angle)
 {
   float nor[3];
 
   if (LIKELY(normalize_v3_v3(nor, axis) != 0.0f)) {
-    axis_angle_normalized_to_quat(q, nor, angle);
+    axis_angle_normalized_to_quat(r, nor, angle);
   }
   else {
-    unit_qt(q);
+    unit_qt(r);
   }
 }
 
@@ -1051,33 +1118,33 @@ void axis_angle_normalized_to_mat3_ex(float mat[3][3],
   mat[2][2] = n_22 + angle_cos;
 }
 
-void axis_angle_normalized_to_mat3(float mat[3][3], const float axis[3], const float angle)
+void axis_angle_normalized_to_mat3(float R[3][3], const float axis[3], const float angle)
 {
-  axis_angle_normalized_to_mat3_ex(mat, axis, sinf(angle), cosf(angle));
+  axis_angle_normalized_to_mat3_ex(R, axis, sinf(angle), cosf(angle));
 }
 
 /* axis angle to 3x3 matrix - safer version (normalization of axis performed) */
-void axis_angle_to_mat3(float mat[3][3], const float axis[3], const float angle)
+void axis_angle_to_mat3(float R[3][3], const float axis[3], const float angle)
 {
   float nor[3];
 
   /* normalize the axis first (to remove unwanted scaling) */
   if (normalize_v3_v3(nor, axis) == 0.0f) {
-    unit_m3(mat);
+    unit_m3(R);
     return;
   }
 
-  axis_angle_normalized_to_mat3(mat, nor, angle);
+  axis_angle_normalized_to_mat3(R, nor, angle);
 }
 
 /* axis angle to 4x4 matrix - safer version (normalization of axis performed) */
-void axis_angle_to_mat4(float mat[4][4], const float axis[3], const float angle)
+void axis_angle_to_mat4(float R[4][4], const float axis[3], const float angle)
 {
   float tmat[3][3];
 
   axis_angle_to_mat3(tmat, axis, angle);
-  unit_m4(mat);
-  copy_m4_m3(mat, tmat);
+  unit_m4(R);
+  copy_m4_m3(R, tmat);
 }
 
 /* 3x3 matrix to axis angle */
@@ -1122,52 +1189,52 @@ void mat4_to_axis_angle(float axis[3], float *angle, const float mat[4][4])
   quat_to_axis_angle(axis, angle, q);
 }
 
-void axis_angle_to_mat4_single(float mat[4][4], const char axis, const float angle)
+void axis_angle_to_mat4_single(float R[4][4], const char axis, const float angle)
 {
   float mat3[3][3];
   axis_angle_to_mat3_single(mat3, axis, angle);
-  copy_m4_m3(mat, mat3);
+  copy_m4_m3(R, mat3);
 }
 
 /* rotation matrix from a single axis */
-void axis_angle_to_mat3_single(float mat[3][3], const char axis, const float angle)
+void axis_angle_to_mat3_single(float R[3][3], const char axis, const float angle)
 {
   const float angle_cos = cosf(angle);
   const float angle_sin = sinf(angle);
 
   switch (axis) {
     case 'X': /* rotation around X */
-      mat[0][0] = 1.0f;
-      mat[0][1] = 0.0f;
-      mat[0][2] = 0.0f;
-      mat[1][0] = 0.0f;
-      mat[1][1] = angle_cos;
-      mat[1][2] = angle_sin;
-      mat[2][0] = 0.0f;
-      mat[2][1] = -angle_sin;
-      mat[2][2] = angle_cos;
+      R[0][0] = 1.0f;
+      R[0][1] = 0.0f;
+      R[0][2] = 0.0f;
+      R[1][0] = 0.0f;
+      R[1][1] = angle_cos;
+      R[1][2] = angle_sin;
+      R[2][0] = 0.0f;
+      R[2][1] = -angle_sin;
+      R[2][2] = angle_cos;
       break;
     case 'Y': /* rotation around Y */
-      mat[0][0] = angle_cos;
-      mat[0][1] = 0.0f;
-      mat[0][2] = -angle_sin;
-      mat[1][0] = 0.0f;
-      mat[1][1] = 1.0f;
-      mat[1][2] = 0.0f;
-      mat[2][0] = angle_sin;
-      mat[2][1] = 0.0f;
-      mat[2][2] = angle_cos;
+      R[0][0] = angle_cos;
+      R[0][1] = 0.0f;
+      R[0][2] = -angle_sin;
+      R[1][0] = 0.0f;
+      R[1][1] = 1.0f;
+      R[1][2] = 0.0f;
+      R[2][0] = angle_sin;
+      R[2][1] = 0.0f;
+      R[2][2] = angle_cos;
       break;
     case 'Z': /* rotation around Z */
-      mat[0][0] = angle_cos;
-      mat[0][1] = angle_sin;
-      mat[0][2] = 0.0f;
-      mat[1][0] = -angle_sin;
-      mat[1][1] = angle_cos;
-      mat[1][2] = 0.0f;
-      mat[2][0] = 0.0f;
-      mat[2][1] = 0.0f;
-      mat[2][2] = 1.0f;
+      R[0][0] = angle_cos;
+      R[0][1] = angle_sin;
+      R[0][2] = 0.0f;
+      R[1][0] = -angle_sin;
+      R[1][1] = angle_cos;
+      R[1][2] = 0.0f;
+      R[2][0] = 0.0f;
+      R[2][1] = 0.0f;
+      R[2][2] = 1.0f;
       break;
     default:
       BLI_assert(0);
@@ -1175,16 +1242,16 @@ void axis_angle_to_mat3_single(float mat[3][3], const char axis, const float ang
   }
 }
 
-void angle_to_mat2(float mat[2][2], const float angle)
+void angle_to_mat2(float R[2][2], const float angle)
 {
   const float angle_cos = cosf(angle);
   const float angle_sin = sinf(angle);
 
   /* 2D rotation matrix */
-  mat[0][0] = angle_cos;
-  mat[0][1] = angle_sin;
-  mat[1][0] = -angle_sin;
-  mat[1][1] = angle_cos;
+  R[0][0] = angle_cos;
+  R[0][1] = angle_sin;
+  R[1][0] = -angle_sin;
+  R[1][1] = angle_cos;
 }
 
 void axis_angle_to_quat_single(float q[4], const char axis, const float angle)
@@ -1194,7 +1261,7 @@ void axis_angle_to_quat_single(float q[4], const char axis, const float angle)
   const float angle_sin = sinf(angle_half);
   const int axis_index = (axis - 'X');
 
-  assert(axis >= 'X' && axis <= 'Z');
+  BLI_assert(axis >= 'X' && axis <= 'Z');
 
   q[0] = angle_cos;
   zero_v3(q + 1);
@@ -1398,7 +1465,7 @@ void rotate_eul(float beul[3], const char axis, const float ang)
 {
   float eul[3], mat1[3][3], mat2[3][3], totmat[3][3];
 
-  assert(axis >= 'X' && axis <= 'Z');
+  BLI_assert(axis >= 'X' && axis <= 'Z');
 
   eul[0] = eul[1] = eul[2] = 0.0f;
   if (axis == 'X') {
@@ -1514,7 +1581,7 @@ void quat_to_compatible_eul(float eul[3], const float oldrot[3], const float qua
  * was adapted from
  *      ANSI C code from the article
  *      "Euler Angle Conversion"
- *      by Ken Shoemake, shoemake@graphics.cis.upenn.edu
+ *      by Ken Shoemake <shoemake@graphics.cis.upenn.edu>
  *      in "Graphics Gems IV", Academic Press, 1994
  * for use in Blender
  */
@@ -1544,16 +1611,15 @@ static const RotOrderInfo rotOrders[] = {
  */
 static const RotOrderInfo *get_rotation_order_info(const short order)
 {
-  assert(order >= 0 && order <= 6);
+  BLI_assert(order >= 0 && order <= 6);
   if (order < 1) {
     return &rotOrders[0];
   }
-  else if (order < 6) {
+  if (order < 6) {
     return &rotOrders[order - 1];
   }
-  else {
-    return &rotOrders[5];
-  }
+
+  return &rotOrders[5];
 }
 
 /* Construct quaternion from Euler angles (in radians). */
@@ -1813,7 +1879,7 @@ void rotate_eulO(float beul[3], const short order, char axis, float ang)
 {
   float eul[3], mat1[3][3], mat2[3][3], totmat[3][3];
 
-  assert(axis >= 'X' && axis <= 'Z');
+  BLI_assert(axis >= 'X' && axis <= 'Z');
 
   zero_v3(eul);
 
@@ -1907,7 +1973,7 @@ void mat4_to_dquat(DualQuat *dq, const float basemat[4][4], const float mat[4][4
   copy_m3_m4(mat3, mat);
 
   if (!is_orthonormal_m3(mat3) || (determinant_m4(mat) < 0.0f) ||
-      len_squared_v3(dscale) > SQUARE(1e-4f)) {
+      len_squared_v3(dscale) > square_f(1e-4f)) {
     /* extract R and S  */
     float tmp[4][4];
 
@@ -1947,7 +2013,7 @@ void mat4_to_dquat(DualQuat *dq, const float basemat[4][4], const float mat[4][4
   dq->trans[3] = 0.5f * (t[0] * q[2] - t[1] * q[1] + t[2] * q[0]);
 }
 
-void dquat_to_mat4(float mat[4][4], const DualQuat *dq)
+void dquat_to_mat4(float R[4][4], const DualQuat *dq)
 {
   float len, q0[4];
   const float *t;
@@ -1963,40 +2029,40 @@ void dquat_to_mat4(float mat[4][4], const DualQuat *dq)
   mul_qt_fl(q0, len);
 
   /* rotation */
-  quat_to_mat4(mat, q0);
+  quat_to_mat4(R, q0);
 
   /* translation */
   t = dq->trans;
-  mat[3][0] = 2.0f * (-t[0] * q0[1] + t[1] * q0[0] - t[2] * q0[3] + t[3] * q0[2]) * len;
-  mat[3][1] = 2.0f * (-t[0] * q0[2] + t[1] * q0[3] + t[2] * q0[0] - t[3] * q0[1]) * len;
-  mat[3][2] = 2.0f * (-t[0] * q0[3] - t[1] * q0[2] + t[2] * q0[1] + t[3] * q0[0]) * len;
+  R[3][0] = 2.0f * (-t[0] * q0[1] + t[1] * q0[0] - t[2] * q0[3] + t[3] * q0[2]) * len;
+  R[3][1] = 2.0f * (-t[0] * q0[2] + t[1] * q0[3] + t[2] * q0[0] - t[3] * q0[1]) * len;
+  R[3][2] = 2.0f * (-t[0] * q0[3] - t[1] * q0[2] + t[2] * q0[1] + t[3] * q0[0]) * len;
 
   /* scaling */
   if (dq->scale_weight) {
-    mul_m4_m4m4(mat, mat, dq->scale);
+    mul_m4_m4m4(R, R, dq->scale);
   }
 }
 
-void add_weighted_dq_dq(DualQuat *dqsum, const DualQuat *dq, float weight)
+void add_weighted_dq_dq(DualQuat *dq_sum, const DualQuat *dq, float weight)
 {
   bool flipped = false;
 
   /* make sure we interpolate quats in the right direction */
-  if (dot_qtqt(dq->quat, dqsum->quat) < 0) {
+  if (dot_qtqt(dq->quat, dq_sum->quat) < 0) {
     flipped = true;
     weight = -weight;
   }
 
   /* interpolate rotation and translation */
-  dqsum->quat[0] += weight * dq->quat[0];
-  dqsum->quat[1] += weight * dq->quat[1];
-  dqsum->quat[2] += weight * dq->quat[2];
-  dqsum->quat[3] += weight * dq->quat[3];
+  dq_sum->quat[0] += weight * dq->quat[0];
+  dq_sum->quat[1] += weight * dq->quat[1];
+  dq_sum->quat[2] += weight * dq->quat[2];
+  dq_sum->quat[3] += weight * dq->quat[3];
 
-  dqsum->trans[0] += weight * dq->trans[0];
-  dqsum->trans[1] += weight * dq->trans[1];
-  dqsum->trans[2] += weight * dq->trans[2];
-  dqsum->trans[3] += weight * dq->trans[3];
+  dq_sum->trans[0] += weight * dq->trans[0];
+  dq_sum->trans[1] += weight * dq->trans[1];
+  dq_sum->trans[2] += weight * dq->trans[2];
+  dq_sum->trans[3] += weight * dq->trans[3];
 
   /* Interpolate scale - but only if there is scale present. If any dual
    * quaternions without scale are added, they will be compensated for in
@@ -2011,8 +2077,8 @@ void add_weighted_dq_dq(DualQuat *dqsum, const DualQuat *dq, float weight)
 
     copy_m4_m4(wmat, (float(*)[4])dq->scale);
     mul_m4_fl(wmat, weight);
-    add_m4_m4m4(dqsum->scale, dqsum->scale, wmat);
-    dqsum->scale_weight += weight;
+    add_m4_m4m4(dq_sum->scale, dq_sum->scale, wmat);
+    dq_sum->scale_weight += weight;
   }
 }
 
@@ -2041,7 +2107,7 @@ void normalize_dq(DualQuat *dq, float totweight)
   }
 }
 
-void mul_v3m3_dq(float co[3], float mat[3][3], DualQuat *dq)
+void mul_v3m3_dq(float r[3], float R[3][3], DualQuat *dq)
 {
   float M[3][3], t[3], scalemat[3][3], len2;
   float w = dq->quat[0], x = dq->quat[1], y = dq->quat[2], z = dq->quat[3];
@@ -2072,31 +2138,31 @@ void mul_v3m3_dq(float co[3], float mat[3][3], DualQuat *dq)
 
   /* apply scaling */
   if (dq->scale_weight) {
-    mul_m4_v3(dq->scale, co);
+    mul_m4_v3(dq->scale, r);
   }
 
   /* apply rotation and translation */
-  mul_m3_v3(M, co);
-  co[0] = (co[0] + t[0]) * len2;
-  co[1] = (co[1] + t[1]) * len2;
-  co[2] = (co[2] + t[2]) * len2;
+  mul_m3_v3(M, r);
+  r[0] = (r[0] + t[0]) * len2;
+  r[1] = (r[1] + t[1]) * len2;
+  r[2] = (r[2] + t[2]) * len2;
 
-  /* compute crazyspace correction mat */
-  if (mat) {
+  /* Compute crazy-space correction matrix. */
+  if (R) {
     if (dq->scale_weight) {
       copy_m3_m4(scalemat, dq->scale);
-      mul_m3_m3m3(mat, M, scalemat);
+      mul_m3_m3m3(R, M, scalemat);
     }
     else {
-      copy_m3_m3(mat, M);
+      copy_m3_m3(R, M);
     }
-    mul_m3_fl(mat, len2);
+    mul_m3_fl(R, len2);
   }
 }
 
-void copy_dq_dq(DualQuat *dq1, const DualQuat *dq2)
+void copy_dq_dq(DualQuat *r, const DualQuat *dq)
 {
-  memcpy(dq1, dq2, sizeof(DualQuat));
+  memcpy(r, dq, sizeof(DualQuat));
 }
 
 /* axis matches eTrackToAxis_Modes */
@@ -2119,8 +2185,8 @@ void quat_apply_track(float quat[4], short axis, short upflag)
       {0.0, sqrt_1_2, sqrt_1_2, 0.0},
   };
 
-  assert(axis >= 0 && axis <= 5);
-  assert(upflag >= 0 && upflag <= 2);
+  BLI_assert(axis >= 0 && axis <= 5);
+  BLI_assert(upflag >= 0 && upflag <= 2);
 
   mul_qt_qtqt(quat, quat, quat_track[axis]);
 
@@ -2142,7 +2208,7 @@ void vec_apply_track(float vec[3], short axis)
 {
   float tvec[3];
 
-  assert(axis >= 0 && axis <= 5);
+  BLI_assert(axis >= 0 && axis <= 5);
 
   copy_v3_v3(tvec, vec);
 
@@ -2303,7 +2369,6 @@ BLI_INLINE int _axis_signed(const int axis)
 bool mat3_from_axis_conversion(
     int src_forward, int src_up, int dst_forward, int dst_up, float r_mat[3][3])
 {
-  // from functools import reduce
   int value;
 
   if (src_forward == dst_forward && src_up == dst_up) {
@@ -2321,8 +2386,8 @@ bool mat3_from_axis_conversion(
   value = ((src_forward << (0 * 3)) | (src_up << (1 * 3)) | (dst_forward << (2 * 3)) |
            (dst_up << (3 * 3)));
 
-  for (uint i = 0; i < (sizeof(_axis_convert_matrix) / sizeof(*_axis_convert_matrix)); i++) {
-    for (uint j = 0; j < (sizeof(*_axis_convert_lut) / sizeof(*_axis_convert_lut[0])); j++) {
+  for (uint i = 0; i < (ARRAY_SIZE(_axis_convert_matrix)); i++) {
+    for (uint j = 0; j < (ARRAY_SIZE(*_axis_convert_lut)); j++) {
       if (_axis_convert_lut[i][j] == value) {
         copy_m3_m3(r_mat, _axis_convert_matrix[i]);
         return true;

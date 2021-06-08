@@ -18,11 +18,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_SHADER_FX_TYPES_H__
-#define __DNA_SHADER_FX_TYPES_H__
+#pragma once
 
 #include "DNA_defs.h"
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct DRWShadingGroup;
 
@@ -34,7 +37,7 @@ typedef enum ShaderFxType {
   eShaderFxType_None = 0,
   eShaderFxType_Blur = 1,
   eShaderFxType_Flip = 2,
-  eShaderFxType_Light = 3,
+  eShaderFxType_Light_deprecated = 3, /* DEPRECATED (replaced by scene lights) */
   eShaderFxType_Pixel = 4,
   eShaderFxType_Swirl = 5,
   eShaderFxType_Wave = 6,
@@ -42,6 +45,7 @@ typedef enum ShaderFxType {
   eShaderFxType_Colorize = 8,
   eShaderFxType_Shadow = 9,
   eShaderFxType_Glow = 10,
+  /* Keep last. */
   NUM_SHADER_FX_TYPES,
 } ShaderFxType;
 
@@ -49,21 +53,24 @@ typedef enum ShaderFxMode {
   eShaderFxMode_Realtime = (1 << 0),
   eShaderFxMode_Render = (1 << 1),
   eShaderFxMode_Editmode = (1 << 2),
-  eShaderFxMode_Expanded = (1 << 3),
+#ifdef DNA_DEPRECATED_ALLOW
+  eShaderFxMode_Expanded_DEPRECATED = (1 << 3),
+#endif
 } ShaderFxMode;
 
 typedef enum {
   /* This fx has been inserted in local override, and hence can be fully edited. */
-  eShaderFxFlag_StaticOverride_Local = (1 << 0),
+  eShaderFxFlag_OverrideLibrary_Local = (1 << 0),
 } ShaderFxFlag;
 
 typedef struct ShaderFxData {
   struct ShaderFxData *next, *prev;
 
   int type, mode;
-  int stackindex;
+  char _pad0[4];
   short flag;
-  char _pad[2];
+  /* An "expand" bit for each of the constraint's (sub)panels (uiPanelDataExpansion). */
+  short ui_expand_flag;
   /** MAX_NAME. */
   char name[64];
 
@@ -81,15 +88,13 @@ typedef struct ShaderFxData_Runtime {
 
 typedef struct BlurShaderFxData {
   ShaderFxData shaderfx;
-  int radius[2];
+  float radius[2];
   /** Flags. */
   int flag;
   /** Number of samples. */
   int samples;
-  /** Circle of confusion. */
-  float coc;
-  /** Not visible in rna. */
-  int blur[2];
+  /** Rotation of blur effect.  */
+  float rotation;
   char _pad[4];
 
   ShaderFxData_Runtime runtime;
@@ -136,14 +141,20 @@ typedef enum eFlipShaderFx_Flag {
 
 typedef struct GlowShaderFxData {
   ShaderFxData shaderfx;
-  float glow_color[3];
+  float glow_color[4];
   float select_color[3];
   float threshold;
   /** Flags. */
   int flag;
   int mode;
-  int blur[2];
+  float blur[2];
   int samples;
+  /** Rotation of effect.  */
+  float rotation;
+  /** Blend modes. */
+  int blend_mode;
+  char _pad[4];
+
   ShaderFxData_Runtime runtime;
 } GlowShaderFxData;
 
@@ -156,19 +167,6 @@ typedef enum eGlowShaderFx_Flag {
   FX_GLOW_USE_ALPHA = (1 << 0),
 } eGlowShaderFx_Flag;
 
-typedef struct LightShaderFxData {
-  ShaderFxData shaderfx;
-  struct Object *object;
-  /** Flags. */
-  int flag;
-  float energy;
-  float ambient;
-  /** Internal, not visible in rna. */
-  float loc[4];
-  char _pad[4];
-  ShaderFxData_Runtime runtime;
-} LightShaderFxData;
-
 typedef struct PixelShaderFxData {
   ShaderFxData shaderfx;
   /** Last element used for shader only. */
@@ -180,7 +178,7 @@ typedef struct PixelShaderFxData {
 } PixelShaderFxData;
 
 typedef enum ePixelShaderFx_Flag {
-  FX_PIXEL_USE_LINES = (1 << 0),
+  FX_PIXEL_FILTER_NEAREST = (1 << 0),
 } ePixelShaderFx_Flag;
 
 typedef struct RimShaderFxData {
@@ -257,4 +255,7 @@ typedef struct WaveShaderFxData {
   char _pad[4];
   ShaderFxData_Runtime runtime;
 } WaveShaderFxData;
-#endif /* __DNA_SHADER_FX_TYPES_H__ */
+
+#ifdef __cplusplus
+}
+#endif

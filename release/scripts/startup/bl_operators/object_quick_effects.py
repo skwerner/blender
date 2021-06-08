@@ -25,7 +25,6 @@ from bpy.props import (
     BoolProperty,
     EnumProperty,
     FloatProperty,
-    FloatVectorProperty,
     IntProperty,
 )
 
@@ -54,6 +53,7 @@ class ObjectModeOperator:
 
 
 class QuickFur(ObjectModeOperator, Operator):
+    """Add fur setup to the selected objects"""
     bl_idname = "object.quick_fur"
     bl_label = "Quick Fur"
     bl_options = {'REGISTER', 'UNDO'}
@@ -119,6 +119,7 @@ class QuickFur(ObjectModeOperator, Operator):
 
 
 class QuickExplode(ObjectModeOperator, Operator):
+    """Make selected objects explode"""
     bl_idname = "object.quick_explode"
     bl_label = "Quick Explode"
     bl_options = {'REGISTER', 'UNDO'}
@@ -132,7 +133,7 @@ class QuickExplode(ObjectModeOperator, Operator):
         default='EXPLODE',
     )
     amount: IntProperty(
-        name="Amount of pieces",
+        name="Number of Pieces",
         min=2, max=10000,
         soft_min=2, soft_max=10000,
         default=100,
@@ -231,7 +232,7 @@ class QuickExplode(ObjectModeOperator, Operator):
 
                 nodes = mat.node_tree.nodes
                 for node in nodes:
-                    if (node.type == 'OUTPUT_MATERIAL'):
+                    if node.type == 'OUTPUT_MATERIAL':
                         node_out_mat = node
                         break
 
@@ -243,7 +244,7 @@ class QuickExplode(ObjectModeOperator, Operator):
 
                 node_mix = nodes.new('ShaderNodeMixShader')
                 node_mix.location = (node_x - offset_x, node_y)
-                mat.node_tree.links.new(node_surface.outputs["BSDF"], node_mix.inputs[1])
+                mat.node_tree.links.new(node_surface.outputs[0], node_mix.inputs[1])
                 mat.node_tree.links.new(node_mix.outputs["Shader"], node_out_mat.inputs['Surface'])
                 offset_x += 200
 
@@ -302,7 +303,7 @@ class QuickExplode(ObjectModeOperator, Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         self.frame_start = context.scene.frame_current
         self.frame_end = self.frame_start + self.frame_duration
         return self.execute(context)
@@ -325,6 +326,7 @@ def grid_location(x, y):
 
 
 class QuickSmoke(ObjectModeOperator, Operator):
+    """Use selected objects as smoke emitters"""
     bl_idname = "object.quick_smoke"
     bl_label = "Quick Smoke"
     bl_options = {'REGISTER', 'UNDO'}
@@ -334,7 +336,7 @@ class QuickSmoke(ObjectModeOperator, Operator):
         items=(
             ('SMOKE', "Smoke", ""),
             ('FIRE', "Fire", ""),
-            ('BOTH', "Smoke + Fire", ""),
+            ('BOTH', "Smoke & Fire", ""),
         ),
         default='SMOKE',
     )
@@ -346,8 +348,8 @@ class QuickSmoke(ObjectModeOperator, Operator):
     )
 
     def execute(self, context):
-        if not bpy.app.build_options.mod_smoke:
-            self.report({'ERROR'}, "Built without Smoke modifier support")
+        if not bpy.app.build_options.fluid:
+            self.report({'ERROR'}, "Built without Fluid modifier")
             return {'CANCELLED'}
 
         fake_context = context.copy()
@@ -363,11 +365,17 @@ class QuickSmoke(ObjectModeOperator, Operator):
         for obj in mesh_objects:
             fake_context["object"] = obj
             # make each selected object a smoke flow
-            bpy.ops.object.modifier_add(fake_context, type='SMOKE')
-            obj.modifiers[-1].smoke_type = 'FLOW'
+            bpy.ops.object.modifier_add(fake_context, type='FLUID')
+            obj.modifiers[-1].fluid_type = 'FLOW'
 
             # set type
-            obj.modifiers[-1].flow_settings.smoke_flow_type = self.style
+            obj.modifiers[-1].flow_settings.flow_type = self.style
+
+            # set flow behavior
+            obj.modifiers[-1].flow_settings.flow_behavior = 'INFLOW'
+
+            # use some surface distance for smoke emission
+            obj.modifiers[-1].flow_settings.surface_distance = 1.5
 
             if not self.show_flows:
                 obj.display_type = 'WIRE'
@@ -385,10 +393,14 @@ class QuickSmoke(ObjectModeOperator, Operator):
         obj.scale = 0.5 * (max_co - min_co) + Vector((1.0, 1.0, 2.0))
 
         # setup smoke domain
-        bpy.ops.object.modifier_add(type='SMOKE')
-        obj.modifiers[-1].smoke_type = 'DOMAIN'
+        bpy.ops.object.modifier_add(type='FLUID')
+        obj.modifiers[-1].fluid_type = 'DOMAIN'
         if self.style == 'FIRE' or self.style == 'BOTH':
-            obj.modifiers[-1].domain_settings.use_high_resolution = True
+            obj.modifiers[-1].domain_settings.use_noise = True
+
+        # ensure correct cache file format for smoke
+        if bpy.app.build_options.openvdb:
+            obj.modifiers[-1].domain_settings.cache_data_format = 'OPENVDB'
 
         # Setup material
 
@@ -428,46 +440,26 @@ class QuickSmoke(ObjectModeOperator, Operator):
         return {'FINISHED'}
 
 
-class QuickFluid(ObjectModeOperator, Operator):
-    bl_idname = "object.quick_fluid"
-    bl_label = "Quick Fluid"
+class QuickLiquid(Operator):
+    """Make selected objects liquid"""
+    bl_idname = "object.quick_liquid"
+    bl_label = "Quick Liquid"
     bl_options = {'REGISTER', 'UNDO'}
 
-    style: EnumProperty(
-        name="Fluid Style",
-        items=(
-            ('INFLOW', "Inflow", ""),
-            ('BASIC', "Basic", ""),
-        ),
-        default='BASIC',
-    )
-    initial_velocity: FloatVectorProperty(
-        name="Initial Velocity",
-        description="Initial velocity of the fluid",
-        min=-100.0, max=100.0,
-        default=(0.0, 0.0, 0.0),
-        subtype='VELOCITY',
-    )
     show_flows: BoolProperty(
-        name="Render Fluid Objects",
-        description="Keep the fluid objects visible during rendering",
-        default=False,
-    )
-    start_baking: BoolProperty(
-        name="Start Fluid Bake",
-        description=("Start baking the fluid immediately "
-                     "after creating the domain object"),
+        name="Render Liquid Objects",
+        description="Keep the liquid objects visible during rendering",
         default=False,
     )
 
     def execute(self, context):
-        if not bpy.app.build_options.mod_fluid:
-            self.report({'ERROR'}, "Built without Fluid modifier support")
+        if not bpy.app.build_options.fluid:
+            self.report({'ERROR'}, "Built without Fluid modifier")
             return {'CANCELLED'}
 
         fake_context = context.copy()
         mesh_objects = [obj for obj in context.selected_objects
-                        if (obj.type == 'MESH' and 0.0 not in obj.dimensions)]
+                        if obj.type == 'MESH']
         min_co = Vector((100000.0, 100000.0, 100000.0))
         max_co = -min_co
 
@@ -475,49 +467,72 @@ class QuickFluid(ObjectModeOperator, Operator):
             self.report({'ERROR'}, "Select at least one mesh object")
             return {'CANCELLED'}
 
+        # set shading type to wireframe so that liquid particles are visible
+        for area in bpy.context.screen.areas:
+            if area.type == 'VIEW_3D':
+                for space in area.spaces:
+                    if space.type == 'VIEW_3D':
+                        space.shading.type = 'WIREFRAME'
+
         for obj in mesh_objects:
             fake_context["object"] = obj
-            # make each selected object a fluid
-            bpy.ops.object.modifier_add(fake_context, type='FLUID_SIMULATION')
+            # make each selected object a liquid flow
+            bpy.ops.object.modifier_add(fake_context, type='FLUID')
+            obj.modifiers[-1].fluid_type = 'FLOW'
 
-            # fluid has to be before constructive modifiers,
-            # so it might not be the last modifier
-            for mod in obj.modifiers:
-                if mod.type == 'FLUID_SIMULATION':
-                    break
+            # set type
+            obj.modifiers[-1].flow_settings.flow_type = 'LIQUID'
 
-            if self.style == 'INFLOW':
-                mod.settings.type = 'INFLOW'
-                mod.settings.inflow_velocity = self.initial_velocity
-            else:
-                mod.settings.type = 'FLUID'
-                mod.settings.initial_velocity = self.initial_velocity
+            # set flow behavior
+            obj.modifiers[-1].flow_settings.flow_behavior = 'GEOMETRY'
 
-            obj.hide_render = not self.show_flows
+            # use some surface distance for smoke emission
+            obj.modifiers[-1].flow_settings.surface_distance = 0.0
+
             if not self.show_flows:
                 obj.display_type = 'WIRE'
 
             # store bounding box min/max for the domain object
             obj_bb_minmax(obj, min_co, max_co)
 
-        # add the fluid domain object
-        bpy.ops.mesh.primitive_cube_add()
+        # add the liquid domain object
+        bpy.ops.mesh.primitive_cube_add(align='WORLD')
         obj = context.active_object
-        obj.name = "Fluid Domain"
+        obj.name = "Liquid Domain"
 
-        # give the fluid some room below the flows
-        # and scale with initial velocity
-        v = 0.5 * self.initial_velocity
-        obj.location = 0.5 * (max_co + min_co) + Vector((0.0, 0.0, -1.0)) + v
-        obj.scale = (
-            0.5 * (max_co - min_co) +
-            Vector((1.0, 1.0, 2.0)) +
-            Vector((abs(v[0]), abs(v[1]), abs(v[2])))
-        )
+        # give the liquid some room above the flows
+        obj.location = 0.5 * (max_co + min_co) + Vector((0.0, 0.0, -1.0))
+        obj.scale = 0.5 * (max_co - min_co) + Vector((1.0, 1.0, 2.0))
 
-        # setup smoke domain
-        bpy.ops.object.modifier_add(type='FLUID_SIMULATION')
-        obj.modifiers[-1].settings.type = 'DOMAIN'
+        # setup liquid domain
+        bpy.ops.object.modifier_add(type='FLUID')
+        obj.modifiers[-1].fluid_type = 'DOMAIN'
+        # set all domain borders to obstacle
+        obj.modifiers[-1].domain_settings.use_collision_border_front = True
+        obj.modifiers[-1].domain_settings.use_collision_border_back = True
+        obj.modifiers[-1].domain_settings.use_collision_border_right = True
+        obj.modifiers[-1].domain_settings.use_collision_border_left = True
+        obj.modifiers[-1].domain_settings.use_collision_border_top = True
+        obj.modifiers[-1].domain_settings.use_collision_border_bottom = True
+
+        # ensure correct cache file formats for liquid
+        if bpy.app.build_options.openvdb:
+            obj.modifiers[-1].domain_settings.cache_data_format = 'OPENVDB'
+        obj.modifiers[-1].domain_settings.cache_mesh_format = 'BOBJECT'
+
+        # change domain type, will also allocate and show particle system for FLIP
+        obj.modifiers[-1].domain_settings.domain_type = 'LIQUID'
+
+        liquid_domain = obj.modifiers[-2]
+
+        # set color mapping field to show phi grid for liquid
+        liquid_domain.domain_settings.color_ramp_field = 'PHI'
+
+        # perform a single slice of the domain
+        liquid_domain.domain_settings.use_slice = True
+
+        # set display thickness to a lower value for more detailed display of phi grids
+        liquid_domain.domain_settings.display_thickness = 0.02
 
         # make the domain smooth so it renders nicely
         bpy.ops.object.shade_smooth()
@@ -525,7 +540,7 @@ class QuickFluid(ObjectModeOperator, Operator):
         # create a ray-transparent material for the domain
         bpy.ops.object.material_slot_add()
 
-        mat = bpy.data.materials.new("Fluid Domain Material")
+        mat = bpy.data.materials.new("Liquid Domain Material")
         obj.material_slots[0].material = mat
 
         # Make sure we use nodes
@@ -556,15 +571,12 @@ class QuickFluid(ObjectModeOperator, Operator):
         links.new(node_absorption.outputs["Volume"], node_out.inputs["Volume"])
         node_absorption.inputs["Color"].default_value = (0.8, 0.9, 1.0, 1.0)
 
-        if self.start_baking:
-            bpy.ops.fluid.bake('INVOKE_DEFAULT')
-
         return {'FINISHED'}
 
 
 classes = (
     QuickExplode,
-    QuickFluid,
     QuickFur,
     QuickSmoke,
+    QuickLiquid,
 )

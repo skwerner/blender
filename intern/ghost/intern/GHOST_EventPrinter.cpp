@@ -23,10 +23,10 @@
  */
 
 #include "GHOST_EventPrinter.h"
-#include <iostream>
-#include "GHOST_EventKey.h"
-#include "GHOST_EventDragnDrop.h"
 #include "GHOST_Debug.h"
+#include "GHOST_EventDragnDrop.h"
+#include "GHOST_EventKey.h"
+#include <iostream>
 
 #include <stdio.h>
 
@@ -39,7 +39,7 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
   if (event->getType() == GHOST_kEventWindowUpdate)
     return false;
 
-  std::cout << "\nGHOST_EventPrinter::processEvent, time: " << (GHOST_TInt32)event->getTime()
+  std::cout << "GHOST_EventPrinter::processEvent, time: " << (GHOST_TInt32)event->getTime()
             << ", type: ";
   switch (event->getType()) {
     case GHOST_kEventUnknown:
@@ -139,8 +139,8 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
         std::cout << "GHOST_kEventOpenMainFile with no path specified!!";
     } break;
 
-    case GHOST_kEventQuit:
-      std::cout << "GHOST_kEventQuit";
+    case GHOST_kEventQuitRequest:
+      std::cout << "GHOST_kEventQuitRequest";
       break;
     case GHOST_kEventWindowClose:
       std::cout << "GHOST_kEventWindowClose";
@@ -163,6 +163,8 @@ bool GHOST_EventPrinter::processEvent(GHOST_IEvent *event)
       handled = false;
       break;
   }
+
+  std::cout << std::endl;
 
   std::cout.flush();
 
@@ -233,6 +235,9 @@ void GHOST_EventPrinter::getKeyString(GHOST_TKey key, char str[32]) const
         break;
       case GHOST_kKeyOS:
         tstr = "OS";
+        break;
+      case GHOST_kKeyApp:
+        tstr = "App";
         break;
       case GHOST_kKeyGrLess:
         // PC german!

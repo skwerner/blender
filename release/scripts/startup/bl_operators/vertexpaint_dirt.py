@@ -32,10 +32,24 @@ def get_vcolor_layer_data(me):
     return lay.data
 
 
-def applyVertexDirt(me, blur_iterations, blur_strength, clamp_dirt, clamp_clean, dirt_only):
+def applyVertexDirt(me, blur_iterations, blur_strength, clamp_dirt, clamp_clean, dirt_only, normalize):
     from mathutils import Vector
     from math import acos
     import array
+
+    # We simulate the accumulation of dirt in the creases of geometric surfaces
+    # by comparing the vertex normal to the average direction of all vertices
+    # connected to that vertex. We can also simulate surfaces being buffed or
+    # worn by testing protruding surfaces.
+    #
+    # So if the angle between the normal and geometric direction is:
+    # < 90 - dirt has accumulated in the crease
+    # > 90 - surface has been worn or buffed
+    # ~ 90 - surface is flat and is generally unworn and clean
+    #
+    # This method is limited by the complexity or lack there of in the geometry.
+    #
+    # Original code and method by Keith "Wahooney" Boshoff.
 
     vert_tone = array.array("f", [0.0]) * len(me.vertices)
 
@@ -60,14 +74,14 @@ def applyVertexDirt(me, blur_iterations, blur_strength, clamp_dirt, clamp_clean,
         tot_con = len(con[i])
 
         if tot_con == 0:
-            continue
+            ang = pi / 2.0  # assume 90°, i. e. flat
+        else:
+            vec /= tot_con
 
-        vec /= tot_con
-
-        # angle is the acos() of the dot product between normal and connected verts.
-        # > 90 degrees: convex
-        # < 90 degrees: concave
-        ang = acos(no.dot(vec))
+            # angle is the acos() of the dot product between normal and connected verts.
+            # > 90 degrees: convex
+            # < 90 degrees: concave
+            ang = acos(no.dot(vec))
 
         # enforce min/max
         ang = max(clamp_dirt, ang)
@@ -90,8 +104,12 @@ def applyVertexDirt(me, blur_iterations, blur_strength, clamp_dirt, clamp_clean,
             vert_tone[j] /= len(c) * blur_strength + 1
         del orig_vert_tone
 
-    min_tone = min(vert_tone)
-    max_tone = max(vert_tone)
+    if normalize:
+        min_tone = min(vert_tone)
+        max_tone = max(vert_tone)
+    else:
+        min_tone = clamp_dirt
+        max_tone = clamp_clean
 
     tone_range = max_tone - min_tone
 
@@ -125,13 +143,13 @@ def applyVertexDirt(me, blur_iterations, blur_strength, clamp_dirt, clamp_clean,
     return {'FINISHED'}
 
 
-import bpy
 from bpy.types import Operator
 from bpy.props import FloatProperty, IntProperty, BoolProperty
 from math import pi
 
 
 class VertexPaintDirt(Operator):
+    '''Generate a dirt map gradient based on cavity'''
     bl_idname = "paint.vertex_color_dirt"
     bl_label = "Dirty Vertex Colors"
     bl_options = {'REGISTER', 'UNDO'}
@@ -167,6 +185,11 @@ class VertexPaintDirt(Operator):
         description="Don't calculate cleans for convex areas",
         default=False,
     )
+    normalize: BoolProperty(
+        name="Normalize",
+        description="Normalize the colors, increasing the contrast",
+        default=True,
+    )
 
     @classmethod
     def poll(cls, context):
@@ -177,7 +200,15 @@ class VertexPaintDirt(Operator):
         obj = context.object
         mesh = obj.data
 
-        ret = applyVertexDirt(mesh, self.blur_iterations, self.blur_strength, self.dirt_angle, self.clean_angle, self.dirt_only)
+        ret = applyVertexDirt(
+            mesh,
+            self.blur_iterations,
+            self.blur_strength,
+            self.dirt_angle,
+            self.clean_angle,
+            self.dirt_only,
+            self.normalize,
+        )
 
         return ret
 

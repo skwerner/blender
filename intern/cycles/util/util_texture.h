@@ -17,19 +17,15 @@
 #ifndef __UTIL_TEXTURE_H__
 #define __UTIL_TEXTURE_H__
 
-CCL_NAMESPACE_BEGIN
+#include "util_transform.h"
 
-/* Texture limits on devices. */
-#define TEX_NUM_MAX (INT_MAX >> 4)
+CCL_NAMESPACE_BEGIN
 
 /* Color to use when textures are not found. */
 #define TEX_IMAGE_MISSING_R 1
 #define TEX_IMAGE_MISSING_G 0
 #define TEX_IMAGE_MISSING_B 1
 #define TEX_IMAGE_MISSING_A 1
-
-/* Texture type. */
-#define kernel_tex_type(tex) (tex & IMAGE_DATA_TYPE_MASK)
 
 /* Interpolation types for textures
  * cuda also use texture space to store other objects */
@@ -43,9 +39,6 @@ typedef enum InterpolationType {
   INTERPOLATION_NUM_TYPES,
 } InterpolationType;
 
-/* Texture types
- * Since we store the type in the lower bits of a flat index,
- * the shift and bit mask constant below need to be kept in sync. */
 typedef enum ImageDataType {
   IMAGE_DATA_TYPE_FLOAT4 = 0,
   IMAGE_DATA_TYPE_BYTE4 = 1,
@@ -55,12 +48,23 @@ typedef enum ImageDataType {
   IMAGE_DATA_TYPE_HALF = 5,
   IMAGE_DATA_TYPE_USHORT4 = 6,
   IMAGE_DATA_TYPE_USHORT = 7,
+  IMAGE_DATA_TYPE_NANOVDB_FLOAT = 8,
+  IMAGE_DATA_TYPE_NANOVDB_FLOAT3 = 9,
 
   IMAGE_DATA_NUM_TYPES
 } ImageDataType;
 
-#define IMAGE_DATA_TYPE_SHIFT 3
-#define IMAGE_DATA_TYPE_MASK 0x7
+/* Alpha types
+ * How to treat alpha in images. */
+typedef enum ImageAlphaType {
+  IMAGE_ALPHA_UNASSOCIATED = 0,
+  IMAGE_ALPHA_ASSOCIATED = 1,
+  IMAGE_ALPHA_CHANNEL_PACKED = 2,
+  IMAGE_ALPHA_IGNORE = 3,
+  IMAGE_ALPHA_AUTO = 4,
+
+  IMAGE_ALPHA_NUM_TYPES,
+} ImageAlphaType;
 
 /* Extension types for textures.
  *
@@ -79,12 +83,17 @@ typedef enum ExtensionType {
 typedef struct TextureInfo {
   /* Pointer, offset or texture depending on device. */
   uint64_t data;
+  /* Data Type */
+  uint data_type;
   /* Buffer number for OpenCL. */
   uint cl_buffer;
   /* Interpolation and extension type. */
   uint interpolation, extension;
   /* Dimensions. */
   uint width, height, depth;
+  /* Transform for 3D textures. */
+  uint use_transform_3d;
+  Transform transform_3d;
 } TextureInfo;
 
 CCL_NAMESPACE_END

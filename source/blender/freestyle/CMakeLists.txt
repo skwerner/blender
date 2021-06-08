@@ -549,6 +549,9 @@ set(SRC
 
 set(LIB
   bf_python_mathutils
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 set(INC
@@ -562,8 +565,8 @@ set(INC
   ../makesrna
   ../python
   ../python/intern
-  ../render/extern/include
-  ../render/intern/include
+  ../render
+  ../render/intern
   ../../../extern/glew/include
   ../../../intern/guardedalloc
 )
@@ -574,6 +577,11 @@ set(INC_SYS
 )
 
 add_definitions(-DWITH_FREESTYLE)
+
+if(WITH_PYTHON_SAFETY)
+  # For bpy_rna.h access.
+  add_definitions(-DWITH_PYTHON_SAFETY)
+endif()
 
 if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
@@ -586,3 +594,4 @@ if(WIN32)
 endif()
 
 blender_add_lib(bf_freestyle "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+blender_precompile_headers(bf_freestyle FRS_precomp.cpp FRS_precomp.h)

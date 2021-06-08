@@ -16,13 +16,17 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#include "COM_defines.h"
+#pragma once
+
 #include "COM_Node.h"
-#include "DNA_node_types.h"
+#include "COM_defines.h"
 #include "DNA_image_types.h"
-extern "C" {
+#include "DNA_node_types.h"
+
 #include "RE_engine.h"
-}
+#include "RE_pipeline.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ImageNode
@@ -31,16 +35,19 @@ extern "C" {
 class ImageNode : public Node {
  private:
   NodeOperation *doMultilayerCheck(NodeConverter &converter,
-                                   RenderLayer *rl,
+                                   RenderLayer *render_layer,
+                                   RenderPass *render_pass,
                                    Image *image,
                                    ImageUser *user,
                                    int framenumber,
                                    int outputsocketIndex,
-                                   int passtype,
                                    int view,
                                    DataType datatype) const;
 
  public:
   ImageNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
+
+}  // namespace blender::compositor

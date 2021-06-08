@@ -16,14 +16,15 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_KEYINGOPERATION_H__
-#define __COM_KEYINGOPERATION_H__
+#pragma once
 
 #include <string.h>
 
 #include "COM_NodeOperation.h"
 
 #include "BLI_listbase.h"
+
+namespace blender::compositor {
 
 /**
  * Class with implementation of keying node
@@ -38,15 +39,15 @@ class KeyingOperation : public NodeOperation {
  public:
   KeyingOperation();
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 
   void setScreenBalance(float value)
   {
     this->m_screenBalance = value;
   }
 
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
-#endif
+}  // namespace blender::compositor

@@ -21,8 +21,7 @@
  * \ingroup wm
  */
 
-#ifndef __WM_EVENT_SYSTEM_H__
-#define __WM_EVENT_SYSTEM_H__
+#pragma once
 
 /* return value of handler-operator call */
 #define WM_HANDLER_CONTINUE 0
@@ -31,7 +30,12 @@
 #define WM_HANDLER_MODAL 4 /* MODAL|BREAK means unhandled */
 
 struct ARegion;
+struct GHOST_TabletData;
 struct ScrArea;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* wmKeyMap is in DNA_windowmanager.h, it's saveable */
 
@@ -44,14 +48,15 @@ enum eWM_EventHandlerType {
   WM_HANDLER_TYPE_KEYMAP,
 };
 
+typedef bool (*EventHandlerPoll)(const ARegion *region, const wmEvent *event);
+
 typedef struct wmEventHandler {
   struct wmEventHandler *next, *prev;
 
   enum eWM_EventHandlerType type;
   char flag; /* WM_HANDLER_BLOCKING, ... */
 
-  /** Optional local and windowspace bb. */
-  const rcti *bblocal, *bbwin;
+  EventHandlerPoll poll;
 } wmEventHandler;
 
 /** Run after the keymap item runs. */
@@ -115,6 +120,10 @@ typedef struct wmEventHandler_Op {
 
   /** Store context for this handler for derived/modal handlers. */
   struct {
+    /* To override the window, and hence the screen. Set for few cases only, usually window/screen
+     * can be taken from current context. */
+    struct wmWindow *win;
+
     struct ScrArea *area;
     struct ARegion *region;
     short region_type;
@@ -137,14 +146,20 @@ void wm_event_free_handler(wmEventHandler *handler);
 /* goes over entire hierarchy:  events -> window -> screen -> area -> region */
 void wm_event_do_handlers(bContext *C);
 
-void wm_event_add_ghostevent(
-    wmWindowManager *wm, wmWindow *win, int type, int time, void *customdata);
+void wm_event_add_ghostevent(wmWindowManager *wm, wmWindow *win, int type, void *customdata);
 
-void wm_event_do_depsgraph(bContext *C);
+void wm_event_do_depsgraph(bContext *C, bool is_after_open_file);
 void wm_event_do_refresh_wm_and_depsgraph(bContext *C);
 void wm_event_do_notifiers(bContext *C);
 
+void wm_event_handler_ui_cancel_ex(bContext *C,
+                                   wmWindow *win,
+                                   ARegion *region,
+                                   bool reactivate_button);
+
+/* wm_event_query.c */
 float wm_pressure_curve(float raw_pressure);
+void wm_tablet_data_from_ghost(const struct GHOST_TabletData *tablet_data, wmTabletData *wmtab);
 
 /* wm_keymap.c */
 
@@ -153,4 +168,6 @@ void wm_dropbox_free(void);
 void wm_drags_check_ops(bContext *C, const wmEvent *event);
 void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect);
 
-#endif /* __WM_EVENT_SYSTEM_H__ */
+#ifdef __cplusplus
+}
+#endif

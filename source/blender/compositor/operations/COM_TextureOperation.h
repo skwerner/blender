@@ -16,18 +16,17 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_TEXTUREOPERATION_H__
-#define __COM_TEXTUREOPERATION_H__
+#pragma once
 
+#include "BLI_listbase.h"
 #include "COM_NodeOperation.h"
 #include "DNA_texture_types.h"
-#include "BLI_listbase.h"
-extern "C" {
-#include "RE_pipeline.h"
-#include "RE_shader_ext.h"
-#include "RE_render_ext.h"
 #include "MEM_guardedalloc.h"
-}
+
+#include "RE_pipeline.h"
+#include "RE_texture.h"
+
+namespace blender::compositor {
 
 /**
  * Base class for all renderlayeroperations
@@ -45,9 +44,10 @@ class TextureBaseOperation : public NodeOperation {
 
  protected:
   /**
-   * Determine the output resolution. The resolution is retrieved from the Renderer
+   * Determine the output resolution.
    */
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 
   /**
    * Constructor
@@ -55,14 +55,14 @@ class TextureBaseOperation : public NodeOperation {
   TextureBaseOperation();
 
  public:
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   void setTexture(Tex *texture)
   {
     this->m_texture = texture;
   }
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
   void setRenderData(const RenderData *rd)
   {
     this->m_rd = rd;
@@ -80,7 +80,7 @@ class TextureOperation : public TextureBaseOperation {
 class TextureAlphaOperation : public TextureBaseOperation {
  public:
   TextureAlphaOperation();
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
-#endif
+}  // namespace blender::compositor

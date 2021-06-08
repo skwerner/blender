@@ -23,10 +23,11 @@ set(INC
   ../blenkernel
   ../blenlib
   ../blentranslation
+  ../depsgraph
   ../makesdna
-  ../../../intern/guardedalloc
   ../../../intern/atomic
   ../../../intern/eigen
+  ../../../intern/guardedalloc
   ../../../extern/rangetree
 )
 
@@ -56,7 +57,7 @@ set(SRC
   operators/bmo_hull.c
   operators/bmo_inset.c
   operators/bmo_join_triangles.c
-  operators/bmo_mesh_conv.c
+  operators/bmo_mesh_convert.c
   operators/bmo_mirror.c
   operators/bmo_normals.c
   operators/bmo_offset_edgeloops.c
@@ -97,8 +98,16 @@ set(SRC
   intern/bmesh_marking.h
   intern/bmesh_mesh.c
   intern/bmesh_mesh.h
-  intern/bmesh_mesh_conv.c
-  intern/bmesh_mesh_conv.h
+  intern/bmesh_mesh_convert.c
+  intern/bmesh_mesh_convert.h
+  intern/bmesh_mesh_duplicate.c
+  intern/bmesh_mesh_duplicate.h
+  intern/bmesh_mesh_normals.c
+  intern/bmesh_mesh_normals.h
+  intern/bmesh_mesh_partial_update.c
+  intern/bmesh_mesh_partial_update.h
+  intern/bmesh_mesh_tessellate.c
+  intern/bmesh_mesh_tessellate.h
   intern/bmesh_mesh_validate.c
   intern/bmesh_mesh_validate.h
   intern/bmesh_mods.c
@@ -116,6 +125,8 @@ set(SRC
   intern/bmesh_query.c
   intern/bmesh_query.h
   intern/bmesh_query_inline.h
+  intern/bmesh_query_uv.c
+  intern/bmesh_query_uv.h
   intern/bmesh_structure.c
   intern/bmesh_structure.h
   intern/bmesh_structure_inline.h
@@ -133,6 +144,8 @@ set(SRC
   tools/bmesh_bevel.h
   tools/bmesh_bisect_plane.c
   tools/bmesh_bisect_plane.h
+  tools/bmesh_boolean.cc
+  tools/bmesh_boolean.h
   tools/bmesh_decimate.h
   tools/bmesh_decimate_collapse.c
   tools/bmesh_decimate_dissolve.c
@@ -143,10 +156,16 @@ set(SRC
   tools/bmesh_edgesplit.h
   tools/bmesh_intersect.c
   tools/bmesh_intersect.h
+  tools/bmesh_intersect_edges.c
+  tools/bmesh_intersect_edges.h
   tools/bmesh_path.c
   tools/bmesh_path.h
   tools/bmesh_path_region.c
   tools/bmesh_path_region.h
+  tools/bmesh_path_region_uv.c
+  tools/bmesh_path_region_uv.h
+  tools/bmesh_path_uv.c
+  tools/bmesh_path_uv.h
   tools/bmesh_region_match.c
   tools/bmesh_region_match.h
   tools/bmesh_separate.c
@@ -169,16 +188,19 @@ set(LIB
   extern_rangetree
 )
 
-if(MSVC AND NOT MSVC_CLANG)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /WX /wd4101")
-endif()
-
 if(WITH_BULLET)
   list(APPEND INC_SYS
     ${BULLET_INCLUDE_DIRS}
+    "../../../intern/rigidbody/"
   )
+  if(NOT WITH_SYSTEM_BULLET)
   list(APPEND LIB
     extern_bullet
+    )
+  endif()
+
+  list(APPEND LIB
+    ${BULLET_LIBRARIES}
   )
   add_definitions(-DWITH_BULLET)
 endif()
@@ -191,4 +213,33 @@ if(WITH_FREESTYLE)
   add_definitions(-DWITH_FREESTYLE)
 endif()
 
+if(WITH_GMP)
+  add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
+  )
+endif()
+
 blender_add_lib(bf_bmesh "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")
+
+if(MSVC AND NOT MSVC_CLANG)
+  target_compile_options(bf_bmesh PRIVATE /WX /wd4101)
+endif()
+
+if(WITH_GTESTS)
+  set(TEST_SRC
+    tests/bmesh_core_test.cc
+  )
+  set(TEST_INC
+  )
+  set(TEST_LIB
+    bf_bmesh
+  )
+  include(GTestTesting)
+  blender_add_test_lib(bf_bmesh_tests "${TEST_SRC}" "${INC};${TEST_INC}" "${INC_SYS}" "${LIB};${TEST_LIB}")
+endif()

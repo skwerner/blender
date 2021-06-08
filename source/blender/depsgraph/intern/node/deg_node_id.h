@@ -23,10 +23,13 @@
 
 #pragma once
 
-#include "intern/node/deg_node.h"
+#include "BLI_ghash.h"
 #include "BLI_sys_types.h"
+#include "DNA_ID.h"
+#include "intern/node/deg_node.h"
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
 struct ComponentNode;
 
@@ -48,6 +51,7 @@ const char *linkedStateAsString(eDepsNode_LinkedState_Type linked_state);
 struct IDNode : public Node {
   struct ComponentIDKey {
     ComponentIDKey(NodeType type, const char *name = "");
+    uint64_t hash() const;
     bool operator==(const ComponentIDKey &other) const;
 
     NodeType type;
@@ -55,7 +59,7 @@ struct IDNode : public Node {
   };
 
   virtual void init(const ID *id, const char *subdata) override;
-  void init_copy_on_write(ID *id_cow_hint = NULL);
+  void init_copy_on_write(ID *id_cow_hint = nullptr);
   ~IDNode();
   void destroy();
 
@@ -70,12 +74,26 @@ struct IDNode : public Node {
 
   IDComponentsMask get_visible_components_mask() const;
 
+  /* Type of the ID stored separately, so it's possible to perform check whether CoW is needed
+   * without de-referencing the id_cow (which is not safe when ID is NOT covered by CoW and has
+   * been deleted from the main database.) */
+  ID_Type id_type;
+
   /* ID Block referenced. */
   ID *id_orig;
+
+  /* Session-wide UUID of the id_orig.
+   * Is used on relations update to map evaluated state from old nodes to the new ones, without
+   * relying on pointers (which are not guaranteed to be unique) and without dereferencing id_orig
+   * which could be "stale" pointer. */
+  uint id_orig_session_uuid;
+
+  /* Evaluated data-block.
+   * Will be covered by the copy-on-write system if the ID Type needs it. */
   ID *id_cow;
 
   /* Hash to make it faster to look up components. */
-  GHash *components;
+  Map<ComponentIDKey, ComponentNode *> components;
 
   /* Additional flags needed for scene evaluation.
    * TODO(sergey): Only needed for until really granular updates
@@ -89,12 +107,21 @@ struct IDNode : public Node {
 
   eDepsNode_LinkedState_Type linked_state;
 
-  /* Indicates the datablock is visible in the evaluated scene. */
+  /* Indicates the data-block is visible in the evaluated scene. */
   bool is_directly_visible;
 
   /* For the collection type of ID, denotes whether collection was fully
    * recursed into. */
   bool is_collection_fully_expanded;
+
+  /* Is used to figure out whether object came to the dependency graph via a base. */
+  bool has_base;
+
+  /* Accumulated flag from operation. Is initialized and used during updates flush. */
+  bool is_user_modified;
+
+  /* Accumulate recalc flags from multiple update passes. */
+  int id_cow_recalc_backup;
 
   IDComponentsMask visible_components_mask;
   IDComponentsMask previously_visible_components_mask;
@@ -102,4 +129,5 @@ struct IDNode : public Node {
   DEG_DEPSNODE_DECLARE;
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

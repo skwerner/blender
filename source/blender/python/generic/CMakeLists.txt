@@ -21,8 +21,8 @@ set(INC
   ../../blenlib
   ../../gpu
   ../../makesdna
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
+  ../../../../intern/guardedalloc
 )
 
 set(INC_SYS
@@ -32,16 +32,16 @@ set(INC_SYS
 
 set(SRC
   bgl.c
+  bl_math_py_api.c
   blf_py_api.c
-  bpy_internal_import.c
   bpy_threads.c
   idprop_py_api.c
   imbuf_py_api.c
   py_capi_utils.c
 
   bgl.h
+  bl_math_py_api.h
   blf_py_api.h
-  bpy_internal_import.h
   idprop_py_api.h
   imbuf_py_api.h
   py_capi_utils.h
@@ -52,6 +52,8 @@ set(SRC
 
 set(LIB
   ${GLEW_LIBRARY}
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 add_definitions(${GL_DEFINITIONS})

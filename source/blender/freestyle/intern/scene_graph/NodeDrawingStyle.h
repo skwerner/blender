@@ -14,12 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_NODE_DRAWING_STYLE_H__
-#define __FREESTYLE_NODE_DRAWING_STYLE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Class to define a Drawing Style to be applied to the underlying children. Inherits from NodeGroup.
+ * \brief Class to define a Drawing Style to be applied to the underlying children. Inherits from
+ * NodeGroup.
  */
 
 #include "DrawingStyle.h"
@@ -105,5 +105,3 @@ class NodeDrawingStyle : public NodeGroup {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_NODE_DRAWING_STYLE_H__

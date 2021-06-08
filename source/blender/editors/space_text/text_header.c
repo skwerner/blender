@@ -34,30 +34,34 @@
 
 #include "WM_types.h"
 
+#include "UI_interface.h"
+
 #include "text_intern.h"
 
 /* ************************ header area region *********************** */
 
 /************************** properties ******************************/
 
-static ARegion *text_has_properties_region(ScrArea *sa)
+static ARegion *text_has_properties_region(ScrArea *area)
 {
-  ARegion *ar, *arnew;
+  ARegion *region, *arnew;
 
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_UI);
-  if (ar)
-    return ar;
+  region = BKE_area_find_region_type(area, RGN_TYPE_UI);
+  if (region) {
+    return region;
+  }
 
   /* add subdiv level; after header */
-  ar = BKE_area_find_region_type(sa, RGN_TYPE_HEADER);
+  region = BKE_area_find_region_type(area, RGN_TYPE_HEADER);
 
   /* is error! */
-  if (ar == NULL)
+  if (region == NULL) {
     return NULL;
+  }
 
   arnew = MEM_callocN(sizeof(ARegion), "properties region");
 
-  BLI_insertlinkafter(&sa->regionbase, ar, arnew);
+  BLI_insertlinkafter(&area->regionbase, region, arnew);
   arnew->regiontype = RGN_TYPE_UI;
   arnew->alignment = RGN_ALIGN_LEFT;
 
@@ -71,44 +75,24 @@ static bool text_properties_poll(bContext *C)
   return (CTX_wm_space_text(C) != NULL);
 }
 
-static int text_properties_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = text_has_properties_region(sa);
-
-  if (ar)
-    ED_region_toggle_hidden(C, ar);
-
-  return OPERATOR_FINISHED;
-}
-
-void TEXT_OT_properties(wmOperatorType *ot)
-{
-  /* identifiers */
-  ot->name = "Toggle Sidebar";
-  ot->description = "Toggle the properties region visibility";
-  ot->idname = "TEXT_OT_properties";
-
-  /* api callbacks */
-  ot->exec = text_properties_exec;
-  ot->poll = text_properties_poll;
-}
-
 static int text_text_search_exec(bContext *C, wmOperator *UNUSED(op))
 {
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = text_has_properties_region(sa);
+  ScrArea *area = CTX_wm_area(C);
+  ARegion *region = text_has_properties_region(area);
   SpaceText *st = CTX_wm_space_text(C);
 
-  if (ar) {
-    if (ar->flag & RGN_FLAG_HIDDEN)
-      ED_region_toggle_hidden(C, ar);
+  if (region) {
+    if (region->flag & RGN_FLAG_HIDDEN) {
+      ED_region_toggle_hidden(C, region);
+    }
+
+    UI_panel_category_active_set(region, "Text");
 
     /* cannot send a button activate yet for case when region wasn't visible yet */
     /* flag gets checked and cleared in main draw callback */
     st->flags |= ST_FIND_ACTIVATE;
 
-    ED_region_tag_redraw(ar);
+    ED_region_tag_redraw(region);
   }
   return OPERATOR_FINISHED;
 }
@@ -124,84 +108,3 @@ void TEXT_OT_start_find(wmOperatorType *ot)
   ot->exec = text_text_search_exec;
   ot->poll = text_properties_poll;
 }
-
-/******************** XXX popup menus *******************/
-
-#if 0
-{
-  // RMB
-
-  uiPopupMenu *pup;
-
-  if (text) {
-    pup = UI_popup_menu_begin(C, IFACE_("Text"), ICON_NONE);
-    if (txt_has_sel(text)) {
-      uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_cut");
-      uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_copy");
-    }
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_paste");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_new");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_open");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_save");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_save_as");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_run_script");
-    UI_popup_menu_end(C, pup);
-  }
-  else {
-    pup = UI_popup_menu_begin(C, IFACE_("File"), ICON_NONE);
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_new");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_open");
-    UI_popup_menu_end(C, pup);
-  }
-}
-
-{
-  // Alt+Shift+E
-
-  uiPopupMenu *pup;
-
-  pup = UI_popup_menu_begin(C, IFACE_("Edit"), ICON_NONE);
-  uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_cut");
-  uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_copy");
-  uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_paste");
-  UI_popup_menu_end(C, pup);
-}
-
-{
-  // Alt+Shift+F
-
-  uiPopupMenu *pup;
-
-  if (text) {
-    pup = UI_popup_menu_begin(C, IFACE_("Text"), ICON_NONE);
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_new");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_open");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_save");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_save_as");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_run_script");
-    UI_popup_menu_end(C, pup);
-  }
-  else {
-    pup = UI_popup_menu_begin(C, IFACE_("File"), ICON_NONE);
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_new");
-    uiItemO(layout, NULL, ICON_NONE, "TEXT_OT_open");
-    UI_popup_menu_end(C, pup);
-  }
-}
-
-{
-  // Alt+Shift+V
-
-  uiPopupMenu *pup;
-
-  pup = UI_popup_menu_begin(C, IFACE_("Text"), ICON_NONE);
-  uiItemEnumO(layout, "TEXT_OT_move", CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Top of File"),
-              0, "type", FILE_TOP);
-  uiItemEnumO(layout, "TEXT_OT_move", CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Bottom of File"),
-              0, "type", FILE_BOTTOM);
-  uiItemEnumO(layout, "TEXT_OT_move", CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Page Up"), 0, "type", PREV_PAGE);
-  uiItemEnumO(layout, "TEXT_OT_move", CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Page Down"),
-              0, "type", NEXT_PAGE);
-  UI_popup_menu_end(C, pup);
-}
-#endif

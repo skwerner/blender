@@ -20,7 +20,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_mesh_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -30,9 +29,9 @@
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
+#include "BKE_editmesh.h"
 #include "BKE_global.h"
 #include "BKE_report.h"
-#include "BKE_editmesh.h"
 #include "BKE_scene.h"
 
 #include "RNA_access.h"
@@ -41,8 +40,8 @@
 
 #include "WM_api.h"
 #include "WM_message.h"
-#include "WM_types.h"
 #include "WM_toolsystem.h"
+#include "WM_types.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -52,6 +51,7 @@
 #include "ED_mesh.h"
 
 #include "transform.h"
+#include "transform_convert.h"
 
 typedef struct TransformModeItem {
   const char *idname;
@@ -73,6 +73,7 @@ static const char OP_PUSH_PULL[] = "TRANSFORM_OT_push_pull";
 static const char OP_TILT[] = "TRANSFORM_OT_tilt";
 static const char OP_TRACKBALL[] = "TRANSFORM_OT_trackball";
 static const char OP_MIRROR[] = "TRANSFORM_OT_mirror";
+static const char OP_BONE_SIZE[] = "TRANSFORM_OT_bbone_resize";
 static const char OP_EDGE_SLIDE[] = "TRANSFORM_OT_edge_slide";
 static const char OP_VERT_SLIDE[] = "TRANSFORM_OT_vert_slide";
 static const char OP_EDGE_CREASE[] = "TRANSFORM_OT_edge_crease";
@@ -92,6 +93,7 @@ static void TRANSFORM_OT_push_pull(struct wmOperatorType *ot);
 static void TRANSFORM_OT_tilt(struct wmOperatorType *ot);
 static void TRANSFORM_OT_trackball(struct wmOperatorType *ot);
 static void TRANSFORM_OT_mirror(struct wmOperatorType *ot);
+static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot);
 static void TRANSFORM_OT_edge_slide(struct wmOperatorType *ot);
 static void TRANSFORM_OT_vert_slide(struct wmOperatorType *ot);
 static void TRANSFORM_OT_edge_crease(struct wmOperatorType *ot);
@@ -112,6 +114,7 @@ static TransformModeItem transform_modes[] = {
     {OP_TILT, TFM_TILT, TRANSFORM_OT_tilt},
     {OP_TRACKBALL, TFM_TRACKBALL, TRANSFORM_OT_trackball},
     {OP_MIRROR, TFM_MIRROR, TRANSFORM_OT_mirror},
+    {OP_BONE_SIZE, TFM_BONESIZE, TRANSFORM_OT_bbone_resize},
     {OP_EDGE_SLIDE, TFM_EDGE_SLIDE, TRANSFORM_OT_edge_slide},
     {OP_VERT_SLIDE, TFM_VERT_SLIDE, TRANSFORM_OT_vert_slide},
     {OP_EDGE_CREASE, TFM_CREASE, TRANSFORM_OT_edge_crease},
@@ -128,46 +131,45 @@ const EnumPropertyItem rna_enum_transform_mode_types[] = {
     {TFM_ROTATION, "ROTATION", 0, "Rotation", ""},
     {TFM_RESIZE, "RESIZE", 0, "Resize", ""},
     {TFM_SKIN_RESIZE, "SKIN_RESIZE", 0, "Skin Resize", ""},
-    {TFM_TOSPHERE, "TOSPHERE", 0, "Tosphere", ""},
+    {TFM_TOSPHERE, "TOSPHERE", 0, "To Sphere", ""},
     {TFM_SHEAR, "SHEAR", 0, "Shear", ""},
     {TFM_BEND, "BEND", 0, "Bend", ""},
-    {TFM_SHRINKFATTEN, "SHRINKFATTEN", 0, "Shrinkfatten", ""},
+    {TFM_SHRINKFATTEN, "SHRINKFATTEN", 0, "Shrink/Fatten", ""},
     {TFM_TILT, "TILT", 0, "Tilt", ""},
     {TFM_TRACKBALL, "TRACKBALL", 0, "Trackball", ""},
-    {TFM_PUSHPULL, "PUSHPULL", 0, "Pushpull", ""},
+    {TFM_PUSHPULL, "PUSHPULL", 0, "Push/Pull", ""},
     {TFM_CREASE, "CREASE", 0, "Crease", ""},
     {TFM_MIRROR, "MIRROR", 0, "Mirror", ""},
-    {TFM_BONESIZE, "BONE_SIZE", 0, "Bonesize", ""},
-    {TFM_BONE_ENVELOPE, "BONE_ENVELOPE", 0, "Bone_Envelope", ""},
-    {TFM_BONE_ENVELOPE_DIST, "BONE_ENVELOPE_DIST", 0, "Bone_Envelope_Distance", ""},
-    {TFM_CURVE_SHRINKFATTEN, "CURVE_SHRINKFATTEN", 0, "Curve_Shrinkfatten", ""},
-    {TFM_MASK_SHRINKFATTEN, "MASK_SHRINKFATTEN", 0, "Mask_Shrinkfatten", ""},
-    {TFM_GPENCIL_SHRINKFATTEN, "GPENCIL_SHRINKFATTEN", 0, "GPencil_Shrinkfatten", ""},
-    {TFM_BONE_ROLL, "BONE_ROLL", 0, "Bone_Roll", ""},
-    {TFM_TIME_TRANSLATE, "TIME_TRANSLATE", 0, "Time_Translate", ""},
-    {TFM_TIME_SLIDE, "TIME_SLIDE", 0, "Time_Slide", ""},
-    {TFM_TIME_SCALE, "TIME_SCALE", 0, "Time_Scale", ""},
-    {TFM_TIME_EXTEND, "TIME_EXTEND", 0, "Time_Extend", ""},
-    {TFM_BAKE_TIME, "BAKE_TIME", 0, "Bake_Time", ""},
-    {TFM_BWEIGHT, "BWEIGHT", 0, "Bweight", ""},
+    {TFM_BONESIZE, "BONE_SIZE", 0, "Bone Size", ""},
+    {TFM_BONE_ENVELOPE, "BONE_ENVELOPE", 0, "Bone Envelope", ""},
+    {TFM_BONE_ENVELOPE_DIST, "BONE_ENVELOPE_DIST", 0, "Bone Envelope Distance", ""},
+    {TFM_CURVE_SHRINKFATTEN, "CURVE_SHRINKFATTEN", 0, "Curve Shrink/Fatten", ""},
+    {TFM_MASK_SHRINKFATTEN, "MASK_SHRINKFATTEN", 0, "Mask Shrink/Fatten", ""},
+    {TFM_GPENCIL_SHRINKFATTEN, "GPENCIL_SHRINKFATTEN", 0, "Grease Pencil Shrink/Fatten", ""},
+    {TFM_BONE_ROLL, "BONE_ROLL", 0, "Bone Roll", ""},
+    {TFM_TIME_TRANSLATE, "TIME_TRANSLATE", 0, "Time Translate", ""},
+    {TFM_TIME_SLIDE, "TIME_SLIDE", 0, "Time Slide", ""},
+    {TFM_TIME_SCALE, "TIME_SCALE", 0, "Time Scale", ""},
+    {TFM_TIME_EXTEND, "TIME_EXTEND", 0, "Time Extend", ""},
+    {TFM_BAKE_TIME, "BAKE_TIME", 0, "Bake Time", ""},
+    {TFM_BWEIGHT, "BWEIGHT", 0, "Bevel Weight", ""},
     {TFM_ALIGN, "ALIGN", 0, "Align", ""},
     {TFM_EDGE_SLIDE, "EDGESLIDE", 0, "Edge Slide", ""},
     {TFM_SEQ_SLIDE, "SEQSLIDE", 0, "Sequence Slide", ""},
-    {TFM_GPENCIL_OPACITY, "GPENCIL_OPACITY", 0, "GPencil_Opacity", ""},
+    {TFM_GPENCIL_OPACITY, "GPENCIL_OPACITY", 0, "Grease Pencil Opacity", ""},
     {0, NULL, 0, NULL, NULL},
 };
 
 static int select_orientation_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  View3D *v3d = CTX_wm_view3d(C);
 
   int orientation = RNA_enum_get(op->ptr, "orientation");
 
   BKE_scene_orientation_slot_set_index(&scene->orientation_slots[SCE_ORIENT_DEFAULT], orientation);
 
   WM_event_add_notifier(C, NC_SCENE | ND_TOOLSETTINGS, NULL);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   struct wmMsgBus *mbus = CTX_wm_message_bus(C);
   WM_msg_publish_rna_prop(mbus, &scene->id, scene, TransformOrientationSlot, type);
@@ -218,6 +220,9 @@ static int delete_orientation_exec(bContext *C, wmOperator *UNUSED(op))
 
   WM_event_add_notifier(C, NC_SCENE | NA_EDITED, scene);
 
+  struct wmMsgBus *mbus = CTX_wm_message_bus(C);
+  WM_msg_publish_rna_prop(mbus, &scene->id, scene, Scene, transform_orientation_slots);
+
   return OPERATOR_FINISHED;
 }
 
@@ -228,11 +233,11 @@ static int delete_orientation_invoke(bContext *C, wmOperator *op, const wmEvent 
 
 static bool delete_orientation_poll(bContext *C)
 {
-  Scene *scene = CTX_data_scene(C);
-
-  if (ED_operator_areaactive(C) == 0)
+  if (ED_operator_areaactive(C) == 0) {
     return 0;
+  }
 
+  Scene *scene = CTX_data_scene(C);
   return ((scene->orientation_slots[SCE_ORIENT_DEFAULT].type >= V3D_ORIENT_CUSTOM) &&
           (scene->orientation_slots[SCE_ORIENT_DEFAULT].index_custom != -1));
 }
@@ -258,6 +263,7 @@ static int create_orientation_exec(bContext *C, wmOperator *op)
   const bool overwrite = RNA_boolean_get(op->ptr, "overwrite");
   const bool use_view = RNA_boolean_get(op->ptr, "use_view");
   View3D *v3d = CTX_wm_view3d(C);
+  Scene *scene = CTX_data_scene(C);
 
   RNA_string_get(op->ptr, "name", name);
 
@@ -268,10 +274,18 @@ static int create_orientation_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  BIF_createTransformOrientation(C, op->reports, name, use_view, use, overwrite);
+  if (!BIF_createTransformOrientation(C, op->reports, name, use_view, use, overwrite)) {
+    BKE_report(op->reports, RPT_ERROR, "Unable to create orientation");
+    return OPERATOR_CANCELLED;
+  }
 
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
-  WM_event_add_notifier(C, NC_SCENE | NA_EDITED, CTX_data_scene(C));
+  if (use) {
+    struct wmMsgBus *mbus = CTX_wm_message_bus(C);
+    WM_msg_publish_rna_prop(mbus, &scene->id, scene, Scene, transform_orientation_slots);
+    WM_event_add_notifier(C, NC_SCENE | NA_EDITED, scene);
+  }
+
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
   return OPERATOR_FINISHED;
 }
@@ -299,11 +313,11 @@ static void TRANSFORM_OT_create_orientation(struct wmOperatorType *ot)
   WM_operatortype_props_advanced_begin(ot);
 
   RNA_def_boolean(
-      ot->srna, "use", false, "Use after creation", "Select orientation after its creation");
+      ot->srna, "use", false, "Use After Creation", "Select orientation after its creation");
   RNA_def_boolean(ot->srna,
                   "overwrite",
                   false,
-                  "Overwrite previous",
+                  "Overwrite Previous",
                   "Overwrite previously created orientation with same name");
 }
 
@@ -396,15 +410,16 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
   int exit_code;
 
   TransInfo *t = op->customdata;
-  const enum TfmMode mode_prev = t->mode;
+  const eTfmMode mode_prev = t->mode;
 
 #if defined(WITH_INPUT_NDOF) && 0
-  // stable 2D mouse coords map to different 3D coords while the 3D mouse is active
-  // in other words, 2D deltas are no longer good enough!
-  // disable until individual 'transformers' behave better
+  /* Stable 2D mouse coords map to different 3D coords while the 3D mouse is active
+   * in other words, 2D deltas are no longer good enough!
+   * disable until individual 'transformers' behave better. */
 
-  if (event->type == NDOF_MOTION)
+  if (event->type == NDOF_MOTION) {
     return OPERATOR_PASS_THROUGH;
+  }
 #endif
 
   /* XXX insert keys are called here, and require context */
@@ -416,7 +431,7 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
    * since we're not reading from 'td->center' in this case. see: T40241 */
   if (t->tsnap.target == SCE_SNAP_TARGET_ACTIVE) {
     /* In camera view, tsnap callback is not set
-     * (see initSnappingMode() in transfrom_snap.c, and T40348). */
+     * (see #initSnappingMode() in transform_snap.c, and T40348). */
     if (t->tsnap.targetSnap && ((t->tsnap.status & TARGET_INIT) == 0)) {
       t->tsnap.targetSnap(t);
     }
@@ -428,7 +443,7 @@ static int transform_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
   if ((exit_code & OPERATOR_RUNNING_MODAL) == 0) {
     transformops_exit(C, op);
-    exit_code &= ~OPERATOR_PASS_THROUGH; /* preventively remove passthrough */
+    exit_code &= ~OPERATOR_PASS_THROUGH; /* Preventively remove pass-through. */
   }
   else {
     if (mode_prev != t->mode) {
@@ -500,22 +515,19 @@ static int transform_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if ((event == NULL) && RNA_struct_property_is_set(op->ptr, "value")) {
     return transform_exec(C, op);
   }
-  else {
-    /* add temp handler */
-    WM_event_add_modal_handler(C, op);
 
-    op->flag |= OP_IS_MODAL_GRAB_CURSOR;  // XXX maybe we want this with the gizmo only?
+  /* add temp handler */
+  WM_event_add_modal_handler(C, op);
 
-    /* Use when modal input has some transformation to begin with. */
-    {
-      TransInfo *t = op->customdata;
-      if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
-        transformApply(C, t);
-      }
-    }
+  op->flag |= OP_IS_MODAL_GRAB_CURSOR; /* XXX maybe we want this with the gizmo only? */
 
-    return OPERATOR_RUNNING_MODAL;
+  /* Use when modal input has some transformation to begin with. */
+  TransInfo *t = op->customdata;
+  if (UNLIKELY(!is_zero_v4(t->values_modal_offset))) {
+    transformApply(C, t);
   }
+
+  return OPERATOR_RUNNING_MODAL;
 }
 
 static bool transform_poll_property(const bContext *UNUSED(C),
@@ -528,7 +540,7 @@ static bool transform_poll_property(const bContext *UNUSED(C),
   {
     /* Hide orientation axis if no constraints are set, since it wont be used. */
     PropertyRNA *prop_con = RNA_struct_find_property(op->ptr, "orient_type");
-    if (prop_con != NULL && (prop_con != prop)) {
+    if (!ELEM(prop_con, NULL, prop)) {
       if (STRPREFIX(prop_id, "constraint")) {
 
         /* Special case: show constraint axis if we don't have values,
@@ -545,10 +557,9 @@ static bool transform_poll_property(const bContext *UNUSED(C),
 
   /* Proportional Editing. */
   {
-    PropertyRNA *prop_pet = RNA_struct_find_property(op->ptr, "proportional");
-    if (prop_pet && (prop_pet != prop) &&
-        (RNA_property_enum_get(op->ptr, prop_pet) == PROP_EDIT_OFF)) {
-      if (STRPREFIX(prop_id, "proportional")) {
+    PropertyRNA *prop_pet = RNA_struct_find_property(op->ptr, "use_proportional_edit");
+    if (prop_pet && (prop_pet != prop) && (RNA_property_boolean_get(op->ptr, prop_pet) == false)) {
+      if (STRPREFIX(prop_id, "proportional") || STRPREFIX(prop_id, "use_proportional")) {
         return false;
       }
     }
@@ -571,7 +582,7 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
   if (flags & P_ORIENT_AXIS_ORTHO) {
     prop = RNA_def_property(ot->srna, "orient_axis_ortho", PROP_ENUM, PROP_NONE);
     RNA_def_property_ui_text(prop, "Axis Ortho", "");
-    RNA_def_property_enum_default(prop, 1);
+    RNA_def_property_enum_default(prop, 0);
     RNA_def_property_enum_items(prop, rna_enum_axis_xyz_items);
     RNA_def_property_flag(prop, PROP_SKIP_SAVE);
   }
@@ -608,12 +619,7 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
   }
 
   if (flags & P_PROPORTIONAL) {
-    RNA_def_enum(ot->srna,
-                 "proportional",
-                 rna_enum_proportional_editing_items,
-                 0,
-                 "Proportional Editing",
-                 "");
+    RNA_def_boolean(ot->srna, "use_proportional_edit", 0, "Proportional Editing", "");
     prop = RNA_def_enum(ot->srna,
                         "proportional_edit_falloff",
                         rna_enum_proportional_falloff_items,
@@ -631,6 +637,9 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
                   "",
                   0.001f,
                   100.0f);
+
+    RNA_def_boolean(ot->srna, "use_proportional_connected", 0, "Connected", "");
+    RNA_def_boolean(ot->srna, "use_proportional_projected", 0, "Projected (2D)", "");
   }
 
   if (flags & P_SNAP) {
@@ -670,7 +679,7 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
 
   if ((flags & P_OPTIONS) && !(flags & P_NO_TEXSPACE)) {
     prop = RNA_def_boolean(
-        ot->srna, "texture_space", 0, "Edit Texture Space", "Edit Object data texture space");
+        ot->srna, "texture_space", 0, "Edit Texture Space", "Edit object data texture space");
     RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
     prop = RNA_def_boolean(
         ot->srna, "remove_on_cancel", 0, "Remove on Cancel", "Remove elements on cancel");
@@ -701,6 +710,15 @@ void Transform_Properties(struct wmOperatorType *ot, int flags)
     prop = RNA_def_boolean(ot->srna, "use_accurate", 0, "Accurate", "Use accurate transformation");
     RNA_def_property_flag(prop, PROP_HIDDEN);
   }
+
+  if (flags & P_POST_TRANSFORM) {
+    prop = RNA_def_boolean(ot->srna,
+                           "use_automerge_and_split",
+                           0,
+                           "Auto Merge & Split",
+                           "Forces the use of Auto Merge and Split");
+    RNA_def_property_flag(prop, PROP_HIDDEN);
+  }
 }
 
 static void TRANSFORM_OT_translate(struct wmOperatorType *ot)
@@ -719,14 +737,14 @@ static void TRANSFORM_OT_translate(struct wmOperatorType *ot)
   ot->poll = ED_operator_screenactive;
   ot->poll_property = transform_poll_property;
 
-  RNA_def_float_vector_xyz(
+  RNA_def_float_translation(
       ot->srna, "value", 3, NULL, -FLT_MAX, FLT_MAX, "Move", "", -FLT_MAX, FLT_MAX);
 
   WM_operatortype_props_advanced_begin(ot);
 
   Transform_Properties(ot,
                        P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_MIRROR | P_ALIGN_SNAP |
-                           P_OPTIONS | P_GPENCIL_EDIT | P_CURSOR_EDIT);
+                           P_OPTIONS | P_GPENCIL_EDIT | P_CURSOR_EDIT | P_POST_TRANSFORM);
 }
 
 static void TRANSFORM_OT_resize(struct wmOperatorType *ot)
@@ -755,16 +773,6 @@ static void TRANSFORM_OT_resize(struct wmOperatorType *ot)
                            P_OPTIONS | P_GPENCIL_EDIT | P_CENTER);
 }
 
-static bool skin_resize_poll(bContext *C)
-{
-  struct Object *obedit = CTX_data_edit_object(C);
-  if (obedit && obedit->type == OB_MESH) {
-    BMEditMesh *em = BKE_editmesh_from_object(obedit);
-    return (em && CustomData_has_layer(&em->bm->vdata, CD_MVERT_SKIN));
-  }
-  return 0;
-}
-
 static void TRANSFORM_OT_skin_resize(struct wmOperatorType *ot)
 {
   /* identifiers */
@@ -778,7 +786,7 @@ static void TRANSFORM_OT_skin_resize(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = skin_resize_poll;
+  ot->poll = ED_operator_editmesh;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_vector(
@@ -816,6 +824,17 @@ static void TRANSFORM_OT_trackball(struct wmOperatorType *ot)
   Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
+/* Similar to #transform_shear_poll. */
+static bool transform_rotate_poll(bContext *C)
+{
+  if (!ED_operator_screenactive(C)) {
+    return false;
+  }
+
+  ScrArea *area = CTX_wm_area(C);
+  return area && !ELEM(area->spacetype, SPACE_ACTION);
+}
+
 static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
 {
   /* identifiers */
@@ -829,7 +848,7 @@ static void TRANSFORM_OT_rotate(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_screenactive;
+  ot->poll = transform_rotate_poll;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float_rotation(
@@ -879,7 +898,7 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
 
   /* api callbacks */
   ot->invoke = transform_invoke;
-  // ot->exec   = transform_exec;  // unsupported
+  // ot->exec = transform_exec; /* unsupported */
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
   ot->poll = ED_operator_region_view3d_active;
@@ -891,6 +910,17 @@ static void TRANSFORM_OT_bend(struct wmOperatorType *ot)
   WM_operatortype_props_advanced_begin(ot);
 
   Transform_Properties(ot, P_PROPORTIONAL | P_MIRROR | P_SNAP | P_GPENCIL_EDIT | P_CENTER);
+}
+
+/* Similar to #transform_rotate_poll. */
+static bool transform_shear_poll(bContext *C)
+{
+  if (!ED_operator_screenactive(C)) {
+    return false;
+  }
+
+  ScrArea *area = CTX_wm_area(C);
+  return area && !ELEM(area->spacetype, SPACE_ACTION);
 }
 
 static void TRANSFORM_OT_shear(struct wmOperatorType *ot)
@@ -906,11 +936,10 @@ static void TRANSFORM_OT_shear(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_screenactive;
+  ot->poll = transform_shear_poll;
   ot->poll_property = transform_poll_property;
 
   RNA_def_float(ot->srna, "value", 0, -FLT_MAX, FLT_MAX, "Offset", "", -FLT_MAX, FLT_MAX);
-  RNA_def_enum(ot->srna, "shear_axis", rna_enum_axis_xy_items, 0, "Shear Axis", "");
 
   WM_operatortype_props_advanced_begin(ot);
 
@@ -975,8 +1004,7 @@ static void TRANSFORM_OT_tosphere(struct wmOperatorType *ot)
 {
   /* identifiers */
   ot->name = "To Sphere";
-  //added "around mesh center" to differentiate between "MESH_OT_vertices_to_sphere()"
-  ot->description = "Move selected vertices outward in a spherical shape around mesh center";
+  ot->description = "Move selected items outward in a spherical shape around geometric center";
   ot->idname = OP_TOSPHERE;
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
 
@@ -1011,8 +1039,31 @@ static void TRANSFORM_OT_mirror(struct wmOperatorType *ot)
   ot->poll = ED_operator_screenactive;
   ot->poll_property = transform_poll_property;
 
-  Transform_Properties(
-      ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_PROPORTIONAL | P_GPENCIL_EDIT | P_CENTER);
+  Transform_Properties(ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_GPENCIL_EDIT | P_CENTER);
+}
+
+static void TRANSFORM_OT_bbone_resize(struct wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Scale B-Bone";
+  ot->description = "Scale selected bendy bones display size";
+  ot->idname = OP_BONE_SIZE;
+  ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
+
+  /* api callbacks */
+  ot->invoke = transform_invoke;
+  ot->exec = transform_exec;
+  ot->modal = transform_modal;
+  ot->cancel = transform_cancel;
+  ot->poll = ED_operator_object_active;
+  ot->poll_property = transform_poll_property;
+
+  RNA_def_float_translation(
+      ot->srna, "value", 3, VecOne, -FLT_MAX, FLT_MAX, "Display Size", "", -FLT_MAX, FLT_MAX);
+
+  WM_operatortype_props_advanced_begin(ot);
+
+  Transform_Properties(ot, P_ORIENT_MATRIX | P_CONSTRAINT | P_MIRROR);
 }
 
 static void TRANSFORM_OT_edge_slide(struct wmOperatorType *ot)
@@ -1150,8 +1201,12 @@ static void TRANSFORM_OT_seq_slide(struct wmOperatorType *ot)
   ot->cancel = transform_cancel;
   ot->poll = ED_operator_sequencer_active;
 
-  RNA_def_float_vector_xyz(
+  /* properties */
+  PropertyRNA *prop;
+
+  prop = RNA_def_float_vector(
       ot->srna, "value", 2, NULL, -FLT_MAX, FLT_MAX, "Offset", "", -FLT_MAX, FLT_MAX);
+  RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 1, 0);
 
   WM_operatortype_props_advanced_begin(ot);
 
@@ -1161,7 +1216,7 @@ static void TRANSFORM_OT_seq_slide(struct wmOperatorType *ot)
 static void TRANSFORM_OT_rotate_normal(struct wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Normal Rotate";
+  ot->name = "Rotate Normals";
   ot->description = "Rotate split normal of selected items";
   ot->idname = OP_NORMAL_ROTATION;
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO | OPTYPE_BLOCKING;
@@ -1171,7 +1226,7 @@ static void TRANSFORM_OT_rotate_normal(struct wmOperatorType *ot)
   ot->exec = transform_exec;
   ot->modal = transform_modal;
   ot->cancel = transform_cancel;
-  ot->poll = ED_operator_editmesh_auto_smooth;
+  ot->poll = ED_operator_editmesh;
 
   RNA_def_float_rotation(
       ot->srna, "value", 0, NULL, -FLT_MAX, FLT_MAX, "Angle", "", -M_PI * 2, M_PI * 2);
@@ -1211,6 +1266,60 @@ static void TRANSFORM_OT_transform(struct wmOperatorType *ot)
                            P_ALIGN_SNAP | P_GPENCIL_EDIT | P_CENTER);
 }
 
+static int transform_from_gizmo_invoke(bContext *C,
+                                       wmOperator *UNUSED(op),
+                                       const wmEvent *UNUSED(event))
+{
+  bToolRef *tref = WM_toolsystem_ref_from_context(C);
+  if (tref) {
+    ARegion *region = CTX_wm_region(C);
+    wmGizmoMap *gzmap = region->gizmo_map;
+    wmGizmoGroup *gzgroup = gzmap ? WM_gizmomap_group_find(gzmap, "VIEW3D_GGT_xform_gizmo") : NULL;
+    if (gzgroup != NULL) {
+      PointerRNA gzg_ptr;
+      WM_toolsystem_ref_properties_ensure_from_gizmo_group(tref, gzgroup->type, &gzg_ptr);
+      const int drag_action = RNA_enum_get(&gzg_ptr, "drag_action");
+      const char *op_id = NULL;
+      switch (drag_action) {
+        case V3D_GIZMO_SHOW_OBJECT_TRANSLATE:
+          op_id = "TRANSFORM_OT_translate";
+          break;
+        case V3D_GIZMO_SHOW_OBJECT_ROTATE:
+          op_id = "TRANSFORM_OT_rotate";
+          break;
+        case V3D_GIZMO_SHOW_OBJECT_SCALE:
+          op_id = "TRANSFORM_OT_resize";
+          break;
+        default:
+          break;
+      }
+      if (op_id) {
+        wmOperatorType *ot = WM_operatortype_find(op_id, true);
+        PointerRNA op_ptr;
+        WM_operator_properties_create_ptr(&op_ptr, ot);
+        RNA_boolean_set(&op_ptr, "release_confirm", true);
+        WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &op_ptr);
+        WM_operator_properties_free(&op_ptr);
+        return OPERATOR_FINISHED;
+      }
+    }
+  }
+  return OPERATOR_PASS_THROUGH;
+}
+
+/* Use with 'TRANSFORM_GGT_gizmo'. */
+static void TRANSFORM_OT_from_gizmo(struct wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Transform from Gizmo";
+  ot->description = "Transform selected items by mode type";
+  ot->idname = "TRANSFORM_OT_from_gizmo";
+  ot->flag = 0;
+
+  /* api callbacks */
+  ot->invoke = transform_from_gizmo_invoke;
+}
+
 void transform_operatortypes(void)
 {
   TransformModeItem *tmode;
@@ -1224,6 +1333,8 @@ void transform_operatortypes(void)
   WM_operatortype_append(TRANSFORM_OT_select_orientation);
   WM_operatortype_append(TRANSFORM_OT_create_orientation);
   WM_operatortype_append(TRANSFORM_OT_delete_orientation);
+
+  WM_operatortype_append(TRANSFORM_OT_from_gizmo);
 }
 
 void ED_keymap_transform(wmKeyConfig *keyconf)

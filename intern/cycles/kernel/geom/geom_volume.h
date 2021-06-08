@@ -47,33 +47,39 @@ ccl_device_inline float3 volume_normalized_position(KernelGlobals *kg,
   return P;
 }
 
-ccl_device float volume_attribute_float(KernelGlobals *kg,
-                                        const ShaderData *sd,
-                                        const AttributeDescriptor desc)
+ccl_device float volume_attribute_value_to_float(const float4 value)
 {
-  float3 P = volume_normalized_position(kg, sd, sd->P);
-  InterpolationType interp = (sd->flag & SD_VOLUME_CUBIC) ? INTERPOLATION_CUBIC :
-                                                            INTERPOLATION_NONE;
-  float4 r = kernel_tex_image_interp_3d(kg, desc.offset, P.x, P.y, P.z, interp);
-  return average(float4_to_float3(r));
+  return average(float4_to_float3(value));
 }
 
-ccl_device float3 volume_attribute_float3(KernelGlobals *kg,
+ccl_device float volume_attribute_value_to_alpha(const float4 value)
+{
+  return value.w;
+}
+
+ccl_device float3 volume_attribute_value_to_float3(const float4 value)
+{
+  if (value.w > 1e-6f && value.w != 1.0f) {
+    /* For RGBA colors, unpremultiply after interpolation. */
+    return float4_to_float3(value) / value.w;
+  }
+  else {
+    return float4_to_float3(value);
+  }
+}
+
+ccl_device float4 volume_attribute_float4(KernelGlobals *kg,
                                           const ShaderData *sd,
                                           const AttributeDescriptor desc)
 {
-  float3 P = volume_normalized_position(kg, sd, sd->P);
+  /* todo: optimize this so we don't have to transform both here and in
+   * kernel_tex_image_interp_3d when possible. Also could optimize for the
+   * common case where transform is translation/scale only. */
+  float3 P = sd->P;
+  object_inverse_position_transform(kg, sd, &P);
   InterpolationType interp = (sd->flag & SD_VOLUME_CUBIC) ? INTERPOLATION_CUBIC :
                                                             INTERPOLATION_NONE;
-  float4 r = kernel_tex_image_interp_3d(kg, desc.offset, P.x, P.y, P.z, interp);
-
-  if (r.w > 1e-6f && r.w != 1.0f) {
-    /* For RGBA colors, unpremultiply after interpolation. */
-    return float4_to_float3(r) / r.w;
-  }
-  else {
-    return float4_to_float3(r);
-  }
+  return kernel_tex_image_interp_3d(kg, desc.offset, P, interp);
 }
 
 #endif

@@ -23,65 +23,72 @@
  * - passing output paths to the visitor?, like render out.
  * - passing sequence strips with many images.
  * - passing directory paths - visitors don't know which path is a dir or a file.
- * */
+ */
 
 #include <sys/stat.h>
 
 #include <string.h>
-#include <assert.h>
 
 /* path/file handling stuff */
 #ifndef WIN32
 #  include <dirent.h>
 #  include <unistd.h>
 #else
-#  include <io.h>
 #  include "BLI_winstuff.h"
+#  include <io.h>
 #endif
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
+#include "DNA_fluid_types.h"
+#include "DNA_freestyle_types.h"
 #include "DNA_image_types.h"
+#include "DNA_material_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_movieclip_types.h"
+#include "DNA_node_types.h"
 #include "DNA_object_fluidsim_types.h"
 #include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
 #include "DNA_particle_types.h"
+#include "DNA_pointcache_types.h"
+#include "DNA_scene_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_sound_types.h"
 #include "DNA_text_types.h"
-#include "DNA_material_types.h"
-#include "DNA_node_types.h"
 #include "DNA_texture_types.h"
 #include "DNA_vfont_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_smoke_types.h"
-#include "DNA_freestyle_types.h"
+#include "DNA_volume_types.h"
 
 #include "BLI_blenlib.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_font.h"
+#include "BKE_image.h"
+#include "BKE_lib_id.h"
 #include "BKE_library.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
 #include "BKE_report.h"
-#include "BKE_sequencer.h"
-#include "BKE_image.h"
 
 #include "BKE_bpath.h" /* own include */
 
 #include "CLG_log.h"
+
+#include "SEQ_iterator.h"
 
 #ifndef _MSC_VER
 #  include "BLI_strict_flags.h"
 #endif
 
 static CLG_LogRef LOG = {"bke.bpath"};
+
+/* -------------------------------------------------------------------- */
+/** \name Check Missing Files
+ * \{ */
 
 static bool checkMissingFiles_visit_cb(void *userdata,
                                        char *UNUSED(path_dst),
@@ -105,6 +112,84 @@ void BKE_bpath_missing_files_check(Main *bmain, ReportList *reports)
                           reports);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Rebase Relative Paths
+ * \{ */
+
+typedef struct BPathRebase_Data {
+  const char *basedir_src;
+  const char *basedir_dst;
+  ReportList *reports;
+
+  int count_tot;
+  int count_changed;
+  int count_failed;
+} BPathRebase_Data;
+
+static bool bpath_relative_rebase_visit_cb(void *userdata, char *path_dst, const char *path_src)
+{
+  BPathRebase_Data *data = (BPathRebase_Data *)userdata;
+
+  data->count_tot++;
+
+  if (BLI_path_is_rel(path_src)) {
+    char filepath[(FILE_MAXDIR * 2) + FILE_MAXFILE];
+    BLI_strncpy(filepath, path_src, FILE_MAX);
+    if (BLI_path_abs(filepath, data->basedir_src)) {
+      BLI_path_normalize(NULL, filepath);
+
+      /* This may fail, if so it's fine to leave absolute since the path is still valid. */
+      BLI_path_rel(filepath, data->basedir_dst);
+
+      BLI_strncpy(path_dst, filepath, FILE_MAX);
+      data->count_changed++;
+      return true;
+    }
+
+    /* Failed to make relative path absolute. */
+    BLI_assert(0);
+    BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
+    data->count_failed++;
+    return false;
+  }
+
+  /* Absolute, leave this as-is. */
+  return false;
+}
+
+void BKE_bpath_relative_rebase(Main *bmain,
+                               const char *basedir_src,
+                               const char *basedir_dst,
+                               ReportList *reports)
+{
+  BPathRebase_Data data = {NULL};
+  const int flag = (BKE_BPATH_TRAVERSE_SKIP_LIBRARY | BKE_BPATH_TRAVERSE_SKIP_MULTIFILE);
+
+  BLI_assert(basedir_src[0] != '\0');
+  BLI_assert(basedir_dst[0] != '\0');
+
+  data.basedir_src = basedir_src;
+  data.basedir_dst = basedir_dst;
+  data.reports = reports;
+
+  BKE_bpath_traverse_main(bmain, bpath_relative_rebase_visit_cb, flag, (void *)&data);
+
+  BKE_reportf(reports,
+              data.count_failed ? RPT_WARNING : RPT_INFO,
+              "Total files %d | Changed %d | Failed %d",
+              data.count_tot,
+              data.count_changed,
+              data.count_failed);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Paths Relative
+ * \{ */
+
 typedef struct BPathRemap_Data {
   const char *basedir;
   ReportList *reports;
@@ -123,18 +208,17 @@ static bool bpath_relative_convert_visit_cb(void *userdata, char *path_dst, cons
   if (BLI_path_is_rel(path_src)) {
     return false; /* already relative */
   }
-  else {
-    strcpy(path_dst, path_src);
-    BLI_path_rel(path_dst, data->basedir);
-    if (BLI_path_is_rel(path_dst)) {
-      data->count_changed++;
-    }
-    else {
-      BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made relative", path_src);
-      data->count_failed++;
-    }
-    return true;
+
+  strcpy(path_dst, path_src);
+  BLI_path_rel(path_dst, data->basedir);
+  if (BLI_path_is_rel(path_dst)) {
+    data->count_changed++;
   }
+  else {
+    BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made relative", path_src);
+    data->count_failed++;
+  }
+  return true;
 }
 
 void BKE_bpath_relative_convert(Main *bmain, const char *basedir, ReportList *reports)
@@ -160,6 +244,12 @@ void BKE_bpath_relative_convert(Main *bmain, const char *basedir, ReportList *re
               data.count_failed);
 }
 
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Make Paths Absolute
+ * \{ */
+
 static bool bpath_absolute_convert_visit_cb(void *userdata, char *path_dst, const char *path_src)
 {
   BPathRemap_Data *data = (BPathRemap_Data *)userdata;
@@ -169,18 +259,17 @@ static bool bpath_absolute_convert_visit_cb(void *userdata, char *path_dst, cons
   if (BLI_path_is_rel(path_src) == false) {
     return false; /* already absolute */
   }
-  else {
-    strcpy(path_dst, path_src);
-    BLI_path_abs(path_dst, data->basedir);
-    if (BLI_path_is_rel(path_dst) == false) {
-      data->count_changed++;
-    }
-    else {
-      BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
-      data->count_failed++;
-    }
-    return true;
+
+  strcpy(path_dst, path_src);
+  BLI_path_abs(path_dst, data->basedir);
+  if (BLI_path_is_rel(path_dst) == false) {
+    data->count_changed++;
   }
+  else {
+    BKE_reportf(data->reports, RPT_WARNING, "Path '%s' cannot be made absolute", path_src);
+    data->count_failed++;
+  }
+  return true;
 }
 
 /* similar to BKE_bpath_relative_convert - keep in sync! */
@@ -206,6 +295,12 @@ void BKE_bpath_absolute_convert(Main *bmain, const char *basedir, ReportList *re
               data.count_changed,
               data.count_failed);
 }
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Find Missing Files
+ * \{ */
 
 /**
  * find this file recursively, use the biggest file so thumbnails don't get used by mistake
@@ -233,21 +328,25 @@ static bool missing_files_find__recursive(char *filename_new,
 
   dir = opendir(dirname);
 
-  if (dir == NULL)
+  if (dir == NULL) {
     return found;
+  }
 
-  if (*r_filesize == -1)
+  if (*r_filesize == -1) {
     *r_filesize = 0; /* dir opened fine */
+  }
 
   while ((de = readdir(dir)) != NULL) {
 
-    if (FILENAME_IS_CURRPAR(de->d_name))
+    if (FILENAME_IS_CURRPAR(de->d_name)) {
       continue;
+    }
 
     BLI_join_dirfile(path, sizeof(path), dirname, de->d_name);
 
-    if (BLI_stat(path, &status) == -1)
+    if (BLI_stat(path, &status) == -1) {
       continue; /* cant stat, don't bother with this file, could print debug info here */
+    }
 
     if (S_ISREG(status.st_mode)) {                              /* is file */
       if (BLI_path_ncmp(filename, de->d_name, FILE_MAX) == 0) { /* name matches */
@@ -307,7 +406,7 @@ static bool missing_files_find__visit_cb(void *userdata, char *path_dst, const c
                 BLI_path_basename(data->searchdir));
     return false;
   }
-  else if (found == false) {
+  if (found == false) {
     BKE_reportf(data->reports,
                 RPT_WARNING,
                 "Could not find '%s' in '%s'",
@@ -315,17 +414,17 @@ static bool missing_files_find__visit_cb(void *userdata, char *path_dst, const c
                 data->searchdir);
     return false;
   }
-  else {
-    bool was_relative = BLI_path_is_rel(path_dst);
 
-    BLI_strncpy(path_dst, filename_new, FILE_MAX);
+  bool was_relative = BLI_path_is_rel(path_dst);
 
-    /* keep path relative if the previous one was relative */
-    if (was_relative)
-      BLI_path_rel(path_dst, data->basedir);
+  BLI_strncpy(path_dst, filename_new, FILE_MAX);
 
-    return true;
+  /* keep path relative if the previous one was relative */
+  if (was_relative) {
+    BLI_path_rel(path_dst, data->basedir);
   }
+
+  return true;
 }
 
 void BKE_bpath_missing_files_find(Main *bmain,
@@ -344,7 +443,15 @@ void BKE_bpath_missing_files_find(Main *bmain,
   BKE_bpath_traverse_main(bmain, missing_files_find__visit_cb, flag, (void *)&data);
 }
 
-/* Run a visitor on a string, replacing the contents of the string as needed. */
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Generic File Path Traversal API
+ * \{ */
+
+/**
+ * Run a visitor on a string, replacing the contents of the string as needed.
+ */
 static bool rewrite_path_fixed(char *path,
                                BPathVisitor visit_cb,
                                const char *absbase,
@@ -370,9 +477,8 @@ static bool rewrite_path_fixed(char *path,
     BLI_strncpy(path, path_dst, FILE_MAX);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static bool rewrite_path_fixed_dirfile(char path_dir[FILE_MAXDIR],
@@ -397,9 +503,8 @@ static bool rewrite_path_fixed_dirfile(char path_dir[FILE_MAXDIR],
     BLI_split_dirfile(path_dst, path_dir, path_file, FILE_MAXDIR, FILE_MAXFILE);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static bool rewrite_path_alloc(char **path,
@@ -425,12 +530,13 @@ static bool rewrite_path_alloc(char **path,
     (*path) = BLI_strdup(path_dst);
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
-/* Run visitor function 'visit' on all paths contained in 'id'. */
+/**
+ * Run visitor function 'visit' on all paths contained in 'id'.
+ */
 void BKE_bpath_traverse_id(
     Main *bmain, ID *id, BPathVisitor visit_cb, const int flag, void *bpath_user_data)
 {
@@ -445,8 +551,12 @@ void BKE_bpath_traverse_id(
       Image *ima;
       ima = (Image *)id;
       if (BKE_image_has_packedfile(ima) == false || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
-        if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE)) {
-          if (rewrite_path_fixed(ima->name, visit_cb, absbase, bpath_user_data)) {
+        /* Skip empty file paths, these are typically from generated images and
+         * don't make sense to add directories to until the image has been saved
+         * once to give it a meaningful value. */
+        if (ELEM(ima->source, IMA_SRC_FILE, IMA_SRC_MOVIE, IMA_SRC_SEQUENCE, IMA_SRC_TILED) &&
+            ima->filepath[0]) {
+          if (rewrite_path_fixed(ima->filepath, visit_cb, absbase, bpath_user_data)) {
             if (flag & BKE_BPATH_TRAVERSE_RELOAD_EDITED) {
               if (!BKE_image_has_packedfile(ima) &&
                   /* image may have been painted onto (and not saved, T44543) */
@@ -489,10 +599,10 @@ void BKE_bpath_traverse_id(
             rewrite_path_fixed(fluidmd->fss->surfdataPath, visit_cb, absbase, bpath_user_data);
           }
         }
-        else if (md->type == eModifierType_Smoke) {
-          SmokeModifierData *smd = (SmokeModifierData *)md;
-          if (smd->type & MOD_SMOKE_TYPE_DOMAIN) {
-            BPATH_TRAVERSE_POINTCACHE(smd->domain->ptcaches[0]);
+        else if (md->type == eModifierType_Fluid) {
+          FluidModifierData *fmd = (FluidModifierData *)md;
+          if (fmd->type & MOD_FLUID_TYPE_DOMAIN && fmd->domain) {
+            rewrite_path_fixed(fmd->domain->cache_directory, visit_cb, absbase, bpath_user_data);
           }
         }
         else if (md->type == eModifierType_Cloth) {
@@ -524,20 +634,27 @@ void BKE_bpath_traverse_id(
     case ID_SO: {
       bSound *sound = (bSound *)id;
       if (sound->packedfile == NULL || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
-        rewrite_path_fixed(sound->name, visit_cb, absbase, bpath_user_data);
+        rewrite_path_fixed(sound->filepath, visit_cb, absbase, bpath_user_data);
+      }
+      break;
+    }
+    case ID_VO: {
+      Volume *volume = (Volume *)id;
+      if (volume->packedfile == NULL || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
+        rewrite_path_fixed(volume->filepath, visit_cb, absbase, bpath_user_data);
       }
       break;
     }
     case ID_TXT:
-      if (((Text *)id)->name) {
-        rewrite_path_alloc(&((Text *)id)->name, visit_cb, absbase, bpath_user_data);
+      if (((Text *)id)->filepath) {
+        rewrite_path_alloc(&((Text *)id)->filepath, visit_cb, absbase, bpath_user_data);
       }
       break;
     case ID_VF: {
       VFont *vfont = (VFont *)id;
       if (vfont->packedfile == NULL || (flag & BKE_BPATH_TRAVERSE_SKIP_PACKED) == 0) {
         if (BKE_vfont_is_builtin(vfont) == false) {
-          rewrite_path_fixed(((VFont *)id)->name, visit_cb, absbase, bpath_user_data);
+          rewrite_path_fixed(((VFont *)id)->filepath, visit_cb, absbase, bpath_user_data);
         }
       }
       break;
@@ -586,7 +703,7 @@ void BKE_bpath_traverse_id(
       if (scene->ed) {
         Sequence *seq;
 
-        SEQ_BEGIN (scene->ed, seq) {
+        SEQ_ALL_BEGIN (scene->ed, seq) {
           if (SEQ_HAS_PATH(seq)) {
             StripElem *se = seq->strip->stripdata;
 
@@ -615,7 +732,7 @@ void BKE_bpath_traverse_id(
             }
           }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
       break;
     }
@@ -630,15 +747,15 @@ void BKE_bpath_traverse_id(
       Library *lib = (Library *)id;
       /* keep packedfile paths always relative to the blend */
       if (lib->packedfile == NULL) {
-        if (rewrite_path_fixed(lib->name, visit_cb, absbase, bpath_user_data)) {
-          BKE_library_filepath_set(bmain, lib, lib->name);
+        if (rewrite_path_fixed(lib->filepath, visit_cb, absbase, bpath_user_data)) {
+          BKE_library_filepath_set(bmain, lib, lib->filepath);
         }
       }
       break;
     }
     case ID_MC: {
       MovieClip *clip = (MovieClip *)id;
-      rewrite_path_fixed(clip->name, visit_cb, absbase, bpath_user_data);
+      rewrite_path_fixed(clip->filepath, visit_cb, absbase, bpath_user_data);
       break;
     }
     case ID_CF: {
@@ -666,15 +783,17 @@ void BKE_bpath_traverse_main(Main *bmain,
                              const int flag,
                              void *bpath_user_data)
 {
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int a = set_listbasepointers(bmain, lbarray);
   while (a--) {
     BKE_bpath_traverse_id_list(bmain, lbarray[a], visit_cb, flag, bpath_user_data);
   }
 }
 
-/* Rewrites a relative path to be relative to the main file - unless the path is
- * absolute, in which case it is not altered. */
+/**
+ * Rewrites a relative path to be relative to the main file - unless the path is
+ * absolute, in which case it is not altered.
+ */
 bool BKE_bpath_relocate_visitor(void *pathbase_v, char *path_dst, const char *path_src)
 {
   /* be sure there is low chance of the path being too short */
@@ -688,28 +807,29 @@ bool BKE_bpath_relocate_visitor(void *pathbase_v, char *path_dst, const char *pa
   }
 
   /* Make referenced file absolute. This would be a side-effect of
-   * BLI_cleanup_file, but we do it explicitly so we know if it changed. */
+   * BLI_path_normalize, but we do it explicitly so we know if it changed. */
   BLI_strncpy(filepath, path_src, FILE_MAX);
   if (BLI_path_abs(filepath, base_old)) {
     /* Path was relative and is now absolute. Remap.
-     * Important BLI_cleanup_dir runs before the path is made relative
+     * Important BLI_path_normalize runs before the path is made relative
      * because it wont work for paths that start with "//../" */
-    BLI_cleanup_file(base_new, filepath);
+    BLI_path_normalize(base_new, filepath);
     BLI_path_rel(filepath, base_new);
     BLI_strncpy(path_dst, filepath, FILE_MAX);
     return true;
   }
-  else {
-    /* Path was not relative to begin with. */
-    return false;
-  }
+
+  /* Path was not relative to begin with. */
+  return false;
 }
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
-/**
- * Backup/Restore/Free functions,
+/** \name Backup/Restore/Free functions,
+ *
  * \note These functions assume the data won't change order.
- */
+ * \{ */
 
 struct PathStore {
   struct PathStore *next, *prev;
@@ -773,3 +893,5 @@ void BKE_bpath_list_free(void *ls_handle)
   BLI_freelistN(ls);
   MEM_freeN(ls);
 }
+
+/** \} */

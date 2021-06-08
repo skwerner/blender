@@ -16,14 +16,16 @@
 
 #include "render/background.h"
 #include "device/device.h"
-#include "render/integrator.h"
 #include "render/graph.h"
+#include "render/integrator.h"
 #include "render/nodes.h"
 #include "render/scene.h"
 #include "render/shader.h"
+#include "render/stats.h"
 
 #include "util/util_foreach.h"
 #include "util/util_math.h"
+#include "util/util_time.h"
 #include "util/util_types.h"
 
 CCL_NAMESPACE_BEGIN
@@ -43,35 +45,37 @@ NODE_DEFINE(Background)
   SOCKET_BOOLEAN(transparent_glass, "Transparent Glass", false);
   SOCKET_FLOAT(transparent_roughness_threshold, "Transparent Roughness Threshold", 0.0f);
 
-  SOCKET_NODE(shader, "Shader", &Shader::node_type);
+  SOCKET_FLOAT(volume_step_size, "Volume Step Size", 0.1f);
+
+  SOCKET_NODE(shader, "Shader", Shader::get_node_type());
 
   return type;
 }
 
-Background::Background() : Node(node_type)
+Background::Background() : Node(get_node_type())
 {
-  need_update = true;
+  shader = NULL;
 }
 
 Background::~Background()
 {
+  dereference_all_used_nodes();
 }
 
 void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 {
-  if (!need_update)
+  if (!is_modified())
     return;
+
+  scoped_callback_timer timer([scene](double time) {
+    if (scene->update_stats) {
+      scene->update_stats->background.times.add_entry({"device_update", time});
+    }
+  });
 
   device_free(device, dscene);
 
-  Shader *bg_shader = shader;
-
-  if (use_shader) {
-    if (!bg_shader)
-      bg_shader = scene->default_background;
-  }
-  else
-    bg_shader = scene->default_empty;
+  Shader *bg_shader = get_shader(scene);
 
   /* set shader index and transparent option */
   KernelBackground *kbackground = &dscene->data.background;
@@ -98,6 +102,8 @@ void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene
   else
     kbackground->volume_shader = SHADER_NONE;
 
+  kbackground->volume_step_size = volume_step_size * scene->integrator->get_volume_step_rate();
+
   /* No background node, make world shader invisible to all rays, to skip evaluation in kernel. */
   if (bg_shader->graph->nodes.size() <= 1) {
     kbackground->surface_shader |= SHADER_EXCLUDE_ANY;
@@ -116,22 +122,31 @@ void Background::device_update(Device *device, DeviceScene *dscene, Scene *scene
       kbackground->surface_shader |= SHADER_EXCLUDE_CAMERA;
   }
 
-  need_update = false;
+  clear_modified();
 }
 
 void Background::device_free(Device * /*device*/, DeviceScene * /*dscene*/)
 {
 }
 
-bool Background::modified(const Background &background)
-{
-  return !Node::equals(background);
-}
-
 void Background::tag_update(Scene *scene)
 {
-  scene->integrator->tag_update(scene);
-  need_update = true;
+  Shader *bg_shader = get_shader(scene);
+  if (bg_shader && bg_shader->is_modified()) {
+    /* Tag as modified to update the KernelBackground visibility information.
+     * We only tag the use_shader socket as modified as it is related to the shader
+     * and to avoid doing unnecessary updates anywhere else. */
+    tag_use_shader_modified();
+  }
+
+  if (ao_factor_is_modified() || use_ao_is_modified()) {
+    scene->integrator->tag_update(scene, Integrator::BACKGROUND_AO_MODIFIED);
+  }
+}
+
+Shader *Background::get_shader(const Scene *scene)
+{
+  return (use_shader) ? ((shader) ? shader : scene->default_background) : scene->default_empty;
 }
 
 CCL_NAMESPACE_END

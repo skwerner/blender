@@ -294,6 +294,21 @@ ccl_device_inline float mix(float a, float b, float t)
 {
   return a + t * (b - a);
 }
+
+ccl_device_inline float smoothstep(float edge0, float edge1, float x)
+{
+  float result;
+  if (x < edge0)
+    result = 0.0f;
+  else if (x >= edge1)
+    result = 1.0f;
+  else {
+    float t = (x - edge0) / (edge1 - edge0);
+    result = (3.0f - 2.0f * t) * (t * t);
+  }
+  return result;
+}
+
 #endif /* __KERNEL_OPENCL__ */
 
 #ifndef __KERNEL_CUDA__
@@ -318,9 +333,43 @@ ccl_device_inline int quick_floor_to_int(float x)
   return float_to_int(x) - ((x < 0) ? 1 : 0);
 }
 
+ccl_device_inline float floorfrac(float x, int *i)
+{
+  *i = quick_floor_to_int(x);
+  return x - *i;
+}
+
 ccl_device_inline int ceil_to_int(float f)
 {
   return float_to_int(ceilf(f));
+}
+
+ccl_device_inline float fractf(float x)
+{
+  return x - floorf(x);
+}
+
+/* Adapted from godot-engine math_funcs.h. */
+ccl_device_inline float wrapf(float value, float max, float min)
+{
+  float range = max - min;
+  return (range != 0.0f) ? value - (range * floorf((value - min) / range)) : min;
+}
+
+ccl_device_inline float pingpongf(float a, float b)
+{
+  return (b != 0.0f) ? fabsf(fractf((a - b) / (b * 2.0f)) * b * 2.0f - b) : 0.0f;
+}
+
+ccl_device_inline float smoothminf(float a, float b, float k)
+{
+  if (k != 0.0f) {
+    float h = fmaxf(k - fabsf(a - b), 0.0f) / k;
+    return fminf(a, b) - h * h * h * k * (1.0f / 6.0f);
+  }
+  else {
+    return fminf(a, b);
+  }
 }
 
 ccl_device_inline float signf(float f)
@@ -334,6 +383,17 @@ ccl_device_inline float nonzerof(float f, float eps)
     return signf(f) * eps;
   else
     return f;
+}
+
+/* `signum` function testing for zero. Matches GLSL and OSL functions. */
+ccl_device_inline float compatible_signf(float f)
+{
+  if (f == 0.0f) {
+    return 0.0f;
+  }
+  else {
+    return signf(f);
+  }
 }
 
 ccl_device_inline float smoothstepf(float f)
@@ -417,12 +477,12 @@ ccl_device_inline float triangle_area(const float3 v1, const float3 v2, const fl
 ccl_device_inline void make_orthonormals(const float3 N, float3 *a, float3 *b)
 {
 #if 0
-  if(fabsf(N.y) >= 0.999f) {
+  if (fabsf(N.y) >= 0.999f) {
     *a = make_float3(1, 0, 0);
     *b = make_float3(0, 0, 1);
     return;
   }
-  if(fabsf(N.z) >= 0.999f) {
+  if (fabsf(N.z) >= 0.999f) {
     *a = make_float3(1, 0, 0);
     *b = make_float3(0, 1, 0);
     return;
@@ -528,6 +588,11 @@ ccl_device_inline float safe_sqrtf(float f)
   return sqrtf(max(f, 0.0f));
 }
 
+ccl_device_inline float inversesqrtf(float f)
+{
+  return (f > 0.0f) ? 1.0f / sqrtf(f) : 0.0f;
+}
+
 ccl_device float safe_asinf(float a)
 {
   return asinf(clamp(a, -1.0f, 1.0f));
@@ -617,6 +682,57 @@ ccl_device float bits_to_01(uint bits)
   return bits * (1.0f / (float)0xFFFFFFFF);
 }
 
+ccl_device_inline uint count_leading_zeros(uint x)
+{
+#if defined(__KERNEL_CUDA__) || defined(__KERNEL_OPTIX__)
+  return __clz(x);
+#elif defined(__KERNEL_OPENCL__)
+  return clz(x);
+#else
+  assert(x != 0);
+#  ifdef _MSC_VER
+  unsigned long leading_zero = 0;
+  _BitScanReverse(&leading_zero, x);
+  return (31 - leading_zero);
+#  else
+  return __builtin_clz(x);
+#  endif
+#endif
+}
+
+ccl_device_inline uint count_trailing_zeros(uint x)
+{
+#if defined(__KERNEL_CUDA__) || defined(__KERNEL_OPTIX__)
+  return (__ffs(x) - 1);
+#elif defined(__KERNEL_OPENCL__)
+  return (31 - count_leading_zeros(x & -x));
+#else
+  assert(x != 0);
+#  ifdef _MSC_VER
+  unsigned long ctz = 0;
+  _BitScanForward(&ctz, x);
+  return ctz;
+#  else
+  return __builtin_ctz(x);
+#  endif
+#endif
+}
+
+ccl_device_inline uint find_first_set(uint x)
+{
+#if defined(__KERNEL_CUDA__) || defined(__KERNEL_OPTIX__)
+  return __ffs(x);
+#elif defined(__KERNEL_OPENCL__)
+  return (x != 0) ? (32 - count_leading_zeros(x & (-x))) : 0;
+#else
+#  ifdef _MSC_VER
+  return (x != 0) ? (32 - count_leading_zeros(x & (-x))) : 0;
+#  else
+  return __builtin_ffs(x);
+#  endif
+#endif
+}
+
 /* projections */
 ccl_device_inline float2 map_to_tube(const float3 co)
 {
@@ -638,7 +754,7 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
   float u, v;
   if (l > 0.0f) {
     if (UNLIKELY(co.x == 0.0f && co.y == 0.0f)) {
-      u = 0.0f; /* othwise domain error */
+      u = 0.0f; /* Otherwise domain error. */
     }
     else {
       u = (1.0f - atan2f(co.x, co.y) / M_PI_F) / 2.0f;
@@ -649,6 +765,36 @@ ccl_device_inline float2 map_to_sphere(const float3 co)
     u = v = 0.0f;
   }
   return make_float2(u, v);
+}
+
+/* Compares two floats.
+ * Returns true if their absolute difference is smaller than abs_diff (for numbers near zero)
+ * or their relative difference is less than ulp_diff ULPs.
+ * Based on
+ * https://randomascii.wordpress.com/2012/02/25/comparing-floating-point-numbers-2012-edition/
+ */
+
+ccl_device_inline float compare_floats(float a, float b, float abs_diff, int ulp_diff)
+{
+  if (fabsf(a - b) < abs_diff) {
+    return true;
+  }
+
+  if ((a < 0.0f) != (b < 0.0f)) {
+    return false;
+  }
+
+  return (abs(__float_as_int(a) - __float_as_int(b)) < ulp_diff);
+}
+
+/* Calculate the angle between the two vectors a and b.
+ * The usual approach `acos(dot(a, b))` has severe precision issues for small angles,
+ * which are avoided by this method.
+ * Based on "Mangled Angles" from https://people.eecs.berkeley.edu/~wkahan/Mindless.pdf
+ */
+ccl_device_inline float precise_angle(float3 a, float3 b)
+{
+  return 2.0f * atan2f(len(a - b), len(a + b));
 }
 
 CCL_NAMESPACE_END

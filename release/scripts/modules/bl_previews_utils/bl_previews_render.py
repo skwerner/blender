@@ -31,12 +31,14 @@ from mathutils import (
 )
 
 
-INTERN_PREVIEW_TYPES = {'MATERIAL', 'LIGHT', 'WORLD', 'TEXTURE', 'IMAGE'}
 OBJECT_TYPES_RENDER = {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT'}
 
 
 def ids_nolib(bids):
     return (bid for bid in bids if not bid.library)
+
+def ids_nolib_with_preview(bids):
+    return (bid for bid in bids if (not bid.library and bid.preview))
 
 
 def rna_backup_gen(data, include_props=None, exclude_props=None, root=()):
@@ -123,7 +125,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             scene.collection.objects.link(light)
 
             scene.render.engine = 'CYCLES'
-            scene.cycles.film_transparent = True
+            scene.render.film_transparent = True
             # TODO: define Cycles world?
 
         scene.render.image_settings.file_format = 'PNG'
@@ -136,6 +138,9 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
         scene.render.filepath = os.path.join(bpy.app.tempdir, 'TEMP_preview_render.png')
         scene.render.use_overwrite = True
         scene.render.use_stamp = False
+        scene.render.threads_mode = 'AUTO'
+        scene.render.tile_x = RENDER_PREVIEW_SIZE // 4
+        scene.render.tile_y = RENDER_PREVIEW_SIZE // 4
 
         image = bpy.data.images.new("TEMP_render_image", RENDER_PREVIEW_SIZE, RENDER_PREVIEW_SIZE, alpha=True)
         image.source = 'FILE'
@@ -212,7 +217,8 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
                     bpy.data.lights.remove(bpy.data.lights[render_context.light_data, None])
                 else:
                     rna_backup_restore(light, render_context.backup_light)
-                    rna_backup_restore(bpy.data.lights[render_context.light_data, None], render_context.backup_light_data)
+                    rna_backup_restore(bpy.data.lights[render_context.light_data,
+                                                       None], render_context.backup_light_data)
             except Exception as e:
                 print("ERROR:", e)
                 success = False
@@ -230,7 +236,8 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
     def object_bbox_merge(bbox, ob, ob_space, offset_matrix):
         # Take collections instances into account (including linked one in this case).
         if ob.type == 'EMPTY' and ob.instance_type == 'COLLECTION':
-            grp_objects = tuple((ob.name, ob.library.filepath if ob.library else None) for ob in ob.instance_collection.all_objects)
+            grp_objects = tuple((ob.name, ob.library.filepath if ob.library else None)
+                                for ob in ob.instance_collection.all_objects)
             if (len(grp_objects) == 0):
                 ob_bbox = ob.bound_box
             else:
@@ -279,12 +286,14 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
         return cos
 
     def preview_render_do(render_context, item_container, item_name, objects, offset_matrix=None):
-        scene = bpy.data.scenes[render_context.scene, None]
+        # Unused.
+        # scene = bpy.data.scenes[render_context.scene, None]
         if objects is not None:
             camera = bpy.data.objects[render_context.camera, None]
             light = bpy.data.objects[render_context.light, None] if render_context.light is not None else None
             cos = objects_bbox_calc(camera, objects, offset_matrix)
-            loc, _ortho_scale = camera.camera_fit_coords(bpy.context.depsgraph, cos)
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+            loc, _ortho_scale = camera.camera_fit_coords(depsgraph, cos)
             camera.location = loc
             # Set camera clipping accordingly to computed bbox.
             min_dist = 1e24
@@ -298,23 +307,24 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             camera.data.clip_start = min_dist / 2
             camera.data.clip_end = max_dist * 2
             if light:
-                loc, _ortho_scale = light.camera_fit_coords(bpy.context.depsgraph, cos)
+                loc, _ortho_scale = light.camera_fit_coords(depsgraph, cos)
                 light.location = loc
-        scene.update()
+        bpy.context.view_layer.update()
 
         bpy.ops.render.render(write_still=True)
 
         image = bpy.data.images[render_context.image, None]
         item = getattr(bpy.data, item_container)[item_name, None]
         image.reload()
-        item.preview.image_size = (RENDER_PREVIEW_SIZE, RENDER_PREVIEW_SIZE)
-        item.preview.image_pixels_float[:] = image.pixels
+        preview = item.preview_ensure()
+        preview.image_size = (RENDER_PREVIEW_SIZE, RENDER_PREVIEW_SIZE)
+        preview.image_pixels_float[:] = image.pixels
 
     # And now, main code!
     do_save = True
 
     if do_data_intern:
-        bpy.ops.wm.previews_clear(id_type=INTERN_PREVIEW_TYPES)
+        bpy.ops.wm.previews_clear(id_type={'SHADING'})
         bpy.ops.wm.previews_ensure()
 
     render_contexts = {}
@@ -350,7 +360,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
                 if obname not in scene.objects:
                     scene.collection.objects.link(ob)
                 ob.hide_render = False
-            scene.update()
+            bpy.context.view_layer.update()
 
             preview_render_do(render_context, 'objects', root.name, objects)
 
@@ -390,9 +400,12 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             bpy.context.window.scene = scene
 
             bpy.ops.object.collection_instance_add(collection=grp.name)
-            grp_ob = next((ob for ob in scene.objects if ob.instance_collection and ob.instance_collection.name == grp.name))
+            grp_ob = next((
+                ob for ob in scene.objects
+                if ob.instance_collection and ob.instance_collection.name == grp.name
+            ))
             grp_obname = grp_ob.name
-            scene.update()
+            bpy.context.view_layer.update()
 
             offset_matrix = Matrix.Translation(grp.instance_offset).inverted()
 
@@ -411,7 +424,7 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
             has_camera = scene.camera is not None
             bpy.context.window.scene = scene
             render_context = render_context_create('__SCENE', objects_ignored)
-            scene.update()
+            bpy.context.view_layer.update()
 
             objects = None
             if not has_camera:
@@ -439,18 +452,18 @@ def do_previews(do_objects, do_collections, do_scenes, do_data_intern):
 
 def do_clear_previews(do_objects, do_collections, do_scenes, do_data_intern):
     if do_data_intern:
-        bpy.ops.wm.previews_clear(id_type=INTERN_PREVIEW_TYPES)
+        bpy.ops.wm.previews_clear(id_type={'SHADING'})
 
     if do_objects:
-        for ob in ids_nolib(bpy.data.objects):
+        for ob in ids_nolib_with_preview(bpy.data.objects):
             ob.preview.image_size = (0, 0)
 
     if do_collections:
-        for grp in ids_nolib(bpy.data.collections):
+        for grp in ids_nolib_with_preview(bpy.data.collections):
             grp.preview.image_size = (0, 0)
 
     if do_scenes:
-        for scene in ids_nolib(bpy.data.scenes):
+        for scene in ids_nolib_with_preview(bpy.data.scenes):
             scene.preview.image_size = (0, 0)
 
     print("Saving %s..." % bpy.data.filepath)
@@ -470,7 +483,8 @@ def main():
     # Get rid of Blender args!
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 
-    parser = argparse.ArgumentParser(description="Use Blender to generate previews for currently open Blender file's items.")
+    parser = argparse.ArgumentParser(
+        description="Use Blender to generate previews for currently open Blender file's items.")
     parser.add_argument('--clear', default=False, action="store_true",
                         help="Clear previews instead of generating them.")
     parser.add_argument('--no_backups', default=False, action="store_true",
@@ -505,7 +519,7 @@ def main():
 
 
 if __name__ == "__main__":
-    print("\n\n *** Running {} *** \n".format(__file__))
-    print(" *** Blend file {} *** \n".format(bpy.data.filepath))
+    print("\n\n *** Running %s *** \n" % __file__)
+    print(" *** Blend file %s *** \n" % bpy.data.filepath)
     main()
     bpy.ops.wm.quit_blender()

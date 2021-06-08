@@ -102,7 +102,7 @@ size_t SocketType::max_size()
 
 void *SocketType::zero_default_value()
 {
-  static Transform zero_transform = {{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}};
+  static Transform zero_transform = transform_zero();
   return &zero_transform;
 }
 
@@ -135,8 +135,13 @@ bool SocketType::is_float3(Type type)
 
 /* Node Type */
 
-NodeType::NodeType(Type type_) : type(type_)
+NodeType::NodeType(Type type, const NodeType *base) : type(type), base(base)
 {
+  if (base) {
+    /* Inherit sockets. */
+    inputs = base->inputs;
+    outputs = base->outputs;
+  }
 }
 
 NodeType::~NodeType()
@@ -149,7 +154,7 @@ void NodeType::register_input(ustring name,
                               int struct_offset,
                               const void *default_value,
                               const NodeEnum *enum_values,
-                              const NodeType **node_type,
+                              const NodeType *node_type,
                               int flags,
                               int extra_flags)
 {
@@ -162,6 +167,8 @@ void NodeType::register_input(ustring name,
   socket.enum_values = enum_values;
   socket.node_type = node_type;
   socket.flags = flags | extra_flags;
+  assert(inputs.size() < std::numeric_limits<SocketModifiedFlags>::digits);
+  socket.modified_flag_bit = (1ull << inputs.size());
   inputs.push_back(socket);
 }
 
@@ -209,7 +216,7 @@ unordered_map<ustring, NodeType, ustringHash> &NodeType::types()
   return _types;
 }
 
-NodeType *NodeType::add(const char *name_, CreateFunc create_, Type type_)
+NodeType *NodeType::add(const char *name_, CreateFunc create_, Type type_, const NodeType *base_)
 {
   ustring name(name_);
 
@@ -219,7 +226,7 @@ NodeType *NodeType::add(const char *name_, CreateFunc create_, Type type_)
     return NULL;
   }
 
-  types()[name] = NodeType(type_);
+  types()[name] = NodeType(type_, base_);
 
   NodeType *type = &types()[name];
   type->name = name;

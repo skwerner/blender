@@ -17,12 +17,15 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_MOVIECLIP_H__
-#define __BKE_MOVIECLIP_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Depsgraph;
 struct ImBuf;
@@ -32,20 +35,11 @@ struct MovieClipScopes;
 struct MovieClipUser;
 struct MovieDistortion;
 
-void BKE_movieclip_free(struct MovieClip *clip);
-
-void BKE_movieclip_copy_data(struct Main *bmain,
-                             struct MovieClip *clip_dst,
-                             const struct MovieClip *clip_src,
-                             const int flag);
-struct MovieClip *BKE_movieclip_copy(struct Main *bmain, const struct MovieClip *clip);
-void BKE_movieclip_make_local(struct Main *bmain, struct MovieClip *clip, const bool lib_local);
-
 struct MovieClip *BKE_movieclip_file_add(struct Main *bmain, const char *name);
 struct MovieClip *BKE_movieclip_file_add_exists_ex(struct Main *bmain,
-                                                   const char *name,
+                                                   const char *filepath,
                                                    bool *r_exists);
-struct MovieClip *BKE_movieclip_file_add_exists(struct Main *bmain, const char *name);
+struct MovieClip *BKE_movieclip_file_add_exists(struct Main *bmain, const char *filepath);
 void BKE_movieclip_reload(struct Main *bmain, struct MovieClip *clip);
 void BKE_movieclip_clear_cache(struct MovieClip *clip);
 void BKE_movieclip_clear_proxy_cache(struct MovieClip *clip);
@@ -108,16 +102,27 @@ float BKE_movieclip_remap_clip_to_scene_frame(const struct MovieClip *clip, floa
 void BKE_movieclip_filename_for_frame(struct MovieClip *clip,
                                       struct MovieClipUser *user,
                                       char *name);
-struct ImBuf *BKE_movieclip_anim_ibuf_for_frame(struct MovieClip *clip,
-                                                struct MovieClipUser *user);
+
+/* Read image buffer from the given movie clip without acquiring the `LOCK_MOVIECLIP` lock.
+ * Used by a prefetch job which takes care of creating a local copy of the clip. */
+struct ImBuf *BKE_movieclip_anim_ibuf_for_frame_no_lock(struct MovieClip *clip,
+                                                        struct MovieClipUser *user);
 
 bool BKE_movieclip_has_cached_frame(struct MovieClip *clip, struct MovieClipUser *user);
 bool BKE_movieclip_put_frame_if_possible(struct MovieClip *clip,
                                          struct MovieClipUser *user,
                                          struct ImBuf *ibuf);
 
-/* Evaluation. */
-void BKE_movieclip_eval_update(struct Depsgraph *depsgraph, struct MovieClip *clip);
+struct GPUTexture *BKE_movieclip_get_gpu_texture(struct MovieClip *clip,
+                                                 struct MovieClipUser *cuser);
+
+void BKE_movieclip_free_gputexture(struct MovieClip *clip);
+
+/* Dependency graph evaluation. */
+
+void BKE_movieclip_eval_update(struct Depsgraph *depsgraph,
+                               struct Main *bmain,
+                               struct MovieClip *clip);
 void BKE_movieclip_eval_selection_update(struct Depsgraph *depsgraph, struct MovieClip *clip);
 
 /* caching flags */
@@ -129,4 +134,6 @@ void BKE_movieclip_eval_selection_update(struct Depsgraph *depsgraph, struct Mov
 #define MOVIECLIP_DISABLE_BLUE (1 << 2)
 #define MOVIECLIP_PREVIEW_GRAYSCALE (1 << 3)
 
+#ifdef __cplusplus
+}
 #endif

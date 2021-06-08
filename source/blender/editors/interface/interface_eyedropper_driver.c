@@ -29,11 +29,11 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_anim_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
 
-#include "BKE_context.h"
 #include "BKE_animsys.h"
+#include "BKE_context.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
@@ -48,8 +48,8 @@
 
 #include "ED_keyframing.h"
 
-#include "interface_intern.h"
 #include "interface_eyedropper_intern.h"
+#include "interface_intern.h"
 
 typedef struct DriverDropper {
   /* Destination property (i.e. where we'll add a driver) */
@@ -58,7 +58,7 @@ typedef struct DriverDropper {
   int index;
   bool is_undo;
 
-  // TODO: new target?
+  /* TODO: new target? */
 } DriverDropper;
 
 static bool driverdropper_init(bContext *C, wmOperator *op)
@@ -95,53 +95,51 @@ static void driverdropper_sample(bContext *C, wmOperator *op, const wmEvent *eve
   DriverDropper *ddr = (DriverDropper *)op->customdata;
   uiBut *but = eyedropper_get_property_button_under_mouse(C, event);
 
-  short mapping_type = RNA_enum_get(op->ptr, "mapping_type");
-  short flag = 0;
+  const short mapping_type = RNA_enum_get(op->ptr, "mapping_type");
+  const short flag = 0;
 
   /* we can only add a driver if we know what RNA property it corresponds to */
   if (but == NULL) {
     return;
   }
-  else {
-    /* Get paths for src... */
-    PointerRNA *target_ptr = &but->rnapoin;
-    PropertyRNA *target_prop = but->rnaprop;
-    int target_index = but->rnaindex;
+  /* Get paths for src... */
+  PointerRNA *target_ptr = &but->rnapoin;
+  PropertyRNA *target_prop = but->rnaprop;
+  const int target_index = but->rnaindex;
 
-    char *target_path = RNA_path_from_ID_to_property(target_ptr, target_prop);
+  char *target_path = RNA_path_from_ID_to_property(target_ptr, target_prop);
 
-    /* ... and destination */
-    char *dst_path = BKE_animdata_driver_path_hack(C, &ddr->ptr, ddr->prop, NULL);
+  /* ... and destination */
+  char *dst_path = BKE_animdata_driver_path_hack(C, &ddr->ptr, ddr->prop, NULL);
 
-    /* Now create driver(s) */
-    if (target_path && dst_path) {
-      int success = ANIM_add_driver_with_target(op->reports,
-                                                ddr->ptr.id.data,
-                                                dst_path,
-                                                ddr->index,
-                                                target_ptr->id.data,
-                                                target_path,
-                                                target_index,
-                                                flag,
-                                                DRIVER_TYPE_PYTHON,
-                                                mapping_type);
+  /* Now create driver(s) */
+  if (target_path && dst_path) {
+    int success = ANIM_add_driver_with_target(op->reports,
+                                              ddr->ptr.owner_id,
+                                              dst_path,
+                                              ddr->index,
+                                              target_ptr->owner_id,
+                                              target_path,
+                                              target_index,
+                                              flag,
+                                              DRIVER_TYPE_PYTHON,
+                                              mapping_type);
 
-      if (success) {
-        /* send updates */
-        UI_context_update_anim_flag(C);
-        DEG_relations_tag_update(CTX_data_main(C));
-        DEG_id_tag_update(ddr->ptr.id.data, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
-        WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL);  // XXX
-      }
+    if (success) {
+      /* send updates */
+      UI_context_update_anim_flag(C);
+      DEG_relations_tag_update(CTX_data_main(C));
+      DEG_id_tag_update(ddr->ptr.owner_id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
+      WM_event_add_notifier(C, NC_ANIMATION | ND_FCURVES_ORDER, NULL); /* XXX */
     }
+  }
 
-    /* cleanup */
-    if (target_path) {
-      MEM_freeN(target_path);
-    }
-    if (dst_path) {
-      MEM_freeN(dst_path);
-    }
+  /* cleanup */
+  if (target_path) {
+    MEM_freeN(target_path);
+  }
+  if (dst_path) {
+    MEM_freeN(dst_path);
   }
 }
 
@@ -180,16 +178,17 @@ static int driverdropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUS
 {
   /* init */
   if (driverdropper_init(C, op)) {
-    WM_cursor_modal_set(CTX_wm_window(C), BC_EYEDROPPER_CURSOR);
+    wmWindow *win = CTX_wm_window(C);
+    /* Workaround for de-activating the button clearing the cursor, see T76794 */
+    UI_context_active_but_clear(C, win, CTX_wm_region(C));
+    WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 /* Repeat operator */
@@ -202,19 +201,15 @@ static int driverdropper_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool driverdropper_poll(bContext *C)
 {
   if (!CTX_wm_window(C)) {
-    return 0;
+    return false;
   }
-  else {
-    return 1;
-  }
+  return true;
 }
 
 void UI_OT_eyedropper_driver(wmOperatorType *ot)

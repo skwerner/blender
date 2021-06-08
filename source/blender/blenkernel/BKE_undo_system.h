@@ -13,12 +13,18 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
-#ifndef __BKE_UNDO_SYSTEM_H__
-#define __BKE_UNDO_SYSTEM_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#include "DNA_ID.h"
+#include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Main;
 struct UndoStep;
@@ -30,9 +36,6 @@ struct Mesh;
 struct Object;
 struct Scene;
 struct Text;
-
-#include "DNA_ID.h"
-#include "DNA_listBase.h"
 
 typedef struct UndoRefID {
   struct ID *ptr;
@@ -48,6 +51,8 @@ UNDO_REF_ID_TYPE(Mesh);
 UNDO_REF_ID_TYPE(Object);
 UNDO_REF_ID_TYPE(Scene);
 UNDO_REF_ID_TYPE(Text);
+UNDO_REF_ID_TYPE(Image);
+UNDO_REF_ID_TYPE(PaintCurve);
 
 typedef struct UndoStack {
   ListBase steps;
@@ -65,6 +70,12 @@ typedef struct UndoStack {
    * That is done once end is called.
    */
   struct UndoStep *step_init;
+
+  /**
+   * Keep track of nested group begin/end calls,
+   * within which all but the last undo-step is marked for skipping.
+   */
+  int group_level;
 } UndoStack;
 
 typedef struct UndoStep {
@@ -77,10 +88,25 @@ typedef struct UndoStep {
   bool skip;
   /** Some situations require the global state to be stored, edge cases when exiting modes. */
   bool use_memfile_step;
+  /** When this is true, undo/memfile read code is allowed to re-use old data-blocks for unchanged
+   * IDs, and existing depsgraphes. This has to be forbidden in some cases (like renamed IDs). */
+  bool use_old_bmain_data;
   /** For use by undo systems that accumulate changes (text editor, painting). */
   bool is_applied;
   /* Over alloc 'type->struct_size'. */
 } UndoStep;
+
+typedef enum eUndoStepDir {
+  STEP_REDO = 1,
+  STEP_UNDO = -1,
+  STEP_INVALID = 0,
+} eUndoStepDir;
+
+typedef enum UndoPushReturn {
+  UNDO_PUSH_RET_FAILURE = 0,
+  UNDO_PUSH_RET_SUCCESS = (1 << 0),
+  UNDO_PUSH_RET_OVERRIDE_CHANGED = (1 << 1),
+} UndoPushReturn;
 
 typedef void (*UndoTypeForEachIDRefFn)(void *user_data, struct UndoRefID *id_ref);
 
@@ -92,7 +118,8 @@ typedef struct UndoType {
   /**
    * When NULL, we don't consider this undo type for context checks.
    * Operators must explicitly set the undo type and handle adding the undo step.
-   * This is needed when tools operate on data which isn't the primary mode (eg, paint-curve in sculpt mode).
+   * This is needed when tools operate on data which isn't the primary mode
+   * (eg, paint-curve in sculpt mode).
    */
   bool (*poll)(struct bContext *C);
 
@@ -100,28 +127,44 @@ typedef struct UndoType {
    * None of these callbacks manage list add/removal.
    *
    * Note that 'step_encode_init' is optional,
-   * some undo types need to perform operatons before undo push finishes.
+   * some undo types need to perform operations before undo push finishes.
    */
   void (*step_encode_init)(struct bContext *C, UndoStep *us);
 
   bool (*step_encode)(struct bContext *C, struct Main *bmain, UndoStep *us);
-  void (*step_decode)(struct bContext *C, struct Main *bmain, UndoStep *us, int dir);
+  void (*step_decode)(
+      struct bContext *C, struct Main *bmain, UndoStep *us, const eUndoStepDir dir, bool is_final);
 
   /**
    * \note When freeing all steps,
-   * free from the last since #MemFileUndoType will merge with the next undo type in the list. */
+   * free from the last since #BKE_UNDOSYS_TYPE_MEMFILE
+   * will merge with the next undo type in the list.
+   */
   void (*step_free)(UndoStep *us);
 
   void (*step_foreach_ID_ref)(UndoStep *us,
                               UndoTypeForEachIDRefFn foreach_ID_ref_fn,
                               void *user_data);
 
-  bool use_context;
+  /** Information for the generic undo system to refine handling of this specific undo type. */
+  uint flags;
 
-  int step_size;
+  /**
+   * The size of the undo struct 'inherited' from #UndoStep for that specific type. Used for
+   * generic allocation in BKE's `undo_system.c`. */
+  size_t step_size;
 } UndoType;
 
-/* expose since we need to perform operations on spesific undo types (rarely). */
+/** #UndoType.flag bitflags. */
+typedef enum UndoTypeFlags {
+  /**
+   * This undo type `encode` callback needs a valid context, it will fail otherwise.
+   * \note Callback is still supposed to properly deal with a NULL context pointer.
+   */
+  UNDOTYPE_FLAG_NEED_CONTEXT_FOR_ENCODE = 1 << 0,
+} UndoTypeFlags;
+
+/* Expose since we need to perform operations on specific undo types (rarely). */
 extern const UndoType *BKE_UNDOSYS_TYPE_IMAGE;
 extern const UndoType *BKE_UNDOSYS_TYPE_MEMFILE;
 extern const UndoType *BKE_UNDOSYS_TYPE_PAINTCURVE;
@@ -141,6 +184,11 @@ void BKE_undosys_stack_init_from_context(UndoStack *ustack, struct bContext *C);
 UndoStep *BKE_undosys_stack_active_with_type(UndoStack *ustack, const UndoType *ut);
 UndoStep *BKE_undosys_stack_init_or_active_with_type(UndoStack *ustack, const UndoType *ut);
 void BKE_undosys_stack_limit_steps_and_memory(UndoStack *ustack, int steps, size_t memory_limit);
+#define BKE_undosys_stack_limit_steps_and_memory_defaults(ustack) \
+  BKE_undosys_stack_limit_steps_and_memory(ustack, U.undosteps, (size_t)U.undomemory * 1024 * 1024)
+
+void BKE_undosys_stack_group_begin(UndoStack *ustack);
+void BKE_undosys_stack_group_end(UndoStack *ustack);
 
 /* Only some UndoType's require init. */
 UndoStep *BKE_undosys_step_push_init_with_type(UndoStack *ustack,
@@ -149,11 +197,11 @@ UndoStep *BKE_undosys_step_push_init_with_type(UndoStack *ustack,
                                                const UndoType *ut);
 UndoStep *BKE_undosys_step_push_init(UndoStack *ustack, struct bContext *C, const char *name);
 
-bool BKE_undosys_step_push_with_type(UndoStack *ustack,
-                                     struct bContext *C,
-                                     const char *name,
-                                     const UndoType *ut);
-bool BKE_undosys_step_push(UndoStack *ustack, struct bContext *C, const char *name);
+UndoPushReturn BKE_undosys_step_push_with_type(UndoStack *ustack,
+                                               struct bContext *C,
+                                               const char *name,
+                                               const UndoType *ut);
+UndoPushReturn BKE_undosys_step_push(UndoStack *ustack, struct bContext *C, const char *name);
 
 UndoStep *BKE_undosys_step_find_by_name_with_type(UndoStack *ustack,
                                                   const char *name,
@@ -161,23 +209,32 @@ UndoStep *BKE_undosys_step_find_by_name_with_type(UndoStack *ustack,
 UndoStep *BKE_undosys_step_find_by_type(UndoStack *ustack, const UndoType *ut);
 UndoStep *BKE_undosys_step_find_by_name(UndoStack *ustack, const char *name);
 
+eUndoStepDir BKE_undosys_step_calc_direction(const UndoStack *ustack,
+                                             const UndoStep *us_target,
+                                             const UndoStep *us_reference);
+
+bool BKE_undosys_step_load_data_ex(UndoStack *ustack,
+                                   struct bContext *C,
+                                   UndoStep *us_target,
+                                   UndoStep *us_reference,
+                                   const bool use_skip);
+bool BKE_undosys_step_load_data(UndoStack *ustack, struct bContext *C, UndoStep *us_target);
+void BKE_undosys_step_load_from_index(UndoStack *ustack, struct bContext *C, const int index);
+
 bool BKE_undosys_step_undo_with_data_ex(UndoStack *ustack,
                                         struct bContext *C,
                                         UndoStep *us,
                                         bool use_skip);
-bool BKE_undosys_step_undo_with_data(UndoStack *ustack, struct bContext *C, UndoStep *us);
+bool BKE_undosys_step_undo_with_data(UndoStack *ustack, struct bContext *C, UndoStep *us_target);
 bool BKE_undosys_step_undo(UndoStack *ustack, struct bContext *C);
 
 bool BKE_undosys_step_redo_with_data_ex(UndoStack *ustack,
                                         struct bContext *C,
                                         UndoStep *us,
                                         bool use_skip);
-bool BKE_undosys_step_redo_with_data(UndoStack *ustack, struct bContext *C, UndoStep *us);
+bool BKE_undosys_step_redo_with_data(UndoStack *ustack, struct bContext *C, UndoStep *us_target);
 bool BKE_undosys_step_redo(UndoStack *ustack, struct bContext *C);
 
-bool BKE_undosys_step_load_data(UndoStack *ustack, struct bContext *C, UndoStep *us);
-
-void BKE_undosys_step_undo_from_index(UndoStack *ustack, struct bContext *C, int index);
 UndoStep *BKE_undosys_step_same_type_next(UndoStep *us);
 UndoStep *BKE_undosys_step_same_type_prev(UndoStep *us);
 
@@ -187,27 +244,13 @@ void BKE_undosys_type_free_all(void);
 
 /* ID Accessor */
 #if 0 /* functionality is only used internally for now. */
-void BKE_undosys_foreach_ID_ref(UndoStack *ustack, UndoTypeForEachIDRefFn foreach_ID_ref_fn, void *user_data);
+void BKE_undosys_foreach_ID_ref(UndoStack *ustack,
+                                UndoTypeForEachIDRefFn foreach_ID_ref_fn,
+                                void *user_data);
 #endif
-
-/* Use when the undo step stores many arbitrary pointers. */
-struct UndoIDPtrMap;
-struct UndoIDPtrMap *BKE_undosys_ID_map_create(void);
-void BKE_undosys_ID_map_destroy(struct UndoIDPtrMap *map);
-void BKE_undosys_ID_map_add(struct UndoIDPtrMap *map, ID *id);
-struct ID *BKE_undosys_ID_map_lookup(const struct UndoIDPtrMap *map, const struct ID *id_src);
-
-void BKE_undosys_ID_map_add_with_prev(struct UndoIDPtrMap *map,
-                                      struct ID *id,
-                                      struct ID **id_prev);
-struct ID *BKE_undosys_ID_map_lookup_with_prev(const struct UndoIDPtrMap *map,
-                                               struct ID *id_src,
-                                               struct ID *id_prev_match[2]);
-
-void BKE_undosys_ID_map_foreach_ID_ref(struct UndoIDPtrMap *map,
-                                       UndoTypeForEachIDRefFn foreach_ID_ref_fn,
-                                       void *user_data);
 
 void BKE_undosys_print(UndoStack *ustack);
 
-#endif /* __BKE_UNDO_SYSTEM_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORRAMPNODE_H__
-#define __COM_COLORRAMPNODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ColorRampNode
@@ -28,7 +29,8 @@
 class ColorRampNode : public Node {
  public:
   ColorRampNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* COM_ColorRampNODE_H */
+}  // namespace blender::compositor

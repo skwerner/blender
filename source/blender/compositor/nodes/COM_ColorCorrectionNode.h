@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORCORRECTIONNODE_H__
-#define __COM_COLORCORRECTIONNODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ColorCorrectionNode
@@ -28,7 +29,8 @@
 class ColorCorrectionNode : public Node {
  public:
   ColorCorrectionNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

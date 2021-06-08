@@ -19,15 +19,16 @@
  * \brief Class to fill in a grid from a SceneGraph (uses only the WingedEdge structures)
  */
 
-#include "WEdge.h"
 #include "WSFillGrid.h"
+#include "WEdge.h"
 
 namespace Freestyle {
 
 void WSFillGrid::fillGrid()
 {
-  if (!_winged_edge || !_grid)
+  if (!_winged_edge || !_grid) {
     return;
+  }
 
   vector<WShape *> wshapes = _winged_edge->getWShapes();
   vector<WVertex *> fvertices;
@@ -40,8 +41,9 @@ void WSFillGrid::fillGrid()
     for (vector<WFace *>::const_iterator f = faces.begin(); f != faces.end(); ++f) {
       (*f)->RetrieveVertexList(fvertices);
 
-      for (vector<WVertex *>::const_iterator wv = fvertices.begin(); wv != fvertices.end(); ++wv)
-        vectors.push_back(Vec3r((*wv)->GetVertex()));
+      for (vector<WVertex *>::const_iterator wv = fvertices.begin(); wv != fvertices.end(); ++wv) {
+        vectors.emplace_back((*wv)->GetVertex());
+      }
 
       // occluder will be deleted by the grid
       Polygon3r *occluder = new Polygon3r(vectors, (*f)->GetNormal());

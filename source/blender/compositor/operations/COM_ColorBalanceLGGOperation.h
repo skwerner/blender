@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORBALANCELGGOPERATION_H__
-#define __COM_COLORBALANCELGGOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 /**
  * this program converts an input color to an output value.
@@ -43,19 +45,19 @@ class ColorBalanceLGGOperation : public NodeOperation {
   ColorBalanceLGGOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setGain(const float gain[3])
   {
@@ -70,4 +72,5 @@ class ColorBalanceLGGOperation : public NodeOperation {
     copy_v3_v3(this->m_gamma_inv, gamma_inv);
   }
 };
-#endif
+
+}  // namespace blender::compositor

@@ -14,13 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_WINGED_EDGE_BUILDER_H__
-#define __FREESTYLE_WINGED_EDGE_BUILDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Class to render a WingedEdge data structure from a polyhedral data structure organized in nodes
- *         of a scene graph
+ * \brief Class to render a WingedEdge data structure
+ * from a polyhedral data structure organized in nodes of a scene graph.
  */
 
 #include "WEdge.h"
@@ -48,14 +47,15 @@ class WingedEdgeBuilder : public SceneVisitor {
   virtual ~WingedEdgeBuilder()
   {
     for (vector<Matrix44r *>::iterator it = _matrices_stack.begin(); it != _matrices_stack.end();
-         ++it)
+         ++it) {
       delete *it;
+    }
     _matrices_stack.clear();
   }
 
-  VISIT_DECL(IndexedFaceSet)
-  VISIT_DECL(NodeShape)
-  VISIT_DECL(NodeTransform)
+  VISIT_DECL(IndexedFaceSet);
+  VISIT_DECL(NodeShape);
+  VISIT_DECL(NodeTransform);
 
   virtual void visitNodeTransformAfter(NodeTransform &);
 
@@ -173,5 +173,3 @@ class WingedEdgeBuilder : public SceneVisitor {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_WINGED_EDGE_BUILDER_H__

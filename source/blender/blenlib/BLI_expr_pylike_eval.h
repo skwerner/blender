@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_EXPR_PYLIKE_EVAL_H__
-#define __BLI_EXPR_PYLIKE_EVAL_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -45,6 +44,7 @@ typedef enum eExprPyLike_EvalStatus {
 void BLI_expr_pylike_free(struct ExprPyLike_Parsed *expr);
 bool BLI_expr_pylike_is_valid(struct ExprPyLike_Parsed *expr);
 bool BLI_expr_pylike_is_constant(struct ExprPyLike_Parsed *expr);
+bool BLI_expr_pylike_is_using_param(struct ExprPyLike_Parsed *expr, int index);
 ExprPyLike_Parsed *BLI_expr_pylike_parse(const char *expression,
                                          const char **param_names,
                                          int param_names_len);
@@ -56,5 +56,3 @@ eExprPyLike_EvalStatus BLI_expr_pylike_eval(struct ExprPyLike_Parsed *expr,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_EXPR_PYLIKE_EVAL_H__ */

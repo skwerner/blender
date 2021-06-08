@@ -27,6 +27,8 @@
 extern "C" {
 #endif
 
+using namespace Freestyle;
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 /*----------------------FEdgeSharp methods ----------------------------*/
@@ -36,26 +38,20 @@ PyDoc_STRVAR(FEdgeSharp_doc,
              "\n"
              "Class defining a sharp FEdge.  A Sharp FEdge corresponds to an initial\n"
              "edge of the input mesh.  It can be a silhouette, a crease or a border.\n"
-             "If it is a crease edge, then it is borded by two faces of the mesh.\n"
+             "If it is a crease edge, then it is bordered by two faces of the mesh.\n"
              "Face a lies on its right whereas Face b lies on its left.  If it is a\n"
              "border edge, then it doesn't have any face on its right, and thus Face\n"
              "a is None.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(first_vertex, second_vertex)\n"
              "\n"
-             "   Default constructor.\n"
-             "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
+             "   Builds an :class:`FEdgeSharp` using the default constructor,\n"
+             "   copy constructor, or between two :class:`SVertex` objects.\n"
              "\n"
              "   :arg brother: An FEdgeSharp object.\n"
              "   :type brother: :class:`FEdgeSharp`\n"
-             "\n"
-             ".. method:: __init__(first_vertex, second_vertex)\n"
-             "\n"
-             "   Builds an FEdgeSharp going from the first vertex to the second.\n"
-             "\n"
              "   :arg first_vertex: The first SVertex object.\n"
              "   :type first_vertex: :class:`SVertex`\n"
              "   :arg second_vertex: The second SVertex object.\n"
@@ -63,17 +59,19 @@ PyDoc_STRVAR(FEdgeSharp_doc,
 
 static int FEdgeSharp_init(BPy_FEdgeSharp *self, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist_1[] = {"brother", NULL};
-  static const char *kwlist_2[] = {"first_vertex", "second_vertex", NULL};
-  PyObject *obj1 = 0, *obj2 = 0;
+  static const char *kwlist_1[] = {"brother", nullptr};
+  static const char *kwlist_2[] = {"first_vertex", "second_vertex", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr;
 
   if (PyArg_ParseTupleAndKeywords(args, kwds, "|O!", (char **)kwlist_1, &FEdgeSharp_Type, &obj1)) {
-    if (!obj1)
+    if (!obj1) {
       self->fes = new FEdgeSharp();
-    else
+    }
+    else {
       self->fes = new FEdgeSharp(*(((BPy_FEdgeSharp *)obj1)->fes));
+    }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!",
@@ -102,8 +100,9 @@ static int FEdgeSharp_init(BPy_FEdgeSharp *self, PyObject *args, PyObject *kwds)
 
 static int FEdgeSharp_mathutils_check(BaseMathObject *bmo)
 {
-  if (!BPy_FEdgeSharp_Check(bmo->cb_user))
+  if (!BPy_FEdgeSharp_Check(bmo->cb_user)) {
     return -1;
+  }
   return 0;
 }
 
@@ -266,8 +265,9 @@ static int FEdgeSharp_material_index_right_set(BPy_FEdgeSharp *self,
                                                void *UNUSED(closure))
 {
   unsigned int i = PyLong_AsUnsignedLong(value);
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return -1;
+  }
   self->fes->setaFrsMaterialIndex(i);
   return 0;
 }
@@ -287,8 +287,9 @@ static int FEdgeSharp_material_index_left_set(BPy_FEdgeSharp *self,
                                               void *UNUSED(closure))
 {
   unsigned int i = PyLong_AsUnsignedLong(value);
-  if (PyErr_Occurred())
+  if (PyErr_Occurred()) {
     return -1;
+  }
   self->fes->setbFrsMaterialIndex(i);
   return 0;
 }
@@ -330,8 +331,9 @@ static int FEdgeSharp_face_mark_right_set(BPy_FEdgeSharp *self,
                                           PyObject *value,
                                           void *UNUSED(closure))
 {
-  if (!PyBool_Check(value))
+  if (!PyBool_Check(value)) {
     return -1;
+  }
   self->fes->setaFaceMark(bool_from_PyBool(value));
   return 0;
 }
@@ -350,96 +352,97 @@ static int FEdgeSharp_face_mark_left_set(BPy_FEdgeSharp *self,
                                          PyObject *value,
                                          void *UNUSED(closure))
 {
-  if (!PyBool_Check(value))
+  if (!PyBool_Check(value)) {
     return -1;
+  }
   self->fes->setbFaceMark(bool_from_PyBool(value));
   return 0;
 }
 
 static PyGetSetDef BPy_FEdgeSharp_getseters[] = {
-    {(char *)"normal_right",
+    {"normal_right",
      (getter)FEdgeSharp_normal_right_get,
      (setter)FEdgeSharp_normal_right_set,
-     (char *)FEdgeSharp_normal_right_doc,
-     NULL},
-    {(char *)"normal_left",
+     FEdgeSharp_normal_right_doc,
+     nullptr},
+    {"normal_left",
      (getter)FEdgeSharp_normal_left_get,
      (setter)FEdgeSharp_normal_left_set,
-     (char *)FEdgeSharp_normal_left_doc,
-     NULL},
-    {(char *)"material_index_right",
+     FEdgeSharp_normal_left_doc,
+     nullptr},
+    {"material_index_right",
      (getter)FEdgeSharp_material_index_right_get,
      (setter)FEdgeSharp_material_index_right_set,
-     (char *)FEdgeSharp_material_index_right_doc,
-     NULL},
-    {(char *)"material_index_left",
+     FEdgeSharp_material_index_right_doc,
+     nullptr},
+    {"material_index_left",
      (getter)FEdgeSharp_material_index_left_get,
      (setter)FEdgeSharp_material_index_left_set,
-     (char *)FEdgeSharp_material_index_left_doc,
-     NULL},
-    {(char *)"material_right",
+     FEdgeSharp_material_index_left_doc,
+     nullptr},
+    {"material_right",
      (getter)FEdgeSharp_material_right_get,
-     (setter)NULL,
-     (char *)FEdgeSharp_material_right_doc,
-     NULL},
-    {(char *)"material_left",
+     (setter) nullptr,
+     FEdgeSharp_material_right_doc,
+     nullptr},
+    {"material_left",
      (getter)FEdgeSharp_material_left_get,
-     (setter)NULL,
-     (char *)FEdgeSharp_material_left_doc,
-     NULL},
-    {(char *)"face_mark_right",
+     (setter) nullptr,
+     FEdgeSharp_material_left_doc,
+     nullptr},
+    {"face_mark_right",
      (getter)FEdgeSharp_face_mark_right_get,
      (setter)FEdgeSharp_face_mark_right_set,
-     (char *)FEdgeSharp_face_mark_right_doc,
-     NULL},
-    {(char *)"face_mark_left",
+     FEdgeSharp_face_mark_right_doc,
+     nullptr},
+    {"face_mark_left",
      (getter)FEdgeSharp_face_mark_left_get,
      (setter)FEdgeSharp_face_mark_left_set,
-     (char *)FEdgeSharp_face_mark_left_doc,
-     NULL},
-    {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
+     FEdgeSharp_face_mark_left_doc,
+     nullptr},
+    {nullptr, nullptr, nullptr, nullptr, nullptr} /* Sentinel */
 };
 
 /*-----------------------BPy_FEdgeSharp type definition ------------------------------*/
 
 PyTypeObject FEdgeSharp_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "FEdgeSharp", /* tp_name */
-    sizeof(BPy_FEdgeSharp),                      /* tp_basicsize */
-    0,                                           /* tp_itemsize */
-    0,                                           /* tp_dealloc */
-    0,                                           /* tp_print */
-    0,                                           /* tp_getattr */
-    0,                                           /* tp_setattr */
-    0,                                           /* tp_reserved */
-    0,                                           /* tp_repr */
-    0,                                           /* tp_as_number */
-    0,                                           /* tp_as_sequence */
-    0,                                           /* tp_as_mapping */
-    0,                                           /* tp_hash  */
-    0,                                           /* tp_call */
-    0,                                           /* tp_str */
-    0,                                           /* tp_getattro */
-    0,                                           /* tp_setattro */
-    0,                                           /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,    /* tp_flags */
-    FEdgeSharp_doc,                              /* tp_doc */
-    0,                                           /* tp_traverse */
-    0,                                           /* tp_clear */
-    0,                                           /* tp_richcompare */
-    0,                                           /* tp_weaklistoffset */
-    0,                                           /* tp_iter */
-    0,                                           /* tp_iternext */
-    0,                                           /* tp_methods */
-    0,                                           /* tp_members */
-    BPy_FEdgeSharp_getseters,                    /* tp_getset */
-    &FEdge_Type,                                 /* tp_base */
-    0,                                           /* tp_dict */
-    0,                                           /* tp_descr_get */
-    0,                                           /* tp_descr_set */
-    0,                                           /* tp_dictoffset */
-    (initproc)FEdgeSharp_init,                   /* tp_init */
-    0,                                           /* tp_alloc */
-    0,                                           /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "FEdgeSharp", /* tp_name */
+    sizeof(BPy_FEdgeSharp),                         /* tp_basicsize */
+    0,                                              /* tp_itemsize */
+    nullptr,                                        /* tp_dealloc */
+    0,                                              /* tp_vectorcall_offset */
+    nullptr,                                        /* tp_getattr */
+    nullptr,                                        /* tp_setattr */
+    nullptr,                                        /* tp_reserved */
+    nullptr,                                        /* tp_repr */
+    nullptr,                                        /* tp_as_number */
+    nullptr,                                        /* tp_as_sequence */
+    nullptr,                                        /* tp_as_mapping */
+    nullptr,                                        /* tp_hash  */
+    nullptr,                                        /* tp_call */
+    nullptr,                                        /* tp_str */
+    nullptr,                                        /* tp_getattro */
+    nullptr,                                        /* tp_setattro */
+    nullptr,                                        /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,       /* tp_flags */
+    FEdgeSharp_doc,                                 /* tp_doc */
+    nullptr,                                        /* tp_traverse */
+    nullptr,                                        /* tp_clear */
+    nullptr,                                        /* tp_richcompare */
+    0,                                              /* tp_weaklistoffset */
+    nullptr,                                        /* tp_iter */
+    nullptr,                                        /* tp_iternext */
+    nullptr,                                        /* tp_methods */
+    nullptr,                                        /* tp_members */
+    BPy_FEdgeSharp_getseters,                       /* tp_getset */
+    &FEdge_Type,                                    /* tp_base */
+    nullptr,                                        /* tp_dict */
+    nullptr,                                        /* tp_descr_get */
+    nullptr,                                        /* tp_descr_set */
+    0,                                              /* tp_dictoffset */
+    (initproc)FEdgeSharp_init,                      /* tp_init */
+    nullptr,                                        /* tp_alloc */
+    nullptr,                                        /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

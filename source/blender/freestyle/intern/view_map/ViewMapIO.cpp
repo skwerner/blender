@@ -19,7 +19,7 @@
  * \brief Functions to manage I/O for the view map
  */
 
-#include <limits.h>
+#include <climits>
 
 #include "ViewMapIO.h"
 
@@ -50,9 +50,7 @@
   } \
   (void)0
 
-namespace Freestyle {
-
-namespace ViewMapIO {
+namespace Freestyle::ViewMapIO {
 
 namespace Internal {
 
@@ -113,23 +111,27 @@ inline int load(istream &in, FrsMaterial &m)
   int i;
 
   // Diffuse
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     READ(tmp_array[i]);
+  }
   m.setDiffuse(tmp_array[0], tmp_array[1], tmp_array[2], tmp_array[3]);
 
   // Specular
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     READ(tmp_array[i]);
+  }
   m.setSpecular(tmp_array[0], tmp_array[1], tmp_array[2], tmp_array[3]);
 
   // Ambient
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     READ(tmp_array[i]);
+  }
   m.setAmbient(tmp_array[0], tmp_array[1], tmp_array[2], tmp_array[3]);
 
   // Emission
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     READ(tmp_array[i]);
+  }
   m.setEmission(tmp_array[0], tmp_array[1], tmp_array[2], tmp_array[3]);
 
   // Shininess
@@ -141,8 +143,9 @@ inline int load(istream &in, FrsMaterial &m)
 
 static int load(istream &in, ViewShape *vs)
 {
-  if (!vs || !vs->sshape())
+  if (!vs || !vs->sshape()) {
     return 1;
+  }
 
   // SShape
 
@@ -217,13 +220,14 @@ static int load(istream &in, ViewShape *vs)
 
 static int load(istream &in, FEdge *fe)
 {
-  if (!fe)
+  if (!fe) {
     return 1;
+  }
 
   bool b;
 
-  FEdgeSmooth *fesmooth = NULL;
-  FEdgeSharp *fesharp = NULL;
+  FEdgeSmooth *fesmooth = nullptr;
+  FEdgeSharp *fesharp = nullptr;
   if (fe->isSmooth()) {
     fesmooth = dynamic_cast<FEdgeSmooth *>(fe);
   }
@@ -335,8 +339,9 @@ static int load(istream &in, FEdge *fe)
 
 static int load(istream &in, SVertex *sv)
 {
-  if (!sv)
+  if (!sv) {
     return 1;
+  }
 
   // Id
   Id::id_type id1, id2;
@@ -388,8 +393,9 @@ static int load(istream &in, SVertex *sv)
 
 static int load(istream &in, ViewEdge *ve)
 {
-  if (!ve)
+  if (!ve) {
     return 1;
+  }
 
   unsigned tmp;
 
@@ -454,8 +460,9 @@ static int load(istream &in, ViewEdge *ve)
 
 static int load(istream &in, ViewVertex *vv)
 {
-  if (!vv)
+  if (!vv) {
     return 1;
+  }
 
   unsigned tmp;
   bool b;
@@ -584,20 +591,24 @@ inline int save(ostream &out, const FrsMaterial &m)
   unsigned i;
 
   // Diffuse
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     WRITE(m.diffuse()[i]);
+  }
 
   // Specular
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     WRITE(m.specular()[i]);
+  }
 
   // Ambient
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     WRITE(m.ambient()[i]);
+  }
 
   // Emission
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < 4; i++) {
     WRITE(m.emission()[i]);
+  }
 
   // Shininess
   float shininess = m.shininess();
@@ -633,8 +644,9 @@ static int save(ostream &out, ViewShape *vs)
   // -> Material
   unsigned int size = vs->sshape()->frs_materials().size();
   WRITE(size);
-  for (unsigned int i = 0; i < size; ++i)
+  for (unsigned int i = 0; i < size; ++i) {
     save(out, vs->sshape()->frs_material(i));
+  }
 
   // -> VerticesList (List)
   tmp = vs->sshape()->getVertexList().size();
@@ -801,14 +813,16 @@ static int save(ostream &out, SVertex *sv)
   WRITE_IF_NON_NULL(sv->viewvertex());
 
   // Normals (List)
-  // Note: the 'size()' method of a set doesn't seem to return the actual size of the given set, so we have to
-  // hack it...
+  // Note: the 'size()' method of a set doesn't seem to return the actual size of the given set, so
+  // we have to hack it...
   set<Vec3r>::const_iterator i;
-  for (i = sv->normals().begin(), tmp = 0; i != sv->normals().end(); i++, tmp++)
-    ;
+  for (i = sv->normals().begin(), tmp = 0; i != sv->normals().end(); i++, tmp++) {
+    /* pass */
+  }
   WRITE(tmp);
-  for (i = sv->normals().begin(); i != sv->normals().end(); i++)
+  for (i = sv->normals().begin(); i != sv->normals().end(); i++) {
     save(out, *i);
+  }
 
   // FEdges (List)
   tmp = sv->fedges().size();
@@ -952,10 +966,11 @@ static int save(ostream &out, ViewVertex *vv)
 
 int load(istream &in, ViewMap *vm, ProgressBar *pb)
 {
-  if (!vm)
+  if (!vm) {
     return 1;
+  }
 
-  //soc unused - unsigned tmp;
+  // soc unused - unsigned tmp;
   int err = 0;
   Internal::g_vm = vm;
 
@@ -981,6 +996,7 @@ int load(istream &in, ViewMap *vm, ProgressBar *pb)
   if (fe_s) {
     bool b;
     READ(b);
+    /* NOLINTNEXTLINE: bugprone-infinite-loop */
     for (READ(fe_rle1), fe_rle2 = 0; fe_rle1 <= fe_s; fe_rle2 = fe_rle1, READ(fe_rle1)) {
       if (b) {
         for (unsigned int i = fe_rle2; i < fe_rle1; i++) {
@@ -1006,6 +1022,7 @@ int load(istream &in, ViewMap *vm, ProgressBar *pb)
   if (vv_s) {
     Nature::VertexNature nature;
     READ(nature);
+    /* NOLINTNEXTLINE: bugprone-infinite-loop */
     for (READ(vv_rle1), vv_rle2 = 0; vv_rle1 <= vv_s; vv_rle2 = vv_rle1, READ(vv_rle1)) {
       if (nature & Nature::T_VERTEX) {
         for (unsigned int i = vv_rle2; i < vv_rle1; i++) {
@@ -1050,25 +1067,30 @@ int load(istream &in, ViewMap *vm, ProgressBar *pb)
   SET_PROGRESS(1);
   for (vector<ViewShape *>::const_iterator i4 = vm->ViewShapes().begin();
        i4 != vm->ViewShapes().end();
-       i4++)
+       i4++) {
     err += Internal::load(in, *i4);
+  }
   SET_PROGRESS(2);
-  for (vector<FEdge *>::const_iterator i5 = vm->FEdges().begin(); i5 != vm->FEdges().end(); i5++)
+  for (vector<FEdge *>::const_iterator i5 = vm->FEdges().begin(); i5 != vm->FEdges().end(); i5++) {
     err += Internal::load(in, *i5);
+  }
   SET_PROGRESS(3);
   for (vector<SVertex *>::const_iterator i6 = vm->SVertices().begin(); i6 != vm->SVertices().end();
-       i6++)
+       i6++) {
     err += Internal::load(in, *i6);
+  }
   SET_PROGRESS(4);
   for (vector<ViewEdge *>::const_iterator i7 = vm->ViewEdges().begin();
        i7 != vm->ViewEdges().end();
-       i7++)
+       i7++) {
     err += Internal::load(in, *i7);
+  }
   SET_PROGRESS(5);
   for (vector<ViewVertex *>::const_iterator i8 = vm->ViewVertices().begin();
        i8 != vm->ViewVertices().end();
-       i8++)
+       i8++) {
     err += Internal::load(in, *i8);
+  }
   SET_PROGRESS(6);
 
   // Read the shape id to index mapping
@@ -1086,8 +1108,9 @@ int load(istream &in, ViewMap *vm, ProgressBar *pb)
 
 int save(ostream &out, ViewMap *vm, ProgressBar *pb)
 {
-  if (!vm)
+  if (!vm) {
     return 1;
+  }
 
   int err = 0;
 
@@ -1104,14 +1127,18 @@ int save(ostream &out, ViewMap *vm, ProgressBar *pb)
     vm->ViewShapes()[i0]->userdata = POINTER_FROM_UINT(i0);
     vm->ViewShapes()[i0]->sshape()->userdata = POINTER_FROM_UINT(i0);
   }
-  for (unsigned int i1 = 0; i1 < vm->FEdges().size(); i1++)
+  for (unsigned int i1 = 0; i1 < vm->FEdges().size(); i1++) {
     vm->FEdges()[i1]->userdata = POINTER_FROM_UINT(i1);
-  for (unsigned int i2 = 0; i2 < vm->SVertices().size(); i2++)
+  }
+  for (unsigned int i2 = 0; i2 < vm->SVertices().size(); i2++) {
     vm->SVertices()[i2]->userdata = POINTER_FROM_UINT(i2);
-  for (unsigned int i3 = 0; i3 < vm->ViewEdges().size(); i3++)
+  }
+  for (unsigned int i3 = 0; i3 < vm->ViewEdges().size(); i3++) {
     vm->ViewEdges()[i3]->userdata = POINTER_FROM_UINT(i3);
-  for (unsigned int i4 = 0; i4 < vm->ViewVertices().size(); i4++)
+  }
+  for (unsigned int i4 = 0; i4 < vm->ViewVertices().size(); i4++) {
     vm->ViewVertices()[i4]->userdata = POINTER_FROM_UINT(i4);
+  }
 
   // Write the current options
   unsigned char flags = Options::getFlags();
@@ -1127,8 +1154,9 @@ int save(ostream &out, ViewMap *vm, ProgressBar *pb)
     bool b = vm->FEdges()[0]->isSmooth();
     WRITE(b);
     for (unsigned int i = 0; i < size; i++) {
-      while (i < size && (vm->FEdges()[i]->isSmooth() == b))
+      while (i < size && (vm->FEdges()[i]->isSmooth() == b)) {
         i++;
+      }
       if (i < size) {
         WRITE(i);
         b = !b;
@@ -1149,8 +1177,9 @@ int save(ostream &out, ViewMap *vm, ProgressBar *pb)
     WRITE(nature);
     nature &= ~Nature::VIEW_VERTEX;
     for (unsigned int i = 0; i < size; i++) {
-      while (i < size && (vm->ViewVertices()[i]->getNature() & nature))
+      while (i < size && (vm->ViewVertices()[i]->getNature() & nature)) {
         i++;
+      }
       if (i < size) {
         WRITE(i);
         nature = vm->ViewVertices()[i]->getNature() & ~Nature::VIEW_VERTEX;
@@ -1165,25 +1194,30 @@ int save(ostream &out, ViewMap *vm, ProgressBar *pb)
   SET_PROGRESS(1);
   for (vector<ViewShape *>::const_iterator i5 = vm->ViewShapes().begin();
        i5 != vm->ViewShapes().end();
-       i5++)
+       i5++) {
     err += Internal::save(out, *i5);
+  }
   SET_PROGRESS(2);
-  for (vector<FEdge *>::const_iterator i6 = vm->FEdges().begin(); i6 != vm->FEdges().end(); i6++)
+  for (vector<FEdge *>::const_iterator i6 = vm->FEdges().begin(); i6 != vm->FEdges().end(); i6++) {
     err += Internal::save(out, *i6);
+  }
   SET_PROGRESS(3);
   for (vector<SVertex *>::const_iterator i7 = vm->SVertices().begin(); i7 != vm->SVertices().end();
-       i7++)
+       i7++) {
     err += Internal::save(out, *i7);
+  }
   SET_PROGRESS(4);
   for (vector<ViewEdge *>::const_iterator i8 = vm->ViewEdges().begin();
        i8 != vm->ViewEdges().end();
-       i8++)
+       i8++) {
     err += Internal::save(out, *i8);
+  }
   SET_PROGRESS(5);
   for (vector<ViewVertex *>::const_iterator i9 = vm->ViewVertices().begin();
        i9 != vm->ViewVertices().end();
-       i9++)
+       i9++) {
     err += Internal::save(out, *i9);
+  }
 
   // Write the shape id to index mapping
   size = vm->shapeIdToIndexMap().size();
@@ -1203,22 +1237,26 @@ int save(ostream &out, ViewMap *vm, ProgressBar *pb)
   for (vector<ViewShape *>::const_iterator j0 = vm->ViewShapes().begin();
        j0 != vm->ViewShapes().end();
        j0++) {
-    (*j0)->userdata = NULL;
-    (*j0)->sshape()->userdata = NULL;
+    (*j0)->userdata = nullptr;
+    (*j0)->sshape()->userdata = nullptr;
   }
-  for (vector<FEdge *>::const_iterator j1 = vm->FEdges().begin(); j1 != vm->FEdges().end(); j1++)
-    (*j1)->userdata = NULL;
+  for (vector<FEdge *>::const_iterator j1 = vm->FEdges().begin(); j1 != vm->FEdges().end(); j1++) {
+    (*j1)->userdata = nullptr;
+  }
   for (vector<SVertex *>::const_iterator j2 = vm->SVertices().begin(); j2 != vm->SVertices().end();
-       j2++)
-    (*j2)->userdata = NULL;
+       j2++) {
+    (*j2)->userdata = nullptr;
+  }
   for (vector<ViewEdge *>::const_iterator j3 = vm->ViewEdges().begin();
        j3 != vm->ViewEdges().end();
-       j3++)
-    (*j3)->userdata = NULL;
+       j3++) {
+    (*j3)->userdata = nullptr;
+  }
   for (vector<ViewVertex *>::const_iterator j4 = vm->ViewVertices().begin();
        j4 != vm->ViewVertices().end();
-       j4++)
-    (*j4)->userdata = NULL;
+       j4++) {
+    (*j4)->userdata = nullptr;
+  }
   SET_PROGRESS(6);
 
   return err;
@@ -1267,6 +1305,4 @@ string getModelsPath()
 
 }  // namespace Options
 
-}  // End of namespace ViewMapIO
-
-} /* namespace Freestyle */
+}  // namespace Freestyle::ViewMapIO

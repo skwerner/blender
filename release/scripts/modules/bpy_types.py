@@ -19,16 +19,12 @@
 # <pep8-80 compliant>
 
 from _bpy import types as bpy_types
-import _bpy
 
 StructRNA = bpy_types.bpy_struct
 StructMetaPropGroup = bpy_types.bpy_struct_meta_idprop
 # StructRNA = bpy_types.Struct
 
-bpy_types.BlendDataLibraries.load = _bpy._library_load
-bpy_types.BlendDataLibraries.write = _bpy._library_write
-bpy_types.BlendData.user_map = _bpy._rna_id_collection_user_map
-bpy_types.BlendData.batch_remove = _bpy._rna_id_collection_batch_remove
+# Note that methods extended in C are defined in: 'bpy_rna_types_capi.c'
 
 
 class Context(StructRNA):
@@ -60,12 +56,14 @@ class Library(bpy_types.ID):
 
         # See: readblenentry.c, IDTYPE_FLAGS_ISLINKABLE,
         # we could make this an attribute in rna.
-        attr_links = ("actions", "armatures", "brushes", "cameras",
-                      "curves", "grease_pencil", "collections", "images",
-                      "lights", "lattices", "materials", "metaballs",
-                      "meshes", "node_groups", "objects", "scenes",
-                      "sounds", "speakers", "textures", "texts",
-                      "fonts", "worlds")
+        attr_links = (
+            "actions", "armatures", "brushes", "cameras",
+            "curves", "grease_pencils", "collections", "images",
+            "lights", "lattices", "materials", "metaballs",
+            "meshes", "node_groups", "objects", "scenes",
+            "sounds", "speakers", "textures", "texts",
+            "fonts", "worlds",
+        )
 
         return tuple(id_block
                      for attr in attr_links
@@ -90,11 +88,13 @@ class Texture(bpy_types.ID):
     def users_object_modifier(self):
         """Object modifiers that use this texture"""
         import bpy
-        return tuple(obj for obj in bpy.data.objects if
-                     self in [mod.texture
-                              for mod in obj.modifiers
-                              if mod.type == 'DISPLACE']
-                     )
+        return tuple(
+            obj for obj in bpy.data.objects if
+            self in [
+                mod.texture
+                for mod in obj.modifiers
+                if mod.type == 'DISPLACE']
+        )
 
 
 class Collection(bpy_types.ID):
@@ -113,23 +113,35 @@ class Object(bpy_types.ID):
 
     @property
     def children(self):
-        """All the children of this object. Warning: takes O(len(bpy.data.objects)) time."""
+        """All the children of this object.
+
+        .. note:: Takes ``O(len(bpy.data.objects))`` time."""
         import bpy
         return tuple(child for child in bpy.data.objects
                      if child.parent == self)
 
     @property
     def users_collection(self):
-        """The collections this object is in. Warning: takes O(len(bpy.data.collections) + len(bpy.data.scenes)) time."""
+        """
+        The collections this object is in.
+
+        .. note:: Takes ``O(len(bpy.data.collections) + len(bpy.data.scenes))`` time."""
         import bpy
-        return tuple(collection for collection in bpy.data.collections
-                     if self in collection.objects[:]) + \
-               tuple(scene.collection for scene in bpy.data.scenes
-                     if self in scene.collection.objects[:])
+        return (
+            tuple(
+                collection for collection in bpy.data.collections
+                if self in collection.objects[:]
+            ) + tuple(
+                scene.collection for scene in bpy.data.scenes
+                if self in scene.collection.objects[:]
+            )
+        )
 
     @property
     def users_scene(self):
-        """The scenes this object is in. Warning: takes O(len(bpy.data.scenes) * len(bpy.data.objects)) time."""
+        """The scenes this object is in.
+
+        .. note:: Takes ``O(len(bpy.data.scenes) * len(bpy.data.objects))`` time."""
         import bpy
         return tuple(scene for scene in bpy.data.scenes
                      if self in scene.objects[:])
@@ -151,10 +163,12 @@ class WindowManager(bpy_types.ID):
             self, draw_func, *,
             ui_units_x=0,
             keymap=None,
+            from_active_button=False,
     ):
         import bpy
         popup = self.popover_begin__internal(
             ui_units_x=ui_units_x,
+            from_active_button=from_active_button,
         )
 
         try:
@@ -171,6 +185,27 @@ class WindowManager(bpy_types.ID):
                 draw_func(pie, bpy.context)
             finally:
                 self.piemenu_end__internal(pie)
+
+
+class WorkSpace(bpy_types.ID):
+    __slots__ = ()
+
+    def status_text_set(self, text):
+        """
+        Set the status text or None to clear,
+        When text is a function, this will be called with the (header, context) arguments.
+        """
+        from bl_ui.space_statusbar import STATUSBAR_HT_header
+        draw_fn = getattr(STATUSBAR_HT_header, "_draw_orig", None)
+        if draw_fn is None:
+            draw_fn = STATUSBAR_HT_header._draw_orig = STATUSBAR_HT_header.draw
+
+        if not (text is None or isinstance(text, str)):
+            draw_fn = text
+            text = None
+
+        self.status_text_set_internal(text)
+        STATUSBAR_HT_header.draw = draw_fn
 
 
 class _GenericBone:
@@ -250,18 +285,6 @@ class _GenericBone:
         return (self.head + self.tail) * 0.5
 
     @property
-    def length(self):
-        """
-        The distance from head to tail,
-        when set the head is moved to fit the length.
-        """
-        return self.vector.length
-
-    @length.setter
-    def length(self, value):
-        self.tail = self.head + ((self.tail - self.head).normalized() * value)
-
-    @property
     def vector(self):
         """
         The direction this bone is pointing.
@@ -271,12 +294,16 @@ class _GenericBone:
 
     @property
     def children(self):
-        """A list of all the bones children. Warning: takes O(len(bones)) time."""
+        """A list of all the bones children.
+
+        .. note:: Takes ``O(len(bones))`` time."""
         return [child for child in self._other_bones if child.parent == self]
 
     @property
     def children_recursive(self):
-        """A list of all children from this bone. Warning: takes O(len(bones)**2) time."""
+        """A list of all children from this bone.
+
+        .. note:: Takes ``O(len(bones)**2)`` time."""
         bones_children = []
         for bone in self._other_bones:
             index = bone.parent_index(self)
@@ -293,7 +320,9 @@ class _GenericBone:
         Returns a chain of children with the same base name as this bone.
         Only direct chains are supported, forks caused by multiple children
         with matching base names will terminate the function
-        and not be returned. Warning: takes O(len(bones)**2) time.
+        and not be returned.
+
+        .. note:: Takes ``O(len(bones)**2)`` time.
         """
         basename = self.basename
         chain = []
@@ -323,16 +352,15 @@ class _GenericBone:
     @property
     def _other_bones(self):
         id_data = self.id_data
-        id_data_type = type(id_data)
 
-        if id_data_type == bpy_types.Object:
-            bones = id_data.pose.bones
-        elif id_data_type == bpy_types.Armature:
-            bones = id_data.edit_bones
-            if not bones:  # not in edit mode
-                bones = id_data.bones
-
-        return bones
+        # `id_data` is an 'Object' for `PosePone`, otherwise it's an `Armature`.
+        if isinstance(self, PoseBone):
+            return id_data.pose.bones
+        if isinstance(self, EditBone):
+            return id_data.edit_bones
+        if isinstance(self, Bone):
+            return id_data.bones
+        raise RuntimeError("Invalid type %r" % self)
 
 
 class PoseBone(StructRNA, _GenericBone, metaclass=StructMetaPropGroup):
@@ -419,6 +447,8 @@ class Mesh(bpy_types.ID):
            int pairs, each pair contains two indices to the
            *vertices* argument. eg: [(1, 2), ...]
 
+           When an empty iterable is passed in, the edges are inferred from the polygons.
+
         :type edges: iterable object
         :arg faces:
 
@@ -454,11 +484,15 @@ class Mesh(bpy_types.ID):
         self.polygons.foreach_set("loop_start", loop_starts)
         self.polygons.foreach_set("vertices", vertex_indices)
 
-        # if no edges - calculate them
-        if faces and (not edges):
-            self.update(calc_edges=True)
-        elif edges:
-            self.update(calc_edges_loose=True)
+        if edges or faces:
+            self.update(
+                # Needed to either:
+                # - Calculate edges that don't exist for polygons.
+                # - Assign edges to polygon loops.
+                calc_edges=bool(faces),
+                # Flag loose edges.
+                calc_edges_loose=bool(edges),
+            )
 
     @property
     def edge_keys(self):
@@ -481,18 +515,20 @@ class MeshLoopTriangle(StructRNA):
         """The midpoint of the face."""
         face_verts = self.vertices[:]
         mesh_verts = self.id_data.vertices
-        return (mesh_verts[face_verts[0]].co +
-                mesh_verts[face_verts[1]].co +
-                mesh_verts[face_verts[2]].co
-                ) / 3.0
+        return (
+            mesh_verts[face_verts[0]].co +
+            mesh_verts[face_verts[1]].co +
+            mesh_verts[face_verts[2]].co
+        ) / 3.0
 
     @property
     def edge_keys(self):
         verts = self.vertices[:]
-        return (ord_ind(verts[0], verts[1]),
-                ord_ind(verts[1], verts[2]),
-                ord_ind(verts[2], verts[0]),
-                )
+        return (
+            ord_ind(verts[0], verts[1]),
+            ord_ind(verts[1], verts[2]),
+            ord_ind(verts[2], verts[0]),
+        )
 
 
 class MeshPolygon(StructRNA):
@@ -522,6 +558,23 @@ class Text(bpy_types.ID):
         """Replace text with this string."""
         self.clear()
         self.write(string)
+
+    def as_module(self):
+        import bpy
+        from os.path import splitext, join
+        from types import ModuleType
+        name = self.name
+        mod = ModuleType(splitext(name)[0])
+        # This is a fake file-path, set this since some scripts check `__file__`,
+        # error messages may include this as well.
+        # NOTE: the file path may be a blank string if the file hasn't been saved.
+        mod.__dict__.update({
+            "__file__": join(bpy.data.filepath, name),
+        })
+        # TODO: We could use Text.compiled (C struct member)
+        # if this is called often it will be much faster.
+        exec(self.as_string(), mod.__dict__)
+        return mod
 
 
 class Sound(bpy_types.ID):
@@ -602,16 +655,24 @@ class Gizmo(StructRNA):
 
         if select_id is not None:
             gpu.select.load_id(select_id)
+            use_blend = False
         else:
             if self.is_highlight:
                 color = (*self.color_highlight, self.alpha_highlight)
             else:
                 color = (*self.color, self.alpha)
             shader.uniform_float("color", color)
+            use_blend = color[3] < 1.0
+
+        if use_blend:
+            gpu.state.blend_set('ALPHA')
 
         with gpu.matrix.push_pop():
             gpu.matrix.multiply_matrix(matrix)
             batch.draw()
+
+        if use_blend:
+            gpu.state.blend_set('NONE')
 
     @staticmethod
     def new_custom_shape(type, verts):
@@ -644,6 +705,12 @@ class Gizmo(StructRNA):
         shader = gpu.shader.from_builtin('3D_UNIFORM_COLOR' if dims == 3 else '2D_UNIFORM_COLOR')
         batch.program_set(shader)
         return (batch, shader)
+
+
+# Dummy class to keep the reference in `bpy_types_dict` and avoid
+# erros like: "TypeError: expected GizmoGroup subclass of class ..."
+class GizmoGroup(StructRNA):
+    __slots__ = ()
 
 
 # Only defined so operators members can be used by accessing self.order
@@ -730,7 +797,10 @@ class _GenericUI:
                 for func in draw_ls._draw_funcs:
 
                     # Begin 'owner_id' filter.
-                    if owner_names is not None:
+                    # Exclude Import/Export menus from this filtering (io addons should always show there)
+                    if not getattr(self, "bl_owner_use_filter", True):
+                        pass
+                    elif owner_names is not None:
                         owner_id = getattr(func, "_owner", None)
                         if owner_id is not None:
                             if func._owner not in owner_names:
@@ -835,6 +905,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         layout = self.layout
 
         import os
+        import re
         import bpy.utils
 
         layout = self.layout
@@ -845,17 +916,21 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         # collect paths
         files = []
         for directory in searchpaths:
-            files.extend(
-                [(f, os.path.join(directory, f))
-                 for f in os.listdir(directory)
-                 if (not f.startswith("."))
-                 if ((filter_ext is None) or
-                     (filter_ext(os.path.splitext(f)[1])))
-                 if ((filter_path is None) or
-                     (filter_path(f)))
-                 ])
+            files.extend([
+                (f, os.path.join(directory, f))
+                for f in os.listdir(directory)
+                if (not f.startswith("."))
+                if ((filter_ext is None) or
+                    (filter_ext(os.path.splitext(f)[1])))
+                if ((filter_path is None) or
+                    (filter_path(f)))
+            ])
 
-        files.sort()
+        # Perform a "natural sort", so 20 comes after 3 (for example).
+        files.sort(
+            key=lambda file_path:
+            tuple(int(t) if t.isdigit() else t for t in re.split(r"(\d+)", file_path[0].lower())),
+        )
 
         col = layout.column(align=True)
 
@@ -896,7 +971,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
             props = row.operator(add_operator, text="", icon='ADD')
             props.name = wm.preset_name
 
-    def draw_preset(self, context):
+    def draw_preset(self, _context):
         """
         Define these on the subclass:
         - preset_operator (string)
@@ -911,11 +986,14 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         ext_valid = getattr(self, "preset_extensions", {".py", ".xml"})
         props_default = getattr(self, "preset_operator_defaults", None)
         add_operator = getattr(self, "preset_add_operator", None)
-        self.path_menu(bpy.utils.preset_paths(self.preset_subdir),
-                       self.preset_operator,
-                       props_default=props_default,
-                       filter_ext=lambda ext: ext.lower() in ext_valid,
-                       add_operator=add_operator)
+        self.path_menu(
+            bpy.utils.preset_paths(self.preset_subdir),
+            self.preset_operator,
+            props_default=props_default,
+            filter_ext=lambda ext: ext.lower() in ext_valid,
+            add_operator=add_operator,
+            display_name=lambda name: bpy.path.display_name(name, title_case=False)
+        )
 
     @classmethod
     def draw_collapsible(cls, context, layout):
@@ -936,7 +1014,7 @@ class Node(StructRNA, metaclass=RNAMetaPropGroup):
     __slots__ = ()
 
     @classmethod
-    def poll(cls, ntree):
+    def poll(cls, _ntree):
         return True
 
 
@@ -949,10 +1027,14 @@ class NodeSocket(StructRNA, metaclass=RNAMetaPropGroup):
 
     @property
     def links(self):
-        """List of node links from or to this socket. Warning: takes O(len(nodetree.links)) time."""
-        return tuple(link for link in self.id_data.links
-                     if (link.from_socket == self or
-                         link.to_socket == self))
+        """
+        List of node links from or to this socket.
+
+        .. note:: Takes ``O(len(nodetree.links))`` time."""
+        return tuple(
+            link for link in self.id_data.links
+            if (link.from_socket == self or
+                link.to_socket == self))
 
 
 class NodeSocketInterface(StructRNA, metaclass=RNAMetaPropGroup):

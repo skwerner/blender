@@ -14,16 +14,17 @@
  * limitations under the License.
  */
 
-#include "render/mesh.h"
 #include "render/attribute.h"
 #include "render/camera.h"
+#include "render/mesh.h"
 
-#include "subd/subd_split.h"
 #include "subd/subd_patch.h"
 #include "subd/subd_patch_table.h"
+#include "subd/subd_split.h"
 
-#include "util/util_foreach.h"
 #include "util/util_algorithm.h"
+#include "util/util_foreach.h"
+#include "util/util_hash.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -31,10 +32,10 @@ CCL_NAMESPACE_BEGIN
 
 CCL_NAMESPACE_END
 
-#  include <opensubdiv/far/topologyRefinerFactory.h>
-#  include <opensubdiv/far/primvarRefiner.h>
-#  include <opensubdiv/far/patchTableFactory.h>
 #  include <opensubdiv/far/patchMap.h>
+#  include <opensubdiv/far/patchTableFactory.h>
+#  include <opensubdiv/far/primvarRefiner.h>
+#  include <opensubdiv/far/topologyRefinerFactory.h>
 
 /* specializations of TopologyRefinerFactory for ccl::Mesh */
 
@@ -45,13 +46,11 @@ template<>
 bool TopologyRefinerFactory<ccl::Mesh>::resizeComponentTopology(TopologyRefiner &refiner,
                                                                 ccl::Mesh const &mesh)
 {
-  setNumBaseVertices(refiner, mesh.verts.size());
-  setNumBaseFaces(refiner, mesh.subd_faces.size());
+  setNumBaseVertices(refiner, mesh.get_verts().size());
+  setNumBaseFaces(refiner, mesh.get_num_subd_faces());
 
-  const ccl::Mesh::SubdFace *face = mesh.subd_faces.data();
-
-  for (int i = 0; i < mesh.subd_faces.size(); i++, face++) {
-    setNumBaseFaceVertices(refiner, i, face->num_corners);
+  for (int i = 0; i < mesh.get_num_subd_faces(); i++) {
+    setNumBaseFaceVertices(refiner, i, mesh.get_subd_num_corners()[i]);
   }
 
   return true;
@@ -61,14 +60,17 @@ template<>
 bool TopologyRefinerFactory<ccl::Mesh>::assignComponentTopology(TopologyRefiner &refiner,
                                                                 ccl::Mesh const &mesh)
 {
-  const ccl::Mesh::SubdFace *face = mesh.subd_faces.data();
+  const ccl::array<int> &subd_face_corners = mesh.get_subd_face_corners();
+  const ccl::array<int> &subd_start_corner = mesh.get_subd_start_corner();
+  const ccl::array<int> &subd_num_corners = mesh.get_subd_num_corners();
 
-  for (int i = 0; i < mesh.subd_faces.size(); i++, face++) {
+  for (int i = 0; i < mesh.get_num_subd_faces(); i++) {
     IndexArray face_verts = getBaseFaceVertices(refiner, i);
 
-    int *corner = &mesh.subd_face_corners[face->start_corner];
+    int start_corner = subd_start_corner[i];
+    int *corner = &subd_face_corners[start_corner];
 
-    for (int j = 0; j < face->num_corners; j++, corner++) {
+    for (int j = 0; j < subd_num_corners[i]; j++, corner++) {
       face_verts[j] = *corner;
     }
   }
@@ -80,17 +82,18 @@ template<>
 bool TopologyRefinerFactory<ccl::Mesh>::assignComponentTags(TopologyRefiner &refiner,
                                                             ccl::Mesh const &mesh)
 {
-  const ccl::Mesh::SubdEdgeCrease *crease = mesh.subd_creases.data();
+  size_t num_creases = mesh.get_subd_creases_weight().size();
 
-  for (int i = 0; i < mesh.subd_creases.size(); i++, crease++) {
-    Index edge = findBaseEdge(refiner, crease->v[0], crease->v[1]);
+  for (int i = 0; i < num_creases; i++) {
+    ccl::Mesh::SubdEdgeCrease crease = mesh.get_subd_crease(i);
+    Index edge = findBaseEdge(refiner, crease.v[0], crease.v[1]);
 
     if (edge != INDEX_INVALID) {
-      setBaseEdgeSharpness(refiner, edge, crease->crease * 10.0f);
+      setBaseEdgeSharpness(refiner, edge, crease.crease * 10.0f);
     }
   }
 
-  for (int i = 0; i < mesh.verts.size(); i++) {
+  for (int i = 0; i < mesh.get_verts().size(); i++) {
     ConstIndexArray vert_edges = getBaseVertexEdges(refiner, i);
 
     if (vert_edges.size() == 2) {
@@ -202,8 +205,8 @@ class OsdData {
     int num_local_points = patch_table->GetNumLocalPoints();
 
     verts.resize(num_refiner_verts + num_local_points);
-    for (int i = 0; i < mesh->verts.size(); i++) {
-      verts[i].value = mesh->verts[i];
+    for (int i = 0; i < mesh->get_verts().size(); i++) {
+      verts[i].value = mesh->get_verts()[i];
     }
 
     OsdValue<float3> *src = verts.data();
@@ -277,16 +280,17 @@ class OsdData {
   {
     /* loop over all edges to find longest in screen space */
     const Far::TopologyLevel &level = refiner->GetLevel(0);
-    Transform objecttoworld = mesh->subd_params->objecttoworld;
-    Camera *cam = mesh->subd_params->camera;
+    const SubdParams *subd_params = mesh->get_subd_params();
+    Transform objecttoworld = subd_params->objecttoworld;
+    Camera *cam = subd_params->camera;
 
     float longest_edge = 0.0f;
 
     for (size_t i = 0; i < level.GetNumEdges(); i++) {
       Far::ConstIndexArray verts = level.GetEdgeVertices(i);
 
-      float3 a = mesh->verts[verts[0]];
-      float3 b = mesh->verts[verts[1]];
+      float3 a = mesh->get_verts()[verts[0]];
+      float3 b = mesh->get_verts()[verts[1]];
 
       float edge_len;
 
@@ -304,7 +308,7 @@ class OsdData {
     }
 
     /* calculate isolation level */
-    int isolation = (int)(log2f(max(longest_edge / mesh->subd_params->dicing_rate, 1.0f)) + 1.0f);
+    int isolation = (int)(log2f(max(longest_edge / subd_params->dicing_rate, 1.0f)) + 1.0f);
 
     return min(isolation, 10);
   }
@@ -318,6 +322,9 @@ class OsdData {
 struct OsdPatch : Patch {
   OsdData *osd_data;
 
+  OsdPatch()
+  {
+  }
   OsdPatch(OsdData *data) : osd_data(data)
   {
   }
@@ -334,9 +341,9 @@ struct OsdPatch : Patch {
 
     float3 du, dv;
     if (P)
-      *P = make_float3(0.0f, 0.0f, 0.0f);
-    du = make_float3(0.0f, 0.0f, 0.0f);
-    dv = make_float3(0.0f, 0.0f, 0.0f);
+      *P = zero_float3();
+    du = zero_float3();
+    dv = zero_float3();
 
     for (int i = 0; i < cv.size(); i++) {
       float3 p = osd_data->verts[cv[i]].value;
@@ -358,23 +365,22 @@ struct OsdPatch : Patch {
       *N = (t != 0.0f) ? *N / t : make_float3(0.0f, 0.0f, 1.0f);
     }
   }
-
-  BoundBox bound()
-  {
-    return BoundBox::empty;
-  }
 };
 
 #endif
 
 void Mesh::tessellate(DiagSplit *split)
 {
+  /* reset the number of subdivision vertices, in case the Mesh was not cleared
+   * between calls or data updates */
+  num_subd_verts = 0;
+
 #ifdef WITH_OPENSUBDIV
   OsdData osd_data;
   bool need_packed_patch_table = false;
 
   if (subdivision_type == SUBDIVISION_CATMULL_CLARK) {
-    if (subd_faces.size()) {
+    if (get_num_subd_faces()) {
       osd_data.build_from_mesh(this);
     }
   }
@@ -392,34 +398,67 @@ void Mesh::tessellate(DiagSplit *split)
     }
   }
 
-  int num_faces = subd_faces.size();
+  int num_faces = get_num_subd_faces();
 
   Attribute *attr_vN = subd_attributes.find(ATTR_STD_VERTEX_NORMAL);
-  float3 *vN = attr_vN->data_float3();
+  float3 *vN = (attr_vN) ? attr_vN->data_float3() : NULL;
 
+  /* count patches */
+  int num_patches = 0;
   for (int f = 0; f < num_faces; f++) {
-    SubdFace &face = subd_faces[f];
+    SubdFace face = get_subd_face(f);
 
     if (face.is_quad()) {
-      /* quad */
-      QuadDice::SubPatch subpatch;
+      num_patches++;
+    }
+    else {
+      num_patches += face.num_corners;
+    }
+  }
 
-      LinearQuadPatch quad_patch;
+  /* build patches from faces */
 #ifdef WITH_OPENSUBDIV
-      OsdPatch osd_patch(&osd_data);
+  if (subdivision_type == SUBDIVISION_CATMULL_CLARK) {
+    vector<OsdPatch> osd_patches(num_patches, &osd_data);
+    OsdPatch *patch = osd_patches.data();
 
-      if (subdivision_type == SUBDIVISION_CATMULL_CLARK) {
-        osd_patch.patch_index = face.ptex_offset;
+    for (int f = 0; f < num_faces; f++) {
+      SubdFace face = get_subd_face(f);
 
-        subpatch.patch = &osd_patch;
+      if (face.is_quad()) {
+        patch->patch_index = face.ptex_offset;
+        patch->from_ngon = false;
+        patch->shader = face.shader;
+        patch++;
       }
-      else
-#endif
-      {
-        float3 *hull = quad_patch.hull;
-        float3 *normals = quad_patch.normals;
+      else {
+        for (int corner = 0; corner < face.num_corners; corner++) {
+          patch->patch_index = face.ptex_offset + corner;
+          patch->from_ngon = true;
+          patch->shader = face.shader;
+          patch++;
+        }
+      }
+    }
 
-        quad_patch.patch_index = face.ptex_offset;
+    /* split patches */
+    split->split_patches(osd_patches.data(), sizeof(OsdPatch));
+  }
+  else
+#endif
+  {
+    vector<LinearQuadPatch> linear_patches(num_patches);
+    LinearQuadPatch *patch = linear_patches.data();
+
+    for (int f = 0; f < num_faces; f++) {
+      SubdFace face = get_subd_face(f);
+
+      if (face.is_quad()) {
+        float3 *hull = patch->hull;
+        float3 *normals = patch->normals;
+
+        patch->patch_index = face.ptex_offset;
+        patch->from_ngon = false;
 
         for (int i = 0; i < 4; i++) {
           hull[i] = verts[subd_face_corners[face.start_corner + i]];
@@ -440,57 +479,13 @@ void Mesh::tessellate(DiagSplit *split)
         swap(hull[2], hull[3]);
         swap(normals[2], normals[3]);
 
-        subpatch.patch = &quad_patch;
+        patch->shader = face.shader;
+        patch++;
       }
-
-      subpatch.patch->shader = face.shader;
-
-      /* Quad faces need to be split at least once to line up with split ngons, we do this
-       * here in this manner because if we do it later edge factors may end up slightly off.
-       */
-      subpatch.P00 = make_float2(0.0f, 0.0f);
-      subpatch.P10 = make_float2(0.5f, 0.0f);
-      subpatch.P01 = make_float2(0.0f, 0.5f);
-      subpatch.P11 = make_float2(0.5f, 0.5f);
-      split->split_quad(subpatch.patch, &subpatch);
-
-      subpatch.P00 = make_float2(0.5f, 0.0f);
-      subpatch.P10 = make_float2(1.0f, 0.0f);
-      subpatch.P01 = make_float2(0.5f, 0.5f);
-      subpatch.P11 = make_float2(1.0f, 0.5f);
-      split->split_quad(subpatch.patch, &subpatch);
-
-      subpatch.P00 = make_float2(0.0f, 0.5f);
-      subpatch.P10 = make_float2(0.5f, 0.5f);
-      subpatch.P01 = make_float2(0.0f, 1.0f);
-      subpatch.P11 = make_float2(0.5f, 1.0f);
-      split->split_quad(subpatch.patch, &subpatch);
-
-      subpatch.P00 = make_float2(0.5f, 0.5f);
-      subpatch.P10 = make_float2(1.0f, 0.5f);
-      subpatch.P01 = make_float2(0.5f, 1.0f);
-      subpatch.P11 = make_float2(1.0f, 1.0f);
-      split->split_quad(subpatch.patch, &subpatch);
-    }
-    else {
-      /* ngon */
-#ifdef WITH_OPENSUBDIV
-      if (subdivision_type == SUBDIVISION_CATMULL_CLARK) {
-        OsdPatch patch(&osd_data);
-
-        patch.shader = face.shader;
-
-        for (int corner = 0; corner < face.num_corners; corner++) {
-          patch.patch_index = face.ptex_offset + corner;
-
-          split->split_quad(&patch);
-        }
-      }
-      else
-#endif
-      {
-        float3 center_vert = make_float3(0.0f, 0.0f, 0.0f);
-        float3 center_normal = make_float3(0.0f, 0.0f, 0.0f);
+      else {
+        /* ngon */
+        float3 center_vert = zero_float3();
+        float3 center_normal = zero_float3();
 
         float inv_num_corners = 1.0f / float(face.num_corners);
         for (int corner = 0; corner < face.num_corners; corner++) {
@@ -499,13 +494,13 @@ void Mesh::tessellate(DiagSplit *split)
         }
 
         for (int corner = 0; corner < face.num_corners; corner++) {
-          LinearQuadPatch patch;
-          float3 *hull = patch.hull;
-          float3 *normals = patch.normals;
+          float3 *hull = patch->hull;
+          float3 *normals = patch->normals;
 
-          patch.patch_index = face.ptex_offset + corner;
+          patch->patch_index = face.ptex_offset + corner;
+          patch->from_ngon = true;
 
-          patch.shader = face.shader;
+          patch->shader = face.shader;
 
           hull[0] =
               verts[subd_face_corners[face.start_corner + mod(corner + 0, face.num_corners)]];
@@ -537,10 +532,13 @@ void Mesh::tessellate(DiagSplit *split)
             }
           }
 
-          split->split_quad(&patch);
+          patch++;
         }
       }
     }
+
+    /* split patches */
+    split->split_patches(linear_patches.data(), sizeof(LinearQuadPatch));
   }
 
   /* interpolate center points for attributes */
@@ -551,7 +549,7 @@ void Mesh::tessellate(DiagSplit *split)
         /* keep subdivision for corner attributes disabled for now */
         attr.flags &= ~ATTR_SUBDIVIDED;
       }
-      else if (subd_faces.size()) {
+      else if (get_num_subd_faces()) {
         osd_data.subdivide_attribute(attr);
 
         need_packed_patch_table = true;
@@ -567,7 +565,7 @@ void Mesh::tessellate(DiagSplit *split)
     switch (attr.element) {
       case ATTR_ELEMENT_VERTEX: {
         for (int f = 0; f < num_faces; f++) {
-          SubdFace &face = subd_faces[f];
+          SubdFace face = get_subd_face(f);
 
           if (!face.is_quad()) {
             char *center = data + (verts.size() - num_subd_verts + ngons) * stride;
@@ -590,7 +588,7 @@ void Mesh::tessellate(DiagSplit *split)
       } break;
       case ATTR_ELEMENT_CORNER: {
         for (int f = 0; f < num_faces; f++) {
-          SubdFace &face = subd_faces[f];
+          SubdFace face = get_subd_face(f);
 
           if (!face.is_quad()) {
             char *center = data + (subd_face_corners.size() + ngons) * stride;
@@ -609,13 +607,13 @@ void Mesh::tessellate(DiagSplit *split)
       } break;
       case ATTR_ELEMENT_CORNER_BYTE: {
         for (int f = 0; f < num_faces; f++) {
-          SubdFace &face = subd_faces[f];
+          SubdFace face = get_subd_face(f);
 
           if (!face.is_quad()) {
             uchar *center = (uchar *)data + (subd_face_corners.size() + ngons) * stride;
 
             float inv_num_corners = 1.0f / float(face.num_corners);
-            float4 val = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+            float4 val = zero_float4();
 
             for (int corner = 0; corner < face.num_corners; corner++) {
               for (int i = 0; i < 4; i++) {

@@ -14,20 +14,19 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_OPERATOR_API_H__
-#define __BMESH_OPERATOR_API_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  */
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include "BLI_ghash.h"
 
 #include <stdarg.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * operators represent logical, executable mesh modules.  all topological
@@ -100,7 +99,7 @@ BLI_INLINE BMFlagLayer *BMO_elem_flag_from_header(BMHeader *ele_head)
   _bmo_elem_flag_toggle( \
       bm, (BM_CHECK_TYPE_ELEM_NONCONST(ele), BMO_elem_flag_from_header(&(ele)->head)), oflag)
 
-/* take care not to instansiate args multiple times */
+/* take care not to instantiate args multiple times */
 #ifdef __GNUC___
 #  define _BMO_CAST_V_CONST(e) \
     ({ \
@@ -203,7 +202,7 @@ typedef enum eBMOpSlotType {
 
   /* normally store pointers to object, scene,
    * _never_ store arrays corresponding to mesh elements with this */
-  BMO_OP_SLOT_PTR = 4, /* requres subtype BMO_OP_SLOT_SUBTYPE_PTR_xxx */
+  BMO_OP_SLOT_PTR = 4, /* requires subtype BMO_OP_SLOT_SUBTYPE_PTR_xxx */
   BMO_OP_SLOT_MAT = 5,
   BMO_OP_SLOT_VEC = 8,
 
@@ -212,7 +211,7 @@ typedef enum eBMOpSlotType {
    *
    * it's very important this remain a power of two */
   BMO_OP_SLOT_ELEMENT_BUF = 9, /* list of verts/edges/faces */
-  BMO_OP_SLOT_MAPPING = 10     /* simple hash map, requres subtype BMO_OP_SLOT_SUBTYPE_MAP_xxx */
+  BMO_OP_SLOT_MAPPING = 10     /* simple hash map, requires subtype BMO_OP_SLOT_SUBTYPE_MAP_xxx */
 } eBMOpSlotType;
 #define BMO_OP_SLOT_TOTAL_TYPES 11
 
@@ -237,6 +236,7 @@ typedef enum eBMOpSlotSubType_Ptr {
   BMO_OP_SLOT_SUBTYPE_PTR_SCENE = 101,
   BMO_OP_SLOT_SUBTYPE_PTR_OBJECT = 102,
   BMO_OP_SLOT_SUBTYPE_PTR_MESH = 103,
+  BMO_OP_SLOT_SUBTYPE_PTR_STRUCT = 104,
 } eBMOpSlotSubType_Ptr;
 typedef enum eBMOpSlotSubType_Int {
   BMO_OP_SLOT_SUBTYPE_INT_ENUM = 200,
@@ -294,14 +294,14 @@ typedef struct BMOpSlot {
   BLI_assert(((slot >= (op)->slots_in) && (slot < &(op)->slots_in[BMO_OP_MAX_SLOTS])) || \
              ((slot >= (op)->slots_out) && (slot < &(op)->slots_out[BMO_OP_MAX_SLOTS])))
 
-/* way more than probably needed, compiler complains if limit hit */
-#define BMO_OP_MAX_SLOTS 20
+/* Limit hit, so expanded for bevel operator. Compiler complains if limit is hit. */
+#define BMO_OP_MAX_SLOTS 21
 
 /* BMOpDefine->type_flag */
 typedef enum {
   BMO_OPTYPE_FLAG_NOP = 0,
-  BMO_OPTYPE_FLAG_UNTAN_MULTIRES =
-      (1 << 0), /* switch from multires tangent space to absolute coordinates */
+  /** Switch from multires tangent space to absolute coordinates. */
+  BMO_OPTYPE_FLAG_UNTAN_MULTIRES = (1 << 0),
   BMO_OPTYPE_FLAG_NORMALS_CALC = (1 << 1),
   BMO_OPTYPE_FLAG_SELECT_FLUSH = (1 << 2),
   BMO_OPTYPE_FLAG_SELECT_VALIDATE = (1 << 3),
@@ -575,7 +575,7 @@ void BMO_slot_map_insert(BMOperator *op, BMOpSlot *slot, const void *element, co
 void BMO_slot_map_to_flag(BMesh *bm,
                           BMOpSlot slot_args[BMO_OP_MAX_SLOTS],
                           const char *slot_name,
-                          const char hflag,
+                          const char htype,
                           const short oflag);
 
 void *BMO_slot_buffer_alloc(BMOperator *op,
@@ -628,7 +628,7 @@ void BMO_slot_buffer_from_all(BMesh *bm,
  * don't directly access. */
 typedef struct BMOIter {
   BMOpSlot *slot;
-  int cur;  //for arrays
+  int cur;  // for arrays
   GHashIterator giter;
   void **val;
   char restrictmask; /* bitwise '&' with BMHeader.htype */
@@ -667,5 +667,3 @@ int BMO_opcode_from_opname(const char *opname);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BMESH_OPERATOR_API_H__ */

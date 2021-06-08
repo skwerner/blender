@@ -17,13 +17,16 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_CONSTRAINT_H__
-#define __BKE_CONSTRAINT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct Depsgraph;
 struct ID;
 struct ListBase;
@@ -53,6 +56,8 @@ typedef struct bConstraintOb {
   float matrix[4][4];
   /** original matrix (before constraint solving) */
   float startmat[4][4];
+  /** space matrix for custom object space */
+  float space_obj_world_matrix[4][4];
 
   /** type of owner  */
   short type;
@@ -101,13 +106,22 @@ typedef struct bConstraintTypeInfo {
   void (*id_looper)(struct bConstraint *con, ConstraintIDFunc func, void *userdata);
   /** copy any special data that is allocated separately (optional) */
   void (*copy_data)(struct bConstraint *con, struct bConstraint *src);
-  /** set settings for data that will be used for bConstraint.data (memory already allocated using MEM_callocN) */
+  /**
+   * Set settings for data that will be used for #bConstraint.data
+   * (memory already allocated using #MEM_callocN).
+   */
   void (*new_data)(void *cdata);
 
   /* target handling function pointers */
-  /** for multi-target constraints: return that list; otherwise make a temporary list (returns number of targets) */
+  /**
+   * For multi-target constraints: return that list;
+   * otherwise make a temporary list (returns number of targets).
+   */
   int (*get_constraint_targets)(struct bConstraint *con, struct ListBase *list);
-  /** for single-target constraints only: flush data back to source data, and the free memory used */
+  /**
+   * For single-target constraints only:
+   * flush data back to source data, and the free memory used.
+   */
   void (*flush_constraint_targets)(struct bConstraint *con, struct ListBase *list, bool no_copy);
 
   /* evaluation */
@@ -136,6 +150,11 @@ struct bConstraint *BKE_constraint_duplicate_ex(struct bConstraint *src,
                                                 const int flag,
                                                 const bool do_extern);
 
+struct bConstraint *BKE_constraint_copy_for_pose(struct Object *ob,
+                                                 struct bPoseChannel *pchan,
+                                                 struct bConstraint *src);
+struct bConstraint *BKE_constraint_copy_for_object(struct Object *ob, struct bConstraint *src);
+
 void BKE_constraints_free(struct ListBase *list);
 void BKE_constraints_free_ex(struct ListBase *list, bool do_id_user);
 void BKE_constraints_copy(struct ListBase *dst, const struct ListBase *src, bool do_extern);
@@ -158,6 +177,9 @@ struct bConstraint *BKE_constraint_find_from_target(struct Object *ob,
                                                     struct bConstraintTarget *tgt,
                                                     struct bPoseChannel **r_pchan);
 
+bool BKE_constraint_is_nonlocal_in_liboverride(const struct Object *ob,
+                                               const struct bConstraint *con);
+
 struct bConstraint *BKE_constraint_add_for_object(struct Object *ob, const char *name, short type);
 struct bConstraint *BKE_constraint_add_for_pose(struct Object *ob,
                                                 struct bPoseChannel *pchan,
@@ -169,6 +191,8 @@ bool BKE_constraint_remove_ex(ListBase *list,
                               struct bConstraint *con,
                               bool clear_dep);
 bool BKE_constraint_remove(ListBase *list, struct bConstraint *con);
+
+void BKE_constraint_panel_expand(struct bConstraint *con);
 
 /* Constraints + Proxies function prototypes */
 void BKE_constraints_proxylocal_extract(struct ListBase *dst, struct ListBase *src);
@@ -184,6 +208,7 @@ void BKE_constraints_clear_evalob(struct bConstraintOb *cob);
 
 void BKE_constraint_mat_convertspace(struct Object *ob,
                                      struct bPoseChannel *pchan,
+                                     struct bConstraintOb *cob,
                                      float mat[4][4],
                                      short from,
                                      short to,
@@ -192,7 +217,7 @@ void BKE_constraint_mat_convertspace(struct Object *ob,
 void BKE_constraint_target_matrix_get(struct Depsgraph *depsgraph,
                                       struct Scene *scene,
                                       struct bConstraint *con,
-                                      int n,
+                                      int index,
                                       short ownertype,
                                       void *ownerdata,
                                       float mat[4][4],
@@ -202,13 +227,19 @@ void BKE_constraint_targets_for_solving_get(struct Depsgraph *depsgraph,
                                             struct bConstraintOb *ob,
                                             struct ListBase *targets,
                                             float ctime);
+void BKE_constraint_custom_object_space_get(float r_mat[4][4], struct bConstraint *con);
 void BKE_constraints_solve(struct Depsgraph *depsgraph,
                            struct ListBase *conlist,
                            struct bConstraintOb *cob,
                            float ctime);
 
+void BKE_constraint_blend_write(struct BlendWriter *writer, struct ListBase *conlist);
+void BKE_constraint_blend_read_data(struct BlendDataReader *reader, struct ListBase *lb);
+void BKE_constraint_blend_read_lib(struct BlendLibReader *reader,
+                                   struct ID *id,
+                                   struct ListBase *conlist);
+void BKE_constraint_blend_read_expand(struct BlendExpander *expander, struct ListBase *lb);
+
 #ifdef __cplusplus
 }
-#endif
-
 #endif

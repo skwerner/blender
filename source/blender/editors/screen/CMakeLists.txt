@@ -28,17 +28,15 @@ set(INC
   ../../imbuf
   ../../makesdna
   ../../makesrna
+  ../../sequencer
   ../../windowmanager
-  ../../../../intern/guardedalloc
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
   area.c
+  area_query.c
   area_utils.c
   glutil.c
   screen_context.c
@@ -63,6 +61,5 @@ if(WITH_INTERNATIONAL)
   add_definitions(-DWITH_INTERNATIONAL)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_screen "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

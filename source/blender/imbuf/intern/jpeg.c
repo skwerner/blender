@@ -22,24 +22,26 @@
  */
 
 /* This little block needed for linking to Blender... */
-#include <stdio.h>
 #include <setjmp.h>
+#include <stdio.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_string.h"
 #include "BLI_fileops.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_idprop.h"
 
-#include "imbuf.h"
-#include "IMB_imbuf_types.h"
-#include "IMB_imbuf.h"
-#include "IMB_metadata.h"
+#include "DNA_ID.h" /* ID property definitions. */
+
 #include "IMB_filetype.h"
-#include "jpeglib.h"
+#include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
+#include "IMB_metadata.h"
+#include "imbuf.h"
 #include "jerror.h"
+#include "jpeglib.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_colormanagement_intern.h"
@@ -57,11 +59,13 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 static const uchar jpeg_default_quality = 75;
 static uchar ibuf_quality;
 
-int imb_is_a_jpeg(const unsigned char *mem)
+bool imb_is_a_jpeg(const unsigned char *mem, const size_t size)
 {
-  if ((mem[0] == 0xFF) && (mem[1] == 0xD8))
-    return 1;
-  return 0;
+  const char magic[2] = {0xFF, 0xD8};
+  if (size < sizeof(magic)) {
+    return false;
+  }
+  return memcmp(mem, magic, sizeof(magic)) == 0;
 }
 
 /*----------------------------------------------------------
@@ -96,8 +100,8 @@ static void jpeg_error(j_common_ptr cinfo)
 
 #if 0
 typedef struct {
-  unsigned char  *buffer;
-  int             filled;
+  unsigned char *buffer;
+  int filled;
 } buffer_struct;
 #endif
 
@@ -245,7 +249,7 @@ static boolean handle_app1(j_decompress_ptr cinfo)
       INPUT_BYTE(cinfo, neogeo[i], return false);
     }
     length = 0;
-    if (STREQLEN(neogeo, "NeoGeo", 6)) {
+    if (STRPREFIX(neogeo, "NeoGeo")) {
       struct NeoGeo_Word *neogeo_word = (struct NeoGeo_Word *)(neogeo + 6);
       ibuf_quality = neogeo_word->quality;
     }
@@ -279,8 +283,9 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
     y = cinfo->image_height;
     depth = cinfo->num_components;
 
-    if (cinfo->jpeg_color_space == JCS_YCCK)
+    if (cinfo->jpeg_color_space == JCS_YCCK) {
       cinfo->out_color_space = JCS_CMYK;
+    }
 
     jpeg_start_decompress(cinfo);
 
@@ -341,8 +346,9 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
 
       marker = cinfo->marker_list;
       while (marker) {
-        if (marker->marker != JPEG_COM)
+        if (marker->marker != JPEG_COM) {
           goto next_stamp_marker;
+        }
 
         /*
          * JPEG marker strings are not null-terminated,
@@ -353,13 +359,13 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
         /*
          * Because JPEG format don't support the
          * pair "key/value" like PNG, we store the
-         * stampinfo in a single "encode" string:
+         * stamp-info in a single "encode" string:
          * "Blender:key:value"
          *
          * That is why we need split it to the
          * common key/value here.
          */
-        if (!STREQLEN(str, "Blender", 7)) {
+        if (!STRPREFIX(str, "Blender")) {
           /*
            * Maybe the file have text that
            * we don't know "what it's", in that
@@ -407,14 +413,25 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
       jpeg_finish_decompress(cinfo);
     }
 
-    jpeg_destroy((j_common_ptr)cinfo);
     if (ibuf) {
+      /* Density_unit may be 0 for unknown, 1 for dots/inch, or 2 for dots/cm. */
+      if (cinfo->density_unit == 1) {
+        /* Convert inches to meters. */
+        ibuf->ppm[0] = cinfo->X_density / 0.0254f;
+        ibuf->ppm[1] = cinfo->Y_density / 0.0254f;
+      }
+      else if (cinfo->density_unit == 2) {
+        ibuf->ppm[0] = cinfo->X_density * 100.0f;
+        ibuf->ppm[1] = cinfo->Y_density * 100.0f;
+      }
+
       ibuf->ftype = IMB_FTYPE_JPG;
       ibuf->foptions.quality = MIN2(ibuf_quality, 100);
     }
+    jpeg_destroy((j_common_ptr)cinfo);
   }
 
-  return (ibuf);
+  return ibuf;
 }
 
 ImBuf *imb_load_jpeg(const unsigned char *buffer,
@@ -426,8 +443,9 @@ ImBuf *imb_load_jpeg(const unsigned char *buffer,
   struct my_error_mgr jerr;
   ImBuf *ibuf;
 
-  if (!imb_is_a_jpeg(buffer))
+  if (!imb_is_a_jpeg(buffer, size)) {
     return NULL;
+  }
 
   colorspace_set_default_role(colorspace, IM_MAX_SPACE, COLOR_ROLE_DEFAULT_BYTE);
 
@@ -448,7 +466,7 @@ ImBuf *imb_load_jpeg(const unsigned char *buffer,
 
   ibuf = ibJpegImageFromCinfo(cinfo, flags);
 
-  return (ibuf);
+  return ibuf;
 }
 
 static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
@@ -475,7 +493,7 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
     for (prop = ibuf->metadata->data.group.first; prop; prop = prop->next) {
       if (prop->type == IDP_STRING) {
         int text_len;
-        if (!strcmp(prop->name, "None")) {
+        if (STREQ(prop->name, "None")) {
           jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *)IDP_String(prop), prop->len + 1);
         }
 
@@ -498,7 +516,8 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
          * The first "Blender" is a simple identify to help
          * in the read process.
          */
-        text_len = BLI_snprintf(text, text_size, "Blender:%s:%s", prop->name, IDP_String(prop));
+        text_len = BLI_snprintf_rlen(
+            text, text_size, "Blender:%s:%s", prop->name, IDP_String(prop));
         jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *)text, text_len + 1);
 
         /* TODO(sergey): Ideally we will try to re-use allocation as
@@ -554,10 +573,12 @@ static int init_jpeg(FILE *outfile, struct jpeg_compress_struct *cinfo, struct I
   int quality;
 
   quality = ibuf->foptions.quality;
-  if (quality <= 0)
+  if (quality <= 0) {
     quality = jpeg_default_quality;
-  if (quality > 100)
+  }
+  if (quality > 100) {
     quality = 100;
+  }
 
   jpeg_create_compress(cinfo);
   jpeg_stdio_dest(cinfo, outfile);
@@ -566,13 +587,16 @@ static int init_jpeg(FILE *outfile, struct jpeg_compress_struct *cinfo, struct I
   cinfo->image_height = ibuf->y;
 
   cinfo->in_color_space = JCS_RGB;
-  if (ibuf->planes == 8)
+  if (ibuf->planes == 8) {
     cinfo->in_color_space = JCS_GRAYSCALE;
+  }
 #if 0
   /* just write RGBA as RGB,
    * unsupported feature only confuses other s/w */
 
-  if (ibuf->planes == 32) cinfo->in_color_space = JCS_UNKNOWN;
+  if (ibuf->planes == 32) {
+    cinfo->in_color_space = JCS_UNKNOWN;
+  }
 #endif
   switch (cinfo->in_color_space) {
     case JCS_RGB:
@@ -596,17 +620,18 @@ static int init_jpeg(FILE *outfile, struct jpeg_compress_struct *cinfo, struct I
   cinfo->dct_method = JDCT_FLOAT;
   jpeg_set_quality(cinfo, quality, true);
 
-  return (0);
+  return 0;
 }
 
-static int save_stdjpeg(const char *name, struct ImBuf *ibuf)
+static bool save_stdjpeg(const char *name, struct ImBuf *ibuf)
 {
   FILE *outfile;
   struct jpeg_compress_struct _cinfo, *cinfo = &_cinfo;
   struct my_error_mgr jerr;
 
-  if ((outfile = BLI_fopen(name, "wb")) == NULL)
+  if ((outfile = BLI_fopen(name, "wb")) == NULL) {
     return 0;
+  }
 
   cinfo->err = jpeg_std_error(&jerr.pub);
   jerr.pub.error_exit = jpeg_error;
@@ -632,9 +657,9 @@ static int save_stdjpeg(const char *name, struct ImBuf *ibuf)
   return 1;
 }
 
-int imb_savejpeg(struct ImBuf *ibuf, const char *name, int flags)
+bool imb_savejpeg(struct ImBuf *ibuf, const char *filepath, int flags)
 {
 
   ibuf->flags = flags;
-  return save_stdjpeg(name, ibuf);
+  return save_stdjpeg(filepath, ibuf);
 }

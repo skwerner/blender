@@ -14,15 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BMESH_H__
-#define __BMESH_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
  *
  * \addtogroup bmesh BMesh
  *
- * \brief BMesh is a non-manifold boundary representation designed to support advanced editing operations.
+ * \brief BMesh is a non-manifold boundary representation
+ * designed to support advanced editing operations.
  * \section bm_structure The Structure
  *
  * BMesh stores topology in four main element structures:
@@ -32,7 +32,8 @@
  * - Edges - BMEdge
  * - Verts - BMVert
  * \subsection bm_header_flags Header Flags
- * Each element (vertex/edge/face/loop) in a mesh has an associated bit-field called "header flags".
+ * Each element (vertex/edge/face/loop)
+ * in a mesh has an associated bit-field called "header flags".
  *
  * BMHeader flags should **never** be read or written to by bmesh operators (see Operators below).
  *
@@ -40,7 +41,7 @@
  * \subsection bm_faces Faces
  *
  * Faces in BMesh are stored as a circular linked list of loops. Loops store per-face-vertex data
- * (amongst other things outlined later in this document), and define the face boundary.
+ * (among other things outlined later in this document), and define the face boundary.
  * \subsection bm_loop The Loop
  *
  * Loops can be thought of as a *face-corner*, since faces don't reference verts or edges directly.
@@ -81,7 +82,8 @@
  * See source/blender/bmesh/bmesh_query.h for more misc. queries.
  * \section bm_api The BMesh API
  *
- * One of the goals of the BMesh API is to make it easy and natural to produce highly maintainable code.
+ * One of the goals of the BMesh API is to make it easy
+ * and natural to produce highly maintainable code.
  * Code duplication, etc are avoided where possible.
  * \subsection bm_iter_api Iterator API
  *
@@ -95,15 +97,18 @@
  * though a mechanism for plugging in new walkers needs to be added at some point.
  *
  * Most topological queries should go through these two APIs;
- * there are additional functions you can use for topological iteration, but their meant for internal bmesh code.
+ * there are additional functions you can use for topological iteration,
+ * but their meant for internal bmesh code.
  *
- * Note that the walker API supports delimiter flags, to allow the caller to flag elements not to walk past.
+ * Note that the walker API supports delimiter flags,
+ * to allow the caller to flag elements not to walk past.
  * \subsection bm_ops Operators
  *
  * Operators are an integral part of BMesh. Unlike regular blender operators,
  * BMesh operators **bmo's** are designed to be nested (e.g. call other operators).
  *
- * Each operator has a number of input/output "slots" which are used to pass settings & data into/out of the operator
+ * Each operator has a number of input/output "slots"
+ * which are used to pass settings & data into/out of the operator
  * (and allows for chaining operators together).
  *
  * These slots are identified by name, using strings.
@@ -111,10 +116,11 @@
  * Access to slots is done with ``BMO_slot_***()`` functions.
  * \subsection bm_tool_flags Tool Flags
  *
- * The BMesh API provides a set of flags for faces, edges and vertices, which are private to an operator.
+ * The BMesh API provides a set of flags for faces, edges and vertices,
+ * which are private to an operator.
  * These flags may be used by the client operator code as needed
  * (a common example is flagging elements for use in another operator).
- * Each call to an operator allocates it's own set of tool flags when it's executed,
+ * Each call to an operator allocates its own set of tool flags when it's executed,
  * avoiding flag conflicts between operators.
  *
  * These flags should not be confused with header flags, which are used to store persistent flags
@@ -140,7 +146,8 @@
  * - map     - BMO_OP_SLOT_MAPPING - simple hash map.
  * \subsection bm_slot_iter Slot Iterators
  *
- * Access to element buffers or maps must go through the slot iterator api, defined in bmesh_operators.h.
+ * Access to element buffers or maps must go through the slot iterator api,
+ * defined in bmesh_operators.h.
  * Use #BMO_ITER where ever possible.
  * \subsection bm_elem_buf Element Buffers
  *
@@ -149,14 +156,16 @@
  * Many operators take in a buffer of elements, process it,
  * then spit out a new one; this allows operators to be chained together.
  *
- * \note Element buffers may have elements of different types within the same buffer (this is supported by the API.
+ * \note Element buffers may have elements of different types within the same buffer
+ * (this is supported by the API.
  * \section bm_fname Function Naming Conventions
  *
  * These conventions should be used throughout the bmesh module.
  *
  * - ``bmesh_kernel_*()`` - Low level API, for primitive functions that others are built ontop of.
  * - ``bmesh_***()`` - Low level API function.
- * - ``bm_***()`` -     'static' functions, not apart of the API at all, but use prefix since they operate on BMesh data.
+ * - ``bm_***()`` -     'static' functions, not a part of the API at all,
+ *   but use prefix since they operate on BMesh data.
  * - ``BM_***()`` -     High level BMesh API function for use anywhere.
  * - ``BMO_***()`` -    High level operator API function for use anywhere.
  * - ``bmo_***()`` -    Low level / internal operator API functions.
@@ -168,33 +177,35 @@
  *
  * \subsection bm_todo_optimize Optimizations
  *
- * - skip normal calc when its not needed (when calling chain of operators & for modifiers, flag as dirty)
- * - skip BMO flag allocation, its not needed in many cases, this is fairly redundant to calc by default.
- * - ability to call BMO's with option not to create return data (will save some time)
- * - binary diff UNDO, currently this uses huge amount of ram when all shapes are stored for each undo step for eg.
- * - use two different iterator types for BMO map/buffer types.
+ * - Skip normal calc when its not needed
+ *   (when calling chain of operators & for modifiers, flag as dirty)
+ * - Skip BMO flag allocation, its not needed in many cases,
+ *   this is fairly redundant to calc by default.
+ * - Ability to call BMO's with option not to create return data (will save some time)
+ * - Binary diff UNDO, currently this uses huge amount of ram
+ *   when all shapes are stored for each undo step for eg.
+ * - Use two different iterator types for BMO map/buffer types.
  */
+
+#include "DNA_customdata_types.h" /* BMesh struct in bmesh_class.h uses */
+#include "DNA_listBase.h"         /* selection history uses */
+
+#include <stdio.h>
+#include <stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "DNA_listBase.h"         /* selection history uses */
-#include "DNA_customdata_types.h" /* BMesh struct in bmesh_class.h uses */
-
-#include <stdlib.h>
-#include <stdio.h>
-#include <assert.h>
-
 #include "bmesh_class.h"
 
 /* include the rest of the API */
-#include "intern/bmesh_operator_api.h"
 #include "intern/bmesh_error.h"
+#include "intern/bmesh_operator_api.h"
 
-#include "intern/bmesh_core.h"
 #include "intern/bmesh_callback_generic.h"
 #include "intern/bmesh_construct.h"
+#include "intern/bmesh_core.h"
 #include "intern/bmesh_delete.h"
 #include "intern/bmesh_edgeloop.h"
 #include "intern/bmesh_interp.h"
@@ -202,13 +213,18 @@ extern "C" {
 #include "intern/bmesh_log.h"
 #include "intern/bmesh_marking.h"
 #include "intern/bmesh_mesh.h"
-#include "intern/bmesh_mesh_conv.h"
+#include "intern/bmesh_mesh_convert.h"
+#include "intern/bmesh_mesh_duplicate.h"
+#include "intern/bmesh_mesh_normals.h"
+#include "intern/bmesh_mesh_partial_update.h"
+#include "intern/bmesh_mesh_tessellate.h"
 #include "intern/bmesh_mesh_validate.h"
 #include "intern/bmesh_mods.h"
 #include "intern/bmesh_operators.h"
 #include "intern/bmesh_polygon.h"
 #include "intern/bmesh_polygon_edgenet.h"
 #include "intern/bmesh_query.h"
+#include "intern/bmesh_query_uv.h"
 #include "intern/bmesh_walkers.h"
 
 #include "intern/bmesh_inline.h"
@@ -216,5 +232,3 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BMESH_H__ */

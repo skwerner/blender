@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_STROKEVERTEXITERATOR_H__
-#define __FREESTYLE_PYTHON_STROKEVERTEXITERATOR_H__
+#pragma once
 
 #include "../BPy_Iterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject StrokeVertexIterator_Type;
 /*---------------------------Python BPy_StrokeVertexIterator structure definition----------*/
 typedef struct {
   BPy_Iterator py_it;
-  StrokeInternal::StrokeVertexIterator *sv_it;
+  Freestyle::StrokeInternal::StrokeVertexIterator *sv_it;
   bool reversed;
   /* attribute to make next() work correctly */
   bool at_start;
@@ -50,5 +49,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_STROKEVERTEXITERATOR_H__ */

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_STROKE_REP_H__
-#define __FREESTYLE_STROKE_REP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -30,10 +29,8 @@
 #  include "MEM_guardedalloc.h"
 #endif
 
-extern "C" {
 #include "DNA_material_types.h"  // for MAX_MTEX
 struct bNodeTree;
-}
 
 namespace Freestyle {
 
@@ -85,8 +82,9 @@ class StrokeVertexRep {
     if (tips) {
       return _texCoord_w_tips;
     }
-    else
+    else {
       return _texCoord;
+    }
   }
 
   inline Vec3r &color()
@@ -266,11 +264,12 @@ class StrokeRep {
   {
     _material = mat;
   }
-  /*
+#if 0
   inline void setMTex(int idx, MTex *mtex_ptr)
   {
     _mtex[idx] = mtex_ptr;
-  }*/
+  }
+#endif
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("Freestyle:StrokeRep")
@@ -278,5 +277,3 @@ class StrokeRep {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_STROKE_REP_H__

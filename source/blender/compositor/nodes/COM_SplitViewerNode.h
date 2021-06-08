@@ -16,11 +16,13 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_SPLITVIEWERNODE_H__
-#define __COM_SPLITVIEWERNODE_H__
+#pragma once
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
+
 /**
  * \brief SplitViewerNode
  * \ingroup Node
@@ -28,6 +30,8 @@
 class SplitViewerNode : public Node {
  public:
   SplitViewerNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
-#endif
+
+}  // namespace blender::compositor

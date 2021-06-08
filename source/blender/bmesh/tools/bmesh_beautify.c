@@ -29,8 +29,8 @@
  * - Take face normals into account.
  */
 
-#include "BLI_math.h"
 #include "BLI_heap.h"
+#include "BLI_math.h"
 #include "BLI_polyfill_2d_beautify.h"
 
 #include "MEM_guardedalloc.h"
@@ -66,15 +66,33 @@ static int erot_gsetutil_cmp(const void *a, const void *b)
 {
   const EdRotState *e_state_a = (const EdRotState *)a;
   const EdRotState *e_state_b = (const EdRotState *)b;
-  if      (e_state_a->v1 < e_state_b->v1) return -1;
-  else if (e_state_a->v1 > e_state_b->v1) return  1;
-  else if (e_state_a->v2 < e_state_b->v2) return -1;
-  else if (e_state_a->v2 > e_state_b->v2) return  1;
-  else if (e_state_a->f1 < e_state_b->f1) return -1;
-  else if (e_state_a->f1 > e_state_b->f1) return  1;
-  else if (e_state_a->f2 < e_state_b->f2) return -1;
-  else if (e_state_a->f2 > e_state_b->f2) return  1;
-  else                                    return  0;
+  if (e_state_a->v1 < e_state_b->v1) {
+    return -1;
+  }
+  else if (e_state_a->v1 > e_state_b->v1) {
+    return 1;
+  }
+  else if (e_state_a->v2 < e_state_b->v2) {
+    return -1;
+  }
+  else if (e_state_a->v2 > e_state_b->v2) {
+    return 1;
+  }
+  else if (e_state_a->f1 < e_state_b->f1) {
+    return -1;
+  }
+  else if (e_state_a->f1 > e_state_b->f1) {
+    return 1;
+  }
+  else if (e_state_a->f2 < e_state_b->f2) {
+    return -1;
+  }
+  else if (e_state_a->f2 > e_state_b->f2) {
+    return 1;
+  }
+  else {
+    return 0;
+  }
 }
 #endif
 static GSet *erot_gset_new(void)
@@ -101,7 +119,7 @@ static void erot_state_ex(const BMEdge *e, int v_index[2], int f_index[2])
   EDGE_ORD(v_index[0], v_index[1]);
 
   /* verts of each of the 2 faces attached to this edge
-   * (that are not apart of this edge) */
+   * (that are not a part of this edge) */
   f_index[0] = BM_elem_index_get(e->l->prev->v);
   f_index[1] = BM_elem_index_get(e->l->radial_next->prev->v);
   EDGE_ORD(f_index[0], f_index[1]);
@@ -123,7 +141,8 @@ static void erot_state_alternate(const BMEdge *e, EdRotState *e_state)
 static float bm_edge_calc_rotate_beauty__area(const float v1[3],
                                               const float v2[3],
                                               const float v3[3],
-                                              const float v4[3])
+                                              const float v4[3],
+                                              const bool lock_degenerate)
 {
   /* not a loop (only to be able to break out) */
   do {
@@ -178,9 +197,11 @@ static float bm_edge_calc_rotate_beauty__area(const float v1[3],
     /**
      * Important to lock degenerate here,
      * since the triangle pars will be projected into different 2D spaces.
-     * Allowing to rotate out of a degenerate state can flip the faces (when performed iteratively).
+     * Allowing to rotate out of a degenerate state can flip the faces
+     * (when performed iteratively).
      */
-    return BLI_polyfill_beautify_quad_rotate_calc_ex(v1_xy, v2_xy, v3_xy, v4_xy, true);
+    return BLI_polyfill_beautify_quad_rotate_calc_ex(
+        v1_xy, v2_xy, v3_xy, v4_xy, lock_degenerate, NULL);
   } while (false);
 
   return FLT_MAX;
@@ -243,7 +264,8 @@ float BM_verts_calc_rotate_beauty(const BMVert *v1,
 
     switch (method) {
       case 0:
-        return bm_edge_calc_rotate_beauty__area(v1->co, v2->co, v3->co, v4->co);
+        return bm_edge_calc_rotate_beauty__area(
+            v1->co, v2->co, v3->co, v4->co, flag & EDGE_RESTRICT_DEGENERATE);
       default:
         return bm_edge_calc_rotate_beauty__angle(v1->co, v2->co, v3->co, v4->co);
     }

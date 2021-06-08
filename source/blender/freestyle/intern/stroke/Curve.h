@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CURVE_H__
-#define __FREESTYLE_CURVE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -55,10 +54,10 @@ using namespace Geometry;
 
 /*! Class to represent a point of a curve.
  *  A CurvePoint can be any point of a 1D curve (it doesn't have to be a vertex of the curve).
- *  Any Interface1D is built upon ViewEdges, themselves built upon FEdges. Therefore, a curve is basically
- *  a polyline made of a list SVertex.
- *  Thus, a CurvePoint is built by lineraly interpolating two SVertex.
- *  CurvePoint can be used as virtual points while querying 0D information along a curve at a given resolution.
+ *  Any Interface1D is built upon ViewEdges, themselves built upon FEdges. Therefore, a curve is
+ * basically a polyline made of a list SVertex. Thus, a CurvePoint is built by linearly
+ * interpolating two SVertex. CurvePoint can be used as virtual points while querying 0D
+ * information along a curve at a given resolution.
  */
 class CurvePoint : public Interface0D {
  public:  // Implementation of Interface0D
@@ -123,10 +122,12 @@ class CurvePoint : public Interface0D {
   virtual Id getId() const
   {
     Id id;
-    if (_t2d == 0)
+    if (_t2d == 0) {
       return __A->getId();
-    else if (_t2d == 1)
+    }
+    else if (_t2d == 1) {
       return __B->getId();
+    }
     return id;
   }
 
@@ -134,50 +135,60 @@ class CurvePoint : public Interface0D {
   virtual Nature::VertexNature getNature() const
   {
     Nature::VertexNature nature = Nature::POINT;
-    if (_t2d == 0)
+    if (_t2d == 0) {
       nature |= __A->getNature();
-    else if (_t2d == 1)
+    }
+    else if (_t2d == 1) {
       nature |= __B->getNature();
+    }
     return nature;
   }
 
   /*! Cast the Interface0D in SVertex if it can be. */
   virtual SVertex *castToSVertex()
   {
-    if (_t2d == 0)
+    if (_t2d == 0) {
       return __A;
-    else if (_t2d == 1)
+    }
+    else if (_t2d == 1) {
       return __B;
+    }
     return Interface0D::castToSVertex();
   }
 
   /*! Cast the Interface0D in ViewVertex if it can be. */
   virtual ViewVertex *castToViewVertex()
   {
-    if (_t2d == 0)
+    if (_t2d == 0) {
       return __A->castToViewVertex();
-    else if (_t2d == 1)
+    }
+    else if (_t2d == 1) {
       return __B->castToViewVertex();
+    }
     return Interface0D::castToViewVertex();
   }
 
   /*! Cast the Interface0D in NonTVertex if it can be. */
   virtual NonTVertex *castToNonTVertex()
   {
-    if (_t2d == 0)
+    if (_t2d == 0) {
       return __A->castToNonTVertex();
-    else if (_t2d == 1)
+    }
+    else if (_t2d == 1) {
       return __B->castToNonTVertex();
+    }
     return Interface0D::castToNonTVertex();
   }
 
   /*! Cast the Interface0D in TVertex if it can be. */
   virtual TVertex *castToTVertex()
   {
-    if (_t2d == 0)
+    if (_t2d == 0) {
       return __A->castToTVertex();
-    else if (_t2d == 1)
+    }
+    else if (_t2d == 1) {
       return __B->castToTVertex();
+    }
     return Interface0D::castToTVertex();
   }
 
@@ -188,12 +199,12 @@ class CurvePoint : public Interface0D {
   SVertex *__A;
   SVertex *__B;
   float _t2d;
-  //float _t3d;
+  // float _t3d;
   Vec3r _Point2d;
   Vec3r _Point3d;
 
  public:
-  /*! Defult Constructor. */
+  /*! Default Constructor. */
   CurvePoint();
 
   /*! Builds a CurvePoint from two SVertex and an interpolation parameter.
@@ -201,22 +212,22 @@ class CurvePoint : public Interface0D {
    *    The first SVertex
    *  \param iB:
    *    The second SVertex
-   *  \param t2d:
+   *  \param t:
    *    A 2D interpolation parameter used to linearly interpolate \a iA and \a iB
    */
-  CurvePoint(SVertex *iA, SVertex *iB, float t2d);
+  CurvePoint(SVertex *iA, SVertex *iB, float t);
 
   /*! Builds a CurvePoint from two CurvePoint and an interpolation parameter.
    *  \param iA:
    *    The first CurvePoint
    *  \param iB:
    *    The second CurvePoint
-   *  \param t2d:
+   *  \param t:
    *    The 2D interpolation parameter used to linearly interpolate \a iA and \a iB.
    */
-  CurvePoint(CurvePoint *iA, CurvePoint *iB, float t2d);
+  CurvePoint(CurvePoint *iA, CurvePoint *iB, float t);
 
-  //CurvePoint(SVertex *iA, SVertex *iB, float t2d, float t3d);
+  // CurvePoint(SVertex *iA, SVertex *iB, float t2d, float t3d);
 
   /*! Copy Constructor. */
   CurvePoint(const CurvePoint &iBrother);
@@ -225,9 +236,7 @@ class CurvePoint : public Interface0D {
   CurvePoint &operator=(const CurvePoint &iBrother);
 
   /*! Destructor */
-  virtual ~CurvePoint()
-  {
-  }
+  virtual ~CurvePoint() = default;
 
   /*! Operator == */
   bool operator==(const CurvePoint &b)
@@ -302,19 +311,19 @@ class CurvePoint : public Interface0D {
   }
 
   Vec3r normal() const;
-  //FrsMaterial material() const;
-  //Id shape_id() const;
+  // FrsMaterial material() const;
+  // Id shape_id() const;
   const SShape *shape() const;
-  //float shape_importance() const;
+  // float shape_importance() const;
 
-  //const unsigned qi() const;
+  // const unsigned qi() const;
   occluder_container::const_iterator occluders_begin() const;
   occluder_container::const_iterator occluders_end() const;
   bool occluders_empty() const;
   int occluders_size() const;
   const Polygon3r &occludee() const;
   const SShape *occluded_shape() const;
-  const bool occludee_empty() const;
+  bool occludee_empty() const;
   real z_discontinuity() const;
 #if 0
   float local_average_depth() const;
@@ -525,7 +534,7 @@ class Curve : public Interface1D {
   int occluders_size() const;
   bool occluders_empty() const;
 
-  const Polygon3r& occludee() const
+  const Polygon3r &occludee() const
   {
     return *(_FEdgeA->aFace());
   }
@@ -564,25 +573,25 @@ class Curve : public Interface1D {
   CurveInternal::CurvePointIterator curveVerticesEnd();
 
   // Iterators access
-  /*! Returns an Interface0DIterator pointing onto the first vertex of the Curve and that can iterate
-   *  over the \a vertices of the Curve.
+  /*! Returns an Interface0DIterator pointing onto the first vertex of the Curve and that can
+   * iterate over the \a vertices of the Curve.
    */
   virtual Interface0DIterator verticesBegin();
 
-  /*! Returns an Interface0DIterator pointing after the last vertex of the Curve and that can iterate
-   *  over the \a vertices of the Curve.
+  /*! Returns an Interface0DIterator pointing after the last vertex of the Curve and that can
+   * iterate over the \a vertices of the Curve.
    */
   virtual Interface0DIterator verticesEnd();
 
-  /*! Returns an Interface0DIterator pointing onto the first point of the Curve and that can iterate
-   *  over the \a points of the Curve at any resolution.
-   *  At each iteration a virtual temporary CurvePoint is created.
+  /*! Returns an Interface0DIterator pointing onto the first point of the Curve and that can
+   * iterate over the \a points of the Curve at any resolution. At each iteration a virtual
+   * temporary CurvePoint is created.
    */
   virtual Interface0DIterator pointsBegin(float t = 0.0f);
 
-  /*! Returns an Interface0DIterator pointing after the last point of the Curve and that can iterate
-   *  over the \a points of the Curve at any resolution.
-   *  At each iteration a virtual temporary CurvePoint is created.
+  /*! Returns an Interface0DIterator pointing after the last point of the Curve and that can
+   * iterate over the \a points of the Curve at any resolution. At each iteration a virtual
+   * temporary CurvePoint is created.
    */
   virtual Interface0DIterator pointsEnd(float t = 0.0f);
 
@@ -592,5 +601,3 @@ class Curve : public Interface1D {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CURVE_H__

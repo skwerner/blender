@@ -17,14 +17,18 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_NLA_H__
-#define __BKE_NLA_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct AnimData;
+struct LibraryForeachIDData;
 struct Main;
 struct NlaStrip;
 struct NlaTrack;
@@ -32,6 +36,10 @@ struct Scene;
 struct Speaker;
 struct bAction;
 
+struct BlendDataReader;
+struct BlendExpander;
+struct BlendLibReader;
+struct BlendWriter;
 struct PointerRNA;
 struct PropertyRNA;
 
@@ -50,12 +58,27 @@ struct NlaTrack *BKE_nlatrack_copy(struct Main *bmain,
                                    struct NlaTrack *nlt,
                                    const bool use_same_actions,
                                    const int flag);
-void BKE_nla_tracks_copy(struct Main *bmain, ListBase *dst, ListBase *src, const int flag);
+void BKE_nla_tracks_copy(struct Main *bmain, ListBase *dst, const ListBase *src, const int flag);
 
-struct NlaTrack *BKE_nlatrack_add(struct AnimData *adt, struct NlaTrack *prev);
+/* Copy NLA tracks from #adt_source to #adt_dest, and update the active track/strip pointers to
+ * point at those copies. */
+void BKE_nla_tracks_copy_from_adt(struct Main *bmain,
+                                  struct AnimData *adt_dest,
+                                  const struct AnimData *adt_source,
+                                  int flag);
+
+struct NlaTrack *BKE_nlatrack_add(struct AnimData *adt,
+                                  struct NlaTrack *prev,
+                                  bool is_liboverride);
 struct NlaStrip *BKE_nlastrip_new(struct bAction *act);
-struct NlaStrip *BKE_nlastack_add_strip(struct AnimData *adt, struct bAction *act);
-struct NlaStrip *BKE_nla_add_soundstrip(struct Scene *scene, struct Speaker *spk);
+struct NlaStrip *BKE_nlastack_add_strip(struct AnimData *adt,
+                                        struct bAction *act,
+                                        const bool is_liboverride);
+struct NlaStrip *BKE_nla_add_soundstrip(struct Main *bmain,
+                                        struct Scene *scene,
+                                        struct Speaker *speaker);
+
+void BKE_nla_strip_foreach_id(struct NlaStrip *strip, struct LibraryForeachIDData *data);
 
 /* ----------------------------- */
 /* API */
@@ -83,9 +106,13 @@ void BKE_nlatrack_solo_toggle(struct AnimData *adt, struct NlaTrack *nlt);
 bool BKE_nlatrack_has_space(struct NlaTrack *nlt, float start, float end);
 void BKE_nlatrack_sort_strips(struct NlaTrack *nlt);
 
-bool BKE_nlatrack_add_strip(struct NlaTrack *nlt, struct NlaStrip *strip);
+bool BKE_nlatrack_add_strip(struct NlaTrack *nlt,
+                            struct NlaStrip *strip,
+                            const bool is_liboverride);
 
 bool BKE_nlatrack_get_bounds(struct NlaTrack *nlt, float bounds[2]);
+
+bool BKE_nlatrack_is_nonlocal_in_liboverride(const struct ID *id, const struct NlaTrack *nlt);
 
 /* ............ */
 
@@ -94,6 +121,7 @@ void BKE_nlastrip_set_active(struct AnimData *adt, struct NlaStrip *strip);
 
 bool BKE_nlastrip_within_bounds(struct NlaStrip *strip, float min, float max);
 void BKE_nlastrip_recalculate_bounds(struct NlaStrip *strip);
+void BKE_nlastrip_recalculate_bounds_sync_action(struct NlaStrip *strip);
 
 void BKE_nlastrip_validate_name(struct AnimData *adt, struct NlaStrip *strip);
 
@@ -111,11 +139,11 @@ void BKE_nla_validate_state(struct AnimData *adt);
 /* ............ */
 
 bool BKE_nla_action_is_stashed(struct AnimData *adt, struct bAction *act);
-bool BKE_nla_action_stash(struct AnimData *adt);
+bool BKE_nla_action_stash(struct AnimData *adt, const bool is_liboverride);
 
 /* ............ */
 
-void BKE_nla_action_pushdown(struct AnimData *adt);
+void BKE_nla_action_pushdown(struct AnimData *adt, const bool is_liboverride);
 
 bool BKE_nla_tweakmode_enter(struct AnimData *adt);
 void BKE_nla_tweakmode_exit(struct AnimData *adt);
@@ -137,4 +165,14 @@ enum eNlaTime_ConvertModes {
 
 float BKE_nla_tweakedit_remap(struct AnimData *adt, float cframe, short mode);
 
+/* ----------------------------- */
+/* .blend file API */
+
+void BKE_nla_blend_write(struct BlendWriter *writer, struct ListBase *tracks);
+void BKE_nla_blend_read_data(struct BlendDataReader *reader, struct ListBase *tracks);
+void BKE_nla_blend_read_lib(struct BlendLibReader *reader, struct ID *id, struct ListBase *tracks);
+void BKE_nla_blend_read_expand(struct BlendExpander *expander, struct ListBase *tracks);
+
+#ifdef __cplusplus
+}
 #endif

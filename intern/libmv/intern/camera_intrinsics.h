@@ -29,10 +29,13 @@ typedef struct libmv_CameraIntrinsics libmv_CameraIntrinsics;
 enum {
   LIBMV_DISTORTION_MODEL_POLYNOMIAL = 0,
   LIBMV_DISTORTION_MODEL_DIVISION = 1,
+  LIBMV_DISTORTION_MODEL_NUKE = 2,
+  LIBMV_DISTORTION_MODEL_BROWN = 3,
 };
 
 typedef struct libmv_CameraIntrinsicsOptions {
   // Common settings of all distortion models.
+  int num_threads;
   int distortion_model;
   int image_width, image_height;
   double focal_length;
@@ -44,12 +47,19 @@ typedef struct libmv_CameraIntrinsicsOptions {
 
   // Division distortion model.
   double division_k1, division_k2;
+
+  // Nuke distortion model.
+  double nuke_k1, nuke_k2;
+
+  // Brown-Conrady distortion model.
+  double brown_k1, brown_k2, brown_k3, brown_k4;
+  double brown_p1, brown_p2;
 } libmv_CameraIntrinsicsOptions;
 
-libmv_CameraIntrinsics *libmv_cameraIntrinsicsNew(
+libmv_CameraIntrinsics* libmv_cameraIntrinsicsNew(
     const libmv_CameraIntrinsicsOptions* libmv_camera_intrinsics_options);
 
-libmv_CameraIntrinsics *libmv_cameraIntrinsicsCopy(
+libmv_CameraIntrinsics* libmv_cameraIntrinsicsCopy(
     const libmv_CameraIntrinsics* libmv_intrinsics);
 
 void libmv_cameraIntrinsicsDestroy(libmv_CameraIntrinsics* libmv_intrinsics);
@@ -66,7 +76,7 @@ void libmv_cameraIntrinsicsExtractOptions(
 
 void libmv_cameraIntrinsicsUndistortByte(
     const libmv_CameraIntrinsics* libmv_intrinsics,
-    const unsigned char *source_image,
+    const unsigned char* source_image,
     int width,
     int height,
     float overscan,
@@ -84,12 +94,12 @@ void libmv_cameraIntrinsicsUndistortFloat(
 
 void libmv_cameraIntrinsicsDistortByte(
     const struct libmv_CameraIntrinsics* libmv_intrinsics,
-    const unsigned char *source_image,
+    const unsigned char* source_image,
     int width,
     int height,
     float overscan,
     int channels,
-    unsigned char *destination_image);
+    unsigned char* destination_image);
 
 void libmv_cameraIntrinsicsDistortFloat(
     const libmv_CameraIntrinsics* libmv_intrinsics,
@@ -121,7 +131,7 @@ void libmv_cameraIntrinsicsInvert(
 #ifdef __cplusplus
 
 namespace libmv {
-  class CameraIntrinsics;
+class CameraIntrinsics;
 }
 
 libmv::CameraIntrinsics* libmv_cameraIntrinsicsCreateFromOptions(

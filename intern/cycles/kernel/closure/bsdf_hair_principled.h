@@ -60,7 +60,8 @@ ccl_device_inline float cos_from_sin(const float s)
   return safe_sqrtf(1.0f - s * s);
 }
 
-/* Gives the change in direction in the normal plane for the given angles and p-th-order scattering. */
+/* Gives the change in direction in the normal plane for the given angles and p-th-order
+ * scattering. */
 ccl_device_inline float delta_phi(int p, float gamma_o, float gamma_t)
 {
   return 2.0f * p * gamma_t - 2.0f * gamma_o + p * M_PI_F;
@@ -123,8 +124,8 @@ ccl_device_inline float bessel_I0(float x)
 ccl_device_inline float log_bessel_I0(float x)
 {
   if (x > 12.0f) {
-    /* log(1/x) == -log(x) iff x > 0.
-     * This is only used with positive cosines */
+    /* log(1/x) == -log(x) if x > 0.
+     * This is only used with positive cosines. */
     return x + 0.5f * (1.f / (8.0f * x) - M_LN_2PI_F - logf(x));
   }
   else {
@@ -205,9 +206,6 @@ ccl_device int bsdf_principled_hair_setup(ShaderData *sd, PrincipledHairBSDF *bs
   float3 X = safe_normalize(sd->dPdu);
   float3 Y = safe_normalize(cross(X, sd->I));
   float3 Z = safe_normalize(cross(X, Y));
-  /* TODO: the solution below works where sd->Ng is the normal
-   * pointing from the center of the curve to the shading point.
-   * It doesn't work for triangles, see https://developer.blender.org/T43625 */
 
   /* h -1..0..1 means the rays goes from grazing the hair, to hitting it at
    * the center, to grazing the other edge. This is the sine of the angle
@@ -215,7 +213,9 @@ ccl_device int bsdf_principled_hair_setup(ShaderData *sd, PrincipledHairBSDF *bs
 
   /* TODO: we convert this value to a cosine later and discard the sign, so
    * we could probably save some operations. */
-  float h = dot(cross(sd->Ng, X), Z);
+  float h = (sd->type & (PRIMITIVE_CURVE_RIBBON | PRIMITIVE_MOTION_CURVE_RIBBON)) ?
+                -sd->v :
+                dot(cross(sd->Ng, X), Z);
 
   kernel_assert(fabsf(h) < 1.0f + 1e-4f);
   kernel_assert(isfinite3_safe(Y));
@@ -490,6 +490,36 @@ ccl_device void bsdf_principled_hair_blur(ShaderClosure *sc, float roughness)
   bsdf->v = fmaxf(roughness, bsdf->v);
   bsdf->s = fmaxf(roughness, bsdf->s);
   bsdf->m0_roughness = fmaxf(roughness, bsdf->m0_roughness);
+}
+
+/* Hair Albedo */
+
+ccl_device_inline float bsdf_principled_hair_albedo_roughness_scale(
+    const float azimuthal_roughness)
+{
+  const float x = azimuthal_roughness;
+  return (((((0.245f * x) + 5.574f) * x - 10.73f) * x + 2.532f) * x - 0.215f) * x + 5.969f;
+}
+
+ccl_device float3 bsdf_principled_hair_albedo(ShaderClosure *sc)
+{
+  PrincipledHairBSDF *bsdf = (PrincipledHairBSDF *)sc;
+  return exp3(-sqrt(bsdf->sigma) * bsdf_principled_hair_albedo_roughness_scale(bsdf->v));
+}
+
+ccl_device_inline float3
+bsdf_principled_hair_sigma_from_reflectance(const float3 color, const float azimuthal_roughness)
+{
+  const float3 sigma = log3(color) /
+                       bsdf_principled_hair_albedo_roughness_scale(azimuthal_roughness);
+  return sigma * sigma;
+}
+
+ccl_device_inline float3 bsdf_principled_hair_sigma_from_concentration(const float eumelanin,
+                                                                       const float pheomelanin)
+{
+  return eumelanin * make_float3(0.506f, 0.841f, 1.653f) +
+         pheomelanin * make_float3(0.343f, 0.733f, 1.924f);
 }
 
 CCL_NAMESPACE_END

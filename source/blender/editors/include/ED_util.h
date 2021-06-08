@@ -21,27 +21,45 @@
  * \ingroup editors
  */
 
-#ifndef __ED_UTIL_H__
-#define __ED_UTIL_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct Main;
 struct bContext;
-struct wmOperatorType;
 
 /* ed_util.c */
 void ED_editors_init_for_undo(struct Main *bmain);
 void ED_editors_init(struct bContext *C);
 void ED_editors_exit(struct Main *bmain, bool do_undo_system);
-bool ED_editors_flush_edits(struct Main *bmain, bool for_render);
 
-void ED_spacedata_id_remap(struct ScrArea *sa,
+bool ED_editors_flush_edits_for_object_ex(struct Main *bmain,
+                                          struct Object *ob,
+                                          bool for_render,
+                                          bool check_needs_flush);
+bool ED_editors_flush_edits_for_object(struct Main *bmain, struct Object *ob);
+
+bool ED_editors_flush_edits_ex(struct Main *bmain, bool for_render, bool check_needs_flush);
+bool ED_editors_flush_edits(struct Main *bmain);
+
+void ED_spacedata_id_remap(struct ScrArea *area,
                            struct SpaceLink *sl,
                            struct ID *old_id,
                            struct ID *new_id);
 
-void ED_OT_flush_edits(struct wmOperatorType *ot);
+void ED_operatortypes_edutils(void);
+
+/* Drawing */
+void ED_region_draw_mouse_line_cb(const struct bContext *C,
+                                  struct ARegion *region,
+                                  void *arg_info);
+
+void ED_region_image_metadata_draw(
+    int x, int y, struct ImBuf *ibuf, const rctf *frame, float zoomx, float zoomy);
 
 /* ************** XXX OLD CRUFT WARNING ************* */
 
@@ -56,4 +74,6 @@ void unpack_menu(struct bContext *C,
                  const char *folder,
                  struct PackedFile *pf);
 
-#endif /* __ED_UTIL_H__ */
+#ifdef __cplusplus
+}
+#endif

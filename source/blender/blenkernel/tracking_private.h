@@ -24,10 +24,13 @@
  * by multiple tracking files but which should not be public.
  */
 
-#ifndef __TRACKING_PRIVATE_H__
-#define __TRACKING_PRIVATE_H__
+#pragma once
 
 #include "BLI_threads.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct GHash;
 struct MovieTracking;
@@ -108,6 +111,7 @@ struct libmv_TrackRegionOptions;
 
 void tracking_configure_tracker(const MovieTrackingTrack *track,
                                 float *mask,
+                                bool is_backwards,
                                 struct libmv_TrackRegionOptions *options);
 
 struct MovieTrackingMarker *tracking_get_keyframed_marker(struct MovieTrackingTrack *track,
@@ -122,27 +126,36 @@ float *tracking_track_get_mask_for_region(int frame_width,
                                           const float region_max[2],
                                           MovieTrackingTrack *track);
 
-/*********************** Frame accessr *************************/
+/*********************** Frame Accessor *************************/
 
 struct libmv_FrameAccessor;
 
 #define MAX_ACCESSOR_CLIP 64
 typedef struct TrackingImageAccessor {
-  struct MovieCache *cache;
   struct MovieClip *clips[MAX_ACCESSOR_CLIP];
   int num_clips;
+
+  /* Array of tracks which are being tracked.
+   * Points to actual track from the `MovieClip` (or multiple of them).
+   * This accessor owns the array, but not the tracks themselves. */
   struct MovieTrackingTrack **tracks;
   int num_tracks;
-  int start_frame;
+
   struct libmv_FrameAccessor *libmv_accessor;
   SpinLock cache_lock;
 } TrackingImageAccessor;
 
+/* Clips are used to access images of an actual footage.
+ * Tracks are used to access masks associated with the tracks.
+ *
+ * NOTE: Both clips and tracks arrays are copied into the image accessor. It means that the caller
+ * is allowed to pass temporary arrays which are only valid during initialization. */
 TrackingImageAccessor *tracking_image_accessor_new(MovieClip *clips[MAX_ACCESSOR_CLIP],
                                                    int num_clips,
                                                    MovieTrackingTrack **tracks,
-                                                   int num_tracks,
-                                                   int start_frame);
+                                                   int num_tracks);
 void tracking_image_accessor_destroy(TrackingImageAccessor *accessor);
 
-#endif /* __TRACKING_PRIVATE_H__ */
+#ifdef __cplusplus
+}
+#endif

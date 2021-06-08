@@ -14,12 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_REP_H__
-#define __FREESTYLE_REP_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Base class for all shapes. Inherits from BasicObjects for references counter management (addRef, release).
+ * \brief Base class for all shapes.
+ * Inherits from BasicObjects for references counter management (addRef, release).
  */
 
 #include <string>
@@ -53,10 +53,12 @@ class Rep : public BaseObject {
     _Id = iBrother._Id;
     _Name = iBrother._Name;
     _LibraryPath = iBrother._LibraryPath;
-    if (0 == iBrother._FrsMaterial)
+    if (0 == iBrother._FrsMaterial) {
       _FrsMaterial = 0;
-    else
+    }
+    else {
       _FrsMaterial = new FrsMaterial(*(iBrother._FrsMaterial));
+    }
 
     _BBox = iBrother.bbox();
   }
@@ -105,14 +107,15 @@ class Rep : public BaseObject {
    */
   virtual void accept(SceneVisitor &v)
   {
-    if (_FrsMaterial)
+    if (_FrsMaterial) {
       v.visitFrsMaterial(*_FrsMaterial);
+    }
     v.visitRep(*this);
   }
 
   /*! Computes the rep bounding box.
-   *  Each Inherited rep must compute its bbox depending on the way the data are stored. So, each inherited class
-   *  must overload this method
+   *  Each Inherited rep must compute its bbox depending on the way the data are stored. So, each
+   * inherited class must overload this method
    */
   virtual void ComputeBBox() = 0;
 
@@ -177,5 +180,3 @@ class Rep : public BaseObject {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_REP_H__

@@ -175,12 +175,12 @@ static void pauseSound(AUD_Handle* handle)
 	(*handle)->pause();
 }
 
-AUD_API AUD_Handle* AUD_pauseAfter(AUD_Handle* handle, float seconds)
+AUD_API AUD_Handle* AUD_pauseAfter(AUD_Handle* handle, double seconds)
 {
-	std::shared_ptr<ISound> silence = std::shared_ptr<ISound>(new Silence);
-	std::shared_ptr<ISound> limiter = std::shared_ptr<ISound>(new Limiter(silence, 0, seconds));
-
 	auto device = DeviceManager::getDevice();
+
+	std::shared_ptr<ISound> silence = std::shared_ptr<ISound>(new Silence(device->getSpecs().rate));
+	std::shared_ptr<ISound> limiter = std::shared_ptr<ISound>(new Limiter(silence, 0, seconds));
 
 	std::lock_guard<ILockable> lock(*device);
 
@@ -270,7 +270,7 @@ AUD_API int AUD_readSound(AUD_Sound* sound, float* buffer, int length, int sampl
 	return length;
 }
 
-AUD_API const char* AUD_mixdown(AUD_Sound* sound, unsigned int start, unsigned int length, unsigned int buffersize, const char* filename, AUD_DeviceSpecs specs, AUD_Container format, AUD_Codec codec, unsigned int bitrate)
+AUD_API const char* AUD_mixdown(AUD_Sound* sound, unsigned int start, unsigned int length, unsigned int buffersize, const char* filename, AUD_DeviceSpecs specs, AUD_Container format, AUD_Codec codec, unsigned int bitrate, void(*callback)(float, void*), void* data)
 {
 	try
 	{
@@ -280,7 +280,7 @@ AUD_API const char* AUD_mixdown(AUD_Sound* sound, unsigned int start, unsigned i
 		std::shared_ptr<IReader> reader = f->createQualityReader();
 		reader->seek(start);
 		std::shared_ptr<IWriter> writer = FileWriter::createWriter(filename, convCToDSpec(specs), static_cast<Container>(format), static_cast<Codec>(codec), bitrate);
-		FileWriter::writeReader(reader, writer, length, buffersize);
+		FileWriter::writeReader(reader, writer, length, buffersize, callback, data);
 
 		return nullptr;
 	}
@@ -290,7 +290,7 @@ AUD_API const char* AUD_mixdown(AUD_Sound* sound, unsigned int start, unsigned i
 	}
 }
 
-AUD_API const char* AUD_mixdown_per_channel(AUD_Sound* sound, unsigned int start, unsigned int length, unsigned int buffersize, const char* filename, AUD_DeviceSpecs specs, AUD_Container format, AUD_Codec codec, unsigned int bitrate)
+AUD_API const char* AUD_mixdown_per_channel(AUD_Sound* sound, unsigned int start, unsigned int length, unsigned int buffersize, const char* filename, AUD_DeviceSpecs specs, AUD_Container format, AUD_Codec codec, unsigned int bitrate, void(*callback)(float, void*), void* data)
 {
 	try
 	{
@@ -326,7 +326,7 @@ AUD_API const char* AUD_mixdown_per_channel(AUD_Sound* sound, unsigned int start
 
 		std::shared_ptr<IReader> reader = f->createQualityReader();
 		reader->seek(start);
-		FileWriter::writeReader(reader, writers, length, buffersize);
+		FileWriter::writeReader(reader, writers, length, buffersize, callback, data);
 
 		return nullptr;
 	}
@@ -336,7 +336,7 @@ AUD_API const char* AUD_mixdown_per_channel(AUD_Sound* sound, unsigned int start
 	}
 }
 
-AUD_API AUD_Device* AUD_openMixdownDevice(AUD_DeviceSpecs specs, AUD_Sound* sequencer, float volume, float start)
+AUD_API AUD_Device* AUD_openMixdownDevice(AUD_DeviceSpecs specs, AUD_Sound* sequencer, float volume, double start)
 {
 	try
 	{
@@ -376,7 +376,7 @@ AUD_API AUD_Device* AUD_init(const char* device, AUD_DeviceSpecs specs, int buff
 {
 	try
 	{
-		std::shared_ptr<IDeviceFactory> factory = DeviceManager::getDeviceFactory(device);
+		std::shared_ptr<IDeviceFactory> factory = device ? DeviceManager::getDeviceFactory(device) : DeviceManager::getDefaultDeviceFactory();
 
 		if(factory)
 		{

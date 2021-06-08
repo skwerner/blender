@@ -20,8 +20,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_stack.h"
 #include "BLI_math.h"
+#include "BLI_stack.h"
 
 #include "BKE_editmesh.h"
 
@@ -93,8 +93,9 @@ static void edgering_find_order(BMEdge *eed_last, BMEdge *eed, BMVert *eve_last,
   if (!(BM_edge_in_face(eed, l->f) && BM_edge_in_face(eed_last, l->f))) {
     BMIter liter;
     BM_ITER_ELEM (l, &liter, l, BM_LOOPS_OF_LOOP) {
-      if (BM_edge_in_face(eed, l->f) && BM_edge_in_face(eed_last, l->f))
+      if (BM_edge_in_face(eed, l->f) && BM_edge_in_face(eed_last, l->f)) {
         break;
+      }
     }
   }
 
@@ -109,7 +110,7 @@ static void edgering_find_order(BMEdge *eed_last, BMEdge *eed, BMVert *eve_last,
 
   BMLoop *l_other = BM_loop_other_edge_loop(l, eed->v1);
   const bool rev = (l_other == l->prev);
-  while (l_other->v != eed_last->v1 && l_other->v != eed_last->v2) {
+  while (!ELEM(l_other->v, eed_last->v1, eed_last->v2)) {
     l_other = rev ? l_other->prev : l_other->next;
   }
 
@@ -158,7 +159,7 @@ void EDBM_preselect_edgering_draw(struct EditMesh_PreSelEdgeRing *psel, const fl
     return;
   }
 
-  GPU_depth_test(false);
+  GPU_depth_test(GPU_DEPTH_NONE);
 
   GPU_matrix_push();
   GPU_matrix_mul(matrix);
@@ -196,7 +197,7 @@ void EDBM_preselect_edgering_draw(struct EditMesh_PreSelEdgeRing *psel, const fl
   GPU_matrix_pop();
 
   /* Reset default */
-  GPU_depth_test(true);
+  GPU_depth_test(GPU_DEPTH_LESS_EQUAL);
 }
 
 static void view3d_preselect_mesh_edgering_update_verts_from_edge(
@@ -342,12 +343,12 @@ void EDBM_preselect_edgering_update_from_edge(struct EditMesh_PreSelEdgeRing *ps
     BM_mesh_elem_index_ensure(bm, BM_VERT);
   }
 
-  if (BM_edge_is_wire(eed_start)) {
-    view3d_preselect_mesh_edgering_update_verts_from_edge(
+  if (BM_edge_is_any_face_len_test(eed_start, 4)) {
+    view3d_preselect_mesh_edgering_update_edges_from_edge(
         psel, bm, eed_start, previewlines, coords);
   }
   else {
-    view3d_preselect_mesh_edgering_update_edges_from_edge(
+    view3d_preselect_mesh_edgering_update_verts_from_edge(
         psel, bm, eed_start, previewlines, coords);
   }
 }

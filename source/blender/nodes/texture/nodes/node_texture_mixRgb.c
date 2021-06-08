@@ -21,19 +21,19 @@
  * \ingroup texnodes
  */
 
-#include "node_texture_util.h"
 #include "NOD_texture.h"
+#include "node_texture_util.h"
 
 /* **************** MIX RGB ******************** */
 static bNodeSocketTemplate inputs[] = {
-    {SOCK_FLOAT, 1, N_("Factor"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
-    {SOCK_RGBA, 1, N_("Color1"), 0.5f, 0.5f, 0.5f, 1.0f},
-    {SOCK_RGBA, 1, N_("Color2"), 0.5f, 0.5f, 0.5f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Factor"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_NONE},
+    {SOCK_RGBA, N_("Color1"), 0.5f, 0.5f, 0.5f, 1.0f},
+    {SOCK_RGBA, N_("Color2"), 0.5f, 0.5f, 0.5f, 1.0f},
+    {-1, ""},
 };
 static bNodeSocketTemplate outputs[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 static void colorfn(float *out, TexParams *p, bNode *node, bNodeStack **in, short thread)
@@ -45,8 +45,9 @@ static void colorfn(float *out, TexParams *p, bNode *node, bNodeStack **in, shor
   tex_input_rgba(col2, in[2], p, thread);
 
   /* use alpha */
-  if (node->custom2 & 1)
+  if (node->custom2 & 1) {
     fac *= col2[3];
+  }
 
   CLAMP(fac, 0.0f, 1.0f);
 

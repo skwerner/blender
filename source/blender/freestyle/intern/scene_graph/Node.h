@@ -14,12 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_NODE_H__
-#define __FREESTYLE_NODE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Abstract class for scene graph nodes. Inherits from BaseObject which defines the addRef release mechanism.
+ * \brief Abstract class for scene graph nodes. Inherits from BaseObject which defines the addRef
+ * release mechanism.
  */
 
 #include "SceneVisitor.h"
@@ -78,13 +78,16 @@ class Node : public BaseObject {
   /*! Makes the union of _BBox and iBox */
   virtual void AddBBox(const BBox<Vec3r> &iBox)
   {
-    if (iBox.empty())
+    if (iBox.empty()) {
       return;
+    }
 
-    if (_BBox.empty())
+    if (_BBox.empty()) {
       _BBox = iBox;
-    else
+    }
+    else {
       _BBox += iBox;
+    }
   }
 
   /*! Updates the BBox */
@@ -109,5 +112,3 @@ class Node : public BaseObject {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_NODE_H__

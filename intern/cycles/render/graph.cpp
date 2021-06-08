@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#include "render/attribute.h"
 #include "render/graph.h"
+#include "render/attribute.h"
+#include "render/constant_fold.h"
 #include "render/nodes.h"
 #include "render/scene.h"
 #include "render/shader.h"
-#include "render/constant_fold.h"
 
 #include "util/util_algorithm.h"
 #include "util/util_foreach.h"
@@ -54,6 +54,25 @@ bool check_node_inputs_traversed(const ShaderNode *node, const ShaderNodeSet &do
 }
 
 } /* namespace */
+
+/* Sockets */
+
+void ShaderInput::disconnect()
+{
+  if (link) {
+    link->links.erase(remove(link->links.begin(), link->links.end(), this), link->links.end());
+  }
+  link = NULL;
+}
+
+void ShaderOutput::disconnect()
+{
+  foreach (ShaderInput *sock, links) {
+    sock->link = NULL;
+  }
+
+  links.clear();
+}
 
 /* Node */
 
@@ -127,6 +146,13 @@ ShaderOutput *ShaderNode::output(ustring name)
   return NULL;
 }
 
+void ShaderNode::remove_input(ShaderInput *input)
+{
+  assert(input->link == NULL);
+  delete input;
+  inputs.erase(remove(inputs.begin(), inputs.end(), input), inputs.end());
+}
+
 void ShaderNode::attributes(Shader *shader, AttributeRequestSet *attributes)
 {
   foreach (ShaderInput *input, inputs) {
@@ -195,7 +221,7 @@ ShaderGraph::ShaderGraph()
   finalized = false;
   simplified = false;
   num_node_ids = 0;
-  add(new OutputNode());
+  add(create_node<OutputNode>());
 }
 
 ShaderGraph::~ShaderGraph()
@@ -246,11 +272,11 @@ void ShaderGraph::connect(ShaderOutput *from, ShaderInput *to)
     ShaderInput *convert_in;
 
     if (to->type() == SocketType::CLOSURE) {
-      EmissionNode *emission = new EmissionNode();
-      emission->color = make_float3(1.0f, 1.0f, 1.0f);
-      emission->strength = 1.0f;
+      EmissionNode *emission = create_node<EmissionNode>();
+      emission->set_color(one_float3());
+      emission->set_strength(1.0f);
       convert = add(emission);
-      /* Connect float inputs to Strength to save an additional Falue->Color conversion. */
+      /* Connect float inputs to Strength to save an additional Value->Color conversion. */
       if (from->type() == SocketType::FLOAT) {
         convert_in = convert->input("Strength");
       }
@@ -259,7 +285,7 @@ void ShaderGraph::connect(ShaderOutput *from, ShaderInput *to)
       }
     }
     else {
-      convert = add(new ConvertNode(from->type(), to->type(), true));
+      convert = add(create_node<ConvertNode>(from->type(), to->type(), true));
       convert_in = convert->inputs[0];
     }
 
@@ -278,11 +304,7 @@ void ShaderGraph::disconnect(ShaderOutput *from)
   assert(!finalized);
   simplified = false;
 
-  foreach (ShaderInput *sock, from->links) {
-    sock->link = NULL;
-  }
-
-  from->links.clear();
+  from->disconnect();
 }
 
 void ShaderGraph::disconnect(ShaderInput *to)
@@ -291,10 +313,29 @@ void ShaderGraph::disconnect(ShaderInput *to)
   assert(to->link);
   simplified = false;
 
-  ShaderOutput *from = to->link;
+  to->disconnect();
+}
 
-  to->link = NULL;
-  from->links.erase(remove(from->links.begin(), from->links.end(), to), from->links.end());
+void ShaderGraph::relink(ShaderInput *from, ShaderInput *to)
+{
+  ShaderOutput *out = from->link;
+  if (out) {
+    disconnect(from);
+    connect(out, to);
+  }
+  to->parent->copy_value(to->socket_type, *(from->parent), from->socket_type);
+}
+
+void ShaderGraph::relink(ShaderOutput *from, ShaderOutput *to)
+{
+  /* Copy because disconnect modifies this list. */
+  vector<ShaderInput *> outputs = from->links;
+
+  foreach (ShaderInput *sock, outputs) {
+    disconnect(sock);
+    if (to)
+      connect(to, sock);
+  }
 }
 
 void ShaderGraph::relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to)
@@ -320,6 +361,7 @@ void ShaderGraph::relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to)
 void ShaderGraph::simplify(Scene *scene)
 {
   if (!simplified) {
+    expand();
     default_inputs(scene->shader_manager->use_osl());
     clean(scene);
     refine_bump_nodes();
@@ -374,7 +416,7 @@ void ShaderGraph::find_dependencies(ShaderNodeSet &dependencies, ShaderInput *in
 void ShaderGraph::clear_nodes()
 {
   foreach (ShaderNode *node, nodes) {
-    delete node;
+    delete_node(node);
   }
   nodes.clear();
 }
@@ -386,7 +428,7 @@ void ShaderGraph::copy_nodes(ShaderNodeSet &nodes, ShaderNodeMap &nnodemap)
 
   /* copy nodes */
   foreach (ShaderNode *node, nodes) {
-    ShaderNode *nnode = node->clone();
+    ShaderNode *nnode = node->clone(this);
     nnodemap[node] = nnode;
 
     /* create new inputs and outputs to recreate links and ensure
@@ -442,8 +484,8 @@ void ShaderGraph::remove_proxy_nodes()
         vector<ShaderInput *> links(output->links);
 
         foreach (ShaderInput *to, links) {
-          /* remove any autoconvert nodes too if they lead to
-           * sockets with an automatically set default value */
+          /* Remove any auto-convert nodes too if they lead to
+           * sockets with an automatically set default value. */
           ShaderNode *tonode = to->parent;
 
           if (tonode->special_type == SHADER_SPECIAL_TYPE_AUTOCONVERT) {
@@ -481,7 +523,7 @@ void ShaderGraph::remove_proxy_nodes()
       if (!removed[node->id])
         newnodes.push_back(node);
       else
-        delete node;
+        delete_node(node);
     }
 
     nodes = newnodes;
@@ -543,8 +585,8 @@ void ShaderGraph::constant_fold(Scene *scene)
    * that happens to ensure there is still a valid graph for displacement.
    */
   if (has_displacement && !output()->input("Displacement")->link) {
-    ColorNode *value = (ColorNode *)add(new ColorNode());
-    value->value = output()->displacement;
+    ColorNode *value = (ColorNode *)add(create_node<ColorNode>());
+    value->set_value(output()->get_displacement());
 
     connect(value->output("Color"), output()->input("Displacement"));
   }
@@ -720,6 +762,14 @@ void ShaderGraph::compute_displacement_hash()
     foreach (ShaderInput *input, node->inputs) {
       int link_id = (input->link) ? input->link->parent->id : 0;
       md5.append((uint8_t *)&link_id, sizeof(link_id));
+      md5.append((input->link) ? input->link->name().c_str() : "");
+    }
+
+    if (node->special_type == SHADER_SPECIAL_TYPE_OSL) {
+      /* Hash takes into account socket values, to detect changes
+       * in the code of the node we need an exception. */
+      OSLNode *oslnode = static_cast<OSLNode *>(node);
+      md5.append(oslnode->bytecode_hash);
     }
   }
 
@@ -745,6 +795,11 @@ void ShaderGraph::clean(Scene *scene)
 
   /* break cycles */
   break_cycles(output(), visited, on_stack);
+  foreach (ShaderNode *node, nodes) {
+    if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT_AOV) {
+      break_cycles(node, visited, on_stack);
+    }
+  }
 
   /* disconnect unused nodes */
   foreach (ShaderNode *node, nodes) {
@@ -767,10 +822,18 @@ void ShaderGraph::clean(Scene *scene)
     if (visited[node->id])
       newnodes.push_back(node);
     else
-      delete node;
+      delete_node(node);
   }
 
   nodes = newnodes;
+}
+
+void ShaderGraph::expand()
+{
+  /* Call expand on all nodes, to generate additional nodes. */
+  foreach (ShaderNode *node, nodes) {
+    node->expand(this);
+  }
 }
 
 void ShaderGraph::default_inputs(bool do_osl)
@@ -786,43 +849,43 @@ void ShaderGraph::default_inputs(bool do_osl)
       if (!input->link && (!(input->flags() & SocketType::OSL_INTERNAL) || do_osl)) {
         if (input->flags() & SocketType::LINK_TEXTURE_GENERATED) {
           if (!texco)
-            texco = new TextureCoordinateNode();
+            texco = create_node<TextureCoordinateNode>();
 
           connect(texco->output("Generated"), input);
         }
         if (input->flags() & SocketType::LINK_TEXTURE_NORMAL) {
           if (!texco)
-            texco = new TextureCoordinateNode();
+            texco = create_node<TextureCoordinateNode>();
 
           connect(texco->output("Normal"), input);
         }
         else if (input->flags() & SocketType::LINK_TEXTURE_UV) {
           if (!texco)
-            texco = new TextureCoordinateNode();
+            texco = create_node<TextureCoordinateNode>();
 
           connect(texco->output("UV"), input);
         }
         else if (input->flags() & SocketType::LINK_INCOMING) {
           if (!geom)
-            geom = new GeometryNode();
+            geom = create_node<GeometryNode>();
 
           connect(geom->output("Incoming"), input);
         }
         else if (input->flags() & SocketType::LINK_NORMAL) {
           if (!geom)
-            geom = new GeometryNode();
+            geom = create_node<GeometryNode>();
 
           connect(geom->output("Normal"), input);
         }
         else if (input->flags() & SocketType::LINK_POSITION) {
           if (!geom)
-            geom = new GeometryNode();
+            geom = create_node<GeometryNode>();
 
           connect(geom->output("Position"), input);
         }
         else if (input->flags() & SocketType::LINK_TANGENT) {
           if (!geom)
-            geom = new GeometryNode();
+            geom = create_node<GeometryNode>();
 
           connect(geom->output("Tangent"), input);
         }
@@ -880,12 +943,12 @@ void ShaderGraph::refine_bump_nodes()
       foreach (NodePair &pair, nodes_dy)
         add(pair.second);
 
-      /* connect what is connected is bump to samplecenter input*/
+      /* Connect what is connected is bump to sample-center input. */
       connect(out, node->input("SampleCenter"));
 
-      /* bump input is just for connectivity purpose for the graph input,
-       * we re-connected this input to samplecenter, so lets disconnect it
-       * from bump input */
+      /* Bump input is just for connectivity purpose for the graph input,
+       * we re-connected this input to sample-center, so lets disconnect it
+       * from bump input. */
       disconnect(bump_input);
     }
   }
@@ -933,16 +996,16 @@ void ShaderGraph::bump_from_displacement(bool use_object_space)
   foreach (NodePair &pair, nodes_dy)
     pair.second->bump = SHADER_BUMP_DY;
 
-  /* add set normal node and connect the bump normal ouput to the set normal
+  /* add set normal node and connect the bump normal output to the set normal
    * output, so it can finally set the shader normal, note we are only doing
    * this for bump from displacement, this will be the only bump allowed to
    * overwrite the shader normal */
-  ShaderNode *set_normal = add(new SetNormalNode());
+  ShaderNode *set_normal = add(create_node<SetNormalNode>());
 
   /* add bump node and connect copied graphs to it */
-  BumpNode *bump = (BumpNode *)add(new BumpNode());
-  bump->use_object_space = use_object_space;
-  bump->distance = 1.0f;
+  BumpNode *bump = (BumpNode *)add(create_node<BumpNode>());
+  bump->set_use_object_space(use_object_space);
+  bump->set_distance(1.0f);
 
   ShaderOutput *out = displacement_in->link;
   ShaderOutput *out_center = nodes_center[out->parent]->output(out->name());
@@ -950,15 +1013,15 @@ void ShaderGraph::bump_from_displacement(bool use_object_space)
   ShaderOutput *out_dy = nodes_dy[out->parent]->output(out->name());
 
   /* convert displacement vector to height */
-  VectorMathNode *dot_center = (VectorMathNode *)add(new VectorMathNode());
-  VectorMathNode *dot_dx = (VectorMathNode *)add(new VectorMathNode());
-  VectorMathNode *dot_dy = (VectorMathNode *)add(new VectorMathNode());
+  VectorMathNode *dot_center = (VectorMathNode *)add(create_node<VectorMathNode>());
+  VectorMathNode *dot_dx = (VectorMathNode *)add(create_node<VectorMathNode>());
+  VectorMathNode *dot_dy = (VectorMathNode *)add(create_node<VectorMathNode>());
 
-  dot_center->type = NODE_VECTOR_MATH_DOT_PRODUCT;
-  dot_dx->type = NODE_VECTOR_MATH_DOT_PRODUCT;
-  dot_dy->type = NODE_VECTOR_MATH_DOT_PRODUCT;
+  dot_center->set_math_type(NODE_VECTOR_MATH_DOT_PRODUCT);
+  dot_dx->set_math_type(NODE_VECTOR_MATH_DOT_PRODUCT);
+  dot_dy->set_math_type(NODE_VECTOR_MATH_DOT_PRODUCT);
 
-  GeometryNode *geom = (GeometryNode *)add(new GeometryNode());
+  GeometryNode *geom = (GeometryNode *)add(create_node<GeometryNode>());
   connect(geom->output("Normal"), dot_center->input("Vector2"));
   connect(geom->output("Normal"), dot_dx->input("Vector2"));
   connect(geom->output("Normal"), dot_dy->input("Vector2"));
@@ -1002,7 +1065,7 @@ void ShaderGraph::transform_multi_closure(ShaderNode *node, ShaderOutput *weight
 
     if (fin) {
       /* mix closure: add node to mix closure weights */
-      MixClosureWeightNode *mix_node = new MixClosureWeightNode();
+      MixClosureWeightNode *mix_node = create_node<MixClosureWeightNode>();
       add(mix_node);
       ShaderInput *fac_in = mix_node->input("Fac");
       ShaderInput *weight_in = mix_node->input("Weight");
@@ -1010,7 +1073,7 @@ void ShaderGraph::transform_multi_closure(ShaderNode *node, ShaderOutput *weight
       if (fin->link)
         connect(fin->link, fac_in);
       else
-        mix_node->fac = node->get_float(fin->socket_type);
+        mix_node->set_fac(node->get_float(fin->socket_type));
 
       if (weight_out)
         connect(weight_out, weight_in);
@@ -1039,18 +1102,18 @@ void ShaderGraph::transform_multi_closure(ShaderNode *node, ShaderOutput *weight
     /* already has a weight connected to it? add weights */
     float weight_value = node->get_float(weight_in->socket_type);
     if (weight_in->link || weight_value != 0.0f) {
-      MathNode *math_node = new MathNode();
+      MathNode *math_node = create_node<MathNode>();
       add(math_node);
 
       if (weight_in->link)
         connect(weight_in->link, math_node->input("Value1"));
       else
-        math_node->value1 = weight_value;
+        math_node->set_value1(weight_value);
 
       if (weight_out)
         connect(weight_out, math_node->input("Value2"));
       else
-        math_node->value2 = 1.0f;
+        math_node->set_value2(1.0f);
 
       weight_out = math_node->output("Value");
       if (weight_in->link)

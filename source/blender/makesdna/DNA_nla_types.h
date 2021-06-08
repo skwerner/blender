@@ -21,10 +21,13 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_NLA_TYPES_H__
-#define __DNA_NLA_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct Ipo;
 struct Object;
@@ -97,17 +100,16 @@ typedef enum eActStrip_Flag {
   ACTSTRIP_SELECT = (1 << 0),
   ACTSTRIP_USESTRIDE = (1 << 1),
   /* Not implemented. Is not used anywhere */
-  ACTSTRIP_BLENDTONEXT = (1 << 2),
+  /* ACTSTRIP_BLENDTONEXT = (1 << 2), */ /* UNUSED */
   ACTSTRIP_HOLDLASTFRAME = (1 << 3),
   ACTSTRIP_ACTIVE = (1 << 4),
   ACTSTRIP_LOCK_ACTION = (1 << 5),
   ACTSTRIP_MUTE = (1 << 6),
   /* This has yet to be implemented. To indicate that a strip should be played backwards */
   ACTSTRIP_REVERSE = (1 << 7),
-  ACTSTRIP_CYCLIC_USEX = (1 << 8),
-  ACTSTRIP_CYCLIC_USEY = (1 << 9),
-  ACTSTRIP_CYCLIC_USEZ = (1 << 10),
   ACTSTRIP_AUTO_BLENDS = (1 << 11),
 } eActStrip_Flag;
 
+#ifdef __cplusplus
+}
 #endif

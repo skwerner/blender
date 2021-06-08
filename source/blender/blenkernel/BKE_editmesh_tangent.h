@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BKE_EDITMESH_TANGENT_H__
-#define __BKE_EDITMESH_TANGENT_H__
+#pragma once
 
 /** \file
  * \ingroup bke
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
                                     bool calc_active_tangent,
@@ -32,4 +35,6 @@ void BKE_editmesh_loop_tangent_calc(BMEditMesh *em,
                                     const uint dm_loopdata_out_len,
                                     short *tangent_mask_curr_p);
 
-#endif /* __BKE_EDITMESH_TANGENT_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -21,7 +21,7 @@
 from bpy.types import (
     Panel,
 )
-from .properties_physics_common import (
+from bl_ui.properties_physics_common import (
     basic_force_field_settings_ui,
     basic_force_field_falloff_ui,
 )
@@ -32,10 +32,12 @@ class PhysicButtonsPanel:
     bl_region_type = 'WINDOW'
     bl_context = "physics"
 
+    @staticmethod
     def poll_force_field(context):
         ob = context.object
         return (ob and (ob.field) and (ob.field.type != 'NONE'))
 
+    @staticmethod
     def poll_collision(context):
         ob = context.object
         return (ob and ob.type == 'MESH') and (context.collision)
@@ -100,7 +102,7 @@ class PHYSICS_PT_field_settings(PhysicButtonsPanel, Panel):
             col.separator()
 
             col = flow.column()
-            col.prop(field, "guide_clump_amount", text="Clumping amount")
+            col.prop(field, "guide_clump_amount", text="Clumping Amount")
             col.prop(field, "guide_clump_shape")
             col.prop(field, "use_max_distance")
 
@@ -116,22 +118,29 @@ class PHYSICS_PT_field_settings(PhysicButtonsPanel, Panel):
 
             col.prop(field, "strength")
 
+            sub = col.column(heading="Affect")
+            sub.prop(field, "apply_to_location", text="Location")
+
             col = flow.column()
             col.prop(field, "texture_nabla")
             col.prop(field, "use_object_coords")
             col.prop(field, "use_2d_force")
 
-        elif field.type == 'SMOKE_FLOW':
+        elif field.type == 'FLUID_FLOW':
             col = flow.column()
             col.prop(field, "strength")
             col.prop(field, "flow")
+
+            sub = col.column(heading="Affect")
+            sub.prop(field, "apply_to_location", text="Location")
+            sub.prop(field, "apply_to_rotation", text="Rotation")
 
             col = flow.column()
             col.prop(field, "source_object")
             col.prop(field, "use_smoke_density")
         else:
             del flow
-            basic_force_field_settings_ui(self, context, field)
+            basic_force_field_settings_ui(self, field)
 
 
 class PHYSICS_PT_field_settings_kink(PhysicButtonsPanel, Panel):
@@ -212,7 +221,7 @@ class PHYSICS_PT_field_falloff(PhysicButtonsPanel, Panel):
 
         layout.prop(field, "falloff_type", text="Shape")
 
-        basic_force_field_falloff_ui(self, context, field)
+        basic_force_field_falloff_ui(self, field)
 
 
 class PHYSICS_PT_field_falloff_angular(PhysicButtonsPanel, Panel):
@@ -376,7 +385,7 @@ class PHYSICS_PT_collision_particle(PhysicButtonsPanel, Panel):
 
 
 class PHYSICS_PT_collision_softbody(PhysicButtonsPanel, Panel):
-    bl_label = "Softbody And Cloth"
+    bl_label = "Softbody & Cloth"
     bl_parent_id = "PHYSICS_PT_collision"
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 

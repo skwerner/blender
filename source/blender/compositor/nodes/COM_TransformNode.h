@@ -16,11 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_TRANSFORMNODE_H__
-#define __COM_TRANSFORMNODE_H__
+#pragma once
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
 
 /**
  * \brief TransformNode
@@ -29,7 +30,8 @@
 class TransformNode : public Node {
  public:
   TransformNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif /* __COM_TRANSFORMNODE_H__ */
+}  // namespace blender::compositor

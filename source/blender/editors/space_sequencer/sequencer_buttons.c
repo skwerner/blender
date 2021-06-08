@@ -21,13 +21,13 @@
  * \ingroup spseq
  */
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
@@ -36,14 +36,10 @@
 #include "BKE_screen.h"
 
 #include "ED_screen.h"
-#include "ED_gpencil.h"
 #include "ED_sequencer.h"
 
-#include "WM_api.h"
-#include "WM_types.h"
-
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "sequencer_intern.h"
 
@@ -54,7 +50,7 @@ static bool sequencer_grease_pencil_panel_poll(const bContext *C, PanelType *UNU
 {
   SpaceSeq *sseq = CTX_wm_space_seq(C);
 
-  /* don't show the gpencil if we are not showing the image */
+  /* Don't show the gpencil if we are not showing the image. */
   return ED_space_sequencer_check_show_imbuf(sseq);
 }
 #endif
@@ -76,8 +72,9 @@ static void metadata_panel_context_draw(const bContext *C, Panel *panel)
     return;
   }
   struct Main *bmain = CTX_data_main(C);
-  struct Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  struct Depsgraph *depsgraph = CTX_data_expect_evaluated_depsgraph(C);
   struct Scene *scene = CTX_data_scene(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceSeq *space_sequencer = CTX_wm_space_seq(C);
   /* NOTE: We can only reliably show metadata for the original (current)
    * frame when split view is used. */
@@ -88,7 +85,8 @@ static void metadata_panel_context_draw(const bContext *C, Panel *panel)
   }
   /* NOTE: We disable multiview for drawing, since we don't know what is the
    * from the panel (is kind of all the views?). */
-  ImBuf *ibuf = sequencer_ibuf_get(bmain, depsgraph, scene, space_sequencer, scene->r.cfra, 0, "");
+  ImBuf *ibuf = sequencer_ibuf_get(
+      bmain, region, depsgraph, scene, space_sequencer, scene->r.cfra, 0, "");
   if (ibuf != NULL) {
     ED_region_image_metadata_panel_draw(ibuf, panel->layout);
     IMB_freeImBuf(ibuf);
@@ -113,36 +111,10 @@ void sequencer_buttons_register(ARegionType *art)
   pt = MEM_callocN(sizeof(PanelType), "spacetype sequencer panel metadata");
   strcpy(pt->idname, "SEQUENCER_PT_metadata");
   strcpy(pt->label, N_("Metadata"));
+  strcpy(pt->category, "Metadata");
   strcpy(pt->translation_context, BLT_I18NCONTEXT_DEFAULT_BPYRNA);
   pt->poll = metadata_panel_context_poll;
   pt->draw = metadata_panel_context_draw;
-  pt->flag |= PNL_DEFAULT_CLOSED;
+  pt->order = 10;
   BLI_addtail(&art->paneltypes, pt);
-}
-
-/* **************** operator to open/close properties view ************* */
-
-static int sequencer_properties_toggle_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  ScrArea *sa = CTX_wm_area(C);
-  ARegion *ar = sequencer_has_buttons_region(sa);
-
-  if (ar) {
-    ED_region_toggle_hidden(C, ar);
-  }
-
-  return OPERATOR_FINISHED;
-}
-
-void SEQUENCER_OT_properties(wmOperatorType *ot)
-{
-  ot->name = "Properties";
-  ot->idname = "SEQUENCER_OT_properties";
-  ot->description = "Toggle the properties region visibility";
-
-  ot->exec = sequencer_properties_toggle_exec;
-  ot->poll = ED_operator_sequencer_active;
-
-  /* flags */
-  ot->flag = 0;
 }

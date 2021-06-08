@@ -16,10 +16,10 @@
 #
 # ***** END GPL LICENSE BLOCK *****
 
-set(FFMPEG_CFLAGS "-I${mingw_LIBDIR}/lame/include -I${mingw_LIBDIR}/openjpeg/include/ -I${mingw_LIBDIR}/ogg/include -I${mingw_LIBDIR}/vorbis/include -I${mingw_LIBDIR}/theora/include -I${mingw_LIBDIR}/vpx/include -I${mingw_LIBDIR}/x264/include -I${mingw_LIBDIR}/xvidcore/include -I${mingw_LIBDIR}/zlib/include")
-set(FFMPEG_LDFLAGS "-L${mingw_LIBDIR}/lame/lib -L${mingw_LIBDIR}/openjpeg/lib -L${mingw_LIBDIR}/ogg/lib -L${mingw_LIBDIR}/vorbis/lib -L${mingw_LIBDIR}/theora/lib -L${mingw_LIBDIR}/vpx/lib -L${mingw_LIBDIR}/x264/lib -L${mingw_LIBDIR}/xvidcore/lib -L${mingw_LIBDIR}/zlib/lib")
+set(FFMPEG_CFLAGS "-I${mingw_LIBDIR}/lame/include -I${mingw_LIBDIR}/openjpeg/include/ -I${mingw_LIBDIR}/ogg/include -I${mingw_LIBDIR}/vorbis/include -I${mingw_LIBDIR}/theora/include -I${mingw_LIBDIR}/opus/include -I${mingw_LIBDIR}/vpx/include -I${mingw_LIBDIR}/x264/include -I${mingw_LIBDIR}/xvidcore/include -I${mingw_LIBDIR}/zlib/include")
+set(FFMPEG_LDFLAGS "-L${mingw_LIBDIR}/lame/lib -L${mingw_LIBDIR}/openjpeg/lib -L${mingw_LIBDIR}/ogg/lib -L${mingw_LIBDIR}/vorbis/lib -L${mingw_LIBDIR}/theora/lib -L${mingw_LIBDIR}/opus/lib -L${mingw_LIBDIR}/vpx/lib -L${mingw_LIBDIR}/x264/lib -L${mingw_LIBDIR}/xvidcore/lib -L${mingw_LIBDIR}/zlib/lib")
 set(FFMPEG_EXTRA_FLAGS --pkg-config-flags=--static --extra-cflags=${FFMPEG_CFLAGS} --extra-ldflags=${FFMPEG_LDFLAGS})
-set(FFMPEG_ENV PKG_CONFIG_PATH=${mingw_LIBDIR}/openjpeg/lib/pkgconfig:${mingw_LIBDIR}/x264/lib/pkgconfig:${mingw_LIBDIR}/vorbis/lib/pkgconfig:${mingw_LIBDIR}/ogg/lib/pkgconfig:${mingw_LIBDIR})
+set(FFMPEG_ENV PKG_CONFIG_PATH=${mingw_LIBDIR}/openjpeg/lib/pkgconfig:${mingw_LIBDIR}/x264/lib/pkgconfig:${mingw_LIBDIR}/vorbis/lib/pkgconfig:${mingw_LIBDIR}/ogg/lib/pkgconfig:${mingw_LIBDIR}:${mingw_LIBDIR}/vpx/lib/pkgconfig:${mingw_LIBDIR}/theora/lib/pkgconfig:${mingw_LIBDIR}/openjpeg/lib/pkgconfig:${mingw_LIBDIR}/opus/lib/pkgconfig:)
 
 if(WIN32)
   set(FFMPEG_ENV set ${FFMPEG_ENV} &&)
@@ -50,13 +50,19 @@ if(APPLE)
   set(FFMPEG_EXTRA_FLAGS
     ${FFMPEG_EXTRA_FLAGS}
     --target-os=darwin
-    )
+    --x86asmexe=${LIBDIR}/nasm/bin/nasm
+  )
+elseif(UNIX)
+  set(FFMPEG_EXTRA_FLAGS
+    ${FFMPEG_EXTRA_FLAGS}
+    --x86asmexe=${LIBDIR}/nasm/bin/nasm
+  )
 endif()
 
 ExternalProject_Add(external_ffmpeg
-  URL ${FFMPEG_URI}
+  URL file://${PACKAGE_DIR}/${FFMPEG_FILE}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH MD5=${FFMPEG_HASH}
+  URL_HASH ${FFMPEG_HASH_TYPE}=${FFMPEG_HASH}
   # OpenJpeg is compiled with pthread support on Linux, which is all fine and is what we
   # want for maximum runtime performance, but due to static nature of that library we
   # need to force ffmpeg to link against pthread, otherwise test program used by autoconf
@@ -73,6 +79,7 @@ ExternalProject_Add(external_ffmpeg
     --disable-libgsm
     --disable-libspeex
     --enable-libvpx
+    --enable-libopus
     --prefix=${LIBDIR}/ffmpeg
     --enable-libtheora
     --enable-libvorbis
@@ -93,8 +100,6 @@ ExternalProject_Add(external_ffmpeg
     --disable-version3
     --disable-debug
     --enable-optimizations
-    --disable-sse
-    --disable-ssse3
     --enable-ffplay
     --disable-openssl
     --disable-securetransport
@@ -126,10 +131,10 @@ endif()
 add_dependencies(
   external_ffmpeg
   external_zlib
-  external_faad
   external_openjpeg
   external_xvidcore
   external_x264
+  external_opus
   external_vpx
   external_theora
   external_vorbis
@@ -140,6 +145,12 @@ if(WIN32)
   add_dependencies(
     external_ffmpeg
     external_zlib_mingw
+  )
+endif()
+if(UNIX)
+  add_dependencies(
+    external_ffmpeg
+    external_nasm
   )
 endif()
 

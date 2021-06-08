@@ -20,8 +20,8 @@
 
 #include <stdlib.h>
 
-#include "DNA_anim_types.h"
 #include "DNA_action_types.h"
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 
 #include "BLI_utildefines.h"
@@ -39,11 +39,11 @@
 
 #ifdef RNA_RUNTIME
 
-#  include <stdio.h>
 #  include <math.h>
+#  include <stdio.h>
 
 /* needed for some of the validation stuff... */
-#  include "BKE_animsys.h"
+#  include "BKE_anim_data.h"
 #  include "BKE_fcurve.h"
 #  include "BKE_nla.h"
 
@@ -51,8 +51,8 @@
 
 #  include "ED_anim_api.h"
 
-#  include "DEG_depsgraph_build.h"
 #  include "DEG_depsgraph.h"
+#  include "DEG_depsgraph_build.h"
 
 /* temp constant defined for these funcs only... */
 #  define NLASTRIP_MIN_LEN_THRESH 0.1f
@@ -65,8 +65,8 @@ static void rna_NlaStrip_name_set(PointerRNA *ptr, const char *value)
   BLI_strncpy_utf8(data->name, value, sizeof(data->name));
 
   /* validate if there's enough info to do so */
-  if (ptr->id.data) {
-    AnimData *adt = BKE_animdata_from_id(ptr->id.data);
+  if (ptr->owner_id) {
+    AnimData *adt = BKE_animdata_from_id(ptr->owner_id);
     BKE_nlastrip_validate_name(adt, data);
   }
 }
@@ -74,7 +74,7 @@ static void rna_NlaStrip_name_set(PointerRNA *ptr, const char *value)
 static char *rna_NlaStrip_path(PointerRNA *ptr)
 {
   NlaStrip *strip = (NlaStrip *)ptr->data;
-  AnimData *adt = BKE_animdata_from_id(ptr->id.data);
+  AnimData *adt = BKE_animdata_from_id(ptr->owner_id);
 
   /* if we're attached to AnimData, try to resolve path back to AnimData */
   if (adt) {
@@ -88,8 +88,8 @@ static char *rna_NlaStrip_path(PointerRNA *ptr)
           char name_esc_nlt[sizeof(nlt->name) * 2];
           char name_esc_strip[sizeof(strip->name) * 2];
 
-          BLI_strescape(name_esc_nlt, nlt->name, sizeof(name_esc_nlt));
-          BLI_strescape(name_esc_strip, strip->name, sizeof(name_esc_strip));
+          BLI_str_escape(name_esc_nlt, nlt->name, sizeof(name_esc_nlt));
+          BLI_str_escape(name_esc_strip, strip->name, sizeof(name_esc_strip));
           return BLI_sprintfN(
               "animation_data.nla_tracks[\"%s\"].strips[\"%s\"]", name_esc_nlt, name_esc_strip);
         }
@@ -103,7 +103,7 @@ static char *rna_NlaStrip_path(PointerRNA *ptr)
 
 static void rna_NlaStrip_update(Main *bmain, Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   ANIM_id_update(bmain, id);
 }
@@ -122,9 +122,9 @@ static void rna_NlaStrip_transform_update(Main *bmain, Scene *scene, PointerRNA 
   BKE_nlameta_flush_transforms(strip);
 
   /* set the flag */
-  if ((strip->flag & NLASTRIP_FLAG_AUTO_BLENDS) && ptr->id.data) {
+  if ((strip->flag & NLASTRIP_FLAG_AUTO_BLENDS) && ptr->owner_id) {
     /* validate state to ensure that auto-blend gets applied immediately */
-    IdAdtTemplate *iat = (IdAdtTemplate *)ptr->id.data;
+    IdAdtTemplate *iat = (IdAdtTemplate *)ptr->owner_id;
 
     if (iat->adt) {
       BKE_nla_validate_state(iat->adt);
@@ -138,12 +138,13 @@ static void rna_NlaStrip_start_frame_set(PointerRNA *ptr, float value)
 {
   NlaStrip *data = (NlaStrip *)ptr->data;
 
-  /* clamp value to lie within valid limits
-   * - cannot start past the end of the strip + some flexibility threshold
-   * - cannot start before the previous strip (if present) ends
-   *   -> but if it was a transition, we could go up to the start of the strip + some flexibility threshold
-   *   as long as we re-adjust the transition afterwards
-   * - minimum frame is -MAXFRAME so that we don't get clipping on frame 0
+  /* Clamp value to lie within valid limits:
+   * - Cannot start past the end of the strip + some flexibility threshold.
+   * - Cannot start before the previous strip (if present) ends.
+   *   -> But if it was a transition,
+   *   we could go up to the start of the strip + some flexibility threshold.
+   *   as long as we re-adjust the transition afterwards.
+   * - Minimum frame is -MAXFRAME so that we don't get clipping on frame 0.
    */
   if (data->prev) {
     if (data->prev->type == NLASTRIP_TYPE_TRANSITION) {
@@ -171,7 +172,8 @@ static void rna_NlaStrip_end_frame_set(PointerRNA *ptr, float value)
    * - must not have zero or negative length strip, so cannot start before the first frame
    *   + some minimum-strip-length threshold
    * - cannot end later than the start of the next strip (if present)
-   *   -> but if it was a transition, we could go up to the start of the end - some flexibility threshold
+   *   -> but if it was a transition,
+   *   we could go up to the start of the end - some flexibility threshold
    *   as long as we re-adjust the transition afterwards
    */
   if (data->next) {
@@ -197,8 +199,9 @@ static void rna_NlaStrip_end_frame_set(PointerRNA *ptr, float value)
 
     len = data->end - data->start;
     actlen = data->actend - data->actstart;
-    if (IS_EQF(actlen, 0.0f))
+    if (IS_EQF(actlen, 0.0f)) {
       actlen = 1.0f;
+    }
 
     /* now, adjust the 'scale' setting to reflect this (so that this change can be valid) */
     data->scale = len / ((actlen)*data->repeat);
@@ -210,7 +213,8 @@ static void rna_NlaStrip_scale_set(PointerRNA *ptr, float value)
   NlaStrip *data = (NlaStrip *)ptr->data;
 
   /* set scale value */
-  /* NOTE: these need to be synced with the values in the property definition in rna_def_nlastrip() */
+  /* NOTE: these need to be synced with the values in the
+   * property definition in rna_def_nlastrip() */
   CLAMP(value, 0.0001f, 1000.0f);
   data->scale = value;
 
@@ -223,7 +227,8 @@ static void rna_NlaStrip_repeat_set(PointerRNA *ptr, float value)
   NlaStrip *data = (NlaStrip *)ptr->data;
 
   /* set repeat value */
-  /* NOTE: these need to be synced with the values in the property definition in rna_def_nlastrip() */
+  /* NOTE: these need to be synced with the values in the
+   * property definition in rna_def_nlastrip() */
   CLAMP(value, 0.01f, 1000.0f);
   data->repeat = value;
 
@@ -253,8 +258,9 @@ static void rna_NlaStrip_blend_out_set(PointerRNA *ptr, float value)
   CLAMP(value, 0, len);
 
   /* it also cannot overlap with blendin */
-  if ((len - value) < data->blendin)
+  if ((len - value) < data->blendin) {
     value = len - data->blendin;
+  }
 
   data->blendout = value;
 }
@@ -268,8 +274,8 @@ static void rna_NlaStrip_use_auto_blend_set(PointerRNA *ptr, bool value)
     data->flag |= NLASTRIP_FLAG_AUTO_BLENDS;
 
     /* validate state to ensure that auto-blend gets applied immediately */
-    if (ptr->id.data) {
-      IdAdtTemplate *iat = (IdAdtTemplate *)ptr->id.data;
+    if (ptr->owner_id) {
+      IdAdtTemplate *iat = (IdAdtTemplate *)ptr->owner_id;
 
       if (iat->adt) {
         BKE_nla_validate_state(iat->adt);
@@ -292,19 +298,21 @@ static int rna_NlaStrip_action_editable(PointerRNA *ptr, const char **UNUSED(r_i
   NlaStrip *strip = (NlaStrip *)ptr->data;
 
   /* strip actions shouldn't be editable if NLA tweakmode is on */
-  if (ptr->id.data) {
-    AnimData *adt = BKE_animdata_from_id(ptr->id.data);
+  if (ptr->owner_id) {
+    AnimData *adt = BKE_animdata_from_id(ptr->owner_id);
 
     if (adt) {
       /* active action is only editable when it is not a tweaking strip */
-      if ((adt->flag & ADT_NLA_EDIT_ON) || (adt->actstrip) || (adt->tmpact))
+      if ((adt->flag & ADT_NLA_EDIT_ON) || (adt->actstrip) || (adt->tmpact)) {
         return 0;
+      }
     }
   }
 
   /* check for clues that strip probably shouldn't be used... */
-  if (strip->flag & NLASTRIP_FLAG_TWEAKUSER)
+  if (strip->flag & NLASTRIP_FLAG_TWEAKUSER) {
     return 0;
+  }
 
   /* should be ok, though we may still miss some cases */
   return PROP_EDITABLE;
@@ -344,8 +352,9 @@ static void rna_NlaStrip_animated_influence_set(PointerRNA *ptr, bool value)
     data->flag |= NLASTRIP_FLAG_USR_INFLUENCE;
     BKE_nlastrip_validate_fcurves(data);
   }
-  else
+  else {
     data->flag &= ~NLASTRIP_FLAG_USR_INFLUENCE;
+  }
 }
 
 static void rna_NlaStrip_animated_time_set(PointerRNA *ptr, bool value)
@@ -357,8 +366,9 @@ static void rna_NlaStrip_animated_time_set(PointerRNA *ptr, bool value)
     data->flag |= NLASTRIP_FLAG_USR_TIME;
     BKE_nlastrip_validate_fcurves(data);
   }
-  else
+  else {
     data->flag &= ~NLASTRIP_FLAG_USR_TIME;
+  }
 }
 
 static FCurve *rna_NlaStrip_fcurve_find(NlaStrip *strip,
@@ -372,7 +382,7 @@ static FCurve *rna_NlaStrip_fcurve_find(NlaStrip *strip,
   }
 
   /* Returns NULL if not found. */
-  return list_find_fcurve(&strip->fcurves, data_path, index);
+  return BKE_fcurve_find(&strip->fcurves, data_path, index);
 }
 
 static NlaStrip *rna_NlaStrip_new(ID *id,
@@ -411,18 +421,21 @@ static NlaStrip *rna_NlaStrip_new(ID *id,
     AnimData adt = {NULL};
     NlaTrack *nlt, *nlt_p;
 
-    /* 'first' NLA track is found by going back up chain of given track's parents until we fall off */
+    /* 'first' NLA track is found by going back up chain of given
+     * track's parents until we fall off. */
     nlt_p = track;
     nlt = track;
-    while ((nlt = nlt->prev) != NULL)
+    while ((nlt = nlt->prev) != NULL) {
       nlt_p = nlt;
+    }
     adt.nla_tracks.first = nlt_p;
 
     /* do the same thing to find the last track */
     nlt_p = track;
     nlt = track;
-    while ((nlt = nlt->next) != NULL)
+    while ((nlt = nlt->next) != NULL) {
       nlt_p = nlt;
+    }
     adt.nla_tracks.last = nlt_p;
 
     /* now we can just auto-name as usual */
@@ -462,7 +475,7 @@ static void rna_NlaStrip_remove(
 static void rna_NlaTrack_solo_set(PointerRNA *ptr, bool value)
 {
   NlaTrack *data = (NlaTrack *)ptr->data;
-  AnimData *adt = BKE_animdata_from_id(ptr->id.data);
+  AnimData *adt = BKE_animdata_from_id(ptr->owner_id);
   NlaTrack *nt;
 
   if (data == NULL) {
@@ -593,6 +606,8 @@ static void rna_def_nlastrip(BlenderRNA *brna)
   RNA_def_struct_ui_text(srna, "NLA Strip", "A container referencing an existing Action");
   RNA_def_struct_path_func(srna, "rna_NlaStrip_path");
   RNA_def_struct_ui_icon(srna, ICON_NLA); /* XXX */
+
+  RNA_define_lib_overridable(true);
 
   /* name property */
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
@@ -736,15 +751,15 @@ static void rna_def_nlastrip(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Influence", "Amount the strip contributes to the current result");
   /* XXX: Update temporarily disabled so that the property can be edited at all!
-   * Even autokey only applies after the curves have been re-evaluated, causing the unkeyed values to be lost
-   */
+   * Even autokey only applies after the curves have been re-evaluated,
+   * causing the unkeyed values to be lost. */
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA | NA_EDITED, /*"rna_NlaStrip_update"*/ NULL);
 
   prop = RNA_def_property(srna, "strip_time", PROP_FLOAT, PROP_TIME);
   RNA_def_property_ui_text(prop, "Strip Time", "Frame of referenced Action to evaluate");
   /* XXX: Update temporarily disabled so that the property can be edited at all!
-   * Even autokey only applies after the curves have been re-evaluated, causing the unkeyed values to be lost
-   */
+   * Even autokey only applies after the curves have been re-evaluated,
+   * causing the unkeyed values to be lost. */
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA | NA_EDITED, /*"rna_NlaStrip_update"*/ NULL);
 
   /* TODO: should the animated_influence/time settings be animatable themselves? */
@@ -769,7 +784,7 @@ static void rna_def_nlastrip(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_animated_time_cyclic", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", NLASTRIP_FLAG_USR_TIME_CYCLIC);
   RNA_def_property_ui_text(
-      prop, "Cyclic Strip Time", "Cycle the animated time within the action start & end");
+      prop, "Cyclic Strip Time", "Cycle the animated time within the action start and end");
   RNA_def_property_update(
       prop, NC_ANIMATION | ND_NLA | NA_EDITED, "rna_NlaStrip_transform_update");
 
@@ -788,7 +803,8 @@ static void rna_def_nlastrip(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "mute", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", NLASTRIP_FLAG_MUTED);
-  RNA_def_property_ui_text(prop, "Muted", "Disable NLA Strip evaluation");
+  RNA_def_property_ui_icon(prop, ICON_CHECKBOX_HLT, -1);
+  RNA_def_property_ui_text(prop, "Mute", "Disable NLA Strip evaluation");
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA | NA_EDITED, "rna_NlaStrip_update");
 
   prop = RNA_def_property(srna, "use_reverse", PROP_BOOLEAN, PROP_NONE);
@@ -806,6 +822,8 @@ static void rna_def_nlastrip(BlenderRNA *brna)
                            "Update range of frames referenced from action "
                            "after tweaking strip and its keyframes");
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA | NA_EDITED, "rna_NlaStrip_update");
+
+  RNA_define_lib_overridable(false);
 }
 
 static void rna_api_nlatrack_strips(BlenderRNA *brna, PropertyRNA *cprop)
@@ -863,9 +881,13 @@ static void rna_def_nlatrack(BlenderRNA *brna)
   /* strips collection */
   prop = RNA_def_property(srna, "strips", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_struct_type(prop, "NlaStrip");
+  /* We do not support inserting or removing strips in overrides of tracks for now. */
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(prop, "NLA Strips", "NLA Strips on this NLA-track");
 
   rna_api_nlatrack_strips(brna, prop);
+
+  RNA_define_lib_overridable(true);
 
   /* name property */
   prop = RNA_def_property(srna, "name", PROP_STRING, PROP_NONE);
@@ -906,6 +928,8 @@ static void rna_def_nlatrack(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", NLATRACK_PROTECTED);
   RNA_def_property_ui_text(prop, "Locked", "NLA Track is locked");
   RNA_def_property_update(prop, NC_ANIMATION | ND_NLA, NULL); /* this will do? */
+
+  RNA_define_lib_overridable(false);
 }
 
 /* --------- */

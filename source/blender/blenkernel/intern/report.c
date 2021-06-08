@@ -21,10 +21,10 @@
  * \ingroup bke
  */
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <errno.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -34,8 +34,8 @@
 
 #include "BLT_translation.h"
 
-#include "BKE_report.h"
 #include "BKE_global.h" /* G.background only */
+#include "BKE_report.h"
 
 const char *BKE_report_type_str(ReportType type)
 {
@@ -65,8 +65,9 @@ const char *BKE_report_type_str(ReportType type)
 
 void BKE_reports_init(ReportList *reports, int flag)
 {
-  if (!reports)
+  if (!reports) {
     return;
+  }
 
   memset(reports, 0, sizeof(ReportList));
 
@@ -75,12 +76,18 @@ void BKE_reports_init(ReportList *reports, int flag)
   reports->flag = flag;
 }
 
+/**
+ * Only frees the list \a reports.
+ * To make displayed reports disappear, either remove window-manager reports
+ * (wmWindowManager.reports, or CTX_wm_reports()), or use #WM_report_banners_cancel().
+ */
 void BKE_reports_clear(ReportList *reports)
 {
   Report *report, *report_next;
 
-  if (!reports)
+  if (!reports) {
     return;
+  }
 
   report = reports->list.first;
 
@@ -114,7 +121,7 @@ void BKE_report(ReportList *reports, ReportType type, const char *_message)
     report->typestr = BKE_report_type_str(type);
 
     len = strlen(message);
-    message_alloc = MEM_callocN(sizeof(char) * (len + 1), "ReportMessage");
+    message_alloc = MEM_mallocN(sizeof(char) * (len + 1), "ReportMessage");
     memcpy(message_alloc, message, sizeof(char) * (len + 1));
     report->message = message_alloc;
     report->len = len;
@@ -163,8 +170,9 @@ void BKE_reports_prepend(ReportList *reports, const char *_prepend)
   DynStr *ds;
   const char *prepend = TIP_(_prepend);
 
-  if (!reports)
+  if (!reports) {
     return;
+  }
 
   for (report = reports->list.first; report; report = report->next) {
     ds = BLI_dynstr_new();
@@ -187,8 +195,9 @@ void BKE_reports_prependf(ReportList *reports, const char *_prepend, ...)
   va_list args;
   const char *prepend = TIP_(_prepend);
 
-  if (!reports)
+  if (!reports) {
     return;
+  }
 
   for (report = reports->list.first; report; report = report->next) {
     ds = BLI_dynstr_new();
@@ -208,32 +217,36 @@ void BKE_reports_prependf(ReportList *reports, const char *_prepend, ...)
 
 ReportType BKE_report_print_level(ReportList *reports)
 {
-  if (!reports)
+  if (!reports) {
     return RPT_ERROR;
+  }
 
   return reports->printlevel;
 }
 
 void BKE_report_print_level_set(ReportList *reports, ReportType level)
 {
-  if (!reports)
+  if (!reports) {
     return;
+  }
 
   reports->printlevel = level;
 }
 
 ReportType BKE_report_store_level(ReportList *reports)
 {
-  if (!reports)
+  if (!reports) {
     return RPT_ERROR;
+  }
 
   return reports->storelevel;
 }
 
 void BKE_report_store_level_set(ReportList *reports, ReportType level)
 {
-  if (!reports)
+  if (!reports) {
     return;
+  }
 
   reports->storelevel = level;
 }
@@ -244,18 +257,23 @@ char *BKE_reports_string(ReportList *reports, ReportType level)
   DynStr *ds;
   char *cstring;
 
-  if (!reports || !reports->list.first)
+  if (!reports || !reports->list.first) {
     return NULL;
+  }
 
   ds = BLI_dynstr_new();
-  for (report = reports->list.first; report; report = report->next)
-    if (report->type >= level)
+  for (report = reports->list.first; report; report = report->next) {
+    if (report->type >= level) {
       BLI_dynstr_appendf(ds, "%s: %s\n", report->typestr, report->message);
+    }
+  }
 
-  if (BLI_dynstr_get_len(ds))
+  if (BLI_dynstr_get_len(ds)) {
     cstring = BLI_dynstr_get_cstring(ds);
-  else
+  }
+  else {
     cstring = NULL;
+  }
 
   BLI_dynstr_free(ds);
   return cstring;
@@ -265,8 +283,9 @@ void BKE_reports_print(ReportList *reports, ReportType level)
 {
   char *cstring = BKE_reports_string(reports, level);
 
-  if (cstring == NULL)
+  if (cstring == NULL) {
     return;
+  }
 
   puts(cstring);
   fflush(stdout);
@@ -278,8 +297,9 @@ Report *BKE_reports_last_displayable(ReportList *reports)
   Report *report;
 
   for (report = reports->list.last; report; report = report->prev) {
-    if (ELEM(report->type, RPT_ERROR, RPT_WARNING, RPT_INFO))
+    if (ELEM(report->type, RPT_ERROR, RPT_WARNING, RPT_INFO)) {
       return report;
+    }
   }
 
   return NULL;
@@ -289,9 +309,11 @@ bool BKE_reports_contain(ReportList *reports, ReportType level)
 {
   Report *report;
   if (reports != NULL) {
-    for (report = reports->list.first; report; report = report->next)
-      if (report->type >= level)
+    for (report = reports->list.first; report; report = report->next) {
+      if (report->type >= level) {
         return true;
+      }
+    }
   }
   return false;
 }

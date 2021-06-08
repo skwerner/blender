@@ -20,10 +20,13 @@
 
 set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_ID.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_ID_enums.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_action_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_anim_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_armature_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_asset_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_boid_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_brush_enums.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_brush_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_cachefile_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_camera_types.h
@@ -32,17 +35,20 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_color_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_constraint_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_curve_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_curveprofile_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_customdata_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_defs.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_documentation.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_dynamicpaint_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_effect_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_fileglobal_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_fluid_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_freestyle_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_genfile.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_gpencil_modifier_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_gpencil_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_gpu_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_hair_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_image_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_ipo_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_key_types.h
@@ -50,6 +56,7 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_layer_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_light_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lightprobe_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_lineart_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_linestyle_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_listBase.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_mask_types.h
@@ -68,13 +75,16 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_outliner_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_packedFile_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_particle_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_pointcache_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_pointcloud_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_rigidbody_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_scene_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_screen_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_sdna_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_sequence_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_session_uuid_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_shader_fx_types.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_smoke_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_simulation_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_sound_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_space_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_speaker_types.h
@@ -85,10 +95,13 @@ set(SRC_DNA_INC
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_vec_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_vfont_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_view2d_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_view3d_enums.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_view3d_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_volume_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_windowmanager_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_workspace_types.h
   ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_world_types.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/makesdna/DNA_xr_types.h
 )
 
 add_subdirectory(datatoc)
@@ -104,13 +117,16 @@ add_subdirectory(blentranslation)
 add_subdirectory(blenloader)
 add_subdirectory(depsgraph)
 add_subdirectory(ikplugin)
-add_subdirectory(physics)
+add_subdirectory(simulation)
 add_subdirectory(gpu)
 add_subdirectory(imbuf)
 add_subdirectory(nodes)
 add_subdirectory(modifiers)
 add_subdirectory(gpencil_modifiers)
+add_subdirectory(sequencer)
 add_subdirectory(shader_fx)
+add_subdirectory(io)
+add_subdirectory(functions)
 add_subdirectory(makesdna)
 add_subdirectory(makesrna)
 
@@ -134,22 +150,14 @@ if(WITH_IMAGE_CINEON)
   add_subdirectory(imbuf/intern/cineon)
 endif()
 
-if(WITH_CODEC_AVI)
-  add_subdirectory(avi)
-endif()
-
 if(WITH_PYTHON)
   add_subdirectory(python)
-endif()
-
-if(WITH_OPENCOLLADA)
-  add_subdirectory(collada)
 endif()
 
 if(WITH_FREESTYLE)
   add_subdirectory(freestyle)
 endif()
 
-if(WITH_ALEMBIC)
-  add_subdirectory(alembic)
+if(WIN32)
+  add_subdirectory(blendthumb)
 endif()

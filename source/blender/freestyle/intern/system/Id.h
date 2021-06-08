@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_ID_H__
-#define __FREESTYLE_ID_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -112,10 +111,12 @@ class Id {
   /*! Operator< */
   bool operator<(const Id &id) const
   {
-    if (_first < id._first)
+    if (_first < id._first) {
       return true;
-    if (_first == id._first && _second < id._second)
+    }
+    if (_first == id._first && _second < id._second) {
       return true;
+    }
     return false;
   }
 
@@ -136,5 +137,3 @@ inline std::ostream &operator<<(std::ostream &s, const Id &id)
 }
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_ID_H__

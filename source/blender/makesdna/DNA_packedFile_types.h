@@ -21,8 +21,11 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_PACKEDFILE_TYPES_H__
-#define __DNA_PACKEDFILE_TYPES_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct PackedFile {
   int size;
@@ -30,20 +33,6 @@ typedef struct PackedFile {
   void *data;
 } PackedFile;
 
-enum ePF_FileStatus {
-  PF_EQUAL = 0,
-  PF_DIFFERS = 1,
-  PF_NOFILE = 2,
-
-  PF_WRITE_ORIGINAL = 3,
-  PF_WRITE_LOCAL = 4,
-  PF_USE_LOCAL = 5,
-  PF_USE_ORIGINAL = 6,
-  PF_KEEP = 7,
-  PF_REMOVE = 8,
-  PF_NOOP = 9,
-
-  PF_ASK = 10,
-};
-
-#endif /* PACKEDFILE_TYPES_H */
+#ifdef __cplusplus
+}
+#endif

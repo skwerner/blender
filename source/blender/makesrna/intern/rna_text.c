@@ -18,14 +18,16 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_text.h"
+
+#include "ED_text.h"
 
 #include "RNA_define.h"
 
@@ -41,29 +43,34 @@ static void rna_Text_filename_get(PointerRNA *ptr, char *value)
 {
   Text *text = (Text *)ptr->data;
 
-  if (text->name)
-    strcpy(value, text->name);
-  else
+  if (text->filepath) {
+    strcpy(value, text->filepath);
+  }
+  else {
     value[0] = '\0';
+  }
 }
 
 static int rna_Text_filename_length(PointerRNA *ptr)
 {
   Text *text = (Text *)ptr->data;
-  return (text->name) ? strlen(text->name) : 0;
+  return (text->filepath) ? strlen(text->filepath) : 0;
 }
 
 static void rna_Text_filename_set(PointerRNA *ptr, const char *value)
 {
   Text *text = (Text *)ptr->data;
 
-  if (text->name)
-    MEM_freeN(text->name);
+  if (text->filepath) {
+    MEM_freeN(text->filepath);
+  }
 
-  if (value[0])
-    text->name = BLI_strdup(value);
-  else
-    text->name = NULL;
+  if (value[0]) {
+    text->filepath = BLI_strdup(value);
+  }
+  else {
+    text->filepath = NULL;
+  }
 }
 
 static bool rna_Text_modified_get(PointerRNA *ptr)
@@ -80,18 +87,72 @@ static int rna_Text_current_line_index_get(PointerRNA *ptr)
 
 static void rna_Text_current_line_index_set(PointerRNA *ptr, int value)
 {
-  Text *text = (Text *)ptr->data;
-  txt_move_toline(text, value, 0);
+  Text *text = ptr->data;
+  TextLine *line = BLI_findlink(&text->lines, value);
+  if (line == NULL) {
+    line = text->lines.last;
+  }
+  text->curl = line;
+  text->curc = 0;
+}
+
+static int rna_Text_select_end_line_index_get(PointerRNA *ptr)
+{
+  Text *text = ptr->data;
+  return BLI_findindex(&text->lines, text->sell);
+}
+
+static void rna_Text_select_end_line_index_set(PointerRNA *ptr, int value)
+{
+  Text *text = ptr->data;
+  TextLine *line = BLI_findlink(&text->lines, value);
+  if (line == NULL) {
+    line = text->lines.last;
+  }
+  text->sell = line;
+  text->selc = 0;
+}
+
+static int rna_Text_current_character_get(PointerRNA *ptr)
+{
+  Text *text = ptr->data;
+  return BLI_str_utf8_offset_to_index(text->curl->line, text->curc);
+}
+
+static void rna_Text_current_character_set(PointerRNA *ptr, int index)
+{
+  Text *text = ptr->data;
+  TextLine *line = text->curl;
+  const int len_utf8 = BLI_strlen_utf8(line->line);
+  CLAMP_MAX(index, len_utf8);
+  text->curc = BLI_str_utf8_offset_from_index(line->line, index);
+}
+
+static int rna_Text_select_end_character_get(PointerRNA *ptr)
+{
+  Text *text = ptr->data;
+  return BLI_str_utf8_offset_to_index(text->sell->line, text->selc);
+}
+
+static void rna_Text_select_end_character_set(PointerRNA *ptr, int index)
+{
+  Text *text = ptr->data;
+  TextLine *line = text->sell;
+  const int len_utf8 = BLI_strlen_utf8(line->line);
+  CLAMP_MAX(index, len_utf8);
+  text->selc = BLI_str_utf8_offset_from_index(line->line, index);
 }
 
 static void rna_TextLine_body_get(PointerRNA *ptr, char *value)
 {
   TextLine *line = (TextLine *)ptr->data;
 
-  if (line->line)
+  if (line->line) {
     strcpy(value, line->line);
-  else
+  }
+  else {
     value[0] = '\0';
+  }
 }
 
 static int rna_TextLine_body_length(PointerRNA *ptr)
@@ -105,8 +166,9 @@ static void rna_TextLine_body_set(PointerRNA *ptr, const char *value)
   TextLine *line = (TextLine *)ptr->data;
   int len = strlen(value);
 
-  if (line->line)
+  if (line->line) {
     MEM_freeN(line->line);
+  }
 
   line->line = MEM_mallocN((len + 1) * sizeof(char), "rna_text_body");
   line->len = len;
@@ -138,6 +200,13 @@ static void rna_def_text_line(BlenderRNA *brna)
 
 static void rna_def_text(BlenderRNA *brna)
 {
+
+  static const EnumPropertyItem indentation_items[] = {
+      {0, "TABS", 0, "Tabs", "Indent using tabs"},
+      {TXT_TABSTOSPACES, "SPACES", 0, "Spaces", "Indent using spaces"},
+      {0, NULL, 0, NULL, NULL},
+  };
+
   StructRNA *srna;
   PropertyRNA *prop;
 
@@ -172,14 +241,12 @@ static void rna_def_text(BlenderRNA *brna)
   prop = RNA_def_property(srna, "use_module", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flags", TXT_ISSCRIPT);
   RNA_def_property_ui_text(
-      prop,
-      "Register",
-      "Register this text as a module on loading, Text name must end with \".py\"");
+      prop, "Register", "Run this text as a script on loading, Text name must end with \".py\"");
 
-  prop = RNA_def_property(srna, "use_tabs_as_spaces", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "flags", TXT_TABSTOSPACES);
-  RNA_def_property_ui_text(
-      prop, "Tabs as Spaces", "Automatically converts all new tabs into spaces");
+  prop = RNA_def_property(srna, "indentation", PROP_ENUM, PROP_NONE); /* as an enum */
+  RNA_def_property_enum_bitflag_sdna(prop, NULL, "flags");
+  RNA_def_property_enum_items(prop, indentation_items);
+  RNA_def_property_ui_text(prop, "Indentation", "Use tabs or spaces for indentation");
 
   prop = RNA_def_property(srna, "lines", PROP_COLLECTION, PROP_NONE);
   RNA_def_property_struct_type(prop, "TextLine");
@@ -194,12 +261,14 @@ static void rna_def_text(BlenderRNA *brna)
       prop, "Current Line", "Current line, and start line of selection if one exists");
 
   prop = RNA_def_property(srna, "current_character", PROP_INT, PROP_UNSIGNED);
-  RNA_def_property_int_sdna(prop, NULL, "curc");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_range(prop, 0, INT_MAX);
   RNA_def_property_ui_text(prop,
                            "Current Character",
                            "Index of current character in current line, and also start index of "
                            "character in selection if one exists");
+  RNA_def_property_int_funcs(
+      prop, "rna_Text_current_character_get", "rna_Text_current_character_set", NULL);
+  RNA_def_property_update(prop, NC_TEXT | ND_CURSOR, NULL);
 
   prop = RNA_def_property(srna, "current_line_index", PROP_INT, PROP_NONE);
   RNA_def_property_int_funcs(
@@ -215,12 +284,20 @@ static void rna_def_text(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "TextLine");
   RNA_def_property_ui_text(prop, "Selection End Line", "End line of selection");
 
+  prop = RNA_def_property(srna, "select_end_line_index", PROP_INT, PROP_NONE);
+  RNA_def_property_int_funcs(
+      prop, "rna_Text_select_end_line_index_get", "rna_Text_select_end_line_index_set", NULL);
+  RNA_def_property_ui_text(prop, "Select End Line Index", "Index of last TextLine in selection");
+  RNA_def_property_update(prop, NC_TEXT | ND_CURSOR, NULL);
+
   prop = RNA_def_property(srna, "select_end_character", PROP_INT, PROP_UNSIGNED);
-  RNA_def_property_int_sdna(prop, NULL, "selc");
-  RNA_def_property_clear_flag(prop, PROP_EDITABLE);
+  RNA_def_property_range(prop, 0, INT_MAX);
   RNA_def_property_ui_text(prop,
                            "Selection End Character",
                            "Index of character after end of selection in the selection end line");
+  RNA_def_property_int_funcs(
+      prop, "rna_Text_select_end_character_get", "rna_Text_select_end_character_set", NULL);
+  RNA_def_property_update(prop, NC_TEXT | ND_CURSOR, NULL);
 
   RNA_api_text(srna);
 }

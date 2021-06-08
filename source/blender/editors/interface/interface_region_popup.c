@@ -26,14 +26,13 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "DNA_userdef_types.h"
 
-#include "BLI_math.h"
 #include "BLI_listbase.h"
+#include "BLI_math.h"
 #include "BLI_rect.h"
 #include "BLI_utildefines.h"
 
@@ -57,24 +56,21 @@
 /**
  * Translate any popup regions (so we can drag them).
  */
-void ui_popup_translate(ARegion *ar, const int mdiff[2])
+void ui_popup_translate(ARegion *region, const int mdiff[2])
 {
-  uiBlock *block;
+  BLI_rcti_translate(&region->winrct, UNPACK2(mdiff));
 
-  BLI_rcti_translate(&ar->winrct, UNPACK2(mdiff));
+  ED_region_update_rect(region);
 
-  ED_region_update_rect(ar);
-
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
 
   /* update blocks */
-  for (block = ar->uiblocks.first; block; block = block->next) {
+  LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
     uiPopupBlockHandle *handle = block->handle;
     /* Make empty, will be initialized on next use, see T60608. */
     BLI_rctf_init(&handle->prev_block_rect, 0, 0, 0, 0);
 
-    uiSafetyRct *saferct;
-    for (saferct = block->saferct.first; saferct; saferct = saferct->next) {
+    LISTBASE_FOREACH (uiSafetyRct *, saferct, &block->saferct) {
       BLI_rctf_translate(&saferct->parent, UNPACK2(mdiff));
       BLI_rctf_translate(&saferct->safety, UNPACK2(mdiff));
     }
@@ -118,7 +114,7 @@ static void ui_popup_block_position(wmWindow *window,
     if (block->buttons.first) {
       BLI_rctf_init_minmax(&block->rect);
 
-      for (uiBut *bt = block->buttons.first; bt; bt = bt->next) {
+      LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
         if (block->content_hints & UI_BLOCK_CONTAINS_SUBMENU_BUT) {
           bt->rect.xmax += UI_MENU_SUBMENU_PADDING;
         }
@@ -236,10 +232,13 @@ static void ui_popup_block_position(wmWindow *window,
   }
 
   /* Compute offset based on direction. */
-  int offset_x = 0, offset_y = 0;
+  float offset_x = 0, offset_y = 0;
+
+  /* Ensure buttons don't come between the parent button and the popup, see: T63566. */
+  const float offset_overlap = max_ff(U.pixelsize, 1.0f);
 
   if (dir1 == UI_DIR_LEFT) {
-    offset_x = butrct.xmin - block->rect.xmax;
+    offset_x = (butrct.xmin - block->rect.xmax) + offset_overlap;
     if (dir2 == UI_DIR_UP) {
       offset_y = butrct.ymin - block->rect.ymin - center_y - UI_MENU_PADDING;
     }
@@ -248,7 +247,7 @@ static void ui_popup_block_position(wmWindow *window,
     }
   }
   else if (dir1 == UI_DIR_RIGHT) {
-    offset_x = butrct.xmax - block->rect.xmin;
+    offset_x = (butrct.xmax - block->rect.xmin) - offset_overlap;
     if (dir2 == UI_DIR_UP) {
       offset_y = butrct.ymin - block->rect.ymin - center_y - UI_MENU_PADDING;
     }
@@ -257,7 +256,7 @@ static void ui_popup_block_position(wmWindow *window,
     }
   }
   else if (dir1 == UI_DIR_UP) {
-    offset_y = butrct.ymax - block->rect.ymin;
+    offset_y = (butrct.ymax - block->rect.ymin) - offset_overlap;
     if (dir2 == UI_DIR_RIGHT) {
       offset_x = butrct.xmax - block->rect.xmax + center_x;
     }
@@ -271,7 +270,7 @@ static void ui_popup_block_position(wmWindow *window,
     }
   }
   else if (dir1 == UI_DIR_DOWN) {
-    offset_y = butrct.ymin - block->rect.ymax;
+    offset_y = (butrct.ymin - block->rect.ymax) + offset_overlap;
     if (dir2 == UI_DIR_RIGHT) {
       offset_x = butrct.xmax - block->rect.xmax + center_x;
     }
@@ -291,7 +290,7 @@ static void ui_popup_block_position(wmWindow *window,
   }
 
   /* Apply offset, buttons in window coords. */
-  for (uiBut *bt = block->buttons.first; bt; bt = bt->next) {
+  LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
     ui_block_to_window_rctf(butregion, but->block, &bt->rect, &bt->rect);
 
     BLI_rctf_translate(&bt->rect, offset_x, offset_y);
@@ -309,49 +308,52 @@ static void ui_popup_block_position(wmWindow *window,
 
     /* when you are outside parent button, safety there should be smaller */
 
+    const int s1 = 40 * U.dpi_fac;
+    const int s2 = 3 * U.dpi_fac;
+
     /* parent button to left */
     if (midx < block->rect.xmin) {
-      block->safety.xmin = block->rect.xmin - 3;
+      block->safety.xmin = block->rect.xmin - s2;
     }
     else {
-      block->safety.xmin = block->rect.xmin - 40;
+      block->safety.xmin = block->rect.xmin - s1;
     }
     /* parent button to right */
     if (midx > block->rect.xmax) {
-      block->safety.xmax = block->rect.xmax + 3;
+      block->safety.xmax = block->rect.xmax + s2;
     }
     else {
-      block->safety.xmax = block->rect.xmax + 40;
+      block->safety.xmax = block->rect.xmax + s1;
     }
 
     /* parent button on bottom */
     if (midy < block->rect.ymin) {
-      block->safety.ymin = block->rect.ymin - 3;
+      block->safety.ymin = block->rect.ymin - s2;
     }
     else {
-      block->safety.ymin = block->rect.ymin - 40;
+      block->safety.ymin = block->rect.ymin - s1;
     }
     /* parent button on top */
     if (midy > block->rect.ymax) {
-      block->safety.ymax = block->rect.ymax + 3;
+      block->safety.ymax = block->rect.ymax + s2;
     }
     else {
-      block->safety.ymax = block->rect.ymax + 40;
+      block->safety.ymax = block->rect.ymax + s1;
     }
 
     /* exception for switched pulldowns... */
     if (dir1 && (dir1 & block->direction) == 0) {
       if (dir2 == UI_DIR_RIGHT) {
-        block->safety.xmax = block->rect.xmax + 3;
+        block->safety.xmax = block->rect.xmax + s2;
       }
       if (dir2 == UI_DIR_LEFT) {
-        block->safety.xmin = block->rect.xmin - 3;
+        block->safety.xmin = block->rect.xmin - s2;
       }
     }
     block->direction = dir1;
   }
 
-  /* keep a list of these, needed for pulldown menus */
+  /* Keep a list of these, needed for pull-down menus. */
   uiSafetyRct *saferct = MEM_callocN(sizeof(uiSafetyRct), "uiSafetyRct");
   saferct->parent = butrct;
   saferct->safety = block->safety;
@@ -366,20 +368,17 @@ static void ui_popup_block_position(wmWindow *window,
 /** \name Menu Block Creation
  * \{ */
 
-static void ui_block_region_refresh(const bContext *C, ARegion *ar)
+static void ui_block_region_refresh(const bContext *C, ARegion *region)
 {
   ScrArea *ctx_area = CTX_wm_area(C);
   ARegion *ctx_region = CTX_wm_region(C);
-  uiBlock *block;
 
-  if (ar->do_draw & RGN_DRAW_REFRESH_UI) {
+  if (region->do_draw & RGN_REFRESH_UI) {
     ScrArea *handle_ctx_area;
     ARegion *handle_ctx_region;
-    uiBlock *block_next;
 
-    ar->do_draw &= ~RGN_DRAW_REFRESH_UI;
-    for (block = ar->uiblocks.first; block; block = block_next) {
-      block_next = block->next;
+    region->do_draw &= ~RGN_REFRESH_UI;
+    LISTBASE_FOREACH_MUTABLE (uiBlock *, block, &region->uiblocks) {
       uiPopupBlockHandle *handle = block->handle;
 
       if (handle->can_refresh) {
@@ -404,11 +403,9 @@ static void ui_block_region_refresh(const bContext *C, ARegion *ar)
   CTX_wm_region_set((bContext *)C, ctx_region);
 }
 
-static void ui_block_region_draw(const bContext *C, ARegion *ar)
+static void ui_block_region_draw(const bContext *C, ARegion *region)
 {
-  uiBlock *block;
-
-  for (block = ar->uiblocks.first; block; block = block->next) {
+  LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
     UI_block_draw(C, block);
   }
 }
@@ -416,18 +413,17 @@ static void ui_block_region_draw(const bContext *C, ARegion *ar)
 /**
  * Use to refresh centered popups on screen resizing (for splash).
  */
-static void ui_block_region_popup_window_listener(wmWindow *UNUSED(win),
-                                                  ScrArea *UNUSED(sa),
-                                                  ARegion *ar,
-                                                  wmNotifier *wmn,
-                                                  const Scene *UNUSED(scene))
+static void ui_block_region_popup_window_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   switch (wmn->category) {
     case NC_WINDOW: {
       switch (wmn->action) {
         case NA_EDITED: {
           /* window resize */
-          ED_region_tag_refresh_ui(ar);
+          ED_region_tag_refresh_ui(region);
           break;
         }
       }
@@ -438,7 +434,6 @@ static void ui_block_region_popup_window_listener(wmWindow *UNUSED(win),
 
 static void ui_popup_block_clip(wmWindow *window, uiBlock *block)
 {
-  uiBut *bt;
   const float xmin_orig = block->rect.xmin;
   const int margin = UI_SCREEN_MARGIN;
   int winx, winy;
@@ -472,7 +467,7 @@ static void ui_popup_block_clip(wmWindow *window, uiBlock *block)
 
   /* ensure menu items draw inside left/right boundary */
   const float xofs = block->rect.xmin - xmin_orig;
-  for (bt = block->buttons.first; bt; bt = bt->next) {
+  LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
     bt->rect.xmin += xofs;
     bt->rect.xmax += xofs;
   }
@@ -480,11 +475,9 @@ static void ui_popup_block_clip(wmWindow *window, uiBlock *block)
 
 void ui_popup_block_scrolltest(uiBlock *block)
 {
-  uiBut *bt;
-
   block->flag &= ~(UI_BLOCK_CLIPBOTTOM | UI_BLOCK_CLIPTOP);
 
-  for (bt = block->buttons.first; bt; bt = bt->next) {
+  LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
     bt->flag &= ~UI_SCROLLED;
   }
 
@@ -493,7 +486,7 @@ void ui_popup_block_scrolltest(uiBlock *block)
   }
 
   /* mark buttons that are outside boundary */
-  for (bt = block->buttons.first; bt; bt = bt->next) {
+  LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
     if (bt->rect.ymin < block->rect.ymin) {
       bt->flag |= UI_SCROLLED;
       block->flag |= UI_BLOCK_CLIPBOTTOM;
@@ -505,7 +498,7 @@ void ui_popup_block_scrolltest(uiBlock *block)
   }
 
   /* mark buttons overlapping arrows, if we have them */
-  for (bt = block->buttons.first; bt; bt = bt->next) {
+  LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
     if (block->flag & UI_BLOCK_CLIPBOTTOM) {
       if (bt->rect.ymin < block->rect.ymin + UI_MENU_SCROLL_ARROW) {
         bt->flag |= UI_SCROLLED;
@@ -521,20 +514,43 @@ void ui_popup_block_scrolltest(uiBlock *block)
 
 static void ui_popup_block_remove(bContext *C, uiPopupBlockHandle *handle)
 {
-  wmWindow *win = CTX_wm_window(C);
-  bScreen *sc = CTX_wm_screen(C);
+  wmWindow *ctx_win = CTX_wm_window(C);
+  ScrArea *ctx_area = CTX_wm_area(C);
+  ARegion *ctx_region = CTX_wm_region(C);
 
-  ui_region_temp_remove(C, sc, handle->region);
+  wmWindowManager *wm = CTX_wm_manager(C);
+  wmWindow *win = ctx_win;
+  bScreen *screen = CTX_wm_screen(C);
+
+  /* There may actually be a different window active than the one showing the popup, so lookup real
+   * one. */
+  if (BLI_findindex(&screen->regionbase, handle->region) == -1) {
+    LISTBASE_FOREACH (wmWindow *, win_iter, &wm->windows) {
+      screen = WM_window_get_active_screen(win_iter);
+      if (BLI_findindex(&screen->regionbase, handle->region) != -1) {
+        win = win_iter;
+        break;
+      }
+    }
+  }
+
+  BLI_assert(win && screen);
+
+  CTX_wm_window_set(C, win);
+  ui_region_temp_remove(C, screen, handle->region);
+
+  /* Reset context (area and region were NULL'ed when changing context window). */
+  CTX_wm_window_set(C, ctx_win);
+  CTX_wm_area_set(C, ctx_area);
+  CTX_wm_region_set(C, ctx_region);
 
   /* reset to region cursor (only if there's not another menu open) */
-  if (BLI_listbase_is_empty(&sc->regionbase)) {
-    ED_region_cursor_set(win, CTX_wm_area(C), CTX_wm_region(C));
-    /* in case cursor needs to be changed again */
-    WM_event_add_mousemove(C);
+  if (BLI_listbase_is_empty(&screen->regionbase)) {
+    win->tag_cursor_refresh = true;
   }
 
   if (handle->scrolltimer) {
-    WM_event_remove_timer(CTX_wm_manager(C), win, handle->scrolltimer);
+    WM_event_remove_timer(wm, win, handle->scrolltimer);
   }
 }
 
@@ -548,13 +564,13 @@ uiBlock *ui_popup_block_refresh(bContext *C,
 {
   const int margin = UI_POPUP_MARGIN;
   wmWindow *window = CTX_wm_window(C);
-  ARegion *ar = handle->region;
+  ARegion *region = handle->region;
 
-  uiBlockCreateFunc create_func = handle->popup_create_vars.create_func;
-  uiBlockHandleCreateFunc handle_create_func = handle->popup_create_vars.handle_create_func;
+  const uiBlockCreateFunc create_func = handle->popup_create_vars.create_func;
+  const uiBlockHandleCreateFunc handle_create_func = handle->popup_create_vars.handle_create_func;
   void *arg = handle->popup_create_vars.arg;
 
-  uiBlock *block_old = ar->uiblocks.first;
+  uiBlock *block_old = region->uiblocks.first;
   uiBlock *block;
 
   handle->refresh = (block_old != NULL);
@@ -567,7 +583,7 @@ uiBlock *ui_popup_block_refresh(bContext *C,
 
   /* create ui block */
   if (create_func) {
-    block = create_func(C, ar, arg);
+    block = create_func(C, region, arg);
   }
   else {
     block = handle_create_func(C, handle, arg);
@@ -590,7 +606,7 @@ uiBlock *ui_popup_block_refresh(bContext *C,
     block->handle = handle;
   }
 
-  ar->regiondata = handle;
+  region->regiondata = handle;
 
   /* set UI_BLOCK_NUMSELECT before UI_block_end() so we get alphanumeric keys assigned */
   if (but == NULL) {
@@ -616,14 +632,14 @@ uiBlock *ui_popup_block_refresh(bContext *C,
   }
   else {
     uiSafetyRct *saferct;
-    /* keep a list of these, needed for pulldown menus */
+    /* Keep a list of these, needed for pull-down menus. */
     saferct = MEM_callocN(sizeof(uiSafetyRct), "uiSafetyRct");
     saferct->safety = block->safety;
     BLI_addhead(&block->saferct, saferct);
   }
 
   if (block->flag & UI_BLOCK_RADIAL) {
-    int win_width = UI_SCREEN_MARGIN;
+    const int win_width = UI_SCREEN_MARGIN;
     int winx, winy;
 
     int x_offset = 0, y_offset = 0;
@@ -664,16 +680,16 @@ uiBlock *ui_popup_block_refresh(bContext *C,
       }
     }
 
-    ar->winrct.xmin = 0;
-    ar->winrct.xmax = winx;
-    ar->winrct.ymin = 0;
-    ar->winrct.ymax = winy;
+    region->winrct.xmin = 0;
+    region->winrct.xmax = winx;
+    region->winrct.ymin = 0;
+    region->winrct.ymax = winy;
 
     ui_block_calc_pie_segment(block, block->pie_data.pie_center_init);
 
     /* lastly set the buttons at the center of the pie menu, ready for animation */
     if (U.pie_animation_timeout > 0) {
-      for (uiBut *but_iter = block->buttons.first; but_iter; but_iter = but_iter->next) {
+      LISTBASE_FOREACH (uiBut *, but_iter, &block->buttons) {
         if (but_iter->pie_dir != UI_RADIAL_NONE) {
           BLI_rctf_recenter(&but_iter->rect, UNPACK2(block->pie_data.pie_center_spawned));
         }
@@ -681,15 +697,26 @@ uiBlock *ui_popup_block_refresh(bContext *C,
     }
   }
   else {
+    /* Add an offset to draw the popover arrow. */
+    if ((block->flag & UI_BLOCK_POPOVER) && ELEM(block->direction, UI_DIR_UP, UI_DIR_DOWN)) {
+      /* Keep sync with 'ui_draw_popover_back_impl'. */
+      const float unit_size = U.widget_unit / block->aspect;
+      const float unit_half = unit_size * (block->direction == UI_DIR_DOWN ? 0.5 : -0.5);
+
+      UI_block_translate(block, 0, -unit_half);
+    }
+
     /* clip block with window boundary */
     ui_popup_block_clip(window, block);
 
     /* Avoid menu moving down and losing cursor focus by keeping it at
      * the same height. */
     if (handle->refresh && handle->prev_block_rect.ymax > block->rect.ymax) {
-      float offset = handle->prev_block_rect.ymax - block->rect.ymax;
-      UI_block_translate(block, 0, offset);
-      block->rect.ymin = handle->prev_block_rect.ymin;
+      if (block->bounds_type != UI_BLOCK_BOUNDS_POPUP_CENTER) {
+        const float offset = handle->prev_block_rect.ymax - block->rect.ymax;
+        UI_block_translate(block, 0, offset);
+        block->rect.ymin = handle->prev_block_rect.ymin;
+      }
     }
 
     handle->prev_block_rect = block->rect;
@@ -697,16 +724,16 @@ uiBlock *ui_popup_block_refresh(bContext *C,
     /* the block and buttons were positioned in window space as in 2.4x, now
      * these menu blocks are regions so we bring it back to region space.
      * additionally we add some padding for the menu shadow or rounded menus */
-    ar->winrct.xmin = block->rect.xmin - margin;
-    ar->winrct.xmax = block->rect.xmax + margin;
-    ar->winrct.ymin = block->rect.ymin - margin;
-    ar->winrct.ymax = block->rect.ymax + UI_POPUP_MENU_TOP;
+    region->winrct.xmin = block->rect.xmin - margin;
+    region->winrct.xmax = block->rect.xmax + margin;
+    region->winrct.ymin = block->rect.ymin - margin;
+    region->winrct.ymax = block->rect.ymax + UI_POPUP_MENU_TOP;
 
-    UI_block_translate(block, -ar->winrct.xmin, -ar->winrct.ymin);
+    UI_block_translate(block, -region->winrct.xmin, -region->winrct.ymin);
 
     /* apply scroll offset */
     if (handle->scrolloffset != 0.0f) {
-      for (uiBut *bt = block->buttons.first; bt; bt = bt->next) {
+      LISTBASE_FOREACH (uiBut *, bt, &block->buttons) {
         bt->rect.ymin += handle->scrolloffset;
         bt->rect.ymax += handle->scrolloffset;
       }
@@ -716,22 +743,22 @@ uiBlock *ui_popup_block_refresh(bContext *C,
   if (block_old) {
     block->oldblock = block_old;
     UI_block_update_from_old(C, block);
-    UI_blocklist_free_inactive(C, &ar->uiblocks);
+    UI_blocklist_free_inactive(C, &region->uiblocks);
   }
 
   /* checks which buttons are visible, sets flags to prevent draw (do after region init) */
   ui_popup_block_scrolltest(block);
 
   /* adds subwindow */
-  ED_region_init(ar);
+  ED_region_floating_init(region);
 
   /* get winmat now that we actually have the subwindow */
-  wmGetProjectionMatrix(block->winmat, &ar->winrct);
+  wmGetProjectionMatrix(block->winmat, &region->winrct);
 
   /* notify change and redraw */
-  ED_region_tag_redraw(ar);
+  ED_region_tag_redraw(region);
 
-  ED_region_update_rect(ar);
+  ED_region_update_rect(region);
 
 #ifdef DEBUG
   window->eventstate = event_back;
@@ -745,12 +772,13 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
                                           uiBut *but,
                                           uiBlockCreateFunc create_func,
                                           uiBlockHandleCreateFunc handle_create_func,
-                                          void *arg)
+                                          void *arg,
+                                          void (*arg_free)(void *arg))
 {
   wmWindow *window = CTX_wm_window(C);
   uiBut *activebut = UI_context_active_but_get(C);
   static ARegionType type;
-  ARegion *ar;
+  ARegion *region;
   uiBlock *block;
   uiPopupBlockHandle *handle;
 
@@ -759,7 +787,7 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
     UI_but_tooltip_timer_remove(C, activebut);
   }
   /* standard cursor by default */
-  WM_cursor_set(window, CURSOR_STD);
+  WM_cursor_set(window, WM_CURSOR_DEFAULT);
 
   /* create handle */
   handle = MEM_callocN(sizeof(uiPopupBlockHandle), "uiPopupBlockHandle");
@@ -768,10 +796,11 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
   handle->ctx_area = CTX_wm_area(C);
   handle->ctx_region = CTX_wm_region(C);
 
-  /* store vars to refresh popup (RGN_DRAW_REFRESH_UI) */
+  /* store vars to refresh popup (RGN_REFRESH_UI) */
   handle->popup_create_vars.create_func = create_func;
   handle->popup_create_vars.handle_create_func = handle_create_func;
   handle->popup_create_vars.arg = arg;
+  handle->popup_create_vars.arg_free = arg_free;
   handle->popup_create_vars.but = but;
   handle->popup_create_vars.butregion = but ? butregion : NULL;
   copy_v2_v2_int(handle->popup_create_vars.event_xy, &window->eventstate->x);
@@ -780,16 +809,16 @@ uiPopupBlockHandle *ui_popup_block_create(bContext *C,
   handle->can_refresh = false;
 
   /* create area region */
-  ar = ui_region_temp_add(CTX_wm_screen(C));
-  handle->region = ar;
+  region = ui_region_temp_add(CTX_wm_screen(C));
+  handle->region = region;
 
   memset(&type, 0, sizeof(ARegionType));
   type.draw = ui_block_region_draw;
   type.layout = ui_block_region_refresh;
   type.regionid = RGN_TYPE_TEMPORARY;
-  ar->type = &type;
+  region->type = &type;
 
-  UI_region_handlers_add(&ar->handlers);
+  UI_region_handlers_add(&region->handlers);
 
   block = ui_popup_block_refresh(C, handle, butregion, but);
   handle = block->handle;
@@ -806,9 +835,9 @@ void ui_popup_block_free(bContext *C, uiPopupBlockHandle *handle)
 {
   /* If this popup is created from a popover which does NOT have keep-open flag set,
    * then close the popover too. We could extend this to other popup types too. */
-  ARegion *ar = handle->popup_create_vars.butregion;
-  if (ar != NULL) {
-    for (uiBlock *block = ar->uiblocks.first; block; block = block->next) {
+  ARegion *region = handle->popup_create_vars.butregion;
+  if (region != NULL) {
+    LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
       if (block->handle && (block->flag & UI_BLOCK_POPOVER) &&
           (block->flag & UI_BLOCK_KEEP_OPEN) == 0) {
         uiPopupBlockHandle *menu = block->handle;
@@ -817,8 +846,8 @@ void ui_popup_block_free(bContext *C, uiPopupBlockHandle *handle)
     }
   }
 
-  if (handle->popup_create_vars.free_func) {
-    handle->popup_create_vars.free_func(handle, handle->popup_create_vars.arg);
+  if (handle->popup_create_vars.arg_free) {
+    handle->popup_create_vars.arg_free(handle->popup_create_vars.arg);
   }
 
   ui_popup_block_remove(C, handle);

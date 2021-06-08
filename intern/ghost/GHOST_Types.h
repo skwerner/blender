@@ -21,8 +21,7 @@
  * \ingroup GHOST
  */
 
-#ifndef __GHOST_TYPES_H__
-#define __GHOST_TYPES_H__
+#pragma once
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
@@ -41,6 +40,22 @@
     } * name
 #endif
 
+/**
+ * Creates a "handle" for a C++ GHOST object.
+ * A handle is just an opaque pointer to an empty struct.
+ * In the API the pointer is cast to the actual C++ class.
+ * The 'name' argument to the macro is the name of the handle to create.
+ */
+
+GHOST_DECLARE_HANDLE(GHOST_SystemHandle);
+GHOST_DECLARE_HANDLE(GHOST_TimerTaskHandle);
+GHOST_DECLARE_HANDLE(GHOST_WindowHandle);
+GHOST_DECLARE_HANDLE(GHOST_EventHandle);
+GHOST_DECLARE_HANDLE(GHOST_RectangleHandle);
+GHOST_DECLARE_HANDLE(GHOST_EventConsumerHandle);
+GHOST_DECLARE_HANDLE(GHOST_ContextHandle);
+GHOST_DECLARE_HANDLE(GHOST_XrContextHandle);
+
 typedef char GHOST_TInt8;
 typedef unsigned char GHOST_TUns8;
 typedef short GHOST_TInt16;
@@ -49,7 +64,6 @@ typedef int GHOST_TInt32;
 typedef unsigned int GHOST_TUns32;
 
 typedef struct {
-  GHOST_TUns16 numOfAASamples;
   int flags;
 } GHOST_GLSettings;
 
@@ -58,6 +72,11 @@ typedef enum {
   GHOST_glDebugContext = (1 << 1),
   GHOST_glAlphaBackground = (1 << 2),
 } GHOST_GLFlags;
+
+typedef enum GHOST_DialogOptions {
+  GHOST_DialogWarning = (1 << 0),
+  GHOST_DialogError = (1 << 1),
+} GHOST_DialogOptions;
 
 #ifdef _MSC_VER
 typedef __int64 GHOST_TInt64;
@@ -97,6 +116,12 @@ typedef struct GHOST_TabletData {
   float Ytilt; /* as above */
 } GHOST_TabletData;
 
+static const GHOST_TabletData GHOST_TABLET_DATA_NONE = {
+    GHOST_kTabletModeNone, /* No cursor in range */
+    1.0f,                  /* Pressure */
+    0.0f,                  /* Xtilt */
+    0.0f};                 /* Ytilt */
+
 typedef enum {
   GHOST_kNotVisible = 0,
   GHOST_kPartiallyVisible,
@@ -126,18 +151,19 @@ typedef enum {
   // GHOST_kWindowStateUnModified,
 } GHOST_TWindowState;
 
-/** Constants for the answer to the blender exit request */
-typedef enum { GHOST_kExitCancel = 0, GHOST_kExitNow } GHOST_TExitRequestResponse;
-
 typedef enum { GHOST_kWindowOrderTop = 0, GHOST_kWindowOrderBottom } GHOST_TWindowOrder;
 
 typedef enum {
   GHOST_kDrawingContextTypeNone = 0,
-  GHOST_kDrawingContextTypeOpenGL
+  GHOST_kDrawingContextTypeOpenGL,
+#ifdef WIN32
+  GHOST_kDrawingContextTypeD3D,
+#endif
 } GHOST_TDrawingContextType;
 
 typedef enum {
-  GHOST_kButtonMaskLeft = 0,
+  GHOST_kButtonMaskNone,
+  GHOST_kButtonMaskLeft,
   GHOST_kButtonMaskMiddle,
   GHOST_kButtonMaskRight,
   GHOST_kButtonMaskButton4,
@@ -166,7 +192,7 @@ typedef enum {
   GHOST_kEventKeyUp,
   //  GHOST_kEventKeyAuto,
 
-  GHOST_kEventQuit,
+  GHOST_kEventQuitRequest,
 
   GHOST_kEventWindowClose,
   GHOST_kEventWindowActivate,
@@ -201,11 +227,27 @@ typedef enum {
   GHOST_kStandardCursorInfo,
   GHOST_kStandardCursorDestroy,
   GHOST_kStandardCursorHelp,
-  GHOST_kStandardCursorCycle,
-  GHOST_kStandardCursorSpray,
   GHOST_kStandardCursorWait,
   GHOST_kStandardCursorText,
   GHOST_kStandardCursorCrosshair,
+  GHOST_kStandardCursorCrosshairA,
+  GHOST_kStandardCursorCrosshairB,
+  GHOST_kStandardCursorCrosshairC,
+  GHOST_kStandardCursorPencil,
+  GHOST_kStandardCursorUpArrow,
+  GHOST_kStandardCursorDownArrow,
+  GHOST_kStandardCursorVerticalSplit,
+  GHOST_kStandardCursorHorizontalSplit,
+  GHOST_kStandardCursorEraser,
+  GHOST_kStandardCursorKnife,
+  GHOST_kStandardCursorEyedropper,
+  GHOST_kStandardCursorZoomIn,
+  GHOST_kStandardCursorZoomOut,
+  GHOST_kStandardCursorMove,
+  GHOST_kStandardCursorNSEWScroll,
+  GHOST_kStandardCursorNSScroll,
+  GHOST_kStandardCursorEWScroll,
+  GHOST_kStandardCursorStop,
   GHOST_kStandardCursorUpDown,
   GHOST_kStandardCursorLeftRight,
   GHOST_kStandardCursorTopSide,
@@ -218,7 +260,6 @@ typedef enum {
   GHOST_kStandardCursorBottomLeftCorner,
   GHOST_kStandardCursorCopy,
   GHOST_kStandardCursorCustom,
-  GHOST_kStandardCursorPencil,
 
   GHOST_kStandardCursorNumCursors
 } GHOST_TStandardCursor;
@@ -296,6 +337,7 @@ typedef enum {
   GHOST_kKeyRightAlt,
   GHOST_kKeyOS,      // Command key on Apple, Windows key(s) on Windows
   GHOST_kKeyGrLess,  // German PC only!
+  GHOST_kKeyApp,     /* Also known as menu key. */
 
   GHOST_kKeyCapsLock,
   GHOST_kKeyNumLock,
@@ -368,11 +410,25 @@ typedef enum {
 } GHOST_TKey;
 
 typedef enum {
-  GHOST_kGrabDisable = 0, /* grab not set */
-  GHOST_kGrabNormal,      /* no cursor adjustments */
-  GHOST_kGrabWrap,        /* wrap the mouse location to prevent limiting screen bounds */
-  GHOST_kGrabHide, /* hide the mouse while grabbing and restore the original location on release (numbuts) */
+  /** Grab not set. */
+  GHOST_kGrabDisable = 0,
+  /** No cursor adjustments. */
+  GHOST_kGrabNormal,
+  /** Wrap the mouse location to prevent limiting screen bounds. */
+  GHOST_kGrabWrap,
+  /**
+   * Hide the mouse while grabbing and restore the original location on release
+   * (used for number buttons and some other draggable UI elements).
+   */
+  GHOST_kGrabHide,
 } GHOST_TGrabCursorMode;
+
+typedef enum {
+  /** Axis that cursor grab will wrap. */
+  GHOST_kGrabAxisNone = 0,
+  GHOST_kAxisX = (1 << 0),
+  GHOST_kGrabAxisY = (1 << 1),
+} GHOST_TAxisFlag;
 
 typedef void *GHOST_TEventDataPtr;
 
@@ -381,11 +437,15 @@ typedef struct {
   GHOST_TInt32 x;
   /** The y-coordinate of the cursor position. */
   GHOST_TInt32 y;
+  /** Associated tablet data. */
+  GHOST_TabletData tablet;
 } GHOST_TEventCursorData;
 
 typedef struct {
   /** The mask of the mouse button. */
   GHOST_TButtonMask button;
+  /** Associated tablet data. */
+  GHOST_TabletData tablet;
 } GHOST_TEventButtonData;
 
 typedef struct {
@@ -398,7 +458,8 @@ typedef enum {
   GHOST_kTrackpadEventScroll,
   GHOST_kTrackpadEventRotate,
   GHOST_kTrackpadEventSwipe, /* Reserved, not used for now */
-  GHOST_kTrackpadEventMagnify
+  GHOST_kTrackpadEventMagnify,
+  GHOST_kTrackpadEventSmartMagnify
 } GHOST_TTrackpadEventSubTypes;
 
 typedef struct {
@@ -412,6 +473,8 @@ typedef struct {
   GHOST_TInt32 deltaX;
   /** The y-delta (currently only for scroll subtype) of the trackpad event */
   GHOST_TInt32 deltaY;
+  /** The delta is inverted from the device due to system preferences. */
+  char isDirectionInverted;
 } GHOST_TEventTrackpadData;
 
 typedef enum {
@@ -500,14 +563,27 @@ typedef struct {
   char ascii;
   /** The unicode character. if the length is 6, not NULL terminated if all 6 are set */
   char utf8_buf[6];
+
+  /** Generated by auto-repeat. */
+  char is_repeat;
 } GHOST_TEventKeyData;
+
+typedef enum {
+  GHOST_kUserSpecialDirDesktop,
+  GHOST_kUserSpecialDirDocuments,
+  GHOST_kUserSpecialDirDownloads,
+  GHOST_kUserSpecialDirMusic,
+  GHOST_kUserSpecialDirPictures,
+  GHOST_kUserSpecialDirVideos,
+  /* Can be extended as needed. */
+} GHOST_TUserSpecialDirTypes;
 
 typedef struct {
   /** Number of pixels on a line. */
   GHOST_TUns32 xPixels;
   /** Number of lines. */
   GHOST_TUns32 yPixels;
-  /** Numberof bits per pixel. */
+  /** Number of bits per pixel. */
   GHOST_TUns32 bpp;
   /** Refresh rate (in Hertz). */
   GHOST_TUns32 frequency;
@@ -524,8 +600,8 @@ typedef int GHOST_TEmbedderWindowID;
 
 /**
  * A timer task callback routine.
- * \param task The timer task object.
- * \param time The current time.
+ * \param task: The timer task object.
+ * \param time: The current time.
  */
 #ifdef __cplusplus
 class GHOST_ITimerTask;
@@ -535,4 +611,137 @@ struct GHOST_TimerTaskHandle__;
 typedef void (*GHOST_TimerProcPtr)(struct GHOST_TimerTaskHandle__ *task, GHOST_TUns64 time);
 #endif
 
-#endif  // __GHOST_TYPES_H__
+#ifdef WITH_XR_OPENXR
+
+struct GHOST_XrDrawViewInfo;
+struct GHOST_XrError;
+/**
+ * The XR view (i.e. the OpenXR runtime) may require a different graphics library than OpenGL. An
+ * offscreen texture of the viewport will then be drawn into using OpenGL, but the final texture
+ * draw call will happen through another lib (say DirectX).
+ *
+ * This enum defines the possible graphics bindings to attempt to enable.
+ */
+typedef enum GHOST_TXrGraphicsBinding {
+  GHOST_kXrGraphicsUnknown = 0,
+  GHOST_kXrGraphicsOpenGL,
+#  ifdef WIN32
+  GHOST_kXrGraphicsD3D11,
+#  endif
+  /* For later */
+  //  GHOST_kXrGraphicsVulkan,
+} GHOST_TXrGraphicsBinding;
+
+typedef void (*GHOST_XrErrorHandlerFn)(const struct GHOST_XrError *);
+
+typedef void (*GHOST_XrSessionCreateFn)(void);
+typedef void (*GHOST_XrSessionExitFn)(void *customdata);
+typedef void (*GHOST_XrCustomdataFreeFn)(void *customdata);
+
+typedef void *(*GHOST_XrGraphicsContextBindFn)(void);
+typedef void (*GHOST_XrGraphicsContextUnbindFn)(GHOST_ContextHandle graphics_context);
+typedef void (*GHOST_XrDrawViewFn)(const struct GHOST_XrDrawViewInfo *draw_view, void *customdata);
+
+/* An array of GHOST_TXrGraphicsBinding items defining the candidate bindings to use. The first
+ * available candidate will be chosen, so order defines priority. */
+typedef const GHOST_TXrGraphicsBinding *GHOST_XrGraphicsBindingCandidates;
+
+typedef struct {
+  float position[3];
+  /* Blender convention (w, x, y, z) */
+  float orientation_quat[4];
+} GHOST_XrPose;
+
+enum {
+  GHOST_kXrContextDebug = (1 << 0),
+  GHOST_kXrContextDebugTime = (1 << 1),
+};
+
+typedef struct {
+  const GHOST_XrGraphicsBindingCandidates gpu_binding_candidates;
+  unsigned int gpu_binding_candidates_count;
+
+  unsigned int context_flag;
+} GHOST_XrContextCreateInfo;
+
+typedef struct {
+  GHOST_XrPose base_pose;
+
+  GHOST_XrSessionCreateFn create_fn;
+  GHOST_XrSessionExitFn exit_fn;
+  void *exit_customdata;
+} GHOST_XrSessionBeginInfo;
+
+typedef struct GHOST_XrDrawViewInfo {
+  int ofsx, ofsy;
+  int width, height;
+
+  GHOST_XrPose eye_pose;
+  GHOST_XrPose local_pose;
+
+  struct {
+    float angle_left, angle_right;
+    float angle_up, angle_down;
+  } fov;
+
+  /** Set if the buffer should be submitted with a srgb transfer applied. */
+  char expects_srgb_buffer;
+} GHOST_XrDrawViewInfo;
+
+typedef struct GHOST_XrError {
+  const char *user_message;
+
+  void *customdata;
+} GHOST_XrError;
+
+typedef struct GHOST_XrActionSetInfo {
+  const char *name;
+
+  GHOST_XrCustomdataFreeFn customdata_free_fn;
+  void *customdata; /* wmXrActionSet */
+} GHOST_XrActionSetInfo;
+
+/** XR action type. Enum values match those in OpenXR's
+ * XrActionType enum for consistency. */
+typedef enum GHOST_XrActionType {
+  GHOST_kXrActionTypeBooleanInput = 1,
+  GHOST_kXrActionTypeFloatInput = 2,
+  GHOST_kXrActionTypeVector2fInput = 3,
+  GHOST_kXrActionTypePoseInput = 4,
+  GHOST_kXrActionTypeVibrationOutput = 100,
+} GHOST_XrActionType;
+
+typedef struct GHOST_XrActionInfo {
+  const char *name;
+  GHOST_XrActionType type;
+  GHOST_TUns32 count_subaction_paths;
+  const char **subaction_paths;
+  /** States for each subaction path. */
+  void *states;
+
+  GHOST_XrCustomdataFreeFn customdata_free_fn;
+  void *customdata; /* wmXrAction */
+} GHOST_XrActionInfo;
+
+typedef struct GHOST_XrActionSpaceInfo {
+  const char *action_name;
+  GHOST_TUns32 count_subaction_paths;
+  const char **subaction_paths;
+  /** Poses for each subaction path. */
+  const GHOST_XrPose *poses;
+} GHOST_XrActionSpaceInfo;
+
+typedef struct GHOST_XrActionBindingInfo {
+  const char *action_name;
+  GHOST_TUns32 count_interaction_paths;
+  /** Interaction path: User (subaction) path + component path. */
+  const char **interaction_paths;
+} GHOST_XrActionBindingInfo;
+
+typedef struct GHOST_XrActionProfileInfo {
+  const char *profile_path;
+  GHOST_TUns32 count_bindings;
+  const GHOST_XrActionBindingInfo *bindings;
+} GHOST_XrActionProfileInfo;
+
+#endif /* WITH_XR_OPENXR */

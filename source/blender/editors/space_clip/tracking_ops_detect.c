@@ -21,26 +21,22 @@
  * \ingroup spclip
  */
 
-#include "MEM_guardedalloc.h"
-
 #include "DNA_gpencil_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_space_types.h"
 
-#include "BLI_utildefines.h"
-
 #include "BKE_context.h"
 #include "BKE_movieclip.h"
-#include "BKE_tracking.h"
 #include "BKE_report.h"
+#include "BKE_tracking.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_clip.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -90,7 +86,7 @@ static int detect_features_exec(bContext *C, wmOperator *op)
   }
 
   /* Deselect existing tracks. */
-  ed_tracking_delect_all_tracks(tracksbase);
+  ed_tracking_deselect_all_tracks(tracksbase);
   /* Run detector. */
   BKE_tracking_detect_harris(tracking,
                              tracksbase,
@@ -117,13 +113,13 @@ void CLIP_OT_detect_features(wmOperatorType *ot)
       {1,
        "INSIDE_GPENCIL",
        0,
-       "Inside Grease Pencil",
-       "Place markers only inside areas outlined with Grease Pencil"},
+       "Inside Annotated Area",
+       "Place markers only inside areas outlined with the Annotation tool"},
       {2,
        "OUTSIDE_GPENCIL",
        0,
-       "Outside Grease Pencil",
-       "Place markers only outside areas outlined with Grease Pencil"},
+       "Outside Annotated Area",
+       "Place markers only outside areas outlined with the Annotation tool"},
       {0, NULL, 0, NULL, NULL},
   };
 

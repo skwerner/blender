@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_ALPHAOVERKEYOPERATION_H__
-#define __COM_ALPHAOVERKEYOPERATION_H__
+#pragma once
+
 #include "COM_MixOperation.h"
+
+namespace blender::compositor {
 
 /**
  * this program converts an input color to an output value.
@@ -27,13 +29,9 @@
 class AlphaOverKeyOperation : public MixBaseOperation {
  public:
   /**
-   * Default constructor
+   * The inner loop of this operation.
    */
-  AlphaOverKeyOperation();
-
-  /**
-   * the inner loop of this program
-   */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
-#endif
+
+}  // namespace blender::compositor

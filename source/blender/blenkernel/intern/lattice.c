@@ -21,41 +21,195 @@
  * \ingroup bke
  */
 
-#include <stdio.h>
-#include <string.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
-#include "BLI_listbase.h"
 #include "BLI_bitmap.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
-#include "DNA_mesh_types.h"
-#include "DNA_meshdata_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
-#include "DNA_lattice_types.h"
+#include "BLT_translation.h"
+
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_curve_types.h"
+#include "DNA_defaults.h"
 #include "DNA_key_types.h"
+#include "DNA_lattice_types.h"
+#include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
-#include "BKE_animsys.h"
-#include "BKE_anim.h"
-#include "BKE_cdderivedmesh.h"
+#include "BKE_anim_data.h"
 #include "BKE_curve.h"
+#include "BKE_deform.h"
 #include "BKE_displist.h"
-#include "BKE_key.h"
+#include "BKE_idtype.h"
 #include "BKE_lattice.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 
-#include "BKE_deform.h"
-
 #include "DEG_depsgraph_query.h"
+
+#include "BLO_read_write.h"
+
+static void lattice_init_data(ID *id)
+{
+  Lattice *lattice = (Lattice *)id;
+
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(lattice, id));
+
+  MEMCPY_STRUCT_AFTER(lattice, DNA_struct_default_get(Lattice), id);
+
+  lattice->def = MEM_callocN(sizeof(BPoint), "lattvert"); /* temporary */
+  BKE_lattice_resize(lattice, 2, 2, 2, NULL);             /* creates a uniform lattice */
+}
+
+static void lattice_copy_data(Main *bmain, ID *id_dst, const ID *id_src, const int flag)
+{
+  Lattice *lattice_dst = (Lattice *)id_dst;
+  const Lattice *lattice_src = (const Lattice *)id_src;
+
+  lattice_dst->def = MEM_dupallocN(lattice_src->def);
+
+  if (lattice_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
+    BKE_id_copy_ex(bmain, &lattice_src->key->id, (ID **)&lattice_dst->key, flag);
+    /* XXX This is not nice, we need to make BKE_id_copy_ex fully re-entrant... */
+    lattice_dst->key->from = &lattice_dst->id;
+  }
+
+  if (lattice_src->dvert) {
+    int tot = lattice_src->pntsu * lattice_src->pntsv * lattice_src->pntsw;
+    lattice_dst->dvert = MEM_mallocN(sizeof(MDeformVert) * tot, "Lattice MDeformVert");
+    BKE_defvert_array_copy(lattice_dst->dvert, lattice_src->dvert, tot);
+  }
+
+  lattice_dst->editlatt = NULL;
+  lattice_dst->batch_cache = NULL;
+}
+
+static void lattice_free_data(ID *id)
+{
+  Lattice *lattice = (Lattice *)id;
+
+  BKE_lattice_batch_cache_free(lattice);
+
+  MEM_SAFE_FREE(lattice->def);
+  if (lattice->dvert) {
+    BKE_defvert_array_free(lattice->dvert, lattice->pntsu * lattice->pntsv * lattice->pntsw);
+    lattice->dvert = NULL;
+  }
+  if (lattice->editlatt) {
+    Lattice *editlt = lattice->editlatt->latt;
+
+    if (editlt->def) {
+      MEM_freeN(editlt->def);
+    }
+    if (editlt->dvert) {
+      BKE_defvert_array_free(editlt->dvert, lattice->pntsu * lattice->pntsv * lattice->pntsw);
+    }
+
+    MEM_freeN(editlt);
+    MEM_freeN(lattice->editlatt);
+    lattice->editlatt = NULL;
+  }
+}
+
+static void lattice_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Lattice *lattice = (Lattice *)id;
+  BKE_LIB_FOREACHID_PROCESS(data, lattice->key, IDWALK_CB_USER);
+}
+
+static void lattice_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Lattice *lt = (Lattice *)id;
+  if (lt->id.us > 0 || BLO_write_is_undo(writer)) {
+    /* Clean up, important in undo case to reduce false detection of changed datablocks. */
+    lt->editlatt = NULL;
+    lt->batch_cache = NULL;
+
+    /* write LibData */
+    BLO_write_id_struct(writer, Lattice, id_address, &lt->id);
+    BKE_id_blend_write(writer, &lt->id);
+
+    /* write animdata */
+    if (lt->adt) {
+      BKE_animdata_blend_write(writer, lt->adt);
+    }
+
+    /* direct data */
+    BLO_write_struct_array(writer, BPoint, lt->pntsu * lt->pntsv * lt->pntsw, lt->def);
+
+    BKE_defvert_blend_write(writer, lt->pntsu * lt->pntsv * lt->pntsw, lt->dvert);
+  }
+}
+
+static void lattice_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Lattice *lt = (Lattice *)id;
+  BLO_read_data_address(reader, &lt->def);
+
+  BLO_read_data_address(reader, &lt->dvert);
+  BKE_defvert_blend_read(reader, lt->pntsu * lt->pntsv * lt->pntsw, lt->dvert);
+
+  lt->editlatt = NULL;
+  lt->batch_cache = NULL;
+
+  BLO_read_data_address(reader, &lt->adt);
+  BKE_animdata_blend_read_data(reader, lt->adt);
+}
+
+static void lattice_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Lattice *lt = (Lattice *)id;
+  BLO_read_id_address(reader, lt->id.lib, &lt->ipo);  // XXX deprecated - old animation system
+  BLO_read_id_address(reader, lt->id.lib, &lt->key);
+}
+
+static void lattice_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Lattice *lt = (Lattice *)id;
+  BLO_expand(expander, lt->ipo);  // XXX deprecated - old animation system
+  BLO_expand(expander, lt->key);
+}
+
+IDTypeInfo IDType_ID_LT = {
+    .id_code = ID_LT,
+    .id_filter = FILTER_ID_LT,
+    .main_listbase_index = INDEX_ID_LT,
+    .struct_size = sizeof(Lattice),
+    .name = "Lattice",
+    .name_plural = "lattices",
+    .translation_context = BLT_I18NCONTEXT_ID_LATTICE,
+    .flags = 0,
+
+    .init_data = lattice_init_data,
+    .copy_data = lattice_copy_data,
+    .free_data = lattice_free_data,
+    .make_local = NULL,
+    .foreach_id = lattice_foreach_id,
+    .foreach_cache = NULL,
+    .owner_get = NULL,
+
+    .blend_write = lattice_blend_write,
+    .blend_read_data = lattice_blend_read_data,
+    .blend_read_lib = lattice_blend_read_lib,
+    .blend_read_expand = lattice_blend_read_expand,
+
+    .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
+};
 
 int BKE_lattice_index_from_uvw(Lattice *lt, const int u, const int v, const int w)
 {
@@ -98,14 +252,13 @@ int BKE_lattice_index_flip(
 }
 
 void BKE_lattice_bitmap_from_flag(
-    Lattice *lt, BLI_bitmap *bitmap, const short flag, const bool clear, const bool respecthide)
+    Lattice *lt, BLI_bitmap *bitmap, const uint8_t flag, const bool clear, const bool respecthide)
 {
   const unsigned int tot = lt->pntsu * lt->pntsv * lt->pntsw;
-  unsigned int i;
   BPoint *bp;
 
   bp = lt->def;
-  for (i = 0; i < tot; i++, bp++) {
+  for (int i = 0; i < tot; i++, bp++) {
     if ((bp->f1 & flag) && (!respecthide || !bp->hide)) {
       BLI_BITMAP_ENABLE(bitmap, i);
     }
@@ -138,7 +291,7 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
   BPoint *bp;
   int i, u, v, w;
   float fu, fv, fw, uc, vc, wc, du = 0.0, dv = 0.0, dw = 0.0;
-  float *co, (*vertexCos)[3] = NULL;
+  float *co, (*vert_coords)[3] = NULL;
 
   /* vertex weight groups are just freed all for now */
   if (lt->dvert) {
@@ -147,43 +300,48 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
   }
 
   while (uNew * vNew * wNew > 32000) {
-    if (uNew >= vNew && uNew >= wNew)
+    if (uNew >= vNew && uNew >= wNew) {
       uNew--;
-    else if (vNew >= uNew && vNew >= wNew)
+    }
+    else if (vNew >= uNew && vNew >= wNew) {
       vNew--;
-    else
+    }
+    else {
       wNew--;
+    }
   }
 
-  vertexCos = MEM_mallocN(sizeof(*vertexCos) * uNew * vNew * wNew, "tmp_vcos");
+  vert_coords = MEM_mallocN(sizeof(*vert_coords) * uNew * vNew * wNew, "tmp_vcos");
 
   calc_lat_fudu(lt->flag, uNew, &fu, &du);
   calc_lat_fudu(lt->flag, vNew, &fv, &dv);
   calc_lat_fudu(lt->flag, wNew, &fw, &dw);
 
-  /* If old size is different then resolution changed in interface,
+  /* If old size is different than resolution changed in interface,
    * try to do clever reinit of points. Pretty simply idea, we just
    * deform new verts by old lattice, but scaling them to match old
    * size first.
    */
   if (ltOb) {
-    if (uNew != 1 && lt->pntsu != 1) {
-      fu = lt->fu;
-      du = (lt->pntsu - 1) * lt->du / (uNew - 1);
+    const float default_size = 1.0;
+
+    if (uNew != 1) {
+      fu = -default_size / 2.0;
+      du = default_size / (uNew - 1);
     }
 
-    if (vNew != 1 && lt->pntsv != 1) {
-      fv = lt->fv;
-      dv = (lt->pntsv - 1) * lt->dv / (vNew - 1);
+    if (vNew != 1) {
+      fv = -default_size / 2.0;
+      dv = default_size / (vNew - 1);
     }
 
-    if (wNew != 1 && lt->pntsw != 1) {
-      fw = lt->fw;
-      dw = (lt->pntsw - 1) * lt->dw / (wNew - 1);
+    if (wNew != 1) {
+      fw = -default_size / 2.0;
+      dw = default_size / (wNew - 1);
     }
   }
 
-  co = vertexCos[0];
+  co = vert_coords[0];
   for (w = 0, wc = fw; w < wNew; w++, wc += dw) {
     for (v = 0, vc = fv; v < vNew; v++, vc += dv) {
       for (u = 0, uc = fu; u < uNew; u++, co += 3, uc += du) {
@@ -208,7 +366,7 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
 
     copy_m4_m4(mat, ltOb->obmat);
     unit_m4(ltOb->obmat);
-    lattice_deform_verts(ltOb, NULL, NULL, vertexCos, uNew * vNew * wNew, NULL, 1.0f);
+    BKE_lattice_deform_coords(ltOb, NULL, vert_coords, uNew * vNew * wNew, 0, NULL, 1.0f);
     copy_m4_m4(ltOb->obmat, mat);
 
     lt->typeu = typeu;
@@ -234,669 +392,19 @@ void BKE_lattice_resize(Lattice *lt, int uNew, int vNew, int wNew, Object *ltOb)
   bp = lt->def;
 
   for (i = 0; i < lt->pntsu * lt->pntsv * lt->pntsw; i++, bp++) {
-    copy_v3_v3(bp->vec, vertexCos[i]);
+    copy_v3_v3(bp->vec, vert_coords[i]);
   }
 
-  MEM_freeN(vertexCos);
-}
-
-void BKE_lattice_init(Lattice *lt)
-{
-  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(lt, id));
-
-  lt->flag = LT_GRID;
-
-  lt->typeu = lt->typev = lt->typew = KEY_BSPLINE;
-
-  lt->def = MEM_callocN(sizeof(BPoint), "lattvert"); /* temporary */
-  BKE_lattice_resize(lt, 2, 2, 2, NULL);             /* creates a uniform lattice */
-  lt->actbp = LT_ACTBP_NONE;
+  MEM_freeN(vert_coords);
 }
 
 Lattice *BKE_lattice_add(Main *bmain, const char *name)
 {
   Lattice *lt;
 
-  lt = BKE_libblock_alloc(bmain, ID_LT, name, 0);
-
-  BKE_lattice_init(lt);
+  lt = BKE_id_new(bmain, ID_LT, name);
 
   return lt;
-}
-
-/**
- * Only copy internal data of Lattice ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_lattice_copy_data(Main *bmain, Lattice *lt_dst, const Lattice *lt_src, const int flag)
-{
-  lt_dst->def = MEM_dupallocN(lt_src->def);
-
-  if (lt_src->key && (flag & LIB_ID_COPY_SHAPEKEY)) {
-    BKE_id_copy_ex(bmain, &lt_src->key->id, (ID **)&lt_dst->key, flag);
-  }
-
-  if (lt_src->dvert) {
-    int tot = lt_src->pntsu * lt_src->pntsv * lt_src->pntsw;
-    lt_dst->dvert = MEM_mallocN(sizeof(MDeformVert) * tot, "Lattice MDeformVert");
-    BKE_defvert_array_copy(lt_dst->dvert, lt_src->dvert, tot);
-  }
-
-  lt_dst->editlatt = NULL;
-}
-
-Lattice *BKE_lattice_copy(Main *bmain, const Lattice *lt)
-{
-  Lattice *lt_copy;
-  BKE_id_copy(bmain, &lt->id, (ID **)&lt_copy);
-  return lt_copy;
-}
-
-/** Free (or release) any data used by this lattice (does not free the lattice itself). */
-void BKE_lattice_free(Lattice *lt)
-{
-  BKE_animdata_free(&lt->id, false);
-
-  BKE_lattice_batch_cache_free(lt);
-
-  MEM_SAFE_FREE(lt->def);
-  if (lt->dvert) {
-    BKE_defvert_array_free(lt->dvert, lt->pntsu * lt->pntsv * lt->pntsw);
-    lt->dvert = NULL;
-  }
-  if (lt->editlatt) {
-    Lattice *editlt = lt->editlatt->latt;
-
-    if (editlt->def)
-      MEM_freeN(editlt->def);
-    if (editlt->dvert)
-      BKE_defvert_array_free(editlt->dvert, lt->pntsu * lt->pntsv * lt->pntsw);
-
-    MEM_freeN(editlt);
-    MEM_freeN(lt->editlatt);
-    lt->editlatt = NULL;
-  }
-}
-
-void BKE_lattice_make_local(Main *bmain, Lattice *lt, const bool lib_local)
-{
-  BKE_id_make_local_generic(bmain, &lt->id, true, lib_local);
-}
-
-typedef struct LatticeDeformData {
-  Object *object;
-  float *latticedata;
-  float latmat[4][4];
-} LatticeDeformData;
-
-LatticeDeformData *init_latt_deform(Object *oblatt, Object *ob)
-{
-  /* we make an array with all differences */
-  Lattice *lt = oblatt->data;
-  BPoint *bp;
-  DispList *dl = oblatt->runtime.curve_cache ?
-                     BKE_displist_find(&oblatt->runtime.curve_cache->disp, DL_VERTS) :
-                     NULL;
-  const float *co = dl ? dl->verts : NULL;
-  float *fp, imat[4][4];
-  float fu, fv, fw;
-  int u, v, w;
-  float *latticedata;
-  float latmat[4][4];
-  LatticeDeformData *lattice_deform_data;
-
-  if (lt->editlatt)
-    lt = lt->editlatt->latt;
-  bp = lt->def;
-
-  fp = latticedata = MEM_mallocN(sizeof(float) * 3 * lt->pntsu * lt->pntsv * lt->pntsw,
-                                 "latticedata");
-
-  /* for example with a particle system: (ob == NULL) */
-  if (ob == NULL) {
-    /* in deformspace, calc matrix  */
-    invert_m4_m4(latmat, oblatt->obmat);
-
-    /* back: put in deform array */
-    invert_m4_m4(imat, latmat);
-  }
-  else {
-    /* in deformspace, calc matrix */
-    invert_m4_m4(imat, oblatt->obmat);
-    mul_m4_m4m4(latmat, imat, ob->obmat);
-
-    /* back: put in deform array */
-    invert_m4_m4(imat, latmat);
-  }
-
-  for (w = 0, fw = lt->fw; w < lt->pntsw; w++, fw += lt->dw) {
-    for (v = 0, fv = lt->fv; v < lt->pntsv; v++, fv += lt->dv) {
-      for (u = 0, fu = lt->fu; u < lt->pntsu; u++, bp++, co += 3, fp += 3, fu += lt->du) {
-        if (dl) {
-          fp[0] = co[0] - fu;
-          fp[1] = co[1] - fv;
-          fp[2] = co[2] - fw;
-        }
-        else {
-          fp[0] = bp->vec[0] - fu;
-          fp[1] = bp->vec[1] - fv;
-          fp[2] = bp->vec[2] - fw;
-        }
-
-        mul_mat3_m4_v3(imat, fp);
-      }
-    }
-  }
-
-  lattice_deform_data = MEM_mallocN(sizeof(LatticeDeformData), "Lattice Deform Data");
-  lattice_deform_data->latticedata = latticedata;
-  lattice_deform_data->object = oblatt;
-  copy_m4_m4(lattice_deform_data->latmat, latmat);
-
-  return lattice_deform_data;
-}
-
-void calc_latt_deform(LatticeDeformData *lattice_deform_data, float co[3], float weight)
-{
-  Object *ob = lattice_deform_data->object;
-  Lattice *lt = ob->data;
-  float u, v, w, tu[4], tv[4], tw[4];
-  float vec[3];
-  int idx_w, idx_v, idx_u;
-  int ui, vi, wi, uu, vv, ww;
-
-  /* vgroup influence */
-  int defgrp_index = -1;
-  float co_prev[3], weight_blend = 0.0f;
-  MDeformVert *dvert = BKE_lattice_deform_verts_get(ob);
-  float *__restrict latticedata = lattice_deform_data->latticedata;
-
-  if (lt->editlatt)
-    lt = lt->editlatt->latt;
-  if (latticedata == NULL)
-    return;
-
-  if (lt->vgroup[0] && dvert) {
-    defgrp_index = defgroup_name_index(ob, lt->vgroup);
-    copy_v3_v3(co_prev, co);
-  }
-
-  /* co is in local coords, treat with latmat */
-  mul_v3_m4v3(vec, lattice_deform_data->latmat, co);
-
-  /* u v w coords */
-
-  if (lt->pntsu > 1) {
-    u = (vec[0] - lt->fu) / lt->du;
-    ui = (int)floor(u);
-    u -= ui;
-    key_curve_position_weights(u, tu, lt->typeu);
-  }
-  else {
-    tu[0] = tu[2] = tu[3] = 0.0;
-    tu[1] = 1.0;
-    ui = 0;
-  }
-
-  if (lt->pntsv > 1) {
-    v = (vec[1] - lt->fv) / lt->dv;
-    vi = (int)floor(v);
-    v -= vi;
-    key_curve_position_weights(v, tv, lt->typev);
-  }
-  else {
-    tv[0] = tv[2] = tv[3] = 0.0;
-    tv[1] = 1.0;
-    vi = 0;
-  }
-
-  if (lt->pntsw > 1) {
-    w = (vec[2] - lt->fw) / lt->dw;
-    wi = (int)floor(w);
-    w -= wi;
-    key_curve_position_weights(w, tw, lt->typew);
-  }
-  else {
-    tw[0] = tw[2] = tw[3] = 0.0;
-    tw[1] = 1.0;
-    wi = 0;
-  }
-
-  for (ww = wi - 1; ww <= wi + 2; ww++) {
-    w = tw[ww - wi + 1];
-
-    if (w != 0.0f) {
-      if (ww > 0) {
-        if (ww < lt->pntsw)
-          idx_w = ww * lt->pntsu * lt->pntsv;
-        else
-          idx_w = (lt->pntsw - 1) * lt->pntsu * lt->pntsv;
-      }
-      else {
-        idx_w = 0;
-      }
-
-      for (vv = vi - 1; vv <= vi + 2; vv++) {
-        v = w * tv[vv - vi + 1];
-
-        if (v != 0.0f) {
-          if (vv > 0) {
-            if (vv < lt->pntsv)
-              idx_v = idx_w + vv * lt->pntsu;
-            else
-              idx_v = idx_w + (lt->pntsv - 1) * lt->pntsu;
-          }
-          else {
-            idx_v = idx_w;
-          }
-
-          for (uu = ui - 1; uu <= ui + 2; uu++) {
-            u = weight * v * tu[uu - ui + 1];
-
-            if (u != 0.0f) {
-              if (uu > 0) {
-                if (uu < lt->pntsu)
-                  idx_u = idx_v + uu;
-                else
-                  idx_u = idx_v + (lt->pntsu - 1);
-              }
-              else {
-                idx_u = idx_v;
-              }
-
-              madd_v3_v3fl(co, &latticedata[idx_u * 3], u);
-
-              if (defgrp_index != -1)
-                weight_blend += (u * defvert_find_weight(dvert + idx_u, defgrp_index));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (defgrp_index != -1)
-    interp_v3_v3v3(co, co_prev, co, weight_blend);
-}
-
-void end_latt_deform(LatticeDeformData *lattice_deform_data)
-{
-  if (lattice_deform_data->latticedata)
-    MEM_freeN(lattice_deform_data->latticedata);
-
-  MEM_freeN(lattice_deform_data);
-}
-
-/* calculations is in local space of deformed object
- * so we store in latmat transform from path coord inside object
- */
-typedef struct {
-  float dmin[3], dmax[3];
-  float curvespace[4][4], objectspace[4][4], objectspace3[3][3];
-  int no_rot_axis;
-} CurveDeform;
-
-static void init_curve_deform(Object *par, Object *ob, CurveDeform *cd)
-{
-  invert_m4_m4(ob->imat, ob->obmat);
-  mul_m4_m4m4(cd->objectspace, ob->imat, par->obmat);
-  invert_m4_m4(cd->curvespace, cd->objectspace);
-  copy_m3_m4(cd->objectspace3, cd->objectspace);
-  cd->no_rot_axis = 0;
-}
-
-/* this makes sure we can extend for non-cyclic.
- *
- * returns OK: 1/0
- */
-static bool where_on_path_deform(
-    Object *ob, float ctime, float vec[4], float dir[3], float quat[4], float *radius)
-{
-  BevList *bl;
-  float ctime1;
-  int cycl = 0;
-
-  /* test for cyclic */
-  bl = ob->runtime.curve_cache->bev.first;
-  if (!bl->nr)
-    return false;
-  if (bl->poly > -1)
-    cycl = 1;
-
-  if (cycl == 0) {
-    ctime1 = CLAMPIS(ctime, 0.0f, 1.0f);
-  }
-  else {
-    ctime1 = ctime;
-  }
-
-  /* vec needs 4 items */
-  if (where_on_path(ob, ctime1, vec, dir, quat, radius, NULL)) {
-
-    if (cycl == 0) {
-      Path *path = ob->runtime.curve_cache->path;
-      float dvec[3];
-
-      if (ctime < 0.0f) {
-        sub_v3_v3v3(dvec, path->data[1].vec, path->data[0].vec);
-        mul_v3_fl(dvec, ctime * (float)path->len);
-        add_v3_v3(vec, dvec);
-        if (quat)
-          copy_qt_qt(quat, path->data[0].quat);
-        if (radius)
-          *radius = path->data[0].radius;
-      }
-      else if (ctime > 1.0f) {
-        sub_v3_v3v3(dvec, path->data[path->len - 1].vec, path->data[path->len - 2].vec);
-        mul_v3_fl(dvec, (ctime - 1.0f) * (float)path->len);
-        add_v3_v3(vec, dvec);
-        if (quat)
-          copy_qt_qt(quat, path->data[path->len - 1].quat);
-        if (radius)
-          *radius = path->data[path->len - 1].radius;
-        /* weight - not used but could be added */
-      }
-    }
-    return true;
-  }
-  return false;
-}
-
-/* for each point, rotate & translate to curve */
-/* use path, since it has constant distances */
-/* co: local coord, result local too */
-/* returns quaternion for rotation, using cd->no_rot_axis */
-/* axis is using another define!!! */
-static bool calc_curve_deform(
-    Object *par, float co[3], const short axis, CurveDeform *cd, float r_quat[4])
-{
-  Curve *cu = par->data;
-  float fac, loc[4], dir[3], new_quat[4], radius;
-  short index;
-  const bool is_neg_axis = (axis > 2);
-
-  if (par->runtime.curve_cache == NULL) {
-    /* Happens with a cyclic dependencies. */
-    return false;
-  }
-
-  if (par->runtime.curve_cache->path == NULL) {
-    return false; /* happens on append, cyclic dependencies and empty curves */
-  }
-
-  /* options */
-  if (is_neg_axis) {
-    index = axis - 3;
-    if (cu->flag & CU_STRETCH)
-      fac = -(co[index] - cd->dmax[index]) / (cd->dmax[index] - cd->dmin[index]);
-    else
-      fac = -(co[index] - cd->dmax[index]) / (par->runtime.curve_cache->path->totdist);
-  }
-  else {
-    index = axis;
-    if (cu->flag & CU_STRETCH) {
-      fac = (co[index] - cd->dmin[index]) / (cd->dmax[index] - cd->dmin[index]);
-    }
-    else {
-      if (LIKELY(par->runtime.curve_cache->path->totdist > FLT_EPSILON)) {
-        fac = +(co[index] - cd->dmin[index]) / (par->runtime.curve_cache->path->totdist);
-      }
-      else {
-        fac = 0.0f;
-      }
-    }
-  }
-
-  if (where_on_path_deform(par, fac, loc, dir, new_quat, &radius)) { /* returns OK */
-    float quat[4], cent[3];
-
-    if (cd->no_rot_axis) { /* set by caller */
-
-      /* this is not exactly the same as 2.4x, since the axis is having rotation removed rather than
-       * changing the axis before calculating the tilt but serves much the same purpose */
-      float dir_flat[3] = {0, 0, 0}, q[4];
-      copy_v3_v3(dir_flat, dir);
-      dir_flat[cd->no_rot_axis - 1] = 0.0f;
-
-      normalize_v3(dir);
-      normalize_v3(dir_flat);
-
-      rotation_between_vecs_to_quat(q, dir, dir_flat); /* Could this be done faster? */
-
-      mul_qt_qtqt(new_quat, q, new_quat);
-    }
-
-    /* Logic for 'cent' orientation *
-     *
-     * The way 'co' is copied to 'cent' may seem to have no meaning, but it does.
-     *
-     * Use a curve modifier to stretch a cube out, color each side RGB, positive side light, negative dark.
-     * view with X up (default), from the angle that you can see 3 faces RGB colors (light), anti-clockwise
-     * Notice X,Y,Z Up all have light colors and each ordered CCW.
-     *
-     * Now for Neg Up XYZ, the colors are all dark, and ordered clockwise - Campbell
-     *
-     * note: moved functions into quat_apply_track/vec_apply_track
-     * */
-    copy_qt_qt(quat, new_quat);
-    copy_v3_v3(cent, co);
-
-    /* zero the axis which is not used,
-     * the big block of text above now applies to these 3 lines */
-    quat_apply_track(
-        quat,
-        axis,
-        (axis == 0 || axis == 2) ? 1 : 0); /* up flag is a dummy, set so no rotation is done */
-    vec_apply_track(cent, axis);
-    cent[index] = 0.0f;
-
-    /* scale if enabled */
-    if (cu->flag & CU_PATH_RADIUS)
-      mul_v3_fl(cent, radius);
-
-    /* local rotation */
-    normalize_qt(quat);
-    mul_qt_v3(quat, cent);
-
-    /* translation */
-    add_v3_v3v3(co, cent, loc);
-
-    if (r_quat)
-      copy_qt_qt(r_quat, quat);
-
-    return true;
-  }
-  return false;
-}
-
-void curve_deform_verts(Object *cuOb,
-                        Object *target,
-                        float (*vertexCos)[3],
-                        int numVerts,
-                        MDeformVert *dvert,
-                        const int defgrp_index,
-                        short defaxis)
-{
-  Curve *cu;
-  int a;
-  CurveDeform cd;
-  const bool is_neg_axis = (defaxis > 2);
-
-  if (cuOb->type != OB_CURVE)
-    return;
-
-  cu = cuOb->data;
-
-  init_curve_deform(cuOb, target, &cd);
-
-  /* dummy bounds, keep if CU_DEFORM_BOUNDS_OFF is set */
-  if (is_neg_axis == false) {
-    cd.dmin[0] = cd.dmin[1] = cd.dmin[2] = 0.0f;
-    cd.dmax[0] = cd.dmax[1] = cd.dmax[2] = 1.0f;
-  }
-  else {
-    /* negative, these bounds give a good rest position */
-    cd.dmin[0] = cd.dmin[1] = cd.dmin[2] = -1.0f;
-    cd.dmax[0] = cd.dmax[1] = cd.dmax[2] = 0.0f;
-  }
-
-  if (dvert) {
-    MDeformVert *dvert_iter;
-    float vec[3];
-
-    if (cu->flag & CU_DEFORM_BOUNDS_OFF) {
-      for (a = 0, dvert_iter = dvert; a < numVerts; a++, dvert_iter++) {
-        const float weight = defvert_find_weight(dvert_iter, defgrp_index);
-
-        if (weight > 0.0f) {
-          mul_m4_v3(cd.curvespace, vertexCos[a]);
-          copy_v3_v3(vec, vertexCos[a]);
-          calc_curve_deform(cuOb, vec, defaxis, &cd, NULL);
-          interp_v3_v3v3(vertexCos[a], vertexCos[a], vec, weight);
-          mul_m4_v3(cd.objectspace, vertexCos[a]);
-        }
-      }
-    }
-    else {
-      /* set mesh min/max bounds */
-      INIT_MINMAX(cd.dmin, cd.dmax);
-
-      for (a = 0, dvert_iter = dvert; a < numVerts; a++, dvert_iter++) {
-        if (defvert_find_weight(dvert_iter, defgrp_index) > 0.0f) {
-          mul_m4_v3(cd.curvespace, vertexCos[a]);
-          minmax_v3v3_v3(cd.dmin, cd.dmax, vertexCos[a]);
-        }
-      }
-
-      for (a = 0, dvert_iter = dvert; a < numVerts; a++, dvert_iter++) {
-        const float weight = defvert_find_weight(dvert_iter, defgrp_index);
-
-        if (weight > 0.0f) {
-          /* already in 'cd.curvespace', prev for loop */
-          copy_v3_v3(vec, vertexCos[a]);
-          calc_curve_deform(cuOb, vec, defaxis, &cd, NULL);
-          interp_v3_v3v3(vertexCos[a], vertexCos[a], vec, weight);
-          mul_m4_v3(cd.objectspace, vertexCos[a]);
-        }
-      }
-    }
-  }
-  else {
-    if (cu->flag & CU_DEFORM_BOUNDS_OFF) {
-      for (a = 0; a < numVerts; a++) {
-        mul_m4_v3(cd.curvespace, vertexCos[a]);
-        calc_curve_deform(cuOb, vertexCos[a], defaxis, &cd, NULL);
-        mul_m4_v3(cd.objectspace, vertexCos[a]);
-      }
-    }
-    else {
-      /* set mesh min max bounds */
-      INIT_MINMAX(cd.dmin, cd.dmax);
-
-      for (a = 0; a < numVerts; a++) {
-        mul_m4_v3(cd.curvespace, vertexCos[a]);
-        minmax_v3v3_v3(cd.dmin, cd.dmax, vertexCos[a]);
-      }
-
-      for (a = 0; a < numVerts; a++) {
-        /* already in 'cd.curvespace', prev for loop */
-        calc_curve_deform(cuOb, vertexCos[a], defaxis, &cd, NULL);
-        mul_m4_v3(cd.objectspace, vertexCos[a]);
-      }
-    }
-  }
-}
-
-/* input vec and orco = local coord in armature space */
-/* orco is original not-animated or deformed reference point */
-/* result written in vec and mat */
-void curve_deform_vector(
-    Object *cuOb, Object *target, float orco[3], float vec[3], float mat[3][3], int no_rot_axis)
-{
-  CurveDeform cd;
-  float quat[4];
-
-  if (cuOb->type != OB_CURVE) {
-    unit_m3(mat);
-    return;
-  }
-
-  init_curve_deform(cuOb, target, &cd);
-  cd.no_rot_axis = no_rot_axis; /* option to only rotate for XY, for example */
-
-  copy_v3_v3(cd.dmin, orco);
-  copy_v3_v3(cd.dmax, orco);
-
-  mul_m4_v3(cd.curvespace, vec);
-
-  if (calc_curve_deform(cuOb, vec, target->trackflag, &cd, quat)) {
-    float qmat[3][3];
-
-    quat_to_mat3(qmat, quat);
-    mul_m3_m3m3(mat, qmat, cd.objectspace3);
-  }
-  else
-    unit_m3(mat);
-
-  mul_m4_v3(cd.objectspace, vec);
-}
-
-void lattice_deform_verts(Object *laOb,
-                          Object *target,
-                          Mesh *mesh,
-                          float (*vertexCos)[3],
-                          int numVerts,
-                          const char *vgroup,
-                          float fac)
-{
-  LatticeDeformData *lattice_deform_data;
-  MDeformVert *dvert = NULL;
-  int defgrp_index = -1;
-  int a;
-
-  if (laOb->type != OB_LATTICE)
-    return;
-
-  lattice_deform_data = init_latt_deform(laOb, target);
-
-  /* Check whether to use vertex groups (only possible if target is a Mesh or Lattice).
-   * We want either a Mesh/Lattice with no derived data, or derived data with deformverts.
-   */
-  if (vgroup && vgroup[0] && target && ELEM(target->type, OB_MESH, OB_LATTICE)) {
-    defgrp_index = defgroup_name_index(target, vgroup);
-
-    if (defgrp_index != -1) {
-      /* if there's derived data without deformverts, don't use vgroups */
-      if (mesh) {
-        dvert = CustomData_get_layer(&mesh->vdata, CD_MDEFORMVERT);
-      }
-      else if (target->type == OB_LATTICE) {
-        dvert = ((Lattice *)target->data)->dvert;
-      }
-      else {
-        dvert = ((Mesh *)target->data)->dvert;
-      }
-    }
-  }
-  if (dvert) {
-    MDeformVert *dvert_iter;
-    for (a = 0, dvert_iter = dvert; a < numVerts; a++, dvert_iter++) {
-      const float weight = defvert_find_weight(dvert_iter, defgrp_index);
-      if (weight > 0.0f) {
-        calc_latt_deform(lattice_deform_data, vertexCos[a], weight * fac);
-      }
-    }
-  }
-  else {
-    for (a = 0; a < numVerts; a++) {
-      calc_latt_deform(lattice_deform_data, vertexCos[a], fac);
-    }
-  }
-  end_latt_deform(lattice_deform_data);
 }
 
 bool object_deform_mball(Object *ob, ListBase *dispbase)
@@ -905,14 +413,13 @@ bool object_deform_mball(Object *ob, ListBase *dispbase)
     DispList *dl;
 
     for (dl = dispbase->first; dl; dl = dl->next) {
-      lattice_deform_verts(ob->parent, ob, NULL, (float(*)[3])dl->verts, dl->nr, NULL, 1.0f);
+      BKE_lattice_deform_coords(ob->parent, ob, (float(*)[3])dl->verts, dl->nr, 0, NULL, 1.0f);
     }
 
     return true;
   }
-  else {
-    return false;
-  }
+
+  return false;
 }
 
 static BPoint *latt_bp(Lattice *lt, int u, int v, int w)
@@ -929,12 +436,15 @@ void outside_lattice(Lattice *lt)
   if (lt->flag & LT_OUTSIDE) {
     bp = lt->def;
 
-    if (lt->pntsu > 1)
+    if (lt->pntsu > 1) {
       du = 1.0f / ((float)lt->pntsu - 1);
-    if (lt->pntsv > 1)
+    }
+    if (lt->pntsv > 1) {
       dv = 1.0f / ((float)lt->pntsv - 1);
-    if (lt->pntsw > 1)
+    }
+    if (lt->pntsw > 1) {
       dw = 1.0f / ((float)lt->pntsw - 1);
+    }
 
     for (w = 0; w < lt->pntsw; w++) {
 
@@ -985,106 +495,111 @@ void outside_lattice(Lattice *lt)
   else {
     bp = lt->def;
 
-    for (w = 0; w < lt->pntsw; w++)
-      for (v = 0; v < lt->pntsv; v++)
-        for (u = 0; u < lt->pntsu; u++, bp++)
+    for (w = 0; w < lt->pntsw; w++) {
+      for (v = 0; v < lt->pntsv; v++) {
+        for (u = 0; u < lt->pntsu; u++, bp++) {
           bp->hide = 0;
+        }
+      }
+    }
   }
 }
 
-float (*BKE_lattice_vertexcos_get(struct Object *ob, int *r_numVerts))[3]
+void BKE_lattice_vert_coords_get(const Lattice *lt, float (*vert_coords)[3])
 {
-  Lattice *lt = ob->data;
-  int i, numVerts;
-  float(*vertexCos)[3];
-
-  if (lt->editlatt)
-    lt = lt->editlatt->latt;
-  numVerts = *r_numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
-
-  vertexCos = MEM_mallocN(sizeof(*vertexCos) * numVerts, "lt_vcos");
-
-  for (i = 0; i < numVerts; i++) {
-    copy_v3_v3(vertexCos[i], lt->def[i].vec);
+  const int vert_len = lt->pntsu * lt->pntsv * lt->pntsw;
+  for (int i = 0; i < vert_len; i++) {
+    copy_v3_v3(vert_coords[i], lt->def[i].vec);
   }
-
-  return vertexCos;
 }
 
-void BKE_lattice_vertexcos_apply(struct Object *ob, float (*vertexCos)[3])
+float (*BKE_lattice_vert_coords_alloc(const Lattice *lt, int *r_vert_len))[3]
 {
-  Lattice *lt = ob->data;
+  const int vert_len = *r_vert_len = lt->pntsu * lt->pntsv * lt->pntsw;
+  float(*vert_coords)[3] = MEM_mallocN(sizeof(*vert_coords) * vert_len, __func__);
+  BKE_lattice_vert_coords_get(lt, vert_coords);
+  return vert_coords;
+}
+
+void BKE_lattice_vert_coords_apply_with_mat4(struct Lattice *lt,
+                                             const float (*vert_coords)[3],
+                                             const float mat[4][4])
+{
   int i, numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
-
   for (i = 0; i < numVerts; i++) {
-    copy_v3_v3(lt->def[i].vec, vertexCos[i]);
+    mul_v3_m4v3(lt->def[i].vec, mat, vert_coords[i]);
+  }
+}
+
+void BKE_lattice_vert_coords_apply(Lattice *lt, const float (*vert_coords)[3])
+{
+  const int vert_len = lt->pntsu * lt->pntsv * lt->pntsw;
+  for (int i = 0; i < vert_len; i++) {
+    copy_v3_v3(lt->def[i].vec, vert_coords[i]);
   }
 }
 
 void BKE_lattice_modifiers_calc(struct Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
-  Lattice *lt = ob->data;
-  /* Get vertex coordinates from the original copy; otherwise we get already-modified coordinates. */
-  Object *ob_orig = DEG_get_original_object(ob);
-  VirtualModifierData virtualModifierData;
-  ModifierData *md = modifiers_getVirtualModifierList(ob, &virtualModifierData);
-  float(*vertexCos)[3] = NULL;
-  int numVerts, editmode = (lt->editlatt != NULL);
-  const ModifierEvalContext mectx = {depsgraph, ob, 0};
-
-  if (ob->runtime.curve_cache) {
-    BKE_displist_free(&ob->runtime.curve_cache->disp);
-  }
-  else {
+  BKE_object_free_derived_caches(ob);
+  if (ob->runtime.curve_cache == NULL) {
     ob->runtime.curve_cache = MEM_callocN(sizeof(CurveCache), "CurveCache for lattice");
   }
 
+  Lattice *lt = ob->data;
+  VirtualModifierData virtualModifierData;
+  ModifierData *md = BKE_modifiers_get_virtual_modifierlist(ob, &virtualModifierData);
+  float(*vert_coords)[3] = NULL;
+  int numVerts;
+  const bool is_editmode = (lt->editlatt != NULL);
+  const ModifierEvalContext mectx = {depsgraph, ob, 0};
+
   for (; md; md = md->next) {
-    const ModifierTypeInfo *mti = modifierType_getInfo(md->type);
+    const ModifierTypeInfo *mti = BKE_modifier_get_info(md->type);
 
-    if (!(mti->flags & eModifierTypeFlag_AcceptsLattice))
+    if (!(mti->flags & eModifierTypeFlag_AcceptsVertexCosOnly)) {
       continue;
-    if (!(md->mode & eModifierMode_Realtime))
-      continue;
-    if (editmode && !(md->mode & eModifierMode_Editmode))
-      continue;
-    if (mti->isDisabled && mti->isDisabled(scene, md, 0))
-      continue;
-    if (mti->type != eModifierTypeType_OnlyDeform)
-      continue;
-
-    if (!vertexCos)
-      vertexCos = BKE_lattice_vertexcos_get(ob_orig, &numVerts);
-    mti->deformVerts(md, &mectx, NULL, vertexCos, numVerts);
-  }
-
-  if (ob->id.tag & LIB_TAG_COPIED_ON_WRITE) {
-    if (vertexCos) {
-      BKE_lattice_vertexcos_apply(ob, vertexCos);
-      MEM_freeN(vertexCos);
     }
-  }
-  else {
-    /* Displist won't do anything; this is just for posterity's sake until we remove it. */
-    if (!vertexCos)
-      vertexCos = BKE_lattice_vertexcos_get(ob_orig, &numVerts);
+    if (!(md->mode & eModifierMode_Realtime)) {
+      continue;
+    }
+    if (is_editmode && !(md->mode & eModifierMode_Editmode)) {
+      continue;
+    }
+    if (mti->isDisabled && mti->isDisabled(scene, md, 0)) {
+      continue;
+    }
+    if (mti->type != eModifierTypeType_OnlyDeform) {
+      continue;
+    }
 
-    DispList *dl = MEM_callocN(sizeof(*dl), "lt_dl");
-    dl->type = DL_VERTS;
-    dl->parts = 1;
-    dl->nr = numVerts;
-    dl->verts = (float *)vertexCos;
+    if (vert_coords == NULL) {
+      /* Get either the edit-mode or regular lattice, whichever is in use now. */
+      const Lattice *effective_lattice = BKE_object_get_lattice(ob);
+      vert_coords = BKE_lattice_vert_coords_alloc(effective_lattice, &numVerts);
+    }
 
-    BLI_addtail(&ob->runtime.curve_cache->disp, dl);
+    mti->deformVerts(md, &mectx, NULL, vert_coords, numVerts);
   }
+
+  if (vert_coords == NULL) {
+    return;
+  }
+
+  Lattice *lt_eval = BKE_object_get_evaluated_lattice(ob);
+  if (lt_eval == NULL) {
+    BKE_id_copy_ex(NULL, &lt->id, (ID **)&lt_eval, LIB_ID_COPY_LOCALIZE);
+    BKE_object_eval_assign_data(ob, &lt_eval->id, true);
+  }
+
+  BKE_lattice_vert_coords_apply(lt_eval, vert_coords);
+  MEM_freeN(vert_coords);
 }
 
-struct MDeformVert *BKE_lattice_deform_verts_get(struct Object *oblatt)
+struct MDeformVert *BKE_lattice_deform_verts_get(const struct Object *oblatt)
 {
-  Lattice *lt = (Lattice *)oblatt->data;
   BLI_assert(oblatt->type == OB_LATTICE);
-  if (lt->editlatt)
-    lt = lt->editlatt->latt;
+  Lattice *lt = BKE_object_get_lattice(oblatt);
   return lt->dvert;
 }
 
@@ -1101,23 +616,24 @@ struct BPoint *BKE_lattice_active_point_get(Lattice *lt)
   if ((lt->actbp != LT_ACTBP_NONE) && (lt->actbp < lt->pntsu * lt->pntsv * lt->pntsw)) {
     return &lt->def[lt->actbp];
   }
-  else {
-    return NULL;
-  }
+
+  return NULL;
 }
 
 void BKE_lattice_center_median(Lattice *lt, float cent[3])
 {
   int i, numVerts;
 
-  if (lt->editlatt)
+  if (lt->editlatt) {
     lt = lt->editlatt->latt;
+  }
   numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
 
   zero_v3(cent);
 
-  for (i = 0; i < numVerts; i++)
+  for (i = 0; i < numVerts; i++) {
     add_v3_v3(cent, lt->def[i].vec);
+  }
 
   mul_v3_fl(cent, 1.0f / (float)numVerts);
 }
@@ -1161,12 +677,14 @@ void BKE_lattice_minmax_dl(Object *ob, Lattice *lt, float min[3], float max[3])
   else {
     int i, numVerts;
 
-    if (lt->editlatt)
+    if (lt->editlatt) {
       lt = lt->editlatt->latt;
+    }
     numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
 
-    for (i = 0; i < numVerts; i++)
+    for (i = 0; i < numVerts; i++) {
       minmax_v3v3_v3(min, max, &dl->verts[i * 3]);
+    }
   }
 }
 
@@ -1174,12 +692,14 @@ void BKE_lattice_minmax(Lattice *lt, float min[3], float max[3])
 {
   int i, numVerts;
 
-  if (lt->editlatt)
+  if (lt->editlatt) {
     lt = lt->editlatt->latt;
+  }
   numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
 
-  for (i = 0; i < numVerts; i++)
+  for (i = 0; i < numVerts; i++) {
     minmax_v3v3_v3(min, max, lt->def[i].vec);
+  }
 }
 
 void BKE_lattice_center_bounds(Lattice *lt, float cent[3])
@@ -1192,7 +712,7 @@ void BKE_lattice_center_bounds(Lattice *lt, float cent[3])
   mid_v3_v3v3(cent, min, max);
 }
 
-void BKE_lattice_transform(Lattice *lt, float mat[4][4], bool do_keys)
+void BKE_lattice_transform(Lattice *lt, const float mat[4][4], bool do_keys)
 {
   BPoint *bp = lt->def;
   int i = lt->pntsu * lt->pntsv * lt->pntsw;
@@ -1214,19 +734,23 @@ void BKE_lattice_transform(Lattice *lt, float mat[4][4], bool do_keys)
   }
 }
 
-void BKE_lattice_translate(Lattice *lt, float offset[3], bool do_keys)
+void BKE_lattice_translate(Lattice *lt, const float offset[3], bool do_keys)
 {
   int i, numVerts;
 
   numVerts = lt->pntsu * lt->pntsv * lt->pntsw;
 
-  if (lt->def)
-    for (i = 0; i < numVerts; i++)
+  if (lt->def) {
+    for (i = 0; i < numVerts; i++) {
       add_v3_v3(lt->def[i].vec, offset);
+    }
+  }
 
-  if (lt->editlatt)
-    for (i = 0; i < numVerts; i++)
+  if (lt->editlatt) {
+    for (i = 0; i < numVerts; i++) {
       add_v3_v3(lt->editlatt->latt->def[i].vec, offset);
+    }
+  }
 
   if (do_keys && lt->key) {
     KeyBlock *kb;

@@ -22,8 +22,8 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_ghash.h"
+#include "BLI_math.h"
 
 #include "bmesh.h"
 
@@ -44,7 +44,7 @@ void bmo_planar_faces_exec(BMesh *bm, BMOperator *op)
   const int faces_num = BMO_slot_buffer_count(op->slots_in, "faces");
 
   const float eps = 0.00001f;
-  const float eps_sq = SQUARE(eps);
+  const float eps_sq = square_f(eps);
 
   BMOIter oiter;
   BMFace *f;
@@ -56,8 +56,7 @@ void bmo_planar_faces_exec(BMesh *bm, BMOperator *op)
   faces_center = MEM_mallocN(sizeof(*faces_center) * faces_num, __func__);
 
   shared_vert_num = 0;
-  BMO_ITER_INDEX(f, &oiter, op->slots_in, "faces", BM_FACE, i)
-  {
+  BMO_ITER_INDEX (f, &oiter, op->slots_in, "faces", BM_FACE, i) {
     BMLoop *l_iter, *l_first;
 
     if (f->len == 3) {
@@ -84,8 +83,7 @@ void bmo_planar_faces_exec(BMesh *bm, BMOperator *op)
     GHashIterator gh_iter;
     bool changed = false;
 
-    BMO_ITER_INDEX(f, &oiter, op->slots_in, "faces", BM_FACE, i)
-    {
+    BMO_ITER_INDEX (f, &oiter, op->slots_in, "faces", BM_FACE, i) {
       BMLoop *l_iter, *l_first;
       float plane[4];
 

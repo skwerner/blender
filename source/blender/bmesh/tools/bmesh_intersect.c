@@ -33,19 +33,19 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
-#include "BLI_utildefines.h"
-#include "BLI_memarena.h"
 #include "BLI_alloca.h"
+#include "BLI_math.h"
+#include "BLI_memarena.h"
 #include "BLI_sort_utils.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_linklist_stack.h"
 #include "BLI_utildefines_stack.h"
 #ifndef NDEBUG
 #endif
 
-#include "BLI_kdopbvh.h"
 #include "BLI_buffer.h"
+#include "BLI_kdopbvh.h"
 
 #include "bmesh.h"
 #include "intern/bmesh_private.h"
@@ -99,9 +99,7 @@ static BMEdge *bm_vert_other_edge(BMVert *v, BMEdge *e)
   if (v->e != e) {
     return v->e;
   }
-  else {
-    return BM_DISK_EDGE_NEXT(v->e, v);
-  }
+  return BM_DISK_EDGE_NEXT(v->e, v);
 }
 #endif
 
@@ -509,7 +507,7 @@ static bool bm_loop_filter_fn(const BMLoop *l, void *user_data)
  * Return true if we have any intersections.
  */
 static void bm_isect_tri_tri(
-    struct ISectState *s, int a_index, int b_index, BMLoop **a, BMLoop **b)
+    struct ISectState *s, int a_index, int b_index, BMLoop **a, BMLoop **b, bool no_shared)
 {
   BMFace *f_a = (*a)->f;
   BMFace *f_b = (*b)->f;
@@ -527,9 +525,16 @@ static void bm_isect_tri_tri(
   STACK_DECLARE(iv_ls_a);
   STACK_DECLARE(iv_ls_b);
 
-  if (UNLIKELY(ELEM(fv_a[0], UNPACK3(fv_b)) || ELEM(fv_a[1], UNPACK3(fv_b)) ||
-               ELEM(fv_a[2], UNPACK3(fv_b)))) {
-    return;
+  if (no_shared) {
+    if (UNLIKELY(ELEM(fv_a[0], UNPACK3(fv_b)) || ELEM(fv_a[1], UNPACK3(fv_b)) ||
+                 ELEM(fv_a[2], UNPACK3(fv_b)))) {
+      return;
+    }
+  }
+  else {
+    if (UNLIKELY(BM_face_share_edge_check(f_a, f_b))) {
+      return;
+    }
   }
 
   STACK_INIT(iv_ls_a, ARRAY_SIZE(iv_ls_a));
@@ -564,11 +569,11 @@ static void bm_isect_tri_tri(
       for (i_b = 0; i_b < 3; i_b++) {
         if (len_squared_v3v3(fv_a[i_a]->co, fv_b[i_b]->co) <= s->epsilon.eps2x_sq) {
 #ifdef USE_DUMP
-          if (BM_ELEM_API_FLAG_TEST(fv_a[i_a], VERT_VISIT) == 0) {
-            printf("  ('VERT-VERT-A') %d, %d),\n", i_a, BM_elem_index_get(fv_a[i_a]));
+          if (BM_ELEM_API_FLAG_TEST(fv_a[i_a], VERT_VISIT_A) == 0) {
+            printf("  ('VERT-VERT-A') %u, %d),\n", i_a, BM_elem_index_get(fv_a[i_a]));
           }
-          if (BM_ELEM_API_FLAG_TEST(fv_b[i_b], VERT_VISIT) == 0) {
-            printf("  ('VERT-VERT-B') %d, %d),\n", i_b, BM_elem_index_get(fv_b[i_b]));
+          if (BM_ELEM_API_FLAG_TEST(fv_b[i_b], VERT_VISIT_B) == 0) {
+            printf("  ('VERT-VERT-B') %u, %d),\n", i_b, BM_elem_index_get(fv_b[i_b]));
           }
 #endif
           STACK_PUSH_TEST_A(fv_a[i_a]);
@@ -676,7 +681,7 @@ static void bm_isect_tri_tri(
     copy_v3_v3(t_scale[2], fv_b[2]->co);
     tri_v3_scale(UNPACK3(t_scale), 1.0f - s->epsilon.eps2x);
 
-    // second check for verts intersecting the triangle
+    /* second check for verts intersecting the triangle */
     for (i_a = 0; i_a < 3; i_a++) {
       if (BM_ELEM_API_FLAG_TEST(fv_a[i_a], VERT_VISIT_A)) {
         continue;
@@ -893,10 +898,10 @@ static int isect_bvhtree_point_v3(BVHTree *tree, const float **looptris, const f
       &z_buffer,
   };
   BVHTreeRayHit hit = {0};
-  float dir[3] = {1.0f, 0.0f, 0.0f};
+  const float dir[3] = {1.0f, 0.0f, 0.0f};
 
   /* Need to initialize hit even tho it's not used.
-   * This is to make it so kdotree believes we didn't intersect anything and
+   * This is to make it so kd-tree believes we didn't intersect anything and
    * keeps calling the intersect callback.
    */
   hit.index = -1;
@@ -905,7 +910,7 @@ static int isect_bvhtree_point_v3(BVHTree *tree, const float **looptris, const f
   BLI_bvhtree_ray_cast(tree, co, dir, 0.0f, &hit, raycast_callback, &raycast_data);
 
 #  ifdef USE_DUMP
-  printf("%s: Total intersections: %d\n", __func__, z_buffer.count);
+  printf("%s: Total intersections: %zu\n", __func__, z_buffer.count);
 #  endif
 
   int num_isect;
@@ -1031,7 +1036,7 @@ bool BM_mesh_intersect(BMesh *bm,
 #endif
 
   if (boolean_mode != BMESH_ISECT_BOOLEAN_NONE) {
-    /* keep original geometrty for raycast callbacks */
+    /* Keep original geometry for ray-cast callbacks. */
     float **cos;
     int i, j;
 
@@ -1082,7 +1087,21 @@ bool BM_mesh_intersect(BMesh *bm,
     tree_b = tree_a;
   }
 
-  overlap = BLI_bvhtree_overlap(tree_b, tree_a, &tree_overlap_tot, NULL, NULL);
+  /* For self intersection this can be useful, sometimes users generate geometry
+   * where surfaces that seem disconnected happen to share an edge.
+   * So when performing intersection calculation allow shared vertices,
+   * just not shared edges. See T75946. */
+  const bool isect_tri_tri_no_shared = (boolean_mode != BMESH_ISECT_BOOLEAN_NONE);
+
+  int flag = BVH_OVERLAP_USE_THREADING | BVH_OVERLAP_RETURN_PAIRS;
+#  ifdef DEBUG
+  /* The overlap result must match that obtained in Release to succeed
+   * in the `bmesh_boolean` test. */
+  if (looptris_tot < 1024) {
+    flag &= ~BVH_OVERLAP_USE_THREADING;
+  }
+#  endif
+  overlap = BLI_bvhtree_overlap_ex(tree_b, tree_a, &tree_overlap_tot, NULL, NULL, 0, flag);
 
   if (overlap) {
     uint i;
@@ -1095,7 +1114,8 @@ bool BM_mesh_intersect(BMesh *bm,
                        overlap[i].indexA,
                        overlap[i].indexB,
                        looptris[overlap[i].indexA],
-                       looptris[overlap[i].indexB]);
+                       looptris[overlap[i].indexB],
+                       isect_tri_tri_no_shared);
 #  ifdef USE_DUMP
       printf(")),\n");
 #  endif
@@ -1132,7 +1152,7 @@ bool BM_mesh_intersect(BMesh *bm,
 #  ifdef USE_DUMP
         printf("  ((%d, %d), (", i_a, i_b);
 #  endif
-        bm_isect_tri_tri(&s, i_a, i_b, looptris[i_a], looptris[i_b]);
+        bm_isect_tri_tri(&s, i_a, i_b, looptris[i_a], looptris[i_b], isect_tri_tri_no_shared);
 #  ifdef USE_DUMP
         printf(")),\n");
 #  endif
@@ -1171,7 +1191,7 @@ bool BM_mesh_intersect(BMesh *bm,
       }
 
 #  ifdef USE_DUMP
-      printf("# SPLITTING EDGE: %d, %d\n", BM_elem_index_get(e), v_ls_base->list_len);
+      printf("# SPLITTING EDGE: %d, %u\n", BM_elem_index_get(e), v_ls_base->list_len);
 #  endif
       /* intersect */
       is_wire = BLI_gset_haskey(s.wire_edges, e);
@@ -1250,6 +1270,13 @@ bool BM_mesh_intersect(BMesh *bm,
         continue;
       }
 
+      /* It's possible the vertex to dissolve is an edge on an existing face
+       * that doesn't divide the face, therefor the edges are not wire
+       * and shouldn't be handled here, see: T63787. */
+      if (!BLI_gset_haskey(s.wire_edges, e_pair[0]) || !BLI_gset_haskey(s.wire_edges, e_pair[1])) {
+        continue;
+      }
+
       v_a = BM_edge_other_vert(e_pair[0], v);
       v_b = BM_edge_other_vert(e_pair[1], v);
 
@@ -1312,10 +1339,8 @@ bool BM_mesh_intersect(BMesh *bm,
             splice_pair[1] = v_next;
             break;
           }
-          else {
-            e_next = bm_vert_other_edge(v_next, e_step);
-          }
 
+          e_next = bm_vert_other_edge(v_next, e_step);
           e_step = e_next;
           v_step = v_next;
           BM_elem_flag_enable(e_step, BM_ELEM_TAG);
@@ -1508,7 +1533,7 @@ bool BM_mesh_intersect(BMesh *bm,
 
     groups_array = MEM_mallocN(sizeof(*groups_array) * (size_t)bm->totface, __func__);
     group_tot = BM_mesh_calc_face_groups(
-        bm, groups_array, &group_index, bm_loop_filter_fn, &user_data_wrap, 0, BM_EDGE);
+        bm, groups_array, &group_index, bm_loop_filter_fn, NULL, &user_data_wrap, 0, BM_EDGE);
 
 #ifdef USE_DUMP
     printf("%s: Total face-groups: %d\n", __func__, group_tot);
@@ -1521,7 +1546,7 @@ bool BM_mesh_intersect(BMesh *bm,
       bool do_remove, do_flip;
 
       {
-        /* for now assyme this is an OK face to test with (not degenerate!) */
+        /* For now assume this is an OK face to test with (not degenerate!) */
         BMFace *f = ftable[groups_array[fg]];
         float co[3];
         int hits;
@@ -1597,7 +1622,7 @@ bool BM_mesh_intersect(BMesh *bm,
           }
 
           if (ok) {
-            BM_vert_collapse_edge(bm, v->e, v, true, false);
+            BM_vert_collapse_edge(bm, v->e, v, true, false, false);
           }
         }
       }
@@ -1634,6 +1659,10 @@ bool BM_mesh_intersect(BMesh *bm,
   BLI_gset_free(s.wire_edges, NULL);
 
   BLI_memarena_free(s.mem_arena);
+
+  /* It's unlikely the selection history is useful at this point,
+   * if this is not called this array would need to be validated, see: T86799. */
+  BM_select_history_clear(bm);
 
   return (has_edit_isect || has_edit_boolean);
 }

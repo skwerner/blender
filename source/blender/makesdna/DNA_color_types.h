@@ -21,10 +21,14 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_COLOR_TYPES_H__
-#define __DNA_COLOR_TYPES_H__
+#pragma once
 
+#include "DNA_defs.h"
 #include "DNA_vec_types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* general defines for kernel functions */
 #define CM_RESOL 32
@@ -47,7 +51,8 @@ enum {
 };
 
 typedef struct CurveMap {
-  short totpoint, flag;
+  short totpoint;
+  short flag DNA_DEPRECATED;
 
   /** Quick multiply value for reading table. */
   float range;
@@ -60,15 +65,12 @@ typedef struct CurveMap {
   /** Display and evaluate table. */
   CurveMapPoint *table;
 
-  /** For RGB curves, premulled table. */
+  /** For RGB curves, pre-multiplied table. */
   CurveMapPoint *premultable;
-  /** For RGB curves, premulled extrapolation vector. */
+  /** For RGB curves, pre-multiplied extrapolation vector. */
   float premul_ext_in[2];
   float premul_ext_out[2];
 } CurveMap;
-
-/* cuma->flag */
-#define CUMA_EXTEND_EXTRAPOLATE 1
 
 typedef struct CurveMapping {
   /** Cur; for buttons, to show active curve. */
@@ -93,11 +95,17 @@ typedef struct CurveMapping {
   char _pad[6];
 } CurveMapping;
 
-/* cumapping->flag */
-#define CUMA_DO_CLIP (1 << 0)
-#define CUMA_PREMULLED (1 << 1)
-#define CUMA_DRAW_CFRA (1 << 2)
-#define CUMA_DRAW_SAMPLE (1 << 3)
+/* CurveMapping.flag */
+typedef enum eCurveMappingFlags {
+  CUMA_DO_CLIP = (1 << 0),
+  CUMA_PREMULLED = (1 << 1),
+  CUMA_DRAW_CFRA = (1 << 2),
+  CUMA_DRAW_SAMPLE = (1 << 3),
+
+  /* The curve is extended by extrapolation. When not set the curve is extended
+   * Horizontally */
+  CUMA_EXTEND_EXTRAPOLATE = (1 << 4),
+} eCurveMappingFlags;
 
 /* cumapping->preset */
 typedef enum eCurveMappingPreset {
@@ -188,7 +196,7 @@ typedef struct ColorManagedViewSettings {
   char look[64];
   /** View transform which is being applied when displaying buffer on the screen. */
   char view_transform[64];
-  /** Fstop exposure. */
+  /** F-stop exposure. */
   float exposure;
   /** Post-display gamma transform. */
   float gamma;
@@ -211,4 +219,6 @@ enum {
   COLORMANAGE_VIEW_USE_CURVES = (1 << 0),
 };
 
+#ifdef __cplusplus
+}
 #endif

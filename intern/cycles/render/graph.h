@@ -61,12 +61,13 @@ enum ShaderNodeSpecialType {
   SHADER_SPECIAL_TYPE_PROXY,
   SHADER_SPECIAL_TYPE_AUTOCONVERT,
   SHADER_SPECIAL_TYPE_GEOMETRY,
-  SHADER_SPECIAL_TYPE_SCRIPT,
+  SHADER_SPECIAL_TYPE_OSL,
   SHADER_SPECIAL_TYPE_IMAGE_SLOT,
   SHADER_SPECIAL_TYPE_CLOSURE,
   SHADER_SPECIAL_TYPE_COMBINE_CLOSURE,
   SHADER_SPECIAL_TYPE_OUTPUT,
   SHADER_SPECIAL_TYPE_BUMP,
+  SHADER_SPECIAL_TYPE_OUTPUT_AOV,
 };
 
 /* Input
@@ -104,6 +105,8 @@ class ShaderInput {
     ((Node *)parent)->set(socket_type, f);
   }
 
+  void disconnect();
+
   const SocketType &socket_type;
   ShaderNode *parent;
   ShaderOutput *link;
@@ -130,6 +133,8 @@ class ShaderOutput {
     return socket_type.type;
   }
 
+  void disconnect();
+
   const SocketType &socket_type;
   ShaderNode *parent;
   vector<ShaderInput *> links;
@@ -147,16 +152,22 @@ class ShaderNode : public Node {
   virtual ~ShaderNode();
 
   void create_inputs_outputs(const NodeType *type);
+  void remove_input(ShaderInput *input);
 
   ShaderInput *input(const char *name);
   ShaderOutput *output(const char *name);
   ShaderInput *input(ustring name);
   ShaderOutput *output(ustring name);
 
-  virtual ShaderNode *clone() const = 0;
+  virtual ShaderNode *clone(ShaderGraph *graph) const = 0;
   virtual void attributes(Shader *shader, AttributeRequestSet *attributes);
   virtual void compile(SVMCompiler &compiler) = 0;
   virtual void compile(OSLCompiler &compiler) = 0;
+
+  /* Expand node into additional nodes. */
+  virtual void expand(ShaderGraph * /* graph */)
+  {
+  }
 
   /* ** Node optimization ** */
   /* Check whether the node can be replaced with single constant. */
@@ -190,10 +201,6 @@ class ShaderNode : public Node {
     return false;
   }
   virtual bool has_spatial_varying()
-  {
-    return false;
-  }
-  virtual bool has_object_dependency()
   {
     return false;
   }
@@ -268,9 +275,9 @@ class ShaderNode : public Node {
 #define SHADER_NODE_CLASS(type) \
   NODE_DECLARE \
   type(); \
-  virtual ShaderNode *clone() const \
+  virtual ShaderNode *clone(ShaderGraph *graph) const \
   { \
-    return new type(*this); \
+    return graph->create_node<type>(*this); \
   } \
   virtual void compile(SVMCompiler &compiler); \
   virtual void compile(OSLCompiler &compiler);
@@ -282,9 +289,9 @@ class ShaderNode : public Node {
   virtual void compile(OSLCompiler &compiler);
 
 #define SHADER_NODE_BASE_CLASS(type) \
-  virtual ShaderNode *clone() const \
+  virtual ShaderNode *clone(ShaderGraph *graph) const \
   { \
-    return new type(*this); \
+    return graph->create_node<type>(*this); \
   } \
   virtual void compile(SVMCompiler &compiler); \
   virtual void compile(OSLCompiler &compiler);
@@ -305,7 +312,7 @@ typedef map<ShaderNode *, ShaderNode *, ShaderNodeIDComparator> ShaderNodeMap;
  * Shader graph of nodes. Also does graph manipulations for default inputs,
  * bump mapping from displacement, and possibly other things in the future. */
 
-class ShaderGraph {
+class ShaderGraph : public NodeOwner {
  public:
   list<ShaderNode *> nodes;
   size_t num_node_ids;
@@ -322,6 +329,8 @@ class ShaderGraph {
   void connect(ShaderOutput *from, ShaderInput *to);
   void disconnect(ShaderOutput *from);
   void disconnect(ShaderInput *to);
+  void relink(ShaderInput *from, ShaderInput *to);
+  void relink(ShaderOutput *from, ShaderOutput *to);
   void relink(ShaderNode *node, ShaderOutput *from, ShaderOutput *to);
 
   void remove_proxy_nodes();
@@ -336,6 +345,24 @@ class ShaderGraph {
 
   void dump_graph(const char *filename);
 
+  /* This function is used to create a node of a specified type instead of
+   * calling 'new', and sets the graph as the owner of the node.
+   */
+  template<typename T, typename... Args> T *create_node(Args &&... args)
+  {
+    T *node = new T(args...);
+    node->set_owner(this);
+    return node;
+  }
+
+  /* This function is used to delete a node created and owned by the graph.
+   */
+  template<typename T> void delete_node(T *node)
+  {
+    assert(node->get_owner() == this);
+    delete node;
+  }
+
  protected:
   typedef pair<ShaderNode *const, ShaderNode *> NodePair;
 
@@ -346,6 +373,7 @@ class ShaderGraph {
   void break_cycles(ShaderNode *node, vector<bool> &visited, vector<bool> &on_stack);
   void bump_from_displacement(bool use_object_space);
   void refine_bump_nodes();
+  void expand();
   void default_inputs(bool do_osl);
   void transform_multi_closure(ShaderNode *node, ShaderOutput *weight_out, bool volume);
 

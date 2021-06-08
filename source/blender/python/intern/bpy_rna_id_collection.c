@@ -25,18 +25,19 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_bitmap.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_global.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
 #include "BKE_main.h"
 
 #include "DNA_ID.h"
-/* Those folowing are only to support hack of not listing some internal 'backward' pointers in generated user_map... */
-#include "DNA_object_types.h"
+/* Those following are only to support hack of not listing some internal
+ * 'backward' pointers in generated user_map. */
 #include "DNA_key_types.h"
+#include "DNA_object_types.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
@@ -48,31 +49,28 @@
 #include "../generic/python_utildefines.h"
 
 #include "RNA_access.h"
-#include "RNA_types.h"
 #include "RNA_enum_types.h"
+#include "RNA_types.h"
 
 #include "bpy_rna.h"
 
 typedef struct IDUserMapData {
-  /* place-holder key only used for lookups to avoid creating new data only for lookups
-   * (never return its contents) */
-  PyObject *py_id_key_lookup_only;
-
-  /* we loop over data-blocks that this ID points to (do build a reverse lookup table) */
+  /** We loop over data-blocks that this ID points to (do build a reverse lookup table) */
   PyObject *py_id_curr;
   ID *id_curr;
 
-  /* filter the values we add into the set */
+  /** Filter the values we add into the set. */
   BLI_bitmap *types_bitmap;
 
-  PyObject *user_map; /* set to fill in as we iterate */
-  bool
-      is_subset; /* true when we're only mapping a subset of all the ID's (subset arg is passed) */
+  /** Set to fill in as we iterate. */
+  PyObject *user_map;
+  /** true when we're only mapping a subset of all the ID's (subset arg is passed). */
+  bool is_subset;
 } IDUserMapData;
 
 static int id_code_as_index(const short idcode)
 {
-  return (int)*((unsigned short *)&idcode);
+  return (int)*((ushort *)&idcode);
 }
 
 static bool id_check_type(const ID *id, const BLI_bitmap *types_bitmap)
@@ -80,14 +78,13 @@ static bool id_check_type(const ID *id, const BLI_bitmap *types_bitmap)
   return BLI_BITMAP_TEST_BOOL(types_bitmap, id_code_as_index(GS(id->name)));
 }
 
-static int foreach_libblock_id_user_map_callback(void *user_data,
-                                                 ID *self_id,
-                                                 ID **id_p,
-                                                 int UNUSED(cb_flag))
+static int foreach_libblock_id_user_map_callback(LibraryIDLinkCallbackData *cb_data)
 {
-  IDUserMapData *data = user_data;
+  ID **id_p = cb_data->id_pointer;
 
   if (*id_p) {
+    IDUserMapData *data = cb_data->user_data;
+    const int cb_flag = cb_data->cb_flag;
 
     if (data->types_bitmap) {
       if (!id_check_type(*id_p, data->types_bitmap)) {
@@ -95,37 +92,32 @@ static int foreach_libblock_id_user_map_callback(void *user_data,
       }
     }
 
-    if ((GS(self_id->name) == ID_OB) && (id_p == (ID **)&((Object *)self_id)->proxy_from)) {
-      /* We skip proxy_from here, since it's some internal pointer which is not relevant info for py/API level. */
-      return IDWALK_RET_NOP;
-    }
-    else if ((GS(self_id->name) == ID_KE) && (id_p == (ID **)&((Key *)self_id)->from)) {
-      /* We skip from here, since it's some internal pointer which is not relevant info for py/API level. */
+    if (cb_flag & IDWALK_CB_LOOPBACK) {
+      /* We skip loop-back pointers like Object.proxy_from or Key.from here,
+       * since it's some internal pointer which is not relevant info for py/API level. */
       return IDWALK_RET_NOP;
     }
 
-    /* pyrna_struct_hash() uses ptr.data only,
-     * but pyrna_struct_richcmp() uses also ptr.type,
-     * so we need to create a valid PointerRNA here...
-     */
-    PyObject *key = data->py_id_key_lookup_only;
-    RNA_id_pointer_create(*id_p, &((BPy_StructRNA *)key)->ptr);
+    if (cb_flag & IDWALK_CB_EMBEDDED) {
+      /* We skip private pointers themselves, like root node trees, we'll 'link' their own ID
+       * pointers to their 'ID owner' instead. */
+      return IDWALK_RET_NOP;
+    }
+
+    PyObject *key = pyrna_id_CreatePyObject(*id_p);
 
     PyObject *set;
     if ((set = PyDict_GetItem(data->user_map, key)) == NULL) {
-
       /* limit to key's added already */
       if (data->is_subset) {
         return IDWALK_RET_NOP;
       }
 
-      /* Cannot use our placeholder key here! */
-      key = pyrna_id_CreatePyObject(*id_p);
       set = PySet_New(NULL);
       PyDict_SetItem(data->user_map, key, set);
       Py_DECREF(set);
-      Py_DECREF(key);
     }
+    Py_DECREF(key);
 
     if (data->py_id_curr == NULL) {
       data->py_id_curr = pyrna_id_CreatePyObject(data->id_curr);
@@ -140,7 +132,7 @@ static int foreach_libblock_id_user_map_callback(void *user_data,
 PyDoc_STRVAR(bpy_user_map_doc,
              ".. method:: user_map([subset=(id1, id2, ...)], key_types={..}, value_types={..})\n"
              "\n"
-             "   Returns a mapping of all ID datablocks in current ``bpy.data`` to a set of all "
+             "   Returns a mapping of all ID data-blocks in current ``bpy.data`` to a set of all "
              "datablocks using them.\n"
              "\n"
              "   For list of valid set members for key_types & value_types, see: "
@@ -225,10 +217,8 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
 
   data_cb.types_bitmap = key_types_bitmap;
 
-  FOREACH_MAIN_LISTBASE_BEGIN(bmain, lb)
-  {
-    FOREACH_MAIN_LISTBASE_ID_BEGIN(lb, id)
-    {
+  FOREACH_MAIN_LISTBASE_BEGIN (bmain, lb) {
+    FOREACH_MAIN_LISTBASE_ID_BEGIN (lb, id) {
       /* We cannot skip here in case we have some filter on key types... */
       if (key_types_bitmap == NULL && val_types_bitmap != NULL) {
         if (!id_check_type(id, val_types_bitmap)) {
@@ -236,32 +226,23 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
         }
       }
 
-      /* One-time init, ID is just used as placeholder here, we abuse this in iterator callback
-       * to avoid having to rebuild a complete bpyrna object each time for the key searching
-       * (where only ID pointer value is used). */
-      if (data_cb.py_id_key_lookup_only == NULL) {
-        data_cb.py_id_key_lookup_only = pyrna_id_CreatePyObject(id);
-      }
-
       if (!data_cb.is_subset &&
           /* We do not want to pre-add keys of flitered out types. */
           (key_types_bitmap == NULL || id_check_type(id, key_types_bitmap)) &&
-          /* We do not want to pre-add keys when we have filter on value types, but not on key types. */
+          /* We do not want to pre-add keys when we have filter on value types,
+           * but not on key types. */
           (val_types_bitmap == NULL || key_types_bitmap != NULL)) {
-        PyObject *key = data_cb.py_id_key_lookup_only;
+        PyObject *key = pyrna_id_CreatePyObject(id);
         PyObject *set;
 
-        RNA_id_pointer_create(id, &((BPy_StructRNA *)key)->ptr);
-
-        /* We have to insert the key now, otherwise ID unused would be missing from final dict... */
+        /* We have to insert the key now,
+         * otherwise ID unused would be missing from final dict... */
         if ((set = PyDict_GetItem(data_cb.user_map, key)) == NULL) {
-          /* Cannot use our placeholder key here! */
-          key = pyrna_id_CreatePyObject(id);
           set = PySet_New(NULL);
           PyDict_SetItem(data_cb.user_map, key, set);
           Py_DECREF(set);
-          Py_DECREF(key);
         }
+        Py_DECREF(key);
       }
 
       if (val_types_bitmap != NULL && !id_check_type(id, val_types_bitmap)) {
@@ -284,10 +265,6 @@ static PyObject *bpy_user_map(PyObject *UNUSED(self), PyObject *args, PyObject *
   ret = data_cb.user_map;
 
 error:
-  if (data_cb.py_id_key_lookup_only != NULL) {
-    Py_XDECREF(data_cb.py_id_key_lookup_only);
-  }
-
   if (key_types_bitmap != NULL) {
     MEM_freeN(key_types_bitmap);
   }
@@ -327,7 +304,7 @@ static PyObject *bpy_batch_remove(PyObject *UNUSED(self), PyObject *args, PyObje
   PyObject *ret = NULL;
 
   static const char *_keywords[] = {"ids", NULL};
-  static _PyArg_Parser _parser = {"O:user_map", _keywords, 0};
+  static _PyArg_Parser _parser = {"O:batch_remove", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args, kwds, &_parser, &ids)) {
     return ret;
   }
@@ -371,20 +348,71 @@ error:
   return ret;
 }
 
-int BPY_rna_id_collection_module(PyObject *mod_par)
+PyDoc_STRVAR(bpy_orphans_purge_doc,
+             ".. method:: orphans_purge()\n"
+             "\n"
+             "   Remove (delete) all IDs with no user.\n"
+             "\n"
+             "   :arg do_local_ids: Include unused local IDs in the deletion, defaults to True\n"
+             "   :type do_local_ids: bool, optional\n"
+             "   :arg do_linked_ids: Include unused linked IDs in the deletion, defaults to True\n"
+             "   :type do_linked_ids: bool, optional\n"
+             "   :arg do_recursive: Recursively check for unused IDs, ensuring no orphaned one "
+             "remain after a single run of that function, defaults to False\n"
+             "   :type do_recursive: bool, optional\n"
+             "   :return: The number of deleted IDs.\n");
+static PyObject *bpy_orphans_purge(PyObject *UNUSED(self), PyObject *args, PyObject *kwds)
 {
-  static PyMethodDef user_map = {
-      "user_map", (PyCFunction)bpy_user_map, METH_VARARGS | METH_KEYWORDS, bpy_user_map_doc};
+#if 0 /* If someone knows how to get a proper 'self' in that case... */
+  BPy_StructRNA *pyrna = (BPy_StructRNA *)self;
+  Main *bmain = pyrna->ptr.data;
+#else
+  Main *bmain = G_MAIN; /* XXX Ugly, but should work! */
+#endif
 
-  PyModule_AddObject(mod_par, "_rna_id_collection_user_map", PyCFunction_New(&user_map, NULL));
+  int num_tagged[INDEX_ID_MAX] = {0};
 
-  static PyMethodDef batch_remove = {"batch_remove",
-                                     (PyCFunction)bpy_batch_remove,
-                                     METH_VARARGS | METH_KEYWORDS,
-                                     bpy_batch_remove_doc};
+  bool do_local_ids = true;
+  bool do_linked_ids = true;
+  bool do_recursive_cleanup = false;
 
-  PyModule_AddObject(
-      mod_par, "_rna_id_collection_batch_remove", PyCFunction_New(&batch_remove, NULL));
+  static const char *_keywords[] = {"do_local_ids", "do_linked_ids", "do_recursive", NULL};
+  static _PyArg_Parser _parser = {"|$ppp:orphans_purge", _keywords, 0};
+  if (!_PyArg_ParseTupleAndKeywordsFast(
+          args, kwds, &_parser, &do_local_ids, &do_linked_ids, &do_recursive_cleanup)) {
+    return NULL;
+  }
 
-  return 0;
+  /* Tag all IDs to delete. */
+  BKE_lib_query_unused_ids_tag(
+      bmain, LIB_TAG_DOIT, do_local_ids, do_linked_ids, do_recursive_cleanup, num_tagged);
+
+  if (num_tagged[INDEX_ID_NULL] == 0) {
+    return PyLong_FromSize_t(0);
+  }
+
+  const size_t num_datablocks_deleted = BKE_id_multi_tagged_delete(bmain);
+  /* Force full redraw, mandatory to avoid crashes when running this from UI... */
+  WM_main_add_notifier(NC_WINDOW, NULL);
+
+  return PyLong_FromSize_t(num_datablocks_deleted);
 }
+
+PyMethodDef BPY_rna_id_collection_user_map_method_def = {
+    "user_map",
+    (PyCFunction)bpy_user_map,
+    METH_STATIC | METH_VARARGS | METH_KEYWORDS,
+    bpy_user_map_doc,
+};
+PyMethodDef BPY_rna_id_collection_batch_remove_method_def = {
+    "batch_remove",
+    (PyCFunction)bpy_batch_remove,
+    METH_STATIC | METH_VARARGS | METH_KEYWORDS,
+    bpy_batch_remove_doc,
+};
+PyMethodDef BPY_rna_id_collection_orphans_purge_method_def = {
+    "orphans_purge",
+    (PyCFunction)bpy_orphans_purge,
+    METH_STATIC | METH_VARARGS | METH_KEYWORDS,
+    bpy_orphans_purge_doc,
+};

@@ -15,39 +15,37 @@
  *
  * The Original Code is Copyright (C) 2018, Blender Foundation
  * This is a new part of Blender
- * Operators for dealing with armatures and GP datablocks
  */
 
 /** \file
  * \ingroup edgpencil
+ *
+ * Operators for dealing with armatures and GP data-blocks.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <stddef.h>
 #include <math.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_blenlib.h"
-#include "BLI_utildefines.h"
 #include "BLI_math.h"
-
-#include "BLT_translation.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_armature_types.h"
 #include "DNA_gpencil_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_main.h"
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_context.h"
 #include "BKE_deform.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
+#include "BKE_main.h"
 #include "BKE_object_deform.h"
 #include "BKE_report.h"
 
@@ -59,8 +57,8 @@
 #include "RNA_enum_types.h"
 
 #include "ED_gpencil.h"
-#include "ED_object.h"
 #include "ED_mesh.h"
+#include "ED_object.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
@@ -167,7 +165,7 @@ static int vgroup_add_unique_bone_cb(Object *ob, Bone *bone, void *UNUSED(ptr))
    * If such a vertex group already exist the routine exits.
    */
   if (!(bone->flag & BONE_NO_DEFORM)) {
-    if (!defgroup_find_name(ob, bone->name)) {
+    if (!BKE_object_defgroup_find_name(ob, bone->name)) {
       BKE_object_defgroup_add_name(ob, bone->name);
       return 1;
     }
@@ -220,7 +218,7 @@ static int dgroup_skinnable_cb(Object *ob, Bone *bone, void *datap)
       }
 
       if (arm->layer & bone->layer) {
-        if (!(defgroup = defgroup_find_name(ob, bone->name))) {
+        if (!(defgroup = BKE_object_defgroup_find_name(ob, bone->name))) {
           defgroup = BKE_object_defgroup_add_name(ob, bone->name);
         }
         else if (defgroup->flag & DG_LOCK_WEIGHT) {
@@ -287,8 +285,9 @@ static void gpencil_add_verts_to_dgroups(
   /* count the number of skinnable bones */
   numbones = gpencil_bone_looper(ob, arm->bonebase.first, &looper_data, gpencil_bone_skinnable_cb);
 
-  if (numbones == 0)
+  if (numbones == 0) {
     return;
+  }
 
   /* create an array of pointer to bones that are skinnable
    * and fill it with all of the skinnable bones */
@@ -306,10 +305,10 @@ static void gpencil_add_verts_to_dgroups(
 
   /* create an array of root and tip positions transformed into
    * global coords */
-  root = MEM_callocN(numbones * sizeof(float) * 3, "root");
-  tip = MEM_callocN(numbones * sizeof(float) * 3, "tip");
-  selected = MEM_callocN(numbones * sizeof(int), "selected");
-  radsqr = MEM_callocN(numbones * sizeof(float), "radsqr");
+  root = MEM_callocN(sizeof(float[3]) * numbones, "root");
+  tip = MEM_callocN(sizeof(float[3]) * numbones, "tip");
+  selected = MEM_callocN(sizeof(int) * numbones, "selected");
+  radsqr = MEM_callocN(sizeof(float) * numbones, "radsqr");
 
   for (j = 0; j < numbones; j++) {
     bone = bonelist[j];
@@ -355,24 +354,22 @@ static void gpencil_add_verts_to_dgroups(
   }
 
   /* loop all strokes */
-  for (bGPDlayer *gpl = gpd->layers.first; gpl; gpl = gpl->next) {
-    bGPDframe *init_gpf = gpl->actframe;
+  LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
+    bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
     bGPDspoint *pt = NULL;
-
-    if (is_multiedit) {
-      init_gpf = gpl->frames.first;
-    }
 
     for (bGPDframe *gpf = init_gpf; gpf; gpf = gpf->next) {
       if ((gpf == gpl->actframe) || ((gpf->flag & GP_FRAME_SELECT) && (is_multiedit))) {
 
-        if (gpf == NULL)
+        if (gpf == NULL) {
           continue;
+        }
 
-        for (bGPDstroke *gps = gpf->strokes.first; gps; gps = gps->next) {
+        LISTBASE_FOREACH (bGPDstroke *, gps, &gpf->strokes) {
           /* skip strokes that are invalid for current view */
-          if (ED_gpencil_stroke_can_use(C, gps) == false)
+          if (ED_gpencil_stroke_can_use(C, gps) == false) {
             continue;
+          }
 
           BKE_gpencil_dvert_ensure(gps);
 
@@ -418,7 +415,7 @@ static void gpencil_add_verts_to_dgroups(
               }
 
               /* assign weight */
-              MDeformWeight *dw = defvert_verify_index(dvert, def_nr);
+              MDeformWeight *dw = BKE_defvert_ensure_index(dvert, def_nr);
               if (dw) {
                 dw->weight = weight;
               }
@@ -477,10 +474,11 @@ static void gpencil_object_vgroup_calc_from_armature(const bContext *C,
      */
     gpencil_add_verts_to_dgroups(C, ob, ob_arm, ratio, decay);
   }
+
+  DEG_relations_tag_update(CTX_data_main(C));
 }
 
-bool ED_gpencil_add_armature_weights(
-    const bContext *C, ReportList *reports, Object *ob, Object *ob_arm, int mode)
+bool ED_gpencil_add_armature(const bContext *C, ReportList *reports, Object *ob, Object *ob_arm)
 {
   Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
@@ -490,7 +488,7 @@ bool ED_gpencil_add_armature_weights(
   }
 
   /* if no armature modifier, add a new one */
-  GpencilModifierData *md = BKE_gpencil_modifiers_findByType(ob, eGpencilModifierType_Armature);
+  GpencilModifierData *md = BKE_gpencil_modifiers_findby_type(ob, eGpencilModifierType_Armature);
   if (md == NULL) {
     md = ED_object_gpencil_modifier_add(
         reports, bmain, scene, ob, "Armature", eGpencilModifierType_Armature);
@@ -514,11 +512,24 @@ bool ED_gpencil_add_armature_weights(
       return false;
     }
   }
+  return true;
+}
+
+bool ED_gpencil_add_armature_weights(
+    const bContext *C, ReportList *reports, Object *ob, Object *ob_arm, int mode)
+{
+  if (ob == NULL) {
+    return false;
+  }
+
+  bool success = ED_gpencil_add_armature(C, reports, ob, ob_arm);
 
   /* add weights */
-  gpencil_object_vgroup_calc_from_armature(C, ob, ob_arm, mode, DEFAULT_RATIO, DEFAULT_DECAY);
+  if (success) {
+    gpencil_object_vgroup_calc_from_armature(C, ob, ob_arm, mode, DEFAULT_RATIO, DEFAULT_DECAY);
+  }
 
-  return true;
+  return success;
 }
 /* ***************** Generate armature weights ************************** */
 static bool gpencil_generate_weights_poll(bContext *C)
@@ -541,7 +552,7 @@ static bool gpencil_generate_weights_poll(bContext *C)
   }
 
   /* need some armature in the view layer */
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     if (base->object->type == OB_ARMATURE) {
       return true;
     }
@@ -552,7 +563,7 @@ static bool gpencil_generate_weights_poll(bContext *C)
 
 static int gpencil_generate_weights_exec(bContext *C, wmOperator *op)
 {
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   Object *ob = CTX_data_active_object(C);
   Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
@@ -564,8 +575,9 @@ static int gpencil_generate_weights_exec(bContext *C, wmOperator *op)
   const float decay = RNA_float_get(op->ptr, "decay");
 
   /* sanity checks */
-  if (ELEM(NULL, ob, gpd))
+  if (ELEM(NULL, ob, gpd)) {
     return OPERATOR_CANCELLED;
+  }
 
   /* get armature */
   const int arm_idx = RNA_enum_get(op->ptr, "armature");
@@ -575,8 +587,8 @@ static int gpencil_generate_weights_exec(bContext *C, wmOperator *op)
   }
   else {
     /* get armature from modifier */
-    GpencilModifierData *md = BKE_gpencil_modifiers_findByType(ob_eval,
-                                                               eGpencilModifierType_Armature);
+    GpencilModifierData *md = BKE_gpencil_modifiers_findby_type(ob_eval,
+                                                                eGpencilModifierType_Armature);
     if (md == NULL) {
       BKE_report(op->reports, RPT_ERROR, "The grease pencil object need an Armature modifier");
       return OPERATOR_CANCELLED;
@@ -627,7 +639,7 @@ static const EnumPropertyItem *gpencil_armatures_enum_itemf(bContext *C,
   RNA_enum_item_add(&item, &totitem, &item_tmp);
   i++;
 
-  for (Base *base = view_layer->object_bases.first; base; base = base->next) {
+  LISTBASE_FOREACH (Base *, base, &view_layer->object_bases) {
     Object *ob = base->object;
     if (ob->type == OB_ARMATURE) {
       item_tmp.identifier = item_tmp.name = ob->id.name + 2;

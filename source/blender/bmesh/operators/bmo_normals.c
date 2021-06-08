@@ -22,14 +22,14 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_math.h"
 #include "BLI_linklist_stack.h"
+#include "BLI_math.h"
 
 #include "bmesh.h"
 
 #include "intern/bmesh_operators_private.h" /* own include */
 
-/********* righthand faces implementation ****** */
+/********* Right-hand faces implementation ****** */
 
 #define FACE_FLAG (1 << 0)
 #define FACE_FLIP (1 << 1)
@@ -44,7 +44,8 @@ static bool bmo_recalc_normal_loop_filter_cb(const BMLoop *l, void *UNUSED(user_
  * This uses a more comprehensive test to see if the furthest face from the center
  * is pointing towards the center or not.
  *
- * A simple test could just check the dot product of the faces-normal and the direction from the center,
+ * A simple test could just check the dot product
+ * of the faces-normal and the direction from the center,
  * however this can fail for faces which make a sharp spike. eg:
  *
  * <pre>
@@ -67,7 +68,8 @@ static bool bmo_recalc_normal_loop_filter_cb(const BMLoop *l, void *UNUSED(user_
  */
 
 /**
- * \return a face index in \a faces and set \a r_is_flip if the face is flipped away from the center.
+ * \return a face index in \a faces and set \a r_is_flip
+ * if the face is flipped away from the center.
  */
 static int recalc_face_normals_find_index(BMesh *bm,
                                           BMFace **faces,
@@ -83,16 +85,23 @@ static int recalc_face_normals_find_index(BMesh *bm,
   int f_start_index;
   int i;
 
-  /* Search for the best loop. Members are compared in-order defined here. */
+  /** Search for the best loop. Members are compared in-order defined here. */
   struct {
-    /* Squared distance from the center to the loops vertex 'l->v'.
-     * The normalized direction between the center and this vertex is also used for the dot-products below. */
+    /**
+     * Squared distance from the center to the loops vertex 'l->v'.
+     * The normalized direction between the center and this vertex
+     * is also used for the dot-products below.
+     */
     float dist_sq;
-    /* Signed dot product using the normalized edge vector,
-     * (best of 'l->prev->v' or 'l->next->v'). */
+    /**
+     * Signed dot product using the normalized edge vector,
+     * (best of 'l->prev->v' or 'l->next->v').
+     */
     float edge_dot;
-    /* Unsigned dot product using the loop-normal
-     * (sign is used to check if we need to flip) */
+    /**
+     * Unsigned dot product using the loop-normal
+     * (sign is used to check if we need to flip).
+     */
     float loop_dot;
   } best, test;
 
@@ -247,13 +256,14 @@ static void bmo_recalc_face_normals_array(BMesh *bm,
   }
 }
 
-/*
- * put normal to the outside, and set the first direction flags in edges
+/**
+ * Put normal to the outside, and set the first direction flags in edges
  *
- * then check the object, and set directions / direction-flags: but only for edges with 1 or 2 faces
- * this is in fact the 'select connected'
+ * then check the object, and set directions / direction-flags:
+ * but only for edges with 1 or 2 faces this is in fact the 'select connected'
  *
- * in case all faces were not done: start over with 'find the ultimate ...' */
+ * in case all faces were not done: start over with 'find the ultimate ...'.
+ */
 
 void bmo_recalc_face_normals_exec(BMesh *bm, BMOperator *op)
 {
@@ -262,7 +272,7 @@ void bmo_recalc_face_normals_exec(BMesh *bm, BMOperator *op)
 
   int(*group_index)[2];
   const int group_tot = BM_mesh_calc_face_groups(
-      bm, groups_array, &group_index, bmo_recalc_normal_loop_filter_cb, NULL, 0, BM_EDGE);
+      bm, groups_array, &group_index, bmo_recalc_normal_loop_filter_cb, NULL, NULL, 0, BM_EDGE);
   int i;
 
   BMO_slot_buffer_flag_enable(bm, op->slots_in, "faces", BM_FACE, FACE_FLAG);

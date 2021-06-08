@@ -55,7 +55,7 @@ ccl_device_inline void kernel_branched_path_ao(KernelGlobals *kg,
 
       if (!shadow_blocked(kg, sd, emission_sd, state, &light_ray, &ao_shadow)) {
         path_radiance_accum_ao(
-            L, state, throughput * num_samples_inv, ao_alpha, ao_bsdf, ao_shadow);
+            kg, L, state, throughput * num_samples_inv, ao_alpha, ao_bsdf, ao_shadow);
       }
       else {
         path_radiance_accum_total_ao(L, state, throughput * num_samples_inv, ao_bsdf);
@@ -91,7 +91,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
   Ray volume_ray = *ray;
   volume_ray.t = (hit) ? isect->t : FLT_MAX;
 
-  bool heterogeneous = volume_stack_is_heterogeneous(kg, state->volume_stack);
+  float step_size = volume_stack_step_size(kg, state->volume_stack);
 
 #      ifdef __VOLUME_DECOUPLED__
   /* decoupled ray marching only supported on CPU */
@@ -100,7 +100,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
     VolumeSegment volume_segment;
 
     shader_setup_from_volume(kg, sd, &volume_ray);
-    kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, heterogeneous);
+    kernel_volume_decoupled_record(kg, state, &volume_ray, sd, &volume_segment, step_size);
 
     /* direct light sampling */
     if (volume_segment.closure_flag & SD_SCATTER) {
@@ -146,7 +146,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 
     /* emission and transmittance */
     if (volume_segment.closure_flag & SD_EMISSION)
-      path_radiance_accum_emission(L, state, *throughput, volume_segment.accum_emission);
+      path_radiance_accum_emission(kg, L, state, *throughput, volume_segment.accum_emission);
     *throughput *= volume_segment.accum_transmittance;
 
     /* free cached steps */
@@ -155,7 +155,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
   else
 #      endif /* __VOLUME_DECOUPLED__ */
   {
-    /* GPU: no decoupled ray marching, scatter probalistically */
+    /* GPU: no decoupled ray marching, scatter probabilistically. */
     int num_samples = kernel_data.integrator.volume_samples;
     float num_samples_inv = 1.0f / num_samples;
 
@@ -171,7 +171,7 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
       path_state_branch(&ps, j, num_samples);
 
       VolumeIntegrateResult result = kernel_volume_integrate(
-          kg, &ps, sd, &volume_ray, L, &tp, heterogeneous);
+          kg, &ps, sd, &volume_ray, L, &tp, step_size);
 
 #      ifdef __VOLUME_SCATTER__
       if (result == VOLUME_PATH_SCATTERED) {
@@ -198,14 +198,14 @@ ccl_device_forceinline void kernel_branched_path_volume(KernelGlobals *kg,
 #    endif /* __VOLUME__ */
 
 /* bounce off surface and integrate indirect light */
-ccl_device_noinline void kernel_branched_path_surface_indirect_light(KernelGlobals *kg,
-                                                                     ShaderData *sd,
-                                                                     ShaderData *indirect_sd,
-                                                                     ShaderData *emission_sd,
-                                                                     float3 throughput,
-                                                                     float num_samples_adjust,
-                                                                     PathState *state,
-                                                                     PathRadiance *L)
+ccl_device_noinline_cpu void kernel_branched_path_surface_indirect_light(KernelGlobals *kg,
+                                                                         ShaderData *sd,
+                                                                         ShaderData *indirect_sd,
+                                                                         ShaderData *emission_sd,
+                                                                         float3 throughput,
+                                                                         float num_samples_adjust,
+                                                                         PathState *state,
+                                                                         PathRadiance *L)
 {
   float sum_sample_weight = 0.0f;
 #    ifdef __DENOISING_FEATURES__
@@ -374,9 +374,9 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
                                                PathRadiance *L)
 {
   /* initialize */
-  float3 throughput = make_float3(1.0f, 1.0f, 1.0f);
+  float3 throughput = one_float3();
 
-  path_radiance_init(L, kernel_data.film.use_light_pass);
+  path_radiance_init(kg, L);
 
   /* shader data memory used for both volumes and surfaces, saves stack space */
   ShaderData sd;
@@ -405,7 +405,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
 
     /* Shade background. */
     if (!hit) {
-      kernel_path_background(kg, &state, &ray, throughput, &sd, L);
+      kernel_path_background(kg, &state, &ray, throughput, &sd, buffer, L);
       break;
     }
 
@@ -417,7 +417,7 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
     if (!(sd.flag & SD_HAS_ONLY_VOLUME)) {
 #    endif
 
-      shader_eval_surface(kg, &sd, &state, state.flag);
+      shader_eval_surface(kg, &sd, &state, buffer, state.flag);
       shader_merge_closures(&sd);
 
       /* Apply shadow catcher, holdout, emission. */
@@ -428,8 +428,8 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
       /* transparency termination */
       if (state.flag & PATH_RAY_TRANSPARENT) {
         /* path termination. this is a strange place to put the termination, it's
-       * mainly due to the mixed in MIS that we use. gives too many unneeded
-       * shader evaluations, only need emission if we are going to terminate */
+         * mainly due to the mixed in MIS that we use. gives too many unneeded
+         * shader evaluations, only need emission if we are going to terminate */
         float probability = path_state_continuation_probability(kg, &state, throughput);
 
         if (probability == 0.0f) {
@@ -445,7 +445,9 @@ ccl_device void kernel_branched_path_integrate(KernelGlobals *kg,
         }
       }
 
+#    ifdef __DENOISING_FEATURES__
       kernel_update_denoising_features(kg, &sd, &state, L);
+#    endif
 
 #    ifdef __AO__
       /* ambient occlusion */
@@ -520,6 +522,14 @@ ccl_device void kernel_branched_path_trace(
   int pass_stride = kernel_data.film.pass_stride;
 
   buffer += index * pass_stride;
+
+  if (kernel_data.film.pass_adaptive_aux_buffer) {
+    ccl_global float4 *aux = (ccl_global float4 *)(buffer +
+                                                   kernel_data.film.pass_adaptive_aux_buffer);
+    if ((*aux).w > 0.0f) {
+      return;
+    }
+  }
 
   /* initialize random numbers and ray */
   uint rng_hash;

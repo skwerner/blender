@@ -27,30 +27,32 @@
 
 #  include "BKE_global.h"
 
+#  include "ED_fileselect.h"
 #  include "ED_screen.h"
 #  include "ED_text.h"
 
 static void rna_RegionView3D_update(ID *id, RegionView3D *rv3d, bContext *C)
 {
-  bScreen *sc = (bScreen *)id;
+  bScreen *screen = (bScreen *)id;
 
-  ScrArea *sa;
-  ARegion *ar;
+  ScrArea *area;
+  ARegion *region;
 
-  area_region_from_regiondata(sc, rv3d, &sa, &ar);
+  area_region_from_regiondata(screen, rv3d, &area, &region);
 
-  if (sa && ar && sa->spacetype == SPACE_VIEW3D) {
-    View3D *v3d = sa->spacedata.first;
+  if (area && region && area->spacetype == SPACE_VIEW3D) {
+    Main *bmain = CTX_data_main(C);
+    View3D *v3d = area->spacedata.first;
     wmWindowManager *wm = CTX_wm_manager(C);
     wmWindow *win;
 
     for (win = wm->windows.first; win; win = win->next) {
-      if (WM_window_get_active_screen(win) == sc) {
+      if (WM_window_get_active_screen(win) == screen) {
         Scene *scene = WM_window_get_active_scene(win);
         ViewLayer *view_layer = WM_window_get_active_view_layer(win);
-        Depsgraph *depsgraph = BKE_scene_get_depsgraph(scene, view_layer, true);
+        Depsgraph *depsgraph = BKE_scene_ensure_depsgraph(bmain, scene, view_layer);
 
-        ED_view3d_update_viewmat(depsgraph, scene, v3d, ar, NULL, NULL, NULL);
+        ED_view3d_update_viewmat(depsgraph, scene, v3d, region, NULL, NULL, NULL, false);
         break;
       }
     }
@@ -60,12 +62,12 @@ static void rna_RegionView3D_update(ID *id, RegionView3D *rv3d, bContext *C)
 static void rna_SpaceTextEditor_region_location_from_cursor(
     ID *id, SpaceText *st, int line, int column, int r_pixel_pos[2])
 {
-  bScreen *sc = (bScreen *)id;
-  ScrArea *sa = BKE_screen_find_area_from_space(sc, (SpaceLink *)st);
-  if (sa) {
-    ARegion *ar = BKE_area_find_region_type(sa, RGN_TYPE_WINDOW);
+  bScreen *screen = (bScreen *)id;
+  ScrArea *area = BKE_screen_find_area_from_space(screen, (SpaceLink *)st);
+  if (area) {
+    ARegion *region = BKE_area_find_region_type(area, RGN_TYPE_WINDOW);
     const int cursor_co[2] = {line, column};
-    ED_text_region_location_from_cursor(st, ar, cursor_co, r_pixel_pos);
+    ED_text_region_location_from_cursor(st, region, cursor_co, r_pixel_pos);
   }
 }
 
@@ -112,6 +114,26 @@ void RNA_api_space_text(StructRNA *srna)
   parm = RNA_def_int_array(
       func, "result", 2, NULL, -1, INT_MAX, "", "Region coordinates", -1, INT_MAX);
   RNA_def_function_output(func, parm);
+}
+
+void RNA_api_space_filebrowser(StructRNA *srna)
+{
+  FunctionRNA *func;
+  PropertyRNA *parm;
+
+  func = RNA_def_function(srna, "activate_asset_by_id", "ED_fileselect_activate_by_id");
+  RNA_def_function_ui_description(func, "Activate the asset entry that represents the given ID");
+
+  parm = RNA_def_property(func, "id_to_activate", PROP_POINTER, PROP_NONE);
+  RNA_def_property_struct_type(parm, "ID");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+
+  parm = RNA_def_boolean(
+      func,
+      "deferred",
+      0,
+      "",
+      "Whether to activate the ID immediately (false) or after the file browser refreshes (true)");
 }
 
 #endif

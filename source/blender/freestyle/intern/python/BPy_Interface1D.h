@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_INTERFACE1D_H__
-#define __FREESTYLE_PYTHON_INTERFACE1D_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../view_map/Interface1D.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +39,7 @@ extern PyTypeObject Interface1D_Type;
 
 /*---------------------------Python BPy_Interface1D structure definition----------*/
 typedef struct {
-  PyObject_HEAD Interface1D *if1D;
+  PyObject_HEAD Freestyle::Interface1D *if1D;
   bool borrowed; /* true if *if1D is a borrowed object */
 } BPy_Interface1D;
 
@@ -55,5 +52,3 @@ int Interface1D_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_INTERFACE1D_H__ */

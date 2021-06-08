@@ -16,11 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_STABILIZE2DNODE_H__
-#define __COM_STABILIZE2DNODE_H__
+#pragma once
 
 #include "COM_Node.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
 
 /**
  * \brief Stabilize2dNode
@@ -29,7 +30,8 @@
 class Stabilize2dNode : public Node {
  public:
   Stabilize2dNode(bNode *editorNode);
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

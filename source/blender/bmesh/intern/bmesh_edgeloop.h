@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BMESH_EDGELOOP_H__
-#define __BMESH_EDGELOOP_H__
+#pragma once
 
 /** \file
  * \ingroup bmesh
@@ -30,7 +29,7 @@ struct ListBase;
 
 /* multiple edgeloops (ListBase) */
 int BM_mesh_edgeloops_find(BMesh *bm,
-                           struct ListBase *r_lb,
+                           struct ListBase *r_eloops,
                            bool (*test_fn)(BMEdge *, void *user_data),
                            void *user_data);
 bool BM_mesh_edgeloops_find_path(BMesh *bm,
@@ -46,7 +45,7 @@ void BM_mesh_edgeloops_calc_normal(BMesh *bm, struct ListBase *eloops);
 void BM_mesh_edgeloops_calc_normal_aligned(BMesh *bm,
                                            struct ListBase *eloops,
                                            const float no_align[3]);
-void BM_mesh_edgeloops_calc_order(BMesh *UNUSED(bm), ListBase *eloops, const bool use_normals);
+void BM_mesh_edgeloops_calc_order(BMesh *bm, ListBase *eloops, const bool use_normals);
 
 /* single edgeloop */
 struct BMEdgeLoopStore *BM_edgeloop_copy(struct BMEdgeLoopStore *el_store);
@@ -78,11 +77,9 @@ bool BM_edgeloop_overlap_check(struct BMEdgeLoopStore *el_store_a,
 
 #define BM_EDGELINK_NEXT(el_store, elink) \
   (elink)->next ? \
-      elink->next : \
+      (elink)->next : \
       (BM_edgeloop_is_closed(el_store) ? BM_edgeloop_verts_get(el_store)->first : NULL)
 
 #define BM_EDGELOOP_NEXT(el_store) \
   (CHECK_TYPE_INLINE(el_store, struct BMEdgeLoopStore *), \
    (struct BMEdgeLoopStore *)((LinkData *)el_store)->next)
-
-#endif /* __BMESH_EDGELOOP_H__ */

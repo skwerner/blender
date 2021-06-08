@@ -1,6 +1,10 @@
 import bpy
 import bmesh
+from bpy_extras.object_utils import AddObjectHelper
 
+from bpy.props import (
+    FloatProperty,
+)
 
 def add_box(width, height, depth):
     """
@@ -35,15 +39,7 @@ def add_box(width, height, depth):
     return verts, faces
 
 
-from bpy.props import (
-    BoolProperty,
-    BoolVectorProperty,
-    FloatProperty,
-    FloatVectorProperty,
-)
-
-
-class AddBox(bpy.types.Operator):
+class AddBox(bpy.types.Operator, AddObjectHelper):
     """Add a simple box mesh"""
     bl_idname = "mesh.primitive_box_add"
     bl_label = "Add Box"
@@ -66,26 +62,6 @@ class AddBox(bpy.types.Operator):
         description="Box Depth",
         min=0.01, max=100.0,
         default=1.0,
-    )
-    layers: BoolVectorProperty(
-        name="Layers",
-        description="Object Layers",
-        size=20,
-        options={'HIDDEN', 'SKIP_SAVE'},
-    )
-
-    # generic transform props
-    view_align: BoolProperty(
-        name="Align to View",
-        default=False,
-    )
-    location: FloatVectorProperty(
-        name="Location",
-        subtype='TRANSLATION',
-    )
-    rotation: FloatVectorProperty(
-        name="Rotation",
-        subtype='EULER',
     )
 
     def execute(self, context):

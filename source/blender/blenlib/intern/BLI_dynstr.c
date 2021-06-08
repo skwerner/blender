@@ -22,14 +22,15 @@
  * \ingroup bli
  */
 
+#include <stdio.h>
 #include <stdlib.h> /* malloc */
 #include <string.h>
 
-#include "MEM_guardedalloc.h"
-#include "BLI_utildefines.h"
+#include "BLI_dynstr.h"
 #include "BLI_memarena.h"
 #include "BLI_string.h"
-#include "BLI_dynstr.h"
+#include "BLI_utildefines.h"
+#include "MEM_guardedalloc.h"
 
 #ifdef _WIN32
 #  ifndef vsnprintf

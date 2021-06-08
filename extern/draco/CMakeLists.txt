@@ -18,12 +18,29 @@
 # All rights reserved.
 # ***** END GPL LICENSE BLOCK *****
 
-set(CMAKE_CXX_STANDARD 14)
-
 # Build Draco library.
-add_subdirectory(dracoenc)
+add_subdirectory(draco)
 
-# Build blender-draco-exporter module.
-add_library(extern_draco SHARED src/draco-compressor.cpp)
-target_include_directories(extern_draco PUBLIC dracoenc/src)
-target_link_libraries(extern_draco PUBLIC dracoenc)
+# Build Draco-Blender bridging module.
+set(SRC
+  src/common.cpp
+  src/common.h
+  src/decoder.cpp
+  src/decoder.h
+  src/encoder.cpp
+  src/encoder.h
+)
+
+set(INC
+  draco/src
+)
+
+set(LIB
+  draco
+)
+
+add_library(extern_draco SHARED "${SRC}")
+target_include_directories(extern_draco PUBLIC "${INC}")
+target_link_libraries(extern_draco PUBLIC "${LIB}")
+
+blender_source_group(extern_draco "${SRC}")

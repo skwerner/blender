@@ -22,7 +22,8 @@
 
 import bpy
 from bpy.types import Operator
-import os
+
+from bpy.app.translations import pgettext_tip as tip_
 
 
 def guess_player_path(preset):
@@ -30,25 +31,11 @@ def guess_player_path(preset):
 
     if preset == 'INTERNAL':
         return bpy.app.binary_path
-    elif preset == 'BLENDER24':
-        player_path = "blender"
-
-        if sys.platform == "darwin":
-            test_path = "/Applications/blender 2.49.app/Contents/MacOS/blender"
-        elif sys.platform[:3] == "win":
-            test_path = "/Program Files/Blender Foundation/Blender/blender.exe"
-
-            if os.path.exists(test_path):
-                player_path = test_path
 
     elif preset == 'DJV':
-        player_path = "djv_view"
-
+        player_path = "djv"
         if sys.platform == "darwin":
-            # TODO, crummy supporting only 1 version,
-            # could find the newest installed version
-            test_path = ("/Applications/djv-0.8.2.app"
-                         "/Contents/Resources/bin/djv_view")
+            test_path = "/Applications/DJV2.app/Contents/Resources/bin/djv"
             if os.path.exists(test_path):
                 player_path = test_path
 
@@ -74,6 +61,7 @@ class PlayRenderedAnim(Operator):
     bl_options = {'REGISTER'}
 
     def execute(self, context):
+        import os
         import subprocess
         from shlex import quote
 
@@ -83,12 +71,13 @@ class PlayRenderedAnim(Operator):
         fps_final = rd.fps / rd.fps_base
 
         preset = prefs.filepaths.animation_player_preset
-        player_path = prefs.filepaths.animation_player
         # file_path = bpy.path.abspath(rd.filepath)  # UNUSED
         is_movie = rd.is_movie_format
 
         # try and guess a command line if it doesn't exist
-        if player_path == "":
+        if preset == 'CUSTOM':
+            player_path = prefs.filepaths.animation_player
+        else:
             player_path = guess_player_path(preset)
 
         if is_movie is False and preset in {'FRAMECYCLER', 'RV', 'MPLAYER'}:
@@ -114,15 +103,17 @@ class PlayRenderedAnim(Operator):
             file = rd.frame_path(frame=scene.frame_start, preview=scene.use_preview_range)
             file = bpy.path.abspath(file)  # expand '//'
             if not os.path.exists(file):
-                self.report({'WARNING'}, f"File {file!r} not found")
+                err_msg = tip_("File %r not found") % file
+                self.report({'WARNING'}, err_msg)
                 path_valid = False
 
             # one last try for full range if we used preview range
             if scene.use_preview_range and not path_valid:
                 file = rd.frame_path(frame=scene.frame_start, preview=False)
                 file = bpy.path.abspath(file)  # expand '//'
+                err_msg = tip_("File %r not found") % file
                 if not os.path.exists(file):
-                    self.report({'WARNING'}, f"File {file!r} not found")
+                    self.report({'WARNING'}, err_msg)
 
         cmd = [player_path]
         # extra options, fps controls etc.
@@ -139,17 +130,24 @@ class PlayRenderedAnim(Operator):
                 "-s", str(frame_start),
                 "-e", str(frame_end),
                 "-j", str(scene.frame_step),
+                "-c", str(prefs.system.memory_cache_limit),
                 file,
             ]
             cmd.extend(opts)
         elif preset == 'DJV':
-            opts = [file, "-playback_speed", str(int(fps_final))]
+            opts = [
+                file,
+                "-speed", str(fps_final),
+                "-in_out", str(frame_start), str(frame_end),
+                "-frame", str(scene.frame_current),
+                "-time_units", "Frames"
+            ]
             cmd.extend(opts)
         elif preset == 'FRAMECYCLER':
-            opts = [file, f"{scene.frame_start:d}-{scene.frame_end:d}"]
+            opts = [file, "%d-%d" % (scene.frame_start, scene.frame_end)]
             cmd.extend(opts)
         elif preset == 'RV':
-            opts = ["-fps", str(rd.fps), "-play", f"[ {file:s} ]"]
+            opts = ["-fps", str(rd.fps), "-play", "[ %s ]" % file]
             cmd.extend(opts)
         elif preset == 'MPLAYER':
             opts = []
@@ -159,7 +157,7 @@ class PlayRenderedAnim(Operator):
                 opts += [
                     ("mf://" + file.replace("#", "?")),
                     "-mf",
-                    f"fps={fps_final:4f}"
+                    "fps=%.4f" % fps_final,
                 ]
 
             opts += ["-loop", "0", "-really-quiet", "-fs"]
@@ -170,19 +168,13 @@ class PlayRenderedAnim(Operator):
         # launch it
         print("Executing command:\n ", " ".join(quote(c) for c in cmd))
 
-        # workaround for boost 1.46, can be eventually removed. bug: [#32350]
-        env_copy = os.environ.copy()
-        if preset == 'INTERNAL':
-            env_copy["LC_ALL"] = "C"
-        # end workaround
-
         try:
-            subprocess.Popen(cmd, env=env_copy)
+            subprocess.Popen(cmd)
         except Exception as e:
+            err_msg = tip_("Couldn't run external animation player with command %r\n%s") % (cmd, e)
             self.report(
                 {'ERROR'},
-                "Couldn't run external animation player with command "
-                f"{cmd!r}\n{e!s}",
+                err_msg,
             )
             return {'CANCELLED'}
 

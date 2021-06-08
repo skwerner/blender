@@ -23,8 +23,7 @@
  * Public API for Depsgraph
  */
 
-#ifndef __DEG_DEPSGRAPH_BUILD_H__
-#define __DEG_DEPSGRAPH_BUILD_H__
+#pragma once
 
 /* ************************************************* */
 
@@ -34,40 +33,47 @@ struct Depsgraph;
 /* ------------------------------------------------ */
 
 struct CacheFile;
-struct Collection;
 struct CustomData_MeshMasks;
-struct EffectorWeights;
 struct ID;
 struct Main;
-struct ModifierData;
 struct Object;
 struct Scene;
-struct ViewLayer;
+struct Simulation;
+struct bNodeTree;
+struct Collection;
+
+#include "BLI_sys_types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "BLI_sys_types.h"
-
 /* Graph Building -------------------------------- */
 
-/* Build depsgraph for the given scene, and dump results in given
- * graph container.
+/* Build depsgraph for the given scene, and dump results in given graph container. */
+void DEG_graph_build_from_view_layer(struct Depsgraph *graph);
+
+/* Build depsgraph for all objects (so also invisible ones) in the given view layer. */
+void DEG_graph_build_for_all_objects(struct Depsgraph *graph);
+
+/* Special version of builder which produces dependency graph suitable for the render pipeline.
+ * It will contain sequencer and compositor (if needed) and all their dependencies. */
+void DEG_graph_build_for_render_pipeline(struct Depsgraph *graph);
+
+/* Builds minimal dependency graph for compositor preview.
+ *
+ * Note that compositor editor might have pinned node tree, which is different from scene's node
+ * tree.
  */
-void DEG_graph_build_from_view_layer(struct Depsgraph *graph,
-                                     struct Main *bmain,
-                                     struct Scene *scene,
-                                     struct ViewLayer *view_layer);
+void DEG_graph_build_for_compositor_preview(struct Depsgraph *graph, struct bNodeTree *nodetree);
+
+void DEG_graph_build_from_ids(struct Depsgraph *graph, struct ID **ids, const int num_ids);
 
 /* Tag relations from the given graph for update. */
 void DEG_graph_tag_relations_update(struct Depsgraph *graph);
 
 /* Create or update relations in the specified graph. */
-void DEG_graph_relations_update(struct Depsgraph *graph,
-                                struct Main *bmain,
-                                struct Scene *scene,
-                                struct ViewLayer *view_layer);
+void DEG_graph_relations_update(struct Depsgraph *graph);
 
 /* Tag all relations in the database for update.*/
 void DEG_relations_tag_update(struct Main *bmain);
@@ -93,6 +99,9 @@ typedef enum eDepsSceneComponentType {
 } eDepsSceneComponentType;
 
 typedef enum eDepsObjectComponentType {
+  /* Used in query API, to denote which component caller is interested in. */
+  DEG_OB_COMP_ANY,
+
   /* Parameters Component - Default when nothing else fits
    * (i.e. just SDNA property setting). */
   DEG_OB_COMP_PARAMETERS,
@@ -108,11 +117,11 @@ typedef enum eDepsObjectComponentType {
   /* Geometry Component (Mesh/Displist) */
   DEG_OB_COMP_GEOMETRY,
 
-  /* Evaluation-Related Outer Types (with Subdata) */
+  /* Evaluation-Related Outer Types (with Sub-data) */
 
   /* Pose Component - Owner/Container of Bones Eval */
   DEG_OB_COMP_EVAL_POSE,
-  /* Bone Component - Child/Subcomponent of Pose */
+  /* Bone Component - Child/Sub-component of Pose */
   DEG_OB_COMP_BONE,
 
   /* Material Shading Component */
@@ -129,6 +138,18 @@ void DEG_add_object_relation(struct DepsNodeHandle *node_handle,
                              struct Object *object,
                              eDepsObjectComponentType component,
                              const char *description);
+void DEG_add_collection_geometry_relation(struct DepsNodeHandle *node_handle,
+                                          struct Collection *collection,
+                                          const char *description);
+void DEG_add_collection_geometry_customdata_mask(struct DepsNodeHandle *node_handle,
+                                                 struct Collection *collection,
+                                                 const struct CustomData_MeshMasks *masks);
+void DEG_add_simulation_relation(struct DepsNodeHandle *node_handle,
+                                 struct Simulation *simulation,
+                                 const char *description);
+void DEG_add_node_tree_relation(struct DepsNodeHandle *node_handle,
+                                struct bNodeTree *node_tree,
+                                const char *description);
 void DEG_add_bone_relation(struct DepsNodeHandle *handle,
                            struct Object *object,
                            const char *bone_name,
@@ -145,7 +166,7 @@ void DEG_add_generic_id_relation(struct DepsNodeHandle *node_handle,
                                  const char *description);
 
 /* Special function which is used from modifiers' updateDepsgraph() callback
- * to indicate that the modifietr needs to know transformation of the object
+ * to indicate that the modifier needs to know transformation of the object
  * which that modifier belongs to.
  * This function will take care of checking which operation is required to
  * have transformation for the modifier, taking into account possible simulation
@@ -168,10 +189,10 @@ void DEG_add_customdata_mask(struct DepsNodeHandle *handle,
 struct ID *DEG_get_id_from_handle(struct DepsNodeHandle *node_handle);
 struct Depsgraph *DEG_get_graph_from_handle(struct DepsNodeHandle *node_handle);
 
+bool DEG_object_has_geometry_component(struct Object *object);
+
 /* ************************************************ */
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_BUILD_H__ */

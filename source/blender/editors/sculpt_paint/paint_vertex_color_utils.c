@@ -20,13 +20,9 @@
  * Intended for use by `paint_vertex.c` & `paint_vertex_color_ops.c`.
  */
 
-#include "MEM_guardedalloc.h"
-
-#include "DNA_brush_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
 
 #include "BLI_math_base.h"
 #include "BLI_math_color.h"
@@ -54,29 +50,37 @@ bool ED_vpaint_color_transform(struct Object *ob,
 {
   Mesh *me;
   const MPoly *mp;
+  int i, j;
 
   if (((me = BKE_mesh_from_object(ob)) == NULL) || (ED_mesh_color_ensure(me, NULL) == false)) {
     return false;
   }
 
   const bool use_face_sel = (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
-  mp = me->mpoly;
+  const bool use_vert_sel = (me->editflag & ME_EDIT_PAINT_VERT_SEL) != 0;
 
-  for (int i = 0; i < me->totpoly; i++, mp++) {
-    MLoopCol *lcol = &me->mloopcol[mp->loopstart];
+  mp = me->mpoly;
+  for (i = 0; i < me->totpoly; i++, mp++) {
+    MLoopCol *lcol = me->mloopcol + mp->loopstart;
 
     if (use_face_sel && !(mp->flag & ME_FACE_SEL)) {
       continue;
     }
 
-    for (int j = 0; j < mp->totloop; j++, lcol++) {
-      float col_mix[3];
-      rgb_uchar_to_float(col_mix, &lcol->r);
+    j = 0;
+    do {
+      uint vidx = me->mloop[mp->loopstart + j].v;
+      if (!(use_vert_sel && !(me->mvert[vidx].flag & SELECT))) {
+        float col_mix[3];
+        rgb_uchar_to_float(col_mix, &lcol->r);
 
-      vpaint_tx_fn(col_mix, user_data, col_mix);
+        vpaint_tx_fn(col_mix, user_data, col_mix);
 
-      rgb_float_to_uchar(&lcol->r, col_mix);
-    }
+        rgb_float_to_uchar(&lcol->r, col_mix);
+      }
+      lcol++;
+      j++;
+    } while (j < mp->totloop);
   }
 
   /* remove stale me->mcol, will be added later */
@@ -216,7 +220,7 @@ BLI_INLINE uint mcol_lighten(uint col_src, uint col_dst, int fac)
   if (fac == 0) {
     return col_src;
   }
-  else if (fac >= 255) {
+  if (fac >= 255) {
     return col_dst;
   }
 
@@ -226,7 +230,7 @@ BLI_INLINE uint mcol_lighten(uint col_src, uint col_dst, int fac)
   cp_dst = (uchar *)&col_dst;
   cp_mix = (uchar *)&col_mix;
 
-  /* See if are lighter, if so mix, else don't do anything.
+  /* See if we're lighter, if so mix, else don't do anything.
    * if the paint color is darker then the original, then ignore */
   if (IMB_colormanagement_get_luminance_byte(cp_src) >
       IMB_colormanagement_get_luminance_byte(cp_dst)) {
@@ -250,7 +254,7 @@ BLI_INLINE uint mcol_darken(uint col_src, uint col_dst, int fac)
   if (fac == 0) {
     return col_src;
   }
-  else if (fac >= 255) {
+  if (fac >= 255) {
     return col_dst;
   }
 
@@ -260,7 +264,7 @@ BLI_INLINE uint mcol_darken(uint col_src, uint col_dst, int fac)
   cp_dst = (uchar *)&col_dst;
   cp_mix = (uchar *)&col_mix;
 
-  /* See if were darker, if so mix, else don't do anything.
+  /* See if we're darker, if so mix, else don't do anything.
    * if the paint color is brighter then the original, then ignore */
   if (IMB_colormanagement_get_luminance_byte(cp_src) <
       IMB_colormanagement_get_luminance_byte(cp_dst)) {
@@ -431,9 +435,7 @@ BLI_INLINE uint mcol_softlight(uint col_src, uint col_dst, int fac)
   cp_dst = (uchar *)&col_dst;
   cp_mix = (uchar *)&col_mix;
 
-  int i = 0;
-
-  for (i = 0; i < 4; i++) {
+  for (int i = 0; i < 4; i++) {
     if (cp_src[i] < 127) {
       temp = ((2 * ((cp_dst[i] / 2) + 64)) * cp_src[i]) / 255;
     }
@@ -608,7 +610,9 @@ BLI_INLINE uint mcol_alpha_sub(uint col_src, int fac)
   return col_mix;
 }
 
-/* wpaint has 'ED_wpaint_blend_tool' */
+/**
+ * \note weight-paint has an equivalent function: #ED_wpaint_blend_tool
+ */
 uint ED_vpaint_blend_tool(const int tool, const uint col, const uint paintcol, const int alpha_i)
 {
   switch ((IMB_BlendMode)tool) {

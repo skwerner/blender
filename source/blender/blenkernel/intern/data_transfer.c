@@ -1,3 +1,4 @@
+
 /*
  * This program is free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
@@ -26,13 +27,13 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_customdata_types.h"
-#include "DNA_meshdata_types.h"
 #include "DNA_mesh_types.h"
+#include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_math.h"
 #include "BLI_blenlib.h"
+#include "BLI_math.h"
 #include "BLI_utildefines.h"
 
 #include "BKE_customdata.h"
@@ -40,8 +41,9 @@
 #include "BKE_deform.h"
 #include "BKE_mesh.h"
 #include "BKE_mesh_mapping.h"
-#include "BKE_mesh_runtime.h"
 #include "BKE_mesh_remap.h"
+#include "BKE_mesh_runtime.h"
+#include "BKE_mesh_wrapper.h"
 #include "BKE_modifier.h"
 #include "BKE_object.h"
 #include "BKE_object_deform.h"
@@ -85,23 +87,26 @@ void BKE_object_data_transfer_dttypes_to_cdmask(const int dtdata_types,
     }
     else if (cddata_type == CD_FAKE_LNOR) {
       r_data_masks->vmask |= CD_MASK_NORMAL;
+      r_data_masks->pmask |= CD_MASK_NORMAL;
       r_data_masks->lmask |= CD_MASK_NORMAL | CD_MASK_CUSTOMLOOPNORMAL;
     }
   }
 }
 
-/* Check what can do each layer type (if it is actually handled by transferdata, if it supports advanced mixing... */
+/**
+ * Check what can do each layer type
+ * (if it is actually handled by transfer-data, if it supports advanced mixing.
+ */
 bool BKE_object_data_transfer_get_dttypes_capacity(const int dtdata_types,
                                                    bool *r_advanced_mixing,
                                                    bool *r_threshold)
 {
-  int i;
   bool ret = false;
 
   *r_advanced_mixing = false;
   *r_threshold = false;
 
-  for (i = 0; (i < DT_TYPE_MAX) && !(ret && *r_advanced_mixing && *r_threshold); i++) {
+  for (int i = 0; (i < DT_TYPE_MAX) && !(ret && *r_advanced_mixing && *r_threshold); i++) {
     const int dtdata_type = 1 << i;
 
     if (!(dtdata_types & dtdata_type)) {
@@ -340,6 +345,10 @@ static void data_transfer_dtdata_type_postprocess(Object *UNUSED(ob_src),
                                                   const bool changed)
 {
   if (dtdata_type == DT_TYPE_LNOR) {
+    if (!changed) {
+      return;
+    }
+
     /* Bake edited destination loop normals into custom normals again. */
     MVert *verts_dst = me_dst->mvert;
     const int num_verts_dst = me_dst->totvert;
@@ -357,10 +366,6 @@ static void data_transfer_dtdata_type_postprocess(Object *UNUSED(ob_src),
     short(*custom_nors_dst)[2] = CustomData_get_layer(ldata_dst, CD_CUSTOMLOOPNORMAL);
 
     BLI_assert(poly_nors_dst);
-
-    if (!changed) {
-      return;
-    }
 
     if (!custom_nors_dst) {
       custom_nors_dst = CustomData_add_layer(
@@ -445,9 +450,7 @@ static void data_transfer_interp_char(const CustomDataTransferLayerMap *laymap,
   float val_src = 0.0f;
   const float val_dst = (float)(*data_dst) / 255.0f;
 
-  int i;
-
-  for (i = count; i--;) {
+  for (int i = count; i--;) {
     val_src += ((float)(*data_src[i]) / 255.0f) * weights[i];
   }
 
@@ -458,7 +461,8 @@ static void data_transfer_interp_char(const CustomDataTransferLayerMap *laymap,
   *data_dst = (char)(val_src * 255.0f);
 }
 
-/* Helpers to match sources and destinations data layers (also handles 'conversions' in CD_FAKE cases). */
+/* Helpers to match sources and destinations data layers
+ * (also handles 'conversions' in CD_FAKE cases). */
 
 void data_transfer_layersmapping_add_item(ListBase *r_map,
                                           const int cddata_type,
@@ -537,12 +541,13 @@ static void data_transfer_layersmapping_add_item_cd(ListBase *r_map,
                                        interp_data);
 }
 
-/* Note: All those layer mapping handlers return false *only* if they were given invalid parameters.
- *       This means that even if they do nothing, they will return true if all given parameters were OK.
- *       Also, r_map may be NULL, in which case they will 'only' create/delete destination layers according
- *       to given parameters.
+/**
+ * \note
+ * All those layer mapping handlers return false *only* if they were given invalid parameters.
+ * This means that even if they do nothing, they will return true if all given parameters were OK.
+ * Also, r_map may be NULL, in which case they will 'only' create/delete destination layers
+ * according to given parameters.
  */
-
 static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map,
                                                                  const int cddata_type,
                                                                  const int mix_mode,
@@ -555,7 +560,7 @@ static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map
                                                                  CustomData *cd_dst,
                                                                  const bool use_dupref_dst,
                                                                  const int tolayers,
-                                                                 bool *use_layers_src,
+                                                                 const bool *use_layers_src,
                                                                  const int num_layers_src,
                                                                  cd_datatransfer_interp interp,
                                                                  void *interp_data)
@@ -581,8 +586,9 @@ static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map
       idx_dst = tot_dst;
 
       /* Find last source actually used! */
-      while (idx_src-- && !use_layers_src[idx_src])
-        ;
+      while (idx_src-- && !use_layers_src[idx_src]) {
+        /* pass */
+      }
       idx_src++;
 
       if (idx_dst < idx_src) {
@@ -608,7 +614,8 @@ static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map
             continue;
           }
           data_src = CustomData_get_layer_n(cd_src, cddata_type, idx_src);
-          /* If dest is a evaluated mesh (fro; ;odifier), we do not want to overwrite cdlayers of orig mesh! */
+          /* If dest is a evaluated mesh (from modifier),
+           * we do not want to overwrite cdlayers of orig mesh! */
           if (use_dupref_dst) {
             data_dst = CustomData_duplicate_referenced_layer_n(
                 cd_dst, cddata_type, idx_src, num_elem_dst);
@@ -653,7 +660,8 @@ static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map
             idx_dst = CustomData_get_named_layer(cd_dst, cddata_type, name);
           }
           else {
-            /* If we are not allowed to create missing dst data layers, just skip matching src one. */
+            /* If we are not allowed to create missing dst data layers,
+             * just skip matching src one. */
             continue;
           }
         }
@@ -661,7 +669,8 @@ static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map
           data_dst_to_delete[idx_dst] = false;
         }
         if (r_map) {
-          /* If dest is a evaluated mesh (from modifier), we do not want to overwrite cdlayers of orig mesh! */
+          /* If dest is a evaluated mesh (from modifier),
+           * we do not want to overwrite cdlayers of orig mesh! */
           if (use_dupref_dst) {
             data_dst = CustomData_duplicate_referenced_layer_n(
                 cd_dst, cddata_type, idx_dst, num_elem_dst);
@@ -682,9 +691,10 @@ static bool data_transfer_layersmapping_cdlayers_multisrc_to_dst(ListBase *r_map
       }
 
       if (data_dst_to_delete) {
-        /* Note: This won't affect newly created layers, if any, since tot_dst has not been updated!
-         *       Also, looping backward ensures us we do not suffer from index shifting when deleting a layer.
-         */
+        /* Note:
+         * This won't affect newly created layers, if any, since tot_dst has not been updated!
+         * Also, looping backward ensures us we do not suffer
+         * from index shifting when deleting a layer. */
         for (idx_dst = tot_dst; idx_dst--;) {
           if (data_dst_to_delete[idx_dst]) {
             CustomData_free_layer(cd_dst, cddata_type, num_elem_dst, idx_dst);
@@ -736,7 +746,8 @@ static bool data_transfer_layersmapping_cdlayers(ListBase *r_map,
       data_dst = CustomData_add_layer(cd_dst, cddata_type, CD_CALLOC, NULL, num_elem_dst);
     }
     else if (use_dupref_dst && r_map) {
-      /* If dest is a evaluated mesh (from modifier), we do not want to overwrite cdlayers of orig mesh! */
+      /* If dest is a evaluated mesh (from modifier),
+       * we do not want to overwrite cdlayers of orig mesh! */
       data_dst = CustomData_duplicate_referenced_layer(cd_dst, cddata_type, num_elem_dst);
     }
 
@@ -770,7 +781,8 @@ static bool data_transfer_layersmapping_cdlayers(ListBase *r_map,
 
     if (tolayers >= 0) { /* Real-layer index */
       idx_dst = tolayers;
-      /* If dest is a evaluated mesh (from modifier), we do not want to overwrite cdlayers of orig mesh! */
+      /* If dest is a evaluated mesh (from modifier),
+       * we do not want to overwrite cdlayers of orig mesh! */
       if (use_dupref_dst && r_map) {
         data_dst = CustomData_duplicate_referenced_layer_n(
             cd_dst, cddata_type, idx_dst, num_elem_dst);
@@ -787,7 +799,8 @@ static bool data_transfer_layersmapping_cdlayers(ListBase *r_map,
         data_dst = CustomData_add_layer(cd_dst, cddata_type, CD_CALLOC, NULL, num_elem_dst);
       }
       else {
-        /* If dest is a evaluated mesh (from modifier), we do not want to overwrite cdlayers of orig mesh! */
+        /* If dest is a evaluated mesh (from modifier),
+         * we do not want to overwrite cdlayers of orig mesh! */
         if (use_dupref_dst && r_map) {
           data_dst = CustomData_duplicate_referenced_layer_n(
               cd_dst, cddata_type, idx_dst, num_elem_dst);
@@ -809,7 +822,8 @@ static bool data_transfer_layersmapping_cdlayers(ListBase *r_map,
           CustomData_add_layer(cd_dst, cddata_type, CD_CALLOC, NULL, num_elem_dst);
         }
       }
-      /* If dest is a evaluated mesh (from modifier), we do not want to overwrite cdlayers of orig mesh! */
+      /* If dest is a evaluated mesh (from modifier),
+       * we do not want to overwrite cdlayers of orig mesh! */
       if (use_dupref_dst && r_map) {
         data_dst = CustomData_duplicate_referenced_layer_n(
             cd_dst, cddata_type, idx_dst, num_elem_dst);
@@ -827,7 +841,8 @@ static bool data_transfer_layersmapping_cdlayers(ListBase *r_map,
         CustomData_add_layer_named(cd_dst, cddata_type, CD_CALLOC, NULL, num_elem_dst, name);
         idx_dst = CustomData_get_named_layer(cd_dst, cddata_type, name);
       }
-      /* If dest is a evaluated mesh (from modifier), we do not want to overwrite cdlayers of orig mesh! */
+      /* If dest is a evaluated mesh (from modifier),
+       * we do not want to overwrite cdlayers of orig mesh! */
       if (use_dupref_dst && r_map) {
         data_dst = CustomData_duplicate_referenced_layer_n(
             cd_dst, cddata_type, idx_dst, num_elem_dst);
@@ -943,7 +958,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_BWEIGHT) {
+    if (cddata_type == CD_FAKE_BWEIGHT) {
       const size_t elem_size = sizeof(*((MVert *)NULL));
       const size_t data_size = sizeof(((MVert *)NULL)->bweight);
       const size_t data_offset = offsetof(MVert, bweight);
@@ -975,7 +990,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_MDEFORMVERT) {
+    if (cddata_type == CD_FAKE_MDEFORMVERT) {
       bool ret;
 
       cd_src = &me_src->vdata;
@@ -1000,8 +1015,9 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       me_dst->dvert = CustomData_get_layer(&me_dst->vdata, CD_MDEFORMVERT);
       return ret;
     }
-    else if (cddata_type == CD_FAKE_SHAPEKEY) {
-      /* TODO: leaving shapekeys aside for now, quite specific case, since we can't access them from MVert :/ */
+    if (cddata_type == CD_FAKE_SHAPEKEY) {
+      /* TODO: leaving shapekeys aside for now, quite specific case,
+       * since we can't access them from MVert :/ */
       return false;
     }
   }
@@ -1030,14 +1046,14 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_CREASE) {
+    if (cddata_type == CD_FAKE_CREASE) {
       const size_t elem_size = sizeof(*((MEdge *)NULL));
       const size_t data_size = sizeof(((MEdge *)NULL)->crease);
       const size_t data_offset = offsetof(MEdge, crease);
       const uint64_t data_flag = 0;
 
       if (!(me_src->cd_flag & ME_CDFLAG_EDGE_CREASE)) {
-        if (use_delete && !me_dst) {
+        if (use_delete) {
           me_dst->cd_flag &= ~ME_CDFLAG_EDGE_CREASE;
         }
         return true;
@@ -1062,14 +1078,14 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (cddata_type == CD_FAKE_BWEIGHT) {
+    if (cddata_type == CD_FAKE_BWEIGHT) {
       const size_t elem_size = sizeof(*((MEdge *)NULL));
       const size_t data_size = sizeof(((MEdge *)NULL)->bweight);
       const size_t data_offset = offsetof(MEdge, bweight);
       const uint64_t data_flag = 0;
 
       if (!(me_src->cd_flag & ME_CDFLAG_EDGE_BWEIGHT)) {
-        if (use_delete && !me_dst) {
+        if (use_delete) {
           me_dst->cd_flag &= ~ME_CDFLAG_EDGE_BWEIGHT;
         }
         return true;
@@ -1094,7 +1110,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (r_map && ELEM(cddata_type, CD_FAKE_SHARP, CD_FAKE_SEAM)) {
+    if (r_map && ELEM(cddata_type, CD_FAKE_SHARP, CD_FAKE_SEAM)) {
       const size_t elem_size = sizeof(*((MEdge *)NULL));
       const size_t data_size = sizeof(((MEdge *)NULL)->flag);
       const size_t data_offset = offsetof(MEdge, flag);
@@ -1117,16 +1133,16 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
                                            interp_data);
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
   else if (elem_type == ME_LOOP) {
     if (cddata_type == CD_FAKE_UV) {
       cddata_type = CD_MLOOPUV;
     }
     else if (cddata_type == CD_FAKE_LNOR) {
-      /* Preprocess should have generated it, Postprocess will convert it back to CD_CUSTOMLOOPNORMAL. */
+      /* Pre-process should have generated it,
+       * Post-process will convert it back to CD_CUSTOMLOOPNORMAL. */
       cddata_type = CD_NORMAL;
       interp_data = space_transform;
       interp = customdata_data_transfer_interp_normal_normals;
@@ -1156,9 +1172,8 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
   else if (elem_type == ME_POLY) {
     if (cddata_type == CD_FAKE_UV) {
@@ -1189,7 +1204,7 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
       }
       return true;
     }
-    else if (r_map && cddata_type == CD_FAKE_SHARP) {
+    if (r_map && cddata_type == CD_FAKE_SHARP) {
       const size_t elem_size = sizeof(*((MPoly *)NULL));
       const size_t data_size = sizeof(((MPoly *)NULL)->flag);
       const size_t data_offset = offsetof(MPoly, flag);
@@ -1212,9 +1227,8 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
                                            interp_data);
       return true;
     }
-    else {
-      return false;
-    }
+
+    return false;
   }
 
   return false;
@@ -1223,8 +1237,8 @@ static bool data_transfer_layersmapping_generate(ListBase *r_map,
 /**
  * Transfer data *layout* of selected types from source to destination object.
  * By default, it only creates new data layers if needed on \a ob_dst.
- * If \a use_delete is true, it will also delete data layers on \a ob_dst that do not match those from \a ob_src,
- * to get (as much as possible) exact copy of source data layout.
+ * If \a use_delete is true, it will also delete data layers on \a ob_dst that do not match those
+ * from \a ob_src, to get (as much as possible) exact copy of source data layout.
  */
 void BKE_object_data_transfer_layout(struct Depsgraph *depsgraph,
                                      Scene *scene,
@@ -1237,7 +1251,6 @@ void BKE_object_data_transfer_layout(struct Depsgraph *depsgraph,
 {
   Mesh *me_src;
   Mesh *me_dst;
-  int i;
 
   const bool use_create = true; /* We always create needed layers here. */
 
@@ -1255,7 +1268,7 @@ void BKE_object_data_transfer_layout(struct Depsgraph *depsgraph,
   }
 
   /* Check all possible data types. */
-  for (i = 0; i < DT_TYPE_MAX; i++) {
+  for (int i = 0; i < DT_TYPE_MAX; i++) {
     const int dtdata_type = 1 << i;
     int cddata_type;
     int fromlayers, tolayers, fromto_idx;
@@ -1391,9 +1404,8 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
   SpaceTransform auto_space_transform;
 
   Mesh *me_src;
-  bool dirty_nors_dst =
-      true; /* Assumed always true if not using an evaluated mesh as destination. */
-  int i;
+  /* Assumed always true if not using an evaluated mesh as destination. */
+  bool dirty_nors_dst = true;
 
   MDeformVert *mdef = NULL;
   int vg_idx = -1;
@@ -1425,7 +1437,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
   if (vgroup_name) {
     mdef = CustomData_get_layer(&me_dst->vdata, CD_MDEFORMVERT);
     if (mdef) {
-      vg_idx = defgroup_name_index(ob_dst, vgroup_name);
+      vg_idx = BKE_object_defgroup_name_index(ob_dst, vgroup_name);
     }
   }
 
@@ -1448,6 +1460,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
   if (!me_src) {
     return changed;
   }
+  BKE_mesh_wrapper_ensure_mdata(me_src);
 
   if (auto_transform) {
     if (space_transform == NULL) {
@@ -1460,7 +1473,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
 
   /* Check all possible data types.
    * Note item mappings and dest mix weights are cached. */
-  for (i = 0; i < DT_TYPE_MAX; i++) {
+  for (int i = 0; i < DT_TYPE_MAX; i++) {
     const int dtdata_type = 1 << i;
     int cddata_type;
     int fromlayers, tolayers, fromto_idx;
@@ -1554,7 +1567,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[VDATA], lay_mapit);
@@ -1632,7 +1645,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[EDATA], lay_mapit);
@@ -1728,7 +1741,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[LDATA], lay_mapit);
@@ -1819,7 +1832,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
                                                space_transform)) {
         CustomDataTransferLayerMap *lay_mapit;
 
-        changed = (lay_map.first != NULL);
+        changed |= (lay_map.first != NULL);
 
         for (lay_mapit = lay_map.first; lay_mapit; lay_mapit = lay_mapit->next) {
           CustomData_data_transfer(&geom_map[PDATA], lay_mapit);
@@ -1832,7 +1845,7 @@ bool BKE_object_data_transfer_ex(struct Depsgraph *depsgraph,
     data_transfer_dtdata_type_postprocess(ob_src, ob_dst, me_src, me_dst, dtdata_type, changed);
   }
 
-  for (i = 0; i < DATAMAX; i++) {
+  for (int i = 0; i < DATAMAX; i++) {
     BKE_mesh_remap_free(&geom_map[i]);
     MEM_SAFE_FREE(weights[i]);
   }

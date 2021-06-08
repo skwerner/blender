@@ -23,32 +23,33 @@
 
 /* System includes ----------------------------------------------------- */
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <float.h>
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_dlrbTree.h"
+#include "BLI_listbase.h"
 #include "BLI_math.h"
-#include "BLI_utildefines.h"
 #include "BLI_rect.h"
+#include "BLI_utildefines.h"
 
 #include "DNA_anim_types.h"
+#include "DNA_brush_types.h"
 #include "DNA_cachefile_types.h"
+#include "DNA_gpencil_types.h"
+#include "DNA_mask_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
-#include "DNA_gpencil_types.h"
-#include "DNA_brush_types.h"
-#include "DNA_mask_types.h"
 
 #include "BKE_fcurve.h"
 
-#include "GPU_draw.h"
 #include "GPU_immediate.h"
 #include "GPU_state.h"
 
+#include "UI_interface.h"
 #include "UI_resources.h"
 #include "UI_view2d.h"
 
@@ -77,13 +78,14 @@ short compare_ak_cfraPtr(void *node, void *data)
   const float *cframe = data;
   float val = *cframe;
 
-  if (is_cfra_eq(val, ak->cfra))
+  if (is_cfra_eq(val, ak->cfra)) {
     return 0;
+  }
 
-  if (val < ak->cfra)
+  if (val < ak->cfra) {
     return -1;
-  else
-    return 1;
+  }
+  return 1;
 }
 
 /* --------------- */
@@ -103,18 +105,16 @@ static eKeyframeHandleDrawOpts bezt_handle_type(BezTriple *bezt)
   if (bezt->h1 == HD_AUTO_ANIM && bezt->h2 == HD_AUTO_ANIM) {
     return KEYFRAME_HANDLE_AUTO_CLAMP;
   }
-  else if (ELEM(bezt->h1, HD_AUTO_ANIM, HD_AUTO) && ELEM(bezt->h2, HD_AUTO_ANIM, HD_AUTO)) {
+  if (ELEM(bezt->h1, HD_AUTO_ANIM, HD_AUTO) && ELEM(bezt->h2, HD_AUTO_ANIM, HD_AUTO)) {
     return KEYFRAME_HANDLE_AUTO;
   }
-  else if (bezt->h1 == HD_VECT && bezt->h2 == HD_VECT) {
+  if (bezt->h1 == HD_VECT && bezt->h2 == HD_VECT) {
     return KEYFRAME_HANDLE_VECTOR;
   }
-  else if (ELEM(HD_FREE, bezt->h1, bezt->h2)) {
+  if (ELEM(HD_FREE, bezt->h1, bezt->h2)) {
     return KEYFRAME_HANDLE_FREE;
   }
-  else {
-    return KEYFRAME_HANDLE_ALIGNED;
-  }
+  return KEYFRAME_HANDLE_ALIGNED;
 }
 
 /* Determine if the keyframe is an extreme by comparing with neighbors.
@@ -205,15 +205,18 @@ static void nupdate_ak_bezt(void *node, void *data)
   BezTriple *bezt = chain->cur;
 
   /* set selection status and 'touched' status */
-  if (BEZT_ISSEL_ANY(bezt))
+  if (BEZT_ISSEL_ANY(bezt)) {
     ak->sel = SELECT;
+  }
 
   /* count keyframes in this column */
   ak->totkey++;
 
-  /* for keyframe type, 'proper' keyframes have priority over breakdowns (and other types for now) */
-  if (BEZKEYTYPE(bezt) == BEZT_KEYTYPE_KEYFRAME)
+  /* For keyframe type, 'proper' keyframes have priority over breakdowns
+   * (and other types for now). */
+  if (BEZKEYTYPE(bezt) == BEZT_KEYTYPE_KEYFRAME) {
     ak->key_type = BEZT_KEYTYPE_KEYFRAME;
+  }
 
   /* For interpolation type, select the highest value (enum is sorted). */
   ak->handle_type = MAX2(ak->handle_type, bezt_handle_type(bezt));
@@ -256,6 +259,10 @@ static DLRBT_Node *nalloc_ak_gpframe(void *data)
 
   /* count keyframes in this column */
   ak->totkey = 1;
+  /* Set as visible block. */
+  ak->totblock = 1;
+  ak->block.sel = ak->sel;
+  ak->block.flag |= ACTKEYBLOCK_FLAG_GPENCIL;
 
   return (DLRBT_Node *)ak;
 }
@@ -267,15 +274,18 @@ static void nupdate_ak_gpframe(void *node, void *data)
   bGPDframe *gpf = (bGPDframe *)data;
 
   /* set selection status and 'touched' status */
-  if (gpf->flag & GP_FRAME_SELECT)
+  if (gpf->flag & GP_FRAME_SELECT) {
     ak->sel = SELECT;
+  }
 
   /* count keyframes in this column */
   ak->totkey++;
 
-  /* for keyframe type, 'proper' keyframes have priority over breakdowns (and other types for now) */
-  if (gpf->key_type == BEZT_KEYTYPE_KEYFRAME)
+  /* for keyframe type, 'proper' keyframes have priority over breakdowns
+   * (and other types for now). */
+  if (gpf->key_type == BEZT_KEYTYPE_KEYFRAME) {
     ak->key_type = BEZT_KEYTYPE_KEYFRAME;
+  }
 }
 
 /* ......... */
@@ -312,8 +322,9 @@ static void nupdate_ak_masklayshape(void *node, void *data)
   MaskLayerShape *masklay_shape = (MaskLayerShape *)data;
 
   /* set selection status and 'touched' status */
-  if (masklay_shape->flag & MASK_SHAPE_SELECT)
+  if (masklay_shape->flag & MASK_SHAPE_SELECT) {
     ak->sel = SELECT;
+  }
 
   /* count keyframes in this column */
   ak->totkey++;
@@ -324,32 +335,35 @@ static void nupdate_ak_masklayshape(void *node, void *data)
 /* Add the given BezTriple to the given 'list' of Keyframes */
 static void add_bezt_to_keycolumns_list(DLRBT_Tree *keys, BezTripleChain *bezt)
 {
-  if (ELEM(NULL, keys, bezt))
+  if (ELEM(NULL, keys, bezt)) {
     return;
-  else
-    BLI_dlrbTree_add(keys, compare_ak_bezt, nalloc_ak_bezt, nupdate_ak_bezt, bezt);
+  }
+
+  BLI_dlrbTree_add(keys, compare_ak_bezt, nalloc_ak_bezt, nupdate_ak_bezt, bezt);
 }
 
 /* Add the given GPencil Frame to the given 'list' of Keyframes */
 static void add_gpframe_to_keycolumns_list(DLRBT_Tree *keys, bGPDframe *gpf)
 {
-  if (ELEM(NULL, keys, gpf))
+  if (ELEM(NULL, keys, gpf)) {
     return;
-  else
-    BLI_dlrbTree_add(keys, compare_ak_gpframe, nalloc_ak_gpframe, nupdate_ak_gpframe, gpf);
+  }
+
+  BLI_dlrbTree_add(keys, compare_ak_gpframe, nalloc_ak_gpframe, nupdate_ak_gpframe, gpf);
 }
 
 /* Add the given MaskLayerShape Frame to the given 'list' of Keyframes */
 static void add_masklay_to_keycolumns_list(DLRBT_Tree *keys, MaskLayerShape *masklay_shape)
 {
-  if (ELEM(NULL, keys, masklay_shape))
+  if (ELEM(NULL, keys, masklay_shape)) {
     return;
-  else
-    BLI_dlrbTree_add(keys,
-                     compare_ak_masklayshape,
-                     nalloc_ak_masklayshape,
-                     nupdate_ak_masklayshape,
-                     masklay_shape);
+  }
+
+  BLI_dlrbTree_add(keys,
+                   compare_ak_masklayshape,
+                   nalloc_ak_masklayshape,
+                   nupdate_ak_masklayshape,
+                   masklay_shape);
 }
 
 /* ActKeyBlocks (Long Keyframes) ------------------------------------------ */
@@ -490,14 +504,14 @@ static void update_keyblocks(DLRBT_Tree *keys, BezTriple *bezt, int bezt_len)
   /* Find the curve count */
   int max_curve = 0;
 
-  for (ActKeyColumn *col = keys->first; col; col = col->next) {
+  LISTBASE_FOREACH (ActKeyColumn *, col, keys) {
     max_curve = MAX2(max_curve, col->totcurve);
   }
 
   /* Propagate blocks to inserted keys */
   ActKeyColumn *prev_ready = NULL;
 
-  for (ActKeyColumn *col = keys->first; col; col = col->next) {
+  LISTBASE_FOREACH (ActKeyColumn *, col, keys) {
     /* Pre-existing column. */
     if (col->totcurve > 0) {
       prev_ready = col;
@@ -526,11 +540,11 @@ bool actkeyblock_is_valid(ActKeyColumn *ac)
 int actkeyblock_get_valid_hold(ActKeyColumn *ac)
 {
   /* check that block is valid */
-  if (!actkeyblock_is_valid(ac))
+  if (!actkeyblock_is_valid(ac)) {
     return 0;
+  }
 
-  const int hold_mask = (ACTKEYBLOCK_FLAG_ANY_HOLD | ACTKEYBLOCK_FLAG_STATIC_HOLD |
-                         ACTKEYBLOCK_FLAG_ANY_HOLD);
+  const int hold_mask = (ACTKEYBLOCK_FLAG_ANY_HOLD | ACTKEYBLOCK_FLAG_STATIC_HOLD);
   return (ac->block.flag & ~ac->block.conflict) & hold_mask;
 }
 
@@ -543,11 +557,11 @@ void draw_keyframe_shape(float x,
                          short key_type,
                          short mode,
                          float alpha,
-                         unsigned int pos_id,
-                         unsigned int size_id,
-                         unsigned int color_id,
-                         unsigned int outline_color_id,
-                         unsigned int flags_id,
+                         uint pos_id,
+                         uint size_id,
+                         uint color_id,
+                         uint outline_color_id,
+                         uint flags_id,
                          short handle_type,
                          short extreme_type)
 {
@@ -567,8 +581,8 @@ void draw_keyframe_shape(float x,
       size *= 0.85f;
       break;
 
-    case BEZT_KEYTYPE_MOVEHOLD: /* slightly smaller than normal keyframes
-                                  * (but by less than for breakdowns) */
+    case BEZT_KEYTYPE_MOVEHOLD: /* Slightly smaller than normal keyframes
+                                 * (but by less than for breakdowns). */
       size *= 0.925f;
       break;
 
@@ -580,9 +594,9 @@ void draw_keyframe_shape(float x,
       size -= 0.8f * key_type;
   }
 
-  unsigned char fill_col[4];
-  unsigned char outline_col[4];
-  unsigned int flags = 0;
+  uchar fill_col[4];
+  uchar outline_col[4];
+  uint flags = 0;
 
   /* draw! */
   if (draw_fill) {
@@ -678,12 +692,16 @@ static void draw_keylist(View2D *v2d,
                          bool channelLocked,
                          int saction_flag)
 {
+  if (keys == NULL) {
+    return;
+  }
+
   const float icon_sz = U.widget_unit * 0.5f * yscale_fac;
   const float half_icon_sz = 0.5f * icon_sz;
   const float smaller_sz = 0.35f * icon_sz;
   const float ipo_sz = 0.1f * icon_sz;
-
-  GPU_blend(true);
+  const float gpencil_sz = smaller_sz * 0.8f;
+  const float screenspace_margin = (0.35f * (float)UI_UNIT_X) / UI_view2d_scale_get_x(v2d);
 
   /* locked channels are less strongly shown, as feedback for locked channels in DopeSheet */
   /* TODO: allow this opacity factor to be themed? */
@@ -691,150 +709,170 @@ static void draw_keylist(View2D *v2d,
 
   /* Show interpolation and handle type? */
   bool show_ipo = (saction_flag & SACTION_SHOW_INTERPOLATION) != 0;
-
   /* draw keyblocks */
-  if (keys) {
-    float sel_color[4], unsel_color[4];
-    float sel_mhcol[4], unsel_mhcol[4];
-    float ipo_color[4], ipo_color_mix[4];
+  float sel_color[4], unsel_color[4];
+  float sel_mhcol[4], unsel_mhcol[4];
+  float ipo_color[4], ipo_color_mix[4];
 
-    /* cache colours first */
-    UI_GetThemeColor4fv(TH_STRIP_SELECT, sel_color);
-    UI_GetThemeColor4fv(TH_STRIP, unsel_color);
-    UI_GetThemeColor4fv(TH_DOPESHEET_IPOLINE, ipo_color);
+  /* cache colors first */
+  UI_GetThemeColor4fv(TH_STRIP_SELECT, sel_color);
+  UI_GetThemeColor4fv(TH_STRIP, unsel_color);
+  UI_GetThemeColor4fv(TH_DOPESHEET_IPOLINE, ipo_color);
 
-    sel_color[3] *= alpha;
-    unsel_color[3] *= alpha;
-    ipo_color[3] *= alpha;
+  sel_color[3] *= alpha;
+  unsel_color[3] *= alpha;
+  ipo_color[3] *= alpha;
 
-    copy_v4_v4(sel_mhcol, sel_color);
-    sel_mhcol[3] *= 0.8f;
-    copy_v4_v4(unsel_mhcol, unsel_color);
-    unsel_mhcol[3] *= 0.8f;
-    copy_v4_v4(ipo_color_mix, ipo_color);
-    ipo_color_mix[3] *= 0.5f;
+  copy_v4_v4(sel_mhcol, sel_color);
+  sel_mhcol[3] *= 0.8f;
+  copy_v4_v4(unsel_mhcol, unsel_color);
+  unsel_mhcol[3] *= 0.8f;
+  copy_v4_v4(ipo_color_mix, ipo_color);
+  ipo_color_mix[3] *= 0.5f;
 
-    uint block_len = 0;
-    for (ActKeyColumn *ab = keys->first; ab; ab = ab->next) {
-      if (actkeyblock_get_valid_hold(ab)) {
-        block_len++;
+  LISTBASE_FOREACH (ActKeyColumn *, ab, keys) {
+    /* Draw grease pencil bars between keyframes. */
+    if ((ab->next != NULL) && (ab->block.flag & ACTKEYBLOCK_FLAG_GPENCIL)) {
+      UI_draw_roundbox_corner_set(UI_CNR_TOP_RIGHT | UI_CNR_BOTTOM_RIGHT);
+      float size = 1.0f;
+      switch (ab->next->key_type) {
+        case BEZT_KEYTYPE_BREAKDOWN:
+        case BEZT_KEYTYPE_MOVEHOLD:
+        case BEZT_KEYTYPE_JITTER:
+          size *= 0.5f;
+          break;
+        case BEZT_KEYTYPE_KEYFRAME:
+          size *= 0.8f;
+          break;
+        default:
+          break;
+      }
+      UI_draw_roundbox_4fv(
+          &(const rctf){
+              .xmin = ab->cfra,
+              .xmax = min_ff(ab->next->cfra - (screenspace_margin * size), ab->next->cfra),
+              .ymin = ypos - gpencil_sz,
+              .ymax = ypos + gpencil_sz,
+          },
+          true,
+          0.25f * (float)UI_UNIT_X,
+          (ab->block.sel) ? sel_mhcol : unsel_mhcol);
+    }
+    else {
+      /* Draw other types. */
+      UI_draw_roundbox_corner_set(UI_CNR_NONE);
+
+      int valid_hold = actkeyblock_get_valid_hold(ab);
+      if (valid_hold != 0) {
+        if ((valid_hold & ACTKEYBLOCK_FLAG_STATIC_HOLD) == 0) {
+          /* draw "moving hold" long-keyframe block - slightly smaller */
+          UI_draw_roundbox_4fv(
+              &(const rctf){
+                  .xmin = ab->cfra,
+                  .xmax = ab->next->cfra,
+                  .ymin = ypos - smaller_sz,
+                  .ymax = ypos + smaller_sz,
+              },
+              true,
+              3.0f,
+              (ab->block.sel) ? sel_mhcol : unsel_mhcol);
+        }
+        else {
+          /* draw standard long-keyframe block */
+          UI_draw_roundbox_4fv(
+              &(const rctf){
+                  .xmin = ab->cfra,
+                  .xmax = ab->next->cfra,
+                  .ymin = ypos - half_icon_sz,
+                  .ymax = ypos + half_icon_sz,
+              },
+              true,
+              3.0f,
+              (ab->block.sel) ? sel_color : unsel_color);
+        }
       }
       if (show_ipo && actkeyblock_is_valid(ab) && (ab->block.flag & ACTKEYBLOCK_FLAG_NON_BEZIER)) {
-        block_len++;
+        /* draw an interpolation line */
+        UI_draw_roundbox_4fv(
+            &(const rctf){
+                .xmin = ab->cfra,
+                .xmax = ab->next->cfra,
+                .ymin = ypos - ipo_sz,
+                .ymax = ypos + ipo_sz,
+            },
+            true,
+            3.0f,
+            (ab->block.conflict & ACTKEYBLOCK_FLAG_NON_BEZIER) ? ipo_color_mix : ipo_color);
       }
-    }
-
-    if (block_len > 0) {
-      GPUVertFormat *format = immVertexFormat();
-      uint pos_id = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-      uint color_id = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
-      immBindBuiltinProgram(GPU_SHADER_2D_FLAT_COLOR);
-
-      immBegin(GPU_PRIM_TRIS, 6 * block_len);
-      for (ActKeyColumn *ab = keys->first; ab; ab = ab->next) {
-        int valid_hold = actkeyblock_get_valid_hold(ab);
-        if (valid_hold != 0) {
-          if ((valid_hold & ACTKEYBLOCK_FLAG_STATIC_HOLD) == 0) {
-            /* draw "moving hold" long-keyframe block - slightly smaller */
-            immRectf_fast_with_color(pos_id,
-                                     color_id,
-                                     ab->cfra,
-                                     ypos - smaller_sz,
-                                     ab->next->cfra,
-                                     ypos + smaller_sz,
-                                     (ab->block.sel) ? sel_mhcol : unsel_mhcol);
-          }
-          else {
-            /* draw standard long-keyframe block */
-            immRectf_fast_with_color(pos_id,
-                                     color_id,
-                                     ab->cfra,
-                                     ypos - half_icon_sz,
-                                     ab->next->cfra,
-                                     ypos + half_icon_sz,
-                                     (ab->block.sel) ? sel_color : unsel_color);
-          }
-        }
-        if (show_ipo && actkeyblock_is_valid(ab) &&
-            (ab->block.flag & ACTKEYBLOCK_FLAG_NON_BEZIER)) {
-          /* draw an interpolation line */
-          immRectf_fast_with_color(
-              pos_id,
-              color_id,
-              ab->cfra,
-              ypos - ipo_sz,
-              ab->next->cfra,
-              ypos + ipo_sz,
-              (ab->block.conflict & ACTKEYBLOCK_FLAG_NON_BEZIER) ? ipo_color_mix : ipo_color);
-        }
-      }
-      immEnd();
-      immUnbindProgram();
     }
   }
 
-  if (keys) {
-    /* count keys */
-    uint key_len = 0;
-    for (ActKeyColumn *ak = keys->first; ak; ak = ak->next) {
-      /* optimization: if keyframe doesn't appear within 5 units (screenspace) in visible area, don't draw
-       * - this might give some improvements, since we current have to flip between view/region matrices
-       */
-      if (IN_RANGE_INCL(ak->cfra, v2d->cur.xmin, v2d->cur.xmax))
-        key_len++;
-    }
+  GPU_blend(GPU_BLEND_ALPHA);
 
-    if (key_len > 0) {
-      /* draw keys */
-      GPUVertFormat *format = immVertexFormat();
-      uint pos_id = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-      uint size_id = GPU_vertformat_attr_add(format, "size", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
-      uint color_id = GPU_vertformat_attr_add(
-          format, "color", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
-      uint outline_color_id = GPU_vertformat_attr_add(
-          format, "outlineColor", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
-      uint flags_id = GPU_vertformat_attr_add(format, "flags", GPU_COMP_U32, 1, GPU_FETCH_INT);
-      immBindBuiltinProgram(GPU_SHADER_KEYFRAME_DIAMOND);
-      GPU_enable_program_point_size();
-      immUniform2f(
-          "ViewportSize", BLI_rcti_size_x(&v2d->mask) + 1, BLI_rcti_size_y(&v2d->mask) + 1);
-      immBegin(GPU_PRIM_POINTS, key_len);
-
-      short handle_type = KEYFRAME_HANDLE_NONE, extreme_type = KEYFRAME_EXTREME_NONE;
-
-      for (ActKeyColumn *ak = keys->first; ak; ak = ak->next) {
-        if (IN_RANGE_INCL(ak->cfra, v2d->cur.xmin, v2d->cur.xmax)) {
-          if (show_ipo) {
-            handle_type = ak->handle_type;
-          }
-          if (saction_flag & SACTION_SHOW_EXTREMES) {
-            extreme_type = ak->extreme_type;
-          }
-
-          draw_keyframe_shape(ak->cfra,
-                              ypos,
-                              icon_sz,
-                              (ak->sel & SELECT),
-                              ak->key_type,
-                              KEYFRAME_SHAPE_BOTH,
-                              alpha,
-                              pos_id,
-                              size_id,
-                              color_id,
-                              outline_color_id,
-                              flags_id,
-                              handle_type,
-                              extreme_type);
-        }
-      }
-
-      immEnd();
-      GPU_disable_program_point_size();
-      immUnbindProgram();
+  /* count keys */
+  uint key_len = 0;
+  LISTBASE_FOREACH (ActKeyColumn *, ak, keys) {
+    /* Optimization: if keyframe doesn't appear within 5 units (screenspace)
+     * in visible area, don't draw.
+     * This might give some improvements,
+     * since we current have to flip between view/region matrices.
+     */
+    if (IN_RANGE_INCL(ak->cfra, v2d->cur.xmin, v2d->cur.xmax)) {
+      key_len++;
     }
   }
 
-  GPU_blend(false);
+  if (key_len > 0) {
+    /* draw keys */
+    GPUVertFormat *format = immVertexFormat();
+    uint pos_id = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
+    uint size_id = GPU_vertformat_attr_add(format, "size", GPU_COMP_F32, 1, GPU_FETCH_FLOAT);
+    uint color_id = GPU_vertformat_attr_add(
+        format, "color", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    uint outline_color_id = GPU_vertformat_attr_add(
+        format, "outlineColor", GPU_COMP_U8, 4, GPU_FETCH_INT_TO_FLOAT_UNIT);
+    uint flags_id = GPU_vertformat_attr_add(format, "flags", GPU_COMP_U32, 1, GPU_FETCH_INT);
+
+    GPU_program_point_size(true);
+    immBindBuiltinProgram(GPU_SHADER_KEYFRAME_DIAMOND);
+    immUniform1f("outline_scale", 1.0f);
+    immUniform2f("ViewportSize", BLI_rcti_size_x(&v2d->mask) + 1, BLI_rcti_size_y(&v2d->mask) + 1);
+    immBegin(GPU_PRIM_POINTS, key_len);
+
+    short handle_type = KEYFRAME_HANDLE_NONE, extreme_type = KEYFRAME_EXTREME_NONE;
+
+    LISTBASE_FOREACH (ActKeyColumn *, ak, keys) {
+      if (IN_RANGE_INCL(ak->cfra, v2d->cur.xmin, v2d->cur.xmax)) {
+        if (show_ipo) {
+          handle_type = ak->handle_type;
+        }
+        if (saction_flag & SACTION_SHOW_EXTREMES) {
+          extreme_type = ak->extreme_type;
+        }
+
+        draw_keyframe_shape(ak->cfra,
+                            ypos,
+                            icon_sz,
+                            (ak->sel & SELECT),
+                            ak->key_type,
+                            KEYFRAME_SHAPE_BOTH,
+                            alpha,
+                            pos_id,
+                            size_id,
+                            color_id,
+                            outline_color_id,
+                            flags_id,
+                            handle_type,
+                            extreme_type);
+      }
+    }
+
+    immEnd();
+    GPU_program_point_size(false);
+    immUnbindProgram();
+  }
+
+  GPU_blend(GPU_BLEND_NONE);
 }
 
 /* *************************** Channel Drawing Funcs *************************** */
@@ -1042,8 +1080,9 @@ void scene_to_keylist(bDopeSheet *ads, Scene *sce, DLRBT_Tree *keys, int saction
 
   bAnimListElem dummychan = {NULL};
 
-  if (sce == NULL)
+  if (sce == NULL) {
     return;
+  }
 
   /* create a dummy wrapper data to work with */
   dummychan.type = ANIMTYPE_SCENE;
@@ -1056,12 +1095,13 @@ void scene_to_keylist(bDopeSheet *ads, Scene *sce, DLRBT_Tree *keys, int saction
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
-  for (ale = anim_data.first; ale; ale = ale->next)
+  for (ale = anim_data.first; ale; ale = ale->next) {
     fcurve_to_keylist(ale->adt, ale->data, keys, saction_flag);
+  }
 
   ANIM_animdata_freelist(&anim_data);
 }
@@ -1076,8 +1116,9 @@ void ob_to_keylist(bDopeSheet *ads, Object *ob, DLRBT_Tree *keys, int saction_fl
   bAnimListElem dummychan = {NULL};
   Base dummybase = {NULL};
 
-  if (ob == NULL)
+  if (ob == NULL) {
     return;
+  }
 
   /* create a dummy wrapper data to work with */
   dummybase.object = ob;
@@ -1092,12 +1133,13 @@ void ob_to_keylist(bDopeSheet *ads, Object *ob, DLRBT_Tree *keys, int saction_fl
   ac.datatype = ANIMCONT_CHANNEL;
 
   /* get F-Curves to take keyframes from */
-  filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
-  for (ale = anim_data.first; ale; ale = ale->next)
+  for (ale = anim_data.first; ale; ale = ale->next) {
     fcurve_to_keylist(ale->adt, ale->data, keys, saction_flag);
+  }
 
   ANIM_animdata_freelist(&anim_data);
 }
@@ -1125,11 +1167,11 @@ void cachefile_to_keylist(bDopeSheet *ads,
 
   /* get F-Curves to take keyframes from */
   ListBase anim_data = {NULL, NULL};
-  int filter = ANIMFILTER_DATA_VISIBLE;  // curves only
+  int filter = ANIMFILTER_DATA_VISIBLE; /* curves only */
   ANIM_animdata_filter(&ac, &anim_data, filter, ac.data, ac.datatype);
 
   /* loop through each F-Curve, grabbing the keyframes */
-  for (bAnimListElem *ale = anim_data.first; ale; ale = ale->next) {
+  LISTBASE_FOREACH (bAnimListElem *, ale, &anim_data) {
     fcurve_to_keylist(ale->adt, ale->data, keys, saction_flag);
   }
 
@@ -1140,8 +1182,9 @@ void fcurve_to_keylist(AnimData *adt, FCurve *fcu, DLRBT_Tree *keys, int saction
 {
   if (fcu && fcu->totvert && fcu->bezt) {
     /* apply NLA-mapping (if applicable) */
-    if (adt)
+    if (adt) {
       ANIM_nla_mapping_apply_fcurve(adt, fcu, 0, 0);
+    }
 
     /* Check if the curve is cyclic. */
     bool is_cyclic = BKE_fcurve_is_cyclic(fcu) && (fcu->totvert >= 2);
@@ -1166,8 +1209,9 @@ void fcurve_to_keylist(AnimData *adt, FCurve *fcu, DLRBT_Tree *keys, int saction
     update_keyblocks(keys, fcu->bezt, fcu->totvert);
 
     /* unapply NLA-mapping if applicable */
-    if (adt)
+    if (adt) {
       ANIM_nla_mapping_apply_fcurve(adt, fcu, 1, 0);
+    }
   }
 }
 
@@ -1216,9 +1260,11 @@ void gpl_to_keylist(bDopeSheet *UNUSED(ads), bGPDlayer *gpl, DLRBT_Tree *keys)
   bGPDframe *gpf;
 
   if (gpl && keys) {
-    /* although the frames should already be in an ordered list, they are not suitable for displaying yet */
-    for (gpf = gpl->frames.first; gpf; gpf = gpf->next)
+    /* Although the frames should already be in an ordered list,
+     * they are not suitable for displaying yet. */
+    for (gpf = gpl->frames.first; gpf; gpf = gpf->next) {
       add_gpframe_to_keycolumns_list(keys, gpf);
+    }
 
     update_keyblocks(keys, NULL, 0);
   }

@@ -21,29 +21,399 @@
 #include "MEM_guardedalloc.h"
 
 #include "DNA_brush_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_object_types.h"
+#include "DNA_defaults.h"
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
+#include "DNA_object_types.h"
+#include "DNA_scene_types.h"
 
+#include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_rand.h"
+
+#include "BLT_translation.h"
 
 #include "BKE_brush.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
-#include "BKE_library.h"
-#include "BKE_library_query.h"
-#include "BKE_library_remap.h"
+#include "BKE_gpencil.h"
+#include "BKE_icons.h"
+#include "BKE_idtype.h"
+#include "BKE_lib_id.h"
+#include "BKE_lib_query.h"
+#include "BKE_lib_remap.h"
 #include "BKE_main.h"
+#include "BKE_material.h"
 #include "BKE_paint.h"
 #include "BKE_texture.h"
-#include "BKE_icons.h"
 
 #include "IMB_colormanagement.h"
 #include "IMB_imbuf.h"
 #include "IMB_imbuf_types.h"
 
-#include "RE_render_ext.h" /* externtex */
+#include "RE_texture.h" /* RE_texture_evaluate */
+
+#include "BLO_read_write.h"
+
+static void brush_init_data(ID *id)
+{
+  Brush *brush = (Brush *)id;
+  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(brush, id));
+
+  MEMCPY_STRUCT_AFTER(brush, DNA_struct_default_get(Brush), id);
+
+  /* enable fake user by default */
+  id_fake_user_set(&brush->id);
+
+  /* the default alpha falloff curve */
+  BKE_brush_curve_preset(brush, CURVE_PRESET_SMOOTH);
+}
+
+static void brush_copy_data(Main *UNUSED(bmain), ID *id_dst, const ID *id_src, const int flag)
+{
+  Brush *brush_dst = (Brush *)id_dst;
+  const Brush *brush_src = (const Brush *)id_src;
+  if (brush_src->icon_imbuf) {
+    brush_dst->icon_imbuf = IMB_dupImBuf(brush_src->icon_imbuf);
+  }
+
+  if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
+    BKE_previewimg_id_copy(&brush_dst->id, &brush_src->id);
+  }
+  else {
+    brush_dst->preview = NULL;
+  }
+
+  brush_dst->curve = BKE_curvemapping_copy(brush_src->curve);
+  if (brush_src->gpencil_settings != NULL) {
+    brush_dst->gpencil_settings = MEM_dupallocN(brush_src->gpencil_settings);
+    brush_dst->gpencil_settings->curve_sensitivity = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_sensitivity);
+    brush_dst->gpencil_settings->curve_strength = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_strength);
+    brush_dst->gpencil_settings->curve_jitter = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_jitter);
+
+    brush_dst->gpencil_settings->curve_rand_pressure = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_pressure);
+    brush_dst->gpencil_settings->curve_rand_strength = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_strength);
+    brush_dst->gpencil_settings->curve_rand_uv = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_uv);
+    brush_dst->gpencil_settings->curve_rand_hue = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_hue);
+    brush_dst->gpencil_settings->curve_rand_saturation = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_saturation);
+    brush_dst->gpencil_settings->curve_rand_value = BKE_curvemapping_copy(
+        brush_src->gpencil_settings->curve_rand_value);
+  }
+
+  /* enable fake user by default */
+  id_fake_user_set(&brush_dst->id);
+}
+
+static void brush_free_data(ID *id)
+{
+  Brush *brush = (Brush *)id;
+  if (brush->icon_imbuf) {
+    IMB_freeImBuf(brush->icon_imbuf);
+  }
+  BKE_curvemapping_free(brush->curve);
+
+  if (brush->gpencil_settings != NULL) {
+    BKE_curvemapping_free(brush->gpencil_settings->curve_sensitivity);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_strength);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_jitter);
+
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_pressure);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_strength);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_uv);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_hue);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_saturation);
+    BKE_curvemapping_free(brush->gpencil_settings->curve_rand_value);
+
+    MEM_SAFE_FREE(brush->gpencil_settings);
+  }
+
+  MEM_SAFE_FREE(brush->gradient);
+
+  BKE_previewimg_free(&(brush->preview));
+}
+
+static void brush_make_local(Main *bmain, ID *id, const int flags)
+{
+  Brush *brush = (Brush *)id;
+  const bool lib_local = (flags & LIB_ID_MAKELOCAL_FULL_LIBRARY) != 0;
+  bool is_local = false, is_lib = false;
+
+  /* - only lib users: do nothing (unless force_local is set)
+   * - only local users: set flag
+   * - mixed: make copy
+   */
+
+  if (!ID_IS_LINKED(brush)) {
+    return;
+  }
+
+  if (brush->clone.image) {
+    /* Special case: ima always local immediately. Clone image should only have one user anyway. */
+    BKE_lib_id_make_local(bmain, &brush->clone.image->id, false, 0);
+  }
+
+  BKE_library_ID_test_usages(bmain, brush, &is_local, &is_lib);
+
+  if (lib_local || is_local) {
+    if (!is_lib) {
+      BKE_lib_id_clear_library_data(bmain, &brush->id);
+      BKE_lib_id_expand_local(bmain, &brush->id);
+
+      /* enable fake user by default */
+      id_fake_user_set(&brush->id);
+    }
+    else {
+      Brush *brush_new = (Brush *)BKE_id_copy(bmain, &brush->id); /* Ensures FAKE_USER is set */
+
+      brush_new->id.us = 0;
+
+      /* setting newid is mandatory for complex make_lib_local logic... */
+      ID_NEW_SET(brush, brush_new);
+
+      if (!lib_local) {
+        BKE_libblock_remap(bmain, brush, brush_new, ID_REMAP_SKIP_INDIRECT_USAGE);
+      }
+    }
+  }
+}
+
+static void brush_foreach_id(ID *id, LibraryForeachIDData *data)
+{
+  Brush *brush = (Brush *)id;
+
+  BKE_LIB_FOREACHID_PROCESS(data, brush->toggle_brush, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, brush->clone.image, IDWALK_CB_NOP);
+  BKE_LIB_FOREACHID_PROCESS(data, brush->paint_curve, IDWALK_CB_USER);
+  if (brush->gpencil_settings) {
+    BKE_LIB_FOREACHID_PROCESS(data, brush->gpencil_settings->material, IDWALK_CB_USER);
+  }
+  BKE_texture_mtex_foreach_id(data, &brush->mtex);
+  BKE_texture_mtex_foreach_id(data, &brush->mask_mtex);
+}
+
+static void brush_blend_write(BlendWriter *writer, ID *id, const void *id_address)
+{
+  Brush *brush = (Brush *)id;
+  if (brush->id.us > 0 || BLO_write_is_undo(writer)) {
+    BLO_write_id_struct(writer, Brush, id_address, &brush->id);
+    BKE_id_blend_write(writer, &brush->id);
+
+    if (brush->curve) {
+      BKE_curvemapping_blend_write(writer, brush->curve);
+    }
+
+    if (brush->gpencil_settings) {
+      BLO_write_struct(writer, BrushGpencilSettings, brush->gpencil_settings);
+
+      if (brush->gpencil_settings->curve_sensitivity) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_sensitivity);
+      }
+      if (brush->gpencil_settings->curve_strength) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_strength);
+      }
+      if (brush->gpencil_settings->curve_jitter) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_jitter);
+      }
+      if (brush->gpencil_settings->curve_rand_pressure) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_pressure);
+      }
+      if (brush->gpencil_settings->curve_rand_strength) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_strength);
+      }
+      if (brush->gpencil_settings->curve_rand_uv) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_uv);
+      }
+      if (brush->gpencil_settings->curve_rand_hue) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_hue);
+      }
+      if (brush->gpencil_settings->curve_rand_saturation) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_saturation);
+      }
+      if (brush->gpencil_settings->curve_rand_value) {
+        BKE_curvemapping_blend_write(writer, brush->gpencil_settings->curve_rand_value);
+      }
+    }
+    if (brush->gradient) {
+      BLO_write_struct(writer, ColorBand, brush->gradient);
+    }
+  }
+}
+
+static void brush_blend_read_data(BlendDataReader *reader, ID *id)
+{
+  Brush *brush = (Brush *)id;
+
+  /* Falloff curve. */
+  BLO_read_data_address(reader, &brush->curve);
+
+  BLO_read_data_address(reader, &brush->gradient);
+
+  if (brush->curve) {
+    BKE_curvemapping_blend_read(reader, brush->curve);
+  }
+  else {
+    BKE_brush_curve_preset(brush, CURVE_PRESET_SHARP);
+  }
+
+  /* grease pencil */
+  BLO_read_data_address(reader, &brush->gpencil_settings);
+  if (brush->gpencil_settings != NULL) {
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_sensitivity);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_strength);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_jitter);
+
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_pressure);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_strength);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_uv);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_hue);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_saturation);
+    BLO_read_data_address(reader, &brush->gpencil_settings->curve_rand_value);
+
+    if (brush->gpencil_settings->curve_sensitivity) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_sensitivity);
+    }
+
+    if (brush->gpencil_settings->curve_strength) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_strength);
+    }
+
+    if (brush->gpencil_settings->curve_jitter) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_jitter);
+    }
+
+    if (brush->gpencil_settings->curve_rand_pressure) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_pressure);
+    }
+
+    if (brush->gpencil_settings->curve_rand_strength) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_strength);
+    }
+
+    if (brush->gpencil_settings->curve_rand_uv) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_uv);
+    }
+
+    if (brush->gpencil_settings->curve_rand_hue) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_hue);
+    }
+
+    if (brush->gpencil_settings->curve_rand_saturation) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_saturation);
+    }
+
+    if (brush->gpencil_settings->curve_rand_value) {
+      BKE_curvemapping_blend_read(reader, brush->gpencil_settings->curve_rand_value);
+    }
+  }
+
+  brush->preview = NULL;
+  brush->icon_imbuf = NULL;
+}
+
+static void brush_blend_read_lib(BlendLibReader *reader, ID *id)
+{
+  Brush *brush = (Brush *)id;
+
+  /* brush->(mask_)mtex.obj is ignored on purpose? */
+  BLO_read_id_address(reader, brush->id.lib, &brush->mtex.tex);
+  BLO_read_id_address(reader, brush->id.lib, &brush->mask_mtex.tex);
+  BLO_read_id_address(reader, brush->id.lib, &brush->clone.image);
+  BLO_read_id_address(reader, brush->id.lib, &brush->toggle_brush);
+  BLO_read_id_address(reader, brush->id.lib, &brush->paint_curve);
+
+  /* link default grease pencil palette */
+  if (brush->gpencil_settings != NULL) {
+    if (brush->gpencil_settings->flag & GP_BRUSH_MATERIAL_PINNED) {
+      BLO_read_id_address(reader, brush->id.lib, &brush->gpencil_settings->material);
+
+      if (!brush->gpencil_settings->material) {
+        brush->gpencil_settings->flag &= ~GP_BRUSH_MATERIAL_PINNED;
+      }
+    }
+    else {
+      brush->gpencil_settings->material = NULL;
+    }
+  }
+}
+
+static void brush_blend_read_expand(BlendExpander *expander, ID *id)
+{
+  Brush *brush = (Brush *)id;
+  BLO_expand(expander, brush->mtex.tex);
+  BLO_expand(expander, brush->mask_mtex.tex);
+  BLO_expand(expander, brush->clone.image);
+  BLO_expand(expander, brush->paint_curve);
+  if (brush->gpencil_settings != NULL) {
+    BLO_expand(expander, brush->gpencil_settings->material);
+  }
+}
+
+static int brush_undo_preserve_cb(LibraryIDLinkCallbackData *cb_data)
+{
+  BlendLibReader *reader = cb_data->user_data;
+  ID *id_old = *cb_data->id_pointer;
+  /* Old data has not been remapped to new values of the pointers, if we want to keep the old
+   * pointer here we need its new address. */
+  ID *id_old_new = id_old != NULL ? BLO_read_get_new_id_address(reader, id_old->lib, id_old) :
+                                    NULL;
+  BLI_assert(id_old_new == NULL || ELEM(id_old, id_old_new, id_old_new->orig_id));
+  if (cb_data->cb_flag & IDWALK_CB_USER) {
+    id_us_plus_no_lib(id_old_new);
+    id_us_min(id_old);
+  }
+  *cb_data->id_pointer = id_old_new;
+  return IDWALK_RET_NOP;
+}
+
+static void brush_undo_preserve(BlendLibReader *reader, ID *id_new, ID *id_old)
+{
+  /* Whole Brush is preserved across undo-steps. */
+  BKE_lib_id_swap(NULL, id_new, id_old);
+
+  /* `id_new` now has content from `id_old`, we need to ensure those old ID pointers are valid.
+   * Note: Since we want to re-use all old pointers here, code is much simpler than for Scene. */
+  BKE_library_foreach_ID_link(NULL, id_new, brush_undo_preserve_cb, reader, IDWALK_NOP);
+
+  /* Note: We do not swap IDProperties, as dealing with potential ID pointers in those would be
+   *       fairly delicate. */
+  SWAP(IDProperty *, id_new->properties, id_old->properties);
+}
+
+IDTypeInfo IDType_ID_BR = {
+    .id_code = ID_BR,
+    .id_filter = FILTER_ID_BR,
+    .main_listbase_index = INDEX_ID_BR,
+    .struct_size = sizeof(Brush),
+    .name = "Brush",
+    .name_plural = "brushes",
+    .translation_context = BLT_I18NCONTEXT_ID_BRUSH,
+    .flags = IDTYPE_FLAGS_NO_ANIMDATA,
+
+    .init_data = brush_init_data,
+    .copy_data = brush_copy_data,
+    .free_data = brush_free_data,
+    .make_local = brush_make_local,
+    .foreach_id = brush_foreach_id,
+    .foreach_cache = NULL,
+    .owner_get = NULL,
+
+    .blend_write = brush_blend_write,
+    .blend_read_data = brush_blend_read_data,
+    .blend_read_lib = brush_blend_read_lib,
+    .blend_read_expand = brush_blend_read_expand,
+
+    .blend_read_undo_preserve = brush_undo_preserve,
+
+    .lib_override_apply_post = NULL,
+};
 
 static RNG *brush_rng;
 
@@ -55,105 +425,75 @@ void BKE_brush_system_init(void)
 
 void BKE_brush_system_exit(void)
 {
+  if (brush_rng == NULL) {
+    return;
+  }
   BLI_rng_free(brush_rng);
+  brush_rng = NULL;
 }
 
 static void brush_defaults(Brush *brush)
 {
-  brush->blend = 0;
-  brush->flag = 0;
 
-  brush->ob_mode = OB_MODE_ALL_PAINT;
+  const Brush *brush_def = DNA_struct_default_get(Brush);
 
-  /* BRUSH SCULPT TOOL SETTINGS */
-  brush->weight = 1.0f; /* weight of brush 0 - 1.0 */
-  brush->size = 35;     /* radius of the brush in pixels */
-  brush->alpha = 0.5f;  /* brush strength/intensity probably variable should be renamed? */
-  brush->autosmooth_factor = 0.0f;
-  brush->topology_rake_factor = 0.0f;
-  brush->crease_pinch_factor = 0.5f;
-  brush->sculpt_plane = SCULPT_DISP_DIR_AREA;
-  brush->plane_offset =
-      0.0f; /* how far above or below the plane that is found by averaging the faces */
-  brush->plane_trim = 0.5f;
-  brush->clone.alpha = 0.5f;
-  brush->normal_weight = 0.0f;
-  brush->fill_threshold = 0.2f;
-  brush->flag |= BRUSH_ALPHA_PRESSURE;
+#define FROM_DEFAULT(member) memcpy(&brush->member, &brush_def->member, sizeof(brush->member))
+#define FROM_DEFAULT_PTR(member) memcpy(brush->member, brush_def->member, sizeof(brush->member))
 
-  /* BRUSH PAINT TOOL SETTINGS */
-  brush->rgb[0] = 1.0f; /* default rgb color of the brush when painting - white */
-  brush->rgb[1] = 1.0f;
-  brush->rgb[2] = 1.0f;
+  FROM_DEFAULT(blend);
+  FROM_DEFAULT(flag);
+  FROM_DEFAULT(weight);
+  FROM_DEFAULT(size);
+  FROM_DEFAULT(alpha);
+  FROM_DEFAULT(hardness);
+  FROM_DEFAULT(autosmooth_factor);
+  FROM_DEFAULT(topology_rake_factor);
+  FROM_DEFAULT(crease_pinch_factor);
+  FROM_DEFAULT(normal_radius_factor);
+  FROM_DEFAULT(wet_paint_radius_factor);
+  FROM_DEFAULT(area_radius_factor);
+  FROM_DEFAULT(disconnected_distance_max);
+  FROM_DEFAULT(sculpt_plane);
+  FROM_DEFAULT(plane_offset);
+  FROM_DEFAULT(clone.alpha);
+  FROM_DEFAULT(normal_weight);
+  FROM_DEFAULT(fill_threshold);
+  FROM_DEFAULT(flag);
+  FROM_DEFAULT(sampling_flag);
+  FROM_DEFAULT_PTR(rgb);
+  FROM_DEFAULT_PTR(secondary_rgb);
+  FROM_DEFAULT(spacing);
+  FROM_DEFAULT(smooth_stroke_radius);
+  FROM_DEFAULT(smooth_stroke_factor);
+  FROM_DEFAULT(rate);
+  FROM_DEFAULT(jitter);
+  FROM_DEFAULT(texture_sample_bias);
+  FROM_DEFAULT(texture_overlay_alpha);
+  FROM_DEFAULT(mask_overlay_alpha);
+  FROM_DEFAULT(cursor_overlay_alpha);
+  FROM_DEFAULT(overlay_flags);
+  FROM_DEFAULT_PTR(add_col);
+  FROM_DEFAULT_PTR(sub_col);
+  FROM_DEFAULT(stencil_pos);
+  FROM_DEFAULT(stencil_dimension);
+  FROM_DEFAULT(mtex);
+  FROM_DEFAULT(mask_mtex);
 
-  zero_v3(brush->secondary_rgb);
-
-  /* BRUSH STROKE SETTINGS */
-  brush->flag |= (BRUSH_SPACE | BRUSH_SPACE_ATTEN);
-  brush->spacing =
-      10; /* how far each brush dot should be spaced as a percentage of brush diameter */
-
-  brush->smooth_stroke_radius = 75;
-  brush->smooth_stroke_factor = 0.9f;
-
-  brush->rate = 0.1f; /* time delay between dots of paint or sculpting when doing airbrush mode */
-
-  brush->jitter = 0.0f;
-
-  /* BRUSH TEXTURE SETTINGS */
-  BKE_texture_mtex_default(&brush->mtex);
-  BKE_texture_mtex_default(&brush->mask_mtex);
-
-  brush->texture_sample_bias = 0; /* value to added to texture samples */
-  brush->texture_overlay_alpha = 33;
-  brush->mask_overlay_alpha = 33;
-  brush->cursor_overlay_alpha = 33;
-  brush->overlay_flags = 0;
-
-  /* brush appearance  */
-
-  brush->add_col[0] = 1.00; /* add mode color is light red */
-  brush->add_col[1] = 0.39;
-  brush->add_col[2] = 0.39;
-
-  brush->sub_col[0] = 0.39; /* subtract mode color is light blue */
-  brush->sub_col[1] = 0.39;
-  brush->sub_col[2] = 1.00;
-
-  brush->stencil_pos[0] = 256;
-  brush->stencil_pos[1] = 256;
-
-  brush->stencil_dimension[0] = 256;
-  brush->stencil_dimension[1] = 256;
+#undef FROM_DEFAULT
+#undef FROM_DEFAULT_PTR
 }
 
 /* Datablock add/copy/free/make_local */
 
-void BKE_brush_init(Brush *brush)
-{
-  BLI_assert(MEMCMP_STRUCT_AFTER_IS_ZERO(brush, id));
-
-  /* enable fake user by default */
-  id_fake_user_set(&brush->id);
-
-  brush_defaults(brush);
-
-  brush->sculpt_tool = SCULPT_TOOL_DRAW; /* sculpting defaults to the draw tool for new brushes */
-
-  /* the default alpha falloff curve */
-  BKE_brush_curve_preset(brush, CURVE_PRESET_SMOOTH);
-}
-
 /**
- * \note Resulting brush will have two users: one as a fake user, another is assumed to be used by the caller.
+ * \note Resulting brush will have two users: one as a fake user,
+ * another is assumed to be used by the caller.
  */
 Brush *BKE_brush_add(Main *bmain, const char *name, const eObjectMode ob_mode)
 {
   Brush *brush;
 
-  brush = BKE_libblock_alloc(bmain, ID_BR, name, 0);
-
-  BKE_brush_init(brush);
+  brush = BKE_id_new(bmain, ID_BR, name);
 
   brush->ob_mode = ob_mode;
 
@@ -170,25 +510,51 @@ void BKE_brush_init_gpencil_settings(Brush *brush)
   brush->gpencil_settings->draw_smoothlvl = 1;
   brush->gpencil_settings->flag = 0;
   brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
   brush->gpencil_settings->draw_strength = 1.0f;
   brush->gpencil_settings->draw_jitter = 0.0f;
   brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
   brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
-  brush->gpencil_settings->flag |= GP_BRUSH_ENABLE_CURSOR;
 
   /* curves */
-  brush->gpencil_settings->curve_sensitivity = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  brush->gpencil_settings->curve_strength = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
-  brush->gpencil_settings->curve_jitter = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_sensitivity = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_strength = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_jitter = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+
+  brush->gpencil_settings->curve_rand_pressure = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_strength = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_uv = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_hue = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_saturation = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  brush->gpencil_settings->curve_rand_value = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 /* add a new gp-brush */
-Brush *BKE_brush_add_gpencil(Main *bmain, ToolSettings *ts, const char *name)
+Brush *BKE_brush_add_gpencil(Main *bmain, ToolSettings *ts, const char *name, eObjectMode mode)
 {
+  Paint *paint = NULL;
   Brush *brush;
-  Paint *paint = &ts->gp_paint->paint;
-  brush = BKE_brush_add(bmain, name, OB_MODE_PAINT_GPENCIL);
+  switch (mode) {
+    case OB_MODE_PAINT_GPENCIL: {
+      paint = &ts->gp_paint->paint;
+      break;
+    }
+    case OB_MODE_SCULPT_GPENCIL: {
+      paint = &ts->gp_sculptpaint->paint;
+      break;
+    }
+    case OB_MODE_WEIGHT_GPENCIL: {
+      paint = &ts->gp_weightpaint->paint;
+      break;
+    }
+    case OB_MODE_VERTEX_GPENCIL: {
+      paint = &ts->gp_vertexpaint->paint;
+      break;
+    }
+    default:
+      paint = &ts->gp_paint->paint;
+  }
+
+  brush = BKE_brush_add(bmain, name, mode);
 
   BKE_paint_brush_set(paint, brush);
   id_us_min(&brush->id);
@@ -202,18 +568,37 @@ Brush *BKE_brush_add_gpencil(Main *bmain, ToolSettings *ts, const char *name)
   return brush;
 }
 
+/* Delete a Brush. */
+bool BKE_brush_delete(Main *bmain, Brush *brush)
+{
+  if (brush->id.tag & LIB_TAG_INDIRECT) {
+    return false;
+  }
+  if (ID_REAL_USERS(brush) <= 1 && ID_EXTRA_USERS(brush) == 0 &&
+      BKE_library_ID_is_indirectly_used(bmain, brush)) {
+    return false;
+  }
+
+  BKE_id_delete(bmain, brush);
+
+  return true;
+}
+
 /* grease pencil cumapping->preset */
 typedef enum eGPCurveMappingPreset {
   GPCURVE_PRESET_PENCIL = 0,
   GPCURVE_PRESET_INK = 1,
   GPCURVE_PRESET_INKNOISE = 2,
   GPCURVE_PRESET_MARKER = 3,
+  GPCURVE_PRESET_CHISEL_SENSIVITY = 4,
+  GPCURVE_PRESET_CHISEL_STRENGTH = 5,
 } eGPCurveMappingPreset;
 
 static void brush_gpencil_curvemap_reset(CurveMap *cuma, int tot, int preset)
 {
-  if (cuma->curve)
+  if (cuma->curve) {
     MEM_freeN(cuma->curve);
+  }
 
   cuma->totpoint = tot;
   cuma->curve = MEM_callocN(cuma->totpoint * sizeof(CurveMapPoint), __func__);
@@ -238,9 +623,9 @@ static void brush_gpencil_curvemap_reset(CurveMap *cuma, int tot, int preset)
     case GPCURVE_PRESET_INKNOISE:
       cuma->curve[0].x = 0.0f;
       cuma->curve[0].y = 0.0f;
-      cuma->curve[1].x = 0.63134f;
-      cuma->curve[1].y = 0.3625f;
-      cuma->curve[2].x = 1.0f;
+      cuma->curve[1].x = 0.55f;
+      cuma->curve[1].y = 0.45f;
+      cuma->curve[2].x = 0.85f;
       cuma->curve[2].y = 1.0f;
       break;
     case GPCURVE_PRESET_MARKER:
@@ -253,6 +638,26 @@ static void brush_gpencil_curvemap_reset(CurveMap *cuma, int tot, int preset)
       cuma->curve[3].x = 1.0f;
       cuma->curve[3].y = 1.0f;
       break;
+    case GPCURVE_PRESET_CHISEL_SENSIVITY:
+      cuma->curve[0].x = 0.0f;
+      cuma->curve[0].y = 0.0f;
+      cuma->curve[1].x = 0.25f;
+      cuma->curve[1].y = 0.40f;
+      cuma->curve[2].x = 1.0f;
+      cuma->curve[2].y = 1.0f;
+      break;
+    case GPCURVE_PRESET_CHISEL_STRENGTH:
+      cuma->curve[0].x = 0.0f;
+      cuma->curve[0].y = 0.0f;
+      cuma->curve[1].x = 0.31f;
+      cuma->curve[1].y = 0.22f;
+      cuma->curve[2].x = 0.61f;
+      cuma->curve[2].y = 0.88f;
+      cuma->curve[3].x = 1.0f;
+      cuma->curve[3].y = 1.0f;
+      break;
+    default:
+      break;
   }
 
   if (cuma->table) {
@@ -261,310 +666,896 @@ static void brush_gpencil_curvemap_reset(CurveMap *cuma, int tot, int preset)
   }
 }
 
-/* create a set of grease pencil presets */
-void BKE_brush_gpencil_presets(bContext *C)
+void BKE_gpencil_brush_preset_set(Main *bmain, Brush *brush, const short type)
 {
 #define SMOOTH_STROKE_RADIUS 40
 #define SMOOTH_STROKE_FACTOR 0.9f
+#define ACTIVE_SMOOTH 0.35f
 
-  ToolSettings *ts = CTX_data_tool_settings(C);
+  CurveMapping *custom_curve = NULL;
+
+  /* Optionally assign a material preset. */
+  enum {
+    PRESET_MATERIAL_NONE = 0,
+    PRESET_MATERIAL_DOT_STROKE,
+  } material_preset = PRESET_MATERIAL_NONE;
+
+  /* Set general defaults at brush level. */
+  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
+  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
+
+  brush->rgb[0] = 0.498f;
+  brush->rgb[1] = 1.0f;
+  brush->rgb[2] = 0.498f;
+
+  brush->secondary_rgb[0] = 1.0f;
+  brush->secondary_rgb[1] = 1.0f;
+  brush->secondary_rgb[2] = 1.0f;
+
+  brush->curve_preset = BRUSH_CURVE_SMOOTH;
+
+  if (brush->gpencil_settings == NULL) {
+    return;
+  }
+
+  /* Set preset type. */
+  brush->gpencil_settings->preset_type = type;
+
+  /* Set vertex mix factor. */
+  brush->gpencil_settings->vertex_mode = GPPAINT_MODE_BOTH;
+  brush->gpencil_settings->vertex_factor = 1.0f;
+
+  switch (type) {
+    case GP_BRUSH_PRESET_AIRBRUSH: {
+      brush->size = 300.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.4f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 0.9f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_AIRBRUSH;
+
+      zero_v3(brush->secondary_rgb);
+
+      material_preset = PRESET_MATERIAL_DOT_STROKE;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_INK_PEN: {
+
+      brush->size = 60.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 1.0f;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.1f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 0;
+      brush->gpencil_settings->simplify_f = 0.002f;
+
+      brush->gpencil_settings->draw_random_press = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      /* Curve. */
+      custom_curve = brush->gpencil_settings->curve_sensitivity;
+      BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
+      BKE_curvemapping_init(custom_curve);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_INK);
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_INK;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_INK_PEN_ROUGH: {
+      brush->size = 60.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 1.0f;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag &= ~GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.0f;
+      brush->gpencil_settings->draw_smoothlvl = 2;
+      brush->gpencil_settings->draw_subdivide = 0;
+      brush->gpencil_settings->simplify_f = 0.000f;
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_RANDOM;
+      brush->gpencil_settings->draw_random_press = 0.6f;
+      brush->gpencil_settings->draw_random_strength = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      /* Curve. */
+      custom_curve = brush->gpencil_settings->curve_sensitivity;
+      BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
+      BKE_curvemapping_init(custom_curve);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_INKNOISE);
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_INKNOISE;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_MARKER_BOLD: {
+      brush->size = 150.0f;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.3f;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.1f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 0;
+      brush->gpencil_settings->simplify_f = 0.002f;
+
+      brush->gpencil_settings->flag &= ~GP_BRUSH_GROUP_RANDOM;
+      brush->gpencil_settings->draw_random_press = 0.0f;
+      brush->gpencil_settings->draw_random_strength = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      /* Curve. */
+      custom_curve = brush->gpencil_settings->curve_sensitivity;
+      BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
+      BKE_curvemapping_init(custom_curve);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 4, GPCURVE_PRESET_MARKER);
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_MARKER;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_MARKER_CHISEL: {
+      brush->size = 150.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 1.0f;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = 0.3f;
+      brush->gpencil_settings->draw_angle = DEG2RAD(35.0f);
+      brush->gpencil_settings->draw_angle_factor = 0.5f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.0f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 0;
+      brush->gpencil_settings->simplify_f = 0.002f;
+
+      brush->gpencil_settings->flag &= ~GP_BRUSH_GROUP_RANDOM;
+      brush->gpencil_settings->draw_random_press = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      /* Curve. */
+      custom_curve = brush->gpencil_settings->curve_sensitivity;
+      BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
+      BKE_curvemapping_init(custom_curve);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_CHISEL_SENSIVITY);
+
+      custom_curve = brush->gpencil_settings->curve_strength;
+      BKE_curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
+      BKE_curvemapping_init(custom_curve);
+      brush_gpencil_curvemap_reset(custom_curve->cm, 4, GPCURVE_PRESET_CHISEL_STRENGTH);
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_CHISEL;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_PEN: {
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 1.0f;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.0f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 1;
+      brush->gpencil_settings->simplify_f = 0.002f;
+
+      brush->gpencil_settings->draw_random_press = 0.0f;
+      brush->gpencil_settings->draw_random_strength = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_PENCIL_SOFT: {
+      brush->size = 80.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.4f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 0.8f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.0f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 0;
+      brush->gpencil_settings->simplify_f = 0.000f;
+
+      brush->gpencil_settings->draw_random_press = 0.0f;
+      brush->gpencil_settings->draw_random_strength = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PENCIL;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+
+      material_preset = PRESET_MATERIAL_DOT_STROKE;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_PENCIL: {
+      brush->size = 20.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.6f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      brush->gpencil_settings->input_samples = 10;
+      brush->gpencil_settings->active_smooth = ACTIVE_SMOOTH;
+      brush->gpencil_settings->draw_angle = 0.0f;
+      brush->gpencil_settings->draw_angle_factor = 0.0f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+
+      brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
+      brush->gpencil_settings->draw_smoothfac = 0.0f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 0;
+      brush->gpencil_settings->simplify_f = 0.002f;
+
+      brush->gpencil_settings->draw_random_press = 0.0f;
+      brush->gpencil_settings->draw_jitter = 0.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PENCIL;
+      brush->gpencil_tool = GPAINT_TOOL_DRAW;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_FILL_AREA: {
+      brush->size = 5.0f;
+
+      brush->gpencil_settings->fill_leak = 3;
+      brush->gpencil_settings->fill_threshold = 0.1f;
+      brush->gpencil_settings->fill_simplylvl = 1;
+      brush->gpencil_settings->fill_factor = 1.0f;
+
+      brush->gpencil_settings->draw_strength = 1.0f;
+      brush->gpencil_settings->hardeness = 1.0f;
+      copy_v2_fl(brush->gpencil_settings->aspect_ratio, 1.0f);
+      brush->gpencil_settings->draw_smoothfac = 0.1f;
+      brush->gpencil_settings->draw_smoothlvl = 1;
+      brush->gpencil_settings->draw_subdivide = 1;
+      brush->gpencil_settings->dilate_pixels = 1;
+
+      brush->gpencil_settings->flag |= GP_BRUSH_FILL_SHOW_EXTENDLINES;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_FILL;
+      brush->gpencil_tool = GPAINT_TOOL_FILL;
+      brush->gpencil_settings->vertex_mode = GPPAINT_MODE_FILL;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_ERASER_SOFT: {
+      brush->size = 30.0f;
+      brush->gpencil_settings->draw_strength = 0.5f;
+      brush->gpencil_settings->flag |= GP_BRUSH_DEFAULT_ERASER;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_SOFT;
+      brush->gpencil_tool = GPAINT_TOOL_ERASE;
+      brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
+      brush->gpencil_settings->era_strength_f = 100.0f;
+      brush->gpencil_settings->era_thickness_f = 10.0f;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_ERASER_HARD: {
+      brush->size = 30.0f;
+      brush->gpencil_settings->draw_strength = 1.0f;
+      brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
+      brush->gpencil_settings->era_strength_f = 100.0f;
+      brush->gpencil_settings->era_thickness_f = 50.0f;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_HARD;
+      brush->gpencil_tool = GPAINT_TOOL_ERASE;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_ERASER_POINT: {
+      brush->size = 30.0f;
+      brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_HARD;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_HARD;
+      brush->gpencil_tool = GPAINT_TOOL_ERASE;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_ERASER_STROKE: {
+      brush->size = 30.0f;
+      brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_STROKE;
+
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_STROKE;
+      brush->gpencil_tool = GPAINT_TOOL_ERASE;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_TINT: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_TINT;
+      brush->gpencil_tool = GPAINT_TOOL_TINT;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_VERTEX_DRAW: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_VERTEX_DRAW;
+      brush->gpencil_vertex_tool = GPVERTEX_TOOL_DRAW;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_VERTEX_BLUR: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_VERTEX_BLUR;
+      brush->gpencil_vertex_tool = GPVERTEX_TOOL_BLUR;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_VERTEX_AVERAGE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_VERTEX_AVERAGE;
+      brush->gpencil_vertex_tool = GPVERTEX_TOOL_AVERAGE;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_VERTEX_SMEAR: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_VERTEX_SMEAR;
+      brush->gpencil_vertex_tool = GPVERTEX_TOOL_SMEAR;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_VERTEX_REPLACE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_VERTEX_REPLACE;
+      brush->gpencil_vertex_tool = GPVERTEX_TOOL_REPLACE;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+
+      zero_v3(brush->secondary_rgb);
+      break;
+    }
+    case GP_BRUSH_PRESET_SMOOTH_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_SMOOTH;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_SMOOTH;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.3f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_flag = GP_SCULPT_FLAG_SMOOTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_STRENGTH_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_STRENGTH;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_STRENGTH;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.3f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_flag = GP_SCULPT_FLAG_SMOOTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_THICKNESS_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_THICKNESS;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_THICKNESS;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.5f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_GRAB_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_GRAB;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_GRAB;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_PRESSURE;
+
+      brush->size = 25.0f;
+
+      brush->gpencil_settings->draw_strength = 0.3f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_PUSH_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_PUSH;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_PUSH;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.3f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_TWIST_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_TWIST;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_TWIST;
+
+      brush->size = 50.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.3f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_PINCH_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_PINCH;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_PINCH;
+
+      brush->size = 50.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.5f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_RANDOMIZE_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_RANDOMIZE;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_RANDOMIZE;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.5f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_CLONE_STROKE: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_CLONE;
+      brush->gpencil_sculpt_tool = GPSCULPT_TOOL_CLONE;
+      brush->gpencil_settings->flag &= ~GP_BRUSH_USE_PRESSURE;
+
+      brush->size = 25.0f;
+
+      brush->gpencil_settings->draw_strength = 1.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    case GP_BRUSH_PRESET_DRAW_WEIGHT: {
+      brush->gpencil_settings->icon_id = GP_BRUSH_ICON_GPBRUSH_WEIGHT;
+      brush->gpencil_weight_tool = GPWEIGHT_TOOL_DRAW;
+
+      brush->size = 25.0f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
+
+      brush->gpencil_settings->draw_strength = 0.8f;
+      brush->gpencil_settings->flag |= GP_BRUSH_USE_STRENGTH_PRESSURE;
+      brush->gpencil_settings->sculpt_mode_flag |= GP_SCULPT_FLAGMODE_APPLY_POSITION;
+
+      break;
+    }
+    default:
+      break;
+  }
+
+  switch (material_preset) {
+    case PRESET_MATERIAL_NONE:
+      break;
+    case PRESET_MATERIAL_DOT_STROKE: {
+      /* Create and link Black Dots material to brush.
+       * This material is required because the brush uses the material
+       * to define how the stroke is drawn. */
+      const char *ma_id = "Dots Stroke";
+      Material *ma = BLI_findstring(&bmain->materials, ma_id, offsetof(ID, name) + 2);
+      if (ma == NULL) {
+        ma = BKE_gpencil_material_add(bmain, ma_id);
+        ma->gp_style->mode = GP_MATERIAL_MODE_DOT;
+        BLI_assert(ma->id.us == 1);
+        id_us_min(&ma->id);
+      }
+
+      BKE_gpencil_brush_material_set(brush, ma);
+
+      /* Pin the material to the brush. */
+      brush->gpencil_settings->flag |= GP_BRUSH_MATERIAL_PINNED;
+      break;
+    }
+  }
+}
+
+static Brush *gpencil_brush_ensure(
+    Main *bmain, ToolSettings *ts, const char *brush_name, eObjectMode mode, bool *r_new)
+{
+  *r_new = false;
+  Brush *brush = BLI_findstring(&bmain->brushes, brush_name, offsetof(ID, name) + 2);
+
+  /* If the brush exist, but the type is not GPencil or the mode is wrong, create a new one. */
+  if ((brush != NULL) && ((brush->gpencil_settings == NULL) || (brush->ob_mode != mode))) {
+    brush = NULL;
+  }
+
+  if (brush == NULL) {
+    brush = BKE_brush_add_gpencil(bmain, ts, brush_name, mode);
+    *r_new = true;
+  }
+
+  if (brush->gpencil_settings == NULL) {
+    BKE_brush_init_gpencil_settings(brush);
+  }
+
+  return brush;
+}
+
+/* Create a set of grease pencil Drawing presets. */
+void BKE_brush_gpencil_paint_presets(Main *bmain, ToolSettings *ts, const bool reset)
+{
+  bool r_new = false;
+
   Paint *paint = &ts->gp_paint->paint;
-  Main *bmain = CTX_data_main(C);
+  Brush *brush_prev = paint->brush;
+  Brush *brush, *deft_draw;
+  /* Airbrush brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Airbrush", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_AIRBRUSH);
+  }
 
-  Brush *brush, *deft;
-  CurveMapping *custom_curve;
+  /* Ink Pen brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Ink Pen", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_INK_PEN);
+  }
 
-  /* Pencil brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Pencil");
-  brush->size = 25.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
+  /* Ink Pen Rough brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Ink Pen Rough", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_INK_PEN_ROUGH);
+  }
 
-  brush->gpencil_settings->draw_strength = 0.6f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+  /* Marker Bold brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Marker Bold", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_MARKER_BOLD);
+  }
 
-  brush->gpencil_settings->draw_random_press = 0.0f;
+  /* Marker Chisel brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Marker Chisel", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_MARKER_CHISEL);
+  }
 
-  brush->gpencil_settings->draw_jitter = 0.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+  /* Pen brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Pen", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_PEN);
+  }
 
-  brush->gpencil_settings->draw_angle = 0.0f;
-  brush->gpencil_settings->draw_angle_factor = 0.0f;
+  /* Pencil Soft brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Pencil Soft", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_PENCIL_SOFT);
+  }
 
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 1;
-  brush->gpencil_settings->thick_smoothfac = 1.0f;
-  brush->gpencil_settings->thick_smoothlvl = 3;
-  brush->gpencil_settings->draw_subdivide = 1;
-  brush->gpencil_settings->draw_random_sub = 0.0f;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PENCIL;
-  brush->gpencil_tool = GPAINT_TOOL_DRAW;
+  /* Pencil brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Pencil", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_PENCIL);
+  }
+  deft_draw = brush; /* save default brush. */
 
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
+  /* Fill brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Fill Area", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_FILL_AREA);
+  }
 
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
+  /* Soft Eraser brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Eraser Soft", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_ERASER_SOFT);
+  }
 
-  /* Pen brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Pen");
-  deft = brush; /* save default brush */
-  brush->size = 30.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
+  /* Hard Eraser brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Eraser Hard", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_ERASER_HARD);
+  }
 
-  brush->gpencil_settings->draw_strength = 1.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
+  /* Point Eraser brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Eraser Point", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_ERASER_POINT);
+  }
 
-  brush->gpencil_settings->draw_random_press = 0.0f;
-  brush->gpencil_settings->draw_random_strength = 0.0f;
+  /* Stroke Eraser brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Eraser Stroke", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_ERASER_STROKE);
+  }
 
-  brush->gpencil_settings->draw_jitter = 0.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+  /* Tint brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Tint", OB_MODE_PAINT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_TINT);
+  }
 
-  brush->gpencil_settings->draw_angle = 0.0f;
-  brush->gpencil_settings->draw_angle_factor = 0.0f;
+  /* Set default Draw brush. */
+  if (reset || brush_prev == NULL) {
+    BKE_paint_brush_set(paint, deft_draw);
+  }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(paint, brush_prev);
+    }
+  }
+}
 
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 1;
-  brush->gpencil_settings->draw_subdivide = 1;
-  brush->gpencil_settings->thick_smoothfac = 1.0f;
-  brush->gpencil_settings->thick_smoothlvl = 3;
-  brush->gpencil_settings->draw_random_sub = 0.0f;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_PEN;
-  brush->gpencil_tool = GPAINT_TOOL_DRAW;
+/* Create a set of grease pencil Vertex Paint presets. */
+void BKE_brush_gpencil_vertex_presets(Main *bmain, ToolSettings *ts, const bool reset)
+{
+  bool r_new = false;
 
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
+  Paint *vertexpaint = &ts->gp_vertexpaint->paint;
+  Brush *brush_prev = vertexpaint->brush;
+  Brush *brush, *deft_vertex;
+  /* Vertex Draw brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Vertex Draw", OB_MODE_VERTEX_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_VERTEX_DRAW);
+  }
+  deft_vertex = brush; /* save default brush. */
 
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
+  /* Vertex Blur brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Vertex Blur", OB_MODE_VERTEX_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_VERTEX_BLUR);
+  }
+  /* Vertex Average brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Vertex Average", OB_MODE_VERTEX_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_VERTEX_AVERAGE);
+  }
+  /* Vertex Smear brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Vertex Smear", OB_MODE_VERTEX_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_VERTEX_SMEAR);
+  }
+  /* Vertex Replace brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Vertex Replace", OB_MODE_VERTEX_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_VERTEX_REPLACE);
+  }
 
-  /* Ink brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Ink");
-  brush->size = 60.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
-  brush->gpencil_settings->draw_sensitivity = 1.6f;
+  /* Set default Vertex brush. */
+  if (reset || brush_prev == NULL) {
+    BKE_paint_brush_set(vertexpaint, deft_vertex);
+  }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(vertexpaint, brush_prev);
+    }
+  }
+}
 
-  brush->gpencil_settings->draw_strength = 1.0f;
+/* Create a set of grease pencil Sculpt Paint presets. */
+void BKE_brush_gpencil_sculpt_presets(Main *bmain, ToolSettings *ts, const bool reset)
+{
+  bool r_new = false;
 
-  brush->gpencil_settings->draw_random_press = 0.0f;
+  Paint *sculptpaint = &ts->gp_sculptpaint->paint;
+  Brush *brush_prev = sculptpaint->brush;
+  Brush *brush, *deft_sculpt;
 
-  brush->gpencil_settings->draw_jitter = 0.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+  /* Smooth brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Smooth Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_SMOOTH_STROKE);
+  }
+  deft_sculpt = brush;
 
-  brush->gpencil_settings->draw_angle = 0.0f;
-  brush->gpencil_settings->draw_angle_factor = 0.0f;
+  /* Strength brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Strength Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_STRENGTH_STROKE);
+  }
 
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 1;
-  brush->gpencil_settings->thick_smoothfac = 1.0f;
-  brush->gpencil_settings->thick_smoothlvl = 3;
-  brush->gpencil_settings->draw_subdivide = 1;
-  brush->gpencil_settings->draw_random_sub = 0.0f;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_INK;
-  brush->gpencil_tool = GPAINT_TOOL_DRAW;
+  /* Thickness brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Thickness Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_THICKNESS_STROKE);
+  }
 
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
+  /* Grab brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Grab Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_GRAB_STROKE);
+  }
 
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
+  /* Push brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Push Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_PUSH_STROKE);
+  }
 
-  /* Curve */
-  custom_curve = brush->gpencil_settings->curve_sensitivity;
-  curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-  curvemapping_initialize(custom_curve);
-  brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_INK);
+  /* Twist brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Twist Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_TWIST_STROKE);
+  }
 
-  /* Ink Noise brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Noise");
-  brush->size = 60.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
+  /* Pinch brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Pinch Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_PINCH_STROKE);
+  }
 
-  brush->gpencil_settings->draw_strength = 1.0f;
+  /* Randomize brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Randomize Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_RANDOMIZE_STROKE);
+  }
 
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_RANDOM;
-  brush->gpencil_settings->draw_random_press = 0.7f;
-  brush->gpencil_settings->draw_random_strength = 0.0f;
+  /* Clone brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Clone Stroke", OB_MODE_SCULPT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_CLONE_STROKE);
+  }
 
-  brush->gpencil_settings->draw_jitter = 0.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
+  /* Set default brush. */
+  if (reset || brush_prev == NULL) {
+    BKE_paint_brush_set(sculptpaint, deft_sculpt);
+  }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(sculptpaint, brush_prev);
+    }
+  }
+}
 
-  brush->gpencil_settings->draw_angle = 0.0f;
-  brush->gpencil_settings->draw_angle_factor = 0.0f;
+/* Create a set of grease pencil Weight Paint presets. */
+void BKE_brush_gpencil_weight_presets(Main *bmain, ToolSettings *ts, const bool reset)
+{
+  bool r_new = false;
 
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 2;
-  brush->gpencil_settings->thick_smoothfac = 0.5f;
-  brush->gpencil_settings->thick_smoothlvl = 2;
-  brush->gpencil_settings->draw_subdivide = 1;
-  brush->gpencil_settings->draw_random_sub = 0.0f;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_INKNOISE;
-  brush->gpencil_tool = GPAINT_TOOL_DRAW;
+  Paint *weightpaint = &ts->gp_weightpaint->paint;
+  Brush *brush_prev = weightpaint->brush;
+  Brush *brush, *deft_weight;
+  /* Vertex Draw brush. */
+  brush = gpencil_brush_ensure(bmain, ts, "Draw Weight", OB_MODE_WEIGHT_GPENCIL, &r_new);
+  if ((reset) || (r_new)) {
+    BKE_gpencil_brush_preset_set(bmain, brush, GP_BRUSH_PRESET_DRAW_WEIGHT);
+  }
+  deft_weight = brush; /* save default brush. */
 
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
-
-  /* Curve */
-  custom_curve = brush->gpencil_settings->curve_sensitivity;
-  curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-  curvemapping_initialize(custom_curve);
-  brush_gpencil_curvemap_reset(custom_curve->cm, 3, GPCURVE_PRESET_INKNOISE);
-
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
-
-  /* Block Basic brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Block");
-  brush->size = 150.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
-
-  brush->gpencil_settings->draw_strength = 1.0f;
-
-  brush->gpencil_settings->draw_random_press = 0.0f;
-
-  brush->gpencil_settings->draw_jitter = 0.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
-
-  brush->gpencil_settings->draw_angle = 0.0f;
-  brush->gpencil_settings->draw_angle_factor = 0.0f;
-
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 1;
-  brush->gpencil_settings->thick_smoothfac = 1.0f;
-  brush->gpencil_settings->thick_smoothlvl = 3;
-  brush->gpencil_settings->draw_subdivide = 0;
-  brush->gpencil_settings->draw_random_sub = 0;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_BLOCK;
-  brush->gpencil_tool = GPAINT_TOOL_DRAW;
-
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
-
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
-
-  /* Marker brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Draw Marker");
-  brush->size = 80.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_USE_PRESSURE | GP_BRUSH_ENABLE_CURSOR);
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
-
-  brush->gpencil_settings->draw_strength = 1.0f;
-
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_RANDOM;
-  brush->gpencil_settings->draw_random_press = 0.374f;
-  brush->gpencil_settings->draw_random_strength = 0.0f;
-
-  brush->gpencil_settings->draw_jitter = 0.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_JITTER_PRESSURE;
-
-  brush->gpencil_settings->draw_angle = DEG2RAD(20.0f);
-  brush->gpencil_settings->draw_angle_factor = 1.0f;
-
-  brush->gpencil_settings->flag |= GP_BRUSH_GROUP_SETTINGS;
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 1;
-  brush->gpencil_settings->thick_smoothfac = 1.0f;
-  brush->gpencil_settings->thick_smoothlvl = 3;
-  brush->gpencil_settings->draw_subdivide = 1;
-  brush->gpencil_settings->draw_random_sub = 0.0f;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_MARKER;
-  brush->gpencil_tool = GPAINT_TOOL_DRAW;
-
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
-  /* Curve */
-  custom_curve = brush->gpencil_settings->curve_sensitivity;
-  curvemapping_set_defaults(custom_curve, 0, 0.0f, 0.0f, 1.0f, 1.0f);
-  curvemapping_initialize(custom_curve);
-  brush_gpencil_curvemap_reset(custom_curve->cm, 4, GPCURVE_PRESET_MARKER);
-
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
-
-  /* Fill brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Fill Area");
-  brush->size = 1.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_ENABLE_CURSOR;
-  brush->gpencil_settings->draw_sensitivity = 1.0f;
-  brush->gpencil_settings->fill_leak = 3;
-  brush->gpencil_settings->fill_threshold = 0.1f;
-  brush->gpencil_settings->fill_simplylvl = 1;
-  brush->gpencil_settings->fill_factor = 1;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_FILL;
-  brush->gpencil_tool = GPAINT_TOOL_FILL;
-
-  brush->gpencil_settings->draw_smoothfac = 0.1f;
-  brush->gpencil_settings->draw_smoothlvl = 1;
-  brush->gpencil_settings->thick_smoothfac = 1.0f;
-  brush->gpencil_settings->thick_smoothlvl = 3;
-  brush->gpencil_settings->draw_subdivide = 1;
-
-  brush->smooth_stroke_radius = SMOOTH_STROKE_RADIUS;
-  brush->smooth_stroke_factor = SMOOTH_STROKE_FACTOR;
-
-  brush->gpencil_settings->draw_strength = 1.0f;
-
-  brush->gpencil_settings->gradient_f = 1.0f;
-  brush->gpencil_settings->gradient_s[0] = 1.0f;
-  brush->gpencil_settings->gradient_s[1] = 1.0f;
-
-  /* Soft Eraser brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Eraser Soft");
-  brush->size = 30.0f;
-  brush->gpencil_settings->draw_strength = 0.5f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_ENABLE_CURSOR | GP_BRUSH_DEFAULT_ERASER);
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_PRESSURE;
-  brush->gpencil_settings->flag |= GP_BRUSH_USE_STENGTH_PRESSURE;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_SOFT;
-  brush->gpencil_tool = GPAINT_TOOL_ERASE;
-  brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
-  brush->gpencil_settings->era_strength_f = 100.0f;
-  brush->gpencil_settings->era_thickness_f = 10.0f;
-
-  /* Hard Eraser brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Eraser Hard");
-  brush->size = 30.0f;
-  brush->gpencil_settings->draw_strength = 1.0f;
-  brush->gpencil_settings->flag |= (GP_BRUSH_ENABLE_CURSOR | GP_BRUSH_DEFAULT_ERASER);
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_HARD;
-  brush->gpencil_tool = GPAINT_TOOL_ERASE;
-  brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_SOFT;
-  brush->gpencil_settings->era_strength_f = 100.0f;
-  brush->gpencil_settings->era_thickness_f = 50.0f;
-
-  /* Point Eraser brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Eraser Point");
-  brush->size = 30.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_ENABLE_CURSOR;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_HARD;
-  brush->gpencil_tool = GPAINT_TOOL_ERASE;
-  brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_HARD;
-
-  /* Stroke Eraser brush */
-  brush = BKE_brush_add_gpencil(bmain, ts, "Eraser Stroke");
-  brush->size = 30.0f;
-  brush->gpencil_settings->flag |= GP_BRUSH_ENABLE_CURSOR;
-  brush->gpencil_settings->icon_id = GP_BRUSH_ICON_ERASE_STROKE;
-  brush->gpencil_tool = GPAINT_TOOL_ERASE;
-  brush->gpencil_settings->eraser_mode = GP_BRUSH_ERASER_STROKE;
-
-  /* set default brush */
-  BKE_paint_brush_set(paint, deft);
+  /* Set default brush. */
+  if (reset || brush_prev == NULL) {
+    BKE_paint_brush_set(weightpaint, deft_weight);
+  }
+  else {
+    if (brush_prev != NULL) {
+      BKE_paint_brush_set(weightpaint, brush_prev);
+    }
+  }
 }
 
 struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mode)
@@ -572,119 +1563,11 @@ struct Brush *BKE_brush_first_search(struct Main *bmain, const eObjectMode ob_mo
   Brush *brush;
 
   for (brush = bmain->brushes.first; brush; brush = brush->id.next) {
-    if (brush->ob_mode & ob_mode)
+    if (brush->ob_mode & ob_mode) {
       return brush;
+    }
   }
   return NULL;
-}
-
-/**
- * Only copy internal data of Brush ID from source to already allocated/initialized destination.
- * You probably never want to use that directly, use BKE_id_copy or BKE_id_copy_ex for typical needs.
- *
- * WARNING! This function will not handle ID user count!
- *
- * \param flag: Copying options (see BKE_library.h's LIB_ID_COPY_... flags for more).
- */
-void BKE_brush_copy_data(Main *UNUSED(bmain),
-                         Brush *brush_dst,
-                         const Brush *brush_src,
-                         const int flag)
-{
-  if (brush_src->icon_imbuf) {
-    brush_dst->icon_imbuf = IMB_dupImBuf(brush_src->icon_imbuf);
-  }
-
-  if ((flag & LIB_ID_COPY_NO_PREVIEW) == 0) {
-    BKE_previewimg_id_copy(&brush_dst->id, &brush_src->id);
-  }
-  else {
-    brush_dst->preview = NULL;
-  }
-
-  brush_dst->curve = curvemapping_copy(brush_src->curve);
-  if (brush_src->gpencil_settings != NULL) {
-    brush_dst->gpencil_settings = MEM_dupallocN(brush_src->gpencil_settings);
-    brush_dst->gpencil_settings->curve_sensitivity = curvemapping_copy(
-        brush_src->gpencil_settings->curve_sensitivity);
-    brush_dst->gpencil_settings->curve_strength = curvemapping_copy(
-        brush_src->gpencil_settings->curve_strength);
-    brush_dst->gpencil_settings->curve_jitter = curvemapping_copy(
-        brush_src->gpencil_settings->curve_jitter);
-  }
-
-  /* enable fake user by default */
-  id_fake_user_set(&brush_dst->id);
-}
-
-Brush *BKE_brush_copy(Main *bmain, const Brush *brush)
-{
-  Brush *brush_copy;
-  BKE_id_copy(bmain, &brush->id, (ID **)&brush_copy);
-  return brush_copy;
-}
-
-/** Free (or release) any data used by this brush (does not free the brush itself). */
-void BKE_brush_free(Brush *brush)
-{
-  if (brush->icon_imbuf) {
-    IMB_freeImBuf(brush->icon_imbuf);
-  }
-  curvemapping_free(brush->curve);
-
-  if (brush->gpencil_settings != NULL) {
-    curvemapping_free(brush->gpencil_settings->curve_sensitivity);
-    curvemapping_free(brush->gpencil_settings->curve_strength);
-    curvemapping_free(brush->gpencil_settings->curve_jitter);
-    MEM_SAFE_FREE(brush->gpencil_settings);
-  }
-
-  MEM_SAFE_FREE(brush->gradient);
-
-  BKE_previewimg_free(&(brush->preview));
-}
-
-void BKE_brush_make_local(Main *bmain, Brush *brush, const bool lib_local)
-{
-  bool is_local = false, is_lib = false;
-
-  /* - only lib users: do nothing (unless force_local is set)
-   * - only local users: set flag
-   * - mixed: make copy
-   */
-
-  if (!ID_IS_LINKED(brush)) {
-    return;
-  }
-
-  if (brush->clone.image) {
-    /* Special case: ima always local immediately. Clone image should only have one user anyway. */
-    id_make_local(bmain, &brush->clone.image->id, false, false);
-  }
-
-  BKE_library_ID_test_usages(bmain, brush, &is_local, &is_lib);
-
-  if (lib_local || is_local) {
-    if (!is_lib) {
-      id_clear_lib_data(bmain, &brush->id);
-      BKE_id_expand_local(bmain, &brush->id);
-
-      /* enable fake user by default */
-      id_fake_user_set(&brush->id);
-    }
-    else {
-      Brush *brush_new = BKE_brush_copy(bmain, brush); /* Ensures FAKE_USER is set */
-
-      brush_new->id.us = 0;
-
-      /* setting newid is mandatory for complex make_lib_local logic... */
-      ID_NEW_SET(brush, brush_new);
-
-      if (!lib_local) {
-        BKE_libblock_remap(bmain, brush, brush_new, ID_REMAP_SKIP_INDIRECT_USAGE);
-      }
-    }
-  }
 }
 
 void BKE_brush_debug_print_state(Brush *br)
@@ -694,20 +1577,28 @@ void BKE_brush_debug_print_state(Brush *br)
   brush_defaults(&def);
 
 #define BR_TEST(field, t) \
-  if (br->field != def.field) \
-  printf("br->" #field " = %" #t ";\n", br->field)
+  if (br->field != def.field) { \
+    printf("br->" #field " = %" #t ";\n", br->field); \
+  } \
+  ((void)0)
 
 #define BR_TEST_FLAG(_f) \
-  if ((br->flag & _f) && !(def.flag & _f)) \
+  if ((br->flag & _f) && !(def.flag & _f)) { \
     printf("br->flag |= " #_f ";\n"); \
-  else if (!(br->flag & _f) && (def.flag & _f)) \
-  printf("br->flag &= ~" #_f ";\n")
+  } \
+  else if (!(br->flag & _f) && (def.flag & _f)) { \
+    printf("br->flag &= ~" #_f ";\n"); \
+  } \
+  ((void)0)
 
 #define BR_TEST_FLAG_OVERLAY(_f) \
-  if ((br->overlay_flags & _f) && !(def.overlay_flags & _f)) \
+  if ((br->overlay_flags & _f) && !(def.overlay_flags & _f)) { \
     printf("br->overlay_flags |= " #_f ";\n"); \
-  else if (!(br->overlay_flags & _f) && (def.overlay_flags & _f)) \
-  printf("br->overlay_flags &= ~" #_f ";\n")
+  } \
+  else if (!(br->overlay_flags & _f) && (def.overlay_flags & _f)) { \
+    printf("br->overlay_flags &= ~" #_f ";\n"); \
+  } \
+  ((void)0)
 
   /* print out any non-default brush state */
   BR_TEST(normal_weight, f);
@@ -773,9 +1664,11 @@ void BKE_brush_debug_print_state(Brush *br)
   BR_TEST(add_col[0], f);
   BR_TEST(add_col[1], f);
   BR_TEST(add_col[2], f);
+  BR_TEST(add_col[3], f);
   BR_TEST(sub_col[0], f);
   BR_TEST(sub_col[1], f);
   BR_TEST(sub_col[2], f);
+  BR_TEST(sub_col[3], f);
 
   printf("\n");
 
@@ -792,49 +1685,73 @@ void BKE_brush_sculpt_reset(Brush *br)
   brush_defaults(br);
   BKE_brush_curve_preset(br, CURVE_PRESET_SMOOTH);
 
+  /* Use the curve presets by default */
+  br->curve_preset = BRUSH_CURVE_SMOOTH;
+
+  /* Note that sculpt defaults where set when 0.5 was the default (now it's 1.0)
+   * assign this so logic below can remain the same. */
+  br->alpha = 0.5f;
+
+  /* Brush settings */
   switch (br->sculpt_tool) {
+    case SCULPT_TOOL_DRAW_SHARP:
+      br->flag |= BRUSH_DIR_IN;
+      br->curve_preset = BRUSH_CURVE_POW4;
+      br->spacing = 5;
+      break;
+    case SCULPT_TOOL_DISPLACEMENT_ERASER:
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
+      br->spacing = 10;
+      br->alpha = 1.0f;
+      break;
+    case SCULPT_TOOL_SLIDE_RELAX:
+      br->spacing = 10;
+      br->alpha = 1.0f;
+      br->slide_deform_type = BRUSH_SLIDE_DEFORM_DRAG;
+      break;
     case SCULPT_TOOL_CLAY:
-      br->flag |= BRUSH_FRONTFACE;
+      br->flag |= BRUSH_SIZE_PRESSURE;
+      br->spacing = 3;
+      br->autosmooth_factor = 0.25f;
+      br->normal_radius_factor = 0.75f;
+      br->hardness = 0.65f;
+      break;
+    case SCULPT_TOOL_CLAY_THUMB:
+      br->alpha = 0.5f;
+      br->normal_radius_factor = 1.0f;
+      br->spacing = 6;
+      br->hardness = 0.5f;
+      br->flag |= BRUSH_SIZE_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
+    case SCULPT_TOOL_CLAY_STRIPS:
+      br->flag |= BRUSH_ACCUMULATE | BRUSH_SIZE_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->alpha = 0.6f;
+      br->spacing = 5;
+      br->normal_radius_factor = 1.55f;
+      br->tip_roundness = 0.18f;
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
+      break;
+    case SCULPT_TOOL_MULTIPLANE_SCRAPE:
+      br->flag2 |= BRUSH_MULTIPLANE_SCRAPE_DYNAMIC | BRUSH_MULTIPLANE_SCRAPE_PLANES_PREVIEW;
+      br->alpha = 0.7f;
+      br->normal_radius_factor = 0.70f;
+      br->multiplane_scrape_angle = 60;
+      br->curve_preset = BRUSH_CURVE_SMOOTH;
+      br->spacing = 5;
       break;
     case SCULPT_TOOL_CREASE:
       br->flag |= BRUSH_DIR_IN;
       br->alpha = 0.25;
       break;
-    case SCULPT_TOOL_FILL:
-      br->add_col[1] = 1;
-      br->sub_col[0] = 0.25;
-      br->sub_col[1] = 1;
-      break;
-    case SCULPT_TOOL_FLATTEN:
-      br->add_col[1] = 1;
-      br->sub_col[0] = 0.25;
-      br->sub_col[1] = 1;
-      break;
-    case SCULPT_TOOL_INFLATE:
-      br->add_col[0] = 0.750000;
-      br->add_col[1] = 0.750000;
-      br->add_col[2] = 0.750000;
-      br->sub_col[0] = 0.250000;
-      br->sub_col[1] = 0.250000;
-      br->sub_col[2] = 0.250000;
-      break;
-    case SCULPT_TOOL_NUDGE:
-      br->add_col[0] = 0.250000;
-      br->add_col[1] = 1.000000;
-      br->add_col[2] = 0.250000;
-      break;
-    case SCULPT_TOOL_PINCH:
-      br->add_col[0] = 0.750000;
-      br->add_col[1] = 0.750000;
-      br->add_col[2] = 0.750000;
-      br->sub_col[0] = 0.250000;
-      br->sub_col[1] = 0.250000;
-      br->sub_col[2] = 0.250000;
-      break;
     case SCULPT_TOOL_SCRAPE:
-      br->add_col[1] = 1.000000;
-      br->sub_col[0] = 0.250000;
-      br->sub_col[1] = 1.000000;
+    case SCULPT_TOOL_FILL:
+      br->alpha = 0.7f;
+      br->area_radius_factor = 0.5f;
+      br->spacing = 7;
+      br->flag |= BRUSH_ACCUMULATE;
+      br->flag |= BRUSH_INVERT_TO_SCRAPE_FILL;
       break;
     case SCULPT_TOOL_ROTATE:
       br->alpha = 1.0;
@@ -842,20 +1759,175 @@ void BKE_brush_sculpt_reset(Brush *br)
     case SCULPT_TOOL_SMOOTH:
       br->flag &= ~BRUSH_SPACE_ATTEN;
       br->spacing = 5;
-      br->add_col[0] = 0.750000;
-      br->add_col[1] = 0.750000;
-      br->add_col[2] = 0.750000;
+      br->alpha = 0.7f;
+      br->surface_smooth_shape_preservation = 0.5f;
+      br->surface_smooth_current_vertex = 0.5f;
+      br->surface_smooth_iterations = 4;
       break;
-    case SCULPT_TOOL_GRAB:
     case SCULPT_TOOL_SNAKE_HOOK:
+      br->alpha = 1.0f;
+      br->rake_factor = 1.0f;
+      break;
     case SCULPT_TOOL_THUMB:
       br->size = 75;
       br->flag &= ~BRUSH_ALPHA_PRESSURE;
       br->flag &= ~BRUSH_SPACE;
       br->flag &= ~BRUSH_SPACE_ATTEN;
-      br->add_col[0] = 0.250000;
-      br->add_col[1] = 1.000000;
-      br->add_col[2] = 0.250000;
+      break;
+    case SCULPT_TOOL_ELASTIC_DEFORM:
+      br->elastic_deform_volume_preservation = 0.4f;
+      br->elastic_deform_type = BRUSH_ELASTIC_DEFORM_GRAB_TRISCALE;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
+    case SCULPT_TOOL_POSE:
+      br->pose_smooth_iterations = 4;
+      br->pose_ik_segments = 1;
+      br->flag2 |= BRUSH_POSE_IK_ANCHORED | BRUSH_USE_CONNECTED_ONLY;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
+    case SCULPT_TOOL_BOUNDARY:
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_CONSTANT;
+      break;
+    case SCULPT_TOOL_DRAW_FACE_SETS:
+      br->alpha = 0.5f;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
+    case SCULPT_TOOL_GRAB:
+      br->alpha = 0.4f;
+      br->size = 75;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      break;
+    case SCULPT_TOOL_CLOTH:
+      br->cloth_mass = 1.0f;
+      br->cloth_damping = 0.01f;
+      br->cloth_sim_limit = 2.5f;
+      br->cloth_sim_falloff = 0.75f;
+      br->cloth_deform_type = BRUSH_CLOTH_DEFORM_DRAG;
+      br->flag &= ~(BRUSH_ALPHA_PRESSURE | BRUSH_SIZE_PRESSURE);
+      break;
+    case SCULPT_TOOL_LAYER:
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->hardness = 0.35f;
+      br->alpha = 1.0f;
+      br->height = 0.05f;
+      break;
+    case SCULPT_TOOL_PAINT:
+      br->hardness = 0.4f;
+      br->spacing = 10;
+      br->alpha = 0.6f;
+      br->flow = 1.0f;
+      br->tip_scale_x = 1.0f;
+      br->tip_roundness = 1.0f;
+      br->density = 1.0f;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      zero_v3(br->rgb);
+      break;
+    case SCULPT_TOOL_SMEAR:
+      br->alpha = 1.0f;
+      br->spacing = 5;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_SPHERE;
+      break;
+    case SCULPT_TOOL_DISPLACEMENT_SMEAR:
+      br->alpha = 1.0f;
+      br->spacing = 5;
+      br->hardness = 0.7f;
+      br->flag &= ~BRUSH_ALPHA_PRESSURE;
+      br->flag &= ~BRUSH_SPACE_ATTEN;
+      br->curve_preset = BRUSH_CURVE_SMOOTHER;
+      break;
+    default:
+      break;
+  }
+
+  /* Cursor colors */
+
+  /* Default Alpha */
+  br->add_col[3] = 0.90f;
+  br->sub_col[3] = 0.90f;
+
+  switch (br->sculpt_tool) {
+    case SCULPT_TOOL_DRAW:
+    case SCULPT_TOOL_DRAW_SHARP:
+    case SCULPT_TOOL_CLAY:
+    case SCULPT_TOOL_CLAY_STRIPS:
+    case SCULPT_TOOL_CLAY_THUMB:
+    case SCULPT_TOOL_LAYER:
+    case SCULPT_TOOL_INFLATE:
+    case SCULPT_TOOL_BLOB:
+    case SCULPT_TOOL_CREASE:
+      br->add_col[0] = 0.0f;
+      br->add_col[1] = 0.5f;
+      br->add_col[2] = 1.0f;
+      br->sub_col[0] = 0.0f;
+      br->sub_col[1] = 0.5f;
+      br->sub_col[2] = 1.0f;
+      break;
+
+    case SCULPT_TOOL_SMOOTH:
+    case SCULPT_TOOL_FLATTEN:
+    case SCULPT_TOOL_FILL:
+    case SCULPT_TOOL_SCRAPE:
+    case SCULPT_TOOL_MULTIPLANE_SCRAPE:
+      br->add_col[0] = 0.877f;
+      br->add_col[1] = 0.142f;
+      br->add_col[2] = 0.117f;
+      br->sub_col[0] = 0.877f;
+      br->sub_col[1] = 0.142f;
+      br->sub_col[2] = 0.117f;
+      break;
+
+    case SCULPT_TOOL_PINCH:
+    case SCULPT_TOOL_GRAB:
+    case SCULPT_TOOL_SNAKE_HOOK:
+    case SCULPT_TOOL_THUMB:
+    case SCULPT_TOOL_NUDGE:
+    case SCULPT_TOOL_ROTATE:
+    case SCULPT_TOOL_ELASTIC_DEFORM:
+    case SCULPT_TOOL_POSE:
+    case SCULPT_TOOL_BOUNDARY:
+    case SCULPT_TOOL_SLIDE_RELAX:
+      br->add_col[0] = 1.0f;
+      br->add_col[1] = 0.95f;
+      br->add_col[2] = 0.005f;
+      br->sub_col[0] = 1.0f;
+      br->sub_col[1] = 0.95f;
+      br->sub_col[2] = 0.005f;
+      break;
+
+    case SCULPT_TOOL_SIMPLIFY:
+    case SCULPT_TOOL_PAINT:
+    case SCULPT_TOOL_MASK:
+    case SCULPT_TOOL_DRAW_FACE_SETS:
+    case SCULPT_TOOL_DISPLACEMENT_ERASER:
+    case SCULPT_TOOL_DISPLACEMENT_SMEAR:
+      br->add_col[0] = 0.75f;
+      br->add_col[1] = 0.75f;
+      br->add_col[2] = 0.75f;
+      br->sub_col[0] = 0.75f;
+      br->sub_col[1] = 0.75f;
+      br->sub_col[2] = 0.75f;
+      break;
+
+    case SCULPT_TOOL_CLOTH:
+      br->add_col[0] = 1.0f;
+      br->add_col[1] = 0.5f;
+      br->add_col[2] = 0.1f;
+      br->sub_col[0] = 1.0f;
+      br->sub_col[1] = 0.5f;
+      br->sub_col[2] = 0.1f;
       break;
     default:
       break;
@@ -867,17 +1939,19 @@ void BKE_brush_sculpt_reset(Brush *br)
  */
 void BKE_brush_curve_preset(Brush *b, eCurveMappingPreset preset)
 {
-  CurveMap *cm = NULL;
+  CurveMapping *cumap = NULL;
+  CurveMap *cuma = NULL;
 
-  if (!b->curve)
-    b->curve = curvemapping_add(1, 0, 0, 1, 1);
+  if (!b->curve) {
+    b->curve = BKE_curvemapping_add(1, 0, 0, 1, 1);
+  }
+  cumap = b->curve;
+  cumap->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
+  cumap->preset = preset;
 
-  cm = b->curve->cm;
-  cm->flag &= ~CUMA_EXTEND_EXTRAPOLATE;
-
-  b->curve->preset = preset;
-  curvemap_reset(cm, &b->curve->clipr, b->curve->preset, CURVEMAP_SLOPE_NEGATIVE);
-  curvemapping_changed(b->curve, false);
+  cuma = b->curve->cm;
+  BKE_curvemap_reset(cuma, &cumap->clipr, cumap->preset, CURVEMAP_SLOPE_NEGATIVE);
+  BKE_curvemapping_changed(cumap, false);
 }
 
 /* Generic texture sampler for 3D painting systems. point has to be either in
@@ -902,12 +1976,11 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
   else if (mtex->brush_map_mode == MTEX_MAP_MODE_3D) {
     /* Get strength by feeding the vertex
      * location directly into a texture */
-    hasrgb = externtex(
-        mtex, point, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    hasrgb = RE_texture_evaluate(mtex, point, thread, pool, false, false, &intensity, rgba);
   }
   else if (mtex->brush_map_mode == MTEX_MAP_MODE_STENCIL) {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x, y;
     float co[3];
 
@@ -933,12 +2006,11 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
     co[1] = y;
     co[2] = 0.0f;
 
-    hasrgb = externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    hasrgb = RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
   else {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x = 0.0f, y = 0.0f; /* Quite warnings */
     float invradius = 1.0f;   /* Quite warnings */
     float co[3];
@@ -990,8 +2062,7 @@ float BKE_brush_sample_tex_3d(const Scene *scene,
     co[1] = y;
     co[2] = 0.0f;
 
-    hasrgb = externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    hasrgb = RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
 
   intensity += br->texture_sample_bias;
@@ -1022,7 +2093,7 @@ float BKE_brush_sample_masktex(
   }
   if (mtex->brush_map_mode == MTEX_MAP_MODE_STENCIL) {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x, y;
     float co[3];
 
@@ -1048,12 +2119,11 @@ float BKE_brush_sample_masktex(
     co[1] = y;
     co[2] = 0.0f;
 
-    externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
   else {
     float rotation = -mtex->rot;
-    float point_2d[2] = {point[0], point[1]};
+    const float point_2d[2] = {point[0], point[1]};
     float x = 0.0f, y = 0.0f; /* Quite warnings */
     float invradius = 1.0f;   /* Quite warnings */
     float co[3];
@@ -1105,8 +2175,7 @@ float BKE_brush_sample_masktex(
     co[1] = y;
     co[2] = 0.0f;
 
-    externtex(
-        mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, thread, pool, false, false);
+    RE_texture_evaluate(mtex, co, thread, pool, false, false, &intensity, rgba);
   }
 
   CLAMP(intensity, 0.0f, 1.0f);
@@ -1156,10 +2225,12 @@ void BKE_brush_color_set(struct Scene *scene, struct Brush *brush, const float c
 {
   UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
 
-  if (ups->flag & UNIFIED_PAINT_COLOR)
+  if (ups->flag & UNIFIED_PAINT_COLOR) {
     copy_v3_v3(ups->rgb, color);
-  else
+  }
+  else {
     copy_v3_v3(brush->rgb, color);
+  }
 }
 
 void BKE_brush_size_set(Scene *scene, Brush *brush, int size)
@@ -1169,10 +2240,12 @@ void BKE_brush_size_set(Scene *scene, Brush *brush, int size)
   /* make sure range is sane */
   CLAMP(size, 1, MAX_BRUSH_PIXEL_RADIUS);
 
-  if (ups->flag & UNIFIED_PAINT_SIZE)
+  if (ups->flag & UNIFIED_PAINT_SIZE) {
     ups->size = size;
-  else
+  }
+  else {
     brush->size = size;
+  }
 }
 
 int BKE_brush_size_get(const Scene *scene, const Brush *brush)
@@ -1191,20 +2264,14 @@ bool BKE_brush_use_locked_size(const Scene *scene, const Brush *brush)
                                           (brush->flag & BRUSH_LOCK_SIZE);
 }
 
-bool BKE_brush_use_size_pressure(const Scene *scene, const Brush *brush)
+bool BKE_brush_use_size_pressure(const Brush *brush)
 {
-  const short us_flag = scene->toolsettings->unified_paint_settings.flag;
-
-  return (us_flag & UNIFIED_PAINT_SIZE) ? (us_flag & UNIFIED_PAINT_BRUSH_SIZE_PRESSURE) :
-                                          (brush->flag & BRUSH_SIZE_PRESSURE);
+  return brush->flag & BRUSH_SIZE_PRESSURE;
 }
 
-bool BKE_brush_use_alpha_pressure(const Scene *scene, const Brush *brush)
+bool BKE_brush_use_alpha_pressure(const Brush *brush)
 {
-  const short us_flag = scene->toolsettings->unified_paint_settings.flag;
-
-  return (us_flag & UNIFIED_PAINT_ALPHA) ? (us_flag & UNIFIED_PAINT_BRUSH_ALPHA_PRESSURE) :
-                                           (brush->flag & BRUSH_ALPHA_PRESSURE);
+  return brush->flag & BRUSH_ALPHA_PRESSURE;
 }
 
 bool BKE_brush_sculpt_has_secondary_color(const Brush *brush)
@@ -1212,9 +2279,11 @@ bool BKE_brush_sculpt_has_secondary_color(const Brush *brush)
   return ELEM(brush->sculpt_tool,
               SCULPT_TOOL_BLOB,
               SCULPT_TOOL_DRAW,
+              SCULPT_TOOL_DRAW_SHARP,
               SCULPT_TOOL_INFLATE,
               SCULPT_TOOL_CLAY,
               SCULPT_TOOL_CLAY_STRIPS,
+              SCULPT_TOOL_CLAY_THUMB,
               SCULPT_TOOL_PINCH,
               SCULPT_TOOL_CREASE,
               SCULPT_TOOL_LAYER,
@@ -1228,10 +2297,12 @@ void BKE_brush_unprojected_radius_set(Scene *scene, Brush *brush, float unprojec
 {
   UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
 
-  if (ups->flag & UNIFIED_PAINT_SIZE)
+  if (ups->flag & UNIFIED_PAINT_SIZE) {
     ups->unprojected_radius = unprojected_radius;
-  else
+  }
+  else {
     brush->unprojected_radius = unprojected_radius;
+  }
 }
 
 float BKE_brush_unprojected_radius_get(const Scene *scene, const Brush *brush)
@@ -1245,10 +2316,12 @@ void BKE_brush_alpha_set(Scene *scene, Brush *brush, float alpha)
 {
   UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
 
-  if (ups->flag & UNIFIED_PAINT_ALPHA)
+  if (ups->flag & UNIFIED_PAINT_ALPHA) {
     ups->alpha = alpha;
-  else
+  }
+  else {
     brush->alpha = alpha;
+  }
 }
 
 float BKE_brush_alpha_get(const Scene *scene, const Brush *brush)
@@ -1269,10 +2342,12 @@ void BKE_brush_weight_set(const Scene *scene, Brush *brush, float value)
 {
   UnifiedPaintSettings *ups = &scene->toolsettings->unified_paint_settings;
 
-  if (ups->flag & UNIFIED_PAINT_WEIGHT)
+  if (ups->flag & UNIFIED_PAINT_WEIGHT) {
     ups->weight = value;
-  else
+  }
+  else {
     brush->weight = value;
+  }
 }
 
 /* scale unprojected radius to reflect a change in the brush's 2D size */
@@ -1282,8 +2357,9 @@ void BKE_brush_scale_unprojected_radius(float *unprojected_radius,
 {
   float scale = new_brush_size;
   /* avoid division by zero */
-  if (old_brush_size != 0)
+  if (old_brush_size != 0) {
     scale /= (float)old_brush_size;
+  }
   (*unprojected_radius) *= scale;
 }
 
@@ -1294,8 +2370,9 @@ void BKE_brush_scale_size(int *r_brush_size,
 {
   float scale = new_unprojected_radius;
   /* avoid division by zero */
-  if (old_unprojected_radius != 0)
+  if (old_unprojected_radius != 0) {
     scale /= new_unprojected_radius;
+  }
   (*r_brush_size) = (int)((float)(*r_brush_size) * scale);
 }
 
@@ -1308,7 +2385,7 @@ void BKE_brush_jitter_pos(const Scene *scene, Brush *brush, const float pos[2], 
   do {
     rand_pos[0] = BLI_rng_get_float(brush_rng) - 0.5f;
     rand_pos[1] = BLI_rng_get_float(brush_rng) - 0.5f;
-  } while (len_squared_v2(rand_pos) > SQUARE(0.5f));
+  } while (len_squared_v2(rand_pos) > square_f(0.5f));
 
   if (brush->flag & BRUSH_ABSOLUTE_JITTER) {
     diameter = 2 * brush->jitter_absolute;
@@ -1340,14 +2417,47 @@ void BKE_brush_randomize_texture_coords(UnifiedPaintSettings *ups, bool mask)
 /* Uses the brush curve control to find a strength value */
 float BKE_brush_curve_strength(const Brush *br, float p, const float len)
 {
-  float strength;
+  float strength = 1.0f;
 
-  if (p >= len)
+  if (p >= len) {
     return 0;
-  else
-    p = p / len;
+  }
 
-  strength = curvemapping_evaluateF(br->curve, 0, p);
+  p = p / len;
+  p = 1.0f - p;
+
+  switch (br->curve_preset) {
+    case BRUSH_CURVE_CUSTOM:
+      strength = BKE_curvemapping_evaluateF(br->curve, 0, 1.0f - p);
+      break;
+    case BRUSH_CURVE_SHARP:
+      strength = p * p;
+      break;
+    case BRUSH_CURVE_SMOOTH:
+      strength = 3.0f * p * p - 2.0f * p * p * p;
+      break;
+    case BRUSH_CURVE_SMOOTHER:
+      strength = pow3f(p) * (p * (p * 6.0f - 15.0f) + 10.0f);
+      break;
+    case BRUSH_CURVE_ROOT:
+      strength = sqrtf(p);
+      break;
+    case BRUSH_CURVE_LIN:
+      strength = p;
+      break;
+    case BRUSH_CURVE_CONSTANT:
+      strength = 1.0f;
+      break;
+    case BRUSH_CURVE_SPHERE:
+      strength = sqrtf(2 * p - p * p);
+      break;
+    case BRUSH_CURVE_POW4:
+      strength = p * p * p * p;
+      break;
+    case BRUSH_CURVE_INVSQUARE:
+      strength = p * (2.0f - p);
+      break;
+  }
 
   return strength;
 }
@@ -1368,7 +2478,7 @@ unsigned int *BKE_brush_gen_texture_cache(Brush *br, int half_side, bool use_sec
   unsigned int *texcache = NULL;
   MTex *mtex = (use_secondary) ? &br->mask_mtex : &br->mtex;
   float intensity;
-  float rgba[4];
+  float rgba_dummy[4];
   int ix, iy;
   int side = half_side * 2;
 
@@ -1386,11 +2496,8 @@ unsigned int *BKE_brush_gen_texture_cache(Brush *br, int half_side, bool use_sec
 
         /* This is copied from displace modifier code */
         /* TODO(sergey): brush are always caching with CM enabled for now. */
-        externtex(mtex, co, &intensity, rgba, rgba + 1, rgba + 2, rgba + 3, 0, NULL, false, false);
-
-        ((char *)texcache)[(iy * side + ix) * 4] = ((char *)texcache)[(iy * side + ix) * 4 + 1] =
-            ((char *)texcache)[(iy * side + ix) * 4 + 2] = ((
-                char *)texcache)[(iy * side + ix) * 4 + 3] = (char)(intensity * 255.0f);
+        RE_texture_evaluate(mtex, co, 0, NULL, false, false, &intensity, rgba_dummy);
+        copy_v4_uchar((uchar *)&texcache[iy * side + ix], (char)(intensity * 255.0f));
       }
     }
   }
@@ -1399,37 +2506,38 @@ unsigned int *BKE_brush_gen_texture_cache(Brush *br, int half_side, bool use_sec
 }
 
 /**** Radial Control ****/
-struct ImBuf *BKE_brush_gen_radial_control_imbuf(Brush *br, bool secondary)
+struct ImBuf *BKE_brush_gen_radial_control_imbuf(Brush *br, bool secondary, bool display_gradient)
 {
   ImBuf *im = MEM_callocN(sizeof(ImBuf), "radial control texture");
   unsigned int *texcache;
-  int side = 128;
+  int side = 512;
   int half = side / 2;
   int i, j;
 
-  curvemapping_initialize(br->curve);
+  BKE_curvemapping_init(br->curve);
   texcache = BKE_brush_gen_texture_cache(br, half, secondary);
   im->rect_float = MEM_callocN(sizeof(float) * side * side, "radial control rect");
   im->x = im->y = side;
 
-  for (i = 0; i < side; ++i) {
-    for (j = 0; j < side; ++j) {
-      float magn = sqrtf(pow2f(i - half) + pow2f(j - half));
-      im->rect_float[i * side + j] = BKE_brush_curve_strength_clamped(br, magn, half);
+  if (display_gradient || texcache) {
+    for (i = 0; i < side; i++) {
+      for (j = 0; j < side; j++) {
+        float magn = sqrtf(pow2f(i - half) + pow2f(j - half));
+        im->rect_float[i * side + j] = BKE_brush_curve_strength_clamped(br, magn, half);
+      }
     }
   }
 
-  /* Modulate curve with texture */
   if (texcache) {
-    for (i = 0; i < side; ++i) {
-      for (j = 0; j < side; ++j) {
+    /* Modulate curve with texture */
+    for (i = 0; i < side; i++) {
+      for (j = 0; j < side; j++) {
         const int col = texcache[i * side + j];
         im->rect_float[i * side + j] *= (((char *)&col)[0] + ((char *)&col)[1] +
                                          ((char *)&col)[2]) /
                                         3.0f / 255.0f;
       }
     }
-
     MEM_freeN(texcache);
   }
 

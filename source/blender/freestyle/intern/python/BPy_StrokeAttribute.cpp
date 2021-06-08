@@ -26,16 +26,20 @@
 extern "C" {
 #endif
 
+using namespace Freestyle;
+
 ///////////////////////////////////////////////////////////////////////////////////////////
 
 //-------------------MODULE INITIALIZATION--------------------------------
 int StrokeAttribute_Init(PyObject *module)
 {
-  if (module == NULL)
+  if (module == nullptr) {
     return -1;
+  }
 
-  if (PyType_Ready(&StrokeAttribute_Type) < 0)
+  if (PyType_Ready(&StrokeAttribute_Type) < 0) {
     return -1;
+  }
   Py_INCREF(&StrokeAttribute_Type);
   PyModule_AddObject(module, "StrokeAttribute", (PyObject *)&StrokeAttribute_Type);
 
@@ -51,20 +55,16 @@ PyDoc_STRVAR(StrokeAttribute_doc,
              "Vertex.\n"
              "\n"
              ".. method:: __init__()\n"
+             "            __init__(brother)\n"
+             "            __init__(red, green, blue, alpha, thickness_right, thickness_left)\n"
+             "            __init__(attribute1, attribute2, t)\n"
              "\n"
-             "   Default constructor.\n"
+             "   Creates a :class:`StrokeAttribute` object using either a default constructor,\n"
+             "   copy constructor, overloaded constructor, or and interpolation constructor\n"
+             "   to interpolate between two :class:`StrokeAttribute` objects.\n"
              "\n"
-             ".. method:: __init__(brother)\n"
-             "\n"
-             "   Copy constructor.\n"
-             "\n"
-             "   :arg brother: A StrokeAttribute object.\n"
+             "   :arg brother: A StrokeAttribute object to be used as a copy constructor.\n"
              "   :type brother: :class:`StrokeAttribute`\n"
-             "\n"
-             ".. method:: __init__(red, green, blue, alpha, thickness_right, thickness_left)\n"
-             "\n"
-             "   Build a stroke vertex attribute from a set of parameters.\n"
-             "\n"
              "   :arg red: Red component of a stroke color.\n"
              "   :type red: float\n"
              "   :arg green: Green component of a stroke color.\n"
@@ -77,12 +77,6 @@ PyDoc_STRVAR(StrokeAttribute_doc,
              "   :type thickness_right: float\n"
              "   :arg thickness_left: Stroke thickness on the left.\n"
              "   :type thickness_left: float\n"
-             "\n"
-             ".. method:: __init__(attribute1, attribute2, t)\n"
-             "\n"
-             "   Interpolation constructor. Build a StrokeAttribute from two\n"
-             "   StrokeAttribute objects and an interpolation parameter.\n"
-             "\n"
              "   :arg attribute1: The first StrokeAttribute object.\n"
              "   :type attribute1: :class:`StrokeAttribute`\n"
              "   :arg attribute2: The second StrokeAttribute object.\n"
@@ -92,21 +86,23 @@ PyDoc_STRVAR(StrokeAttribute_doc,
 
 static int StrokeAttribute_init(BPy_StrokeAttribute *self, PyObject *args, PyObject *kwds)
 {
-  static const char *kwlist_1[] = {"brother", NULL};
-  static const char *kwlist_2[] = {"attribute1", "attribute2", "t", NULL};
+  static const char *kwlist_1[] = {"brother", nullptr};
+  static const char *kwlist_2[] = {"attribute1", "attribute2", "t", nullptr};
   static const char *kwlist_3[] = {
-      "red", "green", "blue", "alpha", "thickness_right", "thickness_left", NULL};
-  PyObject *obj1 = 0, *obj2 = 0;
+      "red", "green", "blue", "alpha", "thickness_right", "thickness_left", nullptr};
+  PyObject *obj1 = nullptr, *obj2 = nullptr;
   float red, green, blue, alpha, thickness_right, thickness_left, t;
 
   if (PyArg_ParseTupleAndKeywords(
           args, kwds, "|O!", (char **)kwlist_1, &StrokeAttribute_Type, &obj1)) {
-    if (!obj1)
+    if (!obj1) {
       self->sa = new StrokeAttribute();
-    else
+    }
+    else {
       self->sa = new StrokeAttribute(*(((BPy_StrokeAttribute *)obj1)->sa));
+    }
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "O!O!f",
@@ -119,7 +115,7 @@ static int StrokeAttribute_init(BPy_StrokeAttribute *self, PyObject *args, PyObj
     self->sa = new StrokeAttribute(
         *(((BPy_StrokeAttribute *)obj1)->sa), *(((BPy_StrokeAttribute *)obj2)->sa), t);
   }
-  else if (PyErr_Clear(),
+  else if ((void)PyErr_Clear(),
            PyArg_ParseTupleAndKeywords(args,
                                        kwds,
                                        "ffffff",
@@ -142,8 +138,9 @@ static int StrokeAttribute_init(BPy_StrokeAttribute *self, PyObject *args, PyObj
 
 static void StrokeAttribute_dealloc(BPy_StrokeAttribute *self)
 {
-  if (self->sa && !self->borrowed)
+  if (self->sa && !self->borrowed) {
     delete self->sa;
+  }
   Py_TYPE(self)->tp_free((PyObject *)self);
 }
 
@@ -171,11 +168,12 @@ static PyObject *StrokeAttribute_get_attribute_real(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", NULL};
+  static const char *kwlist[] = {"name", nullptr};
   char *attr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr)) {
+    return nullptr;
+  }
   double a = self->sa->getAttributeReal(attr);
   return PyFloat_FromDouble(a);
 }
@@ -194,11 +192,12 @@ static PyObject *StrokeAttribute_get_attribute_vec2(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", NULL};
+  static const char *kwlist[] = {"name", nullptr};
   char *attr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr)) {
+    return nullptr;
+  }
   Vec2f a = self->sa->getAttributeVec2f(attr);
   return Vector_from_Vec2f(a);
 }
@@ -217,11 +216,12 @@ static PyObject *StrokeAttribute_get_attribute_vec3(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", NULL};
+  static const char *kwlist[] = {"name", nullptr};
   char *attr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr)) {
+    return nullptr;
+  }
   Vec3f a = self->sa->getAttributeVec3f(attr);
   return Vector_from_Vec3f(a);
 }
@@ -233,18 +233,19 @@ PyDoc_STRVAR(StrokeAttribute_has_attribute_real_doc,
              "\n"
              "   :arg name: The name of the attribute.\n"
              "   :type name: str\n"
-             "   :return: True if the attribute is availbale.\n"
+             "   :return: True if the attribute is available.\n"
              "   :rtype: bool\n");
 
 static PyObject *StrokeAttribute_has_attribute_real(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", NULL};
+  static const char *kwlist[] = {"name", nullptr};
   char *attr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr)) {
+    return nullptr;
+  }
   return PyBool_from_bool(self->sa->isAttributeAvailableReal(attr));
 }
 
@@ -256,18 +257,19 @@ PyDoc_STRVAR(StrokeAttribute_has_attribute_vec2_doc,
              "\n"
              "   :arg name: The name of the attribute.\n"
              "   :type name: str\n"
-             "   :return: True if the attribute is availbale.\n"
+             "   :return: True if the attribute is available.\n"
              "   :rtype: bool\n");
 
 static PyObject *StrokeAttribute_has_attribute_vec2(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", NULL};
+  static const char *kwlist[] = {"name", nullptr};
   char *attr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr)) {
+    return nullptr;
+  }
   return PyBool_from_bool(self->sa->isAttributeAvailableVec2f(attr));
 }
 
@@ -279,18 +281,19 @@ PyDoc_STRVAR(StrokeAttribute_has_attribute_vec3_doc,
              "\n"
              "   :arg name: The name of the attribute.\n"
              "   :type name: str\n"
-             "   :return: True if the attribute is availbale.\n"
+             "   :return: True if the attribute is available.\n"
              "   :rtype: bool\n");
 
 static PyObject *StrokeAttribute_has_attribute_vec3(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", NULL};
+  static const char *kwlist[] = {"name", nullptr};
   char *attr;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "s", (char **)kwlist, &attr)) {
+    return nullptr;
+  }
   return PyBool_from_bool(self->sa->isAttributeAvailableVec3f(attr));
 }
 
@@ -310,12 +313,13 @@ static PyObject *StrokeAttribute_set_attribute_real(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", "value", NULL};
-  char *s = 0;
+  static const char *kwlist[] = {"name", "value", nullptr};
+  char *s = nullptr;
   double d = 0;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "sd", (char **)kwlist, &s, &d))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "sd", (char **)kwlist, &s, &d)) {
+    return nullptr;
+  }
   self->sa->setAttributeReal(s, d);
   Py_RETURN_NONE;
 }
@@ -336,17 +340,18 @@ static PyObject *StrokeAttribute_set_attribute_vec2(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", "value", NULL};
+  static const char *kwlist[] = {"name", "value", nullptr};
   char *s;
-  PyObject *obj = 0;
+  PyObject *obj = nullptr;
   Vec2f vec;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "sO", (char **)kwlist, &s, &obj))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "sO", (char **)kwlist, &s, &obj)) {
+    return nullptr;
+  }
   if (!Vec2f_ptr_from_PyObject(obj, vec)) {
     PyErr_SetString(PyExc_TypeError,
                     "argument 2 must be a 2D vector (either a list of 2 elements or Vector)");
-    return NULL;
+    return nullptr;
   }
   self->sa->setAttributeVec2f(s, vec);
   Py_RETURN_NONE;
@@ -368,17 +373,18 @@ static PyObject *StrokeAttribute_set_attribute_vec3(BPy_StrokeAttribute *self,
                                                     PyObject *args,
                                                     PyObject *kwds)
 {
-  static const char *kwlist[] = {"name", "value", NULL};
+  static const char *kwlist[] = {"name", "value", nullptr};
   char *s;
-  PyObject *obj = 0;
+  PyObject *obj = nullptr;
   Vec3f vec;
 
-  if (!PyArg_ParseTupleAndKeywords(args, kwds, "sO", (char **)kwlist, &s, &obj))
-    return NULL;
+  if (!PyArg_ParseTupleAndKeywords(args, kwds, "sO", (char **)kwlist, &s, &obj)) {
+    return nullptr;
+  }
   if (!Vec3f_ptr_from_PyObject(obj, vec)) {
     PyErr_SetString(PyExc_TypeError,
                     "argument 2 must be a 3D vector (either a list of 3 elements or Vector)");
-    return NULL;
+    return nullptr;
   }
   self->sa->setAttributeVec3f(s, vec);
   Py_RETURN_NONE;
@@ -421,7 +427,7 @@ static PyMethodDef BPy_StrokeAttribute_methods[] = {
      (PyCFunction)StrokeAttribute_set_attribute_vec3,
      METH_VARARGS | METH_KEYWORDS,
      StrokeAttribute_set_attribute_vec3_doc},
-    {NULL, NULL, 0, NULL},
+    {nullptr, nullptr, 0, nullptr},
 };
 
 /*----------------------mathutils callbacks ----------------------------*/
@@ -432,8 +438,9 @@ static PyMethodDef BPy_StrokeAttribute_methods[] = {
 
 static int StrokeAttribute_mathutils_check(BaseMathObject *bmo)
 {
-  if (!BPy_StrokeAttribute_Check(bmo->cb_user))
+  if (!BPy_StrokeAttribute_Check(bmo->cb_user)) {
     return -1;
+  }
   return 0;
 }
 
@@ -562,8 +569,8 @@ static int StrokeAttribute_alpha_set(BPy_StrokeAttribute *self,
                                      void *UNUSED(closure))
 {
   float scalar;
-  if ((scalar = PyFloat_AsDouble(value)) == -1.0f &&
-      PyErr_Occurred()) { /* parsed item not a number */
+  if ((scalar = PyFloat_AsDouble(value)) == -1.0f && PyErr_Occurred()) {
+    /* parsed item not a number */
     PyErr_SetString(PyExc_TypeError, "value must be a number");
     return -1;
   }
@@ -642,69 +649,69 @@ static int StrokeAttribute_visible_set(BPy_StrokeAttribute *self,
 }
 
 static PyGetSetDef BPy_StrokeAttribute_getseters[] = {
-    {(char *)"alpha",
+    {"alpha",
      (getter)StrokeAttribute_alpha_get,
      (setter)StrokeAttribute_alpha_set,
-     (char *)StrokeAttribute_alpha_doc,
-     NULL},
-    {(char *)"color",
+     StrokeAttribute_alpha_doc,
+     nullptr},
+    {"color",
      (getter)StrokeAttribute_color_get,
      (setter)StrokeAttribute_color_set,
-     (char *)StrokeAttribute_color_doc,
-     NULL},
-    {(char *)"thickness",
+     StrokeAttribute_color_doc,
+     nullptr},
+    {"thickness",
      (getter)StrokeAttribute_thickness_get,
      (setter)StrokeAttribute_thickness_set,
-     (char *)StrokeAttribute_thickness_doc,
-     NULL},
-    {(char *)"visible",
+     StrokeAttribute_thickness_doc,
+     nullptr},
+    {"visible",
      (getter)StrokeAttribute_visible_get,
      (setter)StrokeAttribute_visible_set,
-     (char *)StrokeAttribute_visible_doc,
-     NULL},
-    {NULL, NULL, NULL, NULL, NULL} /* Sentinel */
+     StrokeAttribute_visible_doc,
+     nullptr},
+    {nullptr, nullptr, nullptr, nullptr, nullptr} /* Sentinel */
 };
 
 /*-----------------------BPy_StrokeAttribute type definition ------------------------------*/
 
 PyTypeObject StrokeAttribute_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0) "StrokeAttribute", /* tp_name */
-    sizeof(BPy_StrokeAttribute),                      /* tp_basicsize */
-    0,                                                /* tp_itemsize */
-    (destructor)StrokeAttribute_dealloc,              /* tp_dealloc */
-    0,                                                /* tp_print */
-    0,                                                /* tp_getattr */
-    0,                                                /* tp_setattr */
-    0,                                                /* tp_reserved */
-    (reprfunc)StrokeAttribute_repr,                   /* tp_repr */
-    0,                                                /* tp_as_number */
-    0,                                                /* tp_as_sequence */
-    0,                                                /* tp_as_mapping */
-    0,                                                /* tp_hash  */
-    0,                                                /* tp_call */
-    0,                                                /* tp_str */
-    0,                                                /* tp_getattro */
-    0,                                                /* tp_setattro */
-    0,                                                /* tp_as_buffer */
-    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,         /* tp_flags */
-    StrokeAttribute_doc,                              /* tp_doc */
-    0,                                                /* tp_traverse */
-    0,                                                /* tp_clear */
-    0,                                                /* tp_richcompare */
-    0,                                                /* tp_weaklistoffset */
-    0,                                                /* tp_iter */
-    0,                                                /* tp_iternext */
-    BPy_StrokeAttribute_methods,                      /* tp_methods */
-    0,                                                /* tp_members */
-    BPy_StrokeAttribute_getseters,                    /* tp_getset */
-    0,                                                /* tp_base */
-    0,                                                /* tp_dict */
-    0,                                                /* tp_descr_get */
-    0,                                                /* tp_descr_set */
-    0,                                                /* tp_dictoffset */
-    (initproc)StrokeAttribute_init,                   /* tp_init */
-    0,                                                /* tp_alloc */
-    PyType_GenericNew,                                /* tp_new */
+    PyVarObject_HEAD_INIT(nullptr, 0) "StrokeAttribute", /* tp_name */
+    sizeof(BPy_StrokeAttribute),                         /* tp_basicsize */
+    0,                                                   /* tp_itemsize */
+    (destructor)StrokeAttribute_dealloc,                 /* tp_dealloc */
+    0,                                                   /* tp_vectorcall_offset */
+    nullptr,                                             /* tp_getattr */
+    nullptr,                                             /* tp_setattr */
+    nullptr,                                             /* tp_reserved */
+    (reprfunc)StrokeAttribute_repr,                      /* tp_repr */
+    nullptr,                                             /* tp_as_number */
+    nullptr,                                             /* tp_as_sequence */
+    nullptr,                                             /* tp_as_mapping */
+    nullptr,                                             /* tp_hash  */
+    nullptr,                                             /* tp_call */
+    nullptr,                                             /* tp_str */
+    nullptr,                                             /* tp_getattro */
+    nullptr,                                             /* tp_setattro */
+    nullptr,                                             /* tp_as_buffer */
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,            /* tp_flags */
+    StrokeAttribute_doc,                                 /* tp_doc */
+    nullptr,                                             /* tp_traverse */
+    nullptr,                                             /* tp_clear */
+    nullptr,                                             /* tp_richcompare */
+    0,                                                   /* tp_weaklistoffset */
+    nullptr,                                             /* tp_iter */
+    nullptr,                                             /* tp_iternext */
+    BPy_StrokeAttribute_methods,                         /* tp_methods */
+    nullptr,                                             /* tp_members */
+    BPy_StrokeAttribute_getseters,                       /* tp_getset */
+    nullptr,                                             /* tp_base */
+    nullptr,                                             /* tp_dict */
+    nullptr,                                             /* tp_descr_get */
+    nullptr,                                             /* tp_descr_set */
+    0,                                                   /* tp_dictoffset */
+    (initproc)StrokeAttribute_init,                      /* tp_init */
+    nullptr,                                             /* tp_alloc */
+    PyType_GenericNew,                                   /* tp_new */
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////

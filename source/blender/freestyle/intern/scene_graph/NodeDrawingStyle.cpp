@@ -16,7 +16,8 @@
 
 /** \file
  * \ingroup freestyle
- * \brief Class to define a Drawing Style to be applied to the underlying children. Inherits from NodeGroup.
+ * \brief Class to define a Drawing Style to be applied to the underlying children. Inherits from
+ * NodeGroup.
  */
 
 #include "NodeDrawingStyle.h"
@@ -30,8 +31,9 @@ void NodeDrawingStyle::accept(SceneVisitor &v)
   v.visitNodeDrawingStyleBefore(*this);
   v.visitDrawingStyle(_DrawingStyle);
   for (vector<Node *>::iterator node = _Children.begin(), end = _Children.end(); node != end;
-       ++node)
+       ++node) {
     (*node)->accept(v);
+  }
   v.visitNodeDrawingStyleAfter(*this);
 }
 

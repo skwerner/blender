@@ -30,8 +30,8 @@
  * BLI_buffer_declare_static(int, my_int_array, BLI_BUFFER_NOP, 32);
  *
  * BLI_buffer_append(my_int_array, int, 42);
- * assert(my_int_array.count == 1);
- * assert(BLI_buffer_at(my_int_array, int, 0) == 42);
+ * BLI_assert(my_int_array.count == 1);
+ * BLI_assert(BLI_buffer_at(my_int_array, int, 0) == 42);
  *
  * BLI_buffer_free(&my_int_array);
  * \endcode
@@ -112,6 +112,16 @@ void BLI_buffer_reinit(BLI_Buffer *buffer, const size_t new_count)
   }
 
   buffer->count = new_count;
+}
+
+/* Callers use BLI_buffer_append_array. */
+void _bli_buffer_append_array(BLI_Buffer *buffer, void *new_data, size_t count)
+{
+  size_t size = buffer->count;
+  BLI_buffer_resize(buffer, size + count);
+
+  uint8_t *bytes = (uint8_t *)buffer->data;
+  memcpy(bytes + size * buffer->elem_size, new_data, count * buffer->elem_size);
 }
 
 /* callers use BLI_buffer_free */

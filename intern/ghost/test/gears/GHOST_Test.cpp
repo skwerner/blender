@@ -27,11 +27,12 @@
 
 #include <iostream>
 #include <math.h>
+#include <string>
 
 #if defined(WIN32) || defined(__APPLE__)
 #  ifdef WIN32
-#    include <windows.h>
 #    include <atlbase.h>
+#    include <windows.h>
 
 #    include <GL/gl.h>
 #  else  // WIN32 \
@@ -42,12 +43,11 @@
 #  include <GL/gl.h>
 #endif  // defined(WIN32) || defined(__APPLE__)
 
-#include "STR_String.h"
 #include "GHOST_Rect.h"
 
-#include "GHOST_ISystem.h"
 #include "GHOST_IEvent.h"
 #include "GHOST_IEventConsumer.h"
+#include "GHOST_ISystem.h"
 
 #define LEFT_EYE 0
 #define RIGHT_EYE 1
@@ -427,8 +427,7 @@ Application::Application(GHOST_ISystem *system)
   fApp = this;
 
   // Create the main window
-  STR_String title1("gears - main window");
-  m_mainWindow = system->createWindow(title1,
+  m_mainWindow = system->createWindow("gears - main window",
                                       10,
                                       64,
                                       320,
@@ -443,8 +442,7 @@ Application::Application(GHOST_ISystem *system)
   }
 
   // Create a secondary window
-  STR_String title2("gears - secondary window");
-  m_secondaryWindow = system->createWindow(title2,
+  m_secondaryWindow = system->createWindow("gears - secondary window",
                                            340,
                                            64,
                                            320,
@@ -479,12 +477,14 @@ bool Application::processEvent(GHOST_IEvent *event)
 
   switch (event->getType()) {
 #if 0
-  case GHOST_kEventUnknown:
-    break;
-  case GHOST_kEventCursorButton:
-    std::cout << "GHOST_kEventCursorButton"; break;
-  case GHOST_kEventCursorMove:
-    std::cout << "GHOST_kEventCursorMove"; break;
+    case GHOST_kEventUnknown:
+      break;
+    case GHOST_kEventCursorButton:
+      std::cout << "GHOST_kEventCursorButton";
+      break;
+    case GHOST_kEventCursorMove:
+      std::cout << "GHOST_kEventCursorMove";
+      break;
 #endif
     case GHOST_kEventWheel: {
       GHOST_TEventWheelData *wheelData = (GHOST_TEventWheelData *)event->getData();
@@ -596,8 +596,7 @@ bool Application::processEvent(GHOST_IEvent *event)
 
         case GHOST_kKeyW:
           if (m_mainWindow) {
-            STR_String title;
-            m_mainWindow->getTitle(title);
+            std::string title = m_mainWindow->getTitle();
             title += "-";
             m_mainWindow->setTitle(title);
           }
@@ -676,11 +675,12 @@ int main(int /*argc*/, char ** /*argv*/)
     LONG lresult;
     HKEY hkey = 0;
     DWORD dwd = 0;
-    //unsigned char buffer[128];
+    // unsigned char buffer[128];
 
     CRegKey regkey;
-    //DWORD keyValue;
-    //      lresult = regkey.Open(HKEY_LOCAL_MACHINE, "SOFTWARE\\NVIDIA Corporation\\Global\\Stereo3D\\StereoEnable");
+    // DWORD keyValue;
+    // lresult = regkey.Open(
+    //     HKEY_LOCAL_MACHINE, "SOFTWARE\\NVIDIA Corporation\\Global\\Stereo3D\\StereoEnable");
     lresult = regkey.Open(HKEY_LOCAL_MACHINE,
                           "SOFTWARE\\NVIDIA Corporation\\Global\\Stereo3D\\StereoEnable",
                           KEY_ALL_ACCESS);
@@ -716,7 +716,7 @@ int main(int /*argc*/, char ** /*argv*/)
 
     // Enter main loop
     while (!app.m_exitRequested) {
-      //printf("main: loop\n");
+      // printf("main: loop\n");
       fSystem->processEvents(true);
       fSystem->dispatchEvents();
     }

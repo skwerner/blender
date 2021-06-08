@@ -37,20 +37,21 @@
 
 #include "BKE_context.h"
 #include "BKE_deform.h"
-#include "BKE_object_deform.h"
 #include "BKE_dynamicpaint.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_modifier.h"
+#include "BKE_object_deform.h"
 #include "BKE_report.h"
 #include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
+#include "DEG_depsgraph_query.h"
 
 #include "ED_mesh.h"
-#include "ED_screen.h"
 #include "ED_object.h"
+#include "ED_screen.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -58,8 +59,8 @@
 
 #include "PIL_time.h"
 
-#include "WM_types.h"
 #include "WM_api.h"
+#include "WM_types.h"
 
 #include "physics_intern.h" /* own include */
 
@@ -71,20 +72,20 @@ static int surface_slot_add_exec(bContext *C, wmOperator *UNUSED(op))
   DynamicPaintSurface *surface;
 
   /* Make sure we're dealing with a canvas */
-  pmd = (DynamicPaintModifierData *)modifiers_findByType(cObject, eModifierType_DynamicPaint);
-  if (!pmd || !pmd->canvas)
+  pmd = (DynamicPaintModifierData *)BKE_modifiers_findby_type(cObject, eModifierType_DynamicPaint);
+  if (!pmd || !pmd->canvas) {
     return OPERATOR_CANCELLED;
+  }
 
   canvas = pmd->canvas;
   surface = dynamicPaint_createNewSurface(canvas, CTX_data_scene(C));
 
-  if (!surface)
+  if (!surface) {
     return OPERATOR_CANCELLED;
+  }
 
-  /* set preview for this surface only and set active */
   canvas->active_sur = 0;
   for (surface = surface->prev; surface; surface = surface->prev) {
-    surface->flags &= ~MOD_DPAINT_PREVIEW;
     canvas->active_sur++;
   }
 
@@ -101,7 +102,7 @@ void DPAINT_OT_surface_slot_add(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = surface_slot_add_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -116,9 +117,10 @@ static int surface_slot_remove_exec(bContext *C, wmOperator *UNUSED(op))
   int id = 0;
 
   /* Make sure we're dealing with a canvas */
-  pmd = (DynamicPaintModifierData *)modifiers_findByType(obj_ctx, eModifierType_DynamicPaint);
-  if (!pmd || !pmd->canvas)
+  pmd = (DynamicPaintModifierData *)BKE_modifiers_findby_type(obj_ctx, eModifierType_DynamicPaint);
+  if (!pmd || !pmd->canvas) {
     return OPERATOR_CANCELLED;
+  }
 
   canvas = pmd->canvas;
   surface = canvas->surfaces.first;
@@ -133,7 +135,6 @@ static int surface_slot_remove_exec(bContext *C, wmOperator *UNUSED(op))
     id++;
   }
 
-  dynamicPaint_resetPreview(canvas);
   DEG_id_tag_update(&obj_ctx->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_OBJECT | ND_MODIFIER, obj_ctx);
 
@@ -150,7 +151,7 @@ void DPAINT_OT_surface_slot_remove(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = surface_slot_remove_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -161,12 +162,13 @@ static int type_toggle_exec(bContext *C, wmOperator *op)
 
   Object *cObject = ED_object_context(C);
   Scene *scene = CTX_data_scene(C);
-  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)modifiers_findByType(
+  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)BKE_modifiers_findby_type(
       cObject, eModifierType_DynamicPaint);
   int type = RNA_enum_get(op->ptr, "type");
 
-  if (!pmd)
+  if (!pmd) {
     return OPERATOR_CANCELLED;
+  }
 
   /* if type is already enabled, toggle it off */
   if (type == MOD_DYNAMICPAINT_TYPE_CANVAS && pmd->canvas) {
@@ -177,8 +179,9 @@ static int type_toggle_exec(bContext *C, wmOperator *op)
   }
   /* else create a new type */
   else {
-    if (!dynamicPaint_createType(pmd, type, scene))
+    if (!dynamicPaint_createType(pmd, type, scene)) {
       return OPERATOR_CANCELLED;
+    }
   }
 
   /* update dependency */
@@ -200,7 +203,7 @@ void DPAINT_OT_type_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = type_toggle_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -219,40 +222,48 @@ static int output_toggle_exec(bContext *C, wmOperator *op)
 {
   Object *ob = ED_object_context(C);
   DynamicPaintSurface *surface;
-  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)modifiers_findByType(
+  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)BKE_modifiers_findby_type(
       ob, eModifierType_DynamicPaint);
   int output = RNA_enum_get(op->ptr, "output"); /* currently only 1/0 */
 
-  if (!pmd || !pmd->canvas)
+  if (!pmd || !pmd->canvas) {
     return OPERATOR_CANCELLED;
+  }
   surface = get_activeSurface(pmd->canvas);
 
   /* if type is already enabled, toggle it off */
   if (surface->format == MOD_DPAINT_SURFACE_F_VERTEX) {
-    int exists = dynamicPaint_outputLayerExists(surface, ob, output);
+    bool exists = dynamicPaint_outputLayerExists(surface, ob, output);
     const char *name;
 
-    if (output == 0)
+    if (output == 0) {
       name = surface->output_name;
-    else
+    }
+    else {
       name = surface->output_name2;
+    }
 
     /* Vertex Color Layer */
     if (surface->type == MOD_DPAINT_SURFACE_T_PAINT) {
-      if (!exists)
+      if (!exists) {
         ED_mesh_color_add(ob->data, name, true, true);
-      else
+      }
+      else {
         ED_mesh_color_remove_named(ob->data, name);
+      }
     }
     /* Vertex Weight Layer */
     else if (surface->type == MOD_DPAINT_SURFACE_T_WEIGHT) {
       if (!exists) {
         BKE_object_defgroup_add_name(ob, name);
+        DEG_relations_tag_update(CTX_data_main(C));
       }
       else {
-        bDeformGroup *defgroup = defgroup_find_name(ob, name);
-        if (defgroup)
+        bDeformGroup *defgroup = BKE_object_defgroup_find_name(ob, name);
+        if (defgroup) {
           BKE_object_defgroup_remove(ob, defgroup);
+          DEG_relations_tag_update(CTX_data_main(C));
+        }
       }
     }
   }
@@ -275,7 +286,7 @@ void DPAINT_OT_output_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = output_toggle_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -350,6 +361,7 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
   DynamicPaintSurface *surface = job->surface;
   Object *cObject = job->ob;
   DynamicPaintCanvasSettings *canvas = surface->canvas;
+  Scene *input_scene = DEG_get_input_scene(job->depsgraph);
   Scene *scene = job->scene;
   int frame = 1, orig_frame;
   int frames;
@@ -365,8 +377,8 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
 
   /* Set frame to start point (also inits modifier data) */
   frame = surface->start_frame;
-  orig_frame = scene->r.cfra;
-  scene->r.cfra = (int)frame;
+  orig_frame = input_scene->r.cfra;
+  input_scene->r.cfra = (int)frame;
   ED_update_for_newframe(job->bmain, job->depsgraph);
 
   /* Init surface */
@@ -392,7 +404,7 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
     *(job->progress) = progress;
 
     /* calculate a frame */
-    scene->r.cfra = (int)frame;
+    input_scene->r.cfra = (int)frame;
     ED_update_for_newframe(job->bmain, job->depsgraph);
     if (!dynamicPaint_calculateFrame(surface, job->depsgraph, scene, cObject, frame)) {
       job->success = 0;
@@ -428,7 +440,8 @@ static void dynamicPaint_bakeImageSequence(DynamicPaintBakeJob *job)
     }
   }
 
-  scene->r.cfra = orig_frame;
+  input_scene->r.cfra = orig_frame;
+  ED_update_for_newframe(job->bmain, job->depsgraph);
 }
 
 static void dpaint_bake_startjob(void *customdata, short *stop, short *do_update, float *progress)
@@ -460,25 +473,26 @@ static void dpaint_bake_startjob(void *customdata, short *stop, short *do_update
  */
 static int dynamicpaint_bake_exec(struct bContext *C, struct wmOperator *op)
 {
-  DynamicPaintModifierData *pmd = NULL;
-  DynamicPaintCanvasSettings *canvas;
-  Object *ob = ED_object_context(C);
-  Scene *scene = CTX_data_scene(C);
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
+  Object *ob_ = ED_object_context(C);
+  Object *object_eval = DEG_get_evaluated_object(depsgraph, ob_);
+  Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   DynamicPaintSurface *surface;
 
   /*
    * Get modifier data
    */
-  pmd = (DynamicPaintModifierData *)modifiers_findByType(ob, eModifierType_DynamicPaint);
-  if (!pmd) {
+  DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)BKE_modifiers_findby_type(
+      object_eval, eModifierType_DynamicPaint);
+  if (pmd == NULL) {
     BKE_report(op->reports, RPT_ERROR, "Bake failed: no Dynamic Paint modifier found");
     return OPERATOR_CANCELLED;
   }
 
   /* Make sure we're dealing with a canvas */
-  canvas = pmd->canvas;
-  if (!canvas) {
+  DynamicPaintCanvasSettings *canvas = pmd->canvas;
+  if (canvas == NULL) {
     BKE_report(op->reports, RPT_ERROR, "Bake failed: invalid canvas");
     return OPERATOR_CANCELLED;
   }
@@ -490,15 +504,15 @@ static int dynamicpaint_bake_exec(struct bContext *C, struct wmOperator *op)
 
   DynamicPaintBakeJob *job = MEM_mallocN(sizeof(DynamicPaintBakeJob), "DynamicPaintBakeJob");
   job->bmain = CTX_data_main(C);
-  job->scene = scene;
-  job->depsgraph = CTX_data_depsgraph(C);
-  job->ob = ob;
+  job->scene = scene_eval;
+  job->depsgraph = depsgraph;
+  job->ob = object_eval;
   job->canvas = canvas;
   job->surface = surface;
 
   wmJob *wm_job = WM_jobs_get(CTX_wm_manager(C),
                               CTX_wm_window(C),
-                              scene,
+                              CTX_data_scene(C),
                               "Dynamic Paint Bake",
                               WM_JOB_PROGRESS,
                               WM_JOB_TYPE_DPAINT_BAKE);
@@ -524,5 +538,5 @@ void DPAINT_OT_bake(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = dynamicpaint_bake_exec;
-  ot->poll = ED_operator_object_active_editable;
+  ot->poll = ED_operator_object_active_local_editable;
 }

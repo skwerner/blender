@@ -17,15 +17,14 @@
 # ***** END GPL LICENSE BLOCK *****
 
 ExternalProject_Add(external_zlib
-  URL ${ZLIB_URI}
-  URL_HASH MD5=${ZLIB_HASH}
-  DOWNLOAD_DIR ${DOWNLOAD_DIR}
+  URL file://${PACKAGE_DIR}/${ZLIB_FILE}
+  URL_HASH ${ZLIB_HASH_TYPE}=${ZLIB_HASH}
   PREFIX ${BUILD_DIR}/zlib
   CMAKE_ARGS -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_INSTALL_PREFIX=${LIBDIR}/zlib ${DEFAULT_CMAKE_FLAGS}
   INSTALL_DIR ${LIBDIR}/zlib
 )
 
-if (WIN32)
+if(WIN32)
   if(BUILD_MODE STREQUAL Release)
     ExternalProject_Add_Step(external_zlib after_install
       COMMAND ${CMAKE_COMMAND} -E copy ${LIBDIR}/zlib/lib/zlibstatic${LIBEXT} ${HARVEST_TARGET}/zlib/lib/libz_st${LIBEXT}

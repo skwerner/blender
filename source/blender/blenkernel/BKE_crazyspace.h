@@ -21,8 +21,7 @@
  * \ingroup bke
  */
 
-#ifndef __BKE_CRAZYSPACE_H__
-#define __BKE_CRAZYSPACE_H__
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,7 +34,6 @@ struct Scene;
 
 /* crazyspace.c */
 float (*BKE_crazyspace_get_mapped_editverts(struct Depsgraph *depsgraph,
-                                            struct Scene *scene,
                                             struct Object *obedit))[3];
 void BKE_crazyspace_set_quats_editmesh(struct BMEditMesh *em,
                                        float (*origcos)[3],
@@ -65,6 +63,4 @@ void BKE_crazyspace_build_sculpt(struct Depsgraph *depsgraph,
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

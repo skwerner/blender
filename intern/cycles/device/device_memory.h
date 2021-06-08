@@ -23,6 +23,7 @@
 
 #include "util/util_array.h"
 #include "util/util_half.h"
+#include "util/util_string.h"
 #include "util/util_texture.h"
 #include "util/util_types.h"
 #include "util/util_vector.h"
@@ -31,7 +32,14 @@ CCL_NAMESPACE_BEGIN
 
 class Device;
 
-enum MemoryType { MEM_READ_ONLY, MEM_READ_WRITE, MEM_DEVICE_ONLY, MEM_TEXTURE, MEM_PIXELS };
+enum MemoryType {
+  MEM_READ_ONLY,
+  MEM_READ_WRITE,
+  MEM_DEVICE_ONLY,
+  MEM_GLOBAL,
+  MEM_TEXTURE,
+  MEM_PIXELS
+};
 
 /* Supported Data Types */
 
@@ -208,29 +216,33 @@ class device_memory {
   size_t data_depth;
   MemoryType type;
   const char *name;
-  InterpolationType interpolation;
-  ExtensionType extension;
 
   /* Pointers. */
   Device *device;
   device_ptr device_pointer;
   void *host_pointer;
   void *shared_pointer;
+  /* reference counter for shared_pointer */
+  int shared_counter;
 
   virtual ~device_memory();
 
   void swap_device(Device *new_device, size_t new_device_size, device_ptr new_device_ptr);
   void restore_device();
 
+  bool is_resident(Device *sub_device) const;
+
  protected:
   friend class CUDADevice;
+  friend class OptiXDevice;
 
   /* Only create through subclasses. */
   device_memory(Device *device, const char *name, MemoryType type);
+  device_memory(device_memory &&other) noexcept;
 
   /* No copying allowed. */
-  device_memory(const device_memory &);
-  device_memory &operator=(const device_memory &);
+  device_memory(const device_memory &) = delete;
+  device_memory &operator=(const device_memory &) = delete;
 
   /* Host allocation on the device. All host_pointer memory should be
    * allocated with these functions, for devices that support using
@@ -248,6 +260,8 @@ class device_memory {
   device_ptr original_device_ptr;
   size_t original_device_size;
   Device *original_device;
+  bool need_realloc_;
+  bool modified;
 };
 
 /* Device Only Memory
@@ -257,11 +271,15 @@ class device_memory {
 
 template<typename T> class device_only_memory : public device_memory {
  public:
-  device_only_memory(Device *device, const char *name)
-      : device_memory(device, name, MEM_DEVICE_ONLY)
+  device_only_memory(Device *device, const char *name, bool allow_host_memory_fallback = false)
+      : device_memory(device, name, allow_host_memory_fallback ? MEM_READ_WRITE : MEM_DEVICE_ONLY)
   {
     data_type = device_type_traits<T>::data_type;
     data_elements = max(device_type_traits<T>::num_elements, 1);
+  }
+
+  device_only_memory(device_only_memory &&other) noexcept : device_memory(std::move(other))
+  {
   }
 
   virtual ~device_only_memory()
@@ -307,7 +325,7 @@ template<typename T> class device_only_memory : public device_memory {
  * in and copied to the device with copy_to_device(). Or alternatively
  * allocated and set to zero on the device with zero_to_device().
  *
- * When using memory type MEM_TEXTURE, a pointer to this memory will be
+ * When using memory type MEM_GLOBAL, a pointer to this memory will be
  * automatically attached to kernel globals, using the provided name
  * matching an entry in kernel_textures.h. */
 
@@ -318,6 +336,8 @@ template<typename T> class device_vector : public device_memory {
   {
     data_type = device_type_traits<T>::data_type;
     data_elements = device_type_traits<T>::num_elements;
+    modified = true;
+    need_realloc_ = true;
 
     assert(data_elements > 0);
   }
@@ -336,6 +356,7 @@ template<typename T> class device_vector : public device_memory {
       device_free();
       host_free();
       host_pointer = host_alloc(sizeof(T) * new_size);
+      modified = true;
       assert(device_pointer == 0);
     }
 
@@ -389,6 +410,19 @@ template<typename T> class device_vector : public device_memory {
     assert(device_pointer == 0);
   }
 
+  void give_data(array<T> &to)
+  {
+    device_free();
+
+    to.set_data((T *)host_pointer, data_size);
+    data_size = 0;
+    data_width = 0;
+    data_height = 0;
+    data_depth = 0;
+    host_pointer = 0;
+    assert(device_pointer == 0);
+  }
+
   /* Free device and host memory. */
   void free()
   {
@@ -400,10 +434,40 @@ template<typename T> class device_vector : public device_memory {
     data_height = 0;
     data_depth = 0;
     host_pointer = 0;
+    modified = true;
+    need_realloc_ = true;
     assert(device_pointer == 0);
   }
 
-  size_t size()
+  void free_if_need_realloc(bool force_free)
+  {
+    if (need_realloc_ || force_free) {
+      free();
+    }
+  }
+
+  bool is_modified() const
+  {
+    return modified;
+  }
+
+  bool need_realloc()
+  {
+    return need_realloc_;
+  }
+
+  void tag_modified()
+  {
+    modified = true;
+  }
+
+  void tag_realloc()
+  {
+    need_realloc_ = true;
+    tag_modified();
+  }
+
+  size_t size() const
   {
     return data_size;
   }
@@ -421,7 +485,29 @@ template<typename T> class device_vector : public device_memory {
 
   void copy_to_device()
   {
-    device_copy_to();
+    if (data_size != 0) {
+      device_copy_to();
+    }
+  }
+
+  void copy_to_device_if_modified()
+  {
+    if (!modified) {
+      return;
+    }
+
+    copy_to_device();
+  }
+
+  void clear_modified()
+  {
+    modified = false;
+    need_realloc_ = false;
+  }
+
+  void copy_from_device()
+  {
+    device_copy_from(0, data_width, data_height, sizeof(T));
   }
 
   void copy_from_device(int y, int w, int h)
@@ -432,6 +518,14 @@ template<typename T> class device_vector : public device_memory {
   void zero_to_device()
   {
     device_zero();
+  }
+
+  void move_device(Device *new_device)
+  {
+    copy_from_device();
+    device_free();
+    device = new_device;
+    copy_to_device();
   }
 
  protected:
@@ -493,6 +587,33 @@ class device_sub_ptr {
 
   Device *device;
   device_ptr ptr;
+};
+
+/* Device Texture
+ *
+ * 2D or 3D image texture memory. */
+
+class device_texture : public device_memory {
+ public:
+  device_texture(Device *device,
+                 const char *name,
+                 const uint slot,
+                 ImageDataType image_data_type,
+                 InterpolationType interpolation,
+                 ExtensionType extension);
+  ~device_texture();
+
+  void *alloc(const size_t width, const size_t height, const size_t depth = 0);
+  void copy_to_device();
+
+  uint slot;
+  TextureInfo info;
+
+ protected:
+  size_t size(const size_t width, const size_t height, const size_t depth)
+  {
+    return width * ((height == 0) ? 1 : height) * ((depth == 0) ? 1 : depth);
+  }
 };
 
 CCL_NAMESPACE_END

@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_STROKEATTRIBUTE_H__
-#define __FREESTYLE_PYTHON_STROKEATTRIBUTE_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../stroke/Stroke.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +39,7 @@ extern PyTypeObject StrokeAttribute_Type;
 
 /*---------------------------Python BPy_StrokeAttribute structure definition----------*/
 typedef struct {
-  PyObject_HEAD StrokeAttribute *sa;
+  PyObject_HEAD Freestyle::StrokeAttribute *sa;
   bool borrowed; /* true if *sa is a borrowed reference */
 } BPy_StrokeAttribute;
 
@@ -56,5 +53,3 @@ void StrokeAttribute_mathutils_register_callback();
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_STROKEATTRIBUTE_H__ */

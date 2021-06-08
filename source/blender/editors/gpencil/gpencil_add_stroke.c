@@ -25,18 +25,17 @@
 #include "BLI_utildefines.h"
 
 #include "DNA_gpencil_types.h"
+#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BKE_brush.h"
 #include "BKE_context.h"
 #include "BKE_gpencil.h"
-#include "BKE_library.h"
+#include "BKE_gpencil_geom.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 
 #include "DEG_depsgraph.h"
-#include "DEG_depsgraph_query.h"
 
 #include "ED_gpencil.h"
 
@@ -48,30 +47,25 @@ typedef struct ColorTemplate {
 } ColorTemplate;
 
 /* Add color an ensure duplications (matched by name) */
-static int gp_stroke_material(Main *bmain, Object *ob, const ColorTemplate *pct, const bool fill)
+static int gpencil_stroke_material(Main *bmain,
+                                   Object *ob,
+                                   const ColorTemplate *pct,
+                                   const bool fill)
 {
-  short *totcol = give_totcolp(ob);
-  Material *ma = NULL;
-  for (short i = 0; i < *totcol; i++) {
-    ma = give_current_material(ob, i + 1);
-    if (STREQ(ma->id.name, pct->name)) {
-      return i;
-    }
-  }
-
-  int idx;
-
-  /* create a new one */
-  ma = BKE_gpencil_object_material_new(bmain, ob, pct->name, &idx);
+  int index;
+  Material *ma = BKE_gpencil_object_material_ensure_by_name(bmain, ob, pct->name, &index);
 
   copy_v4_v4(ma->gp_style->stroke_rgba, pct->line);
+  srgb_to_linearrgb_v4(ma->gp_style->stroke_rgba, ma->gp_style->stroke_rgba);
+
   copy_v4_v4(ma->gp_style->fill_rgba, pct->fill);
+  srgb_to_linearrgb_v4(ma->gp_style->fill_rgba, ma->gp_style->fill_rgba);
 
   if (fill) {
-    ma->gp_style->flag |= GP_STYLE_FILL_SHOW;
+    ma->gp_style->flag |= GP_MATERIAL_FILL_SHOW;
   }
 
-  return idx;
+  return index;
 }
 
 /* ***************************************************************** */
@@ -210,38 +204,39 @@ static const ColorTemplate gp_stroke_material_grey = {
 /* ***************************************************************** */
 /* Stroke API */
 
-/* add a Simple stroke with colors (original design created by Daniel M. Lara and Matias Mendiola) */
+/* Add a Simple stroke with colors
+ * (original design created by Daniel M. Lara and Matias Mendiola). */
 void ED_gpencil_create_stroke(bContext *C, Object *ob, float mat[4][4])
 {
   Main *bmain = CTX_data_main(C);
-  Depsgraph *depsgraph = CTX_data_depsgraph(C);
-  int cfra_eval = (int)DEG_get_ctime(depsgraph);
+  Scene *scene = CTX_data_scene(C);
   bGPdata *gpd = (bGPdata *)ob->data;
   bGPDstroke *gps;
 
   /* create colors */
-  int color_black = gp_stroke_material(bmain, ob, &gp_stroke_material_black, false);
-  gp_stroke_material(bmain, ob, &gp_stroke_material_white, false);
-  gp_stroke_material(bmain, ob, &gp_stroke_material_red, false);
-  gp_stroke_material(bmain, ob, &gp_stroke_material_green, false);
-  gp_stroke_material(bmain, ob, &gp_stroke_material_blue, false);
-  gp_stroke_material(bmain, ob, &gp_stroke_material_grey, true);
+  int color_black = gpencil_stroke_material(bmain, ob, &gp_stroke_material_black, false);
+  gpencil_stroke_material(bmain, ob, &gp_stroke_material_white, false);
+  gpencil_stroke_material(bmain, ob, &gp_stroke_material_red, false);
+  gpencil_stroke_material(bmain, ob, &gp_stroke_material_green, false);
+  gpencil_stroke_material(bmain, ob, &gp_stroke_material_blue, false);
+  gpencil_stroke_material(bmain, ob, &gp_stroke_material_grey, true);
 
   /* set first color as active and in brushes */
   ob->actcol = color_black + 1;
 
   /* layers */
-  bGPDlayer *colors = BKE_gpencil_layer_addnew(gpd, "Colors", false);
-  bGPDlayer *lines = BKE_gpencil_layer_addnew(gpd, "Lines", true);
+  bGPDlayer *colors = BKE_gpencil_layer_addnew(gpd, "Colors", false, false);
+  bGPDlayer *lines = BKE_gpencil_layer_addnew(gpd, "Lines", true, false);
 
   /* frames */
-  bGPDframe *frame_color = BKE_gpencil_frame_addnew(colors, cfra_eval);
-  bGPDframe *frame_lines = BKE_gpencil_frame_addnew(lines, cfra_eval);
+  bGPDframe *frame_color = BKE_gpencil_frame_addnew(colors, CFRA);
+  bGPDframe *frame_lines = BKE_gpencil_frame_addnew(lines, CFRA);
   UNUSED_VARS(frame_color);
 
   /* generate stroke */
-  gps = BKE_gpencil_add_stroke(frame_lines, color_black, 175, 75);
+  gps = BKE_gpencil_stroke_add(frame_lines, color_black, 175, 75, false);
   BKE_gpencil_stroke_add_points(gps, data0, 175, mat);
+  BKE_gpencil_stroke_geometry_update(gpd, gps);
 
   /* update depsgraph */
   DEG_id_tag_update(&gpd->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);

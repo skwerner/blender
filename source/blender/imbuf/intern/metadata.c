@@ -24,19 +24,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_idprop.h"
 
+#include "DNA_ID.h" /* ID property definitions. */
+
 #include "MEM_guardedalloc.h"
 
-#include "IMB_imbuf_types.h"
 #include "IMB_imbuf.h"
+#include "IMB_imbuf_types.h"
 
 #include "IMB_metadata.h"
-
-#define METADATA_MAX_VALUE_LENGTH 1024
 
 void IMB_metadata_ensure(struct IDProperty **metadata)
 {
@@ -55,7 +55,6 @@ void IMB_metadata_free(struct IDProperty *metadata)
   }
 
   IDP_FreeProperty(metadata);
-  MEM_freeN(metadata);
 }
 
 bool IMB_metadata_get_field(struct IDProperty *metadata,
@@ -98,11 +97,11 @@ void IMB_metadata_set_field(struct IDProperty *metadata, const char *key, const 
   }
 
   if (prop == NULL) {
-    prop = IDP_NewString(value, key, METADATA_MAX_VALUE_LENGTH);
+    prop = IDP_NewString(value, key, 0);
     IDP_AddToGroup(metadata, prop);
   }
 
-  IDP_AssignString(prop, value, METADATA_MAX_VALUE_LENGTH);
+  IDP_AssignString(prop, value, 0);
 }
 
 void IMB_metadata_foreach(struct ImBuf *ibuf, IMBMetadataForeachCb callback, void *userdata)

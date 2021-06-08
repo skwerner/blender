@@ -39,7 +39,7 @@
 #include "bmesh.h"
 #include "intern/bmesh_private.h"
 
-/* edge and vertex share, currently theres no need to have different logic */
+/* edge and vertex share, currently there's no need to have different logic */
 static void bm_data_interp_from_elem(CustomData *data_layer,
                                      const BMElem *ele_src_1,
                                      const BMElem *ele_src_2,
@@ -160,13 +160,12 @@ void BM_data_interp_face_vert_edge(BMesh *bm,
     if (!l_v1 || !l_v2) {
       return;
     }
-    else {
-      const void *src[2];
-      src[0] = l_v1->head.data;
-      src[1] = l_v2->head.data;
 
-      CustomData_bmesh_interp(&bm->ldata, src, w, NULL, 2, l_v->head.data);
-    }
+    const void *src[2];
+    src[0] = l_v1->head.data;
+    src[1] = l_v2->head.data;
+
+    CustomData_bmesh_interp(&bm->ldata, src, w, NULL, 2, l_v->head.data);
   } while ((l_iter = l_iter->radial_next) != e->l);
 }
 
@@ -296,7 +295,7 @@ static bool quad_co(const float v1[3],
                     float r_uv[2])
 {
   float projverts[5][3], n2[3];
-  float origin[2] = {0.0f, 0.0f};
+  const float origin[2] = {0.0f, 0.0f};
   int i;
 
   /* project points into 2d along normal */
@@ -329,10 +328,10 @@ static bool quad_co(const float v1[3],
   return true;
 }
 
-static void mdisp_axis_from_quad(float v1[3],
-                                 float v2[3],
+static void mdisp_axis_from_quad(const float v1[3],
+                                 const float v2[3],
                                  float UNUSED(v3[3]),
-                                 float v4[3],
+                                 const float v4[3],
                                  float r_axis_x[3],
                                  float r_axis_y[3])
 {
@@ -343,8 +342,12 @@ static void mdisp_axis_from_quad(float v1[3],
   normalize_v3(r_axis_y);
 }
 
-/* tl is loop to project onto, l is loop whose internal displacement, co, is being
- * projected.  x and y are location in loop's mdisps grid of point co. */
+/**
+ * \param l_src: is loop whose internal displacement.
+ * \param l_dst: is loop to project onto.
+ * \param p: The point being projected.
+ * \param r_axis_x, r_axis_y: The location in loop's #CD_MDISPS grid of point `p`.
+ */
 static bool mdisp_in_mdispquad(BMLoop *l_src,
                                BMLoop *l_dst,
                                const float l_dst_f_center[3],
@@ -461,7 +464,7 @@ typedef struct BMLoopInterpMultiresData {
 
 static void loop_interp_multires_cb(void *__restrict userdata,
                                     const int ix,
-                                    const ParallelRangeTLS *__restrict UNUSED(tls))
+                                    const TaskParallelTLS *__restrict UNUSED(tls))
 {
   BMLoopInterpMultiresData *data = userdata;
 
@@ -536,7 +539,7 @@ void BM_loop_interp_multires_ex(BMesh *UNUSED(bm),
     md_dst->totdisp = md_src->totdisp;
     md_dst->level = md_src->level;
     if (md_dst->totdisp) {
-      md_dst->disps = MEM_callocN(sizeof(float) * 3 * md_dst->totdisp, __func__);
+      md_dst->disps = MEM_callocN(sizeof(float[3]) * md_dst->totdisp, __func__);
     }
     else {
       return;
@@ -561,7 +564,7 @@ void BM_loop_interp_multires_ex(BMesh *UNUSED(bm),
       .res = res,
       .d = 1.0f / (float)(res - 1),
   };
-  ParallelRangeSettings settings;
+  TaskParallelSettings settings;
   BLI_parallel_range_settings_defaults(&settings);
   settings.use_threading = (res > 5);
   BLI_task_parallel_range(0, res, &data, loop_interp_multires_cb, &settings);
@@ -744,9 +747,21 @@ void BM_loop_interp_from_face(
   float co[2];
   int i;
 
-  /* convert the 3d coords into 2d for projection */
-  BLI_assert(BM_face_is_normal_valid(f_src));
-  axis_dominant_v3_to_m3(axis_mat, f_src->no);
+  /* Convert the 3d coords into 2d for projection. */
+  float axis_dominant[3];
+  if (!is_zero_v3(f_src->no)) {
+    BLI_assert(BM_face_is_normal_valid(f_src));
+    copy_v3_v3(axis_dominant, f_src->no);
+  }
+  else {
+    /* Rare case in which all the vertices of the face are aligned.
+     * Get a random axis that is orthogonal to the tangent. */
+    float vec[3];
+    BM_face_calc_tangent_auto(f_src, vec);
+    ortho_v3_v3(axis_dominant, vec);
+    normalize_v3(axis_dominant);
+  }
+  axis_dominant_v3_to_m3(axis_mat, axis_dominant);
 
   i = 0;
   l_iter = l_first = BM_FACE_FIRST_LOOP(f_src);
@@ -869,7 +884,7 @@ static void update_data_blocks(BMesh *bm, CustomData *olddata, CustomData *data)
   }
 
   if (oldpool) {
-    /* this should never happen but can when dissolve fails - [#28960] */
+    /* this should never happen but can when dissolve fails - T28960. */
     BLI_assert(data->pool != oldpool);
 
     BLI_mempool_destroy(oldpool);
@@ -924,7 +939,7 @@ void BM_data_layer_free(BMesh *bm, CustomData *data, int type)
   data->pool = NULL;
 
   has_layer = CustomData_free_layer_active(data, type, 0);
-  /* assert because its expensive to realloc - better not do if layer isnt present */
+  /* Assert because its expensive to realloc - better not do if layer isn't present. */
   BLI_assert(has_layer != false);
   UNUSED_VARS_NDEBUG(has_layer);
 
@@ -946,7 +961,7 @@ void BM_data_layer_free_n(BMesh *bm, CustomData *data, int type, int n)
   data->pool = NULL;
 
   has_layer = CustomData_free_layer(data, type, 0, CustomData_get_layer_index_n(data, type, n));
-  /* assert because its expensive to realloc - better not do if layer isnt present */
+  /* Assert because its expensive to realloc - better not do if layer isn't present. */
   BLI_assert(has_layer != false);
   UNUSED_VARS_NDEBUG(has_layer);
 
@@ -1016,6 +1031,7 @@ void BM_elem_float_data_set(CustomData *cd, void *element, int type, const float
   }
 }
 
+/* -------------------------------------------------------------------- */
 /** \name Loop interpolation functions: BM_vert_loop_groups_data_layer_***
  *
  * Handling loop custom-data such as UV's, while keeping contiguous fans is rather tedious.

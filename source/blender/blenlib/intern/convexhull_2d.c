@@ -28,7 +28,7 @@
 #include "BLI_strict_flags.h"
 #include "BLI_utildefines.h"
 
-/* Copyright 2001, softSurfer (www.softsurfer.com)
+/* Copyright 2001, softSurfer (http://www.softsurfer.com)
  * This code may be freely used and modified for any purpose
  * providing that this copyright notice is included with it.
  * SoftSurfer makes no warranty for this code, and cannot be held
@@ -37,6 +37,7 @@
  * http://softsurfer.com/Archive/algorithm_0203/algorithm_0203.htm
  */
 
+/* -------------------------------------------------------------------- */
 /** \name Main Convex-Hull Calculation
  * \{ */
 
@@ -115,9 +116,7 @@ int BLI_convexhull_2d_sorted(const float (*points)[2], const int n, int r_points
       if (is_left(points[r_points[top - 1]], points[r_points[top]], points[i]) > 0.0f) {
         break; /* points[i] is a new hull vertex */
       }
-      else {
-        top--; /* pop top point off stack */
-      }
+      top--; /* pop top point off stack */
     }
 
     r_points[++top] = i; /* push points[i] onto stack */
@@ -141,9 +140,7 @@ int BLI_convexhull_2d_sorted(const float (*points)[2], const int n, int r_points
       if (is_left(points[r_points[top - 1]], points[r_points[top]], points[i]) > 0.0f) {
         break; /* points[i] is a new hull vertex */
       }
-      else {
-        top--; /* pop top point off stack */
-      }
+      top--; /* pop top point off stack */
     }
 
     if (points[i][0] == points[r_points[0]][0] && points[i][1] == points[r_points[0]][1]) {
@@ -172,20 +169,17 @@ static int pointref_cmp_yx(const void *a_, const void *b_)
   if (a->pt[1] > b->pt[1]) {
     return 1;
   }
-  else if (a->pt[1] < b->pt[1]) {
+  if (a->pt[1] < b->pt[1]) {
     return -1;
   }
 
   if (a->pt[0] > b->pt[0]) {
     return 1;
   }
-  else if (a->pt[0] < b->pt[0]) {
+  if (a->pt[0] < b->pt[0]) {
     return -1;
   }
-
-  else {
-    return 0;
-  }
+  return 0;
 }
 
 /**
@@ -234,9 +228,9 @@ int BLI_convexhull_2d(const float (*points)[2], const int n, int r_points[])
 
 /** \} */
 
-/* -------------------------------------------------------------------- */
 /* Helper functions */
 
+/* -------------------------------------------------------------------- */
 /** \name Utility Convex-Hull Functions
  * \{ */
 

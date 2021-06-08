@@ -16,10 +16,11 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_CONVERTALPHANODE_H__
-#define __COM_CONVERTALPHANODE_H__
+#pragma once
 
 #include "COM_Node.h"
+
+namespace blender::compositor {
 
 /**
  * \brief ConvertAlphaNode
@@ -30,7 +31,8 @@ class ConvertAlphaNode : public Node {
   ConvertAlphaNode(bNode *editorNode) : Node(editorNode)
   {
   }
-  void convertToOperations(NodeConverter &converter, const CompositorContext &context) const;
+  void convertToOperations(NodeConverter &converter,
+                           const CompositorContext &context) const override;
 };
 
-#endif
+}  // namespace blender::compositor

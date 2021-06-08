@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_UNARYPREDICATE1D_H__
-#define __FREESTYLE_PYTHON_UNARYPREDICATE1D_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../stroke/Predicates1D.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,7 +39,7 @@ extern PyTypeObject UnaryPredicate1D_Type;
 
 /*---------------------------Python BPy_UnaryPredicate1D structure definition----------*/
 typedef struct {
-  PyObject_HEAD UnaryPredicate1D *up1D;
+  PyObject_HEAD Freestyle::UnaryPredicate1D *up1D;
 } BPy_UnaryPredicate1D;
 
 /*---------------------------Python BPy_UnaryPredicate1D visible prototypes-----------*/
@@ -54,5 +51,3 @@ int UnaryPredicate1D_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_UNARYPREDICATE1D_H__ */

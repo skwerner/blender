@@ -1,9 +1,16 @@
 
+#pragma BLENDER_REQUIRE(random_lib.glsl)
+#pragma BLENDER_REQUIRE(bsdf_sampling_lib.glsl)
+#pragma BLENDER_REQUIRE(common_math_geom_lib.glsl)
+#pragma BLENDER_REQUIRE(irradiance_lib.glsl)
+
 uniform samplerCube probeHdr;
 uniform int probeSize;
 uniform float lodFactor;
 uniform float lodMax;
 uniform float intensityFac;
+
+uniform float sampleCount;
 
 in vec3 worldPosition;
 
@@ -64,7 +71,7 @@ void main()
   float weight_accum = 0.0;
   vec3 sh = vec3(0.0);
 
-  for (int face = 0; face < 6; ++face) {
+  for (int face = 0; face < 6; face++) {
     for (float x = halfpix; x < 1.0; x += pixstep) {
       for (float y = halfpix; y < 1.0; y += pixstep) {
         float weight, coef;
@@ -101,8 +108,8 @@ void main()
 
         weight = texel_solid_angle(facecoord, halfpix);
 
-        vec4 sample = textureLod(probeHdr, cubevec, lodMax);
-        sh += sample.rgb * coef * weight;
+        vec4 samp = textureLod(probeHdr, cubevec, lodMax);
+        sh += samp.rgb * coef * weight;
         weight_accum += weight;
       }
     }
@@ -111,32 +118,7 @@ void main()
 
   FragColor = vec4(sh, 1.0);
 #else
-#  if defined(IRRADIANCE_CUBEMAP)
-  /* Downside: Need lots of memory for storage, distortion due to octahedral mapping */
-  const vec2 map_size = vec2(16.0);
-  const vec2 texelSize = 1.0 / map_size;
-  vec2 uvs = mod(gl_FragCoord.xy, map_size) * texelSize;
-  const float paddingSize = 1.0;
-
-  /* Add a N pixel border to ensure filtering is correct
-   * for N mipmap levels. */
-  uvs = (uvs - texelSize * paddingSize) / (1.0 - 2.0 * texelSize * paddingSize);
-
-  /* edge mirroring : only mirror if directly adjacent
-   * (not diagonally adjacent) */
-  vec2 m = abs(uvs - 0.5) + 0.5;
-  vec2 f = floor(m);
-  if (f.x - f.y != 0.0) {
-    uvs = 1.0 - uvs;
-  }
-
-  /* clamp to [0-1] */
-  uvs = fract(uvs);
-
-  /* get cubemap vector */
-  vec3 cubevec = octahedral_to_cubemap_proj(uvs);
-
-#  elif defined(IRRADIANCE_HL2)
+#  if defined(IRRADIANCE_HL2)
   /* Downside: very very low resolution (6 texels), bleed lighting because of interpolation */
   int x = int(gl_FragCoord.x) % 3;
   int y = int(gl_FragCoord.y) % 2;
@@ -165,14 +147,16 @@ void main()
   float weight = 0.0;
   vec3 out_radiance = vec3(0.0);
   for (float i = 0; i < sampleCount; i++) {
-    vec3 L = sample_hemisphere(i, N, T, B); /* Microfacet normal */
+    vec3 Xi = rand2d_to_cylinder(hammersley_2d(i, sampleCount));
+
+    float pdf;
+    vec3 L = sample_uniform_hemisphere(Xi, N, T, B, pdf);
     float NL = dot(N, L);
 
     if (NL > 0.0) {
       /* Coarse Approximation of the mapping distortion
        * Unit Sphere -> Cubemap Face */
       const float dist = 4.0 * M_PI / 6.0;
-      float pdf = pdf_hemisphere();
       /* http://http.developer.nvidia.com/GPUGems3/gpugems3_ch20.html : Equation 13 */
       float lod = clamp(lodFactor - 0.5 * log2(pdf * dist), 0.0, lodMax);
 

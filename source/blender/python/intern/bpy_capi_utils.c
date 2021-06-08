@@ -23,43 +23,35 @@
 
 #include <Python.h>
 
-#include "BLI_utildefines.h"
 #include "BLI_dynstr.h"
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "bpy_capi_utils.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BKE_report.h"
 #include "BKE_context.h"
+#include "BKE_report.h"
 
 #include "BLT_translation.h"
 
 #include "../generic/py_capi_utils.h"
 
-static bContext *__py_context = NULL;
-bContext *BPy_GetContext(void)
-{
-  return __py_context;
-}
-void BPy_SetContext(bContext *C)
-{
-  __py_context = C;
-}
-
 char *BPy_enum_as_string(const EnumPropertyItem *item)
 {
   DynStr *dynstr = BLI_dynstr_new();
-  const EnumPropertyItem *e;
-  char *cstring;
 
-  for (e = item; item->identifier; item++) {
+  /* We can't compare with the first element in the array
+   * since it may be a category (without an identifier). */
+  for (bool is_first = true; item->identifier; item++) {
     if (item->identifier[0]) {
-      BLI_dynstr_appendf(dynstr, (e == item) ? "'%s'" : ", '%s'", item->identifier);
+      BLI_dynstr_appendf(dynstr, is_first ? "'%s'" : ", '%s'", item->identifier);
+      is_first = false;
     }
   }
 
-  cstring = BLI_dynstr_get_cstring(dynstr);
+  char *cstring = BLI_dynstr_get_cstring(dynstr);
   BLI_dynstr_free(dynstr);
   return cstring;
 }
@@ -91,12 +83,15 @@ void BPy_reports_write_stdout(const ReportList *reports, const char *header)
     PySys_WriteStdout("%s\n", header);
   }
 
-  for (const Report *report = reports->list.first; report; report = report->next) {
+  LISTBASE_FOREACH (const Report *, report, &reports->list) {
     PySys_WriteStdout("%s: %s\n", report->typestr, report->message);
   }
 }
 
-bool BPy_errors_to_report_ex(ReportList *reports, const bool use_full, const bool use_location)
+bool BPy_errors_to_report_ex(ReportList *reports,
+                             const char *error_prefix,
+                             const bool use_full,
+                             const bool use_location)
 {
   PyObject *pystring;
 
@@ -123,35 +118,38 @@ bool BPy_errors_to_report_ex(ReportList *reports, const bool use_full, const boo
     return 0;
   }
 
+  if (error_prefix == NULL) {
+    /* Not very helpful, better than nothing. */
+    error_prefix = "Python";
+  }
+
   if (use_location) {
     const char *filename;
     int lineno;
-
-    PyObject *pystring_format; /* workaround, see below */
-    const char *cstring;
 
     PyC_FileAndNum(&filename, &lineno);
     if (filename == NULL) {
       filename = "<unknown location>";
     }
 
-#if 0 /* ARG!. workaround for a bug in blenders use of vsnprintf */
-    BKE_reportf(reports, RPT_ERROR, "%s\nlocation: %s:%d\n", _PyUnicode_AsString(pystring), filename, lineno);
-#else
-    pystring_format = PyUnicode_FromFormat(
-        TIP_("%s\nlocation: %s:%d\n"), _PyUnicode_AsString(pystring), filename, lineno);
+    BKE_reportf(reports,
+                RPT_ERROR,
+                TIP_("%s: %s\nlocation: %s:%d\n"),
+                error_prefix,
+                PyUnicode_AsUTF8(pystring),
+                filename,
+                lineno);
 
-    cstring = _PyUnicode_AsString(pystring_format);
-    BKE_report(reports, RPT_ERROR, cstring);
-
-    /* not exactly needed. just for testing */
-    fprintf(stderr, TIP_("%s\nlocation: %s:%d\n"), cstring, filename, lineno);
-
-    Py_DECREF(pystring_format); /* workaround */
-#endif
+    /* Not exactly needed. Useful for developers tracking down issues. */
+    fprintf(stderr,
+            TIP_("%s: %s\nlocation: %s:%d\n"),
+            error_prefix,
+            PyUnicode_AsUTF8(pystring),
+            filename,
+            lineno);
   }
   else {
-    BKE_report(reports, RPT_ERROR, _PyUnicode_AsString(pystring));
+    BKE_reportf(reports, RPT_ERROR, "%s: %s", error_prefix, PyUnicode_AsUTF8(pystring));
   }
 
   Py_DECREF(pystring);
@@ -160,5 +158,5 @@ bool BPy_errors_to_report_ex(ReportList *reports, const bool use_full, const boo
 
 bool BPy_errors_to_report(ReportList *reports)
 {
-  return BPy_errors_to_report_ex(reports, true, true);
+  return BPy_errors_to_report_ex(reports, NULL, true, true);
 }

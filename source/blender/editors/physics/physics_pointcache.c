@@ -34,7 +34,6 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_layer.h"
-#include "BKE_particle.h"
 #include "BKE_pointcache.h"
 
 #include "DEG_depsgraph.h"
@@ -57,7 +56,46 @@ static bool ptcache_bake_all_poll(bContext *C)
 static bool ptcache_poll(bContext *C)
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
-  return (ptr.data && ptr.id.data);
+
+  ID *id = ptr.owner_id;
+  PointCache *point_cache = ptr.data;
+
+  if (id == NULL || point_cache == NULL) {
+    return false;
+  }
+
+  if (ID_IS_OVERRIDE_LIBRARY_REAL(id) && (point_cache->flag & PTCACHE_DISK_CACHE) == false) {
+    CTX_wm_operator_poll_msg_set(C,
+                                 "Library override data-blocks only support Disk Cache storage");
+    return false;
+  }
+
+  if (ID_IS_LINKED(id) && (point_cache->flag & PTCACHE_DISK_CACHE) == false) {
+    CTX_wm_operator_poll_msg_set(C, "Linked data-blocks do not allow editing caches");
+    return false;
+  }
+
+  return true;
+}
+
+static bool ptcache_add_remove_poll(bContext *C)
+{
+  PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
+
+  ID *id = ptr.owner_id;
+  PointCache *point_cache = ptr.data;
+
+  if (id == NULL || point_cache == NULL) {
+    return false;
+  }
+
+  if (ID_IS_OVERRIDE_LIBRARY_REAL(id) || ID_IS_LINKED(id)) {
+    CTX_wm_operator_poll_msg_set(
+        C, "Linked or library override data-blocks do not allow adding or removing caches");
+    return false;
+  }
+
+  return true;
 }
 
 typedef struct PointCacheJob {
@@ -132,7 +170,7 @@ static void ptcache_job_endjob(void *customdata)
   WM_set_locked_interface(job->wm, false);
 
   WM_main_add_notifier(NC_SCENE | ND_FRAME, scene);
-  WM_main_add_notifier(NC_OBJECT | ND_POINTCACHE, job->baker->pid.ob);
+  WM_main_add_notifier(NC_OBJECT | ND_POINTCACHE, job->baker->pid.owner_id);
 }
 
 static void ptcache_free_bake(PointCache *cache)
@@ -156,7 +194,8 @@ static PTCacheBaker *ptcache_baker_create(bContext *C, wmOperator *op, bool all)
   baker->bmain = CTX_data_main(C);
   baker->scene = CTX_data_scene(C);
   baker->view_layer = CTX_data_view_layer(C);
-  baker->depsgraph = CTX_data_depsgraph(C);
+  /* Depsgraph is used to sweep the frame range and evaluate scene at different times. */
+  baker->depsgraph = CTX_data_depsgraph_pointer(C);
   baker->bake = RNA_boolean_get(op->ptr, "bake");
   baker->render = 0;
   baker->anim_init = 0;
@@ -164,7 +203,7 @@ static PTCacheBaker *ptcache_baker_create(bContext *C, wmOperator *op, bool all)
 
   if (!all) {
     PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
-    Object *ob = ptr.id.data;
+    Object *ob = (Object *)ptr.owner_id;
     PointCache *cache = ptr.data;
     baker->pid = BKE_ptcache_id_find(ob, baker->scene, cache);
   }
@@ -299,7 +338,7 @@ static int ptcache_free_bake_exec(bContext *C, wmOperator *UNUSED(op))
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
   PointCache *cache = ptr.data;
-  Object *ob = ptr.id.data;
+  Object *ob = (Object *)ptr.owner_id;
 
   ptcache_free_bake(cache);
 
@@ -311,7 +350,7 @@ static int ptcache_bake_from_cache_exec(bContext *C, wmOperator *UNUSED(op))
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
   PointCache *cache = ptr.data;
-  Object *ob = ptr.id.data;
+  Object *ob = (Object *)ptr.owner_id;
 
   cache->flag |= PTCACHE_BAKED;
 
@@ -355,7 +394,7 @@ void PTCACHE_OT_free_bake(wmOperatorType *ot)
 void PTCACHE_OT_bake_from_cache(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Bake From Cache";
+  ot->name = "Bake from Cache";
   ot->description = "Bake from cache";
   ot->idname = "PTCACHE_OT_bake_from_cache";
 
@@ -371,7 +410,7 @@ static int ptcache_add_new_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
-  Object *ob = ptr.id.data;
+  Object *ob = (Object *)ptr.owner_id;
   PointCache *cache = ptr.data;
   PTCacheID pid = BKE_ptcache_id_find(ob, scene, cache);
 
@@ -391,7 +430,7 @@ static int ptcache_remove_exec(bContext *C, wmOperator *UNUSED(op))
 {
   PointerRNA ptr = CTX_data_pointer_get_type(C, "point_cache", &RNA_PointCache);
   Scene *scene = CTX_data_scene(C);
-  Object *ob = ptr.id.data;
+  Object *ob = (Object *)ptr.owner_id;
   PointCache *cache = ptr.data;
   PTCacheID pid = BKE_ptcache_id_find(ob, scene, cache);
 
@@ -416,7 +455,7 @@ void PTCACHE_OT_add(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = ptcache_add_new_exec;
-  ot->poll = ptcache_poll;
+  ot->poll = ptcache_add_remove_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
@@ -430,7 +469,7 @@ void PTCACHE_OT_remove(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = ptcache_remove_exec;
-  ot->poll = ptcache_poll;
+  ot->poll = ptcache_add_remove_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;

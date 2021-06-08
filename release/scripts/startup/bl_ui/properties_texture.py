@@ -32,14 +32,14 @@ from bpy.types import (
 )
 
 from rna_prop_ui import PropertyPanel
-from .properties_paint_common import brush_texture_settings
+from bl_ui.properties_paint_common import brush_texture_settings
 
 
 class TEXTURE_MT_context_menu(Menu):
     bl_label = "Texture Specials"
     COMPAT_ENGINES = {'BLENDER_RENDER'}
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.operator("texture.slot_copy", icon='COPYDOWN')
@@ -48,7 +48,7 @@ class TEXTURE_MT_context_menu(Menu):
 
 class TEXTURE_UL_texslots(UIList):
 
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+    def draw_item(self, _context, layout, _data, item, icon, _active_data, _active_propname, _index):
         slot = item
         tex = slot.texture if slot else None
 
@@ -104,7 +104,7 @@ class TEXTURE_PT_preview(TextureButtonsPanel, Panel):
         else:
             layout.template_preview(tex, slot=slot)
 
-        # Show Alpha Button for Brush Textures, see #29502
+        # Show Alpha Button for Brush Textures, see T29502.
         idblock = context_tex_datablock(context)
         if isinstance(idblock, Brush):
             layout.prop(tex, "use_preview_alpha")
@@ -162,6 +162,8 @@ class TEXTURE_PT_node(TextureButtonsPanel, Panel):
 
     def draw(self, context):
         layout = self.layout
+
+        layout.use_property_split = True
 
         node = context.texture_node
         ntree = node.id_data
@@ -357,7 +359,7 @@ class TEXTURE_PT_image(TextureTypePanel, Panel):
     tex_type = 'IMAGE'
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
-    def draw(self, context):
+    def draw(self, _context):
         # TODO: maybe expose the template_ID from the template image here.
         layout = self.layout
         del layout
@@ -438,7 +440,7 @@ class TEXTURE_PT_image_alpha(TextureTypePanel, Panel):
         tex = context.texture
 
         col = layout.column()
-        col.active = bool(tex.image and tex.image.use_alpha)
+        col.active = bool(tex.image and tex.image.alpha_mode != 'NONE')
         col.prop(tex, "use_calculate_alpha", text="Calculate")
         col.prop(tex, "invert_alpha", text="Invert")
 

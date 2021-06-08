@@ -43,8 +43,7 @@
  * - These are used in all depsgraph code and by all callers of Depsgraph API...
  */
 
-#ifndef __DEG_DEPSGRAPH_H__
-#define __DEG_DEPSGRAPH_H__
+#pragma once
 
 #include "DNA_ID.h"
 
@@ -55,9 +54,6 @@ typedef struct Depsgraph Depsgraph;
 
 struct Main;
 
-struct PointerRNA;
-struct PropertyRNA;
-struct RenderEngineType;
 struct Scene;
 struct ViewLayer;
 
@@ -90,7 +86,15 @@ extern "C" {
 
 /* Create new Depsgraph instance */
 // TODO: what args are needed here? What's the building-graph entry point?
-Depsgraph *DEG_graph_new(struct Scene *scene, struct ViewLayer *view_layer, eEvaluationMode mode);
+Depsgraph *DEG_graph_new(struct Main *bmain,
+                         struct Scene *scene,
+                         struct ViewLayer *view_layer,
+                         eEvaluationMode mode);
+
+void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
+                              struct Main *bmain,
+                              struct Scene *scene,
+                              struct ViewLayer *view_layer);
 
 /* Free Depsgraph itself and all its data */
 void DEG_graph_free(Depsgraph *graph);
@@ -106,11 +110,13 @@ void DEG_free_node_types(void);
 /* Update Tagging -------------------------------- */
 
 /* Update dependency graph when visible scenes/layers changes. */
-void DEG_graph_on_visible_update(struct Main *bmain, Depsgraph *depsgraph);
+void DEG_graph_on_visible_update(struct Main *bmain, Depsgraph *depsgraph, const bool do_time);
 
 /* Update all dependency graphs when visible scenes/layers changes. */
 void DEG_on_visible_update(struct Main *bmain, const bool do_time);
 
+/* NOTE: Will return NULL if the flag is not known, allowing to gracefully handle situations
+ * when recalc flag has been removed. */
 const char *DEG_update_tag_as_string(IDRecalcFlag flag);
 
 void DEG_id_tag_update(struct ID *id, int flag);
@@ -121,45 +127,42 @@ void DEG_graph_id_tag_update(struct Main *bmain,
                              struct ID *id,
                              int flag);
 
+/* Tag all dependency graphs when time has changed. */
+void DEG_time_tag_update(struct Main *bmain);
+
+/* Tag a dependency graph when time has changed. */
+void DEG_graph_time_tag_update(struct Depsgraph *depsgraph);
+
 /* Mark a particular datablock type as having changing. This does
  * not cause any updates but is used by external render engines to detect if for
  * example a datablock was removed. */
 void DEG_graph_id_type_tag(struct Depsgraph *depsgraph, short id_type);
 void DEG_id_type_tag(struct Main *bmain, short id_type);
 
-void DEG_ids_clear_recalc(struct Main *bmain, Depsgraph *depsgraph);
+/* Set a depsgraph to flush updates to editors. This would be done
+ * for viewport depsgraphs, but not render or export depsgraph for example. */
+void DEG_enable_editors_update(struct Depsgraph *depsgraph);
 
-/* Update Flushing ------------------------------- */
+/* Check if something was changed in the database and inform editors about this. */
+void DEG_editors_update(struct Depsgraph *depsgraph, bool time);
 
-/* Flush updates for IDs in a single scene. */
-void DEG_graph_flush_update(struct Main *bmain, Depsgraph *depsgraph);
+/* Clear recalc flags after editors or renderers have handled updates. */
+void DEG_ids_clear_recalc(Depsgraph *depsgraph, const bool backup);
 
-/* Check if something was changed in the database and inform
- * editors about this.
- */
-void DEG_ids_check_recalc(struct Main *bmain,
-                          struct Depsgraph *depsgraph,
-                          struct Scene *scene,
-                          struct ViewLayer *view_layer,
-                          bool time);
+/* Restore recalc flags, backed up by a previous call to DEG_ids_clear_recalc.
+ * This also clears the backup. */
+void DEG_ids_restore_recalc(Depsgraph *depsgraph);
 
 /* ************************************************ */
 /* Evaluation Engine API */
 
 /* Graph Evaluation  ----------------------------- */
 
-/* Frame changed recalculation entry point
- * < context_type: context to perform evaluation for
- * < ctime: (frame) new frame to evaluate values on
- */
-void DEG_evaluate_on_framechange(struct Main *bmain, Depsgraph *graph, float ctime);
+/* Frame changed recalculation entry point. */
+void DEG_evaluate_on_framechange(Depsgraph *graph, float ctime);
 
-/* Data changed recalculation entry point.
- * < context_type: context to perform evaluation for
- */
+/* Data changed recalculation entry point. */
 void DEG_evaluate_on_refresh(Depsgraph *graph);
-
-bool DEG_needs_eval(Depsgraph *graph);
 
 /* Editors Integration  -------------------------- */
 
@@ -175,20 +178,21 @@ typedef struct DEGEditorUpdateContext {
 } DEGEditorUpdateContext;
 
 typedef void (*DEG_EditorUpdateIDCb)(const DEGEditorUpdateContext *update_ctx, struct ID *id);
-typedef void (*DEG_EditorUpdateSceneCb)(const DEGEditorUpdateContext *update_ctx, int updated);
+typedef void (*DEG_EditorUpdateSceneCb)(const DEGEditorUpdateContext *update_ctx,
+                                        const bool updated);
 
 /* Set callbacks which are being called when depsgraph changes. */
 void DEG_editors_set_update_cb(DEG_EditorUpdateIDCb id_func, DEG_EditorUpdateSceneCb scene_func);
 
 /* Evaluation  ----------------------------------- */
 
+bool DEG_is_evaluating(const struct Depsgraph *depsgraph);
+
 bool DEG_is_active(const struct Depsgraph *depsgraph);
 void DEG_make_active(struct Depsgraph *depsgraph);
 void DEG_make_inactive(struct Depsgraph *depsgraph);
 
 /* Evaluation Debug ------------------------------ */
-
-bool DEG_debug_is_evaluating(struct Depsgraph *depsgraph);
 
 void DEG_debug_print_begin(struct Depsgraph *depsgraph);
 
@@ -231,5 +235,3 @@ void DEG_debug_print_eval_time(struct Depsgraph *depsgraph,
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
-
-#endif /* __DEG_DEPSGRAPH_H__ */

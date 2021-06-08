@@ -18,6 +18,7 @@
  * \ingroup pygen
  */
 
+/* Use a define instead of `#pragma once` because of `bmesh_py_types.h` */
 #ifndef __PY_CAPI_UTILS_H__
 #define __PY_CAPI_UTILS_H__
 
@@ -38,8 +39,8 @@ PyObject *PyC_Err_SetString_Prefix(PyObject *exception_type_prefix, const char *
 
 void PyC_Err_PrintWithFunc(PyObject *py_func);
 
-void PyC_FileAndNum(const char **filename, int *lineno);
-void PyC_FileAndNum_Safe(const char **filename, int *lineno); /* checks python is running */
+void PyC_FileAndNum(const char **r_filename, int *r_lineno);
+void PyC_FileAndNum_Safe(const char **r_filename, int *r_lineno); /* checks python is running */
 int PyC_AsArray_FAST(void *array,
                      PyObject *value_fast,
                      const Py_ssize_t length,
@@ -84,10 +85,8 @@ PyObject *PyC_DefaultNameSpace(const char *filename);
 void PyC_RunQuicky(const char *filepath, int n, ...);
 bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[]);
 
-void PyC_MainModule_Backup(PyObject **main_mod);
+void PyC_MainModule_Backup(PyObject **r_main_mod);
 void PyC_MainModule_Restore(PyObject *main_mod);
-
-void PyC_SetHomePath(const char *py_path_bundle);
 
 bool PyC_IsInterpreterActive(void);
 
@@ -99,7 +98,7 @@ typedef struct PyC_FlagSet {
   const char *identifier;
 } PyC_FlagSet;
 
-char *PyC_FlagSet_AsString(PyC_FlagSet *item);
+PyObject *PyC_FlagSet_AsString(PyC_FlagSet *item);
 int PyC_FlagSet_ValueFromID_int(PyC_FlagSet *item, const char *identifier, int *r_value);
 int PyC_FlagSet_ValueFromID(PyC_FlagSet *item,
                             const char *identifier,
@@ -119,12 +118,30 @@ bool PyC_RunString_AsIntPtr(const char **imports,
                             const char *expr,
                             const char *filename,
                             intptr_t *r_value);
+bool PyC_RunString_AsStringAndSize(const char **imports,
+                                   const char *expr,
+                                   const char *filename,
+                                   char **r_value,
+                                   size_t *r_value_size);
 bool PyC_RunString_AsString(const char **imports,
                             const char *expr,
                             const char *filename,
                             char **r_value);
 
 int PyC_ParseBool(PyObject *o, void *p);
+
+struct PyC_StringEnumItems {
+  int value;
+  const char *id;
+};
+struct PyC_StringEnum {
+  const struct PyC_StringEnumItems *items;
+  int value_found;
+};
+
+int PyC_ParseStringEnum(PyObject *o, void *p);
+const char *PyC_StringEnum_FindIDFromValue(const struct PyC_StringEnumItems *items,
+                                           const int value);
 
 int PyC_CheckArgs_DeepCopy(PyObject *args);
 

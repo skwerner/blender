@@ -24,6 +24,7 @@
 #include "DNA_key_types.h"
 #include "DNA_lattice_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_object_types.h"
 
 #include "BLI_utildefines.h"
 
@@ -36,20 +37,20 @@
 #  include "DNA_object_types.h"
 #  include "DNA_scene_types.h"
 
-#  include "BLI_string.h"
+#  include "BKE_deform.h"
 #  include "BKE_lattice.h"
 #  include "BKE_main.h"
-#  include "BKE_deform.h"
+#  include "BLI_string.h"
 
 #  include "DEG_depsgraph.h"
 
+#  include "ED_lattice.h"
 #  include "WM_api.h"
 #  include "WM_types.h"
-#  include "ED_lattice.h"
 
 static void rna_LatticePoint_co_get(PointerRNA *ptr, float *values)
 {
-  Lattice *lt = (Lattice *)ptr->id.data;
+  Lattice *lt = (Lattice *)ptr->owner_id;
   BPoint *bp = (BPoint *)ptr->data;
   int index = bp - lt->def;
   int u, v, w;
@@ -63,7 +64,7 @@ static void rna_LatticePoint_co_get(PointerRNA *ptr, float *values)
 
 static void rna_LatticePoint_groups_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
 {
-  Lattice *lt = (Lattice *)ptr->id.data;
+  Lattice *lt = (Lattice *)ptr->owner_id;
 
   if (lt->dvert) {
     BPoint *bp = (BPoint *)ptr->data;
@@ -72,8 +73,9 @@ static void rna_LatticePoint_groups_begin(CollectionPropertyIterator *iter, Poin
     rna_iterator_array_begin(
         iter, (void *)dvert->dw, sizeof(MDeformWeight), dvert->totweight, 0, NULL);
   }
-  else
+  else {
     rna_iterator_array_begin(iter, NULL, 0, 0, 0, NULL);
+  }
 }
 
 static void rna_Lattice_points_begin(CollectionPropertyIterator *iter, PointerRNA *ptr)
@@ -81,17 +83,20 @@ static void rna_Lattice_points_begin(CollectionPropertyIterator *iter, PointerRN
   Lattice *lt = (Lattice *)ptr->data;
   int tot = lt->pntsu * lt->pntsv * lt->pntsw;
 
-  if (lt->editlatt && lt->editlatt->latt->def)
+  if (lt->editlatt && lt->editlatt->latt->def) {
     rna_iterator_array_begin(iter, (void *)lt->editlatt->latt->def, sizeof(BPoint), tot, 0, NULL);
-  else if (lt->def)
+  }
+  else if (lt->def) {
     rna_iterator_array_begin(iter, (void *)lt->def, sizeof(BPoint), tot, 0, NULL);
-  else
+  }
+  else {
     rna_iterator_array_begin(iter, NULL, 0, 0, 0, NULL);
+  }
 }
 
 static void rna_Lattice_update_data(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
+  ID *id = ptr->owner_id;
 
   DEG_id_tag_update(id, 0);
   WM_main_add_notifier(NC_GEOM | ND_DATA, id);
@@ -105,8 +110,8 @@ static void rna_Lattice_update_data_editlatt(Main *UNUSED(bmain),
                                              Scene *UNUSED(scene),
                                              PointerRNA *ptr)
 {
-  ID *id = ptr->id.data;
-  Lattice *lt = (Lattice *)ptr->id.data;
+  ID *id = ptr->owner_id;
+  Lattice *lt = (Lattice *)ptr->owner_id;
 
   if (lt->editlatt) {
     Lattice *lt_em = lt->editlatt->latt;
@@ -123,21 +128,22 @@ static void rna_Lattice_update_data_editlatt(Main *UNUSED(bmain),
 
 static void rna_Lattice_update_size(Main *bmain, Scene *scene, PointerRNA *ptr)
 {
-  Lattice *lt = ptr->id.data;
+  Lattice *lt = (Lattice *)ptr->owner_id;
   Object *ob;
   int newu, newv, neww;
 
-  /* we don't modify the actual pnts, but go through opnts instead */
+  /* We don't modify the actual `pnts`, but go through `opnts` instead. */
   newu = (lt->opntsu > 0) ? lt->opntsu : lt->pntsu;
   newv = (lt->opntsv > 0) ? lt->opntsv : lt->pntsv;
   neww = (lt->opntsw > 0) ? lt->opntsw : lt->pntsw;
 
-  /* BKE_lattice_resize needs an object, any object will have the same result */
+  /* #BKE_lattice_resize needs an object, any object will have the same result */
   for (ob = bmain->objects.first; ob; ob = ob->id.next) {
     if (ob->data == lt) {
       BKE_lattice_resize(lt, newu, newv, neww, ob);
-      if (lt->editlatt)
+      if (lt->editlatt) {
         BKE_lattice_resize(lt->editlatt->latt, newu, newv, neww, ob);
+      }
       break;
     }
   }
@@ -145,8 +151,9 @@ static void rna_Lattice_update_size(Main *bmain, Scene *scene, PointerRNA *ptr)
   /* otherwise without, means old points are not repositioned */
   if (!ob) {
     BKE_lattice_resize(lt, newu, newv, neww, NULL);
-    if (lt->editlatt)
+    if (lt->editlatt) {
       BKE_lattice_resize(lt->editlatt->latt, newu, newv, neww, NULL);
+    }
   }
 
   rna_Lattice_update_data(bmain, scene, ptr);
@@ -156,18 +163,22 @@ static void rna_Lattice_use_outside_set(PointerRNA *ptr, bool value)
 {
   Lattice *lt = ptr->data;
 
-  if (value)
+  if (value) {
     lt->flag |= LT_OUTSIDE;
-  else
+  }
+  else {
     lt->flag &= ~LT_OUTSIDE;
+  }
 
   outside_lattice(lt);
 
   if (lt->editlatt) {
-    if (value)
+    if (value) {
       lt->editlatt->latt->flag |= LT_OUTSIDE;
-    else
+    }
+    else {
       lt->editlatt->latt->flag &= ~LT_OUTSIDE;
+    }
 
     outside_lattice(lt->editlatt->latt);
   }
@@ -214,14 +225,16 @@ static void rna_Lattice_vg_name_set(PointerRNA *ptr, const char *value)
 /* annoying, but is a consequence of RNA structures... */
 static char *rna_LatticePoint_path(PointerRNA *ptr)
 {
-  Lattice *lt = (Lattice *)ptr->id.data;
+  Lattice *lt = (Lattice *)ptr->owner_id;
   void *point = ptr->data;
   BPoint *points = NULL;
 
-  if (lt->editlatt && lt->editlatt->latt->def)
+  if (lt->editlatt && lt->editlatt->latt->def) {
     points = lt->editlatt->latt->def;
-  else
+  }
+  else {
     points = lt->def;
+  }
 
   if (points && point) {
     int tot = lt->pntsu * lt->pntsv * lt->pntsw;
@@ -239,7 +252,7 @@ static char *rna_LatticePoint_path(PointerRNA *ptr)
 
 static bool rna_Lattice_is_editmode_get(PointerRNA *ptr)
 {
-  Lattice *lt = (Lattice *)ptr->id.data;
+  Lattice *lt = (Lattice *)ptr->owner_id;
   return (lt->editlatt != NULL);
 }
 
@@ -256,7 +269,7 @@ static void rna_def_latticepoint(BlenderRNA *brna)
   RNA_def_struct_path_func(srna, "rna_LatticePoint_path");
 
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, NULL, "f1", 0);
+  RNA_def_property_boolean_sdna(prop, NULL, "f1", SELECT);
   RNA_def_property_ui_text(prop, "Point selected", "Selection status");
 
   prop = RNA_def_property(srna, "co", PROP_FLOAT, PROP_TRANSLATION);
@@ -358,7 +371,7 @@ static void rna_def_lattice(BlenderRNA *brna)
   RNA_def_property_boolean_sdna(prop, NULL, "flag", LT_OUTSIDE);
   RNA_def_property_boolean_funcs(prop, NULL, "rna_Lattice_use_outside_set");
   RNA_def_property_ui_text(
-      prop, "Outside", "Only draw, and take into account, the outer vertices");
+      prop, "Outside", "Only display and take into account the outer vertices");
   RNA_def_property_update(prop, 0, "rna_Lattice_update_data_editlatt");
 
   prop = RNA_def_property(srna, "vertex_group", PROP_STRING, PROP_NONE);
@@ -370,6 +383,8 @@ static void rna_def_lattice(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "shape_keys", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "key");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
+  RNA_def_property_clear_flag(prop, PROP_PTR_NO_OWNERSHIP);
   RNA_def_property_ui_text(prop, "Shape Keys", "");
 
   prop = RNA_def_property(srna, "points", PROP_COLLECTION, PROP_NONE);

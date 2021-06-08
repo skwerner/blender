@@ -16,11 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_FASTGAUSSIANBLUROPERATION_H__
-#define __COM_FASTGAUSSIANBLUROPERATION_H__
+#pragma once
 
 #include "COM_BlurBaseOperation.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
 
 class FastGaussianBlurOperation : public BlurBaseOperation {
  private:
@@ -32,13 +33,13 @@ class FastGaussianBlurOperation : public BlurBaseOperation {
   FastGaussianBlurOperation();
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
-  void executePixel(float output[4], int x, int y, void *data);
+                                        rcti *output) override;
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   static void IIR_gauss(MemoryBuffer *src, float sigma, unsigned int channel, unsigned int xy);
-  void *initializeTileData(rcti *rect);
-  void deinitExecution();
-  void initExecution();
+  void *initializeTileData(rcti *rect) override;
+  void deinitExecution() override;
+  void initExecution() override;
 };
 
 enum {
@@ -63,12 +64,12 @@ class FastGaussianBlurValueOperation : public NodeOperation {
   FastGaussianBlurValueOperation();
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
-  void executePixel(float output[4], int x, int y, void *data);
+                                        rcti *output) override;
+  void executePixel(float output[4], int x, int y, void *data) override;
 
-  void *initializeTileData(rcti *rect);
-  void deinitExecution();
-  void initExecution();
+  void *initializeTileData(rcti *rect) override;
+  void deinitExecution() override;
+  void initExecution() override;
   void setSigma(float sigma)
   {
     this->m_sigma = sigma;
@@ -81,4 +82,4 @@ class FastGaussianBlurValueOperation : public NodeOperation {
   }
 };
 
-#endif
+}  // namespace blender::compositor

@@ -16,12 +16,13 @@
  * Copyright 2013, Blender Foundation.
  */
 
-#ifndef __COM_NODECONVERTER_H__
-#define __COM_NODECONVERTER_H__
+#pragma once
 
 #ifdef WITH_CXX_GUARDEDALLOC
 #  include "MEM_guardedalloc.h"
 #endif
+
+namespace blender::compositor {
 
 class NodeInput;
 class NodeOutput;
@@ -122,4 +123,4 @@ class NodeConverter {
 #endif
 };
 
-#endif /* __COM_NODECONVERTER_H__ */
+}  // namespace blender::compositor

@@ -19,8 +19,8 @@
 # ***** END GPL LICENSE BLOCK *****
 
 # add_subdirectory(atomic)  # header only
+add_subdirectory(atomic)
 add_subdirectory(clog)
-add_subdirectory(string)
 add_subdirectory(ghost)
 add_subdirectory(guardedalloc)
 add_subdirectory(libmv)
@@ -31,6 +31,7 @@ add_subdirectory(opensubdiv)
 add_subdirectory(mikktspace)
 add_subdirectory(glew-mx)
 add_subdirectory(eigen)
+add_subdirectory(sky)
 
 if(WITH_AUDASPACE)
   add_subdirectory(audaspace)
@@ -38,14 +39,6 @@ endif()
 
 if(WITH_MOD_REMESH)
   add_subdirectory(dualcon)
-endif()
-
-if(WITH_MOD_FLUID)
-  add_subdirectory(elbeem)
-endif()
-
-if(WITH_MOD_SMOKE)
-  add_subdirectory(smoke)
 endif()
 
 if(WITH_IK_SOLVER)
@@ -73,6 +66,22 @@ if(WIN32)
   add_subdirectory(utfconv)
 endif()
 
+if(WITH_MOD_FLUID)
+  add_subdirectory(mantaflow)
+endif()
+
 if(WITH_OPENVDB)
   add_subdirectory(openvdb)
+endif()
+
+if(WITH_QUADRIFLOW)
+  add_subdirectory(quadriflow)
+endif()
+
+if(WITH_CODEC_FFMPEG)
+  add_subdirectory(ffmpeg)
+endif()
+
+if(UNIX AND NOT APPLE)
+  add_subdirectory(libc_compat)
 endif()

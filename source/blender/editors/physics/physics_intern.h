@@ -21,8 +21,7 @@
  * \ingroup edphys
  */
 
-#ifndef __PHYSICS_INTERN_H__
-#define __PHYSICS_INTERN_H__
+#pragma once
 
 struct Depsgraph;
 struct Object;
@@ -30,7 +29,6 @@ struct PTCacheEdit;
 struct ParticleSystem;
 struct PointCache;
 struct Scene;
-struct ViewLayer;
 struct wmOperatorType;
 
 /* particle_edit.c */
@@ -39,6 +37,7 @@ void PARTICLE_OT_select_roots(struct wmOperatorType *ot);
 void PARTICLE_OT_select_tips(struct wmOperatorType *ot);
 void PARTICLE_OT_select_random(struct wmOperatorType *ot);
 void PARTICLE_OT_select_linked(struct wmOperatorType *ot);
+void PARTICLE_OT_select_linked_pick(struct wmOperatorType *ot);
 void PARTICLE_OT_select_less(struct wmOperatorType *ot);
 void PARTICLE_OT_select_more(struct wmOperatorType *ot);
 
@@ -70,7 +69,7 @@ void recalc_lengths(struct PTCacheEdit *edit);
 void recalc_emitter_field(struct Depsgraph *depsgraph,
                           struct Object *ob,
                           struct ParticleSystem *psys);
-void update_world_cos(struct Depsgraph *depsgraph, struct Object *ob, struct PTCacheEdit *edit);
+void update_world_cos(struct Object *ob, struct PTCacheEdit *edit);
 
 /* particle_object.c */
 void OBJECT_OT_particle_system_add(struct wmOperatorType *ot);
@@ -104,7 +103,19 @@ void BOID_OT_state_move_up(struct wmOperatorType *ot);
 void BOID_OT_state_move_down(struct wmOperatorType *ot);
 
 /* physics_fluid.c */
-void FLUID_OT_bake(struct wmOperatorType *ot);
+void FLUID_OT_bake_all(struct wmOperatorType *ot);
+void FLUID_OT_free_all(struct wmOperatorType *ot);
+void FLUID_OT_bake_data(struct wmOperatorType *ot);
+void FLUID_OT_free_data(struct wmOperatorType *ot);
+void FLUID_OT_bake_noise(struct wmOperatorType *ot);
+void FLUID_OT_free_noise(struct wmOperatorType *ot);
+void FLUID_OT_bake_mesh(struct wmOperatorType *ot);
+void FLUID_OT_free_mesh(struct wmOperatorType *ot);
+void FLUID_OT_bake_particles(struct wmOperatorType *ot);
+void FLUID_OT_free_particles(struct wmOperatorType *ot);
+void FLUID_OT_bake_guides(struct wmOperatorType *ot);
+void FLUID_OT_free_guides(struct wmOperatorType *ot);
+void FLUID_OT_pause_bake(struct wmOperatorType *ot);
 
 /* dynamicpaint.c */
 void DPAINT_OT_bake(struct wmOperatorType *ot);
@@ -140,5 +151,3 @@ void RIGIDBODY_OT_constraint_remove(struct wmOperatorType *ot);
 void RIGIDBODY_OT_world_add(struct wmOperatorType *ot);
 void RIGIDBODY_OT_world_remove(struct wmOperatorType *ot);
 void RIGIDBODY_OT_world_export(struct wmOperatorType *ot);
-
-#endif /* __PHYSICS_INTERN_H__ */

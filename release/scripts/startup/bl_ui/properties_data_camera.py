@@ -84,7 +84,6 @@ class DATA_PT_lens(CameraButtonsPanel, Panel):
         col.separator()
 
         if cam.type == 'PERSP':
-            col = layout.column()
             if cam.lens_unit == 'MILLIMETERS':
                 col.prop(cam, "lens")
             elif cam.lens_unit == 'FOV':
@@ -184,7 +183,7 @@ class DATA_PT_camera(CameraButtonsPanel, Panel):
     bl_options = {'DEFAULT_CLOSED'}
     COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         CAMERA_PT_presets.draw_panel_header(self.layout)
 
     def draw(self, context):
@@ -212,19 +211,26 @@ class DATA_PT_camera(CameraButtonsPanel, Panel):
 class DATA_PT_camera_dof(CameraButtonsPanel, Panel):
     bl_label = "Depth of Field"
     bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+    COMPAT_ENGINES = {'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
+
+    def draw_header(self, context):
+        cam = context.camera
+        dof = cam.dof
+        self.layout.prop(dof, "use_dof", text="")
 
     def draw(self, context):
         layout = self.layout
         layout.use_property_split = True
 
         cam = context.camera
+        dof = cam.dof
+        layout.active = dof.use_dof
 
         col = layout.column()
-        col.prop(cam, "dof_object", text="Focus on Object")
+        col.prop(dof, "focus_object", text="Focus on Object")
         sub = col.column()
-        sub.active = (cam.dof_object is None)
-        sub.prop(cam, "dof_distance", text="Focus Distance")
+        sub.active = (dof.focus_object is None)
+        sub.prop(dof, "focus_distance", text="Focus Distance")
 
 
 class DATA_PT_camera_dof_aperture(CameraButtonsPanel, Panel):
@@ -237,17 +243,18 @@ class DATA_PT_camera_dof_aperture(CameraButtonsPanel, Panel):
         layout.use_property_split = True
 
         cam = context.camera
-        dof_options = cam.gpu_dof
+        dof = cam.dof
+        layout.active = dof.use_dof
 
         flow = layout.grid_flow(row_major=True, columns=0, even_columns=True, even_rows=False, align=False)
 
         col = flow.column()
-        col.prop(dof_options, "fstop")
-        col.prop(dof_options, "blades")
+        col.prop(dof, "aperture_fstop")
 
         col = flow.column()
-        col.prop(dof_options, "rotation")
-        col.prop(dof_options, "ratio")
+        col.prop(dof, "aperture_blades")
+        col.prop(dof, "aperture_rotation")
+        col.prop(dof, "aperture_ratio")
 
 
 class DATA_PT_camera_background_image(CameraButtonsPanel, Panel):
@@ -281,7 +288,7 @@ class DATA_PT_camera_background_image(CameraButtonsPanel, Panel):
             elif bg.source == 'MOVIE_CLIP' and bg.clip:
                 row.prop(bg.clip, "name", text="", emboss=False)
             elif bg.source and bg.use_camera_clip:
-                row.label(text="Camera Clip")
+                row.label(text="Active Clip")
             else:
                 row.label(text="Not Set")
 
@@ -321,7 +328,7 @@ class DATA_PT_camera_background_image(CameraButtonsPanel, Panel):
                             sub.template_image_stereo_3d(bg.image.stereo_3d_format)
 
                 elif bg.source == 'MOVIE_CLIP':
-                    box.prop(bg, "use_camera_clip")
+                    box.prop(bg, "use_camera_clip", text="Active Clip")
 
                     column = box.column()
                     column.active = not bg.use_camera_clip
@@ -352,8 +359,9 @@ class DATA_PT_camera_background_image(CameraButtonsPanel, Panel):
                     col.prop(bg, "rotation")
                     col.prop(bg, "scale")
 
-                    col.prop(bg, "use_flip_x")
-                    col.prop(bg, "use_flip_y")
+                    col = box.column(heading="Flip")
+                    col.prop(bg, "use_flip_x", text="X")
+                    col.prop(bg, "use_flip_y", text="Y")
 
 
 class DATA_PT_camera_display(CameraButtonsPanel, Panel):
@@ -369,22 +377,23 @@ class DATA_PT_camera_display(CameraButtonsPanel, Panel):
 
         col = layout.column(align=True)
 
-        col.separator()
-
         col.prop(cam, "display_size", text="Size")
 
-        col.separator()
-
-        flow = layout.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=False)
-
-        col = flow.column()
+        col = layout.column(heading="Show")
         col.prop(cam, "show_limits", text="Limits")
-        col = flow.column()
         col.prop(cam, "show_mist", text="Mist")
-        col = flow.column()
         col.prop(cam, "show_sensor", text="Sensor")
-        col = flow.column()
         col.prop(cam, "show_name", text="Name")
+
+        col = layout.column(align=False, heading="Passepartout")
+        col.use_property_decorate = False
+        row = col.row(align=True)
+        sub = row.row(align=True)
+        sub.prop(cam, "show_passepartout", text="")
+        sub = sub.row(align=True)
+        sub.active = cam.show_passepartout
+        sub.prop(cam, "passepartout_alpha", text="")
+        row.prop_decorator(cam, "passepartout_alpha")
 
 
 class DATA_PT_camera_display_composition_guides(CameraButtonsPanel, Panel):
@@ -399,45 +408,20 @@ class DATA_PT_camera_display_composition_guides(CameraButtonsPanel, Panel):
 
         cam = context.camera
 
-        flow = layout.grid_flow(row_major=False, columns=0, even_columns=False, even_rows=False, align=False)
+        layout.prop(cam, "show_composition_thirds")
 
-        col = flow.column()
+        col = layout.column(heading="Center", align=True)
         col.prop(cam, "show_composition_center")
-        col = flow.column()
-        col.prop(cam, "show_composition_center_diagonal")
-        col = flow.column()
-        col.prop(cam, "show_composition_thirds")
-        col = flow.column()
-        col.prop(cam, "show_composition_golden")
-        col = flow.column()
-        col.prop(cam, "show_composition_golden_tria_a")
-        col = flow.column()
-        col.prop(cam, "show_composition_golden_tria_b")
-        col = flow.column()
-        col.prop(cam, "show_composition_harmony_tri_a")
-        col = flow.column()
-        col.prop(cam, "show_composition_harmony_tri_b")
+        col.prop(cam, "show_composition_center_diagonal", text="Diagonal")
 
+        col = layout.column(heading="Golden", align=True)
+        col.prop(cam, "show_composition_golden", text="Ratio")
+        col.prop(cam, "show_composition_golden_tria_a", text="Triangle A")
+        col.prop(cam, "show_composition_golden_tria_b", text="Triangle B")
 
-class DATA_PT_camera_display_passepartout(CameraButtonsPanel, Panel):
-    bl_label = "Passepartout"
-    bl_parent_id = "DATA_PT_camera_display"
-    bl_options = {'DEFAULT_CLOSED'}
-    COMPAT_ENGINES = {'BLENDER_RENDER', 'BLENDER_EEVEE', 'BLENDER_WORKBENCH'}
-
-    def draw_header(self, context):
-        cam = context.camera
-
-        self.layout.prop(cam, "show_passepartout", text="")
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-
-        cam = context.camera
-
-        layout.active = cam.show_passepartout
-        layout.prop(cam, "passepartout_alpha", text="Opacity", slider=True)
+        col = layout.column(heading="Harmony", align=True)
+        col.prop(cam, "show_composition_harmony_tri_a", text="Triangle A")
+        col.prop(cam, "show_composition_harmony_tri_b", text="Triangle B")
 
 
 class DATA_PT_camera_safe_areas(CameraButtonsPanel, Panel):
@@ -450,7 +434,7 @@ class DATA_PT_camera_safe_areas(CameraButtonsPanel, Panel):
 
         self.layout.prop(cam, "show_safe_areas", text="")
 
-    def draw_header_preset(self, context):
+    def draw_header_preset(self, _context):
         SAFE_AREAS_PT_presets.draw_panel_header(self.layout)
 
     def draw(self, context):
@@ -493,6 +477,7 @@ class DATA_PT_camera_safe_areas_center_cut(CameraButtonsPanel, Panel):
 
         col = layout.column()
         col.prop(safe_data, "title_center", slider=True)
+        col.prop(safe_data, "action_center", slider=True)
 
 
 class DATA_PT_custom_props_camera(CameraButtonsPanel, PropertyPanel, Panel):
@@ -538,7 +523,6 @@ classes = (
     DATA_PT_camera_background_image,
     DATA_PT_camera_display,
     DATA_PT_camera_display_composition_guides,
-    DATA_PT_camera_display_passepartout,
     DATA_PT_custom_props_camera,
 )
 

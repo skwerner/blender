@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_COLORSPILLOPERATION_H__
-#define __COM_COLORSPILLOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 /**
  * this program converts an input color to an output value.
@@ -42,12 +44,12 @@ class ColorSpillOperation : public NodeOperation {
   ColorSpillOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 
   void setSettings(NodeColorspill *nodeColorSpill)
   {
@@ -65,4 +67,4 @@ class ColorSpillOperation : public NodeOperation {
   float calculateMapValue(float fac, float *input);
 };
 
-#endif
+}  // namespace blender::compositor

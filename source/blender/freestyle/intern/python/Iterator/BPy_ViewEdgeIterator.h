@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_VIEWEDGEITERATOR_H__
-#define __FREESTYLE_PYTHON_VIEWEDGEITERATOR_H__
+#pragma once
 
 #include "../BPy_Iterator.h"
 
@@ -39,7 +38,7 @@ extern PyTypeObject ViewEdgeIterator_Type;
 /*---------------------------Python BPy_ViewEdgeIterator structure definition----------*/
 typedef struct {
   BPy_Iterator py_it;
-  ViewEdgeInternal::ViewEdgeIterator *ve_it;
+  Freestyle::ViewEdgeInternal::ViewEdgeIterator *ve_it;
 } BPy_ViewEdgeIterator;
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -47,5 +46,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_VIEWEDGEITERATOR_H__ */

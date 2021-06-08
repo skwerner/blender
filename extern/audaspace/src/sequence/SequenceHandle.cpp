@@ -22,6 +22,7 @@
 #include <mutex>
 
 #define KEEP_TIME 10
+#define POSITION_EPSILON (1.0 / static_cast<double>(RATE_48000))
 
 AUD_NAMESPACE_BEGIN
 
@@ -57,14 +58,14 @@ void SequenceHandle::start()
 	m_valid = m_handle.get();
 }
 
-bool SequenceHandle::updatePosition(float position)
+bool SequenceHandle::updatePosition(double position)
 {
 	std::lock_guard<ILockable> lock(*m_entry);
 
 	if(m_handle.get())
 	{
 		// we currently have a handle, let's check where we are
-		if(position >= m_entry->m_end)
+		if(position - POSITION_EPSILON >= m_entry->m_end)
 		{
 			if(position >= m_entry->m_end + KEEP_TIME)
 				// far end, stopping
@@ -76,7 +77,7 @@ bool SequenceHandle::updatePosition(float position)
 				return true;
 			}
 		}
-		else if(position >= m_entry->m_begin)
+		else if(position + POSITION_EPSILON >= m_entry->m_begin)
 		{
 			// inside, resuming
 			m_handle->resume();
@@ -98,7 +99,7 @@ bool SequenceHandle::updatePosition(float position)
 	else
 	{
 		// we don't have a handle, let's start if we should be playing
-		if(position >= m_entry->m_begin && position <= m_entry->m_end)
+		if(position + POSITION_EPSILON >= m_entry->m_begin && position - POSITION_EPSILON <= m_entry->m_end)
 		{
 			start();
 			return m_valid;
@@ -140,7 +141,7 @@ void SequenceHandle::stop()
 	m_3dhandle = nullptr;
 }
 
-void SequenceHandle::update(float position, float frame, float fps)
+void SequenceHandle::update(double position, float frame, float fps)
 {
 	if(m_sound_status != m_entry->m_sound_status)
 	{
@@ -229,7 +230,7 @@ void SequenceHandle::update(float position, float frame, float fps)
 		m_handle->setVolume(0);
 }
 
-bool SequenceHandle::seek(float position)
+bool SequenceHandle::seek(double position)
 {
 	if(!m_valid)
 		// sound not valid, aborting
@@ -240,7 +241,7 @@ bool SequenceHandle::seek(float position)
 		return false;
 
 	std::lock_guard<ILockable> lock(*m_entry);
-	float seekpos = position - m_entry->m_begin;
+	double seekpos = position - m_entry->m_begin;
 	if(seekpos < 0)
 		seekpos = 0;
 	seekpos += m_entry->m_skip;

@@ -23,14 +23,14 @@
 
 #include "intern/node/deg_node_factory.h"
 
-namespace DEG {
+namespace blender::deg {
 
 /* Global type registry */
-static DepsNodeFactory *node_typeinfo_registry[static_cast<int>(NodeType::NUM_TYPES)] = {NULL};
+static DepsNodeFactory *node_typeinfo_registry[static_cast<int>(NodeType::NUM_TYPES)] = {nullptr};
 
 void register_node_typeinfo(DepsNodeFactory *factory)
 {
-  BLI_assert(factory != NULL);
+  BLI_assert(factory != nullptr);
   const int type_as_int = static_cast<int>(factory->type());
   node_typeinfo_registry[type_as_int] = factory;
 }
@@ -42,4 +42,4 @@ DepsNodeFactory *type_get_factory(const NodeType type)
   return node_typeinfo_registry[type_as_int];
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

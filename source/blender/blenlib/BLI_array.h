@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_ARRAY_H__
-#define __BLI_ARRAY_H__
+#pragma once
 
 /** \file
  * \ingroup bli
@@ -42,7 +41,8 @@
 
 /** \} */
 
-/** BLI_array.c
+/**
+ * BLI_array.c
  *
  * Doing the realloc in a macro isn't so simple,
  * so use a function the macros can use.
@@ -83,9 +83,10 @@ void _bli_array_grow_func(void **arr_p,
           ((void *)(_##arr##_static) != \
            NULL) && /* don't add _##arr##_len below because it must be zero */ \
           (_bli_array_totalsize_static(arr) >= \
-           _##arr##_len + (num))) ? /* we have an empty array and a static var big enough */ \
+           (size_t)(_##arr##_len + \
+                    (num)))) ? /* we have an empty array and a static var big enough */ \
              (void)(arr = (void *)_##arr##_static) : /* use existing static array or allocate */ \
-             (LIKELY(_bli_array_totalsize(arr) >= _##arr##_len + (num)) ? \
+             (LIKELY(_bli_array_totalsize(arr) >= (size_t)(_##arr##_len + (num))) ? \
                   (void)0 /* do nothing */ : \
                   _bli_array_grow_func((void **)&(arr), \
                                        _##arr##_static, \
@@ -116,7 +117,7 @@ void _bli_array_grow_func(void **arr_p,
   { \
     if (arr && (char *)arr != _##arr##_static) { \
       BLI_array_fake_user(arr); \
-      MEM_freeN(arr); \
+      MEM_freeN((void *)arr); \
     } \
   } \
   ((void)0)
@@ -171,5 +172,3 @@ void _bli_array_grow_func(void **arr_p,
   ((void)0)
 
 /** \} */
-
-#endif /* __BLI_ARRAY_H__ */

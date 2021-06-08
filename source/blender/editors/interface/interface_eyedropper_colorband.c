@@ -38,8 +38,8 @@
 #include "BLI_bitmap_draw_2d.h"
 #include "BLI_math_vector.h"
 
-#include "BKE_context.h"
 #include "BKE_colorband.h"
+#include "BKE_context.h"
 
 #include "RNA_access.h"
 
@@ -84,22 +84,40 @@ static bool eyedropper_colorband_init(bContext *C, wmOperator *op)
 
   uiBut *but = UI_context_active_but_get(C);
 
+  PointerRNA rna_update_ptr = PointerRNA_NULL;
+  PropertyRNA *rna_update_prop = NULL;
+  bool is_undo = true;
+
   if (but == NULL) {
     /* pass */
   }
-  else if (but->type == UI_BTYPE_COLORBAND) {
-    /* When invoked with a hotkey, we can find the band in 'but->poin'. */
-    band = (ColorBand *)but->poin;
-  }
   else {
-    /* When invoked from a button it's in custom_data field. */
-    band = (ColorBand *)but->custom_data;
+    if (but->type == UI_BTYPE_COLORBAND) {
+      /* When invoked with a hotkey, we can find the band in 'but->poin'. */
+      band = (ColorBand *)but->poin;
+    }
+    else {
+      /* When invoked from a button it's in custom_data field. */
+      band = (ColorBand *)but->custom_data;
+    }
+
+    if (band) {
+      rna_update_ptr = ((Colorband_RNAUpdateCb *)but->func_argN)->ptr;
+      rna_update_prop = ((Colorband_RNAUpdateCb *)but->func_argN)->prop;
+      is_undo = UI_but_flag_is_set(but, UI_BUT_UNDO);
+    }
   }
 
   if (!band) {
-    PointerRNA ptr = CTX_data_pointer_get_type(C, "color_ramp", &RNA_ColorRamp);
+    const PointerRNA ptr = CTX_data_pointer_get_type(C, "color_ramp", &RNA_ColorRamp);
     if (ptr.data != NULL) {
       band = ptr.data;
+
+      /* Set this to a sub-member of the property to trigger an update. */
+      extern PropertyRNA rna_ColorRamp_color_mode;
+      rna_update_ptr = ptr;
+      rna_update_prop = &rna_ColorRamp_color_mode;
+      is_undo = RNA_struct_undo_check(ptr.type);
     }
   }
 
@@ -113,9 +131,9 @@ static bool eyedropper_colorband_init(bContext *C, wmOperator *op)
   eye->color_buffer_len = 0;
   eye->color_band = band;
   eye->init_color_band = *eye->color_band;
-  eye->ptr = ((Colorband_RNAUpdateCb *)but->func_argN)->ptr;
-  eye->prop = ((Colorband_RNAUpdateCb *)but->func_argN)->prop;
-  eye->is_undo = UI_but_flag_is_set(but, UI_BUT_UNDO);
+  eye->ptr = rna_update_ptr;
+  eye->prop = rna_update_prop;
+  eye->is_undo = is_undo;
 
   op->customdata = eye;
 
@@ -161,8 +179,8 @@ static void eyedropper_colorband_sample_segment(bContext *C,
   /* Since the mouse tends to move rather rapidly we use #BLI_bitmap_draw_2d_line_v2v2i
    * to interpolate between the reported coordinates */
   struct EyedropperColorband_Context userdata = {C, eye};
-  int p1[2] = {eye->last_x, eye->last_y};
-  int p2[2] = {mx, my};
+  const int p1[2] = {eye->last_x, eye->last_y};
+  const int p2[2] = {mx, my};
   BLI_bitmap_draw_2d_line_v2v2i(p1, p2, eyedropper_colorband_sample_callback, &userdata);
 }
 
@@ -182,11 +200,13 @@ static void eyedropper_colorband_apply(bContext *C, wmOperator *op)
 {
   EyedropperColorband *eye = op->customdata;
   /* Always filter, avoids noise in resulting color-band. */
-  bool filter_samples = true;
+  const bool filter_samples = true;
   BKE_colorband_init_from_table_rgba(
       eye->color_band, eye->color_buffer, eye->color_buffer_len, filter_samples);
   eye->is_set = true;
-  RNA_property_update(C, &eye->ptr, eye->prop);
+  if (eye->prop) {
+    RNA_property_update(C, &eye->ptr, eye->prop);
+  }
 }
 
 static void eyedropper_colorband_cancel(bContext *C, wmOperator *op)
@@ -194,7 +214,9 @@ static void eyedropper_colorband_cancel(bContext *C, wmOperator *op)
   EyedropperColorband *eye = op->customdata;
   if (eye->is_set) {
     *eye->color_band = eye->init_color_band;
-    RNA_property_update(C, &eye->ptr, eye->prop);
+    if (eye->prop) {
+      RNA_property_update(C, &eye->ptr, eye->prop);
+    }
   }
   eyedropper_colorband_exit(C, op);
 }
@@ -267,7 +289,9 @@ static int eyedropper_colorband_point_modal(bContext *C, wmOperator *op, const w
         break;
       case EYE_MODAL_SAMPLE_RESET:
         *eye->color_band = eye->init_color_band;
-        RNA_property_update(C, &eye->ptr, eye->prop);
+        if (eye->prop) {
+          RNA_property_update(C, &eye->ptr, eye->prop);
+        }
         eye->color_buffer_len = 0;
         break;
     }
@@ -280,16 +304,17 @@ static int eyedropper_colorband_invoke(bContext *C, wmOperator *op, const wmEven
 {
   /* init */
   if (eyedropper_colorband_init(C, op)) {
-    WM_cursor_modal_set(CTX_wm_window(C), BC_EYEDROPPER_CURSOR);
+    wmWindow *win = CTX_wm_window(C);
+    /* Workaround for de-activating the button clearing the cursor, see T76794 */
+    UI_context_active_but_clear(C, win, CTX_wm_region(C));
+    WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 /* Repeat operator */
@@ -305,9 +330,7 @@ static int eyedropper_colorband_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool eyedropper_colorband_poll(bContext *C)
@@ -316,7 +339,7 @@ static bool eyedropper_colorband_poll(bContext *C)
   if (but && but->type == UI_BTYPE_COLORBAND) {
     return true;
   }
-  PointerRNA ptr = CTX_data_pointer_get_type(C, "color_ramp", &RNA_ColorRamp);
+  const PointerRNA ptr = CTX_data_pointer_get_type(C, "color_ramp", &RNA_ColorRamp);
   if (ptr.data != NULL) {
     return true;
   }
@@ -326,7 +349,7 @@ static bool eyedropper_colorband_poll(bContext *C)
 void UI_OT_eyedropper_colorramp(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Eyedropper colorband";
+  ot->name = "Eyedropper Colorband";
   ot->idname = "UI_OT_eyedropper_colorramp";
   ot->description = "Sample a color band";
 
@@ -346,7 +369,7 @@ void UI_OT_eyedropper_colorramp(wmOperatorType *ot)
 void UI_OT_eyedropper_colorramp_point(wmOperatorType *ot)
 {
   /* identifiers */
-  ot->name = "Eyedropper colorband (points)";
+  ot->name = "Eyedropper Colorband (Points)";
   ot->idname = "UI_OT_eyedropper_colorramp_point";
   ot->description = "Point-sample a color band";
 

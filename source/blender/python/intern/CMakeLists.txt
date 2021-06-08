@@ -24,6 +24,7 @@ set(INC
   ../../blenlib
   ../../blenloader
   ../../blentranslation
+  ../../depsgraph
   ../../editors/include
   ../../gpu
   ../../imbuf
@@ -32,6 +33,7 @@ set(INC
   ../../windowmanager
   ../../../../intern/clog
   ../../../../intern/guardedalloc
+  ../../../../intern/mantaflow/extern
   ../../../../intern/opencolorio
 )
 
@@ -54,11 +56,13 @@ set(SRC
   bpy_app_sdl.c
   bpy_app_timers.c
   bpy_app_translations.c
+  bpy_app_usd.c
   bpy_capi_utils.c
   bpy_driver.c
   bpy_gizmo_wrap.c
   bpy_interface.c
   bpy_interface_atexit.c
+  bpy_interface_run.c
   bpy_intern_string.c
   bpy_library_load.c
   bpy_library_write.c
@@ -71,9 +75,13 @@ set(SRC
   bpy_rna_anim.c
   bpy_rna_array.c
   bpy_rna_callback.c
+  bpy_rna_data.c
   bpy_rna_driver.c
   bpy_rna_gizmo.c
   bpy_rna_id_collection.c
+  bpy_rna_operator.c
+  bpy_rna_types_capi.c
+  bpy_rna_ui.c
   bpy_traceback.c
   bpy_utils_previews.c
   bpy_utils_units.c
@@ -93,6 +101,7 @@ set(SRC
   bpy_app_sdl.h
   bpy_app_timers.h
   bpy_app_translations.h
+  bpy_app_usd.h
   bpy_capi_utils.h
   bpy_driver.h
   bpy_gizmo_wrap.h
@@ -106,14 +115,20 @@ set(SRC
   bpy_rna.h
   bpy_rna_anim.h
   bpy_rna_callback.h
+  bpy_rna_data.h
   bpy_rna_driver.h
   bpy_rna_gizmo.h
   bpy_rna_id_collection.h
+  bpy_rna_operator.h
+  bpy_rna_types_capi.h
+  bpy_rna_ui.h
   bpy_traceback.h
   bpy_utils_previews.h
   bpy_utils_units.h
   ../BPY_extern.h
   ../BPY_extern_clog.h
+  ../BPY_extern_python.h
+  ../BPY_extern_run.h
 )
 
 set(LIB
@@ -121,6 +136,9 @@ set(LIB
   bf_editor_interface
   bf_editor_space_api
   bf_python_gpu
+
+  ${PYTHON_LINKFLAGS}
+  ${PYTHON_LIBRARIES}
 )
 
 # only to check if buildinfo is available
@@ -153,6 +171,9 @@ endif()
 if(WITH_CODEC_FFMPEG)
   list(APPEND INC_SYS
     ${FFMPEG_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${FFMPEG_LIBRARIES}
   )
   add_definitions(-DWITH_FFMPEG)
 endif()
@@ -230,10 +251,23 @@ if(WITH_OPENAL)
   add_definitions(-DWITH_OPENAL)
 endif()
 
+if(WITH_OPENSUBDIV)
+  add_definitions(-DWITH_OPENSUBDIV)
+endif()
+
 if(WITH_SDL)
   list(APPEND INC_SYS
     ${SDL_INCLUDE_DIR}
   )
+  if(WITH_SDL_DYNLOAD)
+    list(APPEND LIB
+      extern_sdlew
+    )
+  else()
+    list(APPEND LIB
+      ${SDL_LIBRARY}
+    )
+  endif()
   add_definitions(-DWITH_SDL)
 endif()
 
@@ -248,12 +282,20 @@ if(WITH_JACK)
   add_definitions(-DWITH_JACK)
 endif()
 
+if(WITH_COREAUDIO)
+  add_definitions(-DWITH_COREAUDIO)
+endif()
+
 if(WITH_LIBMV)
   add_definitions(-DWITH_LIBMV)
 endif()
 
-if(WITH_MOD_FLUID)
-  add_definitions(-DWITH_MOD_FLUID)
+if(WITH_PULSEAUDIO)
+  add_definitions(-DWITH_PULSEAUDIO)
+endif()
+
+if(WITH_WASAPI)
+  add_definitions(-DWITH_WASAPI)
 endif()
 
 if(WITH_MOD_OCEANSIM)
@@ -264,8 +306,8 @@ if(WITH_MOD_REMESH)
   add_definitions(-DWITH_MOD_REMESH)
 endif()
 
-if(WITH_MOD_SMOKE)
-  add_definitions(-DWITH_SMOKE)
+if(WITH_MOD_FLUID)
+  add_definitions(-DWITH_FLUID)
 endif()
 
 if(WITH_OPENCOLLADA)
@@ -290,7 +332,14 @@ endif()
 if(WITH_ALEMBIC)
   add_definitions(-DWITH_ALEMBIC)
   list(APPEND INC
-    ../../alembic
+    ../../io/alembic
+  )
+endif()
+
+if(WITH_USD)
+  add_definitions(-DWITH_USD)
+  list(APPEND INC
+    ../../io/usd
   )
 endif()
 
@@ -308,6 +357,20 @@ if(WITH_OPENSUBDIV)
   )
 endif()
 
-add_definitions(${GL_DEFINITIONS})
+if(WITH_XR_OPENXR)
+  add_definitions(-DWITH_XR_OPENXR)
+endif()
+
+if(WITH_POTRACE)
+  add_definitions(-DWITH_POTRACE)
+endif()
+
+if(WITH_PUGIXML)
+  add_definitions(-DWITH_PUGIXML)
+endif()
+
+if(WITH_HARU)
+  add_definitions(-DWITH_HARU)
+endif()
 
 blender_add_lib(bf_python "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

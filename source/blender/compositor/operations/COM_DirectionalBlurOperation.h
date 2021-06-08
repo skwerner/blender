@@ -16,10 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_DIRECTIONALBLUROPERATION_H__
-#define __COM_DIRECTIONALBLUROPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "COM_QualityStepHelper.h"
+
+namespace blender::compositor {
 
 class DirectionalBlurOperation : public NodeOperation, public QualityStepHelper {
  private:
@@ -34,23 +36,23 @@ class DirectionalBlurOperation : public NodeOperation, public QualityStepHelper 
   DirectionalBlurOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
   void setData(NodeDBlurData *data)
   {
@@ -61,7 +63,8 @@ class DirectionalBlurOperation : public NodeOperation, public QualityStepHelper 
                      MemoryBuffer *outputMemoryBuffer,
                      cl_mem clOutputBuffer,
                      MemoryBuffer **inputMemoryBuffers,
-                     list<cl_mem> *clMemToCleanUp,
-                     list<cl_kernel> *clKernelsToCleanUp);
+                     std::list<cl_mem> *clMemToCleanUp,
+                     std::list<cl_kernel> *clKernelsToCleanUp) override;
 };
-#endif
+
+}  // namespace blender::compositor

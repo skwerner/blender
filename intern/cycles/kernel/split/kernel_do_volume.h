@@ -35,7 +35,7 @@ ccl_device_noinline bool kernel_split_branched_path_volume_indirect_light_iter(K
   PathRadiance *L = &kernel_split_state.path_radiance[ray_index];
   ShaderData *emission_sd = AS_SHADER_DATA(&kernel_split_state.sd_DL_shadow[ray_index]);
 
-  /* GPU: no decoupled ray marching, scatter probalistically */
+  /* GPU: no decoupled ray marching, scatter probabilistically. */
   int num_samples = kernel_data.integrator.volume_samples;
   float num_samples_inv = 1.0f / num_samples;
 
@@ -44,7 +44,7 @@ ccl_device_noinline bool kernel_split_branched_path_volume_indirect_light_iter(K
                      branched_state->isect.t :
                      FLT_MAX;
 
-  bool heterogeneous = volume_stack_is_heterogeneous(kg, branched_state->path_state.volume_stack);
+  float step_size = volume_stack_step_size(kg, branched_state->path_state.volume_stack);
 
   for (int j = branched_state->next_sample; j < num_samples; j++) {
     ccl_global PathState *ps = &kernel_split_state.path_state[ray_index];
@@ -61,7 +61,7 @@ ccl_device_noinline bool kernel_split_branched_path_volume_indirect_light_iter(K
 
     /* integrate along volume segment with distance sampling */
     VolumeIntegrateResult result = kernel_volume_integrate(
-        kg, ps, sd, &volume_ray, L, tp, heterogeneous);
+        kg, ps, sd, &volume_ray, L, tp, step_size);
 
 #  ifdef __VOLUME_SCATTER__
     if (result == VOLUME_PATH_SCATTERED) {
@@ -164,12 +164,12 @@ ccl_device void kernel_do_volume(KernelGlobals *kg)
       if (!kernel_data.integrator.branched ||
           IS_FLAG(ray_state, ray_index, RAY_BRANCHED_INDIRECT)) {
 #  endif /* __BRANCHED_PATH__ */
-        bool heterogeneous = volume_stack_is_heterogeneous(kg, state->volume_stack);
+        float step_size = volume_stack_step_size(kg, state->volume_stack);
 
         {
           /* integrate along volume segment with distance sampling */
           VolumeIntegrateResult result = kernel_volume_integrate(
-              kg, state, sd, &volume_ray, L, throughput, heterogeneous);
+              kg, state, sd, &volume_ray, L, throughput, step_size);
 
 #  ifdef __VOLUME_SCATTER__
           if (result == VOLUME_PATH_SCATTERED) {

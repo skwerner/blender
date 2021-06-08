@@ -18,8 +18,7 @@
  * \ingroup bpygpu
  */
 
-#ifndef __GPU_PY_BATCH_H__
-#define __GPU_PY_BATCH_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -31,8 +30,8 @@ extern PyTypeObject BPyGPUBatch_Type;
 
 typedef struct BPyGPUBatch {
   PyObject_VAR_HEAD
-      /* The batch is owned, we may support thin wrapped batches later. */
-      struct GPUBatch *batch;
+  /* The batch is owned, we may support thin wrapped batches later. */
+  struct GPUBatch *batch;
 #ifdef USE_GPU_PY_REFERENCES
   /* Just to keep a user to prevent freeing buf's we're using */
   PyObject *references;
@@ -40,5 +39,3 @@ typedef struct BPyGPUBatch {
 } BPyGPUBatch;
 
 PyObject *BPyGPUBatch_CreatePyObject(struct GPUBatch *batch) ATTR_NONNULL(1);
-
-#endif /* __GPU_PY_BATCH_H__ */

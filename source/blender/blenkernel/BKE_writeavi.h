@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_WRITEAVI_H__
-#define __BKE_WRITEAVI_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -36,7 +35,7 @@ struct Scene;
 
 typedef struct bMovieHandle {
   int (*start_movie)(void *context_v,
-                     struct Scene *scene,
+                     const struct Scene *scene,
                      struct RenderData *rd,
                      int rectx,
                      int recty,
@@ -53,22 +52,23 @@ typedef struct bMovieHandle {
                       const char *suffix,
                       struct ReportList *reports);
   void (*end_movie)(void *context_v);
-  int (*get_next_frame)(void *context_v,
-                        struct RenderData *rd,
-                        struct ReportList *reports); /* optional */
+
+  /* Optional function. */
   void (*get_movie_path)(char *string,
-                         struct RenderData *rd,
+                         const struct RenderData *rd,
                          bool preview,
-                         const char *suffix); /* optional */
+                         const char *suffix);
+
   void *(*context_create)(void);
   void (*context_free)(void *context_v);
 } bMovieHandle;
 
 bMovieHandle *BKE_movie_handle_get(const char imtype);
-void BKE_movie_filepath_get(char *string, struct RenderData *rd, bool preview, const char *suffix);
+void BKE_movie_filepath_get(char *string,
+                            const struct RenderData *rd,
+                            bool preview,
+                            const char *suffix);
 
 #ifdef __cplusplus
 }
-#endif
-
 #endif

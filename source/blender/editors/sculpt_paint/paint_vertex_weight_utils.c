@@ -20,16 +20,12 @@
  * Intended for use by `paint_vertex.c` & `paint_vertex_weight_ops.c`.
  */
 
-#include "MEM_guardedalloc.h"
-
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_string_utils.h"
 
 #include "DNA_armature_types.h"
 #include "DNA_mesh_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_brush_types.h"
 #include "DNA_object_types.h"
 
 #include "BKE_action.h"
@@ -37,9 +33,11 @@
 #include "BKE_deform.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_object_deform.h"
 #include "BKE_report.h"
-#include "BKE_object.h"
+
+#include "DEG_depsgraph_build.h"
 
 /* Only for blend modes. */
 #include "IMB_imbuf.h"
@@ -84,15 +82,16 @@ bool ED_wpaint_ensure_data(bContext *C,
   /* this happens on a Bone select, when no vgroup existed yet */
   if (ob->actdef <= 0) {
     Object *modob;
-    if ((modob = modifiers_isDeformedByArmature(ob))) {
+    if ((modob = BKE_modifiers_is_deformed_by_armature(ob))) {
       Bone *actbone = ((bArmature *)modob->data)->act_bone;
       if (actbone) {
         bPoseChannel *pchan = BKE_pose_channel_find_name(modob->pose, actbone->name);
 
         if (pchan) {
-          bDeformGroup *dg = defgroup_find_name(ob, pchan->name);
+          bDeformGroup *dg = BKE_object_defgroup_find_name(ob, pchan->name);
           if (dg == NULL) {
             dg = BKE_object_defgroup_add_name(ob, pchan->name); /* sets actdef */
+            DEG_relations_tag_update(CTX_data_main(C));
           }
           else {
             int actdef = 1 + BLI_findindex(&ob->defbase, dg);
@@ -105,6 +104,7 @@ bool ED_wpaint_ensure_data(bContext *C,
   }
   if (BLI_listbase_is_empty(&ob->defbase)) {
     BKE_object_defgroup_add(ob);
+    DEG_relations_tag_update(CTX_data_main(C));
   }
 
   /* ensure we don't try paint onto an invalid group */
@@ -118,7 +118,7 @@ bool ED_wpaint_ensure_data(bContext *C,
   }
 
   if (flag & WPAINT_ENSURE_MIRROR) {
-    if (me->editflag & ME_EDIT_MIRROR_X) {
+    if (ME_USING_MIRROR_X_VERTEX_GROUPS(me)) {
       int mirror = ED_wpaint_mirror_vgroup_ensure(ob, ob->actdef - 1);
       if (vgroup_index) {
         vgroup_index->mirror = mirror;
@@ -140,9 +140,9 @@ int ED_wpaint_mirror_vgroup_ensure(Object *ob, const int vgroup_active)
     char name_flip[MAXBONENAME];
 
     BLI_string_flip_side_name(name_flip, defgroup->name, false, sizeof(name_flip));
-    mirrdef = defgroup_name_index(ob, name_flip);
+    mirrdef = BKE_object_defgroup_name_index(ob, name_flip);
     if (mirrdef == -1) {
-      if (BKE_defgroup_new(ob, name_flip)) {
+      if (BKE_object_defgroup_new(ob, name_flip)) {
         mirrdef = BLI_listbase_count(&ob->defbase) - 1;
       }
     }
@@ -273,10 +273,15 @@ BLI_INLINE float wval_exclusion(float weight, float paintval, float fac)
   return temp * fac + weight * mfac;
 }
 
-/* vpaint has 'vpaint_blend_tool' */
-/* result is not clamped from [0-1] */
+/**
+ * \param weight: Typically the current weight: #MDeformWeight.weight
+ *
+ * \return The final weight, note that this is _not_ clamped from [0-1].
+ * Clamping must be done on the final #MDeformWeight.weight
+ *
+ * \note vertex-paint has an equivalent function: #ED_vpaint_blend_tool
+ */
 float ED_wpaint_blend_tool(const int tool,
-                           /* dw->weight */
                            const float weight,
                            const float paintval,
                            const float alpha)

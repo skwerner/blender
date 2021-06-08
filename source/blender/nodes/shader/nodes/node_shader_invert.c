@@ -25,11 +25,11 @@
 
 /* **************** INVERT ******************** */
 static bNodeSocketTemplate sh_node_invert_in[] = {
-    {SOCK_FLOAT, 1, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_RGBA, 1, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""}};
+    {SOCK_FLOAT, N_("Fac"), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""}};
 
-static bNodeSocketTemplate sh_node_invert_out[] = {{SOCK_RGBA, 0, N_("Color")}, {-1, 0, ""}};
+static bNodeSocketTemplate sh_node_invert_out[] = {{SOCK_RGBA, N_("Color")}, {-1, ""}};
 
 static void node_shader_exec_invert(void *UNUSED(data),
                                     int UNUSED(thread),
@@ -48,10 +48,12 @@ static void node_shader_exec_invert(void *UNUSED(data),
   icol[2] = 1.0f - col[2];
 
   /* if fac, blend result against original input */
-  if (fac < 1.0f)
+  if (fac < 1.0f) {
     interp_v3_v3v3(out[0]->vec, col, icol, fac);
-  else
+  }
+  else {
     copy_v3_v3(out[0]->vec, icol);
+  }
 }
 
 static int gpu_shader_invert(GPUMaterial *mat,

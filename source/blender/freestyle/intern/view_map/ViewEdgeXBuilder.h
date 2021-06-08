@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_VIEW_EDGE_X_BUILDER_H__
-#define __FREESTYLE_VIEW_EDGE_X_BUILDER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -28,7 +27,8 @@
 
 #if 0  // soc
 #  if defined(__GNUC__) && (__GNUC__ >= 3)
-//hash_map is not part of the C++ standard anymore; hash_map.h has been kept though for backward compatibility
+/* hash_map is not part of the C++ standard anymore;
+ * hash_map.h has been kept though for backward compatibility */
 #    include <hash_map.h>
 #  else
 #    include <hash_map>
@@ -264,23 +264,23 @@ class ViewEdgeXBuilder {
 
   // SHARP //
   /*! checks whether a WEdge has already been processed or not */
-  bool stopSharpViewEdge(WXEdge *iFace);
+  bool stopSharpViewEdge(WXEdge *iEdge);
   int retrieveFaceMarks(WXEdge *iEdge);
   OWXEdge FindNextWEdge(const OWXEdge &iEdge);
   OWXEdge FindPreviousWEdge(const OWXEdge &iEdge);
   FEdge *BuildSharpFEdge(FEdge *feprevious, const OWXEdge &iwe);
 
   // GENERAL //
-  /*! Instanciate a SVertex */
+  /*! Instantiate a SVertex */
   SVertex *MakeSVertex(Vec3r &iPoint);
-  /*! Instanciate a SVertex if it hasn't been already created */
+  /*! Instantiate a SVertex if it hasn't been already created */
   SVertex *MakeSVertex(Vec3r &iPoint, bool shared);
-  /*! instanciate a ViewVertex from a SVertex, if it doesn't exist yet */
+  /*! instantiate a ViewVertex from a SVertex, if it doesn't exist yet */
   ViewVertex *MakeViewVertex(SVertex *iSVertex);
 
-  //oldtmp values
-  //IdHashTable _hashtable;
-  //VVIdHashTable _multivertexHashTable;
+  // oldtmp values
+  // IdHashTable _hashtable;
+  // VVIdHashTable _multivertexHashTable;
   SVertexMap _SVertexMap;
   SShape *_pCurrentSShape;
   ViewShape *_pCurrentVShape;
@@ -291,5 +291,3 @@ class ViewEdgeXBuilder {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_VIEW_EDGE_X_BUILDER_H__

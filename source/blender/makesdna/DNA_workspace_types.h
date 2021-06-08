@@ -20,13 +20,13 @@
  * Use API in BKE_workspace.h to edit these.
  */
 
-#ifndef __DNA_WORKSPACE_TYPES_H__
-#define __DNA_WORKSPACE_TYPES_H__
+#pragma once
 
-#include "DNA_scene_types.h"
+#include "DNA_ID.h"
 
-/* Currently testing, allow to disable. */
-#define USE_WORKSPACE_TOOL
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #
 #
@@ -37,6 +37,9 @@ typedef struct bToolRef_Runtime {
   char keymap[64];
   char gizmo_group[64];
   char data_block[64];
+
+  /** Keymap for #bToolRef.idname_fallback, if set. */
+  char keymap_fallback[64];
 
   /** Use to infer primary operator to use when setting accelerator keys. */
   char op[64];
@@ -50,13 +53,16 @@ typedef struct bToolRef {
   struct bToolRef *next, *prev;
   char idname[64];
 
+  /** Optionally use these when not interacting directly with the primary tools gizmo. */
+  char idname_fallback[64];
+
   /** Use to avoid initializing the same tool multiple times. */
   short tag;
 
   /** #bToolKey (spacetype, mode), used in 'WM_api.h' */
   short space_type;
   /**
-   * Value depends ont the 'space_type', object mode for 3D view, image editor has own mode too.
+   * Value depends on the 'space_type', object mode for 3D view, image editor has own mode too.
    * RNA needs to handle using item function.
    */
   int mode;
@@ -77,8 +83,10 @@ typedef struct bToolRef {
 /**
  * \brief Wrapper for bScreen.
  *
- * bScreens are IDs and thus stored in a main list-base. We also want to store a list-base of them within the
- * workspace (so each workspace can have its own set of screen-layouts) which would mess with the next/prev pointers.
+ * #bScreens are IDs and thus stored in a main list-base.
+ * We also want to store a list-base of them within the workspace
+ * (so each workspace can have its own set of screen-layouts)
+ * which would mess with the next/prev pointers.
  * So we use this struct to wrap a bScreen pointer with another pair of next/prev pointers.
  */
 typedef struct WorkSpaceLayout {
@@ -112,28 +120,20 @@ typedef struct WorkSpace {
   /** #wmOwnerID. */
   ListBase owner_ids;
 
-  /* should be: '#ifdef USE_WORKSPACE_TOOL'. */
-
   /** List of #bToolRef */
   ListBase tools;
 
-  /**
-   * BAD DESIGN WARNING:
-   * This is a workaround for the topbar not knowing which tools spec. */
-  char tools_space_type;
-  /** Type is different for each space-type. */
-  char tools_mode;
-  char _pad[2];
+  char _pad[4];
 
   int object_mode;
 
   /** Enum eWorkSpaceFlags. */
   int flags;
 
-  /* Number for workspace tab reordering in the UI. */
+  /** Number for workspace tab reordering in the UI. */
   int order;
 
-  /* Info text from modal operators (runtime). */
+  /** Info text from modal operators (runtime). */
   char *status_text;
 } WorkSpace;
 
@@ -163,11 +163,16 @@ typedef struct WorkSpace {
 typedef struct WorkSpaceDataRelation {
   struct WorkSpaceDataRelation *next, *prev;
 
-  /* the data used to identify the relation
-   * (e.g. to find screen-layout (= value) from/for a hook) */
+  /** The data used to identify the relation
+   * (e.g. to find screen-layout (= value) from/for a hook).
+   * Note: Now runtime only. */
   void *parent;
-  /* The value for this parent-data/workspace relation */
+  /** The value for this parent-data/workspace relation. */
   void *value;
+
+  /** Reference to the actual parent window, wmWindow->winid. Used in read/write code. */
+  int parentid;
+  char _pad_0[4];
 } WorkSpaceDataRelation;
 
 /**
@@ -178,7 +183,7 @@ typedef struct WorkSpaceInstanceHook {
   WorkSpace *active;
   struct WorkSpaceLayout *act_layout;
 
-  /* Needed because we can't change workspaces/layouts in running handler loop,
+  /** Needed because we can't change workspaces/layouts in running handler loop,
    * it would break context. */
   WorkSpace *temp_workspace_store;
   struct WorkSpaceLayout *temp_layout_store;
@@ -188,4 +193,6 @@ typedef enum eWorkSpaceFlags {
   WORKSPACE_USE_FILTER_BY_ORIGIN = (1 << 1),
 } eWorkSpaceFlags;
 
-#endif /* __DNA_WORKSPACE_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_PREDICATES_0D_H__
-#define __FREESTYLE_PREDICATES_0D_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -65,8 +64,8 @@ class UnaryPredicate0D {
 
   /*! The () operator. Must be overload by inherited classes.
    *  \param it:
-   *    The Interface0DIterator pointing onto the Interface0D at which we wish to evaluate the predicate.
-   *  \return true if the condition is satisfied, false otherwise.
+   *    The Interface0DIterator pointing onto the Interface0D at which we wish to evaluate the
+   * predicate. \return true if the condition is satisfied, false otherwise.
    */
   virtual int operator()(Interface0DIterator &it);
 
@@ -178,5 +177,3 @@ class FalseUP0D : public UnaryPredicate0D {
 }  // end of namespace Predicates0D
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_PREDICATES_0D_H__

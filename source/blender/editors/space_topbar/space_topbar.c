@@ -21,8 +21,8 @@
  * \ingroup sptopbar
  */
 
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "MEM_guardedalloc.h"
 
@@ -38,7 +38,6 @@
 
 #include "ED_screen.h"
 #include "ED_space_api.h"
-#include "ED_undo.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -47,37 +46,33 @@
 #include "RNA_access.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 /* ******************** default callbacks for topbar space ***************** */
 
-static SpaceLink *topbar_new(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
+static SpaceLink *topbar_create(const ScrArea *UNUSED(area), const Scene *UNUSED(scene))
 {
-  ARegion *ar;
+  ARegion *region;
   SpaceTopBar *stopbar;
 
   stopbar = MEM_callocN(sizeof(*stopbar), "init topbar");
   stopbar->spacetype = SPACE_TOPBAR;
 
   /* header */
-  ar = MEM_callocN(sizeof(ARegion), "left aligned header for topbar");
-  BLI_addtail(&stopbar->regionbase, ar);
-  ar->regiontype = RGN_TYPE_HEADER;
-  ar->alignment = RGN_ALIGN_TOP;
-  ar = MEM_callocN(sizeof(ARegion), "right aligned header for topbar");
-  BLI_addtail(&stopbar->regionbase, ar);
-  ar->regiontype = RGN_TYPE_HEADER;
-  ar->alignment = RGN_ALIGN_RIGHT | RGN_SPLIT_PREV;
+  region = MEM_callocN(sizeof(ARegion), "left aligned header for topbar");
+  BLI_addtail(&stopbar->regionbase, region);
+  region->regiontype = RGN_TYPE_HEADER;
+  region->alignment = RGN_ALIGN_TOP;
+  region = MEM_callocN(sizeof(ARegion), "right aligned header for topbar");
+  BLI_addtail(&stopbar->regionbase, region);
+  region->regiontype = RGN_TYPE_HEADER;
+  region->alignment = RGN_ALIGN_RIGHT | RGN_SPLIT_PREV;
 
   /* main regions */
-  ar = MEM_callocN(sizeof(ARegion), "right aligned main region for topbar");
-  BLI_addtail(&stopbar->regionbase, ar);
-  ar->regiontype = RGN_TYPE_WINDOW;
-  ar->alignment = RGN_ALIGN_RIGHT;
-  ar = MEM_callocN(sizeof(ARegion), "main region of topbar");
-  BLI_addtail(&stopbar->regionbase, ar);
-  ar->regiontype = RGN_TYPE_WINDOW;
+  region = MEM_callocN(sizeof(ARegion), "main region of topbar");
+  BLI_addtail(&stopbar->regionbase, region);
+  region->regiontype = RGN_TYPE_WINDOW;
 
   return (SpaceLink *)stopbar;
 }
@@ -88,7 +83,7 @@ static void topbar_free(SpaceLink *UNUSED(sl))
 }
 
 /* spacetype; init callback */
-static void topbar_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(sa))
+static void topbar_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
 {
 }
 
@@ -107,7 +102,7 @@ static void topbar_main_region_init(wmWindowManager *wm, ARegion *region)
   wmKeyMap *keymap;
 
   /* force delayed UI_view2d_region_reinit call */
-  if (ELEM(region->alignment, RGN_ALIGN_RIGHT)) {
+  if (ELEM(RGN_ALIGN_ENUM_FROM_MASK(region->alignment), RGN_ALIGN_RIGHT)) {
     region->flag |= RGN_FLAG_DYNAMIC_SIZE;
   }
   UI_view2d_region_reinit(&region->v2d, V2D_COMMONVIEW_HEADER, region->winx, region->winy);
@@ -125,87 +120,83 @@ static void topbar_keymap(struct wmKeyConfig *UNUSED(keyconf))
 }
 
 /* add handlers, stuff you only do once or on area/region changes */
-static void topbar_header_region_init(wmWindowManager *UNUSED(wm), ARegion *ar)
+static void topbar_header_region_init(wmWindowManager *UNUSED(wm), ARegion *region)
 {
-  if ((ar->alignment & ~RGN_SPLIT_PREV) == RGN_ALIGN_RIGHT) {
-    ar->flag |= RGN_FLAG_DYNAMIC_SIZE;
+  if (RGN_ALIGN_ENUM_FROM_MASK(region->alignment) == RGN_ALIGN_RIGHT) {
+    region->flag |= RGN_FLAG_DYNAMIC_SIZE;
   }
-  ED_region_header_init(ar);
+  ED_region_header_init(region);
 }
 
-static void topbar_main_region_listener(wmWindow *UNUSED(win),
-                                        ScrArea *UNUSED(sa),
-                                        ARegion *ar,
-                                        wmNotifier *wmn,
-                                        const Scene *UNUSED(scene))
+static void topbar_main_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* context changes */
   switch (wmn->category) {
     case NC_WM:
       if (wmn->data == ND_HISTORY) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SCENE:
       if (wmn->data == ND_MODE) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SPACE:
       if (wmn->data == ND_SPACE_VIEW3D) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_GPENCIL:
       if (wmn->data == ND_DATA) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
   }
 }
 
-static void topbar_header_listener(wmWindow *UNUSED(win),
-                                   ScrArea *UNUSED(sa),
-                                   ARegion *ar,
-                                   wmNotifier *wmn,
-                                   const Scene *UNUSED(scene))
+static void topbar_header_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* context changes */
   switch (wmn->category) {
     case NC_WM:
       if (wmn->data == ND_JOB) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SPACE:
       if (wmn->data == ND_SPACE_INFO) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SCREEN:
       if (wmn->data == ND_LAYER) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
     case NC_SCENE:
       if (wmn->data == ND_SCENEBROWSE) {
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
       }
       break;
   }
 }
 
-static void topbar_header_region_message_subscribe(const struct bContext *UNUSED(C),
-                                                   struct WorkSpace *workspace,
-                                                   struct Scene *UNUSED(scene),
-                                                   struct bScreen *UNUSED(screen),
-                                                   struct ScrArea *UNUSED(sa),
-                                                   struct ARegion *ar,
-                                                   struct wmMsgBus *mbus)
+static void topbar_header_region_message_subscribe(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  WorkSpace *workspace = params->workspace;
+  ARegion *region = params->region;
+
   wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
-      .owner = ar,
-      .user_data = ar,
+      .owner = region,
+      .user_data = region,
       .notify = ED_region_do_msg_notify_tag_redraw,
   };
 
@@ -217,12 +208,15 @@ static void recent_files_menu_draw(const bContext *UNUSED(C), Menu *menu)
 {
   struct RecentFile *recent;
   uiLayout *layout = menu->layout;
-  uiLayoutSetOperatorContext(layout, WM_OP_EXEC_REGION_WIN);
+  uiLayoutSetOperatorContext(layout, WM_OP_INVOKE_DEFAULT);
   if (!BLI_listbase_is_empty(&G.recent_files)) {
     for (recent = G.recent_files.first; (recent); recent = recent->next) {
       const char *file = BLI_path_basename(recent->filepath);
       const int icon = BLO_has_bfile_extension(file) ? ICON_FILE_BLEND : ICON_FILE_BACKUP;
-      uiItemStringO(layout, file, icon, "WM_OT_open_mainfile", "filepath", recent->filepath);
+      PointerRNA ptr;
+      uiItemFullO(layout, "WM_OT_open_mainfile", file, icon, NULL, WM_OP_INVOKE_DEFAULT, 0, &ptr);
+      RNA_string_set(&ptr, "filepath", recent->filepath);
+      RNA_boolean_set(&ptr, "display_file_selector", false);
     }
   }
   else {
@@ -251,7 +245,7 @@ void ED_spacetype_topbar(void)
   st->spaceid = SPACE_TOPBAR;
   strncpy(st->name, "Top Bar", BKE_ST_MAXNAME);
 
-  st->new = topbar_new;
+  st->create = topbar_create;
   st->free = topbar_free;
   st->init = topbar_init;
   st->duplicate = topbar_duplicate;

@@ -32,12 +32,6 @@ import bpy
 IS_TESTING = False
 
 
-def drepr(string):
-    # is there a less crappy way to do this in python?, re.escape also escapes
-    # single quotes strings so can't use it.
-    return '"%s"' % repr(string)[1:-1].replace("\"", "\\\"").replace("\\'", "'")
-
-
 def classes_recursive(base_type, clss=None):
     if clss is None:
         clss = [base_type]
@@ -66,7 +60,7 @@ class DataPathBuilder:
         if type(key) is int:
             str_value = '[%d]' % key
         elif type(key) is str:
-            str_value = '[%s]' % drepr(key)
+            str_value = '["%s"]' % bpy.utils.escape_identifier(key)
         else:
             raise Exception("unsupported accessor %r of type %r (internal error)" % (key, type(key)))
         return DataPathBuilder(self.data_path + (str_value, ))
@@ -80,7 +74,10 @@ class DataPathBuilder:
                 base_new = Ellipsis
                 # find the new name
                 if item.startswith("."):
-                    for class_name, item_new, options in rna_update_from_map.get(item[1:], []) + [(None, item[1:], None)]:
+                    for class_name, item_new, options in (
+                            rna_update_from_map.get(item[1:], []) +
+                            [(None, item[1:], None)]
+                    ):
                         if callable(item_new):
                             # No type check here, callback is assumed to know what it's doing.
                             base_new, item_new = item_new(base, class_name, item[1:], fcurve, options)

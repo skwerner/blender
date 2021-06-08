@@ -22,8 +22,7 @@
  * Declaration of GHOST_EventString class.
  */
 
-#ifndef __GHOST_EVENTSTRING_H__
-#define __GHOST_EVENTSTRING_H__
+#pragma once
 
 #include "GHOST_Event.h"
 
@@ -34,10 +33,10 @@ class GHOST_EventString : public GHOST_Event {
  public:
   /**
    * Constructor.
-   * \param msec  The time this event was generated.
-   * \param type  The type of this event.
-   * \param window The generating window (or NULL if system event).
-   * \param data_ptr Pointer to the (unformatted) data associated with the event
+   * \param msec: The time this event was generated.
+   * \param type: The type of this event.
+   * \param window: The generating window (or NULL if system event).
+   * \param data_ptr: Pointer to the (un-formatted) data associated with the event.
    */
   GHOST_EventString(GHOST_TUns64 msec,
                     GHOST_TEventType type,
@@ -54,5 +53,3 @@ class GHOST_EventString : public GHOST_Event {
       free(m_data);
   }
 };
-
-#endif  // __GHOST_EVENTSTRING_H__

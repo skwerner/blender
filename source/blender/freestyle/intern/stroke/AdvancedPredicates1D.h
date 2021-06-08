@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_ADVANCED_PREDICATES_1D_H__
-#define __FREESTYLE_ADVANCED_PREDICATES_1D_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -67,8 +66,9 @@ class DensityLowerThanUP1D : public UnaryPredicate1D {
   int operator()(Interface1D &inter)
   {
     Functions1D::DensityF1D fun(_sigma);
-    if (fun(inter) < 0)
+    if (fun(inter) < 0) {
       return -1;
+    }
     result = (fun.result < _threshold);
     return 0;
   }
@@ -81,5 +81,3 @@ class DensityLowerThanUP1D : public UnaryPredicate1D {
 }  // end of namespace Predicates1D
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_ADVANCED_PREDICATES_1D_H__

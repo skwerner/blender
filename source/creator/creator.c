@@ -25,11 +25,13 @@
 #include <string.h>
 
 #ifdef WIN32
-#  if defined(_MSC_VER) && defined(_M_X64)
-#    include <math.h> /* needed for _set_FMA3_enable */
-#  endif
-#  include <windows.h>
 #  include "utfconv.h"
+#  include <windows.h>
+#endif
+
+#if defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG)
+#  pragma comment(lib, "tbbmalloc_proxy.lib")
+#  pragma comment(linker, "/include:__TBB_malloc_proxy")
 #endif
 
 #include "MEM_guardedalloc.h"
@@ -39,35 +41,38 @@
 #include "DNA_genfile.h"
 
 #include "BLI_args.h"
-#include "BLI_threads.h"
-#include "BLI_utildefines.h"
-#include "BLI_callbacks.h"
 #include "BLI_string.h"
 #include "BLI_system.h"
+#include "BLI_task.h"
+#include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
-/* mostly init functions */
+/* Mostly initialization functions. */
 #include "BKE_appdir.h"
 #include "BKE_blender.h"
 #include "BKE_brush.h"
 #include "BKE_cachefile.h"
+#include "BKE_callbacks.h"
 #include "BKE_context.h"
 #include "BKE_font.h"
 #include "BKE_global.h"
+#include "BKE_gpencil_modifier.h"
+#include "BKE_idtype.h"
+#include "BKE_image.h"
 #include "BKE_material.h"
 #include "BKE_modifier.h"
-#include "BKE_gpencil_modifier.h"
 #include "BKE_node.h"
+#include "BKE_particle.h"
 #include "BKE_shader_fx.h"
 #include "BKE_sound.h"
-#include "BKE_image.h"
-#include "BKE_particle.h"
+#include "BKE_volume.h"
 
 #include "DEG_depsgraph.h"
 
-#include "IMB_imbuf.h" /* for IMB_init */
+#include "IMB_imbuf.h" /* For #IMB_init. */
 
 #include "RE_engine.h"
-#include "RE_render_ext.h"
+#include "RE_texture.h"
 
 #include "ED_datafiles.h"
 
@@ -102,13 +107,11 @@
 #  include "sdlew.h"
 #endif
 
-#include "creator_intern.h" /* own include */
+#include "creator_intern.h" /* Own include. */
 
-/*  Local Function prototypes */
-#ifdef WITH_PYTHON_MODULE
-int main_python_enter(int argc, const char **argv);
-void main_python_exit(void);
-#endif
+/* -------------------------------------------------------------------- */
+/** \name Local Application State
+ * \{ */
 
 /* written to by 'creator_args.c' */
 struct ApplicationState app_state = {
@@ -123,11 +126,12 @@ struct ApplicationState app_state = {
         },
 };
 
+/** \} */
+
 /* -------------------------------------------------------------------- */
 /** \name Application Level Callbacks
  *
  * Initialize callbacks for the modules that need them.
- *
  * \{ */
 
 static void callback_mem_error(const char *errorStr)
@@ -138,7 +142,7 @@ static void callback_mem_error(const char *errorStr)
 
 static void main_callback_setup(void)
 {
-  /* Error output from the alloc routines: */
+  /* Error output from the guarded allocation routines. */
   MEM_set_error_callback(callback_mem_error);
 }
 
@@ -156,7 +160,7 @@ static void callback_main_atexit(void *user_data)
   struct CreatorAtExitData *app_init_data = user_data;
 
   if (app_init_data->ba) {
-    BLI_argsFree(app_init_data->ba);
+    BLI_args_destroy(app_init_data->ba);
     app_init_data->ba = NULL;
   }
 
@@ -179,27 +183,42 @@ static void callback_clg_fatal(void *fp)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Main Function
+/** \name Blender as a Stand-Alone Python Module (bpy)
+ *
+ * While not officially supported, this can be useful for Python developers.
+ * See: https://wiki.blender.org/wiki/Building_Blender/Other/BlenderAsPyModule
  * \{ */
 
 #ifdef WITH_PYTHON_MODULE
-/* allow python module to call main */
+
+/* Called in `bpy_interface.c` when building as a Python module. */
+int main_python_enter(int argc, const char **argv);
+void main_python_exit(void);
+
+/* Rename the 'main' function, allowing Python initialization to call it. */
 #  define main main_python_enter
 static void *evil_C = NULL;
 
 #  ifdef __APPLE__
-/* environ is not available in mac shared libraries */
+/* Environment is not available in macOS shared libraries. */
 #    include <crt_externs.h>
 char **environ = NULL;
-#  endif
-#endif
+#  endif /* __APPLE__ */
+
+#endif /* WITH_PYTHON_MODULE */
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Main Function
+ * \{ */
 
 /**
  * Blender's main function responsibilities are:
  * - setup subsystems.
  * - handle arguments.
  * - run #WM_main() event loop,
- *   or exit immediately when running in background mode.
+ *   or exit immediately when running in background-mode.
  */
 int main(int argc,
 #ifdef WIN32
@@ -222,30 +241,28 @@ int main(int argc,
 
   /* --- end declarations --- */
 
-  /* ensure we free data on early-exit */
+  /* Ensure we free data on early-exit. */
   struct CreatorAtExitData app_init_data = {NULL};
   BKE_blender_atexit_register(callback_main_atexit, &app_init_data);
 
-  /* Unbuffered stdout makes stdout and stderr better synchronized, and helps
+  /* Un-buffered `stdout` makes `stdout` and `stderr` better synchronized, and helps
    * when stepping through code in a debugger (prints are immediately
-   * visible). */
+   * visible). However disabling buffering causes lock contention on windows
+   * see T76767 for details, since this is a debugging aid, we do not enable
+   * the un-buffered behavior for release builds. */
+#ifndef NDEBUG
   setvbuf(stdout, NULL, _IONBF, 0);
+#endif
 
 #ifdef WIN32
-  /* We delay loading of openmp so we can set the policy here. */
+  /* We delay loading of OPENMP so we can set the policy here. */
 #  if defined(_MSC_VER)
   _putenv_s("OMP_WAIT_POLICY", "PASSIVE");
 #  endif
 
-  /* FMA3 support in the 2013 CRT is broken on Vista and Windows 7 RTM
-   * (fixed in SP1). Just disable it. */
-#  if defined(_MSC_VER) && defined(_M_X64)
-  _set_FMA3_enable(0);
-#  endif
-
-  /* Win32 Unicode Args */
-  /* NOTE: cannot use guardedalloc malloc here, as it's not yet initialized
-   *       (it depends on the args passed in, which is what we're getting here!)
+  /* Win32 Unicode Arguments. */
+  /* NOTE: cannot use `guardedalloc` allocation here, as it's not yet initialized
+   *       (it depends on the arguments passed in, which is what we're getting here!)
    */
   {
     wchar_t **argv_16 = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -273,10 +290,11 @@ int main(int argc,
         MEM_use_guarded_allocator();
         break;
       }
-      else if (STREQ(argv[i], "--")) {
+      if (STREQ(argv[i], "--")) {
         break;
       }
     }
+    MEM_init_memleak_detection();
   }
 
 #ifdef BUILD_DATE
@@ -299,7 +317,7 @@ int main(int argc,
   sdlewInit();
 #endif
 
-  /* Initialize logging */
+  /* Initialize logging. */
   CLG_init();
   CLG_fatal_fn_set(callback_clg_fatal);
 
@@ -326,9 +344,9 @@ int main(int argc,
 
   main_callback_setup();
 
-#if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE)
-  /* patch to ignore argument finder gives us (pid?) */
-  if (argc == 2 && STREQLEN(argv[1], "-psn_", 5)) {
+#if defined(__APPLE__) && !defined(WITH_PYTHON_MODULE) && !defined(WITH_HEADLESS)
+  /* Patch to ignore argument finder gives us (PID?) */
+  if (argc == 2 && STRPREFIX(argv[1], "-psn_")) {
     extern int GHOST_HACK_getFirstFile(char buf[]);
     static char firstfilebuf[512];
 
@@ -345,7 +363,7 @@ int main(int argc,
   fpsetmask(0);
 #endif
 
-  /* initialize path to executable */
+  /* Initialize path to executable. */
   BKE_appdir_program_path_init(argv[0]);
 
   BLI_threadapi_init();
@@ -355,113 +373,116 @@ int main(int argc,
 
   BKE_blender_globals_init(); /* blender.c */
 
-  IMB_init();
+  BKE_idtype_init();
   BKE_cachefiles_init();
   BKE_images_init();
   BKE_modifier_init();
   BKE_gpencil_modifier_init();
   BKE_shaderfx_init();
+  BKE_volumes_init();
   DEG_register_node_types();
 
   BKE_brush_system_init();
   RE_texture_rng_init();
 
-  BLI_callback_global_init();
+  BKE_callback_global_init();
 
-  /* first test for background */
+  /* First test for background-mode (#Global.background) */
 #ifndef WITH_PYTHON_MODULE
-  ba = BLI_argsInit(argc, (const char **)argv); /* skip binary path */
+  ba = BLI_args_create(argc, (const char **)argv); /* skip binary path */
 
-  /* ensure we free on early exit */
+  /* Ensure we free on early exit. */
   app_init_data.ba = ba;
 
   main_args_setup(C, ba);
 
-  BLI_argsParse(ba, 1, NULL, NULL);
+  /* Begin argument parsing, ignore leaks so arguments that call #exit
+   * (such as '--version' & '--help') don't report leaks. */
+  MEM_use_memleak_detection(false);
 
-  main_signal_setup();
+  /* Parse environment handling arguments. */
+  BLI_args_parse(ba, ARG_PASS_ENVIRONMENT, NULL, NULL);
 
 #else
-  /* using preferences or user startup makes no sense for py-as-module */
+  /* Using preferences or user startup makes no sense for #WITH_PYTHON_MODULE. */
   G.factory_startup = true;
 #endif
 
+  /* After parsing #ARG_PASS_ENVIRONMENT such as `--env-*`,
+   * since they impact `BKE_appdir` behavior. */
+  BKE_appdir_init();
+
+  /* After parsing number of threads argument. */
+  BLI_task_scheduler_init();
+
+  /* Initialize sub-systems that use `BKE_appdir.h`. */
+  IMB_init();
+
+#ifndef WITH_PYTHON_MODULE
+  /* First test for background-mode (#Global.background) */
+  BLI_args_parse(ba, ARG_PASS_SETTINGS, NULL, NULL);
+
+  main_signal_setup();
+#endif
+
 #ifdef WITH_FFMPEG
+  /* Keep after #ARG_PASS_SETTINGS since debug flags are checked. */
   IMB_ffmpeg_init();
 #endif
 
-  /* after level 1 args, this is so playanim skips RNA init */
+  /* After #ARG_PASS_SETTINGS arguments, this is so #WM_main_playanim skips #RNA_init. */
   RNA_init();
 
   RE_engines_init();
-  init_nodesystem();
-  psys_init_rng();
-  /* end second init */
+  BKE_node_system_init();
+  BKE_particle_init_rng();
+  /* End second initialization. */
 
 #if defined(WITH_PYTHON_MODULE) || defined(WITH_HEADLESS)
-  G.background = true; /* python module mode ALWAYS runs in background mode (for now) */
+  /* Python module mode ALWAYS runs in background-mode (for now). */
+  G.background = true;
 #else
   if (G.background) {
     main_signal_setup_background();
   }
 #endif
 
-  /* background render uses this font too */
+  /* Background render uses this font too. */
   BKE_vfont_builtin_register(datatoc_bfont_pfb, datatoc_bfont_pfb_size);
 
-  /* Initialize ffmpeg if built in, also needed for bg mode if videos are
-   * rendered via ffmpeg */
+  /* Initialize FFMPEG if built in, also needed for background-mode if videos are
+   * rendered via FFMPEG. */
   BKE_sound_init_once();
 
-  init_def_material();
+  BKE_materials_init();
 
+#ifndef WITH_PYTHON_MODULE
   if (G.background == 0) {
-#ifndef WITH_PYTHON_MODULE
-    BLI_argsParse(ba, 2, NULL, NULL);
-    BLI_argsParse(ba, 3, NULL, NULL);
-#endif
-    WM_init(C, argc, (const char **)argv);
-
-    /* this is properly initialized with user defs, but this is default */
-    /* call after loading the startup.blend so we can read U.tempdir */
-    BKE_tempdir_init(U.tempdir);
+    BLI_args_parse(ba, ARG_PASS_SETTINGS_GUI, NULL, NULL);
   }
-  else {
-#ifndef WITH_PYTHON_MODULE
-    BLI_argsParse(ba, 3, NULL, NULL);
+  BLI_args_parse(ba, ARG_PASS_SETTINGS_FORCE, NULL, NULL);
 #endif
 
-    WM_init(C, argc, (const char **)argv);
+  WM_init(C, argc, (const char **)argv);
 
-    /* don't use user preferences temp dir */
-    BKE_tempdir_init(NULL);
-  }
-#ifdef WITH_PYTHON
-  /**
-   * NOTE: the U.pythondir string is NULL until WM_init() is executed,
-   * so we provide the BPY_ function below to append the user defined
-   * python-dir to Python's sys.path at this point.  Simply putting
-   * WM_init() before #BPY_python_start() crashes Blender at startup.
-   */
-
-  /* TODO - U.pythondir */
-#else
+#ifndef WITH_PYTHON
   printf(
-      "\n* WARNING * - Blender compiled without Python!\nthis is not intended for typical "
-      "usage\n\n");
+      "\n* WARNING * - Blender compiled without Python!\n"
+      "this is not intended for typical usage\n\n");
 #endif
 
-  CTX_py_init_set(C, 1);
+  CTX_py_init_set(C, true);
   WM_keyconfig_init(C);
 
 #ifdef WITH_FREESTYLE
-  /* initialize Freestyle */
-  FRS_initialize();
+  /* Initialize Freestyle. */
+  FRS_init();
   FRS_set_context(C);
 #endif
 
   /* OK we are ready for it */
 #ifndef WITH_PYTHON_MODULE
+  /* Handles #ARG_PASS_FINAL. */
   main_args_setup_post(C, ba);
 #endif
 
@@ -472,7 +493,10 @@ int main(int argc,
   callback_main_atexit(&app_init_data);
   BKE_blender_atexit_unregister(callback_main_atexit, &app_init_data);
 
-  /* paranoid, avoid accidental re-use */
+  /* End argument parsing, allow memory leaks to be printed. */
+  MEM_use_memleak_detection(true);
+
+  /* Paranoid, avoid accidental re-use. */
 #ifndef WITH_PYTHON_MODULE
   ba = NULL;
   (void)ba;
@@ -483,29 +507,26 @@ int main(int argc,
   (void)argv;
 #endif
 
-#ifdef WITH_PYTHON_MODULE
-  return 0; /* keep blender in background mode running */
-#endif
-
+#ifndef WITH_PYTHON_MODULE
   if (G.background) {
-    /* Using window-manager API in background mode is a bit odd, but works fine. */
+    /* Using window-manager API in background-mode is a bit odd, but works fine. */
     WM_exit(C);
   }
   else {
     if (!G.file_loaded) {
       WM_init_splash(C);
     }
+    WM_main(C);
   }
-
-  WM_main(C);
+#endif /* WITH_PYTHON_MODULE */
 
   return 0;
-} /* end of int main(argc, argv) */
+} /* End of `int main(...)` function. */
 
 #ifdef WITH_PYTHON_MODULE
 void main_python_exit(void)
 {
-  WM_exit_ext((bContext *)evil_C, true);
+  WM_exit_ex((bContext *)evil_C, true);
   evil_C = NULL;
 }
 #endif

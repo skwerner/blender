@@ -17,16 +17,15 @@
  * All rights reserved.
  */
 
-#ifndef __BLI_RECT_H__
-#define __BLI_RECT_H__
+#pragma once
 
 /** \file
  * \ingroup bli
  */
 
-#include "DNA_vec_types.h"
-#include "BLI_sys_types.h" /* bool */
 #include "BLI_compiler_compat.h"
+#include "BLI_sys_types.h" /* bool */
+#include "DNA_vec_types.h"
 
 struct rctf;
 struct rcti;
@@ -39,6 +38,10 @@ bool BLI_rcti_is_empty(const struct rcti *rect);
 bool BLI_rctf_is_empty(const struct rctf *rect);
 void BLI_rctf_init(struct rctf *rect, float xmin, float xmax, float ymin, float ymax);
 void BLI_rcti_init(struct rcti *rect, int xmin, int xmax, int ymin, int ymax);
+bool BLI_rctf_is_valid(const struct rctf *rect);
+bool BLI_rcti_is_valid(const struct rcti *rect);
+void BLI_rctf_sanitize(struct rctf *rect);
+void BLI_rcti_sanitize(struct rcti *rect);
 void BLI_rctf_init_pt_radius(struct rctf *rect, const float xy[2], float size);
 void BLI_rcti_init_pt_radius(struct rcti *rect, const int xy[2], int size);
 void BLI_rcti_init_minmax(struct rcti *rect);
@@ -59,14 +62,24 @@ void BLI_rcti_translate(struct rcti *rect, int x, int y);
 void BLI_rcti_recenter(struct rcti *rect, int x, int y);
 void BLI_rctf_recenter(struct rctf *rect, float x, float y);
 void BLI_rcti_resize(struct rcti *rect, int x, int y);
+void BLI_rcti_resize_x(struct rcti *rect, int x);
+void BLI_rcti_resize_y(struct rcti *rect, int y);
+void BLI_rcti_pad(struct rcti *rect, int pad_x, int pad_y);
+void BLI_rctf_pad(struct rctf *rect, float pad_x, float pad_y);
 void BLI_rctf_resize(struct rctf *rect, float x, float y);
+void BLI_rctf_resize_x(struct rctf *rect, float x);
+void BLI_rctf_resize_y(struct rctf *rect, float y);
 void BLI_rcti_scale(rcti *rect, const float scale);
 void BLI_rctf_scale(rctf *rect, const float scale);
+void BLI_rctf_pad_y(struct rctf *rect,
+                    const float boundary_size,
+                    const float pad_min,
+                    const float pad_max);
 void BLI_rctf_interp(struct rctf *rect,
                      const struct rctf *rect_a,
                      const struct rctf *rect_b,
                      const float fac);
-//void BLI_rcti_interp(struct rctf *rect, struct rctf *rect_a, struct rctf *rect_b, float fac);
+// void BLI_rcti_interp(struct rctf *rect, struct rctf *rect_a, struct rctf *rect_b, float fac);
 bool BLI_rctf_clamp_pt_v(const struct rctf *rect, float xy[2]);
 bool BLI_rcti_clamp_pt_v(const struct rcti *rect, int xy[2]);
 bool BLI_rctf_clamp(struct rctf *rect, const struct rctf *rect_bounds, float r_xy[2]);
@@ -75,6 +88,10 @@ bool BLI_rctf_compare(const struct rctf *rect_a, const struct rctf *rect_b, cons
 bool BLI_rcti_compare(const struct rcti *rect_a, const struct rcti *rect_b);
 bool BLI_rctf_isect(const struct rctf *src1, const struct rctf *src2, struct rctf *dest);
 bool BLI_rcti_isect(const struct rcti *src1, const struct rcti *src2, struct rcti *dest);
+bool BLI_rctf_isect_rect_x(const struct rctf *src1, const struct rctf *src2, float range_x[2]);
+bool BLI_rctf_isect_rect_y(const struct rctf *src1, const struct rctf *src2, float range_y[2]);
+bool BLI_rcti_isect_rect_x(const struct rcti *src1, const struct rcti *src2, int range_x[2]);
+bool BLI_rcti_isect_rect_y(const struct rcti *src1, const struct rcti *src2, int range_y[2]);
 bool BLI_rcti_isect_x(const rcti *rect, const int x);
 bool BLI_rcti_isect_y(const rcti *rect, const int y);
 bool BLI_rcti_isect_pt(const struct rcti *rect, const int x, const int y);
@@ -93,8 +110,8 @@ bool BLI_rcti_isect_circle(const struct rcti *rect, const float xy[2], const flo
 bool BLI_rctf_isect_circle(const struct rctf *rect, const float xy[2], const float radius);
 bool BLI_rcti_inside_rcti(const rcti *rct_a, const rcti *rct_b);
 bool BLI_rctf_inside_rctf(const rctf *rct_a, const rctf *rct_b);
-void BLI_rcti_union(struct rcti *rcti1, const struct rcti *rcti2);
-void BLI_rctf_union(struct rctf *rctf1, const struct rctf *rctf2);
+void BLI_rcti_union(struct rcti *rct1, const struct rcti *rct2);
+void BLI_rctf_union(struct rctf *rct1, const struct rctf *rct2);
 void BLI_rcti_rctf_copy(struct rcti *dst, const struct rctf *src);
 void BLI_rctf_rcti_copy(struct rctf *dst, const struct rcti *src);
 void BLI_rcti_rctf_copy_floor(struct rcti *dst, const struct rctf *src);
@@ -153,5 +170,3 @@ BLI_INLINE float BLI_rctf_size_y(const struct rctf *rct)
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __BLI_RECT_H__ */

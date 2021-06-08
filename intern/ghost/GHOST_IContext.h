@@ -22,10 +22,8 @@
  * Declaration of GHOST_IContext interface class.
  */
 
-#ifndef __GHOST_IContext_H__
-#define __GHOST_IContext_H__
+#pragma once
 
-#include "STR_String.h"
 #include "GHOST_Types.h"
 
 /**
@@ -46,19 +44,21 @@ class GHOST_IContext {
 
   /**
    * Activates the drawing context.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   virtual GHOST_TSuccess activateDrawingContext() = 0;
 
   /**
    * Release the drawing context of the calling thread.
-   * \return  A boolean success indicator.
+   * \return A boolean success indicator.
    */
   virtual GHOST_TSuccess releaseDrawingContext() = 0;
+
+  virtual unsigned int getDefaultFramebuffer() = 0;
+
+  virtual GHOST_TSuccess swapBuffers() = 0;
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("GHOST:GHOST_IContext")
 #endif
 };
-
-#endif  // __GHOST_IContext_H__

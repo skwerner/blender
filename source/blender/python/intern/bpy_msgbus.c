@@ -21,8 +21,8 @@
 
 #include <Python.h>
 
-#include "../generic/python_utildefines.h"
 #include "../generic/py_capi_utils.h"
+#include "../generic/python_utildefines.h"
 #include "../mathutils/mathutils.h"
 
 #include "BLI_utildefines.h"
@@ -30,17 +30,17 @@
 #include "BKE_context.h"
 
 #include "WM_api.h"
-#include "WM_types.h"
 #include "WM_message.h"
+#include "WM_types.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
 #include "bpy_capi_utils.h"
-#include "bpy_rna.h"
-#include "bpy_intern_string.h"
 #include "bpy_gizmo_wrap.h" /* own include */
+#include "bpy_intern_string.h"
+#include "bpy_rna.h"
 
 #include "bpy_msgbus.h" /* own include */
 
@@ -118,7 +118,7 @@ static int py_msgbus_rna_key_from_py(PyObject *py_sub,
       PointerRNA data_type_ptr = {
           .type = data_type,
       };
-      const char *data_prop_str = _PyUnicode_AsString(data_prop_py);
+      const char *data_prop_str = PyUnicode_AsUTF8(data_prop_py);
       PropertyRNA *data_prop = RNA_struct_find_property(&data_type_ptr, data_prop_str);
 
       if (data_prop == NULL) {
@@ -192,7 +192,7 @@ static void bpy_msgbus_notify(bContext *C,
 static void bpy_msgbus_subscribe_value_free_data(struct wmMsgSubscribeKey *UNUSED(msg_key),
                                                  struct wmMsgSubscribeValue *msg_val)
 {
-  PyGILState_STATE gilstate = PyGILState_Ensure();
+  const PyGILState_STATE gilstate = PyGILState_Ensure();
   Py_DECREF(msg_val->owner);
   Py_DECREF(msg_val->user_data);
   PyGILState_Release(gilstate);
@@ -206,7 +206,7 @@ static void bpy_msgbus_subscribe_value_free_data(struct wmMsgSubscribeKey *UNUSE
 
 PyDoc_STRVAR(
     bpy_msgbus_subscribe_rna_doc,
-    ".. function:: subscribe_rna(data, owner, args, notify, options=set())\n"
+    ".. function:: subscribe_rna(key, owner, args, notify, options=set())\n"
     "\n" BPY_MSGBUS_RNA_MSGKEY_DOC
     "   :arg owner: Handle for this subscription (compared by identity).\n"
     "   :type owner: Any type.\n"
@@ -214,9 +214,7 @@ PyDoc_STRVAR(
     "\n"
     "      - ``PERSISTENT`` when set, the subscriber will be kept when remapping ID data.\n"
     "\n"
-    "   :type options: set of str.\n"
-    "\n"
-    "   Returns a new vector int property definition.\n");
+    "   :type options: set of str.\n");
 static PyObject *bpy_msgbus_subscribe_rna(PyObject *UNUSED(self), PyObject *args, PyObject *kw)
 {
   const char *error_prefix = "subscribe_rna";
@@ -267,9 +265,9 @@ static PyObject *bpy_msgbus_subscribe_rna(PyObject *UNUSED(self), PyObject *args
   }
 
   /* Note: we may want to have a way to pass this in. */
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
   struct wmMsgBus *mbus = CTX_wm_message_bus(C);
-  wmMsgParams_RNA msg_key_params = {{{0}}};
+  wmMsgParams_RNA msg_key_params = {{0}};
 
   wmMsgSubscribeValue msg_val_params = {0};
 
@@ -307,14 +305,16 @@ static PyObject *bpy_msgbus_subscribe_rna(PyObject *UNUSED(self), PyObject *args
 
   WM_msg_subscribe_rna_params(mbus, &msg_key_params, &msg_val_params, __func__);
 
-  WM_msg_dump(mbus, __func__);
+  if (0) { /* For debugging. */
+    WM_msg_dump(mbus, __func__);
+  }
 
   Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(
     bpy_msgbus_publish_rna_doc,
-    ".. function:: publish_rna(data, owner, args, notify)\n"
+    ".. function:: publish_rna(key)\n"
     "\n" BPY_MSGBUS_RNA_MSGKEY_DOC
     "\n"
     "   Notify subscribers of changes to this property\n"
@@ -340,9 +340,9 @@ static PyObject *bpy_msgbus_publish_rna(PyObject *UNUSED(self), PyObject *args, 
   }
 
   /* Note: we may want to have a way to pass this in. */
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
   struct wmMsgBus *mbus = CTX_wm_message_bus(C);
-  wmMsgParams_RNA msg_key_params = {{{0}}};
+  wmMsgParams_RNA msg_key_params = {{0}};
 
   if (py_msgbus_rna_key_from_py(py_sub, &msg_key_params, error_prefix) == -1) {
     return NULL;
@@ -359,7 +359,7 @@ PyDoc_STRVAR(bpy_msgbus_clear_by_owner_doc,
              "   Clear all subscribers using this owner.\n");
 static PyObject *bpy_msgbus_clear_by_owner(PyObject *UNUSED(self), PyObject *py_owner)
 {
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
   struct wmMsgBus *mbus = CTX_wm_message_bus(C);
   WM_msgbus_clear_by_owner(mbus, py_owner);
   Py_RETURN_NONE;

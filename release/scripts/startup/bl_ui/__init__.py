@@ -35,14 +35,17 @@ _modules = [
     "properties_data_curve",
     "properties_data_empty",
     "properties_data_gpencil",
+    "properties_data_hair",
     "properties_data_light",
     "properties_data_lattice",
     "properties_data_mesh",
     "properties_data_metaball",
     "properties_data_modifier",
+    "properties_data_pointcloud",
     "properties_data_shaderfx",
     "properties_data_lightprobe",
     "properties_data_speaker",
+    "properties_data_volume",
     "properties_mask_common",
     "properties_material",
     "properties_material_gpencil",
@@ -54,10 +57,9 @@ _modules = [
     "properties_physics_common",
     "properties_physics_dynamicpaint",
     "properties_physics_field",
-    "properties_physics_fluid",
     "properties_physics_rigidbody",
     "properties_physics_rigidbody_constraint",
-    "properties_physics_smoke",
+    "properties_physics_fluid",
     "properties_physics_softbody",
     "properties_render",
     "properties_output",
@@ -65,6 +67,7 @@ _modules = [
     "properties_scene",
     "properties_texture",
     "properties_world",
+    "properties_collection",
 
     # Generic Space Modules
     #
@@ -84,6 +87,7 @@ _modules = [
     "space_outliner",
     "space_properties",
     "space_sequencer",
+    "space_spreadsheet",
     "space_statusbar",
     "space_text",
     "space_time",
@@ -120,14 +124,12 @@ def register():
     )
     from bpy.types import WindowManager
 
-    def addon_filter_items(self, context):
+    def addon_filter_items(_self, _context):
         import addon_utils
 
         items = [
             ('All', "All", "All Add-ons"),
             ('User', "User", "All Add-ons Installed by User"),
-            ('Enabled', "Enabled", "All Enabled Add-ons"),
-            ('Disabled', "Disabled", "All Disabled Add-ons"),
         ]
 
         items_unique = set()
@@ -201,7 +203,7 @@ class UI_UL_list(bpy.types.UIList):
         for i, item in enumerate(items):
             name = getattr(item, propname, None)
             # This is similar to a logical xor
-            if bool(name and fnmatch.fnmatchcase(name, pattern)) is not bool(reverse):
+            if bool(name and fnmatch.fnmatch(name, pattern)) is not bool(reverse):
                 flags[i] |= bitflag
         return flags
 

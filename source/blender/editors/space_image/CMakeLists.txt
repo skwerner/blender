@@ -23,18 +23,16 @@ set(INC
   ../../blentranslation
   ../../bmesh
   ../../depsgraph
-  ../../imbuf
+  ../../draw
   ../../gpu
+  ../../imbuf
   ../../makesdna
   ../../makesrna
-  ../../render/extern/include
+  ../../render
   ../../windowmanager
-  ../../../../intern/guardedalloc
+  ../../../../intern/clog
   ../../../../intern/glew-mx
-)
-
-set(INC_SYS
-  ${GLEW_INCLUDE_PATH}
+  ../../../../intern/guardedalloc
 )
 
 set(SRC
@@ -42,6 +40,8 @@ set(SRC
   image_draw.c
   image_edit.c
   image_ops.c
+  image_sequence.c
+  image_undo.c
   space_image.c
 
   image_intern.h
@@ -77,6 +77,5 @@ if(WITH_IMAGE_CINEON)
   add_definitions(-DWITH_CINEON)
 endif()
 
-add_definitions(${GL_DEFINITIONS})
 
 blender_add_lib(bf_editor_space_image "${SRC}" "${INC}" "${INC_SYS}" "${LIB}")

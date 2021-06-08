@@ -18,8 +18,7 @@
  * \ingroup bpygpu
  */
 
-#ifndef __GPU_PY_VERTEX_BUFFER_H__
-#define __GPU_PY_VERTEX_BUFFER_H__
+#pragma once
 
 #include "BLI_compiler_attrs.h"
 
@@ -29,10 +28,8 @@ extern PyTypeObject BPyGPUVertBuf_Type;
 
 typedef struct BPyGPUVertBuf {
   PyObject_VAR_HEAD
-      /* The buf is owned, we may support thin wrapped batches later. */
-      struct GPUVertBuf *buf;
+  /* The buf is owned, we may support thin wrapped batches later. */
+  struct GPUVertBuf *buf;
 } BPyGPUVertBuf;
 
-PyObject *BPyGPUVertBuf_CreatePyObject(struct GPUVertBuf *vbo) ATTR_NONNULL(1);
-
-#endif /* __GPU_PY_VERTEX_BUFFER_H__ */
+PyObject *BPyGPUVertBuf_CreatePyObject(struct GPUVertBuf *buf) ATTR_NONNULL(1);

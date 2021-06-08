@@ -23,9 +23,15 @@
 
 #include "node_composite_util.h"
 
-bool cmp_node_poll_default(bNodeType *UNUSED(ntype), bNodeTree *ntree)
+bool cmp_node_poll_default(bNodeType *UNUSED(ntype),
+                           bNodeTree *ntree,
+                           const char **r_disabled_hint)
 {
-  return STREQ(ntree->idname, "CompositorNodeTree");
+  if (!STREQ(ntree->idname, "CompositorNodeTree")) {
+    *r_disabled_hint = "Not a compositor node tree";
+    return false;
+  }
+  return true;
 }
 
 void cmp_node_update_default(bNodeTree *UNUSED(ntree), bNode *node)
@@ -33,8 +39,8 @@ void cmp_node_update_default(bNodeTree *UNUSED(ntree), bNode *node)
   bNodeSocket *sock;
   for (sock = node->outputs.first; sock; sock = sock->next) {
     if (sock->cache) {
-      //free_compbuf(sock->cache);
-      //sock->cache = NULL;
+      // free_compbuf(sock->cache);
+      // sock->cache = NULL;
     }
   }
   node->need_exec = 1;

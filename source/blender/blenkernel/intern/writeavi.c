@@ -43,7 +43,7 @@
 /* ********************** general blender movie support ***************************** */
 
 static int start_stub(void *UNUSED(context_v),
-                      Scene *UNUSED(scene),
+                      const Scene *UNUSED(scene),
                       RenderData *UNUSED(rd),
                       int UNUSED(rectx),
                       int UNUSED(recty),
@@ -85,7 +85,7 @@ static void context_free_stub(void *UNUSED(context_v))
 
 /* callbacks */
 static int start_avi(void *context_v,
-                     Scene *scene,
+                     const Scene *scene,
                      RenderData *rd,
                      int rectx,
                      int recty,
@@ -102,7 +102,7 @@ static int append_avi(void *context_v,
                       int recty,
                       const char *suffix,
                       ReportList *reports);
-static void filepath_avi(char *string, RenderData *rd, bool preview, const char *suffix);
+static void filepath_avi(char *string, const RenderData *rd, bool preview, const char *suffix);
 static void *context_create_avi(void);
 static void context_free_avi(void *context_v);
 #endif /* WITH_AVI */
@@ -118,7 +118,6 @@ bMovieHandle *BKE_movie_handle_get(const char imtype)
   mh.start_movie = start_stub;
   mh.append_movie = append_stub;
   mh.end_movie = end_stub;
-  mh.get_next_frame = NULL;
   mh.get_movie_path = NULL;
   mh.context_create = context_create_stub;
   mh.context_free = context_free_stub;
@@ -159,12 +158,13 @@ bMovieHandle *BKE_movie_handle_get(const char imtype)
 
 #ifdef WITH_AVI
 
-static void filepath_avi(char *string, RenderData *rd, bool preview, const char *suffix)
+static void filepath_avi(char *string, const RenderData *rd, bool preview, const char *suffix)
 {
   int sfra, efra;
 
-  if (string == NULL)
+  if (string == NULL) {
     return;
+  }
 
   if (preview) {
     sfra = rd->psfra;
@@ -196,7 +196,7 @@ static void filepath_avi(char *string, RenderData *rd, bool preview, const char 
 }
 
 static int start_avi(void *context_v,
-                     Scene *UNUSED(scene),
+                     const Scene *UNUSED(scene),
                      RenderData *rd,
                      int rectx,
                      int recty,
@@ -219,10 +219,12 @@ static int start_avi(void *context_v,
   quality = rd->im_format.quality;
   framerate = (double)rd->frs_sec / (double)rd->frs_sec_base;
 
-  if (rd->im_format.imtype != R_IMF_IMTYPE_AVIJPEG)
+  if (rd->im_format.imtype != R_IMF_IMTYPE_AVIJPEG) {
     format = AVI_FORMAT_AVI_RGB;
-  else
+  }
+  else {
     format = AVI_FORMAT_MJPEG;
+  }
 
   if (AVI_open_compress(name, avi, 1, format) != AVI_ERROR_NONE) {
     BKE_report(reports, RPT_ERROR, "Cannot open or start AVI movie file");
@@ -256,8 +258,9 @@ static int append_avi(void *context_v,
   char *cp, rt;
   AviMovie *avi = context_v;
 
-  if (avi == NULL)
+  if (avi == NULL) {
     return 0;
+  }
 
   /* note that libavi free's the buffer... stupid interface - zr */
   rectot = MEM_mallocN(rectx * recty * sizeof(int), "rectot");
@@ -289,8 +292,9 @@ static void end_avi(void *context_v)
 {
   AviMovie *avi = context_v;
 
-  if (avi == NULL)
+  if (avi == NULL) {
     return;
+  }
 
   AVI_close_compress(avi);
 }
@@ -312,7 +316,7 @@ static void context_free_avi(void *context_v)
 #endif /* WITH_AVI */
 
 /* similar to BKE_image_path_from_imformat() */
-void BKE_movie_filepath_get(char *string, RenderData *rd, bool preview, const char *suffix)
+void BKE_movie_filepath_get(char *string, const RenderData *rd, bool preview, const char *suffix)
 {
   bMovieHandle *mh = BKE_movie_handle_get(rd->im_format.imtype);
   if (mh && mh->get_movie_path) {

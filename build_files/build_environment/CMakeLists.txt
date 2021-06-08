@@ -30,11 +30,12 @@
 #   build_deps 2015 x64 / build_deps 2015 x86
 #
 # MAC OS X USAGE:
-#   Install with homebrew: brew install cmake autoconf automake libtool yasm nasm
+#   Install with homebrew: brew install autoconf automake bison cmake libtool pkg-config yasm
+#   Additional requirements for macOS arm64: brew install flex
 #   Run "make deps" from main Blender directory
 #
 # LINUX USAGE:
-#   Install compiler cmake autoconf automake libtool yasm nasm tcl
+#   Install compiler cmake autoconf automake libtool yasm tcl
 #   Run "make deps" from main Blender directory
 #
 ####################################################################################################
@@ -43,28 +44,23 @@ project("BlenderDependencies")
 cmake_minimum_required(VERSION 3.5)
 
 include(ExternalProject)
+include(cmake/check_software.cmake)
 include(cmake/options.cmake)
 include(cmake/versions.cmake)
+include(cmake/download.cmake)
 
 if(ENABLE_MINGW64)
-  if("${CMAKE_SIZEOF_VOID_P}" EQUAL "8")
-    include(cmake/setup_mingw64.cmake)
-  else()
-    include(cmake/setup_mingw32.cmake)
-  endif()
+  include(cmake/setup_mingw64.cmake)
 else()
   set(mingw_LIBDIR ${LIBDIR})
 endif()
 
 include(cmake/zlib.cmake)
-include(cmake/blendthumb.cmake)
 include(cmake/openal.cmake)
 include(cmake/png.cmake)
 include(cmake/jpeg.cmake)
-include(cmake/boost.cmake)
 include(cmake/blosc.cmake)
 include(cmake/pthreads.cmake)
-include(cmake/ilmbase.cmake)
 include(cmake/openexr.cmake)
 include(cmake/freetype.cmake)
 include(cmake/freeglut.cmake)
@@ -76,11 +72,12 @@ include(cmake/cuew.cmake)
 include(cmake/opensubdiv.cmake)
 include(cmake/sdl.cmake)
 include(cmake/opencollada.cmake)
-include(cmake/opencolorio.cmake)
 include(cmake/llvm.cmake)
-include(cmake/clang.cmake)
 if(APPLE)
   include(cmake/openmp.cmake)
+endif()
+if(UNIX)
+  include(cmake/nasm.cmake)
 endif()
 include(cmake/openimageio.cmake)
 include(cmake/tiff.cmake)
@@ -88,31 +85,44 @@ include(cmake/flexbison.cmake)
 include(cmake/osl.cmake)
 include(cmake/tbb.cmake)
 include(cmake/openvdb.cmake)
+include(cmake/nanovdb.cmake)
 include(cmake/python.cmake)
+option(USE_PIP_NUMPY "Install NumPy using pip wheel instead of building from source" OFF)
+if(APPLE AND ("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "x86_64"))
+  set(USE_PIP_NUMPY ON)
+else()
+  include(cmake/numpy.cmake)
+endif()
 include(cmake/python_site_packages.cmake)
-include(cmake/numpy.cmake)
+include(cmake/package_python.cmake)
+include(cmake/usd.cmake)
+include(cmake/potrace.cmake)
+include(cmake/haru.cmake)
+# Boost needs to be included after python.cmake due to the PYTHON_BINARY variable being needed.
+include(cmake/boost.cmake)
 include(cmake/pugixml.cmake)
+include(cmake/ispc.cmake)
+include(cmake/openimagedenoise.cmake)
+include(cmake/embree.cmake)
+if(NOT APPLE)
+  include(cmake/xr_openxr.cmake)
+endif()
+
+# OpenColorIO and dependencies.
+include(cmake/expat.cmake)
+include(cmake/yamlcpp.cmake)
+include(cmake/opencolorio.cmake)
+
+if(BLENDER_PLATFORM_ARM)
+  include(cmake/sse2neon.cmake)
+endif()
 
 if(WITH_WEBP)
   include(cmake/webp.cmake)
 endif()
 
-if(WITH_EMBREE)
-  include(cmake/embree.cmake)
-endif()
-
-if(WIN32)
-  # HMD branch deps
-  include(cmake/hidapi.cmake)
-  # OCIO deps
-  include(cmake/tinyxml.cmake)
-  include(cmake/yamlcpp.cmake)
-  # LCMS is an OCIO dep, but only if you build the apps, leaving it here for convenience
-  #include(cmake/lcms.cmake)
-
-endif()
-
 if(NOT WIN32 OR ENABLE_MINGW64)
+  include(cmake/gmp.cmake)
   include(cmake/openjpeg.cmake)
   if(NOT WIN32 OR BUILD_MODE STREQUAL Release)
     if(WIN32)
@@ -122,10 +132,10 @@ if(NOT WIN32 OR ENABLE_MINGW64)
     include(cmake/ogg.cmake)
     include(cmake/vorbis.cmake)
     include(cmake/theora.cmake)
+    include(cmake/opus.cmake)
     include(cmake/vpx.cmake)
     include(cmake/x264.cmake)
     include(cmake/xvidcore.cmake)
-    include(cmake/faad.cmake)
     include(cmake/ffmpeg.cmake)
     include(cmake/fftw.cmake)
     include(cmake/sndfile.cmake)
@@ -149,6 +159,11 @@ if(UNIX)
   include(cmake/lzma.cmake)
   include(cmake/ssl.cmake)
   include(cmake/sqlite.cmake)
+endif()
+
+if(UNIX AND NOT APPLE)
+  include(cmake/libglu.cmake)
+  include(cmake/mesa.cmake)
 endif()
 
 include(cmake/harvest.cmake)

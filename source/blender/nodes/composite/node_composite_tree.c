@@ -24,8 +24,8 @@
 #include <stdio.h>
 
 #include "DNA_color_types.h"
-#include "DNA_scene_types.h"
 #include "DNA_node_types.h"
+#include "DNA_scene_types.h"
 
 #include "BLT_translation.h"
 
@@ -89,38 +89,52 @@ static void free_node_cache(bNodeTree *UNUSED(ntree), bNode *node)
 static void free_cache(bNodeTree *ntree)
 {
   bNode *node;
-  for (node = ntree->nodes.first; node; node = node->next)
+  for (node = ntree->nodes.first; node; node = node->next) {
     free_node_cache(ntree, node);
+  }
 }
 
 /* local tree then owns all compbufs */
-static void localize(bNodeTree *UNUSED(localtree), bNodeTree *ntree)
+static void localize(bNodeTree *localtree, bNodeTree *ntree)
 {
-  bNode *node;
-  bNodeSocket *sock;
 
-  for (node = ntree->nodes.first; node; node = node->next) {
-    /* ensure new user input gets handled ok */
+  bNode *node = ntree->nodes.first;
+  bNode *local_node = localtree->nodes.first;
+  while (node != NULL) {
+
+    /* Ensure new user input gets handled ok. */
     node->need_exec = 0;
-    node->new_node->original = node;
+    local_node->original = node;
 
     /* move over the compbufs */
     /* right after ntreeCopyTree() oldsock pointers are valid */
 
     if (ELEM(node->type, CMP_NODE_VIEWER, CMP_NODE_SPLITVIEWER)) {
       if (node->id) {
-        if (node->flag & NODE_DO_OUTPUT)
-          node->new_node->id = (ID *)node->id;
-        else
-          node->new_node->id = NULL;
+        if (node->flag & NODE_DO_OUTPUT) {
+          local_node->id = (ID *)node->id;
+        }
+        else {
+          local_node->id = NULL;
+        }
       }
     }
 
-    for (sock = node->outputs.first; sock; sock = sock->next) {
-      sock->new_sock->cache = sock->cache;
-      sock->cache = NULL;
-      sock->new_sock->new_sock = sock;
+    bNodeSocket *output_sock = node->outputs.first;
+    bNodeSocket *local_output_sock = local_node->outputs.first;
+    while (output_sock != NULL) {
+      local_output_sock->cache = output_sock->cache;
+      output_sock->cache = NULL;
+      /* This is actually link to original: someone was just lazy enough and tried to save few
+       * bytes in the cost of readability. */
+      local_output_sock->new_sock = output_sock;
+
+      output_sock = output_sock->next;
+      local_output_sock = local_output_sock->next;
     }
+
+    node = node->next;
+    local_node = local_node->next;
   }
 }
 
@@ -150,8 +164,9 @@ static void local_merge(Main *bmain, bNodeTree *localtree, bNodeTree *ntree)
          * and to achieve much better performance on further calls this context should be
          * copied back to original node */
         if (lnode->storage) {
-          if (lnode->new_node->storage)
+          if (lnode->new_node->storage) {
             BKE_tracking_distortion_free(lnode->new_node->storage);
+          }
 
           lnode->new_node->storage = BKE_tracking_distortion_copy(lnode->storage);
         }
@@ -190,6 +205,12 @@ static void composite_node_add_init(bNodeTree *UNUSED(bnodetree), bNode *bnode)
   }
 }
 
+static bool composite_node_tree_socket_type_valid(eNodeSocketDatatype socket_type,
+                                                  bNodeTreeType *UNUSED(ntreetype))
+{
+  return ELEM(socket_type, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA);
+}
+
 bNodeTreeType *ntreeType_Composite;
 
 void register_node_tree_type_cmp(void)
@@ -212,8 +233,9 @@ void register_node_tree_type_cmp(void)
   tt->update = update;
   tt->get_from_context = composite_get_from_context;
   tt->node_add_init = composite_node_add_init;
+  tt->valid_socket_type = composite_node_tree_socket_type_valid;
 
-  tt->ext.srna = &RNA_CompositorNodeTree;
+  tt->rna_ext.srna = &RNA_CompositorNodeTree;
 
   ntreeTypeAdd(tt);
 }
@@ -243,152 +265,69 @@ void ntreeCompositExecTree(Scene *scene,
 
 /* Update the outputs of the render layer nodes.
  * Since the outputs depend on the render engine, this part is a bit complex:
- * - ntreeCompositUpdateRLayers is called and loops over all render layer nodes
- * - Each render layer node calls the update function of the render engine that's used for its scene
- * - The render engine calls RE_engine_register_pass for each pass
- * - RE_engine_register_pass calls ntreeCompositRegisterPass,
- *   which calls node_cmp_rlayers_register_pass for every render layer node
+ * - ntreeCompositUpdateRLayers is called and loops over all render layer nodes.
+ * - Each render layer node calls the update function of the
+ *   render engine that's used for its scene.
+ * - The render engine calls RE_engine_register_pass for each pass.
+ * - RE_engine_register_pass calls ntreeCompositRegisterPass,.
+ *   which calls node_cmp_rlayers_register_pass for every render layer node.
  */
 void ntreeCompositUpdateRLayers(bNodeTree *ntree)
 {
   bNode *node;
 
-  if (ntree == NULL)
+  if (ntree == NULL) {
     return;
+  }
 
   for (node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == CMP_NODE_R_LAYERS)
+    if (node->type == CMP_NODE_R_LAYERS) {
       node_cmp_rlayers_outputs(ntree, node);
+    }
   }
 }
 
-void ntreeCompositRegisterPass(
-    bNodeTree *ntree, Scene *scene, ViewLayer *view_layer, const char *name, int type)
+void ntreeCompositRegisterPass(bNodeTree *ntree,
+                               Scene *scene,
+                               ViewLayer *view_layer,
+                               const char *name,
+                               eNodeSocketDatatype type)
 {
   bNode *node;
 
-  if (ntree == NULL)
+  if (ntree == NULL) {
     return;
+  }
 
   for (node = ntree->nodes.first; node; node = node->next) {
-    if (node->type == CMP_NODE_R_LAYERS)
+    if (node->type == CMP_NODE_R_LAYERS) {
       node_cmp_rlayers_register_pass(ntree, node, scene, view_layer, name, type);
+    }
   }
 }
 
 /* called from render pipeline, to tag render input and output */
 /* need to do all scenes, to prevent errors when you re-render 1 scene */
-void ntreeCompositTagRender(Scene *curscene)
+void ntreeCompositTagRender(Scene *scene)
 {
-  Scene *sce;
-
   /* XXX Think using G_MAIN here is valid, since you want to update current file's scene nodes,
    * not the ones in temp main generated for rendering?
-   * This is still rather weak though, ideally render struct would store own main AND original G_MAIN... */
-  for (sce = G_MAIN->scenes.first; sce; sce = sce->id.next) {
-    if (sce->nodetree) {
+   * This is still rather weak though,
+   * ideally render struct would store own main AND original G_MAIN. */
+
+  for (Scene *sce_iter = G_MAIN->scenes.first; sce_iter; sce_iter = sce_iter->id.next) {
+    if (sce_iter->nodetree) {
       bNode *node;
 
-      for (node = sce->nodetree->nodes.first; node; node = node->next) {
-        if (node->id == (ID *)curscene || node->type == CMP_NODE_COMPOSITE)
-          nodeUpdate(sce->nodetree, node);
-        else if (node->type == CMP_NODE_TEXTURE) /* uses scene sizex/sizey */
-          nodeUpdate(sce->nodetree, node);
+      for (node = sce_iter->nodetree->nodes.first; node; node = node->next) {
+        if (node->id == (ID *)scene || node->type == CMP_NODE_COMPOSITE) {
+          nodeUpdate(sce_iter->nodetree, node);
+        }
+        else if (node->type == CMP_NODE_TEXTURE) /* uses scene sizex/sizey */ {
+          nodeUpdate(sce_iter->nodetree, node);
+        }
       }
     }
-  }
-}
-
-static int node_animation_properties(bNodeTree *ntree, bNode *node)
-{
-  bNodeSocket *sock;
-  const ListBase *lb;
-  Link *link;
-  PointerRNA ptr;
-  PropertyRNA *prop;
-
-  /* check to see if any of the node's properties have fcurves */
-  RNA_pointer_create((ID *)ntree, &RNA_Node, node, &ptr);
-  lb = RNA_struct_type_properties(ptr.type);
-
-  for (link = lb->first; link; link = link->next) {
-    prop = (PropertyRNA *)link;
-
-    if (RNA_property_animated(&ptr, prop)) {
-      nodeUpdate(ntree, node);
-      return 1;
-    }
-  }
-
-  /* now check node sockets */
-  for (sock = node->inputs.first; sock; sock = sock->next) {
-    RNA_pointer_create((ID *)ntree, &RNA_NodeSocket, sock, &ptr);
-    prop = RNA_struct_find_property(&ptr, "default_value");
-
-    if (RNA_property_animated(&ptr, prop)) {
-      nodeUpdate(ntree, node);
-      return 1;
-    }
-  }
-
-  return 0;
-}
-
-/* tags nodes that have animation capabilities */
-int ntreeCompositTagAnimated(bNodeTree *ntree)
-{
-  bNode *node;
-  int tagged = 0;
-
-  if (ntree == NULL)
-    return 0;
-
-  for (node = ntree->nodes.first; node; node = node->next) {
-
-    tagged = node_animation_properties(ntree, node);
-
-    /* otherwise always tag these node types */
-    if (node->type == CMP_NODE_IMAGE) {
-      Image *ima = (Image *)node->id;
-      if (ima && BKE_image_is_animated(ima)) {
-        nodeUpdate(ntree, node);
-        tagged = 1;
-      }
-    }
-    else if (node->type == CMP_NODE_TIME) {
-      nodeUpdate(ntree, node);
-      tagged = 1;
-    }
-    /* here was tag render layer, but this is called after a render, so re-composites fail */
-    else if (node->type == NODE_GROUP) {
-      if (ntreeCompositTagAnimated((bNodeTree *)node->id)) {
-        nodeUpdate(ntree, node);
-      }
-    }
-    else if (ELEM(node->type, CMP_NODE_MOVIECLIP, CMP_NODE_TRANSFORM)) {
-      nodeUpdate(ntree, node);
-      tagged = 1;
-    }
-    else if (node->type == CMP_NODE_MASK) {
-      nodeUpdate(ntree, node);
-      tagged = 1;
-    }
-  }
-
-  return tagged;
-}
-
-/* called from image window preview */
-void ntreeCompositTagGenerators(bNodeTree *ntree)
-{
-  bNode *node;
-
-  if (ntree == NULL)
-    return;
-
-  for (node = ntree->nodes.first; node; node = node->next) {
-    if (ELEM(node->type, CMP_NODE_R_LAYERS, CMP_NODE_IMAGE))
-      nodeUpdate(ntree, node);
   }
 }
 
@@ -397,12 +336,14 @@ void ntreeCompositClearTags(bNodeTree *ntree)
 {
   bNode *node;
 
-  if (ntree == NULL)
+  if (ntree == NULL) {
     return;
+  }
 
   for (node = ntree->nodes.first; node; node = node->next) {
     node->need_exec = 0;
-    if (node->type == NODE_GROUP)
+    if (node->type == NODE_GROUP) {
       ntreeCompositClearTags((bNodeTree *)node->id);
+    }
   }
 }

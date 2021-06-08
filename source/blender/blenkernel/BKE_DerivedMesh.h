@@ -17,8 +17,7 @@
  * All rights reserved.
  */
 
-#ifndef __BKE_DERIVEDMESH_H__
-#define __BKE_DERIVEDMESH_H__
+#pragma once
 
 /** \file
  * \ingroup bke
@@ -39,7 +38,7 @@
  * per-element attributes and interpolate them (e.g. uvs, vcols, vgroups, etc).
  *
  * Mesh is the "serialized" structure, used for storing object-mode mesh data
- * and also for saving stuff to disk.  It's interfaces are also what DerivedMesh
+ * and also for saving stuff to disk.  Its interfaces are also what DerivedMesh
  * uses to communicate with.
  *
  * CDDM is a little mesh library, that uses Mesh data structures in the backend.
@@ -63,14 +62,18 @@
  *       as it is and stick with using BMesh and CDDM.
  */
 
-#include "DNA_defs.h"
 #include "DNA_customdata_types.h"
+#include "DNA_defs.h"
 #include "DNA_meshdata_types.h"
 
 #include "BLI_compiler_attrs.h"
 
-#include "BKE_customdata.h"
 #include "BKE_bvhutils.h"
+#include "BKE_customdata.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct BMEditMesh;
 struct CCGElem;
@@ -79,12 +82,10 @@ struct CustomData_MeshMasks;
 struct Depsgraph;
 struct MEdge;
 struct MFace;
-struct MLoopNorSpaceArray;
 struct MVert;
 struct Mesh;
 struct ModifierData;
 struct Object;
-struct PBVH;
 struct Scene;
 
 /*
@@ -103,12 +104,6 @@ typedef enum DerivedMeshType {
   DM_TYPE_CCGDM,
 } DerivedMeshType;
 
-typedef enum DMForeachFlag {
-  DM_FOREACH_NOP = 0,
-  DM_FOREACH_USE_NORMAL =
-      (1 << 0), /* foreachMappedVert, foreachMappedLoop, foreachMappedFaceCenter */
-} DMForeachFlag;
-
 typedef enum DMDirtyFlag {
   /* dm has valid tessellated faces, but tessellated CDDATA need to be updated. */
   DM_DIRTY_TESS_CDLAYERS = 1 << 0,
@@ -124,18 +119,16 @@ struct DerivedMesh {
   int numVertData, numEdgeData, numTessFaceData, numLoopData, numPolyData;
   int needsFree;    /* checked on ->release, is set to 0 for cached results */
   int deformedOnly; /* set by modifier stack if only deformed from original */
-  BVHCache *bvhCache;
   DerivedMeshType type;
   DMDirtyFlag dirty;
-  int totmat;            /* total materials. Will be valid only before object drawing. */
-  struct Material **mat; /* material array. Will be valid only before object drawing */
 
   /**
    * \warning Typical access is done via #getLoopTriArray, #getNumLoopTri.
    */
   struct {
-    /* WARNING! swapping between array (ready-to-be-used data) and array_wip (where data is actually computed)
-     *          shall always be protected by same lock as one used for looptris computing. */
+    /* WARNING! swapping between array (ready-to-be-used data) and array_wip
+     * (where data is actually computed) shall always be protected by same
+     * lock as one used for looptris computing. */
     struct MLoopTri *array, *array_wip;
     int num;
     int num_alloc;
@@ -148,23 +141,6 @@ struct DerivedMesh {
 
   /** Calculate vert and face normals */
   void (*calcNormals)(DerivedMesh *dm);
-
-  /** Calculate loop (split) normals */
-  void (*calcLoopNormals)(DerivedMesh *dm, const bool use_split_normals, const float split_angle);
-
-  /** Calculate loop (split) normals, and returns split loop normal spacearr. */
-  void (*calcLoopNormalsSpaceArray)(DerivedMesh *dm,
-                                    const bool use_split_normals,
-                                    const float split_angle,
-                                    struct MLoopNorSpaceArray *r_lnors_spacearr);
-
-  void (*calcLoopTangents)(DerivedMesh *dm,
-                           bool calc_active_tangent,
-                           const char (*tangent_names)[MAX_NAME],
-                           int tangent_names_count);
-
-  /** Recalculates mesh tessellation */
-  void (*recalcTessellation)(DerivedMesh *dm);
 
   /** Loop tessellation cache (WARNING! Only call inside threading-protected code!) */
   void (*recalcLoopTri)(DerivedMesh *dm);
@@ -239,17 +215,12 @@ struct DerivedMesh {
   void *(*getPolyDataArray)(DerivedMesh *dm, int type);
 
   /** Retrieves the base CustomData structures for
-   * verts/edges/tessfaces/loops/facdes*/
+   * verts/edges/tessfaces/loops/faces. */
   CustomData *(*getVertDataLayout)(DerivedMesh *dm);
   CustomData *(*getEdgeDataLayout)(DerivedMesh *dm);
   CustomData *(*getTessFaceDataLayout)(DerivedMesh *dm);
   CustomData *(*getLoopDataLayout)(DerivedMesh *dm);
   CustomData *(*getPolyDataLayout)(DerivedMesh *dm);
-
-  /** Copies all customdata for an element source into dst at index dest */
-  void (*copyFromVertCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
-  void (*copyFromEdgeCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
-  void (*copyFromFaceCData)(DerivedMesh *dm, int source, CustomData *dst, int dest);
 
   /** Optional grid access for subsurf */
   int (*getNumGrids)(DerivedMesh *dm);
@@ -260,66 +231,12 @@ struct DerivedMesh {
   DMFlagMat *(*getGridFlagMats)(DerivedMesh *dm);
   unsigned int **(*getGridHidden)(DerivedMesh *dm);
 
-  /** Iterate over each mapped vertex in the derived mesh, calling the
-   * given function with the original vert and the mapped vert's new
-   * coordinate and normal. For historical reasons the normal can be
-   * passed as a float or short array, only one should be non-NULL.
-   */
-  void (*foreachMappedVert)(DerivedMesh *dm,
-                            void (*func)(void *userData,
-                                         int index,
-                                         const float co[3],
-                                         const float no_f[3],
-                                         const short no_s[3]),
-                            void *userData,
-                            DMForeachFlag flag);
-
-  /** Iterate over each mapped edge in the derived mesh, calling the
-   * given function with the original edge and the mapped edge's new
-   * coordinates.
-   */
-  void (*foreachMappedEdge)(
-      DerivedMesh *dm,
-      void (*func)(void *userData, int index, const float v0co[3], const float v1co[3]),
-      void *userData);
-
-  /** Iterate over each mapped loop in the derived mesh, calling the given function
-   * with the original loop index and the mapped loops's new coordinate and normal.
-   */
-  void (*foreachMappedLoop)(DerivedMesh *dm,
-                            void (*func)(void *userData,
-                                         int vertex_index,
-                                         int face_index,
-                                         const float co[3],
-                                         const float no[3]),
-                            void *userData,
-                            DMForeachFlag flag);
-
-  /** Iterate over each mapped face in the derived mesh, calling the
-   * given function with the original face and the mapped face's (or
-   * faces') center and normal.
-   */
-  void (*foreachMappedFaceCenter)(
-      DerivedMesh *dm,
-      void (*func)(void *userData, int index, const float cent[3], const float no[3]),
-      void *userData,
-      DMForeachFlag flag);
-
-  /** Iterate over all vertex points, calling DO_MINMAX with given args.
-   *
-   * Also called in Editmode
-   */
-  void (*getMinMax)(DerivedMesh *dm, float r_min[3], float r_max[3]);
-
   /** Direct Access Operations
    * - Can be undefined
    * - Must be defined for modifiers that only deform however */
 
   /** Get vertex location, undefined if index is not valid */
   void (*getVertCo)(DerivedMesh *dm, int index, float r_co[3]);
-
-  /** Fill the array (of length .getNumVerts()) with all vertex locations */
-  void (*getVertCos)(DerivedMesh *dm, float (*r_cos)[3]);
 
   /** Get smooth vertex normal, undefined if index is not valid */
   void (*getVertNo)(DerivedMesh *dm, int index, float r_no[3]);
@@ -328,10 +245,6 @@ struct DerivedMesh {
   /** Get a map of vertices to faces
    */
   const struct MeshElemMap *(*getPolyMap)(struct Object *ob, DerivedMesh *dm);
-
-  /** Get the BVH used for paint modes
-   */
-  struct PBVH *(*getPBVH)(struct Object *ob, DerivedMesh *dm);
 
   /** Release reference to the DerivedMesh. This function decides internally
    * if the DerivedMesh will be freed, or cached for later use. */
@@ -344,7 +257,7 @@ void DM_init(DerivedMesh *dm,
              DerivedMeshType type,
              int numVerts,
              int numEdges,
-             int numFaces,
+             int numTessFaces,
              int numLoops,
              int numPolys);
 
@@ -362,22 +275,15 @@ void DM_from_template(DerivedMesh *dm,
                       DerivedMeshType type,
                       int numVerts,
                       int numEdges,
-                      int numFaces,
+                      int numTessFaces,
                       int numLoops,
                       int numPolys);
 
-/** utility function to release a DerivedMesh's layers
- * returns 1 if DerivedMesh has to be released by the backend, 0 otherwise
+/**
+ * Utility function to release a DerivedMesh's layers
+ * returns true if DerivedMesh has to be released by the backend, false otherwise.
  */
-int DM_release(DerivedMesh *dm);
-
-/** utility function to convert a DerivedMesh to a Mesh
- */
-void DM_to_mesh(DerivedMesh *dm,
-                struct Mesh *me,
-                struct Object *ob,
-                const struct CustomData_MeshMasks *mask,
-                bool take_ownership);
+bool DM_release(DerivedMesh *dm);
 
 void DM_set_only_copy(DerivedMesh *dm, const struct CustomData_MeshMasks *mask);
 
@@ -439,14 +345,7 @@ void DM_interp_vert_data(struct DerivedMesh *source,
 
 void mesh_get_mapped_verts_coords(struct Mesh *me_eval, float (*r_cos)[3], const int totcos);
 
-DerivedMesh *mesh_create_derived_render(struct Depsgraph *depsgraph,
-                                        struct Scene *scene,
-                                        struct Object *ob,
-                                        const struct CustomData_MeshMasks *dataMask);
-
 /* same as above but wont use render settings */
-DerivedMesh *mesh_create_derived(struct Mesh *me, float (*vertCos)[3]);
-
 struct Mesh *editbmesh_get_eval_cage(struct Depsgraph *depsgraph,
                                      struct Scene *scene,
                                      struct Object *,
@@ -454,8 +353,7 @@ struct Mesh *editbmesh_get_eval_cage(struct Depsgraph *depsgraph,
                                      const struct CustomData_MeshMasks *dataMask);
 struct Mesh *editbmesh_get_eval_cage_from_orig(struct Depsgraph *depsgraph,
                                                struct Scene *scene,
-                                               struct Object *,
-                                               struct BMEditMesh *em,
+                                               struct Object *obedit,
                                                const struct CustomData_MeshMasks *dataMask);
 struct Mesh *editbmesh_get_eval_cage_and_final(struct Depsgraph *depsgraph,
                                                struct Scene *scene,
@@ -464,8 +362,9 @@ struct Mesh *editbmesh_get_eval_cage_and_final(struct Depsgraph *depsgraph,
                                                const struct CustomData_MeshMasks *dataMask,
                                                struct Mesh **r_final);
 
-float (*editbmesh_get_vertex_cos(struct BMEditMesh *em, int *r_numVerts))[3];
+float (*editbmesh_vert_coords_alloc(struct BMEditMesh *em, int *r_vert_len))[3];
 bool editbmesh_modifier_is_enabled(struct Scene *scene,
+                                   const struct Object *ob,
                                    struct ModifierData *md,
                                    bool has_prev_mesh);
 void makeDerivedMesh(struct Depsgraph *depsgraph,
@@ -477,15 +376,16 @@ void makeDerivedMesh(struct Depsgraph *depsgraph,
 void DM_calc_loop_tangents(DerivedMesh *dm,
                            bool calc_active_tangent,
                            const char (*tangent_names)[MAX_NAME],
-                           int tangent_names_count);
+                           int tangent_names_len);
 
 /* debug only */
 #ifndef NDEBUG
 char *DM_debug_info(DerivedMesh *dm);
 void DM_debug_print(DerivedMesh *dm);
-void DM_debug_print_cdlayers(CustomData *cdata);
 
 bool DM_is_valid(DerivedMesh *dm);
 #endif
 
-#endif /* __BKE_DERIVEDMESH_H__ */
+#ifdef __cplusplus
+}
+#endif

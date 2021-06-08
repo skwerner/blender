@@ -115,7 +115,7 @@ static LaplacianSystem *init_laplacian_system(int a_numEdges, int a_numFaces, in
     return NULL;
   }
 
-  sys->fweights = MEM_callocN(sizeof(float) * 3 * sys->numFaces, "ModLaplSmoothFWeight");
+  sys->fweights = MEM_callocN(sizeof(float[3]) * sys->numFaces, "ModLaplSmoothFWeight");
   if (!sys->fweights) {
     delete_laplacian_system(sys);
     return NULL;
@@ -205,8 +205,7 @@ static void init_laplacian_matrix(LaplacianSystem *sys)
   BM_ITER_MESH (f, &fiter, sys->bm, BM_FACES_OF_MESH) {
     if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
 
-      BM_ITER_ELEM_INDEX(vn, &vi, f, BM_VERTS_OF_FACE, i)
-      {
+      BM_ITER_ELEM_INDEX (vn, &vi, f, BM_VERTS_OF_FACE, i) {
         vf[i] = vn;
       }
       has_4_vert = (i == 4) ? 1 : 0;
@@ -305,8 +304,7 @@ static void fill_laplacian_matrix(LaplacianSystem *sys)
 
   BM_ITER_MESH (f, &fiter, sys->bm, BM_FACES_OF_MESH) {
     if (BM_elem_flag_test(f, BM_ELEM_SELECT)) {
-      BM_ITER_ELEM_INDEX(vn, &vi, f, BM_VERTS_OF_FACE, i)
-      {
+      BM_ITER_ELEM_INDEX (vn, &vi, f, BM_VERTS_OF_FACE, i) {
         vf[i] = vn;
       }
       has_4_vert = (i == 4) ? 1 : 0;

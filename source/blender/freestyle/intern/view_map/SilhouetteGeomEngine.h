@@ -14,13 +14,12 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_SILHOUETTE_GEOM_ENGINE_H__
-#define __FREESTYLE_SILHOUETTE_GEOM_ENGINE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
- * \brief Class to perform all geometric operations dedicated to silhouette. That, for example, implies that
- *         this geom engine has as member data the viewpoint, transformations, projections...
+ * \brief Class to perform all geometric operations dedicated to silhouette. That, for example,
+ * implies that this geom engine has as member data the viewpoint, transformations, projections...
  */
 
 #include <vector>
@@ -135,5 +134,3 @@ class SilhouetteGeomEngine {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_SILHOUETTE_GEOM_ENGINE_H__

@@ -16,35 +16,38 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_BOKEHIMAGEOPERATION_H__
-#define __COM_BOKEHIMAGEOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 
+namespace blender::compositor {
+
 /**
- * \brief The BokehImageOperation class is an operation that creates an image useful to mimic the internals
- *of a camera.
+ * \brief The BokehImageOperation class is an operation that creates an image useful to mimic the
+ *internals of a camera.
  *
  * features:
  *  - number of flaps
  *  - angle offset of the flaps
  *  - rounding of the flaps (also used to make a circular lens)
  *  - simulate catadioptric
- *  - simulate lensshift
+ *  - simulate lens-shift
  *
- * Per pixel the algorithm determines the edge of the bokeh on the same line as the center of the image and the pixel
- * is evaluating.
+ * Per pixel the algorithm determines the edge of the bokeh on the same line as the center of the
+ *image and the pixel is evaluating.
  *
- * The edge is detected by finding the closest point on the direct line between the two nearest flap-corners.
- * this edge is interpolated with a full circle.
- * Result of this edge detection is stored as the distance between the center of the image and the edge.
+ * The edge is detected by finding the closest point on the direct line between the two nearest
+ *flap-corners. this edge is interpolated with a full circle. Result of this edge detection is
+ *stored as the distance between the center of the image and the edge.
  *
- * catadioptric lenses are simulated to interpolate between the center of the image and the distance of the edge.
- * We now have three distances:
+ * catadioptric lenses are simulated to interpolate between the center of the image and the
+ *distance of the edge. We now have three distances:
  *  - distance between the center of the image and the pixel to be evaluated
  *  - distance between the center of the image and the outer-edge
  *  - distance between the center of the image and the inner-edge
  *
- * With a simple compare it can be detected if the evaluated pixel is between the outer and inner edge.
+ * With a simple compare it can be detected if the evaluated pixel is between the outer and inner
+ *edge.
  */
 class BokehImageOperation : public NodeOperation {
  private:
@@ -54,7 +57,7 @@ class BokehImageOperation : public NodeOperation {
   NodeBokehImage *m_data;
 
   /**
-   * \brief precalced center of the image
+   * \brief precalculate center of the image
    */
   float m_center[2];
 
@@ -84,9 +87,9 @@ class BokehImageOperation : public NodeOperation {
   bool m_deleteData;
 
   /**
-   * \brief determine the coordinate of a flap cornder
+   * \brief determine the coordinate of a flap corner.
    *
-   * \param r: result in bokehimage space are stored [x,y]
+   * \param r: result in bokeh-image space are stored [x,y]
    * \param flapNumber: the flap number to calculate
    * \param distance: the lens distance is used to simulate lens shifts
    */
@@ -95,7 +98,8 @@ class BokehImageOperation : public NodeOperation {
   /**
    * \brief Determine if a coordinate is inside the bokeh image
    *
-   * \param distance: the distance that will be used. This parameter is modified a bit to mimic lens shifts
+   * \param distance: the distance that will be used.
+   * This parameter is modified a bit to mimic lens shifts.
    * \param x: the x coordinate of the pixel to evaluate
    * \param y: the y coordinate of the pixel to evaluate
    * \return float range 0..1 0 is completely outside
@@ -106,26 +110,26 @@ class BokehImageOperation : public NodeOperation {
   BokehImageOperation();
 
   /**
-   * \brief the inner loop of this program
+   * \brief The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   /**
    * \brief Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * \brief Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   /**
-   * \brief determine the resolution of this operation. currently fixed at [COM_BLUR_BOKEH_PIXELS, COM_BLUR_BOKEH_PIXELS]
-   * \param resolution:
-   * \param preferredResolution:
+   * \brief determine the resolution of this operation. currently fixed at [COM_BLUR_BOKEH_PIXELS,
+   * COM_BLUR_BOKEH_PIXELS] \param resolution: \param preferredResolution:
    */
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 
   /**
    * \brief set the node data
@@ -148,4 +152,5 @@ class BokehImageOperation : public NodeOperation {
     this->m_deleteData = true;
   }
 };
-#endif
+
+}  // namespace blender::compositor

@@ -28,18 +28,18 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_space_types.h"
-#include "DNA_screen_types.h"
 #include "DNA_object_types.h"
+#include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 
 #include "BLI_string.h"
 
 #include "BLT_translation.h"
 
 #include "BKE_context.h"
-#include "BKE_screen.h"
+#include "BKE_idtype.h"
 #include "BKE_report.h"
-#include "BKE_idcode.h"
+#include "BKE_screen.h"
 
 #include "RNA_access.h"
 
@@ -48,12 +48,13 @@
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_space_api.h"
+#include "ED_outliner.h"
 #include "ED_screen.h"
+#include "ED_space_api.h"
 #include "ED_view3d.h"
 
-#include "interface_intern.h"
 #include "interface_eyedropper_intern.h"
+#include "interface_intern.h"
 
 /**
  * \note #DataDropper is only internal name to avoid confusion with other kinds of eye-droppers.
@@ -67,15 +68,16 @@ typedef struct DataDropper {
 
   ID *init_id; /* for resetting on cancel */
 
+  ScrArea *cursor_area; /* Area under the cursor */
   ARegionType *art;
   void *draw_handle_pixel;
   char name[200];
 } DataDropper;
 
-static void datadropper_draw_cb(const struct bContext *C, ARegion *ar, void *arg)
+static void datadropper_draw_cb(const struct bContext *C, ARegion *region, void *arg)
 {
   DataDropper *ddr = arg;
-  eyedropper_draw_cursor_text(C, ar, ddr->name);
+  eyedropper_draw_cursor_text_region(C, region, ddr->name);
 }
 
 static int datadropper_init(bContext *C, wmOperator *op)
@@ -103,6 +105,7 @@ static int datadropper_init(bContext *C, wmOperator *op)
 
   ddr->is_undo = UI_but_flag_is_set(but, UI_BUT_UNDO);
 
+  ddr->cursor_area = CTX_wm_area(C);
   ddr->art = art;
   ddr->draw_handle_pixel = ED_region_draw_cb_activate(
       art, datadropper_draw_cb, ddr, REGION_DRAW_POST_PIXEL);
@@ -112,17 +115,19 @@ static int datadropper_init(bContext *C, wmOperator *op)
   BLI_assert(ddr->idcode != 0);
   /* Note we can translate here (instead of on draw time),
    * because this struct has very short lifetime. */
-  ddr->idcode_name = TIP_(BKE_idcode_to_name(ddr->idcode));
+  ddr->idcode_name = TIP_(BKE_idtype_idcode_to_name(ddr->idcode));
 
-  PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
-  ddr->init_id = ptr.id.data;
+  const PointerRNA ptr = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
+  ddr->init_id = ptr.owner_id;
 
   return true;
 }
 
 static void datadropper_exit(bContext *C, wmOperator *op)
 {
-  WM_cursor_modal_restore(CTX_wm_window(C));
+  wmWindow *win = CTX_wm_window(C);
+
+  WM_cursor_modal_restore(win);
 
   if (op->customdata) {
     DataDropper *ddr = (DataDropper *)op->customdata;
@@ -136,38 +141,44 @@ static void datadropper_exit(bContext *C, wmOperator *op)
     op->customdata = NULL;
   }
 
-  WM_event_add_mousemove(C);
+  WM_event_add_mousemove(win);
 }
 
 /* *** datadropper id helper functions *** */
 /**
- * \brief get the ID from the screen.
+ * \brief get the ID from the 3D view or outliner.
  */
 static void datadropper_id_sample_pt(bContext *C, DataDropper *ddr, int mx, int my, ID **r_id)
 {
   /* we could use some clever */
   bScreen *screen = CTX_wm_screen(C);
-  ScrArea *sa = BKE_screen_find_area_xy(screen, -1, mx, my);
+  ScrArea *area = BKE_screen_find_area_xy(screen, -1, mx, my);
 
   ScrArea *area_prev = CTX_wm_area(C);
-  ARegion *ar_prev = CTX_wm_region(C);
+  ARegion *region_prev = CTX_wm_region(C);
 
   ddr->name[0] = '\0';
 
-  if (sa) {
-    if (sa->spacetype == SPACE_VIEW3D) {
-      ARegion *ar = BKE_area_find_region_xy(sa, RGN_TYPE_WINDOW, mx, my);
-      if (ar) {
-        const int mval[2] = {mx - ar->winrct.xmin, my - ar->winrct.ymin};
+  if (area) {
+    if (ELEM(area->spacetype, SPACE_VIEW3D, SPACE_OUTLINER)) {
+      ARegion *region = BKE_area_find_region_xy(area, RGN_TYPE_WINDOW, mx, my);
+      if (region) {
+        const int mval[2] = {mx - region->winrct.xmin, my - region->winrct.ymin};
         Base *base;
 
-        CTX_wm_area_set(C, sa);
-        CTX_wm_region_set(C, ar);
+        CTX_wm_area_set(C, area);
+        CTX_wm_region_set(C, region);
 
         /* grr, always draw else we leave stale text */
-        ED_region_tag_redraw(ar);
+        ED_region_tag_redraw(region);
 
-        base = ED_view3d_give_base_under_cursor(C, mval);
+        if (area->spacetype == SPACE_VIEW3D) {
+          base = ED_view3d_give_base_under_cursor(C, mval);
+        }
+        else {
+          base = ED_outliner_give_base_under_cursor(C, mval);
+        }
+
         if (base) {
           Object *ob = base->object;
           ID *id = NULL;
@@ -197,7 +208,7 @@ static void datadropper_id_sample_pt(bContext *C, DataDropper *ddr, int mx, int 
   }
 
   CTX_wm_area_set(C, area_prev);
-  CTX_wm_region_set(C, ar_prev);
+  CTX_wm_region_set(C, region_prev);
 }
 
 /* sets the ID, returns success */
@@ -207,13 +218,13 @@ static bool datadropper_id_set(bContext *C, DataDropper *ddr, ID *id)
 
   RNA_id_pointer_create(id, &ptr_value);
 
-  RNA_property_pointer_set(&ddr->ptr, ddr->prop, ptr_value);
+  RNA_property_pointer_set(&ddr->ptr, ddr->prop, ptr_value, NULL);
 
   RNA_property_update(C, &ddr->ptr, ddr->prop);
 
   ptr_value = RNA_property_pointer_get(&ddr->ptr, ddr->prop);
 
-  return (ptr_value.id.data == id);
+  return (ptr_value.owner_id == id);
 }
 
 /* single point sample & set */
@@ -230,6 +241,36 @@ static void datadropper_cancel(bContext *C, wmOperator *op)
   DataDropper *ddr = op->customdata;
   datadropper_id_set(C, ddr, ddr->init_id);
   datadropper_exit(C, op);
+}
+
+/* To switch the draw callback when region under mouse event changes */
+static void datadropper_set_draw_callback_region(bContext *C,
+                                                 DataDropper *ddr,
+                                                 const int mx,
+                                                 const int my)
+{
+  bScreen *screen = CTX_wm_screen(C);
+  ScrArea *area = BKE_screen_find_area_xy(screen, -1, mx, my);
+
+  if (area) {
+    /* If spacetype changed */
+    if (area->spacetype != ddr->cursor_area->spacetype) {
+      /* Remove old callback */
+      ED_region_draw_cb_exit(ddr->art, ddr->draw_handle_pixel);
+
+      /* Redraw old area */
+      ARegion *region = BKE_area_find_region_type(ddr->cursor_area, RGN_TYPE_WINDOW);
+      ED_region_tag_redraw(region);
+
+      /* Set draw callback in new region */
+      ARegionType *art = BKE_regiontype_from_id(area->type, RGN_TYPE_WINDOW);
+
+      ddr->cursor_area = area;
+      ddr->art = art;
+      ddr->draw_handle_pixel = ED_region_draw_cb_activate(
+          art, datadropper_draw_cb, ddr, REGION_DRAW_POST_PIXEL);
+    }
+  }
 }
 
 /* main modal status check */
@@ -251,15 +292,17 @@ static int datadropper_modal(bContext *C, wmOperator *op, const wmEvent *event)
           /* Could support finished & undo-skip. */
           return is_undo ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
         }
-        else {
-          BKE_report(op->reports, RPT_WARNING, "Failed to set value");
-          return OPERATOR_CANCELLED;
-        }
+        BKE_report(op->reports, RPT_WARNING, "Failed to set value");
+        return OPERATOR_CANCELLED;
       }
     }
   }
   else if (event->type == MOUSEMOVE) {
     ID *id = NULL;
+
+    /* Set the region for eyedropper cursor text drawing */
+    datadropper_set_draw_callback_region(C, ddr, event->x, event->y);
+
     datadropper_id_sample_pt(C, ddr, event->x, event->y, &id);
   }
 
@@ -271,16 +314,17 @@ static int datadropper_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED
 {
   /* init */
   if (datadropper_init(C, op)) {
-    WM_cursor_modal_set(CTX_wm_window(C), BC_EYEDROPPER_CURSOR);
+    wmWindow *win = CTX_wm_window(C);
+    /* Workaround for de-activating the button clearing the cursor, see T76794 */
+    UI_context_active_but_clear(C, win, CTX_wm_region(C));
+    WM_cursor_modal_set(win, WM_CURSOR_EYEDROPPER);
 
     /* add temp handler */
     WM_event_add_modal_handler(C, op);
 
     return OPERATOR_RUNNING_MODAL;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 /* Repeat operator */
@@ -293,9 +337,7 @@ static int datadropper_exec(bContext *C, wmOperator *op)
 
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 static bool datadropper_poll(bContext *C)
@@ -313,12 +355,12 @@ static bool datadropper_poll(bContext *C)
       StructRNA *type = RNA_property_pointer_type(&ptr, prop);
       const short idcode = RNA_type_to_ID_code(type);
       if ((idcode == ID_OB) || OB_DATA_SUPPORT_ID(idcode)) {
-        return 1;
+        return true;
       }
     }
   }
 
-  return 0;
+  return false;
 }
 
 void UI_OT_eyedropper_id(wmOperatorType *ot)

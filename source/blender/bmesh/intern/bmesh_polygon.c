@@ -18,23 +18,22 @@
  * \ingroup bmesh
  *
  * This file contains code for dealing
- * with polygons (normal/area calculation,
- * tessellation, etc)
+ * with polygons (normal/area calculation, tessellation, etc)
  */
 
 #include "DNA_listBase.h"
-#include "DNA_modifier_types.h"
 #include "DNA_meshdata_types.h"
+#include "DNA_modifier_types.h"
 
 #include "MEM_guardedalloc.h"
 
 #include "BLI_alloca.h"
+#include "BLI_heap.h"
+#include "BLI_linklist.h"
 #include "BLI_math.h"
 #include "BLI_memarena.h"
 #include "BLI_polyfill_2d.h"
 #include "BLI_polyfill_2d_beautify.h"
-#include "BLI_linklist.h"
-#include "BLI_heap.h"
 
 #include "bmesh.h"
 #include "bmesh_tools.h"
@@ -121,7 +120,8 @@ static void bm_face_calc_poly_center_median_vertex_cos(const BMFace *f,
 /**
  * For tools that insist on using triangles, ideally we would cache this data.
  *
- * \param use_fixed_quad: When true, always split quad along (0 -> 2) regardless of concave corners,
+ * \param use_fixed_quad: When true,
+ * always split quad along (0 -> 2) regardless of concave corners,
  * (as done in #BM_mesh_calc_tessellation).
  * \param r_loops: Store face loop pointers, (f->len)
  * \param r_index: Store triangle triples, indices into \a r_loops,  `((f->len - 2) * 3)`
@@ -162,7 +162,7 @@ void BM_face_calc_tessellation(const BMFace *f,
     float(*projverts)[2] = BLI_array_alloca(projverts, f->len);
     int j;
 
-    axis_dominant_v3_to_m3(axis_mat, f->no);
+    axis_dominant_v3_to_m3_negate(axis_mat, f->no);
 
     j = 0;
     l_iter = l_first;
@@ -173,7 +173,7 @@ void BM_face_calc_tessellation(const BMFace *f,
     } while ((l_iter = l_iter->next) != l_first);
 
     /* complete the loop */
-    BLI_polyfill_calc(projverts, f->len, -1, r_index);
+    BLI_polyfill_calc(projverts, f->len, 1, r_index);
   }
 }
 
@@ -482,7 +482,7 @@ void BM_face_calc_tangent_edge_diagonal(const BMFace *f, float r_tangent[3])
 
   l_iter = l_first = BM_FACE_FIRST_LOOP(f);
 
-  /* incase of degenerate faces */
+  /* In case of degenerate faces. */
   zero_v3(r_tangent);
 
   /* warning: O(n^2) loop here, take care! */
@@ -519,7 +519,7 @@ void BM_face_calc_tangent_vert_diagonal(const BMFace *f, float r_tangent[3])
 
   l_iter = l_first = BM_FACE_FIRST_LOOP(f);
 
-  /* incase of degenerate faces */
+  /* In case of degenerate faces. */
   zero_v3(r_tangent);
 
   /* warning: O(n^2) loop here, take care! */
@@ -595,6 +595,31 @@ void BM_face_calc_center_bounds(const BMFace *f, float r_cent[3])
 }
 
 /**
+ * computes center of face in 3d.  uses center of bounding box.
+ */
+void BM_face_calc_center_bounds_vcos(const BMesh *bm,
+                                     const BMFace *f,
+                                     float r_cent[3],
+                                     float const (*vertexCos)[3])
+{
+  /* must have valid index data */
+  BLI_assert((bm->elem_index_dirty & BM_VERT) == 0);
+  (void)bm;
+
+  const BMLoop *l_iter, *l_first;
+  float min[3], max[3];
+
+  INIT_MINMAX(min, max);
+
+  l_iter = l_first = BM_FACE_FIRST_LOOP(f);
+  do {
+    minmax_v3v3_v3(min, max, vertexCos[BM_elem_index_get(l_iter->v)]);
+  } while ((l_iter = l_iter->next) != l_first);
+
+  mid_v3_v3v3(r_cent, min, max);
+}
+
+/**
  * computes the center of a face, using the mean average
  */
 void BM_face_calc_center_median(const BMFace *f, float r_cent[3])
@@ -641,7 +666,7 @@ void BM_face_calc_center_median_weighted(const BMFace *f, float r_cent[3])
 /**
  * \brief POLY ROTATE PLANE
  *
- * Rotates a polygon so that it's
+ * Rotates a polygon so that its
  * normal is pointing towards the mesh Z axis
  */
 void poly_rotate_plane(const float normal[3], float (*verts)[3], const uint nverts)
@@ -717,9 +742,7 @@ bool BM_vert_calc_normal_ex(const BMVert *v, const char hflag, float r_no[3])
     normalize_v3(r_no);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 bool BM_vert_calc_normal(const BMVert *v, float r_no[3])
@@ -747,9 +770,7 @@ bool BM_vert_calc_normal(const BMVert *v, float r_no[3])
     normalize_v3(r_no);
     return true;
   }
-  else {
-    return false;
-  }
+  return false;
 }
 
 void BM_vert_normal_update_all(BMVert *v)
@@ -864,6 +885,113 @@ float BM_face_calc_normal_vcos(const BMesh *bm,
 }
 
 /**
+ * Calculate a normal from a vertex cloud.
+ *
+ * \note We could make a higher quality version that takes all vertices into account.
+ * Currently it finds 4 outer most points returning its normal.
+ */
+void BM_verts_calc_normal_from_cloud_ex(
+    BMVert **varr, int varr_len, float r_normal[3], float r_center[3], int *r_index_tangent)
+{
+  const float varr_len_inv = 1.0f / (float)varr_len;
+
+  /* Get the center point and collect vector array since we loop over these a lot. */
+  float center[3] = {0.0f, 0.0f, 0.0f};
+  for (int i = 0; i < varr_len; i++) {
+    madd_v3_v3fl(center, varr[i]->co, varr_len_inv);
+  }
+
+  /* Find the 'co_a' point from center. */
+  int co_a_index = 0;
+  const float *co_a = NULL;
+  {
+    float dist_sq_max = -1.0f;
+    for (int i = 0; i < varr_len; i++) {
+      const float dist_sq_test = len_squared_v3v3(varr[i]->co, center);
+      if (!(dist_sq_test <= dist_sq_max)) {
+        co_a = varr[i]->co;
+        co_a_index = i;
+        dist_sq_max = dist_sq_test;
+      }
+    }
+  }
+
+  float dir_a[3];
+  sub_v3_v3v3(dir_a, co_a, center);
+  normalize_v3(dir_a);
+
+  const float *co_b = NULL;
+  float dir_b[3] = {0.0f, 0.0f, 0.0f};
+  {
+    float dist_sq_max = -1.0f;
+    for (int i = 0; i < varr_len; i++) {
+      if (varr[i]->co == co_a) {
+        continue;
+      }
+      float dir_test[3];
+      sub_v3_v3v3(dir_test, varr[i]->co, center);
+      project_plane_normalized_v3_v3v3(dir_test, dir_test, dir_a);
+      const float dist_sq_test = len_squared_v3(dir_test);
+      if (!(dist_sq_test <= dist_sq_max)) {
+        co_b = varr[i]->co;
+        dist_sq_max = dist_sq_test;
+        copy_v3_v3(dir_b, dir_test);
+      }
+    }
+  }
+
+  if (varr_len <= 3) {
+    normal_tri_v3(r_normal, center, co_a, co_b);
+    goto finally;
+  }
+
+  normalize_v3(dir_b);
+
+  const float *co_a_opposite = NULL;
+  const float *co_b_opposite = NULL;
+
+  {
+    float dot_a_min = FLT_MAX;
+    float dot_b_min = FLT_MAX;
+    for (int i = 0; i < varr_len; i++) {
+      const float *co_test = varr[i]->co;
+      float dot_test;
+
+      if (co_test != co_a) {
+        dot_test = dot_v3v3(dir_a, co_test);
+        if (dot_test < dot_a_min) {
+          dot_a_min = dot_test;
+          co_a_opposite = co_test;
+        }
+      }
+
+      if (co_test != co_b) {
+        dot_test = dot_v3v3(dir_b, co_test);
+        if (dot_test < dot_b_min) {
+          dot_b_min = dot_test;
+          co_b_opposite = co_test;
+        }
+      }
+    }
+  }
+
+  normal_quad_v3(r_normal, co_a, co_b, co_a_opposite, co_b_opposite);
+
+finally:
+  if (r_center != NULL) {
+    copy_v3_v3(r_center, center);
+  }
+  if (r_index_tangent != NULL) {
+    *r_index_tangent = co_a_index;
+  }
+}
+
+void BM_verts_calc_normal_from_cloud(BMVert **varr, int varr_len, float r_normal[3])
+{
+  BM_verts_calc_normal_from_cloud_ex(varr, varr_len, r_normal, NULL, NULL);
+}
+
+/**
  * Calculates the face subset normal.
  */
 float BM_face_calc_normal_subset(const BMLoop *l_first, const BMLoop *l_last, float r_no[3])
@@ -963,8 +1091,8 @@ bool BM_face_point_inside_test(const BMFace *f, const float co[3])
  * with a length equal to (f->len - 3). It will be filled with the new
  * triangles (not including the original triangle).
  *
- * \param r_faces_double: When newly created faces are duplicates of existing faces, they're added to this list.
- * Caller must handle de-duplication.
+ * \param r_faces_double: When newly created faces are duplicates of existing faces,
+ * they're added to this list. Caller must handle de-duplication.
  * This is done because its possible _all_ faces exist already,
  * and in that case we would have to remove all faces including the one passed,
  * which causes complications adding/removing faces while looking over them.
@@ -1068,10 +1196,10 @@ void BM_face_triangulate(BMesh *bm,
           /* named confusingly, l_v1 is in fact the second vertex */
           if (split_24) {
             l_v1 = l_v4;
-            //l_v2 = l_v2;
+            // l_v2 = l_v2;
           }
           else {
-            //l_v1 = l_v1;
+            // l_v1 = l_v1;
             l_v2 = l_v3;
           }
           break;
@@ -1156,8 +1284,8 @@ void BM_face_triangulate(BMesh *bm,
         l_iter = l_first = l_new;
         do {
           BMEdge *e = l_iter->e;
-          /* confusing! if its not a boundary now, we know it will be later
-           * since this will be an edge of one of the new faces which we're in the middle of creating */
+          /* Confusing! if its not a boundary now, we know it will be later since this will be an
+           * edge of one of the new faces which we're in the middle of creating. */
           bool is_new_edge = (l_iter == l_iter->radial_next);
 
           if (is_new_edge) {
@@ -1393,290 +1521,4 @@ void BM_face_as_array_loop_quad(BMFace *f, BMLoop *r_loops[4])
   r_loops[2] = l;
   l = l->next;
   r_loops[3] = l;
-}
-
-/**
- * \brief BM_mesh_calc_tessellation get the looptris and its number from a certain bmesh
- * \param looptris:
- *
- * \note \a looptris Must be pre-allocated to at least the size of given by: poly_to_tri_count
- */
-void BM_mesh_calc_tessellation(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptris_tot)
-{
-  /* use this to avoid locking pthread for _every_ polygon
-   * and calling the fill function */
-#define USE_TESSFACE_SPEEDUP
-
-  /* this assumes all faces can be scan-filled, which isn't always true,
-   * worst case we over alloc a little which is acceptable */
-#ifndef NDEBUG
-  const int looptris_tot = poly_to_tri_count(bm->totface, bm->totloop);
-#endif
-
-  BMIter iter;
-  BMFace *efa;
-  int i = 0;
-
-  MemArena *arena = NULL;
-
-  BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
-    /* don't consider two-edged faces */
-    if (UNLIKELY(efa->len < 3)) {
-      /* do nothing */
-    }
-
-#ifdef USE_TESSFACE_SPEEDUP
-
-    /* no need to ensure the loop order, we know its ok */
-
-    else if (efa->len == 3) {
-#  if 0
-      int j;
-      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, j) {
-        looptris[i][j] = l;
-      }
-      i += 1;
-#  else
-      /* more cryptic but faster */
-      BMLoop *l;
-      BMLoop **l_ptr = looptris[i++];
-      l_ptr[0] = l = BM_FACE_FIRST_LOOP(efa);
-      l_ptr[1] = l = l->next;
-      l_ptr[2] = l->next;
-#  endif
-    }
-    else if (efa->len == 4) {
-#  if 0
-      BMLoop *ltmp[4];
-      int j;
-      BLI_array_grow_items(looptris, 2);
-      BM_ITER_ELEM_INDEX (l, &liter, efa, BM_LOOPS_OF_FACE, j) {
-        ltmp[j] = l;
-      }
-
-      looptris[i][0] = ltmp[0];
-      looptris[i][1] = ltmp[1];
-      looptris[i][2] = ltmp[2];
-      i += 1;
-
-      looptris[i][0] = ltmp[0];
-      looptris[i][1] = ltmp[2];
-      looptris[i][2] = ltmp[3];
-      i += 1;
-#  else
-      /* more cryptic but faster */
-      BMLoop *l;
-      BMLoop **l_ptr_a = looptris[i++];
-      BMLoop **l_ptr_b = looptris[i++];
-      (l_ptr_a[0] = l_ptr_b[0] = l = BM_FACE_FIRST_LOOP(efa));
-      (l_ptr_a[1] = l = l->next);
-      (l_ptr_a[2] = l_ptr_b[1] = l = l->next);
-      (l_ptr_b[2] = l->next);
-#  endif
-
-      if (UNLIKELY(is_quad_flip_v3_first_third_fast(
-              l_ptr_a[0]->v->co, l_ptr_a[1]->v->co, l_ptr_a[2]->v->co, l_ptr_b[2]->v->co))) {
-        /* flip out of degenerate 0-2 state. */
-        l_ptr_a[2] = l_ptr_b[2];
-        l_ptr_b[0] = l_ptr_a[1];
-      }
-    }
-
-#endif /* USE_TESSFACE_SPEEDUP */
-
-    else {
-      int j;
-
-      BMLoop *l_iter;
-      BMLoop *l_first;
-      BMLoop **l_arr;
-
-      float axis_mat[3][3];
-      float(*projverts)[2];
-      uint(*tris)[3];
-
-      const int totfilltri = efa->len - 2;
-
-      if (UNLIKELY(arena == NULL)) {
-        arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
-      }
-
-      tris = BLI_memarena_alloc(arena, sizeof(*tris) * totfilltri);
-      l_arr = BLI_memarena_alloc(arena, sizeof(*l_arr) * efa->len);
-      projverts = BLI_memarena_alloc(arena, sizeof(*projverts) * efa->len);
-
-      axis_dominant_v3_to_m3_negate(axis_mat, efa->no);
-
-      j = 0;
-      l_iter = l_first = BM_FACE_FIRST_LOOP(efa);
-      do {
-        l_arr[j] = l_iter;
-        mul_v2_m3v3(projverts[j], axis_mat, l_iter->v->co);
-        j++;
-      } while ((l_iter = l_iter->next) != l_first);
-
-      BLI_polyfill_calc_arena(projverts, efa->len, 1, tris, arena);
-
-      for (j = 0; j < totfilltri; j++) {
-        BMLoop **l_ptr = looptris[i++];
-        uint *tri = tris[j];
-
-        l_ptr[0] = l_arr[tri[0]];
-        l_ptr[1] = l_arr[tri[1]];
-        l_ptr[2] = l_arr[tri[2]];
-      }
-
-      BLI_memarena_clear(arena);
-    }
-  }
-
-  if (arena) {
-    BLI_memarena_free(arena);
-    arena = NULL;
-  }
-
-  *r_looptris_tot = i;
-
-  BLI_assert(i <= looptris_tot);
-
-#undef USE_TESSFACE_SPEEDUP
-}
-
-/**
- * A version of #BM_mesh_calc_tessellation that avoids degenerate triangles.
- */
-void BM_mesh_calc_tessellation_beauty(BMesh *bm, BMLoop *(*looptris)[3], int *r_looptris_tot)
-{
-  /* this assumes all faces can be scan-filled, which isn't always true,
-   * worst case we over alloc a little which is acceptable */
-#ifndef NDEBUG
-  const int looptris_tot = poly_to_tri_count(bm->totface, bm->totloop);
-#endif
-
-  BMIter iter;
-  BMFace *efa;
-  int i = 0;
-
-  MemArena *pf_arena = NULL;
-
-  /* use_beauty */
-  Heap *pf_heap = NULL;
-
-  BM_ITER_MESH (efa, &iter, bm, BM_FACES_OF_MESH) {
-    /* don't consider two-edged faces */
-    if (UNLIKELY(efa->len < 3)) {
-      /* do nothing */
-    }
-    else if (efa->len == 3) {
-      BMLoop *l;
-      BMLoop **l_ptr = looptris[i++];
-      l_ptr[0] = l = BM_FACE_FIRST_LOOP(efa);
-      l_ptr[1] = l = l->next;
-      l_ptr[2] = l->next;
-    }
-    else if (efa->len == 4) {
-      BMLoop *l_v1 = BM_FACE_FIRST_LOOP(efa);
-      BMLoop *l_v2 = l_v1->next;
-      BMLoop *l_v3 = l_v2->next;
-      BMLoop *l_v4 = l_v1->prev;
-
-      /* #BM_verts_calc_rotate_beauty performs excessive checks we don't need!
-       * It's meant for rotating edges, it also calculates a new normal.
-       *
-       * Use #BLI_polyfill_beautify_quad_rotate_calc since we have the normal.
-       */
-#if 0
-      const bool split_13 = (BM_verts_calc_rotate_beauty(
-              l_v1->v, l_v2->v, l_v3->v, l_v4->v, 0, 0) < 0.0f);
-#else
-      float axis_mat[3][3], v_quad[4][2];
-      axis_dominant_v3_to_m3(axis_mat, efa->no);
-      mul_v2_m3v3(v_quad[0], axis_mat, l_v1->v->co);
-      mul_v2_m3v3(v_quad[1], axis_mat, l_v2->v->co);
-      mul_v2_m3v3(v_quad[2], axis_mat, l_v3->v->co);
-      mul_v2_m3v3(v_quad[3], axis_mat, l_v4->v->co);
-
-      const bool split_13 = BLI_polyfill_beautify_quad_rotate_calc(
-                                v_quad[0], v_quad[1], v_quad[2], v_quad[3]) < 0.0f;
-#endif
-
-      BMLoop **l_ptr_a = looptris[i++];
-      BMLoop **l_ptr_b = looptris[i++];
-      if (split_13) {
-        l_ptr_a[0] = l_v1;
-        l_ptr_a[1] = l_v2;
-        l_ptr_a[2] = l_v3;
-
-        l_ptr_b[0] = l_v1;
-        l_ptr_b[1] = l_v3;
-        l_ptr_b[2] = l_v4;
-      }
-      else {
-        l_ptr_a[0] = l_v1;
-        l_ptr_a[1] = l_v2;
-        l_ptr_a[2] = l_v4;
-
-        l_ptr_b[0] = l_v2;
-        l_ptr_b[1] = l_v3;
-        l_ptr_b[2] = l_v4;
-      }
-    }
-    else {
-      int j;
-
-      BMLoop *l_iter;
-      BMLoop *l_first;
-      BMLoop **l_arr;
-
-      float axis_mat[3][3];
-      float(*projverts)[2];
-      unsigned int(*tris)[3];
-
-      const int totfilltri = efa->len - 2;
-
-      if (UNLIKELY(pf_arena == NULL)) {
-        pf_arena = BLI_memarena_new(BLI_MEMARENA_STD_BUFSIZE, __func__);
-        pf_heap = BLI_heap_new_ex(BLI_POLYFILL_ALLOC_NGON_RESERVE);
-      }
-
-      tris = BLI_memarena_alloc(pf_arena, sizeof(*tris) * totfilltri);
-      l_arr = BLI_memarena_alloc(pf_arena, sizeof(*l_arr) * efa->len);
-      projverts = BLI_memarena_alloc(pf_arena, sizeof(*projverts) * efa->len);
-
-      axis_dominant_v3_to_m3_negate(axis_mat, efa->no);
-
-      j = 0;
-      l_iter = l_first = BM_FACE_FIRST_LOOP(efa);
-      do {
-        l_arr[j] = l_iter;
-        mul_v2_m3v3(projverts[j], axis_mat, l_iter->v->co);
-        j++;
-      } while ((l_iter = l_iter->next) != l_first);
-
-      BLI_polyfill_calc_arena(projverts, efa->len, 1, tris, pf_arena);
-
-      BLI_polyfill_beautify(projverts, efa->len, tris, pf_arena, pf_heap);
-
-      for (j = 0; j < totfilltri; j++) {
-        BMLoop **l_ptr = looptris[i++];
-        unsigned int *tri = tris[j];
-
-        l_ptr[0] = l_arr[tri[0]];
-        l_ptr[1] = l_arr[tri[1]];
-        l_ptr[2] = l_arr[tri[2]];
-      }
-
-      BLI_memarena_clear(pf_arena);
-    }
-  }
-
-  if (pf_arena) {
-    BLI_memarena_free(pf_arena);
-
-    BLI_heap_free(pf_heap, NULL);
-  }
-
-  *r_looptris_tot = i;
-
-  BLI_assert(i <= looptris_tot);
 }

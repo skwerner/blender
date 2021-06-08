@@ -28,12 +28,15 @@
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
+#include "BLI_listbase.h"
 #include "BLI_string.h"
 #include "BLI_string_utf8.h"
 #include "BLI_utildefines.h"
 
+#include "BKE_animsys.h"
 #include "BKE_context.h"
 #include "BKE_fcurve.h"
+#include "BKE_fcurve_driver.h"
 #include "BKE_global.h"
 #include "BKE_main.h"
 #include "BKE_nla.h"
@@ -57,13 +60,13 @@ static FCurve *ui_but_get_fcurve(
 {
   /* for entire array buttons we check the first component, it's not perfect
    * but works well enough in typical cases */
-  int rnaindex = (but->rnaindex == -1) ? 0 : but->rnaindex;
+  const int rnaindex = (but->rnaindex == -1) ? 0 : but->rnaindex;
 
-  return rna_get_fcurve_context_ui(
+  return BKE_fcurve_find_by_rna_context_ui(
       but->block->evil_C, &but->rnapoin, but->rnaprop, rnaindex, adt, action, r_driven, r_special);
 }
 
-void ui_but_anim_flag(uiBut *but, float cfra)
+void ui_but_anim_flag(uiBut *but, const AnimationEvalContext *anim_eval_context)
 {
   AnimData *adt;
   bAction *act;
@@ -82,12 +85,18 @@ void ui_but_anim_flag(uiBut *but, float cfra)
 
   if (fcu) {
     if (!driven) {
+      /* Empty curves are ignored by the animation evaluation system. */
+      if (BKE_fcurve_is_empty(fcu)) {
+        return;
+      }
+
       but->flag |= UI_BUT_ANIMATED;
 
       /* T41525 - When the active action is a NLA strip being edited,
        * we need to correct the frame number to "look inside" the
        * remapped action
        */
+      float cfra = anim_eval_context->eval_time;
       if (adt) {
         cfra = BKE_nla_tweakedit_remap(adt, cfra, NLATIME_CONVERT_UNMAP);
       }
@@ -98,7 +107,9 @@ void ui_but_anim_flag(uiBut *but, float cfra)
 
       /* XXX: this feature is totally broken and useless with NLA */
       if (adt == NULL || adt->nla_tracks.first == NULL) {
-        if (fcurve_is_changed(but->rnapoin, but->rnaprop, fcu, cfra)) {
+        const AnimationEvalContext remapped_context = BKE_animsys_eval_context_construct_at(
+            anim_eval_context, cfra);
+        if (fcurve_is_changed(but->rnapoin, but->rnaprop, fcu, &remapped_context)) {
           but->drawflag |= UI_BUT_ANIMATED_CHANGED;
         }
       }
@@ -109,10 +120,46 @@ void ui_but_anim_flag(uiBut *but, float cfra)
   }
 }
 
-void ui_but_anim_decorate_update_from_flag(uiBut *but)
+static uiBut *ui_but_anim_decorate_find_attached_button(uiButDecorator *but_decorate)
 {
-  BLI_assert(UI_but_is_decorator(but) && but->prev);
-  int flag = but->prev->flag;
+  uiBut *but_iter = NULL;
+
+  BLI_assert(UI_but_is_decorator(&but_decorate->but));
+  BLI_assert(but_decorate->rnapoin.data && but_decorate->rnaprop);
+
+  LISTBASE_CIRCULAR_BACKWARD_BEGIN (
+      &but_decorate->but.block->buttons, but_iter, but_decorate->but.prev) {
+    if (but_iter != (uiBut *)but_decorate &&
+        ui_but_rna_equals_ex(
+            but_iter, &but_decorate->rnapoin, but_decorate->rnaprop, but_decorate->rnaindex)) {
+      return but_iter;
+    }
+  }
+  LISTBASE_CIRCULAR_BACKWARD_END(
+      &but_decorate->but.block->buttons, but_iter, but_decorate->but.prev);
+
+  return NULL;
+}
+
+void ui_but_anim_decorate_update_from_flag(uiButDecorator *decorator_but)
+{
+  if (!decorator_but->rnapoin.data || !decorator_but->rnaprop) {
+    /* Nothing to do. */
+    return;
+  }
+
+  const uiBut *but_anim = ui_but_anim_decorate_find_attached_button(decorator_but);
+  uiBut *but = &decorator_but->but;
+
+  if (!but_anim) {
+    printf("Could not find button with matching property to decorate (%s.%s)\n",
+           RNA_struct_identifier(decorator_but->rnapoin.type),
+           RNA_property_identifier(decorator_but->rnaprop));
+    return;
+  }
+
+  const int flag = but_anim->flag;
+
   if (flag & UI_BUT_DRIVEN) {
     but->icon = ICON_DECORATE_DRIVER;
   }
@@ -122,7 +169,7 @@ void ui_but_anim_decorate_update_from_flag(uiBut *but)
   else if (flag & UI_BUT_ANIMATED) {
     but->icon = ICON_DECORATE_ANIMATE;
   }
-  else if (flag & UI_BUT_OVERRIDEN) {
+  else if (flag & UI_BUT_OVERRIDDEN) {
     but->icon = ICON_DECORATE_OVERRIDE;
   }
   else {
@@ -171,6 +218,8 @@ bool ui_but_anim_expression_set(uiBut *but, const char *str)
     driver = fcu->driver;
 
     if (driver && (driver->type == DRIVER_TYPE_PYTHON)) {
+      bContext *C = but->block->evil_C;
+
       BLI_strncpy_utf8(driver->expression, str, sizeof(driver->expression));
 
       /* tag driver as needing to be recompiled */
@@ -181,7 +230,9 @@ bool ui_but_anim_expression_set(uiBut *but, const char *str)
       fcu->flag &= ~FCURVE_DISABLED;
 
       /* this notifier should update the Graph Editor and trigger depsgraph refresh? */
-      WM_event_add_notifier(but->block->evil_C, NC_ANIMATION | ND_KEYFRAME, NULL);
+      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME, NULL);
+
+      DEG_relations_tag_update(CTX_data_main(C));
 
       return true;
     }
@@ -219,7 +270,7 @@ bool ui_but_anim_expression_create(uiBut *but, const char *str)
   /* make sure we have animdata for this */
   /* FIXME: until materials can be handled by depsgraph,
    * don't allow drivers to be created for them */
-  id = (ID *)but->rnapoin.id.data;
+  id = but->rnapoin.owner_id;
   if ((id == NULL) || (GS(id->name) == ID_MA) || (GS(id->name) == ID_TE)) {
     if (G.debug & G_DEBUG) {
       printf("ERROR: create expression failed - invalid data-block for adding drivers (%p)\n", id);
@@ -234,7 +285,7 @@ bool ui_but_anim_expression_create(uiBut *but, const char *str)
   }
 
   /* create driver */
-  fcu = verify_driver_fcurve(id, path, but->rnaindex, 1);
+  fcu = verify_driver_fcurve(id, path, but->rnaindex, DRIVER_FCURVE_KEYFRAMES);
   if (fcu) {
     ChannelDriver *driver = fcu->driver;
 
@@ -261,84 +312,7 @@ bool ui_but_anim_expression_create(uiBut *but, const char *str)
 
 void ui_but_anim_autokey(bContext *C, uiBut *but, Scene *scene, float cfra)
 {
-  Main *bmain = CTX_data_main(C);
-  ID *id;
-  bAction *action;
-  FCurve *fcu;
-  bool driven;
-  bool special;
-
-  fcu = ui_but_get_fcurve(but, NULL, &action, &driven, &special);
-
-  if (fcu == NULL) {
-    return;
-  }
-
-  if (special) {
-    /* NLA Strip property */
-    if (IS_AUTOKEY_ON(scene)) {
-      Depsgraph *depsgraph = CTX_data_depsgraph(C);
-      ReportList *reports = CTX_wm_reports(C);
-      ToolSettings *ts = scene->toolsettings;
-
-      insert_keyframe_direct(
-          depsgraph, reports, but->rnapoin, but->rnaprop, fcu, cfra, ts->keyframe_type, NULL, 0);
-      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
-    }
-  }
-  else if (driven) {
-    /* Driver - Try to insert keyframe using the driver's input as the frame,
-     * making it easier to set up corrective drivers
-     */
-    if (IS_AUTOKEY_ON(scene)) {
-      Depsgraph *depsgraph = CTX_data_depsgraph(C);
-      ReportList *reports = CTX_wm_reports(C);
-      ToolSettings *ts = scene->toolsettings;
-
-      insert_keyframe_direct(depsgraph,
-                             reports,
-                             but->rnapoin,
-                             but->rnaprop,
-                             fcu,
-                             cfra,
-                             ts->keyframe_type,
-                             NULL,
-                             INSERTKEY_DRIVER);
-      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
-    }
-  }
-  else {
-    id = but->rnapoin.id.data;
-
-    /* TODO: this should probably respect the keyingset only option for anim */
-    if (autokeyframe_cfra_can_key(scene, id)) {
-      Depsgraph *depsgraph = CTX_data_depsgraph(C);
-      ReportList *reports = CTX_wm_reports(C);
-      ToolSettings *ts = scene->toolsettings;
-      short flag = ANIM_get_keyframing_flags(scene, 1);
-
-      fcu->flag &= ~FCURVE_SELECTED;
-
-      /* Note: We use but->rnaindex instead of fcu->array_index,
-       *       because a button may control all items of an array at once.
-       *       E.g., color wheels (see T42567). */
-      BLI_assert((fcu->array_index == but->rnaindex) || (but->rnaindex == -1));
-      insert_keyframe(bmain,
-                      depsgraph,
-                      reports,
-                      id,
-                      action,
-                      ((fcu->grp) ? (fcu->grp->name) : (NULL)),
-                      fcu->rna_path,
-                      but->rnaindex,
-                      cfra,
-                      ts->keyframe_type,
-                      NULL,
-                      flag);
-
-      WM_event_add_notifier(C, NC_ANIMATION | ND_KEYFRAME | NA_EDITED, NULL);
-    }
-  }
+  ED_autokeyframe_property(C, scene, &but->rnapoin, but->rnaprop, but->rnaindex, cfra);
 }
 
 void ui_but_anim_copy_driver(bContext *C)
@@ -356,22 +330,26 @@ void ui_but_anim_paste_driver(bContext *C)
 void ui_but_anim_decorate_cb(bContext *C, void *arg_but, void *UNUSED(arg_dummy))
 {
   wmWindowManager *wm = CTX_wm_manager(C);
-  uiBut *but = arg_but;
-  but = but->prev;
+  uiButDecorator *but_decorate = arg_but;
+  uiBut *but_anim = ui_but_anim_decorate_find_attached_button(but_decorate);
+
+  if (!but_anim) {
+    return;
+  }
 
   /* FIXME(campbell), swapping active pointer is weak. */
-  SWAP(struct uiHandleButtonData *, but->active, but->next->active);
+  SWAP(struct uiHandleButtonData *, but_anim->active, but_decorate->but.active);
   wm->op_undo_depth++;
 
-  if (but->flag & UI_BUT_DRIVEN) {
+  if (but_anim->flag & UI_BUT_DRIVEN) {
     /* pass */
     /* TODO: report? */
   }
-  else if (but->flag & UI_BUT_ANIMATED_KEY) {
+  else if (but_anim->flag & UI_BUT_ANIMATED_KEY) {
     PointerRNA props_ptr;
     wmOperatorType *ot = WM_operatortype_find("ANIM_OT_keyframe_delete_button", false);
     WM_operator_properties_create_ptr(&props_ptr, ot);
-    RNA_boolean_set(&props_ptr, "all", but->rnaindex == -1);
+    RNA_boolean_set(&props_ptr, "all", but_anim->rnaindex == -1);
     WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
     WM_operator_properties_free(&props_ptr);
   }
@@ -379,11 +357,11 @@ void ui_but_anim_decorate_cb(bContext *C, void *arg_but, void *UNUSED(arg_dummy)
     PointerRNA props_ptr;
     wmOperatorType *ot = WM_operatortype_find("ANIM_OT_keyframe_insert_button", false);
     WM_operator_properties_create_ptr(&props_ptr, ot);
-    RNA_boolean_set(&props_ptr, "all", but->rnaindex == -1);
+    RNA_boolean_set(&props_ptr, "all", but_anim->rnaindex == -1);
     WM_operator_name_call_ptr(C, ot, WM_OP_INVOKE_DEFAULT, &props_ptr);
     WM_operator_properties_free(&props_ptr);
   }
 
-  SWAP(struct uiHandleButtonData *, but->active, but->next->active);
+  SWAP(struct uiHandleButtonData *, but_anim->active, but_decorate->but.active);
   wm->op_undo_depth--;
 }

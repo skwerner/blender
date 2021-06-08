@@ -30,10 +30,10 @@
 
 #include FT_FREETYPE_H
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
 #include "BLI_rect.h"
 #include "BLI_threads.h"
+#include "BLI_utildefines.h"
 
 #include "blf_internal.h"
 #include "blf_internal_types.h"
@@ -50,6 +50,7 @@
  */
 void BLF_thumb_preview(const char *filename,
                        const char **draw_str,
+                       const char **i18n_draw_str,
                        const unsigned char draw_str_lines,
                        const float font_color[4],
                        const int font_size,
@@ -65,7 +66,7 @@ void BLF_thumb_preview(const char *filename,
   int font_shrink = 4;
 
   FontBLF *font;
-  int i;
+  GlyphCacheBLF *gc;
 
   /* Create a new blender font obj and fill it with default values */
   font = blf_font_new("thumb_font", filename);
@@ -77,8 +78,8 @@ void BLF_thumb_preview(const char *filename,
   /* Would be done via the BLF API, but we're not using a fontid here */
   font->buf_info.cbuf = buf;
   font->buf_info.ch = channels;
-  font->buf_info.w = w;
-  font->buf_info.h = h;
+  font->buf_info.dims[0] = w;
+  font->buf_info.dims[1] = h;
 
   /* Always create the image with a white font,
    * the caller can theme how it likes */
@@ -89,26 +90,27 @@ void BLF_thumb_preview(const char *filename,
 
   blf_draw_buffer__start(font);
 
-  for (i = 0; i < draw_str_lines; i++) {
-    const char *draw_str_i18n = BLT_translate_do(BLT_I18NCONTEXT_DEFAULT, draw_str[i]);
+  for (int i = 0; i < draw_str_lines; i++) {
+    const char *draw_str_i18n = i18n_draw_str[i] != NULL ? i18n_draw_str[i] : draw_str[i];
     const size_t draw_str_i18n_len = strlen(draw_str_i18n);
     int draw_str_i18n_nbr = 0;
 
     blf_font_size(font, (unsigned int)MAX2(font_size_min, font_size_curr), dpi);
-
-    /* font->glyph_cache remains NULL if blf_font_size() failed to set font size */
-    if (!font->glyph_cache)
+    gc = blf_glyph_cache_find(font, font->size, font->dpi);
+    /* There will be no matching glyph cache if blf_font_size() failed to set font size. */
+    if (!gc) {
       break;
+    }
 
     /* decrease font size each time */
     font_size_curr -= (font_size_curr / font_shrink);
     font_shrink += 1;
 
-    font->pos[1] -= font->glyph_cache->ascender * 1.1f;
+    font->pos[1] -= gc->ascender * 1.1f;
 
-    /* We fallback to default english strings in case not enough chars are available in current font for given
-     * translated string (useful in non-latin i18n context, like chinese, since many fonts will then show
-     * nothing but ugly 'missing char' in their preview).
+    /* We fallback to default english strings in case not enough chars are available in current
+     * font for given translated string (useful in non-latin i18n context, like Chinese,
+     * since many fonts will then show nothing but ugly 'missing char' in their preview).
      * Does not handle all cases, but much better than nothing.
      */
     if (blf_font_count_missing_chars(font, draw_str_i18n, draw_str_i18n_len, &draw_str_i18n_nbr) >

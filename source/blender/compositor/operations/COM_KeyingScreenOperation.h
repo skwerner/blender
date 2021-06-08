@@ -16,8 +16,7 @@
  * Copyright 2012, Blender Foundation.
  */
 
-#ifndef __COM_KEYINGSCREENOPERATION_H__
-#define __COM_KEYINGSCREENOPERATION_H__
+#pragma once
 
 #include <string.h>
 
@@ -28,9 +27,9 @@
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
-extern "C" {
 #include "BLI_voronoi_2d.h"
-}
+
+namespace blender::compositor {
 
 /**
  * Class with implementation of green screen gradient rasterization
@@ -57,18 +56,19 @@ class KeyingScreenOperation : public NodeOperation {
   /**
    * Determine the output resolution. The resolution is retrieved from the Renderer
    */
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override;
 
   TriangulationData *buildVoronoiTriangulation();
 
  public:
   KeyingScreenOperation();
 
-  void initExecution();
-  void deinitExecution();
+  void initExecution() override;
+  void deinitExecution() override;
 
-  void *initializeTileData(rcti *rect);
-  void deinitializeTileData(rcti *rect, void *data);
+  void *initializeTileData(rcti *rect) override;
+  void deinitializeTileData(rcti *rect, void *data) override;
 
   void setMovieClip(MovieClip *clip)
   {
@@ -83,7 +83,7 @@ class KeyingScreenOperation : public NodeOperation {
     this->m_framenumber = framenumber;
   }
 
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 };
 
-#endif
+}  // namespace blender::compositor

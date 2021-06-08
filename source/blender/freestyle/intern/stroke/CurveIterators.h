@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_CURVE_ITERATORS_H__
-#define __FREESTYLE_CURVE_ITERATORS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -30,7 +29,7 @@ namespace Freestyle {
 namespace CurveInternal {
 
 /*! iterator on a curve. Allows an iterating outside
- *  initial vertices. A CurvePoint is instanciated an returned
+ *  initial vertices. A CurvePoint is instantiated an returned
  *  when the iterator is dereferenced.
  */
 
@@ -157,8 +156,9 @@ class CurvePointIterator : public Interface0DIteratorNested {
   virtual bool operator==(const Interface0DIteratorNested &b) const
   {
     const CurvePointIterator *it_exact = dynamic_cast<const CurvePointIterator *>(&b);
-    if (!it_exact)
+    if (!it_exact) {
       return false;
+    }
     return ((__A == it_exact->__A) && (__B == it_exact->__B) && (_t == it_exact->_t));
   }
 
@@ -175,19 +175,21 @@ class CurvePointIterator : public Interface0DIteratorNested {
 
   virtual bool isBegin() const
   {
-    if ((__A == _begin) && (_t < (float)M_EPSILON))
+    if ((__A == _begin) && (_t < (float)M_EPSILON)) {
       return true;
+    }
     return false;
   }
 
   virtual bool isEnd() const
   {
-    if (__B == _end)
+    if (__B == _end) {
       return true;
+    }
     return false;
   }
 
-  //protected:
+  // protected:
   virtual int increment()
   {
     if ((_currentn == _n - 1) && (_t == 1.0f)) {
@@ -223,7 +225,7 @@ class CurvePointIterator : public Interface0DIteratorNested {
     else {
       _t = 1.0f;  // AB is a null segment, we're directly at its end
     }
-    //if normAB ~= 0, we don't change these values
+    // if normAB ~= 0, we don't change these values
     if (_t >= 1) {
       _CurvilinearLength -= normAB * (_t - 1);
       if (_currentn == _n - 1) {
@@ -241,13 +243,14 @@ class CurvePointIterator : public Interface0DIteratorNested {
 
   virtual int decrement()
   {
-    if (_t == 0.0f) {  //we're at the beginning of the edge
+    if (_t == 0.0f) {  // we're at the beginning of the edge
       _t = 1.0f;
       --_currentn;
       --__A;
       --__B;
-      if (_currentn == _n - 1)
+      if (_currentn == _n - 1) {
         return 0;
+      }
     }
 
     if (0 == _step) {  // means we iterate over initial vertices
@@ -270,13 +273,16 @@ class CurvePointIterator : public Interface0DIteratorNested {
     }
 
     // round value
-    if (fabs(_t) < (float)M_EPSILON)
+    if (fabs(_t) < (float)M_EPSILON) {
       _t = 0.0f;
+    }
     if (_t < 0) {
-      if (_currentn == 0)
+      if (_currentn == 0) {
         _CurvilinearLength = 0.0f;
-      else
+      }
+      else {
         _CurvilinearLength += normAB * (-_t);
+      }
       _t = 0.0f;
     }
     return 0;
@@ -296,5 +302,3 @@ class CurvePointIterator : public Interface0DIteratorNested {
 }  // end of namespace CurveInternal
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_CURVE_ITERATORS_H__

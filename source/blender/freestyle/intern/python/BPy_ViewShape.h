@@ -18,16 +18,13 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_VIEWSHAPE_H__
-#define __FREESTYLE_PYTHON_VIEWSHAPE_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
 }
 
 #include "../view_map/ViewMap.h"
-
-using namespace Freestyle;
 
 #include "BPy_SShape.h"
 
@@ -43,7 +40,7 @@ extern PyTypeObject ViewShape_Type;
 
 /*---------------------------Python BPy_ViewShape structure definition----------*/
 typedef struct {
-  PyObject_HEAD ViewShape *vs;
+  PyObject_HEAD Freestyle::ViewShape *vs;
   bool borrowed; /* true if *vs a borrowed object */
   BPy_SShape *py_ss;
 } BPy_ViewShape;
@@ -57,5 +54,3 @@ int ViewShape_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_VIEWSHAPE_H__ */

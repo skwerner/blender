@@ -24,12 +24,12 @@
 #include <limits.h>
 
 #ifndef WIN32
-#  include <unistd.h>  // for read close
+#  include <unistd.h> /* for read close */
 #else
-#  include <zlib.h> /* odd include order-issue */
-#  include <io.h>   // for open close read
-#  include "winsock2.h"
 #  include "BLI_winstuff.h"
+#  include "winsock2.h"
+#  include <io.h>   /* for open close read */
+#  include <zlib.h> /* odd include order-issue */
 #endif
 
 /* allow readfile to use deprecated functionality */
@@ -49,21 +49,22 @@
 #include "DNA_nla_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_fluidsim_types.h"
+#include "DNA_object_force_types.h"
 #include "DNA_object_types.h"
-#include "DNA_view3d_types.h"
 #include "DNA_screen_types.h"
 #include "DNA_sdna_types.h"
 #include "DNA_sequence_types.h"
 #include "DNA_sound_types.h"
 #include "DNA_space_types.h"
 #include "DNA_vfont_types.h"
+#include "DNA_view3d_types.h"
 #include "DNA_world_types.h"
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_action.h"
 #include "BKE_armature.h"
@@ -71,15 +72,16 @@
 #include "BKE_constraint.h"
 #include "BKE_deform.h"
 #include "BKE_fcurve.h"
-#include "BKE_image.h"
 #include "BKE_lattice.h"
-#include "BKE_main.h"  // for Main
-#include "BKE_mesh.h"  // for ME_ defines (patching)
+#include "BKE_main.h" /* for Main */
+#include "BKE_mesh.h" /* for ME_ defines (patching) */
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
-#include "BKE_scene.h"
-#include "BKE_sequencer.h"
+
+#include "SEQ_iterator.h"
+#include "SEQ_sequencer.h"
 
 #include "NOD_socket.h"
 
@@ -91,16 +93,20 @@
 
 #include <errno.h>
 
+/* Make preferences read-only, use versioning_userdef.c. */
+#define U (*((const UserDef *)&U))
+
 static void vcol_to_fcol(Mesh *me)
 {
   MFace *mface;
   uint *mcol, *mcoln, *mcolmain;
   int a;
 
-  if (me->totface == 0 || me->mcol == NULL)
+  if (me->totface == 0 || me->mcol == NULL) {
     return;
+  }
 
-  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, 4 * sizeof(int), "mcoln");
+  mcoln = mcolmain = MEM_malloc_arrayN(me->totface, sizeof(int[4]), "mcoln");
   mcol = (uint *)me->mcol;
   mface = me->mface;
   for (a = me->totface; a > 0; a--, mface++) {
@@ -128,8 +134,9 @@ static void do_version_bone_head_tail_237(Bone *bone)
   mul_v3_fl(vec, bone->length);
   add_v3_v3v3(bone->arm_tail, bone->arm_head, vec);
 
-  for (child = bone->childbase.first; child; child = child->next)
+  for (child = bone->childbase.first; child; child = child->next) {
     do_version_bone_head_tail_237(child);
+  }
 }
 
 static void bone_version_238(ListBase *lb)
@@ -142,8 +149,9 @@ static void bone_version_238(ListBase *lb)
       bone->rad_tail = 0.1f * bone->length;
 
       bone->dist -= bone->rad_head;
-      if (bone->dist <= 0.0f)
+      if (bone->dist <= 0.0f) {
         bone->dist = 0.0f;
+      }
     }
     bone_version_238(&bone->childbase);
   }
@@ -154,8 +162,9 @@ static void bone_version_239(ListBase *lb)
   Bone *bone;
 
   for (bone = lb->first; bone; bone = bone->next) {
-    if (bone->layer == 0)
+    if (bone->layer == 0) {
       bone->layer = 1;
+    }
     bone_version_239(&bone->childbase);
   }
 }
@@ -197,8 +206,9 @@ static void ntree_version_242(bNodeTree *ntree)
       if (node->type == CMP_NODE_HUE_SAT) {
         if (node->storage) {
           NodeHueSat *nhs = node->storage;
-          if (nhs->val == 0.0f)
+          if (nhs->val == 0.0f) {
             nhs->val = 1.0f;
+          }
         }
       }
     }
@@ -219,8 +229,9 @@ static void ntree_version_245(FileData *fd, Library *lib, bNodeTree *ntree)
         if (!node->storage) {
           ntf = MEM_callocN(sizeof(NodeTwoFloats), "NodeTwoFloats");
           node->storage = ntf;
-          if (node->custom1)
+          if (node->custom1) {
             ntf->x = 1.0f;
+          }
         }
       }
 
@@ -247,8 +258,9 @@ static void idproperties_fix_groups_lengths_recurse(IDProperty *prop)
   int i;
 
   for (loop = prop->data.group.first, i = 0; loop; loop = loop->next, i++) {
-    if (loop->type == IDP_GROUP)
+    if (loop->type == IDP_GROUP) {
       idproperties_fix_groups_lengths_recurse(loop);
+    }
   }
 
   if (prop->len != i) {
@@ -279,19 +291,22 @@ static void customdata_version_242(Mesh *me)
   if (!me->vdata.totlayer) {
     CustomData_add_layer(&me->vdata, CD_MVERT, CD_ASSIGN, me->mvert, me->totvert);
 
-    if (me->dvert)
+    if (me->dvert) {
       CustomData_add_layer(&me->vdata, CD_MDEFORMVERT, CD_ASSIGN, me->dvert, me->totvert);
+    }
   }
 
-  if (!me->edata.totlayer)
+  if (!me->edata.totlayer) {
     CustomData_add_layer(&me->edata, CD_MEDGE, CD_ASSIGN, me->medge, me->totedge);
+  }
 
   if (!me->fdata.totlayer) {
     CustomData_add_layer(&me->fdata, CD_MFACE, CD_ASSIGN, me->mface, me->totface);
 
     if (me->tface) {
-      if (me->mcol)
+      if (me->mcol) {
         MEM_freeN(me->mcol);
+      }
 
       me->mcol = CustomData_add_layer(&me->fdata, CD_MCOL, CD_CALLOC, NULL, me->totface);
       me->mtface = CustomData_add_layer(&me->fdata, CD_MTFACE, CD_CALLOC, NULL, me->totface);
@@ -323,19 +338,23 @@ static void customdata_version_242(Mesh *me)
 
     if (layer->type == CD_MTFACE) {
       if (layer->name[0] == 0) {
-        if (mtfacen == 0)
+        if (mtfacen == 0) {
           strcpy(layer->name, "UVMap");
-        else
+        }
+        else {
           BLI_snprintf(layer->name, sizeof(layer->name), "UVMap.%.3d", mtfacen);
+        }
       }
       mtfacen++;
     }
     else if (layer->type == CD_MCOL) {
       if (layer->name[0] == 0) {
-        if (mcoln == 0)
+        if (mcoln == 0) {
           strcpy(layer->name, "Col");
-        else
+        }
+        else {
           BLI_snprintf(layer->name, sizeof(layer->name), "Col.%.3d", mcoln);
+        }
       }
       mcoln++;
     }
@@ -394,8 +413,9 @@ static void do_version_free_effect_245(Effect *eff)
 
   if (eff->type == EFF_PARTICLE) {
     paf = (PartEff *)eff;
-    if (paf->keys)
+    if (paf->keys) {
       MEM_freeN(paf->keys);
+    }
   }
   MEM_freeN(eff);
 }
@@ -437,26 +457,15 @@ static void do_version_constraints_245(ListBase *lb)
       bLocateLikeConstraint *data = (bLocateLikeConstraint *)con->data;
 
       /* new headtail functionality makes Bone-Tip function obsolete */
-      if (data->flag & LOCLIKE_TIP)
+      if (data->flag & LOCLIKE_TIP) {
         con->headtail = 1.0f;
+      }
     }
   }
 }
 
-PartEff *blo_do_version_give_parteff_245(Object *ob)
-{
-  PartEff *paf;
-
-  paf = ob->effect.first;
-  while (paf) {
-    if (paf->type == EFF_PARTICLE)
-      return paf;
-    paf = paf->next;
-  }
-  return NULL;
-}
-
-/* NOTE: this version patch is intended for versions < 2.52.2, but was initially introduced in 2.27 already */
+/* NOTE: this version patch is intended for versions < 2.52.2,
+ * but was initially introduced in 2.27 already. */
 void blo_do_version_old_trackto_to_constraints(Object *ob)
 {
   /* create new trackto constraint from the relationship */
@@ -474,6 +483,7 @@ void blo_do_version_old_trackto_to_constraints(Object *ob)
   ob->track = NULL;
 }
 
+/* NOLINTNEXTLINE: readability-function-size */
 void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 {
   /* WATCH IT!!!: pointers from libdata have not been converted */
@@ -517,8 +527,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       ob->colbits = 0;
       if (ob->totcol) {
         for (a = 0; a < ob->totcol; a++) {
-          if (ob->mat[a])
+          if (ob->mat[a]) {
             ob->colbits |= (1 << a);
+          }
         }
       }
       ob = ob->id.next;
@@ -540,8 +551,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     /* mcol changed */
     Mesh *me = bmain->meshes.first;
     while (me) {
-      if (me->mcol)
+      if (me->mcol) {
         vcol_to_fcol(me);
+      }
       me = me->id.next;
     }
   }
@@ -550,31 +562,33 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Object *ob;
     ob = bmain->objects.first;
     while (ob) {
-      if (ob->dt == 0)
+      if (ob->dt == 0) {
         ob->dt = OB_SOLID;
+      }
       ob = ob->id.next;
     }
   }
 
   if (bmain->versionfile <= 109) {
-    /* new variable: gridlines */
-    bScreen *sc = bmain->screens.first;
-    while (sc) {
-      ScrArea *sa = sc->areabase.first;
-      while (sa) {
-        SpaceLink *sl = sa->spacedata.first;
+    /* New variable: `gridlines`. */
+    bScreen *screen = bmain->screens.first;
+    while (screen) {
+      ScrArea *area = screen->areabase.first;
+      while (area) {
+        SpaceLink *sl = area->spacedata.first;
         while (sl) {
           if (sl->spacetype == SPACE_VIEW3D) {
             View3D *v3d = (View3D *)sl;
 
-            if (v3d->gridlines == 0)
+            if (v3d->gridlines == 0) {
               v3d->gridlines = 20;
+            }
           }
           sl = sl->next;
         }
-        sa = sa->next;
+        area = area->next;
       }
-      sc = sc->id.next;
+      screen = screen->id.next;
     }
   }
 
@@ -608,8 +622,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile <= 153) {
     Scene *sce = bmain->scenes.first;
     while (sce) {
-      if (sce->r.blurfac == 0.0f)
+      if (sce->r.blurfac == 0.0f) {
         sce->r.blurfac = 1.0f;
+      }
       sce = sce->id.next;
     }
   }
@@ -617,8 +632,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile <= 163) {
     Scene *sce = bmain->scenes.first;
     while (sce) {
-      if (sce->r.frs_sec == 0)
+      if (sce->r.frs_sec == 0) {
         sce->r.frs_sec = 25;
+      }
       sce = sce->id.next;
     }
   }
@@ -661,18 +677,19 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile <= 169) {
     Mesh *me = bmain->meshes.first;
     while (me) {
-      if (me->subdiv == 0)
+      if (me->subdiv == 0) {
         me->subdiv = 1;
+      }
       me = me->id.next;
     }
   }
 
   if (bmain->versionfile <= 169) {
-    bScreen *sc = bmain->screens.first;
-    while (sc) {
-      ScrArea *sa = sc->areabase.first;
-      while (sa) {
-        SpaceLink *sl = sa->spacedata.first;
+    bScreen *screen = bmain->screens.first;
+    while (screen) {
+      ScrArea *area = screen->areabase.first;
+      while (area) {
+        SpaceLink *sl = area->spacedata.first;
         while (sl) {
           if (sl->spacetype == SPACE_GRAPH) {
             SpaceGraph *sipo = (SpaceGraph *)sl;
@@ -680,9 +697,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
           }
           sl = sl->next;
         }
-        sa = sa->next;
+        area = area->next;
       }
-      sc = sc->id.next;
+      screen = screen->id.next;
     }
   }
 
@@ -690,7 +707,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Object *ob = bmain->objects.first;
     PartEff *paf;
     while (ob) {
-      paf = blo_do_version_give_parteff_245(ob);
+      paf = BKE_object_do_version_give_parteff_245(ob);
       if (paf) {
         if (paf->staticstep == 0) {
           paf->staticstep = 5;
@@ -701,11 +718,11 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 171) {
-    bScreen *sc = bmain->screens.first;
-    while (sc) {
-      ScrArea *sa = sc->areabase.first;
-      while (sa) {
-        SpaceLink *sl = sa->spacedata.first;
+    bScreen *screen = bmain->screens.first;
+    while (screen) {
+      ScrArea *area = screen->areabase.first;
+      while (area) {
+        SpaceLink *sl = area->spacedata.first;
         while (sl) {
           if (sl->spacetype == SPACE_TEXT) {
             SpaceText *st = (SpaceText *)sl;
@@ -713,9 +730,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
           }
           sl = sl->next;
         }
-        sa = sa->next;
+        area = area->next;
       }
-      sc = sc->id.next;
+      screen = screen->id.next;
     }
   }
 
@@ -758,10 +775,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       sound->min_gain = 0.0;
       sound->distance = 1.0;
 
-      if (sound->attenuation > 0.0f)
+      if (sound->attenuation > 0.0f) {
         sound->flags |= SOUND_FLAGS_3D;
-      else
+      }
+      else {
         sound->flags &= ~SOUND_FLAGS_3D;
+      }
 
       sound = sound->id.next;
     }
@@ -783,10 +802,12 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         me->subdiv = 1;
       }
       else {
-        if (me->subdiv < 2)
+        if (me->subdiv < 2) {
           me->subdiv = 1;
-        else
+        }
+        else {
           me->subdiv--;
+        }
       }
     }
   }
@@ -826,8 +847,8 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile <= 223) {
     VFont *vf;
     for (vf = bmain->fonts.first; vf; vf = vf->id.next) {
-      if (STREQ(vf->name + strlen(vf->name) - 6, ".Bfont")) {
-        strcpy(vf->name, FO_BUILTIN_NAME);
+      if (STREQ(vf->filepath + strlen(vf->filepath) - 6, ".Bfont")) {
+        strcpy(vf->filepath, FO_BUILTIN_NAME);
       }
     }
   }
@@ -836,7 +857,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     bSound *sound;
     Scene *sce;
     Mesh *me;
-    bScreen *sc;
+    bScreen *screen;
 
     for (sound = bmain->sounds.first; sound; sound = sound->id.next) {
       if (sound->packedfile) {
@@ -855,17 +876,17 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      sce->r.stereomode = 1;  // no stereo
+      sce->r.stereomode = 1; /* no stereo */
     }
 
     /* some oldfile patch, moved from set_func_space */
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
 
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
 
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_GRAPH) {
             SpaceSeq *sseq = (SpaceSeq *)sl;
             sseq->v2d.keeptot = 0;
@@ -877,7 +898,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
   if (bmain->versionfile <= 227) {
     Scene *sce;
-    bScreen *sc;
+    bScreen *screen;
     Object *ob;
 
     /* As of now, this insures that the transition from the old Track system
@@ -932,13 +953,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     /* patch for old wrong max view2d settings, allows zooming out more */
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
 
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
 
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_ACTION) {
             SpaceAction *sac = (SpaceAction *)sl;
             sac->v2d.max[0] = 32000;
@@ -953,7 +974,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 228) {
-    bScreen *sc;
+    bScreen *screen;
     Object *ob;
 
     /* As of now, this insures that the transition from the old Track system
@@ -999,13 +1020,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     /* convert old mainb values for new button panels */
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
 
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
 
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_PROPERTIES) {
             SpaceProperties *sbuts = (SpaceProperties *)sl;
 
@@ -1013,33 +1034,33 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
             if (sbuts->mainb == BUTS_LAMP) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_LAMP;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_LAMP;
             }
             else if (sbuts->mainb == BUTS_MAT) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_MAT;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_MAT;
             }
             else if (sbuts->mainb == BUTS_TEX) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_TEX;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_TEX;
             }
             else if (sbuts->mainb == BUTS_ANIM) {
               sbuts->mainb = CONTEXT_OBJECT;
             }
             else if (sbuts->mainb == BUTS_WORLD) {
               sbuts->mainb = CONTEXT_SCENE;
-              //sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_WORLD;
+              // sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_WORLD;
             }
             else if (sbuts->mainb == BUTS_RENDER) {
               sbuts->mainb = CONTEXT_SCENE;
-              //sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_RENDER;
+              // sbuts->tab[CONTEXT_SCENE] = TAB_SCENE_RENDER;
             }
             else if (sbuts->mainb == BUTS_FPAINT) {
               sbuts->mainb = CONTEXT_EDITING;
             }
             else if (sbuts->mainb == BUTS_RADIO) {
               sbuts->mainb = CONTEXT_SHADING;
-              //sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_RAD;
+              // sbuts->tab[CONTEXT_SHADING] = TAB_SHADING_RAD;
             }
             else if (sbuts->mainb == BUTS_CONSTRAINT) {
               sbuts->mainb = CONTEXT_OBJECT;
@@ -1066,16 +1087,16 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
    */
 
   if (bmain->versionfile <= 230) {
-    bScreen *sc;
+    bScreen *screen;
 
     /* new variable blockscale, for panels in any area */
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
 
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
 
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           /* added: 5x better zoom in for action */
           if (sl->spacetype == SPACE_ACTION) {
             SpaceAction *sac = (SpaceAction *)sl;
@@ -1087,14 +1108,14 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 231) {
-    bScreen *sc = bmain->screens.first;
+    bScreen *screen = bmain->screens.first;
 
     /* new bit flags for showing/hiding grid floor and axes */
 
-    while (sc) {
-      ScrArea *sa = sc->areabase.first;
-      while (sa) {
-        SpaceLink *sl = sa->spacedata.first;
+    while (screen) {
+      ScrArea *area = screen->areabase.first;
+      while (area) {
+        SpaceLink *sl = area->spacedata.first;
         while (sl) {
           if (sl->spacetype == SPACE_VIEW3D) {
             View3D *v3d = (View3D *)sl;
@@ -1108,16 +1129,16 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
           }
           sl = sl->next;
         }
-        sa = sa->next;
+        area = area->next;
       }
-      sc = sc->id.next;
+      screen = screen->id.next;
     }
   }
 
   if (bmain->versionfile <= 232) {
     Tex *tex = bmain->textures.first;
     World *wrld = bmain->worlds.first;
-    bScreen *sc;
+    bScreen *screen;
 
     while (tex) {
       if ((tex->flag & (TEX_CHECKER_ODD + TEX_CHECKER_EVEN)) == 0) {
@@ -1145,19 +1166,20 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       if (wrld->aodist == 0.0f) {
         wrld->aodist = 10.0f;
       }
-      if (wrld->aoenergy == 0.0f)
+      if (wrld->aoenergy == 0.0f) {
         wrld->aoenergy = 1.0f;
+      }
       wrld = wrld->id.next;
     }
 
     /* new variable blockscale, for panels in any area, do again because new
-     * areas didnt initialize it to 0.7 yet
+     * areas didn't initialize it to 0.7 yet
      */
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           /* added: 5x better zoom in for nla */
           if (sl->spacetype == SPACE_NLA) {
             SpaceNla *snla = (SpaceNla *)sl;
@@ -1169,13 +1191,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 233) {
-    bScreen *sc;
+    bScreen *screen;
 
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_VIEW3D) {
             View3D *v3d = (View3D *)sl;
             v3d->flag |= V3D_SELECT_OUTLINE;
@@ -1186,17 +1208,18 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   if (bmain->versionfile <= 234) {
-    bScreen *sc;
+    bScreen *screen;
 
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_TEXT) {
             SpaceText *st = (SpaceText *)sl;
-            if (st->tabnumber == 0)
+            if (st->tabnumber == 0) {
               st->tabnumber = 2;
+            }
           }
         }
       }
@@ -1210,18 +1233,20 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Editing *ed;
 
     while (tex) {
-      if (tex->nabla == 0.0f)
+      if (tex->nabla == 0.0f) {
         tex->nabla = 0.025f;
+      }
       tex = tex->id.next;
     }
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQ_BEGIN (sce->ed, seq) {
-          if (seq->type == SEQ_TYPE_IMAGE || seq->type == SEQ_TYPE_MOVIE)
+        SEQ_ALL_BEGIN (sce->ed, seq) {
+          if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_MOVIE)) {
             seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
+          }
         }
-        SEQ_END;
+        SEQ_ALL_END;
       }
 
       sce = sce->id.next;
@@ -1235,8 +1260,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     while (cam) {
       if (cam->ortho_scale == 0.0f) {
         cam->ortho_scale = 256.0f / cam->lens;
-        if (cam->type == CAM_ORTHO)
+        if (cam->type == CAM_ORTHO) {
           printf("NOTE: ortho render has changed, tweak new Camera 'scale' value.\n");
+        }
       }
       cam = cam->id.next;
     }
@@ -1246,19 +1272,15 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     /* softbody init new vars */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       if (ob->soft) {
-        if (ob->soft->defgoal == 0.0f)
+        if (ob->soft->defgoal == 0.0f) {
           ob->soft->defgoal = 0.7f;
-        if (ob->soft->physics_speed == 0.0f)
+        }
+        if (ob->soft->physics_speed == 0.0f) {
           ob->soft->physics_speed = 1.0f;
-
-        if (ob->soft->interval == 0) {
-          ob->soft->interval = 2;
-          ob->soft->sfra = 1;
-          ob->soft->efra = 100;
         }
       }
       if (ob->soft && ob->soft->vertgroup == 0) {
-        bDeformGroup *locGroup = defgroup_find_name(ob, "SOFTGOAL");
+        bDeformGroup *locGroup = BKE_object_defgroup_find_name(ob, "SOFTGOAL");
         if (locGroup) {
           /* retrieve index for that group */
           ob->soft->vertgroup = 1 + BLI_findindex(&ob->defbase, locGroup);
@@ -1277,29 +1299,32 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     for (arm = bmain->armatures.first; arm; arm = arm->id.next) {
       BKE_armature_where_is(arm);
 
-      for (bone = arm->bonebase.first; bone; bone = bone->next)
+      for (bone = arm->bonebase.first; bone; bone = bone->next) {
         do_version_bone_head_tail_237(bone);
+      }
     }
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       if (ob->parent) {
         Object *parent = blo_do_versions_newlibadr(fd, lib, ob->parent);
-        if (parent && parent->type == OB_LATTICE)
+        if (parent && parent->type == OB_LATTICE) {
           ob->partype = PARSKEL;
+        }
       }
 
-      /* btw. armature_rebuild_pose is further only called on leave editmode */
+      /* Note: #BKE_pose_rebuild is further only called on leave edit-mode. */
       if (ob->type == OB_ARMATURE) {
-        if (ob->pose)
+        if (ob->pose) {
           BKE_pose_tag_recalc(bmain, ob->pose);
+        }
 
-        /* cannot call stuff now (pointers!), done in setup_app_data */
+        /* Cannot call stuff now (pointers!), done in #setup_app_data. */
         ob->id.recalc |= ID_RECALC_ALL;
 
         /* new generic xray option */
         arm = blo_do_versions_newlibadr(fd, lib, ob->data);
         enum { ARM_DRAWXRAY = (1 << 1) };
         if (arm->flag & ARM_DRAWXRAY) {
-          ob->dtx |= OB_DRAWXRAY;
+          ob->dtx |= OB_DRAW_IN_FRONT;
         }
       }
       else if (ob->type == OB_MESH) {
@@ -1311,24 +1336,28 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         };
 
         if ((me->flag & ME_SUBSURF)) {
-          SubsurfModifierData *smd = (SubsurfModifierData *)modifier_new(eModifierType_Subsurf);
+          SubsurfModifierData *smd = (SubsurfModifierData *)BKE_modifier_new(
+              eModifierType_Subsurf);
 
           smd->levels = MAX2(1, me->subdiv);
           smd->renderLevels = MAX2(1, me->subdivr);
           smd->subdivType = me->subsurftype;
 
           smd->modifier.mode = 0;
-          if (me->subdiv != 0)
+          if (me->subdiv != 0) {
             smd->modifier.mode |= 1;
-          if (me->subdivr != 0)
+          }
+          if (me->subdivr != 0) {
             smd->modifier.mode |= 2;
+          }
 
-          if (me->flag & ME_OPT_EDGES)
+          if (me->flag & ME_OPT_EDGES) {
             smd->flags |= eSubsurfModifierFlag_ControlEdges;
+          }
 
           BLI_addtail(&ob->modifiers, smd);
 
-          modifier_unique_name(&ob->modifiers, (ModifierData *)smd);
+          BKE_modifier_unique_name(&ob->modifiers, (ModifierData *)smd);
         }
       }
 
@@ -1340,8 +1369,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
           if (obc && obc->type == OB_CURVE) {
             Curve *cu = blo_do_versions_newlibadr(fd, lib, obc->data);
-            if (cu)
+            if (cu) {
               cu->flag |= CU_PATH;
+            }
           }
         }
       }
@@ -1384,18 +1414,19 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      if ((ob->softflag & OB_SB_ENABLE) && !modifiers_findByType(ob, eModifierType_Softbody)) {
+      if ((ob->softflag & OB_SB_ENABLE) &&
+          !BKE_modifiers_findby_type(ob, eModifierType_Softbody)) {
         if (ob->softflag & OB_SB_POSTDEF) {
           md = ob->modifiers.first;
 
-          while (md && modifierType_getInfo(md->type)->type == eModifierTypeType_OnlyDeform) {
+          while (md && BKE_modifier_get_info(md->type)->type == eModifierTypeType_OnlyDeform) {
             md = md->next;
           }
 
-          BLI_insertlinkbefore(&ob->modifiers, md, modifier_new(eModifierType_Softbody));
+          BLI_insertlinkbefore(&ob->modifiers, md, BKE_modifier_new(eModifierType_Softbody));
         }
         else {
-          BLI_addhead(&ob->modifiers, modifier_new(eModifierType_Softbody));
+          BLI_addhead(&ob->modifiers, BKE_modifier_new(eModifierType_Softbody));
         }
 
         ob->softflag &= ~OB_SB_ENABLE;
@@ -1428,14 +1459,17 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      paf = blo_do_version_give_parteff_245(ob);
+      paf = BKE_object_do_version_give_parteff_245(ob);
       if (paf) {
-        if (paf->disp == 0)
+        if (paf->disp == 0) {
           paf->disp = 100;
-        if (paf->speedtex == 0)
+        }
+        if (paf->speedtex == 0) {
           paf->speedtex = 8;
-        if (paf->omat == 0)
+        }
+        if (paf->omat == 0) {
           paf->omat = 1;
+        }
       }
     }
 
@@ -1459,8 +1493,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
       for (kb = key->block.first; kb; kb = kb->next) {
         if (kb == key->refkey) {
-          if (kb->name[0] == 0)
+          if (kb->name[0] == 0) {
             strcpy(kb->name, "Basis");
+          }
         }
         else {
           if (kb->name[0] == 0) {
@@ -1498,8 +1533,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     /* updating stepsize for ghost drawing */
     for (arm = bmain->armatures.first; arm; arm = arm->id.next) {
       bone_version_239(&arm->bonebase);
-      if (arm->layer == 0)
+      if (arm->layer == 0) {
         arm->layer = 1;
+      }
     }
 
     for (; sce; sce = sce->id.next) {
@@ -1510,16 +1546,19 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (; cam; cam = cam->id.next) {
-      if (set_passepartout)
+      if (set_passepartout) {
         cam->flag |= CAM_SHOWPASSEPARTOUT;
+      }
 
       /* make sure old cameras have title safe on */
-      if (!(cam->flag & CAM_SHOW_SAFE_MARGINS))
+      if (!(cam->flag & CAM_SHOW_SAFE_MARGINS)) {
         cam->flag |= CAM_SHOW_SAFE_MARGINS;
+      }
 
       /* set an appropriate camera passepartout alpha */
-      if (!(cam->passepartalpha))
+      if (!(cam->passepartalpha)) {
         cam->passepartalpha = 0.2f;
+      }
     }
   }
 
@@ -1533,12 +1572,14 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     /* updating layers still */
     for (arm = bmain->armatures.first; arm; arm = arm->id.next) {
       bone_version_239(&arm->bonebase);
-      if (arm->layer == 0)
+      if (arm->layer == 0) {
         arm->layer = 1;
+      }
     }
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      if (sce->audio.mixrate == 0)
+      if (sce->audio.mixrate == 0) {
         sce->audio.mixrate = 48000;
+      }
 
       /* We don't add default layer since blender2.8 because the layers
        * are now in Scene->view_layers and a default layer is created in
@@ -1547,14 +1588,16 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       SceneRenderLayer *srl;
       /* new layer flag for sky, was default for solid */
       for (srl = sce->r.layers.first; srl; srl = srl->next) {
-        if (srl->layflag & SCE_LAY_SOLID)
+        if (srl->layflag & SCE_LAY_SOLID) {
           srl->layflag |= SCE_LAY_SKY;
+        }
         srl->passflag &= (SCE_PASS_COMBINED | SCE_PASS_Z | SCE_PASS_NORMAL | SCE_PASS_VECTOR);
       }
 
       /* node version changes */
-      if (sce->nodetree)
+      if (sce->nodetree) {
         ntree_version_241(sce->nodetree);
+      }
 
       /* uv calculation options moved to toolsettings */
       if (sce->toolsettings->unwrapper == 0) {
@@ -1563,12 +1606,15 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
     }
 
-    for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next)
+    for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next) {
       ntree_version_241(ntree);
+    }
 
-    for (la = bmain->lights.first; la; la = la->id.next)
-      if (la->buffers == 0)
+    for (la = bmain->lights.first; la; la = la->id.next) {
+      if (la->buffers == 0) {
         la->buffers = 1;
+      }
+    }
 
     /* for empty drawsize and drawtype */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
@@ -1582,9 +1628,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     if (bmain->versionfile == 241) {
       Image *ima;
       for (ima = bmain->images.first; ima; ima = ima->id.next) {
-        if (STREQ(ima->name, "Compositor")) {
+        if (STREQ(ima->filepath, "Compositor")) {
           strcpy(ima->id.name + 2, "Viewer Node");
-          strcpy(ima->name, "Viewer Node");
+          strcpy(ima->filepath, "Viewer Node");
         }
       }
     }
@@ -1592,7 +1638,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
   if (bmain->versionfile <= 242) {
     Scene *sce;
-    bScreen *sc;
+    bScreen *screen;
     Object *ob;
     Curve *cu;
     Material *ma;
@@ -1604,20 +1650,21 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     bNodeTree *ntree;
     int a;
 
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
-      sa = sc->areabase.first;
-      while (sa) {
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
+      area = screen->areabase.first;
+      while (area) {
         SpaceLink *sl;
 
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           if (sl->spacetype == SPACE_VIEW3D) {
             View3D *v3d = (View3D *)sl;
-            if (v3d->gridsubdiv == 0)
+            if (v3d->gridsubdiv == 0) {
               v3d->gridsubdiv = 10;
+            }
           }
         }
-        sa = sa->next;
+        area = area->next;
       }
     }
 
@@ -1625,35 +1672,40 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       enum {
         R_THREADS = (1 << 19),
       };
-      if (sce->toolsettings->select_thresh == 0.0f)
+      if (sce->toolsettings->select_thresh == 0.0f) {
         sce->toolsettings->select_thresh = 0.01f;
-      if (sce->r.threads == 0) {
-        if (sce->r.mode & R_THREADS)
-          sce->r.threads = 2;
-        else
-          sce->r.threads = 1;
       }
-      if (sce->nodetree)
+      if (sce->r.threads == 0) {
+        if (sce->r.mode & R_THREADS) {
+          sce->r.threads = 2;
+        }
+        else {
+          sce->r.threads = 1;
+        }
+      }
+      if (sce->nodetree) {
         ntree_version_242(sce->nodetree);
+      }
     }
 
-    for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next)
+    for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next) {
       ntree_version_242(ntree);
+    }
 
     /* add default radius values to old curve points */
     for (cu = bmain->curves.first; cu; cu = cu->id.next) {
       for (nu = cu->nurb.first; nu; nu = nu->next) {
-        if (nu) {
-          if (nu->bezt) {
-            for (bezt = nu->bezt, a = 0; a < nu->pntsu; a++, bezt++) {
-              if (!bezt->radius)
-                bezt->radius = 1.0;
+        if (nu->bezt) {
+          for (bezt = nu->bezt, a = 0; a < nu->pntsu; a++, bezt++) {
+            if (!bezt->radius) {
+              bezt->radius = 1.0;
             }
           }
-          else if (nu->bp) {
-            for (bp = nu->bp, a = 0; a < nu->pntsu * nu->pntsv; a++, bp++) {
-              if (!bp->radius)
-                bp->radius = 1.0;
+        }
+        else if (nu->bp) {
+          for (bp = nu->bp, a = 0; a < nu->pntsu * nu->pntsv; a++, bp++) {
+            if (!bp->radius) {
+              bp->radius = 1.0;
             }
           }
         }
@@ -1672,21 +1724,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         bConstraint *curcon;
         for (curcon = list->first; curcon; curcon = curcon->next) {
           switch (curcon->type) {
-            case CONSTRAINT_TYPE_MINMAX: {
-              bMinMaxConstraint *data = curcon->data;
-              if (data->sticky == 1)
-                data->flag |= MINMAX_STICKY;
-              else
-                data->flag &= ~MINMAX_STICKY;
-
-              break;
-            }
             case CONSTRAINT_TYPE_ROTLIKE: {
               bRotateLikeConstraint *data = curcon->data;
 
               /* version patch from buttons_object.c */
-              if (data->flag == 0)
+              if (data->flag == 0) {
                 data->flag = ROTLIKE_X | ROTLIKE_Y | ROTLIKE_Z;
+              }
 
               break;
             }
@@ -1701,14 +1745,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
           for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
             for (curcon = pchan->constraints.first; curcon; curcon = curcon->next) {
               switch (curcon->type) {
-                case CONSTRAINT_TYPE_MINMAX: {
-                  bMinMaxConstraint *data = curcon->data;
-                  if (data->sticky == 1)
-                    data->flag |= MINMAX_STICKY;
-                  else
-                    data->flag &= ~MINMAX_STICKY;
-                  break;
-                }
                 case CONSTRAINT_TYPE_KINEMATIC: {
                   bKinematicConstraint *data = curcon->data;
                   if (!(data->flag & CONSTRAINT_IK_POS)) {
@@ -1721,8 +1757,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
                   bRotateLikeConstraint *data = curcon->data;
 
                   /* version patch from buttons_object.c */
-                  if (data->flag == 0)
+                  if (data->flag == 0) {
                     data->flag = ROTLIKE_X | ROTLIKE_Y | ROTLIKE_Z;
+                  }
                   break;
                 }
               }
@@ -1731,28 +1768,33 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
       }
 
-      /* copy old object level track settings to curve modifers */
+      /* copy old object level track settings to curve modifiers */
       for (md = ob->modifiers.first; md; md = md->next) {
         if (md->type == eModifierType_Curve) {
           CurveModifierData *cmd = (CurveModifierData *)md;
 
-          if (cmd->defaxis == 0)
+          if (cmd->defaxis == 0) {
             cmd->defaxis = ob->trackflag + 1;
+          }
         }
       }
     }
 
     for (ma = bmain->materials.first; ma; ma = ma->id.next) {
-      if (ma->nodetree)
+      if (ma->nodetree) {
         ntree_version_242(ma->nodetree);
+      }
     }
 
-    for (me = bmain->meshes.first; me; me = me->id.next)
+    for (me = bmain->meshes.first; me; me = me->id.next) {
       customdata_version_242(me);
+    }
 
-    for (collection = bmain->collections.first; collection; collection = collection->id.next)
-      if (collection->layer == 0)
+    for (collection = bmain->collections.first; collection; collection = collection->id.next) {
+      if (collection->layer == 0) {
         collection->layer = (1 << 20) - 1;
+      }
+    }
 
     /* now, subversion control! */
     if (bmain->subversionfile < 3) {
@@ -1795,14 +1837,18 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         tex->iuser.cycl = (tex->imaflag & TEX_ANIMCYCLIC) != 0;
       }
       for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-        if (sce->nodetree)
+        if (sce->nodetree) {
           do_version_ntree_242_2(sce->nodetree);
+        }
       }
-      for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next)
+      for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next) {
         do_version_ntree_242_2(ntree);
-      for (ma = bmain->materials.first; ma; ma = ma->id.next)
-        if (ma->nodetree)
+      }
+      for (ma = bmain->materials.first; ma; ma = ma->id.next) {
+        if (ma->nodetree) {
           do_version_ntree_242_2(ma->nodetree);
+        }
+      }
     }
 
     if (bmain->subversionfile < 4) {
@@ -1823,7 +1869,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       for (curdef = ob->defbase.first; curdef; curdef = curdef->next) {
         /* replace an empty-string name with unique name */
         if (curdef->name[0] == '\0') {
-          defgroup_unique_name(curdef, ob);
+          BKE_object_defgroup_unique_name(curdef, ob);
         }
       }
 
@@ -1856,23 +1902,24 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     /* render layer added, this is not the active layer */
     if (bmain->versionfile <= 243 || bmain->subversionfile < 2) {
       Mesh *me;
-      for (me = bmain->meshes.first; me; me = me->id.next)
+      for (me = bmain->meshes.first; me; me = me->id.next) {
         customdata_version_243(me);
+      }
     }
   }
 
   if (bmain->versionfile <= 244) {
-    bScreen *sc;
+    bScreen *screen;
 
     if (bmain->versionfile != 244 || bmain->subversionfile < 2) {
       /* correct older action editors - incorrect scrolling */
-      for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-        ScrArea *sa;
-        sa = sc->areabase.first;
-        while (sa) {
+      for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+        ScrArea *area;
+        area = screen->areabase.first;
+        while (area) {
           SpaceLink *sl;
 
-          for (sl = sa->spacedata.first; sl; sl = sl->next) {
+          for (sl = area->spacedata.first; sl; sl = sl->next) {
             if (sl->spacetype == SPACE_ACTION) {
               SpaceAction *saction = (SpaceAction *)sl;
 
@@ -1883,7 +1930,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
               saction->v2d.cur.ymax = 5.0;
             }
           }
-          sa = sa->next;
+          area = area->next;
         }
       }
     }
@@ -1896,7 +1943,6 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     Light *la;
     Material *ma;
     ParticleSettings *part;
-    Mesh *me;
     bNodeTree *ntree;
     Tex *tex;
     ModifierData *md;
@@ -1925,8 +1971,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
                 bLocLimitConstraint *data = (bLocLimitConstraint *)curcon->data;
 
                 /* old limit without parent option for objects */
-                if (data->flag2)
+                if (data->flag2) {
                   curcon->ownspace = CONSTRAINT_SPACE_LOCAL;
+                }
                 break;
               }
             }
@@ -1955,8 +2002,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
                     bActionConstraint *data = (bActionConstraint *)curcon->data;
 
                     /* 'data->local' used to mean that target was in local-space */
-                    if (data->local)
+                    if (data->local) {
                       curcon->tarspace = CONSTRAINT_SPACE_LOCAL;
+                    }
                     break;
                   }
                 }
@@ -1981,8 +2029,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
     /* add point caches */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-      if (ob->soft && !ob->soft->pointcache)
+      if (ob->soft && !ob->soft->pointcache) {
         ob->soft->pointcache = BKE_ptcache_add(&ob->soft->ptcaches);
+      }
 
       for (psys = ob->particlesystem.first; psys; psys = psys->next) {
         if (psys->pointcache) {
@@ -1992,8 +2041,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
             psys->pointcache->flag &= ~PTCACHE_BAKED;
           }
         }
-        else
+        else {
           psys->pointcache = BKE_ptcache_add(&psys->ptcaches);
+        }
       }
 
       for (md = ob->modifiers.first; md; md = md->next) {
@@ -2007,30 +2057,13 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
     }
 
-    /* Copy over old per-level multires vertex data
-     * into a single vertex array in struct Multires */
-    for (me = bmain->meshes.first; me; me = me->id.next) {
-      if (me->mr && !me->mr->verts) {
-        MultiresLevel *lvl = me->mr->levels.last;
-        if (lvl) {
-          me->mr->verts = lvl->verts;
-          lvl->verts = NULL;
-          /* Don't need the other vert arrays */
-          for (lvl = lvl->prev; lvl; lvl = lvl->prev) {
-            MEM_freeN(lvl->verts);
-            lvl->verts = NULL;
-          }
-        }
-      }
-    }
-
     if (bmain->versionfile != 245 || bmain->subversionfile < 1) {
       for (la = bmain->lights.first; la; la = la->id.next) {
         la->falloff_type = LA_FALLOFF_INVLINEAR;
 
         if (la->curfalloff == NULL) {
-          la->curfalloff = curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
-          curvemapping_initialize(la->curfalloff);
+          la->curfalloff = BKE_curvemapping_add(1, 0.0f, 1.0f, 1.0f, 0.0f);
+          BKE_curvemapping_init(la->curfalloff);
         }
       }
     }
@@ -2042,13 +2075,15 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
 
     for (part = bmain->particles.first; part; part = part->id.next) {
-      if (part->ren_child_nbr == 0)
+      if (part->ren_child_nbr == 0) {
         part->ren_child_nbr = part->child_nbr;
+      }
     }
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      if (sce->nodetree)
+      if (sce->nodetree) {
         ntree_version_245(fd, lib, sce->nodetree);
+      }
 
       if (sce->r.simplify_subsurf == 0) {
         sce->r.simplify_subsurf = 6;
@@ -2056,8 +2091,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
     }
 
-    for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next)
+    for (ntree = bmain->nodetrees.first; ntree; ntree = ntree->id.next) {
       ntree_version_245(fd, lib, ntree);
+    }
 
     /* fix for temporary flag changes during 245 cycle */
     for (ima = bmain->images.first; ima; ima = ima->id.next) {
@@ -2080,7 +2116,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 2)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 2)) {
     Image *ima;
 
     /* initialize 1:1 Aspect */
@@ -2089,24 +2125,26 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 4)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 4)) {
     bArmature *arm;
     ModifierData *md;
     Object *ob;
 
-    for (arm = bmain->armatures.first; arm; arm = arm->id.next)
+    for (arm = bmain->armatures.first; arm; arm = arm->id.next) {
       arm->deformflag |= ARM_DEF_B_BONE_REST;
+    }
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       for (md = ob->modifiers.first; md; md = md->next) {
-        if (md->type == eModifierType_Armature)
+        if (md->type == eModifierType_Armature) {
           ((ArmatureModifierData *)md)->deformflag |= ARM_DEF_B_BONE_REST;
+        }
       }
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 5)) {
-    /* foreground color needs to be something other then black */
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 5)) {
+    /* foreground color needs to be something other than black */
     Scene *sce;
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
       sce->r.fg_stamp[0] = sce->r.fg_stamp[1] = sce->r.fg_stamp[2] = 0.8f;
@@ -2115,7 +2153,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 6)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 6)) {
     Scene *sce;
     /* fix frs_sec_base */
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
@@ -2125,7 +2163,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 7)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 7)) {
     Object *ob;
     bPoseChannel *pchan;
 
@@ -2142,8 +2180,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         int k;
 
         for (k = 0; k < sb->totkey; k++) {
-          if (sb->keys[k])
+          if (sb->keys[k]) {
             MEM_freeN(sb->keys[k]);
+          }
         }
 
         MEM_freeN(sb->keys);
@@ -2154,7 +2193,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 8)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 8)) {
     Scene *sce;
     Object *ob;
     PartEff *paf = NULL;
@@ -2165,8 +2204,9 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         int k;
 
         for (k = 0; k < sb->totkey; k++) {
-          if (sb->keys[k])
+          if (sb->keys[k]) {
             MEM_freeN(sb->keys[k]);
+          }
         }
 
         MEM_freeN(sb->keys);
@@ -2176,7 +2216,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
       }
 
       /* convert old particles to new system */
-      if ((paf = blo_do_version_give_parteff_245(ob))) {
+      if ((paf = BKE_object_do_version_give_parteff_245(ob))) {
         ParticleSystem *psys;
         ModifierData *md;
         ParticleSystemModifierData *psmd;
@@ -2200,7 +2240,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
 
         BLI_addtail(&ob->particlesystem, psys);
 
-        md = modifier_new(eModifierType_ParticleSystem);
+        md = BKE_modifier_new(eModifierType_ParticleSystem);
         BLI_snprintf(md->name,
                      sizeof(md->name),
                      "ParticleSystem %i",
@@ -2221,7 +2261,7 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         part->omat = paf->mat[0];
         part->hair_step = paf->totkey;
 
-        part->eff_group = paf->group;
+        part->force_group = paf->group;
 
         /* old system didn't interpolate between keypoints at render time */
         part->draw_step = part->ren_step = 0;
@@ -2286,10 +2326,11 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
         }
 
         {
-          FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifiers_findByType(
+          FluidsimModifierData *fluidmd = (FluidsimModifierData *)BKE_modifiers_findby_type(
               ob, eModifierType_Fluidsim);
-          if (fluidmd && fluidmd->fss && fluidmd->fss->type == OB_FLUIDSIM_PARTICLE)
+          if (fluidmd && fluidmd->fss && fluidmd->fss->type == OB_FLUIDSIM_PARTICLE) {
             part->type = PART_FLUID;
+          }
         }
 
         do_version_free_effects_245(&ob->effect);
@@ -2319,36 +2360,41 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 10)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 10)) {
     Object *ob;
 
     /* dupliface scale */
-    for (ob = bmain->objects.first; ob; ob = ob->id.next)
+    for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       ob->instance_faces_scale = 1.0f;
+    }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 11)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 11)) {
     Object *ob;
     bActionStrip *strip;
 
-    /* nla-strips - scale */
+    /* NLA-strips - scale. */
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       for (strip = ob->nlastrips.first; strip; strip = strip->next) {
         float length, actlength, repeat;
 
-        if (strip->flag & ACTSTRIP_USESTRIDE)
+        if (strip->flag & ACTSTRIP_USESTRIDE) {
           repeat = 1.0f;
-        else
+        }
+        else {
           repeat = strip->repeat;
+        }
 
         length = strip->end - strip->start;
-        if (length == 0.0f)
+        if (length == 0.0f) {
           length = 1.0f;
+        }
         actlength = strip->actend - strip->actstart;
 
         strip->scale = length / (repeat * actlength);
-        if (strip->scale == 0.0f)
+        if (strip->scale == 0.0f) {
           strip->scale = 1.0f;
+        }
       }
       if (ob->soft) {
         ob->soft->inpush = ob->soft->inspring;
@@ -2357,21 +2403,22 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 14)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 14)) {
     Scene *sce;
     Sequence *seq;
 
     for (sce = bmain->scenes.first; sce; sce = sce->id.next) {
-      SEQ_BEGIN (sce->ed, seq) {
-        if (seq->blend_mode == 0)
+      SEQ_ALL_BEGIN (sce->ed, seq) {
+        if (seq->blend_mode == 0) {
           seq->blend_opacity = 100.0f;
+        }
       }
-      SEQ_END;
+      SEQ_ALL_END;
     }
   }
 
   /* fix broken group lengths in id properties */
-  if ((bmain->versionfile < 245) || (bmain->versionfile == 245 && bmain->subversionfile < 15)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 245, 15)) {
     idproperties_fix_group_lengths(bmain->scenes);
     idproperties_fix_group_lengths(bmain->libraries);
     idproperties_fix_group_lengths(bmain->objects);
@@ -2400,19 +2447,18 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   }
 
   /* convert fluids to modifier */
-  if (bmain->versionfile < 246 || (bmain->versionfile == 246 && bmain->subversionfile < 1)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 246, 1)) {
     Object *ob;
 
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
       if (ob->fluidsimSettings) {
-        FluidsimModifierData *fluidmd = (FluidsimModifierData *)modifier_new(
+        FluidsimModifierData *fluidmd = (FluidsimModifierData *)BKE_modifier_new(
             eModifierType_Fluidsim);
         BLI_addhead(&ob->modifiers, (ModifierData *)fluidmd);
 
         MEM_freeN(fluidmd->fss);
         fluidmd->fss = MEM_dupallocN(ob->fluidsimSettings);
-        fluidmd->fss->ipo = blo_do_versions_newlibadr_us(
-            fd, ob->id.lib, ob->fluidsimSettings->ipo);
+        fluidmd->fss->ipo = blo_do_versions_newlibadr(fd, ob->id.lib, ob->fluidsimSettings->ipo);
         MEM_freeN(ob->fluidsimSettings);
 
         fluidmd->fss->lastgoodframe = INT_MAX;
@@ -2422,38 +2468,37 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 246 || (bmain->versionfile == 246 && bmain->subversionfile < 1)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 246, 1)) {
     Object *ob;
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-      if (ob->pd && (ob->pd->forcefield == PFIELD_WIND))
+      if (ob->pd && (ob->pd->forcefield == PFIELD_WIND)) {
         ob->pd->f_noise = 0.0f;
+      }
     }
   }
 
   /* set the curve radius interpolation to 2.47 default - easy */
-  if (bmain->versionfile < 247 || (bmain->versionfile == 247 && bmain->subversionfile < 6)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 247, 6)) {
     Curve *cu;
     Nurb *nu;
 
     for (cu = bmain->curves.first; cu; cu = cu->id.next) {
       for (nu = cu->nurb.first; nu; nu = nu->next) {
-        if (nu) {
-          nu->radius_interp = 3;
+        nu->radius_interp = 3;
 
-          /* resolu and resolv are now used differently for surfaces
-           * rather than using the resolution to define the entire number of divisions,
-           * use it for the number of divisions per segment
-           */
-          if (nu->pntsv > 1) {
-            nu->resolu = MAX2(1, (int)(((float)nu->resolu / (float)nu->pntsu) + 0.5f));
-            nu->resolv = MAX2(1, (int)(((float)nu->resolv / (float)nu->pntsv) + 0.5f));
-          }
+        /* resolu and resolv are now used differently for surfaces
+         * rather than using the resolution to define the entire number of divisions,
+         * use it for the number of divisions per segment
+         */
+        if (nu->pntsv > 1) {
+          nu->resolu = MAX2(1, (int)(((float)nu->resolu / (float)nu->pntsu) + 0.5f));
+          nu->resolv = MAX2(1, (int)(((float)nu->resolv / (float)nu->pntsv) + 0.5f));
         }
       }
     }
   }
 
-  if (bmain->versionfile < 248 || (bmain->versionfile == 248 && bmain->subversionfile < 2)) {
+  if (!MAIN_VERSION_ATLEAST(bmain, 248, 2)) {
     Scene *sce;
 
     /* Note, these will need to be added for painting */
@@ -2463,17 +2508,17 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
     }
   }
 
-  if (bmain->versionfile < 248 || (bmain->versionfile == 248 && bmain->subversionfile < 3)) {
-    bScreen *sc;
+  if (!MAIN_VERSION_ATLEAST(bmain, 248, 3)) {
+    bScreen *screen;
 
     /* adjust default settings for Animation Editors */
-    for (sc = bmain->screens.first; sc; sc = sc->id.next) {
-      ScrArea *sa;
+    for (screen = bmain->screens.first; screen; screen = screen->id.next) {
+      ScrArea *area;
 
-      for (sa = sc->areabase.first; sa; sa = sa->next) {
+      for (area = screen->areabase.first; area; area = area->next) {
         SpaceLink *sl;
 
-        for (sl = sa->spacedata.first; sl; sl = sl->next) {
+        for (sl = area->spacedata.first; sl; sl = sl->next) {
           switch (sl->spacetype) {
             case SPACE_ACTION: {
               SpaceAction *sact = (SpaceAction *)sl;
@@ -2502,25 +2547,24 @@ void blo_do_versions_pre250(FileData *fd, Library *lib, Main *bmain)
   if (bmain->versionfile < 249 && bmain->subversionfile < 1) {
     Object *ob;
     for (ob = bmain->objects.first; ob; ob = ob->id.next) {
-      if (ob->pd)
+      if (ob->pd) {
         ob->pd->seed = ((uint)(ceil(PIL_check_seconds_timer())) + 1) % 128;
+      }
     }
   }
 
   if (bmain->versionfile < 249 && bmain->subversionfile < 2) {
     Scene *sce = bmain->scenes.first;
-    Sequence *seq;
     Editing *ed;
 
     while (sce) {
       ed = sce->ed;
       if (ed) {
-        SEQP_BEGIN (ed, seq) {
+        LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
           if (seq->strip && seq->strip->proxy) {
             seq->strip->proxy->quality = 90;
           }
         }
-        SEQ_END;
       }
 
       sce = sce->id.next;

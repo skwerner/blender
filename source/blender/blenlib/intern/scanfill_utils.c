@@ -18,18 +18,18 @@
  * \ingroup bli
  */
 
-#include <stdio.h>
+#include <limits.h>
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 #include "MEM_guardedalloc.h"
 
+#include "BLI_ghash.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
 #include "BLI_scanfill.h" /* own include */
 
@@ -139,9 +139,8 @@ static int edge_isect_ls_sort_cb(void *thunk, const void *def_a_ptr, const void 
   if (a > b) {
     return -1;
   }
-  else {
-    return (a < b);
-  }
+
+  return (a < b);
 }
 
 static ScanFillEdge *edge_step(PolyInfo *poly_info,
@@ -158,14 +157,14 @@ static ScanFillEdge *edge_step(PolyInfo *poly_info,
   eed = (e_curr->next && e_curr != poly_info[poly_nr].edge_last) ? e_curr->next :
                                                                    poly_info[poly_nr].edge_first;
   if ((v_curr == eed->v1 || v_curr == eed->v2) == true &&
-      (v_prev == eed->v1 || v_prev == eed->v2) == false) {
+      (ELEM(v_prev, eed->v1, eed->v2)) == false) {
     return eed;
   }
 
   eed = (e_curr->prev && e_curr != poly_info[poly_nr].edge_first) ? e_curr->prev :
                                                                     poly_info[poly_nr].edge_last;
   if ((v_curr == eed->v1 || v_curr == eed->v2) == true &&
-      (v_prev == eed->v1 || v_prev == eed->v2) == false) {
+      (ELEM(v_prev, eed->v1, eed->v2)) == false) {
     return eed;
   }
 
@@ -245,7 +244,7 @@ static bool scanfill_preprocess_self_isect(ScanFillContext *sf_ctx,
           continue;
         }
 
-        /* maintain coorect terminating edge */
+        /* Maintain correct terminating edge. */
         if (pi->edge_last == eed) {
           pi->edge_last = NULL;
         }

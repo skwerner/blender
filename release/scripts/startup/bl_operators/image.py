@@ -89,7 +89,7 @@ class EditExternally(Operator):
 
         return {'FINISHED'}
 
-    def invoke(self, context, event):
+    def invoke(self, context, _event):
         import os
         sd = context.space_data
         try:
@@ -115,41 +115,8 @@ class EditExternally(Operator):
         return {'FINISHED'}
 
 
-class SaveDirty(Operator):
-    """Save all modified textures"""
-    bl_idname = "image.save_dirty"
-    bl_label = "Save Dirty"
-    bl_options = {'REGISTER', 'UNDO'}
-
-    def execute(self, context):
-        unique_paths = set()
-        for image in bpy.data.images:
-            if image.is_dirty:
-                if image.packed_file:
-                    if image.library:
-                        self.report({'WARNING'},
-                                    "Packed library image: %r from library %r"
-                                    " can't be re-packed" %
-                                    (image.name, image.library.filepath))
-                    else:
-                        image.pack(as_png=True)
-                else:
-                    filepath = bpy.path.abspath(image.filepath,
-                                                library=image.library)
-                    if "\\" not in filepath and "/" not in filepath:
-                        self.report({'WARNING'}, "Invalid path: " + filepath)
-                    elif filepath in unique_paths:
-                        self.report({'WARNING'},
-                                    "Path used by more than one image: %r" %
-                                    filepath)
-                    else:
-                        unique_paths.add(filepath)
-                        image.save()
-        return {'FINISHED'}
-
-
 class ProjectEdit(Operator):
-    """Edit a snapshot of the view-port in an external image editor"""
+    """Edit a snapshot of the 3D Viewport in an external image editor"""
     bl_idname = "image.project_edit"
     bl_label = "Project Edit"
     bl_options = {'REGISTER'}
@@ -189,8 +156,7 @@ class ProjectEdit(Operator):
         if bpy.data.is_saved:
             filepath = "//" + filepath
         else:
-            tmpdir = context.preferences.filepaths.temporary_directory
-            filepath = os.path.join(tmpdir, "project_edit")
+            filepath = os.path.join(bpy.app.tempdir, "project_edit")
 
         obj = context.object
 
@@ -227,7 +193,7 @@ class ProjectApply(Operator):
     bl_label = "Project Apply"
     bl_options = {'REGISTER'}
 
-    def execute(self, context):
+    def execute(self, _context):
         image_name = ProjectEdit._proj_hack[0]  # TODO, deal with this nicer
 
         try:
@@ -248,5 +214,4 @@ classes = (
     EditExternally,
     ProjectApply,
     ProjectEdit,
-    SaveDirty,
 )

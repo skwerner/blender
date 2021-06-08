@@ -14,12 +14,15 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLI_ENDIAN_SWITCH_INLINE_H__
-#define __BLI_ENDIAN_SWITCH_INLINE_H__
+#pragma once
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* only include from header */
 #ifndef __BLI_ENDIAN_SWITCH_H__
-#  error "this file isnt to be directly included"
+#  error "this file isn't to be directly included"
 #endif
 
 /** \file
@@ -85,4 +88,6 @@ BLI_INLINE void BLI_endian_switch_double(double *val)
   BLI_endian_switch_uint64((uint64_t *)val);
 }
 
-#endif /* __BLI_ENDIAN_SWITCH_INLINE_H__ */
+#ifdef __cplusplus
+}
+#endif

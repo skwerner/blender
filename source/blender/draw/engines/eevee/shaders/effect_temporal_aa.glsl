@@ -1,20 +1,21 @@
 
+#pragma BLENDER_REQUIRE(common_math_lib.glsl)
+#pragma BLENDER_REQUIRE(common_view_lib.glsl)
+
+uniform sampler2D colorBuffer;
+uniform sampler2D depthBuffer;
 uniform sampler2D colorHistoryBuffer;
-uniform sampler2D velocityBuffer;
+
+uniform mat4 prevViewProjectionMatrix;
 
 out vec4 FragColor;
-
-vec4 safe_color(vec4 c)
-{
-  /* Clamp to avoid black square artifacts if a pixel goes NaN. */
-  return clamp(c, vec4(0.0), vec4(1e20)); /* 1e20 arbitrary. */
-}
 
 #ifdef USE_REPROJECTION
 
 /**
  * Adapted from https://casual-effects.com/g3d/G3D10/data-files/shader/Film/Film_temporalAA.pix
- * which is adapted from https://github.com/gokselgoktas/temporal-anti-aliasing/blob/master/Assets/Resources/Shaders/TemporalAntiAliasing.cginc
+ * which is adapted from
+ * https://github.com/gokselgoktas/temporal-anti-aliasing/blob/master/Assets/Resources/Shaders/TemporalAntiAliasing.cginc
  * which is adapted from https://github.com/playdeadgames/temporal
  * Optimization by Stubbesaurus and epsilon adjustment to avoid division by zero.
  *
@@ -37,17 +38,19 @@ vec3 clip_to_aabb(vec3 color, vec3 minimum, vec3 maximum, vec3 average)
  */
 void main()
 {
-  ivec2 texel = ivec2(gl_FragCoord.xy);
-  float depth = texelFetch(depthBuffer, texel, 0).r;
-  vec2 motion = texelFetch(velocityBuffer, texel, 0).rg;
-
-  /* Decode from unsigned normalized 16bit texture. */
-  motion = motion * 2.0 - 1.0;
-
-  /* Compute pixel position in previous frame. */
   vec2 screen_res = vec2(textureSize(colorBuffer, 0).xy);
   vec2 uv = gl_FragCoord.xy / screen_res;
-  vec2 uv_history = uv - motion;
+  ivec2 texel = ivec2(gl_FragCoord.xy);
+
+  /* Compute pixel position in previous frame. */
+  float depth = textureLod(depthBuffer, uv, 0.0).r;
+  vec3 pos = get_world_space_from_depth(uv, depth);
+  vec2 uv_history = project_point(prevViewProjectionMatrix, pos).xy * 0.5 + 0.5;
+
+  /* HACK: Reject lookdev spheres from TAA reprojection. */
+  if (depth == 0.0) {
+    uv_history = uv;
+  }
 
   ivec2 texel_history = ivec2(uv_history * screen_res);
   vec4 color_history = textureLod(colorHistoryBuffer, uv_history, 0.0);
@@ -95,6 +98,9 @@ void main()
   color_history = (out_of_view) ? color : color_history;
 
   FragColor = safe_color(color_history);
+  /* There is some ghost issue if we use the alpha
+   * in the viewport. Overwriting alpha fixes it. */
+  FragColor.a = color.a;
 }
 
 #else

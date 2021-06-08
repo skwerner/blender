@@ -26,14 +26,13 @@
 #include "MEM_guardedalloc.h"
 
 #include "BLI_utildefines.h"
-#include "BLI_ghash.h"
 
 #include "intern/depsgraph.h"
-#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_component.h"
+#include "intern/node/deg_node_factory.h"
 #include "intern/node/deg_node_id.h"
 
-namespace DEG {
+namespace blender::deg {
 
 const char *operationCodeAsString(OperationCode opcode)
 {
@@ -61,9 +60,19 @@ const char *operationCodeAsString(OperationCode opcode)
     /* Scene related. */
     case OperationCode::SCENE_EVAL:
       return "SCENE_EVAL";
+    case OperationCode::AUDIO_ENTRY:
+      return "AUDIO_ENTRY";
+    case OperationCode::AUDIO_VOLUME:
+      return "AUDIO_VOLUME";
     /* Object related. */
+    case OperationCode::OBJECT_FROM_LAYER_ENTRY:
+      return "OBJECT_FROM_LAYER_ENTRY";
     case OperationCode::OBJECT_BASE_FLAGS:
       return "OBJECT_BASE_FLAGS";
+    case OperationCode::OBJECT_FROM_LAYER_EXIT:
+      return "OBJECT_FROM_LAYER_EXIT";
+    case OperationCode::DIMENSIONS:
+      return "DIMENSIONS";
     /* Transform. */
     case OperationCode::TRANSFORM_INIT:
       return "TRANSFORM_INIT";
@@ -100,6 +109,8 @@ const char *operationCodeAsString(OperationCode opcode)
       return "LIGHT_PROBE_EVAL";
     case OperationCode::SPEAKER_EVAL:
       return "SPEAKER_EVAL";
+    case OperationCode::SOUND_EVAL:
+      return "SOUND_EVAL";
     case OperationCode::ARMATURE_EVAL:
       return "ARMATURE_EVAL";
     /* Pose. */
@@ -167,6 +178,8 @@ const char *operationCodeAsString(OperationCode opcode)
       return "SHADING";
     case OperationCode::MATERIAL_UPDATE:
       return "MATERIAL_UPDATE";
+    case OperationCode::LIGHT_UPDATE:
+      return "LIGHT_UPDATE";
     case OperationCode::WORLD_UPDATE:
       return "WORLD_UPDATE";
     /* Movie clip. */
@@ -183,19 +196,20 @@ const char *operationCodeAsString(OperationCode opcode)
     /* Generic datablock. */
     case OperationCode::GENERIC_DATABLOCK_UPDATE:
       return "GENERIC_DATABLOCK_UPDATE";
+    /* Sequencer. */
+    case OperationCode::SEQUENCES_EVAL:
+      return "SEQUENCES_EVAL";
     /* instancing/duplication. */
     case OperationCode::DUPLI:
       return "DUPLI";
+    case OperationCode::SIMULATION_EVAL:
+      return "SIMULATION_EVAL";
   }
   BLI_assert(!"Unhandled operation code, should never happen.");
   return "UNKNOWN";
 }
 
 OperationNode::OperationNode() : name_tag(-1), flag(0)
-{
-}
-
-OperationNode::~OperationNode()
 {
 }
 
@@ -208,14 +222,11 @@ string OperationNode::identifier() const
  * used for logging and debug prints. */
 string OperationNode::full_identifier() const
 {
-  string owner_str = "";
-  if (owner->type == NodeType::BONE) {
-    owner_str = string(owner->owner->name) + "." + owner->name;
+  string owner_str = owner->owner->name;
+  if (owner->type == NodeType::BONE || !owner->name.empty()) {
+    owner_str += "/" + owner->name;
   }
-  else {
-    owner_str = owner->owner->name;
-  }
-  return owner_str + "." + identifier();
+  return owner_str + "/" + identifier();
 }
 
 void OperationNode::tag_update(Depsgraph *graph, eUpdateSource source)
@@ -239,13 +250,13 @@ void OperationNode::tag_update(Depsgraph *graph, eUpdateSource source)
 
 void OperationNode::set_as_entry()
 {
-  BLI_assert(owner != NULL);
+  BLI_assert(owner != nullptr);
   owner->set_entry_operation(this);
 }
 
 void OperationNode::set_as_exit()
 {
-  BLI_assert(owner != NULL);
+  BLI_assert(owner != nullptr);
   owner->set_exit_operation(this);
 }
 
@@ -257,4 +268,4 @@ void deg_register_operation_depsnodes()
   register_node_typeinfo(&DNTI_OPERATION);
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

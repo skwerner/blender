@@ -29,8 +29,8 @@
 #include "BLI_math_color.h"
 
 #include "BKE_context.h"
-#include "BKE_mesh.h"
 #include "BKE_deform.h"
+#include "BKE_mesh.h"
 
 #include "DEG_depsgraph.h"
 
@@ -68,9 +68,6 @@ static void tag_object_after_update(Object *object)
 static bool vertex_color_set(Object *ob, uint paintcol)
 {
   Mesh *me;
-  const MPoly *mp;
-  int i, j;
-
   if (((me = BKE_mesh_from_object(ob)) == NULL) || (ED_mesh_color_ensure(me, NULL) == false)) {
     return false;
   }
@@ -78,14 +75,15 @@ static bool vertex_color_set(Object *ob, uint paintcol)
   const bool use_face_sel = (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
   const bool use_vert_sel = (me->editflag & ME_EDIT_PAINT_VERT_SEL) != 0;
 
-  mp = me->mpoly;
-  for (i = 0; i < me->totpoly; i++, mp++) {
+  const MPoly *mp = me->mpoly;
+  for (int i = 0; i < me->totpoly; i++, mp++) {
     MLoopCol *lcol = me->mloopcol + mp->loopstart;
 
-    if (use_face_sel && !(mp->flag & ME_FACE_SEL))
+    if (use_face_sel && !(mp->flag & ME_FACE_SEL)) {
       continue;
+    }
 
-    j = 0;
+    int j = 0;
     do {
       uint vidx = me->mloop[mp->loopstart + j].v;
       if (!(use_vert_sel && !(me->mvert[vidx].flag & SELECT))) {
@@ -108,15 +106,13 @@ static int vertex_color_set_exec(bContext *C, wmOperator *UNUSED(op))
 {
   Scene *scene = CTX_data_scene(C);
   Object *obact = CTX_data_active_object(C);
-  unsigned int paintcol = vpaint_get_current_col(scene, scene->toolsettings->vpaint, false);
+  uint paintcol = vpaint_get_current_col(scene, scene->toolsettings->vpaint, false);
 
   if (vertex_color_set(obact, paintcol)) {
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_set(wmOperatorType *ot)
@@ -151,7 +147,7 @@ static bool vertex_paint_from_weight(Object *ob)
   }
 
   /* TODO: respect selection. */
-  /* TODO: Do we want to take weights from evaluated mesh instead? 2.7x was not doing it anyway... */
+  /* TODO: Do we want to take weights from evaluated mesh instead? 2.7x was not doing it anyway. */
   mp = me->mpoly;
   vgroup_active = ob->actdef - 1;
   for (int i = 0; i < me->totpoly; i++, mp++) {
@@ -159,7 +155,7 @@ static bool vertex_paint_from_weight(Object *ob)
     uint j = 0;
     do {
       uint vidx = me->mloop[mp->loopstart + j].v;
-      const float weight = defvert_find_weight(&me->dvert[vidx], vgroup_active);
+      const float weight = BKE_defvert_find_weight(&me->dvert[vidx], vgroup_active);
       const uchar grayscale = weight * 255;
       lcol->r = grayscale;
       lcol->b = grayscale;
@@ -181,9 +177,7 @@ static int vertex_paint_from_weight_exec(bContext *C, wmOperator *UNUSED(op))
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_from_weight(wmOperatorType *ot)
@@ -209,27 +203,28 @@ void PAINT_OT_vertex_color_from_weight(wmOperatorType *ot)
 /** \name Smooth Vertex Colors Operator
  * \{ */
 
-static void vertex_color_smooth_looptag(Mesh *me, bool *mlooptag)
+static void vertex_color_smooth_looptag(Mesh *me, const bool *mlooptag)
 {
   const bool use_face_sel = (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
   const MPoly *mp;
   int(*scol)[4];
-  int i, j;
   bool has_shared = false;
 
   /* if no mloopcol: do not do */
   /* if mtexpoly: only the involved faces, otherwise all */
 
-  if (me->mloopcol == NULL || me->totvert == 0 || me->totpoly == 0)
+  if (me->mloopcol == NULL || me->totvert == 0 || me->totpoly == 0) {
     return;
+  }
 
   scol = MEM_callocN(sizeof(int) * me->totvert * 5, "scol");
 
+  int i;
   for (i = 0, mp = me->mpoly; i < me->totpoly; i++, mp++) {
     if ((use_face_sel == false) || (mp->flag & ME_FACE_SEL)) {
       const MLoop *ml = me->mloop + mp->loopstart;
       MLoopCol *lcol = me->mloopcol + mp->loopstart;
-      for (j = 0; j < mp->totloop; j++, ml++, lcol++) {
+      for (int j = 0; j < mp->totloop; j++, ml++, lcol++) {
         scol[ml->v][0] += lcol->r;
         scol[ml->v][1] += lcol->g;
         scol[ml->v][2] += lcol->b;
@@ -252,7 +247,7 @@ static void vertex_color_smooth_looptag(Mesh *me, bool *mlooptag)
       if ((use_face_sel == false) || (mp->flag & ME_FACE_SEL)) {
         const MLoop *ml = me->mloop + mp->loopstart;
         MLoopCol *lcol = me->mloopcol + mp->loopstart;
-        for (j = 0; j < mp->totloop; j++, ml++, lcol++) {
+        for (int j = 0; j < mp->totloop; j++, ml++, lcol++) {
           if (mlooptag[mp->loopstart + j]) {
             lcol->r = scol[ml->v][0];
             lcol->g = scol[ml->v][1];
@@ -270,7 +265,6 @@ static bool vertex_color_smooth(Object *ob)
 {
   Mesh *me;
   const MPoly *mp;
-
   int i, j;
 
   bool *mlooptag;
@@ -280,6 +274,7 @@ static bool vertex_color_smooth(Object *ob)
   }
 
   const bool use_face_sel = (me->editflag & ME_EDIT_PAINT_FACE_SEL) != 0;
+  const bool use_vert_sel = (me->editflag & ME_EDIT_PAINT_VERT_SEL) != 0;
 
   mlooptag = MEM_callocN(sizeof(bool) * me->totloop, "VPaintData mlooptag");
 
@@ -287,14 +282,19 @@ static bool vertex_color_smooth(Object *ob)
   mp = me->mpoly;
   for (i = 0; i < me->totpoly; i++, mp++) {
     const MLoop *ml = me->mloop + mp->loopstart;
-    int ml_index = mp->loopstart;
 
-    if (use_face_sel && !(mp->flag & ME_FACE_SEL))
+    if (use_face_sel && !(mp->flag & ME_FACE_SEL)) {
       continue;
-
-    for (j = 0; j < mp->totloop; j++, ml_index++, ml++) {
-      mlooptag[ml_index] = true;
     }
+
+    j = 0;
+    do {
+      if (!(use_vert_sel && !(me->mvert[ml->v].flag & SELECT))) {
+        mlooptag[mp->loopstart + j] = true;
+      }
+      ml++;
+      j++;
+    } while (j < mp->totloop);
   }
 
   /* remove stale me->mcol, will be added later */
@@ -316,9 +316,7 @@ static int vertex_color_smooth_exec(bContext *C, wmOperator *UNUSED(op))
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_smooth(wmOperatorType *ot)
@@ -369,19 +367,20 @@ static int vertex_color_brightness_contrast_exec(bContext *C, wmOperator *op)
     float contrast = RNA_float_get(op->ptr, "contrast");
     brightness /= 100.0f;
     float delta = contrast / 200.0f;
-    gain = 1.0f - delta * 2.0f;
     /*
      * The algorithm is by Werner D. Streidt
      * (http://visca.com/ffactory/archives/5-99/msg00021.html)
      * Extracted of OpenCV demhist.c
      */
     if (contrast > 0) {
-      gain = 1.0f / ((gain != 0.0f) ? gain : FLT_EPSILON);
+      gain = 1.0f - delta * 2.0f;
+      gain = 1.0f / max_ff(gain, FLT_EPSILON);
       offset = gain * (brightness - delta);
     }
     else {
       delta *= -1;
-      offset = gain * (brightness + delta);
+      gain = max_ff(1.0f - delta * 2.0f, 0.0f);
+      offset = gain * brightness + delta;
     }
   }
 
@@ -394,9 +393,7 @@ static int vertex_color_brightness_contrast_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_brightness_contrast(wmOperatorType *ot)
@@ -404,7 +401,7 @@ void PAINT_OT_vertex_color_brightness_contrast(wmOperatorType *ot)
   PropertyRNA *prop;
 
   /* identifiers */
-  ot->name = "Vertex Paint Bright/Contrast";
+  ot->name = "Vertex Paint Brightness/Contrast";
   ot->idname = "PAINT_OT_vertex_color_brightness_contrast";
   ot->description = "Adjust vertex color brightness/contrast";
 
@@ -461,9 +458,7 @@ static int vertex_color_hsv_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_hsv(wmOperatorType *ot)
@@ -501,9 +496,7 @@ static int vertex_color_invert_exec(bContext *C, wmOperator *UNUSED(op))
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_invert(wmOperatorType *ot)
@@ -547,9 +540,7 @@ static int vertex_color_levels_exec(bContext *C, wmOperator *op)
     WM_event_add_notifier(C, NC_OBJECT | ND_DRAW, obact);
     return OPERATOR_FINISHED;
   }
-  else {
-    return OPERATOR_CANCELLED;
-  }
+  return OPERATOR_CANCELLED;
 }
 
 void PAINT_OT_vertex_color_levels(wmOperatorType *ot)

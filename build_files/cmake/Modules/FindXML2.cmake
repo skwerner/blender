@@ -14,12 +14,8 @@
 #=============================================================================
 # Copyright 2011 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If XML2_ROOT_DIR was defined in the environment, use it.
@@ -29,9 +25,6 @@ ENDIF()
 
 SET(_xml2_SEARCH_DIRS
   ${XML2_ROOT_DIR}
-  /usr/local
-  /sw # Fink
-  /opt/local # DarwinPorts
 )
 
 FIND_PATH(XML2_INCLUDE_DIR libxml2/libxml/xpath.h
@@ -59,7 +52,7 @@ FIND_PACKAGE_HANDLE_STANDARD_ARGS(XML2 DEFAULT_MSG
 IF(XML2_FOUND)
   SET(XML2_LIBRARIES ${XML2_LIBRARY})
   SET(XML2_INCLUDE_DIRS ${XML2_INCLUDE_DIR})
-ENDIF(XML2_FOUND)
+ENDIF()
 
 MARK_AS_ADVANCED(
   XML2_INCLUDE_DIR

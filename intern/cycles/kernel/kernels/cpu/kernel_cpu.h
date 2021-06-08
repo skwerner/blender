@@ -46,6 +46,9 @@ void KERNEL_FUNCTION_FULL_NAME(shader)(KernelGlobals *kg,
                                        int offset,
                                        int sample);
 
+void KERNEL_FUNCTION_FULL_NAME(bake)(
+    KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);
+
 /* Split kernels */
 
 void KERNEL_FUNCTION_FULL_NAME(data_init)(KernelGlobals *kg,
@@ -89,5 +92,9 @@ DECLARE_SPLIT_KERNEL_FUNCTION(enqueue_inactive)
 DECLARE_SPLIT_KERNEL_FUNCTION(next_iteration_setup)
 DECLARE_SPLIT_KERNEL_FUNCTION(indirect_subsurface)
 DECLARE_SPLIT_KERNEL_FUNCTION(buffer_update)
+DECLARE_SPLIT_KERNEL_FUNCTION(adaptive_stopping)
+DECLARE_SPLIT_KERNEL_FUNCTION(adaptive_filter_x)
+DECLARE_SPLIT_KERNEL_FUNCTION(adaptive_filter_y)
+DECLARE_SPLIT_KERNEL_FUNCTION(adaptive_adjust_samples)
 
 #undef KERNEL_ARCH

@@ -26,41 +26,31 @@
 
 using namespace std;
 
-extern "C" {
 #include "BKE_appdir.h"
-}
 
-namespace Freestyle {
+namespace Freestyle::Config {
 
-namespace Config {
-
-Path *Path::_pInstance = 0;
+Path *Path::_pInstance = nullptr;
 Path::Path()
 {
   // get the root directory
   // soc
-  setRootDir(BKE_appdir_folder_id(BLENDER_SYSTEM_SCRIPTS, NULL));
+  setRootDir(BKE_appdir_folder_id(BLENDER_SYSTEM_SCRIPTS, nullptr));
 
   _pInstance = this;
 }
 
 void Path::setRootDir(const string &iRootDir)
 {
-  _ProjectDir = iRootDir + string(DIR_SEP.c_str()) + "freestyle";
+  _ProjectDir = iRootDir + string(DIR_SEP) + "freestyle";
   _ModelsPath = "";
-  _PatternsPath = _ProjectDir + string(DIR_SEP.c_str()) + "data" + string(DIR_SEP.c_str()) +
-                  "textures" + string(DIR_SEP.c_str()) + "variation_patterns" +
-                  string(DIR_SEP.c_str());
-  _BrushesPath = _ProjectDir + string(DIR_SEP.c_str()) + "data" + string(DIR_SEP.c_str()) +
-                 "textures" + string(DIR_SEP.c_str()) + "brushes" + string(DIR_SEP.c_str());
-  _PythonPath = _ProjectDir + string(DIR_SEP.c_str()) + "modules" + string(DIR_SEP.c_str());
-  if (getenv("PYTHONPATH")) {
-    _PythonPath += string(PATH_SEP.c_str()) + string(getenv("PYTHONPATH"));
-  }
-  _EnvMapDir = _ProjectDir + string(DIR_SEP.c_str()) + "data" + string(DIR_SEP.c_str()) +
-               "env_map" + string(DIR_SEP.c_str());
-  _MapsDir = _ProjectDir + string(DIR_SEP.c_str()) + "data" + string(DIR_SEP.c_str()) + "maps" +
-             string(DIR_SEP.c_str());
+  _PatternsPath = _ProjectDir + string(DIR_SEP) + "data" + string(DIR_SEP) + "textures" +
+                  string(DIR_SEP) + "variation_patterns" + string(DIR_SEP);
+  _BrushesPath = _ProjectDir + string(DIR_SEP) + "data" + string(DIR_SEP) + "textures" +
+                 string(DIR_SEP) + "brushes" + string(DIR_SEP);
+  _EnvMapDir = _ProjectDir + string(DIR_SEP) + "data" + string(DIR_SEP) + "env_map" +
+               string(DIR_SEP);
+  _MapsDir = _ProjectDir + string(DIR_SEP) + "data" + string(DIR_SEP) + "maps" + string(DIR_SEP);
 }
 
 void Path::setHomeDir(const string &iHomeDir)
@@ -70,7 +60,7 @@ void Path::setHomeDir(const string &iHomeDir)
 
 Path::~Path()
 {
-  _pInstance = 0;
+  _pInstance = nullptr;
 }
 
 Path *Path::getInstance()
@@ -93,6 +83,4 @@ string Path::getEnvVar(const string &iEnvVarName)
   return value;
 }
 
-}  // namespace Config
-
-} /* namespace Freestyle */
+}  // namespace Freestyle::Config

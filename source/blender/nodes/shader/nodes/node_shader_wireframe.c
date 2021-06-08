@@ -21,13 +21,13 @@
 
 /* **************** Wireframe ******************** */
 static bNodeSocketTemplate sh_node_wireframe_in[] = {
-    {SOCK_FLOAT, 1, N_("Size"), 0.01f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Size"), 0.01f, 0.0f, 0.0f, 0.0f, 0.0f, 100.0f},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_wireframe_out[] = {
-    {SOCK_FLOAT, 0, N_("Fac"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {-1, 0, ""},
+    {SOCK_FLOAT, N_("Fac"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {-1, ""},
 };
 
 static int node_shader_gpu_wireframe(GPUMaterial *mat,
@@ -36,20 +36,20 @@ static int node_shader_gpu_wireframe(GPUMaterial *mat,
                                      GPUNodeStack *in,
                                      GPUNodeStack *out)
 {
+  GPU_material_flag_set(mat, GPU_MATFLAG_BARYCENTRIC);
   /* node->custom1 is use_pixel_size */
   if (node->custom1) {
     return GPU_stack_link(
         mat, node, "node_wireframe_screenspace", in, out, GPU_builtin(GPU_BARYCENTRIC_TEXCO));
   }
-  else {
-    return GPU_stack_link(mat,
-                          node,
-                          "node_wireframe",
-                          in,
-                          out,
-                          GPU_builtin(GPU_BARYCENTRIC_TEXCO),
-                          GPU_builtin(GPU_BARYCENTRIC_DIST));
-  }
+
+  return GPU_stack_link(mat,
+                        node,
+                        "node_wireframe",
+                        in,
+                        out,
+                        GPU_builtin(GPU_BARYCENTRIC_TEXCO),
+                        GPU_builtin(GPU_BARYCENTRIC_DIST));
 }
 
 /* node type definition */

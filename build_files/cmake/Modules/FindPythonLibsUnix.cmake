@@ -25,12 +25,8 @@
 #=============================================================================
 # Copyright 2011 Blender Foundation.
 #
-# Distributed under the OSI-approved BSD License (the "License");
-# see accompanying file Copyright.txt for details.
-#
-# This software is distributed WITHOUT ANY WARRANTY; without even the
-# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-# See the License for more information.
+# Distributed under the OSI-approved BSD 3-Clause License,
+# see accompanying file BSD-3-Clause-license.txt for details.
 #=============================================================================
 
 # If PYTHON_ROOT_DIR was defined in the environment, use it.
@@ -38,7 +34,7 @@ IF(NOT PYTHON_ROOT_DIR AND NOT $ENV{PYTHON_ROOT_DIR} STREQUAL "")
   SET(PYTHON_ROOT_DIR $ENV{PYTHON_ROOT_DIR})
 ENDIF()
 
-SET(PYTHON_VERSION 3.7 CACHE STRING "Python Version (major and minor only)")
+SET(PYTHON_VERSION 3.9 CACHE STRING "Python Version (major and minor only)")
 MARK_AS_ADVANCED(PYTHON_VERSION)
 
 
@@ -71,21 +67,20 @@ STRING(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
 SET(_python_SEARCH_DIRS
   ${PYTHON_ROOT_DIR}
   "$ENV{HOME}/py${_PYTHON_VERSION_NO_DOTS}"
-  "/opt/py${_PYTHON_VERSION_NO_DOTS}"
   "/opt/lib/python-${PYTHON_VERSION}"
 )
 
 # only search for the dirs if we haven't already
 IF((NOT _IS_INC_DEF) OR (NOT _IS_INC_CONF_DEF) OR (NOT _IS_LIB_DEF) OR (NOT _IS_LIB_PATH_DEF))
   SET(_PYTHON_ABI_FLAGS_TEST
-    "m;mu;u; "    # release
-    "dm;dmu;du;d" # debug
+    "u; "  # release
+    "du;d" # debug
   )
 
   FOREACH(_CURRENT_ABI_FLAGS ${_PYTHON_ABI_FLAGS_TEST})
-    #IF(CMAKE_BUILD_TYPE STREQUAL Debug)
-    #  SET(_CURRENT_ABI_FLAGS "d${_CURRENT_ABI_FLAGS}")
-    #ENDIF()
+    # IF(CMAKE_BUILD_TYPE STREQUAL Debug)
+    #   SET(_CURRENT_ABI_FLAGS "d${_CURRENT_ABI_FLAGS}")
+    # ENDIF()
     STRING(REPLACE " " "" _CURRENT_ABI_FLAGS ${_CURRENT_ABI_FLAGS})
 
     IF(NOT DEFINED PYTHON_INCLUDE_DIR)

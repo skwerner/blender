@@ -21,15 +21,17 @@
  * \ingroup DNA
  */
 
-#ifndef __DNA_WINDOWMANAGER_TYPES_H__
-#define __DNA_WINDOWMANAGER_TYPES_H__
+#pragma once
 
 #include "DNA_listBase.h"
-#include "DNA_screen_types.h"
-#include "DNA_vec_types.h"
-#include "DNA_userdef_types.h"
+#include "DNA_screen_types.h" /* for #ScrAreaMap */
+#include "DNA_xr_types.h"     /* for #XrSessionSettings */
 
 #include "DNA_ID.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* defined here: */
 struct wmWindow;
@@ -48,7 +50,6 @@ struct PointerRNA;
 struct Report;
 struct ReportList;
 struct Stereo3dFormat;
-struct UndoStep;
 struct bContext;
 struct bScreen;
 struct uiLayout;
@@ -120,6 +121,16 @@ typedef struct ReportTimerInfo {
   float widthfac;
 } ReportTimerInfo;
 
+//#ifdef WITH_XR_OPENXR
+typedef struct wmXrData {
+  /** Runtime information for managing Blender specific behaviors. */
+  struct wmXrRuntimeData *runtime;
+  /** Permanent session settings (draw mode, feature toggles, etc). Stored in files and accessible
+   * even before the session runs. */
+  XrSessionSettings session_settings;
+} wmXrData;
+//#endif
+
 /* reports need to be before wmWindowManager */
 
 /* windowmanager is saved, tag WMAN */
@@ -131,17 +142,20 @@ typedef struct wmWindowManager {
   ListBase windows;
 
   /** Set on file read. */
-  int initialized;
+  short initialized;
   /** Indicator whether data was saved. */
   short file_saved;
   /** Operator stack depth to avoid nested undo pushes. */
   short op_undo_depth;
 
+  /** Set after selection to notify outliner to sync. Stores type of selection */
+  short outliner_sync_select_dirty;
+
   /** Operator registry. */
   ListBase operators;
 
-  /** Refresh/redraw wmNotifier structs. */
-  ListBase queue;
+  /** Refresh/redraw #wmNotifier structs. */
+  ListBase notifier_queue;
 
   /** Information and error reports. */
   struct ReportList reports;
@@ -174,19 +188,34 @@ typedef struct wmWindowManager {
 
   /** Indicates whether interface is locked for user interaction. */
   char is_interface_locked;
-  char par[7];
+  char _pad[7];
 
   struct wmMsgBus *message_bus;
 
+  //#ifdef WITH_XR_OPENXR
+  wmXrData xr;
+  //#endif
 } wmWindowManager;
 
 /* wmWindowManager.initialized */
 enum {
-  WM_WINDOW_IS_INITIALIZED = (1 << 0),
-  WM_KEYCONFIG_IS_INITIALIZED = (1 << 1),
+  WM_WINDOW_IS_INIT = (1 << 0),
+  WM_KEYCONFIG_IS_INIT = (1 << 1),
 };
 
-#define WM_KEYCONFIG_STR_DEFAULT "blender"
+/* wmWindowManager.outliner_sync_select_dirty */
+enum {
+  WM_OUTLINER_SYNC_SELECT_FROM_OBJECT = (1 << 0),
+  WM_OUTLINER_SYNC_SELECT_FROM_EDIT_BONE = (1 << 1),
+  WM_OUTLINER_SYNC_SELECT_FROM_POSE_BONE = (1 << 2),
+  WM_OUTLINER_SYNC_SELECT_FROM_SEQUENCE = (1 << 3),
+};
+
+#define WM_OUTLINER_SYNC_SELECT_FROM_ALL \
+  (WM_OUTLINER_SYNC_SELECT_FROM_OBJECT | WM_OUTLINER_SYNC_SELECT_FROM_EDIT_BONE | \
+   WM_OUTLINER_SYNC_SELECT_FROM_POSE_BONE | WM_OUTLINER_SYNC_SELECT_FROM_SEQUENCE)
+
+#define WM_KEYCONFIG_STR_DEFAULT "Blender"
 
 /* IME is win32 only! */
 #if !defined(WIN32) && !defined(DNA_DEPRECATED)
@@ -222,14 +251,14 @@ typedef struct wmWindow {
 
   struct bScreen *screen DNA_DEPRECATED;
 
+  /** Winid also in screens, is for retrieving this window after read. */
+  int winid;
   /** Window coords. */
   short posx, posy, sizex, sizey;
   /** Borderless, full. */
-  short windowstate;
-  /** Multiscreen... no idea how to store yet. */
-  short monitor;
+  char windowstate;
   /** Set to 1 if an active window, for quick rejects. */
-  short active;
+  char active;
   /** Current mouse cursor type. */
   short cursor;
   /** Previous cursor when setting modal one. */
@@ -238,20 +267,33 @@ typedef struct wmWindow {
   short modalcursor;
   /** Cursor grab mode. */
   short grabcursor;
-  /** Internal: tag this for extra mousemove event,
+  /** Internal: tag this for extra mouse-move event,
    * makes cursors/buttons active on UI switching. */
-  short addmousemove;
+  char addmousemove;
+  char tag_cursor_refresh;
 
-  /** Winid also in screens, is for retrieving this window after read. */
-  int winid;
+  /* Track the state of the event queue,
+   * these store the state that needs to be kept between handling events in the queue. */
+  /** Enable when #KM_PRESS events are not handled (keyboard/mouse-buttons only). */
+  char event_queue_check_click;
+  /** Enable when #KM_PRESS events are not handled (keyboard/mouse-buttons only). */
+  char event_queue_check_drag;
+  /**
+   * Enable when the drag was handled,
+   * to avoid mouse-motion continually triggering drag events which are not handled
+   * but add overhead to gizmo handling (for example), see T87511.
+   */
+  char event_queue_check_drag_handled;
+
+  char _pad0[1];
 
   /** Internal, lock pie creation from this event until released. */
-  short lock_pie_event;
+  short pie_event_type_lock;
   /**
    * Exception to the above rule for nested pies, store last pie event for operators
    * that spawn a new pie right after destruction of last pie.
    */
-  short last_pie_event;
+  short pie_event_type_last;
 
   /** Storage for event system. */
   struct wmEvent *eventstate;
@@ -259,12 +301,12 @@ typedef struct wmWindow {
   /** Internal for wm_operators.c. */
   struct wmGesture *tweak;
 
-  /* Input Method Editor data - complex character input (esp. for asian character input)
-   * Currently WIN32, runtime-only data */
+  /* Input Method Editor data - complex character input (especially for Asian character input)
+   * Currently WIN32, runtime-only data. */
   struct wmIMEData *ime_data;
 
-  /** All events (ghost level events were handled). */
-  ListBase queue;
+  /** All events #wmEvent (ghost level events were handled). */
+  ListBase event_queue;
   /** Window+screen handlers, handled last. */
   ListBase handlers;
   /** Priority handlers, handled first. */
@@ -303,7 +345,7 @@ typedef struct wmOperatorTypeMacro {
   struct PointerRNA *ptr;
 } wmOperatorTypeMacro;
 
-/* partial copy of the event, for matching by eventhandler */
+/* Partial copy of the event, for matching by event handler. */
 typedef struct wmKeyMapItem {
   struct wmKeyMapItem *next, *prev;
 
@@ -326,7 +368,7 @@ typedef struct wmKeyMapItem {
   short val;
   /** Oskey is apple or windowskey, value denotes order of pressed. */
   short shift, ctrl, alt, oskey;
-  /** Rawkey modifier. */
+  /** Raw-key modifier. */
   short keymodifier;
 
   /* flag: inactive, expanded */
@@ -338,11 +380,16 @@ typedef struct wmKeyMapItem {
   /** Unique identifier. Positive for kmi that override builtins, negative otherwise. */
   short id;
   char _pad[2];
-  /** Rna pointer to access properties. */
+  /**
+   * RNA pointer to access properties.
+   *
+   * \note The `ptr.owner_id` value must be NULL, as a signal not to use the context
+   * when running property callbacks such as ENUM item functions.
+   */
   struct PointerRNA *ptr;
 } wmKeyMapItem;
 
-/* used instead of wmKeyMapItem for diff keymaps */
+/** Used instead of wmKeyMapItem for diff keymaps. */
 typedef struct wmKeyMapDiffItem {
   struct wmKeyMapDiffItem *next, *prev;
 
@@ -350,15 +397,29 @@ typedef struct wmKeyMapDiffItem {
   wmKeyMapItem *add_item;
 } wmKeyMapDiffItem;
 
-/* wmKeyMapItem.flag */
+/** #wmKeyMapItem.flag */
 enum {
   KMI_INACTIVE = (1 << 0),
   KMI_EXPANDED = (1 << 1),
   KMI_USER_MODIFIED = (1 << 2),
   KMI_UPDATE = (1 << 3),
+  /**
+   * When set, ignore events with #wmEvent.is_repeat enabled.
+   *
+   * \note this flag isn't cleared when editing/loading the key-map items,
+   * so it may be set in cases which don't make sense (modifier-keys or mouse-motion for example).
+   *
+   * Knowing if an event may repeat is something set at the operating-systems event handling level
+   * so rely on #wmEvent.is_repeat being false non keyboard events instead of checking if this
+   * flag makes sense.
+   *
+   * Only used when: `ISKEYBOARD(kmi->type) || (kmi->type == KM_TEXTINPUT)`
+   * as mouse, 3d-mouse, timer... etc never repeat.
+   */
+  KMI_REPEAT_IGNORE = (1 << 4),
 };
 
-/* wmKeyMapItem.maptype */
+/** #wmKeyMapItem.maptype */
 enum {
   KMI_TYPE_KEYBOARD = 0,
   KMI_TYPE_MOUSE = 1,
@@ -398,7 +459,7 @@ typedef struct wmKeyMap {
   const void *modal_items;
 } wmKeyMap;
 
-/* wmKeyMap.flag */
+/** #wmKeyMap.flag */
 enum {
   KEYMAP_MODAL = (1 << 0), /* modal map, not using operatornames */
   KEYMAP_USER = (1 << 1),  /* user keymap */
@@ -429,7 +490,7 @@ typedef struct wmKeyConfig {
 
   /** Unique name. */
   char idname[64];
-  /** Idname of configuration this is derives from, "" if none. */
+  /** ID-name of configuration this is derives from, "" if none. */
   char basename[64];
 
   ListBase keymaps;
@@ -438,14 +499,16 @@ typedef struct wmKeyConfig {
   char _pad0[2];
 } wmKeyConfig;
 
-/* wmKeyConfig.flag */
+/** #wmKeyConfig.flag */
 enum {
   KEYCONF_USER = (1 << 1),         /* And what about (1 << 0)? */
   KEYCONF_INIT_DEFAULT = (1 << 2), /* Has default keymap been initialized? */
 };
 
-/* this one is the operator itself, stored in files for macros etc */
-/* operator + operatortype should be able to redo entirely, but for different contextes */
+/**
+ * This one is the operator itself, stored in files for macros etc.
+ * operator + operator-type should be able to redo entirely, but for different context's.
+ */
 typedef struct wmOperator {
   struct wmOperator *next, *prev;
 
@@ -478,7 +541,9 @@ typedef struct wmOperator {
   char _pad[6];
 } wmOperator;
 
-/* operator type return flags: exec(), invoke() modal(), return values */
+/**
+ * Operator type return flags: exec(), invoke() modal(), return values.
+ */
 enum {
   OPERATOR_RUNNING_MODAL = (1 << 0),
   OPERATOR_CANCELLED = (1 << 1),
@@ -499,14 +564,23 @@ enum {
 #define OPERATOR_RETVAL_CHECK(ret) \
   (void)ret, BLI_assert(ret != 0 && (ret & OPERATOR_FLAGS_ALL) == ret)
 
-/* wmOperator flag */
+/** #wmOperator.flag */
 enum {
   /** low level flag so exec() operators can tell if they were invoked, use with care.
    * Typically this shouldn't make any difference, but it rare cases its needed
    * (see smooth-view) */
   OP_IS_INVOKE = (1 << 0),
-  /** So we can detect if an operators exec() call is activated from an interactive repeat. */
+  /** So we can detect if an operators exec() call is activated by adjusting the last action. */
   OP_IS_REPEAT = (1 << 1),
+  /**
+   * So we can detect if an operators exec() call is activated from #SCREEN_OT_repeat_last.
+   *
+   * This difference can be important because previous settings may be used,
+   * even with #PROP_SKIP_SAVE the repeat last operator will use the previous settings.
+   * Unlike #OP_IS_REPEAT the selection (and context generally) may be different each time.
+   * See T60777 for an example of when this is needed.
+   */
+  OP_IS_REPEAT_LAST = (1 << 1),
 
   /** When the cursor is grabbed */
   OP_IS_MODAL_GRAB_CURSOR = (1 << 2),
@@ -516,4 +590,6 @@ enum {
   OP_IS_MODAL_CURSOR_REGION = (1 << 3),
 };
 
-#endif /* __DNA_WINDOWMANAGER_TYPES_H__ */
+#ifdef __cplusplus
+}
+#endif

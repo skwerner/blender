@@ -23,10 +23,10 @@
 
 #include "RNA_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_ghash.h"
-#include "BLI_string.h"
 #include "BLI_listbase.h"
+#include "BLI_string.h"
+#include "BLI_utildefines.h"
 
 #include "BKE_addon.h" /* own include */
 #include "BKE_idprop.h"
@@ -81,7 +81,6 @@ void BKE_addon_free(bAddon *addon)
 {
   if (addon->prop) {
     IDP_FreeProperty(addon->prop);
-    MEM_freeN(addon->prop);
   }
   MEM_freeN(addon);
 }

@@ -22,38 +22,18 @@
 /* **************** OUTPUT ******************** */
 
 static bNodeSocketTemplate sh_node_bsdf_anisotropic_in[] = {
-    {SOCK_RGBA, 1, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Roughness"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_FLOAT, 1, N_("Anisotropy"), 0.5f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Rotation"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
-    {SOCK_VECTOR,
-     1,
-     N_("Normal"),
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     -1.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_HIDE_VALUE},
-    {SOCK_VECTOR,
-     1,
-     N_("Tangent"),
-     0.0f,
-     0.0f,
-     0.0f,
-     1.0f,
-     -1.0f,
-     1.0f,
-     PROP_NONE,
-     SOCK_HIDE_VALUE},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.8f, 0.8f, 0.8f, 1.0f, 0.0f, 1.0f},
+    {SOCK_FLOAT, N_("Roughness"), 0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_FLOAT, N_("Anisotropy"), 0.5f, 0.0f, 0.0f, 0.0f, -1.0f, 1.0f},
+    {SOCK_FLOAT, N_("Rotation"), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, PROP_FACTOR},
+    {SOCK_VECTOR, N_("Normal"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {SOCK_VECTOR, N_("Tangent"), 0.0f, 0.0f, 0.0f, 1.0f, -1.0f, 1.0f, PROP_NONE, SOCK_HIDE_VALUE},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate sh_node_bsdf_anisotropic_out[] = {
-    {SOCK_SHADER, 0, N_("BSDF")},
-    {-1, 0, ""},
+    {SOCK_SHADER, N_("BSDF")},
+    {-1, ""},
 };
 
 static void node_shader_init_anisotropic(bNodeTree *UNUSED(ntree), bNode *node)
@@ -67,12 +47,21 @@ static int node_shader_gpu_bsdf_anisotropic(GPUMaterial *mat,
                                             GPUNodeStack *in,
                                             GPUNodeStack *out)
 {
-  if (!in[4].link)
+  if (!in[4].link) {
     GPU_link(mat, "world_normals_get", &in[4].link);
+  }
 
   GPU_material_flag_set(mat, GPU_MATFLAG_GLOSSY);
 
-  return GPU_stack_link(mat, node, "node_bsdf_anisotropic", in, out);
+  float use_multi_scatter = (node->custom1 == SHD_GLOSSY_MULTI_GGX) ? 1.0f : 0.0f;
+
+  return GPU_stack_link(mat,
+                        node,
+                        "node_bsdf_anisotropic",
+                        in,
+                        out,
+                        GPU_constant(&use_multi_scatter),
+                        GPU_constant(&node->ssr_id));
 }
 
 /* node type definition */

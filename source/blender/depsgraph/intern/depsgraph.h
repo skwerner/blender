@@ -31,93 +31,52 @@
 
 #include <stdlib.h>
 
-#include "DNA_ID.h" /* for ID_Type */
+#include "MEM_guardedalloc.h"
 
-#include "BKE_main.h" /* for MAX_LIBARRAY */
+#include "DNA_ID.h" /* for ID_Type and INDEX_ID_MAX */
 
 #include "BLI_threads.h" /* for SpinLock */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_physics.h"
 
+#include "intern/debug/deg_debug.h"
 #include "intern/depsgraph_type.h"
 
-struct GHash;
-struct GSet;
 struct ID;
-struct Main;
 struct Scene;
 struct ViewLayer;
 
-namespace DEG {
+namespace blender {
+namespace deg {
 
-struct ComponentNode;
 struct IDNode;
 struct Node;
 struct OperationNode;
+struct Relation;
 struct TimeSourceNode;
-
-/* *************************** */
-/* Relationships Between Nodes */
-
-/* Settings/Tags on Relationship.
- * NOTE: Is a bitmask, allowing accumulation. */
-enum RelationFlag {
-  /* "cyclic" link - when detecting cycles, this relationship was the one
-   * which triggers a cyclic relationship to exist in the graph. */
-  RELATION_FLAG_CYCLIC = (1 << 0),
-  /* Update flush will not go through this relation. */
-  RELATION_FLAG_NO_FLUSH = (1 << 1),
-  /* Only flush along the relation is update comes from a node which was
-   * affected by user input. */
-  RELATION_FLAG_FLUSH_USER_EDIT_ONLY = (1 << 2),
-  /* The relation can not be killed by the cyclic dependencies solver. */
-  RELATION_FLAG_GODMODE = (1 << 4),
-  /* Relation will check existance before being added. */
-  RELATION_CHECK_BEFORE_ADD = (1 << 5),
-};
-
-/* B depends on A (A -> B) */
-struct Relation {
-  Relation(Node *from, Node *to, const char *description);
-  ~Relation();
-
-  void unlink();
-
-  /* the nodes in the relationship (since this is shared between the nodes) */
-  Node *from; /* A */
-  Node *to;   /* B */
-
-  /* relationship attributes */
-  const char *name; /* label for debugging */
-  int flag;         /* Bitmask of RelationFlag) */
-};
-
-/* ********* */
-/* Depsgraph */
 
 /* Dependency Graph object */
 struct Depsgraph {
-  // TODO(sergey): Go away from C++ container and use some native BLI.
-  typedef vector<OperationNode *> OperationNodes;
-  typedef vector<IDNode *> IDDepsNodes;
+  typedef Vector<OperationNode *> OperationNodes;
+  typedef Vector<IDNode *> IDDepsNodes;
 
-  Depsgraph(Scene *scene, ViewLayer *view_layer, eEvaluationMode mode);
+  Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluationMode mode);
   ~Depsgraph();
 
   TimeSourceNode *add_time_source();
   TimeSourceNode *find_time_source() const;
+  void tag_time_source();
 
   IDNode *find_id_node(const ID *id) const;
-  IDNode *add_id_node(ID *id, ID *id_cow_hint = NULL);
+  IDNode *add_id_node(ID *id, ID *id_cow_hint = nullptr);
   void clear_id_nodes();
-  void clear_id_nodes_conditional(const std::function<bool(ID_Type id_type)> &filter);
 
   /* Add new relationship between two nodes. */
   Relation *add_new_relation(Node *from, Node *to, const char *description, int flags = 0);
 
   /* Check whether two nodes are connected by relation with given
-   * description. Description might be NULL to check ANY relation between
+   * description. Description might be nullptr to check ANY relation between
    * given nodes. */
   Relation *check_nodes_connected(const Node *from, const Node *to, const char *description);
 
@@ -136,7 +95,7 @@ struct Depsgraph {
 
   /* <ID : IDNode> mapping from ID blocks to nodes representing these
    * blocks, used for quick lookups. */
-  GHash *id_hash;
+  Map<const ID *, IDNode *> id_hash;
 
   /* Ordered list of ID nodes, order matches ID allocation order.
    * Used for faster iteration, especially for areas which are critical to
@@ -150,12 +109,15 @@ struct Depsgraph {
   bool need_update;
 
   /* Indicates which ID types were updated. */
-  char id_type_updated[MAX_LIBARRAY];
+  char id_type_updated[INDEX_ID_MAX];
+
+  /* Indicates type of IDs present in the depsgraph. */
+  char id_type_exist[INDEX_ID_MAX];
 
   /* Quick-Access Temp Data ............. */
 
   /* Nodes which have been tagged as "directly modified". */
-  GSet *entry_tags;
+  Set<OperationNode *> entry_tags;
 
   /* Convenience Data ................... */
 
@@ -167,7 +129,8 @@ struct Depsgraph {
    * Mainly used by graph evaluation. */
   SpinLock lock;
 
-  /* Scene, layer, mode this dependency graph is built for. */
+  /* Main, scene, layer, mode this dependency graph is built for. */
+  Main *bmain;
   Scene *scene;
   ViewLayer *view_layer;
   eEvaluationMode mode;
@@ -188,15 +151,25 @@ struct Depsgraph {
    * to read stuff from. */
   bool is_active;
 
-  /* NOTE: Corresponds to G_DEBUG_DEPSGRAPH_* flags. */
-  int debug_flags;
-  string debug_name;
+  DepsgraphDebug debug;
 
-  bool debug_is_evaluating;
+  bool is_evaluating;
+
+  /* Is set to truth for dependency graph which are used for post-processing (compositor and
+   * sequencer).
+   * Such dependency graph needs all view layers (so render pipeline can access names), but it
+   * does not need any bases. */
+  bool is_render_pipeline_depsgraph;
+
+  /* Notify editors about changes to IDs in this depsgraph. */
+  bool use_editors_update;
 
   /* Cached list of colliders/effectors for collections and the scene
    * created along with relations, for fast lookup during evaluation. */
-  GHash *physics_relations[DEG_PHYSICS_RELATIONS_NUM];
+  Map<const ID *, ListBase *> *physics_relations[DEG_PHYSICS_RELATIONS_NUM];
+
+  MEM_CXX_CLASS_ALLOC_FUNCS("Depsgraph");
 };
 
-}  // namespace DEG
+}  // namespace deg
+}  // namespace blender

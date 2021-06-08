@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_NODE_CAMERA_H__
-#define __FREESTYLE_NODE_CAMERA_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -47,7 +46,7 @@ class NodeCamera : public Node {
   /*! Default matrices: Identity for both projection and modelview. */
   NodeCamera(CameraType camera_type = GENERIC);
 #if 0 /* UNUSED, gives warning in gcc */
-  NodeCamera(const NodeCamera& iBrother);
+  NodeCamera(const NodeCamera &iBrother);
 #endif
 
   virtual ~NodeCamera()
@@ -137,7 +136,7 @@ class NodeOrthographicCamera : public NodeCamera {
     return zFar_;
   }
 
-  NodeOrthographicCamera(const NodeOrthographicCamera &iBrother);
+  NodeOrthographicCamera(const NodeOrthographicCamera &iBrother) = default;
 
  private:
   double left_;
@@ -217,5 +216,3 @@ class NodePerspectiveCamera : public NodeCamera {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_NODE_CAMERA_H__

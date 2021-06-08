@@ -45,8 +45,8 @@
  *
  * \note modified to use glibc arg order for callbacks.
  */
-BLI_INLINE char *med3(char *, char *, char *, BLI_sort_cmp_t, void *);
-BLI_INLINE void  swapfunc(char *, char *, int, int);
+BLI_INLINE char *med3(char *a, char *b, char *c, BLI_sort_cmp_t cmp, void *thunk);
+BLI_INLINE void  swapfunc(char *a, char *b, int n, int swaptype);
 
 #define min(a, b)   (a) < (b) ? (a) : (b)
 #define swapcode(TYPE, parmi, parmj, n)     \
@@ -90,7 +90,7 @@ BLI_INLINE char *med3(char *a, char *b, char *c, BLI_sort_cmp_t cmp, void *thunk
 }
 
 /**
- * Quick sort reentrant.
+ * Quick sort re-entrant.
  */
 void BLI_qsort_r(void *a, size_t n, size_t es, BLI_sort_cmp_t cmp, void *thunk)
 {

@@ -15,25 +15,26 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 
 def _is_using_buggy_driver():
-    import bgl
+    import gpu
     # We need to be conservative here because in multi-GPU systems display card
     # might be quite old, but others one might be just good.
     #
     # So We shouldn't disable possible good dedicated cards just because display
     # card seems weak. And instead we only blacklist configurations which are
     # proven to cause problems.
-    if bgl.glGetString(bgl.GL_VENDOR) == "ATI Technologies Inc.":
+    if gpu.platform.vendor_get() == "ATI Technologies Inc.":
         import re
-        version = bgl.glGetString(bgl.GL_VERSION)
+        version = gpu.platform.version_get()
         if version.endswith("Compatibility Profile Context"):
             # Old HD 4xxx and 5xxx series drivers did not have driver version
             # in the version string, but those cards do not quite work and
             # causing crashes.
             return True
-        regex = re.compile(".*Compatibility Profile Context ([0-9]+(\.[0-9]+)+)$")
+        regex = re.compile(".*Compatibility Profile Context ([0-9]+(\\.[0-9]+)+)$")
         if not regex.match(version):
             # Skip cards like FireGL
             return False
@@ -70,6 +71,11 @@ def _configure_argument_parser():
     parser.add_argument("--cycles-print-stats",
                         help="Print rendering statistics to stderr",
                         action='store_true')
+    parser.add_argument("--cycles-device",
+                        help="Set the device to use for Cycles, overriding user preferences and the scene setting."
+                             "Valid options are 'CPU', 'CUDA', 'OPTIX' or 'OPENCL'."
+                             "Additionally, you can append '+CPU' to any GPU type for hybrid rendering.",
+                        default=None)
     return parser
 
 
@@ -101,6 +107,10 @@ def _parse_command_line():
     if args.cycles_print_stats:
         import _cycles
         _cycles.enable_print_stats()
+
+    if args.cycles_device:
+        import _cycles
+        _cycles.set_device_override(args.cycles_device)
 
 
 def init():
@@ -139,15 +149,18 @@ def create(engine, data, region=None, v3d=None, rv3d=None, preview_osl=False):
 
     data = data.as_pointer()
     prefs = bpy.context.preferences.as_pointer()
+    screen = 0
     if region:
+        screen = region.id_data.as_pointer()
         region = region.as_pointer()
     if v3d:
+        screen = screen or v3d.id_data.as_pointer()
         v3d = v3d.as_pointer()
     if rv3d:
+        screen = screen or rv3d.id_data.as_pointer()
         rv3d = rv3d.as_pointer()
 
-    engine.session = _cycles.create(
-            engine.as_pointer(), prefs, data, region, v3d, rv3d, preview_osl)
+    engine.session = _cycles.create(engine.as_pointer(), prefs, data, screen, region, v3d, rv3d, preview_osl)
 
 
 def free(engine):
@@ -164,18 +177,19 @@ def render(engine, depsgraph):
         _cycles.render(engine.session, depsgraph.as_pointer())
 
 
-def bake(engine, depsgraph, obj, pass_type, pass_filter, object_id, pixel_array, num_pixels, depth, result):
+def bake(engine, depsgraph, obj, pass_type, pass_filter, width, height):
     import _cycles
     session = getattr(engine, "session", None)
     if session is not None:
-        _cycles.bake(engine.session, depsgraph.as_pointer(), obj.as_pointer(), pass_type, pass_filter, object_id, pixel_array.as_pointer(), num_pixels, depth, result.as_pointer())
+        _cycles.bake(engine.session, depsgraph.as_pointer(), obj.as_pointer(), pass_type, pass_filter, width, height)
 
 
 def reset(engine, data, depsgraph):
     import _cycles
     import bpy
 
-    if bpy.app.debug_value == 256:
+    prefs = bpy.context.preferences
+    if prefs.experimental.use_cycles_debug and prefs.view.show_developer_ui:
         _cycles.debug_flags_update(depsgraph.scene.as_pointer())
     else:
         _cycles.debug_flags_reset()
@@ -220,64 +234,81 @@ def system_info():
     return _cycles.system_info()
 
 
-def register_passes(engine, scene, srl):
-    engine.register_pass(scene, srl, "Combined", 4, "RGBA", 'COLOR')
+def list_render_passes(scene, srl):
+    # Builtin Blender passes.
+    yield ("Combined", "RGBA", 'COLOR')
 
-    if srl.use_pass_z:                     engine.register_pass(scene, srl, "Depth",         1, "Z",    'VALUE')
-    if srl.use_pass_mist:                  engine.register_pass(scene, srl, "Mist",          1, "Z",    'VALUE')
-    if srl.use_pass_normal:                engine.register_pass(scene, srl, "Normal",        3, "XYZ",  'VECTOR')
-    if srl.use_pass_vector:                engine.register_pass(scene, srl, "Vector",        4, "XYZW", 'VECTOR')
-    if srl.use_pass_uv:                    engine.register_pass(scene, srl, "UV",            3, "UVA",  'VECTOR')
-    if srl.use_pass_object_index:          engine.register_pass(scene, srl, "IndexOB",       1, "X",    'VALUE')
-    if srl.use_pass_material_index:        engine.register_pass(scene, srl, "IndexMA",       1, "X",    'VALUE')
-    if srl.use_pass_shadow:                engine.register_pass(scene, srl, "Shadow",        3, "RGB",  'COLOR')
-    if srl.use_pass_ambient_occlusion:     engine.register_pass(scene, srl, "AO",            3, "RGB",  'COLOR')
-    if srl.use_pass_diffuse_direct:        engine.register_pass(scene, srl, "DiffDir",       3, "RGB",  'COLOR')
-    if srl.use_pass_diffuse_indirect:      engine.register_pass(scene, srl, "DiffInd",       3, "RGB",  'COLOR')
-    if srl.use_pass_diffuse_color:         engine.register_pass(scene, srl, "DiffCol",       3, "RGB",  'COLOR')
-    if srl.use_pass_glossy_direct:         engine.register_pass(scene, srl, "GlossDir",      3, "RGB",  'COLOR')
-    if srl.use_pass_glossy_indirect:       engine.register_pass(scene, srl, "GlossInd",      3, "RGB",  'COLOR')
-    if srl.use_pass_glossy_color:          engine.register_pass(scene, srl, "GlossCol",      3, "RGB",  'COLOR')
-    if srl.use_pass_transmission_direct:   engine.register_pass(scene, srl, "TransDir",      3, "RGB",  'COLOR')
-    if srl.use_pass_transmission_indirect: engine.register_pass(scene, srl, "TransInd",      3, "RGB",  'COLOR')
-    if srl.use_pass_transmission_color:    engine.register_pass(scene, srl, "TransCol",      3, "RGB",  'COLOR')
-    if srl.use_pass_subsurface_direct:     engine.register_pass(scene, srl, "SubsurfaceDir", 3, "RGB",  'COLOR')
-    if srl.use_pass_subsurface_indirect:   engine.register_pass(scene, srl, "SubsurfaceInd", 3, "RGB",  'COLOR')
-    if srl.use_pass_subsurface_color:      engine.register_pass(scene, srl, "SubsurfaceCol", 3, "RGB",  'COLOR')
-    if srl.use_pass_emit:                  engine.register_pass(scene, srl, "Emit",          3, "RGB",  'COLOR')
-    if srl.use_pass_environment:           engine.register_pass(scene, srl, "Env",           3, "RGB",  'COLOR')
+    if srl.use_pass_z:                     yield ("Depth",         "Z",    'VALUE')
+    if srl.use_pass_mist:                  yield ("Mist",          "Z",    'VALUE')
+    if srl.use_pass_normal:                yield ("Normal",        "XYZ",  'VECTOR')
+    if srl.use_pass_vector:                yield ("Vector",        "XYZW", 'VECTOR')
+    if srl.use_pass_uv:                    yield ("UV",            "UVA",  'VECTOR')
+    if srl.use_pass_object_index:          yield ("IndexOB",       "X",    'VALUE')
+    if srl.use_pass_material_index:        yield ("IndexMA",       "X",    'VALUE')
+    if srl.use_pass_shadow:                yield ("Shadow",        "RGB",  'COLOR')
+    if srl.use_pass_ambient_occlusion:     yield ("AO",            "RGB",  'COLOR')
+    if srl.use_pass_diffuse_direct:        yield ("DiffDir",       "RGB",  'COLOR')
+    if srl.use_pass_diffuse_indirect:      yield ("DiffInd",       "RGB",  'COLOR')
+    if srl.use_pass_diffuse_color:         yield ("DiffCol",       "RGB",  'COLOR')
+    if srl.use_pass_glossy_direct:         yield ("GlossDir",      "RGB",  'COLOR')
+    if srl.use_pass_glossy_indirect:       yield ("GlossInd",      "RGB",  'COLOR')
+    if srl.use_pass_glossy_color:          yield ("GlossCol",      "RGB",  'COLOR')
+    if srl.use_pass_transmission_direct:   yield ("TransDir",      "RGB",  'COLOR')
+    if srl.use_pass_transmission_indirect: yield ("TransInd",      "RGB",  'COLOR')
+    if srl.use_pass_transmission_color:    yield ("TransCol",      "RGB",  'COLOR')
+    if srl.use_pass_emit:                  yield ("Emit",          "RGB",  'COLOR')
+    if srl.use_pass_environment:           yield ("Env",           "RGB",  'COLOR')
 
+    # Cycles specific passes.
     crl = srl.cycles
-    if crl.pass_debug_render_time:             engine.register_pass(scene, srl, "Debug Render Time",             1, "X",   'VALUE')
-    if crl.pass_debug_bvh_traversed_nodes:     engine.register_pass(scene, srl, "Debug BVH Traversed Nodes",     1, "X",   'VALUE')
-    if crl.pass_debug_bvh_traversed_instances: engine.register_pass(scene, srl, "Debug BVH Traversed Instances", 1, "X",   'VALUE')
-    if crl.pass_debug_bvh_intersections:       engine.register_pass(scene, srl, "Debug BVH Intersections",       1, "X",   'VALUE')
-    if crl.pass_debug_ray_bounces:             engine.register_pass(scene, srl, "Debug Ray Bounces",             1, "X",   'VALUE')
-    if crl.use_pass_volume_direct:             engine.register_pass(scene, srl, "VolumeDir",                     3, "RGB", 'COLOR')
-    if crl.use_pass_volume_indirect:           engine.register_pass(scene, srl, "VolumeInd",                     3, "RGB", 'COLOR')
+    if crl.pass_debug_render_time:             yield ("Debug Render Time",             "X",   'VALUE')
+    if crl.pass_debug_bvh_traversed_nodes:     yield ("Debug BVH Traversed Nodes",     "X",   'VALUE')
+    if crl.pass_debug_bvh_traversed_instances: yield ("Debug BVH Traversed Instances", "X",   'VALUE')
+    if crl.pass_debug_bvh_intersections:       yield ("Debug BVH Intersections",       "X",   'VALUE')
+    if crl.pass_debug_ray_bounces:             yield ("Debug Ray Bounces",             "X",   'VALUE')
+    if crl.pass_debug_sample_count:            yield ("Debug Sample Count",            "X",   'VALUE')
+    if crl.use_pass_volume_direct:             yield ("VolumeDir",                     "RGB", 'COLOR')
+    if crl.use_pass_volume_indirect:           yield ("VolumeInd",                     "RGB", 'COLOR')
 
-    if crl.use_pass_crypto_object:
-        for i in range(0, crl.pass_crypto_depth, 2):
-            engine.register_pass(scene, srl, "CryptoObject" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
-    if crl.use_pass_crypto_material:
-        for i in range(0, crl.pass_crypto_depth, 2):
-            engine.register_pass(scene, srl, "CryptoMaterial" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
-    if srl.cycles.use_pass_crypto_asset:
-        for i in range(0, srl.cycles.pass_crypto_depth, 2):
-            engine.register_pass(scene, srl, "CryptoAsset" + '{:02d}'.format(i), 4, "RGBA", 'COLOR')
+    # Cryptomatte passes.
+    crypto_depth = (srl.pass_cryptomatte_depth + 1) // 2
+    if srl.use_pass_cryptomatte_object:
+        for i in range(0, crypto_depth):
+            yield ("CryptoObject" + '{:02d}'.format(i), "RGBA", 'COLOR')
+    if srl.use_pass_cryptomatte_material:
+        for i in range(0, crypto_depth):
+            yield ("CryptoMaterial" + '{:02d}'.format(i), "RGBA", 'COLOR')
+    if srl.use_pass_cryptomatte_asset:
+        for i in range(0, crypto_depth):
+            yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
-    if crl.use_denoising or crl.denoising_store_passes:
-        engine.register_pass(scene, srl, "Noisy Image", 4, "RGBA", 'COLOR')
+    # Denoising passes.
+    if (scene.cycles.use_denoising and crl.use_denoising) or crl.denoising_store_passes:
+        yield ("Noisy Image", "RGBA", 'COLOR')
         if crl.denoising_store_passes:
-            engine.register_pass(scene, srl, "Denoising Normal",          3, "XYZ", 'VECTOR')
-            engine.register_pass(scene, srl, "Denoising Albedo",          3, "RGB", 'COLOR')
-            engine.register_pass(scene, srl, "Denoising Depth",           1, "Z",   'VALUE')
-            engine.register_pass(scene, srl, "Denoising Shadowing",       1, "X",   'VALUE')
-            engine.register_pass(scene, srl, "Denoising Variance",        3, "RGB", 'COLOR')
-            engine.register_pass(scene, srl, "Denoising Intensity",       1, "X",   'VALUE')
-            clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
-                             "denoising_glossy_direct", "denoising_glossy_indirect",
-                             "denoising_transmission_direct", "denoising_transmission_indirect",
-                             "denoising_subsurface_direct", "denoising_subsurface_indirect")
-            if any(getattr(crl, option) for option in clean_options):
-                engine.register_pass(scene, srl, "Denoising Clean", 3, "RGB", 'COLOR')
+            yield ("Denoising Normal",          "XYZ", 'VECTOR')
+            yield ("Denoising Albedo",          "RGB", 'COLOR')
+            yield ("Denoising Depth",           "Z",   'VALUE')
+
+            if scene.cycles.denoiser == 'NLM':
+                yield ("Denoising Shadowing",       "X",   'VALUE')
+                yield ("Denoising Variance",        "RGB", 'COLOR')
+                yield ("Denoising Intensity",       "X",   'VALUE')
+
+                clean_options = ("denoising_diffuse_direct", "denoising_diffuse_indirect",
+                                 "denoising_glossy_direct", "denoising_glossy_indirect",
+                                 "denoising_transmission_direct", "denoising_transmission_indirect")
+                if any(getattr(crl, option) for option in clean_options):
+                    yield ("Denoising Clean", "RGB", 'COLOR')
+
+    # Custom AOV passes.
+    for aov in srl.aovs:
+        if aov.type == 'VALUE':
+            yield (aov.name, "X", 'VALUE')
+        else:
+            yield (aov.name, "RGBA", 'COLOR')
+
+
+def register_passes(engine, scene, view_layer):
+    for name, channelids, channeltype in list_render_passes(scene, view_layer):
+        engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)

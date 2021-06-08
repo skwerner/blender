@@ -79,7 +79,7 @@ if(EXISTS ${SOURCE_DIR}/.git)
                     ERROR_QUIET)
     if(NOT _git_below_check STREQUAL "")
       # If there're commits between HEAD and upstream this means
-      # that we're reset-ed to older revision. Use it's hash then.
+      # that we're reset-ed to older revision. Use its hash then.
       execute_process(COMMAND git rev-parse --short=12 HEAD
                       WORKING_DIRECTORY ${SOURCE_DIR}
                       OUTPUT_VARIABLE MY_WC_HASH
@@ -128,7 +128,7 @@ if(EXISTS ${SOURCE_DIR}/.git)
                   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
   if(NOT _git_changed_files STREQUAL "")
-    set(MY_WC_BRANCH "${MY_WC_BRANCH} (modified)")
+    string(APPEND MY_WC_BRANCH " (modified)")
   else()
     # Unpushed commits are also considered local modifications
     execute_process(COMMAND git log @{u}..
@@ -137,7 +137,7 @@ if(EXISTS ${SOURCE_DIR}/.git)
                     OUTPUT_STRIP_TRAILING_WHITESPACE
                     ERROR_QUIET)
     if(NOT _git_unpushed_log STREQUAL "")
-      set(MY_WC_BRANCH "${MY_WC_BRANCH} (modified)")
+      string(APPEND MY_WC_BRANCH " (modified)")
     endif()
     unset(_git_unpushed_log)
   endif()
@@ -145,22 +145,13 @@ if(EXISTS ${SOURCE_DIR}/.git)
   unset(_git_changed_files)
 endif()
 
-# BUILD_PLATFORM and BUILD_PLATFORM are taken from CMake
+# BUILD_PLATFORM is taken from CMake
 # but BUILD_DATE and BUILD_TIME are platform dependent
-if(UNIX)
-  if(NOT BUILD_DATE)
-    execute_process(COMMAND date "+%Y-%m-%d" OUTPUT_VARIABLE BUILD_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
-  endif()
-  if(NOT BUILD_TIME)
-    execute_process(COMMAND date "+%H:%M:%S" OUTPUT_VARIABLE BUILD_TIME OUTPUT_STRIP_TRAILING_WHITESPACE)
-  endif()
-elseif(WIN32)
-  if(NOT BUILD_DATE)
-    execute_process(COMMAND cmd /c date /t OUTPUT_VARIABLE BUILD_DATE OUTPUT_STRIP_TRAILING_WHITESPACE)
-  endif()
-  if(NOT BUILD_TIME)
-    execute_process(COMMAND cmd /c time /t OUTPUT_VARIABLE BUILD_TIME OUTPUT_STRIP_TRAILING_WHITESPACE)
-  endif()
+if(NOT BUILD_DATE)
+  STRING(TIMESTAMP BUILD_DATE "%Y-%m-%d" UTC)
+endif()
+if(NOT BUILD_TIME)
+  STRING(TIMESTAMP BUILD_TIME "%H:%M:%S" UTC)
 endif()
 
 # Write a file with the BUILD_HASH define
@@ -170,6 +161,7 @@ file(WRITE buildinfo.h.txt
   "#define BUILD_BRANCH \"${MY_WC_BRANCH}\"\n"
   "#define BUILD_DATE \"${BUILD_DATE}\"\n"
   "#define BUILD_TIME \"${BUILD_TIME}\"\n"
+  "#include \"buildinfo_static.h\"\n"
 )
 
 # cleanup

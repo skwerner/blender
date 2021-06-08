@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_ADVANCED_STROKE_SHADERS_H__
-#define __FREESTYLE_ADVANCED_STROKE_SHADERS_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -27,15 +26,15 @@
 namespace Freestyle {
 
 /*! [ Thickness Shader ].
- *  Assigns thicknesses to the stroke vertices so that the stroke looks like made with a calligraphic tool.
- *  i.e. The stroke will be the thickest in a main direction, the thinest in the direction perpendicular to this one,
- *  and an interpolation inbetween.
+ *  Assigns thicknesses to the stroke vertices so that the stroke looks like made with a
+ * calligraphic tool. i.e. The stroke will be the thickest in a main direction, the thinnest in the
+ * direction perpendicular to this one, and an interpolation in between.
  */
 class CalligraphicShader : public StrokeShader {
  public:
   /*! Builds the shader.
    *  \param iMinThickness:
-   *    The minimum thickness in the direction perpandicular to the main direction.
+   *    The minimum thickness in the direction perpendicular to the main direction.
    *  \param iMaxThickness:
    *    The maximum thickness in the main direction.
    *  \param iOrientation:
@@ -101,11 +100,11 @@ class SpatialNoiseShader : public StrokeShader {
 };
 
 /*! [ Geometry Shader ].
- *  Smoothes the stroke.
+ *  Smooths the stroke.
  *  (Moves the vertices to make the stroke smoother).
- *  Uses curvature flow to converge towards a curve of constant curvature. The diffusion method we use is anisotropic
- *  to prevent the diffusion accross corners.
- * \see \htmlonly <a href=/smoothing/smoothing.html>smoothing/smoothing.html</a> \endhtmlonly
+ *  Uses curvature flow to converge towards a curve of constant curvature. The diffusion method we
+ * use is anisotropic to prevent the diffusion across corners. \see \htmlonly <a
+ * href=/smoothing/smoothing.html>smoothing/smoothing.html</a> \endhtmlonly
  */
 class SmoothingShader : public StrokeShader {
  public:
@@ -232,5 +231,3 @@ class OmissionShader : public StrokeShader {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_ADVANCED_STROKE_SHADERS_H__

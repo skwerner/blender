@@ -21,8 +21,8 @@
  * \ingroup RNA
  */
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "RNA_define.h"
 
@@ -35,9 +35,9 @@
 #include "rna_internal.h" /* own include */
 
 #ifdef RNA_RUNTIME
-static void rna_Curve_transform(Curve *cu, float *mat, bool shape_keys)
+static void rna_Curve_transform(Curve *cu, float mat[16], bool shape_keys)
 {
-  BKE_curve_transform(cu, (float(*)[4])mat, shape_keys, true);
+  BKE_curve_transform(cu, (const float(*)[4])mat, shape_keys, true);
 
   DEG_id_tag_update(&cu->id, 0);
 }

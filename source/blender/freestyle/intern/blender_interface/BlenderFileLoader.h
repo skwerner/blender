@@ -14,15 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __BLENDER_FILE_LOADER_H__
-#define __BLENDER_FILE_LOADER_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
  */
 
-#include <string.h>
 #include <float.h>
+#include <string.h>
 
 #include "../geometry/BBox.h"
 #include "../geometry/Geom.h"
@@ -30,12 +29,11 @@
 #include "../geometry/GeomUtils.h"
 #include "../scene_graph/IndexedFaceSet.h"
 #include "../scene_graph/NodeGroup.h"
-#include "../scene_graph/NodeTransform.h"
 #include "../scene_graph/NodeShape.h"
+#include "../scene_graph/NodeTransform.h"
 #include "../system/FreestyleConfig.h"
 #include "../system/RenderMonitor.h"
 
-extern "C" {
 #include "MEM_guardedalloc.h"
 
 #include "DNA_material_types.h"
@@ -48,7 +46,7 @@ extern "C" {
 #include "render_types.h"
 
 #include "BKE_customdata.h"
-#include "BKE_library.h"
+#include "BKE_lib_id.h"
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_scene.h"
@@ -56,7 +54,6 @@ extern "C" {
 #include "BLI_iterator.h"
 #include "BLI_listbase.h"
 #include "BLI_math.h"
-}
 
 #include "DEG_depsgraph_query.h"
 
@@ -98,7 +95,10 @@ class BlenderFileLoader {
 
 #if 0
   /*! Gets the smallest edge size read */
-  inline real minEdgeSize() {return _minEdgeSize;}
+  inline real minEdgeSize()
+  {
+    return _minEdgeSize;
+  }
 #endif
 
   /*! Modifiers */
@@ -125,7 +125,7 @@ class BlenderFileLoader {
                     bool em1,
                     bool em2,
                     bool em3,
-                    int clip[3]);
+                    const int clip[3]);
   void addTriangle(struct LoaderState *ls,
                    float v1[3],
                    float v2[3],
@@ -152,10 +152,6 @@ class BlenderFileLoader {
   real _minEdgeSize;
 #endif
   bool _smooth; /* if true, face smoothness is taken into account */
-  float _viewplane_left;
-  float _viewplane_right;
-  float _viewplane_bottom;
-  float _viewplane_top;
   float _z_near, _z_far;
   float _z_offset;
 
@@ -167,5 +163,3 @@ class BlenderFileLoader {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __BLENDER_FILE_LOADER_H__

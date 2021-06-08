@@ -34,18 +34,9 @@ CCL_NAMESPACE_BEGIN
 ccl_device int bsdf_ashikhmin_shirley_setup(MicrofacetBsdf *bsdf)
 {
   bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
-  bsdf->alpha_y = bsdf->alpha_x;
-
-  bsdf->type = CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID;
-  return SD_BSDF | SD_BSDF_HAS_EVAL;
-}
-
-ccl_device int bsdf_ashikhmin_shirley_aniso_setup(MicrofacetBsdf *bsdf)
-{
-  bsdf->alpha_x = clamp(bsdf->alpha_x, 1e-4f, 1.0f);
   bsdf->alpha_y = clamp(bsdf->alpha_y, 1e-4f, 1.0f);
 
-  bsdf->type = CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ANISO_ID;
+  bsdf->type = CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID;
   return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
@@ -85,15 +76,11 @@ ccl_device_forceinline float3 bsdf_ashikhmin_shirley_eval_reflect(const ShaderCl
     float HdotI = fmaxf(fabsf(dot(H, I)), 1e-6f);
     float HdotN = fmaxf(dot(H, N), 1e-6f);
 
-    float pump =
-        1.0f /
-        fmaxf(
-            1e-6f,
-            (HdotI *
-             fmaxf(
-                 NdotO,
-                 NdotI))); /* pump from original paper (first derivative disc., but cancels the HdotI in the pdf nicely) */
-    /*float pump = 1.0f / fmaxf(1e-4f, ((NdotO + NdotI) * (NdotO*NdotI))); */ /* pump from d-brdf paper */
+    /* pump from original paper
+     * (first derivative disc., but cancels the HdotI in the pdf nicely) */
+    float pump = 1.0f / fmaxf(1e-6f, (HdotI * fmaxf(NdotO, NdotI)));
+    /* pump from d-brdf paper */
+    /*float pump = 1.0f / fmaxf(1e-4f, ((NdotO + NdotI) * (NdotO*NdotI))); */
 
     float n_x = bsdf_ashikhmin_shirley_roughness_to_exponent(bsdf->alpha_x);
     float n_y = bsdf_ashikhmin_shirley_roughness_to_exponent(bsdf->alpha_y);
@@ -105,9 +92,8 @@ ccl_device_forceinline float3 bsdf_ashikhmin_shirley_eval_reflect(const ShaderCl
       float norm = (n_x + 1.0f) / (8.0f * M_PI_F);
 
       out = NdotO * norm * lobe * pump;
-      *pdf =
-          norm * lobe /
-          HdotI; /* this is p_h / 4(H.I)  (conversion from 'wh measure' to 'wi measure', eq. 8 in paper) */
+      /* this is p_h / 4(H.I)  (conversion from 'wh measure' to 'wi measure', eq. 8 in paper). */
+      *pdf = norm * lobe / HdotI;
     }
     else {
       /* anisotropic */

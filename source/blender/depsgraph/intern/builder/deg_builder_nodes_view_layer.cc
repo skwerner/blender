@@ -25,18 +25,19 @@
 
 #include "intern/builder/deg_builder_nodes.h"
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_blenlib.h"
 #include "BLI_string.h"
+#include "BLI_utildefines.h"
 
-extern "C" {
+#include "DNA_collection_types.h"
 #include "DNA_freestyle_types.h"
 #include "DNA_layer_types.h"
+#include "DNA_linestyle_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
@@ -44,23 +45,22 @@ extern "C" {
 #include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
-} /* extern "C" */
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
 #include "intern/builder/deg_builder.h"
 #include "intern/depsgraph.h"
+#include "intern/depsgraph_type.h"
 #include "intern/node/deg_node.h"
 #include "intern/node/deg_node_component.h"
 #include "intern/node/deg_node_operation.h"
-#include "intern/depsgraph_type.h"
 
-namespace DEG {
+namespace blender::deg {
 
 void DepsgraphNodeBuilder::build_layer_collections(ListBase *lb)
 {
-  const int restrict_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? COLLECTION_RESTRICT_VIEW :
+  const int restrict_flag = (graph_->mode == DAG_EVAL_VIEWPORT) ? COLLECTION_RESTRICT_VIEWPORT :
                                                                   COLLECTION_RESTRICT_RENDER;
 
   for (LayerCollection *lc = (LayerCollection *)lb->first; lc; lc = lc->next) {
@@ -71,6 +71,16 @@ void DepsgraphNodeBuilder::build_layer_collections(ListBase *lb)
       build_collection(lc, lc->collection);
     }
     build_layer_collections(&lc->layer_collections);
+  }
+}
+
+void DepsgraphNodeBuilder::build_freestyle_lineset(FreestyleLineSet *fls)
+{
+  if (fls->group != nullptr) {
+    build_collection(nullptr, fls->group);
+  }
+  if (fls->linestyle != nullptr) {
+    build_freestyle_linestyle(fls->linestyle);
   }
 }
 
@@ -92,7 +102,6 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
   /* Get pointer to a CoW version of scene ID. */
   Scene *scene_cow = get_cow_datablock(scene);
   /* Scene objects. */
-  int select_id = 1;
   /* NOTE: Base is used for function bindings as-is, so need to pass CoW base,
    * but object is expected to be an original one. Hence we go into some
    * tricks here iterating over the view layer. */
@@ -106,29 +115,24 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
        *
        * TODO(sergey): Need to go more granular on visibility checks. */
       build_object(base_index, base->object, linked_state, true);
-      ++base_index;
+      base_index++;
     }
-    base->object->select_id = select_id++;
   }
   build_layer_collections(&view_layer->layer_collections);
-  if (scene->camera != NULL) {
+  if (scene->camera != nullptr) {
     build_object(-1, scene->camera, DEG_ID_LINKED_INDIRECTLY, true);
   }
   /* Rigidbody. */
-  if (scene->rigidbody_world != NULL) {
+  if (scene->rigidbody_world != nullptr) {
     build_rigidbody(scene);
   }
   /* Scene's animation and drivers. */
-  if (scene->adt != NULL) {
+  if (scene->adt != nullptr) {
     build_animdata(&scene->id);
   }
   /* World. */
-  if (scene->world != NULL) {
+  if (scene->world != nullptr) {
     build_world(scene->world);
-  }
-  /* Compositor nodes */
-  if (scene->nodetree != NULL) {
-    build_compositor(scene);
   }
   /* Cache file. */
   LISTBASE_FOREACH (CacheFile *, cachefile, &bmain_->cachefiles) {
@@ -143,28 +147,33 @@ void DepsgraphNodeBuilder::build_view_layer(Scene *scene,
     build_movieclip(clip);
   }
   /* Material override. */
-  if (view_layer->mat_override != NULL) {
+  if (view_layer->mat_override != nullptr) {
     build_material(view_layer->mat_override);
   }
-  /* Freestyle collections. */
+  /* Freestyle linesets. */
   LISTBASE_FOREACH (FreestyleLineSet *, fls, &view_layer->freestyle_config.linesets) {
-    if (fls->group != NULL) {
-      build_collection(NULL, fls->group);
-    }
+    build_freestyle_lineset(fls);
+  }
+  /* Sequencer. */
+  if (linked_state == DEG_ID_LINKED_DIRECTLY) {
+    build_scene_audio(scene);
+    build_scene_sequencer(scene);
   }
   /* Collections. */
-  add_operation_node(
-      &scene->id,
-      NodeType::LAYER_COLLECTIONS,
-      OperationCode::VIEW_LAYER_EVAL,
-      function_bind(BKE_layer_eval_view_layer_indexed, _1, scene_cow, view_layer_index_));
+  add_operation_node(&scene->id,
+                     NodeType::LAYER_COLLECTIONS,
+                     OperationCode::VIEW_LAYER_EVAL,
+                     [view_layer_index = view_layer_index_, scene_cow](::Depsgraph *depsgraph) {
+                       BKE_layer_eval_view_layer_indexed(depsgraph, scene_cow, view_layer_index);
+                     });
   /* Parameters evaluation for scene relations mainly. */
-  add_operation_node(&scene->id, NodeType::PARAMETERS, OperationCode::SCENE_EVAL);
+  build_scene_compositor(scene);
+  build_scene_parameters(scene);
   /* Build all set scenes. */
-  if (scene->set != NULL) {
+  if (scene->set != nullptr) {
     ViewLayer *set_view_layer = BKE_view_layer_default_render(scene->set);
     build_view_layer(scene->set, set_view_layer, DEG_ID_LINKED_VIA_SET);
   }
 }
 
-}  // namespace DEG
+}  // namespace blender::deg

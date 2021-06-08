@@ -20,8 +20,8 @@
  */
 
 #include "Stroke.h"
-#include "StrokeIterators.h"
 #include "StrokeAdvancedIterators.h"
+#include "StrokeIterators.h"
 #include "StrokeRenderer.h"
 
 #include "BKE_global.h"
@@ -43,12 +43,13 @@ StrokeAttribute::StrokeAttribute()
   _alpha = 1.0f;
   _thickness[0] = 1.0f;
   _thickness[1] = 1.0f;
-  for (i = 0; i < 3; ++i)
+  for (i = 0; i < 3; ++i) {
     _color[i] = 0.2f;
+  }
   _color[0] = 0.8f;
-  _userAttributesReal = NULL;
-  _userAttributesVec2f = NULL;
-  _userAttributesVec3f = NULL;
+  _userAttributesReal = nullptr;
+  _userAttributesVec2f = nullptr;
+  _userAttributesVec3f = nullptr;
   _visible = true;
 }
 
@@ -57,21 +58,28 @@ StrokeAttribute::StrokeAttribute(const StrokeAttribute &iBrother)
   _alpha = iBrother._alpha;
   _thickness[0] = iBrother._thickness[0];
   _thickness[1] = iBrother._thickness[1];
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < 3; ++i) {
     _color[i] = iBrother._color[i];
+  }
   _visible = iBrother._visible;
-  if (iBrother._userAttributesReal)
+  if (iBrother._userAttributesReal) {
     _userAttributesReal = new realMap(*iBrother._userAttributesReal);
-  else
-    _userAttributesReal = NULL;
-  if (iBrother._userAttributesVec2f)
+  }
+  else {
+    _userAttributesReal = nullptr;
+  }
+  if (iBrother._userAttributesVec2f) {
     _userAttributesVec2f = new Vec2fMap(*iBrother._userAttributesVec2f);
-  else
-    _userAttributesVec2f = NULL;
-  if (iBrother._userAttributesVec3f)
+  }
+  else {
+    _userAttributesVec2f = nullptr;
+  }
+  if (iBrother._userAttributesVec3f) {
     _userAttributesVec3f = new Vec3fMap(*iBrother._userAttributesVec3f);
-  else
-    _userAttributesVec3f = NULL;
+  }
+  else {
+    _userAttributesVec3f = nullptr;
+  }
 }
 
 StrokeAttribute::StrokeAttribute(float iRColor,
@@ -92,9 +100,9 @@ StrokeAttribute::StrokeAttribute(float iRColor,
 
   _visible = true;
 
-  _userAttributesReal = NULL;
-  _userAttributesVec2f = NULL;
-  _userAttributesVec3f = NULL;
+  _userAttributesReal = nullptr;
+  _userAttributesVec2f = nullptr;
+  _userAttributesVec3f = nullptr;
 }
 
 StrokeAttribute::StrokeAttribute(const StrokeAttribute &a1, const StrokeAttribute &a2, float t)
@@ -102,8 +110,9 @@ StrokeAttribute::StrokeAttribute(const StrokeAttribute &a1, const StrokeAttribut
   _alpha = (1 - t) * a1._alpha + t * a2._alpha;
   _thickness[0] = (1 - t) * a1._thickness[0] + t * a2._thickness[0];
   _thickness[1] = (1 - t) * a1._thickness[1] + t * a2._thickness[1];
-  for (int i = 0; i < 3; ++i)
+  for (int i = 0; i < 3; ++i) {
     _color[i] = (1 - t) * a1._color[i] + t * a2._color[i];
+  }
 
   _visible = a1.isVisible();
 
@@ -120,7 +129,7 @@ StrokeAttribute::StrokeAttribute(const StrokeAttribute &a1, const StrokeAttribut
     }
   }
   else {
-    _userAttributesReal = NULL;
+    _userAttributesReal = nullptr;
   }
   if ((a1._userAttributesVec2f) && (a2._userAttributesVec2f)) {
     if (a1._userAttributesVec2f->size() == a2._userAttributesVec2f->size()) {
@@ -134,7 +143,7 @@ StrokeAttribute::StrokeAttribute(const StrokeAttribute &a1, const StrokeAttribut
     }
   }
   else {
-    _userAttributesVec2f = NULL;
+    _userAttributesVec2f = nullptr;
   }
   if ((a1._userAttributesVec3f) && (a2._userAttributesVec3f)) {
     if (a1._userAttributesVec3f->size() == a2._userAttributesVec3f->size()) {
@@ -148,7 +157,7 @@ StrokeAttribute::StrokeAttribute(const StrokeAttribute &a1, const StrokeAttribut
     }
   }
   else {
-    _userAttributesVec3f = NULL;
+    _userAttributesVec3f = nullptr;
   }
 }
 
@@ -174,32 +183,36 @@ StrokeAttribute &StrokeAttribute::operator=(const StrokeAttribute &iBrother)
   _alpha = iBrother._alpha;
   _thickness[0] = iBrother._thickness[0];
   _thickness[1] = iBrother._thickness[1];
-  for (i = 0; i < 3; ++i)
+  for (i = 0; i < 3; ++i) {
     _color[i] = iBrother._color[i];
+  }
   _visible = iBrother._visible;
   if (iBrother._userAttributesReal) {
-    if (!_userAttributesReal)
+    if (!_userAttributesReal) {
       _userAttributesReal = new realMap;
+    }
     _userAttributesReal = new realMap(*(iBrother._userAttributesReal));
   }
   else {
-    _userAttributesReal = NULL;
+    _userAttributesReal = nullptr;
   }
   if (iBrother._userAttributesVec2f) {
-    if (!_userAttributesVec2f)
+    if (!_userAttributesVec2f) {
       _userAttributesVec2f = new Vec2fMap;
+    }
     _userAttributesVec2f = new Vec2fMap(*(iBrother._userAttributesVec2f));
   }
   else {
-    _userAttributesVec2f = NULL;
+    _userAttributesVec2f = nullptr;
   }
   if (iBrother._userAttributesVec3f) {
-    if (!_userAttributesVec3f)
+    if (!_userAttributesVec3f) {
       _userAttributesVec3f = new Vec3fMap;
+    }
     _userAttributesVec3f = new Vec3fMap(*(iBrother._userAttributesVec3f));
   }
   else {
-    _userAttributesVec3f = NULL;
+    _userAttributesVec3f = nullptr;
   }
   return *this;
 }
@@ -299,22 +312,25 @@ bool StrokeAttribute::isAttributeAvailableVec3f(const char *iName) const
 
 void StrokeAttribute::setAttributeReal(const char *iName, float att)
 {
-  if (!_userAttributesReal)
+  if (!_userAttributesReal) {
     _userAttributesReal = new realMap;
+  }
   (*_userAttributesReal)[iName] = att;
 }
 
 void StrokeAttribute::setAttributeVec2f(const char *iName, const Vec2f &att)
 {
-  if (!_userAttributesVec2f)
+  if (!_userAttributesVec2f) {
     _userAttributesVec2f = new Vec2fMap;
+  }
   (*_userAttributesVec2f)[iName] = att;
 }
 
 void StrokeAttribute::setAttributeVec3f(const char *iName, const Vec3f &att)
 {
-  if (!_userAttributesVec3f)
+  if (!_userAttributesVec3f) {
     _userAttributesVec3f = new Vec3fMap;
+  }
   (*_userAttributesVec3f)[iName] = att;
 }
 
@@ -326,7 +342,7 @@ void StrokeAttribute::setAttributeVec3f(const char *iName, const Vec3f &att)
 /*                                */
 /**********************************/
 
-StrokeVertex::StrokeVertex() : CurvePoint()
+StrokeVertex::StrokeVertex()
 {
   _CurvilignAbscissa = 0.0f;
   _StrokeLength = 0.0f;
@@ -339,7 +355,7 @@ StrokeVertex::StrokeVertex(const StrokeVertex &iBrother) : CurvePoint(iBrother)
   _StrokeLength = 0.0f;
 }
 
-StrokeVertex::StrokeVertex(SVertex *iSVertex) : CurvePoint(iSVertex, 0, 0.0f)
+StrokeVertex::StrokeVertex(SVertex *iSVertex) : CurvePoint(iSVertex, nullptr, 0.0f)
 {
   _CurvilignAbscissa = 0.0f;
   _StrokeLength = 0.0f;
@@ -360,15 +376,11 @@ StrokeVertex::StrokeVertex(StrokeVertex *iA, StrokeVertex *iB, float t3) : Curve
 }
 
 StrokeVertex::StrokeVertex(SVertex *iSVertex, const StrokeAttribute &iAttribute)
-    : CurvePoint(iSVertex, 0, 0.0f)
+    : CurvePoint(iSVertex, nullptr, 0.0f)
 {
   _Attribute = iAttribute;
   _CurvilignAbscissa = 0.0f;
   _StrokeLength = 0.0f;
-}
-
-StrokeVertex::~StrokeVertex()
-{
 }
 
 StrokeVertex &StrokeVertex::operator=(const StrokeVertex &iBrother)
@@ -400,14 +412,14 @@ Stroke::Stroke()
   _textureId = 0;
   _textureStep = 1.0;
   for (int a = 0; a < MAX_MTEX; a++) {
-    _mtex[a] = NULL;
+    _mtex[a] = nullptr;
   }
-  _nodeTree = NULL;
+  _nodeTree = nullptr;
   _tips = false;
-  _rep = NULL;
+  _rep = nullptr;
 }
 
-Stroke::Stroke(const Stroke &iBrother)
+Stroke::Stroke(const Stroke &iBrother) : Interface1D(iBrother)
 {
   for (vertex_container::const_iterator v = iBrother._Vertices.begin(),
                                         vend = iBrother._Vertices.end();
@@ -427,10 +439,12 @@ Stroke::Stroke(const Stroke &iBrother)
   }
   _nodeTree = iBrother._nodeTree;
   _tips = iBrother._tips;
-  if (iBrother._rep)
+  if (iBrother._rep) {
     _rep = new StrokeRep(*(iBrother._rep));
-  else
-    _rep = NULL;
+  }
+  else {
+    _rep = nullptr;
+  }
 }
 
 Stroke::~Stroke()
@@ -446,14 +460,15 @@ Stroke::~Stroke()
   _ViewEdges.clear();
   if (_rep) {
     delete _rep;
-    _rep = NULL;
+    _rep = nullptr;
   }
 }
 
 Stroke &Stroke::operator=(const Stroke &iBrother)
 {
-  if (!_Vertices.empty())
+  if (!_Vertices.empty()) {
     _Vertices.clear();
+  }
 
   for (vertex_container::const_iterator v = iBrother._Vertices.begin(),
                                         vend = iBrother._Vertices.end();
@@ -465,12 +480,13 @@ Stroke &Stroke::operator=(const Stroke &iBrother)
   _id = iBrother._id;
   _ViewEdges = iBrother._ViewEdges;
   _sampling = iBrother._sampling;
-  if (_rep)
-    delete _rep;
-  if (iBrother._rep)
+  delete _rep;
+  if (iBrother._rep) {
     _rep = new StrokeRep(*(iBrother._rep));
-  else
-    _rep = NULL;
+  }
+  else {
+    _rep = nullptr;
+  }
   return *this;
 }
 
@@ -484,8 +500,9 @@ void Stroke::setLength(float iLength)
 
 float Stroke::ComputeSampling(int iNVertices)
 {
-  if (iNVertices <= (int)_Vertices.size())  //soc
+  if (iNVertices <= (int)_Vertices.size()) {  // soc
     return _sampling;
+  }
 
   float sampling = _Length / (float)(iNVertices - _Vertices.size() + 1);
   return sampling;
@@ -518,8 +535,9 @@ class StrokeSegment {
 int Stroke::Resample(int iNPoints)
 {
   int NPointsToAdd = iNPoints - strokeVerticesSize();
-  if (NPointsToAdd <= 0)
+  if (NPointsToAdd <= 0) {
     return 0;
+  }
 
   StrokeInternal::StrokeVertexIterator it = strokeVerticesBegin();
   StrokeInternal::StrokeVertexIterator next = it;
@@ -528,7 +546,7 @@ int Stroke::Resample(int iNPoints)
 
   vertex_container newVertices;
   real t = 0.0f;
-  StrokeVertex *newVertex = NULL;
+  StrokeVertex *newVertex = nullptr;
   vector<StrokeSegment> strokeSegments;
   int N = 0;
   float meanlength = 0;
@@ -540,7 +558,7 @@ int Stroke::Resample(int iNPoints)
     real norm_var = vec_tmp.norm();
     int numberOfPointsToAdd = (int)floor(NPointsToAdd * norm_var / _Length);
     float csampling = norm_var / (float)(numberOfPointsToAdd + 1);
-    strokeSegments.push_back(StrokeSegment(it, next, norm_var, numberOfPointsToAdd, csampling));
+    strokeSegments.emplace_back(it, next, norm_var, numberOfPointsToAdd, csampling);
     N += numberOfPointsToAdd;
     meanlength += norm_var;
     ++nsegments;
@@ -557,36 +575,42 @@ int Stroke::Resample(int iNPoints)
     for (vector<StrokeSegment>::iterator s = strokeSegments.begin(), send = strokeSegments.end();
          s != send;
          ++s) {
-      if (s->_sampling == 0.0f)
+      if (s->_sampling == 0.0f) {
         continue;
+      }
 
       if (s->_resampled == false) {
-        if ((!checkEveryone) && (s->_length < meanlength))
+        if ((!checkEveryone) && (s->_length < meanlength)) {
           continue;
-        //resample
+        }
+        // resample
         s->_n = s->_n + 1;
         s->_sampling = s->_length / (float)(s->_n + 1);
         s->_resampled = resampled = true;
         N++;
-        if (N == NPointsToAdd)
+        if (N == NPointsToAdd) {
           break;
+        }
       }
     }
-    if (checkEveryone && !resampled)
+    if (checkEveryone && !resampled) {
       break;
+    }
     checkEveryone = true;
   }
   if (N < NPointsToAdd) {
-    // fatal error, likely because _Length is inconsistent with the stroke length computed with the vertices
+    // fatal error, likely because _Length is inconsistent with the stroke length computed with the
+    // vertices
     return -1;
   }
-  //actually resample:
+  // actually resample:
   for (vector<StrokeSegment>::iterator s = strokeSegments.begin(), send = strokeSegments.end();
        s != send;
        ++s) {
     newVertices.push_back(&(*(s->_begin)));
-    if (s->_sampling < _sampling)
+    if (s->_sampling < _sampling) {
       _sampling = s->_sampling;
+    }
 
     t = s->_sampling / s->_length;
     for (int i = 0; i < s->_n; ++i) {
@@ -601,12 +625,14 @@ int Stroke::Resample(int iNPoints)
   // add last:
   ++it;
   ++next;
-  if ((it != itend) && (next == itend) /* && (t == 0.0f)*/)
+  if ((it != itend) && (next == itend) /* && (t == 0.0f)*/) {
     newVertices.push_back(&(*it));
+  }
 
   int newsize = newVertices.size();
-  if (newsize != iNPoints)
+  if (newsize != iNPoints) {
     cerr << "Warning: incorrect points number" << endl;
+  }
 
   _Vertices.clear();
   _Vertices = newVertices;
@@ -617,19 +643,21 @@ int Stroke::Resample(int iNPoints)
 
 int Stroke::Resample(float iSampling)
 {
-  //cerr << "old size :" << strokeVerticesSize() << endl;
-  if (iSampling == 0)
+  // cerr << "old size :" << strokeVerticesSize() << endl;
+  if (iSampling == 0) {
     return 0;
-  if (iSampling >= _sampling)
+  }
+  if (iSampling >= _sampling) {
     return 0;
+  }
 
   _sampling = iSampling;
   // Resample...
-  //real curvilinearLength = 0.0f;
+  // real curvilinearLength = 0.0f;
   vertex_container newVertices;
   real t = 0.0f;
   const real limit = 0.99;
-  StrokeVertex *newVertex = NULL;
+  StrokeVertex *newVertex = nullptr;
   StrokeInternal::StrokeVertexIterator it = strokeVerticesBegin();
   StrokeInternal::StrokeVertexIterator next = it;
   ++next;
@@ -641,17 +669,17 @@ int Stroke::Resample(float iSampling)
     Vec2r vec_tmp(b - a);
     real norm_var = vec_tmp.norm();
     if (norm_var <= _sampling) {
-      //curvilinearLength += norm_var;
+      // curvilinearLength += norm_var;
       ++it;
       ++next;
       continue;
     }
 
-    //curvilinearLength += _sampling;
+    // curvilinearLength += _sampling;
     t = _sampling / norm_var;
     while (t < limit) {
       newVertex = new StrokeVertex(&(*it), &(*next), t);
-      //newVertex->setCurvilinearAbscissa(curvilinearLength);
+      // newVertex->setCurvilinearAbscissa(curvilinearLength);
       newVertices.push_back(newVertex);
       t = t + _sampling / norm_var;
     }
@@ -659,8 +687,9 @@ int Stroke::Resample(float iSampling)
     ++next;
   }
   // add last:
-  if ((it != itend) && (next == itend) /* && (t == 0.f)*/)
+  if ((it != itend) && (next == itend) /* && (t == 0.0f)*/) {
     newVertices.push_back(&(*it));
+  }
 
   _Vertices.clear();
   _Vertices = newVertices;
@@ -672,8 +701,9 @@ int Stroke::Resample(float iSampling)
 void Stroke::RemoveAllVertices()
 {
   vertex_container::iterator it = _Vertices.begin(), itend = _Vertices.end();
-  for (; it != itend; ++it)
+  for (; it != itend; ++it) {
     delete (*it);
+  }
   _Vertices.clear();
   UpdateLength();
 }
@@ -733,8 +763,9 @@ Stroke::vertex_iterator Stroke::vertices_end()
 
 StrokeInternal::StrokeVertexIterator Stroke::strokeVerticesBegin(float t)
 {
-  if ((t != 0) && (t < _sampling))
+  if ((t != 0) && (t < _sampling)) {
     Resample(t);
+  }
   return StrokeInternal::StrokeVertexIterator(
       this->_Vertices.begin(), this->_Vertices.begin(), this->_Vertices.end());
 }
@@ -780,25 +811,28 @@ void Stroke::ScaleThickness(float iFactor)
 
 void Stroke::Render(const StrokeRenderer *iRenderer)
 {
-  if (!_rep)
+  if (!_rep) {
     _rep = new StrokeRep(this);
+  }
   iRenderer->RenderStrokeRep(_rep);
 }
 
 void Stroke::RenderBasic(const StrokeRenderer *iRenderer)
 {
-  if (!_rep)
+  if (!_rep) {
     _rep = new StrokeRep(this);
+  }
   iRenderer->RenderStrokeRep(_rep);
 }
 
 Stroke::vertex_iterator Stroke::vertices_begin(float sampling)
 {
   // Resample if necessary
-  if ((sampling != 0) && (sampling < _sampling))
+  if ((sampling != 0) && (sampling < _sampling)) {
     Resample(sampling);
+  }
   return vertex_iterator(_Vertices.begin(), _Vertices.begin(), _Vertices.end());
-  //return _Vertices.begin();
+  // return _Vertices.begin();
 }
 
 #if 0
@@ -829,11 +863,11 @@ Stroke::const_vertex_iterator Stroke::vertices_last() const
 Stroke::vertex_container::reverse_iterator Stroke::vertices_last(float sampling)
 {
   // Resample if necessary
-  if (sampling < _sampling)
+  if (sampling < _sampling) {
     Resample(sampling);
+  }
   return _Vertices.rbegin();
 }
-
 
 inline Vec3r shaded_color(int iCombination = 0) const;
 
@@ -862,8 +896,9 @@ Material Stroke::material() const
   const_vertex_iterator v = vertices_begin(), vend = strokeVerticesEnd();
   Material mat = (*v)->material();
   for (; v != vend; ++v) {
-    if (mat != (*v)->material())
+    if (mat != (*v)->material()) {
       Exception::raiseException();
+    }
   }
   return mat;
 }
@@ -871,10 +906,11 @@ Material Stroke::material() const
 int Stroke::qi() const
 {
   const_vertex_iterator v = vertices_begin(), vend = vertices_end();
-  int qi_= (*v)->qi();
+  int qi_ = (*v)->qi();
   for (; v != vend; ++v) {
-    if ((*v)->qi() != qi_)
+    if ((*v)->qi() != qi_) {
       Exception::raiseException();
+    }
   }
   return qi_;
 }
@@ -899,8 +935,9 @@ bool Stroke::occluders_empty() const
   const_vertex_iterator v = vertices_begin(), vend = vertices_end();
   bool empty = (*v)->occluders_empty();
   for (; v != vend; ++v) {
-    if ((*v)->occluders_empty() != empty)
+    if ((*v)->occluders_empty() != empty) {
       Exception::raiseException();
+    }
   }
   return empty;
 }
@@ -917,8 +954,9 @@ const SShape *Stroke::occluded_shape() const
   const_vertex_iterator v = vertices_begin(), vend = vertices_end();
   const SShape *sshape = (*v)->occluded_shape();
   for (; v != vend; ++v) {
-    if ((*v)->occluded_shape() != sshape)
+    if ((*v)->occluded_shape() != sshape) {
       Exception::raiseException();
+    }
   }
   return sshape;
 }
@@ -928,8 +966,9 @@ const bool Stroke::occludee_empty() const
   const_vertex_iterator v = vertices_begin(), vend = vertices_end();
   bool empty = (*v)->occludee_empty();
   for (; v != vend; ++v) {
-    if ((*v)->occludee_empty() != empty)
+    if ((*v)->occludee_empty() != empty) {
       Exception::raiseException();
+    }
   }
   return empty;
 }
@@ -939,8 +978,9 @@ const SShape *Stroke::shape() const
   const_vertex_iterator v = vertices_begin(), vend = vertices_end();
   const SShape *sshape = (*v)->shape();
   for (; v != vend; ++v) {
-    if ((*v)->shape() != sshape)
+    if ((*v)->shape() != sshape) {
       Exception::raiseException();
+    }
   }
   return sshape;
 }
@@ -965,10 +1005,9 @@ float Stroke::shape_importance(int iCombination) const
   return shape_importance_edge_function<Stroke>(*this, iCombination);
 }
 
-
-float Stroke::local_average_depth(int iCombination ) const
+float Stroke::local_average_depth(int iCombination) const
 {
-  return local_average_depth_edge_function<Stroke >(*this, iCombination);
+  return local_average_depth_edge_function<Stroke>(*this, iCombination);
 }
 
 float Stroke::local_depth_variance(int iCombination) const
@@ -976,7 +1015,7 @@ float Stroke::local_depth_variance(int iCombination) const
   return local_depth_variance_edge_function<Stroke>(*this, iCombination);
 }
 
-real Stroke::local_average_density(float sigma , int iCombination ) const
+real Stroke::local_average_density(float sigma, int iCombination) const
 {
   return density_edge_function<Stroke>(*this, iCombination);
 }

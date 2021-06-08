@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software  Foundation,
+ * along with this program; if not, write to the Free Software Foundation,
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  *
  * The Original Code is Copyright (C) 2015 by the Blender Foundation.
@@ -26,15 +26,16 @@
 #include "RNA_define.h"
 #include "RNA_enum_types.h"
 
+#include "BKE_packedFile.h"
+
 #include "rna_internal.h"
 
 #ifdef RNA_RUNTIME
 
-#  include "BKE_packedFile.h"
-
 static void rna_Sound_pack(bSound *sound, Main *bmain, ReportList *reports)
 {
-  sound->packedfile = newPackedFile(reports, sound->name, ID_BLEND_PATH(bmain, &sound->id));
+  sound->packedfile = BKE_packedfile_new(
+      reports, sound->filepath, ID_BLEND_PATH(bmain, &sound->id));
 }
 
 static void rna_Sound_unpack(bSound *sound, Main *bmain, ReportList *reports, int method)
@@ -44,7 +45,7 @@ static void rna_Sound_unpack(bSound *sound, Main *bmain, ReportList *reports, in
   }
   else {
     /* reports its own error on failure */
-    unpackSound(bmain, reports, sound, method);
+    BKE_packedfile_unpack_sound(bmain, reports, sound, method);
   }
 }
 

@@ -17,29 +17,28 @@
 /** \file
  * \ingroup pythonintern
  *
- * This file defines '_bpy.ops', an internal python module which gives python
- * the ability to inspect and call both C and Python defined operators.
+ * This file defines `_bpy.ops`, an internal python module which gives Python
+ * the ability to inspect and call operators (defined by C or Python).
  *
  * \note
- * This module is exposed to the user via 'release/scripts/modules/bpy/ops.py'
- * which fakes exposing operators as modules/functions using its own classes.
+ * This C module is private, it should only be used by `release/scripts/modules/bpy/ops.py` which
+ * exposes operators as dynamically defined modules & callable objects to access all operators.
  */
 
 #include <Python.h>
 
 #include "RNA_types.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
-#include "BPY_extern.h"
-#include "bpy_operator.h"
-#include "bpy_operator_wrap.h"
-#include "bpy_rna.h" /* for setting arg props only - pyrna_py_to_prop() */
-#include "bpy_capi_utils.h"
-#include "../generic/bpy_internal_import.h"
 #include "../generic/py_capi_utils.h"
 #include "../generic/python_utildefines.h"
+#include "BPY_extern.h"
+#include "bpy_capi_utils.h"
+#include "bpy_operator.h"
+#include "bpy_operator_wrap.h"
+#include "bpy_rna.h" /* for setting argument properties & type method `get_rna_type`. */
 
 #include "RNA_access.h"
 #include "RNA_enum_types.h"
@@ -51,15 +50,15 @@
 
 #include "BLI_ghash.h"
 
-#include "BKE_report.h"
 #include "BKE_context.h"
+#include "BKE_report.h"
 
 /* so operators called can spawn threads which acquire the GIL */
 #define BPY_RELEASE_GIL
 
 static wmOperatorType *ot_lookup_from_py_string(PyObject *value, const char *py_fn_id)
 {
-  const char *opname = _PyUnicode_AsString(value);
+  const char *opname = PyUnicode_AsUTF8(value);
   if (opname == NULL) {
     PyErr_Format(PyExc_TypeError, "%s() expects a string argument", py_fn_id);
     return NULL;
@@ -78,7 +77,6 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
   wmOperatorType *ot;
   const char *opname;
   PyObject *context_dict = NULL; /* optional args */
-  PyObject *context_dict_back;
   const char *context_str = NULL;
   PyObject *ret;
 
@@ -86,7 +84,7 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
 
   /* XXX Todo, work out a better solution for passing on context,
    * could make a tuple from self and pack the name and Context into it... */
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
 
   if (C == NULL) {
     PyErr_SetString(PyExc_RuntimeError, "Context is None, cant poll any operators");
@@ -120,7 +118,7 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
     }
   }
 
-  if (context_dict == NULL || context_dict == Py_None) {
+  if (ELEM(context_dict, NULL, Py_None)) {
     context_dict = NULL;
   }
   else if (!PyDict_Check(context_dict)) {
@@ -132,16 +130,25 @@ static PyObject *pyop_poll(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  context_dict_back = CTX_py_dict_get(C);
-  CTX_py_dict_set(C, (void *)context_dict);
-  Py_XINCREF(context_dict); /* so we done loose it */
+  struct bContext_PyState context_py_state;
+  if (context_dict != NULL) {
+    CTX_py_state_push(C, &context_py_state, (void *)context_dict);
+    Py_INCREF(context_dict); /* so we don't lose it */
+  }
 
   /* main purpose of this function */
   ret = WM_operator_poll_context((bContext *)C, ot, context) ? Py_True : Py_False;
 
-  /* restore with original context dict, probably NULL but need this for nested operator calls */
-  Py_XDECREF(context_dict);
-  CTX_py_dict_set(C, (void *)context_dict_back);
+  if (context_dict != NULL) {
+    PyObject *context_dict_test = CTX_py_dict_get(C);
+    if (context_dict_test != context_dict) {
+      Py_DECREF(context_dict_test);
+    }
+    /* Restore with original context dict,
+     * probably NULL but need this for nested operator calls. */
+    Py_DECREF(context_dict);
+    CTX_py_state_pop(C, &context_py_state);
+  }
 
   return Py_INCREF_RET(ret);
 }
@@ -157,7 +164,6 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
   const char *context_str = NULL;
   PyObject *kw = NULL;           /* optional args */
   PyObject *context_dict = NULL; /* optional args */
-  PyObject *context_dict_back;
 
   /* note that context is an int, python does the conversion in this case */
   int context = WM_OP_EXEC_DEFAULT;
@@ -165,7 +171,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
 
   /* XXX Todo, work out a better solution for passing on context,
    * could make a tuple from self and pack the name and Context into it... */
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
 
   if (C == NULL) {
     PyErr_SetString(PyExc_RuntimeError, "Context is None, cant poll any operators");
@@ -214,7 +220,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     }
   }
 
-  if (context_dict == NULL || context_dict == Py_None) {
+  if (ELEM(context_dict, NULL, Py_None)) {
     context_dict = NULL;
   }
   else if (!PyDict_Check(context_dict)) {
@@ -226,18 +232,28 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     return NULL;
   }
 
-  context_dict_back = CTX_py_dict_get(C);
-
-  CTX_py_dict_set(C, (void *)context_dict);
-  Py_XINCREF(context_dict); /* so we done loose it */
+  /**
+   * It might be that there is already a Python context override. We don't want to remove that
+   * except when this operator call sets a new override explicitly. This is necessary so that
+   * called operator runs in the same context as the calling code by default.
+   */
+  struct bContext_PyState context_py_state;
+  if (context_dict != NULL) {
+    CTX_py_state_push(C, &context_py_state, (void *)context_dict);
+    Py_INCREF(context_dict); /* so we don't lose it */
+  }
 
   if (WM_operator_poll_context((bContext *)C, ot, context) == false) {
-    const char *msg = CTX_wm_operator_poll_msg_get(C);
+    bool msg_free = false;
+    const char *msg = CTX_wm_operator_poll_msg_get(C, &msg_free);
     PyErr_Format(PyExc_RuntimeError,
                  "Operator bpy.ops.%.200s.poll() %.200s",
                  opname,
                  msg ? msg : "failed, context is incorrect");
-    CTX_wm_operator_poll_msg_set(C, NULL); /* better set to NULL else it could be used again */
+    CTX_wm_operator_poll_msg_clear(C);
+    if (msg_free) {
+      MEM_freeN((void *)msg);
+    }
     error_val = -1;
   }
   else {
@@ -253,8 +269,9 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
       ReportList *reports;
 
       reports = MEM_mallocN(sizeof(ReportList), "wmOperatorReportList");
-      BKE_reports_init(reports,
-                       RPT_STORE | RPT_OP_HOLD); /* own so these don't move into global reports */
+
+      /* Own so these don't move into global reports. */
+      BKE_reports_init(reports, RPT_STORE | RPT_OP_HOLD);
 
 #ifdef BPY_RELEASE_GIL
       /* release GIL, since a thread could be started from an operator
@@ -298,9 +315,7 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
     {
       /* no props */
       if (kw != NULL) {
-        PyErr_Format(PyExc_AttributeError,
-                     "Operator \"%s\" does not take any args",
-                     opname);
+        PyErr_Format(PyExc_AttributeError, "Operator \"%s\" does not take any args", opname);
         return NULL;
       }
 
@@ -309,21 +324,26 @@ static PyObject *pyop_call(PyObject *UNUSED(self), PyObject *args)
 #endif
   }
 
-  /* restore with original context dict, probably NULL but need this for nested operator calls */
-  Py_XDECREF(context_dict);
-  CTX_py_dict_set(C, (void *)context_dict_back);
+  if (context_dict != NULL) {
+    PyObject *context_dict_test = CTX_py_dict_get(C);
+    if (context_dict_test != context_dict) {
+      Py_DECREF(context_dict_test);
+    }
+    /* Restore with original context dict,
+     * probably NULL but need this for nested operator calls. */
+    Py_DECREF(context_dict);
+    CTX_py_state_pop(C, &context_py_state);
+  }
 
   if (error_val == -1) {
     return NULL;
   }
 
-  /* when calling  bpy.ops.wm.read_factory_settings() bpy.data's main pointer is freed by clear_globals(),
-   * further access will crash blender. setting context is not needed in this case, only calling because this
+  /* When calling  bpy.ops.wm.read_factory_settings() bpy.data's main pointer
+   * is freed by clear_globals(), further access will crash blender.
+   * Setting context is not needed in this case, only calling because this
    * function corrects bpy.data (internal Main pointer) */
-  BPY_modules_update(C);
-
-  /* needed for when WM_OT_read_factory_settings us called from within a script */
-  bpy_import_main_set(CTX_data_main(C));
+  BPY_modules_update();
 
   /* return operator_ret as a bpy enum */
   return pyrna_enum_bitfield_to_py(rna_enum_operator_return_items, operator_ret);
@@ -343,7 +363,7 @@ static PyObject *pyop_as_string(PyObject *UNUSED(self), PyObject *args)
   char *buf = NULL;
   PyObject *pybuf;
 
-  bContext *C = (bContext *)BPy_GetContext();
+  bContext *C = BPY_context_get();
 
   if (C == NULL) {
     PyErr_SetString(PyExc_RuntimeError,
@@ -433,12 +453,22 @@ static PyObject *pyop_getrna_type(PyObject *UNUSED(self), PyObject *value)
   return (PyObject *)pyrna;
 }
 
+static PyObject *pyop_get_bl_options(PyObject *UNUSED(self), PyObject *value)
+{
+  wmOperatorType *ot;
+  if ((ot = ot_lookup_from_py_string(value, "get_bl_options")) == NULL) {
+    return NULL;
+  }
+  return pyrna_enum_bitfield_to_py(rna_enum_operator_type_flag_items, ot->flag);
+}
+
 static struct PyMethodDef bpy_ops_methods[] = {
     {"poll", (PyCFunction)pyop_poll, METH_VARARGS, NULL},
     {"call", (PyCFunction)pyop_call, METH_VARARGS, NULL},
     {"as_string", (PyCFunction)pyop_as_string, METH_VARARGS, NULL},
     {"dir", (PyCFunction)pyop_dir, METH_NOARGS, NULL},
     {"get_rna_type", (PyCFunction)pyop_getrna_type, METH_O, NULL},
+    {"get_bl_options", (PyCFunction)pyop_get_bl_options, METH_O, NULL},
     {"macro_define", (PyCFunction)PYOP_wrap_macro_define, METH_VARARGS, NULL},
     {NULL, NULL, 0, NULL},
 };

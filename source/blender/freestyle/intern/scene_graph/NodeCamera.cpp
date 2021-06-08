@@ -19,8 +19,8 @@
  * \brief Class to represent a light node
  */
 
-#include <math.h>
-#include <string.h>  // for memcpy
+#include <cmath>
+#include <cstring>  // for memcpy
 
 #include "NodeCamera.h"
 
@@ -33,10 +33,12 @@ static void loadIdentity(double *matrix)
   // Build Identity matrix
   for (i = 0; i < 16; ++i) {
     double value;
-    if ((i % 5) == 0)
+    if ((i % 5) == 0) {
       value = 1.0;
-    else
+    }
+    else {
       value = 0;
+    }
     matrix[i] = value;
   }
 }
@@ -48,10 +50,10 @@ NodeCamera::NodeCamera(CameraType camera_type) : camera_type_(camera_type)
 }
 
 #if 0 /* UNUSED, gives warning in gcc */
-NodeCamera::NodeCamera(const NodeCamera& iBrother) : camera_type_(iBrother.camera_type_)
+NodeCamera::NodeCamera(const NodeCamera &iBrother) : camera_type_(iBrother.camera_type_)
 {
-  memcpy(modelview_matrix_, iBrother.modelview_matrix_, 16 * sizeof(double));
-  memcpy(projection_matrix_, iBrother.projection_matrix_, 16 * sizeof(double));
+  memcpy(modelview_matrix_, iBrother.modelview_matrix_, sizeof(double[16]));
+  memcpy(projection_matrix_, iBrother.projection_matrix_, sizeof(double[16]));
 }
 #endif
 
@@ -62,12 +64,12 @@ void NodeCamera::accept(SceneVisitor &v)
 
 void NodeCamera::setModelViewMatrix(double modelview_matrix[16])
 {
-  memcpy(modelview_matrix_, modelview_matrix, 16 * sizeof(double));
+  memcpy(modelview_matrix_, modelview_matrix, sizeof(double[16]));
 }
 
 void NodeCamera::setProjectionMatrix(double projection_matrix[16])
 {
-  memcpy(projection_matrix_, projection_matrix, 16 * sizeof(double));
+  memcpy(projection_matrix_, projection_matrix, sizeof(double[16]));
 }
 
 NodeOrthographicCamera::NodeOrthographicCamera()
@@ -101,17 +103,6 @@ NodeOrthographicCamera::NodeOrthographicCamera(
   projection_matrix_[7] = -(top + bottom) / (top - bottom);
   projection_matrix_[10] = -2.0 / (zFar - zNear);
   projection_matrix_[11] = -(zFar + zNear) / (zFar - zNear);
-}
-
-NodeOrthographicCamera::NodeOrthographicCamera(const NodeOrthographicCamera &iBrother)
-    : NodeCamera(iBrother),
-      left_(iBrother.left_),
-      right_(iBrother.right_),
-      bottom_(iBrother.bottom_),
-      top_(iBrother.top_),
-      zNear_(iBrother.zNear_),
-      zFar_(iBrother.zFar_)
-{
 }
 
 NodePerspectiveCamera::NodePerspectiveCamera() : NodeCamera(NodeCamera::PERSPECTIVE)

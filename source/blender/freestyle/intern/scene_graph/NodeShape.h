@@ -14,8 +14,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#ifndef __FREESTYLE_NODE_SHAPE_H__
-#define __FREESTYLE_NODE_SHAPE_H__
+#pragma once
 
 /** \file
  * \ingroup freestyle
@@ -53,8 +52,9 @@ class NodeShape : public Node {
    */
   virtual void AddRep(Rep *iRep)
   {
-    if (NULL == iRep)
+    if (NULL == iRep) {
       return;
+    }
     _Shapes.push_back(iRep);
     iRep->addRef();
 
@@ -92,5 +92,3 @@ class NodeShape : public Node {
 };
 
 } /* namespace Freestyle */
-
-#endif  // __FREESTYLE_NODE_SHAPE_H__

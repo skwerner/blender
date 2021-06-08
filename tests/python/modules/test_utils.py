@@ -79,13 +79,14 @@ class AbstractBlenderRunnerTest(unittest.TestCase):
             '-noaudio',
             '--factory-startup',
             '--enable-autoexec',
+            '--debug-memory',
+            '--debug-exit-on-error',
         ]
 
         if blendfile:
             command.append(str(blendfile))
 
         command.extend([
-            '-E', 'CYCLES',
             '--python-exit-code', '47',
             '--python-expr', python_script,
         ]

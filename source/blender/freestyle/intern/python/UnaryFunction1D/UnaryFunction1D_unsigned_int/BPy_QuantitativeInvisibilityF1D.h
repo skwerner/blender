@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_QUANTITATIVEINVISIBILITYF1D_H__
-#define __FREESTYLE_PYTHON_QUANTITATIVEINVISIBILITYF1D_H__
+#pragma once
 
 #include "../BPy_UnaryFunction1DUnsigned.h"
 
@@ -34,7 +33,8 @@ extern PyTypeObject QuantitativeInvisibilityF1D_Type;
 #define BPy_QuantitativeInvisibilityF1D_Check(v) \
   (PyObject_IsInstance((PyObject *)v, (PyObject *)&QuantitativeInvisibilityF1D_Type))
 
-/*---------------------------Python BPy_QuantitativeInvisibilityF1D structure definition----------*/
+/*---------------------------Python BPy_QuantitativeInvisibilityF1D structure
+ * definition----------*/
 typedef struct {
   BPy_UnaryFunction1DUnsigned py_uf1D_unsigned;
 } BPy_QuantitativeInvisibilityF1D;
@@ -44,5 +44,3 @@ typedef struct {
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_QUANTITATIVEINVISIBILITYF1D_H__ */

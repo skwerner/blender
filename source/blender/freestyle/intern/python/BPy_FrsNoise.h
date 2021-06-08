@@ -18,8 +18,7 @@
  * \ingroup freestyle
  */
 
-#ifndef __FREESTYLE_PYTHON_FRSNOISE_H__
-#define __FREESTYLE_PYTHON_FRSNOISE_H__
+#pragma once
 
 extern "C" {
 #include <Python.h>
@@ -27,8 +26,6 @@ extern "C" {
 
 #include "../geometry/Noise.h"
 #include "../system/PseudoNoise.h"
-
-using namespace Freestyle;
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,8 +39,8 @@ extern PyTypeObject FrsNoise_Type;
 
 /*---------------------------Python BPy_FrsNoise structure definition----------*/
 typedef struct {
-  PyObject_HEAD Noise *n;
-  PseudoNoise *pn;
+  PyObject_HEAD Freestyle::Noise *n;
+  Freestyle::PseudoNoise *pn;
 } BPy_FrsNoise;
 
 /*---------------------------Python BPy_FrsNoise visible prototypes-----------*/
@@ -55,5 +52,3 @@ int FrsNoise_Init(PyObject *module);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __FREESTYLE_PYTHON_FRSNOISE_H__ */

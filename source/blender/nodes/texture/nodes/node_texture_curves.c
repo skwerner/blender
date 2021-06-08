@@ -21,13 +21,13 @@
  * \ingroup texnodes
  */
 
-#include "node_texture_util.h"
 #include "NOD_texture.h"
+#include "node_texture_util.h"
 
 /* **************** CURVE Time  ******************** */
 
 /* custom1 = sfra, custom2 = efra */
-static bNodeSocketTemplate time_outputs[] = {{SOCK_FLOAT, 0, N_("Value")}, {-1, 0, ""}};
+static bNodeSocketTemplate time_outputs[] = {{SOCK_FLOAT, N_("Value")}, {-1, ""}};
 
 static void time_colorfn(
     float *out, TexParams *p, bNode *node, bNodeStack **UNUSED(in), short UNUSED(thread))
@@ -35,11 +35,12 @@ static void time_colorfn(
   /* stack order output: fac */
   float fac = 0.0f;
 
-  if (node->custom1 < node->custom2)
+  if (node->custom1 < node->custom2) {
     fac = (p->cfra - node->custom1) / (float)(node->custom2 - node->custom1);
+  }
 
-  curvemapping_initialize(node->storage);
-  fac = curvemapping_evaluateF(node->storage, 0, fac);
+  BKE_curvemapping_init(node->storage);
+  fac = BKE_curvemapping_evaluateF(node->storage, 0, fac);
   out[0] = CLAMPIS(fac, 0.0f, 1.0f);
 }
 
@@ -57,7 +58,7 @@ static void time_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
   node->custom1 = 1;
   node->custom2 = 250;
-  node->storage = curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
+  node->storage = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 void register_node_type_tex_curve_time(void)
@@ -76,13 +77,13 @@ void register_node_type_tex_curve_time(void)
 
 /* **************** CURVE RGB  ******************** */
 static bNodeSocketTemplate rgb_inputs[] = {
-    {SOCK_RGBA, 1, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color"), 0.0f, 0.0f, 0.0f, 1.0f},
+    {-1, ""},
 };
 
 static bNodeSocketTemplate rgb_outputs[] = {
-    {SOCK_RGBA, 0, N_("Color")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Color")},
+    {-1, ""},
 };
 
 static void rgb_colorfn(float *out, TexParams *p, bNode *node, bNodeStack **in, short thread)
@@ -90,7 +91,7 @@ static void rgb_colorfn(float *out, TexParams *p, bNode *node, bNodeStack **in, 
   float cin[4];
   tex_input_rgba(cin, in[0], p, thread);
 
-  curvemapping_evaluateRGBF(node->storage, out, cin);
+  BKE_curvemapping_evaluateRGBF(node->storage, out, cin);
   out[3] = cin[3];
 }
 
@@ -106,7 +107,7 @@ static void rgb_exec(void *data,
 
 static void rgb_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
-  node->storage = curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
+  node->storage = BKE_curvemapping_add(4, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
 void register_node_type_tex_curve_rgb(void)

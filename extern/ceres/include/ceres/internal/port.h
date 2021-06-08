@@ -32,63 +32,79 @@
 #define CERES_PUBLIC_INTERNAL_PORT_H_
 
 // This file needs to compile as c code.
-#ifdef __cplusplus
-#include <cstddef>
 #include "ceres/internal/config.h"
-#if defined(CERES_TR1_MEMORY_HEADER)
-#include <tr1/memory>
+
+#if defined(CERES_USE_OPENMP)
+#if defined(CERES_USE_CXX_THREADS) || defined(CERES_NO_THREADS)
+#error CERES_USE_OPENMP is mutually exclusive to CERES_USE_CXX_THREADS and CERES_NO_THREADS
+#endif
+#elif defined(CERES_USE_CXX_THREADS)
+#if defined(CERES_USE_OPENMP) || defined(CERES_NO_THREADS)
+#error CERES_USE_CXX_THREADS is mutually exclusive to CERES_USE_OPENMP, CERES_USE_CXX_THREADS and CERES_NO_THREADS
+#endif
+#elif defined(CERES_NO_THREADS)
+#if defined(CERES_USE_OPENMP) || defined(CERES_USE_CXX_THREADS)
+#error CERES_NO_THREADS is mutually exclusive to CERES_USE_OPENMP and CERES_USE_CXX_THREADS
+#endif
 #else
-#include <memory>
+#  error One of CERES_USE_OPENMP, CERES_USE_CXX_THREADS or CERES_NO_THREADS must be defined.
 #endif
 
-namespace ceres {
-
-#if defined(CERES_TR1_SHARED_PTR)
-using std::tr1::shared_ptr;
-#else
-using std::shared_ptr;
+// CERES_NO_SPARSE should be automatically defined by config.h if Ceres was
+// compiled without any sparse back-end.  Verify that it has not subsequently
+// been inconsistently redefined.
+#if defined(CERES_NO_SPARSE)
+#if !defined(CERES_NO_SUITESPARSE)
+#error CERES_NO_SPARSE requires CERES_NO_SUITESPARSE.
 #endif
-
-// We allocate some Eigen objects on the stack and other places they
-// might not be aligned to 16-byte boundaries.  If we have C++11, we
-// can specify their alignment anyway, and thus can safely enable
-// vectorization on those matrices; in C++99, we are out of luck.  Figure out
-// what case we're in and write macros that do the right thing.
-#ifdef CERES_USE_CXX11
-namespace port_constants {
-static constexpr size_t kMaxAlignBytes =
-    // Work around a GCC 4.8 bug
-    // (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=56019) where
-    // std::max_align_t is misplaced.
-#if defined (__GNUC__) && __GNUC__ == 4 && __GNUC_MINOR__ == 8
-    alignof(::max_align_t);
-#else
-    alignof(std::max_align_t);
+#if !defined(CERES_NO_CXSPARSE)
+#error CERES_NO_SPARSE requires CERES_NO_CXSPARSE
 #endif
-}  // namespace port_constants
+#if !defined(CERES_NO_ACCELERATE_SPARSE)
+#error CERES_NO_SPARSE requires CERES_NO_ACCELERATE_SPARSE
 #endif
-
-}  // namespace ceres
-
-#endif  // __cplusplus
+#if defined(CERES_USE_EIGEN_SPARSE)
+#error CERES_NO_SPARSE requires !CERES_USE_EIGEN_SPARSE
+#endif
+#endif
 
 // A macro to signal which functions and classes are exported when
-// building a DLL with MSVC.
-//
-// Note that the ordering here is important, CERES_BUILDING_SHARED_LIBRARY
-// is only defined locally when Ceres is compiled, it is never exported to
-// users.  However, in order that we do not have to configure config.h
-// separately for building vs installing, if we are using MSVC and building
-// a shared library, then both CERES_BUILDING_SHARED_LIBRARY and
-// CERES_USING_SHARED_LIBRARY will be defined when Ceres is compiled.
-// Hence it is important that the check for CERES_BUILDING_SHARED_LIBRARY
-// happens first.
-#if defined(_MSC_VER) && defined(CERES_BUILDING_SHARED_LIBRARY)
-# define CERES_EXPORT __declspec(dllexport)
-#elif defined(_MSC_VER) && defined(CERES_USING_SHARED_LIBRARY)
-# define CERES_EXPORT __declspec(dllimport)
+// building a shared library.
+#if defined(_MSC_VER)
+#define CERES_API_SHARED_IMPORT __declspec(dllimport)
+#define CERES_API_SHARED_EXPORT __declspec(dllexport)
+#elif defined(__GNUC__)
+#define CERES_API_SHARED_IMPORT __attribute__((visibility("default")))
+#define CERES_API_SHARED_EXPORT __attribute__((visibility("default")))
 #else
-# define CERES_EXPORT
+#define CERES_API_SHARED_IMPORT
+#define CERES_API_SHARED_EXPORT
+#endif
+
+// CERES_BUILDING_SHARED_LIBRARY is only defined locally when Ceres itself is
+// compiled as a shared library, it is never exported to users.  In order that
+// we do not have to configure config.h separately when building Ceres as either
+// a static or dynamic library, we define both CERES_USING_SHARED_LIBRARY and
+// CERES_BUILDING_SHARED_LIBRARY when building as a shared library.
+#if defined(CERES_USING_SHARED_LIBRARY)
+#if defined(CERES_BUILDING_SHARED_LIBRARY)
+// Compiling Ceres itself as a shared library.
+#define CERES_EXPORT CERES_API_SHARED_EXPORT
+#else
+// Using Ceres as a shared library.
+#define CERES_EXPORT CERES_API_SHARED_IMPORT
+#endif
+#else
+// Ceres was compiled as a static library, export everything.
+#define CERES_EXPORT
+#endif
+
+// Unit tests reach in and test internal functionality so we need a way to make
+// those symbols visible
+#ifdef CERES_EXPORT_INTERNAL_SYMBOLS
+#define CERES_EXPORT_INTERNAL CERES_EXPORT
+#else
+#define CERES_EXPORT_INTERNAL
 #endif
 
 #endif  // CERES_PUBLIC_INTERNAL_PORT_H_

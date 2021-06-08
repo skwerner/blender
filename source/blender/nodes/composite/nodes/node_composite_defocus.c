@@ -27,13 +27,13 @@
 
 /* ************ qdn: Defocus node ****************** */
 static bNodeSocketTemplate cmp_node_defocus_in[] = {
-    {SOCK_RGBA, 1, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
-    {SOCK_FLOAT, 1, N_("Z"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_NONE},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image"), 1.0f, 1.0f, 1.0f, 1.0f},
+    {SOCK_FLOAT, N_("Z"), 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, PROP_NONE},
+    {-1, ""},
 };
 static bNodeSocketTemplate cmp_node_defocus_out[] = {
-    {SOCK_RGBA, 0, N_("Image")},
-    {-1, 0, ""},
+    {SOCK_RGBA, N_("Image")},
+    {-1, ""},
 };
 
 static void node_composit_init_defocus(bNodeTree *UNUSED(ntree), bNode *node)
@@ -45,10 +45,10 @@ static void node_composit_init_defocus(bNodeTree *UNUSED(ntree), bNode *node)
   nbd->preview = 1;
   nbd->gamco = 0;
   nbd->samples = 16;
-  nbd->fstop = 128.f;
+  nbd->fstop = 128.0f;
   nbd->maxblur = 16;
-  nbd->bthresh = 1.f;
-  nbd->scale = 1.f;
+  nbd->bthresh = 1.0f;
+  nbd->scale = 1.0f;
   nbd->no_zbuf = 1;
   node->storage = nbd;
 }

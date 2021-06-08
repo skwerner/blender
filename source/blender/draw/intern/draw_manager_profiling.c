@@ -20,6 +20,7 @@
  * \ingroup draw
  */
 
+#include "BLI_listbase.h"
 #include "BLI_rect.h"
 #include "BLI_string.h"
 
@@ -31,6 +32,7 @@
 
 #include "draw_manager.h"
 
+#include "GPU_debug.h"
 #include "GPU_texture.h"
 
 #include "UI_resources.h"
@@ -43,8 +45,8 @@
 #define GPU_TIMER_FALLOFF 0.1
 
 typedef struct DRWTimer {
-  GLuint query[2];
-  GLuint64 time_average;
+  uint32_t query[2];
+  uint64_t time_average;
   char name[MAX_TIMER_NAME];
   int lvl;       /* Hierarchy level for nested timer. */
   bool is_query; /* Does this timer actually perform queries or is it just a group. */
@@ -63,10 +65,10 @@ static struct DRWTimerPool {
 void DRW_stats_free(void)
 {
   if (DTP.timers != NULL) {
-    for (int i = 0; i < DTP.timer_count; ++i) {
-      DRWTimer *timer = &DTP.timers[i];
-      glDeleteQueries(2, timer->query);
-    }
+    // for (int i = 0; i < DTP.timer_count; i++) {
+    // DRWTimer *timer = &DTP.timers[i];
+    // glDeleteQueries(2, timer->query);
+    // }
     MEM_freeN(DTP.timers);
     DTP.timers = NULL;
   }
@@ -116,12 +118,12 @@ static void drw_stats_timer_start_ex(const char *name, const bool is_query)
     BLI_assert(!DTP.is_querying);
     if (timer->is_query) {
       if (timer->query[0] == 0) {
-        glGenQueries(1, timer->query);
+        // glGenQueries(1, timer->query);
       }
 
-      glFinish();
+      // glFinish();
       /* Issue query for the next frame */
-      glBeginQuery(GL_TIME_ELAPSED, timer->query[0]);
+      // glBeginQuery(GL_TIME_ELAPSED, timer->query[0]);
       DTP.is_querying = true;
     }
   }
@@ -132,10 +134,13 @@ static void drw_stats_timer_start_ex(const char *name, const bool is_query)
 void DRW_stats_group_start(const char *name)
 {
   drw_stats_timer_start_ex(name, false);
+
+  GPU_debug_group_begin(name);
 }
 
 void DRW_stats_group_end(void)
 {
+  GPU_debug_group_end();
   if (DTP.is_recording) {
     BLI_assert(!DTP.is_querying);
     DTP.end_increment++;
@@ -145,15 +150,17 @@ void DRW_stats_group_end(void)
 /* NOTE: Only call this when no sub timer will be called. */
 void DRW_stats_query_start(const char *name)
 {
+  GPU_debug_group_begin(name);
   drw_stats_timer_start_ex(name, true);
 }
 
 void DRW_stats_query_end(void)
 {
+  GPU_debug_group_end();
   if (DTP.is_recording) {
     DTP.end_increment++;
     BLI_assert(DTP.is_querying);
-    glEndQuery(GL_TIME_ELAPSED);
+    // glEndQuery(GL_TIME_ELAPSED);
     DTP.is_querying = false;
   }
 }
@@ -166,19 +173,19 @@ void DRW_stats_reset(void)
              "You forgot a DRW_stats_group/query_start somewhere!");
 
   if (DTP.is_recording) {
-    GLuint64 lvl_time[MAX_NESTED_TIMER] = {0};
+    uint64_t lvl_time[MAX_NESTED_TIMER] = {0};
 
     /* Swap queries for the next frame and sum up each lvl time. */
-    for (int i = DTP.timer_increment - 1; i >= 0; --i) {
+    for (int i = DTP.timer_increment - 1; i >= 0; i--) {
       DRWTimer *timer = &DTP.timers[i];
-      SWAP(GLuint, timer->query[0], timer->query[1]);
+      SWAP(uint32_t, timer->query[0], timer->query[1]);
 
       BLI_assert(timer->lvl < MAX_NESTED_TIMER);
 
       if (timer->is_query) {
-        GLuint64 time;
+        uint64_t time = 0;
         if (timer->query[0] != 0) {
-          glGetQueryObjectui64v(timer->query[0], GL_QUERY_RESULT, &time);
+          // glGetQueryObjectui64v(timer->query[0], GL_QUERY_RESULT, &time);
         }
         else {
           time = 1000000000; /* 1ms default */
@@ -200,7 +207,7 @@ void DRW_stats_reset(void)
   }
 }
 
-static void draw_stat_5row(rcti *rect, int u, int v, const char *txt, const int size)
+static void draw_stat_5row(const rcti *rect, int u, int v, const char *txt, const int size)
 {
   BLF_draw_default_ascii(rect->xmin + (1 + u * 5) * U.widget_unit,
                          rect->ymax - (3 + v) * U.widget_unit,
@@ -209,13 +216,13 @@ static void draw_stat_5row(rcti *rect, int u, int v, const char *txt, const int 
                          size);
 }
 
-static void draw_stat(rcti *rect, int u, int v, const char *txt, const int size)
+static void draw_stat(const rcti *rect, int u, int v, const char *txt, const int size)
 {
   BLF_draw_default_ascii(
       rect->xmin + (1 + u) * U.widget_unit, rect->ymax - (3 + v) * U.widget_unit, 0.0f, txt, size);
 }
 
-void DRW_stats_draw(rcti *rect)
+void DRW_stats_draw(const rcti *rect)
 {
   char stat_string[64];
   int lvl_index[MAX_NESTED_TIMER];
@@ -250,7 +257,7 @@ void DRW_stats_draw(rcti *rect)
 
   /* Engines rows */
   char time_to_txt[16];
-  for (LinkData *link = DST.enabled_engines.first; link; link = link->next) {
+  LISTBASE_FOREACH (LinkData *, link, &DST.enabled_engines) {
     u = 0;
     DrawEngineType *engine = link->data;
     ViewportEngineData *data = drw_viewport_engine_data_ensure(engine);
@@ -323,7 +330,7 @@ void DRW_stats_draw(rcti *rect)
   BLI_strncpy(stat_string, "GPU Render Timings", sizeof(stat_string));
   draw_stat(rect, 0, v++, stat_string, sizeof(stat_string));
 
-  for (int i = 0; i < DTP.timer_increment; ++i) {
+  for (int i = 0; i < DTP.timer_increment; i++) {
     double time_ms, time_percent;
     DRWTimer *timer = &DTP.timers[i];
     DRWTimer *timer_parent = (timer->lvl > 0) ? &DTP.timers[lvl_index[timer->lvl - 1]] : NULL;

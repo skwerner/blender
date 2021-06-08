@@ -18,10 +18,9 @@
  * \ingroup wm
  */
 
-#ifndef __WM_MESSAGE_BUS_INTERN_H__
-#define __WM_MESSAGE_BUS_INTERN_H__
+#pragma once
 
-/* wm_message_bus.h must be included first */
+#include "../wm_message_bus.h"
 
 struct wmMsgBus {
   struct GSet *messages_gset[WM_MSG_TYPE_NUM];
@@ -47,5 +46,3 @@ BLI_INLINE wmMsg *wm_msg_subscribe_value_msg_cast_mut(wmMsgSubscribeKey *key)
 {
   return &((wmMsgSubscribeKey_Generic *)key)->msg;
 }
-
-#endif /* __WM_MESSAGE_BUS_INTERN_H__ */

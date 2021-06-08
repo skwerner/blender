@@ -18,34 +18,36 @@
  * \ingroup spview3d
  */
 
+#include "DNA_armature_types.h"
 #include "DNA_curve_types.h"
 #include "DNA_lattice_types.h"
-#include "DNA_meta_types.h"
 #include "DNA_mesh_types.h"
 #include "DNA_meshdata_types.h"
-#include "DNA_armature_types.h"
+#include "DNA_meta_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
-#include "BLI_utildefines.h"
+#include "BLI_math_geom.h"
 #include "BLI_rect.h"
+#include "BLI_utildefines.h"
 
+#include "BKE_DerivedMesh.h"
 #include "BKE_action.h"
 #include "BKE_armature.h"
 #include "BKE_curve.h"
-#include "BKE_DerivedMesh.h"
 #include "BKE_displist.h"
 #include "BKE_editmesh.h"
-#include "BKE_mesh_runtime.h"
 #include "BKE_mesh_iterators.h"
+#include "BKE_mesh_runtime.h"
+#include "BKE_modifier.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
 #include "bmesh.h"
 
-#include "ED_screen.h"
 #include "ED_armature.h"
+#include "ED_screen.h"
 #include "ED_view3d.h"
 
 typedef struct foreachScreenObjectVert_userData {
@@ -71,7 +73,7 @@ typedef struct foreachScreenEdge_userData {
                int index);
   void *userData;
   ViewContext vc;
-  rctf win_rect; /* copy of: vc.ar->winx/winy, use for faster tests, minx/y will always be 0 */
+  rctf win_rect; /* copy of: vc.region->winx/winy, use for faster tests, minx/y will always be 0 */
   eV3DProjTest clip_flag;
 } foreachScreenEdge_userData;
 
@@ -103,7 +105,7 @@ static void meshobject_foreachScreenVert__mapFunc(void *userData,
   if (!(mv->flag & ME_HIDE)) {
     float screen_co[2];
 
-    if (ED_view3d_project_float_object(data->vc.ar, co, screen_co, data->clip_flag) !=
+    if (ED_view3d_project_float_object(data->vc.region, co, screen_co, data->clip_flag) !=
         V3D_PROJ_RET_OK) {
       return;
     }
@@ -124,7 +126,7 @@ void meshobject_foreachScreenVert(
   Scene *scene_eval = DEG_get_evaluated_scene(vc->depsgraph);
   Object *ob_eval = DEG_get_evaluated_object(vc->depsgraph, vc->obact);
 
-  me = mesh_get_eval_deform(vc->depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
+  me = mesh_get_eval_final(vc->depsgraph, scene_eval, ob_eval, &CD_MASK_BAREMESH);
 
   ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -152,7 +154,7 @@ static void mesh_foreachScreenVert__mapFunc(void *userData,
   if (!BM_elem_flag_test(eve, BM_ELEM_HIDDEN)) {
     float screen_co[2];
 
-    if (ED_view3d_project_float_object(data->vc.ar, co, screen_co, data->clip_flag) !=
+    if (ED_view3d_project_float_object(data->vc.region, co, screen_co, data->clip_flag) !=
         V3D_PROJ_RET_OK) {
       return;
     }
@@ -170,7 +172,7 @@ void mesh_foreachScreenVert(
   foreachScreenVert_userData data;
 
   Mesh *me = editbmesh_get_eval_cage_from_orig(
-      vc->depsgraph, vc->scene, vc->obedit, vc->em, &CD_MASK_BAREMESH);
+      vc->depsgraph, vc->scene, vc->obedit, &CD_MASK_BAREMESH);
 
   ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -200,13 +202,13 @@ static void mesh_foreachScreenEdge__mapFunc(void *userData,
   if (!BM_elem_flag_test(eed, BM_ELEM_HIDDEN)) {
     float screen_co_a[2];
     float screen_co_b[2];
-    eV3DProjTest clip_flag_nowin = data->clip_flag &= ~V3D_PROJ_TEST_CLIP_WIN;
+    eV3DProjTest clip_flag_nowin = data->clip_flag & ~V3D_PROJ_TEST_CLIP_WIN;
 
-    if (ED_view3d_project_float_object(data->vc.ar, v0co, screen_co_a, clip_flag_nowin) !=
+    if (ED_view3d_project_float_object(data->vc.region, v0co, screen_co_a, clip_flag_nowin) !=
         V3D_PROJ_RET_OK) {
       return;
     }
-    if (ED_view3d_project_float_object(data->vc.ar, v1co, screen_co_b, clip_flag_nowin) !=
+    if (ED_view3d_project_float_object(data->vc.region, v1co, screen_co_b, clip_flag_nowin) !=
         V3D_PROJ_RET_OK) {
       return;
     }
@@ -233,7 +235,7 @@ void mesh_foreachScreenEdge(ViewContext *vc,
   foreachScreenEdge_userData data;
 
   Mesh *me = editbmesh_get_eval_cage_from_orig(
-      vc->depsgraph, vc->scene, vc->obedit, vc->em, &CD_MASK_BAREMESH);
+      vc->depsgraph, vc->scene, vc->obedit, &CD_MASK_BAREMESH);
 
   ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -241,8 +243,8 @@ void mesh_foreachScreenEdge(ViewContext *vc,
 
   data.win_rect.xmin = 0;
   data.win_rect.ymin = 0;
-  data.win_rect.xmax = vc->ar->winx;
-  data.win_rect.ymax = vc->ar->winy;
+  data.win_rect.xmax = vc->region->winx;
+  data.win_rect.ymax = vc->region->winy;
 
   data.func = func;
   data.userData = userData;
@@ -258,6 +260,98 @@ void mesh_foreachScreenEdge(ViewContext *vc,
 
 /* ------------------------------------------------------------------------ */
 
+/**
+ * Only call for bound-box clipping.
+ * Otherwise call #mesh_foreachScreenEdge__mapFunc
+ */
+static void mesh_foreachScreenEdge_clip_bb_segment__mapFunc(void *userData,
+                                                            int index,
+                                                            const float v0co[3],
+                                                            const float v1co[3])
+{
+  foreachScreenEdge_userData *data = userData;
+  BMEdge *eed = BM_edge_at_index(data->vc.em->bm, index);
+
+  BLI_assert(data->clip_flag & V3D_PROJ_TEST_CLIP_BB);
+
+  if (!BM_elem_flag_test(eed, BM_ELEM_HIDDEN)) {
+    float v0co_clip[3];
+    float v1co_clip[3];
+
+    if (!clip_segment_v3_plane_n(v0co, v1co, data->vc.rv3d->clip_local, 4, v0co_clip, v1co_clip)) {
+      return;
+    }
+
+    float screen_co_a[2];
+    float screen_co_b[2];
+
+    /* Clipping already handled, no need to check in projection. */
+    eV3DProjTest clip_flag_nowin = data->clip_flag &
+                                   ~(V3D_PROJ_TEST_CLIP_WIN | V3D_PROJ_TEST_CLIP_BB);
+
+    if (ED_view3d_project_float_object(data->vc.region, v0co_clip, screen_co_a, clip_flag_nowin) !=
+        V3D_PROJ_RET_OK) {
+      return;
+    }
+    if (ED_view3d_project_float_object(data->vc.region, v1co_clip, screen_co_b, clip_flag_nowin) !=
+        V3D_PROJ_RET_OK) {
+      return;
+    }
+
+    if (data->clip_flag & V3D_PROJ_TEST_CLIP_WIN) {
+      if (!BLI_rctf_isect_segment(&data->win_rect, screen_co_a, screen_co_b)) {
+        return;
+      }
+    }
+
+    data->func(data->userData, eed, screen_co_a, screen_co_b, index);
+  }
+}
+
+/**
+ * A version of #mesh_foreachScreenEdge that clips the segment when
+ * there is a clipping bounding box.
+ */
+void mesh_foreachScreenEdge_clip_bb_segment(ViewContext *vc,
+                                            void (*func)(void *userData,
+                                                         BMEdge *eed,
+                                                         const float screen_co_a[2],
+                                                         const float screen_co_b[2],
+                                                         int index),
+                                            void *userData,
+                                            eV3DProjTest clip_flag)
+{
+  foreachScreenEdge_userData data;
+
+  Mesh *me = editbmesh_get_eval_cage_from_orig(
+      vc->depsgraph, vc->scene, vc->obedit, &CD_MASK_BAREMESH);
+
+  ED_view3d_check_mats_rv3d(vc->rv3d);
+
+  data.vc = *vc;
+
+  data.win_rect.xmin = 0;
+  data.win_rect.ymin = 0;
+  data.win_rect.xmax = vc->region->winx;
+  data.win_rect.ymax = vc->region->winy;
+
+  data.func = func;
+  data.userData = userData;
+  data.clip_flag = clip_flag;
+
+  BM_mesh_elem_table_ensure(vc->em->bm, BM_EDGE);
+
+  if ((clip_flag & V3D_PROJ_TEST_CLIP_BB) && (vc->rv3d->clipbb != NULL)) {
+    ED_view3d_clipping_local(vc->rv3d, vc->obedit->obmat); /* for local clipping lookups. */
+    BKE_mesh_foreach_mapped_edge(me, mesh_foreachScreenEdge_clip_bb_segment__mapFunc, &data);
+  }
+  else {
+    BKE_mesh_foreach_mapped_edge(me, mesh_foreachScreenEdge__mapFunc, &data);
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+
 static void mesh_foreachScreenFace__mapFunc(void *userData,
                                             int index,
                                             const float cent[3],
@@ -268,7 +362,7 @@ static void mesh_foreachScreenFace__mapFunc(void *userData,
 
   if (!BM_elem_flag_test(efa, BM_ELEM_HIDDEN)) {
     float screen_co[2];
-    if (ED_view3d_project_float_object(data->vc.ar, cent, screen_co, data->clip_flag) ==
+    if (ED_view3d_project_float_object(data->vc.region, cent, screen_co, data->clip_flag) ==
         V3D_PROJ_RET_OK) {
       data->func(data->userData, efa, screen_co, index);
     }
@@ -284,7 +378,7 @@ void mesh_foreachScreenFace(
   foreachScreenFace_userData data;
 
   Mesh *me = editbmesh_get_eval_cage_from_orig(
-      vc->depsgraph, vc->scene, vc->obedit, vc->em, &CD_MASK_BAREMESH);
+      vc->depsgraph, vc->scene, vc->obedit, &CD_MASK_BAREMESH);
   ED_view3d_check_mats_rv3d(vc->rv3d);
 
   data.vc = *vc;
@@ -293,8 +387,15 @@ void mesh_foreachScreenFace(
   data.clip_flag = clip_flag;
 
   BM_mesh_elem_table_ensure(vc->em->bm, BM_FACE);
-  BKE_mesh_foreach_mapped_face_center(
-      me, mesh_foreachScreenFace__mapFunc, &data, MESH_FOREACH_NOP);
+
+  if (BKE_modifiers_uses_subsurf_facedots(vc->scene, vc->obedit)) {
+    BKE_mesh_foreach_mapped_subdiv_face_center(
+        me, mesh_foreachScreenFace__mapFunc, &data, MESH_FOREACH_NOP);
+  }
+  else {
+    BKE_mesh_foreach_mapped_face_center(
+        me, mesh_foreachScreenFace__mapFunc, &data, MESH_FOREACH_NOP);
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -305,6 +406,7 @@ void nurbs_foreachScreenVert(ViewContext *vc,
                                           BPoint *bp,
                                           BezTriple *bezt,
                                           int beztindex,
+                                          bool handles_visible,
                                           const float screen_co_b[2]),
                              void *userData,
                              const eV3DProjTest clip_flag)
@@ -313,6 +415,8 @@ void nurbs_foreachScreenVert(ViewContext *vc,
   Nurb *nu;
   int i;
   ListBase *nurbs = BKE_curve_editNurbs_get(cu);
+  /* If no point in the triple is selected, the handles are invisible. */
+  const bool only_selected = (vc->v3d->overlay.handle_display == CURVE_HANDLE_SELECTED);
 
   ED_view3d_check_mats_rv3d(vc->rv3d);
 
@@ -326,38 +430,40 @@ void nurbs_foreachScreenVert(ViewContext *vc,
         BezTriple *bezt = &nu->bezt[i];
 
         if (bezt->hide == 0) {
+          const bool handles_visible = (vc->v3d->overlay.handle_display != CURVE_HANDLE_NONE) &&
+                                       (!only_selected || BEZT_ISSEL_ANY(bezt));
           float screen_co[2];
 
-          if ((vc->v3d->overlay.edit_flag & V3D_OVERLAY_EDIT_CU_HANDLES) == 0) {
-            if (ED_view3d_project_float_object(vc->ar,
+          if (!handles_visible) {
+            if (ED_view3d_project_float_object(vc->region,
                                                bezt->vec[1],
                                                screen_co,
                                                V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) ==
                 V3D_PROJ_RET_OK) {
-              func(userData, nu, NULL, bezt, 1, screen_co);
+              func(userData, nu, NULL, bezt, 1, false, screen_co);
             }
           }
           else {
-            if (ED_view3d_project_float_object(vc->ar,
+            if (ED_view3d_project_float_object(vc->region,
                                                bezt->vec[0],
                                                screen_co,
                                                V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) ==
                 V3D_PROJ_RET_OK) {
-              func(userData, nu, NULL, bezt, 0, screen_co);
+              func(userData, nu, NULL, bezt, 0, true, screen_co);
             }
-            if (ED_view3d_project_float_object(vc->ar,
+            if (ED_view3d_project_float_object(vc->region,
                                                bezt->vec[1],
                                                screen_co,
                                                V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) ==
                 V3D_PROJ_RET_OK) {
-              func(userData, nu, NULL, bezt, 1, screen_co);
+              func(userData, nu, NULL, bezt, 1, true, screen_co);
             }
-            if (ED_view3d_project_float_object(vc->ar,
+            if (ED_view3d_project_float_object(vc->region,
                                                bezt->vec[2],
                                                screen_co,
                                                V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) ==
                 V3D_PROJ_RET_OK) {
-              func(userData, nu, NULL, bezt, 2, screen_co);
+              func(userData, nu, NULL, bezt, 2, true, screen_co);
             }
           }
         }
@@ -370,9 +476,9 @@ void nurbs_foreachScreenVert(ViewContext *vc,
         if (bp->hide == 0) {
           float screen_co[2];
           if (ED_view3d_project_float_object(
-                  vc->ar, bp->vec, screen_co, V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) ==
+                  vc->region, bp->vec, screen_co, V3D_PROJ_RET_CLIP_BB | V3D_PROJ_RET_CLIP_WIN) ==
               V3D_PROJ_RET_OK) {
-            func(userData, nu, bp, NULL, -1, screen_co);
+            func(userData, nu, bp, NULL, -1, false, screen_co);
           }
         }
       }
@@ -397,7 +503,8 @@ void mball_foreachScreenElem(struct ViewContext *vc,
 
   for (ml = mb->editelems->first; ml; ml = ml->next) {
     float screen_co[2];
-    if (ED_view3d_project_float_object(vc->ar, &ml->x, screen_co, clip_flag) == V3D_PROJ_RET_OK) {
+    if (ED_view3d_project_float_object(vc->region, &ml->x, screen_co, clip_flag) ==
+        V3D_PROJ_RET_OK) {
       func(userData, ml, screen_co);
     }
   }
@@ -428,7 +535,7 @@ void lattice_foreachScreenVert(ViewContext *vc,
   for (i = 0; i < N; i++, bp++, co += 3) {
     if (bp->hide == 0) {
       float screen_co[2];
-      if (ED_view3d_project_float_object(vc->ar, dl ? co : bp->vec, screen_co, clip_flag) ==
+      if (ED_view3d_project_float_object(vc->region, dl ? co : bp->vec, screen_co, clip_flag) ==
           V3D_PROJ_RET_OK) {
         func(userData, bp, screen_co);
       }
@@ -458,23 +565,23 @@ void armature_foreachScreenBone(struct ViewContext *vc,
       int points_proj_tot = 0;
 
       /* project head location to screenspace */
-      if (ED_view3d_project_float_object(vc->ar, ebone->head, screen_co_a, clip_flag) ==
+      if (ED_view3d_project_float_object(vc->region, ebone->head, screen_co_a, clip_flag) ==
           V3D_PROJ_RET_OK) {
         points_proj_tot++;
       }
       else {
         screen_co_a[0] = IS_CLIPPED; /* weak */
-        /* screen_co_a[1]: intentionally dont set this so we get errors on misuse */
+        /* screen_co_a[1]: intentionally don't set this so we get errors on misuse */
       }
 
       /* project tail location to screenspace */
-      if (ED_view3d_project_float_object(vc->ar, ebone->tail, screen_co_b, clip_flag) ==
+      if (ED_view3d_project_float_object(vc->region, ebone->tail, screen_co_b, clip_flag) ==
           V3D_PROJ_RET_OK) {
         points_proj_tot++;
       }
       else {
         screen_co_b[0] = IS_CLIPPED; /* weak */
-        /* screen_co_b[1]: intentionally dont set this so we get errors on misuse */
+        /* screen_co_b[1]: intentionally don't set this so we get errors on misuse */
       }
 
       if (points_proj_tot) { /* at least one point's projection worked */
@@ -510,23 +617,23 @@ void pose_foreachScreenBone(struct ViewContext *vc,
       int points_proj_tot = 0;
 
       /* project head location to screenspace */
-      if (ED_view3d_project_float_object(vc->ar, pchan_eval->pose_head, screen_co_a, clip_flag) ==
-          V3D_PROJ_RET_OK) {
+      if (ED_view3d_project_float_object(
+              vc->region, pchan_eval->pose_head, screen_co_a, clip_flag) == V3D_PROJ_RET_OK) {
         points_proj_tot++;
       }
       else {
         screen_co_a[0] = IS_CLIPPED; /* weak */
-        /* screen_co_a[1]: intentionally dont set this so we get errors on misuse */
+        /* screen_co_a[1]: intentionally don't set this so we get errors on misuse */
       }
 
       /* project tail location to screenspace */
-      if (ED_view3d_project_float_object(vc->ar, pchan_eval->pose_tail, screen_co_b, clip_flag) ==
-          V3D_PROJ_RET_OK) {
+      if (ED_view3d_project_float_object(
+              vc->region, pchan_eval->pose_tail, screen_co_b, clip_flag) == V3D_PROJ_RET_OK) {
         points_proj_tot++;
       }
       else {
         screen_co_b[0] = IS_CLIPPED; /* weak */
-        /* screen_co_b[1]: intentionally dont set this so we get errors on misuse */
+        /* screen_co_b[1]: intentionally don't set this so we get errors on misuse */
       }
 
       if (points_proj_tot) { /* at least one point's projection worked */

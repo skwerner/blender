@@ -16,9 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_MAPUVOPERATION_H__
-#define __COM_MAPUVOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 class MapUVOperation : public NodeOperation {
  private:
@@ -38,24 +40,24 @@ class MapUVOperation : public NodeOperation {
    */
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 
   void pixelTransform(const float xy[2], float r_uv[2], float r_deriv[2][2], float &r_alpha);
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setAlpha(float alpha)
   {
@@ -66,4 +68,4 @@ class MapUVOperation : public NodeOperation {
   bool read_uv(float x, float y, float &r_u, float &r_v, float &r_alpha);
 };
 
-#endif
+}  // namespace blender::compositor

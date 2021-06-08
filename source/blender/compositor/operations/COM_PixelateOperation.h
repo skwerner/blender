@@ -16,10 +16,11 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_PIXELATEOPERATION_H__
-#define __COM_PIXELATEOPERATION_H__
+#pragma once
 
 #include "COM_NodeOperation.h"
+
+namespace blender::compositor {
 
 /**
  * \brief Pixelate operation
@@ -45,12 +46,12 @@ class PixelateOperation : public NodeOperation {
   /**
    * \brief initialization of the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * \brief de-initialization of the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   /**
    * \brief executePixel
@@ -59,7 +60,7 @@ class PixelateOperation : public NodeOperation {
    * \param y: y-coordinate
    * \param sampler: sampler
    */
-  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler);
+  void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;
 };
 
-#endif
+}  // namespace blender::compositor

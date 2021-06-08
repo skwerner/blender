@@ -18,19 +18,17 @@
  * \ingroup bpygpu
  */
 
-#ifndef __GPU_PY_SHADER_H__
-#define __GPU_PY_SHADER_H__
+#pragma once
 
 extern PyTypeObject BPyGPUShader_Type;
 
 #define BPyGPUShader_Check(v) (Py_TYPE(v) == &BPyGPUShader_Type)
 
 typedef struct BPyGPUShader {
-  PyObject_VAR_HEAD struct GPUShader *shader;
+  PyObject_VAR_HEAD
+  struct GPUShader *shader;
   bool is_builtin;
 } BPyGPUShader;
 
 PyObject *BPyGPUShader_CreatePyObject(struct GPUShader *shader, bool is_builtin);
-PyObject *BPyInit_gpu_shader(void);
-
-#endif /* __GPU_PY_SHADER_H__ */
+PyObject *bpygpu_shader_init(void);

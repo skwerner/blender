@@ -18,13 +18,14 @@
  * \ingroup bli
  */
 
-#include <stdlib.h> /* for qsort */
 #include <math.h>   /* for fabsf */
+#include <stdlib.h> /* for qsort */
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_utildefines.h"
 #include "BLI_boxpack_2d.h" /* own include */
+#include "BLI_listbase.h"
+#include "BLI_utildefines.h"
 
 #include "BLI_sort.h" /* qsort_r */
 #define qsort_r BLI_qsort_r
@@ -96,6 +97,7 @@ BLI_INLINE int quad_flag(uint q)
 #define TL 2
 #define BR 3
 
+/* -------------------------------------------------------------------- */
 /** \name Box Accessor Functions
  * \{ */
 
@@ -120,6 +122,7 @@ static float box_ymax_get(const BoxPack *box)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Box Placement
  * \{ */
 
@@ -164,6 +167,7 @@ static void box_ymax_set(BoxPack *box, const float f)
 }
 /** \} */
 
+/* -------------------------------------------------------------------- */
 /** \name Box Utils
  * \{ */
 
@@ -202,6 +206,7 @@ static void vert_bias_update(BoxVert *v)
     printf("\tBox Debug i %i, w:%.3f h:%.3f x:%.3f y:%.3f\n", b->index, b->w, b->h, b->x, b->y)
 #endif
 
+/* -------------------------------------------------------------------- */
 /** \name Box/Vert Sorting
  * \{ */
 
@@ -215,7 +220,7 @@ static int box_areasort(const void *p1, const void *p2)
   if (a1 < a2) {
     return 1;
   }
-  else if (a1 > a2) {
+  if (a1 > a2) {
     return -1;
   }
   return 0;
@@ -245,10 +250,10 @@ static int vertex_sort(const void *p1, const void *p2, void *vs_ctx_p)
   if (UNLIKELY(v1->free == 0 && v2->free == 0)) {
     return 0;
   }
-  else if (UNLIKELY(v1->free == 0)) {
+  if (UNLIKELY(v1->free == 0)) {
     return 1;
   }
-  else if (UNLIKELY(v2->free == 0)) {
+  if (UNLIKELY(v2->free == 0)) {
     return -1;
   }
 #endif
@@ -265,7 +270,7 @@ static int vertex_sort(const void *p1, const void *p2, void *vs_ctx_p)
   if (a1 > a2) {
     return 1;
   }
-  else if (a1 < a2) {
+  if (a1 < a2) {
     return -1;
   }
   return 0;
@@ -273,12 +278,12 @@ static int vertex_sort(const void *p1, const void *p2, void *vs_ctx_p)
 /** \} */
 
 /**
- * Main boxpacking function accessed from other functions
+ * Main box-packing function accessed from other functions
  * This sets boxes x,y to positive values, sorting from 0,0 outwards.
  * There is no limit to the space boxes may take, only that they will be packed
  * tightly into the lower left hand corner (0,0)
  *
- * \param boxarray: a pre allocated array of boxes.
+ * \param boxarray: a pre-allocated array of boxes.
  *      only the 'box->x' and 'box->y' are set, 'box->w' and 'box->h' are used,
  *      'box->index' is not used at all, the only reason its there
  *          is that the box array is sorted by area and programs need to be able
@@ -308,8 +313,8 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
   qsort(boxarray, (size_t)len, sizeof(BoxPack), box_areasort);
 
   /* add verts to the boxes, these are only used internally  */
-  vert = MEM_mallocN((size_t)len * 4 * sizeof(BoxVert), "BoxPack Verts");
-  vertex_pack_indices = MEM_mallocN((size_t)len * 3 * sizeof(int), "BoxPack Indices");
+  vert = MEM_mallocN(sizeof(BoxVert[4]) * (size_t)len, "BoxPack Verts");
+  vertex_pack_indices = MEM_mallocN(sizeof(int[3]) * (size_t)len, "BoxPack Indices");
 
   vs_ctx.vertarray = vert;
 
@@ -380,7 +385,7 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
   box++; /* next box, needed for the loop below */
   /* ...done packing the first box */
 
-  /* Main boxpacking loop */
+  /* Main box-packing loop */
   for (box_index = 1; box_index < len; box_index++, box++) {
 
     /* These floats are used for sorting re-sorting */
@@ -409,8 +414,7 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
 
       /* This vert has a free quadrant
        * Test if we can place the box here
-       * vert->free & quad_flags[j] - Checks
-       * */
+       * `vert->free & quad_flags[j]` - Checks. */
 
       for (j = 0; (j < 4) && isect; j++) {
         if (vert->free & quad_flag(j)) {
@@ -651,7 +655,7 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
               }
             }
             /* The Box verts are only used internally
-             * Update the box x and y since thats what external
+             * Update the box x and y since that's what external
              * functions will see */
             box->x = box_xmin_get(box);
             box->y = box_ymin_get(box);
@@ -672,4 +676,111 @@ void BLI_box_pack_2d(BoxPack *boxarray, const uint len, float *r_tot_x, float *r
   }
   MEM_freeN(vertex_pack_indices);
   MEM_freeN(vs_ctx.vertarray);
+}
+
+/* Packs boxes into a fixed area.
+ * boxes and packed are linked lists containing structs that can be cast to
+ * FixedSizeBoxPack (i.e. contains a FixedSizeBoxPack as its first element).
+ * Boxes that were packed successfully are placed into *packed and removed from *boxes.
+ *
+ * The algorithm is a simplified version of https://github.com/TeamHypersomnia/rectpack2D.
+ * Better ones could be used, but for the current use case (packing Image tiles into GPU
+ * textures) this is fine.
+ *
+ * Note that packing efficiency depends on the order of the input boxes. Generally speaking,
+ * larger boxes should come first, though how exactly size is best defined (e.g. area,
+ * perimeter) depends on the particular application. */
+void BLI_box_pack_2d_fixedarea(ListBase *boxes, int width, int height, ListBase *packed)
+{
+  ListBase spaces = {NULL};
+  FixedSizeBoxPack *full_rect = MEM_callocN(sizeof(FixedSizeBoxPack), __func__);
+  full_rect->w = width;
+  full_rect->h = height;
+
+  BLI_addhead(&spaces, full_rect);
+
+  /* The basic idea of the algorithm is to keep a list of free spaces in the packing area.
+   * Then, for each box to be packed, we try to find a space that can contain it.
+   * The found space is then split into the area that is occupied by the box and the
+   * remaining area, which is reinserted into the free space list.
+   * By inserting the smaller remaining spaces first, the algorithm tries to use these
+   * smaller spaces first instead of "wasting" a large space. */
+  LISTBASE_FOREACH_MUTABLE (FixedSizeBoxPack *, box, boxes) {
+    LISTBASE_FOREACH (FixedSizeBoxPack *, space, &spaces) {
+      /* Skip this space if it's too small. */
+      if (box->w > space->w || box->h > space->h) {
+        continue;
+      }
+
+      /* Pack this box into this space. */
+      box->x = space->x;
+      box->y = space->y;
+      BLI_remlink(boxes, box);
+      BLI_addtail(packed, box);
+
+      if (box->w == space->w && box->h == space->h) {
+        /* Box exactly fills space, so just remove the space. */
+        BLI_remlink(&spaces, space);
+        MEM_freeN(space);
+      }
+      else if (box->w == space->w) {
+        /* Box fills the entire width, so we can just contract the box
+         * to the upper part that remains. */
+        space->y += box->h;
+        space->h -= box->h;
+      }
+      else if (box->h == space->h) {
+        /* Box fills the entire height, so we can just contract the box
+         * to the right part that remains. */
+        space->x += box->w;
+        space->w -= box->w;
+      }
+      else {
+        /* Split the remaining L-shaped space into two spaces.
+         * There are two ways to do so, we pick the one that produces the biggest
+         * remaining space:
+         *
+         *  Horizontal Split            Vertical Split
+         * ###################        ###################
+         * #                 #        #       -         #
+         * #      Large      #        # Small -         #
+         * #                 #        #       -         #
+         * #********---------#        #********  Large  #
+         * #  Box  *  Small  #        #  Box  *         #
+         * #       *         #        #       *         #
+         * ###################        ###################
+         *
+         */
+        int area_hsplit_large = space->w * (space->h - box->h);
+        int area_vsplit_large = (space->w - box->w) * space->h;
+
+        /* Perform split. This space becomes the larger space,
+         * while the new smaller space is inserted _before_ it. */
+        FixedSizeBoxPack *new_space = MEM_callocN(sizeof(FixedSizeBoxPack), __func__);
+        if (area_hsplit_large > area_vsplit_large) {
+          new_space->x = space->x + box->w;
+          new_space->y = space->y;
+          new_space->w = space->w - box->w;
+          new_space->h = box->h;
+
+          space->y += box->h;
+          space->h -= box->h;
+        }
+        else {
+          new_space->x = space->x;
+          new_space->y = space->y + box->h;
+          new_space->w = box->w;
+          new_space->h = space->h - box->h;
+
+          space->x += box->w;
+          space->w -= box->w;
+        }
+        BLI_addhead(&spaces, new_space);
+      }
+
+      break;
+    }
+  }
+
+  BLI_freelistN(&spaces);
 }

@@ -16,11 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_GLAREBASEOPERATION_H__
-#define __COM_GLAREBASEOPERATION_H__
+#pragma once
 
 #include "COM_SingleThreadedOperation.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
 
 /* utility functions used by glare, tonemap and lens distortion */
 /* soms macros for color handling */
@@ -52,12 +53,12 @@ class GlareBaseOperation : public SingleThreadedOperation {
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
 
   void setGlareSettings(NodeGlare *settings)
   {
@@ -65,13 +66,14 @@ class GlareBaseOperation : public SingleThreadedOperation {
   }
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 
  protected:
   GlareBaseOperation();
 
   virtual void generateGlare(float *data, MemoryBuffer *inputTile, NodeGlare *settings) = 0;
 
-  MemoryBuffer *createMemoryBuffer(rcti *rect);
+  MemoryBuffer *createMemoryBuffer(rcti *rect) override;
 };
-#endif
+
+}  // namespace blender::compositor

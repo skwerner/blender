@@ -25,10 +25,10 @@
  * in turn, is probably taken from somewhere as well.
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define FALSE 0
 
@@ -36,8 +36,8 @@
 
 #if defined(WIN32) || defined(__APPLE__)
 #  ifdef WIN32
-#    include <windows.h>
 #    include <GL/gl.h>
+#    include <windows.h>
 #  else /* WIN32 */
 /* __APPLE__ is defined */
 #    include <AGL/gl.h>
@@ -440,12 +440,14 @@ int main(int argc, char **argv)
   if (shSystem) {
     /* Create the main window */
     sMainWindow = GHOST_CreateWindow(shSystem,
+                                     NULL,
                                      title1,
                                      10,
                                      64,
                                      320,
                                      200,
                                      GHOST_kWindowStateNormal,
+                                     false,
                                      GHOST_kDrawingContextTypeOpenGL,
                                      glSettings);
     if (!sMainWindow) {
@@ -455,12 +457,14 @@ int main(int argc, char **argv)
 
     /* Create a secondary window */
     sSecondaryWindow = GHOST_CreateWindow(shSystem,
+                                          NULL,
                                           title2,
                                           340,
                                           64,
                                           320,
                                           200,
                                           GHOST_kWindowStateNormal,
+                                          false,
                                           GHOST_kDrawingContextTypeOpenGL,
                                           glSettings);
     if (!sSecondaryWindow) {
@@ -473,7 +477,7 @@ int main(int argc, char **argv)
 
     /* Enter main loop */
     while (!sExitRequested) {
-      if (!GHOST_ProcessEvents(shSystem, 0)) {
+      if (!GHOST_ProcessEvents(shSystem, false)) {
 #ifdef WIN32
         /* If there were no events, be nice to other applications */
         Sleep(10);

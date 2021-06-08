@@ -16,10 +16,12 @@
  * Copyright 2011, Blender Foundation.
  */
 
-#ifndef __COM_ANTIALIASOPERATION_H__
-#define __COM_ANTIALIASOPERATION_H__
+#pragma once
+
 #include "COM_NodeOperation.h"
 #include "DNA_node_types.h"
+
+namespace blender::compositor {
 
 /**
  * \brief AntiAlias operations
@@ -37,23 +39,24 @@ class AntiAliasOperation : public NodeOperation {
   AntiAliasOperation();
 
   /**
-   * the inner loop of this program
+   * The inner loop of this operation.
    */
-  void executePixel(float output[4], int x, int y, void *data);
+  void executePixel(float output[4], int x, int y, void *data) override;
 
   /**
    * Initialize the execution
    */
-  void initExecution();
+  void initExecution() override;
 
-  void *initializeTileData(rcti *rect);
+  void *initializeTileData(rcti *rect) override;
 
   /**
    * Deinitialize the execution
    */
-  void deinitExecution();
+  void deinitExecution() override;
   bool determineDependingAreaOfInterest(rcti *input,
                                         ReadBufferOperation *readOperation,
-                                        rcti *output);
+                                        rcti *output) override;
 };
-#endif
+
+}  // namespace blender::compositor

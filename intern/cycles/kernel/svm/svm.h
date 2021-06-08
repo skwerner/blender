@@ -220,7 +220,7 @@ CCL_NAMESPACE_BEGIN
 template<uint node_feature_mask, ShaderType type>
 ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
                                ShaderData *sd,
-                               ccl_global float *buffer,
+                               ccl_global float *render_buffer,
                                int path_flag)
 {
   float stack[SVM_STACK_SIZE];
@@ -567,15 +567,15 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         }
         break;
       case NODE_AOV_START:
-        if (!svm_node_aov_check(path_flag, buffer)) {
+        if (!svm_node_aov_check(path_flag, render_buffer)) {
           return;
         }
         break;
       case NODE_AOV_COLOR:
-        svm_node_aov_color(kg, sd, stack, node, buffer);
+        svm_node_aov_color(INTEGRATOR_STATE_PASS, sd, stack, node, render_buffer);
         break;
       case NODE_AOV_VALUE:
-        svm_node_aov_value(kg, sd, stack, node, buffer);
+        svm_node_aov_value(INTEGRATOR_STATE_PASS, sd, stack, node, render_buffer);
         break;
 #endif /* NODES_GROUP(NODE_GROUP_LEVEL_4) */
       default:

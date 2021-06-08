@@ -143,7 +143,7 @@ typedef struct IntegratorStateGPU {
 #  define INTEGRATOR_STATE_PASS kg, state
 
 #  define INTEGRATOR_STATE_PASS_NULL kg, NULL
-#  define INTEGRATOR_STATE_IS_NULL state == NULL
+#  define INTEGRATOR_STATE_IS_NULL (state == NULL)
 
 #  define INTEGRATOR_STATE(nested_struct, member) \
     (((const IntegratorState *)state)->nested_struct.member)

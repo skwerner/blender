@@ -18,30 +18,45 @@
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device_inline bool svm_node_aov_check(const int path_flag, ccl_global float *buffer)
+ccl_device_inline bool svm_node_aov_check(const int path_flag, ccl_global float *render_buffer)
 {
   bool is_primary = (path_flag & PATH_RAY_CAMERA) && (!(path_flag & PATH_RAY_SINGLE_PASS_DONE));
 
-  return ((buffer != NULL) && is_primary);
+  return ((render_buffer != NULL) && is_primary);
 }
 
-ccl_device void svm_node_aov_color(
-    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, ccl_global float *buffer)
+ccl_device void svm_node_aov_color(INTEGRATOR_STATE_CONST_ARGS,
+                                   ShaderData *sd,
+                                   float *stack,
+                                   uint4 node,
+                                   ccl_global float *render_buffer)
 {
   float3 val = stack_load_float3(stack, node.y);
 
-  if (buffer) {
-    kernel_write_pass_float4(buffer + kernel_data.film.pass_aov_color + 4 * node.z,
-                             make_float4(val.x, val.y, val.z, 1.0f));
+  if (render_buffer && !INTEGRATOR_STATE_IS_NULL) {
+    const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+    const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                          kernel_data.film.pass_stride;
+    ccl_global float *buffer = render_buffer + render_buffer_offset +
+                               (kernel_data.film.pass_aov_color + 4 * node.z);
+    kernel_write_pass_float4(buffer, make_float4(val.x, val.y, val.z, 1.0f));
   }
 }
 
-ccl_device void svm_node_aov_value(
-    const KernelGlobals *kg, ShaderData *sd, float *stack, uint4 node, ccl_global float *buffer)
+ccl_device void svm_node_aov_value(INTEGRATOR_STATE_CONST_ARGS,
+                                   ShaderData *sd,
+                                   float *stack,
+                                   uint4 node,
+                                   ccl_global float *render_buffer)
 {
   float val = stack_load_float(stack, node.y);
 
-  if (buffer) {
+  if (render_buffer && !INTEGRATOR_STATE_IS_NULL) {
+    const uint32_t render_pixel_index = INTEGRATOR_STATE(path, render_pixel_index);
+    const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
+                                          kernel_data.film.pass_stride;
+    ccl_global float *buffer = render_buffer + render_buffer_offset +
+                               (kernel_data.film.pass_aov_value + node.z);
     kernel_write_pass_float(buffer + kernel_data.film.pass_aov_value + node.z, val);
   }
 }

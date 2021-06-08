@@ -3202,6 +3202,59 @@ static void rna_def_space_view3d(BlenderRNA *brna)
 	RNA_def_property_ui_text(prop, "Tool Gizmo", "Active tool gizmo");
 	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 
+	/* Per object type gizmo display flags. */
+
+	prop = RNA_def_property(srna, "show_gizmo_object_translate", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_object", V3D_GIZMO_SHOW_OBJECT_TRANSLATE);
+	RNA_def_property_ui_text(prop, "Show Object Location", "Gizmo to adjust location");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "show_gizmo_object_rotate", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_object", V3D_GIZMO_SHOW_OBJECT_ROTATE);
+	RNA_def_property_ui_text(prop, "Show Object Rotation", "Gizmo to adjust rotation");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "show_gizmo_object_scale", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_object", V3D_GIZMO_SHOW_OBJECT_SCALE);
+	RNA_def_property_ui_text(prop, "Show Object Scale", "Gizmo to adjust scale");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	/* Empty Object Data. */
+	prop = RNA_def_property(srna, "show_gizmo_empty_image", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_empty", V3D_GIZMO_SHOW_EMPTY_IMAGE);
+	RNA_def_property_ui_text(prop, "Show Empty Image", "Gizmo to adjust image size and position");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "show_gizmo_empty_force_field", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_empty", V3D_GIZMO_SHOW_EMPTY_FORCE_FIELD);
+	RNA_def_property_ui_text(prop, "Show Empty Force Field", "Gizmo to adjust the force field");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	/* Light Object Data. */
+	prop = RNA_def_property(srna, "show_gizmo_light_size", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_light", V3D_GIZMO_SHOW_LIGHT_SIZE);
+	RNA_def_property_ui_text(prop, "Show Light Size", "Gizmo to adjust spot and area size");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "show_gizmo_light_look_at", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_light", V3D_GIZMO_SHOW_LIGHT_LOOK_AT);
+	RNA_def_property_ui_text(prop, "Show Light Look-At", "Gizmo to adjust spot and area size");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	/* Camera Object Data. */
+	prop = RNA_def_property(srna, "show_gizmo_camera_lens", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_camera", V3D_GIZMO_SHOW_CAMERA_LENS);
+	RNA_def_property_ui_text(prop, "Show Camera Lens", "Gizmo to adjust camera lens & ortho size");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+	prop = RNA_def_property(srna, "show_gizmo_camera_dof_distance", PROP_BOOLEAN, PROP_NONE);
+	RNA_def_property_boolean_sdna(prop, NULL, "gizmo_show_camera", V3D_GIZMO_SHOW_CAMERA_DOF_DIST);
+	RNA_def_property_ui_text(
+	        prop, "Show Camera Focus Distance", "Gizmo to adjust camera focus distance "
+	        "(depends on limits display)");
+	RNA_def_property_update(prop, NC_SPACE | ND_SPACE_VIEW3D, NULL);
+
+
 	prop = RNA_def_property(srna, "use_local_camera", PROP_BOOLEAN, PROP_NONE);
 	RNA_def_property_boolean_negative_sdna(prop, NULL, "scenelock", 1);
 	RNA_def_property_boolean_funcs(prop, NULL, "rna_SpaceView3D_use_local_camera_set");

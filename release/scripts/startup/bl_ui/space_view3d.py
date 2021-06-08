@@ -113,7 +113,7 @@ class VIEW3D_HT_header(Header):
                 sub.active = gpd.use_multiedit
                 sub.popover(
                     panel="VIEW3D_PT_gpencil_multi_frame",
-                    text="Multiframe"
+                    text="Multiframe",
                 )
 
             if gpd.use_stroke_edit_mode:
@@ -122,7 +122,7 @@ class VIEW3D_HT_header(Header):
 
                 row.popover(
                     panel="VIEW3D_PT_tools_grease_pencil_interpolate",
-                    text="Interpolate"
+                    text="Interpolate",
                 )
 
         VIEW3D_MT_editor_menus.draw_collapsible(context, layout)
@@ -252,17 +252,10 @@ class VIEW3D_HT_header(Header):
                 sub.active = settings.use_guide
                 sub.popover(
                     panel="VIEW3D_PT_gpencil_guide",
-                    text="Guides"
+                    text="Guides",
                 )
 
         layout.separator_spacer()
-
-        # Collection Visibility
-        layout.popover(
-            panel="VIEW3D_PT_collections",
-            icon='GROUP',
-            text="",
-        )
 
         # Viewport Settings
         layout.popover(
@@ -271,11 +264,23 @@ class VIEW3D_HT_header(Header):
             text="",
         )
 
+        # Gizmo toggle & popover.
+        row = layout.row(align=True)
+        # FIXME: place-holder icon.
+        row.prop(view, "show_gizmo", text="", toggle=True, icon='EMPTY_DATA')
+        sub = row.row(align=True)
+        sub.active = view.show_gizmo
+        sub.popover(
+            panel="VIEW3D_PT_gizmo_display",
+            text="",
+        )
+
+        # Overlay toggle & popover.
         row = layout.row(align=True)
         row.prop(overlay, "show_overlays", icon='OVERLAY', text="")
         sub = row.row(align=True)
         sub.active = overlay.show_overlays
-        sub.popover(panel="VIEW3D_PT_overlay")
+        sub.popover(panel="VIEW3D_PT_overlay", text="")
 
         row = layout.row()
         row.active = (shading.type in {'WIREFRAME', 'SOLID'}) or object_mode in {'EDIT'}
@@ -292,7 +297,7 @@ class VIEW3D_HT_header(Header):
         # show the shading popover which shows double-sided option.
 
         # sub.enabled = shading.type != 'RENDERED'
-        sub.popover(panel="VIEW3D_PT_shading")
+        sub.popover(panel="VIEW3D_PT_shading", text="")
 
 
 class VIEW3D_MT_editor_menus(Menu):
@@ -4083,6 +4088,10 @@ class VIEW3D_MT_weight_gpencil(Menu):
     def draw(self, context):
         layout = self.layout
 
+        layout.operator("gpencil.vertex_group_normalize_all", text="Normalize All")
+        layout.operator("gpencil.vertex_group_normalize", text="Normalize")
+
+        layout.separator()
         layout.operator("gpencil.vertex_group_invert", text="Invert")
         layout.operator("gpencil.vertex_group_smooth", text="Smooth")
 
@@ -4342,7 +4351,7 @@ class VIEW3D_PT_view3d_lock(Panel):
                     view, "lock_bone", lock_object.data,
                     "edit_bones" if lock_object.mode == 'EDIT'
                     else "bones",
-                    text=""
+                    text="",
                 )
         else:
             subcol.prop(view, "lock_cursor", text="Lock to 3D Cursor")
@@ -4374,9 +4383,9 @@ class VIEW3D_PT_view3d_cursor(Panel):
 
 class VIEW3D_PT_collections(Panel):
     bl_space_type = 'VIEW_3D'
-    bl_region_type = 'HEADER'
+    bl_region_type = 'UI'
+    bl_category = "View"
     bl_label = "Collections Visibility"
-    bl_ui_units_x = 10
 
     def _draw_collection(self, layout, view_layer, collection, index):
         need_separator = index
@@ -4507,7 +4516,8 @@ class VIEW3D_PT_shading(Panel):
             return context.scene.display.shading
 
     def draw(self, context):
-        pass
+        layout = self.layout
+        layout.label(text="Viewport Shading")
 
 
 class VIEW3D_PT_shading_lighting(Panel):
@@ -4670,7 +4680,7 @@ class VIEW3D_PT_shading_options(Panel):
             sub.popover(
                 panel="VIEW3D_PT_shading_options_shadow",
                 icon='PREFERENCES',
-                text=""
+                text="",
             )
 
             col = layout.column()
@@ -4690,7 +4700,7 @@ class VIEW3D_PT_shading_options(Panel):
                     sub.popover(
                         panel="VIEW3D_PT_shading_options_ssao",
                         icon='PREFERENCES',
-                        text=""
+                        text="",
                     )
 
                 if shading.cavity_type in {'SCREEN', 'BOTH'}:
@@ -4755,6 +4765,47 @@ class VIEW3D_PT_shading_options_ssao(Panel):
         col.prop(scene.display, "matcap_ssao_attenuation")
 
 
+class VIEW3D_PT_gizmo_display(Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'HEADER'
+    bl_label = "Gizmo"
+
+    def draw(self, context):
+        layout = self.layout
+
+        scene = context.scene
+        view = context.space_data
+        overlay = view.overlay
+
+        col = layout.column()
+        col.label(text="Viewport Gizmos")
+
+        col.active = view.show_gizmo
+        colsub = col.column()
+        colsub.prop(view, "show_gizmo_navigate", text="Navigate")
+        colsub.prop(view, "show_gizmo_tool", text="Active Tools")
+        colsub.prop(view, "show_gizmo_context", text="Active Object")
+
+        colsub = col.column()
+        colsub.active = view.show_gizmo_context
+        colsub.label(text="Object Gizmos")
+        colsub.prop(scene.transform_orientation_slots[1], "type", text="")
+        colsub.prop(view, "show_gizmo_object_translate", text="Move")
+        colsub.prop(view, "show_gizmo_object_rotate", text="Rotate")
+        colsub.prop(view, "show_gizmo_object_scale", text="Scale")
+
+        # Match order of object type visibility
+        colsub.label(text="Empty")
+        colsub.prop(view, "show_gizmo_empty_image", text="Image")
+        colsub.prop(view, "show_gizmo_empty_force_field", text="Force Field")
+        colsub.label(text="Light")
+        colsub.prop(view, "show_gizmo_light_size", text="Size")
+        colsub.prop(view, "show_gizmo_light_look_at", text="Look At")
+        colsub.label(text="Camera")
+        colsub.prop(view, "show_gizmo_camera_lens", text="Lens")
+        colsub.prop(view, "show_gizmo_camera_dof_distance", text="Focus Distance")
+
+
 class VIEW3D_PT_overlay(Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'HEADER'
@@ -4762,34 +4813,8 @@ class VIEW3D_PT_overlay(Panel):
     bl_ui_units_x = 13
 
     def draw(self, context):
-        pass
-
-
-class VIEW3D_PT_overlay_gizmo(Panel):
-    bl_space_type = 'VIEW_3D'
-    bl_region_type = 'HEADER'
-    bl_parent_id = 'VIEW3D_PT_overlay'
-    bl_label = "Gizmo"
-
-    def draw_header(self, context):
-        view = context.space_data
-        self.layout.prop(view, "show_gizmo", text="")
-
-    def draw(self, context):
         layout = self.layout
-
-        view = context.space_data
-        overlay = view.overlay
-        display_all = overlay.show_overlays
-
-        col = layout.column()
-        col.active = display_all
-
-        row = col.row(align=True)
-        row.active = view.show_gizmo
-        row.prop(view, "show_gizmo_navigate", text="Navigate", toggle=True)
-        row.prop(view, "show_gizmo_context", text="Active Object", toggle=True)
-        row.prop(view, "show_gizmo_tool", text="Active Tools", toggle=True)
+        layout.label(text="Viewport Overlays")
 
 
 class VIEW3D_PT_overlay_guides(Panel):
@@ -6043,8 +6068,8 @@ classes = (
     VIEW3D_PT_shading_options,
     VIEW3D_PT_shading_options_shadow,
     VIEW3D_PT_shading_options_ssao,
+    VIEW3D_PT_gizmo_display,
     VIEW3D_PT_overlay,
-    VIEW3D_PT_overlay_gizmo,
     VIEW3D_PT_overlay_guides,
     VIEW3D_PT_overlay_object,
     VIEW3D_PT_overlay_geometry,

@@ -198,31 +198,34 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
   }
   else if (destination.num_components == 4) {
-    DCHECK_EQ(pass_info.num_components, 4)
-        << "Number of components mismatch for pass type " << pass_info.type;
-
-    /* RGBA */
-    if (type == PASS_SHADOW) {
-      get_pass_shadow4(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_MOTION) {
-      get_pass_motion(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_CRYPTOMATTE) {
-      get_pass_cryptomatte(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_DENOISING_COLOR) {
+    if (type == PASS_DENOISING_COLOR) {
+      /* RGB to RGBA (alpha comes from combined pass). */
       get_pass_denoising_color(render_buffers, buffer_params, destination);
     }
-    else if (type == PASS_SHADOW_CATCHER) {
-      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_SHADOW_CATCHER_MATTE &&
-             pass_access_info_.use_approximate_shadow_catcher) {
-      get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
-    }
     else {
-      get_pass_float4(render_buffers, buffer_params, destination);
+      DCHECK_EQ(pass_info.num_components, 4)
+          << "Number of components mismatch for pass type " << pass_info.type;
+
+      /* RGBA */
+      if (type == PASS_SHADOW) {
+        get_pass_shadow4(render_buffers, buffer_params, destination);
+      }
+      else if (type == PASS_MOTION) {
+        get_pass_motion(render_buffers, buffer_params, destination);
+      }
+      else if (type == PASS_CRYPTOMATTE) {
+        get_pass_cryptomatte(render_buffers, buffer_params, destination);
+      }
+      else if (type == PASS_SHADOW_CATCHER) {
+        get_pass_shadow_catcher(render_buffers, buffer_params, destination);
+      }
+      else if (type == PASS_SHADOW_CATCHER_MATTE &&
+               pass_access_info_.use_approximate_shadow_catcher) {
+        get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
+      }
+      else {
+        get_pass_float4(render_buffers, buffer_params, destination);
+      }
     }
   }
 

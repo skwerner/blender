@@ -35,6 +35,128 @@ static PassFlags pass_flags_combine(const PassFlags flags_a, const PassFlags fla
   return result;
 }
 
+/* Convcert bitmask of pass flags to a human-readable string. */
+static string pass_flags_to_string(const PassFlags pass_flags)
+{
+  string result;
+
+#define CHECK_AND_APPEND(flag_suffix) \
+  do { \
+    if ((pass_flags) & (PASS_FLAG_##flag_suffix)) { \
+      if (!result.empty()) { \
+        result += ", "; \
+      } \
+      result += #flag_suffix; \
+    } \
+  } while (false)
+
+  CHECK_AND_APPEND(UNALIGNED);
+  CHECK_AND_APPEND(AUTO);
+
+#undef CHECK_AND_APPEND
+
+  return result;
+}
+
+const char *pass_type_as_string(const PassType type)
+{
+  switch (type) {
+    case PASS_NONE:
+      return "NONE";
+
+    case PASS_COMBINED:
+      return "COMBINED";
+    case PASS_EMISSION:
+      return "EMISSION";
+    case PASS_BACKGROUND:
+      return "BACKGROUND";
+    case PASS_AO:
+      return "AO";
+    case PASS_SHADOW:
+      return "SHADOW";
+    case PASS_DIFFUSE_DIRECT:
+      return "DIFFUSE_DIRECT";
+    case PASS_DIFFUSE_INDIRECT:
+      return "DIFFUSE_INDIRECT";
+    case PASS_GLOSSY_DIRECT:
+      return "GLOSSY_DIRECT";
+    case PASS_GLOSSY_INDIRECT:
+      return "GLOSSY_INDIRECT";
+    case PASS_TRANSMISSION_DIRECT:
+      return "TRANSMISSION_DIRECT";
+    case PASS_TRANSMISSION_INDIRECT:
+      return "TRANSMISSION_INDIRECT";
+    case PASS_VOLUME_DIRECT:
+      return "VOLUME_DIRECT";
+    case PASS_VOLUME_INDIRECT:
+      return "VOLUME_INDIRECT";
+
+    case PASS_DEPTH:
+      return "DEPTH";
+    case PASS_NORMAL:
+      return "NORMAL";
+    case PASS_ROUGHNESS:
+      return "ROUGHNESS";
+    case PASS_UV:
+      return "UV";
+    case PASS_OBJECT_ID:
+      return "OBJECT_ID";
+    case PASS_MATERIAL_ID:
+      return "MATERIAL_ID";
+    case PASS_MOTION:
+      return "MOTION";
+    case PASS_MOTION_WEIGHT:
+      return "MOTION_WEIGHT";
+    case PASS_RENDER_TIME:
+      return "RENDER_TIME";
+    case PASS_CRYPTOMATTE:
+      return "CRYPTOMATTE";
+    case PASS_AOV_COLOR:
+      return "AOV_COLOR";
+    case PASS_AOV_VALUE:
+      return "AOV_VALUE";
+    case PASS_ADAPTIVE_AUX_BUFFER:
+      return "ADAPTIVE_AUX_BUFFER";
+    case PASS_SAMPLE_COUNT:
+      return "SAMPLE_COUNT";
+    case PASS_DIFFUSE_COLOR:
+      return "DIFFUSE_COLOR";
+    case PASS_GLOSSY_COLOR:
+      return "GLOSSY_COLOR";
+    case PASS_TRANSMISSION_COLOR:
+      return "TRANSMISSION_COLOR";
+    case PASS_MIST:
+      return "MIST";
+    case PASS_DENOISING_COLOR:
+      return "DENOISING_COLOR";
+    case PASS_DENOISING_NORMAL:
+      return "DENOISING_NORMAL";
+    case PASS_DENOISING_ALBEDO:
+      return "DENOISING_ALBEDO";
+    case PASS_SHADOW_CATCHER:
+      return "SHADOW_CATCHER";
+    case PASS_SHADOW_CATCHER_MATTE:
+      return "SHADOW_CATCHER_MATTE";
+
+    case PASS_BAKE_PRIMITIVE:
+      return "BAKE_PRIMITIVE";
+    case PASS_BAKE_DIFFERENTIAL:
+      return "BAKE_DIFFERENTIAL";
+
+    case PASS_CATEGORY_LIGHT_END:
+    case PASS_CATEGORY_DATA_END:
+    case PASS_CATEGORY_BAKE_END:
+    case PASS_NUM:
+      LOG(DFATAL) << "Invalid value for the pass type " << static_cast<int>(type)
+                  << " (value is reserved for an internal use only).";
+      return "UNKNOWN";
+  }
+
+  LOG(DFATAL) << "Unhandled pass type " << static_cast<int>(type) << ", not supposed to happen.";
+
+  return "UNKNOWN";
+}
+
 static bool compare_pass_order(const Pass &a, const Pass &b)
 {
   if (a.components == b.components)
@@ -467,6 +589,19 @@ int Pass::get_offset(const vector<Pass> &passes, const Pass &pass)
   }
 
   return PASS_UNUSED;
+}
+
+std::ostream &operator<<(std::ostream &os, const Pass &pass)
+{
+  os << "type: " << pass_type_as_string(pass.type);
+  os << ", name: \"" << pass.name << "\"";
+
+  const string flags_as_string = pass_flags_to_string(pass.flags);
+  if (!flags_as_string.empty()) {
+    os << ", " << flags_as_string;
+  }
+
+  return os;
 }
 
 CCL_NAMESPACE_END

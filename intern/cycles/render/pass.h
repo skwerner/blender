@@ -25,6 +25,8 @@
 
 CCL_NAMESPACE_BEGIN
 
+const char *pass_type_as_string(const PassType type);
+
 enum PassFlag {
   PASS_FLAG_NONE = 0,
 
@@ -93,5 +95,7 @@ class Pass : public Node {
   static int get_offset(const vector<Pass> &passes, PassType type);
   static int get_offset(const vector<Pass> &passes, const Pass &pass);
 };
+
+std::ostream &operator<<(std::ostream &os, const Pass &pass);
 
 CCL_NAMESPACE_END

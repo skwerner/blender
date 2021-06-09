@@ -585,6 +585,13 @@ void Scene::update_passes()
   }
 
   film->tag_modified();
+
+  if (VLOG_IS_ON(2)) {
+    VLOG(2) << "Effective scene passes:";
+    for (const Pass &pass : passes) {
+      VLOG(2) << "- " << pass;
+    }
+  }
 }
 
 bool Scene::load_kernels(Progress &progress, bool lock_scene)

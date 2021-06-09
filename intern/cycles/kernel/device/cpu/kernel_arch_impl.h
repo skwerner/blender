@@ -49,12 +49,6 @@
 #    include "kernel/kernel_adaptive_sampling.h"
 #    include "kernel/kernel_bake.h"
 
-#if 0
-#    include "kernel/kernel_color.h"
-#    include "kernel/kernel_path.h"
-#    include "kernel/kernel_path_branched.h"
-#    include "kernel/kernel_bake.h"
-#endif
 #else
 #  define STUB_ASSERT(arch, name) \
     assert(!(#name " kernel stub for architecture " #arch " was called!"))

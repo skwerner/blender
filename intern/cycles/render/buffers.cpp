@@ -50,7 +50,9 @@ void BufferParams::update_passes(vector<Pass> &passes)
 
   pass_stride = 0;
   for (const Pass &pass : passes) {
-    pass_offset_[pass.type] = pass_stride;
+    if (pass_offset_[pass.type] == PASS_UNUSED) {
+      pass_offset_[pass.type] = pass_stride;
+    }
 
     pass_stride += pass.components;
   }

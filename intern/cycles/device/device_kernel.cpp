@@ -80,14 +80,12 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "film_convert_sample_count_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_FLOAT_HALF_RGBA:
       return "film_convert_float_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_SHADOW3_HALF_RGBA:
-      return "film_convert_shadow3_half_rgba";
+    case DEVICE_KERNEL_FILM_CONVERT_SHADOW_HALF_RGBA:
+      return "film_convert_shadow_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_DIVIDE_EVEN_COLOR_HALF_RGBA:
       return "film_convert_divide_even_color_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_FLOAT3_HALF_RGBA:
       return "film_convert_float3_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_SHADOW4_HALF_RGBA:
-      return "film_convert_shadow4_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_MOTION_HALF_RGBA:
       return "film_convert_motion_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_CRYPTOMATTE_HALF_RGBA:

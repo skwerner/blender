@@ -186,7 +186,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
 
     /* RGBA */
     if (type == PASS_SHADOW) {
-      get_pass_shadow3(render_buffers, buffer_params, destination);
+      get_pass_shadow(render_buffers, buffer_params, destination);
     }
     else if (pass_info.divide_type != PASS_NONE) {
       /* RGB lighting passes that need to divide out color */
@@ -208,7 +208,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
 
       /* RGBA */
       if (type == PASS_SHADOW) {
-        get_pass_shadow4(render_buffers, buffer_params, destination);
+        get_pass_shadow(render_buffers, buffer_params, destination);
       }
       else if (type == PASS_MOTION) {
         get_pass_motion(render_buffers, buffer_params, destination);
@@ -282,7 +282,8 @@ bool PassAccessor::set_pass_rect(PassType type, int components, float *pixels, i
 #endif
 
 void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
-                                            const BufferParams &buffer_params) const
+                                            const BufferParams &buffer_params,
+                                            const Destination &destination) const
 {
   const PassInfo &pass_info = Pass::get_info(pass_access_info_.type);
 
@@ -321,6 +322,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
 
   kfilm_convert->use_approximate_shadow_catcher = pass_access_info_.use_approximate_shadow_catcher;
   kfilm_convert->show_active_pixels = pass_access_info_.show_active_pixels;
+
+  kfilm_convert->num_components = destination.num_components;
 }
 
 bool PassAccessor::set_render_tile_pixels(RenderBuffers *render_buffers, const Source &source)

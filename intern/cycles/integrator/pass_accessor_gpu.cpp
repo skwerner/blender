@@ -41,7 +41,7 @@ void PassAccessorGPU::run_film_convert_kernels(DeviceKernel kernel,
                                                const Destination &destination) const
 {
   KernelFilmConvert kfilm_convert;
-  init_kernel_film_convert(&kfilm_convert, buffer_params);
+  init_kernel_film_convert(&kfilm_convert, buffer_params, destination);
 
   const int work_size = buffer_params.width * buffer_params.height;
 
@@ -81,18 +81,19 @@ DEFINE_PASS_ACCESSOR(sample_count, SAMPLE_COUNT);
 DEFINE_PASS_ACCESSOR(float, FLOAT);
 
 /* Float3 passes. */
-DEFINE_PASS_ACCESSOR(shadow3, SHADOW3);
 DEFINE_PASS_ACCESSOR(divide_even_color, DIVIDE_EVEN_COLOR);
 DEFINE_PASS_ACCESSOR(float3, FLOAT3);
 
 /* Float4 passes. */
-DEFINE_PASS_ACCESSOR(shadow4, SHADOW4);
 DEFINE_PASS_ACCESSOR(motion, MOTION);
 DEFINE_PASS_ACCESSOR(cryptomatte, CRYPTOMATTE);
 DEFINE_PASS_ACCESSOR(denoising_color, DENOISING_COLOR);
 DEFINE_PASS_ACCESSOR(shadow_catcher, SHADOW_CATCHER);
 DEFINE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow, SHADOW_CATCHER_MATTE_WITH_SHADOW);
 DEFINE_PASS_ACCESSOR(float4, FLOAT4);
+
+/* Float3 or Float4 passes. */
+DEFINE_PASS_ACCESSOR(shadow, SHADOW);
 
 #undef DEFINE_PASS_ACCESSOR
 

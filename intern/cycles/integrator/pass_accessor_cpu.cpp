@@ -40,7 +40,7 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor(const RenderBuffers *
                                                            const Processor &processor) const
 {
   KernelFilmConvert kfilm_convert;
-  init_kernel_film_convert(&kfilm_convert, buffer_params);
+  init_kernel_film_convert(&kfilm_convert, buffer_params, destination);
 
   if (destination.pixels) {
     /* NOTE: No overlays are applied since they are not used for final renders.
@@ -158,18 +158,19 @@ DEFINE_PASS_ACCESSOR(sample_count)
 DEFINE_PASS_ACCESSOR(float)
 
 /* Float3 passes. */
-DEFINE_PASS_ACCESSOR(shadow3)
 DEFINE_PASS_ACCESSOR(divide_even_color)
 DEFINE_PASS_ACCESSOR(float3)
 
 /* Float4 passes. */
-DEFINE_PASS_ACCESSOR(shadow4)
 DEFINE_PASS_ACCESSOR(motion)
 DEFINE_PASS_ACCESSOR(cryptomatte)
 DEFINE_PASS_ACCESSOR(denoising_color)
 DEFINE_PASS_ACCESSOR(shadow_catcher)
 DEFINE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
 DEFINE_PASS_ACCESSOR(float4)
+
+/* Float3 or Float4 passes. */
+DEFINE_PASS_ACCESSOR(shadow)
 
 #undef DEFINE_PASS_ACCESSOR
 

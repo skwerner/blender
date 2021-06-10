@@ -76,13 +76,7 @@ class Pass : public Node {
   /* Check whether two sets of passes are matching exactly. */
   static bool equals_exact(const vector<Pass> &A, const vector<Pass> &B);
 
-  /* Check whether two sets of passes define same set of non-auto passes. */
-  static bool equals_no_auto(const vector<Pass> &A, const vector<Pass> &B);
-
   static bool contains(const vector<Pass> &passes, PassType type);
-
-  /* Remove given pass type if it was automatically created. */
-  static void remove_auto(vector<Pass> &passes, PassType type);
 
   /* Remove all passes which were automatically created. */
   static void remove_all_auto(vector<Pass> &passes);
@@ -92,7 +86,6 @@ class Pass : public Node {
   static const Pass *find(const vector<Pass> &passes, PassType type);
 
   /* Returns PASS_UNUSED if there is no corresponding pass. */
-  static int get_offset(const vector<Pass> &passes, PassType type);
   static int get_offset(const vector<Pass> &passes, const Pass &pass);
 };
 

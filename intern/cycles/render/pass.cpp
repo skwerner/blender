@@ -452,48 +452,6 @@ bool Pass::equals_exact(const vector<Pass> &A, const vector<Pass> &B)
   return true;
 }
 
-/* Get first index which is greater than the given one which correspongs to a non-auto pass.
- * If there are only runtime passes after the given index, -1 is returned. */
-static const int get_next_no_auto_pass_index(const vector<Pass> &passes, int index)
-{
-  ++index;
-
-  while (index < passes.size()) {
-    if ((passes[index].flags & PASS_FLAG_AUTO) == 0) {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
-bool Pass::equals_no_auto(const vector<Pass> &A, const vector<Pass> &B)
-{
-  int index_a = -1, index_b = -1;
-
-  while (true) {
-    index_a = get_next_no_auto_pass_index(A, index_a);
-    index_b = get_next_no_auto_pass_index(A, index_b);
-
-    if (index_a == -1 && index_b == -1) {
-      break;
-    }
-
-    if (index_a == -1 || index_b == -1) {
-      return false;
-    }
-
-    const Pass &pass_a = A[index_a];
-    const Pass &pass_b = B[index_b];
-
-    if (pass_a.type != pass_b.type || pass_a.name != pass_b.name) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 bool Pass::contains(const vector<Pass> &passes, PassType type)
 {
   for (size_t i = 0; i < passes.size(); i++)
@@ -501,31 +459,6 @@ bool Pass::contains(const vector<Pass> &passes, PassType type)
       return true;
 
   return false;
-}
-
-void Pass::remove_auto(vector<Pass> &passes, PassType type)
-{
-  const size_t num_passes = passes.size();
-
-  size_t i = 0;
-  while (i < num_passes) {
-    if (passes[i].type == type) {
-      break;
-    }
-    ++i;
-  }
-
-  if (i >= num_passes) {
-    /* Pass does not exist. */
-    return;
-  }
-
-  if ((passes[i].flags & PASS_FLAG_AUTO) == 0) {
-    /* Pass is not automatically created, can not remove. */
-    return;
-  }
-
-  passes.erase(passes.begin() + i);
 }
 
 void Pass::remove_all_auto(vector<Pass> &passes)
@@ -561,20 +494,6 @@ const Pass *Pass::find(const vector<Pass> &passes, PassType type)
   }
 
   return nullptr;
-}
-
-int Pass::get_offset(const vector<Pass> &passes, PassType type)
-{
-  int pass_offset = 0;
-
-  for (const Pass &pass : passes) {
-    if (pass.type == type) {
-      return pass_offset;
-    }
-    pass_offset += pass.components;
-  }
-
-  return PASS_UNUSED;
 }
 
 int Pass::get_offset(const vector<Pass> &passes, const Pass &pass)

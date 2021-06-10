@@ -73,9 +73,6 @@ class Pass : public Node {
                   const char *name = nullptr,
                   PassFlags flags = PASS_FLAG_NONE);
 
-  /* Check whether two sets of passes are matching exactly. */
-  static bool equals_exact(const vector<Pass> &A, const vector<Pass> &B);
-
   static bool contains(const vector<Pass> &passes, PassType type);
 
   /* Remove all passes which were automatically created. */

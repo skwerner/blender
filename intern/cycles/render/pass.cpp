@@ -440,18 +440,6 @@ void Pass::add(PassType type, vector<Pass> &passes, const char *name, PassFlags 
   }
 }
 
-bool Pass::equals_exact(const vector<Pass> &A, const vector<Pass> &B)
-{
-  if (A.size() != B.size())
-    return false;
-
-  for (int i = 0; i < A.size(); i++)
-    if (A[i].type != B[i].type || A[i].name != B[i].name)
-      return false;
-
-  return true;
-}
-
 bool Pass::contains(const vector<Pass> &passes, PassType type)
 {
   return find(passes, type) != nullptr;

@@ -454,11 +454,7 @@ bool Pass::equals_exact(const vector<Pass> &A, const vector<Pass> &B)
 
 bool Pass::contains(const vector<Pass> &passes, PassType type)
 {
-  for (size_t i = 0; i < passes.size(); i++)
-    if (passes[i].type == type)
-      return true;
-
-  return false;
+  return find(passes, type) != nullptr;
 }
 
 void Pass::remove_all_auto(vector<Pass> &passes)

@@ -110,6 +110,9 @@ class PathTrace {
   /* Set pass data for baking. */
   bool set_render_tile_pixels(PassAccessor &pass_accessor, const PassAccessor::Source &source);
 
+  /* Check whether denoiser was run and denoised passes are available. */
+  bool has_denoised_result() const;
+
   /* Generate full multi-line report of the rendering process, including rendering parameters,
    * times, and so on. */
   string full_report() const;
@@ -176,8 +179,8 @@ class PathTrace {
   /* Run the progress_update_cb callback if it is needed. */
   void progress_update_if_needed();
 
-  /* Pointer to a device which is configured to be used for path tracing. If multiple devices are
-   * configured this is a `MultiDevice`. */
+  /* Pointer to a device which is configured to be used for path tracing. If multiple devices
+   * are configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
 
   RenderScheduler &render_scheduler_;
@@ -213,6 +216,9 @@ class PathTrace {
     /* Parameters of render buffers which corresponds to full render buffers divided by the
      * resolution divider. */
     BufferParams scaled_render_buffer_params;
+
+    /* Denosier was run and there are denoised versions of the passes in the render buffers. */
+    bool has_denoised_result_ = false;
   } render_state_;
 
   /* Progress object which is used to communicate sample progress. */

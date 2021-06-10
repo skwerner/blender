@@ -19,6 +19,10 @@
 #include "integrator/path_trace_work.h"
 #include "integrator/path_trace_work_cpu.h"
 #include "integrator/path_trace_work_gpu.h"
+#include "render/buffers.h"
+#include "render/scene.h"
+
+#include "kernel/kernel_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -53,6 +57,26 @@ PathTraceWork::~PathTraceWork()
 void PathTraceWork::set_effective_buffer_params(const BufferParams &effective_buffer_params)
 {
   effective_buffer_params_ = effective_buffer_params;
+}
+
+PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMode pass_mode) const
+{
+  const KernelFilm &kfilm = device_scene_->data.film;
+
+  PassAccessor::PassAccessInfo pass_access_info;
+  pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
+
+  if (pass_mode == PassMode::DENOISED && kfilm.display_pass_denoised_offset != PASS_UNUSED) {
+    pass_access_info.offset = kfilm.display_pass_denoised_offset;
+  }
+  else {
+    pass_access_info.offset = kfilm.display_pass_offset;
+  }
+
+  pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
+  pass_access_info.show_active_pixels = kfilm.show_active_pixels;
+
+  return pass_access_info;
 }
 
 CCL_NAMESPACE_END

@@ -44,8 +44,8 @@ void BakeManager::set(Scene *scene, const std::string &object_name_)
 {
   object_name = object_name_;
 
-  Pass::add(PASS_BAKE_PRIMITIVE, scene->passes, "BakePrimitive");
-  Pass::add(PASS_BAKE_DIFFERENTIAL, scene->passes, "BakeDifferential");
+  Pass::add(scene->passes, PASS_BAKE_PRIMITIVE, "BakePrimitive");
+  Pass::add(scene->passes, PASS_BAKE_DIFFERENTIAL, "BakeDifferential");
 
   /* create device and update scene */
   scene->film->tag_modified();

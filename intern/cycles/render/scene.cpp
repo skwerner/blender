@@ -510,7 +510,8 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
 
   requested_features.use_baking = bake_manager->get_baking();
 
-  if (Pass::contains(passes, PASS_DENOISING_COLOR)) {
+  const Pass *combined_denoised_pass = Pass::find(passes, PASS_COMBINED, PassMode::DENOISED);
+  if (combined_denoised_pass && combined_denoised_pass->is_written()) {
     requested_features.use_denoising = true;
   }
 
@@ -552,36 +553,37 @@ void Scene::update_passes()
 
   /* Display pass for viewport. */
   const PassType display_pass = film->get_display_pass();
-  Pass::add(display_pass, passes, nullptr, PASS_FLAG_AUTO);
+  Pass::add_internal(passes, display_pass, Pass::FLAG_AUTO);
 
   /* Create passes needed for adaptive sampling. */
   const AdaptiveSampling adaptive_sampling = integrator->get_adaptive_sampling();
   if (adaptive_sampling.use) {
-    Pass::add(PASS_SAMPLE_COUNT, passes, nullptr, PASS_FLAG_AUTO);
-    Pass::add(PASS_ADAPTIVE_AUX_BUFFER, passes, nullptr, PASS_FLAG_AUTO);
+    Pass::add_internal(passes, PASS_SAMPLE_COUNT, Pass::FLAG_AUTO);
+    Pass::add_internal(passes, PASS_ADAPTIVE_AUX_BUFFER, Pass::FLAG_AUTO);
   }
 
   /* Create passes needed for denoising. */
   const bool denoise_store_passes = integrator->get_denoise_store_passes();
   if (integrator->get_use_denoise() || denoise_store_passes) {
-    Pass::add(PASS_DENOISING_COLOR, passes, nullptr, PASS_FLAG_AUTO);
+    Pass::add_internal(passes, PASS_COMBINED, Pass::FLAG_AUTO);
+    Pass::add_internal(passes, PASS_COMBINED, PassMode::DENOISED, Pass::FLAG_AUTO);
 
     /* NOTE: Enable all passes when storage is requested. This way it is possible to tweak denoiser
      * parameters later on. */
 
     if (denoise_store_passes || integrator->get_use_denoise_pass_normal()) {
-      Pass::add(PASS_DENOISING_NORMAL, passes, nullptr, PASS_FLAG_AUTO);
+      Pass::add_internal(passes, PASS_DENOISING_NORMAL, Pass::FLAG_AUTO);
     }
 
     if (denoise_store_passes || integrator->get_use_denoise_pass_albedo()) {
-      Pass::add(PASS_DENOISING_ALBEDO, passes, nullptr, PASS_FLAG_AUTO);
+      Pass::add_internal(passes, PASS_DENOISING_ALBEDO, Pass::FLAG_AUTO);
     }
   }
 
   /* Create passes for shadow catcher. */
   if (display_pass == PASS_SHADOW_CATCHER || has_shadow_catcher()) {
-    Pass::add(PASS_SHADOW_CATCHER, passes, nullptr, PASS_FLAG_AUTO);
-    Pass::add(PASS_SHADOW_CATCHER_MATTE, passes, nullptr, PASS_FLAG_AUTO);
+    Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
+    Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, Pass::FLAG_AUTO);
   }
 
   film->tag_modified();

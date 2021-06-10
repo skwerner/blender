@@ -16,7 +16,9 @@
 
 #pragma once
 
+#include "integrator/pass_accessor.h"
 #include "render/buffers.h"
+#include "render/pass.h"
 #include "util/util_types.h"
 #include "util/util_unique_ptr.h"
 
@@ -60,8 +62,14 @@ class PathTraceWork {
    * The samples are added to the render buffer associated with this work. */
   virtual void render_samples(int start_sample, int samples_num) = 0;
 
-  /* Copy render result from this work to the corresponding place of the GPU display. */
-  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples) = 0;
+  /* Copy render result from this work to the corresponding place of the GPU display.
+   * The pass_mode indicates whether to access denoised or noisy version of the display pass. The
+   * noisy pass mode will be passed here when it is known that the buffer does not have denoised
+   * passes yet (because denoiser did not run). If the denoised pass is requested and denoiser is
+   * not used then this function will fall-back to the noisy pass instead. */
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display,
+                                   PassMode pass_mode,
+                                   int num_samples) = 0;
 
   /* Perform convergence test on the render buffer, and filter the convergence mask.
    * Returns number of active pixels (the ones which did not converge yet). */
@@ -87,6 +95,8 @@ class PathTraceWork {
                 DeviceScene *device_scene,
                 RenderBuffers *buffers,
                 bool *cancel_requested_flag);
+
+  virtual PassAccessor::PassAccessInfo get_display_pass_access_info(PassMode pass_mode) const;
 
   /* Device which will be used for path tracing.
    * Note that it is an actual render device (and never is a multi-device). */

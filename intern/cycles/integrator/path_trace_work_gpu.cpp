@@ -625,7 +625,9 @@ int PathTraceWorkGPU::get_max_num_camera_paths() const
   return max_num_paths_;
 }
 
-void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples)
+void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display,
+                                           PassMode pass_mode,
+                                           int num_samples)
 {
   if (!interop_use_checked_) {
     Device *device = queue_->device;
@@ -642,16 +644,18 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display, int num_samp
   }
 
   if (interop_use_) {
-    if (copy_to_gpu_display_interop(gpu_display, num_samples)) {
+    if (copy_to_gpu_display_interop(gpu_display, pass_mode, num_samples)) {
       return;
     }
     interop_use_ = false;
   }
 
-  copy_to_gpu_display_naive(gpu_display, num_samples);
+  copy_to_gpu_display_naive(gpu_display, pass_mode, num_samples);
 }
 
-void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, int num_samples)
+void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
+                                                 PassMode pass_mode,
+                                                 int num_samples)
 {
   const int width = effective_buffer_params_.width;
   const int height = effective_buffer_params_.height;
@@ -671,14 +675,16 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display, int nu
     queue_->zero_to_device(gpu_display_rgba_half_);
   }
 
-  run_film_convert(gpu_display_rgba_half_.device_pointer, num_samples);
+  run_film_convert(gpu_display_rgba_half_.device_pointer, pass_mode, num_samples);
 
   gpu_display_rgba_half_.copy_from_device();
 
   gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data());
 }
 
-bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, int num_samples)
+bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
+                                                   PassMode pass_mode,
+                                                   int num_samples)
 {
   Device *device = queue_->device;
 
@@ -695,24 +701,20 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display, int 
     return false;
   }
 
-  run_film_convert(d_rgba_half, num_samples);
+  run_film_convert(d_rgba_half, pass_mode, num_samples);
 
   device_graphics_interop_->unmap();
 
   return true;
 }
 
-void PathTraceWorkGPU::run_film_convert(device_ptr d_rgba_half, int num_samples)
+void PathTraceWorkGPU::run_film_convert(device_ptr d_rgba_half,
+                                        PassMode pass_mode,
+                                        int num_samples)
 {
   const KernelFilm &kfilm = device_scene_->data.film;
 
-  /* TODO(sergey): De-duplicate with `PathTraceWorkCPU`. */
-  PassAccessor::PassAccessInfo pass_access_info;
-  pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
-  pass_access_info.offset = kfilm.display_pass_offset;
-  pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
-  pass_access_info.show_active_pixels = kfilm.show_active_pixels;
-
+  const PassAccessor::PassAccessInfo pass_access_info = get_display_pass_access_info(pass_mode);
   const PassAccessorGPU pass_accessor(queue_.get(), pass_access_info, kfilm.exposure, num_samples);
 
   PassAccessor::Destination destination(pass_access_info.type);

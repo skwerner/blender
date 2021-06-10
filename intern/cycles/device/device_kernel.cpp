@@ -90,8 +90,6 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "film_convert_motion_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_CRYPTOMATTE_HALF_RGBA:
       return "film_convert_cryptomatte_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_DENOISING_COLOR_HALF_RGBA:
-      return "film_convert_denoising_color_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_HALF_RGBA:
       return "film_convert_shadow_catcher_half_rgba";
     case DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_MATTE_WITH_SHADOW_HALF_RGBA:

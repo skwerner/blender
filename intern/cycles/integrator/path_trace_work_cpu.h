@@ -48,7 +48,9 @@ class PathTraceWorkCPU : public PathTraceWork {
 
   virtual void render_samples(int start_sample, int samples_num) override;
 
-  virtual void copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples) override;
+  virtual void copy_to_gpu_display(GPUDisplay *gpu_display,
+                                   PassMode pass_mode,
+                                   int num_samples) override;
 
   virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) override;
 

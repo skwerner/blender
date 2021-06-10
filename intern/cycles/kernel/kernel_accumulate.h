@@ -434,15 +434,8 @@ ccl_device_inline void kernel_accum_combined_pass(INTEGRATOR_STATE_CONST_ARGS,
 #endif
 
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
-    kernel_write_pass_float3(buffer, contribution);
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_combined, contribution);
   }
-
-#ifdef __PASSES__
-  if (kernel_data.film.pass_denoising_color != PASS_UNUSED) {
-    kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_color,
-                                       contribution);
-  }
-#endif
 
   kernel_accum_adaptive_buffer(INTEGRATOR_STATE_PASS, contribution, buffer);
 }
@@ -463,15 +456,9 @@ ccl_device_inline void kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_C
 
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
     kernel_write_pass_float4(
-        buffer, make_float4(contribution.x, contribution.y, contribution.z, transparent));
+        buffer + kernel_data.film.pass_combined,
+        make_float4(contribution.x, contribution.y, contribution.z, transparent));
   }
-
-#ifdef __PASSES__
-  if (kernel_data.film.pass_denoising_color != PASS_UNUSED) {
-    kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_color,
-                                       contribution);
-  }
-#endif
 
   kernel_accum_adaptive_buffer(INTEGRATOR_STATE_PASS, contribution, buffer);
 }

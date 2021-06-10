@@ -155,7 +155,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
 
   if (destination.num_components == 1) {
     DCHECK_LE(pass_info.num_components, destination.num_components)
-        << "Number of components mismatch for pass type " << pass_info.type;
+        << "Number of components mismatch for " << pass_type_as_string(type);
 
     /* Scalar */
     if (type == PASS_RENDER_TIME) {
@@ -175,13 +175,13 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
   }
   else if (destination.num_components == 3) {
-    if (pass_info.flags & PASS_FLAG_UNALIGNED) {
-      DCHECK_LE(pass_info.num_components, 3)
-          << "Number of components mismatch for pass type " << pass_info.type;
+    if (pass_info.is_aligned) {
+      DCHECK_LE(pass_info.num_components, 4)
+          << "Number of components mismatch for pass " << pass_type_as_string(type);
     }
     else {
-      DCHECK_LE(pass_info.num_components, 4)
-          << "Number of components mismatch for pass type " << pass_info.type;
+      DCHECK_LE(pass_info.num_components, 3)
+          << "Number of components mismatch for pass " << pass_type_as_string(type);
     }
 
     /* RGBA */
@@ -198,34 +198,28 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
   }
   else if (destination.num_components == 4) {
-    if (type == PASS_DENOISING_COLOR) {
-      /* RGB to RGBA (alpha comes from combined pass). */
-      get_pass_denoising_color(render_buffers, buffer_params, destination);
+    DCHECK_EQ(pass_info.num_components, 4)
+        << "Number of components mismatch for pass " << pass_type_as_string(type);
+
+    /* RGBA */
+    if (type == PASS_SHADOW) {
+      get_pass_shadow(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_MOTION) {
+      get_pass_motion(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_CRYPTOMATTE) {
+      get_pass_cryptomatte(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_SHADOW_CATCHER) {
+      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_SHADOW_CATCHER_MATTE &&
+             pass_access_info_.use_approximate_shadow_catcher) {
+      get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
     }
     else {
-      DCHECK_EQ(pass_info.num_components, 4)
-          << "Number of components mismatch for pass type " << pass_info.type;
-
-      /* RGBA */
-      if (type == PASS_SHADOW) {
-        get_pass_shadow(render_buffers, buffer_params, destination);
-      }
-      else if (type == PASS_MOTION) {
-        get_pass_motion(render_buffers, buffer_params, destination);
-      }
-      else if (type == PASS_CRYPTOMATTE) {
-        get_pass_cryptomatte(render_buffers, buffer_params, destination);
-      }
-      else if (type == PASS_SHADOW_CATCHER) {
-        get_pass_shadow_catcher(render_buffers, buffer_params, destination);
-      }
-      else if (type == PASS_SHADOW_CATCHER_MATTE &&
-               pass_access_info_.use_approximate_shadow_catcher) {
-        get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
-      }
-      else {
-        get_pass_float4(render_buffers, buffer_params, destination);
-      }
+      get_pass_float4(render_buffers, buffer_params, destination);
     }
   }
 
@@ -292,6 +286,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
 
   kfilm_convert->pass_use_exposure = pass_info.use_exposure;
   kfilm_convert->pass_use_filter = pass_info.use_filter;
+
+  /* TODO(sergey): Some of the passes needs to become denoised when denoised pass is accessed. */
 
   kfilm_convert->pass_divide = buffer_params.get_pass_offset(pass_info.divide_type);
 

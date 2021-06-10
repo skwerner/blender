@@ -20,6 +20,7 @@
 #include "integrator/pass_accessor.h"
 #include "integrator/render_scheduler.h"
 #include "render/gpu_display.h"
+#include "render/pass.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
@@ -98,6 +99,8 @@ void PathTrace::reset(const BufferParams &full_buffer_params)
   if (gpu_display_) {
     gpu_display_->reset(full_buffer_params);
   }
+
+  render_state_.has_denoised_result_ = false;
 
   did_draw_after_reset_ = false;
 }
@@ -295,6 +298,8 @@ void PathTrace::denoise(const RenderWork &render_work)
                             get_num_samples_in_buffer());
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
+
+  render_state_.has_denoised_result_ = true;
 }
 
 void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
@@ -350,12 +355,15 @@ void PathTrace::update_display(const RenderWork &render_work)
     return;
   }
 
+  const PassMode pass_mode = render_state_.has_denoised_result_ ? PassMode::DENOISED :
+                                                                  PassMode::NOISY;
+
   /* TODO(sergey): In theory we would want to update parts of the buffer from multiple threads.
    * However, there could be some complications related on how texture buffer is mapped. Depending
    * on an implementation of GPUDisplay it might not be possible to map GPUBuffer in a way that the
    * PathTraceWork expects it in a threaded environment. */
   for (auto &&path_trace_work : path_trace_works_) {
-    path_trace_work->copy_to_gpu_display(gpu_display_.get(), num_samples);
+    path_trace_work->copy_to_gpu_display(gpu_display_.get(), pass_mode, num_samples);
   }
 
   gpu_display_->update_end();
@@ -466,6 +474,11 @@ bool PathTrace::set_render_tile_pixels(PassAccessor &pass_accessor,
                                        const PassAccessor::Source &source)
 {
   return pass_accessor.set_render_tile_pixels(full_render_buffers_.get(), source);
+}
+
+bool PathTrace::has_denoised_result() const
+{
+  return render_state_.has_denoised_result_;
 }
 
 /* --------------------------------------------------------------------

@@ -561,7 +561,6 @@ KERNEL_FILM_CONVERT_DEFINE(float3, rgb)
 
 KERNEL_FILM_CONVERT_DEFINE(motion, rgba)
 KERNEL_FILM_CONVERT_DEFINE(cryptomatte, rgba)
-KERNEL_FILM_CONVERT_DEFINE(denoising_color, rgba)
 KERNEL_FILM_CONVERT_DEFINE(shadow_catcher, rgba)
 KERNEL_FILM_CONVERT_DEFINE(shadow_catcher_matte_with_shadow, rgba)
 KERNEL_FILM_CONVERT_DEFINE(float4, rgba)
@@ -682,6 +681,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                         int stride,
                                         int pass_stride,
                                         int num_samples,
+                                        int pass_denoised,
                                         int pass_sample_count)
 {
   const int work_index = ccl_global_id(0);
@@ -705,9 +705,11 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     pixel_scale = __float_as_uint(buffer[pass_sample_count]);
   }
 
-  buffer[0] = in[0] * pixel_scale;
-  buffer[1] = in[1] * pixel_scale;
-  buffer[2] = in[2] * pixel_scale;
+  float *denoised_pixel = buffer + pass_denoised;
+
+  denoised_pixel[0] = in[0] * pixel_scale;
+  denoised_pixel[1] = in[1] * pixel_scale;
+  denoised_pixel[2] = in[2] * pixel_scale;
 }
 
 #endif

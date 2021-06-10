@@ -144,7 +144,9 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
   }
 }
 
-void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, int num_samples)
+void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
+                                           PassMode pass_mode,
+                                           int num_samples)
 {
   half4 *rgba_half = gpu_display->map_texture_buffer();
   if (!rgba_half) {
@@ -155,11 +157,7 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display, int num_samp
 
   const KernelFilm &kfilm = device_scene_->data.film;
 
-  PassAccessor::PassAccessInfo pass_access_info;
-  pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
-  pass_access_info.offset = kfilm.display_pass_offset;
-  pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
-  pass_access_info.show_active_pixels = kfilm.show_active_pixels;
+  const PassAccessor::PassAccessInfo pass_access_info = get_display_pass_access_info(pass_mode);
 
   const PassAccessorCPU pass_accessor(pass_access_info, kfilm.exposure, num_samples);
   const PassAccessor::Destination destination(pass_access_info.type, rgba_half);

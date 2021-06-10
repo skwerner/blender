@@ -28,6 +28,24 @@
 
 CCL_NAMESPACE_BEGIN
 
+/* Convert part information to an index of `BufferParams::pass_offset_`. */
+
+static int pass_type_mode_to_index(PassType pass_type, PassMode mode)
+{
+  int index = static_cast<int>(pass_type) * 2;
+
+  if (mode == PassMode::DENOISED) {
+    ++index;
+  }
+
+  return index;
+}
+
+static int pass_to_index(const Pass &pass)
+{
+  return pass_type_mode_to_index(pass.type, pass.mode);
+}
+
 /* Buffer Params */
 
 BufferParams::BufferParams()
@@ -50,11 +68,15 @@ void BufferParams::update_passes(vector<Pass> &passes)
 
   pass_stride = 0;
   for (const Pass &pass : passes) {
-    if (pass_offset_[pass.type] == PASS_UNUSED) {
-      pass_offset_[pass.type] = pass_stride;
+    const int index = pass_to_index(pass);
+
+    if (pass_offset_[index] == PASS_UNUSED) {
+      pass_offset_[index] = pass_stride;
     }
 
-    pass_stride += pass.components;
+    if (pass.is_written()) {
+      pass_stride += pass.get_info().num_components;
+    }
   }
 
   pass_stride = align_up(pass_stride, 4);
@@ -62,18 +84,19 @@ void BufferParams::update_passes(vector<Pass> &passes)
 
 void BufferParams::reset_pass_offset()
 {
-  for (int i = 0; i < PASS_NUM; ++i) {
+  for (int i = 0; i < kNumPassOffsets; ++i) {
     pass_offset_[i] = PASS_UNUSED;
   }
 }
 
-int BufferParams::get_pass_offset(PassType pass_type) const
+int BufferParams::get_pass_offset(PassType pass_type, PassMode mode) const
 {
   if (pass_type == PASS_NONE || pass_type == PASS_UNUSED) {
     return PASS_UNUSED;
   }
 
-  return pass_offset_[pass_type];
+  const int index = pass_type_mode_to_index(pass_type, mode);
+  return pass_offset_[index];
 }
 
 void BufferParams::update_offset_stride()

@@ -376,7 +376,6 @@ typedef enum PassType {
   PASS_TRANSMISSION_COLOR,
   /* No Scatter color since it's tricky to define what it would even mean. */
   PASS_MIST,
-  PASS_DENOISING_COLOR,
   PASS_DENOISING_NORMAL,
   PASS_DENOISING_ALBEDO,
 
@@ -1183,7 +1182,6 @@ typedef struct KernelFilm {
   float mist_inv_depth;
   float mist_falloff;
 
-  int pass_denoising_color;
   int pass_denoising_normal;
   int pass_denoising_albedo;
   /* Set to 1 if any of the above denoising passes present. */
@@ -1207,6 +1205,7 @@ typedef struct KernelFilm {
   /* viewport rendering options */
   int display_pass_type;
   int display_pass_offset;
+  int display_pass_denoised_offset;
   int show_active_pixels;
   int use_approximate_shadow_catcher;
 
@@ -1601,7 +1600,6 @@ typedef enum DeviceKernel {
   DEVICE_KERNEL_FILM_CONVERT_FLOAT3_HALF_RGBA,
   DEVICE_KERNEL_FILM_CONVERT_MOTION_HALF_RGBA,
   DEVICE_KERNEL_FILM_CONVERT_CRYPTOMATTE_HALF_RGBA,
-  DEVICE_KERNEL_FILM_CONVERT_DENOISING_COLOR_HALF_RGBA,
   DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_HALF_RGBA,
   DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_MATTE_WITH_SHADOW_HALF_RGBA,
   DEVICE_KERNEL_FILM_CONVERT_FLOAT4_HALF_RGBA,

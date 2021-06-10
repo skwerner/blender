@@ -66,7 +66,6 @@ class PassAccessorCPU : public PassAccessor {
   /* Float4 passes. */
   DECLARE_PASS_ACCESSOR(motion)
   DECLARE_PASS_ACCESSOR(cryptomatte)
-  DECLARE_PASS_ACCESSOR(denoising_color)
   DECLARE_PASS_ACCESSOR(shadow_catcher)
   DECLARE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
   DECLARE_PASS_ACCESSOR(float4)

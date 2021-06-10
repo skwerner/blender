@@ -62,7 +62,7 @@ class BufferParams {
   void update_passes(vector<Pass> &passes);
 
   /* Returns PASS_UNUSED if there is no such pass in the buffer. */
-  int get_pass_offset(PassType pass_type) const;
+  int get_pass_offset(PassType type, PassMode mode = PassMode::NOISY) const;
 
   void update_offset_stride();
 
@@ -71,8 +71,11 @@ class BufferParams {
  protected:
   void reset_pass_offset();
 
+  /* Multipled by 2 to be able to store noisy and denoised pass types. */
+  static constexpr int kNumPassOffsets = PASS_NUM * 2;
+
   /* Indexed by pass type, indicates offset of the corresponding pass in the buffer. */
-  int pass_offset_[PASS_NUM];
+  int pass_offset_[kNumPassOffsets];
 };
 
 /* Render Buffers */

@@ -247,31 +247,6 @@ ccl_device_inline void film_get_pass_pixel_cryptomatte(const KernelFilmConvert *
   pixel[3] = f.w * scale;
 }
 
-/* Special code which converts noisy image pass from RGB to RGBA using alpha from the combined
- * pass. */
-ccl_device_inline void film_get_pass_pixel_denoising_color(
-    const KernelFilmConvert *ccl_restrict kfilm_convert,
-    ccl_global const float *ccl_restrict buffer,
-    float *ccl_restrict pixel)
-{
-  kernel_assert(kfilm_convert->pass_offset != PASS_UNUSED);
-  kernel_assert(kfilm_convert->pass_combined != PASS_UNUSED);
-
-  float scale, scale_exposure;
-  film_get_scale_and_scale_exposure(kfilm_convert, buffer, &scale, &scale_exposure);
-
-  const float *in = buffer + kfilm_convert->pass_offset;
-  const float *in_combined = buffer + kfilm_convert->pass_combined;
-
-  const float3 color = make_float3(in[0], in[1], in[2]) * scale_exposure;
-  const float transparency = in_combined[3] * scale;
-
-  pixel[0] = color.x;
-  pixel[1] = color.y;
-  pixel[2] = color.z;
-  pixel[3] = film_transparency_to_alpha(transparency);
-}
-
 ccl_device_inline void film_get_pass_pixel_float4(const KernelFilmConvert *ccl_restrict
                                                       kfilm_convert,
                                                   ccl_global const float *ccl_restrict buffer,

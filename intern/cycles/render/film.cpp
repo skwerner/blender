@@ -150,7 +150,7 @@ Film::~Film()
 
 void Film::add_default(Scene *scene)
 {
-  Pass::add(PASS_COMBINED, scene->passes);
+  Pass::add(scene->passes, PASS_COMBINED);
 }
 
 void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
@@ -168,15 +168,17 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   KernelFilm *kfilm = &dscene->data.film;
 
-  const PassType display_pass_type = get_actual_display_pass_type(scene->passes,
-                                                                  get_display_pass());
+  const Pass *display_pass = get_actual_display_pass(scene->passes, get_display_pass());
+  const Pass *display_pass_denoised = get_actual_display_pass(
+      scene->passes, get_display_pass(), PassMode::DENOISED);
 
   /* update __data */
   kfilm->exposure = exposure;
   kfilm->pass_flag = 0;
 
-  kfilm->display_pass_type = display_pass_type;
-  kfilm->display_pass_offset = -1;
+  kfilm->display_pass_type = display_pass->type;
+  kfilm->display_pass_offset = PASS_UNUSED;
+  kfilm->display_pass_denoised_offset = PASS_UNUSED;
   kfilm->show_active_pixels = show_active_pixels;
   kfilm->use_approximate_shadow_catcher = get_use_approximate_shadow_catcher();
 
@@ -205,7 +207,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_shadow = PASS_UNUSED;
 
   /* Mark passes as unused so that the kernel knows the pass is inaccessible. */
-  kfilm->pass_denoising_color = PASS_UNUSED;
   kfilm->pass_denoising_normal = PASS_UNUSED;
   kfilm->pass_denoising_albedo = PASS_UNUSED;
   kfilm->pass_sample_count = PASS_UNUSED;
@@ -218,14 +219,25 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   for (size_t i = 0; i < scene->passes.size(); i++) {
     Pass &pass = scene->passes[i];
 
-    if (pass.type == PASS_NONE) {
+    if (pass.type == PASS_NONE || !pass.is_written()) {
+      continue;
+    }
+
+    if (pass.mode == PassMode::DENOISED) {
+      if (&pass == display_pass_denoised) {
+        kfilm->display_pass_denoised_offset = kfilm->pass_stride;
+      }
+
+      /* Generally we only storing offsets of the noisy passes. The display pass is an exception
+       * since it is a read operation and not a write. */
+      kfilm->pass_stride += pass.get_info().num_components;
       continue;
     }
 
     /* Can't do motion pass if no motion vectors are available. */
     if (pass.type == PASS_MOTION || pass.type == PASS_MOTION_WEIGHT) {
       if (scene->need_motion() != Scene::MOTION_PASS) {
-        kfilm->pass_stride += pass.components;
+        kfilm->pass_stride += pass.get_info().num_components;
         continue;
       }
     }
@@ -339,10 +351,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         have_cryptomatte = true;
         break;
 
-      case PASS_DENOISING_COLOR:
-        kfilm->pass_denoising_color = kfilm->pass_stride;
-        kfilm->have_denoising_passes = 1;
-        break;
       case PASS_DENOISING_NORMAL:
         kfilm->pass_denoising_normal = kfilm->pass_stride;
         kfilm->have_denoising_passes = 1;
@@ -383,11 +391,11 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
     }
 
-    if (pass.type == display_pass_type) {
+    if (&pass == display_pass) {
       kfilm->display_pass_offset = kfilm->pass_stride;
     }
 
-    kfilm->pass_stride += pass.components;
+    kfilm->pass_stride += pass.get_info().num_components;
   }
 
   kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
@@ -397,7 +405,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
    *
    * We also don't need to perform light accumulations. Later we want to optimize this to suppress
    * light calculations. */
-  if (display_pass == PASS_NORMAL || display_pass == PASS_UV || display_pass == PASS_ROUGHNESS) {
+  if (display_pass->type == PASS_NORMAL || display_pass->type == PASS_UV ||
+      display_pass->type == PASS_ROUGHNESS) {
     kfilm->use_light_pass = 0;
   }
   else {
@@ -467,36 +476,41 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
   return -1;
 }
 
-const Pass *Film::get_actual_display_pass(const vector<Pass> &passes, const string &pass_name)
+const Pass *Film::get_actual_display_pass(const vector<Pass> &passes,
+                                          PassType pass_type,
+                                          PassMode pass_mode)
 {
-  const Pass *pass = Pass::find(passes, pass_name);
+  const Pass *pass = Pass::find(passes, pass_type, pass_mode);
+  return get_actual_display_pass(passes, pass);
+}
+
+const Pass *Film::get_actual_display_pass(const vector<Pass> &passes, const Pass *pass)
+{
   if (!pass) {
     return nullptr;
   }
 
-  const PassType actual_pass_type = get_actual_display_pass_type(passes, pass->type);
-  if (actual_pass_type != pass->type) {
-    /* This is a bit annoying to have a secondary `find()` here. But this is unlikely to become
-     * a bottleneck, so prefer to de-duplicate logic. */
-    return Pass::find(passes, PASS_SHADOW_CATCHER_MATTE);
-  }
-
-  return pass;
-}
-
-PassType Film::get_actual_display_pass_type(const vector<Pass> &passes, const PassType pass_type)
-{
-  /* When shadow catcher is used the combined pass is only used to get proper value for the
-   * shadow catcher pass. It is not very useful for artists as it is. What artists expect as a
-   * combined pass is something what is to be alpha-overed onto the footage. So we swap the
-   * combined pass with shadow catcher matte here. */
-  if (pass_type == PASS_COMBINED) {
-    if (Pass::contains(passes, PASS_SHADOW_CATCHER_MATTE)) {
-      return PASS_SHADOW_CATCHER_MATTE;
+  if (!pass->is_written()) {
+    if (pass->mode == PassMode::DENOISED) {
+      pass = Pass::find(passes, pass->type);
+      if (!pass) {
+        return nullptr;
+      }
+    }
+    else {
+      return nullptr;
     }
   }
 
-  return pass_type;
+  if (pass->type == PASS_COMBINED) {
+    const Pass *shadow_catcher_matte_pass = Pass::find(
+        passes, PASS_SHADOW_CATCHER_MATTE, pass->mode);
+    if (shadow_catcher_matte_pass) {
+      pass = shadow_catcher_matte_pass;
+    }
+  }
+
+  return pass;
 }
 
 CCL_NAMESPACE_END

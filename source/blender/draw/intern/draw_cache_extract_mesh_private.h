@@ -325,7 +325,7 @@ typedef struct ExtractLEdgeMesh_Params {
 } ExtractLEdgeMesh_Params;
 typedef void(ExtractLEdgeMeshFn)(const MeshRenderData *mr,
                                  const MEdge *med,
-                                 const uint ledge_index,
+                                 const int ledge_index,
                                  void *data);
 
 #define EXTRACT_LEDGE_FOREACH_MESH_BEGIN(elem_edge, index_ledge, params, mr) \
@@ -406,7 +406,6 @@ typedef void(ExtractLVertMeshFn)(const MeshRenderData *mr,
 /* ---------------------------------------------------------------------- */
 /** \name Mesh Elements Extract Struct
  * \{ */
-
 /* TODO(jbakker): move parameters inside a struct. */
 typedef void *(ExtractInitFn)(const MeshRenderData *mr,
                               struct MeshBatchCache *cache,
@@ -415,10 +414,14 @@ typedef void(ExtractFinishFn)(const MeshRenderData *mr,
                               struct MeshBatchCache *cache,
                               void *buffer,
                               void *data);
+typedef void *(ExtractTaskInitFn)(void *userdata);
+typedef void(ExtractTaskFinishFn)(void *userdata, void *task_userdata);
 
 typedef struct MeshExtract {
   /** Executed on main thread and return user data for iteration functions. */
   ExtractInitFn *init;
+  /** Task local data. */
+  ExtractTaskInitFn *task_init;
   /** Executed on one (or more if use_threading) worker thread(s). */
   ExtractTriBMeshFn *iter_looptri_bm;
   ExtractTriMeshFn *iter_looptri_mesh;
@@ -429,6 +432,7 @@ typedef struct MeshExtract {
   ExtractLVertBMeshFn *iter_lvert_bm;
   ExtractLVertMeshFn *iter_lvert_mesh;
   /** Executed on one worker thread after all elements iterations. */
+  ExtractTaskFinishFn *task_finish;
   ExtractFinishFn *finish;
   /** Used to request common data. */
   eMRDataType data_type;
@@ -464,13 +468,11 @@ void mesh_render_data_update_looptris(MeshRenderData *mr,
 void *mesh_extract_buffer_get(const MeshExtract *extractor, MeshBufferCache *mbc);
 eMRIterType mesh_extract_iter_type(const MeshExtract *ext);
 const MeshExtract *mesh_extract_override_get(const MeshExtract *extractor,
-                                             const bool do_hq_normals);
-/*
- * Total number of extractions types.
- */
-#define M_EXTRACT_LEN 38
+                                             const bool do_hq_normals,
+                                             const bool do_single_mat);
 
 extern const MeshExtract extract_tris;
+extern const MeshExtract extract_tris_single_mat;
 extern const MeshExtract extract_lines;
 extern const MeshExtract extract_lines_with_lines_loose;
 extern const MeshExtract extract_lines_loose_only;

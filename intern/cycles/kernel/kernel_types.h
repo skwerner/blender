@@ -1554,7 +1554,12 @@ static_assert_align(KernelShaderEvalInput, 16);
 
 /* Device kernels.
  *
- * Identifier for kernels that can be executed in device queues. */
+ * Identifier for kernels that can be executed in device queues.
+ *
+ * Some implementation details.
+ *
+ * If the kernel uses shared CUDA memory, `CUDADeviceQueue::enqueue` is to be modified.
+ * The path iteration kernels are handled in `PathTraceWorkGPU::enqueue_path_iteration`. */
 
 typedef enum DeviceKernel {
   DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA = 0,

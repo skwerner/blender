@@ -436,8 +436,9 @@ void PathTrace::buffer_read()
     return;
   }
 
-  buffer_read_cb();
-  full_render_buffers_->copy_to_device();
+  if (buffer_read_cb()) {
+    full_render_buffers_->copy_to_device();
+  }
 }
 
 void PathTrace::progress_update_if_needed()

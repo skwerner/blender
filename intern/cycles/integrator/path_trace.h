@@ -128,7 +128,7 @@ class PathTrace {
   /* Callback which initializes rendered buffer. Is called before pathtracing starts.
    *
    * This is used for baking. */
-  function<void(void)> buffer_read_cb;
+  function<bool(void)> buffer_read_cb;
 
   /* Callback which is called to report current rendering progress.
    *

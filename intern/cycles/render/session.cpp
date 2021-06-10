@@ -75,11 +75,12 @@ Session::Session(const SessionParams &params_, const SceneParams &scene_params)
     }
     write_render_tile_cb();
   };
-  path_trace_->buffer_read_cb = [&]() {
+  path_trace_->buffer_read_cb = [&]() -> bool {
     if (!read_render_tile_cb) {
-      return;
+      return false;
     }
     read_render_tile_cb();
+    return true;
   };
   path_trace_->progress_update_cb = [&]() { update_status_time(); };
 }

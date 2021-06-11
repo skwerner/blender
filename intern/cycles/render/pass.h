@@ -46,6 +46,10 @@ struct PassInfo {
    * For example, if the pass with 3 components is stored (and written by the kernel) as individual
    * float components. */
   bool is_aligned = true;
+
+  /* Pass access for read can not happen directly and needs some sort of compositing (for example,
+   * light passes due to divide_type, or shadow catcher pass. */
+  bool use_compositing = false;
 };
 
 class Pass : public Node {

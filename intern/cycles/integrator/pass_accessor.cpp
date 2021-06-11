@@ -192,6 +192,9 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       /* RGB lighting passes that need to divide out color */
       get_pass_divide_even_color(render_buffers, buffer_params, destination);
     }
+    else if (type == PASS_SHADOW_CATCHER) {
+      get_pass_shadow_catcher(render_buffers, buffer_params, destination);
+    }
     else {
       /* RGB/vector */
       get_pass_float3(render_buffers, buffer_params, destination);

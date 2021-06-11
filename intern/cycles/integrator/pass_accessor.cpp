@@ -34,6 +34,7 @@ PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
                                              const Film &film,
                                              const vector<Pass> &passes)
     : type(pass.type),
+      mode(pass.mode),
       offset(Pass::get_offset(passes, pass)),
       use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher())
 {
@@ -151,14 +152,18 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   }
 
   const PassType type = pass_access_info_.type;
+  const PassMode mode = pass_access_info_.mode;
   const PassInfo pass_info = Pass::get_info(type);
 
   if (destination.num_components == 1) {
     DCHECK_LE(pass_info.num_components, destination.num_components)
         << "Number of components mismatch for " << pass_type_as_string(type);
 
-    /* Scalar */
-    if (type == PASS_RENDER_TIME) {
+    if (mode == PassMode::DENOISED) {
+      /* Denoised passes sore their final pixels, no need in special calculation. */
+      get_pass_float(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_RENDER_TIME) {
       /* TODO(sergey): Needs implementation. */
     }
     else if (type == PASS_DEPTH) {
@@ -184,8 +189,11 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
           << "Number of components mismatch for pass " << pass_type_as_string(type);
     }
 
-    /* RGBA */
-    if (type == PASS_SHADOW) {
+    if (mode == PassMode::DENOISED) {
+      /* Denoised passes sore their final pixels, no need in special calculation. */
+      get_pass_float3(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_SHADOW) {
       get_pass_shadow(render_buffers, buffer_params, destination);
     }
     else if (pass_info.divide_type != PASS_NONE) {
@@ -204,8 +212,16 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     DCHECK_EQ(pass_info.num_components, 4)
         << "Number of components mismatch for pass " << pass_type_as_string(type);
 
-    /* RGBA */
-    if (type == PASS_SHADOW) {
+    if (type == PASS_SHADOW_CATCHER_MATTE && pass_access_info_.use_approximate_shadow_catcher) {
+      /* Denoised matte with shadow needs to do calculation (will use denoised shadow catcher pass
+       * to approximate shadow with). */
+      get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
+    }
+    else if (mode == PassMode::DENOISED) {
+      /* Denoised passes sore their final pixels, no need in special calculation. */
+      get_pass_float4(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_SHADOW) {
       get_pass_shadow(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_MOTION) {
@@ -216,10 +232,6 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
     else if (type == PASS_SHADOW_CATCHER) {
       get_pass_shadow_catcher(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_SHADOW_CATCHER_MATTE &&
-             pass_access_info_.use_approximate_shadow_catcher) {
-      get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
     }
     else {
       get_pass_float4(render_buffers, buffer_params, destination);
@@ -282,6 +294,7 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
                                             const BufferParams &buffer_params,
                                             const Destination &destination) const
 {
+  const PassMode mode = pass_access_info_.mode;
   const PassInfo &pass_info = Pass::get_info(pass_access_info_.type);
 
   kfilm_convert->pass_offset = pass_access_info_.offset;
@@ -299,9 +312,9 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->pass_adaptive_aux_buffer = buffer_params.get_pass_offset(
       PASS_ADAPTIVE_AUX_BUFFER);
   kfilm_convert->pass_motion_weight = buffer_params.get_pass_offset(PASS_MOTION_WEIGHT);
-  kfilm_convert->pass_shadow_catcher = buffer_params.get_pass_offset(PASS_SHADOW_CATCHER);
+  kfilm_convert->pass_shadow_catcher = buffer_params.get_pass_offset(PASS_SHADOW_CATCHER, mode);
   kfilm_convert->pass_shadow_catcher_matte = buffer_params.get_pass_offset(
-      PASS_SHADOW_CATCHER_MATTE);
+      PASS_SHADOW_CATCHER_MATTE, mode);
 
   if (pass_info.use_filter) {
     kfilm_convert->scale = 1.0f / num_samples_;
@@ -323,6 +336,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->show_active_pixels = pass_access_info_.show_active_pixels;
 
   kfilm_convert->num_components = destination.num_components;
+
+  kfilm_convert->is_denoised = (mode == PassMode::DENOISED);
 }
 
 bool PassAccessor::set_render_tile_pixels(RenderBuffers *render_buffers, const Source &source)

@@ -40,6 +40,7 @@ class PassAccessor {
     PassAccessInfo(const Pass &pass, const Film &film, const vector<Pass> &passes);
 
     PassType type = PASS_NONE;
+    PassMode mode = PassMode::NOISY;
     int offset = -1;
 
     /* For the shadow catcher matte pass: whether to approximate shadow catcher pass into its

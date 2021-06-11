@@ -311,13 +311,20 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
    * This way using transparent film to render artificial objects will be easy to be combined
    * with a backdrop. */
 
+  float scale, scale_exposure;
+  film_get_scale_and_scale_exposure(kfilm_convert, buffer, &scale, &scale_exposure);
+
+  if (kfilm_convert->is_denoised) {
+    kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
+    ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
+    const float3 pixel = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]) * scale_exposure;
+    return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);
+  }
+
   kernel_assert(kfilm_convert->pass_offset != PASS_UNUSED);
   kernel_assert(kfilm_convert->pass_combined != PASS_UNUSED);
   kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
   kernel_assert(kfilm_convert->pass_shadow_catcher_matte != PASS_UNUSED);
-
-  float scale, scale_exposure;
-  film_get_scale_and_scale_exposure(kfilm_convert, buffer, &scale, &scale_exposure);
 
   ccl_global const float *in_combined = buffer + kfilm_convert->pass_combined;
   ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;

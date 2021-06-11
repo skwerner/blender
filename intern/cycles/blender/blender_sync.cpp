@@ -555,7 +555,8 @@ static BlenderPassInfo get_blender_pass_info(BL::RenderPass &b_pass)
   MAP_PASS("Denoising Normal", PASS_DENOISING_NORMAL);
   MAP_PASS("Denoising Albedo", PASS_DENOISING_ALBEDO);
 
-  MAP_PASS("Shadow Catcher", PASS_SHADOW_CATCHER);
+  MAP_PASS("Shadow Catcher", PASS_SHADOW_CATCHER, PassMode::DENOISED);
+  MAP_PASS("Noisy Shadow Catcher", PASS_SHADOW_CATCHER);
 
   MAP_PASS("Debug Render Time", PASS_RENDER_TIME);
 
@@ -574,6 +575,8 @@ static BlenderPassInfo get_blender_pass_info(BL::RenderPass &b_pass)
 void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_view_layer)
 {
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
+
+  bool add_denoised_passes = false;
 
   vector<Pass> passes;
 
@@ -601,6 +604,8 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
   PointerRNA crl = RNA_pointer_get(&b_view_layer.ptr, "cycles");
 
   if (get_boolean(crl, "denoising_store_passes")) {
+    add_denoised_passes = true;
+
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
     Pass::add(passes, PASS_COMBINED, "Noisy Image");
 
@@ -611,6 +616,8 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
     Pass::add(passes, PASS_DENOISING_ALBEDO, "Denoising Albedo");
   }
   else if (get_boolean(cscene, "use_denoising")) {
+    add_denoised_passes = true;
+
     b_engine.add_pass("Noisy Image", 4, "RGBA", b_view_layer.name().c_str());
     Pass::add(passes, PASS_COMBINED, "Noisy Image");
   }
@@ -634,7 +641,12 @@ void BlenderSync::sync_render_passes(BL::RenderLayer &b_rlay, BL::ViewLayer &b_v
 
   if (get_boolean(crl, "use_pass_shadow_catcher")) {
     b_engine.add_pass("Shadow Catcher", 4, "RGBA", b_view_layer.name().c_str());
-    Pass::add(passes, PASS_SHADOW_CATCHER, "Shadow Catcher");
+    Pass::add_denoising_read(passes, PASS_SHADOW_CATCHER, "Shadow Catcher");
+
+    if (add_denoised_passes) {
+      b_engine.add_pass("Noisy Shadow Catcher", 4, "RGBA", b_view_layer.name().c_str());
+      Pass::add(passes, PASS_SHADOW_CATCHER, "Noisy Shadow Catcher");
+    }
   }
 
   /* Cryptomatte stores two ID/weight pairs per RGBA layer.

@@ -1078,7 +1078,9 @@ typedef struct KernelFilmConvert {
   /* Number of components to write to. */
   int num_components;
 
-  int pad1, pad2, pad3;
+  int is_denoised;
+
+  int pad1, pad2;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 

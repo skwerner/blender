@@ -564,7 +564,8 @@ void Scene::update_passes()
 
   /* Create passes needed for denoising. */
   const bool denoise_store_passes = integrator->get_denoise_store_passes();
-  if (integrator->get_use_denoise() || denoise_store_passes) {
+  const bool add_denoised_passes = integrator->get_use_denoise() || denoise_store_passes;
+  if (add_denoised_passes) {
     Pass::add_internal(passes, PASS_COMBINED, Pass::FLAG_AUTO);
     Pass::add_internal(passes, PASS_COMBINED, PassMode::DENOISED, Pass::FLAG_AUTO);
 
@@ -584,6 +585,11 @@ void Scene::update_passes()
   if (display_pass == PASS_SHADOW_CATCHER || has_shadow_catcher()) {
     Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
     Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, Pass::FLAG_AUTO);
+
+    if (add_denoised_passes) {
+      Pass::add_internal(passes, PASS_SHADOW_CATCHER, PassMode::DENOISED, Pass::FLAG_AUTO);
+      Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, PassMode::DENOISED, Pass::FLAG_AUTO);
+    }
   }
 
   film->tag_modified();

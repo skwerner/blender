@@ -82,6 +82,9 @@ class OIDNPass {
   {
     offset = buffer_params.get_pass_offset(type, mode);
     need_scale = (type == PASS_DENOISING_ALBEDO || type == PASS_DENOISING_NORMAL);
+
+    const PassInfo pass_info = Pass::get_info(type);
+    use_compositing = pass_info.use_compositing;
   }
 
   /* Name of an image which will be passed to the OIDN library.
@@ -104,6 +107,8 @@ class OIDNPass {
    * outside of generic pass handling. */
   bool need_scale = false;
 
+  bool use_compositing = false;
+
   /* For the scaled passes, the data which holds values of scaled pixels. */
   array<float> scaled_buffer;
 };
@@ -122,33 +127,45 @@ class OIDNDeenoiseContext {
         num_samples_(num_samples),
         pass_sample_count_(buffer_params_.get_pass_offset(PASS_SAMPLE_COUNT))
   {
-  }
-
-  void denoise()
-  {
-    /* Add input images.
-     *
-     * NOTE: Store passes for the entire duration od denoising because OIDN denoiser might
-     * reference pixels from the pass buffer. */
-
-    OIDNPass oidn_color_pass(buffer_params_, "color", PASS_COMBINED);
-    OIDNPass oidn_albedo_pass;
-    OIDNPass oidn_normal_pass;
-
-    set_pass(oidn_color_pass);
-
     if (denoise_params_.use_pass_albedo) {
-      oidn_albedo_pass = OIDNPass(buffer_params_, "albedo", PASS_DENOISING_ALBEDO);
-      set_pass(oidn_albedo_pass);
+      oidn_albedo_pass_ = OIDNPass(buffer_params_, "albedo", PASS_DENOISING_ALBEDO);
+      /* NOTE: The albedo pass is always ensured to be set from the denoise() call, since it is
+       * possible that some passes will not use the real values. */
     }
 
     if (denoise_params_.use_pass_normal) {
-      oidn_normal_pass = OIDNPass(buffer_params_, "normal", PASS_DENOISING_NORMAL);
-      set_pass(oidn_normal_pass);
+      oidn_normal_pass_ = OIDNPass(buffer_params_, "normal", PASS_DENOISING_NORMAL);
+      set_pass(oidn_normal_pass_);
+    }
+  }
+
+  void denoise(const PassType pass_type)
+  {
+    /* Add input color image. */
+    OIDNPass oidn_color_pass(buffer_params_, "color", pass_type);
+    if (oidn_color_pass.offset == PASS_UNUSED) {
+      return;
+    }
+    set_pass(oidn_color_pass);
+
+    if (denoise_params_.use_pass_albedo) {
+      if (pass_type == PASS_SHADOW_CATCHER) {
+        /* Using albedo for the shadow catcher passes does not give desired results: there are
+         * an unexpected discontinuity in the shadow catcher pass based on the albedo of the object
+         * the shadow is cast on. */
+        set_fake_albedo_pass();
+      }
+      else {
+        set_pass(oidn_albedo_pass_);
+      }
     }
 
     /* Add output pass. */
-    OIDNPass oidn_output_pass(buffer_params_, "output", PASS_COMBINED, PassMode::DENOISED);
+    OIDNPass oidn_output_pass(buffer_params_, "output", pass_type, PassMode::DENOISED);
+    if (oidn_color_pass.offset == PASS_UNUSED) {
+      LOG(DFATAL) << "Missing denoised pass " << pass_type_as_string(pass_type);
+      return;
+    }
     set_pass_referenced(oidn_output_pass);
 
     /* Execute filter. */
@@ -186,7 +203,7 @@ class OIDNDeenoiseContext {
                            stride * pass_stride * sizeof(float));
   }
 
-  void set_pass_scaled(OIDNPass &oidn_pass)
+  void read_pass_pixels(OIDNPass &oidn_pass)
   {
     const int64_t width = buffer_params_.width;
     const int64_t height = buffer_params_.height;
@@ -196,6 +213,7 @@ class OIDNDeenoiseContext {
 
     PassAccessor::PassAccessInfo pass_access_info;
     pass_access_info.type = oidn_pass.type;
+    pass_access_info.mode = oidn_pass.mode;
     pass_access_info.offset = oidn_pass.offset;
 
     /* Denoiser operates on passes which are used to calculate the approximation, and is never used
@@ -211,19 +229,59 @@ class OIDNDeenoiseContext {
     const PassAccessor::Destination destination(scaled_buffer.data(), 3);
 
     pass_accessor.get_render_tile_pixels(render_buffers_, buffer_params_, destination);
+  }
 
-    oidn_filter_->setImage(
-        oidn_pass.name, scaled_buffer.data(), oidn::Format::Float3, width, height, 0, 0, 0);
+  void set_pass_scaled(OIDNPass &oidn_pass)
+  {
+    if (oidn_pass.scaled_buffer.empty()) {
+      read_pass_pixels(oidn_pass);
+    }
+
+    const int64_t width = buffer_params_.width;
+    const int64_t height = buffer_params_.height;
+
+    oidn_filter_->setImage(oidn_pass.name,
+                           oidn_pass.scaled_buffer.data(),
+                           oidn::Format::Float3,
+                           width,
+                           height,
+                           0,
+                           0,
+                           0);
   }
 
   void set_pass(OIDNPass &oidn_pass)
   {
+    if (oidn_pass.use_compositing) {
+      set_pass_scaled(oidn_pass);
+      return;
+    }
+
     if (!oidn_pass.need_scale || (num_samples_ == 1 && pass_sample_count_ == PASS_UNUSED)) {
       set_pass_referenced(oidn_pass);
       return;
     }
 
     set_pass_scaled(oidn_pass);
+  }
+
+  void set_fake_albedo_pass()
+  {
+    const int64_t width = buffer_params_.width;
+    const int64_t height = buffer_params_.height;
+
+    /* TODO(sergey): Is there a way to avoid allocation of an entire frame of const values? */
+
+    if (fake_albedo_pixels_.empty()) {
+      const int64_t num_pixels = width * height * 3;
+      fake_albedo_pixels_.resize(num_pixels);
+      for (int i = 0; i < num_pixels; ++i) {
+        fake_albedo_pixels_[i] = 0.5f;
+      }
+    }
+
+    oidn_filter_->setImage(
+        "albedo", fake_albedo_pixels_.data(), oidn::Format::Float3, width, height, 0, 0, 0);
   }
 
   /* Scale output pass to match adaptive sampling per-pixel scale, as well as bring alpha channel
@@ -244,6 +302,9 @@ class OIDNDeenoiseContext {
 
     float *buffer_data = render_buffers_->buffer.data();
 
+    const bool has_pass_sample_count = (pass_sample_count_ != PASS_UNUSED);
+    const bool need_scale = has_pass_sample_count || oidn_input_pass.use_compositing;
+
     for (int y = 0; y < height; ++y) {
       float *buffer_row = buffer_data + buffer_offset + y * row_stride;
       for (int x = 0; x < width; ++x) {
@@ -251,8 +312,10 @@ class OIDNDeenoiseContext {
         float *noisy_pixel = buffer_pixel + oidn_input_pass.offset;
         float *denoised_pixel = buffer_pixel + oidn_output_pass.offset;
 
-        if (pass_sample_count_ != PASS_UNUSED) {
-          const float pixel_scale = __float_as_uint(buffer_pixel[pass_sample_count_]);
+        if (need_scale) {
+          float pixel_scale = has_pass_sample_count ?
+                                  __float_as_uint(buffer_pixel[pass_sample_count_]) :
+                                  num_samples_;
 
           denoised_pixel[0] = denoised_pixel[0] * pixel_scale;
           denoised_pixel[1] = denoised_pixel[1] * pixel_scale;
@@ -270,6 +333,12 @@ class OIDNDeenoiseContext {
   oidn::FilterRef *oidn_filter_;
   int num_samples_;
   int pass_sample_count_;
+
+  /* Optional albedo and normal passes, reused by denoising of different pass types. */
+  OIDNPass oidn_albedo_pass_;
+  OIDNPass oidn_normal_pass_;
+
+  array<float> fake_albedo_pixels_;
 };
 #endif
 
@@ -288,7 +357,9 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
   OIDNDeenoiseContext context(params_, buffer_params, render_buffers, oidn_filter, num_samples);
-  context.denoise();
+  context.denoise(PASS_COMBINED);
+  context.denoise(PASS_SHADOW_CATCHER);
+  context.denoise(PASS_SHADOW_CATCHER_MATTE);
 #endif
 
   /* TODO: It may be possible to avoid this copy, but we have to ensure that when other code copies

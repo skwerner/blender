@@ -67,9 +67,11 @@ PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMod
   pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
 
   if (pass_mode == PassMode::DENOISED && kfilm.display_pass_denoised_offset != PASS_UNUSED) {
+    pass_access_info.mode = PassMode::DENOISED;
     pass_access_info.offset = kfilm.display_pass_denoised_offset;
   }
   else {
+    pass_access_info.mode = PassMode::NOISY;
     pass_access_info.offset = kfilm.display_pass_offset;
   }
 

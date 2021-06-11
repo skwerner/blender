@@ -275,16 +275,17 @@ DeviceInfo OIDNDenoiser::get_denoiser_device_info() const
 void OIDNDenoiser::initialize()
 {
 #ifdef WITH_OPENIMAGEDENOISE
-  if (!state_->oidn_device) {
-    state_->oidn_device = oidn::newDevice();
-    state_->oidn_device.commit();
-  }
-
   if (state_->oidn_filter) {
     if (params_.use_pass_albedo != state_->use_pass_albedo ||
         params_.use_pass_normal != state_->use_pass_normal) {
+      state_->oidn_device = nullptr;
       state_->oidn_filter = nullptr;
     }
+  }
+
+  if (!state_->oidn_device) {
+    state_->oidn_device = oidn::newDevice();
+    state_->oidn_device.commit();
   }
 
   if (!state_->oidn_filter) {
@@ -292,6 +293,9 @@ void OIDNDenoiser::initialize()
     state_->oidn_filter.set("hdr", true);
     state_->oidn_filter.set("srgb", false);
   }
+
+  state_->use_pass_albedo = params_.use_pass_albedo;
+  state_->use_pass_normal = params_.use_pass_normal;
 #endif
 }
 

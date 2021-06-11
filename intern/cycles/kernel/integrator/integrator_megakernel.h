@@ -63,6 +63,9 @@ ccl_device void integrator_megakernel(INTEGRATOR_STATE_ARGS,
         case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE:
           integrator_shade_surface(INTEGRATOR_STATE_PASS, render_buffer);
           break;
+        case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME:
+          integrator_shade_volume(INTEGRATOR_STATE_PASS, render_buffer);
+          break;
         case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
           integrator_shade_surface_raytrace(INTEGRATOR_STATE_PASS, render_buffer);
           break;

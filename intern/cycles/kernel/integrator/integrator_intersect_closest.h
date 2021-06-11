@@ -28,6 +28,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+template<uint32_t current_kernel>
 ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
     INTEGRATOR_STATE_ARGS, const Intersection *ccl_restrict isect)
 {
@@ -71,15 +72,16 @@ ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
 
   /* Setup next kernel to execute. */
   if (flags & SD_HAS_RAYTRACE) {
-    INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
-                                DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
-                                shader);
+    INTEGRATOR_PATH_NEXT_SORTED(
+        current_kernel, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
   }
   else {
-    INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
-                                DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
-                                shader);
+    INTEGRATOR_PATH_NEXT_SORTED(current_kernel, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader);
   }
+
+  /* Setup shadow catcher. */
+  const int object_flags = intersection_get_object_flags(kg, isect);
+  kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags);
 
   return true;
 }
@@ -122,7 +124,7 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
   integrator_state_write_isect(INTEGRATOR_STATE_PASS, &isect);
 
 #ifdef __VOLUME__
-  if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, object) != OBJECT_NONE) {
+  if (INTEGRATOR_STATE_ARRAY(volume_stack, 0, shader) != SHADER_NONE) {
     /* Continue with volume kernel if we are inside a volume, regardless
      * if we hit anything. */
     INTEGRATOR_PATH_NEXT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
@@ -140,9 +142,8 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
     }
     else {
       /* Hit a surface, continue with surface kernel unless terminated. */
-      if (integrator_intersect_shader_next_kernel(INTEGRATOR_STATE_PASS, &isect)) {
-        const int object_flags = intersection_get_object_flags(kg, &isect);
-        kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags);
+      if (integrator_intersect_shader_next_kernel<DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST>(
+              INTEGRATOR_STATE_PASS, &isect)) {
         return;
       }
       else {

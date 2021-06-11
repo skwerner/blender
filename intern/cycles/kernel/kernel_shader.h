@@ -46,7 +46,9 @@ CCL_NAMESPACE_BEGIN
 /* ShaderData setup from incoming ray */
 
 #ifdef __OBJECT_MOTION__
-ccl_device void shader_setup_object_transforms(const KernelGlobals *kg, ShaderData *sd, float time)
+ccl_device void shader_setup_object_transforms(const KernelGlobals *ccl_restrict kg,
+                                               ShaderData *ccl_restrict sd,
+                                               float time)
 {
   if (sd->object_flag & SD_OBJECT_MOTION) {
     sd->ob_tfm_motion = object_fetch_transform_motion(kg, sd->object, time);
@@ -58,7 +60,7 @@ ccl_device void shader_setup_object_transforms(const KernelGlobals *kg, ShaderDa
 /* TODO: break this up if it helps reduce register pressure to load data from
  * global memory as we write it to shaderdata. */
 ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict kg,
-                                             ShaderData *sd,
+                                             ShaderData *ccl_restrict sd,
                                              const Ray *ccl_restrict ray,
                                              const Intersection *ccl_restrict isect)
 {
@@ -249,7 +251,7 @@ ccl_device_inline
 /* ShaderData setup from position sampled on mesh */
 
 ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restrict kg,
-                                                ShaderData *sd,
+                                                ShaderData *ccl_restrict sd,
                                                 const float3 P,
                                                 const float3 Ng,
                                                 const float3 I,
@@ -365,8 +367,12 @@ ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restric
 
 /* ShaderData setup for displacement */
 
-ccl_device void shader_setup_from_displace(
-    const KernelGlobals *ccl_restrict kg, ShaderData *sd, int object, int prim, float u, float v)
+ccl_device void shader_setup_from_displace(const KernelGlobals *ccl_restrict kg,
+                                           ShaderData *ccl_restrict sd,
+                                           int object,
+                                           int prim,
+                                           float u,
+                                           float v)
 {
   float3 P, Ng, I = zero_float3();
   int shader;
@@ -396,7 +402,7 @@ ccl_device void shader_setup_from_displace(
 /* ShaderData setup from ray into background */
 
 ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_restrict kg,
-                                                    ShaderData *sd,
+                                                    ShaderData *ccl_restrict sd,
                                                     const float3 ray_P,
                                                     const float3 ray_D,
                                                     const float ray_time)
@@ -444,9 +450,9 @@ ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_res
 /* ShaderData setup from point inside volume */
 
 #ifdef __VOLUME__
-ccl_device_inline void shader_setup_from_volume(const KernelGlobals *kg,
-                                                ShaderData *sd,
-                                                const Ray *ray)
+ccl_device_inline void shader_setup_from_volume(const KernelGlobals *ccl_restrict kg,
+                                                ShaderData *ccl_restrict sd,
+                                                const Ray *ccl_restrict ray)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
@@ -995,8 +1001,8 @@ ccl_device float3 shader_holdout_apply(const KernelGlobals *kg, ShaderData *sd)
 
 template<uint node_feature_mask>
 ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
-                                    ShaderData *sd,
-                                    ccl_global float *buffer,
+                                    ShaderData *ccl_restrict sd,
+                                    ccl_global float *ccl_restrict buffer,
                                     int path_flag)
 {
   PROFILING_INIT(kg, PROFILING_SHADER_EVAL);
@@ -1192,10 +1198,11 @@ ccl_device int shader_phase_sample_closure(const KernelGlobals *kg,
 
 /* Volume Evaluation */
 
+template<typename StackReadOp>
 ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
-                                          ShaderData *sd,
-                                          ccl_addr_space VolumeStack *stack,
-                                          int path_flag)
+                                          ShaderData *ccl_restrict sd,
+                                          const int path_flag,
+                                          StackReadOp stack_read)
 {
   /* If path is being terminated, we are tracing a shadow ray or evaluating
    * emission, then we don't need to store closures. The emission and shadow
@@ -1215,12 +1222,17 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
   sd->flag = 0;
   sd->object_flag = 0;
 
-  for (int i = 0; stack[i].shader != SHADER_NONE; i++) {
+  for (int i = 0;; i++) {
+    const VolumeStack entry = stack_read(i);
+    if (entry.shader == SHADER_NONE) {
+      break;
+    }
+
     /* setup shaderdata from stack. it's mostly setup already in
      * shader_setup_from_volume, this switching should be quick */
-    sd->object = stack[i].object;
+    sd->object = entry.object;
     sd->lamp = LAMP_NONE;
-    sd->shader = stack[i].shader;
+    sd->shader = entry.shader;
 
     sd->flag &= ~SD_SHADER_FLAGS;
     sd->flag |= kernel_tex_fetch(__shaders, (sd->shader & SHADER_MASK)).flags;

@@ -97,6 +97,22 @@ ccl_device_forceinline void integrator_state_read_isect(INTEGRATOR_STATE_CONST_A
 #endif
 }
 
+ccl_device_forceinline VolumeStack integrator_state_read_volume_stack(INTEGRATOR_STATE_CONST_ARGS,
+                                                                      int i)
+{
+  VolumeStack entry = {INTEGRATOR_STATE_ARRAY(volume_stack, i, object),
+                       INTEGRATOR_STATE_ARRAY(volume_stack, i, shader)};
+  return entry;
+}
+
+ccl_device_forceinline void integrator_state_write_volume_stack(INTEGRATOR_STATE_ARGS,
+                                                                int i,
+                                                                VolumeStack entry)
+{
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, i, object) = entry.object;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, i, shader) = entry.shader;
+}
+
 /* Shadow Intersection */
 
 ccl_device_forceinline void integrator_state_write_shadow_isect(
@@ -136,6 +152,22 @@ ccl_device_forceinline void integrator_state_copy_volume_stack_to_shadow(INTEGRA
     INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = INTEGRATOR_STATE_ARRAY(
         volume_stack, i, shader);
   }
+}
+
+ccl_device_forceinline VolumeStack
+integrator_state_read_shadow_volume_stack(INTEGRATOR_STATE_CONST_ARGS, int i)
+{
+  VolumeStack entry = {INTEGRATOR_STATE_ARRAY(volume_stack, i, object),
+                       INTEGRATOR_STATE_ARRAY(volume_stack, i, shader)};
+  return entry;
+}
+
+ccl_device_forceinline void integrator_state_write_shadow_volume_stack(INTEGRATOR_STATE_ARGS,
+                                                                       int i,
+                                                                       VolumeStack entry)
+{
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = entry.object;
+  INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = entry.shader;
 }
 
 ccl_device_inline void integrator_state_copy_to_shadow_catcher(INTEGRATOR_STATE_ARGS)

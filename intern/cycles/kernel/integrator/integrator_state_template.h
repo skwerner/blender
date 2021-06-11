@@ -36,6 +36,8 @@ KERNEL_STRUCT_MEMBER(path, uint16_t, glossy_bounce)
 KERNEL_STRUCT_MEMBER(path, uint16_t, transmission_bounce)
 /* Current volume ray bounce depth. */
 KERNEL_STRUCT_MEMBER(path, uint16_t, volume_bounce)
+/* Current volume bounds ray bounce depth. */
+KERNEL_STRUCT_MEMBER(path, uint16_t, volume_bounds_bounce)
 /* Current transparent ray bounce depth. */
 KERNEL_STRUCT_MEMBER(path, uint16_t, transparent_bounce)
 /* DeviceKernel bit indicating queued kernels.

@@ -61,7 +61,7 @@ CCL_NAMESPACE_BEGIN
 #define ID_NONE (0.0f)
 #define PASS_UNUSED (~0)
 
-#define VOLUME_STACK_SIZE 32
+#define VOLUME_STACK_SIZE 4
 
 /* Split kernel constants */
 #define WORK_POOL_SIZE_GPU 64

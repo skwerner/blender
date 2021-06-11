@@ -59,7 +59,7 @@ CCL_NAMESPACE_BEGIN
  *
  * TODO: these could be made dynamic depending on the features used in the scene. */
 
-#define INTEGRATOR_VOLUME_STACK_SIZE 4
+#define INTEGRATOR_VOLUME_STACK_SIZE VOLUME_STACK_SIZE
 #define INTEGRATOR_SHADOW_ISECT_SIZE 4
 
 /* Data structures */

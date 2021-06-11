@@ -55,6 +55,7 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, transmission_bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, transparent_bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, volume_bounce) = 0;
+  INTEGRATOR_STATE_WRITE(path, volume_bounds_bounce) = 0;
   INTEGRATOR_STATE_WRITE(path, rng_hash) = rng_hash;
   INTEGRATOR_STATE_WRITE(path, rng_offset) = PRNG_BASE_NUM;
   INTEGRATOR_STATE_WRITE(path, flag) = PATH_RAY_CAMERA | PATH_RAY_MIS_SKIP |
@@ -65,7 +66,7 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, throughput) = make_float3(1.0f, 1.0f, 1.0f);
 
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = SHADER_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = kernel_data.background.volume_shader;
 
 #ifdef __DENOISING_FEATURES__
   if (kernel_data.film.have_denoising_passes) {
@@ -206,8 +207,6 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
 #ifdef __VOLUME__
 ccl_device_inline bool path_state_volume_next(INTEGRATOR_STATE_ARGS)
 {
-  /* TODO */
-#  if 0
   /* For volume bounding meshes we pass through without counting transparent
    * bounces, only sanity check in case self intersection gets us stuck. */
   uint32_t volume_bounds_bounce = INTEGRATOR_STATE(path, volume_bounds_bounce) + 1;
@@ -222,9 +221,6 @@ ccl_device_inline bool path_state_volume_next(INTEGRATOR_STATE_ARGS)
   }
 
   return true;
-#  else
-  return false;
-#  endif
 }
 #endif
 

@@ -16,11 +16,15 @@
 
 #pragma once
 
+#include "kernel/integrator/integrator_shade_volume.h"
+#include "kernel/integrator/integrator_volume_stack.h"
+
+#include "kernel/kernel_shader.h"
+
 CCL_NAMESPACE_BEGIN
 
 #ifdef __TRANSPARENT_SHADOWS__
-ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STATE_ARGS,
-                                                                  const int hit)
+ccl_device_inline float3 integrate_transparent_surface_shadow(INTEGRATOR_STATE_ARGS, const int hit)
 {
   /* TODO: does aliasing like this break automatic SoA in CUDA?
    * Should we instead store closures separate from ShaderData?
@@ -45,9 +49,45 @@ ccl_device_inline float3 integrate_transparent_shadow_shader_eval(INTEGRATOR_STA
         INTEGRATOR_STATE_PASS, shadow_sd, NULL, PATH_RAY_SHADOW);
   }
 
+#  ifdef __VOLUME__
+  /* Exit/enter volume. */
+  shadow_volume_stack_enter_exit(INTEGRATOR_STATE_PASS, shadow_sd);
+#  endif
+
   /* Compute transparency from closures. */
   return shader_bsdf_transparency(kg, shadow_sd);
 }
+
+#  ifdef __VOLUME__
+ccl_device_inline float3 integrate_transparent_volume_shadow(INTEGRATOR_STATE_ARGS, const int hit)
+{
+  /* TODO: deduplicate with surface, or does it not matter for memory usage? */
+  ShaderDataTinyStorage shadow_sd_storage;
+  ShaderData *shadow_sd = AS_SHADER_DATA(&shadow_sd_storage);
+
+  /* Setup shader data. */
+  Ray ray ccl_optional_struct_init;
+  integrator_state_read_ray(INTEGRATOR_STATE_PASS, &ray);
+
+  Intersection isect ccl_optional_struct_init;
+  integrator_state_read_shadow_isect(INTEGRATOR_STATE_PASS, &isect, hit);
+
+  shader_setup_from_volume(kg, shadow_sd, &ray);
+
+  /* Evaluate shader. */
+  float3 sigma_a = zero_float3();
+  if (!shadow_volume_shader_sample(INTEGRATOR_STATE_PASS, shadow_sd, &sigma_a)) {
+    return one_float3();
+  }
+
+  /* Integrate extinction over segment. */
+  const float start_t = (hit == 0) ? 0.0f : INTEGRATOR_STATE_ARRAY(shadow_isect, hit - 1, t);
+  const float end_t = isect.t;
+  const float t = end_t - start_t;
+
+  return exp3(-sigma_a * t);
+}
+#  endif
 
 ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS, const int num_hits)
 {
@@ -55,7 +95,21 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS, const
   const int num_recorded_hits = min(num_hits, INTEGRATOR_SHADOW_ISECT_SIZE);
 
   for (int hit = 0; hit < num_recorded_hits; hit++) {
-    const float3 shadow = integrate_transparent_shadow_shader_eval(INTEGRATOR_STATE_PASS, hit);
+#  ifdef __VOLUME__
+    /* Volume shaders. */
+    if (INTEGRATOR_STATE_ARRAY(shadow_volume_stack, 0, shader) != SHADER_NONE) {
+      const float3 shadow = integrate_transparent_volume_shadow(INTEGRATOR_STATE_PASS, hit);
+      const float3 throughput = INTEGRATOR_STATE(shadow_path, throughput) * shadow;
+      if (is_zero(throughput)) {
+        return true;
+      }
+
+      INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
+    }
+#  endif
+
+    /* Surface shaders. */
+    const float3 shadow = integrate_transparent_surface_shadow(INTEGRATOR_STATE_PASS, hit);
     const float3 throughput = INTEGRATOR_STATE(shadow_path, throughput) * shadow;
     if (is_zero(throughput)) {
       return true;

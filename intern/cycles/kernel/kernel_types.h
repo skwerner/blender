@@ -407,106 +407,6 @@ typedef enum CryptomatteType {
   CRYPT_ACCURATE = (1 << 3),
 } CryptomatteType;
 
-typedef enum eBakePassFilter {
-  BAKE_FILTER_NONE = 0,
-  BAKE_FILTER_DIRECT = (1 << 0),
-  BAKE_FILTER_INDIRECT = (1 << 1),
-  BAKE_FILTER_COLOR = (1 << 2),
-  BAKE_FILTER_DIFFUSE = (1 << 3),
-  BAKE_FILTER_GLOSSY = (1 << 4),
-  BAKE_FILTER_TRANSMISSION = (1 << 5),
-  BAKE_FILTER_EMISSION = (1 << 6),
-  BAKE_FILTER_AO = (1 << 7),
-} eBakePassFilter;
-
-typedef enum BakePassFilterCombos {
-  BAKE_FILTER_COMBINED = (BAKE_FILTER_DIRECT | BAKE_FILTER_INDIRECT | BAKE_FILTER_DIFFUSE |
-                          BAKE_FILTER_GLOSSY | BAKE_FILTER_TRANSMISSION | BAKE_FILTER_EMISSION |
-                          BAKE_FILTER_AO),
-  BAKE_FILTER_DIFFUSE_DIRECT = (BAKE_FILTER_DIRECT | BAKE_FILTER_DIFFUSE),
-  BAKE_FILTER_GLOSSY_DIRECT = (BAKE_FILTER_DIRECT | BAKE_FILTER_GLOSSY),
-  BAKE_FILTER_TRANSMISSION_DIRECT = (BAKE_FILTER_DIRECT | BAKE_FILTER_TRANSMISSION),
-  BAKE_FILTER_DIFFUSE_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_DIFFUSE),
-  BAKE_FILTER_GLOSSY_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_GLOSSY),
-  BAKE_FILTER_TRANSMISSION_INDIRECT = (BAKE_FILTER_INDIRECT | BAKE_FILTER_TRANSMISSION),
-} BakePassFilterCombos;
-
-typedef ccl_addr_space struct PathRadianceState {
-#ifdef __PASSES__
-  float3 diffuse;
-  float3 glossy;
-  float3 transmission;
-  float3 volume;
-
-  float3 direct;
-#endif
-} PathRadianceState;
-
-typedef ccl_addr_space struct PathRadiance {
-#ifdef __PASSES__
-  int use_light_pass;
-#endif
-
-  float transparent;
-  float3 emission;
-#ifdef __PASSES__
-  float3 background;
-  float3 ao;
-
-  float3 indirect;
-  float3 direct_emission;
-
-  float3 color_diffuse;
-  float3 color_glossy;
-  float3 color_transmission;
-
-  float3 direct_diffuse;
-  float3 direct_glossy;
-  float3 direct_transmission;
-  float3 direct_volume;
-
-  float3 indirect_diffuse;
-  float3 indirect_glossy;
-  float3 indirect_transmission;
-  float3 indirect_volume;
-
-  float3 shadow;
-  float mist;
-#endif
-
-  struct PathRadianceState state;
-
-#ifdef __SHADOW_TRICKS__
-  /* Total light reachable across the path, ignoring shadow blocked queries. */
-  float3 path_total;
-  /* Total light reachable across the path with shadow blocked queries
-   * applied here.
-   *
-   * Dividing this figure by path_total will give estimate of shadow pass.
-   */
-  float3 path_total_shaded;
-
-  /* Color of the background on which shadow is alpha-overed. */
-  float3 shadow_background_color;
-
-  /* Path radiance sum and throughput at the moment when ray hits shadow
-   * catcher object.
-   */
-  float shadow_throughput;
-
-  /* Accumulated transparency along the path after shadow catcher bounce. */
-  float shadow_transparency;
-
-  /* Indicate if any shadow catcher data is set. */
-  int has_shadow_catcher;
-#endif
-
-#ifdef __DENOISING_FEATURES__
-  float3 denoising_normal;
-  float3 denoising_albedo;
-#endif /* __DENOISING_FEATURES__ */
-} PathRadiance;
-
 typedef struct BsdfEval {
   float3 diffuse;
   float3 glossy;
@@ -928,7 +828,6 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
 
 #ifdef __OSL__
   const struct KernelGlobals *osl_globals;
-  struct PathState *osl_path_state;
 #endif
 
   /* LCG state for closures that require additional random numbers. */
@@ -959,60 +858,13 @@ typedef ccl_addr_space struct ccl_align(16) ShaderDataTinyStorage
 ShaderDataTinyStorage;
 #define AS_SHADER_DATA(shader_data_tiny_storage) ((ShaderData *)shader_data_tiny_storage)
 
-/* Path State */
+/* Volume Stack */
 
 #ifdef __VOLUME__
 typedef struct VolumeStack {
   int object;
   int shader;
 } VolumeStack;
-#endif
-
-typedef struct PathState {
-  /* see enum PathRayFlag */
-  int flag;
-
-  /* random number generator state */
-  uint rng_hash;       /* per pixel hash */
-  int rng_offset;      /* dimension offset */
-  int sample;          /* path sample number */
-  int num_samples;     /* total number of times this path will be sampled */
-  float branch_factor; /* number of branches in indirect paths */
-
-  /* bounce counting */
-  int bounce;
-  int diffuse_bounce;
-  int glossy_bounce;
-  int transmission_bounce;
-  int transparent_bounce;
-
-#ifdef __DENOISING_FEATURES__
-  float denoising_feature_weight;
-  float3 denoising_feature_throughput;
-#endif /* __DENOISING_FEATURES__ */
-
-  /* multiple importance sampling */
-  float min_ray_pdf; /* smallest bounce pdf over entire path up to now */
-  float ray_pdf;     /* last bounce pdf */
-#ifdef __LAMP_MIS__
-  float ray_t; /* accumulated distance through transparent surfaces */
-#endif
-
-  /* volume rendering */
-#ifdef __VOLUME__
-  int volume_bounce;
-  int volume_bounds_bounce;
-  VolumeStack volume_stack[VOLUME_STACK_SIZE];
-#endif
-} PathState;
-
-#ifdef __VOLUME__
-typedef struct VolumeState {
-#  ifdef __SPLIT_KERNEL__
-#  else
-  PathState ps;
-#  endif
-} VolumeState;
 #endif
 
 /* Struct to gather multiple nearby intersections. */
@@ -1024,20 +876,6 @@ typedef struct LocalIntersection {
   struct Intersection hits[LOCAL_MAX_HITS];
   float3 Ng[LOCAL_MAX_HITS];
 } LocalIntersection;
-
-/* Subsurface */
-
-/* Struct to gather SSS indirect rays and delay tracing them. */
-typedef struct SubsurfaceIndirectRays {
-  PathState state[BSSRDF_MAX_HITS];
-
-  int num_rays;
-
-  struct Ray rays[BSSRDF_MAX_HITS];
-  float3 throughputs[BSSRDF_MAX_HITS];
-  struct PathRadianceState L_state[BSSRDF_MAX_HITS];
-} SubsurfaceIndirectRays;
-static_assert(BSSRDF_MAX_HITS <= LOCAL_MAX_HITS, "BSSRDF hits too high.");
 
 /* Constant Kernel Data
  *

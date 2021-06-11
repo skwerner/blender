@@ -528,10 +528,15 @@ int Pass::get_offset(const vector<Pass> &passes, const Pass &pass)
   int pass_offset = 0;
 
   for (const Pass &current_pass : passes) {
-    if (current_pass.name == pass.name) {
-      DCHECK_EQ(current_pass.type, pass.type);
-      DCHECK_EQ(current_pass.mode, pass.mode);
-      return pass_offset;
+    /* Note that pass name is allowed to be empty. This is why we check for type and mode. */
+    if (current_pass.type == pass.type && current_pass.mode == pass.mode &&
+        current_pass.name == pass.name) {
+      if (current_pass.is_written()) {
+        return pass_offset;
+      }
+      else {
+        return PASS_UNUSED;
+      }
     }
     if (current_pass.is_written()) {
       pass_offset += current_pass.get_info().num_components;

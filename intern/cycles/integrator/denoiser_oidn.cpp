@@ -44,6 +44,9 @@ class OIDNDenoiser::State {
 #ifdef WITH_OPENIMAGEDENOISE
   oidn::DeviceRef oidn_device;
   oidn::FilterRef oidn_filter;
+
+  bool use_pass_albedo = false;
+  bool use_pass_normal = false;
 #endif
 };
 
@@ -275,6 +278,13 @@ void OIDNDenoiser::initialize()
   if (!state_->oidn_device) {
     state_->oidn_device = oidn::newDevice();
     state_->oidn_device.commit();
+  }
+
+  if (state_->oidn_filter) {
+    if (params_.use_pass_albedo != state_->use_pass_albedo ||
+        params_.use_pass_normal != state_->use_pass_normal) {
+      state_->oidn_filter = nullptr;
+    }
   }
 
   if (!state_->oidn_filter) {

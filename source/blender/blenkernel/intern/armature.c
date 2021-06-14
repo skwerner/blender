@@ -324,6 +324,7 @@ IDTypeInfo IDType_ID_AR = {
     .make_local = NULL,
     .foreach_id = armature_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = armature_blend_write,
     .blend_read_data = armature_blend_read_data,
@@ -331,6 +332,8 @@ IDTypeInfo IDType_ID_AR = {
     .blend_read_expand = armature_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /** \} */
@@ -1462,7 +1465,11 @@ void BKE_pchan_bbone_segments_cache_compute(bPoseChannel *pchan)
                   tmat,
                   b_bone_mats[0].mat);
 
-    mat4_to_dquat(&b_bone_dual_quats[a], bone->arm_mat, b_bone_mats[a + 1].mat);
+    /* Compute the orthonormal object space rest matrix of the segment. */
+    mul_m4_m4m4(tmat, bone->arm_mat, b_bone_rest[a].mat);
+    normalize_m4(tmat);
+
+    mat4_to_dquat(&b_bone_dual_quats[a], tmat, b_bone_mats[a + 1].mat);
   }
 }
 
@@ -1524,14 +1531,6 @@ void BKE_pchan_bbone_deform_segment_index(const bPoseChannel *pchan,
 /* -------------------------------------------------------------------- */
 /** \name Bone Space to Space Conversion API
  * \{ */
-
-void get_objectspace_bone_matrix(struct Bone *bone,
-                                 float M_accumulatedMatrix[4][4],
-                                 int UNUSED(root),
-                                 int UNUSED(posed))
-{
-  copy_m4_m4(M_accumulatedMatrix, bone->arm_mat);
-}
 
 /* Convert World-Space Matrix to Pose-Space Matrix */
 void BKE_armature_mat_world_to_pose(Object *ob, const float inmat[4][4], float outmat[4][4])
@@ -1692,7 +1691,7 @@ void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
             break;
 
           default:
-            BLI_assert(false);
+            BLI_assert_unreachable();
         }
       }
       /* If removing parent pose rotation: */
@@ -1724,7 +1723,7 @@ void BKE_bone_parent_transform_calc_from_matrices(int bone_flag,
             break;
 
           default:
-            BLI_assert(false);
+            BLI_assert_unreachable();
         }
       }
 
@@ -1885,9 +1884,8 @@ void BKE_armature_mat_pose_to_bone_ex(struct Depsgraph *depsgraph,
    * bone loc/sca/rot is ignored, scene and frame are not used. */
   BKE_pose_where_is_bone(depsgraph, NULL, ob, &work_pchan, 0.0f, false);
 
-  /* find the matrix, need to remove the bone transforms first so this is
-   * calculated as a matrix to set rather than a difference ontop of what's
-   * already there. */
+  /* Find the matrix, need to remove the bone transforms first so this is calculated
+   * as a matrix to set rather than a difference on top of what's already there. */
   unit_m4(outmat);
   BKE_pchan_apply_mat4(&work_pchan, outmat, false);
 
@@ -1926,7 +1924,7 @@ void BKE_pchan_rot_to_mat3(const bPoseChannel *pchan, float r_mat[3][3])
 {
   /* rotations may either be quats, eulers (with various rotation orders), or axis-angle */
   if (pchan->rotmode > 0) {
-    /* euler rotations (will cause gimble lock,
+    /* Euler rotations (will cause gimbal lock,
      * but this can be alleviated a bit with rotation orders) */
     eulO_to_mat3(r_mat, pchan->eul, pchan->rotmode);
   }
@@ -1939,7 +1937,7 @@ void BKE_pchan_rot_to_mat3(const bPoseChannel *pchan, float r_mat[3][3])
     float quat[4];
 
     /* NOTE: we now don't normalize the stored values anymore,
-     * since this was kindof evil in some cases but if this proves to be too problematic,
+     * since this was kind of evil in some cases but if this proves to be too problematic,
      * switch back to the old system of operating directly on the stored copy. */
     normalize_qt_qt(quat, pchan->quat);
     quat_to_mat3(r_mat, quat);
@@ -2517,6 +2515,17 @@ void BKE_pchan_rebuild_bbone_handles(bPose *pose, bPoseChannel *pchan)
   pchan->bbone_next = pose_channel_find_bone(pose, pchan->bone->bbone_next);
 }
 
+void BKE_pose_channels_clear_with_null_bone(bPose *pose, const bool do_id_user)
+{
+  LISTBASE_FOREACH_MUTABLE (bPoseChannel *, pchan, &pose->chanbase) {
+    if (pchan->bone == NULL) {
+      BKE_pose_channel_free_ex(pchan, do_id_user);
+      BKE_pose_channels_hash_free(pose);
+      BLI_freelinkN(&pose->chanbase, pchan);
+    }
+  }
+}
+
 /**
  * Only after leave editmode, duplicating, validating older files, library syncing.
  *
@@ -2528,7 +2537,7 @@ void BKE_pose_rebuild(Main *bmain, Object *ob, bArmature *arm, const bool do_id_
 {
   Bone *bone;
   bPose *pose;
-  bPoseChannel *pchan, *next;
+  bPoseChannel *pchan;
   int counter = 0;
 
   /* only done here */
@@ -2551,14 +2560,7 @@ void BKE_pose_rebuild(Main *bmain, Object *ob, bArmature *arm, const bool do_id_
   }
 
   /* and a check for garbage */
-  for (pchan = pose->chanbase.first; pchan; pchan = next) {
-    next = pchan->next;
-    if (pchan->bone == NULL) {
-      BKE_pose_channel_free_ex(pchan, do_id_user);
-      BKE_pose_channels_hash_free(pose);
-      BLI_freelinkN(&pose->chanbase, pchan);
-    }
-  }
+  BKE_pose_channels_clear_with_null_bone(pose, do_id_user);
 
   BKE_pose_channels_hash_make(pose);
 

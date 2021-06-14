@@ -285,10 +285,6 @@ static bool overlay_should_fade_object(Object *ob, Object *active_object)
     return false;
   }
 
-  if (ob->base_flag & BASE_FROM_DUPLI) {
-    return false;
-  }
-
   return true;
 }
 
@@ -298,9 +294,6 @@ static void OVERLAY_cache_populate(void *vedata, Object *ob)
   OVERLAY_PrivateData *pd = data->stl->pd;
 
   if (pd->space_type == SPACE_IMAGE) {
-    if (ob->type == OB_MESH) {
-      OVERLAY_edit_uv_cache_populate(vedata, ob);
-    }
     return;
   }
 
@@ -489,7 +482,12 @@ static void OVERLAY_cache_finish(void *vedata)
 {
   OVERLAY_Data *data = vedata;
   OVERLAY_PrivateData *pd = data->stl->pd;
-  if (ELEM(pd->space_type, SPACE_IMAGE, SPACE_NODE)) {
+
+  if (ELEM(pd->space_type, SPACE_IMAGE)) {
+    OVERLAY_edit_uv_cache_finish(vedata);
+    return;
+  }
+  if (ELEM(pd->space_type, SPACE_NODE)) {
     return;
   }
 
@@ -596,6 +594,11 @@ static void OVERLAY_draw_scene(void *vedata)
 
   OVERLAY_xray_depth_infront_copy(vedata);
 
+  if (pd->ctx_mode == CTX_MODE_PAINT_WEIGHT) {
+    /* Fix weird case where weightpaint mode needs to draw before xray bones. */
+    OVERLAY_paint_draw(vedata);
+  }
+
   if (DRW_state_is_fbo()) {
     GPU_framebuffer_bind(fbl->overlay_in_front_fb);
   }
@@ -646,7 +649,6 @@ static void OVERLAY_draw_scene(void *vedata)
       OVERLAY_paint_draw(vedata);
       OVERLAY_pose_draw(vedata);
       break;
-    case CTX_MODE_PAINT_WEIGHT:
     case CTX_MODE_PAINT_VERTEX:
     case CTX_MODE_PAINT_TEXTURE:
       OVERLAY_paint_draw(vedata);
@@ -692,6 +694,7 @@ DrawEngineType draw_engine_overlay_type = {
     &OVERLAY_cache_populate,
     &OVERLAY_cache_finish,
     &OVERLAY_draw_scene,
+    NULL,
     NULL,
     NULL,
     NULL,

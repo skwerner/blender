@@ -216,6 +216,7 @@ IDTypeInfo IDType_ID_KE = {
     .make_local = NULL,
     .foreach_id = shapekey_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL, /* Could have one actually? */
 
     .blend_write = shapekey_blend_write,
     .blend_read_data = shapekey_blend_read_data,
@@ -223,6 +224,8 @@ IDTypeInfo IDType_ID_KE = {
     .blend_read_expand = shapekey_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 #define KEY_MODE_DUMMY 0 /* use where mode isn't checked for */

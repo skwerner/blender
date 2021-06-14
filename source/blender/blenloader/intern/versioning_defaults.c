@@ -184,6 +184,9 @@ static void blo_update_defaults_screen(bScreen *screen,
       SpaceSeq *seq = area->spacedata.first;
       seq->flag |= SEQ_SHOW_MARKERS | SEQ_SHOW_FCURVES | SEQ_ZOOM_TO_FIT | SEQ_SHOW_STRIP_OVERLAY |
                    SEQ_SHOW_STRIP_SOURCE | SEQ_SHOW_STRIP_NAME | SEQ_SHOW_STRIP_DURATION;
+
+      seq->render_size = SEQ_RENDER_SIZE_PROXY_100;
+      seq->flag |= SEQ_USE_PROXIES;
     }
     else if (area->spacetype == SPACE_TEXT) {
       /* Show syntax and line numbers in Script workspace text editor. */
@@ -330,7 +333,7 @@ static void blo_update_defaults_scene(Main *bmain, Scene *scene)
   /* Enable Soft Shadows by default. */
   scene->eevee.flag |= SCE_EEVEE_SHADOW_SOFT;
 
-  /* Be sure curfalloff and primitive are initializated */
+  /* Be sure `curfalloff` and primitive are initialized. */
   ToolSettings *ts = scene->toolsettings;
   if (ts->gp_sculpt.cur_falloff == NULL) {
     ts->gp_sculpt.cur_falloff = BKE_curvemapping_add(1, 0.0f, 0.0f, 1.0f, 1.0f);

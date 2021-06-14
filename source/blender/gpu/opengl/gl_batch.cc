@@ -238,7 +238,7 @@ GLuint GLVaoCache::base_instance_vao_get(GPUBatch *batch, int i_first)
   /**
    * There seems to be a nasty bug when drawing using the same VAO reconfiguring (T71147).
    * We just use a throwaway VAO for that. Note that this is likely to degrade performance.
-   **/
+   */
 #ifdef __APPLE__
   glDeleteVertexArrays(1, &vao_base_instance_);
   vao_base_instance_ = 0;
@@ -276,20 +276,6 @@ GLuint GLVaoCache::vao_get(GPUBatch *batch)
 
   return vao_id_;
 }
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Creation & Deletion
- * \{ */
-
-GLBatch::GLBatch()
-{
-}
-
-GLBatch::~GLBatch()
-{
-}
-
 /** \} */
 
 /* -------------------------------------------------------------------- */

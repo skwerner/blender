@@ -79,7 +79,7 @@ struct Render {
   RenderResult *result;
   /* if render with single-layer option, other rendered layers are stored here */
   RenderResult *pushedresult;
-  /* a list of RenderResults, for fullsample */
+  /** A list of #RenderResults, for full-samples. */
   ListBase fullresult;
   /* read/write mutex, all internal code that writes to re->result must use a
    * write lock, all external code must use a read lock. internal code is assumed
@@ -103,7 +103,7 @@ struct Render {
   /* Camera transform, only used by Freestyle. */
   float winmat[4][4];
 
-  /* clippping */
+  /* Clipping. */
   float clip_start;
   float clip_end;
 
@@ -141,7 +141,7 @@ struct Render {
   void (*progress)(void *handle, float i);
   void *prh;
 
-  void (*draw_lock)(void *handle, int i);
+  void (*draw_lock)(void *handle, bool lock);
   void *dlh;
   int (*test_break)(void *handle);
   void *tbh;

@@ -281,7 +281,7 @@ typedef struct ThemeSpace {
   unsigned char edge_seam[4], edge_sharp[4], edge_facesel[4], edge_crease[4], edge_bevel[4];
   /** Solid faces. */
   unsigned char face[4], face_select[4], face_back[4], face_front[4];
-  /**  selected color. */
+  /** Selected color. */
   unsigned char face_dot[4];
   unsigned char extra_edge_len[4], extra_edge_angle[4], extra_face_angle[4], extra_face_area[4];
   unsigned char normal[4];
@@ -375,7 +375,7 @@ typedef struct ThemeSpace {
   /** Two uses, for uvs with modifier applied on mesh and uvs during painting. */
   unsigned char uv_shadow[4];
 
-  /** Outliner - filter match. */
+  /** Search filter match, used for property search and in the outliner. */
   unsigned char match[4];
   /** Outliner - selected item. */
   unsigned char selected_highlight[4];
@@ -492,6 +492,7 @@ typedef struct bTheme {
   ThemeSpace space_clip;
   ThemeSpace space_topbar;
   ThemeSpace space_statusbar;
+  ThemeSpace space_spreadsheet;
 
   /* 20 sets of bone colors for this theme */
   ThemeWireColor tarm[20];
@@ -507,7 +508,7 @@ typedef struct bTheme {
 #define UI_THEMESPACE_START(btheme) \
   (CHECK_TYPE_INLINE(btheme, bTheme *), &((btheme)->space_properties))
 #define UI_THEMESPACE_END(btheme) \
-  (CHECK_TYPE_INLINE(btheme, bTheme *), (&((btheme)->space_statusbar) + 1))
+  (CHECK_TYPE_INLINE(btheme, bTheme *), (&((btheme)->space_spreadsheet) + 1))
 
 typedef struct bAddon {
   struct bAddon *next, *prev;
@@ -634,6 +635,7 @@ typedef struct UserDef_FileSpaceData {
 typedef struct UserDef_Experimental {
   /* Debug options, always available. */
   char use_undo_legacy;
+  char no_override_auto_resync;
   char use_cycles_debug;
   char SANITIZE_AFTER_HERE;
   /* The following options are automatically sanitized (set to 0)
@@ -641,10 +643,10 @@ typedef struct UserDef_Experimental {
   char use_new_hair_type;
   char use_new_point_cloud_type;
   char use_sculpt_vertex_colors;
-  char use_switch_object_operator;
   char use_sculpt_tools_tilt;
-  char use_object_add_tool;
-  char _pad[7];
+  char use_asset_browser;
+  char use_override_templates;
+  char _pad[6];
   /** `makesdna` does not allow empty structs. */
 } UserDef_Experimental;
 
@@ -673,6 +675,21 @@ typedef struct UserDef {
   /** 768 = FILE_MAXDIR. */
   char render_cachedir[768];
   char textudir[768];
+  /**
+   * Optional user location for scripts.
+   *
+   * This supports the same layout as Blender's scripts directory `release/scripts`.
+   *
+   * \note Unlike most paths, changing this is not fully supported at run-time,
+   * requiring a restart to properly take effect. Supporting this would cause complications as
+   * the script path can contain `startup`, `addons` & `modules` etc. properly unwinding the
+   * Python environment to the state it _would_ have been in gets complicated.
+   *
+   * Although this is partially supported as the `sys.path` is refreshed when loading preferences.
+   * This is done to support #PREFERENCES_OT_copy_prev which is available to the user when they
+   * launch with a new version of Blender. In this case setting the script path on top of
+   * factory settings will work without problems.
+   */
   char pythondir[768];
   char sounddir[768];
   char i18ndir[768];
@@ -762,8 +779,12 @@ typedef struct UserDef {
   char _pad13[4];
   struct SolidLight light_param[4];
   float light_ambient[3];
-  char _pad3[4];
-  short gizmo_flag, gizmo_size;
+  char gizmo_flag;
+  /** Generic gizmo size. */
+  char gizmo_size;
+  /** Navigate gizmo size. */
+  char gizmo_size_navigate_v3d;
+  char _pad3[5];
   short edit_studio_light;
   short lookdev_sphere_size;
   short vbotimeout, vbocollectrate;
@@ -900,7 +921,7 @@ typedef struct UserDef {
   int sequencer_disk_cache_compression; /* eUserpref_DiskCacheCompression */
   int sequencer_disk_cache_size_limit;
   short sequencer_disk_cache_flag;
-  char _pad5[2];
+  short sequencer_proxy_setup; /* eUserpref_SeqProxySetup */
 
   float collection_instance_empty_size;
   char _pad10[3];
@@ -1009,8 +1030,11 @@ typedef enum ePathCompare_Flag {
 
 /** #UserDef.viewzoom */
 typedef enum eViewZoom_Style {
-  USER_ZOOM_CONT = 0,
+  /** Update zoom continuously with a timer while dragging the cursor. */
+  USER_ZOOM_CONTINUE = 0,
+  /** Map changes in distance from the view center to zoom. */
   USER_ZOOM_SCALE = 1,
+  /** Map horizontal/vertical motion to zoom. */
   USER_ZOOM_DOLLY = 2,
 } eViewZoom_Style;
 
@@ -1200,7 +1224,7 @@ typedef enum eDupli_ID_Flags {
 
   USER_DUP_OBDATA = (~0) & ((1 << 24) - 1),
 
-  /* Those are not exposed as user preferences, only used internaly. */
+  /* Those are not exposed as user preferences, only used internally. */
   USER_DUP_OBJECT = (1 << 24),
   /* USER_DUP_COLLECTION = (1 << 25), */ /* UNUSED, keep because we may implement. */
 
@@ -1361,6 +1385,11 @@ typedef enum eUserpref_DiskCacheCompression {
   USER_SEQ_DISK_CACHE_COMPRESSION_LOW = 1,
   USER_SEQ_DISK_CACHE_COMPRESSION_HIGH = 2,
 } eUserpref_DiskCacheCompression;
+
+typedef enum eUserpref_SeqProxySetup {
+  USER_SEQ_PROXY_SETUP_MANUAL = 0,
+  USER_SEQ_PROXY_SETUP_AUTOMATIC = 1,
+} eUserpref_SeqProxySetup;
 
 /* Locale Ids. Auto will try to get local from OS. Our default is English though. */
 /** #UserDef.language */

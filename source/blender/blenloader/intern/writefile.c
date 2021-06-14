@@ -768,7 +768,7 @@ static void write_userdef(BlendWriter *writer, const UserDef *userdef)
 /* Keep it last of write_foodata functions. */
 static void write_libraries(WriteData *wd, Main *main)
 {
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   ID *id;
   int a, tot;
   bool found_one;
@@ -870,7 +870,10 @@ static void write_global(WriteData *wd, int fileflags, Main *mainvar)
   fg.fileflags = (fileflags & ~G_FILE_FLAG_ALL_RUNTIME);
 
   fg.globalf = G.f;
-  BLI_strncpy(fg.filename, mainvar->name, sizeof(fg.filename));
+  /* Write information needed for recovery. */
+  if (fileflags & G_FILE_RECOVER_WRITE) {
+    BLI_strncpy(fg.filename, mainvar->name, sizeof(fg.filename));
+  }
   sprintf(subvstr, "%4d", BLENDER_FILE_SUBVERSION);
   memcpy(fg.subvstr, subvstr, 4);
 
@@ -954,7 +957,7 @@ static bool write_file_handle(Main *mainvar,
    * if needed, without duplicating whole code. */
   Main *bmain = mainvar;
   do {
-    ListBase *lbarray[MAX_LIBARRAY];
+    ListBase *lbarray[INDEX_ID_MAX];
     int a = set_listbasepointers(bmain, lbarray);
     while (a--) {
       ID *id = lbarray[a]->first;

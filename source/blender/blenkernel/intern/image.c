@@ -93,7 +93,7 @@
 
 #include "RE_pipeline.h"
 
-#include "SEQ_sequencer.h" /* seq_foreground_frame_get() */
+#include "SEQ_utils.h" /* SEQ_get_topmost_sequence() */
 
 #include "GPU_texture.h"
 
@@ -331,6 +331,7 @@ IDTypeInfo IDType_ID_IM = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = image_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = image_blend_write,
     .blend_read_data = image_blend_read_data,
@@ -338,6 +339,8 @@ IDTypeInfo IDType_ID_IM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* prototypes */
@@ -730,6 +733,37 @@ int BKE_image_get_tile_from_pos(struct Image *ima,
   sub_v2_v2(r_uv, r_ofs);
 
   return tile_number;
+}
+
+/**
+ * Return the tile_number for the closest UDIM tile.
+ */
+int BKE_image_find_nearest_tile(const Image *image, const float co[2])
+{
+  const float co_floor[2] = {floorf(co[0]), floorf(co[1])};
+  /* Distance to the closest UDIM tile. */
+  float dist_best_sq = FLT_MAX;
+  int tile_number_best = -1;
+
+  LISTBASE_FOREACH (const ImageTile *, tile, &image->tiles) {
+    const int tile_index = tile->tile_number - 1001;
+    /* Coordinates of the current tile. */
+    const float tile_index_co[2] = {tile_index % 10, tile_index / 10};
+
+    if (equals_v2v2(co_floor, tile_index_co)) {
+      return tile->tile_number;
+    }
+
+    /* Distance between co[2] and UDIM tile. */
+    const float dist_sq = len_squared_v2v2(tile_index_co, co);
+
+    if (dist_sq < dist_best_sq) {
+      dist_best_sq = dist_sq;
+      tile_number_best = tile->tile_number;
+    }
+  }
+
+  return tile_number_best;
 }
 
 static void image_init_color_management(Image *ima)
@@ -2057,7 +2091,7 @@ static void stampdata(
   }
 
   if (use_dynamic && scene->r.stamp & R_STAMP_SEQSTRIP) {
-    const Sequence *seq = BKE_sequencer_foreground_frame_get(scene, scene->r.cfra);
+    const Sequence *seq = SEQ_get_topmost_sequence(scene, scene->r.cfra);
 
     if (seq) {
       STRNCPY(text, seq->name + 2);

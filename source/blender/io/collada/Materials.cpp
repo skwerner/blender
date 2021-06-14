@@ -105,6 +105,11 @@ bNodeTree *MaterialNode::prepare_material_nodetree()
   return ntree;
 }
 
+void MaterialNode::update_material_nodetree()
+{
+  ntreeUpdateTree(CTX_data_main(mContext), ntree);
+}
+
 bNode *MaterialNode::add_node(int node_type, int locx, int locy, std::string label)
 {
   bNode *node = nodeAddStaticNode(mContext, ntree, node_type);

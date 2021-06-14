@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 #pragma once
 
@@ -117,6 +116,9 @@ MINLINE float sasqrt(float fac);
 
 MINLINE float interpf(float a, float b, float t);
 MINLINE double interpd(double a, double b, double t);
+
+MINLINE float ratiof(float min, float max, float pos);
+MINLINE double ratiod(double min, double max, double pos);
 
 /* NOTE: Compilers will upcast all types smaller than int to int when performing arithmetic
  * operation. */

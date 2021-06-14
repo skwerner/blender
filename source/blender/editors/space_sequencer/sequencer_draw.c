@@ -26,6 +26,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_math.h"
+#include "BLI_string_utils.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
@@ -65,10 +66,20 @@
 #include "ED_sequencer.h"
 #include "ED_space_api.h"
 #include "ED_time_scrub_ui.h"
+#include "ED_util.h"
 
 #include "BIF_glutil.h"
 
+#include "SEQ_effects.h"
+#include "SEQ_prefetch.h"
+#include "SEQ_proxy.h"
+#include "SEQ_relations.h"
+#include "SEQ_render.h"
+#include "SEQ_select.h"
 #include "SEQ_sequencer.h"
+#include "SEQ_time.h"
+#include "SEQ_transform.h"
+#include "SEQ_utils.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -94,8 +105,6 @@
  * it messes up transform. */
 #undef SEQ_ALL_BEGIN
 #undef SEQ_ALL_END
-#undef SEQ_CURRENT_BEGIN
-#undef SEQ_CURRENT_END
 
 static Sequence *special_seq_update = NULL;
 
@@ -371,7 +380,7 @@ static void drawmeta_contents(Scene *scene, Sequence *seqm, float x1, float y1, 
   ListBase *seqbase;
   int offset;
 
-  seqbase = BKE_sequence_seqbase_get(seqm, &offset);
+  seqbase = SEQ_get_seqbase_from_sequence(seqm, &offset);
   if (!seqbase || BLI_listbase_is_empty(seqbase)) {
     return;
   }
@@ -488,7 +497,7 @@ static void draw_seq_handle(View2D *v2d,
     whichsel = SEQ_RIGHTSEL;
   }
 
-  if (!(seq->type & SEQ_TYPE_EFFECT) || BKE_sequence_effect_get_num_inputs(seq->type) == 0) {
+  if (!(seq->type & SEQ_TYPE_EFFECT) || SEQ_effect_get_num_inputs(seq->type) == 0) {
     GPU_blend(GPU_BLEND_ALPHA);
 
     GPU_blend(GPU_BLEND_ALPHA);
@@ -607,49 +616,64 @@ static const char *draw_seq_text_get_name(Sequence *seq)
 {
   const char *name = seq->name + 2;
   if (name[0] == '\0') {
-    name = BKE_sequence_give_name(seq);
+    name = SEQ_sequence_give_name(seq);
   }
   return name;
 }
 
 static void draw_seq_text_get_source(Sequence *seq, char *r_source, size_t source_len)
 {
+  *r_source = '\0';
+
   /* Set source for the most common types. */
-  if (ELEM(seq->type, SEQ_TYPE_IMAGE, SEQ_TYPE_MOVIE)) {
-    BLI_snprintf(r_source, source_len, "%s%s", seq->strip->dir, seq->strip->stripdata->name);
-  }
-  else if (seq->type == SEQ_TYPE_SOUND_RAM) {
-    if (seq->sound) {
-      BLI_snprintf(r_source, source_len, "%s", seq->sound->filepath);
+  switch (seq->type) {
+    case SEQ_TYPE_IMAGE:
+    case SEQ_TYPE_MOVIE: {
+      BLI_join_dirfile(r_source, source_len, seq->strip->dir, seq->strip->stripdata->name);
+      break;
     }
-  }
-  else if (seq->type == SEQ_TYPE_MULTICAM) {
-    BLI_snprintf(r_source, source_len, "Channel: %d", seq->multicam_source);
-  }
-  else if (seq->type == SEQ_TYPE_TEXT) {
-    TextVars *textdata = seq->effectdata;
-    BLI_snprintf(r_source, source_len, "%s", textdata->text);
-  }
-  else if (seq->type == SEQ_TYPE_SCENE) {
-    if (seq->scene_camera) {
-      BLI_snprintf(r_source,
-                   source_len,
-                   "%s (%s)",
-                   seq->scene->id.name + 2,
-                   ((ID *)seq->scene_camera)->name + 2);
+    case SEQ_TYPE_SOUND_RAM: {
+      if (seq->sound != NULL) {
+        BLI_strncpy(r_source, seq->sound->filepath, source_len);
+      }
+      break;
     }
-    else {
-      BLI_snprintf(r_source, source_len, "%s", seq->scene->id.name + 2);
+    case SEQ_TYPE_MULTICAM: {
+      BLI_snprintf(r_source, source_len, "Channel: %d", seq->multicam_source);
+      break;
     }
-  }
-  else if (seq->type == SEQ_TYPE_MOVIECLIP) {
-    BLI_snprintf(r_source, source_len, "%s", seq->clip->id.name + 2);
-  }
-  else if (seq->type == SEQ_TYPE_MASK) {
-    BLI_snprintf(r_source, source_len, "%s", seq->mask->id.name + 2);
-  }
-  else {
-    *r_source = '\0';
+    case SEQ_TYPE_TEXT: {
+      const TextVars *textdata = seq->effectdata;
+      BLI_strncpy(r_source, textdata->text, source_len);
+      break;
+    }
+    case SEQ_TYPE_SCENE: {
+      if (seq->scene != NULL) {
+        if (seq->scene_camera != NULL) {
+          BLI_snprintf(r_source,
+                       source_len,
+                       "%s (%s)",
+                       seq->scene->id.name + 2,
+                       seq->scene_camera->id.name + 2);
+        }
+        else {
+          BLI_strncpy(r_source, seq->scene->id.name + 2, source_len);
+        }
+      }
+      break;
+    }
+    case SEQ_TYPE_MOVIECLIP: {
+      if (seq->clip != NULL) {
+        BLI_strncpy(r_source, seq->clip->id.name + 2, source_len);
+      }
+      break;
+    }
+    case SEQ_TYPE_MASK: {
+      if (seq->mask != NULL) {
+        BLI_strncpy(r_source, seq->mask->id.name + 2, source_len);
+      }
+      break;
+    }
   }
 }
 
@@ -658,33 +682,39 @@ static size_t draw_seq_text_get_overlay_string(SpaceSeq *sseq,
                                                char *r_overlay_string,
                                                size_t overlay_string_len)
 {
-  const char *name = draw_seq_text_get_name(seq);
+  const char *text_sep = " | ";
+  const char *text_array[5];
+  int i = 0;
+
+  if (sseq->flag & SEQ_SHOW_STRIP_NAME) {
+    text_array[i++] = draw_seq_text_get_name(seq);
+  }
+
   char source[FILE_MAX];
-  int strip_duration = seq->enddisp - seq->startdisp;
-  draw_seq_text_get_source(seq, source, sizeof(source));
-
-  bool show_name = sseq->flag & SEQ_SHOW_STRIP_NAME;
-  bool show_source = (sseq->flag & (SEQ_SHOW_STRIP_SOURCE)) && source[0] != '\0';
-  bool show_duration = sseq->flag & SEQ_SHOW_STRIP_DURATION;
-
-  size_t string_len = 0;
-  if (show_name) {
-    string_len = BLI_snprintf(r_overlay_string, overlay_string_len, "%s", name);
-    if (show_source || show_duration) {
-      string_len += BLI_snprintf(r_overlay_string + string_len, overlay_string_len, " | ");
+  if (sseq->flag & SEQ_SHOW_STRIP_SOURCE) {
+    draw_seq_text_get_source(seq, source, sizeof(source));
+    if (source[0] != '\0') {
+      if (i != 0) {
+        text_array[i++] = text_sep;
+      }
+      text_array[i++] = source;
     }
   }
-  if (show_source) {
-    string_len += BLI_snprintf(r_overlay_string + string_len, overlay_string_len, "%s", source);
-    if (show_duration) {
-      string_len += BLI_snprintf(r_overlay_string + string_len, overlay_string_len, " | ");
+
+  char strip_duration_text[16];
+  if (sseq->flag & SEQ_SHOW_STRIP_DURATION) {
+    const int strip_duration = seq->enddisp - seq->startdisp;
+    SNPRINTF(strip_duration_text, "%d", strip_duration);
+    if (i != 0) {
+      text_array[i++] = text_sep;
     }
+    text_array[i++] = strip_duration_text;
   }
-  if (show_duration) {
-    string_len += BLI_snprintf(
-        r_overlay_string + string_len, overlay_string_len, "%d", strip_duration);
-  }
-  return string_len;
+
+  BLI_assert(i <= ARRAY_SIZE(text_array));
+
+  return BLI_string_join_array(r_overlay_string, overlay_string_len, text_array, i) -
+         r_overlay_string;
 }
 
 /* Draw info text on a sequence strip. */
@@ -840,9 +870,9 @@ static void draw_seq_background(Scene *scene,
   /* Draw the main strip body. */
   if (is_single_image) {
     immRectf(pos,
-             BKE_sequence_tx_get_final_left(seq, false),
+             SEQ_transform_get_left_handle_frame(seq, false),
              y1,
-             BKE_sequence_tx_get_final_right(seq, false),
+             SEQ_transform_get_right_handle_frame(seq, false),
              y2);
   }
   else {
@@ -855,10 +885,12 @@ static void draw_seq_background(Scene *scene,
     immUniformColor4ubv(col);
 
     if (seq->startstill) {
-      immRectf(pos, seq->startdisp, y1, (float)(seq->start), y2);
+      const float content_start = min_ff(seq->enddisp, seq->start);
+      immRectf(pos, seq->startdisp, y1, content_start, y2);
     }
     if (seq->endstill) {
-      immRectf(pos, (float)(seq->start + seq->len), y1, seq->enddisp, y2);
+      const float content_end = max_ff(seq->startdisp, seq->start + seq->len);
+      immRectf(pos, content_end, y1, seq->enddisp, y2);
     }
   }
 
@@ -1067,13 +1099,17 @@ static void draw_seq_strip(const bContext *C,
   float pixely = BLI_rctf_size_y(&v2d->cur) / BLI_rcti_size_y(&v2d->mask);
 
   /* Check if we are doing "solo preview". */
-  bool is_single_image = (char)BKE_sequence_single_check(seq);
+  bool is_single_image = (char)SEQ_transform_single_image_check(seq);
 
   /* Draw strip body. */
   x1 = (seq->startstill) ? seq->start : seq->startdisp;
   y1 = seq->machine + SEQ_STRIP_OFSBOTTOM;
   x2 = (seq->endstill) ? (seq->start + seq->len) : seq->enddisp;
   y2 = seq->machine + SEQ_STRIP_OFSTOP;
+
+  /* Limit body to strip bounds. Meta strip can end up with content outside of strip range. */
+  x1 = min_ff(x1, seq->enddisp);
+  x2 = max_ff(x2, seq->startdisp);
 
   float text_margin_y;
   bool y_threshold;
@@ -1143,7 +1179,7 @@ static void draw_seq_strip(const bContext *C,
   }
 
   /* Draw Red line on the top of invalid strip (Missing media). */
-  if (!BKE_sequence_is_valid_check(seq)) {
+  if (!SEQ_sequence_has_source(seq)) {
     draw_seq_invalid(x1, x2, y2, text_margin_y);
   }
 
@@ -1247,7 +1283,7 @@ void ED_sequencer_special_preview_clear(void)
  *
  * TODO: do not rely on such hack and just update the \a ibuf outside of
  * the UI drawing code.
- **/
+ */
 ImBuf *sequencer_ibuf_get(struct Main *bmain,
                           ARegion *region,
                           struct Depsgraph *depsgraph,
@@ -1280,6 +1316,7 @@ ImBuf *sequencer_ibuf_get(struct Main *bmain,
   SEQ_render_new_render_data(
       bmain, depsgraph, scene, rectx, recty, sseq->render_size, false, &context);
   context.view_id = BKE_scene_multiview_view_id_get(&scene->r, viewname);
+  context.use_proxies = (sseq->flag & SEQ_USE_PROXIES) != 0;
 
   /* Sequencer could start rendering, in this case we need to be sure it wouldn't be canceled
    * by Escape pressed somewhere in the past. */
@@ -1416,15 +1453,24 @@ static void sequencer_draw_borders_overlay(const SpaceSeq *sseq,
   if (sseq->flag & SEQ_SHOW_SAFE_MARGINS) {
     immUniformThemeColorBlend(TH_VIEW_OVERLAY, TH_BACK, 0.25f);
 
-    UI_draw_safe_areas(
-        shdr_pos, x1, x2, y1, y2, scene->safe_areas.title, scene->safe_areas.action);
+    UI_draw_safe_areas(shdr_pos,
+                       &(const rctf){
+                           .xmin = x1,
+                           .xmax = x2,
+                           .ymin = y1,
+                           .ymax = y2,
+                       },
+                       scene->safe_areas.title,
+                       scene->safe_areas.action);
 
     if (sseq->flag & SEQ_SHOW_SAFE_CENTER) {
       UI_draw_safe_areas(shdr_pos,
-                         x1,
-                         x2,
-                         y1,
-                         y2,
+                         &(const rctf){
+                             .xmin = x1,
+                             .xmax = x2,
+                             .ymin = y1,
+                             .ymax = y2,
+                         },
                          scene->safe_areas.title_center,
                          scene->safe_areas.action_center);
     }
@@ -1441,7 +1487,7 @@ void sequencer_draw_maskedit(const bContext *C, Scene *scene, ARegion *region, S
 
   // if (sc->mode == SC_MODE_MASKEDIT)
   if (0 && sseq->mainb == SEQ_DRAW_IMG_IMBUF) {
-    Mask *mask = BKE_sequencer_mask_get(scene);
+    Mask *mask = SEQ_active_mask_get(scene);
 
     if (mask) {
       int width, height;
@@ -1473,7 +1519,7 @@ void sequencer_draw_maskedit(const bContext *C, Scene *scene, ARegion *region, S
 /* Force redraw, when prefetching and using cache view. */
 static void seq_prefetch_wm_notify(const bContext *C, Scene *scene)
 {
-  if (BKE_sequencer_prefetch_need_redraw(CTX_data_main(C), scene)) {
+  if (SEQ_prefetch_need_redraw(CTX_data_main(C), scene)) {
     WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, NULL);
   }
 }
@@ -1482,10 +1528,10 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
                                            ImBuf *ibuf,
                                            bool *r_glsl_used,
                                            eGPUTextureFormat *r_format,
-                                           eGPUDataFormat *r_data)
+                                           eGPUDataFormat *r_data,
+                                           void **r_buffer_cache_handle)
 {
   void *display_buffer;
-  void *cache_handle = NULL;
   bool force_fallback = false;
   *r_glsl_used = false;
   force_fallback |= (ED_draw_imbuf_method(ibuf) != IMAGE_DRAW_METHOD_GLSL);
@@ -1493,7 +1539,7 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
 
   /* Default */
   *r_format = GPU_RGBA8;
-  *r_data = GPU_DATA_UNSIGNED_BYTE;
+  *r_data = GPU_DATA_UBYTE;
 
   /* Fallback to CPU based color space conversion. */
   if (force_fallback) {
@@ -1538,12 +1584,9 @@ static void *sequencer_OCIO_transform_ibuf(const bContext *C,
   /* There is data to be displayed, but GLSL is not initialized
    * properly, in this case we fallback to CPU-based display transform. */
   if ((ibuf->rect || ibuf->rect_float) && !*r_glsl_used) {
-    display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, &cache_handle);
+    display_buffer = IMB_display_buffer_acquire_ctx(C, ibuf, r_buffer_cache_handle);
     *r_format = GPU_RGBA8;
-    *r_data = GPU_DATA_UNSIGNED_BYTE;
-  }
-  if (cache_handle) {
-    IMB_display_buffer_release(cache_handle);
+    *r_data = GPU_DATA_UBYTE;
   }
 
   return display_buffer;
@@ -1618,6 +1661,7 @@ static void sequencer_draw_display_buffer(const bContext *C,
                                           bool draw_backdrop)
 {
   void *display_buffer;
+  void *buffer_cache_handle = NULL;
 
   if (sseq->mainb == SEQ_DRAW_IMG_IMBUF && sseq->flag & SEQ_USE_ALPHA) {
     GPU_blend(GPU_BLEND_ALPHA);
@@ -1642,10 +1686,11 @@ static void sequencer_draw_display_buffer(const bContext *C,
 
     display_buffer = (uchar *)ibuf->rect;
     format = GPU_RGBA8;
-    data = GPU_DATA_UNSIGNED_BYTE;
+    data = GPU_DATA_UBYTE;
   }
   else {
-    display_buffer = sequencer_OCIO_transform_ibuf(C, ibuf, &glsl_used, &format, &data);
+    display_buffer = sequencer_OCIO_transform_ibuf(
+        C, ibuf, &glsl_used, &format, &data, &buffer_cache_handle);
   }
 
   if (draw_backdrop) {
@@ -1703,6 +1748,10 @@ static void sequencer_draw_display_buffer(const bContext *C,
   }
   else {
     IMB_colormanagement_finish_glsl_draw();
+  }
+
+  if (buffer_cache_handle) {
+    IMB_display_buffer_release(buffer_cache_handle);
   }
 
   if (sseq->mainb == SEQ_DRAW_IMG_IMBUF && sseq->flag & SEQ_USE_ALPHA) {
@@ -1776,6 +1825,35 @@ static ImBuf *sequencer_get_scope(Scene *scene, SpaceSeq *sseq, ImBuf *ibuf, boo
   return scope;
 }
 
+static bool sequencer_draw_get_transform_preview(SpaceSeq *sseq, Scene *scene)
+{
+  Sequence *last_seq = SEQ_select_active_get(scene);
+  if (last_seq == NULL) {
+    return false;
+  }
+
+  return (G.moving & G_TRANSFORM_SEQ) && (last_seq->flag & SELECT) &&
+         ((last_seq->flag & SEQ_LEFTSEL) || (last_seq->flag & SEQ_RIGHTSEL)) &&
+         (sseq->draw_flag & SEQ_DRAW_TRANSFORM_PREVIEW);
+}
+
+static int sequencer_draw_get_transform_preview_frame(Scene *scene)
+{
+  Sequence *last_seq = SEQ_select_active_get(scene);
+  /* #sequencer_draw_get_transform_preview must already have been called. */
+  BLI_assert(last_seq != NULL);
+  int preview_frame;
+
+  if (last_seq->flag & SEQ_RIGHTSEL) {
+    preview_frame = last_seq->enddisp - 1;
+  }
+  else {
+    preview_frame = last_seq->startdisp;
+  }
+
+  return preview_frame;
+}
+
 void sequencer_draw_preview(const bContext *C,
                             Scene *scene,
                             ARegion *region,
@@ -1800,9 +1878,14 @@ void sequencer_draw_preview(const bContext *C,
     return;
   }
 
+  int preview_frame = timeline_frame;
+  if (sequencer_draw_get_transform_preview(sseq, scene)) {
+    preview_frame = sequencer_draw_get_transform_preview_frame(scene);
+  }
+
   /* Get image. */
   ibuf = sequencer_ibuf_get(
-      bmain, region, depsgraph, scene, sseq, timeline_frame, offset, names[sseq->multiview_eye]);
+      bmain, region, depsgraph, scene, sseq, preview_frame, offset, names[sseq->multiview_eye]);
 
   /* Setup off-screen buffers. */
   GPUViewport *viewport = WM_draw_region_get_viewport(region);
@@ -1871,6 +1954,10 @@ static void draw_seq_backdrop(View2D *v2d)
   uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
+  /* View backdrop. */
+  immUniformThemeColorShade(TH_BACK, -25);
+  immRectf(pos, v2d->cur.xmin, v2d->cur.ymin, v2d->cur.xmax, v2d->cur.ymax);
+
   /* Darker overlay over the view backdrop. */
   immUniformThemeColorShade(TH_BACK, -20);
   immRectf(pos, v2d->cur.xmin, -1.0, v2d->cur.xmax, 1.0);
@@ -1878,21 +1965,17 @@ static void draw_seq_backdrop(View2D *v2d)
   /* Alternating horizontal stripes. */
   i = max_ii(1, ((int)v2d->cur.ymin) - 1);
 
-  float col_alternating[4];
-  UI_GetThemeColor4fv(TH_ROW_ALTERNATE, col_alternating);
+  GPU_blend(GPU_BLEND_ALPHA);
+  immUniformThemeColor(TH_ROW_ALTERNATE);
 
   while (i < v2d->cur.ymax) {
     if (i & 1) {
-      immUniformThemeColorBlendShade(TH_BACK, TH_ROW_ALTERNATE, col_alternating[3], -25);
+      immRectf(pos, v2d->cur.xmin, i, v2d->cur.xmax, i + 1);
     }
-    else {
-      immUniformThemeColorShade(TH_BACK, -25);
-    }
-
-    immRectf(pos, v2d->cur.xmin, i, v2d->cur.xmax, i + 1);
-
     i++;
   }
+
+  GPU_blend(GPU_BLEND_NONE);
 
   /* Lines separating the horizontal bands. */
   i = max_ii(1, ((int)v2d->cur.ymin) - 1);
@@ -1902,6 +1985,7 @@ static void draw_seq_backdrop(View2D *v2d)
   while (line_len--) {
     immVertex2f(pos, v2d->cur.xmax, i);
     immVertex2f(pos, v2d->cur.xmin, i);
+    i++;
   }
   immEnd();
 
@@ -1913,7 +1997,7 @@ static void draw_seq_strips(const bContext *C, Editing *ed, ARegion *region)
   Scene *scene = CTX_data_scene(C);
   View2D *v2d = &region->v2d;
   SpaceSeq *sseq = CTX_wm_space_seq(C);
-  Sequence *last_seq = BKE_sequencer_active_get(scene);
+  Sequence *last_seq = SEQ_select_active_get(scene);
   int sel = 0, j;
   float pixelx = BLI_rctf_size_x(&v2d->cur) / BLI_rcti_size_x(&v2d->mask);
 
@@ -1956,7 +2040,7 @@ static void draw_seq_strips(const bContext *C, Editing *ed, ARegion *region)
     draw_seq_strip(C, sseq, scene, region, last_seq, pixelx, true);
 
     /* When active strip is an effect, highlight its inputs. */
-    if (BKE_sequence_effect_get_num_inputs(last_seq->type) > 0) {
+    if (SEQ_effect_get_num_inputs(last_seq->type) > 0) {
       draw_effect_inputs_highlight(last_seq);
     }
     /* When active is a Multi-cam strip, highlight its source channel. */
@@ -2000,7 +2084,7 @@ static void draw_seq_strips(const bContext *C, Editing *ed, ARegion *region)
 
 static void seq_draw_sfra_efra(Scene *scene, View2D *v2d)
 {
-  const Editing *ed = BKE_sequencer_editing_get(scene, false);
+  const Editing *ed = SEQ_editing_get(scene, false);
   const int frame_sta = scene->r.sfra;
   const int frame_end = scene->r.efra + 1;
 
@@ -2070,7 +2154,7 @@ static void seq_draw_sfra_efra(Scene *scene, View2D *v2d)
 
 typedef struct CacheDrawData {
   struct View2D *v2d;
-  float stripe_offs;
+  float stripe_ofs_y;
   float stripe_ht;
   int cache_flag;
   GPUVertBuf *raw_vbo;
@@ -2102,12 +2186,14 @@ static bool draw_cache_view_init_fn(void *userdata, size_t item_count)
 }
 
 /* Called as a callback */
-static bool draw_cache_view_iter_fn(
-    void *userdata, struct Sequence *seq, int timeline_frame, int cache_type, float UNUSED(cost))
+static bool draw_cache_view_iter_fn(void *userdata,
+                                    struct Sequence *seq,
+                                    int timeline_frame,
+                                    int cache_type)
 {
   CacheDrawData *drawdata = userdata;
   struct View2D *v2d = drawdata->v2d;
-  float stripe_bot, stripe_top, stripe_offs, stripe_ht;
+  float stripe_bot, stripe_top, stripe_ofs_y, stripe_ht;
   GPUVertBuf *vbo;
   size_t *vert_count;
 
@@ -2120,27 +2206,27 @@ static bool draw_cache_view_iter_fn(
     vert_count = &drawdata->final_out_vert_count;
   }
   else if ((cache_type & SEQ_CACHE_STORE_RAW) && (drawdata->cache_flag & SEQ_CACHE_VIEW_RAW)) {
-    stripe_offs = drawdata->stripe_offs;
+    stripe_ofs_y = drawdata->stripe_ofs_y;
     stripe_ht = drawdata->stripe_ht;
-    stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + stripe_offs;
+    stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + stripe_ofs_y;
     stripe_top = stripe_bot + stripe_ht;
     vbo = drawdata->raw_vbo;
     vert_count = &drawdata->raw_vert_count;
   }
   else if ((cache_type & SEQ_CACHE_STORE_PREPROCESSED) &&
            (drawdata->cache_flag & SEQ_CACHE_VIEW_PREPROCESSED)) {
-    stripe_offs = drawdata->stripe_offs;
+    stripe_ofs_y = drawdata->stripe_ofs_y;
     stripe_ht = drawdata->stripe_ht;
-    stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + (stripe_offs + stripe_ht) + stripe_offs;
+    stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + (stripe_ofs_y + stripe_ht) + stripe_ofs_y;
     stripe_top = stripe_bot + stripe_ht;
     vbo = drawdata->preprocessed_vbo;
     vert_count = &drawdata->preprocessed_vert_count;
   }
   else if ((cache_type & SEQ_CACHE_STORE_COMPOSITE) &&
            (drawdata->cache_flag & SEQ_CACHE_VIEW_COMPOSITE)) {
-    stripe_offs = drawdata->stripe_offs;
+    stripe_ofs_y = drawdata->stripe_ofs_y;
     stripe_ht = drawdata->stripe_ht;
-    stripe_top = seq->machine + SEQ_STRIP_OFSTOP - stripe_offs;
+    stripe_top = seq->machine + SEQ_STRIP_OFSTOP - stripe_ofs_y;
     stripe_bot = stripe_top - stripe_ht;
     vbo = drawdata->composite_vbo;
     vert_count = &drawdata->composite_vert_count;
@@ -2193,12 +2279,12 @@ static void draw_cache_view(const bContext *C)
   immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
 
   float stripe_bot, stripe_top;
-  float stripe_offs = UI_view2d_region_to_view_y(v2d, 1.0f) - v2d->cur.ymin;
+  float stripe_ofs_y = UI_view2d_region_to_view_y(v2d, 1.0f) - v2d->cur.ymin;
   float stripe_ht = UI_view2d_region_to_view_y(v2d, 4.0f * UI_DPI_FAC * U.pixelsize) -
                     v2d->cur.ymin;
 
   CLAMP_MAX(stripe_ht, 0.2f);
-  CLAMP_MIN(stripe_offs, stripe_ht / 2);
+  CLAMP_MIN(stripe_ofs_y, stripe_ht / 2);
 
   if (scene->ed->cache_flag & SEQ_CACHE_VIEW_FINAL_OUT) {
     stripe_bot = UI_view2d_region_to_view_y(v2d, V2D_SCROLL_HANDLE_HEIGHT);
@@ -2218,7 +2304,7 @@ static void draw_cache_view(const bContext *C)
       continue;
     }
 
-    stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + stripe_offs;
+    stripe_bot = seq->machine + SEQ_STRIP_OFSBOTTOM + stripe_ofs_y;
     stripe_top = stripe_bot + stripe_ht;
 
     if (scene->ed->cache_flag & SEQ_CACHE_VIEW_RAW) {
@@ -2227,7 +2313,7 @@ static void draw_cache_view(const bContext *C)
       immRectf(pos, seq->startdisp, stripe_bot, seq->enddisp, stripe_top);
     }
 
-    stripe_bot += stripe_ht + stripe_offs;
+    stripe_bot += stripe_ht + stripe_ofs_y;
     stripe_top = stripe_bot + stripe_ht;
 
     if (scene->ed->cache_flag & SEQ_CACHE_VIEW_PREPROCESSED) {
@@ -2236,7 +2322,7 @@ static void draw_cache_view(const bContext *C)
       immRectf(pos, seq->startdisp, stripe_bot, seq->enddisp, stripe_top);
     }
 
-    stripe_top = seq->machine + SEQ_STRIP_OFSTOP - stripe_offs;
+    stripe_top = seq->machine + SEQ_STRIP_OFSTOP - stripe_ofs_y;
     stripe_bot = stripe_top - stripe_ht;
 
     if (scene->ed->cache_flag & SEQ_CACHE_VIEW_COMPOSITE) {
@@ -2253,7 +2339,7 @@ static void draw_cache_view(const bContext *C)
 
   CacheDrawData userdata;
   userdata.v2d = v2d;
-  userdata.stripe_offs = stripe_offs;
+  userdata.stripe_ofs_y = stripe_ofs_y;
   userdata.stripe_ht = stripe_ht;
   userdata.cache_flag = scene->ed->cache_flag;
   userdata.raw_vert_count = 0;
@@ -2265,7 +2351,7 @@ static void draw_cache_view(const bContext *C)
   userdata.composite_vbo = GPU_vertbuf_create_with_format(&format);
   userdata.final_out_vbo = GPU_vertbuf_create_with_format(&format);
 
-  BKE_sequencer_cache_iterate(scene, &userdata, draw_cache_view_init_fn, draw_cache_view_iter_fn);
+  SEQ_cache_iterate(scene, &userdata, draw_cache_view_init_fn, draw_cache_view_iter_fn);
 
   draw_cache_view_batch(userdata.raw_vbo, userdata.raw_vert_count, 1.0f, 0.1f, 0.02f, 0.4f);
   draw_cache_view_batch(
@@ -2282,7 +2368,7 @@ static void draw_cache_view(const bContext *C)
 void draw_timeline_seq(const bContext *C, ARegion *region)
 {
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   SpaceSeq *sseq = CTX_wm_space_seq(C);
   View2D *v2d = &region->v2d;
   short cfra_flag = 0;
@@ -2311,7 +2397,12 @@ void draw_timeline_seq(const bContext *C, ARegion *region)
 
   /* Only draw backdrop in timeline view. */
   if (sseq->view == SEQ_VIEW_SEQUENCE && sseq->draw_flag & SEQ_DRAW_BACKDROP) {
-    sequencer_draw_preview(C, scene, region, sseq, scene->r.cfra, 0, false, true);
+    int preview_frame = scene->r.cfra;
+    if (sequencer_draw_get_transform_preview(sseq, scene)) {
+      preview_frame = sequencer_draw_get_transform_preview_frame(scene);
+    }
+
+    sequencer_draw_preview(C, scene, region, sseq, preview_frame, 0, false, true);
     UI_view2d_view_ortho(v2d);
   }
 

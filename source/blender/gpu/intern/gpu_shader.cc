@@ -57,6 +57,8 @@ static CLG_LogRef LOG = {"gpu.shader"};
 using namespace blender;
 using namespace blender::gpu;
 
+static bool gpu_shader_srgb_uniform_dirty_get();
+
 /* -------------------------------------------------------------------- */
 /** \name Debug functions
  * \{ */
@@ -106,7 +108,7 @@ void Shader::print_log(Span<const char *> sources, char *log, const char *stage,
     error_line = error_char = -1;
     if (log_line[0] >= '0' && log_line[0] <= '9') {
       error_line = (int)strtol(log_line, &error_line_number_end, 10);
-      /* Try to fetch the error caracter (not always available). */
+      /* Try to fetch the error character (not always available). */
       if (ELEM(error_line_number_end[0], '(', ':') && error_line_number_end[1] != ' ') {
         error_char = (int)strtol(error_line_number_end + 1, &log_line, 10);
       }
@@ -166,6 +168,11 @@ void Shader::print_log(Span<const char *> sources, char *log, const char *stage,
           found_line_id = true;
           break;
         }
+/* TODO(fclem) Make this an option to display N lines before error. */
+#if 0 /* Uncomment to print shader file up to the error line to have more context. */
+        BLI_dynstr_appendf(dynstr, "%5d | ", src_line_index);
+        BLI_dynstr_nappend(dynstr, src_line, (src_line_end + 1) - src_line);
+#endif
         /* Continue to next line. */
         src_line = src_line_end + 1;
         src_line_index++;
@@ -496,9 +503,13 @@ void GPU_shader_bind(GPUShader *gpu_shader)
     GPU_matrix_bind(gpu_shader);
     GPU_shader_set_srgb_uniform(gpu_shader);
   }
-
-  if (GPU_matrix_dirty_get()) {
-    GPU_matrix_bind(gpu_shader);
+  else {
+    if (gpu_shader_srgb_uniform_dirty_get()) {
+      GPU_shader_set_srgb_uniform(gpu_shader);
+    }
+    if (GPU_matrix_dirty_get()) {
+      GPU_matrix_bind(gpu_shader);
+    }
   }
 }
 
@@ -710,6 +721,12 @@ void GPU_shader_uniform_4fv_array(GPUShader *sh, const char *name, int len, cons
  * \{ */
 
 static int g_shader_builtin_srgb_transform = 0;
+static bool g_shader_builtin_srgb_is_dirty = false;
+
+static bool gpu_shader_srgb_uniform_dirty_get(void)
+{
+  return g_shader_builtin_srgb_is_dirty;
+}
 
 void GPU_shader_set_srgb_uniform(GPUShader *shader)
 {
@@ -717,11 +734,15 @@ void GPU_shader_set_srgb_uniform(GPUShader *shader)
   if (loc != -1) {
     GPU_shader_uniform_vector_int(shader, loc, 1, 1, &g_shader_builtin_srgb_transform);
   }
+  g_shader_builtin_srgb_is_dirty = false;
 }
 
 void GPU_shader_set_framebuffer_srgb_target(int use_srgb_to_linear)
 {
-  g_shader_builtin_srgb_transform = use_srgb_to_linear;
+  if (g_shader_builtin_srgb_transform != use_srgb_to_linear) {
+    g_shader_builtin_srgb_transform = use_srgb_to_linear;
+    g_shader_builtin_srgb_is_dirty = true;
+  }
 }
 
 /** \} */

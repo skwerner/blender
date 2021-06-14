@@ -45,11 +45,11 @@ struct bNodeTree;
 typedef struct TexPaintSlot {
   /** Image to be painted on. */
   struct Image *ima;
-  /** Customdata index for uv layer, MAX_NAM.E*/
+  /** Custom-data index for uv layer, #MAX_NAME. */
   char *uvname;
   /** Do we have a valid image and UV map. */
   int valid;
-  /** Copy of node inteporlation setting. */
+  /** Copy of node interpolation setting. */
   int interp;
 } TexPaintSlot;
 
@@ -145,6 +145,16 @@ typedef enum eMaterialGPencilStyle_Mode {
   GP_MATERIAL_MODE_SQUARE = 2,
 } eMaterialGPencilStyle_Mode;
 
+typedef struct MaterialLineArt {
+  int flags; /* eMaterialLineArtFlags */
+  unsigned char transparency_mask;
+  unsigned char _pad[3];
+} MaterialLineArt;
+
+typedef enum eMaterialLineArtFlags {
+  LRT_MATERIAL_TRANSPARENCY_ENABLED = (1 << 0),
+} eMaterialLineArtFlags;
+
 typedef struct Material {
   ID id;
   /** Animation data (must be immediately after id for utilities to use it). */
@@ -210,6 +220,7 @@ typedef struct Material {
 
   /** Grease pencil color. */
   struct MaterialGPencilStyle *gp_style;
+  struct MaterialLineArt lineart;
 } Material;
 
 /* **************** MATERIAL ********************* */

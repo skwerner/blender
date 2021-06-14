@@ -264,7 +264,7 @@ void rna_def_mtex_common(struct BlenderRNA *brna,
                          const char *update,
                          const char *update_index);
 void rna_def_texpaint_slots(struct BlenderRNA *brna, struct StructRNA *srna);
-void rna_def_view_layer_common(struct StructRNA *srna, const bool scene);
+void rna_def_view_layer_common(struct BlenderRNA *brna, struct StructRNA *srna, const bool scene);
 
 void rna_def_actionbone_group_common(struct StructRNA *srna,
                                      int update_flag,
@@ -424,6 +424,7 @@ void RNA_api_window(struct StructRNA *srna);
 void RNA_api_wm(struct StructRNA *srna);
 void RNA_api_space_node(struct StructRNA *srna);
 void RNA_api_space_text(struct StructRNA *srna);
+void RNA_api_space_filebrowser(struct StructRNA *srna);
 void RNA_api_region_view3d(struct StructRNA *srna);
 void RNA_api_texture(struct StructRNA *srna);
 void RNA_api_sequences(BlenderRNA *brna, PropertyRNA *cprop, const bool metastrip);

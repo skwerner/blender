@@ -44,6 +44,7 @@
 #include "bpy_operator.h"
 #include "bpy_props.h"
 #include "bpy_rna.h"
+#include "bpy_rna_data.h"
 #include "bpy_rna_gizmo.h"
 #include "bpy_rna_id_collection.h"
 #include "bpy_rna_types_capi.h"
@@ -261,7 +262,7 @@ PyDoc_STRVAR(bpy_escape_identifier_doc,
 static PyObject *bpy_escape_identifier(PyObject *UNUSED(self), PyObject *value)
 {
   Py_ssize_t value_str_len;
-  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+  const char *value_str = PyUnicode_AsUTF8AndSize(value, &value_str_len);
 
   if (value_str == NULL) {
     PyErr_SetString(PyExc_TypeError, "expected a string");
@@ -299,7 +300,7 @@ PyDoc_STRVAR(bpy_unescape_identifier_doc,
 static PyObject *bpy_unescape_identifier(PyObject *UNUSED(self), PyObject *value)
 {
   Py_ssize_t value_str_len;
-  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+  const char *value_str = PyUnicode_AsUTF8AndSize(value, &value_str_len);
 
   if (value_str == NULL) {
     PyErr_SetString(PyExc_TypeError, "expected a string");
@@ -424,6 +425,8 @@ void BPy_init_modules(struct bContext *C)
 
   /* needs to be first so bpy_types can run */
   BPY_library_load_type_ready();
+
+  BPY_rna_data_context_type_ready();
 
   BPY_rna_gizmo_module(mod);
 

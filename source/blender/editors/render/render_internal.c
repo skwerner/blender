@@ -43,14 +43,10 @@
 #include "DNA_userdef_types.h"
 #include "DNA_view3d_types.h"
 
-#include "BKE_blender_undo.h"
-#include "BKE_blender_version.h"
-#include "BKE_camera.h"
 #include "BKE_colortools.h"
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_image.h"
-#include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_node.h"
@@ -58,19 +54,15 @@
 #include "BKE_report.h"
 #include "BKE_scene.h"
 #include "BKE_screen.h"
-#include "BKE_undo_system.h"
 
 #include "DEG_depsgraph.h"
 
 #include "WM_api.h"
 #include "WM_types.h"
 
-#include "ED_object.h"
 #include "ED_render.h"
 #include "ED_screen.h"
-#include "ED_undo.h"
 #include "ED_util.h"
-#include "ED_view3d.h"
 
 #include "BIF_glutil.h"
 
@@ -83,9 +75,7 @@
 #include "RNA_access.h"
 #include "RNA_define.h"
 
-#include "SEQ_sequencer.h"
-
-#include "BLO_undofile.h"
+#include "SEQ_relations.h"
 
 #include "render_intern.h"
 
@@ -363,7 +353,7 @@ static int screen_render_exec(bContext *C, wmOperator *op)
    * otherwise, invalidated cache entries can make their way into
    * the output rendering. We can't put that into RE_RenderFrame,
    * since sequence rendering can call that recursively... (peter) */
-  BKE_sequencer_cache_cleanup(scene);
+  SEQ_cache_cleanup(scene);
 
   RE_SetReports(re, op->reports);
 
@@ -584,9 +574,12 @@ static void image_rect_update(void *rjv, RenderResult *rr, volatile rcti *renrec
     return;
   }
   if (rj->image_outdated) {
-    /* update entire render */
+    /* Free all render buffer caches when switching slots, with lock to ensure main
+     * thread is not drawing the buffer at the same time. */
     rj->image_outdated = false;
-    BKE_image_signal(rj->main, ima, NULL, IMA_SIGNAL_COLORMANAGE);
+    ibuf = BKE_image_acquire_ibuf(ima, &rj->iuser, &lock);
+    BKE_image_free_buffers(ima);
+    BKE_image_release_ibuf(ima, ibuf, lock);
     *(rj->do_update) = true;
     return;
   }
@@ -798,8 +791,10 @@ static int render_breakjob(void *rjv)
   return 0;
 }
 
-/* for exec() when there is no render job
- * note: this wont check for the escape key being pressed, but doing so isnt threadsafe */
+/**
+ * For exec() when there is no render job
+ * note: this wont check for the escape key being pressed, but doing so isn't thread-safe.
+ */
 static int render_break(void *UNUSED(rjv))
 {
   if (G.is_break) {
@@ -810,7 +805,7 @@ static int render_break(void *UNUSED(rjv))
 
 /* runs in thread, no cursor setting here works. careful with notifiers too (malloc conflicts) */
 /* maybe need a way to get job send notifier? */
-static void render_drawlock(void *rjv, int lock)
+static void render_drawlock(void *rjv, bool lock)
 {
   RenderJob *rj = rjv;
 
@@ -935,7 +930,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   /* Reports are done inside check function, and it will return false if there are other strips to
    * render. */
-  if ((scene->r.scemode & R_DOSEQ) && BKE_sequencer_check_scene_recursion(scene, op->reports)) {
+  if ((scene->r.scemode & R_DOSEQ) && SEQ_relations_check_scene_recursion(scene, op->reports)) {
     return OPERATOR_CANCELLED;
   }
 
@@ -948,7 +943,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
   }
 
   /* handle UI stuff */
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   /* flush sculpt and editmode changes */
   ED_editors_flush_edits_ex(bmain, true, false);
@@ -957,7 +952,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
    * otherwise, invalidated cache entries can make their way into
    * the output rendering. We can't put that into RE_RenderFrame,
    * since sequence rendering can call that recursively... (peter) */
-  BKE_sequencer_cache_cleanup(scene);
+  SEQ_cache_cleanup(scene);
 
   /* store spare
    * get view3d layer, local layer, make this nice api call to render
@@ -1068,7 +1063,7 @@ static int screen_render_invoke(bContext *C, wmOperator *op, const wmEvent *even
 
   WM_jobs_start(CTX_wm_manager(C), wm_job);
 
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
   WM_event_add_notifier(C, NC_SCENE | ND_RENDER_RESULT, scene);
 
   /* we set G.is_rendering here already instead of only in the job, this ensure
@@ -1098,7 +1093,7 @@ void RENDER_OT_render(wmOperatorType *ot)
   ot->cancel = screen_render_cancel;
   ot->exec = screen_render_exec;
 
-  /* this isn't needed, causes failer in background mode */
+  /* This isn't needed, causes failure in background mode. */
 #if 0
   ot->poll = ED_operator_screenactive;
 #endif

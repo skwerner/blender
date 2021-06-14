@@ -14,9 +14,8 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "DNA_node_types.h"
-
-#include "RNA_enum_types.h"
+#include "UI_interface.h"
+#include "UI_resources.h"
 
 #include "node_geometry_util.hh"
 
@@ -39,6 +38,12 @@ static bNodeSocketTemplate geo_node_triangulate_out[] = {
     {-1, ""},
 };
 
+static void geo_node_triangulate_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiItemR(layout, ptr, "quad_method", 0, "", ICON_NONE);
+  uiItemR(layout, ptr, "ngon_method", 0, "", ICON_NONE);
+}
+
 static void geo_triangulate_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
   node->custom1 = GEO_NODE_TRIANGULATE_QUAD_SHORTEDGE;
@@ -55,6 +60,8 @@ static void geo_node_triangulate_exec(GeoNodeExecParams params)
       params.node().custom1);
   GeometryNodeTriangulateNGons ngon_method = static_cast<GeometryNodeTriangulateNGons>(
       params.node().custom2);
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   /* #triangulate_mesh might modify the input mesh currently. */
   Mesh *mesh_in = geometry_set.get_mesh_for_write();
@@ -75,5 +82,6 @@ void register_node_type_geo_triangulate()
   node_type_socket_templates(&ntype, geo_node_triangulate_in, geo_node_triangulate_out);
   node_type_init(&ntype, geo_triangulate_init);
   ntype.geometry_node_execute = blender::nodes::geo_node_triangulate_exec;
+  ntype.draw_buttons = geo_node_triangulate_layout;
   nodeRegisterType(&ntype);
 }

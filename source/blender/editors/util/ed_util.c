@@ -27,52 +27,33 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_armature_types.h"
-#include "DNA_mesh_types.h"
-#include "DNA_object_types.h"
-#include "DNA_packedFile_types.h"
-#include "DNA_scene_types.h"
-#include "DNA_screen_types.h"
-#include "DNA_space_types.h"
-
-#include "BLI_fileops.h"
 #include "BLI_listbase.h"
 #include "BLI_path_util.h"
 #include "BLI_string.h"
-#include "BLI_utildefines.h"
 
 #include "BLT_translation.h"
 
-#include "BKE_context.h"
 #include "BKE_global.h"
-#include "BKE_icons.h"
-#include "BKE_layer.h"
 #include "BKE_main.h"
 #include "BKE_material.h"
 #include "BKE_multires.h"
 #include "BKE_object.h"
 #include "BKE_packedFile.h"
 #include "BKE_paint.h"
-#include "BKE_report.h"
 #include "BKE_screen.h"
 #include "BKE_undo_system.h"
-#include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 
 #include "ED_armature.h"
 #include "ED_image.h"
 #include "ED_mesh.h"
-#include "ED_node.h"
 #include "ED_object.h"
-#include "ED_outliner.h"
 #include "ED_paint.h"
-#include "ED_render.h"
 #include "ED_space_api.h"
 #include "ED_util.h"
 
 #include "GPU_immediate.h"
-#include "GPU_state.h"
 
 #include "UI_interface.h"
 #include "UI_resources.h"
@@ -162,7 +143,7 @@ void ED_editors_init(bContext *C)
             ED_object_wpaintmode_enter_ex(bmain, depsgraph, scene, ob);
           }
           else {
-            BLI_assert(0);
+            BLI_assert_unreachable();
           }
         }
         else {
@@ -199,7 +180,7 @@ void ED_editors_exit(Main *bmain, bool do_undo_system)
     return;
   }
 
-  /* frees all editmode undos */
+  /* Frees all edit-mode undo-steps. */
   if (do_undo_system && G_MAIN->wm.first) {
     wmWindowManager *wm = G_MAIN->wm.first;
     /* normally we don't check for NULL undo stack,
@@ -210,19 +191,21 @@ void ED_editors_exit(Main *bmain, bool do_undo_system)
     }
   }
 
+  /* On undo, tag for update so the depsgraph doesn't use stale edit-mode data,
+   * this is possible when mixing edit-mode and memory-file undo.
+   *
+   * By convention, objects are not left in edit-mode - so this isn't often problem in practice,
+   * since exiting edit-mode will tag the objects too.
+   *
+   * However there is no guarantee the active object _never_ changes while in edit-mode.
+   * Python for example can do this, some callers to #ED_object_base_activate
+   * don't handle modes either (doing so isn't always practical).
+   *
+   * To reproduce the problem where stale data is used, see: T84920. */
   for (Object *ob = bmain->objects.first; ob; ob = ob->id.next) {
-    if (ob->type == OB_MESH) {
-      Mesh *me = ob->data;
-      if (me->edit_mesh) {
-        EDBM_mesh_free(me->edit_mesh);
-        MEM_freeN(me->edit_mesh);
-        me->edit_mesh = NULL;
-      }
-    }
-    else if (ob->type == OB_ARMATURE) {
-      bArmature *arm = ob->data;
-      if (arm->edbo) {
-        ED_armature_edit_free(ob->data);
+    if (ED_object_editmode_free_ex(bmain, ob)) {
+      if (do_undo_system == false) {
+        DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
       }
     }
   }
@@ -433,44 +416,6 @@ void unpack_menu(bContext *C,
   UI_popup_menu_end(C, pup);
 }
 
-/* ********************* generic callbacks for drawcall api *********************** */
-
-/**
- * Callback that draws a line between the mouse and a position given as the initial argument.
- */
-void ED_region_draw_mouse_line_cb(const bContext *C, ARegion *region, void *arg_info)
-{
-  wmWindow *win = CTX_wm_window(C);
-  const float *mval_src = (float *)arg_info;
-  const float mval_dst[2] = {
-      win->eventstate->x - region->winrct.xmin,
-      win->eventstate->y - region->winrct.ymin,
-  };
-
-  const uint shdr_pos = GPU_vertformat_attr_add(
-      immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-
-  GPU_line_width(1.0f);
-
-  immBindBuiltinProgram(GPU_SHADER_2D_LINE_DASHED_UNIFORM_COLOR);
-
-  float viewport_size[4];
-  GPU_viewport_size_get_f(viewport_size);
-  immUniform2f("viewport_size", viewport_size[2] / UI_DPI_FAC, viewport_size[3] / UI_DPI_FAC);
-
-  immUniform1i("colors_len", 0); /* "simple" mode */
-  immUniformThemeColor3(TH_VIEW_OVERLAY);
-  immUniform1f("dash_width", 6.0f);
-  immUniform1f("dash_factor", 0.5f);
-
-  immBegin(GPU_PRIM_LINES, 2);
-  immVertex2fv(shdr_pos, mval_src);
-  immVertex2fv(shdr_pos, mval_dst);
-  immEnd();
-
-  immUnbindProgram();
-}
-
 /**
  * Use to free ID references within runtime data (stored outside of DNA)
  *
@@ -483,105 +428,4 @@ void ED_spacedata_id_remap(struct ScrArea *area, struct SpaceLink *sl, ID *old_i
   if (st && st->id_remap) {
     st->id_remap(area, sl, old_id, new_id);
   }
-}
-
-static bool lib_id_preview_editing_poll(bContext *C)
-{
-  const PointerRNA idptr = CTX_data_pointer_get(C, "id");
-  BLI_assert(!idptr.data || RNA_struct_is_ID(idptr.type));
-
-  const ID *id = idptr.data;
-  if (!id) {
-    return false;
-  }
-  if (ID_IS_LINKED(id)) {
-    CTX_wm_operator_poll_msg_set(C, TIP_("Can't edit external library data"));
-    return false;
-  }
-  if (ID_IS_OVERRIDE_LIBRARY(id)) {
-    CTX_wm_operator_poll_msg_set(C, TIP_("Can't edit previews of overridden library data"));
-    return false;
-  }
-  if (!BKE_previewimg_id_get_p(id)) {
-    CTX_wm_operator_poll_msg_set(C, TIP_("Data-block does not support previews"));
-    return false;
-  }
-
-  return true;
-}
-
-static int lib_id_load_custom_preview_exec(bContext *C, wmOperator *op)
-{
-  char path[FILE_MAX];
-
-  RNA_string_get(op->ptr, "filepath", path);
-
-  if (!BLI_is_file(path)) {
-    BKE_reportf(op->reports, RPT_ERROR, "File not found '%s'", path);
-    return OPERATOR_CANCELLED;
-  }
-
-  PointerRNA idptr = CTX_data_pointer_get(C, "id");
-  ID *id = idptr.data;
-
-  BKE_previewimg_id_custom_set(id, path);
-
-  WM_event_add_notifier(C, NC_ASSET, NULL);
-
-  return OPERATOR_FINISHED;
-}
-
-void ED_OT_lib_id_load_custom_preview(wmOperatorType *ot)
-{
-  ot->name = "Load Custom Preview";
-  ot->description = "Choose an image to help identify the data-block visually";
-  ot->idname = "ED_OT_lib_id_load_custom_preview";
-
-  /* api callbacks */
-  ot->poll = lib_id_preview_editing_poll;
-  ot->exec = lib_id_load_custom_preview_exec;
-  ot->invoke = WM_operator_filesel;
-
-  /* flags */
-  ot->flag = OPTYPE_INTERNAL;
-
-  WM_operator_properties_filesel(ot,
-                                 FILE_TYPE_FOLDER | FILE_TYPE_IMAGE,
-                                 FILE_SPECIAL,
-                                 FILE_OPENFILE,
-                                 WM_FILESEL_FILEPATH,
-                                 FILE_DEFAULTDISPLAY,
-                                 FILE_SORT_DEFAULT);
-}
-
-static int lib_id_generate_preview_exec(bContext *C, wmOperator *UNUSED(op))
-{
-  PointerRNA idptr = CTX_data_pointer_get(C, "id");
-  ID *id = idptr.data;
-
-  ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
-
-  PreviewImage *preview = BKE_previewimg_id_get(id);
-  if (preview) {
-    BKE_previewimg_clear(preview);
-  }
-  UI_icon_render_id(C, NULL, id, true, true);
-
-  WM_event_add_notifier(C, NC_ASSET, NULL);
-
-  return OPERATOR_FINISHED;
-}
-
-void ED_OT_lib_id_generate_preview(wmOperatorType *ot)
-{
-  ot->name = "Generate Preview";
-  ot->description = "Create an automatic preview for the selected data-block";
-  ot->idname = "ED_OT_lib_id_generate_preview";
-
-  /* api callbacks */
-  ot->poll = lib_id_preview_editing_poll;
-  ot->exec = lib_id_generate_preview_exec;
-
-  /* flags */
-  ot->flag = OPTYPE_INTERNAL;
 }

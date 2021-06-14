@@ -56,12 +56,12 @@ static void initShear_mouseInputMode(TransInfo *t)
   /* Needed for axis aligned view gizmo. */
   if (t->orient[t->orient_curr].type == V3D_ORIENT_VIEW) {
     if (t->orient_axis_ortho == 0) {
-      if (t->center2d[1] < t->mouse.imval[1]) {
+      if (t->center2d[1] > t->mouse.imval[1]) {
         dir_flip = !dir_flip;
       }
     }
     else if (t->orient_axis_ortho == 1) {
-      if (t->center2d[0] < t->mouse.imval[0]) {
+      if (t->center2d[0] > t->mouse.imval[0]) {
         dir_flip = !dir_flip;
       }
     }
@@ -232,5 +232,7 @@ void initShear(TransInfo *t)
   t->num.unit_type[0] = B_UNIT_NONE; /* Don't think we have any unit here? */
 
   t->flag |= T_NO_CONSTRAINT;
+
+  transform_mode_default_modal_orientation_set(t, V3D_ORIENT_VIEW);
 }
 /** \} */

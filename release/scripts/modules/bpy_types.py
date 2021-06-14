@@ -19,7 +19,6 @@
 # <pep8-80 compliant>
 
 from _bpy import types as bpy_types
-import _bpy
 
 StructRNA = bpy_types.bpy_struct
 StructMetaPropGroup = bpy_types.bpy_struct_meta_idprop
@@ -561,9 +560,17 @@ class Text(bpy_types.ID):
         self.write(string)
 
     def as_module(self):
-        from os.path import splitext
+        import bpy
+        from os.path import splitext, join
         from types import ModuleType
-        mod = ModuleType(splitext(self.name)[0])
+        name = self.name
+        mod = ModuleType(splitext(name)[0])
+        # This is a fake file-path, set this since some scripts check `__file__`,
+        # error messages may include this as well.
+        # NOTE: the file path may be a blank string if the file hasn't been saved.
+        mod.__dict__.update({
+            "__file__": join(bpy.data.filepath, name),
+        })
         # TODO: We could use Text.compiled (C struct member)
         # if this is called often it will be much faster.
         exec(self.as_string(), mod.__dict__)
@@ -900,6 +907,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         layout = self.layout
 
         import os
+        import re
         import bpy.utils
 
         layout = self.layout
@@ -920,7 +928,11 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
                     (filter_path(f)))
             ])
 
-        files.sort()
+        # Perform a "natural sort", so 20 comes after 3 (for example).
+        files.sort(
+            key=lambda file_path:
+            tuple(int(t) if t.isdigit() else t for t in re.split(r"(\d+)", file_path[0].lower())),
+        )
 
         col = layout.column(align=True)
 
@@ -982,6 +994,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
             props_default=props_default,
             filter_ext=lambda ext: ext.lower() in ext_valid,
             add_operator=add_operator,
+            display_name=lambda name: bpy.path.display_name(name, title_case=False)
         )
 
     @classmethod

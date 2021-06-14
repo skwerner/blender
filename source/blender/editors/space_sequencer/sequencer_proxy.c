@@ -25,7 +25,6 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_ghash.h"
-#include "BLI_timecode.h"
 
 #include "DNA_scene_types.h"
 
@@ -34,6 +33,9 @@
 #include "BKE_main.h"
 #include "BKE_report.h"
 
+#include "SEQ_iterator.h"
+#include "SEQ_proxy.h"
+#include "SEQ_relations.h"
 #include "SEQ_sequencer.h"
 
 #include "WM_api.h"
@@ -47,103 +49,28 @@
 /* Own include. */
 #include "sequencer_intern.h"
 
-/*--------------------------------------------------------------------*/
-/** \name Proxy Job Manager
+/* -------------------------------------------------------------------- */
+/** \name Rebuild Proxy and Timecode Indices Operator
  * \{ */
-
-typedef struct ProxyBuildJob {
-  struct Main *main;
-  struct Depsgraph *depsgraph;
-  Scene *scene;
-  ListBase queue;
-  int stop;
-} ProxyJob;
-
-static void proxy_freejob(void *pjv)
-{
-  ProxyJob *pj = pjv;
-
-  BLI_freelistN(&pj->queue);
-
-  MEM_freeN(pj);
-}
-
-/* Only this runs inside thread. */
-static void proxy_startjob(void *pjv, short *stop, short *do_update, float *progress)
-{
-  ProxyJob *pj = pjv;
-  LinkData *link;
-
-  for (link = pj->queue.first; link; link = link->next) {
-    struct SeqIndexBuildContext *context = link->data;
-
-    SEQ_proxy_rebuild(context, stop, do_update, progress);
-
-    if (*stop) {
-      pj->stop = 1;
-      fprintf(stderr, "Canceling proxy rebuild on users request...\n");
-      break;
-    }
-  }
-}
-
-static void proxy_endjob(void *pjv)
-{
-  ProxyJob *pj = pjv;
-  Editing *ed = BKE_sequencer_editing_get(pj->scene, false);
-  LinkData *link;
-
-  for (link = pj->queue.first; link; link = link->next) {
-    SEQ_proxy_rebuild_finish(link->data, pj->stop);
-  }
-
-  BKE_sequencer_free_imbuf(pj->scene, &ed->seqbase, false);
-
-  WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, pj->scene);
-}
 
 static void seq_proxy_build_job(const bContext *C, ReportList *reports)
 {
-  wmJob *wm_job;
-  ProxyJob *pj;
-  struct Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   ScrArea *area = CTX_wm_area(C);
-  Sequence *seq;
-  GSet *file_list;
 
   if (ed == NULL) {
     return;
   }
 
-  wm_job = WM_jobs_get(CTX_wm_manager(C),
-                       CTX_wm_window(C),
-                       scene,
-                       "Building Proxies",
-                       WM_JOB_PROGRESS,
-                       WM_JOB_TYPE_SEQ_BUILD_PROXY);
+  wmJob *wm_job = ED_seq_proxy_wm_job_get(C);
+  ProxyJob *pj = ED_seq_proxy_job_get(C, wm_job);
 
-  pj = WM_jobs_customdata_get(wm_job);
-
-  if (!pj) {
-    pj = MEM_callocN(sizeof(ProxyJob), "proxy rebuild job");
-
-    pj->depsgraph = depsgraph;
-    pj->scene = scene;
-    pj->main = CTX_data_main(C);
-
-    WM_jobs_customdata_set(wm_job, pj, proxy_freejob);
-    WM_jobs_timer(wm_job, 0.1, NC_SCENE | ND_SEQUENCER, NC_SCENE | ND_SEQUENCER);
-    WM_jobs_callbacks(wm_job, proxy_startjob, NULL, NULL, proxy_endjob);
-  }
-
-  file_list = BLI_gset_new(BLI_ghashutil_strhash_p, BLI_ghashutil_strcmp, "file list");
+  GSet *file_list = BLI_gset_new(BLI_ghashutil_strhash_p, BLI_ghashutil_strcmp, "file list");
   bool selected = false; /* Check for no selected strips */
 
-  SEQ_CURRENT_BEGIN (ed, seq) {
-    if (!ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE, SEQ_TYPE_META) ||
-        (seq->flag & SELECT) == 0) {
+  LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
+    if (!ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE) || (seq->flag & SELECT) == 0) {
       continue;
     }
 
@@ -164,14 +91,13 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
       BKE_reportf(reports, RPT_WARNING, "Overwrite is not checked for %s, skipping", seq->name);
     }
   }
-  SEQ_CURRENT_END;
+
+  BLI_gset_free(file_list, MEM_freeN);
 
   if (!selected) {
     BKE_reportf(reports, RPT_WARNING, "Select movie or image strips");
     return;
   }
-
-  BLI_gset_free(file_list, MEM_freeN);
 
   if (selected && !WM_jobs_is_running(wm_job)) {
     G.is_break = false;
@@ -180,12 +106,6 @@ static void seq_proxy_build_job(const bContext *C, ReportList *reports)
 
   ED_area_tag_redraw(area);
 }
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name Rebuild Proxy and Timecode Indices Operator
- * \{ */
 
 static int sequencer_rebuild_proxy_invoke(bContext *C,
                                           wmOperator *op,
@@ -201,8 +121,7 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
   Main *bmain = CTX_data_main(C);
   struct Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
-  Sequence *seq;
+  Editing *ed = SEQ_editing_get(scene, false);
   GSet *file_list;
 
   if (ed == NULL) {
@@ -211,7 +130,7 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
 
   file_list = BLI_gset_new(BLI_ghashutil_strhash_p, BLI_ghashutil_strcmp, "file list");
 
-  SEQ_CURRENT_BEGIN (ed, seq) {
+  LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
     if ((seq->flag & SELECT)) {
       ListBase queue = {NULL, NULL};
       LinkData *link;
@@ -225,10 +144,9 @@ static int sequencer_rebuild_proxy_exec(bContext *C, wmOperator *UNUSED(op))
         SEQ_proxy_rebuild(context, &stop, &do_update, &progress);
         SEQ_proxy_rebuild_finish(context, 0);
       }
-      BKE_sequencer_free_imbuf(scene, &ed->seqbase, false);
+      SEQ_relations_free_imbuf(scene, &ed->seqbase, false);
     }
   }
-  SEQ_CURRENT_END;
 
   BLI_gset_free(file_list, MEM_freeN);
 
@@ -266,8 +184,7 @@ static int sequencer_enable_proxies_invoke(bContext *C,
 static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
 {
   Scene *scene = CTX_data_scene(C);
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
-  Sequence *seq;
+  Editing *ed = SEQ_editing_get(scene, false);
   bool proxy_25 = RNA_boolean_get(op->ptr, "proxy_25");
   bool proxy_50 = RNA_boolean_get(op->ptr, "proxy_50");
   bool proxy_75 = RNA_boolean_get(op->ptr, "proxy_75");
@@ -279,9 +196,9 @@ static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
     turnon = false;
   }
 
-  SEQ_CURRENT_BEGIN (ed, seq) {
+  LISTBASE_FOREACH (Sequence *, seq, SEQ_active_seqbase_get(ed)) {
     if ((seq->flag & SELECT)) {
-      if (ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE, SEQ_TYPE_META)) {
+      if (ELEM(seq->type, SEQ_TYPE_MOVIE, SEQ_TYPE_IMAGE)) {
         SEQ_proxy_set(seq, turnon);
         if (seq->strip->proxy == NULL) {
           continue;
@@ -324,7 +241,6 @@ static int sequencer_enable_proxies_exec(bContext *C, wmOperator *op)
       }
     }
   }
-  SEQ_CURRENT_END;
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
@@ -336,7 +252,7 @@ void SEQUENCER_OT_enable_proxies(wmOperatorType *ot)
   /* Identifiers. */
   ot->name = "Set Selected Strip Proxies";
   ot->idname = "SEQUENCER_OT_enable_proxies";
-  ot->description = "Enable selected proxies on all selected Movie, Image and Meta strips";
+  ot->description = "Enable selected proxies on all selected Movie and Image strips";
 
   /* Api callbacks. */
   ot->invoke = sequencer_enable_proxies_invoke;

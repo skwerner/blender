@@ -215,7 +215,8 @@ void BKE_mesh_split_faces(struct Mesh *mesh, bool free_loop_normals);
  * ignored otherwise. */
 struct Mesh *BKE_mesh_new_from_object(struct Depsgraph *depsgraph,
                                       struct Object *object,
-                                      bool preserve_all_data_layers);
+                                      const bool preserve_all_data_layers,
+                                      const bool preserve_origindex);
 
 /* This is a version of BKE_mesh_new_from_object() which stores mesh in the given main database.
  * However, that function enforces object type to be a geometry one, and ensures a mesh is always
@@ -229,7 +230,7 @@ struct Mesh *BKE_mesh_create_derived_for_modifier(struct Depsgraph *depsgraph,
                                                   struct Scene *scene,
                                                   struct Object *ob_eval,
                                                   struct ModifierData *md_eval,
-                                                  int build_shapekey_layers);
+                                                  const bool build_shapekey_layers);
 
 /* Copies a nomain-Mesh into an existing Mesh. */
 void BKE_mesh_nomain_to_mesh(struct Mesh *mesh_src,

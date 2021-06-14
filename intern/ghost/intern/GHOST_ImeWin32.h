@@ -296,17 +296,17 @@ class GHOST_ImeWin32 {
    * Disable the IME attached to the given window, i.e. prohibits any user-input
    * events from being dispatched to the IME.
    * In Chrome, this function is used when:
-   *   * a rendeder process sets its input focus to a password input.
+   *   * a renderer process sets its input focus to a password input.
    * Parameters
    *   * window_handle [in] (HWND)
    *     Represents the window handle of the caller.
    */
   void EndIME(HWND window_handle);
 
-  /* Updatg resultInfo and compInfo */
+  /** Update #resultInfo and #compInfo */
   void UpdateInfo(HWND window_handle);
 
-  /* disable ime when start up */
+  /** Disable IME when start up. */
   void CheckFirst(HWND window_handle);
 
   ImeComposition resultInfo, compInfo;
@@ -365,7 +365,7 @@ class GHOST_ImeWin32 {
    *     MAKELANGID(LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED);
    *   * "ja-JP" (0x0411)
    *     MAKELANGID(LANG_JAPANESE, SUBLANG_JAPANESE_JAPAN), etc.
-   *   (See <winnt.h> for other available values.)
+   *   (See `winnt.h` for other available values.)
    * This Language ID is used for processing language-specific operations in
    * IME functions.
    */

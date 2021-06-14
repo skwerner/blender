@@ -184,14 +184,14 @@ void RE_InitRenderCB(struct Render *re);
 void RE_FreeRender(struct Render *re);
 /* only called on exit */
 void RE_FreeAllRender(void);
-/* Free memory used by persistent data.
- * Invoked when loading new file.
- */
-void RE_FreeAllPersistentData(void);
-/* only call on file load */
+
+/* On file load, free render results. */
 void RE_FreeAllRenderResults(void);
-/* for external render engines that can keep persistent data */
-void RE_FreePersistentData(void);
+/* On file load or changes engines, free persistent render data.
+ * Assumes no engines are currently rendering. */
+void RE_FreeAllPersistentData(void);
+/* Free persistent render data, optionally only for the given scene. */
+void RE_FreePersistentData(const Scene *scene);
 
 /* get results and statistics */
 void RE_FreeRenderResult(struct RenderResult *rr);
@@ -245,20 +245,16 @@ void RE_InitState(struct Render *re,
                   int winx,
                   int winy,
                   rcti *disprect);
-void RE_ChangeResolution(struct Render *re, int winx, int winy, rcti *disprect);
-void RE_ChangeModeFlag(struct Render *re, int flag, bool clear);
 
 /* set up the viewplane/perspective matrix, three choices */
 struct Object *RE_GetCamera(struct Render *re); /* return camera override if set */
 void RE_SetOverrideCamera(struct Render *re, struct Object *cam_ob);
 void RE_SetCamera(struct Render *re, struct Object *cam_ob);
-void RE_SetWindow(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
-void RE_SetOrtho(struct Render *re, const rctf *viewplane, float clip_start, float clip_end);
 
 /* get current view and window transform */
 void RE_GetViewPlane(struct Render *re, rctf *r_viewplane, rcti *r_disprect);
 
-/* set the render threads based on the command-line and autothreads setting */
+/* Set the render threads based on the command-line and auto-threads setting. */
 void RE_init_threadcount(Render *re);
 
 bool RE_WriteRenderViewsImage(struct ReportList *reports,
@@ -299,9 +295,6 @@ void RE_RenderFreestyleStrokes(struct Render *re,
 void RE_RenderFreestyleExternal(struct Render *re);
 #endif
 
-/* Free memory and clear runtime data which is only needed during rendering. */
-void RE_CleanAfterRender(struct Render *re);
-
 void RE_SetActiveRenderView(struct Render *re, const char *viewname);
 const char *RE_GetActiveRenderView(struct Render *re);
 
@@ -333,7 +326,7 @@ void RE_display_update_cb(struct Render *re,
                           void (*f)(void *handle, RenderResult *rr, volatile struct rcti *rect));
 void RE_stats_draw_cb(struct Render *re, void *handle, void (*f)(void *handle, RenderStats *rs));
 void RE_progress_cb(struct Render *re, void *handle, void (*f)(void *handle, float));
-void RE_draw_lock_cb(struct Render *re, void *handle, void (*f)(void *handle, int));
+void RE_draw_lock_cb(struct Render *re, void *handle, void (*f)(void *handle, bool lock));
 void RE_test_break_cb(struct Render *re, void *handle, int (*f)(void *handle));
 void RE_current_scene_update_cb(struct Render *re,
                                 void *handle,

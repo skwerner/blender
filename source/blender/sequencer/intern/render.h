@@ -30,6 +30,7 @@ extern "C" {
 struct ImBuf;
 struct ListBase;
 struct Scene;
+struct SeqEffectHandle;
 struct SeqRenderData;
 struct Sequence;
 
@@ -50,7 +51,7 @@ struct ImBuf *seq_render_give_ibuf_seqbase(const struct SeqRenderData *context,
                                            int chan_shown,
                                            struct ListBase *seqbasep);
 struct ImBuf *seq_render_effect_execute_threaded(struct SeqEffectHandle *sh,
-                                                 const SeqRenderData *context,
+                                                 const struct SeqRenderData *context,
                                                  struct Sequence *seq,
                                                  float timeline_frame,
                                                  float facf0,

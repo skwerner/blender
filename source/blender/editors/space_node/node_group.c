@@ -107,7 +107,7 @@ static const char *group_ntree_idname(bContext *C)
   return snode->tree_idname;
 }
 
-static const char *group_node_idname(bContext *C)
+const char *node_group_idname(bContext *C)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
 
@@ -147,7 +147,7 @@ static bNode *node_group_get_active(bContext *C, const char *node_idname)
 static int node_group_edit_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
   const bool exit = RNA_boolean_get(op->ptr, "exit");
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
@@ -400,7 +400,7 @@ static int node_group_ungroup_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
   SpaceNode *snode = CTX_wm_space_node(C);
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), bmain);
 
@@ -679,8 +679,19 @@ static bool node_group_make_test_selected(bNodeTree *ntree,
   /* check poll functions for selected nodes */
   LISTBASE_FOREACH (bNode *, node, &ntree->nodes) {
     if (node_group_make_use_node(node, gnode)) {
-      if (node->typeinfo->poll_instance && !node->typeinfo->poll_instance(node, ngroup)) {
-        BKE_reportf(reports, RPT_WARNING, "Can not add node '%s' in a group", node->name);
+      const char *disabled_hint = NULL;
+      if (node->typeinfo->poll_instance &&
+          !node->typeinfo->poll_instance(node, ngroup, &disabled_hint)) {
+        if (disabled_hint) {
+          BKE_reportf(reports,
+                      RPT_WARNING,
+                      "Can not add node '%s' in a group:\n  %s",
+                      node->name,
+                      disabled_hint);
+        }
+        else {
+          BKE_reportf(reports, RPT_WARNING, "Can not add node '%s' in a group", node->name);
+        }
         ok = false;
         break;
       }
@@ -1013,7 +1024,7 @@ static int node_group_make_exec(bContext *C, wmOperator *op)
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = snode->edittree;
   const char *ntree_idname = group_ntree_idname(C);
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
   Main *bmain = CTX_data_main(C);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));
@@ -1030,6 +1041,9 @@ static int node_group_make_exec(bContext *C, wmOperator *op)
     nodeSetActive(ntree, gnode);
     if (ngroup) {
       ED_node_tree_push(snode, ngroup, gnode);
+      LISTBASE_FOREACH (bNode *, node, &ngroup->nodes) {
+        sort_multi_input_socket_links(snode, node, NULL, NULL);
+      }
       ntreeUpdateTree(bmain, ngroup);
     }
   }
@@ -1039,7 +1053,7 @@ static int node_group_make_exec(bContext *C, wmOperator *op)
   snode_notify(C, snode);
   snode_dag_update(C, snode);
 
-  /* We broke relations in node tree, need to rebuild them in the grahes. */
+  /* We broke relations in node tree, need to rebuild them in the graphs. */
   DEG_relations_tag_update(bmain);
 
   return OPERATOR_FINISHED;
@@ -1070,7 +1084,7 @@ static int node_group_insert_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
   bNodeTree *ntree = snode->edittree;
-  const char *node_idname = group_node_idname(C);
+  const char *node_idname = node_group_idname(C);
   Main *bmain = CTX_data_main(C);
 
   ED_preview_kill_jobs(CTX_wm_manager(C), CTX_data_main(C));

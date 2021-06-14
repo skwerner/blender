@@ -70,7 +70,8 @@ Depsgraph::Depsgraph(Main *bmain, Scene *scene, ViewLayer *view_layer, eEvaluati
       scene_cow(nullptr),
       is_active(false),
       is_evaluating(false),
-      is_render_pipeline_depsgraph(false)
+      is_render_pipeline_depsgraph(false),
+      use_editors_update(false)
 {
   BLI_spin_init(&lock);
   memset(id_type_updated, 0, sizeof(id_type_updated));
@@ -140,6 +141,14 @@ static void clear_id_nodes_conditional(Depsgraph::IDDepsNodes *id_nodes, const F
     if (id_node->id_cow == nullptr) {
       /* This means builder "stole" ownership of the copy-on-written
        * datablock for her own dirty needs. */
+      continue;
+    }
+    if (id_node->id_cow == id_node->id_orig) {
+      /* Copy-on-write version is not needed for this ID type.
+       *
+       * NOTE: Is important to not de-reference the original datablock here because it might be
+       * freed already (happens during main database free when some IDs are freed prior to a
+       * scene). */
       continue;
     }
     if (!deg_copy_on_write_is_expanded(id_node->id_cow)) {
@@ -277,7 +286,9 @@ Depsgraph *DEG_graph_new(Main *bmain, Scene *scene, ViewLayer *view_layer, eEval
 }
 
 /* Replace the "owner" pointers (currently Main/Scene/ViewLayer) of this depsgraph.
- * Used during undo steps when we do want to re-use the old depsgraph data as much as possible. */
+ * Used for:
+ * - Undo steps when we do want to re-use the old depsgraph data as much as possible.
+ * - Rendering where we want to re-use objects between different view layers. */
 void DEG_graph_replace_owners(struct Depsgraph *depsgraph,
                               Main *bmain,
                               Scene *scene,

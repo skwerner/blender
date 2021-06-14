@@ -96,7 +96,7 @@ class USERPREF_MT_editor_menus(Menu):
 class USERPREF_MT_view(Menu):
     bl_label = "View"
 
-    def draw(self, context):
+    def draw(self, _context):
         layout = self.layout
 
         layout.menu("INFO_MT_area")
@@ -241,7 +241,7 @@ class USERPREF_PT_interface_translation(InterfacePanel, CenterAlignMixIn, Panel)
     bl_translation_context = i18n_contexts.id_windowmanager
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, _context):
         return bpy.app.build_options.international
 
     def draw_centered(self, context, layout):
@@ -542,7 +542,7 @@ class USERPREF_PT_animation_fcurves(AnimationPanel, CenterAlignMixIn, Panel):
 
         flow = layout.grid_flow(row_major=False, columns=0, even_columns=True, even_rows=False, align=False)
 
-        flow.prop(edit, "fcurve_unselected_alpha", text="F-Curve Visibility")
+        flow.prop(edit, "fcurve_unselected_alpha", text="Unselected Opacity")
         flow.prop(edit, "fcurve_new_auto_smoothing", text="Default Smoothing Mode")
         flow.prop(edit, "keyframe_new_interpolation_type", text="Default Interpolation")
         flow.prop(edit, "keyframe_new_handle_type", text="Default Handles")
@@ -581,7 +581,7 @@ class USERPREF_PT_system_cycles_devices(SystemPanel, CenterAlignMixIn, Panel):
     bl_label = "Cycles Render Devices"
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, _context):
         # No GPU rendering on macOS currently.
         import sys
         return bpy.app.build_options.cycles and sys.platform != "darwin"
@@ -642,7 +642,7 @@ class USERPREF_PT_system_video_sequencer(SystemPanel, CenterAlignMixIn, Panel):
     def draw_centered(self, context, layout):
         prefs = context.preferences
         system = prefs.system
-        edit = prefs.edit
+        # edit = prefs.edit
 
         layout.prop(system, "memory_cache_limit")
 
@@ -654,6 +654,10 @@ class USERPREF_PT_system_video_sequencer(SystemPanel, CenterAlignMixIn, Panel):
         col.prop(system, "sequencer_disk_cache_dir", text="Directory")
         col.prop(system, "sequencer_disk_cache_size_limit", text="Cache Limit")
         col.prop(system, "sequencer_disk_cache_compression", text="Compression")
+
+        layout.separator()
+
+        layout.prop(system, "sequencer_proxy_setup")
 
 
 # -----------------------------------------------------------------------------
@@ -690,6 +694,9 @@ class USERPREF_PT_viewport_display(ViewportPanel, CenterAlignMixIn, Panel):
         if view.mini_axis_type == 'MINIMAL':
             col.prop(view, "mini_axis_size", text="Size")
             col.prop(view, "mini_axis_brightness", text="Brightness")
+
+        if view.mini_axis_type == 'GIZMO':
+            col.prop(view, "gizmo_size_navigate_v3d", text="Size")
 
 
 class USERPREF_PT_viewport_quality(ViewportPanel, CenterAlignMixIn, Panel):
@@ -1330,7 +1337,7 @@ class USERPREF_PT_saveload_autorun(FilePathsPanel, Panel):
 
         box = layout.box()
         row = box.row()
-        row.label(text="Excluded Paths:")
+        row.label(text="Excluded Paths")
         row.operator("preferences.autoexec_path_add", text="", icon='ADD', emboss=False)
         for i, path_cmp in enumerate(prefs.autoexec_paths):
             row = box.row()
@@ -1341,6 +1348,11 @@ class USERPREF_PT_saveload_autorun(FilePathsPanel, Panel):
 
 class USERPREF_PT_file_paths_asset_libraries(FilePathsPanel, Panel):
     bl_label = "Asset Libraries"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences
+        return prefs.experimental.use_asset_browser
 
     def draw(self, context):
         layout = self.layout
@@ -1437,7 +1449,7 @@ class USERPREF_PT_saveload_file_browser(SaveLoadPanel, CenterAlignMixIn, Panel):
         col.prop(paths, "use_filter_files")
 
         col = layout.column(heading="Hide")
-        col.prop(paths, "show_hidden_files_datablocks", text="Dot File & Datablocks")
+        col.prop(paths, "show_hidden_files_datablocks", text="Dot File & Data-Blocks")
         col.prop(paths, "hide_recent_locations", text="Recent Locations")
         col.prop(paths, "hide_system_bookmarks", text="System Bookmarks")
 
@@ -2177,7 +2189,7 @@ class ExperimentalPanel:
     url_prefix = "https://developer.blender.org/"
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, _context):
         return bpy.app.version_cycle == 'alpha'
 
     def _draw_items(self, context, items):
@@ -2188,14 +2200,21 @@ class ExperimentalPanel:
         layout.use_property_split = False
         layout.use_property_decorate = False
 
-        for prop_keywords, task in items:
+        for prop_keywords, reference in items:
             split = layout.split(factor=0.66)
             col = split.split()
             col.prop(experimental, **prop_keywords)
 
-            if task:
+            if reference:
+                if type(reference) is tuple:
+                    url_ext = reference[0]
+                    text = reference[1]
+                else:
+                    url_ext = reference
+                    text = reference
+
                 col = split.split()
-                col.operator("wm.url_open", text=task, icon='URL').url = self.url_prefix + task
+                col.operator("wm.url_open", text=text, icon='URL').url = self.url_prefix + url_ext
 
 
 """
@@ -2222,9 +2241,9 @@ class USERPREF_PT_experimental_new_features(ExperimentalPanel, Panel):
         self._draw_items(
             context, (
                 ({"property": "use_sculpt_vertex_colors"}, "T71947"),
-                ({"property": "use_switch_object_operator"}, "T80402"),
                 ({"property": "use_sculpt_tools_tilt"}, "T82877"),
-                ({"property": "use_object_add_tool"}, "T57210"),
+                ({"property": "use_asset_browser"}, ("project/profile/124/", "Milestone 1")),
+                ({"property": "use_override_templates"}, ("T73318", "Milestone 4")),
             ),
         )
 
@@ -2245,7 +2264,7 @@ class USERPREF_PT_experimental_debugging(ExperimentalPanel, Panel):
     bl_label = "Debugging"
 
     @classmethod
-    def poll(cls, context):
+    def poll(cls, _context):
         # Unlike the other experimental panels, the debugging one is always visible
         # even in beta or release.
         return True
@@ -2254,6 +2273,7 @@ class USERPREF_PT_experimental_debugging(ExperimentalPanel, Panel):
         self._draw_items(
             context, (
                 ({"property": "use_undo_legacy"}, "T60695"),
+                ({"property": "override_auto_resync"}, "T83811"),
                 ({"property": "use_cycles_debug"}, None),
             ),
         )

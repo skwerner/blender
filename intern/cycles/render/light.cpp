@@ -117,19 +117,20 @@ NODE_DEFINE(Light)
   type_enum.insert("spot", LIGHT_SPOT);
   SOCKET_ENUM(light_type, "Type", type_enum, LIGHT_POINT);
 
-  SOCKET_COLOR(strength, "Strength", make_float3(1.0f, 1.0f, 1.0f));
+  SOCKET_COLOR(strength, "Strength", one_float3());
 
-  SOCKET_POINT(co, "Co", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_POINT(co, "Co", zero_float3());
 
-  SOCKET_VECTOR(dir, "Dir", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_VECTOR(dir, "Dir", zero_float3());
   SOCKET_FLOAT(size, "Size", 0.0f);
   SOCKET_FLOAT(angle, "Angle", 0.0f);
 
-  SOCKET_VECTOR(axisu, "Axis U", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_VECTOR(axisu, "Axis U", zero_float3());
   SOCKET_FLOAT(sizeu, "Size U", 1.0f);
-  SOCKET_VECTOR(axisv, "Axis V", make_float3(0.0f, 0.0f, 0.0f));
+  SOCKET_VECTOR(axisv, "Axis V", zero_float3());
   SOCKET_FLOAT(sizev, "Size V", 1.0f);
   SOCKET_BOOLEAN(round, "Round", false);
+  SOCKET_FLOAT(spread, "Spread", M_PI_F);
 
   SOCKET_INT(map_resolution, "Map Resolution", 0);
 
@@ -152,23 +153,29 @@ NODE_DEFINE(Light)
   SOCKET_BOOLEAN(is_portal, "Is Portal", false);
   SOCKET_BOOLEAN(is_enabled, "Is Enabled", true);
 
-  SOCKET_NODE(shader, "Shader", &Shader::node_type);
+  SOCKET_NODE(shader, "Shader", Shader::get_node_type());
 
   return type;
 }
 
-Light::Light() : Node(node_type)
+Light::Light() : Node(get_node_type())
 {
 }
 
 void Light::tag_update(Scene *scene)
 {
-  scene->light_manager->need_update = is_modified();
+  if (is_modified()) {
+    scene->light_manager->tag_update(scene, LightManager::LIGHT_MODIFIED);
+
+    if (samples_is_modified()) {
+      scene->integrator->tag_update(scene, Integrator::LIGHT_SAMPLES_MODIFIED);
+    }
+  }
 }
 
 bool Light::has_contribution(Scene *scene)
 {
-  if (strength == make_float3(0.0f, 0.0f, 0.0f)) {
+  if (strength == zero_float3()) {
     return false;
   }
   if (is_portal) {
@@ -184,7 +191,7 @@ bool Light::has_contribution(Scene *scene)
 
 LightManager::LightManager()
 {
-  need_update = true;
+  update_flags = UPDATE_ALL;
   need_update_background = true;
   use_light_visibility = false;
   last_background_enabled = false;
@@ -954,7 +961,7 @@ void LightManager::device_update_background(Device *device,
   Shader *shader = scene->background->get_shader(scene);
   int num_suns = 0;
   foreach (ShaderNode *node, shader->graph->nodes) {
-    if (node->type == EnvironmentTextureNode::node_type) {
+    if (node->type == EnvironmentTextureNode::get_node_type()) {
       EnvironmentTextureNode *env = (EnvironmentTextureNode *)node;
       ImageMetaData metadata;
       if (!env->handle.empty()) {
@@ -963,7 +970,7 @@ void LightManager::device_update_background(Device *device,
         environment_res.y = max(environment_res.y, metadata.height);
       }
     }
-    if (node->type == SkyTextureNode::node_type) {
+    if (node->type == SkyTextureNode::get_node_type()) {
       SkyTextureNode *sky = (SkyTextureNode *)node;
       if (sky->get_sky_type() == NODE_SKY_NISHITA && sky->get_sun_disc()) {
         /* Ensure that the input coordinates aren't transformed before they reach the node.
@@ -972,7 +979,7 @@ void LightManager::device_update_background(Device *device,
         const ShaderInput *vec_in = sky->input("Vector");
         if (vec_in && vec_in->link && vec_in->link->parent) {
           ShaderNode *vec_src = vec_in->link->parent;
-          if ((vec_src->type != TextureCoordinateNode::node_type) ||
+          if ((vec_src->type != TextureCoordinateNode::get_node_type()) ||
               (vec_in->link != vec_src->output("Generated"))) {
             environment_res.x = max(environment_res.x, 4096);
             environment_res.y = max(environment_res.y, 2048);
@@ -1195,6 +1202,15 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
       float invarea = (area != 0.0f) ? 1.0f / area : 1.0f;
       float3 dir = light->dir;
 
+      /* Convert from spread angle 0..180 to 90..0, clamping to a minimum
+       * angle to avoid excessive noise. */
+      const float min_spread_angle = 1.0f * M_PI_F / 180.0f;
+      const float spread_angle = 0.5f * (M_PI_F - max(light->spread, min_spread_angle));
+      /* Normalization computed using:
+       * integrate cos(x) * (1 - tan(x) * tan(a)) * sin(x) from x = 0 to pi/2 - a. */
+      const float tan_spread = tanf(spread_angle);
+      const float normalize_spread = 2.0f / (2.0f + (2.0f * spread_angle - M_PI_F) * tan_spread);
+
       dir = safe_normalize(dir);
 
       if (light->use_mis && area != 0.0f)
@@ -1214,6 +1230,8 @@ void LightManager::device_update_points(Device *, DeviceScene *dscene, Scene *sc
       klights[light_index].area.dir[0] = dir.x;
       klights[light_index].area.dir[1] = dir.y;
       klights[light_index].area.dir[2] = dir.z;
+      klights[light_index].area.tan_spread = tan_spread;
+      klights[light_index].area.normalize_spread = normalize_spread;
     }
     else if (light->light_type == LIGHT_SPOT) {
       shader_id &= ~SHADER_AREA_LIGHT;
@@ -1305,7 +1323,7 @@ void LightManager::device_update(Device *device,
                                  Scene *scene,
                                  Progress &progress)
 {
-  if (!need_update)
+  if (!need_update())
     return;
 
   scoped_callback_timer timer([scene](double time) {
@@ -1316,7 +1334,7 @@ void LightManager::device_update(Device *device,
 
   VLOG(1) << "Total " << scene->lights.size() << " lights.";
 
-  /* Detect which lights are enabled, also determins if we need to update the background. */
+  /* Detect which lights are enabled, also determines if we need to update the background. */
   test_enabled_lights(scene);
 
   device_free(device, dscene, need_update_background);
@@ -1343,7 +1361,7 @@ void LightManager::device_update(Device *device,
 
   scene->film->set_use_light_visibility(use_light_visibility);
 
-  need_update = false;
+  update_flags = UPDATE_NONE;
   need_update_background = false;
 }
 
@@ -1366,9 +1384,14 @@ void LightManager::device_free(Device *, DeviceScene *dscene, const bool free_ba
   dscene->ies_lights.free();
 }
 
-void LightManager::tag_update(Scene * /*scene*/)
+void LightManager::tag_update(Scene * /*scene*/, uint32_t flag)
 {
-  need_update = true;
+  update_flags |= flag;
+}
+
+bool LightManager::need_update() const
+{
+  return update_flags != UPDATE_NONE;
 }
 
 int LightManager::add_ies_from_file(const string &filename)
@@ -1414,7 +1437,7 @@ int LightManager::add_ies(const string &content)
   ies_slots[slot]->users = 1;
   ies_slots[slot]->hash = hash;
 
-  need_update = true;
+  update_flags = UPDATE_ALL;
   need_update_background = true;
 
   return slot;
@@ -1433,8 +1456,10 @@ void LightManager::remove_ies(int slot)
   ies_slots[slot]->users--;
 
   /* If the slot has no more users, update the device to remove it. */
-  need_update |= (ies_slots[slot]->users == 0);
-  need_update_background |= need_update;
+  if (ies_slots[slot]->users == 0) {
+    update_flags |= UPDATE_ALL;
+    need_update_background = true;
+  }
 }
 
 void LightManager::device_update_ies(DeviceScene *dscene)

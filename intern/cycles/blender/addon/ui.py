@@ -15,6 +15,7 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 import bpy
 from bpy_extras.node_utils import find_node_input
@@ -23,7 +24,7 @@ from bl_ui.utils import PresetPanel
 from bpy.types import Panel
 
 from bl_ui.properties_grease_pencil_common import GreasePencilSimplifyPanel
-from bl_ui.properties_view_layer import ViewLayerCryptomattePanel
+from bl_ui.properties_view_layer import ViewLayerCryptomattePanel, ViewLayerAOVPanel
 
 
 class CYCLES_PT_sampling_presets(PresetPanel, Panel):
@@ -274,6 +275,8 @@ class CYCLES_RENDER_PT_sampling_denoising(CyclesButtonsPanel, Panel):
 
         sub.prop(cscene, "denoiser", text="")
 
+        layout.separator()
+
         heading = layout.column(align=False, heading="Viewport")
         row = heading.row(align=True)
         row.prop(cscene, "use_preview_denoising", text="")
@@ -284,6 +287,9 @@ class CYCLES_RENDER_PT_sampling_denoising(CyclesButtonsPanel, Panel):
         sub = heading.row(align=True)
         sub.active = cscene.use_preview_denoising
         sub.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
+        sub = heading.row(align=True)
+        sub.active = cscene.use_preview_denoising
+        sub.prop(cscene, "preview_denoising_input_passes", text="Input Passes")
 
 
 class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
@@ -549,6 +555,37 @@ class CYCLES_RENDER_PT_light_paths_caustics(CyclesButtonsPanel, Panel):
         col.prop(cscene, "caustics_refractive", text="Refractive")
 
 
+class CYCLES_RENDER_PT_light_paths_fast_gi(CyclesButtonsPanel, Panel):
+    bl_label = "Fast GI Approximation"
+    bl_options = {'DEFAULT_CLOSED'}
+    bl_parent_id = "CYCLES_RENDER_PT_light_paths"
+
+    def draw_header(self, context):
+        scene = context.scene
+        cscene = scene.cycles
+
+        self.layout.prop(cscene, "use_fast_gi", text="")
+
+    def draw(self, context):
+        scene = context.scene
+        cscene = scene.cycles
+        world = scene.world
+
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        col = layout.column(align=True)
+        col.prop(cscene, "ao_bounces", text="Viewport Bounces")
+        col.prop(cscene, "ao_bounces_render", text="Render Bounces")
+
+        if world:
+          light = world.light_settings
+          col = layout.column(align=True)
+          col.prop(light, "ao_factor", text="AO Factor")
+          col.prop(light, "distance", text="AO Distance")
+
+
 class CYCLES_RENDER_PT_motion_blur(CyclesButtonsPanel, Panel):
     bl_label = "Motion Blur"
     bl_options = {'DEFAULT_CLOSED'}
@@ -717,7 +754,7 @@ class CYCLES_RENDER_PT_performance_tiles(CyclesButtonsPanel, Panel):
         col.prop(cscene, "tile_order", text="Order")
 
         sub = col.column()
-        sub.active = not rd.use_save_buffers
+        sub.active = not rd.use_save_buffers and not cscene.use_adaptive_sampling
         sub.prop(cscene, "use_progressive_refine")
 
 
@@ -769,7 +806,7 @@ class CYCLES_RENDER_PT_performance_final_render(CyclesButtonsPanel, Panel):
         col = layout.column()
 
         col.prop(rd, "use_save_buffers")
-        col.prop(rd, "use_persistent_data", text="Persistent Images")
+        col.prop(rd, "use_persistent_data", text="Persistent Data")
 
 
 class CYCLES_RENDER_PT_performance_viewport(CyclesButtonsPanel, Panel):
@@ -915,7 +952,7 @@ class CYCLES_RENDER_PT_passes_light(CyclesButtonsPanel, Panel):
         col.prop(view_layer, "use_pass_ambient_occlusion", text="Ambient Occlusion")
 
 
-class CYCLES_RENDER_PT_passes_crypto(CyclesButtonsPanel, ViewLayerCryptomattePanel):
+class CYCLES_RENDER_PT_passes_crypto(CyclesButtonsPanel, ViewLayerCryptomattePanel, Panel):
     bl_label = "Cryptomatte"
     bl_context = "view_layer"
     bl_parent_id = "CYCLES_RENDER_PT_passes"
@@ -944,48 +981,10 @@ class CYCLES_RENDER_PT_passes_debug(CyclesButtonsPanel, Panel):
         layout.prop(cycles_view_layer, "pass_debug_ray_bounces")
 
 
-class CYCLES_RENDER_UL_aov(bpy.types.UIList):
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname):
-        row = layout.row()
-        split = row.split(factor=0.65)
-        icon = 'ERROR' if item.conflict else 'NONE'
-        split.row().prop(item, "name", text="", icon=icon, emboss=False)
-        split.row().prop(item, "type", text="", emboss=False)
-
-
-class CYCLES_RENDER_PT_passes_aov(CyclesButtonsPanel, Panel):
+class CYCLES_RENDER_PT_passes_aov(CyclesButtonsPanel, ViewLayerAOVPanel):
     bl_label = "Shader AOV"
     bl_context = "view_layer"
     bl_parent_id = "CYCLES_RENDER_PT_passes"
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        cycles_view_layer = context.view_layer.cycles
-
-        row = layout.row()
-        col = row.column()
-        col.template_list(
-            "CYCLES_RENDER_UL_aov",
-            "aovs",
-            cycles_view_layer,
-            "aovs",
-            cycles_view_layer,
-            "active_aov",
-            rows=2,
-        )
-
-        col = row.column()
-        sub = col.column(align=True)
-        sub.operator("cycles.add_aov", icon='ADD', text="")
-        sub.operator("cycles.remove_aov", icon='REMOVE', text="")
-
-        if cycles_view_layer.active_aov < len(cycles_view_layer.aovs):
-            active_aov = cycles_view_layer.aovs[cycles_view_layer.active_aov]
-            if active_aov.conflict:
-                layout.label(text=active_aov.conflict, icon='ERROR')
 
 
 class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
@@ -1177,7 +1176,7 @@ class CYCLES_PT_context_material(CyclesButtonsPanel, Panel):
         split = layout.split(factor=0.65)
 
         if ob:
-            split.template_ID(ob, "active_material", new="material.new", duplicate="material.duplicate")
+            split.template_ID(ob, "active_material", new="material.new")
             row = split.row()
 
             if slot:
@@ -1470,25 +1469,28 @@ class CYCLES_LIGHT_PT_nodes(CyclesButtonsPanel, Panel):
         panel_node_draw(layout, light, 'OUTPUT_LIGHT', 'Surface')
 
 
-class CYCLES_LIGHT_PT_spot(CyclesButtonsPanel, Panel):
-    bl_label = "Spot Shape"
+class CYCLES_LIGHT_PT_beam_shape(CyclesButtonsPanel, Panel):
+    bl_label = "Beam Shape"
+    bl_parent_id = "CYCLES_LIGHT_PT_light"
     bl_context = "data"
 
     @classmethod
     def poll(cls, context):
-        light = context.light
-        return (light and light.type == 'SPOT') and CyclesButtonsPanel.poll(context)
+        if context.light.type in {'SPOT', 'AREA'}:
+            return context.light and CyclesButtonsPanel.poll(context)
 
     def draw(self, context):
         layout = self.layout
         light = context.light
         layout.use_property_split = True
-        layout.use_property_decorate = False
 
         col = layout.column()
-        col.prop(light, "spot_size", text="Size")
-        col.prop(light, "spot_blend", text="Blend", slider=True)
-        col.prop(light, "show_cone")
+        if light.type == 'SPOT':
+            col.prop(light, "spot_size", text="Spot Size")
+            col.prop(light, "spot_blend", text="Blend", slider=True)
+            col.prop(light, "show_cone")
+        elif light.type == 'AREA':
+            col.prop(light, "spread", text="Spread")
 
 
 class CYCLES_WORLD_PT_preview(CyclesButtonsPanel, Panel):
@@ -1998,9 +2000,11 @@ class CYCLES_RENDER_PT_bake_output(CyclesButtonsPanel, Panel):
             if rd.bake_type == 'DISPLACEMENT':
                 layout.prop(rd, "use_bake_lores_mesh")
         else:
+            layout.prop(cbk, "target")
 
-            layout.prop(cbk, "margin")
-            layout.prop(cbk, "use_clear", text="Clear Image")
+            if cbk.target == 'IMAGE_TEXTURES':
+                layout.prop(cbk, "margin")
+                layout.prop(cbk, "use_clear", text="Clear Image")
 
 
 class CYCLES_RENDER_PT_debug(CyclesButtonsPanel, Panel):
@@ -2097,7 +2101,6 @@ class CYCLES_RENDER_PT_simplify_viewport(CyclesButtonsPanel, Panel):
         col.prop(rd, "simplify_subdivision", text="Max Subdivision")
         col.prop(rd, "simplify_child_particles", text="Child Particles")
         col.prop(cscene, "texture_limit", text="Texture Limit")
-        col.prop(cscene, "ao_bounces", text="AO Bounces")
         col.prop(rd, "simplify_volumes", text="Volume Resolution")
 
 
@@ -2123,7 +2126,6 @@ class CYCLES_RENDER_PT_simplify_render(CyclesButtonsPanel, Panel):
         col.prop(rd, "simplify_subdivision_render", text="Max Subdivision")
         col.prop(rd, "simplify_child_particles_render", text="Child Particles")
         col.prop(cscene, "texture_limit_render", text="Texture Limit")
-        col.prop(cscene, "ao_bounces_render", text="AO Bounces")
 
 
 class CYCLES_RENDER_PT_simplify_culling(CyclesButtonsPanel, Panel):
@@ -2302,6 +2304,7 @@ classes = (
     CYCLES_RENDER_PT_light_paths_max_bounces,
     CYCLES_RENDER_PT_light_paths_clamping,
     CYCLES_RENDER_PT_light_paths_caustics,
+    CYCLES_RENDER_PT_light_paths_fast_gi,
     CYCLES_RENDER_PT_volumes,
     CYCLES_RENDER_PT_subdivision,
     CYCLES_RENDER_PT_hair,
@@ -2328,7 +2331,6 @@ classes = (
     CYCLES_RENDER_PT_passes_light,
     CYCLES_RENDER_PT_passes_crypto,
     CYCLES_RENDER_PT_passes_debug,
-    CYCLES_RENDER_UL_aov,
     CYCLES_RENDER_PT_passes_aov,
     CYCLES_RENDER_PT_filter,
     CYCLES_RENDER_PT_override,
@@ -2345,7 +2347,7 @@ classes = (
     CYCLES_LIGHT_PT_preview,
     CYCLES_LIGHT_PT_light,
     CYCLES_LIGHT_PT_nodes,
-    CYCLES_LIGHT_PT_spot,
+    CYCLES_LIGHT_PT_beam_shape,
     CYCLES_WORLD_PT_preview,
     CYCLES_WORLD_PT_surface,
     CYCLES_WORLD_PT_volume,
@@ -2375,7 +2377,7 @@ classes = (
     node_panel(CYCLES_WORLD_PT_settings_surface),
     node_panel(CYCLES_WORLD_PT_settings_volume),
     node_panel(CYCLES_LIGHT_PT_light),
-    node_panel(CYCLES_LIGHT_PT_spot),
+    node_panel(CYCLES_LIGHT_PT_beam_shape)
 )
 
 

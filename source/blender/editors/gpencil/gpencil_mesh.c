@@ -36,8 +36,6 @@
 #include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_duplilist.h"
-#include "BKE_global.h"
-#include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -253,7 +251,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   gpd->draw_mode = (project_type == GP_REPROJECT_KEEP) ? GP_DRAWMODE_3D : GP_DRAWMODE_2D;
 
   /* Set cursor to indicate working. */
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   GP_SpaceConversion gsc = {NULL};
   SnapObjectContext *sctx = NULL;
@@ -320,7 +318,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
                                use_seams,
                                use_faces);
 
-      /* Reproject all untaged created strokes. */
+      /* Reproject all un-tagged created strokes. */
       if (project_type != GP_REPROJECT_KEEP) {
         LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           bGPDframe *gpf = gpl->actframe;
@@ -387,7 +385,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
 
   /* Reset cursor. */
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -434,7 +432,7 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Bake Mesh Animation to Grease Pencil";
   ot->idname = "GPENCIL_OT_bake_mesh_animation";
-  ot->description = "Bake Mesh Animation to Grease Pencil strokes";
+  ot->description = "Bake mesh animation to grease pencil strokes";
 
   /* callbacks */
   ot->invoke = gpencil_bake_mesh_animation_invoke;

@@ -512,7 +512,7 @@ static int imb_read_tiff_pixels(ImBuf *ibuf, TIFF *image)
   }
 
   if (success) {
-    /* Code seems to be not needed for 16 bits tif, on PPC G5 OSX (ton) */
+    /* Code seems to be not needed for 16 bits TIFF, on PPC G5 OSX (ton) */
     if (bitspersample < 16) {
       if (ENDIAN_ORDER == B_ENDIAN) {
         IMB_convert_rgba_to_abgr(tmpibuf);
@@ -576,11 +576,7 @@ ImBuf *imb_loadtiff(const unsigned char *mem,
   int ib_depth;
   int found;
 
-  /* check whether or not we have a TIFF file */
-  if (size < IMB_TIFF_NCB) {
-    fprintf(stderr, "imb_loadtiff: size < IMB_TIFF_NCB\n");
-    return NULL;
-  }
+  /* Check whether or not we have a TIFF file. */
   if (imb_is_a_tiff(mem, size) == 0) {
     return NULL;
   }
@@ -806,7 +802,7 @@ bool imb_savetiff(ImBuf *ibuf, const char *filepath, int flags)
 
   /* open TIFF file for writing */
   if (flags & IB_mem) {
-    /* bork at the creation of a TIFF in memory */
+    /* Failed to allocate TIFF in memory. */
     fprintf(stderr,
             "imb_savetiff: creation of in-memory TIFF files is "
             "not yet supported.\n");

@@ -18,6 +18,9 @@
 
 #include "DNA_material_types.h"
 
+#include "UI_interface.h"
+#include "UI_resources.h"
+
 #include "node_geometry_util.hh"
 
 static bNodeSocketTemplate geo_node_attribute_mix_in[] = {
@@ -41,13 +44,24 @@ static bNodeSocketTemplate geo_node_mix_attribute_out[] = {
     {-1, ""},
 };
 
+static void geo_node_attribute_mix_layout(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
+{
+  uiLayoutSetPropSep(layout, true);
+  uiLayoutSetPropDecorate(layout, false);
+  uiItemR(layout, ptr, "blend_type", 0, "", ICON_NONE);
+  uiLayout *col = uiLayoutColumn(layout, false);
+  uiItemR(col, ptr, "input_type_factor", 0, IFACE_("Factor"), ICON_NONE);
+  uiItemR(col, ptr, "input_type_a", 0, IFACE_("A"), ICON_NONE);
+  uiItemR(col, ptr, "input_type_b", 0, IFACE_("B"), ICON_NONE);
+}
+
 namespace blender::nodes {
 
 static void do_mix_operation_float(const int blend_mode,
                                    const FloatReadAttribute &factors,
                                    const FloatReadAttribute &inputs_a,
                                    const FloatReadAttribute &inputs_b,
-                                   FloatWriteAttribute &results)
+                                   FloatWriteAttribute results)
 {
   const int size = results.size();
   for (const int i : IndexRange(size)) {
@@ -55,7 +69,7 @@ static void do_mix_operation_float(const int blend_mode,
     float3 a{inputs_a[i]};
     const float3 b{inputs_b[i]};
     ramp_blend(blend_mode, a, factor, b);
-    const float result = a.length();
+    const float result = a.x;
     results.set(i, result);
   }
 }
@@ -64,7 +78,7 @@ static void do_mix_operation_float3(const int blend_mode,
                                     const FloatReadAttribute &factors,
                                     const Float3ReadAttribute &inputs_a,
                                     const Float3ReadAttribute &inputs_b,
-                                    Float3WriteAttribute &results)
+                                    Float3WriteAttribute results)
 {
   const int size = results.size();
   for (const int i : IndexRange(size)) {
@@ -80,7 +94,7 @@ static void do_mix_operation_color4f(const int blend_mode,
                                      const FloatReadAttribute &factors,
                                      const Color4fReadAttribute &inputs_a,
                                      const Color4fReadAttribute &inputs_b,
-                                     Color4fWriteAttribute &results)
+                                     Color4fWriteAttribute results)
 {
   const int size = results.size();
   for (const int i : IndexRange(size)) {
@@ -95,59 +109,56 @@ static void do_mix_operation_color4f(const int blend_mode,
 static void do_mix_operation(const CustomDataType result_type,
                              int blend_mode,
                              const FloatReadAttribute &attribute_factor,
-                             ReadAttributePtr attribute_a,
-                             ReadAttributePtr attribute_b,
-                             WriteAttributePtr attribute_result)
+                             const ReadAttribute &attribute_a,
+                             const ReadAttribute &attribute_b,
+                             WriteAttribute &attribute_result)
 {
   if (result_type == CD_PROP_FLOAT) {
-    FloatReadAttribute attribute_a_float = std::move(attribute_a);
-    FloatReadAttribute attribute_b_float = std::move(attribute_b);
-    FloatWriteAttribute attribute_result_float = std::move(attribute_result);
-    do_mix_operation_float(blend_mode,
-                           attribute_factor,
-                           attribute_a_float,
-                           attribute_b_float,
-                           attribute_result_float);
+    do_mix_operation_float(
+        blend_mode, attribute_factor, attribute_a, attribute_b, attribute_result);
   }
   else if (result_type == CD_PROP_FLOAT3) {
-    Float3ReadAttribute attribute_a_float3 = std::move(attribute_a);
-    Float3ReadAttribute attribute_b_float3 = std::move(attribute_b);
-    Float3WriteAttribute attribute_result_float3 = std::move(attribute_result);
-    do_mix_operation_float3(blend_mode,
-                            attribute_factor,
-                            attribute_a_float3,
-                            attribute_b_float3,
-                            attribute_result_float3);
+    do_mix_operation_float3(
+        blend_mode, attribute_factor, attribute_a, attribute_b, attribute_result);
   }
   else if (result_type == CD_PROP_COLOR) {
-    Color4fReadAttribute attribute_a_color4f = std::move(attribute_a);
-    Color4fReadAttribute attribute_b_color4f = std::move(attribute_b);
-    Color4fWriteAttribute attribute_result_color4f = std::move(attribute_result);
-    do_mix_operation_color4f(blend_mode,
-                             attribute_factor,
-                             attribute_a_color4f,
-                             attribute_b_color4f,
-                             attribute_result_color4f);
+    do_mix_operation_color4f(
+        blend_mode, attribute_factor, attribute_a, attribute_b, attribute_result);
   }
+}
+
+static AttributeDomain get_result_domain(const GeometryComponent &component,
+                                         const GeoNodeExecParams &params,
+                                         StringRef result_name)
+{
+  /* Use the domain of the result attribute if it already exists. */
+  ReadAttributePtr result_attribute = component.attribute_try_get_for_read(result_name);
+  if (result_attribute) {
+    return result_attribute->domain();
+  }
+
+  /* Otherwise use the highest priority domain from existing input attributes, or the default. */
+  return params.get_highest_priority_input_domain({"A", "B"}, component, ATTR_DOMAIN_POINT);
 }
 
 static void attribute_mix_calc(GeometryComponent &component, const GeoNodeExecParams &params)
 {
   const bNode &node = params.node();
   const NodeAttributeMix *node_storage = (const NodeAttributeMix *)node.storage;
-
-  CustomDataType result_type = CD_PROP_COLOR;
-  AttributeDomain result_domain = ATTR_DOMAIN_POINT;
-
-  /* Use type and domain from the result attribute, if it exists already. */
   const std::string result_name = params.get_input<std::string>("Result");
-  const ReadAttributePtr result_attribute_read = component.attribute_try_get_for_read(result_name);
-  if (result_attribute_read) {
-    result_type = result_attribute_read->custom_data_type();
-    result_domain = result_attribute_read->domain();
-  }
 
-  WriteAttributePtr attribute_result = component.attribute_try_ensure_for_write(
+  /* Use the highest complexity data type among the inputs and outputs, that way the node will
+   * never "remove information". Use CD_PROP_BOOL as the lowest complexity data type, but in any
+   * real situation it won't be returned. */
+  const CustomDataType result_type = bke::attribute_data_type_highest_complexity({
+      params.get_input_attribute_data_type("A", component, CD_PROP_BOOL),
+      params.get_input_attribute_data_type("B", component, CD_PROP_BOOL),
+      params.get_input_attribute_data_type("Result", component, CD_PROP_BOOL),
+  });
+
+  const AttributeDomain result_domain = get_result_domain(component, params, result_name);
+
+  OutputAttributePtr attribute_result = component.attribute_try_get_for_output(
       result_name, result_domain, result_type);
   if (!attribute_result) {
     return;
@@ -163,14 +174,17 @@ static void attribute_mix_calc(GeometryComponent &component, const GeoNodeExecPa
   do_mix_operation(result_type,
                    node_storage->blend_type,
                    attribute_factor,
-                   std::move(attribute_a),
-                   std::move(attribute_b),
-                   std::move(attribute_result));
+                   *attribute_a,
+                   *attribute_b,
+                   *attribute_result);
+  attribute_result.save();
 }
 
 static void geo_node_attribute_mix_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (geometry_set.has<MeshComponent>()) {
     attribute_mix_calc(geometry_set.get_component_for_write<MeshComponent>(), params);
@@ -214,6 +228,7 @@ void register_node_type_geo_attribute_mix()
   node_type_socket_templates(&ntype, geo_node_attribute_mix_in, geo_node_mix_attribute_out);
   node_type_init(&ntype, blender::nodes::geo_node_attribute_mix_init);
   node_type_update(&ntype, blender::nodes::geo_node_attribute_mix_update);
+  ntype.draw_buttons = geo_node_attribute_mix_layout;
   node_type_storage(
       &ntype, "NodeAttributeMix", node_free_standard_storage, node_copy_standard_storage);
   ntype.geometry_node_execute = blender::nodes::geo_node_attribute_mix_exec;

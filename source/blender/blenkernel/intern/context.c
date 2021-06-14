@@ -318,7 +318,7 @@ static eContextResult ctx_data_get(bContext *C, const char *member, bContextData
    *
    * Values in order of importance
    * (0, -1, 1) - Where 1 is highest priority
-   * */
+   */
   if (done != 1 && recursion < 1 && C->wm.store) {
     C->data.recursion = 1;
 
@@ -909,6 +909,15 @@ struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C)
 {
   ScrArea *area = CTX_wm_area(C);
   if (area && area->spacetype == SPACE_TOPBAR) {
+    return area->spacedata.first;
+  }
+  return NULL;
+}
+
+struct SpaceSpreadsheet *CTX_wm_space_spreadsheet(const bContext *C)
+{
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype == SPACE_SPREADSHEET) {
     return area->spacedata.first;
   }
   return NULL;

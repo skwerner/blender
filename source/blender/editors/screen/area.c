@@ -141,13 +141,15 @@ void ED_region_pixelspace(ARegion *region)
 }
 
 /* only exported for WM */
-void ED_region_do_listen(
-    wmWindow *win, ScrArea *area, ARegion *region, wmNotifier *note, const Scene *scene)
+void ED_region_do_listen(wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *notifier = params->notifier;
+
   /* generic notes first */
-  switch (note->category) {
+  switch (notifier->category) {
     case NC_WM:
-      if (note->data == ND_FILEREAD) {
+      if (notifier->data == ND_FILEREAD) {
         ED_region_tag_redraw(region);
       }
       break;
@@ -157,16 +159,16 @@ void ED_region_do_listen(
   }
 
   if (region->type && region->type->listener) {
-    region->type->listener(win, area, region, note, scene);
+    region->type->listener(params);
   }
 }
 
 /* only exported for WM */
-void ED_area_do_listen(wmWindow *win, ScrArea *area, wmNotifier *note, Scene *scene)
+void ED_area_do_listen(wmSpaceTypeListenerParams *params)
 {
   /* no generic notes? */
-  if (area->type && area->type->listener) {
-    area->type->listener(win, area, note, scene);
+  if (params->area->type && params->area->type->listener) {
+    params->area->type->listener(params);
   }
 }
 
@@ -289,7 +291,15 @@ static void region_draw_azone_tab_arrow(ScrArea *area, ARegion *region, AZone *a
   float alpha = WM_region_use_viewport(area, region) ? 0.6f : 0.4f;
   const float color[4] = {0.05f, 0.05f, 0.05f, alpha};
   UI_draw_roundbox_aa(
-      true, (float)az->x1, (float)az->y1, (float)az->x2, (float)az->y2, 4.0f, color);
+      &(const rctf){
+          .xmin = (float)az->x1,
+          .xmax = (float)az->x2,
+          .ymin = (float)az->y1,
+          .ymax = (float)az->y2,
+      },
+      true,
+      4.0f,
+      color);
 
   draw_azone_arrow((float)az->x1, (float)az->y1, (float)az->x2, (float)az->y2, az->edge);
 }
@@ -373,7 +383,16 @@ static void region_draw_status_text(ScrArea *area, ARegion *region)
     float color[4] = {0.0f, 0.0f, 0.0f, 0.5f};
     UI_GetThemeColor3fv(TH_BACK, color);
     UI_draw_roundbox_corner_set(UI_CNR_ALL);
-    UI_draw_roundbox_aa(true, x1, y1, x2, y2, 4.0f, color);
+    UI_draw_roundbox_aa(
+        &(const rctf){
+            .xmin = x1,
+            .xmax = x2,
+            .ymin = y1,
+            .ymax = y2,
+        },
+        true,
+        4.0f,
+        color);
 
     UI_FontThemeColor(fontid, TH_TEXT);
   }
@@ -418,16 +437,13 @@ void ED_area_do_msg_notify_tag_refresh(
   ED_area_tag_refresh(area);
 }
 
-void ED_area_do_mgs_subscribe_for_tool_header(
-    /* Follow ARegionType.message_subscribe */
-    const struct bContext *UNUSED(C),
-    struct WorkSpace *workspace,
-    struct Scene *UNUSED(scene),
-    struct bScreen *UNUSED(screen),
-    struct ScrArea *UNUSED(area),
-    struct ARegion *region,
-    struct wmMsgBus *mbus)
+/* Follow ARegionType.message_subscribe */
+void ED_area_do_mgs_subscribe_for_tool_header(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  WorkSpace *workspace = params->workspace;
+  ARegion *region = params->region;
+
   BLI_assert(region->regiontype == RGN_TYPE_TOOL_HEADER);
   wmMsgSubscribeValue msg_sub_value_region_tag_redraw = {
       .owner = region,
@@ -438,16 +454,12 @@ void ED_area_do_mgs_subscribe_for_tool_header(
       mbus, &workspace->id, workspace, WorkSpace, tools, &msg_sub_value_region_tag_redraw);
 }
 
-void ED_area_do_mgs_subscribe_for_tool_ui(
-    /* Follow ARegionType.message_subscribe */
-    const struct bContext *UNUSED(C),
-    struct WorkSpace *workspace,
-    struct Scene *UNUSED(scene),
-    struct bScreen *UNUSED(screen),
-    struct ScrArea *UNUSED(area),
-    struct ARegion *region,
-    struct wmMsgBus *mbus)
+void ED_area_do_mgs_subscribe_for_tool_ui(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  WorkSpace *workspace = params->workspace;
+  ARegion *region = params->region;
+
   BLI_assert(region->regiontype == RGN_TYPE_UI);
   const char *panel_category_tool = "Tool";
   const char *category = UI_panel_category_active_get(region, false);
@@ -634,7 +646,16 @@ void ED_region_do_draw(bContext *C, ARegion *region)
       WM_msg_subscribe_rna(mbus, &ptr, NULL, &msg_sub_value_region_tag_redraw, __func__);
     }
 
-    ED_region_message_subscribe(C, workspace, scene, screen, area, region, mbus);
+    wmRegionMessageSubscribeParams message_subscribe_params = {
+        .context = C,
+        .message_bus = mbus,
+        .workspace = workspace,
+        .scene = scene,
+        .screen = screen,
+        .area = area,
+        .region = region,
+    };
+    ED_region_message_subscribe(&message_subscribe_params);
   }
 }
 
@@ -3495,297 +3516,6 @@ void ED_region_info_draw(ARegion *region,
   ED_region_info_draw_multiline(region, text_array, fill_color, full_redraw);
 }
 
-#define MAX_METADATA_STR 1024
-
-static const char *meta_data_list[] = {
-    "File",
-    "Strip",
-    "Date",
-    "RenderTime",
-    "Note",
-    "Marker",
-    "Time",
-    "Frame",
-    "Camera",
-    "Scene",
-};
-
-BLI_INLINE bool metadata_is_valid(ImBuf *ibuf, char *r_str, short index, int offset)
-{
-  return (IMB_metadata_get_field(
-              ibuf->metadata, meta_data_list[index], r_str + offset, MAX_METADATA_STR - offset) &&
-          r_str[0]);
-}
-
-BLI_INLINE bool metadata_is_custom_drawable(const char *field)
-{
-  /* Metadata field stored by Blender for multilayer EXR images. Is rather
-   * useless to be viewed all the time. Can still be seen in the Metadata
-   * panel. */
-  if (STREQ(field, "BlenderMultiChannel")) {
-    return false;
-  }
-  /* Is almost always has value "scanlineimage", also useless to be seen
-   * all the time. */
-  if (STREQ(field, "type")) {
-    return false;
-  }
-  return !BKE_stamp_is_known_field(field);
-}
-
-typedef struct MetadataCustomDrawContext {
-  int fontid;
-  int xmin, ymin;
-  int vertical_offset;
-  int current_y;
-} MetadataCustomDrawContext;
-
-static void metadata_custom_draw_fields(const char *field, const char *value, void *ctx_v)
-{
-  if (!metadata_is_custom_drawable(field)) {
-    return;
-  }
-  MetadataCustomDrawContext *ctx = (MetadataCustomDrawContext *)ctx_v;
-  char temp_str[MAX_METADATA_STR];
-  BLI_snprintf(temp_str, MAX_METADATA_STR, "%s: %s", field, value);
-  BLF_position(ctx->fontid, ctx->xmin, ctx->ymin + ctx->current_y, 0.0f);
-  BLF_draw(ctx->fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-  ctx->current_y += ctx->vertical_offset;
-}
-
-static void metadata_draw_imbuf(ImBuf *ibuf, const rctf *rect, int fontid, const bool is_top)
-{
-  char temp_str[MAX_METADATA_STR];
-  int ofs_y = 0;
-  const float height = BLF_height_max(fontid);
-  const float margin = height / 8;
-  const float vertical_offset = (height + margin);
-
-  /* values taking margins into account */
-  const float descender = BLF_descender(fontid);
-  const float xmin = (rect->xmin + margin);
-  const float xmax = (rect->xmax - margin);
-  const float ymin = (rect->ymin + margin) - descender;
-  const float ymax = (rect->ymax - margin) - descender;
-
-  if (is_top) {
-    for (int i = 0; i < 4; i++) {
-      /* first line */
-      if (i == 0) {
-        bool do_newline = false;
-        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[0]);
-        if (metadata_is_valid(ibuf, temp_str, 0, len)) {
-          BLF_position(fontid, xmin, ymax - vertical_offset, 0.0f);
-          BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-          do_newline = true;
-        }
-
-        len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[1]);
-        if (metadata_is_valid(ibuf, temp_str, 1, len)) {
-          int line_width = BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-          BLF_position(fontid, xmax - line_width, ymax - vertical_offset, 0.0f);
-          BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-          do_newline = true;
-        }
-
-        if (do_newline) {
-          ofs_y += vertical_offset;
-        }
-      } /* Strip */
-      else if (ELEM(i, 1, 2)) {
-        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
-        if (metadata_is_valid(ibuf, temp_str, i + 1, len)) {
-          BLF_position(fontid, xmin, ymax - vertical_offset - ofs_y, 0.0f);
-          BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-          ofs_y += vertical_offset;
-        }
-      } /* Note (wrapped) */
-      else if (i == 3) {
-        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
-        if (metadata_is_valid(ibuf, temp_str, i + 1, len)) {
-          struct ResultBLF info;
-          BLF_enable(fontid, BLF_WORD_WRAP);
-          BLF_wordwrap(fontid, ibuf->x - (margin * 2));
-          BLF_position(fontid, xmin, ymax - vertical_offset - ofs_y, 0.0f);
-          BLF_draw_ex(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX, &info);
-          BLF_wordwrap(fontid, 0);
-          BLF_disable(fontid, BLF_WORD_WRAP);
-          ofs_y += vertical_offset * info.lines;
-        }
-      }
-      else {
-        int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i + 1]);
-        if (metadata_is_valid(ibuf, temp_str, i + 1, len)) {
-          int line_width = BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-          BLF_position(fontid, xmax - line_width, ymax - vertical_offset - ofs_y, 0.0f);
-          BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-          ofs_y += vertical_offset;
-        }
-      }
-    }
-  }
-  else {
-    MetadataCustomDrawContext ctx;
-    ctx.fontid = fontid;
-    ctx.xmin = xmin;
-    ctx.ymin = ymin;
-    ctx.current_y = ofs_y;
-    ctx.vertical_offset = vertical_offset;
-    IMB_metadata_foreach(ibuf, metadata_custom_draw_fields, &ctx);
-    int ofs_x = 0;
-    ofs_y = ctx.current_y;
-    for (int i = 5; i < 10; i++) {
-      int len = BLI_snprintf_rlen(temp_str, MAX_METADATA_STR, "%s: ", meta_data_list[i]);
-      if (metadata_is_valid(ibuf, temp_str, i, len)) {
-        BLF_position(fontid, xmin + ofs_x, ymin + ofs_y, 0.0f);
-        BLF_draw(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX);
-
-        ofs_x += BLF_width(fontid, temp_str, BLF_DRAW_STR_DUMMY_MAX) + UI_UNIT_X;
-      }
-    }
-  }
-}
-
-typedef struct MetadataCustomCountContext {
-  int count;
-} MetadataCustomCountContext;
-
-static void metadata_custom_count_fields(const char *field, const char *UNUSED(value), void *ctx_v)
-{
-  if (!metadata_is_custom_drawable(field)) {
-    return;
-  }
-  MetadataCustomCountContext *ctx = (MetadataCustomCountContext *)ctx_v;
-  ctx->count++;
-}
-
-static float metadata_box_height_get(ImBuf *ibuf, int fontid, const bool is_top)
-{
-  const float height = BLF_height_max(fontid);
-  const float margin = (height / 8);
-  char str[MAX_METADATA_STR] = "";
-  short count = 0;
-
-  if (is_top) {
-    if (metadata_is_valid(ibuf, str, 0, 0) || metadata_is_valid(ibuf, str, 1, 0)) {
-      count++;
-    }
-    for (int i = 2; i < 5; i++) {
-      if (metadata_is_valid(ibuf, str, i, 0)) {
-        if (i == 4) {
-          struct {
-            struct ResultBLF info;
-            rctf rect;
-          } wrap;
-
-          BLF_enable(fontid, BLF_WORD_WRAP);
-          BLF_wordwrap(fontid, ibuf->x - (margin * 2));
-          BLF_boundbox_ex(fontid, str, sizeof(str), &wrap.rect, &wrap.info);
-          BLF_wordwrap(fontid, 0);
-          BLF_disable(fontid, BLF_WORD_WRAP);
-
-          count += wrap.info.lines;
-        }
-        else {
-          count++;
-        }
-      }
-    }
-  }
-  else {
-    for (int i = 5; i < 10; i++) {
-      if (metadata_is_valid(ibuf, str, i, 0)) {
-        count = 1;
-        break;
-      }
-    }
-    MetadataCustomCountContext ctx;
-    ctx.count = 0;
-    IMB_metadata_foreach(ibuf, metadata_custom_count_fields, &ctx);
-    count += ctx.count;
-  }
-
-  if (count) {
-    return (height + margin) * count;
-  }
-
-  return 0;
-}
-
-#undef MAX_METADATA_STR
-
-void ED_region_image_metadata_draw(
-    int x, int y, ImBuf *ibuf, const rctf *frame, float zoomx, float zoomy)
-{
-  const uiStyle *style = UI_style_get_dpi();
-
-  if (!ibuf->metadata) {
-    return;
-  }
-
-  /* find window pixel coordinates of origin */
-  GPU_matrix_push();
-
-  /* offset and zoom using ogl */
-  GPU_matrix_translate_2f(x, y);
-  GPU_matrix_scale_2f(zoomx, zoomy);
-
-  BLF_size(blf_mono_font, style->widgetlabel.points * 1.5f * U.pixelsize, U.dpi);
-
-  /* *** upper box*** */
-
-  /* get needed box height */
-  float box_y = metadata_box_height_get(ibuf, blf_mono_font, true);
-
-  if (box_y) {
-    /* set up rect */
-    rctf rect;
-    BLI_rctf_init(&rect, frame->xmin, frame->xmax, frame->ymax, frame->ymax + box_y);
-    /* draw top box */
-    GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-    immUniformThemeColor(TH_METADATA_BG);
-    immRectf(pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
-    immUnbindProgram();
-
-    BLF_clipping(blf_mono_font, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
-    BLF_enable(blf_mono_font, BLF_CLIPPING);
-
-    UI_FontThemeColor(blf_mono_font, TH_METADATA_TEXT);
-    metadata_draw_imbuf(ibuf, &rect, blf_mono_font, true);
-
-    BLF_disable(blf_mono_font, BLF_CLIPPING);
-  }
-
-  /* *** lower box*** */
-
-  box_y = metadata_box_height_get(ibuf, blf_mono_font, false);
-
-  if (box_y) {
-    /* set up box rect */
-    rctf rect;
-    BLI_rctf_init(&rect, frame->xmin, frame->xmax, frame->ymin - box_y, frame->ymin);
-    /* draw top box */
-    GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
-    immBindBuiltinProgram(GPU_SHADER_2D_UNIFORM_COLOR);
-    immUniformThemeColor(TH_METADATA_BG);
-    immRectf(pos, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
-    immUnbindProgram();
-
-    BLF_clipping(blf_mono_font, rect.xmin, rect.ymin, rect.xmax, rect.ymax);
-    BLF_enable(blf_mono_font, BLF_CLIPPING);
-
-    UI_FontThemeColor(blf_mono_font, TH_METADATA_TEXT);
-    metadata_draw_imbuf(ibuf, &rect, blf_mono_font, false);
-
-    BLF_disable(blf_mono_font, BLF_CLIPPING);
-  }
-
-  GPU_matrix_pop();
-}
-
 typedef struct MetadataPanelDrawContext {
   uiLayout *layout;
 } MetadataPanelDrawContext;
@@ -4027,14 +3757,12 @@ void ED_region_cache_draw_cached_segments(
 /**
  * Generate subscriptions for this region.
  */
-void ED_region_message_subscribe(bContext *C,
-                                 struct WorkSpace *workspace,
-                                 struct Scene *scene,
-                                 struct bScreen *screen,
-                                 struct ScrArea *area,
-                                 struct ARegion *region,
-                                 struct wmMsgBus *mbus)
+void ED_region_message_subscribe(wmRegionMessageSubscribeParams *params)
 {
+  ARegion *region = params->region;
+  const bContext *C = params->context;
+  struct wmMsgBus *mbus = params->message_bus;
+
   if (region->gizmo_map != NULL) {
     WM_gizmomap_message_subscribe(C, region->gizmo_map, region, mbus);
   }
@@ -4044,7 +3772,7 @@ void ED_region_message_subscribe(bContext *C,
   }
 
   if (region->type->message_subscribe != NULL) {
-    region->type->message_subscribe(C, workspace, scene, screen, area, region, mbus);
+    region->type->message_subscribe(params);
   }
 }
 

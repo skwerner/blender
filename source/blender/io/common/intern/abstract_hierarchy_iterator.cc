@@ -137,10 +137,6 @@ AbstractHierarchyWriter *EnsuredWriter::operator->()
   return writer_;
 }
 
-AbstractHierarchyWriter::~AbstractHierarchyWriter()
-{
-}
-
 bool AbstractHierarchyWriter::check_is_animated(const HierarchyContext &context) const
 {
   const Object *object = context.object;
@@ -400,7 +396,7 @@ static bool remove_weak_subtrees(const HierarchyContext *context,
 
 void AbstractHierarchyIterator::export_graph_prune()
 {
-  /* Take a copy of the map so that we can modify while recursing. */
+  /* Take a copy of the map so that we can modify while recusing. */
   ExportGraph unpruned_export_graph = export_graph_;
   remove_weak_subtrees(HierarchyContext::root(), export_graph_, unpruned_export_graph);
 }

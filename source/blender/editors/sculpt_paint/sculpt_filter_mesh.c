@@ -302,8 +302,7 @@ static void mesh_filter_task_cb(void *__restrict userdata,
   const bool relax_face_sets = !(ss->filter_cache->iteration_count % 3 == 0);
 
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, node, vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
     SCULPT_orig_vert_data_update(&orig_data, &vd);
     float orig_co[3], val[3], avg[3], normal[3], disp[3], disp2[3], transform[3][3], final_pos[3];
     float fade = vd.mask ? *vd.mask : 0.0f;
@@ -553,7 +552,7 @@ static void mesh_filter_sharpen_init(SculptSession *ss,
     filter_cache->sharpen_factor[i] = 1.0f - pow2f(1.0f - filter_cache->sharpen_factor[i]);
   }
 
-  /* Smooth the calculated factors and directions to remove high frecuency detail. */
+  /* Smooth the calculated factors and directions to remove high frequency detail. */
   for (int smooth_iterations = 0;
        smooth_iterations < filter_cache->sharpen_curvature_smooth_iterations;
        smooth_iterations++) {
@@ -586,8 +585,7 @@ static void mesh_filter_surface_smooth_displace_task_cb(
   PBVHNode *node = data->nodes[i];
   PBVHVertexIter vd;
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, node, vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
     float fade = vd.mask ? *vd.mask : 0.0f;
     fade = 1.0f - fade;
     fade *= data->filter_strength;

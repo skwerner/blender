@@ -23,6 +23,7 @@ set(INC_SYS
 )
 
 set(SRC
+  alembic.cpp
   attribute.cpp
   background.cpp
   bake.cpp
@@ -49,6 +50,7 @@ set(SRC
   mesh_displace.cpp
   mesh_subdivision.cpp
   nodes.cpp
+  procedural.cpp
   object.cpp
   osl.cpp
   particles.cpp
@@ -65,6 +67,7 @@ set(SRC
 )
 
 set(SRC_HEADERS
+  alembic.h
   attribute.h
   bake.h
   background.h
@@ -91,6 +94,7 @@ set(SRC_HEADERS
   object.h
   osl.h
   particles.h
+  procedural.h
   curves.h
   scene.h
   session.h
@@ -130,8 +134,11 @@ if(WITH_OPENCOLORIO)
     SYSTEM
     ${OPENCOLORIO_INCLUDE_DIRS}
   )
+  list(APPEND LIB
+    ${OPENCOLORIO_LIBRARIES}
+  )
   if(WIN32)
-    add_definitions(-DOpenColorIO_STATIC)
+    add_definitions(-DOpenColorIO_SKIP_IMPORTS)
   endif()
 endif()
 
@@ -142,6 +149,16 @@ if(WITH_OPENVDB)
   )
   list(APPEND LIB
     ${OPENVDB_LIBRARIES}
+  )
+endif()
+
+if(WITH_ALEMBIC)
+  add_definitions(-DWITH_ALEMBIC)
+  list(APPEND INC_SYS
+    ${ALEMBIC_INCLUDE_DIRS}
+  )
+  list(APPEND LIB
+    ${ALEMBIC_LIBRARIES}
   )
 endif()
 

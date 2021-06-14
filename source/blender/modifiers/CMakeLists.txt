@@ -50,7 +50,7 @@ set(SRC
   intern/MOD_armature.c
   intern/MOD_array.c
   intern/MOD_bevel.c
-  intern/MOD_boolean.c
+  intern/MOD_boolean.cc
   intern/MOD_build.c
   intern/MOD_cast.c
   intern/MOD_cloth.c
@@ -181,11 +181,19 @@ endif()
 
 if(WITH_GMP)
   add_definitions(-DWITH_GMP)
+
+  list(APPEND INC_SYS
+    ${GMP_INCLUDE_DIRS}
+  )
+
+  list(APPEND LIB
+    ${GMP_LIBRARIES}
+  )
 endif()
 
 if(WITH_OPENVDB)
   list(APPEND INC
-     ../../../intern/openvdb
+    ../../../intern/openvdb
   )
   list(APPEND INC_SYS
     ${OPENVDB_INCLUDE_DIRS}

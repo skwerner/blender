@@ -54,6 +54,7 @@ set(SRC
   intern/BLI_memblock.c
   intern/BLI_memiter.c
   intern/BLI_mempool.c
+  intern/BLI_mmap.c
   intern/BLI_timer.c
   intern/DLRB_tree.c
   intern/array_store.c
@@ -191,6 +192,7 @@ set(SRC
   BLI_float3.hh
   BLI_float4x4.hh
   BLI_fnmatch.h
+  BLI_function_ref.hh
   BLI_ghash.h
   BLI_gsqueue.h
   BLI_hash.h
@@ -243,6 +245,7 @@ set(SRC
   BLI_mempool.h
   BLI_mesh_boolean.hh
   BLI_mesh_intersect.hh
+  BLI_mmap.h
   BLI_mpq2.hh
   BLI_mpq3.hh
   BLI_multi_value_map.hh
@@ -255,11 +258,12 @@ set(SRC
   BLI_rand.h
   BLI_rand.hh
   BLI_rect.h
-  BLI_resource_collector.hh
+  BLI_resource_scope.hh
   BLI_scanfill.h
   BLI_session_uuid.h
   BLI_set.hh
   BLI_set_slots.hh
+  BLI_simd.h
   BLI_smallhash.h
   BLI_sort.h
   BLI_sort_utils.h
@@ -276,6 +280,7 @@ set(SRC
   BLI_sys_types.h
   BLI_system.h
   BLI_task.h
+  BLI_task.hh
   BLI_threads.h
   BLI_timecode.h
   BLI_timeit.hh
@@ -292,6 +297,8 @@ set(SRC
   BLI_vector_set.hh
   BLI_vector_set_slots.hh
   BLI_vfontdata.h
+  BLI_virtual_array.hh
+  BLI_virtual_vector_array.hh
   BLI_voronoi_2d.h
   BLI_voxel.h
   BLI_winstuff.h
@@ -385,6 +392,7 @@ if(WITH_GTESTS)
     tests/BLI_disjoint_set_test.cc
     tests/BLI_edgehash_test.cc
     tests/BLI_expr_pylike_eval_test.cc
+    tests/BLI_function_ref_test.cc
     tests/BLI_ghash_test.cc
     tests/BLI_hash_mm2a_test.cc
     tests/BLI_heap_simple_test.cc
@@ -427,6 +435,7 @@ if(WITH_GTESTS)
     tests/BLI_task_test.cc
     tests/BLI_vector_set_test.cc
     tests/BLI_vector_test.cc
+    tests/BLI_virtual_array_test.cc
 
     tests/BLI_exception_safety_test_utils.hh
   )

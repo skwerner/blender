@@ -239,12 +239,13 @@ typedef struct DRWVolumeGrid {
   float texture_to_object[4][4];
   float object_to_texture[4][4];
 
-  /* Transfrom from bounds to texture space. */
+  /* Transform from bounds to texture space. */
   float object_to_bounds[4][4];
   float bounds_to_texture[4][4];
 } DRWVolumeGrid;
 
-DRWVolumeGrid *DRW_volume_batch_cache_get_grid(struct Volume *volume, struct VolumeGrid *grid);
+DRWVolumeGrid *DRW_volume_batch_cache_get_grid(struct Volume *volume,
+                                               const struct VolumeGrid *grid);
 struct GPUBatch *DRW_cache_volume_face_wireframe_get(struct Object *ob);
 struct GPUBatch *DRW_cache_volume_selection_surface_get(struct Object *ob);
 

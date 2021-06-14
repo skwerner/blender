@@ -169,6 +169,7 @@ IDTypeInfo IDType_ID_VF = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = vfont_blend_write,
     .blend_read_data = vfont_blend_read_data,
@@ -176,6 +177,8 @@ IDTypeInfo IDType_ID_VF = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /***************************** VFont *******************************/
@@ -444,7 +447,6 @@ static void build_underline(Curve *cu,
   nu2->resolu = cu->resolu;
   nu2->bezt = NULL;
   nu2->knotsu = nu2->knotsv = NULL;
-  nu2->flag = CU_2D;
   nu2->charidx = charidx + 1000;
   if (mat_nr > 0) {
     nu2->mat_nr = mat_nr - 1;
@@ -1273,7 +1275,7 @@ static bool vfont_to_curve(Object *ob,
   if (cu->textoncurve && cu->textoncurve->type == OB_CURVE) {
     BLI_assert(cu->textoncurve->runtime.curve_cache != NULL);
     if (cu->textoncurve->runtime.curve_cache != NULL &&
-        cu->textoncurve->runtime.curve_cache->path != NULL) {
+        cu->textoncurve->runtime.curve_cache->anim_path_accum_length != NULL) {
       float distfac, imat[4][4], imat3[3][3], cmat[3][3];
       float minx, maxx;
       float timeofs, sizefac;
@@ -1307,7 +1309,8 @@ static bool vfont_to_curve(Object *ob,
       /* length correction */
       const float chartrans_size_x = maxx - minx;
       if (chartrans_size_x != 0.0f) {
-        const float totdist = cu->textoncurve->runtime.curve_cache->path->totdist;
+        const CurveCache *cc = cu->textoncurve->runtime.curve_cache;
+        const float totdist = BKE_anim_path_get_length(cc);
         distfac = (sizefac * totdist) / chartrans_size_x;
         distfac = (distfac > 1.0f) ? (1.0f / distfac) : 1.0f;
       }
@@ -1361,8 +1364,8 @@ static bool vfont_to_curve(Object *ob,
 
         /* calc the right loc AND the right rot separately */
         /* vec, tvec need 4 items */
-        where_on_path(cu->textoncurve, ctime, vec, tvec, NULL, NULL, NULL);
-        where_on_path(cu->textoncurve, ctime + dtime, tvec, rotvec, NULL, NULL, NULL);
+        BKE_where_on_path(cu->textoncurve, ctime, vec, tvec, NULL, NULL, NULL);
+        BKE_where_on_path(cu->textoncurve, ctime + dtime, tvec, rotvec, NULL, NULL, NULL);
 
         mul_v3_fl(vec, sizefac);
 

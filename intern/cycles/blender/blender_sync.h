@@ -74,7 +74,8 @@ class BlenderSync {
                  int height,
                  void **python_thread_state);
   void sync_view_layer(BL::SpaceView3D &b_v3d, BL::ViewLayer &b_view_layer);
-  vector<Pass> sync_render_passes(BL::RenderLayer &b_render_layer,
+  vector<Pass> sync_render_passes(BL::Scene &b_scene,
+                                  BL::RenderLayer &b_render_layer,
                                   BL::ViewLayer &b_view_layer,
                                   bool adaptive_sampling,
                                   const DenoiseParams &denoising);
@@ -134,6 +135,7 @@ class BlenderSync {
   void sync_view();
 
   /* Shader */
+  array<Node *> find_used_shaders(BL::Object &b_ob);
   void sync_world(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d, bool update_all);
   void sync_shaders(BL::Depsgraph &b_depsgraph, BL::SpaceView3D &b_v3d);
   void sync_nodes(Shader *shader, BL::ShaderNodeTree &b_ntree);
@@ -148,6 +150,7 @@ class BlenderSync {
                       BlenderObjectCulling &culling,
                       bool *use_portal,
                       TaskPool *geom_task_pool);
+  void sync_object_motion_init(BL::Object &b_parent, BL::Object &b_ob, Object *object);
 
   bool sync_object_attributes(BL::DepsgraphObjectInstance &b_instance, Object *object);
 

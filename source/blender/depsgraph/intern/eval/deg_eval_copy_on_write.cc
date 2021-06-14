@@ -92,7 +92,7 @@
 #include "BKE_pointcache.h"
 #include "BKE_sound.h"
 
-#include "SEQ_sequencer.h"
+#include "SEQ_relations.h"
 
 #include "intern/builder/deg_builder.h"
 #include "intern/builder/deg_builder_nodes.h"
@@ -304,7 +304,8 @@ bool id_copy_inplace_no_main(const ID *id, ID *newid)
   bool result = (BKE_id_copy_ex(nullptr,
                                 (ID *)id_for_copy,
                                 &newid,
-                                LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE) != nullptr);
+                                (LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE |
+                                 LIB_ID_COPY_SET_COPIED_ON_WRITE)) != nullptr);
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
   if (result) {
@@ -322,7 +323,7 @@ bool scene_copy_inplace_no_main(const Scene *scene, Scene *new_scene)
   const ID *id_for_copy = &scene->id;
 
   if (G.debug & G_DEBUG_DEPSGRAPH_UUID) {
-    BKE_sequencer_check_uuids_unique_and_report(scene);
+    SEQ_relations_check_uuids_unique_and_report(scene);
   }
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
@@ -333,7 +334,8 @@ bool scene_copy_inplace_no_main(const Scene *scene, Scene *new_scene)
   bool result = (BKE_id_copy_ex(nullptr,
                                 id_for_copy,
                                 (ID **)&new_scene,
-                                LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE) != nullptr);
+                                (LIB_ID_COPY_LOCALIZE | LIB_ID_CREATE_NO_ALLOCATE |
+                                 LIB_ID_COPY_SET_COPIED_ON_WRITE)) != nullptr);
 
 #ifdef NESTED_ID_NASTY_WORKAROUND
   if (result) {
@@ -653,11 +655,17 @@ void update_list_orig_pointers(const ListBase *listbase_orig,
 {
   T *element_orig = reinterpret_cast<T *>(listbase_orig->first);
   T *element_cow = reinterpret_cast<T *>(listbase->first);
-  while (element_orig != nullptr) {
+
+  /* Both lists should have the same number of elements, so the check on
+   * `element_cow` is just to prevent a crash if this is not the case. */
+  while (element_orig != nullptr && element_cow != nullptr) {
     element_cow->*orig_field = element_orig;
     element_cow = element_cow->next;
     element_orig = element_orig->next;
   }
+
+  BLI_assert((element_orig == nullptr && element_cow == nullptr) ||
+             !"list of pointers of different sizes, unable to reliably set orig pointer");
 }
 
 void update_particle_system_orig_pointers(const Object *object_orig, Object *object_cow)

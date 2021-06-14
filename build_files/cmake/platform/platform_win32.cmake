@@ -49,7 +49,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
     if(NOT EXISTS "${CLANG_OPENMP_DLL}")
       message(FATAL_ERROR "Clang OpenMP library (${CLANG_OPENMP_DLL}) not found.")
     endif()
-    string(APPEND CMAKE_EXE_LINKER_FLAGS " \"${CLANG_OPENMP_LIB}\"")
+    set(OpenMP_LINKER_FLAGS "\"${CLANG_OPENMP_LIB}\"")
   endif()
   if(WITH_WINDOWS_STRIPPED_PDB)
     message(WARNING "stripped pdb not supported with clang, disabling..")
@@ -119,6 +119,7 @@ string(APPEND CMAKE_MODULE_LINKER_FLAGS " /SAFESEH:NO /ignore:4099")
 list(APPEND PLATFORM_LINKLIBS
   ws2_32 vfw32 winmm kernel32 user32 gdi32 comdlg32 Comctl32 version
   advapi32 shfolder shell32 ole32 oleaut32 uuid psapi Dbghelp Shlwapi
+  pathcch
 )
 
 if(WITH_INPUT_IME)
@@ -148,11 +149,6 @@ add_definitions(-D_WIN32_WINNT=0x601)
 include(build_files/cmake/platform/platform_win32_bundle_crt.cmake)
 remove_cc_flag("/MDd" "/MD" "/Zi")
 
-if(WITH_WINDOWS_PDB)
-  set(PDB_INFO_OVERRIDE_FLAGS "/Z7")
-  set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
-endif()
-
 if(MSVC_CLANG) # Clangs version of cl doesn't support all flags
   string(APPEND CMAKE_CXX_FLAGS " ${CXX_WARN_FLAGS} /nologo /J /Gd /EHsc -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference ")
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd -Wno-unused-command-line-argument -Wno-microsoft-enum-forward-reference")
@@ -160,6 +156,21 @@ else()
   string(APPEND CMAKE_CXX_FLAGS " /nologo /J /Gd /MP /EHsc /bigobj")
   set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /nologo /J /Gd /MP /bigobj")
 endif()
+
+# X64 ASAN is available and usable on MSVC 16.9 preview 4 and up)
+if(WITH_COMPILER_ASAN AND MSVC AND NOT MSVC_CLANG)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 19.28.29828)
+    #set a flag so we don't have to do this comparison all the time
+    SET(MSVC_ASAN On)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /fsanitize=address")
+    set(CMAKE_C_FLAGS     "${CMAKE_C_FLAGS} /fsanitize=address")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " /INCREMENTAL:NO")
+    string(APPEND CMAKE_SHARED_LINKER_FLAGS_DEBUG " /INCREMENTAL:NO")
+  else()
+    message("-- ASAN not supported on MSVC ${CMAKE_CXX_COMPILER_VERSION}")
+  endif()
+endif()
+
 
 # C++ standards conformace (/permissive-) is available on msvc 15.5 (1912) and up
 if(MSVC_VERSION GREATER 1911 AND NOT MSVC_CLANG)
@@ -173,14 +184,41 @@ if(WITH_WINDOWS_SCCACHE AND CMAKE_VS_MSBUILD_COMMAND)
     set(WITH_WINDOWS_SCCACHE Off)
 endif()
 
+# Debug Symbol format
+# sccache # MSVC_ASAN # format # why
+# On      # On        # Z7     # sccache will only play nice with Z7
+# On      # Off       # Z7     # sccache will only play nice with Z7
+# Off     # On        # Zi     # Asan will not play nice with Edit and Continue
+# Off     # Off       # ZI     # Neither asan nor sscache is enabled Edit and Continue is available
+
+# Release Symbol format
+# sccache # MSVC_ASAN # format # why
+# On      # On        # Z7     # sccache will only play nice with Z7
+# On      # Off       # Z7     # sccache will only play nice with Z7
+# Off     # On        # Zi     # Asan will not play nice with Edit and Continue
+# Off     # Off       # Zi     # Edit and Continue disables some optimizations
+
+
 if(WITH_WINDOWS_SCCACHE)
     set(CMAKE_C_COMPILER_LAUNCHER sccache)
     set(CMAKE_CXX_COMPILER_LAUNCHER sccache)
     set(SYMBOL_FORMAT /Z7)
+    set(SYMBOL_FORMAT_RELEASE /Z7)
 else()
     unset(CMAKE_C_COMPILER_LAUNCHER)
     unset(CMAKE_CXX_COMPILER_LAUNCHER)
-    set(SYMBOL_FORMAT /ZI)
+    if(MSVC_ASAN)
+      set(SYMBOL_FORMAT /Z7)
+      set(SYMBOL_FORMAT_RELEASE /Z7)
+    else()
+      set(SYMBOL_FORMAT /ZI)
+      set(SYMBOL_FORMAT_RELEASE /Zi)
+    endif()
+endif()
+
+if(WITH_WINDOWS_PDB)
+	set(PDB_INFO_OVERRIDE_FLAGS "${SYMBOL_FORMAT_RELEASE}")
+	set(PDB_INFO_OVERRIDE_LINKER_FLAGS "/DEBUG /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
 string(APPEND CMAKE_CXX_FLAGS_DEBUG " /MDd ${SYMBOL_FORMAT}")
@@ -189,9 +227,11 @@ string(APPEND CMAKE_CXX_FLAGS_RELEASE " /MD ${PDB_INFO_OVERRIDE_FLAGS}")
 string(APPEND CMAKE_C_FLAGS_RELEASE " /MD ${PDB_INFO_OVERRIDE_FLAGS}")
 string(APPEND CMAKE_CXX_FLAGS_MINSIZEREL " /MD ${PDB_INFO_OVERRIDE_FLAGS}")
 string(APPEND CMAKE_C_FLAGS_MINSIZEREL " /MD ${PDB_INFO_OVERRIDE_FLAGS}")
-string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " /MD ${SYMBOL_FORMAT}")
-string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " /MD ${SYMBOL_FORMAT}")
+string(APPEND CMAKE_CXX_FLAGS_RELWITHDEBINFO " /MD ${SYMBOL_FORMAT_RELEASE}")
+string(APPEND CMAKE_C_FLAGS_RELWITHDEBINFO " /MD ${SYMBOL_FORMAT_RELEASE}")
 unset(SYMBOL_FORMAT)
+unset(SYMBOL_FORMAT_RELEASE)
+
 # JMC is available on msvc 15.8 (1915) and up
 if(MSVC_VERSION GREATER 1914 AND NOT MSVC_CLANG)
   string(APPEND CMAKE_CXX_FLAGS_DEBUG " /JMC")
@@ -421,7 +461,7 @@ if(WITH_JACK)
 endif()
 
 if(WITH_PYTHON)
-  set(PYTHON_VERSION 3.7) # CACHE STRING)
+  set(PYTHON_VERSION 3.9) # CACHE STRING)
 
   string(REPLACE "." "" _PYTHON_VERSION_NO_DOTS ${PYTHON_VERSION})
   set(PYTHON_LIBRARY ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}.lib)
@@ -454,10 +494,18 @@ if(WITH_BOOST)
     set(BOOST ${LIBDIR}/boost)
     set(BOOST_INCLUDE_DIR ${BOOST}/include)
     set(BOOST_LIBPATH ${BOOST}/lib)
-    if(CMAKE_CL_64)
-      set(BOOST_POSTFIX "vc141-mt-x64-1_70.lib")
-      set(BOOST_DEBUG_POSTFIX "vc141-mt-gd-x64-1_70.lib")
+    set(BOOST_VERSION_HEADER ${BOOST_INCLUDE_DIR}/boost/version.hpp)
+    if(EXISTS ${BOOST_VERSION_HEADER})
+      file(STRINGS "${BOOST_VERSION_HEADER}" BOOST_LIB_VERSION REGEX "#define BOOST_LIB_VERSION ")
+      if(BOOST_LIB_VERSION MATCHES "#define BOOST_LIB_VERSION \"([0-9_]+)\"")
+        set(BOOST_VERSION "${CMAKE_MATCH_1}")
+      endif()
     endif()
+    if(NOT BOOST_VERSION)
+      message(FATAL_ERROR "Unable to determine Boost version")
+    endif()
+    set(BOOST_POSTFIX "vc141-mt-x64-${BOOST_VERSION}.lib")
+    set(BOOST_DEBUG_POSTFIX "vc141-mt-gd-x64-${BOOST_VERSION}.lib")
     set(BOOST_LIBRARIES
       optimized ${BOOST_LIBPATH}/libboost_date_time-${BOOST_POSTFIX}
       optimized ${BOOST_LIBPATH}/libboost_filesystem-${BOOST_POSTFIX}
@@ -500,7 +548,7 @@ if(WITH_OPENIMAGEIO)
   set(OPENIMAGEIO_LIBRARIES ${OIIO_OPTIMIZED} ${OIIO_DEBUG})
 
   set(OPENIMAGEIO_DEFINITIONS "-DUSE_TBB=0")
-  set(OPENCOLORIO_DEFINITIONS "-DOCIO_STATIC_BUILD")
+  set(OPENCOLORIO_DEFINITIONS "-DDOpenColorIO_SKIP_IMPORTS")
   set(OPENIMAGEIO_IDIFF "${OPENIMAGEIO}/bin/idiff.exe")
   add_definitions(-DOIIO_STATIC_DEFINE)
   add_definitions(-DOIIO_NO_SSE=1)
@@ -538,11 +586,13 @@ if(WITH_OPENCOLORIO)
   set(OPENCOLORIO_LIBPATH ${OPENCOLORIO}/lib)
   set(OPENCOLORIO_LIBRARIES
     optimized ${OPENCOLORIO_LIBPATH}/OpenColorIO.lib
-    optimized ${OPENCOLORIO_LIBPATH}/tinyxml.lib
     optimized ${OPENCOLORIO_LIBPATH}/libyaml-cpp.lib
+    optimized ${OPENCOLORIO_LIBPATH}/libexpatMD.lib
+    optimized ${OPENCOLORIO_LIBPATH}/pystring.lib
     debug ${OPENCOLORIO_LIBPATH}/OpencolorIO_d.lib
-    debug ${OPENCOLORIO_LIBPATH}/tinyxml_d.lib
     debug ${OPENCOLORIO_LIBPATH}/libyaml-cpp_d.lib
+    debug ${OPENCOLORIO_LIBPATH}/libexpatdMD.lib
+    debug ${OPENCOLORIO_LIBPATH}/pystring_d.lib
   )
   set(OPENCOLORIO_DEFINITIONS)
 endif()
@@ -661,6 +711,10 @@ endif()
 if(WITH_CYCLES_OSL)
   set(CYCLES_OSL ${LIBDIR}/osl CACHE PATH "Path to OpenShadingLanguage installation")
   set(OSL_SHADER_DIR ${CYCLES_OSL}/shaders)
+  # Shaders have moved around a bit between OSL versions, check multiple locations
+  if(NOT EXISTS "${OSL_SHADER_DIR}")
+    set(OSL_SHADER_DIR ${CYCLES_OSL}/share/OSL/shaders)
+  endif()
   find_library(OSL_LIB_EXEC NAMES oslexec PATHS ${CYCLES_OSL}/lib)
   find_library(OSL_LIB_COMP NAMES oslcomp PATHS ${CYCLES_OSL}/lib)
   find_library(OSL_LIB_QUERY NAMES oslquery PATHS ${CYCLES_OSL}/lib)
@@ -781,7 +835,14 @@ if(WITH_XR_OPENXR)
     set(XR_OPENXR_SDK ${LIBDIR}/xr_openxr_sdk)
     set(XR_OPENXR_SDK_LIBPATH ${LIBDIR}/xr_openxr_sdk/lib)
     set(XR_OPENXR_SDK_INCLUDE_DIR ${XR_OPENXR_SDK}/include)
-    set(XR_OPENXR_SDK_LIBRARIES optimized ${XR_OPENXR_SDK_LIBPATH}/openxr_loader.lib debug ${XR_OPENXR_SDK_LIBPATH}/openxr_loader_d.lib)
+    # This is the old name of this library, it is checked to
+    # support the transition between the old and new lib versions
+    # this can be removed after the next lib update.
+    if(EXISTS ${XR_OPENXR_SDK_LIBPATH}/openxr_loader_d.lib)
+      set(XR_OPENXR_SDK_LIBRARIES optimized ${XR_OPENXR_SDK_LIBPATH}/openxr_loader.lib debug ${XR_OPENXR_SDK_LIBPATH}/openxr_loader_d.lib)
+    else()
+      set(XR_OPENXR_SDK_LIBRARIES optimized ${XR_OPENXR_SDK_LIBPATH}/openxr_loader.lib debug ${XR_OPENXR_SDK_LIBPATH}/openxr_loaderd.lib)
+    endif()
   else()
     message(WARNING "OpenXR-SDK was not found, disabling WITH_XR_OPENXR")
     set(WITH_XR_OPENXR OFF)
@@ -799,4 +860,16 @@ if(WITH_POTRACE)
   set(POTRACE_INCLUDE_DIRS ${LIBDIR}/potrace/include)
   set(POTRACE_LIBRARIES ${LIBDIR}/potrace/lib/potrace.lib)
   set(POTRACE_FOUND On)
+endif()
+
+if(WITH_HARU)
+  if(EXISTS ${LIBDIR}/haru)
+    set(HARU_FOUND On)
+    set(HARU_ROOT_DIR ${LIBDIR}/haru)
+    set(HARU_INCLUDE_DIRS ${HARU_ROOT_DIR}/include)
+    set(HARU_LIBRARIES ${HARU_ROOT_DIR}/lib/libhpdfs.lib)
+  else()
+    message(WARNING "Haru was not found, disabling WITH_HARU")
+    set(WITH_HARU OFF)
+  endif()
 endif()

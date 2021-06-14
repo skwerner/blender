@@ -40,8 +40,9 @@ set(SRC
   drawnode.c
   node_add.c
   node_buttons.c
-  node_draw.c
+  node_draw.cc
   node_edit.c
+  node_geometry_attribute_search.cc
   node_gizmo.c
   node_group.c
   node_ops.c

@@ -17,7 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- * */
+ */
 
 #pragma once
 
@@ -266,6 +266,9 @@ void orthogonalize_m4(float R[4][4], int axis);
 void orthogonalize_m3_stable(float R[3][3], int axis, bool normalize);
 void orthogonalize_m4_stable(float R[4][4], int axis, bool normalize);
 
+bool orthogonalize_m3_zero_axes(float R[3][3], const float unit_length);
+bool orthogonalize_m4_zero_axes(float R[4][4], const float unit_length);
+
 bool is_orthogonal_m3(const float mat[3][3]);
 bool is_orthogonal_m4(const float mat[4][4]);
 bool is_orthonormal_m3(const float mat[3][3]);
@@ -331,6 +334,7 @@ void rescale_m4(float mat[4][4], const float scale[3]);
 void transform_pivot_set_m3(float mat[3][3], const float pivot[2]);
 void transform_pivot_set_m4(float mat[4][4], const float pivot[3]);
 
+void mat4_to_rot(float rot[3][3], const float wmat[4][4]);
 void mat3_to_rot_size(float rot[3][3], float size[3], const float mat3[3][3]);
 void mat4_to_loc_rot_size(float loc[3], float rot[3][3], float size[3], const float wmat[4][4]);
 void mat4_to_loc_quat(float loc[3], float quat[4], const float wmat[4][4]);

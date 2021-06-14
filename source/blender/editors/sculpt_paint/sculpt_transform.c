@@ -60,10 +60,9 @@
 #include <math.h>
 #include <stdlib.h>
 
-void ED_sculpt_init_transform(struct bContext *C)
+void ED_sculpt_init_transform(struct bContext *C, Object *ob)
 {
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
-  Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
@@ -165,8 +164,7 @@ static void sculpt_transform_task_cb(void *__restrict userdata,
   PBVHVertexIter vd;
 
   SCULPT_undo_push_node(data->ob, node, SCULPT_UNDO_COORDS);
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, node, vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, node, vd, PBVH_ITER_UNIQUE) {
     SCULPT_orig_vert_data_update(&orig_data, &vd);
     float transformed_co[3], orig_co[3], disp[3];
     float *start_co;
@@ -220,10 +218,9 @@ static void sculpt_transform_all_vertices(Sculpt *sd, Object *ob)
       0, ss->filter_cache->totnode, &data, sculpt_transform_task_cb, &settings);
 }
 
-void ED_sculpt_update_modal_transform(struct bContext *C)
+void ED_sculpt_update_modal_transform(struct bContext *C, Object *ob)
 {
   Sculpt *sd = CTX_data_tool_settings(C)->sculpt;
-  Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
@@ -243,9 +240,8 @@ void ED_sculpt_update_modal_transform(struct bContext *C)
   SCULPT_flush_update_step(C, SCULPT_UPDATE_COORDS);
 }
 
-void ED_sculpt_end_transform(struct bContext *C)
+void ED_sculpt_end_transform(struct bContext *C, Object *ob)
 {
-  Object *ob = CTX_data_active_object(C);
   SculptSession *ss = ob->sculpt;
   if (ss->filter_cache) {
     SCULPT_filter_cache_free(ss);
@@ -280,12 +276,12 @@ static EnumPropertyItem prop_sculpt_pivot_position_types[] = {
     {SCULPT_PIVOT_POSITION_MASK_BORDER,
      "BORDER",
      0,
-     "Mask border",
+     "Mask Border",
      "Sets the pivot position to the center of the border of the mask"},
     {SCULPT_PIVOT_POSITION_ACTIVE_VERTEX,
      "ACTIVE",
      0,
-     "Active vertex",
+     "Active Vertex",
      "Sets the pivot position to the active vertex position"},
     {SCULPT_PIVOT_POSITION_CURSOR_SURFACE,
      "SURFACE",
@@ -338,8 +334,7 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
     if (mode == SCULPT_PIVOT_POSITION_UNMASKED) {
       for (int n = 0; n < totnode; n++) {
         PBVHVertexIter vd;
-        BKE_pbvh_vertex_iter_begin(ss->pbvh, nodes[n], vd, PBVH_ITER_UNIQUE)
-        {
+        BKE_pbvh_vertex_iter_begin (ss->pbvh, nodes[n], vd, PBVH_ITER_UNIQUE) {
           const float mask = (vd.mask) ? *vd.mask : 0.0f;
           if (mask < 1.0f) {
             if (SCULPT_check_vertex_pivot_symmetry(vd.co, ss->pivot_pos, symm)) {
@@ -357,8 +352,7 @@ static int sculpt_set_pivot_position_exec(bContext *C, wmOperator *op)
 
       for (int n = 0; n < totnode; n++) {
         PBVHVertexIter vd;
-        BKE_pbvh_vertex_iter_begin(ss->pbvh, nodes[n], vd, PBVH_ITER_UNIQUE)
-        {
+        BKE_pbvh_vertex_iter_begin (ss->pbvh, nodes[n], vd, PBVH_ITER_UNIQUE) {
           const float mask = (vd.mask) ? *vd.mask : 0.0f;
           if (mask < (0.5f + threshold) && mask > (0.5f - threshold)) {
             if (SCULPT_check_vertex_pivot_symmetry(vd.co, ss->pivot_pos, symm)) {

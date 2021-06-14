@@ -79,7 +79,7 @@ bool EEVEE_renderpasses_only_first_sample_pass_active(EEVEE_Data *vedata)
  * type the rest of the bits are used for the name hash. */
 int EEVEE_renderpasses_aov_hash(const ViewLayerAOV *aov)
 {
-  int hash = BLI_hash_string(aov->name);
+  int hash = BLI_hash_string(aov->name) << 1;
   SET_FLAG_FROM_TEST(hash, aov->type == AOV_TYPE_COLOR, EEVEE_AOV_HASH_COLOR_TYPE_MASK);
   return hash;
 }
@@ -278,7 +278,10 @@ void EEVEE_renderpasses_postprocess(EEVEE_ViewLayerData *UNUSED(sldata),
   EEVEE_PrivateData *g_data = stl->g_data;
   EEVEE_EffectsInfo *effects = stl->effects;
 
-  const int current_sample = effects->taa_current_sample;
+  /* Compensate for taa_current_sample being incremented after last drawing in
+   * EEVEE_temporal_sampling_draw when DRW_state_is_image_render(). */
+  const int current_sample = DRW_state_is_image_render() ? effects->taa_current_sample - 1 :
+                                                           effects->taa_current_sample;
   g_data->renderpass_current_sample = current_sample;
   g_data->renderpass_type = renderpass_type;
   g_data->renderpass_postprocess = PASS_POST_UNDEFINED;
@@ -436,15 +439,15 @@ void EEVEE_renderpasses_draw(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
   EEVEE_EffectsInfo *effects = stl->effects;
   DefaultFramebufferList *dfbl = DRW_viewport_framebuffer_list_get();
 
-  /* We can only draw a single renderpass. Lightpasses also select their color pass
+  /* We can only draw a single render-pass. Light-passes also select their color pass
    * (a second pass). We mask the light pass when a light pass is selected. */
   const eViewLayerEEVEEPassType render_pass =
       ((stl->g_data->render_passes & EEVEE_RENDERPASSES_LIGHT_PASS) != 0) ?
           (stl->g_data->render_passes & EEVEE_RENDERPASSES_LIGHT_PASS) :
           stl->g_data->render_passes;
 
-  bool is_valid = (render_pass & EEVEE_RENDERPASSES_ALL) > 0;
-  bool needs_color_transfer = (render_pass & EEVEE_RENDERPASSES_COLOR_PASS) > 0 &&
+  bool is_valid = (render_pass & EEVEE_RENDERPASSES_ALL) != 0;
+  bool needs_color_transfer = (render_pass & EEVEE_RENDERPASSES_COLOR_PASS) != 0 &&
                               DRW_state_is_opengl_render();
   UNUSED_VARS(needs_color_transfer);
 
@@ -487,7 +490,7 @@ void EEVEE_renderpasses_draw_debug(EEVEE_Data *vedata)
       tx = txl->maxzbuffer;
       break;
     case 2:
-      tx = effects->ssr_pdf_output;
+      /* UNUSED */
       break;
     case 3:
       tx = effects->ssr_normal_input;

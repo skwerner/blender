@@ -46,10 +46,13 @@ class MultiDevice : public Device {
   list<SubDevice> devices, denoising_devices;
   device_ptr unique_key;
   vector<vector<SubDevice *>> peer_islands;
+  bool use_denoising;
   bool matching_rendering_and_denoising_devices;
 
   MultiDevice(DeviceInfo &info, Stats &stats, Profiler &profiler, bool background_)
-      : Device(info, stats, profiler, background_), unique_key(1)
+      : Device(info, stats, profiler, background_),
+        unique_key(1),
+        use_denoising(!info.denoising_devices.empty())
   {
     foreach (DeviceInfo &subinfo, info.multi_devices) {
       /* Always add CPU devices at the back since GPU devices can change
@@ -194,6 +197,7 @@ class MultiDevice : public Device {
       if (!sub.device->load_kernels(requested_features))
         return false;
 
+    use_denoising = requested_features.use_denoising;
     if (requested_features.use_denoising) {
       /* Only need denoising feature, everything else is unused. */
       DeviceRequestedFeatures denoising_features;
@@ -228,10 +232,6 @@ class MultiDevice : public Device {
     foreach (SubDevice &sub, devices) {
       DeviceKernelStatus subresult = sub.device->get_active_kernel_switch_state();
       switch (subresult) {
-        case DEVICE_KERNEL_WAITING_FOR_FEATURE_KERNEL:
-          result = subresult;
-          break;
-
         case DEVICE_KERNEL_FEATURE_KERNEL_INVALID:
         case DEVICE_KERNEL_FEATURE_KERNEL_AVAILABLE:
           return subresult;
@@ -248,10 +248,13 @@ class MultiDevice : public Device {
   void build_bvh(BVH *bvh, Progress &progress, bool refit) override
   {
     /* Try to build and share a single acceleration structure, if possible */
-    if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2) {
+    if (bvh->params.bvh_layout == BVH_LAYOUT_BVH2 || bvh->params.bvh_layout == BVH_LAYOUT_EMBREE) {
       devices.back().device->build_bvh(bvh, progress, refit);
       return;
     }
+
+    assert(bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX ||
+           bvh->params.bvh_layout == BVH_LAYOUT_MULTI_OPTIX_EMBREE);
 
     BVHMulti *const bvh_multi = static_cast<BVHMulti *>(bvh);
     bvh_multi->sub_bvhs.resize(devices.size());
@@ -293,7 +296,7 @@ class MultiDevice : public Device {
       i++;
     }
 
-    /* Change geomtry BVH pointers back to the multi BVH */
+    /* Change geometry BVH pointers back to the multi BVH. */
     for (size_t k = 0; k < bvh->geometry.size(); ++k) {
       bvh->geometry[k]->bvh = geom_bvhs[k];
     }
@@ -397,7 +400,7 @@ class MultiDevice : public Device {
     size_t existing_size = mem.device_size;
 
     /* The tile buffers are allocated on each device (see below), so copy to all of them */
-    if (strcmp(mem.name, "RenderBuffers") == 0) {
+    if (strcmp(mem.name, "RenderBuffers") == 0 && use_denoising) {
       foreach (SubDevice &sub, devices) {
         mem.device = sub.device;
         mem.device_pointer = (existing_key) ? sub.ptr_map[existing_key] : 0;
@@ -463,7 +466,7 @@ class MultiDevice : public Device {
     /* This is a hack to only allocate the tile buffers on denoising devices
      * Similarly the tile buffers also need to be allocated separately on all devices so any
      * overlap rendered for denoising does not interfere with each other */
-    if (strcmp(mem.name, "RenderBuffers") == 0) {
+    if (strcmp(mem.name, "RenderBuffers") == 0 && use_denoising) {
       vector<device_ptr> device_pointers;
       device_pointers.reserve(devices.size());
 
@@ -515,7 +518,7 @@ class MultiDevice : public Device {
     size_t existing_size = mem.device_size;
 
     /* Free memory that was allocated for all devices (see above) on each device */
-    if (strcmp(mem.name, "RenderBuffers") == 0 || mem.type == MEM_PIXELS) {
+    if (mem.type == MEM_PIXELS || (strcmp(mem.name, "RenderBuffers") == 0 && use_denoising)) {
       foreach (SubDevice &sub, devices) {
         mem.device = sub.device;
         mem.device_pointer = sub.ptr_map[key];

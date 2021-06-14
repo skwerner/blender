@@ -65,6 +65,10 @@
 
 #include "BLO_read_write.h"
 
+#ifdef WITH_PYTHON
+#  include "BPY_extern.h"
+#endif
+
 static void screen_free_data(ID *id)
 {
   bScreen *screen = (bScreen *)id;
@@ -220,6 +224,17 @@ void BKE_screen_foreach_id_screen_area(LibraryForeachIDData *data, ScrArea *area
         BKE_LIB_FOREACHID_PROCESS(data, sclip->mask_info.mask, IDWALK_CB_USER_ONE);
         break;
       }
+      case SPACE_SPREADSHEET: {
+        SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+
+        LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+          if (context->type == SPREADSHEET_CONTEXT_OBJECT) {
+            BKE_LIB_FOREACHID_PROCESS(
+                data, ((SpreadsheetContextObject *)context)->object, IDWALK_CB_NOP);
+          }
+        }
+        break;
+      }
       default:
         break;
     }
@@ -307,6 +322,7 @@ IDTypeInfo IDType_ID_SCR = {
     .make_local = NULL,
     .foreach_id = screen_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = screen_blend_write,
     /* Cannot be used yet, because #direct_link_screen has a return value. */
@@ -315,6 +331,8 @@ IDTypeInfo IDType_ID_SCR = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* ************ Spacetype/regiontype handling ************** */
@@ -326,6 +344,9 @@ static ListBase spacetypes = {NULL, NULL};
 static void spacetype_free(SpaceType *st)
 {
   LISTBASE_FOREACH (ARegionType *, art, &st->regiontypes) {
+#ifdef WITH_PYTHON
+    BPY_callback_screen_free(art);
+#endif
     BLI_freelistN(&art->drawcalls);
 
     LISTBASE_FOREACH (PanelType *, pt, &art->paneltypes) {
@@ -523,7 +544,7 @@ void BKE_spacedata_copylist(ListBase *lb1, ListBase *lb2)
 /* facility to set locks for drawing to survive (render) threads accessing drawing data */
 /* lock can become bitflag too */
 /* should be replaced in future by better local data handling for threads */
-void BKE_spacedata_draw_locks(int set)
+void BKE_spacedata_draw_locks(bool set)
 {
   LISTBASE_FOREACH (SpaceType *, st, &spacetypes) {
     LISTBASE_FOREACH (ARegionType *, art, &st->regiontypes) {
@@ -1207,7 +1228,7 @@ static void write_panel_list(BlendWriter *writer, ListBase *lb)
   }
 }
 
-static void write_area_regions(BlendWriter *writer, ScrArea *area)
+static void write_area(BlendWriter *writer, ScrArea *area)
 {
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     write_region(writer, region, area->spacetype);
@@ -1332,6 +1353,37 @@ static void write_area_regions(BlendWriter *writer, ScrArea *area)
     else if (sl->spacetype == SPACE_INFO) {
       BLO_write_struct(writer, SpaceInfo, sl);
     }
+    else if (sl->spacetype == SPACE_SPREADSHEET) {
+      BLO_write_struct(writer, SpaceSpreadsheet, sl);
+
+      SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+      LISTBASE_FOREACH (SpreadsheetColumn *, column, &sspreadsheet->columns) {
+        BLO_write_struct(writer, SpreadsheetColumn, column);
+        BLO_write_struct(writer, SpreadsheetColumnID, column->id);
+        BLO_write_string(writer, column->id->name);
+      }
+      LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+        switch (context->type) {
+          case SPREADSHEET_CONTEXT_OBJECT: {
+            SpreadsheetContextObject *object_context = (SpreadsheetContextObject *)context;
+            BLO_write_struct(writer, SpreadsheetContextObject, object_context);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_MODIFIER: {
+            SpreadsheetContextModifier *modifier_context = (SpreadsheetContextModifier *)context;
+            BLO_write_struct(writer, SpreadsheetContextModifier, modifier_context);
+            BLO_write_string(writer, modifier_context->modifier_name);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_NODE: {
+            SpreadsheetContextNode *node_context = (SpreadsheetContextNode *)context;
+            BLO_write_struct(writer, SpreadsheetContextNode, node_context);
+            BLO_write_string(writer, node_context->node_name);
+            break;
+          }
+        }
+      }
+    }
   }
 }
 
@@ -1346,7 +1398,7 @@ void BKE_screen_area_map_blend_write(BlendWriter *writer, ScrAreaMap *area_map)
 
     BLO_write_struct(writer, ScrGlobalAreaData, area->global);
 
-    write_area_regions(writer, area);
+    write_area(writer, area);
 
     area->butspacetype = SPACE_EMPTY; /* Unset again, was changed above. */
   }
@@ -1508,9 +1560,6 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
 
     if (sl->spacetype == SPACE_VIEW3D) {
       View3D *v3d = (View3D *)sl;
-
-      v3d->flag |= V3D_INVALID_BACKBUF;
-
       if (v3d->gpd) {
         BLO_read_data_address(reader, &v3d->gpd);
         BKE_gpencil_blend_read_data(reader, v3d->gpd);
@@ -1599,8 +1648,7 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
 
       BLO_read_list(reader, &snode->treepath);
       snode->edittree = NULL;
-      snode->iofsd = NULL;
-      BLI_listbase_clear(&snode->linkdrag);
+      snode->runtime = NULL;
     }
     else if (sl->spacetype == SPACE_TEXT) {
       SpaceText *st = (SpaceText *)sl;
@@ -1672,6 +1720,7 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
       sfile->op = NULL;
       sfile->previews_timer = NULL;
       sfile->tags = 0;
+      sfile->runtime = NULL;
       BLO_read_data_address(reader, &sfile->params);
       BLO_read_data_address(reader, &sfile->asset_params);
     }
@@ -1681,6 +1730,36 @@ static void direct_link_area(BlendDataReader *reader, ScrArea *area)
       sclip->scopes.track_search = NULL;
       sclip->scopes.track_preview = NULL;
       sclip->scopes.ok = 0;
+    }
+    else if (sl->spacetype == SPACE_SPREADSHEET) {
+      SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+
+      sspreadsheet->runtime = NULL;
+
+      BLO_read_list(reader, &sspreadsheet->columns);
+      LISTBASE_FOREACH (SpreadsheetColumn *, column, &sspreadsheet->columns) {
+        BLO_read_data_address(reader, &column->id);
+        BLO_read_data_address(reader, &column->id->name);
+      }
+
+      BLO_read_list(reader, &sspreadsheet->context_path);
+      LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+        switch (context->type) {
+          case SPREADSHEET_CONTEXT_NODE: {
+            SpreadsheetContextNode *node_context = (SpreadsheetContextNode *)context;
+            BLO_read_data_address(reader, &node_context->node_name);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_MODIFIER: {
+            SpreadsheetContextModifier *modifier_context = (SpreadsheetContextModifier *)context;
+            BLO_read_data_address(reader, &modifier_context->modifier_name);
+            break;
+          }
+          case SPREADSHEET_CONTEXT_OBJECT: {
+            break;
+          }
+        }
+      }
     }
   }
 
@@ -1893,6 +1972,16 @@ void BKE_screen_area_blend_read_lib(BlendLibReader *reader, ID *parent_id, ScrAr
         SpaceClip *sclip = (SpaceClip *)sl;
         BLO_read_id_address(reader, parent_id->lib, &sclip->clip);
         BLO_read_id_address(reader, parent_id->lib, &sclip->mask_info.mask);
+        break;
+      }
+      case SPACE_SPREADSHEET: {
+        SpaceSpreadsheet *sspreadsheet = (SpaceSpreadsheet *)sl;
+        LISTBASE_FOREACH (SpreadsheetContext *, context, &sspreadsheet->context_path) {
+          if (context->type == SPREADSHEET_CONTEXT_OBJECT) {
+            BLO_read_id_address(
+                reader, parent_id->lib, &((SpreadsheetContextObject *)context)->object);
+          }
+        }
         break;
       }
       default:

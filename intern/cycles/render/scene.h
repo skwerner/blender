@@ -123,7 +123,7 @@ class DeviceScene {
   device_vector<float> light_group_sample_cdf;
   device_vector<float> light_group_sample_prob;
   device_vector<int> leaf_to_first_emitter;
-  device_vector<float4> light_tree_leaf_emitters;
+  device_vector<KernelLightTreeLeaf> light_tree_leaf_emitters;
 
   /* particles */
   device_vector<KernelParticle> particles;

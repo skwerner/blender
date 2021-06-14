@@ -510,7 +510,7 @@ void LightManager::device_update_distribution(Device *device,
      * also stores an offset into the light_tree_leaf_emitters array to where
      * its first light is. this offset is stored in leaf_to_first_emitter.
      */
-    float4 *leaf_emitters = dscene->light_tree_leaf_emitters.alloc(num_leaf_lights * 3);
+    KernelLightTreeLeaf *leaf_emitters = dscene->light_tree_leaf_emitters.alloc(num_leaf_lights);
     int *leaf_to_first_emitter = dscene->leaf_to_first_emitter.alloc(nodes.size());
 
     offset = 0;
@@ -535,20 +535,20 @@ void LightManager::device_update_distribution(Device *device,
         Orientation bcone = light_tree.compute_bcone(emissive_prims[j]);
         float energy = light_tree.compute_energy(emissive_prims[j]);
 
-        leaf_emitters[offset].x = bbox.min[0];
-        leaf_emitters[offset].y = bbox.min[1];
-        leaf_emitters[offset].z = bbox.min[2];
-        leaf_emitters[offset].w = bbox.max[0];
+        leaf_emitters[offset].bbox_min[0] = bbox.min[0];
+        leaf_emitters[offset].bbox_min[1] = bbox.min[1];
+        leaf_emitters[offset].bbox_min[2] = bbox.min[2];
+        leaf_emitters[offset].theta_o = bcone.theta_o;
 
-        leaf_emitters[offset + 1].x = bbox.max[1];
-        leaf_emitters[offset + 1].y = bbox.max[2];
-        leaf_emitters[offset + 1].z = bcone.theta_o;
-        leaf_emitters[offset + 1].w = bcone.theta_e;
+        leaf_emitters[offset].bbox_max[0] = bbox.max[0];
+        leaf_emitters[offset].bbox_max[1] = bbox.max[1];
+        leaf_emitters[offset].bbox_max[2] = bbox.max[2];
+        leaf_emitters[offset].theta_e = bcone.theta_e;
 
-        leaf_emitters[offset + 2].x = bcone.axis[0];
-        leaf_emitters[offset + 2].y = bcone.axis[1];
-        leaf_emitters[offset + 2].z = bcone.axis[2];
-        leaf_emitters[offset + 2].w = energy;
+        leaf_emitters[offset].axis[0] = bcone.axis[0];
+        leaf_emitters[offset].axis[1] = bcone.axis[1];
+        leaf_emitters[offset].axis[2] = bcone.axis[2];
+        leaf_emitters[offset].energy = energy;
         offset += 3;
       }
     }

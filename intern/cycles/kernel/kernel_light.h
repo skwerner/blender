@@ -827,21 +827,17 @@ ccl_device float calc_light_importance(
   int offset = first_emitter + light_offset * 3;
 
   /* get relevant information to be able to calculate the importance */
-  const float4 data0 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 0);
-  const float4 data1 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 1);
-  const float4 data2 = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 2);
+  const KernelLightTreeLeaf leaf = kernel_tex_fetch(__light_tree_leaf_emitters, offset + 0);
 
   /* decode data for this light */
-  const float3 bbox_min = make_float3(data0.x, data0.y, data0.z);
-  const float3 bbox_max = make_float3(data0.w, data1.x, data1.y);
-  const float theta_o = data1.z;
-  const float theta_e = data1.w;
-  const float3 axis = make_float3(data2.x, data2.y, data2.z);
-  const float energy = data2.w;
+  const float3 bbox_min = make_float3(leaf.bbox_min[0], leaf.bbox_min[1], leaf.bbox_min[2]);
+  const float3 bbox_max = make_float3(leaf.bbox_max[0], leaf.bbox_max[1], leaf.bbox_max[2]);
+
+  const float3 axis = make_float3(leaf.axis[0], leaf.axis[1], leaf.axis[2]);
   const float3 centroid = 0.5f * (bbox_max + bbox_min);
 
   return calc_importance(
-      kg, P, V, t_max, bbox_max, bbox_min, theta_o, theta_e, axis, energy, centroid);
+      kg, P, V, t_max, bbox_max, bbox_min, leaf.theta_o, leaf.theta_e, axis, leaf.energy, centroid);
 }
 
 /* the combined energy, spatial and orientation bounds for all the lights for the

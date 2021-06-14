@@ -1571,6 +1571,16 @@ typedef struct KernelLightDistribution {
 } KernelLightDistribution;
 static_assert_align(KernelLightDistribution, 16);
 
+typedef struct KernelLightTreeLeaf {
+  float bbox_min[3];
+  float theta_o;
+  float bbox_max[3];
+  float theta_e;
+  float axis[3];
+  float energy;
+} KernelLightTreeLeaf;
+static_assert_align(KernelLightTreeLeaf, 16);
+
 typedef struct KernelParticle {
   int index;
   float age;

@@ -164,13 +164,13 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
   task.num_samples = num_samples;
   task.buffer_params = buffer_params;
 
-  device_vector<float> local_buffer(device, "denoiser local buffer", MEM_READ_WRITE);
+  RenderBuffers local_render_buffers(device);
   bool local_buffer_used = false;
 
   if (device == device_) {
     /* The device can access an existing buffer pointer. */
     local_buffer_used = false;
-    task.buffer = render_buffers->buffer.device_pointer;
+    task.render_buffers = render_buffers;
   }
   else {
     /* Create buffer which is available by the device used by denoiser. */
@@ -182,24 +182,26 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
 
     render_buffers->copy_from_device();
 
-    local_buffer.alloc(render_buffers->buffer.size());
-    memcpy(local_buffer.data(),
+    /* TODO(sergey): Avoid `zero_to_device()`. */
+    local_render_buffers.reset(buffer_params);
+
+    memcpy(local_render_buffers.buffer.data(),
            render_buffers->buffer.data(),
            sizeof(float) * render_buffers->buffer.size());
-    local_buffer.copy_to_device();
+    local_render_buffers.copy_to_device();
 
-    task.buffer = local_buffer.device_pointer;
+    task.render_buffers = &local_render_buffers;
   }
 
   device->denoise_buffer(task);
 
   if (local_buffer_used) {
-    /* TODO(sergey): Only copy denoised pass. */
-    local_buffer.copy_from_device();
+    /* TODO(sergey): Only copy denoised passes. */
+    local_render_buffers.copy_from_device();
     memcpy(render_buffers->buffer.data(),
-           local_buffer.data(),
+           local_render_buffers.buffer.data(),
            sizeof(float) * render_buffers->buffer.size());
-    render_buffers->buffer.copy_to_device();
+    render_buffers->copy_to_device();
   }
 }
 

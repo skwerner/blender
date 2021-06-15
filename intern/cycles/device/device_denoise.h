@@ -86,9 +86,9 @@ class DeviceDenoiseTask {
   DenoiseParams params;
 
   int num_samples;
-  BufferParams buffer_params;
 
-  device_ptr buffer;
+  RenderBuffers *render_buffers;
+  BufferParams buffer_params;
 };
 
 CCL_NAMESPACE_END

@@ -594,7 +594,7 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,
   const int pass_sample_count = task.buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
 
   void *args[] = {const_cast<device_ptr *>(&d_input_rgb),
-                  const_cast<device_ptr *>(&task.buffer),
+                  &task.render_buffers->buffer.device_pointer,
                   const_cast<int *>(&task.buffer_params.full_x),
                   const_cast<int *>(&task.buffer_params.full_y),
                   const_cast<int *>(&task.buffer_params.width),
@@ -621,7 +621,7 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
   const int pass_sample_count = task.buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
 
   void *args[] = {const_cast<device_ptr *>(&d_input_rgb),
-                  const_cast<device_ptr *>(&task.buffer),
+                  &task.render_buffers->buffer.device_pointer,
                   const_cast<int *>(&task.buffer_params.full_x),
                   const_cast<int *>(&task.buffer_params.full_y),
                   const_cast<int *>(&task.buffer_params.width),

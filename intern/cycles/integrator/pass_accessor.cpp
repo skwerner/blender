@@ -160,7 +160,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
         << "Number of components mismatch for " << pass_type_as_string(type);
 
     if (mode == PassMode::DENOISED) {
-      /* Denoised passes sore their final pixels, no need in special calculation. */
+      /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_RENDER_TIME) {
@@ -190,7 +190,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
 
     if (mode == PassMode::DENOISED) {
-      /* Denoised passes sore their final pixels, no need in special calculation. */
+      /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float3(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_SHADOW) {
@@ -218,7 +218,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       get_pass_shadow_catcher_matte_with_shadow(render_buffers, buffer_params, destination);
     }
     else if (mode == PassMode::DENOISED) {
-      /* Denoised passes sore their final pixels, no need in special calculation. */
+      /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float4(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_SHADOW) {

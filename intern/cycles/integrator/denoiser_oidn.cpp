@@ -113,13 +113,13 @@ class OIDNPass {
   array<float> scaled_buffer;
 };
 
-class OIDNDeenoiseContext {
+class OIDNDenoiseContext {
  public:
-  OIDNDeenoiseContext(const DenoiseParams &denoise_params,
-                      const BufferParams &buffer_params,
-                      RenderBuffers *render_buffers,
-                      oidn::FilterRef *oidn_filter,
-                      const int num_samples)
+  OIDNDenoiseContext(const DenoiseParams &denoise_params,
+                     const BufferParams &buffer_params,
+                     RenderBuffers *render_buffers,
+                     oidn::FilterRef *oidn_filter,
+                     const int num_samples)
       : denoise_params_(denoise_params),
         buffer_params_(buffer_params),
         render_buffers_(render_buffers),
@@ -356,7 +356,7 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
 #ifdef WITH_OPENIMAGEDENOISE
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
-  OIDNDeenoiseContext context(params_, buffer_params, render_buffers, oidn_filter, num_samples);
+  OIDNDenoiseContext context(params_, buffer_params, render_buffers, oidn_filter, num_samples);
   context.denoise(PASS_COMBINED);
   context.denoise(PASS_SHADOW_CATCHER);
   context.denoise(PASS_SHADOW_CATCHER_MATTE);

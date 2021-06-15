@@ -21,6 +21,7 @@
 
 #  include "bvh/bvh.h"
 #  include "bvh/bvh_optix.h"
+#  include "integrator/pass_accessor_gpu.h"
 #  include "render/buffers.h"
 #  include "render/hair.h"
 #  include "render/mesh.h"
@@ -553,10 +554,13 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
 
   OptiXDeviceQueue queue(this);
 
+  /* Read pixels from the noisy input pass, store them in the temporary buffer for further
+   * clamping. */
+  denoise_read_input_pixels(&queue, task, input_rgb.device_pointer);
+
   /* Make sure input data is in [0 .. 10000] range by scaling the input buffer by the number of
-   *
-   * samples in the buffer. This will do (scaled) copy of the noisy image and needed passes into
-   * an input buffer for the OptiX denoiser. */
+   * samples in the buffer. Additionally, fill in the auxillary passes needed by the denoiser which
+   * were not provided by the pass accessor. */
   if (!denoise_filter_convert_to_rgb(&queue, task, input_rgb.device_pointer)) {
     LOG(ERROR) << "Error connverting denoising passes to RGB buffer.";
     return;
@@ -577,6 +581,33 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
   }
 
   queue.synchronize();
+}
+
+void OptiXDevice::denoise_read_input_pixels(OptiXDeviceQueue *queue,
+                                            const DeviceDenoiseTask &task,
+                                            const device_ptr d_input_rgb) const
+{
+  PassAccessor::PassAccessInfo pass_access_info;
+  pass_access_info.type = PASS_COMBINED;
+  pass_access_info.mode = PassMode::NOISY;
+  pass_access_info.offset = task.buffer_params.get_pass_offset(pass_access_info.type,
+                                                               pass_access_info.mode);
+
+  /* Denoiser operates on passes which are used to calculate the approximation, and is never used
+   * on the approximation. The latter is not even possible because OptiX does not support
+   * denoising of semi-transparent pixels. */
+  pass_access_info.use_approximate_shadow_catcher = false;
+  pass_access_info.show_active_pixels = false;
+
+  /* TODO(sergey): Consider adding support of actual exposure, to avoid clamping in extreme cases.
+   */
+  const PassAccessorGPU pass_accessor(queue, pass_access_info, 1.0f, task.num_samples);
+
+  PassAccessor::Destination destination(pass_access_info.type);
+  destination.d_pixels = d_input_rgb;
+  destination.num_components = 3;
+
+  pass_accessor.get_render_tile_pixels(task.render_buffers, task.buffer_params, destination);
 }
 
 bool OptiXDevice::denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,

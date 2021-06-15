@@ -141,6 +141,11 @@ class OptiXDevice : public CUDADevice {
 
   virtual void denoise_buffer(const DeviceDenoiseTask &task) override;
 
+  /* Read pixels from the input noisy image and store scaled result in the given memory. */
+  void denoise_read_input_pixels(OptiXDeviceQueue *queue,
+                                 const DeviceDenoiseTask &task,
+                                 const device_ptr d_input_rgb) const;
+
   /* Run corresponding conversion kernels, preparing data for the denoiser or copying data from the
    * denoiser result to the render buffer. */
   bool denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,

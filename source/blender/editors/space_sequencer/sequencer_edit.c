@@ -34,6 +34,7 @@
 
 #include "BLT_translation.h"
 
+#include "DNA_anim_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_sound_types.h"
 
@@ -136,6 +137,48 @@ bool ED_space_sequencer_check_show_strip(SpaceSeq *sseq)
 {
   return (ELEM(sseq->view, SEQ_VIEW_SEQUENCE, SEQ_VIEW_SEQUENCE_PREVIEW) &&
           ELEM(sseq->mainb, SEQ_DRAW_SEQUENCE, SEQ_DRAW_IMG_IMBUF));
+}
+
+static bool sequencer_fcurves_targets_color_strip(const FCurve *fcurve)
+{
+  if (!BLI_str_startswith(fcurve->rna_path, "sequence_editor.sequences_all[\"")) {
+    return false;
+  }
+
+  if (!BLI_str_endswith(fcurve->rna_path, "\"].color")) {
+    return false;
+  }
+
+  return true;
+}
+
+/*
+ * Check if there is animation shown during playback.
+ *
+ * - Colors of color strips are displayed on the strip itself.
+ * - Backdrop is drawn.
+ */
+bool ED_space_sequencer_has_playback_animation(const struct SpaceSeq *sseq,
+                                               const struct Scene *scene)
+{
+  if (sseq->draw_flag & SEQ_DRAW_BACKDROP) {
+    return true;
+  }
+
+  if (!scene->adt) {
+    return false;
+  }
+  if (!scene->adt->action) {
+    return false;
+  }
+
+  LISTBASE_FOREACH (FCurve *, fcurve, &scene->adt->action->curves) {
+    if (sequencer_fcurves_targets_color_strip(fcurve)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** \} */

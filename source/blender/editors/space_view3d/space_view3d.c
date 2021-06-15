@@ -351,14 +351,13 @@ static SpaceLink *view3d_duplicate(SpaceLink *sl)
   View3D *v3do = (View3D *)sl;
   View3D *v3dn = MEM_dupallocN(sl);
 
+  memset(&v3dn->runtime, 0x0, sizeof(v3dn->runtime));
+
   /* clear or remove stuff from old */
 
   if (v3dn->localvd) {
     v3dn->localvd = NULL;
-    v3dn->runtime.properties_storage = NULL;
   }
-  /* Only one View3D is allowed to have this flag! */
-  v3dn->runtime.flag &= ~V3D_RUNTIME_XR_SESSION_ROOT;
 
   v3dn->local_collections_uuid = 0;
   v3dn->flag &= ~(V3D_LOCAL_COLLECTIONS | V3D_XR_SESSION_MIRROR);
@@ -372,8 +371,6 @@ static SpaceLink *view3d_duplicate(SpaceLink *sl)
   }
 
   /* copy or clear inside new stuff */
-
-  v3dn->runtime.properties_storage = NULL;
 
   return (SpaceLink *)v3dn;
 }
@@ -625,6 +622,7 @@ static void view3d_ob_drop_copy(wmDrag *drag, wmDropBox *drop)
   ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, ID_OB);
 
   RNA_string_set(drop->ptr, "name", id->name + 2);
+  RNA_boolean_set(drop->ptr, "duplicate", false);
 }
 
 static void view3d_collection_drop_copy(wmDrag *drag, wmDropBox *drop)

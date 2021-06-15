@@ -616,8 +616,8 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
 {
   const int work_size = task.buffer_params.width * task.buffer_params.height;
 
-  const int pass_combined_denoised = task.buffer_params.get_pass_offset(PASS_COMBINED,
-                                                                        PassMode::DENOISED);
+  const int pass_noisy = task.buffer_params.get_pass_offset(PASS_COMBINED, PassMode::NOISY);
+  const int pass_denoised = task.buffer_params.get_pass_offset(PASS_COMBINED, PassMode::DENOISED);
   const int pass_sample_count = task.buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
 
   void *args[] = {const_cast<device_ptr *>(&d_input_rgb),
@@ -630,7 +630,8 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
                   const_cast<int *>(&task.buffer_params.stride),
                   const_cast<int *>(&task.buffer_params.pass_stride),
                   const_cast<int *>(&task.num_samples),
-                  const_cast<int *>(&pass_combined_denoised),
+                  const_cast<int *>(&pass_noisy),
+                  const_cast<int *>(&pass_denoised),
                   const_cast<int *>(&pass_sample_count)};
 
   return queue->enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);

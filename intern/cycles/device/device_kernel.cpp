@@ -71,31 +71,29 @@ const char *device_kernel_as_string(DeviceKernel kernel)
     case DEVICE_KERNEL_SHADER_EVAL_BACKGROUND:
       return "shader_eval_background";
 
-    /* Film. */
-    case DEVICE_KERNEL_FILM_CONVERT_DEPTH_HALF_RGBA:
-      return "film_convert_depth_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_MIST_HALF_RGBA:
-      return "film_convert_mist_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_SAMPLE_COUNT_HALF_RGBA:
-      return "film_convert_sample_count_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_FLOAT_HALF_RGBA:
-      return "film_convert_float_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_SHADOW_HALF_RGBA:
-      return "film_convert_shadow_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_DIVIDE_EVEN_COLOR_HALF_RGBA:
-      return "film_convert_divide_even_color_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_FLOAT3_HALF_RGBA:
-      return "film_convert_float3_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_MOTION_HALF_RGBA:
-      return "film_convert_motion_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_CRYPTOMATTE_HALF_RGBA:
-      return "film_convert_cryptomatte_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_HALF_RGBA:
-      return "film_convert_shadow_catcher_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_SHADOW_CATCHER_MATTE_WITH_SHADOW_HALF_RGBA:
-      return "film_convert_shadow_catcher_matte_with_shadow_half_rgba";
-    case DEVICE_KERNEL_FILM_CONVERT_FLOAT4_HALF_RGBA:
-      return "film_convert_float4_half_rgba";
+      /* Film. */
+
+#define FILM_CONVERT_KERNEL_AS_STRING(variant, variant_lowercase) \
+  case DEVICE_KERNEL_FILM_CONVERT_##variant: \
+    return "film_convert_" #variant_lowercase; \
+  case DEVICE_KERNEL_FILM_CONVERT_##variant##_HALF_RGBA: \
+    return "film_convert_" #variant_lowercase "_half_rgba";
+
+      FILM_CONVERT_KERNEL_AS_STRING(DEPTH, depth)
+      FILM_CONVERT_KERNEL_AS_STRING(MIST, mist)
+      FILM_CONVERT_KERNEL_AS_STRING(SAMPLE_COUNT, sample_count)
+      FILM_CONVERT_KERNEL_AS_STRING(FLOAT, float)
+      FILM_CONVERT_KERNEL_AS_STRING(SHADOW, shadow)
+      FILM_CONVERT_KERNEL_AS_STRING(DIVIDE_EVEN_COLOR, divide_even_color)
+      FILM_CONVERT_KERNEL_AS_STRING(FLOAT3, float3)
+      FILM_CONVERT_KERNEL_AS_STRING(MOTION, motion)
+      FILM_CONVERT_KERNEL_AS_STRING(CRYPTOMATTE, cryptomatte)
+      FILM_CONVERT_KERNEL_AS_STRING(SHADOW_CATCHER, shadow_catcher)
+      FILM_CONVERT_KERNEL_AS_STRING(SHADOW_CATCHER_MATTE_WITH_SHADOW,
+                                    shadow_catcher_matte_with_shadow)
+      FILM_CONVERT_KERNEL_AS_STRING(FLOAT4, float4)
+
+#undef FILM_CONVERT_KERNEL_AS_STRING
 
     /* Adaptive sampling. */
     case DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_CHECK:

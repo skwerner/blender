@@ -66,7 +66,8 @@ class PassAccessor {
     half4 *pixels_half_rgba = nullptr;
 
     /* Device-side pointers. */
-    device_ptr d_pixels_half_rgba;
+    device_ptr d_pixels = 0;
+    device_ptr d_pixels_half_rgba = 0;
 
     int num_components = 0;
   };

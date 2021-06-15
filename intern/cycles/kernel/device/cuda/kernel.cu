@@ -441,6 +441,28 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
  * Film.
  */
 
+/* Common implementation for float destination. */
+template<typename Processor>
+ccl_device_inline void kernel_cuda_film_convert_common(const KernelFilmConvert *kfilm_convert,
+                                                       float *pixels,
+                                                       float *render_buffer,
+                                                       int num_pixels,
+                                                       int offset,
+                                                       int stride,
+                                                       const Processor &processor)
+{
+  const int render_pixel_index = ccl_global_id(0);
+  if (render_pixel_index >= num_pixels) {
+    return;
+  }
+
+  const uint64_t render_buffer_offset = (uint64_t)render_pixel_index * kfilm_convert->pass_stride;
+  ccl_global const float *buffer = render_buffer + render_buffer_offset;
+  ccl_global float *pixel = pixels + render_pixel_index * kfilm_convert->num_components;
+
+  processor(kfilm_convert, buffer, pixel);
+}
+
 /* Common implementation for half4 destination and 4-channel input pass. */
 template<typename Processor>
 ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_rgba(
@@ -531,6 +553,22 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
                                                   CUDA_KERNEL_MAX_REGISTERS) name
 
 #  define KERNEL_FILM_CONVERT_DEFINE_HALF_RGBA(variant, channels) \
+    KERNEL_FILM_CONVERT_PROC(kernel_cuda_film_convert_##variant) \
+    (const KernelFilmConvert kfilm_convert, \
+     float *pixels, \
+     float *render_buffer, \
+     int num_pixels, \
+     int offset, \
+     int stride) \
+    { \
+      kernel_cuda_film_convert_common(&kfilm_convert, \
+                                      pixels, \
+                                      render_buffer, \
+                                      num_pixels, \
+                                      offset, \
+                                      stride, \
+                                      film_get_pass_pixel_##variant); \
+    } \
     KERNEL_FILM_CONVERT_PROC(kernel_cuda_film_convert_##variant##_half_rgba) \
     (const KernelFilmConvert kfilm_convert, \
      uchar4 *rgba, \

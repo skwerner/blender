@@ -149,10 +149,8 @@ class OIDNDenoiseContext {
     set_pass(oidn_color_pass);
 
     if (denoise_params_.use_pass_albedo) {
-      if (pass_type == PASS_SHADOW_CATCHER) {
-        /* Using albedo for the shadow catcher passes does not give desired results: there are
-         * an unexpected discontinuity in the shadow catcher pass based on the albedo of the object
-         * the shadow is cast on. */
+      const PassInfo pass_info = Pass::get_info(pass_type);
+      if (!pass_info.use_denoising_albedo) {
         set_fake_albedo_pass();
       }
       else {

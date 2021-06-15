@@ -22,6 +22,7 @@
 #  include "device/cuda/device_impl.h"
 #  include "device/optix/queue.h"
 #  include "device/optix/util.h"
+#  include "kernel/kernel_types.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -139,21 +140,20 @@ class OptiXDevice : public CUDADevice {
    * Denoising.
    */
 
+  class DenoiseContext;
+  class DenoisePass;
+
   virtual void denoise_buffer(const DeviceDenoiseTask &task) override;
 
+  void denoise_pass(DenoiseContext &context, PassType pass_type);
+
   /* Read pixels from the input noisy image and store scaled result in the given memory. */
-  void denoise_read_input_pixels(OptiXDeviceQueue *queue,
-                                 const DeviceDenoiseTask &task,
-                                 const device_ptr d_input_rgb) const;
+  void denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass) const;
 
   /* Run corresponding conversion kernels, preparing data for the denoiser or copying data from the
    * denoiser result to the render buffer. */
-  bool denoise_filter_convert_to_rgb(OptiXDeviceQueue *queue,
-                                     const DeviceDenoiseTask &task,
-                                     const device_ptr d_input_rgb);
-  bool denoise_filter_convert_from_rgb(OptiXDeviceQueue *queue,
-                                       const DeviceDenoiseTask &task,
-                                       const device_ptr d_input_rgb);
+  bool denoise_filter_convert_to_rgb(DenoiseContext &context, const DenoisePass &pass);
+  bool denoise_filter_convert_from_rgb(DenoiseContext &context, const DenoisePass &pass);
 
   /* Make sure the OptiX denoiser is created and configured for the given task. */
   bool denoise_ensure(const DeviceDenoiseTask &task);
@@ -167,9 +167,7 @@ class OptiXDevice : public CUDADevice {
   bool denoise_configure_if_needed(const DeviceDenoiseTask &task);
 
   /* Run configured denoiser on the given task. */
-  bool denoise_run(OptiXDeviceQueue *queue,
-                   const DeviceDenoiseTask &task,
-                   const device_ptr d_input_rgb);
+  bool denoise_run(DenoiseContext &context);
 };
 
 CCL_NAMESPACE_END

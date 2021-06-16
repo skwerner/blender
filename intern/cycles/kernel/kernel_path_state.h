@@ -67,6 +67,8 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
 
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
   INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = kernel_data.background.volume_shader;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 1, object) = OBJECT_NONE;
+  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 1, shader) = SHADER_NONE;
 
 #ifdef __DENOISING_FEATURES__
   if (kernel_data.film.have_denoising_passes) {
@@ -299,6 +301,16 @@ ccl_device_inline void path_state_rng_load(INTEGRATOR_STATE_CONST_ARGS, RNGState
 {
   rng_state->rng_hash = INTEGRATOR_STATE(path, rng_hash);
   rng_state->rng_offset = INTEGRATOR_STATE(path, rng_offset);
+  rng_state->sample = INTEGRATOR_STATE(path, sample);
+}
+
+ccl_device_inline void shadow_path_state_rng_load(INTEGRATOR_STATE_CONST_ARGS, RNGState *rng_state)
+{
+  const uint shadow_bounces = INTEGRATOR_STATE(shadow_path, transparent_bounce) -
+                              INTEGRATOR_STATE(path, transparent_bounce);
+
+  rng_state->rng_hash = INTEGRATOR_STATE(path, rng_hash);
+  rng_state->rng_offset = INTEGRATOR_STATE(path, rng_offset) + PRNG_BOUNCE_NUM * shadow_bounces;
   rng_state->sample = INTEGRATOR_STATE(path, sample);
 }
 

@@ -105,15 +105,6 @@ ccl_device_inline bool light_sample_terminate(const KernelGlobals *ccl_restrict 
                                               BsdfEval *eval,
                                               const float rand_terminate)
 {
-  /* TODO: move in volume phase evaluation. */
-#if 0
-#  ifdef __PASSES__
-  /* use visibility flag to skip lights */
-    if (ls->shader & SHADER_EXCLUDE_SCATTER)
-      eval->volume = zero_float3();
-#  endif
-#endif
-
   if (bsdf_eval_is_zero(eval)) {
     return true;
   }

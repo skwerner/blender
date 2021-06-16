@@ -59,9 +59,10 @@ ccl_device_inline float3 integrate_transparent_surface_shadow(INTEGRATOR_STATE_A
 }
 
 #  ifdef __VOLUME__
-ccl_device_inline float3 integrate_transparent_volume_shadow(INTEGRATOR_STATE_ARGS,
-                                                             const int hit,
-                                                             const int num_recorded_hits)
+ccl_device_inline void integrate_transparent_volume_shadow(INTEGRATOR_STATE_ARGS,
+                                                           const int hit,
+                                                           const int num_recorded_hits,
+                                                           float3 *ccl_restrict throughput)
 {
   /* TODO: deduplicate with surface, or does it not matter for memory usage? */
   ShaderDataTinyStorage shadow_sd_storage;
@@ -80,14 +81,11 @@ ccl_device_inline float3 integrate_transparent_volume_shadow(INTEGRATOR_STATE_AR
 
   shader_setup_from_volume(kg, shadow_sd, &ray);
 
-  /* Evaluate shader. */
-  float3 sigma_a = zero_float3();
-  if (!shadow_volume_shader_sample(INTEGRATOR_STATE_PASS, shadow_sd, &sigma_a)) {
-    return one_float3();
-  }
+  const float step_size = volume_stack_step_size(INTEGRATOR_STATE_PASS, [=](const int i) {
+    return integrator_state_read_shadow_volume_stack(INTEGRATOR_STATE_PASS, i);
+  });
 
-  /* Integrate extinction over segment. */
-  return volume_color_transmittance(sigma_a, ray.t);
+  volume_shadow_heterogeneous(INTEGRATOR_STATE_PASS, &ray, shadow_sd, throughput, step_size);
 }
 #  endif
 
@@ -106,9 +104,9 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS, const
     if (hit < num_recorded_hits || !shadow_intersections_has_remaining(num_hits)) {
 #  ifdef __VOLUME__
       if (!integrator_state_shadow_volume_stack_is_empty(INTEGRATOR_STATE_PASS)) {
-        const float3 shadow = integrate_transparent_volume_shadow(
-            INTEGRATOR_STATE_PASS, hit, num_recorded_hits);
-        const float3 throughput = INTEGRATOR_STATE(shadow_path, throughput) * shadow;
+        float3 throughput = INTEGRATOR_STATE(shadow_path, throughput);
+        integrate_transparent_volume_shadow(
+            INTEGRATOR_STATE_PASS, hit, num_recorded_hits, &throughput);
         if (is_zero(throughput)) {
           return true;
         }

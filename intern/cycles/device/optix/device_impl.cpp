@@ -879,7 +879,7 @@ bool OptiXDevice::denoise_run(DenoiseContext &context)
                                    denoiser_.state.device_pointer + denoiser_.scratch_offset,
                                    denoiser_.scratch_size));
 #  else
-  const int input_passes = denoise_buffer_num_passes(task.params);
+  const int input_passes = denoise_buffer_num_passes(context.denoise_params);
 
   optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
                                    context.queue.stream(),

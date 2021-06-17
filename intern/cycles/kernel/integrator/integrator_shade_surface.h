@@ -297,14 +297,17 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
   if (!(sd.flag & SD_HAS_ONLY_VOLUME)) {
 #endif
 
-    const int path_flag = INTEGRATOR_STATE(path, flag);
-#ifdef __SUBSURFACE__
-    /* Can skip shader evaluation for BSSRDF exit point without bump mapping. */
-    if (!(path_flag & PATH_RAY_SUBSURFACE) || ((sd.flag & SD_HAS_BSSRDF_BUMP)))
-#endif
     {
-      /* Evaluate shader. */
-      shader_eval_surface<node_feature_mask>(INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
+      const int path_flag = INTEGRATOR_STATE(path, flag);
+#ifdef __SUBSURFACE__
+      /* Can skip shader evaluation for BSSRDF exit point without bump mapping. */
+      if (!(path_flag & PATH_RAY_SUBSURFACE) || ((sd.flag & SD_HAS_BSSRDF_BUMP)))
+#endif
+      {
+        /* Evaluate shader. */
+        shader_eval_surface<node_feature_mask>(
+            INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
+      }
     }
 
 #ifdef __SUBSURFACE__
@@ -344,7 +347,11 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
     /* Perform path termination. Most paths have already been terminated in
      * the intersect_closest kernel, this is just for emission and for dividing
      * throughput by the probability at the right moment. */
-    const float probability = path_state_continuation_probability(INTEGRATOR_STATE_PASS);
+    const int path_flag = INTEGRATOR_STATE(path, flag);
+    const float probability = (path_flag & PATH_RAY_TERMINATE_ON_NEXT_SURFACE) ?
+                                  0.0f :
+                                  path_state_continuation_probability(INTEGRATOR_STATE_PASS,
+                                                                      path_flag);
     if (probability == 0.0f) {
       return false;
     }

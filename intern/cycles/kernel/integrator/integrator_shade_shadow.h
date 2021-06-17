@@ -105,7 +105,7 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS, const
     /* Volume shaders. */
     if (hit < num_recorded_hits || !shadow_intersections_has_remaining(num_hits)) {
 #  ifdef __VOLUME__
-      if (INTEGRATOR_STATE_ARRAY(shadow_volume_stack, 0, shader) != SHADER_NONE) {
+      if (!integrator_state_shadow_volume_stack_is_empty(INTEGRATOR_STATE_PASS)) {
         const float3 shadow = integrate_transparent_volume_shadow(
             INTEGRATOR_STATE_PASS, hit, num_recorded_hits);
         const float3 throughput = INTEGRATOR_STATE(shadow_path, throughput) * shadow;

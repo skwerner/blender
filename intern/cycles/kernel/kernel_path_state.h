@@ -105,7 +105,7 @@ ccl_device_inline void path_state_next(INTEGRATOR_STATE_ARGS, int label)
 
     flag |= PATH_RAY_TRANSPARENT;
     if (transparent_bounce >= kernel_data.integrator.transparent_max_bounce) {
-      flag |= PATH_RAY_TERMINATE_IMMEDIATE;
+      flag |= PATH_RAY_TERMINATE_ON_NEXT_SURFACE;
     }
 
     if (!kernel_data.integrator.transparent_shadows)
@@ -245,15 +245,10 @@ ccl_device_inline uint path_state_ray_visibility(INTEGRATOR_STATE_CONST_ARGS)
   return visibility;
 }
 
-ccl_device_inline float path_state_continuation_probability(INTEGRATOR_STATE_CONST_ARGS)
+ccl_device_inline float path_state_continuation_probability(INTEGRATOR_STATE_CONST_ARGS,
+                                                            const uint32_t path_flag)
 {
-  const uint32_t flag = INTEGRATOR_STATE(path, flag);
-
-  if (flag & PATH_RAY_TERMINATE_IMMEDIATE) {
-    /* Ray is to be terminated immediately. */
-    return 0.0f;
-  }
-  else if (flag & PATH_RAY_TRANSPARENT) {
+  if (path_flag & PATH_RAY_TRANSPARENT) {
     const uint32_t transparent_bounce = INTEGRATOR_STATE(path, transparent_bounce);
     /* Do at least specified number of bounces without RR. */
     if (transparent_bounce <= kernel_data.integrator.transparent_min_bounce) {

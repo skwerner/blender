@@ -263,44 +263,49 @@ enum PathRayFlag {
   PATH_RAY_TRANSPARENT_BACKGROUND = (1 << 14),
 
   /* Terminate ray immediately at next bounce. */
-  PATH_RAY_TERMINATE_IMMEDIATE = (1 << 15),
+  PATH_RAY_TERMINATE_ON_NEXT_SURFACE = (1 << 15),
+  PATH_RAY_TERMINATE_IN_NEXT_VOLUME = (1 << 16),
 
   /* Ray is to be terminated, but continue with transparent bounces and
    * emission as long as we encounter them. This is required to make the
    * MIS between direct and indirect light rays match, as shadow rays go
    * through transparent surfaces to reach emission too. */
-  PATH_RAY_TERMINATE_AFTER_TRANSPARENT = (1 << 16),
+  PATH_RAY_TERMINATE_AFTER_TRANSPARENT = (1 << 17),
+
+  /* Terminate ray immediately after volume shading. */
+  PATH_RAY_TERMINATE_AFTER_VOLUME = (1 << 18),
 
   /* Ray is to be terminated. */
-  PATH_RAY_TERMINATE = (PATH_RAY_TERMINATE_IMMEDIATE | PATH_RAY_TERMINATE_AFTER_TRANSPARENT),
+  PATH_RAY_TERMINATE = (PATH_RAY_TERMINATE_ON_NEXT_SURFACE | PATH_RAY_TERMINATE_IN_NEXT_VOLUME |
+                        PATH_RAY_TERMINATE_AFTER_TRANSPARENT | PATH_RAY_TERMINATE_AFTER_VOLUME),
 
   /* Path and shader is being evaluated for direct lighting emission. */
-  PATH_RAY_EMISSION = (1 << 17),
+  PATH_RAY_EMISSION = (1 << 19),
 
   /* Perform subsurface scattering. */
-  PATH_RAY_SUBSURFACE = (1 << 18),
+  PATH_RAY_SUBSURFACE = (1 << 20),
 
   /* Contribute to denoising features. */
-  PATH_RAY_DENOISING_FEATURES = (1 << 19),
+  PATH_RAY_DENOISING_FEATURES = (1 << 21),
 
   /* Render pass categories. */
-  PATH_RAY_REFLECT_PASS = (1 << 20),
-  PATH_RAY_TRANSMISSION_PASS = (1 << 21),
-  PATH_RAY_VOLUME_PASS = (1 << 22),
+  PATH_RAY_REFLECT_PASS = (1 << 22),
+  PATH_RAY_TRANSMISSION_PASS = (1 << 23),
+  PATH_RAY_VOLUME_PASS = (1 << 24),
   PATH_RAY_ANY_PASS = (PATH_RAY_REFLECT_PASS | PATH_RAY_TRANSMISSION_PASS | PATH_RAY_VOLUME_PASS),
 
   /* Shadow ray is for a light or surface. */
-  PATH_RAY_SHADOW_FOR_LIGHT = (1 << 23),
+  PATH_RAY_SHADOW_FOR_LIGHT = (1 << 25),
 
   /* A shadow catcher object was hit and the path was split into two. */
-  PATH_RAY_SHADOW_CATCHER_HIT = (1 << 24),
+  PATH_RAY_SHADOW_CATCHER_HIT = (1 << 26),
 
   /* A shadow catcher object was hit and this path traces only shadow catchers, writing them into
    * their dedicated pass for later division.
    *
    * NOTE: Is not covered with `PATH_RAY_ANY_PASS` because shadow catcher does special handling
    * which is separate from the light passes. */
-  PATH_RAY_SHADOW_CATCHER_PASS = (1 << 25),
+  PATH_RAY_SHADOW_CATCHER_PASS = (1 << 27),
 };
 
 /* Configure ray visibility bits for rays and objects respectively,

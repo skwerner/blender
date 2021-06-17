@@ -154,14 +154,12 @@ ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
     }
     else {
       /* Hit a surface, continue with surface kernel unless terminated. */
-      if (integrator_intersect_shader_next_kernel<DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME>(
-              INTEGRATOR_STATE_PASS, &isect)) {
-        return;
-      }
-      else {
-        INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME);
-        return;
-      }
+      const int shader = intersection_get_shader(kg, &isect);
+      const int flags = kernel_tex_fetch(__shaders, shader).flags;
+
+      integrator_intersect_shader_next_kernel<DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME>(
+          INTEGRATOR_STATE_PASS, &isect, shader, flags);
+      return;
     }
   }
 #endif /* __VOLUME__ */

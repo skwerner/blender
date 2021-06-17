@@ -29,20 +29,18 @@
 CCL_NAMESPACE_BEGIN
 
 template<uint32_t current_kernel>
-ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
-    INTEGRATOR_STATE_ARGS, const Intersection *ccl_restrict isect)
+ccl_device_forceinline bool integrator_intersect_terminate(INTEGRATOR_STATE_ARGS,
+                                                           const Intersection *ccl_restrict isect,
+                                                           const int shader_flags)
 {
-  /* Find shader from intersection. */
-  const int shader = intersection_get_shader(kg, isect);
-  const int flags = kernel_tex_fetch(__shaders, shader).flags;
 
   /* Optional AO bounce termination. */
   if (path_state_ao_bounce(INTEGRATOR_STATE_PASS)) {
-    if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+    if (shader_flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
       INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
     }
     else {
-      return false;
+      return true;
     }
   }
 
@@ -60,18 +58,28 @@ ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
     const float terminate = path_state_rng_1D(kg, &rng_state, PRNG_TERMINATE);
 
     if (probability == 0.0f || terminate >= probability) {
-      if (flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+      if (shader_flags & (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
         /* Mark path to be terminated right after shader evaluation. */
         INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_TERMINATE_IMMEDIATE;
       }
       else {
-        return false;
+        return true;
       }
     }
   }
 
+  return false;
+}
+
+template<uint32_t current_kernel>
+ccl_device_forceinline void integrator_intersect_shader_next_kernel(
+    INTEGRATOR_STATE_ARGS,
+    const Intersection *ccl_restrict isect,
+    const int shader,
+    const int shader_flags)
+{
   /* Setup next kernel to execute. */
-  if (flags & SD_HAS_RAYTRACE) {
+  if (shader_flags & SD_HAS_RAYTRACE) {
     INTEGRATOR_PATH_NEXT_SORTED(
         current_kernel, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
   }
@@ -82,8 +90,6 @@ ccl_device_forceinline bool integrator_intersect_shader_next_kernel(
   /* Setup shadow catcher. */
   const int object_flags = intersection_get_object_flags(kg, isect);
   kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags);
-
-  return true;
 }
 
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
@@ -142,8 +148,13 @@ ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
     }
     else {
       /* Hit a surface, continue with surface kernel unless terminated. */
-      if (integrator_intersect_shader_next_kernel<DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST>(
-              INTEGRATOR_STATE_PASS, &isect)) {
+      const int shader = intersection_get_shader(kg, &isect);
+      const int flags = kernel_tex_fetch(__shaders, shader).flags;
+
+      if (!integrator_intersect_terminate<DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST>(
+              INTEGRATOR_STATE_PASS, &isect, flags)) {
+        integrator_intersect_shader_next_kernel<DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST>(
+            INTEGRATOR_STATE_PASS, &isect, shader, flags);
         return;
       }
       else {

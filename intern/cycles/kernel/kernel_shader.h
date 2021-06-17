@@ -1098,13 +1098,19 @@ ccl_device void shader_volume_phase_eval(const KernelGlobals *kg,
                                          const ShaderData *sd,
                                          const float3 omega_in,
                                          BsdfEval *eval,
-                                         float *pdf)
+                                         const float light_pdf,
+                                         const uint light_shader_flags)
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_VOLUME_EVAL);
 
   bsdf_eval_init(eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
-  _shader_volume_phase_multi_eval(sd, omega_in, pdf, -1, eval, 0.0f, 0.0f);
+  float pdf;
+  _shader_volume_phase_multi_eval(sd, omega_in, &pdf, -1, eval, 0.0f, 0.0f);
+  if (light_shader_flags & SHADER_USE_MIS) {
+    float weight = power_heuristic(light_pdf, pdf);
+    bsdf_eval_mul(eval, weight);
+  }
 }
 
 ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,

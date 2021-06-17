@@ -658,10 +658,11 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
 
 /* Write emission to render buffer. */
 ccl_device_inline void kernel_accum_emission(INTEGRATOR_STATE_CONST_ARGS,
+                                             const float3 throughput,
                                              const float3 L,
                                              ccl_global float *ccl_restrict render_buffer)
 {
-  float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
+  float3 contribution = throughput * L;
   kernel_accum_clamp(kg, &contribution, INTEGRATOR_STATE(path, bounce) - 1);
 
   ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,

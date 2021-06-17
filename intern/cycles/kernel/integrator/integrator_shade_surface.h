@@ -94,7 +94,8 @@ ccl_device_forceinline void integrate_surface_emission(INTEGRATOR_STATE_CONST_AR
     L *= mis_weight;
   }
 
-  kernel_accum_emission(INTEGRATOR_STATE_PASS, L, render_buffer);
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+  kernel_accum_emission(INTEGRATOR_STATE_PASS, throughput, L, render_buffer);
 }
 #endif /* __EMISSION__ */
 

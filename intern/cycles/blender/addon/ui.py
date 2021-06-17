@@ -139,6 +139,14 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
         CYCLES_PT_sampling_presets.draw_panel_header(self.layout)
 
     def draw(self, context):
+        pass
+
+
+class CYCLES_RENDER_PT_sampling_viewport(CyclesButtonsPanel, Panel):
+    bl_label = "Viewport"
+    bl_parent_id = "CYCLES_RENDER_PT_sampling"
+
+    def draw(self, context):
         layout = self.layout
 
         scene = context.scene
@@ -148,10 +156,52 @@ class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
         layout.use_property_decorate = False
 
         col = layout.column(align=True)
-        col.prop(cscene, "samples", text="Render")
-        col.prop(cscene, "preview_samples", text="Viewport")
+        col.prop(cscene, "preview_samples", text="Samples")
+
+        layout.separator()
+
+        heading = layout.column(align=False, heading="Denoising")
+        row = heading.row(align=True)
+        row.prop(cscene, "use_preview_denoising", text="")
+        sub = row.row()
+        sub.active = cscene.use_preview_denoising
+        sub.prop(cscene, "preview_denoiser", text="")
+
+        sub = heading.row(align=True)
+        sub.active = cscene.use_preview_denoising
+        sub.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
+        sub = heading.row(align=True)
+        sub.active = cscene.use_preview_denoising
+        sub.prop(cscene, "preview_denoising_input_passes", text="Input Passes")
+
+
+class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
+    bl_label = "Render"
+    bl_parent_id = "CYCLES_RENDER_PT_sampling"
+
+    def draw(self, context):
+        layout = self.layout
+
+        scene = context.scene
+        cscene = scene.cycles
+
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        col = layout.column(align=True)
+        col.prop(cscene, "samples")
 
         draw_samples_info(layout, context)
+
+        layout.separator()
+
+        heading = layout.column(align=True, heading="Denoising")
+        row = heading.row(align=True)
+        row.prop(cscene, "use_denoising", text="")
+        sub = row.row()
+
+        sub.active = cscene.use_denoising
+        sub.prop(cscene, "denoiser", text="")
 
 
 class CYCLES_RENDER_PT_sampling_adaptive(CyclesButtonsPanel, Panel):
@@ -179,44 +229,6 @@ class CYCLES_RENDER_PT_sampling_adaptive(CyclesButtonsPanel, Panel):
         col = layout.column(align=True)
         col.prop(cscene, "adaptive_threshold", text="Noise Threshold")
         col.prop(cscene, "adaptive_min_samples", text="Min Samples")
-
-
-class CYCLES_RENDER_PT_sampling_denoising(CyclesButtonsPanel, Panel):
-    bl_label = "Denoising"
-    bl_parent_id = "CYCLES_RENDER_PT_sampling"
-    bl_options = {'DEFAULT_CLOSED'}
-
-    def draw(self, context):
-        layout = self.layout
-        layout.use_property_split = True
-        layout.use_property_decorate = False
-
-        scene = context.scene
-        cscene = scene.cycles
-
-        heading = layout.column(align=True, heading="Render")
-        row = heading.row(align=True)
-        row.prop(cscene, "use_denoising", text="")
-        sub = row.row()
-
-        sub.active = cscene.use_denoising
-        sub.prop(cscene, "denoiser", text="")
-
-        layout.separator()
-
-        heading = layout.column(align=False, heading="Viewport")
-        row = heading.row(align=True)
-        row.prop(cscene, "use_preview_denoising", text="")
-        sub = row.row()
-        sub.active = cscene.use_preview_denoising
-        sub.prop(cscene, "preview_denoiser", text="")
-
-        sub = heading.row(align=True)
-        sub.active = cscene.use_preview_denoising
-        sub.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
-        sub = heading.row(align=True)
-        sub.active = cscene.use_preview_denoising
-        sub.prop(cscene, "preview_denoising_input_passes", text="Input Passes")
 
 
 class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
@@ -254,31 +266,6 @@ class CYCLES_RENDER_PT_sampling_advanced(CyclesButtonsPanel, Panel):
                 layout.separator()
                 layout.row().prop(cscene, "use_layer_samples")
                 break
-
-
-class CYCLES_RENDER_PT_sampling_total(CyclesButtonsPanel, Panel):
-    bl_label = "Total Samples"
-    bl_parent_id = "CYCLES_RENDER_PT_sampling"
-
-    @classmethod
-    def poll(cls, context):
-        scene = context.scene
-        cscene = scene.cycles
-
-        return cscene.use_square_samples
-
-    def draw(self, context):
-        layout = self.layout
-        cscene = context.scene.cycles
-
-        # Calculate sample values
-        aa = cscene.samples
-        if cscene.use_square_samples:
-            aa = aa * aa
-
-        col = layout.column(align=True)
-        col.scale_y = 0.6
-        col.label(text="%s AA" % aa)
 
 
 class CYCLES_RENDER_PT_subdivision(CyclesButtonsPanel, Panel):
@@ -2055,8 +2042,9 @@ classes = (
     CYCLES_PT_sampling_presets,
     CYCLES_PT_integrator_presets,
     CYCLES_RENDER_PT_sampling,
+    CYCLES_RENDER_PT_sampling_viewport,
+    CYCLES_RENDER_PT_sampling_render,
     CYCLES_RENDER_PT_sampling_adaptive,
-    CYCLES_RENDER_PT_sampling_denoising,
     CYCLES_RENDER_PT_sampling_advanced,
     CYCLES_RENDER_PT_light_paths,
     CYCLES_RENDER_PT_light_paths_max_bounces,

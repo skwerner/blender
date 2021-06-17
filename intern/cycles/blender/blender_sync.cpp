@@ -848,6 +848,19 @@ SessionParams BlenderSync::get_session_params(BL::RenderEngine &b_engine,
   else if (shadingsystem == 1)
     params.shadingsystem = SHADINGSYSTEM_OSL;
 
+  /* Time limit. */
+  if (background) {
+    params.time_limit = get_float(cscene, "time_limit");
+  }
+  else {
+    /* For the viewport it kind of makes more sense to think in terms of the noise floor, which is
+     * usually higher than acceptable level for the final frame. */
+    /* TODO: It might be useful to support time limit in the viewport as well, but needs some
+     * extra thoughts and input. */
+    params.time_limit = 0.0;
+  }
+
+  /* Profiling. */
   params.use_profiling = params.device.has_profiling && !b_engine.is_preview() && background &&
                          BlenderSession::print_render_stats;
 

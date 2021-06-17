@@ -70,6 +70,16 @@ int RenderScheduler::get_num_samples() const
   return num_samples_;
 }
 
+void RenderScheduler::set_time_limit(double time_limit)
+{
+  time_limit_ = time_limit;
+}
+
+double RenderScheduler::get_time_limit() const
+{
+  return time_limit_;
+}
+
 int RenderScheduler::get_rendered_sample() const
 {
   DCHECK_GT(get_num_rendered_samples(), 0);
@@ -110,6 +120,10 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.adaptive_sampling_threshold = 0.4f;
 
   state_.path_trace_finished = false;
+
+  state_.start_render_time = 0.0;
+  state_.end_render_time = 0.0;
+  state_.time_limit_reached = false;
 
   first_render_time_.path_trace_per_sample = 0.0;
   first_render_time_.denoise_time = 0.0;
@@ -176,7 +190,7 @@ bool RenderScheduler::done() const
     return false;
   }
 
-  if (state_.path_trace_finished) {
+  if (state_.path_trace_finished || state_.time_limit_reached) {
     return true;
   }
 
@@ -185,7 +199,12 @@ bool RenderScheduler::done() const
 
 RenderWork RenderScheduler::get_render_work()
 {
+  check_time_limit_reached();
+
   if (done()) {
+    if (state_.end_render_time == 0.0) {
+      state_.end_render_time = time_dt();
+    }
     return RenderWork();
   }
 
@@ -196,6 +215,8 @@ RenderWork RenderScheduler::get_render_work()
     state_.num_rendered_samples = 0;
     state_.last_display_update_sample = -1;
   }
+
+  set_start_render_time_if_needed();
 
   render_work.resolution_divider = state_.resolution_divider;
 
@@ -315,6 +336,9 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
 
 string RenderScheduler::full_report() const
 {
+  const double render_wall_time = state_.end_render_time - state_.start_render_time;
+  const int num_rendered_samples = get_num_rendered_samples();
+
   string result = "\nRender Scheduler Summary\n\n";
 
   {
@@ -385,7 +409,17 @@ string RenderScheduler::full_report() const
 
   const double total_time = path_trace_time_.get_wall() + adaptive_filter_time_.get_wall() +
                             denoise_time_.get_wall() + display_update_time_.get_wall();
-  result += "\n  Total: " + to_string(total_time);
+  result += "\n  Total: " + to_string(total_time) + "\n";
+
+  result += string_printf(
+      "\nRendered %d samples in %f seconds\n", num_rendered_samples, render_wall_time);
+
+  /* When adaptive sampling is used the average time becomes meaningless, because different samples
+   * will likely render different number of pixels. */
+  if (!adaptive_sampling_.use) {
+    result += string_printf("Average time per sample: %f seconds\n",
+                            render_wall_time / num_rendered_samples);
+  }
 
   return result;
 }
@@ -395,9 +429,25 @@ double RenderScheduler::guess_display_update_interval_in_seconds() const
   return guess_display_update_interval_in_seconds_for_num_samples(state_.num_rendered_samples);
 }
 
+double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples(
+    int num_rendered_samples) const
+{
+  double update_interval = guess_display_update_interval_in_seconds_for_num_samples_no_limit(
+      num_rendered_samples);
+
+  if (time_limit_ != 0.0 && state_.start_render_time != 0.0) {
+    const double remaining_render_time = max(0.0,
+                                             time_limit_ - (time_dt() - state_.start_render_time));
+
+    update_interval = min(update_interval, remaining_render_time);
+  }
+
+  return update_interval;
+}
+
 /* TODO(sergey): This is just a quick implementation, exact values might need to be tweaked based
  * on a more careful experiments with viewport rendering. */
-double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples(
+double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples_no_limit(
     int num_rendered_samples) const
 {
   /* TODO(sergey): Need a decision on whether this should be using number of samples rendered
@@ -732,6 +782,37 @@ bool RenderScheduler::work_is_usable_for_first_render_estimation(const RenderWor
 {
   return render_work.resolution_divider == pixel_size_ &&
          render_work.path_trace.start_sample == start_sample_;
+}
+
+void RenderScheduler::set_start_render_time_if_needed()
+{
+  /* Start counting render time when rendering sampels at their final resolution. */
+  if (state_.resolution_divider == pixel_size_ && get_num_rendered_samples() == 0) {
+    state_.start_render_time = time_dt();
+  }
+}
+
+void RenderScheduler::check_time_limit_reached()
+{
+  if (time_limit_ == 0.0) {
+    /* No limit is enforced. */
+    return;
+  }
+
+  if (state_.start_render_time == 0.0) {
+    /* Rendering did not start yet. */
+    return;
+  }
+
+  const double current_time = time_dt();
+
+  if (current_time - state_.start_render_time < time_limit_) {
+    /* Time limit is not reached yet. */
+    return;
+  }
+
+  state_.time_limit_reached = true;
+  state_.end_render_time = current_time;
 }
 
 /* --------------------------------------------------------------------

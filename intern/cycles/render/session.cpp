@@ -272,6 +272,7 @@ RenderWork Session::run_update_for_next_iteration()
   }
 
   render_scheduler_.set_num_samples(params.samples);
+  render_scheduler_.set_time_limit(params.time_limit);
 
   while (have_tiles) {
     render_work = render_scheduler_.get_render_work();
@@ -388,6 +389,15 @@ void Session::set_samples(int samples)
 {
   if (samples != params.samples) {
     params.samples = samples;
+
+    pause_cond.notify_all();
+  }
+}
+
+void Session::set_time_limit(double time_limit)
+{
+  if (time_limit != params.time_limit) {
+    params.time_limit = time_limit;
 
     pause_cond.notify_all();
   }

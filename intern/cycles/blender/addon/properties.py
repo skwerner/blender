@@ -279,6 +279,15 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=32,
     )
 
+    # TODO: Use proper subtype to show units in the UI.
+    time_limit: FloatProperty(
+        name="Time Limit",
+        description="Limit the render time (excluding synchronization time)."
+        "Zero disables the limit",
+        min=0.0,
+        default=0.0,
+    )
+
     sampling_pattern: EnumProperty(
         name="Sampling Pattern",
         description="Random sampling pattern used by the integrator",

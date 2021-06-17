@@ -725,8 +725,9 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
     create_session();
   }
 
-  /* increase samples, but never decrease */
+  /* increase samples and render time, but never decrease */
   session->set_samples(session_params.samples);
+  session->set_time_limit(session_params.time_limit);
   session->set_pause(session_pause);
 
   /* copy recalc flags, outside of mutex so we can decide to do the real

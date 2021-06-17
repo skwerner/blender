@@ -203,6 +203,11 @@ class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
         sub.active = cscene.use_denoising
         sub.prop(cscene, "denoiser", text="")
 
+        layout.separator()
+
+        col = layout.column(align=True)
+        col.prop(cscene, "time_limit")
+
 
 class CYCLES_RENDER_PT_sampling_adaptive(CyclesButtonsPanel, Panel):
     bl_label = "Adaptive Sampling"

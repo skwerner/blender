@@ -76,6 +76,11 @@ class RenderScheduler {
   void set_num_samples(int num_samples);
   int get_num_samples() const;
 
+  /* Time limit for the path tracing tasks, in minutes.
+   * Zero disables the limit. */
+  void set_time_limit(double time_limit);
+  double get_time_limit() const;
+
   /* Get sample up to which rendering has been done.
    * This is an absolute 0-based value.
    *
@@ -144,6 +149,8 @@ class RenderScheduler {
    * less often but the device occupancy goes higher. */
   double guess_display_update_interval_in_seconds() const;
   double guess_display_update_interval_in_seconds_for_num_samples(int num_rendered_samples) const;
+  double guess_display_update_interval_in_seconds_for_num_samples_no_limit(
+      int num_rendered_samples) const;
 
   /* Calculate number of samples which can be rendered within current desred update interval which
    * is calculated by `guess_update_interval_in_seconds()`. */
@@ -179,6 +186,13 @@ class RenderScheduler {
   /* Check whether timing of the given work are usable to store timings in the `first_render_time_`
    * for the resolution divider calculation. */
   bool work_is_usable_for_first_render_estimation(const RenderWork &render_work);
+
+  void set_start_render_time_if_needed();
+
+  /* CHeck whether render time limit has been reached (or exceeded), and if so store related
+   * information in the state so that rendering is considered finished, and is possible to report
+   * average render time information. */
+  void check_time_limit_reached();
 
   /* Helper class to keep track of task timing.
    *
@@ -244,6 +258,11 @@ class RenderScheduler {
     float adaptive_sampling_threshold = 0.0f;
 
     bool path_trace_finished = false;
+    bool time_limit_reached = false;
+
+    /* Time at which rendering started and finished. */
+    double start_render_time = 0.0;
+    double end_render_time = 0.0;
   } state_;
 
   /* Timing of tasks which were performed at the very first render work at 100% of the
@@ -264,6 +283,10 @@ class RenderScheduler {
    * [start_sample_, start_sample_ + num_samples_ - 1] range, inclusively. */
   int start_sample_ = 0;
   int num_samples_ = 0;
+
+  /* Limit in seconds for how long path tracing is allowed to happen.
+   * Zero means no limit is applied. */
+  double time_limit_ = 0.0;
 
   /* Headless rendering without interface. */
   bool headless_;

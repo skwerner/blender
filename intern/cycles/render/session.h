@@ -57,6 +57,10 @@ class SessionParams {
   int pixel_size;
   int threads;
 
+  /* Limit in seconds for how long path tracing is allowed to happen.
+   * Zero means no limit is applied. */
+  double time_limit;
+
   bool use_profiling;
 
   ShadingSystem shadingsystem;
@@ -72,6 +76,7 @@ class SessionParams {
     samples = 1024;
     pixel_size = 1;
     threads = 0;
+    time_limit = 0.0;
 
     use_profiling = false;
 
@@ -125,6 +130,7 @@ class Session {
   void set_pause(bool pause);
 
   void set_samples(int samples);
+  void set_time_limit(double time_limit);
 
   void set_gpu_display(unique_ptr<GPUDisplay> gpu_display);
 

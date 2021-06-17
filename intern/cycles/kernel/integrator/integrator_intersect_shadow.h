@@ -97,6 +97,9 @@ ccl_device bool integrate_intersect_shadow_transparent(INTEGRATOR_STATE_ARGS,
 
     INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = num_hits;
   }
+  else {
+    INTEGRATOR_STATE_WRITE(shadow_path, num_hits) = 0;
+  }
 
   return opaque_hit;
 }

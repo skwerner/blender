@@ -178,7 +178,7 @@ ccl_device_forceinline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS
 
   integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_PASS);
 
-  /* Branch of shadow kernel. */
+  /* Branch off shadow kernel. */
   INTEGRATOR_SHADOW_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
 }
 #endif

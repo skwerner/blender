@@ -157,8 +157,8 @@ ccl_device_forceinline void integrator_state_copy_volume_stack_to_shadow(INTEGRA
 ccl_device_forceinline VolumeStack
 integrator_state_read_shadow_volume_stack(INTEGRATOR_STATE_CONST_ARGS, int i)
 {
-  VolumeStack entry = {INTEGRATOR_STATE_ARRAY(volume_stack, i, object),
-                       INTEGRATOR_STATE_ARRAY(volume_stack, i, shader)};
+  VolumeStack entry = {INTEGRATOR_STATE_ARRAY(shadow_volume_stack, i, object),
+                       INTEGRATOR_STATE_ARRAY(shadow_volume_stack, i, shader)};
   return entry;
 }
 

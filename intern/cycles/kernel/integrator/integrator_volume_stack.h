@@ -277,4 +277,88 @@ ccl_device_inline void volume_stack_clean(INTEGRATOR_STATE_ARGS)
   }
 }
 
+template<typename StackReadOp>
+ccl_device float volume_stack_step_size(INTEGRATOR_STATE_ARGS, StackReadOp stack_read)
+{
+  float step_size = FLT_MAX;
+
+  for (int i = 0;; i++) {
+    VolumeStack entry = stack_read(i);
+    if (entry.shader == SHADER_NONE) {
+      break;
+    }
+
+    int shader_flag = kernel_tex_fetch(__shaders, (entry.shader & SHADER_MASK)).flags;
+
+    bool heterogeneous = false;
+
+    if (shader_flag & SD_HETEROGENEOUS_VOLUME) {
+      heterogeneous = true;
+    }
+    else if (shader_flag & SD_NEED_VOLUME_ATTRIBUTES) {
+      /* We want to render world or objects without any volume grids
+       * as homogeneous, but can only verify this at run-time since other
+       * heterogeneous volume objects may be using the same shader. */
+      int object = entry.object;
+      if (object != OBJECT_NONE) {
+        int object_flag = kernel_tex_fetch(__object_flag, object);
+        if (object_flag & SD_OBJECT_HAS_VOLUME_ATTRIBUTES) {
+          heterogeneous = true;
+        }
+      }
+    }
+
+    if (heterogeneous) {
+      float object_step_size = object_volume_step_size(kg, entry.object);
+      object_step_size *= kernel_data.integrator.volume_step_rate;
+      step_size = fminf(object_step_size, step_size);
+    }
+  }
+
+  return step_size;
+}
+
+template<typename StackReadOp>
+ccl_device int volume_stack_sampling_method(INTEGRATOR_STATE_ARGS, StackReadOp stack_read)
+{
+  if (kernel_data.integrator.num_all_lights == 0)
+    return 0;
+
+  int method = -1;
+
+  for (int i = 0;; i++) {
+    VolumeStack entry = stack_read(i);
+    if (entry.shader == SHADER_NONE) {
+      break;
+    }
+
+    int shader_flag = kernel_tex_fetch(__shaders, (entry.shader & SHADER_MASK)).flags;
+
+    if (shader_flag & SD_VOLUME_MIS) {
+      /* Multiple importance sampling. */
+      return SD_VOLUME_MIS;
+    }
+    else if (shader_flag & SD_VOLUME_EQUIANGULAR) {
+      /* Distance + equiangular sampling -> multiple importance sampling. */
+      if (method == 0) {
+        return SD_VOLUME_MIS;
+      }
+
+      /* Only equiangular sampling. */
+      method = SD_VOLUME_EQUIANGULAR;
+    }
+    else {
+      /* Distance + equiangular sampling -> multiple importance sampling. */
+      if (method == SD_VOLUME_EQUIANGULAR) {
+        return SD_VOLUME_MIS;
+      }
+
+      /* Distance sampling only. */
+      method = 0;
+    }
+  }
+
+  return method;
+}
+
 CCL_NAMESPACE_END

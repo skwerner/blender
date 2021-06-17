@@ -126,14 +126,16 @@ ccl_device_inline void kernel_write_denoising_features(
 
 #ifdef __SHADOW_CATCHER__
 
-/* Write transparency to the matte pass at a bounce off the shadow catcher object (this is where
- * the path split happens). */
+/* Write shadow catcher passes on a bounce from the shadow catcher object. */
 ccl_device_inline void kernel_write_shadow_catcher_bounce_data(
     INTEGRATOR_STATE_ARGS, const ShaderData *sd, ccl_global float *ccl_restrict render_buffer)
 {
-  if (kernel_data.film.pass_shadow_catcher_matte == PASS_UNUSED) {
+  if (!kernel_data.integrator.has_shadow_catcher) {
     return;
   }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
 
   if (!kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STATE_PASS, sd->object_flag)) {
     return;
@@ -141,9 +143,13 @@ ccl_device_inline void kernel_write_shadow_catcher_bounce_data(
 
   ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS, render_buffer);
 
+  /* Count sample for the shadow catcher object. */
+  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher + 3, 1.0f);
+
+  /* Since the split is done, the sample does not contribute to the matte, so accumulate it as
+   * transparency to the matte. */
   /* TODO(sergey): Use contribution and transparency based on the throughput, allowing to have
    * transparent object between camera and shadow catcher. */
-
   kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3, 1.0f);
 }
 

@@ -381,7 +381,8 @@ typedef enum PassType {
 
   /* PASS_SHADOW_CATCHER accumulates contribution of shadow catcher object which is not affected by
    * any other object. The pass accessor will divide the combined pass by the shadow catcher. The
-   * result of this division is then to be multiplied with the backdrop.
+   * result of this division is then to be multiplied with the backdrop. The alpha channel of this
+   * pass contains number of samples which contributed to the color components of the pass.
    *
    * PASS_SHADOW_CATCHER_MATTE contains pass which contains non-catcher objects. This pass is to be
    * alpha-overed onto the backdrop (after multiplication). */

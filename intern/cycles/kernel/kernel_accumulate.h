@@ -365,25 +365,31 @@ ccl_device void kernel_accum_adaptive_buffer(INTEGRATOR_STATE_CONST_ARGS,
 /* Accumulate contribution to the Shadow Catcher pass.
  *
  * Returns truth if the contribution is fully handled here and is not to be added to the other
- * passes (like combined, adaptive sampling, denoising passes). */
+ * passes (like combined, adaptive sampling). */
 
 ccl_device bool kernel_accum_shadow_catcher(INTEGRATOR_STATE_CONST_ARGS,
                                             const float3 contribution,
                                             ccl_global float *ccl_restrict buffer)
 {
+  if (!kernel_data.integrator.has_shadow_catcher) {
+    return false;
+  }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
+
   /* Matte pass. */
-  if (kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher_matte, contribution);
-    }
+  if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher_matte, contribution);
+    /* NOTE: Accumulate the combined pass and to the samples count pass, so that the adaptive
+     * sampling is based on how noisy the combined pass is as if there were no catchers in the
+     * scene. */
   }
 
   /* Shadow catcher pass. */
-  if (kernel_data.film.pass_shadow_catcher != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher, contribution);
-      return true;
-    }
+  if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher, contribution);
+    return true;
   }
 
   return false;
@@ -394,23 +400,30 @@ ccl_device bool kernel_accum_shadow_catcher_transparent(INTEGRATOR_STATE_CONST_A
                                                         const float transparent,
                                                         ccl_global float *ccl_restrict buffer)
 {
+  if (!kernel_data.integrator.has_shadow_catcher) {
+    return false;
+  }
+
+  kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
+  kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
+
   /* Matte pass. */
-  if (kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float4(
-          buffer + kernel_data.film.pass_shadow_catcher_matte,
-          make_float4(contribution.x, contribution.y, contribution.z, transparent));
-    }
+  if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
+    kernel_write_pass_float4(
+        buffer + kernel_data.film.pass_shadow_catcher_matte,
+        make_float4(contribution.x, contribution.y, contribution.z, transparent));
+    /* NOTE: Accumulate the combined pass and to the samples count pass, so that the adaptive
+     * sampling is based on how noisy the combined pass is as if there were no catchers in the
+     * scene. */
   }
 
   /* Shadow catcher pass. */
-  if (kernel_data.film.pass_shadow_catcher != PASS_UNUSED) {
-    if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
-      kernel_write_pass_float4(
-          buffer + kernel_data.film.pass_shadow_catcher,
-          make_float4(contribution.x, contribution.y, contribution.z, transparent));
-      return true;
-    }
+  if (kernel_shadow_catcher_is_object_pass(INTEGRATOR_STATE_PASS)) {
+    /* NOTE: The transparency of the shadow catcher pass is ignored. It is not needed for the
+     * calculation and the alpha channel of the pass contains numbers of samples contributed to a
+     * pixel of the pass. */
+    kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow_catcher, contribution);
+    return true;
   }
 
   return false;

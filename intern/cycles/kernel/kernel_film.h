@@ -299,26 +299,31 @@ ccl_device_inline void film_get_pass_pixel_shadow(const KernelFilmConvert *ccl_r
  */
 
 ccl_device_inline float4
-film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_convert,
-                              ccl_global const float *ccl_restrict buffer)
+film_calculate_shadow_catcher_denoised(const KernelFilmConvert *ccl_restrict kfilm_convert,
+                                       ccl_global const float *ccl_restrict buffer)
 {
-  /* For the shadow catcher pass we divide combined pass by the shadow catcher.
-   *
-   * The non-obvious trick here is that we add matte pass to the shadow catcher, so that we
-   * avoid division by zero. This solves artifacts around edges of the artificial object.
-   *
-   * Another trick we do here is to alpha-over the pass on top of white. and ignore the alpha.
-   * This way using transparent film to render artificial objects will be easy to be combined
-   * with a backdrop. */
+  kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
 
   float scale, scale_exposure;
   film_get_scale_and_scale_exposure(kfilm_convert, buffer, &scale, &scale_exposure);
 
+  ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
+
+  const float3 pixel = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]) * scale_exposure;
+
+  return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);
+}
+
+ccl_device_inline float4
+film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_convert,
+                              ccl_global const float *ccl_restrict buffer)
+{
+  /* For the shadow catcher pass we divide combined pass by the shadow catcher.
+   * Note that denoised shadow catcher pass contains value which only needs ot be scaled (but not
+   * to be calculated as division). */
+
   if (kfilm_convert->is_denoised) {
-    kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
-    ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
-    const float3 pixel = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]) * scale_exposure;
-    return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);
+    return film_calculate_shadow_catcher_denoised(kfilm_convert, buffer);
   }
 
   kernel_assert(kfilm_convert->pass_offset != PASS_UNUSED);
@@ -330,23 +335,35 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
   ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
   ccl_global const float *in_matte = buffer + kfilm_convert->pass_shadow_catcher_matte;
 
-  const float3 color_catcher = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]) *
-                               scale_exposure;
+  /* If there is no shadow catcher object in this pixel, there is no modification of the light
+   * needed, so return one. */
+  const float num_samples = in_catcher[3];
+  if (num_samples == 0.0f) {
+    return one_float4();
+  }
 
-  const float3 color_combined = make_float3(in_combined[0], in_combined[1], in_combined[2]) *
-                                scale_exposure;
+  /* No scaling needed. The integration works in way that number of samples in the combined and
+   * shadow catcher passes are the same, and exposure is cancelled during the division. */
+  const float3 color_catcher = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]);
+  const float3 color_combined = make_float3(in_combined[0], in_combined[1], in_combined[2]);
+  const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]);
 
-  const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]) * scale_exposure;
+  /* Need to ignore contribution of the matte object when doing division (otherwise there will be
+   * artifacts caused by anti-aliasing). Since combined pass is used for adaptive sampling and need
+   * to contain matte objects, we subtrack matte objects contribution here. This is the same as if
+   * the matte objects were not accumulated to the combined pass. */
+  const float3 combined_no_matte = color_combined - color_matte;
 
+  const float3 shadow_catcher = safe_divide_color(combined_no_matte, color_catcher);
+
+  const float scale = film_get_scale(kfilm_convert, buffer);
   const float transparency = in_combined[3] * scale;
-  const float alpha = saturate(1.0f - transparency);
+  const float alpha = film_transparency_to_alpha(transparency);
 
-  const float3 shadow_catcher = safe_divide_even_color(color_combined,
-                                                       color_catcher + color_matte);
-
-  /* Restore pre-multipled nature of the color, avoiding artifacts on the edges.
-   * Makes sense since the division of premultiplied color's "removes" alpha from the
-   * result. */
+  /* Alpha-over on white using transparency of the combined pass. This allows to eliminate
+   * artifacts which are happenning on an edge of a shadow catcher when using transparent film.
+   * Note that we treat shadow catcher as straight alpha here because alpha got cancelled out
+   * during the division. */
   const float3 pixel = (1.0f - alpha) * one_float3() + alpha * shadow_catcher;
 
   return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);

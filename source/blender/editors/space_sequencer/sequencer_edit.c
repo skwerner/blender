@@ -335,7 +335,7 @@ static int sequencer_snap_exec(bContext *C, wmOperator *op)
 
   /* Check meta-strips. */
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
-    if (seq->flag & SELECT && !(seq->depth == 0 && seq->flag & SEQ_LOCK) &&
+    if (seq->flag & SELECT && !(seq->flag & SEQ_LOCK) &&
         SEQ_transform_sequence_can_be_translated(seq)) {
       if ((seq->flag & (SEQ_LEFTSEL + SEQ_RIGHTSEL)) == 0) {
         SEQ_transform_translate_sequence(
@@ -357,7 +357,7 @@ static int sequencer_snap_exec(bContext *C, wmOperator *op)
 
   /* Test for effects and overlap. */
   for (seq = ed->seqbasep->first; seq; seq = seq->next) {
-    if (seq->flag & SELECT && !(seq->depth == 0 && seq->flag & SEQ_LOCK)) {
+    if (seq->flag & SELECT && !(seq->flag & SEQ_LOCK)) {
       seq->flag &= ~SEQ_OVERLAP;
       if (SEQ_transform_test_overlap(ed->seqbasep, seq)) {
         SEQ_transform_seqbase_shuffle(ed->seqbasep, seq, scene);
@@ -1983,7 +1983,7 @@ static int sequencer_meta_make_exec(bContext *C, wmOperator *op)
 
   seqm->machine = active_seq ? active_seq->machine : channel_max;
   strcpy(seqm->name + 2, "MetaStrip");
-  SEQ_sequence_base_unique_name_recursive(&ed->seqbase, seqm);
+  SEQ_sequence_base_unique_name_recursive(scene, &ed->seqbase, seqm);
   seqm->start = meta_start_frame;
   seqm->len = meta_end_frame - meta_start_frame;
   SEQ_time_update_sequence(scene, seqm);
@@ -2187,7 +2187,7 @@ static Sequence *find_next_prev_sequence(Scene *scene, Sequence *test, int lr, i
 
   seq = ed->seqbasep->first;
   while (seq) {
-    if ((seq != test) && (test->machine == seq->machine) && (test->depth == seq->depth) &&
+    if ((seq != test) && (test->machine == seq->machine) &&
         ((sel == -1) || (sel == (seq->flag & SELECT)))) {
       dist = MAXFRAME * 2;
 

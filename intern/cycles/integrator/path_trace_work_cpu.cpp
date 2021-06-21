@@ -56,8 +56,7 @@ PathTraceWorkCPU::PathTraceWorkCPU(Device *device,
                                    RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
     : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
-      kernels_(*(device->get_cpu_kernels())),
-      render_buffers_(buffers)
+      kernels_(*(device->get_cpu_kernels()))
 {
   DCHECK_EQ(device->info.type, DEVICE_CPU);
 }
@@ -114,7 +113,7 @@ void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_global
   IntegratorState *shadow_catcher_state = &integrator_states[1];
 
   KernelWorkTile sample_work_tile = work_tile;
-  float *render_buffer = render_buffers_->buffer.data();
+  float *render_buffer = buffers_->buffer.data();
 
   for (int sample = 0; sample < samples_num; ++sample) {
     if (is_cancel_requested()) {
@@ -164,7 +163,7 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
-    pass_accessor.get_render_tile_pixels(render_buffers_, effective_buffer_params_, destination);
+    pass_accessor.get_render_tile_pixels(buffers_, effective_buffer_params_, destination);
   });
 
   gpu_display->unmap_texture_buffer();
@@ -179,7 +178,7 @@ int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float thres
   const int offset = effective_buffer_params_.offset;
   const int stride = effective_buffer_params_.stride;
 
-  float *render_buffer = render_buffers_->buffer.data();
+  float *render_buffer = buffers_->buffer.data();
 
   uint num_active_pixels = 0;
 

@@ -109,9 +109,6 @@ class PathTraceWorkGPU : public PathTraceWork {
   /* Scheduler which gives work to path tracing threads. */
   WorkTileScheduler work_tile_scheduler_;
 
-  /* Output render buffer. */
-  RenderBuffers *render_buffers_;
-
   /* Integrate state for paths. */
   IntegratorStateGPU integrator_state_gpu_;
   /* SoA arrays for integrator state. */

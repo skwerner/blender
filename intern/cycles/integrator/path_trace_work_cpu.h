@@ -69,9 +69,6 @@ class PathTraceWorkCPU : public PathTraceWork {
    * accessing it, but some "localization" is required to decouple from kernel globals stored
    * on the device level. */
   vector<CPUKernelThreadGlobals> kernel_thread_globals_;
-
-  /* Render output buffers. */
-  RenderBuffers *render_buffers_;
 };
 
 CCL_NAMESPACE_END

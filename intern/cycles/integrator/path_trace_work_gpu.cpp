@@ -36,7 +36,6 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
                                    bool *cancel_requested_flag)
     : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
       queue_(device->gpu_queue_create()),
-      render_buffers_(buffers),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
       integrator_shader_sort_counter_(device, "integrator_shader_sort_counter", MEM_READ_WRITE),
       integrator_shader_raytrace_sort_counter_(
@@ -332,7 +331,7 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
     case DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE:
     case DEVICE_KERNEL_INTEGRATOR_SHADE_VOLUME: {
       /* Shading kernels with integrator state and render buffer. */
-      void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
+      void *d_render_buffer = (void *)buffers_->buffer.device_pointer;
       void *args[] = {&d_path_index, &d_render_buffer, const_cast<int *>(&work_size)};
 
       queue_->enqueue(kernel, work_size, args);
@@ -562,7 +561,7 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
 
   void *d_work_tiles = (void *)work_tiles_.device_pointer;
   void *d_path_index = (void *)nullptr;
-  void *d_render_buffer = (void *)render_buffers_->buffer.device_pointer;
+  void *d_render_buffer = (void *)buffers_->buffer.device_pointer;
 
   if (max_active_path_index_ != 0) {
     queue_->zero_to_device(num_queued_paths_);
@@ -668,8 +667,8 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
                                                  PassMode pass_mode,
                                                  int num_samples)
 {
-  const int final_width = render_buffers_->params.width;
-  const int final_height = render_buffers_->params.height;
+  const int final_width = buffers_->params.width;
+  const int final_height = buffers_->params.height;
 
   /* Re-allocate display memory if needed, and make sure the device pointer is allocated.
    *
@@ -727,7 +726,7 @@ void PathTraceWorkGPU::run_film_convert(device_ptr d_rgba_half,
   PassAccessor::Destination destination(pass_access_info.type);
   destination.d_pixels_half_rgba = d_rgba_half;
 
-  pass_accessor.get_render_tile_pixels(render_buffers_, effective_buffer_params_, destination);
+  pass_accessor.get_render_tile_pixels(buffers_, effective_buffer_params_, destination);
 }
 
 int PathTraceWorkGPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)
@@ -752,7 +751,7 @@ int PathTraceWorkGPU::adaptive_sampling_convergence_check_count_active(float thr
 
   const int work_size = effective_buffer_params_.width * effective_buffer_params_.height;
 
-  void *args[] = {&render_buffers_->buffer.device_pointer,
+  void *args[] = {&buffers_->buffer.device_pointer,
                   const_cast<int *>(&effective_buffer_params_.full_x),
                   const_cast<int *>(&effective_buffer_params_.full_y),
                   const_cast<int *>(&effective_buffer_params_.width),
@@ -775,7 +774,7 @@ void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_x()
 {
   const int work_size = effective_buffer_params_.height;
 
-  void *args[] = {&render_buffers_->buffer.device_pointer,
+  void *args[] = {&buffers_->buffer.device_pointer,
                   &effective_buffer_params_.full_x,
                   &effective_buffer_params_.full_y,
                   &effective_buffer_params_.width,
@@ -790,7 +789,7 @@ void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_y()
 {
   const int work_size = effective_buffer_params_.width;
 
-  void *args[] = {&render_buffers_->buffer.device_pointer,
+  void *args[] = {&buffers_->buffer.device_pointer,
                   &effective_buffer_params_.full_x,
                   &effective_buffer_params_.full_y,
                   &effective_buffer_params_.width,

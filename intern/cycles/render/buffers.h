@@ -40,14 +40,14 @@ struct float4;
 class BufferParams {
  public:
   /* width/height of the physical buffer */
-  int width;
-  int height;
+  int width = 0;
+  int height = 0;
 
   /* offset into and width/height of the full buffer */
-  int full_x;
-  int full_y;
-  int full_width;
-  int full_height;
+  int full_x = 0;
+  int full_y = 0;
+  int full_width = 0;
+  int full_height = 0;
 
   /* Runtime fields, only valid after `update_passes()` or `update_offset_stride()`. */
   int offset = -1, stride = -1;

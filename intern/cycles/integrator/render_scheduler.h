@@ -27,6 +27,11 @@ class RenderWork {
  public:
   int resolution_divider = 1;
 
+  /* Initialize render buffers.
+   * Includes steps like zero-ing the buffer on the device, and optional reading of pixels from the
+   * baking target. */
+  bool init_render_buffers = false;
+
   /* Path tracing samples information. */
   struct {
     int start_sample = 0;

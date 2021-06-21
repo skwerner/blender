@@ -134,14 +134,10 @@ void PathTrace::render(const RenderWork &render_work)
 
 void PathTrace::render_pipeline(RenderWork render_work)
 {
-  /* TODO(sergey): For truly resumable render might need to avoid zero-ing. */
-  if (render_work.path_trace.start_sample == render_scheduler_.get_start_sample()) {
-    full_render_buffers_->zero();
-    buffer_read();
-  }
-
   render_init_kernel_execution();
   render_update_resolution_divider(render_work.resolution_divider);
+
+  init_render_buffers(render_work);
 
   path_trace(render_work);
   if (is_cancel_requested()) {
@@ -172,6 +168,16 @@ void PathTrace::render_init_kernel_execution()
   for (auto &&path_trace_work : path_trace_works_) {
     path_trace_work->init_execution();
   }
+}
+
+void PathTrace::init_render_buffers(const RenderWork &render_work)
+{
+  if (!render_work.init_render_buffers) {
+    return;
+  }
+
+  full_render_buffers_->zero();
+  buffer_read();
 }
 
 void PathTrace::path_trace(RenderWork &render_work)

@@ -16,6 +16,7 @@
 
 #include "integrator/path_trace.h"
 
+#include "device/cpu/device.h"
 #include "device/device.h"
 #include "integrator/pass_accessor.h"
 #include "integrator/render_scheduler.h"
@@ -37,22 +38,8 @@ PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler 
   /* Create path tracing work in advance, so that it can be reused by incremental sampling as much
    * as possible. */
   device_->foreach_device([&](Device *path_trace_device) {
-    if (!path_trace_works_.empty()) {
-      if (path_trace_works_.size() == 1) {
-        LOG(ERROR)
-            << "Multi-devices are not yet fully implemented, will render on a single device.";
-      }
-      return;
-    }
-
-    /* TODO(sergey): Need to create render buffer for every individual device, so that they can
-     * write directly to it. */
-    full_render_buffers_ = make_unique<RenderBuffers>(path_trace_device);
-
-    path_trace_works_.emplace_back(PathTraceWork::create(path_trace_device,
-                                                         device_scene,
-                                                         full_render_buffers_.get(),
-                                                         &render_cancel_.is_requested));
+    path_trace_works_.emplace_back(
+        PathTraceWork::create(path_trace_device, device_scene, &render_cancel_.is_requested));
   });
 }
 
@@ -87,17 +74,15 @@ bool PathTrace::ready_to_reset()
   return false;
 }
 
-void PathTrace::reset(const BufferParams &full_buffer_params)
+void PathTrace::reset(const BufferParams &big_tile_params)
 {
-  if (full_render_buffers_->params.modified(full_buffer_params)) {
-    full_render_buffers_->reset(full_buffer_params);
-
-    /* Indicate the work state that resolution divider is out of date. */
-    render_state_.resolution_divider = 0;
+  if (big_tile_params_.modified(big_tile_params)) {
+    big_tile_params_ = big_tile_params;
+    render_state_.need_reset_params = true;
   }
 
   if (gpu_display_) {
-    gpu_display_->reset(full_buffer_params);
+    gpu_display_->reset(big_tile_params);
   }
 
   render_state_.has_denoised_result_ = false;
@@ -135,7 +120,6 @@ void PathTrace::render(const RenderWork &render_work)
 void PathTrace::render_pipeline(RenderWork render_work)
 {
   render_init_kernel_execution();
-  render_update_resolution_divider(render_work.resolution_divider);
 
   init_render_buffers(render_work);
 
@@ -170,14 +154,116 @@ void PathTrace::render_init_kernel_execution()
   }
 }
 
-void PathTrace::init_render_buffers(const RenderWork &render_work)
+/* TODO(sergey): Look into `std::function` rather than using a template. Should not be a
+ * measurable performance impact at runtime, but will make compilation faster and binary somewhat
+ * smaller. */
+template<typename Callback>
+static void foreach_sliced_buffer_params(const vector<unique_ptr<PathTraceWork>> &path_trace_works,
+                                         const BufferParams &buffer_params,
+                                         const Callback &callback)
 {
-  if (!render_work.init_render_buffers) {
-    return;
+  const int num_works = path_trace_works.size();
+  const int height = buffer_params.height;
+
+  int current_y = 0;
+  for (int i = 0; i < num_works; ++i) {
+    /* TODO(sergey): Support adaptive weight based on an observed device performance. */
+    const float weight = 1.0f / num_works;
+
+    const int slice_height = max(lround(height * weight), 1);
+
+    /* Disallow negative values to deal with situations when there are more compute devices than
+     * scanlines. */
+    const int remaining_height = max(0, height - current_y);
+
+    BufferParams slide_params = buffer_params;
+    slide_params.full_y = buffer_params.full_y + current_y;
+    if (i < num_works - 1) {
+      slide_params.height = min(slice_height, remaining_height);
+    }
+    else {
+      slide_params.height = remaining_height;
+    }
+
+    slide_params.update_offset_stride();
+
+    callback(path_trace_works[i].get(), slide_params);
+
+    current_y += slide_params.height;
+  }
+}
+
+void PathTrace::update_allocated_work_buffer_params()
+{
+  foreach_sliced_buffer_params(path_trace_works_,
+                               big_tile_params_,
+                               [](PathTraceWork *path_trace_work, const BufferParams &params) {
+                                 RenderBuffers *buffers = path_trace_work->get_render_buffers();
+                                 buffers->reset(params);
+                               });
+}
+
+static BufferParams scale_buffer_params(const BufferParams &params, int resolution_divider)
+{
+  BufferParams scaled_params = params;
+
+  scaled_params.width = max(1, params.width / resolution_divider);
+  scaled_params.height = max(1, params.height / resolution_divider);
+  scaled_params.full_x = params.full_x / resolution_divider;
+  scaled_params.full_y = params.full_y / resolution_divider;
+  scaled_params.full_width = params.full_width / resolution_divider;
+  scaled_params.full_height = params.full_height / resolution_divider;
+
+  scaled_params.update_offset_stride();
+
+  return scaled_params;
+}
+
+void PathTrace::update_effective_work_buffer_params(const RenderWork &render_work)
+{
+  const int resolution_divider = render_work.resolution_divider;
+
+  const BufferParams scaled_big_tile_params = scale_buffer_params(big_tile_params_,
+                                                                  resolution_divider);
+
+  foreach_sliced_buffer_params(path_trace_works_,
+                               scaled_big_tile_params,
+                               [&](PathTraceWork *path_trace_work, const BufferParams params) {
+                                 path_trace_work->set_effective_buffer_params(
+                                     scaled_big_tile_params, params);
+                               });
+
+  render_state_.effective_big_tile_params = scaled_big_tile_params;
+}
+
+void PathTrace::update_work_buffer_params_if_needed(const RenderWork &render_work)
+{
+  if (render_state_.need_reset_params) {
+    update_allocated_work_buffer_params();
   }
 
-  full_render_buffers_->zero();
-  buffer_read();
+  if (render_state_.need_reset_params ||
+      render_state_.resolution_divider != render_work.resolution_divider) {
+    update_effective_work_buffer_params(render_work);
+  }
+
+  render_state_.resolution_divider = render_work.resolution_divider;
+  render_state_.need_reset_params = false;
+}
+
+void PathTrace::init_render_buffers(const RenderWork &render_work)
+{
+  update_work_buffer_params_if_needed(render_work);
+
+  /* Handle initialization scheduled by the render scheduler. */
+  if (render_work.init_render_buffers) {
+    tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+      RenderBuffers *buffers = path_trace_work->get_render_buffers();
+      buffers->zero();
+    });
+
+    buffer_read();
+  }
 }
 
 void PathTrace::path_trace(RenderWork &render_work)
@@ -299,9 +385,41 @@ void PathTrace::denoise(const RenderWork &render_work)
 
   const double start_time = time_dt();
 
-  denoiser_->denoise_buffer(render_state_.scaled_render_buffer_params,
-                            full_render_buffers_.get(),
-                            get_num_samples_in_buffer());
+  RenderBuffers *buffer_to_denoise = nullptr;
+
+  unique_ptr<Device> big_tile_device;
+  unique_ptr<RenderBuffers> big_tile_render_buffers;
+
+  if (path_trace_works_.size() == 1) {
+    buffer_to_denoise = path_trace_works_.front()->get_render_buffers();
+  }
+  else {
+    /* TODO(sergey): Try to reuse the buffer as much as possible. */
+    /* TODO(sergey): Split the functionality into a separate function. */
+
+    /* Used to access stats and profiler. */
+    Device *device_template = path_trace_works_.front()->get_device();
+
+    /* TODO(sergey): Share same device as what will be used by the denoiser. */
+    vector<DeviceInfo> cpu_devices;
+    device_cpu_info(cpu_devices);
+    big_tile_device.reset(
+        device_cpu_create(cpu_devices[0], device_template->stats, device_template->profiler));
+
+    big_tile_render_buffers = make_unique<RenderBuffers>(big_tile_device.get());
+    big_tile_render_buffers->reset(render_state_.effective_big_tile_params);
+
+    buffer_to_denoise = big_tile_render_buffers.get();
+
+    copy_to_render_buffers(big_tile_render_buffers.get());
+  }
+
+  denoiser_->denoise_buffer(
+      render_state_.effective_big_tile_params, buffer_to_denoise, get_num_samples_in_buffer());
+
+  if (big_tile_render_buffers) {
+    copy_from_render_buffers(big_tile_render_buffers.get());
+  }
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
 
@@ -346,13 +464,13 @@ void PathTrace::update_display(const RenderWork &render_work)
 
   VLOG(3) << "Perform copy to GPUDisplay work.";
 
-  const int width = render_state_.scaled_render_buffer_params.width;
-  const int height = render_state_.scaled_render_buffer_params.height;
+  const double start_time = time_dt();
+
+  const int width = render_state_.effective_big_tile_params.width;
+  const int height = render_state_.effective_big_tile_params.height;
   if (width == 0 || height == 0) {
     return;
   }
-
-  const double start_time = time_dt();
 
   const int num_samples = get_num_samples_in_buffer();
 
@@ -364,10 +482,8 @@ void PathTrace::update_display(const RenderWork &render_work)
   const PassMode pass_mode = render_state_.has_denoised_result_ ? PassMode::DENOISED :
                                                                   PassMode::NOISY;
 
-  /* TODO(sergey): In theory we would want to update parts of the buffer from multiple threads.
-   * However, there could be some complications related on how texture buffer is mapped. Depending
-   * on an implementation of GPUDisplay it might not be possible to map GPUBuffer in a way that the
-   * PathTraceWork expects it in a threaded environment. */
+  /* TODO(sergey): When using multi-device rendering map the GPUDisplay once and copy data from all
+   * works in parallel. */
   for (auto &&path_trace_work : path_trace_works_) {
     path_trace_work->copy_to_gpu_display(gpu_display_.get(), pass_mode, num_samples);
   }
@@ -388,31 +504,6 @@ void PathTrace::cancel()
   }
 
   render_cancel_.is_requested = false;
-}
-
-void PathTrace::render_update_resolution_divider(int resolution_divider)
-{
-  if (render_state_.resolution_divider == resolution_divider) {
-    return;
-  }
-  render_state_.resolution_divider = resolution_divider;
-
-  const BufferParams &orig_params = full_render_buffers_->params;
-
-  render_state_.scaled_render_buffer_params = orig_params;
-
-  render_state_.scaled_render_buffer_params.width = max(1, orig_params.width / resolution_divider);
-  render_state_.scaled_render_buffer_params.height = max(1,
-                                                         orig_params.height / resolution_divider);
-  render_state_.scaled_render_buffer_params.full_x = orig_params.full_x / resolution_divider;
-  render_state_.scaled_render_buffer_params.full_y = orig_params.full_y / resolution_divider;
-
-  render_state_.scaled_render_buffer_params.update_offset_stride();
-
-  /* TODO(sergey): Perform slicing of the render buffers for every work. */
-  for (auto &&path_trace_work : path_trace_works_) {
-    path_trace_work->set_effective_buffer_params(render_state_.scaled_render_buffer_params);
-  }
 }
 
 int PathTrace::get_num_samples_in_buffer()
@@ -451,7 +542,10 @@ void PathTrace::buffer_read()
   }
 
   if (buffer_read_cb()) {
-    full_render_buffers_->copy_to_device();
+    tbb::parallel_for_each(path_trace_works_, [](unique_ptr<PathTraceWork> &path_trace_work) {
+      RenderBuffers *buffers = path_trace_work->get_render_buffers();
+      buffers->copy_to_device();
+    });
   }
 }
 
@@ -466,20 +560,56 @@ void PathTrace::progress_update_if_needed()
   }
 }
 
+void PathTrace::copy_to_render_buffers(RenderBuffers *render_buffers)
+{
+  tbb::parallel_for_each(path_trace_works_,
+                         [&render_buffers](unique_ptr<PathTraceWork> &path_trace_work) {
+                           path_trace_work->copy_to_render_buffers(render_buffers);
+                         });
+  render_buffers->copy_to_device();
+}
+
+void PathTrace::copy_from_render_buffers(RenderBuffers *render_buffers)
+{
+  render_buffers->copy_from_device();
+  tbb::parallel_for_each(path_trace_works_,
+                         [&render_buffers](unique_ptr<PathTraceWork> &path_trace_work) {
+                           path_trace_work->copy_from_render_buffers(render_buffers);
+                         });
+}
+
 bool PathTrace::get_render_tile_pixels(const PassAccessor &pass_accessor,
                                        const PassAccessor::Destination &destination)
 {
-  if (!full_render_buffers_->copy_from_device()) {
-    return false;
-  }
+  bool success = true;
 
-  return pass_accessor.get_render_tile_pixels(full_render_buffers_.get(), destination);
+  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+    if (!success) {
+      return;
+    }
+    if (!path_trace_work->get_render_tile_pixels(pass_accessor, destination)) {
+      success = false;
+    }
+  });
+
+  return success;
 }
 
 bool PathTrace::set_render_tile_pixels(PassAccessor &pass_accessor,
                                        const PassAccessor::Source &source)
 {
-  return pass_accessor.set_render_tile_pixels(full_render_buffers_.get(), source);
+  bool success = true;
+
+  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+    if (!success) {
+      return;
+    }
+    if (!path_trace_work->set_render_tile_pixels(pass_accessor, source)) {
+      success = false;
+    }
+  });
+
+  return success;
 }
 
 bool PathTrace::has_denoised_result() const

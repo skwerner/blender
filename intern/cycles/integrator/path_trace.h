@@ -58,10 +58,7 @@ class PathTrace {
    * render result. */
   bool ready_to_reset();
 
-  /* `full_buffer_params` denotes parameters of the entire big tile which is to be path traced.
-   *
-   * TODO(sergey): Streamline terminology. Maybe it should be `big_tile_buffer_params`? */
-  void reset(const BufferParams &full_buffer_params);
+  void reset(const BufferParams &big_tile_params);
 
   /* Set progress tracker.
    * Used to communicate details about the progress to the outer world, check whether rendering is
@@ -99,6 +96,16 @@ class PathTrace {
    * This is a blockign call, which returns as soon as there is no running `render_samples()` call.
    */
   void cancel();
+
+  /* Copy an entire render buffer to/from the oath trace.  */
+
+  /* Copy happens via CPU side buffer: data will be copied from every device of the path trace, and
+   * the data will be copied to the device of the given render buffers. */
+  void copy_to_render_buffers(RenderBuffers *render_buffers);
+
+  /* Copy happens via CPU side buffer: data will be copied from the device of the given rendetr
+   * buffers and will be copied to all devices of the path trace. */
+  void copy_from_render_buffers(RenderBuffers *render_buffers);
 
   /* Get pass data of the entire big tile.
    * This call puts pass render result from all devices into the final pixels storage.
@@ -151,8 +158,12 @@ class PathTrace {
   /* Initialize kernel execution on all integrator queues. */
   void render_init_kernel_execution();
 
-  /* Update the render state to possibly changed resolution divider. */
-  void render_update_resolution_divider(int resolution_divider);
+  /* Make sure both allocated and effective buffer parameters of path tracer works are up to date
+   * with the current big tile parameters, performance-dependent slicing, and resolution divider.
+   */
+  void update_work_buffer_params_if_needed(const RenderWork &render_work);
+  void update_allocated_work_buffer_params();
+  void update_effective_work_buffer_params(const RenderWork &render_work);
 
   /* Perform various steps of the render work.
    *
@@ -192,13 +203,8 @@ class PathTrace {
    * device. */
   vector<unique_ptr<PathTraceWork>> path_trace_works_;
 
-  /* Render buffer which corresponds to the big tile.
-   * It is used to accumulate work from all rendering devices, and to communicate render result
-   * to the render session.
-   *
-   * TODO(sergey): This is actually a subject for reconsideration when multi-device support will be
-   * added. */
-  unique_ptr<RenderBuffers> full_render_buffers_;
+  /* Render buffer parameters of the  the big tile. */
+  BufferParams big_tile_params_;
 
   /* Denoiser which takes care of denoising the big tile. */
   unique_ptr<Denoiser> denoiser_;
@@ -207,6 +213,10 @@ class PathTrace {
    * Is brought up to date in the `render()` call and is accessed from all the steps involved into
    * rendering the work. */
   struct {
+    /* Denotes whether render buffers parameters of path trace works are to be reset for the new
+     * value of the big tile parameters. */
+    bool need_reset_params = false;
+
     /* Divider of the resolution for faster previews.
      *
      * Allows to re-use same render buffer, but have less pixels rendered into in it. The way to
@@ -214,9 +224,8 @@ class PathTrace {
      * affects both resolution and stride as visible by the integrator kernels. */
     int resolution_divider = 0;
 
-    /* Parameters of render buffers which corresponds to full render buffers divided by the
-     * resolution divider. */
-    BufferParams scaled_render_buffer_params;
+    /* Paramaters of the big tile with the current resolution divider applied. */
+    BufferParams effective_big_tile_params;
 
     /* Denosier was run and there are denoised versions of the passes in the render buffers. */
     bool has_denoised_result_ = false;

@@ -372,22 +372,35 @@ void BlenderGPUDisplay::do_update_end()
  * Texture update from CPU buffer.
  */
 
-void BlenderGPUDisplay::do_copy_pixels_to_texture(const half4 *rgba_pixels)
+void BlenderGPUDisplay::do_copy_pixels_to_texture(
+    const half4 *rgba_pixels, int texture_x, int texture_y, int pixels_width, int pixels_height)
 {
   /* This call copies pixels to a Pixel Buffer Object (PBO) which is much cheaper from CPU time
    * point of view than to copy data directly to the OpenGL texture.
    *
    * The possible downside of this approach is that it might require a higher peak memory when
    * doing partial updates of the texture (although, in practice even partial updates might peak
-   * with a full-frame buffer stored on the CPU if the GPU is currently occupied), */
+   * with a full-frame buffer stored on the CPU if the GPU is currently occupied). */
 
   half4 *mapped_rgba_pixels = map_texture_buffer();
   if (!mapped_rgba_pixels) {
     return;
   }
 
-  const size_t size_in_bytes = sizeof(half4) * texture_.width * texture_.height;
-  memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
+  if (texture_x == 0 && texture_y == 0 && pixels_width == texture_.width &&
+      pixels_height == texture_.height) {
+    const size_t size_in_bytes = sizeof(half4) * texture_.width * texture_.height;
+    memcpy(mapped_rgba_pixels, rgba_pixels, size_in_bytes);
+  }
+  else {
+    const half4 *rgba_row = rgba_pixels;
+    half4 *mapped_rgba_row = mapped_rgba_pixels + texture_y * texture_.width;
+    for (int y = 0; y < pixels_height;
+         ++y, rgba_row += pixels_width, mapped_rgba_row += texture_.width) {
+      memcpy(mapped_rgba_row, rgba_row, sizeof(half4) * pixels_width);
+    }
+  }
+
   unmap_texture_buffer();
 }
 

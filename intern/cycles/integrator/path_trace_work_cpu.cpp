@@ -53,9 +53,8 @@ static inline CPUKernelThreadGlobals *kernel_thread_globals_get(
 
 PathTraceWorkCPU::PathTraceWorkCPU(Device *device,
                                    DeviceScene *device_scene,
-                                   RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
+    : PathTraceWork(device, device_scene, cancel_requested_flag),
       kernels_(*(device->get_cpu_kernels()))
 {
   DCHECK_EQ(device->info.type, DEVICE_CPU);
@@ -154,16 +153,21 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
     return;
   }
 
+  const int offset_y = effective_buffer_params_.full_y - effective_big_tile_params_.full_y;
+  const int width = effective_buffer_params_.width;
+
   const KernelFilm &kfilm = device_scene_->data.film;
 
   const PassAccessor::PassAccessInfo pass_access_info = get_display_pass_access_info(pass_mode);
 
   const PassAccessorCPU pass_accessor(pass_access_info, kfilm.exposure, num_samples);
-  const PassAccessor::Destination destination(pass_access_info.type, rgba_half);
+
+  PassAccessor::Destination destination(pass_access_info.type, rgba_half);
+  destination.offset = offset_y * width;
 
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
-    pass_accessor.get_render_tile_pixels(buffers_, effective_buffer_params_, destination);
+    pass_accessor.get_render_tile_pixels(buffers_.get(), effective_buffer_params_, destination);
   });
 
   gpu_display->unmap_texture_buffer();

@@ -354,7 +354,7 @@ bool PassAccessor::set_render_tile_pixels(RenderBuffers *render_buffers, const S
   const int num_components = source.num_components;
 
   float *out = buffer_data + pass_access_info_.offset;
-  const float *in = source.pixels;
+  const float *in = source.pixels + source.offset * num_components;
 
   for (int i = 0; i < size; i++, out += pass_stride, in += num_components) {
     memcpy(out, in, sizeof(float) * num_components);

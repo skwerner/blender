@@ -449,6 +449,7 @@ ccl_device_inline void kernel_cuda_film_convert_common(const KernelFilmConvert *
                                                        int num_pixels,
                                                        int offset,
                                                        int stride,
+                                                       int dst_offset,
                                                        const Processor &processor)
 {
   const int render_pixel_index = ccl_global_id(0);
@@ -458,7 +459,8 @@ ccl_device_inline void kernel_cuda_film_convert_common(const KernelFilmConvert *
 
   const uint64_t render_buffer_offset = (uint64_t)render_pixel_index * kfilm_convert->pass_stride;
   ccl_global const float *buffer = render_buffer + render_buffer_offset;
-  ccl_global float *pixel = pixels + render_pixel_index * kfilm_convert->num_components;
+  ccl_global float *pixel = pixels +
+                            (render_pixel_index + dst_offset) * kfilm_convert->num_components;
 
   processor(kfilm_convert, buffer, pixel);
 }
@@ -472,6 +474,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_rgba(
     int num_pixels,
     int offset,
     int stride,
+    int rgba_offset,
     const Processor &processor)
 {
   const int render_pixel_index = ccl_global_id(0);
@@ -487,7 +490,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_rgba(
 
   film_apply_pass_pixel_overlays_rgba(kfilm_convert, buffer, pixel);
 
-  ccl_global half *out = (ccl_global half *)rgba + render_pixel_index * 4;
+  ccl_global half *out = (ccl_global half *)rgba + (rgba_offset + render_pixel_index) * 4;
   float4_store_half(out, make_float4(pixel[0], pixel[1], pixel[2], pixel[3]));
 }
 
@@ -500,6 +503,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_rgb(
     int num_pixels,
     int offset,
     int stride,
+    int rgba_offset,
     const Processor &processor)
 {
   kernel_cuda_film_convert_half_rgba_common_rgba(
@@ -509,6 +513,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_rgb(
       num_pixels,
       offset,
       stride,
+      rgba_offset,
       [&processor](const KernelFilmConvert *kfilm_convert,
                    ccl_global const float *buffer,
                    float *pixel_rgba) {
@@ -526,6 +531,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
     int num_pixels,
     int offset,
     int stride,
+    int rgba_offset,
     const Processor &processor)
 {
   kernel_cuda_film_convert_half_rgba_common_rgba(
@@ -535,6 +541,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
       num_pixels,
       offset,
       stride,
+      rgba_offset,
       [&processor](const KernelFilmConvert *kfilm_convert,
                    ccl_global const float *buffer,
                    float *pixel_rgba) {
@@ -552,14 +559,15 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
     extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS, \
                                                   CUDA_KERNEL_MAX_REGISTERS) name
 
-#  define KERNEL_FILM_CONVERT_DEFINE_HALF_RGBA(variant, channels) \
+#  define KERNEL_FILM_CONVERT_DEFINE(variant, channels) \
     KERNEL_FILM_CONVERT_PROC(kernel_cuda_film_convert_##variant) \
     (const KernelFilmConvert kfilm_convert, \
      float *pixels, \
      float *render_buffer, \
      int num_pixels, \
      int offset, \
-     int stride) \
+     int stride, \
+     int rgba_offset) \
     { \
       kernel_cuda_film_convert_common(&kfilm_convert, \
                                       pixels, \
@@ -567,6 +575,7 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
                                       num_pixels, \
                                       offset, \
                                       stride, \
+                                      rgba_offset, \
                                       film_get_pass_pixel_##variant); \
     } \
     KERNEL_FILM_CONVERT_PROC(kernel_cuda_film_convert_##variant##_half_rgba) \
@@ -575,7 +584,8 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
      float *render_buffer, \
      int num_pixels, \
      int offset, \
-     int stride) \
+     int stride, \
+     int rgba_offset) \
     { \
       kernel_cuda_film_convert_half_rgba_common_##channels(&kfilm_convert, \
                                                            rgba, \
@@ -583,11 +593,9 @@ ccl_device_inline void kernel_cuda_film_convert_half_rgba_common_value(
                                                            num_pixels, \
                                                            offset, \
                                                            stride, \
+                                                           rgba_offset, \
                                                            film_get_pass_pixel_##variant); \
     }
-
-#  define KERNEL_FILM_CONVERT_DEFINE(variant, channels) \
-    KERNEL_FILM_CONVERT_DEFINE_HALF_RGBA(variant, channels)
 
 KERNEL_FILM_CONVERT_DEFINE(depth, value)
 KERNEL_FILM_CONVERT_DEFINE(mist, value)

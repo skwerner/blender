@@ -36,10 +36,7 @@ struct KernelWorkTile;
  * This implementation suits best devices which have a lot of integrator states, such as GPU. */
 class PathTraceWorkGPU : public PathTraceWork {
  public:
-  PathTraceWorkGPU(Device *device,
-                   DeviceScene *device_scene,
-                   RenderBuffers *buffers,
-                   bool *cancel_requested_flag);
+  PathTraceWorkGPU(Device *device, DeviceScene *device_scene, bool *cancel_requested_flag);
 
   virtual void init_execution() override;
 
@@ -80,6 +77,9 @@ class PathTraceWorkGPU : public PathTraceWork {
    * For the shadow catcher case we limit number of camera rays to make it so split is possible.
    * If there are no shadow catcher in the scene, it the same as `max_num_paths_`. */
   int get_max_num_camera_paths() const;
+
+  /* Check whether graphics interop can be used for the GPUDisplay update. */
+  bool should_use_graphics_interop();
 
   /* Naive implementation of the `copy_to_gpu_display()` which performs film conversion on the
    * device, then copies pixels to the host and pushes them to the `gpu_display`. */

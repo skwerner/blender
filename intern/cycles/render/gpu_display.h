@@ -69,6 +69,11 @@ class GPUDisplay {
    * This call will configure parameters for a changed buffer and reset the texture state. */
   void reset(const BufferParams &buffer_params);
 
+  const GPUDisplayParams &get_params() const
+  {
+    return params_;
+  }
+
   /* --------------------------------------------------------------------
    * Update procedure.
    *
@@ -94,15 +99,14 @@ class GPUDisplay {
    * efficient one.
    */
 
-  /* Copy rendered pixels from path tracer to a GPU texture.
+  /* Copy buffer of rendered pixels of a given size into a given position of the texture.
    *
-   * The reason for this is is to allow use of this function for partial updates from different
-   * devices. In this case the caller will acquire the lock once, update all the slices and release
+   * This function does not acquire a lock. The reason for this is is to allow use of this function
+   * for partial updates from different devices. In this case the caller will acquire the lock
+   * once, update all the slices and release
    * the lock once. This will ensure that draw() will never use partially updated texture. */
-  /* TODO(sergey): Specify parameters which will allow to do partial updates, which will be needed
-   * to update the texture from multiple devices. */
-  /* TODO(sergey): Do we need to support uint8 data type? */
-  void copy_pixels_to_texture(const half4 *rgba_pixels);
+  void copy_pixels_to_texture(
+      const half4 *rgba_pixels, int texture_x, int texture_y, int pixels_width, int pixels_height);
 
   /* --------------------------------------------------------------------
    * Texture buffer mapping.
@@ -161,7 +165,11 @@ class GPUDisplay {
   virtual bool do_update_begin(int texture_width, int texture_height) = 0;
   virtual void do_update_end() = 0;
 
-  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels) = 0;
+  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels,
+                                         int texture_x,
+                                         int texture_y,
+                                         int pixels_width,
+                                         int pixels_height) = 0;
   virtual void do_draw() = 0;
 
   virtual half4 *do_map_texture_buffer() = 0;

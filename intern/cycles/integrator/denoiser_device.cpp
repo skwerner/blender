@@ -60,7 +60,20 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
 /* Check whether given device is single (not a MultiDevice) and supports requested denoiser. */
 static bool is_single_supported_device(Device *device, DenoiserType type)
 {
-  return (device->info.type != DEVICE_MULTI) && (device->info.denoisers & type);
+  if (device->info.type == DEVICE_MULTI) {
+    /* Assume multi-device is never created with a single sub-device.
+     * If one requests such configuration it should be checked on the session level. */
+    return false;
+  }
+
+  if (!device->info.multi_devices.empty()) {
+    /* Some configurations will use multi_devices, but keep the type of an individual device.
+     * This does simplify checks for homogenous setups, but here we really need a single device. */
+    return false;
+  }
+
+  /* Check the denoiser type is supported. */
+  return (device->info.denoisers & type);
 }
 
 /* Find best suitable device to perform denoiser on. Will iterate over possible sub-devices of

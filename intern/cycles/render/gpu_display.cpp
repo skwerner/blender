@@ -95,7 +95,8 @@ void GPUDisplay::update_end()
  * Texture update from CPU buffer.
  */
 
-void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels)
+void GPUDisplay::copy_pixels_to_texture(
+    const half4 *rgba_pixels, int texture_x, int texture_y, int pixels_width, int pixels_height)
 {
   DCHECK(update_state_.is_active);
 
@@ -105,7 +106,7 @@ void GPUDisplay::copy_pixels_to_texture(const half4 *rgba_pixels)
   }
 
   mark_texture_updated();
-  do_copy_pixels_to_texture(rgba_pixels);
+  do_copy_pixels_to_texture(rgba_pixels, texture_x, texture_y, pixels_width, pixels_height);
 }
 
 /* --------------------------------------------------------------------

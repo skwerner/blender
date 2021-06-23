@@ -104,7 +104,11 @@ class BlenderGPUDisplay : public GPUDisplay {
   virtual bool do_update_begin(int texture_width, int texture_height) override;
   virtual void do_update_end() override;
 
-  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels) override;
+  virtual void do_copy_pixels_to_texture(const half4 *rgba_pixels,
+                                         int texture_x,
+                                         int texture_y,
+                                         int pixels_width,
+                                         int pixels_height) override;
   virtual void do_draw() override;
 
   virtual half4 *do_map_texture_buffer() override;

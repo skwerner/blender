@@ -39,10 +39,7 @@ class CPUKernels;
  * queues on the render device which makes this work be only usable on CPU. */
 class PathTraceWorkCPU : public PathTraceWork {
  public:
-  PathTraceWorkCPU(Device *device,
-                   DeviceScene *device_scene,
-                   RenderBuffers *buffers,
-                   bool *cancel_requested_flag);
+  PathTraceWorkCPU(Device *device, DeviceScene *device_scene, bool *cancel_requested_flag);
 
   virtual void init_execution() override;
 

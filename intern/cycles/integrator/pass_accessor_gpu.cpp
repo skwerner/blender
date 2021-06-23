@@ -51,7 +51,8 @@ void PassAccessorGPU::run_film_convert_kernels(DeviceKernel kernel,
                     const_cast<device_ptr *>(&render_buffers->buffer.device_pointer),
                     const_cast<int *>(&work_size),
                     const_cast<int *>(&buffer_params.offset),
-                    const_cast<int *>(&buffer_params.stride)};
+                    const_cast<int *>(&buffer_params.stride),
+                    const_cast<int *>(&destination.offset)};
 
     queue_->enqueue(kernel, work_size, args);
   }
@@ -63,7 +64,8 @@ void PassAccessorGPU::run_film_convert_kernels(DeviceKernel kernel,
                     const_cast<device_ptr *>(&render_buffers->buffer.device_pointer),
                     const_cast<int *>(&work_size),
                     const_cast<int *>(&buffer_params.offset),
-                    const_cast<int *>(&buffer_params.stride)};
+                    const_cast<int *>(&buffer_params.stride),
+                    const_cast<int *>(&destination.offset)};
 
     queue_->enqueue(kernel_half_float, work_size, args);
   }

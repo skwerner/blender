@@ -32,9 +32,8 @@ CCL_NAMESPACE_BEGIN
 
 PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
                                    DeviceScene *device_scene,
-                                   RenderBuffers *buffers,
                                    bool *cancel_requested_flag)
-    : PathTraceWork(device, device_scene, buffers, cancel_requested_flag),
+    : PathTraceWork(device, device_scene, cancel_requested_flag),
       queue_(device->gpu_queue_create()),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
       integrator_shader_sort_counter_(device, "integrator_shader_sort_counter", MEM_READ_WRITE),
@@ -629,14 +628,16 @@ int PathTraceWorkGPU::get_max_num_camera_paths() const
   return max_num_paths_;
 }
 
-void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display,
-                                           PassMode pass_mode,
-                                           int num_samples)
+bool PathTraceWorkGPU::should_use_graphics_interop()
 {
-  if (device_->have_error()) {
-    /* Don't attempt to update GPU display if the device has errors: the error state will make
-     * wrong decisions to happen about interop, causing more chained bugs. */
-    return;
+  /* There are few aspects with the graphics interop when using multiple devices caused by the fact
+   * that the GPUDisplay has a single texture:
+   *
+   *   CUDA will return `CUDA_ERROR_NOT_SUPPORTED` from `cuGraphicsGLRegisterBuffer()` when
+   *   attempting to register OpenGL PBO which has been mapped. Which makes sense, because
+   *   otherwise one would run into a conflict of where the source of truth is. */
+  if (has_multiple_works()) {
+    return false;
   }
 
   if (!interop_use_checked_) {
@@ -653,10 +654,26 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display,
     interop_use_checked_ = true;
   }
 
-  if (interop_use_) {
+  return interop_use_;
+}
+
+void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display,
+                                           PassMode pass_mode,
+                                           int num_samples)
+{
+  if (device_->have_error()) {
+    /* Don't attempt to update GPU display if the device has errors: the error state will make
+     * wrong decisions to happen about interop, causing more chained bugs. */
+    return;
+  }
+
+  if (should_use_graphics_interop()) {
     if (copy_to_gpu_display_interop(gpu_display, pass_mode, num_samples)) {
       return;
     }
+
+    /* If error happens when trying to use graphics interop fallback to the native implementation
+     * and don't attempt to use interop for the further updates. */
     interop_use_ = false;
   }
 
@@ -667,8 +684,15 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
                                                  PassMode pass_mode,
                                                  int num_samples)
 {
+  const int full_x = effective_buffer_params_.full_x;
+  const int full_y = effective_buffer_params_.full_y;
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
   const int final_width = buffers_->params.width;
   const int final_height = buffers_->params.height;
+
+  const int texture_x = full_x - effective_big_tile_params_.full_x;
+  const int texture_y = full_y - effective_big_tile_params_.full_y;
 
   /* Re-allocate display memory if needed, and make sure the device pointer is allocated.
    *
@@ -687,7 +711,8 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
 
   gpu_display_rgba_half_.copy_from_device();
 
-  gpu_display->copy_pixels_to_texture(gpu_display_rgba_half_.data());
+  gpu_display->copy_pixels_to_texture(
+      gpu_display_rgba_half_.data(), texture_x, texture_y, width, height);
 }
 
 bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
@@ -706,6 +731,10 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
   if (!d_rgba_half) {
     return false;
   }
+
+  /* TODO(sergey): Take offset within the big tile into account.
+   * Can not test this currently because interop returns "NOT SUPPORTED" for some reason. Need to
+   * fix that first. */
 
   run_film_convert(d_rgba_half, pass_mode, num_samples);
 
@@ -726,7 +755,7 @@ void PathTraceWorkGPU::run_film_convert(device_ptr d_rgba_half,
   PassAccessor::Destination destination(pass_access_info.type);
   destination.d_pixels_half_rgba = d_rgba_half;
 
-  pass_accessor.get_render_tile_pixels(buffers_, effective_buffer_params_, destination);
+  pass_accessor.get_render_tile_pixels(buffers_.get(), effective_buffer_params_, destination);
 }
 
 int PathTraceWorkGPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)

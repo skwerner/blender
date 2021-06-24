@@ -629,6 +629,12 @@ void PathTraceWorkGPU::copy_to_gpu_display(GPUDisplay *gpu_display,
                                            PassMode pass_mode,
                                            int num_samples)
 {
+  if (device_->have_error()) {
+    /* Don't attempt to update GPU display if the device has errors: the error state will make
+     * wrong decisions to happen about interop, causing more chained bugs. */
+    return;
+  }
+
   if (!interop_use_checked_) {
     Device *device = queue_->device;
     interop_use_ = device->should_use_graphics_interop();

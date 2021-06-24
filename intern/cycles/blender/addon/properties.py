@@ -708,11 +708,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
 
     debug_use_cuda_adaptive_compile: BoolProperty(name="Adaptive Compile", default=False)
 
-    debug_use_optix_curves_api: BoolProperty(
-        name="Native OptiX Curve Primitive",
-        description="Use OptiX curves API for hair instead of custom implementation",
-        default=False
-    )
     debug_use_optix_debug: BoolProperty(
         name="OptiX Module Debug",
         description="Load OptiX module in debug mode: lower logging verbosity level, enable validations, and lower optimization level",

@@ -100,9 +100,6 @@ class DebugFlags {
     /* Reset flags to their defaults. */
     void reset();
 
-    /* Use OptiX curves API for hair instead of custom implementation. */
-    bool use_curves_api;
-
     /* Load OptiX module with debug capabilities. Will lower logging verbosity level, enable
      * validations, and lower optimization level. */
     bool use_debug;

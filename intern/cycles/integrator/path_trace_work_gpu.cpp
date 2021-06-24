@@ -50,6 +50,11 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       max_active_path_index_(0)
 {
   memset(&integrator_state_gpu_, 0, sizeof(integrator_state_gpu_));
+
+  /* Limit number of active paths to the half of the overall state. This is due to the logic in the
+   * path compaction which relies on the fact that regeneration does not happen sooner than half of
+   * the states are available again. */
+  min_num_active_paths_ = min(min_num_active_paths_, max_num_paths_ / 2);
 }
 
 void PathTraceWorkGPU::alloc_integrator_soa()

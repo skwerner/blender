@@ -657,8 +657,6 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
                                                  PassMode pass_mode,
                                                  int num_samples)
 {
-  const int width = effective_buffer_params_.width;
-  const int height = effective_buffer_params_.height;
   const int final_width = render_buffers_->params.width;
   const int final_height = render_buffers_->params.height;
 
@@ -669,7 +667,7 @@ void PathTraceWorkGPU::copy_to_gpu_display_naive(GPUDisplay *gpu_display,
    * allocated memory as well. */
   if (gpu_display_rgba_half_.data_width != final_width ||
       gpu_display_rgba_half_.data_height != final_height) {
-    gpu_display_rgba_half_.alloc(width, height);
+    gpu_display_rgba_half_.alloc(final_width, final_height);
     /* TODO(sergey): There should be a way to make sure device-side memory is allocated without
      * transfering zeroes to the device. */
     queue_->zero_to_device(gpu_display_rgba_half_);

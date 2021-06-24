@@ -72,7 +72,6 @@ typedef struct RegionView3D {
   /** Allocated backup of its self while in localview. */
   struct RegionView3D *localvd;
   struct RenderEngine *render_engine;
-  struct ViewDepths *depths;
 
   /** Animated smooth view. */
   struct SmoothView3DStore *sms;
@@ -102,7 +101,7 @@ typedef struct RegionView3D {
   /** Viewport zoom on the camera frame, see BKE_screen_view3d_zoom_to_fac. */
   float camzoom;
   /**
-   * Check if persp/ortho view, since 'persp' cant be used for this since
+   * Check if persp/ortho view, since 'persp' can't be used for this since
    * it can have cameras assigned as well. (only set in #view3d_winmatrix_set)
    */
   char is_persp;
@@ -258,6 +257,8 @@ typedef struct View3D_Runtime {
   int flag;
 
   char _pad1[4];
+  /* Only used for overlay stats while in localview. */
+  struct SceneStats *local_stats;
 } View3D_Runtime;
 
 /** 3D ViewPort Struct. */
@@ -367,7 +368,7 @@ typedef struct View3D {
 #define V3D_LOCAL_COLLECTIONS (1 << 0)
 #define V3D_FLAG_UNUSED_1 (1 << 1) /* cleared */
 #define V3D_HIDE_HELPLINES (1 << 2)
-#define V3D_INVALID_BACKBUF (1 << 3)
+#define V3D_FLAG_UNUSED_2 (1 << 3) /* cleared */
 #define V3D_XR_SESSION_MIRROR (1 << 4)
 
 #define V3D_FLAG_UNUSED_10 (1 << 10) /* cleared */
@@ -380,6 +381,8 @@ typedef struct View3D {
 enum {
   /** The 3D view which the XR session was created in is flagged with this. */
   V3D_RUNTIME_XR_SESSION_ROOT = (1 << 0),
+  /** Some operators override the depth buffer for dedicated occlusion operations. */
+  V3D_RUNTIME_DEPTHBUF_OVERRIDDEN = (1 << 1),
 };
 
 /** #RegionView3D.persp */

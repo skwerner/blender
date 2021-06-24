@@ -15,19 +15,20 @@
 #
 
 # <pep8 compliant>
+from __future__ import annotations
 
 
 def _is_using_buggy_driver():
-    import bgl
+    import gpu
     # We need to be conservative here because in multi-GPU systems display card
     # might be quite old, but others one might be just good.
     #
     # So We shouldn't disable possible good dedicated cards just because display
     # card seems weak. And instead we only blacklist configurations which are
     # proven to cause problems.
-    if bgl.glGetString(bgl.GL_VENDOR) == "ATI Technologies Inc.":
+    if gpu.platform.vendor_get() == "ATI Technologies Inc.":
         import re
-        version = bgl.glGetString(bgl.GL_VERSION)
+        version = gpu.platform.version_get()
         if version.endswith("Compatibility Profile Context"):
             # Old HD 4xxx and 5xxx series drivers did not have driver version
             # in the version string, but those cards do not quite work and
@@ -131,7 +132,7 @@ def init():
         _workaround_buggy_drivers()
 
     path = os.path.dirname(__file__)
-    user_path = os.path.dirname(os.path.abspath(bpy.utils.user_resource('CONFIG', '')))
+    user_path = os.path.dirname(os.path.abspath(bpy.utils.user_resource('CONFIG', path='')))
 
     _cycles.init(path, user_path, bpy.app.background)
     _parse_command_line()
@@ -282,7 +283,7 @@ def list_render_passes(scene, srl):
             yield ("CryptoAsset" + '{:02d}'.format(i), "RGBA", 'COLOR')
 
     # Denoising passes.
-    if crl.use_denoising or crl.denoising_store_passes:
+    if (scene.cycles.use_denoising and crl.use_denoising) or crl.denoising_store_passes:
         yield ("Noisy Image", "RGBA", 'COLOR')
         if crl.denoising_store_passes:
             yield ("Denoising Normal",          "XYZ", 'VECTOR')
@@ -301,7 +302,7 @@ def list_render_passes(scene, srl):
                     yield ("Denoising Clean", "RGB", 'COLOR')
 
     # Custom AOV passes.
-    for aov in crl.aovs:
+    for aov in srl.aovs:
         if aov.type == 'VALUE':
             yield (aov.name, "X", 'VALUE')
         else:
@@ -309,22 +310,5 @@ def list_render_passes(scene, srl):
 
 
 def register_passes(engine, scene, view_layer):
-    # Detect duplicate render pass names, first one wins.
-    listed = set()
     for name, channelids, channeltype in list_render_passes(scene, view_layer):
-        if name not in listed:
-            engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)
-            listed.add(name)
-
-
-def detect_conflicting_passes(scene, view_layer):
-    # Detect conflicting render pass names for UI.
-    counter = {}
-    for name, _, _ in list_render_passes(scene, view_layer):
-        counter[name] = counter.get(name, 0) + 1
-
-    for aov in view_layer.cycles.aovs:
-        if counter[aov.name] > 1:
-            aov.conflict = "Conflicts with another render pass with the same name"
-        else:
-            aov.conflict = ""
+        engine.register_pass(scene, view_layer, name, len(channelids), channelids, channeltype)

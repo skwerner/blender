@@ -56,6 +56,13 @@ void createTransCursor_image(TransInfo *t)
   }
 
   td->flag = TD_SELECTED;
+
+  /* UV coords are scaled by aspects (see UVsToTransData). This also applies for the Cursor in the
+   * UV Editor which also means that for display and when the cursor coords are flushed
+   * (recalcData_cursor_image), these are converted each time. */
+  cursor_location[0] = cursor_location[0] * t->aspect[0];
+  cursor_location[1] = cursor_location[1] * t->aspect[1];
+
   copy_v3_v3(td->center, cursor_location);
   td->ob = NULL;
 
@@ -124,6 +131,32 @@ void createTransCursor_view3d(TransInfo *t)
     copy_qt_qt(td->ext->iquat, cursor->rotation_quaternion);
   }
   td->ext->rotOrder = cursor->rotation_mode;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Recalc Cursor
+ * \{ */
+
+void recalcData_cursor_image(TransInfo *t)
+{
+  TransDataContainer *tc = t->data_container;
+  TransData *td = tc->data;
+  float aspect_inv[2];
+
+  aspect_inv[0] = 1.0f / t->aspect[0];
+  aspect_inv[1] = 1.0f / t->aspect[1];
+
+  td->loc[0] = td->loc[0] * aspect_inv[0];
+  td->loc[1] = td->loc[1] * aspect_inv[1];
+
+  DEG_id_tag_update(&t->scene->id, ID_RECALC_COPY_ON_WRITE);
+}
+
+void recalcData_cursor(TransInfo *t)
+{
+  DEG_id_tag_update(&t->scene->id, ID_RECALC_COPY_ON_WRITE);
 }
 
 /** \} */

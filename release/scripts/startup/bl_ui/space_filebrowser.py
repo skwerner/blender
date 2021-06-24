@@ -40,7 +40,11 @@ class FILEBROWSER_HT_header(Header):
         row.prop(params, "asset_library", text="")
         # External libraries don't auto-refresh, add refresh button.
         if params.asset_library != 'LOCAL':
-            row.operator("file.refresh", text="", icon="FILE_REFRESH")
+            row.operator("file.refresh", text="", icon='FILE_REFRESH')
+
+        layout.separator_spacer()
+
+        layout.prop(params, "import_type", text="")
 
         layout.separator_spacer()
 
@@ -197,7 +201,8 @@ class FILEBROWSER_PT_filter(Panel):
 
                 sub = row.column(align=True)
 
-                sub.prop(params, "use_filter_asset_only")
+                if context.preferences.experimental.use_asset_browser:
+                    sub.prop(params, "use_filter_asset_only")
 
                 filter_id = params.filter_id
                 for identifier in dir(filter_id):
@@ -390,7 +395,8 @@ class FILEBROWSER_PT_advanced_filter(Panel):
                 layout.separator()
                 col = layout.column(align=True)
 
-                col.prop(params, "use_filter_asset_only")
+                if context.preferences.experimental.use_asset_browser:
+                    col.prop(params, "use_filter_asset_only")
 
                 filter_id = params.filter_id
                 for identifier in dir(filter_id):
@@ -492,6 +498,7 @@ class FILEBROWSER_MT_view(Menu):
 
         layout.prop(st, "show_region_toolbar", text="Source List")
         layout.prop(st, "show_region_ui", text="File Path")
+        layout.operator("file.view_selected")
 
         layout.separator()
 
@@ -589,7 +596,7 @@ class ASSETBROWSER_PT_metadata(asset_utils.AssetBrowserPanel, Panel):
         active_asset = asset_utils.SpaceAssetInfo.get_active_asset(context)
 
         if not active_file or not active_asset:
-            layout.label(text="No asset selected.", icon='INFO')
+            layout.label(text="No asset selected", icon='INFO')
             return
 
         # If the active file is an ID, use its name directly so renaming is possible from right here.

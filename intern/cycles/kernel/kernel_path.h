@@ -65,7 +65,6 @@ ccl_device_forceinline bool kernel_path_scene_intersect(KernelGlobals *kg,
   uint visibility = path_state_ray_visibility(kg, state);
 
   if (path_state_ao_bounce(kg, state)) {
-    visibility = PATH_RAY_SHADOW;
     ray->t = kernel_data.background.ao_distance;
   }
 
@@ -267,7 +266,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
     if (state->flag & PATH_RAY_TRANSPARENT_BACKGROUND) {
       state->flag |= (PATH_RAY_SHADOW_CATCHER | PATH_RAY_STORE_SHADOW_INFO);
 
-      float3 bg = make_float3(0.0f, 0.0f, 0.0f);
+      float3 bg = zero_float3();
       if (!kernel_data.background.transparent) {
         bg = indirect_background(kg, emission_sd, state, NULL, ray);
       }
@@ -288,7 +287,7 @@ ccl_device_forceinline bool kernel_path_shader_apply(KernelGlobals *kg,
     if (kernel_data.background.transparent) {
       L->transparent += average(holdout_weight * throughput);
     }
-    if (isequal_float3(holdout_weight, make_float3(1.0f, 1.0f, 1.0f))) {
+    if (isequal_float3(holdout_weight, one_float3())) {
       return false;
     }
   }
@@ -416,7 +415,13 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
         break;
       }
       else if (path_state_ao_bounce(kg, state)) {
-        break;
+        if (intersection_get_shader_flags(kg, &isect) &
+            (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+          state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+        }
+        else {
+          break;
+        }
       }
 
       /* Setup shader data. */
@@ -460,7 +465,7 @@ ccl_device void kernel_path_indirect(KernelGlobals *kg,
 #    ifdef __AO__
         /* ambient occlusion */
         if (kernel_data.integrator.use_ambient_occlusion) {
-          kernel_path_ao(kg, sd, emission_sd, L, state, throughput, make_float3(0.0f, 0.0f, 0.0f));
+          kernel_path_ao(kg, sd, emission_sd, L, state, throughput, zero_float3());
         }
 #    endif /* __AO__ */
 
@@ -554,7 +559,13 @@ ccl_device_forceinline void kernel_path_integrate(KernelGlobals *kg,
         break;
       }
       else if (path_state_ao_bounce(kg, state)) {
-        break;
+        if (intersection_get_shader_flags(kg, &isect) &
+            (SD_HAS_TRANSPARENT_SHADOW | SD_HAS_EMISSION)) {
+          state->flag |= PATH_RAY_TERMINATE_AFTER_TRANSPARENT;
+        }
+        else {
+          break;
+        }
       }
 
       /* Setup shader data. */
@@ -670,7 +681,7 @@ ccl_device void kernel_path_trace(
   }
 
   /* Initialize state. */
-  float3 throughput = make_float3(1.0f, 1.0f, 1.0f);
+  float3 throughput = one_float3();
 
   PathRadiance L;
   path_radiance_init(kg, &L);

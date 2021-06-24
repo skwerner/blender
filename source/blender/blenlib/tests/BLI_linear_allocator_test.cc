@@ -1,6 +1,7 @@
 /* Apache License, Version 2.0 */
 
 #include "BLI_linear_allocator.hh"
+#include "BLI_rand.hh"
 #include "BLI_strict_flags.h"
 #include "testing/testing.h"
 
@@ -78,7 +79,7 @@ TEST(linear_allocator, Construct)
   LinearAllocator<> allocator;
 
   std::array<int, 5> values = {1, 2, 3, 4, 5};
-  Vector<int> *vector = allocator.construct<Vector<int>>(values);
+  Vector<int> *vector = allocator.construct<Vector<int>>(values).release();
   EXPECT_EQ(vector->size(), 5);
   EXPECT_EQ((*vector)[3], 4);
   vector->~Vector();
@@ -113,6 +114,39 @@ TEST(linear_allocator, ConstructArrayCopy)
   EXPECT_EQ(span2.size(), 3);
   EXPECT_EQ(span1[1], 2);
   EXPECT_EQ(span2[2], 3);
+}
+
+TEST(linear_allocator, AllocateLarge)
+{
+  LinearAllocator<> allocator;
+  void *buffer1 = allocator.allocate(1024 * 1024, 8);
+  void *buffer2 = allocator.allocate(1024 * 1024, 8);
+  EXPECT_NE(buffer1, buffer2);
+}
+
+TEST(linear_allocator, ManyAllocations)
+{
+  LinearAllocator<> allocator;
+  RandomNumberGenerator rng;
+  for (int i = 0; i < 1000; i++) {
+    int size = rng.get_int32(10000);
+    int alignment = 1 << (rng.get_int32(7));
+    void *buffer = allocator.allocate(size, alignment);
+    EXPECT_NE(buffer, nullptr);
+  }
+}
+
+TEST(linear_allocator, ConstructArray)
+{
+  LinearAllocator<> allocator;
+  MutableSpan<std::string> strings = allocator.construct_array<std::string>(4, "hello");
+  EXPECT_EQ(strings[0], "hello");
+  EXPECT_EQ(strings[1], "hello");
+  EXPECT_EQ(strings[2], "hello");
+  EXPECT_EQ(strings[3], "hello");
+  for (std::string &string : strings) {
+    string.~basic_string();
+  }
 }
 
 }  // namespace blender::tests

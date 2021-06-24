@@ -140,6 +140,24 @@ RenderEngine *RE_engine_create(RenderEngineType *type)
   return engine;
 }
 
+static void engine_depsgraph_free(RenderEngine *engine)
+{
+  if (engine->depsgraph) {
+    /* Need GPU context since this might free GPU buffers. */
+    const bool use_gpu_context = (engine->type->flag & RE_USE_GPU_CONTEXT);
+    if (use_gpu_context) {
+      DRW_render_context_enable(engine->re);
+    }
+
+    DEG_graph_free(engine->depsgraph);
+    engine->depsgraph = NULL;
+
+    if (use_gpu_context) {
+      DRW_render_context_disable(engine->re);
+    }
+  }
+}
+
 void RE_engine_free(RenderEngine *engine)
 {
 #ifdef WITH_PYTHON
@@ -147,6 +165,8 @@ void RE_engine_free(RenderEngine *engine)
     BPY_DECREF_RNA_INVALIDATE(engine->py_instance);
   }
 #endif
+
+  engine_depsgraph_free(engine);
 
   BLI_mutex_end(&engine->update_render_passes_mutex);
 
@@ -194,7 +214,7 @@ static RenderResult *render_result_from_bake(RenderEngine *engine, int x, int y,
         primitive[1] = int_as_float(-1);
       }
       else {
-        primitive[0] = int_as_float(bake_pixel->object_id);
+        primitive[0] = int_as_float(bake_pixel->seed);
         primitive[1] = int_as_float(bake_pixel->primitive_id);
         primitive[2] = bake_pixel->uv[0];
         primitive[3] = bake_pixel->uv[1];
@@ -526,7 +546,7 @@ float RE_engine_get_camera_shift_x(RenderEngine *engine, Object *camera, bool us
 void RE_engine_get_camera_model_matrix(RenderEngine *engine,
                                        Object *camera,
                                        bool use_spherical_stereo,
-                                       float *r_modelmat)
+                                       float r_modelmat[16])
 {
   /* When using spherical stereo, get model matrix without multiview,
    * leaving stereo to be handled by the engine. */
@@ -598,34 +618,94 @@ RenderData *RE_engine_get_render_data(Render *re)
   return &re->r;
 }
 
+bool RE_engine_use_persistent_data(RenderEngine *engine)
+{
+  /* Re-rendering is not supported with GPU contexts, since the GPU context
+   * is destroyed when the render thread exists. */
+  return (engine->re->r.mode & R_PERSISTENT_DATA) && !(engine->type->flag & RE_USE_GPU_CONTEXT);
+}
+
+static bool engine_keep_depsgraph(RenderEngine *engine)
+{
+  /* For persistent data or GPU engines like Eevee, reuse the depsgraph between
+   * view layers and animation frames. For renderers like Cycles that create
+   * their own copy of the scene, persistent data must be explicitly enabled to
+   * keep memory usage low by default. */
+  return (engine->re->r.mode & R_PERSISTENT_DATA) || (engine->type->flag & RE_USE_GPU_CONTEXT);
+}
+
 /* Depsgraph */
 static void engine_depsgraph_init(RenderEngine *engine, ViewLayer *view_layer)
 {
   Main *bmain = engine->re->main;
   Scene *scene = engine->re->scene;
+  bool reuse_depsgraph = false;
 
-  engine->depsgraph = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_RENDER);
-  DEG_debug_name_set(engine->depsgraph, "RENDER");
+  /* Reuse depsgraph from persistent data if possible. */
+  if (engine->depsgraph) {
+    if (DEG_get_bmain(engine->depsgraph) != bmain ||
+        DEG_get_input_scene(engine->depsgraph) != scene) {
+      /* If bmain or scene changes, we need a completely new graph. */
+      engine_depsgraph_free(engine);
+    }
+    else if (DEG_get_input_view_layer(engine->depsgraph) != view_layer) {
+      /* If only view layer changed, reuse depsgraph in the hope of reusing
+       * objects shared between view layers. */
+      DEG_graph_replace_owners(engine->depsgraph, bmain, scene, view_layer);
+      DEG_graph_tag_relations_update(engine->depsgraph);
+    }
+
+    reuse_depsgraph = true;
+  }
+
+  if (!engine->depsgraph) {
+    /* Ensure we only use persistent data for one scene / view layer at a time,
+     * to avoid excessive memory usage. */
+    RE_FreePersistentData(NULL);
+
+    /* Create new depsgraph if not cached with persistent data. */
+    engine->depsgraph = DEG_graph_new(bmain, scene, view_layer, DAG_EVAL_RENDER);
+    DEG_debug_name_set(engine->depsgraph, "RENDER");
+  }
 
   if (engine->re->r.scemode & R_BUTS_PREVIEW) {
+    /* Update for preview render. */
     Depsgraph *depsgraph = engine->depsgraph;
     DEG_graph_relations_update(depsgraph);
+
+    /* Need GPU context since this might free GPU buffers. */
+    const bool use_gpu_context = (engine->type->flag & RE_USE_GPU_CONTEXT) && reuse_depsgraph;
+    if (use_gpu_context) {
+      DRW_render_context_enable(engine->re);
+    }
+
     DEG_evaluate_on_framechange(depsgraph, CFRA);
-    DEG_ids_check_recalc(bmain, depsgraph, scene, view_layer, true);
-    DEG_ids_clear_recalc(bmain, depsgraph);
+
+    if (use_gpu_context) {
+      DRW_render_context_disable(engine->re);
+    }
   }
   else {
-    BKE_scene_graph_update_for_newframe(engine->depsgraph);
+    /* Go through update with full Python callbacks for regular render. */
+    BKE_scene_graph_update_for_newframe_ex(engine->depsgraph, false);
   }
 
   engine->has_grease_pencil = DRW_render_check_grease_pencil(engine->depsgraph);
 }
 
-static void engine_depsgraph_free(RenderEngine *engine)
+static void engine_depsgraph_exit(RenderEngine *engine)
 {
-  DEG_graph_free(engine->depsgraph);
-
-  engine->depsgraph = NULL;
+  if (engine->depsgraph) {
+    if (engine_keep_depsgraph(engine)) {
+      /* Clear recalc flags since the engine should have handled the updates for the currently
+       * rendered framed by now. */
+      DEG_ids_clear_recalc(engine->depsgraph, false);
+    }
+    else {
+      /* Free immediately to save memory. */
+      engine_depsgraph_free(engine);
+    }
+  }
 }
 
 void RE_engine_frame_set(RenderEngine *engine, int frame, float subframe)
@@ -634,12 +714,15 @@ void RE_engine_frame_set(RenderEngine *engine, int frame, float subframe)
     return;
   }
 
+  /* Clear recalc flags before update so engine can detect what changed. */
+  DEG_ids_clear_recalc(engine->depsgraph, false);
+
   Render *re = engine->re;
   double cfra = (double)frame + (double)subframe;
 
   CLAMP(cfra, MINAFRAME, MAXFRAME);
   BKE_scene_frame_set(re->scene, cfra);
-  BKE_scene_graph_update_for_newframe(engine->depsgraph);
+  BKE_scene_graph_update_for_newframe_ex(engine->depsgraph, false);
 
   BKE_scene_camera_switch_update(re->scene);
 }
@@ -663,15 +746,13 @@ bool RE_bake_engine(Render *re,
                     Object *object,
                     const int object_id,
                     const BakePixel pixel_array[],
-                    const BakeImages *bake_images,
-                    const int depth,
+                    const BakeTargets *targets,
                     const eScenePassType pass_type,
                     const int pass_filter,
                     float result[])
 {
   RenderEngineType *type = RE_engines_find(re->r.engine);
   RenderEngine *engine;
-  bool persistent_data = (re->r.mode & R_PERSISTENT_DATA) != 0;
 
   /* set render info */
   re->i.cfra = re->scene->r.cfra;
@@ -707,14 +788,14 @@ bool RE_bake_engine(Render *re,
       type->update(engine, re->main, engine->depsgraph);
     }
 
-    for (int i = 0; i < bake_images->size; i++) {
-      const BakeImage *image = bake_images->data + i;
+    for (int i = 0; i < targets->num_images; i++) {
+      const BakeImage *image = targets->images + i;
 
       engine->bake.pixels = pixel_array + image->offset;
-      engine->bake.result = result + image->offset * depth;
+      engine->bake.result = result + image->offset * targets->num_channels;
       engine->bake.width = image->width;
       engine->bake.height = image->height;
-      engine->bake.depth = depth;
+      engine->bake.depth = targets->num_channels;
       engine->bake.object_id = object_id;
 
       type->bake(
@@ -730,13 +811,13 @@ bool RE_bake_engine(Render *re,
   engine->tile_y = 0;
   engine->flag &= ~RE_ENGINE_RENDERING;
 
+  /* Free depsgraph outside of parts mutex lock, since this locks OpenGL context
+   * while the the UI drawing might also lock the OpenGL context and parts mutex. */
+  engine_depsgraph_free(engine);
   BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
 
-  /* re->engine becomes zero if user changed active render engine during render */
-  if (!persistent_data || !re->engine) {
-    RE_engine_free(engine);
-    re->engine = NULL;
-  }
+  RE_engine_free(engine);
+  re->engine = NULL;
 
   RE_parts_free(re);
   BLI_rw_mutex_unlock(&re->partsmutex);
@@ -758,7 +839,7 @@ static void engine_render_view_layer(Render *re,
 {
   /* Lock UI so scene can't be edited while we read from it in this render thread. */
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 1);
+    re->draw_lock(re->dlh, true);
   }
 
   /* Create depsgraph with scene evaluated at render resolution. */
@@ -774,18 +855,19 @@ static void engine_render_view_layer(Render *re,
   }
 
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 0);
+    re->draw_lock(re->dlh, false);
   }
 
   /* Perform render with engine. */
   if (use_engine) {
-    if (engine->type->flag & RE_USE_GPU_CONTEXT) {
+    const bool use_gpu_context = (engine->type->flag & RE_USE_GPU_CONTEXT);
+    if (use_gpu_context) {
       DRW_render_context_enable(engine->re);
     }
 
     engine->type->render(engine, engine->depsgraph);
 
-    if (engine->type->flag & RE_USE_GPU_CONTEXT) {
+    if (use_gpu_context) {
       DRW_render_context_disable(engine->re);
     }
   }
@@ -801,31 +883,30 @@ static void engine_render_view_layer(Render *re,
   }
 
   /* Free dependency graph, if engine has not done it already. */
-  engine_depsgraph_free(engine);
+  engine_depsgraph_exit(engine);
 }
 
-int RE_engine_render(Render *re, int do_all)
+bool RE_engine_render(Render *re, bool do_all)
 {
   RenderEngineType *type = RE_engines_find(re->r.engine);
-  bool persistent_data = (re->r.mode & R_PERSISTENT_DATA) != 0;
 
   /* verify if we can render */
   if (!type->render) {
-    return 0;
+    return false;
   }
   if ((re->r.scemode & R_BUTS_PREVIEW) && !(type->flag & RE_USE_PREVIEW)) {
-    return 0;
+    return false;
   }
   if (do_all && !(type->flag & RE_USE_POSTPROCESS)) {
-    return 0;
+    return false;
   }
   if (!do_all && (type->flag & RE_USE_POSTPROCESS)) {
-    return 0;
+    return false;
   }
 
   /* Lock drawing in UI during data phase. */
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 1);
+    re->draw_lock(re->dlh, true);
   }
 
   /* update animation here so any render layer animation is applied before
@@ -853,14 +934,14 @@ int RE_engine_render(Render *re, int do_all)
   if (re->result == NULL) {
     /* Clear UI drawing locks. */
     if (re->draw_lock) {
-      re->draw_lock(re->dlh, 0);
+      re->draw_lock(re->dlh, false);
     }
     /* Too small image is handled earlier, here it could only happen if
      * there was no sufficient memory to allocate all passes.
      */
     BKE_report(re->reports, RPT_ERROR, "Failed allocate render result, out of memory");
     G.is_break = true;
-    return 1;
+    return true;
   }
 
   /* set render info */
@@ -903,7 +984,7 @@ int RE_engine_render(Render *re, int do_all)
 
   /* Clear UI drawing locks. */
   if (re->draw_lock) {
-    re->draw_lock(re->dlh, 0);
+    re->draw_lock(re->dlh, false);
   }
 
   /* Render view layers. */
@@ -954,7 +1035,13 @@ int RE_engine_render(Render *re, int do_all)
   }
 
   /* re->engine becomes zero if user changed active render engine during render */
-  if (!persistent_data || !re->engine) {
+  if (!engine_keep_depsgraph(engine) || !re->engine) {
+    /* Free depsgraph outside of parts mutex lock, since this locks OpenGL context
+     * while the the UI drawing might also lock the OpenGL context and parts mutex. */
+    BLI_rw_mutex_unlock(&re->partsmutex);
+    engine_depsgraph_free(engine);
+    BLI_rw_mutex_lock(&re->partsmutex, THREAD_LOCK_WRITE);
+
     RE_engine_free(engine);
     re->engine = NULL;
   }
@@ -978,7 +1065,7 @@ int RE_engine_render(Render *re, int do_all)
   }
 #endif
 
-  return 1;
+  return true;
 }
 
 void RE_engine_update_render_passes(struct RenderEngine *engine,
@@ -1024,9 +1111,8 @@ void RE_engine_free_blender_memory(RenderEngine *engine)
    *
    * TODO(sergey): Find better solution for this.
    */
-  if (engine->has_grease_pencil) {
+  if (engine->has_grease_pencil || engine_keep_depsgraph(engine)) {
     return;
   }
-  DEG_graph_free(engine->depsgraph);
-  engine->depsgraph = NULL;
+  engine_depsgraph_free(engine);
 }

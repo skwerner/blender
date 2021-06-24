@@ -99,6 +99,7 @@ static void cache_file_blend_write(BlendWriter *writer, ID *id, const void *id_a
     cache_file->handle_readers = NULL;
 
     BLO_write_id_struct(writer, CacheFile, id_address, &cache_file->id);
+    BKE_id_blend_write(writer, &cache_file->id);
 
     if (cache_file->adt) {
       BKE_animdata_blend_write(writer, cache_file->adt);
@@ -135,6 +136,7 @@ IDTypeInfo IDType_ID_CF = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = cache_file_blend_write,
     .blend_read_data = cache_file_blend_read_data,
@@ -142,6 +144,8 @@ IDTypeInfo IDType_ID_CF = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* TODO: make this per cache file to avoid global locks. */
@@ -194,6 +198,9 @@ void BKE_cachefile_reader_open(CacheFile *cache_file,
 void BKE_cachefile_reader_free(CacheFile *cache_file, struct CacheReader **reader)
 {
 #ifdef WITH_ALEMBIC
+  /* Multiple modifiers and constraints can call this function concurrently, and
+   * cachefile_handle_free() can also be called at the same time. */
+  BLI_spin_lock(&spin);
   if (*reader != NULL) {
     if (cache_file) {
       BLI_assert(cache_file->id.tag & LIB_TAG_COPIED_ON_WRITE);
@@ -202,13 +209,11 @@ void BKE_cachefile_reader_free(CacheFile *cache_file, struct CacheReader **reade
     CacheReader_free(*reader);
     *reader = NULL;
 
-    /* Multiple modifiers and constraints can call this function concurrently. */
-    BLI_spin_lock(&spin);
     if (cache_file && cache_file->handle_readers) {
       BLI_gset_remove(cache_file->handle_readers, reader, NULL);
     }
-    BLI_spin_unlock(&spin);
   }
+  BLI_spin_unlock(&spin);
 #else
   UNUSED_VARS(cache_file, reader);
 #endif

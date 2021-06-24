@@ -97,7 +97,9 @@
 #include "BKE_unit.h"
 #include "BKE_workspace.h"
 
-#include "SEQ_sequencer.h"
+#include "SEQ_iterator.h"
+#include "SEQ_modifier.h"
+#include "SEQ_utils.h"
 
 /* Only for IMB_BlendMode */
 #include "IMB_imbuf.h"
@@ -707,8 +709,8 @@ static void do_versions_area_ensure_tool_region(Main *bmain,
 static void do_version_bones_split_bbone_scale(ListBase *lb)
 {
   LISTBASE_FOREACH (Bone *, bone, lb) {
-    bone->scale_in_y = bone->scale_in_x;
-    bone->scale_out_y = bone->scale_out_x;
+    bone->scale_in_z = bone->scale_in_x;
+    bone->scale_out_z = bone->scale_out_x;
 
     do_version_bones_split_bbone_scale(&bone->childbase);
   }
@@ -963,7 +965,7 @@ static void do_version_curvemapping_walker(Main *bmain, void (*callback)(CurveMa
     if (scene->ed != NULL) {
       LISTBASE_FOREACH (Sequence *, seq, &scene->ed->seqbase) {
         LISTBASE_FOREACH (SequenceModifierData *, smd, &seq->modifiers) {
-          const SequenceModifierTypeInfo *smti = BKE_sequence_modifier_type_info_get(smd->type);
+          const SequenceModifierTypeInfo *smti = SEQ_modifier_type_info_get(smd->type);
 
           if (smti) {
             if (smd->type == seqModifierType_Curves) {
@@ -1388,7 +1390,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
       }
     }
 
-    /* Cleanup deprecated flag from particlesettings data-blocks. */
+    /* Cleanup deprecated flag from particle-settings data-blocks. */
     for (ParticleSettings *part = bmain->particles.first; part; part = part->id.next) {
       part->draw &= ~PART_DRAW_EMITTER;
     }
@@ -1783,7 +1785,7 @@ void do_versions_after_linking_280(Main *bmain, ReportList *UNUSED(reports))
 static void do_versions_seq_unique_name_all_strips(Scene *sce, ListBase *seqbasep)
 {
   for (Sequence *seq = seqbasep->first; seq != NULL; seq = seq->next) {
-    BKE_sequence_base_unique_name_recursive(&sce->ed->seqbase, seq);
+    SEQ_sequence_base_unique_name_recursive(sce, &sce->ed->seqbase, seq);
     if (seq->seqbase.first != NULL) {
       do_versions_seq_unique_name_all_strips(sce, &seq->seqbase);
     }
@@ -1812,7 +1814,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 1)) {
-    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "bleedexp")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "bleedexp")) {
       for (Light *la = bmain->lights.first; la; la = la->id.next) {
         la->bleedexp = 2.5f;
       }
@@ -1838,7 +1840,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 2)) {
-    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "cascade_max_dist")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "cascade_max_dist")) {
       for (Light *la = bmain->lights.first; la; la = la->id.next) {
         la->cascade_max_dist = 1000.0f;
         la->cascade_count = 4;
@@ -1847,7 +1849,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "contact_dist")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "contact_dist")) {
       for (Light *la = bmain->lights.first; la; la = la->id.next) {
         la->contact_dist = 0.2f;
         la->contact_bias = 0.03f;
@@ -1910,7 +1912,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     FOREACH_NODETREE_END;
 
     if (error & NTREE_DOVERSION_NEED_OUTPUT) {
-      BKE_report(fd->reports, RPT_ERROR, "Eevee material conversion problem. Error in console");
+      BKE_report(fd->reports != NULL ? fd->reports->reports : NULL,
+                 RPT_ERROR,
+                 "Eevee material conversion problem. Error in console");
       printf(
           "You need to connect Principled and Eevee Specular shader nodes to new material "
           "output "
@@ -1918,7 +1922,9 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     if (error & NTREE_DOVERSION_TRANSPARENCY_EMISSION) {
-      BKE_report(fd->reports, RPT_ERROR, "Eevee material conversion problem. Error in console");
+      BKE_report(fd->reports != NULL ? fd->reports->reports : NULL,
+                 RPT_ERROR,
+                 "Eevee material conversion problem. Error in console");
       printf(
           "You need to combine transparency and emission shaders to the converted Principled "
           "shader nodes.\n");
@@ -2108,7 +2114,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     for (Tex *tex = bmain->textures.first; tex; tex = tex->id.next) {
-      /* Removed envmap, pointdensity, voxeldata, ocean textures. */
+      /* Removed environment map, point-density, voxel-data, ocean textures. */
       if (ELEM(tex->type, 10, 14, 15, 16)) {
         tex->type = 0;
       }
@@ -2183,7 +2189,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
 
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 13)) {
     /* Initialize specular factor. */
-    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "spec_fac")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "spec_fac")) {
       for (Light *la = bmain->lights.first; la; la = la->id.next) {
         la->spec_fac = 1.0f;
       }
@@ -3133,7 +3139,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "att_dist")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "att_dist")) {
       for (Light *la = bmain->lights.first; la; la = la->id.next) {
         la->att_dist = la->clipend;
       }
@@ -3170,7 +3176,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
           bool is_blend = false;
 
           {
-            char tool = tool_init;
+            char tool;
             switch (tool_init) {
               case PAINT_BLEND_MIX:
                 tool = VPAINT_TOOL_DRAW;
@@ -3419,7 +3425,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
             }
             case SPACE_OUTLINER: {
               SpaceOutliner *space_outliner = (SpaceOutliner *)sl;
-              space_outliner->filter &= ~(SO_FILTER_UNUSED_1 | SO_FILTER_UNUSED_5 |
+              space_outliner->filter &= ~(SO_FILTER_CLEARED_1 | SO_FILTER_UNUSED_5 |
                                           SO_FILTER_OB_STATE_SELECTABLE);
               space_outliner->storeflag &= ~(SO_TREESTORE_UNUSED_1);
               break;
@@ -3682,7 +3688,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
   if (!MAIN_VERSION_ATLEAST(bmain, 280, 48)) {
     for (Scene *scene = bmain->scenes.first; scene; scene = scene->id.next) {
       /* Those are not currently used, but are accessible through RNA API and were not
-       * properly initialized previously. This is mere copy of BKE_init_scene() code. */
+       * properly initialized previously. This is mere copy of #scene_init_data code. */
       if (scene->r.im_format.view_settings.look[0] == '\0') {
         BKE_color_managed_display_settings_init(&scene->r.im_format.display_settings);
         BKE_color_managed_view_settings_init_render(
@@ -3967,8 +3973,8 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       LISTBASE_FOREACH (Object *, ob, &bmain->objects) {
         if (ob->pose) {
           LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
-            pchan->scale_in_y = pchan->scale_in_x;
-            pchan->scale_out_y = pchan->scale_out_x;
+            pchan->scale_in_z = pchan->scale_in_x;
+            pchan->scale_out_z = pchan->scale_out_x;
           }
         }
       }
@@ -4049,7 +4055,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
 
     /* Initializes sun lights with the new angular diameter property */
-    if (!DNA_struct_elem_find(fd->filesdna, "Light", "float", "sun_angle")) {
+    if (!DNA_struct_elem_find(fd->filesdna, "Lamp", "float", "sun_angle")) {
       LISTBASE_FOREACH (Light *, light, &bmain->lights) {
         light->sun_angle = 2.0f * atanf(light->area_size);
       }
@@ -4301,7 +4307,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* Elatic deform brush */
+    /* Elastic deform brush */
     for (Brush *br = bmain->brushes.first; br; br = br->id.next) {
       if (br->ob_mode & OB_MODE_SCULPT && br->elastic_deform_volume_preservation == 0.0f) {
         br->elastic_deform_volume_preservation = 0.5f;
@@ -4910,7 +4916,7 @@ void blo_do_versions_280(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
 
-    /* Boundary Edges Automasking. */
+    /* Boundary Edges Auto-masking. */
     if (!DNA_struct_elem_find(
             fd->filesdna, "Brush", "int", "automasking_boundary_edges_propagation_steps")) {
       for (Brush *br = bmain->brushes.first; br; br = br->id.next) {

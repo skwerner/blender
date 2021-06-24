@@ -36,9 +36,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_fileops.h"
-#include "BLI_fileops_types.h"
 #include "BLI_ghash.h"
-#include "BLI_linklist.h"
 #include "BLI_math.h"
 #include "BLI_string.h"
 #include "BLI_utildefines.h"
@@ -48,7 +46,6 @@
 #include "DNA_camera_types.h"
 #include "DNA_node_types.h"
 #include "DNA_object_types.h"
-#include "DNA_packedFile_types.h"
 #include "DNA_scene_types.h"
 #include "DNA_screen_types.h"
 
@@ -62,14 +59,10 @@
 #include "BKE_lib_id.h"
 #include "BKE_main.h"
 #include "BKE_packedFile.h"
-#include "BKE_paint.h"
 #include "BKE_report.h"
-#include "BKE_scene.h"
-#include "BKE_screen.h"
 
 #include "DEG_depsgraph.h"
 
-#include "GPU_immediate.h"
 #include "GPU_state.h"
 
 #include "IMB_colormanagement.h"
@@ -251,6 +244,70 @@ static bool image_not_packed_poll(bContext *C)
   return (ima && BLI_listbase_is_empty(&ima->packedfiles));
 }
 
+static void image_view_all(struct SpaceImage *sima, struct ARegion *region, struct wmOperator *op)
+{
+  float aspx, aspy, zoomx, zoomy, w, h;
+  int width, height;
+  const bool fit_view = RNA_boolean_get(op->ptr, "fit_view");
+
+  ED_space_image_get_size(sima, &width, &height);
+  ED_space_image_get_aspect(sima, &aspx, &aspy);
+
+  w = width * aspx;
+  h = height * aspy;
+
+  float xof = 0.0f, yof = 0.0f;
+  if ((sima->image == NULL) || (sima->image->source == IMA_SRC_TILED)) {
+    /* Extend the shown area to cover all UDIM tiles. */
+    int x_tiles, y_tiles;
+    if (sima->image == NULL) {
+      x_tiles = sima->tile_grid_shape[0];
+      y_tiles = sima->tile_grid_shape[1];
+    }
+    else {
+      x_tiles = y_tiles = 1;
+      LISTBASE_FOREACH (ImageTile *, tile, &sima->image->tiles) {
+        int tile_x = (tile->tile_number - 1001) % 10;
+        int tile_y = (tile->tile_number - 1001) / 10;
+        x_tiles = max_ii(x_tiles, tile_x + 1);
+        y_tiles = max_ii(y_tiles, tile_y + 1);
+      }
+    }
+    xof = 0.5f * (x_tiles - 1.0f) * w;
+    yof = 0.5f * (y_tiles - 1.0f) * h;
+    w *= x_tiles;
+    h *= y_tiles;
+  }
+
+  /* check if the image will fit in the image with (zoom == 1) */
+  width = BLI_rcti_size_x(&region->winrct) + 1;
+  height = BLI_rcti_size_y(&region->winrct) + 1;
+
+  if (fit_view) {
+    const int margin = 5; /* margin from border */
+
+    zoomx = (float)width / (w + 2 * margin);
+    zoomy = (float)height / (h + 2 * margin);
+
+    sima_zoom_set(sima, region, min_ff(zoomx, zoomy), NULL, false);
+  }
+  else {
+    if ((w >= width || h >= height) && (width > 0 && height > 0)) {
+      zoomx = (float)width / w;
+      zoomy = (float)height / h;
+
+      /* find the zoom value that will fit the image in the image space */
+      sima_zoom_set(sima, region, 1.0f / power_of_2(1.0f / min_ff(zoomx, zoomy)), NULL, false);
+    }
+    else {
+      sima_zoom_set(sima, region, 1.0f, NULL, false);
+    }
+  }
+
+  sima->xof = xof;
+  sima->yof = yof;
+}
+
 bool space_image_main_region_poll(bContext *C)
 {
   SpaceImage *sima = CTX_wm_space_image(C);
@@ -417,7 +474,7 @@ void IMAGE_OT_view_pan(wmOperatorType *ot)
                        -FLT_MAX,
                        FLT_MAX,
                        "Offset",
-                       "Offset in floating point units, 1.0 is the width and height of the image",
+                       "Offset in floating-point units, 1.0 is the width and height of the image",
                        -FLT_MAX,
                        FLT_MAX);
 }
@@ -467,7 +524,7 @@ static void image_view_zoom_init(bContext *C, wmOperator *op, const wmEvent *eve
   UI_view2d_region_to_view(
       &region->v2d, event->mval[0], event->mval[1], &vpd->location[0], &vpd->location[1]);
 
-  if (U.viewzoom == USER_ZOOM_CONT) {
+  if (U.viewzoom == USER_ZOOM_CONTINUE) {
     /* needs a timer to continue redrawing */
     vpd->timer = WM_event_add_timer(CTX_wm_manager(C), CTX_wm_window(C), TIMER, 0.01f);
     vpd->timer_lastdraw = PIL_check_seconds_timer();
@@ -579,12 +636,10 @@ static void image_zoom_apply(ViewZoomData *vpd,
     delta = -delta;
   }
 
-  if (viewzoom == USER_ZOOM_CONT) {
+  if (viewzoom == USER_ZOOM_CONTINUE) {
     double time = PIL_check_seconds_timer();
     float time_step = (float)(time - vpd->timer_lastdraw);
     float zfac;
-
-    /* oldstyle zoom */
     zfac = 1.0f + ((delta / 20.0f) * time_step);
     vpd->timer_lastdraw = time;
     /* this is the final zoom, but instead make it into a factor */
@@ -745,70 +800,12 @@ static int image_view_all_exec(bContext *C, wmOperator *op)
 {
   SpaceImage *sima;
   ARegion *region;
-  float aspx, aspy, zoomx, zoomy, w, h;
-  int width, height;
-  const bool fit_view = RNA_boolean_get(op->ptr, "fit_view");
 
   /* retrieve state */
   sima = CTX_wm_space_image(C);
   region = CTX_wm_region(C);
 
-  ED_space_image_get_size(sima, &width, &height);
-  ED_space_image_get_aspect(sima, &aspx, &aspy);
-
-  w = width * aspx;
-  h = height * aspy;
-
-  float xof = 0.0f, yof = 0.0f;
-  if ((sima->image == NULL) || (sima->image->source == IMA_SRC_TILED)) {
-    /* Extend the shown area to cover all UDIM tiles. */
-    int x_tiles, y_tiles;
-    if (sima->image == NULL) {
-      x_tiles = sima->tile_grid_shape[0];
-      y_tiles = sima->tile_grid_shape[1];
-    }
-    else {
-      x_tiles = y_tiles = 1;
-      LISTBASE_FOREACH (ImageTile *, tile, &sima->image->tiles) {
-        int tile_x = (tile->tile_number - 1001) % 10;
-        int tile_y = (tile->tile_number - 1001) / 10;
-        x_tiles = max_ii(x_tiles, tile_x + 1);
-        y_tiles = max_ii(y_tiles, tile_y + 1);
-      }
-    }
-    xof = 0.5f * (x_tiles - 1.0f) * w;
-    yof = 0.5f * (y_tiles - 1.0f) * h;
-    w *= x_tiles;
-    h *= y_tiles;
-  }
-
-  /* check if the image will fit in the image with (zoom == 1) */
-  width = BLI_rcti_size_x(&region->winrct) + 1;
-  height = BLI_rcti_size_y(&region->winrct) + 1;
-
-  if (fit_view) {
-    const int margin = 5; /* margin from border */
-
-    zoomx = (float)width / (w + 2 * margin);
-    zoomy = (float)height / (h + 2 * margin);
-
-    sima_zoom_set(sima, region, min_ff(zoomx, zoomy), NULL, false);
-  }
-  else {
-    if ((w >= width || h >= height) && (width > 0 && height > 0)) {
-      zoomx = (float)width / w;
-      zoomy = (float)height / h;
-
-      /* find the zoom value that will fit the image in the image space */
-      sima_zoom_set(sima, region, 1.0f / power_of_2(1.0f / min_ff(zoomx, zoomy)), NULL, false);
-    }
-    else {
-      sima_zoom_set(sima, region, 1.0f, NULL, false);
-    }
-  }
-
-  sima->xof = xof;
-  sima->yof = yof;
+  image_view_all(sima, region, op);
 
   ED_region_tag_redraw(region);
 
@@ -830,6 +827,49 @@ void IMAGE_OT_view_all(wmOperatorType *ot)
 
   /* flags */
   ot->flag = OPTYPE_LOCK_BYPASS;
+
+  /* properties */
+  prop = RNA_def_boolean(ot->srna, "fit_view", 0, "Fit View", "Fit frame to the viewport");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Cursor To Center View Operator
+ * \{ */
+
+static int view_cursor_center_exec(bContext *C, wmOperator *op)
+{
+  SpaceImage *sima;
+  ARegion *region;
+
+  sima = CTX_wm_space_image(C);
+  region = CTX_wm_region(C);
+
+  image_view_all(sima, region, op);
+
+  sima->cursor[0] = 0.5f;
+  sima->cursor[1] = 0.5f;
+
+  /* Needed for updating the cursor. */
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_IMAGE, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+void IMAGE_OT_view_cursor_center(wmOperatorType *ot)
+{
+  PropertyRNA *prop;
+
+  /* identifiers */
+  ot->name = "Cursor To Center View";
+  ot->description = "Set 2D Cursor To Center View location";
+  ot->idname = "IMAGE_OT_view_cursor_center";
+
+  /* api callbacks */
+  ot->exec = view_cursor_center_exec;
+  ot->poll = ED_space_image_cursor_poll;
 
   /* properties */
   prop = RNA_def_boolean(ot->srna, "fit_view", 0, "Fit View", "Fit frame to the viewport");
@@ -900,7 +940,7 @@ static int image_view_selected_exec(bContext *C, wmOperator *UNUSED(op))
     }
   }
   else if (ED_space_image_check_show_maskedit(sima, obedit)) {
-    if (!ED_mask_selected_minmax(C, min, max)) {
+    if (!ED_mask_selected_minmax(C, min, max, false)) {
       return OPERATOR_CANCELLED;
     }
   }
@@ -1271,7 +1311,6 @@ static int image_open_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   Object *obedit = CTX_data_edit_object(C);
   ImageUser *iuser = NULL;
-  ImageOpenData *iod = op->customdata;
   Image *ima = NULL;
   int frame_seq_len = 0;
   int frame_ofs = 1;
@@ -1305,7 +1344,7 @@ static int image_open_exec(bContext *C, wmOperator *op)
   }
 
   /* hook into UI */
-  iod = op->customdata;
+  ImageOpenData *iod = op->customdata;
 
   if (iod->pprop.prop) {
     /* when creating new ID blocks, use is already 1, but RNA
@@ -1444,12 +1483,11 @@ static void image_open_draw(bContext *UNUSED(C), wmOperator *op)
   uiLayout *layout = op->layout;
   ImageOpenData *iod = op->customdata;
   ImageFormatData *imf = &iod->im_format;
-  PointerRNA imf_ptr, ptr;
+  PointerRNA imf_ptr;
 
   /* main draw call */
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
   uiDefAutoButsRNA(
-      layout, &ptr, image_open_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
+      layout, op->ptr, image_open_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
 
   /* image template */
   RNA_pointer_create(NULL, &RNA_ImageFormatSettings, imf, &imf_ptr);
@@ -1569,7 +1607,7 @@ static int image_replace_exec(bContext *C, wmOperator *op)
 
   RNA_string_get(op->ptr, "filepath", str);
 
-  /* we cant do much if the str is longer than FILE_MAX :/ */
+  /* we can't do much if the str is longer than FILE_MAX :/ */
   BLI_strncpy(sima->image->filepath, str, sizeof(sima->image->filepath));
 
   if (sima->image->source == IMA_SRC_GENERATED) {
@@ -1825,11 +1863,11 @@ static bool save_image_op(
   opts->save_as_render = (RNA_struct_find_property(op->ptr, "save_as_render") &&
                           RNA_boolean_get(op->ptr, "save_as_render"));
 
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   bool ok = BKE_image_save(op->reports, bmain, ima, iuser, opts);
 
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   /* Remember file path for next save. */
   BLI_strncpy(G.ima, opts->filepath, sizeof(G.ima));
@@ -1964,7 +2002,7 @@ static void image_save_as_draw(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *layout = op->layout;
   ImageSaveData *isd = op->customdata;
-  PointerRNA imf_ptr, ptr;
+  PointerRNA imf_ptr;
   const bool is_multiview = RNA_boolean_get(op->ptr, "show_multiview");
 
   /* image template */
@@ -1972,9 +2010,8 @@ static void image_save_as_draw(bContext *UNUSED(C), wmOperator *op)
   uiTemplateImageSettings(layout, &imf_ptr, false);
 
   /* main draw call */
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
   uiDefAutoButsRNA(
-      layout, &ptr, image_save_as_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
+      layout, op->ptr, image_save_as_draw_check_prop, NULL, NULL, UI_BUT_LABEL_ALIGN_NONE, false);
 
   /* multiview template */
   if (is_multiview) {
@@ -2576,13 +2613,10 @@ static void image_new_draw(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *col;
   uiLayout *layout = op->layout;
-  PointerRNA ptr;
 #if 0
   Scene *scene = CTX_data_scene(C);
   const bool is_multiview = (scene->r.scemode & R_MULTIVIEW) != 0;
 #endif
-
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
 
   /* copy of WM_operator_props_dialog_popup() layout */
 
@@ -2590,19 +2624,19 @@ static void image_new_draw(bContext *UNUSED(C), wmOperator *op)
   uiLayoutSetPropDecorate(layout, false);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "name", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "width", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "height", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "color", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "alpha", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "generated_type", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "float", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "tiled", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "name", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "width", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "height", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "color", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "alpha", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "generated_type", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "float", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "tiled", 0, NULL, ICON_NONE);
 
 #if 0
   if (is_multiview) {
     uiItemL(col[0], "", ICON_NONE);
-    uiItemR(col[1], &ptr, "use_stereo_3d", 0, NULL, ICON_NONE);
+    uiItemR(col[1], op->ptr, "use_stereo_3d", 0, NULL, ICON_NONE);
   }
 #endif
 }
@@ -2659,6 +2693,126 @@ void IMAGE_OT_new(wmOperatorType *ot)
 }
 
 #undef IMA_DEF_NAME
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Flip Operator
+ * \{ */
+
+static int image_flip_exec(bContext *C, wmOperator *op)
+{
+  Image *ima = image_from_context(C);
+  ImBuf *ibuf = BKE_image_acquire_ibuf(ima, NULL, NULL);
+  SpaceImage *sima = CTX_wm_space_image(C);
+  const bool is_paint = ((sima != NULL) && (sima->mode == SI_MODE_PAINT));
+
+  if (ibuf == NULL) {
+    /* TODO: this should actually never happen, but does for render-results -> cleanup. */
+    return OPERATOR_CANCELLED;
+  }
+
+  const bool flip_horizontal = RNA_boolean_get(op->ptr, "use_flip_horizontal");
+  const bool flip_vertical = RNA_boolean_get(op->ptr, "use_flip_vertical");
+
+  if (!flip_horizontal && !flip_vertical) {
+    BKE_image_release_ibuf(ima, ibuf, NULL);
+    return OPERATOR_FINISHED;
+  }
+
+  ED_image_undo_push_begin_with_image(op->type->name, ima, ibuf, &sima->iuser);
+
+  if (is_paint) {
+    ED_imapaint_clear_partial_redraw();
+  }
+
+  const int size_x = ibuf->x;
+  const int size_y = ibuf->y;
+
+  if (ibuf->rect_float) {
+    float *float_pixels = (float *)ibuf->rect_float;
+
+    float *orig_float_pixels = MEM_dupallocN(float_pixels);
+    for (int x = 0; x < size_x; x++) {
+      for (int y = 0; y < size_y; y++) {
+        const int source_pixel_x = flip_horizontal ? size_x - x - 1 : x;
+        const int source_pixel_y = flip_vertical ? size_y - y - 1 : y;
+
+        float *source_pixel = &orig_float_pixels[4 * (source_pixel_x + source_pixel_y * size_x)];
+        float *target_pixel = &float_pixels[4 * (x + y * size_x)];
+
+        copy_v4_v4(target_pixel, source_pixel);
+      }
+    }
+    MEM_freeN(orig_float_pixels);
+
+    if (ibuf->rect) {
+      IMB_rect_from_float(ibuf);
+    }
+  }
+  else if (ibuf->rect) {
+    char *char_pixels = (char *)ibuf->rect;
+    char *orig_char_pixels = MEM_dupallocN(char_pixels);
+    for (int x = 0; x < size_x; x++) {
+      for (int y = 0; y < size_y; y++) {
+        const int source_pixel_x = flip_horizontal ? size_x - x - 1 : x;
+        const int source_pixel_y = flip_vertical ? size_y - y - 1 : y;
+
+        char *source_pixel = &orig_char_pixels[4 * (source_pixel_x + source_pixel_y * size_x)];
+        char *target_pixel = &char_pixels[4 * (x + y * size_x)];
+
+        copy_v4_v4_char(target_pixel, source_pixel);
+      }
+    }
+    MEM_freeN(orig_char_pixels);
+  }
+  else {
+    BKE_image_release_ibuf(ima, ibuf, NULL);
+    return OPERATOR_CANCELLED;
+  }
+
+  ibuf->userflags |= IB_DISPLAY_BUFFER_INVALID;
+  BKE_image_mark_dirty(ima, ibuf);
+
+  if (ibuf->mipmap[0]) {
+    ibuf->userflags |= IB_MIPMAP_INVALID;
+  }
+
+  ED_image_undo_push_end();
+
+  /* force GPU re-upload, all image is invalid. */
+  BKE_image_free_gputextures(ima);
+
+  WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
+
+  BKE_image_release_ibuf(ima, ibuf, NULL);
+
+  return OPERATOR_FINISHED;
+}
+
+void IMAGE_OT_flip(wmOperatorType *ot)
+{
+  /* identifiers */
+  ot->name = "Flip Image";
+  ot->idname = "IMAGE_OT_flip";
+  ot->description = "Flip the image";
+
+  /* api callbacks */
+  ot->exec = image_flip_exec;
+  ot->poll = image_from_context_has_data_poll_no_image_user;
+
+  /* properties */
+  PropertyRNA *prop;
+  prop = RNA_def_boolean(
+      ot->srna, "use_flip_horizontal", false, "Horizontal", "Flip the image horizontally");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+  prop = RNA_def_boolean(
+      ot->srna, "use_flip_vertical", false, "Vertical", "Flip the image vertically");
+  RNA_def_property_flag(prop, PROP_SKIP_SAVE);
+
+  /* flags */
+  ot->flag = OPTYPE_REGISTER;
+}
 
 /** \} */
 
@@ -2747,7 +2901,7 @@ static int image_invert_exec(bContext *C, wmOperator *op)
 
   ED_image_undo_push_end();
 
-  /* force GPU reupload, all image is invalid */
+  /* Force GPU re-upload, all image is invalid. */
   BKE_image_free_gputextures(ima);
 
   WM_event_add_notifier(C, NC_IMAGE | NA_EDITED, ima);
@@ -2771,13 +2925,13 @@ void IMAGE_OT_invert(wmOperatorType *ot)
   ot->poll = image_from_context_has_data_poll_no_image_user;
 
   /* properties */
-  prop = RNA_def_boolean(ot->srna, "invert_r", 0, "Red", "Invert Red Channel");
+  prop = RNA_def_boolean(ot->srna, "invert_r", 0, "Red", "Invert red channel");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  prop = RNA_def_boolean(ot->srna, "invert_g", 0, "Green", "Invert Green Channel");
+  prop = RNA_def_boolean(ot->srna, "invert_g", 0, "Green", "Invert green channel");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  prop = RNA_def_boolean(ot->srna, "invert_b", 0, "Blue", "Invert Blue Channel");
+  prop = RNA_def_boolean(ot->srna, "invert_b", 0, "Blue", "Invert blue channel");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
-  prop = RNA_def_boolean(ot->srna, "invert_a", 0, "Alpha", "Invert Alpha Channel");
+  prop = RNA_def_boolean(ot->srna, "invert_a", 0, "Alpha", "Invert alpha channel");
   RNA_def_property_flag(prop, PROP_SKIP_SAVE);
 
   /* flags */
@@ -2838,7 +2992,7 @@ static int image_scale_exec(bContext *C, wmOperator *op)
 
   ED_image_undo_push_end();
 
-  /* force GPU reupload, all image is invalid */
+  /* Force GPU re-upload, all image is invalid. */
   BKE_image_free_gputextures(ima);
 
   DEG_id_tag_update(&ima->id, 0);
@@ -3035,6 +3189,23 @@ void IMAGE_OT_unpack(wmOperatorType *ot)
 /* -------------------------------------------------------------------- */
 /** \name Sample Image Operator
  * \{ */
+
+/* Returns mouse position in image space. */
+bool ED_space_image_get_position(SpaceImage *sima, struct ARegion *ar, int mval[2], float fpos[2])
+{
+  void *lock;
+  ImBuf *ibuf = ED_space_image_acquire_buffer(sima, &lock, 0);
+
+  if (ibuf == NULL) {
+    ED_space_image_release_buffer(sima, ibuf, lock);
+    return false;
+  }
+
+  UI_view2d_region_to_view(&ar->v2d, mval[0], mval[1], &fpos[0], &fpos[1]);
+
+  ED_space_image_release_buffer(sima, ibuf, lock);
+  return true;
+}
 
 /* Returns color in linear space, matching ED_space_node_color_sample(). */
 bool ED_space_image_color_sample(
@@ -3815,21 +3986,18 @@ static void tile_add_draw(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *col;
   uiLayout *layout = op->layout;
-  PointerRNA ptr;
-
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
 
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
 
   col = uiLayoutColumn(layout, false);
-  uiItemR(col, &ptr, "number", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "count", 0, NULL, ICON_NONE);
-  uiItemR(col, &ptr, "label", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "fill", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "number", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "count", 0, NULL, ICON_NONE);
+  uiItemR(col, op->ptr, "label", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "fill", 0, NULL, ICON_NONE);
 
-  if (RNA_boolean_get(&ptr, "fill")) {
-    draw_fill_tile(&ptr, layout);
+  if (RNA_boolean_get(op->ptr, "fill")) {
+    draw_fill_tile(op->ptr, layout);
   }
 }
 
@@ -3949,10 +4117,7 @@ static int tile_fill_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(e
 
 static void tile_fill_draw(bContext *UNUSED(C), wmOperator *op)
 {
-  PointerRNA ptr;
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-
-  draw_fill_tile(&ptr, op->layout);
+  draw_fill_tile(op->ptr, op->layout);
 }
 
 void IMAGE_OT_tile_fill(wmOperatorType *ot)

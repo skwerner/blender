@@ -53,6 +53,8 @@ typedef enum GpencilModifierType {
   eGpencilModifierType_Time = 16,
   eGpencilModifierType_Multiply = 17,
   eGpencilModifierType_Texture = 18,
+  eGpencilModifierType_Lineart = 19,
+  eGpencilModifierType_Length = 20,
   /* Keep last. */
   NUM_GREASEPENCIL_MODIFIER_TYPES,
 } GpencilModifierType;
@@ -107,6 +109,8 @@ typedef struct NoiseGpencilModifierData {
   float factor_uvs;
   /** Noise Frequency scaling */
   float noise_scale;
+  float noise_offset;
+  char _pad[4];
   /** How many frames before recalculate randoms. */
   int step;
   /** Custom index for passes. */
@@ -180,11 +184,16 @@ typedef struct ThickGpencilModifierData {
   int flag;
   /** Relative thickness factor. */
   float thickness_fac;
-  /** Absolute thickness overide. */
+  /** Absolute thickness override. */
   int thickness;
   /** Custom index for passes. */
   int layer_pass;
-  char _pad[4];
+  /** Start/end distances of the fading effect. */
+  float fading_start;
+  float fading_end;
+  float fading_end_factor;
+  /** Fading reference object */
+  struct Object *object;
   struct CurveMapping *curve_thickness;
 } ThickGpencilModifierData;
 
@@ -196,6 +205,7 @@ typedef enum eThickGpencil_Flag {
   GP_THICK_NORMALIZE = (1 << 4),
   GP_THICK_INVERT_LAYERPASS = (1 << 5),
   GP_THICK_INVERT_MATERIAL = (1 << 6),
+  GP_THICK_FADING = (1 << 7),
 } eThickGpencil_Flag;
 
 typedef struct TimeGpencilModifierData {
@@ -288,9 +298,16 @@ typedef struct OpacityGpencilModifierData {
   int flag;
   /** Main Opacity factor. */
   float factor;
+  /** Fading controlling object */
+  int _pad0;
+  struct Object *object;
+  /** Start/end distances of the fading effect. */
+  float fading_start;
+  float fading_end;
+  float fading_end_factor;
   /** Modify stroke, fill or both. */
   char modify_color;
-  char _pad[3];
+  char _pad1[3];
   /** Custom index for passes. */
   int layer_pass;
 
@@ -306,6 +323,7 @@ typedef enum eOpacityGpencil_Flag {
   GP_OPACITY_INVERT_MATERIAL = (1 << 5),
   GP_OPACITY_CUSTOM_CURVE = (1 << 6),
   GP_OPACITY_NORMALIZE = (1 << 7),
+  GP_OPACITY_FADING = (1 << 8),
 } eOpacityGpencil_Flag;
 
 typedef struct ArrayGpencilModifierData {
@@ -467,6 +485,39 @@ typedef enum eLatticeGpencil_Flag {
   GP_LATTICE_INVERT_MATERIAL = (1 << 4),
 } eLatticeGpencil_Flag;
 
+typedef struct LengthGpencilModifierData {
+  GpencilModifierData modifier;
+  /** Material for filtering. */
+  struct Material *material;
+  /** Layer name. */
+  char layername[64];
+  /** Custom index for passes. */
+  int pass_index;
+  /** Flags. */
+  int flag;
+  /** Custom index for passes. */
+  int layer_pass;
+  /** Length. */
+  float start_fac, end_fac;
+  /** Overshoot trajectory factor. */
+  float overshoot_fac;
+  /** Modifier mode. */
+  int mode;
+  char _pad[4];
+} LengthGpencilModifierData;
+
+typedef enum eLengthGpencil_Flag {
+  GP_LENGTH_INVERT_LAYER = (1 << 0),
+  GP_LENGTH_INVERT_PASS = (1 << 1),
+  GP_LENGTH_INVERT_LAYERPASS = (1 << 2),
+  GP_LENGTH_INVERT_MATERIAL = (1 << 3),
+} eLengthGpencil_Flag;
+
+typedef enum eLengthGpencil_Type {
+  GP_LENGTH_RELATIVE = 0,
+  GP_LENGTH_ABSOLUTE = 1,
+} eLengthGpencil_Type;
+
 typedef struct MirrorGpencilModifierData {
   GpencilModifierData modifier;
   struct Object *object;
@@ -613,6 +664,14 @@ typedef struct OffsetGpencilModifierData {
   float loc[3];
   float rot[3];
   float scale[3];
+  /** Random Offset. */
+  float rnd_offset[3];
+  /** Random Rotation. */
+  float rnd_rot[3];
+  /** Random Scales. */
+  float rnd_scale[3];
+  /** (first element is the index) random values. */
+  int seed;
   /** Custom index for passes. */
   int layer_pass;
 } OffsetGpencilModifierData;
@@ -623,6 +682,7 @@ typedef enum eOffsetGpencil_Flag {
   GP_OFFSET_INVERT_VGROUP = (1 << 2),
   GP_OFFSET_INVERT_LAYERPASS = (1 << 3),
   GP_OFFSET_INVERT_MATERIAL = (1 << 4),
+  GP_OFFSET_UNIFORM_RANDOM_SCALE = (1 << 5),
 } eOffsetGpencil_Flag;
 
 typedef struct SmoothGpencilModifierData {
@@ -806,6 +866,88 @@ typedef enum eTextureGpencil_Mode {
   FILL = 1,
   STROKE_AND_FILL = 2,
 } eTextureGpencil_Mode;
+
+typedef enum eLineartGpencilModifierSource {
+  LRT_SOURCE_COLLECTION = 0,
+  LRT_SOURCE_OBJECT = 1,
+  LRT_SOURCE_SCENE = 2,
+} eLineartGpencilModifierSource;
+
+typedef enum eLineArtGPencilModifierFlags {
+  LRT_GPENCIL_INVERT_SOURCE_VGROUP = (1 << 0),
+  LRT_GPENCIL_MATCH_OUTPUT_VGROUP = (1 << 1),
+  LRT_GPENCIL_BINARY_WEIGHTS = (1 << 2) /* Deprecated, this is removed for lack of use case. */,
+  LRT_GPENCIL_IS_BAKED = (1 << 3),
+  LRT_GPENCIL_USE_CACHE = (1 << 4),
+} eLineArtGPencilModifierFlags;
+
+typedef enum eLineartGpencilTransparencyFlags {
+  LRT_GPENCIL_TRANSPARENCY_ENABLE = (1 << 0),
+  /** Set to true means using "and" instead of "or" logic on mask bits. */
+  LRT_GPENCIL_TRANSPARENCY_MATCH = (1 << 1),
+} eLineartGpencilTransparencyFlags;
+
+struct LineartCache;
+
+typedef struct LineartGpencilModifierData {
+  GpencilModifierData modifier;
+
+  short edge_types; /* line type enable flags, bits in eLineartEdgeFlag */
+
+  char source_type; /* Object or Collection, from eLineartGpencilModifierSource */
+
+  char use_multiple_levels;
+  short level_start;
+  short level_end;
+
+  struct Object *source_object;
+  struct Collection *source_collection;
+
+  struct Material *target_material;
+  char target_layer[64];
+
+  /**
+   * These two variables are to pass on vertex group information from mesh to strokes.
+   * `vgname` specifies which vertex groups our strokes from source_vertex_group will go to.
+   */
+  char source_vertex_group[64];
+  char vgname[64];
+
+  float opacity;
+  short thickness;
+
+  unsigned char transparency_flags; /* eLineartGpencilTransparencyFlags */
+  unsigned char transparency_mask;
+
+  /** `0..1` range for cosine angle */
+  float crease_threshold;
+
+  /** `0..PI` angle, for splitting strokes at sharp points. */
+  float angle_splitting_threshold;
+
+  /* CPU mode */
+  float chaining_image_threshold;
+
+  /* Ported from SceneLineArt flags. */
+  int calculation_flags;
+
+  /* Additional Switches. */
+  int flags;
+
+  /* Runtime data. */
+
+  /* Because we can potentially only compute features lines once per modifier stack (Use Cache), we
+   * need to have these override values to ensure that we have the data we need is computed and
+   * stored in the cache. */
+  char level_start_override;
+  char level_end_override;
+  short edge_types_override;
+
+  struct LineartCache *cache;
+  /* Keep a pointer to the render buffer so we can call destroy from ModifierData. */
+  struct LineartRenderBuffer *render_buffer_ptr;
+
+} LineartGpencilModifierData;
 
 #ifdef __cplusplus
 }

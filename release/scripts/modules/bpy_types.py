@@ -19,7 +19,6 @@
 # <pep8-80 compliant>
 
 from _bpy import types as bpy_types
-import _bpy
 
 StructRNA = bpy_types.bpy_struct
 StructMetaPropGroup = bpy_types.bpy_struct_meta_idprop
@@ -151,7 +150,11 @@ class Object(bpy_types.ID):
 class WindowManager(bpy_types.ID):
     __slots__ = ()
 
-    def popup_menu(self, draw_func, title="", icon='NONE'):
+    def popup_menu(
+            self, draw_func, *,
+            title="",
+            icon='NONE',
+    ):
         import bpy
         popup = self.popmenu_begin__internal(title, icon=icon)
 
@@ -177,7 +180,11 @@ class WindowManager(bpy_types.ID):
         finally:
             self.popover_end__internal(popup, keymap=keymap)
 
-    def popup_menu_pie(self, event, draw_func, title="", icon='NONE'):
+    def popup_menu_pie(
+            self, event, draw_func, *,
+            title="",
+            icon='NONE',
+    ):
         import bpy
         pie = self.piemenu_begin__internal(title, icon=icon, event=event)
 
@@ -393,7 +400,7 @@ class EditBone(StructRNA, _GenericBone, metaclass=StructMetaPropGroup):
         self.tail = self.head + vec
         self.roll = other.roll
 
-    def transform(self, matrix, scale=True, roll=True):
+    def transform(self, matrix, *, scale=True, roll=True):
         """
         Transform the the bones head, tail, roll and envelope
         (when the matrix has a scale component).
@@ -561,9 +568,17 @@ class Text(bpy_types.ID):
         self.write(string)
 
     def as_module(self):
-        from os.path import splitext
+        import bpy
+        from os.path import splitext, join
         from types import ModuleType
-        mod = ModuleType(splitext(self.name)[0])
+        name = self.name
+        mod = ModuleType(splitext(name)[0])
+        # This is a fake file-path, set this since some scripts check `__file__`,
+        # error messages may include this as well.
+        # NOTE: the file path may be a blank string if the file hasn't been saved.
+        mod.__dict__.update({
+            "__file__": join(bpy.data.filepath, name),
+        })
         # TODO: We could use Text.compiled (C struct member)
         # if this is called often it will be much faster.
         exec(self.as_string(), mod.__dict__)
@@ -658,16 +673,14 @@ class Gizmo(StructRNA):
             use_blend = color[3] < 1.0
 
         if use_blend:
-            # TODO: wrap GPU_blend from GPU state.
-            from bgl import glEnable, glDisable, GL_BLEND
-            glEnable(GL_BLEND)
+            gpu.state.blend_set('ALPHA')
 
         with gpu.matrix.push_pop():
             gpu.matrix.multiply_matrix(matrix)
             batch.draw()
 
         if use_blend:
-            glDisable(GL_BLEND)
+            gpu.state.blend_set('NONE')
 
     @staticmethod
     def new_custom_shape(type, verts):
@@ -734,7 +747,7 @@ class Operator(StructRNA, metaclass=RNAMeta):
             return delattr(properties, attr)
         return super().__delattr__(attr)
 
-    def as_keywords(self, ignore=()):
+    def as_keywords(self, *, ignore=()):
         """Return a copy of the properties as a dictionary"""
         ignore = ignore + ("rna_type",)
         return {attr: getattr(self, attr)
@@ -900,6 +913,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
         layout = self.layout
 
         import os
+        import re
         import bpy.utils
 
         layout = self.layout
@@ -920,7 +934,11 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
                     (filter_path(f)))
             ])
 
-        files.sort()
+        # Perform a "natural sort", so 20 comes after 3 (for example).
+        files.sort(
+            key=lambda file_path:
+            tuple(int(t) if t.isdigit() else t for t in re.split(r"(\d+)", file_path[0].lower())),
+        )
 
         col = layout.column(align=True)
 
@@ -982,6 +1000,7 @@ class Menu(StructRNA, _GenericUI, metaclass=RNAMeta):
             props_default=props_default,
             filter_ext=lambda ext: ext.lower() in ext_valid,
             add_operator=add_operator,
+            display_name=lambda name: bpy.path.display_name(name, title_case=False)
         )
 
     @classmethod

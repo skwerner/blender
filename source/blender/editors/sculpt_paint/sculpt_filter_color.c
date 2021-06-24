@@ -86,7 +86,7 @@ static EnumPropertyItem prop_color_filter_types[] = {
     {COLOR_FILTER_SATURATION, "SATURATION", 0, "Saturation", "Change saturation"},
     {COLOR_FILTER_VALUE, "VALUE", 0, "Value", "Change value"},
 
-    {COLOR_FILTER_BRIGHTNESS, "BRIGTHNESS", 0, "Brightness", "Change brightness"},
+    {COLOR_FILTER_BRIGHTNESS, "BRIGHTNESS", 0, "Brightness", "Change brightness"},
     {COLOR_FILTER_CONTRAST, "CONTRAST", 0, "Contrast", "Change contrast"},
 
     {COLOR_FILTER_SMOOTH, "SMOOTH", 0, "Smooth", "Smooth colors"},
@@ -110,8 +110,7 @@ static void color_filter_task_cb(void *__restrict userdata,
   SCULPT_orig_vert_data_init(&orig_data, data->ob, data->nodes[n]);
 
   PBVHVertexIter vd;
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     SCULPT_orig_vert_data_update(&orig_data, &vd);
     float orig_color[3], final_color[4], hsv_color[3];
     int hue;

@@ -56,7 +56,7 @@ def _getattr_bytes(var, attr):
     return var.path_resolve(attr, False).as_bytes()
 
 
-def abspath(path, start=None, library=None):
+def abspath(path, *, start=None, library=None):
     """
     Returns the absolute path relative to the current blend file
     using the "//" prefix.
@@ -92,7 +92,7 @@ def abspath(path, start=None, library=None):
     return path
 
 
-def relpath(path, start=None):
+def relpath(path, *, start=None):
     """
     Returns the path relative to the current blend file using the "//" prefix.
 
@@ -134,7 +134,7 @@ def is_subdir(path, directory):
     return False
 
 
-def clean_name(name, replace="_"):
+def clean_name(name, *, replace="_"):
     """
     Returns a name with characters replaced that
     may cause problems under various circumstances,
@@ -198,15 +198,17 @@ def _clean_utf8(name):
 _display_name_literals = {
     ":": "_colon_",
     "+": "_plus_",
+    "/": "_slash_",
 }
 
 
-def display_name(name, *, has_ext=True):
+def display_name(name, *, has_ext=True, title_case=True):
     """
     Creates a display string from name to be used menus and the user interface.
-    Capitalize the first letter in all lowercase names,
-    mixed case names are kept as is. Intended for use with
-    filenames and module names.
+    Intended for use with filenames and module names.
+
+    :arg has_ext: Remove file extension from name
+    :arg title_case: Convert lowercase names to title case
     """
 
     if has_ext:
@@ -220,7 +222,7 @@ def display_name(name, *, has_ext=True):
     # (when paths can't start with numbers for eg).
     name = name.replace("_", " ").lstrip(" ")
 
-    if name.islower():
+    if title_case and name.islower():
         name = name.lower().title()
 
     name = _clean_utf8(name)
@@ -309,7 +311,7 @@ def resolve_ncase(path):
     return ncase_path if found else path
 
 
-def ensure_ext(filepath, ext, case_sensitive=False):
+def ensure_ext(filepath, ext, *, case_sensitive=False):
     """
     Return the path with the extension added if it is not already set.
 
@@ -330,7 +332,7 @@ def ensure_ext(filepath, ext, case_sensitive=False):
     return filepath + ext
 
 
-def module_names(path, recursive=False):
+def module_names(path, *, recursive=False):
     """
     Return a list of modules which can be imported from *path*.
 
@@ -359,7 +361,7 @@ def module_names(path, recursive=False):
             if isfile(fullpath):
                 modules.append((filename, fullpath))
                 if recursive:
-                    for mod_name, mod_path in module_names(directory, True):
+                    for mod_name, mod_path in module_names(directory, recursive=True):
                         modules.append(("%s.%s" % (filename, mod_name),
                                         mod_path,
                                         ))
@@ -369,7 +371,7 @@ def module_names(path, recursive=False):
 
 def basename(path):
     """
-    Equivalent to os.path.basename, but skips a "//" prefix.
+    Equivalent to ``os.path.basename``, but skips a "//" prefix.
 
     Use for Windows compatibility.
     """

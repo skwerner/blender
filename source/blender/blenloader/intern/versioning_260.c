@@ -67,13 +67,15 @@
 #include "BKE_texture.h"
 #include "BKE_tracking.h"
 
-#include "SEQ_sequencer.h"
+#include "SEQ_iterator.h"
+#include "SEQ_modifier.h"
+#include "SEQ_utils.h"
 
 #ifdef WITH_FFMPEG
 #  include "BKE_writeffmpeg.h"
 #endif
 
-#include "IMB_imbuf.h" /* for proxy / timecode versioning stuff */
+#include "IMB_imbuf.h" /* for proxy / time-code versioning stuff. */
 
 #include "NOD_common.h"
 #include "NOD_texture.h"
@@ -337,7 +339,7 @@ static void do_versions_nodetree_multi_file_output_format_2_62_1(Scene *sce, bNo
       NodeImageMultiFile *nimf = node->storage;
       bNodeSocket *sock;
 
-      /* CMP_NODE_OUTPUT_MULTI_FILE has been redeclared as CMP_NODE_OUTPUT_FILE */
+      /* CMP_NODE_OUTPUT_MULTI_FILE has been re-declared as CMP_NODE_OUTPUT_FILE */
       node->type = CMP_NODE_OUTPUT_FILE;
 
       /* initialize the node-wide image format from render data, if available */
@@ -859,7 +861,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
         int i;
         for (i = 0; i < 3; i++) {
           if ((ob->dsize[i] == 0.0f) || /* simple case, user never touched dsize */
-              (ob->scale[i] == 0.0f))   /* cant scale the dsize to give a non zero result,
+              (ob->scale[i] == 0.0f))   /* can't scale the dsize to give a non zero result,
                                          * so fallback to 1.0f */
           {
             ob->dscale[i] = 1.0f;
@@ -1499,7 +1501,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
             SequenceModifierData *smd;
             ColorBalanceModifierData *cbmd;
 
-            smd = BKE_sequence_modifier_new(seq, NULL, seqModifierType_ColorBalance);
+            smd = SEQ_modifier_new(seq, NULL, seqModifierType_ColorBalance);
             cbmd = (ColorBalanceModifierData *)smd;
 
             cbmd->color_balance = *strip->color_balance;
@@ -1813,7 +1815,7 @@ void blo_do_versions_260(FileData *fd, Library *UNUSED(lib), Main *bmain)
           seq->alpha_mode = SEQ_ALPHA_STRAIGHT;
         }
         else {
-          BKE_sequence_alpha_mode_from_extension(seq);
+          SEQ_alpha_mode_from_file_extension(seq);
         }
       }
       SEQ_ALL_END;

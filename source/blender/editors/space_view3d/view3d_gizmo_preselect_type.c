@@ -52,7 +52,6 @@
 
 /* -------------------------------------------------------------------- */
 /** \name Mesh Element (Vert/Edge/Face) Pre-Select Gizmo API
- *
  * \{ */
 
 typedef struct MeshElemGizmo3D {
@@ -155,10 +154,10 @@ static int gizmo_preselect_elem_test_select(bContext *C, wmGizmo *gz, const int 
        * Only pre-select a vertex when the cursor is really close to it. */
       if (eve_test) {
         BMVert *vert = (BMVert *)eve_test;
-        float vert_p_co[3], vert_co[3];
+        float vert_p_co[2], vert_co[3];
         const float mval_f[2] = {UNPACK2(vc.mval)};
         mul_v3_m4v3(vert_co, gz_ele->bases[base_index_vert]->object->obmat, vert->co);
-        ED_view3d_project(vc.region, vert_co, vert_p_co);
+        ED_view3d_project_v2(vc.region, vert_co, vert_p_co);
         float len = len_v2v2(vert_p_co, mval_f);
         if (len < 35) {
           best.ele = (BMElem *)eve_test;
@@ -282,7 +281,6 @@ static void GIZMO_GT_mesh_preselect_elem_3d(wmGizmoType *gzt)
 
 /* -------------------------------------------------------------------- */
 /** \name Mesh Edge-Ring Pre-Select Gizmo API
- *
  * \{ */
 
 typedef struct MeshEdgeRingGizmo3D {
@@ -439,7 +437,6 @@ static void GIZMO_GT_mesh_preselect_edgering_3d(wmGizmoType *gzt)
 
 /* -------------------------------------------------------------------- */
 /** \name Gizmo API
- *
  * \{ */
 
 void ED_gizmotypes_preselect_3d(void)

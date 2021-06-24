@@ -28,7 +28,6 @@
 #include "DNA_ID.h"
 #include "DNA_anim_types.h"
 #include "DNA_collection_types.h"
-#include "DNA_material_types.h"
 #include "DNA_object_types.h"
 #include "DNA_scene_types.h"
 
@@ -43,27 +42,19 @@
 #include "BKE_appdir.h"
 #include "BKE_armature.h"
 #include "BKE_blender_copybuffer.h"
-#include "BKE_collection.h"
 #include "BKE_context.h"
 #include "BKE_idtype.h"
-#include "BKE_layer.h"
 #include "BKE_lib_id.h"
 #include "BKE_lib_query.h"
 #include "BKE_lib_remap.h"
 #include "BKE_main.h"
-#include "BKE_material.h"
-#include "BKE_outliner_treehash.h"
 #include "BKE_report.h"
-#include "BKE_scene.h"
 #include "BKE_workspace.h"
 
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_build.h"
 
-#include "../blenloader/BLO_readfile.h"
-
 #include "ED_keyframing.h"
-#include "ED_object.h"
 #include "ED_outliner.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
@@ -72,7 +63,6 @@
 #include "WM_types.h"
 
 #include "UI_interface.h"
-#include "UI_resources.h"
 #include "UI_view2d.h"
 
 #include "RNA_access.h"
@@ -164,7 +154,9 @@ void OUTLINER_OT_highlight_update(wmOperatorType *ot)
 /** \name Toggle Open/Closed Operator
  * \{ */
 
-/* Open or close a tree element, optionally toggling all children recursively */
+/**
+ * Open or close a tree element, optionally toggling all children recursively.
+ */
 void outliner_item_openclose(SpaceOutliner *space_outliner,
                              TreeElement *te,
                              bool open,
@@ -331,7 +323,8 @@ static void do_item_rename(ARegion *region,
                 TSE_POSEGRP_BASE,
                 TSE_R_LAYER_BASE,
                 TSE_SCENE_COLLECTION_BASE,
-                TSE_VIEW_COLLECTION_BASE)) {
+                TSE_VIEW_COLLECTION_BASE,
+                TSE_LIBRARY_OVERRIDE_BASE)) {
     BKE_report(reports, RPT_WARNING, "Cannot edit builtin name");
   }
   else if (ELEM(tselem->type, TSE_SEQUENCE, TSE_SEQ_STRIP, TSE_SEQUENCE_DUP)) {
@@ -463,7 +456,8 @@ static void id_delete(bContext *C, ReportList *reports, TreeElement *te, TreeSto
   ID *id = tselem->id;
 
   BLI_assert(id != NULL);
-  BLI_assert(ELEM(tselem->type, 0 && te->idcode != 0, TSE_LAYER_COLLECTION));
+  BLI_assert(((tselem->type == TSE_SOME_ID) && (te->idcode != 0)) ||
+             (tselem->type == TSE_LAYER_COLLECTION));
   UNUSED_VARS_NDEBUG(te);
 
   if (te->idcode == ID_LI && ((Library *)id)->parent != NULL) {
@@ -474,7 +468,7 @@ static void id_delete(bContext *C, ReportList *reports, TreeElement *te, TreeSto
     BKE_reportf(reports, RPT_WARNING, "Cannot delete indirectly linked id '%s'", id->name);
     return;
   }
-  if (BKE_library_ID_is_indirectly_used(bmain, id) && ID_REAL_USERS(id) <= 1) {
+  if (ID_REAL_USERS(id) <= 1 && BKE_library_ID_is_indirectly_used(bmain, id)) {
     BKE_reportf(reports,
                 RPT_WARNING,
                 "Cannot delete id '%s', indirectly used data-blocks need at least one user",
@@ -637,7 +631,7 @@ static bool outliner_id_remap_find_tree_element(bContext *C,
     if (y > te->ys && y < te->ys + UI_UNIT_Y) {
       TreeStoreElem *tselem = TREESTORE(te);
 
-      if (tselem->type == 0 && tselem->id) {
+      if ((tselem->type == TSE_SOME_ID) && tselem->id) {
         printf("found id %s (%p)!\n", tselem->id->name, tselem->id);
 
         RNA_enum_set(op->ptr, "id_type", GS(tselem->id->name));
@@ -673,6 +667,10 @@ static const EnumPropertyItem *outliner_id_itemf(bContext *C,
                                                  PropertyRNA *UNUSED(prop),
                                                  bool *r_free)
 {
+  if (C == NULL) {
+    return DummyRNA_NULL_items;
+  }
+
   EnumPropertyItem item_tmp = {0}, *item = NULL;
   int totitem = 0;
   int i = 0;
@@ -762,7 +760,7 @@ static int outliner_id_copy_tag(SpaceOutliner *space_outliner, ListBase *tree)
     TreeStoreElem *tselem = TREESTORE(te);
 
     /* if item is selected and is an ID, tag it as needing to be copied. */
-    if (tselem->flag & TSE_SELECTED && ELEM(tselem->type, 0, TSE_LAYER_COLLECTION)) {
+    if (tselem->flag & TSE_SELECTED && ELEM(tselem->type, TSE_SOME_ID, TSE_LAYER_COLLECTION)) {
       ID *id = tselem->id;
       if (!(id->tag & LIB_TAG_DOIT)) {
         BKE_copybuffer_tag_ID(tselem->id);
@@ -771,9 +769,7 @@ static int outliner_id_copy_tag(SpaceOutliner *space_outliner, ListBase *tree)
     }
 
     /* go over sub-tree */
-    if (TSELEM_OPEN(tselem, space_outliner)) {
-      num_ids += outliner_id_copy_tag(space_outliner, &te->subtree);
-    }
+    num_ids += outliner_id_copy_tag(space_outliner, &te->subtree);
   }
 
   return num_ids;
@@ -1115,36 +1111,6 @@ bool outliner_flag_flip(ListBase *lb, short flag)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Restriction Column Utility
- * \{ */
-
-/* same check needed for both object operation and restrict column button func
- * return 0 when in edit mode (cannot restrict view or select)
- * otherwise return 1 */
-int common_restrict_check(bContext *C, Object *ob)
-{
-  /* Don't allow hide an object in edit mode,
-   * check the bugs (T22153 and T21609, T23977).
-   */
-  Object *obedit = CTX_data_edit_object(C);
-  if (obedit && obedit == ob) {
-    /* found object is hidden, reset */
-    if (ob->restrictflag & OB_RESTRICT_VIEWPORT) {
-      ob->restrictflag &= ~OB_RESTRICT_VIEWPORT;
-    }
-    /* found object is unselectable, reset */
-    if (ob->restrictflag & OB_RESTRICT_SELECT) {
-      ob->restrictflag &= ~OB_RESTRICT_SELECT;
-    }
-    return 0;
-  }
-
-  return 1;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name Toggle Expanded (Outliner) Operator
  * \{ */
 
@@ -1382,7 +1348,7 @@ void OUTLINER_OT_show_active(wmOperatorType *ot)
   ot->name = "Show Active";
   ot->idname = "OUTLINER_OT_show_active";
   ot->description =
-      "Open up the tree and adjust the view so that the active Object is shown centered";
+      "Open up the tree and adjust the view so that the active object is shown centered";
 
   /* callbacks */
   ot->exec = outliner_show_active_exec;
@@ -1635,13 +1601,15 @@ void OUTLINER_OT_show_one_level(wmOperatorType *ot)
 /** \name Show Hierarchy Operator
  * \{ */
 
-/* Helper function for tree_element_shwo_hierarchy() -
- * recursively checks whether subtrees have any objects. */
+/**
+ * Helper function for #tree_element_shwo_hierarchy() -
+ * recursively checks whether subtrees have any objects.
+ */
 static int subtree_has_objects(ListBase *lb)
 {
   LISTBASE_FOREACH (TreeElement *, te, lb) {
     TreeStoreElem *tselem = TREESTORE(te);
-    if (tselem->type == 0 && te->idcode == ID_OB) {
+    if ((tselem->type == TSE_SOME_ID) && (te->idcode == ID_OB)) {
       return 1;
     }
     if (subtree_has_objects(&te->subtree)) {
@@ -1659,7 +1627,7 @@ static void tree_element_show_hierarchy(Scene *scene, SpaceOutliner *space_outli
     TreeStoreElem *tselem = TREESTORE(te);
 
     if (ELEM(tselem->type,
-             0,
+             TSE_SOME_ID,
              TSE_SCENE_OBJECTS_BASE,
              TSE_VIEW_COLLECTION_BASE,
              TSE_LAYER_COLLECTION)) {
@@ -2268,29 +2236,19 @@ static bool ed_operator_outliner_id_orphans_active(bContext *C)
 
 /** \} */
 
-static void outliner_orphans_purge_tag(ID *id, int *num_tagged)
-{
-  if (id->us == 0) {
-    id->tag |= LIB_TAG_DOIT;
-    num_tagged[INDEX_ID_NULL]++;
-    num_tagged[BKE_idtype_idcode_to_index(GS(id->name))]++;
-  }
-  else {
-    id->tag &= ~LIB_TAG_DOIT;
-  }
-}
-
-static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(evt))
+static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEvent *UNUSED(event))
 {
   Main *bmain = CTX_data_main(C);
   int num_tagged[INDEX_ID_MAX] = {0};
 
-  /* Tag all IDs having zero users. */
-  ID *id;
-  FOREACH_MAIN_ID_BEGIN (bmain, id) {
-    outliner_orphans_purge_tag(id, num_tagged);
-  }
-  FOREACH_MAIN_ID_END;
+  const bool do_local_ids = RNA_boolean_get(op->ptr, "do_local_ids");
+  const bool do_linked_ids = RNA_boolean_get(op->ptr, "do_linked_ids");
+  const bool do_recursive_cleanup = RNA_boolean_get(op->ptr, "do_recursive");
+
+  /* Tag all IDs to delete. */
+  BKE_lib_query_unused_ids_tag(
+      bmain, LIB_TAG_DOIT, do_local_ids, do_linked_ids, do_recursive_cleanup, num_tagged);
+
   RNA_int_set(op->ptr, "num_deleted", num_tagged[INDEX_ID_NULL]);
 
   if (num_tagged[INDEX_ID_NULL] == 0) {
@@ -2299,7 +2257,7 @@ static int outliner_orphans_purge_invoke(bContext *C, wmOperator *op, const wmEv
   }
 
   DynStr *dyn_str = BLI_dynstr_new();
-  BLI_dynstr_append(dyn_str, "Purging unused data-blocks (");
+  BLI_dynstr_appendf(dyn_str, "Purging %d unused data-blocks (", num_tagged[INDEX_ID_NULL]);
   bool is_first = true;
   for (int i = 0; i < INDEX_ID_MAX - 2; i++) {
     if (num_tagged[i] != 0) {
@@ -2333,12 +2291,13 @@ static int outliner_orphans_purge_exec(bContext *C, wmOperator *op)
   int num_tagged[INDEX_ID_MAX] = {0};
 
   if ((num_tagged[INDEX_ID_NULL] = RNA_int_get(op->ptr, "num_deleted")) == 0) {
-    /* Tag all IDs having zero users. */
-    ID *id;
-    FOREACH_MAIN_ID_BEGIN (bmain, id) {
-      outliner_orphans_purge_tag(id, num_tagged);
-    }
-    FOREACH_MAIN_ID_END;
+    const bool do_local_ids = RNA_boolean_get(op->ptr, "do_local_ids");
+    const bool do_linked_ids = RNA_boolean_get(op->ptr, "do_linked_ids");
+    const bool do_recursive_cleanup = RNA_boolean_get(op->ptr, "do_recursive");
+
+    /* Tag all IDs to delete. */
+    BKE_lib_query_unused_ids_tag(
+        bmain, LIB_TAG_DOIT, do_local_ids, do_linked_ids, do_recursive_cleanup, num_tagged);
 
     if (num_tagged[INDEX_ID_NULL] == 0) {
       BKE_report(op->reports, RPT_INFO, "No orphaned data-blocks to purge");
@@ -2360,8 +2319,10 @@ static int outliner_orphans_purge_exec(bContext *C, wmOperator *op)
   }
 
   DEG_relations_tag_update(bmain);
-  WM_event_add_notifier(C, NC_ID | NA_EDITED, NULL);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_OUTLINER, NULL);
+  WM_event_add_notifier(C, NC_ID | NA_REMOVED, NULL);
+  /* Force full redraw of the UI. */
+  WM_main_add_notifier(NC_WINDOW, NULL);
+
   return OPERATOR_FINISHED;
 }
 
@@ -2383,6 +2344,24 @@ void OUTLINER_OT_orphans_purge(wmOperatorType *ot)
   /* properties */
   PropertyRNA *prop = RNA_def_int(ot->srna, "num_deleted", 0, 0, INT_MAX, "", "", 0, INT_MAX);
   RNA_def_property_flag(prop, PROP_SKIP_SAVE | PROP_HIDDEN);
+
+  RNA_def_boolean(ot->srna,
+                  "do_local_ids",
+                  true,
+                  "Local Data-blocks",
+                  "Include unused local data-blocks into deletion");
+  RNA_def_boolean(ot->srna,
+                  "do_linked_ids",
+                  true,
+                  "Linked Data-blocks",
+                  "Include unused linked data-blocks into deletion");
+
+  RNA_def_boolean(ot->srna,
+                  "do_recursive",
+                  false,
+                  "Recursive Delete",
+                  "Recursively check for indirectly unused data-blocks, ensuring that no orphaned "
+                  "data-blocks remain after execution");
 }
 
 /** \} */

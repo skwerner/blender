@@ -243,7 +243,8 @@ static void hair_batch_cache_ensure_procedural_final_points(ParticleHairCache *c
   GPUVertFormat format = {0};
   GPU_vertformat_attr_add(&format, "pos", GPU_COMP_F32, 4, GPU_FETCH_FLOAT);
 
-  cache->final[subdiv].proc_buf = GPU_vertbuf_create_with_format(&format);
+  cache->final[subdiv].proc_buf = GPU_vertbuf_create_with_format_ex(&format,
+                                                                    GPU_USAGE_DEVICE_ONLY);
 
   /* Create a destination buffer for the transform feedback. Sized appropriately */
   /* Those are points! not line segments. */
@@ -318,7 +319,7 @@ bool hair_ensure_procedural_data(Object *object,
   HairBatchCache *cache = hair_batch_cache_get(hair);
   *r_hair_cache = &cache->hair;
 
-  const int steps = 2; /* TODO: don't hardcode? */
+  const int steps = 2; /* TODO: don't hard-code? */
   (*r_hair_cache)->final[subdiv].strands_res = 1 << (steps + subdiv);
 
   /* Refreshed on combing and simulation. */

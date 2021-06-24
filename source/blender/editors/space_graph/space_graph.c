@@ -172,6 +172,8 @@ static SpaceLink *graph_duplicate(SpaceLink *sl)
 {
   SpaceGraph *sipon = MEM_dupallocN(sl);
 
+  memset(&sipon->runtime, 0x0, sizeof(sipon->runtime));
+
   /* clear or remove stuff from old */
   BLI_duplicatelist(&sipon->runtime.ghost_curves, &((SpaceGraph *)sl)->runtime.ghost_curves);
   sipon->ads = MEM_dupallocN(sipon->ads);
@@ -403,12 +405,11 @@ static void graph_buttons_region_draw(const bContext *C, ARegion *region)
   ED_region_panels(C, region);
 }
 
-static void graph_region_listener(wmWindow *UNUSED(win),
-                                  ScrArea *UNUSED(area),
-                                  ARegion *region,
-                                  wmNotifier *wmn,
-                                  const Scene *UNUSED(scene))
+static void graph_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
+
   /* context changes */
   switch (wmn->category) {
     case NC_ANIMATION:
@@ -470,14 +471,14 @@ static void graph_region_listener(wmWindow *UNUSED(win),
   }
 }
 
-static void graph_region_message_subscribe(const struct bContext *UNUSED(C),
-                                           struct WorkSpace *UNUSED(workspace),
-                                           struct Scene *scene,
-                                           struct bScreen *screen,
-                                           struct ScrArea *area,
-                                           struct ARegion *region,
-                                           struct wmMsgBus *mbus)
+static void graph_region_message_subscribe(const wmRegionMessageSubscribeParams *params)
 {
+  struct wmMsgBus *mbus = params->message_bus;
+  Scene *scene = params->scene;
+  bScreen *screen = params->screen;
+  ScrArea *area = params->area;
+  ARegion *region = params->region;
+
   PointerRNA ptr;
   RNA_pointer_create(&screen->id, &RNA_SpaceGraphEditor, area->spacedata.first, &ptr);
 
@@ -546,11 +547,10 @@ static void graph_region_message_subscribe(const struct bContext *UNUSED(C),
 }
 
 /* editor level listener */
-static void graph_listener(wmWindow *UNUSED(win),
-                           ScrArea *area,
-                           wmNotifier *wmn,
-                           Scene *UNUSED(scene))
+static void graph_listener(const wmSpaceTypeListenerParams *params)
 {
+  ScrArea *area = params->area;
+  wmNotifier *wmn = params->notifier;
   SpaceGraph *sipo = (SpaceGraph *)area->spacedata.first;
 
   /* context changes */

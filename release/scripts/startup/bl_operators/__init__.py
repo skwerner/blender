@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
+from __future__ import annotations
 
 # support reloading sub-modules
 if "bpy" in locals():
@@ -44,6 +45,7 @@ _modules = [
     "rigidbody",
     "screen_play_rendered_anim",
     "sequencer",
+    "spreadsheet",
     "userpref",
     "uvcalc_follow_active",
     "uvcalc_lightmap",

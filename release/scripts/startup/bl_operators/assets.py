@@ -16,14 +16,17 @@
 #
 # ##### END GPL LICENSE BLOCK #####
 
-import bpy
+# <pep8 compliant>
+from __future__ import annotations
+
+from bpy.types import Operator
 
 from bpy_extras.asset_utils import (
     SpaceAssetInfo,
 )
 
 
-class ASSET_OT_tag_add(bpy.types.Operator):
+class ASSET_OT_tag_add(Operator):
     """Add a new keyword tag to the active asset"""
 
     bl_idname = "asset.tag_add"
@@ -41,7 +44,7 @@ class ASSET_OT_tag_add(bpy.types.Operator):
         return {'FINISHED'}
 
 
-class ASSET_OT_tag_remove(bpy.types.Operator):
+class ASSET_OT_tag_remove(Operator):
     """Remove an existing keyword tag from the active asset"""
 
     bl_idname = "asset.tag_remove"

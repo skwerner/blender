@@ -560,8 +560,8 @@ static void bm_isect_tri_tri(
   /* vert-vert
    * --------- */
   {
-    /* first check in any verts are touching
-     * (any case where we wont create new verts)
+    /* first check if any verts are touching
+     * (any case where we won't create new verts)
      */
     uint i_a;
     for (i_a = 0; i_a < 3; i_a++) {
@@ -1036,7 +1036,7 @@ bool BM_mesh_intersect(BMesh *bm,
 #endif
 
   if (boolean_mode != BMESH_ISECT_BOOLEAN_NONE) {
-    /* keep original geometrty for raycast callbacks */
+    /* Keep original geometry for ray-cast callbacks. */
     float **cos;
     int i, j;
 
@@ -1546,7 +1546,7 @@ bool BM_mesh_intersect(BMesh *bm,
       bool do_remove, do_flip;
 
       {
-        /* for now assyme this is an OK face to test with (not degenerate!) */
+        /* For now assume this is an OK face to test with (not degenerate!) */
         BMFace *f = ftable[groups_array[fg]];
         float co[3];
         int hits;
@@ -1606,7 +1606,7 @@ bool BM_mesh_intersect(BMesh *bm,
       for (node = s.vert_dissolve; node; node = node->next) {
         BMVert *v = node->link;
         if (BM_vert_is_edge_pair(v)) {
-          /* we wont create degenerate faces from this */
+          /* we won't create degenerate faces from this */
           bool ok = true;
 
           /* would we create a 2-sided-face?
@@ -1622,7 +1622,7 @@ bool BM_mesh_intersect(BMesh *bm,
           }
 
           if (ok) {
-            BM_vert_collapse_edge(bm, v->e, v, true, false);
+            BM_vert_collapse_edge(bm, v->e, v, true, false, false);
           }
         }
       }
@@ -1659,6 +1659,10 @@ bool BM_mesh_intersect(BMesh *bm,
   BLI_gset_free(s.wire_edges, NULL);
 
   BLI_memarena_free(s.mem_arena);
+
+  /* It's unlikely the selection history is useful at this point,
+   * if this is not called this array would need to be validated, see: T86799. */
+  BM_select_history_clear(bm);
 
   return (has_edit_isect || has_edit_boolean);
 }

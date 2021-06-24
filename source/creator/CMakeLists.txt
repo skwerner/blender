@@ -74,7 +74,7 @@ endif()
 if(WITH_TBB)
   blender_include_dirs(${TBB_INCLUDE_DIRS})
   if(NOT APPLE)
-    # APPLE plaform uses full paths for linking libraries.
+    # APPLE platform uses full paths for linking libraries.
     link_directories(${LIBDIR}/tbb/lib)
   endif()
 endif()
@@ -116,7 +116,12 @@ if(WITH_XR_OPENXR)
 endif()
 
 if(WITH_GMP)
+  blender_include_dirs(${GMP_INCLUDE_DIRS})
   add_definitions(-DWITH_GMP)
+endif()
+
+if(WITH_OPENCOLORIO)
+  add_definitions(-DWITH_OCIO)
 endif()
 
 # Setup the exe sources and buildinfo
@@ -130,14 +135,11 @@ set(SRC
 
 # MSVC 2010 gives linking errors with the manifest
 if(WIN32 AND NOT UNIX)
-  string(SUBSTRING ${BLENDER_VERSION} 0 1 bver1)
-  string(SUBSTRING ${BLENDER_VERSION} 2 1 bver2)
-  string(SUBSTRING ${BLENDER_VERSION} 3 1 bver3)
   add_definitions(
     -DBLEN_VER_RC_STR="${BLENDER_VERSION}"
-    -DBLEN_VER_RC_1=${bver1}
-    -DBLEN_VER_RC_2=${bver2}
-    -DBLEN_VER_RC_3=${bver3}
+    -DBLEN_VER_RC_1=${BLENDER_VERSION_MAJOR}
+    -DBLEN_VER_RC_2=${BLENDER_VERSION_MINOR}
+    -DBLEN_VER_RC_3=${BLENDER_VERSION_PATCH}
     -DBLEN_VER_RC_4=0
   )
 
@@ -188,7 +190,7 @@ if(WITH_BUILDINFO)
 
   # --------------------------------------------------------------------------
   # write header for values that change each build
-  # note, generaed file is in build dir's source/creator
+  # note, generated file is in build dir's source/creator
   #       except when used as an include path.
 
   add_definitions(-DWITH_BUILDINFO_HEADER)
@@ -288,6 +290,15 @@ if(WITH_PYTHON_MODULE)
 
 else()
   add_executable(blender ${EXETYPE} ${SRC})
+  if(WIN32)
+      add_executable(blender-launcher WIN32
+        blender_launcher_win32.c
+        ${CMAKE_SOURCE_DIR}/release/windows/icons/winblender.rc
+        ${CMAKE_BINARY_DIR}/blender.exe.manifest
+      )
+      target_compile_definitions (blender-launcher PRIVATE -D_UNICODE -DUNICODE)
+      target_link_libraries(blender-launcher Pathcch.lib)
+  endif()
 endif()
 
 if(WITH_BUILDINFO)
@@ -326,7 +337,14 @@ elseif(WIN32)
 
 elseif(APPLE)
   if(WITH_PYTHON_MODULE)
-    set(TARGETDIR_VER ${BLENDER_VERSION})
+    if(WITH_INSTALL_PORTABLE)
+      set(TARGETDIR_VER $<TARGET_FILE_DIR:blender>/../Resources/${BLENDER_VERSION})
+      # Keep the `BLENDER_VERSION` folder and bpy.so in the build folder.
+      set(INSTALL_BPY_TO_SITE_PACKAGES OFF)
+    else()
+      set(TARGETDIR_VER "${PYTHON_LIBPATH}/Resources/${BLENDER_VERSION}")
+      set(INSTALL_BPY_TO_SITE_PACKAGES ON)
+    endif()
   else()
     set(TARGETDIR_VER Blender.app/Contents/Resources/${BLENDER_VERSION})
   endif()
@@ -353,14 +371,14 @@ if(WITH_PYTHON)
      "${BLENDER_VERSION_CYCLE}" STREQUAL "rc")
     set(ADDON_EXCLUDE_CONDITIONAL "addons_contrib/*")
   else()
-    set(ADDON_EXCLUDE_CONDITIONAL "_addons_contrib/*")  # dummy, wont do anything
+    set(ADDON_EXCLUDE_CONDITIONAL "_addons_contrib/*")  # dummy, won't do anything
   endif()
 
   # do not install freestyle dir if disabled
   if(NOT WITH_FREESTYLE)
     set(FREESTYLE_EXCLUDE_CONDITIONAL "freestyle/*")
   else()
-    set(FREESTYLE_EXCLUDE_CONDITIONAL "_freestyle/*")  # dummy, wont do anything
+    set(FREESTYLE_EXCLUDE_CONDITIONAL "_freestyle/*")  # dummy, won't do anything
   endif()
 
   install(
@@ -456,8 +474,8 @@ if(UNIX AND NOT APPLE)
       add_custom_target(
         blender_man_page ALL
         COMMAND ${CMAKE_SOURCE_DIR}/doc/manpage/blender.1.py
-                ${EXECUTABLE_OUTPUT_PATH}/blender
-                ${CMAKE_CURRENT_BINARY_DIR}/blender.1)
+                --blender ${EXECUTABLE_OUTPUT_PATH}/blender
+                --output ${CMAKE_CURRENT_BINARY_DIR}/blender.1)
       add_dependencies(blender_man_page blender)
     endif()
   endif()
@@ -574,7 +592,7 @@ if(UNIX AND NOT APPLE)
         DIRECTORY ${PYTHON_LIBPATH}/python${PYTHON_VERSION}
         DESTINATION ${TARGETDIR_VER}/python/${_target_LIB}
         PATTERN "__pycache__" EXCLUDE               # * any cache *
-        PATTERN "config-${PYTHON_VERSION}m/*.a" EXCLUDE  # static lib
+        PATTERN "config-${PYTHON_VERSION}/*.a" EXCLUDE  # static lib
         PATTERN "lib2to3" EXCLUDE                   # ./lib2to3
         PATTERN "site-packages/*" EXCLUDE           # ./site-packages/*
         PATTERN "tkinter" EXCLUDE                   # ./tkinter
@@ -613,9 +631,9 @@ if(UNIX AND NOT APPLE)
           PATTERN "doc" EXCLUDE                   # ./doc
           PATTERN "tests" EXCLUDE                 # ./tests
           PATTERN "f2py" EXCLUDE                  # ./f2py - fortran/python interface code, not for blender.
-          PATTERN "include" EXCLUDE               # include dirs all over, we wont use NumPy/CAPI
+          PATTERN "include" EXCLUDE               # include dirs all over, we won't use NumPy/CAPI
           PATTERN "*.h" EXCLUDE                   # some includes are not in include dirs
-          PATTERN "*.a" EXCLUDE                   # ./core/lib/libnpymath.a - for linking, we dont need.
+          PATTERN "*.a" EXCLUDE                   # ./core/lib/libnpymath.a - for linking, we don't need.
         )
         unset(_suffix)
       endif()
@@ -685,6 +703,26 @@ elseif(WIN32)
           FILES ${LIBDIR}/fftw3/lib/libfftw3-3.dll
           DESTINATION "."
     )
+  endif()
+  if(MSVC_ASAN)
+    # The asan dll's can be found in the same folder as the compiler, this is the easiest way to find these.
+    string(REPLACE "cl.exe" "clang_rt.asan_dynamic-x86_64.dll" ASAN_DLL ${CMAKE_C_COMPILER})
+    string(REPLACE "cl.exe" "clang_rt.asan_dbg_dynamic-x86_64.dll" ASAN_DEBUG_DLL ${CMAKE_C_COMPILER})
+    if(NOT EXISTS "${ASAN_DLL}")
+      message(FATAL_ERROR "Asan is enabled, but the ASAN runtime is not detected, this is an optional component during the MSVC install, please install it")
+    endif()
+    install(
+          FILES ${ASAN_DLL}
+          DESTINATION "."
+          CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
+    )
+    install(
+          FILES ${ASAN_DEBUG_DLL}
+          DESTINATION "."
+          CONFIGURATIONS Debug
+    )
+    unset(ASAN_DLL)
+    unset(ASAN_DEBUG_DLL)
   endif()
 
   if(WITH_GMP)
@@ -764,7 +802,7 @@ elseif(WIN32)
         PATTERN "*.pyo" EXCLUDE                 # * any cache *
       )
 
-       install(
+      install(
         DIRECTORY ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/lib
         DESTINATION ${BLENDER_VERSION}/python/
         CONFIGURATIONS Debug
@@ -772,7 +810,6 @@ elseif(WIN32)
         PATTERN "__pycache__" EXCLUDE           # * any cache *
         PATTERN "*.pyc" EXCLUDE                 # * any cache *
         PATTERN "*.pyo" EXCLUDE                 # * any cache *)
-
       )
 
       install(
@@ -804,13 +841,13 @@ elseif(WIN32)
 
       if(WINDOWS_PYTHON_DEBUG)
         install(
-          FILES ${LIBDIR}/python/37/libs/python${_PYTHON_VERSION_NO_DOTS}.pdb
+          FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}.pdb
           DESTINATION "."
           CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
         )
 
         install(
-          FILES ${LIBDIR}/python/37/libs/python${_PYTHON_VERSION_NO_DOTS}_d.pdb
+          FILES ${LIBDIR}/python/${_PYTHON_VERSION_NO_DOTS}/libs/python${_PYTHON_VERSION_NO_DOTS}_d.pdb
           DESTINATION "."
           CONFIGURATIONS Debug
         )
@@ -847,13 +884,13 @@ elseif(WIN32)
   if(WITH_TBB)
     install(
       FILES
-        ${LIBDIR}/tbb/lib/tbb.dll
+        ${LIBDIR}/tbb/bin/tbb.dll
       DESTINATION "."
       CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
     )
     install(
       FILES
-        ${LIBDIR}/tbb/lib/debug/tbb_debug.dll
+        ${LIBDIR}/tbb/bin/tbb_debug.dll
       DESTINATION "."
       CONFIGURATIONS Debug
     )
@@ -861,18 +898,19 @@ elseif(WIN32)
   if(WITH_TBB_MALLOC_PROXY)
     install(
       FILES
-        ${LIBDIR}/tbb/lib/tbbmalloc.dll
-        ${LIBDIR}/tbb/lib/tbbmalloc_proxy.dll
+        ${LIBDIR}/tbb/bin/tbbmalloc.dll
+        ${LIBDIR}/tbb/bin/tbbmalloc_proxy.dll
       DESTINATION "."
       CONFIGURATIONS Release;RelWithDebInfo;MinSizeRel
     )
     install(
       FILES
-        ${LIBDIR}/tbb/lib/debug/tbbmalloc.dll
-        ${LIBDIR}/tbb/lib/debug/tbbmalloc_proxy.dll
+        ${LIBDIR}/tbb/bin/tbbmalloc_debug.dll
+        ${LIBDIR}/tbb/bin/tbbmalloc_proxy_debug.dll
       DESTINATION "."
       CONFIGURATIONS Debug
     )
+    list(APPEND LIB ${TBB_MALLOC_LIBRARIES})
   endif()
 
   if(WITH_CODEC_SNDFILE)
@@ -945,7 +983,7 @@ elseif(APPLE)
       PATTERN "__pycache__" EXCLUDE
       PATTERN "__MACOSX" EXCLUDE
       PATTERN ".DS_Store" EXCLUDE
-      PATTERN "config-${PYTHON_VERSION}m/*.a" EXCLUDE  # static lib
+      PATTERN "config-${PYTHON_VERSION}/*.a" EXCLUDE  # static lib
       PATTERN "lib2to3" EXCLUDE                   # ./lib2to3
       PATTERN "tkinter" EXCLUDE                   # ./tkinter
       PATTERN "lib-dynload/_tkinter.*" EXCLUDE    # ./lib-dynload/_tkinter.co
@@ -1006,6 +1044,20 @@ elseif(APPLE)
       FILES ${LIBDIR}/openmp/lib/libomp.dylib
       DESTINATION Blender.app/Contents/Resources/lib
     )
+    if(WITH_PYTHON_MODULE)
+      # Move the dylib in a Blender version folder to keep the corresponding OpenMP version.
+      install(
+        DIRECTORY   ${CMAKE_BINARY_DIR}/Resources/lib
+        DESTINATION ${TARGETDIR_VER}
+      )
+      add_custom_command(TARGET blender POST_BUILD
+        # The old `LC_LOAD_DYLIB` is the `LC_ID_DYLIB` of the LIBDIR OpenMP dylib.
+        # Change it to support multiple rpaths.
+        COMMAND xcrun install_name_tool -change "@executable_path/../Resources/lib/libomp.dylib" "@rpath/libomp.dylib" "$<TARGET_FILE:blender>"
+        # For installation into site-packages.
+        COMMAND xcrun install_name_tool -add_rpath "@loader_path/../Resources/${BLENDER_VERSION}/lib" "$<TARGET_FILE:blender>"
+      )
+    endif()
   endif()
 
   if(WITH_LLVM AND NOT LLVM_STATIC)
@@ -1036,6 +1088,14 @@ elseif(APPLE)
       DESTINATION ${TARGETDIR_VER}/python/include/${_py_inc_suffix}
     )
     unset(_py_inc_suffix)
+  endif()
+  if(WITH_PYTHON_MODULE)
+    if(INSTALL_BPY_TO_SITE_PACKAGES)
+      install(
+        TARGETS blender
+        LIBRARY DESTINATION ${PYTHON_LIBPATH}/site-packages
+      )
+    endif()
   endif()
 
   if(WITH_DRACO)
@@ -1167,7 +1227,7 @@ endif()
 
 if(WIN32 AND NOT WITH_PYTHON_MODULE)
   install(
-    TARGETS blender
+    TARGETS blender blender-launcher
     COMPONENT Blender
     DESTINATION "."
   )

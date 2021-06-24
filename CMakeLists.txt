@@ -63,6 +63,9 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/build_files/cmake/platform")
 # avoid having empty buildtype
 if(NOT DEFINED CMAKE_BUILD_TYPE_INIT)
   set(CMAKE_BUILD_TYPE_INIT "Release")
+  # Internal logic caches this variable, avoid showing it by default
+  # since it's easy to accidentally set instead of the build type.
+  mark_as_advanced(CMAKE_BUILD_TYPE_INIT)
 endif()
 
 # Omit superfluous "Up-to-date" messages.
@@ -164,10 +167,6 @@ if(APPLE)
 endif()
 
 option(WITH_BUILDINFO     "Include extra build details (only disable for development & faster builds)" ON)
-if(${CMAKE_VERSION} VERSION_LESS 2.8.8)
-  # add_library OBJECT arg unsupported
-  set(WITH_BUILDINFO OFF)
-endif()
 set(BUILDINFO_OVERRIDE_DATE "" CACHE STRING "Use instead of the current date for reproducible builds (empty string disables this option)")
 set(BUILDINFO_OVERRIDE_TIME "" CACHE STRING "Use instead of the current time for reproducible builds (empty string disables this option)")
 set(CPACK_OVERRIDE_PACKAGENAME "" CACHE STRING "Use instead of the standard packagename (empty string disables this option)")
@@ -205,6 +204,7 @@ option(WITH_OPENVDB_BLOSC "Enable blosc compression for OpenVDB, only enable if 
 option(WITH_OPENVDB_3_ABI_COMPATIBLE "Assume OpenVDB library has been compiled with version 3 ABI compatibility" OFF)
 mark_as_advanced(WITH_OPENVDB_3_ABI_COMPATIBLE)
 option(WITH_NANOVDB       "Enable usage of NanoVDB data structure for rendering on the GPU" ON)
+option(WITH_HARU          "Enable features relying on Libharu (Grease pencil PDF export)" ON)
 
 # GHOST Windowing Library Options
 option(WITH_GHOST_DEBUG   "Enable debugging output for the GHOST library" OFF)
@@ -236,9 +236,7 @@ option(WITH_SYSTEM_AUDASPACE "Build with external audaspace library installed on
 mark_as_advanced(WITH_AUDASPACE)
 mark_as_advanced(WITH_SYSTEM_AUDASPACE)
 
-if(NOT WITH_AUDASPACE)
-  set(WITH_SYSTEM_AUDASPACE OFF)
-endif()
+set_and_warn_dependency(WITH_AUDASPACE WITH_SYSTEM_AUDASPACE OFF)
 
 option(WITH_OPENMP        "Enable OpenMP (has to be supported by the compiler)" ON)
 if(UNIX AND NOT APPLE)
@@ -300,14 +298,32 @@ option(WITH_OPENCOLLADA   "Enable OpenCollada Support (http://www.opencollada.or
 # Sound output
 option(WITH_SDL           "Enable SDL for sound and joystick support" ON)
 option(WITH_OPENAL        "Enable OpenAL Support (http://www.openal.org)" ON)
+if(APPLE)
+  option(WITH_COREAUDIO    "Enable CoreAudio for audio support on macOS" ON)
+else()
+  set(WITH_COREAUDIO OFF)
+endif()
 if(NOT WIN32)
   option(WITH_JACK          "Enable JACK Support (http://www.jackaudio.org)" ON)
   if(UNIX AND NOT APPLE)
     option(WITH_JACK_DYNLOAD  "Enable runtime dynamic JACK libraries loading" OFF)
   endif()
+else()
+  set(WITH_JACK OFF)
 endif()
 if(UNIX AND NOT APPLE)
   option(WITH_SDL_DYNLOAD  "Enable runtime dynamic SDL libraries loading" OFF)
+endif()
+if(UNIX AND NOT APPLE)
+  option(WITH_PULSEAUDIO   "Enable PulseAudio for audio support on Linux" ON)
+  option(WITH_PULSEAUDIO_DYNLOAD  "Enable runtime dynamic PulseAudio libraries loading" OFF)
+else()
+  set(WITH_PULSEAUDIO OFF)
+endif()
+if(WIN32)
+  option(WITH_WASAPI      "Enable Windows Audio Sessions API for audio support on Windows" ON)
+else()
+  set(WITH_WASAPI OFF)
 endif()
 
 # Compression
@@ -370,8 +386,8 @@ if(WITH_PYTHON_INSTALL)
   endif()
 endif()
 
-option(WITH_CPU_SSE              "Enable SIMD instruction if they're detected on the host machine" ON)
-mark_as_advanced(WITH_CPU_SSE)
+option(WITH_CPU_SIMD              "Enable SIMD instruction if they're detected on the host machine" ON)
+mark_as_advanced(WITH_CPU_SIMD)
 
 # Cycles
 option(WITH_CYCLES                  "Enable Cycles Render Engine" ON)
@@ -416,6 +432,7 @@ else()
   option(LLVM_STATIC                  "Link with LLVM static libraries" OFF)
 endif()
 mark_as_advanced(LLVM_STATIC)
+option(WITH_CLANG                   "Use Clang" OFF)
 
 # disable for now, but plan to support on all platforms eventually
 option(WITH_MEM_JEMALLOC   "Enable malloc replacement (http://www.canonware.com/jemalloc)" ON)
@@ -503,10 +520,10 @@ if(CMAKE_COMPILER_IS_GNUCC)
   mark_as_advanced(WITH_LINKER_LLD)
 endif()
 
-if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
-  option(WITH_COMPILER_ASAN "Build and link against address sanitizer (only for Debug & RelWithDebInfo targets)." OFF)
-  mark_as_advanced(WITH_COMPILER_ASAN)
+option(WITH_COMPILER_ASAN "Build and link against address sanitizer (only for Debug & RelWithDebInfo targets)." OFF)
+mark_as_advanced(WITH_COMPILER_ASAN)
 
+if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID MATCHES "Clang")
   if(WITH_COMPILER_ASAN)
     set(_asan_defaults "\
 -fsanitize=address \
@@ -610,6 +627,12 @@ if(WIN32)
 
 endif()
 
+if(UNIX)
+  # See WITH_WINDOWS_SCCACHE for Windows.
+  option(WITH_COMPILER_CCACHE "Use ccache to improve rebuild times (Works with Ninja, Makefiles and Xcode)" OFF)
+  mark_as_advanced(WITH_COMPILER_CCACHE)
+endif()
+
 # The following only works with the Ninja generator in CMake >= 3.0.
 if("${CMAKE_GENERATOR}" MATCHES "Ninja")
   option(WITH_NINJA_POOL_JOBS
@@ -664,16 +687,11 @@ if(NOT WITH_BLENDER AND NOT WITH_CYCLES_STANDALONE)
   )
 endif()
 
-if(NOT WITH_AUDASPACE)
-  if(WITH_OPENAL)
-    message(WARNING "WITH_OPENAL requires WITH_AUDASPACE which is disabled")
-    set(WITH_OPENAL OFF)
-  endif()
-  if(WITH_JACK)
-    message(WARNING "WITH_JACK requires WITH_AUDASPACE which is disabled")
-    set(WITH_JACK OFF)
-  endif()
-endif()
+set_and_warn_dependency(WITH_AUDASPACE WITH_OPENAL OFF)
+set_and_warn_dependency(WITH_AUDASPACE WITH_COREAUDIO OFF)
+set_and_warn_dependency(WITH_AUDASPACE WITH_JACK OFF)
+set_and_warn_dependency(WITH_AUDASPACE WITH_PULSEAUDIO OFF)
+set_and_warn_dependency(WITH_AUDASPACE WITH_WASAPI OFF)
 
 if(NOT WITH_SDL AND WITH_GHOST_SDL)
   message(FATAL_ERROR "WITH_GHOST_SDL requires WITH_SDL")
@@ -684,10 +702,8 @@ if(WITH_PYTHON_MODULE AND WITH_PYTHON_INSTALL)
   message(FATAL_ERROR "WITH_PYTHON_MODULE requires WITH_PYTHON_INSTALL to be OFF")
 endif()
 
-if(NOT WITH_PYTHON)
-  set(WITH_CYCLES OFF)
-  set(WITH_DRACO OFF)
-endif()
+set_and_warn_dependency(WITH_PYTHON WITH_CYCLES        OFF)
+set_and_warn_dependency(WITH_PYTHON WITH_DRACO         OFF)
 
 if(WITH_DRACO AND NOT WITH_PYTHON_INSTALL)
   message(STATUS "WITH_DRACO requires WITH_PYTHON_INSTALL to be ON, disabling WITH_DRACO for now")
@@ -722,8 +738,12 @@ set_and_warn_dependency(WITH_TBB WITH_MOD_FLUID         OFF)
 # NanoVDB requires OpenVDB to convert the data structure
 set_and_warn_dependency(WITH_OPENVDB WITH_NANOVDB       OFF)
 
-# OpenVDB uses 'half' type from OpenEXR & fails to link without OpenEXR enabled.
+# OpenVDB and OpenColorIO uses 'half' type from OpenEXR
 set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENVDB OFF)
+set_and_warn_dependency(WITH_IMAGE_OPENEXR WITH_OPENCOLORIO  OFF)
+
+# Haru needs `TIFFFaxBlackCodes` & `TIFFFaxWhiteCodes` symbols from TIFF.
+set_and_warn_dependency(WITH_IMAGE_TIFF WITH_HARU       OFF)
 
 # auto enable openimageio for cycles
 if(WITH_CYCLES)
@@ -732,6 +752,7 @@ if(WITH_CYCLES)
   # auto enable llvm for cycles_osl
   if(WITH_CYCLES_OSL)
     set(WITH_LLVM ON CACHE BOOL "" FORCE)
+    set(WITH_CLANG ON CACHE BOOL "" FORCE)
   endif()
 else()
   set(WITH_CYCLES_OSL OFF)
@@ -754,6 +775,7 @@ if(WITH_INSTALL_PORTABLE)
 endif()
 
 if(WITH_GHOST_SDL OR WITH_HEADLESS)
+  message(STATUS "Disabling Ghost Wayland, X11, Input IME, and OpenXR")
   set(WITH_GHOST_WAYLAND OFF)
   set(WITH_GHOST_X11     OFF)
   set(WITH_X11_XINPUT    OFF)
@@ -763,14 +785,6 @@ if(WITH_GHOST_SDL OR WITH_HEADLESS)
   set(WITH_GHOST_XDND    OFF)
   set(WITH_INPUT_IME     OFF)
   set(WITH_XR_OPENXR     OFF)
-endif()
-
-if(WITH_CPU_SSE)
-  TEST_SSE_SUPPORT(COMPILER_SSE_FLAG COMPILER_SSE2_FLAG)
-else()
-  message(STATUS "SSE and SSE2 optimizations are DISABLED!")
-  set(COMPILER_SSE_FLAG)
-  set(COMPILER_SSE2_FLAG)
 endif()
 
 if(WITH_BUILDINFO)
@@ -792,7 +806,7 @@ endif()
 if(NOT WITH_CUDA_DYNLOAD)
   find_package(CUDA)
   if(NOT CUDA_FOUND)
-    message("CUDA toolkit not found, using dynamic runtime loading of libraries instead")
+    message(STATUS "CUDA toolkit not found, using dynamic runtime loading of libraries (WITH_CUDA_DYNLOAD) instead")
     set(WITH_CUDA_DYNLOAD ON)
   endif()
 endif()
@@ -821,8 +835,8 @@ if(WITH_PYTHON)
   # Do this before main 'platform_*' checks,
   # because UNIX will search for the old Python paths which may not exist.
   # giving errors about missing paths before this case is met.
-  if(DEFINED PYTHON_VERSION AND "${PYTHON_VERSION}" VERSION_LESS "3.7")
-    message(FATAL_ERROR "At least Python 3.7 is required to build")
+  if(DEFINED PYTHON_VERSION AND "${PYTHON_VERSION}" VERSION_LESS "3.9")
+    message(FATAL_ERROR "At least Python 3.9 is required to build, but found Python ${PYTHON_VERSION}")
   endif()
 
   file(GLOB RESULT "${CMAKE_SOURCE_DIR}/release/scripts/addons")
@@ -897,6 +911,18 @@ if(NOT CMAKE_BUILD_TYPE MATCHES "Release")
   endif()
 endif()
 
+# Test SIMD support, before platform includes to determine if sse2neon is needed.
+if(WITH_CPU_SIMD)
+  set(COMPILER_SSE_FLAG)
+  set(COMPILER_SSE2_FLAG)
+
+  # Test Neon first since macOS Arm can compile and run x86-64 SSE binaries.
+  TEST_NEON_SUPPORT()
+  if(NOT SUPPORT_NEON_BUILD)
+    TEST_SSE_SUPPORT(COMPILER_SSE_FLAG COMPILER_SSE2_FLAG)
+  endif()
+endif()
+
 # ----------------------------------------------------------------------------
 # Main Platform Checks
 #
@@ -952,22 +978,49 @@ if(WITH_INTERNATIONAL)
   endif()
 endif()
 
-# See TEST_SSE_SUPPORT() for how this is defined.
-
-# Do it globally, SSE2 is required for quite some time now.
-# Doing it now allows to use SSE/SSE2 in inline headers.
-if(SUPPORT_SSE_BUILD)
-  string(PREPEND PLATFORM_CFLAGS "${COMPILER_SSE_FLAG} ")
-  add_definitions(-D__SSE__ -D__MMX__)
-endif()
-if(SUPPORT_SSE2_BUILD)
-  string(APPEND PLATFORM_CFLAGS " ${COMPILER_SSE2_FLAG}")
-  add_definitions(-D__SSE2__)
-  if(NOT SUPPORT_SSE_BUILD) # don't double up
-    add_definitions(-D__MMX__)
+# Enable SIMD support if detected by TEST_SSE_SUPPORT() or TEST_NEON_SUPPORT().
+#
+# This is done globally, so that all modules can use it if available, and
+# because these are used in headers used by many modules.
+if(WITH_CPU_SIMD)
+  if(SUPPORT_NEON_BUILD)
+    # Neon
+    if(SSE2NEON_FOUND)
+      blender_include_dirs_sys("${SSE2NEON_INCLUDE_DIRS}")
+      add_definitions(-DWITH_SSE2NEON)
+    endif()
+  else()
+    # SSE
+    if(SUPPORT_SSE_BUILD)
+      string(PREPEND PLATFORM_CFLAGS "${COMPILER_SSE_FLAG} ")
+      add_definitions(-D__SSE__ -D__MMX__)
+    endif()
+    if(SUPPORT_SSE2_BUILD)
+      string(APPEND PLATFORM_CFLAGS " ${COMPILER_SSE2_FLAG}")
+      add_definitions(-D__SSE2__)
+      if(NOT SUPPORT_SSE_BUILD) # don't double up
+        add_definitions(-D__MMX__)
+      endif()
+    endif()
   endif()
-endif()
 
+  # Print instructions used
+  if(SUPPORT_NEON_BUILD)
+    if(SSE2NEON_FOUND)
+      message(STATUS "Neon SIMD instructions enabled")
+    else()
+      message(STATUS "Neon SIMD instructions detected but unused, requires sse2neon")
+    endif()
+  elseif(SUPPORT_SSE2_BUILD)
+    message(STATUS "SSE2 SIMD instructions enabled")
+  elseif(SUPPORT_SSE_BUILD)
+    message(STATUS "SSE SIMD instructions enabled")
+  else()
+    message(STATUS "No SIMD instructions detected")
+  endif()
+else()
+  message(STATUS "SIMD instructions disabled")
+endif()
 
 # set the endian define
 if(MSVC)
@@ -1012,6 +1065,9 @@ if(WITH_OPENVDB)
   if(WITH_OPENVDB_3_ABI_COMPATIBLE)
     list(APPEND OPENVDB_DEFINITIONS -DOPENVDB_3_ABI_COMPATIBLE)
   endif()
+
+  # OpenVDB headers use deprecated TBB headers, silence warning.
+  list(APPEND OPENVDB_DEFINITIONS -DTBB_SUPPRESS_DEPRECATED_MESSAGES=1)
 
   list(APPEND OPENVDB_INCLUDE_DIRS
     ${BOOST_INCLUDE_DIR}
@@ -1175,6 +1231,8 @@ if(WITH_OPENMP)
     if(NOT WITH_OPENMP_STATIC)
       string(APPEND CMAKE_C_FLAGS " ${OpenMP_C_FLAGS}")
       string(APPEND CMAKE_CXX_FLAGS " ${OpenMP_CXX_FLAGS}")
+      string(APPEND CMAKE_EXE_LINKER_FLAGS " ${OpenMP_LINKER_FLAGS}")
+      string(APPEND CMAKE_MODULE_LINKER_FLAGS " ${OpenMP_LINKER_FLAGS}")
     else()
       # Typically avoid adding flags as defines but we can't
       # pass OpenMP flags to the linker for static builds, meaning
@@ -1185,6 +1243,7 @@ if(WITH_OPENMP)
       find_library_static(OpenMP_LIBRARIES gomp ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES})
     endif()
   else()
+    message(STATUS "OpenMP not found, disabling WITH_OPENMP")
     set(WITH_OPENMP OFF)
   endif()
 
@@ -1260,6 +1319,7 @@ list(APPEND GL_DEFINITIONS -DGLEW_NO_GLU)
 if(WITH_BULLET AND WITH_SYSTEM_BULLET)
   find_package(Bullet)
   if(NOT BULLET_FOUND)
+    message(STATUS "Bullet not found, disabling WITH_BULLET")
     set(WITH_BULLET OFF)
   endif()
 else()
@@ -1428,6 +1488,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
   # gcc 4.2 gives annoying warnings on every file with this
   if(NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.3")
     ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_UNINITIALIZED -Wuninitialized)
+    ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_UNINITIALIZED -Wuninitialized)
   endif()
 
   # versions before gcc4.6 give many BLI_math warnings
@@ -1465,6 +1526,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_UNDEF -Wundef)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_FORMAT_SIGN -Wformat-signedness)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_RESTRICT -Wrestrict)
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_SUGGEST_OVERRIDE  -Wno-suggest-override)
 
   # gcc 4.2 gives annoying warnings on every file with this
   if(NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "4.3")
@@ -1492,11 +1554,13 @@ if(CMAKE_COMPILER_IS_GNUCC)
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_FORMAT                  -Wno-format)
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_SWITCH                  -Wno-switch)
   ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_VARIABLE         -Wno-unused-variable)
+  ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_UNUSED_VARIABLE         -Wno-uninitialized)
 
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_CLASS_MEMACCESS     -Wno-class-memaccess)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_COMMENT             -Wno-comment)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_TYPEDEFS     -Wno-unused-local-typedefs)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_VARIABLE     -Wno-unused-variable)
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_REMOVE_STRICT_FLAGS CXX_WARN_NO_UNUSED_VARIABLE     -Wno-uninitialized)
 
   if(CMAKE_COMPILER_IS_GNUCC AND (NOT "${CMAKE_C_COMPILER_VERSION}" VERSION_LESS "7.0"))
     ADD_CHECK_C_COMPILER_FLAG(C_REMOVE_STRICT_FLAGS C_WARN_NO_IMPLICIT_FALLTHROUGH    -Wno-implicit-fallthrough)
@@ -1526,6 +1590,8 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_OVERLOADED_VIRTUAL  -Wno-overloaded-virtual)  # we get a lot of these, if its a problem a dev needs to look into it.
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_SIGN_COMPARE        -Wno-sign-compare)
   ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_INVALID_OFFSETOF    -Wno-invalid-offsetof)
+  # Apple Clang (tested on version 12) doesn't support this flag while LLVM Clang 11 does.
+  ADD_CHECK_CXX_COMPILER_FLAG(CXX_WARNINGS CXX_WARN_NO_SUGGEST_OVERRIDE    -Wno-suggest-override)
 
   # gives too many unfixable warnings
   # ADD_CHECK_C_COMPILER_FLAG(C_WARNINGS C_WARN_UNUSED_MACROS      -Wunused-macros)
@@ -1758,8 +1824,20 @@ if(WITH_BLENDER)
   # internal and external library information first, for test linking
   add_subdirectory(source)
 elseif(WITH_CYCLES_STANDALONE)
+  add_subdirectory(intern/glew-mx)
+  add_subdirectory(intern/guardedalloc)
+  add_subdirectory(intern/libc_compat)
+  add_subdirectory(intern/numaapi)
+  add_subdirectory(intern/sky)
+
   add_subdirectory(intern/cycles)
   add_subdirectory(extern/clew)
+  if(WITH_CYCLES_LOGGING)
+    if(NOT WITH_SYSTEM_GFLAGS)
+      add_subdirectory(extern/gflags)
+    endif()
+    add_subdirectory(extern/glog)
+  endif()
   if(WITH_CUDA_DYNLOAD)
     add_subdirectory(extern/cuew)
   endif()
@@ -1769,15 +1847,14 @@ elseif(WITH_CYCLES_STANDALONE)
 endif()
 
 #-----------------------------------------------------------------------------
+# Testing
+add_subdirectory(tests)
+
+#-----------------------------------------------------------------------------
 # Blender Application
 if(WITH_BLENDER)
   add_subdirectory(source/creator)
 endif()
-
-
-#-----------------------------------------------------------------------------
-# Testing
-add_subdirectory(tests)
 
 
 #-----------------------------------------------------------------------------
@@ -1829,10 +1906,12 @@ if(FIRST_RUN)
   info_cfg_text("Build Options:")
   info_cfg_option(WITH_ALEMBIC)
   info_cfg_option(WITH_BULLET)
+  info_cfg_option(WITH_CLANG)
   info_cfg_option(WITH_CYCLES)
   info_cfg_option(WITH_FFTW3)
   info_cfg_option(WITH_FREESTYLE)
   info_cfg_option(WITH_GMP)
+  info_cfg_option(WITH_HARU)
   info_cfg_option(WITH_IK_ITASC)
   info_cfg_option(WITH_IK_SOLVER)
   info_cfg_option(WITH_INPUT_NDOF)
@@ -1841,6 +1920,8 @@ if(FIRST_RUN)
   info_cfg_option(WITH_OPENCOLORIO)
   info_cfg_option(WITH_OPENIMAGEDENOISE)
   info_cfg_option(WITH_OPENVDB)
+  info_cfg_option(WITH_POTRACE)
+  info_cfg_option(WITH_PUGIXML)
   info_cfg_option(WITH_QUADRIFLOW)
   info_cfg_option(WITH_TBB)
   info_cfg_option(WITH_USD)
@@ -1873,11 +1954,15 @@ if(FIRST_RUN)
   info_cfg_option(WITH_CODEC_AVI)
   info_cfg_option(WITH_CODEC_FFMPEG)
   info_cfg_option(WITH_CODEC_SNDFILE)
+  info_cfg_option(WITH_COREAUDIO)
   info_cfg_option(WITH_JACK)
   info_cfg_option(WITH_JACK_DYNLOAD)
   info_cfg_option(WITH_OPENAL)
+  info_cfg_option(WITH_PULSEAUDIO)
+  info_cfg_option(WITH_PULSEAUDIO_DYNLOAD)
   info_cfg_option(WITH_SDL)
   info_cfg_option(WITH_SDL_DYNLOAD)
+  info_cfg_option(WITH_WASAPI)
 
   info_cfg_text("Compression:")
   info_cfg_option(WITH_LZMA)

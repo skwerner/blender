@@ -36,7 +36,6 @@
 
 /* -------------------------------------------------------------------- */
 /** \name Edge (for crease) Transform Creation
- *
  * \{ */
 
 void createTransEdge(TransInfo *t)
@@ -121,6 +120,13 @@ void createTransEdge(TransInfo *t)
         td++;
       }
     }
+  }
+}
+
+void recalcData_mesh_edge(TransInfo *t)
+{
+  FOREACH_TRANS_DATA_CONTAINER (t, tc) {
+    DEG_id_tag_update(tc->obedit->data, ID_RECALC_GEOMETRY);
   }
 }
 

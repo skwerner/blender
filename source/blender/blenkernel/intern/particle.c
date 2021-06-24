@@ -75,6 +75,7 @@
 #include "BKE_material.h"
 #include "BKE_mesh.h"
 #include "BKE_modifier.h"
+#include "BKE_object.h"
 #include "BKE_particle.h"
 #include "BKE_pointcache.h"
 #include "BKE_scene.h"
@@ -100,6 +101,8 @@ static void particle_settings_init(ID *id)
   MEMCPY_STRUCT_AFTER(particle_settings, DNA_struct_default_get(ParticleSettings), id);
 
   particle_settings->effector_weights = BKE_effector_add_weights(NULL);
+  particle_settings->pd = BKE_partdeflect_new(PFIELD_NULL);
+  particle_settings->pd2 = BKE_partdeflect_new(PFIELD_NULL);
 }
 
 static void particle_settings_copy_data(Main *UNUSED(bmain),
@@ -381,8 +384,9 @@ void BKE_particle_partdeflect_blend_read_lib(BlendLibReader *reader, ID *id, Par
 static void particle_settings_blend_read_lib(BlendLibReader *reader, ID *id)
 {
   ParticleSettings *part = (ParticleSettings *)id;
-  BLO_read_id_address(
-      reader, part->id.lib, &part->ipo); /* XXX deprecated - old animation system */
+
+  /* XXX: deprecated - old animation system. */
+  BLO_read_id_address(reader, part->id.lib, &part->ipo);
 
   BLO_read_id_address(reader, part->id.lib, &part->instance_object);
   BLO_read_id_address(reader, part->id.lib, &part->instance_collection);
@@ -503,6 +507,7 @@ IDTypeInfo IDType_ID_PA = {
     .make_local = NULL,
     .foreach_id = particle_settings_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = particle_settings_blend_write,
     .blend_read_data = particle_settings_blend_read_data,
@@ -510,6 +515,8 @@ IDTypeInfo IDType_ID_PA = {
     .blend_read_expand = particle_settings_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 unsigned int PSYS_FRAND_SEED_OFFSET[PSYS_FRAND_COUNT];
@@ -1431,7 +1438,7 @@ static void do_particle_interpolation(ParticleSystem *psys,
   int point_vel = (point && point->keys->vel);
   float real_t, dfra, keytime, invdt = 1.0f;
 
-  /* billboards wont fill in all of these, so start cleared */
+  /* billboards won't fill in all of these, so start cleared */
   memset(keys, 0, sizeof(keys));
 
   /* interpret timing and find keys */
@@ -2301,7 +2308,7 @@ void psys_particle_on_emitter(ParticleSystemModifierData *psmd,
       }
       return;
     }
-    /* we cant use the num_dmcache */
+    /* we can't use the num_dmcache */
     psys_particle_on_dm(
         psmd->mesh_final, from, index, index_dmcache, fuv, foffset, vec, nor, utan, vtan, orco);
   }
@@ -2413,14 +2420,15 @@ int do_guides(Depsgraph *depsgraph,
       cu = (Curve *)eff->ob->data;
 
       if (pd->flag & PFIELD_GUIDE_PATH_ADD) {
-        if (where_on_path(
+        if (BKE_where_on_path(
                 eff->ob, data->strength * guidetime, guidevec, guidedir, NULL, &radius, &weight) ==
             0) {
           return 0;
         }
       }
       else {
-        if (where_on_path(eff->ob, guidetime, guidevec, guidedir, NULL, &radius, &weight) == 0) {
+        if (BKE_where_on_path(eff->ob, guidetime, guidevec, guidedir, NULL, &radius, &weight) ==
+            0) {
           return 0;
         }
       }
@@ -3921,7 +3929,7 @@ static ModifierData *object_add_or_copy_particle_system(
   }
 
   if (name == NULL) {
-    name = (psys_orig != NULL) ? psys_orig->name : DATA_("ParticleSettings");
+    name = (psys_orig != NULL) ? psys_orig->name : DATA_("ParticleSystem");
   }
 
   psys = ob->particlesystem.first;
@@ -3939,7 +3947,7 @@ static ModifierData *object_add_or_copy_particle_system(
     id_us_plus(&psys->part->id);
   }
   else {
-    psys->part = BKE_particlesettings_add(bmain, psys->name);
+    psys->part = BKE_particlesettings_add(bmain, DATA_("ParticleSettings"));
   }
   md = BKE_modifier_new(eModifierType_ParticleSystem);
   BLI_strncpy(md->name, psys->name, sizeof(md->name));
@@ -3948,6 +3956,7 @@ static ModifierData *object_add_or_copy_particle_system(
   psmd = (ParticleSystemModifierData *)md;
   psmd->psys = psys;
   BLI_addtail(&ob->modifiers, md);
+  BKE_object_modifier_set_active(ob, md);
 
   psys->totpart = 0;
   psys->flag = PSYS_CURRENT;

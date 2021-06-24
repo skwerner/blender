@@ -68,6 +68,7 @@
 #include "BLI_math_vector.h"
 #include "BLI_mempool.h"
 #include "BLI_system.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_timecode.h" /* For stamp time-code format. */
 #include "BLI_utildefines.h"
@@ -93,7 +94,7 @@
 
 #include "RE_pipeline.h"
 
-#include "SEQ_sequencer.h" /* seq_foreground_frame_get() */
+#include "SEQ_utils.h" /* SEQ_get_topmost_sequence() */
 
 #include "GPU_texture.h"
 
@@ -331,6 +332,7 @@ IDTypeInfo IDType_ID_IM = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = image_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = image_blend_write,
     .blend_read_data = image_blend_read_data,
@@ -338,6 +340,8 @@ IDTypeInfo IDType_ID_IM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /* prototypes */
@@ -732,6 +736,37 @@ int BKE_image_get_tile_from_pos(struct Image *ima,
   return tile_number;
 }
 
+/**
+ * Return the tile_number for the closest UDIM tile.
+ */
+int BKE_image_find_nearest_tile(const Image *image, const float co[2])
+{
+  const float co_floor[2] = {floorf(co[0]), floorf(co[1])};
+  /* Distance to the closest UDIM tile. */
+  float dist_best_sq = FLT_MAX;
+  int tile_number_best = -1;
+
+  LISTBASE_FOREACH (const ImageTile *, tile, &image->tiles) {
+    const int tile_index = tile->tile_number - 1001;
+    /* Coordinates of the current tile. */
+    const float tile_index_co[2] = {tile_index % 10, tile_index / 10};
+
+    if (equals_v2v2(co_floor, tile_index_co)) {
+      return tile->tile_number;
+    }
+
+    /* Distance between co[2] and UDIM tile. */
+    const float dist_sq = len_squared_v2v2(tile_index_co, co);
+
+    if (dist_sq < dist_best_sq) {
+      dist_best_sq = dist_sq;
+      tile_number_best = tile->tile_number;
+    }
+  }
+
+  return tile_number_best;
+}
+
 static void image_init_color_management(Image *ima)
 {
   ImBuf *ibuf;
@@ -848,6 +883,39 @@ Image *BKE_image_load_exists(Main *bmain, const char *filepath)
   return BKE_image_load_exists_ex(bmain, filepath, NULL);
 }
 
+typedef struct ImageFillData {
+  short gen_type;
+  uint width;
+  uint height;
+  unsigned char *rect;
+  float *rect_float;
+  float fill_color[4];
+} ImageFillData;
+
+static void image_buf_fill_isolated(void *usersata_v)
+{
+  ImageFillData *usersata = usersata_v;
+
+  const short gen_type = usersata->gen_type;
+  const uint width = usersata->width;
+  const uint height = usersata->height;
+
+  unsigned char *rect = usersata->rect;
+  float *rect_float = usersata->rect_float;
+
+  switch (gen_type) {
+    case IMA_GENTYPE_GRID:
+      BKE_image_buf_fill_checker(rect, rect_float, width, height);
+      break;
+    case IMA_GENTYPE_GRID_COLOR:
+      BKE_image_buf_fill_checker_color(rect, rect_float, width, height);
+      break;
+    default:
+      BKE_image_buf_fill_color(rect, rect_float, width, height, usersata->fill_color);
+      break;
+  }
+}
+
 static ImBuf *add_ibuf_size(unsigned int width,
                             unsigned int height,
                             const char *name,
@@ -910,17 +978,16 @@ static ImBuf *add_ibuf_size(unsigned int width,
 
   STRNCPY(ibuf->name, name);
 
-  switch (gen_type) {
-    case IMA_GENTYPE_GRID:
-      BKE_image_buf_fill_checker(rect, rect_float, width, height);
-      break;
-    case IMA_GENTYPE_GRID_COLOR:
-      BKE_image_buf_fill_checker_color(rect, rect_float, width, height);
-      break;
-    default:
-      BKE_image_buf_fill_color(rect, rect_float, width, height, fill_color);
-      break;
-  }
+  ImageFillData data;
+
+  data.gen_type = gen_type;
+  data.width = width;
+  data.height = height;
+  data.rect = rect;
+  data.rect_float = rect_float;
+  copy_v4_v4(data.fill_color, fill_color);
+
+  BLI_task_isolate(image_buf_fill_isolated, &data);
 
   return ibuf;
 }
@@ -2057,7 +2124,7 @@ static void stampdata(
   }
 
   if (use_dynamic && scene->r.stamp & R_STAMP_SEQSTRIP) {
-    const Sequence *seq = BKE_sequencer_foreground_frame_get(scene, scene->r.cfra);
+    const Sequence *seq = SEQ_get_topmost_sequence(scene, scene->r.cfra);
 
     if (seq) {
       STRNCPY(text, seq->name + 2);
@@ -5292,7 +5359,7 @@ int BKE_image_user_frame_get(const ImageUser *iuser, int cfra, bool *r_is_in_ran
     }
   }
 
-  /* important to apply after else we cant loop on frames 100 - 110 for eg. */
+  /* important to apply after else we can't loop on frames 100 - 110 for eg. */
   framenr += iuser->offset;
 
   return framenr;

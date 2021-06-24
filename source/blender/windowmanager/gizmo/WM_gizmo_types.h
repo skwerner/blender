@@ -341,7 +341,7 @@ typedef struct wmGizmoType {
   const char *idname; /* MAX_NAME */
 
   /** Set to 'sizeof(wmGizmo)' or larger for instances of this type,
-   * use so we can cant to other types without the hassle of a custom-data pointer. */
+   * use so we can cast to other types without the hassle of a custom-data pointer. */
   uint struct_size;
 
   /** Initialize struct (calloc'd 'struct_size' region). */
@@ -370,6 +370,14 @@ typedef struct wmGizmoType {
    * - Offset isn't applied (wmGizmo.matrix_offset).
    */
   wmGizmoFnMatrixBasisGet matrix_basis_get;
+
+  /**
+   * Returns screen-space bounding box in the window space
+   * (compatible with #wmEvent.x #wmEvent.y).
+   *
+   * Used for tool-tip placement (otherwise the cursor location is used).
+   */
+  wmGizmoFnScreenBoundsGet screen_bounds_get;
 
   /** Activate a gizmo state when the user clicks on it. */
   wmGizmoFnInvoke invoke;

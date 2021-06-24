@@ -39,6 +39,7 @@ typedef enum eGPUBarrier {
   GPU_BARRIER_NONE = 0,
   GPU_BARRIER_SHADER_IMAGE_ACCESS = (1 << 0),
   GPU_BARRIER_TEXTURE_FETCH = (1 << 1),
+  GPU_BARRIER_SHADER_STORAGE = (1 << 2),
 } eGPUBarrier;
 
 ENUM_OPERATORS(eGPUBarrier, GPU_BARRIER_TEXTURE_FETCH)
@@ -46,7 +47,7 @@ ENUM_OPERATORS(eGPUBarrier, GPU_BARRIER_TEXTURE_FETCH)
 /**
  * Defines the fixed pipeline blending equation.
  * SRC is the output color from the shader.
- * DST is the color from the framebuffer.
+ * DST is the color from the frame-buffer.
  * The blending equation is :
  *  (SRC * A) + (DST * B).
  * The blend mode will modify the A and B parameters.
@@ -64,7 +65,7 @@ typedef enum eGPUBlend {
    * NOTE: Does not modify alpha. */
   GPU_BLEND_INVERT,
   /** Order independent transparency.
-   * NOTE: Cannot be used as is. Needs special setup (framebuffer, shader ...). */
+   * NOTE: Cannot be used as is. Needs special setup (frame-buffer, shader ...). */
   GPU_BLEND_OIT,
   /** Special blend to add color under and multiply dst color by src alpha. */
   GPU_BLEND_BACKGROUND,

@@ -229,6 +229,7 @@ static void wm_link_do(WMLinkAppendData *lapp_data,
   Library *lib;
 
   const int flag = lapp_data->flag;
+  const int id_tag_extra = 0;
 
   LinkNode *liblink, *itemlink;
   int lib_idx, item_idx;
@@ -243,7 +244,7 @@ static void wm_link_do(WMLinkAppendData *lapp_data,
       bh = BLO_blendhandle_from_memory(datatoc_startup_blend, datatoc_startup_blend_size);
     }
     else {
-      bh = BLO_blendhandle_from_file(libname, reports);
+      bh = BLO_blendhandle_from_file(libname, &(BlendFileReadReport){.reports = reports});
     }
 
     if (bh == NULL) {
@@ -255,7 +256,7 @@ static void wm_link_do(WMLinkAppendData *lapp_data,
     /* here appending/linking starts */
     struct LibraryLink_Params liblink_params;
     BLO_library_link_params_init_with_context(
-        &liblink_params, bmain, flag, scene, view_layer, v3d);
+        &liblink_params, bmain, flag, id_tag_extra, scene, view_layer, v3d);
 
     mainl = BLO_library_link_begin(&bh, libname, &liblink_params);
     lib = mainl->curlib;
@@ -520,7 +521,7 @@ static int wm_link_append_exec(bContext *C, wmOperator *op)
 
   wm_link_append_data_free(lapp_data);
 
-  /* important we unset, otherwise these object wont
+  /* important we unset, otherwise these object won't
    * link into other scenes from this blend file */
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
 
@@ -629,7 +630,7 @@ void WM_OT_append(wmOperatorType *ot)
                   "set_fake",
                   false,
                   "Fake User",
-                  "Set Fake User for appended items (except Objects and Groups)");
+                  "Set \"Fake User\" for appended items (except objects and collections)");
   RNA_def_boolean(
       ot->srna,
       "use_recursive",
@@ -641,23 +642,23 @@ void WM_OT_append(wmOperatorType *ot)
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Append Single Data-Block & Return it
+/** \name Link/Append Single Data-Block & Return it
  *
- * Used for appending workspace from startup files.
  * \{ */
 
-ID *WM_file_append_datablock(Main *bmain,
-                             Scene *scene,
-                             ViewLayer *view_layer,
-                             View3D *v3d,
-                             const char *filepath,
-                             const short id_code,
-                             const char *id_name)
+static ID *wm_file_link_datablock_ex(Main *bmain,
+                                     Scene *scene,
+                                     ViewLayer *view_layer,
+                                     View3D *v3d,
+                                     const char *filepath,
+                                     const short id_code,
+                                     const char *id_name,
+                                     bool clear_pre_existing_flag)
 {
   /* Tag everything so we can make local only the new datablock. */
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, true);
 
-  /* Define working data, with just the one item we want to append. */
+  /* Define working data, with just the one item we want to link. */
   WMLinkAppendData *lapp_data = wm_link_append_data_new(0);
 
   wm_link_append_data_library_add(lapp_data, filepath);
@@ -670,6 +671,36 @@ ID *WM_file_append_datablock(Main *bmain,
   /* Get linked datablock and free working data. */
   ID *id = item->new_id;
   wm_link_append_data_free(lapp_data);
+
+  if (clear_pre_existing_flag) {
+    BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
+  }
+
+  return id;
+}
+
+ID *WM_file_link_datablock(Main *bmain,
+                           Scene *scene,
+                           ViewLayer *view_layer,
+                           View3D *v3d,
+                           const char *filepath,
+                           const short id_code,
+                           const char *id_name)
+{
+  return wm_file_link_datablock_ex(
+      bmain, scene, view_layer, v3d, filepath, id_code, id_name, true);
+}
+
+ID *WM_file_append_datablock(Main *bmain,
+                             Scene *scene,
+                             ViewLayer *view_layer,
+                             View3D *v3d,
+                             const char *filepath,
+                             const short id_code,
+                             const char *id_name)
+{
+  ID *id = wm_file_link_datablock_ex(
+      bmain, scene, view_layer, v3d, filepath, id_code, id_name, false);
 
   /* Make datablock local. */
   BKE_library_make_local(bmain, NULL, NULL, true, false);
@@ -749,7 +780,7 @@ static void lib_relocate_do_remap(Main *bmain,
     /* In some cases, new_id might become direct link, remove parent of library in this case. */
     if (new_id->lib->parent && (new_id->tag & LIB_TAG_INDIRECT) == 0) {
       if (do_reload) {
-        BLI_assert(0); /* Should not happen in 'pure' reload case... */
+        BLI_assert_unreachable(); /* Should not happen in 'pure' reload case... */
       }
       new_id->lib->parent = NULL;
     }
@@ -804,7 +835,7 @@ static void lib_relocate_do(Main *bmain,
                             ReportList *reports,
                             const bool do_reload)
 {
-  ListBase *lbarray[MAX_LIBARRAY];
+  ListBase *lbarray[INDEX_ID_MAX];
   int lba_idx;
 
   LinkNode *itemlink;
@@ -977,7 +1008,7 @@ static void lib_relocate_do(Main *bmain,
   BKE_main_lib_objects_recalc_all(bmain);
   IMB_colormanagement_check_file_config(bmain);
 
-  /* important we unset, otherwise these object wont
+  /* important we unset, otherwise these object won't
    * link into other scenes from this blend file */
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
 

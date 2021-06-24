@@ -99,15 +99,7 @@ static void autokeyframe_pose(
   bPoseChannel *pchan;
   FCurve *fcu;
 
-  /* TODO: this should probably be done per channel instead. */
   if (!autokeyframe_cfra_can_key(scene, id)) {
-    /* tag channels that should have unkeyed data */
-    for (pchan = pose->chanbase.first; pchan; pchan = pchan->next) {
-      if (pchan->bone->flag & BONE_TRANSFORM) {
-        /* tag this channel */
-        pchan->bone->flag |= BONE_UNKEYED;
-      }
-    }
     return;
   }
 
@@ -138,9 +130,6 @@ static void autokeyframe_pose(
     }
 
     ListBase dsources = {NULL, NULL};
-
-    /* clear any 'unkeyed' flag it may have */
-    pchan->bone->flag &= ~BONE_UNKEYED;
 
     /* add datasource override for the camera object */
     ANIM_relative_keyingset_add_source(&dsources, id, &RNA_PoseBone, pchan);
@@ -444,7 +433,7 @@ static short pose_grab_with_ik(Main *bmain, Object *ob)
   for (pchan = ob->pose->chanbase.first; pchan; pchan = pchan->next) {
     if (pchan->bone->layer & arm->layer) {
       if (pchan->bone->flag & (BONE_SELECTED | BONE_TRANSFORM_MIRROR)) {
-        /* Rule: no IK for solitatry (unconnected) bones */
+        /* Rule: no IK for solitary (unconnected) bones. */
         for (bonec = pchan->bone->childbase.first; bonec; bonec = bonec->next) {
           if (bonec->flag & BONE_CONNECTED) {
             break;
@@ -672,7 +661,7 @@ static void add_pose_transdata(TransInfo *t, bPoseChannel *pchan, Object *ob, Tr
     }
   }
 
-  /* for axismat we use bone's own transform */
+  /* For `axismtx` we use bone's own transform. */
   copy_m3_m4(pmat, pchan->pose_mat);
   mul_m3_m3m3(td->axismtx, omat, pmat);
   normalize_m3(td->axismtx);
@@ -870,8 +859,6 @@ void createTransPose(TransInfo *t)
       t->mode = TFM_RESIZE;
     }
   }
-
-  t->flag |= T_POSE;
 }
 
 void createTransArmatureVerts(TransInfo *t)
@@ -1281,9 +1268,6 @@ void recalcData_edit_armature(TransInfo *t)
         restoreBones(tc);
       }
     }
-
-    /* Tag for redraw/invalidate overlay cache. */
-    DEG_id_tag_update(&arm->id, ID_RECALC_SELECT);
   }
 }
 
@@ -1343,7 +1327,7 @@ static void pose_transform_mirror_update(TransInfo *t, TransDataContainer *tc, O
     }
     BKE_pchan_apply_mat4(pchan, pchan_mtx_final, false);
 
-    /* Set flag to let autokeyframe know to keyframe the mirrred bone. */
+    /* Set flag to let auto key-frame know to key-frame the mirrored bone. */
     pchan->bone->flag |= BONE_TRANSFORM_MIRROR;
 
     /* In this case we can do target-less IK grabbing. */
@@ -1354,7 +1338,7 @@ static void pose_transform_mirror_update(TransInfo *t, TransDataContainer *tc, O
       }
       mul_v3_m4v3(data->grabtarget, flip_mtx, td->loc);
       if (pid) {
-        /* TODO(germano): Realitve Mirror support */
+        /* TODO(germano): Relative Mirror support. */
       }
       data->flag |= CONSTRAINT_IK_AUTO;
       /* Add a temporary auto IK constraint here, as we will only temporarily active this
@@ -1465,9 +1449,9 @@ void recalcData_pose(TransInfo *t)
       /* TODO: autokeyframe calls need some setting to specify to add samples
        * (FPoints) instead of keyframes? */
       if ((t->animtimer) && (t->context) && IS_AUTOKEY_ON(t->scene)) {
-        int targetless_ik =
-            (t->flag &
-             T_AUTOIK); /* XXX this currently doesn't work, since flags aren't set yet! */
+
+        /* XXX: this currently doesn't work, since flags aren't set yet! */
+        int targetless_ik = (t->flag & T_AUTOIK);
 
         animrecord_check_state(t, ob);
         autokeyframe_pose(t->context, t->scene, ob, t->mode, targetless_ik);

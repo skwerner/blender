@@ -24,6 +24,7 @@
 
 #include "BLI_listbase.h"
 #include "BLI_math.h"
+#include "BLI_string.h"
 #include "BLI_utildefines.h"
 
 #ifdef WITH_INTERNATIONAL
@@ -257,8 +258,23 @@ static void do_versions_theme(const UserDef *userdef, bTheme *btheme)
     FROM_DEFAULT_V4_UCHAR(space_node.nodeclass_attribute);
   }
 
-  if (!USER_VERSION_ATLEAST(292, 6)) {
+  if (!USER_VERSION_ATLEAST(292, 12)) {
     FROM_DEFAULT_V4_UCHAR(space_node.nodeclass_shader);
+  }
+
+  if (!USER_VERSION_ATLEAST(293, 15)) {
+    FROM_DEFAULT_V4_UCHAR(space_properties.active);
+
+    FROM_DEFAULT_V4_UCHAR(space_info.info_error);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_warning);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_info);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_debug);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_debug_text);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_property);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_error);
+    FROM_DEFAULT_V4_UCHAR(space_info.info_operator);
+
+    btheme->space_spreadsheet = btheme->space_outliner;
   }
 
   /**
@@ -820,6 +836,44 @@ void blo_do_versions_userdef(UserDef *userdef)
     userdef->uiflag &= ~USER_UIFLAG_UNUSED_3;
   }
 
+  if (!USER_VERSION_ATLEAST(292, 9)) {
+    if (BLI_listbase_is_empty(&userdef->asset_libraries)) {
+      BKE_preferences_asset_library_default_add(userdef);
+    }
+  }
+
+  if (!USER_VERSION_ATLEAST(293, 1)) {
+    /* This rename was made after 2.93.0, harmless to run when it's not needed. */
+    const char *replace_table[][2] = {
+        {"blender", "Blender"},
+        {"blender_27x", "Blender_27x"},
+        {"industry_compatible", "Industry_Compatible"},
+    };
+    const int replace_table_len = ARRAY_SIZE(replace_table);
+
+    BLI_str_replace_table_exact(
+        userdef->keyconfigstr, sizeof(userdef->keyconfigstr), replace_table, replace_table_len);
+    LISTBASE_FOREACH (wmKeyConfigPref *, kpt, &userdef->user_keyconfig_prefs) {
+      BLI_str_replace_table_exact(
+          kpt->idname, sizeof(kpt->idname), replace_table, replace_table_len);
+    }
+  }
+
+  if (!USER_VERSION_ATLEAST(293, 2)) {
+    /* Enable asset browser features by default for alpha testing.
+     * BLO_sanitize_experimental_features_userpref_blend() will disable it again for non-alpha
+     * builds. */
+    userdef->experimental.use_asset_browser = true;
+  }
+
+  if (!USER_VERSION_ATLEAST(293, 12)) {
+    if (userdef->gizmo_size_navigate_v3d == 0) {
+      userdef->gizmo_size_navigate_v3d = 80;
+    }
+
+    userdef->sequencer_proxy_setup = USER_SEQ_PROXY_SETUP_AUTOMATIC;
+  }
+
   /**
    * Versioning code until next subversion bump goes here.
    *
@@ -831,9 +885,6 @@ void blo_do_versions_userdef(UserDef *userdef)
    */
   {
     /* Keep this block, even when empty. */
-    if (BLI_listbase_is_empty(&userdef->asset_libraries)) {
-      BKE_preferences_asset_library_default_add(userdef);
-    }
   }
 
   LISTBASE_FOREACH (bTheme *, btheme, &userdef->themes) {

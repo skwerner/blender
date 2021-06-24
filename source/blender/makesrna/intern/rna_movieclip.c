@@ -49,7 +49,7 @@
 #  include "DNA_screen_types.h"
 #  include "DNA_space_types.h"
 
-#  include "SEQ_sequencer.h"
+#  include "SEQ_relations.h"
 
 static void rna_MovieClip_reload_update(Main *UNUSED(bmain), Scene *UNUSED(scene), PointerRNA *ptr)
 {
@@ -76,7 +76,7 @@ static void rna_MovieClip_use_proxy_update(Main *bmain, Scene *UNUSED(scene), Po
 {
   MovieClip *clip = (MovieClip *)ptr->owner_id;
   BKE_movieclip_clear_cache(clip);
-  BKE_sequence_invalidate_movieclip_strips(bmain, clip);
+  SEQ_relations_invalidate_movieclip_strips(bmain, clip);
 }
 
 static void rna_MovieClipUser_proxy_render_settings_update(Main *bmain,
@@ -105,7 +105,7 @@ static void rna_MovieClipUser_proxy_render_settings_update(Main *bmain,
 
             if (clip && (clip->flag & MCLIP_USE_PROXY)) {
               BKE_movieclip_clear_cache(clip);
-              BKE_sequence_invalidate_movieclip_strips(bmain, clip);
+              SEQ_relations_invalidate_movieclip_strips(bmain, clip);
             }
 
             break;
@@ -290,7 +290,7 @@ static void rna_def_moviecliUser(BlenderRNA *brna)
   RNA_def_property_enum_items(prop, clip_render_size_items);
   RNA_def_property_ui_text(prop,
                            "Proxy Render Size",
-                           "Draw preview using full resolution or different proxy resolutions");
+                           "Display preview using full resolution or different proxy resolutions");
   RNA_def_property_update(
       prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClipUser_proxy_render_settings_update");
 
@@ -354,7 +354,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
                             0,
                             0,
                             "Size",
-                            "Width and height in pixels, zero when image data cant be loaded",
+                            "Width and height in pixels, zero when image data can't be loaded",
                             0,
                             0);
   RNA_def_property_int_funcs(prop, "rna_MovieClip_size_get", NULL, NULL);
@@ -402,7 +402,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
                            "Start Frame",
                            "Global scene frame number at which this movie starts playing "
                            "(affects all data associated with a clip)");
-  RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClip_reload_update");
+  RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);
 
   /* frame_offset */
   prop = RNA_def_property(srna, "frame_offset", PROP_INT, PROP_NONE);
@@ -412,7 +412,7 @@ static void rna_def_movieclip(BlenderRNA *brna)
       "Frame Offset",
       "Offset of footage first frame relative to its file name "
       "(affects only how footage is loading, does not change data associated with a clip)");
-  RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, "rna_MovieClip_reload_update");
+  RNA_def_property_update(prop, NC_MOVIECLIP | ND_DISPLAY, NULL);
 
   /* length */
   prop = RNA_def_property(srna, "frame_duration", PROP_INT, PROP_NONE);

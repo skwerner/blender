@@ -20,7 +20,7 @@
 /** \file
  * \ingroup wm
  *
- * Internal functions for managing UI registrable types (operator, UI and menu types).
+ * Internal functions for managing UI registerable types (operator, UI and menu types).
  *
  * Also Blender's main event loop (WM_main).
  */
@@ -172,7 +172,7 @@ static void window_manager_blend_read_data(BlendDataReader *reader, ID *id)
     win->ime_data = NULL;
 #endif
 
-    BLI_listbase_clear(&win->queue);
+    BLI_listbase_clear(&win->event_queue);
     BLI_listbase_clear(&win->handlers);
     BLI_listbase_clear(&win->modalhandlers);
     BLI_listbase_clear(&win->gesture);
@@ -184,6 +184,9 @@ static void window_manager_blend_read_data(BlendDataReader *reader, ID *id)
     win->modalcursor = 0;
     win->grabcursor = 0;
     win->addmousemove = true;
+    win->event_queue_check_click = 0;
+    win->event_queue_check_drag = 0;
+    win->event_queue_check_drag_handled = 0;
     BLO_read_data_address(reader, &win->stereo3d_format);
 
     /* Multi-view always fallback to anaglyph at file opening
@@ -198,7 +201,7 @@ static void window_manager_blend_read_data(BlendDataReader *reader, ID *id)
   BLI_listbase_clear(&wm->timers);
   BLI_listbase_clear(&wm->operators);
   BLI_listbase_clear(&wm->paintcursors);
-  BLI_listbase_clear(&wm->queue);
+  BLI_listbase_clear(&wm->notifier_queue);
   BKE_reports_init(&wm->reports, RPT_STORE);
 
   BLI_listbase_clear(&wm->keyconfigs);
@@ -272,6 +275,7 @@ IDTypeInfo IDType_ID_WM = {
     .make_local = NULL,
     .foreach_id = window_manager_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = window_manager_blend_write,
     .blend_read_data = window_manager_blend_read_data,
@@ -279,6 +283,8 @@ IDTypeInfo IDType_ID_WM = {
     .blend_read_expand = NULL,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 #define MAX_OP_REGISTERED 32
@@ -468,7 +474,10 @@ void WM_keyconfig_init(bContext *C)
       wm->defaultconf->flag |= KEYCONF_INIT_DEFAULT;
     }
 
-    WM_keyconfig_update_tag(NULL, NULL);
+    /* Harmless, but no need to update in background mode. */
+    if (!G.background) {
+      WM_keyconfig_update_tag(NULL, NULL);
+    }
     WM_keyconfig_update(wm);
 
     wm->initialized |= WM_KEYCONFIG_IS_INIT;
@@ -562,7 +571,7 @@ void wm_add_default(Main *bmain, bContext *C)
 void wm_close_and_free(bContext *C, wmWindowManager *wm)
 {
   if (wm->autosavetimer) {
-    wm_autosave_timer_ended(wm);
+    wm_autosave_timer_end(wm);
   }
 
 #ifdef WITH_XR_OPENXR
@@ -587,12 +596,15 @@ void wm_close_and_free(bContext *C, wmWindowManager *wm)
     WM_keyconfig_free(keyconf);
   }
 
-  BLI_freelistN(&wm->queue);
+  BLI_freelistN(&wm->notifier_queue);
 
   if (wm->message_bus != NULL) {
     WM_msgbus_destroy(wm->message_bus);
   }
 
+#ifdef WITH_PYTHON
+  BPY_callback_wm_free(wm);
+#endif
   BLI_freelistN(&wm->paintcursors);
 
   WM_drag_free_list(&wm->drags);
@@ -634,10 +646,10 @@ void WM_main(bContext *C)
     /* Per window, all events to the window, screen, area and region handlers. */
     wm_event_do_handlers(C);
 
-    /* Wvents have left notes about changes, we handle and cache it. */
+    /* Events have left notes about changes, we handle and cache it. */
     wm_event_do_notifiers(C);
 
-    /* Wxecute cached changes draw. */
+    /* Execute cached changes draw. */
     wm_draw_update(C);
   }
 }

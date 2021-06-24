@@ -103,7 +103,7 @@ static void applyNormalRotation(TransInfo *t, const int UNUSED(mval[2]))
 
     applyNumInput(&t->num, &angle);
 
-    headerRotation(t, str, angle);
+    headerRotation(t, str, sizeof(str), angle);
 
     axis_angle_normalized_to_mat3(mat, axis, angle);
 
@@ -127,7 +127,6 @@ void initNormalRotation(TransInfo *t)
   t->mode = TFM_NORMAL_ROTATION;
   t->transform = applyNormalRotation;
 
-  setInputPostFct(&t->mouse, postInputRotation);
   initMouseInputMode(t, &t->mouse, INPUT_ANGLE);
 
   t->idx_max = 0;
@@ -149,5 +148,7 @@ void initNormalRotation(TransInfo *t)
 
     storeCustomLNorValue(tc, bm);
   }
+
+  transform_mode_default_modal_orientation_set(t, V3D_ORIENT_VIEW);
 }
 /** \} */

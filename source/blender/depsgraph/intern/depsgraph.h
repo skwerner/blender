@@ -33,9 +33,7 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "DNA_ID.h" /* for ID_Type */
-
-#include "BKE_main.h" /* for MAX_LIBARRAY */
+#include "DNA_ID.h" /* for ID_Type and INDEX_ID_MAX */
 
 #include "BLI_threads.h" /* for SpinLock */
 
@@ -110,11 +108,16 @@ struct Depsgraph {
   /* Indicates whether relations needs to be updated. */
   bool need_update;
 
+  /* Indicated whether IDs in this graph are to be tagged as if they first appear visible, with
+   * an optional tag for their animation (time) update. */
+  bool need_visibility_update;
+  bool need_visibility_time_update;
+
   /* Indicates which ID types were updated. */
-  char id_type_updated[MAX_LIBARRAY];
+  char id_type_updated[INDEX_ID_MAX];
 
   /* Indicates type of IDs present in the depsgraph. */
-  char id_type_exist[MAX_LIBARRAY];
+  char id_type_exist[INDEX_ID_MAX];
 
   /* Quick-Access Temp Data ............. */
 
@@ -162,6 +165,9 @@ struct Depsgraph {
    * Such dependency graph needs all view layers (so render pipeline can access names), but it
    * does not need any bases. */
   bool is_render_pipeline_depsgraph;
+
+  /* Notify editors about changes to IDs in this depsgraph. */
+  bool use_editors_update;
 
   /* Cached list of colliders/effectors for collections and the scene
    * created along with relations, for fast lookup during evaluation. */

@@ -56,7 +56,6 @@
 
 #include "MOD_gpencil_modifiertypes.h"
 #include "MOD_gpencil_ui_common.h"
-#include "MOD_gpencil_util.h"
 
 static void initData(GpencilModifierData *md)
 {
@@ -456,8 +455,10 @@ static void generate_geometry(
   /* Compute start and end frames for the animation effect
    * By default, the upper bound is given by the "maximum length" setting
    */
-  float start_frame = gpf->framenum + mmd->start_delay;
-  float end_frame = start_frame + mmd->length;
+  float start_frame = is_percentage ? gpf->framenum : gpf->framenum + mmd->start_delay;
+  /* When use percentage don't need a limit in the upper bound, so use a maximum value for the last
+   * frame. */
+  float end_frame = is_percentage ? start_frame + 9999 : start_frame + mmd->length;
 
   if (gpf->next) {
     /* Use the next frame or upper bound as end frame, whichever is lower/closer */
@@ -548,6 +549,7 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   PointerRNA *ptr = gpencil_modifier_panel_get_property_pointers(panel, &ob_ptr);
 
   int mode = RNA_enum_get(ptr, "mode");
+  const bool use_percentage = RNA_boolean_get(ptr, "use_percentage");
 
   uiLayoutSetPropSep(layout, true);
 
@@ -559,16 +561,22 @@ static void panel_draw(const bContext *UNUSED(C), Panel *panel)
   uiItemS(layout);
 
   uiItemR(layout, ptr, "transition", 0, NULL, ICON_NONE);
-  uiItemR(layout, ptr, "start_delay", 0, NULL, ICON_NONE);
-  uiItemR(layout, ptr, "length", 0, IFACE_("Frames"), ICON_NONE);
+  row = uiLayoutRow(layout, true);
+  uiLayoutSetActive(row, !use_percentage);
+  uiItemR(row, ptr, "start_delay", 0, NULL, ICON_NONE);
+  row = uiLayoutRow(layout, true);
+  uiLayoutSetActive(row, !use_percentage);
+  uiItemR(row, ptr, "length", 0, IFACE_("Frames"), ICON_NONE);
 
   uiItemS(layout);
 
   row = uiLayoutRowWithHeading(layout, true, IFACE_("Use Factor"));
+  uiLayoutSetPropDecorate(row, false);
   uiItemR(row, ptr, "use_percentage", 0, "", ICON_NONE);
   sub = uiLayoutRow(row, true);
-  uiLayoutSetActive(sub, RNA_boolean_get(ptr, "use_percentage"));
+  uiLayoutSetActive(sub, use_percentage);
   uiItemR(sub, ptr, "percentage_factor", 0, "", ICON_NONE);
+  uiItemDecoratorR(row, ptr, "percentage_factor", 0);
 
   /* Check for incompatible time modifier. */
   Object *ob = ob_ptr.data;

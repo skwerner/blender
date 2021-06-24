@@ -64,7 +64,7 @@ typedef struct BoidParticle {
   struct BoidData data;
   float gravity[3];
   float wander[3];
-  float rt;
+  char _pad0[4];
 } BoidParticle;
 
 typedef struct ParticleSpring {
@@ -82,7 +82,7 @@ typedef struct ChildParticle {
   float w[4];
   /** Face vertex weights and offset. */
   float fuv[4], foffset;
-  float rt;
+  char _pad0[4];
 } ChildParticle;
 
 typedef struct ParticleTarget {
@@ -99,7 +99,8 @@ typedef struct ParticleDupliWeight {
   short count;
   short flag;
   /** Only updated on file save and used on file load. */
-  short index, rt;
+  short index;
+  char _pad0[2];
 } ParticleDupliWeight;
 
 typedef struct ParticleData {
@@ -118,10 +119,10 @@ typedef struct ParticleData {
   /** Boids data. */
   BoidParticle *boid;
 
-  /** Amount of hair or keyed key.s*/
+  /** Amount of hair or keyed keys. */
   int totkey;
 
-  /** Dietime is not necessarily time+lifetime as. */
+  /** Die-time is not necessarily time+lifetime as. */
   float time, lifetime;
   /** Particles can die unnaturally (collision). */
   float dietime;
@@ -132,7 +133,10 @@ typedef struct ParticleData {
    */
   /** Index to vert/edge/face. */
   int num;
-  /** Index to derived mesh data (face) to avoid slow lookups. */
+  /**
+   * Index to derived mesh data (face) to avoid slow lookups. It can also have negative
+   * values DMCACHE_NOTFOUND and DMCACHE_ISCHILD.
+   */
   int num_dmcache;
 
   /** Coordinates on face/edge number "num" and depth along. */
@@ -188,7 +192,8 @@ typedef struct ParticleSettings {
   struct EffectorWeights *effector_weights;
   struct Collection *collision_group;
 
-  int flag, rt;
+  int flag;
+  char _pad1[4];
   short type, from, distr, texact;
   /* physics modes */
   short phystype, rotmode, avemode, reactevent;

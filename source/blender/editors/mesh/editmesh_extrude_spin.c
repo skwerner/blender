@@ -33,16 +33,12 @@
 
 #include "RNA_access.h"
 #include "RNA_define.h"
-#include "RNA_enum_types.h"
 
-#include "WM_api.h"
 #include "WM_types.h"
 
 #include "ED_mesh.h"
 #include "ED_screen.h"
 #include "ED_view3d.h"
-
-#include "UI_resources.h"
 
 #include "MEM_guardedalloc.h"
 
@@ -112,7 +108,12 @@ static int edbm_spin_exec(bContext *C, wmOperator *op)
       continue;
     }
 
-    EDBM_update_generic(obedit->data, true, true);
+    EDBM_update(obedit->data,
+                &(const struct EDBMUpdate_Params){
+                    .calc_looptri = true,
+                    .calc_normals = false,
+                    .is_destructive = true,
+                });
   }
 
   MEM_freeN(objects);

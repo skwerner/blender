@@ -296,8 +296,8 @@ static bool rna_Object_visible_in_viewport_get(Object *ob, View3D *v3d)
 static void rna_Object_mat_convert_space(Object *ob,
                                          ReportList *reports,
                                          bPoseChannel *pchan,
-                                         float *mat,
-                                         float *mat_ret,
+                                         float mat[16],
+                                         float mat_ret[16],
                                          int from,
                                          int to)
 {
@@ -402,6 +402,29 @@ static Mesh *rna_Object_to_mesh(Object *object,
 static void rna_Object_to_mesh_clear(Object *object)
 {
   BKE_object_to_mesh_clear(object);
+}
+
+static Curve *rna_Object_to_curve(Object *object,
+                                  ReportList *reports,
+                                  Depsgraph *depsgraph,
+                                  bool apply_modifiers)
+{
+  if (!ELEM(object->type, OB_FONT, OB_CURVE)) {
+    BKE_report(reports, RPT_ERROR, "Object is not a curve or a text");
+    return NULL;
+  }
+
+  if (depsgraph == NULL) {
+    BKE_report(reports, RPT_ERROR, "Invalid depsgraph");
+    return NULL;
+  }
+
+  return BKE_object_to_curve(object, depsgraph, apply_modifiers);
+}
+
+static void rna_Object_to_curve_clear(Object *object)
+{
+  BKE_object_to_curve_clear(object);
 }
 
 static PointerRNA rna_Object_shape_key_add(
@@ -552,8 +575,10 @@ static void rna_Object_ray_cast(Object *ob,
   /* Test BoundBox first (efficiency) */
   BoundBox *bb = BKE_object_boundbox_get(ob);
   float distmin;
-  normalize_v3(
-      direction); /* Needed for valid distance check from isect_ray_aabb_v3_simple() call. */
+
+  /* Needed for valid distance check from #isect_ray_aabb_v3_simple() call. */
+  normalize_v3(direction);
+
   if (!bb ||
       (isect_ray_aabb_v3_simple(origin, direction, bb->vec[0], bb->vec[6], &distmin, NULL) &&
        distmin <= distance)) {
@@ -976,6 +1001,29 @@ void RNA_api_object(StructRNA *srna)
 
   func = RNA_def_function(srna, "to_mesh_clear", "rna_Object_to_mesh_clear");
   RNA_def_function_ui_description(func, "Clears mesh data-block created by to_mesh()");
+
+  /* curve */
+  func = RNA_def_function(srna, "to_curve", "rna_Object_to_curve");
+  RNA_def_function_ui_description(
+      func,
+      "Create a Curve data-block from the current state of the object. This only works for curve "
+      "and text objects. The object owns the data-block. To force free it, use to_curve_clear(). "
+      "The result is temporary and can not be used by objects from the main database");
+  RNA_def_function_flag(func, FUNC_USE_REPORTS);
+  parm = RNA_def_pointer(
+      func, "depsgraph", "Depsgraph", "Dependency Graph", "Evaluated dependency graph");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  RNA_def_boolean(func,
+                  "apply_modifiers",
+                  false,
+                  "",
+                  "Apply the deform modifiers on the control points of the curve. This is only "
+                  "supported for curve objects");
+  parm = RNA_def_pointer(func, "curve", "Curve", "", "Curve created from object");
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "to_curve_clear", "rna_Object_to_curve_clear");
+  RNA_def_function_ui_description(func, "Clears curve data-block created by to_curve()");
 
   /* Armature */
   func = RNA_def_function(srna, "find_armature", "BKE_modifiers_is_deformed_by_armature");

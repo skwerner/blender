@@ -23,6 +23,7 @@
  * GPU material library parsing and code generation.
  */
 
+#include <stdio.h>
 #include <string.h>
 
 #include "MEM_guardedalloc.h"
@@ -46,6 +47,7 @@ extern char datatoc_gpu_shader_material_anisotropic_glsl[];
 extern char datatoc_gpu_shader_material_attribute_glsl[];
 extern char datatoc_gpu_shader_material_background_glsl[];
 extern char datatoc_gpu_shader_material_bevel_glsl[];
+extern char datatoc_gpu_shader_material_wavelength_glsl[];
 extern char datatoc_gpu_shader_material_blackbody_glsl[];
 extern char datatoc_gpu_shader_material_bright_contrast_glsl[];
 extern char datatoc_gpu_shader_material_bump_glsl[];
@@ -187,6 +189,11 @@ static GPUMaterialLibrary gpu_shader_material_background_library = {
 
 static GPUMaterialLibrary gpu_shader_material_bevel_library = {
     .code = datatoc_gpu_shader_material_bevel_glsl,
+    .dependencies = {NULL},
+};
+
+static GPUMaterialLibrary gpu_shader_material_wavelength_library = {
+    .code = datatoc_gpu_shader_material_wavelength_glsl,
     .dependencies = {NULL},
 };
 
@@ -592,6 +599,7 @@ static GPUMaterialLibrary *gpu_material_libraries[] = {
     &gpu_shader_material_attribute_library,
     &gpu_shader_material_background_library,
     &gpu_shader_material_bevel_library,
+    &gpu_shader_material_wavelength_library,
     &gpu_shader_material_blackbody_library,
     &gpu_shader_material_bright_contrast_library,
     &gpu_shader_material_bump_library,
@@ -755,6 +763,10 @@ static void gpu_parse_material_library(GHash *hash, GPUMaterialLibrary *library)
 
     /* get parameters */
     while (*code && *code != ')') {
+      if (BLI_str_startswith(code, "const ")) {
+        code = gpu_str_skip_token(code, NULL, 0);
+      }
+
       /* test if it's an input or output */
       qual = FUNCTION_QUAL_IN;
       if (BLI_str_startswith(code, "out ")) {

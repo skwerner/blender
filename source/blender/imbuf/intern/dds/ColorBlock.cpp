@@ -46,11 +46,6 @@ inline static uint colorDistance(Color32 c0, Color32 c1)
 }
 #endif
 
-/** Default constructor. */
-ColorBlock::ColorBlock()
-{
-}
-
 /** Init the color block from an array of colors. */
 ColorBlock::ColorBlock(const uint *linearImage)
 {
@@ -118,9 +113,8 @@ void ColorBlock::init(uint w, uint h, const float *data, uint x, uint y)
       const uint idx = ((y + by) * w + x + bx);
 
       Color32 &c = color(e, i);
-      c.r = uint8(255 * CLAMP(data[idx + 0 * srcPlane],
-                              0.0f,
-                              1.0f)); /* @@ Is this the right way to quantize floats to bytes? */
+      /* @@ Is this the right way to quantize floats to bytes? */
+      c.r = uint8(255 * CLAMP(data[idx + 0 * srcPlane], 0.0f, 1.0f));
       c.g = uint8(255 * CLAMP(data[idx + 1 * srcPlane], 0.0f, 1.0f));
       c.b = uint8(255 * CLAMP(data[idx + 2 * srcPlane], 0.0f, 1.0f));
       c.a = uint8(255 * CLAMP(data[idx + 3 * srcPlane], 0.0f, 1.0f));
@@ -400,7 +394,7 @@ void ColorBlock::boundsRangeAlpha(Color32 *start, Color32 *end) const
 #endif
 
 #if 0
-/** Sort colors by abosolute value in their 16 bit representation. */
+/** Sort colors by absolute value in their 16 bit representation. */
 void ColorBlock::sortColorsByAbsoluteValue()
 {
   /* Dummy selection sort. */

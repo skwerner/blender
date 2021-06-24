@@ -28,28 +28,20 @@ struct Collection;
 struct GeometrySet;
 struct Object;
 
+/* Each geometry component has a specific type. The type determines what kind of data the component
+ * stores. Functions modifying a geometry will usually just modify a subset of the component types.
+ */
+typedef enum GeometryComponentType {
+  GEO_COMPONENT_TYPE_MESH = 0,
+  GEO_COMPONENT_TYPE_POINT_CLOUD = 1,
+  GEO_COMPONENT_TYPE_INSTANCES = 2,
+  GEO_COMPONENT_TYPE_VOLUME = 3,
+  GEO_COMPONENT_TYPE_CURVE = 4,
+} GeometryComponentType;
+
 void BKE_geometry_set_free(struct GeometrySet *geometry_set);
 
 bool BKE_geometry_set_has_instances(const struct GeometrySet *geometry_set);
-
-typedef enum InstancedDataType {
-  INSTANCE_DATA_TYPE_OBJECT = 0,
-  INSTANCE_DATA_TYPE_COLLECTION = 1,
-} InstancedDataType;
-
-typedef struct InstancedData {
-  InstancedDataType type;
-  union {
-    struct Object *object;
-    struct Collection *collection;
-  } data;
-} InstancedData;
-
-int BKE_geometry_set_instances(const struct GeometrySet *geometry_set,
-                               float (**r_positions)[3],
-                               float (**r_rotations)[3],
-                               float (**r_scales)[3],
-                               struct InstancedData **r_instanced_data);
 
 #ifdef __cplusplus
 }

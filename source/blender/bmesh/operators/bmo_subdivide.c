@@ -51,13 +51,13 @@ typedef struct SubDParams {
   BMOpSlot *slot_custom_patterns; /* BMO_slot_get(params->op->slots_in, "custom_patterns"); */
   float fractal_ofs[3];
 
-  /* rumtime storage for shape key */
+  /* Runtime storage for shape key. */
   struct {
     int cd_vert_shape_offset;
     int cd_vert_shape_offset_tmp;
     int totlayer;
 
-    /* shapekey holding displaced vertex coordinates for current geometry */
+    /* Shape-key holding displaced vertex coordinates for current geometry. */
     int tmpkey;
   } shape_info;
 
@@ -1094,7 +1094,7 @@ void bmo_subdivide_edges_exec(BMesh *bm, BMOperator *op)
         }
       }
 
-      /* obvously don't test for other patterns matching */
+      /* Obviously don't test for other patterns matching. */
       continue;
     }
 
@@ -1344,7 +1344,7 @@ void BM_mesh_esubdivide(BMesh *bm,
 {
   BMOperator op;
 
-  /* use_sphere isnt exposed here since its only used for new primitives */
+  /* `use_sphere` isn't exposed here since its only used for new primitives. */
   BMO_op_initf(bm,
                &op,
                BMO_FLAG_DEFAULTS,

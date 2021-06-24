@@ -25,6 +25,8 @@
 
 #include "GHOST_Types.h"
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -160,6 +162,7 @@ extern void GHOST_GetAllDisplayDimensions(GHOST_SystemHandle systemhandle,
  * The new window is added to the list of windows managed.
  * Never explicitly delete the window, use disposeWindow() instead.
  * \param systemhandle: The handle to the system.
+ * \param parentWindow: Handle of parent (or owner) window, or NULL
  * \param title: The name of the window.
  * (displayed in the title bar of the window if the OS supports it).
  * \param left: The coordinate of the left edge of the window.
@@ -167,30 +170,22 @@ extern void GHOST_GetAllDisplayDimensions(GHOST_SystemHandle systemhandle,
  * \param width: The width the window.
  * \param height: The height the window.
  * \param state: The state of the window when opened.
+ * \param is_dialog: Stay on top of parent window, no icon in taskbar, can't be minimized.
  * \param type: The type of drawing context installed in this window.
  * \param glSettings: Misc OpenGL options.
  * \return A handle to the new window ( == NULL if creation failed).
  */
 extern GHOST_WindowHandle GHOST_CreateWindow(GHOST_SystemHandle systemhandle,
+                                             GHOST_WindowHandle parent_windowhandle,
                                              const char *title,
                                              GHOST_TInt32 left,
                                              GHOST_TInt32 top,
                                              GHOST_TUns32 width,
                                              GHOST_TUns32 height,
                                              GHOST_TWindowState state,
+                                             bool is_dialog,
                                              GHOST_TDrawingContextType type,
                                              GHOST_GLSettings glSettings);
-
-extern GHOST_WindowHandle GHOST_CreateDialogWindow(GHOST_SystemHandle systemhandle,
-                                                   GHOST_WindowHandle parent_windowhandle,
-                                                   const char *title,
-                                                   GHOST_TInt32 left,
-                                                   GHOST_TInt32 top,
-                                                   GHOST_TUns32 width,
-                                                   GHOST_TUns32 height,
-                                                   GHOST_TWindowState state,
-                                                   GHOST_TDrawingContextType type,
-                                                   GHOST_GLSettings glSettings);
 
 /**
  * Create a new offscreen context.
@@ -281,7 +276,7 @@ extern int GHOST_GetFullScreen(GHOST_SystemHandle systemhandle);
  * wait (block) until the next event before returning.
  * \return Indication of the presence of events.
  */
-extern int GHOST_ProcessEvents(GHOST_SystemHandle systemhandle, int waitForEvent);
+extern bool GHOST_ProcessEvents(GHOST_SystemHandle systemhandle, bool waitForEvent);
 
 /**
  * Retrieves events from the queue and send them to the event consumers.
@@ -1064,7 +1059,110 @@ int GHOST_XrSessionNeedsUpsideDownDrawing(const GHOST_XrContextHandle xr_context
  * \returns GHOST_kSuccess if any event was handled, otherwise GHOST_kFailure.
  */
 GHOST_TSuccess GHOST_XrEventsHandle(GHOST_XrContextHandle xr_context);
-#endif
+
+/* actions */
+/**
+ * Create an OpenXR action set for input/output.
+ */
+int GHOST_XrCreateActionSet(GHOST_XrContextHandle xr_context, const GHOST_XrActionSetInfo *info);
+
+/**
+ * Destroy a previously created OpenXR action set.
+ */
+void GHOST_XrDestroyActionSet(GHOST_XrContextHandle xr_context, const char *action_set_name);
+
+/**
+ * Create OpenXR input/output actions.
+ */
+int GHOST_XrCreateActions(GHOST_XrContextHandle xr_context,
+                          const char *action_set_name,
+                          GHOST_TUns32 count,
+                          const GHOST_XrActionInfo *infos);
+
+/**
+ * Destroy previously created OpenXR actions.
+ */
+void GHOST_XrDestroyActions(GHOST_XrContextHandle xr_context,
+                            const char *action_set_name,
+                            GHOST_TUns32 count,
+                            const char *const *action_names);
+
+/**
+ * Create spaces for pose-based OpenXR actions.
+ */
+int GHOST_XrCreateActionSpaces(GHOST_XrContextHandle xr_context,
+                               const char *action_set_name,
+                               GHOST_TUns32 count,
+                               const GHOST_XrActionSpaceInfo *infos);
+
+/**
+ * Destroy previously created spaces for OpenXR actions.
+ */
+void GHOST_XrDestroyActionSpaces(GHOST_XrContextHandle xr_context,
+                                 const char *action_set_name,
+                                 GHOST_TUns32 count,
+                                 const GHOST_XrActionSpaceInfo *infos);
+
+/**
+ * Create input/output path bindings for OpenXR actions.
+ */
+int GHOST_XrCreateActionBindings(GHOST_XrContextHandle xr_context,
+                                 const char *action_set_name,
+                                 GHOST_TUns32 count,
+                                 const GHOST_XrActionProfileInfo *infos);
+
+/**
+ * Destroy previously created bindings for OpenXR actions.
+ */
+void GHOST_XrDestroyActionBindings(GHOST_XrContextHandle xr_context,
+                                   const char *action_set_name,
+                                   GHOST_TUns32 count,
+                                   const GHOST_XrActionProfileInfo *infos);
+
+/**
+ * Attach all created action sets to the current OpenXR session.
+ */
+int GHOST_XrAttachActionSets(GHOST_XrContextHandle xr_context);
+
+/**
+ * Update button/tracking states for OpenXR actions.
+ *
+ * \param action_set_name: The name of the action set to sync. If NULL, all action sets
+ * attached to the session will be synced.
+ */
+int GHOST_XrSyncActions(GHOST_XrContextHandle xr_context, const char *action_set_name);
+
+/**
+ * Apply an OpenXR haptic output action.
+ */
+int GHOST_XrApplyHapticAction(GHOST_XrContextHandle xr_context,
+                              const char *action_set_name,
+                              const char *action_name,
+                              const GHOST_TInt64 *duration,
+                              const float *frequency,
+                              const float *amplitude);
+
+/**
+ * Stop a previously applied OpenXR haptic output action.
+ */
+void GHOST_XrStopHapticAction(GHOST_XrContextHandle xr_context,
+                              const char *action_set_name,
+                              const char *action_name);
+
+/**
+ * Get action set custom data (owned by Blender, not GHOST).
+ */
+void *GHOST_XrGetActionSetCustomdata(GHOST_XrContextHandle xr_context,
+                                     const char *action_set_name);
+
+/**
+ * Get action custom data (owned by Blender, not GHOST).
+ */
+void *GHOST_XrGetActionCustomdata(GHOST_XrContextHandle xr_context,
+                                  const char *action_set_name,
+                                  const char *action_name);
+
+#endif /* WITH_XR_OPENXR */
 
 #ifdef __cplusplus
 }

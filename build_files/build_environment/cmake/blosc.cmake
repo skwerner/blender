@@ -29,16 +29,16 @@ set(BLOSC_EXTRA_ARGS
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
 
-# Prevent blosc from including it's own local copy of zlib in the object file
+# Prevent blosc from including its own local copy of zlib in the object file
 # and cause linker errors with everybody else.
 set(BLOSC_EXTRA_ARGS ${BLOSC_EXTRA_ARGS}
   -DPREFER_EXTERNAL_ZLIB=ON
 )
 
 ExternalProject_Add(external_blosc
-  URL ${BLOSC_URI}
+  URL file://${PACKAGE_DIR}/${BLOSC_FILE}
   DOWNLOAD_DIR ${DOWNLOAD_DIR}
-  URL_HASH MD5=${BLOSC_HASH}
+  URL_HASH ${BLOSC_HASH_TYPE}=${BLOSC_HASH}
   PREFIX ${BUILD_DIR}/blosc
   PATCH_COMMAND ${PATCH_CMD} --verbose -p 1 -N -d ${BUILD_DIR}/blosc/src/external_blosc < ${PATCH_DIR}/blosc.diff
   CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${LIBDIR}/blosc ${DEFAULT_CMAKE_FLAGS} ${BLOSC_EXTRA_ARGS}

@@ -47,7 +47,7 @@
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
-/* Mostly init functions. */
+/* Mostly initialization functions. */
 #include "BKE_appdir.h"
 #include "BKE_blender.h"
 #include "BKE_brush.h"
@@ -109,8 +109,6 @@
 
 #include "creator_intern.h" /* Own include. */
 
-/* Local Function prototypes. */
-
 /* -------------------------------------------------------------------- */
 /** \name Local Application State
  * \{ */
@@ -134,7 +132,6 @@ struct ApplicationState app_state = {
 /** \name Application Level Callbacks
  *
  * Initialize callbacks for the modules that need them.
- *
  * \{ */
 
 static void callback_mem_error(const char *errorStr)
@@ -213,6 +210,41 @@ char **environ = NULL;
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name GMP Allocator Workaround
+ * \{ */
+
+#if (defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG) && defined(WITH_GMP)) || \
+    defined(DOXYGEN)
+#  include "gmp.h"
+#  include "tbb/scalable_allocator.h"
+
+void *gmp_alloc(size_t size)
+{
+  return scalable_malloc(size);
+}
+void *gmp_realloc(void *ptr, size_t old_size, size_t new_size)
+{
+  return scalable_realloc(ptr, new_size);
+}
+
+void gmp_free(void *ptr, size_t size)
+{
+  scalable_free(ptr);
+}
+/**
+ * Use TBB's scalable_allocator on Windows.
+ * `TBBmalloc` correctly captures all allocations already,
+ * however, GMP is built with MINGW since it doesn't build with MSVC,
+ * which TBB has issues hooking into automatically.
+ */
+void gmp_blender_init_allocator()
+{
+  mp_set_memory_functions(gmp_alloc, gmp_realloc, gmp_free);
+}
+#endif
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name Main Function
  * \{ */
 
@@ -264,7 +296,7 @@ int main(int argc,
 #  endif
 
   /* Win32 Unicode Arguments. */
-  /* NOTE: cannot use guardedalloc malloc here, as it's not yet initialized
+  /* NOTE: cannot use `guardedalloc` allocation here, as it's not yet initialized
    *       (it depends on the arguments passed in, which is what we're getting here!)
    */
   {
@@ -343,6 +375,10 @@ int main(int argc,
   libmv_initLogging(argv[0]);
 #elif defined(WITH_CYCLES_LOGGING)
   CCL_init_logging(argv[0]);
+#endif
+
+#if defined(WITH_TBB_MALLOC) && defined(_MSC_VER) && defined(NDEBUG) && defined(WITH_GMP)
+  gmp_blender_init_allocator();
 #endif
 
   main_callback_setup();
@@ -453,8 +489,8 @@ int main(int argc,
   /* Background render uses this font too. */
   BKE_vfont_builtin_register(datatoc_bfont_pfb, datatoc_bfont_pfb_size);
 
-  /* Initialize ffmpeg if built in, also needed for background-mode if videos are
-   * rendered via ffmpeg. */
+  /* Initialize FFMPEG if built in, also needed for background-mode if videos are
+   * rendered via FFMPEG. */
   BKE_sound_init_once();
 
   BKE_materials_init();
@@ -524,7 +560,7 @@ int main(int argc,
 #endif /* WITH_PYTHON_MODULE */
 
   return 0;
-} /* End of int main(...) function. */
+} /* End of `int main(...)` function. */
 
 #ifdef WITH_PYTHON_MODULE
 void main_python_exit(void)

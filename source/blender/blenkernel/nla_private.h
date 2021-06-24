@@ -79,6 +79,13 @@ typedef struct NlaValidMask {
 typedef struct NlaEvalChannelSnapshot {
   struct NlaEvalChannel *channel;
 
+  /** For an upper snapshot channel, marks values that should be blended. */
+  NlaValidMask blend_domain;
+
+  /** Only used for keyframe remapping. Any values not in the \a remap_domain will not be used
+   * for keyframe remapping. */
+  NlaValidMask remap_domain;
+
   int length;   /* Number of values in the property. */
   bool is_base; /* Base snapshot of the channel. */
 
@@ -106,14 +113,10 @@ typedef struct NlaEvalChannel {
 
   int index;
   bool is_array;
-  bool in_blend;
   char mix_mode;
 
-  struct NlaEvalChannel *next_blend;
-  NlaEvalChannelSnapshot *blend_snapshot;
-
-  /* Mask of array items controlled by NLA. */
-  NlaValidMask valid;
+  /* Associated with the RNA property's value(s), marks which elements are affected by NLA. */
+  NlaValidMask domain;
 
   /* Base set of values. */
   NlaEvalChannelSnapshot base_snapshot;
@@ -156,8 +159,8 @@ typedef struct NlaKeyframingContext {
   NlaStrip strip;
   NlaEvalStrip *eval_strip;
 
-  /* Evaluated NLA stack below the current strip. */
-  NlaEvalData nla_channels;
+  /* Evaluated NLA stack below the tweak strip. */
+  NlaEvalData lower_eval_data;
 } NlaKeyframingContext;
 
 /* --------------- NLA Functions (not to be used as a proper API) ----------------------- */
@@ -185,6 +188,24 @@ void nladata_flush_channels(PointerRNA *ptr,
                             NlaEvalData *channels,
                             NlaEvalSnapshot *snapshot,
                             const bool flush_to_original);
+
+void nlasnapshot_enable_all_blend_domain(NlaEvalSnapshot *snapshot);
+
+void nlasnapshot_ensure_channels(NlaEvalData *eval_data, NlaEvalSnapshot *snapshot);
+
+void nlasnapshot_blend(NlaEvalData *eval_data,
+                       NlaEvalSnapshot *lower_snapshot,
+                       NlaEvalSnapshot *upper_snapshot,
+                       const short upper_blendmode,
+                       const float upper_influence,
+                       NlaEvalSnapshot *r_blended_snapshot);
+
+void nlasnapshot_blend_get_inverted_upper_snapshot(NlaEvalData *eval_data,
+                                                   NlaEvalSnapshot *lower_snapshot,
+                                                   NlaEvalSnapshot *blended_snapshot,
+                                                   const short upper_blendmode,
+                                                   const float upper_influence,
+                                                   NlaEvalSnapshot *r_upper_snapshot);
 
 #ifdef __cplusplus
 }

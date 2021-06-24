@@ -684,6 +684,29 @@ static char *rna_def_property_get_func(
         }
       }
     }
+
+    /* Check log scale sliders for negative range. */
+    if (prop->type == PROP_FLOAT) {
+      FloatPropertyRNA *fprop = (FloatPropertyRNA *)prop;
+      /* NOTE: UI_BTYPE_NUM_SLIDER can't have a softmin of zero. */
+      if ((fprop->ui_scale_type == PROP_SCALE_LOG) && (fprop->hardmin < 0 || fprop->softmin < 0)) {
+        CLOG_ERROR(
+            &LOG, "\"%s.%s\", range for log scale < 0.", srna->identifier, prop->identifier);
+        DefRNA.error = true;
+        return NULL;
+      }
+    }
+    if (prop->type == PROP_INT) {
+      IntPropertyRNA *iprop = (IntPropertyRNA *)prop;
+      /* Only UI_BTYPE_NUM_SLIDER is implemented and that one can't have a softmin of zero. */
+      if ((iprop->ui_scale_type == PROP_SCALE_LOG) &&
+          (iprop->hardmin <= 0 || iprop->softmin <= 0)) {
+        CLOG_ERROR(
+            &LOG, "\"%s.%s\", range for log scale <= 0.", srna->identifier, prop->identifier);
+        DefRNA.error = true;
+        return NULL;
+      }
+    }
   }
 
   func = rna_alloc_function_name(srna->identifier, rna_safe_id(prop->identifier), "get");
@@ -705,26 +728,34 @@ static char *rna_def_property_get_func(
 
         rna_print_data_get(f, dp);
 
-        if (!(prop->flag & PROP_NEVER_NULL)) {
+        if (dp->dnapointerlevel == 1) {
+          /* Handle allocated char pointer properties. */
           fprintf(f, "    if (data->%s == NULL) {\n", dp->dnaname);
           fprintf(f, "        *value = '\\0';\n");
           fprintf(f, "        return;\n");
           fprintf(f, "    }\n");
-        }
-
-        if (sprop->maxlength) {
           fprintf(f,
-                  "    %s(value, data->%s, %d);\n",
-                  string_copy_func,
-                  dp->dnaname,
-                  sprop->maxlength);
-        }
-        else {
-          fprintf(f,
-                  "    %s(value, data->%s, sizeof(data->%s));\n",
+                  "    %s(value, data->%s, strlen(data->%s) + 1);\n",
                   string_copy_func,
                   dp->dnaname,
                   dp->dnaname);
+        }
+        else {
+          /* Handle char array properties. */
+          if (sprop->maxlength) {
+            fprintf(f,
+                    "    %s(value, data->%s, %d);\n",
+                    string_copy_func,
+                    dp->dnaname,
+                    sprop->maxlength);
+          }
+          else {
+            fprintf(f,
+                    "    %s(value, data->%s, sizeof(data->%s));\n",
+                    string_copy_func,
+                    dp->dnaname,
+                    dp->dnaname);
+          }
         }
       }
       fprintf(f, "}\n\n");
@@ -1046,25 +1077,30 @@ static char *rna_def_property_set_func(
 
         rna_print_data_get(f, dp);
 
-        if (!(prop->flag & PROP_NEVER_NULL)) {
-          fprintf(f, "    if (data->%s == NULL) {\n", dp->dnaname);
-          fprintf(f, "        return;\n");
-          fprintf(f, "    }\n");
-        }
-
-        if (sprop->maxlength) {
-          fprintf(f,
-                  "    %s(data->%s, value, %d);\n",
-                  string_copy_func,
-                  dp->dnaname,
-                  sprop->maxlength);
+        if (dp->dnapointerlevel == 1) {
+          /* Handle allocated char pointer properties. */
+          fprintf(
+              f, "    if (data->%s != NULL) { MEM_freeN(data->%s); }\n", dp->dnaname, dp->dnaname);
+          fprintf(f, "    const int length = strlen(value);\n");
+          fprintf(f, "    data->%s = MEM_mallocN(length + 1, __func__);\n", dp->dnaname);
+          fprintf(f, "    %s(data->%s, value, length + 1);\n", string_copy_func, dp->dnaname);
         }
         else {
-          fprintf(f,
-                  "    %s(data->%s, value, sizeof(data->%s));\n",
-                  string_copy_func,
-                  dp->dnaname,
-                  dp->dnaname);
+          /* Handle char array properties. */
+          if (sprop->maxlength) {
+            fprintf(f,
+                    "    %s(data->%s, value, %d);\n",
+                    string_copy_func,
+                    dp->dnaname,
+                    sprop->maxlength);
+          }
+          else {
+            fprintf(f,
+                    "    %s(data->%s, value, sizeof(data->%s));\n",
+                    string_copy_func,
+                    dp->dnaname,
+                    dp->dnaname);
+          }
         }
       }
       fprintf(f, "}\n\n");
@@ -1285,10 +1321,17 @@ static char *rna_def_property_length_func(
     }
     else {
       rna_print_data_get(f, dp);
-      if (!(prop->flag & PROP_NEVER_NULL)) {
-        fprintf(f, "    if (data->%s == NULL) { return 0; }\n", dp->dnaname);
+      if (dp->dnapointerlevel == 1) {
+        /* Handle allocated char pointer properties. */
+        fprintf(f,
+                "    return (data->%s == NULL) ? 0 : strlen(data->%s);\n",
+                dp->dnaname,
+                dp->dnaname);
       }
-      fprintf(f, "    return strlen(data->%s);\n", dp->dnaname);
+      else {
+        /* Handle char array properties. */
+        fprintf(f, "    return strlen(data->%s);\n", dp->dnaname);
+      }
     }
     fprintf(f, "}\n\n");
   }
@@ -3158,6 +3201,8 @@ static const char *rna_property_subtypename(PropertySubType type)
       return "PROP_ANGLE";
     case PROP_TIME:
       return "PROP_TIME";
+    case PROP_TIME_ABSOLUTE:
+      return "PROP_TIME_ABSOLUTE";
     case PROP_DISTANCE:
       return "PROP_DISTANCE";
     case PROP_DISTANCE_CAMERA:
@@ -3223,6 +3268,8 @@ static const char *rna_property_subtype_unit(PropertySubType type)
       return "PROP_UNIT_ROTATION";
     case PROP_UNIT_TIME:
       return "PROP_UNIT_TIME";
+    case PROP_UNIT_TIME_ABSOLUTE:
+      return "PROP_UNIT_TIME_ABSOLUTE";
     case PROP_UNIT_VELOCITY:
       return "PROP_UNIT_VELOCITY";
     case PROP_UNIT_ACCELERATION:
@@ -3671,7 +3718,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
           }
         }
         else {
-          if (!defaultfound && !(eprop->itemf && eprop->item == DummyRNA_NULL_items)) {
+          if (!defaultfound && !(eprop->item_fn && eprop->item == DummyRNA_NULL_items)) {
             CLOG_ERROR(&LOG,
                        "%s%s.%s, enum default is not in items.",
                        srna->identifier,
@@ -3915,6 +3962,8 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
               rna_function_string(iprop->getarray_ex),
               rna_function_string(iprop->setarray_ex),
               rna_function_string(iprop->range_ex));
+      rna_int_print(f, iprop->ui_scale_type);
+      fprintf(f, ", ");
       rna_int_print(f, iprop->softmin);
       fprintf(f, ", ");
       rna_int_print(f, iprop->softmax);
@@ -3949,6 +3998,8 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
               rna_function_string(fprop->getarray_ex),
               rna_function_string(fprop->setarray_ex),
               rna_function_string(fprop->range_ex));
+      rna_float_print(f, fprop->ui_scale_type);
+      fprintf(f, ", ");
       rna_float_print(f, fprop->softmin);
       fprintf(f, ", ");
       rna_float_print(f, fprop->softmax);
@@ -3989,10 +4040,10 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
     case PROP_ENUM: {
       EnumPropertyRNA *eprop = (EnumPropertyRNA *)prop;
       fprintf(f,
-              "\t%s, %s, %s, %s, %s, NULL, ",
+              "\t%s, %s, %s, %s, %s, ",
               rna_function_string(eprop->get),
               rna_function_string(eprop->set),
-              rna_function_string(eprop->itemf),
+              rna_function_string(eprop->item_fn),
               rna_function_string(eprop->get_ex),
               rna_function_string(eprop->set_ex));
       if (eprop->item) {
@@ -4010,7 +4061,7 @@ static void rna_generate_property(FILE *f, StructRNA *srna, const char *nest, Pr
               "\t%s, %s, %s, %s,",
               rna_function_string(pprop->get),
               rna_function_string(pprop->set),
-              rna_function_string(pprop->typef),
+              rna_function_string(pprop->type_fn),
               rna_function_string(pprop->poll));
       if (pprop->type) {
         fprintf(f, "&RNA_%s\n", (const char *)pprop->type);
@@ -4178,7 +4229,7 @@ static void rna_generate_struct(BlenderRNA *UNUSED(brna), StructRNA *srna, FILE 
   }
   fprintf(f, "\t");
   rna_print_c_string(f, srna->identifier);
-  fprintf(f, ", NULL, NULL"); /* PyType - Cant initialize here */
+  fprintf(f, ", NULL, NULL"); /* PyType - Can't initialize here */
   fprintf(f, ", %d, NULL, ", srna->flag);
   rna_print_c_string(f, srna->name);
   fprintf(f, ",\n\t");
@@ -4321,7 +4372,7 @@ static RNAProcessItem PROCESS_ITEMS[] = {
     {"rna_screen.c", NULL, RNA_def_screen},
     {"rna_sculpt_paint.c", NULL, RNA_def_sculpt_paint},
     {"rna_sequencer.c", "rna_sequencer_api.c", RNA_def_sequencer},
-#ifdef WITH_GEOMETRY_NODES
+#ifdef WITH_SIMULATION_DATABLOCK
     {"rna_simulation.c", NULL, RNA_def_simulation},
 #endif
     {"rna_space.c", "rna_space_api.c", RNA_def_space},
@@ -4436,7 +4487,7 @@ static void rna_generate(BlenderRNA *brna, FILE *f, const char *filename, const 
     }
   }
 
-  if (STREQ(filename, "rna_ID.c")) {
+  if (filename && STREQ(filename, "rna_ID.c")) {
     /* this is ugly, but we cannot have c files compiled for both
      * makesrna and blender with some build systems at the moment */
     fprintf(f, "#include \"rna_define.c\"\n\n");
@@ -4758,7 +4809,13 @@ static const char *cpp_classes =
     "class CollectionIterator {\n"
     "public:\n"
     "    CollectionIterator() : iter(), t(iter.ptr), init(false) { iter.valid = false; }\n"
+    "    CollectionIterator(const PointerRNA &ptr) : CollectionIterator() { this->begin(ptr); }\n"
     "    ~CollectionIterator(void) { if (init) Tend(&iter); };\n"
+    "\n"
+    "    CollectionIterator(const CollectionIterator &other) = delete;\n"
+    "    CollectionIterator(CollectionIterator &&other) = delete;\n"
+    "    CollectionIterator &operator=(const CollectionIterator &other) = delete;\n"
+    "    CollectionIterator &operator=(CollectionIterator &&other) = delete;\n"
     "\n"
     "    operator bool(void)\n"
     "    { return iter.valid != 0; }\n"
@@ -4777,9 +4834,6 @@ static const char *cpp_classes =
     "true; }\n"
     "\n"
     "private:\n"
-    "    const CollectionIterator<T, Tbegin, Tnext, Tend>& operator = "
-    "(const CollectionIterator<T, Tbegin, Tnext, Tend>& /*copy*/) {}\n"
-    ""
     "    CollectionPropertyIterator iter;\n"
     "    T t;\n"
     "    bool init;\n"
@@ -4794,6 +4848,8 @@ static const char *cpp_classes =
     "\n"
     "    void begin(CollectionIterator<T, Tbegin, Tnext, Tend>& iter)\n"
     "    { iter.begin(ptr); }\n"
+    "    CollectionIterator<T, Tbegin, Tnext, Tend> begin()\n"
+    "    { return CollectionIterator<T, Tbegin, Tnext, Tend>(ptr); }\n"
     "    CollectionIterator<T, Tbegin, Tnext, Tend> end()\n"
     "    { return CollectionIterator<T, Tbegin, Tnext, Tend>(); } /* test */ \n"
     ""

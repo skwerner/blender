@@ -29,7 +29,7 @@
 
 #include "intern/bmesh_operators_private.h" /* own include */
 
-/********* righthand faces implementation ****** */
+/********* Right-hand faces implementation ****** */
 
 #define FACE_FLAG (1 << 0)
 #define FACE_FLIP (1 << 1)
@@ -138,7 +138,7 @@ static int recalc_face_normals_find_index(BMesh *bm,
    * then the outer-most loop attached to that vertex.
    *
    * Important this is correctly detected,
-   * where casting a ray from the center wont hit any loops past this one.
+   * where casting a ray from the center won't hit any loops past this one.
    * Otherwise the result may be incorrect.
    */
   for (i = 0; i < faces_len; i++) {

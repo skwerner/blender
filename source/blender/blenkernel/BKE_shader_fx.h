@@ -149,7 +149,7 @@ typedef struct ShaderFxTypeInfo {
 
 #define SHADERFX_TYPE_PANEL_PREFIX "FX_PT_"
 
-/* Initialize  global data (type info and some common global storages). */
+/* Initialize  global data (type info and some common global storage). */
 void BKE_shaderfx_init(void);
 
 void BKE_shaderfxType_panel_id(ShaderFxType type, char *r_idname);
@@ -160,6 +160,8 @@ void BKE_shaderfx_free_ex(struct ShaderFxData *fx, const int flag);
 void BKE_shaderfx_free(struct ShaderFxData *fx);
 bool BKE_shaderfx_unique_name(struct ListBase *shaderfx, struct ShaderFxData *fx);
 bool BKE_shaderfx_depends_ontime(struct ShaderFxData *fx);
+bool BKE_shaderfx_is_nonlocal_in_liboverride(const struct Object *ob,
+                                             const struct ShaderFxData *shaderfx);
 struct ShaderFxData *BKE_shaderfx_findby_type(struct Object *ob, ShaderFxType type);
 struct ShaderFxData *BKE_shaderfx_findby_name(struct Object *ob, const char *name);
 void BKE_shaderfx_copydata_generic(const struct ShaderFxData *fx_src, struct ShaderFxData *fx_dst);

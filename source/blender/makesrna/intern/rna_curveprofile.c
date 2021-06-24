@@ -137,7 +137,7 @@ static void rna_CurveProfile_remove_point(CurveProfile *profile,
 static void rna_CurveProfile_evaluate(struct CurveProfile *profile,
                                       ReportList *reports,
                                       float length_portion,
-                                      float *location)
+                                      float location[2])
 {
   if (!profile->table) {
     BKE_report(reports, RPT_ERROR, "CurveProfile table not initialized, call initialize()");
@@ -280,6 +280,9 @@ static void rna_def_curveprofile(BlenderRNA *brna)
 
   func = RNA_def_function(srna, "update", "rna_CurveProfile_update");
   RNA_def_function_ui_description(func, "Refresh internal data, remove doubles and clip points");
+
+  func = RNA_def_function(srna, "reset_view", "BKE_curveprofile_reset_view");
+  RNA_def_function_ui_description(func, "Reset the curve profile grid to its clipping size");
 
   func = RNA_def_function(srna, "initialize", "rna_CurveProfile_initialize");
   parm = RNA_def_int(func,

@@ -509,7 +509,7 @@ static void viewops_data_create(bContext *C,
         negate_v3_v3(my_origin, rv3d->ofs); /* ofs is flipped */
 
         /* Set the dist value to be the distance from this 3d point this means you'll
-         * always be able to zoom into it and panning wont go bad when dist was zero. */
+         * always be able to zoom into it and panning won't go bad when dist was zero. */
 
         /* remove dist value */
         upvec[0] = upvec[1] = 0;
@@ -827,14 +827,14 @@ static void viewrotate_apply(ViewOpsData *vod, const int event_xy[2])
     quat_to_mat3(m, vod->curr.viewquat);
     invert_m3_m3(m_inv, m);
 
-    /* Avoid Gimble Lock
+    /* Avoid Gimbal Lock
      *
      * Even though turn-table mode is in use, this can occur when the user exits the camera view
      * or when aligning the view to a rotated object.
      *
-     * We have gimble lock when the user's view is rotated +/- 90 degrees along the view axis.
+     * We have gimbal lock when the user's view is rotated +/- 90 degrees along the view axis.
      * In this case the vertical rotation is the same as the sideways turntable motion.
-     * Making it impossible to get out of the gimble locked state without resetting the view.
+     * Making it impossible to get out of the gimbal locked state without resetting the view.
      *
      * The logic below lets the user exit out of this state without any abrupt 'fix'
      * which would be disorienting.
@@ -843,7 +843,7 @@ static void viewrotate_apply(ViewOpsData *vod, const int event_xy[2])
      * - Rotated-horizon: `cross_v3_v3v3(xaxis, zvec_global, m_inv[2])`
      *   When only this is used, this turntable rotation works - but it's side-ways
      *   (as if the entire turn-table has been placed on its side)
-     *   While there is no gimble lock, it's also awkward to use.
+     *   While there is no gimbal lock, it's also awkward to use.
      * - Un-rotated-horizon: `m_inv[0]`
      *   When only this is used, the turntable rotation can have gimbal lock.
      *
@@ -852,7 +852,7 @@ static void viewrotate_apply(ViewOpsData *vod, const int event_xy[2])
      * Blending isn't essential, it just makes the transition smoother.
      *
      * This allows sideways turn-table rotation on a Z axis that isn't world-space Z,
-     * While up-down turntable rotation eventually corrects gimble lock. */
+     * While up-down turntable rotation eventually corrects gimbal lock. */
 #if 1
     if (len_squared_v3v3(zvec_global, m_inv[2]) > 0.001f) {
       float fac;
@@ -895,7 +895,7 @@ static void viewrotate_apply(ViewOpsData *vod, const int event_xy[2])
   copy_qt_qt(rv3d->viewquat, vod->curr.viewquat);
 
   /* check for view snap,
-   * note: don't apply snap to vod->viewquat so the view wont jam up */
+   * note: don't apply snap to vod->viewquat so the view won't jam up */
   if (vod->axis_snap) {
     viewrotate_apply_snap(vod);
   }
@@ -953,7 +953,6 @@ static int viewrotate_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
   else if (event_code == VIEW_CONFIRM) {
-    ED_view3d_depth_tag_update(vod->rv3d);
     use_autokey = true;
     ret = OPERATOR_FINISHED;
   }
@@ -1014,7 +1013,6 @@ static int viewrotate_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     }
 
     viewrotate_apply(vod, event_xy);
-    ED_view3d_depth_tag_update(vod->rv3d);
 
     viewops_data_free(C, op);
 
@@ -1799,7 +1797,6 @@ static int viewmove_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
   else if (event_code == VIEW_CONFIRM) {
-    ED_view3d_depth_tag_update(vod->rv3d);
     use_autokey = true;
     ret = OPERATOR_FINISHED;
   }
@@ -1840,7 +1837,6 @@ static int viewmove_invoke(bContext *C, wmOperator *op, const wmEvent *event)
   if (event->type == MOUSEPAN) {
     /* invert it, trackpad scroll follows same principle as 2d windows this way */
     viewmove_apply(vod, 2 * event->x - event->prevx, 2 * event->y - event->prevy);
-    ED_view3d_depth_tag_update(vod->rv3d);
 
     viewops_data_free(C, op);
 
@@ -2025,7 +2021,7 @@ static float viewzoom_scale_value(const rcti *winrct,
 {
   float zfac;
 
-  if (viewzoom == USER_ZOOM_CONT) {
+  if (viewzoom == USER_ZOOM_CONTINUE) {
     double time = PIL_check_seconds_timer();
     float time_step = (float)(time - *r_timer_lastdraw);
     float fac;
@@ -2043,7 +2039,6 @@ static float viewzoom_scale_value(const rcti *winrct,
       fac = -fac;
     }
 
-    /* oldstyle zoom */
     zfac = 1.0f + ((fac / 20.0f) * time_step);
     *r_timer_lastdraw = time;
   }
@@ -2255,7 +2250,6 @@ static int viewzoom_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
   else if (event_code == VIEW_CONFIRM) {
-    ED_view3d_depth_tag_update(vod->rv3d);
     use_autokey = true;
     ret = OPERATOR_FINISHED;
   }
@@ -2342,8 +2336,6 @@ static int viewzoom_exec(bContext *C, wmOperator *op)
     view3d_boxview_sync(area, region);
   }
 
-  ED_view3d_depth_tag_update(rv3d);
-
   ED_view3d_camera_lock_sync(depsgraph, v3d, rv3d);
   ED_view3d_camera_lock_autokey(v3d, rv3d, C, false, true);
 
@@ -2399,13 +2391,11 @@ static int viewzoom_invoke(bContext *C, wmOperator *op, const wmEvent *event)
                      (use_cursor_init && (U.uiflag & USER_ZOOM_TO_MOUSEPOS)));
       ED_view3d_camera_lock_autokey(vod->v3d, vod->rv3d, C, false, true);
 
-      ED_view3d_depth_tag_update(vod->rv3d);
-
       viewops_data_free(C, op);
       return OPERATOR_FINISHED;
     }
 
-    if (U.viewzoom == USER_ZOOM_CONT) {
+    if (U.viewzoom == USER_ZOOM_CONTINUE) {
       /* needs a timer to continue redrawing */
       vod->timer = WM_event_add_timer(CTX_wm_manager(C), CTX_wm_window(C), TIMER, 0.01f);
       vod->prev.time = PIL_check_seconds_timer();
@@ -2508,7 +2498,7 @@ static void view_dolly_to_vector_3d(ARegion *region,
   madd_v3_v3v3fl(rv3d->ofs, orig_ofs, dvec, -(1.0f - dfac));
 }
 
-static void viewdolly_apply(ViewOpsData *vod, const int xy[2], const short zoom_invert)
+static void viewdolly_apply(ViewOpsData *vod, const int xy[2], const bool zoom_invert)
 {
   float zfac = 1.0;
 
@@ -2580,7 +2570,6 @@ static int viewdolly_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
   else if (event_code == VIEW_CONFIRM) {
-    ED_view3d_depth_tag_update(vod->rv3d);
     use_autokey = true;
     ret = OPERATOR_FINISHED;
   }
@@ -2628,15 +2617,14 @@ static int viewdolly_exec(bContext *C, wmOperator *op)
   /* overwrite the mouse vector with the view direction (zoom into the center) */
   if ((use_cursor_init && (U.uiflag & USER_ZOOM_TO_MOUSEPOS)) == 0) {
     normalize_v3_v3(mousevec, rv3d->viewinv[2]);
+    negate_v3(mousevec);
   }
 
-  view_dolly_to_vector_3d(region, rv3d->ofs, mousevec, delta < 0 ? 0.2f : 1.8f);
+  view_dolly_to_vector_3d(region, rv3d->ofs, mousevec, delta < 0 ? 1.8f : 0.2f);
 
   if (RV3D_LOCK_FLAGS(rv3d) & RV3D_BOXVIEW) {
     view3d_boxview_sync(area, region);
   }
-
-  ED_view3d_depth_tag_update(rv3d);
 
   ED_view3d_camera_lock_sync(CTX_data_ensure_evaluated_depsgraph(C), v3d, rv3d);
 
@@ -2718,7 +2706,6 @@ static int viewdolly_invoke(bContext *C, wmOperator *op, const wmEvent *event)
                                                         event->prevx;
       }
       viewdolly_apply(vod, &event->prevx, (U.uiflag & USER_ZOOM_INVERT) == 0);
-      ED_view3d_depth_tag_update(vod->rv3d);
 
       viewops_data_free(C, op);
       return OPERATOR_FINISHED;
@@ -2887,7 +2874,7 @@ static void view3d_from_minmax(bContext *C,
                           });
   }
 
-  /* smooth view does viewlock RV3D_BOXVIEW copy */
+  /* Smooth-view does view-lock #RV3D_BOXVIEW copy. */
 }
 
 /**
@@ -3020,7 +3007,6 @@ void VIEW3D_OT_view_all(wmOperatorType *ot)
  * Move & Zoom the view to fit selected contents.
  * \{ */
 
-/* like a localview without local!, was centerview() in 2.4x */
 static int viewselected_exec(bContext *C, wmOperator *op)
 {
   ARegion *region = CTX_wm_region(C);
@@ -3281,7 +3267,7 @@ static int viewcenter_cursor_exec(bContext *C, wmOperator *op)
     ED_view3d_smooth_view(
         C, v3d, region, smooth_viewtx, &(const V3D_SmoothParams){.ofs = new_ofs});
 
-    /* smooth view does viewlock RV3D_BOXVIEW copy */
+    /* Smooth view does view-lock #RV3D_BOXVIEW copy. */
   }
 
   return OPERATOR_FINISHED;
@@ -3629,15 +3615,14 @@ static int view3d_zoom_border_exec(bContext *C, wmOperator *op)
 
   ED_view3d_dist_range_get(v3d, dist_range);
 
-  /* Get Z Depths, needed for perspective, nice for ortho */
-  ED_view3d_draw_depth(CTX_data_ensure_evaluated_depsgraph(C), region, v3d, true);
-
+  ED_view3d_depth_override(
+      CTX_data_ensure_evaluated_depsgraph(C), region, v3d, NULL, V3D_DEPTH_NO_GPENCIL, NULL);
   {
     /* avoid allocating the whole depth buffer */
     ViewDepths depth_temp = {0};
 
     /* avoid view3d_update_depths() for speed. */
-    view3d_update_depths_rect(region, &depth_temp, &rect);
+    view3d_depths_rect_create(region, &rect, &depth_temp);
 
     /* find the closest Z pixel */
     depth_close = view3d_depth_near(&depth_temp);
@@ -3662,14 +3647,14 @@ static int view3d_zoom_border_exec(bContext *C, wmOperator *op)
   if (rv3d->is_persp) {
     float p_corner[3];
 
-    /* no depths to use, we cant do anything! */
+    /* no depths to use, we can't do anything! */
     if (depth_close == FLT_MAX) {
       BKE_report(op->reports, RPT_ERROR, "Depth too large");
       return OPERATOR_CANCELLED;
     }
     /* convert border to 3d coordinates */
-    if ((!ED_view3d_unproject(region, cent[0], cent[1], depth_close, p)) ||
-        (!ED_view3d_unproject(region, rect.xmin, rect.ymin, depth_close, p_corner))) {
+    if ((!ED_view3d_unproject_v3(region, cent[0], cent[1], depth_close, p)) ||
+        (!ED_view3d_unproject_v3(region, rect.xmin, rect.ymin, depth_close, p_corner))) {
       return OPERATOR_CANCELLED;
     }
 
@@ -3692,7 +3677,8 @@ static int view3d_zoom_border_exec(bContext *C, wmOperator *op)
     new_dist = rv3d->dist;
 
     /* convert the drawn rectangle into 3d space */
-    if (depth_close != FLT_MAX && ED_view3d_unproject(region, cent[0], cent[1], depth_close, p)) {
+    if (depth_close != FLT_MAX &&
+        ED_view3d_unproject_v3(region, cent[0], cent[1], depth_close, p)) {
       negate_v3_v3(new_ofs, p);
     }
     else {
@@ -3838,12 +3824,12 @@ void VIEW3D_OT_zoom_camera_1_to_1(wmOperatorType *ot)
  * \{ */
 
 static const EnumPropertyItem prop_view_items[] = {
-    {RV3D_VIEW_LEFT, "LEFT", ICON_TRIA_LEFT, "Left", "View from the Left"},
-    {RV3D_VIEW_RIGHT, "RIGHT", ICON_TRIA_RIGHT, "Right", "View from the Right"},
-    {RV3D_VIEW_BOTTOM, "BOTTOM", ICON_TRIA_DOWN, "Bottom", "View from the Bottom"},
-    {RV3D_VIEW_TOP, "TOP", ICON_TRIA_UP, "Top", "View from the Top"},
-    {RV3D_VIEW_FRONT, "FRONT", 0, "Front", "View from the Front"},
-    {RV3D_VIEW_BACK, "BACK", 0, "Back", "View from the Back"},
+    {RV3D_VIEW_LEFT, "LEFT", ICON_TRIA_LEFT, "Left", "View from the left"},
+    {RV3D_VIEW_RIGHT, "RIGHT", ICON_TRIA_RIGHT, "Right", "View from the right"},
+    {RV3D_VIEW_BOTTOM, "BOTTOM", ICON_TRIA_DOWN, "Bottom", "View from the bottom"},
+    {RV3D_VIEW_TOP, "TOP", ICON_TRIA_UP, "Top", "View from the top"},
+    {RV3D_VIEW_FRONT, "FRONT", 0, "Front", "View from the front"},
+    {RV3D_VIEW_BACK, "BACK", 0, "Back", "View from the back"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -4106,8 +4092,6 @@ static int view_camera_exec(bContext *C, wmOperator *op)
   ED_view3d_smooth_view_force_finish(C, v3d, region);
 
   if ((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ANY_TRANSFORM) == 0) {
-    /* lastview -  */
-
     ViewLayer *view_layer = CTX_data_view_layer(C);
     Scene *scene = CTX_data_scene(C);
 
@@ -4120,15 +4104,6 @@ static int view_camera_exec(bContext *C, wmOperator *op)
 
         ED_view3d_lastview_store(rv3d);
       }
-
-#if 0
-      if (G.qual == LR_ALTKEY) {
-        if (oldcamera && is_an_active_object(oldcamera)) {
-          v3d->camera = oldcamera;
-        }
-        handle_view3d_lock();
-      }
-#endif
 
       /* first get the default camera for the view lock type */
       if (v3d->scenelock) {
@@ -4225,10 +4200,10 @@ enum {
 };
 
 static const EnumPropertyItem prop_view_orbit_items[] = {
-    {V3D_VIEW_STEPLEFT, "ORBITLEFT", 0, "Orbit Left", "Orbit the view around to the Left"},
-    {V3D_VIEW_STEPRIGHT, "ORBITRIGHT", 0, "Orbit Right", "Orbit the view around to the Right"},
-    {V3D_VIEW_STEPUP, "ORBITUP", 0, "Orbit Up", "Orbit the view Up"},
-    {V3D_VIEW_STEPDOWN, "ORBITDOWN", 0, "Orbit Down", "Orbit the view Down"},
+    {V3D_VIEW_STEPLEFT, "ORBITLEFT", 0, "Orbit Left", "Orbit the view around to the left"},
+    {V3D_VIEW_STEPRIGHT, "ORBITRIGHT", 0, "Orbit Right", "Orbit the view around to the right"},
+    {V3D_VIEW_STEPUP, "ORBITUP", 0, "Orbit Up", "Orbit the view up"},
+    {V3D_VIEW_STEPDOWN, "ORBITDOWN", 0, "Orbit Down", "Orbit the view down"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -4445,7 +4420,6 @@ static int viewroll_modal(bContext *C, wmOperator *op, const wmEvent *event)
     }
   }
   else if (event_code == VIEW_CONFIRM) {
-    ED_view3d_depth_tag_update(vod->rv3d);
     use_autokey = true;
     ret = OPERATOR_FINISHED;
   }
@@ -4463,8 +4437,8 @@ static int viewroll_modal(bContext *C, wmOperator *op, const wmEvent *event)
 
 static const EnumPropertyItem prop_view_roll_items[] = {
     {0, "ANGLE", 0, "Roll Angle", "Roll the view using an angle value"},
-    {V3D_VIEW_STEPLEFT, "LEFT", 0, "Roll Left", "Roll the view around to the Left"},
-    {V3D_VIEW_STEPRIGHT, "RIGHT", 0, "Roll Right", "Roll the view around to the Right"},
+    {V3D_VIEW_STEPLEFT, "LEFT", 0, "Roll Left", "Roll the view around to the left"},
+    {V3D_VIEW_STEPRIGHT, "RIGHT", 0, "Roll Right", "Roll the view around to the right"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -4553,7 +4527,6 @@ static int viewroll_invoke(bContext *C, wmOperator *op, const wmEvent *event)
     if (event->type == MOUSEROTATE) {
       vod->init.event_xy[0] = vod->prev.event_xy[0] = event->x;
       viewroll_apply(vod, event->prevx, event->prevy);
-      ED_view3d_depth_tag_update(vod->rv3d);
 
       viewops_data_free(C, op);
       return OPERATOR_FINISHED;
@@ -4611,10 +4584,10 @@ enum {
 };
 
 static const EnumPropertyItem prop_view_pan_items[] = {
-    {V3D_VIEW_PANLEFT, "PANLEFT", 0, "Pan Left", "Pan the view to the Left"},
-    {V3D_VIEW_PANRIGHT, "PANRIGHT", 0, "Pan Right", "Pan the view to the Right"},
-    {V3D_VIEW_PANUP, "PANUP", 0, "Pan Up", "Pan the view Up"},
-    {V3D_VIEW_PANDOWN, "PANDOWN", 0, "Pan Down", "Pan the view Down"},
+    {V3D_VIEW_PANLEFT, "PANLEFT", 0, "Pan Left", "Pan the view to the left"},
+    {V3D_VIEW_PANRIGHT, "PANRIGHT", 0, "Pan Right", "Pan the view to the right"},
+    {V3D_VIEW_PANUP, "PANUP", 0, "Pan Up", "Pan the view up"},
+    {V3D_VIEW_PANDOWN, "PANDOWN", 0, "Pan Down", "Pan the view down"},
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -4650,7 +4623,6 @@ static int viewpan_invoke(bContext *C, wmOperator *op, const wmEvent *event)
 
   viewmove_apply(vod, vod->prev.event_xy[0] + x, vod->prev.event_xy[1] + y);
 
-  ED_view3d_depth_tag_update(vod->rv3d);
   viewops_data_free(C, op);
 
   return OPERATOR_FINISHED;
@@ -5078,7 +5050,7 @@ void ED_view3d_cursor3d_position_rotation(bContext *C,
                                                    SCE_SNAP_MODE_FACE,
                                                    &(const struct SnapObjectParams){
                                                        .snap_select = SNAP_ALL,
-                                                       .use_object_edit_cage = false,
+                                                       .edit_mode_type = SNAP_GEOM_FINAL,
                                                        .use_occlusion_test = true,
                                                    },
                                                    mval_fl,
@@ -5286,7 +5258,7 @@ void VIEW3D_OT_cursor3d(wmOperatorType *ot)
 static const EnumPropertyItem prop_shading_type_items[] = {
     {OB_WIRE, "WIREFRAME", 0, "Wireframe", "Toggle wireframe shading"},
     {OB_SOLID, "SOLID", 0, "Solid", "Toggle solid shading"},
-    {OB_MATERIAL, "MATERIAL", 0, "LookDev", "Toggle lookdev shading"},
+    {OB_MATERIAL, "MATERIAL", 0, "Material Preview", "Toggle material preview shading"},
     {OB_RENDER, "RENDERED", 0, "Rendered", "Toggle rendered shading"},
     {0, NULL, 0, NULL, NULL},
 };

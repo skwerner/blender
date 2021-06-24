@@ -79,6 +79,7 @@ set(SRC
   intern/GHOST_SystemPaths.h
   intern/GHOST_TimerManager.h
   intern/GHOST_TimerTask.h
+  intern/GHOST_Util.h
   intern/GHOST_Window.h
   intern/GHOST_WindowManager.h
 )
@@ -281,6 +282,7 @@ elseif(WITH_GHOST_X11 OR WITH_GHOST_WAYLAND)
       ${wayland-egl_INCLUDE_DIRS}
       ${xkbcommon_INCLUDE_DIRS}
       ${wayland-cursor_INCLUDE_DIRS}
+      ${dbus_INCLUDE_DIRS}
     )
 
     list(APPEND SRC
@@ -319,6 +321,11 @@ elseif(WITH_GHOST_X11 OR WITH_GHOST_WAYLAND)
     generate_protocol_bindings(
       xdg-shell
       "${WAYLAND_PROTOCOLS_DIR}/stable/xdg-shell/xdg-shell.xml"
+    )
+    # xdg-decoration.
+    generate_protocol_bindings(
+      xdg-decoration
+      "${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
     )
     # Pointer-constraints.
     generate_protocol_bindings(
@@ -363,6 +370,7 @@ elseif(WIN32)
     intern/GHOST_DropTargetWin32.cpp
     intern/GHOST_SystemWin32.cpp
     intern/GHOST_WindowWin32.cpp
+    intern/GHOST_Wintab.cpp
 
     intern/GHOST_ContextD3D.h
     intern/GHOST_DisplayManagerWin32.h
@@ -370,6 +378,7 @@ elseif(WIN32)
     intern/GHOST_SystemWin32.h
     intern/GHOST_TaskbarWin32.h
     intern/GHOST_WindowWin32.h
+    intern/GHOST_Wintab.h
   )
 
   if(NOT WITH_GL_EGL)
@@ -438,6 +447,7 @@ endif()
 if(WITH_XR_OPENXR)
   list(APPEND SRC
     intern/GHOST_Xr.cpp
+    intern/GHOST_XrAction.cpp
     intern/GHOST_XrContext.cpp
     intern/GHOST_XrEvent.cpp
     intern/GHOST_XrGraphicsBinding.cpp
@@ -446,6 +456,7 @@ if(WITH_XR_OPENXR)
 
     GHOST_IXrContext.h
     intern/GHOST_IXrGraphicsBinding.h
+    intern/GHOST_XrAction.h
     intern/GHOST_XrContext.h
     intern/GHOST_XrException.h
     intern/GHOST_XrSession.h
@@ -472,10 +483,12 @@ if(WITH_XR_OPENXR)
       shlwapi
     )
   elseif(UNIX AND NOT APPLE)
-    list(APPEND XR_PLATFORM_DEFINES
-      -DXR_OS_LINUX
-      -DXR_USE_PLATFORM_XLIB
-    )
+    list(APPEND XR_PLATFORM_DEFINES -DXR_OS_LINUX)
+    if (WITH_GL_EGL)
+      list(APPEND XR_PLATFORM_DEFINES -DXR_USE_PLATFORM_EGL)
+    else()
+      list(APPEND XR_PLATFORM_DEFINES -DXR_USE_PLATFORM_XLIB)
+    endif()
   endif()
 
   add_definitions(-DWITH_XR_OPENXR ${XR_PLATFORM_DEFINES})

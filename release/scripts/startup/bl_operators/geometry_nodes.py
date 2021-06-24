@@ -17,15 +17,19 @@
 # ##### END GPL LICENSE BLOCK #####
 
 import bpy
+from bpy.types import Operator
 
 
-def geometry_node_group_empty_new(context):
+def geometry_node_group_empty_new():
     group = bpy.data.node_groups.new("Geometry Nodes", 'GeometryNodeTree')
     group.inputs.new('NodeSocketGeometry', "Geometry")
     group.outputs.new('NodeSocketGeometry', "Geometry")
     input_node = group.nodes.new('NodeGroupInput')
     output_node = group.nodes.new('NodeGroupOutput')
     output_node.is_active_output = True
+
+    input_node.select = False
+    output_node.select = False
 
     input_node.location.x = -200 - input_node.width
     output_node.location.x = 200
@@ -35,17 +39,17 @@ def geometry_node_group_empty_new(context):
     return group
 
 
-def geometry_modifier_poll(context) -> bool:
+def geometry_modifier_poll(context):
     ob = context.object
 
-    # Test object support for geometry node modifier (No volume or hair object support yet)
-    if not ob or ob.type not in {'MESH', 'CURVE', 'SURFACE', 'META', 'FONT', 'POINTCLOUD'}:
+    # Test object support for geometry node modifier (No curve, or hair object support yet)
+    if not ob or ob.type not in {'MESH', 'POINTCLOUD', 'VOLUME'}:
         return False
 
     return True
 
 
-class NewGeometryNodesModifier(bpy.types.Operator):
+class NewGeometryNodesModifier(Operator):
     """Create a new modifier with a new geometry node group"""
 
     bl_idname = "node.new_geometry_nodes_modifier"
@@ -62,14 +66,11 @@ class NewGeometryNodesModifier(bpy.types.Operator):
         if not modifier:
             return {'CANCELLED'}
 
-        group = geometry_node_group_empty_new(context)
-        modifier.node_group = group
-
         return {'FINISHED'}
 
 
-class NewGeometryNodeTreeAssign(bpy.types.Operator):
-    """Create a new geometry node group and assign it the the active modifier"""
+class NewGeometryNodeTreeAssign(Operator):
+    """Create a new geometry node group and assign it to the active modifier"""
 
     bl_idname = "node.new_geometry_node_group_assign"
     bl_label = "Assign New Geometry Node Group"
@@ -85,13 +86,38 @@ class NewGeometryNodeTreeAssign(bpy.types.Operator):
         if not modifier:
             return {'CANCELLED'}
 
-        group = geometry_node_group_empty_new(context)
+        group = geometry_node_group_empty_new()
         modifier.node_group = group
 
+        return {'FINISHED'}
+
+
+class CopyGeometryNodeTreeAssign(Operator):
+    """Copy the active geometry node group and assign it to the active modifier"""
+
+    bl_idname = "node.copy_geometry_node_group_assign"
+    bl_label = "Copy Geometry Node Group"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return geometry_modifier_poll(context)
+
+    def execute(self, context):
+        modifier = context.object.modifiers.active
+        if modifier is None:
+            return {'CANCELLED'}
+
+        group = modifier.node_group
+        if group is None:
+            return {'CANCELLED'}
+
+        modifier.node_group = group.copy()
         return {'FINISHED'}
 
 
 classes = (
     NewGeometryNodesModifier,
     NewGeometryNodeTreeAssign,
+    CopyGeometryNodeTreeAssign,
 )

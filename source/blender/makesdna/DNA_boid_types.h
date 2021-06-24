@@ -35,7 +35,7 @@ typedef enum eBoidRuleType {
   eBoidRuleType_Goal = 1,
   /** get away from assigned object or loudest assigned signal source */
   eBoidRuleType_Avoid = 2,
-  /** manoeuver to avoid collisions with other boids and deflector object in near future */
+  /** Maneuver to avoid collisions with other boids and deflector object in near future. */
   eBoidRuleType_AvoidCollision = 3,
   /** keep from going through other boids */
   eBoidRuleType_Separate = 4,
@@ -97,7 +97,8 @@ typedef struct BoidRuleFollowLeader {
 } BoidRuleFollowLeader;
 typedef struct BoidRuleAverageSpeed {
   BoidRule rule;
-  float wander, level, speed, rt;
+  float wander, level, speed;
+  char _pad0[4];
 } BoidRuleAverageSpeed;
 typedef struct BoidRuleFight {
   BoidRule rule;
@@ -178,7 +179,7 @@ typedef struct BoidState {
 //} BoidSignal;
 // typedef struct BoidSignalDefine {
 //  struct BoidSignalDefine *next, *prev;
-//  int id, rt;
+//  int id, _pad[4];
 //  char name[32];
 //} BoidSignalDefine;
 

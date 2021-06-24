@@ -32,7 +32,6 @@
 #        \", %s, %x12, %.4f, etc.), protecting them from ugly (evil) fribidi,
 #        which seems completely unaware of such things (as unicode is...).
 
-import sys
 import ctypes
 import re
 
@@ -85,11 +84,11 @@ def protect_format_seq(msg):
 #    LRM = "\u200E"
 #    RLM = "\u200F"
     LRE = "\u202A"
-    RLE = "\u202B"
+#    RLE = "\u202B"
     PDF = "\u202C"
     LRO = "\u202D"
-    RLO = "\u202E"
-    uctrl = {LRE, RLE, PDF, LRO, RLO}
+#    RLO = "\u202E"
+    # uctrl = {LRE, RLE, PDF, LRO, RLO}
     # Most likely incomplete, but seems to cover current needs.
     format_codes = set("tslfd")
     digits = set(".0123456789")

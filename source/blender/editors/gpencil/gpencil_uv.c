@@ -31,7 +31,6 @@
 #include "BKE_context.h"
 #include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
-#include "BKE_unit.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -45,6 +44,7 @@
 #include "ED_numinput.h"
 #include "ED_screen.h"
 #include "ED_space_api.h"
+#include "ED_util.h"
 #include "ED_view3d.h"
 
 #include "DEG_depsgraph.h"
@@ -452,7 +452,7 @@ void GPENCIL_OT_transform_fill(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Transform Stroke Fill";
   ot->idname = "GPENCIL_OT_transform_fill";
-  ot->description = "Transform Grease Pencil Stroke Fill";
+  ot->description = "Transform grease pencil stroke fill";
 
   /* api callbacks */
   ot->invoke = gpencil_transform_fill_invoke;

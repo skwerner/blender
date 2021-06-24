@@ -235,7 +235,7 @@ static void gpencil_vfx_rim(RimShaderFxData *fx, Object *ob, gpIterVfxData *iter
   DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
 
   if (fx->mode == eShaderFxRimMode_Overlay) {
-    /* We cannot do custom blending on MultiTarget framebuffers.
+    /* We cannot do custom blending on multi-target frame-buffers.
      * Workaround by doing 2 passes. */
     grp = DRW_shgroup_create_sub(grp);
     DRW_shgroup_state_disable(grp, DRW_STATE_BLEND_MUL);
@@ -363,7 +363,7 @@ static void gpencil_vfx_shadow(ShadowShaderFxData *fx, Object *ob, gpIterVfxData
     copy_v2_v2(wave_ofs, wave_dir);
     SWAP(float, wave_ofs[0], wave_ofs[1]);
     wave_ofs[1] *= -1.0f;
-    /* Keep world space scalling and aspect ratio. */
+    /* Keep world space scaling and aspect ratio. */
     mul_v2_fl(wave_dir, 1.0f / (max_ff(1e-8f, fx->period) * distance_factor));
     mul_v2_v2(wave_dir, vp_size);
     mul_v2_fl(wave_ofs, fx->amplitude * distance_factor);
@@ -397,7 +397,7 @@ static void gpencil_vfx_shadow(ShadowShaderFxData *fx, Object *ob, gpIterVfxData
   unit_m4(uv_mat);
   zero_v2(wave_ofs);
 
-  /* We reseted the uv_mat so we need to accound for the rotation in the  */
+  /* Reset the `uv_mat` to account for rotation in the Y-axis (Shadow-V parameter). */
   copy_v2_fl2(tmp, 0.0f, blur_size[1]);
   rotate_v2_v2fl(blur_dir, tmp, -fx->rotation);
   mul_v2_v2(blur_dir, vp_size_inv);
@@ -424,22 +424,26 @@ static void gpencil_vfx_glow(GlowShaderFxData *fx, Object *UNUSED(ob), gpIterVfx
 
   GPUShader *sh = GPENCIL_shader_fx_glow_get();
 
-  float ref_col[3];
+  float ref_col[4];
 
   if (fx->mode == eShaderFxGlowMode_Luminance) {
+    /* Only pass in the first value for luminance. */
     ref_col[0] = fx->threshold;
     ref_col[1] = -1.0f;
     ref_col[2] = -1.0f;
+    ref_col[3] = -1.0f;
   }
   else {
+    /* First three values are the RGB for the selected color, last value the threshold. */
     copy_v3_v3(ref_col, fx->select_color);
+    ref_col[3] = fx->threshold;
   }
 
   DRWState state = DRW_STATE_WRITE_COLOR;
   grp = gpencil_vfx_pass_create("Fx Glow H", state, iter, sh);
   DRW_shgroup_uniform_vec2_copy(grp, "offset", (float[2]){fx->blur[0] * c, fx->blur[0] * s});
   DRW_shgroup_uniform_int_copy(grp, "sampCount", max_ii(1, min_ii(fx->samples, fx->blur[0])));
-  DRW_shgroup_uniform_vec3_copy(grp, "threshold", ref_col);
+  DRW_shgroup_uniform_vec4_copy(grp, "threshold", ref_col);
   DRW_shgroup_uniform_vec4_copy(grp, "glowColor", fx->glow_color);
   DRW_shgroup_uniform_bool_copy(grp, "glowUnder", use_glow_under);
   DRW_shgroup_uniform_bool_copy(grp, "firstPass", true);
@@ -473,7 +477,7 @@ static void gpencil_vfx_glow(GlowShaderFxData *fx, Object *UNUSED(ob), gpIterVfx
   grp = gpencil_vfx_pass_create("Fx Glow V", state, iter, sh);
   DRW_shgroup_uniform_vec2_copy(grp, "offset", (float[2]){-fx->blur[1] * s, fx->blur[1] * c});
   DRW_shgroup_uniform_int_copy(grp, "sampCount", max_ii(1, min_ii(fx->samples, fx->blur[0])));
-  DRW_shgroup_uniform_vec3_copy(grp, "threshold", (float[3]){-1.0f, -1.0f, -1.0f});
+  DRW_shgroup_uniform_vec4_copy(grp, "threshold", (float[4]){-1.0f, -1.0f, -1.0f, -1.0});
   DRW_shgroup_uniform_vec4_copy(grp, "glowColor", (float[4]){1.0f, 1.0f, 1.0f, fx->glow_color[3]});
   DRW_shgroup_uniform_bool_copy(grp, "firstPass", false);
   DRW_shgroup_uniform_int_copy(grp, "blendMode", fx->blend_mode);
@@ -515,7 +519,7 @@ static void gpencil_vfx_wave(WaveShaderFxData *fx, Object *ob, gpIterVfxData *it
   copy_v2_v2(wave_ofs, wave_dir);
   SWAP(float, wave_ofs[0], wave_ofs[1]);
   wave_ofs[1] *= -1.0f;
-  /* Keep world space scalling and aspect ratio. */
+  /* Keep world space scaling and aspect ratio. */
   mul_v2_fl(wave_dir, 1.0f / (max_ff(1e-8f, fx->period) * distance_factor));
   mul_v2_v2(wave_dir, vp_size);
   mul_v2_fl(wave_ofs, fx->amplitude * distance_factor);
@@ -647,7 +651,7 @@ void gpencil_vfx_cache_populate(GPENCIL_Data *vedata, Object *ob, GPENCIL_tObjec
     DRW_shgroup_uniform_int_copy(grp, "isFirstPass", true);
     DRW_shgroup_call_procedural_triangles(grp, NULL, 1);
 
-    /* We cannot do custom blending on MultiTarget framebuffers.
+    /* We cannot do custom blending on multi-target frame-buffers.
      * Workaround by doing 2 passes. */
     grp = DRW_shgroup_create_sub(grp);
     DRW_shgroup_state_disable(grp, DRW_STATE_BLEND_MUL);

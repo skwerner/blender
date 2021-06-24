@@ -32,7 +32,7 @@ namespace gpu {
 /**
  * Implementation of shader compilation and uniforms handling.
  * Base class which is then specialized for each implementation (GL, VK, ...).
- **/
+ */
 class Shader {
  public:
   /** Uniform & attribute locations for shader. */
@@ -49,6 +49,7 @@ class Shader {
   virtual void vertex_shader_from_glsl(MutableSpan<const char *> sources) = 0;
   virtual void geometry_shader_from_glsl(MutableSpan<const char *> sources) = 0;
   virtual void fragment_shader_from_glsl(MutableSpan<const char *> sources) = 0;
+  virtual void compute_shader_from_glsl(MutableSpan<const char *> sources) = 0;
   virtual bool finalize(void) = 0;
 
   virtual void transform_feedback_names_set(Span<const char *> name_list,
@@ -76,7 +77,7 @@ class Shader {
   void print_log(Span<const char *> sources, char *log, const char *stage, const bool error);
 };
 
-/* Syntacting suggar. */
+/* Syntactic sugar. */
 static inline GPUShader *wrap(Shader *vert)
 {
   return reinterpret_cast<GPUShader *>(vert);

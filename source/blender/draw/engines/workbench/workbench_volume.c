@@ -202,7 +202,7 @@ static void workbench_volume_material_color(WORKBENCH_PrivateData *wpd,
                                             eV3DShadingColorType color_type,
                                             float color[3])
 {
-  Material *ma = BKE_object_material_get(ob, VOLUME_MATERIAL_NR);
+  Material *ma = BKE_object_material_get_eval(ob, VOLUME_MATERIAL_NR);
   WORKBENCH_UBO_Material ubo_data;
   workbench_material_ubo_data(wpd, ob, ma, &ubo_data, color_type);
   copy_v3_v3(color, ubo_data.base_color);
@@ -215,7 +215,7 @@ static void workbench_volume_object_cache_populate(WORKBENCH_Data *vedata,
   /* Create 3D textures. */
   Volume *volume = ob->data;
   BKE_volume_load(volume, G.main);
-  VolumeGrid *volume_grid = BKE_volume_grid_active_get(volume);
+  const VolumeGrid *volume_grid = BKE_volume_grid_active_get_for_read(volume);
   if (volume_grid == NULL) {
     return;
   }

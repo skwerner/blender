@@ -594,7 +594,7 @@ float quat_split_swing_and_twist(const float q_in[4], int axis, float r_swing[4]
       BLI_assert(fabsf(r_swing[axis + 1]) < BLI_ASSERT_UNIT_EPSILON);
     }
 
-    /* Output twist last just in case q ovelaps r_twist. */
+    /* Output twist last just in case q overlaps r_twist. */
     if (r_twist) {
       r_twist[0] = cos_t;
       zero_v3(r_twist + 1);
@@ -1581,7 +1581,7 @@ void quat_to_compatible_eul(float eul[3], const float oldrot[3], const float qua
  * was adapted from
  *      ANSI C code from the article
  *      "Euler Angle Conversion"
- *      by Ken Shoemake, shoemake@graphics.cis.upenn.edu
+ *      by Ken Shoemake <shoemake@graphics.cis.upenn.edu>
  *      in "Graphics Gems IV", Academic Press, 1994
  * for use in Blender
  */
@@ -1922,6 +1922,31 @@ void eulO_to_gimbal_axis(float gmat[3][3], const float eul[3], const short order
   /* Last axis is global */
   zero_v3(gmat[R->axis[2]]);
   gmat[R->axis[2]][R->axis[2]] = 1;
+}
+
+void add_eul_euleul(float r_eul[3], float a[3], float b[3], const short order)
+{
+  float quat[4], quat_b[4];
+
+  eulO_to_quat(quat, a, order);
+  eulO_to_quat(quat_b, b, order);
+
+  mul_qt_qtqt(quat, quat_b, quat);
+
+  quat_to_eulO(r_eul, order, quat);
+}
+
+void sub_eul_euleul(float r_eul[3], float a[3], float b[3], const short order)
+{
+  float quat[4], quat_b[4];
+
+  eulO_to_quat(quat, a, order);
+  eulO_to_quat(quat_b, b, order);
+
+  invert_qt_normalized(quat_b);
+  mul_qt_qtqt(quat, quat_b, quat);
+
+  quat_to_eulO(r_eul, order, quat);
 }
 
 /******************************* Dual Quaternions ****************************/

@@ -153,8 +153,7 @@ static int vertex_parent_set_exec(bContext *C, wmOperator *op)
 
     em = me->edit_mesh;
 
-    EDBM_mesh_normals_update(em);
-    BKE_editmesh_looptri_calc(em);
+    BKE_editmesh_looptri_and_normals_calc(em);
 
     /* Make sure the evaluated mesh is updated.
      *
@@ -801,7 +800,7 @@ bool ED_object_parent_set(ReportList *reports,
        *   so we check this by assuming that the parent is selected too.
        */
       /* XXX currently this should only happen for meshes, curves, surfaces,
-       * and lattices - this stuff isn't available for metas yet */
+       * and lattices - this stuff isn't available for meta-balls yet. */
       if (ELEM(ob->type, OB_MESH, OB_CURVE, OB_SURF, OB_FONT, OB_LATTICE)) {
         ModifierData *md;
 
@@ -812,7 +811,8 @@ bool ED_object_parent_set(ReportList *reports,
               if (md) {
                 ((CurveModifierData *)md)->object = par;
               }
-              if (par->runtime.curve_cache && par->runtime.curve_cache->path == NULL) {
+              if (par->runtime.curve_cache &&
+                  par->runtime.curve_cache->anim_path_accum_length == NULL) {
                 DEG_id_tag_update(&par->id, ID_RECALC_GEOMETRY);
               }
             }
@@ -893,10 +893,10 @@ bool ED_object_parent_set(ReportList *reports,
           reports, depsgraph, scene, ob, par, ARM_GROUPS_ENVELOPE, xmirror);
     }
     else if (partype == PAR_ARMATURE_AUTO) {
-      WM_cursor_wait(1);
+      WM_cursor_wait(true);
       ED_object_vgroup_calc_from_armature(
           reports, depsgraph, scene, ob, par, ARM_GROUPS_AUTO, xmirror);
-      WM_cursor_wait(0);
+      WM_cursor_wait(false);
     }
     /* get corrected inverse */
     ob->partype = PAROBJECT;
@@ -912,9 +912,9 @@ bool ED_object_parent_set(ReportList *reports,
       ED_gpencil_add_armature_weights(C, reports, ob, par, GP_PAR_ARMATURE_NAME);
     }
     else if (ELEM(partype, PAR_ARMATURE_AUTO, PAR_ARMATURE_ENVELOPE)) {
-      WM_cursor_wait(1);
+      WM_cursor_wait(true);
       ED_gpencil_add_armature_weights(C, reports, ob, par, GP_PAR_ARMATURE_AUTO);
-      WM_cursor_wait(0);
+      WM_cursor_wait(false);
     }
     /* get corrected inverse */
     ob->partype = PAROBJECT;
@@ -1567,7 +1567,11 @@ static bool allow_make_links_data(const int type, Object *ob_src, Object *ob_dst
       }
       break;
     case MAKE_LINKS_MATERIALS:
-      if (OB_TYPE_SUPPORT_MATERIAL(ob_src->type) && OB_TYPE_SUPPORT_MATERIAL(ob_dst->type)) {
+      if (OB_TYPE_SUPPORT_MATERIAL(ob_src->type) && OB_TYPE_SUPPORT_MATERIAL(ob_dst->type) &&
+          /* Linking non-grease-pencil materials to a grease-pencil object causes issues.
+           * We make sure that if one of the objects is a grease-pencil object, the other must be
+           * as well. */
+          ((ob_src->type == OB_GPENCIL) == (ob_dst->type == OB_GPENCIL))) {
         return true;
       }
       break;
@@ -1752,7 +1756,7 @@ static int make_links_data_exec(bContext *C, wmOperator *op)
   }
 
   DEG_relations_tag_update(bmain);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
   WM_event_add_notifier(C, NC_ANIMATION | ND_NLA_ACTCHANGE, CTX_wm_view3d(C));
   WM_event_add_notifier(C, NC_OBJECT, NULL);
 
@@ -1786,20 +1790,33 @@ void OBJECT_OT_make_links_scene(wmOperatorType *ot)
 void OBJECT_OT_make_links_data(wmOperatorType *ot)
 {
   static const EnumPropertyItem make_links_items[] = {
-      {MAKE_LINKS_OBDATA, "OBDATA", 0, "Object Data", ""},
-      {MAKE_LINKS_MATERIALS, "MATERIAL", 0, "Materials", ""},
-      {MAKE_LINKS_ANIMDATA, "ANIMATION", 0, "Animation Data", ""},
-      {MAKE_LINKS_GROUP, "GROUPS", 0, "Collection", ""},
-      {MAKE_LINKS_DUPLICOLLECTION, "DUPLICOLLECTION", 0, "Instance Collection", ""},
-      {MAKE_LINKS_MODIFIERS, "MODIFIERS", 0, "Modifiers", ""},
-      {MAKE_LINKS_FONTS, "FONTS", 0, "Fonts", ""},
-      {MAKE_LINKS_SHADERFX, "EFFECTS", 0, "Effects", ""},
+      {MAKE_LINKS_OBDATA, "OBDATA", 0, "Link Object Data", "Replace assigned Object Data"},
+      {MAKE_LINKS_MATERIALS, "MATERIAL", 0, "Link Materials", "Replace assigned Materials"},
+      {MAKE_LINKS_ANIMDATA,
+       "ANIMATION",
+       0,
+       "Link Animation Data",
+       "Replace assigned Animation Data"},
+      {MAKE_LINKS_GROUP, "GROUPS", 0, "Link Collections", "Replace assigned Collections"},
+      {MAKE_LINKS_DUPLICOLLECTION,
+       "DUPLICOLLECTION",
+       0,
+       "Link Instance Collection",
+       "Replace assigned Collection Instance"},
+      {MAKE_LINKS_FONTS, "FONTS", 0, "Link Fonts to Text", "Replace Text object Fonts"},
+      {0, "", 0, NULL, NULL},
+      {MAKE_LINKS_MODIFIERS, "MODIFIERS", 0, "Copy Modifiers", "Replace Modifiers"},
+      {MAKE_LINKS_SHADERFX,
+       "EFFECTS",
+       0,
+       "Copy Grease Pencil Effects",
+       "Replace Grease Pencil Effects"},
       {0, NULL, 0, NULL, NULL},
   };
 
   /* identifiers */
-  ot->name = "Link Data";
-  ot->description = "Apply active object links to other selected objects";
+  ot->name = "Link/Transfer Data";
+  ot->description = "Transfer data from active object to selected objects";
   ot->idname = "OBJECT_OT_make_links_data";
 
   /* api callbacks */
@@ -1926,7 +1943,7 @@ void ED_object_single_user(Main *bmain, Scene *scene, Object *ob)
   ob->flag |= OB_DONE;
 
   single_object_users(bmain, scene, NULL, OB_DONE, false);
-  BKE_main_id_clear_newpoins(bmain);
+  BKE_main_id_newptr_and_tag_clear(bmain);
 }
 
 static void single_obdata_users(
@@ -2324,7 +2341,7 @@ void OBJECT_OT_make_local(wmOperatorType *ot)
 
 static bool make_override_library_object_overridable_check(Main *bmain, Object *object)
 {
-  /* An object is actually overrideable only if it is in at least one local collections.
+  /* An object is actually overridable only if it is in at least one local collection.
    * Unfortunately 'direct link' flag is not enough here. */
   LISTBASE_FOREACH (Collection *, collection, &bmain->collections) {
     if (!ID_IS_LINKED(collection) && BKE_collection_has_object(collection, object)) {
@@ -2436,7 +2453,7 @@ static int make_override_library_exec(bContext *C, wmOperator *op)
   BKE_main_id_tag_all(bmain, LIB_TAG_DOIT, false);
 
   const bool success = BKE_lib_override_library_create(
-      bmain, scene, view_layer, id_root, &obact->id);
+      bmain, scene, view_layer, id_root, &obact->id, NULL);
 
   /* Remove the instance empty from this scene, the items now have an overridden collection
    * instead. */
@@ -2552,14 +2569,14 @@ static int convert_proxy_to_override_exec(bContext *C, wmOperator *op)
 
   /* Remove the instance empty from this scene, the items now have an overridden collection
    * instead. */
-  if (success && is_override_instancing_object) {
+  if (is_override_instancing_object) {
     ED_object_base_free_and_unlink(bmain, scene, ob_proxy_group);
   }
 
   DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_BASE_FLAGS | ID_RECALC_COPY_ON_WRITE);
   WM_event_add_notifier(C, NC_WINDOW, NULL);
 
-  return success ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
+  return OPERATOR_FINISHED;
 }
 
 void OBJECT_OT_convert_proxy_to_override(wmOperatorType *ot)
@@ -2626,7 +2643,7 @@ static int make_single_user_exec(bContext *C, wmOperator *op)
     single_object_action_users(bmain, scene, view_layer, v3d, flag);
   }
 
-  BKE_main_id_clear_newpoins(bmain);
+  BKE_main_id_newptr_and_tag_clear(bmain);
 
   WM_event_add_notifier(C, NC_WINDOW, NULL);
 
@@ -2695,7 +2712,7 @@ static int drop_named_material_invoke(bContext *C, wmOperator *op, const wmEvent
   DEG_id_tag_update(&base->object->id, ID_RECALC_TRANSFORM);
 
   WM_event_add_notifier(C, NC_OBJECT | ND_OB_SHADING, base->object);
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, CTX_wm_view3d(C));
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
   WM_event_add_notifier(C, NC_MATERIAL | ND_SHADING_LINKS, ma);
 
   return OPERATOR_FINISHED;

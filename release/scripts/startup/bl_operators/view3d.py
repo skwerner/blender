@@ -169,7 +169,7 @@ class VIEW3D_OT_edit_mesh_extrude_manifold_normal(Operator):
         obj = context.active_object
         return (obj is not None and obj.mode == 'EDIT')
 
-    def execute(self, context):
+    def execute(self, _context):
         bpy.ops.mesh.extrude_manifold(
             'INVOKE_REGION_WIN',
             MESH_OT_extrude_region={
@@ -208,7 +208,8 @@ class VIEW3D_OT_transform_gizmo_set(Operator):
 
     @classmethod
     def poll(cls, context):
-        return context.area.type == 'VIEW_3D'
+        area = context.area
+        return area and (area.type == 'VIEW_3D')
 
     def execute(self, context):
         space_data = context.space_data

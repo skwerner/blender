@@ -80,7 +80,7 @@
 #include "RE_engine.h"
 #include "RE_pipeline.h" /* RE_ free stuff */
 
-#include "SEQ_sequencer.h" /* free seq clipboard */
+#include "SEQ_clipboard.h" /* free seq clipboard */
 
 #include "IMB_thumbs.h"
 
@@ -272,7 +272,7 @@ void WM_init(bContext *C, int argc, const char **argv)
    * for scripts that do background processing with preview icons. */
   BKE_icons_init(BIFICONID_LAST);
 
-  /* reports cant be initialized before the wm,
+  /* reports can't be initialized before the wm,
    * but keep before file reading, since that may report errors */
   wm_init_reports(C);
 
@@ -331,7 +331,7 @@ void WM_init(bContext *C, int argc, const char **argv)
    * startup.blend because it may contain PyDrivers. It also needs to be after
    * initializing space types and other internal data.
    *
-   * However cant redo this at the moment. Solution is to load python
+   * However can't redo this at the moment. Solution is to load python
    * before wm_homefile_read() or make py-drivers check if python is running.
    * Will try fix when the crash can be repeated. - campbell. */
 
@@ -343,8 +343,13 @@ void WM_init(bContext *C, int argc, const char **argv)
   (void)argv; /* unused */
 #endif
 
-  if (!G.background && !wm_start_with_console) {
-    GHOST_toggleConsole(3);
+  if (!G.background) {
+    if (wm_start_with_console) {
+      GHOST_toggleConsole(1);
+    }
+    else {
+      GHOST_toggleConsole(3);
+    }
   }
 
   BKE_material_copybuf_clear();
@@ -496,7 +501,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
         if ((has_edited &&
              BLO_write_file(
                  bmain, filename, fileflags, &(const struct BlendFileWriteParams){0}, NULL)) ||
-            (undo_memfile && BLO_memfile_write_file(undo_memfile, filename))) {
+            (BLO_memfile_write_file(undo_memfile, filename))) {
           printf("Saved session recovery to '%s'\n", filename);
         }
       }
@@ -517,14 +522,21 @@ void WM_exit_ex(bContext *C, const bool do_python)
           BKE_blendfile_userdef_write_all(NULL);
         }
       }
+      /* Free the callback data used on file-open
+       * (will be set when a recover operation has run). */
+      wm_test_autorun_revert_action_set(NULL, NULL);
     }
   }
 
-#ifdef WITH_PYTHON
+#if defined(WITH_PYTHON) && !defined(WITH_PYTHON_MODULE)
   /* Without this, we there isn't a good way to manage false-positive resource leaks
    * where a #PyObject references memory allocated with guarded-alloc, T71362.
    *
-   * This allows add-ons to free resources when unregistered (which is good practice anyway). */
+   * This allows add-ons to free resources when unregistered (which is good practice anyway).
+   *
+   * Don't run this code when built as a Python module as this runs when Python is in the
+   * process of shutting down, where running a snippet like this will crash, see T82675.
+   * Instead use the `atexit` module, installed by #BPY_python_start */
   BPY_run_string_eval(C, (const char *[]){"addon_utils", NULL}, "addon_utils.disable_all()");
 #endif
 
@@ -565,7 +577,7 @@ void WM_exit_ex(bContext *C, const bool do_python)
     wm_free_reports(wm);
   }
 
-  BKE_sequencer_free_clipboard(); /* sequencer.c */
+  SEQ_clipboard_free(); /* sequencer.c */
   BKE_tracking_clipboard_free();
   BKE_mask_clipboard_free();
   BKE_vfont_clipboard_free();
@@ -617,13 +629,13 @@ void WM_exit_ex(bContext *C, const bool do_python)
 #ifdef WITH_PYTHON
   /* option not to close python so we can use 'atexit' */
   if (do_python && ((C == NULL) || CTX_py_init_get(C))) {
-    /* XXX - old note */
-    /* before BKE_blender_free so py's gc happens while library still exists */
-    /* needed at least for a rare sigsegv that can happen in pydrivers */
-
-    /* Update for blender 2.5, move after BKE_blender_free because Blender now holds references to
-     * PyObject's so decref'ing them after python ends causes bad problems every time
-     * the py-driver bug can be fixed if it happens again we can deal with it then. */
+    /* NOTE: (old note)
+     * before BKE_blender_free so Python's garbage-collection happens while library still exists.
+     * Needed at least for a rare crash that can happen in python-drivers.
+     *
+     * Update for Blender 2.5, move after #BKE_blender_free because Blender now holds references
+     * to #PyObject's so #Py_DECREF'ing them after Python ends causes bad problems every time
+     * the python-driver bug can be fixed if it happens again we can deal with it then. */
     BPY_python_end();
   }
 #else

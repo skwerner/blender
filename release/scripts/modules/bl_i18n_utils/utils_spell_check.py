@@ -38,6 +38,7 @@ class SpellChecker:
         "boolean", "booleans",
         "chamfer",
         "couldn",  # couldn't
+        "customizable",
         "decrement",
         "derivate",
         "deterministically",
@@ -118,6 +119,7 @@ class SpellChecker:
         "dirtree",
         "editcurve",
         "editmesh",
+        "faceforward",
         "filebrowser",
         "filelist",
         "filename", "filenames",
@@ -173,7 +175,7 @@ class SpellChecker:
         "premultiply", "premultiplied",
         "prepass",
         "prepend",
-        "preprocess", "preprocessing",
+        "preprocess", "preprocessing", "preprocessor",
         "preseek",
         "promillage",
         "pushdown",
@@ -199,6 +201,7 @@ class SpellChecker:
         "selfcollision",
         "shadowbuffer", "shadowbuffers",
         "singletexture",
+        "softbox",
         "spellcheck", "spellchecking",
         "startup",
         "stateful",
@@ -548,7 +551,7 @@ class SpellChecker:
         "freestyle",
         "enum", "enums",
         "gizmogroup",
-        "gons",  # N-Gons
+        "gon", "gons",  # N-Gon(s)
         "gpencil",
         "idcol",
         "keyframe", "keyframes", "keyframing", "keyframed",
@@ -644,6 +647,7 @@ class SpellChecker:
         # Acronyms
         "aa", "msaa",
         "ao",
+        "aov", "aovs",
         "api",
         "apic",  # Affine Particle-In-Cell
         "asc", "cdl",

@@ -35,6 +35,54 @@ struct float4x4 {
   {
   }
 
+  /* Assumes an XYZ euler order. */
+  static float4x4 from_loc_eul_scale(const float3 location,
+                                     const float3 rotation,
+                                     const float3 scale)
+  {
+    float4x4 mat;
+    loc_eul_size_to_mat4(mat.values, location, rotation, scale);
+    return mat;
+  }
+
+  static float4x4 from_normalized_axis_data(const float3 location,
+                                            const float3 forward,
+                                            const float3 up)
+  {
+    BLI_ASSERT_UNIT_V3(forward);
+    BLI_ASSERT_UNIT_V3(up);
+    float4x4 matrix;
+    const float3 cross = float3::cross(forward, up);
+    matrix.values[0][0] = forward.x;
+    matrix.values[1][0] = cross.x;
+    matrix.values[2][0] = up.x;
+    matrix.values[3][0] = location.x;
+
+    matrix.values[0][1] = forward.y;
+    matrix.values[1][1] = cross.y;
+    matrix.values[2][1] = up.y;
+    matrix.values[3][1] = location.y;
+
+    matrix.values[0][2] = forward.z;
+    matrix.values[1][2] = cross.z;
+    matrix.values[2][2] = up.z;
+    matrix.values[3][2] = location.z;
+
+    matrix.values[0][3] = 0.0f;
+    matrix.values[1][3] = 0.0f;
+    matrix.values[2][3] = 0.0f;
+    matrix.values[3][3] = 1.0f;
+
+    return matrix;
+  }
+
+  static float4x4 identity()
+  {
+    float4x4 mat;
+    unit_m4(mat.values);
+    return mat;
+  }
+
   operator float *()
   {
     return &values[0][0];
@@ -43,6 +91,17 @@ struct float4x4 {
   operator const float *() const
   {
     return &values[0][0];
+  }
+
+  using c_style_float4x4 = float[4][4];
+  c_style_float4x4 &ptr()
+  {
+    return values;
+  }
+
+  const c_style_float4x4 &ptr() const
+  {
+    return values;
   }
 
   friend float4x4 operator*(const float4x4 &a, const float4x4 &b)
@@ -66,6 +125,39 @@ struct float4x4 {
   friend float3 operator*(const float4x4 &m, const float (*v)[3])
   {
     return m * float3(v);
+  }
+
+  float3 translation() const
+  {
+    return float3(values[3]);
+  }
+
+  /* Assumes XYZ rotation order. */
+  float3 to_euler() const
+  {
+    float3 euler;
+    mat4_to_eul(euler, values);
+    return euler;
+  }
+
+  float3 scale() const
+  {
+    float3 scale;
+    mat4_to_size(scale, values);
+    return scale;
+  }
+
+  void apply_scale(const float scale)
+  {
+    values[0][0] *= scale;
+    values[0][1] *= scale;
+    values[0][2] *= scale;
+    values[1][0] *= scale;
+    values[1][1] *= scale;
+    values[1][2] *= scale;
+    values[2][0] *= scale;
+    values[2][1] *= scale;
+    values[2][2] *= scale;
   }
 
   float4x4 inverted() const

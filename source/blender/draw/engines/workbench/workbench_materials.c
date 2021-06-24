@@ -76,7 +76,7 @@ void workbench_material_ubo_data(WORKBENCH_PrivateData *wpd,
         alpha *= mat->a;
         copy_v3_v3(data->base_color, &mat->r);
         metallic = mat->metallic;
-        roughness = sqrtf(mat->roughness); /* Remap to disney roughness. */
+        roughness = sqrtf(mat->roughness); /* Remap to Disney roughness. */
       }
       else {
         copy_v3_fl(data->base_color, 0.8f);
@@ -93,7 +93,7 @@ void workbench_material_ubo_data(WORKBENCH_PrivateData *wpd,
 /* Return correct material or empty default material if slot is empty. */
 BLI_INLINE Material *workbench_object_material_get(Object *ob, int mat_nr)
 {
-  Material *ma = BKE_object_material_get(ob, mat_nr);
+  Material *ma = BKE_object_material_get_eval(ob, mat_nr);
   if (ma == NULL) {
     ma = BKE_material_default_empty();
   }

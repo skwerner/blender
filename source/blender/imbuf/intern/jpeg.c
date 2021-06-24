@@ -413,11 +413,22 @@ static ImBuf *ibJpegImageFromCinfo(struct jpeg_decompress_struct *cinfo, int fla
       jpeg_finish_decompress(cinfo);
     }
 
-    jpeg_destroy((j_common_ptr)cinfo);
     if (ibuf) {
+      /* Density_unit may be 0 for unknown, 1 for dots/inch, or 2 for dots/cm. */
+      if (cinfo->density_unit == 1) {
+        /* Convert inches to meters. */
+        ibuf->ppm[0] = cinfo->X_density / 0.0254f;
+        ibuf->ppm[1] = cinfo->Y_density / 0.0254f;
+      }
+      else if (cinfo->density_unit == 2) {
+        ibuf->ppm[0] = cinfo->X_density * 100.0f;
+        ibuf->ppm[1] = cinfo->Y_density * 100.0f;
+      }
+
       ibuf->ftype = IMB_FTYPE_JPG;
       ibuf->foptions.quality = MIN2(ibuf_quality, 100);
     }
+    jpeg_destroy((j_common_ptr)cinfo);
   }
 
   return ibuf;
@@ -505,7 +516,8 @@ static void write_jpeg(struct jpeg_compress_struct *cinfo, struct ImBuf *ibuf)
          * The first "Blender" is a simple identify to help
          * in the read process.
          */
-        text_len = BLI_snprintf(text, text_size, "Blender:%s:%s", prop->name, IDP_String(prop));
+        text_len = BLI_snprintf_rlen(
+            text, text_size, "Blender:%s:%s", prop->name, IDP_String(prop));
         jpeg_write_marker(cinfo, JPEG_COM, (JOCTET *)text, text_len + 1);
 
         /* TODO(sergey): Ideally we will try to re-use allocation as

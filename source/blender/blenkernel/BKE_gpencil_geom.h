@@ -27,10 +27,10 @@
 extern "C" {
 #endif
 
-struct BoundBox;
 struct Depsgraph;
 struct Main;
 struct Object;
+struct RegionView3D;
 struct Scene;
 struct bGPDcurve;
 struct bGPDframe;
@@ -111,7 +111,10 @@ void BKE_gpencil_dissolve_points(struct bGPdata *gpd,
                                  struct bGPDstroke *gps,
                                  const short tag);
 
-bool BKE_gpencil_stroke_stretch(struct bGPDstroke *gps, const float dist, const float tip_length);
+bool BKE_gpencil_stroke_stretch(struct bGPDstroke *gps,
+                                const float dist,
+                                const float overshoot_fac,
+                                const short mode);
 bool BKE_gpencil_stroke_trim_points(struct bGPDstroke *gps,
                                     const int index_from,
                                     const int index_to);
@@ -135,7 +138,7 @@ bool BKE_gpencil_stroke_split(struct bGPdata *gpd,
                               struct bGPDstroke *gps,
                               const int before_index,
                               struct bGPDstroke **remaining_gps);
-bool BKE_gpencil_stroke_shrink(struct bGPDstroke *gps, const float dist);
+bool BKE_gpencil_stroke_shrink(struct bGPDstroke *gps, const float dist, const short mode);
 
 float BKE_gpencil_stroke_length(const struct bGPDstroke *gps, bool use_3d);
 float BKE_gpencil_stroke_segment_length(const struct bGPDstroke *gps,
@@ -149,6 +152,11 @@ void BKE_gpencil_stroke_join(struct bGPDstroke *gps_a,
                              struct bGPDstroke *gps_b,
                              const bool leave_gaps,
                              const bool fit_thickness);
+void BKE_gpencil_stroke_copy_to_keyframes(struct bGPdata *gpd,
+                                          struct bGPDlayer *gpl,
+                                          struct bGPDframe *gpf,
+                                          struct bGPDstroke *gps,
+                                          const bool tail);
 
 bool BKE_gpencil_convert_mesh(struct Main *bmain,
                               struct Depsgraph *depsgraph,
@@ -168,6 +176,20 @@ void BKE_gpencil_stroke_uniform_subdivide(struct bGPdata *gpd,
                                           const uint32_t target_number,
                                           const bool select);
 
+void BKE_gpencil_stroke_to_view_space(struct RegionView3D *rv3d,
+                                      struct bGPDstroke *gps,
+                                      const float diff_mat[4][4]);
+void BKE_gpencil_stroke_from_view_space(struct RegionView3D *rv3d,
+                                        struct bGPDstroke *gps,
+                                        const float diff_mat[4][4]);
+struct bGPDstroke *BKE_gpencil_stroke_perimeter_from_view(struct RegionView3D *rv3d,
+                                                          struct bGPdata *gpd,
+                                                          const struct bGPDlayer *gpl,
+                                                          struct bGPDstroke *gps,
+                                                          const int subdivisions,
+                                                          const float diff_mat[4][4]);
+float BKE_gpencil_stroke_average_pressure_get(struct bGPDstroke *gps);
+bool BKE_gpencil_stroke_is_pressure_constant(struct bGPDstroke *gps);
 #ifdef __cplusplus
 }
 #endif

@@ -125,7 +125,7 @@ static void sclip_zoom_set(const bContext *C,
     dx = ((location[0] - 0.5f) * w - sc->xof) * (sc->zoom - oldzoom) / sc->zoom;
     dy = ((location[1] - 0.5f) * h - sc->yof) * (sc->zoom - oldzoom) / sc->zoom;
 
-    if (sc->flag & SC_LOCK_SELECTION) {
+    if (clip_view_has_locked_selection(C)) {
       sc->xlockof += dx;
       sc->ylockof += dy;
     }
@@ -396,7 +396,7 @@ static void view_pan_init(bContext *C, wmOperator *op, const wmEvent *event)
   vpd->x = event->x;
   vpd->y = event->y;
 
-  if (sc->flag & SC_LOCK_SELECTION) {
+  if (clip_view_has_locked_selection(C)) {
     vpd->vec = &sc->xlockof;
   }
   else {
@@ -434,7 +434,7 @@ static int view_pan_exec(bContext *C, wmOperator *op)
 
   RNA_float_get_array(op->ptr, "offset", offset);
 
-  if (sc->flag & SC_LOCK_SELECTION) {
+  if (clip_view_has_locked_selection(C)) {
     sc->xlockof += offset[0];
     sc->ylockof += offset[1];
   }
@@ -533,7 +533,7 @@ void CLIP_OT_view_pan(wmOperatorType *ot)
                        -FLT_MAX,
                        FLT_MAX,
                        "Offset",
-                       "Offset in floating point units, 1.0 is the width and height of the image",
+                       "Offset in floating-point units, 1.0 is the width and height of the image",
                        -FLT_MAX,
                        FLT_MAX);
 }
@@ -569,7 +569,7 @@ static void view_zoom_init(bContext *C, wmOperator *op, const wmEvent *event)
     WM_cursor_modal_set(win, WM_CURSOR_NSEW_SCROLL);
   }
 
-  if (U.viewzoom == USER_ZOOM_CONT) {
+  if (U.viewzoom == USER_ZOOM_CONTINUE) {
     /* needs a timer to continue redrawing */
     vpd->timer = WM_event_add_timer(CTX_wm_manager(C), CTX_wm_window(C), TIMER, 0.01f);
     vpd->timer_lastdraw = PIL_check_seconds_timer();
@@ -662,7 +662,7 @@ static void view_zoom_apply(
     delta = -delta;
   }
 
-  if (U.viewzoom == USER_ZOOM_CONT) {
+  if (U.viewzoom == USER_ZOOM_CONTINUE) {
     SpaceClip *sclip = CTX_wm_space_clip(C);
     double time = PIL_check_seconds_timer();
     float time_step = (float)(time - vpd->timer_lastdraw);
@@ -1235,10 +1235,8 @@ static void do_movie_proxy(void *pjv,
                            float *progress)
 {
   ProxyJob *pj = pjv;
-  Scene *scene = pj->scene;
   MovieClip *clip = pj->clip;
   struct MovieDistortion *distortion = NULL;
-  int cfra, sfra = SFRA, efra = EFRA;
 
   if (pj->index_context) {
     IMB_anim_index_rebuild(pj->index_context, stop, do_update, progress);
@@ -1252,8 +1250,8 @@ static void do_movie_proxy(void *pjv,
     return;
   }
 
-  sfra = 1;
-  efra = clip->len;
+  const int sfra = 1;
+  const int efra = clip->len;
 
   if (build_undistort_count) {
     int threads = BLI_system_thread_count();
@@ -1265,7 +1263,7 @@ static void do_movie_proxy(void *pjv,
     BKE_tracking_distortion_set_threads(distortion, threads);
   }
 
-  for (cfra = sfra; cfra <= efra; cfra++) {
+  for (int cfra = sfra; cfra <= efra; cfra++) {
     BKE_movieclip_build_proxy_frame(
         clip, pj->clip_flag, distortion, cfra, build_undistort_sizes, build_undistort_count, 1);
 
@@ -1837,11 +1835,19 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
 /** \name Toggle Lock To Selection Operator
  * \{ */
 
-static int lock_selection_togglee_exec(bContext *C, wmOperator *UNUSED(op))
+static int lock_selection_toggle_exec(bContext *C, wmOperator *UNUSED(op))
 {
   SpaceClip *space_clip = CTX_wm_space_clip(C);
+
+  ClipViewLockState lock_state;
+  ED_clip_view_lock_state_store(C, &lock_state);
+
   space_clip->flag ^= SC_LOCK_SELECTION;
+
+  ED_clip_view_lock_state_restore_no_jump(C, &lock_state);
+
   WM_event_add_notifier(C, NC_SPACE | ND_SPACE_CLIP, NULL);
+
   return OPERATOR_FINISHED;
 }
 
@@ -1854,7 +1860,7 @@ void CLIP_OT_lock_selection_toggle(wmOperatorType *ot)
 
   /* api callbacks */
   ot->poll = ED_space_clip_poll;
-  ot->exec = lock_selection_togglee_exec;
+  ot->exec = lock_selection_toggle_exec;
 
   /* flags */
   ot->flag = OPTYPE_LOCK_BYPASS;

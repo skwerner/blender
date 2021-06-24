@@ -140,7 +140,7 @@ void BKE_pose_channel_free_bbone_cache(struct bPoseChannel_Runtime *runtime);
 void BKE_pose_channels_free(struct bPose *pose);
 void BKE_pose_channels_free_ex(struct bPose *pose, bool do_id_user);
 
-void BKE_pose_channels_hash_make(struct bPose *pose);
+void BKE_pose_channels_hash_ensure(struct bPose *pose);
 void BKE_pose_channels_hash_free(struct bPose *pose);
 
 void BKE_pose_channels_remove(struct Object *ob,
@@ -161,7 +161,7 @@ void BKE_pose_channel_session_uuid_generate(struct bPoseChannel *pchan);
 struct bPoseChannel *BKE_pose_channel_find_name(const struct bPose *pose, const char *name);
 struct bPoseChannel *BKE_pose_channel_active(struct Object *ob);
 struct bPoseChannel *BKE_pose_channel_active_or_first_selected(struct Object *ob);
-struct bPoseChannel *BKE_pose_channel_verify(struct bPose *pose, const char *name);
+struct bPoseChannel *BKE_pose_channel_ensure(struct bPose *pose, const char *name);
 struct bPoseChannel *BKE_pose_channel_get_mirrored(const struct bPose *pose, const char *name);
 
 void BKE_pose_check_uuids_unique_and_report(const struct bPose *pose);
@@ -187,10 +187,6 @@ void BKE_pose_itasc_init(struct bItasc *itasc);
 
 /* Checks if a bone is part of an IK chain or not */
 bool BKE_pose_channel_in_IK_chain(struct Object *ob, struct bPoseChannel *pchan);
-
-/* clears BONE_UNKEYED flags for frame changing */
-// XXX to be deprecated for a more general solution in animsys...
-void framechange_poses_clear_unkeyed(struct Main *bmain);
 
 /* Bone Groups API --------------------- */
 
@@ -226,6 +222,9 @@ void BKE_pose_blend_write(struct BlendWriter *writer, struct bPose *pose, struct
 void BKE_pose_blend_read_data(struct BlendDataReader *reader, struct bPose *pose);
 void BKE_pose_blend_read_lib(struct BlendLibReader *reader, struct Object *ob, struct bPose *pose);
 void BKE_pose_blend_read_expand(struct BlendExpander *expander, struct bPose *pose);
+
+/* action_mirror.c */
+void BKE_action_flip_with_pose(struct bAction *act, struct Object *ob_arm);
 
 #ifdef __cplusplus
 };

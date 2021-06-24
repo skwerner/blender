@@ -438,7 +438,7 @@ void EDBM_selectmode_to_scene(bContext *C)
 
 void EDBM_selectmode_flush_ex(BMEditMesh *em, const short selectmode)
 {
-  BM_mesh_select_mode_flush_ex(em->bm, selectmode);
+  BM_mesh_select_mode_flush_ex(em->bm, selectmode, BM_SELECT_LEN_FLUSH_RECALC_ALL);
 }
 
 void EDBM_selectmode_flush(BMEditMesh *em)
@@ -785,7 +785,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
       l = v->l;
       luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
       uv = luv->uv;
-      uv_vert_sel = luv->flag & MLOOPUV_VERTSEL;
+      uv_vert_sel = uvedit_uv_select_test(scene, l, cd_loop_uv_offset);
 
       lastv = NULL;
       iterv = vlist;
@@ -796,7 +796,7 @@ UvElementMap *BM_uv_element_map_create(BMesh *bm,
         l = iterv->l;
         luv = BM_ELEM_CD_GET_VOID_P(l, cd_loop_uv_offset);
         uv2 = luv->uv;
-        uv2_vert_sel = luv->flag & MLOOPUV_VERTSEL;
+        uv2_vert_sel = uvedit_uv_select_test(scene, l, cd_loop_uv_offset);
 
         /* Check if the uv loops share the same selection state (if not, they are not connected as
          * they have been ripped or other edit commands have separated them). */
@@ -1222,12 +1222,12 @@ BMVert *EDBM_verts_mirror_get(BMEditMesh *em, BMVert *v)
 
 BMEdge *EDBM_verts_mirror_get_edge(BMEditMesh *em, BMEdge *e)
 {
-  BMVert *v1_mirr = EDBM_verts_mirror_get(em, e->v1);
-  if (v1_mirr) {
-    BMVert *v2_mirr = EDBM_verts_mirror_get(em, e->v2);
-    if (v2_mirr) {
-      return BM_edge_exists(v1_mirr, v2_mirr);
-    }
+  BMVert *v1_mirr, *v2_mirr;
+  if ((v1_mirr = EDBM_verts_mirror_get(em, e->v1)) &&
+      (v2_mirr = EDBM_verts_mirror_get(em, e->v2)) &&
+      /* While highly unlikely, a zero length central edges vertices can match, see T89342. */
+      LIKELY(v1_mirr != v2_mirr)) {
+    return BM_edge_exists(v1_mirr, v2_mirr);
   }
 
   return NULL;
@@ -1405,9 +1405,17 @@ bool EDBM_mesh_reveal(BMEditMesh *em, bool select)
 /** \name Update API
  * \{ */
 
+void EDBM_mesh_normals_update_ex(BMEditMesh *em, const struct BMeshNormalsUpdate_Params *params)
+{
+  BM_mesh_normals_update_ex(em->bm, params);
+}
+
 void EDBM_mesh_normals_update(BMEditMesh *em)
 {
-  BM_mesh_normals_update(em->bm);
+  EDBM_mesh_normals_update_ex(em,
+                              &(const struct BMeshNormalsUpdate_Params){
+                                  .face_normals = true,
+                              });
 }
 
 void EDBM_stats_update(BMEditMesh *em)
@@ -1439,20 +1447,31 @@ void EDBM_stats_update(BMEditMesh *em)
   }
 }
 
-/* so many tools call these that we better make it a generic function.
+/**
+ * So many tools call these that we better make it a generic function.
  */
-void EDBM_update_generic(Mesh *mesh, const bool do_tessellation, const bool is_destructive)
+void EDBM_update(Mesh *mesh, const struct EDBMUpdate_Params *params)
 {
   BMEditMesh *em = mesh->edit_mesh;
   /* Order of calling isn't important. */
   DEG_id_tag_update(&mesh->id, ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_GEOM | ND_DATA, &mesh->id);
 
-  if (do_tessellation) {
-    BKE_editmesh_looptri_calc(em);
+  if (params->calc_normals && params->calc_looptri) {
+    /* Calculating both has some performance gains. */
+    BKE_editmesh_looptri_and_normals_calc(em);
+  }
+  else {
+    if (params->calc_normals) {
+      EDBM_mesh_normals_update(em);
+    }
+
+    if (params->calc_looptri) {
+      BKE_editmesh_looptri_calc(em);
+    }
   }
 
-  if (is_destructive) {
+  if (params->is_destructive) {
     /* TODO. we may be able to remove this now! - Campbell */
     // BM_mesh_elem_table_free(em->bm, BM_ALL_NOLOOP);
   }
@@ -1475,6 +1494,17 @@ void EDBM_update_generic(Mesh *mesh, const bool do_tessellation, const bool is_d
     }
   }
 #endif
+}
+
+/* Bad level call from Python API. */
+void EDBM_update_extern(struct Mesh *me, const bool do_tessellation, const bool is_destructive)
+{
+  EDBM_update(me,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = do_tessellation,
+                  .calc_normals = false,
+                  .is_destructive = is_destructive,
+              });
 }
 
 /** \} */
@@ -1544,7 +1574,7 @@ int EDBM_elem_to_index_any(BMEditMesh *em, BMElem *ele)
   return index;
 }
 
-BMElem *EDBM_elem_from_index_any(BMEditMesh *em, int index)
+BMElem *EDBM_elem_from_index_any(BMEditMesh *em, uint index)
 {
   BMesh *bm = em->bm;
 
@@ -1585,14 +1615,14 @@ int EDBM_elem_to_index_any_multi(ViewLayer *view_layer,
 }
 
 BMElem *EDBM_elem_from_index_any_multi(ViewLayer *view_layer,
-                                       int object_index,
-                                       int elem_index,
+                                       uint object_index,
+                                       uint elem_index,
                                        Object **r_obedit)
 {
   uint bases_len;
   Base **bases = BKE_view_layer_array_from_bases_in_edit_mode(view_layer, NULL, &bases_len);
   *r_obedit = NULL;
-  Object *obedit = ((uint)object_index < bases_len) ? bases[object_index]->object : NULL;
+  Object *obedit = (object_index < bases_len) ? bases[object_index]->object : NULL;
   MEM_freeN(bases);
   if (obedit != NULL) {
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
@@ -1721,7 +1751,7 @@ void EDBM_project_snap_verts(
                                                     SCE_SNAP_MODE_FACE,
                                                     &(const struct SnapObjectParams){
                                                         .snap_select = SNAP_NOT_ACTIVE,
-                                                        .use_object_edit_cage = false,
+                                                        .edit_mode_type = SNAP_GEOM_FINAL,
                                                         .use_occlusion_test = true,
                                                     },
                                                     mval,

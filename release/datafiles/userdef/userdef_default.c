@@ -105,7 +105,7 @@ const UserDef U_default = {
     .autoexec_paths = {NULL},
     .user_menus = {NULL},
 
-    .keyconfigstr = "blender",
+    .keyconfigstr = "Blender",
     .undosteps = 32,
     .undomemory = 0,
     .gp_manhattandist = 1,
@@ -119,6 +119,7 @@ const UserDef U_default = {
 
     .gizmo_flag = USER_GIZMO_DRAW,
     .gizmo_size = 75,
+    .gizmo_size_navigate_v3d = 80,
     .edit_studio_light = 0,
     .lookdev_sphere_size = 150,
     .vbotimeout = 120,
@@ -225,6 +226,7 @@ const UserDef U_default = {
     .sequencer_disk_cache_compression = 0,
     .sequencer_disk_cache_size_limit = 100,
     .sequencer_disk_cache_flag = 0,
+    .sequencer_proxy_setup = USER_SEQ_PROXY_SETUP_AUTOMATIC,
 
     .collection_instance_empty_size = 1.0f,
 

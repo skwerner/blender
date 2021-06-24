@@ -158,7 +158,7 @@ char *BLI_file_ungzip_to_mem(const char *from_file, int *r_size)
   return mem;
 }
 
-#define CHUNK 256 * 1024
+#define CHUNK (256 * 1024)
 
 /* gzip byte array from memory and write it to file at certain position.
  * return size of gzip stream.
@@ -171,7 +171,7 @@ size_t BLI_gzip_mem_to_file_at_pos(
   z_stream strm;
   unsigned char out[CHUNK];
 
-  fseek(file, gz_stream_offset, 0);
+  BLI_fseek(file, gz_stream_offset, 0);
 
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
@@ -217,7 +217,7 @@ size_t BLI_ungzip_file_to_mem_at_pos(void *buf, size_t len, FILE *file, size_t g
   size_t chunk = 256 * 1024;
   unsigned char in[CHUNK];
 
-  fseek(file, gz_stream_offset, 0);
+  BLI_fseek(file, gz_stream_offset, 0);
 
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;

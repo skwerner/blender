@@ -927,7 +927,9 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
       }
 
       if (apply_vcos) {
-        EDBM_mesh_normals_update(em);
+        /* TODO: use the #BKE_editmesh_looptri_and_normals_calc_with_partial
+         * This requires begin/end states for UI interaction (which currently aren't supported). */
+        BKE_editmesh_looptri_and_normals_calc(em);
       }
 
       /* Edges */
@@ -1031,7 +1033,9 @@ static void v3d_editvertex_buts(uiLayout *layout, View3D *v3d, Object *ob, float
             }
           }
         }
-        BKE_nurb_test_2d(nu);
+        if (CU_IS_2D(cu)) {
+          BKE_nurb_project_2d(nu);
+        }
         BKE_nurb_handles_test(nu, true, false); /* test for bezier too */
       }
     }
@@ -1575,7 +1579,7 @@ static void do_view3d_region_buttons(bContext *C, void *UNUSED(index), int event
   }
 
   /* default for now */
-  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
+  WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, NULL);
 }
 
 static bool view3d_panel_transform_poll(const bContext *C, PanelType *UNUSED(pt))

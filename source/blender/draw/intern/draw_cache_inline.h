@@ -40,10 +40,6 @@
     (flag |= DRW_ibo_requested(ibo) ? (value) : 0)
 #endif
 
-/* Test and assign NULL if test fails */
-#define DRW_TEST_ASSIGN_VBO(v) (v = (DRW_vbo_requested(v) ? (v) : NULL))
-#define DRW_TEST_ASSIGN_IBO(v) (v = (DRW_ibo_requested(v) ? (v) : NULL))
-
 BLI_INLINE GPUBatch *DRW_batch_request(GPUBatch **batch)
 {
   /* XXX TODO(fclem): We are writing to batch cache here. Need to make this thread safe. */
@@ -53,13 +49,13 @@ BLI_INLINE GPUBatch *DRW_batch_request(GPUBatch **batch)
   return *batch;
 }
 
-BLI_INLINE bool DRW_batch_requested(GPUBatch *batch, int prim_type)
+BLI_INLINE bool DRW_batch_requested(GPUBatch *batch, GPUPrimType prim_type)
 {
   /* Batch has been requested if it has been created but not initialized. */
   if (batch != NULL && batch->verts[0] == NULL) {
     /* HACK. We init without a valid VBO and let the first vbo binding
      * fill verts[0]. */
-    GPU_batch_init_ex(batch, prim_type, (GPUVertBuf *)1, NULL, 0);
+    GPU_batch_init_ex(batch, prim_type, (GPUVertBuf *)1, NULL, (eGPUBatchFlag)0);
     batch->verts[0] = NULL;
     return true;
   }

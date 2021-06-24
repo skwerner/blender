@@ -20,7 +20,7 @@
 #include "util/util_math.h"
 #include "util/util_types.h"
 
-#ifdef __KERNEL_SSE2__
+#if !defined(__KERNEL_GPU__) && defined(__KERNEL_SSE2__)
 #  include "util/util_simd.h"
 #endif
 
@@ -223,12 +223,14 @@ ccl_device_inline ssef fastpow24(const ssef &arg)
   ssef x = fastpow<0x3F4CCCCD, 0x4F55A7FB>(arg);  // error max = 0.17  avg = 0.0018    |avg| = 0.05
   ssef arg2 = arg * arg;
   ssef arg4 = arg2 * arg2;
-  x = improve_5throot_solution(x,
-                               arg4); /* error max = 0.018     avg = 0.0031    |avg| = 0.0031  */
-  x = improve_5throot_solution(x,
-                               arg4); /* error max = 0.00021   avg = 1.6e-05   |avg| = 1.6e-05 */
-  x = improve_5throot_solution(x,
-                               arg4); /* error max = 6.1e-07   avg = 5.2e-08   |avg| = 1.1e-07 */
+
+  /* error max = 0.018     avg = 0.0031    |avg| = 0.0031  */
+  x = improve_5throot_solution(x, arg4);
+  /* error max = 0.00021   avg = 1.6e-05   |avg| = 1.6e-05 */
+  x = improve_5throot_solution(x, arg4);
+  /* error max = 6.1e-07   avg = 5.2e-08   |avg| = 1.1e-07 */
+  x = improve_5throot_solution(x, arg4);
+
   return x * (x * x);
 }
 
@@ -277,16 +279,16 @@ ccl_device float4 color_srgb_to_linear_v4(float4 c)
 
 ccl_device float3 color_highlight_compress(float3 color, float3 *variance)
 {
-  color += make_float3(1.0f, 1.0f, 1.0f);
+  color += one_float3();
   if (variance) {
-    *variance *= sqr3(make_float3(1.0f, 1.0f, 1.0f) / color);
+    *variance *= sqr3(one_float3() / color);
   }
   return log3(color);
 }
 
 ccl_device float3 color_highlight_uncompress(float3 color)
 {
-  return exp3(color) - make_float3(1.0f, 1.0f, 1.0f);
+  return exp3(color) - one_float3();
 }
 
 CCL_NAMESPACE_END

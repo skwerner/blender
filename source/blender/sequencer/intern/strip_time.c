@@ -36,7 +36,11 @@
 
 #include "IMB_imbuf.h"
 
+#include "SEQ_iterator.h"
+#include "SEQ_render.h"
 #include "SEQ_sequencer.h"
+#include "SEQ_time.h"
+#include "SEQ_transform.h"
 
 #include "strip_time.h"
 #include "utils.h"
@@ -142,7 +146,7 @@ void seq_update_sound_bounds_recursive(Scene *scene, Sequence *metaseq)
       scene, metaseq, metaseq_start(metaseq), metaseq_end(metaseq));
 }
 
-void BKE_sequence_calc_disp(Scene *scene, Sequence *seq)
+void SEQ_time_update_sequence_bounds(Scene *scene, Sequence *seq)
 {
   if (seq->startofs && seq->startstill) {
     seq->startstill = 0;
@@ -159,16 +163,45 @@ void BKE_sequence_calc_disp(Scene *scene, Sequence *seq)
   }
 }
 
-void BKE_sequence_calc(Scene *scene, Sequence *seq)
+static void seq_time_update_meta_strip(Scene *scene, Sequence *seq_meta)
+{
+  if (BLI_listbase_is_empty(&seq_meta->seqbase)) {
+    return;
+  }
+
+  int min = MAXFRAME * 2;
+  int max = -MAXFRAME * 2;
+  LISTBASE_FOREACH (Sequence *, seq, &seq_meta->seqbase) {
+    min = min_ii(seq->startdisp, min);
+    max = max_ii(seq->enddisp, max);
+  }
+
+  seq_meta->start = min + seq_meta->anim_startofs;
+  seq_meta->len = max - min;
+  seq_meta->len -= seq_meta->anim_startofs;
+  seq_meta->len -= seq_meta->anim_endofs;
+
+  seq_update_sound_bounds_recursive(scene, seq_meta);
+}
+
+void SEQ_time_update_meta_strip_range(Scene *scene, Sequence *seq_meta)
+{
+  seq_time_update_meta_strip(scene, seq_meta);
+
+  /* Prevent meta-strip to move in timeline. */
+  SEQ_transform_set_left_handle_frame(seq_meta, seq_meta->startdisp);
+  SEQ_transform_set_right_handle_frame(seq_meta, seq_meta->enddisp);
+}
+
+void SEQ_time_update_sequence(Scene *scene, Sequence *seq)
 {
   Sequence *seqm;
-  int min, max;
 
-  /* check all metas recursively */
+  /* Check all meta-strips recursively. */
   seqm = seq->seqbase.first;
   while (seqm) {
     if (seqm->seqbase.first) {
-      BKE_sequence_calc(scene, seqm);
+      SEQ_time_update_sequence(scene, seqm);
     }
     seqm = seqm->next;
   }
@@ -190,7 +223,7 @@ void BKE_sequence_calc(Scene *scene, Sequence *seq)
         seq->start = seq->startdisp = seq->seq1->startdisp;
         seq->enddisp = seq->seq1->enddisp;
       }
-      /* we cant help if strips don't overlap, it wont give useful results.
+      /* we can't help if strips don't overlap, it won't give useful results.
        * but at least ensure 'len' is never negative which causes bad bugs elsewhere. */
       if (seq->enddisp < seq->startdisp) {
         /* simple start/end swap */
@@ -206,37 +239,26 @@ void BKE_sequence_calc(Scene *scene, Sequence *seq)
       seq->len = seq->enddisp - seq->startdisp;
     }
     else {
-      BKE_sequence_calc_disp(scene, seq);
+      SEQ_time_update_sequence_bounds(scene, seq);
     }
   }
   else {
     if (seq->type == SEQ_TYPE_META) {
-      seqm = seq->seqbase.first;
-      if (seqm) {
-        min = MAXFRAME * 2;
-        max = -MAXFRAME * 2;
-        while (seqm) {
-          if (seqm->startdisp < min) {
-            min = seqm->startdisp;
-          }
-          if (seqm->enddisp > max) {
-            max = seqm->enddisp;
-          }
-          seqm = seqm->next;
-        }
-        seq->start = min + seq->anim_startofs;
-        seq->len = max - min;
-        seq->len -= seq->anim_startofs;
-        seq->len -= seq->anim_endofs;
-      }
-      seq_update_sound_bounds_recursive(scene, seq);
+      seq_time_update_meta_strip(scene, seq);
     }
-    BKE_sequence_calc_disp(scene, seq);
+
+    Editing *ed = SEQ_editing_get(scene, false);
+    MetaStack *ms = SEQ_meta_stack_active_get(ed);
+    if (ms != NULL) {
+      SEQ_time_update_meta_strip_range(scene, ms->parseq);
+    }
+
+    SEQ_time_update_sequence_bounds(scene, seq);
   }
 }
 
 /** Comparison function suitable to be used with BLI_listbase_sort()... */
-int BKE_sequencer_cmp_time_startdisp(const void *a, const void *b)
+int SEQ_time_cmp_time_startdisp(const void *a, const void *b)
 {
   const Sequence *seq_a = a;
   const Sequence *seq_b = b;
@@ -244,14 +266,14 @@ int BKE_sequencer_cmp_time_startdisp(const void *a, const void *b)
   return (seq_a->startdisp > seq_b->startdisp);
 }
 
-int BKE_sequencer_find_next_prev_edit(Scene *scene,
-                                      int timeline_frame,
-                                      const short side,
-                                      const bool do_skip_mute,
-                                      const bool do_center,
-                                      const bool do_unselected)
+int SEQ_time_find_next_prev_edit(Scene *scene,
+                                 int timeline_frame,
+                                 const short side,
+                                 const bool do_skip_mute,
+                                 const bool do_center,
+                                 const bool do_unselected)
 {
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
   Sequence *seq;
 
   int dist, best_dist, best_frame = timeline_frame;
@@ -319,7 +341,7 @@ int BKE_sequencer_find_next_prev_edit(Scene *scene,
   return best_frame;
 }
 
-float BKE_sequence_get_fps(Scene *scene, Sequence *seq)
+float SEQ_time_sequence_get_fps(Scene *scene, Sequence *seq)
 {
   switch (seq->type) {
     case SEQ_TYPE_MOVIE: {
@@ -383,6 +405,17 @@ void SEQ_timeline_boundbox(const Scene *scene, const ListBase *seqbase, rctf *re
   }
 }
 
+static bool strip_exists_at_frame(SeqCollection *all_strips, const int timeline_frame)
+{
+  Sequence *seq;
+  SEQ_ITERATOR_FOREACH (seq, all_strips) {
+    if (SEQ_time_strip_intersects_frame(seq, timeline_frame)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Find first gap between strips after initial_frame and describe it by filling data of r_gap_info
  *
@@ -404,10 +437,12 @@ void seq_time_gap_info_get(const Scene *scene,
   int timeline_frame = initial_frame;
   r_gap_info->gap_exists = false;
 
-  if (SEQ_render_evaluate_frame(seqbase, initial_frame) == 0) {
+  SeqCollection *collection = SEQ_query_all_strips(seqbase);
+
+  if (!strip_exists_at_frame(collection, initial_frame)) {
     /* Search backward for gap_start_frame. */
     for (; timeline_frame >= sfra; timeline_frame--) {
-      if (SEQ_render_evaluate_frame(seqbase, timeline_frame) != 0) {
+      if (strip_exists_at_frame(collection, timeline_frame)) {
         break;
       }
     }
@@ -417,7 +452,7 @@ void seq_time_gap_info_get(const Scene *scene,
   else {
     /* Search forward for gap_start_frame. */
     for (; timeline_frame <= efra; timeline_frame++) {
-      if (SEQ_render_evaluate_frame(seqbase, timeline_frame) == 0) {
+      if (!strip_exists_at_frame(collection, timeline_frame)) {
         r_gap_info->gap_start_frame = timeline_frame;
         break;
       }
@@ -425,11 +460,25 @@ void seq_time_gap_info_get(const Scene *scene,
   }
   /* Search forward for gap_end_frame. */
   for (; timeline_frame <= efra; timeline_frame++) {
-    if (SEQ_render_evaluate_frame(seqbase, timeline_frame) != 0) {
+    if (strip_exists_at_frame(collection, timeline_frame)) {
       const int gap_end_frame = timeline_frame;
       r_gap_info->gap_length = gap_end_frame - r_gap_info->gap_start_frame;
       r_gap_info->gap_exists = true;
       break;
     }
   }
+}
+
+/**
+ * Test if strip intersects with timeline frame.
+ * Note: This checks if strip would be rendered at this frame. For rendering it is assumed, that
+ * timeline frame has width of 1 frame and therefore ends at timeline_frame + 1
+ *
+ * \param seq: Sequence to be checked
+ * \param timeline_frame: absolute frame position
+ * \return true if strip intersects with timeline frame.
+ */
+bool SEQ_time_strip_intersects_frame(const Sequence *seq, const int timeline_frame)
+{
+  return (seq->startdisp <= timeline_frame) && (seq->enddisp > timeline_frame);
 }

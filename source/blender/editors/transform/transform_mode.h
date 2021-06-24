@@ -47,8 +47,7 @@ void protectedTransBits(short protectflag, float vec[3]);
 void protectedSizeBits(short protectflag, float size[3]);
 void constraintTransLim(TransInfo *t, TransData *td);
 void constraintSizeLim(TransInfo *t, TransData *td);
-void postInputRotation(TransInfo *t, float values[3]);
-void headerRotation(TransInfo *t, char *str, float final);
+void headerRotation(TransInfo *t, char *str, int str_size, float final);
 void ElementRotation_ex(TransInfo *t,
                         TransDataContainer *tc,
                         TransData *td,
@@ -56,12 +55,13 @@ void ElementRotation_ex(TransInfo *t,
                         const float *center);
 void ElementRotation(
     TransInfo *t, TransDataContainer *tc, TransData *td, float mat[3][3], const short around);
-void headerResize(TransInfo *t, const float vec[3], char *str);
+void headerResize(TransInfo *t, const float vec[3], char *str, int str_size);
 void ElementResize(TransInfo *t, TransDataContainer *tc, TransData *td, float mat[3][3]);
 short getAnimEdit_SnapMode(TransInfo *t);
 void doAnimEdit_SnapFrame(
     TransInfo *t, TransData *td, TransData2D *td2d, struct AnimData *adt, short autosnap);
 void transform_mode_init(TransInfo *t, struct wmOperator *op, const int mode);
+void transform_mode_default_modal_orientation_set(TransInfo *t, int type);
 
 /* transform_mode_align.c */
 void initAlign(TransInfo *t);

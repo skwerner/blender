@@ -357,6 +357,7 @@ IDTypeInfo IDType_ID_ME = {
     .make_local = NULL,
     .foreach_id = mesh_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = mesh_blend_write,
     .blend_read_data = mesh_blend_read_data,
@@ -364,6 +365,8 @@ IDTypeInfo IDType_ID_ME = {
     .blend_read_expand = mesh_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 enum {
@@ -845,9 +848,7 @@ static void mesh_tessface_clear_intern(Mesh *mesh, int free_customdata)
 
 Mesh *BKE_mesh_add(Main *bmain, const char *name)
 {
-  Mesh *me;
-
-  me = BKE_id_new(bmain, ID_ME, name);
+  Mesh *me = BKE_id_new(bmain, ID_ME, name);
 
   return me;
 }
@@ -880,7 +881,7 @@ Mesh *BKE_mesh_new_nomain(
       NULL, ID_ME, BKE_idtype_idcode_to_name(ID_ME), LIB_ID_CREATE_LOCALIZE);
   BKE_libblock_init_empty(&mesh->id);
 
-  /* don't use CustomData_reset(...); because we dont want to touch customdata */
+  /* Don't use CustomData_reset(...); because we don't want to touch custom-data. */
   copy_vn_i(mesh->vdata.typemap, CD_NUMTYPES, -1);
   copy_vn_i(mesh->edata.typemap, CD_NUMTYPES, -1);
   copy_vn_i(mesh->fdata.typemap, CD_NUMTYPES, -1);
@@ -899,9 +900,11 @@ Mesh *BKE_mesh_new_nomain(
   return mesh;
 }
 
-/* Copy user editable settings that we want to preserve through the modifier stack
- * or operations where a mesh with new topology is created based on another mesh. */
-void BKE_mesh_copy_settings(Mesh *me_dst, const Mesh *me_src)
+/**
+ * Copy user editable settings that we want to preserve
+ * when a new mesh is based on an existing mesh.
+ */
+void BKE_mesh_copy_parameters(Mesh *me_dst, const Mesh *me_src)
 {
   /* Copy general settings. */
   me_dst->editflag = me_src->editflag;
@@ -919,6 +922,20 @@ void BKE_mesh_copy_settings(Mesh *me_dst, const Mesh *me_src)
   me_dst->texflag = me_src->texflag;
   copy_v3_v3(me_dst->loc, me_src->loc);
   copy_v3_v3(me_dst->size, me_src->size);
+}
+
+/**
+ * A version of #BKE_mesh_copy_parameters that is intended for evaluated output
+ * (the modifier stack for example).
+ *
+ * \warning User counts are not handled for ID's.
+ */
+void BKE_mesh_copy_parameters_for_eval(Mesh *me_dst, const Mesh *me_src)
+{
+  /* User counts aren't handled, don't copy into a mesh from #G_MAIN. */
+  BLI_assert(me_dst->id.tag & (LIB_TAG_NO_MAIN | LIB_TAG_COPIED_ON_WRITE));
+
+  BKE_mesh_copy_parameters(me_dst, me_src);
 
   /* Copy materials. */
   if (me_dst->mat != NULL) {
@@ -941,7 +958,7 @@ Mesh *BKE_mesh_new_nomain_from_template_ex(const Mesh *me_src,
 
   Mesh *me_dst = BKE_id_new_nomain(ID_ME, NULL);
 
-  me_dst->mselect = MEM_dupallocN(me_dst->mselect);
+  me_dst->mselect = MEM_dupallocN(me_src->mselect);
 
   me_dst->totvert = verts_len;
   me_dst->totedge = edges_len;
@@ -950,7 +967,7 @@ Mesh *BKE_mesh_new_nomain_from_template_ex(const Mesh *me_src,
   me_dst->totpoly = polys_len;
 
   me_dst->cd_flag = me_src->cd_flag;
-  BKE_mesh_copy_settings(me_dst, me_src);
+  BKE_mesh_copy_parameters_for_eval(me_dst, me_src);
 
   CustomData_copy(&me_src->vdata, &me_dst->vdata, mask.vmask, CD_CALLOC, verts_len);
   CustomData_copy(&me_src->edata, &me_dst->edata, mask.emask, CD_CALLOC, edges_len);
@@ -1007,10 +1024,9 @@ BMesh *BKE_mesh_to_bmesh_ex(const Mesh *me,
                             const struct BMeshCreateParams *create_params,
                             const struct BMeshFromMeshParams *convert_params)
 {
-  BMesh *bm;
   const BMAllocTemplate allocsize = BMALLOC_TEMPLATE_FROM_ME(me);
 
-  bm = BM_mesh_create(&allocsize, create_params);
+  BMesh *bm = BM_mesh_create(&allocsize, create_params);
   BM_mesh_bm_from_me(bm, me, convert_params);
 
   return bm;
@@ -1038,7 +1054,7 @@ Mesh *BKE_mesh_from_bmesh_nomain(BMesh *bm,
   BLI_assert(params->calc_object_remap == false);
   Mesh *mesh = BKE_id_new_nomain(ID_ME, NULL);
   BM_mesh_bm_to_me(NULL, bm, mesh, params);
-  BKE_mesh_copy_settings(mesh, me_settings);
+  BKE_mesh_copy_parameters_for_eval(mesh, me_settings);
   return mesh;
 }
 
@@ -1048,7 +1064,7 @@ Mesh *BKE_mesh_from_bmesh_for_eval_nomain(BMesh *bm,
 {
   Mesh *mesh = BKE_id_new_nomain(ID_ME, NULL);
   BM_mesh_bm_to_me_for_eval(bm, mesh, cd_mask_extra);
-  BKE_mesh_copy_settings(mesh, me_settings);
+  BKE_mesh_copy_parameters_for_eval(mesh, me_settings);
   return mesh;
 }
 
@@ -1162,17 +1178,14 @@ void BKE_mesh_texspace_copy_from_object(Mesh *me, Object *ob)
 float (*BKE_mesh_orco_verts_get(Object *ob))[3]
 {
   Mesh *me = ob->data;
-  MVert *mvert = NULL;
   Mesh *tme = me->texcomesh ? me->texcomesh : me;
-  int a, totvert;
-  float(*vcos)[3] = NULL;
 
   /* Get appropriate vertex coordinates */
-  vcos = MEM_calloc_arrayN(me->totvert, sizeof(*vcos), "orco mesh");
-  mvert = tme->mvert;
-  totvert = min_ii(tme->totvert, me->totvert);
+  float(*vcos)[3] = MEM_calloc_arrayN(me->totvert, sizeof(*vcos), "orco mesh");
+  MVert *mvert = tme->mvert;
+  int totvert = min_ii(tme->totvert, me->totvert);
 
-  for (a = 0; a < totvert; a++, mvert++) {
+  for (int a = 0; a < totvert; a++, mvert++) {
     copy_v3_v3(vcos[a], mvert->co);
   }
 
@@ -1182,18 +1195,17 @@ float (*BKE_mesh_orco_verts_get(Object *ob))[3]
 void BKE_mesh_orco_verts_transform(Mesh *me, float (*orco)[3], int totvert, int invert)
 {
   float loc[3], size[3];
-  int a;
 
   BKE_mesh_texspace_get(me->texcomesh ? me->texcomesh : me, loc, size);
 
   if (invert) {
-    for (a = 0; a < totvert; a++) {
+    for (int a = 0; a < totvert; a++) {
       float *co = orco[a];
       madd_v3_v3v3v3(co, loc, co, size);
     }
   }
   else {
-    for (a = 0; a < totvert; a++) {
+    for (int a = 0; a < totvert; a++) {
       float *co = orco[a];
       co[0] = (co[0] - loc[0]) / size[0];
       co[1] = (co[1] - loc[1]) / size[1];
@@ -1202,9 +1214,11 @@ void BKE_mesh_orco_verts_transform(Mesh *me, float (*orco)[3], int totvert, int 
   }
 }
 
-/* rotates the vertices of a face in case v[2] or v[3] (vertex index) is = 0.
- * this is necessary to make the if (mface->v4) check for quads work */
-int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
+/**
+ * Rotates the vertices of a face in case v[2] or v[3] (vertex index) is = 0.
+ * this is necessary to make the if #MFace.v4 check for quads work.
+ */
+int BKE_mesh_mface_index_validate(MFace *mface, CustomData *fdata, int mfindex, int nr)
 {
   /* first test if the face is legal */
   if ((mface->v3 || nr == 4) && mface->v3 == mface->v4) {
@@ -1224,7 +1238,7 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
   }
 
   /* Check corrupt cases, bow-tie geometry,
-   * cant handle these because edge data wont exist so just return 0. */
+   * can't handle these because edge data won't exist so just return 0. */
   if (nr == 3) {
     if (
         /* real edges */
@@ -1248,8 +1262,8 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
     if (mface->v3 == 0) {
       static int corner_indices[4] = {1, 2, 0, 3};
 
-      SWAP(unsigned int, mface->v1, mface->v2);
-      SWAP(unsigned int, mface->v2, mface->v3);
+      SWAP(uint, mface->v1, mface->v2);
+      SWAP(uint, mface->v2, mface->v3);
 
       if (fdata) {
         CustomData_swap_corners(fdata, mfindex, corner_indices);
@@ -1260,8 +1274,8 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
     if (mface->v3 == 0 || mface->v4 == 0) {
       static int corner_indices[4] = {2, 3, 0, 1};
 
-      SWAP(unsigned int, mface->v1, mface->v3);
-      SWAP(unsigned int, mface->v2, mface->v4);
+      SWAP(uint, mface->v1, mface->v3);
+      SWAP(uint, mface->v2, mface->v4);
 
       if (fdata) {
         CustomData_swap_corners(fdata, mfindex, corner_indices);
@@ -1274,7 +1288,6 @@ int test_index_face(MFace *mface, CustomData *fdata, int mfindex, int nr)
 
 Mesh *BKE_mesh_from_object(Object *ob)
 {
-
   if (ob == NULL) {
     return NULL;
   }
@@ -1364,7 +1377,7 @@ void BKE_mesh_material_index_clear(Mesh *me)
   }
 }
 
-void BKE_mesh_material_remap(Mesh *me, const unsigned int *remap, unsigned int remap_len)
+void BKE_mesh_material_remap(Mesh *me, const uint *remap, uint remap_len)
 {
   const short remap_len_short = (short)remap_len;
 
@@ -1414,8 +1427,7 @@ void BKE_mesh_smooth_flag_set(Mesh *me, const bool use_smooth)
  */
 int poly_find_loop_from_vert(const MPoly *poly, const MLoop *loopstart, uint vert)
 {
-  int j;
-  for (j = 0; j < poly->totloop; j++, loopstart++) {
+  for (int j = 0; j < poly->totloop; j++, loopstart++) {
     if (loopstart->v == vert) {
       return j;
     }
@@ -1429,10 +1441,7 @@ int poly_find_loop_from_vert(const MPoly *poly, const MLoop *loopstart, uint ver
  * vertex. Returns the index of the loop matching vertex, or -1 if the
  * vertex is not in \a poly
  */
-int poly_get_adj_loops_from_vert(const MPoly *poly,
-                                 const MLoop *mloop,
-                                 unsigned int vert,
-                                 unsigned int r_adj[2])
+int poly_get_adj_loops_from_vert(const MPoly *poly, const MLoop *mloop, uint vert, uint r_adj[2])
 {
   int corner = poly_find_loop_from_vert(poly, &mloop[poly->loopstart], vert);
 
@@ -1527,12 +1536,12 @@ void BKE_mesh_transform(Mesh *me, const float mat[4][4], bool do_keys)
 
 void BKE_mesh_translate(Mesh *me, const float offset[3], const bool do_keys)
 {
-  MVert *mvert = CustomData_duplicate_referenced_layer(&me->vdata, CD_MVERT, me->totvert);
+  CustomData_duplicate_referenced_layer(&me->vdata, CD_MVERT, me->totvert);
   /* If the referenced layer has been re-allocated need to update pointers stored in the mesh. */
   BKE_mesh_update_customdata_pointers(me, false);
 
   int i = me->totvert;
-  for (mvert = me->mvert; i--; mvert++) {
+  for (MVert *mvert = me->mvert; i--; mvert++) {
     add_v3_v3(mvert->co, offset);
   }
 
@@ -1545,22 +1554,6 @@ void BKE_mesh_translate(Mesh *me, const float offset[3], const bool do_keys)
       }
     }
   }
-}
-
-void BKE_mesh_tessface_calc(Mesh *mesh)
-{
-  mesh->totface = BKE_mesh_tessface_calc_ex(
-      &mesh->fdata,
-      &mesh->ldata,
-      &mesh->pdata,
-      mesh->mvert,
-      mesh->totface,
-      mesh->totloop,
-      mesh->totpoly,
-      /* calc normals right after, don't copy from polys here */
-      false);
-
-  BKE_mesh_update_customdata_pointers(mesh, true);
 }
 
 void BKE_mesh_tessface_ensure(Mesh *mesh)
@@ -1682,11 +1675,9 @@ void BKE_mesh_mselect_validate(Mesh *me)
  */
 int BKE_mesh_mselect_find(Mesh *me, int index, int type)
 {
-  int i;
-
   BLI_assert(ELEM(type, ME_VSEL, ME_ESEL, ME_FSEL));
 
-  for (i = 0; i < me->totselect; i++) {
+  for (int i = 0; i < me->totselect; i++) {
     if ((me->mselect[i].index == index) && (me->mselect[i].type == type)) {
       return i;
     }

@@ -47,6 +47,7 @@
 #endif
 
 #include "GPU_buffers.h"
+#include "GPU_capabilities.h"
 #include "GPU_material.h"
 #include "GPU_uniform_buffer.h"
 
@@ -446,6 +447,19 @@ void DRW_shgroup_uniform_vec4_array_copy(DRWShadingGroup *shgroup,
   }
 }
 
+void DRW_shgroup_vertex_buffer(DRWShadingGroup *shgroup,
+                               const char *name,
+                               GPUVertBuf *vertex_buffer)
+{
+  int location = GPU_shader_get_ssbo(shgroup->shader, name);
+  if (location == -1) {
+    BLI_assert(false && "Unable to locate binding of shader storage buffer objects.");
+    return;
+  }
+  drw_shgroup_uniform_create_ex(
+      shgroup, location, DRW_UNIFORM_VERTEX_BUFFER_AS_STORAGE, vertex_buffer, 0, 0, 1);
+}
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
@@ -700,6 +714,17 @@ static void drw_command_draw_intance_range(
   cmd->inst_count = count;
 }
 
+static void drw_command_compute(DRWShadingGroup *shgroup,
+                                int groups_x_len,
+                                int groups_y_len,
+                                int groups_z_len)
+{
+  DRWCommandCompute *cmd = drw_command_create(shgroup, DRW_CMD_COMPUTE);
+  cmd->groups_x_len = groups_x_len;
+  cmd->groups_y_len = groups_y_len;
+  cmd->groups_z_len = groups_z_len;
+}
+
 static void drw_command_draw_procedural(DRWShadingGroup *shgroup,
                                         GPUBatch *batch,
                                         DRWResourceHandle handle,
@@ -813,6 +838,17 @@ void DRW_shgroup_call_instance_range(
   }
   DRWResourceHandle handle = drw_resource_handle(shgroup, ob ? ob->obmat : NULL, ob);
   drw_command_draw_intance_range(shgroup, geom, handle, i_sta, i_ct);
+}
+
+void DRW_shgroup_call_compute(DRWShadingGroup *shgroup,
+                              int groups_x_len,
+                              int groups_y_len,
+                              int groups_z_len)
+{
+  BLI_assert(groups_x_len > 0 && groups_y_len > 0 && groups_z_len > 0);
+  BLI_assert(GPU_compute_shader_support());
+
+  drw_command_compute(shgroup, groups_x_len, groups_y_len, groups_z_len);
 }
 
 static void drw_shgroup_call_procedural_add_ex(DRWShadingGroup *shgroup,
@@ -978,7 +1014,7 @@ static void drw_sculpt_get_frustum_planes(Object *ob, float planes[6][4])
 
 static void drw_sculpt_generate_calls(DRWSculptCallbackData *scd)
 {
-  /* PBVH should always exist for non-empty meshes, created by depsgrah eval. */
+  /* PBVH should always exist for non-empty meshes, created by depsgraph eval. */
   PBVH *pbvh = (scd->ob->sculpt) ? scd->ob->sculpt->pbvh : NULL;
   if (!pbvh) {
     return;
@@ -1536,8 +1572,8 @@ static void draw_frustum_culling_planes_calc(const float (*persmat)[4], float (*
   planes_from_projmat(persmat,
                       frustum_planes[0],
                       frustum_planes[5],
-                      frustum_planes[3],
                       frustum_planes[1],
+                      frustum_planes[3],
                       frustum_planes[4],
                       frustum_planes[2]);
 
@@ -1601,10 +1637,10 @@ static void draw_frustum_bound_sphere_calc(const BoundBox *bbox,
 
     /* Detect which of the corner of the far clipping plane is the farthest to the origin */
     float nfar[4];               /* most extreme far point in NDC space */
-    float farxy[2];              /* farpoint projection onto the near plane */
+    float farxy[2];              /* far-point projection onto the near plane */
     float farpoint[3] = {0.0f};  /* most extreme far point in camera coordinate */
     float nearpoint[3];          /* most extreme near point in camera coordinate */
-    float farcenter[3] = {0.0f}; /* center of far cliping plane in camera coordinate */
+    float farcenter[3] = {0.0f}; /* center of far clipping plane in camera coordinate */
     float F = -1.0f, N;          /* square distance of far and near point to origin */
     float f, n; /* distance of far and near point to z axis. f is always > 0 but n can be < 0 */
     float e, s; /* far and near clipping distance (<0) */
@@ -1773,7 +1809,7 @@ DRWView *DRW_view_create_sub(const DRWView *parent_view,
  * DRWView Update:
  * This is meant to be done on existing views when rendering in a loop and there is no
  * need to allocate more DRWViews.
- **/
+ */
 
 /* Update matrices of a view created with DRW_view_create_sub. */
 void DRW_view_update_sub(DRWView *view, const float viewmat[4][4], const float winmat[4][4])

@@ -257,7 +257,7 @@ int PyC_ParseBool(PyObject *o, void *p)
 int PyC_ParseStringEnum(PyObject *o, void *p)
 {
   struct PyC_StringEnum *e = p;
-  const char *value = _PyUnicode_AsString(o);
+  const char *value = PyUnicode_AsUTF8(o);
   if (value == NULL) {
     PyErr_Format(PyExc_ValueError, "expected a string, got %s", Py_TYPE(o)->tp_name);
     return 0;
@@ -282,7 +282,18 @@ int PyC_ParseStringEnum(PyObject *o, void *p)
   return 0;
 }
 
-/* silly function, we dont use arg. just check its compatible with __deepcopy__ */
+const char *PyC_StringEnum_FindIDFromValue(const struct PyC_StringEnumItems *items,
+                                           const int value)
+{
+  for (int i = 0; items[i].id; i++) {
+    if (items[i].value == value) {
+      return items[i].id;
+    }
+  }
+  return NULL;
+}
+
+/* Silly function, we don't use arg. just check its compatible with `__deepcopy__`. */
 int PyC_CheckArgs_DeepCopy(PyObject *args)
 {
   PyObject *dummy_pydict;
@@ -343,7 +354,7 @@ void PyC_ObSpitStr(char *result, size_t result_len, PyObject *var)
                  (int)var->ob_refcnt,
                  (void *)var,
                  type ? type->tp_name : null_str,
-                 var_str ? _PyUnicode_AsString(var_str) : "<error>");
+                 var_str ? PyUnicode_AsUTF8(var_str) : "<error>");
     if (var_str != NULL) {
       Py_DECREF(var_str);
     }
@@ -405,7 +416,7 @@ void PyC_FileAndNum(const char **r_filename, int *r_lineno)
 
   /* when executing a script */
   if (r_filename) {
-    *r_filename = _PyUnicode_AsString(frame->f_code->co_filename);
+    *r_filename = PyUnicode_AsUTF8(frame->f_code->co_filename);
   }
 
   /* when executing a module */
@@ -418,7 +429,7 @@ void PyC_FileAndNum(const char **r_filename, int *r_lineno)
       if (mod) {
         PyObject *mod_file = PyModule_GetFilenameObject(mod);
         if (mod_file) {
-          *r_filename = _PyUnicode_AsString(mod_name);
+          *r_filename = PyUnicode_AsUTF8(mod_name);
           Py_DECREF(mod_file);
         }
         else {
@@ -428,7 +439,7 @@ void PyC_FileAndNum(const char **r_filename, int *r_lineno)
 
       /* unlikely, fallback */
       if (*r_filename == NULL) {
-        *r_filename = _PyUnicode_AsString(mod_name);
+        *r_filename = PyUnicode_AsUTF8(mod_name);
       }
     }
   }
@@ -512,7 +523,7 @@ PyObject *PyC_FrozenSetFromStrings(const char **strings)
 /**
  * Similar to #PyErr_Format(),
  *
- * Implementation - we cant actually prepend the existing exception,
+ * Implementation - we can't actually prepend the existing exception,
  * because it could have _any_ arguments given to it, so instead we get its
  * ``__str__`` output and raise our own exception including it.
  */
@@ -569,9 +580,9 @@ void PyC_Err_PrintWithFunc(PyObject *py_func)
   /* use py style error */
   fprintf(stderr,
           "File \"%s\", line %d, in %s\n",
-          _PyUnicode_AsString(f_code->co_filename),
+          PyUnicode_AsUTF8(f_code->co_filename),
           f_code->co_firstlineno,
-          _PyUnicode_AsString(((PyFunctionObject *)py_func)->func_name));
+          PyUnicode_AsUTF8(((PyFunctionObject *)py_func)->func_name));
 }
 
 /** \} */
@@ -722,7 +733,6 @@ PyObject *PyC_ExceptionBuffer_Simple(void)
 
   PyErr_Restore(error_type, error_value, error_traceback);
 
-  PyErr_Print();
   PyErr_Clear();
   return string_io_buf;
 }
@@ -740,7 +750,7 @@ const char *PyC_UnicodeAsByteAndSize(PyObject *py_str, Py_ssize_t *size, PyObjec
 {
   const char *result;
 
-  result = _PyUnicode_AsStringAndSize(py_str, size);
+  result = PyUnicode_AsUTF8AndSize(py_str, size);
 
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
@@ -767,7 +777,7 @@ const char *PyC_UnicodeAsByte(PyObject *py_str, PyObject **coerce)
 {
   const char *result;
 
-  result = _PyUnicode_AsString(py_str);
+  result = PyUnicode_AsUTF8(py_str);
 
   if (result) {
     /* 99% of the time this is enough but we better support non unicode
@@ -836,7 +846,7 @@ PyObject *PyC_DefaultNameSpace(const char *filename)
   PyModule_AddStringConstant(mod_main, "__name__", "__main__");
   if (filename) {
     /* __file__ mainly for nice UI'ness
-     * note: this wont map to a real file when executing text-blocks and buttons. */
+     * note: this won't map to a real file when executing text-blocks and buttons. */
     PyModule_AddObject(mod_main, "__file__", PyC_UnicodeFromByte(filename));
   }
   PyModule_AddObject(mod_main, "__builtins__", builtins);
@@ -865,11 +875,11 @@ bool PyC_NameSpace_ImportArray(PyObject *py_dict, const char *imports[])
 }
 
 /* restore MUST be called after this */
-void PyC_MainModule_Backup(PyObject **main_mod)
+void PyC_MainModule_Backup(PyObject **r_main_mod)
 {
   PyObject *modules = PyImport_GetModuleDict();
-  *main_mod = PyDict_GetItemString(modules, "__main__");
-  Py_XINCREF(*main_mod); /* don't free */
+  *r_main_mod = PyDict_GetItemString(modules, "__main__");
+  Py_XINCREF(*r_main_mod); /* don't free */
 }
 
 void PyC_MainModule_Restore(PyObject *main_mod)
@@ -877,40 +887,6 @@ void PyC_MainModule_Restore(PyObject *main_mod)
   PyObject *modules = PyImport_GetModuleDict();
   PyDict_SetItemString(modules, "__main__", main_mod);
   Py_XDECREF(main_mod);
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name #Py_SetPythonHome Wrapper
- * \{ */
-
-/**
- * - Must be called before #Py_Initialize.
- * - Expects output of `BKE_appdir_folder_id(BLENDER_PYTHON, NULL)`.
- * - Note that the `PYTHONPATH` environment variable isn't reliable, see T31506.
- *   Use #Py_SetPythonHome instead.
- */
-void PyC_SetHomePath(const char *py_path_bundle)
-{
-#  ifdef __APPLE__
-  /* OSX allow file/directory names to contain : character (represented as / in the Finder)
-   * but current Python lib (release 3.1.1) doesn't handle these correctly */
-  if (strchr(py_path_bundle, ':')) {
-    fprintf(stderr,
-            "Warning! Blender application is located in a path containing ':' or '/' chars\n"
-            "This may make python import function fail\n");
-  }
-#  endif
-
-  /* Set the environment path. */
-  wchar_t py_path_bundle_wchar[1024];
-
-  /* Can't use `mbstowcs` on linux gives bug: T23018. */
-  BLI_strncpy_wchar_from_utf8(
-      py_path_bundle_wchar, py_path_bundle, ARRAY_SIZE(py_path_bundle_wchar));
-
-  Py_SetPythonHome(py_path_bundle_wchar);
 }
 
 bool PyC_IsInterpreterActive(void)
@@ -1180,7 +1156,7 @@ int PyC_FlagSet_ToBitfield(PyC_FlagSet *items,
   *r_value = 0;
 
   while (_PySet_NextEntry(value, &pos, &key, &hash)) {
-    const char *param = _PyUnicode_AsString(key);
+    const char *param = PyUnicode_AsUTF8(key);
 
     if (param == NULL) {
       PyErr_Format(PyExc_TypeError,
@@ -1358,7 +1334,7 @@ bool PyC_RunString_AsStringAndSize(const char *imports[],
     const char *val;
     Py_ssize_t val_len;
 
-    val = _PyUnicode_AsStringAndSize(retval, &val_len);
+    val = PyUnicode_AsUTF8AndSize(retval, &val_len);
     if (val == NULL && PyErr_Occurred()) {
       ok = false;
     }
@@ -1483,7 +1459,6 @@ uint32_t PyC_Long_AsU32(PyObject *value)
 
 /* -------------------------------------------------------------------- */
 /** \name Py_buffer Utils
- *
  * \{ */
 
 char PyC_StructFmt_type_from_str(const char *typestr)

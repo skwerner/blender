@@ -30,7 +30,6 @@
 
 #include "MEM_guardedalloc.h"
 
-#include "BLI_blenlib.h"
 #include "BLI_math.h"
 #include "BLI_string_utils.h"
 
@@ -49,8 +48,6 @@
 
 #include "ED_armature.h"
 #include "ED_mesh.h"
-
-#include "eigen_capi.h"
 
 #include "armature_intern.h"
 #include "meshlaplacian.h"
@@ -489,8 +486,8 @@ void ED_object_vgroup_calc_from_armature(ReportList *reports,
     defbase_add = bone_looper(ob, arm->bonebase.first, NULL, vgroup_add_unique_bone_cb);
 
     if (defbase_add) {
-      /* its possible there are DWeight's outside the range of the current
-       * objects deform groups, in this case the new groups wont be empty T33889. */
+      /* It's possible there are DWeights outside the range of the current
+       * object's deform groups. In this case the new groups won't be empty T33889. */
       ED_vgroup_data_clamp_range(ob->data, defbase_tot);
     }
   }

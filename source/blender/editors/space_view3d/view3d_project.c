@@ -38,7 +38,6 @@
 
 #include "ED_view3d.h" /* own include */
 
-#define BL_NEAR_CLIP 0.001
 #define BL_ZERO_CLIP 0.001
 
 /* Non Clipping Projection Functions
@@ -139,37 +138,31 @@ static eV3DProjStatus ed_view3d_project__internal(const ARegion *region,
   copy_v3_v3(vec4, co);
   vec4[3] = 1.0;
   mul_m4_v4(perspmat, vec4);
+  const float w = fabsf(vec4[3]);
 
-  if (((flag & V3D_PROJ_TEST_CLIP_ZERO) == 0) || (fabsf(vec4[3]) > (float)BL_ZERO_CLIP)) {
-    if (((flag & V3D_PROJ_TEST_CLIP_NEAR) == 0) || (vec4[3] > (float)BL_NEAR_CLIP)) {
-      const float scalar = (vec4[3] != 0.0f) ? (1.0f / vec4[3]) : 0.0f;
-      const float fx = ((float)region->winx / 2.0f) * (1.0f + (vec4[0] * scalar));
-      if (((flag & V3D_PROJ_TEST_CLIP_WIN) == 0) || (fx > 0.0f && fx < (float)region->winx)) {
-        const float fy = ((float)region->winy / 2.0f) * (1.0f + (vec4[1] * scalar));
-        if (((flag & V3D_PROJ_TEST_CLIP_WIN) == 0) || (fy > 0.0f && fy < (float)region->winy)) {
-          r_co[0] = fx;
-          r_co[1] = fy;
-
-          /* check if the point is behind the view, we need to flip in this case */
-          if (UNLIKELY((flag & V3D_PROJ_TEST_CLIP_NEAR) == 0) && (vec4[3] < 0.0f)) {
-            negate_v2(r_co);
-          }
-        }
-        else {
-          return V3D_PROJ_RET_CLIP_WIN;
-        }
-      }
-      else {
-        return V3D_PROJ_RET_CLIP_WIN;
-      }
-    }
-    else {
-      return V3D_PROJ_RET_CLIP_NEAR;
-    }
-  }
-  else {
+  if ((flag & V3D_PROJ_TEST_CLIP_ZERO) && (w <= (float)BL_ZERO_CLIP)) {
     return V3D_PROJ_RET_CLIP_ZERO;
   }
+
+  if ((flag & V3D_PROJ_TEST_CLIP_NEAR) && (vec4[2] <= -w)) {
+    return V3D_PROJ_RET_CLIP_NEAR;
+  }
+
+  if ((flag & V3D_PROJ_TEST_CLIP_FAR) && (vec4[2] >= w)) {
+    return V3D_PROJ_RET_CLIP_FAR;
+  }
+
+  const float scalar = (w != 0.0f) ? (1.0f / w) : 0.0f;
+  const float fx = ((float)region->winx / 2.0f) * (1.0f + (vec4[0] * scalar));
+  const float fy = ((float)region->winy / 2.0f) * (1.0f + (vec4[1] * scalar));
+
+  if ((flag & V3D_PROJ_TEST_CLIP_WIN) &&
+      (fx <= 0.0f || fy <= 0.0f || fx >= (float)region->winx || fy >= (float)region->winy)) {
+    return V3D_PROJ_RET_CLIP_WIN;
+  }
+
+  r_co[0] = fx;
+  r_co[1] = fy;
 
   return V3D_PROJ_RET_OK;
 }
@@ -795,7 +788,7 @@ bool ED_view3d_win_to_segment_clipped(struct Depsgraph *depsgraph,
 /** \name Utility functions for projection
  * \{ */
 
-void ED_view3d_ob_project_mat_get(const RegionView3D *rv3d, Object *ob, float r_pmat[4][4])
+void ED_view3d_ob_project_mat_get(const RegionView3D *rv3d, const Object *ob, float r_pmat[4][4])
 {
   float vmat[4][4];
 
@@ -816,23 +809,30 @@ void ED_view3d_ob_project_mat_get_from_obmat(const RegionView3D *rv3d,
 /**
  * Convert between region relative coordinates (x,y) and depth component z and
  * a point in world space. */
-void ED_view3d_project(const struct ARegion *region, const float world[3], float r_region_co[3])
+void ED_view3d_project_v3(const struct ARegion *region, const float world[3], float r_region_co[3])
 {
   /* Viewport is set up to make coordinates relative to the region, not window. */
   RegionView3D *rv3d = region->regiondata;
   const int viewport[4] = {0, 0, region->winx, region->winy};
-
-  GPU_matrix_project(world, rv3d->viewmat, rv3d->winmat, viewport, r_region_co);
+  GPU_matrix_project_3fv(world, rv3d->viewmat, rv3d->winmat, viewport, r_region_co);
 }
 
-bool ED_view3d_unproject(
+void ED_view3d_project_v2(const struct ARegion *region, const float world[3], float r_region_co[2])
+{
+  /* Viewport is set up to make coordinates relative to the region, not window. */
+  RegionView3D *rv3d = region->regiondata;
+  const int viewport[4] = {0, 0, region->winx, region->winy};
+  GPU_matrix_project_2fv(world, rv3d->viewmat, rv3d->winmat, viewport, r_region_co);
+}
+
+bool ED_view3d_unproject_v3(
     const struct ARegion *region, float regionx, float regiony, float regionz, float world[3])
 {
   RegionView3D *rv3d = region->regiondata;
   const int viewport[4] = {0, 0, region->winx, region->winy};
   const float region_co[3] = {regionx, regiony, regionz};
 
-  return GPU_matrix_unproject(region_co, rv3d->viewmat, rv3d->winmat, viewport, world);
+  return GPU_matrix_unproject_3fv(region_co, rv3d->viewmat, rv3d->winmat, viewport, world);
 }
 
 /** \} */

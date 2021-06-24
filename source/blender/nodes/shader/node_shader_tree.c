@@ -184,6 +184,12 @@ static bool shader_validate_link(bNodeTree *UNUSED(ntree), bNodeLink *link)
   return true;
 }
 
+static bool shader_node_tree_socket_type_valid(eNodeSocketDatatype socket_type,
+                                               bNodeTreeType *UNUSED(ntreetype))
+{
+  return ELEM(socket_type, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA, SOCK_SHADER);
+}
+
 bNodeTreeType *ntreeType_Shader;
 
 void register_node_tree_type_sh(void)
@@ -205,6 +211,7 @@ void register_node_tree_type_sh(void)
   tt->poll = shader_tree_poll;
   tt->get_from_context = shader_get_from_context;
   tt->validate_link = shader_validate_link;
+  tt->valid_socket_type = shader_node_tree_socket_type_valid;
 
   tt->rna_ext.srna = &RNA_ShaderNodeTree;
 
@@ -388,7 +395,7 @@ static void ntree_shader_groups_expand_inputs(bNodeTree *localtree)
 
     if (is_group || is_group_output) {
       LISTBASE_FOREACH (bNodeSocket *, socket, &node->inputs) {
-        if (socket->link != NULL) {
+        if (socket->link != NULL && !(socket->link->flag & NODE_LINK_MUTED)) {
           bNodeLink *link = socket->link;
           /* Fix the case where the socket is actually converting the data. (see T71374)
            * We only do the case of lossy conversion to float.*/
@@ -557,12 +564,14 @@ static bool ntree_shader_has_displacement(bNodeTree *ntree,
     /* Non-cycles node is used as an output. */
     return false;
   }
-  if (displacement->link != NULL) {
+
+  if ((displacement->link != NULL) && !(displacement->link->flag & NODE_LINK_MUTED)) {
     *r_node = displacement->link->fromnode;
     *r_socket = displacement->link->fromsock;
     *r_link = displacement->link;
+    return true;
   }
-  return displacement->link != NULL;
+  return false;
 }
 
 static void ntree_shader_relink_node_normal(bNodeTree *ntree,
@@ -1027,31 +1036,4 @@ void ntreeShaderEndExecTree(bNodeTreeExec *exec)
     /* XXX clear nodetree backpointer to exec data, same problem as noted in ntreeBeginExecTree */
     ntree->execdata = NULL;
   }
-}
-
-/* TODO: left over from Blender Internal, could reuse for new texture nodes. */
-bool ntreeShaderExecTree(bNodeTree *ntree, int thread)
-{
-  ShaderCallData scd;
-  bNodeThreadStack *nts = NULL;
-  bNodeTreeExec *exec = ntree->execdata;
-  int compat;
-
-  /* ensure execdata is only initialized once */
-  if (!exec) {
-    BLI_thread_lock(LOCK_NODES);
-    if (!ntree->execdata) {
-      ntree->execdata = ntreeShaderBeginExecTree(ntree);
-    }
-    BLI_thread_unlock(LOCK_NODES);
-
-    exec = ntree->execdata;
-  }
-
-  nts = ntreeGetThreadStack(exec, thread);
-  compat = ntreeExecThreadNodes(exec, nts, &scd, thread);
-  ntreeReleaseThreadStack(nts);
-
-  /* if compat is zero, it has been using non-compatible nodes */
-  return compat;
 }

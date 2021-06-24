@@ -35,19 +35,16 @@
 
 #  include "MEM_guardedalloc.h"
 
-#  include "DNA_mesh_types.h"
 #  include "DNA_modifier_types.h"
 #  include "DNA_object_types.h"
 #  include "DNA_scene_types.h"
 #  include "DNA_space_types.h"
 
 #  include "BKE_context.h"
-#  include "BKE_global.h"
 #  include "BKE_main.h"
 #  include "BKE_report.h"
 
 #  include "BLI_listbase.h"
-#  include "BLI_math_vector.h"
 #  include "BLI_path_util.h"
 #  include "BLI_string.h"
 #  include "BLI_utildefines.h"
@@ -124,6 +121,7 @@ static int wm_alembic_export_exec(bContext *C, wmOperator *op)
       .uvs = RNA_boolean_get(op->ptr, "uvs"),
       .normals = RNA_boolean_get(op->ptr, "normals"),
       .vcolors = RNA_boolean_get(op->ptr, "vcolors"),
+      .orcos = RNA_boolean_get(op->ptr, "orcos"),
       .apply_subdiv = RNA_boolean_get(op->ptr, "apply_subdiv"),
       .curves_as_mesh = RNA_boolean_get(op->ptr, "curves_as_mesh"),
       .flatten_hierarchy = RNA_boolean_get(op->ptr, "flatten"),
@@ -213,6 +211,7 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
 
   uiItemR(col, imfptr, "normals", 0, NULL, ICON_NONE);
   uiItemR(col, imfptr, "vcolors", 0, NULL, ICON_NONE);
+  uiItemR(col, imfptr, "orcos", 0, NULL, ICON_NONE);
   uiItemR(col, imfptr, "face_sets", 0, NULL, ICON_NONE);
   uiItemR(col, imfptr, "curves_as_mesh", 0, NULL, ICON_NONE);
 
@@ -243,21 +242,17 @@ static void ui_alembic_export_settings(uiLayout *layout, PointerRNA *imfptr)
 
 static void wm_alembic_export_draw(bContext *C, wmOperator *op)
 {
-  PointerRNA ptr;
-
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-
   /* Conveniently set start and end frame to match the scene's frame range. */
   Scene *scene = CTX_data_scene(C);
 
-  if (scene != NULL && RNA_boolean_get(&ptr, "init_scene_frame_range")) {
-    RNA_int_set(&ptr, "start", SFRA);
-    RNA_int_set(&ptr, "end", EFRA);
+  if (scene != NULL && RNA_boolean_get(op->ptr, "init_scene_frame_range")) {
+    RNA_int_set(op->ptr, "start", SFRA);
+    RNA_int_set(op->ptr, "end", EFRA);
 
-    RNA_boolean_set(&ptr, "init_scene_frame_range", false);
+    RNA_boolean_set(op->ptr, "init_scene_frame_range", false);
   }
 
-  ui_alembic_export_settings(op->layout, &ptr);
+  ui_alembic_export_settings(op->layout, op->ptr);
 }
 
 static bool wm_alembic_export_check(bContext *UNUSED(C), wmOperator *op)
@@ -385,6 +380,12 @@ void WM_OT_alembic_export(wmOperatorType *ot)
 
   RNA_def_boolean(ot->srna, "vcolors", 0, "Vertex Colors", "Export vertex colors");
 
+  RNA_def_boolean(ot->srna,
+                  "orcos",
+                  true,
+                  "Generated Coordinates",
+                  "Export undeformed mesh vertex coordinates");
+
   RNA_def_boolean(
       ot->srna, "face_sets", 0, "Face Sets", "Export per face shading group assignments");
 
@@ -428,7 +429,7 @@ void WM_OT_alembic_export(wmOperatorType *ot)
                   "triangulate",
                   false,
                   "Triangulate",
-                  "Export Polygons (Quads & NGons) as Triangles");
+                  "Export polygons (quads and n-gons) as triangles");
 
   RNA_def_enum(ot->srna,
                "quad_method",
@@ -439,10 +440,10 @@ void WM_OT_alembic_export(wmOperatorType *ot)
 
   RNA_def_enum(ot->srna,
                "ngon_method",
-               rna_enum_modifier_triangulate_quad_method_items,
+               rna_enum_modifier_triangulate_ngon_method_items,
                MOD_TRIANGULATE_NGON_BEAUTY,
-               "Polygon Method",
-               "Method for splitting the polygons into triangles");
+               "N-gon Method",
+               "Method for splitting the n-gons into triangles");
 
   RNA_def_boolean(ot->srna,
                   "export_hair",
@@ -598,10 +599,7 @@ static void ui_alembic_import_settings(uiLayout *layout, PointerRNA *imfptr)
 
 static void wm_alembic_import_draw(bContext *UNUSED(C), wmOperator *op)
 {
-  PointerRNA ptr;
-
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-  ui_alembic_import_settings(op->layout, &ptr);
+  ui_alembic_import_settings(op->layout, op->ptr);
 }
 
 /* op->invoke, opens fileselect if path property not set, otherwise executes */

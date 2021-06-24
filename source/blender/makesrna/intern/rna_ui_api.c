@@ -480,7 +480,6 @@ static void rna_uiTemplateID(uiLayout *layout,
                              PointerRNA *ptr,
                              const char *propname,
                              const char *newop,
-                             const char *duplicateop,
                              const char *openop,
                              const char *unlinkop,
                              int filter,
@@ -499,8 +498,7 @@ static void rna_uiTemplateID(uiLayout *layout,
   /* Get translated name (label). */
   name = rna_translate_ui_text(name, text_ctxt, NULL, prop, translate);
 
-  uiTemplateID(
-      layout, C, ptr, propname, newop, duplicateop, openop, unlinkop, filter, live_icon, name);
+  uiTemplateID(layout, C, ptr, propname, newop, openop, unlinkop, filter, live_icon, name);
 }
 
 static void rna_uiTemplateAnyID(uiLayout *layout,
@@ -597,7 +595,7 @@ static const char *rna_ui_get_enum_name(bContext *C,
                                         const char *identifier)
 {
   PropertyRNA *prop = NULL;
-  const EnumPropertyItem *items = NULL, *item;
+  const EnumPropertyItem *items = NULL;
   bool free;
   const char *name = "";
 
@@ -611,11 +609,9 @@ static const char *rna_ui_get_enum_name(bContext *C,
   RNA_property_enum_items_gettexted(C, ptr, prop, &items, NULL, &free);
 
   if (items) {
-    for (item = items; item->identifier; item++) {
-      if (item->identifier[0] && STREQ(item->identifier, identifier)) {
-        name = item->name;
-        break;
-      }
+    const int index = RNA_enum_from_identifier(items, identifier);
+    if (index != -1) {
+      name = items[index].name;
     }
     if (free) {
       MEM_freeN((void *)items);
@@ -631,7 +627,7 @@ static const char *rna_ui_get_enum_description(bContext *C,
                                                const char *identifier)
 {
   PropertyRNA *prop = NULL;
-  const EnumPropertyItem *items = NULL, *item;
+  const EnumPropertyItem *items = NULL;
   bool free;
   const char *desc = "";
 
@@ -645,11 +641,9 @@ static const char *rna_ui_get_enum_description(bContext *C,
   RNA_property_enum_items_gettexted(C, ptr, prop, &items, NULL, &free);
 
   if (items) {
-    for (item = items; item->identifier; item++) {
-      if (item->identifier[0] && STREQ(item->identifier, identifier)) {
-        desc = item->description;
-        break;
-      }
+    const int index = RNA_enum_from_identifier(items, identifier);
+    if (index != -1) {
+      desc = items[index].description;
     }
     if (free) {
       MEM_freeN((void *)items);
@@ -665,7 +659,7 @@ static int rna_ui_get_enum_icon(bContext *C,
                                 const char *identifier)
 {
   PropertyRNA *prop = NULL;
-  const EnumPropertyItem *items = NULL, *item;
+  const EnumPropertyItem *items = NULL;
   bool free;
   int icon = ICON_NONE;
 
@@ -679,11 +673,9 @@ static int rna_ui_get_enum_icon(bContext *C,
   RNA_property_enum_items(C, ptr, prop, &items, NULL, &free);
 
   if (items) {
-    for (item = items; item->identifier; item++) {
-      if (item->identifier[0] && STREQ(item->identifier, identifier)) {
-        icon = item->icon;
-        break;
-      }
+    const int index = RNA_enum_from_identifier(items, identifier);
+    if (index != -1) {
+      icon = items[index].icon;
     }
     if (free) {
       MEM_freeN((void *)items);
@@ -1026,7 +1018,8 @@ void RNA_api_ui_layout(StructRNA *srna)
 
   func = RNA_def_function(srna, "operator_menu_enum", "rna_uiItemMenuEnumO");
   RNA_def_function_flag(func, FUNC_USE_CONTEXT);
-  api_ui_item_op(func); /* cant use api_ui_item_op_common because property must come right after */
+  /* Can't use #api_ui_item_op_common because property must come right after. */
+  api_ui_item_op(func);
   parm = RNA_def_string(func, "property", NULL, 0, "", "Identifier of property in operator");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
   api_ui_item_common(func);
@@ -1158,11 +1151,8 @@ void RNA_api_ui_layout(StructRNA *srna)
   api_ui_item_rna_common(func);
   RNA_def_string(func, "new", NULL, 0, "", "Operator identifier to create a new ID block");
   RNA_def_string(
-      func, "duplicate", NULL, 0, "", "Operator identifier to duplicate the selected ID block");
-  RNA_def_string(
       func, "open", NULL, 0, "", "Operator identifier to open a file for creating a new ID block");
-  RNA_def_string(
-      func, "unlink", NULL, 0, "", "Operator identifier to unlink the selected ID block");
+  RNA_def_string(func, "unlink", NULL, 0, "", "Operator identifier to unlink the ID block");
   RNA_def_enum(func,
                "filter",
                id_template_filter_items,

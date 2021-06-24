@@ -26,7 +26,7 @@
 #ifdef WITH_OPENVDB
 #  include <openvdb/openvdb.h>
 openvdb::GridBase::ConstPtr BKE_volume_grid_openvdb_for_read(const struct Volume *volume,
-                                                             struct VolumeGrid *grid);
+                                                             const struct VolumeGrid *grid);
 #endif
 
 CCL_NAMESPACE_BEGIN
@@ -41,7 +41,7 @@ class BlenderSmokeLoader : public ImageLoader {
     mesh_texture_space(b_mesh, texspace_loc, texspace_size);
   }
 
-  bool load_metadata(ImageMetaData &metadata) override
+  bool load_metadata(const ImageDeviceFeatures &, ImageMetaData &metadata) override
   {
     if (!b_domain) {
       return false;
@@ -222,14 +222,12 @@ class BlenderVolumeLoader : public VDBImageLoader {
     b_volume.grids.load(b_data.ptr.data);
 
 #ifdef WITH_OPENVDB
-    BL::Volume::grids_iterator b_grid_iter;
-    for (b_volume.grids.begin(b_grid_iter); b_grid_iter != b_volume.grids.end(); ++b_grid_iter) {
-      BL::VolumeGrid b_volume_grid(*b_grid_iter);
+    for (BL::VolumeGrid &b_volume_grid : b_volume.grids) {
       if (b_volume_grid.name() == grid_name) {
         const bool unload = !b_volume_grid.is_loaded();
 
         ::Volume *volume = (::Volume *)b_volume.ptr.data;
-        VolumeGrid *volume_grid = (VolumeGrid *)b_volume_grid.ptr.data;
+        const VolumeGrid *volume_grid = (VolumeGrid *)b_volume_grid.ptr.data;
         grid = BKE_volume_grid_openvdb_for_read(volume, volume_grid);
 
         if (unload) {
@@ -260,9 +258,7 @@ static void sync_volume_object(BL::BlendData &b_data,
   volume->set_object_space((b_render.space() == BL::VolumeRender::space_OBJECT));
 
   /* Find grid with matching name. */
-  BL::Volume::grids_iterator b_grid_iter;
-  for (b_volume.grids.begin(b_grid_iter); b_grid_iter != b_volume.grids.end(); ++b_grid_iter) {
-    BL::VolumeGrid b_grid = *b_grid_iter;
+  for (BL::VolumeGrid &b_grid : b_volume.grids) {
     ustring name = ustring(b_grid.name());
     AttributeStandard std = ATTR_STD_NONE;
 

@@ -110,7 +110,7 @@ BLI_STATIC_ASSERT_ALIGN(gpLight, 16)
 typedef struct GPENCIL_MaterialPool {
   /* Linklist. */
   struct GPENCIL_MaterialPool *next;
-  /* GPU representatin of materials. */
+  /* GPU representation of materials. */
   gpMaterial mat_data[GP_MATERIAL_BUFFER_LEN];
   /* Matching ubo. */
   struct GPUUniformBuf *ubo;
@@ -122,7 +122,7 @@ typedef struct GPENCIL_MaterialPool {
 } GPENCIL_MaterialPool;
 
 typedef struct GPENCIL_LightPool {
-  /* GPU representatin of materials. */
+  /* GPU representation of materials. */
   gpLight light_data[GPENCIL_LIGHT_BUFFER_LEN];
   /* Matching ubo. */
   struct GPUUniformBuf *ubo;
@@ -151,7 +151,7 @@ typedef struct GPENCIL_tVfx {
   /** Linklist */
   struct GPENCIL_tVfx *next;
   DRWPass *vfx_ps;
-  /* Framebuffer reference since it may not be allocated yet. */
+  /* Frame-buffer reference since it may not be allocated yet. */
   GPUFrameBuffer **target_fb;
 } GPENCIL_tVfx;
 
@@ -297,7 +297,9 @@ typedef struct GPENCIL_PrivateData {
   int v3d_color_type;
   /* Current frame */
   int cfra;
-  /* If we are rendering for final render (F12). */
+  /* If we are rendering for final render (F12).
+   * NOTE: set to false for viewport and opengl rendering (including VSE scene rendering), but set
+   * to true when rendering in `OB_RENDER` shading mode (viewport or opengl rendering) */
   bool is_render;
   /* If we are in viewport display (used for VFX). */
   bool is_viewport;
@@ -342,6 +344,8 @@ typedef struct GPENCIL_PrivateData {
 
   /* Display onion skinning */
   bool do_onion;
+  /* Playing animation */
+  bool playing;
   /* simplify settings */
   bool simplify_fill;
   bool simplify_fx;
@@ -350,7 +354,7 @@ typedef struct GPENCIL_PrivateData {
   bool use_lighting;
   /* Use physical lights or just ambient lighting. */
   bool use_lights;
-  /* Do we need additional framebuffers? */
+  /* Do we need additional frame-buffers? */
   bool use_layer_fb;
   bool use_object_fb;
   bool use_mask_fb;

@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8-80 compliant>
+from __future__ import annotations
 
 from bpy.types import (
     Operator,
@@ -32,6 +33,11 @@ class CONSTRAINT_OT_add_target(Operator):
     bl_label = "Add Target"
     bl_options = {'UNDO', 'INTERNAL'}
 
+    @classmethod
+    def poll(cls, context):
+        constraint = getattr(context, "constraint", None)
+        return constraint
+
     def execute(self, context):
         context.constraint.targets.new()
         return {'FINISHED'}
@@ -45,6 +51,11 @@ class CONSTRAINT_OT_remove_target(Operator):
 
     index: IntProperty()
 
+    @classmethod
+    def poll(cls, context):
+        constraint = getattr(context, "constraint", None)
+        return constraint
+
     def execute(self, context):
         tgts = context.constraint.targets
         tgts.remove(tgts[self.index])
@@ -56,6 +67,11 @@ class CONSTRAINT_OT_normalize_target_weights(Operator):
     bl_idname = "constraint.normalize_target_weights"
     bl_label = "Normalize Weights"
     bl_options = {'UNDO', 'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        constraint = getattr(context, "constraint", None)
+        return constraint
 
     def execute(self, context):
         tgts = context.constraint.targets

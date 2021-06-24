@@ -44,7 +44,6 @@
 
 /* -------------------------------------------------------------------- */
 /** \name UVs Transform Creation
- *
  * \{ */
 
 static void UVsToTransData(const float aspect[2],
@@ -92,7 +91,7 @@ static void UVsToTransData(const float aspect[2],
  */
 static void uv_set_connectivity_distance(BMesh *bm, float *dists, const float aspect[2])
 {
-  /* Mostly copied from #editmesh_set_connectivity_distance. */
+  /* Mostly copied from #transform_convert_mesh_connectivity_distance. */
   BLI_LINKSTACK_DECLARE(queue, BMLoop *);
 
   /* Any BM_ELEM_TAG'd loop is added to 'queue_next', this makes sure that we don't add things
@@ -414,7 +413,6 @@ void createTransUVs(bContext *C, TransInfo *t)
 
 /* -------------------------------------------------------------------- */
 /** \name UVs Transform Flush
- *
  * \{ */
 
 static void flushTransUVs(TransInfo *t)
@@ -477,7 +475,7 @@ void recalcData_uv(TransInfo *t)
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     if (tc->data_len) {
-      DEG_id_tag_update(tc->obedit->data, 0);
+      DEG_id_tag_update(tc->obedit->data, ID_RECALC_GEOMETRY);
     }
   }
 }

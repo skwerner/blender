@@ -64,7 +64,7 @@ extern "C" {
 #  define S_ISDIR(x) (((x)&_S_IFDIR) == _S_IFDIR)
 #endif
 
-/* defines for using ISO C++ conformant names */
+/* Defines for using ISO C++ conferment names. */
 #if !defined(_MSC_VER) || _MSC_VER < 1900
 #  define snprintf _snprintf
 #endif
@@ -105,7 +105,7 @@ int closedir(DIR *dp);
 const char *dirname(char *path);
 
 /* Windows utility functions. */
-void BLI_windows_register_blend_extension(const bool background);
+bool BLI_windows_register_blend_extension(const bool background);
 void BLI_windows_get_default_root_dir(char *root_dir);
 int BLI_windows_get_executable_dir(char *str);
 

@@ -44,6 +44,7 @@
 #include "bpy_operator.h"
 #include "bpy_props.h"
 #include "bpy_rna.h"
+#include "bpy_rna_data.h"
 #include "bpy_rna_gizmo.h"
 #include "bpy_rna_id_collection.h"
 #include "bpy_rna_types_capi.h"
@@ -117,7 +118,7 @@ static PyObject *bpy_blend_paths(PyObject *UNUSED(self), PyObject *args, PyObjec
   bool local = false;
 
   static const char *_keywords[] = {"absolute", "packed", "local", NULL};
-  static _PyArg_Parser _parser = {"|O&O&O&:blend_paths", _keywords, 0};
+  static _PyArg_Parser _parser = {"|$O&O&O&:blend_paths", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args,
                                         kw,
                                         &_parser,
@@ -163,8 +164,8 @@ static PyObject *bpy_user_resource(PyObject *UNUSED(self), PyObject *args, PyObj
 
   const char *path;
 
-  static const char *_keywords[] = {"type", "subdir", NULL};
-  static _PyArg_Parser _parser = {"O&|s:user_resource", _keywords, 0};
+  static const char *_keywords[] = {"type", "path", NULL};
+  static _PyArg_Parser _parser = {"O&|$s:user_resource", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, PyC_ParseStringEnum, &type, &subdir)) {
     return NULL;
   }
@@ -200,7 +201,7 @@ static PyObject *bpy_system_resource(PyObject *UNUSED(self), PyObject *args, PyO
   const char *path;
 
   static const char *_keywords[] = {"type", "path", NULL};
-  static _PyArg_Parser _parser = {"O&|s:system_resource", _keywords, 0};
+  static _PyArg_Parser _parser = {"O&|$s:system_resource", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args, kw, &_parser, PyC_ParseStringEnum, &type, &subdir)) {
     return NULL;
   }
@@ -238,7 +239,7 @@ static PyObject *bpy_resource_path(PyObject *UNUSED(self), PyObject *args, PyObj
   const char *path;
 
   static const char *_keywords[] = {"type", "major", "minor", NULL};
-  static _PyArg_Parser _parser = {"O&|ii:resource_path", _keywords, 0};
+  static _PyArg_Parser _parser = {"O&|$ii:resource_path", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(
           args, kw, &_parser, PyC_ParseStringEnum, &type, &major, &minor)) {
     return NULL;
@@ -261,7 +262,7 @@ PyDoc_STRVAR(bpy_escape_identifier_doc,
 static PyObject *bpy_escape_identifier(PyObject *UNUSED(self), PyObject *value)
 {
   Py_ssize_t value_str_len;
-  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+  const char *value_str = PyUnicode_AsUTF8AndSize(value, &value_str_len);
 
   if (value_str == NULL) {
     PyErr_SetString(PyExc_TypeError, "expected a string");
@@ -299,7 +300,7 @@ PyDoc_STRVAR(bpy_unescape_identifier_doc,
 static PyObject *bpy_unescape_identifier(PyObject *UNUSED(self), PyObject *value)
 {
   Py_ssize_t value_str_len;
-  const char *value_str = _PyUnicode_AsStringAndSize(value, &value_str_len);
+  const char *value_str = PyUnicode_AsUTF8AndSize(value, &value_str_len);
 
   if (value_str == NULL) {
     PyErr_SetString(PyExc_TypeError, "expected a string");
@@ -402,7 +403,7 @@ void BPy_init_modules(struct bContext *C)
     Py_DECREF(py_modpath);
   }
   else {
-    printf("bpy: couldn't find 'scripts/modules', blender probably wont start.\n");
+    printf("bpy: couldn't find 'scripts/modules', blender probably won't start.\n");
   }
   /* stand alone utility modules not related to blender directly */
   IDProp_Init_Types(); /* not actually a submodule, just types */
@@ -424,6 +425,8 @@ void BPy_init_modules(struct bContext *C)
 
   /* needs to be first so bpy_types can run */
   BPY_library_load_type_ready();
+
+  BPY_rna_data_context_type_ready();
 
   BPY_rna_gizmo_module(mod);
 

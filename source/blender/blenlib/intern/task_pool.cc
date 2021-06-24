@@ -34,9 +34,9 @@
 #include "BLI_threads.h"
 
 #ifdef WITH_TBB
-/* Quiet top level deprecation message, unrelated to API usage here. */
-#  define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
-#  include <tbb/tbb.h>
+#  include <tbb/blocked_range.h>
+#  include <tbb/task_arena.h>
+#  include <tbb/task_group.h>
 #endif
 
 /* Task
@@ -111,15 +111,7 @@ class Task {
   Task &operator=(const Task &other) = delete;
   Task &operator=(Task &&other) = delete;
 
-  /* Execute task. */
-  void operator()() const
-  {
-#ifdef WITH_TBB
-    tbb::this_task_arena::isolate([this] { run(pool, taskdata); });
-#else
-    run(pool, taskdata);
-#endif
-  }
+  void operator()() const;
 };
 
 /* TBB Task Group.
@@ -131,6 +123,12 @@ class TBBTaskGroup : public tbb::task_group {
  public:
   TBBTaskGroup(TaskPriority priority)
   {
+#  if TBB_INTERFACE_VERSION_MAJOR >= 12
+    /* TODO: support priorities in TBB 2021, where they are only available as
+     * part of task arenas, no longer for task groups. Or remove support for
+     * task priorities if they are no longer useful. */
+    UNUSED_VARS(priority);
+#  else
     switch (priority) {
       case TASK_PRIORITY_LOW:
         my_context.set_priority(tbb::priority_low);
@@ -139,10 +137,7 @@ class TBBTaskGroup : public tbb::task_group {
         my_context.set_priority(tbb::priority_normal);
         break;
     }
-  }
-
-  ~TBBTaskGroup()
-  {
+#  endif
   }
 };
 #endif
@@ -164,8 +159,8 @@ struct TaskPool {
   ThreadMutex user_mutex;
   void *userdata;
 
-  /* TBB task pool. */
 #ifdef WITH_TBB
+  /* TBB task pool. */
   TBBTaskGroup tbb_group;
 #endif
   volatile bool is_suspended;
@@ -176,6 +171,12 @@ struct TaskPool {
   ThreadQueue *background_queue;
   volatile bool background_is_canceling;
 };
+
+/* Execute task. */
+void Task::operator()() const
+{
+  run(pool, taskdata);
+}
 
 /* TBB Task Pool.
  *
@@ -268,7 +269,7 @@ static bool tbb_task_pool_canceled(TaskPool *pool)
 {
 #ifdef WITH_TBB
   if (pool->use_threads) {
-    return pool->tbb_group.is_canceling();
+    return tbb::is_current_task_group_canceling();
   }
 #else
   UNUSED_VARS(pool);
@@ -520,7 +521,7 @@ void BLI_task_pool_cancel(TaskPool *pool)
   }
 }
 
-bool BLI_task_pool_canceled(TaskPool *pool)
+bool BLI_task_pool_current_canceled(TaskPool *pool)
 {
   switch (pool->type) {
     case TASK_POOL_TBB:

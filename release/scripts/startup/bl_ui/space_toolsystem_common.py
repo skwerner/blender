@@ -218,7 +218,7 @@ class ToolSelectPanelHelper:
             assert(type(icon_name) is str)
             icon_value = _icon_cache.get(icon_name)
             if icon_value is None:
-                dirname = bpy.utils.system_resource('DATAFILES', "icons")
+                dirname = bpy.utils.system_resource('DATAFILES', path="icons")
                 filename = os.path.join(dirname, icon_name + ".dat")
                 try:
                     icon_value = bpy.app.icons.new_triangles_from_file(filename)
@@ -1004,7 +1004,7 @@ def _activate_by_item(context, space_type, item, index, *, as_fallback=False):
     if item.draw_cursor is not None:
         def handle_fn(context, item, tool, xy):
             item.draw_cursor(context, tool, xy)
-        handle = WindowManager.draw_cursor_add(handle_fn, (context, item, tool), space_type)
+        handle = WindowManager.draw_cursor_add(handle_fn, (context, item, tool), space_type, 'WINDOW')
         handle_map[space_type] = handle
 
 

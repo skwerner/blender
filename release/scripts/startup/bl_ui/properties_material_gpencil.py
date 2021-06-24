@@ -46,12 +46,18 @@ class GPENCIL_MT_material_context_menu(Menu):
 
         layout.separator()
 
-        layout.operator("object.material_slot_remove_unused")
-        layout.operator("gpencil.stroke_merge_material", text="Merge Similar")
-
-        layout.separator()
         layout.operator("gpencil.material_to_vertex_color", text="Convert Materials to Vertex Color")
         layout.operator("gpencil.extract_palette_vertex", text="Extract Palette from Vertex Color")
+
+        layout.separator()
+
+        layout.operator("gpencil.materials_copy_to_object", text="Copy Material to Selected").only_active = True
+        layout.operator("gpencil.materials_copy_to_object", text="Copy All Materials to Selected").only_active = False
+
+        layout.separator()
+
+        layout.operator("gpencil.stroke_merge_material", text="Merge Similar")
+        layout.operator("object.material_slot_remove_unused")
 
 
 class GPENCIL_UL_matslots(UIList):
@@ -245,8 +251,8 @@ class MATERIAL_PT_gpencil_custom_props(GPMaterialButtonsPanel, PropertyPanel, Pa
     _property_type = bpy.types.Material
 
 
-class MATERIAL_PT_gpencil_options(GPMaterialButtonsPanel, Panel):
-    bl_label = "Options"
+class MATERIAL_PT_gpencil_settings(GPMaterialButtonsPanel, Panel):
+    bl_label = "Settings"
     bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
@@ -275,7 +281,7 @@ classes = (
     MATERIAL_PT_gpencil_surface,
     MATERIAL_PT_gpencil_strokecolor,
     MATERIAL_PT_gpencil_fillcolor,
-    MATERIAL_PT_gpencil_options,
+    MATERIAL_PT_gpencil_settings,
     MATERIAL_PT_gpencil_custom_props,
 )
 

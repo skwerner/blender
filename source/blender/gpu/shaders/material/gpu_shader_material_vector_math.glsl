@@ -138,3 +138,21 @@ void vector_math_tangent(
 {
   outVector = tan(a);
 }
+
+void vector_math_refract(
+    vec3 a, vec3 b, vec3 c, float scale, out vec3 outVector, out float outValue)
+{
+  outVector = refract(a, normalize(b), scale);
+}
+
+void vector_math_faceforward(
+    vec3 a, vec3 b, vec3 c, float scale, out vec3 outVector, out float outValue)
+{
+  outVector = faceforward(a, b, c);
+}
+
+void vector_math_multiply_add(
+    vec3 a, vec3 b, vec3 c, float scale, out vec3 outVector, out float outValue)
+{
+  outVector = a * b + c;
+}

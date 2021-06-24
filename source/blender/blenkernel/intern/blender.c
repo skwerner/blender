@@ -132,7 +132,7 @@ static void blender_version_init(void)
 
   BLI_snprintf(blender_version_string,
                ARRAY_SIZE(blender_version_string),
-               "%d.%02d.%d%s",
+               "%d.%01d.%d%s",
                BLENDER_VERSION / 100,
                BLENDER_VERSION % 100,
                BLENDER_VERSION_PATCH,
@@ -417,7 +417,7 @@ void BKE_blender_atexit_unregister(void (*func)(void *user_data), const void *us
       free(ae);
       return;
     }
-    ae_p = &ae;
+    ae_p = &ae->next;
     ae = ae->next;
   }
 }

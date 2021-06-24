@@ -14,11 +14,21 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "BLI_math_matrix.h"
+#ifdef WITH_OPENVDB
+#  include <openvdb/openvdb.h>
+#endif
 
+#include "BLI_float4x4.hh"
+
+#include "DNA_mesh_types.h"
 #include "DNA_pointcloud_types.h"
+#include "DNA_volume_types.h"
 
 #include "BKE_mesh.h"
+#include "BKE_spline.hh"
+#include "BKE_volume.h"
+
+#include "DEG_depsgraph_query.h"
 
 #include "node_geometry_util.hh"
 
@@ -49,20 +59,22 @@ static bool use_translate(const float3 rotation, const float3 scale)
   return true;
 }
 
-static void transform_mesh(Mesh *mesh,
-                           const float3 translation,
-                           const float3 rotation,
-                           const float3 scale)
+void transform_mesh(Mesh *mesh,
+                    const float3 translation,
+                    const float3 rotation,
+                    const float3 scale)
 {
   /* Use only translation if rotation and scale are zero. */
   if (use_translate(rotation, scale)) {
-    BKE_mesh_translate(mesh, translation, true);
+    if (!translation.is_zero()) {
+      BKE_mesh_translate(mesh, translation, false);
+    }
   }
   else {
-    float mat[4][4];
-    loc_eul_size_to_mat4(mat, translation, rotation, scale);
-    BKE_mesh_transform(mesh, mat, true);
-    BKE_mesh_calc_normals(mesh);
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
+    BKE_mesh_transform(mesh, matrix.values, false);
+    mesh->runtime.cd_dirty_vert |= CD_MASK_NORMAL;
+    mesh->runtime.cd_dirty_poly |= CD_MASK_NORMAL;
   }
 }
 
@@ -73,15 +85,15 @@ static void transform_pointcloud(PointCloud *pointcloud,
 {
   /* Use only translation if rotation and scale don't apply. */
   if (use_translate(rotation, scale)) {
-    for (int i = 0; i < pointcloud->totpoint; i++) {
+    for (const int i : IndexRange(pointcloud->totpoint)) {
       add_v3_v3(pointcloud->co[i], translation);
     }
   }
   else {
-    float mat[4][4];
-    loc_eul_size_to_mat4(mat, translation, rotation, scale);
-    for (int i = 0; i < pointcloud->totpoint; i++) {
-      mul_m4_v3(mat, pointcloud->co[i]);
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
+    for (const int i : IndexRange(pointcloud->totpoint)) {
+      float3 &co = *(float3 *)pointcloud->co[i];
+      co = matrix * co;
     }
   }
 }
@@ -91,20 +103,69 @@ static void transform_instances(InstancesComponent &instances,
                                 const float3 rotation,
                                 const float3 scale)
 {
-  MutableSpan<float3> positions = instances.positions();
+  MutableSpan<float4x4> transforms = instances.instance_transforms();
 
   /* Use only translation if rotation and scale don't apply. */
   if (use_translate(rotation, scale)) {
-    for (float3 &position : positions) {
-      add_v3_v3(position, translation);
+    for (float4x4 &transform : transforms) {
+      add_v3_v3(transform.ptr()[3], translation);
     }
   }
   else {
-    float mat[4][4];
-    loc_eul_size_to_mat4(mat, translation, rotation, scale);
-    for (float3 &position : positions) {
-      mul_m4_v3(mat, position);
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
+    for (float4x4 &transform : transforms) {
+      transform = matrix * transform;
     }
+  }
+}
+
+static void transform_volume(Volume *volume,
+                             const float3 translation,
+                             const float3 rotation,
+                             const float3 scale,
+                             GeoNodeExecParams &params)
+{
+#ifdef WITH_OPENVDB
+  /* Scaling an axis to zero is not supported for volumes. */
+  const float3 limited_scale = {
+      (scale.x == 0.0f) ? FLT_EPSILON : scale.x,
+      (scale.y == 0.0f) ? FLT_EPSILON : scale.y,
+      (scale.z == 0.0f) ? FLT_EPSILON : scale.z,
+  };
+
+  const Main *bmain = DEG_get_bmain(params.depsgraph());
+  BKE_volume_load(volume, bmain);
+
+  const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, limited_scale);
+
+  openvdb::Mat4s vdb_matrix;
+  memcpy(vdb_matrix.asPointer(), matrix, sizeof(float[4][4]));
+  openvdb::Mat4d vdb_matrix_d{vdb_matrix};
+
+  const int num_grids = BKE_volume_num_grids(volume);
+  for (const int i : IndexRange(num_grids)) {
+    VolumeGrid *volume_grid = BKE_volume_grid_get_for_write(volume, i);
+
+    openvdb::GridBase::Ptr grid = BKE_volume_grid_openvdb_for_write(volume, volume_grid, false);
+    openvdb::math::Transform &grid_transform = grid->transform();
+    grid_transform.postMult(vdb_matrix_d);
+  }
+#else
+  UNUSED_VARS(volume, translation, rotation, scale, params);
+#endif
+}
+
+static void transform_curve(CurveEval &curve,
+                            const float3 translation,
+                            const float3 rotation,
+                            const float3 scale)
+{
+  if (use_translate(rotation, scale)) {
+    curve.translate(translation);
+  }
+  else {
+    const float4x4 matrix = float4x4::from_loc_eul_scale(translation, rotation, scale);
+    curve.transform(matrix);
   }
 }
 
@@ -119,15 +180,21 @@ static void geo_node_transform_exec(GeoNodeExecParams params)
     Mesh *mesh = geometry_set.get_mesh_for_write();
     transform_mesh(mesh, translation, rotation, scale);
   }
-
   if (geometry_set.has_pointcloud()) {
     PointCloud *pointcloud = geometry_set.get_pointcloud_for_write();
     transform_pointcloud(pointcloud, translation, rotation, scale);
   }
-
   if (geometry_set.has_instances()) {
     InstancesComponent &instances = geometry_set.get_component_for_write<InstancesComponent>();
     transform_instances(instances, translation, rotation, scale);
+  }
+  if (geometry_set.has_volume()) {
+    Volume *volume = geometry_set.get_volume_for_write();
+    transform_volume(volume, translation, rotation, scale, params);
+  }
+  if (geometry_set.has_curve()) {
+    CurveEval *curve = geometry_set.get_curve_for_write();
+    transform_curve(*curve, translation, rotation, scale);
   }
 
   params.set_output("Geometry", std::move(geometry_set));

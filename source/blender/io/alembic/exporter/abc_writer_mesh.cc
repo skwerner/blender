@@ -113,10 +113,6 @@ void ABCGenericMeshWriter::create_alembic_objects(const HierarchyContext *contex
   liquid_sim_modifier_ = get_liquid_sim_modifier(scene_eval, context->object);
 }
 
-ABCGenericMeshWriter::~ABCGenericMeshWriter()
-{
-}
-
 Alembic::Abc::OObject ABCGenericMeshWriter::get_alembic_object() const
 {
   if (is_subd_) {
@@ -204,6 +200,7 @@ void ABCGenericMeshWriter::do_write(HierarchyContext &context)
   }
 
   m_custom_data_config.pack_uvs = args_.export_params->packuv;
+  m_custom_data_config.mesh = mesh;
   m_custom_data_config.mpoly = mesh->mpoly;
   m_custom_data_config.mloop = mesh->mloop;
   m_custom_data_config.totpoly = mesh->totpoly;
@@ -254,7 +251,7 @@ void ABCGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
 
   UVSample uvs_and_indices;
 
-  if (!frame_has_been_written_ && args_.export_params->uvs) {
+  if (args_.export_params->uvs) {
     const char *name = get_uv_sample(uvs_and_indices, m_custom_data_config, &mesh->ldata);
 
     if (!uvs_and_indices.indices.empty() && !uvs_and_indices.uvs.empty()) {
@@ -281,6 +278,10 @@ void ABCGenericMeshWriter::write_mesh(HierarchyContext &context, Mesh *mesh)
     }
 
     mesh_sample.setNormals(normals_sample);
+  }
+
+  if (args_.export_params->orcos) {
+    write_generated_coordinates(abc_poly_mesh_schema_.getArbGeomParams(), m_custom_data_config);
   }
 
   if (liquid_sim_modifier_ != nullptr) {
@@ -316,7 +317,7 @@ void ABCGenericMeshWriter::write_subd(HierarchyContext &context, struct Mesh *me
       V3fArraySample(points), Int32ArraySample(poly_verts), Int32ArraySample(loop_counts));
 
   UVSample sample;
-  if (!frame_has_been_written_ && args_.export_params->uvs) {
+  if (args_.export_params->uvs) {
     const char *name = get_uv_sample(sample, m_custom_data_config, &mesh->ldata);
 
     if (!sample.indices.empty() && !sample.uvs.empty()) {
@@ -331,6 +332,10 @@ void ABCGenericMeshWriter::write_subd(HierarchyContext &context, struct Mesh *me
 
     write_custom_data(
         abc_subdiv_schema_.getArbGeomParams(), m_custom_data_config, &mesh->ldata, CD_MLOOPUV);
+  }
+
+  if (args_.export_params->orcos) {
+    write_generated_coordinates(abc_poly_mesh_schema_.getArbGeomParams(), m_custom_data_config);
   }
 
   if (!crease_indices.empty()) {

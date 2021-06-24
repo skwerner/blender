@@ -196,6 +196,7 @@ IDTypeInfo IDType_ID_CA = {
     .make_local = camera_make_local,
     .foreach_id = camera_foreach_id,
     .foreach_cache = NULL,
+    .owner_get = NULL,
 
     .blend_write = camera_blend_write,
     .blend_read_data = camera_blend_read_data,
@@ -203,6 +204,8 @@ IDTypeInfo IDType_ID_CA = {
     .blend_read_expand = camera_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 /** \} */

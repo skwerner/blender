@@ -55,6 +55,7 @@
 #include "DEG_depsgraph.h"
 #include "DEG_depsgraph_query.h"
 
+#include "MOD_gpencil_lineart.h"
 #include "MOD_gpencil_modifiertypes.h"
 
 #include "BLO_read_write.h"
@@ -199,6 +200,60 @@ bool BKE_gpencil_has_transform_modifiers(Object *ob)
       }
     }
   }
+  return false;
+}
+
+GpencilLineartLimitInfo BKE_gpencil_get_lineart_modifier_limits(const Object *ob)
+{
+  GpencilLineartLimitInfo info = {0};
+  bool is_first = true;
+  LISTBASE_FOREACH (GpencilModifierData *, md, &ob->greasepencil_modifiers) {
+    if (md->type == eGpencilModifierType_Lineart) {
+      LineartGpencilModifierData *lmd = (LineartGpencilModifierData *)md;
+      if (is_first || (lmd->flags & LRT_GPENCIL_USE_CACHE)) {
+        info.min_level = MIN2(info.min_level, lmd->level_start);
+        info.max_level = MAX2(info.max_level,
+                              (lmd->use_multiple_levels ? lmd->level_end : lmd->level_start));
+        info.edge_types |= lmd->edge_types;
+      }
+    }
+  }
+  return info;
+}
+
+void BKE_gpencil_set_lineart_modifier_limits(GpencilModifierData *md,
+                                             const GpencilLineartLimitInfo *info,
+                                             const bool is_first_lineart)
+{
+  BLI_assert(md->type == eGpencilModifierType_Lineart);
+  LineartGpencilModifierData *lmd = (LineartGpencilModifierData *)md;
+  if (is_first_lineart || lmd->flags & LRT_GPENCIL_USE_CACHE) {
+    lmd->level_start_override = info->min_level;
+    lmd->level_end_override = info->max_level;
+    lmd->edge_types_override = info->edge_types;
+  }
+  else {
+    lmd->level_start_override = lmd->level_start;
+    lmd->level_end_override = lmd->level_end;
+    lmd->edge_types_override = lmd->edge_types;
+  }
+}
+
+bool BKE_gpencil_is_first_lineart_in_stack(const Object *ob, const GpencilModifierData *md)
+{
+  if (md->type != eGpencilModifierType_Lineart) {
+    return false;
+  }
+  LISTBASE_FOREACH (GpencilModifierData *, gmd, &ob->greasepencil_modifiers) {
+    if (gmd->type == eGpencilModifierType_Lineart) {
+      if (gmd == md) {
+        return true;
+      }
+      return false;
+    }
+  }
+  /* If we reach here it means md is not in ob's modifier stack. */
+  BLI_assert(false);
   return false;
 }
 
@@ -616,7 +671,8 @@ static int gpencil_remap_time_get(Depsgraph *depsgraph, Scene *scene, Object *ob
   return remap_cfra;
 }
 
-/** Get the current frame re-timed with time modifiers.
+/**
+ * Get the current frame re-timed with time modifiers.
  * \param depsgraph: Current depsgraph.
  * \param scene: Current scene
  * \param ob: Grease pencil object
@@ -656,10 +712,12 @@ static void gpencil_copy_activeframe_to_eval(
   LISTBASE_FOREACH (bGPDlayer *, gpl_orig, &gpd_orig->layers) {
 
     if (gpl_eval != NULL) {
-      int remap_cfra = gpencil_remap_time_get(depsgraph, scene, ob, gpl_orig);
+      bGPDframe *gpf_orig = gpl_orig->actframe;
 
-      bGPDframe *gpf_orig = BKE_gpencil_layer_frame_get(
-          gpl_orig, remap_cfra, GP_GETFRAME_USE_PREV);
+      int remap_cfra = gpencil_remap_time_get(depsgraph, scene, ob, gpl_orig);
+      if (gpf_orig && gpf_orig->framenum != remap_cfra) {
+        gpf_orig = BKE_gpencil_layer_frame_get(gpl_orig, remap_cfra, GP_GETFRAME_USE_PREV);
+      }
 
       if (gpf_orig != NULL) {
         int gpf_index = BLI_findindex(&gpl_orig->frames, gpf_orig);
@@ -701,11 +759,16 @@ void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *o
   Object *ob_orig = (Object *)DEG_get_original_id(&ob->id);
   bGPdata *gpd_orig = (bGPdata *)ob_orig->data;
 
-  /* Need check if some layer is parented. */
+  /* Need check if some layer is parented or transformed. */
   bool do_parent = false;
+  bool do_transform = false;
   LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd_orig->layers) {
     if (gpl->parent != NULL) {
       do_parent = true;
+      break;
+    }
+    if ((!is_zero_v3(gpl->location)) || (!is_zero_v3(gpl->rotation)) || (!is_one_v3(gpl->scale))) {
+      do_transform = true;
       break;
     }
   }
@@ -715,7 +778,7 @@ void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *o
   const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
                                    (ob->greasepencil_modifiers.first != NULL) &&
                                    (!GPENCIL_SIMPLIFY_MODIF(scene)));
-  if ((!do_modifiers) && (!do_parent)) {
+  if ((!do_modifiers) && (!do_parent) && (!do_transform)) {
     return;
   }
   DEG_debug_print_eval(depsgraph, __func__, gpd_eval->id.name, gpd_eval);
@@ -739,7 +802,8 @@ void BKE_gpencil_prepare_eval_data(Depsgraph *depsgraph, Scene *scene, Object *o
   BKE_gpencil_update_orig_pointers(ob_orig, ob);
 }
 
-/** Calculate gpencil modifiers.
+/**
+ * Calculate gpencil modifiers.
  * \param depsgraph: Current depsgraph
  * \param scene: Current scene
  * \param ob: Grease pencil object
@@ -748,9 +812,9 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
   bGPdata *gpd = (bGPdata *)ob->data;
   const bool is_edit = GPENCIL_ANY_EDIT_MODE(gpd);
-  const bool is_multiedit = (bool)GPENCIL_MULTIEDIT_SESSIONS_ON(gpd);
-  const bool is_curve_edit = (bool)GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd);
   const bool is_render = (bool)(DEG_get_mode(depsgraph) == DAG_EVAL_RENDER);
+  const bool is_curve_edit = (bool)(GPENCIL_CURVE_EDIT_SESSIONS_ON(gpd) && !is_render);
+  const bool is_multiedit = (bool)(GPENCIL_MULTIEDIT_SESSIONS_ON(gpd) && !is_render);
   const bool do_modifiers = (bool)((!is_multiedit) && (!is_curve_edit) &&
                                    (ob->greasepencil_modifiers.first != NULL) &&
                                    (!GPENCIL_SIMPLIFY_MODIF(scene)));
@@ -762,6 +826,8 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
   BKE_gpencil_lattice_init(ob);
 
   const bool time_remap = BKE_gpencil_has_time_modifiers(ob);
+  bool is_first_lineart = true;
+  GpencilLineartLimitInfo info = BKE_gpencil_get_lineart_modifier_limits(ob);
 
   LISTBASE_FOREACH (GpencilModifierData *, md, &ob->greasepencil_modifiers) {
 
@@ -770,6 +836,11 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
 
       if ((GPENCIL_MODIFIER_EDIT(md, is_edit)) && (!is_render)) {
         continue;
+      }
+
+      if (md->type == eGpencilModifierType_Lineart) {
+        BKE_gpencil_set_lineart_modifier_limits(md, &info, is_first_lineart);
+        is_first_lineart = false;
       }
 
       /* Apply geometry modifiers (add new geometry). */
@@ -797,6 +868,8 @@ void BKE_gpencil_modifiers_calc(Depsgraph *depsgraph, Scene *scene, Object *ob)
 
   /* Clear any lattice data. */
   BKE_gpencil_lattice_clear(ob);
+
+  MOD_lineart_clear_cache(&gpd->runtime.lineart_cache);
 }
 
 void BKE_gpencil_modifier_blend_write(BlendWriter *writer, ListBase *modbase)

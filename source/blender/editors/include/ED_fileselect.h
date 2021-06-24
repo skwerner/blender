@@ -29,8 +29,8 @@ extern "C" {
 
 struct ARegion;
 struct FileAssetSelectParams;
-struct FileSelectParams;
 struct FileDirEntry;
+struct FileSelectParams;
 struct Scene;
 struct ScrArea;
 struct SpaceFile;
@@ -110,7 +110,7 @@ struct FileAssetSelectParams *ED_fileselect_get_asset_params(const struct SpaceF
 
 void ED_fileselect_set_params_from_userdef(struct SpaceFile *sfile);
 void ED_fileselect_params_to_userdef(struct SpaceFile *sfile,
-                                     const int temp_win_size[],
+                                     const int temp_win_size[2],
                                      const bool is_maximized);
 
 void ED_fileselect_init_layout(struct SpaceFile *sfile, struct ARegion *region);
@@ -145,6 +145,13 @@ void ED_fileselect_exit(struct wmWindowManager *wm,
                         struct SpaceFile *sfile);
 
 bool ED_fileselect_is_asset_browser(const struct SpaceFile *sfile);
+struct ID *ED_fileselect_active_asset_get(const struct SpaceFile *sfile);
+
+/* Activate the file that corresponds to the given ID.
+ * Pass deferred=true to wait for the next refresh before activating. */
+void ED_fileselect_activate_by_id(struct SpaceFile *sfile,
+                                  struct ID *asset_id,
+                                  const bool deferred);
 
 void ED_fileselect_window_params_get(const struct wmWindow *win,
                                      int win_size[2],
@@ -194,7 +201,7 @@ typedef enum FSMenuInsert {
   FS_INSERT_SAVE = (1 << 1),
   /** moves the item to the front of the list when its not already there */
   FS_INSERT_FIRST = (1 << 2),
-  /** just append to preseve delivered order */
+  /** just append to preserve delivered order */
   FS_INSERT_LAST = (1 << 3),
 } FSMenuInsert;
 

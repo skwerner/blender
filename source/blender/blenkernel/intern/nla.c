@@ -254,7 +254,7 @@ NlaTrack *BKE_nlatrack_copy(Main *bmain,
  * \param flag: Control ID pointers management, see LIB_ID_CREATE_.../LIB_ID_COPY_...
  * flags in BKE_lib_id.h
  */
-void BKE_nla_tracks_copy(Main *bmain, ListBase *dst, ListBase *src, const int flag)
+void BKE_nla_tracks_copy(Main *bmain, ListBase *dst, const ListBase *src, const int flag)
 {
   NlaTrack *nlt, *nlt_d;
 
@@ -273,6 +273,54 @@ void BKE_nla_tracks_copy(Main *bmain, ListBase *dst, ListBase *src, const int fl
     nlt_d = BKE_nlatrack_copy(bmain, nlt, true, flag);
     BLI_addtail(dst, nlt_d);
   }
+}
+
+/* Set adt_dest->actstrip to the strip with the same index as adt_source->actstrip. */
+static void update_active_strip(AnimData *adt_dest,
+                                NlaTrack *track_dest,
+                                const AnimData *adt_source,
+                                NlaTrack *track_source)
+{
+  BLI_assert(BLI_listbase_count(&track_source->strips) == BLI_listbase_count(&track_dest->strips));
+
+  NlaStrip *strip_dest = track_dest->strips.first;
+  LISTBASE_FOREACH (NlaStrip *, strip_source, &track_source->strips) {
+    if (strip_source == adt_source->actstrip) {
+      adt_dest->actstrip = strip_dest;
+    }
+
+    strip_dest = strip_dest->next;
+  }
+}
+
+/* Set adt_dest->act_track to the track with the same index as adt_source->act_track. */
+static void update_active_track(AnimData *adt_dest, const AnimData *adt_source)
+{
+  BLI_assert(BLI_listbase_count(&adt_source->nla_tracks) ==
+             BLI_listbase_count(&adt_dest->nla_tracks));
+
+  NlaTrack *track_dest = adt_dest->nla_tracks.first;
+  LISTBASE_FOREACH (NlaTrack *, track_source, &adt_source->nla_tracks) {
+    if (track_source == adt_source->act_track) {
+      adt_dest->act_track = track_dest;
+      /* Assumption: the active strip is on the active track. */
+      update_active_strip(adt_dest, track_dest, adt_source, track_source);
+    }
+
+    track_dest = track_dest->next;
+  }
+}
+
+void BKE_nla_tracks_copy_from_adt(Main *bmain,
+                                  AnimData *adt_dest,
+                                  const AnimData *adt_source,
+                                  const int flag)
+{
+  adt_dest->act_track = NULL;
+  adt_dest->actstrip = NULL;
+
+  BKE_nla_tracks_copy(bmain, &adt_dest->nla_tracks, &adt_source->nla_tracks, flag);
+  update_active_track(adt_dest, adt_source);
 }
 
 /* Adding ------------------------------------------- */
@@ -296,11 +344,16 @@ NlaTrack *BKE_nlatrack_add(AnimData *adt, NlaTrack *prev, const bool is_liboverr
   nlt->flag = NLATRACK_SELECTED | NLATRACK_OVERRIDELIBRARY_LOCAL;
   nlt->index = BLI_listbase_count(&adt->nla_tracks);
 
-  /* add track to stack, and make it the active one */
-  if (is_liboverride) {
-    for (; prev != NULL && (prev->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) == 0; prev = prev->next) {
+  /* In liboverride case, we only add local tracks after all those coming from the linked data,
+   * so we need to find the first local track. */
+  if (is_liboverride && prev != NULL && (prev->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) == 0) {
+    NlaTrack *first_local = prev->next;
+    for (; first_local != NULL && (first_local->flag & NLATRACK_OVERRIDELIBRARY_LOCAL) == 0;
+         first_local = first_local->next) {
     }
+    prev = first_local != NULL ? first_local->prev : NULL;
   }
+  /* Add track to stack, and make it the active one. */
   if (prev != NULL) {
     BLI_insertlinkafter(&adt->nla_tracks, prev, nlt);
   }
@@ -429,8 +482,10 @@ NlaStrip *BKE_nla_add_soundstrip(Main *bmain, Scene *scene, Speaker *speaker)
   return strip;
 }
 
-/** Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
- * `IDTypeInfo` structure). */
+/**
+ * Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
+ * `IDTypeInfo` structure).
+ */
 void BKE_nla_strip_foreach_id(NlaStrip *strip, LibraryForeachIDData *data)
 {
   BKE_LIB_FOREACHID_PROCESS(data, strip->act, IDWALK_CB_USER);
@@ -1375,8 +1430,10 @@ static void nlastrip_fix_resize_overlaps(NlaStrip *strip)
   }
 }
 
-/** Recalculate the start and end frames for the strip to match the bounds of its action such that
- * the overall NLA animation result is unchanged. */
+/**
+ * Recalculate the start and end frames for the strip to match the bounds of its action such that
+ * the overall NLA animation result is unchanged.
+ */
 void BKE_nlastrip_recalculate_bounds_sync_action(NlaStrip *strip)
 {
   float prev_actstart;

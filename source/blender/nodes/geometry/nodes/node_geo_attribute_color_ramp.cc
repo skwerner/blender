@@ -14,9 +14,14 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "node_geometry_util.hh"
+#include "BLI_task.hh"
 
 #include "BKE_colorband.h"
+
+#include "UI_interface.h"
+#include "UI_resources.h"
+
+#include "node_geometry_util.hh"
 
 static bNodeSocketTemplate geo_node_attribute_color_ramp_in[] = {
     {SOCK_GEOMETRY, N_("Geometry")},
@@ -30,55 +35,14 @@ static bNodeSocketTemplate geo_node_attribute_color_ramp_out[] = {
     {-1, ""},
 };
 
+static void geo_node_attribute_color_ramp_layout(uiLayout *layout,
+                                                 bContext *UNUSED(C),
+                                                 PointerRNA *ptr)
+{
+  uiTemplateColorRamp(layout, ptr, "color_ramp", false);
+}
+
 namespace blender::nodes {
-
-static void execute_on_component(const GeoNodeExecParams &params, GeometryComponent &component)
-{
-  const bNode &bnode = params.node();
-  NodeAttributeColorRamp *node_storage = (NodeAttributeColorRamp *)bnode.storage;
-
-  const std::string result_name = params.get_input<std::string>("Result");
-  /* Once we support more domains at the user level, we have to decide how the result domain is
-   * choosen. */
-  const AttributeDomain result_domain = ATTR_DOMAIN_POINT;
-  const CustomDataType result_type = CD_PROP_COLOR;
-
-  WriteAttributePtr attribute_result = component.attribute_try_ensure_for_write(
-      result_name, result_domain, result_type);
-  if (!attribute_result) {
-    return;
-  }
-
-  Color4fWriteAttribute attribute_out = std::move(attribute_result);
-
-  const std::string input_name = params.get_input<std::string>("Attribute");
-  FloatReadAttribute attribute_in = component.attribute_get_for_read<float>(
-      input_name, result_domain, 0.0f);
-
-  Span<float> data_in = attribute_in.get_span();
-  MutableSpan<Color4f> data_out = attribute_out.get_span();
-
-  ColorBand *color_ramp = &node_storage->color_ramp;
-  for (const int i : data_in.index_range()) {
-    BKE_colorband_evaluate(color_ramp, data_in[i], data_out[i]);
-  }
-
-  attribute_out.apply_span();
-}
-
-static void geo_node_attribute_color_ramp_exec(GeoNodeExecParams params)
-{
-  GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
-
-  if (geometry_set.has<MeshComponent>()) {
-    execute_on_component(params, geometry_set.get_component_for_write<MeshComponent>());
-  }
-  if (geometry_set.has<PointCloudComponent>()) {
-    execute_on_component(params, geometry_set.get_component_for_write<PointCloudComponent>());
-  }
-
-  params.set_output("Geometry", std::move(geometry_set));
-}
 
 static void geo_node_attribute_color_ramp_init(bNodeTree *UNUSED(ntree), bNode *node)
 {
@@ -86,6 +50,77 @@ static void geo_node_attribute_color_ramp_init(bNodeTree *UNUSED(ntree), bNode *
       sizeof(NodeAttributeColorRamp), __func__);
   BKE_colorband_init(&node_storage->color_ramp, true);
   node->storage = node_storage;
+}
+
+static AttributeDomain get_result_domain(const GeometryComponent &component,
+                                         StringRef input_name,
+                                         StringRef result_name)
+{
+  /* Use the domain of the result attribute if it already exists. */
+  std::optional<AttributeMetaData> result_info = component.attribute_get_meta_data(result_name);
+  if (result_info) {
+    return result_info->domain;
+  }
+
+  /* Otherwise use the input attribute's domain if it exists. */
+  std::optional<AttributeMetaData> source_info = component.attribute_get_meta_data(input_name);
+  if (source_info) {
+    return source_info->domain;
+  }
+
+  return ATTR_DOMAIN_POINT;
+}
+
+static void execute_on_component(const GeoNodeExecParams &params, GeometryComponent &component)
+{
+  const bNode &bnode = params.node();
+  NodeAttributeColorRamp *node_storage = (NodeAttributeColorRamp *)bnode.storage;
+  const std::string result_name = params.get_input<std::string>("Result");
+  const std::string input_name = params.get_input<std::string>("Attribute");
+
+  /* Always output a color attribute for now. We might want to allow users to customize.
+   * Using the type of an existing attribute could work, but does not have a real benefit
+   * currently. */
+  const AttributeDomain result_domain = get_result_domain(component, input_name, result_name);
+
+  OutputAttribute_Typed<ColorGeometry4f> attribute_result =
+      component.attribute_try_get_for_output_only<ColorGeometry4f>(result_name, result_domain);
+  if (!attribute_result) {
+    return;
+  }
+
+  GVArray_Typed<float> attribute_in = component.attribute_get_for_read<float>(
+      input_name, result_domain, 0.0f);
+
+  MutableSpan<ColorGeometry4f> results = attribute_result.as_span();
+
+  ColorBand *color_ramp = &node_storage->color_ramp;
+  threading::parallel_for(IndexRange(attribute_in.size()), 512, [&](IndexRange range) {
+    for (const int i : range) {
+      BKE_colorband_evaluate(color_ramp, attribute_in[i], results[i]);
+    }
+  });
+
+  attribute_result.save();
+}
+
+static void geo_node_attribute_color_ramp_exec(GeoNodeExecParams params)
+{
+  GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
+
+  if (geometry_set.has<MeshComponent>()) {
+    execute_on_component(params, geometry_set.get_component_for_write<MeshComponent>());
+  }
+  if (geometry_set.has<PointCloudComponent>()) {
+    execute_on_component(params, geometry_set.get_component_for_write<PointCloudComponent>());
+  }
+  if (geometry_set.has<CurveComponent>()) {
+    execute_on_component(params, geometry_set.get_component_for_write<CurveComponent>());
+  }
+
+  params.set_output("Geometry", std::move(geometry_set));
 }
 
 }  // namespace blender::nodes
@@ -103,5 +138,6 @@ void register_node_type_geo_attribute_color_ramp()
   node_type_init(&ntype, blender::nodes::geo_node_attribute_color_ramp_init);
   node_type_size_preset(&ntype, NODE_SIZE_LARGE);
   ntype.geometry_node_execute = blender::nodes::geo_node_attribute_color_ramp_exec;
+  ntype.draw_buttons = geo_node_attribute_color_ramp_layout;
   nodeRegisterType(&ntype);
 }

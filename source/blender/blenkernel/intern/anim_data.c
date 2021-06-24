@@ -287,8 +287,10 @@ bool BKE_animdata_id_is_animated(const struct ID *id)
          !BLI_listbase_is_empty(&adt->overrides);
 }
 
-/** Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
- * `IDTypeInfo` structure). */
+/**
+ * Callback used by lib_query to walk over all ID usages (mimics `foreach_id` callback of
+ * `IDTypeInfo` structure).
+ */
 void BKE_animdata_foreach_id(AnimData *adt, LibraryForeachIDData *data)
 {
   LISTBASE_FOREACH (FCurve *, fcu, &adt->drivers) {
@@ -352,7 +354,7 @@ AnimData *BKE_animdata_copy(Main *bmain, AnimData *adt, const int flag)
   }
 
   /* duplicate NLA data */
-  BKE_nla_tracks_copy(bmain, &dadt->nla_tracks, &adt->nla_tracks, flag);
+  BKE_nla_tracks_copy_from_adt(bmain, dadt, adt, flag);
 
   /* duplicate drivers (F-Curves) */
   BKE_fcurves_copy(&dadt->drivers, &adt->drivers);
@@ -945,7 +947,7 @@ static bool nlastrips_path_rename_fix(ID *owner_id,
           owner_id, prefix, oldName, newName, oldKey, newKey, &strip->act->curves, verify_paths);
     }
     /* Ignore own F-Curves, since those are local.  */
-    /* Check sub-strips (if metas) */
+    /* Check sub-strips (if meta-strips). */
     is_changed |= nlastrips_path_rename_fix(
         owner_id, prefix, oldName, newName, oldKey, newKey, &strip->strips, verify_paths);
   }
@@ -1175,7 +1177,7 @@ static bool nlastrips_path_remove_fix(const char *prefix, ListBase *strips)
       any_removed |= fcurves_path_remove_fix(prefix, &strip->act->curves);
     }
 
-    /* check sub-strips (if metas) */
+    /* Check sub-strips (if meta-strips). */
     any_removed |= nlastrips_path_remove_fix(prefix, &strip->strips);
   }
   return any_removed;
@@ -1243,7 +1245,7 @@ static void nlastrips_apply_all_curves_cb(ID *id, ListBase *strips, AllFCurvesCb
       fcurves_apply_cb(id, &strip->act->curves, wrapper->func, wrapper->user_data);
     }
 
-    /* check sub-strips (if metas) */
+    /* Check sub-strips (if meta-strips). */
     nlastrips_apply_all_curves_cb(id, &strip->strips, wrapper);
   }
 }

@@ -23,12 +23,8 @@
 
 #include <stdio.h>
 
-#include "MEM_guardedalloc.h"
-
 #include "BLI_utildefines.h"
 
-#include "BLI_blenlib.h"
-#include "BLI_ghash.h"
 #include "BLI_math_vector.h"
 
 #include "DNA_gpencil_modifier_types.h"
@@ -36,18 +32,10 @@
 #include "DNA_material_types.h"
 #include "DNA_meshdata_types.h"
 #include "DNA_object_types.h"
-#include "DNA_scene_types.h"
 
-#include "BKE_colortools.h"
 #include "BKE_deform.h"
-#include "BKE_gpencil.h"
 #include "BKE_gpencil_modifier.h"
-#include "BKE_lattice.h"
-#include "BKE_main.h"
 #include "BKE_material.h"
-#include "BKE_object.h"
-
-#include "DEG_depsgraph.h"
 
 #include "MOD_gpencil_modifiertypes.h"
 #include "MOD_gpencil_util.h"
@@ -66,6 +54,7 @@ void gpencil_modifier_type_init(GpencilModifierTypeInfo *types[])
   INIT_GP_TYPE(Build);
   INIT_GP_TYPE(Opacity);
   INIT_GP_TYPE(Lattice);
+  INIT_GP_TYPE(Length);
   INIT_GP_TYPE(Mirror);
   INIT_GP_TYPE(Smooth);
   INIT_GP_TYPE(Hook);
@@ -74,6 +63,7 @@ void gpencil_modifier_type_init(GpencilModifierTypeInfo *types[])
   INIT_GP_TYPE(Time);
   INIT_GP_TYPE(Multiply);
   INIT_GP_TYPE(Texture);
+  INIT_GP_TYPE(Lineart);
 #undef INIT_GP_TYPE
 }
 

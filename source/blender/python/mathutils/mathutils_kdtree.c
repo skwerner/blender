@@ -52,7 +52,7 @@ static void kdtree_nearest_to_py_tuple(const KDTreeNearest_3d *nearest, PyObject
   BLI_assert(PyTuple_GET_SIZE(py_retval) == 3);
 
   PyTuple_SET_ITEMS(py_retval,
-                    Vector_CreatePyObject((float *)nearest->co, 3, NULL),
+                    Vector_CreatePyObject(nearest->co, 3, NULL),
                     PyLong_FromLong(nearest->index),
                     PyFloat_FromDouble(nearest->dist));
 }
@@ -222,7 +222,7 @@ static PyObject *py_kdtree_find(PyKDTree *self, PyObject *args, PyObject *kwargs
   const char *keywords[] = {"co", "filter", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwargs, "O|O:find", (char **)keywords, &py_co, &py_filter)) {
+          args, kwargs, "O|$O:find", (char **)keywords, &py_co, &py_filter)) {
     return NULL;
   }
 
@@ -459,7 +459,7 @@ PyMODINIT_FUNC PyInit_mathutils_kdtree(void)
   if (PyType_Ready(&PyKDTree_Type)) {
     return NULL;
   }
-  PyModule_AddObject(m, "KDTree", (PyObject *)&PyKDTree_Type);
+  PyModule_AddType(m, &PyKDTree_Type);
 
   return m;
 }

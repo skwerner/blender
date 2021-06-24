@@ -86,16 +86,16 @@ static int gNextIconId = 1;
 /* Protected by gIconMutex. */
 static int gFirstIconId = 1;
 
-std::mutex gIconMutex;
+static std::mutex gIconMutex;
 
 /* Not mutex-protected! */
 static GHash *gCachedPreviews = nullptr;
 
 /* Queue of icons for deferred deletion. */
-typedef struct DeferredIconDeleteNode {
+struct DeferredIconDeleteNode {
   struct DeferredIconDeleteNode *next;
   int icon_id;
-} DeferredIconDeleteNode;
+};
 /* Protected by gIconMutex. */
 static LockfreeLinkList g_icon_delete_queue;
 
@@ -374,6 +374,7 @@ PreviewImage **BKE_previewimg_id_get_p(const ID *id)
     ID_PRV_CASE(ID_GR, Collection);
     ID_PRV_CASE(ID_SCE, Scene);
     ID_PRV_CASE(ID_SCR, bScreen);
+    ID_PRV_CASE(ID_AC, bAction);
 #undef ID_PRV_CASE
     default:
       break;

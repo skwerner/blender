@@ -15,7 +15,7 @@
  *
  * The Original Code is Copyright (C) 2015 by Blender Foundation
  * All rights reserved.
- * */
+ */
 
 #pragma once
 
@@ -41,7 +41,7 @@ bool BLI_eigen_solve_selfadjoint_m3(const float m3[3][3],
                                     float r_eigen_values[3],
                                     float r_eigen_vectors[3][3]);
 
-void BLI_svd_m3(const float m3[3][3], float r_U[3][3], float r_S[], float r_V[3][3]);
+void BLI_svd_m3(const float m3[3][3], float r_U[3][3], float r_S[3], float r_V[3][3]);
 
 /***************************** Simple Solvers ************************************/
 

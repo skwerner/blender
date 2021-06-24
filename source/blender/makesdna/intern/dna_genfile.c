@@ -792,6 +792,9 @@ static void cast_primitive_type(const eSDNA_Type old_type,
         old_value_i = *((uint64_t *)old_data);
         old_value_f = (double)old_value_i;
         break;
+      case SDNA_TYPE_INT8:
+        old_value_i = (uint64_t) * ((int8_t *)old_data);
+        old_value_f = (double)old_value_i;
     }
 
     switch (new_type) {
@@ -828,6 +831,9 @@ static void cast_primitive_type(const eSDNA_Type old_type,
       case SDNA_TYPE_UINT64:
         *((uint64_t *)new_data) = old_value_i;
         break;
+      case SDNA_TYPE_INT8:
+        *((int8_t *)new_data) = (int8_t)old_value_i;
+        break;
     }
 
     old_data += oldlen;
@@ -849,7 +855,7 @@ static void cast_pointer_64_to_32(const int array_len,
                                   uint32_t *new_data)
 {
   /* WARNING: 32-bit Blender trying to load file saved by 64-bit Blender,
-   * pointers may lose uniqueness on truncation! (Hopefully this wont
+   * pointers may lose uniqueness on truncation! (Hopefully this won't
    * happen unless/until we ever get to multi-gigabyte .blend files...) */
   for (int a = 0; a < array_len; a++) {
     new_data[a] = old_data[a] >> 3;
@@ -1194,7 +1200,10 @@ static void reconstruct_struct(const DNA_ReconstructInfo *reconstruct_info,
                             new_block + step->data.substruct.new_offset);
         break;
       case RECONSTRUCT_STEP_INIT_ZERO:
-        /* Do nothing, because the memory block has been calloced. */
+        /* Do nothing, because the memory block are zeroed (from #MEM_callocN).
+         *
+         * Note that the struct could be initialized with the default struct,
+         * however this complicates versioning, especially with flags, see: D4500. */
         break;
     }
   }
@@ -1555,9 +1564,8 @@ DNA_ReconstructInfo *DNA_reconstruct_info_create(const SDNA *oldsdna,
     ReconstructStep *steps = create_reconstruct_steps_for_struct(
         oldsdna, newsdna, compare_flags, old_struct, new_struct);
 
-    int steps_len = new_struct->members_len;
     /* Comment the line below to skip the compression for debugging purposes. */
-    steps_len = compress_reconstruct_steps(steps, new_struct->members_len);
+    const int steps_len = compress_reconstruct_steps(steps, new_struct->members_len);
 
     reconstruct_info->steps[new_struct_nr] = steps;
     reconstruct_info->step_counts[new_struct_nr] = steps_len;
@@ -1652,6 +1660,7 @@ int DNA_elem_type_size(const eSDNA_Type elem_nr)
   switch (elem_nr) {
     case SDNA_TYPE_CHAR:
     case SDNA_TYPE_UCHAR:
+    case SDNA_TYPE_INT8:
       return 1;
     case SDNA_TYPE_SHORT:
     case SDNA_TYPE_USHORT:

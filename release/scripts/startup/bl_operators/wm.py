@@ -17,6 +17,7 @@
 # ##### END GPL LICENSE BLOCK #####
 
 # <pep8 compliant>
+from __future__ import annotations
 
 import bpy
 from bpy.types import (
@@ -33,11 +34,6 @@ from bpy.props import (
 )
 from bpy.app.translations import pgettext_iface as iface_
 
-# FIXME, we need a way to detect key repeat events.
-# unfortunately checking event previous values isn't reliable.
-use_toolbar_release_hack = True
-
-
 rna_path_prop = StringProperty(
     name="Context Attributes",
     description="RNA context string",
@@ -48,18 +44,21 @@ rna_reverse_prop = BoolProperty(
     name="Reverse",
     description="Cycle backwards",
     default=False,
+    options={'SKIP_SAVE'},
 )
 
 rna_wrap_prop = BoolProperty(
     name="Wrap",
     description="Wrap back to the first/last values",
     default=False,
+    options={'SKIP_SAVE'},
 )
 
 rna_relative_prop = BoolProperty(
     name="Relative",
     description="Apply relative to the current value (delta)",
     default=False,
+    options={'SKIP_SAVE'},
 )
 
 rna_space_type_prop = EnumProperty(
@@ -96,6 +95,76 @@ def context_path_validate(context, data_path):
     return value
 
 
+def context_path_to_rna_property(context, data_path):
+    from bl_rna_utils.data_path import property_definition_from_data_path
+    rna_prop = property_definition_from_data_path(context, "." + data_path)
+    if rna_prop is not None:
+        return rna_prop
+    return None
+
+
+def context_path_decompose(data_path):
+    # Decompose a data_path into 3 components:
+    # base_path, prop_attr, prop_item, where:
+    # `"foo.bar["baz"].fiz().bob.buz[10][2]"`, returns...
+    # `("foo.bar["baz"].fiz().bob", "buz", "[10][2]")`
+    #
+    # This is useful as we often want the base and the property, ignoring any item access.
+    # Note that item access includes function calls since these aren't properties.
+    #
+    # Note that the `.` is removed from the start of the first and second values,
+    # this is done because `.attr` isn't convenient to use as an argument,
+    # also the convention is not to include this within the data paths or the operator logic for `bpy.ops.wm.*`.
+    from bl_rna_utils.data_path import decompose_data_path
+    path_split = decompose_data_path("." + data_path)
+
+    # Find the last property that isn't a function call.
+    value_prev = ""
+    i = len(path_split)
+    while (i := i - 1) >= 0:
+        value = path_split[i]
+        if value.startswith("."):
+            if not value_prev.startswith("("):
+                break
+        value_prev = value
+
+    if i != -1:
+        base_path = "".join(path_split[:i])
+        prop_attr = path_split[i]
+        prop_item = "".join(path_split[i + 1:])
+
+        if base_path:
+            assert(base_path.startswith("."))
+            base_path= base_path[1:]
+        if prop_attr:
+            assert(prop_attr.startswith("."))
+            prop_attr = prop_attr[1:]
+    else:
+        # If there are no properties, everything is an item.
+        # Note that should not happen in practice with values which are added onto `context`,
+        # include since it's correct to account for this case and not doing so will create a confusing exception.
+        base_path = ""
+        prop_attr = ""
+        prop_item = "".join(path_split)
+
+    return (base_path, prop_attr, prop_item)
+
+
+def description_from_data_path(base, data_path, *, prefix, value=Ellipsis):
+    if context_path_validate(base, data_path) is Ellipsis:
+        return None
+
+    if (
+            (rna_prop := context_path_to_rna_property(base, data_path)) and
+            (description := rna_prop.description)
+    ):
+        description = "%s: %s" % (prefix, description)
+        if value != Ellipsis:
+            description = "%s\n%s: %s" % (description, iface_("Value"), str(value))
+        return description
+    return None
+
+
 def operator_value_is_undo(value):
     if value in {None, Ellipsis}:
         return False
@@ -121,12 +190,9 @@ def operator_value_is_undo(value):
 
 
 def operator_path_is_undo(context, data_path):
-    # note that if we have data paths that use strings this could fail
-    # luckily we don't do this!
-    #
-    # When we can't find the data owner assume no undo is needed.
-    data_path_head = data_path.rpartition(".")[0]
+    data_path_head, _, _ = context_path_decompose(data_path)
 
+    # When we can't find the data owner assume no undo is needed.
     if not data_path_head:
         return False
 
@@ -169,6 +235,10 @@ class WM_OT_context_set_boolean(Operator):
         default=True,
     )
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Assign"), value=props.value)
+
     execute = execute_context_assign
 
 
@@ -186,6 +256,10 @@ class WM_OT_context_set_int(Operator):  # same as enum
     )
     relative: rna_relative_prop
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix="Assign", value=props.value)
+
     execute = execute_context_assign
 
 
@@ -201,6 +275,10 @@ class WM_OT_context_scale_float(Operator):
         description="Assign value",
         default=1.0,
     )
+
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Scale"), value=props.value)
 
     def execute(self, context):
         data_path = self.data_path
@@ -233,7 +311,12 @@ class WM_OT_context_scale_int(Operator):
         name="Always Step",
         description="Always adjust the value by a minimum of 1 when 'value' is not 1.0",
         default=True,
+        options={'SKIP_SAVE'},
     )
+
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Scale"), value=props.value)
 
     def execute(self, context):
         data_path = self.data_path
@@ -274,6 +357,10 @@ class WM_OT_context_set_float(Operator):  # same as enum
     )
     relative: rna_relative_prop
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix="Assign", value=props.value)
+
     execute = execute_context_assign
 
 
@@ -289,6 +376,10 @@ class WM_OT_context_set_string(Operator):  # same as enum
         description="Assign value",
         maxlen=1024,
     )
+
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Assign"), value=props.value)
 
     execute = execute_context_assign
 
@@ -306,6 +397,10 @@ class WM_OT_context_set_enum(Operator):
         maxlen=1024,
     )
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Assign"), value=props.value)
+
     execute = execute_context_assign
 
 
@@ -321,6 +416,10 @@ class WM_OT_context_set_value(Operator):
         description="Assignment value (as a string)",
         maxlen=1024,
     )
+
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Assign"), value=props.value)
 
     def execute(self, context):
         data_path = self.data_path
@@ -338,6 +437,13 @@ class WM_OT_context_toggle(Operator):
 
     data_path: rna_path_prop
     module: rna_module_prop
+
+    @classmethod
+    def description(cls, context, props):
+        # Currently unsupported, it might be possible to extract this.
+        if props.module:
+            return None
+        return description_from_data_path(context, props.data_path, prefix=iface_("Toggle"))
 
     def execute(self, context):
         data_path = self.data_path
@@ -375,6 +481,11 @@ class WM_OT_context_toggle_enum(Operator):
         maxlen=1024,
     )
 
+    @classmethod
+    def description(cls, context, props):
+        value = "(%r, %r)" % (props.value_1, props.value_2)
+        return description_from_data_path(context, props.data_path, prefix=iface_("Toggle"), value=value)
+
     def execute(self, context):
         data_path = self.data_path
 
@@ -405,6 +516,10 @@ class WM_OT_context_cycle_int(Operator):
     data_path: rna_path_prop
     reverse: rna_reverse_prop
     wrap: rna_wrap_prop
+
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Cycle"))
 
     def execute(self, context):
         data_path = self.data_path
@@ -442,6 +557,10 @@ class WM_OT_context_cycle_enum(Operator):
     reverse: rna_reverse_prop
     wrap: rna_wrap_prop
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Cycle"))
+
     def execute(self, context):
         data_path = self.data_path
         value = context_path_validate(context, data_path)
@@ -450,22 +569,11 @@ class WM_OT_context_cycle_enum(Operator):
 
         orig_value = value
 
-        # Have to get rna enum values
-        rna_struct_str, rna_prop_str = data_path.rsplit('.', 1)
-        i = rna_prop_str.find('[')
-
-        # just in case we get "context.foo.bar[0]"
-        if i != -1:
-            rna_prop_str = rna_prop_str[0:i]
-
-        rna_struct = eval("context.%s.rna_type" % rna_struct_str)
-
-        rna_prop = rna_struct.properties[rna_prop_str]
-
+        rna_prop = context_path_to_rna_property(context, data_path)
         if type(rna_prop) != bpy.types.EnumProperty:
             raise Exception("expected an enum property")
 
-        enums = rna_struct.properties[rna_prop_str].enum_items.keys()
+        enums = rna_prop.enum_items.keys()
         orig_index = enums.index(orig_value)
 
         # Have the info we need, advance to the next item.
@@ -498,6 +606,10 @@ class WM_OT_context_cycle_array(Operator):
     data_path: rna_path_prop
     reverse: rna_reverse_prop
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Cycle"))
+
     def execute(self, context):
         data_path = self.data_path
         value = context_path_validate(context, data_path)
@@ -523,6 +635,10 @@ class WM_OT_context_menu_enum(Operator):
 
     data_path: rna_path_prop
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Menu"))
+
     def execute(self, context):
         data_path = self.data_path
         value = context_path_validate(context, data_path)
@@ -530,15 +646,15 @@ class WM_OT_context_menu_enum(Operator):
         if value is Ellipsis:
             return {'PASS_THROUGH'}
 
-        base_path, prop_string = data_path.rsplit(".", 1)
+        base_path, prop_attr, _ = context_path_decompose(data_path)
         value_base = context_path_validate(context, base_path)
-        prop = value_base.bl_rna.properties[prop_string]
+        rna_prop = context_path_to_rna_property(context, data_path)
 
         def draw_cb(self, context):
             layout = self.layout
-            layout.prop(value_base, prop_string, expand=True)
+            layout.prop(value_base, prop_attr, expand=True)
 
-        context.window_manager.popup_menu(draw_func=draw_cb, title=prop.name, icon=prop.icon)
+        context.window_manager.popup_menu(draw_func=draw_cb, title=rna_prop.name, icon=rna_prop.icon)
 
         return {'FINISHED'}
 
@@ -550,6 +666,10 @@ class WM_OT_context_pie_enum(Operator):
 
     data_path: rna_path_prop
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Pie Menu"))
+
     def invoke(self, context, event):
         wm = context.window_manager
         data_path = self.data_path
@@ -558,15 +678,15 @@ class WM_OT_context_pie_enum(Operator):
         if value is Ellipsis:
             return {'PASS_THROUGH'}
 
-        base_path, prop_string = data_path.rsplit(".", 1)
+        base_path, prop_attr, _ = context_path_decompose(data_path)
         value_base = context_path_validate(context, base_path)
-        prop = value_base.bl_rna.properties[prop_string]
+        rna_prop = context_path_to_rna_property(context, data_path)
 
         def draw_cb(self, context):
             layout = self.layout
-            layout.prop(value_base, prop_string, expand=True)
+            layout.prop(value_base, prop_attr, expand=True)
 
-        wm.popup_menu_pie(draw_func=draw_cb, title=prop.name, icon=prop.icon, event=event)
+        wm.popup_menu_pie(draw_func=draw_cb, title=rna_prop.name, icon=rna_prop.icon, event=event)
 
         return {'FINISHED'}
 
@@ -587,11 +707,15 @@ class WM_OT_operator_pie_enum(Operator):
         maxlen=1024,
     )
 
+    @classmethod
+    def description(cls, context, props):
+        return description_from_data_path(context, props.data_path, prefix=iface_("Pie Menu"))
+
     def invoke(self, context, event):
         wm = context.window_manager
 
         data_path = self.data_path
-        prop_string = self.prop_string
+        prop_attr = self.prop_string
 
         # same as eval("bpy.ops." + data_path)
         op_mod_str, ob_id_str = data_path.split(".", 1)
@@ -607,7 +731,7 @@ class WM_OT_operator_pie_enum(Operator):
         def draw_cb(self, context):
             layout = self.layout
             pie = layout.menu_pie()
-            pie.operator_enum(data_path, prop_string)
+            pie.operator_enum(data_path, prop_attr)
 
         wm.popup_menu_pie(draw_func=draw_cb, title=op_rna.name, event=event)
 
@@ -631,17 +755,17 @@ class WM_OT_context_set_id(Operator):
         value = self.value
         data_path = self.data_path
 
-        # match the pointer type from the target property to bpy.data.*
+        # Match the pointer type from the target property to `bpy.data.*`
         # so we lookup the correct list.
-        data_path_base, data_path_prop = data_path.rsplit(".", 1)
-        data_prop_rna = eval("context.%s" % data_path_base).rna_type.properties[data_path_prop]
-        data_prop_rna_type = data_prop_rna.fixed_type
+
+        rna_prop = context_path_to_rna_property(context, data_path)
+        rna_prop_fixed_type = rna_prop.fixed_type
 
         id_iter = None
 
         for prop in bpy.data.rna_type.properties:
             if prop.rna_type.identifier == "CollectionProperty":
-                if prop.fixed_type == data_prop_rna_type:
+                if prop.fixed_type == rna_prop_fixed_type:
                     id_iter = prop.identifier
                     break
 
@@ -741,10 +865,12 @@ class WM_OT_context_modal_mouse(Operator):
     input_scale: FloatProperty(
         description="Scale the mouse movement by this value before applying the delta",
         default=0.01,
+        options={'SKIP_SAVE'},
     )
     invert: BoolProperty(
         description="Invert the mouse input",
         default=False,
+        options={'SKIP_SAVE'},
     )
     initial_x: IntProperty(options={'HIDDEN'})
 
@@ -834,7 +960,7 @@ class WM_OT_context_modal_mouse(Operator):
 
 
 class WM_OT_url_open(Operator):
-    """Open a website in the web-browser"""
+    """Open a website in the web browser"""
     bl_idname = "wm.url_open"
     bl_label = ""
     bl_options = {'INTERNAL'}
@@ -851,7 +977,7 @@ class WM_OT_url_open(Operator):
 
 
 class WM_OT_url_open_preset(Operator):
-    """Open a preset website in the web-browser"""
+    """Open a preset website in the web browser"""
     bl_idname = "wm.url_open_preset"
     bl_label = "Open Preset Website"
     bl_options = {'INTERNAL'}
@@ -893,7 +1019,7 @@ class WM_OT_url_open_preset(Operator):
         (('BUG', "Bug",
           "Report a bug with pre-filled version information"),
          _url_from_bug),
-        (('BUG_ADDON', "Add-On Bug",
+        (('BUG_ADDON', "Add-on Bug",
           "Report a bug in an add-on"),
          _url_from_bug_addon),
         (('RELEASE_NOTES', "Release Notes",
@@ -974,7 +1100,7 @@ class WM_OT_path_open(Operator):
         return {'FINISHED'}
 
 
-def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
+def _wm_doc_get_id(doc_id, *, do_url=True, url_prefix="", report=None):
 
     def operator_exists_pair(a, b):
         # Not fast, this is only for docs.
@@ -1025,6 +1151,11 @@ def _wm_doc_get_id(doc_id, do_url=True, url_prefix=""):
                 # Check class for dynamically registered types.
                 rna_class = bpy.types.PropertyGroup.bl_rna_get_subclass_py(class_name)
 
+            if rna_class is None:
+                if report is not None:
+                    report({'ERROR'}, iface_("Type \"%s\" can not be found") % class_name)
+                return None
+
             # Detect if this is a inherited member and use that name instead.
             rna_parent = rna_class.bl_rna
             rna_prop = rna_parent.properties.get(class_prop)
@@ -1059,7 +1190,7 @@ class WM_OT_doc_view_manual(Operator):
     doc_id: doc_id
 
     @staticmethod
-    def _find_reference(rna_id, url_mapping, verbose=True):
+    def _find_reference(rna_id, url_mapping, *, verbose=True):
         if verbose:
             print("online manual check for: '%s'... " % rna_id)
         from fnmatch import fnmatchcase
@@ -1084,9 +1215,9 @@ class WM_OT_doc_view_manual(Operator):
                 return url
 
     def execute(self, _context):
-        rna_id = _wm_doc_get_id(self.doc_id, do_url=False)
+        rna_id = _wm_doc_get_id(self.doc_id, do_url=False, report=self.report)
         if rna_id is None:
-            return {'PASS_THROUGH'}
+            return {'CANCELLED'}
 
         url = self._lookup_rna_url(rna_id)
 
@@ -1118,9 +1249,9 @@ class WM_OT_doc_view(Operator):
         _prefix = ("https://docs.blender.org/api/master")
 
     def execute(self, _context):
-        url = _wm_doc_get_id(self.doc_id, do_url=True, url_prefix=self._prefix)
+        url = _wm_doc_get_id(self.doc_id, do_url=True, url_prefix=self._prefix, report=self.report)
         if url is None:
-            return {'PASS_THROUGH'}
+            return {'CANCELLED'}
 
         import webbrowser
         webbrowser.open(url)
@@ -1175,7 +1306,7 @@ rna_use_soft_limits = BoolProperty(
 
 rna_is_overridable_library = BoolProperty(
     name="Is Library Overridable",
-    description="Allow the property to be overridden when the Data-Block is linked",
+    description="Allow the property to be overridden when the data-block is linked",
     default=False,
 )
 
@@ -1395,7 +1526,7 @@ class WM_OT_properties_edit(Operator):
             self.default = ""
 
         # setup defaults
-        prop_ui = rna_idprop_ui_prop_get(item, prop, False)  # don't create
+        prop_ui = rna_idprop_ui_prop_get(item, prop, create=False)
         if prop_ui:
             self.min = prop_ui.get("min", -1000000000)
             self.max = prop_ui.get("max", 1000000000)
@@ -1604,7 +1735,7 @@ class WM_OT_sysinfo(Operator):
 
 
 class WM_OT_operator_cheat_sheet(Operator):
-    """List all the Operators in a text-block, useful for scripting"""
+    """List all the operators in a text-block, useful for scripting"""
     bl_idname = "wm.operator_cheat_sheet"
     bl_label = "Operator Cheat Sheet"
 
@@ -1625,7 +1756,7 @@ class WM_OT_operator_cheat_sheet(Operator):
         textblock = bpy.data.texts.new("OperatorList.txt")
         textblock.write('# %d Operators\n\n' % tot)
         textblock.write('\n'.join(op_strings))
-        self.report({'INFO'}, "See OperatorList.txt textblock")
+        self.report({'INFO'}, "See OperatorList.txt text block")
         return {'FINISHED'}
 
 
@@ -1687,18 +1818,6 @@ class WM_OT_tool_set_by_id(Operator):
 
     space_type: rna_space_type_prop
 
-    if use_toolbar_release_hack:
-        def invoke(self, context, event):
-            # Hack :S
-            if not self.properties.is_property_set("name"):
-                WM_OT_toolbar._key_held = False
-                return {'PASS_THROUGH'}
-            elif (WM_OT_toolbar._key_held == event.type) and (event.value != 'RELEASE'):
-                return {'PASS_THROUGH'}
-            WM_OT_toolbar._key_held = None
-
-            return self.execute(context)
-
     def execute(self, context):
         from bl_ui.space_toolsystem_common import (
             activate_by_id,
@@ -1717,7 +1836,7 @@ class WM_OT_tool_set_by_id(Operator):
                 tool_settings.workspace_tool_type = 'FALLBACK'
             return {'FINISHED'}
         else:
-            self.report({'WARNING'}, "Tool %r not found for space %r." % (self.name, space_type))
+            self.report({'WARNING'}, "Tool %r not found for space %r" % (self.name, space_type))
             return {'CANCELLED'}
 
 
@@ -1726,7 +1845,7 @@ class WM_OT_tool_set_by_index(Operator):
     bl_idname = "wm.tool_set_by_index"
     bl_label = "Set Tool by Index"
     index: IntProperty(
-        name="Index in toolbar",
+        name="Index in Toolbar",
         default=0,
     )
     cycle: BoolProperty(
@@ -1737,8 +1856,9 @@ class WM_OT_tool_set_by_index(Operator):
     )
 
     expand: BoolProperty(
-        description="Include tool sub-groups",
+        description="Include tool subgroups",
         default=True,
+        options={'SKIP_SAVE'},
     )
 
     as_fallback: BoolProperty(
@@ -1789,15 +1909,8 @@ class WM_OT_toolbar(Operator):
     def poll(cls, context):
         return context.space_data is not None
 
-    if use_toolbar_release_hack:
-        _key_held = None
-
-        def invoke(self, context, event):
-            WM_OT_toolbar._key_held = event.type
-            return self.execute(context)
-
     @staticmethod
-    def keymap_from_toolbar(context, space_type, use_fallback_keys=True, use_reset=True):
+    def keymap_from_toolbar(context, space_type, *, use_fallback_keys=True, use_reset=True):
         from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
         from bl_keymap_utils import keymap_from_toolbar
 
@@ -2072,7 +2185,7 @@ class WM_OT_batch_rename(Operator):
             # Enum identifiers are compared with 'object.type'.
             ('MESH', "Meshes", ""),
             ('CURVE', "Curves", ""),
-            ('META', "Meta Balls", ""),
+            ('META', "Metaballs", ""),
             ('ARMATURE', "Armatures", ""),
             ('LATTICE', "Lattices", ""),
             ('GPENCIL', "Grease Pencils", ""),
@@ -2098,7 +2211,7 @@ class WM_OT_batch_rename(Operator):
     actions: CollectionProperty(type=BatchRenameAction)
 
     @staticmethod
-    def _data_from_context(context, data_type, only_selected, check_context=False):
+    def _data_from_context(context, data_type, only_selected, *, check_context=False):
 
         mode = context.mode
         scene = context.scene
@@ -2163,13 +2276,13 @@ class WM_OT_batch_rename(Operator):
         object_data_type_attrs_map = {
             'MESH': ("meshes", "Mesh(es)"),
             'CURVE': ("curves", "Curve(s)"),
-            'META': ("metaballs", "MetaBall(s)"),
+            'META': ("metaballs", "Metaball(s)"),
             'ARMATURE': ("armatures", "Armature(s)"),
             'LATTICE': ("lattices", "Lattice(s)"),
             'GPENCIL': ("grease_pencils", "Grease Pencil(s)"),
             'CAMERA': ("cameras", "Camera(s)"),
             'SPEAKER': ("speakers", "Speaker(s)"),
-            'LIGHT_PROBE': ("light_probes", "LightProbe(s)"),
+            'LIGHT_PROBE': ("light_probes", "Light Probe(s)"),
         }
 
         # Finish with space types.
@@ -2203,8 +2316,7 @@ class WM_OT_batch_rename(Operator):
                         id
                         for ob in context.selected_objects
                         if ob.type == data_type
-                        for id in (ob.data,)
-                        if id is not None and id.library is None
+                        if (id := ob.data) is not None and id.library is None
                     ))
                     if only_selected else
                     [id for id in getattr(bpy.data, attr) if id.library is None],
@@ -2489,10 +2601,10 @@ class WM_OT_batch_rename(Operator):
         return wm.invoke_props_dialog(self, width=400)
 
 
-class WM_MT_splash(Menu):
-    bl_label = "Splash"
+class WM_MT_splash_quick_setup(Menu):
+    bl_label = "Quick Setup"
 
-    def draw_setup(self, context):
+    def draw(self, context):
         wm = context.window_manager
         # prefs = context.preferences
 
@@ -2580,18 +2692,11 @@ class WM_MT_splash(Menu):
         layout.separator()
         layout.separator()
 
+
+class WM_MT_splash(Menu):
+    bl_label = "Splash"
+
     def draw(self, context):
-        # Draw setup screen if no preferences have been saved yet.
-        import os
-
-        userconfig_path = bpy.utils.user_resource('CONFIG')
-        userdef_path = os.path.join(userconfig_path, "userpref.blend")
-
-        if not os.path.isfile(userdef_path):
-            self.draw_setup(context)
-            return
-
-        # Pass
         layout = self.layout
         layout.operator_context = 'EXEC_DEFAULT'
         layout.emboss = 'PULLDOWN_MENU'
@@ -2740,6 +2845,7 @@ classes = (
     WM_OT_toolbar_prompt,
     BatchRenameAction,
     WM_OT_batch_rename,
+    WM_MT_splash_quick_setup,
     WM_MT_splash,
     WM_MT_splash_about,
 )

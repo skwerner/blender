@@ -18,6 +18,7 @@
  * \ingroup modifiers
  */
 
+#include "BKE_geometry_set.hh"
 #include "BKE_lib_query.h"
 #include "BKE_mesh_runtime.h"
 #include "BKE_modifier.h"
@@ -113,8 +114,7 @@ static void panel_draw(const bContext *C, Panel *panel)
 
   uiLayoutSetPropSep(layout, true);
 
-  uiTemplateID(
-      layout, C, ptr, "texture", "texture.new", nullptr, nullptr, nullptr, 0, ICON_NONE, nullptr);
+  uiTemplateID(layout, C, ptr, "texture", "texture.new", nullptr, nullptr, 0, ICON_NONE, nullptr);
   uiItemR(layout, ptr, "texture_map_mode", 0, "Texture Mapping", ICON_NONE);
 
   if (vdmd->texture_map_mode == MOD_VOLUME_DISPLACE_MAP_OBJECT) {
@@ -285,7 +285,7 @@ struct DisplaceGridOp {
 
 #endif
 
-static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Volume *volume)
+static void displace_volume(ModifierData *md, const ModifierEvalContext *ctx, Volume *volume)
 {
 #ifdef WITH_OPENVDB
   VolumeDisplaceModifierData *vdmd = reinterpret_cast<VolumeDisplaceModifierData *>(md);
@@ -294,7 +294,7 @@ static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Vo
   BKE_volume_load(volume, DEG_get_bmain(ctx->depsgraph));
   const int grid_amount = BKE_volume_num_grids(volume);
   for (int grid_index = 0; grid_index < grid_amount; grid_index++) {
-    VolumeGrid *volume_grid = BKE_volume_grid_get(volume, grid_index);
+    VolumeGrid *volume_grid = BKE_volume_grid_get_for_write(volume, grid_index);
     BLI_assert(volume_grid != nullptr);
 
     openvdb::GridBase::Ptr grid = BKE_volume_grid_openvdb_for_write(volume, volume_grid, false);
@@ -304,12 +304,20 @@ static Volume *modifyVolume(ModifierData *md, const ModifierEvalContext *ctx, Vo
     BKE_volume_grid_type_operation(grid_type, displace_grid_op);
   }
 
-  return volume;
 #else
-  UNUSED_VARS(md, ctx);
+  UNUSED_VARS(md, volume, ctx);
   BKE_modifier_set_error(ctx->object, md, "Compiled without OpenVDB");
-  return volume;
 #endif
+}
+
+static void modifyGeometrySet(ModifierData *md,
+                              const ModifierEvalContext *ctx,
+                              GeometrySet *geometry_set)
+{
+  Volume *input_volume = geometry_set->get_volume_for_write();
+  if (input_volume != nullptr) {
+    displace_volume(md, ctx, input_volume);
+  }
 }
 
 ModifierTypeInfo modifierType_VolumeDisplace = {
@@ -329,8 +337,7 @@ ModifierTypeInfo modifierType_VolumeDisplace = {
     /* deformMatricesEM */ nullptr,
     /* modifyMesh */ nullptr,
     /* modifyHair */ nullptr,
-    /* modifyGeometrySet */ nullptr,
-    /* modifyVolume */ modifyVolume,
+    /* modifyGeometrySet */ modifyGeometrySet,
 
     /* initData */ initData,
     /* requiredDataMask */ nullptr,

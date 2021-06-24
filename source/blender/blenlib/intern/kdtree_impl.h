@@ -158,7 +158,7 @@ static uint kdtree_balance(KDTreeNode *nodes, uint nodes_len, uint axis, const u
     return 0 + ofs;
   }
 
-  /* quicksort style sorting around median */
+  /* Quick-sort style sorting around median. */
   left = 0;
   right = nodes_len - 1;
   median = nodes_len / 2;
@@ -882,7 +882,7 @@ static void deduplicate_recursive(const struct DeDuplicateParams *p, uint i)
  * although it can still be used as a target.
  * \returns The number of merges found (includes any merges already in the \a duplicates array).
  *
- * \note Merging is always a single step (target indices wont be marked for merging).
+ * \note Merging is always a single step (target indices won't be marked for merging).
  */
 int BLI_kdtree_nd_(calc_duplicates_fast)(const KDTree *tree,
                                          const float range,

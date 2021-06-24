@@ -143,12 +143,6 @@ void BlenderSession::create_session()
 
   session->scene = scene;
 
-  /* There is no single depsgraph to use for the entire render.
-   * So we need to handle this differently.
-   *
-   * We could loop over the final render result render layers in pipeline and keep Cycles unaware
-   * of multiple layers, or perhaps move syncing further down in the pipeline.
-   */
   /* create sync */
   sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
   BL::Object b_camera_override(b_engine.camera_override());
@@ -161,7 +155,7 @@ void BlenderSession::create_session()
 
   /* set buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+      b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
   session->reset(buffer_params, session_params.samples);
 
   b_engine.use_highlight_tiles(session_params.progressive_refine == false);
@@ -213,7 +207,7 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   SceneParams scene_params = BlenderSync::get_scene_params(b_scene, background);
 
   if (scene->params.modified(scene_params) || session->params.modified(session_params) ||
-      !scene_params.persistent_data) {
+      !this->b_render.use_persistent_data()) {
     /* if scene or session parameters changed, it's easier to simply re-create
      * them rather than trying to distinguish which settings need to be updated
      */
@@ -225,7 +219,6 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   }
 
   session->progress.reset();
-  scene->reset();
 
   session->tile_manager.set_tile_order(session_params.tile_order);
 
@@ -234,17 +227,22 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
    */
   session->stats.mem_peak = session->stats.mem_used;
 
-  /* There is no single depsgraph to use for the entire render.
-   * See note on create_session().
-   */
-  /* sync object should be re-created */
-  delete sync;
-  sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
+  if (is_new_session) {
+    /* Sync object should be re-created for new scene. */
+    delete sync;
+    sync = new BlenderSync(b_engine, b_data, b_scene, scene, !background, session->progress);
+  }
+  else {
+    /* Sync recalculations to do just the required updates. */
+    sync->sync_recalc(b_depsgraph, b_v3d);
+  }
+
+  BL::Object b_camera_override(b_engine.camera_override());
+  sync->sync_camera(b_render, b_camera_override, width, height, "");
 
   BL::SpaceView3D b_null_space_view3d(PointerRNA_NULL);
   BL::RegionView3D b_null_region_view3d(PointerRNA_NULL);
-  BufferParams buffer_params = BlenderSync::get_buffer_params(b_render,
-                                                              b_null_space_view3d,
+  BufferParams buffer_params = BlenderSync::get_buffer_params(b_null_space_view3d,
                                                               b_null_region_view3d,
                                                               scene->camera,
                                                               width,
@@ -358,11 +356,7 @@ void BlenderSession::do_write_update_render_tile(RenderTile &rtile,
 
   if (do_read_only) {
     /* copy each pass */
-    BL::RenderLayer::passes_iterator b_iter;
-
-    for (b_rlay.passes.begin(b_iter); b_iter != b_rlay.passes.end(); ++b_iter) {
-      BL::RenderPass b_pass(*b_iter);
-
+    for (BL::RenderPass &b_pass : b_rlay.passes) {
       /* find matching pass type */
       PassType pass_type = BlenderSync::get_pass_type(b_pass);
       int components = b_pass.channels();
@@ -491,7 +485,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background, b_view_layer);
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+      b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
 
   /* temporary render result to find needed passes and views */
   BL::RenderResult b_rr = begin_render_result(
@@ -506,7 +500,7 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
 
   /* Compute render passes and film settings. */
   vector<Pass> passes = sync->sync_render_passes(
-      b_rlay, b_view_layer, session_params.adaptive_sampling, session_params.denoising);
+      b_scene, b_rlay, b_view_layer, session_params.adaptive_sampling, session_params.denoising);
 
   /* Set buffer params, using film settings from sync_render_passes. */
   buffer_params.passes = passes;
@@ -552,7 +546,6 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
       int seed = scene->integrator->get_seed();
       seed += hash_uint2(seed, hash_uint2(view_index * 0xdeadbeef, 0));
       scene->integrator->set_seed(seed);
-      scene->integrator->tag_update(scene);
     }
 
     /* Update number of samples per layer. */
@@ -603,18 +596,6 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   /* clear callback */
   session->write_render_tile_cb = function_null;
   session->update_render_tile_cb = function_null;
-
-  /* TODO: find a way to clear this data for persistent data render */
-#if 0
-  /* free all memory used (host and device), so we wouldn't leave render
-   * engine with extra memory allocated
-   */
-
-  session->device_free();
-
-  delete sync;
-  sync = NULL;
-#endif
 }
 
 static int bake_pass_filter_get(const int pass_filter)
@@ -736,10 +717,7 @@ void BlenderSession::do_write_update_render_result(BL::RenderLayer &b_rlay,
 
   if (!do_update_only) {
     /* copy each pass */
-    BL::RenderLayer::passes_iterator b_iter;
-
-    for (b_rlay.passes.begin(b_iter); b_iter != b_rlay.passes.end(); ++b_iter) {
-      BL::RenderPass b_pass(*b_iter);
+    for (BL::RenderPass &b_pass : b_rlay.passes) {
       int components = b_pass.channels();
 
       /* Copy pixels from regular render passes. */
@@ -831,7 +809,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
 
   /* get buffer parameters */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+      b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
 
   if (!buffer_params.denoising_data_pass) {
     session_params.denoising.use = false;
@@ -910,7 +888,7 @@ bool BlenderSession::draw(int w, int h)
       SessionParams session_params = BlenderSync::get_session_params(
           b_engine, b_userpref, b_scene, background);
       BufferParams buffer_params = BlenderSync::get_buffer_params(
-          b_render, b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
+          b_v3d, b_rv3d, scene->camera, width, height, session_params.denoising.use);
       bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
       if (session_pause == false) {
@@ -928,7 +906,7 @@ bool BlenderSession::draw(int w, int h)
 
   /* draw */
   BufferParams buffer_params = BlenderSync::get_buffer_params(
-      b_render, b_v3d, b_rv3d, scene->camera, width, height, session->params.denoising.use);
+      b_v3d, b_rv3d, scene->camera, width, height, session->params.denoising.use);
   DeviceDrawParams draw_params;
 
   if (session->params.display_buffer_linear) {
@@ -1115,10 +1093,6 @@ void BlenderSession::update_resumable_tile_manager(int num_samples)
           << "number of samples to render is " << range_num_samples;
 
   scene->integrator->set_start_sample(rounded_range_start_sample);
-
-  if (scene->integrator->is_modified()) {
-    scene->integrator->tag_update(scene);
-  }
 
   session->tile_manager.range_start_sample = rounded_range_start_sample;
   session->tile_manager.range_num_samples = rounded_range_num_samples;

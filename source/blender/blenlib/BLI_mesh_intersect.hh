@@ -29,6 +29,7 @@
 
 #  include "BLI_array.hh"
 #  include "BLI_double3.hh"
+#  include "BLI_float3.hh"
 #  include "BLI_index_range.hh"
 #  include "BLI_map.hh"
 #  include "BLI_math_mpq.hh"
@@ -95,7 +96,7 @@ struct Plane {
   /* Test equality on the exact fields. */
   bool operator==(const Plane &other) const;
 
-  /* Hash onthe exact fields. */
+  /* Hash on the exact fields. */
   uint64_t hash() const;
 
   void make_canonical();
@@ -144,7 +145,7 @@ struct Face : NonCopyable {
   /* Test equality of verts, in same positions. */
   bool operator==(const Face &other) const;
 
-  /* Test equaliy faces allowing cyclic shifts. */
+  /* Test equality faces allowing cyclic shifts. */
   bool cyclic_equal(const Face &other) const;
 
   FacePos next_pos(FacePos p) const
@@ -340,6 +341,63 @@ class IMesh {
 std::ostream &operator<<(std::ostream &os, const IMesh &mesh);
 
 /**
+ * A Bounding Box using floats, and a routine to detect possible
+ * intersection.
+ */
+struct BoundingBox {
+  float3 min{FLT_MAX, FLT_MAX, FLT_MAX};
+  float3 max{-FLT_MAX, -FLT_MAX, -FLT_MAX};
+
+  BoundingBox() = default;
+  BoundingBox(const float3 &min, const float3 &max) : min(min), max(max)
+  {
+  }
+
+  void combine(const float3 &p)
+  {
+    min.x = min_ff(min.x, p.x);
+    min.y = min_ff(min.y, p.y);
+    min.z = min_ff(min.z, p.z);
+    max.x = max_ff(max.x, p.x);
+    max.y = max_ff(max.y, p.y);
+    max.z = max_ff(max.z, p.z);
+  }
+
+  void combine(const double3 &p)
+  {
+    min.x = min_ff(min.x, static_cast<float>(p.x));
+    min.y = min_ff(min.y, static_cast<float>(p.y));
+    min.z = min_ff(min.z, static_cast<float>(p.z));
+    max.x = max_ff(max.x, static_cast<float>(p.x));
+    max.y = max_ff(max.y, static_cast<float>(p.y));
+    max.z = max_ff(max.z, static_cast<float>(p.z));
+  }
+
+  void combine(const BoundingBox &bb)
+  {
+    min.x = min_ff(min.x, bb.min.x);
+    min.y = min_ff(min.y, bb.min.y);
+    min.z = min_ff(min.z, bb.min.z);
+    max.x = max_ff(max.x, bb.max.x);
+    max.y = max_ff(max.y, bb.max.y);
+    max.z = max_ff(max.z, bb.max.z);
+  }
+
+  void expand(float pad)
+  {
+    min.x -= pad;
+    min.y -= pad;
+    min.z -= pad;
+    max.x += pad;
+    max.y += pad;
+    max.z += pad;
+  }
+};
+
+/** Assume bounding boxes have been expanded by a sufficient epsilon. */
+bool bbs_might_intersect(const BoundingBox &bb_a, const BoundingBox &bb_b);
+
+/**
  * The output will have duplicate vertices merged and degenerate triangles ignored.
  * If the input has overlapping co-planar triangles, then there will be
  * as many duplicates as there are overlaps in each overlapping triangular region.
@@ -356,6 +414,9 @@ IMesh trimesh_nary_intersect(const IMesh &tm_in,
                              std::function<int(int)> shape_fn,
                              bool use_self,
                              IMeshArena *arena);
+
+/** Return an IMesh that is a triangulation of a mesh with general polygonal faces. */
+IMesh triangulate_polymesh(IMesh &imesh, IMeshArena *arena);
 
 /** This has the side effect of populating verts in the #IMesh. */
 void write_obj_mesh(IMesh &m, const std::string &objname);

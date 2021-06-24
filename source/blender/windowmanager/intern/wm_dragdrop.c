@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "DNA_screen_types.h"
+#include "DNA_space_types.h"
 #include "DNA_windowmanager_types.h"
 
 #include "MEM_guardedalloc.h"
@@ -39,6 +40,7 @@
 #include "BKE_context.h"
 #include "BKE_global.h"
 #include "BKE_idtype.h"
+#include "BKE_lib_id.h"
 
 #include "GPU_shader.h"
 #include "GPU_state.h"
@@ -95,11 +97,13 @@ ListBase *WM_dropboxmap_find(const char *idname, int spaceid, int regionid)
 wmDropBox *WM_dropbox_add(ListBase *lb,
                           const char *idname,
                           bool (*poll)(bContext *, wmDrag *, const wmEvent *, const char **),
-                          void (*copy)(wmDrag *, wmDropBox *))
+                          void (*copy)(wmDrag *, wmDropBox *),
+                          void (*cancel)(struct Main *, wmDrag *, wmDropBox *))
 {
   wmDropBox *drop = MEM_callocN(sizeof(wmDropBox), "wmDropBox");
   drop->poll = poll;
   drop->copy = copy;
+  drop->cancel = cancel;
   drop->ot = WM_operatortype_find(idname, 0);
   drop->opcontext = WM_OP_INVOKE_DEFAULT;
 
@@ -150,6 +154,10 @@ wmDrag *WM_event_start_drag(
   switch (type) {
     case WM_DRAG_PATH:
       BLI_strncpy(drag->path, poin, FILE_MAX);
+      /* As the path is being copied, free it immediately as `drag` won't "own" the data. */
+      if (flags & WM_DRAG_FREE_DATA) {
+        MEM_freeN(poin);
+      }
       break;
     case WM_DRAG_ID:
       if (poin) {
@@ -221,7 +229,8 @@ static const char *dropbox_active(bContext *C,
       if (handler->dropboxes) {
         LISTBASE_FOREACH (wmDropBox *, drop, handler->dropboxes) {
           const char *tooltip = NULL;
-          if (drop->poll(C, drag, event, &tooltip)) {
+          if (drop->poll(C, drag, event, &tooltip) &&
+              WM_operator_poll_context(C, drop->ot, drop->opcontext)) {
             /* XXX Doing translation here might not be ideal, but later we have no more
              *     access to ot (and hence op context)... */
             return (tooltip) ? tooltip : WM_operatortype_name(drop->ot, drop->ptr);
@@ -349,6 +358,14 @@ ID *WM_drag_get_local_ID_from_event(const wmEvent *event, short idcode)
   return WM_drag_get_local_ID(lb->first, idcode);
 }
 
+/**
+ * Check if the drag data is either a local ID or an external ID asset of type \a idcode.
+ */
+bool WM_drag_is_ID_type(const wmDrag *drag, int idcode)
+{
+  return WM_drag_get_local_ID(drag, idcode) || WM_drag_get_asset_data(drag, idcode);
+}
+
 wmDragAsset *WM_drag_get_asset_data(const wmDrag *drag, int idcode)
 {
   if (drag->type != WM_DRAG_ASSET) {
@@ -356,19 +373,30 @@ wmDragAsset *WM_drag_get_asset_data(const wmDrag *drag, int idcode)
   }
 
   wmDragAsset *asset_drag = drag->poin;
-  return (idcode == 0 || asset_drag->id_type == idcode) ? asset_drag : NULL;
+  return (ELEM(idcode, 0, asset_drag->id_type)) ? asset_drag : NULL;
 }
 
 static ID *wm_drag_asset_id_import(wmDragAsset *asset_drag)
 {
-  /* Append only for now, wmDragAsset could have a `link` bool. */
-  return WM_file_append_datablock(
-      G_MAIN, NULL, NULL, NULL, asset_drag->path, asset_drag->id_type, asset_drag->name);
+  switch ((eFileAssetImportType)asset_drag->import_type) {
+    case FILE_ASSET_IMPORT_LINK:
+      return WM_file_link_datablock(
+          G_MAIN, NULL, NULL, NULL, asset_drag->path, asset_drag->id_type, asset_drag->name);
+    case FILE_ASSET_IMPORT_APPEND:
+      return WM_file_append_datablock(
+          G_MAIN, NULL, NULL, NULL, asset_drag->path, asset_drag->id_type, asset_drag->name);
+  }
+
+  BLI_assert_unreachable();
+  return NULL;
 }
 
 /**
  * When dragging a local ID, return that. Otherwise, if dragging an asset-handle, link or append
  * that depending on what was chosen by the drag-box (currently append only in fact).
+ *
+ * Use #WM_drag_free_imported_drag_ID() as cancel callback of the drop-box, so that the asset
+ * import is rolled back if the drop operator fails.
  */
 ID *WM_drag_get_local_ID_or_import_from_asset(const wmDrag *drag, int idcode)
 {
@@ -387,6 +415,39 @@ ID *WM_drag_get_local_ID_or_import_from_asset(const wmDrag *drag, int idcode)
 
   /* Link/append the asset. */
   return wm_drag_asset_id_import(asset_drag);
+}
+
+/**
+ * \brief Free asset ID imported for cancelled drop.
+ *
+ * If the asset was imported (linked/appended) using #WM_drag_get_local_ID_or_import_from_asset()`
+ * (typically via a #wmDropBox.copy() callback), we want the ID to be removed again if the drop
+ * operator cancels.
+ * This is for use as #wmDropBox.cancel() callback.
+ */
+void WM_drag_free_imported_drag_ID(struct Main *bmain, wmDrag *drag, wmDropBox *drop)
+{
+  if (drag->type != WM_DRAG_ASSET) {
+    return;
+  }
+
+  wmDragAsset *asset_drag = WM_drag_get_asset_data(drag, 0);
+  if (!asset_drag) {
+    return;
+  }
+
+  /* Get name from property, not asset data - it may have changed after importing to ensure
+   * uniqueness (name is assumed to be set from the imported ID name). */
+  char name[MAX_ID_NAME - 2];
+  RNA_string_get(drop->ptr, "name", name);
+  if (!name[0]) {
+    return;
+  }
+
+  ID *id = BKE_libblock_find_name(bmain, asset_drag->id_type, name);
+  if (id) {
+    BKE_id_delete(bmain, id);
+  }
 }
 
 /* ************** draw ***************** */
@@ -457,7 +518,7 @@ void wm_drags_draw(bContext *C, wmWindow *win, rcti *rect)
     rect->ymin = rect->ymax = cursory;
   }
 
-  /* Should we support multi-line drag draws? Maybe not, more types mixed wont work well. */
+  /* Should we support multi-line drag draws? Maybe not, more types mixed won't work well. */
   GPU_blend(GPU_BLEND_ALPHA);
   LISTBASE_FOREACH (wmDrag *, drag, &wm->drags) {
     const uchar text_col[] = {255, 255, 255, 255};

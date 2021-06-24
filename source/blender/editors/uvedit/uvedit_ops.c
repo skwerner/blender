@@ -187,28 +187,6 @@ void ED_object_assign_active_image(Main *bmain, Object *ob, int mat_nr, Image *i
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name Space Conversion
- * \{ */
-
-void uvedit_pixel_to_float(SpaceImage *sima, float pixeldist, float r_dist[2])
-{
-  int width, height;
-
-  if (sima) {
-    ED_space_image_get_size(sima, &width, &height);
-  }
-  else {
-    width = IMG_SIZE_FALLBACK;
-    height = IMG_SIZE_FALLBACK;
-  }
-
-  r_dist[0] = pixeldist / width;
-  r_dist[1] = pixeldist / height;
-}
-
-/** \} */
-
-/* -------------------------------------------------------------------- */
 /** \name Live Unwrap Utilities
  * \{ */
 
@@ -654,7 +632,7 @@ static void uv_weld_align(bContext *C, eUVWeldAlign tool)
         }
       }
       else {
-        /* error - cant find an endpoint */
+        /* error - can't find an endpoint */
       }
     }
 
@@ -1473,7 +1451,7 @@ static int uv_hide_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   const ToolSettings *ts = scene->toolsettings;
   const bool swap = RNA_boolean_get(op->ptr, "unselected");
-  const int use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
+  const bool use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
 
   uint objects_len = 0;
   Object **objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data_with_uvs(
@@ -1491,9 +1469,14 @@ static int uv_hide_exec(bContext *C, wmOperator *op)
 
     if (ts->uv_flag & UV_SYNC_SELECTION) {
       if (EDBM_mesh_hide(em, swap)) {
-        EDBM_update_generic(ob->data, true, false);
+        EDBM_update(ob->data,
+                    &(const struct EDBMUpdate_Params){
+                        .calc_looptri = true,
+                        .calc_normals = false,
+                        .is_destructive = false,
+                    });
       }
-      return OPERATOR_FINISHED;
+      continue;
     }
 
     BM_ITER_MESH (efa, &iter, em->bm, BM_FACES_OF_MESH) {
@@ -1605,8 +1588,8 @@ static int uv_reveal_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   const ToolSettings *ts = scene->toolsettings;
 
-  const int use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
-  const int stickymode = sima ? (sima->sticky != SI_STICKY_DISABLE) : 1;
+  const bool use_face_center = (ts->uv_selectmode == UV_SELECT_FACE);
+  const bool stickymode = sima ? (sima->sticky != SI_STICKY_DISABLE) : 1;
   const bool select = RNA_boolean_get(op->ptr, "select");
 
   uint objects_len = 0;
@@ -1629,9 +1612,14 @@ static int uv_reveal_exec(bContext *C, wmOperator *op)
     /* call the mesh function if we are in mesh sync sel */
     if (ts->uv_flag & UV_SYNC_SELECTION) {
       if (EDBM_mesh_reveal(em, select)) {
-        EDBM_update_generic(ob->data, true, false);
+        EDBM_update(ob->data,
+                    &(const struct EDBMUpdate_Params){
+                        .calc_looptri = true,
+                        .calc_normals = false,
+                        .is_destructive = false,
+                    });
       }
-      return OPERATOR_FINISHED;
+      continue;
     }
     if (use_face_center) {
       if (em->selectmode == SCE_SELECT_FACE) {

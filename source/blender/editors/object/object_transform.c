@@ -1394,7 +1394,7 @@ static int object_origin_set_exec(bContext *C, wmOperator *op)
              * (all layers are considered without evaluating lock attributes) */
             LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
               /* calculate difference matrix */
-              BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+              BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
               /* undo matrix */
               invert_m4_m4(inverse_diff_mat, diff_mat);
               LISTBASE_FOREACH (bGPDframe *, gpf, &gpl->frames) {
@@ -1533,7 +1533,7 @@ void OBJECT_OT_origin_set(wmOperatorType *ot)
        0,
        "Origin to Geometry",
        "Calculate the center of geometry based on the current pivot point (median, otherwise "
-       "bounding-box)"},
+       "bounding box)"},
       {ORIGIN_TO_CURSOR,
        "ORIGIN_CURSOR",
        0,
@@ -1615,6 +1615,7 @@ struct XFormAxisItem {
 
 struct XFormAxisData {
   ViewContext vc;
+  ViewDepths *depths;
   struct {
     float depth;
     float normal[3];
@@ -1654,7 +1655,7 @@ static void object_transform_axis_target_calc_depth_init(struct XFormAxisData *x
   if (center_tot) {
     mul_v3_fl(center, 1.0f / center_tot);
     float center_proj[3];
-    ED_view3d_project(xfd->vc.region, center, center_proj);
+    ED_view3d_project_v3(xfd->vc.region, center, center_proj);
     xfd->prev.depth = center_proj[2];
     xfd->prev.is_depth_valid = true;
   }
@@ -1684,8 +1685,8 @@ static void object_transform_axis_target_free_data(wmOperator *op)
   struct XFormAxisItem *item = xfd->object_data;
 
 #ifdef USE_RENDER_OVERRIDE
-  if (xfd->vc.rv3d->depths) {
-    xfd->vc.rv3d->depths->damaged = true;
+  if (xfd->depths) {
+    ED_view3d_depths_free(xfd->depths);
   }
 #endif
 
@@ -1782,18 +1783,14 @@ static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, cons
   vc.v3d->flag2 |= V3D_HIDE_OVERLAYS;
 #endif
 
-  ED_view3d_autodist_init(vc.depsgraph, vc.region, vc.v3d, 0);
-
-  if (vc.rv3d->depths != NULL) {
-    vc.rv3d->depths->damaged = true;
-  }
-  ED_view3d_depth_update(vc.region);
+  ViewDepths *depths = NULL;
+  ED_view3d_depth_override(vc.depsgraph, vc.region, vc.v3d, NULL, V3D_DEPTH_NO_GPENCIL, &depths);
 
 #ifdef USE_RENDER_OVERRIDE
   vc.v3d->flag2 = flag2_prev;
 #endif
 
-  if (vc.rv3d->depths == NULL) {
+  if (depths == NULL) {
     BKE_report(op->reports, RPT_WARNING, "Unable to access depth buffer, using view plane");
     return OPERATOR_CANCELLED;
   }
@@ -1805,6 +1802,7 @@ static int object_transform_axis_target_invoke(bContext *C, wmOperator *op, cons
 
   /* Don't change this at runtime. */
   xfd->vc = vc;
+  xfd->depths = depths;
   xfd->vc.mval[0] = event->mval[0];
   xfd->vc.mval[1] = event->mval[1];
 
@@ -1868,37 +1866,39 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
   const bool is_translate_init = is_translate && (xfd->is_translate != is_translate);
 
   if (event->type == MOUSEMOVE || is_translate_init) {
-    const ViewDepths *depths = xfd->vc.rv3d->depths;
+    const ViewDepths *depths = xfd->depths;
     if (depths && ((uint)event->mval[0] < depths->w) && ((uint)event->mval[1] < depths->h)) {
-      double depth = (double)ED_view3d_depth_read_cached(&xfd->vc, event->mval);
+      float depth_fl = 1.0f;
+      ED_view3d_depth_read_cached(depths, event->mval, 0, &depth_fl);
       float location_world[3];
-      if (depth == 1.0f) {
+      if (depth_fl == 1.0f) {
         if (xfd->prev.is_depth_valid) {
-          depth = (double)xfd->prev.depth;
+          depth_fl = xfd->prev.depth;
         }
       }
 
 #ifdef USE_FAKE_DEPTH_INIT
       /* First time only. */
-      if (depth == 1.0f) {
+      if (depth_fl == 1.0f) {
         if (xfd->prev.is_depth_valid == false) {
           object_transform_axis_target_calc_depth_init(xfd, event->mval);
           if (xfd->prev.is_depth_valid) {
-            depth = (double)xfd->prev.depth;
+            depth_fl = xfd->prev.depth;
           }
         }
       }
 #endif
 
+      double depth = (double)depth_fl;
       if ((depth > depths->depth_range[0]) && (depth < depths->depth_range[1])) {
-        xfd->prev.depth = depth;
+        xfd->prev.depth = depth_fl;
         xfd->prev.is_depth_valid = true;
-        if (ED_view3d_depth_unproject(region, event->mval, depth, location_world)) {
+        if (ED_view3d_depth_unproject_v3(region, event->mval, depth, location_world)) {
           if (is_translate) {
 
             float normal[3];
             bool normal_found = false;
-            if (ED_view3d_depth_read_cached_normal(&xfd->vc, event->mval, normal)) {
+            if (ED_view3d_depth_read_cached_normal(region, depths, event->mval, normal)) {
               normal_found = true;
 
               /* cheap attempt to smooth normals out a bit! */
@@ -1908,7 +1908,7 @@ static int object_transform_axis_target_modal(bContext *C, wmOperator *op, const
                   if (x != 0 && y != 0) {
                     const int mval_ofs[2] = {event->mval[0] + x, event->mval[1] + y};
                     float n[3];
-                    if (ED_view3d_depth_read_cached_normal(&xfd->vc, mval_ofs, n)) {
+                    if (ED_view3d_depth_read_cached_normal(region, depths, mval_ofs, n)) {
                       add_v3_v3(normal, n);
                     }
                   }

@@ -30,7 +30,7 @@
 #include <sys/stat.h>
 
 #if defined(__NetBSD__) || defined(__DragonFly__) || defined(__HAIKU__)
-/* Other modern unix os's should probably use this also */
+/* Other modern unix OS's should probably use this also. */
 #  include <sys/statvfs.h>
 #  define USE_STATFS_STATVFS
 #endif
@@ -113,7 +113,7 @@ double BLI_dir_free_space(const char *dir)
   char tmp[4];
 
   tmp[0] = '\\';
-  tmp[1] = 0; /* Just a failsafe */
+  tmp[1] = 0; /* Just a fail-safe. */
   if (ELEM(dir[0] == '/', '\\')) {
     tmp[0] = '\\';
     tmp[1] = 0;
@@ -266,7 +266,8 @@ eFileAttributes BLI_file_attributes(const char *path)
   if (attr & FILE_ATTRIBUTE_SPARSE_FILE) {
     ret |= FILE_ATTR_SPARSE_FILE;
   }
-  if (attr & FILE_ATTRIBUTE_OFFLINE) {
+  if (attr & FILE_ATTRIBUTE_OFFLINE || attr & FILE_ATTRIBUTE_RECALL_ON_OPEN ||
+      attr & FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS) {
     ret |= FILE_ATTR_OFFLINE;
   }
   if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
@@ -292,19 +293,23 @@ bool BLI_file_alias_target(const char *filepath,
                            /* This parameter can only be `const` on Linux since
                             * redirections are not supported there.
                             * NOLINTNEXTLINE: readability-non-const-parameter. */
-                           char r_targetpath[FILE_MAXDIR])
+                           char r_targetpath[/*FILE_MAXDIR*/])
 {
 #  ifdef WIN32
   if (!BLI_path_extension_check(filepath, ".lnk")) {
     return false;
   }
 
-  IShellLinkW *Shortcut = NULL;
-  bool success = false;
-  CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+  if (FAILED(hr)) {
+    return false;
+  }
 
-  HRESULT hr = CoCreateInstance(
+  IShellLinkW *Shortcut = NULL;
+  hr = CoCreateInstance(
       &CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLinkW, (LPVOID *)&Shortcut);
+
+  bool success = false;
   if (SUCCEEDED(hr)) {
     IPersistFile *PersistFile;
     hr = Shortcut->lpVtbl->QueryInterface(Shortcut, &IID_IPersistFile, (LPVOID *)&PersistFile);
@@ -328,6 +333,7 @@ bool BLI_file_alias_target(const char *filepath,
     Shortcut->lpVtbl->Release(Shortcut);
   }
 
+  CoUninitialize();
   return (success && r_targetpath[0]);
 #  else
   UNUSED_VARS(r_targetpath, filepath);
@@ -377,7 +383,7 @@ int BLI_exists(const char *path)
   struct stat st;
   BLI_assert(!BLI_path_is_rel(path));
   if (stat(path, &st)) {
-    return (0);
+    return 0;
   }
 #endif
   return (st.st_mode);

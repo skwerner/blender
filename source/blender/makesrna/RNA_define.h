@@ -388,6 +388,7 @@ void RNA_def_property_string_default(PropertyRNA *prop, const char *value);
 void RNA_def_property_ui_text(PropertyRNA *prop, const char *name, const char *description);
 void RNA_def_property_ui_range(
     PropertyRNA *prop, double min, double max, double step, int precision);
+void RNA_def_property_ui_scale_type(PropertyRNA *prop, PropertyScaleType scale_type);
 void RNA_def_property_ui_icon(PropertyRNA *prop, int icon, int consecutive);
 
 void RNA_def_property_update(PropertyRNA *prop, int noteflag, const char *updatefunc);
@@ -421,7 +422,7 @@ void RNA_def_property_string_funcs(PropertyRNA *prop,
                                    const char *length,
                                    const char *set);
 void RNA_def_property_pointer_funcs(
-    PropertyRNA *prop, const char *get, const char *set, const char *typef, const char *poll);
+    PropertyRNA *prop, const char *get, const char *set, const char *type_fn, const char *poll);
 void RNA_def_property_collection_funcs(PropertyRNA *prop,
                                        const char *begin,
                                        const char *next,
@@ -465,8 +466,6 @@ void RNA_def_property_string_funcs_runtime(PropertyRNA *prop,
                                            StringPropertyLengthFunc lengthfunc,
                                            StringPropertySetFunc setfunc);
 
-void RNA_def_property_enum_py_data(PropertyRNA *prop, void *py_data);
-
 void RNA_def_property_translation_context(PropertyRNA *prop, const char *context);
 
 /* Function */
@@ -507,12 +506,15 @@ void RNA_def_property_duplicate_pointers(StructOrFunctionRNA *cont_, PropertyRNA
 void RNA_def_property_free_pointers(PropertyRNA *prop);
 int RNA_def_property_free_identifier(StructOrFunctionRNA *cont_, const char *identifier);
 
+void RNA_def_property_free_pointers_set_py_data_callback(
+    void (*py_data_clear_fn)(PropertyRNA *prop));
+
 /* utilities */
 const char *RNA_property_typename(PropertyType type);
 #define IS_DNATYPE_FLOAT_COMPAT(_str) (strcmp(_str, "float") == 0 || strcmp(_str, "double") == 0)
 #define IS_DNATYPE_INT_COMPAT(_str) \
   (strcmp(_str, "int") == 0 || strcmp(_str, "short") == 0 || strcmp(_str, "char") == 0 || \
-   strcmp(_str, "uchar") == 0 || strcmp(_str, "ushort") == 0)
+   strcmp(_str, "uchar") == 0 || strcmp(_str, "ushort") == 0 || strcmp(_str, "int8_t") == 0)
 #define IS_DNATYPE_BOOLEAN_COMPAT(_str) \
   (IS_DNATYPE_INT_COMPAT(_str) || strcmp(_str, "int64_t") == 0 || strcmp(_str, "uint64_t") == 0)
 

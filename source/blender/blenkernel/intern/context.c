@@ -80,7 +80,17 @@ struct bContext {
     struct ARegion *menu;
     struct wmGizmoGroup *gizmo_group;
     struct bContextStore *store;
-    const char *operator_poll_msg; /* reason for poll failing */
+
+    /* Operator poll. */
+    /**
+     * Store the reason the poll function fails (static string, not allocated).
+     * For more advanced formatting use `operator_poll_msg_dyn_params`.
+     */
+    const char *operator_poll_msg;
+    /**
+     * Store values to dynamically to create the string (called when a tool-tip is shown).
+     */
+    struct bContextPollMsgDyn_Params operator_poll_msg_dyn_params;
   } wm;
 
   /* data context */
@@ -113,11 +123,16 @@ bContext *CTX_copy(const bContext *C)
 {
   bContext *newC = MEM_dupallocN((void *)C);
 
+  memset(&newC->wm.operator_poll_msg_dyn_params, 0, sizeof(newC->wm.operator_poll_msg_dyn_params));
+
   return newC;
 }
 
 void CTX_free(bContext *C)
 {
+  /* This may contain a dynamically allocated message, free. */
+  CTX_wm_operator_poll_msg_clear(C);
+
   MEM_freeN(C);
 }
 
@@ -318,7 +333,7 @@ static eContextResult ctx_data_get(bContext *C, const char *member, bContextData
    *
    * Values in order of importance
    * (0, -1, 1) - Where 1 is highest priority
-   * */
+   */
   if (done != 1 && recursion < 1 && C->wm.store) {
     C->data.recursion = 1;
 
@@ -914,6 +929,15 @@ struct SpaceTopBar *CTX_wm_space_topbar(const bContext *C)
   return NULL;
 }
 
+struct SpaceSpreadsheet *CTX_wm_space_spreadsheet(const bContext *C)
+{
+  ScrArea *area = CTX_wm_area(C);
+  if (area && area->spacetype == SPACE_SPREADSHEET) {
+    return area->spacedata.first;
+  }
+  return NULL;
+}
+
 void CTX_wm_manager_set(bContext *C, wmWindowManager *wm)
 {
   C->wm.manager = wm;
@@ -994,13 +1018,45 @@ void CTX_wm_gizmo_group_set(bContext *C, struct wmGizmoGroup *gzgroup)
   C->wm.gizmo_group = gzgroup;
 }
 
+void CTX_wm_operator_poll_msg_clear(bContext *C)
+{
+  struct bContextPollMsgDyn_Params *params = &C->wm.operator_poll_msg_dyn_params;
+  if (params->free_fn != NULL) {
+    params->free_fn(C, params->user_data);
+  }
+  params->get_fn = NULL;
+  params->free_fn = NULL;
+  params->user_data = NULL;
+
+  C->wm.operator_poll_msg = NULL;
+}
 void CTX_wm_operator_poll_msg_set(bContext *C, const char *msg)
 {
+  CTX_wm_operator_poll_msg_clear(C);
+
   C->wm.operator_poll_msg = msg;
 }
 
-const char *CTX_wm_operator_poll_msg_get(bContext *C)
+void CTX_wm_operator_poll_msg_set_dynamic(bContext *C,
+                                          const struct bContextPollMsgDyn_Params *params)
 {
+  CTX_wm_operator_poll_msg_clear(C);
+
+  C->wm.operator_poll_msg_dyn_params = *params;
+}
+
+const char *CTX_wm_operator_poll_msg_get(bContext *C, bool *r_free)
+{
+  struct bContextPollMsgDyn_Params *params = &C->wm.operator_poll_msg_dyn_params;
+  if (params->get_fn != NULL) {
+    char *msg = params->get_fn(C, params->user_data);
+    if (msg != NULL) {
+      *r_free = true;
+    }
+    return msg;
+  }
+
+  *r_free = false;
   return IFACE_(C->wm.operator_poll_msg);
 }
 

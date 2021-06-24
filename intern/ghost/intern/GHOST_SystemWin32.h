@@ -64,8 +64,6 @@ class GHOST_SystemWin32 : public GHOST_System {
    ** Time(r) functionality
    ***************************************************************************************/
 
-  GHOST_TUns64 millisSinceStart(__int64 ms) const;
-
   /**
    * This method converts performance counter measurements into milliseconds since the start of the
    * system process.
@@ -322,16 +320,9 @@ class GHOST_SystemWin32 : public GHOST_System {
 
   /**
    * Creates tablet events from Wintab events.
-   * \param type: The type of pointer event.
    * \param window: The window receiving the event (the active window).
-   * \param mask: The button mask of the calling event.
-   * \param mousePressed: Whether the mouse is currently pressed.
-   * \return True if the method handled the event.
    */
-  static GHOST_TSuccess processWintabEvent(GHOST_TEventType type,
-                                           GHOST_WindowWin32 *window,
-                                           GHOST_TButtonMask mask,
-                                           bool mousePressed);
+  static void processWintabEvent(GHOST_WindowWin32 *window);
 
   /**
    * Creates tablet events from pointer events.
@@ -375,6 +366,13 @@ class GHOST_SystemWin32 : public GHOST_System {
    * \param scanCode: The ScanCode of pressed key (similar to PS/2 Set 1).
    */
   GHOST_TKey processSpecialKey(short vKey, short scanCode) const;
+
+  /**
+   * Creates a window size event.
+   * \param window: The window receiving the event (the active window).
+   * \return The event created.
+   */
+  static GHOST_Event *processWindowSizeEvent(GHOST_WindowWin32 *window);
 
   /**
    * Creates a window event.
@@ -463,15 +461,15 @@ class GHOST_SystemWin32 : public GHOST_System {
   __int64 m_lfstart;
   /** AltGr on current keyboard layout. */
   bool m_hasAltGr;
-  /** language identifier. */
+  /** Language identifier. */
   WORD m_langId;
-  /** stores keyboard layout. */
+  /** Stores keyboard layout. */
   HKL m_keylayout;
 
-  /** Console status */
+  /** Console status. */
   int m_consoleStatus;
 
-  /** Wheel delta accumulator */
+  /** Wheel delta accumulator. */
   int m_wheelDeltaAccum;
 };
 

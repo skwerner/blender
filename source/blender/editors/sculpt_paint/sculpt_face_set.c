@@ -138,8 +138,7 @@ static void do_draw_face_sets_brush_task_cb_ex(void *__restrict userdata,
 
   MVert *mvert = SCULPT_mesh_deformed_mverts_get(ss);
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
     if (BKE_pbvh_type(ss->pbvh) == PBVH_FACES) {
       MeshElemMap *vert_map = &ss->pmap[vd.index];
       for (int j = 0; j < ss->pmap[vd.index].count; j++) {
@@ -148,40 +147,42 @@ static void do_draw_face_sets_brush_task_cb_ex(void *__restrict userdata,
         float poly_center[3];
         BKE_mesh_calc_poly_center(p, &ss->mloop[p->loopstart], mvert, poly_center);
 
-        if (sculpt_brush_test_sq_fn(&test, poly_center)) {
-          const float fade = bstrength * SCULPT_brush_strength_factor(ss,
-                                                                      brush,
-                                                                      vd.co,
-                                                                      sqrtf(test.dist),
-                                                                      vd.no,
-                                                                      vd.fno,
-                                                                      vd.mask ? *vd.mask : 0.0f,
-                                                                      vd.index,
-                                                                      thread_id);
+        if (!sculpt_brush_test_sq_fn(&test, poly_center)) {
+          continue;
+        }
+        const float fade = bstrength * SCULPT_brush_strength_factor(ss,
+                                                                    brush,
+                                                                    vd.co,
+                                                                    sqrtf(test.dist),
+                                                                    vd.no,
+                                                                    vd.fno,
+                                                                    vd.mask ? *vd.mask : 0.0f,
+                                                                    vd.index,
+                                                                    thread_id);
 
-          if (fade > 0.05f && ss->face_sets[vert_map->indices[j]] > 0) {
-            ss->face_sets[vert_map->indices[j]] = abs(ss->cache->paint_face_set);
-          }
+        if (fade > 0.05f && ss->face_sets[vert_map->indices[j]] > 0) {
+          ss->face_sets[vert_map->indices[j]] = abs(ss->cache->paint_face_set);
         }
       }
     }
 
     else if (BKE_pbvh_type(ss->pbvh) == PBVH_GRIDS) {
       {
-        if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-          const float fade = bstrength * SCULPT_brush_strength_factor(ss,
-                                                                      brush,
-                                                                      vd.co,
-                                                                      sqrtf(test.dist),
-                                                                      vd.no,
-                                                                      vd.fno,
-                                                                      vd.mask ? *vd.mask : 0.0f,
-                                                                      vd.index,
-                                                                      thread_id);
+        if (!sculpt_brush_test_sq_fn(&test, vd.co)) {
+          continue;
+        }
+        const float fade = bstrength * SCULPT_brush_strength_factor(ss,
+                                                                    brush,
+                                                                    vd.co,
+                                                                    sqrtf(test.dist),
+                                                                    vd.no,
+                                                                    vd.fno,
+                                                                    vd.mask ? *vd.mask : 0.0f,
+                                                                    vd.index,
+                                                                    thread_id);
 
-          if (fade > 0.05f) {
-            SCULPT_vertex_face_set_set(ss, vd.index, ss->cache->paint_face_set);
-          }
+        if (fade > 0.05f) {
+          SCULPT_vertex_face_set_set(ss, vd.index, ss->cache->paint_face_set);
         }
       }
     }
@@ -205,32 +206,34 @@ static void do_relax_face_sets_brush_task_cb_ex(void *__restrict userdata,
       ss, &test, data->brush->falloff_shape);
 
   const bool relax_face_sets = !(ss->cache->iteration_count % 3 == 0);
-  /* This operations needs a stregth tweak as the relax deformation is too weak by default. */
+  /* This operations needs a strength tweak as the relax deformation is too weak by default. */
   if (relax_face_sets) {
     bstrength *= 2.0f;
   }
 
   const int thread_id = BLI_task_parallel_thread_id(tls);
 
-  BKE_pbvh_vertex_iter_begin(ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE)
-  {
-    if (sculpt_brush_test_sq_fn(&test, vd.co)) {
-      if (relax_face_sets != SCULPT_vertex_has_unique_face_set(ss, vd.index)) {
-        const float fade = bstrength * SCULPT_brush_strength_factor(ss,
-                                                                    brush,
-                                                                    vd.co,
-                                                                    sqrtf(test.dist),
-                                                                    vd.no,
-                                                                    vd.fno,
-                                                                    vd.mask ? *vd.mask : 0.0f,
-                                                                    vd.index,
-                                                                    thread_id);
+  BKE_pbvh_vertex_iter_begin (ss->pbvh, data->nodes[n], vd, PBVH_ITER_UNIQUE) {
+    if (!sculpt_brush_test_sq_fn(&test, vd.co)) {
+      continue;
+    }
+    if (relax_face_sets == SCULPT_vertex_has_unique_face_set(ss, vd.index)) {
+      continue;
+    }
 
-        SCULPT_relax_vertex(ss, &vd, fade * bstrength, relax_face_sets, vd.co);
-        if (vd.mvert) {
-          vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
-        }
-      }
+    const float fade = bstrength * SCULPT_brush_strength_factor(ss,
+                                                                brush,
+                                                                vd.co,
+                                                                sqrtf(test.dist),
+                                                                vd.no,
+                                                                vd.fno,
+                                                                vd.mask ? *vd.mask : 0.0f,
+                                                                vd.index,
+                                                                thread_id);
+
+    SCULPT_relax_vertex(ss, &vd, fade * bstrength, relax_face_sets, vd.co);
+    if (vd.mvert) {
+      vd.mvert->flag |= ME_VERT_PBVH_UPDATE;
     }
   }
   BKE_pbvh_vertex_iter_end;
@@ -313,7 +316,7 @@ static int sculpt_face_set_create_exec(bContext *C, wmOperator *op)
 
   const int mode = RNA_enum_get(op->ptr, "mode");
 
-  /* Dyntopo not suported. */
+  /* Dyntopo not supported. */
   if (BKE_pbvh_type(ss->pbvh) == PBVH_BMESH) {
     return OPERATOR_CANCELLED;
   }
@@ -442,6 +445,7 @@ typedef enum eSculptFaceSetsInitMode {
   SCULPT_FACE_SETS_FROM_SHARP_EDGES = 5,
   SCULPT_FACE_SETS_FROM_BEVEL_WEIGHT = 6,
   SCULPT_FACE_SETS_FROM_FACE_MAPS = 7,
+  SCULPT_FACE_SETS_FROM_FACE_SET_BOUNDARIES = 8,
 } eSculptFaceSetsInitMode;
 
 static EnumPropertyItem prop_sculpt_face_sets_init_types[] = {
@@ -501,6 +505,14 @@ static EnumPropertyItem prop_sculpt_face_sets_init_types[] = {
         "Face Sets from Face Maps",
         "Create a Face Set per Face Map",
     },
+    {
+        SCULPT_FACE_SETS_FROM_FACE_SET_BOUNDARIES,
+        "FACE_SET_BOUNDARIES",
+        0,
+        "Face Sets from Face Set Boundaries",
+        "Create a Face Set per isolated Face Set",
+    },
+
     {0, NULL, 0, NULL, NULL},
 };
 
@@ -552,6 +564,14 @@ static bool sculpt_face_sets_init_sharp_edges_test(BMesh *UNUSED(bm),
   return BM_elem_flag_test(from_e, BM_ELEM_SMOOTH);
 }
 
+static bool sculpt_face_sets_init_face_set_boundary_test(
+    BMesh *bm, BMFace *from_f, BMEdge *UNUSED(from_e), BMFace *to_f, const float UNUSED(threshold))
+{
+  const int cd_face_sets_offset = CustomData_get_offset(&bm->pdata, CD_SCULPT_FACE_SETS);
+  return BM_ELEM_CD_GET_INT(from_f, cd_face_sets_offset) ==
+         BM_ELEM_CD_GET_INT(to_f, cd_face_sets_offset);
+}
+
 static void sculpt_face_sets_init_flood_fill(Object *ob,
                                              face_sets_flood_fill_test test,
                                              const float threshold)
@@ -582,44 +602,49 @@ static void sculpt_face_sets_init_flood_fill(Object *ob,
   int next_face_set = 1;
 
   for (int i = 0; i < totfaces; i++) {
-    if (!BLI_BITMAP_TEST(visited_faces, i)) {
-      GSQueue *queue;
-      queue = BLI_gsqueue_new(sizeof(int));
+    if (BLI_BITMAP_TEST(visited_faces, i)) {
+      continue;
+    }
+    GSQueue *queue;
+    queue = BLI_gsqueue_new(sizeof(int));
 
-      face_sets[i] = next_face_set;
-      BLI_BITMAP_ENABLE(visited_faces, i);
-      BLI_gsqueue_push(queue, &i);
+    face_sets[i] = next_face_set;
+    BLI_BITMAP_ENABLE(visited_faces, i);
+    BLI_gsqueue_push(queue, &i);
 
-      while (!BLI_gsqueue_is_empty(queue)) {
-        int from_f;
-        BLI_gsqueue_pop(queue, &from_f);
+    while (!BLI_gsqueue_is_empty(queue)) {
+      int from_f;
+      BLI_gsqueue_pop(queue, &from_f);
 
-        BMFace *f, *f_neighbor;
-        BMEdge *ed;
-        BMIter iter_a, iter_b;
+      BMFace *f, *f_neighbor;
+      BMEdge *ed;
+      BMIter iter_a, iter_b;
 
-        f = BM_face_at_index(bm, from_f);
+      f = BM_face_at_index(bm, from_f);
 
-        BM_ITER_ELEM (ed, &iter_a, f, BM_EDGES_OF_FACE) {
-          BM_ITER_ELEM (f_neighbor, &iter_b, ed, BM_FACES_OF_EDGE) {
-            if (f_neighbor != f) {
-              int neighbor_face_index = BM_elem_index_get(f_neighbor);
-              if (!BLI_BITMAP_TEST(visited_faces, neighbor_face_index)) {
-                if (test(bm, f, ed, f_neighbor, threshold)) {
-                  face_sets[neighbor_face_index] = next_face_set;
-                  BLI_BITMAP_ENABLE(visited_faces, neighbor_face_index);
-                  BLI_gsqueue_push(queue, &neighbor_face_index);
-                }
-              }
-            }
+      BM_ITER_ELEM (ed, &iter_a, f, BM_EDGES_OF_FACE) {
+        BM_ITER_ELEM (f_neighbor, &iter_b, ed, BM_FACES_OF_EDGE) {
+          if (f_neighbor == f) {
+            continue;
           }
+          int neighbor_face_index = BM_elem_index_get(f_neighbor);
+          if (BLI_BITMAP_TEST(visited_faces, neighbor_face_index)) {
+            continue;
+          }
+          if (!test(bm, f, ed, f_neighbor, threshold)) {
+            continue;
+          }
+
+          face_sets[neighbor_face_index] = next_face_set;
+          BLI_BITMAP_ENABLE(visited_faces, neighbor_face_index);
+          BLI_gsqueue_push(queue, &neighbor_face_index);
         }
       }
-
-      next_face_set += 1;
-
-      BLI_gsqueue_free(queue);
     }
+
+    next_face_set += 1;
+
+    BLI_gsqueue_free(queue);
   }
 
   MEM_SAFE_FREE(visited_faces);
@@ -714,6 +739,10 @@ static int sculpt_face_set_init_exec(bContext *C, wmOperator *op)
       break;
     case SCULPT_FACE_SETS_FROM_BEVEL_WEIGHT:
       sculpt_face_sets_init_flood_fill(ob, sculpt_face_sets_init_bevel_weight_test, threshold);
+      break;
+    case SCULPT_FACE_SETS_FROM_FACE_SET_BOUNDARIES:
+      sculpt_face_sets_init_flood_fill(
+          ob, sculpt_face_sets_init_face_set_boundary_test, threshold);
       break;
     case SCULPT_FACE_SETS_FROM_FACE_MAPS:
       sculpt_face_sets_init_loop(ob, SCULPT_FACE_SETS_FROM_FACE_MAPS);
@@ -919,10 +948,6 @@ static int sculpt_face_sets_change_visibility_exec(bContext *C, wmOperator *op)
   BKE_pbvh_update_vertex_data(ss->pbvh, PBVH_UpdateVisibility);
 
   MEM_SAFE_FREE(nodes);
-
-  if (BKE_pbvh_type(pbvh) == PBVH_FACES) {
-    BKE_mesh_flush_hidden_from_verts(ob->data);
-  }
 
   SCULPT_tag_update_overlays(C);
 

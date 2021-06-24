@@ -63,7 +63,7 @@
  * because 'near' is disabled through BLI_windstuff */
 #  include "BLI_winstuff.h"
 #  include "utfconv.h"
-#  include <direct.h> /* chdir */
+#  include <direct.h> /* #chdir */
 #  include <shlobj.h>
 #endif
 
@@ -112,13 +112,13 @@ static bool get_thumb_dir(char *dir, ThumbSize size)
 #endif
   switch (size) {
     case THB_NORMAL:
-      subdir = "/" THUMBNAILS "/normal/";
+      subdir = SEP_STR THUMBNAILS SEP_STR "normal" SEP_STR;
       break;
     case THB_LARGE:
-      subdir = "/" THUMBNAILS "/large/";
+      subdir = SEP_STR THUMBNAILS SEP_STR "large" SEP_STR;
       break;
     case THB_FAIL:
-      subdir = "/" THUMBNAILS "/fail/blender/";
+      subdir = SEP_STR THUMBNAILS SEP_STR "fail" SEP_STR "blender" SEP_STR;
       break;
     default:
       return 0; /* unknown size */
@@ -393,7 +393,7 @@ static ImBuf *thumb_create_ex(const char *file_path,
               img = IMB_thumb_load_font(file_path, tsize, tsize);
               break;
             default:
-              BLI_assert(0); /* This should never happen */
+              BLI_assert_unreachable(); /* This should never happen */
           }
         }
 
@@ -738,7 +738,7 @@ void IMB_thumb_path_unlock(const char *path)
 
   if (thumb_locks.locked_paths) {
     if (!BLI_gset_remove(thumb_locks.locked_paths, key, MEM_freeN)) {
-      BLI_assert(0);
+      BLI_assert_unreachable();
     }
     BLI_condition_notify_all(&thumb_locks.cond);
   }

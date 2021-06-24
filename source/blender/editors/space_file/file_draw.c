@@ -131,10 +131,19 @@ static void draw_tile(int sx, int sy, int width, int height, int colorid, int sh
   UI_GetThemeColorShade4fv(colorid, shade, color);
   UI_draw_roundbox_corner_set(UI_CNR_ALL);
   UI_draw_roundbox_aa(
-      true, (float)sx, (float)(sy - height), (float)(sx + width), (float)sy, 5.0f, color);
+      &(const rctf){
+          .xmin = (float)sx,
+          .xmax = (float)(sx + width),
+          .ymin = (float)(sy - height),
+          .ymax = (float)sy,
+      },
+      true,
+      5.0f,
+      color);
 }
 
-static void file_draw_icon(uiBlock *block,
+static void file_draw_icon(const SpaceFile *sfile,
+                           uiBlock *block,
                            const FileDirEntry *file,
                            const char *path,
                            int sx,
@@ -165,14 +174,19 @@ static void file_draw_icon(uiBlock *block,
     if ((id = filelist_file_get_id(file))) {
       UI_but_drag_set_id(but, id);
     }
-    else if (file->typeflag & FILE_TYPE_ASSET) {
+    else if (sfile->browse_mode == FILE_BROWSE_MODE_ASSETS &&
+             (file->typeflag & FILE_TYPE_ASSET) != 0) {
       ImBuf *preview_image = filelist_file_getimage(file);
       char blend_path[FILE_MAX_LIBEXTRA];
       if (BLO_library_path_explode(path, blend_path, NULL, NULL)) {
+        const FileAssetSelectParams *asset_params = ED_fileselect_get_asset_params(sfile);
+        BLI_assert(asset_params != NULL);
+
         UI_but_drag_set_asset(but,
                               file->name,
                               BLI_strdup(blend_path),
                               file->blentype,
+                              asset_params->import_type,
                               icon,
                               preview_image,
                               UI_DPI_FAC);
@@ -291,7 +305,8 @@ void file_calc_previews(const bContext *C, ARegion *region)
   UI_view2d_totRect_set(v2d, sfile->layout->width, sfile->layout->height);
 }
 
-static void file_draw_preview(uiBlock *block,
+static void file_draw_preview(const SpaceFile *sfile,
+                              uiBlock *block,
                               const FileDirEntry *file,
                               const char *path,
                               int sx,
@@ -315,6 +330,7 @@ static void file_draw_preview(uiBlock *block,
   int ex, ey;
   bool show_outline = !is_icon &&
                       (file->typeflag & (FILE_TYPE_IMAGE | FILE_TYPE_MOVIE | FILE_TYPE_BLENDER));
+  const bool is_offline = (file->attributes & FILE_ATTR_OFFLINE);
 
   BLI_assert(imb != NULL);
 
@@ -411,14 +427,14 @@ static void file_draw_preview(uiBlock *block,
         icon_x, icon_y, icon, icon_aspect / U.dpi_fac, icon_opacity, 0.0f, icon_color, false);
   }
 
-  if (is_link) {
-    /* Arrow icon to indicate it is a shortcut, link, or alias. */
+  if (is_link || is_offline) {
+    /* Icon at bottom to indicate it is a shortcut, link, alias, or offline. */
     float icon_x, icon_y;
     icon_x = xco + (2.0f * UI_DPI_FAC);
     icon_y = yco + (2.0f * UI_DPI_FAC);
-    const int arrow = ICON_LOOP_FORWARDS;
+    const int arrow = is_link ? ICON_LOOP_FORWARDS : ICON_URL;
     if (!is_icon) {
-      /* Arrow at very bottom-left if preview style. */
+      /* At very bottom-left if preview style. */
       const uchar dark[4] = {0, 0, 0, 255};
       const uchar light[4] = {255, 255, 255, 255};
       UI_icon_draw_ex(icon_x + 1, icon_y - 1, arrow, 1.0f / U.dpi_fac, 0.2f, 0.0f, dark, false);
@@ -465,7 +481,7 @@ static void file_draw_preview(uiBlock *block,
 
   but = uiDefBut(block, UI_BTYPE_LABEL, 0, "", xco, yco, ex, ey, NULL, 0.0, 0.0, 0, 0, NULL);
 
-  /* dragregion */
+  /* Drag-region. */
   if (drag) {
     ID *id;
 
@@ -475,9 +491,19 @@ static void file_draw_preview(uiBlock *block,
     /* path is no more static, cannot give it directly to but... */
     else if (file->typeflag & FILE_TYPE_ASSET) {
       char blend_path[FILE_MAX_LIBEXTRA];
+
       if (BLO_library_path_explode(path, blend_path, NULL, NULL)) {
-        UI_but_drag_set_asset(
-            but, file->name, BLI_strdup(blend_path), file->blentype, icon, imb, scale);
+        const FileAssetSelectParams *asset_params = ED_fileselect_get_asset_params(sfile);
+        BLI_assert(asset_params != NULL);
+
+        UI_but_drag_set_asset(but,
+                              file->name,
+                              BLI_strdup(blend_path),
+                              file->blentype,
+                              asset_params->import_type,
+                              icon,
+                              imb,
+                              scale);
       }
     }
     else {
@@ -546,7 +572,7 @@ static void draw_background(FileLayout *layout, View2D *v2d)
   for (i = 2; (i <= layout->rows + 1); i += 2) {
     sy = (int)v2d->cur.ymax - layout->offset_top - i * item_height - layout->tile_border_y;
 
-    /* Offsett pattern slightly to add scroll effect. */
+    /* Offset pattern slightly to add scroll effect. */
     sy += round_fl_to_int(item_height * (v2d->tot.ymax - v2d->cur.ymax) / item_height);
 
     immRectf(pos,
@@ -916,7 +942,8 @@ void file_draw_list(const bContext *C, ARegion *region)
         is_icon = 1;
       }
 
-      file_draw_preview(block,
+      file_draw_preview(sfile,
+                        block,
                         file,
                         path,
                         sx,
@@ -931,7 +958,8 @@ void file_draw_list(const bContext *C, ARegion *region)
                         is_link);
     }
     else {
-      file_draw_icon(block,
+      file_draw_icon(sfile,
+                     block,
                      file,
                      path,
                      sx,
@@ -1039,7 +1067,7 @@ static void file_draw_invalid_library_hint(const SpaceFile *sfile, const ARegion
     UI_icon_draw(sx, sy - UI_UNIT_Y, ICON_INFO);
 
     const char *suggestion = TIP_(
-        "Set up the library or edit libraries in the Preferences, File Paths section.");
+        "Set up the library or edit libraries in the Preferences, File Paths section");
     file_draw_string_multiline(
         sx + UI_UNIT_X, sy, suggestion, width - UI_UNIT_X, line_height, text_col, NULL, NULL);
   }

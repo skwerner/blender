@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 #pragma once
 
@@ -165,6 +164,9 @@ void compatible_eul(float eul[3], const float old[3]);
 
 void rotate_eul(float eul[3], const char axis, const float angle);
 
+void add_eul_euleul(float r_eul[3], float a[3], float b[3], const short order);
+void sub_eul_euleul(float r_eul[3], float a[3], float b[3], const short order);
+
 /************************** Arbitrary Order Eulers ***************************/
 
 /* warning: must match the eRotationModes in DNA_action_types.h
@@ -178,7 +180,7 @@ typedef enum eEulerRotationOrders {
   EULER_ORDER_YZX,
   EULER_ORDER_ZXY,
   EULER_ORDER_ZYX,
-  /* there are 6 more entries with dulpicate entries included */
+  /* There are 6 more entries with duplicate entries included. */
 } eEulerRotationOrders;
 
 void eulO_to_quat(float quat[4], const float eul[3], const short order);

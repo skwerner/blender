@@ -152,7 +152,7 @@ static struct bUnitDef buMetricLenDef[] = {
   {"micrometer", "micrometers", "µm",  "um", "Micrometers",    "MICROMETERS", UN_SC_UM,  0.0, B_UNIT_DEF_NONE},
 
   /* These get displayed because of float precision problems in the transform header,
-   * could work around, but for now probably people wont use these. */
+   * could work around, but for now probably people won't use these. */
 #if 0
   {"nanometer", "Nanometers",     "nm", NULL, 0.000000001, 0.0,   B_UNIT_DEF_NONE},
   {"picometer", "Picometers",     "pm", NULL, 0.000000000001, 0.0, B_UNIT_DEF_NONE},
@@ -333,7 +333,7 @@ static struct bUnitCollection buPowerCollection = {buPowerDef, 3, 0, UNIT_COLLEC
 /* Temperature */
 static struct bUnitDef buMetricTempDef[] = {
   {"kelvin",  "kelvin",  "K",  NULL, "Kelvin",  "KELVIN",  1.0f, 0.0,    B_UNIT_DEF_NONE}, /* Base unit. */
-  {"celsius", "celsius", "°C", "C",  "Celsius", "CELCIUS", 1.0f, 273.15, B_UNIT_DEF_NONE},
+  {"celsius", "celsius", "°C", "C",  "Celsius", "CELSIUS", 1.0f, 273.15, B_UNIT_DEF_NONE},
   NULL_UNIT,
 };
 static struct bUnitCollection buMetricTempCollection = {buMetricTempDef, 0, 0, UNIT_COLLECTION_LENGTH(buMetricTempDef)};
@@ -358,6 +358,7 @@ static const struct bUnitCollection *bUnitSystems[][B_UNIT_TYPE_TOT] = {
      NULL,
      &buNaturalRotCollection,
      &buNaturalTimeCollection,
+     &buNaturalTimeCollection,
      NULL,
      NULL,
      NULL,
@@ -370,6 +371,7 @@ static const struct bUnitCollection *bUnitSystems[][B_UNIT_TYPE_TOT] = {
      &buMetricVolCollection,
      &buMetricMassCollection,
      &buNaturalRotCollection,
+     &buNaturalTimeCollection,
      &buNaturalTimeCollection,
      &buMetricVelCollection,
      &buMetricAclCollection,
@@ -384,12 +386,13 @@ static const struct bUnitCollection *bUnitSystems[][B_UNIT_TYPE_TOT] = {
      &buImperialMassCollection,
      &buNaturalRotCollection,
      &buNaturalTimeCollection,
+     &buNaturalTimeCollection,
      &buImperialVelCollection,
      &buImperialAclCollection,
      &buCameraLenCollection,
      &buPowerCollection,
      &buImperialTempCollection},
-    {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
+    {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
 };
 
 static const bUnitCollection *unit_get_system(int system, int type)
@@ -943,7 +946,7 @@ static int unit_scale_str(char *str,
 
     /* Add the addition sign, the bias, and the close parenthesis after the value. */
     int value_end_ofs = find_end_of_value_chars(str, len_max, prev_op_ofs + 2);
-    int len_bias_num = BLI_snprintf(str_tmp, TEMP_STR_SIZE, "+%.9g)", unit->bias);
+    int len_bias_num = BLI_snprintf_rlen(str_tmp, TEMP_STR_SIZE, "+%.9g)", unit->bias);
     if (value_end_ofs + len_bias_num < len_max) {
       memmove(str + value_end_ofs + len_bias_num, str + value_end_ofs, len - value_end_ofs + 1);
       memcpy(str + value_end_ofs, str_tmp, len_bias_num);
@@ -957,7 +960,8 @@ static int unit_scale_str(char *str,
   int len_move = (len - (found_ofs + len_name)) + 1; /* 1+ to copy the string terminator. */
 
   /* "#" Removed later */
-  int len_num = BLI_snprintf(str_tmp, TEMP_STR_SIZE, "*%.9g" SEP_STR, unit->scalar / scale_pref);
+  int len_num = BLI_snprintf_rlen(
+      str_tmp, TEMP_STR_SIZE, "*%.9g" SEP_STR, unit->scalar / scale_pref);
 
   if (len_num > len_max) {
     len_num = len_max;
@@ -984,7 +988,7 @@ static int unit_scale_str(char *str,
     memcpy(str_found, str_tmp, len_num); /* Without the string terminator. */
   }
 
-  /* Since the null terminator wont be moved if the stringlen_max
+  /* Since the null terminator won't be moved if the stringlen_max
    * was not long enough to fit everything in it. */
   str[len_max - 1] = '\0';
   return found_ofs + len_num;
@@ -1132,8 +1136,8 @@ bool BKE_unit_replace_string(
     strncpy(str, str_tmp, len_max);
   }
   else {
-    /* BLI_snprintf would not fit into str_tmp, cant do much in this case.
-     * Check for this because otherwise BKE_unit_replace_string could call its self forever. */
+    /* BLI_snprintf would not fit into str_tmp, can't do much in this case.
+     * Check for this because otherwise BKE_unit_replace_string could call itself forever. */
     return changed;
   }
 
@@ -1167,8 +1171,7 @@ bool BKE_unit_replace_string(
   /* Replace # with add sign when there is no operator between it and the next number.
    *
    * "1*1# 3*100# * 3"  ->  "1*1+ 3*100  * 3"
-   *
-   * */
+   */
   {
     char *str_found = str;
     const char *ch = str;

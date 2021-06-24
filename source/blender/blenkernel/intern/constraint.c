@@ -1463,30 +1463,20 @@ static void followpath_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
      * currently for paths to work it needs to go through the bevlist/displist system (ton)
      */
 
-    if (ct->tar->runtime.curve_cache && ct->tar->runtime.curve_cache->path &&
-        ct->tar->runtime.curve_cache->path->data) {
+    if (ct->tar->runtime.curve_cache && ct->tar->runtime.curve_cache->anim_path_accum_length) {
       float quat[4];
       if ((data->followflag & FOLLOWPATH_STATIC) == 0) {
         /* animated position along curve depending on time */
-        Nurb *nu = cu->nurb.first;
         curvetime = cu->ctime - data->offset;
 
         /* ctime is now a proper var setting of Curve which gets set by Animato like any other var
          * that's animated, but this will only work if it actually is animated...
          *
          * we divide the curvetime calculated in the previous step by the length of the path,
-         * to get a time factor, which then gets clamped to lie within 0.0 - 1.0 range. */
+         * to get a time factor. */
         curvetime /= cu->pathlen;
 
-        if (nu && nu->flagu & CU_NURB_CYCLIC) {
-          /* If the curve is cyclic, enable looping around if the time is
-           * outside the bounds 0..1 */
-          if ((curvetime < 0.0f) || (curvetime > 1.0f)) {
-            curvetime -= floorf(curvetime);
-          }
-        }
-        else {
-          /* The curve is not cyclic, so clamp to the begin/end points. */
+        if (cu->flag & CU_PATH_CLAMP) {
           CLAMP(curvetime, 0.0f, 1.0f);
         }
       }
@@ -1495,13 +1485,13 @@ static void followpath_get_tarmat(struct Depsgraph *UNUSED(depsgraph),
         curvetime = data->offset_fac;
       }
 
-      if (where_on_path(ct->tar,
-                        curvetime,
-                        vec,
-                        dir,
-                        (data->followflag & FOLLOWPATH_FOLLOW) ? quat : NULL,
-                        &radius,
-                        NULL)) { /* quat_pt is quat or NULL*/
+      if (BKE_where_on_path(ct->tar,
+                            curvetime,
+                            vec,
+                            dir,
+                            (data->followflag & FOLLOWPATH_FOLLOW) ? quat : NULL,
+                            &radius,
+                            NULL)) { /* quat_pt is quat or NULL*/
         float totmat[4][4];
         unit_m4(totmat);
 
@@ -1645,10 +1635,28 @@ static void rotlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *UN
   float eul[3];
   float size[3];
 
+  /* This constraint is based on euler rotation math, which doesn't work well with shear.
+   * The Y axis is chosen as the main one because constraints are most commonly used on bones.
+   * This also allows using the constraint to simply remove shear. */
+  orthogonalize_m4_stable(cob->matrix, 1, false);
+
+  /* Only do the complex processing if some limits are actually enabled. */
+  if (!(data->flag & (LIMIT_XROT | LIMIT_YROT | LIMIT_ZROT))) {
+    return;
+  }
+
+  /* Select the Euler rotation order, defaulting to the owner value. */
+  short rot_order = cob->rotOrder;
+
+  if (data->euler_order != CONSTRAINT_EULER_AUTO) {
+    rot_order = data->euler_order;
+  }
+
+  /* Decompose the matrix using the specified order. */
   copy_v3_v3(loc, cob->matrix[3]);
   mat4_to_size(size, cob->matrix);
 
-  mat4_to_eulO(eul, cob->rotOrder, cob->matrix);
+  mat4_to_eulO(eul, rot_order, cob->matrix);
 
   /* constraint data uses radians internally */
 
@@ -1681,7 +1689,7 @@ static void rotlimit_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *UN
     }
   }
 
-  loc_eulO_size_to_mat4(cob->matrix, loc, eul, size, cob->rotOrder);
+  loc_eulO_size_to_mat4(cob->matrix, loc, eul, size, rot_order);
 }
 
 static bConstraintTypeInfo CTI_ROTLIMIT = {
@@ -2539,9 +2547,14 @@ static void armdef_accumulate_matrix(const float obmat[4][4],
 
   /* Accumulate the transformation. */
   if (r_sum_dq != NULL) {
+    float basemat_world[4][4];
     DualQuat tmpdq;
 
-    mat4_to_dquat(&tmpdq, basemat, mat);
+    /* Compute the orthonormal rest matrix in world space. */
+    mul_m4_m4m4(basemat_world, obmat, basemat);
+    orthogonalize_m4_stable(basemat_world, 1, true);
+
+    mat4_to_dquat(&tmpdq, basemat_world, mat);
     add_weighted_dq_dq(r_sum_dq, &tmpdq, weight);
   }
   else {
@@ -2558,7 +2571,7 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
                                    float r_sum_mat[4][4],
                                    DualQuat *r_sum_dq)
 {
-  float iobmat[4][4], basemat[4][4], co[3];
+  float iobmat[4][4], co[3];
   Bone *bone = pchan->bone;
   float weight = ct->weight;
 
@@ -2572,15 +2585,12 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
         co, bone->arm_head, bone->arm_tail, bone->rad_head, bone->rad_tail, bone->dist);
   }
 
-  /* Compute the quaternion base matrix. */
-  if (r_sum_dq != NULL) {
-    mul_m4_series(basemat, ct->tar->obmat, bone->arm_mat, iobmat);
-  }
-
   /* Find the correct bone transform matrix in world space. */
   if (bone->segments > 1 && bone->segments == pchan->runtime.bbone_segments) {
     Mat4 *b_bone_mats = pchan->runtime.bbone_deform_mats;
+    Mat4 *b_bone_rest_mats = pchan->runtime.bbone_rest_mats;
     float(*iamat)[4] = b_bone_mats[0].mat;
+    float basemat[4][4];
 
     /* The target is a B-Bone:
      * FIRST: find the segment (see b_bone_deform in armature.c)
@@ -2592,6 +2602,11 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
     float blend;
     BKE_pchan_bbone_deform_segment_index(pchan, y / bone->length, &index, &blend);
 
+    if (r_sum_dq != NULL) {
+      /* Compute the object space rest matrix of the segment. */
+      mul_m4_m4m4(basemat, bone->arm_mat, b_bone_rest_mats[index].mat);
+    }
+
     armdef_accumulate_matrix(ct->tar->obmat,
                              iobmat,
                              basemat,
@@ -2599,6 +2614,12 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
                              weight * (1.0f - blend),
                              r_sum_mat,
                              r_sum_dq);
+
+    if (r_sum_dq != NULL) {
+      /* Compute the object space rest matrix of the segment. */
+      mul_m4_m4m4(basemat, bone->arm_mat, b_bone_rest_mats[index + 1].mat);
+    }
+
     armdef_accumulate_matrix(ct->tar->obmat,
                              iobmat,
                              basemat,
@@ -2610,7 +2631,7 @@ static void armdef_accumulate_bone(bConstraintTarget *ct,
   else {
     /* Simple bone. This requires DEG_OPCODE_BONE_DONE dependency due to chan_mat. */
     armdef_accumulate_matrix(
-        ct->tar->obmat, iobmat, basemat, pchan->chan_mat, weight, r_sum_mat, r_sum_dq);
+        ct->tar->obmat, iobmat, bone->arm_mat, pchan->chan_mat, weight, r_sum_mat, r_sum_dq);
   }
 
   /* Accumulate the weight. */
@@ -2837,7 +2858,7 @@ static void actcon_get_tarmat(struct Depsgraph *depsgraph,
        * including rotation order, otherwise this fails. */
       pchan = cob->pchan;
 
-      tchan = BKE_pose_channel_verify(&pose, pchan->name);
+      tchan = BKE_pose_channel_ensure(&pose, pchan->name);
       tchan->rotmode = pchan->rotmode;
 
       /* evaluate action using workob (it will only set the PoseChannel in question) */
@@ -3771,8 +3792,7 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
     BKE_object_minmax(ct->tar, curveMin, curveMax, true);
 
     /* get targetmatrix */
-    if (data->tar->runtime.curve_cache && data->tar->runtime.curve_cache->path &&
-        data->tar->runtime.curve_cache->path->data) {
+    if (data->tar->runtime.curve_cache && data->tar->runtime.curve_cache->anim_path_accum_length) {
       float vec[4], dir[3], totmat[4][4];
       float curvetime;
       short clamp_axis;
@@ -3856,7 +3876,7 @@ static void clampto_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *tar
       }
 
       /* 3. position on curve */
-      if (where_on_path(ct->tar, curvetime, vec, dir, NULL, NULL, NULL)) {
+      if (BKE_where_on_path(ct->tar, curvetime, vec, dir, NULL, NULL, NULL)) {
         unit_m4(totmat);
         copy_v3_v3(totmat[3], vec);
 
@@ -4680,7 +4700,7 @@ static void pivotcon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *ta
   copy_m3_m4(rotMat, cob->matrix);
   normalize_m3(rotMat);
 
-  /* correct the pivot by the rotation axis otherwise the pivot translates when it shouldnt */
+  /* correct the pivot by the rotation axis otherwise the pivot translates when it shouldn't */
   mat3_normalized_to_axis_angle(axis, &angle, rotMat);
   if (angle) {
     float dvec[3];

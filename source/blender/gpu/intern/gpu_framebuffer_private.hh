@@ -20,12 +20,7 @@
 /** \file
  * \ingroup gpu
  *
- * GPU Framebuffer
- * - this is a wrapper for an OpenGL framebuffer object (FBO). in practice
- *   multiple FBO's may be created.
- * - actual FBO creation & config is deferred until GPU_framebuffer_bind or
- *   GPU_framebuffer_check_valid to allow creation & config while another
- *   opengl context is bound (since FBOs are not shared between ogl contexts).
+ * Private frame buffer API.
  */
 
 #pragma once
@@ -104,6 +99,20 @@ class FrameBuffer {
   int scissor_[4] = {0};
   bool scissor_test_ = false;
   bool dirty_state_ = true;
+
+#ifndef GPU_NO_USE_PY_REFERENCES
+ public:
+  /**
+   * Reference of a pointer that needs to be cleaned when deallocating the frame-buffer.
+   * Points to #BPyGPUFrameBuffer.fb
+   */
+  void **py_ref = nullptr;
+#endif
+
+ public:
+  /* Reference of a pointer that needs to be cleaned when deallocating the frame-buffer.
+   * Points to #BPyGPUFrameBuffer::fb */
+  void **ref = nullptr;
 
  public:
   FrameBuffer(const char *name);
@@ -210,7 +219,7 @@ class FrameBuffer {
   };
 };
 
-/* Syntacting suggar. */
+/* Syntactic sugar. */
 static inline GPUFrameBuffer *wrap(FrameBuffer *vert)
 {
   return reinterpret_cast<GPUFrameBuffer *>(vert);

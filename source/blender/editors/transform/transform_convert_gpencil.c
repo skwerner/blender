@@ -37,13 +37,13 @@
 #include "BKE_gpencil_geom.h"
 
 #include "ED_gpencil.h"
+#include "ED_keyframing.h"
 
 #include "transform.h"
 #include "transform_convert.h"
 
 /* -------------------------------------------------------------------- */
 /** \name Gpencil Transform Creation
- *
  * \{ */
 
 static void createTransGPencil_center_get(bGPDstroke *gps, float r_center[3])
@@ -78,14 +78,12 @@ static short get_bezt_sel_triple_flag(BezTriple *bezt, const bool handles_visibl
     flag = ((bezt->f1 & SELECT) ? SEL_F1 : 0) | ((bezt->f2 & SELECT) ? SEL_F2 : 0) |
            ((bezt->f3 & SELECT) ? SEL_F3 : 0);
   }
-  else {
-    if (bezt->f2 & SELECT) {
-      flag = SEL_ALL;
-    }
+  else if (bezt->f2 & SELECT) {
+    flag = SEL_ALL;
   }
 
   /* Special case for auto & aligned handles */
-  if (flag != SEL_ALL && flag & SEL_F2) {
+  if ((flag != SEL_ALL) && (flag & SEL_F2)) {
     if (ELEM(bezt->h1, HD_AUTO, HD_ALIGN) && ELEM(bezt->h2, HD_AUTO, HD_ALIGN)) {
       flag = SEL_ALL;
     }
@@ -115,6 +113,7 @@ static void createTransGPencil_curves(bContext *C,
 #define SEL_F3 (1 << 2)
 
   View3D *v3d = t->view;
+  Scene *scene = CTX_data_scene(C);
   const bool handle_only_selected_visible = (v3d->overlay.handle_display == CURVE_HANDLE_SELECTED);
   const bool handle_all_visible = (v3d->overlay.handle_display == CURVE_HANDLE_ALL);
 
@@ -135,7 +134,7 @@ static void createTransGPencil_curves(bContext *C,
               continue;
             }
             /* Check if the color is editable. */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
             /* Check if stroke has an editcurve */
@@ -231,7 +230,9 @@ static void createTransGPencil_curves(bContext *C,
       }
 
       if ((gpf->framenum != cfra) && (!is_multiedit)) {
-        gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        if (IS_AUTOKEY_ON(scene)) {
+          gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        }
         /* in some weird situations (framelock enabled) return NULL */
         if (gpf == NULL) {
           continue;
@@ -242,7 +243,7 @@ static void createTransGPencil_curves(bContext *C,
       }
 
       /* Calculate difference matrix. */
-      BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+      BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
       copy_m3_m4(mtx, diff_mat);
       pseudoinverse_m3_m3(smtx, mtx, PSEUDOINVERSE_EPSILON);
 
@@ -263,7 +264,7 @@ static void createTransGPencil_curves(bContext *C,
               continue;
             }
             /* Check if the color is editable. */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
             /* Check if stroke has an editcurve */
@@ -313,7 +314,7 @@ static void createTransGPencil_curves(bContext *C,
                     }
                   }
                   else if (handles_visible) {
-                    if (BEZT_ISSEL_IDX(bezt, j)) {
+                    if (sel) {
                       td->flag = TD_SELECTED;
                     }
                     else {
@@ -406,6 +407,7 @@ static void createTransGPencil_strokes(bContext *C,
                                        const bool is_prop_edit_connected,
                                        const bool is_scale_thickness)
 {
+  Scene *scene = CTX_data_scene(C);
   TransData *td = NULL;
   float mtx[3][3], smtx[3][3];
 
@@ -436,7 +438,7 @@ static void createTransGPencil_strokes(bContext *C,
               continue;
             }
             /* Check if the color is editable. */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
 
@@ -507,7 +509,7 @@ static void createTransGPencil_strokes(bContext *C,
       }
 
       /* Calculate difference matrix. */
-      BKE_gpencil_parent_matrix_get(depsgraph, obact, gpl, diff_mat);
+      BKE_gpencil_layer_transform_matrix_get(depsgraph, obact, gpl, diff_mat);
       /* Undo matrix. */
       invert_m4_m4(inverse_diff_mat, diff_mat);
 
@@ -518,7 +520,9 @@ static void createTransGPencil_strokes(bContext *C,
        *   spent too much time editing the wrong frame...
        */
       if ((gpf->framenum != cfra) && (!is_multiedit)) {
-        gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        if (IS_AUTOKEY_ON(scene)) {
+          gpf = BKE_gpencil_frame_addcopy(gpl, cfra);
+        }
         /* in some weird situations (framelock enabled) return NULL */
         if (gpf == NULL) {
           continue;
@@ -551,7 +555,7 @@ static void createTransGPencil_strokes(bContext *C,
               continue;
             }
             /* check if the color is editable */
-            if (ED_gpencil_stroke_color_use(obact, gpl, gps) == false) {
+            if (ED_gpencil_stroke_material_editable(obact, gpl, gps) == false) {
               continue;
             }
             /* What we need to include depends on proportional editing settings... */
@@ -688,7 +692,7 @@ void createTransGPencil(bContext *C, TransInfo *t)
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   const Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = scene->toolsettings;
-  Object *obact = CTX_data_active_object(C);
+  Object *obact = OBACT(t->view_layer);
   bGPdata *gpd = obact->data;
   BLI_assert(gpd != NULL);
 

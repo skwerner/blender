@@ -64,6 +64,8 @@ extern "C" {
 #define RE_USE_SPHERICAL_STEREO 128
 #define RE_USE_STEREO_VIEWPORT 256
 #define RE_USE_GPU_CONTEXT 512
+#define RE_USE_CUSTOM_FREESTYLE 1024
+#define RE_USE_NO_IMAGE_SAVE 2048
 
 /* RenderEngine.flag */
 #define RE_ENGINE_ANIMATION 1
@@ -194,7 +196,7 @@ float RE_engine_get_camera_shift_x(RenderEngine *engine,
 void RE_engine_get_camera_model_matrix(RenderEngine *engine,
                                        struct Object *camera,
                                        bool use_spherical_stereo,
-                                       float *r_modelmat);
+                                       float r_modelmat[16]);
 bool RE_engine_get_spherical_stereo(RenderEngine *engine, struct Object *camera);
 
 bool RE_engine_test_break(RenderEngine *engine);
@@ -204,7 +206,7 @@ void RE_engine_update_memory_stats(RenderEngine *engine, float mem_used, float m
 void RE_engine_report(RenderEngine *engine, int type, const char *msg);
 void RE_engine_set_error_message(RenderEngine *engine, const char *msg);
 
-int RE_engine_render(struct Render *re, int do_all);
+bool RE_engine_render(struct Render *re, bool do_all);
 
 bool RE_engine_is_external(const struct Render *re);
 
@@ -222,6 +224,8 @@ void RE_engine_register_pass(struct RenderEngine *engine,
                              int channels,
                              const char *chanid,
                              eNodeSocketDatatype type);
+
+bool RE_engine_use_persistent_data(struct RenderEngine *engine);
 
 /* Engine Types */
 

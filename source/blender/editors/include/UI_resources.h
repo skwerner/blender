@@ -433,7 +433,7 @@ void UI_GetColorPtrBlendShade3ubv(const unsigned char cp1[3],
  * (for anything fancy use UI_GetThemeColor[Fancy] then BLF_color) */
 void UI_FontThemeColor(int fontid, int colorid);
 
-/* clear the framebuffer using the input colorid */
+/* Clear the frame-buffer using the input colorid. */
 void UI_ThemeClearColor(int colorid);
 
 /* internal (blender) usage only, for init and set active */
@@ -451,7 +451,7 @@ int UI_ThemeMenuShadowWidth(void);
 /* only for buttons in theme editor! */
 const unsigned char *UI_ThemeGetColorPtr(struct bTheme *btheme, int spacetype, int colorid);
 
-void UI_make_axis_color(const unsigned char *src_col, unsigned char *dst_col, const char axis);
+void UI_make_axis_color(const unsigned char src_col[3], unsigned char dst_col[3], const char axis);
 
 #ifdef __cplusplus
 }

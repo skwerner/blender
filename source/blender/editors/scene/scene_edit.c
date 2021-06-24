@@ -120,7 +120,7 @@ void ED_scene_change_update(Main *bmain, Scene *scene, ViewLayer *layer)
 
   BKE_scene_set_background(bmain, scene);
   DEG_graph_relations_update(depsgraph);
-  DEG_on_visible_update(bmain, false);
+  DEG_tag_on_visible_update(bmain, false);
 
   ED_render_engine_changed(bmain, false);
   ED_update_for_newframe(bmain, depsgraph);
@@ -240,8 +240,9 @@ static void SCENE_OT_new(wmOperatorType *ot)
 
 static bool scene_delete_poll(bContext *C)
 {
+  Main *bmain = CTX_data_main(C);
   Scene *scene = CTX_data_scene(C);
-  return (scene->id.prev || scene->id.next);
+  return BKE_scene_can_be_removed(bmain, scene);
 }
 
 static int scene_delete_exec(bContext *C, wmOperator *UNUSED(op))

@@ -33,6 +33,7 @@
 #include "DNA_windowmanager_types.h" /* for ReportType */
 #include "zlib.h"
 
+struct BLI_mmap_file;
 struct BLOCacheStorage;
 struct IDNameLib_Map;
 struct Key;
@@ -83,13 +84,14 @@ typedef struct FileData {
   /** Regular file reading. */
   int filedes;
 
-  /** Variables needed for reading from memory / stream. */
+  /** Variables needed for reading from memory / stream / memory-mapped files. */
   const char *buffer;
+  struct BLI_mmap_file *mmap_file;
   /** Variables needed for reading from memfile (undo). */
   struct MemFile *memfile;
   /** Whether we are undoing (< 0) or redoing (> 0), used to choose which 'unchanged' flag to use
    * to detect unchanged data from memfile. */
-  short undo_direction;
+  int undo_direction; /* eUndoStepDir */
 
   /** Variables needed for reading from file. */
   gzFile gzfiledes;
@@ -108,15 +110,23 @@ typedef struct FileData {
 
   int fileversion;
   /** Used to retrieve ID names from (bhead+1). */
-  int id_name_offs;
+  int id_name_offset;
   /** Used to retrieve asset data from (bhead+1). NOTE: This may not be available in old files,
    * will be -1 then! */
-  int id_asset_data_offs;
+  int id_asset_data_offset;
   /** For do_versions patching. */
   int globalf, fileflags;
 
   /** Optionally skip some data-blocks when they're not needed. */
   eBLOReadSkip skip_flags;
+
+  /**
+   * Tag to apply to all loaded ID data-blocks.
+   *
+   * \note This is initialized from #LibraryLink_Params.id_tag_extra since passing it as an
+   * argument would need an additional argument to be passed around when expanding library data.
+   */
+  int id_tag_extra;
 
   struct OldNewMap *datamap;
   struct OldNewMap *globmap;
@@ -135,7 +145,7 @@ typedef struct FileData {
   ListBase *old_mainlist;
   struct IDNameLib_Map *old_idmap;
 
-  struct ReportList *reports;
+  struct BlendFileReadReport *reports;
 } FileData;
 
 #define SIZEOFBLENDERHEADER 12
@@ -147,11 +157,13 @@ void blo_split_main(ListBase *mainlist, struct Main *main);
 
 BlendFileData *blo_read_file_internal(FileData *fd, const char *filepath);
 
-FileData *blo_filedata_from_file(const char *filepath, struct ReportList *reports);
-FileData *blo_filedata_from_memory(const void *mem, int memsize, struct ReportList *reports);
+FileData *blo_filedata_from_file(const char *filepath, struct BlendFileReadReport *reports);
+FileData *blo_filedata_from_memory(const void *mem,
+                                   int memsize,
+                                   struct BlendFileReadReport *reports);
 FileData *blo_filedata_from_memfile(struct MemFile *memfile,
                                     const struct BlendFileReadParams *params,
-                                    struct ReportList *reports);
+                                    struct BlendFileReadReport *reports);
 
 void blo_clear_proxy_pointers_from_lib(struct Main *oldmain);
 void blo_make_packed_pointer_map(FileData *fd, struct Main *oldmain);
@@ -196,6 +208,7 @@ void blo_do_versions_260(struct FileData *fd, struct Library *lib, struct Main *
 void blo_do_versions_270(struct FileData *fd, struct Library *lib, struct Main *bmain);
 void blo_do_versions_280(struct FileData *fd, struct Library *lib, struct Main *bmain);
 void blo_do_versions_290(struct FileData *fd, struct Library *lib, struct Main *bmain);
+void blo_do_versions_300(struct FileData *fd, struct Library *lib, struct Main *bmain);
 void blo_do_versions_cycles(struct FileData *fd, struct Library *lib, struct Main *bmain);
 
 void do_versions_after_linking_250(struct Main *bmain);
@@ -203,6 +216,7 @@ void do_versions_after_linking_260(struct Main *bmain);
 void do_versions_after_linking_270(struct Main *bmain);
 void do_versions_after_linking_280(struct Main *bmain, struct ReportList *reports);
 void do_versions_after_linking_290(struct Main *bmain, struct ReportList *reports);
+void do_versions_after_linking_300(struct Main *bmain, struct ReportList *reports);
 void do_versions_after_linking_cycles(struct Main *bmain);
 
 /* This is rather unfortunate to have to expose this here, but better use that nasty hack in

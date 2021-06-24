@@ -32,9 +32,10 @@
 #include "atomic_ops.h"
 
 #ifdef WITH_TBB
-/* Quiet top level deprecation message, unrelated to API usage here. */
-#  define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
-#  include <tbb/tbb.h>
+#  include <tbb/blocked_range.h>
+#  include <tbb/enumerable_thread_specific.h>
+#  include <tbb/parallel_for.h>
+#  include <tbb/parallel_reduce.h>
 #endif
 
 #ifdef WITH_TBB
@@ -89,13 +90,11 @@ struct RangeTask {
 
   void operator()(const tbb::blocked_range<int> &r) const
   {
-    tbb::this_task_arena::isolate([this, r] {
-      TaskParallelTLS tls;
-      tls.userdata_chunk = userdata_chunk;
-      for (int i = r.begin(); i != r.end(); ++i) {
-        func(userdata, i, &tls);
-      }
-    });
+    TaskParallelTLS tls;
+    tls.userdata_chunk = userdata_chunk;
+    for (int i = r.begin(); i != r.end(); ++i) {
+      func(userdata, i, &tls);
+    }
   }
 
   void join(const RangeTask &other)

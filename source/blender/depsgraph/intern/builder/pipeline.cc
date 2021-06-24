@@ -40,10 +40,6 @@ AbstractBuilderPipeline::AbstractBuilderPipeline(::Depsgraph *graph)
 {
 }
 
-AbstractBuilderPipeline::~AbstractBuilderPipeline()
-{
-}
-
 void AbstractBuilderPipeline::build()
 {
   double start_time = 0.0;
@@ -98,11 +94,11 @@ void AbstractBuilderPipeline::build_step_finalize()
   if (G.debug_value == 799) {
     deg_graph_transitive_reduction(deg_graph_);
   }
-  /* Store pointers to commonly used valuated datablocks. */
+  /* Store pointers to commonly used evaluated datablocks. */
   deg_graph_->scene_cow = (Scene *)deg_graph_->get_cow_id(&deg_graph_->scene->id);
   /* Flush visibility layer and re-schedule nodes for update. */
   deg_graph_build_finalize(bmain_, deg_graph_);
-  DEG_graph_on_visible_update(bmain_, reinterpret_cast<::Depsgraph *>(deg_graph_), false);
+  DEG_graph_tag_on_visible_update(reinterpret_cast<::Depsgraph *>(deg_graph_), false);
 #if 0
   if (!DEG_debug_consistency_check(deg_graph_)) {
     printf("Consistency validation failed, ABORTING!\n");

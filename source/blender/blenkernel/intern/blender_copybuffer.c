@@ -87,15 +87,16 @@ bool BKE_copybuffer_read(Main *bmain_dst,
                          ReportList *reports,
                          const uint64_t id_types_mask)
 {
-  BlendHandle *bh = BLO_blendhandle_from_file(libname, reports);
+  BlendHandle *bh = BLO_blendhandle_from_file(libname, &(BlendFileReadReport){.reports = reports});
   if (bh == NULL) {
     /* Error reports will have been made by BLO_blendhandle_from_file(). */
     return false;
   }
   /* Here appending/linking starts. */
   const int flag = 0;
+  const int id_tag_extra = 0;
   struct LibraryLink_Params liblink_params;
-  BLO_library_link_params_init(&liblink_params, bmain_dst, flag);
+  BLO_library_link_params_init(&liblink_params, bmain_dst, flag, id_tag_extra);
   Main *mainl = BLO_library_link_begin(&bh, libname, &liblink_params);
   BLO_library_link_copypaste(mainl, bh, id_types_mask);
   BLO_library_link_end(mainl, &bh, &liblink_params);
@@ -105,7 +106,7 @@ bool BKE_copybuffer_read(Main *bmain_dst,
   /* Append, rather than linking. */
   Library *lib = BLI_findstring(&bmain_dst->libraries, libname, offsetof(Library, filepath_abs));
   BKE_library_make_local(bmain_dst, lib, NULL, true, false);
-  /* Important we unset, otherwise these object wont
+  /* Important we unset, otherwise these object won't
    * link into other scenes from this blend file.
    */
   BKE_main_id_tag_all(bmain_dst, LIB_TAG_PRE_EXISTING, false);
@@ -130,8 +131,9 @@ int BKE_copybuffer_paste(bContext *C,
   Main *mainl = NULL;
   Library *lib;
   BlendHandle *bh;
+  const int id_tag_extra = 0;
 
-  bh = BLO_blendhandle_from_file(libname, reports);
+  bh = BLO_blendhandle_from_file(libname, &(BlendFileReadReport){.reports = reports});
 
   if (bh == NULL) {
     /* error reports will have been made by BLO_blendhandle_from_file() */
@@ -148,7 +150,8 @@ int BKE_copybuffer_paste(bContext *C,
 
   /* here appending/linking starts */
   struct LibraryLink_Params liblink_params;
-  BLO_library_link_params_init_with_context(&liblink_params, bmain, flag, scene, view_layer, v3d);
+  BLO_library_link_params_init_with_context(
+      &liblink_params, bmain, flag, id_tag_extra, scene, view_layer, v3d);
   mainl = BLO_library_link_begin(&bh, libname, &liblink_params);
 
   const int num_pasted = BLO_library_link_copypaste(mainl, bh, id_types_mask);
@@ -163,7 +166,7 @@ int BKE_copybuffer_paste(bContext *C,
   lib = BLI_findstring(&bmain->libraries, libname, offsetof(Library, filepath_abs));
   BKE_library_make_local(bmain, lib, NULL, true, false);
 
-  /* important we unset, otherwise these object wont
+  /* important we unset, otherwise these object won't
    * link into other scenes from this blend file */
   BKE_main_id_tag_all(bmain, LIB_TAG_PRE_EXISTING, false);
 

@@ -294,8 +294,7 @@ static void bm_decim_build_edge_cost_single(BMEdge *e,
     /* subtract existing cost to further differentiate edges from one another
      *
      * keep topology cost below 0.0 so their values don't interfere with quadric cost,
-     * (and they get handled first).
-     * */
+     * (and they get handled first). */
     if (vweights == NULL) {
       cost = bm_decim_build_edge_cost_single_squared__topology(e) - cost;
     }
@@ -940,7 +939,7 @@ static bool bm_edge_collapse_is_degenerate_topology(BMEdge *e_first)
  * intended for speed over flexibility.
  * can only collapse edges connected to (1, 2) tris.
  *
- * Important - dont add vert/edge/face data on collapsing!
+ * Important - don't add vert/edge/face data on collapsing!
  *
  * \param r_e_clear_other: Let caller know what edges we remove besides \a e_clear
  * \param customdata_flag: Merge factor, scales from 0 - 1 ('v_clear' -> 'v_other')
@@ -1286,6 +1285,11 @@ static bool bm_decim_edge_collapse(BMesh *bm,
  *        a vertex group is the usual source for this.
  * \param symmetry_axis: Axis of symmetry, -1 to disable mirror decimate.
  * \param symmetry_eps: Threshold when matching mirror verts.
+ *
+ * \note The caller is responsible for recalculating face and vertex normals.
+ * - Vertex normals are maintained while decimating,
+ *   although they won't necessarily match the final recalculated normals.
+ * - Face normals are not maintained at all.
  */
 void BM_mesh_decimate_collapse(BMesh *bm,
                                const float factor,
@@ -1319,9 +1323,9 @@ void BM_mesh_decimate_collapse(BMesh *bm,
   UNUSED_VARS(do_triangulate);
 #endif
 
-  /* alloc vars */
+  /* Allocate variables. */
   vquadrics = MEM_callocN(sizeof(Quadric) * bm->totvert, __func__);
-  /* since some edges may be degenerate, we might be over allocing a little here */
+  /* Since some edges may be degenerate, we might be over allocating a little here. */
   eheap = BLI_heap_new_ex(bm->totedge);
   eheap_table = MEM_mallocN(sizeof(HeapNode *) * bm->totedge, __func__);
   tot_edge_orig = bm->totedge;
@@ -1368,7 +1372,7 @@ void BM_mesh_decimate_collapse(BMesh *bm,
       /* handy to detect corruptions elsewhere */
       BLI_assert(BM_elem_index_get(e) < tot_edge_orig);
 
-      /* Under normal conditions wont be accessed again,
+      /* Under normal conditions won't be accessed again,
        * but NULL just in case so we don't use freed node. */
       eheap_table[BM_elem_index_get(e)] = NULL;
 
@@ -1395,7 +1399,7 @@ void BM_mesh_decimate_collapse(BMesh *bm,
        * \note
        * - `eheap_table[e_index_mirr]` is only removed from the heap at the last moment
        *   since its possible (in theory) for collapsing `e` to remove `e_mirr`.
-       * - edges sharing a vertex are ignored, so the pivot vertex isnt moved to one side.
+       * - edges sharing a vertex are ignored, so the pivot vertex isn't moved to one side.
        */
 
       BMEdge *e = BLI_heap_pop_min(eheap);

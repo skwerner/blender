@@ -593,13 +593,14 @@ void ED_object_data_xform_by_mat4(struct XFormObjectData *xod_base, const float 
       if (xod_base->is_edit_mode) {
         EditNurb *editnurb = cu->editnurb;
         nurb = &editnurb->nurbs;
-        BKE_curve_nurbs_vert_coords_apply_with_mat4(&editnurb->nurbs, xod->elem_array, mat, true);
+        BKE_curve_nurbs_vert_coords_apply_with_mat4(
+            &editnurb->nurbs, xod->elem_array, mat, CU_IS_2D(cu));
         /* Always operate on all keys for the moment. */
         // key_index = editnurb->shapenr - 1;
       }
       else {
         nurb = &cu->nurb;
-        BKE_curve_nurbs_vert_coords_apply_with_mat4(&cu->nurb, xod->elem_array, mat, true);
+        BKE_curve_nurbs_vert_coords_apply_with_mat4(&cu->nurb, xod->elem_array, mat, CU_IS_2D(cu));
       }
 
       if ((key != NULL) && (xod->key_data != NULL)) {
@@ -694,12 +695,12 @@ void ED_object_data_xform_restore(struct XFormObjectData *xod_base)
       struct XFormObjectData_Curve *xod = (struct XFormObjectData_Curve *)xod_base;
       if (xod_base->is_edit_mode) {
         EditNurb *editnurb = cu->editnurb;
-        BKE_curve_nurbs_vert_coords_apply(&editnurb->nurbs, xod->elem_array, true);
+        BKE_curve_nurbs_vert_coords_apply(&editnurb->nurbs, xod->elem_array, CU_IS_2D(cu));
         /* Always operate on all keys for the moment. */
         // key_index = editnurb->shapenr - 1;
       }
       else {
-        BKE_curve_nurbs_vert_coords_apply(&cu->nurb, xod->elem_array, true);
+        BKE_curve_nurbs_vert_coords_apply(&cu->nurb, xod->elem_array, CU_IS_2D(cu));
       }
 
       if ((key != NULL) && (xod->key_data != NULL)) {
@@ -744,8 +745,12 @@ void ED_object_data_xform_tag_update(struct XFormObjectData *xod_base)
     case ID_ME: {
       Mesh *me = (Mesh *)xod_base->id;
       if (xod_base->is_edit_mode) {
-        EDBM_update_generic(me, true, false);
-        EDBM_mesh_normals_update(me->edit_mesh);
+        EDBM_update(me,
+                    &(const struct EDBMUpdate_Params){
+                        .calc_looptri = true,
+                        .calc_normals = true,
+                        .is_destructive = false,
+                    });
       }
       DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);
       break;

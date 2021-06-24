@@ -40,6 +40,7 @@
 
 #include "BLI_ghash.h"
 #include "BLI_math.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
 #include "BLI_utildefines.h"
 
@@ -58,7 +59,7 @@ Mesh *BKE_mesh_wrapper_from_editmesh_with_coords(BMEditMesh *em,
                                                  const Mesh *me_settings)
 {
   Mesh *me = BKE_id_new_nomain(ID_ME, NULL);
-  BKE_mesh_copy_settings(me, me_settings);
+  BKE_mesh_copy_parameters_for_eval(me, me_settings);
   BKE_mesh_runtime_ensure_edit_data(me);
 
   me->runtime.wrapper_type = ME_WRAPPER_TYPE_BMESH;
@@ -95,15 +96,9 @@ Mesh *BKE_mesh_wrapper_from_editmesh(BMEditMesh *em,
   return BKE_mesh_wrapper_from_editmesh_with_coords(em, cd_mask_extra, NULL, me_settings);
 }
 
-void BKE_mesh_wrapper_ensure_mdata(Mesh *me)
+static void mesh_wrapper_ensure_mdata_isolated(void *userdata)
 {
-  ThreadMutex *mesh_eval_mutex = (ThreadMutex *)me->runtime.eval_mutex;
-  BLI_mutex_lock(mesh_eval_mutex);
-
-  if (me->runtime.wrapper_type == ME_WRAPPER_TYPE_MDATA) {
-    BLI_mutex_unlock(mesh_eval_mutex);
-    return;
-  }
+  Mesh *me = userdata;
 
   const eMeshWrapperType geom_type_orig = me->runtime.wrapper_type;
   me->runtime.wrapper_type = ME_WRAPPER_TYPE_MDATA;
@@ -136,6 +131,20 @@ void BKE_mesh_wrapper_ensure_mdata(Mesh *me)
   if (me->runtime.wrapper_type_finalize) {
     BKE_mesh_wrapper_deferred_finalize(me, &me->runtime.cd_mask_extra);
   }
+}
+
+void BKE_mesh_wrapper_ensure_mdata(Mesh *me)
+{
+  ThreadMutex *mesh_eval_mutex = (ThreadMutex *)me->runtime.eval_mutex;
+  BLI_mutex_lock(mesh_eval_mutex);
+
+  if (me->runtime.wrapper_type == ME_WRAPPER_TYPE_MDATA) {
+    BLI_mutex_unlock(mesh_eval_mutex);
+    return;
+  }
+
+  /* Must isolate multithreaded tasks while holding a mutex lock. */
+  BLI_task_isolate(mesh_wrapper_ensure_mdata_isolated, me);
 
   BLI_mutex_unlock(mesh_eval_mutex);
 }
@@ -148,7 +157,7 @@ bool BKE_mesh_wrapper_minmax(const Mesh *me, float min[3], float max[3])
     case ME_WRAPPER_TYPE_MDATA:
       return BKE_mesh_minmax(me, min, max);
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
   return false;
 }
 
@@ -189,7 +198,7 @@ void BKE_mesh_wrapper_vert_coords_copy(const Mesh *me,
       return;
     }
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
 }
 
 void BKE_mesh_wrapper_vert_coords_copy_with_mat4(const Mesh *me,
@@ -226,7 +235,7 @@ void BKE_mesh_wrapper_vert_coords_copy_with_mat4(const Mesh *me,
       return;
     }
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
 }
 
 /** \} */
@@ -243,7 +252,7 @@ int BKE_mesh_wrapper_vert_len(const Mesh *me)
     case ME_WRAPPER_TYPE_MDATA:
       return me->totvert;
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
   return -1;
 }
 
@@ -255,7 +264,7 @@ int BKE_mesh_wrapper_edge_len(const Mesh *me)
     case ME_WRAPPER_TYPE_MDATA:
       return me->totedge;
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
   return -1;
 }
 
@@ -267,7 +276,7 @@ int BKE_mesh_wrapper_loop_len(const Mesh *me)
     case ME_WRAPPER_TYPE_MDATA:
       return me->totloop;
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
   return -1;
 }
 
@@ -279,7 +288,7 @@ int BKE_mesh_wrapper_poly_len(const Mesh *me)
     case ME_WRAPPER_TYPE_MDATA:
       return me->totpoly;
   }
-  BLI_assert(0);
+  BLI_assert_unreachable();
   return -1;
 }
 

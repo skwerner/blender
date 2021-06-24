@@ -118,7 +118,7 @@ static int py_msgbus_rna_key_from_py(PyObject *py_sub,
       PointerRNA data_type_ptr = {
           .type = data_type,
       };
-      const char *data_prop_str = _PyUnicode_AsString(data_prop_py);
+      const char *data_prop_str = PyUnicode_AsUTF8(data_prop_py);
       PropertyRNA *data_prop = RNA_struct_find_property(&data_type_ptr, data_prop_str);
 
       if (data_prop == NULL) {
@@ -245,7 +245,7 @@ static PyObject *bpy_msgbus_subscribe_rna(PyObject *UNUSED(self), PyObject *args
       "options",
       NULL,
   };
-  static _PyArg_Parser _parser = {"OOO!O|O!:subscribe_rna", _keywords, 0};
+  static _PyArg_Parser _parser = {"OOO!O|$O!:subscribe_rna", _keywords, 0};
   if (!_PyArg_ParseTupleAndKeywordsFast(args,
                                         kw,
                                         &_parser,

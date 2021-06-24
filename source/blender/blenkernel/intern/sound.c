@@ -68,6 +68,7 @@
 #include "BLO_read_write.h"
 
 #include "SEQ_sequencer.h"
+#include "SEQ_sound.h"
 
 static void sound_free_audio(bSound *sound);
 
@@ -186,8 +187,8 @@ static void sound_blend_read_data(BlendDataReader *reader, ID *id)
 static void sound_blend_read_lib(BlendLibReader *reader, ID *id)
 {
   bSound *sound = (bSound *)id;
-  BLO_read_id_address(
-      reader, sound->id.lib, &sound->ipo); /* XXX deprecated - old animation system */
+  /* XXX: deprecated - old animation system. */
+  BLO_read_id_address(reader, sound->id.lib, &sound->ipo);
 }
 
 static void sound_blend_read_expand(BlendExpander *expander, ID *id)
@@ -213,6 +214,7 @@ IDTypeInfo IDType_ID_SO = {
     .make_local = NULL,
     .foreach_id = NULL,
     .foreach_cache = sound_foreach_cache,
+    .owner_get = NULL,
 
     .blend_write = sound_blend_write,
     .blend_read_data = sound_blend_read_data,
@@ -220,6 +222,8 @@ IDTypeInfo IDType_ID_SO = {
     .blend_read_expand = sound_blend_read_expand,
 
     .blend_read_undo_preserve = NULL,
+
+    .lib_override_apply_post = NULL,
 };
 
 #ifdef WITH_AUDASPACE
@@ -409,7 +413,7 @@ void BKE_sound_init(Main *bmain)
   }
 
   if (!(sound_device = AUD_init(device_name, specs, buffersize, "Blender"))) {
-    sound_device = AUD_init("Null", specs, buffersize, "Blender");
+    sound_device = AUD_init("None", specs, buffersize, "Blender");
   }
 
   BKE_sound_init_main(bmain);
@@ -683,7 +687,7 @@ void BKE_sound_update_fps(Main *bmain, Scene *scene)
     AUD_Sequence_setFPS(scene->sound_scene, FPS);
   }
 
-  BKE_sequencer_refresh_sound_length(bmain, scene);
+  SEQ_sound_update_length(bmain, scene);
 }
 
 void BKE_sound_update_scene_listener(Scene *scene)
@@ -825,7 +829,7 @@ void BKE_sound_update_sequencer(Main *main, bSound *sound)
   Scene *scene;
 
   for (scene = main->scenes.first; scene; scene = scene->id.next) {
-    BKE_sequencer_update_sound(scene, sound);
+    SEQ_sound_update(scene, sound);
   }
 }
 
@@ -990,7 +994,7 @@ int BKE_sound_scene_playing(Scene *scene)
     return -1;
   }
 
-  /* In case of a "Null" audio device, we have no playback information. */
+  /* In case of a "None" audio device, we have no playback information. */
   if (AUD_Device_getRate(sound_device) == AUD_RATE_INVALID) {
     return -1;
   }

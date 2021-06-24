@@ -36,8 +36,6 @@
 #include "BKE_anim_data.h"
 #include "BKE_context.h"
 #include "BKE_duplilist.h"
-#include "BKE_global.h"
-#include "BKE_gpencil.h"
 #include "BKE_gpencil_geom.h"
 #include "BKE_layer.h"
 #include "BKE_main.h"
@@ -253,7 +251,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   gpd->draw_mode = (project_type == GP_REPROJECT_KEEP) ? GP_DRAWMODE_3D : GP_DRAWMODE_2D;
 
   /* Set cursor to indicate working. */
-  WM_cursor_wait(1);
+  WM_cursor_wait(true);
 
   GP_SpaceConversion gsc = {NULL};
   SnapObjectContext *sctx = NULL;
@@ -320,7 +318,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
                                use_seams,
                                use_faces);
 
-      /* Reproject all untaged created strokes. */
+      /* Reproject all un-tagged created strokes. */
       if (project_type != GP_REPROJECT_KEEP) {
         LISTBASE_FOREACH (bGPDlayer *, gpl, &gpd->layers) {
           bGPDframe *gpf = gpl->actframe;
@@ -387,7 +385,7 @@ static int gpencil_bake_mesh_animation_exec(bContext *C, wmOperator *op)
   WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);
 
   /* Reset cursor. */
-  WM_cursor_wait(0);
+  WM_cursor_wait(false);
 
   /* done */
   return OPERATOR_FINISHED;
@@ -404,25 +402,6 @@ static int gpencil_bake_mesh_animation_invoke(bContext *C,
 
 void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
 {
-  static const EnumPropertyItem reproject_type[] = {
-      {GP_REPROJECT_KEEP, "KEEP", 0, "No Reproject", ""},
-      {GP_REPROJECT_FRONT, "FRONT", 0, "Front", "Reproject the strokes using the X-Z plane"},
-      {GP_REPROJECT_SIDE, "SIDE", 0, "Side", "Reproject the strokes using the Y-Z plane"},
-      {GP_REPROJECT_TOP, "TOP", 0, "Top", "Reproject the strokes using the X-Y plane"},
-      {GP_REPROJECT_VIEW,
-       "VIEW",
-       0,
-       "View",
-       "Reproject the strokes to end up on the same plane, as if drawn from the current viewpoint "
-       "using 'Cursor' Stroke Placement"},
-      {GP_REPROJECT_CURSOR,
-       "CURSOR",
-       0,
-       "Cursor",
-       "Reproject the strokes using the orientation of 3D cursor"},
-      {0, NULL, 0, NULL, NULL},
-  };
-
   static const EnumPropertyItem target_object_modes[] = {
       {GP_TARGET_OB_NEW, "NEW", 0, "New Object", ""},
       {GP_TARGET_OB_SELECTED, "SELECTED", 0, "Selected Object", ""},
@@ -434,7 +413,7 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
   /* identifiers */
   ot->name = "Bake Mesh Animation to Grease Pencil";
   ot->idname = "GPENCIL_OT_bake_mesh_animation";
-  ot->description = "Bake Mesh Animation to Grease Pencil strokes";
+  ot->description = "Bake mesh animation to grease pencil strokes";
 
   /* callbacks */
   ot->invoke = gpencil_bake_mesh_animation_invoke;
@@ -493,5 +472,10 @@ void GPENCIL_OT_bake_mesh_animation(wmOperatorType *ot)
   RNA_def_int(
       ot->srna, "frame_target", 1, 1, 100000, "Target Frame", "Destination frame", 1, 100000);
 
-  RNA_def_enum(ot->srna, "project_type", reproject_type, GP_REPROJECT_VIEW, "Projection Type", "");
+  RNA_def_enum(ot->srna,
+               "project_type",
+               rna_gpencil_reproject_type_items,
+               GP_REPROJECT_VIEW,
+               "Projection Type",
+               "");
 }

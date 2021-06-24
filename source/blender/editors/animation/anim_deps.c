@@ -50,6 +50,7 @@
 #include "RNA_access.h"
 
 #include "SEQ_sequencer.h"
+#include "SEQ_utils.h"
 
 #include "ED_anim_api.h"
 
@@ -108,8 +109,8 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
     /* in other case we do standard depsgraph update, ideally
      * we'd be calling property update functions here too ... */
     DEG_id_tag_update(id,
-                      ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY |
-                          ID_RECALC_ANIMATION); /* XXX or do we want something more restrictive? */
+                      /* XXX: or do we want something more restrictive? */
+                      ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
   }
 }
 
@@ -118,11 +119,10 @@ void ANIM_list_elem_update(Main *bmain, Scene *scene, bAnimListElem *ale)
 void ANIM_id_update(Main *bmain, ID *id)
 {
   if (id) {
-    DEG_id_tag_update_ex(
-        bmain,
-        id,
-        ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY |
-            ID_RECALC_ANIMATION); /* XXX or do we want something more restrictive? */
+    DEG_id_tag_update_ex(bmain,
+                         id,
+                         /* XXX: or do we want something more restrictive? */
+                         ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY | ID_RECALC_ANIMATION);
   }
 }
 
@@ -212,7 +212,7 @@ static void animchan_sync_fcurve_scene(bAnimListElem *ale)
     return;
   }
 
-  Editing *ed = BKE_sequencer_editing_get(scene, false);
+  Editing *ed = SEQ_editing_get(scene, false);
 
   /* get strip name, and check if this strip is selected */
   char *seq_name = BLI_str_quoted_substrN(fcu->rna_path, "sequences_all[");
@@ -220,7 +220,7 @@ static void animchan_sync_fcurve_scene(bAnimListElem *ale)
     return;
   }
 
-  Sequence *seq = BKE_sequence_get_by_name(ed->seqbasep, seq_name, false);
+  Sequence *seq = SEQ_get_sequence_by_name(ed->seqbasep, seq_name, false);
   MEM_freeN(seq_name);
 
   if (seq == NULL) {

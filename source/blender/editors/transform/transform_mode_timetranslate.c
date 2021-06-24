@@ -76,10 +76,10 @@ static void headerTimeTranslate(TransInfo *t, char str[UI_MAX_DRAW_STR])
     }
   }
 
-  ofs += BLI_snprintf(str, UI_MAX_DRAW_STR, TIP_("DeltaX: %s"), &tvec[0]);
+  ofs += BLI_snprintf_rlen(str, UI_MAX_DRAW_STR, TIP_("DeltaX: %s"), &tvec[0]);
 
   if (t->flag & T_PROP_EDIT_ALL) {
-    ofs += BLI_snprintf(
+    ofs += BLI_snprintf_rlen(
         str + ofs, UI_MAX_DRAW_STR - ofs, TIP_(" Proportional size: %.2f"), t->prop_size);
   }
 }
@@ -97,7 +97,7 @@ static void applyTimeTranslateValue(TransInfo *t, const float deltax)
       /* It is assumed that td->extra is a pointer to the AnimData,
        * whose active action is where this keyframe comes from.
        * (this is only valid when not in NLA)
-       * (also: masks and gpencil dont have animadata)
+       * (also: masks and gpencil don't have animadata)
        */
       AnimData *adt = (t->spacetype != SPACE_NLA) ? td->extra : NULL;
 

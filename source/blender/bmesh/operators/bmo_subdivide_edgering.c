@@ -244,7 +244,7 @@ static GSet *bm_edgering_pair_calc(BMesh *bm, ListBase *eloops_rim)
 
         el_store_other = BLI_ghash_lookup(vert_eloop_gh, v_other);
 
-        /* in rare cases we cant find a match */
+        /* in rare cases we can't find a match */
         if (el_store_other) {
           pair_test.first = el_store;
           pair_test.second = el_store_other;
@@ -932,7 +932,7 @@ static void bm_edgering_pair_order(BMesh *bm,
     BLI_assert(bm_edgering_pair_order_is_flipped(bm, el_store_a, el_store_b) == false);
   }
   else {
-    /* if we dont share and edge - flip */
+    /* If we don't share and edge - flip. */
     BMEdge *e = BM_edge_exists(((LinkData *)lb_a->first)->data, ((LinkData *)lb_b->first)->data);
     if (e == NULL || !BMO_edge_flag_test(bm, e, EDGE_RING)) {
       BM_edgeloop_flip(bm, el_store_b);

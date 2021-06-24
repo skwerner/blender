@@ -144,12 +144,15 @@ bool ED_gpencil_data_owner_is_annotation(struct PointerRNA *owner_ptr);
 bool ED_gpencil_has_keyframe_v3d(struct Scene *scene, struct Object *ob, int cfra);
 
 /* ----------- Stroke Editing Utilities ---------------- */
+bool ED_gpencil_frame_has_selected_stroke(const struct bGPDframe *gpf);
+bool ED_gpencil_layer_has_selected_stroke(const struct bGPDlayer *gpl, const bool is_multiedit);
 
 bool ED_gpencil_stroke_can_use_direct(const struct ScrArea *area, const struct bGPDstroke *gps);
 bool ED_gpencil_stroke_can_use(const struct bContext *C, const struct bGPDstroke *gps);
-bool ED_gpencil_stroke_color_use(struct Object *ob,
-                                 const struct bGPDlayer *gpl,
-                                 const struct bGPDstroke *gps);
+bool ED_gpencil_stroke_material_editable(struct Object *ob,
+                                         const struct bGPDlayer *gpl,
+                                         const struct bGPDstroke *gps);
+bool ED_gpencil_stroke_material_visible(struct Object *ob, const struct bGPDstroke *gps);
 
 /* ----------- Grease Pencil Operators ----------------- */
 
@@ -213,7 +216,7 @@ bool ED_gpencil_anim_copybuf_paste(struct bAnimContext *ac, const short copy_mod
 
 /* ------------ Grease-Pencil Undo System ------------------ */
 int ED_gpencil_session_active(void);
-int ED_undo_gpencil_step(struct bContext *C, int step, const char *name);
+int ED_undo_gpencil_step(struct bContext *C, const int step); /* eUndoStepDir. */
 
 /* ------------ Grease-Pencil Armature ------------------ */
 bool ED_gpencil_add_armature(const struct bContext *C,
@@ -248,8 +251,10 @@ void ED_gpencil_brush_draw_eraser(struct Brush *brush, int x, int y);
 
 /* ----------- Add Primitive Utilities -------------- */
 
+void ED_gpencil_create_blank(struct bContext *C, struct Object *ob, float mat[4][4]);
 void ED_gpencil_create_monkey(struct bContext *C, struct Object *ob, float mat[4][4]);
 void ED_gpencil_create_stroke(struct bContext *C, struct Object *ob, float mat[4][4]);
+void ED_gpencil_create_lineart(struct bContext *C, struct Object *ob);
 
 /* ------------ Object Utilities ------------ */
 struct Object *ED_gpencil_add_object(struct bContext *C,
@@ -263,11 +268,13 @@ bool ED_object_gpencil_exit(struct Main *bmain, struct Object *ob);
 void ED_gpencil_project_stroke_to_plane(const struct Scene *scene,
                                         const struct Object *ob,
                                         const struct RegionView3D *rv3d,
+                                        struct bGPDlayer *gpl,
                                         struct bGPDstroke *gps,
                                         const float origin[3],
                                         const int axis);
 void ED_gpencil_project_point_to_plane(const struct Scene *scene,
                                        const struct Object *ob,
+                                       struct bGPDlayer *gpl,
                                        const struct RegionView3D *rv3d,
                                        const float origin[3],
                                        const int axis,
@@ -366,6 +373,11 @@ bool ED_gpencil_stroke_point_is_inside(struct bGPDstroke *gps,
                                        struct GP_SpaceConversion *gsc,
                                        int mouse[2],
                                        const float diff_mat[4][4]);
+void ED_gpencil_projected_2d_bound_box(struct GP_SpaceConversion *gsc,
+                                       struct bGPDstroke *gps,
+                                       const float diff_mat[4][4],
+                                       float r_min[2],
+                                       float r_max[2]);
 
 struct bGPDstroke *ED_gpencil_stroke_nearest_to_ends(struct bContext *C,
                                                      struct GP_SpaceConversion *gsc,

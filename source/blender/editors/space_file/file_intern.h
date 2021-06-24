@@ -62,7 +62,9 @@ void FILE_OT_bookmark_cleanup(struct wmOperatorType *ot);
 void FILE_OT_bookmark_move(struct wmOperatorType *ot);
 void FILE_OT_reset_recent(wmOperatorType *ot);
 void FILE_OT_hidedot(struct wmOperatorType *ot);
+void FILE_OT_associate_blend(struct wmOperatorType *ot);
 void FILE_OT_execute(struct wmOperatorType *ot);
+void FILE_OT_mouse_execute(struct wmOperatorType *ot);
 void FILE_OT_cancel(struct wmOperatorType *ot);
 void FILE_OT_parent(struct wmOperatorType *ot);
 void FILE_OT_directory_new(struct wmOperatorType *ot);
@@ -75,6 +77,7 @@ void FILE_OT_rename(struct wmOperatorType *ot);
 void FILE_OT_smoothscroll(struct wmOperatorType *ot);
 void FILE_OT_filepath_drop(struct wmOperatorType *ot);
 void FILE_OT_start_filter(struct wmOperatorType *ot);
+void FILE_OT_view_selected(struct wmOperatorType *ot);
 
 void file_directory_enter_handle(bContext *C, void *arg_unused, void *arg_but);
 void file_filename_enter_handle(bContext *C, void *arg_unused, void *arg_but);
@@ -111,6 +114,21 @@ int autocomplete_directory(struct bContext *C, char *str, void *arg_v);
 int autocomplete_file(struct bContext *C, char *str, void *arg_v);
 
 void file_params_renamefile_activate(struct SpaceFile *sfile, struct FileSelectParams *params);
+
+typedef void *onReloadFnData;
+typedef void (*onReloadFn)(struct SpaceFile *space_data, onReloadFnData custom_data);
+typedef struct SpaceFile_Runtime {
+  /* Called once after the file browser has reloaded. Reset to NULL after calling.
+   * Use file_on_reload_callback_register() to register a callback. */
+  onReloadFn on_reload;
+  onReloadFnData on_reload_custom_data;
+} SpaceFile_Runtime;
+
+/* Register an on-reload callback function. Note that there can only be one such function at a
+ * time; registering a new one will overwrite the previous one. */
+void file_on_reload_callback_register(struct SpaceFile *sfile,
+                                      onReloadFn callback,
+                                      onReloadFnData custom_data);
 
 /* file_panels.c */
 void file_tool_props_region_panels_register(struct ARegionType *art);

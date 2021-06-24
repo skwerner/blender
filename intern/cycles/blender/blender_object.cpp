@@ -51,10 +51,11 @@ bool BlenderSync::BKE_object_is_modified(BL::Object &b_ob)
   }
   else {
     /* object level material links */
-    BL::Object::material_slots_iterator slot;
-    for (b_ob.material_slots.begin(slot); slot != b_ob.material_slots.end(); ++slot)
-      if (slot->link() == BL::MaterialSlot::link_OBJECT)
+    for (BL::MaterialSlot &b_slot : b_ob.material_slots) {
+      if (b_slot.link() == BL::MaterialSlot::link_OBJECT) {
         return true;
+      }
+    }
   }
 
   return false;
@@ -95,7 +96,49 @@ bool BlenderSync::object_is_light(BL::Object &b_ob)
   return (b_ob_data && b_ob_data.is_a(&RNA_Light));
 }
 
-/* Object */
+void BlenderSync::sync_object_motion_init(BL::Object &b_parent, BL::Object &b_ob, Object *object)
+{
+  /* Initialize motion blur for object, detecting if it's enabled and creating motion
+   * steps array if so. */
+  array<Transform> motion;
+  object->set_motion(motion);
+
+  Scene::MotionType need_motion = scene->need_motion();
+  if (need_motion == Scene::MOTION_NONE || !object->get_geometry()) {
+    return;
+  }
+
+  Geometry *geom = object->get_geometry();
+  geom->set_use_motion_blur(false);
+  geom->set_motion_steps(0);
+
+  uint motion_steps;
+
+  if (need_motion == Scene::MOTION_BLUR) {
+    motion_steps = object_motion_steps(b_parent, b_ob, Object::MAX_MOTION_STEPS);
+    geom->set_motion_steps(motion_steps);
+    if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
+      geom->set_use_motion_blur(true);
+    }
+  }
+  else {
+    motion_steps = 3;
+    geom->set_motion_steps(motion_steps);
+  }
+
+  motion.resize(motion_steps, transform_empty());
+
+  if (motion_steps) {
+    motion[motion_steps / 2] = object->get_tfm();
+
+    /* update motion socket before trying to access object->motion_time */
+    object->set_motion(motion);
+
+    for (size_t step = 0; step < motion_steps; step++) {
+      motion_times.insert(object->motion_time(step));
+    }
+  }
+}
 
 Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
                                  BL::ViewLayer &b_view_layer,
@@ -218,10 +261,8 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
   }
 
   /* test if we need to sync */
-  bool object_updated = false;
-
-  if (object_map.add_or_update(&object, b_ob, b_parent, key))
-    object_updated = true;
+  bool object_updated = object_map.add_or_update(&object, b_ob, b_parent, key) ||
+                        (tfm != object->get_tfm());
 
   /* mesh sync */
   /* b_ob is owned by the iterator and will go out of scope at the end of the block.
@@ -243,9 +284,6 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
 
   /* holdout */
   object->set_use_holdout(use_holdout);
-  if (object->use_holdout_is_modified()) {
-    scene->object_manager->tag_update(scene);
-  }
 
   object->set_visibility(visibility);
 
@@ -273,49 +311,11 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
    * transform comparison should not be needed, but duplis don't work perfect
    * in the depsgraph and may not signal changes, so this is a workaround */
   if (object->is_modified() || object_updated ||
-      (object->get_geometry() && object->get_geometry()->is_modified()) ||
-      tfm != object->get_tfm()) {
+      (object->get_geometry() && object->get_geometry()->is_modified())) {
     object->name = b_ob.name().c_str();
     object->set_pass_id(b_ob.pass_index());
     object->set_color(get_float3(b_ob.color()));
     object->set_tfm(tfm);
-    array<Transform> motion;
-    object->set_motion(motion);
-
-    /* motion blur */
-    Scene::MotionType need_motion = scene->need_motion();
-    if (need_motion != Scene::MOTION_NONE && object->get_geometry()) {
-      Geometry *geom = object->get_geometry();
-      geom->set_use_motion_blur(false);
-      geom->set_motion_steps(0);
-
-      uint motion_steps;
-
-      if (need_motion == Scene::MOTION_BLUR) {
-        motion_steps = object_motion_steps(b_parent, b_ob, Object::MAX_MOTION_STEPS);
-        geom->set_motion_steps(motion_steps);
-        if (motion_steps && object_use_deform_motion(b_parent, b_ob)) {
-          geom->set_use_motion_blur(true);
-        }
-      }
-      else {
-        motion_steps = 3;
-        geom->set_motion_steps(motion_steps);
-      }
-
-      motion.resize(motion_steps, transform_empty());
-
-      if (motion_steps) {
-        motion[motion_steps / 2] = tfm;
-
-        /* update motion socket before trying to access object->motion_time */
-        object->set_motion(motion);
-
-        for (size_t step = 0; step < motion_steps; step++) {
-          motion_times.insert(object->motion_time(step));
-        }
-      }
-    }
 
     /* dupli texture coordinates and random_id */
     if (is_instance) {
@@ -325,13 +325,15 @@ Object *BlenderSync::sync_object(BL::Depsgraph &b_depsgraph,
       object->set_random_id(b_instance.random_id());
     }
     else {
-      object->set_dupli_generated(make_float3(0.0f, 0.0f, 0.0f));
-      object->set_dupli_uv(make_float2(0.0f, 0.0f));
+      object->set_dupli_generated(zero_float3());
+      object->set_dupli_uv(zero_float2());
       object->set_random_id(hash_uint2(hash_string(object->name.c_str()), 0));
     }
 
     object->tag_update(scene);
   }
+
+  sync_object_motion_init(b_parent, b_ob, object);
 
   if (is_instance) {
     /* Sync possible particle data. */
@@ -348,6 +350,10 @@ static bool lookup_property(BL::ID b_id, const string &name, float4 *r_value)
   PropertyRNA *prop;
 
   if (!RNA_path_resolve(&b_id.ptr, name.c_str(), &ptr, &prop)) {
+    return false;
+  }
+
+  if (prop == NULL) {
     return false;
   }
 
@@ -558,10 +564,12 @@ void BlenderSync::sync_objects(BL::Depsgraph &b_depsgraph,
   if (!cancel && !motion) {
     sync_background_light(b_v3d, use_portal);
 
-    /* handle removed data and modified pointers */
+    /* Handle removed data and modified pointers, as this may free memory, delete Nodes in the
+     * right order to ensure that dependent data is freed after their users. Objects should be
+     * freed before particle systems and geometries. */
     light_map.post_sync();
-    geometry_map.post_sync();
     object_map.post_sync();
+    geometry_map.post_sync();
     particle_system_map.post_sync();
   }
 
@@ -609,7 +617,7 @@ void BlenderSync::sync_motion(BL::RenderSettings &b_render,
     if (b_cam) {
       sync_camera_motion(b_render, b_cam, width, height, 0.0f);
     }
-    sync_objects(b_depsgraph, b_v3d, 0.0f);
+    sync_objects(b_depsgraph, b_v3d);
   }
 
   /* Insert motion times from camera. Motion times from other objects

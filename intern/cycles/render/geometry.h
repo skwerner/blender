@@ -43,6 +43,24 @@ class Shader;
 class Volume;
 struct PackedBVH;
 
+/* Flags used to determine which geometry data need to be packed. */
+enum PackFlags : uint32_t {
+  PACK_NONE = 0u,
+
+  /* Pack the geometry information (e.g. triangle or curve keys indices). */
+  PACK_GEOMETRY = (1u << 0),
+
+  /* Pack the vertices, for Meshes and Volumes' bounding meshes. */
+  PACK_VERTICES = (1u << 1),
+
+  /* Pack the visibility flags for each triangle or curve. */
+  PACK_VISIBILITY = (1u << 2),
+
+  PACK_ALL = (PACK_GEOMETRY | PACK_VERTICES | PACK_VISIBILITY),
+};
+
+PackFlags operator|=(PackFlags &pack_flags, uint32_t value);
+
 /* Geometry
  *
  * Base class for geometric types like Mesh and Hair. */
@@ -90,6 +108,7 @@ class Geometry : public Node {
 
   /* Update Flags */
   bool need_update_rebuild;
+  bool need_update_bvh_for_offset;
 
   /* Index into scene->geometry (only valid during update) */
   size_t index;
@@ -125,7 +144,10 @@ class Geometry : public Node {
                    int n,
                    int total);
 
-  virtual void pack_primitives(PackedBVH &pack, int object, uint visibility) = 0;
+  virtual void pack_primitives(PackedBVH *pack,
+                               int object,
+                               uint visibility,
+                               PackFlags pack_flags) = 0;
 
   /* Check whether the geometry should have own BVH built separately. Briefly,
    * own BVH is needed for geometry, if:
@@ -155,16 +177,50 @@ class Geometry : public Node {
     return geometry_type == HAIR;
   }
 
+  bool is_volume() const
+  {
+    return geometry_type == VOLUME;
+  }
+
   /* Updates */
   void tag_update(Scene *scene, bool rebuild);
+
+  void tag_bvh_update(bool rebuild);
 };
 
 /* Geometry Manager */
 
 class GeometryManager {
+  uint32_t update_flags;
+
  public:
+  enum : uint32_t {
+    UV_PASS_NEEDED = (1 << 0),
+    MOTION_PASS_NEEDED = (1 << 1),
+    GEOMETRY_MODIFIED = (1 << 2),
+    OBJECT_MANAGER = (1 << 3),
+    MESH_ADDED = (1 << 4),
+    MESH_REMOVED = (1 << 5),
+    HAIR_ADDED = (1 << 6),
+    HAIR_REMOVED = (1 << 7),
+
+    SHADER_ATTRIBUTE_MODIFIED = (1 << 8),
+    SHADER_DISPLACEMENT_MODIFIED = (1 << 9),
+
+    GEOMETRY_ADDED = MESH_ADDED | HAIR_ADDED,
+    GEOMETRY_REMOVED = MESH_REMOVED | HAIR_REMOVED,
+
+    TRANSFORM_MODIFIED = (1 << 10),
+
+    VISIBILITY_MODIFIED = (1 << 11),
+
+    /* tag everything in the manager for an update */
+    UPDATE_ALL = ~0u,
+
+    UPDATE_NONE = 0u,
+  };
+
   /* Update Flags */
-  bool need_update;
   bool need_flags_update;
 
   /* Constructor/Destructor */
@@ -174,10 +230,12 @@ class GeometryManager {
   /* Device Updates */
   void device_update_preprocess(Device *device, Scene *scene, Progress &progress);
   void device_update(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
-  void device_free(Device *device, DeviceScene *dscene);
+  void device_free(Device *device, DeviceScene *dscene, bool force_free);
 
   /* Updates */
-  void tag_update(Scene *scene);
+  void tag_update(Scene *scene, uint32_t flag);
+
+  bool need_update() const;
 
   /* Statistics */
   void collect_statistics(const Scene *scene, RenderStats *stats);
@@ -198,7 +256,7 @@ class GeometryManager {
                              vector<AttributeRequestSet> &object_attributes);
 
   /* Compute verts/triangles/curves offsets in global arrays. */
-  void mesh_calc_offset(Scene *scene);
+  void mesh_calc_offset(Scene *scene, BVHLayout bvh_layout);
 
   void device_update_object(Device *device, DeviceScene *dscene, Scene *scene, Progress &progress);
 

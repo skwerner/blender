@@ -110,12 +110,6 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
   float face_alpha = (do_occlude_wire || !pd->edit_mesh.do_faces) ? 0.0f : 1.0f;
   GPUTexture **depth_tex = (pd->edit_mesh.do_zbufclip) ? &dtxl->depth : &txl->dummy_depth_tx;
 
-  if (select_face && !pd->edit_mesh.do_faces && pd->edit_mesh.do_edges) {
-    /* Force display of face centers in this case because that's
-     * the only way to see if a face is selected. */
-    show_face_dots = true;
-  }
-
   /* Run Twice for in-front passes. */
   for (int i = 0; i < 2; i++) {
     /* Complementary Depth Pass */
@@ -155,7 +149,7 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
     DRWState state_common = DRW_STATE_WRITE_COLOR | DRW_STATE_DEPTH_LESS_EQUAL |
                             DRW_STATE_BLEND_ALPHA;
     /* Faces */
-    /* Cage geom needs to be offsetted to avoid Z-fighting. */
+    /* Cage geom needs an offset applied to avoid Z-fighting. */
     for (int j = 0; j < 2; j++) {
       DRWPass **edit_face_ps = (j == 0) ? &psl->edit_mesh_faces_ps[i] :
                                           &psl->edit_mesh_faces_cage_ps[i];
@@ -203,7 +197,7 @@ void OVERLAY_edit_mesh_cache_init(OVERLAY_Data *vedata)
       grp = pd->edit_mesh_skin_roots_grp[i] = DRW_shgroup_create(sh, psl->edit_mesh_verts_ps[i]);
       DRW_shgroup_uniform_block(grp, "globalsBlock", G_draw.block_ubo);
     }
-    /* Facedots */
+    /* Face-dots */
     if (select_face && show_face_dots) {
       sh = OVERLAY_shader_edit_mesh_facedot();
       grp = pd->edit_mesh_facedots_grp[i] = DRW_shgroup_create(sh, psl->edit_mesh_verts_ps[i]);
@@ -350,7 +344,7 @@ void OVERLAY_edit_mesh_draw(OVERLAY_Data *vedata)
   if (pd->edit_mesh.do_zbufclip) {
     DRW_draw_pass(psl->edit_mesh_depth_ps[IN_FRONT]);
 
-    /* render facefill */
+    /* Render face-fill. */
     DRW_view_set_active(pd->view_edit_faces);
     DRW_draw_pass(psl->edit_mesh_faces_ps[NOT_IN_FRONT]);
 

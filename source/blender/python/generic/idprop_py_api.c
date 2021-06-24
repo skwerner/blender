@@ -42,6 +42,18 @@ extern bool pyrna_id_FromPyObject(PyObject *obj, ID **id);
 extern PyObject *pyrna_id_CreatePyObject(ID *id);
 extern bool pyrna_id_CheckPyObject(PyObject *obj);
 
+/* Currently there is no need to expose this publicly. */
+static PyObject *BPy_IDGroup_IterKeys_CreatePyObject(BPy_IDProperty *group, const bool reversed);
+static PyObject *BPy_IDGroup_IterValues_CreatePyObject(BPy_IDProperty *group, const bool reversed);
+static PyObject *BPy_IDGroup_IterItems_CreatePyObject(BPy_IDProperty *group, const bool reversed);
+
+static PyObject *BPy_IDGroup_ViewKeys_CreatePyObject(BPy_IDProperty *group);
+static PyObject *BPy_IDGroup_ViewValues_CreatePyObject(BPy_IDProperty *group);
+static PyObject *BPy_IDGroup_ViewItems_CreatePyObject(BPy_IDProperty *group);
+
+static BPy_IDGroup_View *IDGroup_View_New_WithType(BPy_IDProperty *group, PyTypeObject *type);
+static int BPy_IDGroup_Contains(BPy_IDProperty *self, PyObject *value);
+
 /* -------------------------------------------------------------------- */
 /** \name Python from ID-Property (Internal Conversions)
  *
@@ -79,7 +91,7 @@ static PyObject *idprop_py_from_idp_double(const IDProperty *prop)
 static PyObject *idprop_py_from_idp_group(ID *id, IDProperty *prop, IDProperty *parent)
 {
   BPy_IDProperty *group = PyObject_New(BPy_IDProperty, &BPy_IDGroup_Type);
-  group->id = id;
+  group->owner_id = id;
   group->prop = prop;
   group->parent = parent; /* can be NULL */
   return (PyObject *)group;
@@ -93,7 +105,7 @@ static PyObject *idprop_py_from_idp_id(IDProperty *prop)
 static PyObject *idprop_py_from_idp_array(ID *id, IDProperty *prop)
 {
   BPy_IDProperty *array = PyObject_New(BPy_IDProperty, &BPy_IDArray_Type);
-  array->id = id;
+  array->owner_id = id;
   array->prop = prop;
   return (PyObject *)array;
 }
@@ -140,7 +152,7 @@ static Py_hash_t BPy_IDGroup_hash(BPy_IDProperty *self)
 static PyObject *BPy_IDGroup_repr(BPy_IDProperty *self)
 {
   return PyUnicode_FromFormat("<bpy id prop: owner=\"%s\", name=\"%s\", address=%p>",
-                              self->id ? self->id->name : "<NONE>",
+                              self->owner_id ? self->owner_id->name : "<NONE>",
                               self->prop->name,
                               self->prop);
 }
@@ -189,13 +201,13 @@ static int BPy_IDGroup_SetData(BPy_IDProperty *self, IDProperty *prop, PyObject 
         st = (char *)PyC_UnicodeAsByte(value, &value_coerce);
         alloc_len = strlen(st) + 1;
 
-        st = _PyUnicode_AsString(value);
+        st = PyUnicode_AsUTF8(value);
         IDP_ResizeArray(prop, alloc_len);
         memcpy(IDP_Array(prop), st, alloc_len);
         Py_XDECREF(value_coerce);
       }
 #  else
-      st = _PyUnicode_AsString(value);
+      st = PyUnicode_AsUTF8(value);
       IDP_ResizeArray(prop, strlen(st) + 1);
       strcpy(IDP_Array(prop), st);
 #  endif
@@ -253,7 +265,7 @@ static int BPy_IDGroup_SetName(BPy_IDProperty *self, PyObject *value, void *UNUS
     return -1;
   }
 
-  name = _PyUnicode_AsStringAndSize(value, &name_size);
+  name = PyUnicode_AsUTF8AndSize(value, &name_size);
 
   if (name_size >= MAX_IDPROP_NAME) {
     PyErr_SetString(PyExc_TypeError, "string length cannot exceed 63 characters!");
@@ -300,7 +312,7 @@ static PyObject *BPy_IDGroup_Map_GetItem(BPy_IDProperty *self, PyObject *item)
     return NULL;
   }
 
-  name = _PyUnicode_AsString(item);
+  name = PyUnicode_AsUTF8(item);
 
   if (name == NULL) {
     PyErr_SetString(PyExc_TypeError, "only strings are allowed as keys of ID properties");
@@ -314,7 +326,7 @@ static PyObject *BPy_IDGroup_Map_GetItem(BPy_IDProperty *self, PyObject *item)
     return NULL;
   }
 
-  return BPy_IDGroup_WrapData(self->id, idprop, self->prop);
+  return BPy_IDGroup_WrapData(self->owner_id, idprop, self->prop);
 }
 
 /* returns NULL on success, error string on failure */
@@ -358,7 +370,7 @@ static const char *idp_try_read_name(PyObject *name_obj)
   const char *name = NULL;
   if (name_obj) {
     Py_ssize_t name_size;
-    name = _PyUnicode_AsStringAndSize(name_obj, &name_size);
+    name = PyUnicode_AsUTF8AndSize(name_obj, &name_size);
 
     if (name == NULL) {
       PyErr_Format(PyExc_KeyError,
@@ -420,7 +432,7 @@ static IDProperty *idp_from_PyUnicode(const char *name, PyObject *ob)
   prop = IDP_New(IDP_STRING, &val, name);
   Py_XDECREF(value_coerce);
 #else
-  val.str = _PyUnicode_AsString(ob);
+  val.str = PyUnicode_AsUTF8(ob);
   prop = IDP_New(IDP_STRING, val, name);
 #endif
   return prop;
@@ -722,7 +734,7 @@ int BPy_Wrap_SetMapItem(IDProperty *prop, PyObject *key, PyObject *val)
 
   if (val == NULL) { /* del idprop[key] */
     IDProperty *pkey;
-    const char *name = _PyUnicode_AsString(key);
+    const char *name = PyUnicode_AsUTF8(key);
 
     if (name == NULL) {
       PyErr_Format(PyExc_KeyError, "expected a string, not %.200s", Py_TYPE(key)->tp_name);
@@ -756,16 +768,11 @@ static int BPy_IDGroup_Map_SetItem(BPy_IDProperty *self, PyObject *key, PyObject
 
 static PyObject *BPy_IDGroup_iter(BPy_IDProperty *self)
 {
-  BPy_IDGroup_Iter *iter = PyObject_New(BPy_IDGroup_Iter, &BPy_IDGroup_Iter_Type);
-  iter->group = self;
-  iter->mode = IDPROP_ITER_KEYS;
-  iter->cur = self->prop->data.group.first;
-  Py_XINCREF(iter);
-  return (PyObject *)iter;
+  return BPy_IDGroup_ViewKeys_CreatePyObject(self);
 }
 
 /* for simple, non nested types this is the same as BPy_IDGroup_WrapData */
-static PyObject *BPy_IDGroup_MapDataToPy(IDProperty *prop)
+PyObject *BPy_IDGroup_MapDataToPy(IDProperty *prop)
 {
   switch (prop->type) {
     case IDP_STRING:
@@ -874,6 +881,370 @@ static PyObject *BPy_IDGroup_MapDataToPy(IDProperty *prop)
 /** \} */
 
 /* -------------------------------------------------------------------- */
+/** \name ID-Property Group Iterator Type
+ * \{ */
+
+static PyObject *BPy_IDGroup_Iter_repr(BPy_IDGroup_Iter *self)
+{
+  if (self->group == NULL) {
+    return PyUnicode_FromFormat("<%s>", Py_TYPE(self)->tp_name);
+  }
+  return PyUnicode_FromFormat("<%s \"%s\">", Py_TYPE(self)->tp_name, self->group->prop->name);
+}
+
+static void BPy_IDGroup_Iter_dealloc(BPy_IDGroup_Iter *self)
+{
+  if (self->group != NULL) {
+    PyObject_GC_UnTrack(self);
+  }
+  Py_CLEAR(self->group);
+  PyObject_GC_Del(self);
+}
+
+static int BPy_IDGroup_Iter_traverse(BPy_IDGroup_Iter *self, visitproc visit, void *arg)
+{
+  Py_VISIT(self->group);
+  return 0;
+}
+
+static int BPy_IDGroup_Iter_clear(BPy_IDGroup_Iter *self)
+{
+  Py_CLEAR(self->group);
+  return 0;
+}
+
+static bool BPy_Group_Iter_same_size_or_raise_error(BPy_IDGroup_Iter *self)
+{
+  if (self->len_init == self->group->prop->len) {
+    return true;
+  }
+  PyErr_SetString(PyExc_RuntimeError, "IDPropertyGroup changed size during iteration");
+  return false;
+}
+
+static PyObject *BPy_Group_IterKeys_next(BPy_IDGroup_Iter *self)
+{
+  if (self->cur != NULL) {
+    /* When `cur` is set, `group` cannot be NULL. */
+    if (!BPy_Group_Iter_same_size_or_raise_error(self)) {
+      return NULL;
+    }
+    IDProperty *cur = self->cur;
+    self->cur = self->reversed ? self->cur->prev : self->cur->next;
+    return PyUnicode_FromString(cur->name);
+  }
+  PyErr_SetNone(PyExc_StopIteration);
+  return NULL;
+}
+
+static PyObject *BPy_Group_IterValues_next(BPy_IDGroup_Iter *self)
+{
+  if (self->cur != NULL) {
+    /* When `cur` is set, `group` cannot be NULL. */
+    if (!BPy_Group_Iter_same_size_or_raise_error(self)) {
+      return NULL;
+    }
+    IDProperty *cur = self->cur;
+    self->cur = self->reversed ? self->cur->prev : self->cur->next;
+    return BPy_IDGroup_WrapData(self->group->owner_id, cur, self->group->prop);
+  }
+  PyErr_SetNone(PyExc_StopIteration);
+  return NULL;
+}
+
+static PyObject *BPy_Group_IterItems_next(BPy_IDGroup_Iter *self)
+{
+  if (self->cur != NULL) {
+    /* When `cur` is set, `group` cannot be NULL. */
+    if (!BPy_Group_Iter_same_size_or_raise_error(self)) {
+      return NULL;
+    }
+    IDProperty *cur = self->cur;
+    self->cur = self->reversed ? self->cur->prev : self->cur->next;
+    PyObject *ret = PyTuple_New(2);
+    PyTuple_SET_ITEMS(ret,
+                      PyUnicode_FromString(cur->name),
+                      BPy_IDGroup_WrapData(self->group->owner_id, cur, self->group->prop));
+    return ret;
+  }
+  PyErr_SetNone(PyExc_StopIteration);
+  return NULL;
+}
+
+PyTypeObject BPy_IDGroup_IterKeys_Type = {PyVarObject_HEAD_INIT(NULL, 0)};
+PyTypeObject BPy_IDGroup_IterValues_Type = {PyVarObject_HEAD_INIT(NULL, 0)};
+PyTypeObject BPy_IDGroup_IterItems_Type = {PyVarObject_HEAD_INIT(NULL, 0)};
+
+/* ID Property Group Iterator. */
+static void IDGroup_Iter_init_type(void)
+{
+#define SHARED_MEMBER_SET(member, value) \
+  { \
+    k_ty->member = v_ty->member = i_ty->member = value; \
+  } \
+  ((void)0)
+
+  PyTypeObject *k_ty = &BPy_IDGroup_IterKeys_Type;
+  PyTypeObject *v_ty = &BPy_IDGroup_IterValues_Type;
+  PyTypeObject *i_ty = &BPy_IDGroup_IterItems_Type;
+
+  /* Unique members. */
+  k_ty->tp_name = "IDPropertyGroupIterKeys";
+  v_ty->tp_name = "IDPropertyGroupIterValues";
+  i_ty->tp_name = "IDPropertyGroupIterItems";
+
+  k_ty->tp_iternext = (iternextfunc)BPy_Group_IterKeys_next;
+  v_ty->tp_iternext = (iternextfunc)BPy_Group_IterValues_next;
+  i_ty->tp_iternext = (iternextfunc)BPy_Group_IterItems_next;
+
+  /* Shared members. */
+  SHARED_MEMBER_SET(tp_basicsize, sizeof(BPy_IDGroup_Iter));
+  SHARED_MEMBER_SET(tp_dealloc, (destructor)BPy_IDGroup_Iter_dealloc);
+  SHARED_MEMBER_SET(tp_repr, (reprfunc)BPy_IDGroup_Iter_repr);
+  SHARED_MEMBER_SET(tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC);
+  SHARED_MEMBER_SET(tp_traverse, (traverseproc)BPy_IDGroup_Iter_traverse);
+  SHARED_MEMBER_SET(tp_clear, (inquiry)BPy_IDGroup_Iter_clear);
+  SHARED_MEMBER_SET(tp_iter, PyObject_SelfIter);
+
+#undef SHARED_MEMBER_SET
+}
+
+static PyObject *IDGroup_Iter_New_WithType(BPy_IDProperty *group,
+                                           const bool reversed,
+                                           PyTypeObject *type)
+{
+  BLI_assert(group ? group->prop->type == IDP_GROUP : true);
+  BPy_IDGroup_Iter *iter = PyObject_GC_New(BPy_IDGroup_Iter, type);
+  iter->reversed = reversed;
+  iter->group = group;
+  if (group != NULL) {
+    Py_INCREF(group);
+    PyObject_GC_Track(iter);
+    iter->cur = (reversed ? group->prop->data.group.last : group->prop->data.group.first);
+    iter->len_init = group->prop->len;
+  }
+  else {
+    iter->cur = NULL;
+    iter->len_init = 0;
+  }
+  return (PyObject *)iter;
+}
+
+static PyObject *BPy_IDGroup_IterKeys_CreatePyObject(BPy_IDProperty *group, const bool reversed)
+{
+  return IDGroup_Iter_New_WithType(group, reversed, &BPy_IDGroup_IterKeys_Type);
+}
+
+static PyObject *BPy_IDGroup_IterValues_CreatePyObject(BPy_IDProperty *group, const bool reversed)
+{
+  return IDGroup_Iter_New_WithType(group, reversed, &BPy_IDGroup_IterValues_Type);
+}
+
+static PyObject *BPy_IDGroup_IterItems_CreatePyObject(BPy_IDProperty *group, const bool reversed)
+{
+  return IDGroup_Iter_New_WithType(group, reversed, &BPy_IDGroup_IterItems_Type);
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name ID-Property Group View Types (Keys/Values/Items)
+ *
+ * This view types is a thin wrapper on keys/values/items, this matches Python's `dict_view` type.
+ * The is returned by `property.keys()` and is separate from the iterator that loops over keys.
+ *
+ * There are some less common features this type could support (matching Python's `dict_view`)
+ *
+ * TODO:
+ * - Efficient contains checks for values and items which currently convert to a list first.
+ * - Missing `dict_views.isdisjoint`.
+ * - Missing `tp_as_number` (`nb_subtract`, `nb_and`, `nb_xor`, `nb_or`).
+ * \{ */
+
+static PyObject *BPy_IDGroup_View_repr(BPy_IDGroup_View *self)
+{
+  if (self->group == NULL) {
+    return PyUnicode_FromFormat("<%s>", Py_TYPE(self)->tp_name);
+  }
+  return PyUnicode_FromFormat("<%s \"%s\">", Py_TYPE(self)->tp_name, self->group->prop->name);
+}
+
+static void BPy_IDGroup_View_dealloc(BPy_IDGroup_View *self)
+{
+  if (self->group != NULL) {
+    PyObject_GC_UnTrack(self);
+  }
+  Py_CLEAR(self->group);
+  PyObject_GC_Del(self);
+}
+
+static int BPy_IDGroup_View_traverse(BPy_IDGroup_View *self, visitproc visit, void *arg)
+{
+  Py_VISIT(self->group);
+  return 0;
+}
+
+static int BPy_IDGroup_View_clear(BPy_IDGroup_View *self)
+{
+  Py_CLEAR(self->group);
+  return 0;
+}
+
+/* View Specific API's (Key/Value/Items). */
+
+static PyObject *BPy_Group_ViewKeys_iter(BPy_IDGroup_View *self)
+{
+  return BPy_IDGroup_IterKeys_CreatePyObject(self->group, self->reversed);
+}
+
+static PyObject *BPy_Group_ViewValues_iter(BPy_IDGroup_View *self)
+{
+  return BPy_IDGroup_IterValues_CreatePyObject(self->group, self->reversed);
+}
+
+static PyObject *BPy_Group_ViewItems_iter(BPy_IDGroup_View *self)
+{
+  return BPy_IDGroup_IterItems_CreatePyObject(self->group, self->reversed);
+}
+
+static Py_ssize_t BPy_Group_View_len(BPy_IDGroup_View *self)
+{
+  if (self->group == NULL) {
+    return 0;
+  }
+  return self->group->prop->len;
+}
+
+static int BPy_Group_ViewKeys_Contains(BPy_IDGroup_View *self, PyObject *value)
+{
+  if (self->group == NULL) {
+    return 0;
+  }
+  return BPy_IDGroup_Contains(self->group, value);
+}
+
+static int BPy_Group_ViewValues_Contains(BPy_IDGroup_View *self, PyObject *value)
+{
+  if (self->group == NULL) {
+    return 0;
+  }
+  /* TODO: implement this without first converting to a list. */
+  PyObject *list = PySequence_List((PyObject *)self);
+  const int result = PySequence_Contains(list, value);
+  Py_DECREF(list);
+  return result;
+}
+
+static int BPy_Group_ViewItems_Contains(BPy_IDGroup_View *self, PyObject *value)
+{
+  if (self->group == NULL) {
+    return 0;
+  }
+  /* TODO: implement this without first converting to a list. */
+  PyObject *list = PySequence_List((PyObject *)self);
+  const int result = PySequence_Contains(list, value);
+  Py_DECREF(list);
+  return result;
+}
+
+static PySequenceMethods BPy_IDGroup_ViewKeys_as_sequence = {
+    (lenfunc)BPy_Group_View_len,             /* sq_length */
+    0,                                       /* sq_concat */
+    0,                                       /* sq_repeat */
+    0,                                       /* sq_item */
+    0,                                       /* sq_slice */
+    0,                                       /* sq_ass_item */
+    0,                                       /* sq_ass_slice */
+    (objobjproc)BPy_Group_ViewKeys_Contains, /* sq_contains */
+};
+
+static PySequenceMethods BPy_IDGroup_ViewValues_as_sequence = {
+    (lenfunc)BPy_Group_View_len,               /* sq_length */
+    0,                                         /* sq_concat */
+    0,                                         /* sq_repeat */
+    0,                                         /* sq_item */
+    0,                                         /* sq_slice */
+    0,                                         /* sq_ass_item */
+    0,                                         /* sq_ass_slice */
+    (objobjproc)BPy_Group_ViewValues_Contains, /* sq_contains */
+};
+
+static PySequenceMethods BPy_IDGroup_ViewItems_as_sequence = {
+    (lenfunc)BPy_Group_View_len,              /* sq_length */
+    0,                                        /* sq_concat */
+    0,                                        /* sq_repeat */
+    0,                                        /* sq_item */
+    0,                                        /* sq_slice */
+    0,                                        /* sq_ass_item */
+    0,                                        /* sq_ass_slice */
+    (objobjproc)BPy_Group_ViewItems_Contains, /* sq_contains */
+};
+
+/* Methods. */
+
+PyDoc_STRVAR(BPy_IDGroup_View_reversed_doc,
+             "Return a reverse iterator over the ID Property keys values or items.");
+
+static PyObject *BPy_IDGroup_View_reversed(BPy_IDGroup_View *self, PyObject *UNUSED(ignored))
+{
+  BPy_IDGroup_View *result = IDGroup_View_New_WithType(self->group, Py_TYPE(self));
+  result->reversed = !self->reversed;
+  return (PyObject *)result;
+}
+
+static PyMethodDef BPy_IDGroup_View_methods[] = {
+    {"__reversed__",
+     (PyCFunction)(void (*)(void))BPy_IDGroup_View_reversed,
+     METH_NOARGS,
+     BPy_IDGroup_View_reversed_doc},
+    {NULL, NULL},
+};
+
+PyTypeObject BPy_IDGroup_ViewKeys_Type = {PyVarObject_HEAD_INIT(NULL, 0)};
+PyTypeObject BPy_IDGroup_ViewValues_Type = {PyVarObject_HEAD_INIT(NULL, 0)};
+PyTypeObject BPy_IDGroup_ViewItems_Type = {PyVarObject_HEAD_INIT(NULL, 0)};
+
+/* ID Property Group View. */
+static void IDGroup_View_init_type(void)
+{
+  PyTypeObject *k_ty = &BPy_IDGroup_ViewKeys_Type;
+  PyTypeObject *v_ty = &BPy_IDGroup_ViewValues_Type;
+  PyTypeObject *i_ty = &BPy_IDGroup_ViewItems_Type;
+
+  /* Unique members. */
+  k_ty->tp_name = "IDPropertyGroupViewKeys";
+  v_ty->tp_name = "IDPropertyGroupViewValues";
+  i_ty->tp_name = "IDPropertyGroupViewItems";
+
+  k_ty->tp_iter = (getiterfunc)BPy_Group_ViewKeys_iter;
+  v_ty->tp_iter = (getiterfunc)BPy_Group_ViewValues_iter;
+  i_ty->tp_iter = (getiterfunc)BPy_Group_ViewItems_iter;
+
+  k_ty->tp_as_sequence = &BPy_IDGroup_ViewKeys_as_sequence;
+  v_ty->tp_as_sequence = &BPy_IDGroup_ViewValues_as_sequence;
+  i_ty->tp_as_sequence = &BPy_IDGroup_ViewItems_as_sequence;
+
+  /* Shared members. */
+#define SHARED_MEMBER_SET(member, value) \
+  { \
+    k_ty->member = v_ty->member = i_ty->member = value; \
+  } \
+  ((void)0)
+
+  SHARED_MEMBER_SET(tp_basicsize, sizeof(BPy_IDGroup_View));
+  SHARED_MEMBER_SET(tp_dealloc, (destructor)BPy_IDGroup_View_dealloc);
+  SHARED_MEMBER_SET(tp_repr, (reprfunc)BPy_IDGroup_View_repr);
+  SHARED_MEMBER_SET(tp_flags, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_GC);
+  SHARED_MEMBER_SET(tp_traverse, (traverseproc)BPy_IDGroup_View_traverse);
+  SHARED_MEMBER_SET(tp_clear, (inquiry)BPy_IDGroup_View_clear);
+  SHARED_MEMBER_SET(tp_methods, BPy_IDGroup_View_methods);
+
+#undef SHARED_MEMBER_SET
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
 /** \name ID-Property Group Methods
  * \{ */
 
@@ -918,23 +1289,8 @@ static PyObject *BPy_IDGroup_pop(BPy_IDProperty *self, PyObject *args)
     return NULL;
   }
 
-  IDP_RemoveFromGroup(self->prop, idprop);
+  IDP_FreeFromGroup(self->prop, idprop);
   return pyform;
-}
-
-PyDoc_STRVAR(
-    BPy_IDGroup_iter_items_doc,
-    ".. method:: iteritems()\n"
-    "\n"
-    "   Iterate through the items in the dict; behaves like dictionary method iteritems.\n");
-static PyObject *BPy_IDGroup_iter_items(BPy_IDProperty *self)
-{
-  BPy_IDGroup_Iter *iter = PyObject_New(BPy_IDGroup_Iter, &BPy_IDGroup_Iter_Type);
-  iter->group = self;
-  iter->mode = IDPROP_ITER_ITEMS;
-  iter->cur = self->prop->data.group.first;
-  Py_XINCREF(iter);
-  return (PyObject *)iter;
 }
 
 /* utility function */
@@ -1021,13 +1377,37 @@ PyObject *BPy_Wrap_GetItems(ID *id, IDProperty *prop)
   return seq;
 }
 
+PyObject *BPy_Wrap_GetKeys_View_WithID(ID *id, IDProperty *prop)
+{
+  PyObject *self = prop ? idprop_py_from_idp_group(id, prop, NULL) : NULL;
+  PyObject *ret = BPy_IDGroup_ViewKeys_CreatePyObject((BPy_IDProperty *)self);
+  Py_XDECREF(self); /* Owned by `ret`. */
+  return ret;
+}
+
+PyObject *BPy_Wrap_GetValues_View_WithID(ID *id, IDProperty *prop)
+{
+  PyObject *self = prop ? idprop_py_from_idp_group(id, prop, NULL) : NULL;
+  PyObject *ret = BPy_IDGroup_ViewValues_CreatePyObject((BPy_IDProperty *)self);
+  Py_XDECREF(self); /* Owned by `ret`. */
+  return ret;
+}
+
+PyObject *BPy_Wrap_GetItems_View_WithID(ID *id, IDProperty *prop)
+{
+  PyObject *self = prop ? idprop_py_from_idp_group(id, prop, NULL) : NULL;
+  PyObject *ret = BPy_IDGroup_ViewItems_CreatePyObject((BPy_IDProperty *)self);
+  Py_XDECREF(self); /* Owned by `ret`. */
+  return ret;
+}
+
 PyDoc_STRVAR(BPy_IDGroup_keys_doc,
              ".. method:: keys()\n"
              "\n"
              "   Return the keys associated with this group as a list of strings.\n");
 static PyObject *BPy_IDGroup_keys(BPy_IDProperty *self)
 {
-  return BPy_Wrap_GetKeys(self->prop);
+  return BPy_IDGroup_ViewKeys_CreatePyObject(self);
 }
 
 PyDoc_STRVAR(BPy_IDGroup_values_doc,
@@ -1036,21 +1416,21 @@ PyDoc_STRVAR(BPy_IDGroup_values_doc,
              "   Return the values associated with this group.\n");
 static PyObject *BPy_IDGroup_values(BPy_IDProperty *self)
 {
-  return BPy_Wrap_GetValues(self->id, self->prop);
+  return BPy_IDGroup_ViewValues_CreatePyObject(self);
 }
 
 PyDoc_STRVAR(BPy_IDGroup_items_doc,
              ".. method:: items()\n"
              "\n"
-             "   Return the items associated with this group.\n");
+             "   Iterate through the items in the dict; behaves like dictionary method items.\n");
 static PyObject *BPy_IDGroup_items(BPy_IDProperty *self)
 {
-  return BPy_Wrap_GetItems(self->id, self->prop);
+  return BPy_IDGroup_ViewItems_CreatePyObject(self);
 }
 
 static int BPy_IDGroup_Contains(BPy_IDProperty *self, PyObject *value)
 {
-  const char *name = _PyUnicode_AsString(value);
+  const char *name = PyUnicode_AsUTF8(value);
 
   if (!name) {
     PyErr_Format(PyExc_TypeError, "expected a string, not a %.200s", Py_TYPE(value)->tp_name);
@@ -1134,7 +1514,7 @@ static PyObject *BPy_IDGroup_get(BPy_IDProperty *self, PyObject *args)
 
   idprop = IDP_GetPropertyFromGroup(self->prop, key);
   if (idprop) {
-    PyObject *pyobj = BPy_IDGroup_WrapData(self->id, idprop, self->prop);
+    PyObject *pyobj = BPy_IDGroup_WrapData(self->owner_id, idprop, self->prop);
     if (pyobj) {
       return pyobj;
     }
@@ -1146,7 +1526,6 @@ static PyObject *BPy_IDGroup_get(BPy_IDProperty *self, PyObject *args)
 
 static struct PyMethodDef BPy_IDGroup_methods[] = {
     {"pop", (PyCFunction)BPy_IDGroup_pop, METH_VARARGS, BPy_IDGroup_pop_doc},
-    {"iteritems", (PyCFunction)BPy_IDGroup_iter_items, METH_NOARGS, BPy_IDGroup_iter_items_doc},
     {"keys", (PyCFunction)BPy_IDGroup_keys, METH_NOARGS, BPy_IDGroup_keys_doc},
     {"values", (PyCFunction)BPy_IDGroup_values, METH_NOARGS, BPy_IDGroup_values_doc},
     {"items", (PyCFunction)BPy_IDGroup_items, METH_NOARGS, BPy_IDGroup_items_doc},
@@ -1192,12 +1571,8 @@ PyTypeObject BPy_IDGroup_Type = {
 
     /* Methods to implement standard operations */
 
-    NULL, /* destructor tp_dealloc; */
-#if PY_VERSION_HEX >= 0x03080000
-    0, /* tp_vectorcall_offset */
-#else
-    (printfunc)NULL, /* printfunc tp_print */
-#endif
+    NULL,                       /* destructor tp_dealloc; */
+    0,                          /* tp_vectorcall_offset */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1605,12 +1980,8 @@ PyTypeObject BPy_IDArray_Type = {
 
     /* Methods to implement standard operations */
 
-    NULL, /* destructor tp_dealloc; */
-#if PY_VERSION_HEX >= 0x03080000
-    0, /* tp_vectorcall_offset */
-#else
-    (printfunc)NULL, /* printfunc tp_print */
-#endif
+    NULL,                       /* destructor tp_dealloc; */
+    0,                          /* tp_vectorcall_offset */
     NULL,                       /* getattrfunc tp_getattr; */
     NULL,                       /* setattrfunc tp_setattr; */
     NULL,                       /* cmpfunc tp_compare; */
@@ -1684,105 +2055,59 @@ PyTypeObject BPy_IDArray_Type = {
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name ID-Property Group Iterator Type
+/** \name Initialize Types
  * \{ */
-
-static PyObject *IDGroup_Iter_repr(BPy_IDGroup_Iter *self)
-{
-  return PyUnicode_FromFormat("(ID Property Group Iter \"%s\")", self->group->prop->name);
-}
-
-static PyObject *BPy_Group_Iter_Next(BPy_IDGroup_Iter *self)
-{
-
-  if (self->cur) {
-    PyObject *ret;
-    IDProperty *cur;
-
-    cur = self->cur;
-    self->cur = self->cur->next;
-
-    if (self->mode == IDPROP_ITER_ITEMS) {
-      ret = PyTuple_New(2);
-      PyTuple_SET_ITEMS(ret,
-                        PyUnicode_FromString(cur->name),
-                        BPy_IDGroup_WrapData(self->group->id, cur, self->group->prop));
-      return ret;
-    }
-
-    return PyUnicode_FromString(cur->name);
-  }
-
-  PyErr_SetNone(PyExc_StopIteration);
-  return NULL;
-}
-
-PyTypeObject BPy_IDGroup_Iter_Type = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    /*  For printing, in format "<module>.<name>" */
-    "IDPropertyGroupIter",    /* char *tp_name; */
-    sizeof(BPy_IDGroup_Iter), /* int tp_basicsize; */
-    0,                        /* tp_itemsize;  For allocation */
-
-    /* Methods to implement standard operations */
-
-    NULL, /* destructor tp_dealloc; */
-#if PY_VERSION_HEX >= 0x03080000
-    0, /* tp_vectorcall_offset */
-#else
-    (printfunc)NULL, /* printfunc tp_print */
-#endif
-    NULL,                        /* getattrfunc tp_getattr; */
-    NULL,                        /* setattrfunc tp_setattr; */
-    NULL,                        /* cmpfunc tp_compare; */
-    (reprfunc)IDGroup_Iter_repr, /* reprfunc tp_repr; */
-
-    /* Method suites for standard classes */
-
-    NULL, /* PyNumberMethods *tp_as_number; */
-    NULL, /* PySequenceMethods *tp_as_sequence; */
-    NULL, /* PyMappingMethods *tp_as_mapping; */
-
-    /* More standard operations (here for binary compatibility) */
-
-    NULL, /* hashfunc tp_hash; */
-    NULL, /* ternaryfunc tp_call; */
-    NULL, /* reprfunc tp_str; */
-    NULL, /* getattrofunc tp_getattro; */
-    NULL, /* setattrofunc tp_setattro; */
-
-    /* Functions to access object as input/output buffer */
-    NULL, /* PyBufferProcs *tp_as_buffer; */
-
-    /*** Flags to define presence of optional/expanded features ***/
-    Py_TPFLAGS_DEFAULT, /* long tp_flags; */
-
-    NULL, /*  char *tp_doc;  Documentation string */
-    /*** Assigned meaning in release 2.0 ***/
-    /* call function for all accessible objects */
-    NULL, /* traverseproc tp_traverse; */
-
-    /* delete references to contained objects */
-    NULL, /* inquiry tp_clear; */
-
-    /***  Assigned meaning in release 2.1 ***/
-    /*** rich comparisons ***/
-    NULL, /* richcmpfunc tp_richcompare; */
-
-    /***  weak reference enabler ***/
-    0, /* long tp_weaklistoffset; */
-
-    /*** Added in release 2.2 ***/
-    /*   Iterators */
-    PyObject_SelfIter,                 /* getiterfunc tp_iter; */
-    (iternextfunc)BPy_Group_Iter_Next, /* iternextfunc tp_iternext; */
-};
 
 void IDProp_Init_Types(void)
 {
+  IDGroup_Iter_init_type();
+  IDGroup_View_init_type();
+
   PyType_Ready(&BPy_IDGroup_Type);
-  PyType_Ready(&BPy_IDGroup_Iter_Type);
   PyType_Ready(&BPy_IDArray_Type);
+
+  PyType_Ready(&BPy_IDGroup_IterKeys_Type);
+  PyType_Ready(&BPy_IDGroup_IterValues_Type);
+  PyType_Ready(&BPy_IDGroup_IterItems_Type);
+
+  PyType_Ready(&BPy_IDGroup_ViewKeys_Type);
+  PyType_Ready(&BPy_IDGroup_ViewValues_Type);
+  PyType_Ready(&BPy_IDGroup_ViewItems_Type);
+}
+
+/**
+ * \note `group` may be NULL, unlike most other uses of this argument.
+ * This is supported so RNA keys/values/items methods returns an iterator with the expected type:
+ * - Without having ID-properties.
+ * - Without supporting #BPy_IDProperty.prop being NULL, which would incur many more checks.
+ * Python's own dictionary-views also works this way too.
+ */
+static BPy_IDGroup_View *IDGroup_View_New_WithType(BPy_IDProperty *group, PyTypeObject *type)
+{
+  BLI_assert(group ? group->prop->type == IDP_GROUP : true);
+  BPy_IDGroup_View *iter = PyObject_GC_New(BPy_IDGroup_View, type);
+  iter->reversed = false;
+  iter->group = group;
+  if (group != NULL) {
+    Py_INCREF(group);
+    PyObject_GC_Track(iter);
+  }
+  return iter;
+}
+
+static PyObject *BPy_IDGroup_ViewKeys_CreatePyObject(BPy_IDProperty *group)
+{
+  return (PyObject *)IDGroup_View_New_WithType(group, &BPy_IDGroup_ViewKeys_Type);
+}
+
+static PyObject *BPy_IDGroup_ViewValues_CreatePyObject(BPy_IDProperty *group)
+{
+  return (PyObject *)IDGroup_View_New_WithType(group, &BPy_IDGroup_ViewValues_Type);
+}
+
+static PyObject *BPy_IDGroup_ViewItems_CreatePyObject(BPy_IDProperty *group)
+{
+  return (PyObject *)IDGroup_View_New_WithType(group, &BPy_IDGroup_ViewItems_Type);
 }
 
 /** \} */
@@ -1811,16 +2136,18 @@ static PyObject *BPyInit_idprop_types(void)
 
   IDProp_Init_Types();
 
-#define MODULE_TYPE_ADD(s, t) \
-  PyModule_AddObject(s, t.tp_name, (PyObject *)&t); \
-  Py_INCREF((PyObject *)&t)
-
   /* bmesh_py_types.c */
-  MODULE_TYPE_ADD(submodule, BPy_IDGroup_Type);
-  MODULE_TYPE_ADD(submodule, BPy_IDGroup_Iter_Type);
-  MODULE_TYPE_ADD(submodule, BPy_IDArray_Type);
+  PyModule_AddType(submodule, &BPy_IDGroup_Type);
 
-#undef MODULE_TYPE_ADD
+  PyModule_AddType(submodule, &BPy_IDGroup_ViewKeys_Type);
+  PyModule_AddType(submodule, &BPy_IDGroup_ViewValues_Type);
+  PyModule_AddType(submodule, &BPy_IDGroup_ViewItems_Type);
+
+  PyModule_AddType(submodule, &BPy_IDGroup_IterKeys_Type);
+  PyModule_AddType(submodule, &BPy_IDGroup_IterValues_Type);
+  PyModule_AddType(submodule, &BPy_IDGroup_IterItems_Type);
+
+  PyModule_AddType(submodule, &BPy_IDArray_Type);
 
   return submodule;
 }

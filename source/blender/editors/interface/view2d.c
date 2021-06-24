@@ -616,7 +616,7 @@ static void ui_view2d_curRect_validate_resize(View2D *v2d, bool resize)
   if ((width != curwidth) || (height != curheight)) {
     float temp, dh;
 
-    /* resize from centerpoint, unless otherwise specified */
+    /* Resize from center-point, unless otherwise specified. */
     if (width != curwidth) {
       if (v2d->keepofs & V2D_LOCKOFS_X) {
         cur->xmax += width - BLI_rctf_size_x(cur);
@@ -991,10 +991,11 @@ void UI_view2d_totRect_set_resize(View2D *v2d, int width, int height, bool resiz
 
   if (ELEM(0, width, height)) {
     if (G.debug & G_DEBUG) {
+      /* XXX: temp debug info. */
       printf("Error: View2D totRect set exiting: v2d=%p width=%d height=%d\n",
              (void *)v2d,
              width,
-             height); /* XXX temp debug info */
+             height);
     }
     return;
   }
@@ -1058,7 +1059,7 @@ void UI_view2d_zoom_cache_reset(void)
   /* While scaling we can accumulate fonts at many sizes (~20 or so).
    * Not an issue with embedded font, but can use over 500Mb with i18n ones! See T38244. */
 
-  /* note: only some views draw text, we could check for this case to avoid clearning cache */
+  /* Note: only some views draw text, we could check for this case to avoid cleaning cache. */
   BLF_cache_clear();
 }
 
@@ -1895,7 +1896,7 @@ void UI_view2d_scroller_size_get(const View2D *v2d, float *r_x, float *r_y)
  *
  * \param r_x, r_y: scale on each axis
  */
-void UI_view2d_scale_get(View2D *v2d, float *r_x, float *r_y)
+void UI_view2d_scale_get(const View2D *v2d, float *r_x, float *r_y)
 {
   if (r_x) {
     *r_x = UI_view2d_scale_get_x(v2d);

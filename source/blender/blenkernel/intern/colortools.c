@@ -965,6 +965,12 @@ void BKE_curvemapping_changed_all(CurveMapping *cumap)
   cumap->cur = cur;
 }
 
+/* Reset the view for current curve. */
+void BKE_curvemapping_reset_view(CurveMapping *cumap)
+{
+  cumap->curr = cumap->clipr;
+}
+
 /* table should be verified */
 float BKE_curvemap_evaluateF(const CurveMapping *cumap, const CurveMap *cuma, float value)
 {
@@ -1368,7 +1374,7 @@ void BKE_histogram_update_sample_line(Histogram *hist,
             rgba[3] = 1.0f;
             break;
           default:
-            BLI_assert(0);
+            BLI_assert_unreachable();
         }
 
         hist->data_luma[i] = IMB_colormanagement_get_luminance(rgba);
@@ -1470,7 +1476,7 @@ static void scopes_update_cb(void *__restrict userdata,
           rgba[3] = 1.0f;
           break;
         default:
-          BLI_assert(0);
+          BLI_assert_unreachable();
       }
     }
     else {

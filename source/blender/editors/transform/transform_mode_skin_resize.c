@@ -64,7 +64,7 @@ static void applySkinResize(TransInfo *t, const int UNUSED(mval[2]))
 
   size_to_mat3(mat, t->values_final);
 
-  headerResize(t, t->values_final, str);
+  headerResize(t, t->values_final, str, sizeof(str));
 
   FOREACH_TRANS_DATA_CONTAINER (t, tc) {
     TransData *td = tc->data;
@@ -88,8 +88,8 @@ static void applySkinResize(TransInfo *t, const int UNUSED(mval[2]))
       }
 
       mat3_to_size(fsize, tmat);
-      td->val[0] = td->ext->isize[0] * (1 + (fsize[0] - 1) * td->factor);
-      td->val[1] = td->ext->isize[1] * (1 + (fsize[1] - 1) * td->factor);
+      td->loc[0] = td->iloc[0] * (1 + (fsize[0] - 1) * td->factor);
+      td->loc[1] = td->iloc[1] * (1 + (fsize[1] - 1) * td->factor);
     }
   }
 
@@ -111,7 +111,6 @@ void initSkinResize(TransInfo *t)
   t->num.val_flag[2] |= NUM_NULL_ONE;
   t->num.flag |= NUM_AFFECT_ALL;
   if ((t->flag & T_EDIT) == 0) {
-    t->flag |= T_NO_ZERO;
 #ifdef USE_NUM_NO_ZERO
     t->num.val_flag[0] |= NUM_NO_ZERO;
     t->num.val_flag[1] |= NUM_NO_ZERO;

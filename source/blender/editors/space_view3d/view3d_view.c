@@ -142,7 +142,7 @@ void ED_view3d_smooth_view_ex(
   /* initialize sms */
   view3d_smooth_view_state_backup(&sms.dst, v3d, rv3d);
   view3d_smooth_view_state_backup(&sms.src, v3d, rv3d);
-  /* if smoothview runs multiple times... */
+  /* If smooth-view runs multiple times. */
   if (rv3d->sms == NULL) {
     view3d_smooth_view_state_backup(&sms.org, v3d, rv3d);
   }
@@ -235,7 +235,7 @@ void ED_view3d_smooth_view_ex(
       /* grid draw as floor */
       if ((RV3D_LOCK_FLAGS(rv3d) & RV3D_LOCK_ROTATION) == 0) {
         /* use existing if exists, means multiple calls to smooth view
-         * wont lose the original 'view' setting */
+         * won't lose the original 'view' setting */
         rv3d->view = RV3D_VIEW_USER;
       }
 
@@ -244,7 +244,7 @@ void ED_view3d_smooth_view_ex(
       /* if this is view rotation only
        * we can decrease the time allowed by
        * the angle between quats
-       * this means small rotations wont lag */
+       * this means small rotations won't lag */
       if (sview->quat && !sview->ofs && !sview->dist) {
         /* scale the time allowed by the rotation */
         /* 180deg == 1.0 */
@@ -277,8 +277,7 @@ void ED_view3d_smooth_view_ex(
       if (rv3d->smooth_timer) {
         WM_event_remove_timer(wm, win, rv3d->smooth_timer);
       }
-      /* TIMER1 is hardcoded in keymap */
-      /* max 30 frs/sec */
+      /* #TIMER1 is hard-coded in key-map. */
       rv3d->smooth_timer = WM_event_add_timer(wm, win, TIMER1, 1.0 / 100.0);
 
       ok = true;
@@ -396,7 +395,7 @@ static void view3d_smoothview_apply(bContext *C, View3D *v3d, ARegion *region, b
   /* note: this doesn't work right because the v3d->lens is now used in ortho mode r51636,
    * when switching camera in quad-view the other ortho views would zoom & reset.
    *
-   * For now only redraw all regions when smoothview finishes.
+   * For now only redraw all regions when smooth-view finishes.
    */
   if (step >= 1.0f) {
     WM_event_add_notifier(C, NC_SPACE | ND_SPACE_VIEW3D, v3d);
@@ -423,7 +422,7 @@ static int view3d_smoothview_invoke(bContext *C, wmOperator *UNUSED(op), const w
 }
 
 /**
- * Apply the smoothview immediately, use when we need to start a new view operation.
+ * Apply the smooth-view immediately, use when we need to start a new view operation.
  * (so we don't end up half-applying a view operation when pressing keys quickly).
  */
 void ED_view3d_smooth_view_force_finish(bContext *C, View3D *v3d, ARegion *region)
@@ -1210,8 +1209,8 @@ static uint free_localview_bit(Main *bmain)
 
   ushort local_view_bits = 0;
 
-  /* sometimes we lose a localview: when an area is closed */
-  /* check all areas: which localviews are in use? */
+  /* Sometimes we lose a local-view: when an area is closed.
+   * Check all areas: which local-views are in use? */
   for (screen = bmain->screens.first; screen; screen = screen->id.next) {
     for (area = screen->areabase.first; area; area = area->next) {
       SpaceLink *sl = area->spacedata.first;
@@ -1394,6 +1393,7 @@ static void view3d_localview_exit(const Depsgraph *depsgraph,
 
   MEM_freeN(v3d->localvd);
   v3d->localvd = NULL;
+  MEM_SAFE_FREE(v3d->runtime.local_stats);
 
   LISTBASE_FOREACH (ARegion *, region, &area->regionbase) {
     if (region->regiontype == RGN_TYPE_WINDOW) {
@@ -1517,7 +1517,7 @@ static int localview_remove_from_exec(bContext *C, wmOperator *op)
   }
 
   if (changed) {
-    DEG_on_visible_update(bmain, false);
+    DEG_tag_on_visible_update(bmain, false);
     DEG_id_tag_update(&scene->id, ID_RECALC_SELECT);
     WM_event_add_notifier(C, NC_SCENE | ND_OB_SELECT, scene);
     WM_event_add_notifier(C, NC_SCENE | ND_OB_ACTIVE, scene);

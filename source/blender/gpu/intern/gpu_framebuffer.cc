@@ -71,6 +71,12 @@ FrameBuffer::~FrameBuffer()
       reinterpret_cast<Texture *>(attachment.tex)->detach_from(this);
     }
   }
+
+#ifndef GPU_NO_USE_PY_REFERENCES
+  if (this->py_ref) {
+    *this->py_ref = nullptr;
+  }
+#endif
 }
 
 /** \} */
@@ -359,7 +365,7 @@ void GPU_framebuffer_viewport_reset(GPUFrameBuffer *gpu_fb)
   unwrap(gpu_fb)->viewport_reset();
 }
 
-/* ---------- Framebuffer Operations ----------- */
+/* ---------- Frame-buffer Operations ----------- */
 
 void GPU_framebuffer_clear(GPUFrameBuffer *gpu_fb,
                            eGPUFrameBufferBits buffers,
@@ -473,13 +479,25 @@ void GPU_framebuffer_recursive_downsample(GPUFrameBuffer *gpu_fb,
   unwrap(gpu_fb)->recursive_downsample(max_lvl, callback, userData);
 }
 
+#ifndef GPU_NO_USE_PY_REFERENCES
+void **GPU_framebuffer_py_reference_get(GPUFrameBuffer *gpu_fb)
+{
+  return unwrap(gpu_fb)->py_ref;
+}
+
+void GPU_framebuffer_py_reference_set(GPUFrameBuffer *gpu_fb, void **py_ref)
+{
+  BLI_assert(py_ref == nullptr || unwrap(gpu_fb)->py_ref == nullptr);
+  unwrap(gpu_fb)->py_ref = py_ref;
+}
+#endif
+
 /** \} */
 
 /* -------------------------------------------------------------------- */
-/** \name GPUOffScreen
+/** \name  Frame-Buffer Stack
  *
- * Container that holds a frame-buffer and its textures.
- * Might be bound to multiple contexts.
+ * Keeps track of frame-buffer binding operation to restore previously bound frame-buffers.
  * \{ */
 
 #define FRAMEBUFFER_STACK_DEPTH 16
@@ -489,21 +507,35 @@ static struct {
   uint top;
 } FrameBufferStack = {{nullptr}};
 
-static void gpuPushFrameBuffer(GPUFrameBuffer *fb)
+void GPU_framebuffer_push(GPUFrameBuffer *fb)
 {
   BLI_assert(FrameBufferStack.top < FRAMEBUFFER_STACK_DEPTH);
   FrameBufferStack.framebuffers[FrameBufferStack.top] = fb;
   FrameBufferStack.top++;
 }
 
-static GPUFrameBuffer *gpuPopFrameBuffer()
+GPUFrameBuffer *GPU_framebuffer_pop(void)
 {
   BLI_assert(FrameBufferStack.top > 0);
   FrameBufferStack.top--;
   return FrameBufferStack.framebuffers[FrameBufferStack.top];
 }
 
+uint GPU_framebuffer_stack_level_get(void)
+{
+  return FrameBufferStack.top;
+}
+
 #undef FRAMEBUFFER_STACK_DEPTH
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name GPUOffScreen
+ *
+ * Container that holds a frame-buffer and its textures.
+ * Might be bound to multiple contexts.
+ * \{ */
 
 #define MAX_CTX_FB_LEN 3
 
@@ -614,7 +646,7 @@ void GPU_offscreen_bind(GPUOffScreen *ofs, bool save)
 {
   if (save) {
     GPUFrameBuffer *fb = GPU_framebuffer_active_get();
-    gpuPushFrameBuffer(fb);
+    GPU_framebuffer_push(fb);
   }
   unwrap(gpu_offscreen_fb_get(ofs))->bind(false);
 }
@@ -623,7 +655,7 @@ void GPU_offscreen_unbind(GPUOffScreen *UNUSED(ofs), bool restore)
 {
   GPUFrameBuffer *fb = nullptr;
   if (restore) {
-    fb = gpuPopFrameBuffer();
+    fb = GPU_framebuffer_pop();
   }
 
   if (fb) {
@@ -643,7 +675,7 @@ void GPU_offscreen_draw_to_screen(GPUOffScreen *ofs, int x, int y)
 
 void GPU_offscreen_read_pixels(GPUOffScreen *ofs, eGPUDataFormat format, void *pixels)
 {
-  BLI_assert(ELEM(format, GPU_DATA_UNSIGNED_BYTE, GPU_DATA_FLOAT));
+  BLI_assert(ELEM(format, GPU_DATA_UBYTE, GPU_DATA_FLOAT));
 
   const int w = GPU_texture_width(ofs->color);
   const int h = GPU_texture_height(ofs->color);

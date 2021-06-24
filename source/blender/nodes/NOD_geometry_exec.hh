@@ -20,52 +20,102 @@
 
 #include "BKE_attribute_access.hh"
 #include "BKE_geometry_set.hh"
-#include "BKE_persistent_data_handle.hh"
+#include "BKE_geometry_set_instances.hh"
+#include "BKE_node_ui_storage.hh"
 
 #include "DNA_node_types.h"
 
+#include "NOD_derived_node_tree.hh"
+
+struct Depsgraph;
+struct ModifierData;
+
 namespace blender::nodes {
 
-using bke::BooleanReadAttribute;
-using bke::BooleanWriteAttribute;
-using bke::Color4fReadAttribute;
-using bke::Color4fWriteAttribute;
-using bke::Float3ReadAttribute;
-using bke::Float3WriteAttribute;
-using bke::FloatReadAttribute;
-using bke::FloatWriteAttribute;
-using bke::Int32ReadAttribute;
-using bke::Int32WriteAttribute;
-using bke::PersistentDataHandleMap;
-using bke::PersistentObjectHandle;
-using bke::ReadAttribute;
-using bke::ReadAttributePtr;
-using bke::WriteAttribute;
-using bke::WriteAttributePtr;
+using bke::geometry_set_realize_instances;
+using bke::OutputAttribute;
+using bke::OutputAttribute_Typed;
+using bke::ReadAttributeLookup;
+using bke::WriteAttributeLookup;
 using fn::CPPType;
 using fn::GMutablePointer;
+using fn::GMutableSpan;
 using fn::GPointer;
+using fn::GSpan;
 using fn::GValueMap;
+using fn::GVArray;
+using fn::GVArray_GSpan;
+using fn::GVArray_Span;
+using fn::GVArray_Typed;
+using fn::GVArrayPtr;
+using fn::GVMutableArray;
+using fn::GVMutableArray_GSpan;
+using fn::GVMutableArray_Typed;
+using fn::GVMutableArrayPtr;
+
+/**
+ * This class exists to separate the memory management details of the geometry nodes evaluator from
+ * the node execution functions and related utilities.
+ */
+class GeoNodeExecParamsProvider {
+ public:
+  DNode dnode;
+  const Object *self_object = nullptr;
+  const ModifierData *modifier = nullptr;
+  Depsgraph *depsgraph = nullptr;
+
+  /**
+   * Returns true when the node is allowed to get/extract the input value. The identifier is
+   * expected to be valid. This may return false if the input value has been consumed already.
+   */
+  virtual bool can_get_input(StringRef identifier) const = 0;
+
+  /**
+   * Returns true when the node is allowed to set the output value. The identifier is expected to
+   * be valid. This may return false if the output value has been set already.
+   */
+  virtual bool can_set_output(StringRef identifier) const = 0;
+
+  /**
+   * Take ownership of an input value. The caller is responsible for destructing the value. It does
+   * not have to be freed, because the memory is managed by the geometry nodes evaluator.
+   */
+  virtual GMutablePointer extract_input(StringRef identifier) = 0;
+
+  /**
+   * Similar to #extract_input, but has to be used for multi-input sockets.
+   */
+  virtual Vector<GMutablePointer> extract_multi_input(StringRef identifier) = 0;
+
+  /**
+   * Get the input value for the identifier without taking ownership of it.
+   */
+  virtual GPointer get_input(StringRef identifier) const = 0;
+
+  /**
+   * Prepare a memory buffer for an output value of the node. The returned memory has to be
+   * initialized by the caller. The identifier and type are expected to be correct.
+   */
+  virtual GMutablePointer alloc_output_value(const CPPType &type) = 0;
+
+  /**
+   * The value has been allocated with #alloc_output_value.
+   */
+  virtual void set_output(StringRef identifier, GMutablePointer value) = 0;
+
+  /* A description for these methods is provided in GeoNodeExecParams. */
+  virtual void set_input_unused(StringRef identifier) = 0;
+  virtual bool output_is_required(StringRef identifier) const = 0;
+  virtual bool lazy_require_input(StringRef identifier) = 0;
+  virtual bool lazy_output_is_required(StringRef identifier) const = 0;
+};
 
 class GeoNodeExecParams {
  private:
-  const bNode &node_;
-  GValueMap<StringRef> &input_values_;
-  GValueMap<StringRef> &output_values_;
-  const PersistentDataHandleMap &handle_map_;
-  const Object *self_object_;
+  GeoNodeExecParamsProvider *provider_;
 
  public:
-  GeoNodeExecParams(const bNode &node,
-                    GValueMap<StringRef> &input_values,
-                    GValueMap<StringRef> &output_values,
-                    const PersistentDataHandleMap &handle_map,
-                    const Object *self_object)
-      : node_(node),
-        input_values_(input_values),
-        output_values_(output_values),
-        handle_map_(handle_map),
-        self_object_(self_object)
+  GeoNodeExecParams(GeoNodeExecParamsProvider &provider) : provider_(&provider)
   {
   }
 
@@ -78,9 +128,9 @@ class GeoNodeExecParams {
   GMutablePointer extract_input(StringRef identifier)
   {
 #ifdef DEBUG
-    this->check_extract_input(identifier);
+    this->check_input_access(identifier);
 #endif
-    return input_values_.extract(identifier);
+    return provider_->extract_input(identifier);
   }
 
   /**
@@ -91,47 +141,38 @@ class GeoNodeExecParams {
   template<typename T> T extract_input(StringRef identifier)
   {
 #ifdef DEBUG
-    this->check_extract_input(identifier, &CPPType::get<T>());
+    this->check_input_access(identifier, &CPPType::get<T>());
 #endif
-    return input_values_.extract<T>(identifier);
+    GMutablePointer gvalue = this->extract_input(identifier);
+    return gvalue.relocate_out<T>();
+  }
+
+  /**
+   * Get input as vector for multi input socket with the given identifier.
+   *
+   * This method can only be called once for each identifier.
+   */
+  template<typename T> Vector<T> extract_multi_input(StringRef identifier)
+  {
+    Vector<GMutablePointer> gvalues = provider_->extract_multi_input(identifier);
+    Vector<T> values;
+    for (GMutablePointer gvalue : gvalues) {
+      values.append(gvalue.relocate_out<T>());
+    }
+    return values;
   }
 
   /**
    * Get the input value for the input socket with the given identifier.
-   *
-   * This makes a copy of the value, which is fine for most types but should be avoided for
-   * geometry sets.
    */
-  template<typename T> T get_input(StringRef identifier) const
+  template<typename T> const T &get_input(StringRef identifier) const
   {
 #ifdef DEBUG
-    this->check_extract_input(identifier, &CPPType::get<T>());
+    this->check_input_access(identifier, &CPPType::get<T>());
 #endif
-    return input_values_.lookup<T>(identifier);
-  }
-
-  /**
-   * Move-construct a new value based on the given value and store it for the given socket
-   * identifier.
-   */
-  void set_output_by_move(StringRef identifier, GMutablePointer value)
-  {
-#ifdef DEBUG
-    BLI_assert(value.type() != nullptr);
-    BLI_assert(value.get() != nullptr);
-    this->check_set_output(identifier, *value.type());
-#endif
-    output_values_.add_new_by_move(identifier, value);
-  }
-
-  void set_output_by_copy(StringRef identifier, GPointer value)
-  {
-#ifdef DEBUG
-    BLI_assert(value.type() != nullptr);
-    BLI_assert(value.get() != nullptr);
-    this->check_set_output(identifier, *value.type());
-#endif
-    output_values_.add_new_by_copy(identifier, value);
+    GPointer gvalue = provider_->get_input(identifier);
+    BLI_assert(gvalue.is_type<T>());
+    return *(const T *)gvalue.get();
   }
 
   /**
@@ -139,10 +180,53 @@ class GeoNodeExecParams {
    */
   template<typename T> void set_output(StringRef identifier, T &&value)
   {
+    using StoredT = std::decay_t<T>;
+    const CPPType &type = CPPType::get<std::decay_t<T>>();
 #ifdef DEBUG
-    this->check_set_output(identifier, CPPType::get<std::decay_t<T>>());
+    this->check_output_access(identifier, type);
 #endif
-    output_values_.add_new(identifier, std::forward<T>(value));
+    GMutablePointer gvalue = provider_->alloc_output_value(type);
+    new (gvalue.get()) StoredT(std::forward<T>(value));
+    provider_->set_output(identifier, gvalue);
+  }
+
+  /**
+   * Tell the evaluator that a specific input won't be used anymore.
+   */
+  void set_input_unused(StringRef identifier)
+  {
+    provider_->set_input_unused(identifier);
+  }
+
+  /**
+   * Returns true when the output has to be computed.
+   * Nodes that support laziness could use the #lazy_output_is_required variant to possibly avoid
+   * some computations.
+   */
+  bool output_is_required(StringRef identifier) const
+  {
+    return provider_->output_is_required(identifier);
+  }
+
+  /**
+   * Tell the evaluator that a specific input is required.
+   * This returns true when the input will only be available in the next execution.
+   * False is returned if the input is available already.
+   * This can only be used when the node supports laziness.
+   */
+  bool lazy_require_input(StringRef identifier)
+  {
+    return provider_->lazy_require_input(identifier);
+  }
+
+  /**
+   * Asks the evaluator if a specific output is required right now. If this returns false, the
+   * value might still need to be computed later.
+   * This can only be used when the node supports laziness.
+   */
+  bool lazy_output_is_required(StringRef identifier)
+  {
+    return provider_->lazy_output_is_required(identifier);
   }
 
   /**
@@ -150,37 +234,47 @@ class GeoNodeExecParams {
    */
   const bNode &node() const
   {
-    return node_;
-  }
-
-  const PersistentDataHandleMap &handle_map() const
-  {
-    return handle_map_;
+    return *provider_->dnode->bnode();
   }
 
   const Object *self_object() const
   {
-    return self_object_;
+    return provider_->self_object;
+  }
+
+  Depsgraph *depsgraph() const
+  {
+    return provider_->depsgraph;
   }
 
   /**
-   * Creates a read-only attribute based on node inputs. The method automatically detects which
-   * input with the given name is available.
+   * Add an error message displayed at the top of the node when displaying the node tree,
+   * and potentially elsewhere in Blender.
    */
-  ReadAttributePtr get_input_attribute(const StringRef name,
-                                       const GeometryComponent &component,
-                                       const AttributeDomain domain,
-                                       const CustomDataType type,
-                                       const void *default_value) const;
+  void error_message_add(const NodeWarningType type, std::string message) const;
+
+  /**
+   * Creates a read-only attribute based on node inputs. The method automatically detects which
+   * input socket with the given name is available.
+   *
+   * \note This will add an error message if the string socket is active and
+   * the input attribute does not exist.
+   */
+  GVArrayPtr get_input_attribute(const StringRef name,
+                                 const GeometryComponent &component,
+                                 const AttributeDomain domain,
+                                 const CustomDataType type,
+                                 const void *default_value) const;
 
   template<typename T>
-  bke::TypedReadAttribute<T> get_input_attribute(const StringRef name,
-                                                 const GeometryComponent &component,
-                                                 const AttributeDomain domain,
-                                                 const T &default_value) const
+  GVArray_Typed<T> get_input_attribute(const StringRef name,
+                                       const GeometryComponent &component,
+                                       const AttributeDomain domain,
+                                       const T &default_value) const
   {
     const CustomDataType type = bke::cpp_type_to_custom_data_type(CPPType::get<T>());
-    return this->get_input_attribute(name, component, domain, type, &default_value);
+    GVArrayPtr varray = this->get_input_attribute(name, component, domain, type, &default_value);
+    return GVArray_Typed<T>(std::move(varray));
   }
 
   /**
@@ -191,10 +285,14 @@ class GeoNodeExecParams {
                                                const GeometryComponent &component,
                                                const CustomDataType default_type) const;
 
+  AttributeDomain get_highest_priority_input_domain(Span<std::string> names,
+                                                    const GeometryComponent &component,
+                                                    const AttributeDomain default_domain) const;
+
  private:
   /* Utilities for detecting common errors at when using this class. */
-  void check_extract_input(StringRef identifier, const CPPType *requested_type = nullptr) const;
-  void check_set_output(StringRef identifier, const CPPType &value_type) const;
+  void check_input_access(StringRef identifier, const CPPType *requested_type = nullptr) const;
+  void check_output_access(StringRef identifier, const CPPType &value_type) const;
 
   /* Find the active socket socket with the input name (not the identifier). */
   const bNodeSocket *find_available_socket(const StringRef name) const;

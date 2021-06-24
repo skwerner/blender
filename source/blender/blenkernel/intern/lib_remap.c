@@ -137,6 +137,7 @@ static int foreach_libblock_remap_callback(LibraryIDLinkCallbackData *cb_data)
                                 (id_remap_data->flag & ID_REMAP_FORCE_NEVER_NULL_USAGE) == 0);
     const bool skip_reference = (id_remap_data->flag & ID_REMAP_SKIP_OVERRIDE_LIBRARY) != 0;
     const bool skip_never_null = (id_remap_data->flag & ID_REMAP_SKIP_NEVER_NULL_USAGE) != 0;
+    const bool force_user_refcount = (id_remap_data->flag & ID_REMAP_FORCE_USER_REFCOUNT) != 0;
 
 #ifdef DEBUG_PRINT
     printf(
@@ -203,16 +204,16 @@ static int foreach_libblock_remap_callback(LibraryIDLinkCallbackData *cb_data)
         }
       }
       if (cb_flag & IDWALK_CB_USER) {
-        /* NOTE: We don't user-count IDs which are not in the main database.
+        /* NOTE: by default we don't user-count IDs which are not in the main database.
          * This is because in certain conditions we can have data-blocks in
          * the main which are referencing data-blocks outside of it.
          * For example, BKE_mesh_new_from_object() called on an evaluated
          * object will cause such situation.
          */
-        if ((old_id->tag & LIB_TAG_NO_MAIN) == 0) {
+        if (force_user_refcount || (old_id->tag & LIB_TAG_NO_MAIN) == 0) {
           id_us_min(old_id);
         }
-        if (new_id != NULL && (new_id->tag & LIB_TAG_NO_MAIN) == 0) {
+        if (new_id != NULL && (force_user_refcount || (new_id->tag & LIB_TAG_NO_MAIN) == 0)) {
           /* We do not want to handle LIB_TAG_INDIRECT/LIB_TAG_EXTERN here. */
           new_id->us++;
         }
@@ -303,6 +304,7 @@ static void libblock_remap_data_postprocess_object_update(Main *bmain,
 /* Can be called with both old_collection and new_collection being NULL,
  * this means we have to check whole Main database then. */
 static void libblock_remap_data_postprocess_collection_update(Main *bmain,
+                                                              Collection *owner_collection,
                                                               Collection *UNUSED(old_collection),
                                                               Collection *new_collection)
 {
@@ -311,7 +313,7 @@ static void libblock_remap_data_postprocess_collection_update(Main *bmain,
      * and BKE_main_collection_sync_remap() does not tolerate any of those, so for now always check
      * whole existing collections for NULL pointers.
      * I'd consider optimizing that whole collection remapping process a TODO for later. */
-    BKE_collections_child_remove_nulls(bmain, NULL /*old_collection*/);
+    BKE_collections_child_remove_nulls(bmain, owner_collection, NULL /*old_collection*/);
   }
   else {
     /* Temp safe fix, but a "tad" brute force... We should probably be able to use parents from
@@ -373,9 +375,12 @@ static void libblock_remap_data(
     Main *bmain, ID *id, ID *old_id, ID *new_id, const short remap_flags, IDRemap *r_id_remap_data)
 {
   IDRemap id_remap_data;
-  const int foreach_id_flags = (remap_flags & ID_REMAP_NO_INDIRECT_PROXY_DATA_USAGE) != 0 ?
-                                   IDWALK_NO_INDIRECT_PROXY_DATA_USAGE :
-                                   IDWALK_NOP;
+  const int foreach_id_flags = ((remap_flags & ID_REMAP_NO_INDIRECT_PROXY_DATA_USAGE) != 0 ?
+                                    IDWALK_NO_INDIRECT_PROXY_DATA_USAGE :
+                                    IDWALK_NOP) |
+                               ((remap_flags & ID_REMAP_FORCE_INTERNAL_RUNTIME_POINTERS) != 0 ?
+                                    IDWALK_DO_INTERNAL_RUNTIME_POINTERS :
+                                    IDWALK_NOP);
 
   if (r_id_remap_data == NULL) {
     r_id_remap_data = &id_remap_data;
@@ -422,15 +427,17 @@ static void libblock_remap_data(
     FOREACH_MAIN_ID_END;
   }
 
-  /* XXX We may not want to always 'transfer' fake-user from old to new id...
-   *     Think for now it's desired behavior though,
-   *     we can always add an option (flag) to control this later if needed. */
-  if (old_id && (old_id->flag & LIB_FAKEUSER)) {
-    id_fake_user_clear(old_id);
-    id_fake_user_set(new_id);
-  }
+  if ((remap_flags & ID_REMAP_SKIP_USER_CLEAR) == 0) {
+    /* XXX We may not want to always 'transfer' fake-user from old to new id...
+     *     Think for now it's desired behavior though,
+     *     we can always add an option (flag) to control this later if needed. */
+    if (old_id && (old_id->flag & LIB_FAKEUSER)) {
+      id_fake_user_clear(old_id);
+      id_fake_user_set(new_id);
+    }
 
-  id_us_clear_real(old_id);
+    id_us_clear_real(old_id);
+  }
 
   if (new_id && (new_id->tag & LIB_TAG_INDIRECT) &&
       (r_id_remap_data->status & ID_REMAP_IS_LINKED_DIRECT)) {
@@ -479,12 +486,14 @@ void BKE_libblock_remap_locked(Main *bmain, void *old_idv, void *new_idv, const 
   skipped_direct = id_remap_data.skipped_direct;
   skipped_refcounted = id_remap_data.skipped_refcounted;
 
-  /* If old_id was used by some ugly 'user_one' stuff (like Image or Clip editors...), and user
-   * count has actually been incremented for that, we have to decrease once more its user count...
-   * unless we had to skip some 'user_one' cases. */
-  if ((old_id->tag & LIB_TAG_EXTRAUSER_SET) &&
-      !(id_remap_data.status & ID_REMAP_IS_USER_ONE_SKIPPED)) {
-    id_us_clear_real(old_id);
+  if ((remap_flags & ID_REMAP_SKIP_USER_CLEAR) == 0) {
+    /* If old_id was used by some ugly 'user_one' stuff (like Image or Clip editors...), and user
+     * count has actually been incremented for that, we have to decrease once more its user
+     * count... unless we had to skip some 'user_one' cases. */
+    if ((old_id->tag & LIB_TAG_EXTRAUSER_SET) &&
+        !(id_remap_data.status & ID_REMAP_IS_USER_ONE_SKIPPED)) {
+      id_us_clear_real(old_id);
+    }
   }
 
   if (old_id->us - skipped_refcounted < 0) {
@@ -516,7 +525,7 @@ void BKE_libblock_remap_locked(Main *bmain, void *old_idv, void *new_idv, const 
       break;
     case ID_GR:
       libblock_remap_data_postprocess_collection_update(
-          bmain, (Collection *)old_id, (Collection *)new_id);
+          bmain, NULL, (Collection *)old_id, (Collection *)new_id);
       break;
     case ID_ME:
     case ID_CU:
@@ -621,6 +630,12 @@ void BKE_libblock_relink_ex(
   switch (GS(id->name)) {
     case ID_SCE:
     case ID_GR: {
+      /* Note: here we know which collection we have affected, so at lest for NULL children
+       * detection we can only process that one.
+       * This is also a required fix in case `id` would not be in Main anymore, which can happen
+       * e.g. when called from `id_delete`. */
+      Collection *owner_collection = (GS(id->name) == ID_GR) ? (Collection *)id :
+                                                               ((Scene *)id)->master_collection;
       if (old_id) {
         switch (GS(old_id->name)) {
           case ID_OB:
@@ -629,7 +644,7 @@ void BKE_libblock_relink_ex(
             break;
           case ID_GR:
             libblock_remap_data_postprocess_collection_update(
-                bmain, (Collection *)old_id, (Collection *)new_id);
+                bmain, owner_collection, (Collection *)old_id, (Collection *)new_id);
             break;
           default:
             break;
@@ -637,7 +652,7 @@ void BKE_libblock_relink_ex(
       }
       else {
         /* No choice but to check whole objects/collections. */
-        libblock_remap_data_postprocess_collection_update(bmain, NULL, NULL);
+        libblock_remap_data_postprocess_collection_update(bmain, owner_collection, NULL, NULL);
         libblock_remap_data_postprocess_object_update(bmain, NULL, NULL);
       }
       break;

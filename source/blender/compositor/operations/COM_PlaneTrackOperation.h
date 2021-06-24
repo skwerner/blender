@@ -28,6 +28,8 @@
 #include "BLI_listbase.h"
 #include "BLI_string.h"
 
+namespace blender::compositor {
+
 class PlaneTrackCommon {
  protected:
   MovieClip *m_movieClip;
@@ -38,7 +40,7 @@ class PlaneTrackCommon {
   /* note: this class is not an operation itself (to prevent virtual inheritance issues)
    * implementation classes must make wrappers to use these methods, see below.
    */
-  void readCornersFromTrack(float corners[4][2], float frame);
+  void read_and_calculate_corners(PlaneDistortBaseOperation *distort_op);
   void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2]);
 
  public:
@@ -60,6 +62,9 @@ class PlaneTrackCommon {
   {
     this->m_framenumber = framenumber;
   }
+
+ private:
+  void readCornersFromTrack(float corners[4][2], float frame);
 };
 
 class PlaneTrackMaskOperation : public PlaneDistortMaskOperation, public PlaneTrackCommon {
@@ -68,9 +73,10 @@ class PlaneTrackMaskOperation : public PlaneDistortMaskOperation, public PlaneTr
   {
   }
 
-  void initExecution();
+  void initExecution() override;
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2])
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override
   {
     PlaneTrackCommon::determineResolution(resolution, preferredResolution);
 
@@ -86,12 +92,15 @@ class PlaneTrackWarpImageOperation : public PlaneDistortWarpImageOperation,
   {
   }
 
-  void initExecution();
+  void initExecution() override;
 
-  void determineResolution(unsigned int resolution[2], unsigned int preferredResolution[2])
+  void determineResolution(unsigned int resolution[2],
+                           unsigned int preferredResolution[2]) override
   {
     PlaneTrackCommon::determineResolution(resolution, preferredResolution);
     unsigned int temp[2];
     NodeOperation::determineResolution(temp, resolution);
   }
 };
+
+}  // namespace blender::compositor

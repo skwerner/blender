@@ -21,7 +21,8 @@ if(WIN32)
 endif()
 option(WITH_WEBP "Enable building of oiio with webp support" OFF)
 option(WITH_BOOST_PYTHON "Enable building of boost with python support" OFF)
-set(MAKE_THREADS 1 CACHE STRING "Number of threads to run make with")
+cmake_host_system_information(RESULT NUM_CORES QUERY NUMBER_OF_LOGICAL_CORES)
+set(MAKE_THREADS ${NUM_CORES} CACHE STRING "Number of threads to run make with")
 
 if(NOT BUILD_MODE)
   set(BUILD_MODE "Release")
@@ -35,13 +36,19 @@ else(BUILD_MODE STREQUAL "Debug")
   set(LIBDIR ${CMAKE_CURRENT_BINARY_DIR}/Release)
 endif()
 
-option(DOWNLOAD_DIR "Path for downloaded files" ${CMAKE_CURRENT_SOURCE_DIR}/downloads)
+set(DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/downloads" CACHE STRING "Path for downloaded files")
+# This path must be hard-coded like this, so that the GNUmakefile knows where it is and can pass it to make_source_archive.py:
+set(PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/packages")
+option(PACKAGE_USE_UPSTREAM_SOURCES "Use soures upstream to download the package sources, when OFF the blender mirror will be used" ON)
+
 file(TO_CMAKE_PATH ${DOWNLOAD_DIR} DOWNLOAD_DIR)
+file(TO_CMAKE_PATH ${PACKAGE_DIR} PACKAGE_DIR)
 set(PATCH_DIR ${CMAKE_CURRENT_SOURCE_DIR}/patches)
 set(BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/build)
 
 message("LIBDIR = ${LIBDIR}")
 message("DOWNLOAD_DIR = ${DOWNLOAD_DIR}")
+message("PACKAGE_DIR = ${PACKAGE_DIR}")
 message("PATCH_DIR = ${PATCH_DIR}")
 message("BUILD_DIR = ${BUILD_DIR}")
 
@@ -130,6 +137,10 @@ else()
     endif()
     set(OSX_SYSROOT ${XCODE_DEV_PATH}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk)
 
+    if("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
+      set(BLENDER_PLATFORM_ARM ON)
+    endif()
+
     set(PLATFORM_CFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -arch ${CMAKE_OSX_ARCHITECTURES}")
     set(PLATFORM_CXXFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -std=c++11 -stdlib=libc++ -arch ${CMAKE_OSX_ARCHITECTURES}")
     set(PLATFORM_LDFLAGS "-isysroot ${OSX_SYSROOT} -mmacosx-version-min=${OSX_DEPLOYMENT_TARGET} -arch ${CMAKE_OSX_ARCHITECTURES}")
@@ -144,6 +155,10 @@ else()
       -DCMAKE_OSX_SYSROOT:PATH=${OSX_SYSROOT}
     )
   else()
+    if("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
+      set(BLENDER_PLATFORM_ARM ON)
+    endif()
+
     set(PLATFORM_CFLAGS "-fPIC")
     set(PLATFORM_CXXFLAGS "-std=c++11 -fPIC")
     set(PLATFORM_LDFLAGS)

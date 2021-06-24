@@ -32,8 +32,8 @@
 
 namespace blender::ed::outliner {
 
-TreeElementAnimData::TreeElementAnimData(TreeElement &legacy_te, ID &id)
-    : AbstractTreeElement(legacy_te), anim_data_(*reinterpret_cast<IdAdtTemplate &>(id).adt)
+TreeElementAnimData::TreeElementAnimData(TreeElement &legacy_te, AnimData &anim_data)
+    : AbstractTreeElement(legacy_te), anim_data_(anim_data)
 {
   BLI_assert(legacy_te.store_elem->type == TSE_ANIM_DATA);
   /* this element's info */
@@ -44,7 +44,8 @@ TreeElementAnimData::TreeElementAnimData(TreeElement &legacy_te, ID &id)
 void TreeElementAnimData::expand(SpaceOutliner &space_outliner) const
 {
   /* Animation data-block itself. */
-  outliner_add_element(&space_outliner, &legacy_te_.subtree, anim_data_.action, &legacy_te_, 0, 0);
+  outliner_add_element(
+      &space_outliner, &legacy_te_.subtree, anim_data_.action, &legacy_te_, TSE_SOME_ID, 0);
 
   expand_drivers(space_outliner);
   expand_NLA_tracks(space_outliner);

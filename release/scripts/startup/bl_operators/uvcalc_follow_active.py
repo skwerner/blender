@@ -18,7 +18,6 @@
 
 # <pep8 compliant>
 
-import bpy
 from bpy.types import Operator
 
 from bpy.props import (
@@ -224,7 +223,7 @@ def extend(obj, EXTEND_MODE):
     for f_triple in walk_face(f_act):
         apply_uv(*f_triple)
 
-    bmesh.update_edit_mesh(me, False)
+    bmesh.update_edit_mesh(me, loop_triangles=False)
     return STATUS_OK
 
 

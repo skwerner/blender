@@ -1923,7 +1923,8 @@ static void rna_def_constraint_follow_path(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "offset_factor", PROP_FLOAT, PROP_FACTOR);
   RNA_def_property_float_sdna(prop, NULL, "offset_fac");
-  RNA_def_property_range(prop, 0.0f, 1.0f);
+  RNA_def_property_range(prop, -FLT_MAX, FLT_MAX);
+  RNA_def_property_ui_range(prop, 0.0f, 1.0f, 0.01, 3);
   RNA_def_property_ui_text(
       prop, "Offset Factor", "Percentage value defining target position along length of curve");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
@@ -2597,6 +2598,12 @@ static void rna_def_constraint_rotation_limit(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "Maximum Z", "Highest Z value to allow");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
+  prop = RNA_def_property(srna, "euler_order", PROP_ENUM, PROP_NONE);
+  RNA_def_property_enum_sdna(prop, NULL, "euler_order");
+  RNA_def_property_enum_items(prop, euler_order_items);
+  RNA_def_property_ui_text(prop, "Euler Order", "Explicitly specify the euler rotation order");
+  RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
+
   prop = RNA_def_property(srna, "use_transform_limit", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag2", LIMIT_TRANSFORM);
   RNA_def_property_ui_text(
@@ -3032,7 +3039,7 @@ static void rna_def_constraint_spline_ik(BlenderRNA *brna)
       prop, "Use Original Scale", "Apply volume preservation over the original scaling");
   RNA_def_property_update(prop, NC_OBJECT | ND_CONSTRAINT, "rna_Constraint_update");
 
-  /* volume presevation for "volumetric" scale mode */
+  /* Volume preservation for "volumetric" scale mode. */
   prop = RNA_def_property(srna, "bulge", PROP_FLOAT, PROP_NONE);
   RNA_def_property_range(prop, 0.0, 100.0f);
   RNA_def_property_ui_text(

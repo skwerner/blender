@@ -46,10 +46,10 @@
 struct DupliObject;
 struct Object;
 
-/* Use draw manager to call GPU_select, see: DRW_draw_select_loop */
+/** Use draw manager to call GPU_select, see: #DRW_draw_select_loop */
 #define USE_GPU_SELECT
 
-/* Use drawcall batching using instanced rendering. */
+/** Use draw-call batching using instanced rendering. */
 #define USE_BATCHING 1
 
 // #define DRW_DEBUG_CULLING
@@ -187,6 +187,10 @@ typedef enum {
   DRW_CMD_DRAW_INSTANCE = 2,
   DRW_CMD_DRAW_INSTANCE_RANGE = 3,
   DRW_CMD_DRAW_PROCEDURAL = 4,
+
+  /* Compute Commands. */
+  DRW_CMD_COMPUTE = 8,
+
   /* Other Commands */
   DRW_CMD_CLEAR = 12,
   DRW_CMD_DRWSTATE = 13,
@@ -224,6 +228,12 @@ typedef struct DRWCommandDrawInstanceRange {
   uint inst_count;
 } DRWCommandDrawInstanceRange;
 
+typedef struct DRWCommandCompute {
+  int groups_x_len;
+  int groups_y_len;
+  int groups_z_len;
+} DRWCommandCompute;
+
 typedef struct DRWCommandDrawProcedural {
   GPUBatch *batch;
   DRWResourceHandle handle;
@@ -260,20 +270,22 @@ typedef union DRWCommand {
   DRWCommandDrawInstance instance;
   DRWCommandDrawInstanceRange instance_range;
   DRWCommandDrawProcedural procedural;
+  DRWCommandCompute compute;
   DRWCommandSetMutableState state;
   DRWCommandSetStencil stencil;
   DRWCommandSetSelectID select_id;
   DRWCommandClear clear;
 } DRWCommand;
 
-/* Used for agregating calls into GPUVertBufs. */
+/** Used for aggregating calls into #GPUVertBuf's. */
 struct DRWCallBuffer {
   GPUVertBuf *buf;
   GPUVertBuf *buf_select;
   int count;
 };
 
-/* Used by DRWUniform.type */
+/** Used by #DRWUniform.type */
+/* TODO(jbakker): rename to DRW_RESOURCE/DRWResourceType. */
 typedef enum {
   DRW_UNIFORM_INT = 0,
   DRW_UNIFORM_INT_COPY,
@@ -286,6 +298,7 @@ typedef enum {
   DRW_UNIFORM_BLOCK,
   DRW_UNIFORM_BLOCK_REF,
   DRW_UNIFORM_TFEEDBACK_TARGET,
+  DRW_UNIFORM_VERTEX_BUFFER_AS_STORAGE,
   /** Per drawcall uniforms/UBO */
   DRW_UNIFORM_BLOCK_OBMATS,
   DRW_UNIFORM_BLOCK_OBINFOS,
@@ -324,8 +337,8 @@ struct DRWUniform {
     /* DRW_UNIFORM_BLOCK_OBATTRS */
     struct GPUUniformAttrList *uniform_attrs;
   };
-  int location;      /* Uniform location or binding point for textures and ubos. */
-  uint8_t type;      /* DRWUniformType */
+  int location;      /* Uniform location or binding point for textures and UBO's. */
+  uint8_t type;      /* #DRWUniformType */
   uint8_t length;    /* Length of vector types. */
   uint8_t arraysize; /* Array size of scalar/vector types. */
 };
@@ -429,7 +442,7 @@ struct DRWView {
  * We lose a bit of memory by allocating more than what we need
  * but it's counterbalanced by not needing the linked-list pointers
  * for each item.
- **/
+ */
 
 typedef struct DRWUniformChunk {
   struct DRWUniformChunk *next; /* single-linked list */

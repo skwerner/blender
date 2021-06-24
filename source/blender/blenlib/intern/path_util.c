@@ -180,7 +180,7 @@ void BLI_path_normalize(const char *relabase, char *path)
   else {
     if (path[0] == '/' && path[1] == '/') {
       if (path[2] == '\0') {
-        return; /* path is "//" - cant clean it */
+        return; /* path is "//" - can't clean it */
       }
       path = path + 2; /* leave the initial "//" untouched */
     }
@@ -236,7 +236,7 @@ void BLI_path_normalize(const char *relabase, char *path)
     }
     else {
       /* support for odd paths: eg /../home/me --> /home/me
-       * this is a valid path in blender but we cant handle this the usual way below
+       * this is a valid path in blender but we can't handle this the usual way below
        * simply strip this prefix then evaluate the path as usual.
        * pythons os.path.normpath() does this */
 
@@ -459,7 +459,7 @@ static wchar_t *next_slash(wchar_t *path)
   return slash;
 }
 
-/* adds a slash if the unc path points sto a share */
+/* Adds a slash if the UNC path points to a share. */
 static void BLI_path_add_slash_to_share(wchar_t *uncpath)
 {
   wchar_t *slash_after_server = next_slash(uncpath + 2);
@@ -1044,17 +1044,17 @@ bool BLI_path_abs(char *path, const char *basepath)
 #else
   BLI_strncpy(tmp, path, sizeof(tmp));
 
-  /* Check for loading a windows path on a posix system
-   * in this case, there is no use in trying C:/ since it
-   * will never exist on a unix os.
+  /* Check for loading a MS-Windows path on a POSIX system
+   * in this case, there is no use in trying `C:/` since it
+   * will never exist on a Unix system.
    *
-   * Add a '/' prefix and lowercase the drive-letter, remove the ':'.
-   * C:\foo.JPG -> /c/foo.JPG */
+   * Add a `/` prefix and lowercase the drive-letter, remove the `:`.
+   * `C:\foo.JPG` -> `/c/foo.JPG` */
 
   if (isalpha(tmp[0]) && (tmp[1] == ':') && ELEM(tmp[2], '\\', '/')) {
     tmp[1] = tolower(tmp[0]); /* Replace ':' with drive-letter. */
     tmp[0] = '/';
-    /* '\' the slash will be converted later */
+    /* `\` the slash will be converted later. */
   }
 
 #endif
@@ -1279,7 +1279,7 @@ void BLI_setenv(const char *env, const char *val)
   uputenv(env, val);
 
 #else
-  /* linux/osx/bsd */
+  /* Linux/macOS/BSD */
   if (val) {
     setenv(env, val, 1);
   }
@@ -1375,7 +1375,7 @@ void BLI_make_file_string(const char *relabase, char *string, const char *dir, c
     }
   }
   else {
-    return; /* string is NULL, probably shouldnt happen but return anyway */
+    return; /* string is NULL, probably shouldn't happen but return anyway */
   }
 
   /* Resolve relative references */
@@ -1646,11 +1646,11 @@ bool BLI_path_filename_ensure(char *filepath, size_t maxlen, const char *filenam
 /**
  * Converts `/foo/bar.txt` to `/foo/` and `bar.txt`
  *
- * - Wont change \a string.
- * - Wont create any directories.
+ * - Won't change \a string.
+ * - Won't create any directories.
  * - Doesn't use CWD, or deal with relative paths.
  * - Only fill's in \a dir and \a file when they are non NULL.
- * */
+ */
 void BLI_split_dirfile(
     const char *string, char *dir, char *file, const size_t dirlen, const size_t filelen)
 {
@@ -2013,9 +2013,9 @@ void BLI_path_slash_native(char *path)
 {
 #ifdef WIN32
   if (path && BLI_strnlen(path, 3) > 2) {
-    BLI_str_replace_char(path + 2, '/', '\\');
+    BLI_str_replace_char(path + 2, ALTSEP, SEP);
   }
 #else
-  BLI_str_replace_char(path + BLI_path_unc_prefix_len(path), '\\', '/');
+  BLI_str_replace_char(path + BLI_path_unc_prefix_len(path), ALTSEP, SEP);
 #endif
 }

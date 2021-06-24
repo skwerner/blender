@@ -39,7 +39,6 @@
 
 #include "BKE_action.h"
 #include "BKE_curve.h"
-#include "BKE_deform.h"
 #include "BKE_fcurve.h"
 #include "BKE_main.h"
 #include "BKE_report.h"
@@ -914,7 +913,7 @@ static tAnimCopybufItem *pastebuf_match_path_property(Main *bmain,
     if (aci->rna_path && fcu->rna_path) {
       /* find the property of the fcurve and compare against the end of the tAnimCopybufItem
        * more involved since it needs to do path lookups.
-       * This is not 100% reliable since the user could be editing the curves on a path that wont
+       * This is not 100% reliable since the user could be editing the curves on a path that won't
        * resolve, or a bone could be renamed after copying for eg. but in normal copy & paste
        * this should work out ok.
        */

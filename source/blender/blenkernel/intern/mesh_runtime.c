@@ -30,6 +30,7 @@
 #include "DNA_object_types.h"
 
 #include "BLI_math_geom.h"
+#include "BLI_task.h"
 #include "BLI_threads.h"
 
 #include "BKE_bvhutils.h"
@@ -98,7 +99,7 @@ void BKE_mesh_runtime_clear_cache(Mesh *mesh)
  */
 static void mesh_ensure_looptri_data(Mesh *mesh)
 {
-  const unsigned int totpoly = mesh->totpoly;
+  const uint totpoly = mesh->totpoly;
   const int looptris_len = poly_to_tri_count(totpoly, mesh->totloop);
 
   BLI_assert(mesh->runtime.looptris.array_wip == NULL);
@@ -151,21 +152,26 @@ int BKE_mesh_runtime_looptri_len(const Mesh *mesh)
   return looptri_len;
 }
 
+static void mesh_runtime_looptri_recalc_isolated(void *userdata)
+{
+  Mesh *mesh = userdata;
+  BKE_mesh_runtime_looptri_recalc(mesh);
+}
+
 /* This is a ported copy of dm_getLoopTriArray(dm). */
 const MLoopTri *BKE_mesh_runtime_looptri_ensure(Mesh *mesh)
 {
-  MLoopTri *looptri;
-
   ThreadMutex *mesh_eval_mutex = (ThreadMutex *)mesh->runtime.eval_mutex;
   BLI_mutex_lock(mesh_eval_mutex);
 
-  looptri = mesh->runtime.looptris.array;
+  MLoopTri *looptri = mesh->runtime.looptris.array;
 
   if (looptri != NULL) {
     BLI_assert(BKE_mesh_runtime_looptri_len(mesh) == mesh->runtime.looptris.len);
   }
   else {
-    BKE_mesh_runtime_looptri_recalc(mesh);
+    /* Must isolate multithreaded tasks while holding a mutex lock. */
+    BLI_task_isolate(mesh_runtime_looptri_recalc_isolated, mesh);
     looptri = mesh->runtime.looptris.array;
   }
 
@@ -180,8 +186,7 @@ void BKE_mesh_runtime_verttri_from_looptri(MVertTri *r_verttri,
                                            const MLoopTri *looptri,
                                            int looptri_num)
 {
-  int i;
-  for (i = 0; i < looptri_num; i++) {
+  for (int i = 0; i < looptri_num; i++) {
     r_verttri[i].tri[0] = mloop[looptri[i].tri[0]].v;
     r_verttri[i].tri[1] = mloop[looptri[i].tri[1]].v;
     r_verttri[i].tri[2] = mloop[looptri[i].tri[2]].v;

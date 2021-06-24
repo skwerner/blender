@@ -42,23 +42,23 @@ struct AnimData;
  */
 
 typedef struct Bone {
-  /**  Next/prev elements within this list. */
+  /** Next/previous elements within this list. */
   struct Bone *next, *prev;
   /** User-Defined Properties on this Bone. */
   IDProperty *prop;
-  /**  Parent (ik parent if appropriate flag is set. */
+  /** Parent (IK parent if appropriate flag is set). */
   struct Bone *parent;
-  /**  Children   . */
+  /** Children. */
   ListBase childbase;
-  /**  Name of the bone - must be unique within the armature, MAXBONENAME. */
+  /** Name of the bone - must be unique within the armature, MAXBONENAME. */
   char name[64];
 
-  /**  roll is input for editmode, length calculated. */
+  /** Roll is input for edit-mode, length calculated. */
   float roll;
   float head[3];
-  /**  head/tail and roll in Bone Space   . */
+  /** Head/tail and roll in Bone Space. */
   float tail[3];
-  /**  rotation derived from head/tail/roll. */
+  /** Rotation derived from head/tail/roll. */
   float bone_mat[3][3];
 
   int flag;
@@ -67,39 +67,47 @@ typedef struct Bone {
   char _pad[7];
 
   float arm_head[3];
-  /**  head/tail in Armature Space (rest pos). */
+  /** Head/tail in Armature Space (rest pose). */
   float arm_tail[3];
-  /**  matrix: (bonemat(b)+head(b))*arm_mat(b-1), rest po.s*/
+  /** Matrix: `(bonemat(b)+head(b))*arm_mat(b-1)`, rest pose. */
   float arm_mat[4][4];
-  /** Roll in Armature Space (rest pos). */
+  /** Roll in Armature Space (rest pose). */
   float arm_roll;
 
-  /**  dist, weight: for non-deformgroup deforms. */
+  /** dist, weight: for non-deformgroup deforms. */
   float dist, weight;
-  /**  width: for block bones. keep in this order, transform!. */
+  /** width: for block bones. keep in this order, transform!. */
   float xwidth, length, zwidth;
-  /** Radius for head/tail sphere, defining deform as well, parent->rad_tip overrides rad_head. */
+  /**
+   * Radius for head/tail sphere, defining deform as well,
+   * `parent->rad_tip` overrides `rad_head`.
+   */
   float rad_head, rad_tail;
 
-  /** Curved bones settings - these define the "restpose" for a curved bone. */
+  /** Curved bones settings - these define the "rest-pose" for a curved bone. */
   float roll1, roll2;
-  float curve_in_x, curve_in_y;
-  float curve_out_x, curve_out_y;
+  float curve_in_x, curve_in_z;
+  float curve_out_x, curve_out_z;
   /** Length of bezier handles. */
   float ease1, ease2;
-  float scale_in_x, scale_in_y;
-  float scale_out_x, scale_out_y;
+  float scale_in_x DNA_DEPRECATED, scale_in_z DNA_DEPRECATED;
+  float scale_out_x DNA_DEPRECATED, scale_out_z DNA_DEPRECATED;
+  float scale_in[3], scale_out[3];
 
-  /**  patch for upward compat, UNUSED!. */
+  /** Patch for upward compatibility, UNUSED! */
   float size[3];
   /** Layers that bone appears on. */
   int layer;
-  /**  for B-bones. */
+  /** For B-bones. */
   short segments;
 
   /** Type of next/prev bone handles. */
   char bbone_prev_type;
   char bbone_next_type;
+  /** B-Bone flags. */
+  int bbone_flag;
+  short bbone_prev_flag;
+  short bbone_next_flag;
   /** Next/prev bones to use as handle references when calculating bbones (optional). */
   struct Bone *bbone_prev;
   struct Bone *bbone_next;
@@ -126,12 +134,12 @@ typedef struct bArmature {
 
   /** Active bone. */
   Bone *act_bone;
-  /** Active editbone (in editmode). */
+  /** Active edit-bone (in edit-mode). */
   struct EditBone *act_edbone;
 
   /** ID data is older than edit-mode data (TODO: move to edit-mode struct). */
   char needs_flush_to_id;
-  char _pad0[7];
+  char _pad0[3];
 
   int flag;
   int drawtype;
@@ -143,6 +151,9 @@ typedef struct bArmature {
   unsigned int layer_used;
   /** For buttons to work, both variables in this order together. */
   unsigned int layer, layer_protected;
+
+  /** Relative position of the axes on the bone, from head (0.0f) to tail (1.0f). */
+  float axes_position;
 } bArmature;
 
 /* armature->flag */
@@ -227,8 +238,10 @@ typedef enum eBone_Flag {
   BONE_MULT_VG_ENV = (1 << 11),
   /** bone doesn't deform geometry */
   BONE_NO_DEFORM = (1 << 12),
+#ifdef DNA_DEPRECATED_ALLOW
   /** set to prevent destruction of its unkeyframed pose (after transform) */
   BONE_UNKEYED = (1 << 13),
+#endif
   /** set to prevent hinge child bones from influencing the transform center */
   BONE_HINGE_CHILD_TRANSFORM = (1 << 14),
 #ifdef DNA_DEPRECATED_ALLOW
@@ -251,8 +264,10 @@ typedef enum eBone_Flag {
   BONE_NO_LOCAL_LOCATION = (1 << 22),
   /** object child will use relative transform (like deform) */
   BONE_RELATIVE_PARENTING = (1 << 23),
+#ifdef DNA_DEPRECATED_ALLOW
   /** it will add the parent end roll to the inroll */
   BONE_ADD_PARENT_END_ROLL = (1 << 24),
+#endif
   /** this bone was transformed by the mirror function */
   BONE_TRANSFORM_MIRROR = (1 << 25),
   /** this bone is associated with a locked vertex group, ONLY USE FOR DRAWING */
@@ -282,6 +297,29 @@ typedef enum eBone_BBoneHandleType {
   BBONE_HANDLE_RELATIVE = 2, /* Custom handle in relative position mode. */
   BBONE_HANDLE_TANGENT = 3,  /* Custom handle in tangent mode (use direction, not location). */
 } eBone_BBoneHandleType;
+
+/* bone->bbone_flag */
+typedef enum eBone_BBoneFlag {
+  /** Add the parent Out roll to the In roll. */
+  BBONE_ADD_PARENT_END_ROLL = (1 << 0),
+  /** Multiply B-Bone easing values with Scale Length. */
+  BBONE_SCALE_EASING = (1 << 1),
+} eBone_BBoneFlag;
+
+/* bone->bbone_prev/next_flag */
+typedef enum eBone_BBoneHandleFlag {
+  /** Use handle bone scaling for scale X. */
+  BBONE_HANDLE_SCALE_X = (1 << 0),
+  /** Use handle bone scaling for scale Y (length). */
+  BBONE_HANDLE_SCALE_Y = (1 << 1),
+  /** Use handle bone scaling for scale Z. */
+  BBONE_HANDLE_SCALE_Z = (1 << 2),
+  /** Use handle bone scaling for easing. */
+  BBONE_HANDLE_SCALE_EASE = (1 << 3),
+  /** Is handle scale required? */
+  BBONE_HANDLE_SCALE_ANY = BBONE_HANDLE_SCALE_X | BBONE_HANDLE_SCALE_Y | BBONE_HANDLE_SCALE_Z |
+                           BBONE_HANDLE_SCALE_EASE,
+} eBone_BBoneHandleFlag;
 
 #define MAXBONENAME 64
 

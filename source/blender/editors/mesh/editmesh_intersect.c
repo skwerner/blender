@@ -116,8 +116,12 @@ static void edbm_intersect_select(BMEditMesh *em, struct Mesh *me, bool do_selec
     }
   }
 
-  EDBM_mesh_normals_update(em);
-  EDBM_update_generic(me, true, true);
+  EDBM_update(me,
+              &(const struct EDBMUpdate_Params){
+                  .calc_looptri = true,
+                  .calc_normals = true,
+                  .is_destructive = true,
+              });
 }
 
 /* -------------------------------------------------------------------- */
@@ -212,6 +216,7 @@ static int edbm_intersect_exec(bContext *C, wmOperator *op)
                                         nshapes,
                                         use_self,
                                         use_separate_all,
+                                        false,
                                         true);
     }
     else {
@@ -254,27 +259,24 @@ static void edbm_intersect_ui(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *layout = op->layout;
   uiLayout *row;
-  PointerRNA ptr;
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-
-  bool use_exact = RNA_enum_get(&ptr, "solver") == ISECT_SOLVER_EXACT;
+  bool use_exact = RNA_enum_get(op->ptr, "solver") == ISECT_SOLVER_EXACT;
 
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
   row = uiLayoutRow(layout, false);
-  uiItemR(row, &ptr, "mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(row, op->ptr, "mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   uiItemS(layout);
   row = uiLayoutRow(layout, false);
-  uiItemR(row, &ptr, "separate_mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(row, op->ptr, "separate_mode", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   uiItemS(layout);
 
   row = uiLayoutRow(layout, false);
-  uiItemR(row, &ptr, "solver", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(row, op->ptr, "solver", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   uiItemS(layout);
 
   if (!use_exact) {
-    uiItemR(layout, &ptr, "threshold", 0, NULL, ICON_NONE);
+    uiItemR(layout, op->ptr, "threshold", 0, NULL, ICON_NONE);
   }
 }
 
@@ -302,8 +304,8 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
   };
 
   static const EnumPropertyItem isect_intersect_solver_items[] = {
-      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster Solver, some limitations"},
-      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact Solver, slower, handles more cases"},
+      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster solver, some limitations"},
+      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact solver, slower, handles more cases"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -322,7 +324,7 @@ void MESH_OT_intersect(struct wmOperatorType *ot)
   RNA_def_enum(
       ot->srna, "separate_mode", isect_separate_items, ISECT_SEPARATE_CUT, "Separate Mode", "");
   RNA_def_float_distance(
-      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge threshold", "", 0.0, 0.001);
+      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge Threshold", "", 0.0, 0.001);
   RNA_def_enum(ot->srna,
                "solver",
                isect_intersect_solver_items,
@@ -375,8 +377,16 @@ static int edbm_intersect_boolean_exec(bContext *C, wmOperator *op)
     }
 
     if (use_exact) {
-      has_isect = BM_mesh_boolean(
-          em->bm, em->looptris, em->tottri, test_fn, NULL, 2, use_self, true, boolean_operation);
+      has_isect = BM_mesh_boolean(em->bm,
+                                  em->looptris,
+                                  em->tottri,
+                                  test_fn,
+                                  NULL,
+                                  2,
+                                  use_self,
+                                  true,
+                                  false,
+                                  boolean_operation);
     }
     else {
       has_isect = BM_mesh_intersect(em->bm,
@@ -412,27 +422,24 @@ static void edbm_intersect_boolean_ui(bContext *UNUSED(C), wmOperator *op)
 {
   uiLayout *layout = op->layout;
   uiLayout *row;
-  PointerRNA ptr;
 
-  RNA_pointer_create(NULL, op->type->srna, op->properties, &ptr);
-
-  bool use_exact = RNA_enum_get(&ptr, "solver") == ISECT_SOLVER_EXACT;
+  bool use_exact = RNA_enum_get(op->ptr, "solver") == ISECT_SOLVER_EXACT;
 
   uiLayoutSetPropSep(layout, true);
   uiLayoutSetPropDecorate(layout, false);
 
   row = uiLayoutRow(layout, false);
-  uiItemR(row, &ptr, "operation", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(row, op->ptr, "operation", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   uiItemS(layout);
 
   row = uiLayoutRow(layout, false);
-  uiItemR(row, &ptr, "solver", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
+  uiItemR(row, op->ptr, "solver", UI_ITEM_R_EXPAND, NULL, ICON_NONE);
   uiItemS(layout);
 
-  uiItemR(layout, &ptr, "use_swap", 0, NULL, ICON_NONE);
-  uiItemR(layout, &ptr, "use_self", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "use_swap", 0, NULL, ICON_NONE);
+  uiItemR(layout, op->ptr, "use_self", 0, NULL, ICON_NONE);
   if (!use_exact) {
-    uiItemR(layout, &ptr, "threshold", 0, NULL, ICON_NONE);
+    uiItemR(layout, op->ptr, "threshold", 0, NULL, ICON_NONE);
   }
 }
 
@@ -446,8 +453,8 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
   };
 
   static const EnumPropertyItem isect_boolean_solver_items[] = {
-      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster Solver, some limitations"},
-      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact Solver, slower, handles more cases"},
+      {ISECT_SOLVER_FAST, "FAST", 0, "Fast", "Faster solver, some limitations"},
+      {ISECT_SOLVER_EXACT, "EXACT", 0, "Exact", "Exact solver, slower, handles more cases"},
       {0, NULL, 0, NULL, NULL},
   };
 
@@ -466,7 +473,7 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
                "operation",
                isect_boolean_operation_items,
                BMESH_ISECT_BOOLEAN_DIFFERENCE,
-               "Boolean operation",
+               "Boolean Operation",
                "Which boolean operation to apply");
   RNA_def_boolean(ot->srna,
                   "use_swap",
@@ -475,7 +482,7 @@ void MESH_OT_intersect_boolean(struct wmOperatorType *ot)
                   "Use with difference intersection to swap which side is kept");
   RNA_def_boolean(ot->srna, "use_self", false, "Self", "Do self-union or self-intersection");
   RNA_def_float_distance(
-      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge threshold", "", 0.0, 0.001);
+      ot->srna, "threshold", 0.000001f, 0.0, 0.01, "Merge Threshold", "", 0.0, 0.001);
   RNA_def_enum(ot->srna,
                "solver",
                isect_boolean_solver_items,
@@ -960,8 +967,12 @@ static int edbm_face_split_by_edges_exec(bContext *C, wmOperator *UNUSED(op))
     }
 #endif
 
-    EDBM_mesh_normals_update(em);
-    EDBM_update_generic(obedit->data, true, true);
+    EDBM_update(obedit->data,
+                &(const struct EDBMUpdate_Params){
+                    .calc_looptri = true,
+                    .calc_normals = true,
+                    .is_destructive = true,
+                });
 
 #ifdef USE_NET_ISLAND_CONNECT
     /* we may have remaining isolated regions remaining,
@@ -1065,8 +1076,12 @@ static int edbm_face_split_by_edges_exec(bContext *C, wmOperator *UNUSED(op))
 
       BLI_ghash_free(face_edge_map, NULL, NULL);
 
-      EDBM_mesh_normals_update(em);
-      EDBM_update_generic(obedit->data, true, true);
+      EDBM_update(obedit->data,
+                  &(const struct EDBMUpdate_Params){
+                      .calc_looptri = true,
+                      .calc_normals = true,
+                      .is_destructive = true,
+                  });
     }
 
     BLI_stack_free(edges_loose);

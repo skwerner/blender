@@ -28,10 +28,7 @@
 #include <vector>
 
 #ifdef WITH_TBB
-/* Quiet top level deprecation message, unrelated to API usage here. */
-#  define TBB_SUPPRESS_DEPRECATED_MESSAGES 1
 #  include <tbb/flow_graph.h>
-#  include <tbb/tbb.h>
 #endif
 
 /* Task Graph */
@@ -70,7 +67,7 @@ struct TaskNode {
 #ifdef WITH_TBB
         tbb_node(task_graph->tbb_graph,
                  tbb::flow::unlimited,
-                 std::bind(&TaskNode::run, this, std::placeholders::_1)),
+                 [&](const tbb::flow::continue_msg input) { run(input); }),
 #endif
         run_func(run_func),
         task_data(task_data),
@@ -94,7 +91,7 @@ struct TaskNode {
 #ifdef WITH_TBB
   tbb::flow::continue_msg run(const tbb::flow::continue_msg UNUSED(input))
   {
-    tbb::this_task_arena::isolate([this] { run_func(task_data); });
+    run_func(task_data);
     return tbb::flow::continue_msg();
   }
 #endif

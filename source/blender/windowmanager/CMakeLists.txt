@@ -168,6 +168,9 @@ if(WITH_PYTHON)
     ../python
   )
   add_definitions(-DWITH_PYTHON)
+  if(WITH_PYTHON_MODULE)
+    add_definitions(-DWITH_PYTHON_MODULE)
+  endif()
 endif()
 
 if(WITH_BUILDINFO)
@@ -200,6 +203,7 @@ if(WITH_XR_OPENXR)
 
   list(APPEND SRC
     xr/intern/wm_xr.c
+    xr/intern/wm_xr_actions.c
     xr/intern/wm_xr_draw.c
     xr/intern/wm_xr_session.c
 

@@ -169,7 +169,7 @@ static BMLoop *bm_loop_find_other_fan_loop_with_visible_face(BMLoop *l_src,
       l_other = l_other->prev;
     }
     else {
-      BLI_assert(0);
+      BLI_assert_unreachable();
     }
   }
   return l_other;
@@ -189,7 +189,7 @@ static BMLoop *bm_vert_step_fan_loop_uv(BMLoop *l, BMEdge **e_step, const int cd
     l_next = l;
   }
   else {
-    BLI_assert(0);
+    BLI_assert_unreachable();
     return NULL;
   }
 
@@ -572,7 +572,7 @@ static UVRipPairs *uv_rip_pairs_from_loop(BMLoop *l_init,
   rip->loops = BLI_gset_ptr_new(__func__);
 
   /* We can rely on this stack being small, as we're walking down two sides of an edge loop,
-   * so the stack wont be much larger than the total number of fans at any one vertex. */
+   * so the stack won't be much larger than the total number of fans at any one vertex. */
   BLI_SMALLSTACK_DECLARE(stack, BMLoop *);
 
   /* Needed for cases when we walk onto loops which already have a side assigned,

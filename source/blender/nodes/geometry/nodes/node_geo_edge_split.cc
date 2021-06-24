@@ -14,9 +14,6 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
-#include "BLI_math_base.h"
-#include "BLI_math_rotation.h"
-
 #include "DNA_modifier_types.h"
 
 #include "node_geometry_util.hh"
@@ -47,9 +44,12 @@ static bNodeSocketTemplate geo_node_edge_split_out[] = {
 };
 
 namespace blender::nodes {
+
 static void geo_node_edge_split_exec(GeoNodeExecParams params)
 {
   GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
+
+  geometry_set = geometry_set_realize_instances(geometry_set);
 
   if (!geometry_set.has_mesh()) {
     params.set_output("Geometry", std::move(geometry_set));
@@ -83,6 +83,7 @@ static void geo_node_edge_split_exec(GeoNodeExecParams params)
 
   params.set_output("Geometry", std::move(geometry_set));
 }
+
 }  // namespace blender::nodes
 
 void register_node_type_geo_edge_split()

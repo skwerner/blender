@@ -45,6 +45,7 @@ struct MovieClip;
 struct Scene;
 struct VFont;
 struct bSound;
+struct SequenceLookup;
 
 /* strlens; 256= FILE_MAXFILE, 768= FILE_MAXDIR */
 
@@ -55,7 +56,9 @@ typedef struct StripAnim {
 
 typedef struct StripElem {
   char name[256];
+  /** Ignore when zeroed. */
   int orig_width, orig_height;
+  float orig_fps;
 } StripElem;
 
 typedef struct StripCrop {
@@ -164,14 +167,15 @@ typedef struct Sequence {
    * frames that use the last frame after data ends.
    */
   int startstill, endstill;
-  /** Machine: the strip channel, depth the depth in the sequence when dealing with metastrips. */
-  int machine, depth;
+  /** Machine: the strip channel */
+  int machine;
+  int _pad3;
   /** Starting and ending points of the strip in the sequence. */
   int startdisp, enddisp;
   float sat;
   float mul, handsize;
 
-  short anim_preseek;
+  short anim_preseek; /* UNUSED. */
   /** Streamindex for movie or sound files with several streams. */
   short streamindex;
   /** For multicam source selection. */
@@ -255,6 +259,10 @@ typedef struct MetaStack {
   int disp_range[2];
 } MetaStack;
 
+typedef struct EditingRuntime {
+  struct SequenceLookup *sequence_lookup;
+} EditingRuntime;
+
 typedef struct Editing {
   /** Pointer to the current list of seq's being edited (can be within a meta strip). */
   ListBase *seqbasep;
@@ -278,13 +286,15 @@ typedef struct Editing {
   struct SeqCache *cache;
 
   /* Cache control */
-  float recycle_max_cost;
+  float recycle_max_cost; /* UNUSED only for versioning. */
   int cache_flag;
 
   struct PrefetchJob *prefetch_job;
 
-  /* Must be initialized only by BKE_sequencer_cache_create() */
+  /* Must be initialized only by seq_cache_create() */
   int64_t disk_cache_timestamp;
+
+  EditingRuntime runtime;
 } Editing;
 
 /* ************* Effect Variable Structs ********* */
@@ -354,6 +364,8 @@ typedef struct TextVars {
 enum {
   SEQ_TEXT_SHADOW = (1 << 0),
   SEQ_TEXT_BOX = (1 << 1),
+  SEQ_TEXT_BOLD = (1 << 2),
+  SEQ_TEXT_ITALIC = (1 << 3),
 };
 
 /* TextVars.align */
@@ -514,11 +526,11 @@ enum {
   SEQ_AUDIO_PAN_ANIMATED = (1 << 26),
   SEQ_AUDIO_DRAW_WAVEFORM = (1 << 27),
 
-  /* don't include Grease Pencil in OpenGL previews of Scene strips */
-  SEQ_SCENE_NO_GPENCIL = (1 << 28),
+  /* don't include Annotations in OpenGL previews of Scene strips */
+  SEQ_SCENE_NO_ANNOTATION = (1 << 28),
   SEQ_USE_VIEWS = (1 << 29),
 
-  /* access scene strips directly (like a metastrip) */
+  /* Access scene strips directly (like a meta-strip). */
   SEQ_SCENE_STRIPS = (1 << 30),
 
   SEQ_INVALID_EFFECT = (1u << 31),

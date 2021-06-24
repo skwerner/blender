@@ -32,6 +32,8 @@
 
 #include "RNA_access.h"
 
+#include "node_common.h"
+
 bNodeTreeType *ntreeType_Geometry;
 
 static void geometry_node_tree_get_from_context(const bContext *C,
@@ -63,6 +65,53 @@ static void geometry_node_tree_get_from_context(const bContext *C,
   }
 }
 
+static void geometry_node_tree_update(bNodeTree *ntree)
+{
+  ntreeSetOutput(ntree);
+
+  /* Needed to give correct types to reroutes. */
+  ntree_update_reroute_nodes(ntree);
+}
+
+static void foreach_nodeclass(Scene *UNUSED(scene), void *calldata, bNodeClassCallback func)
+{
+  func(calldata, NODE_CLASS_INPUT, N_("Input"));
+  func(calldata, NODE_CLASS_GEOMETRY, N_("Geometry"));
+  func(calldata, NODE_CLASS_ATTRIBUTE, N_("Attribute"));
+  func(calldata, NODE_CLASS_OP_COLOR, N_("Color"));
+  func(calldata, NODE_CLASS_OP_VECTOR, N_("Vector"));
+  func(calldata, NODE_CLASS_CONVERTOR, N_("Convertor"));
+  func(calldata, NODE_CLASS_LAYOUT, N_("Layout"));
+}
+
+static bool geometry_node_tree_validate_link(bNodeTree *UNUSED(ntree), bNodeLink *link)
+{
+  /* Geometry, string, object, material, texture and collection sockets can only be connected to
+   * themselves. The other types can be converted between each other. */
+  if (ELEM(link->fromsock->type, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA, SOCK_BOOLEAN, SOCK_INT) &&
+      ELEM(link->tosock->type, SOCK_FLOAT, SOCK_VECTOR, SOCK_RGBA, SOCK_BOOLEAN, SOCK_INT)) {
+    return true;
+  }
+  return (link->tosock->type == link->fromsock->type);
+}
+
+static bool geometry_node_tree_socket_type_valid(eNodeSocketDatatype socket_type,
+                                                 bNodeTreeType *UNUSED(ntreetype))
+{
+  return ELEM(socket_type,
+              SOCK_FLOAT,
+              SOCK_VECTOR,
+              SOCK_RGBA,
+              SOCK_BOOLEAN,
+              SOCK_INT,
+              SOCK_STRING,
+              SOCK_OBJECT,
+              SOCK_GEOMETRY,
+              SOCK_COLLECTION,
+              SOCK_TEXTURE,
+              SOCK_MATERIAL);
+}
+
 void register_node_tree_type_geo(void)
 {
   bNodeTreeType *tt = ntreeType_Geometry = static_cast<bNodeTreeType *>(
@@ -73,8 +122,11 @@ void register_node_tree_type_geo(void)
   tt->ui_icon = 0; /* defined in drawnode.c */
   strcpy(tt->ui_description, N_("Geometry nodes"));
   tt->rna_ext.srna = &RNA_GeometryNodeTree;
-
+  tt->update = geometry_node_tree_update;
   tt->get_from_context = geometry_node_tree_get_from_context;
+  tt->foreach_nodeclass = foreach_nodeclass;
+  tt->valid_socket_type = geometry_node_tree_socket_type_valid;
+  tt->validate_link = geometry_node_tree_validate_link;
 
   ntreeTypeAdd(tt);
 }

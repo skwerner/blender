@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 /** \file
  * \ingroup bli
@@ -1439,12 +1438,12 @@ int isect_line_sphere_v3(const float l1[3],
   /* adapted for use in blender by Campbell Barton - 2011
    *
    * atelier iebele abel - 2001
-   * atelier@iebele.nl
+   * <atelier@iebele.nl>
    * http://www.iebele.nl
    *
    * sphere_line_intersection function adapted from:
    * http://astronomy.swin.edu.au/pbourke/geometry/sphereline
-   * Paul Bourke pbourke@swin.edu.au
+   * Paul Bourke <pbourke@swin.edu.au>
    */
 
   const float ldir[3] = {
@@ -2354,7 +2353,7 @@ bool isect_planes_v3_fn(
         for (i_test = 0; i_test < planes_len; i_test++) {
           const float *np_test = planes[i_test];
           if (((dot_v3v3(np_test, co_test) + np_test[3]) > eps_isect)) {
-            /* For low epsilon values the point could intersect it's own plane. */
+            /* For low epsilon values the point could intersect its own plane. */
             if (!ELEM(i_test, i, j, k)) {
               break;
             }
@@ -3345,6 +3344,13 @@ float closest_to_ray_v3(float r_close[3],
                         const float ray_dir[3])
 {
   float h[3], lambda;
+
+  if (UNLIKELY(is_zero_v3(ray_dir))) {
+    lambda = 0.0f;
+    copy_v3_v3(r_close, ray_orig);
+    return lambda;
+  }
+
   sub_v3_v3v3(h, p, ray_orig);
   lambda = dot_v3v3(ray_dir, h) / dot_v3v3(ray_dir, ray_dir);
   madd_v3_v3v3fl(r_close, ray_orig, ray_dir, lambda);
@@ -3887,7 +3893,7 @@ void interp_weights_quad_v3(float w[4],
  * - 0 if the point is outside of triangle.
  * - 1 if the point is inside triangle.
  * - 2 if it's on the edge.
- * */
+ */
 int barycentric_inside_triangle_v2(const float w[3])
 {
   if (IN_RANGE(w[0], 0.0f, 1.0f) && IN_RANGE(w[1], 0.0f, 1.0f) && IN_RANGE(w[2], 0.0f, 1.0f)) {
@@ -4468,7 +4474,7 @@ void interp_weights_poly_v2(float *w, float v[][2], const int n, const float co[
     d_curr = d_next;
     DIR_V2_SET(&d_next, v_next, co);
     ht = mean_value_half_tan_v2_db(&d_curr, &d_next);
-    w[i_curr] = (float)((ht_prev + ht) / d_curr.len);
+    w[i_curr] = (d_curr.len == 0.0) ? 0.0f : (float)((ht_prev + ht) / d_curr.len);
     totweight += w[i_curr];
 
     /* step */
@@ -4887,8 +4893,8 @@ void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x
     len1 = (1.0f / len_v3(v1));
     len2 = (1.0f / len_v3(v2));
 
-    winmat[2][0] += len1 * winmat[0][0] * x;
-    winmat[2][1] += len2 * winmat[1][1] * y;
+    winmat[2][0] -= len1 * winmat[0][0] * x;
+    winmat[2][1] -= len2 * winmat[1][1] * y;
   }
   else {
     winmat[3][0] += x;
@@ -4905,8 +4911,8 @@ void window_translate_m4(float winmat[4][4], float perspmat[4][4], const float x
 void planes_from_projmat(const float mat[4][4],
                          float left[4],
                          float right[4],
-                         float top[4],
                          float bottom[4],
+                         float top[4],
                          float near[4],
                          float far[4])
 {
@@ -5234,7 +5240,7 @@ void map_to_sphere(float *r_u, float *r_v, const float x, const float y, const f
   len = sqrtf(x * x + y * y + z * z);
   if (len > 0.0f) {
     if (UNLIKELY(x == 0.0f && y == 0.0f)) {
-      *r_u = 0.0f; /* othwise domain error */
+      *r_u = 0.0f; /* Otherwise domain error. */
     }
     else {
       *r_u = (1.0f - atan2f(x, y) / (float)M_PI) / 2.0f;
@@ -5394,7 +5400,7 @@ void accumulate_vertex_normals_poly_v3(float **vertnos,
 
 void tangent_from_uv_v3(const float uv1[2],
                         const float uv2[2],
-                        const float uv3[3],
+                        const float uv3[2],
                         const float co1[3],
                         const float co2[3],
                         const float co3[3],
@@ -5837,7 +5843,7 @@ bool form_factor_visible_quad(const float p[3],
   return true;
 }
 
-/* altivec optimization, this works, but is unused */
+/* `AltiVec` optimization, this works, but is unused. */
 
 #if 0
 #  include <Accelerate/Accelerate.h>
@@ -5908,7 +5914,7 @@ static float ff_quad_form_factor(float *p, float *n, float *q0, float *q1, float
 
 #if 0
 
-#  include <xmmintrin.h>
+#  include "BLI_simd.h"
 
 static __m128 sse_approx_acos(__m128 x)
 {
@@ -6126,7 +6132,7 @@ bool is_quad_convex_v3(const float v1[3], const float v2[3], const float v3[3], 
 
 bool is_quad_convex_v2(const float v1[2], const float v2[2], const float v3[2], const float v4[2])
 {
-  /* linetests, the 2 diagonals have to instersect to be convex */
+  /* Line-tests, the 2 diagonals have to intersect to be convex. */
   return (isect_seg_seg_v2(v1, v3, v2, v4) > 0);
 }
 
@@ -6212,6 +6218,19 @@ bool is_quad_flip_v3_first_third_fast(const float v1[3],
   return dot_v3v3(cross_a, cross_b) > 0.0f;
 }
 
+bool is_quad_flip_v3_first_third_fast_with_normal(const float v1[3],
+                                                  const float v2[3],
+                                                  const float v3[3],
+                                                  const float v4[3],
+                                                  const float normal[3])
+{
+  float dir_v3v1[3], tangent[3];
+  sub_v3_v3v3(dir_v3v1, v3, v1);
+  cross_v3_v3v3(tangent, dir_v3v1, normal);
+  const float dot = dot_v3v3(v1, tangent);
+  return (dot_v3v3(v4, tangent) >= dot) || (dot_v3v3(v2, tangent) <= dot);
+}
+
 /**
  * Return the value which the distance between points will need to be scaled by,
  * to define a handle, given both points are on a perfect circle.
@@ -6230,11 +6249,11 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
 
   const float tan_dot = dot_v3v3(tan_l, tan_r);
   if (tan_dot > 1.0f - eps) {
-    /* no angle difference (use fallback, length wont make any difference) */
+    /* no angle difference (use fallback, length won't make any difference) */
     return (1.0f / 3.0f) * 0.75f;
   }
   if (tan_dot < -1.0f + eps) {
-    /* parallele tangents (half-circle) */
+    /* Parallel tangents (half-circle). */
     return (1.0f / 2.0f);
   }
 
@@ -6245,4 +6264,57 @@ float cubic_tangent_factor_circle_v3(const float tan_l[3], const float tan_r[3])
   const float angle_sin = sinf(angle);
   const float angle_cos = cosf(angle);
   return ((1.0f - angle_cos) / (angle_sin * 2.0f)) / angle_sin;
+}
+
+/**
+ * Utility for computing approximate geodesic distances on triangle meshes.
+ *
+ * Given triangle with vertex coordinates v0, v1, v2, and known geodesic distances
+ * dist1 and dist2 at v1 and v2, estimate a geodesic distance at vertex v0.
+ *
+ * From "Dart Throwing on Surfaces", EGSR 2009. Section 7, Geodesic Dart Throwing.
+ */
+float geodesic_distance_propagate_across_triangle(
+    const float v0[3], const float v1[3], const float v2[3], const float dist1, const float dist2)
+{
+  /* Vectors along triangle edges. */
+  float v10[3], v12[3];
+  sub_v3_v3v3(v10, v0, v1);
+  sub_v3_v3v3(v12, v2, v1);
+
+  if (dist1 != 0.0f && dist2 != 0.0f) {
+    /* Local coordinate system in the triangle plane. */
+    float u[3], v[3], n[3];
+    const float d12 = normalize_v3_v3(u, v12);
+
+    if (d12 * d12 > 0.0f) {
+      cross_v3_v3v3(n, v12, v10);
+      normalize_v3(n);
+      cross_v3_v3v3(v, n, u);
+
+      /* v0 in local coordinates */
+      const float v0_[2] = {dot_v3v3(v10, u), fabsf(dot_v3v3(v10, v))};
+
+      /* Compute virtual source point in local coordinates, that we estimate the geodesic
+       * distance is being computed from. See figure 9 in the paper for the derivation. */
+      const float a = 0.5f * (1.0f + (dist1 * dist1 - dist2 * dist2) / (d12 * d12));
+      const float hh = dist1 * dist1 - a * a * d12 * d12;
+
+      if (hh > 0.0f) {
+        const float h = sqrtf(hh);
+        const float S_[2] = {a * d12, -h};
+
+        /* Only valid if the line between the source point and v0 crosses
+         * the edge between v1 and v2. */
+        const float x_intercept = S_[0] + h * (v0_[0] - S_[0]) / (v0_[1] + h);
+        if (x_intercept >= 0.0f && x_intercept <= d12) {
+          return len_v2v2(S_, v0_);
+        }
+      }
+    }
+  }
+
+  /* Fall back to Dijsktra approximation in trivial case, or if no valid source
+   * point found that connects to v0 across the triangle. */
+  return min_ff(dist1 + len_v3(v10), dist2 + len_v3v3(v0, v2));
 }

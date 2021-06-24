@@ -118,7 +118,7 @@ static Mesh *modifyMesh(ModifierData *md, const ModifierEvalContext *ctx, Mesh *
 {
   DynamicPaintModifierData *pmd = (DynamicPaintModifierData *)md;
 
-  /* dont apply dynamic paint on orco mesh stack */
+  /* Don't apply dynamic paint on ORCO mesh stack. */
   if (!(ctx->flag & MOD_APPLY_ORCO)) {
     Scene *scene = DEG_get_evaluated_scene(ctx->depsgraph);
     return dynamicPaint_Modifier_do(pmd, ctx->depsgraph, scene, ctx->object, mesh);
@@ -221,7 +221,6 @@ ModifierTypeInfo modifierType_DynamicPaint = {
     /* modifyMesh */ modifyMesh,
     /* modifyHair */ NULL,
     /* modifyGeometrySet */ NULL,
-    /* modifyVolume */ NULL,
 
     /* initData */ initData,
     /* requiredDataMask */ requiredDataMask,

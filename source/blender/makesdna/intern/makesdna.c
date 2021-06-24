@@ -84,6 +84,7 @@ static const char *includefiles[] = {
     "DNA_mesh_types.h",
     "DNA_meshdata_types.h",
     "DNA_modifier_types.h",
+    "DNA_lineart_types.h",
     "DNA_lattice_types.h",
     "DNA_object_types.h",
     "DNA_object_force_types.h",
@@ -360,7 +361,7 @@ static int add_type(const char *str, int size)
   }
   if (strchr(str, '*')) {
     /* note: this is valid C syntax but we can't parse, complain!
-     * `struct SomeStruct* some_var;` <-- correct but we cant handle right now. */
+     * `struct SomeStruct* some_var;` <-- correct but we can't handle right now. */
     return -1;
   }
 
@@ -397,13 +398,11 @@ static int add_type(const char *str, int size)
 }
 
 /**
- *
  * Because of the weird way of tokenizing, we have to 'cast' function
  * pointers to ... (*f)(), whatever the original signature. In fact,
  * we add name and type at the same time... There are two special
  * cases, unfortunately. These are explicitly checked.
- *
- * */
+ */
 static int add_name(const char *str)
 {
   char buf[255]; /* stupid limit, change it :) */
@@ -479,17 +478,16 @@ static int add_name(const char *str)
     }
 
     /*
-     * Put )(void) at the end? Maybe )(). Should check this with
-     * old sdna. Actually, sometimes )(), sometimes )(void...)
+     * Put `)(void)` at the end? Maybe `)()`. Should check this with
+     * old `sdna`. Actually, sometimes `)()`, sometimes `)(void...)`
      * Alas.. such is the nature of brain-damage :(
      *
-     * Sorted it out: always do )(), except for headdraw and
-     * windraw, part of ScrArea. This is important, because some
+     * Sorted it out: always do )(), except for `headdraw` and
+     * `windraw`, part of #ScrArea. This is important, because some
      * linkers will treat different fp's differently when called
      * !!! This has to do with interference in byte-alignment and
-     * the way args are pushed on the stack.
-     *
-     * */
+     * the way arguments are pushed on the stack.
+     */
     buf[i] = 0;
     DEBUG_PRINTF(3, "Name before chomping: %s\n", buf);
     if ((strncmp(buf, "(*headdraw", 10) == 0) || (strncmp(buf, "(*windraw", 9) == 0)) {
@@ -727,7 +725,7 @@ static int convert_include(const char *filename)
 
           const int strct = add_type(md1, 0);
           if (strct == -1) {
-            fprintf(stderr, "File '%s' contains struct we cant parse \"%s\"\n", filename, md1);
+            fprintf(stderr, "File '%s' contains struct we can't parse \"%s\"\n", filename, md1);
             return 1;
           }
 
@@ -1077,7 +1075,7 @@ static int calculate_struct_sizes(int firststruct, FILE *file_verify, const char
             }
           }
 
-          if (size_native % 4) {
+          if (size_native % 4 && !ELEM(size_native, 1, 2)) {
             fprintf(stderr,
                     "Sizeerror 4 in struct: %s (add %d bytes)\n",
                     types[structtype],
@@ -1224,6 +1222,7 @@ static int make_structDNA(const char *base_directory,
   add_type("int64_t", 8);  /* SDNA_TYPE_INT64 */
   add_type("uint64_t", 8); /* SDNA_TYPE_UINT64 */
   add_type("void", 0);     /* SDNA_TYPE_VOID */
+  add_type("int8_t", 1);   /* SDNA_TYPE_INT8 */
 
   /* the defines above shouldn't be output in the padding file... */
   const int firststruct = types_len;
@@ -1518,16 +1517,12 @@ int main(int argc, char **argv)
  *
  * - 'long': even though DNA supports, 'long' shouldn't be used since it can be either 32 or 64bit,
  *   use int, int32_t or int64_t instead.
- * - 'int8_t': as DNA doesn't yet support 'signed char' types,
- *   all char types are assumed to be unsigned.
- *   We should be able to support this, it's just not something which has been added yet.
  *
  * Only valid use would be as a runtime variable if an API expected a long,
  * but so far we don't have this happening.
  */
 #ifdef __GNUC__
 #  pragma GCC poison long
-#  pragma GCC poison int8_t
 #endif
 
 #include "DNA_ID.h"
@@ -1561,6 +1556,7 @@ int main(int argc, char **argv)
 #include "DNA_layer_types.h"
 #include "DNA_light_types.h"
 #include "DNA_lightprobe_types.h"
+#include "DNA_lineart_types.h"
 #include "DNA_linestyle_types.h"
 #include "DNA_listBase.h"
 #include "DNA_mask_types.h"

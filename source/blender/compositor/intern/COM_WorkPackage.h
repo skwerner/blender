@@ -16,54 +16,62 @@
  * Copyright 2011, Blender Foundation.
  */
 
-class WorkPackage;
-
 #pragma once
 
+#ifdef WITH_CXX_GUARDEDALLOC
+#  include "MEM_guardedalloc.h"
+#endif
+
+#include "COM_Enums.h"
+
+#include "BLI_rect.h"
+
+#include <functional>
+#include <ostream>
+
+namespace blender::compositor {
+// Forward Declarations.
 class ExecutionGroup;
-#include "COM_ExecutionGroup.h"
 
 /**
  * \brief contains data about work that can be scheduled
  * \see WorkScheduler
  */
-class WorkPackage {
- private:
+struct WorkPackage {
+  eWorkPackageType type;
+
+  eWorkPackageState state = eWorkPackageState::NotScheduled;
+
   /**
    * \brief executionGroup with the operations-setup to be evaluated
    */
-  ExecutionGroup *m_executionGroup;
+  ExecutionGroup *execution_group;
 
   /**
    * \brief number of the chunk to be executed
    */
-  unsigned int m_chunkNumber;
-
- public:
-  /**
-   * constructor
-   * \param group: the ExecutionGroup
-   * \param chunkNumber: the number of the chunk
-   */
-  WorkPackage(ExecutionGroup *group, unsigned int chunkNumber);
+  unsigned int chunk_number;
 
   /**
-   * \brief get the ExecutionGroup
+   * Area of the execution group that the work package calculates.
    */
-  ExecutionGroup *getExecutionGroup() const
-  {
-    return this->m_executionGroup;
-  }
+  rcti rect;
 
   /**
-   * \brief get the number of the chunk
+   * Custom function to execute when work package type is CustomFunction.
    */
-  unsigned int getChunkNumber() const
-  {
-    return this->m_chunkNumber;
-  }
+  std::function<void()> execute_fn;
+
+  /**
+   * Called when work execution is finished.
+   */
+  std::function<void()> executed_fn;
 
 #ifdef WITH_CXX_GUARDEDALLOC
   MEM_CXX_CLASS_ALLOC_FUNCS("COM:WorkPackage")
 #endif
 };
+
+std::ostream &operator<<(std::ostream &os, const WorkPackage &work_package);
+
+}  // namespace blender::compositor

@@ -143,7 +143,7 @@ static BMEdge *get_other_edge(BMVert *v, BMEdge *e)
   return NULL;
 }
 
-/* interpoaltes along a line made up of 2 segments (used for edge slide) */
+/* Interpolates along a line made up of 2 segments (used for edge slide). */
 static void interp_line_v3_v3v3v3(
     float p[3], const float v1[3], const float v2[3], const float v3[3], float t)
 {
@@ -944,7 +944,7 @@ static EdgeSlideData *createEdgeSlideVerts_single_side(TransInfo *t, TransDataCo
   /* over alloc */
   sv_array = MEM_callocN(sizeof(TransDataEdgeSlideVert) * bm->totvertsel, "sv_array");
 
-  /* same loop for all loops, weak but we dont connect loops in this case */
+  /* Same loop for all loops, weak but we don't connect loops in this case. */
   loop_nr = 1;
 
   sv_table = MEM_mallocN(sizeof(*sv_table) * bm->totvert, __func__);
@@ -1482,15 +1482,15 @@ static void applyEdgeSlide(TransInfo *t, const int UNUSED(mval[2]))
     ofs += BLI_strncpy_rlen(str + ofs, &c[0], sizeof(str) - ofs);
   }
   else {
-    ofs += BLI_snprintf(str + ofs, sizeof(str) - ofs, "%.4f ", final);
+    ofs += BLI_snprintf_rlen(str + ofs, sizeof(str) - ofs, "%.4f ", final);
   }
-  ofs += BLI_snprintf(
+  ofs += BLI_snprintf_rlen(
       str + ofs, sizeof(str) - ofs, TIP_("(E)ven: %s, "), WM_bool_as_string(use_even));
   if (use_even) {
-    ofs += BLI_snprintf(
+    ofs += BLI_snprintf_rlen(
         str + ofs, sizeof(str) - ofs, TIP_("(F)lipped: %s, "), WM_bool_as_string(flipped));
   }
-  ofs += BLI_snprintf(
+  ofs += BLI_snprintf_rlen(
       str + ofs, sizeof(str) - ofs, TIP_("Alt or (C)lamp: %s"), WM_bool_as_string(is_clamp));
   /* done with header string */
 

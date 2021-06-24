@@ -152,7 +152,7 @@ int mathutils_array_parse(
       return -1;
     }
 
-    memcpy(array, ((BaseMathObject *)value)->data, size * sizeof(float));
+    memcpy(array, ((const BaseMathObject *)value)->data, size * sizeof(float));
   }
   else
 #endif
@@ -235,7 +235,7 @@ int mathutils_array_parse_alloc(float **array,
     }
 
     *array = PyMem_Malloc(size * sizeof(float));
-    memcpy(*array, ((BaseMathObject *)value)->data, size * sizeof(float));
+    memcpy(*array, ((const BaseMathObject *)value)->data, size * sizeof(float));
     return size;
   }
 
@@ -471,7 +471,7 @@ int mathutils_any_to_rotmat(float rmat[3][3], PyObject *value, const char *error
       return -1;
     }
 
-    eulO_to_mat3(rmat, ((EulerObject *)value)->eul, ((EulerObject *)value)->order);
+    eulO_to_mat3(rmat, ((const EulerObject *)value)->eul, ((const EulerObject *)value)->order);
     return 0;
   }
   if (QuaternionObject_Check(value)) {
@@ -480,7 +480,7 @@ int mathutils_any_to_rotmat(float rmat[3][3], PyObject *value, const char *error
     }
 
     float tquat[4];
-    normalize_qt_qt(tquat, ((QuaternionObject *)value)->quat);
+    normalize_qt_qt(tquat, ((const QuaternionObject *)value)->quat);
     quat_to_mat3(rmat, tquat);
     return 0;
   }
@@ -530,8 +530,8 @@ int EXPP_FloatsAreEqual(float af, float bf, int maxDiff)
 {
   /* solid, fast routine across all platforms
    * with constant time behavior */
-  const int ai = *(int *)(&af);
-  const int bi = *(int *)(&bf);
+  const int ai = *(const int *)(&af);
+  const int bi = *(const int *)(&bf);
   const int test = SIGNMASK(ai ^ bi);
   int diff, v1, v2;
 
@@ -784,11 +784,11 @@ PyMODINIT_FUNC PyInit_mathutils(void)
   mod = PyModule_Create(&M_Mathutils_module_def);
 
   /* each type has its own new() function */
-  PyModule_AddObject(mod, vector_Type.tp_name, (PyObject *)&vector_Type);
-  PyModule_AddObject(mod, matrix_Type.tp_name, (PyObject *)&matrix_Type);
-  PyModule_AddObject(mod, euler_Type.tp_name, (PyObject *)&euler_Type);
-  PyModule_AddObject(mod, quaternion_Type.tp_name, (PyObject *)&quaternion_Type);
-  PyModule_AddObject(mod, color_Type.tp_name, (PyObject *)&color_Type);
+  PyModule_AddType(mod, &vector_Type);
+  PyModule_AddType(mod, &matrix_Type);
+  PyModule_AddType(mod, &euler_Type);
+  PyModule_AddType(mod, &quaternion_Type);
+  PyModule_AddType(mod, &color_Type);
 
   /* submodule */
   PyModule_AddObject(mod, "geometry", (submodule = PyInit_mathutils_geometry()));

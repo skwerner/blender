@@ -77,18 +77,18 @@ struct Collection *BKE_collection_duplicate(struct Main *bmain,
 /* Master Collection for Scene */
 
 struct Collection *BKE_collection_master_add(void);
-struct Scene *BKE_collection_master_scene_search(const struct Main *bmain,
-                                                 const struct Collection *master_collection);
 
 /* Collection Objects */
 
 bool BKE_collection_has_object(struct Collection *collection, const struct Object *ob);
 bool BKE_collection_has_object_recursive(struct Collection *collection, struct Object *ob);
+bool BKE_collection_has_object_recursive_instanced(struct Collection *collection,
+                                                   struct Object *ob);
 struct Collection *BKE_collection_object_find(struct Main *bmain,
                                               struct Scene *scene,
                                               struct Collection *collection,
                                               struct Object *ob);
-bool BKE_collection_is_empty(struct Collection *collection);
+bool BKE_collection_is_empty(const struct Collection *collection);
 
 bool BKE_collection_object_add(struct Main *bmain,
                                struct Collection *collection,
@@ -112,7 +112,9 @@ bool BKE_scene_collections_object_remove(struct Main *bmain,
                                          struct Object *object,
                                          const bool free_us);
 void BKE_collections_object_remove_nulls(struct Main *bmain);
-void BKE_collections_child_remove_nulls(struct Main *bmain, struct Collection *old_collection);
+void BKE_collections_child_remove_nulls(struct Main *bmain,
+                                        struct Collection *parent_collection,
+                                        struct Collection *child_collection);
 
 /* Dependencies. */
 
@@ -125,6 +127,7 @@ bool BKE_collection_object_cyclic_check(struct Main *bmain,
 /* Object list cache. */
 
 struct ListBase BKE_collection_object_cache_get(struct Collection *collection);
+ListBase BKE_collection_object_cache_instanced_get(struct Collection *collection);
 void BKE_collection_object_cache_free(struct Collection *collection);
 
 struct Base *BKE_collection_or_layer_objects(const struct ViewLayer *view_layer,
@@ -225,6 +228,8 @@ void BKE_scene_collections_iterator_end(struct BLI_Iterator *iter);
 void BKE_scene_objects_iterator_begin(struct BLI_Iterator *iter, void *data_in);
 void BKE_scene_objects_iterator_next(struct BLI_Iterator *iter);
 void BKE_scene_objects_iterator_end(struct BLI_Iterator *iter);
+
+struct GSet *BKE_scene_objects_as_gset(struct Scene *scene, struct GSet *objects_gset);
 
 #define FOREACH_SCENE_COLLECTION_BEGIN(scene, _instance) \
   ITER_BEGIN (BKE_scene_collections_iterator_begin, \

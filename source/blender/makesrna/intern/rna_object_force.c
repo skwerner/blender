@@ -648,6 +648,13 @@ static void rna_FieldSettings_update(Main *UNUSED(bmain), Scene *UNUSED(scene), 
       ob->pd->tex = NULL;
     }
 
+    /* In the case of specific force-fields that are using the #EffectorData's normal, we need to
+     * rebuild mesh and BVH-tree for #SurfaceModifier to work correctly. */
+    if (ELEM(ob->pd->shape, PFIELD_SHAPE_SURFACE, PFIELD_SHAPE_POINTS) ||
+        ob->pd->forcefield == PFIELD_GUIDE) {
+      DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
+    }
+
     DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM);
     WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
   }
@@ -859,14 +866,12 @@ static void rna_CollisionSettings_dependency_update(Main *bmain, Scene *scene, P
   Object *ob = (Object *)ptr->owner_id;
   ModifierData *md = BKE_modifiers_findby_type(ob, eModifierType_Collision);
 
-  /* add/remove modifier as needed */
+  /* add the modifier if needed */
   if (ob->pd->deflect && !md) {
     ED_object_modifier_add(NULL, bmain, scene, ob, NULL, eModifierType_Collision);
   }
-  else if (!ob->pd->deflect && md) {
-    ED_object_modifier_remove(NULL, bmain, scene, ob, md);
-  }
 
+  DEG_id_tag_update(&ob->id, ID_RECALC_TRANSFORM | ID_RECALC_GEOMETRY);
   WM_main_add_notifier(NC_OBJECT | ND_DRAW, ob);
 }
 

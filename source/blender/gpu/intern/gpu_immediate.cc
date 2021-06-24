@@ -166,7 +166,7 @@ static void wide_line_workaround_start(GPUPrimType prim_type)
       return;
   }
 
-  imm->prev_shader = imm->shader;
+  imm->prev_builtin_shader = imm->builtin_shader_bound;
 
   immUnbindProgram();
 
@@ -194,15 +194,15 @@ static void wide_line_workaround_start(GPUPrimType prim_type)
 
 static void wide_line_workaround_end()
 {
-  if (imm->prev_shader) {
+  if (imm->prev_builtin_shader) {
     if (GPU_blend_get() == GPU_BLEND_NONE) {
       /* Restore default. */
       immUniform1i("lineSmooth", 1);
     }
     immUnbindProgram();
 
-    immBindShader(imm->prev_shader);
-    imm->prev_shader = nullptr;
+    immBindBuiltinProgram(imm->prev_builtin_shader);
+    imm->prev_builtin_shader = GPU_SHADER_TEXT;
   }
 }
 
@@ -606,7 +606,7 @@ void immUniform4fv(const char *name, const float data[4])
 /* Note array index is not supported for name (i.e: "array[0]"). */
 void immUniformArray4fv(const char *name, const float *data, int count)
 {
-  GPU_shader_uniform_4fv_array(imm->shader, name, count, (float(*)[4])data);
+  GPU_shader_uniform_4fv_array(imm->shader, name, count, (const float(*)[4])data);
 }
 
 void immUniformMatrix4fv(const char *name, const float data[4][4])

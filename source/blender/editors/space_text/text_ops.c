@@ -266,8 +266,6 @@ static int text_new_exec(bContext *C, wmOperator *UNUSED(op))
   PropertyRNA *prop;
 
   text = BKE_text_add(bmain, "Text");
-  /* Texts have no user by default... Only the 'real' user flag. */
-  id_us_min(&text->id);
 
   /* hook into UI */
   UI_context_active_but_prop_get_templateID(C, &ptr, &prop);
@@ -506,12 +504,10 @@ static int text_unlink_exec(bContext *C, wmOperator *UNUSED(op))
     if (text->id.prev) {
       st->text = text->id.prev;
       text_update_cursor_moved(C);
-      WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, st->text);
     }
     else if (text->id.next) {
       st->text = text->id.next;
       text_update_cursor_moved(C);
-      WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, st->text);
     }
   }
 
@@ -3200,7 +3196,7 @@ static void text_cursor_set_apply(bContext *C, wmOperator *op, const wmEvent *ev
 
     if (event->type == TIMER) {
       text_cursor_set_to_pos(st, region, event->mval[0], event->mval[1], 1);
-      text_scroll_to_cursor(st, region, false);
+      ED_text_scroll_to_cursor(st, region, false);
       WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, st->text);
     }
   }
@@ -3210,7 +3206,7 @@ static void text_cursor_set_apply(bContext *C, wmOperator *op, const wmEvent *ev
     if (event->type == TIMER) {
       text_cursor_set_to_pos(
           st, region, CLAMPIS(event->mval[0], 0, region->winx), event->mval[1], 1);
-      text_scroll_to_cursor(st, region, false);
+      ED_text_scroll_to_cursor(st, region, false);
       WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, st->text);
     }
   }
@@ -3219,7 +3215,7 @@ static void text_cursor_set_apply(bContext *C, wmOperator *op, const wmEvent *ev
 
     if (event->type != TIMER) {
       text_cursor_set_to_pos(st, region, event->mval[0], event->mval[1], 1);
-      text_scroll_to_cursor(st, region, false);
+      ED_text_scroll_to_cursor(st, region, false);
       WM_event_add_notifier(C, NC_TEXT | ND_CURSOR, st->text);
 
       ssel->mval_prev[0] = event->mval[0];
@@ -3832,7 +3828,7 @@ static int text_resolve_conflict_invoke(bContext *C, wmOperator *op, const wmEve
   switch (BKE_text_file_modified_check(text)) {
     case 1:
       if (text->flags & TXT_ISDIRTY) {
-        /* modified locally and externally, ahhh. offer more possibilities. */
+        /* Modified locally and externally, ah. offer more possibilities. */
         pup = UI_popup_menu_begin(
             C, IFACE_("File Modified Outside and Inside Blender"), ICON_NONE);
         layout = UI_popup_menu_layout(pup);

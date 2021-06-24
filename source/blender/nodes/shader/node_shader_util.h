@@ -80,7 +80,9 @@
 extern "C" {
 #endif
 
-bool sh_node_poll_default(struct bNodeType *ntype, struct bNodeTree *ntree);
+bool sh_node_poll_default(struct bNodeType *ntype,
+                          struct bNodeTree *ntree,
+                          const char **r_disabled_hint);
 void sh_node_type_base(
     struct bNodeType *ntype, int type, const char *name, short nclass, short flag);
 void sh_fn_node_type_base(
@@ -92,6 +94,11 @@ typedef struct ShaderCallData {
   /* Empty for now, may be reused if we convert shader to texture nodes. */
   int dummy;
 } ShaderCallData;
+
+typedef struct XYZ_to_RGB /* Transposed #imbuf_xyz_to_rgb, passed as 3x vec3. */
+{
+  float r[3], g[3], b[3];
+} XYZ_to_RGB;
 
 void nodestack_get_vec(float *in, short type_in, bNodeStack *ns);
 
@@ -111,6 +118,7 @@ void node_shader_gpu_tex_mapping(struct GPUMaterial *mat,
 void ntreeExecGPUNodes(struct bNodeTreeExec *exec,
                        struct GPUMaterial *mat,
                        struct bNode *output_node);
+void get_XYZ_to_RGB_for_gpu(XYZ_to_RGB *data);
 
 #ifdef __cplusplus
 }

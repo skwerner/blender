@@ -39,10 +39,10 @@ class GLTexture;
 /**
  * State manager keeping track of the draw state and applying it before drawing.
  * Opengl Implementation.
- **/
+ */
 class GLStateManager : public StateManager {
  public:
-  /** Anothter reference to the active framebuffer. */
+  /** Another reference to the active frame-buffer. */
   GLFrameBuffer *active_fb = nullptr;
 
  private:
@@ -120,6 +120,9 @@ static inline GLbitfield to_gl(eGPUBarrier barrier_bits)
   }
   if (barrier_bits & GPU_BARRIER_TEXTURE_FETCH) {
     barrier |= GL_TEXTURE_FETCH_BARRIER_BIT;
+  }
+  if (barrier_bits & GPU_BARRIER_SHADER_STORAGE) {
+    barrier |= GL_SHADER_STORAGE_BARRIER_BIT;
   }
   return barrier;
 }

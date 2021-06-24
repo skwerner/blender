@@ -162,7 +162,7 @@ static void make_box_from_metaelem(Box *r, const MetaElem *ml)
 }
 
 /**
- * Partitions part of mainb array [start, end) along axis s. Returns i,
+ * Partitions part of #process.mainb array [start, end) along axis s. Returns i,
  * where centroids of elements in the [start, i) segment lie "on the right side" of div,
  * and elements in the [i, end) segment lie "on the left"
  */
@@ -263,7 +263,7 @@ static void build_bvh_spatial(PROCESS *process,
  * BASED AT CODE (but mostly rewritten) :
  * C code from the article
  * "An Implicit Surface Polygonizer"
- * by Jules Bloomenthal, jbloom@beauty.gmu.edu
+ * by Jules Bloomenthal <jbloom@beauty.gmu.edu>
  * in "Graphics Gems IV", Academic Press, 1994
  *
  * Authored by Jules Bloomenthal, Xerox PARC.
@@ -1170,8 +1170,9 @@ static void polygonize(PROCESS *process)
 
 /**
  * Iterates over ALL objects in the scene and all of its sets, including
- * making all duplis(not only metas). Copies metas to mainb array.
- * Computes bounding boxes for building BVH. */
+ * making all duplis (not only meta-elements). Copies meta-elements to #process.mainb array.
+ * Computes bounding boxes for building BVH.
+ */
 static void init_meta(Depsgraph *depsgraph, PROCESS *process, Scene *scene, Object *ob)
 {
   Scene *sce_iter = scene;
@@ -1199,7 +1200,7 @@ static void init_meta(Depsgraph *depsgraph, PROCESS *process, Scene *scene, Obje
       zero_size = 0;
       ml = NULL;
 
-      /* If this metaball is the original that's used for duplication, only have it it visible when
+      /* If this metaball is the original that's used for duplication, only have it visible when
        * the instancer is visible too. */
       if ((base->flag_legacy & OB_FROMDUPLI) == 0 && ob->parent != NULL &&
           (ob->parent->transflag & parenting_dupli_transflag) != 0 &&
@@ -1435,7 +1436,7 @@ void BKE_mball_polygonize(Depsgraph *depsgraph, Scene *scene, Object *ob, ListBa
   if (process.totelem > 0) {
     build_bvh_spatial(&process, &process.metaball_bvh, 0, process.totelem, &process.allbb);
 
-    /* Don't polygonize meta-balls with too high resolution (base mball to small)
+    /* Don't polygonize meta-balls with too high resolution (base mball too small)
      * note: Eps was 0.0001f but this was giving problems for blood animation for
      * the open movie "Sintel", using 0.00001f. */
     if (ob->scale[0] > 0.00001f * (process.allbb.max[0] - process.allbb.min[0]) ||

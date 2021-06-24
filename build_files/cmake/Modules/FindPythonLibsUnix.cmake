@@ -34,7 +34,7 @@ IF(NOT PYTHON_ROOT_DIR AND NOT $ENV{PYTHON_ROOT_DIR} STREQUAL "")
   SET(PYTHON_ROOT_DIR $ENV{PYTHON_ROOT_DIR})
 ENDIF()
 
-SET(PYTHON_VERSION 3.7 CACHE STRING "Python Version (major and minor only)")
+SET(PYTHON_VERSION 3.9 CACHE STRING "Python Version (major and minor only)")
 MARK_AS_ADVANCED(PYTHON_VERSION)
 
 
@@ -44,7 +44,7 @@ SET(PYTHON_LINKFLAGS "-Xlinker -export-dynamic" CACHE STRING "Linker flags for p
 MARK_AS_ADVANCED(PYTHON_LINKFLAGS)
 
 
-# if the user passes these defines as args, we dont want to overwrite
+# if the user passes these defines as args, we don't want to overwrite
 SET(_IS_INC_DEF OFF)
 SET(_IS_INC_CONF_DEF OFF)
 SET(_IS_LIB_DEF OFF)
@@ -73,8 +73,8 @@ SET(_python_SEARCH_DIRS
 # only search for the dirs if we haven't already
 IF((NOT _IS_INC_DEF) OR (NOT _IS_INC_CONF_DEF) OR (NOT _IS_LIB_DEF) OR (NOT _IS_LIB_PATH_DEF))
   SET(_PYTHON_ABI_FLAGS_TEST
-    "m;mu;u; "    # release
-    "dm;dmu;du;d" # debug
+    "u; "  # release
+    "du;d" # debug
   )
 
   FOREACH(_CURRENT_ABI_FLAGS ${_PYTHON_ABI_FLAGS_TEST})
@@ -143,7 +143,7 @@ IF((NOT _IS_INC_DEF) OR (NOT _IS_INC_CONF_DEF) OR (NOT _IS_LIB_DEF) OR (NOT _IS_
       SET(_PYTHON_ABI_FLAGS "${_CURRENT_ABI_FLAGS}")
       break()
     ELSE()
-      # ensure we dont find values from 2 different ABI versions
+      # ensure we don't find values from 2 different ABI versions
       IF(NOT _IS_INC_DEF)
         UNSET(PYTHON_INCLUDE_DIR CACHE)
       ENDIF()

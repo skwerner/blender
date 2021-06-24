@@ -88,7 +88,9 @@
 
 #include "particle_edit_utildefines.h"
 
-/**************************** utilities *******************************/
+/* -------------------------------------------------------------------- */
+/** \name Public Utilities
+ * \{ */
 
 bool PE_poll(bContext *C)
 {
@@ -178,9 +180,56 @@ void PE_free_ptcache_edit(PTCacheEdit *edit)
   MEM_freeN(edit);
 }
 
-/************************************************/
-/*          Edit Mode Helpers                   */
-/************************************************/
+int PE_minmax(
+    Depsgraph *depsgraph, Scene *scene, ViewLayer *view_layer, float min[3], float max[3])
+{
+  Object *ob = OBACT(view_layer);
+  PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
+  ParticleSystem *psys;
+  ParticleSystemModifierData *psmd_eval = NULL;
+  POINT_P;
+  KEY_K;
+  float co[3], mat[4][4];
+  int ok = 0;
+
+  if (!edit) {
+    return ok;
+  }
+
+  if ((psys = edit->psys)) {
+    psmd_eval = edit->psmd_eval;
+  }
+  else {
+    unit_m4(mat);
+  }
+
+  LOOP_VISIBLE_POINTS {
+    if (psys) {
+      psys_mat_hair_to_global(
+          ob, psmd_eval->mesh_final, psys->part->from, psys->particles + p, mat);
+    }
+
+    LOOP_SELECTED_KEYS {
+      copy_v3_v3(co, key->co);
+      mul_m4_v3(mat, co);
+      DO_MINMAX(co, min, max);
+      ok = 1;
+    }
+  }
+
+  if (!ok) {
+    BKE_object_minmax(ob, min, max, true);
+    ok = 1;
+  }
+
+  return ok;
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Mode Helpers
+ * \{ */
 
 int PE_start_edit(PTCacheEdit *edit)
 {
@@ -253,7 +302,7 @@ static void pe_update_hair_particle_edit_pointers(PTCacheEdit *edit)
  *
  * note: this function runs on poll, therefore it can runs many times a second
  * keep it fast! */
-static PTCacheEdit *pe_get_current(Depsgraph *depsgraph, Scene *scene, Object *ob, int create)
+static PTCacheEdit *pe_get_current(Depsgraph *depsgraph, Scene *scene, Object *ob, bool create)
 {
   ParticleEditSettings *pset = PE_settings(scene);
   PTCacheEdit *edit = NULL;
@@ -357,12 +406,12 @@ static PTCacheEdit *pe_get_current(Depsgraph *depsgraph, Scene *scene, Object *o
 
 PTCacheEdit *PE_get_current(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
-  return pe_get_current(depsgraph, scene, ob, 0);
+  return pe_get_current(depsgraph, scene, ob, false);
 }
 
 PTCacheEdit *PE_create_current(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
-  return pe_get_current(depsgraph, scene, ob, 1);
+  return pe_get_current(depsgraph, scene, ob, true);
 }
 
 void PE_current_changed(Depsgraph *depsgraph, Scene *scene, Object *ob)
@@ -409,10 +458,15 @@ static int pe_x_mirror(Object *ob)
   return 0;
 }
 
-/****************** common struct passed to callbacks ******************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Common Struct Passed to Callbacks
+ * \{ */
 
 typedef struct PEData {
   ViewContext vc;
+  ViewDepths *depths;
 
   const bContext *context;
   Main *bmain;
@@ -471,16 +525,12 @@ static void PE_set_view3d_data(bContext *C, PEData *data)
   ED_view3d_viewcontext_init(C, &data->vc, data->depsgraph);
 
   if (!XRAY_ENABLED(data->vc.v3d)) {
-    if (data->vc.v3d->flag & V3D_INVALID_BACKBUF) {
-      /* needed or else the draw matrix can be incorrect */
-      view3d_operator_needs_opengl(C);
-
-      ED_view3d_backbuf_depth_validate(&data->vc);
-      /* we may need to force an update here by setting the rv3d as dirty
-       * for now it seems ok, but take care!:
-       * rv3d->depths->dirty = 1; */
-      ED_view3d_depth_update(data->vc.region);
-    }
+    ED_view3d_depth_override(data->depsgraph,
+                             data->vc.region,
+                             data->vc.v3d,
+                             data->vc.obact,
+                             V3D_DEPTH_OBJECT_ONLY,
+                             &data->depths);
   }
 }
 
@@ -519,12 +569,26 @@ static void PE_free_random_generator(PEData *data)
   }
 }
 
-/*************************** selection utilities *******************************/
+static void PE_data_free(PEData *data)
+{
+  PE_free_random_generator(data);
+  PE_free_shape_tree(data);
+  if (data->depths) {
+    ED_view3d_depths_free(data->depths);
+    data->depths = NULL;
+  }
+}
+
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Selection Utilities
+ * \{ */
 
 static bool key_test_depth(const PEData *data, const float co[3], const int screen_co[2])
 {
   View3D *v3d = data->vc.v3d;
-  ViewDepths *vd = data->vc.rv3d->depths;
+  ViewDepths *vd = data->depths;
   float depth;
 
   /* nothing to do */
@@ -554,7 +618,7 @@ static bool key_test_depth(const PEData *data, const float co[3], const int scre
   }
 
   float win[3];
-  ED_view3d_project(data->vc.region, co, win);
+  ED_view3d_project_v3(data->vc.region, co, win);
 
   if (win[2] - 0.00001f > depth) {
     return 0;
@@ -632,7 +696,11 @@ static bool point_is_selected(PTCacheEditPoint *point)
   return 0;
 }
 
-/*************************** iterators *******************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Iterators
+ * \{ */
 
 typedef void (*ForPointFunc)(PEData *data, int point_index);
 typedef void (*ForHitPointFunc)(PEData *data, int point_index, float mouse_distance);
@@ -905,9 +973,11 @@ static int count_selected_keys(Scene *scene, PTCacheEdit *edit)
   return sel;
 }
 
-/************************************************/
-/*          Particle Edit Mirroring             */
-/************************************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Particle Edit Mirroring
+ * \{ */
 
 static void PE_update_mirror_cache(Object *ob, ParticleSystem *psys)
 {
@@ -1115,9 +1185,11 @@ static void PE_apply_mirror(Object *ob, ParticleSystem *psys)
   }
 }
 
-/************************************************/
-/*          Edit Calculation                    */
-/************************************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Calculation
+ * \{ */
 
 typedef struct DeflectEmitterIter {
   Object *object;
@@ -1605,9 +1677,11 @@ void PE_update_object(Depsgraph *depsgraph, Scene *scene, Object *ob, int usefla
   }
 }
 
-/************************************************/
-/*          Edit Selections                     */
-/************************************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Edit Selections
+ * \{ */
 
 /*-----selection callbacks-----*/
 
@@ -1703,7 +1777,11 @@ static void toggle_key_select(PEData *data, int point_index, int key_index, bool
   data->is_changed = true;
 }
 
-/************************ de select all operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name De-Select All Operator
+ * \{ */
 
 static bool select_action_apply(PTCacheEditPoint *point, PTCacheEditKey *key, int action)
 {
@@ -1794,19 +1872,21 @@ void PARTICLE_OT_select_all(wmOperatorType *ot)
   WM_operator_properties_select_all(ot);
 }
 
-/************************ pick select operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Pick Select Operator
+ * \{ */
 
 bool PE_mouse_particles(bContext *C, const int mval[2], bool extend, bool deselect, bool toggle)
 {
-  PEData data;
+  Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
   POINT_P;
   KEY_K;
 
-  PE_set_view3d_data(C, &data);
-
-  PTCacheEdit *edit = PE_get_current(data.depsgraph, scene, ob);
+  PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
 
   if (!PE_start_edit(edit)) {
     return false;
@@ -1821,6 +1901,8 @@ bool PE_mouse_particles(bContext *C, const int mval[2], bool extend, bool desele
     }
   }
 
+  PEData data;
+  PE_set_view3d_data(C, &data);
   data.mval = mval;
   data.rad = ED_view3d_select_dist_px();
 
@@ -1840,10 +1922,16 @@ bool PE_mouse_particles(bContext *C, const int mval[2], bool extend, bool desele
     WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, data.ob);
   }
 
+  PE_data_free(&data);
+
   return true;
 }
 
-/************************ select root operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Root Operator
+ * \{ */
 
 static void select_root(PEData *data, int point_index)
 {
@@ -1906,7 +1994,11 @@ void PARTICLE_OT_select_roots(wmOperatorType *ot)
   WM_operator_properties_select_action(ot, SEL_SELECT, false);
 }
 
-/************************ select tip operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Tip Operator
+ * \{ */
 
 static void select_tip(PEData *data, int point_index)
 {
@@ -1977,7 +2069,11 @@ void PARTICLE_OT_select_tips(wmOperatorType *ot)
   WM_operator_properties_select_action(ot, SEL_SELECT, false);
 }
 
-/*********************** select random operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Random Operator
+ * \{ */
 
 enum { RAN_HAIR, RAN_POINTS };
 
@@ -1999,7 +2095,7 @@ static int select_random_exec(bContext *C, wmOperator *op)
   int p;
   int k;
 
-  const float randfac = RNA_float_get(op->ptr, "percent") / 100.0f;
+  const float randfac = RNA_float_get(op->ptr, "ratio");
   const int seed = WM_operator_properties_select_random_seed_increment_get(op);
   const bool select = (RNA_enum_get(op->ptr, "action") == SEL_SELECT);
   RNG *rng;
@@ -2064,7 +2160,11 @@ void PARTICLE_OT_select_random(wmOperatorType *ot)
                           "Select either hair or points");
 }
 
-/************************ select linked operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Linked operator
+ * \{ */
 
 static int select_linked_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -2115,6 +2215,7 @@ static int select_linked_pick_exec(bContext *C, wmOperator *op)
   for_mouse_hit_keys(&data, select_keys, PSEL_NEAREST);
   PE_update_selection(data.depsgraph, data.scene, data.ob, 1);
   WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, data.ob);
+  PE_data_free(&data);
 
   return OPERATOR_FINISHED;
 }
@@ -2146,7 +2247,12 @@ void PARTICLE_OT_select_linked_pick(wmOperatorType *ot)
   RNA_def_int_vector(ot->srna, "location", 2, NULL, 0, INT_MAX, "Location", "", 0, 16384);
 }
 
-/************************ box select operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Box Select Operator
+ * \{ */
+
 bool PE_deselect_all_visible_ex(PTCacheEdit *edit)
 {
   bool changed = false;
@@ -2204,47 +2310,76 @@ bool PE_box_select(bContext *C, const rcti *rect, const int sel_op)
     for_mouse_hit_keys(&data, select_key_op, PSEL_ALL_KEYS);
   }
 
-  if (data.is_changed) {
-    PE_update_selection(data.depsgraph, scene, ob, 1);
+  bool is_changed = data.is_changed;
+  PE_data_free(&data);
+
+  if (is_changed) {
+    PE_update_selection(depsgraph, scene, ob, 1);
     WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, ob);
   }
-  return data.is_changed;
+  return is_changed;
 }
 
-/************************ circle select operator ************************/
+/** \} */
 
-bool PE_circle_select(bContext *C, const int sel_op, const int mval[2], float rad)
+/* -------------------------------------------------------------------- */
+/** \name Circle Select Operator
+ * \{ */
+
+static void pe_select_cache_free_generic_userdata(void *data)
+{
+  PE_data_free(data);
+  MEM_freeN(data);
+}
+
+static void pe_select_cache_init_with_generic_userdata(bContext *C, wmGenericUserData *wm_userdata)
+{
+  struct PEData *data = MEM_callocN(sizeof(*data), __func__);
+  wm_userdata->data = data;
+  wm_userdata->free_fn = pe_select_cache_free_generic_userdata;
+  wm_userdata->use_free = true;
+  PE_set_view3d_data(C, data);
+}
+
+bool PE_circle_select(
+    bContext *C, wmGenericUserData *wm_userdata, const int sel_op, const int mval[2], float rad)
 {
   BLI_assert(ELEM(sel_op, SEL_OP_SET, SEL_OP_ADD, SEL_OP_SUB));
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
   Scene *scene = CTX_data_scene(C);
   Object *ob = CTX_data_active_object(C);
   PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
-  PEData data;
 
   if (!PE_start_edit(edit)) {
     return false;
   }
 
-  const bool select = (sel_op != SEL_OP_SUB);
+  if (wm_userdata->data == NULL) {
+    pe_select_cache_init_with_generic_userdata(C, wm_userdata);
+  }
 
-  PE_set_view3d_data(C, &data);
-  data.mval = mval;
-  data.rad = rad;
-  data.select = select;
+  PEData *data = wm_userdata->data;
+  data->mval = mval;
+  data->rad = rad;
+  data->select = (sel_op != SEL_OP_SUB);
 
   if (SEL_OP_USE_PRE_DESELECT(sel_op)) {
-    data.is_changed = PE_deselect_all_visible_ex(edit);
+    data->is_changed = PE_deselect_all_visible_ex(edit);
   }
-  for_mouse_hit_keys(&data, select_key, 0);
-  if (data.is_changed) {
-    PE_update_selection(data.depsgraph, scene, ob, 1);
+  for_mouse_hit_keys(data, select_key, 0);
+
+  if (data->is_changed) {
+    PE_update_selection(depsgraph, scene, ob, 1);
     WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, ob);
   }
-  return data.is_changed;
+  return data->is_changed;
 }
 
-/************************ lasso select operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Lasso Select Operator
+ * \{ */
 
 int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, const int sel_op)
 {
@@ -2323,15 +2458,22 @@ int PE_lasso_select(bContext *C, const int mcoords[][2], const int mcoords_len, 
     }
   }
 
-  if (data.is_changed) {
-    PE_update_selection(data.depsgraph, scene, ob, 1);
+  bool is_changed = data.is_changed;
+  PE_data_free(&data);
+
+  if (is_changed) {
+    PE_update_selection(depsgraph, scene, ob, 1);
     WM_event_add_notifier(C, NC_OBJECT | ND_PARTICLE | NA_SELECTED, ob);
     return OPERATOR_FINISHED;
   }
   return OPERATOR_CANCELLED;
 }
 
-/*************************** hide operator **************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Hide Operator
+ * \{ */
 
 static int hide_exec(bContext *C, wmOperator *op)
 {
@@ -2388,7 +2530,11 @@ void PARTICLE_OT_hide(wmOperatorType *ot)
   RNA_def_boolean(ot->srna, "unselected", 0, "Unselected", "Hide unselected rather than selected");
 }
 
-/*************************** reveal operator **************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Reveal Operator
+ * \{ */
 
 static int reveal_exec(bContext *C, wmOperator *op)
 {
@@ -2435,7 +2581,11 @@ void PARTICLE_OT_reveal(wmOperatorType *ot)
   RNA_def_boolean(ot->srna, "select", true, "Select", "");
 }
 
-/************************ select less operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select Less Operator
+ * \{ */
 
 static void select_less_keys(PEData *data, int point_index)
 {
@@ -2498,7 +2648,11 @@ void PARTICLE_OT_select_less(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ select more operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Select More Operator
+ * \{ */
 
 static void select_more_keys(PEData *data, int point_index)
 {
@@ -2566,7 +2720,11 @@ void PARTICLE_OT_select_more(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ rekey operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Re-Key Operator
+ * \{ */
 
 static void rekey_particle(PEData *data, int pa_index)
 {
@@ -2723,7 +2881,11 @@ static void rekey_particle_to_time(
   pa->flag &= ~PARS_REKEY;
 }
 
-/************************* utilities **************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Internal Utilities
+ * \{ */
 
 static int remove_tagged_particles(Object *ob, ParticleSystem *psys, int mirror)
 {
@@ -2905,7 +3067,11 @@ static void remove_tagged_keys(Depsgraph *depsgraph, Object *ob, ParticleSystem 
   }
 }
 
-/************************ subdivide opertor *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Subdivide Operator
+ * \{ */
 
 /* works like normal edit mode subdivide, inserts keys between neighboring selected keys */
 static void subdivide_particle(PEData *data, int pa_index)
@@ -3029,7 +3195,11 @@ void PARTICLE_OT_subdivide(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ remove doubles opertor *********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Remove Doubles Operator
+ * \{ */
 
 static int remove_doubles_exec(bContext *C, wmOperator *op)
 {
@@ -3192,7 +3362,11 @@ void PARTICLE_OT_weight_set(wmOperatorType *ot)
                 1);
 }
 
-/************************ cursor drawing *******************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Cursor Drawing
+ * \{ */
 
 static void brush_drawcursor(bContext *C, int x, int y, void *UNUSED(customdata))
 {
@@ -3238,7 +3412,11 @@ static void toggle_particle_cursor(Scene *scene, bool enable)
   }
 }
 
-/*************************** delete operator **************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Delete Operator
+ * \{ */
 
 enum { DEL_PARTICLE, DEL_KEY };
 
@@ -3314,7 +3492,11 @@ void PARTICLE_OT_delete(wmOperatorType *ot)
                           "Delete a full particle or only keys");
 }
 
-/*************************** mirror operator **************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Mirror Operator
+ * \{ */
 
 static void PE_mirror_x(Depsgraph *depsgraph, Scene *scene, Object *ob, int tagged)
 {
@@ -3496,6 +3678,21 @@ static int mirror_exec(bContext *C, wmOperator *UNUSED(op))
   return OPERATOR_FINISHED;
 }
 
+static bool mirror_poll(bContext *C)
+{
+  if (!PE_hair_poll(C)) {
+    return false;
+  }
+
+  Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
+  Scene *scene = CTX_data_scene(C);
+  Object *ob = CTX_data_active_object(C);
+  PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
+
+  /* The operator only works for hairs emitted from faces. */
+  return edit->psys->part->from == PART_FROM_FACE;
+}
+
 void PARTICLE_OT_mirror(wmOperatorType *ot)
 {
   /* identifiers */
@@ -3505,13 +3702,17 @@ void PARTICLE_OT_mirror(wmOperatorType *ot)
 
   /* api callbacks */
   ot->exec = mirror_exec;
-  ot->poll = PE_hair_poll;
+  ot->poll = mirror_poll;
 
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************* brush edit callbacks ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Brush Edit Callbacks
+ * \{ */
 
 static void brush_comb(PEData *data,
                        float UNUSED(mat[4][4]),
@@ -3735,8 +3936,7 @@ static void brush_puff(PEData *data, int point_index, float mouse_distance)
       }
     }
     else {
-      /* compute position as if hair was standing up straight.
-       * */
+      /* Compute position as if hair was standing up straight. */
       float length;
       copy_v3_v3(co_prev, co);
       copy_v3_v3(co, key->co);
@@ -4460,7 +4660,11 @@ static int brush_add(const bContext *C, PEData *data, short number)
   return n;
 }
 
-/************************* brush edit operator ********************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Brush Edit Operator
+ * \{ */
 
 typedef struct BrushEdit {
   Scene *scene;
@@ -4551,7 +4755,7 @@ static void brush_edit_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
   mval[0] = mouse[0];
   mval[1] = mouse[1];
 
-  /* disable locking temporatily for disconnected hair */
+  /* Disable locking temporarily for disconnected hair. */
   if (edit->psys && edit->psys->flag & PSYS_GLOBAL_HAIR) {
     pset->flag &= ~PE_LOCK_FIRST;
   }
@@ -4561,7 +4765,7 @@ static void brush_edit_apply(bContext *C, wmOperator *op, PointerRNA *itemptr)
            (dx != 0 || dy != 0)) ||
       bedit->first) {
     PEData data = bedit->data;
-    data.context = C; /* TODO(mai): why isnt this set in bedit->data? */
+    data.context = C; /* TODO(mai): why isn't this set in bedit->data? */
 
     view3d_operator_needs_opengl(C);
     selected = (short)count_selected_keys(scene, edit);
@@ -4753,7 +4957,7 @@ static void brush_edit_exit(wmOperator *op)
 {
   BrushEdit *bedit = op->customdata;
 
-  PE_free_random_generator(&bedit->data);
+  PE_data_free(&bedit->data);
   MEM_freeN(bedit);
 }
 
@@ -4850,7 +5054,11 @@ void PARTICLE_OT_brush_edit(wmOperatorType *ot)
   RNA_def_property_flag(prop, PROP_HIDDEN | PROP_SKIP_SAVE);
 }
 
-/*********************** cut shape ***************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Cut Shape
+ * \{ */
 
 static bool shape_cut_poll(bContext *C)
 {
@@ -4989,7 +5197,7 @@ static int shape_cut_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  /* disable locking temporatily for disconnected hair */
+  /* Disable locking temporarily for disconnected hair. */
   if (edit->psys && edit->psys->flag & PSYS_GLOBAL_HAIR) {
     pset->flag &= ~PE_LOCK_FIRST;
   }
@@ -5056,54 +5264,11 @@ void PARTICLE_OT_shape_cut(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ utilities ******************************/
+/** \} */
 
-int PE_minmax(
-    Depsgraph *depsgraph, Scene *scene, ViewLayer *view_layer, float min[3], float max[3])
-{
-  Object *ob = OBACT(view_layer);
-  PTCacheEdit *edit = PE_get_current(depsgraph, scene, ob);
-  ParticleSystem *psys;
-  ParticleSystemModifierData *psmd_eval = NULL;
-  POINT_P;
-  KEY_K;
-  float co[3], mat[4][4];
-  int ok = 0;
-
-  if (!edit) {
-    return ok;
-  }
-
-  if ((psys = edit->psys)) {
-    psmd_eval = edit->psmd_eval;
-  }
-  else {
-    unit_m4(mat);
-  }
-
-  LOOP_VISIBLE_POINTS {
-    if (psys) {
-      psys_mat_hair_to_global(
-          ob, psmd_eval->mesh_final, psys->part->from, psys->particles + p, mat);
-    }
-
-    LOOP_SELECTED_KEYS {
-      copy_v3_v3(co, key->co);
-      mul_m4_v3(mat, co);
-      DO_MINMAX(co, min, max);
-      ok = 1;
-    }
-  }
-
-  if (!ok) {
-    BKE_object_minmax(ob, min, max, true);
-    ok = 1;
-  }
-
-  return ok;
-}
-
-/************************ particle edit toggle operator ************************/
+/* -------------------------------------------------------------------- */
+/** \name Particle Edit Toggle Operator
+ * \{ */
 
 /* initialize needed data for bake edit */
 void PE_create_particle_edit(
@@ -5246,8 +5411,7 @@ static bool particle_edit_toggle_poll(bContext *C)
     return 0;
   }
 
-  return (ob->particlesystem.first || BKE_modifiers_findby_type(ob, eModifierType_Cloth) ||
-          BKE_modifiers_findby_type(ob, eModifierType_Softbody));
+  return ED_object_particle_edit_mode_supported(ob);
 }
 
 static void free_all_psys_edit(Object *object)
@@ -5262,8 +5426,17 @@ static void free_all_psys_edit(Object *object)
   }
 }
 
+bool ED_object_particle_edit_mode_supported(const Object *ob)
+{
+  return (ob->particlesystem.first || BKE_modifiers_findby_type(ob, eModifierType_Cloth) ||
+          BKE_modifiers_findby_type(ob, eModifierType_Softbody));
+}
+
 void ED_object_particle_edit_mode_enter_ex(Depsgraph *depsgraph, Scene *scene, Object *ob)
 {
+  /* Needed so #ParticleSystemModifierData.mesh_final is set. */
+  BKE_scene_graph_evaluated_ensure(depsgraph, G_MAIN);
+
   PTCacheEdit *edit;
 
   ob->mode |= OB_MODE_PARTICLE_EDIT;
@@ -5357,7 +5530,11 @@ void PARTICLE_OT_particle_edit_toggle(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ set editable operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Set Editable Operator
+ * \{ */
 
 static int clear_edited_exec(bContext *C, wmOperator *UNUSED(op))
 {
@@ -5407,7 +5584,11 @@ void PARTICLE_OT_edited_clear(wmOperatorType *ot)
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
 
-/************************ Unify length operator ************************/
+/** \} */
+
+/* -------------------------------------------------------------------- */
+/** \name Unify length operator
+ * \{ */
 
 static float calculate_point_length(PTCacheEditPoint *point)
 {
@@ -5519,3 +5700,5 @@ void PARTICLE_OT_unify_length(struct wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 }
+
+/** \} */

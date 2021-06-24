@@ -35,7 +35,6 @@
 #include "BKE_context.h"
 #include "BKE_lib_id.h"
 #include "BKE_node.h"
-#include "BKE_scene.h"
 #include "BKE_screen.h"
 
 #include "ED_node.h"
@@ -75,12 +74,17 @@ void ED_node_tree_start(SpaceNode *snode, bNodeTree *ntree, ID *id, ID *from)
     copy_v2_v2(path->view_center, ntree->view_center);
 
     if (id) {
-      BLI_strncpy(path->node_name, id->name + 2, sizeof(path->node_name));
+      BLI_strncpy(path->display_name, id->name + 2, sizeof(path->display_name));
     }
 
     BLI_addtail(&snode->treepath, path);
 
-    id_us_ensure_real(&ntree->id);
+    if (ntree->type != NTREE_GEOMETRY) {
+      /* This can probably be removed for all node tree types. It mainly exists because it was not
+       * possible to store id references in custom properties. Also see T36024. I don't want to
+       * remove it for all tree types in bcon3 though. */
+      id_us_ensure_real(&ntree->id);
+    }
   }
 
   /* update current tree */
@@ -107,6 +111,7 @@ void ED_node_tree_push(SpaceNode *snode, bNodeTree *ntree, bNode *gnode)
     }
 
     BLI_strncpy(path->node_name, gnode->name, sizeof(path->node_name));
+    BLI_strncpy(path->display_name, gnode->name, sizeof(path->display_name));
   }
   else {
     path->parent_key = NODE_INSTANCE_KEY_BASE;
@@ -171,7 +176,7 @@ int ED_node_tree_path_length(SpaceNode *snode)
   int length = 0;
   int i = 0;
   LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
-    length += strlen(path->node_name);
+    length += strlen(path->display_name);
     if (i > 0) {
       length += 1; /* for separator char */
     }
@@ -186,12 +191,12 @@ void ED_node_tree_path_get(SpaceNode *snode, char *value)
   value[0] = '\0';
   LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     if (i == 0) {
-      strcpy(value, path->node_name);
-      value += strlen(path->node_name);
+      strcpy(value, path->display_name);
+      value += strlen(path->display_name);
     }
     else {
-      sprintf(value, "/%s", path->node_name);
-      value += strlen(path->node_name) + 1;
+      sprintf(value, "/%s", path->display_name);
+      value += strlen(path->display_name) + 1;
     }
   }
 }
@@ -204,10 +209,10 @@ void ED_node_tree_path_get_fixedbuf(SpaceNode *snode, char *value, int max_lengt
   int i = 0;
   LISTBASE_FOREACH_INDEX (bNodeTreePath *, path, &snode->treepath, i) {
     if (i == 0) {
-      size = BLI_strncpy_rlen(value, path->node_name, max_length);
+      size = BLI_strncpy_rlen(value, path->display_name, max_length);
     }
     else {
-      size = BLI_snprintf_rlen(value, max_length, "/%s", path->node_name);
+      size = BLI_snprintf_rlen(value, max_length, "/%s", path->display_name);
     }
     max_length -= size;
     if (max_length <= 0) {
@@ -321,18 +326,25 @@ static void node_free(SpaceLink *sl)
   LISTBASE_FOREACH_MUTABLE (bNodeTreePath *, path, &snode->treepath) {
     MEM_freeN(path);
   }
+
+  MEM_SAFE_FREE(snode->runtime);
 }
 
 /* spacetype; init callback */
-static void node_init(struct wmWindowManager *UNUSED(wm), ScrArea *UNUSED(area))
+static void node_init(struct wmWindowManager *UNUSED(wm), ScrArea *area)
 {
+  SpaceNode *snode = (SpaceNode *)area->spacedata.first;
+
+  if (snode->runtime == NULL) {
+    snode->runtime = MEM_callocN(sizeof(SpaceNode_Runtime), __func__);
+  }
 }
 
-static void node_area_listener(wmWindow *UNUSED(win),
-                               ScrArea *area,
-                               wmNotifier *wmn,
-                               Scene *UNUSED(scene))
+static void node_area_listener(const wmSpaceTypeListenerParams *params)
 {
+  ScrArea *area = params->area;
+  wmNotifier *wmn = params->notifier;
+
   /* note, ED_area_tag_refresh will re-execute compositor */
   SpaceNode *snode = area->spacedata.first;
   /* shaderfrom is only used for new shading nodes, otherwise all shaders are from objects */
@@ -362,7 +374,7 @@ static void node_area_listener(wmWindow *UNUSED(win),
         case ND_TRANSFORM_DONE:
           if (ED_node_is_compositor(snode)) {
             if (snode->flag & SNODE_AUTO_RENDER) {
-              snode->recalc = 1;
+              snode->runtime->recalc = true;
               ED_area_tag_refresh(area);
             }
           }
@@ -521,8 +533,8 @@ static void node_area_refresh(const struct bContext *C, ScrArea *area)
       Scene *scene = (Scene *)snode->id;
       if (scene->use_nodes) {
         /* recalc is set on 3d view changes for auto compo */
-        if (snode->recalc) {
-          snode->recalc = 0;
+        if (snode->runtime->recalc) {
+          snode->runtime->recalc = false;
           node_render_changed_exec((struct bContext *)C, NULL);
         }
         else {
@@ -546,8 +558,10 @@ static SpaceLink *node_duplicate(SpaceLink *sl)
 
   BLI_duplicatelist(&snoden->treepath, &snode->treepath);
 
-  /* clear or remove stuff from old */
-  BLI_listbase_clear(&snoden->linkdrag);
+  if (snode->runtime != NULL) {
+    snoden->runtime = MEM_dupallocN(snode->runtime);
+    BLI_listbase_clear(&snoden->runtime->linkdrag);
+  }
 
   /* Note: no need to set node tree user counts,
    * the editor only keeps at least 1 (id_us_ensure_real),
@@ -589,6 +603,16 @@ static void node_toolbar_region_draw(const bContext *C, ARegion *region)
   ED_region_panels(C, region);
 }
 
+void ED_node_cursor_location_get(const SpaceNode *snode, float value[2])
+{
+  copy_v2_v2(value, snode->runtime->cursor);
+}
+
+void ED_node_cursor_location_set(SpaceNode *snode, const float value[2])
+{
+  copy_v2_v2(snode->runtime->cursor, value);
+}
+
 static void node_cursor(wmWindow *win, ScrArea *area, ARegion *region)
 {
   SpaceNode *snode = area->spacedata.first;
@@ -597,15 +621,15 @@ static void node_cursor(wmWindow *win, ScrArea *area, ARegion *region)
   UI_view2d_region_to_view(&region->v2d,
                            win->eventstate->x - region->winrct.xmin,
                            win->eventstate->y - region->winrct.ymin,
-                           &snode->cursor[0],
-                           &snode->cursor[1]);
+                           &snode->runtime->cursor[0],
+                           &snode->runtime->cursor[1]);
 
-  /* here snode->cursor is used to detect the node edge for sizing */
-  node_set_cursor(win, snode, snode->cursor);
+  /* here snode->runtime->cursor is used to detect the node edge for sizing */
+  node_set_cursor(win, snode, snode->runtime->cursor);
 
-  /* XXX snode->cursor is in placing new nodes space */
-  snode->cursor[0] /= UI_DPI_FAC;
-  snode->cursor[1] /= UI_DPI_FAC;
+  /* XXX snode->runtime->cursor is in placing new nodes space */
+  snode->runtime->cursor[0] /= UI_DPI_FAC;
+  snode->runtime->cursor[1] /= UI_DPI_FAC;
 }
 
 /* Initialize main region, setting handlers. */
@@ -636,6 +660,38 @@ static void node_main_region_draw(const bContext *C, ARegion *region)
 
 /* ************* dropboxes ************* */
 
+static bool node_group_drop_poll(bContext *UNUSED(C),
+                                 wmDrag *drag,
+                                 const wmEvent *UNUSED(event),
+                                 const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_NT);
+}
+
+static bool node_object_drop_poll(bContext *UNUSED(C),
+                                  wmDrag *drag,
+                                  const wmEvent *UNUSED(event),
+                                  const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_OB);
+}
+
+static bool node_collection_drop_poll(bContext *UNUSED(C),
+                                      wmDrag *drag,
+                                      const wmEvent *UNUSED(event),
+                                      const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_GR);
+}
+
+static bool node_texture_drop_poll(bContext *UNUSED(C),
+                                   wmDrag *drag,
+                                   const wmEvent *UNUSED(event),
+                                   const char **UNUSED(r_tooltip))
+{
+  return WM_drag_is_ID_type(drag, ID_TE);
+}
+
 static bool node_ima_drop_poll(bContext *UNUSED(C),
                                wmDrag *drag,
                                const wmEvent *UNUSED(event),
@@ -645,7 +701,7 @@ static bool node_ima_drop_poll(bContext *UNUSED(C),
     /* rule might not work? */
     return (ELEM(drag->icon, 0, ICON_FILE_IMAGE, ICON_FILE_MOVIE));
   }
-  return WM_drag_get_local_ID(drag, ID_IM) != NULL;
+  return WM_drag_is_ID_type(drag, ID_IM);
 }
 
 static bool node_mask_drop_poll(bContext *UNUSED(C),
@@ -653,19 +709,26 @@ static bool node_mask_drop_poll(bContext *UNUSED(C),
                                 const wmEvent *UNUSED(event),
                                 const char **UNUSED(r_tooltip))
 {
-  return WM_drag_get_local_ID(drag, ID_MSK) != NULL;
+  return WM_drag_is_ID_type(drag, ID_MSK);
+}
+
+static void node_group_drop_copy(wmDrag *drag, wmDropBox *drop)
+{
+  ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, 0);
+
+  RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
 static void node_id_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-  ID *id = WM_drag_get_local_ID(drag, 0);
+  ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, 0);
 
   RNA_string_set(drop->ptr, "name", id->name + 2);
 }
 
 static void node_id_path_drop_copy(wmDrag *drag, wmDropBox *drop)
 {
-  ID *id = WM_drag_get_local_ID(drag, 0);
+  ID *id = WM_drag_get_local_ID_or_import_from_asset(drag, 0);
 
   if (id) {
     RNA_string_set(drop->ptr, "name", id->name + 2);
@@ -682,8 +745,36 @@ static void node_dropboxes(void)
 {
   ListBase *lb = WM_dropboxmap_find("Node Editor", SPACE_NODE, RGN_TYPE_WINDOW);
 
-  WM_dropbox_add(lb, "NODE_OT_add_file", node_ima_drop_poll, node_id_path_drop_copy);
-  WM_dropbox_add(lb, "NODE_OT_add_mask", node_mask_drop_poll, node_id_drop_copy);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_object",
+                 node_object_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_collection",
+                 node_collection_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_texture",
+                 node_texture_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_group",
+                 node_group_drop_poll,
+                 node_group_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_file",
+                 node_ima_drop_poll,
+                 node_id_path_drop_copy,
+                 WM_drag_free_imported_drag_ID);
+  WM_dropbox_add(lb,
+                 "NODE_OT_add_mask",
+                 node_mask_drop_poll,
+                 node_id_drop_copy,
+                 WM_drag_free_imported_drag_ID);
 }
 
 /* ************* end drop *********** */
@@ -703,12 +794,10 @@ static void node_header_region_draw(const bContext *C, ARegion *region)
 }
 
 /* used for header + main region */
-static void node_region_listener(wmWindow *UNUSED(win),
-                                 ScrArea *UNUSED(area),
-                                 ARegion *region,
-                                 wmNotifier *wmn,
-                                 const Scene *UNUSED(scene))
+static void node_region_listener(const wmRegionListenerParams *params)
 {
+  ARegion *region = params->region;
+  wmNotifier *wmn = params->notifier;
   wmGizmoMap *gzmap = region->gizmo_map;
 
   /* context changes */

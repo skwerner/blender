@@ -75,12 +75,12 @@ def rna_info_BuildRNAInfo_cache():
 rna_info_BuildRNAInfo_cache.ret = None
 # --- end rna_info cache
 
-# import rpdb2; rpdb2.start_embedded_debugger('test')
 import os
 import sys
 import inspect
 import shutil
 import logging
+import warnings
 
 from textwrap import indent
 
@@ -227,6 +227,7 @@ else:
         "blf",
         "bl_math",
         "imbuf",
+        "imbuf.types",
         "bmesh",
         "bmesh.ops",
         "bmesh.types",
@@ -250,6 +251,9 @@ else:
         "gpu.types",
         "gpu.matrix",
         "gpu.select",
+        "gpu.shader",
+        "gpu.state",
+        "gpu.texture",
         "gpu_extras",
         "idprop.types",
         "mathutils",
@@ -541,6 +545,13 @@ def range_str(val):
 
 
 def example_extract_docstring(filepath):
+    '''
+    Return (text, line_no, line_no_has_content) where:
+    - ``text`` is the doc-string text.
+    - ``line_no`` is the line the doc-string text ends.
+    - ``line_no_has_content`` when False, this file only contains a doc-string.
+      There is no need to include the remainder.
+    '''
     file = open(filepath, "r", encoding="utf-8")
     line = file.readline()
     line_no = 0
@@ -549,7 +560,7 @@ def example_extract_docstring(filepath):
         line_no += 1
     else:
         file.close()
-        return "", 0
+        return "", 0, True
 
     for line in file:
         line_no += 1
@@ -559,15 +570,17 @@ def example_extract_docstring(filepath):
             text.append(line.rstrip())
 
     line_no += 1
+    line_no_has_content = False
 
     # Skip over blank lines so the Python code doesn't have blank lines at the top.
     for line in file:
         if line.strip():
+            line_no_has_content = True
             break
         line_no += 1
 
     file.close()
-    return "\n".join(text), line_no
+    return "\n".join(text), line_no, line_no_has_content
 
 
 def title_string(text, heading_char, double=False):
@@ -586,16 +599,18 @@ def write_example_ref(ident, fw, example_id, ext="py"):
         filepath = os.path.join("..", "examples", "%s.%s" % (example_id, ext))
         filepath_full = os.path.join(os.path.dirname(fw.__self__.name), filepath)
 
-        text, line_no = example_extract_docstring(filepath_full)
+        text, line_no, line_no_has_content = example_extract_docstring(filepath_full)
 
         for line in text.split("\n"):
             fw("%s\n" % (ident + line).rstrip())
         fw("\n")
 
-        fw("%s.. literalinclude:: %s\n" % (ident, filepath))
-        if line_no > 0:
-            fw("%s   :lines: %d-\n" % (ident, line_no))
-        fw("\n")
+        # Some files only contain a doc-string.
+        if line_no_has_content:
+            fw("%s.. literalinclude:: %s\n" % (ident, filepath))
+            if line_no > 0:
+                fw("%s   :lines: %d-\n" % (ident, line_no))
+            fw("\n")
         EXAMPLE_SET_USED.add(example_id)
     else:
         if bpy.app.debug:
@@ -939,7 +954,7 @@ def pymodule2sphinx(basepath, module_name, module, title, module_all_extra):
             # constant, not much fun we can do here except to list it.
             # TODO, figure out some way to document these!
             fw(".. data:: %s\n\n" % attribute)
-            write_indented_lines("   ", fw, "constant value %s" % repr(value), False)
+            write_indented_lines("   ", fw, "Constant value %s" % repr(value), False)
             fw("\n")
         else:
             BPY_LOGGER.debug("\tnot documenting %s.%s of %r type" % (module_name, attribute, value_type.__name__))
@@ -1021,7 +1036,6 @@ def pymodule2sphinx(basepath, module_name, module, title, module_all_extra):
 context_type_map = {
     # context_member: (RNA type, is_collection)
     "active_annotation_layer": ("GPencilLayer", False),
-    "active_base": ("ObjectBase", False),
     "active_bone": ("EditBone", False),
     "active_gpencil_frame": ("GreasePencilLayer", True),
     "active_gpencil_layer": ("GPencilLayer", True),
@@ -1204,7 +1218,7 @@ def pycontext2sphinx(basepath):
     # for member in sorted(unique):
     #     print('        "%s": ("", False),' % member)
     if len(context_type_map) > len(unique):
-        raise Exception(
+        warnings.warn(
             "Some types are not used: %s" %
             str([member for member in context_type_map if member not in unique]))
     else:
@@ -1232,7 +1246,7 @@ def pyrna_enum2sphinx(prop, use_empty_descriptions=False):
             "%s.\n" % (
                 identifier,
                 # Account for multi-line enum descriptions, allowing this to be a block of text.
-                indent(", ".join(escape_rst(val) for val in (name, description) if val) or "Undocumented", "  "),
+                indent(" -- ".join(escape_rst(val) for val in (name, description) if val) or "Undocumented", "  "),
             )
             for identifier, name, description in prop.enum_items
         ])
@@ -1404,7 +1418,8 @@ def pyrna2sphinx(basepath):
             else:
                 fw("   .. attribute:: %s\n\n" % prop.identifier)
             if prop.description:
-                fw("      %s\n\n" % prop.description)
+                write_indented_lines("      ", fw, prop.description, False)
+                fw("\n")
 
             # special exception, can't use generic code here for enums
             if prop.type == "enum":
@@ -1540,8 +1555,8 @@ def pyrna2sphinx(basepath):
             fw(".. hlist::\n")
             fw("   :columns: 2\n\n")
 
-            # context does its own thing
-            # "active_base": ("ObjectBase", False),
+            # Context does its own thing.
+            # "active_object": ("Object", False),
             for ref_attr, (ref_type, ref_is_seq) in sorted(context_type_map.items()):
                 if ref_type == struct_id:
                     fw("   * :mod:`bpy.context.%s`\n" % ref_attr)
@@ -1714,7 +1729,6 @@ except ModuleNotFoundError:
 
     fw("if html_theme == 'sphinx_rtd_theme':\n")
     fw("    html_theme_options = {\n")
-    fw("        'canonical_url': 'https://docs.blender.org/api/current/',\n")
     # fw("        'analytics_id': '',\n")
     # fw("        'collapse_navigation': True,\n")
     fw("        'sticky_navigation': False,\n")
@@ -1726,6 +1740,7 @@ except ModuleNotFoundError:
     # not helpful since the source is generated, adds to upload size.
     fw("html_copy_source = False\n")
     fw("html_show_sphinx = False\n")
+    fw("html_baseurl = 'https://docs.blender.org/api/current/'\n")
     fw("html_use_opensearch = 'https://docs.blender.org/api/current'\n")
     fw("html_split_index = True\n")
     fw("html_static_path = ['static']\n")
@@ -1975,11 +1990,14 @@ def write_rst_importable_modules(basepath):
         "aud": "Audio System",
         "blf": "Font Drawing",
         "imbuf": "Image Buffer",
+        "imbuf.types": "Image Buffer Types",
         "gpu": "GPU Shader Module",
         "gpu.types": "GPU Types",
-        "gpu.matrix": "GPU Matrix",
-        "gpu.select": "GPU Select",
-        "gpu.shader": "GPU Shader",
+        "gpu.matrix": "GPU Matrix Utilities",
+        "gpu.select": "GPU Select Utilities",
+        "gpu.shader": "GPU Shader Utilities",
+        "gpu.state": "GPU State Utilities",
+        "gpu.texture": "GPU Texture Utilities",
         "bmesh": "BMesh Module",
         "bmesh.ops": "BMesh Operators",
         "bmesh.types": "BMesh Types",

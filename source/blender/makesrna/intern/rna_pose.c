@@ -138,8 +138,22 @@ static char *rna_PoseBone_path(PointerRNA *ptr)
 
 /* Bone groups only. */
 
-static bActionGroup *rna_bone_group_new(ID *id, bPose *pose, const char *name)
+static bool rna_bone_group_poll(Object *ob, ReportList *reports)
 {
+  if ((ob->proxy != NULL) || (ob->proxy_group != NULL) || ID_IS_OVERRIDE_LIBRARY(ob)) {
+    BKE_report(reports, RPT_ERROR, "Cannot edit bone groups for proxies or library overrides");
+    return false;
+  }
+
+  return true;
+}
+
+static bActionGroup *rna_bone_group_new(ID *id, bPose *pose, ReportList *reports, const char *name)
+{
+  if (!rna_bone_group_poll((Object *)id, reports)) {
+    return NULL;
+  }
+
   bActionGroup *grp = BKE_pose_add_group(pose, name);
   WM_main_add_notifier(NC_OBJECT | ND_POSE | NA_ADDED, id);
   return grp;
@@ -147,6 +161,10 @@ static bActionGroup *rna_bone_group_new(ID *id, bPose *pose, const char *name)
 
 static void rna_bone_group_remove(ID *id, bPose *pose, ReportList *reports, PointerRNA *grp_ptr)
 {
+  if (!rna_bone_group_poll((Object *)id, reports)) {
+    return;
+  }
+
   bActionGroup *grp = grp_ptr->data;
   const int grp_idx = BLI_findindex(&pose->agroups, grp);
 
@@ -163,6 +181,11 @@ static void rna_bone_group_remove(ID *id, bPose *pose, ReportList *reports, Poin
 
 void rna_ActionGroup_colorset_set(PointerRNA *ptr, int value)
 {
+  Object *ob = (Object *)ptr->owner_id;
+  if (!rna_bone_group_poll(ob, NULL)) {
+    return;
+  }
+
   bActionGroup *grp = ptr->data;
 
   /* ensure only valid values get set */
@@ -184,6 +207,10 @@ bool rna_ActionGroup_is_custom_colorset_get(PointerRNA *ptr)
 static void rna_BoneGroup_name_set(PointerRNA *ptr, const char *value)
 {
   Object *ob = (Object *)ptr->owner_id;
+  if (!rna_bone_group_poll(ob, NULL)) {
+    return;
+  }
+
   bActionGroup *agrp = ptr->data;
 
   /* copy the new name into the name slot */
@@ -398,22 +425,6 @@ static void rna_Itasc_update_rebuild(Main *bmain, Scene *scene, PointerRNA *ptr)
   rna_Itasc_update(bmain, scene, ptr);
 }
 
-static void rna_PoseChannel_bone_custom_set(PointerRNA *ptr,
-                                            PointerRNA value,
-                                            struct ReportList *UNUSED(reports))
-{
-  bPoseChannel *pchan = (bPoseChannel *)ptr->data;
-
-  if (pchan->custom) {
-    id_us_min(&pchan->custom->id);
-    pchan->custom = NULL;
-  }
-
-  pchan->custom = value.data;
-
-  id_us_plus(&pchan->custom->id);
-}
-
 static PointerRNA rna_PoseChannel_bone_group_get(PointerRNA *ptr)
 {
   Object *ob = (Object *)ptr->owner_id;
@@ -609,8 +620,8 @@ static void rna_PoseChannel_constraints_remove(
 
   ED_object_constraint_update(bmain, ob);
 
-  BKE_constraints_active_set(&pchan->constraints,
-                             NULL); /* XXX, is this really needed? - Campbell */
+  /* XXX(Campbell): is this really needed? */
+  BKE_constraints_active_set(&pchan->constraints, NULL);
 
   WM_main_add_notifier(NC_OBJECT | ND_CONSTRAINT | NA_REMOVED, id);
 
@@ -1027,7 +1038,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "Constraint");
   RNA_def_property_override_flag(
       prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY | PROPOVERRIDE_LIBRARY_INSERTION);
-  RNA_def_property_ui_text(prop, "Constraints", "Constraints that act on this PoseChannel");
+  RNA_def_property_ui_text(prop, "Constraints", "Constraints that act on this pose channel");
   RNA_def_property_override_funcs(prop, NULL, NULL, "rna_PoseChannel_constraints_override_apply");
 
   rna_def_pose_channel_constraints(brna, prop);
@@ -1115,6 +1126,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
 
   prop = RNA_def_property(srna, "rotation_mode", PROP_ENUM, PROP_NONE);
   RNA_def_property_enum_sdna(prop, NULL, "rotmode");
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_enum_items(prop, rna_enum_object_rotation_mode_items);
   RNA_def_property_enum_funcs(prop, NULL, "rna_PoseChannel_rotation_mode_set", NULL);
   /* XXX... disabled, since proxy-locked layers are currently
@@ -1340,18 +1352,32 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   prop = RNA_def_property(srna, "custom_shape", PROP_POINTER, PROP_NONE);
   RNA_def_property_pointer_sdna(prop, NULL, "custom");
   RNA_def_property_struct_type(prop, "Object");
-  RNA_def_property_flag(prop, PROP_EDITABLE);
-  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
-  RNA_def_property_pointer_funcs(prop, NULL, "rna_PoseChannel_bone_custom_set", NULL, NULL);
+  RNA_def_property_flag(prop, PROP_EDITABLE | PROP_ID_REFCOUNT);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_ui_text(
-      prop, "Custom Object", "Object that defines custom draw type for this bone");
+      prop, "Custom Object", "Object that defines custom display shape for this bone");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_dependency_update");
 
-  prop = RNA_def_property(srna, "custom_shape_scale", PROP_FLOAT, PROP_NONE);
-  RNA_def_property_float_sdna(prop, NULL, "custom_scale");
-  RNA_def_property_range(prop, 0.0f, 1000.0f);
+  prop = RNA_def_property(srna, "custom_shape_scale_xyz", PROP_FLOAT, PROP_XYZ);
+  RNA_def_property_float_sdna(prop, NULL, "custom_scale_xyz");
+  RNA_def_property_flag(prop, PROP_PROPORTIONAL);
+  RNA_def_property_float_array_default(prop, rna_default_scale_3d);
   RNA_def_property_ui_text(prop, "Custom Shape Scale", "Adjust the size of the custom shape");
+  RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
+
+  prop = RNA_def_property(srna, "custom_shape_translation", PROP_FLOAT, PROP_XYZ);
+  RNA_def_property_float_sdna(prop, NULL, "custom_translation");
+  RNA_def_property_flag(prop, PROP_PROPORTIONAL);
+  RNA_def_property_ui_text(
+      prop, "Custom Shape Translation", "Adjust the location of the custom shape");
+  RNA_def_property_ui_range(prop, -FLT_MAX, FLT_MAX, 1, RNA_TRANSLATION_PREC_DEFAULT);
+  RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
+
+  prop = RNA_def_property(srna, "custom_shape_rotation_euler", PROP_FLOAT, PROP_EULER);
+  RNA_def_property_float_sdna(prop, NULL, "custom_rotation_euler");
+  RNA_def_property_ui_text(
+      prop, "Custom Shape Rotation", "Adjust the rotation of the custom shape");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
 
   prop = RNA_def_property(srna, "use_custom_shape_bone_size", PROP_BOOLEAN, PROP_NONE);
@@ -1392,7 +1418,7 @@ static void rna_def_pose_channel(BlenderRNA *brna)
   RNA_def_property_flag(prop, PROP_EDITABLE);
   RNA_def_property_pointer_funcs(
       prop, "rna_PoseChannel_bone_group_get", "rna_PoseChannel_bone_group_set", NULL, NULL);
-  RNA_def_property_ui_text(prop, "Bone Group", "Bone Group this pose channel belongs to");
+  RNA_def_property_ui_text(prop, "Bone Group", "Bone group this pose channel belongs to");
   RNA_def_property_editable_func(prop, "rna_PoseChannel_proxy_editable");
   RNA_def_property_update(prop, NC_OBJECT | ND_POSE, "rna_Pose_update");
 
@@ -1619,7 +1645,7 @@ static void rna_def_bone_groups(BlenderRNA *brna, PropertyRNA *cprop)
 
   func = RNA_def_function(srna, "new", "rna_bone_group_new");
   RNA_def_function_ui_description(func, "Add a new bone group to the object");
-  RNA_def_function_flag(func, FUNC_USE_SELF_ID); /* ID needed for refresh */
+  RNA_def_function_flag(func, FUNC_USE_SELF_ID | FUNC_USE_REPORTS); /* ID needed for refresh */
   RNA_def_string(func, "name", "Group", MAX_NAME, "", "Name of the new group");
   /* return type */
   parm = RNA_def_pointer(func, "group", "BoneGroup", "", "New bone group");

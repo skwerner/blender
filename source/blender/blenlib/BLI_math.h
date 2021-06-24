@@ -17,8 +17,7 @@
  * All rights reserved.
  *
  * The Original Code is: some of this file.
- *
- * */
+ */
 
 #pragma once
 
@@ -71,4 +70,5 @@
 #include "BLI_math_rotation.h"
 #include "BLI_math_solvers.h"
 #include "BLI_math_statistics.h"
+#include "BLI_math_time.h"
 #include "BLI_math_vector.h"

@@ -985,12 +985,12 @@ bool UI_but_active_only(const bContext *C, ARegion *region, uiBlock *block, uiBu
 
 /**
  * \warning This must run after other handlers have been added,
- * otherwise the handler wont be removed, see: T71112.
+ * otherwise the handler won't be removed, see: T71112.
  */
 bool UI_block_active_only_flagged_buttons(const bContext *C, ARegion *region, uiBlock *block)
 {
   /* Running this command before end-block has run, means buttons that open menus
-   * wont have those menus correctly positioned, see T83539. */
+   * won't have those menus correctly positioned, see T83539. */
   BLI_assert(block->endblock);
 
   bool done = false;
@@ -1198,7 +1198,7 @@ static bool ui_but_event_operator_string_from_menu(const bContext *C,
 
   /* annoying, create a property */
   const IDPropertyTemplate val = {0};
-  IDProperty *prop_menu = IDP_New(IDP_GROUP, &val, __func__); /* dummy, name is unimportant  */
+  IDProperty *prop_menu = IDP_New(IDP_GROUP, &val, __func__); /* Dummy, name is unimportant. */
   IDP_AddToGroup(prop_menu, IDP_NewString(mt->idname, "name", sizeof(mt->idname)));
 
   if (WM_key_event_operator_string(
@@ -1223,7 +1223,7 @@ static bool ui_but_event_operator_string_from_panel(const bContext *C,
 
   /* annoying, create a property */
   const IDPropertyTemplate val = {0};
-  IDProperty *prop_panel = IDP_New(IDP_GROUP, &val, __func__); /* dummy, name is unimportant  */
+  IDProperty *prop_panel = IDP_New(IDP_GROUP, &val, __func__); /* Dummy, name is unimportant. */
   IDP_AddToGroup(prop_panel, IDP_NewString(pt->idname, "name", sizeof(pt->idname)));
   IDP_AddToGroup(prop_panel,
                  IDP_New(IDP_INT,
@@ -1804,7 +1804,7 @@ void UI_block_update_from_old(const bContext *C, uiBlock *block)
 static void ui_but_validate(const uiBut *but)
 {
   /* Number buttons must have a click-step,
-   * assert instead of correcting the value to ensure the caller knows what they're doing.  */
+   * assert instead of correcting the value to ensure the caller knows what they're doing. */
   if (but->type == UI_BTYPE_NUM) {
     uiButNumber *number_but = (uiButNumber *)but;
 
@@ -3223,8 +3223,8 @@ void ui_but_range_set_hard(uiBut *but)
 /* note: this could be split up into functions which handle arrays and not */
 void ui_but_range_set_soft(uiBut *but)
 {
-  /* ideally we would not limit this but practically, its more than
-   * enough worst case is very long vectors wont use a smart soft-range
+  /* Ideally we would not limit this, but practically it's more than
+   * enough. Worst case is very long vectors won't use a smart soft-range,
    * which isn't so bad. */
 
   if (but->rnaprop) {
@@ -3578,7 +3578,7 @@ static void ui_but_build_drawstr_float(uiBut *but, double value)
     subtype = RNA_property_subtype(but->rnaprop);
   }
 
-  /* Change negative zero to regular zero, without altering anything else.  */
+  /* Change negative zero to regular zero, without altering anything else. */
   value += +0.0f;
 
   if (value == (double)FLT_MAX) {
@@ -4146,7 +4146,7 @@ static uiBut *ui_def_but(uiBlock *block,
   }
 
 #ifdef WITH_PYTHON
-  /* if the 'UI_OT_editsource' is running, extract the source info from the button  */
+  /* If the 'UI_OT_editsource' is running, extract the source info from the button. */
   if (UI_editsource_enable_check()) {
     UI_editsource_active_but_test(but);
   }
@@ -4184,7 +4184,7 @@ static void ui_def_but_rna__menu(bContext *UNUSED(C), uiLayout *layout, void *bu
   uiPopupBlockHandle *handle = block->handle;
   uiBut *but = (uiBut *)but_p;
 
-  /* see comment in ui_item_enum_expand, re: uiname  */
+  /* see comment in ui_item_enum_expand, re: `uiname`. */
   const EnumPropertyItem *item_array;
 
   UI_block_flag_enable(block, UI_BLOCK_MOVEMOUSE_QUIT);

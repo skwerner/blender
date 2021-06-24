@@ -840,7 +840,7 @@ void psys_get_birth_coords(
 
     copy_v3_v3(state->co, loc);
 
-    /* boids don't get any initial velocity  */
+    /* boids don't get any initial velocity. */
     zero_v3(state->vel);
 
     /* boids store direction in ave */
@@ -1007,7 +1007,7 @@ void psys_get_birth_coords(
           mul_qt_v3(q_imat, rot_vec_local);
 
           /* vtan_local */
-          copy_v3_v3(vtan_local, vtan); /* flips, cant use */
+          copy_v3_v3(vtan_local, vtan); /* flips, can't use */
           mul_qt_v3(q_imat, vtan_local);
 
           /* ensure orthogonal matrix (rot_vec aligned) */
@@ -1320,6 +1320,14 @@ void psys_get_pointcache_start_end(Scene *scene, ParticleSystem *psys, int *sfra
   *efra = min_ii((int)(part->end + part->lifetime + 1.0f), max_ii(scene->r.pefra, scene->r.efra));
 }
 
+/* BVH tree balancing inside a mutex lock must be run in isolation. Balancing
+ * is multithreaded, and we do not want the current thread to start another task
+ * that may involve acquiring the same mutex lock that it is waiting for. */
+static void bvhtree_balance_isolated(void *userdata)
+{
+  BLI_bvhtree_balance((BVHTree *)userdata);
+}
+
 /************************************************/
 /*          Effectors                           */
 /************************************************/
@@ -1356,7 +1364,8 @@ static void psys_update_particle_bvhtree(ParticleSystem *psys, float cfra)
           }
         }
       }
-      BLI_bvhtree_balance(psys->bvhtree);
+
+      BLI_task_isolate(bvhtree_balance_isolated, psys->bvhtree);
 
       psys->bvhtree_frame = cfra;
 
@@ -1911,7 +1920,7 @@ static void sph_force_cb(void *sphdata_v, ParticleKey *state, float *force, floa
     }
   }
 
-  /* Artificial buoyancy force in negative gravity direction  */
+  /* Artificial buoyancy force in negative gravity direction. */
   if (fluid->buoyancy > 0.0f && gravity) {
     madd_v3_v3fl(force, gravity, fluid->buoyancy * (density - rest_density));
   }
@@ -2086,7 +2095,7 @@ static void sphclassical_force_cb(void *sphdata_v,
     }
   }
 
-  /* Artificial buoyancy force in negative gravity direction  */
+  /* Artificial buoyancy force in negative gravity direction. */
   if (fluid->buoyancy > 0.0f && gravity) {
     madd_v3_v3fl(force, gravity, fluid->buoyancy * (pa->sphdensity - rest_density));
   }
@@ -3360,7 +3369,7 @@ static void hair_create_input_mesh(ParticleSimulationData *sim,
   /* XXX placeholder for more flexible future hair settings */
   hair_radius = part->size;
 
-  /* make vgroup for pin roots etc.. */
+  /* Make vgroup for pin roots etc. */
   hair_index = 1;
   LOOP_PARTICLES
   {

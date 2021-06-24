@@ -5188,7 +5188,7 @@ bool BKE_image_has_ibuf(Image *ima, ImageUser *iuser)
   return ibuf != NULL;
 }
 
-/* ******** Pool for image buffers ********  */
+/* ******** Pool for image buffers ******** */
 
 typedef struct ImagePoolItem {
   struct ImagePoolItem *next, *prev;
@@ -5359,7 +5359,7 @@ int BKE_image_user_frame_get(const ImageUser *iuser, int cfra, bool *r_is_in_ran
     }
   }
 
-  /* important to apply after else we cant loop on frames 100 - 110 for eg. */
+  /* important to apply after else we can't loop on frames 100 - 110 for eg. */
   framenr += iuser->offset;
 
   return framenr;

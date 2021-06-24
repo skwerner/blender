@@ -2571,7 +2571,7 @@ bool EDBM_selectmode_disable(Scene *scene,
                              const short selectmode_fallback)
 {
   /* note essential, but switch out of vertex mode since the
-   * selected regions wont be nicely isolated after flushing */
+   * selected regions won't be nicely isolated after flushing */
   if (em->selectmode & selectmode_disable) {
     if (em->selectmode == selectmode_disable) {
       em->selectmode = selectmode_fallback;
@@ -2983,7 +2983,7 @@ bool EDBM_select_interior_faces(BMEditMesh *em)
           int i_b = BM_elem_index_get(l_pair[1]->f);
           if (i_a != i_b) {
             /* Only for predictable results that don't depend on the order of radial loops,
-             * not essential.  */
+             * not essential. */
             if (i_a > i_b) {
               SWAP(int, i_a, i_b);
             }
@@ -3642,8 +3642,9 @@ static int edbm_select_linked_pick_exec(bContext *C, wmOperator *op)
 
   {
     ViewLayer *view_layer = CTX_data_view_layer(C);
-    const int object_index = RNA_int_get(op->ptr, "object_index");
-    const int index = RNA_int_get(op->ptr, "index");
+    /* Intentionally wrap negative values so the lookup fails. */
+    const uint object_index = (uint)RNA_int_get(op->ptr, "object_index");
+    const uint index = (uint)RNA_int_get(op->ptr, "index");
     ele = EDBM_elem_from_index_any_multi(view_layer, object_index, index, &obedit);
   }
 

@@ -325,4 +325,4 @@ class OSLRenderServices : public OSL::RendererServices {
 
 CCL_NAMESPACE_END
 
-#endif /* __OSL_SERVICES_H__  */
+#endif /* __OSL_SERVICES_H__ */

@@ -1346,7 +1346,7 @@ static void dialog_exec_cb(bContext *C, void *arg1, void *arg2)
   wmOperator *op;
   {
     /* Execute will free the operator.
-     * In this case, wm_operator_ui_popup_cancel wont run. */
+     * In this case, wm_operator_ui_popup_cancel won't run. */
     wmOpPopUp *data = arg1;
     op = data->op;
     MEM_freeN(data);
@@ -2885,7 +2885,7 @@ static int radial_control_modal(bContext *C, wmOperator *op, const wmEvent *even
           }
         }
 
-        /* calculate new value and apply snapping  */
+        /* Calculate new value and apply snapping. */
         switch (rc->subtype) {
           case PROP_NONE:
           case PROP_DISTANCE:

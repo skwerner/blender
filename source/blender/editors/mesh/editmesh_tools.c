@@ -984,7 +984,7 @@ static int edbm_add_edge_face_exec(bContext *C, wmOperator *op)
        * copying face data from surrounding, may have copied hidden face flag too.
        *
        * Important that faces use flushing since 'edges.out'
-       * wont include hidden edges that already existed.
+       * won't include hidden edges that already existed.
        */
       BMO_slot_buffer_hflag_disable(
           em->bm, bmop.slots_out, "faces.out", BM_FACE, BM_ELEM_HIDDEN, true);
@@ -1794,7 +1794,7 @@ static int edbm_face_make_planar_exec(bContext *C, wmOperator *op)
     EDBM_update(obedit->data,
                 &(const struct EDBMUpdate_Params){
                     .calc_looptri = true,
-                    .calc_normals = false,
+                    .calc_normals = true,
                     .is_destructive = true,
                 });
   }
@@ -4038,7 +4038,7 @@ static float bm_edge_seg_isect(const float sco_a[2],
     b2 = ((x22 * y21) - (x21 * y22)) / xdiff2;
   }
   else {
-    m2 = MAXSLOPE; /* Vertical slope  */
+    m2 = MAXSLOPE; /* Vertical slope. */
     b2 = x22;
   }
 
@@ -4088,7 +4088,7 @@ static float bm_edge_seg_isect(const float sco_a[2],
 
     /* Calculate the distance from point to line. */
     if (m2 != MAXSLOPE) {
-      /* sqrt(m2 * m2 + 1); Only looking for change in sign.  Skip extra math .*/
+      /* `sqrt(m2 * m2 + 1);` Only looking for change in sign.  Skip extra math. */
       dist = (y12 - m2 * x12 - b2);
     }
     else {
@@ -4110,8 +4110,8 @@ static float bm_edge_seg_isect(const float sco_a[2],
         m1 = MAXSLOPE;
         b1 = x12;
       }
-      x2max = max_ff(x21, x22) + 0.001f; /* prevent missed edges   */
-      x2min = min_ff(x21, x22) - 0.001f; /* due to round off error */
+      x2max = max_ff(x21, x22) + 0.001f; /* Prevent missed edges. */
+      x2min = min_ff(x21, x22) - 0.001f; /* Due to round off error. */
       y2max = max_ff(y21, y22) + 0.001f;
       y2min = min_ff(y21, y22) - 0.001f;
 
@@ -4252,7 +4252,7 @@ static int edbm_knife_cut_exec(bContext *C, wmOperator *op)
       const float *sco_a = screen_vert_coords[BM_elem_index_get(be->v1)];
       const float *sco_b = screen_vert_coords[BM_elem_index_get(be->v2)];
 
-      /* check for error value (vert cant be projected) */
+      /* check for error value (vert can't be projected) */
       if ((sco_a[0] != FLT_MAX) && (sco_b[0] != FLT_MAX)) {
         isect = bm_edge_seg_isect(sco_a, sco_b, mouse_path, len, mode, &isected);
 
@@ -4753,7 +4753,7 @@ static int edbm_separate_exec(bContext *C, wmOperator *op)
                                  .calc_object_remap = true,
                              }));
 
-            DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY);
+            DEG_id_tag_update(&me->id, ID_RECALC_GEOMETRY_ALL_MODES);
             WM_event_add_notifier(C, NC_GEOM | ND_DATA, me);
           }
 
@@ -5823,7 +5823,7 @@ static int edbm_decimate_exec(bContext *C, wmOperator *op)
     EDBM_update(obedit->data,
                 &(const struct EDBMUpdate_Params){
                     .calc_looptri = true,
-                    .calc_normals = false,
+                    .calc_normals = true,
                     .is_destructive = true,
                 });
   }
@@ -8219,7 +8219,7 @@ enum {
   EDBM_CLNOR_MODAL_POINTTO_SET_USE_SELECTED = 114,
 };
 
-/* called in transform_ops.c, on each regeneration of keymaps */
+/* Called in transform_ops.c, on each regeneration of key-maps. */
 wmKeyMap *point_normals_modal_keymap(wmKeyConfig *keyconf)
 {
   static const EnumPropertyItem modal_items[] = {

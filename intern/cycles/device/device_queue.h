@@ -18,7 +18,10 @@
 
 #include "device/device_kernel.h"
 
+#include "device/device_graphics_interop.h"
+#include "util/util_logging.h"
 #include "util/util_map.h"
+#include "util/util_unique_ptr.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -73,6 +76,19 @@ class DeviceQueue {
   virtual void zero_to_device(device_memory &mem) = 0;
   virtual void copy_to_device(device_memory &mem) = 0;
   virtual void copy_from_device(device_memory &mem) = 0;
+
+  /* Graphics resources interoperability.
+   *
+   * The interoperability comes here by the meaning that the device is capable of computing result
+   * directly into an OpenGL (or other graphics library) buffer. */
+
+  /* Create graphics interoperability context which will be taking care of mapping graphics
+   * resource as a buffer writable by kernels of this device. */
+  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create()
+  {
+    LOG(FATAL) << "Request of GPU interop of a device which does not support it.";
+    return nullptr;
+  }
 
   /* Device this queue has been created for. */
   Device *device;

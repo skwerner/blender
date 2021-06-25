@@ -23,7 +23,6 @@
 #  include <string.h>
 
 #  include "device/cuda/device_impl.h"
-#  include "device/cuda/graphics_interop.h"
 
 #  include "render/buffers.h"
 
@@ -1348,11 +1347,6 @@ bool CUDADevice::should_use_graphics_interop()
   }
 
   return false;
-}
-
-unique_ptr<DeviceGraphicsInterop> CUDADevice::graphics_interop_create()
-{
-  return make_unique<CUDADeviceGraphicsInterop>(this);
 }
 
 int CUDADevice::get_num_multiprocessors()

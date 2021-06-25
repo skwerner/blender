@@ -27,10 +27,11 @@
 CCL_NAMESPACE_BEGIN
 
 class CUDADevice;
+class CUDADeviceQueue;
 
 class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
  public:
-  CUDADeviceGraphicsInterop(CUDADevice *device);
+  explicit CUDADeviceGraphicsInterop(CUDADeviceQueue *queue);
 
   CUDADeviceGraphicsInterop(const CUDADeviceGraphicsInterop &other) = delete;
   CUDADeviceGraphicsInterop(CUDADeviceGraphicsInterop &&other) noexcept = delete;
@@ -46,6 +47,7 @@ class CUDADeviceGraphicsInterop : public DeviceGraphicsInterop {
   virtual void unmap() override;
 
  protected:
+  CUDADeviceQueue *queue_ = nullptr;
   CUDADevice *device_ = nullptr;
 
   /* OpenGL PBO which is currently registered as the destination for the CUDA buffer. */

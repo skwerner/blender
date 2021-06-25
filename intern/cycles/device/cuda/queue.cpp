@@ -17,7 +17,9 @@
 #ifdef WITH_CUDA
 
 #  include "device/cuda/queue.h"
+
 #  include "device/cuda/device_impl.h"
+#  include "device/cuda/graphics_interop.h"
 #  include "device/cuda/kernel.h"
 
 CCL_NAMESPACE_BEGIN
@@ -196,6 +198,11 @@ void CUDADeviceQueue::copy_from_device(device_memory &mem)
       cuda_device_,
       cuMemcpyDtoHAsync(
           mem.host_pointer, (CUdeviceptr)mem.device_pointer, mem.memory_size(), cuda_stream_));
+}
+
+unique_ptr<DeviceGraphicsInterop> CUDADeviceQueue::graphics_interop_create()
+{
+  return make_unique<CUDADeviceGraphicsInterop>(this);
 }
 
 CCL_NAMESPACE_END

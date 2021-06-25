@@ -23,7 +23,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-CUDADeviceGraphicsInterop::CUDADeviceGraphicsInterop(CUDADevice *device) : device_(device)
+CUDADeviceGraphicsInterop::CUDADeviceGraphicsInterop(CUDADeviceQueue *queue)
+    : queue_(queue), device_(static_cast<CUDADevice *>(queue->device))
 {
 }
 
@@ -72,7 +73,7 @@ device_ptr CUDADeviceGraphicsInterop::map()
   CUdeviceptr cu_buffer;
   size_t bytes;
 
-  cuda_device_assert(device_, cuGraphicsMapResources(1, &cu_graphics_resource_, 0));
+  cuda_device_assert(device_, cuGraphicsMapResources(1, &cu_graphics_resource_, queue_->stream()));
   cuda_device_assert(
       device_, cuGraphicsResourceGetMappedPointer(&cu_buffer, &bytes, cu_graphics_resource_));
 
@@ -83,7 +84,8 @@ void CUDADeviceGraphicsInterop::unmap()
 {
   CUDAContextScope scope(device_);
 
-  cuda_device_assert(device_, cuGraphicsUnmapResources(1, &cu_graphics_resource_, 0));
+  cuda_device_assert(device_,
+                     cuGraphicsUnmapResources(1, &cu_graphics_resource_, queue_->stream()));
 }
 
 CCL_NAMESPACE_END

@@ -147,9 +147,7 @@ class CUDADevice : public Device {
 
   void tex_free(device_texture &mem);
 
-  /* Graphics resources interoperability. */
   virtual bool should_use_graphics_interop() override;
-  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create() override;
 
   virtual unique_ptr<DeviceQueue> gpu_queue_create() override;
 

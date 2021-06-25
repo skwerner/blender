@@ -695,10 +695,8 @@ bool PathTraceWorkGPU::copy_to_gpu_display_interop(GPUDisplay *gpu_display,
                                                    PassMode pass_mode,
                                                    int num_samples)
 {
-  Device *device = queue_->device;
-
   if (!device_graphics_interop_) {
-    device_graphics_interop_ = device->graphics_interop_create();
+    device_graphics_interop_ = queue_->graphics_interop_create();
   }
 
   const DeviceGraphicsInteropDestination graphics_interop_dst =

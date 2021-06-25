@@ -22,7 +22,6 @@
 #include "bvh/bvh_params.h"
 
 #include "device/device_denoise.h"
-#include "device/device_graphics_interop.h"
 #include "device/device_memory.h"
 
 #include "util/util_function.h"
@@ -372,14 +371,6 @@ class Device {
   virtual bool should_use_graphics_interop()
   {
     return false;
-  }
-
-  /* Create graphics interoperability context which will be taking care of mapping graphics
-   * resource as a buffer writable by kernels of this device. */
-  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create()
-  {
-    LOG(FATAL) << "Request of GPU interop of a device which does not support it.";
-    return nullptr;
   }
 
   /* Buffer denoising. */

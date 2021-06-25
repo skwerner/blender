@@ -55,6 +55,8 @@ class CUDADeviceQueue : public DeviceQueue {
     return cuda_stream_;
   }
 
+  virtual unique_ptr<DeviceGraphicsInterop> graphics_interop_create() override;
+
  protected:
   CUDADevice *cuda_device_;
   CUstream cuda_stream_;

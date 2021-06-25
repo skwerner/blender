@@ -166,14 +166,10 @@ ccl_device bool integrator_init_from_bake(INTEGRATOR_STATE_ARGS,
     /* Setup next kernel to execute. */
     const int flags = kernel_tex_fetch(__shaders, shader).flags;
     if (flags & SD_HAS_RAYTRACE) {
-      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
-                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
-                                  shader);
+      INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
     }
     else {
-      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST,
-                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
-                                  shader);
+      INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader);
     }
   }
 

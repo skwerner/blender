@@ -60,6 +60,8 @@ set(SRC_CUDA
   cuda/device.h
   cuda/device_impl.cpp
   cuda/device_impl.h
+  cuda/graphics_interop.cpp
+  cuda/graphics_interop.h
   cuda/kernel.cpp
   cuda/kernel.h
   cuda/queue.cpp

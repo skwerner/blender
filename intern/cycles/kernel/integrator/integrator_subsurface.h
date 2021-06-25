@@ -91,7 +91,7 @@ ccl_device void subsurface_color_bump_blur(const KernelGlobals *kg,
 }
 #  endif
 
-ccl_device bool subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const ShaderClosure *sc)
+ccl_device int subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const ShaderClosure *sc)
 {
   /* We should never have two consecutive BSSRDF bounces, the second one should
    * be converted to a diffuse BSDF to avoid this. */

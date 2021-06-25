@@ -330,6 +330,7 @@ typedef enum ClosureLabel {
   LABEL_TRANSPARENT = 32,
   LABEL_VOLUME_SCATTER = 64,
   LABEL_TRANSMIT_TRANSPARENT = 128,
+  LABEL_SUBSURFACE_SCATTER = 256,
 } ClosureLabel;
 
 /* Render Passes */

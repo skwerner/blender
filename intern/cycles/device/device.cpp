@@ -310,7 +310,7 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
   }
 
   DeviceInfo info;
-  info.type = subdevices.front().type;
+  info.type = DEVICE_NONE;
   info.id = "MULTI";
   info.description = "Multi Device";
   info.num = 0;
@@ -355,7 +355,10 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     info.id += device.id;
 
     /* Set device type to MULTI if subdevices are not of a common type. */
-    if (device.type != info.type) {
+    if (info.type == DEVICE_NONE) {
+      info.type = device.type;
+    }
+    else if (device.type != info.type) {
       info.type = DEVICE_MULTI;
     }
 

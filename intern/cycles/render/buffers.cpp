@@ -159,7 +159,6 @@ void RenderBuffers::reset(const BufferParams &params_)
 
   /* re-allocate buffer */
   buffer.alloc(params.width * params.pass_stride, params.height);
-  buffer.zero_to_device();
 }
 
 void RenderBuffers::zero()

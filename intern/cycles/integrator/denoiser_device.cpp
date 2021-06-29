@@ -195,7 +195,6 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
 
     render_buffers->copy_from_device();
 
-    /* TODO(sergey): Avoid `zero_to_device()`. */
     local_render_buffers.reset(buffer_params);
 
     /* NOTE: The local buffer is allocated for an exact size of the effective render size, while

@@ -19,6 +19,7 @@
 #include "device/device.h"
 #include "device/device_denoise.h"
 #include "device/device_memory.h"
+#include "device/device_queue.h"
 #include "render/buffers.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
@@ -186,6 +187,8 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
     task.render_buffers = render_buffers;
   }
   else {
+    DeviceQueue *queue = device->get_denoise_queue();
+
     /* Create buffer which is available by the device used by denoiser. */
 
     /* TODO(sergey): Optimize data transfers. For example, only copy denoising related passes,
@@ -203,7 +206,8 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
     memcpy(local_render_buffers.buffer.data(),
            render_buffers->buffer.data(),
            sizeof(float) * local_render_buffers.buffer.size());
-    local_render_buffers.copy_to_device();
+
+    queue->copy_to_device(local_render_buffers.buffer);
 
     task.render_buffers = &local_render_buffers;
   }

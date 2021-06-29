@@ -590,6 +590,11 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
   denoise_pass(context, PASS_SHADOW_CATCHER_MATTE);
 }
 
+DeviceQueue *OptiXDevice::get_denoise_queue()
+{
+  return &denoiser_.queue;
+}
+
 void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
 {
   const BufferParams &buffer_params = context.buffer_params;

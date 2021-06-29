@@ -381,6 +381,12 @@ class Device {
     LOG(ERROR) << "Request buffer denoising from a device which does not support it.";
   }
 
+  virtual DeviceQueue *get_denoise_queue()
+  {
+    LOG(ERROR) << "Request denoising queue from a device which does not support it.";
+    return nullptr;
+  }
+
   /* Sub-devices */
 
   /* Run given callback for every individual device which will be handling rendering.

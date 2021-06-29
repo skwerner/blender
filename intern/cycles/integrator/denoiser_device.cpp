@@ -198,9 +198,12 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
     /* TODO(sergey): Avoid `zero_to_device()`. */
     local_render_buffers.reset(buffer_params);
 
+    /* NOTE: The local buffer is allocated for an exact size of the effective render size, while
+     * the input render buffer is allcoated for the lowest resolution divider possible. So it is
+     * important to only copy actually needed part of the input buffer. */
     memcpy(local_render_buffers.buffer.data(),
            render_buffers->buffer.data(),
-           sizeof(float) * render_buffers->buffer.size());
+           sizeof(float) * local_render_buffers.buffer.size());
     local_render_buffers.copy_to_device();
 
     task.render_buffers = &local_render_buffers;
@@ -213,7 +216,7 @@ void DeviceDenoiser::denoise_buffer_on_device(Device *device,
     local_render_buffers.copy_from_device();
     memcpy(render_buffers->buffer.data(),
            local_render_buffers.buffer.data(),
-           sizeof(float) * render_buffers->buffer.size());
+           sizeof(float) * local_render_buffers.buffer.size());
     render_buffers->copy_to_device();
   }
 }

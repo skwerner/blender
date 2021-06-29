@@ -41,8 +41,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-OptiXDevice::Denoiser::Denoiser(CUDADevice *device)
-    : device(device), state(device, "__denoiser_state")
+OptiXDevice::Denoiser::Denoiser(OptiXDevice *device)
+    : device(device), queue(device), state(device, "__denoiser_state")
 {
 }
 
@@ -542,8 +542,7 @@ static int denoise_buffer_pass_stride(const DenoiseParams &params)
 class OptiXDevice::DenoiseContext {
  public:
   explicit DenoiseContext(OptiXDevice *device, const DeviceDenoiseTask &task)
-      : queue(device),
-        denoise_params(task.params),
+      : denoise_params(task.params),
         render_buffers(task.render_buffers),
         buffer_params(task.buffer_params),
         input_rgb(device, "denoiser input rgb"),
@@ -554,8 +553,6 @@ class OptiXDevice::DenoiseContext {
 
     pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
   }
-
-  OptiXDeviceQueue queue;
 
   const DenoiseParams &denoise_params;
 
@@ -635,10 +632,10 @@ void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
     return;
   }
 
-  context.queue.synchronize();
+  denoiser_.queue.synchronize();
 }
 
-void OptiXDevice::denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass) const
+void OptiXDevice::denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass)
 {
   PassAccessor::PassAccessInfo pass_access_info;
   pass_access_info.type = pass.type;
@@ -653,7 +650,8 @@ void OptiXDevice::denoise_read_input_pixels(DenoiseContext &context, const Denoi
 
   /* TODO(sergey): Consider adding support of actual exposure, to avoid clamping in extreme cases.
    */
-  const PassAccessorGPU pass_accessor(&context.queue, pass_access_info, 1.0f, context.num_samples);
+  const PassAccessorGPU pass_accessor(
+      &denoiser_.queue, pass_access_info, 1.0f, context.num_samples);
 
   PassAccessor::Destination destination(pass_access_info.type);
   destination.d_pixels = context.input_rgb.device_pointer;
@@ -692,7 +690,7 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DenoiseContext &context, const D
                   const_cast<int *>(&context.num_samples),
                   const_cast<int *>(&context.pass_sample_count)};
 
-  return context.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args);
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args);
 }
 
 bool OptiXDevice::denoise_filter_convert_from_rgb(DenoiseContext &context, const DenoisePass &pass)
@@ -715,7 +713,7 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(DenoiseContext &context, const
                   const_cast<int *>(&pass.denoised_offset),
                   const_cast<int *>(&context.pass_sample_count)};
 
-  return context.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);
 }
 
 bool OptiXDevice::denoise_ensure(const DeviceDenoiseTask &task)
@@ -808,7 +806,7 @@ bool OptiXDevice::denoise_configure_if_needed(const DeviceDenoiseTask &task)
 
   /* Initialize denoiser state for the current tile size. */
   const OptixResult result = optixDenoiserSetup(denoiser_.optix_denoiser,
-                                                0,
+                                                denoiser_.queue.stream(),
                                                 task.buffer_params.width,
                                                 task.buffer_params.height,
                                                 denoiser_.state.device_pointer,
@@ -868,7 +866,7 @@ bool OptiXDevice::denoise_run(DenoiseContext &context)
   guide_layers.normal = input_layers[2];
 
   optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
-                                   context.queue.stream(),
+                                   denoiser_.queue.stream(),
                                    &params,
                                    denoiser_.state.device_pointer,
                                    denoiser_.scratch_offset,
@@ -883,7 +881,7 @@ bool OptiXDevice::denoise_run(DenoiseContext &context)
   const int input_passes = denoise_buffer_num_passes(context.denoise_params);
 
   optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
-                                   context.queue.stream(),
+                                   denoiser_.queue.stream(),
                                    &params,
                                    denoiser_.state.device_pointer,
                                    denoiser_.scratch_offset,

@@ -85,10 +85,11 @@ class OptiXDevice : public CUDADevice {
 
   class Denoiser {
    public:
-    explicit Denoiser(CUDADevice *device);
+    explicit Denoiser(OptiXDevice *device);
     ~Denoiser();
 
-    CUDADevice *device;
+    OptiXDevice *device;
+    OptiXDeviceQueue queue;
 
     OptixDenoiser optix_denoiser = nullptr;
 
@@ -148,7 +149,7 @@ class OptiXDevice : public CUDADevice {
   void denoise_pass(DenoiseContext &context, PassType pass_type);
 
   /* Read pixels from the input noisy image and store scaled result in the given memory. */
-  void denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass) const;
+  void denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass);
 
   /* Run corresponding conversion kernels, preparing data for the denoiser or copying data from the
    * denoiser result to the render buffer. */

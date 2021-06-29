@@ -683,6 +683,10 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
 
 void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 {
+  if (!session->copy_render_tile_from_device()) {
+    return;
+  }
+
   const int2 tile_size = session->get_render_tile_size();
   vector<float> pixels(tile_size.x * tile_size.y * 4);
 
@@ -698,6 +702,10 @@ void BlenderSession::write_render_result(BL::RenderLayer &b_rlay)
 
 void BlenderSession::update_render_result(BL::RenderLayer &b_rlay)
 {
+  if (!session->copy_render_tile_from_device()) {
+    return;
+  }
+
   const int2 tile_size = session->get_render_tile_size();
   vector<float> pixels(tile_size.x * tile_size.y * 4);
 

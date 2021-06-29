@@ -150,6 +150,8 @@ class Session {
   int2 get_render_tile_size() const;
   int2 get_render_tile_offset() const;
 
+  bool copy_render_tile_from_device();
+
   bool get_render_tile_pixels(const string &pass_name, int num_components, float *pixels);
   bool set_render_tile_pixels(const string &pass_name, int num_components, const float *pixels);
 

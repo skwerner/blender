@@ -91,8 +91,13 @@ class PathTraceWork {
    * - Copies work's render buffer to its device. */
   void copy_from_render_buffers(const RenderBuffers *render_buffers);
 
+  bool copy_render_tile_from_device();
+
   /* Access pixels rendered by this work and copy them to the coresponding location in the
-   * destination. */
+   * destination.
+   *
+   * NOTE: Does not perform copy of buffers from the device. Use `copy_render_tile_from_device()`
+   * to update host-side data. */
   bool get_render_tile_pixels(const PassAccessor &pass_accessor,
                               const PassAccessor::Destination &destination);
 

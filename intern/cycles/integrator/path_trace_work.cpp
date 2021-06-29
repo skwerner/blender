@@ -112,13 +112,14 @@ void PathTraceWork::copy_from_render_buffers(const RenderBuffers *render_buffers
   buffers_->copy_to_device();
 }
 
+bool PathTraceWork::copy_render_tile_from_device()
+{
+  return buffers_->copy_from_device();
+}
+
 bool PathTraceWork::get_render_tile_pixels(const PassAccessor &pass_accessor,
                                            const PassAccessor::Destination &destination)
 {
-  if (!buffers_->copy_from_device()) {
-    return false;
-  }
-
   const int offset_y = effective_buffer_params_.full_y - effective_big_tile_params_.full_y;
   const int width = effective_buffer_params_.width;
 

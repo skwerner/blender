@@ -574,6 +574,11 @@ int2 Session::get_render_tile_offset() const
   return make_int2(tile.x - tile.full_x, tile.y - tile.full_y);
 }
 
+bool Session::copy_render_tile_from_device()
+{
+  return path_trace_->copy_render_tile_from_device();
+}
+
 bool Session::get_render_tile_pixels(const string &pass_name, int num_components, float *pixels)
 {
   const Pass *pass = Pass::find(scene->passes, pass_name);

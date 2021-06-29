@@ -578,6 +578,22 @@ void PathTrace::copy_from_render_buffers(RenderBuffers *render_buffers)
                          });
 }
 
+bool PathTrace::copy_render_tile_from_device()
+{
+  bool success = true;
+
+  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+    if (!success) {
+      return;
+    }
+    if (!path_trace_work->copy_render_tile_from_device()) {
+      success = false;
+    }
+  });
+
+  return success;
+}
+
 bool PathTrace::get_render_tile_pixels(const PassAccessor &pass_accessor,
                                        const PassAccessor::Destination &destination)
 {

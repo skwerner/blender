@@ -107,8 +107,14 @@ class PathTrace {
    * buffers and will be copied to all devices of the path trace. */
   void copy_from_render_buffers(RenderBuffers *render_buffers);
 
+  /* Copy render buffers of the big tile from the device to hsot.
+   * Return true if all copies are successful. */
+  bool copy_render_tile_from_device();
+
   /* Get pass data of the entire big tile.
    * This call puts pass render result from all devices into the final pixels storage.
+   *
+   * NOTE: Expects buffers to be copied to the host using `copy_render_tile_from_device()`.
    *
    * Returns false if any of the accessor's `get_render_tile_pixels()` returned false. */
   bool get_render_tile_pixels(const PassAccessor &pass_accessor,

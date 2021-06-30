@@ -53,6 +53,11 @@ class RenderWork {
   /* Display which is used to visualize render result is to be updated for the new render. */
   bool update_display = false;
 
+  /* Re-balance multi-device scheduling after rendering this work.
+   * Note that the scheduler does not know anything abouce devices, so if there is only a single
+   * device used, then it is up for the PathTracer to ignore the balancing. */
+  bool rebalance = false;
+
   /* Conversion to bool, to simplify checks about whether there is anything to be done for this
    * work. */
   inline operator bool() const
@@ -188,6 +193,9 @@ class RenderScheduler {
    * The `denoiser_delayed` is what `work_need_denoise()` returned as delayed denoiser flag. */
   bool work_need_update_display(const bool denoiser_delayed);
 
+  /* Check whether it is time to perform rebalancing for the render work, */
+  bool work_need_rebalance();
+
   /* Check whether timing of the given work are usable to store timings in the `first_render_time_`
    * for the resolution divider calculation. */
   bool work_is_usable_for_first_render_estimation(const RenderWork &render_work);
@@ -257,6 +265,9 @@ class RenderScheduler {
     double last_display_update_time = 0.0;
     /* Value of -1 means display was never updated. */
     int last_display_update_sample = -1;
+
+    /* Point in time at which last rebalance has been performed. */
+    double last_rebalance_time = 0.0;
 
     /* Threshold for adaptive sampling which will be scheduled to work when not using progressive
      * noise floor. */

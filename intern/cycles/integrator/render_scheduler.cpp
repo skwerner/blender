@@ -115,6 +115,8 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.last_display_update_time = 0.0;
   state_.last_display_update_sample = -1;
 
+  state_.last_rebalance_time = 0.0;
+
   /* TODO(sergey): Choose better initial value. */
   /* NOTE: The adaptive sampling settings might not be available here yet. */
   state_.adaptive_sampling_threshold = 0.4f;
@@ -201,9 +203,11 @@ RenderWork RenderScheduler::get_render_work()
 {
   check_time_limit_reached();
 
+  const double time_now = time_dt();
+
   if (done()) {
     if (state_.end_render_time == 0.0) {
-      state_.end_render_time = time_dt();
+      state_.end_render_time = time_now;
     }
     return RenderWork();
   }
@@ -241,8 +245,13 @@ RenderWork RenderScheduler::get_render_work()
   /* A fallback display update time, for the case there is an error of display update, or when
    * there is no display at all. */
   if (render_work.update_display) {
-    state_.last_display_update_time = time_dt();
+    state_.last_display_update_time = time_now;
     state_.last_display_update_sample = state_.num_rendered_samples;
+  }
+
+  render_work.rebalance = work_need_rebalance();
+  if (render_work.rebalance) {
+    state_.last_rebalance_time = time_now;
   }
 
   return render_work;
@@ -697,6 +706,22 @@ bool RenderScheduler::work_need_update_display(const bool denoiser_delayed)
   const double update_interval = guess_display_update_interval_in_seconds_for_num_samples(
       state_.last_display_update_sample);
   return (time_dt() - state_.last_display_update_time) > update_interval;
+}
+
+bool RenderScheduler::work_need_rebalance()
+{
+  /* This is the minimum time, as the rebalancing can not happen more often than the path trace
+   * work. */
+  static const double kRebalanceIntervalInSeconds = 5;
+
+  if (state_.resolution_divider != pixel_size_) {
+    /* Don't rebalance at a non-final resolution divider. Some reasons for this:
+     *  - It will introduce unnecessary during navigation.
+     *  - Per-render device timing information is not very reliable yet. */
+    return false;
+  }
+
+  return (time_dt() - state_.last_rebalance_time) > kRebalanceIntervalInSeconds;
 }
 
 void RenderScheduler::update_start_resolution_divider()

@@ -19,6 +19,7 @@
 #include "integrator/denoiser.h"
 #include "integrator/pass_accessor.h"
 #include "integrator/path_trace_work.h"
+#include "integrator/work_balancer.h"
 #include "render/buffers.h"
 #include "util/util_function.h"
 #include "util/util_thread.h"
@@ -180,6 +181,7 @@ class PathTrace {
   void adaptive_sample(RenderWork &render_work);
   void denoise(const RenderWork &render_work);
   void update_display(const RenderWork &render_work);
+  void rebalance(const RenderWork &render_work);
 
   /* Get number of samples in the current state of the render buffers. */
   int get_num_samples_in_buffer();
@@ -208,6 +210,9 @@ class PathTrace {
   /* Per-compute device descriptors of work which is responsible for path tracing on its configured
    * device. */
   vector<unique_ptr<PathTraceWork>> path_trace_works_;
+
+  /* Per-path trace work information needed for multi-device balancing. */
+  vector<WorkBalanceInfo> work_balance_infos_;
 
   /* Render buffer parameters of the  the big tile. */
   BufferParams big_tile_params_;

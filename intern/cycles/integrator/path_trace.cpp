@@ -41,6 +41,9 @@ PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler 
     path_trace_works_.emplace_back(
         PathTraceWork::create(path_trace_device, device_scene, &render_cancel_.is_requested));
   });
+
+  work_balance_infos_.resize(path_trace_works_.size());
+  work_balance_do_initial(work_balance_infos_);
 }
 
 void PathTrace::load_kernels()
@@ -139,6 +142,7 @@ void PathTrace::render_pipeline(RenderWork render_work)
   }
 
   update_display(render_work);
+  rebalance(render_work);
 
   progress_update_if_needed();
 
@@ -159,6 +163,7 @@ void PathTrace::render_init_kernel_execution()
  * smaller. */
 template<typename Callback>
 static void foreach_sliced_buffer_params(const vector<unique_ptr<PathTraceWork>> &path_trace_works,
+                                         const vector<WorkBalanceInfo> &work_balance_infos,
                                          const BufferParams &buffer_params,
                                          const Callback &callback)
 {
@@ -167,9 +172,7 @@ static void foreach_sliced_buffer_params(const vector<unique_ptr<PathTraceWork>>
 
   int current_y = 0;
   for (int i = 0; i < num_works; ++i) {
-    /* TODO(sergey): Support adaptive weight based on an observed device performance. */
-    const float weight = 1.0f / num_works;
-
+    const double weight = work_balance_infos[i].weight;
     const int slice_height = max(lround(height * weight), 1);
 
     /* Disallow negative values to deal with situations when there are more compute devices than
@@ -196,6 +199,7 @@ static void foreach_sliced_buffer_params(const vector<unique_ptr<PathTraceWork>>
 void PathTrace::update_allocated_work_buffer_params()
 {
   foreach_sliced_buffer_params(path_trace_works_,
+                               work_balance_infos_,
                                big_tile_params_,
                                [](PathTraceWork *path_trace_work, const BufferParams &params) {
                                  RenderBuffers *buffers = path_trace_work->get_render_buffers();
@@ -227,6 +231,7 @@ void PathTrace::update_effective_work_buffer_params(const RenderWork &render_wor
                                                                   resolution_divider);
 
   foreach_sliced_buffer_params(path_trace_works_,
+                               work_balance_infos_,
                                scaled_big_tile_params,
                                [&](PathTraceWork *path_trace_work, const BufferParams params) {
                                  path_trace_work->set_effective_buffer_params(
@@ -277,9 +282,13 @@ void PathTrace::path_trace(RenderWork &render_work)
 
   const double start_time = time_dt();
 
-  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+  const int num_works = path_trace_works_.size();
+  tbb::parallel_for(0, num_works, [&](int i) {
+    const double work_start_time = time_dt();
+    PathTraceWork *path_trace_work = path_trace_works_[i].get();
     path_trace_work->render_samples(render_work.path_trace.start_sample,
                                     render_work.path_trace.num_samples);
+    work_balance_infos_[i].time_spent += time_dt() - work_start_time;
   });
 
   render_scheduler_.report_path_trace_time(
@@ -491,6 +500,27 @@ void PathTrace::update_display(const RenderWork &render_work)
   gpu_display_->update_end();
 
   render_scheduler_.report_display_update_time(render_work, time_dt() - start_time);
+}
+
+void PathTrace::rebalance(const RenderWork &render_work)
+{
+  if (!render_work.rebalance) {
+    return;
+  }
+
+  if (path_trace_works_.size() == 1) {
+    VLOG(3) << "Ignoring rebalance work due to single device render.";
+    return;
+  }
+
+  VLOG(3) << "Perform rebalance work.";
+
+  if (!work_balance_do_rebalance(work_balance_infos_)) {
+    VLOG(3) << "Balance in path trace works did not change.";
+    return;
+  }
+
+  /* TODO(sergey): Update buffer allocation, and copy data across devices as needed. */
 }
 
 void PathTrace::cancel()

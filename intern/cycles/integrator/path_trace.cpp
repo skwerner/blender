@@ -30,6 +30,28 @@
 
 CCL_NAMESPACE_BEGIN
 
+namespace {
+
+class TempCPURenderBuffers {
+ public:
+  /* `device_template` is used to access stats and profiler. */
+  explicit TempCPURenderBuffers(Device *device_template)
+  {
+    vector<DeviceInfo> cpu_devices;
+    device_cpu_info(cpu_devices);
+
+    device.reset(
+        device_cpu_create(cpu_devices[0], device_template->stats, device_template->profiler));
+
+    buffers = make_unique<RenderBuffers>(device.get());
+  }
+
+  unique_ptr<Device> device;
+  unique_ptr<RenderBuffers> buffers;
+};
+
+}  // namespace
+
 PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler)
     : device_(device), render_scheduler_(render_scheduler)
 {
@@ -396,38 +418,28 @@ void PathTrace::denoise(const RenderWork &render_work)
 
   RenderBuffers *buffer_to_denoise = nullptr;
 
-  unique_ptr<Device> big_tile_device;
-  unique_ptr<RenderBuffers> big_tile_render_buffers;
+  unique_ptr<TempCPURenderBuffers> big_tile_cpu_buffers;
 
   if (path_trace_works_.size() == 1) {
     buffer_to_denoise = path_trace_works_.front()->get_render_buffers();
   }
   else {
     /* TODO(sergey): Try to reuse the buffer as much as possible. */
-    /* TODO(sergey): Split the functionality into a separate function. */
-
-    /* Used to access stats and profiler. */
-    Device *device_template = path_trace_works_.front()->get_device();
-
     /* TODO(sergey): Share same device as what will be used by the denoiser. */
-    vector<DeviceInfo> cpu_devices;
-    device_cpu_info(cpu_devices);
-    big_tile_device.reset(
-        device_cpu_create(cpu_devices[0], device_template->stats, device_template->profiler));
 
-    big_tile_render_buffers = make_unique<RenderBuffers>(big_tile_device.get());
-    big_tile_render_buffers->reset(render_state_.effective_big_tile_params);
+    big_tile_cpu_buffers = make_unique<TempCPURenderBuffers>(device_);
+    big_tile_cpu_buffers->buffers->reset(render_state_.effective_big_tile_params);
 
-    buffer_to_denoise = big_tile_render_buffers.get();
+    buffer_to_denoise = big_tile_cpu_buffers->buffers.get();
 
-    copy_to_render_buffers(big_tile_render_buffers.get());
+    copy_to_render_buffers(big_tile_cpu_buffers->buffers.get());
   }
 
   denoiser_->denoise_buffer(
       render_state_.effective_big_tile_params, buffer_to_denoise, get_num_samples_in_buffer());
 
-  if (big_tile_render_buffers) {
-    copy_from_render_buffers(big_tile_render_buffers.get());
+  if (big_tile_cpu_buffers) {
+    copy_from_render_buffers(big_tile_cpu_buffers->buffers.get());
   }
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);

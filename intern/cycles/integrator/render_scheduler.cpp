@@ -712,13 +712,17 @@ bool RenderScheduler::work_need_rebalance()
 {
   /* This is the minimum time, as the rebalancing can not happen more often than the path trace
    * work. */
-  static const double kRebalanceIntervalInSeconds = 5;
+  static const double kRebalanceIntervalInSeconds = 1;
 
   if (state_.resolution_divider != pixel_size_) {
     /* Don't rebalance at a non-final resolution divider. Some reasons for this:
      *  - It will introduce unnecessary during navigation.
      *  - Per-render device timing information is not very reliable yet. */
     return false;
+  }
+
+  if (state_.num_rendered_samples == 1) {
+    return true;
   }
 
   return (time_dt() - state_.last_rebalance_time) > kRebalanceIntervalInSeconds;

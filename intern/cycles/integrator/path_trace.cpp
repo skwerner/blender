@@ -516,23 +516,56 @@ void PathTrace::update_display(const RenderWork &render_work)
 
 void PathTrace::rebalance(const RenderWork &render_work)
 {
+  static const int kLogLevel = 3;
+
+  scoped_timer timer;
+
+  const int num_works = path_trace_works_.size();
+
   if (!render_work.rebalance) {
     return;
   }
 
-  if (path_trace_works_.size() == 1) {
-    VLOG(3) << "Ignoring rebalance work due to single device render.";
+  if (num_works == 1) {
+    VLOG(kLogLevel) << "Ignoring rebalance work due to single device render.";
     return;
   }
 
-  VLOG(3) << "Perform rebalance work.";
+  if (VLOG_IS_ON(kLogLevel)) {
+    VLOG(kLogLevel) << "Perform rebalance work.";
+    VLOG(kLogLevel) << "Per-device path tracing time (seconds):";
+    for (int i = 0; i < num_works; ++i) {
+      VLOG(kLogLevel) << path_trace_works_[i]->get_device()->info.description << ": "
+                      << work_balance_infos_[i].time_spent;
+    }
+  }
 
-  if (!work_balance_do_rebalance(work_balance_infos_)) {
-    VLOG(3) << "Balance in path trace works did not change.";
+  const bool did_rebalance = work_balance_do_rebalance(work_balance_infos_);
+
+  if (VLOG_IS_ON(kLogLevel)) {
+    VLOG(kLogLevel) << "Calculated per-device weights for works:";
+    for (int i = 0; i < num_works; ++i) {
+      LOG(INFO) << path_trace_works_[i]->get_device()->info.description << ": "
+                << work_balance_infos_[i].weight;
+    }
+  }
+
+  if (!did_rebalance) {
+    VLOG(kLogLevel) << "Balance in path trace works did not change.";
     return;
   }
 
-  /* TODO(sergey): Update buffer allocation, and copy data across devices as needed. */
+  TempCPURenderBuffers big_tile_cpu_buffers(device_);
+  big_tile_cpu_buffers.buffers->reset(render_state_.effective_big_tile_params);
+
+  copy_to_render_buffers(big_tile_cpu_buffers.buffers.get());
+
+  render_state_.need_reset_params = true;
+  update_work_buffer_params_if_needed(render_work);
+
+  copy_from_render_buffers(big_tile_cpu_buffers.buffers.get());
+
+  VLOG(kLogLevel) << "Rebalance time (seconds): " << timer.get_time();
 }
 
 void PathTrace::cancel()

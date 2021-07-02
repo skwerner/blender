@@ -255,7 +255,10 @@ class OIDNDenoiseContext {
       return;
     }
 
-    if (!oidn_pass.need_scale || (num_samples_ == 1 && pass_sample_count_ == PASS_UNUSED)) {
+    /* When adaptive sampling is involved scaling is always needed.
+     * If the avoid scaling if there is only one sample, to save up time (so we dont divide buffer
+     * by 1). */
+    if (pass_sample_count_ == PASS_UNUSED && (!oidn_pass.need_scale || num_samples_ == 1)) {
       set_pass_referenced(oidn_pass);
       return;
     }

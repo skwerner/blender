@@ -51,8 +51,8 @@ class OIDNDenoiser::State {
 #endif
 };
 
-OIDNDenoiser::OIDNDenoiser(Device *device, const DenoiseParams &params)
-    : Denoiser(device, params), state_(make_unique<State>())
+OIDNDenoiser::OIDNDenoiser(Device *path_trace_device, const DenoiseParams &params)
+    : Denoiser(path_trace_device, params), state_(make_unique<State>())
 {
   DCHECK_EQ(params.type, DENOISER_OPENIMAGEDENOISE);
 
@@ -65,8 +65,42 @@ OIDNDenoiser::~OIDNDenoiser()
    * per the OIDN denoiser header. */
 }
 
-void OIDNDenoiser::load_kernels(Progress * /*progress*/)
+bool OIDNDenoiser::load_kernels(Progress *progress)
 {
+  if (!Denoiser::load_kernels(progress)) {
+    return false;
+  }
+
+  /* Make sure all lazily-initializable resources are initialized and are ready for use by the
+   * denoising process. */
+
+#ifdef WITH_OPENIMAGEDENOISE
+  if (state_->oidn_filter) {
+    if (params_.use_pass_albedo != state_->use_pass_albedo ||
+        params_.use_pass_normal != state_->use_pass_normal) {
+      state_->oidn_device = nullptr;
+      state_->oidn_filter = nullptr;
+    }
+  }
+
+  if (!state_->oidn_device) {
+    state_->oidn_device = oidn::newDevice();
+    state_->oidn_device.commit();
+  }
+
+  if (!state_->oidn_filter) {
+    state_->oidn_filter = state_->oidn_device.newFilter("RT");
+    state_->oidn_filter.set("hdr", true);
+    state_->oidn_filter.set("srgb", false);
+  }
+
+  state_->use_pass_albedo = params_.use_pass_albedo;
+  state_->use_pass_normal = params_.use_pass_normal;
+
+  return true;
+#else
+  return false;
+#endif
 }
 
 #ifdef WITH_OPENIMAGEDENOISE
@@ -352,8 +386,6 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   /* Copy pixels from compute device to CPU (no-op for CPU device). */
   render_buffers->buffer.copy_from_device();
 
-  initialize();
-
 #ifdef WITH_OPENIMAGEDENOISE
   oidn::FilterRef *oidn_filter = &state_->oidn_filter;
 
@@ -368,56 +400,9 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   render_buffers->buffer.copy_to_device();
 }
 
-DeviceInfo OIDNDenoiser::get_denoiser_device_info() const
+uint OIDNDenoiser::get_device_type_mask() const
 {
-  /* OpenImageDenoiser runs on CPU. Access the CPU device information with some safety fallbacks
-   * for possible variations of Cycles integration. */
-
-  vector<DeviceInfo> cpu_devices = Device::available_devices(DEVICE_MASK_CPU);
-
-  if (cpu_devices.empty()) {
-    LOG(ERROR) << "No CPU devices reported.";
-
-    DeviceInfo dummy_info;
-    dummy_info.type = DEVICE_NONE;
-    return dummy_info;
-  }
-
-  if (cpu_devices.size() > 1) {
-    DeviceInfo device_info;
-    device_info.type = DEVICE_MULTI;
-    device_info.multi_devices = cpu_devices;
-    return device_info;
-  }
-
-  return cpu_devices[0];
-}
-
-void OIDNDenoiser::initialize()
-{
-#ifdef WITH_OPENIMAGEDENOISE
-  if (state_->oidn_filter) {
-    if (params_.use_pass_albedo != state_->use_pass_albedo ||
-        params_.use_pass_normal != state_->use_pass_normal) {
-      state_->oidn_device = nullptr;
-      state_->oidn_filter = nullptr;
-    }
-  }
-
-  if (!state_->oidn_device) {
-    state_->oidn_device = oidn::newDevice();
-    state_->oidn_device.commit();
-  }
-
-  if (!state_->oidn_filter) {
-    state_->oidn_filter = state_->oidn_device.newFilter("RT");
-    state_->oidn_filter.set("hdr", true);
-    state_->oidn_filter.set("srgb", false);
-  }
-
-  state_->use_pass_albedo = params_.use_pass_albedo;
-  state_->use_pass_normal = params_.use_pass_normal;
-#endif
+  return DEVICE_MASK_CPU;
 }
 
 CCL_NAMESPACE_END

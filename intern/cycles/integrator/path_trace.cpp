@@ -417,28 +417,30 @@ void PathTrace::denoise(const RenderWork &render_work)
 
   RenderBuffers *buffer_to_denoise = nullptr;
 
-  unique_ptr<TempCPURenderBuffers> big_tile_cpu_buffers;
+  unique_ptr<RenderBuffers> multi_devoice_buffers;
 
   if (path_trace_works_.size() == 1) {
     buffer_to_denoise = path_trace_works_.front()->get_render_buffers();
   }
   else {
-    /* TODO(sergey): Try to reuse the buffer as much as possible. */
-    /* TODO(sergey): Share same device as what will be used by the denoiser. */
+    Device *denoiser_device = denoiser_->get_denoiser_device();
+    if (!denoiser_device) {
+      return;
+    }
 
-    big_tile_cpu_buffers = make_unique<TempCPURenderBuffers>(device_);
-    big_tile_cpu_buffers->buffers->reset(render_state_.effective_big_tile_params);
+    multi_devoice_buffers = make_unique<RenderBuffers>(denoiser_device);
+    multi_devoice_buffers->reset(render_state_.effective_big_tile_params);
 
-    buffer_to_denoise = big_tile_cpu_buffers->buffers.get();
+    buffer_to_denoise = multi_devoice_buffers.get();
 
-    copy_to_render_buffers(big_tile_cpu_buffers->buffers.get());
+    copy_to_render_buffers(multi_devoice_buffers.get());
   }
 
   denoiser_->denoise_buffer(
       render_state_.effective_big_tile_params, buffer_to_denoise, get_num_samples_in_buffer());
 
-  if (big_tile_cpu_buffers) {
-    copy_from_render_buffers(big_tile_cpu_buffers->buffers.get());
+  if (multi_devoice_buffers) {
+    copy_from_render_buffers(multi_devoice_buffers.get());
   }
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);
@@ -813,12 +815,12 @@ static string denoiser_device_report(const Denoiser *denoiser)
     return "";
   }
 
-  const DeviceInfo device_info = denoiser->get_denoiser_device_info();
-  if (device_info.type == DEVICE_NONE) {
+  const Device *denoiser_device = denoiser->get_denoiser_device();
+  if (!denoiser_device) {
     return "";
   }
 
-  return device_info_list_report("Denoising on", device_info);
+  return device_info_list_report("Denoising on", denoiser_device->info);
 }
 
 string PathTrace::full_report() const

@@ -38,23 +38,24 @@ class Progress;
  * TODO(sergey): Are we better with device or a queue here? */
 class Denoiser {
  public:
+  /* Create denoiser for the given path trace device.
+   *
+   * Notes:
+   * - The denoiser must be configured. This means that `params.use` must be true.
+   *   This is checked in debug builds.
+   * - The device might be MultiDevice. */
+  static unique_ptr<Denoiser> create(Device *path_trace_device, const DenoiseParams &params);
+
   virtual ~Denoiser() = default;
 
   void set_params(const DenoiseParams &params);
   const DenoiseParams &get_params() const;
 
-  /* Create denoiser for the given device.
-   * Notes:
-   * - The denoiser must be configured. This means that `params.use` must be true.
-   *   This is checked in debug builds.
-   * - The device might be MultiDevice. */
-  static unique_ptr<Denoiser> create(Device *device, const DenoiseParams &params);
-
   /* Create devices and load kernels needed for denoising.
    * The progress is used to communicate state when kenrels actually needs to be loaded.
    *
    * NOTE: The `progress` is an optional argument, can be nullptr. */
-  virtual void load_kernels(Progress *progress) = 0;
+  virtual bool load_kernels(Progress *progress);
 
   /* Denoise the entire buffer.
    *
@@ -74,25 +75,41 @@ class Denoiser {
                               RenderBuffers *render_buffers,
                               const int num_samples) = 0;
 
-  /* Get access to the device information which is used to perform actual denoising.
-   * Note that this device:
+  /* Get a device which is used to perform actual denoising.
    *
-   * - Can be different from the device used during denoiser creation. This happens, for example,
-   *   when using OptiX denoiser and rendering on CPU.
+   * Notes:
    *
-   * - The denoising device is lazily initialized, so if no denoising was perfoemed yet it is
-   *   possible that device info of type DEVICE_NONE will be returned.
+   * - The device is lazily initialized via `load_kernels()`, so it will be nullptr until then,
+   *
+   * - The device can be different from the path tracing device. This happens, for example, when
+   *   using OptiX denoiser and rendering on CPU.
    *
    * - No threading safety is ensured in this call. This means, that it is up to caller to ensure
    *   that there is no threadingconflict between denoising task lazily initializing the device and
    *   access to this device happen. */
-  virtual DeviceInfo get_denoiser_device_info() const = 0;
+  Device *get_denoiser_device() const;
 
  protected:
-  Denoiser(Device *device, const DenoiseParams &params);
+  Denoiser(Device *path_trace_device, const DenoiseParams &params);
 
-  Device *device_;
+  /* Make sure denoising device is initialized. */
+  virtual Device *ensure_denoiser_device(Progress *progress);
+
+  /* Get device type mask which is used to filter available devices when new device needs to be
+   * created. */
+  virtual uint get_device_type_mask() const = 0;
+
+  Device *path_trace_device_;
   DenoiseParams params_;
+
+  /* Cached pointer to the device on which denoising will happen.
+   * Used to avoid lookup of a device for every denoising request. */
+  Device *denoiser_device_ = nullptr;
+
+  /* Denoiser device which was created to perform denoising in the case the none of the rendering
+   * devices are capable of denoising. */
+  unique_ptr<Device> local_denoiser_device_;
+  bool device_creation_attempted_ = false;
 };
 
 CCL_NAMESPACE_END

@@ -21,8 +21,8 @@
 
 CCL_NAMESPACE_BEGIN
 
-OptiXDenoiser::OptiXDenoiser(Device *device, const DenoiseParams &params)
-    : DeviceDenoiser(device, params)
+OptiXDenoiser::OptiXDenoiser(Device *path_trace_device, const DenoiseParams &params)
+    : DeviceDenoiser(path_trace_device, params)
 {
 }
 

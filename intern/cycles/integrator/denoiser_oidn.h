@@ -29,21 +29,17 @@ class OIDNDenoiser : public Denoiser {
    * OpenImageDenoise device and filter handles. */
   class State;
 
-  OIDNDenoiser(Device *device, const DenoiseParams &params);
+  OIDNDenoiser(Device *path_trace_device, const DenoiseParams &params);
   ~OIDNDenoiser();
 
-  virtual void load_kernels(Progress *progress) override;
+  virtual bool load_kernels(Progress *progress) override;
 
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples) override;
 
-  virtual DeviceInfo get_denoiser_device_info() const override;
-
  protected:
-  /* Make sure all lazily-initializable resources are initialized and are ready for use by the
-   * denoising process. */
-  void initialize();
+  virtual uint get_device_type_mask() const override;
 
   /* We only perform one denoising at a time, since OpenImageDenoise itself is multithreaded.
    * Use this mutex whenever images are passed to the OIDN and needs to be denoised. */

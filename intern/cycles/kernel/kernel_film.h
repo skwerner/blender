@@ -53,12 +53,13 @@ ccl_device_inline float film_get_scale_exposure(const KernelFilmConvert *ccl_res
     return kfilm_convert->scale_exposure;
   }
 
+  const float scale = film_get_scale(kfilm_convert, buffer);
+
   if (kfilm_convert->pass_use_exposure) {
-    const float scale = film_get_scale(kfilm_convert, buffer);
     return scale * kfilm_convert->exposure;
   }
 
-  return 1.0f;
+  return scale;
 }
 
 ccl_device_inline void film_get_scale_and_scale_exposure(

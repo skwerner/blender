@@ -491,22 +491,22 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
   const int path_flag = INTEGRATOR_STATE(path, flag);
   int pass_offset = PASS_UNUSED;
 
+  /* Denoising albedo. */
+#  ifdef __DENOISING_FEATURES__
+  if (path_flag & PATH_RAY_DENOISING_FEATURES) {
+    if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
+      const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
+                                                                   denoising_feature_throughput);
+      const float3 denoising_albedo = denoising_feature_throughput * contribution;
+      kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_albedo,
+                                         denoising_albedo);
+    }
+  }
+#  endif /* __DENOISING_FEATURES__ */
+
   if (!(path_flag & PATH_RAY_ANY_PASS)) {
     /* Directly visible, write to emission or background pass. */
     pass_offset = pass;
-
-    /* Denoising albedo. */
-#  ifdef __DENOISING_FEATURES__
-    if (path_flag & PATH_RAY_DENOISING_FEATURES) {
-      if (kernel_data.film.pass_denoising_albedo != PASS_UNUSED) {
-        const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
-                                                                     denoising_feature_throughput);
-        const float3 denoising_albedo = denoising_feature_throughput * contribution;
-        kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_albedo,
-                                           denoising_albedo);
-      }
-    }
-#  endif /* __DENOISING_FEATURES__ */
   }
   else if (path_flag & PATH_RAY_REFLECT_PASS) {
     /* Indirectly visible through reflection. */

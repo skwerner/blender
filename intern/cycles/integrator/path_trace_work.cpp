@@ -76,7 +76,7 @@ bool PathTraceWork::has_multiple_works() const
 
 void PathTraceWork::copy_to_render_buffers(RenderBuffers *render_buffers)
 {
-  buffers_->copy_from_device();
+  copy_render_buffers_from_device();
 
   const int64_t width = effective_buffer_params_.width;
   const int64_t height = effective_buffer_params_.height;
@@ -109,12 +109,7 @@ void PathTraceWork::copy_from_render_buffers(const RenderBuffers *render_buffers
 
   memcpy(dst, src, data_size);
 
-  buffers_->copy_to_device();
-}
-
-bool PathTraceWork::copy_render_tile_from_device()
-{
-  return buffers_->copy_from_device();
+  copy_render_buffers_to_device();
 }
 
 bool PathTraceWork::get_render_tile_pixels(const PassAccessor &pass_accessor,

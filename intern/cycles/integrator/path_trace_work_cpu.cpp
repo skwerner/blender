@@ -173,6 +173,23 @@ void PathTraceWorkCPU::copy_to_gpu_display(GPUDisplay *gpu_display,
   gpu_display->unmap_texture_buffer();
 }
 
+bool PathTraceWorkCPU::copy_render_buffers_from_device()
+{
+  return buffers_->copy_from_device();
+}
+
+bool PathTraceWorkCPU::copy_render_buffers_to_device()
+{
+  buffers_->buffer.copy_to_device();
+  return true;
+}
+
+bool PathTraceWorkCPU::zero_render_buffers()
+{
+  buffers_->zero();
+  return true;
+}
+
 int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float threshold, bool reset)
 {
   const int full_x = effective_buffer_params_.full_x;

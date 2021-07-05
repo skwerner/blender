@@ -49,6 +49,10 @@ class PathTraceWorkCPU : public PathTraceWork {
                                    PassMode pass_mode,
                                    int num_samples) override;
 
+  virtual bool copy_render_buffers_from_device() override;
+  virtual bool copy_render_buffers_to_device() override;
+  virtual bool zero_render_buffers() override;
+
   virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) override;
 
  protected:

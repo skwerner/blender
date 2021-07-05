@@ -829,6 +829,32 @@ void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_y()
   queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y, work_size, args);
 }
 
+bool PathTraceWorkGPU::copy_render_buffers_from_device()
+{
+  queue_->copy_from_device(buffers_->buffer);
+
+  /* Synchronize so that the CPU-side buffer is available at the exit of this function. */
+  return queue_->synchronize();
+}
+
+bool PathTraceWorkGPU::copy_render_buffers_to_device()
+{
+  queue_->copy_to_device(buffers_->buffer);
+
+  /* NOTE: The direct device access to the buffers only happens within this path trace work. The
+   * rest of communication happens via API calls which involves `copy_render_buffers_from_device()`
+   * which will perform synchronization as needed. */
+
+  return true;
+}
+
+bool PathTraceWorkGPU::zero_render_buffers()
+{
+  queue_->zero_to_device(buffers_->buffer);
+
+  return true;
+}
+
 bool PathTraceWorkGPU::has_shadow_catcher() const
 {
   return device_scene_->data.integrator.has_shadow_catcher;

@@ -285,8 +285,7 @@ void PathTrace::init_render_buffers(const RenderWork &render_work)
   /* Handle initialization scheduled by the render scheduler. */
   if (render_work.init_render_buffers) {
     tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
-      RenderBuffers *buffers = path_trace_work->get_render_buffers();
-      buffers->zero();
+      path_trace_work->zero_render_buffers();
     });
 
     buffer_read();
@@ -618,8 +617,7 @@ void PathTrace::buffer_read()
 
   if (buffer_read_cb()) {
     tbb::parallel_for_each(path_trace_works_, [](unique_ptr<PathTraceWork> &path_trace_work) {
-      RenderBuffers *buffers = path_trace_work->get_render_buffers();
-      buffers->copy_to_device();
+      path_trace_work->copy_render_buffers_to_device();
     });
   }
 }
@@ -661,7 +659,7 @@ bool PathTrace::copy_render_tile_from_device()
     if (!success) {
       return;
     }
-    if (!path_trace_work->copy_render_tile_from_device()) {
+    if (!path_trace_work->copy_render_buffers_from_device()) {
       success = false;
     }
   });

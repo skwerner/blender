@@ -440,7 +440,11 @@ void PathTrace::denoise(const RenderWork &render_work)
       render_state_.effective_big_tile_params, buffer_to_denoise, get_num_samples_in_buffer());
 
   if (multi_devoice_buffers) {
-    copy_from_render_buffers(multi_devoice_buffers.get());
+    multi_devoice_buffers->copy_from_device();
+    tbb::parallel_for_each(
+        path_trace_works_, [&multi_devoice_buffers](unique_ptr<PathTraceWork> &path_trace_work) {
+          path_trace_work->copy_from_denoised_render_buffers(multi_devoice_buffers.get());
+        });
   }
 
   render_scheduler_.report_denoise_time(render_work, time_dt() - start_time);

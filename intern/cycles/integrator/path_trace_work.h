@@ -91,6 +91,12 @@ class PathTraceWork {
    * - Copies work's render buffer to its device. */
   void copy_from_render_buffers(const RenderBuffers *render_buffers);
 
+  /* Special version of the `copy_from_render_buffers()` which only copies denosied passes from the
+   * given render buffers, leaving rest of the passes.
+   *
+   * Same notes about device copying aplies to this call as well. */
+  void copy_from_denoised_render_buffers(const RenderBuffers *render_buffers);
+
   /* Copy render buffers to/from device using an appropriate device queue when needed so that
    * things are executed in order with the `render_samples()`. */
   virtual bool copy_render_buffers_from_device() = 0;

@@ -65,7 +65,7 @@ ccl_device float cubic_h1(float a)
 
 /* Fast bicubic texture lookup using 4 bilinear lookups, adapted from CUDA samples. */
 template<typename T>
-ccl_device T kernel_tex_image_interp_bicubic(const TextureInfo &info, float x, float y)
+ccl_device_noinline T kernel_tex_image_interp_bicubic(const TextureInfo &info, float x, float y)
 {
   CUtexObject tex = (CUtexObject)info.data;
 
@@ -91,7 +91,8 @@ ccl_device T kernel_tex_image_interp_bicubic(const TextureInfo &info, float x, f
 
 /* Fast tricubic texture lookup using 8 trilinear lookups. */
 template<typename T>
-ccl_device T kernel_tex_image_interp_tricubic(const TextureInfo &info, float x, float y, float z)
+ccl_device_noinline T
+kernel_tex_image_interp_tricubic(const TextureInfo &info, float x, float y, float z)
 {
   CUtexObject tex = (CUtexObject)info.data;
 
@@ -161,7 +162,7 @@ ccl_device T kernel_tex_image_interp_tricubic_nanovdb(S &s, float x, float y, fl
 }
 
 template<typename T>
-ccl_device_inline T kernel_tex_image_interp_nanovdb(
+ccl_device_noinline T kernel_tex_image_interp_nanovdb(
     const TextureInfo &info, float x, float y, float z, uint interpolation)
 {
   using namespace nanovdb;

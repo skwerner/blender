@@ -85,7 +85,13 @@ ccl_device float svm_ao(INTEGRATOR_STATE_CONST_ARGS,
   return ((float)unoccluded) / num_samples;
 }
 
-ccl_device void svm_node_ao(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd, float *stack, uint4 node)
+#  if defined(__KERNEL_OPTIX__)
+ccl_device_inline
+#  else
+ccl_device_noinline
+#  endif
+    void
+    svm_node_ao(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd, float *stack, uint4 node)
 {
 #  if defined(__KERNEL_OPTIX__)
   optixDirectCall<void>(0, INTEGRATOR_STATE_PASS, sd, stack, node);

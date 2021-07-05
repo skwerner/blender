@@ -88,10 +88,10 @@ ccl_device_inline float wireframe(
   return 0.0f;
 }
 
-ccl_device void svm_node_wireframe(const KernelGlobals *kg,
-                                   ShaderData *sd,
-                                   float *stack,
-                                   uint4 node)
+ccl_device_noinline void svm_node_wireframe(const KernelGlobals *kg,
+                                            ShaderData *sd,
+                                            float *stack,
+                                            uint4 node)
 {
   uint in_size = node.y;
   uint out_fac = node.z;

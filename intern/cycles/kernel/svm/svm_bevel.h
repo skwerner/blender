@@ -209,10 +209,13 @@ ccl_device float3 svm_bevel(INTEGRATOR_STATE_CONST_ARGS,
   return is_zero(N) ? sd->N : (sd->flag & SD_BACKFACING) ? -N : N;
 }
 
-ccl_device void svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS,
-                               ShaderData *sd,
-                               float *stack,
-                               uint4 node)
+#  if defined(__KERNEL_OPTIX__)
+ccl_device_inline
+#  else
+ccl_device_noinline
+#  endif
+    void
+    svm_node_bevel(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd, float *stack, uint4 node)
 {
 #  if defined(__KERNEL_OPTIX__)
   optixDirectCall<void>(1, INTEGRATOR_STATE_PASS, sd, stack, node);

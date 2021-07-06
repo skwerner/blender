@@ -36,7 +36,8 @@ class OIDNDenoiser : public Denoiser {
 
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
-                              const int num_samples) override;
+                              const int num_samples,
+                              bool allow_inplace_modification) override;
 
  protected:
   virtual uint get_device_type_mask() const override;

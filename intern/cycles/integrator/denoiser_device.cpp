@@ -38,8 +38,12 @@ DeviceDenoiser::~DeviceDenoiser()
 
 void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                     RenderBuffers *render_buffers,
-                                    const int num_samples)
+                                    const int num_samples,
+                                    bool allow_inplace_modification)
 {
+  /* TODO(sergey): Support in-place modification to lower memory footprint. */
+  (void)allow_inplace_modification;
+
   Device *denoiser_device = get_denoiser_device();
   if (!denoiser_device) {
     return;

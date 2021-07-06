@@ -418,6 +418,7 @@ void PathTrace::denoise(const RenderWork &render_work)
   RenderBuffers *buffer_to_denoise = nullptr;
 
   unique_ptr<RenderBuffers> multi_devoice_buffers;
+  bool allow_inplace_modification = false;
 
   if (path_trace_works_.size() == 1) {
     buffer_to_denoise = path_trace_works_.front()->get_render_buffers();
@@ -434,10 +435,14 @@ void PathTrace::denoise(const RenderWork &render_work)
     buffer_to_denoise = multi_devoice_buffers.get();
 
     copy_to_render_buffers(multi_devoice_buffers.get());
+
+    allow_inplace_modification = true;
   }
 
-  denoiser_->denoise_buffer(
-      render_state_.effective_big_tile_params, buffer_to_denoise, get_num_samples_in_buffer());
+  denoiser_->denoise_buffer(render_state_.effective_big_tile_params,
+                            buffer_to_denoise,
+                            get_num_samples_in_buffer(),
+                            allow_inplace_modification);
 
   if (multi_devoice_buffers) {
     multi_devoice_buffers->copy_from_device();

@@ -70,10 +70,16 @@ class Denoiser {
    *
    * The `num_samples` corresponds to the number of samples in the render buffers. It is used
    * to scale buffers down to the "final" value in algorithms which don't do automatic exposure,
-   * or which needs "final" value for data passes. */
+   * or which needs "final" value for data passes.
+   *
+   * The `allow_inplace_modification` means that the denoiser is allowed to do in-place
+   * modification of the input passes (scaling them down i.e.). This will lower the memory
+   * footprint of the denoiser but will make input passes "invalid" (from path tracer) point of
+   * view. */
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
-                              const int num_samples) = 0;
+                              const int num_samples,
+                              bool allow_inplace_modification) = 0;
 
   /* Get a device which is used to perform actual denoising.
    *

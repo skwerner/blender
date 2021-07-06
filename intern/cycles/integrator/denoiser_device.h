@@ -33,7 +33,8 @@ class DeviceDenoiser : public Denoiser {
 
   virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
-                              const int num_samples) override;
+                              const int num_samples,
+                              bool allow_inplace_modification) override;
 };
 
 CCL_NAMESPACE_END

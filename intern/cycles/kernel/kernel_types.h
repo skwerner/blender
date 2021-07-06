@@ -343,6 +343,7 @@ typedef enum ClosureLabel {
 #define PASS_NAME_JOIN(a, b) a##_##b
 #define PASSMASK(pass) (1 << ((PASS_NAME_JOIN(PASS, pass)) % 32))
 
+// NOTE: Keep in sync with `Pass::get_type_enum()`.
 typedef enum PassType {
   PASS_NONE = 0,
 

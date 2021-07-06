@@ -21,104 +21,18 @@
 
 CCL_NAMESPACE_BEGIN
 
-/* TODO(sergey): Should be able to de-duplicate with `Pass::get_type_enum` somehow.
- * The latter one should also help with solving fragile nature of
- * `enum_view3d_shading_render_pass`. */
 const char *pass_type_as_string(const PassType type)
 {
-  switch (type) {
-    case PASS_NONE:
-      return "NONE";
+  const int type_int = static_cast<int>(type);
 
-    case PASS_COMBINED:
-      return "COMBINED";
-    case PASS_EMISSION:
-      return "EMISSION";
-    case PASS_BACKGROUND:
-      return "BACKGROUND";
-    case PASS_AO:
-      return "AO";
-    case PASS_SHADOW:
-      return "SHADOW";
-    case PASS_DIFFUSE_DIRECT:
-      return "DIFFUSE_DIRECT";
-    case PASS_DIFFUSE_INDIRECT:
-      return "DIFFUSE_INDIRECT";
-    case PASS_GLOSSY_DIRECT:
-      return "GLOSSY_DIRECT";
-    case PASS_GLOSSY_INDIRECT:
-      return "GLOSSY_INDIRECT";
-    case PASS_TRANSMISSION_DIRECT:
-      return "TRANSMISSION_DIRECT";
-    case PASS_TRANSMISSION_INDIRECT:
-      return "TRANSMISSION_INDIRECT";
-    case PASS_VOLUME_DIRECT:
-      return "VOLUME_DIRECT";
-    case PASS_VOLUME_INDIRECT:
-      return "VOLUME_INDIRECT";
+  const NodeEnum *type_enum = Pass::get_type_enum();
 
-    case PASS_DEPTH:
-      return "DEPTH";
-    case PASS_NORMAL:
-      return "NORMAL";
-    case PASS_ROUGHNESS:
-      return "ROUGHNESS";
-    case PASS_UV:
-      return "UV";
-    case PASS_OBJECT_ID:
-      return "OBJECT_ID";
-    case PASS_MATERIAL_ID:
-      return "MATERIAL_ID";
-    case PASS_MOTION:
-      return "MOTION";
-    case PASS_MOTION_WEIGHT:
-      return "MOTION_WEIGHT";
-    case PASS_RENDER_TIME:
-      return "RENDER_TIME";
-    case PASS_CRYPTOMATTE:
-      return "CRYPTOMATTE";
-    case PASS_AOV_COLOR:
-      return "AOV_COLOR";
-    case PASS_AOV_VALUE:
-      return "AOV_VALUE";
-    case PASS_ADAPTIVE_AUX_BUFFER:
-      return "ADAPTIVE_AUX_BUFFER";
-    case PASS_SAMPLE_COUNT:
-      return "SAMPLE_COUNT";
-    case PASS_DIFFUSE_COLOR:
-      return "DIFFUSE_COLOR";
-    case PASS_GLOSSY_COLOR:
-      return "GLOSSY_COLOR";
-    case PASS_TRANSMISSION_COLOR:
-      return "TRANSMISSION_COLOR";
-    case PASS_MIST:
-      return "MIST";
-    case PASS_DENOISING_NORMAL:
-      return "DENOISING_NORMAL";
-    case PASS_DENOISING_ALBEDO:
-      return "DENOISING_ALBEDO";
-    case PASS_SHADOW_CATCHER:
-      return "SHADOW_CATCHER";
-    case PASS_SHADOW_CATCHER_MATTE:
-      return "SHADOW_CATCHER_MATTE";
-
-    case PASS_BAKE_PRIMITIVE:
-      return "BAKE_PRIMITIVE";
-    case PASS_BAKE_DIFFERENTIAL:
-      return "BAKE_DIFFERENTIAL";
-
-    case PASS_CATEGORY_LIGHT_END:
-    case PASS_CATEGORY_DATA_END:
-    case PASS_CATEGORY_BAKE_END:
-    case PASS_NUM:
-      LOG(DFATAL) << "Invalid value for the pass type " << static_cast<int>(type)
-                  << " (value is reserved for an internal use only).";
-      return "UNKNOWN";
+  if (!type_enum->exists(type_int)) {
+    LOG(DFATAL) << "Unhandled pass type " << static_cast<int>(type) << ", not supposed to happen.";
+    return "UNKNOWN";
   }
 
-  LOG(DFATAL) << "Unhandled pass type " << static_cast<int>(type) << ", not supposed to happen.";
-
-  return "UNKNOWN";
+  return (*type_enum)[type_int].c_str();
 }
 
 const char *pass_mode_as_string(PassMode mode)
@@ -157,7 +71,23 @@ const NodeEnum *Pass::get_type_enum()
   static NodeEnum pass_type_enum;
 
   if (pass_type_enum.empty()) {
+
+    /* Light Passes. */
     pass_type_enum.insert("combined", PASS_COMBINED);
+    pass_type_enum.insert("emission", PASS_EMISSION);
+    pass_type_enum.insert("background", PASS_BACKGROUND);
+    pass_type_enum.insert("ao", PASS_AO);
+    pass_type_enum.insert("shadow", PASS_SHADOW);
+    pass_type_enum.insert("diffuse_direct", PASS_DIFFUSE_DIRECT);
+    pass_type_enum.insert("diffuse_indirect", PASS_DIFFUSE_INDIRECT);
+    pass_type_enum.insert("glossy_direct", PASS_GLOSSY_DIRECT);
+    pass_type_enum.insert("glossy_indirect", PASS_GLOSSY_INDIRECT);
+    pass_type_enum.insert("transmission_direct", PASS_TRANSMISSION_DIRECT);
+    pass_type_enum.insert("transmission_indirect", PASS_TRANSMISSION_INDIRECT);
+    pass_type_enum.insert("volume_direct", PASS_VOLUME_DIRECT);
+    pass_type_enum.insert("volume_indirect", PASS_VOLUME_INDIRECT);
+
+    /* Data passes. */
     pass_type_enum.insert("depth", PASS_DEPTH);
     pass_type_enum.insert("normal", PASS_NORMAL);
     pass_type_enum.insert("roughness", PASS_ROUGHNESS);
@@ -172,22 +102,16 @@ const NodeEnum *Pass::get_type_enum()
     pass_type_enum.insert("aov_value", PASS_AOV_VALUE);
     pass_type_enum.insert("adaptive_aux_buffer", PASS_ADAPTIVE_AUX_BUFFER);
     pass_type_enum.insert("sample_count", PASS_SAMPLE_COUNT);
-    pass_type_enum.insert("mist", PASS_MIST);
-    pass_type_enum.insert("emission", PASS_EMISSION);
-    pass_type_enum.insert("background", PASS_BACKGROUND);
-    pass_type_enum.insert("ambient_occlusion", PASS_AO);
-    pass_type_enum.insert("shadow", PASS_SHADOW);
-    pass_type_enum.insert("diffuse_direct", PASS_DIFFUSE_DIRECT);
-    pass_type_enum.insert("diffuse_indirect", PASS_DIFFUSE_INDIRECT);
     pass_type_enum.insert("diffuse_color", PASS_DIFFUSE_COLOR);
-    pass_type_enum.insert("glossy_direct", PASS_GLOSSY_DIRECT);
-    pass_type_enum.insert("glossy_indirect", PASS_GLOSSY_INDIRECT);
     pass_type_enum.insert("glossy_color", PASS_GLOSSY_COLOR);
-    pass_type_enum.insert("transmission_direct", PASS_TRANSMISSION_DIRECT);
-    pass_type_enum.insert("transmission_indirect", PASS_TRANSMISSION_INDIRECT);
     pass_type_enum.insert("transmission_color", PASS_TRANSMISSION_COLOR);
-    pass_type_enum.insert("volume_direct", PASS_VOLUME_DIRECT);
-    pass_type_enum.insert("volume_indirect", PASS_VOLUME_INDIRECT);
+    pass_type_enum.insert("mist", PASS_MIST);
+    pass_type_enum.insert("denoising_normal", PASS_DENOISING_NORMAL);
+    pass_type_enum.insert("denoising_albedo", PASS_DENOISING_ALBEDO);
+
+    pass_type_enum.insert("shadow_catcher", PASS_SHADOW_CATCHER);
+    pass_type_enum.insert("shadow_catcher_matte", PASS_SHADOW_CATCHER_MATTE);
+
     pass_type_enum.insert("bake_primitive", PASS_BAKE_PRIMITIVE);
     pass_type_enum.insert("bake_differential", PASS_BAKE_DIFFERENTIAL);
   }

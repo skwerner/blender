@@ -51,6 +51,7 @@ string string_strip(const string &s);
 string string_remove_trademark(const string &s);
 string string_from_bool(const bool var);
 string to_string(const char *str);
+string string_to_lower(const string &s);
 
 /* Wide char strings are only used on Windows to deal with non-ASCII
  * characters in file names and such. No reason to use such strings

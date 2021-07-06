@@ -17,6 +17,8 @@
 #include "blender_viewport.h"
 
 #include "blender_util.h"
+#include "render/pass.h"
+#include "util/util_logging.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -56,7 +58,22 @@ BlenderViewportParameters::BlenderViewportParameters(BL::SpaceView3D &b_v3d, boo
   }
 
   /* Film. */
-  display_pass = (PassType)get_enum(cshading, "render_pass", -1, -1);
+
+  /* Lookup display pass based on the enum identifier.
+   * This is because integer values of python enum are not aligned with the passes definition in
+   * the kernel. */
+
+  display_pass = PASS_COMBINED;
+
+  const string display_pass_identifier = get_enum_identifier(cshading, "render_pass");
+  if (!display_pass_identifier.empty()) {
+    const ustring pass_type_identifier(string_to_lower(display_pass_identifier));
+    const NodeEnum *pass_type_enum = Pass::get_type_enum();
+    if (pass_type_enum->exists(pass_type_identifier)) {
+      display_pass = static_cast<PassType>((*pass_type_enum)[pass_type_identifier]);
+    }
+  }
+
   if (use_developer_ui) {
     show_active_pixels = get_boolean(cshading, "show_active_pixels");
   }

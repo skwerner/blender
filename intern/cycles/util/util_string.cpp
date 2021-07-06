@@ -17,6 +17,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+#include <algorithm>
+#include <cctype>
+
 #include "util/util_foreach.h"
 #include "util/util_string.h"
 #include "util/util_windows.h"
@@ -170,6 +173,13 @@ string string_from_bool(bool var)
 string to_string(const char *str)
 {
   return string(str);
+}
+
+string string_to_lower(const string &s)
+{
+  string r = s;
+  std::transform(r.begin(), r.end(), r.begin(), [](char c) { return std::tolower(c); });
+  return r;
 }
 
 /* Wide char strings helpers for Windows. */

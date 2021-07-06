@@ -26,6 +26,7 @@
 #  include "render/hair.h"
 #  include "render/mesh.h"
 #  include "render/object.h"
+#  include "render/pass.h"
 #  include "render/scene.h"
 
 #  include "util/util_debug.h"
@@ -701,6 +702,7 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DenoiseContext &context, const D
 bool OptiXDevice::denoise_filter_convert_from_rgb(DenoiseContext &context, const DenoisePass &pass)
 {
   const BufferParams &buffer_params = context.buffer_params;
+  const PassInfo pass_info = Pass::get_info(pass.type);
 
   const int work_size = buffer_params.width * buffer_params.height;
 
@@ -716,7 +718,8 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(DenoiseContext &context, const
                   const_cast<int *>(&context.num_samples),
                   const_cast<int *>(&pass.noisy_offset),
                   const_cast<int *>(&pass.denoised_offset),
-                  const_cast<int *>(&context.pass_sample_count)};
+                  const_cast<int *>(&context.pass_sample_count),
+                  const_cast<bool *>(&pass_info.use_compositing)};
 
   return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);
 }

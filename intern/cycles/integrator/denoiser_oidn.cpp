@@ -344,20 +344,30 @@ class OIDNDenoiseContext {
       float *buffer_row = buffer_data + buffer_offset + y * row_stride;
       for (int x = 0; x < width; ++x) {
         float *buffer_pixel = buffer_row + x * pass_stride;
-        float *noisy_pixel = buffer_pixel + oidn_input_pass.offset;
         float *denoised_pixel = buffer_pixel + oidn_output_pass.offset;
 
         if (need_scale) {
-          float pixel_scale = has_pass_sample_count ?
-                                  __float_as_uint(buffer_pixel[pass_sample_count_]) :
-                                  num_samples_;
+          const float pixel_scale = has_pass_sample_count ?
+                                        __float_as_uint(buffer_pixel[pass_sample_count_]) :
+                                        num_samples_;
 
           denoised_pixel[0] = denoised_pixel[0] * pixel_scale;
           denoised_pixel[1] = denoised_pixel[1] * pixel_scale;
           denoised_pixel[2] = denoised_pixel[2] * pixel_scale;
         }
 
-        denoised_pixel[3] = noisy_pixel[3];
+        /* Currently compositing passes are either 3-component (derived by dividing light passes)
+         * or do not have transparency (shadow catcher). Implicitly rely on this logic, as it
+         * simplifies logic and avoids extra memory allocation. */
+        if (!oidn_input_pass.use_compositing) {
+          const float *noisy_pixel = buffer_pixel + oidn_input_pass.offset;
+          denoised_pixel[3] = noisy_pixel[3];
+        }
+        else {
+          /* Assigning to zero since this is a default alpha value for 3-component passes, and it
+           * is an opaque pixel for 4 component passes. */
+          denoised_pixel[3] = 0;
+        }
       }
     }
   }

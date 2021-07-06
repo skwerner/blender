@@ -735,7 +735,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                         int num_samples,
                                         int pass_noisy,
                                         int pass_denoised,
-                                        int pass_sample_count)
+                                        int pass_sample_count,
+                                        bool use_compositing)
 {
   const int work_index = ccl_global_id(0);
   const int y = work_index / sw;
@@ -758,13 +759,25 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     pixel_scale = __float_as_uint(buffer[pass_sample_count]);
   }
 
-  const float *noisy_pixel = buffer + pass_noisy;
   float *denoised_pixel = buffer + pass_denoised;
 
   denoised_pixel[0] = in[0] * pixel_scale;
   denoised_pixel[1] = in[1] * pixel_scale;
   denoised_pixel[2] = in[2] * pixel_scale;
-  denoised_pixel[3] = noisy_pixel[3];
+
+  /* Currently compositing passes are either 3-component (derived by dividing light passes)
+   * or do not have transparency (shadow catcher). Implicitly rely on this logic, as it
+   * simplifies logic and avoids extra memory allocation. */
+  if (!use_compositing) {
+    const float *noisy_pixel = buffer + pass_noisy;
+    denoised_pixel[3] = noisy_pixel[3];
+  }
+  else {
+    /* Assigning to zero since this is a default alpha value for 3-component passes, and it
+     * is an opaque pixel for 4 component passes. */
+
+    denoised_pixel[3] = 0;
+  }
 }
 
 #endif

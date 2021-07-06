@@ -292,14 +292,22 @@ class LockedNode : NonCopyable, NonMovable {
   }
 };
 
-static const CPPType *get_socket_cpp_type(const DSocket socket)
-{
-  return nodes::socket_cpp_type_get(*socket->typeinfo());
-}
-
 static const CPPType *get_socket_cpp_type(const SocketRef &socket)
 {
-  return nodes::socket_cpp_type_get(*socket.typeinfo());
+  const CPPType *type = nodes::socket_cpp_type_get(*socket.typeinfo());
+  if (type == nullptr) {
+    return nullptr;
+  }
+  /* The evaluator only supports types that have special member functions. */
+  if (!type->has_special_member_functions()) {
+    return nullptr;
+  }
+  return type;
+}
+
+static const CPPType *get_socket_cpp_type(const DSocket socket)
+{
+  return get_socket_cpp_type(*socket.socket_ref());
 }
 
 static bool node_supports_laziness(const DNode node)
@@ -394,6 +402,9 @@ class GeometryNodesEvaluator {
     Stack<DNode> nodes_to_check;
     /* Start at the output sockets. */
     for (const DInputSocket &socket : params_.output_sockets) {
+      nodes_to_check.push(socket.node());
+    }
+    for (const DSocket &socket : params_.force_compute_sockets) {
       nodes_to_check.push(socket.node());
     }
     /* Use the local allocator because the states do not need to outlive the evaluator. */
@@ -493,7 +504,8 @@ class GeometryNodesEvaluator {
           },
           {});
       if (output_state.potential_users == 0) {
-        /* If it does not have any potential users, it is unused. */
+        /* If it does not have any potential users, it is unused. It might become required again in
+         * `schedule_initial_nodes`. */
         output_state.output_usage = ValueUsage::Unused;
       }
     }
@@ -566,6 +578,20 @@ class GeometryNodesEvaluator {
       this->with_locked_node(node, node_state, [&](LockedNode &locked_node) {
         /* Setting an input as required will schedule any linked node. */
         this->set_input_required(locked_node, socket);
+      });
+    }
+    for (const DSocket socket : params_.force_compute_sockets) {
+      const DNode node = socket.node();
+      NodeState &node_state = this->get_node_state(node);
+      this->with_locked_node(node, node_state, [&](LockedNode &locked_node) {
+        if (socket->is_input()) {
+          this->set_input_required(locked_node, DInputSocket(socket));
+        }
+        else {
+          OutputState &output_state = node_state.outputs[socket->index()];
+          output_state.output_usage = ValueUsage::Required;
+          this->schedule_node(locked_node);
+        }
       });
     }
   }
@@ -888,7 +914,7 @@ class GeometryNodesEvaluator {
       OutputState &output_state = node_state.outputs[socket->index()];
       output_state.has_been_computed = true;
       void *buffer = allocator.allocate(type->size(), type->alignment());
-      type->copy_to_uninitialized(type->default_value(), buffer);
+      type->copy_construct(type->default_value(), buffer);
       this->forward_output({node.context(), socket}, {*type, buffer});
     }
   }
@@ -967,7 +993,7 @@ class GeometryNodesEvaluator {
       /* Move value into memory owned by the outer allocator. */
       const CPPType &type = *input_state.type;
       void *buffer = outer_allocator_.allocate(type.size(), type.alignment());
-      type.move_to_uninitialized(value, buffer);
+      type.move_construct(value, buffer);
 
       params_.r_output_values.append({type, buffer});
     }
@@ -1116,10 +1142,14 @@ class GeometryNodesEvaluator {
     this->with_locked_node(node, node_state, [&](LockedNode &locked_node) {
       output_state.potential_users -= 1;
       if (output_state.potential_users == 0) {
-        /* The output socket has no users anymore. */
-        output_state.output_usage = ValueUsage::Unused;
-        /* Schedule the origin node in case it wants to set its inputs as unused as well. */
-        this->schedule_node(locked_node);
+        /* The socket might be required even though the output is not used by other sockets. That
+         * can happen when the socket is forced to be computed. */
+        if (output_state.output_usage != ValueUsage::Required) {
+          /* The output socket has no users anymore. */
+          output_state.output_usage = ValueUsage::Unused;
+          /* Schedule the origin node in case it wants to set its inputs as unused as well. */
+          this->schedule_node(locked_node);
+        }
       }
     });
   }
@@ -1204,7 +1234,7 @@ class GeometryNodesEvaluator {
     }
     else {
       /* Cannot convert, use default value instead. */
-      to_type.copy_to_uninitialized(to_type.default_value(), buffer);
+      to_type.copy_construct(to_type.default_value(), buffer);
     }
     this->add_value_to_input_socket(to_socket, from_socket, {to_type, buffer});
   }
@@ -1230,7 +1260,7 @@ class GeometryNodesEvaluator {
       const CPPType &type = *value_to_forward.type();
       for (const DInputSocket &to_socket : to_sockets.drop_front(1)) {
         void *buffer = allocator.allocate(type.size(), type.alignment());
-        type.copy_to_uninitialized(value_to_forward.get(), buffer);
+        type.copy_construct(value_to_forward.get(), buffer);
         this->add_value_to_input_socket(to_socket, from_socket, {type, buffer});
       }
       /* Forward the original value to one of the targets. */
@@ -1331,7 +1361,7 @@ class GeometryNodesEvaluator {
     }
     /* Use a default fallback value when the loaded type is not compatible. */
     void *default_buffer = allocator.allocate(required_type.size(), required_type.alignment());
-    required_type.copy_to_uninitialized(required_type.default_value(), default_buffer);
+    required_type.copy_construct(required_type.default_value(), default_buffer);
     return {required_type, default_buffer};
   }
 

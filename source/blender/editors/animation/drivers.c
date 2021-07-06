@@ -581,7 +581,7 @@ bool ANIM_remove_driver(ReportList *UNUSED(reports),
     }
     else {
       /* find the matching driver and remove it only
-       * Note: here is one of the places where we don't want new F-Curve + Driver added!
+       * NOTE: here is one of the places where we don't want new F-Curve + Driver added!
        *      so 'add' var must be 0
        */
       fcu = verify_driver_fcurve(id, rna_path, array_index, DRIVER_FCURVE_LOOKUP_ONLY);
@@ -1253,7 +1253,7 @@ static int copy_driver_button_exec(bContext *C, wmOperator *op)
     }
   }
 
-  /* since we're just copying, we don't really need to do anything else...*/
+  /* Since we're just copying, we don't really need to do anything else. */
   return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 
@@ -1303,7 +1303,7 @@ static int paste_driver_button_exec(bContext *C, wmOperator *op)
     }
   }
 
-  /* since we're just copying, we don't really need to do anything else...*/
+  /* Since we're just copying, we don't really need to do anything else. */
   return (changed) ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 }
 

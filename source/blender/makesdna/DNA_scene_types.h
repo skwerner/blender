@@ -25,7 +25,7 @@
 
 #include "DNA_defs.h"
 
-/* XXX, temp feature - campbell */
+/* XXX(campbell): temp feature. */
 #define DURIAN_CAMERA_SWITCH
 
 /* check for cyclic set-scene,
@@ -241,7 +241,8 @@ typedef struct SceneRenderLayer {
 #define SCE_LAY_FRS (1 << 6)
 #define SCE_LAY_AO (1 << 7)
 #define SCE_LAY_VOLUMES (1 << 8)
-/* flags between (1 << 8) and (1 << 15) are set to 1 already, for future options */
+#define SCE_LAY_MOTION_BLUR (1 << 9)
+/* flags between (1 << 9) and (1 << 15) are set to 1 already, for future options */
 
 #define SCE_LAY_ALL_Z (1 << 15)
 /* #define SCE_LAY_XOR         (1 << 16) */ /* UNUSED */
@@ -396,7 +397,7 @@ typedef enum eStereo3dInterlaceType {
 /* Generic image format settings,
  * this is used for NodeImageFile and IMAGE_OT_save_as operator too.
  *
- * note: its a bit strange that even though this is an image format struct
+ * NOTE: its a bit strange that even though this is an image format struct
  * the imtype can still be used to select video formats.
  * RNA ensures these enum's are only selectable for render output.
  */
@@ -1335,6 +1336,12 @@ typedef struct MeshStatVis {
 typedef struct SequencerToolSettings {
   /* eSeqImageFitMethod */
   int fit_method;
+  short snap_mode;
+  short snap_flag;
+  int _pad0;
+  /** When there are many snap points, 0-1 range corresponds to resolution from boundbox to all
+   * possible snap points. */
+  int snap_distance;
 } SequencerToolSettings;
 
 typedef enum eSeqImageFitMethod {
@@ -2038,6 +2045,7 @@ enum {
 #define SCE_SNAP_NO_SELF (1 << 4)
 #define SCE_SNAP_ABS_GRID (1 << 5)
 #define SCE_SNAP_BACKFACE_CULLING (1 << 6)
+#define SCE_SNAP_SEQ (1 << 7)
 
 /** #ToolSettings.snap_target */
 #define SCE_SNAP_TARGET_CLOSEST 0
@@ -2050,15 +2058,26 @@ enum {
 #define SCE_SNAP_MODE_EDGE (1 << 1)
 #define SCE_SNAP_MODE_FACE (1 << 2)
 #define SCE_SNAP_MODE_VOLUME (1 << 3)
-#define SCE_SNAP_MODE_INCREMENT (1 << 4)
-#define SCE_SNAP_MODE_EDGE_MIDPOINT (1 << 5)
-#define SCE_SNAP_MODE_EDGE_PERPENDICULAR (1 << 6)
+#define SCE_SNAP_MODE_EDGE_MIDPOINT (1 << 4)
+#define SCE_SNAP_MODE_EDGE_PERPENDICULAR (1 << 5)
+
+/** #SequencerToolSettings.snap_mode */
+#define SEQ_SNAP_TO_STRIPS (1 << 0)
+#define SEQ_SNAP_TO_CURRENT_FRAME (1 << 1)
+#define SEQ_SNAP_TO_STRIP_HOLD (1 << 2)
+
+/** #SequencerToolSettings.snap_flag */
+#define SEQ_SNAP_IGNORE_MUTED (1 << 0)
+#define SEQ_SNAP_IGNORE_SOUND (1 << 1)
 
 /** #ToolSettings.snap_node_mode */
-#define SCE_SNAP_MODE_NODE_X (1 << 5)
-#define SCE_SNAP_MODE_NODE_Y (1 << 6)
+#define SCE_SNAP_MODE_NODE_X (1 << 0)
+#define SCE_SNAP_MODE_NODE_Y (1 << 1)
 
-/** #ToolSettings.snap_mode and #ToolSettings.snap_node_mode */
+/**
+ * #ToolSettings.snap_mode and #ToolSettings.snap_node_mode
+ */
+#define SCE_SNAP_MODE_INCREMENT (1 << 6)
 #define SCE_SNAP_MODE_GRID (1 << 7)
 
 /** #ToolSettings.snap_transform_mode_flag */
@@ -2257,7 +2276,7 @@ enum {
 #define UVCALC_NO_ASPECT_CORRECT (1 << 1)
 /** Adjust UV's while transforming with Vert or Edge Slide. */
 #define UVCALC_TRANSFORM_CORRECT_SLIDE (1 << 2)
-/** Use mesh data after subsurf to compute UVs*/
+/** Use mesh data after subsurf to compute UV's. */
 #define UVCALC_USESUBSURF (1 << 3)
 /** adjust UV's while transforming to avoid distortion */
 #define UVCALC_TRANSFORM_CORRECT (1 << 4)

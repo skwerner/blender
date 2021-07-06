@@ -157,7 +157,7 @@ typedef struct KnifePosData {
 typedef struct KnifeTool_OpData {
   ARegion *region;   /* region that knifetool was activated in */
   void *draw_handle; /* for drawing preview loop */
-  ViewContext vc;    /* note: _don't_ use 'mval', instead use the one we define below */
+  ViewContext vc;    /* NOTE: _don't_ use 'mval', instead use the one we define below. */
   float mval[2];     /* mouse value with snapping applied */
   // bContext *C;
 
@@ -937,7 +937,7 @@ static KnifeVert *knife_split_edge(KnifeTool_OpData *kcd,
 static void knife_start_cut(KnifeTool_OpData *kcd)
 {
   kcd->prev = kcd->curr;
-  kcd->curr.is_space = 0; /*TODO: why do we do this? */
+  kcd->curr.is_space = 0; /* TODO: why do we do this? */
 
   if (kcd->prev.vert == NULL && kcd->prev.edge == NULL) {
     float origin[3], origin_ofs[3];
@@ -952,7 +952,7 @@ static void knife_start_cut(KnifeTool_OpData *kcd)
       zero_v3(kcd->prev.cage);
     }
 
-    copy_v3_v3(kcd->prev.co, kcd->prev.cage); /*TODO: do we need this? */
+    copy_v3_v3(kcd->prev.co, kcd->prev.cage); /* TODO: do we need this? */
     copy_v3_v3(kcd->curr.cage, kcd->prev.cage);
     copy_v3_v3(kcd->curr.co, kcd->prev.co);
   }
@@ -1475,7 +1475,7 @@ static void knife_add_cut(KnifeTool_OpData *kcd)
     }
   }
 
-  /* Note: as following loop progresses, the 'v' fields of
+  /* NOTE: as following loop progresses, the 'v' fields of
    * the linehits will be filled in (as edges are split or
    * in-face verts are made), so it may be true that both
    * the v and the kfe or f fields will be non-NULL. */
@@ -1760,7 +1760,7 @@ static bool point_is_visible(KnifeTool_OpData *kcd,
 
     if (RV3D_CLIPPING_ENABLED(kcd->vc.v3d, kcd->vc.rv3d)) {
       float view_clip[2][3];
-      /* note: view_clip[0] should never get clipped */
+      /* NOTE: view_clip[0] should never get clipped. */
       copy_v3_v3(view_clip[0], p_ofs);
       madd_v3_v3v3fl(view_clip[1], p_ofs, view, dist);
 

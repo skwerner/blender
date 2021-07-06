@@ -250,7 +250,7 @@ static void realloc_particles(ParticleSimulationData *sim, int new_totpart)
 
     if (psys->particles) {
       totsaved = MIN2(psys->totpart, totpart);
-      /*save old pars*/
+      /* Save old pars. */
       if (totsaved) {
         memcpy(newpars, psys->particles, totsaved * sizeof(ParticleData));
 
@@ -447,9 +447,9 @@ void psys_calc_dmcache(Object *ob, Mesh *mesh_final, Mesh *mesh_original, Partic
     MEM_freeN(nodedmelem);
   }
   else {
-    /* TODO PARTICLE, make the following line unnecessary, each function
+    /* TODO_PARTICLE: make the following line unnecessary, each function
      * should know to use the num or num_dmcache, set the num_dmcache to
-     * an invalid value, just in case */
+     * an invalid value, just in case. */
 
     LOOP_PARTICLES
     {
@@ -607,8 +607,8 @@ void init_particle(ParticleSimulationData *sim, ParticleData *pa)
   pa->time = part->sta + (part->end - part->sta) * birth_time;
 
   pa->hair_index = 0;
-  /* we can't reset to -1 anymore since we've figured out correct index in distribute_particles */
-  /* usage other than straight after distribute has to handle this index by itself - jahka*/
+  /* We can't reset to -1 anymore since we've figured out correct index in #distribute_particles
+   * usage other than straight after distribute has to handle this index by itself - jahka. */
   // pa->num_dmcache = DMCACHE_NOTFOUND; /* assume we don't have a derived mesh face */
 }
 
@@ -992,9 +992,9 @@ void psys_get_birth_coords(
           /* (part->rotmode == PART_ROT_NOR_TAN) */
           float tmat[3][3];
 
-          /* note: utan_local is not taken from 'utan', we calculate from rot_vec/vtan */
-          /* note: it looks like rotation phase may be applied twice (once with vtan, again below)
-           * however this isn't the case - campbell */
+          /* NOTE: utan_local is not taken from 'utan', we calculate from rot_vec/vtan. */
+          /* NOTE(campbell): it looks like rotation phase may be applied twice
+           * (once with vtan, again below) however this isn't the case. */
           float *rot_vec_local = tmat[0];
           float *vtan_local = tmat[1];
           float *utan_local = tmat[2];
@@ -1014,7 +1014,7 @@ void psys_get_birth_coords(
           cross_v3_v3v3(utan_local, vtan_local, rot_vec_local);
           cross_v3_v3v3(vtan_local, utan_local, rot_vec_local);
 
-          /* note: no need to normalize */
+          /* NOTE: no need to normalize. */
           mat3_to_quat(q2, tmat);
         }
 
@@ -1473,7 +1473,7 @@ static void integrate_particle(
 
     force_func(forcedata, states + i, force, impulse);
 
-    /* force to acceleration*/
+    /* Force to acceleration. */
     mul_v3_v3fl(acceleration, force, 1.0f / pa_mass);
 
     if (external_acceleration) {
@@ -2226,7 +2226,7 @@ static void sph_integrate(ParticleSimulationData *sim,
   sphdata->pass = 0;
   // sphdata.element_size and sphdata.flow are set in the callback.
 
-  /* restore previous state and treat gravity & effectors as external acceleration*/
+  /* Restore previous state and treat gravity & effectors as external acceleration. */
   sub_v3_v3v3(effector_acceleration, pa->state.vel, pa->prev_state.vel);
   mul_v3_fl(effector_acceleration, 1.0f / dtime);
 
@@ -2617,7 +2617,7 @@ static float collision_newton_rhapson(ParticleCollision *col,
      * here. */
     if (d1 == d0) {
       /* If first iteration, try from other end where the gradient may be
-       * greater. Note: code duplicated below. */
+       * greater. NOTE: code duplicated below. */
       if (iter == 0) {
         t0 = 1.0f;
         collision_interpolate_element(pce, t0, col->f, col);
@@ -2638,7 +2638,7 @@ static float collision_newton_rhapson(ParticleCollision *col,
     t1 -= d1 * dd;
 
     /* Particle moving away from plane could also mean a strangely rotating
-     * face, so check from end. Note: code duplicated above. */
+     * face, so check from end. NOTE: code duplicated above. */
     if (iter == 0 && t1 < 0.0f) {
       t0 = 1.0f;
       collision_interpolate_element(pce, t0, col->f, col);
@@ -3001,7 +3001,7 @@ static int collision_response(ParticleSimulationData *sim,
       /* get back to global coordinates */
       add_v3_v3(v1_tan, vc_tan);
 
-      /* convert to angular velocity*/
+      /* Convert to angular velocity. */
       cross_v3_v3v3(ave, vr_tan, pce->nor);
       mul_v3_fl(ave, 1.0f / MAX2(pa->size, 0.001f));
 
@@ -3927,7 +3927,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
       pa->alive = PARS_DYING;
     }
     else if (birthtime <= cfra && birthtime >= psys->cfra) {
-      /* particle is born some time between this and last step*/
+      /* Particle is born some time between this and last step. */
       reset_particle(sim, pa, dfra * timestep, cfra);
       pa->alive = PARS_ALIVE;
       pa->state.time = cfra - birthtime;
@@ -3936,7 +3936,7 @@ static void dynamics_step(ParticleSimulationData *sim, float cfra)
       /* nothing to be done when particle is dead */
     }
 
-    /* only reset unborn particles if they're shown or if the particle is born soon*/
+    /* Only reset unborn particles if they're shown or if the particle is born soon. */
     if (pa->alive == PARS_UNBORN &&
         (part->flag & PART_UNBORN || (cfra + psys->pointcache->step > pa->time))) {
       reset_particle(sim, pa, dtime, cfra);
@@ -4104,7 +4104,7 @@ static void update_children(ParticleSimulationData *sim, const bool use_render_p
     psys_free_children(sim->psys);
   }
 }
-/* updates cached particles' alive & other flags etc..*/
+/* Updates cached particles' alive & other flags etc. */
 static void cached_step(ParticleSimulationData *sim, float cfra, const bool use_render_params)
 {
   ParticleSystem *psys = sim->psys;

@@ -42,7 +42,7 @@ static PyObject *Quaternion_deepcopy(QuaternionObject *self, PyObject *args);
 
 /* -----------------------------METHODS------------------------------ */
 
-/* note: BaseMath_ReadCallback must be called beforehand */
+/* NOTE: BaseMath_ReadCallback must be called beforehand. */
 static PyObject *Quaternion_to_tuple_ext(QuaternionObject *self, int ndigits)
 {
   PyObject *ret;
@@ -1113,7 +1113,7 @@ static PyObject *Quaternion_imatmul(PyObject *q1, PyObject *q2)
 }
 
 /* -obj
- * returns the negative of this object*/
+ * Returns the negative of this object. */
 static PyObject *Quaternion_neg(QuaternionObject *self)
 {
   float tquat[QUAT_SIZE];

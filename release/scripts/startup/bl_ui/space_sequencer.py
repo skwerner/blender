@@ -162,6 +162,14 @@ class SEQUENCER_HT_header(Header):
                 if tool_settings.use_proportional_edit:
                     row.prop(tool_settings, "proportional_edit_falloff", icon_only=True)
 
+        if st.view_type in {'SEQUENCER', 'SEQUENCER_PREVIEW'}:
+            tool_settings = context.tool_settings
+            row = layout.row(align=True)
+            row.prop(tool_settings, "use_snap_sequencer", text="")
+            sub = row.row(align=True)
+            sub.popover(panel="SEQUENCER_PT_snapping")
+            layout.separator_spacer()
+
         row = layout.row(align=True)
         row.prop(st, "show_strip_overlay", text="", icon='OVERLAY')
         sub = row.row(align=True)
@@ -392,7 +400,7 @@ class SEQUENCER_MT_view(Menu):
             layout.menu("SEQUENCER_MT_proxy")
 
             layout.operator_context = 'INVOKE_DEFAULT'
-        
+
         layout.separator()
         layout.operator_context = 'INVOKE_REGION_WIN'
         layout.operator("sequencer.refresh_all", icon='FILE_REFRESH', text="Refresh All")
@@ -458,6 +466,7 @@ class SEQUENCER_MT_select_handle(Menu):
         layout.operator("sequencer.select_handles", text="Both Neighbors").side = 'BOTH_NEIGHBORS'
         layout.operator("sequencer.select_handles", text="Left Neighbor").side = 'LEFT_NEIGHBOR'
         layout.operator("sequencer.select_handles", text="Right Neighbor").side = 'RIGHT_NEIGHBOR'
+
 
 class SEQUENCER_MT_select_channel(Menu):
     bl_label = "Select Channel"
@@ -1407,14 +1416,13 @@ class SEQUENCER_PT_source(SequencerButtonsPanel, Panel):
                 split.label(text="%dx%d" % size, translate=False)
             else:
                 split.label(text="None")
-            #FPS
+            # FPS
             if elem.orig_fps:
                 split = col.split(factor=0.5, align=False)
                 split.alignment = 'RIGHT'
                 split.label(text="FPS")
                 split.alignment = 'LEFT'
                 split.label(text="%.2f" % elem.orig_fps, translate=False)
-
 
 
 class SEQUENCER_PT_scene(SequencerButtonsPanel, Panel):
@@ -1849,7 +1857,7 @@ class SEQUENCER_PT_cache_settings(SequencerButtonsPanel, Panel):
     @classmethod
     def poll(cls, context):
         show_developer_ui = context.preferences.view.show_developer_ui
-        return cls.has_sequencer(context) and  context.scene.sequence_editor and show_developer_ui
+        return cls.has_sequencer(context) and context.scene.sequence_editor and show_developer_ui
 
     def draw(self, context):
         layout = self.layout
@@ -2264,6 +2272,28 @@ class SEQUENCER_PT_custom_props(SequencerButtonsPanel, PropertyPanel, Panel):
     bl_category = "Strip"
 
 
+class SEQUENCER_PT_snapping(Panel):
+    bl_space_type = 'SEQUENCE_EDITOR'
+    bl_region_type = 'HEADER'
+    bl_label = ""
+
+    def draw(self, context):
+        tool_settings = context.tool_settings
+        sequencer_tool_settings = tool_settings.sequencer_tool_settings
+
+        layout = self.layout
+        layout.use_property_split = True
+        layout.use_property_decorate = False
+
+        col = layout.column(heading="Snap to", align=True)
+        col.prop(sequencer_tool_settings, "snap_to_current_frame")
+        col.prop(sequencer_tool_settings, "snap_to_hold_offset")
+
+        col = layout.column(heading="Ignore", align=True)
+        col.prop(sequencer_tool_settings, "snap_ignore_muted", text="Muted Strips")
+        col.prop(sequencer_tool_settings, "snap_ignore_sound", text="Sound Strips")
+
+
 classes = (
     SEQUENCER_MT_change,
     SEQUENCER_HT_tool_header,
@@ -2333,6 +2363,8 @@ classes = (
 
     SEQUENCER_PT_annotation,
     SEQUENCER_PT_annotation_onion,
+
+    SEQUENCER_PT_snapping,
 )
 
 if __name__ == "__main__":  # only for live edit.

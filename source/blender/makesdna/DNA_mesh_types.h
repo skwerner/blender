@@ -141,7 +141,7 @@ typedef struct Mesh {
   struct MSelect *mselect;
 
   /* BMESH ONLY */
-  /*new face structures*/
+  /* New face structures. */
   struct MPoly *mpoly;
   struct MLoop *mloop;
   struct MLoopUV *mloopuv;
@@ -164,7 +164,7 @@ typedef struct Mesh {
   struct MVert *mvert;
   /** Array of edges. */
   struct MEdge *medge;
-  /** Deformgroup vertices. */
+  /** Deform-group vertices. */
   struct MDeformVert *dvert;
 
   /* array of colors for the tessellated faces, must be number of tessellated

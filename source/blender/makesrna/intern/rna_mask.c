@@ -115,7 +115,7 @@ static void rna_Mask_update_parent(Main *bmain, Scene *scene, PointerRNA *ptr)
   rna_Mask_update_data(bmain, scene, ptr);
 }
 
-/* note: this function exists only to avoid id refcounting */
+/* NOTE: this function exists only to avoid id refcounting. */
 static void rna_MaskParent_id_set(PointerRNA *ptr,
                                   PointerRNA value,
                                   struct ReportList *UNUSED(reports))
@@ -631,7 +631,7 @@ static void rna_def_maskParent(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "ID");
   RNA_def_property_flag(prop, PROP_EDITABLE);
   // RNA_def_property_editable_func(prop, "rna_maskSpline_id_editable");
-  /* note: custom set function is ONLY to avoid rna setting a user for this. */
+  /* NOTE: custom set function is ONLY to avoid rna setting a user for this. */
   RNA_def_property_pointer_funcs(
       prop, NULL, "rna_MaskParent_id_set", "rna_MaskParent_id_typef", NULL);
   RNA_def_property_ui_text(
@@ -1008,7 +1008,7 @@ static void rna_def_mask_layer(BlenderRNA *brna)
   RNA_def_property_ui_icon(prop, ICON_RESTRICT_RENDER_OFF, -1);
   RNA_def_property_update(prop, NC_MASK | NA_EDITED, NULL);
 
-  /* select (for dopesheet)*/
+  /* Select (for dope-sheet). */
   prop = RNA_def_property(srna, "select", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, NULL, "flag", MASK_LAYERFLAG_SELECT);
   RNA_def_property_ui_text(prop, "Select", "Layer is selected for editing in the Dope Sheet");

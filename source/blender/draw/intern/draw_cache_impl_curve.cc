@@ -94,7 +94,7 @@ static void curve_render_overlay_verts_edges_len_get(ListBase *lb,
   LISTBASE_FOREACH (Nurb *, nu, lb) {
     if (nu->bezt) {
       vert_len += nu->pntsu * 3;
-      /* 2x handles per point*/
+      /* 2x handles per point. */
       edge_len += 2 * nu->pntsu;
     }
     else if (nu->bp) {
@@ -363,7 +363,7 @@ static void curve_cd_calc_used_gpu_layers(CustomDataMask *cd_layers,
       int type = gpu_attr->type;
 
       /* Curves cannot have named layers.
-       * Note: We could relax this assumption later. */
+       * NOTE: We could relax this assumption later. */
       if (name[0] != '\0') {
         continue;
       }

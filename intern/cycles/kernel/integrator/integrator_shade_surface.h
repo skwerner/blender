@@ -155,7 +155,7 @@ ccl_device_forceinline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS
 
   /* Create shadow ray. */
   Ray ray ccl_optional_struct_init;
-  light_sample_to_shadow_ray(sd, &ls, &ray);
+  light_sample_to_shadow_ray(kg, sd, &ls, &ray);
   const bool is_light = light_sample_is_light(&ls);
 
   /* Copy volume stack and enter/exit volume. */

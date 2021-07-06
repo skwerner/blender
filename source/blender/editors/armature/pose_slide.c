@@ -444,7 +444,7 @@ static void pose_slide_draw_2d_slider(const struct bContext *UNUSED(C), ARegion 
              color_line);
 
   /* Draw triangles at the ends of the line in overshoot mode to indicate direction of 0-100%
-   * range.*/
+   * range. */
   if (pso->overshoot) {
     if (pso->factor > 1 + OVERSHOOT_RANGE_DELTA + 0.5) {
       draw_overshoot_triangle(color_line, false, main_line_rect.xmin, line_y);
@@ -1005,14 +1005,14 @@ static void pose_slide_rest_pose_apply(bContext *C, tPoseSlideOp *pso)
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_BBONE_SHAPE) && (pchan->flag & POSE_BBONE_SHAPE)) {
       /* Bbone properties - they all start a "bbone_" prefix. */
-      /* TODO Not implemented */
+      /* TODO: Not implemented. */
       // pose_slide_apply_props(pso, pfl, "bbone_");
     }
 
     if (ELEM(pso->channels, PS_TFM_ALL, PS_TFM_PROPS) && (pfl->oldprops)) {
       /* Not strictly a transform, but custom properties contribute
        * to the pose produced in many rigs (e.g. the facial rigs used in Sintel). */
-      /* TODO Not implemented */
+      /* TODO: Not implemented. */
       // pose_slide_apply_props(pso, pfl, "[\"");
     }
   }
@@ -1468,7 +1468,7 @@ static int pose_slide_modal(bContext *C, wmOperator *op, const wmEvent *event)
         /* Reset transforms back to original state. */
         pose_slide_reset(pso);
 
-        /* Depsgraph updates + redraws.*/
+        /* Depsgraph updates + redraws. */
         pose_slide_refresh(C, pso);
 
         /* Clean up temp data. */

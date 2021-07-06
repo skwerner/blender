@@ -217,7 +217,7 @@ static void node_buts_texture(uiLayout *layout, bContext *UNUSED(C), PointerRNA 
   uiItemR(layout, ptr, "texture", DEFAULT_FLAGS, "", ICON_NONE);
 
   if (multi) {
-    /* Number Drawing not optimal here, better have a list*/
+    /* Number Drawing not optimal here, better have a list. */
     uiItemR(layout, ptr, "node_output", DEFAULT_FLAGS, "", ICON_NONE);
   }
 }
@@ -758,7 +758,7 @@ static void node_shader_buts_tex_image(uiLayout *layout, bContext *C, PointerRNA
 
   uiItemR(layout, ptr, "extension", DEFAULT_FLAGS, "", ICON_NONE);
 
-  /* note: image user properties used directly here, unlike compositor image node,
+  /* NOTE: image user properties used directly here, unlike compositor image node,
    * which redefines them in the node struct RNA to get proper updates.
    */
   node_buts_image_user(layout, C, &iuserptr, &imaptr, &iuserptr, false, true);
@@ -1833,9 +1833,11 @@ static void node_composit_buts_chroma_matte(uiLayout *layout, bContext *UNUSED(C
   uiItemR(col, ptr, "threshold", DEFAULT_FLAGS, nullptr, ICON_NONE);
 
   col = uiLayoutColumn(layout, true);
-  /*uiItemR(col, ptr, "lift", UI_ITEM_R_SLIDER, nullptr, ICON_NONE);  Removed for now */
+  /* Removed for now. */
+  // uiItemR(col, ptr, "lift", UI_ITEM_R_SLIDER, nullptr, ICON_NONE);
   uiItemR(col, ptr, "gain", DEFAULT_FLAGS | UI_ITEM_R_SLIDER, nullptr, ICON_NONE);
-  /*uiItemR(col, ptr, "shadow_adjust", UI_ITEM_R_SLIDER, nullptr, ICON_NONE);  Removed for now*/
+  /* Removed for now. */
+  // uiItemR(col, ptr, "shadow_adjust", UI_ITEM_R_SLIDER, nullptr, ICON_NONE);
 }
 
 static void node_composit_buts_color_matte(uiLayout *layout, bContext *UNUSED(C), PointerRNA *ptr)
@@ -3528,7 +3530,7 @@ static void std_node_socket_draw(
   bNode *node = (bNode *)node_ptr->data;
   bNodeSocket *sock = (bNodeSocket *)ptr->data;
   int type = sock->typeinfo->type;
-  /*int subtype = sock->typeinfo->subtype;*/
+  // int subtype = sock->typeinfo->subtype;
 
   /* XXX not nice, eventually give this node its own socket type ... */
   if (node->type == CMP_NODE_OUTPUT_FILE) {
@@ -4193,7 +4195,7 @@ void node_draw_link_bezier(const View2D *v2d,
   }
 }
 
-/* note; this is used for fake links in groups too */
+/* NOTE: this is used for fake links in groups too. */
 void node_draw_link(View2D *v2d, SpaceNode *snode, bNodeLink *link)
 {
   int th_col1 = TH_WIRE_INNER, th_col2 = TH_WIRE_INNER, th_col3 = TH_WIRE;

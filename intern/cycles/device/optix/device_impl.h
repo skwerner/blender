@@ -145,7 +145,7 @@ class OptiXDevice : public CUDADevice {
   class DenoisePass;
 
   virtual void denoise_buffer(const DeviceDenoiseTask &task) override;
-  virtual DeviceQueue *get_denoise_queue();
+  virtual DeviceQueue *get_denoise_queue() override;
 
   void denoise_pass(DenoiseContext &context, PassType pass_type);
 

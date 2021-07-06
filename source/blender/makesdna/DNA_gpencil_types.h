@@ -246,11 +246,11 @@ typedef struct bGPDstroke_Runtime {
   /** Runtime falloff factor (only for transform). */
   float multi_frame_falloff;
 
-  /** Vertex offset in the vbo where this stroke starts. */
+  /** Vertex offset in the VBO where this stroke starts. */
   int stroke_start;
   /** Triangle offset in the ibo where this fill starts. */
   int fill_start;
-  /** Curve Handles offset in the ibo where this handle starts. */
+  /** Curve Handles offset in the IBO where this handle starts. */
   int curve_start;
 
   /** Original stroke (used to dereference evaluated data) */
@@ -557,7 +557,7 @@ typedef enum eGPDlayer_Flag {
   /* Unlock color */
   GP_LAYER_UNLOCK_COLOR = (1 << 12),
   /* Mask Layer */
-  GP_LAYER_USE_MASK = (1 << 13), /*TODO: DEPRECATED */
+  GP_LAYER_USE_MASK = (1 << 13), /* TODO: DEPRECATED */
   /* Ruler Layer */
   GP_LAYER_IS_RULER = (1 << 14),
   /* Disable masks in viewlayer render */

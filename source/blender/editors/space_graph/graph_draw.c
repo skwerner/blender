@@ -414,7 +414,7 @@ static bool draw_fcurve_handles_check(SpaceGraph *sipo, FCurve *fcu)
 }
 
 /* draw lines for F-Curve handles only (this is only done in EditMode)
- * note: draw_fcurve_handles_check must be checked before running this. */
+ * NOTE: draw_fcurve_handles_check must be checked before running this. */
 static void draw_fcurve_handles(SpaceGraph *sipo, FCurve *fcu)
 {
   int sel, b;
@@ -1251,7 +1251,7 @@ static void graph_draw_driver_debug(bAnimContext *ac, ID *id, FCurve *fcu)
     float x = driver->curval;
     float y = fcu->curval * unitfac;
 
-    /* only draw indicators if the point is in range*/
+    /* Only draw indicators if the point is in range. */
     if (x >= v2d->cur.xmin) {
       float co[2];
 

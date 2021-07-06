@@ -391,7 +391,7 @@ typedef struct ProjPaintState {
   float *cavities;
 
 #ifndef PROJ_DEBUG_NOSEAMBLEED
-  /** store info about faces, if they are initialized etc*/
+  /** Store info about faces, if they are initialized etc. */
   ushort *faceSeamFlags;
   /** save the winding of the face in uv space,
    * helps as an extra validation step for seam detection. */
@@ -930,7 +930,7 @@ static bool project_bucket_point_occluded(const ProjPaintState *ps,
       }
 
       if (isect_ret >= 1) {
-        /* TODO - we may want to cache the first hit,
+        /* TODO: we may want to cache the first hit,
          * it is not possible to swap the face order in the list anymore */
         return true;
       }
@@ -1073,7 +1073,7 @@ static bool pixel_bounds_uv(const float uv_quad[4][2],
   bounds_px->xmax = (int)(ibuf_x * max_uv[0]) + 1;
   bounds_px->ymax = (int)(ibuf_y * max_uv[1]) + 1;
 
-  /*printf("%d %d %d %d\n", min_px[0], min_px[1], max_px[0], max_px[1]);*/
+  // printf("%d %d %d %d\n", min_px[0], min_px[1], max_px[0], max_px[1]);
 
   /* face uses no UV area when quantized to pixels? */
   return (bounds_px->xmin == bounds_px->xmax || bounds_px->ymin == bounds_px->ymax) ? false : true;
@@ -1103,7 +1103,7 @@ static bool pixel_bounds_array(
   bounds_px->xmax = (int)(ibuf_x * max_uv[0]) + 1;
   bounds_px->ymax = (int)(ibuf_y * max_uv[1]) + 1;
 
-  /*printf("%d %d %d %d\n", min_px[0], min_px[1], max_px[0], max_px[1]);*/
+  // printf("%d %d %d %d\n", min_px[0], min_px[1], max_px[0], max_px[1]);
 
   /* face uses no UV area when quantized to pixels? */
   return (bounds_px->xmin == bounds_px->xmax || bounds_px->ymin == bounds_px->ymax) ? false : true;
@@ -1661,7 +1661,7 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
       const MLoopTri *lt_other = &ps->mlooptri_eval[tri_index];
       const float *lt_other_tri_uv[3] = {PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv, lt_other)};
 
-      /* BKE_image_acquire_ibuf - TODO - this may be slow */
+      /* #BKE_image_acquire_ibuf - TODO: this may be slow. */
       uchar rgba_ub[4];
       float rgba_f[4];
 
@@ -1768,13 +1768,13 @@ static float project_paint_uvpixel_mask(const ProjPaintState *ps,
       angle_cos = dot_v3v3(viewDirPersp, no);
     }
 
-    /* If backface culling is disabled, allow painting on back faces. */
+    /* If back-face culling is disabled, allow painting on back faces. */
     if (!ps->do_backfacecull) {
       angle_cos = fabsf(angle_cos);
     }
 
     if (angle_cos <= ps->normal_angle__cos) {
-      /* outsize the normal limit*/
+      /* Outsize the normal limit. */
       return 0.0f;
     }
     if (angle_cos < ps->normal_angle_inner__cos) {
@@ -1878,7 +1878,7 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
   int x_tile, y_tile;
   int x_round, y_round;
   int tile_offset;
-  /* volatile is important here to ensure pending check is not optimized away by compiler*/
+  /* Volatile is important here to ensure pending check is not optimized away by compiler. */
   volatile int tile_index;
 
   ProjPaintImage *projima = tinf->pjima;
@@ -1959,7 +1959,7 @@ static ProjPixel *project_paint_uvpixel_init(const ProjPaintState *ps,
         const float *lt_other_tri_uv[3] = {
             PS_LOOPTRI_AS_UV_3(ps->poly_to_loop_uv_clone, lt_other)};
 
-        /* BKE_image_acquire_ibuf - TODO - this may be slow */
+        /* #BKE_image_acquire_ibuf - TODO: this may be slow. */
 
         if (ibuf->rect_float) {
           if (ibuf_other->rect_float) { /* from float to float */
@@ -2063,7 +2063,7 @@ static bool line_clip_rect2f(const rctf *cliprect,
       return false;
     }
 
-    /* this is a single point  (or close to)*/
+    /* This is a single point  (or close to). */
     if (fabsf(l1[0] - l2[0]) < PROJ_PIXEL_TOLERANCE) {
       if (BLI_rctf_isect_pt_v(rect, l1)) {
         copy_v2_v2(l1_clip, l1);
@@ -2090,7 +2090,7 @@ static bool line_clip_rect2f(const rctf *cliprect,
       return false;
     }
 
-    /* this is a single point  (or close to)*/
+    /* This is a single point  (or close to). */
     if (fabsf(l1[1] - l2[1]) < PROJ_PIXEL_TOLERANCE) {
       if (BLI_rctf_isect_pt_v(rect, l1)) {
         copy_v2_v2(l1_clip, l1);
@@ -2602,8 +2602,8 @@ static void project_bucket_clip_face(const bool is_ortho,
     return;
   }
 
-  /* get the UV space bounding box */
-  /* use IsectPT2Df_limit here so we catch points are are touching the tri edge
+  /* Get the UV space bounding box. */
+  /* Use #IsectPT2Df_limit here so we catch points are touching the triangles edge
    * (or a small fraction over) */
   bucket_bounds_ss[0][0] = bucket_bounds->xmax;
   bucket_bounds_ss[0][1] = bucket_bounds->ymin;
@@ -2678,7 +2678,7 @@ static void project_bucket_clip_face(const bool is_ortho,
 
     /* calc center */
     float cent[2] = {0.0f, 0.0f};
-    /*float up[2] = {0.0f, 1.0f};*/
+    // float up[2] = {0.0f, 1.0f};
     bool doubles;
 
     (*tot) = 0;
@@ -3065,7 +3065,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
     v2coSS = ps->screenCoords[lt_vtri[1]];
     v3coSS = ps->screenCoords[lt_vtri[2]];
 
-    /* This function gives is a concave polyline in UV space from the clipped tri*/
+    /* This function gives is a concave polyline in UV space from the clipped tri. */
     project_bucket_clip_face(is_ortho,
                              is_flip_object,
                              clip_rect,
@@ -3160,7 +3160,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
           //#endif
         }
 
-#if 0 /* TODO - investigate why this doesn't work sometimes! it should! */
+#if 0 /* TODO: investigate why this doesn't work sometimes! it should! */
         /* no intersection for this entire row,
          * after some intersection above means we can quit now */
         if (has_x_isect == 0 && has_isect) {
@@ -3401,7 +3401,7 @@ static void project_paint_face_init(const ProjPaintState *ps,
                   }
                 }
 
-#  if 0 /* TODO - investigate why this doesn't work sometimes! it should! */
+#  if 0 /* TODO: investigate why this doesn't work sometimes! it should! */
                 /* no intersection for this entire row,
                  * after some intersection above means we can quit now */
                 if (has_x_isect == 0 && has_isect) {
@@ -3432,8 +3432,8 @@ static void project_paint_bucket_bounds(const ProjPaintState *ps,
 {
   /* divide by bucketWidth & bucketHeight so the bounds are offset in bucket grid units */
 
-  /* XXX: the offset of 0.5 is always truncated to zero and the offset of 1.5f
-   * is always truncated to 1, is this really correct?? - jwilkins */
+  /* XXX(jwilkins ): the offset of 0.5 is always truncated to zero and the offset of 1.5f
+   * is always truncated to 1, is this really correct? */
 
   /* these offsets of 0.5 and 1.5 seem odd but they are correct */
   bucketMin[0] =
@@ -3553,18 +3553,18 @@ static void project_bucket_init(const ProjPaintState *ps,
   ps->bucketFlags[bucket_index] |= PROJ_BUCKET_INIT;
 }
 
-/* We want to know if a bucket and a face overlap in screen-space
+/* We want to know if a bucket and a face overlap in screen-space.
  *
- * Note, if this ever returns false positives its not that bad, since a face in the bounding area
+ * NOTE: if this ever returns false positives its not that bad, since a face in the bounding area
  * will have its pixels calculated when it might not be needed later, (at the moment at least)
- * obviously it shouldn't have bugs though */
+ * obviously it shouldn't have bugs though. */
 
 static bool project_bucket_face_isect(ProjPaintState *ps,
                                       int bucket_x,
                                       int bucket_y,
                                       const MLoopTri *lt)
 {
-  /* TODO - replace this with a trickier method that uses side-of-line for all
+  /* TODO: replace this with a trickier method that uses side-of-line for all
    * #ProjPaintState.screenCoords edges against the closest bucket corner. */
   const int lt_vtri[3] = {PS_LOOPTRI_AS_VERT_INDEX_3(ps, lt)};
   rctf bucket_bounds;
@@ -3611,7 +3611,7 @@ static bool project_bucket_face_isect(ProjPaintState *ps,
 }
 
 /* Add faces to the bucket but don't initialize its pixels
- * TODO - when painting occluded, sort the faces on their min-Z
+ * TODO: when painting occluded, sort the faces on their min-Z
  * and only add faces that faces that are not occluded */
 static void project_paint_delayed_face_init(ProjPaintState *ps,
                                             const MLoopTri *lt,
@@ -3824,7 +3824,7 @@ static void proj_paint_state_screen_coords_init(ProjPaintState *ps, const int di
         minmax_v2v2_v2(ps->screenMin, ps->screenMax, projScreenCo);
       }
       else {
-        /* TODO - deal with cases where 1 side of a face goes behind the view ?
+        /* TODO: deal with cases where 1 side of a face goes behind the view ?
          *
          * After some research this is actually very tricky, only option is to
          * clip the derived mesh before painting, which is a Pain */
@@ -4358,7 +4358,7 @@ static void project_paint_prepare_all_faces(ProjPaintState *ps,
 
 #endif  // PROJ_DEBUG_WINCLIP
 
-        /* backface culls individual triangles but mask normal will use polygon */
+        /* Back-face culls individual triangles but mask normal will use polygon. */
         if (ps->do_backfacecull) {
           if (ps->do_mask_normal) {
             if (prev_poly != lt->poly) {
@@ -4430,7 +4430,7 @@ static void project_paint_prepare_all_faces(ProjPaintState *ps,
     }
   }
 
-  /* build an array of images we use*/
+  /* Build an array of images we use. */
   if (ps->is_shared_user == false) {
     project_paint_build_proj_ima(ps, arena, &used_images);
   }
@@ -4696,7 +4696,7 @@ static bool project_image_refresh_tagged(ProjPaintState *ps)
       /* look over each bound cell */
       for (i = 0; i < PROJ_BOUNDBOX_SQUARED; i++) {
         pr = &(projIma->partRedrawRect[i]);
-        if (pr->x2 != -1) { /* TODO - use 'enabled' ? */
+        if (pr->x2 != -1) { /* TODO: use 'enabled' ? */
           set_imapaintpartial(pr);
           imapaint_image_update(NULL, projIma->ima, projIma->ibuf, &projIma->iuser, true);
           redraw = 1;
@@ -4770,7 +4770,7 @@ static bool project_bucket_iter_next(ProjPaintState *ps,
 
     BLI_assert(bucket_y >= ps->bucketMin[1] && bucket_y < ps->bucketMax[1]);
     if (bucket_x >= ps->bucketMin[0] && bucket_x < ps->bucketMax[0]) {
-      /* use bucket_bounds for project_bucket_isect_circle and project_bucket_init*/
+      /* Use bucket_bounds for #project_bucket_isect_circle and #project_bucket_init. */
       project_bucket_bounds(ps, bucket_x, bucket_y, bucket_bounds);
 
       if ((ps->source != PROJ_SRC_VIEW) ||
@@ -5356,7 +5356,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool), void *ph_v
 
         dist_sq = len_squared_v2v2(projPixel->projCoSS, pos);
 
-        /*if (dist < radius) {*/ /* correct but uses a sqrtf */
+        /* Faster alternative to `dist < radius` without a #sqrtf. */
         if (dist_sq <= brush_radius_sq) {
           dist = sqrtf(dist_sq);
 
@@ -5393,7 +5393,7 @@ static void do_projectpaint_thread(TaskPool *__restrict UNUSED(pool), void *ph_v
                 samplecos[2] = 0.0f;
               }
 
-              /* note, for clone and smear,
+              /* NOTE: for clone and smear,
                * we only use the alpha, could be a special function */
               BKE_brush_sample_tex_3d(ps->scene, brush, samplecos, texrgba, thread_index, pool);
 
@@ -5814,7 +5814,7 @@ static void project_state_init(bContext *C, Object *ob, ProjPaintState *ps, int 
     ps->is_maskbrush = (brush->mask_mtex.tex) ? true : false;
   }
   else {
-    /* brush may be NULL*/
+    /* Brush may be NULL. */
     ps->do_masking = false;
     ps->is_texbrush = false;
     ps->is_maskbrush = false;

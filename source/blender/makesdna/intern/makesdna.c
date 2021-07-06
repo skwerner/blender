@@ -360,7 +360,7 @@ static int add_type(const char *str, int size)
     return -1;
   }
   if (strchr(str, '*')) {
-    /* note: this is valid C syntax but we can't parse, complain!
+    /* NOTE: this is valid C syntax but we can't parse, complain!
      * `struct SomeStruct* some_var;` <-- correct but we can't handle right now. */
     return -1;
   }
@@ -422,7 +422,7 @@ static int add_name(const char *str)
     int isfuncptr = (strchr(str + 1, '(')) != NULL;
 
     DEBUG_PRINTF(3, "\t\t\t\t*** Function pointer or multidim array pointer found\n");
-    /* functionpointer: transform the type (sometimes) */
+    /* function-pointer: transform the type (sometimes). */
     int i = 0;
 
     while (str[i] != ')') {
@@ -506,7 +506,7 @@ static int add_name(const char *str)
       buf[i + 2] = ')';
       buf[i + 3] = 0;
     }
-    /* now proceed with buf*/
+    /* Now proceed with buf. */
     DEBUG_PRINTF(3, "\t\t\t\t\tProposing fp name %s\n", buf);
     name = buf;
   }
@@ -567,7 +567,7 @@ static short *add_struct(int namecode)
 
 static int preprocess_include(char *maindata, const int maindata_len)
 {
-  /* note: len + 1, last character is a dummy to prevent
+  /* NOTE: len + 1, last character is a dummy to prevent
    * comparisons using uninitialized memory */
   char *temp = MEM_mallocN(maindata_len + 1, "preprocess_include");
   temp[maindata_len] = ' ';
@@ -1212,8 +1212,8 @@ static int make_structDNA(const char *base_directory,
   add_type("ushort", 2); /* SDNA_TYPE_USHORT */
   add_type("int", 4);    /* SDNA_TYPE_INT */
 
-  /* note, long isn't supported,
-   * these are place-holders to maintain alignment with eSDNA_Type*/
+  /* NOTE: long isn't supported,
+   * these are place-holders to maintain alignment with #eSDNA_Type. */
   add_type("long", 4);  /* SDNA_TYPE_LONG */
   add_type("ulong", 4); /* SDNA_TYPE_ULONG */
 

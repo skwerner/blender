@@ -1395,7 +1395,7 @@ static void rna_def_armature_bones(BlenderRNA *brna, PropertyRNA *cprop)
   RNA_def_property_ui_text(prop, "Active Bone", "Armature's active bone");
   RNA_def_property_pointer_funcs(prop, NULL, "rna_Armature_act_bone_set", NULL, NULL);
 
-  /* todo, redraw */
+  /* TODO: redraw. */
   /*      RNA_def_property_collection_active(prop, prop_act); */
 }
 
@@ -1421,7 +1421,7 @@ static void rna_def_armature_edit_bones(BlenderRNA *brna, PropertyRNA *cprop)
   /*RNA_def_property_update(prop, 0, "rna_Armature_act_editbone_update"); */
   RNA_def_property_pointer_funcs(prop, NULL, "rna_Armature_act_edit_bone_set", NULL, NULL);
 
-  /* todo, redraw */
+  /* TODO: redraw. */
   /*      RNA_def_property_collection_active(prop, prop_act); */
 
   /* add target */
@@ -1438,7 +1438,7 @@ static void rna_def_armature_edit_bones(BlenderRNA *brna, PropertyRNA *cprop)
   func = RNA_def_function(srna, "remove", "rna_Armature_edit_bone_remove");
   RNA_def_function_flag(func, FUNC_USE_REPORTS);
   RNA_def_function_ui_description(func, "Remove an existing bone from the armature");
-  /* target to remove*/
+  /* Target to remove. */
   parm = RNA_def_pointer(func, "bone", "EditBone", "", "EditBone to remove");
   RNA_def_parameter_flags(parm, PROP_NEVER_NULL, PARM_REQUIRED | PARM_RNAPTR);
   RNA_def_parameter_clear_flags(parm, PROP_THICK_WRAP, 0);

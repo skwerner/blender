@@ -1285,7 +1285,7 @@ static void node_add_error_message_button(
                             0,
                             0,
                             nullptr);
-  UI_but_func_tooltip_set(but, node_errors_tooltip_fn, storage_pointer_alloc);
+  UI_but_func_tooltip_set(but, node_errors_tooltip_fn, storage_pointer_alloc, MEM_freeN);
   UI_block_emboss_set(node.block, UI_EMBOSS);
 }
 
@@ -1403,28 +1403,6 @@ static void node_draw_basis(const bContext *C,
                  0,
                  0,
                  "");
-    UI_block_emboss_set(node->block, UI_EMBOSS);
-  }
-  if (ntree->type == NTREE_GEOMETRY) {
-    /* Active preview toggle. */
-    iconofs -= iconbutw;
-    UI_block_emboss_set(node->block, UI_EMBOSS_NONE);
-    int icon = (node->flag & NODE_ACTIVE_PREVIEW) ? ICON_RESTRICT_VIEW_OFF : ICON_RESTRICT_VIEW_ON;
-    uiBut *but = uiDefIconBut(node->block,
-                              UI_BTYPE_BUT_TOGGLE,
-                              0,
-                              icon,
-                              iconofs,
-                              rct->ymax - NODE_DY,
-                              iconbutw,
-                              UI_UNIT_Y,
-                              nullptr,
-                              0,
-                              0,
-                              0,
-                              0,
-                              "Show this node's geometry output in the spreadsheet");
-    UI_but_func_set(but, node_toggle_button_cb, node, (void *)"NODE_OT_active_preview_toggle");
     UI_block_emboss_set(node->block, UI_EMBOSS);
   }
 
@@ -1766,7 +1744,7 @@ static void node_update(const bContext *C, bNodeTree *ntree, bNode *node)
   }
 }
 
-static void count_mutli_input_socket_links(bNodeTree *ntree, SpaceNode *snode)
+static void count_multi_input_socket_links(bNodeTree *ntree, SpaceNode *snode)
 {
   Map<bNodeSocket *, int> counts;
   LISTBASE_FOREACH (bNodeLink *, link, &ntree->links) {
@@ -1800,7 +1778,7 @@ void node_update_nodetree(const bContext *C, bNodeTree *ntree)
   SpaceNode *snode = CTX_wm_space_node(C);
   ntreeTagUsedSockets(ntree);
 
-  count_mutli_input_socket_links(ntree, snode);
+  count_multi_input_socket_links(ntree, snode);
 
   /* Update nodes front to back, so children sizes get updated before parents. */
   LISTBASE_FOREACH_BACKWARD (bNode *, node, &ntree->nodes) {

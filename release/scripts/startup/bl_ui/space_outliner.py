@@ -370,6 +370,10 @@ class OUTLINER_PT_filter(Panel):
         col = layout.column(align=True)
 
         row = col.row()
+        row.label(icon='RENDERLAYERS')
+        row.prop(space, "use_filter_view_layers", text="All View Layers")
+
+        row = col.row()
         row.label(icon='OUTLINER_COLLECTION')
         row.prop(space, "use_filter_collection", text="Collections")
 
@@ -436,7 +440,6 @@ class OUTLINER_PT_filter(Panel):
             row = col.row()
             row.label(icon='LIBRARY_DATA_OVERRIDE')
             row.prop(space, "use_filter_lib_override_system", text="System Overrides")
-
 
 
 classes = (

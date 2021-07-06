@@ -155,7 +155,7 @@ static int snap_sel_to_grid_exec(bContext *C, wmOperator *UNUSED(op))
               /* Get location of grid point in pose space. */
               BKE_armature_loc_pose_to_bone(pchan_eval, vec, vec);
 
-              /* adjust location on the original pchan*/
+              /* Adjust location on the original pchan. */
               bPoseChannel *pchan = BKE_pose_channel_find_name(ob->pose, pchan_eval->name);
               if ((pchan->protectflag & OB_LOCK_LOCX) == 0) {
                 pchan->loc[0] = vec[0];
@@ -895,7 +895,7 @@ void VIEW3D_OT_snap_cursor_to_selected(wmOperatorType *ot)
 /**
  * Calculates the center position of the active object in global space.
  *
- * Note: this could be exported to be a generic function.
+ * NOTE: this could be exported to be a generic function.
  * see: #calculateCenterActive
  */
 static bool snap_calc_active_center(bContext *C, const bool select_only, float r_center[3])

@@ -41,10 +41,6 @@ class SPREADSHEET_HT_header(bpy.types.Header):
             return
 
         layout.prop(space, "object_eval_state", text="")
-        if space.object_eval_state != 'ORIGINAL':
-            layout.prop(space, "geometry_component_type", text="")
-        if space.geometry_component_type != 'INSTANCES':
-            layout.prop(space, "attribute_domain", text="")
 
         context_path = space.context_path
         if space.object_eval_state == 'ORIGINAL':
@@ -58,8 +54,11 @@ class SPREADSHEET_HT_header(bpy.types.Header):
         pin_icon = 'PINNED' if space.is_pinned else 'UNPINNED'
         layout.operator("spreadsheet.toggle_pin", text="", icon=pin_icon, emboss=False)
 
+        if space.object_eval_state == 'VIEWER_NODE' and len(context_path) < 3:
+            layout.label(text="No active viewer node.", icon='INFO')
+
         layout.separator_spacer()
-        
+
         row = layout.row(align=True)
         sub = row.row(align=True)
         sub.active = self.selection_filter_available(space)
@@ -115,6 +114,7 @@ class SPREADSHEET_HT_header(bpy.types.Header):
         if obj.type != 'MESH' or obj.mode != 'EDIT':
             return False
         return True
+
 
 classes = (
     SPREADSHEET_HT_header,

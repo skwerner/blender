@@ -243,7 +243,7 @@ void BKE_object_dimensions_set(struct Object *ob, const float value[3], int axis
 
 void BKE_object_empty_draw_type_set(struct Object *ob, const int value);
 void BKE_object_boundbox_flag(struct Object *ob, int flag, const bool set);
-void BKE_object_boundbox_calc_from_mesh(struct Object *ob, struct Mesh *me_eval);
+void BKE_object_boundbox_calc_from_mesh(struct Object *ob, const struct Mesh *me_eval);
 void BKE_object_minmax(struct Object *ob, float r_min[3], float r_max[3], const bool use_hidden);
 bool BKE_object_minmax_dupli(struct Depsgraph *depsgraph,
                              struct Scene *scene,
@@ -382,14 +382,13 @@ void BKE_object_data_batch_cache_dirty_tag(struct ID *object_data);
 /* this function returns a superset of the scenes selection based on relationships */
 
 typedef enum eObRelationTypes {
-  OB_REL_NONE = 0,                      /* just the selection as is */
-  OB_REL_PARENT = (1 << 0),             /* immediate parent */
-  OB_REL_PARENT_RECURSIVE = (1 << 1),   /* parents up to root of selection tree*/
-  OB_REL_CHILDREN = (1 << 2),           /* immediate children */
-  OB_REL_CHILDREN_RECURSIVE = (1 << 3), /* All children */
-  OB_REL_MOD_ARMATURE = (1 << 4),       /* Armatures related to the selected objects */
-  /* OB_REL_SCENE_CAMERA = (1 << 5), */ /* you might want the scene camera too even if unselected?
-                                         */
+  OB_REL_NONE = 0,                      /* Just the selection as is. */
+  OB_REL_PARENT = (1 << 0),             /* Immediate parent. */
+  OB_REL_PARENT_RECURSIVE = (1 << 1),   /* Parents up to root of selection tree. */
+  OB_REL_CHILDREN = (1 << 2),           /* Immediate children. */
+  OB_REL_CHILDREN_RECURSIVE = (1 << 3), /* All children. */
+  OB_REL_MOD_ARMATURE = (1 << 4),       /* Armatures related to the selected objects. */
+  // OB_REL_SCENE_CAMERA = (1 << 5), /* You might want the scene camera too even if unselected? */
 } eObRelationTypes;
 
 typedef enum eObjectSet {

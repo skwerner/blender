@@ -198,7 +198,7 @@ void EEVEE_subsurface_add_pass(EEVEE_ViewLayerData *sldata,
 
   /* Limit of 8 bit stencil buffer. ID 255 is refraction. */
   if (effects->sss_surface_count >= 254) {
-    /* TODO : display message. */
+    /* TODO: display message. */
     printf("Error: Too many different Subsurface shader in the scene.\n");
     return;
   }
@@ -315,7 +315,7 @@ void EEVEE_subsurface_compute(EEVEE_ViewLayerData *sldata, EEVEE_Data *vedata)
 
     if (!DRW_pass_is_empty(psl->sss_translucency_ps)) {
       /* We sample the shadow-maps using normal sampler. We need to disable Comparison mode.
-       * TODO(fclem): avoid this by using sampler objects.*/
+       * TODO(fclem): avoid this by using sampler objects. */
       GPU_texture_compare_mode(sldata->shadow_cube_pool, false);
       GPU_texture_compare_mode(sldata->shadow_cascade_pool, false);
 

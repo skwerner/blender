@@ -39,6 +39,7 @@
  * Edge flags and usage flags are used by with scene/object/gpencil modifier bits, and those values
  * needs to stay consistent throughout. */
 
+/* These flags are used for 1 time calculation, not stroke selection afterwards. */
 typedef enum eLineartMainFlags {
   LRT_INTERSECTION_AS_CONTOUR = (1 << 0),
   LRT_EVERYTHING_AS_CONTOUR = (1 << 1),
@@ -46,6 +47,15 @@ typedef enum eLineartMainFlags {
   LRT_ALLOW_OVERLAPPING_EDGES = (1 << 3),
   LRT_ALLOW_CLIPPING_BOUNDARIES = (1 << 4),
   LRT_REMOVE_DOUBLES = (1 << 5),
+  LRT_LOOSE_AS_CONTOUR = (1 << 6),
+  LRT_GPENCIL_INVERT_SOURCE_VGROUP = (1 << 7),
+  LRT_GPENCIL_MATCH_OUTPUT_VGROUP = (1 << 8),
+  LRT_FILTER_FACE_MARK = (1 << 9),
+  LRT_FILTER_FACE_MARK_INVERT = (1 << 10),
+  LRT_FILTER_FACE_MARK_BOUNDARIES = (1 << 11),
+  LRT_CHAIN_LOOSE_EDGES = (1 << 12),
+  LRT_CHAIN_GEOMETRY_SPACE = (1 << 13),
+  LRT_ALLOW_OVERLAP_EDGE_TYPES = (1 << 14),
 } eLineartMainFlags;
 
 typedef enum eLineartEdgeFlag {
@@ -54,9 +64,7 @@ typedef enum eLineartEdgeFlag {
   LRT_EDGE_FLAG_CREASE = (1 << 2),
   LRT_EDGE_FLAG_MATERIAL = (1 << 3),
   LRT_EDGE_FLAG_INTERSECTION = (1 << 4),
-  /** Floating edge, unimplemented yet. */
-  LRT_EDGE_FLAG_FLOATING = (1 << 5),
-  /** Also used as discarded line mark. */
+  LRT_EDGE_FLAG_LOOSE = (1 << 5),
   LRT_EDGE_FLAG_CHAIN_PICKED = (1 << 6),
   LRT_EDGE_FLAG_CLIPPED = (1 << 7),
   /** Limited to 8 bits, DON'T ADD ANYMORE until improvements on the data structure. */

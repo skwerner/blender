@@ -54,6 +54,7 @@
 #include "ED_render.h"
 #include "ED_screen.h"
 #include "ED_select_utils.h"
+#include "ED_spreadsheet.h"
 
 #include "RNA_access.h"
 #include "RNA_define.h"
@@ -662,7 +663,8 @@ void snode_update(SpaceNode *snode, bNode *node)
   }
 }
 
-void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node, bool *r_active_texture_changed)
+void ED_node_set_active(
+    Main *bmain, SpaceNode *snode, bNodeTree *ntree, bNode *node, bool *r_active_texture_changed)
 {
   const bool was_active_texture = (node->flag & NODE_ACTIVE_TEXTURE) != 0;
   if (r_active_texture_changed) {
@@ -781,6 +783,19 @@ void ED_node_set_active(Main *bmain, bNodeTree *ntree, bNode *node, bool *r_acti
         allqueue(REDRAWIPO, 0);
       }
 #endif
+    }
+    else if (ntree->type == NTREE_GEOMETRY) {
+      if (node->type == GEO_NODE_VIEWER) {
+        if ((node->flag & NODE_DO_OUTPUT) == 0) {
+          LISTBASE_FOREACH (bNode *, node_iter, &ntree->nodes) {
+            if (node_iter->type == GEO_NODE_VIEWER) {
+              node_iter->flag &= ~NODE_DO_OUTPUT;
+            }
+          }
+          node->flag |= NODE_DO_OUTPUT;
+          ED_spreadsheet_context_paths_set_geometry_node(bmain, snode, node);
+        }
+      }
     }
   }
 }
@@ -1130,7 +1145,7 @@ static bool cursor_isect_multi_input_socket(const float cursor[2], const bNodeSo
 {
   const float node_socket_height = node_socket_calculate_height(socket);
   rctf multi_socket_rect;
-  /*.xmax = socket->locx + NODE_SOCKSIZE * 5.5f
+  /* `.xmax = socket->locx + NODE_SOCKSIZE * 5.5f`
    * would be the same behavior as for regular sockets.
    * But keep it smaller because for multi-input socket you
    * sometimes want to drag the link to the other side, if you may
@@ -1318,7 +1333,6 @@ static int node_duplicate_exec(bContext *C, wmOperator *op)
       nodeSetSelected(node, false);
       node->flag &= ~(NODE_ACTIVE | NODE_ACTIVE_TEXTURE);
       nodeSetSelected(newnode, true);
-      newnode->flag &= ~NODE_ACTIVE_PREVIEW;
 
       do_tag_update |= (do_tag_update || node_connected_to_output(bmain, ntree, newnode));
     }
@@ -1357,9 +1371,9 @@ void NODE_OT_duplicate(wmOperatorType *ot)
       ot->srna, "keep_inputs", false, "Keep Inputs", "Keep the input links to duplicated nodes");
 }
 
-bool ED_node_select_check(ListBase *lb)
+bool ED_node_select_check(const ListBase *lb)
 {
-  LISTBASE_FOREACH (bNode *, node, lb) {
+  LISTBASE_FOREACH (const bNode *, node, lb) {
     if (node->flag & NODE_SELECT) {
       return true;
     }
@@ -2310,10 +2324,10 @@ static int ntree_socket_add_exec(bContext *C, wmOperator *op)
     sock = ntreeInsertSocketInterface(
         ntree, in_out, active_sock->idname, active_sock->next, active_sock->name);
     /* XXX this only works for actual sockets, not interface templates! */
-    /*nodeSocketCopyValue(sock, &ntree_ptr, active_sock, &ntree_ptr);*/
+    // nodeSocketCopyValue(sock, &ntree_ptr, active_sock, &ntree_ptr);
   }
   else {
-    /* XXX TODO define default socket type for a tree! */
+    /* XXX TODO: define default socket type for a tree! */
     sock = ntreeAddSocketInterface(ntree, in_out, "NodeSocketFloat", default_name);
   }
 

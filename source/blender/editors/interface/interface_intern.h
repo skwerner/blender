@@ -221,7 +221,8 @@ struct uiBut {
 
   const char *tip;
   uiButToolTipFunc tip_func;
-  void *tip_argN;
+  void *tip_arg;
+  uiFreeArgFunc tip_arg_free;
 
   /** info on why button is disabled, displayed in tooltip */
   const char *disabled_info;
@@ -261,7 +262,7 @@ struct uiBut {
 
   ListBase extra_op_icons; /** #uiButExtraOpIcon */
 
-  /* Draggable data, type is WM_DRAG_... */
+  /* Drag-able data, type is WM_DRAG_... */
   char dragtype;
   short dragflag;
   void *dragpoin;
@@ -279,7 +280,7 @@ struct uiBut {
   float *editvec;
 
   uiButPushedStateFunc pushed_state_func;
-  void *pushed_state_arg;
+  const void *pushed_state_arg;
 
   /* pointer back */
   uiBlock *block;
@@ -316,7 +317,7 @@ typedef struct uiButSearch {
   void *item_active;
 
   void *arg;
-  uiButSearchArgFreeFn arg_free_fn;
+  uiFreeArgFunc arg_free_fn;
 
   uiButSearchContextMenuFn item_context_menu_fn;
   uiButSearchTooltipFn item_tooltip_fn;
@@ -349,6 +350,15 @@ typedef struct uiButProgressbar {
   /* 0..1 range */
   float progress;
 } uiButProgressbar;
+
+/** Derived struct for #UI_BTYPE_DATASETROW. */
+typedef struct uiButDatasetRow {
+  uiBut but;
+
+  uint8_t geometry_component_type;
+  uint8_t attribute_domain;
+  int indentation;
+} uiButDatasetRow;
 
 /** Derived struct for #UI_BTYPE_HSVCUBE. */
 typedef struct uiButHSVCube {
@@ -695,7 +705,7 @@ struct uiPopupBlockCreate {
   uiBlockCreateFunc create_func;
   uiBlockHandleCreateFunc handle_create_func;
   void *arg;
-  void (*arg_free)(void *arg);
+  uiFreeArgFunc arg_free;
 
   int event_xy[2];
 
@@ -819,7 +829,7 @@ uiPopupBlockHandle *ui_popup_block_create(struct bContext *C,
                                           uiBlockCreateFunc create_func,
                                           uiBlockHandleCreateFunc handle_create_func,
                                           void *arg,
-                                          void (*arg_free)(void *arg));
+                                          uiFreeArgFunc arg_free);
 uiPopupBlockHandle *ui_popup_menu_create(struct bContext *C,
                                          struct ARegion *butregion,
                                          uiBut *but,

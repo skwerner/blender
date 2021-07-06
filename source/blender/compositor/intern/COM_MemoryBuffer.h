@@ -34,7 +34,7 @@ enum class MemoryBufferState {
   /** \brief memory has been allocated on creator device and CPU machine,
    * but kernel has not been executed */
   Default = 0,
-  /** \brief chunk is consolidated from other chunks. special state.*/
+  /** \brief chunk is consolidated from other chunks. special state. */
   Temporary = 6,
 };
 
@@ -246,6 +246,8 @@ class MemoryBuffer {
   {
     return this->m_buffer;
   }
+
+  MemoryBuffer *inflate() const;
 
   inline void wrap_pixel(int &x, int &y, MemoryBufferExtend extend_x, MemoryBufferExtend extend_y)
   {

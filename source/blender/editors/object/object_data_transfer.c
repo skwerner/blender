@@ -96,7 +96,7 @@ static const EnumPropertyItem DT_layer_items[] = {
     {0, NULL, 0, NULL, NULL},
 };
 
-/* Note: rna_enum_dt_layers_select_src_items enum is from rna_modifier.c */
+/* NOTE: #rna_enum_dt_layers_select_src_items enum is from rna_modifier.c. */
 static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
                                                           PointerRNA *ptr,
                                                           PropertyRNA *UNUSED(prop),
@@ -201,7 +201,7 @@ static const EnumPropertyItem *dt_layers_select_src_itemf(bContext *C,
   return item;
 }
 
-/* Note: rna_enum_dt_layers_select_dst_items enum is from rna_modifier.c */
+/* NOTE: #rna_enum_dt_layers_select_dst_items enum is from `rna_modifier.c`. */
 static const EnumPropertyItem *dt_layers_select_dst_itemf(bContext *C,
                                                           PointerRNA *ptr,
                                                           PropertyRNA *UNUSED(prop),
@@ -255,7 +255,7 @@ static const EnumPropertyItem *dt_layers_select_itemf(bContext *C,
   return dt_layers_select_src_itemf(C, ptr, prop, r_free);
 }
 
-/* Note: rna_enum_dt_mix_mode_items enum is from rna_modifier.c */
+/* NOTE: rna_enum_dt_mix_mode_items enum is from `rna_modifier.c`. */
 static const EnumPropertyItem *dt_mix_mode_itemf(bContext *C,
                                                  PointerRNA *ptr,
                                                  PropertyRNA *UNUSED(prop),
@@ -511,7 +511,7 @@ static int data_transfer_exec(bContext *C, wmOperator *op)
   }
 
 #if 0 /* TODO */
-  /* Note: issue with that is that if canceled, operator cannot be redone... Nasty in our case. */
+  /* NOTE: issue with that is that if canceled, operator cannot be redone... Nasty in our case. */
   return changed ? OPERATOR_FINISHED : OPERATOR_CANCELLED;
 #else
   return OPERATOR_FINISHED;
@@ -611,23 +611,23 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 {
   PropertyRNA *prop;
 
-  /* Identifiers.*/
+  /* Identifiers. */
   ot->name = "Transfer Mesh Data";
   ot->idname = "OBJECT_OT_data_transfer";
   ot->description =
       "Transfer data layer(s) (weights, edge sharp, etc.) from active to selected meshes";
 
-  /* API callbacks.*/
+  /* API callbacks. */
   ot->poll = data_transfer_poll;
   ot->poll_property = data_transfer_poll_property;
   ot->invoke = WM_menu_invoke;
   ot->exec = data_transfer_exec;
   ot->check = data_transfer_check;
 
-  /* Flags.*/
+  /* Flags. */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  /* Properties.*/
+  /* Properties. */
   prop = RNA_def_boolean(ot->srna,
                          "use_reverse_transfer",
                          false,
@@ -767,7 +767,7 @@ void OBJECT_OT_data_transfer(wmOperatorType *ot)
 }
 
 /******************************************************************************/
-/* Note: This operator is hybrid, it can work as a usual standalone Object operator,
+/* NOTE: This operator is hybrid, it can work as a usual standalone Object operator,
  *       or as a DataTransfer modifier tool.
  */
 
@@ -886,7 +886,7 @@ void OBJECT_OT_datalayout_transfer(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_REGISTER | OPTYPE_UNDO;
 
-  /* Properties.*/
+  /* Properties. */
   edit_modifier_properties(ot);
 
   /* Data type to transfer. */

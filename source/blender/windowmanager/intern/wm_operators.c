@@ -53,7 +53,7 @@
 
 #include "BLI_blenlib.h"
 #include "BLI_dial_2d.h"
-#include "BLI_dynstr.h" /*for WM_operator_pystring */
+#include "BLI_dynstr.h" /* For #WM_operator_pystring. */
 #include "BLI_math.h"
 #include "BLI_utildefines.h"
 
@@ -126,8 +126,8 @@ void WM_operator_py_idname(char *to, const char *from)
   if (sep) {
     int ofs = (sep - from);
 
-    /* note, we use ascii tolower instead of system tolower, because the
-     * latter depends on the locale, and can lead to idname mismatch */
+    /* NOTE: we use ascii `tolower` instead of system `tolower`, because the
+     * latter depends on the locale, and can lead to `idname` mismatch. */
     memcpy(to, from, sizeof(char) * ofs);
     BLI_str_tolower_ascii(to, ofs);
 
@@ -323,16 +323,16 @@ bool WM_operator_pystring_abbreviate(char *str, int str_len_max)
       if (parens_len > str_len_max) {
         const char *comma_first = strchr(parens_start, ',');
 
-        /* truncate after the first comma */
+        /* Truncate after the first comma. */
         if (comma_first) {
           const char end_str[] = " ... )";
           const int end_str_len = sizeof(end_str) - 1;
 
-          /* leave a place for the first argument*/
+          /* Leave a place for the first argument. */
           const int new_str_len = (comma_first - parens_start) + 1;
 
           if (str_len >= new_str_len + parens_start_pos + end_str_len + 1) {
-            /* append " ... )" to the string after the comma */
+            /* Append " ... )" to the string after the comma. */
             memcpy(str + new_str_len + parens_start_pos, end_str, end_str_len + 1);
 
             return true;
@@ -745,7 +745,7 @@ static bool operator_last_properties_init_impl(wmOperator *op, IDProperty *last_
         if (idp_src) {
           IDProperty *idp_dst = IDP_CopyProperty(idp_src);
 
-          /* note - in the future this may need to be done recursively,
+          /* NOTE: in the future this may need to be done recursively,
            * but for now RNA doesn't access nested operators */
           idp_dst->flag |= IDP_FLAG_GHOST;
 
@@ -1156,7 +1156,7 @@ bool WM_operator_filesel_ensure_ext_imtype(wmOperator *op, const struct ImageFor
   RNA_property_string_get(op->ptr, prop, filepath);
   if (BKE_image_path_ensure_ext_from_imformat(filepath, im_format)) {
     RNA_property_string_set(op->ptr, prop, filepath);
-    /* note, we could check for and update 'filename' here,
+    /* NOTE: we could check for and update 'filename' here,
      * but so far nothing needs this. */
     return true;
   }
@@ -2361,7 +2361,7 @@ static void radial_control_paint_cursor(bContext *UNUSED(C), int x, int y, void 
       strdrawlen = BLI_strlen_utf8(str);
       break;
     default:
-      tex_radius = WM_RADIAL_CONTROL_DISPLAY_SIZE; /* note, this is a dummy value */
+      tex_radius = WM_RADIAL_CONTROL_DISPLAY_SIZE; /* NOTE: this is a dummy value. */
       alpha = 0.75;
       break;
   }
@@ -3202,7 +3202,7 @@ static void redraw_timer_step(bContext *C,
     int tot = (scene->r.efra - scene->r.sfra) + 1;
 
     while (tot--) {
-      /* todo, ability to escape! */
+      /* TODO: ability to escape! */
       scene->r.cfra++;
       if (scene->r.cfra > scene->r.efra) {
         scene->r.cfra = scene->r.sfra;

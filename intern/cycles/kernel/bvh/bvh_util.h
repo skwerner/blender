@@ -116,7 +116,7 @@ ccl_device_inline void sort_intersections(Intersection *hits, uint num_hits)
 /* Utility to quickly get flags from an intersection. */
 
 ccl_device_forceinline int intersection_get_shader_flags(const KernelGlobals *ccl_restrict kg,
-                                                         const Intersection *isect)
+                                                         const Intersection *ccl_restrict isect)
 {
   const int prim = kernel_tex_fetch(__prim_index, isect->prim);
   int shader = 0;
@@ -138,7 +138,7 @@ ccl_device_forceinline int intersection_get_shader_flags(const KernelGlobals *cc
 }
 
 ccl_device_forceinline int intersection_get_shader(const KernelGlobals *ccl_restrict kg,
-                                                   const Intersection *isect)
+                                                   const Intersection *ccl_restrict isect)
 {
   const int prim = kernel_tex_fetch(__prim_index, isect->prim);
   int shader = 0;
@@ -160,7 +160,7 @@ ccl_device_forceinline int intersection_get_shader(const KernelGlobals *ccl_rest
 }
 
 ccl_device_forceinline int intersection_get_object(const KernelGlobals *ccl_restrict kg,
-                                                   const Intersection *isect)
+                                                   const Intersection *ccl_restrict isect)
 {
   if (isect->object != OBJECT_NONE) {
     return isect->object;
@@ -170,7 +170,7 @@ ccl_device_forceinline int intersection_get_object(const KernelGlobals *ccl_rest
 }
 
 ccl_device_forceinline int intersection_get_object_flags(const KernelGlobals *ccl_restrict kg,
-                                                         const Intersection *isect)
+                                                         const Intersection *ccl_restrict isect)
 {
   const int object = intersection_get_object(kg, isect);
 

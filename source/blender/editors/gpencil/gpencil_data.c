@@ -828,7 +828,7 @@ static int gpencil_frame_clean_loose_exec(bContext *C, wmOperator *op)
         }
       }
 
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }
@@ -871,20 +871,20 @@ void GPENCIL_OT_frame_clean_loose(wmOperatorType *ot)
 }
 
 /* ********************* Clean Duplicated Frames ************************** */
-static bool gpencil_frame_is_equal(bGPDframe *gpf_a, bGPDframe *gpf_b)
+static bool gpencil_frame_is_equal(const bGPDframe *gpf_a, const bGPDframe *gpf_b)
 {
   if ((gpf_a == NULL) || (gpf_b == NULL)) {
     return false;
   }
   /* If the number of strokes is different, cannot be equal. */
-  int totstrokes_a = BLI_listbase_count(&gpf_a->strokes);
-  int totstrokes_b = BLI_listbase_count(&gpf_b->strokes);
+  const int totstrokes_a = BLI_listbase_count(&gpf_a->strokes);
+  const int totstrokes_b = BLI_listbase_count(&gpf_b->strokes);
   if ((totstrokes_a == 0) || (totstrokes_b == 0) || (totstrokes_a != totstrokes_b)) {
     return false;
   }
   /* Loop all strokes and check. */
-  bGPDstroke *gps_a = gpf_a->strokes.first;
-  bGPDstroke *gps_b = gpf_b->strokes.first;
+  const bGPDstroke *gps_a = gpf_a->strokes.first;
+  const bGPDstroke *gps_b = gpf_b->strokes.first;
   for (int i = 0; i < totstrokes_a; i++) {
     /* If the number of points is different, cannot be equal. */
     if (gps_a->totpoints != gps_b->totpoints) {
@@ -924,8 +924,8 @@ static bool gpencil_frame_is_equal(bGPDframe *gpf_a, bGPDframe *gpf_b)
 
     /* Loop points and check if equals or not. */
     for (int p = 0; p < gps_a->totpoints; p++) {
-      bGPDspoint *pt_a = &gps_a->points[p];
-      bGPDspoint *pt_b = &gps_b->points[p];
+      const bGPDspoint *pt_a = &gps_a->points[p];
+      const bGPDspoint *pt_b = &gps_b->points[p];
       if (!equals_v3v3(&pt_a->x, &pt_b->x)) {
         return false;
       }
@@ -1572,7 +1572,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
               continue;
             }
             bool gpf_lock = false;
-            /* some stroke is already at front*/
+            /* Some stroke is already at front. */
             if (ELEM(direction, GP_STROKE_MOVE_TOP, GP_STROKE_MOVE_UP)) {
               if (gps == gpf->strokes.last) {
                 gpf_lock = true;
@@ -1664,7 +1664,7 @@ static int gpencil_stroke_arrange_exec(bContext *C, wmOperator *op)
         BLI_freelistN(&selected);
       }
 
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }
@@ -1772,7 +1772,7 @@ static int gpencil_stroke_change_color_exec(bContext *C, wmOperator *op)
           }
         }
       }
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }
@@ -2718,9 +2718,8 @@ static void gpencil_joined_fix_animdata_cb(ID *id, FCurve *fcu, void *user_data)
         fcu->rna_path = BKE_animsys_fix_rna_path_rename(
             id, fcu->rna_path, "layers", old_name, new_name, 0, 0, false);
 
-        /* we don't want to apply a second remapping on this F-Curve now,
-         * so stop trying to fix names names
-         */
+        /* We don't want to apply a second remapping on this F-Curve now,
+         * so stop trying to fix names. */
         break;
       }
     }
@@ -3356,7 +3355,7 @@ static int gpencil_material_unlock_all_exec(bContext *C, wmOperator *UNUSED(op))
     return OPERATOR_CANCELLED;
   }
 
-  /* make all layers editable again*/
+  /* Make all layers editable again. */
   MaterialGPencilStyle *gp_style = NULL;
 
   for (short i = 0; i < *totcol; i++) {
@@ -3410,7 +3409,7 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
-  /* read all strokes and select*/
+  /* Read all strokes and select. */
   CTX_DATA_BEGIN (C, bGPDlayer *, gpl, editable_gpencil_layers) {
     bGPDframe *init_gpf = (is_multiedit) ? gpl->frames.first : gpl->actframe;
 
@@ -3452,7 +3451,7 @@ static int gpencil_material_select_exec(bContext *C, wmOperator *op)
           }
         }
       }
-      /* if not multiedit, exit loop*/
+      /* If not multi-edit, exit loop. */
       if (!is_multiedit) {
         break;
       }

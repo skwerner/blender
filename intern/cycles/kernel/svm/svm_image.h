@@ -185,7 +185,7 @@ ccl_device_forceinline void svm_node_tex_image_box(const KernelGlobals *kg,
     }
   }
   else {
-    /* Desperate mode, no valid choice anyway, fallback to one side.*/
+    /* Desperate mode, no valid choice anyway, fallback to one side. */
     weight.x = 1.0f;
   }
 

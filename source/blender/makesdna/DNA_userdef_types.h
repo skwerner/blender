@@ -261,7 +261,7 @@ typedef struct ThemeSpace {
   /** Region background. */
   unsigned char execution_buts[4];
 
-  /* note, cannot use name 'panel' because of DNA mapping old files */
+  /* NOTE: cannot use name 'panel' because of DNA mapping old files. */
   uiPanelColors panelcolors;
 
   unsigned char shade1[4];
@@ -496,7 +496,7 @@ typedef struct bTheme {
 
   /* 20 sets of bone colors for this theme */
   ThemeWireColor tarm[20];
-  /*ThemeWireColor tobj[20];*/
+  // ThemeWireColor tobj[20];
 
   /* See COLLECTION_COLOR_TOT for the number of collection colors. */
   ThemeCollectionColor collection_color[8];

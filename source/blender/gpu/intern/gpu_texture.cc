@@ -400,7 +400,7 @@ void GPU_texture_update(GPUTexture *tex, eGPUDataFormat data_format, const void 
 }
 
 /* Makes data interpretation aware of the source layout.
- * Skipping pixels correctly when changing rows when doing partial update.*/
+ * Skipping pixels correctly when changing rows when doing partial update. */
 void GPU_unpack_row_length_set(uint len)
 {
   Context::get()->state_manager->texture_unpack_row_length_set(len);
@@ -600,7 +600,7 @@ void GPU_texture_py_reference_set(GPUTexture *tex, void **py_ref)
 }
 #endif
 
-/* TODO remove */
+/* TODO: remove. */
 int GPU_texture_opengl_bindcode(const GPUTexture *tex)
 {
   return reinterpret_cast<const Texture *>(tex)->gl_bindcode_get();

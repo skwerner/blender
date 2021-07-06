@@ -464,7 +464,7 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
   else {
     /* Shadow terminator offset. */
     const float frequency_multiplier =
-        kernel_tex_fetch(__objects, sd->object).shadow_terminator_offset;
+        kernel_tex_fetch(__objects, sd->object).shadow_terminator_shading_offset;
     if (frequency_multiplier > 1.0f) {
       *eval *= shift_cos_in(dot(*omega_in, sc->N), frequency_multiplier);
     }
@@ -588,7 +588,7 @@ ccl_device_inline
     }
     /* Shadow terminator offset. */
     const float frequency_multiplier =
-        kernel_tex_fetch(__objects, sd->object).shadow_terminator_offset;
+        kernel_tex_fetch(__objects, sd->object).shadow_terminator_shading_offset;
     if (frequency_multiplier > 1.0f) {
       eval *= shift_cos_in(dot(omega_in, sc->N), frequency_multiplier);
     }

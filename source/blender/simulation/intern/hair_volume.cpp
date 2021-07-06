@@ -200,7 +200,7 @@ BLI_INLINE void hair_grid_interpolate(const HairGridVert *grid,
   }
 
   if (velocity_gradient) {
-    /* XXX TODO */
+    /* XXX TODO: */
     zero_m3(velocity_gradient);
   }
 }
@@ -530,7 +530,7 @@ void SIM_hair_volume_add_segment(HairGrid *grid,
   const int stride2 = strides[axis2];
 
   /* increment of secondary directions per step in the primary direction
-   * note: we always go in the positive direction along axis0, so the sign can be inverted
+   * NOTE: we always go in the positive direction along axis0, so the sign can be inverted
    */
   const float inc1 = dir2[axis1] / dir2[axis0];
   const float inc2 = dir2[axis2] / dir2[axis0];
@@ -722,7 +722,7 @@ bool SIM_hair_volume_solve_divergence(HairGrid *grid,
   const float flowfac = grid->cellsize;
   const float inv_flowfac = 1.0f / grid->cellsize;
 
-  /*const int num_cells = hair_grid_size(grid->res);*/
+  // const int num_cells = hair_grid_size(grid->res);
   const int res[3] = {grid->res[0], grid->res[1], grid->res[2]};
   const int resA[3] = {grid->res[0] + 2, grid->res[1] + 2, grid->res[2] + 2};
 
@@ -800,7 +800,7 @@ bool SIM_hair_volume_solve_divergence(HairGrid *grid,
             vert->density, target_density, target_strength);
 
         /* B vector contains the finite difference approximation of the velocity divergence.
-         * Note: according to the discretized Navier-Stokes equation the rhs vector
+         * NOTE: according to the discretized Navier-Stokes equation the rhs vector
          * and resulting pressure gradient should be multiplied by the (inverse) density;
          * however, this is already included in the weighting of hair velocities on the grid!
          */
@@ -891,7 +891,7 @@ bool SIM_hair_volume_solve_divergence(HairGrid *grid,
             neighbor_hi_index[neighbors_hi++] = u + strideA2;
           }
 
-          /*int liquid_neighbors = neighbors_lo + neighbors_hi;*/
+          // int liquid_neighbors = neighbors_lo + neighbors_hi;
           non_solid_neighbors = 6;
 
           for (n = 0; n < neighbors_lo; n++) {

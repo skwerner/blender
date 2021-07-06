@@ -169,7 +169,7 @@ struct uiLayout {
   bool enabled;
   bool redalert;
   bool keepaspect;
-  /** For layouts inside gridflow, they and their items shall never have a fixed maximal size. */
+  /** For layouts inside grid-flow, they and their items shall never have a fixed maximal size. */
   bool variable_size;
   char alignment;
   eUIEmbossType emboss;
@@ -643,7 +643,7 @@ static void ui_item_array(uiLayout *layout,
                    NULL);
   }
   else {
-    /* note, this block of code is a bit arbitrary and has just been made
+    /* NOTE: this block of code is a bit arbitrary and has just been made
      * to work with common cases, but may need to be re-worked */
 
     /* special case, boolean array in a menu, this could be used in a more generic way too */
@@ -662,7 +662,7 @@ static void ui_item_array(uiLayout *layout,
         }
       }
 
-      /* show checkboxes for rna on a non-emboss block (menu for eg) */
+      /* Show check-boxes for rna on a non-emboss block (menu for eg). */
       bool *boolarr = NULL;
       if (type == PROP_BOOLEAN &&
           ELEM(layout->root->block->emboss, UI_EMBOSS_NONE, UI_EMBOSS_PULLDOWN)) {
@@ -1191,7 +1191,7 @@ static uiBut *uiItemFullO_ptr_ex(uiLayout *layout,
 
   const eUIEmbossType prev_emboss = layout->emboss;
   if (flag & UI_ITEM_R_NO_BG) {
-    layout->emboss = UI_EMBOSS_NONE;
+    layout->emboss = UI_EMBOSS_NONE_OR_STATUS;
   }
 
   /* create the button */
@@ -1818,7 +1818,7 @@ static void ui_item_rna_size(uiLayout *layout,
     }
     else if (type == PROP_BOOLEAN) {
       if (icon == ICON_NONE) {
-        /* Exception for checkboxes, they need a little less space to align nicely. */
+        /* Exception for check-boxes, they need a little less space to align nicely. */
         is_checkbox_only = true;
       }
       icon = ICON_DOT;
@@ -1984,7 +1984,7 @@ void uiItemFullR(uiLayout *layout,
    * a label to display in the first column, the heading is inserted there. Otherwise it's inserted
    * as a new row before the first item. */
   uiLayout *heading_layout = ui_layout_heading_find(layout);
-  /* Although checkboxes use the split layout, they are an exception and should only place their
+  /* Although check-boxes use the split layout, they are an exception and should only place their
    * label in the second column, to not make that almost empty.
    *
    * Keep using 'use_prop_sep' instead of disabling it entirely because
@@ -2062,7 +2062,7 @@ void uiItemFullR(uiLayout *layout,
 
     /* Menus and pie-menus don't show checkbox without this. */
     if ((layout->root->type == UI_LAYOUT_MENU) ||
-        /* Use checkboxes only as a fallback in pie-menu's, when no icon is defined. */
+        /* Use check-boxes only as a fallback in pie-menu's, when no icon is defined. */
         ((layout->root->type == UI_LAYOUT_PIEMENU) && (icon == ICON_NONE))) {
       const int prop_flag = RNA_property_flag(prop);
       if (type == PROP_BOOLEAN) {
@@ -2122,7 +2122,7 @@ void uiItemFullR(uiLayout *layout,
 
   const eUIEmbossType prev_emboss = layout->emboss;
   if (no_bg) {
-    layout->emboss = UI_EMBOSS_NONE;
+    layout->emboss = UI_EMBOSS_NONE_OR_STATUS;
   }
 
   uiBut *but = NULL;
@@ -2353,9 +2353,9 @@ void uiItemFullR(uiLayout *layout,
     }
   }
 
-  /* Mark non-embossed textfields inside a listbox. */
+  /* Mark non-embossed text-fields inside a list-box. */
   if (but && (block->flag & UI_BLOCK_LIST_ITEM) && (but->type == UI_BTYPE_TEXT) &&
-      (but->emboss & UI_EMBOSS_NONE)) {
+      ELEM(but->emboss, UI_EMBOSS_NONE, UI_EMBOSS_NONE_OR_STATUS)) {
     UI_but_flag_enable(but, UI_BUT_LIST_ITEM);
   }
 
@@ -2831,7 +2831,7 @@ void ui_item_paneltype_func(bContext *C, uiLayout *layout, void *arg_pt)
   PanelType *pt = (PanelType *)arg_pt;
   UI_paneltype_draw(C, pt, layout);
 
-  /* panels are created flipped (from event handling pov) */
+  /* Panels are created flipped (from event handling POV). */
   layout->root->block->flag ^= UI_BLOCK_IS_FLIP;
 }
 
@@ -3147,7 +3147,7 @@ static uiBut *uiItemL_(uiLayout *layout, const char *name, int icon)
     but->drawflag |= UI_BUT_TEXT_RIGHT;
   }
 
-  /* Mark as a label inside a listbox. */
+  /* Mark as a label inside a list-box. */
   if (block->flag & UI_BLOCK_LIST_ITEM) {
     but->flag |= UI_BUT_LIST_ITEM;
   }
@@ -3381,10 +3381,13 @@ typedef struct MenuItemLevel {
 
 static void menu_item_enum_opname_menu(bContext *UNUSED(C), uiLayout *layout, void *arg)
 {
-  MenuItemLevel *lvl = (MenuItemLevel *)(((uiBut *)arg)->func_argN);
+  uiBut *but = arg;
+  MenuItemLevel *lvl = but->func_argN;
+  /* Use the operator properties from the button owning the menu. */
+  IDProperty *op_props = but->opptr ? but->opptr->data : NULL;
 
   uiLayoutSetOperatorContext(layout, lvl->opcontext);
-  uiItemsEnumO(layout, lvl->opname, lvl->propname);
+  uiItemsFullEnumO(layout, lvl->opname, lvl->propname, op_props, lvl->opcontext, 0);
 
   layout->root->block->flag |= UI_BLOCK_IS_FLIP;
 
@@ -3392,12 +3395,13 @@ static void menu_item_enum_opname_menu(bContext *UNUSED(C), uiLayout *layout, vo
   UI_block_direction_set(layout->root->block, UI_DIR_DOWN);
 }
 
-void uiItemMenuEnumO_ptr(uiLayout *layout,
-                         bContext *C,
-                         wmOperatorType *ot,
-                         const char *propname,
-                         const char *name,
-                         int icon)
+void uiItemMenuEnumFullO_ptr(uiLayout *layout,
+                             bContext *C,
+                             wmOperatorType *ot,
+                             const char *propname,
+                             const char *name,
+                             int icon,
+                             PointerRNA *r_opptr)
 {
   /* Caller must check */
   BLI_assert(ot->srna != NULL);
@@ -3416,6 +3420,15 @@ void uiItemMenuEnumO_ptr(uiLayout *layout,
   lvl->opcontext = layout->root->opcontext;
 
   uiBut *but = ui_item_menu(layout, name, icon, menu_item_enum_opname_menu, NULL, lvl, NULL, true);
+  /* Use the menu button as owner for the operator properties, which will then be passed to the
+   * individual menu items. */
+  if (r_opptr) {
+    but->opptr = MEM_callocN(sizeof(PointerRNA), "uiButOpPtr");
+    WM_operator_properties_create_ptr(but->opptr, ot);
+    BLI_assert(but->opptr->data == NULL);
+    WM_operator_properties_alloc(&but->opptr, (IDProperty **)&but->opptr->data, ot->idname);
+    *r_opptr = *but->opptr;
+  }
 
   /* add hotkey here, lower UI code can't detect it */
   if ((layout->root->block->flag & UI_BLOCK_LOOP) && (ot->prop && ot->invoke)) {
@@ -3427,12 +3440,13 @@ void uiItemMenuEnumO_ptr(uiLayout *layout,
   }
 }
 
-void uiItemMenuEnumO(uiLayout *layout,
-                     bContext *C,
-                     const char *opname,
-                     const char *propname,
-                     const char *name,
-                     int icon)
+void uiItemMenuEnumFullO(uiLayout *layout,
+                         bContext *C,
+                         const char *opname,
+                         const char *propname,
+                         const char *name,
+                         int icon,
+                         PointerRNA *r_opptr)
 {
   wmOperatorType *ot = WM_operatortype_find(opname, 0); /* print error next */
 
@@ -3444,7 +3458,17 @@ void uiItemMenuEnumO(uiLayout *layout,
     return;
   }
 
-  uiItemMenuEnumO_ptr(layout, C, ot, propname, name, icon);
+  uiItemMenuEnumFullO_ptr(layout, C, ot, propname, name, icon, r_opptr);
+}
+
+void uiItemMenuEnumO(uiLayout *layout,
+                     bContext *C,
+                     const char *opname,
+                     const char *propname,
+                     const char *name,
+                     int icon)
+{
+  uiItemMenuEnumFullO(layout, C, opname, propname, name, icon, NULL);
 }
 
 static void menu_item_enum_rna_menu(bContext *UNUSED(C), uiLayout *layout, void *arg)
@@ -4615,7 +4639,7 @@ static void ui_litem_init_from_parent(uiLayout *litem, uiLayout *layout, int ali
 {
   litem->root = layout->root;
   litem->align = align;
-  /* Children of gridflow layout shall never have "ideal big size" returned as estimated size. */
+  /* Children of grid-flow layout shall never have "ideal big size" returned as estimated size. */
   litem->variable_size = layout->variable_size || layout->item.type == ITEM_LAYOUT_GRID_FLOW;
   litem->active = true;
   litem->enabled = true;

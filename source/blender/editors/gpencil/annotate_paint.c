@@ -708,7 +708,7 @@ static void annotation_stroke_arrow_init_conv_point(bGPDspoint *pt, const float 
 static void annotation_stroke_arrow_init_point(
     tGPsdata *p, tGPspoint *ptc, bGPDspoint *pt, const float co[8], const int co_idx)
 {
-  /* Note: provided co_idx should be always pair number as it's [x1, y1, x2, y2, x3, y3]. */
+  /* NOTE: provided co_idx should be always pair number as it's [x1, y1, x2, y2, x3, y3]. */
   const float real_co[2] = {co[co_idx], co[co_idx + 1]};
   copy_v2_v2(&ptc->x, real_co);
   annotation_stroke_convertcoords(p, &ptc->x, &pt->x, NULL);
@@ -1079,17 +1079,6 @@ static void annotation_free_stroke(bGPDframe *gpf, bGPDstroke *gps)
   BLI_freelinkN(&gpf->strokes, gps);
 }
 
-/**
- * Which which point is in front (result should only be used for comparison).
- */
-static float view3d_point_depth(const RegionView3D *rv3d, const float co[3])
-{
-  if (rv3d->is_persp) {
-    return ED_view3d_calc_zfac(rv3d, co, NULL);
-  }
-  return -dot_v3v3(rv3d->viewinv[2], co);
-}
-
 /* only erase stroke points that are visible (3d view) */
 static bool annotation_stroke_eraser_is_occluded(tGPsdata *p,
                                                  const bGPDspoint *pt,
@@ -1102,8 +1091,8 @@ static bool annotation_stroke_eraser_is_occluded(tGPsdata *p,
     float mval_3d[3];
 
     if (ED_view3d_autodist_simple(p->region, mval_i, mval_3d, 0, NULL)) {
-      const float depth_mval = view3d_point_depth(rv3d, mval_3d);
-      const float depth_pt = view3d_point_depth(rv3d, &pt->x);
+      const float depth_mval = ED_view3d_calc_depth_for_comparison(rv3d, mval_3d);
+      const float depth_pt = ED_view3d_calc_depth_for_comparison(rv3d, &pt->x);
 
       if (depth_pt > depth_mval) {
         return true;
@@ -1152,7 +1141,7 @@ static void annotation_stroke_eraser_dostroke(tGPsdata *p,
 
     /* Clear Tags
      *
-     * Note: It's better this way, as we are sure that
+     * NOTE: It's better this way, as we are sure that
      * we don't miss anything, though things will be
      * slightly slower as a result
      */
@@ -2489,18 +2478,15 @@ static int annotation_draw_modal(bContext *C, wmOperator *op, const wmEvent *eve
   /* default exit state - pass through to support MMB view nav, etc. */
   int estate = OPERATOR_PASS_THROUGH;
 
-  /* if (event->type == NDOF_MOTION)
-   *    return OPERATOR_PASS_THROUGH;
-   * -------------------------------
-   * [mce] Not quite what I was looking
-   * for, but a good start! GP continues to
-   * draw on the screen while the 3D mouse
-   * moves the viewpoint. Problem is that
-   * the stroke is converted to 3D only after
-   * it is finished. This approach should work
-   * better in tools that immediately apply
-   * in 3D space.
-   */
+  /* NOTE(mike erwin): Not quite what I was looking for, but a good start!
+   * grease-pencil continues to draw on the screen while the 3D mouse moves the viewpoint.
+   * Problem is that the stroke is converted to 3D only after it is finished.
+   * This approach should work better in tools that immediately apply in 3D space. */
+#if 0
+  if (event->type == NDOF_MOTION) {
+    return OPERATOR_PASS_THROUGH;
+  }
+#endif
 
   if (p->status == GP_STATUS_IDLING) {
     ARegion *region = CTX_wm_region(C);

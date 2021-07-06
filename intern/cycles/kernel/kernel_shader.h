@@ -283,7 +283,7 @@ ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restric
   /* primitive */
   sd->object = object;
   sd->lamp = LAMP_NONE;
-  /* currently no access to bvh prim index for strand sd->prim*/
+  /* Currently no access to bvh prim index for strand sd->prim. */
   sd->prim = prim;
   sd->u = u;
   sd->v = v;
@@ -583,11 +583,7 @@ ccl_device_inline void shader_prepare_closures(INTEGRATOR_STATE_CONST_ARGS, Shad
 
 ccl_device_inline bool shader_bsdf_is_transmission(const ShaderData *sd, const float3 omega_in)
 {
-  /* For curves use the smooth normal, particularly for ribbons the geometric
-   * normal gives too much darkening otherwise. */
-  const float3 Ng = (sd->type & PRIMITIVE_ALL_CURVE) ? sd->N : sd->Ng;
-
-  return dot(Ng, omega_in) < 0.0f;
+  return dot(sd->N, omega_in) < 0.0f;
 }
 
 ccl_device_forceinline bool _shader_bsdf_exclude(ClosureType type, uint light_shader_flags)
@@ -1227,6 +1223,7 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
   sd->num_closure_left = max_closures;
   sd->flag = 0;
   sd->object_flag = 0;
+  sd->type = PRIMITIVE_VOLUME;
 
   for (int i = 0;; i++) {
     const VolumeStack entry = stack_read(i);

@@ -25,24 +25,22 @@ class CollectionButtonsPanel:
     bl_region_type = 'WINDOW'
     bl_context = "collection"
 
+    @classmethod
+    def poll(cls, context):
+        return context.collection != context.scene.collection
+
 
 def lineart_make_line_type_entry(col, line_type, text_disp, expand, search_from):
     col.prop(line_type, "use", text=text_disp)
     if line_type.use and expand:
         col.prop_search(line_type, "layer", search_from,
                         "layers", icon='GREASEPENCIL')
-        col.prop_search(line_type, "material",  search_from,
+        col.prop_search(line_type, "material", search_from,
                         "materials", icon='SHADING_TEXTURE')
 
 
 class COLLECTION_PT_collection_flags(CollectionButtonsPanel, Panel):
     bl_label = "Restrictions"
-
-    @classmethod
-    def poll(cls, context):
-        vl = context.view_layer
-        vlc = vl.active_layer_collection
-        return (vlc.name != 'Master Collection')
 
     def draw(self, context):
         layout = self.layout
@@ -87,6 +85,13 @@ class COLLECTION_PT_lineart_collection(CollectionButtonsPanel, Panel):
 
         row = layout.row()
         row.prop(collection, "lineart_usage")
+
+        layout.prop(collection, "lineart_use_intersection_mask")
+
+        row = layout.row(align=True, heading="Masks")
+        row.active = collection.lineart_use_intersection_mask
+        for i in range(8):
+            row.prop(collection, "lineart_intersection_mask", index=i, text=str(i), toggle=True)
 
 
 classes = (

@@ -76,7 +76,7 @@ typedef struct StitchPreviewer {
   float *preview_polys;
   /* uvs per polygon. */
   uint *uvs_per_polygon;
-  /*number of preview polygons */
+  /* Number of preview polygons. */
   uint num_polys;
   /* preview data. These will be either the previewed vertices or edges
    * depending on stitch mode settings */
@@ -1746,7 +1746,8 @@ static void stitch_draw_vbo(GPUVertBuf *vbo, GPUPrimType prim_type, const float 
   GPU_batch_discard(batch);
 }
 
-/* TODO make things pretier : store batches inside StitchPreviewer instead of the bare verts pos */
+/* TODO: make things pretier : store batches inside StitchPreviewer instead of the bare verts pos
+ */
 static void stitch_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), void *arg)
 {
 
@@ -1817,7 +1818,7 @@ static void stitch_draw(const bContext *UNUSED(C), ARegion *UNUSED(region), void
 
         /* Closing line */
         GPU_vertbuf_attr_set(vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index]);
-        /* j = uvs_per_polygon[i] - 1*/
+        /* `j = uvs_per_polygon[i] - 1` */
         GPU_vertbuf_attr_set(
             vbo_line, pos_id, line_idx++, &stitch_preview->preview_polys[index + j * 2]);
 
@@ -1979,7 +1980,7 @@ static StitchState *stitch_init(bContext *C,
         counter++;
         state->uvs[counter] = element;
       }
-      /* pointer arithmetic to the rescue, as always :)*/
+      /* Pointer arithmetic to the rescue, as always :). */
       map[element - state->element_map->buf] = counter;
     }
   }

@@ -933,8 +933,8 @@ static const EnumPropertyItem prop_column_select_types[] = {
 /* ------------------- */
 
 /* Selects all visible keyframes between the specified markers */
-/* TODO, this is almost an _exact_ duplicate of a function of the same name in graph_select.c
- * should de-duplicate - campbell */
+/* TODO(campbell): this is almost an _exact_ duplicate of a function of the same name in
+ * graph_select.c should de-duplicate. */
 static void markers_selectkeys_between(bAnimContext *ac)
 {
   ListBase anim_data = {NULL, NULL};
@@ -1840,7 +1840,7 @@ static int actkeys_clickselect_exec(bContext *C, wmOperator *op)
   mval[0] = RNA_int_get(op->ptr, "mouse_x");
   mval[1] = RNA_int_get(op->ptr, "mouse_y");
 
-  /* select keyframe(s) based upon mouse position*/
+  /* Select keyframe(s) based upon mouse position. */
   ret_value = mouse_action_keys(
       &ac, mval, selectmode, deselect_all, column, channel, wait_to_deselect_others);
 

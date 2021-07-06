@@ -168,7 +168,7 @@ DO_INLINE void zero_lfvector(float (*to)[3], unsigned int verts)
 {
   memset(to, 0.0f, verts * sizeof(lfVector));
 }
-/* multiply long vector with scalar*/
+/* Multiply long vector with scalar. */
 DO_INLINE void mul_lfvectorS(float (*to)[3],
                              float (*fLongVector)[3],
                              float scalar,
@@ -180,7 +180,7 @@ DO_INLINE void mul_lfvectorS(float (*to)[3],
     mul_fvector_S(to[i], fLongVector[i], scalar);
   }
 }
-/* multiply long vector with scalar*/
+/* Multiply long vector with scalar. */
 /* A -= B * float */
 DO_INLINE void submul_lfvectorS(float (*to)[3],
                                 float (*fLongVector)[3],
@@ -583,7 +583,7 @@ DO_INLINE void del_bfmatrix(fmatrix3x3 *matrix)
 /* copy big matrix */
 DO_INLINE void cp_bfmatrix(fmatrix3x3 *to, fmatrix3x3 *from)
 {
-  /* TODO bounds checking */
+  /* TODO: bounds checking. */
   memcpy(to, from, sizeof(fmatrix3x3) * (from[0].vcount + from[0].scount));
 }
 
@@ -613,7 +613,7 @@ DO_INLINE void initdiag_bfmatrix(fmatrix3x3 *matrix, float m3[3][3])
   }
 }
 
-/* SPARSE SYMMETRIC multiply big matrix with long vector*/
+/* SPARSE SYMMETRIC multiply big matrix with long vector. */
 /* STATUS: verified */
 DO_INLINE void mul_bfmatrix_lfvector(float (*to)[3], fmatrix3x3 *from, lfVector *fLongVector)
 {
@@ -644,7 +644,7 @@ DO_INLINE void mul_bfmatrix_lfvector(float (*to)[3], fmatrix3x3 *from, lfVector 
   del_lfvector(temp);
 }
 
-/* SPARSE SYMMETRIC sub big matrix with big matrix*/
+/* SPARSE SYMMETRIC sub big matrix with big matrix. */
 /* A -= B * float + C * float --> for big matrix */
 /* VERIFIED */
 DO_INLINE void subadd_bfmatrixS_bfmatrixS(
@@ -697,7 +697,7 @@ Implicit_Data *SIM_mass_spring_solver_create(int numverts, int numsprings)
   id->S = create_bfmatrix(numverts, 0);
   id->Pinv = create_bfmatrix(numverts, numsprings);
   id->P = create_bfmatrix(numverts, numsprings);
-  id->bigI = create_bfmatrix(numverts, numsprings); /* TODO 0 springs */
+  id->bigI = create_bfmatrix(numverts, numsprings); /* TODO: 0 springs. */
   id->M = create_bfmatrix(numverts, numsprings);
   id->X = create_lfvector(numverts);
   id->Xnew = create_lfvector(numverts);
@@ -2112,7 +2112,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdx(Implicit_Data *data,
                                               int q,
                                               float dfdx[3][3])
 {
-  const float delta = 0.00001f; /* TODO find a good heuristic for this */
+  const float delta = 0.00001f; /* TODO: find a good heuristic for this. */
   float dvec_null[3][3], dvec_pos[3][3], dvec_neg[3][3];
   float f[3];
   int a, b;
@@ -2123,7 +2123,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdx(Implicit_Data *data,
   copy_m3_m3(dvec_neg, dvec_pos);
   negate_m3(dvec_neg);
 
-  /* XXX TODO offset targets to account for position dependency */
+  /* XXX TODO: offset targets to account for position dependency. */
 
   for (a = 0; a < 3; a++) {
     spring_hairbend_forces(
@@ -2151,7 +2151,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdv(Implicit_Data *data,
                                               int q,
                                               float dfdv[3][3])
 {
-  const float delta = 0.00001f; /* TODO find a good heuristic for this */
+  const float delta = 0.00001f; /* TODO: find a good heuristic for this. */
   float dvec_null[3][3], dvec_pos[3][3], dvec_neg[3][3];
   float f[3];
   int a, b;
@@ -2162,7 +2162,7 @@ BLI_INLINE void spring_hairbend_estimate_dfdv(Implicit_Data *data,
   copy_m3_m3(dvec_neg, dvec_pos);
   negate_m3(dvec_neg);
 
-  /* XXX TODO offset targets to account for position dependency */
+  /* XXX TODO: offset targets to account for position dependency. */
 
   for (a = 0; a < 3; a++) {
     spring_hairbend_forces(

@@ -3187,8 +3187,8 @@ void seq_effect_speed_rebuild_map(Scene *scene, Sequence *seq, bool force)
     return;
   }
 
-  /* XXX - new in 2.5x. should we use the animation system this way?
-   * The fcurve is needed because many frames need evaluating at once - campbell */
+  /* XXX(campbell): new in 2.5x. should we use the animation system this way?
+   * The fcurve is needed because many frames need evaluating at once. */
   fcu = id_data_find_fcurve(&scene->id, seq, &RNA_Sequence, "speed_factor", 0, NULL);
   if (!v->frameMap || v->length != seq->len) {
     if (v->frameMap) {
@@ -3214,7 +3214,7 @@ void seq_effect_speed_rebuild_map(Scene *scene, Sequence *seq, bool force)
   else {
     /* if there is no fcurve, use value as simple multiplier */
     if (!fcu) {
-      fallback_fac = seq->speed_fader; /* same as speed_factor in rna*/
+      fallback_fac = seq->speed_fader; /* Same as speed_factor in RNA. */
     }
   }
 

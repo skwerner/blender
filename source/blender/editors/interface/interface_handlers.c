@@ -273,7 +273,7 @@ static void ui_selectcontext_apply(bContext *C,
 
 /**
  * how far to drag before we check for gesture direction (in pixels),
- * note: half the height of a button is about right... */
+ * NOTE: half the height of a button is about right... */
 #  define DRAG_MULTINUM_THRESHOLD_DRAG_X (UI_UNIT_Y / 4)
 
 /**
@@ -469,7 +469,7 @@ typedef struct uiAfterFunc {
   PropertyRNA *rnaprop;
 
   void *search_arg;
-  uiButSearchArgFreeFn search_arg_free_fn;
+  uiFreeArgFunc search_arg_free_fn;
 
   bContextStore *context;
 
@@ -1350,7 +1350,7 @@ static void ui_multibut_states_create(uiBut *but_active, uiHandleButtonData *dat
   }
 
   /* edit buttons proportionally to eachother
-   * note: if we mix buttons which are proportional and others which are not,
+   * NOTE: if we mix buttons which are proportional and others which are not,
    * this may work a bit strangely */
   if ((but_active->rnaprop && (RNA_property_flag(but_active->rnaprop) & PROP_PROPORTIONAL)) ||
       ELEM(but_active->unit_type, RNA_SUBTYPE_UNIT_VALUE(PROP_UNIT_LENGTH))) {
@@ -1461,12 +1461,9 @@ static bool ui_drag_toggle_but_is_supported(const uiBut *but)
 
 /* Button pushed state to compare if other buttons match. Can be more
  * then just true or false for toggle buttons with more than 2 states. */
-static int ui_drag_toggle_but_pushed_state(bContext *C, uiBut *but)
+static int ui_drag_toggle_but_pushed_state(uiBut *but)
 {
   if (but->rnapoin.data == NULL && but->poin == NULL && but->icon) {
-    if (but->pushed_state_func) {
-      return but->pushed_state_func(C, but->pushed_state_arg);
-    }
     /* Assume icon identifies a unique state, for buttons that
      * work through functions callbacks and don't have an boolean
      * value that indicates the state. */
@@ -1505,7 +1502,7 @@ static bool ui_drag_toggle_set_xy_xy(
     ui_window_to_block_fl(region, block, &xy_b_block[0], &xy_b_block[1]);
 
     LISTBASE_FOREACH (uiBut *, but, &block->buttons) {
-      /* Note: ctrl is always true here because (at least for now)
+      /* NOTE: ctrl is always true here because (at least for now)
        * we always want to consider text control in this case, even when not embossed. */
       if (ui_but_is_interactive(but, true)) {
         if (BLI_rctf_isect_segment(&but->rect, xy_a_block, xy_b_block)) {
@@ -1513,7 +1510,7 @@ static bool ui_drag_toggle_set_xy_xy(
           /* execute the button */
           if (ui_drag_toggle_but_is_supported(but)) {
             /* is it pressed? */
-            const int pushed_state_but = ui_drag_toggle_but_pushed_state(C, but);
+            const int pushed_state_but = ui_drag_toggle_but_pushed_state(but);
             if (pushed_state_but != pushed_state) {
               UI_but_execute(C, region, but);
               if (do_check) {
@@ -1689,7 +1686,7 @@ static bool ui_selectcontext_begin(bContext *C, uiBut *but, uiSelectContextStore
           break;
         }
         uiSelectContextElem *other = &selctx_data->elems[i];
-        /* TODO,. de-duplicate copy_to_selected_button */
+        /* TODO: de-duplicate copy_to_selected_button. */
         if (link->ptr.data != ptr.data) {
           if (use_path_from_id) {
             /* Path relative to ID. */
@@ -1943,7 +1940,7 @@ static bool ui_but_drag_init(bContext *C,
        * typically 'button_activate_exit()' handles this */
       ui_apply_but_autokey(C, but);
 
-      drag_info->pushed_state = ui_drag_toggle_but_pushed_state(C, but);
+      drag_info->pushed_state = ui_drag_toggle_but_pushed_state(but);
       drag_info->but_cent_start[0] = BLI_rctf_cent_x(&but->rect);
       drag_info->but_cent_start[1] = BLI_rctf_cent_y(&but->rect);
       copy_v2_v2_int(drag_info->xy_init, &event->x);
@@ -1990,7 +1987,7 @@ static bool ui_but_drag_init(bContext *C,
       bool valid = false;
       uiDragColorHandle *drag_info = MEM_callocN(sizeof(*drag_info), __func__);
 
-      /* TODO support more button pointer types */
+      /* TODO: support more button pointer types. */
       if (but->rnaprop && RNA_property_subtype(but->rnaprop) == PROP_COLOR_GAMMA) {
         ui_but_v3_get(but, drag_info->color);
         drag_info->gamma_corrected = true;
@@ -2187,6 +2184,9 @@ static void ui_apply_but(
     case UI_BTYPE_LISTROW:
       ui_apply_but_ROW(C, block, but, data);
       break;
+    case UI_BTYPE_DATASETROW:
+      ui_apply_but_ROW(C, block, but, data);
+      break;
     case UI_BTYPE_TAB:
       ui_apply_but_TAB(C, but, data);
       break;
@@ -2297,7 +2297,7 @@ static void ui_but_drop(bContext *C, const wmEvent *event, uiBut *but, uiHandleB
   ListBase *drags = event->customdata; /* drop event type has listbase customdata by default */
 
   LISTBASE_FOREACH (wmDrag *, wmd, drags) {
-    /* TODO asset dropping. */
+    /* TODO: asset dropping. */
     if (wmd->type == WM_DRAG_ID) {
       /* align these types with UI_but_active_drop_name */
       if (ELEM(but->type, UI_BTYPE_TEXT, UI_BTYPE_SEARCH_MENU)) {
@@ -2428,7 +2428,7 @@ static void ui_but_paste_numeric_array(bContext *C,
 static void ui_but_copy_numeric_value(uiBut *but, char *output, int output_len_max)
 {
   /* Get many decimal places, then strip trailing zeros.
-   * note: too high values start to give strange results */
+   * NOTE: too high values start to give strange results. */
   ui_but_string_get_ex(but, output, output_len_max, UI_PRECISION_FLOAT_MAX, false, NULL);
   BLI_str_rstrip_float_zero(output, '\0');
 }
@@ -4284,7 +4284,7 @@ static bool ui_do_but_extra_operator_icon(bContext *C,
   button_tooltip_timer_reset(C, but);
 
   ui_but_extra_operator_icon_apply(C, but, op_icon);
-  /* Note: 'but', 'data' may now be freed, don't access. */
+  /* NOTE: 'but', 'data' may now be freed, don't access. */
 
   return true;
 }
@@ -4334,7 +4334,7 @@ static bool ui_do_but_ANY_drag_toggle(
     }
   }
   else if (data->state == BUTTON_STATE_WAIT_DRAG) {
-    /* note: the 'BUTTON_STATE_WAIT_DRAG' part of 'ui_do_but_EXIT' could be refactored into
+    /* NOTE: the 'BUTTON_STATE_WAIT_DRAG' part of 'ui_do_but_EXIT' could be refactored into
      * its own function */
     data->applied = false;
     *r_retval = ui_do_but_EXIT(C, but, data, event);
@@ -4552,7 +4552,7 @@ static int ui_do_but_TEX(
       if (ELEM(event->type, EVT_PADENTER, EVT_RETKEY) && (!UI_but_is_utf8(but))) {
         /* pass - allow filesel, enter to execute */
       }
-      else if (but->emboss == UI_EMBOSS_NONE && !event->ctrl) {
+      else if (ELEM(but->emboss, UI_EMBOSS_NONE, UI_EMBOSS_NONE_OR_STATUS) && !event->ctrl) {
         /* pass */
       }
       else {
@@ -4677,7 +4677,7 @@ static int ui_do_but_EXIT(bContext *C, uiBut *but, uiHandleButtonData *data, con
 {
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
 
-    /* first handle click on icondrag type button */
+    /* First handle click on icon-drag type button. */
     if ((event->type == LEFTMOUSE) && (event->val == KM_PRESS) && but->dragpoin) {
       if (ui_but_contains_point_px_icon(but, data->region, event)) {
 
@@ -4700,7 +4700,7 @@ static int ui_do_but_EXIT(bContext *C, uiBut *but, uiHandleButtonData *data, con
 
     if (ELEM(event->type, LEFTMOUSE, EVT_PADENTER, EVT_RETKEY) && event->val == KM_PRESS) {
       int ret = WM_UI_HANDLER_BREAK;
-      /* XXX (a bit ugly) Special case handling for filebrowser drag button */
+      /* XXX: (a bit ugly) Special case handling for file-browser drag button. */
       if (but->dragpoin && but->imb && ui_but_contains_point_px_icon(but, data->region, event)) {
         ret = WM_UI_HANDLER_CONTINUE;
       }
@@ -4770,7 +4770,7 @@ static float ui_numedit_apply_snapf(
       UnitSettings *unit = but->block->unit;
       const int unit_type = UI_but_unit_type_get(but);
       if ((unit_type == PROP_UNIT_ROTATION) && (unit->system_rotation != USER_UNIT_ROT_RADIANS)) {
-        /* pass (degrees)*/
+        /* Pass (degrees). */
       }
       else {
         softrange = 20.0f;
@@ -5763,7 +5763,7 @@ static int ui_do_but_GRIP(
   int retval = WM_UI_HANDLER_CONTINUE;
   const bool horizontal = (BLI_rctf_size_x(&but->rect) < BLI_rctf_size_y(&but->rect));
 
-  /* Note: Having to store org point in window space and recompute it to block "space" each time
+  /* NOTE: Having to store org point in window space and recompute it to block "space" each time
    *       is not ideal, but this is a way to hack around behavior of ui_window_to_block(), which
    *       returns different results when the block is inside a panel or not...
    *       See T37739.
@@ -5836,7 +5836,7 @@ static int ui_do_but_BLOCK(bContext *C, uiBut *but, uiHandleButtonData *data, co
 {
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
 
-    /* first handle click on icondrag type button */
+    /* First handle click on icon-drag type button. */
     if (event->type == LEFTMOUSE && but->dragpoin && event->val == KM_PRESS) {
       if (ui_but_contains_point_px_icon(but, data->region, event)) {
         button_activate_state(C, but, BUTTON_STATE_WAIT_DRAG);
@@ -5883,7 +5883,7 @@ static int ui_do_but_BLOCK(bContext *C, uiBut *but, uiHandleButtonData *data, co
          * wouldn't lead to cancel changes made to this button, but changing state to EXIT also
          * makes no button active for a while which leads to triggering operator when doing fast
          * scrolling mouse wheel. using post activate stuff from button allows to make button be
-         * active again after checking for all all that mouse leave and cancel stuff, so quick
+         * active again after checking for all that mouse leave and cancel stuff, so quick
          * scroll wouldn't be an issue anymore. Same goes for scrolling wheel in another
          * direction below (sergey).
          */
@@ -6021,7 +6021,7 @@ static int ui_do_but_COLOR(bContext *C, uiBut *but, uiHandleButtonData *data, co
   uiButColor *color_but = (uiButColor *)but;
 
   if (data->state == BUTTON_STATE_HIGHLIGHT) {
-    /* first handle click on icondrag type button */
+    /* First handle click on icon-drag type button. */
     if (event->type == LEFTMOUSE && but->dragpoin && event->val == KM_PRESS) {
       ui_palette_set_active(color_but);
       if (ui_but_contains_point_px_icon(but, data->region, event)) {
@@ -6951,8 +6951,8 @@ static bool ui_numedit_but_CURVE(uiBlock *block,
   CurveMapPoint *cmp = cuma->curve;
   bool changed = false;
 
-  /* evtx evty and drag coords are absolute mousecoords,
-   * prevents errors when editing when layout changes */
+  /* evtx evty and drag coords are absolute mouse-coords,
+   * prevents errors when editing when layout changes. */
   int mx = evtx;
   int my = evty;
   ui_window_to_block(data->region, block, &mx, &my);
@@ -7010,7 +7010,7 @@ static bool ui_numedit_but_CURVE(uiBlock *block,
       changed = true;
 
 #ifdef USE_CONT_MOUSE_CORRECT
-      /* note: using 'cmp_last' is weak since there may be multiple points selected,
+      /* NOTE: using 'cmp_last' is weak since there may be multiple points selected,
        * but in practice this isn't really an issue */
       if (ui_but_is_cursor_warp(but)) {
         /* OK but can go outside bounds */
@@ -7219,8 +7219,8 @@ static bool ui_numedit_but_CURVEPROFILE(uiBlock *block,
   CurveProfilePoint *pts = profile->path;
   bool changed = false;
 
-  /* evtx evty and drag coords are absolute mousecoords,
-   * prevents errors when editing when layout changes */
+  /* evtx evty and drag coords are absolute mouse-coords,
+   * prevents errors when editing when layout changes. */
   int mx = evtx;
   int my = evty;
   ui_window_to_block(data->region, block, &mx, &my);
@@ -7281,7 +7281,7 @@ static bool ui_numedit_but_CURVEPROFILE(uiBlock *block,
       data->draglasty = evty;
       changed = true;
 #ifdef USE_CONT_MOUSE_CORRECT
-      /* note: using 'cmp_last' is weak since there may be multiple points selected,
+      /* NOTE: using 'cmp_last' is weak since there may be multiple points selected,
        * but in practice this isn't really an issue */
       if (ui_but_is_cursor_warp(but)) {
         /* OK but can go outside bounds */
@@ -7827,6 +7827,7 @@ static int ui_do_button(bContext *C, uiBlock *block, uiBut *but, const wmEvent *
     case UI_BTYPE_CHECKBOX:
     case UI_BTYPE_CHECKBOX_N:
     case UI_BTYPE_ROW:
+    case UI_BTYPE_DATASETROW:
       retval = ui_do_but_TOG(C, but, data, event);
       break;
     case UI_BTYPE_SCROLL:
@@ -7989,8 +7990,7 @@ static void ui_blocks_set_tooltips(ARegion *region, const bool enable)
     return;
   }
 
-  /* we disabled buttons when when they were already shown, and
-   * re-enable them on mouse move */
+  /* We disabled buttons when they were already shown, and re-enable them on mouse move. */
   LISTBASE_FOREACH (uiBlock *, block, &region->uiblocks) {
     block->tooltipdisabled = !enable;
   }
@@ -8216,8 +8216,8 @@ static void button_activate_state(bContext *C, uiBut *but, uiHandleButtonState s
     data->hold_action_timer = NULL;
   }
 
-  /* add a blocking ui handler at the window handler for blocking, modal states
-   * but not for popups, because we already have a window level handler*/
+  /* Add a blocking ui handler at the window handler for blocking, modal states
+   * but not for popups, because we already have a window level handler. */
   if (!(but->block->handle && but->block->handle->popup)) {
     if (button_modal_state(state)) {
       if (!button_modal_state(data->state)) {
@@ -8614,9 +8614,9 @@ void UI_context_active_but_prop_handle(bContext *C)
 {
   uiBut *activebut = ui_context_rna_button_active(C);
   if (activebut) {
-    /* TODO, look into a better way to handle the button change
+    /* TODO(campbell): look into a better way to handle the button change
      * currently this is mainly so reset defaults works for the
-     * operator redo panel - campbell */
+     * operator redo panel. */
     uiBlock *block = activebut->block;
     if (block->handle_func) {
       block->handle_func(C, block->handle_func_arg, activebut->retval);
@@ -8805,7 +8805,7 @@ void ui_but_execute_begin(struct bContext *UNUSED(C),
 {
   BLI_assert(region != NULL);
   BLI_assert(BLI_findindex(&region->uiblocks, but->block) != -1);
-  /* note: ideally we would not have to change 'but->active' however
+  /* NOTE: ideally we would not have to change 'but->active' however
    * some functions we call don't use data (as they should be doing) */
   uiHandleButtonData *data;
   *active_back = but->active;
@@ -9174,7 +9174,7 @@ static int ui_handle_button_event(bContext *C, const wmEvent *event, uiBut *but)
        *
        * This is needed to make sure if a button was active,
        * it stays active while the mouse is over it.
-       * This avoids adding mousemoves, see: T33466. */
+       * This avoids adding mouse-moves, see: T33466. */
       if (ELEM(state_orig, BUTTON_STATE_INIT, BUTTON_STATE_HIGHLIGHT, BUTTON_STATE_WAIT_DRAG)) {
         if (ui_but_find_mouse_over(region, event) == but) {
           button_activate_init(C, region, but, BUTTON_ACTIVATE_OVER);
@@ -10015,7 +10015,7 @@ static int ui_handle_menu_event(bContext *C,
               }
 
               if (!but) {
-                /* wrap button or no active button*/
+                /* Wrap button or no active button. */
                 uiBut *but_wrap = NULL;
                 if (ELEM(scrolltype, MENU_SCROLL_UP, MENU_SCROLL_BOTTOM)) {
                   but_wrap = ui_but_last(block);
@@ -10255,7 +10255,7 @@ static int ui_handle_menu_event(bContext *C,
             /* For buttons that use a hold function,
              * exit when mouse-up outside the menu. */
             if (block->flag & UI_BLOCK_POPUP_HOLD) {
-              /* Note, we could check the cursor is over the parent button. */
+              /* NOTE: we could check the cursor is over the parent button. */
               menu->menuretval = UI_RETURN_CANCEL;
               retval = WM_UI_HANDLER_CONTINUE;
             }
@@ -10359,7 +10359,7 @@ static int ui_handle_menu_event(bContext *C,
    * anymore why it was there? but it meant enter didn't work
    * for example when mouse was not over submenu */
   if ((event->type == TIMER) ||
-      (/*inside &&*/ (!menu->menuretval || (menu->menuretval & UI_RETURN_UPDATE)) &&
+      (/* inside && */ (!menu->menuretval || (menu->menuretval & UI_RETURN_UPDATE)) &&
        retval == WM_UI_HANDLER_CONTINUE)) {
     retval = ui_handle_menu_button(C, event, menu);
   }

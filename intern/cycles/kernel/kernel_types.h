@@ -529,9 +529,6 @@ typedef enum PrimitiveType {
   PRIMITIVE_CURVE_RIBBON = (1 << 4),
   PRIMITIVE_MOTION_CURVE_RIBBON = (1 << 5),
   PRIMITIVE_VOLUME = (1 << 6),
-  /* Lamp primitive is not included below on purpose,
-   * since it is no real traceable primitive.
-   */
   PRIMITIVE_LAMP = (1 << 7),
 
   PRIMITIVE_ALL_TRIANGLE = (PRIMITIVE_TRIANGLE | PRIMITIVE_MOTION_TRIANGLE),
@@ -540,16 +537,14 @@ typedef enum PrimitiveType {
   PRIMITIVE_ALL_VOLUME = (PRIMITIVE_VOLUME),
   PRIMITIVE_ALL_MOTION = (PRIMITIVE_MOTION_TRIANGLE | PRIMITIVE_MOTION_CURVE_THICK |
                           PRIMITIVE_MOTION_CURVE_RIBBON),
-  PRIMITIVE_ALL = (PRIMITIVE_ALL_TRIANGLE | PRIMITIVE_ALL_CURVE | PRIMITIVE_ALL_VOLUME),
+  PRIMITIVE_ALL = (PRIMITIVE_ALL_TRIANGLE | PRIMITIVE_ALL_CURVE | PRIMITIVE_ALL_VOLUME |
+                   PRIMITIVE_LAMP),
 
-  /* Total number of different traceable primitives.
-   * NOTE: This is an actual value, not a bitflag.
-   */
-  PRIMITIVE_NUM_TOTAL = 7,
+  PRIMITIVE_NUM = 8,
 } PrimitiveType;
 
-#define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM_TOTAL) | (type))
-#define PRIMITIVE_UNPACK_SEGMENT(type) (type >> PRIMITIVE_NUM_TOTAL)
+#define PRIMITIVE_PACK_SEGMENT(type, segment) ((segment << PRIMITIVE_NUM) | (type))
+#define PRIMITIVE_UNPACK_SEGMENT(type) (type >> PRIMITIVE_NUM)
 
 typedef enum CurveShapeType {
   CURVE_RIBBON = 0,

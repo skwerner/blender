@@ -470,7 +470,7 @@ ccl_device_inline void shader_setup_from_volume(const KernelGlobals *ccl_restric
   sd->object = OBJECT_NONE; /* todo: fill this for texture coordinates */
   sd->lamp = LAMP_NONE;
   sd->prim = PRIM_NONE;
-  sd->type = PRIMITIVE_NONE;
+  sd->type = PRIMITIVE_VOLUME;
 
   sd->u = 0.0f;
   sd->v = 0.0f;
@@ -1223,7 +1223,6 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
   sd->num_closure_left = max_closures;
   sd->flag = 0;
   sd->object_flag = 0;
-  sd->type = PRIMITIVE_VOLUME;
 
   for (int i = 0;; i++) {
     const VolumeStack entry = stack_read(i);

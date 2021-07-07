@@ -318,16 +318,19 @@ ccl_device float volume_stack_step_size(INTEGRATOR_STATE_ARGS, StackReadOp stack
   return step_size;
 }
 
-template<typename StackReadOp>
-ccl_device int volume_stack_sampling_method(INTEGRATOR_STATE_ARGS, StackReadOp stack_read)
-{
-  if (kernel_data.integrator.num_all_lights == 0)
-    return 0;
+typedef enum VolumeSampleMethod {
+  VOLUME_SAMPLE_NONE = 0,
+  VOLUME_SAMPLE_DISTANCE = (1 << 0),
+  VOLUME_SAMPLE_EQUIANGULAR = (1 << 1),
+  VOLUME_SAMPLE_MIS = (VOLUME_SAMPLE_DISTANCE | VOLUME_SAMPLE_EQUIANGULAR),
+} VolumeSampleMethod;
 
-  int method = -1;
+ccl_device VolumeSampleMethod volume_stack_sample_method(INTEGRATOR_STATE_ARGS)
+{
+  VolumeSampleMethod method = VOLUME_SAMPLE_NONE;
 
   for (int i = 0;; i++) {
-    VolumeStack entry = stack_read(i);
+    VolumeStack entry = integrator_state_read_volume_stack(INTEGRATOR_STATE_PASS, i);
     if (entry.shader == SHADER_NONE) {
       break;
     }
@@ -336,25 +339,25 @@ ccl_device int volume_stack_sampling_method(INTEGRATOR_STATE_ARGS, StackReadOp s
 
     if (shader_flag & SD_VOLUME_MIS) {
       /* Multiple importance sampling. */
-      return SD_VOLUME_MIS;
+      return VOLUME_SAMPLE_MIS;
     }
     else if (shader_flag & SD_VOLUME_EQUIANGULAR) {
       /* Distance + equiangular sampling -> multiple importance sampling. */
-      if (method == 0) {
-        return SD_VOLUME_MIS;
+      if (method == VOLUME_SAMPLE_DISTANCE) {
+        return VOLUME_SAMPLE_MIS;
       }
 
       /* Only equiangular sampling. */
-      method = SD_VOLUME_EQUIANGULAR;
+      method = VOLUME_SAMPLE_EQUIANGULAR;
     }
     else {
       /* Distance + equiangular sampling -> multiple importance sampling. */
-      if (method == SD_VOLUME_EQUIANGULAR) {
-        return SD_VOLUME_MIS;
+      if (method == VOLUME_SAMPLE_EQUIANGULAR) {
+        return VOLUME_SAMPLE_MIS;
       }
 
       /* Distance sampling only. */
-      method = 0;
+      method = VOLUME_SAMPLE_DISTANCE;
     }
   }
 

@@ -33,7 +33,6 @@ typedef enum VolumeIntegrateEvent {
 
 typedef struct VolumeIntegrateResult {
   /* Throughput and offset for direct light scattering. */
-  VolumeSampleMethod direct_sample_method;
   bool direct_scatter;
   float3 direct_throughput;
   float direct_t;
@@ -388,9 +387,6 @@ typedef struct VolumeIntegrateState {
   float start_t;
   float end_t;
 
-  /* Current throughput. */
-  float3 throughput;
-
   /* If volume is absorption-only up to this point, and no probabilistic
    * scattering or termination has been used yet. */
   bool absorption_only;
@@ -398,6 +394,9 @@ typedef struct VolumeIntegrateState {
   /* Random numbers for scattering. */
   float rscatter;
   float rphase;
+
+  /* Sampling. */
+  VolumeSampleMethod direct_sample_method;
 } VolumeIntegrateState;
 
 ccl_device_forceinline void volume_integrate_step_scattering(
@@ -407,46 +406,66 @@ ccl_device_forceinline void volume_integrate_step_scattering(
     VolumeIntegrateState &ccl_restrict vstate,
     VolumeIntegrateResult &ccl_restrict result)
 {
-  /* Distance sampling */
+  /* Equiangular sampling for direct lighting. */
+  if (vstate.direct_sample_method == VOLUME_SAMPLE_EQUIANGULAR && !result.direct_scatter) {
+    if (result.direct_t >= vstate.start_t && result.direct_t <= vstate.end_t) {
+      const float new_dt = result.direct_t - vstate.start_t;
+      const float3 new_transmittance = volume_color_transmittance(coeff.sigma_t, new_dt);
 
-  /* Pick random color channel, we use the Veach one-sample
-   * model with balance heuristic for the channels. */
-  const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
-  float3 channel_pdf;
-  const int channel = volume_sample_channel(
-      albedo, result.indirect_throughput, vstate.rphase, &channel_pdf);
-
-  /* decide if we will scatter or continue */
-  const float sample_transmittance = volume_channel_get(transmittance, channel);
-
-  if (1.0f - vstate.rscatter >= sample_transmittance) {
-    /* compute sampling distance */
-    const float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
-    const float new_dt = -logf(1.0f - vstate.rscatter) / sample_sigma_t;
-    const float new_t = vstate.start_t + new_dt;
-
-    /* transmittance and pdf */
-    const float3 new_transmittance = volume_color_transmittance(coeff.sigma_t, new_dt);
-    const float3 pdf = coeff.sigma_t * new_transmittance;
-
-    /* throughput */
-    result.indirect_scatter = true;
-    result.indirect_t = new_t;
-    result.indirect_throughput *= coeff.sigma_s * new_transmittance / dot(channel_pdf, pdf);
-    shader_copy_volume_phases(&result.indirect_phases, sd);
-
-    result.direct_scatter = true;
-    result.direct_t = result.indirect_t;
-    result.direct_throughput = result.indirect_throughput;
-    shader_copy_volume_phases(&result.direct_phases, sd); /* TODO: only copy once? */
+      result.direct_scatter = true;
+      result.direct_throughput *= coeff.sigma_s * new_transmittance;
+      shader_copy_volume_phases(&result.direct_phases, sd);
+    }
+    else {
+      result.direct_throughput *= transmittance;
+    }
   }
-  else {
-    /* throughput */
-    const float pdf = dot(channel_pdf, transmittance);
-    result.indirect_throughput *= transmittance / pdf;
 
-    /* remap rscatter so we can reuse it and keep thing stratified */
-    vstate.rscatter = 1.0f - (1.0f - vstate.rscatter) / sample_transmittance;
+  /* Distance sampling for indirect and optional direct lighting. */
+  if (!result.indirect_scatter) {
+    /* Pick random color channel, we use the Veach one-sample
+     * model with balance heuristic for the channels. */
+    const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+    float3 channel_pdf;
+    const int channel = volume_sample_channel(
+        albedo, result.indirect_throughput, vstate.rphase, &channel_pdf);
+
+    /* decide if we will scatter or continue */
+    const float sample_transmittance = volume_channel_get(transmittance, channel);
+
+    if (1.0f - vstate.rscatter >= sample_transmittance) {
+      /* compute sampling distance */
+      const float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
+      const float new_dt = -logf(1.0f - vstate.rscatter) / sample_sigma_t;
+      const float new_t = vstate.start_t + new_dt;
+
+      /* transmittance and pdf */
+      const float3 new_transmittance = volume_color_transmittance(coeff.sigma_t, new_dt);
+      const float distance_pdf = dot(channel_pdf, coeff.sigma_t * new_transmittance);
+
+      /* throughput */
+      result.indirect_scatter = true;
+      result.indirect_t = new_t;
+      result.indirect_throughput *= coeff.sigma_s * new_transmittance / distance_pdf;
+      shader_copy_volume_phases(&result.indirect_phases, sd);
+
+      if (vstate.direct_sample_method != VOLUME_SAMPLE_EQUIANGULAR) {
+        /* If using distance sampling for direct light, just copy parameters
+         * of indirect light since we scatter at the same point then. */
+        result.direct_scatter = true;
+        result.direct_t = result.indirect_t;
+        result.direct_throughput = result.indirect_throughput;
+        shader_copy_volume_phases(&result.direct_phases, sd);
+      }
+    }
+    else {
+      /* throughput */
+      const float pdf = dot(channel_pdf, transmittance);
+      result.indirect_throughput *= transmittance / pdf;
+
+      /* remap rscatter so we can reuse it and keep thing stratified */
+      vstate.rscatter = 1.0f - (1.0f - vstate.rscatter) / sample_transmittance;
+    }
   }
 }
 
@@ -454,14 +473,16 @@ ccl_device_forceinline void volume_integrate_step_scattering(
  * volume until we reach the end, get absorbed entirely, or run out of
  * iterations. this does probabilistically scatter or get transmitted through
  * for path tracing where we don't want to branch. */
-ccl_device_forceinline void volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
-                                                           Ray *ccl_restrict ray,
-                                                           ShaderData *ccl_restrict sd,
-                                                           const RNGState *rng_state,
-                                                           ccl_global float *ccl_restrict
-                                                               render_buffer,
-                                                           const float object_step_size,
-                                                           VolumeIntegrateResult &result)
+ccl_device_forceinline void volume_integrate_heterogeneous(
+    INTEGRATOR_STATE_ARGS,
+    Ray *ccl_restrict ray,
+    ShaderData *ccl_restrict sd,
+    const RNGState *rng_state,
+    ccl_global float *ccl_restrict render_buffer,
+    const float object_step_size,
+    const VolumeSampleMethod direct_sample_method,
+    const float3 equiangular_light_P,
+    VolumeIntegrateResult &result)
 {
   /* Prepare for stepping.
    * Using a different step offset for the first step avoids banding artifacts. */
@@ -483,11 +504,20 @@ ccl_device_forceinline void volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS
   vstate.absorption_only = true;
   vstate.rscatter = path_state_rng_1D(kg, rng_state, PRNG_SCATTER_DISTANCE);
   vstate.rphase = path_state_rng_1D(kg, rng_state, PRNG_PHASE_CHANNEL);
+  vstate.direct_sample_method = direct_sample_method;
 
   /* Initialize volume integration result. */
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
   result.direct_throughput = throughput;
   result.indirect_throughput = throughput;
+
+  /* Equiangular sampling: compute distance and PDF in advance. */
+  if (vstate.direct_sample_method == VOLUME_SAMPLE_EQUIANGULAR) {
+    float equiangular_pdf;
+    result.direct_t = volume_equiangular_sample(
+        ray, equiangular_light_P, vstate.rscatter, &equiangular_pdf);
+    result.direct_throughput /= equiangular_pdf;
+  }
 
   for (int i = 0; i < max_steps; i++) {
     /* Advance to new position */
@@ -683,7 +713,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 }
 #  endif
 
-/* Path tracing: scatter in new direction using phase function. */
+/* Path tracing: scatter in new direction using phase function */
 ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS,
                                                            ShaderData *sd,
                                                            const RNGState *rng_state,
@@ -756,23 +786,35 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
   RNGState rng_state;
   path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
 
-  /* Sample light ahead of volume stepping. */
+  /* Sample light ahead of volume stepping, for equiangular sampling. */
+  /* TODO: distant lights are ignored now, but could instead use even distribution. */
   LightSample ls ccl_optional_struct_init;
   const bool need_light_sample = !(INTEGRATOR_STATE(path, flag) & PATH_RAY_TERMINATE);
-  if (need_light_sample) {
-    integrate_volume_sample_light(INTEGRATOR_STATE_PASS, &sd, &rng_state, &ls);
-  }
+  const bool have_equiangular_sample = need_light_sample &&
+                                       integrate_volume_sample_light(
+                                           INTEGRATOR_STATE_PASS, &sd, &rng_state, &ls) &&
+                                       (ls.t != FLT_MAX);
 
-  /* TODO: expensive to zero closures? */
-  VolumeIntegrateResult result = {};
+  VolumeSampleMethod direct_sample_method = (have_equiangular_sample) ?
+                                                volume_stack_sample_method(INTEGRATOR_STATE_PASS) :
+                                                VOLUME_SAMPLE_DISTANCE;
 
   /* Step through volume. */
   const float step_size = volume_stack_step_size(INTEGRATOR_STATE_PASS, [=](const int i) {
     return integrator_state_read_volume_stack(INTEGRATOR_STATE_PASS, i);
   });
 
-  volume_integrate_heterogeneous(
-      INTEGRATOR_STATE_PASS, ray, &sd, &rng_state, render_buffer, step_size, result);
+  /* TODO: expensive to zero closures? */
+  VolumeIntegrateResult result = {};
+  volume_integrate_heterogeneous(INTEGRATOR_STATE_PASS,
+                                 ray,
+                                 &sd,
+                                 &rng_state,
+                                 render_buffer,
+                                 step_size,
+                                 direct_sample_method,
+                                 ls.P,
+                                 result);
 
   /* Perform path termination. The intersect_closest will have already marked this path
    * to be terminated. That will shading evaluating to leave out any scattering closures,

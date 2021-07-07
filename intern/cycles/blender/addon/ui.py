@@ -1449,8 +1449,7 @@ class CYCLES_WORLD_PT_settings_volume(CyclesButtonsPanel, Panel):
         col = layout.column()
 
         sub = col.column()
-        sub.active = use_cpu(context)
-        sub.prop(cworld, "volume_sampling", text="Sampling")
+        col.prop(cworld, "volume_sampling", text="Sampling")
         col.prop(cworld, "volume_interpolation", text="Interpolation")
         col.prop(cworld, "homogeneous_volume", text="Homogeneous")
         sub = col.column()
@@ -1589,8 +1588,7 @@ class CYCLES_MATERIAL_PT_settings_volume(CyclesButtonsPanel, Panel):
 
         col = layout.column()
         sub = col.column()
-        sub.active = use_cpu(context)
-        sub.prop(cmat, "volume_sampling", text="Sampling")
+        col.prop(cmat, "volume_sampling", text="Sampling")
         col.prop(cmat, "volume_interpolation", text="Interpolation")
         col.prop(cmat, "homogeneous_volume", text="Homogeneous")
         sub = col.column()

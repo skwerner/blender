@@ -790,4 +790,21 @@ ccl_device_noinline bool light_sample(const KernelGlobals *kg,
   return light_sample_from_position(kg, lamp, randu, randv, P, ls);
 }
 
+ccl_device_inline bool light_sample_new_position(const KernelGlobals *kg,
+                                                 const float randu,
+                                                 const float randv,
+                                                 const float time,
+                                                 const float3 P,
+                                                 LightSample *ls)
+{
+  /* Sample a new position on the same light, for volume sampling. */
+  if (ls->type == LIGHT_TRIANGLE) {
+    triangle_light_sample(kg, ls->prim, ls->object, randu, randv, time, ls, P);
+    return (ls->pdf > 0.0f);
+  }
+  else {
+    return light_sample_from_position(kg, ls->lamp, randu, randv, P, ls);
+  }
+}
+
 CCL_NAMESPACE_END

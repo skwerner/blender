@@ -31,6 +31,21 @@ typedef enum VolumeIntegrateEvent {
   VOLUME_PATH_MISSED = 2
 } VolumeIntegrateEvent;
 
+typedef struct VolumeIntegrateResult {
+  /* Throughput and offset for direct light scattering. */
+  VolumeSampleMethod direct_sample_method;
+  bool direct_scatter;
+  float3 direct_throughput;
+  float direct_t;
+  ShaderVolumePhases direct_phases;
+
+  /* Throughput and offset for indirect light scattering. */
+  bool indirect_scatter;
+  float3 indirect_throughput;
+  float indirect_t;
+  ShaderVolumePhases indirect_phases;
+} VolumeIntegrateResult;
+
 /* Ignore paths that have volume throughput below this value, to avoid unnecessary work
  * and precision issues.
  * todo: this value could be tweaked or turned into a probability to avoid unnecessary
@@ -366,24 +381,88 @@ ccl_device float3 volume_emission_integrate(VolumeShaderCoefficients *coeff,
   return emission;
 }
 
-/* Volume Path */
+/* Volume Integration */
+
+typedef struct VolumeIntegrateState {
+  /* Volume segment extents. */
+  float start_t;
+  float end_t;
+
+  /* Current throughput. */
+  float3 throughput;
+
+  /* If volume is absorption-only up to this point, and no probabilistic
+   * scattering or termination has been used yet. */
+  bool absorption_only;
+
+  /* Random numbers for scattering. */
+  float rscatter;
+  float rphase;
+} VolumeIntegrateState;
+
+ccl_device_forceinline void volume_integrate_step_scattering(
+    const ShaderData *sd,
+    const VolumeShaderCoefficients &ccl_restrict coeff,
+    const float3 transmittance,
+    VolumeIntegrateState &ccl_restrict vstate,
+    VolumeIntegrateResult &ccl_restrict result)
+{
+  /* Distance sampling */
+
+  /* Pick random color channel, we use the Veach one-sample
+   * model with balance heuristic for the channels. */
+  const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+  float3 channel_pdf;
+  const int channel = volume_sample_channel(
+      albedo, result.indirect_throughput, vstate.rphase, &channel_pdf);
+
+  /* decide if we will scatter or continue */
+  const float sample_transmittance = volume_channel_get(transmittance, channel);
+
+  if (1.0f - vstate.rscatter >= sample_transmittance) {
+    /* compute sampling distance */
+    const float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
+    const float new_dt = -logf(1.0f - vstate.rscatter) / sample_sigma_t;
+    const float new_t = vstate.start_t + new_dt;
+
+    /* transmittance and pdf */
+    const float3 new_transmittance = volume_color_transmittance(coeff.sigma_t, new_dt);
+    const float3 pdf = coeff.sigma_t * new_transmittance;
+
+    /* throughput */
+    result.indirect_scatter = true;
+    result.indirect_t = new_t;
+    result.indirect_throughput *= coeff.sigma_s * new_transmittance / dot(channel_pdf, pdf);
+    shader_copy_volume_phases(&result.indirect_phases, sd);
+
+    result.direct_scatter = true;
+    result.direct_t = result.indirect_t;
+    result.direct_throughput = result.indirect_throughput;
+    shader_copy_volume_phases(&result.direct_phases, sd); /* TODO: only copy once? */
+  }
+  else {
+    /* throughput */
+    const float pdf = dot(channel_pdf, transmittance);
+    result.indirect_throughput *= transmittance / pdf;
+
+    /* remap rscatter so we can reuse it and keep thing stratified */
+    vstate.rscatter = 1.0f - (1.0f - vstate.rscatter) / sample_transmittance;
+  }
+}
 
 /* heterogeneous volume distance sampling: integrate stepping through the
  * volume until we reach the end, get absorbed entirely, or run out of
  * iterations. this does probabilistically scatter or get transmitted through
  * for path tracing where we don't want to branch. */
-ccl_device VolumeIntegrateEvent
-volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
-                               Ray *ccl_restrict ray,
-                               ShaderData *ccl_restrict sd,
-                               ShaderVolumePhases *ccl_restrict phases,
-                               ccl_addr_space float3 *ccl_restrict throughput,
-                               const RNGState *rng_state,
-                               ccl_global float *ccl_restrict render_buffer,
-                               const float object_step_size)
+ccl_device_forceinline void volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
+                                                           Ray *ccl_restrict ray,
+                                                           ShaderData *ccl_restrict sd,
+                                                           const RNGState *rng_state,
+                                                           ccl_global float *ccl_restrict
+                                                               render_buffer,
+                                                           const float object_step_size,
+                                                           VolumeIntegrateResult &result)
 {
-  float3 tp = *throughput;
-
   /* Prepare for stepping.
    * Using a different step offset for the first step avoids banding artifacts. */
   int max_steps;
@@ -397,123 +476,86 @@ volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
                    &steps_offset,
                    &max_steps);
 
-  /* compute coefficients at the start */
-  float t = 0.0f;
-  float3 accum_transmittance = one_float3();
+  /* Initialize volume integration state. */
+  VolumeIntegrateState vstate ccl_optional_struct_init;
+  vstate.start_t = 0.0f;
+  vstate.end_t = 0.0f;
+  vstate.absorption_only = true;
+  vstate.rscatter = path_state_rng_1D(kg, rng_state, PRNG_SCATTER_DISTANCE);
+  vstate.rphase = path_state_rng_1D(kg, rng_state, PRNG_PHASE_CHANNEL);
 
-  /* pick random color channel, we use the Veach one-sample
-   * model with balance heuristic for the channels */
-  float xi = path_state_rng_1D(kg, rng_state, PRNG_SCATTER_DISTANCE);
-  const float rphase = path_state_rng_1D(kg, rng_state, PRNG_PHASE_CHANNEL);
-  bool has_scatter = false;
+  /* Initialize volume integration result. */
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+  result.direct_throughput = throughput;
+  result.indirect_throughput = throughput;
 
   for (int i = 0; i < max_steps; i++) {
-    /* advance to new position */
-    float new_t = min(ray->t, (i + steps_offset) * step_size);
-    float dt = new_t - t;
-
-    float3 new_P = ray->P + ray->D * (t + dt * step_shade_offset);
-    VolumeShaderCoefficients coeff ccl_optional_struct_init;
+    /* Advance to new position */
+    vstate.end_t = min(ray->t, (i + steps_offset) * step_size);
+    const float shade_t = vstate.start_t + (vstate.end_t - vstate.start_t) * step_shade_offset;
+    sd->P = ray->P + ray->D * shade_t;
 
     /* compute segment */
-    sd->P = new_P;
+    VolumeShaderCoefficients coeff ccl_optional_struct_init;
     if (volume_shader_sample(INTEGRATOR_STATE_PASS, sd, &coeff)) {
-      int closure_flag = sd->flag;
-      float3 new_tp;
-      float3 transmittance;
-      bool scatter = false;
+      const int closure_flag = sd->flag;
 
-      /* distance sampling */
-      if ((closure_flag & SD_SCATTER) || (has_scatter && (closure_flag & SD_EXTINCTION))) {
-        has_scatter = true;
+      /* Evaluate transmittance over segment. */
+      const float dt = (vstate.end_t - vstate.start_t);
+      const float3 transmittance = (closure_flag & SD_EXTINCTION) ?
+                                       volume_color_transmittance(coeff.sigma_t, dt) :
+                                       one_float3();
 
-        /* Sample channel, use MIS with balance heuristic. */
-        const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
-        float3 channel_pdf;
-        const int channel = volume_sample_channel(albedo, tp, rphase, &channel_pdf);
+      /* Emission. */
+      if (closure_flag & SD_EMISSION) {
+        /* Only write emission before indirect light scatter position, since we terminate
+         * stepping at that point if we have already found a direct light scatter position. */
+        if (!result.indirect_scatter) {
+          /* TODO: write only once to avoid overhead of atomics? */
+          const float3 emission = volume_emission_integrate(
+              &coeff, closure_flag, transmittance, dt);
+          kernel_accum_emission(
+              INTEGRATOR_STATE_PASS, result.indirect_throughput, emission, render_buffer);
+        }
+      }
 
-        /* compute transmittance over full step */
-        transmittance = volume_color_transmittance(coeff.sigma_t, dt);
-
-        /* decide if we will scatter or continue */
-        const float sample_transmittance = volume_channel_get(transmittance, channel);
-
-        if (1.0f - xi >= sample_transmittance) {
-          /* compute sampling distance */
-          const float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
-          const float new_dt = -logf(1.0f - xi) / sample_sigma_t;
-          new_t = t + new_dt;
-
-          /* transmittance and pdf */
-          const float3 new_transmittance = volume_color_transmittance(coeff.sigma_t, new_dt);
-          const float3 pdf = coeff.sigma_t * new_transmittance;
-
-          /* throughput */
-          new_tp = tp * coeff.sigma_s * new_transmittance / dot(channel_pdf, pdf);
-          scatter = true;
+      if (closure_flag & SD_EXTINCTION) {
+        if ((closure_flag & SD_SCATTER) || !vstate.absorption_only) {
+          /* Scattering and absorption. */
+          volume_integrate_step_scattering(sd, coeff, transmittance, vstate, result);
         }
         else {
-          /* throughput */
-          const float pdf = dot(channel_pdf, transmittance);
-          new_tp = tp * transmittance / pdf;
-
-          /* remap xi so we can reuse it and keep thing stratified */
-          xi = 1.0f - (1.0f - xi) / sample_transmittance;
+          /* Absorption only. */
+          result.indirect_throughput *= transmittance;
+          result.direct_throughput *= transmittance;
         }
-      }
-      else if (closure_flag & SD_EXTINCTION) {
-        /* absorption only, no sampling needed */
-        transmittance = volume_color_transmittance(coeff.sigma_t, dt);
-        new_tp = tp * transmittance;
-      }
-      else {
-        transmittance = zero_float3();
-        new_tp = tp;
-      }
 
-      /* integrate emission attenuated by absorption */
-      if (closure_flag & SD_EMISSION) {
-        const float3 emission = volume_emission_integrate(&coeff, closure_flag, transmittance, dt);
-        kernel_accum_emission(INTEGRATOR_STATE_PASS, tp, emission, render_buffer);
-      }
-
-      /* modify throughput */
-      if (closure_flag & SD_EXTINCTION) {
-        tp = new_tp;
-
-        /* stop if nearly all light blocked */
-        if (tp.x < VOLUME_THROUGHPUT_EPSILON && tp.y < VOLUME_THROUGHPUT_EPSILON &&
-            tp.z < VOLUME_THROUGHPUT_EPSILON) {
-          tp = zero_float3();
-          break;
+        /* Stop if nearly all light blocked. */
+        if (!result.indirect_scatter) {
+          if (max3(result.indirect_throughput) < VOLUME_THROUGHPUT_EPSILON) {
+            result.indirect_throughput = zero_float3();
+            break;
+          }
+        }
+        else if (!result.direct_scatter) {
+          if (max3(result.direct_throughput) < VOLUME_THROUGHPUT_EPSILON) {
+            break;
+          }
         }
       }
 
-      /* prepare to scatter to new direction */
-      if (scatter) {
-        shader_copy_volume_phases(phases, sd);
-
-        /* adjust throughput and move to new location */
-        sd->P = ray->P + new_t * ray->D;
-        *throughput = tp;
-
-        return VOLUME_PATH_SCATTERED;
-      }
-      else {
-        /* accumulate transmittance */
-        accum_transmittance *= transmittance;
+      /* If we have scattering data for both direct and indirect, we're done. */
+      if (result.direct_scatter && result.indirect_scatter) {
+        break;
       }
     }
 
-    /* stop if at the end of the volume */
-    t = new_t;
-    if (t == ray->t)
+    /* Stop if at the end of the volume. */
+    vstate.start_t = vstate.end_t;
+    if (vstate.start_t == ray->t) {
       break;
+    }
   }
-
-  *throughput = tp;
-
-  return VOLUME_PATH_ATTENUATED;
 }
 
 #  ifdef __EMISSION__
@@ -548,9 +590,11 @@ ccl_device_forceinline bool integrate_volume_sample_light(INTEGRATOR_STATE_ARGS,
  * queue shadow ray to be traced. */
 ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
                                                           const ShaderData *ccl_restrict sd,
+                                                          const RNGState *ccl_restrict rng_state,
+                                                          const float3 P,
                                                           const ShaderVolumePhases *ccl_restrict
                                                               phases,
-                                                          const RNGState *ccl_restrict rng_state,
+                                                          const float3 throughput,
                                                           LightSample *ccl_restrict ls)
 {
   /* Sample position on the same light again, now from the shading
@@ -564,7 +608,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
     float light_u, light_v;
     path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
 
-    if (!light_sample(kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, ls)) {
+    if (!light_sample(kg, light_u, light_v, sd->time, P, bounce, path_flag, ls)) {
       return;
     }
   }
@@ -602,7 +646,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 
   /* Create shadow ray. */
   Ray ray ccl_optional_struct_init;
-  light_sample_to_volume_shadow_ray(kg, sd, ls, sd->P, &ray);
+  light_sample_to_volume_shadow_ray(kg, sd, ls, P, &ray);
   const bool is_light = light_sample_is_light(ls);
 
   /* Write shadow ray and associated state to global memory. */
@@ -614,7 +658,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
   uint32_t shadow_flag = INTEGRATOR_STATE(path, flag);
   shadow_flag |= (is_light) ? PATH_RAY_SHADOW_FOR_LIGHT : 0;
   shadow_flag |= PATH_RAY_VOLUME_PASS;
-  const float3 throughput = INTEGRATOR_STATE(path, throughput) * bsdf_eval_sum(&phase_eval);
+  const float3 throughput_phase = throughput * bsdf_eval_sum(&phase_eval);
 
   if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
     const float3 diffuse_glossy_ratio = (bounce == 0) ?
@@ -626,7 +670,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(shadow_path, flag) = shadow_flag;
   INTEGRATOR_STATE_WRITE(shadow_path, bounce) = bounce;
   INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
-  INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
+  INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput_phase;
 
   if (kernel_data.kernel_features & KERNEL_FEATURE_SHADOW_PASS) {
     INTEGRATOR_STATE_WRITE(shadow_path, unshadowed_throughput) = throughput;
@@ -642,8 +686,8 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 /* Path tracing: scatter in new direction using phase function. */
 ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS,
                                                            ShaderData *sd,
-                                                           const ShaderVolumePhases *phases,
-                                                           const RNGState *rng_state)
+                                                           const RNGState *rng_state,
+                                                           const ShaderVolumePhases *phases)
 {
   float phase_u, phase_v;
   path_state_rng_2D(kg, rng_state, PRNG_BSDF_U, &phase_u, &phase_v);
@@ -679,9 +723,9 @@ ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS
 #  endif
 
   /* Update throughput. */
-  float3 throughput = INTEGRATOR_STATE(path, throughput);
-  throughput *= bsdf_eval_sum(&phase_eval) / phase_pdf;
-  INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+  const float3 throughput_phase = throughput * bsdf_eval_sum(&phase_eval) / phase_pdf;
+  INTEGRATOR_STATE_WRITE(path, throughput) = throughput_phase;
 
   if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
     INTEGRATOR_STATE_WRITE(path, diffuse_glossy_ratio) = one_float3();
@@ -719,16 +763,16 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
     integrate_volume_sample_light(INTEGRATOR_STATE_PASS, &sd, &rng_state, &ls);
   }
 
-  /* Step through volume. */
-  float3 throughput = INTEGRATOR_STATE(path, throughput);
+  /* TODO: expensive to zero closures? */
+  VolumeIntegrateResult result = {};
 
+  /* Step through volume. */
   const float step_size = volume_stack_step_size(INTEGRATOR_STATE_PASS, [=](const int i) {
     return integrator_state_read_volume_stack(INTEGRATOR_STATE_PASS, i);
   });
 
-  ShaderVolumePhases phases;
-  VolumeIntegrateEvent event = volume_integrate_heterogeneous(
-      INTEGRATOR_STATE_PASS, ray, &sd, &phases, &throughput, &rng_state, render_buffer, step_size);
+  volume_integrate_heterogeneous(
+      INTEGRATOR_STATE_PASS, ray, &sd, &rng_state, render_buffer, step_size, result);
 
   /* Perform path termination. The intersect_closest will have already marked this path
    * to be terminated. That will shading evaluating to leave out any scattering closures,
@@ -741,27 +785,43 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
   if (probability == 0.0f) {
     return VOLUME_PATH_MISSED;
   }
-  else if (event == VOLUME_PATH_SCATTERED) {
-    /* Only divide throughput by probability if we scatter. For the attenuation
-     * case the next surface will already do this division. */
-    if (probability != 1.0f) {
-      throughput /= probability;
-    }
+
+  /* Direct light. */
+  if (result.direct_scatter) {
+    const float3 direct_P = ray->P + result.direct_t * ray->D;
+    result.direct_throughput /= probability;
+    integrate_volume_direct_light(INTEGRATOR_STATE_PASS,
+                                  &sd,
+                                  &rng_state,
+                                  direct_P,
+                                  &result.direct_phases,
+                                  result.direct_throughput,
+                                  &ls);
   }
 
-  INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
+  /* Indirect light.
+   *
+   * Only divide throughput by probability if we scatter. For the attenuation
+   * case the next surface will already do this division. */
+  if (result.indirect_scatter) {
+    result.indirect_throughput /= probability;
+  }
+  INTEGRATOR_STATE_WRITE(path, throughput) = result.indirect_throughput;
 
-  if (event == VOLUME_PATH_SCATTERED) {
-    /* Direct light. */
-    integrate_volume_direct_light(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state, &ls);
+  if (result.indirect_scatter) {
+    sd.P = ray->P + result.indirect_t * ray->D;
 
-    /* Scatter. */
-    if (!integrate_volume_phase_scatter(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state)) {
+    if (integrate_volume_phase_scatter(
+            INTEGRATOR_STATE_PASS, &sd, &rng_state, &result.indirect_phases)) {
+      return VOLUME_PATH_SCATTERED;
+    }
+    else {
       return VOLUME_PATH_MISSED;
     }
   }
-
-  return event;
+  else {
+    return VOLUME_PATH_ATTENUATED;
+  }
 }
 
 #endif

@@ -519,34 +519,55 @@ volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
 #  ifdef __EMISSION__
 /* Path tracing: sample point on light and evaluate light shader, then
  * queue shadow ray to be traced. */
-ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
-                                                          ShaderData *sd,
-                                                          const ShaderVolumePhases *phases,
-                                                          const RNGState *rng_state)
+ccl_device_forceinline bool integrate_volume_sample_light(INTEGRATOR_STATE_ARGS,
+                                                          const ShaderData *ccl_restrict sd,
+                                                          const RNGState *ccl_restrict rng_state,
+                                                          LightSample *ccl_restrict ls)
 {
   /* Test if there is a light or BSDF that needs direct light. */
   if (!kernel_data.integrator.use_direct_light) {
-    return;
+    return false;
   }
 
   /* Sample position on a light. */
-  LightSample ls ccl_optional_struct_init;
+  const int path_flag = INTEGRATOR_STATE(path, flag);
+  const uint bounce = INTEGRATOR_STATE(path, bounce);
+  float light_u, light_v;
+  path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
+
+  light_sample(kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, ls);
+
+  if (ls->shader & SHADER_EXCLUDE_SCATTER) {
+    return false;
+  }
+
+  return true;
+}
+
+/* Path tracing: sample point on light and evaluate light shader, then
+ * queue shadow ray to be traced. */
+ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
+                                                          const ShaderData *ccl_restrict sd,
+                                                          const ShaderVolumePhases *ccl_restrict
+                                                              phases,
+                                                          const RNGState *ccl_restrict rng_state,
+                                                          LightSample *ccl_restrict ls)
+{
+  /* Sample position on the same light again, now from the shading
+   * point where we scattered.
+   *
+   * TODO: decorrelate random numbers and use light_sample_new_position to
+   * avoid resampling the CDF. */
   {
     const int path_flag = INTEGRATOR_STATE(path, flag);
     const uint bounce = INTEGRATOR_STATE(path, bounce);
     float light_u, light_v;
     path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
 
-    if (!light_sample(kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, &ls)) {
+    if (!light_sample(kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, ls)) {
       return;
     }
   }
-
-  if (ls.shader & SHADER_EXCLUDE_SCATTER) {
-    return;
-  }
-
-  kernel_assert(ls.pdf != 0.0f);
 
   /* Evaluate light shader.
    *
@@ -557,32 +578,32 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
   ShaderDataTinyStorage emission_sd_storage;
   ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
   const float3 light_eval = light_sample_shader_eval(
-      INTEGRATOR_STATE_PASS, emission_sd, &ls, sd->time);
+      INTEGRATOR_STATE_PASS, emission_sd, ls, sd->time);
   if (is_zero(light_eval)) {
     return;
   }
 
   /* Evaluate BSDF. */
   BsdfEval phase_eval ccl_optional_struct_init;
-  const float phase_pdf = shader_volume_phase_eval(kg, sd, phases, ls.D, &phase_eval);
+  const float phase_pdf = shader_volume_phase_eval(kg, sd, phases, ls->D, &phase_eval);
 
-  if (ls.shader & SHADER_USE_MIS) {
-    float mis_weight = power_heuristic(ls.pdf, phase_pdf);
+  if (ls->shader & SHADER_USE_MIS) {
+    float mis_weight = power_heuristic(ls->pdf, phase_pdf);
     bsdf_eval_mul(&phase_eval, mis_weight);
   }
 
-  bsdf_eval_mul3(&phase_eval, light_eval / ls.pdf);
+  bsdf_eval_mul3(&phase_eval, light_eval / ls->pdf);
 
   /* Path termination. */
   const float terminate = path_state_rng_light_termination(kg, rng_state);
-  if (light_sample_terminate(kg, &ls, &phase_eval, terminate)) {
+  if (light_sample_terminate(kg, ls, &phase_eval, terminate)) {
     return;
   }
 
   /* Create shadow ray. */
   Ray ray ccl_optional_struct_init;
-  light_sample_to_volume_shadow_ray(kg, sd, &ls, sd->P, &ray);
-  const bool is_light = light_sample_is_light(&ls);
+  light_sample_to_volume_shadow_ray(kg, sd, ls, sd->P, &ray);
+  const bool is_light = light_sample_is_light(ls);
 
   /* Write shadow ray and associated state to global memory. */
   integrator_state_write_shadow_ray(INTEGRATOR_STATE_PASS, &ray);
@@ -687,11 +708,19 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
   ShaderData sd;
   shader_setup_from_volume(kg, &sd, ray);
 
-  float3 throughput = INTEGRATOR_STATE(path, throughput);
-
   /* Load random number state. */
   RNGState rng_state;
   path_state_rng_load(INTEGRATOR_STATE_PASS, &rng_state);
+
+  /* Sample light ahead of volume stepping. */
+  LightSample ls ccl_optional_struct_init;
+  const bool need_light_sample = !(INTEGRATOR_STATE(path, flag) & PATH_RAY_TERMINATE);
+  if (need_light_sample) {
+    integrate_volume_sample_light(INTEGRATOR_STATE_PASS, &sd, &rng_state, &ls);
+  }
+
+  /* Step through volume. */
+  float3 throughput = INTEGRATOR_STATE(path, throughput);
 
   const float step_size = volume_stack_step_size(INTEGRATOR_STATE_PASS, [=](const int i) {
     return integrator_state_read_volume_stack(INTEGRATOR_STATE_PASS, i);
@@ -724,7 +753,7 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
 
   if (event == VOLUME_PATH_SCATTERED) {
     /* Direct light. */
-    integrate_volume_direct_light(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state);
+    integrate_volume_direct_light(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state, &ls);
 
     /* Scatter. */
     if (!integrate_volume_phase_scatter(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state)) {

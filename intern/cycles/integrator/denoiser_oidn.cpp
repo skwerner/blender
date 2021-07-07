@@ -146,8 +146,10 @@ class OIDNPass {
   /* For the scaled passes, the data which holds values of scaled pixels. */
   array<float> scaled_buffer;
 
-  /* For the in-place usable passes denotes whether the underlying data has been scaled. */
-  bool is_scaled = false;
+  /* For the in-place usable passes denotes whether the data is prepared to be used as-is.
+   * For example, for compositing passes this means that the compositing result has been read,
+   * and for scaling passes means that scaling has been performed. */
+  bool is_inplace_ready = false;
 };
 
 class OIDNDenoiseContext {
@@ -240,14 +242,8 @@ class OIDNDenoiseContext {
                            stride * pass_stride * sizeof(float));
   }
 
-  void read_pass_pixels(OIDNPass &oidn_pass)
+  void read_pass_pixels(OIDNPass &oidn_pass, const PassAccessor::Destination &destination)
   {
-    const int64_t width = buffer_params_.width;
-    const int64_t height = buffer_params_.height;
-
-    array<float> &scaled_buffer = oidn_pass.scaled_buffer;
-    scaled_buffer.resize(width * height * 3);
-
     PassAccessor::PassAccessInfo pass_access_info;
     pass_access_info.type = oidn_pass.type;
     pass_access_info.mode = oidn_pass.mode;
@@ -263,16 +259,49 @@ class OIDNDenoiseContext {
      * by users. What is important is to use same exposure for read and write access of the pass
      * pixels. */
     const PassAccessorCPU pass_accessor(pass_access_info, 1.0f, num_samples_);
-    const PassAccessor::Destination destination(scaled_buffer.data(), 3);
 
     pass_accessor.get_render_tile_pixels(render_buffers_, buffer_params_, destination);
   }
 
+  void read_pass_pixels_inplace_if_needed(OIDNPass &oidn_pass)
+  {
+    if (oidn_pass.is_inplace_ready) {
+      return;
+    }
+    oidn_pass.is_inplace_ready = true;
+
+    float *buffer_data = render_buffers_->buffer.data();
+    float *pass_data = buffer_data + oidn_pass.offset;
+
+    PassAccessor::Destination destination(pass_data, 3);
+    destination.pixel_stride = buffer_params_.pass_stride;
+
+    read_pass_pixels(oidn_pass, destination);
+  }
+
+  void read_pass_pixels_into_buffer_if_needed(OIDNPass &oidn_pass)
+  {
+    if (!oidn_pass.scaled_buffer.empty()) {
+      return;
+    }
+
+    VLOG(3) << "Allocating temporary buffer for pass " << oidn_pass.name << " ("
+            << pass_type_as_string(oidn_pass.type) << ")";
+
+    const int64_t width = buffer_params_.width;
+    const int64_t height = buffer_params_.height;
+
+    array<float> &scaled_buffer = oidn_pass.scaled_buffer;
+    scaled_buffer.resize(width * height * 3);
+
+    const PassAccessor::Destination destination(scaled_buffer.data(), 3);
+
+    read_pass_pixels(oidn_pass, destination);
+  }
+
   void set_pass_scaled(OIDNPass &oidn_pass)
   {
-    if (oidn_pass.scaled_buffer.empty()) {
-      read_pass_pixels(oidn_pass);
-    }
+    read_pass_pixels_into_buffer_if_needed(oidn_pass);
 
     const int64_t width = buffer_params_.width;
     const int64_t height = buffer_params_.height;
@@ -289,23 +318,23 @@ class OIDNDenoiseContext {
 
   void set_pass(OIDNPass &oidn_pass)
   {
-    if (oidn_pass.use_compositing) {
-      /* TODO(sergey): Avoid extra memory for compositing passes. */
-      set_pass_scaled(oidn_pass);
-      return;
-    }
+    const bool use_compositing = oidn_pass.use_compositing;
 
-    /* When adaptive sampling is involved scaling is always needed.
-     * If the avoid scaling if there is only one sample, to save up time (so we dont divide buffer
-     * by 1). */
-    if (pass_sample_count_ == PASS_UNUSED && (!oidn_pass.need_scale || num_samples_ == 1)) {
+    /* Simple case: no compositing is involved, no scaling o9s needed. Reference the pass from the
+     * render buffers without extra compute. */
+    if (!use_compositing && !is_pass_scale_needed(oidn_pass)) {
       set_pass_referenced(oidn_pass);
       return;
     }
 
     if (allow_inplace_modification_) {
       set_pass_referenced(oidn_pass);
-      scale_pass_if_needed(oidn_pass);
+      if (use_compositing) {
+        read_pass_pixels_inplace_if_needed(oidn_pass);
+      }
+      else {
+        scale_pass_inplace_if_needed(oidn_pass);
+      }
       return;
     }
 
@@ -384,15 +413,37 @@ class OIDNDenoiseContext {
     }
   }
 
-  void scale_pass_if_needed(OIDNPass &oidn_pass)
+  bool is_pass_scale_needed(OIDNPass &oidn_pass) const
   {
+    if (oidn_pass.is_inplace_ready) {
+      return false;
+    }
+
+    if (pass_sample_count_ != PASS_UNUSED) {
+      /* With adaptive sampling pixels will have different number of samples in them, so need to
+       * always scale the pass to make pixels uniformly sampled. */
+      return true;
+    }
+
     if (!oidn_pass.need_scale) {
+      return false;
+    }
+
+    if (num_samples_ == 1) {
+      /* If the avoid scaling if there is only one sample, to save up time (so we dont divide
+       * buffer by 1). */
+      return false;
+    }
+
+    return true;
+  }
+
+  void scale_pass_inplace_if_needed(OIDNPass &oidn_pass)
+  {
+    if (!is_pass_scale_needed(oidn_pass)) {
       return;
     }
-    if (oidn_pass.is_scaled) {
-      return;
-    }
-    oidn_pass.is_scaled = true;
+    oidn_pass.is_inplace_ready = true;
 
     const int64_t x = buffer_params_.full_x;
     const int64_t y = buffer_params_.full_y;

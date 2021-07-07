@@ -98,14 +98,15 @@ inline void PassAccessorCPU::run_get_pass_kernel_processor_float(
     const Processor &processor) const
 {
   const float *buffer_data = render_buffers->buffer.data();
+  const int pixel_stride = destination.pixel_stride ? destination.pixel_stride :
+                                                      destination.num_components;
 
   tbb::parallel_for(0, buffer_params.height, [&](int y) {
     int64_t pixel_index = int64_t(y) * buffer_params.width;
     for (int x = 0; x < buffer_params.width; ++x, ++pixel_index) {
       const int64_t input_pixel_offset = pixel_index * buffer_params.pass_stride;
       const float *buffer = buffer_data + input_pixel_offset;
-      float *pixel = destination.pixels +
-                     (pixel_index + destination.offset) * destination.num_components;
+      float *pixel = destination.pixels + (pixel_index + destination.offset) * pixel_stride;
 
       processor(kfilm_convert, buffer, pixel);
     }

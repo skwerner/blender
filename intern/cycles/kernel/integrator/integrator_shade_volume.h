@@ -395,17 +395,29 @@ typedef struct VolumeIntegrateState {
   float rscatter;
   float rphase;
 
-  /* Sampling. */
+  /* Multiple importance sampling. */
   VolumeSampleMethod direct_sample_method;
+  bool use_mis;
+  float distance_pdf;
+  float equiangular_pdf;
 } VolumeIntegrateState;
 
 ccl_device_forceinline void volume_integrate_step_scattering(
     const ShaderData *sd,
+    const Ray *ray,
+    const float3 equiangular_light_P,
     const VolumeShaderCoefficients &ccl_restrict coeff,
     const float3 transmittance,
     VolumeIntegrateState &ccl_restrict vstate,
     VolumeIntegrateResult &ccl_restrict result)
 {
+  /* Pick random color channel, we use the Veach one-sample
+   * model with balance heuristic for the channels. */
+  const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
+  float3 channel_pdf;
+  const int channel = volume_sample_channel(
+      albedo, result.indirect_throughput, vstate.rphase, &channel_pdf);
+
   /* Equiangular sampling for direct lighting. */
   if (vstate.direct_sample_method == VOLUME_SAMPLE_EQUIANGULAR && !result.direct_scatter) {
     if (result.direct_t >= vstate.start_t && result.direct_t <= vstate.end_t) {
@@ -413,23 +425,25 @@ ccl_device_forceinline void volume_integrate_step_scattering(
       const float3 new_transmittance = volume_color_transmittance(coeff.sigma_t, new_dt);
 
       result.direct_scatter = true;
-      result.direct_throughput *= coeff.sigma_s * new_transmittance;
+      result.direct_throughput *= coeff.sigma_s * new_transmittance / vstate.equiangular_pdf;
       shader_copy_volume_phases(&result.direct_phases, sd);
+
+      /* Multiple importance sampling. */
+      if (vstate.use_mis) {
+        const float distance_pdf = vstate.distance_pdf *
+                                   dot(channel_pdf, coeff.sigma_t * new_transmittance);
+        const float mis_weight = 2.0f * power_heuristic(vstate.equiangular_pdf, distance_pdf);
+        result.direct_throughput *= mis_weight;
+      }
     }
     else {
       result.direct_throughput *= transmittance;
+      vstate.distance_pdf *= dot(channel_pdf, transmittance);
     }
   }
 
   /* Distance sampling for indirect and optional direct lighting. */
   if (!result.indirect_scatter) {
-    /* Pick random color channel, we use the Veach one-sample
-     * model with balance heuristic for the channels. */
-    const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
-    float3 channel_pdf;
-    const int channel = volume_sample_channel(
-        albedo, result.indirect_throughput, vstate.rphase, &channel_pdf);
-
     /* decide if we will scatter or continue */
     const float sample_transmittance = volume_channel_get(transmittance, channel);
 
@@ -456,12 +470,23 @@ ccl_device_forceinline void volume_integrate_step_scattering(
         result.direct_t = result.indirect_t;
         result.direct_throughput = result.indirect_throughput;
         shader_copy_volume_phases(&result.direct_phases, sd);
+
+        /* Multiple importance sampling. */
+        if (vstate.use_mis) {
+          const float equiangular_pdf = volume_equiangular_pdf(ray, equiangular_light_P, new_t);
+          const float mis_weight = power_heuristic(vstate.distance_pdf * distance_pdf,
+                                                   equiangular_pdf);
+          result.direct_throughput *= 2.0f * mis_weight;
+        }
       }
     }
     else {
       /* throughput */
       const float pdf = dot(channel_pdf, transmittance);
       result.indirect_throughput *= transmittance / pdf;
+      if (vstate.direct_sample_method != VOLUME_SAMPLE_EQUIANGULAR) {
+        vstate.distance_pdf *= pdf;
+      }
 
       /* remap rscatter so we can reuse it and keep thing stratified */
       vstate.rscatter = 1.0f - (1.0f - vstate.rscatter) / sample_transmittance;
@@ -504,7 +529,22 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
   vstate.absorption_only = true;
   vstate.rscatter = path_state_rng_1D(kg, rng_state, PRNG_SCATTER_DISTANCE);
   vstate.rphase = path_state_rng_1D(kg, rng_state, PRNG_PHASE_CHANNEL);
+
+  /* Multiple importance sampling: pick between equiangular and distance sampling strategy. */
   vstate.direct_sample_method = direct_sample_method;
+  vstate.use_mis = (direct_sample_method == VOLUME_SAMPLE_MIS);
+  if (vstate.use_mis) {
+    if (vstate.rscatter < 0.5f) {
+      vstate.rscatter *= 2.0f;
+      vstate.direct_sample_method = VOLUME_SAMPLE_DISTANCE;
+    }
+    else {
+      vstate.rscatter = (vstate.rscatter - 0.5f) * 2.0f;
+      vstate.direct_sample_method = VOLUME_SAMPLE_EQUIANGULAR;
+    }
+  }
+  vstate.equiangular_pdf = 0.0f;
+  vstate.distance_pdf = 1.0f;
 
   /* Initialize volume integration result. */
   const float3 throughput = INTEGRATOR_STATE(path, throughput);
@@ -513,10 +553,8 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
 
   /* Equiangular sampling: compute distance and PDF in advance. */
   if (vstate.direct_sample_method == VOLUME_SAMPLE_EQUIANGULAR) {
-    float equiangular_pdf;
     result.direct_t = volume_equiangular_sample(
-        ray, equiangular_light_P, vstate.rscatter, &equiangular_pdf);
-    result.direct_throughput /= equiangular_pdf;
+        ray, equiangular_light_P, vstate.rscatter, &vstate.equiangular_pdf);
   }
 
   for (int i = 0; i < max_steps; i++) {
@@ -552,7 +590,8 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
       if (closure_flag & SD_EXTINCTION) {
         if ((closure_flag & SD_SCATTER) || !vstate.absorption_only) {
           /* Scattering and absorption. */
-          volume_integrate_step_scattering(sd, coeff, transmittance, vstate, result);
+          volume_integrate_step_scattering(
+              sd, ray, equiangular_light_P, coeff, transmittance, vstate, result);
         }
         else {
           /* Absorption only. */

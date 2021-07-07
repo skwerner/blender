@@ -368,115 +368,6 @@ ccl_device float3 volume_emission_integrate(VolumeShaderCoefficients *coeff,
 
 /* Volume Path */
 
-#  if 0
-/* homogeneous volume: assume shader evaluation at the start gives
- * the volume shading coefficient for the entire line segment */
-ccl_device VolumeIntegrateEvent
-volume_integrate_homogeneous(INTEGRATOR_STATE_ARGS,
-                             Ray *ccl_restrict ray,
-                             ShaderData *ccl_restrict sd,
-                             ccl_addr_space float3 *ccl_restrict throughput,
-                             const RNGState *rng_state,
-                             const bool probalistic_scatter,
-                             ccl_global float *ccl_restrict render_buffer)
-{
-  /* Evaluate shader. */
-  VolumeShaderCoefficients coeff ccl_optional_struct_init;
-
-  if (!volume_shader_sample(INTEGRATOR_STATE_PASS, sd, &coeff)) {
-    return VOLUME_PATH_MISSED;
-  }
-
-  const int closure_flag = sd->flag;
-  float t = ray->t;
-  float3 new_tp;
-
-#    ifdef __VOLUME_SCATTER__
-  /* randomly scatter, and if we do t is shortened */
-  if (closure_flag & SD_SCATTER) {
-    /* Sample channel, use MIS with balance heuristic. */
-    const float rphase = path_state_rng_1D(kg, rng_state, PRNG_PHASE_CHANNEL);
-    const float3 albedo = safe_divide_color(coeff.sigma_s, coeff.sigma_t);
-    float3 channel_pdf;
-    const int channel = volume_sample_channel(albedo, *throughput, rphase, &channel_pdf);
-
-    /* decide if we will hit or miss */
-    bool scatter = true;
-    float xi = path_state_rng_1D(kg, rng_state, PRNG_SCATTER_DISTANCE);
-
-    if (probalistic_scatter) {
-      float sample_sigma_t = volume_channel_get(coeff.sigma_t, channel);
-      float sample_transmittance = expf(-sample_sigma_t * t);
-
-      if (1.0f - xi >= sample_transmittance) {
-        scatter = true;
-
-        /* rescale random number so we can reuse it */
-        xi = 1.0f - (1.0f - xi - sample_transmittance) / (1.0f - sample_transmittance);
-      }
-      else
-        scatter = false;
-    }
-
-    if (scatter) {
-      /* scattering */
-      float3 pdf;
-      float3 transmittance;
-      float sample_t;
-
-      /* distance sampling */
-      sample_t = volume_distance_sample(ray->t, coeff.sigma_t, channel, xi, &transmittance, &pdf);
-
-      /* modify pdf for hit/miss decision */
-      if (probalistic_scatter)
-        pdf *= one_float3() - volume_color_transmittance(coeff.sigma_t, t);
-
-      new_tp = *throughput * coeff.sigma_s * transmittance / dot(channel_pdf, pdf);
-      t = sample_t;
-    }
-    else {
-      /* no scattering */
-      float3 transmittance = volume_color_transmittance(coeff.sigma_t, t);
-      float pdf = dot(channel_pdf, transmittance);
-      new_tp = *throughput * transmittance / pdf;
-    }
-  }
-  else
-#    endif
-      if (closure_flag & SD_EXTINCTION) {
-    /* absorption only, no sampling needed */
-    float3 transmittance = volume_color_transmittance(coeff.sigma_t, t);
-    new_tp = *throughput * transmittance;
-  }
-  else {
-    new_tp = *throughput;
-  }
-
-  /* integrate emission attenuated by extinction */
-  if (closure_flag & SD_EMISSION) {
-    float3 transmittance = volume_color_transmittance(coeff.sigma_t, ray->t);
-    float3 emission = volume_emission_integrate(&coeff, closure_flag, transmittance, ray->t);
-
-    kernel_accum_emission(INTEGRATOR_STATE_PASS, *throughput, emission, render_buffer);
-  }
-
-  /* modify throughput */
-  if (closure_flag & SD_EXTINCTION) {
-    *throughput = new_tp;
-
-    /* prepare to scatter to new direction */
-    if (t < ray->t) {
-      /* adjust throughput and move to new location */
-      sd->P = ray->P + t * ray->D;
-
-      return VOLUME_PATH_SCATTERED;
-    }
-  }
-
-  return VOLUME_PATH_ATTENUATED;
-}
-#  endif
-
 /* heterogeneous volume distance sampling: integrate stepping through the
  * volume until we reach the end, get absorbed entirely, or run out of
  * iterations. this does probabilistically scatter or get transmitted through
@@ -532,7 +423,6 @@ volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
       bool scatter = false;
 
       /* distance sampling */
-#  ifdef __VOLUME_SCATTER__
       if ((closure_flag & SD_SCATTER) || (has_scatter && (closure_flag & SD_EXTINCTION))) {
         has_scatter = true;
 
@@ -570,9 +460,7 @@ volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
           xi = 1.0f - (1.0f - xi) / sample_transmittance;
         }
       }
-      else
-#  endif
-          if (closure_flag & SD_EXTINCTION) {
+      else if (closure_flag & SD_EXTINCTION) {
         /* absorption only, no sampling needed */
         transmittance = volume_color_transmittance(coeff.sigma_t, dt);
         new_tp = tp * transmittance;

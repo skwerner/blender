@@ -112,7 +112,6 @@ CCL_NAMESPACE_BEGIN
 #define __PRINCIPLED__
 #define __SUBSURFACE__
 #define __VOLUME__
-#define __VOLUME_SCATTER__
 #define __CMJ__
 #define __SHADOW_RECORD_ALL__
 #define __BRANCHED_PATH__
@@ -144,7 +143,6 @@ CCL_NAMESPACE_BEGIN
 #endif
 #ifdef __NO_VOLUME__
 #  undef __VOLUME__
-#  undef __VOLUME_SCATTER__
 #endif
 #ifdef __NO_SUBSURFACE__
 #  undef __SUBSURFACE__

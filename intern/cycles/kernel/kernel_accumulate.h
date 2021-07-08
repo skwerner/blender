@@ -633,7 +633,7 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
   if (kernel_data.film.light_pass_flag & PASSMASK(COMBINED)) {
     ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
                                                                 render_buffer);
-    kernel_write_pass_float(buffer + 3, transparent);
+    kernel_write_pass_float(buffer + kernel_data.film.pass_combined + 3, transparent);
   }
 }
 

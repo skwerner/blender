@@ -66,7 +66,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
     return true;
   }
 
-  const float4 I = *((ccl_global float4 *)buffer);
+  const float4 I = *(ccl_global float4 *)(buffer + kernel_data.film.pass_combined);
 
   const float sample = __float_as_uint(buffer[kernel_data.film.pass_sample_count]);
 

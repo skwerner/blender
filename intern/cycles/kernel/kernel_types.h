@@ -1083,9 +1083,13 @@ typedef struct KernelFilmConvert {
   /* Number of components to write to. */
   int num_components;
 
+  /* Number of floats per pixel. When zero is the same as `num_components`.
+   * NOTE: Is ignored for half4 destination. */
+  int pixel_stride;
+
   int is_denoised;
 
-  int pad1, pad2;
+  int pad1;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 

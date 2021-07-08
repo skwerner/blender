@@ -105,7 +105,8 @@ class OptiXDevice : public CUDADevice {
     size_t scratch_offset = 0;
     size_t scratch_size = 0;
 
-    int input_passes = 0;
+    bool use_pass_albedo = false;
+    bool use_pass_normal = false;
   };
   Denoiser denoiser_;
 
@@ -157,19 +158,19 @@ class OptiXDevice : public CUDADevice {
   bool denoise_filter_convert_to_rgb(DenoiseContext &context, const DenoisePass &pass);
   bool denoise_filter_convert_from_rgb(DenoiseContext &context, const DenoisePass &pass);
 
-  /* Make sure the OptiX denoiser is created and configured for the given task. */
-  bool denoise_ensure(const DeviceDenoiseTask &task);
+  /* Make sure the OptiX denoiser is created and configured. */
+  bool denoise_ensure(DenoiseContext &context);
 
   /* Create OptiX denoiser descriptor if needed.
    * Will do nothing if the current OptiX descriptor is usable for the given parameters.
    * If the OptiX denoiser descriptor did re-allocate here it is left unconfigured. */
-  bool denoise_create_if_needed(const DenoiseParams &params);
+  bool denoise_create_if_needed(DenoiseContext &context);
 
   /* Configure existing OptiX denoiser descriptor for the use for the given task. */
-  bool denoise_configure_if_needed(const DeviceDenoiseTask &task);
+  bool denoise_configure_if_needed(DenoiseContext &context);
 
-  /* Run configured denoiser on the given task. */
-  bool denoise_run(DenoiseContext &context);
+  /* Run configured denoiser. */
+  bool denoise_run(DenoiseContext &context, const DenoisePass &pass);
 };
 
 CCL_NAMESPACE_END

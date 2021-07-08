@@ -336,6 +336,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->show_active_pixels = pass_access_info_.show_active_pixels;
 
   kfilm_convert->num_components = destination.num_components;
+  kfilm_convert->pixel_stride = destination.pixel_stride ? destination.pixel_stride :
+                                                           destination.num_components;
 
   kfilm_convert->is_denoised = (mode == PassMode::DENOISED);
 }

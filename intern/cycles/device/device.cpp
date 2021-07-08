@@ -317,7 +317,6 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
 
   info.has_half_images = true;
   info.has_nanovdb = true;
-  info.has_volume_decoupled = true;
   info.has_osl = true;
   info.has_profiling = true;
   info.has_peer_memory = false;
@@ -365,7 +364,6 @@ DeviceInfo Device::get_multi_device(const vector<DeviceInfo> &subdevices,
     /* Accumulate device info. */
     info.has_half_images &= device.has_half_images;
     info.has_nanovdb &= device.has_nanovdb;
-    info.has_volume_decoupled &= device.has_volume_decoupled;
     info.has_osl &= device.has_osl;
     info.has_profiling &= device.has_profiling;
     info.has_peer_memory |= device.has_peer_memory;

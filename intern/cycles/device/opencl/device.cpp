@@ -136,7 +136,6 @@ void device_opencl_info(vector<DeviceInfo> &devices)
     /* We don't know if it's used for display, but assume it is. */
     info.display_device = true;
     info.use_split_kernel = true;
-    info.has_volume_decoupled = false;
     info.denoisers = 0;
     info.id = id;
 

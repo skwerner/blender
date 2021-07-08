@@ -74,7 +74,6 @@ class DeviceInfo {
   bool display_device;        /* GPU is used as a display device. */
   bool has_nanovdb;           /* Support NanoVDB volumes. */
   bool has_half_images;       /* Support half-float textures. */
-  bool has_volume_decoupled;  /* Decoupled volume shading. */
   bool has_osl;               /* Support Open Shading Language. */
   bool has_profiling;         /* Supports runtime collection of profiling info. */
   bool has_peer_memory;       /* GPU has P2P access to memory of another GPU. */
@@ -92,7 +91,6 @@ class DeviceInfo {
     display_device = false;
     has_half_images = false;
     has_nanovdb = false;
-    has_volume_decoupled = false;
     has_osl = false;
     has_profiling = false;
     has_peer_memory = false;

@@ -531,12 +531,10 @@ void ShaderManager::device_update_common(Device *device,
       flag |= SD_NEED_VOLUME_ATTRIBUTES;
     if (shader->has_bssrdf_bump)
       flag |= SD_HAS_BSSRDF_BUMP;
-    if (device->info.has_volume_decoupled) {
-      if (shader->get_volume_sampling_method() == VOLUME_SAMPLING_EQUIANGULAR)
-        flag |= SD_VOLUME_EQUIANGULAR;
-      if (shader->get_volume_sampling_method() == VOLUME_SAMPLING_MULTIPLE_IMPORTANCE)
-        flag |= SD_VOLUME_MIS;
-    }
+    if (shader->get_volume_sampling_method() == VOLUME_SAMPLING_EQUIANGULAR)
+      flag |= SD_VOLUME_EQUIANGULAR;
+    if (shader->get_volume_sampling_method() == VOLUME_SAMPLING_MULTIPLE_IMPORTANCE)
+      flag |= SD_VOLUME_MIS;
     if (shader->get_volume_interpolation_method() == VOLUME_INTERPOLATION_CUBIC)
       flag |= SD_VOLUME_CUBIC;
     if (shader->has_bump)

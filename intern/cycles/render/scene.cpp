@@ -667,17 +667,26 @@ int Scene::get_max_closure_count()
   return max_closure_global;
 }
 
-bool Scene::has_shadow_catcher() const
+bool Scene::has_shadow_catcher()
 {
-  /* TODO(sergey): Calculate once when object manager changes. */
-
-  for (Object *object : objects) {
-    if (object->get_is_shadow_catcher()) {
-      return true;
+  if (shadow_catcher_modified_) {
+    has_shadow_catcher_ = false;
+    for (Object *object : objects) {
+      if (object->get_is_shadow_catcher()) {
+        has_shadow_catcher_ = true;
+        break;
+      }
     }
+
+    shadow_catcher_modified_ = false;
   }
 
-  return false;
+  return has_shadow_catcher_;
+}
+
+void Scene::tag_shadow_catcher_modified()
+{
+  shadow_catcher_modified_ = true;
 }
 
 template<> Light *Scene::create_node<Light>()

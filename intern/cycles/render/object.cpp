@@ -214,6 +214,10 @@ void Object::tag_update(Scene *scene)
     if (use_holdout_is_modified()) {
       flag |= ObjectManager::HOLDOUT_MODIFIED;
     }
+
+    if (is_shadow_catcher_is_modified()) {
+      scene->tag_shadow_catcher_modified();
+    }
   }
 
   if (geometry) {

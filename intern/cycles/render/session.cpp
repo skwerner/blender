@@ -589,6 +589,10 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const bool has_denoised_result = path_trace_->has_denoised_result();
   if (pass->mode == PassMode::DENOISED && !has_denoised_result) {
     pass = Pass::find(scene->passes, pass->type);
+    if (pass == nullptr) {
+      /* Happens when denoised result pass is requested but is never written by the kernel. */
+      return false;
+    }
   }
 
   pass = Film::get_actual_display_pass(scene->passes, pass);

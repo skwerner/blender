@@ -168,9 +168,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
   KernelFilm *kfilm = &dscene->data.film;
 
-  const Pass *display_pass = get_actual_display_pass(scene->passes, get_display_pass());
+  const Pass *display_pass = get_actual_display_pass(scene, get_display_pass());
   const Pass *display_pass_denoised = get_actual_display_pass(
-      scene->passes, get_display_pass(), PassMode::DENOISED);
+      scene, get_display_pass(), PassMode::DENOISED);
 
   /* update __data */
   kfilm->exposure = exposure;
@@ -476,15 +476,13 @@ int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
   return -1;
 }
 
-const Pass *Film::get_actual_display_pass(const vector<Pass> &passes,
-                                          PassType pass_type,
-                                          PassMode pass_mode)
+const Pass *Film::get_actual_display_pass(Scene *scene, PassType pass_type, PassMode pass_mode)
 {
-  const Pass *pass = Pass::find(passes, pass_type, pass_mode);
-  return get_actual_display_pass(passes, pass);
+  const Pass *pass = Pass::find(scene->passes, pass_type, pass_mode);
+  return get_actual_display_pass(scene, pass);
 }
 
-const Pass *Film::get_actual_display_pass(const vector<Pass> &passes, const Pass *pass)
+const Pass *Film::get_actual_display_pass(Scene *scene, const Pass *pass)
 {
   if (!pass) {
     return nullptr;
@@ -492,7 +490,7 @@ const Pass *Film::get_actual_display_pass(const vector<Pass> &passes, const Pass
 
   if (!pass->is_written()) {
     if (pass->mode == PassMode::DENOISED) {
-      pass = Pass::find(passes, pass->type);
+      pass = Pass::find(scene->passes, pass->type);
       if (!pass) {
         return nullptr;
       }
@@ -502,9 +500,9 @@ const Pass *Film::get_actual_display_pass(const vector<Pass> &passes, const Pass
     }
   }
 
-  if (pass->type == PASS_COMBINED) {
+  if (pass->type == PASS_COMBINED && scene->has_shadow_catcher()) {
     const Pass *shadow_catcher_matte_pass = Pass::find(
-        passes, PASS_SHADOW_CATCHER_MATTE, pass->mode);
+        scene->passes, PASS_SHADOW_CATCHER_MATTE, pass->mode);
     if (shadow_catcher_matte_pass) {
       pass = shadow_catcher_matte_pass;
     }

@@ -327,14 +327,9 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
     return film_calculate_shadow_catcher_denoised(kfilm_convert, buffer);
   }
 
-  kernel_assert(kfilm_convert->pass_offset != PASS_UNUSED);
-  kernel_assert(kfilm_convert->pass_combined != PASS_UNUSED);
   kernel_assert(kfilm_convert->pass_shadow_catcher != PASS_UNUSED);
-  kernel_assert(kfilm_convert->pass_shadow_catcher_matte != PASS_UNUSED);
 
-  ccl_global const float *in_combined = buffer + kfilm_convert->pass_combined;
   ccl_global const float *in_catcher = buffer + kfilm_convert->pass_shadow_catcher;
-  ccl_global const float *in_matte = buffer + kfilm_convert->pass_shadow_catcher_matte;
 
   /* If there is no shadow catcher object in this pixel, there is no modification of the light
    * needed, so return one. */
@@ -342,6 +337,17 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
   if (num_samples == 0.0f) {
     return one_float4();
   }
+
+  /* NOTE: It is possible that the Shadow Catcher pass is requested as an output without actual
+   * shadow catcher objects in the scene. In this case there will be no auxillary passes required
+   * for the devision (to save up memory). So delay the asserts to this point so that the number of
+   * samples check handles such configuration. */
+  kernel_assert(kfilm_convert->pass_offset != PASS_UNUSED);
+  kernel_assert(kfilm_convert->pass_combined != PASS_UNUSED);
+  kernel_assert(kfilm_convert->pass_shadow_catcher_matte != PASS_UNUSED);
+
+  ccl_global const float *in_combined = buffer + kfilm_convert->pass_combined;
+  ccl_global const float *in_matte = buffer + kfilm_convert->pass_shadow_catcher_matte;
 
   /* No scaling needed. The integration works in way that number of samples in the combined and
    * shadow catcher passes are the same, and exposure is cancelled during the division. */

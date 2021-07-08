@@ -83,10 +83,10 @@ class Film : public Node {
 
   /* Get display pass from its name.
    * Will do special logic to replace combined pass with shadow catcher matte. */
-  static const Pass *get_actual_display_pass(const vector<Pass> &passes,
+  static const Pass *get_actual_display_pass(Scene *scene,
                                              PassType pass_type,
                                              PassMode pass_mode = PassMode::NOISY);
-  static const Pass *get_actual_display_pass(const vector<Pass> &passes, const Pass *pass);
+  static const Pass *get_actual_display_pass(Scene *scene, const Pass *pass);
 };
 
 CCL_NAMESPACE_END

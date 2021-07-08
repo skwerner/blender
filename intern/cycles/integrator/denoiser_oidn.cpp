@@ -513,9 +513,12 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
                              oidn_filter,
                              num_samples,
                              allow_inplace_modification);
-  context.denoise(PASS_COMBINED);
-  context.denoise(PASS_SHADOW_CATCHER);
+  /* NOTE: Passes are in the reverse order of their dependency. For example, Shadow Catcher pass
+   * uses combined pass, so the combined pass needs to be handled later. This is because of
+   * possible in-place modification of the input noisy passes. */
   context.denoise(PASS_SHADOW_CATCHER_MATTE);
+  context.denoise(PASS_SHADOW_CATCHER);
+  context.denoise(PASS_COMBINED);
 #endif
 
   /* TODO: It may be possible to avoid this copy, but we have to ensure that when other code copies

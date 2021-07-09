@@ -193,9 +193,6 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float3(render_buffers, buffer_params, destination);
     }
-    else if (type == PASS_SHADOW) {
-      get_pass_shadow(render_buffers, buffer_params, destination);
-    }
     else if (pass_info.divide_type != PASS_NONE) {
       /* RGB lighting passes that need to divide out color */
       get_pass_divide_even_color(render_buffers, buffer_params, destination);
@@ -220,9 +217,6 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     else if (mode == PassMode::DENOISED) {
       /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float4(render_buffers, buffer_params, destination);
-    }
-    else if (type == PASS_SHADOW) {
-      get_pass_shadow(render_buffers, buffer_params, destination);
     }
     else if (type == PASS_MOTION) {
       get_pass_motion(render_buffers, buffer_params, destination);

@@ -598,6 +598,10 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
   INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
 
+  if (kernel_data.kernel_features & KERNEL_FEATURE_SHADOW_PASS) {
+    INTEGRATOR_STATE_WRITE(shadow_path, unshadowed_throughput) = throughput;
+  }
+
   integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_PASS);
 
   /* Branch off shadow kernel. */

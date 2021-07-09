@@ -479,10 +479,10 @@ void LightManager::device_update_distribution(Device *,
     kfilm->pass_shadow_scale = 1.0f;
 
     if (kintegrator->pdf_triangles != 0.0f)
-      kfilm->pass_shadow_scale *= 0.5f;
+      kfilm->pass_shadow_scale /= 0.5f;
 
     if (num_background_lights < num_lights)
-      kfilm->pass_shadow_scale *= (float)(num_lights - num_background_lights) / (float)num_lights;
+      kfilm->pass_shadow_scale /= (float)(num_lights - num_background_lights) / (float)num_lights;
 
     /* CDF */
     dscene->light_distribution.copy_to_device();

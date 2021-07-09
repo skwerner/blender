@@ -1480,6 +1480,9 @@ enum KernelFeatureFlag : unsigned int {
 
   /* Light render passes. */
   KERNEL_FEATURE_LIGHT_PASSES = (1U << 21U),
+
+  /* Shadow render pass. */
+  KERNEL_FEATURE_SHADOW_PASS = (1U << 22U),
 };
 
 /* Shader node feature mask, to specialize shader evaluation for kernels. */

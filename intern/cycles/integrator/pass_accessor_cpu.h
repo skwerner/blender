@@ -70,9 +70,6 @@ class PassAccessorCPU : public PassAccessor {
   DECLARE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
   DECLARE_PASS_ACCESSOR(float4)
 
-  /* Float3 or Float4 passes. */
-  DECLARE_PASS_ACCESSOR(shadow)
-
 #undef DECLARE_PASS_ACCESSOR
 };
 

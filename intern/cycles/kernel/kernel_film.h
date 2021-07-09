@@ -271,31 +271,6 @@ ccl_device_inline void film_get_pass_pixel_float4(const KernelFilmConvert *ccl_r
 }
 
 /* --------------------------------------------------------------------
- * Float3 or Float4 passes.
- */
-
-ccl_device_inline void film_get_pass_pixel_shadow(const KernelFilmConvert *ccl_restrict
-                                                      kfilm_convert,
-                                                  ccl_global const float *ccl_restrict buffer,
-                                                  float *ccl_restrict pixel)
-{
-  const float *in = buffer + kfilm_convert->pass_offset;
-
-  const float weight = in[3];
-  const float weight_inv = (weight > 0.0f) ? 1.0f / weight : 1.0f;
-
-  const float3 shadow = make_float3(in[0], in[1], in[2]) * weight_inv;
-
-  pixel[0] = shadow.x;
-  pixel[1] = shadow.y;
-  pixel[2] = shadow.z;
-
-  if (kfilm_convert->num_components == 4) {
-    pixel[3] = 1.0f;
-  }
-}
-
-/* --------------------------------------------------------------------
  * Shadow catcher.
  */
 

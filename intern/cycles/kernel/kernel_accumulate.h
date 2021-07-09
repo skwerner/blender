@@ -117,193 +117,6 @@ ccl_device_forceinline void kernel_accum_clamp(const KernelGlobals *kg, float3 *
 }
 
 /* --------------------------------------------------------------------
- * Legacy functions.
- *
- * TODO: Seems to be mainly related to shadow catcher, which is about to have new implementation.
- * Some other code is related to clamping, which is done in `kernel_accum_clamp()`. Port remaining
- * parts over, remove legacy code.
- */
-
-#if 0
-ccl_device_inline void path_radiance_accum_light(const KernelGlobals *kg,
-                                                 PathRadiance *L,
-                                                 ccl_addr_space PathState *state,
-                                                 float3 throughput,
-                                                 BsdfEval *bsdf_eval,
-                                                 float3 shadow,
-                                                 float shadow_fac,
-                                                 bool is_lamp)
-{
-#  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
-    float3 light = throughput * bsdf_eval->sum_no_mis;
-    L->path_total += light;
-    L->path_total_shaded += shadow * light;
-
-    if (state->flag & PATH_RAY_SHADOW_CATCHER) {
-      return;
-    }
-  }
-#  endif
-}
-
-ccl_device_inline void path_radiance_accum_total_light(PathRadiance *L,
-                                                       ccl_addr_space PathState *state,
-                                                       float3 throughput,
-                                                       const BsdfEval *bsdf_eval)
-{
-#  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
-    L->path_total += throughput * bsdf_eval->sum_no_mis;
-  }
-#  else
-  (void)L;
-  (void)state;
-  (void)throughput;
-  (void)bsdf_eval;
-#  endif
-}
-
-ccl_device_inline void path_radiance_accum_background(const KernelGlobals *kg,
-                                                      PathRadiance *L,
-                                                      ccl_addr_space PathState *state,
-                                                      float3 throughput,
-                                                      float3 value)
-{
-
-#  ifdef __SHADOW_TRICKS__
-  if (state->flag & PATH_RAY_STORE_SHADOW_INFO) {
-    L->path_total += throughput * value;
-    L->path_total_shaded += throughput * value * L->shadow_transparency;
-
-    if (state->flag & PATH_RAY_SHADOW_CATCHER) {
-      return;
-    }
-  }
-#  endif
-}
-
-ccl_device_inline void path_radiance_accum_transparent(PathRadiance *L,
-                                                       ccl_addr_space PathState *state,
-                                                       float3 throughput)
-{
-  L->transparent += average(throughput);
-}
-
-#  ifdef __SHADOW_TRICKS__
-ccl_device_inline void path_radiance_accum_shadowcatcher(PathRadiance *L,
-                                                         float3 throughput,
-                                                         float3 background)
-{
-  L->shadow_throughput += average(throughput);
-  L->shadow_background_color += throughput * background;
-  L->has_shadow_catcher = 1;
-}
-#  endif
-
-#  ifdef __SHADOW_TRICKS__
-ccl_device_inline void path_radiance_sum_shadowcatcher(const KernelGlobals *kg,
-                                                       PathRadiance *L,
-                                                       float3 *L_sum,
-                                                       float *alpha)
-{
-  /* Calculate current shadow of the path. */
-  float path_total = average(L->path_total);
-  float shadow;
-
-  if (UNLIKELY(!isfinite_safe(path_total))) {
-    kernel_assert(!"Non-finite total radiance along the path");
-    shadow = 0.0f;
-  }
-  else if (path_total == 0.0f) {
-    shadow = L->shadow_transparency;
-  }
-  else {
-    float path_total_shaded = average(L->path_total_shaded);
-    shadow = path_total_shaded / path_total;
-  }
-
-  /* Calculate final light sum and transparency for shadow catcher object. */
-  if (kernel_data.background.transparent) {
-    *alpha -= L->shadow_throughput * shadow;
-  }
-  else {
-    L->shadow_background_color *= shadow;
-    *L_sum += L->shadow_background_color;
-  }
-}
-#  endif
-
-ccl_device_inline float3 path_radiance_clamp_and_sum(const KernelGlobals *kg,
-                                                     PathRadiance *L,
-                                                     float *alpha)
-{
-  float3 L_sum;
-  /* Light Passes are used */
-#  ifdef __PASSES__
-  float3 L_direct, L_indirect;
-  if (L->use_light_pass) {
-    path_radiance_sum_indirect(L);
-
-    L_direct = L->direct_diffuse + L->direct_glossy + L->direct_transmission + L->direct_volume +
-               L->emission;
-    L_indirect = L->indirect_diffuse + L->indirect_glossy + L->indirect_transmission +
-                 L->indirect_volume;
-
-    if (!kernel_data.background.transparent)
-      L_direct += L->background;
-
-    L_sum = L_direct + L_indirect;
-    float sum = fabsf((L_sum).x) + fabsf((L_sum).y) + fabsf((L_sum).z);
-
-    /* Reject invalid value */
-    if (!isfinite_safe(sum)) {
-      kernel_assert(!"Non-finite sum in path_radiance_clamp_and_sum!");
-      L_sum = zero_float3();
-
-      L->direct_diffuse = zero_float3();
-      L->direct_glossy = zero_float3();
-      L->direct_transmission = zero_float3();
-      L->direct_volume = zero_float3();
-
-      L->indirect_diffuse = zero_float3();
-      L->indirect_glossy = zero_float3();
-      L->indirect_transmission = zero_float3();
-      L->indirect_volume = zero_float3();
-
-      L->emission = zero_float3();
-    }
-  }
-
-  /* No Light Passes */
-  else
-#  endif
-  {
-    L_sum = L->emission;
-
-    /* Reject invalid value */
-    float sum = fabsf((L_sum).x) + fabsf((L_sum).y) + fabsf((L_sum).z);
-    if (!isfinite_safe(sum)) {
-      kernel_assert(!"Non-finite final sum in path_radiance_clamp_and_sum!");
-      L_sum = zero_float3();
-    }
-  }
-
-  /* Compute alpha. */
-  *alpha = 1.0f - L->transparent;
-
-  /* Add shadow catcher contributions. */
-#  ifdef __SHADOW_TRICKS__
-  if (L->has_shadow_catcher) {
-    path_radiance_sum_shadowcatcher(kg, L, &L_sum, alpha);
-  }
-#  endif /* __SHADOW_TRICKS__ */
-
-  return L_sum;
-}
-#endif
-
-/* --------------------------------------------------------------------
  * Pass accumulation utilities.
  */
 
@@ -606,17 +419,15 @@ ccl_device_inline void kernel_accum_light(INTEGRATOR_STATE_CONST_ARGS,
       kernel_write_pass_float3(buffer + pass_offset, contribution);
     }
 
-    /* TODO: Write shadow pass. */
-#  if 0
-  if (path_flag & PATH_RAY_SHADOW_FOR_LIGHT) {
-    const int shadow_pass_offset = kernel_data.film.pass_shadow;
-    if (shadow_pass_offset != PASS_UNUSED) {
-      kernel_write_pass_float4(
-          buffer + shadow_pass_offset,
-          make_float4(shadow.x, shadow.y, shadow.z, kernel_data.film.pass_shadow_scale));
+    /* Write shadow pass. */
+    if (kernel_data.film.pass_shadow != PASS_UNUSED && (path_flag & PATH_RAY_SHADOW_FOR_LIGHT) &&
+        (path_flag & PATH_RAY_CAMERA)) {
+      const float3 unshadowed_throughput = INTEGRATOR_STATE(shadow_path, unshadowed_throughput);
+      const float3 shadowed_throughput = INTEGRATOR_STATE(shadow_path, throughput);
+      const float3 shadow = safe_divide_float3_float3(shadowed_throughput, unshadowed_throughput) *
+                            kernel_data.film.pass_shadow_scale;
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_shadow, shadow);
     }
-  }
-#  endif
   }
 #endif
 }

@@ -524,6 +524,10 @@ uint Film::get_kernel_features(const Scene *scene) const
     if (pass.type != PASS_NONE && pass.type != PASS_COMBINED &&
         pass.type <= PASS_CATEGORY_LIGHT_END) {
       kernel_features |= KERNEL_FEATURE_LIGHT_PASSES;
+
+      if (pass.type == PASS_SHADOW) {
+        kernel_features |= KERNEL_FEATURE_SHADOW_PASS;
+      }
     }
 
     if (pass.type == PASS_AO) {

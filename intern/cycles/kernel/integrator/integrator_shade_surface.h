@@ -190,6 +190,10 @@ ccl_device_forceinline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS
   INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
   INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
 
+  if (kernel_data.kernel_features & KERNEL_FEATURE_SHADOW_PASS) {
+    INTEGRATOR_STATE_WRITE(shadow_path, unshadowed_throughput) = throughput;
+  }
+
   /* Branch off shadow kernel. */
   INTEGRATOR_SHADOW_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
 }

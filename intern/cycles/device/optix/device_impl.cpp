@@ -549,21 +549,32 @@ class OptiXDevice::DenoiseContext {
     const int num_guiding_passes = num_input_passes - 1;
 
     if (num_guiding_passes) {
-      guiding_params.pass_stride = 0;
-      if (use_pass_albedo) {
-        guiding_params.pass_albedo = guiding_params.pass_stride;
-        guiding_params.pass_stride += 3;
-      }
-      if (use_pass_normal) {
-        guiding_params.pass_normal = guiding_params.pass_stride;
-        guiding_params.pass_stride += 3;
-      }
+      if (task.allow_inplace_modification) {
+        guiding_params.device_pointer = render_buffers->buffer.device_pointer;
 
-      guiding_params.stride = buffer_params.width;
+        guiding_params.pass_albedo = pass_denoising_albedo;
+        guiding_params.pass_normal = pass_denoising_normal;
 
-      guiding_buffer.alloc_to_device(buffer_params.width * buffer_params.height *
-                                     guiding_params.pass_stride);
-      guiding_params.device_pointer = guiding_buffer.device_pointer;
+        guiding_params.stride = buffer_params.stride;
+        guiding_params.pass_stride = buffer_params.pass_stride;
+      }
+      else {
+        guiding_params.pass_stride = 0;
+        if (use_pass_albedo) {
+          guiding_params.pass_albedo = guiding_params.pass_stride;
+          guiding_params.pass_stride += 3;
+        }
+        if (use_pass_normal) {
+          guiding_params.pass_normal = guiding_params.pass_stride;
+          guiding_params.pass_stride += 3;
+        }
+
+        guiding_params.stride = buffer_params.width;
+
+        guiding_buffer.alloc_to_device(buffer_params.width * buffer_params.height *
+                                       guiding_params.pass_stride);
+        guiding_params.device_pointer = guiding_buffer.device_pointer;
+      }
     }
 
     pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);

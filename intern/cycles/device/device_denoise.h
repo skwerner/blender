@@ -89,6 +89,11 @@ class DeviceDenoiseTask {
 
   RenderBuffers *render_buffers;
   BufferParams buffer_params;
+
+  /* Allow to do in-place modification of the input passes (scaling them down i.e.). This will
+   * lower the memory footprint of the denoiser but will make input passes "invalid" (from path
+   * tracer) point of view. */
+  bool allow_inplace_modification;
 };
 
 CCL_NAMESPACE_END

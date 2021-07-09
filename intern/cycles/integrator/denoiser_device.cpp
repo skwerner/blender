@@ -41,9 +41,6 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
                                     const int num_samples,
                                     bool allow_inplace_modification)
 {
-  /* TODO(sergey): Support in-place modification to lower memory footprint. */
-  (void)allow_inplace_modification;
-
   Device *denoiser_device = get_denoiser_device();
   if (!denoiser_device) {
     return;
@@ -53,6 +50,7 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
   task.params = params_;
   task.num_samples = num_samples;
   task.buffer_params = buffer_params;
+  task.allow_inplace_modification = allow_inplace_modification;
 
   RenderBuffers local_render_buffers(denoiser_device);
   bool local_buffer_used = false;
@@ -93,7 +91,8 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
   denoiser_device->denoise_buffer(task);
 
   if (local_buffer_used) {
-    /* TODO(sergey): Only copy denoised passes. */
+    /* TODO(sergey): Only copy denoised passes. This will also allow to reduce memory usage by
+     * allowing in-place modification of the temporary render buffer. */
     local_render_buffers.copy_from_device();
     memcpy(render_buffers->buffer.data(),
            local_render_buffers.buffer.data(),

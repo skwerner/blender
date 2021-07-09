@@ -316,7 +316,8 @@ void PathTraceWorkGPU::enqueue_path_iteration(DeviceKernel kernel)
   switch (kernel) {
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST:
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW:
-    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE: {
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK: {
       /* Ray intersection kernels with integrator state. */
       void *args[] = {&d_path_index, const_cast<int *>(&work_size)};
 

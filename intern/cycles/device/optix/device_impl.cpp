@@ -311,6 +311,10 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   group_descs[PG_RGEN_INTERSECT_SUBSURFACE].raygen.module = optix_module;
   group_descs[PG_RGEN_INTERSECT_SUBSURFACE].raygen.entryFunctionName =
       "__raygen__kernel_optix_integrator_intersect_subsurface";
+  group_descs[PG_RGEN_INTERSECT_VOLUME_STACK].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
+  group_descs[PG_RGEN_INTERSECT_VOLUME_STACK].raygen.module = optix_module;
+  group_descs[PG_RGEN_INTERSECT_VOLUME_STACK].raygen.entryFunctionName =
+      "__raygen__kernel_optix_integrator_intersect_volume_stack";
   group_descs[PG_MISS].kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
   group_descs[PG_MISS].miss.module = optix_module;
   group_descs[PG_MISS].miss.entryFunctionName = "__miss__kernel_optix_miss";
@@ -476,6 +480,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_CLOSEST]);
     pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_SHADOW]);
     pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_SUBSURFACE]);
+    pipeline_groups.push_back(groups[PG_RGEN_INTERSECT_VOLUME_STACK]);
     pipeline_groups.push_back(groups[PG_MISS]);
     pipeline_groups.push_back(groups[PG_HITD]);
     pipeline_groups.push_back(groups[PG_HITS]);
@@ -497,10 +502,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
                                      &pipelines[PIP_INTERSECT]));
 
     /* Calculate continuation stack size based on the maximum of all ray generation stack sizes. */
-    const unsigned int css = std::max(stack_size[PG_RGEN_INTERSECT_CLOSEST].cssRG,
-                                      std::max(stack_size[PG_RGEN_INTERSECT_SHADOW].cssRG,
-                                               stack_size[PG_RGEN_INTERSECT_SUBSURFACE].cssRG)) +
-                             link_options.maxTraceDepth * trace_css;
+    const unsigned int css =
+        std::max(stack_size[PG_RGEN_INTERSECT_CLOSEST].cssRG,
+                 std::max(stack_size[PG_RGEN_INTERSECT_SHADOW].cssRG,
+                          std::max(stack_size[PG_RGEN_INTERSECT_SUBSURFACE].cssRG,
+                                   stack_size[PG_RGEN_INTERSECT_VOLUME_STACK].cssRG))) +
+        link_options.maxTraceDepth * trace_css;
 
     optix_assert(
         optixPipelineSetStackSize(pipelines[PIP_INTERSECT], 0, 0, css, motion_blur ? 3 : 2));

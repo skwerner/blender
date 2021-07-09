@@ -43,7 +43,8 @@ static bool is_optix_specific_kernel(DeviceKernel kernel)
   return (kernel == DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE ||
           kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST ||
           kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW ||
-          kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE);
+          kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE ||
+          kernel == DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK);
 }
 
 bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *args[])
@@ -102,6 +103,10 @@ bool OptiXDeviceQueue::enqueue(DeviceKernel kernel, const int work_size, void *a
     case DEVICE_KERNEL_INTEGRATOR_INTERSECT_SUBSURFACE:
       pipeline = optix_device->pipelines[PIP_INTERSECT];
       sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_SUBSURFACE * sizeof(SbtRecord);
+      break;
+    case DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK:
+      pipeline = optix_device->pipelines[PIP_INTERSECT];
+      sbt_params.raygenRecord = sbt_data_ptr + PG_RGEN_INTERSECT_VOLUME_STACK * sizeof(SbtRecord);
       break;
 
     default:

@@ -107,8 +107,14 @@ ccl_device bool integrator_init_from_camera(INTEGRATOR_STATE_ARGS,
   /* Initialize path state for path integration. */
   path_state_init_integrator(INTEGRATOR_STATE_PASS, sample, rng_hash);
 
-  /* Continue with intersect_closest kernel. */
-  INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
+  /* Continue with intersect_closest kernel, optionally initializing volume
+   * stack before that if the camera may be inside a volume. */
+  if (kernel_data.cam.is_inside_volume) {
+    INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_VOLUME_STACK);
+  }
+  else {
+    INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_INTERSECT_CLOSEST);
+  }
 
   return true;
 }

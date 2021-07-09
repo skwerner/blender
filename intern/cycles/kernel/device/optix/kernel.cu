@@ -30,6 +30,7 @@
 #include "kernel/integrator/integrator_intersect_closest.h"
 #include "kernel/integrator/integrator_intersect_shadow.h"
 #include "kernel/integrator/integrator_intersect_subsurface.h"
+#include "kernel/integrator/integrator_intersect_volume_stack.h"
 
 #include "kernel/kernel_adaptive_sampling.h"
 #include "kernel/kernel_bake.h"
@@ -86,6 +87,14 @@ extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_subsurfac
   const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
                                                        global_index;
   integrator_intersect_subsurface(nullptr, path_index);
+}
+
+extern "C" __global__ void __raygen__kernel_optix_integrator_intersect_volume_stack()
+{
+  const int global_index = optixGetLaunchIndex().x;
+  const int path_index = (__params.path_index_array) ? __params.path_index_array[global_index] :
+                                                       global_index;
+  integrator_intersect_volume_stack(nullptr, path_index);
 }
 
 extern "C" __global__ void __miss__kernel_optix_miss()

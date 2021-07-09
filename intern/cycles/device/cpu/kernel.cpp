@@ -34,6 +34,7 @@ CPUKernels::CPUKernels()
       REGISTER_KERNEL(integrator_intersect_closest),
       REGISTER_KERNEL(integrator_intersect_shadow),
       REGISTER_KERNEL(integrator_intersect_subsurface),
+      REGISTER_KERNEL(integrator_intersect_volume_stack),
       REGISTER_KERNEL(integrator_shade_background),
       REGISTER_KERNEL(integrator_shade_light),
       REGISTER_KERNEL(integrator_shade_shadow),

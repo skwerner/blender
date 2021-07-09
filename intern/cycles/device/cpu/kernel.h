@@ -43,6 +43,7 @@ class CPUKernels {
   IntegratorFunction integrator_intersect_closest;
   IntegratorFunction integrator_intersect_shadow;
   IntegratorFunction integrator_intersect_subsurface;
+  IntegratorFunction integrator_intersect_volume_stack;
   IntegratorShadeFunction integrator_shade_background;
   IntegratorShadeFunction integrator_shade_light;
   IntegratorShadeFunction integrator_shade_shadow;

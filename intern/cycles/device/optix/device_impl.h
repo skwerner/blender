@@ -46,6 +46,7 @@ enum {
 #  endif
   PG_CALL_SVM_AO,
   PG_CALL_SVM_BEVEL,
+  PG_CALL_AO_PASS,
   NUM_PROGRAM_GROUPS
 };
 
@@ -58,7 +59,7 @@ static const int NUM_HIT_PROGRAM_GROUPS = 5;
 static const int NUM_HIT_PROGRAM_GROUPS = 3;
 #  endif
 static const int CALLABLE_PROGRAM_GROUPS_BASE = PG_CALL_SVM_AO;
-static const int NUM_CALLABLE_PROGRAM_GROUPS = 2;
+static const int NUM_CALLABLE_PROGRAM_GROUPS = 3;
 
 /* List of OptiX pipelines. */
 enum { PIP_SHADE_RAYTRACE, PIP_INTERSECT, NUM_PIPELINES };

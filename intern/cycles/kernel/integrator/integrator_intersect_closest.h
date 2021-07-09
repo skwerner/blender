@@ -91,7 +91,7 @@ ccl_device_forceinline void integrator_intersect_shader_next_kernel(
     const int shader_flags)
 {
   /* Setup next kernel to execute. */
-  if (shader_flags & SD_HAS_RAYTRACE) {
+  if ((shader_flags & SD_HAS_RAYTRACE) || (kernel_data.film.pass_ao != PASS_UNUSED)) {
     INTEGRATOR_PATH_NEXT_SORTED(
         current_kernel, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
   }

@@ -164,8 +164,8 @@ ccl_device bool integrator_init_from_bake(INTEGRATOR_STATE_ARGS,
     integrator_state_write_isect(INTEGRATOR_STATE_PASS, &isect);
 
     /* Setup next kernel to execute. */
-    const int flags = kernel_tex_fetch(__shaders, shader).flags;
-    if (flags & SD_HAS_RAYTRACE) {
+    const int shader_flags = kernel_tex_fetch(__shaders, shader).flags;
+    if ((shader_flags & SD_HAS_RAYTRACE) || (kernel_data.film.pass_ao != PASS_UNUSED)) {
       INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
     }
     else {

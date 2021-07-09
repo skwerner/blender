@@ -515,6 +515,10 @@ DeviceRequestedFeatures Scene::get_requested_device_features()
     requested_features.use_denoising = true;
   }
 
+  if (Pass::find(passes, PASS_AO)) {
+    requested_features.nodes_features |= NODE_FEATURE_RAYTRACE;
+  }
+
   return requested_features;
 }
 

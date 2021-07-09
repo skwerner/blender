@@ -281,6 +281,50 @@ ccl_device_forceinline bool integrate_surface_volume_only_bounce(INTEGRATOR_STAT
 }
 #endif
 
+#if defined(__AO__) && defined(__SHADER_RAYTRACE__)
+ccl_device_forceinline void integrate_surface_ao_pass(INTEGRATOR_STATE_CONST_ARGS,
+                                                      const ShaderData *ccl_restrict sd,
+                                                      const RNGState *ccl_restrict rng_state,
+                                                      ccl_global float *ccl_restrict render_buffer)
+{
+#  ifdef __KERNEL_OPTIX__
+  optixDirectCall<void>(2, INTEGRATOR_STATE_PASS, sd, rng_state, render_buffer);
+}
+
+extern "C" __device__ void __direct_callable__ao_pass(INTEGRATOR_STATE_CONST_ARGS,
+                                                      const ShaderData *ccl_restrict sd,
+                                                      const RNGState *ccl_restrict rng_state,
+                                                      ccl_global float *ccl_restrict render_buffer)
+{
+#  endif /* __KERNEL_OPTIX__ */
+  float bsdf_u, bsdf_v;
+  path_state_rng_2D(kg, rng_state, PRNG_BSDF_U, &bsdf_u, &bsdf_v);
+
+  const float3 ao_N = shader_bsdf_ao_normal(kg, sd);
+  float3 ao_D;
+  float ao_pdf;
+  sample_cos_hemisphere(ao_N, bsdf_u, bsdf_v, &ao_D, &ao_pdf);
+
+  if (dot(sd->Ng, ao_D) > 0.0f && ao_pdf != 0.0f) {
+    Ray ray ccl_optional_struct_init;
+    ray.P = ray_offset(sd->P, sd->Ng);
+    ray.D = ao_D;
+    ray.t = kernel_data.integrator.ao_bounces_distance;
+    ray.time = sd->time;
+    ray.dP = differential_zero_compact();
+    ray.dD = differential_zero_compact();
+
+    Intersection isect ccl_optional_struct_init;
+    if (!scene_intersect(kg, &ray, PATH_RAY_SHADOW_OPAQUE, &isect)) {
+      ccl_global float *buffer = kernel_pass_pixel_render_buffer(INTEGRATOR_STATE_PASS,
+                                                                 render_buffer);
+      const float3 throughput = INTEGRATOR_STATE(path, throughput);
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_ao, throughput);
+    }
+  }
+}
+#endif /* defined(__AO__) && defined(__SHADER_RAYTRACE__) */
+
 template<uint node_feature_mask>
 ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
                                   ccl_global float *ccl_restrict render_buffer)
@@ -370,14 +414,14 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
     kernel_write_shadow_catcher_bounce_data(INTEGRATOR_STATE_PASS, &sd, render_buffer);
 #endif
 
-    /* TODO */
-#if 0
-#  ifdef __AO__
-  /* ambient occlusion */
-  if (kernel_data.integrator.use_ambient_occlusion) {
-    kernel_path_ao(kg, &sd, emission_sd, L, state, throughput, shader_bsdf_alpha(kg, &sd));
-  }
-#  endif /* __AO__ */
+#if defined(__AO__) && defined(__SHADER_RAYTRACE__)
+    /* Ambient occlusion pass. */
+    if (node_feature_mask & NODE_FEATURE_RAYTRACE) {
+      if ((kernel_data.film.pass_ao != PASS_UNUSED) &&
+          (INTEGRATOR_STATE(path, flag) & PATH_RAY_CAMERA)) {
+        integrate_surface_ao_pass(INTEGRATOR_STATE_PASS, &sd, &rng_state, render_buffer);
+      }
+    }
 #endif
 
     continue_path_label = integrate_surface_bsdf_bssrdf_bounce(
@@ -387,14 +431,12 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
   else {
     continue_path_label = integrate_surface_volume_only_bounce(INTEGRATOR_STATE_PASS, &sd);
   }
-#endif
 
   if (continue_path_label & LABEL_TRANSMIT) {
     /* Enter/Exit volume. */
-#ifdef __VOLUME__
     volume_stack_enter_exit(INTEGRATOR_STATE_PASS, &sd);
-#endif
   }
+#endif
 
   return continue_path_label != 0;
 }

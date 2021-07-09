@@ -894,6 +894,21 @@ ccl_device float3 shader_bsdf_average_normal(const KernelGlobals *kg, const Shad
   return (is_zero(N)) ? sd->N : normalize(N);
 }
 
+ccl_device float3 shader_bsdf_ao_normal(const KernelGlobals *kg, const ShaderData *sd)
+{
+  float3 N = zero_float3();
+
+  for (int i = 0; i < sd->num_closure; i++) {
+    const ShaderClosure *sc = &sd->closure[i];
+    if (CLOSURE_IS_BSDF_DIFFUSE(sc->type)) {
+      const DiffuseBsdf *bsdf = (const DiffuseBsdf *)sc;
+      N += bsdf->N * fabsf(average(sc->weight));
+    }
+  }
+
+  return (is_zero(N)) ? sd->N : normalize(N);
+}
+
 #ifdef __SUBSURFACE__
 ccl_device float3 shader_bssrdf_normal(const ShaderData *sd)
 {

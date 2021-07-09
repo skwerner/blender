@@ -81,7 +81,6 @@ set(SRC_HEADERS
   kernel_math.h
   kernel_montecarlo.h
   kernel_passes.h
-  kernel_path.h
   kernel_path_state.h
   kernel_profiling.h
   kernel_projection.h

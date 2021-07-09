@@ -106,10 +106,14 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "adaptive_sampling_filter_y";
 
     /* Denoising. */
-    case DEVICE_KERNEL_FILTER_CONVERT_TO_RGB:
-      return "filter_convert_to_rgb";
-    case DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB:
-      return "filter_convert_from_rgb";
+    case DEVICE_KERNEL_FILTER_GUIDING_PREPROCESS:
+      return "filter_guiding_preprocess";
+    case DEVICE_KERNEL_FILTER_GUIDING_SET_FAKE_ALBEDO:
+      return "filter_guiding_set_fake_albedo";
+    case DEVICE_KERNEL_FILTER_COLOR_PREPROCESS:
+      return "filter_color_preprocess";
+    case DEVICE_KERNEL_FILTER_COLOR_POSTPROCESS:
+      return "filter_color_postprocess";
 
     /* Generic */
     case DEVICE_KERNEL_PREFIX_SUM:

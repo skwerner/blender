@@ -670,103 +670,153 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_filter_convert_to_rgb(float *rgb,
-                                      float *render_buffer,
-                                      int sx,
-                                      int sy,
-                                      int sw,
-                                      int sh,
-                                      int offset,
-                                      int stride,
-                                      int pass_stride,
-                                      int num_inputs,
-                                      int num_samples,
-                                      int pass_denoised,
-                                      int pass_denoising_albedo,
-                                      int pass_denoising_normal,
-                                      int pass_sample_count)
+    kernel_cuda_filter_color_preprocess(float *render_buffer,
+                                        int full_x,
+                                        int full_y,
+                                        int width,
+                                        int height,
+                                        int offset,
+                                        int stride,
+                                        int pass_stride,
+                                        int pass_denoised)
 {
   const int work_index = ccl_global_id(0);
-  const int y = work_index / sw;
-  const int x = work_index - y * sw;
+  const int y = work_index / width;
+  const int x = work_index - y * width;
 
-  if (x >= sw || y >= sh) {
+  if (x >= width || y >= height) {
     return;
   }
 
-  const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
-  float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
+  const uint64_t render_pixel_index = offset + (x + full_x) + (y + full_y) * stride;
+  float *buffer = render_buffer + render_pixel_index * pass_stride;
 
-  float pixel_scale;
-  if (pass_sample_count == PASS_UNUSED) {
-    pixel_scale = 1.0f / num_samples;
-  }
-  else {
-    pixel_scale = 1.0f / __float_as_uint(buffer[pass_sample_count]);
-  }
-
-  /* Color pass is stored in the denoised pass ofr the render buffer, for the in-place denoising.
-   * It is already scaled by the number of samples vioa path accessor, so only need to clamp values
-   * to the absolute values hwich OptiX expects. */
   float *color_out = buffer + pass_denoised;
   color_out[0] = clamp(color_out[0], 0.0f, 10000.0f);
   color_out[1] = clamp(color_out[1], 0.0f, 10000.0f);
   color_out[2] = clamp(color_out[2], 0.0f, 10000.0f);
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_filter_guiding_preprocess(float *guiding_buffer,
+                                          int guiding_pass_stride,
+                                          int guiding_pass_albedo,
+                                          int guiding_pass_normal,
+                                          const float *render_buffer,
+                                          int render_offset,
+                                          int render_stride,
+                                          int render_pass_stride,
+                                          int render_pass_sample_count,
+                                          int render_pass_denoising_albedo,
+                                          int render_pass_denoising_normal,
+                                          int full_x,
+                                          int full_y,
+                                          int width,
+                                          int height,
+                                          int num_samples)
+{
+  const int work_index = ccl_global_id(0);
+  const int y = work_index / width;
+  const int x = work_index - y * width;
+
+  if (x >= width || y >= height) {
+    return;
+  }
+
+  const uint64_t guiding_pixel_index = x + y * width;
+  float *guiding_pixel = guiding_buffer + guiding_pixel_index * guiding_pass_stride;
+
+  const uint64_t render_pixel_index = render_offset + (x + full_x) + (y + full_y) * render_stride;
+  const float *buffer = render_buffer + render_pixel_index * render_pass_stride;
+
+  float pixel_scale;
+  if (render_pass_sample_count == PASS_UNUSED) {
+    pixel_scale = 1.0f / num_samples;
+  }
+  else {
+    pixel_scale = 1.0f / __float_as_uint(buffer[render_pass_sample_count]);
+  }
 
   /* Albedo pass. */
-  if (num_inputs > 1) {
-    float *out = rgb + (x + y * sw) * 3;
-    if (pass_denoising_albedo != PASS_UNUSED) {
-      const float *in = buffer + pass_denoising_albedo;
-      out[0] = in[0] * pixel_scale;
-      out[1] = in[1] * pixel_scale;
-      out[2] = in[2] * pixel_scale;
-    }
-    else {
-      /* Use fake albedoe when OptiX denoiser is configured for it, but is to be ignored by the
-       * current pass denoising. */
-      out[0] = 0.5f;
-      out[1] = 0.5f;
-      out[2] = 0.5f;
-    }
+  if (guiding_pass_albedo != PASS_UNUSED) {
+    kernel_assert(render_pass_denoising_albedo != PASS_UNUSED);
+
+    const float *aledo_in = buffer + render_pass_denoising_albedo;
+    float *albedo_out = guiding_pixel + guiding_pass_albedo;
+
+    albedo_out[0] = aledo_in[0] * pixel_scale;
+    albedo_out[1] = aledo_in[1] * pixel_scale;
+    albedo_out[2] = aledo_in[2] * pixel_scale;
   }
 
   /* Normal pass. */
-  if (num_inputs > 2) {
-    const float *in = buffer + pass_denoising_normal;
-    float *out = rgb + (x + y * sw) * 3 + (sw * sh) * 3;
-    out[0] = in[0] * pixel_scale;
-    out[1] = in[1] * pixel_scale;
-    out[2] = in[2] * pixel_scale;
+  if (render_pass_denoising_normal != PASS_UNUSED) {
+    kernel_assert(render_pass_denoising_normal != PASS_UNUSED);
+
+    const float *normal_in = buffer + render_pass_denoising_normal;
+    float *normal_out = guiding_pixel + guiding_pass_normal;
+
+    normal_out[3] = normal_in[0] * pixel_scale;
+    normal_out[4] = normal_in[1] * pixel_scale;
+    normal_out[5] = normal_in[2] * pixel_scale;
   }
 }
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_filter_convert_from_rgb(float *render_buffer,
-                                        int sx,
-                                        int sy,
-                                        int sw,
-                                        int sh,
-                                        int offset,
-                                        int stride,
-                                        int pass_stride,
-                                        int num_samples,
-                                        int pass_noisy,
-                                        int pass_denoised,
-                                        int pass_sample_count,
-                                        bool use_compositing)
+    kernel_cuda_filter_guiding_set_fake_albedo(float *guiding_buffer,
+                                               int guiding_pass_stride,
+                                               int guiding_pass_albedo,
+                                               int width,
+                                               int height)
 {
-  const int work_index = ccl_global_id(0);
-  const int y = work_index / sw;
-  const int x = work_index - y * sw;
+  kernel_assert(guiding_pass_albedo != PASS_UNUSED);
 
-  if (x >= sw || y >= sh) {
+  const int work_index = ccl_global_id(0);
+  const int y = work_index / width;
+  const int x = work_index - y * width;
+
+  if (x >= width || y >= height) {
     return;
   }
 
-  const int render_pixel_index = offset + (x + sx) + (y + sy) * stride;
-  float *buffer = render_buffer + (uint64_t)render_pixel_index * pass_stride;
+  const uint64_t guiding_pixel_index = x + y * width;
+  float *guiding_pixel = guiding_buffer + guiding_pixel_index * guiding_pass_stride;
+
+  float *albedo_out = guiding_pixel + guiding_pass_albedo;
+
+  albedo_out[0] = 0.5f;
+  albedo_out[1] = 0.5f;
+  albedo_out[2] = 0.5f;
+}
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_filter_color_postprocess(float *render_buffer,
+                                         int full_x,
+                                         int full_y,
+                                         int width,
+                                         int height,
+                                         int offset,
+                                         int stride,
+                                         int pass_stride,
+                                         int num_samples,
+                                         int pass_noisy,
+                                         int pass_denoised,
+                                         int pass_sample_count,
+                                         bool use_compositing)
+{
+  const int work_index = ccl_global_id(0);
+  const int y = work_index / width;
+  const int x = work_index - y * width;
+
+  if (x >= width || y >= height) {
+    return;
+  }
+
+  const uint64_t render_pixel_index = offset + (x + full_x) + (y + full_y) * stride;
+  float *buffer = render_buffer + render_pixel_index * pass_stride;
 
   float pixel_scale;
   if (pass_sample_count == PASS_UNUSED) {

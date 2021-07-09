@@ -531,25 +531,39 @@ class OptiXDevice::DenoiseContext {
       : denoise_params(task.params),
         render_buffers(task.render_buffers),
         buffer_params(task.buffer_params),
-        input_buffer(device, "denoiser input buffer"),
+        guiding_buffer(device, "denoiser guiding passes buffer"),
         num_samples(task.num_samples)
   {
     num_input_passes = 1;
     if (denoise_params.use_pass_albedo) {
       num_input_passes += 1;
       use_pass_albedo = true;
+      pass_denoising_albedo = buffer_params.get_pass_offset(PASS_DENOISING_ALBEDO);
       if (denoise_params.use_pass_normal) {
         num_input_passes += 1;
         use_pass_normal = true;
+        pass_denoising_normal = buffer_params.get_pass_offset(PASS_DENOISING_NORMAL);
       }
     }
 
-    /* Don't allocate color pass: denoised pass storage from the render buffers is used for both
-     * noisy pass input at a proper scale and result of the denoiser. */
-    const int input_buffer_stride = (num_input_passes - 1) * 3;
-    if (input_buffer_stride) {
-      input_buffer.alloc_to_device(buffer_params.width * buffer_params.height *
-                                   input_buffer_stride);
+    const int num_guiding_passes = num_input_passes - 1;
+
+    if (num_guiding_passes) {
+      guiding_params.pass_stride = 0;
+      if (use_pass_albedo) {
+        guiding_params.pass_albedo = guiding_params.pass_stride;
+        guiding_params.pass_stride += 3;
+      }
+      if (use_pass_normal) {
+        guiding_params.pass_normal = guiding_params.pass_stride;
+        guiding_params.pass_stride += 3;
+      }
+
+      guiding_params.stride = buffer_params.width;
+
+      guiding_buffer.alloc_to_device(buffer_params.width * buffer_params.height *
+                                     guiding_params.pass_stride);
+      guiding_params.device_pointer = guiding_buffer.device_pointer;
     }
 
     pass_sample_count = buffer_params.get_pass_offset(PASS_SAMPLE_COUNT);
@@ -560,9 +574,19 @@ class OptiXDevice::DenoiseContext {
   RenderBuffers *render_buffers = nullptr;
   const BufferParams &buffer_params;
 
-  /* Device-side storage of the input passes.
-   * Start with the input color pass, followed with optional albedo and normal passes. */
-  device_only_memory<float> input_buffer;
+  /* Device-side storage of the guiding passes. */
+  device_only_memory<float> guiding_buffer;
+
+  struct {
+    device_ptr device_pointer = 0;
+
+    /* NOTE: Are only initialized when the corresponding guiding pass is enabled. */
+    int pass_albedo = PASS_UNUSED;
+    int pass_normal = PASS_UNUSED;
+
+    int stride = -1;
+    int pass_stride = -1;
+  } guiding_params;
 
   /* Number of input passes. Including the color and extra auxillary passes. */
   int num_input_passes = 0;
@@ -570,15 +594,38 @@ class OptiXDevice::DenoiseContext {
   bool use_pass_normal = false;
 
   int num_samples = 0;
+
   int pass_sample_count = PASS_UNUSED;
+
+  /* NOTE: Are only initialized when the corresponding guiding pass is enabled. */
+  int pass_denoising_albedo = PASS_UNUSED;
+  int pass_denoising_normal = PASS_UNUSED;
+
+  /* For passes which don't need albedo channel for denoising we replace the actual albedo with
+   * the (0.5, 0.5, 0.5). This flag indicates that the real albedo pass has been replaced with
+   * the fake values and denoising of passes which do need albedo can no longer happen. */
+  bool albedo_replaced_with_fake = false;
 };
 
 class OptiXDevice::DenoisePass {
  public:
+  DenoisePass(const PassType type, const BufferParams &buffer_params) : type(type)
+  {
+    noisy_offset = buffer_params.get_pass_offset(type, PassMode::NOISY);
+    denoised_offset = buffer_params.get_pass_offset(type, PassMode::DENOISED);
+
+    const PassInfo pass_info = Pass::get_info(type);
+    use_compositing = pass_info.use_compositing;
+    use_denoising_albedo = pass_info.use_denoising_albedo;
+  }
+
   PassType type;
 
   int noisy_offset;
   int denoised_offset;
+
+  bool use_compositing;
+  bool use_denoising_albedo;
 };
 
 void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
@@ -591,9 +638,17 @@ void OptiXDevice::denoise_buffer(const DeviceDenoiseTask &task)
     return;
   }
 
+  if (!denoise_filter_guiding_preprocess(context)) {
+    LOG(ERROR) << "Error preprocessing guiding passes.";
+    return;
+  }
+
+  /* Passes which will use real albedo when it is available. */
   denoise_pass(context, PASS_COMBINED);
-  denoise_pass(context, PASS_SHADOW_CATCHER);
   denoise_pass(context, PASS_SHADOW_CATCHER_MATTE);
+
+  /* Passes which do not need albedo and hence if real is present it needs to become fake. */
+  denoise_pass(context, PASS_SHADOW_CATCHER);
 }
 
 DeviceQueue *OptiXDevice::get_denoise_queue()
@@ -601,14 +656,52 @@ DeviceQueue *OptiXDevice::get_denoise_queue()
   return &denoiser_.queue;
 }
 
+bool OptiXDevice::denoise_filter_guiding_preprocess(DenoiseContext &context)
+{
+  const BufferParams &buffer_params = context.buffer_params;
+
+  const int work_size = buffer_params.width * buffer_params.height;
+
+  void *args[] = {const_cast<device_ptr *>(&context.guiding_params.device_pointer),
+                  const_cast<int *>(&context.guiding_params.pass_stride),
+                  const_cast<int *>(&context.guiding_params.pass_albedo),
+                  const_cast<int *>(&context.guiding_params.pass_normal),
+                  &context.render_buffers->buffer.device_pointer,
+                  const_cast<int *>(&buffer_params.offset),
+                  const_cast<int *>(&buffer_params.stride),
+                  const_cast<int *>(&buffer_params.pass_stride),
+                  const_cast<int *>(&context.pass_sample_count),
+                  const_cast<int *>(&context.pass_denoising_albedo),
+                  const_cast<int *>(&context.pass_denoising_normal),
+                  const_cast<int *>(&buffer_params.full_x),
+                  const_cast<int *>(&buffer_params.full_y),
+                  const_cast<int *>(&buffer_params.width),
+                  const_cast<int *>(&buffer_params.height),
+                  const_cast<int *>(&context.num_samples)};
+
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_GUIDING_PREPROCESS, work_size, args);
+}
+
+bool OptiXDevice::denoise_filter_guiding_set_fake_albedo(DenoiseContext &context)
+{
+  const BufferParams &buffer_params = context.buffer_params;
+
+  const int work_size = buffer_params.width * buffer_params.height;
+
+  void *args[] = {const_cast<device_ptr *>(&context.guiding_params.device_pointer),
+                  const_cast<int *>(&context.guiding_params.pass_stride),
+                  const_cast<int *>(&context.guiding_params.pass_albedo),
+                  const_cast<int *>(&buffer_params.width),
+                  const_cast<int *>(&buffer_params.height)};
+
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_GUIDING_SET_FAKE_ALBEDO, work_size, args);
+}
+
 void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
 {
   const BufferParams &buffer_params = context.buffer_params;
 
-  DenoisePass pass;
-  pass.type = pass_type;
-  pass.noisy_offset = buffer_params.get_pass_offset(pass_type, PassMode::NOISY);
-  pass.denoised_offset = buffer_params.get_pass_offset(pass_type, PassMode::DENOISED);
+  const DenoisePass pass(pass_type, buffer_params);
 
   if (pass.noisy_offset == PASS_UNUSED) {
     return;
@@ -618,14 +711,23 @@ void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
     return;
   }
 
-  /* Read pixels from the noisy input pass, store them in the temporary buffer for further
-   * clamping. */
-  denoise_read_input_pixels(context, pass);
+  if (pass.use_denoising_albedo) {
+    if (context.albedo_replaced_with_fake) {
+      LOG(ERROR) << "Pass which requires albedo is denoised after fake albedo has been set.";
+      return;
+    }
+  }
+  else if (!context.albedo_replaced_with_fake) {
+    context.albedo_replaced_with_fake = true;
+    if (!denoise_filter_guiding_set_fake_albedo(context)) {
+      LOG(ERROR) << "Error replacing real albedo with the fake one.";
+      return;
+    }
+  }
 
-  /* Make sure input data is in [0 .. 10000] range by scaling the input buffer by the number of
-   * samples in the buffer. Additionally, fill in the auxillary passes needed by the denoiser which
-   * were not provided by the pass accessor. */
-  if (!denoise_filter_convert_to_rgb(context, pass)) {
+  /* Read and preprocess noisy color input pass. */
+  denoise_color_read(context, pass);
+  if (!denoise_filter_color_preprocess(context, pass)) {
     LOG(ERROR) << "Error connverting denoising passes to RGB buffer.";
     return;
   }
@@ -638,7 +740,7 @@ void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
   /* Store result in the combined pass of the render buffer.
    *
    * This will scale the denoiser result up to match the number of, possibly per-pixel, samples. */
-  if (!denoise_filter_convert_from_rgb(context, pass)) {
+  if (!denoise_filter_color_postprocess(context, pass)) {
     LOG(ERROR) << "Error copying denoiser result to the denoised pass.";
     return;
   }
@@ -646,7 +748,7 @@ void OptiXDevice::denoise_pass(DenoiseContext &context, PassType pass_type)
   denoiser_.queue.synchronize();
 }
 
-void OptiXDevice::denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass)
+void OptiXDevice::denoise_color_read(DenoiseContext &context, const DenoisePass &pass)
 {
   PassAccessor::PassAccessInfo pass_access_info;
   pass_access_info.type = pass.type;
@@ -673,21 +775,13 @@ void OptiXDevice::denoise_read_input_pixels(DenoiseContext &context, const Denoi
   pass_accessor.get_render_tile_pixels(context.render_buffers, context.buffer_params, destination);
 }
 
-bool OptiXDevice::denoise_filter_convert_to_rgb(DenoiseContext &context, const DenoisePass &pass)
+bool OptiXDevice::denoise_filter_color_preprocess(DenoiseContext &context, const DenoisePass &pass)
 {
   const BufferParams &buffer_params = context.buffer_params;
 
-  const PassInfo pass_info = Pass::get_info(pass.type);
-
   const int work_size = buffer_params.width * buffer_params.height;
 
-  const int pass_denoising_albedo = pass_info.use_denoising_albedo ?
-                                        buffer_params.get_pass_offset(PASS_DENOISING_ALBEDO) :
-                                        PASS_UNUSED;
-  const int pass_denoising_normal = buffer_params.get_pass_offset(PASS_DENOISING_NORMAL);
-
-  void *args[] = {const_cast<device_ptr *>(&context.input_buffer.device_pointer),
-                  &context.render_buffers->buffer.device_pointer,
+  void *args[] = {&context.render_buffers->buffer.device_pointer,
                   const_cast<int *>(&buffer_params.full_x),
                   const_cast<int *>(&buffer_params.full_y),
                   const_cast<int *>(&buffer_params.width),
@@ -695,20 +789,15 @@ bool OptiXDevice::denoise_filter_convert_to_rgb(DenoiseContext &context, const D
                   const_cast<int *>(&buffer_params.offset),
                   const_cast<int *>(&buffer_params.stride),
                   const_cast<int *>(&buffer_params.pass_stride),
-                  const_cast<int *>(&context.num_input_passes),
-                  const_cast<int *>(&context.num_samples),
-                  const_cast<int *>(&pass.denoised_offset),
-                  const_cast<int *>(&pass_denoising_albedo),
-                  const_cast<int *>(&pass_denoising_normal),
-                  const_cast<int *>(&context.pass_sample_count)};
+                  const_cast<int *>(&pass.denoised_offset)};
 
-  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_TO_RGB, work_size, args);
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_COLOR_PREPROCESS, work_size, args);
 }
 
-bool OptiXDevice::denoise_filter_convert_from_rgb(DenoiseContext &context, const DenoisePass &pass)
+bool OptiXDevice::denoise_filter_color_postprocess(DenoiseContext &context,
+                                                   const DenoisePass &pass)
 {
   const BufferParams &buffer_params = context.buffer_params;
-  const PassInfo pass_info = Pass::get_info(pass.type);
 
   const int work_size = buffer_params.width * buffer_params.height;
 
@@ -724,9 +813,9 @@ bool OptiXDevice::denoise_filter_convert_from_rgb(DenoiseContext &context, const
                   const_cast<int *>(&pass.noisy_offset),
                   const_cast<int *>(&pass.denoised_offset),
                   const_cast<int *>(&context.pass_sample_count),
-                  const_cast<bool *>(&pass_info.use_compositing)};
+                  const_cast<bool *>(&pass.use_compositing)};
 
-  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_CONVERT_FROM_RGB, work_size, args);
+  return denoiser_.queue.enqueue(DEVICE_KERNEL_FILTER_COLOR_POSTPROCESS, work_size, args);
 }
 
 bool OptiXDevice::denoise_ensure(DenoiseContext &context)
@@ -844,54 +933,70 @@ bool OptiXDevice::denoise_configure_if_needed(DenoiseContext &context)
 bool OptiXDevice::denoise_run(DenoiseContext &context, const DenoisePass &pass)
 {
   const BufferParams &buffer_params = context.buffer_params;
+  const int width = buffer_params.width;
+  const int height = buffer_params.height;
 
   /* Set up input and output layer information. */
-  OptixImage2D input_layers[3] = {};
-  OptixImage2D output_layers[1] = {};
+  OptixImage2D color_layer = {0};
+  OptixImage2D albedo_layer = {0};
+  OptixImage2D normal_layer = {0};
+
+  OptixImage2D output_layer = {0};
 
   /* Color pass. */
   {
     const int pass_denoised = pass.denoised_offset;
     const int64_t pass_stride_in_bytes = context.buffer_params.pass_stride * sizeof(float);
 
-    input_layers[0].data = context.render_buffers->buffer.device_pointer +
-                           pass_denoised * sizeof(float);
-    input_layers[0].width = buffer_params.width;
-    input_layers[0].height = buffer_params.height;
-    input_layers[0].rowStrideInBytes = pass_stride_in_bytes * context.buffer_params.stride;
-    input_layers[0].pixelStrideInBytes = pass_stride_in_bytes;
-    input_layers[0].format = OPTIX_PIXEL_FORMAT_FLOAT3;
+    color_layer.data = context.render_buffers->buffer.device_pointer +
+                       pass_denoised * sizeof(float);
+    color_layer.width = width;
+    color_layer.height = height;
+    color_layer.rowStrideInBytes = pass_stride_in_bytes * context.buffer_params.stride;
+    color_layer.pixelStrideInBytes = pass_stride_in_bytes;
+    color_layer.format = OPTIX_PIXEL_FORMAT_FLOAT3;
   }
 
+  device_vector<float> fake_albedo(this, "fake_albedo", MEM_READ_WRITE);
+
   /* Optional albedo and color passes. */
-  {
-    const device_ptr d_input_buffer = context.input_buffer.device_pointer;
-    const int64_t pixel_stride_in_bytes = 3 * sizeof(float);
-    const int64_t row_stride_in_bytes = context.buffer_params.width * pixel_stride_in_bytes;
-    const int64_t pass_size_in_bytes = row_stride_in_bytes * buffer_params.height;
-    for (int i = 1; i < context.num_input_passes; ++i) {
-      input_layers[i].data = d_input_buffer + (pass_size_in_bytes * (i - 1));
-      input_layers[i].width = buffer_params.width;
-      input_layers[i].height = buffer_params.height;
-      input_layers[i].rowStrideInBytes = row_stride_in_bytes;
-      input_layers[i].pixelStrideInBytes = pixel_stride_in_bytes;
-      input_layers[i].format = OPTIX_PIXEL_FORMAT_FLOAT3;
+  if (context.num_input_passes > 1) {
+    const device_ptr d_guiding_buffer = context.guiding_params.device_pointer;
+    const int64_t pixel_stride_in_bytes = context.guiding_params.pass_stride * sizeof(float);
+    const int64_t row_stride_in_bytes = context.guiding_params.stride * pixel_stride_in_bytes;
+
+    if (context.use_pass_albedo) {
+      albedo_layer.data = d_guiding_buffer + context.guiding_params.pass_albedo * sizeof(float);
+      albedo_layer.width = width;
+      albedo_layer.height = height;
+      albedo_layer.rowStrideInBytes = row_stride_in_bytes;
+      albedo_layer.pixelStrideInBytes = pixel_stride_in_bytes;
+      albedo_layer.format = OPTIX_PIXEL_FORMAT_FLOAT3;
+    }
+
+    if (context.use_pass_normal) {
+      normal_layer.data = d_guiding_buffer + context.guiding_params.pass_normal * sizeof(float);
+      normal_layer.width = width;
+      normal_layer.height = height;
+      normal_layer.rowStrideInBytes = row_stride_in_bytes;
+      normal_layer.pixelStrideInBytes = pixel_stride_in_bytes;
+      normal_layer.format = OPTIX_PIXEL_FORMAT_FLOAT3;
     }
   }
 
   /* Denoise in-place of the noisy input in the render buffers. */
-  output_layers[0] = input_layers[0];
+  output_layer = color_layer;
 
   /* Finally run denonising. */
   OptixDenoiserParams params = {}; /* All parameters are disabled/zero. */
 #  if OPTIX_ABI_VERSION >= 47
   OptixDenoiserLayer image_layers = {};
-  image_layers.input = input_layers[0];
-  image_layers.output = output_layers[0];
+  image_layers.input = color_layer;
+  image_layers.output = output_layer;
 
   OptixDenoiserGuideLayer guide_layers = {};
-  guide_layers.albedo = input_layers[1];
-  guide_layers.normal = input_layers[2];
+  guide_layers.albedo = albedo_layer;
+  guide_layers.normal = normal_layer;
 
   optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
                                    denoiser_.queue.stream(),
@@ -906,20 +1011,23 @@ bool OptiXDevice::denoise_run(DenoiseContext &context, const DenoisePass &pass)
                                    denoiser_.state.device_pointer + denoiser_.scratch_offset,
                                    denoiser_.scratch_size));
 #  else
-  const int input_passes = denoise_buffer_num_passes(context.denoise_params);
+  {
+    OptixImage2D input_layers[] = {color_layer, albedo_layer, normal_layer};
+    OptixImage2D output_layers[] = {output_layer};
 
-  optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
-                                   denoiser_.queue.stream(),
-                                   &params,
-                                   denoiser_.state.device_pointer,
-                                   denoiser_.scratch_offset,
-                                   input_layers,
-                                   input_passes,
-                                   0,
-                                   0,
-                                   output_layers,
-                                   denoiser_.state.device_pointer + denoiser_.scratch_offset,
-                                   denoiser_.scratch_size));
+    optix_assert(optixDenoiserInvoke(denoiser_.optix_denoiser,
+                                     denoiser_.queue.stream(),
+                                     &params,
+                                     denoiser_.state.device_pointer,
+                                     denoiser_.scratch_offset,
+                                     input_layers,
+                                     context.num_input_passes,
+                                     0,
+                                     0,
+                                     output_layers,
+                                     denoiser_.state.device_pointer + denoiser_.scratch_offset,
+                                     denoiser_.scratch_size));
+  }
 #  endif
 
   return true;

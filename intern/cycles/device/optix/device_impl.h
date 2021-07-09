@@ -149,15 +149,28 @@ class OptiXDevice : public CUDADevice {
   virtual void denoise_buffer(const DeviceDenoiseTask &task) override;
   virtual DeviceQueue *get_denoise_queue() override;
 
+  /* Read guiding passes from the render buffers, preprocess them in a way which is expected by
+   * OptiX and store in the guiding passes memory within the given context.
+   *
+   * Pre=-processing of the guiding passes is to only hapopen once per context lifetime. DO not
+   * preprocess them for every pass which is being denoised. */
+  bool denoise_filter_guiding_preprocess(DenoiseContext &context);
+
+  /* Set fake albedo pixels in the albedo guiding pass storage.
+   * After this point only passes which do not need albedo for denoising can be processed. */
+  bool denoise_filter_guiding_set_fake_albedo(DenoiseContext &context);
+
   void denoise_pass(DenoiseContext &context, PassType pass_type);
 
-  /* Read pixels from the input noisy image and store scaled result in the given memory. */
-  void denoise_read_input_pixels(DenoiseContext &context, const DenoisePass &pass);
+  /* Read input color pass from the render buffer into the memory which corresponds to the noisy
+   * input within the given context. Pixels are scaled to the number of samples, but are not
+   * preprocessed yet. */
+  void denoise_color_read(DenoiseContext &context, const DenoisePass &pass);
 
-  /* Run corresponding conversion kernels, preparing data for the denoiser or copying data from the
+  /* Run corresponding filter kernels, preparing data for the denoiser or copying data from the
    * denoiser result to the render buffer. */
-  bool denoise_filter_convert_to_rgb(DenoiseContext &context, const DenoisePass &pass);
-  bool denoise_filter_convert_from_rgb(DenoiseContext &context, const DenoisePass &pass);
+  bool denoise_filter_color_preprocess(DenoiseContext &context, const DenoisePass &pass);
+  bool denoise_filter_color_postprocess(DenoiseContext &context, const DenoisePass &pass);
 
   /* Make sure the OptiX denoiser is created and configured. */
   bool denoise_ensure(DenoiseContext &context);

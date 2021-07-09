@@ -86,17 +86,17 @@ void DeviceDenoiser::denoise_buffer(const BufferParams &buffer_params,
     queue->copy_to_device(local_render_buffers.buffer);
 
     task.render_buffers = &local_render_buffers;
+    task.allow_inplace_modification = true;
   }
 
   denoiser_device->denoise_buffer(task);
 
   if (local_buffer_used) {
-    /* TODO(sergey): Only copy denoised passes. This will also allow to reduce memory usage by
-     * allowing in-place modification of the temporary render buffer. */
     local_render_buffers.copy_from_device();
-    memcpy(render_buffers->buffer.data(),
-           local_render_buffers.buffer.data(),
-           sizeof(float) * local_render_buffers.buffer.size());
+
+    render_buffers_host_copy_denoised(
+        render_buffers, buffer_params, &local_render_buffers, local_render_buffers.params);
+
     render_buffers->copy_to_device();
   }
 }

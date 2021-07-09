@@ -98,6 +98,21 @@ class RenderBuffers {
   void copy_to_device();
 };
 
+/* Copy denoised passes form source to destination.
+ *
+ * Buffer parameters are provided explicitly, allowing to copy pixelks between render buffers which
+ * content corresponds to a render result at a non-unit resolution divider.
+ *
+ * `src_offset` allows to offset source pixel index which is used when a fraction of the source
+ * buffer is to be copied.
+ *
+ * Copy happens of the number of pixels in the destination. */
+void render_buffers_host_copy_denoised(RenderBuffers *dst,
+                                       const BufferParams &dst_params,
+                                       const RenderBuffers *src,
+                                       const BufferParams &src_params,
+                                       const size_t src_offset = 0);
+
 /* Render Tile
  * Rendering task on a buffer */
 

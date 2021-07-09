@@ -70,11 +70,11 @@ void BufferParams::update_passes(vector<Pass> &passes)
   for (const Pass &pass : passes) {
     const int index = pass_to_index(pass);
 
-    if (pass_offset_[index] == PASS_UNUSED) {
-      pass_offset_[index] = pass_stride;
-    }
-
     if (pass.is_written()) {
+      if (pass_offset_[index] == PASS_UNUSED) {
+        pass_offset_[index] = pass_stride;
+      }
+
       pass_stride += pass.get_info().num_components;
     }
   }
@@ -181,6 +181,73 @@ bool RenderBuffers::copy_from_device()
 void RenderBuffers::copy_to_device()
 {
   buffer.copy_to_device();
+}
+
+void render_buffers_host_copy_denoised(RenderBuffers *dst,
+                                       const BufferParams &dst_params,
+                                       const RenderBuffers *src,
+                                       const BufferParams &src_params,
+                                       const size_t src_offset)
+{
+  DCHECK_EQ(dst_params.width, src_params.width);
+  /* TODO(sergey): More sanity checks to avoid buffer overrun. */
+
+  /* Create a map of pass ofsets to be copied.
+   * Assume offsets are different to allow copying passes between buffers with different set of
+   * passes. */
+
+  struct {
+    int dst_offset;
+    int src_offset;
+  } pass_offsets[PASS_NUM];
+
+  int num_passes = 0;
+
+  for (int i = 0; i < PASS_NUM; ++i) {
+    const PassType pass_type = static_cast<PassType>(i);
+
+    const int dst_pass_offset = dst_params.get_pass_offset(pass_type, PassMode::DENOISED);
+    if (dst_pass_offset == PASS_UNUSED) {
+      continue;
+    }
+
+    const int src_pass_offset = src_params.get_pass_offset(pass_type, PassMode::DENOISED);
+    if (src_pass_offset == PASS_UNUSED) {
+      continue;
+    }
+
+    pass_offsets[num_passes].dst_offset = dst_pass_offset;
+    pass_offsets[num_passes].src_offset = src_pass_offset;
+    ++num_passes;
+  }
+
+  /* Copy passes. */
+  /* TODO(sergey): Make it more reusable, allowing implement copy of noisy passes. */
+
+  const int64_t dst_width = dst_params.width;
+  const int64_t dst_height = dst_params.height;
+  const int64_t dst_pass_stride = dst_params.pass_stride;
+  const int64_t dst_num_pixels = dst_width * dst_height;
+
+  const int64_t src_pass_stride = src_params.pass_stride;
+  const int64_t src_offset_in_floats = src_offset * src_pass_stride;
+
+  const float *src_pixel = src->buffer.data() + src_offset_in_floats;
+  float *dst_pixel = dst->buffer.data();
+
+  for (int i = 0; i < dst_num_pixels;
+       ++i, src_pixel += src_pass_stride, dst_pixel += dst_pass_stride) {
+    for (int pass_offset_idx = 0; pass_offset_idx < num_passes; ++pass_offset_idx) {
+      const int dst_pass_offset = pass_offsets[pass_offset_idx].dst_offset;
+      const int src_pass_offset = pass_offsets[pass_offset_idx].src_offset;
+
+      /* TODO(sergey): Support non-RGBA passes. */
+      dst_pixel[dst_pass_offset + 0] = src_pixel[src_pass_offset + 0];
+      dst_pixel[dst_pass_offset + 1] = src_pixel[src_pass_offset + 1];
+      dst_pixel[dst_pass_offset + 2] = src_pixel[src_pass_offset + 2];
+      dst_pixel[dst_pass_offset + 3] = src_pixel[src_pass_offset + 3];
+    }
+  }
 }
 
 CCL_NAMESPACE_END

@@ -81,6 +81,8 @@ ccl_device_forceinline bool integrator_intersect_terminate(INTEGRATOR_STATE_ARGS
   return false;
 }
 
+/* Note that current_kernel is a template value since making this a variable
+ * leads to poor performance with CUDA atomics. */
 template<uint32_t current_kernel>
 ccl_device_forceinline void integrator_intersect_shader_next_kernel(
     INTEGRATOR_STATE_ARGS,

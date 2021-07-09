@@ -345,11 +345,4 @@ extern "C" __global__ void __intersection__curve_ribbon()
     optix_intersection_curve(prim, type);
   }
 }
-
-extern "C" __global__ void __intersection__curve_all()
-{
-  const uint prim = optixGetPrimitiveIndex();
-  const uint type = kernel_tex_fetch(__prim_type, prim);
-  optix_intersection_curve(prim, type);
-}
 #endif

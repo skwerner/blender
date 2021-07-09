@@ -18,11 +18,11 @@
 
 #pragma once
 
-#include "COM_NodeOperation.h"
+#include "COM_ConstantOperation.h"
 
 namespace blender::compositor {
 
-class BufferOperation : public NodeOperation {
+class BufferOperation : public ConstantOperation {
  private:
   MemoryBuffer *buffer_;
   MemoryBuffer *inflated_buffer_;
@@ -30,6 +30,7 @@ class BufferOperation : public NodeOperation {
  public:
   BufferOperation(MemoryBuffer *buffer, DataType data_type);
 
+  const float *get_constant_elem() override;
   void *initializeTileData(rcti *rect) override;
   void deinitExecution() override;
   void executePixelSampled(float output[4], float x, float y, PixelSampler sampler) override;

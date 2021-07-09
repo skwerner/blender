@@ -2088,7 +2088,7 @@ static void widget_draw_text(const uiFontStyle *fstyle,
     but_pos_ofs = but->pos;
 
 #ifdef WITH_INPUT_IME
-    /* if is ime compositing, move the cursor */
+    /* If is IME compositing, move the cursor. */
     if (ime_data && ime_data->composite_len && ime_data->cursor_pos != -1) {
       but_pos_ofs += ime_data->cursor_pos;
     }
@@ -2140,12 +2140,12 @@ static void widget_draw_text(const uiFontStyle *fstyle,
     }
 
 #ifdef WITH_INPUT_IME
-    /* ime cursor following */
+    /* IME cursor following. */
     if (ime_reposition_window) {
       ui_but_ime_reposition(but, ime_win_x, ime_win_y, false);
     }
     if (ime_data && ime_data->composite_len) {
-      /* composite underline */
+      /* Composite underline. */
       widget_draw_text_ime_underline(fstyle, wcol, but, rect, ime_data, drawstr);
     }
 #endif
@@ -3720,10 +3720,6 @@ static void widget_progressbar(
   /* "slider" bar color */
   copy_v3_v3_uchar(wcol->inner, wcol->item);
   widgetbase_draw(&wtb_bar, wcol);
-
-  /* raise text a bit */
-  rect->xmin += (BLI_rcti_size_x(&rect_prog) / 2);
-  rect->xmax += (BLI_rcti_size_x(&rect_prog) / 2);
 }
 
 static void widget_datasetrow(

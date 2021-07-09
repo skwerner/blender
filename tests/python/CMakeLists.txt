@@ -636,6 +636,7 @@ if(WITH_CYCLES OR WITH_OPENGL_RENDER_TESTS)
   else()
     set(render_tests
       bsdf
+      cycles_x
       denoise
       denoise_animation
       displacement

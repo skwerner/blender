@@ -21,6 +21,7 @@
 
 #include "device/device.h"
 #include "device/device_denoise.h"
+#include "util/util_function.h"
 #include "util/util_unique_ptr.h"
 
 CCL_NAMESPACE_BEGIN
@@ -94,6 +95,16 @@ class Denoiser {
    *   that there is no threadingconflict between denoising task lazily initializing the device and
    *   access to this device happen. */
   Device *get_denoiser_device() const;
+
+  function<bool(void)> is_cancelled_cb;
+
+  bool is_cancelled() const
+  {
+    if (!is_cancelled_cb) {
+      return false;
+    }
+    return is_cancelled_cb();
+  }
 
  protected:
   Denoiser(Device *path_trace_device, const DenoiseParams &params);

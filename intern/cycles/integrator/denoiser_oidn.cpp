@@ -65,6 +65,14 @@ OIDNDenoiser::~OIDNDenoiser()
    * per the OIDN denoiser header. */
 }
 
+#ifdef WITH_OPENIMAGEDENOISE
+static bool oidn_progress_monitor_function(void *user_ptr, double /*n*/)
+{
+  OIDNDenoiser *oidn_denoiser = reinterpret_cast<OIDNDenoiser *>(user_ptr);
+  return !oidn_denoiser->is_cancelled();
+}
+#endif
+
 bool OIDNDenoiser::load_kernels(Progress *progress)
 {
   if (!Denoiser::load_kernels(progress)) {
@@ -92,6 +100,8 @@ bool OIDNDenoiser::load_kernels(Progress *progress)
     state_->oidn_filter = state_->oidn_device.newFilter("RT");
     state_->oidn_filter.set("hdr", true);
     state_->oidn_filter.set("srgb", false);
+
+    state_->oidn_filter.setProgressMonitorFunction(oidn_progress_monitor_function, this);
   }
 
   state_->use_pass_albedo = params_.use_pass_albedo;
@@ -555,9 +565,15 @@ void OIDNDenoiser::denoise_buffer(const BufferParams &buffer_params,
   if (context.need_denoising()) {
     context.read_guiding_passes();
 
-    context.denoise_pass(PASS_COMBINED);
-    context.denoise_pass(PASS_SHADOW_CATCHER);
-    context.denoise_pass(PASS_SHADOW_CATCHER_MATTE);
+    const std::array<PassType, 3> passes = {
+        {PASS_COMBINED, PASS_SHADOW_CATCHER, PASS_SHADOW_CATCHER_MATTE}};
+
+    for (const PassType pass_type : passes) {
+      context.denoise_pass(pass_type);
+      if (is_cancelled()) {
+        return;
+      }
+    }
   }
 #endif
 

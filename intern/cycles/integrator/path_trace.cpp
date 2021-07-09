@@ -393,6 +393,7 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
   }
 
   denoiser_ = Denoiser::create(device_, params);
+  denoiser_->is_cancelled_cb = [this]() { return is_cancel_requested(); };
 }
 
 void PathTrace::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)

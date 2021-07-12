@@ -135,6 +135,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   denoise_time_.reset();
   adaptive_filter_time_.reset();
   display_update_time_.reset();
+  rebalance_time_.reset();
 }
 
 bool RenderScheduler::render_work_reschedule_on_converge(RenderWork &render_work)
@@ -361,6 +362,19 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
   state_.last_display_update_time = time_dt();
 }
 
+void RenderScheduler::report_rebalance_time(const RenderWork &render_work, double time)
+{
+  rebalance_time_.add_wall(time);
+
+  if (work_report_reset_average(render_work)) {
+    rebalance_time_.reset_average();
+  }
+
+  rebalance_time_.add_average(time);
+
+  VLOG(4) << "Average rebalance time: " << rebalance_time_.get_average() << " seconds.";
+}
+
 string RenderScheduler::full_report() const
 {
   const double render_wall_time = state_.end_render_time - state_.start_render_time;
@@ -434,9 +448,21 @@ string RenderScheduler::full_report() const
                           display_update_time_.get_wall(),
                           display_update_time_.get_average());
 
+  const int num_rebalance_observations = rebalance_time_.get_num_observations();
+  if (num_rebalance_observations) {
+    result += string_printf("  %20s %20f %20f\n",
+                            "Rebalance",
+                            rebalance_time_.get_wall(),
+                            rebalance_time_.get_average());
+  }
+
   const double total_time = path_trace_time_.get_wall() + adaptive_filter_time_.get_wall() +
                             denoise_time_.get_wall() + display_update_time_.get_wall();
   result += "\n  Total: " + to_string(total_time) + "\n";
+
+  if (num_rebalance_observations) {
+    result += "\nNumber of performed rebalances: " + to_string(num_rebalance_observations) + "\n";
+  }
 
   result += string_printf(
       "\nRendered %d samples in %f seconds\n", num_rendered_samples, render_wall_time);

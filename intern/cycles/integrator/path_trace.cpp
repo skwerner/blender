@@ -529,18 +529,18 @@ void PathTrace::rebalance(const RenderWork &render_work)
 {
   static const int kLogLevel = 3;
 
-  scoped_timer timer;
-
-  const int num_works = path_trace_works_.size();
-
   if (!render_work.rebalance) {
     return;
   }
+
+  const int num_works = path_trace_works_.size();
 
   if (num_works == 1) {
     VLOG(kLogLevel) << "Ignoring rebalance work due to single device render.";
     return;
   }
+
+  const double start_time = time_dt();
 
   if (VLOG_IS_ON(kLogLevel)) {
     VLOG(kLogLevel) << "Perform rebalance work.";
@@ -576,7 +576,7 @@ void PathTrace::rebalance(const RenderWork &render_work)
 
   copy_from_render_buffers(big_tile_cpu_buffers.buffers.get());
 
-  VLOG(kLogLevel) << "Rebalance time (seconds): " << timer.get_time();
+  render_scheduler_.report_rebalance_time(render_work, time_dt() - start_time);
 }
 
 void PathTrace::cancel()

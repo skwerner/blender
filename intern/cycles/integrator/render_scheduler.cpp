@@ -287,6 +287,10 @@ void RenderScheduler::report_path_trace_time(const RenderWork &render_work,
                                                render_work.path_trace.num_samples;
   }
 
+  if (work_report_reset_average(render_work)) {
+    path_trace_time_.reset_average();
+  }
+
   path_trace_time_.add_average(final_time_approx, render_work.path_trace.num_samples);
 
   VLOG(4) << "Average path tracing time: " << path_trace_time_.get_average() << " seconds.";
@@ -304,6 +308,10 @@ void RenderScheduler::report_adaptive_filter_time(const RenderWork &render_work,
 
   const double final_time_approx = approximate_final_time(render_work, time);
 
+  if (work_report_reset_average(render_work)) {
+    adaptive_filter_time_.reset_average();
+  }
+
   adaptive_filter_time_.add_average(final_time_approx, render_work.path_trace.num_samples);
 
   VLOG(4) << "Average adaptive sampling filter  time: " << adaptive_filter_time_.get_average()
@@ -320,6 +328,10 @@ void RenderScheduler::report_denoise_time(const RenderWork &render_work, double 
     first_render_time_.denoise_time = final_time_approx;
   }
 
+  if (work_report_reset_average(render_work)) {
+    denoise_time_.reset_average();
+  }
+
   denoise_time_.add_average(final_time_approx);
 
   VLOG(4) << "Average denoising time: " << denoise_time_.get_average() << " seconds.";
@@ -333,6 +345,10 @@ void RenderScheduler::report_display_update_time(const RenderWork &render_work, 
 
   if (work_is_usable_for_first_render_estimation(render_work)) {
     first_render_time_.display_update_time = final_time_approx;
+  }
+
+  if (work_report_reset_average(render_work)) {
+    display_update_time_.reset_average();
   }
 
   display_update_time_.add_average(final_time_approx);
@@ -813,6 +829,16 @@ bool RenderScheduler::work_is_usable_for_first_render_estimation(const RenderWor
 {
   return render_work.resolution_divider == pixel_size_ &&
          render_work.path_trace.start_sample == start_sample_;
+}
+
+bool RenderScheduler::work_report_reset_average(const RenderWork &render_work)
+{
+  /* When rendering at a non-final resolution divider time average is not very useful because it
+   * will either bias average down (due to lower render times on the smaller images) or will give
+   * incorrect result when trying to estimate time which would have spent on the final resolution.
+   *
+   * So we only accumulate average for the latest resolution divider which was rendered. */
+  return render_work.resolution_divider != pixel_size_;
 }
 
 void RenderScheduler::set_start_render_time_if_needed()

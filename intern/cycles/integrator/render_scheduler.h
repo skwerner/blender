@@ -200,6 +200,9 @@ class RenderScheduler {
    * for the resolution divider calculation. */
   bool work_is_usable_for_first_render_estimation(const RenderWork &render_work);
 
+  /* Check whether timing report about the given work need to reset accumulated average time. */
+  bool work_report_reset_average(const RenderWork &render_work);
+
   void set_start_render_time_if_needed();
 
   /* CHeck whether render time limit has been reached (or exceeded), and if so store related
@@ -246,6 +249,12 @@ class RenderScheduler {
         return 0;
       }
       return average_time_accumulator_ / num_average_times_;
+    }
+
+    inline void reset_average()
+    {
+      average_time_accumulator_ = 0.0;
+      num_average_times_ = 0;
     }
 
    protected:

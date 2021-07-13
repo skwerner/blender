@@ -558,8 +558,8 @@ void PathTrace::rebalance(const RenderWork &render_work)
   if (VLOG_IS_ON(kLogLevel)) {
     VLOG(kLogLevel) << "Calculated per-device weights for works:";
     for (int i = 0; i < num_works; ++i) {
-      LOG(INFO) << path_trace_works_[i]->get_device()->info.description << ": "
-                << work_balance_infos_[i].weight;
+      VLOG(kLogLevel) << path_trace_works_[i]->get_device()->info.description << ": "
+                      << work_balance_infos_[i].weight;
     }
   }
 

@@ -45,7 +45,7 @@ ccl_device_inline float3 integrate_transparent_surface_shadow(INTEGRATOR_STATE_A
 
   /* Evaluate shader. */
   if (!(shadow_sd->flag & SD_HAS_ONLY_VOLUME)) {
-    shader_eval_surface<NODE_FEATURE_MASK_SURFACE_SHADOW>(
+    shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_SHADOW>(
         INTEGRATOR_STATE_PASS, shadow_sd, NULL, PATH_RAY_SHADOW);
   }
 

@@ -147,10 +147,9 @@ BVHLayoutMask OptiXDevice::get_bvh_layout_mask() const
   return BVH_LAYOUT_OPTIX;
 }
 
-string OptiXDevice::compile_kernel_get_common_cflags(
-    const DeviceRequestedFeatures &requested_features)
+string OptiXDevice::compile_kernel_get_common_cflags(const uint kernel_features)
 {
-  string common_cflags = CUDADevice::compile_kernel_get_common_cflags(requested_features);
+  string common_cflags = CUDADevice::compile_kernel_get_common_cflags(kernel_features);
 
   /* Add OptiX SDK include directory to include paths. */
   const char *optix_sdk_path = getenv("OPTIX_ROOT_DIR");
@@ -159,14 +158,14 @@ string OptiXDevice::compile_kernel_get_common_cflags(
   }
 
   /* Specialization for shader raytracing. */
-  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
+  if (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) {
     common_cflags += " --keep-device-functions";
   }
 
   return common_cflags;
 }
 
-bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features)
+bool OptiXDevice::load_kernels(const uint kernel_features)
 {
   if (have_error()) {
     /* Abort early if context creation failed already. */
@@ -174,12 +173,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   /* Load CUDA modules because we need some of the utility kernels. */
-  if (!CUDADevice::load_kernels(requested_features)) {
+  if (!CUDADevice::load_kernels(kernel_features)) {
     return false;
   }
 
   /* Skip creating OptiX module if only doing denoising. */
-  if (!(requested_features.use_path_tracing || requested_features.use_baking)) {
+  if (!(kernel_features & (KERNEL_FEATURE_PATH_TRACING | KERNEL_FEATURE_BAKING))) {
     return true;
   }
 
@@ -232,9 +231,9 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 
 #  if OPTIX_ABI_VERSION >= 36
   pipeline_options.usesPrimitiveTypeFlags = OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
-  if (requested_features.use_hair) {
+  if (kernel_features & KERNEL_FEATURE_HAIR) {
 #    if OPTIX_ABI_VERSION >= 47
-    if (requested_features.use_hair_thick) {
+    if (kernel_features & KERNEL_FEATURE_HAIR_THICK) {
       pipeline_options.usesPrimitiveTypeFlags |= OPTIX_PRIMITIVE_TYPE_FLAGS_ROUND_CUBIC_BSPLINE;
     }
     else
@@ -246,7 +245,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   /* Keep track of whether motion blur is enabled, so to enable/disable motion in BVH builds
    * This is necessary since objects may be reported to have motion if the Vector pass is
    * active, but may still need to be rendered without motion blur if that isn't active as well. */
-  motion_blur = requested_features.use_object_motion;
+  motion_blur = (kernel_features & KERNEL_FEATURE_OBJECT_MOTION) != 0;
 
   if (motion_blur) {
     pipeline_options.usesMotionBlur = true;
@@ -256,10 +255,9 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   { /* Load and compile PTX module with OptiX kernels. */
-    string ptx_data,
-        ptx_filename = path_get((requested_features.nodes_features & NODE_FEATURE_RAYTRACE) ?
-                                    "lib/kernel_optix_shader_raytrace.ptx" :
-                                    "lib/kernel_optix.ptx");
+    string ptx_data, ptx_filename = path_get((kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) ?
+                                                 "lib/kernel_optix_shader_raytrace.ptx" :
+                                                 "lib/kernel_optix.ptx");
     if (use_adaptive_compilation() || path_file_size(ptx_filename) == -1) {
       if (!getenv("OPTIX_ROOT_DIR")) {
         set_error(
@@ -267,12 +265,11 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
             "the Optix SDK to be able to compile Optix kernels on demand).");
         return false;
       }
-      ptx_filename = compile_kernel(requested_features,
-                                    (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) ?
-                                        "kernel_shader_raytrace" :
-                                        "kernel",
-                                    "optix",
-                                    true);
+      ptx_filename = compile_kernel(
+          kernel_features,
+          (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) ? "kernel_shader_raytrace" : "kernel",
+          "optix",
+          true);
     }
     if (ptx_filename.empty() || !path_read_text(ptx_filename, ptx_data)) {
       set_error(string_printf("Failed to load OptiX kernel from '%s'", ptx_filename.c_str()));
@@ -327,12 +324,12 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   group_descs[PG_HITS].hitgroup.moduleAH = optix_module;
   group_descs[PG_HITS].hitgroup.entryFunctionNameAH = "__anyhit__kernel_optix_shadow_all_hit";
 
-  if (requested_features.use_hair) {
+  if (kernel_features & KERNEL_FEATURE_HAIR) {
     group_descs[PG_HITD].hitgroup.moduleIS = optix_module;
     group_descs[PG_HITS].hitgroup.moduleIS = optix_module;
 
     /* Add curve intersection programs. */
-    if (requested_features.use_hair_thick) {
+    if (kernel_features & KERNEL_FEATURE_HAIR_THICK) {
       /* Slower programs for thick hair since that also slows down ribbons.
        * Ideally this should not be needed. */
       group_descs[PG_HITD].hitgroup.entryFunctionNameIS = "__intersection__curve_all";
@@ -344,7 +341,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
     }
 
 #  if OPTIX_ABI_VERSION >= 47
-    if (requested_features.use_hair_thick) {
+    if (kernel_features & KERNEL_FEATURE_HAIR_THICK) {
       OptixBuiltinISOptions builtin_options = {};
       builtin_options.builtinISModuleType = OPTIX_PRIMITIVE_TYPE_ROUND_CUBIC_BSPLINE;
       builtin_options.usesMotionBlur = false;
@@ -372,8 +369,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
 #  endif
   }
 
-  if (requested_features.use_subsurface ||
-      (requested_features.nodes_features & NODE_FEATURE_RAYTRACE)) {
+  if (kernel_features & (KERNEL_FEATURE_SUBSURFACE | KERNEL_FEATURE_NODE_RAYTRACE)) {
     /* Add hit group for local intersections. */
     group_descs[PG_HITL].kind = OPTIX_PROGRAM_GROUP_KIND_HITGROUP;
     group_descs[PG_HITL].hitgroup.moduleAH = optix_module;
@@ -381,7 +377,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   }
 
   /* Shader raytracing replaces some functions with direct callables. */
-  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
+  if (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) {
     group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].kind = OPTIX_PROGRAM_GROUP_KIND_RAYGEN;
     group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].raygen.module = optix_module;
     group_descs[PG_RGEN_SHADE_SURFACE_RAYTRACE].raygen.entryFunctionName =
@@ -439,7 +435,7 @@ bool OptiXDevice::load_kernels(const DeviceRequestedFeatures &requested_features
   link_options.overrideUsesMotionBlur = motion_blur;
 #  endif
 
-  if (requested_features.nodes_features & NODE_FEATURE_RAYTRACE) {
+  if (kernel_features & KERNEL_FEATURE_NODE_RAYTRACE) {
     /* Create shader raytracing pipeline. */
     vector<OptixProgramGroup> pipeline_groups;
     pipeline_groups.reserve(NUM_PROGRAM_GROUPS);

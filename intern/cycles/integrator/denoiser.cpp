@@ -161,10 +161,7 @@ static unique_ptr<Device> create_denoiser_device(Device *path_trace_device,
   }
 
   /* Only need denoising feature, everything else is unused. */
-  DeviceRequestedFeatures denoising_features;
-  denoising_features.use_denoising = true;
-  denoising_features.use_path_tracing = false;
-  if (!denoiser_device->load_kernels(denoising_features)) {
+  if (!denoiser_device->load_kernels(KERNEL_FEATURE_DENOISING)) {
     return nullptr;
   }
 

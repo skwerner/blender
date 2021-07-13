@@ -147,7 +147,7 @@ CUDADevice::~CUDADevice()
   cuda_assert(cuCtxDestroy(cuContext));
 }
 
-bool CUDADevice::support_device(const DeviceRequestedFeatures & /*requested_features*/)
+bool CUDADevice::support_device(const uint /*kernel_features*/)
 {
   int major, minor;
   cuDeviceGetAttribute(&major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR, cuDevId);
@@ -220,8 +220,7 @@ bool CUDADevice::use_adaptive_compilation()
 /* Common NVCC flags which stays the same regardless of shading model,
  * kernel sources md5 and only depends on compiler or compilation settings.
  */
-string CUDADevice::compile_kernel_get_common_cflags(
-    const DeviceRequestedFeatures &requested_features)
+string CUDADevice::compile_kernel_get_common_cflags(const uint kernel_features)
 {
   const int machine = system_cpu_bits();
   const string source_path = path_get("source");
@@ -235,7 +234,7 @@ string CUDADevice::compile_kernel_get_common_cflags(
       machine,
       include_path.c_str());
   if (use_adaptive_compilation()) {
-    cflags += " " + requested_features.get_build_options();
+    cflags += " -D__KERNEL_FEATURES__=" + string_printf("%d", kernel_features);
   }
   const char *extra_cflags = getenv("CYCLES_CUDA_EXTRA_CFLAGS");
   if (extra_cflags) {
@@ -249,7 +248,7 @@ string CUDADevice::compile_kernel_get_common_cflags(
   return cflags;
 }
 
-string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_features,
+string CUDADevice::compile_kernel(const uint kernel_features,
                                   const char *name,
                                   const char *base,
                                   bool force_ptx)
@@ -298,7 +297,7 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   /* We include cflags into md5 so changing cuda toolkit or changing other
    * compiler command line arguments makes sure cubin gets re-built.
    */
-  string common_cflags = compile_kernel_get_common_cflags(requested_features);
+  string common_cflags = compile_kernel_get_common_cflags(kernel_features);
   const string kernel_md5 = util_md5_string(source_md5 + common_cflags);
 
   const char *const kernel_ext = force_ptx ? "ptx" : "cubin";
@@ -407,7 +406,7 @@ string CUDADevice::compile_kernel(const DeviceRequestedFeatures &requested_featu
   return cubin;
 }
 
-bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
+bool CUDADevice::load_kernels(const uint kernel_features)
 {
   /* TODO(sergey): Support kernels re-load for CUDA devices.
    *
@@ -424,12 +423,12 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
     return false;
 
   /* check if GPU is supported */
-  if (!support_device(requested_features))
+  if (!support_device(kernel_features))
     return false;
 
   /* get kernel */
   const char *kernel_name = "kernel";
-  string cubin = compile_kernel(requested_features, kernel_name);
+  string cubin = compile_kernel(kernel_features, kernel_name);
   if (cubin.empty())
     return false;
 
@@ -449,14 +448,14 @@ bool CUDADevice::load_kernels(const DeviceRequestedFeatures &requested_features)
         "Failed to load CUDA kernel from '%s' (%s)", cubin.c_str(), cuewErrorString(result)));
 
   if (result == CUDA_SUCCESS) {
-    reserve_local_memory(requested_features);
+    reserve_local_memory(kernel_features);
     kernels.load(this);
   }
 
   return (result == CUDA_SUCCESS);
 }
 
-void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures & /* requested_features */)
+void CUDADevice::reserve_local_memory(const uint /* kernel_features */)
 {
   /* Together with CU_CTX_LMEM_RESIZE_TO_MAX, this reserves local memory
    * needed for kernel launches, so that we can reliably figure out when
@@ -471,7 +470,7 @@ void CUDADevice::reserve_local_memory(const DeviceRequestedFeatures & /* request
   /* Get kernel function. */
   CUfunction cuRender;
 
-  if (requested_features.use_baking) {
+  if (kernel_features & KERNEL_FEATURE_BAKING) {
     cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_bake"));
   }
   else {

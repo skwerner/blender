@@ -446,7 +446,7 @@ void SVMCompiler::generate_node(ShaderNode *node, ShaderNodeSet &done)
   if (current_type == SHADER_TYPE_SURFACE) {
     if (node->has_spatial_varying())
       current_shader->has_surface_spatial_varying = true;
-    if (node->get_feature() & NODE_FEATURE_RAYTRACE)
+    if (node->get_feature() & KERNEL_FEATURE_NODE_RAYTRACE)
       current_shader->has_surface_raytrace = true;
   }
   else if (current_type == SHADER_TYPE_VOLUME) {
@@ -794,21 +794,21 @@ void SVMCompiler::compile_type(Shader *shader, ShaderGraph *graph, ShaderType ty
         case SHADER_TYPE_SURFACE: /* generate surface shader */
           generate = true;
           shader->has_surface = true;
-          state.node_feature_mask = NODE_FEATURE_MASK_SURFACE;
+          state.node_feature_mask = KERNEL_FEATURE_NODE_MASK_SURFACE;
           break;
         case SHADER_TYPE_VOLUME: /* generate volume shader */
           generate = true;
           shader->has_volume = true;
-          state.node_feature_mask = NODE_FEATURE_MASK_VOLUME;
+          state.node_feature_mask = KERNEL_FEATURE_NODE_MASK_VOLUME;
           break;
         case SHADER_TYPE_DISPLACEMENT: /* generate displacement shader */
           generate = true;
           shader->has_displacement = true;
-          state.node_feature_mask = NODE_FEATURE_MASK_DISPLACEMENT;
+          state.node_feature_mask = KERNEL_FEATURE_NODE_MASK_DISPLACEMENT;
           break;
         case SHADER_TYPE_BUMP: /* generate bump shader */
           generate = true;
-          state.node_feature_mask = NODE_FEATURE_MASK_BUMP;
+          state.node_feature_mask = KERNEL_FEATURE_NODE_MASK_BUMP;
           break;
         default:
           break;
@@ -978,7 +978,7 @@ SVMCompiler::CompilerState::CompilerState(ShaderGraph *graph)
     max_id = max(node->id, max_id);
   }
   nodes_done_flag.resize(max_id + 1, false);
-  node_feature_mask = NODE_FEATURE_ALL;
+  node_feature_mask = 0;
 }
 
 CCL_NAMESPACE_END

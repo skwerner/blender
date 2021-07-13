@@ -35,7 +35,6 @@ CCL_NAMESPACE_BEGIN
 class BufferParams;
 class Device;
 class DeviceScene;
-class DeviceRequestedFeatures;
 class PathTrace;
 class Progress;
 class GPUDisplay;

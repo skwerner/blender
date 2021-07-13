@@ -244,7 +244,7 @@ class ShaderNode : public Node {
    */
   virtual int get_feature()
   {
-    return bump == SHADER_BUMP_NONE ? 0 : NODE_FEATURE_BUMP;
+    return bump == SHADER_BUMP_NONE ? 0 : KERNEL_FEATURE_NODE_BUMP;
   }
 
   /* Get closure ID to which the node compiles into. */

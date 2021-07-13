@@ -72,7 +72,7 @@ ccl_device_noinline int svm_node_closure_bsdf(
   uint4 data_node = read_node(kg, &offset);
 
   /* Only compute BSDF for surfaces, transparent variable is shared with volume extinction. */
-  if ((!NODES_FEATURE(BSDF) || shader_type != SHADER_TYPE_SURFACE) || mix_weight == 0.0f) {
+  if ((!KERNEL_NODES_FEATURE(BSDF) || shader_type != SHADER_TYPE_SURFACE) || mix_weight == 0.0f) {
     if (type == CLOSURE_BSDF_PRINCIPLED_ID) {
       /* Read all principled BSDF extra data to get the right offset. */
       read_node(kg, &offset);

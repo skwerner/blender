@@ -59,7 +59,7 @@ ccl_device float3 integrator_eval_background_shader(INTEGRATOR_STATE_ARGS,
                                  INTEGRATOR_STATE(ray, P),
                                  INTEGRATOR_STATE(ray, D),
                                  INTEGRATOR_STATE(ray, time));
-    shader_eval_surface<NODE_FEATURE_MASK_SURFACE_LIGHT>(
+    shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT>(
         INTEGRATOR_STATE_PASS, emission_sd, render_buffer, path_flag | PATH_RAY_EMISSION);
 
     L = shader_background_eval(emission_sd);

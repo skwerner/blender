@@ -254,10 +254,10 @@ class VoronoiTextureNode : public TextureNode {
   {
     int result = ShaderNode::get_feature();
     if (dimensions == 4) {
-      result |= NODE_FEATURE_VORONOI_EXTRA;
+      result |= KERNEL_FEATURE_NODE_VORONOI_EXTRA;
     }
     else if (dimensions >= 2 && feature == NODE_VORONOI_SMOOTH_F1) {
-      result |= NODE_FEATURE_VORONOI_EXTRA;
+      result |= KERNEL_FEATURE_NODE_VORONOI_EXTRA;
     }
     return result;
   }
@@ -483,7 +483,7 @@ class BsdfBaseNode : public ShaderNode {
 
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_BSDF;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_BSDF;
   }
 
  protected:
@@ -724,7 +724,7 @@ class EmissionNode : public ShaderNode {
 
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_EMISSION;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_EMISSION;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -739,7 +739,7 @@ class BackgroundNode : public ShaderNode {
 
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_EMISSION;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_EMISSION;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -769,7 +769,7 @@ class AmbientOcclusionNode : public ShaderNode {
   }
   virtual int get_feature()
   {
-    return NODE_FEATURE_RAYTRACE;
+    return KERNEL_FEATURE_NODE_RAYTRACE;
   }
 
   NODE_SOCKET_API(float3, color)
@@ -789,7 +789,7 @@ class VolumeNode : public ShaderNode {
   void compile(SVMCompiler &compiler, ShaderInput *param1, ShaderInput *param2);
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_VOLUME;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_VOLUME;
   }
   virtual ClosureType get_closure_type()
   {
@@ -1003,7 +1003,7 @@ class HairInfoNode : public ShaderNode {
   }
   virtual int get_feature()
   {
-    return ShaderNode::get_feature() | NODE_FEATURE_HAIR;
+    return ShaderNode::get_feature() | KERNEL_FEATURE_NODE_HAIR;
   }
 };
 
@@ -1350,7 +1350,7 @@ class BumpNode : public ShaderNode {
   }
   virtual int get_feature()
   {
-    return NODE_FEATURE_BUMP;
+    return KERNEL_FEATURE_NODE_BUMP;
   }
 
   NODE_SOCKET_API(bool, invert)
@@ -1503,7 +1503,7 @@ class BevelNode : public ShaderNode {
   }
   virtual int get_feature()
   {
-    return NODE_FEATURE_RAYTRACE;
+    return KERNEL_FEATURE_NODE_RAYTRACE;
   }
 
   NODE_SOCKET_API(float, radius)
@@ -1517,7 +1517,7 @@ class DisplacementNode : public ShaderNode {
   void constant_fold(const ConstantFolder &folder);
   virtual int get_feature()
   {
-    return NODE_FEATURE_BUMP;
+    return KERNEL_FEATURE_NODE_BUMP;
   }
 
   NODE_SOCKET_API(NodeNormalMapSpace, space)
@@ -1538,7 +1538,7 @@ class VectorDisplacementNode : public ShaderNode {
   void constant_fold(const ConstantFolder &folder);
   virtual int get_feature()
   {
-    return NODE_FEATURE_BUMP;
+    return KERNEL_FEATURE_NODE_BUMP;
   }
 
   NODE_SOCKET_API(NodeNormalMapSpace, space)

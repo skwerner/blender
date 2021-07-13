@@ -95,23 +95,22 @@ class CUDADevice : public Device {
 
   virtual ~CUDADevice();
 
-  bool support_device(const DeviceRequestedFeatures & /*requested_features*/);
+  bool support_device(const uint /*kernel_features*/);
 
   bool check_peer_access(Device *peer_device) override;
 
   bool use_adaptive_compilation();
 
-  virtual string compile_kernel_get_common_cflags(
-      const DeviceRequestedFeatures &requested_features);
+  virtual string compile_kernel_get_common_cflags(const uint kernel_features);
 
-  string compile_kernel(const DeviceRequestedFeatures &requested_features,
+  string compile_kernel(const uint kernel_features,
                         const char *name,
                         const char *base = "cuda",
                         bool force_ptx = false);
 
-  virtual bool load_kernels(const DeviceRequestedFeatures &requested_features) override;
+  virtual bool load_kernels(const uint kernel_features) override;
 
-  void reserve_local_memory(const DeviceRequestedFeatures &requested_features);
+  void reserve_local_memory(const uint kernel_features);
 
   void init_host_memory();
 

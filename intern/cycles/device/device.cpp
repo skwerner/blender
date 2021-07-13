@@ -49,35 +49,6 @@ vector<DeviceInfo> Device::optix_devices;
 vector<DeviceInfo> Device::cpu_devices;
 uint Device::devices_initialized_mask = 0;
 
-/* Device Requested Features */
-
-std::ostream &operator<<(std::ostream &os, const DeviceRequestedFeatures &requested_features)
-{
-  os << "Experimental features: " << (requested_features.experimental ? "On" : "Off") << std::endl;
-  /* TODO(sergey): Decode bitflag into list of names. */
-  os << "Nodes features: " << requested_features.nodes_features << std::endl;
-  os << "Use Hair: " << string_from_bool(requested_features.use_hair) << std::endl;
-  os << "Use Object Motion: " << string_from_bool(requested_features.use_object_motion)
-     << std::endl;
-  os << "Use Camera Motion: " << string_from_bool(requested_features.use_camera_motion)
-     << std::endl;
-  os << "Use Baking: " << string_from_bool(requested_features.use_baking) << std::endl;
-  os << "Use Subsurface: " << string_from_bool(requested_features.use_subsurface) << std::endl;
-  os << "Use Volume: " << string_from_bool(requested_features.use_volume) << std::endl;
-  os << "Use Patch Evaluation: " << string_from_bool(requested_features.use_patch_evaluation)
-     << std::endl;
-  os << "Use Transparent Shadows: " << string_from_bool(requested_features.use_transparent)
-     << std::endl;
-  os << "Use Principled BSDF: " << string_from_bool(requested_features.use_principled)
-     << std::endl;
-  os << "Use Denoising: " << string_from_bool(requested_features.use_denoising) << std::endl;
-  os << "Use Displacement: " << string_from_bool(requested_features.use_true_displacement)
-     << std::endl;
-  os << "Use Background Light: " << string_from_bool(requested_features.use_background_light)
-     << std::endl;
-  return os;
-}
-
 /* Device */
 
 Device::~Device() noexcept(false)

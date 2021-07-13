@@ -333,7 +333,7 @@ class Scene : public NodeOwner {
   void free_memory(bool final);
 
   bool kernels_loaded;
-  DeviceRequestedFeatures loaded_kernel_features;
+  uint loaded_kernel_features;
 
   bool load_kernels(Progress &progress, bool lock_scene = true);
 
@@ -342,7 +342,7 @@ class Scene : public NodeOwner {
 
   /* ** Split kernel routines ** */
 
-  DeviceRequestedFeatures get_requested_device_features();
+  uint get_kernel_features();
 
   /* Maximum number of closure during session lifetime. */
   int max_closure_global;

@@ -250,12 +250,12 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
             kg, sd, stack, node, path_flag, offset);
         break;
       case NODE_CLOSURE_EMISSION:
-        if (NODES_FEATURE(EMISSION)) {
+        if (KERNEL_NODES_FEATURE(EMISSION)) {
           svm_node_closure_emission(sd, stack, node);
         }
         break;
       case NODE_CLOSURE_BACKGROUND:
-        if (NODES_FEATURE(EMISSION)) {
+        if (KERNEL_NODES_FEATURE(EMISSION)) {
           svm_node_closure_background(sd, stack, node);
         }
         break;
@@ -266,7 +266,7 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         svm_node_closure_weight(sd, stack, node.y);
         break;
       case NODE_EMISSION_WEIGHT:
-        if (NODES_FEATURE(EMISSION)) {
+        if (KERNEL_NODES_FEATURE(EMISSION)) {
           svm_node_emission_weight(kg, sd, stack, node);
         }
         break;
@@ -303,27 +303,27 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         svm_node_vertex_color(kg, sd, stack, node.y, node.z, node.w);
         break;
       case NODE_GEOMETRY_BUMP_DX:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_geometry_bump_dx(kg, sd, stack, node.y, node.z);
         }
         break;
       case NODE_GEOMETRY_BUMP_DY:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_geometry_bump_dy(kg, sd, stack, node.y, node.z);
         }
         break;
       case NODE_SET_DISPLACEMENT:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_set_displacement(kg, sd, stack, node.y);
         }
         break;
       case NODE_DISPLACEMENT:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_displacement(kg, sd, stack, node);
         }
         break;
       case NODE_VECTOR_DISPLACEMENT:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           offset = svm_node_vector_displacement(kg, sd, stack, node, offset);
         }
         break;
@@ -337,52 +337,52 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         offset = svm_node_tex_noise(kg, sd, stack, node.y, node.z, node.w, offset);
         break;
       case NODE_SET_BUMP:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_set_bump(kg, sd, stack, node);
         }
         break;
       case NODE_ATTR_BUMP_DX:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_attr_bump_dx(kg, sd, stack, node);
         }
         break;
       case NODE_ATTR_BUMP_DY:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_attr_bump_dy(kg, sd, stack, node);
         }
         break;
       case NODE_VERTEX_COLOR_BUMP_DX:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_vertex_color_bump_dx(kg, sd, stack, node.y, node.z, node.w);
         }
         break;
       case NODE_VERTEX_COLOR_BUMP_DY:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_vertex_color_bump_dy(kg, sd, stack, node.y, node.z, node.w);
         }
         break;
       case NODE_TEX_COORD_BUMP_DX:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           offset = svm_node_tex_coord_bump_dx(kg, sd, path_flag, stack, node, offset);
         }
         break;
       case NODE_TEX_COORD_BUMP_DY:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           offset = svm_node_tex_coord_bump_dy(kg, sd, path_flag, stack, node, offset);
         }
         break;
       case NODE_CLOSURE_SET_NORMAL:
-        if (NODES_FEATURE(BUMP)) {
+        if (KERNEL_NODES_FEATURE(BUMP)) {
           svm_node_set_normal(kg, sd, stack, node.y, node.z);
         }
         break;
       case NODE_ENTER_BUMP_EVAL:
-        if (NODES_FEATURE(BUMP_STATE)) {
+        if (KERNEL_NODES_FEATURE(BUMP_STATE)) {
           svm_node_enter_bump_eval(kg, sd, stack, node.y);
         }
         break;
       case NODE_LEAVE_BUMP_EVAL:
-        if (NODES_FEATURE(BUMP_STATE)) {
+        if (KERNEL_NODES_FEATURE(BUMP_STATE)) {
           svm_node_leave_bump_eval(kg, sd, stack, node.y);
         }
         break;
@@ -400,12 +400,12 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         svm_node_layer_weight(sd, stack, node);
         break;
       case NODE_CLOSURE_VOLUME:
-        if (NODES_FEATURE(VOLUME)) {
+        if (KERNEL_NODES_FEATURE(VOLUME)) {
           svm_node_closure_volume<type>(kg, sd, stack, node);
         }
         break;
       case NODE_PRINCIPLED_VOLUME:
-        if (NODES_FEATURE(VOLUME)) {
+        if (KERNEL_NODES_FEATURE(VOLUME)) {
           offset = svm_node_principled_volume<type>(kg, sd, stack, node, path_flag, offset);
         }
         break;
@@ -435,7 +435,7 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
 #if defined(__HAIR__)
       case NODE_HAIR_INFO:
-        if (NODES_FEATURE(HAIR)) {
+        if (KERNEL_NODES_FEATURE(HAIR)) {
           svm_node_hair_info(kg, sd, stack, node.y, node.z);
         }
         break;
@@ -545,19 +545,19 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
         break;
 #ifdef __SHADER_RAYTRACE__
       case NODE_BEVEL:
-        if (NODES_FEATURE(RAYTRACE)) {
+        if (KERNEL_NODES_FEATURE(RAYTRACE)) {
           svm_node_bevel(INTEGRATOR_STATE_PASS, sd, stack, node);
         }
         break;
       case NODE_AMBIENT_OCCLUSION:
-        if (NODES_FEATURE(RAYTRACE)) {
+        if (KERNEL_NODES_FEATURE(RAYTRACE)) {
           svm_node_ao(INTEGRATOR_STATE_PASS, sd, stack, node);
         }
         break;
 #endif
 
       case NODE_TEX_VOXEL:
-        if (NODES_FEATURE(VOLUME)) {
+        if (KERNEL_NODES_FEATURE(VOLUME)) {
           offset = svm_node_tex_voxel(kg, sd, stack, node, offset);
         }
         break;

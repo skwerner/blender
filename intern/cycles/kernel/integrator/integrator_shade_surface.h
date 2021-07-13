@@ -416,7 +416,7 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
 
 #if defined(__AO__) && defined(__SHADER_RAYTRACE__)
     /* Ambient occlusion pass. */
-    if (node_feature_mask & NODE_FEATURE_RAYTRACE) {
+    if (node_feature_mask & KERNEL_FEATURE_NODE_RAYTRACE) {
       if ((kernel_data.film.pass_ao != PASS_UNUSED) &&
           (INTEGRATOR_STATE(path, flag) & PATH_RAY_CAMERA)) {
         integrate_surface_ao_pass(INTEGRATOR_STATE_PASS, &sd, &rng_state, render_buffer);
@@ -441,7 +441,7 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
   return continue_path_label != 0;
 }
 
-template<uint node_feature_mask = NODE_FEATURE_MASK_SURFACE & ~NODE_FEATURE_RAYTRACE,
+template<uint node_feature_mask = KERNEL_FEATURE_NODE_MASK_SURFACE & ~KERNEL_FEATURE_NODE_RAYTRACE,
          int current_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE>
 ccl_device_forceinline void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
                                                      ccl_global float *ccl_restrict render_buffer)
@@ -463,7 +463,7 @@ ccl_device_forceinline void integrator_shade_surface(INTEGRATOR_STATE_ARGS,
 ccl_device_forceinline void integrator_shade_surface_raytrace(
     INTEGRATOR_STATE_ARGS, ccl_global float *ccl_restrict render_buffer)
 {
-  integrator_shade_surface<NODE_FEATURE_MASK_SURFACE,
+  integrator_shade_surface<KERNEL_FEATURE_NODE_MASK_SURFACE,
                            DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE>(INTEGRATOR_STATE_PASS,
                                                                             render_buffer);
 }

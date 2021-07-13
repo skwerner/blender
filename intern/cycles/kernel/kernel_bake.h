@@ -64,7 +64,7 @@ ccl_device void kernel_background_evaluate(const KernelGlobals *kg,
   /* Evaluate shader.
    * This is being evaluated for all BSDFs, so path flag does not contain a specific type. */
   const int path_flag = PATH_RAY_EMISSION;
-  shader_eval_surface<NODE_FEATURE_MASK_SURFACE_LIGHT>(
+  shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT>(
       INTEGRATOR_STATE_PASS_NULL, &sd, NULL, path_flag);
   const float3 color = shader_background_eval(&sd);
 

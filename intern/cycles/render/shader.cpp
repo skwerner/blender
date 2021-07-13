@@ -683,33 +683,35 @@ void ShaderManager::add_default(Scene *scene)
   }
 }
 
-void ShaderManager::get_requested_graph_features(ShaderGraph *graph,
-                                                 DeviceRequestedFeatures *requested_features)
+uint ShaderManager::get_graph_kernel_features(ShaderGraph *graph)
 {
+  uint kernel_features = 0;
+
   foreach (ShaderNode *node, graph->nodes) {
-    requested_features->nodes_features |= node->get_feature();
+    kernel_features |= node->get_feature();
     if (node->special_type == SHADER_SPECIAL_TYPE_CLOSURE) {
       BsdfBaseNode *bsdf_node = static_cast<BsdfBaseNode *>(node);
       if (CLOSURE_IS_VOLUME(bsdf_node->get_closure_type())) {
-        requested_features->nodes_features |= NODE_FEATURE_VOLUME;
+        kernel_features |= KERNEL_FEATURE_NODE_VOLUME;
       }
       else if (CLOSURE_IS_PRINCIPLED(bsdf_node->get_closure_type())) {
-        requested_features->use_principled = true;
+        kernel_features |= KERNEL_FEATURE_PRINCIPLED;
       }
     }
     if (node->has_surface_bssrdf()) {
-      requested_features->use_subsurface = true;
+      kernel_features |= KERNEL_FEATURE_SUBSURFACE;
     }
     if (node->has_surface_transparent()) {
-      requested_features->use_transparent = true;
+      kernel_features |= KERNEL_FEATURE_TRANSPARENT;
     }
   }
+
+  return kernel_features;
 }
 
-void ShaderManager::get_requested_features(Scene *scene,
-                                           DeviceRequestedFeatures *requested_features)
+uint ShaderManager::get_kernel_features(Scene *scene)
 {
-  requested_features->nodes_features = NODE_FEATURE_BSDF | NODE_FEATURE_EMISSION;
+  uint kernel_features = KERNEL_FEATURE_NODE_BSDF | KERNEL_FEATURE_NODE_EMISSION;
   for (int i = 0; i < scene->shaders.size(); i++) {
     Shader *shader = scene->shaders[i];
     if (!shader->reference_count()) {
@@ -717,19 +719,22 @@ void ShaderManager::get_requested_features(Scene *scene,
     }
 
     /* Gather requested features from all the nodes from the graph nodes. */
-    get_requested_graph_features(shader->graph, requested_features);
+    kernel_features |= get_graph_kernel_features(shader->graph);
     ShaderNode *output_node = shader->graph->output();
     if (output_node->input("Displacement")->link != NULL) {
-      requested_features->nodes_features |= NODE_FEATURE_BUMP;
+      kernel_features |= KERNEL_FEATURE_NODE_BUMP;
       if (shader->get_displacement_method() == DISPLACE_BOTH) {
-        requested_features->nodes_features |= NODE_FEATURE_BUMP_STATE;
+        kernel_features |= KERNEL_FEATURE_NODE_BUMP_STATE;
       }
     }
     /* On top of volume nodes, also check if we need volume sampling because
-     * e.g. an Emission node would slip through the NODE_FEATURE_VOLUME check */
-    if (shader->has_volume)
-      requested_features->use_volume |= true;
+     * e.g. an Emission node would slip through the KERNEL_FEATURE_NODE_VOLUME check */
+    if (shader->has_volume) {
+      kernel_features |= KERNEL_FEATURE_VOLUME;
+    }
   }
+
+  return kernel_features;
 }
 
 void ShaderManager::free_memory()

@@ -469,57 +469,61 @@ void Scene::enable_update_stats()
   }
 }
 
-DeviceRequestedFeatures Scene::get_requested_device_features()
+uint Scene::get_kernel_features()
 {
-  DeviceRequestedFeatures requested_features;
-
-  shader_manager->get_requested_features(this, &requested_features);
+  uint kernel_features = shader_manager->get_kernel_features(this);
 
   /* This features are not being tweaked as often as shaders,
    * so could be done selective magic for the viewport as well.
    */
   bool use_motion = need_motion() == Scene::MotionType::MOTION_BLUR;
-  requested_features.use_hair = false;
-  requested_features.use_hair_thick = (params.hair_shape == CURVE_THICK);
-  requested_features.use_object_motion = false;
-  requested_features.use_camera_motion = use_motion && camera->use_motion();
+  kernel_features |= KERNEL_FEATURE_PATH_TRACING;
+  if (params.hair_shape == CURVE_THICK) {
+    kernel_features |= KERNEL_FEATURE_HAIR_THICK;
+  }
+  if (use_motion && camera->use_motion()) {
+    kernel_features |= KERNEL_FEATURE_CAMERA_MOTION;
+  }
   foreach (Object *object, objects) {
     Geometry *geom = object->get_geometry();
     if (use_motion) {
-      requested_features.use_object_motion |= object->use_motion() | geom->get_use_motion_blur();
-      requested_features.use_camera_motion |= geom->get_use_motion_blur();
+      if (object->use_motion() || geom->get_use_motion_blur()) {
+        kernel_features |= KERNEL_FEATURE_OBJECT_MOTION;
+      }
+      if (geom->get_use_motion_blur()) {
+        kernel_features |= KERNEL_FEATURE_CAMERA_MOTION;
+      }
     }
     if (object->get_is_shadow_catcher()) {
-      requested_features.use_shadow_catcher = true;
+      kernel_features |= KERNEL_FEATURE_SHADOW_CATCHER;
     }
     if (geom->is_mesh()) {
       Mesh *mesh = static_cast<Mesh *>(geom);
 #ifdef WITH_OPENSUBDIV
       if (mesh->get_subdivision_type() != Mesh::SUBDIVISION_NONE) {
-        requested_features.use_patch_evaluation = true;
+        kernel_features |= KERNEL_FEATURE_PATCH_EVALUATION;
       }
 #endif
-      requested_features.use_true_displacement |= mesh->has_true_displacement();
     }
     else if (geom->is_hair()) {
-      requested_features.use_hair = true;
+      kernel_features |= KERNEL_FEATURE_HAIR;
     }
   }
 
-  requested_features.use_background_light = light_manager->has_background_light(this);
-
-  requested_features.use_baking = bake_manager->get_baking();
+  if (bake_manager->get_baking()) {
+    kernel_features |= KERNEL_FEATURE_BAKING;
+  }
 
   const Pass *combined_denoised_pass = Pass::find(passes, PASS_COMBINED, PassMode::DENOISED);
   if (combined_denoised_pass && combined_denoised_pass->is_written()) {
-    requested_features.use_denoising = true;
+    kernel_features |= KERNEL_FEATURE_DENOISING;
   }
 
   if (Pass::find(passes, PASS_AO)) {
-    requested_features.nodes_features |= NODE_FEATURE_RAYTRACE;
+    kernel_features |= KERNEL_FEATURE_NODE_RAYTRACE;
   }
 
-  return requested_features;
+  return kernel_features;
 }
 
 bool Scene::update(Progress &progress)
@@ -537,6 +541,9 @@ bool Scene::update(Progress &progress)
     /* Currently viewport render is faster with higher max_closures, needs investigating. */
     kintegrator->max_closures = MAX_CLOSURE;
   }
+
+  /* Update kernel features for kernel loading. */
+  dscene.data.kernel_features = get_kernel_features();
 
   /* Load render kernels, before device update where we upload data to the GPU. */
   load_kernels(progress, false);
@@ -606,6 +613,38 @@ void Scene::update_passes()
   }
 }
 
+static void log_kernel_features(const uint features)
+{
+  VLOG(2) << "Requested features:\n";
+  VLOG(2) << "Use BSDF" << string_from_bool(features & KERNEL_FEATURE_NODE_BSDF) << "\n";
+  VLOG(2) << "Use Principled BSDF" << string_from_bool(features & KERNEL_FEATURE_PRINCIPLED)
+          << "\n";
+  VLOG(2) << "Use Emission" << string_from_bool(features & KERNEL_FEATURE_NODE_EMISSION) << "\n";
+  VLOG(2) << "Use Volume" << string_from_bool(features & KERNEL_FEATURE_NODE_VOLUME) << "\n";
+  VLOG(2) << "Use Hair" << string_from_bool(features & KERNEL_FEATURE_NODE_HAIR) << "\n";
+  VLOG(2) << "Use Bump" << string_from_bool(features & KERNEL_FEATURE_NODE_BUMP) << "\n";
+  VLOG(2) << "Use Voronoi" << string_from_bool(features & KERNEL_FEATURE_NODE_VORONOI_EXTRA)
+          << "\n";
+  VLOG(2) << "Use Shader Raytrace" << string_from_bool(features & KERNEL_FEATURE_NODE_RAYTRACE)
+          << "\n";
+  VLOG(2) << "Use Transparent" << string_from_bool(features & KERNEL_FEATURE_TRANSPARENT) << "\n";
+  VLOG(2) << "Use Denoising" << string_from_bool(features & KERNEL_FEATURE_DENOISING) << "\n";
+  VLOG(2) << "Use Path Tracing" << string_from_bool(features & KERNEL_FEATURE_PATH_TRACING)
+          << "\n";
+  VLOG(2) << "Use Hair" << string_from_bool(features & KERNEL_FEATURE_HAIR) << "\n";
+  VLOG(2) << "Use Object Motion" << string_from_bool(features & KERNEL_FEATURE_OBJECT_MOTION)
+          << "\n";
+  VLOG(2) << "Use Camera Motion" << string_from_bool(features & KERNEL_FEATURE_CAMERA_MOTION)
+          << "\n";
+  VLOG(2) << "Use Baking" << string_from_bool(features & KERNEL_FEATURE_BAKING) << "\n";
+  VLOG(2) << "Use Subsurface" << string_from_bool(features & KERNEL_FEATURE_SUBSURFACE) << "\n";
+  VLOG(2) << "Use Volume" << string_from_bool(features & KERNEL_FEATURE_VOLUME) << "\n";
+  VLOG(2) << "Use Patch Evaluation" << string_from_bool(features & KERNEL_FEATURE_PATCH_EVALUATION)
+          << "\n";
+  VLOG(2) << "Use Shadow Catcher" << string_from_bool(features & KERNEL_FEATURE_SHADOW_CATCHER)
+          << "\n";
+}
+
 bool Scene::load_kernels(Progress &progress, bool lock_scene)
 {
   thread_scoped_lock scene_lock;
@@ -613,15 +652,15 @@ bool Scene::load_kernels(Progress &progress, bool lock_scene)
     scene_lock = thread_scoped_lock(mutex);
   }
 
-  DeviceRequestedFeatures requested_features = get_requested_device_features();
+  const uint kernel_features = dscene.data.kernel_features;
 
-  if (!kernels_loaded || loaded_kernel_features.modified(requested_features)) {
+  if (!kernels_loaded || loaded_kernel_features != kernel_features) {
     progress.set_status("Loading render kernels (may take a few minutes the first time)");
 
     scoped_timer timer;
 
-    VLOG(2) << "Requested features:\n" << requested_features;
-    if (!device->load_kernels(requested_features)) {
+    log_kernel_features(kernel_features);
+    if (!device->load_kernels(kernel_features)) {
       string message = device->error_message();
       if (message.empty())
         message = "Failed loading render kernel, see console for errors";
@@ -633,7 +672,7 @@ bool Scene::load_kernels(Progress &progress, bool lock_scene)
     }
 
     kernels_loaded = true;
-    loaded_kernel_features = requested_features;
+    loaded_kernel_features = kernel_features;
     return true;
   }
   return false;

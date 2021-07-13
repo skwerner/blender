@@ -109,38 +109,40 @@ CCL_NAMESPACE_BEGIN
 #endif /* __KERNEL_OPTIX__ */
 
 /* Scene-based selective features compilation. */
-#ifdef __NO_CAMERA_MOTION__
-#  undef __CAMERA_MOTION__
-#endif
-#ifdef __NO_OBJECT_MOTION__
-#  undef __OBJECT_MOTION__
-#endif
-#ifdef __NO_HAIR__
-#  undef __HAIR__
-#endif
-#ifdef __NO_VOLUME__
-#  undef __VOLUME__
-#endif
-#ifdef __NO_SUBSURFACE__
-#  undef __SUBSURFACE__
-#endif
-#ifdef __NO_BAKING__
-#  undef __BAKING__
-#endif
-#ifdef __NO_PATCH_EVAL__
-#  undef __PATCH_EVAL__
-#endif
-#ifdef __NO_TRANSPARENT__
-#  undef __TRANSPARENT_SHADOWS__
-#endif
-#ifdef __NO_SHADOW_CATCHER__
-#  undef __SHADOW_CATCHER__
-#endif
-#ifdef __NO_PRINCIPLED__
-#  undef __PRINCIPLED__
-#endif
-#ifdef __NO_DENOISING__
-#  undef __DENOISING_FEATURES__
+#ifdef __KERNEL_FEATURES__
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_CAMERA_MOTION)
+#    undef __CAMERA_MOTION__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_OBJECT_MOTION)
+#    undef __OBJECT_MOTION__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_HAIR)
+#    undef __HAIR__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_VOLUME)
+#    undef __VOLUME__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_SUBSURFACE)
+#    undef __SUBSURFACE__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_BAKING)
+#    undef __BAKING__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_PATCH_EVALUATION)
+#    undef __PATCH_EVAL__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_TRANSPARENT)
+#    undef __TRANSPARENT_SHADOWS__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_SHADOW_CATCHER)
+#    undef __SHADOW_CATCHER__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_PRINCIPLED)
+#    undef __PRINCIPLED__
+#  endif
+#  if !(__KERNEL_FEATURES & KERNEL_FEATURE_DENOISING)
+#    undef __DENOISING_FEATURES__
+#  endif
 #endif
 
 /* Features that enable others */
@@ -1189,6 +1191,9 @@ typedef struct KernelBake {
 static_assert_align(KernelBake, 16);
 
 typedef struct KernelData {
+  uint kernel_features;
+  uint pad1, pad2, pad3;
+
   KernelCamera cam;
   KernelFilm film;
   KernelBackground background;
@@ -1428,5 +1433,70 @@ typedef enum DeviceKernel {
 enum {
   DEVICE_KERNEL_INTEGRATOR_NUM = DEVICE_KERNEL_INTEGRATOR_MEGAKERNEL + 1,
 };
+
+/* Kernel Features */
+
+enum KernelFeatureFlag : unsigned int {
+  /* Shader nodes. */
+  KERNEL_FEATURE_NODE_BSDF = (1U << 0U),
+  KERNEL_FEATURE_NODE_EMISSION = (1U << 1U),
+  KERNEL_FEATURE_NODE_VOLUME = (1U << 2U),
+  KERNEL_FEATURE_NODE_HAIR = (1U << 3U),
+  KERNEL_FEATURE_NODE_BUMP = (1U << 4U),
+  KERNEL_FEATURE_NODE_BUMP_STATE = (1U << 5U),
+  KERNEL_FEATURE_NODE_VORONOI_EXTRA = (1U << 6U),
+  KERNEL_FEATURE_NODE_RAYTRACE = (1U << 7U),
+
+  /* Use denoising kernels and output denoising passes. */
+  KERNEL_FEATURE_DENOISING = (1U << 8U),
+
+  /* Use path tracing kernels. */
+  KERNEL_FEATURE_PATH_TRACING = (1U << 9U),
+
+  /* BVH/sampling kernel features. */
+  KERNEL_FEATURE_HAIR = (1U << 10U),
+  KERNEL_FEATURE_HAIR_THICK = (1U << 11U),
+  KERNEL_FEATURE_OBJECT_MOTION = (1U << 12U),
+  KERNEL_FEATURE_CAMERA_MOTION = (1U << 13U),
+
+  /* Denotes whether baking functionality is needed. */
+  KERNEL_FEATURE_BAKING = (1U << 14U),
+
+  /* Use subsurface scattering materials. */
+  KERNEL_FEATURE_SUBSURFACE = (1U << 15U),
+
+  /* Use volume materials. */
+  KERNEL_FEATURE_VOLUME = (1U << 16U),
+
+  /* Use OpenSubdiv patch evaluation */
+  KERNEL_FEATURE_PATCH_EVALUATION = (1U << 17U),
+
+  /* Use Transparent shadows */
+  KERNEL_FEATURE_TRANSPARENT = (1U << 18U),
+
+  /* Use shadow catcher. */
+  KERNEL_FEATURE_SHADOW_CATCHER = (1U << 19U),
+
+  /* Per-uber shader usage flags. */
+  KERNEL_FEATURE_PRINCIPLED = (1U << 20U),
+};
+
+/* Shader node feature mask, to specialize shader evaluation for kernels. */
+
+#define KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT \
+  (KERNEL_FEATURE_NODE_EMISSION | KERNEL_FEATURE_NODE_VORONOI_EXTRA)
+#define KERNEL_FEATURE_NODE_MASK_SURFACE_SHADOW \
+  (KERNEL_FEATURE_NODE_BSDF | KERNEL_FEATURE_NODE_EMISSION | KERNEL_FEATURE_NODE_VOLUME | \
+   KERNEL_FEATURE_NODE_HAIR | KERNEL_FEATURE_NODE_BUMP | KERNEL_FEATURE_NODE_BUMP_STATE | \
+   KERNEL_FEATURE_NODE_VORONOI_EXTRA)
+#define KERNEL_FEATURE_NODE_MASK_SURFACE \
+  (KERNEL_FEATURE_NODE_MASK_SURFACE_SHADOW | KERNEL_FEATURE_NODE_RAYTRACE)
+#define KERNEL_FEATURE_NODE_MASK_VOLUME \
+  (KERNEL_FEATURE_NODE_EMISSION | KERNEL_FEATURE_NODE_VOLUME | KERNEL_FEATURE_NODE_VORONOI_EXTRA)
+#define KERNEL_FEATURE_NODE_MASK_DISPLACEMENT \
+  (KERNEL_FEATURE_NODE_VORONOI_EXTRA | KERNEL_FEATURE_NODE_BUMP | KERNEL_FEATURE_NODE_BUMP_STATE)
+#define KERNEL_FEATURE_NODE_MASK_BUMP KERNEL_FEATURE_NODE_MASK_DISPLACEMENT
+
+#define KERNEL_NODES_FEATURE(feature) ((node_feature_mask & (KERNEL_FEATURE_NODE_##feature)) != 0U)
 
 CCL_NAMESPACE_END

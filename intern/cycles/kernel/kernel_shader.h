@@ -1063,7 +1063,7 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
 #endif
   }
 
-  if (NODES_FEATURE(BSDF) && (sd->flag & SD_BSDF_NEEDS_LCG)) {
+  if (KERNEL_NODES_FEATURE(BSDF) && (sd->flag & SD_BSDF_NEEDS_LCG)) {
     sd->lcg_state = lcg_state_init(INTEGRATOR_STATE(path, rng_hash),
                                    INTEGRATOR_STATE(path, rng_offset),
                                    INTEGRATOR_STATE(path, sample),
@@ -1274,7 +1274,7 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
     else
 #    endif
     {
-      svm_eval_nodes<NODE_FEATURE_MASK_VOLUME, SHADER_TYPE_VOLUME>(
+      svm_eval_nodes<KERNEL_FEATURE_NODE_MASK_VOLUME, SHADER_TYPE_VOLUME>(
           INTEGRATOR_STATE_PASS, sd, NULL, path_flag);
     }
 #  endif
@@ -1302,7 +1302,7 @@ ccl_device void shader_eval_displacement(INTEGRATOR_STATE_CONST_ARGS, ShaderData
   else
 #  endif
   {
-    svm_eval_nodes<NODE_FEATURE_MASK_DISPLACEMENT, SHADER_TYPE_DISPLACEMENT>(
+    svm_eval_nodes<KERNEL_FEATURE_NODE_MASK_DISPLACEMENT, SHADER_TYPE_DISPLACEMENT>(
         INTEGRATOR_STATE_PASS, sd, NULL, 0);
   }
 #endif

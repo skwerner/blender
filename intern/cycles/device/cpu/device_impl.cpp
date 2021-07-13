@@ -474,7 +474,7 @@ void *CPUDevice::get_cpu_osl_memory()
 #endif
 }
 
-bool CPUDevice::load_kernels(const DeviceRequestedFeatures & /*requested_features*/)
+bool CPUDevice::load_kernels(const uint /*kernel_features*/)
 {
   return true;
 }

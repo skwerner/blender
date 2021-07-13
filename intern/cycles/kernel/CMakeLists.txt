@@ -86,7 +86,6 @@ set(SRC_HEADERS
   kernel_projection.h
   kernel_random.h
   kernel_shader.h
-  kernel_shadow.h
   kernel_shadow_catcher.h
   kernel_subsurface.h
   kernel_textures.h

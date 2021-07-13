@@ -234,7 +234,6 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
     switch (node.x) {
       case NODE_END:
         return;
-#if NODES_GROUP(NODE_GROUP_LEVEL_0)
       case NODE_SHADER_JUMP: {
         if (type == SHADER_TYPE_SURFACE)
           offset = node.y;
@@ -390,9 +389,7 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
       case NODE_HSV:
         svm_node_hsv(kg, sd, stack, node);
         break;
-#endif /* NODES_GROUP(NODE_GROUP_LEVEL_0) */
 
-#if NODES_GROUP(NODE_GROUP_LEVEL_1)
       case NODE_CLOSURE_HOLDOUT:
         svm_node_closure_holdout(sd, stack, node);
         break;
@@ -436,16 +433,14 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
       case NODE_PARTICLE_INFO:
         svm_node_particle_info(kg, sd, stack, node.y, node.z);
         break;
-#  if defined(__HAIR__)
+#if defined(__HAIR__)
       case NODE_HAIR_INFO:
         if (NODES_FEATURE(HAIR)) {
           svm_node_hair_info(kg, sd, stack, node.y, node.z);
         }
         break;
-#  endif
-#endif /* NODES_GROUP(NODE_GROUP_LEVEL_1) */
+#endif
 
-#if NODES_GROUP(NODE_GROUP_LEVEL_2)
       case NODE_TEXTURE_MAPPING:
         offset = svm_node_texture_mapping(kg, sd, stack, node.y, node.z, offset);
         break;
@@ -498,9 +493,7 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
       case NODE_IES:
         svm_node_ies(kg, sd, stack, node);
         break;
-#endif /* NODES_GROUP(NODE_GROUP_LEVEL_2) */
 
-#if NODES_GROUP(NODE_GROUP_LEVEL_3)
       case NODE_RGB_CURVES:
       case NODE_VECTOR_CURVES:
         offset = svm_node_curves(kg, sd, stack, node, offset);
@@ -550,7 +543,7 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
       case NODE_CLAMP:
         offset = svm_node_clamp(kg, sd, stack, node.y, node.z, node.w, offset);
         break;
-#  ifdef __SHADER_RAYTRACE__
+#ifdef __SHADER_RAYTRACE__
       case NODE_BEVEL:
         if (NODES_FEATURE(RAYTRACE)) {
           svm_node_bevel(INTEGRATOR_STATE_PASS, sd, stack, node);
@@ -561,10 +554,8 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
           svm_node_ao(INTEGRATOR_STATE_PASS, sd, stack, node);
         }
         break;
-#  endif
-#endif /* NODES_GROUP(NODE_GROUP_LEVEL_3) */
+#endif
 
-#if NODES_GROUP(NODE_GROUP_LEVEL_4)
       case NODE_TEX_VOXEL:
         if (NODES_FEATURE(VOLUME)) {
           offset = svm_node_tex_voxel(kg, sd, stack, node, offset);
@@ -581,7 +572,6 @@ ccl_device void svm_eval_nodes(INTEGRATOR_STATE_CONST_ARGS,
       case NODE_AOV_VALUE:
         svm_node_aov_value(INTEGRATOR_STATE_PASS, sd, stack, node, render_buffer);
         break;
-#endif /* NODES_GROUP(NODE_GROUP_LEVEL_4) */
       default:
         kernel_assert(!"Unknown node type was passed to the SVM machine");
         return;

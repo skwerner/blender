@@ -105,56 +105,6 @@ class DebugFlags {
     bool use_debug;
   };
 
-  /* Descriptor of OpenCL feature-set to be used. */
-  struct OpenCL {
-    OpenCL();
-
-    /* Reset flags to their defaults. */
-    void reset();
-
-    /* Available device types.
-     * Only gives a hint which devices to let user to choose from, does not
-     * try to use any sort of optimal device or so.
-     */
-    enum DeviceType {
-      /* None of OpenCL devices will be used. */
-      DEVICE_NONE,
-      /* All OpenCL devices will be used. */
-      DEVICE_ALL,
-      /* Default system OpenCL device will be used. */
-      DEVICE_DEFAULT,
-      /* Host processor will be used. */
-      DEVICE_CPU,
-      /* GPU devices will be used. */
-      DEVICE_GPU,
-      /* Dedicated OpenCL accelerator device will be used. */
-      DEVICE_ACCELERATOR,
-    };
-
-    /* Available kernel types. */
-    enum KernelType {
-      /* Do automated guess which kernel to use, based on the officially
-       * supported GPUs and such.
-       */
-      KERNEL_DEFAULT,
-      /* Force mega kernel to be used. */
-      KERNEL_MEGA,
-      /* Force split kernel to be used. */
-      KERNEL_SPLIT,
-    };
-
-    /* Requested device type. */
-    DeviceType device_type;
-
-    /* Use debug version of the kernel. */
-    bool debug;
-
-    /* TODO(mai): Currently this is only for OpenCL, but we should have it implemented for all
-     * devices. */
-    /* Artificial memory limit in bytes (0 if disabled). */
-    size_t mem_limit;
-  };
-
   /* Get instance of debug flags registry. */
   static DebugFlags &get()
   {
@@ -173,9 +123,6 @@ class DebugFlags {
 
   /* Requested OptiX flags. */
   OptiX optix;
-
-  /* Requested OpenCL flags. */
-  OpenCL opencl;
 
  private:
   DebugFlags();

@@ -21,14 +21,6 @@
 #define CCL_NAMESPACE_BEGIN
 #define CCL_NAMESPACE_END
 
-/* Selective nodes compilation. */
-#ifndef __NODES_MAX_GROUP__
-#  define __NODES_MAX_GROUP__ NODE_GROUP_LEVEL_MAX
-#endif
-#ifndef __NODES_FEATURES__
-#  define __NODES_FEATURES__ NODE_FEATURE_ALL
-#endif
-
 /* Manual definitions so we can compile without CUDA toolkit. */
 
 #ifdef __CUDACC_RTC__

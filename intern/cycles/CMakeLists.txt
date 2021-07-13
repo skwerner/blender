@@ -296,14 +296,10 @@ if(WITH_OPENIMAGEDENOISE)
 endif()
 
 if(WITH_CYCLES_STANDALONE)
-  set(WITH_CYCLES_DEVICE_OPENCL TRUE)
   set(WITH_CYCLES_DEVICE_CUDA TRUE)
 endif()
 # TODO(sergey): Consider removing it, only causes confusion in interface.
 set(WITH_CYCLES_DEVICE_MULTI TRUE)
-
-# TODO: force disabled for now since it does not build
-set(WITH_CYCLES_DEVICE_OPENCL OFF)
 
 # Logging capabilities using GLog library.
 if(WITH_CYCLES_LOGGING)

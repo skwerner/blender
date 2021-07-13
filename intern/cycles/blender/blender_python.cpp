@@ -45,10 +45,6 @@
 #  include <OSL/oslquery.h>
 #endif
 
-#ifdef WITH_OPENCL
-#  include "device/opencl/device_opencl.h"
-#endif
-
 CCL_NAMESPACE_BEGIN
 
 namespace {
@@ -72,12 +68,10 @@ PyObject *pyunicode_from_string(const char *str)
 /* Synchronize debug flags from a given Blender scene.
  * Return truth when device list needs invalidation.
  */
-bool debug_flags_sync_from_scene(BL::Scene b_scene)
+static void debug_flags_sync_from_scene(BL::Scene b_scene)
 {
   DebugFlagsRef flags = DebugFlags();
   PointerRNA cscene = RNA_pointer_get(&b_scene.ptr, "cycles");
-  /* Backup some settings for comparison. */
-  DebugFlags::OpenCL::DeviceType opencl_device_type = flags.opencl.device_type;
   /* Synchronize shared flags. */
   flags.viewport_static_bvh = get_enum(cscene, "debug_bvh_type");
   /* Synchronize CPU flags. */
@@ -91,43 +85,15 @@ bool debug_flags_sync_from_scene(BL::Scene b_scene)
   flags.cuda.adaptive_compile = get_boolean(cscene, "debug_use_cuda_adaptive_compile");
   /* Synchronize OptiX flags. */
   flags.optix.use_debug = get_boolean(cscene, "debug_use_optix_debug");
-  /* Synchronize OpenCL device type. */
-  switch (get_enum(cscene, "debug_opencl_device_type")) {
-    case 0:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_NONE;
-      break;
-    case 1:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_ALL;
-      break;
-    case 2:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_DEFAULT;
-      break;
-    case 3:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_CPU;
-      break;
-    case 4:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_GPU;
-      break;
-    case 5:
-      flags.opencl.device_type = DebugFlags::OpenCL::DEVICE_ACCELERATOR;
-      break;
-  }
-  /* Synchronize other OpenCL flags. */
-  flags.opencl.debug = get_boolean(cscene, "debug_use_opencl_debug");
-  flags.opencl.mem_limit = ((size_t)get_int(cscene, "debug_opencl_mem_limit")) * 1024 * 1024;
-  return flags.opencl.device_type != opencl_device_type;
 }
 
 /* Reset debug flags to default values.
  * Return truth when device list needs invalidation.
  */
-bool debug_flags_reset()
+static void debug_flags_reset()
 {
   DebugFlagsRef flags = DebugFlags();
-  /* Backup some settings for comparison. */
-  DebugFlags::OpenCL::DeviceType opencl_device_type = flags.opencl.device_type;
   flags.reset();
-  return flags.opencl.device_type != opencl_device_type;
 }
 
 } /* namespace */
@@ -639,40 +605,6 @@ static PyObject *system_info_func(PyObject * /*self*/, PyObject * /*value*/)
   return pyunicode_from_string(system_info.c_str());
 }
 
-#ifdef WITH_OPENCL
-static PyObject *opencl_disable_func(PyObject * /*self*/, PyObject * /*value*/)
-{
-  VLOG(2) << "Disabling OpenCL platform.";
-  DebugFlags().opencl.device_type = DebugFlags::OpenCL::DEVICE_NONE;
-  Py_RETURN_NONE;
-}
-
-static PyObject *opencl_compile_func(PyObject * /*self*/, PyObject *args)
-{
-  PyObject *sequence = PySequence_Fast(args, "Arguments must be a sequence");
-  if (sequence == NULL) {
-    Py_RETURN_FALSE;
-  }
-
-  vector<string> parameters;
-  for (Py_ssize_t i = 0; i < PySequence_Fast_GET_SIZE(sequence); i++) {
-    PyObject *item = PySequence_Fast_GET_ITEM(sequence, i);
-    PyObject *item_as_string = PyObject_Str(item);
-    const char *parameter_string = PyUnicode_AsUTF8(item_as_string);
-    parameters.push_back(parameter_string);
-    Py_DECREF(item_as_string);
-  }
-  Py_DECREF(sequence);
-
-  if (device_opencl_compile_kernel(parameters)) {
-    Py_RETURN_TRUE;
-  }
-  else {
-    Py_RETURN_FALSE;
-  }
-}
-#endif
-
 static bool image_parse_filepaths(PyObject *pyfilepaths, vector<string> &filepaths)
 {
   if (PyUnicode_Check(pyfilepaths)) {
@@ -850,10 +782,7 @@ static PyObject *debug_flags_update_func(PyObject * /*self*/, PyObject *args)
   RNA_id_pointer_create((ID *)PyLong_AsVoidPtr(pyscene), &sceneptr);
   BL::Scene b_scene(sceneptr);
 
-  if (debug_flags_sync_from_scene(b_scene)) {
-    VLOG(2) << "Tagging device list for update.";
-    Device::tag_update();
-  }
+  debug_flags_sync_from_scene(b_scene);
 
   VLOG(2) << "Debug flags set to:\n" << DebugFlags();
 
@@ -864,10 +793,7 @@ static PyObject *debug_flags_update_func(PyObject * /*self*/, PyObject *args)
 
 static PyObject *debug_flags_reset_func(PyObject * /*self*/, PyObject * /*args*/)
 {
-  if (debug_flags_reset()) {
-    VLOG(2) << "Tagging device list for update.";
-    Device::tag_update();
-  }
+  debug_flags_reset();
   if (debug_flags_set) {
     VLOG(2) << "Debug flags reset to:\n" << DebugFlags();
     debug_flags_set = false;
@@ -962,16 +888,14 @@ static PyObject *enable_print_stats_func(PyObject * /*self*/, PyObject * /*args*
 static PyObject *get_device_types_func(PyObject * /*self*/, PyObject * /*args*/)
 {
   vector<DeviceType> device_types = Device::available_types();
-  bool has_cuda = false, has_optix = false, has_opencl = false;
+  bool has_cuda = false, has_optix = false;
   foreach (DeviceType device_type, device_types) {
     has_cuda |= (device_type == DEVICE_CUDA);
     has_optix |= (device_type == DEVICE_OPTIX);
-    has_opencl |= (device_type == DEVICE_OPENCL);
   }
-  PyObject *list = PyTuple_New(3);
+  PyObject *list = PyTuple_New(2);
   PyTuple_SET_ITEM(list, 0, PyBool_FromLong(has_cuda));
   PyTuple_SET_ITEM(list, 1, PyBool_FromLong(has_optix));
-  PyTuple_SET_ITEM(list, 2, PyBool_FromLong(has_opencl));
   return list;
 }
 
@@ -990,9 +914,6 @@ static PyObject *set_device_override_func(PyObject * /*self*/, PyObject *arg)
 
   if (override == "CPU") {
     BlenderSession::device_override = DEVICE_MASK_CPU;
-  }
-  else if (override == "OPENCL") {
-    BlenderSession::device_override = DEVICE_MASK_OPENCL;
   }
   else if (override == "CUDA") {
     BlenderSession::device_override = DEVICE_MASK_CUDA;
@@ -1029,10 +950,6 @@ static PyMethodDef methods[] = {
 #endif
     {"available_devices", available_devices_func, METH_VARARGS, ""},
     {"system_info", system_info_func, METH_NOARGS, ""},
-#ifdef WITH_OPENCL
-    {"opencl_disable", opencl_disable_func, METH_NOARGS, ""},
-    {"opencl_compile", opencl_compile_func, METH_VARARGS, ""},
-#endif
 
     /* Standalone denoising */
     {"denoise", (PyCFunction)denoise_func, METH_VARARGS | METH_KEYWORDS, ""},

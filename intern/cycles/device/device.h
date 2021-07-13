@@ -48,7 +48,6 @@ class CPUKernelThreadGlobals;
 enum DeviceType {
   DEVICE_NONE = 0,
   DEVICE_CPU,
-  DEVICE_OPENCL,
   DEVICE_CUDA,
   DEVICE_MULTI,
   DEVICE_OPTIX,
@@ -57,7 +56,6 @@ enum DeviceType {
 
 enum DeviceTypeMask {
   DEVICE_MASK_CPU = (1 << DEVICE_CPU),
-  DEVICE_MASK_OPENCL = (1 << DEVICE_OPENCL),
   DEVICE_MASK_CUDA = (1 << DEVICE_CUDA),
   DEVICE_MASK_OPTIX = (1 << DEVICE_OPTIX),
   DEVICE_MASK_ALL = ~0
@@ -113,11 +111,6 @@ class DeviceRequestedFeatures {
 
   /* Selective nodes compilation. */
 
-  /* Identifier of a node group up to which all the nodes needs to be
-   * compiled in. Nodes from higher group indices will be ignores.
-   */
-  int max_nodes_group;
-
   /* Features bitfield indicating which features from the requested group
    * will be compiled in. Nodes which corresponds to features which are not
    * in this bitfield will be ignored even if they're in the requested group.
@@ -165,8 +158,6 @@ class DeviceRequestedFeatures {
 
   DeviceRequestedFeatures()
   {
-    /* TODO(sergey): Find more meaningful defaults. */
-    max_nodes_group = 0;
     nodes_features = 0;
     use_hair = false;
     use_hair_thick = false;
@@ -187,8 +178,7 @@ class DeviceRequestedFeatures {
 
   bool modified(const DeviceRequestedFeatures &requested_features)
   {
-    return !(max_nodes_group == requested_features.max_nodes_group &&
-             nodes_features == requested_features.nodes_features &&
+    return !(nodes_features == requested_features.nodes_features &&
              use_hair == requested_features.use_hair &&
              use_hair_thick == requested_features.use_hair_thick &&
              use_object_motion == requested_features.use_object_motion &&
@@ -214,8 +204,6 @@ class DeviceRequestedFeatures {
     if (experimental) {
       build_options += "-D__KERNEL_EXPERIMENTAL__ ";
     }
-    build_options += "-D__NODES_MAX_GROUP__=" + string_printf("%d", max_nodes_group);
-    build_options += " -D__NODES_FEATURES__=" + string_printf("%d", nodes_features);
     if (!use_hair) {
       build_options += " -D__NO_HAIR__";
     }
@@ -431,7 +419,6 @@ class Device {
   static thread_mutex device_mutex;
   static vector<DeviceInfo> cuda_devices;
   static vector<DeviceInfo> optix_devices;
-  static vector<DeviceInfo> opencl_devices;
   static vector<DeviceInfo> cpu_devices;
   static uint devices_initialized_mask;
 };

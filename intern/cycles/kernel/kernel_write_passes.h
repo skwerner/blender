@@ -16,7 +16,7 @@
 
 #pragma once
 
-#if defined(__SPLIT_KERNEL__) || defined(__KERNEL_CUDA__)
+#ifdef __KERNEL_GPU__
 #  define __ATOMIC_PASS_WRITE__
 #endif
 

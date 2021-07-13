@@ -52,14 +52,6 @@ __device__ half __float2half(const float f)
   return val;
 }
 
-/* Selective nodes compilation. */
-#ifndef __NODES_MAX_GROUP__
-#  define __NODES_MAX_GROUP__ NODE_GROUP_LEVEL_MAX
-#endif
-#ifndef __NODES_FEATURES__
-#  define __NODES_FEATURES__ NODE_FEATURE_ALL
-#endif
-
 #define ccl_device \
   __device__ __forceinline__  // Function calls are bad for OptiX performance, so inline everything
 #define ccl_device_inline ccl_device

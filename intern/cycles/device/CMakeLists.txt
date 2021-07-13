@@ -80,16 +80,6 @@ set(SRC_MULTI
   multi/device.h
 )
 
-set(SRC_OPENCL
-  opencl/device.cpp
-  opencl/device.h
-  opencl/device_impl.cpp
-  opencl/device_impl.h
-  opencl/memory_manager.h
-  opencl/memory_manager.cpp
-  opencl/util.cpp
-)
-
 set(SRC_OPTIX
   optix/device.cpp
   optix/device.h
@@ -127,12 +117,6 @@ endif()
 
 add_definitions(${GL_DEFINITIONS})
 
-if(WITH_CYCLES_DEVICE_OPENCL)
-  list(APPEND LIB
-    extern_clew
-  )
-  add_definitions(-DWITH_OPENCL)
-endif()
 if(WITH_CYCLES_DEVICE_CUDA)
   add_definitions(-DWITH_CUDA)
 endif()
@@ -158,7 +142,6 @@ cycles_add_library(cycles_device "${LIB}"
   ${SRC_CUDA}
   ${SRC_DUMMY}
   ${SRC_MULTI}
-  ${SRC_OPENCL}
   ${SRC_OPTIX}
   ${SRC_HEADERS}
 )
@@ -167,6 +150,5 @@ source_group("cpu" FILES ${SRC_CPU})
 source_group("cuda" FILES ${SRC_CUDA})
 source_group("dummy" FILES ${SRC_DUMMY})
 source_group("multi" FILES ${SRC_MULTI})
-source_group("opencl" FILES ${SRC_OPENCL})
 source_group("optix" FILES ${SRC_OPTIX})
 source_group("common" FILES ${SRC} ${SRC_HEADERS})

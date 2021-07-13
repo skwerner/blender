@@ -35,16 +35,6 @@ set(SRC_DEVICE_CUDA
   device/cuda/kernel.cu
 )
 
-set(SRC_DEVICE_OPENCL
-  device/opencl/kernel_adaptive_stopping.cl
-  device/opencl/kernel_adaptive_filter_x.cl
-  device/opencl/kernel_adaptive_filter_y.cl
-  device/opencl/kernel_adaptive_adjust_samples.cl
-  device/opencl/kernel_bake.cl
-  device/opencl/kernel_base.cl
-  device/opencl/kernel_displace.cl
-)
-
 set(SRC_DEVICE_OPTIX
   device/optix/kernel.cu
   device/optix/kernel_shader_raytrace.cu
@@ -117,12 +107,6 @@ set(SRC_DEVICE_CUDA_HEADERS
 set(SRC_DEVICE_OPTIX_HEADERS
   device/optix/compat.h
   device/optix/globals.h
-)
-
-set(SRC_DEVICE_OPENCL_HEADERS
-  device/opencl/compat.h
-  device/opencl/image.h
-  device/opencl/globals.h
 )
 
 set(SRC_CLOSURE_HEADERS
@@ -612,12 +596,10 @@ cycles_add_library(cycles_kernel "${LIB}"
   ${SRC_DEVICE_CPU}
   ${SRC_DEVICE_CUDA}
   ${SRC_DEVICE_OPTIX}
-  ${SRC_DEVICE_OPENCL}
   ${SRC_HEADERS}
   ${SRC_DEVICE_CPU_HEADERS}
   ${SRC_DEVICE_CUDA_HEADERS}
   ${SRC_DEVICE_OPTIX_HEADERS}
-  ${SRC_DEVICE_OPENCL_HEADERS}
   ${SRC_BVH_HEADERS}
   ${SRC_CLOSURE_HEADERS}
   ${SRC_SVM_HEADERS}
@@ -632,7 +614,6 @@ source_group("integrator" FILES ${SRC_INTEGRATOR_HEADERS})
 source_group("kernel" FILES ${SRC_HEADERS})
 source_group("device\\cpu" FILES ${SRC_DEVICE_CPU} ${SRC_DEVICE_CPU_HEADERS})
 source_group("device\\cuda" FILES ${SRC_DEVICE_CUDA} ${SRC_DEVICE_CUDA_HEADERS})
-source_group("device\\opencl" FILES ${SRC_DEVICE_OPENCL} ${SRC_DEVICE_OPENCL_HEADERS})
 source_group("device\\optix" FILES ${SRC_DEVICE_OPTIX} ${SRC_DEVICE_OPTIX_HEADERS})
 source_group("svm" FILES ${SRC_SVM_HEADERS})
 
@@ -643,21 +624,11 @@ if(WITH_CYCLES_DEVICE_OPTIX AND WITH_CYCLES_CUDA_BINARIES)
   add_dependencies(cycles_kernel cycles_kernel_optix)
 endif()
 
-# OpenCL kernel
+# Install kernel source for runtime compilation
 
-# set(KERNEL_PREPROCESSED ${CMAKE_CURRENT_BINARY_DIR}/kernel_preprocessed.cl)
-# add_custom_command(
-#    OUTPUT ${KERNEL_PREPROCESSED}
-#    COMMAND gcc -x c++ -E ${CMAKE_CURRENT_SOURCE_DIR}/kernel.cl -I ${CMAKE_CURRENT_SOURCE_DIR}/../util/ -DCCL_NAMESPACE_BEGIN= -DCCL_NAMESPACE_END= -o ${KERNEL_PREPROCESSED}
-#    DEPENDS ${SRC_KERNEL} ${SRC_UTIL_HEADERS})
-# add_custom_target(cycles_kernel_preprocess ALL DEPENDS ${KERNEL_PREPROCESSED})
-# delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${KERNEL_PREPROCESSED}" ${CYCLES_INSTALL_PATH}/kernel)
-
-delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_OPENCL}" ${CYCLES_INSTALL_PATH}/source/kernel/device/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_CUDA}" ${CYCLES_INSTALL_PATH}/source/kernel/device/cuda)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_OPTIX}" ${CYCLES_INSTALL_PATH}/source/kernel/device/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel)
-delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_OPENCL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/device/opencl)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_CUDA_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/device/cuda)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_DEVICE_OPTIX_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/device/optix)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_BVH_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/bvh)
@@ -666,7 +637,6 @@ delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_SVM_HEADERS}" ${CYCLES_INSTAL
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_GEOM_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/geom)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_INTEGRATOR_HEADERS}" ${CYCLES_INSTALL_PATH}/source/kernel/integrator)
 delayed_install(${CMAKE_CURRENT_SOURCE_DIR} "${SRC_UTIL_HEADERS}" ${CYCLES_INSTALL_PATH}/source/util)
-
 
 if(WITH_NANOVDB)
   set(SRC_NANOVDB_HEADERS

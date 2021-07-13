@@ -65,11 +65,6 @@ bool path_read_text(const string &path, string &text);
 /* File manipulation. */
 bool path_remove(const string &path);
 
-/* source code utility */
-string path_source_replace_includes(const string &source,
-                                    const string &path,
-                                    const string &source_filename = "");
-
 /* cache utility */
 void path_cache_clear_except(const string &name, const set<string> &except);
 

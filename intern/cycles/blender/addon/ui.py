@@ -87,12 +87,6 @@ def use_cpu(context):
     return (get_device_type(context) == 'NONE' or cscene.device == 'CPU')
 
 
-def use_opencl(context):
-    cscene = context.scene.cycles
-
-    return (get_device_type(context) == 'OPENCL' and cscene.device == 'GPU')
-
-
 def use_cuda(context):
     cscene = context.scene.cycles
 
@@ -1798,14 +1792,6 @@ class CYCLES_RENDER_PT_debug(CyclesDebugButtonsPanel, Panel):
         col = layout.column()
         col.label(text="OptiX Flags:")
         col.prop(cscene, "debug_use_optix_debug")
-
-        col.separator()
-
-        col = layout.column()
-        col.label(text="OpenCL Flags:")
-        col.prop(cscene, "debug_opencl_device_type", text="Device")
-        col.prop(cscene, "debug_use_opencl_debug", text="Debug")
-        col.prop(cscene, "debug_opencl_mem_limit")
 
         col.separator()
 

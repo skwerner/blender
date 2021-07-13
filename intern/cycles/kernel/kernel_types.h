@@ -63,25 +63,6 @@ CCL_NAMESPACE_BEGIN
 
 #define VOLUME_STACK_SIZE 4
 
-/* Split kernel constants */
-#define WORK_POOL_SIZE_GPU 64
-#define WORK_POOL_SIZE_CPU 1
-#ifdef __KERNEL_GPU__
-#  define WORK_POOL_SIZE WORK_POOL_SIZE_GPU
-#else
-#  define WORK_POOL_SIZE WORK_POOL_SIZE_CPU
-#endif
-
-#define SHADER_SORT_BLOCK_SIZE 2048
-
-#ifdef __KERNEL_OPENCL__
-#  define SHADER_SORT_LOCAL_SIZE 64
-#elif defined(__KERNEL_CUDA__)
-#  define SHADER_SORT_LOCAL_SIZE 32
-#else
-#  define SHADER_SORT_LOCAL_SIZE 1
-#endif
-
 /* Kernel features */
 #define __SOBOL__
 #define __DPDU__
@@ -102,7 +83,6 @@ CCL_NAMESPACE_BEGIN
 #define __SVM__
 #define __EMISSION__
 #define __HOLDOUT__
-#define __MULTI_CLOSURE__
 #define __TRANSPARENT_SHADOWS__
 #define __BACKGROUND_MIS__
 #define __LAMP_MIS__
@@ -127,9 +107,6 @@ CCL_NAMESPACE_BEGIN
 #ifdef __KERNEL_OPTIX__
 #  undef __BAKING__
 #endif /* __KERNEL_OPTIX__ */
-
-#ifdef __KERNEL_OPENCL__
-#endif /* __KERNEL_OPENCL__ */
 
 /* Scene-based selective features compilation. */
 #ifdef __NO_CAMERA_MOTION__
@@ -477,25 +454,10 @@ typedef struct differential {
 /* Ray */
 
 typedef struct Ray {
-/* TODO(sergey): This is only needed because current AMD
- * compiler has hard time building the kernel with this
- * reshuffle. And at the same time reshuffle will cause
- * less optimal CPU code in certain places.
- *
- * We'll get rid of this nasty exception once AMD compiler
- * is fixed.
- */
-#ifndef __KERNEL_OPENCL_AMD__
   float3 P;   /* origin */
   float3 D;   /* direction */
   float t;    /* length of the ray */
   float time; /* time (for motion blur) */
-#else
-  float t;    /* length of the ray */
-  float time; /* time (for motion blur) */
-  float3 P;   /* origin */
-  float3 D;   /* direction */
-#endif
 
 #ifdef __RAY_DIFFERENTIALS__
   float dP;
@@ -620,18 +582,10 @@ typedef struct AttributeDescriptor {
 
 /* Closure data */
 
-#ifdef __MULTI_CLOSURE__
-#  ifdef __SPLIT_KERNEL__
-#    define MAX_CLOSURE 1
-#  else
-#    ifndef __MAX_CLOSURE__
-#      define MAX_CLOSURE 64
-#    else
-#      define MAX_CLOSURE __MAX_CLOSURE__
-#    endif
-#  endif
+#ifndef __MAX_CLOSURE__
+#  define MAX_CLOSURE 64
 #else
-#  define MAX_CLOSURE 1
+#  define MAX_CLOSURE __MAX_CLOSURE__
 #endif
 
 /* This struct is the base class for all closures. The common members are

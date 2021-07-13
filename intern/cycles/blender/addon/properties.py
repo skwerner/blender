@@ -111,7 +111,6 @@ enum_device_type = (
     ('CPU', "CPU", "CPU", 0),
     ('CUDA', "CUDA", "CUDA", 1),
     ('OPTIX', "OptiX", "OptiX", 3),
-    ('OPENCL', "OpenCL", "OpenCL", 2)
 )
 
 enum_texture_limit = (
@@ -717,39 +716,6 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         default=False
     )
 
-    debug_opencl_kernel_type: EnumProperty(
-        name="OpenCL Kernel Type",
-        default='DEFAULT',
-        items=(
-            ('DEFAULT', "Default", ""),
-            ('MEGA', "Mega", ""),
-            ('SPLIT', "Split", ""),
-        ),
-        update=CyclesRenderSettings._devices_update_callback
-    )
-
-    debug_opencl_device_type: EnumProperty(
-        name="OpenCL Device Type",
-        default='ALL',
-        items=(
-            ('NONE', "None", ""),
-            ('ALL', "All", ""),
-            ('DEFAULT', "Default", ""),
-            ('CPU', "CPU", ""),
-            ('GPU', "GPU", ""),
-            ('ACCELERATOR', "Accelerator", ""),
-        ),
-        update=CyclesRenderSettings._devices_update_callback
-    )
-
-    debug_use_opencl_debug: BoolProperty(name="Debug OpenCL", default=False)
-
-    debug_opencl_mem_limit: IntProperty(
-        name="Memory limit",
-        default=0,
-        description="Artificial limit on OpenCL memory usage in MB (0 to disable limit)"
-    )
-
     @classmethod
     def register(cls):
         bpy.types.Scene.cycles = PointerProperty(
@@ -1291,14 +1257,12 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def get_device_types(self, context):
         import _cycles
-        has_cuda, has_optix, has_opencl = _cycles.get_device_types()
+        has_cuda, has_optix = _cycles.get_device_types()
         list = [('NONE', "None", "Don't use compute device", 0)]
         if has_cuda:
             list.append(('CUDA', "CUDA", "Use CUDA for GPU acceleration", 1))
         if has_optix:
             list.append(('OPTIX', "OptiX", "Use OptiX for GPU acceleration", 3))
-        if has_opencl:
-            list.append(('OPENCL', "OpenCL", "Use OpenCL for GPU acceleration", 2))
         return list
 
     compute_device_type: EnumProperty(
@@ -1323,7 +1287,7 @@ class CyclesPreferences(bpy.types.AddonPreferences):
 
     def update_device_entries(self, device_list):
         for device in device_list:
-            if not device[1] in {'CUDA', 'OPTIX', 'OPENCL', 'CPU'}:
+            if not device[1] in {'CUDA', 'OPTIX', 'CPU'}:
                 continue
             # Try to find existing Device entry
             entry = self.find_existing_device_entry(device)
@@ -1357,22 +1321,9 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             elif entry.type == 'CPU':
                 cpu_devices.append(entry)
         # Extend all GPU devices with CPU.
-        if compute_device_type in {'CUDA', 'OPTIX', 'OPENCL'}:
+        if compute_device_type != 'CPU':
             devices.extend(cpu_devices)
         return devices
-
-    # For backwards compatibility, only returns CUDA and OpenCL but still
-    # refreshes all devices.
-    def get_devices(self, compute_device_type=''):
-        import _cycles
-        # Ensure `self.devices` is not re-allocated when the second call to
-        # get_devices_for_type is made, freeing items from the first list.
-        for device_type in ('CUDA', 'OPTIX', 'OPENCL'):
-            self.update_device_entries(_cycles.available_devices(device_type))
-
-        cuda_devices = self.get_devices_for_type('CUDA')
-        opencl_devices = self.get_devices_for_type('OPENCL')
-        return cuda_devices, opencl_devices
 
     def get_num_gpu_devices(self):
         import _cycles

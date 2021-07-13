@@ -733,8 +733,6 @@ static const char *device_type_for_description(const DeviceType type)
 
     case DEVICE_CPU:
       return "CPU";
-    case DEVICE_OPENCL:
-      return "OpenCL";
     case DEVICE_CUDA:
       return "CUDA";
     case DEVICE_OPTIX:

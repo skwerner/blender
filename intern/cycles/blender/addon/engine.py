@@ -18,39 +18,6 @@
 from __future__ import annotations
 
 
-def _is_using_buggy_driver():
-    import gpu
-    # We need to be conservative here because in multi-GPU systems display card
-    # might be quite old, but others one might be just good.
-    #
-    # So We shouldn't disable possible good dedicated cards just because display
-    # card seems weak. And instead we only blacklist configurations which are
-    # proven to cause problems.
-    if gpu.platform.vendor_get() == "ATI Technologies Inc.":
-        import re
-        version = gpu.platform.version_get()
-        if version.endswith("Compatibility Profile Context"):
-            # Old HD 4xxx and 5xxx series drivers did not have driver version
-            # in the version string, but those cards do not quite work and
-            # causing crashes.
-            return True
-        regex = re.compile(".*Compatibility Profile Context ([0-9]+(\\.[0-9]+)+)$")
-        if not regex.match(version):
-            # Skip cards like FireGL
-            return False
-        version = regex.sub("\\1", version).split('.')
-        return int(version[0]) == 8
-    return False
-
-
-def _workaround_buggy_drivers():
-    if _is_using_buggy_driver():
-        import _cycles
-        if hasattr(_cycles, "opencl_disable"):
-            print("Cycles: OpenGL driver known to be buggy, disabling OpenCL platform.")
-            _cycles.opencl_disable()
-
-
 def _configure_argument_parser():
     import argparse
     # No help because it conflicts with general Python scripts argument parsing
@@ -73,7 +40,7 @@ def _configure_argument_parser():
                         action='store_true')
     parser.add_argument("--cycles-device",
                         help="Set the device to use for Cycles, overriding user preferences and the scene setting."
-                             "Valid options are 'CPU', 'CUDA', 'OPTIX' or 'OPENCL'."
+                             "Valid options are 'CPU', 'CUDA' or 'OPTIX'."
                              "Additionally, you can append '+CPU' to any GPU type for hybrid rendering.",
                         default=None)
     return parser
@@ -117,19 +84,6 @@ def init():
     import bpy
     import _cycles
     import os.path
-
-    # Workaround possibly buggy legacy drivers which crashes on the OpenCL
-    # device enumeration.
-    #
-    # This checks are not really correct because they might still fail
-    # in the case of multiple GPUs. However, currently buggy drivers
-    # are really old and likely to be used in single GPU systems only
-    # anyway.
-    #
-    # Can't do it in the background mode, so we hope OpenCL is no enabled
-    # in the user preferences.
-    if not bpy.app.background:
-        _workaround_buggy_drivers()
 
     path = os.path.dirname(__file__)
     user_path = os.path.dirname(os.path.abspath(bpy.utils.user_resource('CONFIG', path='')))

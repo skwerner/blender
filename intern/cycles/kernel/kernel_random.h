@@ -176,8 +176,6 @@ ccl_device_inline bool sample_is_even(int pattern, int sample)
     return __builtin_popcount(sample & 0xaaaaaaaa) & 1;
 #elif defined(__NVCC__)
     return __popc(sample & 0xaaaaaaaa) & 1;
-#elif defined(__KERNEL_OPENCL__)
-    return popcount(sample & 0xaaaaaaaa) & 1;
 #else
     /* TODO(Stefan): pop-count intrinsic for Windows with fallback for older CPUs. */
     int i = sample & 0xaaaaaaaa;

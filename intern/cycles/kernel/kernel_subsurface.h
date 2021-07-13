@@ -120,12 +120,7 @@ ccl_device_inline int subsurface_scatter_disk(const KernelGlobals *kg,
   float3 disk_P = (disk_r * cosf(phi)) * disk_T + (disk_r * sinf(phi)) * disk_B;
 
   /* create ray */
-#ifdef __SPLIT_KERNEL__
-  Ray ray_object = ss_isect->ray;
-  Ray *ray = &ray_object;
-#else
   Ray *ray = &ss_isect->ray;
-#endif
   ray->P = sd->P + disk_N * disk_height + disk_P;
   ray->D = -disk_N;
   ray->t = 2.0f * disk_height;
@@ -186,10 +181,6 @@ ccl_device_inline int subsurface_scatter_disk(const KernelGlobals *kg,
 
     ss_isect->weight[hit] = eval;
   }
-
-#ifdef __SPLIT_KERNEL__
-  ss_isect->ray = *ray;
-#endif
 
   return num_eval_hits;
 }

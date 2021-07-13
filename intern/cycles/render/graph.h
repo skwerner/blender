@@ -238,15 +238,6 @@ class ShaderNode : public Node {
    * that those functions are for selective compilation only?
    */
 
-  /* Nodes are split into several groups, group of level 0 contains
-   * nodes which are most commonly used, further levels are extension
-   * of previous one and includes less commonly used nodes.
-   */
-  virtual int get_group()
-  {
-    return NODE_GROUP_LEVEL_0;
-  }
-
   /* Node feature are used to disable huge nodes inside the group,
    * so it's possible to disable huge nodes inside of the required
    * nodes group.

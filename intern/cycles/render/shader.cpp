@@ -687,8 +687,6 @@ void ShaderManager::get_requested_graph_features(ShaderGraph *graph,
                                                  DeviceRequestedFeatures *requested_features)
 {
   foreach (ShaderNode *node, graph->nodes) {
-    requested_features->max_nodes_group = max(requested_features->max_nodes_group,
-                                              node->get_group());
     requested_features->nodes_features |= node->get_feature();
     if (node->special_type == SHADER_SPECIAL_TYPE_CLOSURE) {
       BsdfBaseNode *bsdf_node = static_cast<BsdfBaseNode *>(node);
@@ -711,7 +709,6 @@ void ShaderManager::get_requested_graph_features(ShaderGraph *graph,
 void ShaderManager::get_requested_features(Scene *scene,
                                            DeviceRequestedFeatures *requested_features)
 {
-  requested_features->max_nodes_group = NODE_GROUP_LEVEL_0;
   requested_features->nodes_features = NODE_FEATURE_BSDF | NODE_FEATURE_EMISSION;
   for (int i = 0; i < scene->shaders.size(); i++) {
     Shader *shader = scene->shaders[i];
@@ -726,8 +723,6 @@ void ShaderManager::get_requested_features(Scene *scene,
       requested_features->nodes_features |= NODE_FEATURE_BUMP;
       if (shader->get_displacement_method() == DISPLACE_BOTH) {
         requested_features->nodes_features |= NODE_FEATURE_BUMP_STATE;
-        requested_features->max_nodes_group = max(requested_features->max_nodes_group,
-                                                  NODE_GROUP_LEVEL_1);
       }
     }
     /* On top of volume nodes, also check if we need volume sampling because

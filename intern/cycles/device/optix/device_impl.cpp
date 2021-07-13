@@ -1368,7 +1368,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       memcpy(index_data.data(),
              mesh->get_triangles().data(),
              mesh->get_triangles().size() * sizeof(int));
-      device_vector<float3> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
+      device_vector<float4> vertex_data(this, "optix temp vertex data", MEM_READ_ONLY);
       vertex_data.alloc(num_verts * num_motion_steps);
 
       for (size_t step = 0; step < num_motion_steps; ++step) {
@@ -1400,7 +1400,7 @@ void OptiXDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
       build_input.triangleArray.vertexBuffers = (CUdeviceptr *)vertex_ptrs.data();
       build_input.triangleArray.numVertices = num_verts;
       build_input.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_FLOAT3;
-      build_input.triangleArray.vertexStrideInBytes = sizeof(float3);
+      build_input.triangleArray.vertexStrideInBytes = sizeof(float4);
       build_input.triangleArray.indexBuffer = index_data.device_pointer;
       build_input.triangleArray.numIndexTriplets = mesh->num_triangles();
       build_input.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_UNSIGNED_INT3;

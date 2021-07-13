@@ -18,6 +18,8 @@
 
 #include "util/util_math.h"
 
+#include "util/util_logging.h"
+
 CCL_NAMESPACE_BEGIN
 
 void work_balance_do_initial(vector<WorkBalanceInfo> &work_balance_infos)
@@ -36,79 +38,46 @@ void work_balance_do_initial(vector<WorkBalanceInfo> &work_balance_infos)
   }
 }
 
-/* Calculate time which takes for every work to complete a unit of work.
- * The result times are normalized so that their sum is 1. */
-static vector<double> calculate_normalized_times_per_unit(
-    const vector<WorkBalanceInfo> &work_balance_infos)
+static double calculate_total_time(const vector<WorkBalanceInfo> &work_balance_infos)
 {
-  const int num_infos = work_balance_infos.size();
-
-  vector<double> times_per_unit;
-  times_per_unit.reserve(num_infos);
-
-  double total_time_per_unit = 0;
-  for (const WorkBalanceInfo &work_balance_info : work_balance_infos) {
-    /* The work did `total_work * weight`, and the time per unit is
-     * `time_spent / (total_work * weight). The total amount of work is not known here, but it will
-     * gets cancelled out during normalization anyway.
-     *
-     * Note that in some degenerated cases (when amount of work is smaller than amount of workers)
-     * it is possible that the time and/or weight of the work is 0. */
-    const double time_per_unit = work_balance_info.weight != 0 ?
-                                     work_balance_info.time_spent / work_balance_info.weight :
-                                     0;
-    times_per_unit.push_back(time_per_unit);
-    total_time_per_unit += time_per_unit;
+  double total_time = 0;
+  for (const WorkBalanceInfo &info : work_balance_infos) {
+    total_time += info.time_spent;
   }
-
-  const double total_time_per_unit_inv = 1.0 / total_time_per_unit;
-  for (double &time_per_unit : times_per_unit) {
-    time_per_unit *= total_time_per_unit_inv;
-  }
-
-  return times_per_unit;
+  return total_time;
 }
 
-/* Calculate weights for the more ideal distribution of work.
- * The calculation here is based on an observed performance of every worker: the amount of work
- * scheduler is proportional to the performance of the worker. Performance of the worker is an
- * inverse of the time-per-unit-work. */
-static vector<double> calculate_normalized_weights(
-    const vector<WorkBalanceInfo> &work_balance_infos)
+/* The balance is based on equalizing time which devices spent performing a task. Assume that
+ * average of the observed times is usable for estimating whether more or less work is to be
+ * scheduled, and how difference in the work scheduling is needed. */
+
+bool work_balance_do_rebalance(vector<WorkBalanceInfo> &work_balance_infos)
 {
   const int num_infos = work_balance_infos.size();
 
-  const vector<double> times_per_unit = calculate_normalized_times_per_unit(work_balance_infos);
+  const double total_time = calculate_total_time(work_balance_infos);
+  const double time_average = total_time / num_infos;
 
-  vector<double> weights;
-  weights.reserve(num_infos);
+  double total_weight;
+  vector<double> new_weights;
+  new_weights.reserve(num_infos);
 
-  double total_weight = 0;
-  for (double time_per_unit : times_per_unit) {
-    /* Note that in some degenerated cases (when amount of work is smaller than amount of workers)
-     * it is possible that the time and/or weight of the work is 0. */
-    const double weight = time_per_unit != 0 ? 1.0 / time_per_unit : 0;
-    total_weight += weight;
-    weights.push_back(weight);
-  }
-
-  const double total_weight_inv = 1.0 / total_weight;
-  for (double &weight : weights) {
-    weight *= total_weight_inv;
-  }
-
-  return weights;
-}
-
-static bool apply_new_weights(vector<WorkBalanceInfo> &work_balance_infos,
-                              const vector<double> &new_weights)
-{
-  const int num_infos = work_balance_infos.size();
+  /* Equalize the overall average time. This means that we don't make it so every work will perform
+   * amount of work based on the current average, but that after the weights changes the time will
+   * equalize.
+   * Can think of it that if one of the devices is 10% faster than another, then one device needs
+   * to do 5% less of the current work, and another needs to do 5% more. */
+  const double lerp_weight = 1.0 / num_infos;
 
   bool has_big_difference = false;
-  for (int i = 0; i < num_infos; ++i) {
-    /* Apparently, there is no `ccl::fabs()`. */
-    if (std::fabs(work_balance_infos[i].weight - new_weights[i]) > 0.02) {
+
+  for (const WorkBalanceInfo &info : work_balance_infos) {
+    const double time_target = lerp(info.time_spent, time_average, lerp_weight);
+    const double new_weight = info.weight * time_target / info.time_spent;
+    new_weights.push_back(new_weight);
+    total_weight += new_weight;
+
+    if (std::fabs(1.0 - time_target / time_average) > 0.02) {
       has_big_difference = true;
     }
   }
@@ -117,20 +86,14 @@ static bool apply_new_weights(vector<WorkBalanceInfo> &work_balance_infos,
     return false;
   }
 
+  const double total_weight_inv = 1.0 / total_weight;
   for (int i = 0; i < num_infos; ++i) {
     WorkBalanceInfo &info = work_balance_infos[i];
-    info.weight = new_weights[i];
+    info.weight = new_weights[i] * total_weight_inv;
     info.time_spent = 0;
   }
 
   return true;
-}
-
-bool work_balance_do_rebalance(vector<WorkBalanceInfo> &work_balance_infos)
-{
-  const vector<double> new_weights = calculate_normalized_weights(work_balance_infos);
-
-  return apply_new_weights(work_balance_infos, new_weights);
 }
 
 CCL_NAMESPACE_END

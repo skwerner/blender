@@ -150,6 +150,8 @@ void PathTrace::render_pipeline(RenderWork render_work)
 
   init_render_buffers(render_work);
 
+  rebalance(render_work);
+
   path_trace(render_work);
   if (is_cancel_requested()) {
     return;
@@ -166,7 +168,6 @@ void PathTrace::render_pipeline(RenderWork render_work)
   }
 
   update_display(render_work);
-  rebalance(render_work);
 
   progress_update_if_needed();
 

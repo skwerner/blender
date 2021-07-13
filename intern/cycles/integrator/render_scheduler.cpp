@@ -124,6 +124,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.num_rebalance_requested = 0;
   state_.num_rebalance_changes = 0;
   state_.last_rebalance_changed = false;
+  state_.need_rebalance_at_next_work = false;
 
   /* TODO(sergey): Choose better initial value. */
   /* NOTE: The adaptive sampling settings might not be available here yet. */
@@ -529,6 +530,13 @@ double RenderScheduler::guess_display_update_interval_in_seconds_for_num_samples
    * taken into account. It will depend on whether the start sample offset clears the render
    * buffer. */
 
+  if (state_.need_rebalance_at_next_work) {
+    return 0.1;
+  }
+  if (state_.last_rebalance_changed) {
+    return 0.2;
+  }
+
   if (headless_) {
     /* In headless mode do rare updates, so that the device occupancy is high, but there are still
      * progress messages printed to the logs. */
@@ -789,6 +797,16 @@ bool RenderScheduler::work_need_rebalance()
   }
 
   if (state_.num_rendered_samples == 0) {
+    state_.need_rebalance_at_next_work = true;
+    return false;
+  }
+
+  if (state_.need_rebalance_at_next_work) {
+    state_.need_rebalance_at_next_work = false;
+    return true;
+  }
+
+  if (state_.last_rebalance_changed) {
     return true;
   }
 

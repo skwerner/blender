@@ -290,6 +290,8 @@ class RenderScheduler {
     /* Number of rebalance works handled which did change balance across devices. */
     int num_rebalance_changes = 0;
 
+    bool need_rebalance_at_next_work = false;
+
     /* Denotes whether the latest performed rebalance work cause an actual rebalance of work across
      * devices. */
     bool last_rebalance_changed = false;

@@ -40,6 +40,8 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
       integrator_shader_sort_counter_(device, "integrator_shader_sort_counter", MEM_READ_WRITE),
       integrator_shader_raytrace_sort_counter_(
           device, "integrator_shader_raytrace_sort_counter", MEM_READ_WRITE),
+      integrator_next_shadow_catcher_path_index_(
+          device, "integrator_next_shadow_catcher_path_index", MEM_READ_WRITE),
       queued_paths_(device, "queued_paths", MEM_READ_WRITE),
       num_queued_paths_(device, "num_queued_paths", MEM_READ_WRITE),
       work_tiles_(device, "work_tiles", MEM_READ_WRITE),
@@ -146,18 +148,31 @@ void PathTraceWorkGPU::alloc_integrator_sorting()
   }
 }
 
+void PathTraceWorkGPU::alloc_integrator_path_split()
+{
+  if (integrator_next_shadow_catcher_path_index_.size() != 0) {
+    return;
+  }
+
+  integrator_next_shadow_catcher_path_index_.alloc(1);
+  /* TODO(sergey): Use queue? */
+  integrator_next_shadow_catcher_path_index_.zero_to_device();
+
+  integrator_state_gpu_.next_shadow_catcher_path_index =
+      (int *)integrator_next_shadow_catcher_path_index_.device_pointer;
+}
+
 void PathTraceWorkGPU::alloc_work_memory()
 {
   alloc_integrator_soa();
   alloc_integrator_queue();
   alloc_integrator_sorting();
+  alloc_integrator_path_split();
 }
 
 void PathTraceWorkGPU::init_execution()
 {
   queue_->init_execution();
-
-  integrator_state_gpu_.shadow_catcher_state_offset = get_shadow_catcher_state_offset();
 
   /* Copy to device side struct in constant memory. */
   device_->const_copy_to(
@@ -166,6 +181,10 @@ void PathTraceWorkGPU::init_execution()
 
 void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 {
+  /* Limit number of states for the tile and rely on a greedy scheduling of tiles. This allows to
+   * add more work (because tiles are smaller, so there is higher chance that more paths will
+   * become busy after adding new tiles). This is especially important for the shadow catcher which
+   * schedules work in halves of available number of paths. */
   work_tile_scheduler_.set_max_num_path_states(max_num_paths_ / 8);
 
   work_tile_scheduler_.reset(effective_buffer_params_, start_sample, samples_num);
@@ -415,12 +434,6 @@ void PathTraceWorkGPU::compact_states(const int num_active_paths)
     max_active_path_index_ = 0;
   }
 
-  /* TODO: not supported for shadow catcher yet. That needs to switch to an atomic
-   * counter for new paths so that we can fill in the space left after compaction. */
-  if (has_shadow_catcher()) {
-    return;
-  }
-
   /* Compact fragmented path states into the start of the array, moving any paths
    * with index higher than the number of active paths into the gaps. */
   if (max_active_path_index_ == num_active_paths) {
@@ -496,7 +509,28 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
 
   vector<KernelWorkTile> work_tiles;
 
-  const int max_num_camera_paths = get_max_num_camera_paths();
+  int max_num_camera_paths = max_num_paths_;
+  int num_predicted_splits = 0;
+
+  if (has_shadow_catcher()) {
+    /* When there are shadow catchers in the scene bounce from them will split the state. So we
+     * make sure there is enough space in the path states array to fit split states.
+     *
+     * Basically, when adding N new paths we ensure that there is 2*N available path states, so
+     * that all the new paths can be split.
+     *
+     * Note that it is possible that some of the current states can still split, so need to make
+     * sure there is enough space for them as well. */
+
+    /* Number of currently in-flight states which can still split. */
+    const int num_scheduled_possible_split = shadow_catcher_count_possible_splits();
+
+    const int num_available_paths = max_num_paths_ - num_active_paths;
+    const int num_new_paths = num_available_paths / 2;
+    max_num_camera_paths = max(num_active_paths,
+                               num_active_paths + num_new_paths - num_scheduled_possible_split);
+    num_predicted_splits += num_scheduled_possible_split + num_new_paths;
+  }
 
   /* Schedule when we're out of paths or there are too few paths to keep the
    * device occupied. */
@@ -530,23 +564,33 @@ bool PathTraceWorkGPU::enqueue_work_tiles(bool &finished)
    * known maximum path index, which makes computing active index arrays slow. */
   compact_states(num_active_paths);
 
+  if (has_shadow_catcher()) {
+    integrator_next_shadow_catcher_path_index_.data()[0] = num_paths;
+    queue_->copy_to_device(integrator_next_shadow_catcher_path_index_);
+  }
+
   enqueue_work_tiles((device_scene_->data.bake.use) ? DEVICE_KERNEL_INTEGRATOR_INIT_FROM_BAKE :
                                                       DEVICE_KERNEL_INTEGRATOR_INIT_FROM_CAMERA,
                      work_tiles.data(),
-                     work_tiles.size());
+                     work_tiles.size(),
+                     num_active_paths,
+                     num_predicted_splits);
+
   return true;
 }
 
 void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
                                           const KernelWorkTile work_tiles[],
-                                          const int num_work_tiles)
+                                          const int num_work_tiles,
+                                          const int num_active_paths,
+                                          const int num_predicted_splits)
 {
   /* Copy work tiles to device. */
   if (work_tiles_.size() < num_work_tiles) {
     work_tiles_.alloc(num_work_tiles);
   }
 
-  int path_index_offset = 0;
+  int path_index_offset = num_active_paths;
   int max_tile_work_size = 0;
   for (int i = 0; i < num_work_tiles; i++) {
     KernelWorkTile &work_tile = work_tiles_.data()[i];
@@ -565,46 +609,17 @@ void PathTraceWorkGPU::enqueue_work_tiles(DeviceKernel kernel,
   queue_->copy_to_device(work_tiles_);
 
   void *d_work_tiles = (void *)work_tiles_.device_pointer;
-  void *d_path_index = (void *)nullptr;
   void *d_render_buffer = (void *)buffers_->buffer.device_pointer;
 
-  if (max_active_path_index_ != 0) {
-    queue_->zero_to_device(num_queued_paths_);
-
-    /* Limit work size to max known active path index + the number of paths we are going
-     * to enqueue, which may be smaller than the total number of paths possible. */
-    const int work_size = min(max_num_paths_, max_active_path_index_ + path_index_offset);
-    int queued_kernel = 0;
-
-    void *d_queued_paths = (void *)queued_paths_.device_pointer;
-    void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
-    void *args[] = {
-        const_cast<int *>(&work_size), &d_queued_paths, &d_num_queued_paths, &queued_kernel};
-
-    queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_TERMINATED_PATHS_ARRAY, work_size, args);
-
-    d_path_index = (void *)queued_paths_.device_pointer;
-  }
-
   /* Launch kernel. */
-  void *args[] = {&d_path_index,
-                  &d_work_tiles,
+  void *args[] = {&d_work_tiles,
                   const_cast<int *>(&num_work_tiles),
                   &d_render_buffer,
                   const_cast<int *>(&max_tile_work_size)};
 
   queue_->enqueue(kernel, max_tile_work_size * num_work_tiles, args);
 
-  /* TODO: this could be computed more accurately using on the last entry
-   * in the queued_paths array passed to the kernel? */
-  /* When there is a shadow catcher in the scene provision that the shadow catcher state will
-   * become active at some point.
-   *
-   * TODO: What is more accurate approach here? What if the shadow catcher is hit after some
-   * transparent bounce? Do we need to calculate this somewhere else as well? */
-  max_active_path_index_ = min(max_active_path_index_ + path_index_offset +
-                                   get_shadow_catcher_state_offset(),
-                               max_num_paths_);
+  max_active_path_index_ = path_index_offset + num_predicted_splits;
 }
 
 int PathTraceWorkGPU::get_num_active_paths()
@@ -621,17 +636,6 @@ int PathTraceWorkGPU::get_num_active_paths()
   }
 
   return num_paths;
-}
-
-int PathTraceWorkGPU::get_max_num_camera_paths() const
-{
-  /* When shadow catcher is used reserve half of the states for the shadow catcher needs (so that
-   * when path hits shadow catcher it can split). */
-  if (has_shadow_catcher()) {
-    return max_num_paths_ / 2;
-  }
-
-  return max_num_paths_;
 }
 
 bool PathTraceWorkGPU::should_use_graphics_interop()
@@ -866,13 +870,27 @@ bool PathTraceWorkGPU::has_shadow_catcher() const
   return device_scene_->data.integrator.has_shadow_catcher;
 }
 
-int PathTraceWorkGPU::get_shadow_catcher_state_offset() const
+int PathTraceWorkGPU::shadow_catcher_count_possible_splits()
 {
+  if (max_active_path_index_ == 0) {
+    return 0;
+  }
+
   if (!has_shadow_catcher()) {
     return 0;
   }
 
-  return max_num_paths_ / 2;
+  queue_->zero_to_device(num_queued_paths_);
+
+  const int work_size = max_active_path_index_;
+  void *d_num_queued_paths = (void *)num_queued_paths_.device_pointer;
+  void *args[] = {const_cast<int *>(&work_size), &d_num_queued_paths};
+
+  queue_->enqueue(DEVICE_KERNEL_INTEGRATOR_SHADOW_CATCHER_COUNT_POSSIBLE_SPLITS, work_size, args);
+  queue_->copy_from_device(num_queued_paths_);
+  queue_->synchronize();
+
+  return num_queued_paths_.data()[0];
 }
 
 CCL_NAMESPACE_END

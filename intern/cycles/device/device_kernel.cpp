@@ -66,6 +66,8 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       return "integrator_compact_states";
     case DEVICE_KERNEL_INTEGRATOR_RESET:
       return "integrator_reset";
+    case DEVICE_KERNEL_INTEGRATOR_SHADOW_CATCHER_COUNT_POSSIBLE_SPLITS:
+      return "integrator_shadow_catcher_count_possible_splits";
 
     /* Shader evaluation. */
     case DEVICE_KERNEL_SHADER_EVAL_DISPLACE:

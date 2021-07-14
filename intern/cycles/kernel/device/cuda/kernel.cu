@@ -90,8 +90,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_init_from_camera(const int *path_index_array,
-                                            KernelWorkTile *tiles,
+    kernel_cuda_integrator_init_from_camera(KernelWorkTile *tiles,
                                             const int num_tiles,
                                             float *render_buffer,
                                             const int max_tile_work_size)
@@ -111,9 +110,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     return;
   }
 
-  const int path_index = (path_index_array) ?
-                             path_index_array[tile->path_index_offset + tile_work_index] :
-                             tile->path_index_offset + tile_work_index;
+  const int path_index = tile->path_index_offset + tile_work_index;
 
   uint x, y, sample;
   get_work_pixel(tile, tile_work_index, &x, &y, &sample);
@@ -123,8 +120,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
 extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
                                               CUDA_KERNEL_MAX_REGISTERS)
-    kernel_cuda_integrator_init_from_bake(const int *path_index_array,
-                                          KernelWorkTile *tiles,
+    kernel_cuda_integrator_init_from_bake(KernelWorkTile *tiles,
                                           const int num_tiles,
                                           float *render_buffer,
                                           const int max_tile_work_size)
@@ -144,9 +140,7 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
     return;
   }
 
-  const int path_index = (path_index_array) ?
-                             path_index_array[tile->path_index_offset + tile_work_index] :
-                             tile->path_index_offset + tile_work_index;
+  const int path_index = tile->path_index_offset + tile_work_index;
 
   uint x, y, sample;
   get_work_pixel(tile, tile_work_index, &x, &y, &sample);
@@ -328,16 +322,6 @@ extern "C" __global__ void __launch_bounds__(CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_
 {
   cuda_parallel_active_index_array<CUDA_PARALLEL_ACTIVE_INDEX_DEFAULT_BLOCK_SIZE>(
       num_states, indices + indices_offset, num_indices, [](const int path_index) {
-        if (kernel_data.integrator.has_shadow_catcher) {
-          /* NOTE: The kernel invocation limits number of states checked, ensuring that only
-           * non-shadow-catcher states are checked here. */
-
-          /* Only allow termination of both complementary states did finish their job. */
-          if (INTEGRATOR_SHADOW_CATCHER_STATE(path, queued_kernel) != 0 ||
-              INTEGRATOR_SHADOW_CATCHER_STATE(shadow_path, queued_kernel) != 0) {
-            return false;
-          }
-        }
         return (INTEGRATOR_STATE(path, queued_kernel) == 0) &&
                (INTEGRATOR_STATE(shadow_path, queued_kernel) == 0);
       });
@@ -843,6 +827,31 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
      * is an opaque pixel for 4 component passes. */
 
     denoised_pixel[3] = 0;
+  }
+}
+
+/* --------------------------------------------------------------------
+ * Shadow catcher.
+ */
+
+extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
+                                              CUDA_KERNEL_MAX_REGISTERS)
+    kernel_cuda_integrator_shadow_catcher_count_possible_splits(int num_states,
+                                                                uint *num_possible_splits)
+{
+  const int path_index = ccl_global_id(0);
+
+  bool can_split = false;
+
+  if (path_index < num_states) {
+    can_split = kernel_shadow_catcher_path_can_split(nullptr, path_index);
+  }
+
+  /* NOTE: All threads specified in the mask must execute the intrinsic. */
+  const uint can_split_mask = __ballot_sync(0xffffffff, can_split);
+  const int lane_id = threadIdx.x % warpSize;
+  if (lane_id == 0) {
+    atomic_fetch_and_add_uint32(num_possible_splits, __popc(can_split_mask));
   }
 }
 

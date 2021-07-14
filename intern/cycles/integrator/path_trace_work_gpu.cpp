@@ -131,12 +131,12 @@ void PathTraceWorkGPU::alloc_integrator_queue()
 void PathTraceWorkGPU::alloc_integrator_sorting()
 {
   /* Allocate arrays for shader sorting. */
-  const int num_shaders = device_scene_->shaders.size();
-  if (integrator_shader_sort_counter_.size() < num_shaders) {
-    integrator_shader_sort_counter_.alloc(num_shaders);
+  const int max_shaders = device_scene_->data.max_shaders;
+  if (integrator_shader_sort_counter_.size() < max_shaders) {
+    integrator_shader_sort_counter_.alloc(max_shaders);
     integrator_shader_sort_counter_.zero_to_device();
 
-    integrator_shader_raytrace_sort_counter_.alloc(num_shaders);
+    integrator_shader_raytrace_sort_counter_.alloc(max_shaders);
     integrator_shader_raytrace_sort_counter_.zero_to_device();
 
     integrator_state_gpu_.sort_key_counter[DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE] =
@@ -146,13 +146,16 @@ void PathTraceWorkGPU::alloc_integrator_sorting()
   }
 }
 
-void PathTraceWorkGPU::init_execution()
+void PathTraceWorkGPU::alloc_work_memory()
 {
-  queue_->init_execution();
-
   alloc_integrator_soa();
   alloc_integrator_queue();
   alloc_integrator_sorting();
+}
+
+void PathTraceWorkGPU::init_execution()
+{
+  queue_->init_execution();
 
   integrator_state_gpu_.shadow_catcher_state_offset = get_shadow_catcher_state_offset();
 
@@ -358,8 +361,8 @@ void PathTraceWorkGPU::compute_sorted_queued_paths(DeviceKernel kernel, DeviceKe
   /* Compute prefix sum of number of active paths with each shader. */
   {
     const int work_size = 1;
-    int num_shaders = device_scene_->shaders.size();
-    void *args[] = {&d_counter, &num_shaders};
+    int max_shaders = device_scene_->data.max_shaders;
+    void *args[] = {&d_counter, &max_shaders};
     queue_->enqueue(DEVICE_KERNEL_PREFIX_SUM, work_size, args);
   }
 

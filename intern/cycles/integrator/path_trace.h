@@ -54,6 +54,10 @@ class PathTrace {
    * The progress is reported to the currently configure progress object (via `set_progress`). */
   void load_kernels();
 
+  /* Allocate working memory. This runs before allocating scene memory so that we can estimate
+   * more accurately which scene device memory may need to allocated on the host. */
+  void alloc_work_memory();
+
   /* Check whether now it is a good time to reset rendering.
    * Used to avoid very often resets in the viewport, giving it a chance to draw intermediate
    * render result. */

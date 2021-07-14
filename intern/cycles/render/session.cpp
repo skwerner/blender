@@ -443,14 +443,19 @@ void Session::wait()
 
 bool Session::update_scene(int width, int height)
 {
-  /* update camera if dimensions changed for progressive render. the camera
+  /* Update camera if dimensions changed for progressive render. the camera
    * knows nothing about progressive or cropped rendering, it just gets the
-   * image dimensions passed in */
+   * image dimensions passed in. */
   Camera *cam = scene->camera;
-
   cam->set_screen_size(width, height);
 
+  /* First detect which kernel features are used and allocate working memory.
+   * This helps estimate how may device memory is available for the scene and
+   * how much we need to allocate on the host instead. */
+  scene->update_kernel_features();
+
   path_trace_->load_kernels();
+  path_trace_->alloc_work_memory();
 
   if (scene->update(progress)) {
     return true;

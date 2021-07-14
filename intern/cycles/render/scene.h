@@ -270,6 +270,7 @@ class Scene : public NodeOwner {
 
   void enable_update_stats();
 
+  void update_kernel_features();
   bool update(Progress &progress);
 
   /* Update passes so that they contain all passes required for the configured functionality. */
@@ -339,10 +340,6 @@ class Scene : public NodeOwner {
 
   bool has_shadow_catcher_ = false;
   bool shadow_catcher_modified_ = true;
-
-  /* ** Split kernel routines ** */
-
-  uint get_kernel_features();
 
   /* Maximum number of closure during session lifetime. */
   int max_closure_global;

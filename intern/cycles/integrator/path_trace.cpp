@@ -77,6 +77,13 @@ void PathTrace::load_kernels()
   }
 }
 
+void PathTrace::alloc_work_memory()
+{
+  for (auto &&path_trace_work : path_trace_works_) {
+    path_trace_work->alloc_work_memory();
+  }
+}
+
 bool PathTrace::ready_to_reset()
 {
   /* The logic here is optimized for the best feedback in the viewport, which implies having a GPU

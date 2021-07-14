@@ -1126,12 +1126,10 @@ typedef struct KernelIntegrator {
   int volume_max_steps;
   float volume_step_rate;
 
-  int max_closures;
-
   int has_shadow_catcher;
 
   /* padding */
-  int pad1;
+  int pad1, pad2;
 } KernelIntegrator;
 static_assert_align(KernelIntegrator, 16);
 
@@ -1190,7 +1188,9 @@ static_assert_align(KernelBake, 16);
 
 typedef struct KernelData {
   uint kernel_features;
-  uint pad1, pad2, pad3;
+  uint max_closures;
+  uint max_shaders;
+  uint pad;
 
   KernelCamera cam;
   KernelFilm film;

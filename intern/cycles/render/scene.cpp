@@ -469,13 +469,16 @@ void Scene::enable_update_stats()
   }
 }
 
-uint Scene::get_kernel_features()
+void Scene::update_kernel_features()
 {
+  if (!need_update()) {
+    return;
+  }
+
+  /* These features are not being tweaked as often as shaders,
+   * so could be done selective magic for the viewport as well. */
   uint kernel_features = shader_manager->get_kernel_features(this);
 
-  /* This features are not being tweaked as often as shaders,
-   * so could be done selective magic for the viewport as well.
-   */
   bool use_motion = need_motion() == Scene::MotionType::MOTION_BLUR;
   kernel_features |= KERNEL_FEATURE_PATH_TRACING;
   if (params.hair_shape == CURVE_THICK) {
@@ -516,7 +519,12 @@ uint Scene::get_kernel_features()
 
   kernel_features |= film->get_kernel_features(this);
 
-  return kernel_features;
+  dscene.data.kernel_features = kernel_features;
+
+  /* Currently viewport render is faster with higher max_closures, needs investigating. */
+  const uint max_closures = (params.background) ? get_max_closure_count() : MAX_CLOSURE;
+  dscene.data.max_closures = max_closures;
+  dscene.data.max_shaders = shaders.size();
 }
 
 bool Scene::update(Progress &progress)
@@ -525,22 +533,10 @@ bool Scene::update(Progress &progress)
     return false;
   }
 
-  /* Update max_closures. */
-  KernelIntegrator *kintegrator = &dscene.data.integrator;
-  if (params.background) {
-    kintegrator->max_closures = get_max_closure_count();
-  }
-  else {
-    /* Currently viewport render is faster with higher max_closures, needs investigating. */
-    kintegrator->max_closures = MAX_CLOSURE;
-  }
-
-  /* Update kernel features for kernel loading. */
-  dscene.data.kernel_features = get_kernel_features();
-
   /* Load render kernels, before device update where we upload data to the GPU. */
   load_kernels(progress, false);
 
+  /* Upload scene data to the GPU. */
   progress.set_status("Updating Scene");
   MEM_GUARDED_CALL(&progress, device_update, device, progress);
 

@@ -448,8 +448,8 @@ bool CUDADevice::load_kernels(const uint kernel_features)
         "Failed to load CUDA kernel from '%s' (%s)", cubin.c_str(), cuewErrorString(result)));
 
   if (result == CUDA_SUCCESS) {
-    reserve_local_memory(kernel_features);
     kernels.load(this);
+    reserve_local_memory(kernel_features);
   }
 
   return (result == CUDA_SUCCESS);
@@ -460,45 +460,36 @@ void CUDADevice::reserve_local_memory(const uint /* kernel_features */)
   /* Together with CU_CTX_LMEM_RESIZE_TO_MAX, this reserves local memory
    * needed for kernel launches, so that we can reliably figure out when
    * to allocate scene data in mapped host memory. */
-  CUDAContextScope scope(this);
-
   size_t total = 0, free_before = 0, free_after = 0;
-  cuMemGetInfo(&free_before, &total);
 
-  /* TODO: implement for new integrator kernels. */
-#  if 0
-  /* Get kernel function. */
-  CUfunction cuRender;
-
-  if (kernel_features & KERNEL_FEATURE_BAKING) {
-    cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_bake"));
-  }
-  else {
-    cuda_assert(cuModuleGetFunction(&cuRender, cuModule, "kernel_cuda_path_trace"));
+  {
+    CUDAContextScope scope(this);
+    cuMemGetInfo(&free_before, &total);
   }
 
-  cuda_assert(cuFuncSetCacheConfig(cuRender, CU_FUNC_CACHE_PREFER_L1));
+  {
+    /* Use the biggest kernel for estimation. */
+    const DeviceKernel test_kernel = DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE;
 
-  int min_blocks, num_threads_per_block;
-  cuda_assert(
-      cuOccupancyMaxPotentialBlockSize(&min_blocks, &num_threads_per_block, cuRender, NULL, 0, 0));
+    /* Launch kernel, using just 1 block appears sufficient to reserve memory for all
+     * multiprocessors. It would be good to do this in parallel for the multi GPU case
+     * still to make it faster. */
+    CUDADeviceQueue queue(this);
 
-  /* Launch kernel, using just 1 block appears sufficient to reserve
-   * memory for all multiprocessors. It would be good to do this in
-   * parallel for the multi GPU case still to make it faster. */
-  CUdeviceptr d_work_tiles = 0;
-  uint total_work_size = 0;
+    void *d_path_index = nullptr;
+    void *d_render_buffer = nullptr;
+    int d_work_size = 0;
+    void *args[] = {&d_path_index, &d_render_buffer, &d_work_size};
 
-  void *args[] = {&d_work_tiles, &total_work_size};
+    queue.init_execution();
+    queue.enqueue(test_kernel, 1, args);
+    queue.synchronize();
+  }
 
-  cuda_assert(cuLaunchKernel(cuRender, 1, 1, 1, num_threads_per_block, 1, 1, 0, 0, args, 0));
-
-  cuda_assert(cuCtxSynchronize());
-
-  cuMemGetInfo(&free_after, &total);
-#  else
-  free_after = free_before;
-#  endif
+  {
+    CUDAContextScope scope(this);
+    cuMemGetInfo(&free_after, &total);
+  }
 
   VLOG(1) << "Local memory reserved " << string_human_readable_number(free_before - free_after)
           << " bytes. (" << string_human_readable_size(free_before - free_after) << ")";

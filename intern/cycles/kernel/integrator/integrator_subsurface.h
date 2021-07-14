@@ -143,7 +143,7 @@ ccl_device void subsurface_shader_data_setup(INTEGRATOR_STATE_ARGS, ShaderData *
   /* Setup diffuse BSDF at the exit point. This replaces shader_eval_surface. */
   sd->flag &= ~SD_CLOSURE_FLAGS;
   sd->num_closure = 0;
-  sd->num_closure_left = kernel_data.integrator.max_closures;
+  sd->num_closure_left = kernel_data.max_closures;
 
   const float3 weight = one_float3();
   const float roughness = INTEGRATOR_STATE(subsurface, roughness);

@@ -1026,7 +1026,7 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
     max_closures = 0;
   }
   else {
-    max_closures = kernel_data.integrator.max_closures;
+    max_closures = kernel_data.max_closures;
   }
 
   sd->num_closure = 0;
@@ -1229,7 +1229,7 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
     max_closures = 0;
   }
   else {
-    max_closures = kernel_data.integrator.max_closures;
+    max_closures = kernel_data.max_closures;
   }
 
   /* reset closures once at the start, we will be accumulating the closures

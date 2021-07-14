@@ -38,6 +38,7 @@ class PathTraceWorkGPU : public PathTraceWork {
  public:
   PathTraceWorkGPU(Device *device, DeviceScene *device_scene, bool *cancel_requested_flag);
 
+  virtual void alloc_work_memory() override;
   virtual void init_execution() override;
 
   virtual void render_samples(int start_sample, int samples_num) override;

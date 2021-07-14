@@ -176,14 +176,18 @@ ccl_device_forceinline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS
   uint32_t shadow_flag = INTEGRATOR_STATE(path, flag);
   shadow_flag |= (is_light) ? PATH_RAY_SHADOW_FOR_LIGHT : 0;
   shadow_flag |= (is_transmission) ? PATH_RAY_TRANSMISSION_PASS : PATH_RAY_REFLECT_PASS;
-  const float3 diffuse_glossy_ratio = (bounce == 0) ? bsdf_eval_diffuse_glossy_ratio(&bsdf_eval) :
-                                                      INTEGRATOR_STATE(path, diffuse_glossy_ratio);
   const float3 throughput = INTEGRATOR_STATE(path, throughput) * bsdf_eval_sum(&bsdf_eval);
+
+  if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
+    const float3 diffuse_glossy_ratio = (bounce == 0) ?
+                                            bsdf_eval_diffuse_glossy_ratio(&bsdf_eval) :
+                                            INTEGRATOR_STATE(path, diffuse_glossy_ratio);
+    INTEGRATOR_STATE_WRITE(shadow_path, diffuse_glossy_ratio) = diffuse_glossy_ratio;
+  }
 
   INTEGRATOR_STATE_WRITE(shadow_path, flag) = shadow_flag;
   INTEGRATOR_STATE_WRITE(shadow_path, bounce) = bounce;
   INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
-  INTEGRATOR_STATE_WRITE(shadow_path, diffuse_glossy_ratio) = diffuse_glossy_ratio;
   INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
 
   /* Branch off shadow kernel. */
@@ -242,9 +246,12 @@ ccl_device_forceinline int integrate_surface_bsdf_bssrdf_bounce(INTEGRATOR_STATE
   float3 throughput = INTEGRATOR_STATE(path, throughput);
   throughput *= bsdf_eval_sum(&bsdf_eval) / bsdf_pdf;
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
-  if (INTEGRATOR_STATE(path, bounce) == 0) {
-    INTEGRATOR_STATE_WRITE(path,
-                           diffuse_glossy_ratio) = bsdf_eval_diffuse_glossy_ratio(&bsdf_eval);
+
+  if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
+    if (INTEGRATOR_STATE(path, bounce) == 0) {
+      INTEGRATOR_STATE_WRITE(path,
+                             diffuse_glossy_ratio) = bsdf_eval_diffuse_glossy_ratio(&bsdf_eval);
+    }
   }
 
   /* Update path state */

@@ -65,34 +65,18 @@ ccl_device_inline void path_state_init_integrator(INTEGRATOR_STATE_ARGS,
   INTEGRATOR_STATE_WRITE(path, min_ray_pdf) = FLT_MAX;
   INTEGRATOR_STATE_WRITE(path, throughput) = make_float3(1.0f, 1.0f, 1.0f);
 
-  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = kernel_data.background.volume_shader;
-  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 1, object) = OBJECT_NONE;
-  INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 1, shader) = SHADER_NONE;
+  if (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) {
+    INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, object) = OBJECT_NONE;
+    INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 0, shader) = kernel_data.background.volume_shader;
+    INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 1, object) = OBJECT_NONE;
+    INTEGRATOR_STATE_ARRAY_WRITE(volume_stack, 1, shader) = SHADER_NONE;
+  }
 
 #ifdef __DENOISING_FEATURES__
-  if (kernel_data.film.have_denoising_passes) {
+  if (kernel_data.kernel_features & KERNEL_FEATURE_DENOISING) {
     INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_DENOISING_FEATURES;
     INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) = one_float3();
   }
-  else {
-    INTEGRATOR_STATE_WRITE(path, denoising_feature_throughput) = zero_float3();
-  }
-#endif
-
-/* TODO */
-#if 0
-#  ifdef __VOLUME__
-  state->volume_bounds_bounce = 0;
-
-  if (kernel_data.integrator.use_volumes) {
-    /* Initialize volume stack with volume we are inside of. */
-    kernel_volume_stack_init(kg, stack_sd, state, ray, state->volume_stack);
-  }
-  else {
-    state->volume_stack[0].shader = SHADER_NONE;
-  }
-#  endif
 #endif
 }
 

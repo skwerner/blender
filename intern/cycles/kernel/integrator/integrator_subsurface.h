@@ -114,8 +114,11 @@ ccl_device int subsurface_bounce(INTEGRATOR_STATE_ARGS, ShaderData *sd, const Sh
   /* Pass BSSRDF parameters. */
   INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SUBSURFACE;
   INTEGRATOR_STATE_WRITE(path, throughput) *= shader_bssrdf_sample_weight(sd, sc);
-  if (INTEGRATOR_STATE(path, bounce) == 0) {
-    INTEGRATOR_STATE_WRITE(path, diffuse_glossy_ratio) = one_float3();
+
+  if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
+    if (INTEGRATOR_STATE(path, bounce) == 0) {
+      INTEGRATOR_STATE_WRITE(path, diffuse_glossy_ratio) = one_float3();
+    }
   }
 
   const float roughness = (sc->type == CLOSURE_BSSRDF_PRINCIPLED_ID ||

@@ -514,14 +514,7 @@ uint Scene::get_kernel_features()
     kernel_features |= KERNEL_FEATURE_BAKING;
   }
 
-  const Pass *combined_denoised_pass = Pass::find(passes, PASS_COMBINED, PassMode::DENOISED);
-  if (combined_denoised_pass && combined_denoised_pass->is_written()) {
-    kernel_features |= KERNEL_FEATURE_DENOISING;
-  }
-
-  if (Pass::find(passes, PASS_AO)) {
-    kernel_features |= KERNEL_FEATURE_NODE_RAYTRACE;
-  }
+  kernel_features |= film->get_kernel_features(this);
 
   return kernel_features;
 }

@@ -188,8 +188,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_aov_value_num = 0;
   kfilm->pass_aov_color_num = 0;
 
-  kfilm->have_denoising_passes = 0;
-
   /* Mark with PASS_UNUSED to avoid mask test in the kernel. */
   kfilm->pass_background = PASS_UNUSED;
   kfilm->pass_emission = PASS_UNUSED;
@@ -353,11 +351,9 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
       case PASS_DENOISING_NORMAL:
         kfilm->pass_denoising_normal = kfilm->pass_stride;
-        kfilm->have_denoising_passes = 1;
         break;
       case PASS_DENOISING_ALBEDO:
         kfilm->pass_denoising_albedo = kfilm->pass_stride;
-        kfilm->have_denoising_passes = 1;
         break;
 
       case PASS_SHADOW_CATCHER:
@@ -509,6 +505,33 @@ const Pass *Film::get_actual_display_pass(Scene *scene, const Pass *pass)
   }
 
   return pass;
+}
+
+uint Film::get_kernel_features(const Scene *scene) const
+{
+  uint kernel_features = 0;
+
+  for (const Pass &pass : scene->passes) {
+    if (!pass.is_written()) {
+      continue;
+    }
+
+    if ((pass.type == PASS_COMBINED && pass.mode == PassMode::DENOISED) ||
+        pass.type == PASS_DENOISING_NORMAL || pass.type == PASS_DENOISING_ALBEDO) {
+      kernel_features |= KERNEL_FEATURE_DENOISING;
+    }
+
+    if (pass.type != PASS_NONE && pass.type != PASS_COMBINED &&
+        pass.type <= PASS_CATEGORY_LIGHT_END) {
+      kernel_features |= KERNEL_FEATURE_LIGHT_PASSES;
+    }
+
+    if (pass.type == PASS_AO) {
+      kernel_features |= KERNEL_FEATURE_NODE_RAYTRACE;
+    }
+  }
+
+  return kernel_features;
 }
 
 CCL_NAMESPACE_END

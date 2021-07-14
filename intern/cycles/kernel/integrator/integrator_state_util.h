@@ -115,7 +115,9 @@ ccl_device_forceinline void integrator_state_write_volume_stack(INTEGRATOR_STATE
 
 ccl_device_forceinline bool integrator_state_volume_stack_is_empty(INTEGRATOR_STATE_CONST_ARGS)
 {
-  return INTEGRATOR_STATE_ARRAY(volume_stack, 0, shader) == SHADER_NONE;
+  return (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) ?
+             INTEGRATOR_STATE_ARRAY(volume_stack, 0, shader) == SHADER_NONE :
+             true;
 }
 
 /* Shadow Intersection */
@@ -151,11 +153,13 @@ ccl_device_forceinline void integrator_state_read_shadow_isect(INTEGRATOR_STATE_
 
 ccl_device_forceinline void integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_ARGS)
 {
-  for (int i = 0; i < INTEGRATOR_VOLUME_STACK_SIZE; i++) {
-    INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = INTEGRATOR_STATE_ARRAY(
-        volume_stack, i, object);
-    INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = INTEGRATOR_STATE_ARRAY(
-        volume_stack, i, shader);
+  if (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) {
+    for (int i = 0; i < INTEGRATOR_VOLUME_STACK_SIZE; i++) {
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, object) = INTEGRATOR_STATE_ARRAY(
+          volume_stack, i, object);
+      INTEGRATOR_STATE_ARRAY_WRITE(shadow_volume_stack, i, shader) = INTEGRATOR_STATE_ARRAY(
+          volume_stack, i, shader);
+    }
   }
 }
 
@@ -170,7 +174,9 @@ integrator_state_read_shadow_volume_stack(INTEGRATOR_STATE_CONST_ARGS, int i)
 ccl_device_forceinline bool integrator_state_shadow_volume_stack_is_empty(
     INTEGRATOR_STATE_CONST_ARGS)
 {
-  return INTEGRATOR_STATE_ARRAY(shadow_volume_stack, 0, shader) == SHADER_NONE;
+  return (kernel_data.kernel_features & KERNEL_FEATURE_VOLUME) ?
+             INTEGRATOR_STATE_ARRAY(shadow_volume_stack, 0, shader) == SHADER_NONE :
+             true;
 }
 
 ccl_device_forceinline void integrator_state_write_shadow_volume_stack(INTEGRATOR_STATE_ARGS,
@@ -191,13 +197,29 @@ ccl_device_inline void integrator_state_copy_to_shadow_catcher(INTEGRATOR_STATE_
   index = 0; \
   do {
 
-#define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
-  INTEGRATOR_SHADOW_CATCHER_STATE_WRITE(parent_struct, name) = INTEGRATOR_STATE(parent_struct, \
-                                                                                name);
+#ifdef __KERNEL_GPU__
+  /* For GPU we need to check if arrays are allocated. */
+#  define KERNEL_STRUCT_MEMBER(parent_struct, type, name, feature) \
+    if (kernel_integrator_state.parent_struct.name != nullptr) { \
+      INTEGRATOR_SHADOW_CATCHER_STATE_WRITE(parent_struct, \
+                                            name) = INTEGRATOR_STATE(parent_struct, name); \
+    }
 
-#define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
-  INTEGRATOR_SHADOW_CATCHER_STATE_ARRAY_WRITE( \
-      parent_struct, index, name) = INTEGRATOR_STATE_ARRAY(parent_struct, index, name);
+#  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name, feature) \
+    if (kernel_integrator_state.parent_struct[index].name != nullptr) { \
+      INTEGRATOR_SHADOW_CATCHER_STATE_ARRAY_WRITE( \
+          parent_struct, index, name) = INTEGRATOR_STATE_ARRAY(parent_struct, index, name); \
+    }
+#else
+  /* For CPU it's a simple copy. */
+#  define KERNEL_STRUCT_MEMBER(parent_struct, type, name, feature) \
+    INTEGRATOR_SHADOW_CATCHER_STATE_WRITE(parent_struct, name) = INTEGRATOR_STATE(parent_struct, \
+                                                                                  name);
+
+#  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name, feature) \
+    INTEGRATOR_SHADOW_CATCHER_STATE_ARRAY_WRITE( \
+        parent_struct, index, name) = INTEGRATOR_STATE_ARRAY(parent_struct, index, name);
+#endif /* __KERNEL_GPU__ */
 
 #define KERNEL_STRUCT_END(name) \
   } \
@@ -233,13 +255,17 @@ ccl_device_inline void integrator_state_move(const int to_path_index, const int 
     index = 0; \
     do {
 
-#  define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
-    kernel_integrator_state.parent_struct.name[to_path_index] = \
-        kernel_integrator_state.parent_struct.name[path_index];
+#  define KERNEL_STRUCT_MEMBER(parent_struct, type, name, feature) \
+    if (kernel_integrator_state.parent_struct.name != nullptr) { \
+      kernel_integrator_state.parent_struct.name[to_path_index] = \
+          kernel_integrator_state.parent_struct.name[path_index]; \
+    }
 
-#  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
-    kernel_integrator_state.parent_struct[index].name[to_path_index] = \
-        kernel_integrator_state.parent_struct[index].name[path_index];
+#  define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name, feature) \
+    if (kernel_integrator_state.parent_struct[index].name != nullptr) { \
+      kernel_integrator_state.parent_struct[index].name[to_path_index] = \
+          kernel_integrator_state.parent_struct[index].name[path_index]; \
+    }
 
 #  define KERNEL_STRUCT_END(name) \
     } \

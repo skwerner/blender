@@ -980,8 +980,6 @@ typedef struct KernelFilm {
 
   int pass_denoising_normal;
   int pass_denoising_albedo;
-  /* Set to 1 if any of the above denoising passes present. */
-  int have_denoising_passes;
 
   int pass_aov_color;
   int pass_aov_value;
@@ -1006,7 +1004,7 @@ typedef struct KernelFilm {
   int use_approximate_shadow_catcher;
 
   /* padding */
-  int pad1, pad2;
+  int pad1, pad2, pad3;
 } KernelFilm;
 static_assert_align(KernelFilm, 16);
 
@@ -1479,6 +1477,9 @@ enum KernelFeatureFlag : unsigned int {
 
   /* Per-uber shader usage flags. */
   KERNEL_FEATURE_PRINCIPLED = (1U << 20U),
+
+  /* Light render passes. */
+  KERNEL_FEATURE_LIGHT_PASSES = (1U << 21U),
 };
 
 /* Shader node feature mask, to specialize shader evaluation for kernels. */

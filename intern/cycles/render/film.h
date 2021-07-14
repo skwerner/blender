@@ -87,6 +87,8 @@ class Film : public Node {
                                              PassType pass_type,
                                              PassMode pass_mode = PassMode::NOISY);
   static const Pass *get_actual_display_pass(Scene *scene, const Pass *pass);
+
+  uint get_kernel_features(const Scene *scene) const;
 };
 
 CCL_NAMESPACE_END

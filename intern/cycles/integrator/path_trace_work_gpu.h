@@ -117,6 +117,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   IntegratorStateGPU integrator_state_gpu_;
   /* SoA arrays for integrator state. */
   vector<unique_ptr<device_memory>> integrator_state_soa_;
+  uint integrator_state_soa_kernel_features_;
   /* Keep track of number of queued kernels. */
   device_vector<IntegratorQueueCounter> integrator_queue_counter_;
   /* Shader sorting. */

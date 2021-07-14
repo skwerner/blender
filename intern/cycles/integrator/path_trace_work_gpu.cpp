@@ -35,6 +35,7 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
                                    bool *cancel_requested_flag)
     : PathTraceWork(device, device_scene, cancel_requested_flag),
       queue_(device->gpu_queue_create()),
+      integrator_state_soa_kernel_features_(0),
       integrator_queue_counter_(device, "integrator_queue_counter", MEM_READ_WRITE),
       integrator_shader_sort_counter_(device, "integrator_shader_sort_counter", MEM_READ_WRITE),
       integrator_shader_raytrace_sort_counter_(
@@ -57,28 +58,31 @@ PathTraceWorkGPU::PathTraceWorkGPU(Device *device,
 
 void PathTraceWorkGPU::alloc_integrator_soa()
 {
-  /* IntegrateState allocated as structure of arrays.
-   *
-   * Allocate a device only memory buffer before for each struct member, and then
+  /* IntegrateState allocated as structure of arrays. */
+
+  /* Check if we already allocated memory for the required features. */
+  const uint kernel_features = device_scene_->data.kernel_features;
+  if ((integrator_state_soa_kernel_features_ & kernel_features) == kernel_features) {
+    return;
+  }
+  integrator_state_soa_kernel_features_ = kernel_features;
+
+  /* Allocate a device only memory buffer before for each struct member, and then
    * write the pointers into a struct that resides in constant memory.
    *
    * TODO: store float3 in separate XYZ arrays. */
-
-  if (!integrator_state_soa_.empty()) {
-    return;
-  }
-
 #define KERNEL_STRUCT_BEGIN(name) for (int array_index = 0;; array_index++) {
-#define KERNEL_STRUCT_MEMBER(parent_struct, type, name) \
-  { \
+#define KERNEL_STRUCT_MEMBER(parent_struct, type, name, feature) \
+  if ((kernel_features & feature) && (integrator_state_gpu_.parent_struct.name == nullptr)) { \
     device_only_memory<type> *array = new device_only_memory<type>(device_, \
                                                                    "integrator_state_" #name); \
     array->alloc_to_device(max_num_paths_); \
     integrator_state_soa_.emplace_back(array); \
     integrator_state_gpu_.parent_struct.name = (type *)array->device_pointer; \
   }
-#define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name) \
-  { \
+#define KERNEL_STRUCT_ARRAY_MEMBER(parent_struct, type, name, feature) \
+  if ((kernel_features & feature) && \
+      (integrator_state_gpu_.parent_struct[array_index].name == nullptr)) { \
     device_only_memory<type> *array = new device_only_memory<type>(device_, \
                                                                    "integrator_state_" #name); \
     array->alloc_to_device(max_num_paths_); \

@@ -584,14 +584,18 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
   uint32_t shadow_flag = INTEGRATOR_STATE(path, flag);
   shadow_flag |= (is_light) ? PATH_RAY_SHADOW_FOR_LIGHT : 0;
   shadow_flag |= PATH_RAY_VOLUME_PASS;
-  const float3 diffuse_glossy_ratio = (bounce == 0) ? one_float3() :
-                                                      INTEGRATOR_STATE(path, diffuse_glossy_ratio);
   const float3 throughput = INTEGRATOR_STATE(path, throughput) * bsdf_eval_sum(&phase_eval);
+
+  if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
+    const float3 diffuse_glossy_ratio = (bounce == 0) ?
+                                            one_float3() :
+                                            INTEGRATOR_STATE(path, diffuse_glossy_ratio);
+    INTEGRATOR_STATE_WRITE(shadow_path, diffuse_glossy_ratio) = diffuse_glossy_ratio;
+  }
 
   INTEGRATOR_STATE_WRITE(shadow_path, flag) = shadow_flag;
   INTEGRATOR_STATE_WRITE(shadow_path, bounce) = bounce;
   INTEGRATOR_STATE_WRITE(shadow_path, transparent_bounce) = transparent_bounce;
-  INTEGRATOR_STATE_WRITE(shadow_path, diffuse_glossy_ratio) = diffuse_glossy_ratio;
   INTEGRATOR_STATE_WRITE(shadow_path, throughput) = throughput;
 
   integrator_state_copy_volume_stack_to_shadow(INTEGRATOR_STATE_PASS);
@@ -636,7 +640,10 @@ ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS
   float3 throughput = INTEGRATOR_STATE(path, throughput);
   throughput *= bsdf_eval_sum(&phase_eval) / phase_pdf;
   INTEGRATOR_STATE_WRITE(path, throughput) = throughput;
-  INTEGRATOR_STATE_WRITE(path, diffuse_glossy_ratio) = one_float3();
+
+  if (kernel_data.kernel_features & KERNEL_FEATURE_LIGHT_PASSES) {
+    INTEGRATOR_STATE_WRITE(path, diffuse_glossy_ratio) = one_float3();
+  }
 
   /* Update path state */
   INTEGRATOR_STATE_WRITE(path, mis_ray_pdf) = phase_pdf;

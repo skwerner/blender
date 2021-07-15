@@ -166,9 +166,7 @@ void PathTraceWorkGPU::init_execution()
 
 void PathTraceWorkGPU::render_samples(int start_sample, int samples_num)
 {
-  /* Update number of available states based on the updated content of the scene (shadow catcher
-   * object might have been added or removed). */
-  work_tile_scheduler_.set_max_num_path_states(get_max_num_camera_paths());
+  work_tile_scheduler_.set_max_num_path_states(max_num_paths_ / 8);
 
   work_tile_scheduler_.reset(effective_buffer_params_, start_sample, samples_num);
 

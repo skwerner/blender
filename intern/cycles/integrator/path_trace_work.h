@@ -124,6 +124,9 @@ class PathTraceWork {
    * Returns number of active pixels (the ones which did not converge yet). */
   virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) = 0;
 
+  /* Run cryptomatte pass post-processing kernels. */
+  virtual void cryptomatte_postproces() = 0;
+
   /* Cheap-ish request to see whether rendering is requested and is to be stopped as soon as
    * possible, without waiting for any samples to be finished. */
   inline bool is_cancel_requested() const

@@ -839,6 +839,18 @@ void PathTraceWorkGPU::enqueue_adaptive_sampling_filter_y()
   queue_->enqueue(DEVICE_KERNEL_ADAPTIVE_SAMPLING_CONVERGENCE_FILTER_Y, work_size, args);
 }
 
+void PathTraceWorkGPU::cryptomatte_postproces()
+{
+  const int work_size = effective_buffer_params_.width * effective_buffer_params_.height;
+
+  void *args[] = {&buffers_->buffer.device_pointer,
+                  const_cast<int *>(&work_size),
+                  &effective_buffer_params_.offset,
+                  &effective_buffer_params_.stride};
+
+  queue_->enqueue(DEVICE_KERNEL_CRYPTOMATTE_POSTPROCESS, work_size, args);
+}
+
 bool PathTraceWorkGPU::copy_render_buffers_from_device()
 {
   queue_->copy_from_device(buffers_->buffer);

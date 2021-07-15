@@ -116,6 +116,10 @@ const char *device_kernel_as_string(DeviceKernel kernel)
     case DEVICE_KERNEL_FILTER_COLOR_POSTPROCESS:
       return "filter_color_postprocess";
 
+    /* Cryptomatte. */
+    case DEVICE_KERNEL_CRYPTOMATTE_POSTPROCESS:
+      return "cryptomatte_postprocess";
+
     /* Generic */
     case DEVICE_KERNEL_PREFIX_SUM:
       return "prefix_sum";

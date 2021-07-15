@@ -242,4 +242,26 @@ int PathTraceWorkCPU::adaptive_sampling_converge_filter_count_active(float thres
   return num_active_pixels;
 }
 
+void PathTraceWorkCPU::cryptomatte_postproces()
+{
+  const int width = effective_buffer_params_.width;
+  const int height = effective_buffer_params_.height;
+
+  float *render_buffer = buffers_->buffer.data();
+
+  tbb::task_arena local_arena = local_tbb_arena_create(device_);
+
+  /* Check convergency and do x-filter in a single `parallel_for`, to reduce threading overhead. */
+  local_arena.execute([&]() {
+    tbb::parallel_for(0, height, [&](int y) {
+      CPUKernelThreadGlobals *kernel_globals = &kernel_thread_globals_[0];
+      int pixel_index = y * width;
+
+      for (int x = 0; x < width; ++x, ++pixel_index) {
+        kernels_.cryptomatte_postprocess(kernel_globals, render_buffer, pixel_index);
+      }
+    });
+  });
+}
+
 CCL_NAMESPACE_END

@@ -22,6 +22,7 @@
 #include "integrator/render_scheduler.h"
 #include "render/gpu_display.h"
 #include "render/pass.h"
+#include "render/scene.h"
 #include "util/util_algorithm.h"
 #include "util/util_logging.h"
 #include "util/util_progress.h"
@@ -53,7 +54,7 @@ class TempCPURenderBuffers {
 }  // namespace
 
 PathTrace::PathTrace(Device *device, DeviceScene *device_scene, RenderScheduler &render_scheduler)
-    : device_(device), render_scheduler_(render_scheduler)
+    : device_(device), device_scene_(device_scene), render_scheduler_(render_scheduler)
 {
   DCHECK_NE(device_, nullptr);
 
@@ -153,6 +154,8 @@ void PathTrace::render(const RenderWork &render_work)
 
 void PathTrace::render_pipeline(RenderWork render_work)
 {
+  render_scheduler_.set_need_schedule_cryptomatte(device_scene_->data.film.cryptomatte_depth);
+
   render_init_kernel_execution();
 
   init_render_buffers(render_work);
@@ -165,6 +168,11 @@ void PathTrace::render_pipeline(RenderWork render_work)
   }
 
   adaptive_sample(render_work);
+  if (is_cancel_requested()) {
+    return;
+  }
+
+  cryptomatte_postprocess(render_work);
   if (is_cancel_requested()) {
     return;
   }
@@ -409,6 +417,18 @@ void PathTrace::set_denoiser_params(const DenoiseParams &params)
 void PathTrace::set_adaptive_sampling(const AdaptiveSampling &adaptive_sampling)
 {
   render_scheduler_.set_adaptive_sampling(adaptive_sampling);
+}
+
+void PathTrace::cryptomatte_postprocess(const RenderWork &render_work)
+{
+  if (!render_work.cryptomatte.postprocess) {
+    return;
+  }
+  VLOG(3) << "Perform cryptomatte work.";
+
+  tbb::parallel_for_each(path_trace_works_, [&](unique_ptr<PathTraceWork> &path_trace_work) {
+    path_trace_work->cryptomatte_postproces();
+  });
 }
 
 void PathTrace::denoise(const RenderWork &render_work)

@@ -16,7 +16,9 @@
 
 /* Templated common declaration part of all CPU kernels. */
 
-/* Integrator. */
+/* --------------------------------------------------------------------
+ * Integrator.
+ */
 
 #define KERNEL_INTEGRATOR_FUNCTION(name) \
   void KERNEL_FUNCTION_FULL_NAME(integrator_##name)(const KernelGlobals *ccl_restrict kg, \
@@ -50,7 +52,9 @@ KERNEL_INTEGRATOR_SHADE_FUNCTION(megakernel);
 #undef KERNEL_INTEGRATOR_INIT_FUNCTION
 #undef KERNEL_INTEGRATOR_SHADE_FUNCTION
 
-/* Shader evaluation. */
+/* --------------------------------------------------------------------
+ * Shader evaluation.
+ */
 
 void KERNEL_FUNCTION_FULL_NAME(shader_eval_background)(const KernelGlobals *kg,
                                                        const KernelShaderEvalInput *input,
@@ -61,7 +65,9 @@ void KERNEL_FUNCTION_FULL_NAME(shader_eval_displace)(const KernelGlobals *kg,
                                                      float4 *output,
                                                      const int offset);
 
-/* Adaptive sampling. */
+/* --------------------------------------------------------------------
+ * Adaptive sampling.
+ */
 
 bool KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_convergence_check)(
     const KernelGlobals *kg,
@@ -88,8 +94,18 @@ void KERNEL_FUNCTION_FULL_NAME(adaptive_sampling_filter_y)(const KernelGlobals *
                                                            int offset,
                                                            int stride);
 
-/* Baking. */
-/* TODO(sergey): Needs to be re-implemented. */
+/* --------------------------------------------------------------------
+ * Cryptomatte.
+ */
+
+void KERNEL_FUNCTION_FULL_NAME(cryptomatte_postprocess)(const KernelGlobals *kg,
+                                                        ccl_global float *render_buffer,
+                                                        int pixel_index);
+
+/* --------------------------------------------------------------------
+ * Bake.
+ */
+/* TODO(sergey): Needs to be re-implemented. Or not? Brecht did it already :) */
 
 void KERNEL_FUNCTION_FULL_NAME(bake)(
     const KernelGlobals *kg, float *buffer, int sample, int x, int y, int offset, int stride);

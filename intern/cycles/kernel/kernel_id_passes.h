@@ -83,27 +83,16 @@ ccl_device_inline void kernel_sort_id_slots(ccl_global float *buffer, int num_sl
   }
 }
 
-#ifdef __KERNEL_GPU__
 /* post-sorting for Cryptomatte */
-ccl_device void kernel_cryptomatte_post(const KernelGlobals *kg,
-                                        ccl_global float *buffer,
-                                        uint sample,
-                                        int x,
-                                        int y,
-                                        int offset,
-                                        int stride)
+ccl_device_inline void kernel_cryptomatte_post(const KernelGlobals *kg,
+                                               ccl_global float *render_buffer,
+                                               int pixel_index)
 {
-  /* TODO(sergey): Bring this back, possibly as a separate kernel. */
-#  if 0
-  if (sample - 1 == kernel_data.integrator.aa_samples) {
-    int index = offset + x + y * stride;
-    int pass_stride = kernel_data.film.pass_stride;
-    ccl_global float *cryptomatte_buffer = buffer + index * pass_stride +
-                                           kernel_data.film.pass_cryptomatte;
-    kernel_sort_id_slots(cryptomatte_buffer, 2 * kernel_data.film.cryptomatte_depth);
-  }
-#  endif
+  const int pass_stride = kernel_data.film.pass_stride;
+  const uint64_t render_buffer_offset = (uint64_t)pixel_index * pass_stride;
+  ccl_global float *cryptomatte_buffer = render_buffer + render_buffer_offset +
+                                         kernel_data.film.pass_cryptomatte;
+  kernel_sort_id_slots(cryptomatte_buffer, 2 * kernel_data.film.cryptomatte_depth);
 }
-#endif
 
 CCL_NAMESPACE_END

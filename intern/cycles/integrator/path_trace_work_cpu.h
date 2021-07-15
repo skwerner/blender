@@ -54,6 +54,7 @@ class PathTraceWorkCPU : public PathTraceWork {
   virtual bool zero_render_buffers() override;
 
   virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) override;
+  virtual void cryptomatte_postproces() override;
 
  protected:
   /* Core path tracing routine. Renders given work time on the given queue. */

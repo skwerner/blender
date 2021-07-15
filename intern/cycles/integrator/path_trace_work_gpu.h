@@ -52,6 +52,7 @@ class PathTraceWorkGPU : public PathTraceWork {
   virtual bool zero_render_buffers() override;
 
   virtual int adaptive_sampling_converge_filter_count_active(float threshold, bool reset) override;
+  virtual void cryptomatte_postproces() override;
 
  protected:
   void alloc_integrator_soa();

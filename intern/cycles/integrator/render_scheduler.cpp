@@ -35,6 +35,11 @@ RenderScheduler::RenderScheduler(bool headless, bool background, int pixel_size)
   use_progressive_noise_floor_ = !background_;
 }
 
+void RenderScheduler::set_need_schedule_cryptomatte(bool need_schedule_cryptomatte)
+{
+  need_schedule_cryptomatte_ = need_schedule_cryptomatte;
+}
+
 void RenderScheduler::set_need_schedule_rebalance(bool need_schedule_rebalance)
 {
   need_schedule_rebalance_works_ = need_schedule_rebalance;
@@ -130,6 +135,9 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   /* NOTE: The adaptive sampling settings might not be available here yet. */
   state_.adaptive_sampling_threshold = 0.4f;
 
+  state_.last_work_was_denoised = false;
+  state_.postprocess_work_scheduled = false;
+
   state_.path_trace_finished = false;
 
   state_.start_render_time = 0.0;
@@ -216,10 +224,13 @@ RenderWork RenderScheduler::get_render_work()
   const double time_now = time_dt();
 
   if (done()) {
-    if (state_.end_render_time == 0.0) {
-      state_.end_render_time = time_now;
+    RenderWork render_work;
+    if (!set_postprocess_render_work(&render_work)) {
+      if (state_.end_render_time == 0.0) {
+        state_.end_render_time = time_now;
+      }
     }
-    return RenderWork();
+    return render_work;
   }
 
   RenderWork render_work;
@@ -256,6 +267,7 @@ RenderWork RenderScheduler::get_render_work()
 
   bool denoiser_delayed;
   render_work.denoise = work_need_denoise(denoiser_delayed);
+  state_.last_work_was_denoised = true;
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
 
@@ -266,7 +278,37 @@ RenderWork RenderScheduler::get_render_work()
     state_.last_display_update_sample = state_.num_rendered_samples;
   }
 
+  if (done()) {
+    set_postprocess_render_work(&render_work);
+  }
+
   return render_work;
+}
+
+bool RenderScheduler::set_postprocess_render_work(RenderWork *render_work)
+{
+  if (state_.postprocess_work_scheduled) {
+    return false;
+  }
+  state_.postprocess_work_scheduled = true;
+
+  bool any_scheduled = false;
+
+  if (need_schedule_cryptomatte_) {
+    render_work->cryptomatte.postprocess = true;
+    any_scheduled = true;
+  }
+
+  if (denoiser_params_.use && !state_.last_work_was_denoised) {
+    render_work->denoise = true;
+    any_scheduled = true;
+  }
+
+  if (any_scheduled) {
+    render_work->update_display = true;
+  }
+
+  return any_scheduled;
 }
 
 /* Knowing time which it took to complete a task at the current resolution divider approximate how

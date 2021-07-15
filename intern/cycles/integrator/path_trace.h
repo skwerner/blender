@@ -184,6 +184,7 @@ class PathTrace {
   void path_trace(RenderWork &render_work);
   void adaptive_sample(RenderWork &render_work);
   void denoise(const RenderWork &render_work);
+  void cryptomatte_postprocess(const RenderWork &render_work);
   void update_display(const RenderWork &render_work);
   void rebalance(const RenderWork &render_work);
 
@@ -206,6 +207,8 @@ class PathTrace {
   /* Pointer to a device which is configured to be used for path tracing. If multiple devices
    * are configured this is a `MultiDevice`. */
   Device *device_ = nullptr;
+
+  DeviceScene *device_scene_;
 
   RenderScheduler &render_scheduler_;
 

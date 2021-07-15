@@ -48,6 +48,8 @@ CPUKernels::CPUKernels()
       REGISTER_KERNEL(adaptive_sampling_convergence_check),
       REGISTER_KERNEL(adaptive_sampling_filter_x),
       REGISTER_KERNEL(adaptive_sampling_filter_y),
+      /* Cryptomatte. */
+      REGISTER_KERNEL(cryptomatte_postprocess),
       /* Bake. */
       REGISTER_KERNEL(bake)
 {

@@ -154,7 +154,8 @@ void PathTrace::render(const RenderWork &render_work)
 
 void PathTrace::render_pipeline(RenderWork render_work)
 {
-  render_scheduler_.set_need_schedule_cryptomatte(device_scene_->data.film.cryptomatte_depth);
+  render_scheduler_.set_need_schedule_cryptomatte(device_scene_->data.film.cryptomatte_passes !=
+                                                  0);
 
   render_init_kernel_execution();
 

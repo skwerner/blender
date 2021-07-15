@@ -421,7 +421,8 @@ extern "C" __global__ void CUDA_LAUNCH_BOUNDS(CUDA_KERNEL_BLOCK_NUM_THREADS,
 
   /* NOTE: All threads specified in the mask must execute the intrinsic. */
   const uint num_active_pixels_mask = __ballot_sync(0xffffffff, !converged);
-  if (threadIdx.x == 0) {
+  const int lane_id = threadIdx.x % warpSize;
+  if (lane_id == 0) {
     atomic_fetch_and_add_uint32(num_active_pixels, __popc(num_active_pixels_mask));
   }
 }

@@ -564,7 +564,7 @@ void SVMCompiler::find_aov_nodes_and_dependencies(ShaderNodeSet &aov_nodes,
   foreach (ShaderNode *node, graph->nodes) {
     if (node->special_type == SHADER_SPECIAL_TYPE_OUTPUT_AOV) {
       OutputAOVNode *aov_node = static_cast<OutputAOVNode *>(node);
-      if (aov_node->slot >= 0) {
+      if (aov_node->offset >= 0) {
         aov_nodes.insert(aov_node);
         foreach (ShaderInput *in, node->inputs) {
           if (in->link != NULL) {

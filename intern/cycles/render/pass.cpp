@@ -166,7 +166,6 @@ PassInfo Pass::get_info(PassType type)
   pass_info.use_filter = true;
   pass_info.use_exposure = false;
   pass_info.divide_type = PASS_NONE;
-  pass_info.is_aligned = true;
   pass_info.use_compositing = false;
   pass_info.use_denoising_albedo = true;
 
@@ -186,13 +185,13 @@ PassInfo Pass::get_info(PassType type)
       pass_info.num_components = 1;
       break;
     case PASS_NORMAL:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       break;
     case PASS_ROUGHNESS:
       pass_info.num_components = 1;
       break;
     case PASS_UV:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       break;
     case PASS_MOTION:
       pass_info.num_components = 4;
@@ -209,7 +208,7 @@ PassInfo Pass::get_info(PassType type)
 
     case PASS_EMISSION:
     case PASS_BACKGROUND:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       pass_info.use_exposure = true;
       break;
     case PASS_AO:
@@ -227,29 +226,29 @@ PassInfo Pass::get_info(PassType type)
     case PASS_DIFFUSE_COLOR:
     case PASS_GLOSSY_COLOR:
     case PASS_TRANSMISSION_COLOR:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       break;
     case PASS_DIFFUSE_DIRECT:
     case PASS_DIFFUSE_INDIRECT:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       pass_info.use_exposure = true;
       pass_info.divide_type = PASS_DIFFUSE_COLOR;
       break;
     case PASS_GLOSSY_DIRECT:
     case PASS_GLOSSY_INDIRECT:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       pass_info.use_exposure = true;
       pass_info.divide_type = PASS_GLOSSY_COLOR;
       break;
     case PASS_TRANSMISSION_DIRECT:
     case PASS_TRANSMISSION_INDIRECT:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       pass_info.use_exposure = true;
       pass_info.divide_type = PASS_TRANSMISSION_COLOR;
       break;
     case PASS_VOLUME_DIRECT:
     case PASS_VOLUME_INDIRECT:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       pass_info.use_exposure = true;
       break;
 
@@ -259,11 +258,9 @@ PassInfo Pass::get_info(PassType type)
 
     case PASS_DENOISING_NORMAL:
       pass_info.num_components = 3;
-      pass_info.is_aligned = false;
       break;
     case PASS_DENOISING_ALBEDO:
       pass_info.num_components = 3;
-      pass_info.is_aligned = false;
       break;
 
     case PASS_SHADOW_CATCHER:
@@ -289,7 +286,7 @@ PassInfo Pass::get_info(PassType type)
       break;
 
     case PASS_AOV_COLOR:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       break;
     case PASS_AOV_VALUE:
       pass_info.num_components = 1;
@@ -406,9 +403,9 @@ void Pass::add_internal(
 
   passes.push_back(pass);
 
-  /* Order from by components, to ensure alignment so passes with size 4 come first and then passes
-   * with size 1. Note this must use stable sort so cryptomatte passes remain in the right order.
-   */
+  /* Order from by components and type, This is required to for AOVs and cryptomatte passes,
+   * which the kernel assumes to be in order. Note this must use stable sort so cryptomatte
+   * passes remain in the right order. */
   stable_sort(&passes[0], &passes[0] + passes.size(), compare_pass_order);
 
   if (pass.info_.divide_type != PASS_NONE) {

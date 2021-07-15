@@ -242,7 +242,7 @@ def list_render_passes(scene, srl):
         if aov.type == 'VALUE':
             yield (aov.name, "X", 'VALUE')
         else:
-            yield (aov.name, "RGBA", 'COLOR')
+            yield (aov.name, "RGB", 'COLOR')
 
 
 def register_passes(engine, scene, view_layer):

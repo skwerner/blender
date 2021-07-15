@@ -185,8 +185,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->light_pass_flag = 0;
   kfilm->pass_stride = 0;
   kfilm->use_light_pass = use_light_visibility;
-  kfilm->pass_aov_value_num = 0;
-  kfilm->pass_aov_color_num = 0;
 
   /* Mark with PASS_UNUSED to avoid mask test in the kernel. */
   kfilm->pass_background = PASS_UNUSED;
@@ -213,6 +211,8 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
   kfilm->pass_shadow_catcher_matte = PASS_UNUSED;
 
   bool have_cryptomatte = false;
+  bool have_aov_color = false;
+  bool have_aov_value = false;
 
   for (size_t i = 0; i < scene->passes.size(); i++) {
     Pass &pass = scene->passes[i];
@@ -371,16 +371,16 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
         break;
 
       case PASS_AOV_COLOR:
-        if (kfilm->pass_aov_color_num == 0) {
+        if (!have_aov_color) {
           kfilm->pass_aov_color = kfilm->pass_stride;
+          have_aov_color = true;
         }
-        kfilm->pass_aov_color_num++;
         break;
       case PASS_AOV_VALUE:
-        if (kfilm->pass_aov_value_num == 0) {
+        if (!have_aov_value) {
           kfilm->pass_aov_value = kfilm->pass_stride;
+          have_aov_value = true;
         }
-        kfilm->pass_aov_value_num++;
         break;
       default:
         assert(false);
@@ -393,8 +393,6 @@ void Film::device_update(Device *device, DeviceScene *dscene, Scene *scene)
 
     kfilm->pass_stride += pass.get_info().num_components;
   }
-
-  kfilm->pass_stride = align_up(kfilm->pass_stride, 4);
 
   /* When displaying the normal/uv pass in the viewport we need to disable
    * transparency.
@@ -451,21 +449,24 @@ void Film::assign_and_tag_passes_update(Scene *scene, const vector<Pass> &passes
 
 int Film::get_aov_offset(Scene *scene, string name, bool &is_color)
 {
-  int num_color = 0, num_value = 0;
+  int offset_color = 0, offset_value = 0;
   foreach (const Pass &pass, scene->passes) {
-    if (pass.type == PASS_AOV_COLOR) {
-      num_color++;
-    }
-    else if (pass.type == PASS_AOV_VALUE) {
-      num_value++;
-    }
-    else {
-      continue;
+    if (pass.name == name) {
+      if (pass.type == PASS_AOV_VALUE) {
+        is_color = false;
+        return offset_value;
+      }
+      else if (pass.type == PASS_AOV_COLOR) {
+        is_color = true;
+        return offset_color;
+      }
     }
 
-    if (pass.name == name) {
-      is_color = (pass.type == PASS_AOV_COLOR);
-      return (is_color ? num_color : num_value) - 1;
+    if (pass.type == PASS_AOV_VALUE) {
+      offset_value += pass.get_info().num_components;
+    }
+    else if (pass.type == PASS_AOV_COLOR) {
+      offset_color += pass.get_info().num_components;
     }
   }
 

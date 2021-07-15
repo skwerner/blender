@@ -44,8 +44,10 @@ ccl_device_inline void kernel_write_pass_float3(ccl_global float *ccl_restrict b
   atomic_add_and_fetch_float(buf_y, value.y);
   atomic_add_and_fetch_float(buf_z, value.z);
 #else
-  ccl_global float3 *buf = (ccl_global float3 *)buffer;
-  *buf += value;
+  ccl_global float *buf = (ccl_global float *)buffer;
+  buf[0] += value.x;
+  buf[1] += value.y;
+  buf[2] += value.z;
 #endif
 }
 
@@ -63,40 +65,12 @@ ccl_device_inline void kernel_write_pass_float4(ccl_global float *ccl_restrict b
   atomic_add_and_fetch_float(buf_z, value.z);
   atomic_add_and_fetch_float(buf_w, value.w);
 #else
-  ccl_global float4 *buf = (ccl_global float4 *)buffer;
-  *buf += value;
+  ccl_global float *buf = (ccl_global float *)buffer;
+  buf[0] += value.x;
+  buf[1] += value.y;
+  buf[2] += value.z;
+  buf[3] += value.w;
 #endif
 }
-
-#ifdef __DENOISING_FEATURES__
-ccl_device_inline void kernel_write_pass_float_variance(ccl_global float *ccl_restrict buffer,
-                                                        float value)
-{
-  kernel_write_pass_float(buffer, value);
-
-  /* The online one-pass variance update that's used for the megakernel can't easily be implemented
-   * with atomics, so for the split kernel the E[x^2] - 1/N * (E[x])^2 fallback is used. */
-  kernel_write_pass_float(buffer + 1, value * value);
-}
-
-#  ifdef __ATOMIC_PASS_WRITE__
-#    define kernel_write_pass_float3_unaligned kernel_write_pass_float3
-#  else
-ccl_device_inline void kernel_write_pass_float3_unaligned(ccl_global float *ccl_restrict buffer,
-                                                          float3 value)
-{
-  buffer[0] += value.x;
-  buffer[1] += value.y;
-  buffer[2] += value.z;
-}
-#  endif
-
-ccl_device_inline void kernel_write_pass_float3_variance(ccl_global float *ccl_restrict buffer,
-                                                         float3 value)
-{
-  kernel_write_pass_float3_unaligned(buffer, value);
-  kernel_write_pass_float3_unaligned(buffer + 3, value * value);
-}
-#endif /* __DENOISING_FEATURES__ */
 
 CCL_NAMESPACE_END

@@ -331,8 +331,7 @@ ccl_device_inline void kernel_accum_emission_or_background_pass(INTEGRATOR_STATE
       const float3 denoising_feature_throughput = INTEGRATOR_STATE(path,
                                                                    denoising_feature_throughput);
       const float3 denoising_albedo = denoising_feature_throughput * contribution;
-      kernel_write_pass_float3_unaligned(buffer + kernel_data.film.pass_denoising_albedo,
-                                         denoising_albedo);
+      kernel_write_pass_float3(buffer + kernel_data.film.pass_denoising_albedo, denoising_albedo);
     }
   }
 #  endif /* __DENOISING_FEATURES__ */

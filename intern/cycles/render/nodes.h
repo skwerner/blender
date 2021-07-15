@@ -221,7 +221,7 @@ class OutputAOVNode : public ShaderNode {
     return false;
   }
 
-  int slot;
+  int offset;
   bool is_color;
 };
 

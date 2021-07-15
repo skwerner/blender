@@ -5912,33 +5912,33 @@ NODE_DEFINE(OutputAOVNode)
 OutputAOVNode::OutputAOVNode() : ShaderNode(get_node_type())
 {
   special_type = SHADER_SPECIAL_TYPE_OUTPUT_AOV;
-  slot = -1;
+  offset = -1;
 }
 
 void OutputAOVNode::simplify_settings(Scene *scene)
 {
-  slot = scene->film->get_aov_offset(scene, name.string(), is_color);
-  if (slot == -1) {
-    slot = scene->film->get_aov_offset(scene, name.string(), is_color);
+  offset = scene->film->get_aov_offset(scene, name.string(), is_color);
+  if (offset == -1) {
+    offset = scene->film->get_aov_offset(scene, name.string(), is_color);
   }
 
-  if (slot == -1 || is_color) {
+  if (offset == -1 || is_color) {
     input("Value")->disconnect();
   }
-  if (slot == -1 || !is_color) {
+  if (offset == -1 || !is_color) {
     input("Color")->disconnect();
   }
 }
 
 void OutputAOVNode::compile(SVMCompiler &compiler)
 {
-  assert(slot >= 0);
+  assert(offset >= 0);
 
   if (is_color) {
-    compiler.add_node(NODE_AOV_COLOR, compiler.stack_assign(input("Color")), slot);
+    compiler.add_node(NODE_AOV_COLOR, compiler.stack_assign(input("Color")), offset);
   }
   else {
-    compiler.add_node(NODE_AOV_VALUE, compiler.stack_assign(input("Value")), slot);
+    compiler.add_node(NODE_AOV_VALUE, compiler.stack_assign(input("Value")), offset);
   }
 }
 

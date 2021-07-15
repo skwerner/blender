@@ -78,8 +78,6 @@ void BufferParams::update_passes(vector<Pass> &passes)
       pass_stride += pass.get_info().num_components;
     }
   }
-
-  pass_stride = align_up(pass_stride, 4);
 }
 
 void BufferParams::reset_pass_offset()

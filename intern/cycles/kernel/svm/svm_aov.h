@@ -38,8 +38,8 @@ ccl_device void svm_node_aov_color(INTEGRATOR_STATE_CONST_ARGS,
     const uint64_t render_buffer_offset = (uint64_t)render_pixel_index *
                                           kernel_data.film.pass_stride;
     ccl_global float *buffer = render_buffer + render_buffer_offset +
-                               (kernel_data.film.pass_aov_color + 4 * node.z);
-    kernel_write_pass_float4(buffer, make_float4(val.x, val.y, val.z, 1.0f));
+                               (kernel_data.film.pass_aov_color + node.z);
+    kernel_write_pass_float3(buffer, make_float3(val.x, val.y, val.z));
   }
 }
 

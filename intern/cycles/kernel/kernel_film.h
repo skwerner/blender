@@ -282,7 +282,7 @@ ccl_device_inline void film_get_pass_pixel_combined(const KernelFilmConvert *ccl
  * Shadow catcher.
  */
 
-ccl_device_inline float4
+ccl_device_inline float3
 film_calculate_shadow_catcher_denoised(const KernelFilmConvert *ccl_restrict kfilm_convert,
                                        ccl_global const float *ccl_restrict buffer)
 {
@@ -295,10 +295,10 @@ film_calculate_shadow_catcher_denoised(const KernelFilmConvert *ccl_restrict kfi
 
   const float3 pixel = make_float3(in_catcher[0], in_catcher[1], in_catcher[2]) * scale_exposure;
 
-  return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);
+  return pixel;
 }
 
-ccl_device_inline float4
+ccl_device_inline float3
 film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_convert,
                               ccl_global const float *ccl_restrict buffer)
 {
@@ -318,7 +318,7 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
    * needed, so return one. */
   const float num_samples = in_catcher[3];
   if (num_samples == 0.0f) {
-    return one_float4();
+    return one_float3();
   }
 
   /* NOTE: It is possible that the Shadow Catcher pass is requested as an output without actual
@@ -356,7 +356,7 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
    * during the division. */
   const float3 pixel = (1.0f - alpha) * one_float3() + alpha * shadow_catcher;
 
-  return make_float4(pixel.x, pixel.y, pixel.z, 1.0f);
+  return pixel;
 }
 
 ccl_device_inline float4 film_calculate_shadow_catcher_matte_with_shadow(
@@ -378,14 +378,13 @@ ccl_device_inline float4 film_calculate_shadow_catcher_matte_with_shadow(
 
   ccl_global const float *in_matte = buffer + kfilm_convert->pass_shadow_catcher_matte;
 
-  const float4 shadow_catcher = film_calculate_shadow_catcher(kfilm_convert, buffer);
+  const float3 shadow_catcher = film_calculate_shadow_catcher(kfilm_convert, buffer);
   const float3 color_matte = make_float3(in_matte[0], in_matte[1], in_matte[2]) * scale_exposure;
 
   const float transparency = in_matte[3] * scale;
   const float alpha = saturate(1.0f - transparency);
 
-  const float alpha_matte = (1.0f - alpha) * (1.0f - average(float4_to_float3(shadow_catcher))) +
-                            alpha;
+  const float alpha_matte = (1.0f - alpha) * (1.0f - average(shadow_catcher)) + alpha;
 
   if (kfilm_convert->use_approximate_shadow_catcher_background) {
     kernel_assert(kfilm_convert->pass_background != PASS_UNUSED);
@@ -406,13 +405,13 @@ ccl_device_inline void film_get_pass_pixel_shadow_catcher(
     ccl_global const float *ccl_restrict buffer,
     float *ccl_restrict pixel)
 {
-  const float4 pixel_value = film_calculate_shadow_catcher(kfilm_convert, buffer);
+  const float3 pixel_value = film_calculate_shadow_catcher(kfilm_convert, buffer);
 
   pixel[0] = pixel_value.x;
   pixel[1] = pixel_value.y;
   pixel[2] = pixel_value.z;
   if (kfilm_convert->num_components == 4) {
-    pixel[3] = pixel_value.w;
+    pixel[3] = 1.0f;
   }
 }
 

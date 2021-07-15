@@ -63,18 +63,7 @@ PassAccessor::Destination::Destination(const PassType pass_type, half4 *pixels)
 PassAccessor::Destination::Destination(const PassType pass_type)
 {
   const PassInfo pass_info = Pass::get_info(pass_type);
-
-  if (pass_info.divide_type != PASS_NONE) {
-    /* Divide is used for colors, which has 3 destination components.
-     * The passes which use division are stored as aligned float4 internally, and there is no
-     * implementation of divide_even_color for float4. So we force it here.
-     * The rest of the aligned float3 passes should be fine, because they have float4
-     * implementation. */
-    num_components = 3;
-  }
-  else {
-    num_components = pass_info.num_components;
-  }
+  num_components = pass_info.num_components;
 }
 
 /* --------------------------------------------------------------------
@@ -160,10 +149,10 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   const PassMode mode = pass_access_info_.mode;
   const PassInfo pass_info = Pass::get_info(type);
 
-  if (destination.num_components == 1) {
-    DCHECK_LE(pass_info.num_components, destination.num_components)
-        << "Number of components mismatch for " << pass_type_as_string(type);
+  DCHECK_LE(pass_info.num_components, destination.num_components)
+      << "Number of components mismatch for " << pass_type_as_string(type);
 
+  if (pass_info.num_components == 1) {
     if (mode == PassMode::DENOISED) {
       /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float(render_buffers, buffer_params, destination);
@@ -184,16 +173,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       get_pass_float(render_buffers, buffer_params, destination);
     }
   }
-  else if (destination.num_components == 3) {
-    if (pass_info.is_aligned) {
-      DCHECK_LE(pass_info.num_components, 4)
-          << "Number of components mismatch for pass " << pass_type_as_string(type);
-    }
-    else {
-      DCHECK_LE(pass_info.num_components, 3)
-          << "Number of components mismatch for pass " << pass_type_as_string(type);
-    }
-
+  else if (pass_info.num_components == 3) {
     if (mode == PassMode::DENOISED) {
       /* Denoised passes store their final pixels, no need in special calculation. */
       get_pass_float3(render_buffers, buffer_params, destination);
@@ -210,10 +190,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       get_pass_float3(render_buffers, buffer_params, destination);
     }
   }
-  else if (destination.num_components == 4) {
-    DCHECK_EQ(pass_info.num_components, 4)
-        << "Number of components mismatch for pass " << pass_type_as_string(type);
-
+  else if (pass_info.num_components == 4) {
     if (type == PASS_SHADOW_CATCHER_MATTE && pass_access_info_.use_approximate_shadow_catcher) {
       /* Denoised matte with shadow needs to do calculation (will use denoised shadow catcher pass
        * to approximate shadow with). */
@@ -314,18 +291,23 @@ bool PassAccessor::set_render_tile_pixels(RenderBuffers *render_buffers, const S
     return false;
   }
 
+  const PassType type = pass_access_info_.type;
+  const PassInfo pass_info = Pass::get_info(type);
+
   const BufferParams &buffer_params = render_buffers->params;
 
   float *buffer_data = render_buffers->buffer.data();
-  const int pass_stride = buffer_params.pass_stride;
   const int size = buffer_params.width * buffer_params.height;
-  const int num_components = source.num_components;
+
+  const int out_stride = buffer_params.pass_stride;
+  const int in_stride = source.num_components;
+  const int num_components_to_copy = min(source.num_components, pass_info.num_components);
 
   float *out = buffer_data + pass_access_info_.offset;
-  const float *in = source.pixels + source.offset * num_components;
+  const float *in = source.pixels + source.offset * in_stride;
 
-  for (int i = 0; i < size; i++, out += pass_stride, in += num_components) {
-    memcpy(out, in, sizeof(float) * num_components);
+  for (int i = 0; i < size; i++, out += out_stride, in += in_stride) {
+    memcpy(out, in, sizeof(float) * num_components_to_copy);
   }
 
   return true;

@@ -34,6 +34,9 @@ ccl_device_inline bool kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STA
   if ((object_flag & SD_OBJECT_SHADOW_CATCHER) == 0) {
     return false;
   }
+  if (object_flag & SD_OBJECT_HOLDOUT_MASK) {
+    return false;
+  }
 
   const int path_flag = INTEGRATOR_STATE(path, flag);
 

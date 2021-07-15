@@ -533,10 +533,16 @@ void Film::update_passes(Scene *scene)
 
   const vector<Pass *> passes_immutable = scene->passes;
   for (const Pass *pass : passes_immutable) {
-    const PassInfo info = Pass::get_info(pass->type);
+    const PassInfo info = Pass::get_info(pass->type, pass->include_albedo);
     /* Add utility passes needed to generate some light passes. */
     if (info.divide_type != PASS_NONE) {
       add_auto_pass(scene, info.divide_type);
+    }
+    if (info.direct_type != PASS_NONE) {
+      add_auto_pass(scene, info.direct_type);
+    }
+    if (info.indirect_type != PASS_NONE) {
+      add_auto_pass(scene, info.indirect_type);
     }
 
     /* NOTE: Enable all denoised passes when storage is requested.
@@ -638,16 +644,11 @@ void Film::finalize_passes(Scene *scene, const bool use_denoise)
   vector<Pass *> new_passes;
 
   for (Pass *pass : scene->passes) {
-    pass->info_ = Pass::get_info(pass->type);
+    pass->info_ = Pass::get_info(pass->type, pass->include_albedo);
 
     /* Disable denoising on passes if denoising is disabled, or if the
      * pass does not support it. */
     pass->mode = (use_denoise && pass->info_.support_denoise) ? pass->mode : PassMode::NOISY;
-
-    /* All passes are currently written into the render buffer. Passes that
-     * are dynamically constructed from others without being written will
-     * be added later. */
-    pass->is_written_ = true;
 
     /* Merge duplicate passes. */
     bool duplicate_found = false;
@@ -668,7 +669,6 @@ void Film::finalize_passes(Scene *scene, const bool use_denoise)
       }
 
       new_pass->is_auto_ &= pass->is_auto_;
-      new_pass->is_written_ |= pass->is_written_;
       duplicate_found = true;
       break;
     }

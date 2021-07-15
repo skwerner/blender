@@ -160,7 +160,7 @@ DEFINE_PASS_ACCESSOR(sample_count)
 DEFINE_PASS_ACCESSOR(float)
 
 /* Float3 passes. */
-DEFINE_PASS_ACCESSOR(divide_even_color)
+DEFINE_PASS_ACCESSOR(light_path)
 DEFINE_PASS_ACCESSOR(shadow_catcher)
 DEFINE_PASS_ACCESSOR(float3)
 

@@ -167,25 +167,42 @@ ccl_device_inline void film_get_pass_pixel_float(const KernelFilmConvert *ccl_re
  * Float 3 passes.
  */
 
-ccl_device_inline void film_get_pass_pixel_divide_even_color(
-    const KernelFilmConvert *ccl_restrict kfilm_convert,
-    ccl_global const float *ccl_restrict buffer,
-    float *ccl_restrict pixel)
+ccl_device_inline void film_get_pass_pixel_light_path(const KernelFilmConvert *ccl_restrict
+                                                          kfilm_convert,
+                                                      ccl_global const float *ccl_restrict buffer,
+                                                      float *ccl_restrict pixel)
 {
   kernel_assert(kfilm_convert->num_components >= 3);
   kernel_assert(kfilm_convert->pass_offset != PASS_UNUSED);
-  kernel_assert(kfilm_convert->pass_divide != PASS_UNUSED);
 
+  /* Read light pass. */
   const float *in = buffer + kfilm_convert->pass_offset;
-  const float *in_divide = buffer + kfilm_convert->pass_divide;
+  float3 f = make_float3(in[0], in[1], in[2]);
 
-  const float3 f = make_float3(in[0], in[1], in[2]);
-  const float3 f_divide = make_float3(in_divide[0], in_divide[1], in_divide[2]);
-  const float3 f_divided = safe_divide_even_color(f * kfilm_convert->exposure, f_divide);
+  /* Optionally add indirect light pass. */
+  if (kfilm_convert->pass_indirect != PASS_UNUSED) {
+    const float *in_indirect = buffer + kfilm_convert->pass_indirect;
+    const float3 f_indirect = make_float3(in_indirect[0], in_indirect[1], in_indirect[2]);
+    f += f_indirect;
+  }
 
-  pixel[0] = f_divided.x;
-  pixel[1] = f_divided.y;
-  pixel[2] = f_divided.z;
+  /* Optionally divide out color. */
+  if (kfilm_convert->pass_divide != PASS_UNUSED) {
+    const float *in_divide = buffer + kfilm_convert->pass_divide;
+    const float3 f_divide = make_float3(in_divide[0], in_divide[1], in_divide[2]);
+    f = safe_divide_even_color(f, f_divide);
+
+    /* Exposure only, sample scale cancels out. */
+    f *= kfilm_convert->exposure;
+  }
+  else {
+    /* Sample scale and exposure. */
+    f *= film_get_scale_exposure(kfilm_convert, buffer);
+  }
+
+  pixel[0] = f.x;
+  pixel[1] = f.y;
+  pixel[2] = f.z;
 }
 
 ccl_device_inline void film_get_pass_pixel_float3(const KernelFilmConvert *ccl_restrict

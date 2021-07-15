@@ -573,38 +573,47 @@ static PassType bake_type_to_pass(const string &bake_type_str, const int bake_fi
     return PASS_SHADOW;
   }
   else if (strcmp(bake_type, "DIFFUSE") == 0) {
-    /* TODO: arbitrary combinations. */
-    if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+    if ((bake_filter & BL::BakeSettings::pass_filter_DIRECT) &&
+        bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_DIFFUSE;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
       return PASS_DIFFUSE_DIRECT;
     }
     else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
       return PASS_DIFFUSE_INDIRECT;
     }
-    else if (bake_filter & BL::BakeSettings::pass_filter_COLOR) {
+    else {
       return PASS_DIFFUSE_COLOR;
     }
   }
   else if (strcmp(bake_type, "GLOSSY") == 0) {
-    /* TODO: arbitrary combinations. */
-    if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+    if ((bake_filter & BL::BakeSettings::pass_filter_DIRECT) &&
+        bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_GLOSSY;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
       return PASS_GLOSSY_DIRECT;
     }
     else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
       return PASS_GLOSSY_INDIRECT;
     }
-    else if (bake_filter & BL::BakeSettings::pass_filter_COLOR) {
+    else {
       return PASS_GLOSSY_COLOR;
     }
   }
   else if (strcmp(bake_type, "TRANSMISSION") == 0) {
-    /* TODO: arbitrary combinations. */
-    if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
+    if ((bake_filter & BL::BakeSettings::pass_filter_DIRECT) &&
+        bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
+      return PASS_TRANSMISSION;
+    }
+    else if (bake_filter & BL::BakeSettings::pass_filter_DIRECT) {
       return PASS_TRANSMISSION_DIRECT;
     }
     else if (bake_filter & BL::BakeSettings::pass_filter_INDIRECT) {
       return PASS_TRANSMISSION_INDIRECT;
     }
-    else if (bake_filter & BL::BakeSettings::pass_filter_COLOR) {
+    else {
       return PASS_TRANSMISSION_COLOR;
     }
   }
@@ -630,10 +639,10 @@ void BlenderSession::bake(BL::Depsgraph &b_depsgraph_,
 
   /* Add render pass that we want to bake, and name it Combined so that it is
    * used as that on the Blender side. */
-  const PassType pass_type = bake_type_to_pass(bake_type, bake_filter);
   Pass *pass = scene->create_node<Pass>();
-  pass->type = pass_type;
   pass->name = "Combined";
+  pass->type = bake_type_to_pass(bake_type, bake_filter);
+  pass->include_albedo = (bake_filter & BL::BakeSettings::pass_filter_COLOR);
 
   session->read_render_tile_cb = [&]() { read_render_tile(); };
   session->write_render_tile_cb = [&]() { write_render_tile(); };

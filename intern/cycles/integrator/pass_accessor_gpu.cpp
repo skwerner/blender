@@ -93,7 +93,7 @@ DEFINE_PASS_ACCESSOR(sample_count, SAMPLE_COUNT);
 DEFINE_PASS_ACCESSOR(float, FLOAT);
 
 /* Float3 passes. */
-DEFINE_PASS_ACCESSOR(divide_even_color, DIVIDE_EVEN_COLOR);
+DEFINE_PASS_ACCESSOR(light_path, LIGHT_PATH);
 DEFINE_PASS_ACCESSOR(float3, FLOAT3);
 
 /* Float4 passes. */

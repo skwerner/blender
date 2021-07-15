@@ -38,6 +38,7 @@ PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
                                              const vector<Pass *> &passes)
     : type(pass.type),
       mode(pass.mode),
+      include_albedo(pass.include_albedo),
       offset(Pass::get_offset(passes, &pass)),
       use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher()),
       use_approximate_shadow_catcher_background(use_approximate_shadow_catcher &&
@@ -147,7 +148,7 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
 
   const PassType type = pass_access_info_.type;
   const PassMode mode = pass_access_info_.mode;
-  const PassInfo pass_info = Pass::get_info(type);
+  const PassInfo pass_info = Pass::get_info(type, pass_access_info_.include_albedo);
 
   if (pass_info.num_components == 1) {
     /* Single channel passes. */
@@ -195,9 +196,11 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
       /* Shadow catcher pass. */
       get_pass_shadow_catcher(render_buffers, buffer_params, destination);
     }
-    else if (pass_info.divide_type != PASS_NONE && mode != PassMode::DENOISED) {
-      /* RGB lighting passes that need to divide out color. */
-      get_pass_divide_even_color(render_buffers, buffer_params, destination);
+    else if ((pass_info.divide_type != PASS_NONE || pass_info.direct_type != PASS_NONE ||
+              pass_info.indirect_type != PASS_NONE) &&
+             mode != PassMode::DENOISED) {
+      /* RGB lighting passes that need to divide out color and/or sum direct and indirect. */
+      get_pass_light_path(render_buffers, buffer_params, destination);
     }
     else {
       /* Passes that need no special computation, or denoised passes that already
@@ -229,7 +232,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
                                             const Destination &destination) const
 {
   const PassMode mode = pass_access_info_.mode;
-  const PassInfo &pass_info = Pass::get_info(pass_access_info_.type);
+  const PassInfo &pass_info = Pass::get_info(pass_access_info_.type,
+                                             pass_access_info_.include_albedo);
 
   kfilm_convert->pass_offset = pass_access_info_.offset;
   kfilm_convert->pass_stride = buffer_params.pass_stride;
@@ -238,7 +242,10 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->pass_use_filter = pass_info.use_filter;
 
   /* TODO(sergey): Some of the passes needs to become denoised when denoised pass is accessed. */
-
+  if (pass_info.direct_type != PASS_NONE) {
+    kfilm_convert->pass_offset = buffer_params.get_pass_offset(pass_info.direct_type);
+  }
+  kfilm_convert->pass_indirect = buffer_params.get_pass_offset(pass_info.indirect_type);
   kfilm_convert->pass_divide = buffer_params.get_pass_offset(pass_info.divide_type);
 
   kfilm_convert->pass_combined = buffer_params.get_pass_offset(PASS_COMBINED);
@@ -289,8 +296,8 @@ bool PassAccessor::set_render_tile_pixels(RenderBuffers *render_buffers, const S
     return false;
   }
 
-  const PassType type = pass_access_info_.type;
-  const PassInfo pass_info = Pass::get_info(type);
+  const PassInfo pass_info = Pass::get_info(pass_access_info_.type,
+                                            pass_access_info_.include_albedo);
 
   const BufferParams &buffer_params = render_buffers->params;
 

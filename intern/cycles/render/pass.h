@@ -40,7 +40,10 @@ struct PassInfo {
   int num_components = -1;
   bool use_filter = false;
   bool use_exposure = false;
+  bool is_written = true;
   PassType divide_type = PASS_NONE;
+  PassType direct_type = PASS_NONE;
+  PassType indirect_type = PASS_NONE;
 
   /* Pass access for read can not happen directly and needs some sort of compositing (for example,
    * light passes due to divide_type, or shadow catcher pass. */
@@ -62,6 +65,7 @@ class Pass : public Node {
   PassType type;
   PassMode mode;
   ustring name;
+  bool include_albedo;
 
   Pass();
 
@@ -79,14 +83,11 @@ class Pass : public Node {
    * as adaptive sampling). */
   bool is_auto_;
 
-  /* The pass is written by the render pipeline. */
-  bool is_written_;
-
  public:
   static const NodeEnum *get_type_enum();
   static const NodeEnum *get_mode_enum();
 
-  static PassInfo get_info(PassType type);
+  static PassInfo get_info(PassType type, const bool include_albedo = false);
 
   static bool contains(const vector<Pass *> &passes, PassType type);
 

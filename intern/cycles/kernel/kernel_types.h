@@ -336,12 +336,16 @@ typedef enum PassType {
   PASS_BACKGROUND,
   PASS_AO,
   PASS_SHADOW,
+  PASS_DIFFUSE,
   PASS_DIFFUSE_DIRECT,
   PASS_DIFFUSE_INDIRECT,
+  PASS_GLOSSY,
   PASS_GLOSSY_DIRECT,
   PASS_GLOSSY_INDIRECT,
+  PASS_TRANSMISSION,
   PASS_TRANSMISSION_DIRECT,
   PASS_TRANSMISSION_INDIRECT,
+  PASS_VOLUME,
   PASS_VOLUME_DIRECT,
   PASS_VOLUME_INDIRECT,
   PASS_CATEGORY_LIGHT_END = 31,
@@ -1043,6 +1047,7 @@ typedef struct KernelFilmConvert {
   int pass_use_filter;
 
   int pass_divide;
+  int pass_indirect;
 
   int pass_combined;
   int pass_sample_count;
@@ -1071,7 +1076,7 @@ typedef struct KernelFilmConvert {
   int is_denoised;
 
   /* Padding. */
-  int pad1, pad2;
+  int pad1;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 
@@ -1438,7 +1443,7 @@ typedef enum DeviceKernel {
   DECLARE_FILM_CONVERT_KERNEL(MIST),
   DECLARE_FILM_CONVERT_KERNEL(SAMPLE_COUNT),
   DECLARE_FILM_CONVERT_KERNEL(FLOAT),
-  DECLARE_FILM_CONVERT_KERNEL(DIVIDE_EVEN_COLOR),
+  DECLARE_FILM_CONVERT_KERNEL(LIGHT_PATH),
   DECLARE_FILM_CONVERT_KERNEL(FLOAT3),
   DECLARE_FILM_CONVERT_KERNEL(MOTION),
   DECLARE_FILM_CONVERT_KERNEL(CRYPTOMATTE),

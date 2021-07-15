@@ -45,6 +45,7 @@ class PassAccessor {
 
     PassType type = PASS_NONE;
     PassMode mode = PassMode::NOISY;
+    bool include_albedo = false;
     int offset = -1;
 
     /* For the shadow catcher matte pass: whether to approximate shadow catcher pass into its
@@ -135,7 +136,7 @@ class PassAccessor {
   DECLARE_PASS_ACCESSOR(float)
 
   /* Float3 passes. */
-  DECLARE_PASS_ACCESSOR(divide_even_color)
+  DECLARE_PASS_ACCESSOR(light_path)
   DECLARE_PASS_ACCESSOR(shadow_catcher)
   DECLARE_PASS_ACCESSOR(float3)
 

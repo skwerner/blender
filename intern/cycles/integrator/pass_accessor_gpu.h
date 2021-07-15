@@ -49,7 +49,7 @@ class PassAccessorGPU : public PassAccessor {
   DECLARE_PASS_ACCESSOR(float);
 
   /* Float3 passes. */
-  DECLARE_PASS_ACCESSOR(divide_even_color);
+  DECLARE_PASS_ACCESSOR(light_path);
   DECLARE_PASS_ACCESSOR(float3);
 
   /* Float4 passes. */

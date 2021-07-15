@@ -66,12 +66,16 @@ const NodeEnum *Pass::get_type_enum()
     pass_type_enum.insert("background", PASS_BACKGROUND);
     pass_type_enum.insert("ao", PASS_AO);
     pass_type_enum.insert("shadow", PASS_SHADOW);
+    pass_type_enum.insert("diffuse", PASS_DIFFUSE);
     pass_type_enum.insert("diffuse_direct", PASS_DIFFUSE_DIRECT);
     pass_type_enum.insert("diffuse_indirect", PASS_DIFFUSE_INDIRECT);
+    pass_type_enum.insert("glossy", PASS_GLOSSY);
     pass_type_enum.insert("glossy_direct", PASS_GLOSSY_DIRECT);
     pass_type_enum.insert("glossy_indirect", PASS_GLOSSY_INDIRECT);
+    pass_type_enum.insert("transmission", PASS_TRANSMISSION);
     pass_type_enum.insert("transmission_direct", PASS_TRANSMISSION_DIRECT);
     pass_type_enum.insert("transmission_indirect", PASS_TRANSMISSION_INDIRECT);
+    pass_type_enum.insert("volume", PASS_VOLUME);
     pass_type_enum.insert("volume_direct", PASS_VOLUME_DIRECT);
     pass_type_enum.insert("volume_indirect", PASS_VOLUME_INDIRECT);
 
@@ -130,11 +134,12 @@ NODE_DEFINE(Pass)
   SOCKET_ENUM(type, "Type", *pass_type_enum, PASS_COMBINED);
   SOCKET_ENUM(mode, "Mode", *pass_mode_enum, static_cast<int>(PassMode::DENOISED));
   SOCKET_STRING(name, "Name", ustring());
+  SOCKET_BOOLEAN(include_albedo, "Include Albedo", false);
 
   return type;
 }
 
-Pass::Pass() : Node(get_node_type()), is_auto_(false), is_written_(false)
+Pass::Pass() : Node(get_node_type()), is_auto_(false)
 {
 }
 
@@ -145,10 +150,10 @@ const PassInfo &Pass::get_info() const
 
 bool Pass::is_written() const
 {
-  return is_written_;
+  return info_.is_written;
 }
 
-PassInfo Pass::get_info(PassType type)
+PassInfo Pass::get_info(const PassType type, const bool include_albedo)
 {
   PassInfo pass_info;
 
@@ -218,23 +223,61 @@ PassInfo Pass::get_info(PassType type)
     case PASS_TRANSMISSION_COLOR:
       pass_info.num_components = 3;
       break;
+    case PASS_DIFFUSE:
+      pass_info.num_components = 3;
+      pass_info.use_exposure = true;
+      pass_info.direct_type = PASS_DIFFUSE_DIRECT;
+      pass_info.indirect_type = PASS_DIFFUSE_INDIRECT;
+      pass_info.divide_type = (!include_albedo) ? PASS_DIFFUSE_COLOR : PASS_NONE;
+      pass_info.use_compositing = true;
+      pass_info.is_written = false;
+      break;
     case PASS_DIFFUSE_DIRECT:
     case PASS_DIFFUSE_INDIRECT:
       pass_info.num_components = 3;
       pass_info.use_exposure = true;
-      pass_info.divide_type = PASS_DIFFUSE_COLOR;
+      pass_info.divide_type = (!include_albedo) ? PASS_DIFFUSE_COLOR : PASS_NONE;
+      pass_info.use_compositing = true;
+      break;
+    case PASS_GLOSSY:
+      pass_info.num_components = 3;
+      pass_info.use_exposure = true;
+      pass_info.direct_type = PASS_GLOSSY_DIRECT;
+      pass_info.indirect_type = PASS_GLOSSY_INDIRECT;
+      pass_info.divide_type = (!include_albedo) ? PASS_GLOSSY_COLOR : PASS_NONE;
+      pass_info.use_compositing = true;
+      pass_info.is_written = false;
       break;
     case PASS_GLOSSY_DIRECT:
     case PASS_GLOSSY_INDIRECT:
       pass_info.num_components = 3;
       pass_info.use_exposure = true;
-      pass_info.divide_type = PASS_GLOSSY_COLOR;
+      pass_info.divide_type = (!include_albedo) ? PASS_GLOSSY_COLOR : PASS_NONE;
+      pass_info.use_compositing = true;
+      break;
+    case PASS_TRANSMISSION:
+      pass_info.num_components = 3;
+      pass_info.use_exposure = true;
+      pass_info.direct_type = PASS_TRANSMISSION_DIRECT;
+      pass_info.indirect_type = PASS_TRANSMISSION_INDIRECT;
+      pass_info.divide_type = (!include_albedo) ? PASS_TRANSMISSION_COLOR : PASS_NONE;
+      pass_info.use_compositing = true;
+      pass_info.is_written = false;
       break;
     case PASS_TRANSMISSION_DIRECT:
     case PASS_TRANSMISSION_INDIRECT:
       pass_info.num_components = 3;
       pass_info.use_exposure = true;
-      pass_info.divide_type = PASS_TRANSMISSION_COLOR;
+      pass_info.divide_type = (!include_albedo) ? PASS_TRANSMISSION_COLOR : PASS_NONE;
+      pass_info.use_compositing = true;
+      break;
+    case PASS_VOLUME:
+      pass_info.num_components = 3;
+      pass_info.use_exposure = true;
+      pass_info.direct_type = PASS_VOLUME_DIRECT;
+      pass_info.indirect_type = PASS_VOLUME_INDIRECT;
+      pass_info.use_compositing = true;
+      pass_info.is_written = false;
       break;
     case PASS_VOLUME_DIRECT:
     case PASS_VOLUME_INDIRECT:
@@ -301,10 +344,6 @@ PassInfo Pass::get_info(PassType type)
       LOG(DFATAL) << "Unexpected pass type is used " << type;
       pass_info.num_components = 0;
       break;
-  }
-
-  if (pass_info.divide_type != PASS_NONE) {
-    pass_info.use_compositing = true;
   }
 
   return pass_info;

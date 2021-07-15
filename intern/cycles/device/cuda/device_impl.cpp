@@ -234,7 +234,7 @@ string CUDADevice::compile_kernel_get_common_cflags(const uint kernel_features)
       machine,
       include_path.c_str());
   if (use_adaptive_compilation()) {
-    cflags += " -D__KERNEL_FEATURES__=" + string_printf("%d", kernel_features);
+    cflags += " -D__KERNEL_FEATURES__=" + to_string(kernel_features);
   }
   const char *extra_cflags = getenv("CYCLES_CUDA_EXTRA_CFLAGS");
   if (extra_cflags) {

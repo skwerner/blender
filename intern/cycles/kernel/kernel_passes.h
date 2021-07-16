@@ -148,9 +148,9 @@ ccl_device_forceinline void kernel_write_shadow_catcher_bounce_data(
 
   /* Since the split is done, the sample does not contribute to the matte, so accumulate it as
    * transparency to the matte. */
-  /* TODO(sergey): Use contribution and transparency based on the throughput, allowing to have
-   * transparent object between camera and shadow catcher. */
-  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3, 1.0f);
+  const float3 throughput = INTEGRATOR_STATE(path, throughput);
+  kernel_write_pass_float(buffer + kernel_data.film.pass_shadow_catcher_matte + 3,
+                          average(throughput));
 }
 
 #endif /* __SHADOW_CATCHER__ */

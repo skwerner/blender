@@ -40,7 +40,7 @@ ccl_device_inline bool kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STA
 
   const int path_flag = INTEGRATOR_STATE(path, flag);
 
-  if ((path_flag & PATH_RAY_CAMERA) == 0) {
+  if ((path_flag & PATH_RAY_TRANSPARENT_BACKGROUND) == 0) {
     /* Split only on primary rays, secondary bounces are to treat shadow catcher as a regular
      * object. */
     return false;
@@ -71,7 +71,7 @@ ccl_device_inline bool kernel_shadow_catcher_path_can_split(INTEGRATOR_STATE_CON
     return false;
   }
 
-  return (path_flag & PATH_RAY_CAMERA) != 0;
+  return (path_flag & PATH_RAY_TRANSPARENT_BACKGROUND) != 0;
 }
 
 ccl_device void kernel_shadow_catcher_split(INTEGRATOR_STATE_ARGS, const int object_flag)

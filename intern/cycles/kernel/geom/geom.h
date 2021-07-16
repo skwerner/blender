@@ -33,4 +33,5 @@
 #include "kernel/geom/geom_curve_intersect.h"
 #include "kernel/geom/geom_volume.h"
 #include "kernel/geom/geom_primitive.h"
+#include "kernel/geom/geom_shader_data.h"
 // clang-format on

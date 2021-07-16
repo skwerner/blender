@@ -797,7 +797,6 @@ typedef ccl_addr_space struct ccl_align(16) ShaderData
   /* Closure data, we store a fixed array of closures */
   int num_closure;
   int num_closure_left;
-  float randb_closure;
   float3 svm_closure_weight;
 
   /* Closure weights summed directly, so we can evaluate

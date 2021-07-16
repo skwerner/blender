@@ -122,6 +122,7 @@ class Pass : public Node {
       vector<Pass> &passes, PassType type, PassMode mode, int flags, const char *name = nullptr);
 
   static bool contains(const vector<Pass> &passes, PassType type, PassMode mode = PassMode::NOISY);
+  static bool contains_any(const vector<Pass> &passes, PassType type);
 
   /* Remove all passes which were automatically created. */
   static void remove_all_auto(vector<Pass> &passes);

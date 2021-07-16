@@ -591,6 +591,12 @@ void Scene::update_passes()
       Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, PassMode::DENOISED, Pass::FLAG_AUTO);
     }
   }
+  else if (Pass::contains_any(passes, PASS_SHADOW_CATCHER)) {
+    Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
+    if (add_denoised_passes) {
+      Pass::add_internal(passes, PASS_SHADOW_CATCHER, PassMode::DENOISED, Pass::FLAG_AUTO);
+    }
+  }
 
   film->tag_modified();
 

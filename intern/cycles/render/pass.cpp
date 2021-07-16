@@ -421,6 +421,19 @@ bool Pass::contains(const vector<Pass> &passes, PassType type, PassMode mode)
   return Pass::find(passes, type, mode) != nullptr;
 }
 
+bool Pass::contains_any(const vector<Pass> &passes, PassType type)
+{
+  for (const Pass &pass : passes) {
+    if (pass.type != type) {
+      continue;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
 void Pass::remove_all_auto(vector<Pass> &passes)
 {
   vector<Pass> new_passes;

@@ -215,7 +215,7 @@ class OIDNDenoiseContext {
     }
 
     OIDNPass oidn_output_pass(buffer_params_, "output", pass_type, PassMode::DENOISED);
-    if (oidn_color_pass.offset == PASS_UNUSED) {
+    if (oidn_output_pass.offset == PASS_UNUSED) {
       LOG(DFATAL) << "Missing denoised pass " << pass_type_as_string(pass_type);
       return;
     }

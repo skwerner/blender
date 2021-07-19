@@ -609,16 +609,15 @@ ccl_device_forceinline bool _shader_bsdf_exclude(ClosureType type, uint light_sh
   return false;
 }
 
-ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
-                                               ShaderData *sd,
-                                               const float3 omega_in,
-                                               const bool is_transmission,
-                                               float *pdf,
-                                               const ShaderClosure *skip_sc,
-                                               BsdfEval *result_eval,
-                                               float sum_pdf,
-                                               float sum_sample_weight,
-                                               const uint light_shader_flags)
+ccl_device_inline float _shader_bsdf_multi_eval(const KernelGlobals *kg,
+                                                ShaderData *sd,
+                                                const float3 omega_in,
+                                                const bool is_transmission,
+                                                const ShaderClosure *skip_sc,
+                                                BsdfEval *result_eval,
+                                                float sum_pdf,
+                                                float sum_sample_weight,
+                                                const uint light_shader_flags)
 {
   /* this is the veach one-sample model with balance heuristic, some pdf
    * factors drop out when using balance heuristic weighting */
@@ -646,7 +645,7 @@ ccl_device_inline void _shader_bsdf_multi_eval(const KernelGlobals *kg,
     }
   }
 
-  *pdf = (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
+  return (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
 }
 
 #ifndef __KERNEL_CUDA__
@@ -654,26 +653,20 @@ ccl_device
 #else
 ccl_device_inline
 #endif
-    void
+    float
     shader_bsdf_eval(const KernelGlobals *kg,
                      ShaderData *sd,
                      const float3 omega_in,
                      const bool is_transmission,
-                     BsdfEval *eval,
-                     const float light_pdf,
+                     BsdfEval *bsdf_eval,
                      const uint light_shader_flags)
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_EVAL);
 
-  bsdf_eval_init(eval, false, zero_float3(), kernel_data.film.use_light_pass);
+  bsdf_eval_init(bsdf_eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
-  float pdf;
-  _shader_bsdf_multi_eval(
-      kg, sd, omega_in, is_transmission, &pdf, NULL, eval, 0.0f, 0.0f, light_shader_flags);
-  if (light_shader_flags & SHADER_USE_MIS) {
-    float weight = power_heuristic(light_pdf, pdf);
-    bsdf_eval_mul(eval, weight);
-  }
+  return _shader_bsdf_multi_eval(
+      kg, sd, omega_in, is_transmission, NULL, bsdf_eval, 0.0f, 0.0f, light_shader_flags);
 }
 
 /* Randomly sample a BSSRDF or BSDF proportional to ShaderClosure.sample_weight. */
@@ -771,8 +764,8 @@ ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
     if (sd->num_closure > 1) {
       const bool is_transmission = shader_bsdf_is_transmission(sd, *omega_in);
       float sweight = sc->sample_weight;
-      _shader_bsdf_multi_eval(
-          kg, sd, *omega_in, is_transmission, pdf, sc, bsdf_eval, *pdf * sweight, sweight, 0);
+      *pdf = _shader_bsdf_multi_eval(
+          kg, sd, *omega_in, is_transmission, sc, bsdf_eval, *pdf * sweight, sweight, 0);
     }
   }
 
@@ -1075,13 +1068,12 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
 
 #ifdef __VOLUME__
 
-ccl_device_inline void _shader_volume_phase_multi_eval(const ShaderData *sd,
-                                                       const float3 omega_in,
-                                                       float *pdf,
-                                                       int skip_phase,
-                                                       BsdfEval *result_eval,
-                                                       float sum_pdf,
-                                                       float sum_sample_weight)
+ccl_device_inline float _shader_volume_phase_multi_eval(const ShaderData *sd,
+                                                        const float3 omega_in,
+                                                        int skip_phase,
+                                                        BsdfEval *result_eval,
+                                                        float sum_pdf,
+                                                        float sum_sample_weight)
 {
   for (int i = 0; i < sd->num_closure; i++) {
     if (i == skip_phase)
@@ -1102,26 +1094,19 @@ ccl_device_inline void _shader_volume_phase_multi_eval(const ShaderData *sd,
     }
   }
 
-  *pdf = (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
+  return (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
 }
 
-ccl_device void shader_volume_phase_eval(const KernelGlobals *kg,
-                                         const ShaderData *sd,
-                                         const float3 omega_in,
-                                         BsdfEval *eval,
-                                         const float light_pdf,
-                                         const uint light_shader_flags)
+ccl_device float shader_volume_phase_eval(const KernelGlobals *kg,
+                                          const ShaderData *sd,
+                                          const float3 omega_in,
+                                          BsdfEval *phase_eval)
 {
   PROFILING_INIT(kg, PROFILING_CLOSURE_VOLUME_EVAL);
 
-  bsdf_eval_init(eval, false, zero_float3(), kernel_data.film.use_light_pass);
+  bsdf_eval_init(phase_eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
-  float pdf;
-  _shader_volume_phase_multi_eval(sd, omega_in, &pdf, -1, eval, 0.0f, 0.0f);
-  if (light_shader_flags & SHADER_USE_MIS) {
-    float weight = power_heuristic(light_pdf, pdf);
-    bsdf_eval_mul(eval, weight);
-  }
+  return _shader_volume_phase_multi_eval(sd, omega_in, -1, phase_eval, 0.0f, 0.0f);
 }
 
 ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,

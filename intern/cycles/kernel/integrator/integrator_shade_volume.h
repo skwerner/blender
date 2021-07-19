@@ -560,7 +560,12 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 
   /* Evaluate BSDF. */
   BsdfEval phase_eval ccl_optional_struct_init;
-  shader_volume_phase_eval(kg, sd, ls.D, &phase_eval, ls.pdf, ls.shader);
+  const float phase_pdf = shader_volume_phase_eval(kg, sd, ls.D, &phase_eval);
+
+  if (ls.shader & SHADER_USE_MIS) {
+    float mis_weight = power_heuristic(ls.pdf, phase_pdf);
+    bsdf_eval_mul(&phase_eval, mis_weight);
+  }
 
   bsdf_eval_mul3(&phase_eval, light_eval / ls.pdf);
 

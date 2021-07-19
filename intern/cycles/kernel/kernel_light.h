@@ -44,8 +44,13 @@ typedef struct LightSample {
 
 /* Regular Light */
 
-ccl_device_inline bool light_sample_from_position(
-    const KernelGlobals *kg, int lamp, float randu, float randv, float3 P, LightSample *ls)
+template<bool in_volume_segment>
+ccl_device_inline bool light_sample(const KernelGlobals *kg,
+                                    const int lamp,
+                                    const float randu,
+                                    const float randv,
+                                    const float3 P,
+                                    LightSample *ls)
 {
   const ccl_global KernelLight *klight = &kernel_tex_fetch(__lights, lamp);
   LightType type = (LightType)klight->type;
@@ -56,6 +61,18 @@ ccl_device_inline bool light_sample_from_position(
   ls->lamp = lamp;
   ls->u = randu;
   ls->v = randv;
+
+  if (in_volume_segment && (type == LIGHT_DISTANT || type == LIGHT_BACKGROUND)) {
+    /* Distant lights in a volume get a dummy sample, position will not actually
+     * be used in that case. Only when sampling from a specific scatter position
+     * do we actually need to evaluate these. */
+    ls->P = zero_float3();
+    ls->Ng = zero_float3();
+    ls->D = zero_float3();
+    ls->pdf = true;
+    ls->t = FLT_MAX;
+    return true;
+  }
 
   if (type == LIGHT_DISTANT) {
     /* distant light */
@@ -130,13 +147,15 @@ ccl_device_inline bool light_sample_from_position(
       float invarea = fabsf(klight->area.invarea);
       bool is_round = (klight->area.invarea < 0.0f);
 
-      if (dot(ls->P - P, Ng) > 0.0f) {
-        return false;
+      if (!in_volume_segment) {
+        if (dot(ls->P - P, Ng) > 0.0f) {
+          return false;
+        }
       }
 
       float3 inplane;
 
-      if (is_round) {
+      if (is_round || in_volume_segment) {
         inplane = ellipse_sample(axisu * 0.5f, axisv * 0.5f, randu, randv);
         ls->P += inplane;
         ls->pdf = invarea;
@@ -536,6 +555,7 @@ ccl_device_forceinline float triangle_light_pdf(const KernelGlobals *kg,
   }
 }
 
+template<bool in_volume_segment>
 ccl_device_forceinline void triangle_light_sample(const KernelGlobals *kg,
                                                   int prim,
                                                   int object,
@@ -576,7 +596,7 @@ ccl_device_forceinline void triangle_light_sample(const KernelGlobals *kg,
 
   float distance_to_plane = fabsf(dot(N0, V[0] - P) / dot(N0, N0));
 
-  if (longest_edge_squared > distance_to_plane * distance_to_plane) {
+  if (!in_volume_segment && (longest_edge_squared > distance_to_plane * distance_to_plane)) {
     /* see James Arvo, "Stratified Sampling of Spherical Triangles"
      * http://www.graphics.cornell.edu/pubs/1995/Arv95c.pdf */
 
@@ -750,14 +770,15 @@ ccl_device_inline bool light_select_reached_max_bounces(const KernelGlobals *kg,
   return (bounce > kernel_tex_fetch(__lights, index).max_bounces);
 }
 
-ccl_device_noinline bool light_sample(const KernelGlobals *kg,
-                                      float randu,
-                                      const float randv,
-                                      const float time,
-                                      const float3 P,
-                                      const int bounce,
-                                      const int path_flag,
-                                      LightSample *ls)
+template<bool in_volume_segment>
+ccl_device_noinline bool light_distribution_sample(const KernelGlobals *kg,
+                                                   float randu,
+                                                   const float randv,
+                                                   const float time,
+                                                   const float3 P,
+                                                   const int bounce,
+                                                   const int path_flag,
+                                                   LightSample *ls)
 {
   /* Sample light index from distribution. */
   const int index = light_distribution_sample(kg, &randu);
@@ -776,7 +797,7 @@ ccl_device_noinline bool light_sample(const KernelGlobals *kg,
     }
 
     const int shader_flag = kdistribution->mesh_light.shader_flag;
-    triangle_light_sample(kg, prim, object, randu, randv, time, ls, P);
+    triangle_light_sample<in_volume_segment>(kg, prim, object, randu, randv, time, ls, P);
     ls->shader |= shader_flag;
     return (ls->pdf > 0.0f);
   }
@@ -787,23 +808,47 @@ ccl_device_noinline bool light_sample(const KernelGlobals *kg,
     return false;
   }
 
-  return light_sample_from_position(kg, lamp, randu, randv, P, ls);
+  return light_sample<in_volume_segment>(kg, lamp, randu, randv, P, ls);
 }
 
-ccl_device_inline bool light_sample_new_position(const KernelGlobals *kg,
-                                                 const float randu,
-                                                 const float randv,
-                                                 const float time,
-                                                 const float3 P,
-                                                 LightSample *ls)
+ccl_device_inline bool light_distribution_sample_from_volume_segment(const KernelGlobals *kg,
+                                                                     float randu,
+                                                                     const float randv,
+                                                                     const float time,
+                                                                     const float3 P,
+                                                                     const int bounce,
+                                                                     const int path_flag,
+                                                                     LightSample *ls)
+{
+  return light_distribution_sample<true>(kg, randu, randv, time, P, bounce, path_flag, ls);
+}
+
+ccl_device_inline bool light_distribution_sample_from_position(const KernelGlobals *kg,
+                                                               float randu,
+                                                               const float randv,
+                                                               const float time,
+                                                               const float3 P,
+                                                               const int bounce,
+                                                               const int path_flag,
+                                                               LightSample *ls)
+{
+  return light_distribution_sample<false>(kg, randu, randv, time, P, bounce, path_flag, ls);
+}
+
+ccl_device_inline bool light_distribution_sample_new_position(const KernelGlobals *kg,
+                                                              const float randu,
+                                                              const float randv,
+                                                              const float time,
+                                                              const float3 P,
+                                                              LightSample *ls)
 {
   /* Sample a new position on the same light, for volume sampling. */
   if (ls->type == LIGHT_TRIANGLE) {
-    triangle_light_sample(kg, ls->prim, ls->object, randu, randv, time, ls, P);
+    triangle_light_sample<false>(kg, ls->prim, ls->object, randu, randv, time, ls, P);
     return (ls->pdf > 0.0f);
   }
   else {
-    return light_sample_from_position(kg, ls->lamp, randu, randv, P, ls);
+    return light_sample<false>(kg, ls->lamp, randu, randv, P, ls);
   }
 }
 

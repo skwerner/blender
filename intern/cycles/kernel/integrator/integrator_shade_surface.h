@@ -119,7 +119,8 @@ ccl_device_forceinline void integrate_surface_direct_light(INTEGRATOR_STATE_ARGS
     float light_u, light_v;
     path_state_rng_2D(kg, rng_state, PRNG_LIGHT_U, &light_u, &light_v);
 
-    if (!light_sample(kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, &ls)) {
+    if (!light_distribution_sample_from_position(
+            kg, light_u, light_v, sd->time, sd->P, bounce, path_flag, &ls)) {
       return;
     }
   }

@@ -259,7 +259,10 @@ ccl_device_forceinline int integrate_surface_bsdf_bssrdf_bounce(INTEGRATOR_STATE
   }
 
   /* Update path state */
-  if (!(label & LABEL_TRANSPARENT)) {
+  if (label & LABEL_TRANSPARENT) {
+    INTEGRATOR_STATE_WRITE(path, mis_ray_t) += sd->ray_length;
+  }
+  else {
     INTEGRATOR_STATE_WRITE(path, mis_ray_pdf) = bsdf_pdf;
     INTEGRATOR_STATE_WRITE(path, mis_ray_t) = 0.0f;
     INTEGRATOR_STATE_WRITE(path, min_ray_pdf) = fminf(bsdf_pdf,
@@ -287,6 +290,8 @@ ccl_device_forceinline bool integrate_surface_volume_only_bounce(INTEGRATOR_STAT
 #  ifdef __RAY_DIFFERENTIALS__
   INTEGRATOR_STATE_WRITE(ray, dP) = differential_make_compact(sd->dP);
 #  endif
+
+  INTEGRATOR_STATE_WRITE(path, mis_ray_t) += sd->ray_length;
 
   return LABEL_TRANSMIT | LABEL_TRANSPARENT;
 }

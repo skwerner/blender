@@ -603,7 +603,8 @@ bool Session::get_render_tile_pixels(const string &pass_name, int num_components
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
 
-  const PassAccessor::PassAccessInfo pass_access_info(*pass, *scene->film, scene->passes);
+  const PassAccessor::PassAccessInfo pass_access_info(
+      *pass, *scene->film, *scene->background, scene->passes);
   const PassAccessorCPU pass_accessor(pass_access_info, exposure, num_samples);
   const PassAccessor::Destination destination(pixels, num_components);
 
@@ -623,7 +624,8 @@ bool Session::set_render_tile_pixels(const string &pass_name,
   const float exposure = scene->film->get_exposure();
   const int num_samples = render_scheduler_.get_num_rendered_samples();
 
-  const PassAccessor::PassAccessInfo pass_access_info(*pass, *scene->film, scene->passes);
+  const PassAccessor::PassAccessInfo pass_access_info(
+      *pass, *scene->film, *scene->background, scene->passes);
   PassAccessorCPU pass_accessor(pass_access_info, exposure, num_samples);
   PassAccessor::Source source(pixels, num_components);
 

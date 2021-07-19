@@ -151,6 +151,7 @@ bool PathTraceWork::set_render_tile_pixels(PassAccessor &pass_accessor,
 PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMode pass_mode) const
 {
   const KernelFilm &kfilm = device_scene_->data.film;
+  const KernelBackground &kbackground = device_scene_->data.background;
 
   PassAccessor::PassAccessInfo pass_access_info;
   pass_access_info.type = static_cast<PassType>(kfilm.display_pass_type);
@@ -165,6 +166,8 @@ PassAccessor::PassAccessInfo PathTraceWork::get_display_pass_access_info(PassMod
   }
 
   pass_access_info.use_approximate_shadow_catcher = kfilm.use_approximate_shadow_catcher;
+  pass_access_info.use_approximate_shadow_catcher_background =
+      kfilm.use_approximate_shadow_catcher && !kbackground.transparent;
   pass_access_info.show_active_pixels = kfilm.show_active_pixels;
 
   return pass_access_info;

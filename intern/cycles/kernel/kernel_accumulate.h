@@ -220,6 +220,10 @@ ccl_device bool kernel_accum_shadow_catcher_transparent(INTEGRATOR_STATE_CONST_A
   kernel_assert(kernel_data.film.pass_shadow_catcher != PASS_UNUSED);
   kernel_assert(kernel_data.film.pass_shadow_catcher_matte != PASS_UNUSED);
 
+  if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SHADOW_CATCHER_BACKGROUND) {
+    return true;
+  }
+
   /* Matte pass. */
   if (kernel_shadow_catcher_is_matte_path(INTEGRATOR_STATE_PASS)) {
     kernel_write_pass_float4(

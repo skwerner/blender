@@ -74,12 +74,14 @@ ccl_device_inline bool kernel_shadow_catcher_path_can_split(INTEGRATOR_STATE_CON
   return (path_flag & PATH_RAY_TRANSPARENT_BACKGROUND) != 0;
 }
 
-ccl_device void kernel_shadow_catcher_split(INTEGRATOR_STATE_ARGS, const int object_flag)
+/* NOTE: Leaves kernel scheduling information untouched. Use INIT semantic for one of the paths
+ * after this function. */
+ccl_device_inline bool kernel_shadow_catcher_split(INTEGRATOR_STATE_ARGS, const int object_flags)
 {
 #ifdef __SHADOW_CATCHER__
 
-  if (!kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STATE_PASS, object_flag)) {
-    return;
+  if (!kernel_shadow_catcher_is_path_split_bounce(INTEGRATOR_STATE_PASS, object_flags)) {
+    return false;
   }
 
   /* The split is to be done. Mark the current state as such, so that it stops contributing to the
@@ -90,6 +92,10 @@ ccl_device void kernel_shadow_catcher_split(INTEGRATOR_STATE_ARGS, const int obj
    * catcher objects ignoring non-catcher objects. */
   integrator_state_shadow_catcher_split(INTEGRATOR_STATE_PASS);
 
+  return true;
+#else
+  (void)object_flags;
+  return false;
 #endif
 }
 

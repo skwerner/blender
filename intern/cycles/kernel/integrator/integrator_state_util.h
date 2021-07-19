@@ -238,54 +238,32 @@ ccl_device_inline void integrator_state_move(const int to_path_index, const int 
   INTEGRATOR_STATE_WRITE(shadow_path, queued_kernel) = 0;
 }
 
-ccl_device_inline void integrator_state_init_after_split(INTEGRATOR_STATE_ARGS)
-{
-  /* Path. */
-  const int kernel = INTEGRATOR_STATE(path, queued_kernel);
-  {
-    atomic_fetch_and_add_uint32(&kernel_integrator_state.queue_counter->num_queued[kernel], 1);
-  }
-
-  /* Shadow path. Note that it is optional. */
-  {
-    const int shadow_kernel = INTEGRATOR_STATE(shadow_path, queued_kernel);
-    if (shadow_kernel != 0) {
-      atomic_fetch_and_add_uint32(
-          &kernel_integrator_state.queue_counter->num_queued[shadow_kernel], 1);
-    }
-  }
-
-  /* Sorting. */
-  {
-    if (kernel_integrator_state.sort_key_counter[kernel] != nullptr) {
-      const int key = INTEGRATOR_STATE(path, shader_sort_key);
-      atomic_fetch_and_add_uint32(&kernel_integrator_state.sort_key_counter[kernel][key], 1);
-    }
-  }
-}
-
-ccl_device_inline void integrator_state_split(const int to_path_index, const int path_index)
-{
-  integrator_state_copy_only(to_path_index, path_index);
-
-  integrator_state_init_after_split(nullptr, to_path_index);
-}
-
 #endif
 
+/* NOTE: Leaves kernel scheduling information untouched. Use INIT semantic for one of the paths
+ * after this function. */
 ccl_device_inline void integrator_state_shadow_catcher_split(INTEGRATOR_STATE_ARGS)
 {
 #if defined(__KERNEL_GPU__)
   const int to_path_index = atomic_fetch_and_add_uint32(
       &kernel_integrator_state.next_shadow_catcher_path_index[0], 1);
 
-  integrator_state_split(to_path_index, path_index);
+  integrator_state_copy_only(to_path_index, path_index);
 
   kernel_integrator_state.path.flag[to_path_index] |= PATH_RAY_SHADOW_CATCHER_PASS;
-#else
-  *(state + 1) = *state;
 
-  (state + 1)->path.flag |= PATH_RAY_SHADOW_CATCHER_PASS;
+  /* Sanity check: expect to split in the intersect-closest kernel, where there is no shadow ray
+   * and no sorting yet. */
+  kernel_assert(INTEGRATOR_STATE(shadow_path, queued_kernel) == 0);
+  kernel_assert(kernel_integrator_state.sort_key_counter[INTEGRATOR_STATE(path, queued_kernel)] ==
+                nullptr);
+#else
+
+  IntegratorState *ccl_restrict split_state = state + 1;
+
+  *split_state = *state;
+
+  split_state->path.flag |= PATH_RAY_SHADOW_CATCHER_PASS;
 #endif
 }
 

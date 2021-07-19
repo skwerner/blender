@@ -742,6 +742,7 @@ void OptiXDevice::denoise_color_read(DenoiseContext &context, const DenoisePass 
    * on the approximation. The latter is not even possible because OptiX does not support
    * denoising of semi-transparent pixels. */
   pass_access_info.use_approximate_shadow_catcher = false;
+  pass_access_info.use_approximate_shadow_catcher_background = false;
   pass_access_info.show_active_pixels = false;
 
   /* TODO(sergey): Consider adding support of actual exposure, to avoid clamping in extreme cases.

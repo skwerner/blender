@@ -282,6 +282,9 @@ enum PathRayFlag {
    * NOTE: Is not covered with `PATH_RAY_ANY_PASS` because shadow catcher does special handling
    * which is separate from the light passes. */
   PATH_RAY_SHADOW_CATCHER_PASS = (1 << 27),
+
+  /* Path is evaluating background for an approximate shadow catcher with non-transparent film. */
+  PATH_RAY_SHADOW_CATCHER_BACKGROUND = (1 << 28),
 };
 
 /* Configure ray visibility bits for rays and objects respectively,
@@ -1023,12 +1026,14 @@ typedef struct KernelFilmConvert {
   int pass_motion_weight;
   int pass_shadow_catcher;
   int pass_shadow_catcher_matte;
+  int pass_background;
 
   float scale;
   float exposure;
   float scale_exposure;
 
   int use_approximate_shadow_catcher;
+  int use_approximate_shadow_catcher_background;
   int show_active_pixels;
 
   /* Number of components to write to. */
@@ -1040,7 +1045,8 @@ typedef struct KernelFilmConvert {
 
   int is_denoised;
 
-  int pad1;
+  /* Padding. */
+  int pad1, pad2, pad3;
 } KernelFilmConvert;
 static_assert_align(KernelFilmConvert, 16);
 

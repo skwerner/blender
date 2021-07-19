@@ -24,6 +24,7 @@
 
 CCL_NAMESPACE_BEGIN
 
+class Background;
 class Film;
 class RenderBuffers;
 class BufferParams;
@@ -37,7 +38,10 @@ class PassAccessor {
   class PassAccessInfo {
    public:
     PassAccessInfo() = default;
-    PassAccessInfo(const Pass &pass, const Film &film, const vector<Pass> &passes);
+    PassAccessInfo(const Pass &pass,
+                   const Film &film,
+                   const Background &background,
+                   const vector<Pass> &passes);
 
     PassType type = PASS_NONE;
     PassMode mode = PassMode::NOISY;
@@ -47,6 +51,9 @@ class PassAccessor {
      * matte pass, so that both artificial objects and shadows can be alpha-overed onto a backdrop.
      */
     bool use_approximate_shadow_catcher = false;
+
+    /* When approximate shadow catcher matte is used alpha-over the result on top of background. */
+    bool use_approximate_shadow_catcher_background = false;
 
     bool show_active_pixels = false;
   };

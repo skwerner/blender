@@ -583,8 +583,15 @@ void Scene::update_passes()
 
   /* Create passes for shadow catcher. */
   if (has_shadow_catcher()) {
+    const bool need_background = film->get_use_approximate_shadow_catcher() &&
+                                 !background->get_transparent();
+
     Pass::add_internal(passes, PASS_SHADOW_CATCHER, Pass::FLAG_AUTO);
     Pass::add_internal(passes, PASS_SHADOW_CATCHER_MATTE, Pass::FLAG_AUTO);
+
+    if (need_background) {
+      Pass::add_internal(passes, PASS_BACKGROUND, Pass::FLAG_AUTO);
+    }
 
     if (add_denoised_passes) {
       Pass::add_internal(passes, PASS_SHADOW_CATCHER, PassMode::DENOISED, Pass::FLAG_AUTO);

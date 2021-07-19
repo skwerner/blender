@@ -90,8 +90,29 @@ ccl_device_forceinline void integrator_intersect_shader_next_kernel(
     const int shader,
     const int shader_flags)
 {
-  /* Setup next kernel to execute. */
-  if ((shader_flags & SD_HAS_RAYTRACE) || (kernel_data.film.pass_ao != PASS_UNUSED)) {
+  /* Note on scheduling.
+   *
+   * When there is no shadow catcher split the scheduling is simple: schedule surface shading with
+   * or without raytrace support, depending on the shader used.
+   *
+   * When there is a shadow catcher split the general idea is to have the following configuration:
+   *
+   *  - Schedule surface shading kernel (with corresponding raytrace support) for the ray which
+   *    will trace shadow catcher object.
+   *
+   *  - When no alpha-over of approximate shadow catcher is needed, schedule surface shading for
+   *    the matte ray.
+   *
+   *  - Otherwise schedule background shading kernel, so that we have a background to alpha-over
+   *    on. The background kernel will then schedule surface shading for the matte ray.
+   *
+   * Note that the splitting leaves kernel and sorting counters as-is, so use INIT semantic for
+   * the matte path. */
+
+  const bool use_raytrace_kernel = ((shader_flags & SD_HAS_RAYTRACE) ||
+                                    (kernel_data.film.pass_ao != PASS_UNUSED));
+
+  if (use_raytrace_kernel) {
     INTEGRATOR_PATH_NEXT_SORTED(
         current_kernel, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
   }
@@ -99,9 +120,27 @@ ccl_device_forceinline void integrator_intersect_shader_next_kernel(
     INTEGRATOR_PATH_NEXT_SORTED(current_kernel, DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader);
   }
 
-  /* Setup shadow catcher. */
+#ifdef __SHADOW_CATCHER__
   const int object_flags = intersection_get_object_flags(kg, isect);
-  kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags);
+  if (kernel_shadow_catcher_split(INTEGRATOR_STATE_PASS, object_flags)) {
+    if (kernel_data.film.use_approximate_shadow_catcher && !kernel_data.background.transparent) {
+      INTEGRATOR_STATE_WRITE(path, flag) |= PATH_RAY_SHADOW_CATCHER_BACKGROUND;
+
+      if (use_raytrace_kernel) {
+        INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
+      }
+      else {
+        INTEGRATOR_PATH_INIT(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
+      }
+    }
+    else if (use_raytrace_kernel) {
+      INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE, shader);
+    }
+    else {
+      INTEGRATOR_PATH_INIT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE, shader);
+    }
+  }
+#endif
 }
 
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)

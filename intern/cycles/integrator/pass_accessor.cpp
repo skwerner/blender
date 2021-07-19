@@ -16,7 +16,9 @@
 
 #include "integrator/pass_accessor.h"
 
+#include "render/background.h"
 #include "render/buffers.h"
+#include "render/film.h"
 #include "util/util_logging.h"
 
 // clang-format off
@@ -32,11 +34,14 @@ CCL_NAMESPACE_BEGIN
 
 PassAccessor::PassAccessInfo::PassAccessInfo(const Pass &pass,
                                              const Film &film,
+                                             const Background &background,
                                              const vector<Pass> &passes)
     : type(pass.type),
       mode(pass.mode),
       offset(Pass::get_offset(passes, pass)),
-      use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher())
+      use_approximate_shadow_catcher(film.get_use_approximate_shadow_catcher()),
+      use_approximate_shadow_catcher_background(use_approximate_shadow_catcher &&
+                                                !background.get_transparent())
 {
 }
 
@@ -263,6 +268,9 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->pass_shadow_catcher_matte = buffer_params.get_pass_offset(
       PASS_SHADOW_CATCHER_MATTE, mode);
 
+  /* Background is not denoised, so always use noisy pass. */
+  kfilm_convert->pass_background = buffer_params.get_pass_offset(PASS_BACKGROUND);
+
   if (pass_info.use_filter) {
     kfilm_convert->scale = 1.0f / num_samples_;
   }
@@ -280,6 +288,8 @@ void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
   kfilm_convert->scale_exposure = kfilm_convert->scale * kfilm_convert->exposure;
 
   kfilm_convert->use_approximate_shadow_catcher = pass_access_info_.use_approximate_shadow_catcher;
+  kfilm_convert->use_approximate_shadow_catcher_background =
+      pass_access_info_.use_approximate_shadow_catcher_background;
   kfilm_convert->show_active_pixels = pass_access_info_.show_active_pixels;
 
   kfilm_convert->num_components = destination.num_components;

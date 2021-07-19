@@ -179,11 +179,32 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
-  // TODO: unify these in a single loop to only have a single shader evaluation call
+  /* TODO: unify these in a single loop to only have a single shader evaluation call. */
   integrate_distant_lights(INTEGRATOR_STATE_PASS, render_buffer);
   integrate_background(INTEGRATOR_STATE_PASS, render_buffer);
 
-  /* Path ends here. */
+#ifdef __SHADOW_CATCHER__
+  if (INTEGRATOR_STATE(path, flag) & PATH_RAY_SHADOW_CATCHER_BACKGROUND) {
+    INTEGRATOR_STATE_WRITE(path, flag) &= ~PATH_RAY_SHADOW_CATCHER_BACKGROUND;
+
+    const int isect_prim = INTEGRATOR_STATE(isect, prim);
+    const int shader = intersection_get_shader_from_isect_prim(kg, isect_prim);
+    const int shader_flags = kernel_tex_fetch(__shaders, shader).flags;
+
+    if ((shader_flags & SD_HAS_RAYTRACE) || (kernel_data.film.pass_ao != PASS_UNUSED)) {
+      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND,
+                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE_RAYTRACE,
+                                  shader);
+    }
+    else {
+      INTEGRATOR_PATH_NEXT_SORTED(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND,
+                                  DEVICE_KERNEL_INTEGRATOR_SHADE_SURFACE,
+                                  shader);
+    }
+    return;
+  }
+#endif
+
   INTEGRATOR_PATH_TERMINATE(DEVICE_KERNEL_INTEGRATOR_SHADE_BACKGROUND);
 }
 

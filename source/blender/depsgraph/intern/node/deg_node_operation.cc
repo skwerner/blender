@@ -98,8 +98,6 @@ const char *operationCodeAsString(OperationCode opcode)
     /* Geometry. */
     case OperationCode::GEOMETRY_EVAL_INIT:
       return "GEOMETRY_EVAL_INIT";
-    case OperationCode::GEOMETRY_EVAL_DEFORM:
-      return "GEOMETRY_EVAL_DEFORM";
     case OperationCode::GEOMETRY_EVAL:
       return "GEOMETRY_EVAL";
     case OperationCode::GEOMETRY_EVAL_DONE:
@@ -162,12 +160,8 @@ const char *operationCodeAsString(OperationCode opcode)
     case OperationCode::FILE_CACHE_UPDATE:
       return "FILE_CACHE_UPDATE";
     /* Batch cache. */
-    case OperationCode::BATCH_UPDATE_SELECT:
-      return "BATCH_UPDATE_SELECT";
-    case OperationCode::BATCH_UPDATE_DEFORM:
-      return "BATCH_UPDATE_DEFORM";
-    case OperationCode::BATCH_UPDATE_ALL:
-      return "BATCH_UPDATE_ALL";
+    case OperationCode::GEOMETRY_SELECT_UPDATE:
+      return "GEOMETRY_SELECT_UPDATE";
     /* Masks. */
     case OperationCode::MASK_ANIMATION:
       return "MASK_ANIMATION";
@@ -211,7 +205,7 @@ const char *operationCodeAsString(OperationCode opcode)
     case OperationCode::SIMULATION_EVAL:
       return "SIMULATION_EVAL";
   }
-  BLI_assert(!"Unhandled operation code, should never happen.");
+  BLI_assert_msg(0, "Unhandled operation code, should never happen.");
   return "UNKNOWN";
 }
 

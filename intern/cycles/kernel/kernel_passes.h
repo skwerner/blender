@@ -153,27 +153,13 @@ ccl_device_forceinline void kernel_write_shadow_catcher_bounce_data(
 
 #endif /* __SHADOW_CATCHER__ */
 
-#ifdef __KERNEL_CPU__
-#  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
-    kernel_write_id_pass_cpu(buffer, depth * 2, id, matte_weight, kg->coverage_##name)
-ccl_device_inline size_t kernel_write_id_pass_cpu(
-    float *ccl_restrict buffer, size_t depth, float id, float matte_weight, CoverageMap *map)
+ccl_device_inline size_t kernel_write_id_pass(float *ccl_restrict buffer,
+                                              size_t depth,
+                                              float id,
+                                              float matte_weight)
 {
-  if (map) {
-    (*map)[id] += matte_weight;
-    return 0;
-  }
-#else /* __KERNEL_CPU__ */
-#  define WRITE_ID_SLOT(buffer, depth, id, matte_weight, name) \
-    kernel_write_id_slots_gpu(buffer, depth * 2, id, matte_weight)
-ccl_device_inline size_t kernel_write_id_slots_gpu(ccl_global float *ccl_restrict buffer,
-                                                   size_t depth,
-                                                   float id,
-                                                   float matte_weight)
-{
-#endif /* __KERNEL_CPU__ */
-  kernel_write_id_slots(buffer, depth, id, matte_weight);
-  return depth * 2;
+  kernel_write_id_slots(buffer, depth * 2, id, matte_weight);
+  return depth * 4;
 }
 
 ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
@@ -247,18 +233,18 @@ ccl_device_inline void kernel_write_data_passes(INTEGRATOR_STATE_ARGS,
       ccl_global float *cryptomatte_buffer = buffer + kernel_data.film.pass_cryptomatte;
       if (kernel_data.film.cryptomatte_passes & CRYPT_OBJECT) {
         const float id = object_cryptomatte_id(kg, sd->object);
-        cryptomatte_buffer += WRITE_ID_SLOT(
-            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, object);
+        cryptomatte_buffer += kernel_write_id_pass(
+            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight);
       }
       if (kernel_data.film.cryptomatte_passes & CRYPT_MATERIAL) {
         const float id = shader_cryptomatte_id(kg, sd->shader);
-        cryptomatte_buffer += WRITE_ID_SLOT(
-            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, material);
+        cryptomatte_buffer += kernel_write_id_pass(
+            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight);
       }
       if (kernel_data.film.cryptomatte_passes & CRYPT_ASSET) {
         const float id = object_cryptomatte_asset_id(kg, sd->object);
-        cryptomatte_buffer += WRITE_ID_SLOT(
-            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight, asset);
+        cryptomatte_buffer += kernel_write_id_pass(
+            cryptomatte_buffer, kernel_data.film.cryptomatte_depth, id, matte_weight);
       }
     }
   }

@@ -48,7 +48,6 @@
 #include "bvh/bvh_embree.h"
 
 #include "render/buffers.h"
-#include "render/coverage.h"
 
 #include "util/util_debug.h"
 #include "util/util_foreach.h"

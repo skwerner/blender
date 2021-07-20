@@ -32,10 +32,6 @@ CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globa
 {
   reset_runtime_memory();
 
-  coverage_asset = nullptr;
-  coverage_object = nullptr;
-  coverage_material = nullptr;
-
 #ifdef WITH_OSL
   OSLShader::thread_init(this, reinterpret_cast<OSLGlobals *>(osl_globals_memory));
 #else

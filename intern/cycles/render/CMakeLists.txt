@@ -32,7 +32,6 @@ set(SRC
   camera.cpp
   colorspace.cpp
   constant_fold.cpp
-  coverage.cpp
   denoising.cpp
   film.cpp
   geometry.cpp
@@ -78,7 +77,6 @@ set(SRC_HEADERS
   camera.h
   colorspace.h
   constant_fold.h
-  coverage.h
   denoising.h
   film.h
   geometry.h

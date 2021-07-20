@@ -195,7 +195,6 @@ def do_versions(self):
                     view_layer.use_pass_cryptomatte_material = cview_layer.get("use_pass_crypto_material", False)
                     view_layer.use_pass_cryptomatte_asset = cview_layer.get("use_pass_crypto_asset", False)
                     view_layer.pass_cryptomatte_depth = cview_layer.get("pass_crypto_depth", 6)
-                    view_layer.use_pass_cryptomatte_accurate = cview_layer.get("pass_crypto_accurate", True)
 
             if version <= (2, 93, 7):
                 if scene.render.engine == 'CYCLES':

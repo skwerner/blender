@@ -115,29 +115,6 @@ bool BufferParams::modified(const BufferParams &other) const
   return memcmp(pass_offset_, other.pass_offset_, sizeof(pass_offset_)) != 0;
 }
 
-/* Render Buffer Task */
-
-RenderTile::RenderTile()
-{
-  x = 0;
-  y = 0;
-  w = 0;
-  h = 0;
-
-  sample = 0;
-  start_sample = 0;
-  num_samples = 0;
-  resolution = 0;
-
-  offset = 0;
-  stride = 0;
-
-  buffer = 0;
-
-  buffers = NULL;
-  stealing_state = NO_STEALING;
-}
-
 /* Render Buffers */
 
 RenderBuffers::RenderBuffers(Device *device) : buffer(device, "RenderBuffers", MEM_READ_WRITE)

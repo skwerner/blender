@@ -111,10 +111,6 @@ class PassAccessor {
   /* Set pass data for the given render buffers. Used for baking to read from passes. */
   bool set_render_tile_pixels(RenderBuffers *render_buffers, const Source &source);
 
-#if 0
-  bool set_pass_rect(PassType type, int components, float *pixels);
-#endif
-
  protected:
   virtual void init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
                                         const BufferParams &buffer_params,

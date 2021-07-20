@@ -237,53 +237,6 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
   return true;
 }
 
-#if 0
-/* TODO(sergey): Need to be converted to a kernel-based processing if it will be used. */
-bool PassAccessor::set_pass_rect(PassType type, int components, float *pixels, int samples)
-{
-  if (buffer.data() == NULL) {
-    return false;
-  }
-
-  int pass_offset = 0;
-
-  for (size_t j = 0; j < params.passes.size(); j++) {
-    Pass &pass = params.passes[j];
-
-    if (pass.type != type) {
-      pass_offset += pass.components;
-      continue;
-    }
-
-    float *out = buffer.data() + pass_offset;
-    const int pass_stride = params.passes_size;
-    const int size = params.width * params.height;
-
-    DCHECK_EQ(pass.components, components)
-        << "Number of components mismatch for pass " << pass.name;
-
-    for (int i = 0; i < size; i++, out += pass_stride, pixels += components) {
-      if (pass.filter) {
-        /* Scale by the number of samples, inverse of what we do in get_render_tile_pixels.
-         * A better solution would be to remove the need for set_pass_rect entirely,
-         * and change baking to bake multiple objects in a tile at once. */
-        for (int j = 0; j < components; j++) {
-          out[j] = pixels[j] * samples;
-        }
-      }
-      else {
-        /* For non-filtered passes just straight copy, these may contain non-float data. */
-        memcpy(out, pixels, sizeof(float) * components);
-      }
-    }
-
-    return true;
-  }
-
-  return false;
-}
-#endif
-
 void PassAccessor::init_kernel_film_convert(KernelFilmConvert *kfilm_convert,
                                             const BufferParams &buffer_params,
                                             const Destination &destination) const

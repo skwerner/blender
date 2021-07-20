@@ -473,6 +473,7 @@ ccl_device_inline void kernel_accum_transparent(INTEGRATOR_STATE_CONST_ARGS,
 ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
                                                const float3 L,
                                                const float transparent,
+                                               const bool is_transparent_background_ray,
                                                ccl_global float *ccl_restrict render_buffer)
 {
   float3 contribution = INTEGRATOR_STATE(path, throughput) * L;
@@ -481,7 +482,13 @@ ccl_device_inline void kernel_accum_background(INTEGRATOR_STATE_CONST_ARGS,
   ccl_global float *buffer = kernel_accum_pixel_render_buffer(INTEGRATOR_STATE_PASS,
                                                               render_buffer);
 
-  kernel_accum_combined_transparent_pass(INTEGRATOR_STATE_PASS, contribution, transparent, buffer);
+  if (is_transparent_background_ray) {
+    kernel_accum_transparent(INTEGRATOR_STATE_PASS, transparent, render_buffer);
+  }
+  else {
+    kernel_accum_combined_transparent_pass(
+        INTEGRATOR_STATE_PASS, contribution, transparent, buffer);
+  }
   kernel_accum_emission_or_background_pass(
       INTEGRATOR_STATE_PASS, contribution, buffer, kernel_data.film.pass_background);
 }

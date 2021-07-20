@@ -97,8 +97,11 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   bool eval_background = true;
   float transparent = 0.0f;
 
-  if (kernel_data.background.transparent &&
-      (INTEGRATOR_STATE(path, flag) & PATH_RAY_TRANSPARENT_BACKGROUND)) {
+  const bool is_transparent_background_ray = kernel_data.background.transparent &&
+                                             (INTEGRATOR_STATE(path, flag) &
+                                              PATH_RAY_TRANSPARENT_BACKGROUND);
+
+  if (is_transparent_background_ray) {
     transparent = average(INTEGRATOR_STATE(path, throughput));
 
 #ifdef __PASSES__
@@ -120,7 +123,8 @@ ccl_device_inline void integrate_background(INTEGRATOR_STATE_ARGS,
   }
 
   /* Write to render buffer. */
-  kernel_accum_background(INTEGRATOR_STATE_PASS, L, transparent, render_buffer);
+  kernel_accum_background(
+      INTEGRATOR_STATE_PASS, L, transparent, is_transparent_background_ray, render_buffer);
 }
 
 ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,

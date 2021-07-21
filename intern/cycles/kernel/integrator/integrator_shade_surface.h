@@ -384,7 +384,7 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
     }
 #endif
 
-    shader_prepare_closures(INTEGRATOR_STATE_PASS, &sd);
+    shader_prepare_surface_closures(INTEGRATOR_STATE_PASS, &sd);
 
 #ifdef __HOLDOUT__
     /* Evaluate holdout. */

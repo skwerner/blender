@@ -54,15 +54,6 @@ ccl_device int bsdf_diffuse_toon_setup(ToonBsdf *bsdf)
   return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
-ccl_device bool bsdf_toon_merge(const ShaderClosure *a, const ShaderClosure *b)
-{
-  const ToonBsdf *bsdf_a = (const ToonBsdf *)a;
-  const ToonBsdf *bsdf_b = (const ToonBsdf *)b;
-
-  return (isequal_float3(bsdf_a->N, bsdf_b->N)) && (bsdf_a->size == bsdf_b->size) &&
-         (bsdf_a->smooth == bsdf_b->smooth);
-}
-
 ccl_device float3 bsdf_toon_get_intensity(float max_angle, float smooth, float angle)
 {
   float is;

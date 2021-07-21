@@ -61,15 +61,6 @@ ccl_device int bsdf_hair_transmission_setup(HairBsdf *bsdf)
   return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
-ccl_device bool bsdf_hair_merge(const ShaderClosure *a, const ShaderClosure *b)
-{
-  const HairBsdf *bsdf_a = (const HairBsdf *)a;
-  const HairBsdf *bsdf_b = (const HairBsdf *)b;
-
-  return (isequal_float3(bsdf_a->T, bsdf_b->T)) && (bsdf_a->roughness1 == bsdf_b->roughness1) &&
-         (bsdf_a->roughness2 == bsdf_b->roughness2) && (bsdf_a->offset == bsdf_b->offset);
-}
-
 ccl_device float3 bsdf_hair_reflection_eval_reflect(const ShaderClosure *sc,
                                                     const float3 I,
                                                     const float3 omega_in,

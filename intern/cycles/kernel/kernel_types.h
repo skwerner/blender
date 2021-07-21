@@ -593,6 +593,8 @@ typedef struct AttributeDescriptor {
 #  define MAX_CLOSURE __MAX_CLOSURE__
 #endif
 
+#define MAX_VOLUME_CLOSURE 8
+
 /* This struct is the base class for all closures. The common members are
  * duplicated in all derived classes since we don't have C++ in the kernel
  * yet, and because it lets us lay out the members to minimize padding. The
@@ -817,6 +819,21 @@ typedef ccl_addr_space struct ccl_align(16) ShaderDataTinyStorage
 }
 ShaderDataTinyStorage;
 #define AS_SHADER_DATA(shader_data_tiny_storage) ((ShaderData *)shader_data_tiny_storage)
+
+/* Compact volume closures storage.
+ *
+ * Used for decoupled direct/indirect light closure storage. */
+
+ccl_addr_space struct ShaderVolumeClosure {
+  float3 weight;
+  float sample_weight;
+  float g;
+};
+
+ccl_addr_space struct ShaderVolumePhases {
+  ShaderVolumeClosure closure[MAX_VOLUME_CLOSURE];
+  int num_closure;
+};
 
 /* Volume Stack */
 

@@ -61,21 +61,12 @@ ccl_device int volume_henyey_greenstein_setup(HenyeyGreensteinVolume *volume)
   return SD_SCATTER;
 }
 
-ccl_device bool volume_henyey_greenstein_merge(const ShaderClosure *a, const ShaderClosure *b)
-{
-  const HenyeyGreensteinVolume *volume_a = (const HenyeyGreensteinVolume *)a;
-  const HenyeyGreensteinVolume *volume_b = (const HenyeyGreensteinVolume *)b;
-
-  return (volume_a->g == volume_b->g);
-}
-
-ccl_device float3 volume_henyey_greenstein_eval_phase(const ShaderClosure *sc,
+ccl_device float3 volume_henyey_greenstein_eval_phase(const ShaderVolumeClosure *svc,
                                                       const float3 I,
                                                       float3 omega_in,
                                                       float *pdf)
 {
-  const HenyeyGreensteinVolume *volume = (const HenyeyGreensteinVolume *)sc;
-  float g = volume->g;
+  float g = svc->g;
 
   /* note that I points towards the viewer */
   if (fabsf(g) < 1e-3f) {
@@ -121,7 +112,7 @@ henyey_greenstrein_sample(float3 D, float g, float randu, float randv, float *pd
   return dir;
 }
 
-ccl_device int volume_henyey_greenstein_sample(const ShaderClosure *sc,
+ccl_device int volume_henyey_greenstein_sample(const ShaderVolumeClosure *svc,
                                                float3 I,
                                                float3 dIdx,
                                                float3 dIdy,
@@ -133,8 +124,7 @@ ccl_device int volume_henyey_greenstein_sample(const ShaderClosure *sc,
                                                float3 *domega_in_dy,
                                                float *pdf)
 {
-  const HenyeyGreensteinVolume *volume = (const HenyeyGreensteinVolume *)sc;
-  float g = volume->g;
+  float g = svc->g;
 
   /* note that I points towards the viewer and so is used negated */
   *omega_in = henyey_greenstrein_sample(-I, g, randu, randv, pdf);
@@ -152,17 +142,15 @@ ccl_device int volume_henyey_greenstein_sample(const ShaderClosure *sc,
 /* VOLUME CLOSURE */
 
 ccl_device float3 volume_phase_eval(const ShaderData *sd,
-                                    const ShaderClosure *sc,
+                                    const ShaderVolumeClosure *svc,
                                     float3 omega_in,
                                     float *pdf)
 {
-  kernel_assert(sc->type == CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID);
-
-  return volume_henyey_greenstein_eval_phase(sc, sd->I, omega_in, pdf);
+  return volume_henyey_greenstein_eval_phase(svc, sd->I, omega_in, pdf);
 }
 
 ccl_device int volume_phase_sample(const ShaderData *sd,
-                                   const ShaderClosure *sc,
+                                   const ShaderVolumeClosure *svc,
                                    float randu,
                                    float randv,
                                    float3 *eval,
@@ -170,29 +158,17 @@ ccl_device int volume_phase_sample(const ShaderData *sd,
                                    differential3 *domega_in,
                                    float *pdf)
 {
-  int label;
-
-  switch (sc->type) {
-    case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID:
-      label = volume_henyey_greenstein_sample(sc,
-                                              sd->I,
-                                              sd->dI.dx,
-                                              sd->dI.dy,
-                                              randu,
-                                              randv,
-                                              eval,
-                                              omega_in,
-                                              &domega_in->dx,
-                                              &domega_in->dy,
-                                              pdf);
-      break;
-    default:
-      *eval = make_float3(0.0f, 0.0f, 0.0f);
-      label = LABEL_NONE;
-      break;
-  }
-
-  return label;
+  return volume_henyey_greenstein_sample(svc,
+                                         sd->I,
+                                         sd->dI.dx,
+                                         sd->dI.dy,
+                                         randu,
+                                         randv,
+                                         eval,
+                                         omega_in,
+                                         &domega_in->dx,
+                                         &domega_in->dy,
+                                         pdf);
 }
 
 /* Volume sampling utilities. */

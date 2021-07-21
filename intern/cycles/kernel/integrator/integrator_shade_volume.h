@@ -376,6 +376,7 @@ ccl_device VolumeIntegrateEvent
 volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
                                Ray *ccl_restrict ray,
                                ShaderData *ccl_restrict sd,
+                               ShaderVolumePhases *ccl_restrict phases,
                                ccl_addr_space float3 *ccl_restrict throughput,
                                const RNGState *rng_state,
                                ccl_global float *ccl_restrict render_buffer,
@@ -490,6 +491,8 @@ volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
 
       /* prepare to scatter to new direction */
       if (scatter) {
+        shader_copy_volume_phases(phases, sd);
+
         /* adjust throughput and move to new location */
         sd->P = ray->P + new_t * ray->D;
         *throughput = tp;
@@ -518,6 +521,7 @@ volume_integrate_heterogeneous(INTEGRATOR_STATE_ARGS,
  * queue shadow ray to be traced. */
 ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
                                                           ShaderData *sd,
+                                                          const ShaderVolumePhases *phases,
                                                           const RNGState *rng_state)
 {
   /* Test if there is a light or BSDF that needs direct light. */
@@ -560,7 +564,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 
   /* Evaluate BSDF. */
   BsdfEval phase_eval ccl_optional_struct_init;
-  const float phase_pdf = shader_volume_phase_eval(kg, sd, ls.D, &phase_eval);
+  const float phase_pdf = shader_volume_phase_eval(kg, sd, phases, ls.D, &phase_eval);
 
   if (ls.shader & SHADER_USE_MIS) {
     float mis_weight = power_heuristic(ls.pdf, phase_pdf);
@@ -617,6 +621,7 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
 /* Path tracing: scatter in new direction using phase function. */
 ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS,
                                                            ShaderData *sd,
+                                                           const ShaderVolumePhases *phases,
                                                            const RNGState *rng_state)
 {
   float phase_u, phase_v;
@@ -628,8 +633,15 @@ ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS
   float3 phase_omega_in ccl_optional_struct_init;
   differential3 phase_domega_in ccl_optional_struct_init;
 
-  const int label = shader_volume_phase_sample(
-      kg, sd, phase_u, phase_v, &phase_eval, &phase_omega_in, &phase_domega_in, &phase_pdf);
+  const int label = shader_volume_phase_sample(kg,
+                                               sd,
+                                               phases,
+                                               phase_u,
+                                               phase_v,
+                                               &phase_eval,
+                                               &phase_omega_in,
+                                               &phase_domega_in,
+                                               &phase_pdf);
 
   if (phase_pdf == 0.0f || bsdf_eval_is_zero(&phase_eval)) {
     return false;
@@ -685,8 +697,9 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
     return integrator_state_read_volume_stack(INTEGRATOR_STATE_PASS, i);
   });
 
+  ShaderVolumePhases phases;
   VolumeIntegrateEvent event = volume_integrate_heterogeneous(
-      INTEGRATOR_STATE_PASS, ray, &sd, &throughput, &rng_state, render_buffer, step_size);
+      INTEGRATOR_STATE_PASS, ray, &sd, &phases, &throughput, &rng_state, render_buffer, step_size);
 
   /* Perform path termination. The intersect_closest will have already marked this path
    * to be terminated. That will shading evaluating to leave out any scattering closures,
@@ -711,10 +724,10 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
 
   if (event == VOLUME_PATH_SCATTERED) {
     /* Direct light. */
-    integrate_volume_direct_light(INTEGRATOR_STATE_PASS, &sd, &rng_state);
+    integrate_volume_direct_light(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state);
 
     /* Scatter. */
-    if (!integrate_volume_phase_scatter(INTEGRATOR_STATE_PASS, &sd, &rng_state)) {
+    if (!integrate_volume_phase_scatter(INTEGRATOR_STATE_PASS, &sd, &phases, &rng_state)) {
       return VOLUME_PATH_MISSED;
     }
   }

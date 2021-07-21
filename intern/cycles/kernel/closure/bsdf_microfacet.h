@@ -354,21 +354,6 @@ ccl_device int bsdf_microfacet_ggx_clearcoat_setup(MicrofacetBsdf *bsdf, const S
   return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
-ccl_device bool bsdf_microfacet_merge(const ShaderClosure *a, const ShaderClosure *b)
-{
-  const MicrofacetBsdf *bsdf_a = (const MicrofacetBsdf *)a;
-  const MicrofacetBsdf *bsdf_b = (const MicrofacetBsdf *)b;
-
-  return (isequal_float3(bsdf_a->N, bsdf_b->N)) && (bsdf_a->alpha_x == bsdf_b->alpha_x) &&
-         (bsdf_a->alpha_y == bsdf_b->alpha_y) && (isequal_float3(bsdf_a->T, bsdf_b->T)) &&
-         (bsdf_a->ior == bsdf_b->ior) &&
-         ((bsdf_a->extra == NULL && bsdf_b->extra == NULL) ||
-          ((bsdf_a->extra && bsdf_b->extra) &&
-           (isequal_float3(bsdf_a->extra->color, bsdf_b->extra->color)) &&
-           (isequal_float3(bsdf_a->extra->cspec0, bsdf_b->extra->cspec0)) &&
-           (bsdf_a->extra->clearcoat == bsdf_b->extra->clearcoat)));
-}
-
 ccl_device int bsdf_microfacet_ggx_refraction_setup(MicrofacetBsdf *bsdf)
 {
   bsdf->extra = NULL;

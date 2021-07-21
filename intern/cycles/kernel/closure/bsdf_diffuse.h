@@ -48,14 +48,6 @@ ccl_device int bsdf_diffuse_setup(DiffuseBsdf *bsdf)
   return SD_BSDF | SD_BSDF_HAS_EVAL;
 }
 
-ccl_device bool bsdf_diffuse_merge(const ShaderClosure *a, const ShaderClosure *b)
-{
-  const DiffuseBsdf *bsdf_a = (const DiffuseBsdf *)a;
-  const DiffuseBsdf *bsdf_b = (const DiffuseBsdf *)b;
-
-  return (isequal_float3(bsdf_a->N, bsdf_b->N));
-}
-
 ccl_device float3 bsdf_diffuse_eval_reflect(const ShaderClosure *sc,
                                             const float3 I,
                                             const float3 omega_in,

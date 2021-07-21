@@ -37,19 +37,27 @@ CCL_NAMESPACE_BEGIN
 /* Merging */
 
 #if defined(__VOLUME__)
-ccl_device_inline void shader_merge_closures(ShaderData *sd)
+ccl_device_inline void shader_merge_volume_closures(ShaderData *sd)
 {
-  /* merge identical closures, better when we sample a single closure at a time */
+  /* Merge identical closures to save closure space with stacked volumes. */
   for (int i = 0; i < sd->num_closure; i++) {
     ShaderClosure *sci = &sd->closure[i];
 
+    if (sci->type != CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID) {
+      continue;
+    }
+
     for (int j = i + 1; j < sd->num_closure; j++) {
       ShaderClosure *scj = &sd->closure[j];
+      if (sci->type != scj->type) {
+        continue;
+      }
 
-      if (sci->type != scj->type)
+      const HenyeyGreensteinVolume *hgi = (const HenyeyGreensteinVolume *)sci;
+      const HenyeyGreensteinVolume *hgj = (const HenyeyGreensteinVolume *)scj;
+      if (!(hgi->g == hgj->g)) {
         continue;
-      if (!bsdf_merge(sci, scj))
-        continue;
+      }
 
       sci->weight += scj->weight;
       sci->sample_weight += scj->sample_weight;
@@ -67,9 +75,32 @@ ccl_device_inline void shader_merge_closures(ShaderData *sd)
     }
   }
 }
+
+ccl_device_inline void shader_copy_volume_phases(ShaderVolumePhases *ccl_restrict phases,
+                                                 const ShaderData *ccl_restrict sd)
+{
+  phases->num_closure = 0;
+
+  for (int i = 0; i < sd->num_closure; i++) {
+    const ShaderClosure *from_sc = &sd->closure[i];
+    const HenyeyGreensteinVolume *from_hg = (const HenyeyGreensteinVolume *)from_sc;
+
+    if (from_sc->type == CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID) {
+      ShaderVolumeClosure *to_sc = &phases->closure[phases->num_closure];
+
+      to_sc->weight = from_sc->weight;
+      to_sc->sample_weight = from_sc->sample_weight;
+      to_sc->g = from_hg->g;
+      phases->num_closure++;
+      if (phases->num_closure >= MAX_VOLUME_CLOSURE) {
+        break;
+      }
+    }
+  }
+}
 #endif /* __VOLUME__ */
 
-ccl_device_inline void shader_prepare_closures(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
+ccl_device_inline void shader_prepare_surface_closures(INTEGRATOR_STATE_CONST_ARGS, ShaderData *sd)
 {
   /* Defensive sampling.
    *
@@ -605,29 +636,27 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
 #ifdef __VOLUME__
 
 ccl_device_inline float _shader_volume_phase_multi_eval(const ShaderData *sd,
+                                                        const ShaderVolumePhases *phases,
                                                         const float3 omega_in,
                                                         int skip_phase,
                                                         BsdfEval *result_eval,
                                                         float sum_pdf,
                                                         float sum_sample_weight)
 {
-  for (int i = 0; i < sd->num_closure; i++) {
+  for (int i = 0; i < phases->num_closure; i++) {
     if (i == skip_phase)
       continue;
 
-    const ShaderClosure *sc = &sd->closure[i];
+    const ShaderVolumeClosure *svc = &phases->closure[i];
+    float phase_pdf = 0.0f;
+    float3 eval = volume_phase_eval(sd, svc, omega_in, &phase_pdf);
 
-    if (CLOSURE_IS_PHASE(sc->type)) {
-      float phase_pdf = 0.0f;
-      float3 eval = volume_phase_eval(sd, sc, omega_in, &phase_pdf);
-
-      if (phase_pdf != 0.0f) {
-        bsdf_eval_accum(result_eval, false, eval, 1.0f);
-        sum_pdf += phase_pdf * sc->sample_weight;
-      }
-
-      sum_sample_weight += sc->sample_weight;
+    if (phase_pdf != 0.0f) {
+      bsdf_eval_accum(result_eval, false, eval, 1.0f);
+      sum_pdf += phase_pdf * svc->sample_weight;
     }
+
+    sum_sample_weight += svc->sample_weight;
   }
 
   return (sum_sample_weight > 0.0f) ? sum_pdf / sum_sample_weight : 0.0f;
@@ -635,6 +664,7 @@ ccl_device_inline float _shader_volume_phase_multi_eval(const ShaderData *sd,
 
 ccl_device float shader_volume_phase_eval(const KernelGlobals *kg,
                                           const ShaderData *sd,
+                                          const ShaderVolumePhases *phases,
                                           const float3 omega_in,
                                           BsdfEval *phase_eval)
 {
@@ -642,11 +672,12 @@ ccl_device float shader_volume_phase_eval(const KernelGlobals *kg,
 
   bsdf_eval_init(phase_eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
-  return _shader_volume_phase_multi_eval(sd, omega_in, -1, phase_eval, 0.0f, 0.0f);
+  return _shader_volume_phase_multi_eval(sd, phases, omega_in, -1, phase_eval, 0.0f, 0.0f);
 }
 
 ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
                                           const ShaderData *sd,
+                                          const ShaderVolumePhases *phases,
                                           float randu,
                                           float randv,
                                           BsdfEval *phase_eval,
@@ -658,37 +689,32 @@ ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
 
   int sampled = 0;
 
-  if (sd->num_closure > 1) {
+  if (phases->num_closure > 1) {
     /* pick a phase closure based on sample weights */
     float sum = 0.0f;
 
-    for (sampled = 0; sampled < sd->num_closure; sampled++) {
-      const ShaderClosure *sc = &sd->closure[sampled];
-
-      if (CLOSURE_IS_PHASE(sc->type))
-        sum += sc->sample_weight;
+    for (sampled = 0; sampled < phases->num_closure; sampled++) {
+      const ShaderVolumeClosure *svc = &phases->closure[sampled];
+      sum += svc->sample_weight;
     }
 
     float r = randu * sum;
     float partial_sum = 0.0f;
 
-    for (sampled = 0; sampled < sd->num_closure; sampled++) {
-      const ShaderClosure *sc = &sd->closure[sampled];
+    for (sampled = 0; sampled < phases->num_closure; sampled++) {
+      const ShaderVolumeClosure *svc = &phases->closure[sampled];
+      float next_sum = partial_sum + svc->sample_weight;
 
-      if (CLOSURE_IS_PHASE(sc->type)) {
-        float next_sum = partial_sum + sc->sample_weight;
-
-        if (r <= next_sum) {
-          /* Rescale to reuse for BSDF direction sample. */
-          randu = (r - partial_sum) / sc->sample_weight;
-          break;
-        }
-
-        partial_sum = next_sum;
+      if (r <= next_sum) {
+        /* Rescale to reuse for BSDF direction sample. */
+        randu = (r - partial_sum) / svc->sample_weight;
+        break;
       }
+
+      partial_sum = next_sum;
     }
 
-    if (sampled == sd->num_closure) {
+    if (sampled == phases->num_closure) {
       *pdf = 0.0f;
       return LABEL_NONE;
     }
@@ -696,12 +722,12 @@ ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
 
   /* todo: this isn't quite correct, we don't weight anisotropy properly
    * depending on color channels, even if this is perhaps not a common case */
-  const ShaderClosure *sc = &sd->closure[sampled];
+  const ShaderVolumeClosure *svc = &phases->closure[sampled];
   int label;
   float3 eval = zero_float3();
 
   *pdf = 0.0f;
-  label = volume_phase_sample(sd, sc, randu, randv, &eval, omega_in, domega_in, pdf);
+  label = volume_phase_sample(sd, svc, randu, randv, &eval, omega_in, domega_in, pdf);
 
   if (*pdf != 0.0f) {
     bsdf_eval_init(phase_eval, false, eval, kernel_data.film.use_light_pass);
@@ -712,7 +738,7 @@ ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
 
 ccl_device int shader_phase_sample_closure(const KernelGlobals *kg,
                                            const ShaderData *sd,
-                                           const ShaderClosure *sc,
+                                           const ShaderVolumeClosure *sc,
                                            float randu,
                                            float randv,
                                            BsdfEval *phase_eval,
@@ -800,9 +826,9 @@ ccl_device_inline void shader_eval_volume(INTEGRATOR_STATE_CONST_ARGS,
     }
 #  endif
 
-    /* merge closures to avoid exceeding number of closures limit */
+    /* Merge closures to avoid exceeding number of closures limit. */
     if (i > 0)
-      shader_merge_closures(sd);
+      shader_merge_volume_closures(sd);
   }
 }
 

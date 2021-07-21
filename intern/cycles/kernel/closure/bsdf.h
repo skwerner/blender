@@ -431,21 +431,6 @@ ccl_device_inline int bsdf_sample(const KernelGlobals *kg,
       break;
 #  endif /* __PRINCIPLED__ */
 #endif
-#ifdef __VOLUME__
-    case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID:
-      label = volume_henyey_greenstein_sample(sc,
-                                              sd->I,
-                                              sd->dI.dx,
-                                              sd->dI.dy,
-                                              randu,
-                                              randv,
-                                              eval,
-                                              omega_in,
-                                              &domega_in->dx,
-                                              &domega_in->dy,
-                                              pdf);
-      break;
-#endif
     default:
       label = LABEL_NONE;
       break;
@@ -573,11 +558,6 @@ ccl_device_inline
         break;
 #  endif /* __PRINCIPLED__ */
 #endif
-#ifdef __VOLUME__
-      case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID:
-        eval = volume_henyey_greenstein_eval_phase(sc, sd->I, omega_in, pdf);
-        break;
-#endif
       default:
         break;
     }
@@ -665,11 +645,6 @@ ccl_device_inline
         break;
 #  endif /* __PRINCIPLED__ */
 #endif
-#ifdef __VOLUME__
-      case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID:
-        eval = volume_henyey_greenstein_eval_phase(sc, sd->I, omega_in, pdf);
-        break;
-#endif
       default:
         break;
     }
@@ -713,57 +688,6 @@ ccl_device void bsdf_blur(const KernelGlobals *kg, ShaderClosure *sc, float roug
     default:
       break;
   }
-#endif
-}
-
-ccl_device bool bsdf_merge(ShaderClosure *a, ShaderClosure *b)
-{
-#ifdef __SVM__
-  switch (a->type) {
-    case CLOSURE_BSDF_TRANSPARENT_ID:
-      return true;
-    case CLOSURE_BSDF_DIFFUSE_ID:
-    case CLOSURE_BSDF_BSSRDF_ID:
-    case CLOSURE_BSDF_TRANSLUCENT_ID:
-      return bsdf_diffuse_merge(a, b);
-    case CLOSURE_BSDF_OREN_NAYAR_ID:
-      return bsdf_oren_nayar_merge(a, b);
-    case CLOSURE_BSDF_REFLECTION_ID:
-    case CLOSURE_BSDF_REFRACTION_ID:
-    case CLOSURE_BSDF_MICROFACET_GGX_ID:
-    case CLOSURE_BSDF_MICROFACET_GGX_FRESNEL_ID:
-    case CLOSURE_BSDF_MICROFACET_GGX_CLEARCOAT_ID:
-    case CLOSURE_BSDF_MICROFACET_GGX_REFRACTION_ID:
-    case CLOSURE_BSDF_MICROFACET_MULTI_GGX_ID:
-    case CLOSURE_BSDF_MICROFACET_MULTI_GGX_FRESNEL_ID:
-    case CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_ID:
-    case CLOSURE_BSDF_MICROFACET_MULTI_GGX_GLASS_FRESNEL_ID:
-    case CLOSURE_BSDF_MICROFACET_BECKMANN_ID:
-    case CLOSURE_BSDF_MICROFACET_BECKMANN_REFRACTION_ID:
-    case CLOSURE_BSDF_ASHIKHMIN_SHIRLEY_ID:
-      return bsdf_microfacet_merge(a, b);
-    case CLOSURE_BSDF_ASHIKHMIN_VELVET_ID:
-      return bsdf_ashikhmin_velvet_merge(a, b);
-    case CLOSURE_BSDF_DIFFUSE_TOON_ID:
-    case CLOSURE_BSDF_GLOSSY_TOON_ID:
-      return bsdf_toon_merge(a, b);
-    case CLOSURE_BSDF_HAIR_REFLECTION_ID:
-    case CLOSURE_BSDF_HAIR_TRANSMISSION_ID:
-      return bsdf_hair_merge(a, b);
-#  ifdef __PRINCIPLED__
-    case CLOSURE_BSDF_PRINCIPLED_DIFFUSE_ID:
-    case CLOSURE_BSDF_BSSRDF_PRINCIPLED_ID:
-      return bsdf_principled_diffuse_merge(a, b);
-#  endif
-#  ifdef __VOLUME__
-    case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID:
-      return volume_henyey_greenstein_merge(a, b);
-#  endif
-    default:
-      return false;
-  }
-#else
-  return false;
 #endif
 }
 

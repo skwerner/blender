@@ -9,14 +9,20 @@ def _run(args):
     import time
 
     start_time = time.time()
+    elapsed_time = 0.0
+    num_frames = 0
 
-    scene = bpy.context.scene
-    for i in range(scene.frame_start, scene.frame_end):
-        scene.frame_set(scene.frame_start)
+    while elapsed_time < 10.0:
+        scene = bpy.context.scene
+        for i in range(scene.frame_start, scene.frame_end + 1):
+            scene.frame_set(scene.frame_start)
 
-    elapsed_time = time.time() - start_time
+        num_frames += scene.frame_end + 1 - scene.frame_start
+        elapsed_time = time.time() - start_time
 
-    result = {'time': elapsed_time}
+    time_per_frame = elapsed_time / num_frames
+
+    result = {'time': time_per_frame}
     return result
 
 

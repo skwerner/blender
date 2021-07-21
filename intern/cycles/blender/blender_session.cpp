@@ -164,7 +164,7 @@ void BlenderSession::create_session()
     session->set_gpu_display(make_unique<BlenderGPUDisplay>(b_engine, b_scene));
   }
 
-  /* TODO(sergey): Decice on what is to be communicated to the engine here. There is no tiled
+  /* TODO(sergey): Decide on what is to be communicated to the engine here. There is no tiled
    * rendering for from visual point of view when render buffer fits big tile. But for huge
    * render resolutions it might still be helpful to see which big tile is being sampled. */
   /* b_engine.use_highlight_tiles(session_params.progressive_refine == false); */

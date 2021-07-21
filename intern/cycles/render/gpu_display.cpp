@@ -66,7 +66,7 @@ bool GPUDisplay::update_begin(int texture_width, int texture_height)
   mutex_.lock();
 
   if (!do_update_begin(texture_width, texture_height)) {
-    LOG(ERROR) << "GPUDisplay implementation could not begin updater.";
+    LOG(ERROR) << "GPUDisplay implementation could not begin update.";
     mutex_.unlock();
     return false;
   }

@@ -789,7 +789,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   session->start();
 }
 
-void BlenderSession::draw(int w, int h)
+void BlenderSession::view_draw(int w, int h)
 {
   /* pause in redraw in case update is not being called due to final render */
   session->set_pause(BlenderSync::get_session_pause(b_scene, background));

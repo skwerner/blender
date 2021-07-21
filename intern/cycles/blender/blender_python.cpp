@@ -299,7 +299,7 @@ static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
   Py_RETURN_NONE;
 }
 
-static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
+static PyObject *view_draw_func(PyObject * /*self*/, PyObject *args)
 {
   PyObject *pysession, *pygraph, *pyv3d, *pyrv3d;
 
@@ -313,7 +313,7 @@ static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
     int viewport[4];
     glGetIntegerv(GL_VIEWPORT, viewport);
 
-    session->draw(viewport[2], viewport[3]);
+    session->view_draw(viewport[2], viewport[3]);
   }
 
   Py_RETURN_NONE;
@@ -941,7 +941,7 @@ static PyMethodDef methods[] = {
     {"free", free_func, METH_O, ""},
     {"render", render_func, METH_VARARGS, ""},
     {"bake", bake_func, METH_VARARGS, ""},
-    {"draw", draw_func, METH_VARARGS, ""},
+    {"view_draw", view_draw_func, METH_VARARGS, ""},
     {"sync", sync_func, METH_VARARGS, ""},
     {"reset", reset_func, METH_VARARGS, ""},
 #ifdef WITH_OSL

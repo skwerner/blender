@@ -82,7 +82,7 @@ class BlenderSession {
   void synchronize(BL::Depsgraph &b_depsgraph);
 
   /* drawing */
-  void draw(int w, int h);
+  void view_draw(int w, int h);
   void tag_redraw();
   void tag_update();
   void get_status(string &status, string &substatus);

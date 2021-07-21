@@ -158,14 +158,14 @@ def sync(engine, depsgraph, data):
     _cycles.sync(engine.session, depsgraph.as_pointer())
 
 
-def draw(engine, depsgraph, region, v3d, rv3d):
+def view_draw(engine, depsgraph, region, v3d, rv3d):
     import _cycles
     depsgraph = depsgraph.as_pointer()
     v3d = v3d.as_pointer()
     rv3d = rv3d.as_pointer()
 
     # draw render image
-    _cycles.draw(engine.session, depsgraph, v3d, rv3d)
+    _cycles.view_draw(engine.session, depsgraph, v3d, rv3d)
 
 
 def available_devices():

@@ -97,7 +97,7 @@ class CyclesRender(bpy.types.RenderEngine):
         engine.sync(self, depsgraph, context.blend_data)
 
     def view_draw(self, context, depsgraph):
-        engine.draw(self, depsgraph, context.region, context.space_data, context.region_data)
+        engine.view_draw(self, depsgraph, context.region, context.space_data, context.region_data)
 
     def update_script_node(self, node):
         if engine.with_osl():

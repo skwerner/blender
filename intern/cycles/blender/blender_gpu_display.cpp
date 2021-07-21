@@ -27,30 +27,10 @@ void DRW_opengl_context_activate(bool drw_state);
 void *WM_opengl_context_create();
 void WM_opengl_context_activate(void *gl_context);
 void WM_opengl_context_dispose(void *gl_context);
+void WM_opengl_context_release(void *context);
 }
 
 CCL_NAMESPACE_BEGIN
-
-namespace {
-
-/* --------------------------------------------------------------------
- * Context helpers.
- */
-
-class GLContextScope {
- public:
-  explicit GLContextScope(void *gl_context)
-  {
-    WM_opengl_context_activate(gl_context);
-  }
-
-  ~GLContextScope()
-  {
-    WM_opengl_context_activate(nullptr);
-  }
-};
-
-} /* namespace */
 
 /* --------------------------------------------------------------------
  * BlenderDisplayShader.
@@ -317,7 +297,7 @@ bool BlenderGPUDisplay::do_update_begin(int texture_width, int texture_height)
   glWaitSync((GLsync)gl_render_sync_, 0, GL_TIMEOUT_IGNORED);
 
   if (!gl_texture_resources_ensure()) {
-    WM_opengl_context_activate(nullptr);
+    WM_opengl_context_release(gl_context_);
     return false;
   }
 
@@ -365,7 +345,7 @@ void BlenderGPUDisplay::do_update_end()
   gl_upload_sync_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
   glFlush();
 
-  WM_opengl_context_activate(nullptr);
+  WM_opengl_context_release(gl_context_);
 }
 
 /* --------------------------------------------------------------------
@@ -426,8 +406,6 @@ void BlenderGPUDisplay::do_unmap_texture_buffer()
   glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
 
   glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-
-  WM_opengl_context_activate(nullptr);
 }
 
 /* --------------------------------------------------------------------
@@ -559,7 +537,7 @@ void BlenderGPUDisplay::gl_resources_destroy()
   if (gl_context_) {
     const bool drw_state = DRW_opengl_context_release();
 
-    GLContextScope scope(gl_context_);
+    WM_opengl_context_activate(gl_context_);
 
     if (texture_.gl_pbo_id_) {
       glDeleteBuffers(1, &texture_.gl_pbo_id_);

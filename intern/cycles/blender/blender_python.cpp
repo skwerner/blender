@@ -264,6 +264,30 @@ static PyObject *render_func(PyObject * /*self*/, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject *draw_func(PyObject * /*self*/, PyObject *args)
+{
+  PyObject *py_session, *py_graph, *py_screen, *py_space_image;
+
+  if (!PyArg_ParseTuple(args, "OOOO", &py_session, &py_graph, &py_screen, &py_space_image)) {
+    return nullptr;
+  }
+
+  BlenderSession *session = (BlenderSession *)PyLong_AsVoidPtr(py_session);
+
+  ID *b_screen = (ID *)PyLong_AsVoidPtr(py_screen);
+
+  PointerRNA b_space_image_ptr;
+  RNA_pointer_create(b_screen,
+                     &RNA_SpaceImageEditor,
+                     pylong_as_voidptr_typesafe(py_space_image),
+                     &b_space_image_ptr);
+  BL::SpaceImageEditor b_space_image(b_space_image_ptr);
+
+  session->draw(b_space_image);
+
+  Py_RETURN_NONE;
+}
+
 /* pixel_array and result passed as pointers */
 static PyObject *bake_func(PyObject * /*self*/, PyObject *args)
 {
@@ -997,6 +1021,7 @@ static PyMethodDef methods[] = {
     {"create", create_func, METH_VARARGS, ""},
     {"free", free_func, METH_O, ""},
     {"render", render_func, METH_VARARGS, ""},
+    {"draw", draw_func, METH_VARARGS, ""},
     {"bake", bake_func, METH_VARARGS, ""},
     {"view_draw", view_draw_func, METH_VARARGS, ""},
     {"sync", sync_func, METH_VARARGS, ""},

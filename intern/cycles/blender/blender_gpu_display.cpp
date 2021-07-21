@@ -24,7 +24,7 @@ extern "C" {
 bool DRW_opengl_context_release();
 void DRW_opengl_context_activate(bool drw_state);
 
-void *WM_opengl_context_create();
+void *WM_opengl_context_create_from_thread();
 void WM_opengl_context_activate(void *gl_context);
 void WM_opengl_context_dispose(void *gl_context);
 void WM_opengl_context_release(void *context);
@@ -493,11 +493,12 @@ void BlenderGPUDisplay::gl_context_create()
 {
   const bool drw_state = DRW_opengl_context_release();
 
-  gl_context_ = WM_opengl_context_create();
+  gl_context_ = WM_opengl_context_create_from_thread();
   if (!gl_context_) {
     LOG(ERROR) << "Error creating OpenGL context.";
   }
 
+  WM_opengl_context_release(gl_context_);
   DRW_opengl_context_activate(drw_state);
 }
 

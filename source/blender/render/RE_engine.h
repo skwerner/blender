@@ -40,6 +40,7 @@ struct RenderData;
 struct RenderEngine;
 struct RenderEngineType;
 struct RenderLayer;
+struct RenderPass;
 struct RenderResult;
 struct ReportList;
 struct Scene;
@@ -88,6 +89,9 @@ typedef struct RenderEngineType {
 
   void (*update)(struct RenderEngine *engine, struct Main *bmain, struct Depsgraph *depsgraph);
   void (*render)(struct RenderEngine *engine, struct Depsgraph *depsgraph);
+  void (*draw)(struct RenderEngine *engine,
+               const struct bContext *context,
+               struct Depsgraph *depsgraph);
   void (*bake)(struct RenderEngine *engine,
                struct Depsgraph *depsgraph,
                struct Object *object,
@@ -186,6 +190,10 @@ void RE_engine_end_result(RenderEngine *engine,
                           bool merge_results);
 struct RenderResult *RE_engine_get_result(struct RenderEngine *engine);
 
+struct RenderPass *RE_engine_pass_by_index_get(struct RenderEngine *engine,
+                                               const char *layer_name,
+                                               int index);
+
 const char *RE_engine_active_view_get(RenderEngine *engine);
 void RE_engine_active_view_set(RenderEngine *engine, const char *viewname);
 float RE_engine_get_camera_shift_x(RenderEngine *engine,
@@ -224,6 +232,10 @@ void RE_engine_register_pass(struct RenderEngine *engine,
                              eNodeSocketDatatype type);
 
 bool RE_engine_use_persistent_data(struct RenderEngine *engine);
+
+struct RenderEngine *RE_engine_get(const struct Render *re);
+
+bool RE_engine_is_rendering(const struct Render *re);
 
 /* Engine Types */
 

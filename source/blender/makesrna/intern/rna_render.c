@@ -179,6 +179,24 @@ static void engine_render(RenderEngine *engine, Depsgraph *depsgraph)
   RNA_parameter_list_free(&list);
 }
 
+static void engine_draw(RenderEngine *engine, const struct bContext *context, Depsgraph *depsgraph)
+{
+  extern FunctionRNA rna_RenderEngine_draw_func;
+  PointerRNA ptr;
+  ParameterList list;
+  FunctionRNA *func;
+
+  RNA_pointer_create(NULL, engine->type->rna_ext.srna, engine, &ptr);
+  func = &rna_RenderEngine_draw_func;
+
+  RNA_parameter_list_create(&list, &ptr, func);
+  RNA_parameter_set_lookup(&list, "context", &context);
+  RNA_parameter_set_lookup(&list, "depsgraph", &depsgraph);
+  engine->type->rna_ext.call(NULL, &ptr, func, &list);
+
+  RNA_parameter_list_free(&list);
+}
+
 static void engine_bake(RenderEngine *engine,
                         struct Depsgraph *depsgraph,
                         struct Object *object,
@@ -317,7 +335,7 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
   RenderEngineType *et, dummyet = {NULL};
   RenderEngine dummyengine = {NULL};
   PointerRNA dummyptr;
-  int have_function[8];
+  int have_function[9];
 
   /* setup dummy engine & engine type to store static properties in */
   dummyengine.type = &dummyet;
@@ -360,11 +378,12 @@ static StructRNA *rna_RenderEngine_register(Main *bmain,
 
   et->update = (have_function[0]) ? engine_update : NULL;
   et->render = (have_function[1]) ? engine_render : NULL;
-  et->bake = (have_function[2]) ? engine_bake : NULL;
-  et->view_update = (have_function[3]) ? engine_view_update : NULL;
-  et->view_draw = (have_function[4]) ? engine_view_draw : NULL;
-  et->update_script_node = (have_function[5]) ? engine_update_script_node : NULL;
-  et->update_render_passes = (have_function[6]) ? engine_update_render_passes : NULL;
+  et->draw = (have_function[2]) ? engine_draw : NULL;
+  et->bake = (have_function[3]) ? engine_bake : NULL;
+  et->view_update = (have_function[4]) ? engine_view_update : NULL;
+  et->view_draw = (have_function[5]) ? engine_view_draw : NULL;
+  et->update_script_node = (have_function[6]) ? engine_update_script_node : NULL;
+  et->update_render_passes = (have_function[7]) ? engine_update_render_passes : NULL;
 
   RE_engines_register(et);
 
@@ -521,6 +540,14 @@ static void rna_def_render_engine(BlenderRNA *brna)
   parm = RNA_def_pointer(func, "depsgraph", "Depsgraph", "", "");
   RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
 
+  func = RNA_def_function(srna, "draw", NULL);
+  RNA_def_function_ui_description(func, "Draw render image");
+  RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL);
+  parm = RNA_def_pointer(func, "context", "Context", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "depsgraph", "Depsgraph", "", "");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+
   func = RNA_def_function(srna, "bake", NULL);
   RNA_def_function_ui_description(func, "Bake passes");
   RNA_def_function_flag(func, FUNC_REGISTER_OPTIONAL | FUNC_ALLOW_WRITE);
@@ -641,6 +668,14 @@ static void rna_def_render_engine(BlenderRNA *brna)
                                   "Test if the render operation should been canceled, this is a "
                                   "fast call that should be used regularly for responsiveness");
   parm = RNA_def_boolean(func, "do_break", 0, "Break", "");
+  RNA_def_function_return(func, parm);
+
+  func = RNA_def_function(srna, "pass_by_index_get", "RE_engine_pass_by_index_get");
+  parm = RNA_def_string(func, "layer", NULL, 0, "Layer", "Name of render layer to get pass for");
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_int(func, "index", 0, 0, INT_MAX, "Index", "Index of pass to get", 0, INT_MAX);
+  RNA_def_parameter_flags(parm, 0, PARM_REQUIRED);
+  parm = RNA_def_pointer(func, "render_pass", "RenderPass", "Index", "Index of pass to get");
   RNA_def_function_return(func, parm);
 
   func = RNA_def_function(srna, "active_view_get", "RE_engine_active_view_get");

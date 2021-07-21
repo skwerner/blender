@@ -1197,6 +1197,18 @@ static void drw_engines_enable_basic(void)
   use_drw_engine(&draw_engine_basic_type);
 }
 
+static void drw_engine_enable_image_editor(void)
+{
+  if (DRW_engine_external_use_for_image_editor()) {
+    use_drw_engine(&draw_engine_external_type);
+  }
+  else {
+    use_drw_engine(&draw_engine_image_type);
+  }
+
+  use_drw_engine(&draw_engine_overlay_type);
+}
+
 static void drw_engines_enable_editors(void)
 {
   SpaceLink *space_data = DST.draw_ctx.space_data;
@@ -1205,8 +1217,7 @@ static void drw_engines_enable_editors(void)
   }
 
   if (space_data->spacetype == SPACE_IMAGE) {
-    use_drw_engine(&draw_engine_image_type);
-    use_drw_engine(&draw_engine_overlay_type);
+    drw_engine_enable_image_editor();
   }
   else if (space_data->spacetype == SPACE_NODE) {
     /* Only enable when drawing the space image backdrop. */

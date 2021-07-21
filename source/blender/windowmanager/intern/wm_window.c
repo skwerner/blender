@@ -2430,6 +2430,16 @@ void *WM_opengl_context_create(void)
    * So we should call this function only on the main thread.
    */
   BLI_assert(BLI_thread_is_main());
+
+  return WM_opengl_context_create_from_thread();
+}
+
+/* Special version of OpenGL context creation which allows context to be created from non-main
+ * thread.
+ * The caller takes a risk of possible driver quirks which might make certain resources not shared
+ * across different contexts. */
+void *WM_opengl_context_create_from_thread(void)
+{
   BLI_assert(GPU_framebuffer_active_get() == GPU_framebuffer_back_get());
 
   GHOST_GLSettings glSettings = {0};

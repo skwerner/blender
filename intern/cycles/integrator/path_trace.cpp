@@ -510,7 +510,9 @@ void PathTrace::set_gpu_display(unique_ptr<GPUDisplay> gpu_display)
 
 void PathTrace::draw()
 {
-  DCHECK(gpu_display_);
+  if (!gpu_display_) {
+    return;
+  }
 
   did_draw_after_reset_ |= gpu_display_->draw();
 }

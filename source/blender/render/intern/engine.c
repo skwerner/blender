@@ -539,6 +539,27 @@ void RE_engine_set_error_message(RenderEngine *engine, const char *msg)
   }
 }
 
+RenderPass *RE_engine_pass_by_index_get(RenderEngine *engine, const char *layer_name, int index)
+{
+  Render *re = engine->re;
+  if (re == NULL) {
+    return NULL;
+  }
+
+  RenderPass *pass = NULL;
+
+  RenderResult *rr = RE_AcquireResultRead(re);
+  if (rr != NULL) {
+    const RenderLayer *layer = RE_GetRenderLayer(rr, layer_name);
+    if (layer != NULL) {
+      pass = BLI_findlink(&layer->passes, index);
+    }
+  }
+  RE_ReleaseResult(re);
+
+  return pass;
+}
+
 const char *RE_engine_active_view_get(RenderEngine *engine)
 {
   Render *re = engine->re;
@@ -1068,4 +1089,17 @@ void RE_engine_free_blender_memory(RenderEngine *engine)
     return;
   }
   engine_depsgraph_free(engine);
+}
+
+struct RenderEngine *RE_engine_get(const Render *re)
+{
+  return re->engine;
+}
+
+bool RE_engine_is_rendering(const Render *re)
+{
+  if (re->engine == NULL) {
+    return false;
+  }
+  return re->engine->flag & RE_ENGINE_RENDERING;
 }

@@ -132,6 +132,18 @@ def render(engine, depsgraph):
         _cycles.render(engine.session, depsgraph.as_pointer())
 
 
+def draw(engine, depsgraph, space_image):
+    if not engine.session:
+        return
+
+    depsgraph_ptr = depsgraph.as_pointer()
+    space_image_ptr = space_image.as_pointer()
+    screen_ptr = space_image.id_data.as_pointer()
+
+    import _cycles
+    _cycles.draw(engine.session, depsgraph_ptr, screen_ptr, space_image_ptr)
+
+
 def bake(engine, depsgraph, obj, pass_type, pass_filter, width, height):
     import _cycles
     session = getattr(engine, "session", None)

@@ -160,7 +160,7 @@ void BlenderSession::create_session()
   session->reset(buffer_params, session_params.samples);
 
   /* Create GPU display. */
-  if (!background) {
+  if (!b_engine.is_preview()) {
     session->set_gpu_display(make_unique<BlenderGPUDisplay>(b_engine, b_scene));
   }
 
@@ -263,6 +263,11 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
 
   /* reset time */
   start_resize_time = 0.0;
+
+  {
+    thread_scoped_lock lock(draw_state_.mutex);
+    draw_state_.last_pass_index = -1;
+  }
 }
 
 void BlenderSession::free_session()
@@ -271,43 +276,6 @@ void BlenderSession::free_session()
 
   delete sync;
   delete session;
-}
-
-void BlenderSession::do_write_update_render_tile(bool do_update_only)
-{
-  const int2 tile_offset = session->get_render_tile_offset();
-  const int2 tile_size = session->get_render_tile_size();
-
-  /* get render result */
-  BL::RenderResult b_rr = b_engine.begin_result(tile_offset.x,
-                                                tile_offset.y,
-                                                tile_size.x,
-                                                tile_size.y,
-                                                b_rlay_name.c_str(),
-                                                b_rview_name.c_str());
-
-  /* can happen if the intersected rectangle gives 0 width or height */
-  if (b_rr.ptr.data == NULL) {
-    return;
-  }
-
-  BL::RenderResult::layers_iterator b_single_rlay;
-  b_rr.layers.begin(b_single_rlay);
-
-  /* layer will be missing if it was disabled in the UI */
-  if (b_single_rlay == b_rr.layers.end())
-    return;
-
-  BL::RenderLayer b_rlay = *b_single_rlay;
-
-  if (do_update_only) {
-    update_render_result(b_rlay);
-  }
-  else {
-    write_render_result(b_rlay);
-  }
-
-  b_engine.end_result(b_rr, true, false, true);
 }
 
 void BlenderSession::read_render_tile()
@@ -350,19 +318,34 @@ void BlenderSession::read_render_tile()
 
 void BlenderSession::write_render_tile()
 {
-  do_write_update_render_tile(false);
-}
+  const int2 tile_offset = session->get_render_tile_offset();
+  const int2 tile_size = session->get_render_tile_size();
 
-void BlenderSession::update_render_tile()
-{
-  /* use final write for preview renders, otherwise render result wouldn't be
-   * be updated in blender side
-   * would need to be investigated a bit further, but for now shall be fine
-   */
-  if (!b_engine.is_preview())
-    do_write_update_render_tile(true);
-  else
-    do_write_update_render_tile(false);
+  /* get render result */
+  BL::RenderResult b_rr = b_engine.begin_result(tile_offset.x,
+                                                tile_offset.y,
+                                                tile_size.x,
+                                                tile_size.y,
+                                                b_rlay_name.c_str(),
+                                                b_rview_name.c_str());
+
+  /* can happen if the intersected rectangle gives 0 width or height */
+  if (b_rr.ptr.data == NULL) {
+    return;
+  }
+
+  BL::RenderResult::layers_iterator b_single_rlay;
+  b_rr.layers.begin(b_single_rlay);
+
+  /* layer will be missing if it was disabled in the UI */
+  if (b_single_rlay == b_rr.layers.end())
+    return;
+
+  BL::RenderLayer b_rlay = *b_single_rlay;
+
+  write_render_result(b_rlay);
+
+  b_engine.end_result(b_rr, true, false, true);
 }
 
 static void add_cryptomatte_layer(BL::RenderResult &b_rr, string name, string manifest)
@@ -435,7 +418,13 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
 
   /* set callback to write out render results */
   session->write_render_tile_cb = [&]() { write_render_tile(); };
-  session->update_render_tile_cb = [&]() { update_render_tile(); };
+
+  /* Use final write for preview renders, otherwise render result wouldn't be be updated on Blender
+   * side. */
+  /* TODO(sergey): Investigate whether GPUDisplay can be used for the preview as well. */
+  if (b_engine.is_preview()) {
+    session->update_render_tile_cb = [&]() { write_render_tile(); };
+  }
 
   BL::ViewLayer b_view_layer = b_depsgraph.view_layer_eval();
 
@@ -450,7 +439,14 @@ void BlenderSession::render(BL::Depsgraph &b_depsgraph_)
   BL::RenderResult::layers_iterator b_single_rlay;
   b_rr.layers.begin(b_single_rlay);
   BL::RenderLayer b_rlay = *b_single_rlay;
-  b_rlay_name = b_view_layer.name();
+
+  {
+    thread_scoped_lock lock(draw_state_.mutex);
+    b_rlay_name = b_view_layer.name();
+
+    /* Signal that the display pass is to be updated. */
+    draw_state_.last_pass_index = -1;
+  }
 
   /* Compute render passes and film settings. */
   sync->sync_render_passes(b_rlay, b_view_layer);
@@ -801,6 +797,40 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   /* Start rendering thread, if it's not running already. Do this
    * after all scene data has been synced at least once. */
   session->start();
+}
+
+void BlenderSession::draw(BL::SpaceImageEditor &space_image)
+{
+  if (!session || !session->scene) {
+    /* Offline render drawing does not force the render engine update, which means it's possible
+     * that the Session is not created yet. */
+    return;
+  }
+
+  thread_scoped_lock lock(draw_state_.mutex);
+
+  const int pass_index = space_image.image_user().multilayer_pass();
+  if (pass_index != draw_state_.last_pass_index) {
+    BL::RenderPass b_display_pass(b_engine.pass_by_index_get(b_rlay_name.c_str(), pass_index));
+    if (!b_display_pass) {
+      return;
+    }
+
+    Scene *scene = session->scene;
+
+    thread_scoped_lock lock(scene->mutex);
+
+    const Pass *pass = Pass::find(scene->passes, b_display_pass.name());
+    if (!pass) {
+      return;
+    }
+
+    scene->film->set_display_pass(pass->type);
+
+    draw_state_.last_pass_index = pass_index;
+  }
+
+  session->draw();
 }
 
 void BlenderSession::view_draw(int w, int h)

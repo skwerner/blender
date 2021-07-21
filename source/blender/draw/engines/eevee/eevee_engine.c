@@ -648,6 +648,7 @@ RenderEngineType DRW_engine_viewport_eevee_type = {
     NULL,
     NULL,
     NULL,
+    NULL,
     &EEVEE_render_update_passes,
     &draw_engine_eevee_type,
     {NULL, NULL, NULL},

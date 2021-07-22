@@ -110,7 +110,7 @@ extern "C" {
  * If zero is supplied for epsilon, an internal value of 1e-8 used
  * instead, since this code will not work correctly if it is not allowed
  * to merge "too near" vertices.
- * 
+ *
  * Normally the output will contain mappings from outputs to inputs.
  * If this is not needed, set need_ids to false and the execution may be much
  * faster in some circumstances.
@@ -250,7 +250,7 @@ template<typename Arith_t> class CDT_result {
   Array<vec2<Arith_t>> vert;
   Array<std::pair<int, int>> edge;
   Array<Vector<int>> face;
-  /* The orig vectors are only popluated if the need_ids input field is true. */
+  /* The orig vectors are only populated if the need_ids input field is true. */
   /** For each output vert, which input verts correspond to it? */
   Array<Vector<int>> vert_orig;
   /**

@@ -1756,9 +1756,34 @@ TEST(delaunay_d, CintTwoFace)
   input.faces_len_table = faces_len;
   input.faces_start_table = faces_start;
   input.epsilon = 1e-5f;
+  input.need_ids = false;
   ::CDT_result *output = BLI_delaunay_2d_cdt_calc(&input, CDT_FULL);
   BLI_delaunay_2d_cdt_free(output);
 }
+
+TEST(delaunay_d, CintTwoFaceNoIds)
+{
+  float vert_coords[][2] = {
+      {0.0, 0.0}, {1.0, 0.0}, {0.5, 1.0}, {1.1, 1.0}, {1.1, 0.0}, {1.6, 1.0}};
+  int faces[] = {0, 1, 2, 3, 4, 5};
+  int faces_len[] = {3, 3};
+  int faces_start[] = {0, 3};
+
+  ::CDT_input input;
+  input.verts_len = 6;
+  input.edges_len = 0;
+  input.faces_len = 2;
+  input.vert_coords = vert_coords;
+  input.edges = nullptr;
+  input.faces = faces;
+  input.faces_len_table = faces_len;
+  input.faces_start_table = faces_start;
+  input.epsilon = 1e-5f;
+  input.need_ids = true;
+  ::CDT_result *output = BLI_delaunay_2d_cdt_calc(&input, CDT_FULL);
+  BLI_delaunay_2d_cdt_free(output);
+}
+
 #endif
 
 #if DO_TEXT_TESTS
@@ -1849,7 +1874,7 @@ void text_test(
       vec2<T> start_co = b_vert[arc_origin_vert];
       vec2<T> end_co = b_vert[arc_terminal_vert];
       vec2<T> center_co = 0.5 * (start_co + end_co);
-      BLI_assert(start_co[0] == end_co[2]);
+      BLI_assert(start_co[0] == end_co[0]);
       double radius = abs(math_to_double<T>(end_co[1] - center_co[1]));
       double angle_delta = M_PI / (num_arc_points + 1);
       int start_vert = b_before_arcs_in.vert.size() + arc * num_arc_points;

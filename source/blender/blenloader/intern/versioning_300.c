@@ -31,6 +31,7 @@
 #include "DNA_collection_types.h"
 #include "DNA_genfile.h"
 #include "DNA_listBase.h"
+#include "DNA_material_types.h"
 #include "DNA_modifier_types.h"
 #include "DNA_text_types.h"
 #include "DNA_workspace_types.h"
@@ -505,6 +506,11 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
                     sizeof(scene->master_collection->id.name) - 2);
       }
     }
+    LISTBASE_FOREACH (Material *, mat, &bmain->materials) {
+      if (!(mat->lineart.flags & LRT_MATERIAL_CUSTOM_OCCLUSION_EFFECTIVENESS)) {
+        mat->lineart.mat_occlusion = 1;
+      }
+    }
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 300, 9)) {
@@ -525,15 +531,6 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
       }
     }
     FOREACH_NODETREE_END;
-
-    {
-      if (!DNA_struct_elem_find(
-              fd->filesdna, "WorkSpace", "AssetLibraryReference", "active_asset_library")) {
-        LISTBASE_FOREACH (WorkSpace *, workspace, &bmain->workspaces) {
-          BKE_asset_library_reference_init_default(&workspace->active_asset_library);
-        }
-      }
-    }
   }
 
   if (!MAIN_VERSION_ATLEAST(bmain, 300, 10)) {
@@ -546,18 +543,7 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
     }
   }
 
-  /**
-   * Versioning code until next subversion bump goes here.
-   *
-   * \note Be sure to check when bumping the version:
-   * - "versioning_userdef.c", #blo_do_versions_userdef
-   * - "versioning_userdef.c", #do_versions_theme
-   *
-   * \note Keep this message at the bottom of the function.
-   */
-  {
-    /* Keep this block, even when empty. */
-
+  if (!MAIN_VERSION_ATLEAST(bmain, 300, 13)) {
     /* Convert Surface Deform to sparse-capable bind structure. */
     if (!DNA_struct_elem_find(
             fd->filesdna, "SurfaceDeformModifierData", "int", "num_mesh_verts")) {
@@ -576,5 +562,42 @@ void blo_do_versions_300(FileData *fd, Library *UNUSED(lib), Main *bmain)
         }
       }
     }
+
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "WorkSpace", "AssetLibraryReference", "asset_library")) {
+      LISTBASE_FOREACH (WorkSpace *, workspace, &bmain->workspaces) {
+        BKE_asset_library_reference_init_default(&workspace->asset_library);
+      }
+    }
+
+    if (!DNA_struct_elem_find(
+            fd->filesdna, "FileAssetSelectParams", "AssetLibraryReference", "asset_library")) {
+      LISTBASE_FOREACH (bScreen *, screen, &bmain->screens) {
+        LISTBASE_FOREACH (ScrArea *, area, &screen->areabase) {
+          LISTBASE_FOREACH (SpaceLink *, space, &area->spacedata) {
+            if (space->spacetype == SPACE_FILE) {
+              SpaceFile *sfile = (SpaceFile *)space;
+              if (sfile->browse_mode != FILE_BROWSE_MODE_ASSETS) {
+                continue;
+              }
+              BKE_asset_library_reference_init_default(&sfile->asset_params->asset_library);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Versioning code until next subversion bump goes here.
+   *
+   * \note Be sure to check when bumping the version:
+   * - "versioning_userdef.c", #blo_do_versions_userdef
+   * - "versioning_userdef.c", #do_versions_theme
+   *
+   * \note Keep this message at the bottom of the function.
+   */
+  {
+    /* Keep this block, even when empty. */
   }
 }

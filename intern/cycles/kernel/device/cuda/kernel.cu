@@ -597,6 +597,7 @@ KERNEL_FILM_CONVERT_DEFINE(motion, rgba)
 KERNEL_FILM_CONVERT_DEFINE(cryptomatte, rgba)
 KERNEL_FILM_CONVERT_DEFINE(shadow_catcher, rgba)
 KERNEL_FILM_CONVERT_DEFINE(shadow_catcher_matte_with_shadow, rgba)
+KERNEL_FILM_CONVERT_DEFINE(combined, rgba)
 KERNEL_FILM_CONVERT_DEFINE(float4, rgba)
 
 #  undef KERNEL_FILM_CONVERT_DEFINE

@@ -260,14 +260,22 @@ ccl_device_inline void film_get_pass_pixel_float4(const KernelFilmConvert *ccl_r
 
   const float *in = buffer + kfilm_convert->pass_offset;
 
-  /* Note that 3rd channel contains transparency = 1 - alpha at this point. */
   const float3 color = make_float3(in[0], in[1], in[2]) * scale_exposure;
-  const float transparency = in[3] * scale;
+  const float alpha = in[3] * scale;
 
   pixel[0] = color.x;
   pixel[1] = color.y;
   pixel[2] = color.z;
-  pixel[3] = film_transparency_to_alpha(transparency);
+  pixel[3] = alpha;
+}
+ccl_device_inline void film_get_pass_pixel_combined(const KernelFilmConvert *ccl_restrict
+                                                        kfilm_convert,
+                                                    ccl_global const float *ccl_restrict buffer,
+                                                    float *ccl_restrict pixel)
+{
+  /* 3rd channel contains transparency = 1 - alpha for the combined pass. */
+  film_get_pass_pixel_float4(kfilm_convert, buffer, pixel);
+  pixel[3] = film_transparency_to_alpha(pixel[3]);
 }
 
 /* --------------------------------------------------------------------

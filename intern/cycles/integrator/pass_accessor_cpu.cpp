@@ -168,6 +168,7 @@ DEFINE_PASS_ACCESSOR(motion)
 DEFINE_PASS_ACCESSOR(cryptomatte)
 DEFINE_PASS_ACCESSOR(shadow_catcher)
 DEFINE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
+DEFINE_PASS_ACCESSOR(combined)
 DEFINE_PASS_ACCESSOR(float4)
 
 #undef DEFINE_PASS_ACCESSOR

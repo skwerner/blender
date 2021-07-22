@@ -221,7 +221,12 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
     else if (mode == PassMode::DENOISED) {
       /* Denoised passes store their final pixels, no need in special calculation. */
-      get_pass_float4(render_buffers, buffer_params, destination);
+      if (type == PASS_COMBINED) {
+        get_pass_combined(render_buffers, buffer_params, destination);
+      }
+      else {
+        get_pass_float4(render_buffers, buffer_params, destination);
+      }
     }
     else if (type == PASS_MOTION) {
       get_pass_motion(render_buffers, buffer_params, destination);
@@ -231,6 +236,9 @@ bool PassAccessor::get_render_tile_pixels(const RenderBuffers *render_buffers,
     }
     else if (type == PASS_SHADOW_CATCHER) {
       get_pass_shadow_catcher(render_buffers, buffer_params, destination);
+    }
+    else if (type == PASS_COMBINED) {
+      get_pass_combined(render_buffers, buffer_params, destination);
     }
     else {
       get_pass_float4(render_buffers, buffer_params, destination);

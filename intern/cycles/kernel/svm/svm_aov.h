@@ -57,7 +57,7 @@ ccl_device void svm_node_aov_value(INTEGRATOR_STATE_CONST_ARGS,
                                           kernel_data.film.pass_stride;
     ccl_global float *buffer = render_buffer + render_buffer_offset +
                                (kernel_data.film.pass_aov_value + node.z);
-    kernel_write_pass_float(buffer + kernel_data.film.pass_aov_value + node.z, val);
+    kernel_write_pass_float(buffer, val);
   }
 }
 CCL_NAMESPACE_END

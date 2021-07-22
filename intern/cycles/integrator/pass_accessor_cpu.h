@@ -68,6 +68,7 @@ class PassAccessorCPU : public PassAccessor {
   DECLARE_PASS_ACCESSOR(cryptomatte)
   DECLARE_PASS_ACCESSOR(shadow_catcher)
   DECLARE_PASS_ACCESSOR(shadow_catcher_matte_with_shadow)
+  DECLARE_PASS_ACCESSOR(combined)
   DECLARE_PASS_ACCESSOR(float4)
 
 #undef DECLARE_PASS_ACCESSOR

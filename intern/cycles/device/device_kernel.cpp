@@ -94,6 +94,7 @@ const char *device_kernel_as_string(DeviceKernel kernel)
       FILM_CONVERT_KERNEL_AS_STRING(SHADOW_CATCHER, shadow_catcher)
       FILM_CONVERT_KERNEL_AS_STRING(SHADOW_CATCHER_MATTE_WITH_SHADOW,
                                     shadow_catcher_matte_with_shadow)
+      FILM_CONVERT_KERNEL_AS_STRING(COMBINED, combined)
       FILM_CONVERT_KERNEL_AS_STRING(FLOAT4, float4)
 
 #undef FILM_CONVERT_KERNEL_AS_STRING

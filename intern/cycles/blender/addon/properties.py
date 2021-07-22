@@ -1326,6 +1326,20 @@ class CyclesPreferences(bpy.types.AddonPreferences):
             devices.extend(cpu_devices)
         return devices
 
+    # Refresh device list. This does not happen automatically on Blender
+    # startup due to unstable OpenCL implementations that can cause crashes.
+    def refresh_devices(self):
+        import _cycles
+        # Ensure `self.devices` is not re-allocated when the second call to
+        # get_devices_for_type is made, freeing items from the first list.
+        for device_type in ('CUDA', 'OPTIX', 'OPENCL'):
+            self.update_device_entries(_cycles.available_devices(device_type))
+
+    # Deprecated: use refresh_devices instead.
+    def get_devices(self, compute_device_type=''):
+        self.refresh_devices()
+        return None
+
     def get_num_gpu_devices(self):
         import _cycles
         device_list = _cycles.available_devices(self.compute_device_type)

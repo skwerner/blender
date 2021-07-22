@@ -231,6 +231,8 @@ def list_render_passes(scene, srl):
     # Denoising passes.
     if (scene.cycles.use_denoising and crl.use_denoising) or crl.denoising_store_passes:
         yield ("Noisy Image", "RGBA", 'COLOR')
+        if crl.use_pass_shadow_catcher:
+            yield ("Noisy Shadow Catcher", "RGBA", 'COLOR')
         if crl.denoising_store_passes:
             yield ("Denoising Normal",          "XYZ", 'VECTOR')
             yield ("Denoising Albedo",          "RGB", 'COLOR')

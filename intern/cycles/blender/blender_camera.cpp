@@ -894,11 +894,8 @@ void BlenderSync::sync_view(BL::SpaceView3D &b_v3d,
   }
 }
 
-BufferParams BlenderSync::get_buffer_params(BL::SpaceView3D &b_v3d,
-                                            BL::RegionView3D &b_rv3d,
-                                            Camera *cam,
-                                            int width,
-                                            int height)
+BufferParams BlenderSync::get_buffer_params(
+    BL::SpaceView3D &b_v3d, BL::RegionView3D &b_rv3d, Camera *cam, int width, int height)
 {
   BufferParams params;
   bool use_border = false;

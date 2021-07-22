@@ -213,7 +213,7 @@ PassInfo Pass::get_info(PassType type)
       pass_info.use_exposure = true;
       break;
     case PASS_AO:
-      pass_info.num_components = 4;
+      pass_info.num_components = 3;
       break;
     case PASS_SHADOW:
       pass_info.num_components = 3;

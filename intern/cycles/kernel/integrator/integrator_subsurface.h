@@ -28,6 +28,8 @@
 #include "kernel/closure/bssrdf.h"
 #include "kernel/closure/volume.h"
 
+#include "kernel/integrator/integrator_intersect_volume_stack.h"
+
 CCL_NAMESPACE_BEGIN
 
 #ifdef __SUBSURFACE__
@@ -301,9 +303,11 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
   Transform ob_tfm = object_fetch_transform_motion_test(kg, object, time, &ob_itfm);
 #  endif
 
+  const float3 ray_start_P = ray_offset(P, -Ng);
+
   /* Setup ray. */
   Ray ray ccl_optional_struct_init;
-  ray.P = ray_offset(P, -Ng);
+  ray.P = ray_start_P;
   ray.D = D;
   ray.t = FLT_MAX;
   ray.time = time;
@@ -524,6 +528,18 @@ ccl_device_inline bool subsurface_random_walk(INTEGRATOR_STATE_ARGS)
   if (!hit) {
     return false;
   }
+
+#  ifdef __VOLUME__
+  /* Update volume stack if needed. */
+  if (kernel_data.integrator.use_volumes) {
+    const int object = intersection_get_object(kg, &ss_isect.hits[0]);
+    const int object_flag = kernel_tex_fetch(__object_flag, object);
+
+    if (object_flag & SD_OBJECT_INTERSECTS_VOLUME) {
+      integrator_volume_stack_update_for_subsurface(INTEGRATOR_STATE_PASS, ray_start_P, ray.P);
+    }
+  }
+#  endif /* __VOLUME__ */
 
   /* Pretend ray is coming from the outside towards the exit point. This ensures
    * correct front/back facing normals.

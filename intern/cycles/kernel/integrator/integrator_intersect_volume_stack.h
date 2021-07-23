@@ -23,6 +23,51 @@
 
 CCL_NAMESPACE_BEGIN
 
+ccl_device void integrator_volume_stack_update_for_subsurface(INTEGRATOR_STATE_ARGS,
+                                                              const float3 from_P,
+                                                              const float3 to_P)
+{
+  ShaderDataTinyStorage stack_sd_storage;
+  ShaderData *stack_sd = AS_SHADER_DATA(&stack_sd_storage);
+
+  kernel_assert(kernel_data.integrator.use_volumes);
+
+  Ray volume_ray ccl_optional_struct_init;
+  volume_ray.P = from_P;
+  volume_ray.D = normalize_len(to_P - from_P, &volume_ray.t);
+
+#ifdef __VOLUME_RECORD_ALL__
+  Intersection hits[2 * VOLUME_STACK_SIZE + 1];
+  uint num_hits = scene_intersect_volume_all(
+      kg, &volume_ray, hits, 2 * VOLUME_STACK_SIZE, PATH_RAY_ALL_VISIBILITY);
+  if (num_hits > 0) {
+    Intersection *isect = hits;
+
+    qsort(hits, num_hits, sizeof(Intersection), intersections_compare);
+
+    for (uint hit = 0; hit < num_hits; ++hit, ++isect) {
+      shader_setup_from_ray(kg, stack_sd, &volume_ray, isect);
+      volume_stack_enter_exit(INTEGRATOR_STATE_PASS, stack_sd);
+    }
+  }
+#else
+  Intersection isect;
+  int step = 0;
+  while (step < 2 * VOLUME_STACK_SIZE &&
+         scene_intersect_volume(kg, &volume_ray, &isect, PATH_RAY_ALL_VISIBILITY)) {
+    shader_setup_from_ray(kg, stack_sd, &volume_ray, &isect);
+    volume_stack_enter_exit(INTEGRATOR_STATE_PASS, stack_sd);
+
+    /* Move ray forward. */
+    volume_ray.P = ray_offset(stack_sd->P, -stack_sd->Ng);
+    if (volume_ray.t != FLT_MAX) {
+      volume_ray.D = normalize_len(to_P - volume_ray.P, &volume_ray.t);
+    }
+    ++step;
+  }
+#endif
+}
+
 ccl_device void integrator_intersect_volume_stack(INTEGRATOR_STATE_ARGS)
 {
   ShaderDataTinyStorage stack_sd_storage;

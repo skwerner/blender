@@ -24,11 +24,10 @@ CCL_NAMESPACE_BEGIN
 
 ccl_device_inline void kernel_write_pass_float(ccl_global float *ccl_restrict buffer, float value)
 {
-  ccl_global float *buf = buffer;
 #ifdef __ATOMIC_PASS_WRITE__
-  atomic_add_and_fetch_float(buf, value);
+  atomic_add_and_fetch_float(buffer, value);
 #else
-  *buf += value;
+  *buffer += value;
 #endif
 }
 
@@ -44,10 +43,9 @@ ccl_device_inline void kernel_write_pass_float3(ccl_global float *ccl_restrict b
   atomic_add_and_fetch_float(buf_y, value.y);
   atomic_add_and_fetch_float(buf_z, value.z);
 #else
-  ccl_global float *buf = (ccl_global float *)buffer;
-  buf[0] += value.x;
-  buf[1] += value.y;
-  buf[2] += value.z;
+  buffer[0] += value.x;
+  buffer[1] += value.y;
+  buffer[2] += value.z;
 #endif
 }
 
@@ -65,12 +63,26 @@ ccl_device_inline void kernel_write_pass_float4(ccl_global float *ccl_restrict b
   atomic_add_and_fetch_float(buf_z, value.z);
   atomic_add_and_fetch_float(buf_w, value.w);
 #else
-  ccl_global float *buf = (ccl_global float *)buffer;
-  buf[0] += value.x;
-  buf[1] += value.y;
-  buf[2] += value.z;
-  buf[3] += value.w;
+  buffer[0] += value.x;
+  buffer[1] += value.y;
+  buffer[2] += value.z;
+  buffer[3] += value.w;
 #endif
+}
+
+ccl_device_inline float kernel_read_pass_float(ccl_global float *ccl_restrict buffer)
+{
+  return *buffer;
+}
+
+ccl_device_inline float3 kernel_read_pass_float3(ccl_global float *ccl_restrict buffer)
+{
+  return make_float3(buffer[0], buffer[1], buffer[2]);
+}
+
+ccl_device_inline float4 kernel_read_pass_float4(ccl_global float *ccl_restrict buffer)
+{
+  return make_float4(buffer[0], buffer[1], buffer[2], buffer[3]);
 }
 
 CCL_NAMESPACE_END

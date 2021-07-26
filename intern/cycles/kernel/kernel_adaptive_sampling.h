@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include "kernel/kernel_write_passes.h"
+
 CCL_NAMESPACE_BEGIN
 
 /* Check whether the pixel has converged and should not be sampled anymore. */
@@ -32,9 +34,8 @@ ccl_device_forceinline bool kernel_need_sample_pixel(INTEGRATOR_STATE_CONST_ARGS
                                         kernel_data.film.pass_stride;
   ccl_global float *buffer = render_buffer + render_buffer_offset;
 
-  ccl_global float4 *aux = (ccl_global float4 *)(buffer +
-                                                 kernel_data.film.pass_adaptive_aux_buffer);
-  return (*aux).w == 0.0f;
+  const uint aux_w_offset = kernel_data.film.pass_adaptive_aux_buffer + 3;
+  return buffer[aux_w_offset] == 0.0f;
 }
 
 /* Determines whether to continue sampling a given pixel or if it has sufficiently converged. */
@@ -57,7 +58,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
 
   /* TODO(Stefan): Is this better in linear, sRGB or something else? */
 
-  const float4 A = *(ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
+  const float4 A = kernel_read_pass_float4(buffer + kernel_data.film.pass_adaptive_aux_buffer);
   if (!reset && A.w != 0.0f) {
     /* If the pixel was considered converged, its state will not change in this kernmel. Early
      * output before doing any math.
@@ -66,7 +67,7 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
     return true;
   }
 
-  const float4 I = *(ccl_global float4 *)(buffer + kernel_data.film.pass_combined);
+  const float4 I = kernel_read_pass_float4(buffer + kernel_data.film.pass_combined);
 
   const float sample = __float_as_uint(buffer[kernel_data.film.pass_sample_count]);
 
@@ -77,7 +78,8 @@ ccl_device bool kernel_adaptive_sampling_convergence_check(const KernelGlobals *
                       (sample * 0.0001f + sqrtf(I.x + I.y + I.z));
   const bool did_converge = (error < threshold * sample);
 
-  buffer[kernel_data.film.pass_adaptive_aux_buffer + 3] = did_converge;
+  const uint aux_w_offset = kernel_data.film.pass_adaptive_aux_buffer + 3;
+  buffer[aux_w_offset] = did_converge;
 
   return did_converge;
 }
@@ -99,20 +101,19 @@ ccl_device void kernel_adaptive_sampling_filter_x(const KernelGlobals *kg,
   for (int x = start_x; x < start_x + width; ++x) {
     int index = offset + x + y * stride;
     ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
-    ccl_global float4 *aux = (ccl_global float4 *)(buffer +
-                                                   kernel_data.film.pass_adaptive_aux_buffer);
-    if ((*aux).w == 0.0f) {
+    const uint aux_w_offset = kernel_data.film.pass_adaptive_aux_buffer + 3;
+
+    if (buffer[aux_w_offset] == 0.0f) {
       if (x > start_x && !prev) {
         index = index - 1;
         buffer = render_buffer + index * kernel_data.film.pass_stride;
-        aux = (ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-        (*aux).w = 0.0f;
+        buffer[aux_w_offset] = 0.0f;
       }
       prev = true;
     }
     else {
       if (prev) {
-        (*aux).w = 0.0f;
+        buffer[aux_w_offset] = 0.0f;
       }
       prev = false;
     }
@@ -133,20 +134,19 @@ ccl_device void kernel_adaptive_sampling_filter_y(const KernelGlobals *kg,
   for (int y = start_y; y < start_y + height; ++y) {
     int index = offset + x + y * stride;
     ccl_global float *buffer = render_buffer + index * kernel_data.film.pass_stride;
-    ccl_global float4 *aux = (ccl_global float4 *)(buffer +
-                                                   kernel_data.film.pass_adaptive_aux_buffer);
-    if ((*aux).w == 0.0f) {
+    const uint aux_w_offset = kernel_data.film.pass_adaptive_aux_buffer + 3;
+
+    if (buffer[aux_w_offset] == 0.0f) {
       if (y > start_y && !prev) {
         index = index - stride;
         buffer = render_buffer + index * kernel_data.film.pass_stride;
-        aux = (ccl_global float4 *)(buffer + kernel_data.film.pass_adaptive_aux_buffer);
-        (*aux).w = 0.0f;
+        buffer[aux_w_offset] = 0.0f;
       }
       prev = true;
     }
     else {
       if (prev) {
-        (*aux).w = 0.0f;
+        buffer[aux_w_offset] = 0.0f;
       }
       prev = false;
     }

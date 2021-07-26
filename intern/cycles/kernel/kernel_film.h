@@ -298,6 +298,17 @@ film_calculate_shadow_catcher_denoised(const KernelFilmConvert *ccl_restrict kfi
   return pixel;
 }
 
+ccl_device_inline float3 safe_divide_shadow_catcher(float3 a, float3 b)
+{
+  float x, y, z;
+
+  x = (b.x != 0.0f) ? a.x / b.x : 1.0f;
+  y = (b.y != 0.0f) ? a.y / b.y : 1.0f;
+  z = (b.z != 0.0f) ? a.z / b.z : 1.0f;
+
+  return make_float3(x, y, z);
+}
+
 ccl_device_inline float3
 film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_convert,
                               ccl_global const float *ccl_restrict buffer)
@@ -344,7 +355,7 @@ film_calculate_shadow_catcher(const KernelFilmConvert *ccl_restrict kfilm_conver
    * the matte objects were not accumulated to the combined pass. */
   const float3 combined_no_matte = color_combined - color_matte;
 
-  const float3 shadow_catcher = safe_divide_color(combined_no_matte, color_catcher);
+  const float3 shadow_catcher = safe_divide_shadow_catcher(combined_no_matte, color_catcher);
 
   const float scale = film_get_scale(kfilm_convert, buffer);
   const float transparency = in_combined[3] * scale;

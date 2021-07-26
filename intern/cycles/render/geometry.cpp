@@ -215,6 +215,12 @@ void Geometry::compute_bvh(
       msg += string_printf("%s %u/%u", name.c_str(), (uint)(n + 1), (uint)total);
 
     Object object;
+
+    /* Ensure all visibility bits are set at the geometry level BVH. In
+     * the object level BVH is where actual visibility is tested. */
+    object.set_is_shadow_catcher(true);
+    object.set_visibility(~0);
+
     object.set_geometry(this);
 
     vector<Geometry *> geometry;

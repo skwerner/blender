@@ -241,8 +241,6 @@ RenderWork RenderScheduler::get_render_work()
     state_.last_display_update_sample = -1;
   }
 
-  set_start_render_time_if_needed();
-
   render_work.resolution_divider = state_.resolution_divider;
 
   render_work.path_trace.start_sample = get_start_sample_to_path_trace();
@@ -322,6 +320,20 @@ static double approximate_final_time(const RenderWork &render_work, double time)
   const double resolution_divider_sq = render_work.resolution_divider *
                                        render_work.resolution_divider;
   return time * resolution_divider_sq;
+}
+
+void RenderScheduler::report_work_begin(const RenderWork &render_work)
+{
+  /* Start counting render time when rendering sampels at their final resolution.
+   *
+   * NOTE: The work might have the path trace part be all zero: this happens when a post-processing
+   * work is scheduled after the path tracing. Checking for just a start sample doesn't work here
+   * because it might be wrongly 0. Check for whether path tracing is actually happening as it is
+   * expected to happen in the first work. */
+  if (render_work.resolution_divider == pixel_size_ && render_work.path_trace.num_samples != 0 &&
+      render_work.path_trace.start_sample == get_start_sample()) {
+    state_.start_render_time = time_dt();
+  }
 }
 
 void RenderScheduler::report_path_trace_time(const RenderWork &render_work,
@@ -950,14 +962,6 @@ bool RenderScheduler::work_report_reset_average(const RenderWork &render_work)
    *
    * So we only accumulate average for the latest resolution divider which was rendered. */
   return render_work.resolution_divider != pixel_size_;
-}
-
-void RenderScheduler::set_start_render_time_if_needed()
-{
-  /* Start counting render time when rendering sampels at their final resolution. */
-  if (state_.resolution_divider == pixel_size_ && get_num_rendered_samples() == 0) {
-    state_.start_render_time = time_dt();
-  }
 }
 
 void RenderScheduler::check_time_limit_reached()

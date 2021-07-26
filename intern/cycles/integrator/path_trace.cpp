@@ -159,6 +159,8 @@ void PathTrace::render_pipeline(RenderWork render_work)
 
   render_init_kernel_execution();
 
+  render_scheduler_.report_work_begin(render_work);
+
   init_render_buffers(render_work);
 
   rebalance(render_work);

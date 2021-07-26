@@ -142,6 +142,9 @@ class RenderScheduler {
 
   RenderWork get_render_work();
 
+  /* Report that the path tracer started to work, after scene update and loading kernels. */
+  void report_work_begin(const RenderWork &render_work);
+
   /* Report time (in seconds) which corresponding part of work took. */
   void report_path_trace_time(const RenderWork &render_work, double time, bool is_cancelled);
   void report_adaptive_filter_time(const RenderWork &render_work, double time, bool is_cancelled);
@@ -217,8 +220,6 @@ class RenderScheduler {
 
   /* Check whether timing report about the given work need to reset accumulated average time. */
   bool work_report_reset_average(const RenderWork &render_work);
-
-  void set_start_render_time_if_needed();
 
   /* CHeck whether render time limit has been reached (or exceeded), and if so store related
    * information in the state so that rendering is considered finished, and is possible to report

@@ -267,7 +267,7 @@ RenderWork RenderScheduler::get_render_work()
 
   bool denoiser_delayed;
   render_work.denoise = work_need_denoise(denoiser_delayed);
-  state_.last_work_was_denoised = true;
+  state_.last_work_was_denoised = render_work.denoise;
 
   render_work.update_display = work_need_update_display(denoiser_delayed);
 

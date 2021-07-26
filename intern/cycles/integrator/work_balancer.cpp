@@ -58,7 +58,7 @@ bool work_balance_do_rebalance(vector<WorkBalanceInfo> &work_balance_infos)
   const double total_time = calculate_total_time(work_balance_infos);
   const double time_average = total_time / num_infos;
 
-  double total_weight;
+  double total_weight = 0;
   vector<double> new_weights;
   new_weights.reserve(num_infos);
 

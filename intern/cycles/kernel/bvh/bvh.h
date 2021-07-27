@@ -159,8 +159,6 @@ ccl_device_intersect bool scene_intersect(const KernelGlobals *kg,
                                           const uint visibility,
                                           Intersection *isect)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT);
-
 #ifdef __KERNEL_OPTIX__
   uint p0 = 0;
   uint p1 = 0;
@@ -247,8 +245,6 @@ ccl_device_intersect bool scene_intersect_local(const KernelGlobals *kg,
                                                 uint *lcg_state,
                                                 int max_hits)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_LOCAL);
-
 #  ifdef __KERNEL_OPTIX__
   uint p0 = ((uint64_t)lcg_state) & 0xFFFFFFFF;
   uint p1 = (((uint64_t)lcg_state) >> 32) & 0xFFFFFFFF;
@@ -362,8 +358,6 @@ ccl_device_intersect bool scene_intersect_shadow_all(const KernelGlobals *kg,
                                                      uint max_hits,
                                                      uint *num_hits)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_SHADOW_ALL);
-
 #  ifdef __KERNEL_OPTIX__
   uint p0 = ((uint64_t)isect) & 0xFFFFFFFF;
   uint p1 = (((uint64_t)isect) >> 32) & 0xFFFFFFFF;
@@ -442,8 +436,6 @@ ccl_device_intersect bool scene_intersect_volume(const KernelGlobals *kg,
                                                  Intersection *isect,
                                                  const uint visibility)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_VOLUME);
-
 #  ifdef __KERNEL_OPTIX__
   uint p0 = 0;
   uint p1 = 0;
@@ -502,8 +494,6 @@ ccl_device_intersect uint scene_intersect_volume_all(const KernelGlobals *kg,
                                                      const uint max_hits,
                                                      const uint visibility)
 {
-  PROFILING_INIT(kg, PROFILING_INTERSECT_VOLUME_ALL);
-
   if (!scene_intersect_valid(ray)) {
     return false;
   }

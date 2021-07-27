@@ -509,6 +509,8 @@ ccl_device_forceinline void volume_integrate_heterogeneous(
     const float3 equiangular_light_P,
     VolumeIntegrateResult &result)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_VOLUME_INTEGRATE);
+
   /* Prepare for stepping.
    * Using a different step offset for the first step avoids banding artifacts. */
   int max_steps;
@@ -667,6 +669,8 @@ ccl_device_forceinline void integrate_volume_direct_light(INTEGRATOR_STATE_ARGS,
                                                           const float3 throughput,
                                                           LightSample *ccl_restrict ls)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_VOLUME_DIRECT_LIGHT);
+
   /* Sample position on the same light again, now from the shading
    * point where we scattered.
    *
@@ -760,6 +764,8 @@ ccl_device_forceinline bool integrate_volume_phase_scatter(INTEGRATOR_STATE_ARGS
                                                            const RNGState *rng_state,
                                                            const ShaderVolumePhases *phases)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_VOLUME_INDIRECT_LIGHT);
+
   float phase_u, phase_v;
   path_state_rng_2D(kg, rng_state, PRNG_BSDF_U, &phase_u, &phase_v);
 
@@ -912,6 +918,8 @@ ccl_device VolumeIntegrateEvent volume_integrate(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_volume(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_VOLUME_SETUP);
+
 #ifdef __VOLUME__
   /* Setup shader data. */
   Ray ray ccl_optional_struct_init;

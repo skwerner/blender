@@ -228,8 +228,6 @@ ccl_device_inline
                      BsdfEval *bsdf_eval,
                      const uint light_shader_flags)
 {
-  PROFILING_INIT(kg, PROFILING_CLOSURE_EVAL);
-
   bsdf_eval_init(bsdf_eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
   return _shader_bsdf_multi_eval(
@@ -312,8 +310,6 @@ ccl_device int shader_bsdf_sample_closure(const KernelGlobals *kg,
                                           differential3 *domega_in,
                                           float *pdf)
 {
-  PROFILING_INIT(kg, PROFILING_CLOSURE_SAMPLE);
-
   /* BSSRDF should already have been handled elsewhere. */
   kernel_assert(CLOSURE_IS_BSDF(sc->type));
 
@@ -576,8 +572,6 @@ ccl_device void shader_eval_surface(INTEGRATOR_STATE_CONST_ARGS,
                                     ccl_global float *ccl_restrict buffer,
                                     int path_flag)
 {
-  PROFILING_INIT(kg, PROFILING_SHADER_EVAL);
-
   /* If path is being terminated, we are tracing a shadow ray or evaluating
    * emission, then we don't need to store closures. The emission and shadow
    * shader data also do not have a closure array to save GPU memory. */
@@ -668,8 +662,6 @@ ccl_device float shader_volume_phase_eval(const KernelGlobals *kg,
                                           const float3 omega_in,
                                           BsdfEval *phase_eval)
 {
-  PROFILING_INIT(kg, PROFILING_CLOSURE_VOLUME_EVAL);
-
   bsdf_eval_init(phase_eval, false, zero_float3(), kernel_data.film.use_light_pass);
 
   return _shader_volume_phase_multi_eval(sd, phases, omega_in, -1, phase_eval, 0.0f, 0.0f);
@@ -685,8 +677,6 @@ ccl_device int shader_volume_phase_sample(const KernelGlobals *kg,
                                           differential3 *domega_in,
                                           float *pdf)
 {
-  PROFILING_INIT(kg, PROFILING_CLOSURE_VOLUME_SAMPLE);
-
   int sampled = 0;
 
   if (phases->num_closure > 1) {
@@ -746,8 +736,6 @@ ccl_device int shader_phase_sample_closure(const KernelGlobals *kg,
                                            differential3 *domega_in,
                                            float *pdf)
 {
-  PROFILING_INIT(kg, PROFILING_CLOSURE_VOLUME_SAMPLE);
-
   int label;
   float3 eval = zero_float3();
 

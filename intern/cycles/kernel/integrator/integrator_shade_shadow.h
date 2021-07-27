@@ -26,6 +26,8 @@ CCL_NAMESPACE_BEGIN
 #ifdef __TRANSPARENT_SHADOWS__
 ccl_device_inline float3 integrate_transparent_surface_shadow(INTEGRATOR_STATE_ARGS, const int hit)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_SHADOW_SURFACE);
+
   /* TODO: does aliasing like this break automatic SoA in CUDA?
    * Should we instead store closures separate from ShaderData?
    *
@@ -64,6 +66,8 @@ ccl_device_inline void integrate_transparent_volume_shadow(INTEGRATOR_STATE_ARGS
                                                            const int num_recorded_hits,
                                                            float3 *ccl_restrict throughput)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_SHADOW_VOLUME);
+
   /* TODO: deduplicate with surface, or does it not matter for memory usage? */
   ShaderDataTinyStorage shadow_sd_storage;
   ShaderData *shadow_sd = AS_SHADER_DATA(&shadow_sd_storage);
@@ -150,6 +154,7 @@ ccl_device_inline bool integrate_transparent_shadow(INTEGRATOR_STATE_ARGS, const
 ccl_device void integrator_shade_shadow(INTEGRATOR_STATE_ARGS,
                                         ccl_global float *ccl_restrict render_buffer)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_SHADOW_SETUP);
   const int num_hits = INTEGRATOR_STATE(shadow_path, num_hits);
 
 #ifdef __TRANSPARENT_SHADOWS__

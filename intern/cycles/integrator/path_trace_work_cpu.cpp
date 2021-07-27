@@ -72,6 +72,10 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
   const int64_t image_height = effective_buffer_params_.height;
   const int64_t total_pixels_num = image_width * image_height;
 
+  for (CPUKernelThreadGlobals &kernel_globals : kernel_thread_globals_) {
+    kernel_globals.start_profiling();
+  }
+
   tbb::task_arena local_arena = local_tbb_arena_create(device_);
   local_arena.execute([&]() {
     tbb::parallel_for(int64_t(0), total_pixels_num, [&](int64_t work_index) {
@@ -97,6 +101,10 @@ void PathTraceWorkCPU::render_samples(int start_sample, int samples_num)
       render_samples_full_pipeline(kernel_globals, work_tile, samples_num);
     });
   });
+
+  for (CPUKernelThreadGlobals &kernel_globals : kernel_thread_globals_) {
+    kernel_globals.stop_profiling();
+  }
 }
 
 void PathTraceWorkCPU::render_samples_full_pipeline(KernelGlobals *kernel_globals,

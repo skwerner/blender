@@ -50,6 +50,8 @@ ccl_device bool integrator_init_from_bake(INTEGRATOR_STATE_ARGS,
                                           const int y,
                                           const int scheduled_sample)
 {
+  PROFILING_INIT(kg, PROFILING_RAY_SETUP);
+
   /* Initialize path state to give basic buffer access and allow early outputs. */
   path_state_init(INTEGRATOR_STATE_PASS, tile, x, y);
 

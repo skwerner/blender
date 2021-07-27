@@ -43,8 +43,6 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
                                              const Ray *ccl_restrict ray,
                                              const Intersection *ccl_restrict isect)
 {
-  PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
-
   /* Read intersection data into shader globals.
    *
    * TODO: this is redundant, could potentially remove some of this from
@@ -134,8 +132,6 @@ ccl_device_inline void shader_setup_from_ray(const KernelGlobals *ccl_restrict k
   differential_incoming_compact(&sd->dI, ray->D, ray->dD);
   differential_dudv(&sd->du, &sd->dv, sd->dPdu, sd->dPdv, sd->dP, sd->Ng);
 #endif
-  PROFILING_SHADER(sd->shader);
-  PROFILING_OBJECT(sd->object);
 }
 
 /* ShaderData setup from position sampled on mesh */
@@ -155,8 +151,6 @@ ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restric
                                                 bool object_space,
                                                 int lamp)
 {
-  PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
-
   /* vectors */
   sd->P = P;
   sd->N = Ng;
@@ -250,9 +244,6 @@ ccl_device_inline void shader_setup_from_sample(const KernelGlobals *ccl_restric
   sd->du = differential_zero();
   sd->dv = differential_zero();
 #endif
-
-  PROFILING_SHADER(sd->shader);
-  PROFILING_OBJECT(sd->object);
 }
 
 /* ShaderData setup for displacement */
@@ -297,8 +288,6 @@ ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_res
                                                     const float3 ray_D,
                                                     const float ray_time)
 {
-  PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
-
   /* for NDC coordinates */
   sd->ray_P = ray_P;
 
@@ -332,9 +321,6 @@ ccl_device_inline void shader_setup_from_background(const KernelGlobals *ccl_res
   sd->du = differential_zero();
   sd->dv = differential_zero();
 #endif
-
-  PROFILING_SHADER(sd->shader);
-  PROFILING_OBJECT(sd->object);
 }
 
 /* ShaderData setup from point inside volume */
@@ -344,7 +330,6 @@ ccl_device_inline void shader_setup_from_volume(const KernelGlobals *ccl_restric
                                                 ShaderData *ccl_restrict sd,
                                                 const Ray *ccl_restrict ray)
 {
-  PROFILING_INIT(kg, PROFILING_SHADER_SETUP);
 
   /* vectors */
   sd->P = ray->P;
@@ -382,9 +367,6 @@ ccl_device_inline void shader_setup_from_volume(const KernelGlobals *ccl_restric
   /* for NDC coordinates */
   sd->ray_P = ray->P;
   sd->ray_dP = ray->dP;
-
-  PROFILING_SHADER(sd->shader);
-  PROFILING_OBJECT(sd->object);
 }
 #endif /* __VOLUME__ */
 

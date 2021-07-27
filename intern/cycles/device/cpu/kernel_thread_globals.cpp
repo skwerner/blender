@@ -21,16 +21,14 @@
 #include "kernel/osl/osl_globals.h"
 // clang-format on
 
+#include "util/util_profiling.h"
+
 CCL_NAMESPACE_BEGIN
 
-CPUKernelThreadGlobals::CPUKernelThreadGlobals()
-{
-  reset_runtime_memory();
-}
-
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globals,
-                                               void *osl_globals_memory)
-    : KernelGlobals(kernel_globals)
+                                               void *osl_globals_memory,
+                                               Profiler &cpu_profiler)
+    : KernelGlobals(kernel_globals), cpu_profiler_(cpu_profiler)
 {
   reset_runtime_memory();
 
@@ -46,7 +44,7 @@ CPUKernelThreadGlobals::CPUKernelThreadGlobals(const KernelGlobals &kernel_globa
 }
 
 CPUKernelThreadGlobals::CPUKernelThreadGlobals(CPUKernelThreadGlobals &&other) noexcept
-    : KernelGlobals(std::move(other))
+    : KernelGlobals(std::move(other)), cpu_profiler_(other.cpu_profiler_)
 {
   other.reset_runtime_memory();
 }
@@ -76,6 +74,16 @@ void CPUKernelThreadGlobals::reset_runtime_memory()
 #ifdef WITH_OSL
   osl = nullptr;
 #endif
+}
+
+void CPUKernelThreadGlobals::start_profiling()
+{
+  cpu_profiler_.add_state(&profiler);
+}
+
+void CPUKernelThreadGlobals::stop_profiling()
+{
+  cpu_profiler_.remove_state(&profiler);
 }
 
 CCL_NAMESPACE_END

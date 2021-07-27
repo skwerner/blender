@@ -145,6 +145,8 @@ ccl_device_forceinline void integrator_intersect_shader_next_kernel(
 
 ccl_device void integrator_intersect_closest(INTEGRATOR_STATE_ARGS)
 {
+  PROFILING_INIT(kg, PROFILING_INTERSECT_CLOSEST);
+
   /* Read ray from integrator state into local memory. */
   Ray ray ccl_optional_struct_init;
   integrator_state_read_ray(INTEGRATOR_STATE_PASS, &ray);

@@ -352,9 +352,12 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
                                   ccl_global float *ccl_restrict render_buffer)
 
 {
+  PROFILING_INIT_FOR_SHADER(kg, PROFILING_SHADE_SURFACE_SETUP);
+
   /* Setup shader data. */
   ShaderData sd;
   integrate_surface_shader_setup(INTEGRATOR_STATE_PASS, &sd);
+  PROFILING_SHADER(sd.object, sd.shader);
 
   int continue_path_label = 0;
 
@@ -371,6 +374,7 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
 #endif
       {
         /* Evaluate shader. */
+        PROFILING_EVENT(PROFILING_SHADE_SURFACE_EVAL);
         shader_eval_surface<node_feature_mask>(
             INTEGRATOR_STATE_PASS, &sd, render_buffer, path_flag);
       }
@@ -394,16 +398,17 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
     }
 #endif
 
-#ifdef __PASSES__
-    /* Write render passes. */
-    kernel_write_data_passes(INTEGRATOR_STATE_PASS, &sd, render_buffer);
-#endif
-
 #ifdef __EMISSION__
     /* Write emission. */
     if (sd.flag & SD_EMISSION) {
       integrate_surface_emission(INTEGRATOR_STATE_PASS, &sd, render_buffer);
     }
+#endif
+
+#ifdef __PASSES__
+    /* Write render passes. */
+    PROFILING_EVENT(PROFILING_SHADE_SURFACE_PASSES);
+    kernel_write_data_passes(INTEGRATOR_STATE_PASS, &sd, render_buffer);
 #endif
 
     /* Load random number state. */
@@ -425,9 +430,6 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
       INTEGRATOR_STATE_WRITE(path, throughput) /= probability;
     }
 
-    /* Direct light. */
-    integrate_surface_direct_light(INTEGRATOR_STATE_PASS, &sd, &rng_state);
-
 #ifdef __DENOISING_FEATURES__
     kernel_write_denoising_features(INTEGRATOR_STATE_PASS, &sd, render_buffer);
 #endif
@@ -436,21 +438,28 @@ ccl_device bool integrate_surface(INTEGRATOR_STATE_ARGS,
     kernel_write_shadow_catcher_bounce_data(INTEGRATOR_STATE_PASS, &sd, render_buffer);
 #endif
 
+    /* Direct light. */
+    PROFILING_EVENT(PROFILING_SHADE_SURFACE_DIRECT_LIGHT);
+    integrate_surface_direct_light(INTEGRATOR_STATE_PASS, &sd, &rng_state);
+
 #if defined(__AO__) && defined(__SHADER_RAYTRACE__)
     /* Ambient occlusion pass. */
     if (node_feature_mask & KERNEL_FEATURE_NODE_RAYTRACE) {
       if ((kernel_data.film.pass_ao != PASS_UNUSED) &&
           (INTEGRATOR_STATE(path, flag) & PATH_RAY_CAMERA)) {
+        PROFILING_EVENT(PROFILING_SHADE_SURFACE_AO);
         integrate_surface_ao_pass(INTEGRATOR_STATE_PASS, &sd, &rng_state, render_buffer);
       }
     }
 #endif
 
+    PROFILING_EVENT(PROFILING_SHADE_SURFACE_INDIRECT_LIGHT);
     continue_path_label = integrate_surface_bsdf_bssrdf_bounce(
         INTEGRATOR_STATE_PASS, &sd, &rng_state);
 #ifdef __VOLUME__
   }
   else {
+    PROFILING_EVENT(PROFILING_SHADE_SURFACE_INDIRECT_LIGHT);
     continue_path_label = integrate_surface_volume_only_bounce(INTEGRATOR_STATE_PASS, &sd);
   }
 

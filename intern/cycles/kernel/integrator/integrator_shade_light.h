@@ -95,6 +95,8 @@ ccl_device_inline void integrate_light(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_light(INTEGRATOR_STATE_ARGS,
                                        ccl_global float *ccl_restrict render_buffer)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_LIGHT_SETUP);
+
   integrate_light(INTEGRATOR_STATE_PASS, render_buffer);
 
   /* TODO: we could get stuck in an infinite loop if there are precision issues

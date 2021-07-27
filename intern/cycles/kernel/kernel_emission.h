@@ -40,6 +40,7 @@ ccl_device_noinline_cpu float3 light_sample_shader_eval(INTEGRATOR_STATE_ARGS,
   else {
     /* Setup shader data and call shader_eval_surface once, better
      * for GPU coherence and compile times. */
+    PROFILING_INIT_FOR_SHADER(kg, PROFILING_SHADE_LIGHT_SETUP);
 #ifdef __BACKGROUND_MIS__
     if (ls->type == LIGHT_BACKGROUND) {
       shader_setup_from_background(kg, emission_sd, ls->P, ls->D, time);
@@ -64,6 +65,9 @@ ccl_device_noinline_cpu float3 light_sample_shader_eval(INTEGRATOR_STATE_ARGS,
 
       ls->Ng = emission_sd->Ng;
     }
+
+    PROFILING_SHADER(emission_sd->object, emission_sd->shader);
+    PROFILING_EVENT(PROFILING_SHADE_LIGHT_EVAL);
 
     /* No proper path flag, we're evaluating this for all closures. that's
      * weak but we'd have to do multiple evaluations otherwise. */

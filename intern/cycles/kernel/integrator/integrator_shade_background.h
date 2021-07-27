@@ -54,11 +54,15 @@ ccl_device float3 integrator_eval_background_shader(INTEGRATOR_STATE_ARGS,
     ShaderDataTinyStorage emission_sd_storage;
     ShaderData *emission_sd = AS_SHADER_DATA(&emission_sd_storage);
 
+    PROFILING_INIT_FOR_SHADER(kg, PROFILING_SHADE_LIGHT_SETUP);
     shader_setup_from_background(kg,
                                  emission_sd,
                                  INTEGRATOR_STATE(ray, P),
                                  INTEGRATOR_STATE(ray, D),
                                  INTEGRATOR_STATE(ray, time));
+
+    PROFILING_SHADER(emission_sd->object, emission_sd->shader);
+    PROFILING_EVENT(PROFILING_SHADE_LIGHT_EVAL);
     shader_eval_surface<KERNEL_FEATURE_NODE_MASK_SURFACE_LIGHT>(
         INTEGRATOR_STATE_PASS, emission_sd, render_buffer, path_flag | PATH_RAY_EMISSION);
 
@@ -179,6 +183,8 @@ ccl_device_inline void integrate_distant_lights(INTEGRATOR_STATE_ARGS,
 ccl_device void integrator_shade_background(INTEGRATOR_STATE_ARGS,
                                             ccl_global float *ccl_restrict render_buffer)
 {
+  PROFILING_INIT(kg, PROFILING_SHADE_LIGHT_SETUP);
+
   /* TODO: unify these in a single loop to only have a single shader evaluation call. */
   integrate_distant_lights(INTEGRATOR_STATE_PASS, render_buffer);
   integrate_background(INTEGRATOR_STATE_PASS, render_buffer);

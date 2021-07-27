@@ -32,9 +32,7 @@ class OIDNDenoiser : public Denoiser {
   OIDNDenoiser(Device *path_trace_device, const DenoiseParams &params);
   ~OIDNDenoiser();
 
-  virtual bool load_kernels(Progress *progress) override;
-
-  virtual void denoise_buffer(const BufferParams &buffer_params,
+    virtual void denoise_buffer(const BufferParams &buffer_params,
                               RenderBuffers *render_buffers,
                               const int num_samples,
                               bool allow_inplace_modification) override;
@@ -45,8 +43,6 @@ class OIDNDenoiser : public Denoiser {
   /* We only perform one denoising at a time, since OpenImageDenoise itself is multithreaded.
    * Use this mutex whenever images are passed to the OIDN and needs to be denoised. */
   static thread_mutex mutex_;
-
-  unique_ptr<State> state_;
 };
 
 CCL_NAMESPACE_END

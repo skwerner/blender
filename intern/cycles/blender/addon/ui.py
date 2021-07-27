@@ -126,6 +126,20 @@ def draw_samples_info(layout, context):
         col.label(text="%s AA" % aa)
 
 
+def get_effective_preview_denoiser(context):
+    scene = context.scene
+    cscene = scene.cycles
+
+    if cscene.preview_denoiser != "AUTO":
+        return cscene.preview_denoiser
+
+    if context.preferences.addons[__package__].preferences.get_devices_for_type('OPTIX'):
+        return 'OPTIX'
+
+    return 'OIDN'
+
+
+
 class CYCLES_RENDER_PT_sampling(CyclesButtonsPanel, Panel):
     bl_label = "Sampling"
 
@@ -161,12 +175,15 @@ class CYCLES_RENDER_PT_sampling_viewport(CyclesButtonsPanel, Panel):
         sub.active = cscene.use_preview_denoising
         sub.prop(cscene, "preview_denoiser", text="")
 
-        sub = heading.row(align=True)
+        sub = heading.column(align=True)
         sub.active = cscene.use_preview_denoising
         sub.prop(cscene, "preview_denoising_start_sample", text="Start Sample")
-        sub = heading.row(align=True)
-        sub.active = cscene.use_preview_denoising
         sub.prop(cscene, "preview_denoising_input_passes", text="Input Passes")
+        sub_row = sub.row()
+
+        effective_preview_denoiser = get_effective_preview_denoiser(context)
+        if effective_preview_denoiser == 'OPENIMAGEDENOISE':
+            sub_row.prop(cscene, "use_preview_denoising_prefilter", text="Prefilter")
 
 
 class CYCLES_RENDER_PT_sampling_render(CyclesButtonsPanel, Panel):
@@ -829,6 +846,7 @@ class CYCLES_RENDER_PT_denoising(CyclesButtonsPanel, Panel):
             col.prop(cycles_view_layer, "denoising_optix_input_passes")
         elif denoiser == 'OPENIMAGEDENOISE':
             col.prop(cycles_view_layer, "denoising_openimagedenoise_input_passes")
+            col.prop(cycles_view_layer, "use_denoising_prefilter", text="Prefilter")
 
 
 class CYCLES_PT_post_processing(CyclesButtonsPanel, Panel):

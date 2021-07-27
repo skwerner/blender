@@ -97,7 +97,10 @@ NODE_DEFINE(Integrator)
                  "Use Albedo Pass for Denoiser",
                  default_denoise_params.use_pass_albedo);
   SOCKET_BOOLEAN(use_denoise_pass_normal,
-                 "Use Normal  Pass for Denoiser Denoiser",
+                 "Use Normal Pass for Denoiser Denoiser",
+                 default_denoise_params.use_pass_normal);
+  SOCKET_BOOLEAN(use_denoise_prefilter,
+                 "Prefilter noisy guiding passes",
                  default_denoise_params.use_pass_normal);
 
   return type;
@@ -305,6 +308,8 @@ DenoiseParams Integrator::get_denoise_params() const
 
   denoise_params.use_pass_albedo = use_denoise_pass_albedo;
   denoise_params.use_pass_normal = use_denoise_pass_normal;
+
+  denoise_params.use_prefilter = use_denoise_prefilter;
 
   return denoise_params;
 }

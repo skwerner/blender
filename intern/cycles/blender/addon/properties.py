@@ -248,6 +248,11 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
         description="Denoise the image in the 3D viewport",
         default=False,
     )
+    use_preview_denoising_prefilter: BoolProperty(
+        name="Use Denoising Prefilter",
+        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
+        default=False,
+    )
 
     denoiser: EnumProperty(
         name="Denoiser",
@@ -1208,6 +1213,11 @@ class CyclesRenderLayerSettings(bpy.types.PropertyGroup):
         description="Passes used by the denoiser to distinguish noise from shader and geometry detail",
         items=enum_denoising_input_passes,
         default='RGB_ALBEDO_NORMAL',
+    )
+    use_denoising_prefilter: BoolProperty(
+        name="Use Denoising Prefilter",
+        description="Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoiser",
+        default=True,
     )
 
     @classmethod

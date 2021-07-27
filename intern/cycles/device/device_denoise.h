@@ -38,41 +38,32 @@ typedef int DenoiserTypeMask;
 class DenoiseParams {
  public:
   /* Apply denoiser to image. */
-  bool use;
+  bool use = false;
 
   /* Output denoising data passes (possibly without applying the denoiser). */
-  bool store_passes;
+  bool store_passes = false;
 
   /* Denoiser type. */
-  DenoiserType type;
+  DenoiserType type = DENOISER_OPENIMAGEDENOISE;
 
   /* Viewport start sample. */
-  int start_sample;
+  int start_sample = 0;
 
-  /* Extra passes which are used by the denoiser (the color pass is always used). */
-  bool use_pass_albedo;
-  bool use_pass_normal;
+  /* Extra passes which are used by the denoiser (the color pass is always used).
+   * Default to color + albedo only, since normal input does not always have the desired effect
+   * when denoising with OptiX. */
+  bool use_pass_albedo = true;
+  bool use_pass_normal = false;
 
-  DenoiseParams()
-  {
-    use = false;
-    store_passes = false;
+  bool use_prefilter = false;
 
-    type = DENOISER_OPENIMAGEDENOISE;
-
-    /* Default to color + albedo only, since normal input does not always have the desired effect
-     * when denoising with OptiX. */
-    use_pass_albedo = true;
-    use_pass_normal = false;
-
-    start_sample = 0;
-  }
+  DenoiseParams() = default;
 
   bool modified(const DenoiseParams &other) const
   {
     return !(use == other.use && store_passes == other.store_passes && type == other.type &&
              start_sample == other.start_sample && use_pass_albedo == other.use_pass_albedo &&
-             use_pass_normal == other.use_pass_normal);
+             use_pass_normal == other.use_pass_normal && use_prefilter == other.use_prefilter);
   }
 };
 

@@ -390,6 +390,10 @@ class OIDNDenoiseContext {
         set_fake_albedo_pass();
       }
     }
+
+    if (oidn_normal_pass_) {
+      set_pass(oidn_normal_pass_);
+    }
   }
 
   void set_output_pass(OIDNPass &oidn_pass)

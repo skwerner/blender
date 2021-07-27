@@ -622,21 +622,16 @@ void BlenderGPUDisplay::vertex_buffer_update()
   vpointer[2] = params_.offset.x;
   vpointer[3] = params_.offset.y;
 
-  // vpointer[4] = (float)texture_.width / (float)params_.size.x;
   vpointer[4] = 1.0f;
   vpointer[5] = 0.0f;
   vpointer[6] = (float)params_.size.x + params_.offset.x;
   vpointer[7] = params_.offset.y;
 
-  // vpointer[8] = (float)texture_.width / (float)params_.size.x;
-  // vpointer[9] = (float)texture_.height / (float)params_.size.y;
   vpointer[8] = 1.0f;
   vpointer[9] = 1.0f;
   vpointer[10] = (float)params_.size.x + params_.offset.x;
   vpointer[11] = (float)params_.size.y + params_.offset.y;
 
-  // vpointer[12] = 0.0f;
-  // vpointer[13] = (float)texture_.height / (float)params_.size.y;
   vpointer[12] = 0.0f;
   vpointer[13] = 1.0f;
   vpointer[14] = params_.offset.x;

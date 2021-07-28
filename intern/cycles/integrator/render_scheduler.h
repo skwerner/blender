@@ -62,6 +62,8 @@ class RenderWork {
    * device used, then it is up for the PathTracer to ignore the balancing. */
   bool rebalance = false;
 
+  bool write_final_result = false;
+
   /* Conversion to bool, to simplify checks about whether there is anything to be done for this
    * work. */
   inline operator bool() const
@@ -137,9 +139,6 @@ class RenderScheduler {
    * the path tracer is to finish the current pixels) then false is returned. */
   bool render_work_reschedule_on_idle(RenderWork &render_work);
 
-  /* Check whether all work has been scheduled. */
-  bool done() const;
-
   RenderWork get_render_work();
 
   /* Report that the path tracer started to work, after scene update and loading kernels. */
@@ -157,6 +156,12 @@ class RenderScheduler {
   string full_report() const;
 
  protected:
+  /* Check whether all work has been scheduled and time limit was not exceeded.
+   *
+   * NOTE: Tricky bit: if the time limit was reached the done() is considered to be true, but some
+   * extra work needs to be scheduled to denoise and write final result. */
+  bool done() const;
+
   /* Returns true if any work was scheduled. */
   bool set_postprocess_render_work(RenderWork *render_work);
 
@@ -312,6 +317,7 @@ class RenderScheduler {
     float adaptive_sampling_threshold = 0.0f;
 
     bool last_work_was_denoised = false;
+    bool final_result_was_written = false;
     bool postprocess_work_scheduled = false;
 
     bool path_trace_finished = false;

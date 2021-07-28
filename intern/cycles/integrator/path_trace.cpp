@@ -189,7 +189,7 @@ void PathTrace::render_pipeline(RenderWork render_work)
 
   progress_update_if_needed();
 
-  if (render_scheduler_.done()) {
+  if (render_work.write_final_result) {
     buffer_write();
   }
 }

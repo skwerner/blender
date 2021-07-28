@@ -136,6 +136,7 @@ void RenderScheduler::reset(const BufferParams &buffer_params, int num_samples)
   state_.adaptive_sampling_threshold = 0.4f;
 
   state_.last_work_was_denoised = false;
+  state_.final_result_was_written = false;
   state_.postprocess_work_scheduled = false;
 
   state_.path_trace_finished = false;
@@ -267,6 +268,9 @@ RenderWork RenderScheduler::get_render_work()
   render_work.denoise = work_need_denoise(denoiser_delayed);
   state_.last_work_was_denoised = render_work.denoise;
 
+  render_work.write_final_result = done();
+  state_.final_result_was_written = render_work.write_final_result;
+
   render_work.update_display = work_need_update_display(denoiser_delayed);
 
   /* A fallback display update time, for the case there is an error of display update, or when
@@ -299,6 +303,11 @@ bool RenderScheduler::set_postprocess_render_work(RenderWork *render_work)
 
   if (denoiser_params_.use && !state_.last_work_was_denoised) {
     render_work->denoise = true;
+    any_scheduled = true;
+  }
+
+  if (!state_.final_result_was_written) {
+    render_work->write_final_result = true;
     any_scheduled = true;
   }
 
